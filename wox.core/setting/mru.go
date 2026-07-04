@@ -24,6 +24,7 @@ type MRUItem struct {
 	ContextData common.ContextData
 	LastUsed    int64
 	UseCount    int
+	Score       int64
 }
 
 // MRUManager manages Most Recently Used items
@@ -138,6 +139,7 @@ func (m *MRUManager) GetMRUItems(ctx context.Context, limit int) ([]MRUItem, err
 			ContextData: common.UnmarshalContextData(record.ContextData),
 			LastUsed:    record.LastUsed,
 			UseCount:    record.UseCount,
+			Score:       sr.score,
 		})
 	}
 

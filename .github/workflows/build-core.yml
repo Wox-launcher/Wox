@@ -137,7 +137,7 @@ jobs:
             libxtst-dev \
             libayatana-appindicator3-dev \
             libkeybinder-3.0-dev \
-            libgtk-layer-shell-dev \
+            libgtk-layer-shell0 \
             patchelf \
             libfuse2 \
             xvfb
@@ -562,7 +562,7 @@ jobs:
             libxtst-dev \
             libayatana-appindicator3-dev \
             libkeybinder-3.0-dev \
-            libgtk-layer-shell-dev \
+            libgtk-layer-shell0 \
             libfuse2 \
             xvfb
       - name: Setup Go

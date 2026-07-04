@@ -51,19 +51,16 @@ set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
 # System-level dependencies.
+# gtk-layer-shell is loaded at runtime via dlopen so Wox does not hard-depend
+# on libgtk-layer-shell.so.0. Distros without it (e.g. stock Ubuntu 24.04 GNOME)
+# still launch and fall back to compositor-managed window placement; systems
+# that have the library (Hyprland, sway, ...) get precise layer-shell placement.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
 pkg_check_modules(X11 REQUIRED IMPORTED_TARGET x11)
 pkg_check_modules(XTEST REQUIRED IMPORTED_TARGET xtst)
-# gtk-layer-shell is an optional dependency that enables precise launcher
-# placement on wlroots-based Wayland compositors (Hyprland, sway, etc.).
-# Builds without it simply fall back to compositor-owned placement on Wayland.
-pkg_check_modules(LAYER_SHELL QUIET IMPORTED_TARGET gtk-layer-shell-0)
-if(LAYER_SHELL_FOUND)
-  add_definitions(-DGTK_LAYER_SHELL_ENABLED)
-endif()
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
@@ -145,6 +142,5 @@ target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GIO)
 # link x11 lib
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::X11)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::XTEST)
-if(LAYER_SHELL_FOUND)
-  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::LAYER_SHELL)
-endif()
+# dlopen-based runtime loading of libgtk-layer-shell.so.0 (optional)
+target_link_libraries(${BINARY_NAME} PRIVATE ${CMAKE_DL_LIBS})

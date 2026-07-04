@@ -81,3 +81,11 @@ func IsCapsLockHotkeyString(combineKey string) bool {
 	spec, err := (&Hotkey{}).parseCombineKey(combineKey)
 	return err == nil && spec.isCapsLockKey()
 }
+
+// IsDoubleModifierHotkeyString reports whether combineKey is a double-modifier
+// hotkey (e.g. "ctrl+ctrl", "shift+shift"). Used by callers (such as the Linux
+// doctor checks) that need to detect special hotkeys without registering them.
+func IsDoubleModifierHotkeyString(combineKey string) bool {
+	spec, err := (&Hotkey{}).parseCombineKey(combineKey)
+	return err == nil && spec.isDoubleModifier()
+}

@@ -19,7 +19,10 @@ import (
 
 var calculatorIcon = common.PluginCalculatorIcon
 
-const maxCalculatorHistories = 300
+const (
+	calculatorExpressionScore int64 = 50
+	maxCalculatorHistories          = 300
+)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &CalculatorPlugin{})
@@ -153,8 +156,10 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		c.addQueryHistoryDebounced(ctx, query.Search, result)
 
 		results = append(results, plugin.QueryResult{
-			Title: formattedResult,
-			Icon:  calculatorIcon,
+			Title:    formattedResult,
+			Icon:     calculatorIcon,
+			Score:    calculatorExpressionScore,
+			ScoreKey: calculatorExpressionScoreKey(query.Search),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_calculator_copy_result",
@@ -199,8 +204,10 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 			c.addQueryHistoryDebounced(ctx, query.Search, result)
 
 			results = append(results, plugin.QueryResult{
-				Title: formattedResult,
-				Icon:  calculatorIcon,
+				Title:    formattedResult,
+				Icon:     calculatorIcon,
+				Score:    calculatorExpressionScore,
+				ScoreKey: calculatorExpressionScoreKey(query.Search),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_calculator_copy_result",
@@ -283,6 +290,10 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	}
 
 	return plugin.NewQueryResponse(results)
+}
+
+func calculatorExpressionScoreKey(expression string) string {
+	return "calculator:" + strings.TrimSpace(expression)
 }
 
 func (c *CalculatorPlugin) getDecimalSeparator(ctx context.Context) DecimalSeparator {

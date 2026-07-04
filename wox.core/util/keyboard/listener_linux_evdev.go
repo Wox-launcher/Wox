@@ -5,6 +5,7 @@ package keyboard
 import (
 	"encoding/binary"
 	"fmt"
+	"os/user"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -376,10 +377,10 @@ func evdevReadLoop(fd int, stopCh <-chan struct{}, handler RawKeyHandler) {
 // evdevAvailability caches the result of the first evdev read availability
 // probe so we don't repeatedly open/close devices.
 var (
-	evdevReadOnce     sync.Once
-	evdevRead         bool
-	uinputWriteOnce   sync.Once
-	uinputWrite       bool
+	evdevReadOnce   sync.Once
+	evdevRead       bool
+	uinputWriteOnce sync.Once
+	uinputWrite     bool
 )
 
 // IsEvdevReadAvailable reports whether the current user has read access
@@ -424,4 +425,50 @@ func IsUinputWriteAvailable() bool {
 		uinputWrite = true
 	})
 	return uinputWrite
+}
+
+// CheckUinputAccess classifies the current user's ability to write to
+// /dev/uinput. It distinguishes three outcomes:
+//   - OK: /dev/uinput is writable.
+//   - NotInGroup: the user is not a member of the 'uinput' group (the common
+//     case on stock distros); joining the group is the fix.
+//   - InGroupNoDevicePermission: the user is in the 'uinput' group but
+//     /dev/uinput is still not writable, which means the device node lacks
+//     group permissions (e.g. crw------- root:root). A udev rule is the fix.
+//
+// This is not cached because group membership can change during the process
+// lifetime (rare but possible), and the doctor is invoked on-demand rather
+// than in a hot path.
+func CheckUinputAccess() UinputAccessStatus {
+	if IsUinputWriteAvailable() {
+		return UinputAccessOK
+	}
+	if isUinputGroupMember() {
+		return UinputAccessInGroupNoDevice
+	}
+	return UinputAccessNotInGroup
+}
+
+// isUinputGroupMember reports whether the current user belongs to the 'uinput'
+// group. Used to differentiate "not in group" from "in group but device node
+// permissions are wrong".
+func isUinputGroupMember() bool {
+	current, err := user.Current()
+	if err != nil {
+		return false
+	}
+	groupIds, err := current.GroupIds()
+	if err != nil {
+		return false
+	}
+	target, err := user.LookupGroup("uinput")
+	if err != nil {
+		return false
+	}
+	for _, gid := range groupIds {
+		if gid == target.Gid {
+			return true
+		}
+	}
+	return false
 }

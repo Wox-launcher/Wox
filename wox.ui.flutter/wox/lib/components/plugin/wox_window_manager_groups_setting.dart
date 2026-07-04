@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/demo/wox_demo.dart';
@@ -11,6 +13,7 @@ import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_textfield.dart';
+import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_setting.dart';
@@ -349,6 +352,7 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
       selectedApp: current,
       initialApps: _mergeSelectedApp(current, apps),
       loadApps: () async => _mergeSelectedApp(current, await _loadAvailableApps()),
+      titleKey: 'plugin_window_manager_group_app_selector_title',
     );
     if (!mounted || selectedApp == null) {
       return;
@@ -371,9 +375,12 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
     if (screen == null) {
       return;
     }
+    // Preserve existing URLs when swapping the app on the same slot.
+    final existing = screen.assignmentFor(slotId);
+    final preservedUrls = existing?.urls ?? const <String>[];
     screen.assignments.removeWhere((assignment) => assignment.slot == slotId);
     if (identity.isNotEmpty) {
-      screen.assignments.add(_WindowManagerAssignment(slot: slotId, app: app));
+      screen.assignments.add(_WindowManagerAssignment(slot: slotId, app: app, urls: preservedUrls));
     }
   }
 
@@ -394,6 +401,61 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
       merged.add(app);
     }
     return merged;
+  }
+
+  /// Returns true when the app identity matches a known browser executable
+  /// (Windows exe name or macOS bundle id).
+  bool _isBrowserApp(IgnoredHotkeyApp app) {
+    final id = app.identity.trim().toLowerCase();
+    if (id.isEmpty) {
+      return false;
+    }
+    // Windows browser executable base names
+    const winBrowserExes = {'chrome.exe', 'msedge.exe', 'firefox.exe', 'brave.exe', 'opera.exe', 'launcher.exe'};
+    // macOS browser bundle id prefixes
+    const macBrowserPrefixes = [
+      'com.google.chrome',
+      'com.microsoft.edgemac',
+      'org.mozilla.firefox',
+      'com.brave.browser',
+      'com.operasoftware.opera',
+      'org.chromium.chromium',
+      'com.apple.safari',
+    ];
+    // Linux browser executable names
+    const linuxBrowserCmds = {
+      'google-chrome',
+      'google-chrome-stable',
+      'chromium',
+      'chromium-browser',
+      'microsoft-edge',
+      'microsoft-edge-stable',
+      'firefox',
+      'brave-browser',
+      'opera',
+    };
+    return winBrowserExes.contains(id) || macBrowserPrefixes.any((p) => id.startsWith(p)) || linuxBrowserCmds.contains(id);
+  }
+
+  Future<void> _openUrlEditor(_WindowGroupSlot slot) async {
+    final screen = _selectedScreen;
+    if (screen == null) {
+      return;
+    }
+    final assignment = screen.assignmentFor(slot.id);
+    if (assignment == null) {
+      return;
+    }
+
+    final result = await showDialog<List<String>>(context: context, builder: (context) => _UrlEditDialog(initialUrls: List<String>.from(assignment.urls)));
+    if (!mounted || result == null) {
+      return;
+    }
+
+    setState(() {
+      screen.assignments.removeWhere((a) => a.slot == slot.id);
+      screen.assignments.add(_WindowManagerAssignment(slot: slot.id, app: assignment.app, urls: result));
+    });
   }
 
   void _setSelectedLayout(_WindowGroupLayout layout) {
@@ -528,6 +590,7 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
     final selected = displayIndex == _selectedDisplayIndex;
     final layout = selected ? _selectedLayout : _WindowGroupLayouts.byId(_group.screenFor(display, displayIndex).layout);
     final screen = _group.screenFor(display, displayIndex);
+    final selectedIndicatorColor = isThemeDark() ? Colors.green.shade400 : Colors.green.shade700;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -536,9 +599,10 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
         onTap: () => setState(() => _selectedDisplayIndex = displayIndex),
         child: Container(
           decoration: BoxDecoration(
-            color: selected ? getThemeActiveBackgroundColor().withValues(alpha: isThemeDark() ? 0.26 : 0.18) : getThemePopupSurfaceColor(),
-            border: Border.all(color: selected ? getThemeActiveBackgroundColor() : getThemeSubTextColor().withValues(alpha: 0.4), width: selected ? 2 : 1),
+            color: selected ? Color.alphaBlend(selectedIndicatorColor.withValues(alpha: isThemeDark() ? 0.08 : 0.06), getThemePopupSurfaceColor()) : getThemePopupSurfaceColor(),
+            border: Border.all(color: selected ? selectedIndicatorColor.withValues(alpha: 0.9) : getThemeSubTextColor().withValues(alpha: 0.4), width: selected ? 2.5 : 1),
             borderRadius: BorderRadius.circular(6),
+            boxShadow: selected ? [BoxShadow(color: selectedIndicatorColor.withValues(alpha: isThemeDark() ? 0.24 : 0.18), blurRadius: 12, spreadRadius: 1)] : const [],
           ),
           child: Stack(
             children: [
@@ -574,56 +638,109 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
     final assignedApp = assignment?.app;
     final hasAssignment = assignedApp != null && assignedApp.identity.trim().isNotEmpty;
     final appName = hasAssignment && assignedApp.name.trim().isNotEmpty ? assignedApp.name.trim() : '';
+    final isBrowser = hasAssignment && _isBrowserApp(assignedApp);
+    final urlCount = assignment?.urls.where((u) => u.trim().isNotEmpty).length ?? 0;
+    final urlPillColor = isThemeDark() ? Colors.green.shade300 : Colors.green.shade700;
+
+    final tile = Container(
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: hasAssignment ? getThemeActiveBackgroundColor().withValues(alpha: isThemeDark() ? 0.28 : 0.2) : getThemeTextColor().withValues(alpha: isThemeDark() ? 0.035 : 0.055),
+        border: Border.all(color: hasAssignment ? getThemeActiveBackgroundColor().withValues(alpha: 0.55) : getThemeSubTextColor().withValues(alpha: 0.38)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child:
+          hasAssignment
+              ? WoxTooltip(
+                message: tr('plugin_window_manager_group_slot_change_app'),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (assignedApp.icon.imageData.isNotEmpty)
+                      ClipRRect(borderRadius: BorderRadius.circular(4), child: WoxImageView(woxImage: assignedApp.icon, width: 18, height: 18))
+                    else
+                      Icon(Icons.apps_rounded, size: 18, color: getThemeTextColor().withValues(alpha: 0.78)),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(appName, style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+              )
+              : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add_circle_outline_rounded, size: 15, color: getThemeSubTextColor()),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      tr('plugin_window_manager_group_slot_choose_app'),
+                      style: TextStyle(color: getThemeSubTextColor(), fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+    );
+
+    if (isBrowser) {
+      return MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: selectedDisplay ? () => _openSlotAppSelector(slot) : () => setState(() => _selectedDisplayIndex = displayIndex),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              tile,
+              Positioned(
+                right: 6,
+                bottom: 6,
+                child: WoxTooltip(
+                  message: tr('plugin_window_manager_group_browser_urls'),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap:
+                        selectedDisplay
+                            ? () => _openUrlEditor(slot)
+                            : () {
+                              setState(() => _selectedDisplayIndex = displayIndex);
+                            },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Color.alphaBlend(urlPillColor.withValues(alpha: isThemeDark() ? 0.18 : 0.1), getThemeBackgroundColor()),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: urlPillColor.withValues(alpha: 0.75)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.link_rounded, size: 13, color: urlPillColor),
+                          const SizedBox(width: 3),
+                          Text(urlCount > 0 ? '$urlCount' : 'URL', style: TextStyle(color: urlPillColor, fontSize: 10, fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: selectedDisplay ? () => _openSlotAppSelector(slot) : () => setState(() => _selectedDisplayIndex = displayIndex),
-        child: Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color:
-                hasAssignment
-                    ? getThemeActiveBackgroundColor().withValues(alpha: isThemeDark() ? 0.28 : 0.2)
-                    : getThemeTextColor().withValues(alpha: isThemeDark() ? 0.035 : 0.055),
-            border: Border.all(color: hasAssignment ? getThemeActiveBackgroundColor().withValues(alpha: 0.55) : getThemeSubTextColor().withValues(alpha: 0.38)),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child:
-              hasAssignment
-                  ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (assignedApp.icon.imageData.isNotEmpty)
-                        ClipRRect(borderRadius: BorderRadius.circular(4), child: WoxImageView(woxImage: assignedApp.icon, width: 18, height: 18))
-                      else
-                        Icon(Icons.apps_rounded, size: 18, color: getThemeTextColor().withValues(alpha: 0.78)),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(appName, style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ),
-                    ],
-                  )
-                  : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.add_circle_outline_rounded, size: 15, color: getThemeSubTextColor()),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(
-                          tr('plugin_window_manager_group_slot_choose_app'),
-                          style: TextStyle(color: getThemeSubTextColor(), fontSize: 11),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-        ),
+        child: tile,
       ),
     );
   }
@@ -754,8 +871,17 @@ class _WindowManagerGroup {
   }
 
   _WindowManagerGroupScreen screenFor(WindowManagerDisplay display, int displayIndex) {
+    final displayId = display.id.trim();
+    if (displayId.isNotEmpty) {
+      for (final screen in screens) {
+        if (screen.displayId == displayId) {
+          return screen;
+        }
+      }
+    }
+
     for (final screen in screens) {
-      if (screen.matches(display, displayIndex)) {
+      if (screen.displayIndex == displayIndex) {
         return screen;
       }
     }
@@ -794,10 +920,6 @@ class _WindowManagerGroupScreen {
     return _WindowManagerGroupScreen(displayId: displayId, displayIndex: displayIndex, layout: layout, assignments: assignments.map((assignment) => assignment.copy()).toList());
   }
 
-  bool matches(WindowManagerDisplay display, int index) {
-    return (displayId.trim().isNotEmpty && displayId == display.id) || (displayId.trim().isEmpty && displayIndex == index);
-  }
-
   _WindowManagerAssignment? assignmentFor(String slotId) {
     for (final assignment in assignments) {
       if (assignment.slot == slotId) {
@@ -811,20 +933,26 @@ class _WindowManagerGroupScreen {
 class _WindowManagerAssignment {
   String slot;
   IgnoredHotkeyApp app;
+  List<String> urls;
 
-  _WindowManagerAssignment({required this.slot, required this.app});
+  _WindowManagerAssignment({required this.slot, required this.app, this.urls = const []});
 
   factory _WindowManagerAssignment.fromJson(Map<String, dynamic> json) {
     final rawApp = json['App'];
-    return _WindowManagerAssignment(slot: json['Slot'] ?? '', app: rawApp is Map ? IgnoredHotkeyApp.fromJson(Map<String, dynamic>.from(rawApp)) : IgnoredHotkeyApp.empty());
+    final rawUrls = json['Urls'];
+    return _WindowManagerAssignment(
+      slot: json['Slot'] ?? '',
+      app: rawApp is Map ? IgnoredHotkeyApp.fromJson(Map<String, dynamic>.from(rawApp)) : IgnoredHotkeyApp.empty(),
+      urls: rawUrls is List ? rawUrls.map((e) => e.toString()).toList() : const [],
+    );
   }
 
   Map<String, dynamic> toJson() {
-    return <String, dynamic>{'Slot': slot, 'App': app.toJson()};
+    return <String, dynamic>{'Slot': slot, 'App': app.toJson(), 'Urls': urls};
   }
 
   _WindowManagerAssignment copy() {
-    return _WindowManagerAssignment(slot: slot, app: IgnoredHotkeyApp(name: app.name, identity: app.identity, path: app.path, icon: app.icon));
+    return _WindowManagerAssignment(slot: slot, app: IgnoredHotkeyApp(name: app.name, identity: app.identity, path: app.path, icon: app.icon), urls: List<String>.from(urls));
   }
 }
 
@@ -942,4 +1070,235 @@ class _WindowGroupSlot {
   final double height;
 
   _WindowGroupSlot({required this.id, required this.titleKey, required this.left, required this.top, required this.width, required this.height});
+}
+
+/// Dialog for editing the list of URLs that a browser slot should open when the
+/// workspace layout is applied. URLs are auto-completed with https:// on save.
+class _UrlEditDialog extends StatefulWidget {
+  final List<String> initialUrls;
+
+  const _UrlEditDialog({required this.initialUrls});
+
+  @override
+  State<_UrlEditDialog> createState() => _UrlEditDialogState();
+}
+
+class _UrlEditDialogState extends State<_UrlEditDialog> {
+  static const _urlTableKey = 'urls';
+  static const _urlColumnKey = 'Url';
+  static const _extensionStoreUrl = 'https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh';
+
+  late List<Map<String, dynamic>> _rows;
+  bool _extensionConnected = false;
+  bool _checkingExtension = true;
+
+  String tr(String key) => Get.find<WoxSettingController>().tr(key);
+
+  @override
+  void initState() {
+    super.initState();
+    _rows = widget.initialUrls.where((url) => url.trim().isNotEmpty).map((url) => <String, dynamic>{_urlColumnKey: url.trim()}).toList();
+    _checkExtensionConnected();
+  }
+
+  void _checkExtensionConnected() async {
+    final traceId = const UuidV4().generate();
+    try {
+      final connected = await WoxApi.instance.getBrowserExtensionConnected(traceId);
+      if (mounted) {
+        setState(() {
+          _extensionConnected = connected;
+          _checkingExtension = false;
+        });
+      }
+    } catch (e) {
+      Logger.instance.error(traceId, 'Failed to check browser extension status: $e');
+      if (mounted) {
+        setState(() {
+          _extensionConnected = false;
+          _checkingExtension = false;
+        });
+      }
+    }
+  }
+
+  void _openExtensionStore() async {
+    final uri = Uri.parse(_extensionStoreUrl);
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  /// Auto-completes a URL with https:// if no scheme is present.
+  /// Returns "" for invalid non-http(s) schemes.
+  String _normalizeUrl(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) {
+      return '';
+    }
+    if (!s.contains('://')) {
+      return 'https://$s';
+    }
+    final lower = s.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      return s;
+    }
+    return '';
+  }
+
+  PluginSettingValueTable _buildUrlTableDefinition() {
+    return PluginSettingValueTable.fromJson({
+      "Key": _urlTableKey,
+      "Title": "",
+      "Tooltip": "",
+      "MaxHeight": 210,
+      "UpdateDialogWidth": 560,
+      "Columns": [
+        {
+          "Key": _urlColumnKey,
+          "Label": "URL",
+          "Tooltip": "",
+          "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
+          "Width": 360,
+          "TextMaxLines": 1,
+          "Validators": [
+            {"Type": "not_empty"},
+          ],
+        },
+      ],
+    });
+  }
+
+  Future<String?> _updateRows(String key, String value) async {
+    final decoded = jsonDecode(value);
+    if (decoded is! List) {
+      return null;
+    }
+
+    setState(() {
+      _rows = decoded.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList();
+    });
+    return null;
+  }
+
+  Widget _buildExtensionStatusBox() {
+    if (_checkingExtension) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: getThemeTextColor().withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: getThemeSubTextColor().withValues(alpha: 0.22), width: 1),
+        ),
+        child: Row(
+          children: [
+            SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: getThemeSubTextColor())),
+            const SizedBox(width: 6),
+            Expanded(child: Text('...', style: TextStyle(color: getThemeSubTextColor().withValues(alpha: 0.8), fontSize: 11))),
+          ],
+        ),
+      );
+    }
+
+    if (_extensionConnected) {
+      final successColor = isThemeDark() ? Colors.green.shade400 : Colors.green.shade700;
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: successColor.withValues(alpha: isThemeDark() ? 0.12 : 0.08),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: successColor.withValues(alpha: 0.45), width: 1),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle_outline_rounded, size: 14, color: successColor),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(tr('plugin_window_manager_group_browser_extension_connected'), style: TextStyle(color: getThemeTextColor().withValues(alpha: 0.86), fontSize: 11)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final warningColor = isThemeDark() ? Colors.orange.shade300 : Colors.orange.shade700;
+    final warningLinkColor = isThemeDark() ? Colors.orange.shade200 : Colors.orange.shade800;
+    return GestureDetector(
+      onTap: _openExtensionStore,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: warningColor.withValues(alpha: isThemeDark() ? 0.12 : 0.08),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: warningColor.withValues(alpha: 0.45), width: 1),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, size: 14, color: warningColor),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(tr('plugin_window_manager_group_browser_extension_not_connected'), style: TextStyle(color: warningColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(Icons.open_in_new_rounded, size: 11, color: warningLinkColor),
+                      const SizedBox(width: 3),
+                      Text(
+                        tr('plugin_window_manager_group_browser_extension_install'),
+                        style: TextStyle(color: warningLinkColor, fontSize: 11, fontWeight: FontWeight.w600, decoration: TextDecoration.underline),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _submit() {
+    final urls = <String>[];
+    for (final row in _rows) {
+      final normalized = _normalizeUrl(row[_urlColumnKey]?.toString() ?? '');
+      if (normalized.isNotEmpty) {
+        urls.add(normalized);
+      }
+    }
+    Navigator.pop(context, urls);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = getThemeTextColor();
+    return WoxDialog(
+      title: Text(tr('plugin_window_manager_group_browser_urls'), style: TextStyle(color: textColor, fontSize: 16)),
+      titleTextStyle: TextStyle(color: textColor, fontSize: 16),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(tr('plugin_window_manager_group_browser_urls_description'), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
+            const SizedBox(height: 12),
+            WoxSettingPluginTable(
+              value: jsonEncode(_rows),
+              item: _buildUrlTableDefinition(),
+              tableWidth: 480,
+              inlineTitleActions: true,
+              showCloneAction: false,
+              onUpdate: _updateRows,
+            ),
+            const SizedBox(height: 8),
+            _buildExtensionStatusBox(),
+          ],
+        ),
+      ),
+      actions: [WoxButton(text: tr('ui_cancel'), onPressed: () => Navigator.pop(context, null)), WoxButton(text: tr('ui_save'), onPressed: _submit)],
+    );
+  }
 }

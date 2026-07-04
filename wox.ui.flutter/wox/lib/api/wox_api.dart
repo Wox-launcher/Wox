@@ -52,6 +52,14 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData<List<WindowManagerDisplay>>(traceId, "/setting/window-manager/displays", null);
   }
 
+  Future<bool> getBrowserExtensionConnected(String traceId) async {
+    final result = await WoxHttpUtil.instance.postData(traceId, "/browser/extension/status", null);
+    if (result is Map) {
+      return result['connected'] == true;
+    }
+    return false;
+  }
+
   Future<List<String>> getSystemFontFamilies(String traceId) async {
     return await WoxHttpUtil.instance.postData<List<String>>(traceId, "/setting/ui/fonts", null);
   }

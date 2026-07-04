@@ -134,6 +134,26 @@ func TestCalculatorBasic(t *testing.T) {
 	suite.RunQueryTests(tests)
 }
 
+func TestCalculatorExpressionHasBaseScore(t *testing.T) {
+	suite := NewTestSuite(t)
+	setCalculatorSeparators(t, "Dot", "Comma")
+	waitForCalculatorReady(t, suite)
+
+	results, err := runQuery(suite.ctx, "31*6")
+	if err != nil {
+		t.Fatalf("run calculator query: %v", err)
+	}
+	for _, result := range results {
+		if result.Title == "186" {
+			if result.Score < 50 {
+				t.Fatalf("calculator expression result should have base score, got %d", result.Score)
+			}
+			return
+		}
+	}
+	t.Fatalf("calculator result 186 not found: %#v", results)
+}
+
 func TestCalculatorTrigonometric(t *testing.T) {
 	suite := NewTestSuite(t)
 	setCalculatorSeparators(t, "Dot", "Comma")

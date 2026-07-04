@@ -23,6 +23,7 @@ const (
 	DoctorCheckGnomeTrayIndicator     DoctorCheckType = "gnomeTrayIndicator"
 	DoctorCheckWaylandDesktopLaunch   DoctorCheckType = "waylandDesktopLaunch"
 	DoctorCheckLinuxInputGroup        DoctorCheckType = "linuxInputGroup"
+	DoctorCheckLinuxUinputGroup       DoctorCheckType = "linuxUinputGroup"
 )
 
 type DoctorCheckSeverity string
@@ -67,6 +68,9 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 		results = append(results, result)
 	}
 	if result, ok := checkLinuxInputGroup(ctx); ok {
+		results = append(results, result)
+	}
+	if result, ok := checkLinuxUinputGroup(ctx); ok {
 		results = append(results, result)
 	}
 

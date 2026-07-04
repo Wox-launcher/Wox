@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
+	"wox/util/browser"
 
 	"github.com/olahol/melody"
 	"github.com/rs/cors"
@@ -34,6 +36,7 @@ type BrowserPlugin struct {
 
 	openedTabs []browserTab
 	activeTab  browserTab
+	tabsMu     sync.RWMutex
 }
 
 type websocketMsg struct {
@@ -139,7 +142,11 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 		return plugin.NewQueryResponse(results)
 	}
 
-	for _, tab := range c.openedTabs {
+	c.tabsMu.RLock()
+	tabs := append([]browserTab(nil), c.openedTabs...)
+	c.tabsMu.RUnlock()
+
+	for _, tab := range tabs {
 		isTitleMatched, titleScore := plugin.IsStringMatchScore(ctx, tab.Title, query.Search)
 		isUrlMatched, urlScore := strings.Contains(tab.Url, query.Search), int64(1)
 		if !isTitleMatched && !isUrlMatched {
@@ -257,7 +264,9 @@ func (c *BrowserPlugin) onUpdateTabs(ctx context.Context, data string) {
 		return tab.Highlighted
 	})
 	if exist {
+		c.tabsMu.Lock()
 		c.activeTab = activeTab
+		c.tabsMu.Unlock()
 		plugin.GetPluginManager().SetActiveBrowserUrl(activeTab.Url)
 	}
 
@@ -266,13 +275,85 @@ func (c *BrowserPlugin) onUpdateTabs(ctx context.Context, data string) {
 		return tab.Url
 	})
 	// filter invalid tabs
-	c.openedTabs = lo.Filter(uniqueTabs, func(tab browserTab, _ int) bool {
+	filtered := lo.Filter(uniqueTabs, func(tab browserTab, _ int) bool {
 		return tab.Url != ""
 	})
+	c.tabsMu.Lock()
+	c.openedTabs = filtered
+	c.tabsMu.Unlock()
 
 	util.Go(ctx, "index browser icons", func() {
-		for _, tab := range c.openedTabs {
+		for _, tab := range filtered {
 			getWebsiteIconWithCache(ctx, tab.Url)
 		}
 	})
+}
+
+// GetOpenedTabUrls returns the URLs of currently open tabs reported by the
+// browser extension. Returns nil when no tabs have been reported.
+func (c *BrowserPlugin) GetOpenedTabUrls() []string {
+	c.tabsMu.RLock()
+	defer c.tabsMu.RUnlock()
+	urls := make([]string, len(c.openedTabs))
+	for i, tab := range c.openedTabs {
+		urls[i] = tab.Url
+	}
+	return urls
+}
+
+// GetOpenedTabs returns the full tab info (tabId, windowId, tabIndex, url)
+// for currently open tabs reported by the browser extension.
+func (c *BrowserPlugin) GetOpenedTabs() []browser.TabInfo {
+	c.tabsMu.RLock()
+	defer c.tabsMu.RUnlock()
+	tabs := make([]browser.TabInfo, len(c.openedTabs))
+	for i, tab := range c.openedTabs {
+		tabs[i] = browser.TabInfo{TabId: tab.TabId, WindowId: tab.WindowId, TabIndex: tab.TabIndex, Url: tab.Url}
+	}
+	return tabs
+}
+
+// IsExtensionConnected reports whether the browser extension WebSocket has
+// at least one active session.
+func (c *BrowserPlugin) IsExtensionConnected() bool {
+	if c.m == nil {
+		return false
+	}
+	sessions, err := c.m.Sessions()
+	if err != nil {
+		return false
+	}
+	return len(sessions) > 0
+}
+
+// OpenUrlViaExtension sends an openUrl command to the browser extension so it
+// creates a new tab with the given URL. This opens the tab inside the already
+// running browser instance instead of launching a new process.
+func (c *BrowserPlugin) OpenUrlViaExtension(url string) error {
+	if c.m == nil {
+		return fmt.Errorf("browser extension websocket not started")
+	}
+	msg := fmt.Sprintf(`{"method":"openUrl","data":%s}`, mustJSONString(url))
+	return c.m.Broadcast([]byte(msg))
+}
+
+// HighlightTab sends a highlightTab command to the browser extension so it
+// switches focus to the specified tab within the specified window.
+func (c *BrowserPlugin) HighlightTab(tabId, windowId, tabIndex int) error {
+	if c.m == nil {
+		return fmt.Errorf("browser extension websocket not started")
+	}
+	msg := fmt.Sprintf(`{"method":"highlightTab","data":"{\"tabId\":%d,\"windowId\":%d,\"tabIndex\":%d}"}`, tabId, windowId, tabIndex)
+	return c.m.Broadcast([]byte(msg))
+}
+
+// mustJSONString encodes a string as a JSON string literal (with surrounding
+// quotes and proper escaping). Panics if the string cannot be encoded, which
+// only happens for invalid surrogate pairs — not possible in normal use.
+func mustJSONString(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return `""`
+	}
+	return string(b)
 }

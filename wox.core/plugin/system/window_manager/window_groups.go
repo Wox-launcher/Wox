@@ -13,6 +13,7 @@ import (
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
+	"wox/util/browser"
 	"wox/util/overlay"
 	"wox/util/shell"
 	"wox/util/window"
@@ -56,6 +57,7 @@ type windowManagerWindowGroupScreen struct {
 type windowManagerWindowGroupAssignment struct {
 	Slot string
 	App  setting.IgnoredHotkeyApp
+	Urls []string
 }
 
 type windowGroupLayoutDefinition struct {
@@ -78,6 +80,7 @@ type windowGroupPlacement struct {
 	Identity  string
 	AppName   string
 	AppPath   string
+	Urls      []string
 	Window    window.ManagedWindow
 	Rect      window.WindowRect
 }
@@ -337,7 +340,22 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 	if len(missingBeforeLaunch) > 0 {
 		launchWaitPlacements = make([]windowGroupPlacement, 0, len(missingBeforeLaunch))
 		for _, placement := range placements {
-			if !missingBeforeLaunch[placement.Identity] || strings.TrimSpace(placement.AppPath) == "" {
+			if !missingBeforeLaunch[placement.Identity] {
+				continue
+			}
+
+			browserID := browser.BrowserIDForIdentity(placement.Identity, placement.AppPath)
+			isBrowser := browserID != ""
+			urlsToOpen := normalizePlacementUrls(placement.Urls)
+			hasUrls := len(urlsToOpen) > 0
+
+			// For a browser with URLs, launch via OpenURL instead of shell.Open.
+			// For a browser without URLs but no appPath, skip (can't launch).
+			// For non-browser apps, require appPath as before.
+			if !isBrowser && strings.TrimSpace(placement.AppPath) == "" {
+				continue
+			}
+			if isBrowser && !hasUrls && strings.TrimSpace(placement.AppPath) == "" {
 				continue
 			}
 
@@ -347,33 +365,74 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 				messageKey = "plugin_window_manager_group_showing_app"
 				p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager group app already running without manageable window, requesting activation: group=%s app=%s identity=%s path=%s", group.Id, placement.AppName, placement.Identity, placement.AppPath))
 			} else {
-				p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager launching missing group app: group=%s app=%s identity=%s path=%s", group.Id, placement.AppName, placement.Identity, placement.AppPath))
+				p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager launching missing group app: group=%s app=%s identity=%s path=%s browser=%s urls=%d", group.Id, placement.AppName, placement.Identity, placement.AppPath, browserID, len(urlsToOpen)))
 			}
 
 			launchStart := time.Now()
 			placeholderName := p.showWindowGroupLaunchPlaceholder(ctx, group, placement, messageKey)
-			if err := shell.Open(placement.AppPath); err != nil {
-				p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, placement.Identity)
-				summary.LaunchFailures = appendUniqueString(summary.LaunchFailures, placement.AppName)
-				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to launch app for group: group=%s app=%s identity=%s path=%s err=%s", group.Id, placement.AppName, placement.Identity, placement.AppPath, err.Error()))
-				continue
+
+			launched := false
+			if isBrowser && hasUrls {
+				// Use dedup-aware opening so already-open tabs are skipped when
+				// the extension is connected. If the browser is truly not running,
+				// the extension won't be connected and this falls back to
+				// browser.OpenURL which launches the browser with the first URL.
+				p.openBrowserUrlsWithDedup(ctx, browserID, placement, urlsToOpen)
+				launched = true
+			} else if isBrowser && !hasUrls && strings.TrimSpace(placement.AppPath) != "" {
+				if err := shell.Open(placement.AppPath); err != nil {
+					p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, placement.Identity)
+					summary.LaunchFailures = appendUniqueString(summary.LaunchFailures, placement.AppName)
+					p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to launch browser for group: group=%s app=%s identity=%s path=%s err=%s", group.Id, placement.AppName, placement.Identity, placement.AppPath, err.Error()))
+					continue
+				}
+				launched = true
+			} else {
+				if err := shell.Open(placement.AppPath); err != nil {
+					p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, placement.Identity)
+					summary.LaunchFailures = appendUniqueString(summary.LaunchFailures, placement.AppName)
+					p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to launch app for group: group=%s app=%s identity=%s path=%s err=%s", group.Id, placement.AppName, placement.Identity, placement.AppPath, err.Error()))
+					continue
+				}
+				launched = true
 			}
-			if placeholderName != "" {
-				launchPlaceholders[placement.Identity] = placeholderName
+
+			if launched {
+				if placeholderName != "" {
+					launchPlaceholders[placement.Identity] = placeholderName
+				}
+				p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager requested group app open: group=%s app=%s identity=%s alreadyRunning=%t costMs=%d", group.Id, placement.AppName, placement.Identity, isRunningWithoutWindow, time.Since(launchStart).Milliseconds()))
+				if !isRunningWithoutWindow {
+					summary.Launched++
+				}
+				launchedIdentities[placement.Identity] = true
+				launchWaitPlacements = append(launchWaitPlacements, placement)
 			}
-			p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager requested group app open: group=%s app=%s identity=%s alreadyRunning=%t costMs=%d", group.Id, placement.AppName, placement.Identity, isRunningWithoutWindow, time.Since(launchStart).Milliseconds()))
-			if !isRunningWithoutWindow {
-				summary.Launched++
-			}
-			launchedIdentities[placement.Identity] = true
-			launchWaitPlacements = append(launchWaitPlacements, placement)
 		}
 	}
 
+	// For already-running browsers with URLs, open URLs as new tabs (with dedup
+	// via the browser extension when available) before moving the window.
 	for _, placement := range placements {
 		if launchedIdentities[placement.Identity] && len(windowsByIdentity[placement.Identity]) == 0 {
 			continue
 		}
+		// Skip URL opening for placements we just launched — their URLs were
+		// already opened during the launch step above.
+		if launchedIdentities[placement.Identity] {
+			p.applyWindowGroupPlacement(ctx, group, placement, windowsByIdentity, &summary)
+			p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, placement.Identity)
+			continue
+		}
+
+		browserID := browser.BrowserIDForIdentity(placement.Identity, placement.AppPath)
+		if browserID != "" {
+			urlsToOpen := normalizePlacementUrls(placement.Urls)
+			if len(urlsToOpen) > 0 {
+				p.openBrowserUrlsWithDedup(ctx, browserID, placement, urlsToOpen)
+			}
+		}
+
 		p.applyWindowGroupPlacement(ctx, group, placement, windowsByIdentity, &summary)
 		p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, placement.Identity)
 	}
@@ -615,6 +674,7 @@ func (p *WindowManagerPlugin) buildWindowGroupPlacements(ctx context.Context, gr
 				Identity:  identity,
 				AppName:   windowGroupAppName(assignment.App),
 				AppPath:   strings.TrimSpace(assignment.App.Path),
+				Urls:      assignment.Urls,
 				Rect:      rect,
 			})
 		}
@@ -802,4 +862,96 @@ func appendUniqueString(values []string, value string) []string {
 		}
 	}
 	return append(values, value)
+}
+
+// browserExtensionProvider is implemented by the Browser plugin to expose tab
+// state and URL-opening via the Chrome extension. Window Manager uses it to
+// activate existing tabs instead of opening duplicates.
+type browserExtensionProvider interface {
+	GetOpenedTabs() []browser.TabInfo
+	IsExtensionConnected() bool
+	OpenUrlViaExtension(url string) error
+	HighlightTab(tabId, windowId, tabIndex int) error
+}
+
+// normalizePlacementUrls filters blank entries and auto-completes https:// on
+// each URL from the placement's Urls slice.
+func normalizePlacementUrls(rawUrls []string) []string {
+	var result []string
+	for _, raw := range rawUrls {
+		normalized := browser.NormalizeURL(raw)
+		if normalized != "" {
+			result = append(result, normalized)
+		}
+	}
+	return result
+}
+
+// openBrowserUrlsWithDedup opens URLs as new tabs in the already-running browser.
+// When the Wox browser extension is connected, it activates the existing tab for
+// URLs already open (only the first match is activated) and opens new tabs for
+// the rest. Otherwise it falls back to browser.OpenURL.
+func (p *WindowManagerPlugin) openBrowserUrlsWithDedup(ctx context.Context, browserID string, placement windowGroupPlacement, urlsToOpen []string) {
+	provider := p.findBrowserExtensionProvider()
+	if provider != nil && provider.IsExtensionConnected() {
+		existingTabs := provider.GetOpenedTabs()
+		existingByKey := make(map[string]browser.TabInfo, len(existingTabs))
+		for _, tab := range existingTabs {
+			key := browser.NormalizeURLForComparison(tab.Url)
+			if _, exists := existingByKey[key]; !exists {
+				existingByKey[key] = tab
+			}
+		}
+		p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager dedup: existing tabs=%d urlsToOpen=%d", len(existingTabs), len(urlsToOpen)))
+		opened := 0
+		activated := 0
+		firstActivated := false
+		for _, urlToOpen := range urlsToOpen {
+			key := browser.NormalizeURLForComparison(urlToOpen)
+			if tab, found := existingByKey[key]; found {
+				if !firstActivated {
+					if err := provider.HighlightTab(tab.TabId, tab.WindowId, tab.TabIndex); err != nil {
+						p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager highlight tab failed, falling back to open: group=%s app=%s url=%s err=%s", placement.GroupName, placement.AppName, urlToOpen, err.Error()))
+						_ = browser.OpenURL(urlToOpen, browserID)
+						opened++
+					} else {
+						p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager activated existing tab: group=%s app=%s url=%s tabId=%d", placement.GroupName, placement.AppName, urlToOpen, tab.TabId))
+						activated++
+						firstActivated = true
+					}
+				} else {
+					p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager skipping already-open url (first tab already activated): group=%s app=%s url=%s", placement.GroupName, placement.AppName, urlToOpen))
+				}
+				continue
+			}
+			if err := provider.OpenUrlViaExtension(urlToOpen); err != nil {
+				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager extension open url failed, falling back: group=%s app=%s url=%s err=%s", placement.GroupName, placement.AppName, urlToOpen, err.Error()))
+				_ = browser.OpenURL(urlToOpen, browserID)
+			}
+			opened++
+		}
+		p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager urls processed via extension: group=%s app=%s opened=%d activated=%d skipped=%d", placement.GroupName, placement.AppName, opened, activated, len(urlsToOpen)-opened-activated))
+	} else {
+		providerConnected := provider != nil
+		p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager dedup skipped (provider=%t connected=%t): group=%s app=%s urls=%d", providerConnected, providerConnected && provider.IsExtensionConnected(), placement.GroupName, placement.AppName, len(urlsToOpen)))
+		for _, urlToOpen := range urlsToOpen {
+			_ = browser.OpenURL(urlToOpen, browserID)
+		}
+		p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager opened urls (no extension connected): group=%s app=%s urls=%d", placement.GroupName, placement.AppName, len(urlsToOpen)))
+	}
+}
+
+// findBrowserExtensionProvider retrieves the Browser plugin instance if it is
+// loaded and implements browserExtensionProvider.
+func (p *WindowManagerPlugin) findBrowserExtensionProvider() browserExtensionProvider {
+	const browserPluginID = "8f68a760-86a0-46a9-b331-58dcaf091daa"
+	sp := plugin.GetPluginManager().GetSystemPlugin(browserPluginID)
+	if sp == nil {
+		return nil
+	}
+	provider, ok := sp.(browserExtensionProvider)
+	if !ok {
+		return nil
+	}
+	return provider
 }
