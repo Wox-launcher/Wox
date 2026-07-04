@@ -220,6 +220,105 @@ func TestContentIndexCamelCase(t *testing.T) {
 	}
 }
 
+func TestContentSearchQuotedPhraseRequiresTokenOrder(t *testing.T) {
+	db := newTestContentSearchDB(t)
+	defer db.Close()
+	ctx := context.Background()
+
+	if _, err := db.IndexContent(ctx, "/test/phrase.txt", 1000, 100, "txt", "Initialize content index if enabled"); err != nil {
+		t.Fatalf("index phrase content: %v", err)
+	}
+	if _, err := db.IndexContent(ctx, "/test/scrambled.txt", 1000, 100, "txt", "Initialize index content if enabled"); err != nil {
+		t.Fatalf("index scrambled content: %v", err)
+	}
+
+	unquotedResults, err := db.SearchContent(ctx, "Initialize content index if enabled", 10)
+	if err != nil {
+		t.Fatalf("unquoted SearchContent: %v", err)
+	}
+	if len(unquotedResults) != 2 {
+		t.Fatalf("unquoted results: %d, want 2", len(unquotedResults))
+	}
+
+	quotedResults, err := db.SearchContent(ctx, `"Initialize content index if enabled"`, 10)
+	if err != nil {
+		t.Fatalf("quoted SearchContent: %v", err)
+	}
+	if len(quotedResults) != 1 {
+		t.Fatalf("quoted results: %d, want 1", len(quotedResults))
+	}
+	if quotedResults[0].Path != "/test/phrase.txt" {
+		t.Fatalf("quoted result path: %q, want /test/phrase.txt", quotedResults[0].Path)
+	}
+}
+
+func TestContentIndexInitRecreatesLegacyDetailNoneTable(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	dsn := dbPath + "?_journal_mode=WAL&_synchronous=NORMAL&_cache_size=2000&_foreign_keys=true&_busy_timeout=5000"
+	sqlDB, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer sqlDB.Close()
+
+	_, err = sqlDB.ExecContext(ctx, `
+		CREATE TABLE meta (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);
+		INSERT INTO meta (key, value) VALUES ('content_crawl_state', 'complete');
+		CREATE TABLE content_entries (
+			rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+			path TEXT NOT NULL UNIQUE,
+			mtime INTEGER NOT NULL,
+			size INTEGER NOT NULL,
+			content_hash INTEGER NOT NULL DEFAULT 0,
+			extension TEXT NOT NULL DEFAULT '',
+			indexed_text_bytes INTEGER NOT NULL DEFAULT 0
+		);
+		CREATE VIRTUAL TABLE entries_content_fts USING fts5(
+			content,
+			content='',
+			tokenize='unicode61',
+			detail='none'
+		);
+		INSERT INTO content_entries (rowid, path, mtime, size, content_hash, extension, indexed_text_bytes)
+			VALUES (1, '/test/legacy.txt', 1000, 100, 1, 'txt', 18);
+		INSERT INTO entries_content_fts(rowid, content) VALUES (1, 'alpha beta gamma');
+	`)
+	if err != nil {
+		t.Fatalf("create legacy content db: %v", err)
+	}
+
+	db := &ContentSearchDB{db: sqlDB, dbPath: dbPath}
+	if err := db.initTables(ctx); err != nil {
+		t.Fatalf("initTables: %v", err)
+	}
+
+	rows, err := sqlDB.QueryContext(ctx, `SELECT rowid FROM entries_content_fts WHERE entries_content_fts MATCH ?`, `"alpha beta"`)
+	if err != nil {
+		t.Fatalf("phrase query should be supported after initTables: %v", err)
+	}
+	rows.Close()
+
+	stats, err := db.ContentStats(ctx)
+	if err != nil {
+		t.Fatalf("ContentStats: %v", err)
+	}
+	if stats.DocCount != 0 {
+		t.Fatalf("legacy content entries should be cleared after schema rebuild, got %d", stats.DocCount)
+	}
+	state, err := db.GetContentCrawlState(ctx)
+	if err != nil {
+		t.Fatalf("GetContentCrawlState: %v", err)
+	}
+	if state != "" {
+		t.Fatalf("crawl state after schema rebuild: %q, want empty", state)
+	}
+}
+
 func TestContentIndexStats(t *testing.T) {
 	db := newTestContentSearchDB(t)
 	defer db.Close()
