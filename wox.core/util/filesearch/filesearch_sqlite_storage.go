@@ -2668,6 +2668,12 @@ func (d *FileSearchDB) rebuildFTSTables(ctx context.Context, optimize bool) erro
 		logFilesearchSQLiteMaintenance(ctx, "optimize_fts", "standalone", optimizeElapsedMs, len(filesearchFTSTables))
 	}
 	logFilesearchSQLiteMaintenance(ctx, "rebuild_fts_total", fmt.Sprintf("optimize=%t", optimize), util.GetSystemTimestamp()-startedAt, len(filesearchFTSTables))
+	// Mark search artifacts as built so NeedsSearchArtifactRebuild() returns
+	// false. EndBulkSync is the bulk-sync path's replacement for
+	// RebuildSearchArtifacts, so it owns the same flag reset. Without this,
+	// callers like waitForFileSearchIdle poll forever after a RebuildIndex
+	// because the flag was set during schema init and never cleared.
+	d.searchArtifactsNeedRebuild = false
 	return nil
 }
 
