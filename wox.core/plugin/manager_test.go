@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"wox/common"
 	"wox/setting"
 	"wox/util"
 )
@@ -88,6 +89,20 @@ func TestPolishUpdatableResultKeepsPreviewForTriggeredQuery(t *testing.T) {
 
 	assert.NotNil(t, result.Preview)
 	assert.Equal(t, "base64:cover", result.Preview.PreviewData)
+}
+
+func TestNormalizeToolbarMsgUsesPluginIconWhenMsgIconMissing(t *testing.T) {
+	manager := &Manager{}
+	pluginIcon := common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>`)
+	pluginInstance := &Instance{
+		Metadata: Metadata{
+			Icon: pluginIcon.String(),
+		},
+	}
+
+	normalized := manager.normalizeToolbarMsg(context.Background(), pluginInstance, ToolbarMsg{Id: "status", Title: "working"})
+
+	assert.Equal(t, pluginIcon, normalized.Icon)
 }
 
 func newTestManagerWithCachedResult(query Query, result QueryResult) (*Manager, *Instance) {
