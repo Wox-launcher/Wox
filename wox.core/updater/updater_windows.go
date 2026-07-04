@@ -3,6 +3,7 @@ package updater
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -64,7 +65,7 @@ func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newP
 	}
 
 	util.GetLogger().Info(ctx, "moving new executable to current location")
-	if err := os.Rename(newPath, oldPath); err != nil {
+	if err := moveDownloadedExecutable(ctx, newPath, oldPath); err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to move new executable to current location, attempting to restore backup: %v", err))
 
 		restoreErr := os.Rename(backupPath, oldPath)
@@ -94,6 +95,38 @@ func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newP
 	os.Exit(0)
 
 	return nil // This line will never be reached due to os.Exit(0)
+}
+
+// moveDownloadedExecutable falls back to copy when Windows cannot rename across drives.
+func moveDownloadedExecutable(ctx context.Context, src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	} else {
+		util.GetLogger().Info(ctx, fmt.Sprintf("failed to rename downloaded executable, falling back to copy: %v", err))
+	}
+
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		_ = dstFile.Close()
+		_ = os.Remove(dst)
+		return err
+	}
+	if err := dstFile.Close(); err != nil {
+		_ = os.Remove(dst)
+		return err
+	}
+
+	_ = os.Remove(src)
+	return nil
 }
 
 func hideBackupExecutable(ctx context.Context, path string) {
