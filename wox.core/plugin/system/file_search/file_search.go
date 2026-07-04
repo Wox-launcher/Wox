@@ -43,14 +43,15 @@ const contentSearchExtensionsKey = "contentSearchExtensions"
 const contentSearchToolbarMsgID = "file-search-content-status"
 
 const (
-	slowFileSearchQueryThresholdMs   int64 = 40
-	slowFileSearchStageThresholdMs   int64 = 15
-	incrementalToolbarMinimumShowMs  int64 = 1000
-	fullIndexCompletionToolbarHoldMs int64 = 1000 * 5
-	toolbarActivityPathMaxChars            = 42
-	toolbarErrorReasonMaxChars             = 28
-	fileSearchResultLimit                  = 100
-	fileSearchRefinedCandidateLimit        = 300
+	slowFileSearchQueryThresholdMs    int64 = 40
+	slowFileSearchStageThresholdMs    int64 = 15
+	incrementalToolbarMinimumShowMs   int64 = 1000
+	fullIndexCompletionToolbarHoldMs  int64 = 1000 * 5
+	toolbarActivityPathMaxChars             = 42
+	toolbarErrorReasonMaxChars              = 28
+	fileSearchResultLimit                   = 100
+	fileSearchRefinedCandidateLimit         = 300
+	fileSearchRefinementSortScoreStep       = 1000000
 )
 
 const (
@@ -553,7 +554,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	fileTypeIcons := map[string]common.WoxImage{}
 	showPreview := c.getConfiguredShowPreview(ctx)
 	queryResults := make([]plugin.QueryResult, 0, len(results))
-	for _, item := range results {
+	for index, item := range results {
 		icon := resolveFileSearchResultIcon(ctx, item, fileTypeIcons, &diagnostics)
 		actions := c.buildFileSearchResultActions(ctx, item)
 
@@ -572,6 +573,9 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 				PreviewType: plugin.WoxPreviewTypeFile,
 				PreviewData: item.Path,
 			}
+		}
+		if selectedSort != fileSearchSortRefinementRelevance {
+			queryResult.Score = fileSearchRefinementSortScore(index, len(results))
 		}
 		queryResults = append(queryResults, queryResult)
 	}
@@ -932,6 +936,15 @@ func refineFileSearchResults(results []filesearch.SearchResult, selectedType str
 		return append([]filesearch.SearchResult(nil), refined[:limit]...)
 	}
 	return refined
+}
+
+// fileSearchRefinementSortScore keeps explicit sort refinement order stable after manager-side score sorting.
+func fileSearchRefinementSortScore(index int, count int) int64 {
+	if count <= 0 {
+		return 0
+	}
+
+	return int64(count-index) * fileSearchRefinementSortScoreStep
 }
 
 func resolveFileSearchResultIcon(ctx context.Context, result filesearch.SearchResult, fileTypeIcons map[string]common.WoxImage, diagnostics *fileSearchQueryDiagnostics) common.WoxImage {

@@ -895,6 +895,7 @@ class WoxLauncherController extends GetxController {
     } else {
       nextRefinements[refinement.id] = normalizedValues;
     }
+    queryRefinementValues.assignAll(nextRefinements);
 
     // Feature addition: changing a refinement is equivalent to changing the
     // query. Reusing onQueryChanged keeps loading, stale-result clearing, and
