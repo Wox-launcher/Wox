@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
+import 'package:flutter_highlight/themes/github.dart';
 import 'package:flutter_highlight/themes/monokai.dart';
 import 'package:highlight/highlight.dart';
 import 'package:highlight/languages/bash.dart';
@@ -46,13 +47,14 @@ import 'package:wox/components/file_preview/file_preview_policy.dart';
 import 'package:wox/components/file_preview/file_preview_renderer.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_selectable_text.dart';
+import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 
 class CodeFilePreviewRenderer implements WoxFilePreviewRenderer {
-  // Syntax-highlighted CodeField construction is much heavier than plain text,
-  // so code previews need a lower auto-load threshold than generic text files.
-  static const int codeAutoLoadThresholdBytes = 256 * 1024;
-  static const int codeHighlightedMaxBytes = codeAutoLoadThresholdBytes;
+  // Syntax-highlighted CodeField construction is much heavier than plain text.
+  // Keep the highlighter reserved for small files and let larger code files use
+  // the limited plain-text preview instead of forcing a manual load step.
+  static const int codeHighlightedMaxBytes = 30 * 1024;
   static const int codeHighlightedMaxLines = 4000;
   static const int codePlainPreviewMaxBytes = 512 * 1024;
   static const int codePlainPreviewMaxLines = 2000;
@@ -138,10 +140,11 @@ class CodeFilePreviewRenderer implements WoxFilePreviewRenderer {
       return WoxFilePreviewResult(content: context.buildText(context.tr("ui_file_preview_code_not_found", {"path": context.filePath})));
     }
 
+    final fileSize = file.lengthSync();
     return WoxFilePreviewPolicy.buildDeferredPreview(
       context: context,
       file: file,
-      manualLoadThresholdBytes: codeAutoLoadThresholdBytes,
+      manualLoadThresholdBytes: fileSize,
       icon: Icons.code_rounded,
       accent: const Color(0xFF8B5CF6),
       typeLabel: WoxFilePreviewPolicy.extensionTypeLabel(context),
@@ -197,9 +200,10 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
   }
 
   Widget _buildHighlightedPreview(_CodePreviewData data) {
-    final codeBackgroundColor = monokaiTheme["root"]?.backgroundColor ?? Colors.grey.shade900;
+    final codeTheme = _codePreviewTheme();
+    final codeBackgroundColor = _codePreviewBackgroundColor();
     return CodeTheme(
-      data: CodeThemeData(styles: monokaiTheme),
+      data: CodeThemeData(styles: codeTheme),
       // Code preview keeps its own editor scroller while the scaffold owns the
       // shared outer frame and metadata area. Large files never reach this path
       // because CodeController highlights and lays out the whole document on the
@@ -216,6 +220,7 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
                   child: ConstrainedBox(
                     constraints: BoxConstraints(minWidth: constraints.maxWidth, maxWidth: constraints.maxWidth, minHeight: constraints.maxHeight),
                     child: CodeField(
+                      background: codeBackgroundColor,
                       textStyle: TextStyle(fontSize: WoxInterfaceSizeUtil.instance.current.resultSubtitleFontSize),
                       readOnly: true,
                       gutterStyle: GutterStyle.none,
@@ -230,8 +235,9 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
   }
 
   Widget _buildPlainPreview(_CodePreviewData data) {
-    final codeBackgroundColor = monokaiTheme["root"]?.backgroundColor ?? Colors.grey.shade900;
-    final codeTextColor = monokaiTheme["root"]?.color ?? Colors.grey.shade100;
+    final codeTheme = _codePreviewTheme();
+    final codeBackgroundColor = _codePreviewBackgroundColor();
+    final codeTextColor = _codePreviewTextColor(codeTheme);
     final metrics = WoxInterfaceSizeUtil.instance.current;
 
     return LayoutBuilder(
@@ -277,6 +283,21 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
           ),
     );
   }
+}
+
+Map<String, TextStyle> _codePreviewTheme() {
+  final theme = Map<String, TextStyle>.from(isThemeDark() ? monokaiTheme : githubTheme);
+  final rootStyle = theme["root"] ?? const TextStyle();
+  theme["root"] = rootStyle.copyWith(backgroundColor: _codePreviewBackgroundColor());
+  return theme;
+}
+
+Color _codePreviewBackgroundColor() {
+  return getThemeBackgroundColor();
+}
+
+Color _codePreviewTextColor(Map<String, TextStyle> theme) {
+  return theme["root"]?.color ?? (isThemeDark() ? Colors.grey.shade100 : Colors.grey.shade900);
 }
 
 class _CodePreviewData {

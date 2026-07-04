@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/file_preview/file_info_preview.dart';
-import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/utils/colors.dart';
@@ -158,24 +157,11 @@ class _WoxDeferredFilePreviewState extends State<WoxDeferredFilePreview> {
         sections: [
           WoxFilePreviewSection(
             title: widget.messageTitle,
-            child: Padding(
-              padding: EdgeInsets.all(WoxInterfaceSizeUtil.instance.current.scaledSpacing(12)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(widget.message, style: TextStyle(color: getThemeSubTextColor(), fontSize: WoxInterfaceSizeUtil.instance.current.resultSubtitleFontSize, height: 1.4)),
-                  SizedBox(height: WoxInterfaceSizeUtil.instance.current.scaledSpacing(12)),
-                  WoxButton.primary(
-                    text: _launcherController == null ? widget.actionLabel : "${widget.actionLabel} (${_launcherController!.filePreviewLoadHotkeyLabel})",
-                    icon: Icon(Icons.visibility_rounded, size: WoxInterfaceSizeUtil.instance.current.toolbarIconSize),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: WoxInterfaceSizeUtil.instance.current.scaledSpacing(14),
-                      vertical: WoxInterfaceSizeUtil.instance.current.scaledSpacing(9),
-                    ),
-                    onPressed: _loadPreview,
-                  ),
-                ],
-              ),
+            child: _ManualPreviewPrompt(
+              message: widget.message,
+              actionLabel: widget.actionLabel,
+              hotkeyLabel: _launcherController?.filePreviewLoadHotkeyLabel ?? "",
+              onPressed: _loadPreview,
             ),
           ),
         ],
@@ -194,6 +180,114 @@ class _WoxDeferredFilePreviewState extends State<WoxDeferredFilePreview> {
               child: ConstrainedBox(constraints: BoxConstraints(minWidth: constraints.maxWidth, maxWidth: constraints.maxWidth, minHeight: constraints.maxHeight), child: child),
             ),
           ),
+    );
+  }
+}
+
+class _ManualPreviewPrompt extends StatelessWidget {
+  final String message;
+  final String actionLabel;
+  final String hotkeyLabel;
+  final VoidCallback onPressed;
+
+  const _ManualPreviewPrompt({required this.message, required this.actionLabel, required this.hotkeyLabel, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final padding = metrics.scaledSpacing(12);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < metrics.scaledSpacing(520);
+        final promptMessage = Text(message, style: TextStyle(color: getThemeSubTextColor(), fontSize: metrics.resultSubtitleFontSize, height: 1.4));
+        final action = _LoadPreviewButton(label: actionLabel, hotkeyLabel: hotkeyLabel, onPressed: onPressed, expanded: compact);
+
+        return Padding(
+          padding: EdgeInsets.all(padding),
+          child:
+              compact
+                  ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [promptMessage, SizedBox(height: metrics.scaledSpacing(12)), action])
+                  : Row(crossAxisAlignment: CrossAxisAlignment.center, children: [Expanded(child: promptMessage), SizedBox(width: metrics.scaledSpacing(14)), action]),
+        );
+      },
+    );
+  }
+}
+
+class _LoadPreviewButton extends StatelessWidget {
+  final String label;
+  final String hotkeyLabel;
+  final VoidCallback onPressed;
+  final bool expanded;
+
+  const _LoadPreviewButton({required this.label, required this.hotkeyLabel, required this.onPressed, required this.expanded});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final activeColor = getThemeActiveBackgroundColor();
+    final borderRadius = BorderRadius.circular(6);
+    final hotkeyParts = hotkeyLabel.split("+").map((part) => part.trim()).where((part) => part.isNotEmpty).toList();
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: borderRadius,
+        child: Container(
+          constraints: BoxConstraints(minHeight: metrics.scaledSpacing(34)),
+          padding: EdgeInsets.symmetric(horizontal: metrics.scaledSpacing(12), vertical: metrics.scaledSpacing(7)),
+          decoration: BoxDecoration(color: activeColor.withValues(alpha: 0.08), borderRadius: borderRadius, border: Border.all(color: activeColor.withValues(alpha: 0.28))),
+          child: Row(
+            mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+              Flexible(
+                fit: expanded ? FlexFit.tight : FlexFit.loose,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: getThemeTextColor(), fontSize: metrics.resultSubtitleFontSize, fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (hotkeyParts.isNotEmpty) ...[
+                SizedBox(width: metrics.scaledSpacing(10)),
+                Wrap(spacing: metrics.scaledSpacing(4), runSpacing: metrics.scaledSpacing(4), children: hotkeyParts.map((part) => _HotkeyKeycap(label: part)).toList()),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HotkeyKeycap extends StatelessWidget {
+  final String label;
+
+  const _HotkeyKeycap({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final textColor = getThemeSubTextColor();
+
+    return Container(
+      constraints: BoxConstraints(minWidth: metrics.scaledSpacing(20)),
+      padding: EdgeInsets.symmetric(horizontal: metrics.scaledSpacing(5), vertical: metrics.scaledSpacing(2)),
+      decoration: BoxDecoration(
+        color: getThemeCardBackgroundColor().withValues(alpha: 0.36),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: getThemeDividerColor().withValues(alpha: 0.55)),
+      ),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: textColor, fontSize: metrics.smallLabelFontSize, fontWeight: FontWeight.w700, height: 1.1),
+      ),
     );
   }
 }
