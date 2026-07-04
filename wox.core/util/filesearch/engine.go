@@ -18,6 +18,7 @@ type Engine struct {
 	resetMu         sync.Mutex
 	closed          bool
 	db              *FileSearchDB
+	contentDB       *ContentSearchDB
 	searchProvider  *SQLiteSearchProvider
 	scanner         *Scanner
 	policy          *policyState
@@ -201,18 +202,31 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 	}
 
 	oldDB := e.db
+	oldContentDB := e.contentDB
 	e.db = nil
+	e.contentDB = nil
 	e.searchProvider = nil
 	e.scanner = nil
 	if e.contentHook != nil {
 		e.contentHook.Close()
 		e.contentHook = nil
 	}
+	var closeErr error
 	if oldDB != nil {
 		if err := oldDB.Close(); err != nil {
-			e.mu.Unlock()
-			return fmt.Errorf("close old filesearch database: %w", err)
+			closeErr = fmt.Errorf("close old filesearch database: %w", err)
 		}
+	}
+	if oldContentDB != nil {
+		if err := oldContentDB.Close(); err != nil {
+			if closeErr == nil {
+				closeErr = fmt.Errorf("close old content search database: %w", err)
+			}
+		}
+	}
+	if closeErr != nil {
+		e.mu.Unlock()
+		return closeErr
 	}
 
 	fileSearchDir := util.GetLocation().GetFileSearchDirectory()
@@ -272,6 +286,18 @@ func (e *Engine) Close() error {
 		e.db = nil
 		e.searchProvider = nil
 		e.scanner = nil
+		if e.contentDB != nil {
+			contentErr := e.contentDB.Close()
+			e.contentDB = nil
+			if err == nil {
+				err = contentErr
+			}
+		}
+		return err
+	}
+	if e.contentDB != nil {
+		err := e.contentDB.Close()
+		e.contentDB = nil
 		return err
 	}
 	return nil
@@ -908,20 +934,20 @@ func (e *Engine) SearchContent(ctx context.Context, query string, limit int) ([]
 		return nil, nil
 	}
 	e.mu.RLock()
-	if e.closed || e.db == nil {
+	if e.closed || e.contentDB == nil {
 		e.mu.RUnlock()
 		return nil, nil
 	}
-	db := e.db
+	contentDB := e.contentDB
 	e.mu.RUnlock()
 
 	// Skip content search if crawl is not complete.
-	crawlState, _ := db.GetContentCrawlState(ctx)
+	crawlState, _ := contentDB.GetContentCrawlState(ctx)
 	if crawlState != "complete" {
 		return nil, nil
 	}
 
-	return db.SearchContent(ctx, query, limit)
+	return contentDB.SearchContent(ctx, query, limit)
 }
 
 // ContentStats returns statistics about the content index.
@@ -931,23 +957,45 @@ func (e *Engine) ContentStats(ctx context.Context) (ContentStats, error) {
 	}
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if e.closed || e.db == nil {
+	if e.closed || e.contentDB == nil {
 		return ContentStats{}, nil
 	}
-	return e.db.ContentStats(ctx)
+	return e.contentDB.ContentStats(ctx)
 }
 
-// ResetContentIndex deletes all content index data.
+// ResetContentIndex removes the standalone content index database.
 func (e *Engine) ResetContentIndex(ctx context.Context) error {
 	if e == nil {
 		return nil
 	}
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if e.closed || e.db == nil {
-		return fmt.Errorf("filesearch engine closed")
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	return e.db.ResetContentIndex(ctx)
+
+	e.mu.Lock()
+	if e.closed {
+		e.mu.Unlock()
+		return nil
+	}
+	e.closeContentHookLocked()
+	contentDB := e.contentDB
+	e.contentDB = nil
+	e.mu.Unlock()
+
+	var closeErr error
+	if contentDB != nil {
+		closeErr = contentDB.Close()
+	}
+	if err := removeContentSearchDBFiles(); err != nil {
+		if closeErr != nil {
+			return fmt.Errorf("close content search database: %w; %v", closeErr, err)
+		}
+		return err
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close content search database: %w", closeErr)
+	}
+	return nil
 }
 
 // StartContentCrawl launches a content crawl in a background goroutine.
@@ -955,14 +1003,23 @@ func (e *Engine) StartContentCrawl(ctx context.Context, roots []RootRecord, poli
 	if e == nil {
 		return
 	}
-	e.mu.RLock()
-	db := e.db
-	e.mu.RUnlock()
-	if db == nil {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	e.mu.Lock()
+	if e.closed {
+		e.mu.Unlock()
+		return
+	}
+	contentDB, err := e.ensureContentDBLocked(ctx)
+	e.mu.Unlock()
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("open content search database for crawl failed: %v", err))
 		return
 	}
 
-	crawler := NewContentCrawler(db, roots, policy, extensions, maxReadBytes, progressCB)
+	crawler := NewContentCrawler(contentDB, roots, policy, extensions, maxReadBytes, progressCB)
 	go func() {
 		if err := crawler.Run(util.NewTraceContext()); err != nil {
 			util.GetLogger().Error(context.Background(), fmt.Sprintf("content crawl failed: %v", err))
@@ -981,20 +1038,25 @@ func (e *Engine) StartContentHook(ctx context.Context, extensions map[string]boo
 	if e == nil {
 		return
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.closed || e.db == nil {
 		return
 	}
+	contentDB, err := e.ensureContentDBLocked(ctx)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("open content search database for hook failed: %v", err))
+		return
+	}
 
 	// Stop any existing hook before installing a new one so extension changes
 	// take effect cleanly.
-	if e.contentHook != nil {
-		e.contentHook.Close()
-		e.contentHook = nil
-	}
+	e.closeContentHookLocked()
 
-	hook := NewContentIndexHook(e.db, extensions, maxReadBytes, e.policy)
+	hook := NewContentIndexHook(contentDB, e.db, extensions, maxReadBytes, e.policy)
 	e.contentHook = hook
 
 	scanner := e.scanner
@@ -1012,6 +1074,11 @@ func (e *Engine) StopContentHook() {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.closeContentHookLocked()
+}
+
+// closeContentHookLocked detaches and closes the incremental content hook while e.mu is held.
+func (e *Engine) closeContentHookLocked() {
 	if e.contentHook != nil {
 		e.contentHook.Close()
 		e.contentHook = nil
@@ -1020,6 +1087,22 @@ func (e *Engine) StopContentHook() {
 	if scanner != nil {
 		scanner.SetContentHook(nil)
 	}
+}
+
+// ensureContentDBLocked opens the optional content database on first use while e.mu is held.
+func (e *Engine) ensureContentDBLocked(ctx context.Context) (*ContentSearchDB, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if e.contentDB != nil {
+		return e.contentDB, nil
+	}
+	contentDB, err := NewContentSearchDB(ctx)
+	if err != nil {
+		return nil, err
+	}
+	e.contentDB = contentDB
+	return contentDB, nil
 }
 
 // NeedsSearchArtifactRebuild reports whether the FTS search artifacts are
@@ -1041,8 +1124,8 @@ func (e *Engine) GetContentCrawlState(ctx context.Context) (string, error) {
 	}
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if e.closed || e.db == nil {
+	if e.closed || e.contentDB == nil {
 		return "", nil
 	}
-	return e.db.GetContentCrawlState(ctx)
+	return e.contentDB.GetContentCrawlState(ctx)
 }

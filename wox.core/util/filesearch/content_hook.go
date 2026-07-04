@@ -49,7 +49,8 @@ type ContentHook interface {
 // applies content index mutations (IndexContent / DeleteContent / scope
 // reconcile) off the scanner's critical path.
 type ContentIndexHook struct {
-	db           *FileSearchDB
+	contentDB    *ContentSearchDB
+	nameDB       *FileSearchDB
 	extensions   map[string]bool
 	maxReadBytes int64
 	policy       *policyState
@@ -66,9 +67,10 @@ type ContentIndexHook struct {
 // background worker. The policy is used to filter paths the same way the
 // scanner does, so content indexing respects ignore rules and hidden-file
 // settings without re-implementing them.
-func NewContentIndexHook(db *FileSearchDB, extensions map[string]bool, maxReadBytes int64, policy *policyState) *ContentIndexHook {
+func NewContentIndexHook(contentDB *ContentSearchDB, nameDB *FileSearchDB, extensions map[string]bool, maxReadBytes int64, policy *policyState) *ContentIndexHook {
 	h := &ContentIndexHook{
-		db:           db,
+		contentDB:    contentDB,
+		nameDB:       nameDB,
 		extensions:   extensions,
 		maxReadBytes: maxReadBytes,
 		policy:       policy,
@@ -157,7 +159,7 @@ func (h *ContentIndexHook) process(notification ContentHookNotification) {
 }
 
 func (h *ContentIndexHook) processUpsert(ctx context.Context, path string) {
-	if h.db == nil {
+	if h.contentDB == nil {
 		return
 	}
 	if !IsContentSearchableExtension(path, h.extensions) {
@@ -168,7 +170,7 @@ func (h *ContentIndexHook) processUpsert(ctx context.Context, path string) {
 	if err != nil {
 		// File may have been deleted between the scanner event and hook
 		// processing. Treat as delete to keep content index consistent.
-		_ = h.db.DeleteContent(ctx, path)
+		_ = h.contentDB.DeleteContent(ctx, path)
 		return
 	}
 	if info.IsDir() {
@@ -180,7 +182,7 @@ func (h *ContentIndexHook) processUpsert(ctx context.Context, path string) {
 	if h.policy != nil {
 		traversalCtx := h.policy.newTraversalContext(RootRecord{Path: filepath.Dir(path)}, filepath.Dir(path))
 		if !traversalCtx.ShouldIndexPath(path, false) {
-			_ = h.db.DeleteContent(ctx, path)
+			_ = h.contentDB.DeleteContent(ctx, path)
 			return
 		}
 	}
@@ -194,14 +196,14 @@ func (h *ContentIndexHook) processUpsert(ctx context.Context, path string) {
 		return
 	}
 	ext := contentNormalizeExtension(path)
-	_, _ = h.db.IndexContent(ctx, path, info.ModTime().UnixMilli(), info.Size(), ext, text)
+	_, _ = h.contentDB.IndexContent(ctx, path, info.ModTime().UnixMilli(), info.Size(), ext, text)
 }
 
 func (h *ContentIndexHook) processDelete(ctx context.Context, path string) {
-	if h.db == nil {
+	if h.contentDB == nil {
 		return
 	}
-	_ = h.db.DeleteContent(ctx, path)
+	_ = h.contentDB.DeleteContent(ctx, path)
 }
 
 // processScopeReplaced reconciles the content index for a directory scope that
@@ -209,7 +211,7 @@ func (h *ContentIndexHook) processDelete(ctx context.Context, path string) {
 // that no longer exist in the name index, and queues content indexing for
 // newly searchable files that are now on disk.
 func (h *ContentIndexHook) processScopeReplaced(ctx context.Context, rootID, scopePath string) {
-	if h.db == nil || scopePath == "" {
+	if h.contentDB == nil || h.nameDB == nil || scopePath == "" {
 		return
 	}
 
@@ -228,11 +230,11 @@ func (h *ContentIndexHook) processScopeReplaced(ctx context.Context, rootID, sco
 // New files that are now searchable are queued for content indexing through
 // the normal upsert path.
 func (h *ContentIndexHook) reconcileScope(ctx context.Context, rootID, scopePath string) {
-	if h.db == nil {
+	if h.contentDB == nil || h.nameDB == nil {
 		return
 	}
 
-	contentPaths, err := h.db.ListContentEntryPathsUnderScope(ctx, scopePath)
+	contentPaths, err := h.contentDB.ListContentEntryPathsUnderScope(ctx, scopePath)
 	if err != nil {
 		util.GetLogger().Warn(ctx, "content hook reconcile: failed to list content paths under "+scopePath+": "+err.Error())
 		return
@@ -240,12 +242,12 @@ func (h *ContentIndexHook) reconcileScope(ctx context.Context, rootID, scopePath
 
 	// Delete content entries for paths no longer in the name index.
 	for _, p := range contentPaths {
-		exists, err := h.db.EntryPathExists(ctx, p)
+		exists, err := h.nameDB.EntryPathExists(ctx, p)
 		if err != nil {
 			continue
 		}
 		if !exists {
-			_ = h.db.DeleteContent(ctx, p)
+			_ = h.contentDB.DeleteContent(ctx, p)
 		}
 	}
 

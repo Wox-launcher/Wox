@@ -32,9 +32,9 @@ const contentCrawlStateKey = "content_crawl_state"
 // inserts into content_entries + entries_content_fts. If the path already
 // exists with the same hash, it skips (no change). Returns true if the index
 // was actually updated. Retries on "database is locked" up to 3 times.
-func (d *FileSearchDB) IndexContent(ctx context.Context, path string, mtime, size int64, extension, text string) (bool, error) {
+func (d *ContentSearchDB) IndexContent(ctx context.Context, path string, mtime, size int64, extension, text string) (bool, error) {
 	if d == nil || d.db == nil {
-		return false, fmt.Errorf("filesearch db not open")
+		return false, fmt.Errorf("content search db not open")
 	}
 
 	hash := fnv32aContent(text)
@@ -62,7 +62,7 @@ func (d *FileSearchDB) IndexContent(ctx context.Context, path string, mtime, siz
 }
 
 // indexContentOnce performs a single IndexContent attempt without retry.
-func (d *FileSearchDB) indexContentOnce(ctx context.Context, path string, mtime, size int64, extension string, hash uint32, tokenized string, indexedBytes int64) (bool, error) {
+func (d *ContentSearchDB) indexContentOnce(ctx context.Context, path string, mtime, size int64, extension string, hash uint32, tokenized string, indexedBytes int64) (bool, error) {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("begin tx: %w", err)
@@ -113,9 +113,9 @@ func (d *FileSearchDB) indexContentOnce(ctx context.Context, path string, mtime,
 }
 
 // DeleteContent removes a file's content from the index.
-func (d *FileSearchDB) DeleteContent(ctx context.Context, path string) error {
+func (d *ContentSearchDB) DeleteContent(ctx context.Context, path string) error {
 	if d == nil || d.db == nil {
-		return fmt.Errorf("filesearch db not open")
+		return fmt.Errorf("content search db not open")
 	}
 
 	tx, err := d.db.BeginTx(ctx, nil)
@@ -143,11 +143,10 @@ func (d *FileSearchDB) DeleteContent(ctx context.Context, path string) error {
 	return tx.Commit()
 }
 
-// ResetContentIndex deletes all content index data. Called when the user
-// changes the extension whitelist or disables content search.
-func (d *FileSearchDB) ResetContentIndex(ctx context.Context) error {
+// ResetContentIndex clears content index rows while keeping the open database.
+func (d *ContentSearchDB) ResetContentIndex(ctx context.Context) error {
 	if d == nil || d.db == nil {
-		return fmt.Errorf("filesearch db not open")
+		return fmt.Errorf("content search db not open")
 	}
 
 	tx, err := d.db.BeginTx(ctx, nil)
@@ -173,10 +172,11 @@ func (d *FileSearchDB) ResetContentIndex(ctx context.Context) error {
 
 // SearchContent searches the content index for files matching all query terms.
 // Returns results sorted by FTS5 relevance (rank), limited to `limit`.
-// Uses the same SQLite page cache as name/path search — equally fast.
-func (d *FileSearchDB) SearchContent(ctx context.Context, query string, limit int) ([]ContentSearchResult, error) {
+// Runs against the standalone content database so large content queries do not
+// share SQLite cache or write pressure with name/path search.
+func (d *ContentSearchDB) SearchContent(ctx context.Context, query string, limit int) ([]ContentSearchResult, error) {
 	if d == nil || d.db == nil {
-		return nil, fmt.Errorf("filesearch db not open")
+		return nil, fmt.Errorf("content search db not open")
 	}
 	if limit <= 0 {
 		limit = 20
@@ -224,9 +224,9 @@ func (d *FileSearchDB) SearchContent(ctx context.Context, query string, limit in
 }
 
 // ContentStats returns statistics about the content index for display.
-func (d *FileSearchDB) ContentStats(ctx context.Context) (ContentStats, error) {
+func (d *ContentSearchDB) ContentStats(ctx context.Context) (ContentStats, error) {
 	if d == nil || d.db == nil {
-		return ContentStats{}, fmt.Errorf("filesearch db not open")
+		return ContentStats{}, fmt.Errorf("content search db not open")
 	}
 
 	var stats ContentStats
@@ -241,9 +241,9 @@ func (d *FileSearchDB) ContentStats(ctx context.Context) (ContentStats, error) {
 }
 
 // SetContentCrawlState stores the content crawl state in the meta table.
-func (d *FileSearchDB) SetContentCrawlState(ctx context.Context, state string) error {
+func (d *ContentSearchDB) SetContentCrawlState(ctx context.Context, state string) error {
 	if d == nil || d.db == nil {
-		return fmt.Errorf("filesearch db not open")
+		return fmt.Errorf("content search db not open")
 	}
 	_, err := d.db.ExecContext(ctx,
 		`INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
@@ -252,9 +252,9 @@ func (d *FileSearchDB) SetContentCrawlState(ctx context.Context, state string) e
 }
 
 // GetContentCrawlState reads the content crawl state from the meta table.
-func (d *FileSearchDB) GetContentCrawlState(ctx context.Context) (string, error) {
+func (d *ContentSearchDB) GetContentCrawlState(ctx context.Context) (string, error) {
 	if d == nil || d.db == nil {
-		return "", fmt.Errorf("filesearch db not open")
+		return "", fmt.Errorf("content search db not open")
 	}
 	var state string
 	err := d.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, contentCrawlStateKey).Scan(&state)
@@ -266,9 +266,9 @@ func (d *FileSearchDB) GetContentCrawlState(ctx context.Context) (string, error)
 
 // GetContentEntryHash returns the content hash for a path, or 0 if not indexed.
 // Used for change detection during incremental updates.
-func (d *FileSearchDB) GetContentEntryHash(ctx context.Context, path string) (uint32, error) {
+func (d *ContentSearchDB) GetContentEntryHash(ctx context.Context, path string) (uint32, error) {
 	if d == nil || d.db == nil {
-		return 0, fmt.Errorf("filesearch db not open")
+		return 0, fmt.Errorf("content search db not open")
 	}
 	var hash int64
 	err := d.db.QueryRowContext(ctx, `SELECT content_hash FROM content_entries WHERE path = ?`, path).Scan(&hash)
@@ -280,9 +280,9 @@ func (d *FileSearchDB) GetContentEntryHash(ctx context.Context, path string) (ui
 
 // ListContentEntryPaths returns all indexed content paths. Used by the crawler
 // to detect stale entries (paths in DB but no longer on disk).
-func (d *FileSearchDB) ListContentEntryPaths(ctx context.Context) ([]string, error) {
+func (d *ContentSearchDB) ListContentEntryPaths(ctx context.Context) ([]string, error) {
 	if d == nil || d.db == nil {
-		return nil, fmt.Errorf("filesearch db not open")
+		return nil, fmt.Errorf("content search db not open")
 	}
 	rows, err := d.db.QueryContext(ctx, `SELECT path FROM content_entries ORDER BY path ASC`)
 	if err != nil {
@@ -305,9 +305,9 @@ func (d *FileSearchDB) ListContentEntryPaths(ctx context.Context) ([]string, err
 // under the given directory scope (the scope path itself plus any path with it
 // as a parent prefix). Used by the content hook to reconcile content entries
 // after a scanner scope replacement.
-func (d *FileSearchDB) ListContentEntryPathsUnderScope(ctx context.Context, scopePath string) ([]string, error) {
+func (d *ContentSearchDB) ListContentEntryPathsUnderScope(ctx context.Context, scopePath string) ([]string, error) {
 	if d == nil || d.db == nil {
-		return nil, fmt.Errorf("filesearch db not open")
+		return nil, fmt.Errorf("content search db not open")
 	}
 	// Match the scope path exactly and any path beneath it (scopePath + "/" or "\").
 	// SQLite LIKE with escaped separator handles both separators because paths
