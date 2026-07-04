@@ -446,7 +446,7 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 	return nil
 }
 
-// runChatLoop is the explicit agent-style loop. Each iteration starts a new
+// runChatLoop is the explicit tool-enabled loop. Each iteration starts a new
 // stream, drains it, executes any tool calls, and either finishes or feeds the
 // tool results back for the next iteration. Bounded by MaxIterations and the
 // loop context.
@@ -507,6 +507,10 @@ func (a *APIImpl) runChatLoop(ctx context.Context, model common.Model, conversat
 			return
 		}
 
+		// load_tools expands only this chat loop's visible tool set; the global
+		// registry remains the discovery source and is not mutated.
+		opts.Tools = ai.AppendRequestedTools(opts.Tools, streamedResult.ToolCalls)
+
 		// Append tool results as tool-role conversations so the next iteration
 		// shows the model what each tool returned.
 		conversations = append(conversations, buildToolConversations(streamedResult)...)
@@ -564,11 +568,11 @@ func (a *APIImpl) executeToolCalls(ctx context.Context, streamedResult *common.C
 	retryCounts := make(map[string]int)
 
 	for toolCallIndex, toolCall := range streamedResult.ToolCalls {
-		tool, ok := ai.GetToolRegistry().Get(toolCall.Name)
+		tool, ok := findVisibleTool(options.Tools, toolCall.Name)
 		if !ok {
-			util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool not found in registry: %s", toolCall.Name))
+			util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool not available in this chat step: %s", toolCall.Name))
 			streamedResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusFailed
-			streamedResult.ToolCalls[toolCallIndex].Response = fmt.Sprintf("tool %q not found", toolCall.Name)
+			streamedResult.ToolCalls[toolCallIndex].Response = fmt.Sprintf("tool %q is not loaded; call load_tools first", toolCall.Name)
 			continue
 		}
 
@@ -590,6 +594,16 @@ func (a *APIImpl) executeToolCalls(ctx context.Context, streamedResult *common.C
 	return !lo.SomeBy(streamedResult.ToolCalls, func(tc common.ToolCallInfo) bool {
 		return tc.Status == common.ToolCallStatusFailed
 	})
+}
+
+// findVisibleTool enforces the per-step tool boundary advertised to the model.
+func findVisibleTool(tools []common.Tool, name string) (common.Tool, bool) {
+	for _, tool := range tools {
+		if tool.Name == name {
+			return tool, true
+		}
+	}
+	return common.Tool{}, false
 }
 
 // runSingleToolCall invokes one tool and records its result. Failures are

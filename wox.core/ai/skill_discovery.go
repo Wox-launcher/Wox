@@ -26,8 +26,10 @@ type skillDiscoveryRoot struct {
 }
 
 type skillManifestFrontMatter struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
+	Name                        string `yaml:"name"`
+	Description                 string `yaml:"description"`
+	DisableModelInvocation      bool   `yaml:"disableModelInvocation"`
+	DisableModelInvocationAlias bool   `yaml:"disable-model-invocation"`
 }
 
 // DiscoverSkills scans known local skill directories for SKILL.md bundles.
@@ -181,16 +183,17 @@ func loadDiscoveredSkill(manifestPath string, root skillDiscoveryRoot) common.Sk
 	}
 
 	skill := common.Skill{
-		Id:           stableSkillId(root.Source, name, bundlePath),
-		Name:         name,
-		Description:  strings.TrimSpace(metadata.Description),
-		Path:         bundlePath,
-		ManifestPath: manifestPath,
-		Source:       root.Source,
-		SourceName:   root.SourceName,
-		Builtin:      root.Builtin,
-		ReadOnly:     true,
-		Enabled:      true,
+		Id:                     stableSkillId(root.Source, name, bundlePath),
+		Name:                   name,
+		Description:            strings.TrimSpace(metadata.Description),
+		Path:                   bundlePath,
+		ManifestPath:           manifestPath,
+		Source:                 root.Source,
+		SourceName:             root.SourceName,
+		Builtin:                root.Builtin,
+		ReadOnly:               true,
+		Enabled:                true,
+		DisableModelInvocation: metadata.DisableModelInvocation || metadata.DisableModelInvocationAlias,
 	}
 	if err != nil {
 		skill.Enabled = false

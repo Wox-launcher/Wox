@@ -8,7 +8,11 @@ class AIModel {
   late String provider;
   late String providerAlias;
 
-  AIModel({required this.name, required this.provider, required this.providerAlias});
+  AIModel({
+    required this.name,
+    required this.provider,
+    required this.providerAlias,
+  });
 
   AIModel.fromJson(Map<String, dynamic> json) {
     name = json['Name'];
@@ -48,15 +52,31 @@ class AIQuestionOption {
   late bool recommended;
   late Map<String, String> extra;
 
-  AIQuestionOption({required this.value, required this.title, required this.subTitle, required this.recommended, required this.extra});
+  AIQuestionOption({
+    required this.value,
+    required this.title,
+    required this.subTitle,
+    required this.recommended,
+    required this.extra,
+  });
 
   AIQuestionOption.fromJson(Map<String, dynamic> json) {
     value = json['Value'] ?? json['value'] ?? "";
     title = json['Title'] ?? json['title'] ?? value;
-    subTitle = json['SubTitle'] ?? json['subTitle'] ?? json['Subtitle'] ?? json['subtitle'] ?? "";
+    subTitle =
+        json['SubTitle'] ??
+        json['subTitle'] ??
+        json['Subtitle'] ??
+        json['subtitle'] ??
+        "";
     recommended = json['Recommended'] ?? json['recommended'] ?? false;
     final rawExtra = json['Extra'] ?? json['extra'];
-    extra = rawExtra is Map ? rawExtra.map((key, value) => MapEntry(key.toString(), value.toString())) : <String, String>{};
+    extra =
+        rawExtra is Map
+            ? rawExtra.map(
+              (key, value) => MapEntry(key.toString(), value.toString()),
+            )
+            : <String, String>{};
     if (value.isEmpty) {
       value = title;
     }
@@ -71,7 +91,11 @@ class AIQuestion {
   late String question;
   late List<AIQuestionOption> options;
 
-  AIQuestion({required this.questionId, required this.question, required this.options});
+  AIQuestion({
+    required this.questionId,
+    required this.question,
+    required this.options,
+  });
 
   AIQuestion.fromJson(Map<String, dynamic> json) {
     questionId = json['QuestionId'] ?? json['questionId'] ?? "";
@@ -82,10 +106,18 @@ class AIQuestion {
             ? rawOptions
                 .map((option) {
                   if (option is String) {
-                    return AIQuestionOption(value: option, title: option, subTitle: "", recommended: false, extra: <String, String>{});
+                    return AIQuestionOption(
+                      value: option,
+                      title: option,
+                      subTitle: "",
+                      recommended: false,
+                      extra: <String, String>{},
+                    );
                   }
                   if (option is Map) {
-                    return AIQuestionOption.fromJson(Map<String, dynamic>.from(option));
+                    return AIQuestionOption.fromJson(
+                      Map<String, dynamic>.from(option),
+                    );
                   }
                   return null;
                 })
@@ -96,44 +128,29 @@ class AIQuestion {
   }
 }
 
-class AIAgent {
+class AISkillRef {
+  late String id;
   late String name;
-  late String prompt;
-  late AIModel model;
-  late WoxImage icon;
+  late String path;
+  late String source;
 
-  AIAgent({required this.name, required this.prompt, required this.model, WoxImage? icon}) : icon = icon ?? WoxImage(imageType: "emoji", imageData: "🤖");
+  AISkillRef({
+    required this.id,
+    required this.name,
+    required this.path,
+    required this.source,
+  });
 
-  AIAgent.fromJson(Map<String, dynamic> json) {
-    name = json['Name'] ?? "";
-    prompt = json['Prompt'] ?? "";
-    model = json['Model'] != null ? AIModel.fromJson(json['Model']) : AIModel(name: "", provider: "", providerAlias: "");
-    icon = json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : WoxImage(imageType: "emoji", imageData: "🤖");
+  AISkillRef.fromJson(Map<String, dynamic> json) {
+    id = json['Id'] ?? json['id'] ?? "";
+    name = json['Name'] ?? json['name'] ?? "";
+    path = json['Path'] ?? json['path'] ?? "";
+    source = json['Source'] ?? json['source'] ?? "";
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = <String, dynamic>{};
-    data['Name'] = name;
-    data['Prompt'] = prompt;
-    data['Model'] = model.toJson();
-    data['Icon'] = icon.toJson();
-    return data;
+    return {'Id': id, 'Name': name, 'Path': path, 'Source': source};
   }
-
-  static AIAgent empty() {
-    return AIAgent(name: "", prompt: "", model: AIModel(name: "", provider: "", providerAlias: ""), icon: WoxImage(imageType: "emoji", imageData: "🤖"));
-  }
-}
-
-class ChatSelectItem {
-  final String id;
-  final String name;
-  final WoxImage icon;
-  final bool isCategory;
-  final List<ChatSelectItem> children;
-  Function(String traceId)? onExecute;
-
-  ChatSelectItem({required this.id, required this.name, required this.icon, required this.isCategory, required this.children, this.onExecute});
 }
 
 // should be same as AIChatData in the ai chat plugin
@@ -144,9 +161,15 @@ class WoxAIChatData {
   late Rx<AIModel> model;
   late int createdAt;
   late int updatedAt;
-  String? agentName;
 
-  WoxAIChatData({required this.id, required this.title, required this.conversations, required this.model, required this.createdAt, required this.updatedAt, this.agentName});
+  WoxAIChatData({
+    required this.id,
+    required this.title,
+    required this.conversations,
+    required this.model,
+    required this.createdAt,
+    required this.updatedAt,
+  });
 
   static WoxAIChatData fromJson(Map<String, dynamic> json) {
     List<WoxAIChatConversation> conversations = [];
@@ -160,10 +183,12 @@ class WoxAIChatData {
       id: json['Id'] ?? "",
       title: json['Title'] ?? "",
       conversations: RxList<WoxAIChatConversation>.from(conversations),
-      model: json['Model'] != null ? AIModel.fromJson(json['Model']).obs : AIModel(name: "", provider: "", providerAlias: "").obs,
+      model:
+          json['Model'] != null
+              ? AIModel.fromJson(json['Model']).obs
+              : AIModel(name: "", provider: "", providerAlias: "").obs,
       createdAt: json['CreatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       updatedAt: json['UpdatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
-      agentName: json['AgentName'],
     );
   }
 
@@ -176,11 +201,6 @@ class WoxAIChatData {
       'CreatedAt': createdAt,
       'UpdatedAt': updatedAt,
     };
-
-    // Add agent name if available
-    if (agentName != null && agentName!.isNotEmpty) {
-      json['AgentName'] = agentName;
-    }
 
     return json;
   }
@@ -197,7 +217,6 @@ class WoxAIChatData {
       model: AIModel(name: "", provider: "", providerAlias: "").obs,
       createdAt: 0,
       updatedAt: 0,
-      agentName: null,
     );
   }
 }
@@ -209,9 +228,18 @@ class WoxAIChatPreviewData {
   WoxAIChatPreviewData({required this.activeChat, required this.chats});
 
   WoxAIChatPreviewData.fromJson(Map<String, dynamic> json) {
-    activeChat = json['ActiveChat'] != null ? WoxAIChatData.fromJson(json['ActiveChat']) : WoxAIChatData.empty();
+    activeChat =
+        json['ActiveChat'] != null
+            ? WoxAIChatData.fromJson(json['ActiveChat'])
+            : WoxAIChatData.empty();
     final rawChats = json['Chats'];
-    chats = rawChats is List ? rawChats.whereType<Map<String, dynamic>>().map(WoxAIChatData.fromJson).toList() : <WoxAIChatData>[];
+    chats =
+        rawChats is List
+            ? rawChats
+                .whereType<Map<String, dynamic>>()
+                .map(WoxAIChatData.fromJson)
+                .toList()
+            : <WoxAIChatData>[];
   }
 }
 
@@ -227,7 +255,10 @@ enum ToolCallStatus {
 
   static ToolCallStatus fromString(String? value) {
     if (value == null) return ToolCallStatus.pending;
-    return ToolCallStatus.values.firstWhere((e) => e.value == value, orElse: () => ToolCallStatus.pending);
+    return ToolCallStatus.values.firstWhere(
+      (e) => e.value == value,
+      orElse: () => ToolCallStatus.pending,
+    );
   }
 }
 
@@ -237,7 +268,8 @@ class ToolCallInfo {
   late Map<String, dynamic> arguments;
   late ToolCallStatus status;
 
-  late String delta; // when toolcall is streaming, we will put the delta content here
+  late String
+  delta; // when toolcall is streaming, we will put the delta content here
   late String response;
 
   late int startTimestamp;
@@ -246,7 +278,9 @@ class ToolCallInfo {
   bool isExpanded = false;
 
   int get duration =>
-      (status == ToolCallStatus.streaming || status == ToolCallStatus.pending || status == ToolCallStatus.running)
+      (status == ToolCallStatus.streaming ||
+              status == ToolCallStatus.pending ||
+              status == ToolCallStatus.running)
           ? DateTime.now().millisecondsSinceEpoch - startTimestamp
           : endTimestamp - startTimestamp;
 
@@ -286,7 +320,16 @@ class ToolCallInfo {
   }
 
   static ToolCallInfo empty() {
-    return ToolCallInfo(id: "", name: "", arguments: {}, response: "", delta: "", status: ToolCallStatus.pending, startTimestamp: 0, endTimestamp: 0);
+    return ToolCallInfo(
+      id: "",
+      name: "",
+      arguments: {},
+      response: "",
+      delta: "",
+      status: ToolCallStatus.pending,
+      startTimestamp: 0,
+      endTimestamp: 0,
+    );
   }
 }
 
@@ -294,8 +337,10 @@ class WoxAIChatConversation {
   late String id;
   late WoxAIChatConversationRole role;
   late String text;
-  late String reasoning; // Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1, qwen3)
+  late String
+  reasoning; // Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1, qwen3)
   late List<WoxImage> images;
+  late List<AISkillRef> skillRefs;
   late int timestamp;
   late ToolCallInfo toolCallInfo;
 
@@ -305,6 +350,7 @@ class WoxAIChatConversation {
     required this.text,
     required this.reasoning,
     required this.images,
+    required this.skillRefs,
     required this.timestamp,
     required this.toolCallInfo,
   });
@@ -314,6 +360,15 @@ class WoxAIChatConversation {
     if (json['Images'] != null) {
       for (var e in json['Images']) {
         images.add(WoxImage.fromJson(e));
+      }
+    }
+
+    List<AISkillRef> skillRefs = [];
+    if (json['SkillRefs'] is List) {
+      for (final e in json['SkillRefs']) {
+        if (e is Map) {
+          skillRefs.add(AISkillRef.fromJson(Map<String, dynamic>.from(e)));
+        }
       }
     }
 
@@ -328,6 +383,7 @@ class WoxAIChatConversation {
       text: json['Text'],
       reasoning: json['Reasoning'] ?? '',
       images: images,
+      skillRefs: skillRefs,
       timestamp: json['Timestamp'],
       toolCallInfo: toolCallInfo,
     );
@@ -340,6 +396,7 @@ class WoxAIChatConversation {
       'Text': text,
       'Reasoning': reasoning,
       'Images': images.map((e) => e.toJson()).toList(),
+      'SkillRefs': skillRefs.map((e) => e.toJson()).toList(),
       'Timestamp': timestamp,
       'ToolCallInfo': toolCallInfo.toJson(),
     };

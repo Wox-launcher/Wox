@@ -17,6 +17,7 @@ import (
 
 	"wox/account"
 	"wox/ai"
+	aitool "wox/ai/builtintool"
 	"wox/cloudsync"
 	"wox/common"
 	"wox/diagnostic"
@@ -133,7 +134,6 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/ai/chat/summarize":  handleAIChatSummarize,
 	"/ai/mcp/tools":       handleAIMCPServerTools,
 	"/ai/mcp/tools/all":   handleAIMCPServerToolsAll,
-	"/ai/agents":          handleAIAgents,
 	"/ai/skills":          handleAISkills,
 	"/ai/question/answer": handleAIQuestionAnswer,
 
@@ -3239,19 +3239,6 @@ func handleAIMCPServerToolsAll(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, results)
 }
 
-func handleAIAgents(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
-	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
-	if chater == nil {
-		writeErrorResponse(w, "ai chat plugin not found")
-		return
-	}
-
-	agents := chater.GetAllAgents(ctx)
-	writeSuccessResponse(w, agents)
-}
-
 func handleAISkills(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 
@@ -3278,7 +3265,7 @@ func handleAIQuestionAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("AI: resolving question answer for questionId=%s", questionId))
-	ai.ResolveAIQuestionAnswer(questionId, answer)
+	aitool.ResolveAIQuestionAnswer(questionId, answer)
 	writeSuccessResponse(w, "")
 }
 

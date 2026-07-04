@@ -114,12 +114,21 @@ type ToolCallInfo struct {
 
 type ToolCallStatus string
 
+// AISkillRef is the stable message-level pointer to a local SKILL.md bundle.
+type AISkillRef struct {
+	Id     string
+	Name   string
+	Path   string
+	Source string
+}
+
 type Conversation struct {
 	Id           string
 	Role         ConversationRole
 	Text         string
 	Reasoning    string // Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1, qwen3)
 	Images       []WoxImage
+	SkillRefs    []AISkillRef
 	ToolCallInfo ToolCallInfo
 	Timestamp    int64
 }
@@ -144,20 +153,11 @@ func (m *Model) ProviderName() string {
 	return string(m.Provider)
 }
 
-type AIAgent struct {
-	Name   string
-	Prompt string
-	Model  Model
-	Icon   WoxImage
-	Skills []string // Skill Ids this agent can reference during chat
-}
-
 type AIChatData struct {
 	Id            string
 	Title         string
 	Conversations []Conversation
 	Model         Model
-	AgentName     string
 
 	CreatedAt int64
 	UpdatedAt int64
@@ -174,7 +174,6 @@ type AIChater interface {
 	DeleteChat(ctx context.Context, chatId string) bool
 	SummarizeChat(ctx context.Context, chatId string) bool
 	GetAllTools(ctx context.Context) []MCPTool
-	GetAllAgents(ctx context.Context) []AIAgent
 	GetAllSkills(ctx context.Context) []Skill
 	ReloadMCPServers(ctx context.Context, notifyUI bool)
 	ReloadSkills(ctx context.Context) error
@@ -265,7 +264,7 @@ func (m *MCPTool) ToTool() Tool {
 	}
 }
 
-// LoopPolicy controls the agent-style chat loop in AIChatStream.
+// LoopPolicy controls the tool-enabled chat loop in AIChatStream.
 type LoopPolicy struct {
 	MaxIterations  int           // 0 means default (25); -1 means unlimited
 	RetryOnFailure bool          // when true, tool errors are fed back to the model instead of aborting
@@ -280,19 +279,20 @@ type ContextPolicy struct {
 	Enabled          bool
 }
 
-// Skill describes a discovered SKILL.md bundle that an agent can reference.
+// Skill describes a discovered SKILL.md bundle that a model can reference.
 type Skill struct {
-	Id           string
-	Name         string
-	Description  string
-	Path         string
-	ManifestPath string
-	Source       string
-	SourceName   string
-	Builtin      bool
-	ReadOnly     bool
-	Error        string
-	Enabled      bool
+	Id                     string
+	Name                   string
+	Description            string
+	Path                   string
+	ManifestPath           string
+	Source                 string
+	SourceName             string
+	Builtin                bool
+	ReadOnly               bool
+	Error                  string
+	Enabled                bool
+	DisableModelInvocation bool
 
 	// Deprecated: legacy manually configured skills used inline instructions.
 	// Keep these fields for settings compatibility while discovered skills

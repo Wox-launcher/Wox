@@ -1,9 +1,10 @@
-package ai
+package tool
 
 import (
 	"context"
 	"fmt"
 
+	"wox/ai"
 	"wox/common"
 	"wox/util"
 
@@ -11,18 +12,19 @@ import (
 	"github.com/tmc/langchaingo/jsonschema"
 )
 
-// SendAIQuestionHook is set by the plugin package at startup. It delivers the
-// question to the UI; keeping it as a hook avoids an import cycle between
-// wox/ai and wox/plugin.
+func init() {
+	ai.GetToolRegistry().Register(AskUserTool())
+}
+
+// SendAIQuestionHook is set by the plugin package at startup to deliver questions to the UI.
 var SendAIQuestionHook func(ctx context.Context, questionId string, question string, options []common.AIQuestionOption)
 
-// pendingQuestions maps questionId to a response channel. Each ask_user
-// invocation registers here and blocks on its channel until the UI replies
-// via ResolveAIQuestionAnswer or the context is cancelled.
+// pendingQuestions maps questionId to a response channel resolved by ResolveAIQuestionAnswer.
 var pendingQuestions = util.NewHashMap[string, chan string]()
 
-func init() {
-	GetToolRegistry().Register(common.Tool{
+// AskUserTool asks the user for clarification through the chat UI.
+func AskUserTool() common.Tool {
+	return common.Tool{
 		Name:        "ask_user",
 		Description: "Ask the user a question and wait for their response. Use this when you need clarification, a choice, or information only the user can provide. The user may take a while; do not use this for things you can determine yourself.",
 		Parameters: jsonschema.Definition{
@@ -49,7 +51,7 @@ func init() {
 		},
 		Source:   common.ToolSourceBuiltin,
 		Callback: askUserCallback,
-	})
+	}
 }
 
 func askUserCallback(ctx context.Context, args map[string]any) (common.ToolResult, error) {
@@ -79,8 +81,7 @@ func askUserCallback(ctx context.Context, args map[string]any) (common.ToolResul
 	}
 }
 
-// parseAIQuestionOptions accepts the structured option shape from the tool
-// schema while tolerating legacy string options from earlier prompts.
+// parseAIQuestionOptions accepts structured options while tolerating legacy string options.
 func parseAIQuestionOptions(raw any) []common.AIQuestionOption {
 	rawOptions, ok := raw.([]any)
 	if !ok {
@@ -116,7 +117,6 @@ func parseAIQuestionOptions(raw any) []common.AIQuestionOption {
 	return options
 }
 
-// getStringArg returns the first string value matching any accepted key.
 func getStringArg(data map[string]any, keys ...string) string {
 	for _, key := range keys {
 		if value, ok := data[key].(string); ok {
@@ -126,7 +126,6 @@ func getStringArg(data map[string]any, keys ...string) string {
 	return ""
 }
 
-// getBoolArg returns the first boolean value matching any accepted key.
 func getBoolArg(data map[string]any, keys ...string) bool {
 	for _, key := range keys {
 		if value, ok := data[key].(bool); ok {
@@ -136,7 +135,6 @@ func getBoolArg(data map[string]any, keys ...string) bool {
 	return false
 }
 
-// getStringMapArg normalizes a loose object into string metadata.
 func getStringMapArg(data map[string]any, keys ...string) map[string]string {
 	for _, key := range keys {
 		rawMap, ok := data[key].(map[string]any)
@@ -157,9 +155,7 @@ func getStringMapArg(data map[string]any, keys ...string) map[string]string {
 	return nil
 }
 
-// ResolveAIQuestionAnswer is called by the WebSocket/HTTP router when the UI
-// reports the user's answer. It is a no-op when the question is unknown or
-// already resolved (e.g. cancelled).
+// ResolveAIQuestionAnswer resolves a pending ask_user request from the UI route.
 func ResolveAIQuestionAnswer(questionId string, answer string) {
 	if ch, ok := pendingQuestions.Load(questionId); ok {
 		select {

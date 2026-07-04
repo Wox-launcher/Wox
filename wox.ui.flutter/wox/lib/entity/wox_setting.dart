@@ -206,16 +206,21 @@ class WoxSetting {
     customNodejsPath = json['CustomNodejsPath'] ?? '';
     cloudSyncServerUrl = json['CloudSyncServerUrl'] ?? '';
     if (json['CloudSyncDisabledPlugins'] != null) {
-      cloudSyncDisabledPlugins = List<String>.from(json['CloudSyncDisabledPlugins']);
+      cloudSyncDisabledPlugins = List<String>.from(
+        json['CloudSyncDisabledPlugins'],
+      );
     } else {
       cloudSyncDisabledPlugins = <String>[];
     }
     showScoreTail = json['ShowScoreTail'] ?? false;
     showPerformanceTail = json['ShowPerformanceTail'] ?? false;
     showPerformanceTailBatch = json['ShowPerformanceTailBatch'] ?? true;
-    showPerformanceTailPluginQuery = json['ShowPerformanceTailPluginQuery'] ?? true;
-    showPerformanceTailBackendPrepared = json['ShowPerformanceTailBackendPrepared'] ?? true;
-    showPerformanceTailUiReceived = json['ShowPerformanceTailUiReceived'] ?? true;
+    showPerformanceTailPluginQuery =
+        json['ShowPerformanceTailPluginQuery'] ?? true;
+    showPerformanceTailBackendPrepared =
+        json['ShowPerformanceTailBackendPrepared'] ?? true;
+    showPerformanceTailUiReceived =
+        json['ShowPerformanceTailUiReceived'] ?? true;
   }
 
   Map<String, dynamic> toJson() {
@@ -266,7 +271,8 @@ class WoxSetting {
     data['ShowPerformanceTail'] = showPerformanceTail;
     data['ShowPerformanceTailBatch'] = showPerformanceTailBatch;
     data['ShowPerformanceTailPluginQuery'] = showPerformanceTailPluginQuery;
-    data['ShowPerformanceTailBackendPrepared'] = showPerformanceTailBackendPrepared;
+    data['ShowPerformanceTailBackendPrepared'] =
+        showPerformanceTailBackendPrepared;
     data['ShowPerformanceTailUiReceived'] = showPerformanceTailUiReceived;
     return data;
   }
@@ -309,7 +315,8 @@ class QueryHotkey {
     hideQueryBox = json['HideQueryBox'] ?? false;
     hideToolbar = json['HideToolbar'] ?? false;
     width = json['Width'] == null ? "" : json['Width'].toString();
-    maxResultCount = json['MaxResultCount'] == null ? "" : json['MaxResultCount'].toString();
+    maxResultCount =
+        json['MaxResultCount'] == null ? "" : json['MaxResultCount'].toString();
     position = json['Position'] ?? 'system_default';
     disabled = json['Disabled'] ?? false;
   }
@@ -338,13 +345,21 @@ class IgnoredHotkeyApp {
   late String path;
   late WoxImage icon;
 
-  IgnoredHotkeyApp({required this.name, required this.identity, required this.path, required this.icon});
+  IgnoredHotkeyApp({
+    required this.name,
+    required this.identity,
+    required this.path,
+    required this.icon,
+  });
 
   IgnoredHotkeyApp.fromJson(Map<String, dynamic> json) {
     name = json['Name'] ?? '';
     identity = json['Identity'] ?? '';
     path = json['Path'] ?? '';
-    icon = json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : WoxImage.empty();
+    icon =
+        json['Icon'] != null
+            ? WoxImage.fromJson(json['Icon'])
+            : WoxImage.empty();
   }
 
   Map<String, dynamic> toJson() {
@@ -357,7 +372,12 @@ class IgnoredHotkeyApp {
   }
 
   static IgnoredHotkeyApp empty() {
-    return IgnoredHotkeyApp(name: '', identity: '', path: '', icon: WoxImage.empty());
+    return IgnoredHotkeyApp(
+      name: '',
+      identity: '',
+      path: '',
+      icon: WoxImage.empty(),
+    );
   }
 }
 
@@ -368,7 +388,11 @@ class QueryShortcut {
 
   late bool disabled;
 
-  QueryShortcut({required this.shortcut, required this.query, required this.disabled});
+  QueryShortcut({
+    required this.shortcut,
+    required this.query,
+    required this.disabled,
+  });
 
   QueryShortcut.fromJson(Map<String, dynamic> json) {
     shortcut = json['Shortcut'];
@@ -455,7 +479,11 @@ class SettingWindowContext {
   // means the settings page should return to the launcher query UI.
   late String source;
 
-  SettingWindowContext({required this.path, required this.param, this.source = ''});
+  SettingWindowContext({
+    required this.path,
+    required this.param,
+    this.source = '',
+  });
 
   SettingWindowContext.fromJson(Map<String, dynamic> json) {
     path = json['Path'];
@@ -471,7 +499,12 @@ class AIProvider {
 
   late String host;
 
-  AIProvider({required this.name, required this.alias, required this.apiKey, required this.host});
+  AIProvider({
+    required this.name,
+    required this.alias,
+    required this.apiKey,
+    required this.host,
+  });
 
   AIProvider.fromJson(Map<String, dynamic> json) {
     name = json['Name'];
@@ -498,15 +531,26 @@ class AIMCPServer {
   late List<String> environmentVariables;
   late String url;
 
-  AIMCPServer({required this.name, required this.type, required this.disabled, required this.command, required this.environmentVariables, required this.url});
+  AIMCPServer({
+    required this.name,
+    required this.type,
+    required this.disabled,
+    required this.command,
+    required this.environmentVariables,
+    required this.url,
+  });
 
   AIMCPServer.fromJson(Map<String, dynamic> json) {
     name = json['Name'] ?? json['name'] ?? '';
     type = json['Type'] ?? json['type'] ?? '';
     disabled = json['Disabled'] ?? json['disabled'] ?? false;
     command = json['Command'] ?? json['command'] ?? '';
-    final rawEnvironmentVariables = json['EnvironmentVariables'] ?? json['environmentVariables'];
-    environmentVariables = rawEnvironmentVariables is List ? List<String>.from(rawEnvironmentVariables) : <String>[];
+    final rawEnvironmentVariables =
+        json['EnvironmentVariables'] ?? json['environmentVariables'];
+    environmentVariables =
+        rawEnvironmentVariables is List
+            ? List<String>.from(rawEnvironmentVariables)
+            : <String>[];
     url = json['Url'] ?? json['url'] ?? '';
   }
 
@@ -534,6 +578,7 @@ class AISkill {
   late bool readOnly;
   late String error;
   late bool enabled;
+  late bool disableModelInvocation;
   late String instructions;
   late List<String> tools;
   late Map<String, String> templates;
@@ -551,6 +596,7 @@ class AISkill {
     required this.readOnly,
     required this.error,
     required this.enabled,
+    required this.disableModelInvocation,
     required this.instructions,
     required this.tools,
     required this.templates,
@@ -569,13 +615,25 @@ class AISkill {
     readOnly = json['ReadOnly'] ?? json['readOnly'] ?? true;
     error = json['Error'] ?? json['error'] ?? '';
     enabled = json['Enabled'] ?? json['enabled'] ?? true;
+    disableModelInvocation =
+        json['DisableModelInvocation'] ??
+        json['disableModelInvocation'] ??
+        false;
     instructions = json['Instructions'] ?? json['instructions'] ?? '';
     final rawTools = json['Tools'] ?? json['tools'];
     tools = rawTools is List ? List<String>.from(rawTools) : <String>[];
     final rawTemplates = json['Templates'] ?? json['templates'];
-    templates = rawTemplates is Map ? rawTemplates.map((key, value) => MapEntry(key.toString(), value.toString())) : <String, String>{};
+    templates =
+        rawTemplates is Map
+            ? rawTemplates.map(
+              (key, value) => MapEntry(key.toString(), value.toString()),
+            )
+            : <String, String>{};
     final rawIcon = json['Icon'] ?? json['icon'];
-    icon = rawIcon is Map ? WoxImage.fromJson(Map<String, dynamic>.from(rawIcon)) : WoxImage.empty();
+    icon =
+        rawIcon is Map
+            ? WoxImage.fromJson(Map<String, dynamic>.from(rawIcon))
+            : WoxImage.empty();
   }
 
   Map<String, dynamic> toJson() {
@@ -591,6 +649,7 @@ class AISkill {
     data['ReadOnly'] = readOnly;
     data['Error'] = error;
     data['Enabled'] = enabled;
+    data['DisableModelInvocation'] = disableModelInvocation;
     data['Instructions'] = instructions;
     data['Tools'] = tools;
     data['Templates'] = templates;
@@ -604,7 +663,11 @@ class AIProviderInfo {
   late WoxImage icon;
   late String defaultHost;
 
-  AIProviderInfo({required this.name, required this.icon, required this.defaultHost});
+  AIProviderInfo({
+    required this.name,
+    required this.icon,
+    required this.defaultHost,
+  });
 
   AIProviderInfo.fromJson(Map<String, dynamic> json) {
     name = json['Name'];

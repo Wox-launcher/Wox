@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_chat_toolcall_duration.dart';
 import 'package:wox/components/wox_image_view.dart';
-import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/components/wox_selectable_text.dart';
@@ -16,7 +16,6 @@ import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
-import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/strings.dart';
@@ -29,6 +28,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
 
   WoxTheme get woxTheme => WoxThemeUtil.instance.currentTheme.value;
   WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
+  double get _commandPaletteItemHeight => _metrics.scaledSpacing(38);
+  double get _commandPaletteHeaderHeight => _metrics.scaledSpacing(28);
+  double get _commandPaletteVerticalPadding => _metrics.scaledSpacing(8);
 
   // Get translation from WoxSettingController
   String tr(String key) {
@@ -41,7 +43,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
 
     return Obx(() {
       final title = controller.aiChatData.value.title.isEmpty ? tr('ui_ai_chat_new_chat') : controller.aiChatData.value.title;
-      final isFullscreen = controller.launcherController.isPreviewFullscreen.value;
+      final isConversationSidebarCollapsed = controller.isConversationSidebarCollapsed.value;
       final showExitChatMode = !controller.launcherController.isQueryBoxVisible.value;
 
       return SizedBox(
@@ -52,8 +54,8 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
             WoxTooltip(
               message: tr("ui_action_toggle_sidebar"),
               child: IconButton(
-                onPressed: () => controller.launcherController.togglePreviewFullscreen(const UuidV4().generate()),
-                icon: Icon(isFullscreen ? Icons.view_sidebar_outlined : Icons.splitscreen_outlined),
+                onPressed: () => controller.toggleConversationSidebar(const UuidV4().generate()),
+                icon: Icon(isConversationSidebarCollapsed ? Icons.view_sidebar_outlined : Icons.splitscreen_outlined),
                 iconSize: _metrics.scaledSpacing(22),
                 color: subtitleColor,
                 padding: EdgeInsets.zero,
@@ -101,16 +103,17 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       children: [
         LayoutBuilder(
           builder: (context, constraints) {
-            final showConversationSidebar = constraints.maxWidth >= _metrics.scaledSpacing(760);
-            return Row(
-              children: [
-                if (showConversationSidebar) ...[_buildConversationSidebar(), Container(width: 1, color: safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(20))],
-                Expanded(child: _buildChatConversationPane(context)),
-              ],
-            );
+            return Obx(() {
+              final showConversationSidebar = constraints.maxWidth >= _metrics.scaledSpacing(760) && !controller.isConversationSidebarCollapsed.value;
+              return Row(
+                children: [
+                  if (showConversationSidebar) ...[_buildConversationSidebar(), Container(width: 1, color: safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(20))],
+                  Expanded(child: _buildChatConversationPane(context)),
+                ],
+              );
+            });
           },
         ),
-        Obx(() => controller.isShowChatSelectPanel.value ? _buildChatSelectPanel(context) : const SizedBox.shrink()),
         Obx(() {
           final question = controller.pendingAIQuestion.value;
           return question == null ? const SizedBox.shrink() : _buildAIQuestionOverlay(question);
@@ -143,107 +146,285 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       onKeyEvent: _handleChatInputKeyEvent,
       child: Padding(
         padding: EdgeInsets.fromLTRB(_metrics.scaledSpacing(10), _metrics.scaledSpacing(6), _metrics.scaledSpacing(10), _metrics.scaledSpacing(8)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox.shrink(),
-            Container(
-              decoration: BoxDecoration(
-                color: safeFromCssColor(woxTheme.queryBoxBackgroundColor),
-                borderRadius: BorderRadius.circular(woxTheme.queryBoxBorderRadius.toDouble()),
-                border: Border.all(color: safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(25)),
-              ),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: controller.textController,
-                    focusNode: controller.aiChatFocusNode,
-                    decoration: InputDecoration(
-                      hintText: tr('ui_ai_chat_input_hint'),
-                      hintStyle: TextStyle(color: safeFromCssColor(woxTheme.previewPropertyTitleColor)),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(14), vertical: _metrics.scaledSpacing(8)),
-                    ),
-                    maxLines: null,
-                    keyboardType: TextInputType.multiline,
-                    cursorColor: safeFromCssColor(woxTheme.queryBoxCursorColor),
-                    // AI chat lives in the launcher preview surface, so its controls
-                    // follow density metrics while settings controls keep their own sizes.
-                    style: TextStyle(fontSize: _metrics.resultSubtitleFontSize, color: safeFromCssColor(woxTheme.queryBoxFontColor)),
+        child: _ChatCommandPaletteOverlay(controller: controller, paletteBuilder: (context, maxHeight) => _buildCommandPalette(maxHeight), child: _buildChatInputBox()),
+      ),
+    );
+  }
+
+  Widget _buildChatInputBox() {
+    return Container(
+      decoration: BoxDecoration(
+        color: safeFromCssColor(woxTheme.queryBoxBackgroundColor),
+        borderRadius: BorderRadius.circular(woxTheme.queryBoxBorderRadius.toDouble()),
+        border: Border.all(color: safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(25)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildDraftSkillRefs(),
+          TextField(
+            controller: controller.textController,
+            focusNode: controller.aiChatFocusNode,
+            decoration: InputDecoration(
+              hintText: tr('ui_ai_chat_input_hint'),
+              hintStyle: TextStyle(color: safeFromCssColor(woxTheme.previewPropertyTitleColor)),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(14), vertical: _metrics.scaledSpacing(8)),
+            ),
+            minLines: 1,
+            maxLines: 4,
+            keyboardType: TextInputType.multiline,
+            cursorColor: safeFromCssColor(woxTheme.queryBoxCursorColor),
+            // AI chat lives in the launcher preview surface, so its controls
+            // follow density metrics while settings controls keep their own sizes.
+            style: TextStyle(fontSize: _metrics.resultSubtitleFontSize, color: safeFromCssColor(woxTheme.queryBoxFontColor)),
+          ),
+          Container(
+            height: _metrics.scaledSpacing(34),
+            padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(8)),
+            decoration: BoxDecoration(border: Border(top: BorderSide(color: safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(25)))),
+            child: Row(
+              children: [
+                Obx(
+                  () => _buildChatStatusChip(
+                    Icons.model_training_rounded,
+                    controller.aiChatData.value.model.value.name.isEmpty ? tr("ui_ai_chat_select_model") : controller.aiChatData.value.model.value.name,
                   ),
-                  Container(
-                    height: _metrics.scaledSpacing(34),
-                    padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(8)),
-                    decoration: BoxDecoration(border: Border(top: BorderSide(color: safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(25)))),
+                ),
+                SizedBox(width: _metrics.scaledSpacing(8)),
+                const Spacer(),
+                InkWell(
+                  onTap: () => controller.sendMessage(),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(8), vertical: _metrics.scaledSpacing(4)),
+                    decoration: BoxDecoration(color: safeFromCssColor(woxTheme.actionItemActiveBackgroundColor), borderRadius: BorderRadius.circular(4)),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Obx(
-                          () => WoxTooltip(
-                            message: tr('ui_ai_chat_select_agent'),
-                            child: IconButton(
-                              icon: Icon(
-                                Icons.smart_toy,
-                                size: _metrics.scaledSpacing(18),
-                                color:
-                                    (controller.aiChatData.value.agentName != null && controller.aiChatData.value.agentName!.isNotEmpty)
-                                        ? getThemeTextColor()
-                                        : getThemeTextColor().withAlpha(128),
-                              ),
-                              color: safeFromCssColor(woxTheme.actionItemActiveBackgroundColor),
-                              onPressed: () {
-                                controller.showAgentsPanel();
-                              },
-                              padding: EdgeInsets.zero,
-                              constraints: BoxConstraints(minWidth: _metrics.scaledSpacing(32), minHeight: _metrics.scaledSpacing(32)),
-                            ),
-                          ),
-                        ),
-                        Obx(
-                          () => WoxTooltip(
-                            message: tr('ui_ai_chat_select_model_title'),
-                            child: IconButton(
-                              icon: Icon(
-                                Icons.model_training,
-                                size: _metrics.scaledSpacing(18),
-                                color: controller.aiChatData.value.model.value.name.isNotEmpty ? getThemeTextColor() : getThemeTextColor().withAlpha(128),
-                              ),
-                              color: safeFromCssColor(woxTheme.actionItemActiveBackgroundColor),
-                              onPressed: () {
-                                controller.showModelsPanel();
-                              },
-                              padding: EdgeInsets.zero,
-                              constraints: BoxConstraints(minWidth: _metrics.scaledSpacing(32), minHeight: _metrics.scaledSpacing(32)),
-                            ),
-                          ),
-                        ),
-                        Obx(
-                          () => Text(
-                            controller.aiChatData.value.model.value.name.isEmpty ? tr("ui_ai_chat_select_model") : controller.aiChatData.value.model.value.name,
-                            style: TextStyle(color: getThemeTextColor(), fontSize: _metrics.smallLabelFontSize),
-                          ),
-                        ),
-                        const Spacer(),
-                        InkWell(
-                          onTap: () => controller.sendMessage(),
-                          child: Container(
-                            padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(8), vertical: _metrics.scaledSpacing(4)),
-                            decoration: BoxDecoration(color: safeFromCssColor(woxTheme.actionItemActiveBackgroundColor), borderRadius: BorderRadius.circular(4)),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.keyboard_return, size: _metrics.scaledSpacing(14), color: safeFromCssColor(woxTheme.actionItemActiveFontColor)),
-                                SizedBox(width: _metrics.scaledSpacing(4)),
-                                Text(tr('ui_ai_chat_send'), style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: safeFromCssColor(woxTheme.actionItemActiveFontColor))),
-                              ],
-                            ),
-                          ),
-                        ),
+                        Icon(Icons.keyboard_return, size: _metrics.scaledSpacing(14), color: safeFromCssColor(woxTheme.actionItemActiveFontColor)),
+                        SizedBox(width: _metrics.scaledSpacing(4)),
+                        Text(tr('ui_ai_chat_send'), style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: safeFromCssColor(woxTheme.actionItemActiveFontColor))),
                       ],
                     ),
                   ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDraftSkillRefs() {
+    return Obx(() {
+      final refs = controller.draftSkillRefs.toList();
+      if (refs.isEmpty) {
+        return const SizedBox.shrink();
+      }
+
+      return Container(
+        width: double.infinity,
+        padding: EdgeInsets.fromLTRB(_metrics.scaledSpacing(10), _metrics.scaledSpacing(8), _metrics.scaledSpacing(10), _metrics.scaledSpacing(2)),
+        child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: refs.map((ref) => _buildSkillRefChip(ref, removable: true)).toList())),
+      );
+    });
+  }
+
+  Widget _buildSkillRefChip(AISkillRef ref, {required bool removable}) {
+    final borderColor = safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(40);
+    final backgroundColor = safeFromCssColor(woxTheme.actionContainerBackgroundColor).withAlpha(80);
+    final textColor = safeFromCssColor(woxTheme.queryBoxFontColor);
+    final subTextColor = safeFromCssColor(woxTheme.resultItemSubTitleColor);
+
+    return Container(
+      margin: EdgeInsets.only(right: _metrics.scaledSpacing(6), bottom: _metrics.scaledSpacing(4)),
+      padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(7), vertical: _metrics.scaledSpacing(4)),
+      decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(5), border: Border.all(color: borderColor)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.extension_rounded, size: _metrics.scaledSpacing(13), color: subTextColor),
+          SizedBox(width: _metrics.scaledSpacing(5)),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: _metrics.scaledSpacing(180)),
+            child: Text(
+              ref.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: textColor, fontSize: _metrics.smallLabelFontSize, fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (removable) ...[
+            SizedBox(width: _metrics.scaledSpacing(5)),
+            InkWell(
+              onTap: () => controller.removeDraftSkillRef(ref),
+              borderRadius: BorderRadius.circular(8),
+              child: Icon(Icons.close_rounded, size: _metrics.scaledSpacing(13), color: subTextColor),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatStatusChip(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: _metrics.scaledSpacing(16), color: getThemeTextColor().withAlpha(180)),
+        SizedBox(width: _metrics.scaledSpacing(5)),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: _metrics.scaledSpacing(220)),
+          child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: _metrics.smallLabelFontSize)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCommandPalette(double maxHeight) {
+    return Obx(() {
+      if (!controller.isCommandPaletteVisible.value) {
+        return const SizedBox.shrink();
+      }
+
+      final items = controller.commandPaletteItems.toList();
+      controller.updateCommandPaletteLayoutMetrics(
+        itemHeight: _commandPaletteItemHeight,
+        headerHeight: _commandPaletteHeaderHeight,
+        verticalPadding: _commandPaletteVerticalPadding,
+      );
+
+      final children = <Widget>[];
+      ChatCommandPaletteGroup? currentGroup;
+      for (var i = 0; i < items.length; i++) {
+        final item = items[i];
+        if (currentGroup != item.group) {
+          currentGroup = item.group;
+          children.add(_buildCommandPaletteGroupHeader(item.group));
+        }
+        children.add(_buildCommandPaletteItem(item, i));
+      }
+
+      return Material(
+        elevation: 10,
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: safeFromCssColor(woxTheme.actionContainerBackgroundColor),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(35)),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child:
+                items.isEmpty
+                    ? Padding(
+                      padding: EdgeInsets.all(_metrics.scaledSpacing(14)),
+                      child: Text(tr("ui_no_data"), style: TextStyle(color: safeFromCssColor(woxTheme.resultItemSubTitleColor), fontSize: _metrics.resultSubtitleFontSize)),
+                    )
+                    : Scrollbar(
+                      thumbVisibility: true,
+                      controller: controller.commandPaletteScrollController,
+                      child: Listener(
+                        onPointerSignal: _handleCommandPalettePointerSignal,
+                        onPointerPanZoomUpdate: _handleCommandPalettePointerPanZoomUpdate,
+                        child: ListView(
+                          controller: controller.commandPaletteScrollController,
+                          padding: EdgeInsets.symmetric(vertical: _commandPaletteVerticalPadding),
+                          primary: false,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          children: children,
+                        ),
+                      ),
+                    ),
+          ),
+        ),
+      );
+    });
+  }
+
+  void _scrollCommandPaletteByPointerDelta(double deltaY) {
+    if (!controller.commandPaletteScrollController.hasClients) {
+      return;
+    }
+
+    final position = controller.commandPaletteScrollController.position;
+    final targetOffset = (position.pixels + deltaY).clamp(position.minScrollExtent, position.maxScrollExtent).toDouble();
+    if ((targetOffset - position.pixels).abs() < 0.01) {
+      return;
+    }
+
+    // The command palette is rendered in an overlay, so route pointer scrolling
+    // directly to its controller instead of relying on ambient scroll handling.
+    controller.commandPaletteScrollController.jumpTo(targetOffset);
+  }
+
+  void _handleCommandPalettePointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      _scrollCommandPaletteByPointerDelta(event.scrollDelta.dy);
+    }
+  }
+
+  void _handleCommandPalettePointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
+    _scrollCommandPaletteByPointerDelta(-event.panDelta.dy);
+  }
+
+  Widget _buildCommandPaletteGroupHeader(ChatCommandPaletteGroup group) {
+    final label = group == ChatCommandPaletteGroup.model ? tr("ui_ai_chat_select_model_title") : tr("ui_ai_skills");
+    return SizedBox(
+      height: _commandPaletteHeaderHeight,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(14)),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(label, style: TextStyle(color: safeFromCssColor(woxTheme.resultItemSubTitleColor), fontSize: _metrics.smallLabelFontSize, fontWeight: FontWeight.w700)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommandPaletteItem(ChatCommandPaletteItem item, int index) {
+    final isActive = controller.commandPaletteSelectedIndex.value == index;
+    final icon = item.group == ChatCommandPaletteGroup.model ? Icons.model_training_rounded : Icons.extension_rounded;
+    final titleColor = isActive ? safeFromCssColor(woxTheme.resultItemActiveTitleColor) : safeFromCssColor(woxTheme.resultItemTitleColor);
+    final subTitleColor = safeFromCssColor(woxTheme.resultItemSubTitleColor);
+    final backgroundColor = isActive ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor) : Colors.transparent;
+
+    return InkWell(
+      onTap: () => controller.executeCommandPaletteItem(item),
+      child: Container(
+        height: _commandPaletteItemHeight,
+        padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(14)),
+        color: backgroundColor,
+        child: Row(
+          children: [
+            Icon(icon, size: _metrics.scaledSpacing(18), color: titleColor),
+            SizedBox(width: _metrics.scaledSpacing(10)),
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      item.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: titleColor, fontSize: _metrics.resultSubtitleFontSize, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  if (item.subTitle.isNotEmpty) ...[
+                    SizedBox(width: _metrics.scaledSpacing(8)),
+                    Expanded(
+                      child: Text(item.subTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: subTitleColor, fontSize: _metrics.smallLabelFontSize)),
+                    ),
+                  ],
                 ],
               ),
             ),
+            if (item.selected) Icon(Icons.check_rounded, size: _metrics.scaledSpacing(18), color: titleColor),
           ],
         ),
       ),
@@ -254,11 +435,23 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     if (event is KeyDownEvent) {
       switch (event.logicalKey) {
         case LogicalKeyboardKey.escape:
+          if (controller.handleCommandPaletteEscape()) {
+            return KeyEventResult.handled;
+          }
           controller.launcherController.exitChatInputMode(const UuidV4().generate());
           return KeyEventResult.handled;
         case LogicalKeyboardKey.enter:
+          if (controller.executeSelectedCommandPaletteItem()) {
+            return KeyEventResult.handled;
+          }
           controller.sendMessage();
           return KeyEventResult.handled;
+        case LogicalKeyboardKey.arrowDown:
+          controller.moveCommandPaletteSelection(1);
+          return controller.isCommandPaletteVisible.value ? KeyEventResult.handled : KeyEventResult.ignored;
+        case LogicalKeyboardKey.arrowUp:
+          controller.moveCommandPaletteSelection(-1);
+          return controller.isCommandPaletteVisible.value ? KeyEventResult.handled : KeyEventResult.ignored;
       }
     }
 
@@ -268,7 +461,12 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     }
 
     if (controller.launcherController.isActionHotkey(pressedHotkey)) {
-      controller.showChatSelectPanel();
+      controller.openCommandPaletteFromActionHotkey();
+      return KeyEventResult.handled;
+    }
+
+    if (_isToggleConversationSidebarHotkey(pressedHotkey)) {
+      controller.toggleConversationSidebar(const UuidV4().generate());
       return KeyEventResult.handled;
     }
 
@@ -281,6 +479,11 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     }
 
     return KeyEventResult.ignored;
+  }
+
+  bool _isToggleConversationSidebarHotkey(HotKey hotkey) {
+    final parsed = WoxHotkey.parseHotkeyFromString(controller.launcherController.previewFullscreenHotkey);
+    return parsed != null && parsed.isNormalHotkey && WoxHotkey.equals(parsed.normalHotkey, hotkey);
   }
 
   Widget _buildConversationSidebar() {
@@ -429,57 +632,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       }
     }
     return tr("ui_ai_chat_continue_chat");
-  }
-
-  Widget _buildChatSelectPanel(BuildContext context) {
-    return Positioned(
-      right: _metrics.scaledSpacing(10),
-      bottom: _metrics.scaledSpacing(10),
-      child: Material(
-        elevation: 8,
-        borderRadius: BorderRadius.circular(woxTheme.actionQueryBoxBorderRadius.toDouble()),
-        child: Container(
-          padding: EdgeInsets.only(
-            top: woxTheme.actionContainerPaddingTop.toDouble(),
-            bottom: woxTheme.actionContainerPaddingBottom.toDouble(),
-            left: woxTheme.actionContainerPaddingLeft.toDouble(),
-            right: woxTheme.actionContainerPaddingRight.toDouble(),
-          ),
-          decoration: BoxDecoration(
-            color: safeFromCssColor(woxTheme.actionContainerBackgroundColor),
-            borderRadius: BorderRadius.circular(woxTheme.actionQueryBoxBorderRadius.toDouble()),
-          ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: _metrics.scaledSpacing(320)),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Obx(
-                  () => Text(
-                    controller.currentChatSelectCategory.isEmpty
-                        ? tr("ui_ai_chat_options")
-                        : (controller.currentChatSelectCategory.value == "models" ? tr("ui_ai_chat_select_model_title") : tr("ui_ai_chat_select_agent_title")),
-                    style: TextStyle(color: safeFromCssColor(woxTheme.actionContainerHeaderFontColor), fontSize: _metrics.actionHeaderFontSize),
-                  ),
-                ),
-                const Divider(),
-                WoxListView<ChatSelectItem>(
-                  controller: controller.chatSelectListController,
-                  listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code,
-                  showFilter: true,
-                  // Chat selection uses the launcher action-list surface, so
-                  // visible capacity follows density instead of the old fixed
-                  // 350px panel height.
-                  maxHeight: _metrics.actionItemBaseHeight * 8.75,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   // Keeps ask_user prompts inside the chat preview instead of using launcher-level dialogs.
@@ -704,6 +856,13 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  if (message.skillRefs.isNotEmpty) ...[
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(alignment: WrapAlignment.end, children: message.skillRefs.map((ref) => _buildSkillRefChip(ref, removable: false)).toList()),
+                    ),
+                    SizedBox(height: _metrics.scaledSpacing(3)),
+                  ],
                   Container(
                     margin: EdgeInsets.only(bottom: _metrics.scaledSpacing(3)),
                     padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(12), vertical: _metrics.scaledSpacing(8)),
@@ -983,18 +1142,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       );
     }
 
-    if (controller.aiChatData.value.agentName != null && controller.aiChatData.value.agentName!.isNotEmpty) {
-      final currentAgent = controller.availableAgents.firstWhere((agent) => agent.name == controller.aiChatData.value.agentName, orElse: () => AIAgent.empty());
-
-      if (currentAgent.name.isNotEmpty && currentAgent.icon.imageData.isNotEmpty) {
-        final avatarSize = _metrics.scaledSpacing(36);
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(avatarSize / 2),
-          child: SizedBox(width: avatarSize, height: avatarSize, child: WoxImageView(woxImage: currentAgent.icon, width: avatarSize, height: avatarSize)),
-        );
-      }
-    }
-
     return Container(
       width: _metrics.scaledSpacing(36),
       height: _metrics.scaledSpacing(36),
@@ -1016,5 +1163,113 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     final formattedReasoning = reasoningLines.map((line) => '> $line').join('\n');
 
     return '$formattedReasoning\n\n$content';
+  }
+}
+
+class _ChatCommandPaletteOverlay extends StatefulWidget {
+  final WoxAIChatController controller;
+  final Widget child;
+  final Widget Function(BuildContext context, double maxHeight) paletteBuilder;
+
+  const _ChatCommandPaletteOverlay({required this.controller, required this.child, required this.paletteBuilder});
+
+  @override
+  State<_ChatCommandPaletteOverlay> createState() => _ChatCommandPaletteOverlayState();
+}
+
+class _ChatCommandPaletteOverlayState extends State<_ChatCommandPaletteOverlay> {
+  final LayerLink _layerLink = LayerLink();
+  final GlobalKey _targetKey = GlobalKey();
+  Worker? _visibilityWorker;
+  OverlayEntry? _overlayEntry;
+
+  @override
+  void initState() {
+    super.initState();
+    _visibilityWorker = ever<bool>(widget.controller.isCommandPaletteVisible, (_) => _syncOverlay());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncOverlay());
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatCommandPaletteOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) {
+      return;
+    }
+
+    _visibilityWorker?.dispose();
+    _visibilityWorker = ever<bool>(widget.controller.isCommandPaletteVisible, (_) => _syncOverlay());
+    _removeOverlay();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncOverlay());
+  }
+
+  @override
+  void dispose() {
+    _visibilityWorker?.dispose();
+    _removeOverlay();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_overlayEntry != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _overlayEntry?.markNeedsBuild());
+    }
+
+    return CompositedTransformTarget(key: _targetKey, link: _layerLink, child: widget.child);
+  }
+
+  void _syncOverlay() {
+    if (!mounted) {
+      return;
+    }
+
+    if (widget.controller.isCommandPaletteVisible.value) {
+      _showOverlay();
+      return;
+    }
+
+    _removeOverlay();
+  }
+
+  void _showOverlay() {
+    if (_overlayEntry != null) {
+      _overlayEntry!.markNeedsBuild();
+      return;
+    }
+
+    _overlayEntry = OverlayEntry(builder: _buildOverlay);
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  Widget _buildOverlay(BuildContext overlayContext) {
+    final renderBox = _targetKey.currentContext?.findRenderObject() as RenderBox?;
+    final targetSize = renderBox?.size ?? Size.zero;
+    final targetTop = renderBox?.localToGlobal(Offset.zero).dy ?? 0;
+    final maxHeight = (targetTop - 12).clamp(96.0, 310.0).toDouble();
+
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          GestureDetector(behavior: HitTestBehavior.translucent, onTap: widget.controller.hideCommandPalette),
+          Positioned(
+            width: targetSize.width,
+            child: CompositedTransformFollower(
+              link: _layerLink,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.topLeft,
+              followerAnchor: Alignment.bottomLeft,
+              offset: const Offset(0, -8),
+              child: Material(color: Colors.transparent, child: widget.paletteBuilder(overlayContext, maxHeight)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

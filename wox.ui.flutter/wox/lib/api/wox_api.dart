@@ -226,10 +226,6 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/mcp/tools/all", null);
   }
 
-  Future<List<AIAgent>> findAIAgents(String traceId) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/ai/agents", null);
-  }
-
   Future<List<AISkill>> findAISkills(String traceId) async {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/skills", null);
   }

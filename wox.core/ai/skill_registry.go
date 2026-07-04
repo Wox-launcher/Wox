@@ -2,12 +2,13 @@ package ai
 
 import (
 	"sort"
+	"strings"
 	"sync"
 
 	"wox/common"
 )
 
-// SkillRegistry holds discovered skills that agents can reference by Id.
+// SkillRegistry holds discovered skills that chats can reference by Id.
 type SkillRegistry struct {
 	mu     sync.RWMutex
 	skills map[string]common.Skill
@@ -48,6 +49,22 @@ func (r *SkillRegistry) Get(id string) (common.Skill, bool) {
 	defer r.mu.RUnlock()
 	s, ok := r.skills[id]
 	return s, ok
+}
+
+// FindByName returns enabled or disabled skills that match a display name.
+func (r *SkillRegistry) FindByName(name string) []common.Skill {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	name = strings.TrimSpace(name)
+	out := []common.Skill{}
+	for _, s := range r.skills {
+		if strings.EqualFold(s.Name, name) {
+			out = append(out, s)
+		}
+	}
+	sortSkills(out)
+	return out
 }
 
 // List returns a snapshot of all registered skills.
