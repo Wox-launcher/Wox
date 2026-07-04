@@ -320,7 +320,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     }
 
     return Positioned(
-      left: 100 + textWidth,
+      left: 260 + textWidth,
       top: 0,
       width: blankWidth,
       height: boxHeight,

@@ -62,20 +62,16 @@ Color getThemePopupOutlineColor() {
 Color getThemeCardBackgroundColor() {
   Color baseColor = getThemeBackgroundColor();
   bool isDarkTheme = baseColor.computeLuminance() < 0.5;
+  // Flutter exposes Color channels as normalized doubles, so convert them
+  // before applying the legacy 20-step RGB offset.
+  int shiftChannel(double channel, int offset) {
+    return ((channel * 255).round() + offset).clamp(0, 255).toInt();
+  }
+
   if (isDarkTheme) {
-    return Color.fromRGBO(
-      (baseColor.r + 20 > 255 ? 255 : baseColor.r + 20).toInt(),
-      (baseColor.g + 20 > 255 ? 255 : baseColor.g + 20).toInt(),
-      (baseColor.b + 20 > 255 ? 255 : baseColor.b + 20).toInt(),
-      1.0,
-    );
+    return Color.fromRGBO(shiftChannel(baseColor.r, 20), shiftChannel(baseColor.g, 20), shiftChannel(baseColor.b, 20), 1.0);
   } else {
-    return Color.fromRGBO(
-      (baseColor.r - 20 < 0 ? 0 : baseColor.r - 20).toInt(),
-      (baseColor.g - 20 < 0 ? 0 : baseColor.g - 20).toInt(),
-      (baseColor.b - 20 < 0 ? 0 : baseColor.b - 20).toInt(),
-      1.0,
-    );
+    return Color.fromRGBO(shiftChannel(baseColor.r, -20), shiftChannel(baseColor.g, -20), shiftChannel(baseColor.b, -20), 1.0);
   }
 }
 

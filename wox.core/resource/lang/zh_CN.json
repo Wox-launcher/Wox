@@ -56,6 +56,7 @@
   "ui_file_preview_large_file_title": "大文件预览",
   "ui_file_preview_large_file_message": "此文件大小为 {size}。完整预览可能需要一些时间，Wox 先显示文件信息。",
   "ui_file_preview_load_full_preview": "加载预览",
+  "ui_file_preview_code_preview_limited": "正在显示前 {lines} 行。为避免界面卡住，大型代码文件会跳过语法高亮。",
   "ui_file_preview_property_type": "类型",
   "ui_file_preview_property_size": "大小",
   "ui_file_preview_property_modified": "修改时间",

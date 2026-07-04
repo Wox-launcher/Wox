@@ -55,6 +55,7 @@
   "ui_file_preview_large_file_title": "Prévia de arquivo grande",
   "ui_file_preview_large_file_message": "Este arquivo tem {size}. A prévia completa pode levar algum tempo, então o Wox mostra os detalhes do arquivo primeiro.",
   "ui_file_preview_load_full_preview": "Carregar prévia",
+  "ui_file_preview_code_preview_limited": "Mostrando as primeiras {lines} linhas. O realce de sintaxe é ignorado para arquivos de código grandes para manter o Wox responsivo.",
   "ui_file_preview_property_type": "Tipo",
   "ui_file_preview_property_size": "Tamanho",
   "ui_file_preview_property_modified": "Modificado",
