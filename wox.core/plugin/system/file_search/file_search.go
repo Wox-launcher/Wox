@@ -602,7 +602,11 @@ func (c *FileSearchPlugin) searchContent(ctx context.Context, queryText string, 
 	}
 
 	contentHits, err := c.engine.SearchContent(ctx, queryText, 20)
-	if err != nil || len(contentHits) == 0 {
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("content search failed for query %q: %s", queryText, err.Error()))
+		return nil
+	}
+	if len(contentHits) == 0 {
 		return nil
 	}
 

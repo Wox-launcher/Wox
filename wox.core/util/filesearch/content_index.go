@@ -193,11 +193,11 @@ func (d *ContentSearchDB) SearchContent(ctx context.Context, query string, limit
 	matchExpr := quoteFTS5Match(tokenized)
 
 	rows, err := d.db.QueryContext(ctx, `
-		SELECT ce.path, f.rank
+		SELECT ce.path, bm25(entries_content_fts) AS rank
 		FROM entries_content_fts f
 		JOIN content_entries ce ON ce.rowid = f.rowid
 		WHERE f.entries_content_fts MATCH ?
-		ORDER BY f.rank
+		ORDER BY rank
 		LIMIT ?
 	`, matchExpr, limit)
 	if err != nil {
