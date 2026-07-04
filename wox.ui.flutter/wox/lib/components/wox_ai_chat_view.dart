@@ -147,14 +147,18 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
           child: buildTopStatusBar(),
         ),
         Expanded(
-          child: SingleChildScrollView(
-            controller: controller.aiChatScrollController,
-            padding: EdgeInsets.only(top: _metrics.scaledSpacing(6), bottom: _metrics.scaledSpacing(8)),
-            child: Obx(() {
-              final renderItems = _buildChatRenderItems(controller.aiChatData.value.conversations);
-              return Column(children: renderItems.map((item) => _buildChatRenderItem(item, context)).toList());
-            }),
-          ),
+          child: Obx(() {
+            final renderItems = _buildChatRenderItems(controller.aiChatData.value.conversations);
+            if (renderItems.isEmpty) {
+              return _buildEmptyChatPlaceholder();
+            }
+
+            return SingleChildScrollView(
+              controller: controller.aiChatScrollController,
+              padding: EdgeInsets.only(top: _metrics.scaledSpacing(6), bottom: _metrics.scaledSpacing(8)),
+              child: Column(children: renderItems.map((item) => _buildChatRenderItem(item, context)).toList()),
+            );
+          }),
         ),
         Obx(() {
           final trace = controller.aiChatData.value.debugTrace.value;
@@ -165,6 +169,23 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
         }),
         _buildChatInputArea(),
       ],
+    );
+  }
+
+  Widget _buildEmptyChatPlaceholder() {
+    final textColor = safeFromCssColor(woxTheme.resultItemTitleColor).withAlpha(150);
+
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(24)),
+        child: Text(
+          tr("ui_ai_chat_empty_prompt"),
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: textColor, fontSize: _metrics.scaledSpacing(28), fontWeight: FontWeight.w500, height: 1.2),
+        ),
+      ),
     );
   }
 
@@ -1149,7 +1170,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                     ),
                   ),
                   SizedBox(width: _metrics.scaledSpacing(6)),
-                  Icon(expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: _metrics.scaledSpacing(16), color: titleColor),
+                  Icon(expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right, size: _metrics.scaledSpacing(16), color: titleColor),
                 ],
               ),
             ),
@@ -1164,9 +1185,15 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     });
   }
 
-  // Keeps the toolbar space stable while hiding message actions until hover.
+  // Keeps the metadata row reserved while hiding actions until hover.
   Widget _buildHoverVisibleMessageMetaRow({required WoxAIChatConversation message, required bool isUser, required bool visible}) {
-    return Visibility(visible: visible, maintainSize: true, maintainAnimation: true, maintainState: true, child: _buildMessageMetaRow(message, isUser));
+    return IgnorePointer(
+      ignoring: !visible,
+      child: ExcludeSemantics(
+        excluding: !visible,
+        child: AnimatedOpacity(opacity: visible ? 1 : 0, duration: const Duration(milliseconds: 80), curve: Curves.easeOut, child: _buildMessageMetaRow(message, isUser)),
+      ),
+    );
   }
 
   // Keeps timestamps and inline actions aligned with the message side.
@@ -1208,8 +1235,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       child: Obx(() {
         final expanded = controller.isToolActivityExpanded(item.id);
         final status = _toolActivityStatus(item.tools);
-        final startTimestamp = _toolActivityStartTimestamp(item.tools);
-        final endTimestamp = _toolActivityEndTimestamp(item.tools, startTimestamp);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1231,17 +1256,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                         style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: titleColor, fontWeight: FontWeight.w600),
                       ),
                     ),
-                    SizedBox(width: _metrics.scaledSpacing(8)),
-                    WoxChatToolcallDuration(
-                      id: item.id,
-                      startTimestamp: startTimestamp,
-                      endTimestamp: endTimestamp,
-                      style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: titleColor),
-                    ),
-                    SizedBox(width: _metrics.scaledSpacing(8)),
-                    _buildToolStatusIndicator(status, _toolActivityStatusLabel(status)),
+                    if (status == ToolCallStatus.failed) ...[SizedBox(width: _metrics.scaledSpacing(8)), _buildToolStatusIndicator(status, _toolActivityStatusLabel(status))],
                     SizedBox(width: _metrics.scaledSpacing(6)),
-                    Icon(expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: _metrics.scaledSpacing(16), color: titleColor),
+                    Icon(expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right, size: _metrics.scaledSpacing(16), color: titleColor),
                   ],
                 ),
               ),
@@ -1258,62 +1275,54 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   }
 
   Widget _buildToolCallBadge(WoxAIChatConversation message) {
-    final titleColor = safeFromCssColor(woxTheme.resultItemTitleColor);
     final subtitleColor = safeFromCssColor(woxTheme.resultItemSubTitleColor);
-    final borderColor = safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(35);
-    final backgroundColor = safeFromCssColor(woxTheme.queryBoxBackgroundColor).withAlpha(60);
     final startTimestamp = _toolCallStartTimestamp(message);
     final endTimestamp = _toolCallEndTimestamp(message.toolCallInfo, startTimestamp);
     final toolName = message.toolCallInfo.name.isEmpty ? tr("ui_ai_chat_tools") : message.toolCallInfo.name;
 
     return Obx(() {
       final expanded = controller.isToolCallExpanded(message.id);
-      return Container(
-        width: double.infinity,
-        decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(6), border: Border.all(color: borderColor)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => controller.toggleToolCallExpanded(message.id),
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(8), vertical: _metrics.scaledSpacing(7)),
-                child: Row(
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Icon(Icons.build_outlined, size: _metrics.scaledSpacing(14), color: subtitleColor),
-                    SizedBox(width: _metrics.scaledSpacing(6)),
-                    Expanded(
-                      child: Text(
-                        toolName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: titleColor, fontWeight: FontWeight.w600),
-                      ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => controller.toggleToolCallExpanded(message.id),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(2), vertical: _metrics.scaledSpacing(6)),
+              child: Row(
+                children: [
+                  Icon(Icons.build_outlined, size: _metrics.scaledSpacing(16), color: subtitleColor),
+                  SizedBox(width: _metrics.scaledSpacing(8)),
+                  Flexible(
+                    child: Text(
+                      toolName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: subtitleColor, fontWeight: FontWeight.w600),
                     ),
-                    SizedBox(width: _metrics.scaledSpacing(6)),
-                    WoxChatToolcallDuration(
-                      id: message.id,
-                      startTimestamp: startTimestamp,
-                      endTimestamp: endTimestamp,
-                      style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: subtitleColor),
-                    ),
-                    SizedBox(width: _metrics.scaledSpacing(6)),
-                    _buildStatusIndicator(message.toolCallInfo),
-                    SizedBox(width: _metrics.scaledSpacing(6)),
-                    Icon(expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: _metrics.scaledSpacing(14), color: subtitleColor),
-                  ],
-                ),
+                  ),
+                  SizedBox(width: _metrics.scaledSpacing(8)),
+                  WoxChatToolcallDuration(
+                    id: message.id,
+                    startTimestamp: startTimestamp,
+                    endTimestamp: endTimestamp,
+                    style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: subtitleColor),
+                  ),
+                  SizedBox(width: _metrics.scaledSpacing(8)),
+                  _buildStatusIndicator(message.toolCallInfo),
+                  SizedBox(width: _metrics.scaledSpacing(6)),
+                  Icon(expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right, size: _metrics.scaledSpacing(16), color: subtitleColor),
+                ],
               ),
             ),
-            if (expanded)
-              Padding(
-                padding: EdgeInsets.fromLTRB(_metrics.scaledSpacing(8), 0, _metrics.scaledSpacing(8), _metrics.scaledSpacing(8)),
-                child: _buildToolCallDetails(message.toolCallInfo),
-              ),
-          ],
-        ),
+          ),
+          if (expanded)
+            Padding(
+              padding: EdgeInsets.only(left: _metrics.scaledSpacing(24), top: _metrics.scaledSpacing(2), bottom: _metrics.scaledSpacing(4)),
+              child: _buildToolCallDetails(message.toolCallInfo),
+            ),
+        ],
       );
     });
   }
@@ -1464,39 +1473,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       return Icons.extension_outlined;
     }
     return Icons.terminal_rounded;
-  }
-
-  int _toolActivityStartTimestamp(List<WoxAIChatConversation> tools) {
-    int? startTimestamp;
-    for (final tool in tools) {
-      final timestamp = _toolCallStartTimestamp(tool);
-      if (startTimestamp == null || timestamp < startTimestamp) {
-        startTimestamp = timestamp;
-      }
-    }
-    return startTimestamp ?? DateTime.now().millisecondsSinceEpoch;
-  }
-
-  int? _toolActivityEndTimestamp(List<WoxAIChatConversation> tools, int startTimestamp) {
-    if (tools.any((tool) => _isActiveToolStatus(tool.toolCallInfo.status))) {
-      return null;
-    }
-
-    int? endTimestamp;
-    for (final tool in tools) {
-      final timestamp = tool.toolCallInfo.endTimestamp > 0 ? tool.toolCallInfo.endTimestamp : tool.timestamp;
-      if (timestamp <= 0) {
-        continue;
-      }
-      if (endTimestamp == null || timestamp > endTimestamp) {
-        endTimestamp = timestamp;
-      }
-    }
-
-    if (endTimestamp == null) {
-      return startTimestamp;
-    }
-    return endTimestamp < startTimestamp ? startTimestamp : endTimestamp;
   }
 
   int _toolCallStartTimestamp(WoxAIChatConversation message) {

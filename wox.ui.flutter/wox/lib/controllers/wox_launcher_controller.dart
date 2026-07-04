@@ -4797,7 +4797,15 @@ class WoxLauncherController extends GetxController {
     final queryBoxHeight =
         isQueryBoxVisible.value ? getQueryBoxTotalHeight() : 0.0;
     final refinementHeight = getQueryRefinementBarHeight();
-    var totalHeight = queryBoxHeight + refinementHeight + resultHeight;
+    final hiddenChatModeChromeHeight =
+        isChatModeActive.value && !isQueryBoxVisible.value
+            ? _getHiddenChatModeChromeHeight(hasItems: hasItems)
+            : 0.0;
+    var totalHeight =
+        queryBoxHeight +
+        refinementHeight +
+        resultHeight +
+        hiddenChatModeChromeHeight;
 
     // On Windows with high DPI, add one pixel to avoid fractional cut-off.
     if (Platform.isWindows) {
@@ -4818,6 +4826,21 @@ class WoxLauncherController extends GetxController {
     }
 
     return totalHeight;
+  }
+
+  // Chat mode hides launcher chrome visually but keeps the window height stable.
+  double _getHiddenChatModeChromeHeight({required bool hasItems}) {
+    var hiddenHeight = getQueryBoxTotalHeight();
+    final wouldShowToolbarOutsideChatMode =
+        (hasItems ||
+            isShowDoctorCheckInfo ||
+            hasVisibleToolbarMsg ||
+            hasBugAwareToolbarIndicator) &&
+        !isToolbarHiddenForce.value;
+    if (wouldShowToolbarOutsideChatMode) {
+      hiddenHeight += WoxThemeUtil.instance.getToolbarHeight();
+    }
+    return hiddenHeight;
   }
 
   /// Calculate the initial window height when showing the app.

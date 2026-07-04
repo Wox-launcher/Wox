@@ -2283,6 +2283,7 @@
   "ui_ai_chat_show_sidebar": "显示侧边栏",
   "ui_ai_chat_hide_sidebar": "隐藏侧边栏",
   "ui_ai_chat_new_chat": "新对话",
+  "ui_ai_chat_empty_prompt": "今天想用 Wox 问点什么？",
   "ui_ai_chat_start_chat": "开始对话",
   "ui_ai_chat_create_new_chat": "开始一个新的对话",
   "ui_ai_chat_continue_chat": "继续对话",

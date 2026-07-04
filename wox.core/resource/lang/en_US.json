@@ -2283,6 +2283,7 @@
   "ui_ai_chat_show_sidebar": "Show Sidebar",
   "ui_ai_chat_hide_sidebar": "Hide Sidebar",
   "ui_ai_chat_new_chat": "New Chat",
+  "ui_ai_chat_empty_prompt": "What do you want to ask Wox today?",
   "ui_ai_chat_start_chat": "Start Chat",
   "ui_ai_chat_create_new_chat": "Create a new chat",
   "ui_ai_chat_continue_chat": "Continue Chat",
