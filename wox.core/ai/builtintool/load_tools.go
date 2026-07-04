@@ -19,13 +19,13 @@ func init() {
 func LoadToolsTool() common.Tool {
 	return common.Tool{
 		Name:        ai.LoadToolsToolName,
-		Description: "Request executable tools by exact name from the available_tools context. Requested tools become callable in the next model step.",
+		Description: "Request catalog tools by exact name from the tool_catalog context. Requested tools become callable in the next model step.",
 		Parameters: jsonschema.Definition{
 			Type: jsonschema.Object,
 			Properties: map[string]jsonschema.Definition{
 				"names": {
 					Type:        jsonschema.Array,
-					Description: "Exact tool names to load from the available_tools context",
+					Description: "Exact tool names to load from the tool_catalog context",
 					Items:       &jsonschema.Definition{Type: jsonschema.String},
 				},
 			},

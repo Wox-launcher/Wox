@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"wox/ai"
 	aitool "wox/ai/builtintool"
 	"wox/common"
@@ -25,6 +26,12 @@ var aiChatsSettingKey = "ai_chats"
 
 const aiChatEnterChatModeActionId = "__wox_internal_enter_chat_mode__"
 
+const (
+	aiChatCompactionTriggerEstimatedTokens = 24000
+	aiChatCompactionRecentTargetTokens     = 12000
+	aiChatCompactionMinRecentUserTurns     = 3
+)
+
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &AIChatPlugin{})
 }
@@ -34,6 +41,11 @@ type AIChatPlugin struct {
 	mcpServers  []common.AIChatMCPServerConfig
 	mcpToolsMap []common.MCPTool
 	api         plugin.API
+}
+
+type aiChatRuntimeContext struct {
+	Conversations []common.Conversation
+	DebugTrace    *common.AIChatDebugTrace
 }
 
 func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
@@ -277,7 +289,11 @@ func (r *AIChatPlugin) loadChats(ctx context.Context) ([]common.AIChatData, erro
 }
 
 func (r *AIChatPlugin) saveChats(ctx context.Context) {
-	chatsJson, err := json.Marshal(r.chats)
+	persistedChats := make([]common.AIChatData, len(r.chats))
+	for i, chat := range r.chats {
+		persistedChats[i] = cloneAIChatDataForState(chat)
+	}
+	chatsJson, err := json.Marshal(persistedChats)
 	if err != nil {
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to marshal chats: %s", err.Error()))
 		return
@@ -289,7 +305,7 @@ func (r *AIChatPlugin) saveChats(ctx context.Context) {
 func (r *AIChatPlugin) GetAllTools(ctx context.Context) []common.MCPTool {
 	// Keep returning MCPTool shape for UI compatibility: the UI only reads
 	// Name/Description/Parameters. The registry is the source of truth now.
-	tools := ai.GetToolRegistry().List()
+	tools := r.availableToolsForRuntime(ctx)
 	tools = lo.Filter(tools, func(t common.Tool, _ int) bool {
 		return !ai.IsRuntimeOnlyTool(t.Name)
 	})
@@ -331,6 +347,10 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	r.appendOrUpdateChatData(aiChatData)
 	r.saveChats(ctx)
 
+	runtimeContext := r.buildRuntimeRequestContext(ctx, &aiChatData)
+	r.appendOrUpdateChatData(aiChatData)
+	r.saveChats(ctx)
+
 	const chatStreamUIUpdateMinIntervalMs int64 = 120
 	var chatDataMu sync.Mutex
 	var lastChatResponseAt int64
@@ -343,20 +363,20 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		}
 
 		lastChatResponseAt = now
-		return cloneAIChatDataForUI(aiChatData), true
+		snapshot := cloneAIChatDataForUI(aiChatData)
+		if runtimeContext.DebugTrace != nil {
+			snapshot.DebugTrace = cloneAIChatDebugTrace(runtimeContext.DebugTrace)
+		}
+		return snapshot, true
 	}
 
-	// Plain chat only exposes runtime discovery tools at first. Executable tools
-	// become callable after the model requests them with load_tools.
-	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, r.buildRuntimeConversations(ctx, aiChatData), common.ChatOptions{
-		Tools:      ai.GetToolRegistry().FindByName([]string{ai.ReadSkillToolName, ai.LoadToolsToolName}),
-		LoopPolicy: common.LoopPolicy{MaxIterations: 25, RetryOnFailure: true, MaxRetries: 3},
-		ContextPolicy: common.ContextPolicy{
-			MaxConversations: 50,
-			SummarizeToCount: 20,
-			Enabled:          true,
-		},
-		OnSummarize: r.maybeSummarizeConversations,
+	// Plain chat exposes runtime discovery tools plus high-frequency web tools.
+	// Other catalog tools become callable after the model requests them with load_tools.
+	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, runtimeContext.Conversations, common.ChatOptions{
+		Tools:          r.initialToolsForRuntime(ctx),
+		LoopPolicy:     common.LoopPolicy{MaxIterations: 25, RetryOnFailure: true, MaxRetries: 3},
+		DebugTrace:     runtimeContext.DebugTrace,
+		DebugTraceName: "chat",
 	}, func(streamResult common.ChatStreamData) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream receiving data, status: %s, data: %s", streamResult.Status, streamResult.Data))
 
@@ -368,7 +388,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		chatDataMu.Lock()
 		// Update conversations and sync to UI.
 		if streamResult.Data != "" || streamResult.Reasoning != "" {
-			r.appendOrUpdateConversation(&aiChatData, common.Conversation{
+			r.appendOrUpdateConversationAtEnd(&aiChatData, common.Conversation{
 				Id:        responseId,
 				Role:      common.ConversationRoleAssistant,
 				Text:      streamResult.Data,
@@ -397,6 +417,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 				})
 			}
 		}
+		updateMainChatDebugTrace(runtimeContext.DebugTrace, aiChatData)
 
 		forceSend := streamResult.Status != common.ChatStreamStatusStreaming
 		snapshot, shouldSendSnapshot = snapshotChatData(forceSend)
@@ -445,9 +466,33 @@ func isInternalChatToolCall(toolCall common.ToolCallInfo) bool {
 	return ai.IsRuntimeOnlyTool(toolCall.Name)
 }
 
-// buildRuntimeConversations injects runtime-only skill and tool directories without mutating persisted chat history.
-func (r *AIChatPlugin) buildRuntimeConversations(ctx context.Context, aiChatData common.AIChatData) []common.Conversation {
-	runtimeConversations := make([]common.Conversation, 0, len(aiChatData.Conversations)+2)
+// buildRuntimeRequestContext prepares the provider-facing message list without
+// mutating persisted conversations. Long chats use the latest compaction entry
+// as a runtime checkpoint, while the saved chat keeps the full history.
+func (r *AIChatPlugin) buildRuntimeRequestContext(ctx context.Context, aiChatData *common.AIChatData) aiChatRuntimeContext {
+	r.maybeAppendCompactionEntry(ctx, aiChatData)
+
+	runtimeConversations := r.composeRuntimeConversations(ctx, *aiChatData, latestCompactionEntry(aiChatData.CompactionEntries), true)
+	trace := (*common.AIChatDebugTrace)(nil)
+	if util.IsDev() {
+		trace = &common.AIChatDebugTrace{
+			EstimatedPersistedTokens: estimateConversationTokens(aiChatData.Conversations),
+			EstimatedRuntimeTokens:   estimateConversationTokens(runtimeConversations),
+		}
+	}
+
+	return aiChatRuntimeContext{Conversations: runtimeConversations, DebugTrace: trace}
+}
+
+func (r *AIChatPlugin) composeRuntimeConversations(ctx context.Context, aiChatData common.AIChatData, compactionEntry *common.AIChatCompactionEntry, expandCurrentSkillRefs bool) []common.Conversation {
+	recentConversations := r.recentConversationsForRuntime(ctx, aiChatData.Conversations, compactionEntry)
+	runtimeConversations := make([]common.Conversation, 0, len(recentConversations)+4)
+	runtimeConversations = append(runtimeConversations, common.Conversation{
+		Id:        uuid.NewString(),
+		Role:      common.ConversationRoleSystem,
+		Text:      formatRuntimeTimePrompt(util.GetSystemTime()),
+		Timestamp: util.GetSystemTimestamp(),
+	})
 	if availableSkillsPrompt := ai.FormatAvailableSkillsPrompt(ai.GetSkillRegistry().ListEnabled()); availableSkillsPrompt != "" {
 		runtimeConversations = append(runtimeConversations, common.Conversation{
 			Id:        uuid.NewString(),
@@ -456,7 +501,7 @@ func (r *AIChatPlugin) buildRuntimeConversations(ctx context.Context, aiChatData
 			Timestamp: util.GetSystemTimestamp(),
 		})
 	}
-	if availableToolsPrompt := ai.FormatAvailableToolsPrompt(ai.GetToolRegistry().List()); availableToolsPrompt != "" {
+	if availableToolsPrompt := ai.FormatAvailableToolsPrompt(r.availableToolsForRuntime(ctx)); availableToolsPrompt != "" {
 		runtimeConversations = append(runtimeConversations, common.Conversation{
 			Id:        uuid.NewString(),
 			Role:      common.ConversationRoleSystem,
@@ -464,11 +509,132 @@ func (r *AIChatPlugin) buildRuntimeConversations(ctx context.Context, aiChatData
 			Timestamp: util.GetSystemTimestamp(),
 		})
 	}
+	if compactionEntry != nil && strings.TrimSpace(compactionEntry.Summary) != "" {
+		runtimeConversations = append(runtimeConversations, common.Conversation{
+			Id:        uuid.NewString(),
+			Role:      common.ConversationRoleSystem,
+			Text:      "Summary of previous conversation:\n" + strings.TrimSpace(compactionEntry.Summary),
+			Timestamp: util.GetSystemTimestamp(),
+		})
+	}
 
-	for _, conversation := range aiChatData.Conversations {
-		runtimeConversations = append(runtimeConversations, r.withMessageSkillReferences(ctx, conversation))
+	currentSkillMessageId := ""
+	if expandCurrentSkillRefs {
+		currentSkillMessageId = lastUserConversationId(recentConversations)
+	}
+	for _, conversation := range recentConversations {
+		if conversation.Id == currentSkillMessageId {
+			runtimeConversations = append(runtimeConversations, r.withMessageSkillReferences(ctx, conversation))
+		} else {
+			runtimeConversations = append(runtimeConversations, cloneAIConversation(conversation))
+		}
 	}
 	return runtimeConversations
+}
+
+// formatRuntimeTimePrompt gives models a stable anchor for relative dates.
+func formatRuntimeTimePrompt(now time.Time) string {
+	return fmt.Sprintf(
+		"Current local date and time: %s.\nCurrent local date: %s.\nResolve relative dates such as today, tomorrow, yesterday, this week, and recent using this local date. For current or time-sensitive requests, use this date instead of model training data when forming searches or answers.",
+		now.Format("2006-01-02 15:04:05 MST (-07:00)"),
+		now.Format("2006-01-02"),
+	)
+}
+
+// initialToolsForRuntime returns tools callable on the first model step.
+func (r *AIChatPlugin) initialToolsForRuntime(ctx context.Context) []common.Tool {
+	names := []string{ai.ReadSkillToolName, ai.LoadToolsToolName}
+	if r.isWebAccessEnabled(ctx) {
+		names = append(names, ai.WebSearchToolName, ai.WebFetchToolName)
+	}
+	return ai.GetToolRegistry().FindByName(names)
+}
+
+// availableToolsForRuntime filters setting-gated tools before exposing them to the model.
+func (r *AIChatPlugin) availableToolsForRuntime(ctx context.Context) []common.Tool {
+	tools := ai.GetToolRegistry().List()
+	if r.isWebAccessEnabled(ctx) {
+		return tools
+	}
+
+	return lo.Filter(tools, func(tool common.Tool, _ int) bool {
+		return !ai.IsWebAccessTool(tool.Name)
+	})
+}
+
+func (r *AIChatPlugin) isWebAccessEnabled(ctx context.Context) bool {
+	webSearchConfig := setting.NormalizeAIWebSearchConfig(setting.GetSettingManager().GetWoxSetting(ctx).AIWebSearch.Get())
+	return webSearchConfig.Enabled
+}
+
+func (r *AIChatPlugin) recentConversationsForRuntime(ctx context.Context, conversations []common.Conversation, compactionEntry *common.AIChatCompactionEntry) []common.Conversation {
+	if compactionEntry == nil || strings.TrimSpace(compactionEntry.FirstKeptConversationId) == "" {
+		return cloneAIConversations(conversations)
+	}
+
+	for i, conversation := range conversations {
+		if conversation.Id == compactionEntry.FirstKeptConversationId {
+			return cloneAIConversations(conversations[i:])
+		}
+	}
+
+	r.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI: compaction entry first kept conversation not found: %s", compactionEntry.FirstKeptConversationId))
+	return cloneAIConversations(conversations)
+}
+
+func (r *AIChatPlugin) maybeAppendCompactionEntry(ctx context.Context, aiChatData *common.AIChatData) {
+	latestEntry := latestCompactionEntry(aiChatData.CompactionEntries)
+	beforeRuntime := r.composeRuntimeConversations(ctx, *aiChatData, latestEntry, true)
+	estimatedTokensBefore := estimateConversationTokens(beforeRuntime)
+	if estimatedTokensBefore <= aiChatCompactionTriggerEstimatedTokens {
+		return
+	}
+
+	keepStart := findCompactionKeepStartIndex(aiChatData.Conversations)
+	if keepStart <= 0 || keepStart >= len(aiChatData.Conversations) {
+		return
+	}
+
+	firstNewCompactedIndex := 0
+	firstCompactedConversationId := aiChatData.Conversations[0].Id
+	previousSummary := ""
+	if latestEntry != nil {
+		previousSummary = latestEntry.Summary
+		if latestEntry.FirstCompactedConversationId != "" {
+			firstCompactedConversationId = latestEntry.FirstCompactedConversationId
+		}
+		if previousLastIndex := conversationIndexById(aiChatData.Conversations, latestEntry.LastCompactedConversationId); previousLastIndex >= 0 {
+			firstNewCompactedIndex = previousLastIndex + 1
+		}
+	}
+	if keepStart <= firstNewCompactedIndex {
+		return
+	}
+
+	section := cloneAIConversations(aiChatData.Conversations[firstNewCompactedIndex:keepStart])
+	summaryText, summarizeErr := r.summarizeConversationsSection(ctx, aiChatData.Model, previousSummary, section)
+	if summarizeErr != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: failed to compact conversations: %s", summarizeErr.Error()))
+		return
+	}
+	if strings.TrimSpace(summaryText) == "" {
+		return
+	}
+
+	entry := common.AIChatCompactionEntry{
+		Id:                           uuid.NewString(),
+		Summary:                      strings.TrimSpace(summaryText),
+		FirstCompactedConversationId: firstCompactedConversationId,
+		LastCompactedConversationId:  aiChatData.Conversations[keepStart-1].Id,
+		FirstKeptConversationId:      aiChatData.Conversations[keepStart].Id,
+		EstimatedTokensBefore:        estimatedTokensBefore,
+		ConversationCount:            len(aiChatData.Conversations),
+		Model:                        aiChatData.Model,
+		CreatedAt:                    util.GetSystemTimestamp(),
+	}
+	entry.EstimatedTokensAfter = estimateConversationTokens(r.composeRuntimeConversations(ctx, *aiChatData, &entry, true))
+	aiChatData.CompactionEntries = append(aiChatData.CompactionEntries, entry)
+	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: created compaction entry, chat: %s, beforeTokens: %d, afterTokens: %d, firstKept: %s", aiChatData.Id, entry.EstimatedTokensBefore, entry.EstimatedTokensAfter, entry.FirstKeptConversationId))
 }
 
 // withMessageSkillReferences expands explicit message-level skill refs for the current provider call only.
@@ -509,11 +675,142 @@ func (r *AIChatPlugin) withMessageSkillReferences(ctx context.Context, conversat
 	return cloned
 }
 
+// updateMainChatDebugTrace keeps the dev inspector token summary synchronized while streaming.
+func updateMainChatDebugTrace(trace *common.AIChatDebugTrace, aiChatData common.AIChatData) {
+	if trace == nil {
+		return
+	}
+
+	trace.SetEstimatedPersistedTokens(estimateConversationTokens(aiChatData.Conversations))
+}
+
+type aiChatConversationTurn struct {
+	start int
+	end   int
+}
+
+func findCompactionKeepStartIndex(conversations []common.Conversation) int {
+	turns := splitConversationTurns(conversations)
+	if len(turns) <= aiChatCompactionMinRecentUserTurns {
+		return 0
+	}
+
+	keptTokens := 0
+	keptUserTurns := 0
+	keepStart := turns[len(turns)-1].start
+	for i := len(turns) - 1; i >= 0; i-- {
+		turn := turns[i]
+		turnTokens := estimateConversationTokens(conversations[turn.start:turn.end])
+		if keptUserTurns >= aiChatCompactionMinRecentUserTurns && keptTokens+turnTokens > aiChatCompactionRecentTargetTokens {
+			break
+		}
+		keptTokens += turnTokens
+		keptUserTurns++
+		keepStart = turn.start
+	}
+	return keepStart
+}
+
+func splitConversationTurns(conversations []common.Conversation) []aiChatConversationTurn {
+	userStarts := []int{}
+	for i, conversation := range conversations {
+		if conversation.Role == common.ConversationRoleUser {
+			userStarts = append(userStarts, i)
+		}
+	}
+	if len(userStarts) == 0 {
+		return []aiChatConversationTurn{}
+	}
+
+	turns := make([]aiChatConversationTurn, 0, len(userStarts))
+	for i, userStart := range userStarts {
+		start := userStart
+		if i == 0 && userStart > 0 {
+			start = 0
+		}
+		end := len(conversations)
+		if i+1 < len(userStarts) {
+			end = userStarts[i+1]
+		}
+		turns = append(turns, aiChatConversationTurn{start: start, end: end})
+	}
+	return turns
+}
+
+func conversationIndexById(conversations []common.Conversation, id string) int {
+	if id == "" {
+		return -1
+	}
+	for i, conversation := range conversations {
+		if conversation.Id == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func lastUserConversationId(conversations []common.Conversation) string {
+	for i := len(conversations) - 1; i >= 0; i-- {
+		if conversations[i].Role == common.ConversationRoleUser {
+			return conversations[i].Id
+		}
+	}
+	return ""
+}
+
+func latestCompactionEntry(entries []common.AIChatCompactionEntry) *common.AIChatCompactionEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+	entry := entries[len(entries)-1]
+	return &entry
+}
+
+func estimateConversationTokens(conversations []common.Conversation) int {
+	total := 0
+	for _, conversation := range conversations {
+		total += 8
+		total += estimateTextTokens(string(conversation.Role))
+		total += estimateTextTokens(conversation.Text)
+		total += estimateTextTokens(conversation.Reasoning)
+		total += len(conversation.Images) * 1024
+		for _, ref := range conversation.SkillRefs {
+			total += estimateTextTokens(ref.Id) + estimateTextTokens(ref.Name) + estimateTextTokens(ref.Path) + estimateTextTokens(ref.Source)
+		}
+		if conversation.ToolCallInfo.Id != "" {
+			total += 16
+			total += estimateTextTokens(conversation.ToolCallInfo.Id)
+			total += estimateTextTokens(conversation.ToolCallInfo.Name)
+			total += estimateTextTokens(fmt.Sprintf("%v", conversation.ToolCallInfo.Arguments))
+			total += estimateTextTokens(conversation.ToolCallInfo.Delta)
+			total += estimateTextTokens(conversation.ToolCallInfo.Response)
+		}
+	}
+	return total
+}
+
+func estimateTextTokens(text string) int {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0
+	}
+	runeCount := len([]rune(text))
+	return (runeCount + 3) / 4
+}
+
 // cloneAIChatDataForUI copies mutable slices before websocket serialization so
 // concurrent stream callbacks cannot mutate the payload while it is sent.
 func cloneAIChatDataForUI(aiChatData common.AIChatData) common.AIChatData {
 	snapshot := aiChatData
 	snapshot.Conversations = cloneAIConversations(aiChatData.Conversations)
+	snapshot.CompactionEntries = cloneAIChatCompactionEntries(aiChatData.CompactionEntries)
+	snapshot.DebugTrace = cloneAIChatDebugTrace(aiChatData.DebugTrace)
+	return snapshot
+}
+
+func cloneAIChatDataForState(aiChatData common.AIChatData) common.AIChatData {
+	snapshot := cloneAIChatDataForUI(aiChatData)
+	snapshot.DebugTrace = nil
 	return snapshot
 }
 
@@ -524,6 +821,26 @@ func cloneAIConversations(conversations []common.Conversation) []common.Conversa
 		cloned[i] = cloneAIConversation(conversation)
 	}
 	return cloned
+}
+
+func cloneAIChatCompactionEntries(entries []common.AIChatCompactionEntry) []common.AIChatCompactionEntry {
+	return append([]common.AIChatCompactionEntry(nil), entries...)
+}
+
+func cloneAIChatCompactionEntryPtr(entry *common.AIChatCompactionEntry) *common.AIChatCompactionEntry {
+	if entry == nil {
+		return nil
+	}
+	cloned := *entry
+	return &cloned
+}
+
+func cloneAIChatDebugTrace(trace *common.AIChatDebugTrace) *common.AIChatDebugTrace {
+	if trace == nil {
+		return nil
+	}
+	cloned := trace.Snapshot()
+	return &cloned
 }
 
 // cloneAIConversation copies nested mutable fields while keeping scalar metadata intact.
@@ -565,7 +882,20 @@ func (r *AIChatPlugin) appendOrUpdateConversation(aiChatData *common.AIChatData,
 	aiChatData.Conversations = append(aiChatData.Conversations, conversation)
 }
 
+// appendOrUpdateConversationAtEnd keeps streaming assistant updates after tool cards.
+func (r *AIChatPlugin) appendOrUpdateConversationAtEnd(aiChatData *common.AIChatData, conversation common.Conversation) {
+	for i := range aiChatData.Conversations {
+		if aiChatData.Conversations[i].Id == conversation.Id {
+			aiChatData.Conversations = append(aiChatData.Conversations[:i], aiChatData.Conversations[i+1:]...)
+			break
+		}
+	}
+
+	aiChatData.Conversations = append(aiChatData.Conversations, conversation)
+}
+
 func (r *AIChatPlugin) appendOrUpdateChatData(aiChatData common.AIChatData) {
+	aiChatData = cloneAIChatDataForState(aiChatData)
 	for i := range r.chats {
 		if r.chats[i].Id == aiChatData.Id {
 			r.chats[i] = aiChatData
@@ -686,7 +1016,14 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 		Timestamp: util.GetSystemTimestamp(),
 	})
 
-	r.api.AIChatStream(ctx, chat.Model, conversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
+	debugTrace := cloneAIChatDebugTrace(chat.DebugTrace)
+	chatOptions := common.EmptyChatOptions
+	if util.IsDev() && debugTrace != nil {
+		chatOptions.DebugTrace = debugTrace
+		chatOptions.DebugTraceName = "title_summary"
+	}
+
+	r.api.AIChatStream(ctx, chat.Model, conversations, chatOptions, func(streamResult common.ChatStreamData) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat summarize stream data: %s", streamResult.Data))
 		if streamResult.Status == common.ChatStreamStatusFinished {
 			// Use Data directly since Reasoning is now separated
@@ -706,75 +1043,46 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 				}
 			}
 			r.saveChats(ctx)
-			plugin.GetPluginManager().GetUI().SendChatResponse(ctx, updatedChat)
+			updatedSnapshot := cloneAIChatDataForUI(updatedChat)
+			// Title updates come from persisted chat state, so restore the transient debug trace for the UI snapshot.
+			updatedSnapshot.DebugTrace = cloneAIChatDebugTrace(debugTrace)
+			plugin.GetPluginManager().GetUI().SendChatResponse(ctx, updatedSnapshot)
 		}
 	})
 }
 
-// maybeSummarizeConversations compacts a conversation list when it exceeds the
-// policy threshold to avoid token overflow in long tool loops. Leading system
-// messages and a tail of recent messages are preserved; the middle is summarized
-// into a single system message. On any summarization failure the original list
-// is returned unchanged so the chat continues rather than aborts.
-func (r *AIChatPlugin) maybeSummarizeConversations(ctx context.Context, conversations []common.Conversation, policy common.ContextPolicy) []common.Conversation {
-	if !policy.Enabled || policy.MaxConversations <= 0 || len(conversations) <= policy.MaxConversations {
-		return conversations
+// summarizeConversationsSection asks the model to update the cumulative
+// compaction summary for a contiguous range of complete user turns.
+func (r *AIChatPlugin) summarizeConversationsSection(ctx context.Context, model common.Model, previousSummary string, section []common.Conversation) (string, error) {
+	var promptBuilder strings.Builder
+	promptBuilder.WriteString("Create an updated cumulative summary for the assistant to continue this chat.\n")
+	promptBuilder.WriteString("Requirements:\n")
+	promptBuilder.WriteString("1. Preserve durable facts, user preferences, decisions, tool outcomes, and unresolved tasks.\n")
+	promptBuilder.WriteString("2. Do not invent details.\n")
+	promptBuilder.WriteString("3. Return only the updated summary.\n")
+	if strings.TrimSpace(previousSummary) != "" {
+		promptBuilder.WriteString("\nExisting cumulative summary:\n")
+		promptBuilder.WriteString(strings.TrimSpace(previousSummary))
+		promptBuilder.WriteString("\n")
 	}
+	promptBuilder.WriteString("\nNew conversation section to fold into the summary:\n")
+	promptBuilder.WriteString(formatConversationsForCompactionSummary(section))
 
-	keepCount := policy.SummarizeToCount
-	if keepCount <= 0 || keepCount >= len(conversations) {
-		return conversations
+	promptConversations := []common.Conversation{
+		{
+			Id:        uuid.NewString(),
+			Role:      common.ConversationRoleUser,
+			Text:      promptBuilder.String(),
+			Timestamp: util.GetSystemTimestamp(),
+		},
 	}
-
-	headCount := 0
-	for headCount < len(conversations) && conversations[headCount].Role == common.ConversationRoleSystem {
-		headCount++
-	}
-	if headCount >= len(conversations) {
-		return conversations
-	}
-	tailStart := len(conversations) - keepCount
-	if tailStart <= headCount {
-		return conversations
-	}
-
-	toSummarize := conversations[headCount:tailStart]
-	summaryText, summarizeErr := r.summarizeConversationsSection(ctx, conversations[0].Id, toSummarize)
-	if summarizeErr != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: failed to summarize conversations: %s", summarizeErr.Error()))
-		return conversations
-	}
-
-	summaryConv := common.Conversation{
-		Id:        uuid.NewString(),
-		Role:      common.ConversationRoleSystem,
-		Text:      "Summary of previous conversation:\n" + summaryText,
-		Timestamp: util.GetSystemTimestamp(),
-	}
-
-	result := make([]common.Conversation, 0, headCount+1+keepCount)
-	result = append(result, conversations[:headCount]...)
-	result = append(result, summaryConv)
-	result = append(result, conversations[tailStart:]...)
-	return result
-}
-
-// summarizeConversationsSection asks the model to summarize a slice of the
-// conversation. It blocks the caller because it runs in the loop iteration
-// before the next model request.
-func (r *AIChatPlugin) summarizeConversationsSection(ctx context.Context, _ string, section []common.Conversation) (string, error) {
-	promptConversations := lo.Filter(section, func(c common.Conversation, _ int) bool {
-		return c.Role != common.ConversationRoleTool
-	})
-	promptConversations = append(promptConversations, common.Conversation{
-		Id:   uuid.NewString(),
-		Role: common.ConversationRoleUser,
-		Text: "Summarize the conversation above into a concise set of facts and decisions an assistant would need to continue. Keep tool results and key context. Do not add anything new.",
-	})
 
 	var sb strings.Builder
 	var done = make(chan struct{})
-	streamErr := r.api.AIChatStream(ctx, r.GetDefaultModel(ctx), promptConversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
+	if model.Name == "" {
+		model = r.GetDefaultModel(ctx)
+	}
+	streamErr := r.api.AIChatStream(ctx, model, promptConversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
 		if streamResult.Status == common.ChatStreamStatusFinished {
 			sb.WriteString(streamResult.Data)
 			close(done)
@@ -794,6 +1102,37 @@ func (r *AIChatPlugin) summarizeConversationsSection(ctx context.Context, _ stri
 		return "", ctx.Err()
 	}
 	return sb.String(), nil
+}
+
+func formatConversationsForCompactionSummary(conversations []common.Conversation) string {
+	var builder strings.Builder
+	for _, conversation := range conversations {
+		builder.WriteString("\n---\n")
+		builder.WriteString("role: ")
+		builder.WriteString(string(conversation.Role))
+		builder.WriteString("\n")
+		if strings.TrimSpace(conversation.Text) != "" {
+			builder.WriteString("text:\n")
+			builder.WriteString(conversation.Text)
+			builder.WriteString("\n")
+		}
+		if strings.TrimSpace(conversation.Reasoning) != "" {
+			builder.WriteString("reasoning:\n")
+			builder.WriteString(conversation.Reasoning)
+			builder.WriteString("\n")
+		}
+		if conversation.ToolCallInfo.Id != "" {
+			builder.WriteString("tool_call:\n")
+			builder.WriteString("name: ")
+			builder.WriteString(conversation.ToolCallInfo.Name)
+			builder.WriteString("\narguments: ")
+			builder.WriteString(fmt.Sprintf("%v", conversation.ToolCallInfo.Arguments))
+			builder.WriteString("\nresponse:\n")
+			builder.WriteString(conversation.ToolCallInfo.Response)
+			builder.WriteString("\n")
+		}
+	}
+	return builder.String()
 }
 
 func (c *AIChatPlugin) getResultGroup(ctx context.Context, chat common.AIChatData) (string, int64) {

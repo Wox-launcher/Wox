@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tmc/langchaingo/jsonschema"
@@ -154,13 +155,184 @@ func (m *Model) ProviderName() string {
 }
 
 type AIChatData struct {
-	Id            string
-	Title         string
-	Conversations []Conversation
-	Model         Model
+	Id                string
+	Title             string
+	Conversations     []Conversation
+	CompactionEntries []AIChatCompactionEntry
+	Model             Model
+	DebugTrace        *AIChatDebugTrace
 
 	CreatedAt int64
 	UpdatedAt int64
+}
+
+// AIChatCompactionEntry records a runtime context checkpoint for long chats.
+// Persisted conversations remain complete; runtime requests use the latest
+// entry summary plus conversations starting from FirstKeptConversationId.
+type AIChatCompactionEntry struct {
+	Id                           string
+	Summary                      string
+	FirstCompactedConversationId string
+	LastCompactedConversationId  string
+	FirstKeptConversationId      string
+	EstimatedTokensBefore        int
+	EstimatedTokensAfter         int
+	ConversationCount            int
+	Model                        Model
+	CreatedAt                    int64
+}
+
+type AIChatDebugEventType string
+
+const (
+	AIChatDebugEventModelCallStarted  AIChatDebugEventType = "model_call_started"
+	AIChatDebugEventModelCallFinished AIChatDebugEventType = "model_call_finished"
+	AIChatDebugEventModelCallError    AIChatDebugEventType = "model_call_error"
+	AIChatDebugEventToolCallStarted   AIChatDebugEventType = "tool_call_started"
+	AIChatDebugEventToolCallFinished  AIChatDebugEventType = "tool_call_finished"
+)
+
+// AIChatDebugTrace is a development-only timeline of the runtime chat loop.
+// It records the exact request/response boundaries and must not be persisted.
+type AIChatDebugTrace struct {
+	Events                   []AIChatDebugEvent
+	EstimatedPersistedTokens int
+	EstimatedRuntimeTokens   int
+
+	mu      sync.Mutex
+	nextSeq int
+}
+
+// AIChatDebugEvent is one timestamped request, response, error, or tool step in
+// the runtime timeline.
+type AIChatDebugEvent struct {
+	Seq          int
+	Timestamp    int64
+	Type         AIChatDebugEventType
+	Name         string
+	Iteration    int
+	CallId       string
+	ParentCallId string
+	Model        Model
+	Status       string
+	Error        string
+	Request      []Conversation
+	Response     []Conversation
+	VisibleTools []AIChatDebugTool
+	ToolCallInfo *ToolCallInfo
+}
+
+// AIChatDebugTool is the serializable subset of a runtime tool definition.
+type AIChatDebugTool struct {
+	Name        string
+	Description string
+	Source      ToolSource
+	Server      string
+}
+
+// AppendEvent adds a timeline event with a monotonic sequence number.
+func (t *AIChatDebugTrace) AppendEvent(event AIChatDebugEvent) {
+	if t == nil {
+		return
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.nextSeq++
+	event.Seq = t.nextSeq
+	if event.Timestamp == 0 {
+		event.Timestamp = time.Now().UnixMilli()
+	}
+	t.Events = append(t.Events, cloneAIChatDebugEvent(event))
+}
+
+// SetTokenEstimates updates the top-level token summary shown by the inspector.
+func (t *AIChatDebugTrace) SetTokenEstimates(persistedTokens int, runtimeTokens int) {
+	if t == nil {
+		return
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.EstimatedPersistedTokens = persistedTokens
+	t.EstimatedRuntimeTokens = runtimeTokens
+}
+
+// SetEstimatedPersistedTokens updates the persisted-token estimate during streaming.
+func (t *AIChatDebugTrace) SetEstimatedPersistedTokens(persistedTokens int) {
+	if t == nil {
+		return
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.EstimatedPersistedTokens = persistedTokens
+}
+
+// Snapshot returns a detached copy that can be sent to Flutter safely.
+func (t *AIChatDebugTrace) Snapshot() AIChatDebugTrace {
+	if t == nil {
+		return AIChatDebugTrace{}
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return AIChatDebugTrace{
+		Events:                   cloneAIChatDebugEvents(t.Events),
+		EstimatedPersistedTokens: t.EstimatedPersistedTokens,
+		EstimatedRuntimeTokens:   t.EstimatedRuntimeTokens,
+		nextSeq:                  t.nextSeq,
+	}
+}
+
+// cloneAIChatDebugEvents copies events before they leave the locked trace.
+func cloneAIChatDebugEvents(events []AIChatDebugEvent) []AIChatDebugEvent {
+	cloned := make([]AIChatDebugEvent, len(events))
+	for i, event := range events {
+		cloned[i] = cloneAIChatDebugEvent(event)
+	}
+	return cloned
+}
+
+// cloneAIChatDebugEvent copies nested event payloads that can be mutated while streaming.
+func cloneAIChatDebugEvent(event AIChatDebugEvent) AIChatDebugEvent {
+	cloned := event
+	cloned.Request = cloneDebugConversations(event.Request)
+	cloned.Response = cloneDebugConversations(event.Response)
+	cloned.VisibleTools = append([]AIChatDebugTool(nil), event.VisibleTools...)
+	if event.ToolCallInfo != nil {
+		toolCallInfo := cloneDebugToolCallInfo(*event.ToolCallInfo)
+		cloned.ToolCallInfo = &toolCallInfo
+	}
+	return cloned
+}
+
+// cloneDebugConversations copies conversation payloads stored inside trace events.
+func cloneDebugConversations(conversations []Conversation) []Conversation {
+	cloned := make([]Conversation, len(conversations))
+	for i, conversation := range conversations {
+		cloned[i] = conversation
+		cloned[i].Images = append([]WoxImage(nil), conversation.Images...)
+		cloned[i].SkillRefs = append([]AISkillRef(nil), conversation.SkillRefs...)
+		cloned[i].ToolCallInfo = cloneDebugToolCallInfo(conversation.ToolCallInfo)
+	}
+	return cloned
+}
+
+// cloneDebugToolCallInfo copies tool arguments so later updates do not affect older events.
+func cloneDebugToolCallInfo(toolCallInfo ToolCallInfo) ToolCallInfo {
+	cloned := toolCallInfo
+	if toolCallInfo.Arguments != nil {
+		cloned.Arguments = map[string]any{}
+		for key, value := range toolCallInfo.Arguments {
+			cloned.Arguments[key] = value
+		}
+	}
+	return cloned
 }
 
 // AIChatPreviewData bootstraps the chat preview app with an active draft and the saved chat list.
@@ -183,14 +355,11 @@ type AIChater interface {
 var EmptyChatOptions = ChatOptions{}
 
 type ChatOptions struct {
-	Tools         []Tool
-	ThinkingMode  ChatThinkingMode
-	LoopPolicy    LoopPolicy
-	ContextPolicy ContextPolicy
-	// OnSummarize, when set, is invoked at the top of each loop iteration to
-	// optionally summarize old conversations. Returns the (possibly shortened)
-	// conversation list.
-	OnSummarize func(ctx context.Context, conversations []Conversation, policy ContextPolicy) []Conversation
+	Tools          []Tool
+	ThinkingMode   ChatThinkingMode
+	LoopPolicy     LoopPolicy
+	DebugTrace     *AIChatDebugTrace
+	DebugTraceName string
 }
 
 type MCPTool struct {
@@ -270,13 +439,6 @@ type LoopPolicy struct {
 	RetryOnFailure bool          // when true, tool errors are fed back to the model instead of aborting
 	MaxRetries     int           // per-iteration retry cap for a single failing tool call; 0 means default (3)
 	Timeout        time.Duration // 0 means no per-loop timeout
-}
-
-// ContextPolicy controls when long conversations get summarized to avoid token overflow.
-type ContextPolicy struct {
-	MaxConversations int // threshold to trigger summarization; 0 disables
-	SummarizeToCount int // target conversation count after summarization
-	Enabled          bool
 }
 
 // Skill describes a discovered SKILL.md bundle that a model can reference.

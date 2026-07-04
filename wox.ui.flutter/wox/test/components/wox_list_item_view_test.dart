@@ -87,6 +87,7 @@ WoxSetting _setting({required int appWidth}) {
     aiProviders: [],
     aiMCPServers: [],
     aiSkills: [],
+    aiWebSearch: AIWebSearchConfig.fromJson(null),
     appWidth: appWidth,
     maxResultCount: 8,
     uiDensity: 'normal',

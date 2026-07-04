@@ -13,6 +13,10 @@ const (
 	ReadSkillToolName = "read_skill"
 	// LoadToolsToolName is the runtime tool used to request executable tools for the next loop step.
 	LoadToolsToolName = "load_tools"
+	// WebSearchToolName is the built-in search tool exposed when AI web access is enabled.
+	WebSearchToolName = "web_search"
+	// WebFetchToolName is the built-in page fetch tool exposed when AI web access is enabled.
+	WebFetchToolName = "web_fetch"
 
 	availableToolsPromptMaxChars = 12000
 )
@@ -22,7 +26,12 @@ func IsRuntimeOnlyTool(name string) bool {
 	return name == ReadSkillToolName || name == LoadToolsToolName
 }
 
-// FormatAvailableToolsPrompt returns a lightweight directory of tools the model can request.
+// IsWebAccessTool reports whether a tool depends on the AI web search setting.
+func IsWebAccessTool(name string) bool {
+	return name == WebSearchToolName || name == WebFetchToolName
+}
+
+// FormatAvailableToolsPrompt returns a lightweight catalog of tools the model can load.
 func FormatAvailableToolsPrompt(tools []common.Tool) string {
 	visibleTools := make([]common.Tool, 0, len(tools))
 	for _, tool := range tools {
@@ -48,13 +57,13 @@ func FormatAvailableToolsPrompt(tools []common.Tool) string {
 	})
 
 	var builder strings.Builder
-	builder.WriteString("Executable tools are available through the load_tools tool. Use load_tools with exact tool names from available_tools when a tool is needed. Loaded tools become callable in the next step.\n")
-	builder.WriteString("<available_tools>\n")
+	builder.WriteString("Tool catalog: these tools are discoverable, but not necessarily callable in the current model step. Only tools provided in the API tool list are callable now. Use load_tools with exact names from tool_catalog for catalog tools that are not currently callable. Loaded tools become callable in the next model step.\n")
+	builder.WriteString("<tool_catalog>\n")
 
 	count := 0
 	for _, tool := range visibleTools {
 		entry := formatAvailableToolEntry(tool)
-		if builder.Len()+len(entry)+len("</available_tools>") > availableToolsPromptMaxChars {
+		if builder.Len()+len(entry)+len("</tool_catalog>") > availableToolsPromptMaxChars {
 			builder.WriteString("  <truncated>true</truncated>\n")
 			break
 		}
@@ -62,7 +71,7 @@ func FormatAvailableToolsPrompt(tools []common.Tool) string {
 		builder.WriteString(entry)
 		count++
 	}
-	builder.WriteString("</available_tools>")
+	builder.WriteString("</tool_catalog>")
 
 	if count == 0 {
 		return ""

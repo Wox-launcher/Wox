@@ -35,6 +35,7 @@ type WoxSetting struct {
 	AIProviders        *WoxSettingValue[[]AIProvider]
 	AIMCPServers       *WoxSettingValue[[]common.AIChatMCPServerConfig]
 	AISkills           *WoxSettingValue[[]common.Skill]
+	AIWebSearch        *WoxSettingValue[AIWebSearchConfig]
 	EnableAutoBackup   *WoxSettingValue[bool]
 	EnableAutoUpdate   *WoxSettingValue[bool]
 	ReleaseChannel     *WoxSettingValue[ReleaseChannel]
@@ -166,6 +167,92 @@ type AIProvider struct {
 	Alias  string              // optional, used to distinguish multiple configs for the same provider
 	ApiKey string
 	Host   string
+}
+
+type AIWebSearchProvider string
+
+const (
+	AIWebSearchProviderExa     AIWebSearchProvider = "exa"
+	AIWebSearchProviderTavily  AIWebSearchProvider = "tavily"
+	AIWebSearchProviderBrave   AIWebSearchProvider = "brave"
+	AIWebSearchProviderSearXNG AIWebSearchProvider = "searxng"
+)
+
+const (
+	DefaultAIWebSearchResultCount        = 5
+	MaxAIWebSearchResultCount            = 10
+	DefaultAIWebSearchFetchMaxCharacters = 12000
+	MaxAIWebSearchFetchMaxCharacters     = 50000
+	DefaultAIWebSearchExaEndpoint        = "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa"
+	DefaultAIWebSearchTavilyEndpoint     = "https://api.tavily.com"
+	DefaultAIWebSearchBraveEndpoint      = "https://api.search.brave.com"
+)
+
+type AIWebSearchConfig struct {
+	Enabled            bool
+	Provider           string
+	Endpoint           string
+	ApiKey             string
+	SearchResultCount  int
+	FetchMaxCharacters int
+}
+
+// DefaultAIWebSearchConfig returns the zero-config Exa-backed web access setup.
+func DefaultAIWebSearchConfig() AIWebSearchConfig {
+	return AIWebSearchConfig{
+		Enabled:            true,
+		Provider:           string(AIWebSearchProviderExa),
+		Endpoint:           DefaultAIWebSearchExaEndpoint,
+		SearchResultCount:  DefaultAIWebSearchResultCount,
+		FetchMaxCharacters: DefaultAIWebSearchFetchMaxCharacters,
+	}
+}
+
+// NormalizeAIWebSearchConfig clamps user settings while preserving explicit endpoint overrides.
+func NormalizeAIWebSearchConfig(config AIWebSearchConfig) AIWebSearchConfig {
+	provider := AIWebSearchProvider(strings.ToLower(strings.TrimSpace(config.Provider)))
+	switch provider {
+	case AIWebSearchProviderTavily, AIWebSearchProviderBrave, AIWebSearchProviderSearXNG:
+	default:
+		provider = AIWebSearchProviderExa
+	}
+
+	config.Provider = string(provider)
+	config.Endpoint = strings.TrimSpace(config.Endpoint)
+	config.ApiKey = strings.TrimSpace(config.ApiKey)
+	if config.Endpoint == "" {
+		config.Endpoint = DefaultAIWebSearchEndpoint(provider)
+	}
+	config.SearchResultCount = normalizeAIWebSearchInt(config.SearchResultCount, DefaultAIWebSearchResultCount, 1, MaxAIWebSearchResultCount)
+	config.FetchMaxCharacters = normalizeAIWebSearchInt(config.FetchMaxCharacters, DefaultAIWebSearchFetchMaxCharacters, 1000, MaxAIWebSearchFetchMaxCharacters)
+	return config
+}
+
+// DefaultAIWebSearchEndpoint returns the built-in endpoint for providers that have one.
+func DefaultAIWebSearchEndpoint(provider AIWebSearchProvider) string {
+	switch provider {
+	case AIWebSearchProviderExa:
+		return DefaultAIWebSearchExaEndpoint
+	case AIWebSearchProviderTavily:
+		return DefaultAIWebSearchTavilyEndpoint
+	case AIWebSearchProviderBrave:
+		return DefaultAIWebSearchBraveEndpoint
+	default:
+		return ""
+	}
+}
+
+func normalizeAIWebSearchInt(value int, defaultValue int, minValue int, maxValue int) int {
+	if value <= 0 {
+		return defaultValue
+	}
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
 }
 
 type QueryHotkey struct {
@@ -348,6 +435,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		AIProviders:                        NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
 		AIMCPServers:                       NewWoxSettingValue(store, "AIMCPServers", []common.AIChatMCPServerConfig{}),
 		AISkills:                           NewWoxSettingValue(store, "AISkills", []common.Skill{}),
+		AIWebSearch:                        NewWoxSettingValue(store, "AIWebSearch", DefaultAIWebSearchConfig()),
 		QueryHistories:                     NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
 		QueryCompletionFeedbacks:           NewWoxSettingValue(store, "QueryCompletionFeedback", []QueryCompletionFeedback{}),
 		PinedResults:                       NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),

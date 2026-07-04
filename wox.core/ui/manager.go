@@ -1615,6 +1615,8 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 				logger.Error(ctx, fmt.Sprintf("failed to reload AI skills: %s", err.Error()))
 			}
 		}
+	case "AIWebSearch":
+		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "tools")
 	}
 }
 

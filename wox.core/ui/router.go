@@ -921,6 +921,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.AIProviders = woxSetting.AIProviders.Get()
 	settingDto.AIMCPServers = woxSetting.AIMCPServers.Get()
 	settingDto.AISkills = woxSetting.AISkills.Get()
+	settingDto.AIWebSearch = setting.NormalizeAIWebSearchConfig(woxSetting.AIWebSearch.Get())
 	if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
 		settingDto.AISkills = chater.GetAllSkills(ctx)
 	}
@@ -1221,6 +1222,20 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		woxSetting.AISkills.Set(skills)
+	case "AIWebSearch":
+		var webSearch setting.AIWebSearchConfig
+		if err := json.Unmarshal([]byte(vs), &webSearch); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		webSearch = setting.NormalizeAIWebSearchConfig(webSearch)
+		if err := woxSetting.AIWebSearch.Set(webSearch); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		if normalizedValue, err := json.Marshal(webSearch); err == nil {
+			updatedValue = string(normalizedValue)
+		}
 	case "EnableAutoBackup":
 		woxSetting.EnableAutoBackup.Set(vb)
 	case "EnableAutoUpdate":
