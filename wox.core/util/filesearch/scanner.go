@@ -80,7 +80,8 @@ type Scanner struct {
 	// Content index hook receives incremental file change notifications after
 	// the name index has been updated, so the content FTS index stays in sync
 	// without waiting for the next full crawl.
-	contentHook ContentHook
+	contentHookMu sync.RWMutex
+	contentHook   ContentHook
 	// Tests override the preparation budget so run-based smoke coverage can force
 	// job splitting without manufacturing thousands of files just to cross the
 	// production thresholds.
@@ -144,7 +145,15 @@ func (s *Scanner) SetStateChangeHandler(handler func(ctx context.Context)) {
 // SetContentHook installs the content index hook. The hook is notified after
 // name index mutations so the content FTS index receives incremental updates.
 func (s *Scanner) SetContentHook(hook ContentHook) {
+	s.contentHookMu.Lock()
+	defer s.contentHookMu.Unlock()
 	s.contentHook = hook
+}
+
+func (s *Scanner) getContentHook() ContentHook {
+	s.contentHookMu.RLock()
+	defer s.contentHookMu.RUnlock()
+	return s.contentHook
 }
 
 func (s *Scanner) Start(ctx context.Context) {
@@ -670,7 +679,8 @@ func (s *Scanner) applyRunJobInternal(ctx context.Context, kind RunKind, root Ro
 // runs) trigger a scope reconcile so stale content entries are pruned and new
 // searchable files are queued.
 func (s *Scanner) notifyContentHook(ctx context.Context, root RootRecord, job Job, batch *SubtreeSnapshotBatch) {
-	if s.contentHook == nil {
+	hook := s.getContentHook()
+	if hook == nil {
 		return
 	}
 	switch job.Kind {
@@ -680,12 +690,12 @@ func (s *Scanner) notifyContentHook(ctx context.Context, root RootRecord, job Jo
 				continue
 			}
 			if isDeleteOnlyDelta(delta.SemanticKind) {
-				s.contentHook.Notify(ctx, ContentHookNotification{
+				hook.Notify(ctx, ContentHookNotification{
 					Kind: ContentHookKindDelete,
 					Path: delta.Path,
 				})
 			} else {
-				s.contentHook.Notify(ctx, ContentHookNotification{
+				hook.Notify(ctx, ContentHookNotification{
 					Kind: ContentHookKindUpsert,
 					Path: delta.Path,
 				})
@@ -701,13 +711,13 @@ func (s *Scanner) notifyContentHook(ctx context.Context, root RootRecord, job Jo
 				if entry.IsDir {
 					continue
 				}
-				s.contentHook.Notify(ctx, ContentHookNotification{
+				hook.Notify(ctx, ContentHookNotification{
 					Kind: ContentHookKindUpsert,
 					Path: entry.Path,
 				})
 			}
 		}
-		s.contentHook.Notify(ctx, ContentHookNotification{
+		hook.Notify(ctx, ContentHookNotification{
 			Kind:      ContentHookKindScopeReplaced,
 			ScopePath: job.ScopePath,
 			RootID:    job.RootID,

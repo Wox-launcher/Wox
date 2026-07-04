@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -142,12 +141,8 @@ func (c *ContentCrawler) crawlRoot(ctx context.Context, root RootRecord, rootIdx
 			return nil
 		}
 
-		readBytes := c.maxReadBytes
-		if info.Size() < readBytes {
-			readBytes = info.Size()
-		}
-
-		text, err := readContentFile(path, readBytes)
+		readBytes := contentExtractionMaxBytes(path, info.Size(), c.maxReadBytes)
+		text, err := extractContentText(path, readBytes)
 		if err != nil {
 			return nil
 		}
@@ -189,22 +184,6 @@ func (c *ContentCrawler) report(progress ContentCrawlProgress) {
 	if c.progressCB != nil {
 		c.progressCB(progress)
 	}
-}
-
-func readContentFile(path string, maxBytes int64) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	limited := io.LimitReader(f, maxBytes)
-	buf := make([]byte, maxBytes)
-	n, err := io.ReadFull(limited, buf)
-	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
-		return "", err
-	}
-	return string(buf[:n]), nil
 }
 
 // ContentCrawlStatus returns a human-readable status string for the content index.

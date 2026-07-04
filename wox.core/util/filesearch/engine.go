@@ -2,6 +2,7 @@ package filesearch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -203,14 +204,11 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 
 	oldDB := e.db
 	oldContentDB := e.contentDB
+	e.closeContentHookLocked()
 	e.db = nil
 	e.contentDB = nil
 	e.searchProvider = nil
 	e.scanner = nil
-	if e.contentHook != nil {
-		e.contentHook.Close()
-		e.contentHook = nil
-	}
 	var closeErr error
 	if oldDB != nil {
 		if err := oldDB.Close(); err != nil {
@@ -999,9 +997,11 @@ func (e *Engine) ResetContentIndex(ctx context.Context) error {
 }
 
 // StartContentCrawl launches a content crawl in a background goroutine.
-func (e *Engine) StartContentCrawl(ctx context.Context, roots []RootRecord, policy Policy, extensions map[string]bool, maxReadBytes int64, progressCB func(ContentCrawlProgress)) {
+func (e *Engine) StartContentCrawl(ctx context.Context, roots []RootRecord, policy Policy, extensions map[string]bool, maxReadBytes int64, progressCB func(ContentCrawlProgress)) <-chan error {
+	done := make(chan error, 1)
 	if e == nil {
-		return
+		close(done)
+		return done
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -1010,21 +1010,28 @@ func (e *Engine) StartContentCrawl(ctx context.Context, roots []RootRecord, poli
 	e.mu.Lock()
 	if e.closed {
 		e.mu.Unlock()
-		return
+		close(done)
+		return done
 	}
 	contentDB, err := e.ensureContentDBLocked(ctx)
 	e.mu.Unlock()
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("open content search database for crawl failed: %v", err))
-		return
+		done <- err
+		close(done)
+		return done
 	}
 
 	crawler := NewContentCrawler(contentDB, roots, policy, extensions, maxReadBytes, progressCB)
 	go func() {
-		if err := crawler.Run(util.NewTraceContext()); err != nil {
-			util.GetLogger().Error(context.Background(), fmt.Sprintf("content crawl failed: %v", err))
+		err := crawler.Run(ctx)
+		if err != nil && !errors.Is(err, context.Canceled) {
+			util.GetLogger().Error(ctx, fmt.Sprintf("content crawl failed: %v", err))
 		}
+		done <- err
+		close(done)
 	}()
+	return done
 }
 
 // StartContentHook installs the incremental content index hook on the scanner.
@@ -1079,13 +1086,14 @@ func (e *Engine) StopContentHook() {
 
 // closeContentHookLocked detaches and closes the incremental content hook while e.mu is held.
 func (e *Engine) closeContentHookLocked() {
-	if e.contentHook != nil {
-		e.contentHook.Close()
-		e.contentHook = nil
-	}
+	hook := e.contentHook
+	e.contentHook = nil
 	scanner := e.scanner
 	if scanner != nil {
 		scanner.SetContentHook(nil)
+	}
+	if hook != nil {
+		hook.Close()
 	}
 }
 

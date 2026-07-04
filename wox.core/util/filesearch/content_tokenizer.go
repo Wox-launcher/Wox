@@ -210,6 +210,7 @@ func isContentTokenBoundary(r rune) bool {
 func ContentDefaultExtensions() []string {
 	return []string{
 		"txt", "md", "json", "yaml", "yml", "xml", "csv", "tsv",
+		"docx", "pptx", "xlsx", "pdf",
 		"go", "py", "js", "ts", "tsx", "jsx", "rs", "c", "cpp", "h", "hpp",
 		"java", "rb", "php", "sh", "bat", "ps1",
 		"toml", "ini", "cfg", "conf",
