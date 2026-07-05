@@ -9,7 +9,8 @@ import (
 	"sync"
 	"time"
 	"wox/ai"
-	aitool "wox/ai/builtintool"
+	_ "wox/ai/builtintool"
+	aitool "wox/ai/builtintool/wox"
 	"wox/common"
 	"wox/plugin"
 	"wox/setting"
@@ -42,8 +43,12 @@ type AIChatPlugin struct {
 	mcpToolsMap []common.MCPTool
 	api         plugin.API
 
-	// activeChatCancels maps chatId to the cancel func for the active streaming context.
+	// activeChatCancels maps chatId to the active streaming cancellation entry.
 	activeChatCancels sync.Map
+}
+
+type activeAIChatCancel struct {
+	cancel context.CancelFunc
 }
 
 type aiChatRuntimeContext struct {
@@ -354,10 +359,15 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	r.appendOrUpdateChatData(aiChatData)
 	r.saveChats(ctx)
 
-	// Create a cancellable context so StopChat can interrupt the streaming loop.
+	// AIChatStream schedules the loop asynchronously, so keep the cancel entry
+	// registered until a terminal stream callback cleans up this exact entry.
 	chatCtx, cancelChat := context.WithCancel(ctx)
-	r.activeChatCancels.Store(aiChatData.Id, cancelChat)
-	defer r.activeChatCancels.Delete(aiChatData.Id)
+	activeCancel := &activeAIChatCancel{cancel: cancelChat}
+	r.activeChatCancels.Store(aiChatData.Id, activeCancel)
+	cleanupActiveCancel := func() {
+		cancelChat()
+		r.activeChatCancels.CompareAndDelete(aiChatData.Id, activeCancel)
+	}
 
 	const chatStreamUIUpdateMinIntervalMs int64 = 120
 	var chatDataMu sync.Mutex
@@ -453,6 +463,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		}
 
 		if isFinished {
+			cleanupActiveCancel()
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream finished: %s", streamResult.Data))
 			r.appendOrUpdateChatData(finishedSnapshot)
 			r.saveChats(ctx)
@@ -464,6 +475,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 			}
 			// The loop now continues inside AIChatStream; Chat() is only invoked once.
 		} else if isTerminalError {
+			cleanupActiveCancel()
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream ended with error, saving chat data: %s", streamResult.Data))
 			r.appendOrUpdateChatData(snapshot)
 			r.saveChats(ctx)
@@ -471,6 +483,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	})
 
 	if chatErr != nil {
+		cleanupActiveCancel()
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to chat: %s", chatErr.Error()))
 		r.appendOrUpdateConversation(&aiChatData, common.Conversation{
 			Id:        uuid.NewString(),
@@ -945,10 +958,10 @@ func (r *AIChatPlugin) appendOrUpdateChatData(aiChatData common.AIChatData) {
 // StopChat cancels the active streaming context for the given chat id.
 // Returns true if a streaming session was found and cancelled.
 func (r *AIChatPlugin) StopChat(ctx context.Context, chatId string) bool {
-	if cancelFunc, ok := r.activeChatCancels.LoadAndDelete(chatId); ok {
-		if cancel, ok := cancelFunc.(context.CancelFunc); ok {
+	if cancelEntry, ok := r.activeChatCancels.LoadAndDelete(chatId); ok {
+		if activeCancel, ok := cancelEntry.(*activeAIChatCancel); ok {
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Stopping chat with ID: %s", chatId))
-			cancel()
+			activeCancel.cancel()
 			return true
 		}
 	}

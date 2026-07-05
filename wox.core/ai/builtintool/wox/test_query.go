@@ -1,4 +1,4 @@
-package tool
+package woxtool
 
 import (
 	"context"
@@ -21,7 +21,7 @@ func init() {
 func TestQueryTool() common.Tool {
 	return common.Tool{
 		Name:        "test_query",
-		Description: "Execute a silent Wox query to verify a plugin works. Returns whether exactly one result was found and executed successfully.",
+		Description: "Execute a silent Wox query to verify a plugin works. Returns whether exactly one result was found and executed successfully. A successful result only means the plugin responded correctly to the query; it does not mean the plugin has been loaded or registered by Wox. Do not claim the plugin is loaded or recognized by Wox based on this tool alone.",
 		Parameters: jsonschema.Definition{
 			Type: jsonschema.Object,
 			Properties: map[string]jsonschema.Definition{

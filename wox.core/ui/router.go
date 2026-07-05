@@ -17,7 +17,8 @@ import (
 
 	"wox/account"
 	"wox/ai"
-	aitool "wox/ai/builtintool"
+	_ "wox/ai/builtintool"
+	aitool "wox/ai/builtintool/wox"
 	"wox/cloudsync"
 	"wox/common"
 	"wox/diagnostic"
