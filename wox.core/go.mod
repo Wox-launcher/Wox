@@ -53,11 +53,16 @@ require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/danieljoos/wincred v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/gen2brain/malgo v0.11.25 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/jsonschema-go v0.3.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/k2-fsa/sherpa-onnx-go v1.13.3 // indirect
+	github.com/k2-fsa/sherpa-onnx-go-linux v1.13.3 // indirect
+	github.com/k2-fsa/sherpa-onnx-go-macos v1.13.3 // indirect
+	github.com/k2-fsa/sherpa-onnx-go-windows v1.13.3 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect

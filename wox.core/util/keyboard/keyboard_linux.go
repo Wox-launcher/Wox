@@ -3,6 +3,8 @@ package keyboard
 import (
 	"encoding/binary"
 	"fmt"
+	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -13,7 +15,7 @@ import (
 // Ctrl is held while C (copy) or V (paste) is tapped, matching the
 // Windows/Darwin implementations that use Cmd+C/Cmd+V.
 const (
-	evKeyLeftCtrlCode = 29
+	evKeyLeftCtrlCode  = 29
 	evKeyCodeC         = 46
 	evKeyCodeV         = 47
 	evKeyBackspaceCode = 14
@@ -337,8 +339,8 @@ func keyToEvdevKeyCode(key Key) (uint16, error) {
 
 // uinput ioctl constants from <linux/uinput.h>
 const (
-	uiDevCreate  = 0x5501 // USB UI_DEV_CREATE
-	uiDevDestroy = 0x5502 // USB UI_DEV_DESTROY
+	uiDevCreate  = 0x5501     // USB UI_DEV_CREATE
+	uiDevDestroy = 0x5502     // USB UI_DEV_DESTROY
 	uiSetEvbit   = 0x40045564 // _IOW('U', 100, int)
 	uiSetKeybit  = 0x40045565 // _IOW('U', 101, int)
 )
@@ -350,10 +352,10 @@ const (
 // uinputDevCreate is a lazily-created virtual keyboard used for CapsLock
 // injection. It's created on first use and kept open for the process lifetime.
 var (
-	uinputOnce     sync.Once
-	uinputFd       int
-	uinputInitErr  error
-	uinputClosed   bool
+	uinputOnce    sync.Once
+	uinputFd      int
+	uinputInitErr error
+	uinputClosed  bool
 )
 
 // ensureUinputDevice creates a uinput virtual keyboard device that supports
@@ -382,11 +384,11 @@ func ensureUinputDevice() (int, error) {
 		// UI_SET_KEYBIT = _IOW('U', 101, int)
 		keybit := uintptr(0x40045565)
 		keysToEnable := []int{
-			58,                  // KEY_CAPSLOCK
-			evKeyLeftCtrlCode,   // KEY_LEFTCTRL
-			evKeyCodeC,          // KEY_C
-			evKeyCodeV,          // KEY_V
-			evKeyBackspaceCode,  // KEY_BACKSPACE
+			58,                 // KEY_CAPSLOCK
+			evKeyLeftCtrlCode,  // KEY_LEFTCTRL
+			evKeyCodeC,         // KEY_C
+			evKeyCodeV,         // KEY_V
+			evKeyBackspaceCode, // KEY_BACKSPACE
 		}
 		for _, key := range keysToEnable {
 			_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), keybit, uintptr(key))
@@ -486,4 +488,35 @@ func setCapsLockState(enabled bool) error {
 		return nil
 	}
 	return simulateCapsLockTap()
+}
+
+// simulateType inputs text into the focused window. Linux uinput does not
+// support direct Unicode injection, so this falls back to the clipboard +
+// paste approach used by the rest of Wox. The caller should be aware that
+// this overwrites the clipboard contents.
+func simulateType(text string) error {
+	if text == "" {
+		return nil
+	}
+	if err := writeTextToClipboard(text); err != nil {
+		return fmt.Errorf("failed to write text to clipboard for typing: %w", err)
+	}
+	return simulatePaste()
+}
+
+// writeTextToClipboard writes text to the X11 clipboard via xclip or xsel.
+// This avoids a circular dependency on the wox/util/clipboard package.
+func writeTextToClipboard(text string) error {
+	// Try xclip first, fall back to xsel
+	if _, err := exec.LookPath("xclip"); err == nil {
+		cmd := exec.Command("xclip", "-selection", "clipboard")
+		cmd.Stdin = strings.NewReader(text)
+		return cmd.Run()
+	}
+	if _, err := exec.LookPath("xsel"); err == nil {
+		cmd := exec.Command("xsel", "--clipboard", "--input")
+		cmd.Stdin = strings.NewReader(text)
+		return cmd.Run()
+	}
+	return fmt.Errorf("no clipboard utility found (xclip or xsel required)")
 }

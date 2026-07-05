@@ -112,6 +112,56 @@ int isCapsLockEnabled() {
 }
 
 int woxDarwinIsPhysicalCapsLockPressed(int *available);
+
+// simulateType injects Unicode text through CGEventKeyboardSetUnicodeString.
+// Each rune is sent as a key press+release pair with the Unicode string payload
+// attached to the press event. The virtual keyCode 0 is a placeholder; the OS
+// resolves the actual character from the Unicode string, not the keyCode.
+const char* simulateType(const char* text) {
+    // CGEventKeyboardSetUnicodeString accepts a UniChar buffer (UTF-16).
+    // Convert the UTF-8 input string to UTF-16 for the CGEvent API.
+    CFStringRef cfStr = CFStringCreateWithCString(NULL, text, kCFStringEncodingUTF8);
+    if (cfStr == NULL) {
+        return "failed to create CFString from text";
+    }
+    CFIndex length = CFStringGetLength(cfStr);
+
+    // Process in chunks of up to 20 characters (CGEventKeyboardSetUnicodeString
+    // supports a max of 20 UniChar per call).
+    const CFIndex chunkSize = 20;
+    for (CFIndex i = 0; i < length; i += chunkSize) {
+        CFIndex remaining = length - i;
+        if (remaining > chunkSize) {
+            remaining = chunkSize;
+        }
+
+        UniChar buffer[chunkSize];
+        CFStringGetCharacters(cfStr, CFRangeMake(i, remaining), buffer);
+
+        CGEventRef keyDown = CGEventCreateKeyboardEvent(NULL, 0, true);
+        if (keyDown == NULL) {
+            CFRelease(cfStr);
+            return "failed to create key down event";
+        }
+        CGEventKeyboardSetUnicodeString(keyDown, (UniCharCount)remaining, buffer);
+        CGEventPost(kCGHIDEventTap, keyDown);
+        CFRelease(keyDown);
+
+        CGEventRef keyUp = CGEventCreateKeyboardEvent(NULL, 0, false);
+        if (keyUp == NULL) {
+            CFRelease(cfStr);
+            return "failed to create key up event";
+        }
+        // Attach the same unicode string to the release event so IME
+        // compositions commit correctly on some apps.
+        CGEventKeyboardSetUnicodeString(keyUp, (UniCharCount)remaining, buffer);
+        CGEventPost(kCGHIDEventTap, keyUp);
+        CFRelease(keyUp);
+    }
+
+    CFRelease(cfStr);
+    return NULL;
+}
 */
 import "C"
 import "fmt"
@@ -186,5 +236,17 @@ func simulateCapsLockTap() error {
 		return fmt.Errorf("failed to send CapsLock: %v", errMsg)
 	}
 
+	return nil
+}
+
+func simulateType(text string) error {
+	if text == "" {
+		return nil
+	}
+	err := C.simulateType(C.CString(text))
+	if err != nil {
+		errMsg := C.GoString(err)
+		return fmt.Errorf("failed to type text: %v", errMsg)
+	}
 	return nil
 }

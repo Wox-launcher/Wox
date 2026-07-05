@@ -26,6 +26,7 @@ import (
 	"wox/plugin"
 	pluginhost "wox/plugin/host"
 	appplugin "wox/plugin/system/app"
+	dictationplugin "wox/plugin/system/dictation"
 	"wox/setting"
 	"wox/telemetry"
 	"wox/ui/dto"
@@ -145,6 +146,10 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/doctor/unignore":               handleDoctorUnignore,
 	"/permission/accessibility/open": handlePermissionAccessibilityOpen,
 	"/permission/privacy/open":       handlePermissionPrivacyOpen,
+
+	// dictation
+	"/dictation/model/download": handleDictationModelDownload,
+	"/dictation/model/status":   handleDictationModelStatus,
 
 	// others
 	"/":                                   handleHome,
@@ -3539,4 +3544,54 @@ func handlePluginDetail(w http.ResponseWriter, r *http.Request) {
 
 func handleVersion(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, updater.CURRENT_VERSION)
+}
+
+// handleDictationModelDownload starts a model download for the dictation plugin.
+// The request body should contain {"modelId": "..."} where modelId is one of the
+// recommended model IDs. The download runs asynchronously and progress is
+// reported via the model status endpoint.
+func handleDictationModelDownload(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	body, _ := io.ReadAll(r.Body)
+	modelID := gjson.GetBytes(body, "modelId").String()
+	if modelID == "" {
+		writeErrorResponse(w, "modelId is required")
+		return
+	}
+
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		writeErrorResponse(w, "dictation plugin not found")
+		return
+	}
+	dp, ok := sp.(*dictationplugin.DictationPlugin)
+	if !ok {
+		writeErrorResponse(w, "dictation plugin type assertion failed")
+		return
+	}
+
+	if err := dp.StartModelDownload(ctx, modelID); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, "")
+}
+
+// handleDictationModelStatus returns the download status for all known models.
+// The Flutter side polls this to update the model dropdown with live progress.
+func handleDictationModelStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		writeErrorResponse(w, "dictation plugin not found")
+		return
+	}
+	dp, ok := sp.(*dictationplugin.DictationPlugin)
+	if !ok {
+		writeErrorResponse(w, "dictation plugin type assertion failed")
+		return
+	}
+
+	status := dp.GetModelStatuses(ctx)
+	writeSuccessResponse(w, status)
 }

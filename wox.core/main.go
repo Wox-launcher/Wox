@@ -60,6 +60,8 @@ import (
 	_ "wox/plugin/system/glance"
 
 	_ "wox/plugin/system/window_manager"
+
+	_ "wox/plugin/system/dictation"
 )
 
 func main() {

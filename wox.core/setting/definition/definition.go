@@ -21,6 +21,11 @@ const (
 	PluginSettingDefinitionTypeNewLine       PluginSettingDefinitionType = "newline"
 	PluginSettingDefinitionTypeTable         PluginSettingDefinitionType = "table"
 
+	// Wox-internal setting types used by system plugins. These are not part
+	// of the public plugin API and are rendered by dedicated Flutter widgets.
+	PluginSettingDefinitionTypeDictationHotkey PluginSettingDefinitionType = "dictationHotkey"
+	PluginSettingDefinitionTypeDictationModel  PluginSettingDefinitionType = "dictationModel"
+
 	// dynamic setting will be replaced by the actual setting when retrieved
 	// this is useful when the setting is dynamic. E.g. a list of plugins for select
 	// if user define the dynamic setting, user should use api.
@@ -119,6 +124,22 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 	case "selectAIModel":
 		n.Type = PluginSettingDefinitionTypeSelectAIModel
 		var v PluginSettingValueSelectAIModel
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "dictationHotkey":
+		n.Type = PluginSettingDefinitionTypeDictationHotkey
+		var v PluginSettingValueDictationHotkey
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "dictationModel":
+		n.Type = PluginSettingDefinitionTypeDictationModel
+		var v PluginSettingValueDictationModel
 		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
 		if unmarshalErr != nil {
 			return unmarshalErr

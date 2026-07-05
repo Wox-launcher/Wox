@@ -1,6 +1,8 @@
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 
 import 'setting/wox_plugin_setting_checkbox.dart';
+import 'setting/wox_plugin_setting_dictation_hotkey.dart';
+import 'setting/wox_plugin_setting_dictation_model.dart';
 import 'setting/wox_plugin_setting_head.dart';
 import 'setting/wox_plugin_setting_label.dart';
 import 'setting/wox_plugin_setting_newline.dart';
@@ -39,6 +41,10 @@ class PluginSettingDefinitionItem {
       value = PluginSettingValueTable.fromJson(json['Value']);
     } else if (type == "textbox") {
       value = PluginSettingValueTextBox.fromJson(json['Value']);
+    } else if (type == "dictationHotkey") {
+      value = PluginSettingValueDictationHotkey.fromJson(json['Value']);
+    } else if (type == "dictationModel") {
+      value = PluginSettingValueDictationModel.fromJson(json['Value']);
     } else {
       throw Exception("Unknown setting type: $type");
     }

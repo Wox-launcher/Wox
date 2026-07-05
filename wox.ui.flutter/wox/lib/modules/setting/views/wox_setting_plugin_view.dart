@@ -6,6 +6,8 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/plugin/wox_ai_command_template_dialog.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_dictation_hotkey_view.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_dictation_model_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_label_view.dart';
@@ -27,6 +29,8 @@ import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_dictation_hotkey.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_dictation_model.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_newline.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
@@ -968,6 +972,30 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 }
                 if (e.type == "label") {
                   settingWidget = WoxSettingPluginLabel(value: "", item: e.value as PluginSettingValueLabel, labelWidth: uniformLabelWidth, onUpdate: (key, value) async => null);
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
+                }
+                if (e.type == "dictationHotkey") {
+                  final hotkeyValue = e.value as PluginSettingValueDictationHotkey;
+                  settingWidget = WoxSettingPluginDictationHotkey(
+                    value: plugin.setting.settings[hotkeyValue.key] ?? "",
+                    item: hotkeyValue,
+                    labelWidth: uniformLabelWidth,
+                    onUpdate: (key, value) async {
+                      return controller.updatePluginSetting(plugin.id, key, value);
+                    },
+                  );
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
+                }
+                if (e.type == "dictationModel") {
+                  final modelValue = e.value as PluginSettingValueDictationModel;
+                  settingWidget = WoxSettingPluginDictationModel(
+                    value: plugin.setting.settings[modelValue.key] ?? "",
+                    item: modelValue,
+                    labelWidth: uniformLabelWidth,
+                    onUpdate: (key, value) async {
+                      return controller.updatePluginSetting(plugin.id, key, value);
+                    },
+                  );
                   return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
                 if (e.type == "table") {

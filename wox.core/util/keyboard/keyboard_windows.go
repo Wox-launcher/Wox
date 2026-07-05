@@ -90,11 +90,40 @@ const char* setCapsLockState(int enabled) {
 
     return simulateCapsLockTap();
 }
+
+// simulateType sends Unicode text via SendInput with KEYEVENTF_UNICODE.
+// Each UTF-16 code unit is sent as a key press+release pair, which lets
+// the OS insert arbitrary Unicode text into the focused window without
+// touching the clipboard.
+const char* simulateType(const unsigned short* codepoints, int count) {
+    for (int i = 0; i < count; i++) {
+        unsigned short cp = codepoints[i];
+
+        INPUT inputs[2];
+        ZeroMemory(inputs, sizeof(inputs));
+
+        inputs[0].type = INPUT_KEYBOARD;
+        inputs[0].ki.wScan = cp;
+        inputs[0].ki.dwFlags = KEYEVENTF_UNICODE;
+
+        inputs[1].type = INPUT_KEYBOARD;
+        inputs[1].ki.wScan = cp;
+        inputs[1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+
+        UINT res = SendInput(2, inputs, sizeof(INPUT));
+        if (res != 2) {
+            return "Failed to send all input events for typing";
+        }
+    }
+
+    return NULL;
+}
 */
 import "C"
 import (
 	"fmt"
 	"time"
+	"unicode/utf16"
 )
 
 func simulateCopy() error {
@@ -164,6 +193,23 @@ func isKeyPressed(key Key) bool {
 	}
 
 	return C.isKeyPressed(C.int(vkCode)) != 0
+}
+
+func simulateType(text string) error {
+	if text == "" {
+		return nil
+	}
+	// Convert UTF-8 string to UTF-16 code units for KEYEVENTF_UNICODE.
+	codepoints := utf16.Encode([]rune(text))
+	if len(codepoints) == 0 {
+		return nil
+	}
+	err := C.simulateType((*C.ushort)(&codepoints[0]), C.int(len(codepoints)))
+	if err != nil {
+		errMsg := C.GoString(err)
+		return fmt.Errorf("failed to type text: %v", errMsg)
+	}
+	return nil
 }
 
 // We need to wait for all modifiers to be released before simulating Ctrl+C/Ctrl+V.

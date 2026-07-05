@@ -24,6 +24,7 @@ import (
 	"wox/diagnostic"
 	"wox/i18n"
 	"wox/plugin"
+	dictationplugin "wox/plugin/system/dictation"
 	"wox/plugin/system/shell/terminal"
 	"wox/resource"
 	"wox/setting"
@@ -69,6 +70,8 @@ type Manager struct {
 	mainHotkeyKey        string
 	selectionHotkey      *hotkey.Hotkey
 	selectionHotkeyKey   string
+	dictationHotkey      *hotkey.Hotkey
+	dictationHotkeyKey   string
 	waylandPortalHotkeys *hotkey.Group
 	waylandPortalQueries []setting.QueryHotkey
 	queryHotkeys         []*hotkey.Hotkey
@@ -117,6 +120,9 @@ func GetUIManager() *Manager {
 		})
 		managerInstance.themes = util.NewHashMap[string, common.Theme]()
 		logger = util.GetLogger()
+		// Inject the UI Manager as the dictation hotkey registrar to break the
+		// import cycle between ui and plugin/system/dictation.
+		dictationplugin.SetHotkeyRegistrar(managerInstance)
 	})
 	return managerInstance
 }
@@ -351,6 +357,62 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 		oldHotkey.Unregister(ctx)
 	}
 	return nil
+}
+
+// RegisterDictationHotkey binds the global dictation toggle hotkey. When
+// combineKey is empty the existing binding (if any) is removed. The callback
+// delegates to the DictationPlugin's ToggleDictation so the plugin owns the
+// recording lifecycle and trigger-mode logic.
+func (m *Manager) RegisterDictationHotkey(ctx context.Context, combineKey string) error {
+	combineKey = strings.TrimSpace(combineKey)
+	if combineKey == "" {
+		logger.Info(ctx, "remove dictation hotkey")
+		if m.dictationHotkey != nil {
+			m.dictationHotkey.Unregister(ctx)
+			m.dictationHotkey = nil
+		}
+		m.dictationHotkeyKey = ""
+		return nil
+	}
+	if m.dictationHotkeyKey == combineKey && m.dictationHotkey != nil {
+		logger.Info(ctx, fmt.Sprintf("dictation hotkey already registered: %s", combineKey))
+		return nil
+	}
+	logger.Info(ctx, fmt.Sprintf("register dictation hotkey: %s", combineKey))
+
+	newHotkey := &hotkey.Hotkey{}
+	registerErr := newHotkey.Register(ctx, combineKey, func() {
+		m.handleDictationHotkeyTrigger(ctx)
+	})
+	if registerErr != nil {
+		return registerErr
+	}
+
+	oldHotkey := m.dictationHotkey
+	m.dictationHotkey = newHotkey
+	m.dictationHotkeyKey = combineKey
+	if oldHotkey != nil {
+		oldHotkey.Unregister(ctx)
+	}
+	return nil
+}
+
+// handleDictationHotkeyTrigger finds the loaded DictationPlugin and toggles
+// the recording session. In hold mode the plugin itself is responsible for
+// distinguishing press/release; the toggle call is idempotent when already
+// recording.
+func (m *Manager) handleDictationHotkeyTrigger(ctx context.Context) {
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		logger.Error(ctx, "dictation plugin not found for hotkey callback")
+		return
+	}
+	type dictationToggler interface {
+		ToggleDictation(ctx context.Context)
+	}
+	if dt, ok := sp.(dictationToggler); ok {
+		dt.ToggleDictation(ctx)
+	}
 }
 
 // reregisterWaylandPortalGlobalHotkeys binds all Wox shortcuts in one portal

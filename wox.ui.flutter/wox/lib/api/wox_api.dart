@@ -465,4 +465,16 @@ class WoxApi {
   Future<void> cloudSyncKeyReset(String traceId, String resetToken) async {
     await WoxHttpUtil.instance.postData(traceId, "/sync/key/reset", {"reset_token": resetToken, "confirm": true});
   }
+
+  Future<void> dictationModelDownload(String traceId, String modelId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/dictation/model/download", {"modelId": modelId});
+  }
+
+  Future<List<dynamic>> dictationModelStatus(String traceId) async {
+    final result = await WoxHttpUtil.instance.postData(traceId, "/dictation/model/status", null);
+    if (result is List) {
+      return result;
+    }
+    return [];
+  }
 }
