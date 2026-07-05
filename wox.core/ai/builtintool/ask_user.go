@@ -26,14 +26,14 @@ var pendingQuestions = util.NewHashMap[string, chan string]()
 func AskUserTool() common.Tool {
 	return common.Tool{
 		Name:        "ask_user",
-		Description: "Ask the user a question and wait for their response. Use this when you need clarification, a choice, or information only the user can provide. The user may take a while; do not use this for things you can determine yourself.",
+		Description: "Ask the user a single question and wait for their response. Rules: 1. Ask only ONE question per call — never bundle multiple questions together. 2. Always provide concrete options for the user to pick from; do not leave options empty. 3. The last option should always be a free-text choice (e.g. title 'Other' or '自定义输入') so the user can type their own answer if none of the predefined options fit. 4. Use this when you need a choice or information only the user can provide; do not use it for things you can determine yourself.",
 		Parameters: jsonschema.Definition{
 			Type: jsonschema.Object,
 			Properties: map[string]jsonschema.Definition{
 				"question": {Type: jsonschema.String, Description: "The question to ask the user"},
 				"options": {
 					Type:        jsonschema.Array,
-					Description: "Optional choices for the user to pick from. When empty the UI shows a free-text input.",
+					Description: "Concrete choices for the user to pick from. Always provide at least 2 options. The last option should be a free-text fallback (e.g. title 'Other' or '自定义输入') so the user can type their own answer.",
 					Items: &jsonschema.Definition{
 						Type: jsonschema.Object,
 						Properties: map[string]jsonschema.Definition{

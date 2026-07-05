@@ -55,7 +55,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             WoxTooltip(
-              message: tr("ui_action_toggle_sidebar"),
+              message: "${tr("ui_action_toggle_sidebar")} (${controller.launcherController.previewFullscreenHotkeyLabel})",
               child: IconButton(
                 onPressed: () => controller.toggleConversationSidebar(const UuidV4().generate()),
                 icon: Icon(isConversationSidebarCollapsed ? Icons.view_sidebar_outlined : Icons.splitscreen_outlined),
@@ -155,6 +155,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
 
             return SingleChildScrollView(
               controller: controller.aiChatScrollController,
+              physics: const ClampingScrollPhysics(),
               padding: EdgeInsets.only(top: _metrics.scaledSpacing(6), bottom: _metrics.scaledSpacing(8)),
               child: Column(children: renderItems.map((item) => _buildChatRenderItem(item, context)).toList()),
             );
@@ -319,7 +320,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
             style: TextStyle(fontSize: _metrics.resultSubtitleFontSize, color: safeFromCssColor(woxTheme.queryBoxFontColor)),
           ),
           Container(
-            height: _metrics.scaledSpacing(34),
+            height: _metrics.scaledSpacing(42),
             padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(8)),
             decoration: BoxDecoration(border: Border(top: BorderSide(color: safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(25)))),
             child: Row(
@@ -334,41 +335,27 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                 const Spacer(),
                 Obx(() {
                   final generating = controller.isGenerating.value;
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => generating ? controller.stopChat() : controller.sendMessage(),
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(10), vertical: _metrics.scaledSpacing(6)),
-                        decoration: BoxDecoration(
-                          color: generating
-                              ? safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(30)
-                              : safeFromCssColor(woxTheme.actionItemActiveBackgroundColor),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              generating ? Icons.stop_rounded : Icons.keyboard_return,
-                              size: _metrics.scaledSpacing(16),
-                              color: generating
-                                  ? safeFromCssColor(woxTheme.resultItemTitleColor)
-                                  : safeFromCssColor(woxTheme.actionItemActiveFontColor),
-                            ),
-                            SizedBox(width: _metrics.scaledSpacing(4)),
-                            Text(
-                              generating ? tr('ui_ai_chat_stop') : tr('ui_ai_chat_send'),
-                              style: TextStyle(
-                                fontSize: _metrics.smallLabelFontSize,
-                                color: generating
-                                    ? safeFromCssColor(woxTheme.resultItemTitleColor)
-                                    : safeFromCssColor(woxTheme.actionItemActiveFontColor),
-                              ),
-                            ),
-                          ],
-                        ),
+                  return TextButton.icon(
+                    onPressed: () => generating ? controller.stopChat() : controller.sendMessage(),
+                    style: TextButton.styleFrom(
+                      minimumSize: Size(_metrics.scaledSpacing(82), _metrics.scaledSpacing(34)),
+                      padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(14)),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                      backgroundColor: generating ? safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(30) : safeFromCssColor(woxTheme.actionItemActiveBackgroundColor),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                    icon: Icon(
+                      generating ? Icons.stop_rounded : Icons.keyboard_return,
+                      size: _metrics.scaledSpacing(18),
+                      color: generating ? safeFromCssColor(woxTheme.resultItemTitleColor) : safeFromCssColor(woxTheme.actionItemActiveFontColor),
+                    ),
+                    label: Text(
+                      generating ? tr('ui_ai_chat_stop') : tr('ui_ai_chat_send'),
+                      style: TextStyle(
+                        fontSize: _metrics.resultSubtitleFontSize,
+                        fontWeight: FontWeight.w700,
+                        color: generating ? safeFromCssColor(woxTheme.resultItemTitleColor) : safeFromCssColor(woxTheme.actionItemActiveFontColor),
                       ),
                     ),
                   );
@@ -662,10 +649,13 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       child: Obx(() {
         final groupedChats = _groupChats(controller.chats);
         return ListView(
+          physics: const ClampingScrollPhysics(),
           padding: EdgeInsets.fromLTRB(_metrics.scaledSpacing(10), _metrics.scaledSpacing(12), _metrics.scaledSpacing(10), _metrics.scaledSpacing(12)),
           children: [
-            _buildConversationSectionTitle(tr("ui_ai_chat_new_chat")),
-            _buildNewChatTile(sidebarColor),
+            // New chat button at the top.
+            _buildNewChatButton(sidebarColor),
+            SizedBox(height: _metrics.scaledSpacing(8)),
+            // Date-grouped chat history below.
             if (groupedChats.today.isNotEmpty) ...[_buildConversationSectionTitle(tr("ui_ai_chat_history_today")), ...groupedChats.today.map(_buildConversationTile)],
             if (groupedChats.yesterday.isNotEmpty) ...[_buildConversationSectionTitle(tr("ui_ai_chat_history_yesterday")), ...groupedChats.yesterday.map(_buildConversationTile)],
             if (groupedChats.history.isNotEmpty) ...[_buildConversationSectionTitle(tr("ui_ai_chat_history_history")), ...groupedChats.history.map(_buildConversationTile)],
@@ -682,14 +672,29 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  Widget _buildNewChatTile(Color subtitleColor) {
+  Widget _buildNewChatButton(Color subtitleColor) {
     final isActiveDraft = controller.aiChatData.value.conversations.isEmpty && controller.chats.every((chat) => chat.id != controller.aiChatData.value.id);
-    return _buildConversationTileShell(
-      title: tr("ui_ai_chat_new_chat"),
-      subtitle: tr("ui_ai_chat_create_new_chat"),
-      active: isActiveDraft,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: controller.startNewChat,
-      subtitleColor: subtitleColor,
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(12), vertical: _metrics.scaledSpacing(10)),
+        decoration: BoxDecoration(
+          color: isActiveDraft ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor) : safeFromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(30),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.add_rounded, size: _metrics.scaledSpacing(18), color: safeFromCssColor(woxTheme.actionItemActiveFontColor).withAlpha(200)),
+            SizedBox(width: _metrics.scaledSpacing(8)),
+            Text(
+              tr("ui_ai_chat_new_chat"),
+              style: TextStyle(color: safeFromCssColor(woxTheme.previewFontColor), fontSize: _metrics.resultSubtitleFontSize, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -700,13 +705,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       active: chat.id == controller.aiChatData.value.id,
       onTap: () => controller.selectChat(chat),
       subtitleColor: safeFromCssColor(woxTheme.resultItemSubTitleColor),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildConversationTileAction(tooltip: tr("ui_ai_chat_summarize_chat"), icon: Icons.short_text_rounded, onPressed: () => controller.summarizeChat(chat)),
-          _buildConversationTileAction(tooltip: tr("ui_ai_chat_delete_chat"), icon: Icons.delete_outline_rounded, onPressed: () => controller.deleteChat(chat)),
-        ],
-      ),
+      trailing: _buildConversationTileAction(tooltip: tr("ui_ai_chat_delete_chat"), icon: Icons.delete_outline_rounded, onPressed: () => controller.deleteChat(chat)),
     );
   }
 
@@ -878,7 +877,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   }
 
   // Free-text ask_user prompts need a focused editor and explicit submit action.
-  Widget _buildAIQuestionFreeTextAnswer(Color textColor, Color subTextColor) {
+  // When [showButtons] is false, only the text field is rendered (used when
+  // embedded inside the options panel which already has its own buttons).
+  Widget _buildAIQuestionFreeTextAnswer(Color textColor, Color subTextColor, {bool showButtons = true}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -898,15 +899,10 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: safeFromCssColor(woxTheme.actionItemActiveBackgroundColor))),
           ),
         ),
-        SizedBox(height: _metrics.scaledSpacing(12)),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            _buildAIQuestionButton(label: tr("ui_cancel"), onTap: controller.cancelPendingAIQuestion, primary: false),
-            SizedBox(width: _metrics.scaledSpacing(8)),
-            _buildAIQuestionButton(label: tr("ui_ai_question_submit"), onTap: controller.submitPendingAIQuestionAnswer, primary: true),
-          ],
-        ),
+        if (showButtons) ...[
+          SizedBox(height: _metrics.scaledSpacing(12)),
+          _buildAIQuestionActions(submitButton: _buildAIQuestionButton(label: tr("ui_ai_question_submit"), onTap: controller.submitPendingAIQuestionAnswer, primary: true)),
+        ],
       ],
     );
   }
@@ -922,73 +918,121 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
             shrinkWrap: true,
             itemCount: question.options.length,
             separatorBuilder: (context, index) => SizedBox(height: _metrics.scaledSpacing(8)),
-            itemBuilder: (_, index) => _buildAIQuestionOptionTile(question.options[index], textColor, subTextColor),
+            itemBuilder: (_, index) => _buildAIQuestionOptionTile(question, question.options[index], textColor, subTextColor),
           ),
         ),
+        // Show text input when the free-text (last) option is selected.
+        Obx(
+          () =>
+              controller.isAIQuestionFreeTextSelected()
+                  ? Padding(padding: EdgeInsets.only(top: _metrics.scaledSpacing(8)), child: _buildAIQuestionFreeTextAnswer(textColor, subTextColor, showButtons: false))
+                  : const SizedBox.shrink(),
+        ),
         SizedBox(height: _metrics.scaledSpacing(12)),
-        Row(mainAxisAlignment: MainAxisAlignment.end, children: [_buildAIQuestionButton(label: tr("ui_cancel"), onTap: controller.cancelPendingAIQuestion, primary: false)]),
+        _buildAIQuestionActions(
+          submitButton: Obx(
+            () => _buildAIQuestionButton(
+              label: tr("ui_ai_question_submit"),
+              onTap: controller.submitSelectedAIQuestionAnswer,
+              primary: true,
+              enabled: controller.selectedAIQuestionOption.value != null,
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildAIQuestionOptionTile(AIQuestionOption option, Color textColor, Color subTextColor) {
-    return InkWell(
-      onTap: () => controller.answerPendingAIQuestion(option.value),
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(12), vertical: _metrics.scaledSpacing(10)),
-        decoration: BoxDecoration(
-          color: safeFromCssColor(woxTheme.queryBoxBackgroundColor),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: subTextColor.withAlpha(45)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    option.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: textColor, fontSize: _metrics.resultSubtitleFontSize, fontWeight: FontWeight.w700),
-                  ),
-                  if (option.subTitle.isNotEmpty) ...[
-                    SizedBox(height: _metrics.scaledSpacing(4)),
-                    Text(option.subTitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: subTextColor, fontSize: _metrics.smallLabelFontSize, height: 1.25)),
+  Widget _buildAIQuestionOptionTile(AIQuestion question, AIQuestionOption option, Color textColor, Color subTextColor) {
+    return Obx(() {
+      final isSelected = controller.selectedAIQuestionOption.value?.value == option.value;
+      return GestureDetector(
+        onTap: () => controller.selectAIQuestionOption(option),
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(12), vertical: _metrics.scaledSpacing(10)),
+          decoration: BoxDecoration(
+            color: isSelected ? safeFromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(50) : safeFromCssColor(woxTheme.queryBoxBackgroundColor),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: isSelected ? safeFromCssColor(woxTheme.actionItemActiveBackgroundColor) : subTextColor.withAlpha(45), width: isSelected ? 1.5 : 1),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                size: _metrics.scaledSpacing(16),
+                color: isSelected ? safeFromCssColor(woxTheme.actionItemActiveBackgroundColor) : subTextColor.withAlpha(80),
+              ),
+              SizedBox(width: _metrics.scaledSpacing(8)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      option.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: textColor, fontSize: _metrics.resultSubtitleFontSize, fontWeight: FontWeight.w700),
+                    ),
+                    if (option.subTitle.isNotEmpty) ...[
+                      SizedBox(height: _metrics.scaledSpacing(4)),
+                      Text(
+                        option.subTitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: subTextColor, fontSize: _metrics.smallLabelFontSize, height: 1.25),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            if (option.recommended) ...[
-              SizedBox(width: _metrics.scaledSpacing(10)),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(6), vertical: _metrics.scaledSpacing(3)),
-                decoration: BoxDecoration(color: safeFromCssColor(woxTheme.actionItemActiveBackgroundColor), borderRadius: BorderRadius.circular(4)),
-                child: Text(tr("ui_ai_question_recommended"), style: TextStyle(color: safeFromCssColor(woxTheme.actionItemActiveFontColor), fontSize: _metrics.smallLabelFontSize)),
-              ),
+              if (option.recommended) ...[
+                SizedBox(width: _metrics.scaledSpacing(10)),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(6), vertical: _metrics.scaledSpacing(3)),
+                  decoration: BoxDecoration(color: safeFromCssColor(woxTheme.actionItemActiveBackgroundColor), borderRadius: BorderRadius.circular(4)),
+                  child: Text(
+                    tr("ui_ai_question_recommended"),
+                    style: TextStyle(color: safeFromCssColor(woxTheme.actionItemActiveFontColor), fontSize: _metrics.smallLabelFontSize),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
+      );
+    });
+  }
+
+  Widget _buildAIQuestionActions({required Widget submitButton}) {
+    return Row(
+      children: [
+        const Spacer(),
+        _buildAIQuestionButton(label: tr("ui_cancel"), onTap: controller.cancelPendingAIQuestion, primary: false),
+        SizedBox(width: _metrics.scaledSpacing(8)),
+        submitButton,
+      ],
     );
   }
 
-  Widget _buildAIQuestionButton({required String label, required VoidCallback onTap, required bool primary}) {
+  Widget _buildAIQuestionButton({required String label, required VoidCallback onTap, required bool primary, bool enabled = true}) {
     final backgroundColor = primary ? safeFromCssColor(woxTheme.actionItemActiveBackgroundColor) : safeFromCssColor(woxTheme.queryBoxBackgroundColor);
     final textColor = primary ? safeFromCssColor(woxTheme.actionItemActiveFontColor) : safeFromCssColor(woxTheme.queryBoxFontColor);
     final borderColor = safeFromCssColor(woxTheme.resultItemSubTitleColor).withAlpha(70);
+    final effectiveBackgroundColor = enabled ? backgroundColor : backgroundColor.withAlpha(50);
+    final effectiveTextColor = enabled ? textColor : textColor.withAlpha(80);
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(12), vertical: _metrics.scaledSpacing(7)),
-        decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(6), border: Border.all(color: primary ? backgroundColor : borderColor)),
-        child: Text(label, style: TextStyle(color: textColor, fontSize: _metrics.smallLabelFontSize, fontWeight: FontWeight.w700)),
+        decoration: BoxDecoration(
+          color: effectiveBackgroundColor,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: primary ? effectiveBackgroundColor : borderColor),
+        ),
+        child: Text(label, style: TextStyle(color: effectiveTextColor, fontSize: _metrics.smallLabelFontSize, fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -1134,13 +1178,20 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
 
   // Renders the shared text and image payload for visible chat messages.
   Widget _buildMessageContent(WoxAIChatConversation message, Color fontColor) {
-    final data = _formatMessageWithReasoning(message);
-    final hasText = data.trim().isNotEmpty;
+    final hasReasoning = message.reasoning.trim().isNotEmpty;
+    final hasText = message.text.trim().isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (hasText) WoxMarkdownView(data: data, fontColor: fontColor, fontSize: _metrics.resultSubtitleFontSize),
+        // Reasoning is displayed as a visually de-emphasized block above the
+        // main answer: smaller font, lighter color, italic style.
+        if (hasReasoning)
+          Padding(
+            padding: EdgeInsets.only(bottom: hasText ? _metrics.scaledSpacing(6) : 0),
+            child: WoxSelectableText(message.reasoning.trim(), style: TextStyle(fontSize: _metrics.smallLabelFontSize, height: 1.4, color: fontColor.withAlpha(120))),
+          ),
+        if (hasText) WoxMarkdownView(data: message.text, fontColor: fontColor, fontSize: _metrics.resultSubtitleFontSize),
         if (message.images.isNotEmpty) ...[
           if (hasText) SizedBox(height: _metrics.scaledSpacing(8)),
           Wrap(
@@ -1154,26 +1205,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
         ],
       ],
     );
-  }
-
-  // Formats reasoning as a markdown blockquote prepended to the message text.
-  String _formatMessageWithReasoning(WoxAIChatConversation message) {
-    final content = message.text;
-    final reasoning = message.reasoning;
-
-    if (reasoning.trim().isEmpty) {
-      return content;
-    }
-
-    // Format reasoning as markdown blockquote (each line prefixed with "> ")
-    final reasoningLines = reasoning.split('\n');
-    final formattedReasoning = reasoningLines.map((line) => '> $line').join('\n');
-
-    if (content.trim().isEmpty) {
-      return formattedReasoning;
-    }
-
-    return '$formattedReasoning\n\n$content';
   }
 
   // Keeps the metadata row reserved while hiding actions until hover.

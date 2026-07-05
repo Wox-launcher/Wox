@@ -75,6 +75,7 @@ class WoxAIChatController extends GetxController {
   final RxBool isLoadingModels = false.obs;
   final RxBool isLoadingSkills = false.obs;
   final Rxn<AIQuestion> pendingAIQuestion = Rxn<AIQuestion>();
+  final Rxn<AIQuestionOption> selectedAIQuestionOption = Rxn<AIQuestionOption>();
   final RxBool isDebugInspectorVisible = false.obs;
   final RxBool isGenerating = false.obs;
 
@@ -748,6 +749,7 @@ class WoxAIChatController extends GetxController {
       }
 
       aiQuestionAnswerController.clear();
+      selectedAIQuestionOption.value = null;
       pendingAIQuestion.value = question;
       SchedulerBinding.instance.addPostFrameCallback((_) {
         if (!isClosed && pendingAIQuestion.value?.questionId == question.questionId) {
@@ -771,6 +773,52 @@ class WoxAIChatController extends GetxController {
     answerPendingAIQuestion(answer.isEmpty ? "User cancelled" : answer);
   }
 
+  // Select an option from the ask_user panel (does not submit).
+  void selectAIQuestionOption(AIQuestionOption option) {
+    if (selectedAIQuestionOption.value?.value == option.value) {
+      selectedAIQuestionOption.value = null;
+    } else {
+      selectedAIQuestionOption.value = option;
+    }
+    // Focus the text input when the free-text (last) option is selected.
+    final question = pendingAIQuestion.value;
+    if (question != null && question.options.isNotEmpty && selectedAIQuestionOption.value != null) {
+      final isLastOption = question.options.last.value == selectedAIQuestionOption.value!.value;
+      if (isLastOption) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!isClosed) aiQuestionAnswerFocusNode.requestFocus();
+        });
+      }
+    }
+  }
+
+  // Submit the selected option or typed free-text answer.
+  void submitSelectedAIQuestionAnswer() {
+    final question = pendingAIQuestion.value;
+    if (question == null) return;
+
+    final selected = selectedAIQuestionOption.value;
+    if (selected != null) {
+      // If the free-text (last) option is selected, use typed text if available.
+      final isLastOption = question.options.isNotEmpty && question.options.last.value == selected.value;
+      if (isLastOption) {
+        final typed = aiQuestionAnswerController.text.trim();
+        answerPendingAIQuestion(typed.isEmpty ? selected.value : typed);
+      } else {
+        answerPendingAIQuestion(selected.value);
+      }
+    } else {
+      answerPendingAIQuestion("User cancelled");
+    }
+  }
+
+  bool isAIQuestionFreeTextSelected() {
+    final question = pendingAIQuestion.value;
+    final selected = selectedAIQuestionOption.value;
+    if (question == null || selected == null || question.options.isEmpty) return false;
+    return question.options.last.value == selected.value;
+  }
+
   void cancelPendingAIQuestion() {
     answerPendingAIQuestion("User cancelled");
   }
@@ -783,6 +831,7 @@ class WoxAIChatController extends GetxController {
     }
 
     pendingAIQuestion.value = null;
+    selectedAIQuestionOption.value = null;
     aiQuestionAnswerController.clear();
     unawaited(WoxApi.instance.answerAIQuestion(const UuidV4().generate(), question.questionId, answer));
     focusChatInput(const UuidV4().generate());
