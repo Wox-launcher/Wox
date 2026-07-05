@@ -15,9 +15,9 @@ const (
 	LoadToolsToolName = "load_tools"
 	// AskUserToolName is the built-in tool for asking the user a question through the chat UI.
 	AskUserToolName = "ask_user"
-	// WebSearchToolName is the built-in search tool exposed when AI web access is enabled.
+	// WebSearchToolName is the built-in search tool exposed to AI chat.
 	WebSearchToolName = "web_search"
-	// WebFetchToolName is the built-in page fetch tool exposed when AI web access is enabled.
+	// WebFetchToolName is the built-in page fetch tool exposed to AI chat.
 	WebFetchToolName = "web_fetch"
 
 	availableToolsPromptMaxChars = 12000
@@ -26,11 +26,6 @@ const (
 // IsRuntimeOnlyTool reports whether a tool is only used to manage chat context.
 func IsRuntimeOnlyTool(name string) bool {
 	return name == ReadSkillToolName || name == LoadToolsToolName
-}
-
-// IsWebAccessTool reports whether a tool depends on the AI web search setting.
-func IsWebAccessTool(name string) bool {
-	return name == WebSearchToolName || name == WebFetchToolName
 }
 
 // FormatAvailableToolsPrompt returns a lightweight catalog of tools the model can load.
@@ -59,7 +54,7 @@ func FormatAvailableToolsPrompt(tools []common.Tool) string {
 	})
 
 	var builder strings.Builder
-	builder.WriteString("Tool catalog: these tools are discoverable, but not necessarily callable in the current model step. Only tools provided in the API tool list are callable now. Use load_tools with exact names from tool_catalog for catalog tools that are not currently callable. Loaded tools become callable in the next model step.\n")
+	builder.WriteString("Tool catalog: builtin tools are already enabled and callable now. MCP and other catalog tools are discoverable but must be loaded with load_tools before they can be called. Use load_tools with exact names from the tool_catalog. Loaded tools become callable in the next model step.\n")
 	builder.WriteString("<tool_catalog>\n")
 
 	count := 0

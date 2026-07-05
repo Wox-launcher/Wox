@@ -28,7 +28,6 @@ class WoxSetting {
   late List<AIProvider> aiProviders;
   late List<AIMCPServer> aiMCPServers;
   late List<AISkill> aiSkills;
-  late AIWebSearchConfig aiWebSearch;
   late int appWidth;
   late int maxResultCount;
   // UiDensity is stored as a small enum so Flutter derives visual metrics
@@ -81,7 +80,6 @@ class WoxSetting {
     required this.aiProviders,
     required this.aiMCPServers,
     required this.aiSkills,
-    required this.aiWebSearch,
     required this.appWidth,
     required this.maxResultCount,
     required this.uiDensity,
@@ -188,7 +186,6 @@ class WoxSetting {
     } else {
       aiSkills = <AISkill>[];
     }
-    aiWebSearch = AIWebSearchConfig.fromJson(json['AIWebSearch']);
 
     appWidth = json['AppWidth'];
     maxResultCount = json['MaxResultCount'];
@@ -246,7 +243,6 @@ class WoxSetting {
     data['AIProviders'] = aiProviders;
     data['AIMCPServers'] = aiMCPServers;
     data['AISkills'] = aiSkills;
-    data['AIWebSearch'] = aiWebSearch.toJson();
     data['AppWidth'] = appWidth;
     data['MaxResultCount'] = maxResultCount;
     data['UiDensity'] = uiDensity;
@@ -494,48 +490,6 @@ class AIProvider {
   }
 }
 
-class AIWebSearchConfig {
-  late bool enabled;
-  late String provider;
-  late String endpoint;
-  late String apiKey;
-  late int searchResultCount;
-  late int fetchMaxCharacters;
-
-  AIWebSearchConfig({
-    required this.enabled,
-    required this.provider,
-    required this.endpoint,
-    required this.apiKey,
-    required this.searchResultCount,
-    required this.fetchMaxCharacters,
-  });
-
-  AIWebSearchConfig.fromJson(dynamic json) {
-    final data = json is Map<String, dynamic> ? json : <String, dynamic>{};
-    enabled = data['Enabled'] ?? true;
-    provider = data['Provider'] ?? 'exa';
-    endpoint = data['Endpoint'] ?? 'https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa';
-    apiKey = data['ApiKey'] ?? '';
-    searchResultCount = data['SearchResultCount'] ?? 5;
-    fetchMaxCharacters = data['FetchMaxCharacters'] ?? 12000;
-  }
-
-  Map<String, dynamic> toJson() {
-    return {'Enabled': enabled, 'Provider': provider, 'Endpoint': endpoint, 'ApiKey': apiKey, 'SearchResultCount': searchResultCount, 'FetchMaxCharacters': fetchMaxCharacters};
-  }
-
-  AIWebSearchConfig copyWith({bool? enabled, String? provider, String? endpoint, String? apiKey, int? searchResultCount, int? fetchMaxCharacters}) {
-    return AIWebSearchConfig(
-      enabled: enabled ?? this.enabled,
-      provider: provider ?? this.provider,
-      endpoint: endpoint ?? this.endpoint,
-      apiKey: apiKey ?? this.apiKey,
-      searchResultCount: searchResultCount ?? this.searchResultCount,
-      fetchMaxCharacters: fetchMaxCharacters ?? this.fetchMaxCharacters,
-    );
-  }
-}
 
 class AIMCPServer {
   late String name;

@@ -30,7 +30,6 @@ type WoxSettingDto struct {
 	AIProviders           []setting.AIProvider
 	AIMCPServers          []common.AIChatMCPServerConfig
 	AISkills              []common.Skill
-	AIWebSearch           setting.AIWebSearchConfig
 	HttpProxyEnabled      bool
 	HttpProxyUrl          string
 	ShowPosition          setting.PositionType

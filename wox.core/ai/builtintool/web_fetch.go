@@ -28,11 +28,11 @@ func init() {
 	ai.GetToolRegistry().Register(WebFetchTool())
 }
 
-// WebFetchTool fetches a web page through the provider or local HTTP fallback.
+// WebFetchTool fetches a web page through Exa's hosted MCP fetch tool or a local HTTP fallback.
 func WebFetchTool() common.Tool {
 	return common.Tool{
 		Name:        ai.WebFetchToolName,
-		Description: "Fetch readable content from an http or https URL. Uses provider extraction when available and local HTTP fetch otherwise.",
+		Description: "Fetch readable content from an http or https URL. Uses Exa extraction when available and local HTTP fetch otherwise.",
 		Parameters: jsonschema.Definition{
 			Type: jsonschema.Object,
 			Properties: map[string]jsonschema.Definition{
@@ -59,43 +59,18 @@ func webFetchCallback(ctx context.Context, args map[string]any) (common.ToolResu
 		return common.ToolResult{}, fmt.Errorf("url is required")
 	}
 
-	config, err := currentAIWebSearchConfig(ctx)
-	if err != nil {
-		return common.ToolResult{}, err
-	}
-
+	config := defaultAIWebSearchConfig()
 	maxCharacters := argumentInt(args, "max_characters", config.FetchMaxCharacters)
 	maxCharacters = clampInt(maxCharacters, 1000, setting.MaxAIWebSearchFetchMaxCharacters)
-	content, provider, err := fetchWeb(ctx, config, rawURL, maxCharacters)
+	content, err := fetchExa(ctx, config, rawURL, maxCharacters)
 	if err != nil {
 		return common.ToolResult{}, err
 	}
-	return common.ToolResult{Text: formatWebFetchResult(rawURL, provider, maxCharacters, content)}, nil
-}
-
-// fetchWeb prefers provider extraction and falls back to local HTTP fetch when the provider has no fetch API.
-func fetchWeb(ctx context.Context, config setting.AIWebSearchConfig, rawURL string, maxCharacters int) (string, string, error) {
-	if err := validateHTTPURL(rawURL); err != nil {
-		return "", "", err
-	}
-
-	switch setting.AIWebSearchProvider(config.Provider) {
-	case setting.AIWebSearchProviderExa:
-		content, err := fetchExa(ctx, config, rawURL, maxCharacters)
-		return content, config.Provider, err
-	case setting.AIWebSearchProviderTavily:
-		content, err := fetchTavily(ctx, config, rawURL, maxCharacters)
-		return content, config.Provider, err
-	case setting.AIWebSearchProviderBrave, setting.AIWebSearchProviderSearXNG:
-		content, err := localHTTPFetch(ctx, rawURL, maxCharacters)
-		return content, "local-http", err
-	default:
-		return "", "", fmt.Errorf("unsupported AI web search provider: %s", config.Provider)
-	}
+	return common.ToolResult{Text: formatWebFetchResult(rawURL, maxCharacters, content)}, nil
 }
 
 // fetchExa calls Exa's hosted MCP fetch tool for provider-side extraction.
-func fetchExa(ctx context.Context, config setting.AIWebSearchConfig, rawURL string, maxCharacters int) (string, error) {
+func fetchExa(ctx context.Context, config aiWebSearchConfig, rawURL string, maxCharacters int) (string, error) {
 	text, err := callExaMCPTool(ctx, config, exaWebFetchToolName, map[string]any{
 		"urls":          []string{rawURL},
 		"maxCharacters": maxCharacters,
@@ -106,39 +81,43 @@ func fetchExa(ctx context.Context, config setting.AIWebSearchConfig, rawURL stri
 	return truncateString(text, maxCharacters), nil
 }
 
-// fetchTavily uses Tavily /extract so page fetching benefits from their extraction pipeline.
-func fetchTavily(ctx context.Context, config setting.AIWebSearchConfig, rawURL string, maxCharacters int) (string, error) {
-	type tavilyExtractResult struct {
-		URL        string `json:"url"`
-		Content    string `json:"content"`
-		RawContent string `json:"raw_content"`
-	}
-	type tavilyExtractResponse struct {
-		Results []tavilyExtractResult `json:"results"`
-	}
-
-	var response tavilyExtractResponse
-	err := postJSON(ctx, joinEndpointPath(config.Endpoint, "/extract"), map[string]string{
-		"Authorization": "Bearer " + config.ApiKey,
-	}, map[string]any{
-		"urls":          []string{rawURL},
-		"extract_depth": "basic",
-	}, &response)
+// validateHTTPURL prevents local file or custom-scheme fetches from entering the web_fetch tool path.
+func validateHTTPURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return "", err
+		return err
 	}
-	if len(response.Results) == 0 {
-		return "", fmt.Errorf("tavily extract returned no content")
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("only http and https URLs are supported")
 	}
-
-	content := response.Results[0].RawContent
-	if strings.TrimSpace(content) == "" {
-		content = response.Results[0].Content
+	if parsed.Host == "" {
+		return fmt.Errorf("url host is required")
 	}
-	return truncateString(content, maxCharacters), nil
+	return nil
 }
 
-// localHTTPFetch is the safe fallback for providers without first-party fetch support.
+// formatWebFetchResult produces the model-facing text returned by web_fetch.
+func formatWebFetchResult(rawURL string, maxCharacters int, content string) string {
+	var builder strings.Builder
+	builder.WriteString("# Web Fetch Result\n")
+	builder.WriteString("Provider: exa")
+	builder.WriteString("\nURL: ")
+	builder.WriteString(rawURL)
+	builder.WriteString(fmt.Sprintf("\nMax Characters: %d\n\n", maxCharacters))
+	builder.WriteString(truncateString(content, maxCharacters))
+	return strings.TrimSpace(builder.String())
+}
+
+// htmlToText removes noisy markup before returning locally fetched pages to the model.
+func htmlToText(content string) string {
+	content = htmlBlockRegexp.ReplaceAllString(content, " ")
+	content = htmlTagRegexp.ReplaceAllString(content, " ")
+	content = html.UnescapeString(content)
+	content = spaceRegexp.ReplaceAllString(content, " ")
+	return strings.TrimSpace(content)
+}
+
+// localHTTPFetch is the safe fallback when provider-side extraction is unavailable.
 func localHTTPFetch(ctx context.Context, rawURL string, maxCharacters int) (string, error) {
 	if err := validateHTTPURL(rawURL); err != nil {
 		return "", err
@@ -173,41 +152,4 @@ func localHTTPFetch(ctx context.Context, rawURL string, maxCharacters int) (stri
 		content = htmlToText(content)
 	}
 	return truncateString(content, maxCharacters), nil
-}
-
-// validateHTTPURL prevents local file or custom-scheme fetches from entering the web_fetch tool path.
-func validateHTTPURL(rawURL string) error {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return err
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("only http and https URLs are supported")
-	}
-	if parsed.Host == "" {
-		return fmt.Errorf("url host is required")
-	}
-	return nil
-}
-
-// formatWebFetchResult produces the model-facing text returned by web_fetch.
-func formatWebFetchResult(rawURL string, provider string, maxCharacters int, content string) string {
-	var builder strings.Builder
-	builder.WriteString("# Web Fetch Result\n")
-	builder.WriteString("Provider: ")
-	builder.WriteString(provider)
-	builder.WriteString("\nURL: ")
-	builder.WriteString(rawURL)
-	builder.WriteString(fmt.Sprintf("\nMax Characters: %d\n\n", maxCharacters))
-	builder.WriteString(truncateString(content, maxCharacters))
-	return strings.TrimSpace(builder.String())
-}
-
-// htmlToText removes noisy markup before returning locally fetched pages to the model.
-func htmlToText(content string) string {
-	content = htmlBlockRegexp.ReplaceAllString(content, " ")
-	content = htmlTagRegexp.ReplaceAllString(content, " ")
-	content = html.UnescapeString(content)
-	content = spaceRegexp.ReplaceAllString(content, " ")
-	return strings.TrimSpace(content)
 }

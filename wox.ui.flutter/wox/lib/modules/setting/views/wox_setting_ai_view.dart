@@ -5,11 +5,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
-import 'package:wox/components/wox_dropdown_button.dart';
-import 'package:wox/components/wox_switch.dart';
-import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
-import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/utils/consts.dart';
 
@@ -94,7 +90,6 @@ class WoxSettingAIView extends WoxSettingBaseView {
                   }),
                 ),
               ),
-              _buildWebSearchSection(),
               settingTarget(
                 settingKey: "AIMCPServers",
                 child: Padding(
@@ -147,118 +142,6 @@ class WoxSettingAIView extends WoxSettingBaseView {
         return const SizedBox.shrink();
       },
     );
-  }
-
-  Widget _buildWebSearchSection() {
-    return Obx(() {
-      final config = controller.woxSetting.value.aiWebSearch;
-      final endpointController = TextEditingController(text: config.endpoint);
-      final apiKeyController = TextEditingController(text: config.apiKey);
-      final resultCountController = TextEditingController(text: config.searchResultCount.toString());
-      final fetchMaxController = TextEditingController(text: config.fetchMaxCharacters.toString());
-
-      return settingTarget(
-        settingKey: "AIWebSearch",
-        child: formSection(
-          title: controller.tr("ui_ai_web_search"),
-          children: [
-            formField(
-              label: controller.tr("ui_ai_web_search_enabled"),
-              tips: controller.tr("ui_ai_web_search_enabled_tips"),
-              child: WoxSwitch(value: config.enabled, onChanged: (value) => _updateAIWebSearch(config.copyWith(enabled: value))),
-            ),
-            formField(
-              label: controller.tr("ui_ai_web_search_provider"),
-              tips: controller.tr("ui_ai_web_search_provider_tips"),
-              child: WoxDropdownButton<String>(
-                width: 300,
-                value: config.provider,
-                items: const [
-                  WoxDropdownItem(value: "exa", label: "Exa"),
-                  WoxDropdownItem(value: "tavily", label: "Tavily"),
-                  WoxDropdownItem(value: "brave", label: "Brave"),
-                  WoxDropdownItem(value: "searxng", label: "SearXNG"),
-                ],
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  _updateAIWebSearch(config.copyWith(provider: value, endpoint: _defaultEndpointForProvider(value)));
-                },
-              ),
-            ),
-            formField(
-              label: controller.tr("ui_ai_web_search_endpoint"),
-              tips: controller.tr("ui_ai_web_search_endpoint_tips"),
-              child: WoxTextField(
-                width: 520,
-                enabled: config.enabled,
-                controller: endpointController,
-                onChanged: (value) => _updateAIWebSearch(config.copyWith(endpoint: value.trim())),
-              ),
-            ),
-            formField(
-              label: controller.tr("ui_ai_web_search_api_key"),
-              tips: controller.tr("ui_ai_web_search_api_key_tips"),
-              child: WoxTextField(
-                width: 420,
-                enabled: config.enabled,
-                controller: apiKeyController,
-                obscureText: true,
-                onChanged: (value) => _updateAIWebSearch(config.copyWith(apiKey: value.trim())),
-              ),
-            ),
-            formField(
-              label: controller.tr("ui_ai_web_search_result_count"),
-              tips: controller.tr("ui_ai_web_search_result_count_tips"),
-              child: WoxTextField(
-                width: 120,
-                enabled: config.enabled,
-                controller: resultCountController,
-                onChanged: (value) {
-                  final parsed = int.tryParse(value.trim());
-                  if (parsed != null) {
-                    _updateAIWebSearch(config.copyWith(searchResultCount: parsed));
-                  }
-                },
-              ),
-            ),
-            formField(
-              label: controller.tr("ui_ai_web_search_fetch_max"),
-              tips: controller.tr("ui_ai_web_search_fetch_max_tips"),
-              child: WoxTextField(
-                width: 120,
-                enabled: config.enabled,
-                controller: fetchMaxController,
-                onChanged: (value) {
-                  final parsed = int.tryParse(value.trim());
-                  if (parsed != null) {
-                    _updateAIWebSearch(config.copyWith(fetchMaxCharacters: parsed));
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-
-  void _updateAIWebSearch(AIWebSearchConfig config) {
-    controller.updateConfig("AIWebSearch", jsonEncode(config.toJson()));
-  }
-
-  String _defaultEndpointForProvider(String provider) {
-    switch (provider) {
-      case "exa":
-        return "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa";
-      case "tavily":
-        return "https://api.tavily.com";
-      case "brave":
-        return "https://api.search.brave.com";
-      default:
-        return "";
-    }
   }
 
   PluginSettingValueTable _buildMCPServersTable() {

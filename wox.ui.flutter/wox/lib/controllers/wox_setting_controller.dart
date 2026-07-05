@@ -994,7 +994,7 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     final traceId = const UuidV4().generate();
     await WoxApi.instance.updateSetting(traceId, key, value);
     await reloadSetting(traceId);
-    Logger.instance.info(traceId, 'Setting updated: $key=${_redactSettingLogValue(key, value)}');
+    Logger.instance.info(traceId, 'Setting updated: $key=$value');
 
     if (key == "AIProviders") {
       invalidateAIModelSelectorResources();
@@ -1025,20 +1025,6 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     }
   }
 
-  String _redactSettingLogValue(String key, String value) {
-    if (key == "AIWebSearch") {
-      try {
-        final decoded = jsonDecode(value);
-        if (decoded is Map<String, dynamic>) {
-          decoded["ApiKey"] = decoded["ApiKey"] == null || decoded["ApiKey"].toString().isEmpty ? "" : "***";
-          return jsonEncode(decoded);
-        }
-      } catch (_) {
-        return "***";
-      }
-    }
-    return value;
-  }
 
   // updateLang persists the new language code. The language json and plugin
   // translation refresh is handled by reloadSetting, which updateConfig invokes
@@ -3064,13 +3050,6 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
   _BuiltInSettingSearchDefinition(settingKey: 'HideGlanceIcon', navPath: 'ui', titleKey: 'ui_glance_hide_icon', subtitleKey: 'ui_glance_hide_icon_tips'),
   _BuiltInSettingSearchDefinition(settingKey: 'PrimaryGlance', navPath: 'ui', titleKey: 'ui_glance_primary', subtitleKey: 'ui_glance_primary_tips'),
   _BuiltInSettingSearchDefinition(settingKey: 'AIProviders', navPath: 'ai', titleKey: 'ui_ai_model', searchKeywords: ['ai provider', 'api key', 'model']),
-  _BuiltInSettingSearchDefinition(
-    settingKey: 'AIWebSearch',
-    navPath: 'ai',
-    titleKey: 'ui_ai_web_search',
-    subtitleKey: 'ui_ai_web_search_enabled_tips',
-    searchKeywords: ['web search', 'web fetch', 'exa', 'tavily', 'brave', 'searxng'],
-  ),
   _BuiltInSettingSearchDefinition(settingKey: 'AIMCPServers', navPath: 'ai', titleKey: 'ui_ai_mcp_servers', searchKeywords: ['mcp', 'tool', 'server']),
   _BuiltInSettingSearchDefinition(settingKey: 'AISkills', navPath: 'ai', titleKey: 'ui_ai_skills', searchKeywords: ['skill', 'repo', 'path']),
   _BuiltInSettingSearchDefinition(settingKey: 'HttpProxyEnabled', navPath: 'network', titleKey: 'ui_proxy_enabled', searchKeywords: ['proxy']),

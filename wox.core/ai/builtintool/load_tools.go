@@ -15,11 +15,12 @@ func init() {
 	ai.GetToolRegistry().Register(LoadToolsTool())
 }
 
-// LoadToolsTool lets the model request executable tools for the next loop step.
+// LoadToolsTool lets the model request MCP or additional catalog tools that are
+// not enabled by default. Builtin tools are already callable on the first step.
 func LoadToolsTool() common.Tool {
 	return common.Tool{
 		Name:        ai.LoadToolsToolName,
-		Description: "Request catalog tools by exact name from the tool_catalog context. Requested tools become callable in the next model step.",
+		Description: "Request MCP or catalog tools by exact name from the tool_catalog context. Requested tools become callable in the next model step. Builtin tools are already enabled by default.",
 		Parameters: jsonschema.Definition{
 			Type: jsonschema.Object,
 			Properties: map[string]jsonschema.Definition{

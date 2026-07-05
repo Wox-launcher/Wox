@@ -98,6 +98,19 @@ func (r *ToolRegistry) FindByName(names []string) []common.Tool {
 	return out
 }
 
+// ListBySource returns a snapshot of tools from a specific source.
+func (r *ToolRegistry) ListBySource(source common.ToolSource) []common.Tool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]common.Tool, 0)
+	for _, t := range r.tools {
+		if t.Source == source {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 func (r *ToolRegistry) setLocked(tool common.Tool) {
 	switch tool.Source {
 	case common.ToolSourceBuiltin:

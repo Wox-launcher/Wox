@@ -579,30 +579,17 @@ func formatRuntimeTimePrompt(now time.Time) string {
 	)
 }
 
-// initialToolsForRuntime returns tools callable on the first model step.
+// initialToolsForRuntime returns all builtin tools on the first model step so
+// common actions like reading files, running commands, or editing code do not
+// require an extra load_tools round trip. MCP tools remain in the catalog and
+// are loaded on demand via load_tools.
 func (r *AIChatPlugin) initialToolsForRuntime(ctx context.Context) []common.Tool {
-	names := []string{ai.ReadSkillToolName, ai.LoadToolsToolName, ai.AskUserToolName}
-	if r.isWebAccessEnabled(ctx) {
-		names = append(names, ai.WebSearchToolName, ai.WebFetchToolName)
-	}
-	return ai.GetToolRegistry().FindByName(names)
+	return ai.GetToolRegistry().ListBySource(common.ToolSourceBuiltin)
 }
 
-// availableToolsForRuntime filters setting-gated tools before exposing them to the model.
+// availableToolsForRuntime exposes all registered tools to the model because web access is enabled by default.
 func (r *AIChatPlugin) availableToolsForRuntime(ctx context.Context) []common.Tool {
-	tools := ai.GetToolRegistry().List()
-	if r.isWebAccessEnabled(ctx) {
-		return tools
-	}
-
-	return lo.Filter(tools, func(tool common.Tool, _ int) bool {
-		return !ai.IsWebAccessTool(tool.Name)
-	})
-}
-
-func (r *AIChatPlugin) isWebAccessEnabled(ctx context.Context) bool {
-	webSearchConfig := setting.NormalizeAIWebSearchConfig(setting.GetSettingManager().GetWoxSetting(ctx).AIWebSearch.Get())
-	return webSearchConfig.Enabled
+	return ai.GetToolRegistry().List()
 }
 
 func (r *AIChatPlugin) recentConversationsForRuntime(ctx context.Context, conversations []common.Conversation, compactionEntry *common.AIChatCompactionEntry) []common.Conversation {
