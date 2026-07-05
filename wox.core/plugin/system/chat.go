@@ -176,8 +176,15 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 					Name:                   "i18n:plugin_ai_chat_start_chat",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						// Generate the chat id up front so it can be shared with
+						// the subsequent chat-mode query via ContextData. Without
+						// this, getChatPreviewData would create a brand-new empty
+						// chat as ActiveChat and the UI would show a blank new
+						// conversation while the real streaming chat (this one)
+						// only appears in the history sidebar.
+						chatId := uuid.NewString()
 						r.Chat(ctx, common.AIChatData{
-							Id:    uuid.NewString(),
+							Id:    chatId,
 							Title: query.RawQuery,
 							Model: r.GetDefaultModel(ctx),
 							Conversations: []common.Conversation{
@@ -196,6 +203,7 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 							QueryType:      plugin.QueryTypeInput,
 							QueryText:      "chat " + query.RawQuery,
 							QuerySelection: selection.Selection{},
+							ContextData:    common.ContextData{"ai_chat_active_id": chatId},
 						})
 					},
 				},
@@ -994,9 +1002,26 @@ func (r *AIChatPlugin) newChatData(ctx context.Context) common.AIChatData {
 	return chatData
 }
 
-func (r *AIChatPlugin) getChatPreviewData(ctx context.Context) plugin.QueryResult {
+func (r *AIChatPlugin) getChatPreviewData(ctx context.Context, activeChatId string) plugin.QueryResult {
+	// When re-entering chat mode from search fallback, the caller passes the id
+	// of the chat that was just created and is already streaming. Use it as the
+	// ActiveChat so the UI lands on that conversation instead of a blank new
+	// one. Fallback to a fresh empty chat for normal "chat xxx" entry.
+	var activeChat common.AIChatData
+	if activeChatId != "" {
+		for i := range r.chats {
+			if r.chats[i].Id == activeChatId {
+				activeChat = r.chats[i]
+				break
+			}
+		}
+	}
+	if activeChat.Id == "" {
+		activeChat = r.newChatData(ctx)
+	}
+
 	previewData, err := json.Marshal(common.AIChatPreviewData{
-		ActiveChat: r.newChatData(ctx),
+		ActiveChat: activeChat,
 		Chats:      r.chats,
 	})
 	if err != nil {
@@ -1033,7 +1058,11 @@ func (r *AIChatPlugin) getChatPreviewData(ctx context.Context) plugin.QueryResul
 }
 
 func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
-	response := plugin.NewQueryResponse([]plugin.QueryResult{r.getChatPreviewData(ctx)})
+	activeChatId := ""
+	if query.ContextData != nil {
+		activeChatId = query.ContextData["ai_chat_active_id"]
+	}
+	response := plugin.NewQueryResponse([]plugin.QueryResult{r.getChatPreviewData(ctx, activeChatId)})
 	response.Layout = plugin.QueryLayout{ChatMode: true}
 	return response
 }

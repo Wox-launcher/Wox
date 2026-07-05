@@ -367,6 +367,10 @@ class WoxAIChatData {
       'Model': model.toJson(),
       'CreatedAt': createdAt,
       'UpdatedAt': updatedAt,
+      // Preserve the transient streaming flag through clone() so sidebar
+      // snapshots reflect the real send/stop button state when a user
+      // reselects a chat that is still generating.
+      'IsStreaming': isStreaming,
     };
 
     return json;

@@ -201,7 +201,10 @@ class WoxAIChatController extends GetxController {
     aiChatData.value = chat.clone();
     draftSkillRefs.clear();
     _clearChatExpansionStates();
-    isGenerating.value = false;
+    // Sync the stop-button state with the target chat's real streaming flag.
+    // Hardcoding false would hide the stop button when switching back to a chat
+    // that is still generating.
+    isGenerating.value = chat.isStreaming;
     textController.clear();
     hideCommandPalette();
     SchedulerBinding.instance.addPostFrameCallback((_) {
