@@ -58,7 +58,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
               message: "${tr("ui_action_toggle_sidebar")} (${controller.launcherController.previewFullscreenHotkeyLabel})",
               child: IconButton(
                 onPressed: () => controller.toggleConversationSidebar(const UuidV4().generate()),
-                icon: Icon(isConversationSidebarCollapsed ? Icons.view_sidebar_outlined : Icons.splitscreen_outlined),
+                icon: Icon(isConversationSidebarCollapsed ? Icons.menu : Icons.close),
                 iconSize: _metrics.scaledSpacing(22),
                 color: subtitleColor,
                 padding: EdgeInsets.zero,
@@ -116,26 +116,46 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       Logger.instance.debug(const UuidV4().generate(), "repaint: chat view");
     }
 
-    return Stack(
-      children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            return Obx(() {
-              final showConversationSidebar = constraints.maxWidth >= _metrics.scaledSpacing(760) && !controller.isConversationSidebarCollapsed.value;
-              return Row(
-                children: [
-                  if (showConversationSidebar) ...[_buildConversationSidebar(), Container(width: 1, color: safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(20))],
-                  Expanded(child: _buildChatConversationPane(context)),
-                ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final sidebarWidth = _metrics.scaledSpacing(260);
+
+        final drawerWidth = sidebarWidth + 1;
+
+        return Stack(
+          children: [
+            Positioned.fill(child: _buildChatConversationPane(context)),
+            // Click-outside catcher: only visible while the drawer is open so
+            // taps on the chat pane collapse the sidebar the same way zencode
+            // dismisses its panel when the editor area is clicked.
+            Obx(() {
+              final showConversationSidebar = !controller.isConversationSidebarCollapsed.value;
+              return showConversationSidebar
+                  ? Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: () => controller.toggleConversationSidebar(const UuidV4().generate())))
+                  : const SizedBox.shrink();
+            }),
+            Obx(() {
+              final showConversationSidebar = !controller.isConversationSidebarCollapsed.value;
+              return AnimatedPositioned(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                top: 0,
+                bottom: 0,
+                left: showConversationSidebar ? 0.0 : -drawerWidth,
+                width: drawerWidth,
+                child: ColoredBox(
+                  color: safeFromCssColor(woxTheme.actionContainerBackgroundColor),
+                  child: Row(children: [_buildConversationSidebar(), Container(width: 1, color: safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(20))]),
+                ),
               );
-            });
-          },
-        ),
-        Obx(() {
-          final question = controller.pendingAIQuestion.value;
-          return question == null ? const SizedBox.shrink() : _buildAIQuestionOverlay(question);
-        }),
-      ],
+            }),
+            Obx(() {
+              final question = controller.pendingAIQuestion.value;
+              return question == null ? const SizedBox.shrink() : _buildAIQuestionOverlay(question);
+            }),
+          ],
+        );
+      },
     );
   }
 
@@ -673,38 +693,14 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   }
 
   Widget _buildNewChatButton(Color subtitleColor) {
-    final isActiveDraft = controller.aiChatData.value.conversations.isEmpty && controller.chats.every((chat) => chat.id != controller.aiChatData.value.id);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: controller.startNewChat,
-      child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(12), vertical: _metrics.scaledSpacing(10)),
-        decoration: BoxDecoration(
-          color: isActiveDraft ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor) : safeFromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(30),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.add_rounded, size: _metrics.scaledSpacing(18), color: safeFromCssColor(woxTheme.actionItemActiveFontColor).withAlpha(200)),
-            SizedBox(width: _metrics.scaledSpacing(8)),
-            Text(
-              tr("ui_ai_chat_new_chat"),
-              style: TextStyle(color: safeFromCssColor(woxTheme.previewFontColor), fontSize: _metrics.resultSubtitleFontSize, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-      ),
-    );
+    return _NewChatButton(onTap: controller.startNewChat);
   }
 
   Widget _buildConversationTile(WoxAIChatData chat) {
     return _buildConversationTileShell(
       title: chat.title.isEmpty ? tr("ui_ai_chat_new_chat") : chat.title,
-      subtitle: _getConversationSubtitle(chat),
       active: chat.id == controller.aiChatData.value.id,
       onTap: () => controller.selectChat(chat),
-      subtitleColor: safeFromCssColor(woxTheme.resultItemSubTitleColor),
       trailing: _buildConversationTileAction(tooltip: tr("ui_ai_chat_delete_chat"), icon: Icons.delete_outline_rounded, onPressed: () => controller.deleteChat(chat)),
     );
   }
@@ -725,49 +721,8 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  Widget _buildConversationTileShell({
-    required String title,
-    required String subtitle,
-    required bool active,
-    required VoidCallback onTap,
-    required Color subtitleColor,
-    Widget? trailing,
-  }) {
-    final backgroundColor = active ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor) : Colors.transparent;
-    final titleColor = active ? safeFromCssColor(woxTheme.resultItemActiveTitleColor) : safeFromCssColor(woxTheme.resultItemTitleColor);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        height: _metrics.scaledSpacing(58),
-        margin: EdgeInsets.only(bottom: _metrics.scaledSpacing(4)),
-        padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(8)),
-        decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(6)),
-        child: Row(
-          children: [
-            Icon(Icons.chat_bubble, size: _metrics.scaledSpacing(26), color: safeFromCssColor(woxTheme.resultItemActiveBackgroundColor)),
-            SizedBox(width: _metrics.scaledSpacing(10)),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: titleColor, fontSize: _metrics.resultTitleFontSize, fontWeight: FontWeight.w700),
-                  ),
-                  SizedBox(height: _metrics.scaledSpacing(2)),
-                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: subtitleColor, fontSize: _metrics.smallLabelFontSize)),
-                ],
-              ),
-            ),
-            if (trailing != null) ...[SizedBox(width: _metrics.scaledSpacing(4)), trailing],
-          ],
-        ),
-      ),
-    );
+  Widget _buildConversationTileShell({required String title, required bool active, required VoidCallback onTap, Widget? trailing}) {
+    return _ConversationTile(title: title, active: active, onTap: onTap, trailing: trailing);
   }
 
   ({List<WoxAIChatData> today, List<WoxAIChatData> yesterday, List<WoxAIChatData> history}) _groupChats(List<WoxAIChatData> chats) {
@@ -791,15 +746,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       }
     }
     return (today: today, yesterday: yesterday, history: history);
-  }
-
-  String _getConversationSubtitle(WoxAIChatData chat) {
-    for (final conversation in chat.conversations) {
-      if (conversation.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value && conversation.text.trim().isNotEmpty) {
-        return conversation.text.trim();
-      }
-    }
-    return tr("ui_ai_chat_continue_chat");
   }
 
   // Keeps ask_user prompts inside the chat preview instead of using launcher-level dialogs.
@@ -1049,6 +995,24 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       pendingTools.clear();
     }
 
+    // Mark the last assistant render item added before the given index as the
+    // final one in its round. We look backwards from the insertion point so
+    // we can resolve this lazily once the next user message (or end of list)
+    // arrives, instead of tracking rounds in a separate pass.
+    void markLastAssistantInRound(int endIndex) {
+      for (int i = endIndex - 1; i >= 0; i--) {
+        final item = items[i];
+        if (item is _ChatMessageRenderItem) {
+          if (item.message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_ASSISTANT.value) {
+            item.isLastAssistantInRound = true;
+          }
+          // Stop at the first message render item regardless of role: user
+          // messages break assistant runs and don't need marking.
+          break;
+        }
+      }
+    }
+
     for (final conversation in conversations) {
       if (conversation.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_SYSTEM.value) {
         continue;
@@ -1059,17 +1023,26 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
         continue;
       }
 
+      // A new user message starts a fresh round, so the previous round's last
+      // assistant reply (if any) becomes the toolbar owner.
+      if (conversation.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value) {
+        markLastAssistantInRound(items.length);
+      }
+
       flushToolActivity();
       items.add(_ChatMessageRenderItem(conversation));
     }
 
     flushToolActivity();
+    // End of conversation: the trailing round's last assistant reply, if any,
+    // owns the toolbar.
+    markLastAssistantInRound(items.length);
     return items;
   }
 
   Widget _buildChatRenderItem(_ChatRenderItem item, BuildContext context) {
     if (item is _ChatMessageRenderItem) {
-      return _buildMessageItem(item.message, context);
+      return _buildMessageItem(item.message, context, showMetaRow: item.isLastAssistantInRound);
     }
 
     if (item is _ChatToolActivityRenderItem) {
@@ -1083,7 +1056,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     return conversation.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_TOOL.value;
   }
 
-  Widget _buildMessageItem(WoxAIChatConversation message, BuildContext context) {
+  Widget _buildMessageItem(WoxAIChatConversation message, BuildContext context, {required bool showMetaRow}) {
     final isUser = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
     final isAssistant = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_ASSISTANT.value;
 
@@ -1092,7 +1065,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     }
 
     if (isAssistant) {
-      return _buildAssistantMessageItem(message);
+      return _buildAssistantMessageItem(message, showMetaRow: showMetaRow);
     }
 
     return const SizedBox.shrink();
@@ -1147,7 +1120,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   }
 
   // Renders assistant messages as a full-width reading column.
-  Widget _buildAssistantMessageItem(WoxAIChatConversation message) {
+  // Only the last assistant reply in a round renders the meta row (timestamp
+  // plus copy/regenerate actions); intermediate assistant replies hide it.
+  Widget _buildAssistantMessageItem(WoxAIChatConversation message, {required bool showMetaRow}) {
     final fontColor = safeFromCssColor(woxTheme.resultItemTitleColor);
     var isHovered = false;
 
@@ -1167,7 +1142,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                   padding: EdgeInsets.only(top: _metrics.scaledSpacing(1), right: _metrics.scaledSpacing(4)),
                   child: _buildMessageContent(message, fontColor),
                 ),
-                _buildHoverVisibleMessageMetaRow(message: message, isUser: false, visible: isHovered),
+                if (showMetaRow) _buildHoverVisibleMessageMetaRow(message: message, isUser: false, visible: isHovered),
               ],
             ),
           ),
@@ -1605,7 +1580,13 @@ abstract class _ChatRenderItem {
 class _ChatMessageRenderItem extends _ChatRenderItem {
   final WoxAIChatConversation message;
 
-  const _ChatMessageRenderItem(this.message);
+  // True when this is the final assistant message in its round (the run of
+  // messages between two user messages, or from the last user message to the
+  // end of the conversation). Only the last assistant message in a round shows
+  // the action toolbar; intermediate assistant messages hide the meta row.
+  bool isLastAssistantInRound = false;
+
+  _ChatMessageRenderItem(this.message);
 }
 
 class _ChatToolActivityRenderItem extends _ChatRenderItem {
@@ -1724,6 +1705,110 @@ class _ChatCommandPaletteOverlayState extends State<_ChatCommandPaletteOverlay> 
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// A stateful new-chat button so it stays visually quiet by default and only
+// highlights when the user hovers over it.
+class _NewChatButton extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _NewChatButton({required this.onTap});
+
+  @override
+  State<_NewChatButton> createState() => _NewChatButtonState();
+}
+
+class _NewChatButtonState extends State<_NewChatButton> {
+  bool isHovered = false;
+
+  WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
+
+  String tr(String key) {
+    return Get.find<WoxSettingController>().tr(key);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final woxTheme = WoxThemeUtil.instance.currentTheme.value;
+    final backgroundColor = isHovered ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor) : Colors.transparent;
+    return MouseRegion(
+      onEnter: (_) => setState(() => isHovered = true),
+      onExit: (_) => setState(() => isHovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(12), vertical: _metrics.scaledSpacing(10)),
+          decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(6)),
+          child: Row(
+            children: [
+              Icon(Icons.add_rounded, size: _metrics.scaledSpacing(18), color: safeFromCssColor(woxTheme.actionItemActiveFontColor).withAlpha(200)),
+              SizedBox(width: _metrics.scaledSpacing(8)),
+              Text(
+                tr("ui_ai_chat_new_chat"),
+                style: TextStyle(color: safeFromCssColor(woxTheme.previewFontColor), fontSize: _metrics.resultSubtitleFontSize, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// A stateful tile so hover changes survive rebuilds and are clearly visible.
+class _ConversationTile extends StatefulWidget {
+  final String title;
+  final bool active;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  const _ConversationTile({required this.title, required this.active, required this.onTap, this.trailing});
+
+  @override
+  State<_ConversationTile> createState() => _ConversationTileState();
+}
+
+class _ConversationTileState extends State<_ConversationTile> {
+  bool isHovered = false;
+
+  WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
+
+  @override
+  Widget build(BuildContext context) {
+    final woxTheme = WoxThemeUtil.instance.currentTheme.value;
+    final backgroundColor = widget.active || isHovered ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor) : Colors.transparent;
+    final titleColor = widget.active ? safeFromCssColor(woxTheme.resultItemActiveTitleColor) : safeFromCssColor(woxTheme.resultItemTitleColor);
+    return MouseRegion(
+      onEnter: (_) => setState(() => isHovered = true),
+      onExit: (_) => setState(() => isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          height: _metrics.scaledSpacing(42),
+          margin: EdgeInsets.only(bottom: _metrics.scaledSpacing(4)),
+          padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(8)),
+          decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(6)),
+          child: Row(
+            children: [
+              Icon(Icons.chat_bubble, size: _metrics.scaledSpacing(22), color: safeFromCssColor(woxTheme.resultItemActiveBackgroundColor)),
+              SizedBox(width: _metrics.scaledSpacing(10)),
+              Expanded(
+                child: Text(
+                  widget.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: titleColor, fontSize: _metrics.resultSubtitleFontSize, fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (widget.trailing != null) ...[SizedBox(width: _metrics.scaledSpacing(4)), widget.trailing!],
+            ],
+          ),
+        ),
       ),
     );
   }

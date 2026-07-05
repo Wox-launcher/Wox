@@ -170,6 +170,7 @@ class WoxAIChatController extends GetxController {
     _clearChatExpansionStates();
     isGenerating.value = false;
     hideCommandPalette();
+    collapseConversationSidebar(const UuidV4().generate());
     if (aiChatData.value.model.value.name.isEmpty) {
       _setDefaultModel(const UuidV4().generate());
     }
@@ -187,6 +188,16 @@ class WoxAIChatController extends GetxController {
       scrollToBottomOfAiChat();
     });
     focusChatInput(const UuidV4().generate());
+  }
+
+  // Hides the conversation sidebar after selecting a chat so the message pane
+  // gets the full preview width and the input field can receive focus cleanly.
+  void collapseConversationSidebar(String traceId) {
+    if (isConversationSidebarCollapsed.value) {
+      return;
+    }
+    isConversationSidebarCollapsed.value = true;
+    Logger.instance.debug(traceId, "AI chat conversation sidebar collapsed after chat selection");
   }
 
   // Chat mode starts with the conversation list folded so the message surface gets the full preview width.
