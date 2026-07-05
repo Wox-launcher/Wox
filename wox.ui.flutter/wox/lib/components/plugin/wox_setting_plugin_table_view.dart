@@ -489,7 +489,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       );
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAIMCPServerTools) {
-      var disabled = row["disabled"] ?? false;
+      var disabled = row["Disabled"] ?? row["disabled"] ?? false;
       if (disabled) {
         return const Icon(Icons.circle, color: Colors.grey);
       }
@@ -523,6 +523,18 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           isHeader: false,
           isOperation: false,
           child: Text("${toolNames.length} tools", style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor))),
+        ),
+      );
+    }
+    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAISelectSkills) {
+      final skillIds = value is List ? value : <dynamic>[];
+      return WoxTooltip(
+        message: skillIds.join("\n"),
+        child: columnWidth(
+          column: column,
+          isHeader: false,
+          isOperation: false,
+          child: Text("${skillIds.length} skills", style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor))),
         ),
       );
     }

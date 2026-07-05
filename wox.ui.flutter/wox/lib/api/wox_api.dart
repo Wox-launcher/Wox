@@ -226,8 +226,8 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/mcp/tools/all", null);
   }
 
-  Future<List<AIAgent>> findAIAgents(String traceId) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/ai/agents", null);
+  Future<List<AISkill>> findAISkills(String traceId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/skills", null);
   }
 
   Future<List<AICommandTemplate>> findAICommandTemplates(String traceId) async {
@@ -240,6 +240,22 @@ class WoxApi {
 
   Future<void> sendChatRequest(String traceId, WoxAIChatData data) async {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/chat", {"chatData": data.toJson()});
+  }
+
+  Future<void> stopChatRequest(String traceId, String chatId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/chat/stop", {"chatId": chatId});
+  }
+
+  Future<void> deleteAIChat(String traceId, String chatId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/chat/delete", {"chatId": chatId});
+  }
+
+  Future<void> summarizeAIChat(String traceId, String chatId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/chat/summarize", {"chatId": chatId});
+  }
+
+  Future<void> answerAIQuestion(String traceId, String questionId, String answer) async {
+    await WoxHttpUtil.instance.postData(traceId, "/ai/question/answer", {"questionId": questionId, "answer": answer});
   }
 
   Future<List<DoctorCheckResult>> doctorCheck(String traceId) async {

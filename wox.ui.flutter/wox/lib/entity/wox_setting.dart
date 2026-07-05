@@ -26,6 +26,8 @@ class WoxSetting {
   late bool isLinuxWaylandSession;
   late bool isEvdevReadAvailable;
   late List<AIProvider> aiProviders;
+  late List<AIMCPServer> aiMCPServers;
+  late List<AISkill> aiSkills;
   late int appWidth;
   late int maxResultCount;
   // UiDensity is stored as a small enum so Flutter derives visual metrics
@@ -76,6 +78,8 @@ class WoxSetting {
     required this.isLinuxWaylandSession,
     required this.isEvdevReadAvailable,
     required this.aiProviders,
+    required this.aiMCPServers,
+    required this.aiSkills,
     required this.appWidth,
     required this.maxResultCount,
     required this.uiDensity,
@@ -165,6 +169,24 @@ class WoxSetting {
       aiProviders = <AIProvider>[];
     }
 
+    if (json['AIMCPServers'] != null) {
+      aiMCPServers = <AIMCPServer>[];
+      json['AIMCPServers'].forEach((v) {
+        aiMCPServers.add(AIMCPServer.fromJson(v));
+      });
+    } else {
+      aiMCPServers = <AIMCPServer>[];
+    }
+
+    if (json['AISkills'] != null) {
+      aiSkills = <AISkill>[];
+      json['AISkills'].forEach((v) {
+        aiSkills.add(AISkill.fromJson(v));
+      });
+    } else {
+      aiSkills = <AISkill>[];
+    }
+
     appWidth = json['AppWidth'];
     maxResultCount = json['MaxResultCount'];
     uiDensity = json['UiDensity'] ?? 'normal';
@@ -219,6 +241,8 @@ class WoxSetting {
     data['IsLinuxWaylandSession'] = isLinuxWaylandSession;
     data['IsEvdevReadAvailable'] = isEvdevReadAvailable;
     data['AIProviders'] = aiProviders;
+    data['AIMCPServers'] = aiMCPServers;
+    data['AISkills'] = aiSkills;
     data['AppWidth'] = appWidth;
     data['MaxResultCount'] = maxResultCount;
     data['UiDensity'] = uiDensity;
@@ -462,6 +486,120 @@ class AIProvider {
     data['Alias'] = alias;
     data['ApiKey'] = apiKey;
     data['Host'] = host;
+    return data;
+  }
+}
+
+
+class AIMCPServer {
+  late String name;
+  late String type;
+  late bool disabled;
+  late String command;
+  late List<String> environmentVariables;
+  late String url;
+
+  AIMCPServer({required this.name, required this.type, required this.disabled, required this.command, required this.environmentVariables, required this.url});
+
+  AIMCPServer.fromJson(Map<String, dynamic> json) {
+    name = json['Name'] ?? json['name'] ?? '';
+    type = json['Type'] ?? json['type'] ?? '';
+    disabled = json['Disabled'] ?? json['disabled'] ?? false;
+    command = json['Command'] ?? json['command'] ?? '';
+    final rawEnvironmentVariables = json['EnvironmentVariables'] ?? json['environmentVariables'];
+    environmentVariables = rawEnvironmentVariables is List ? List<String>.from(rawEnvironmentVariables) : <String>[];
+    url = json['Url'] ?? json['url'] ?? '';
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['Name'] = name;
+    data['Type'] = type;
+    data['Disabled'] = disabled;
+    data['Command'] = command;
+    data['EnvironmentVariables'] = environmentVariables;
+    data['Url'] = url;
+    return data;
+  }
+}
+
+class AISkill {
+  late String id;
+  late String name;
+  late String description;
+  late String path;
+  late String manifestPath;
+  late String source;
+  late String sourceName;
+  late bool builtin;
+  late bool readOnly;
+  late String error;
+  late bool enabled;
+  late bool disableModelInvocation;
+  late String instructions;
+  late List<String> tools;
+  late Map<String, String> templates;
+  late WoxImage icon;
+
+  AISkill({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.path,
+    required this.manifestPath,
+    required this.source,
+    required this.sourceName,
+    required this.builtin,
+    required this.readOnly,
+    required this.error,
+    required this.enabled,
+    required this.disableModelInvocation,
+    required this.instructions,
+    required this.tools,
+    required this.templates,
+    required this.icon,
+  });
+
+  AISkill.fromJson(Map<String, dynamic> json) {
+    id = json['Id'] ?? json['id'] ?? '';
+    name = json['Name'] ?? json['name'] ?? '';
+    description = json['Description'] ?? json['description'] ?? '';
+    path = json['Path'] ?? json['path'] ?? '';
+    manifestPath = json['ManifestPath'] ?? json['manifestPath'] ?? '';
+    source = json['Source'] ?? json['source'] ?? '';
+    sourceName = json['SourceName'] ?? json['sourceName'] ?? '';
+    builtin = json['Builtin'] ?? json['builtin'] ?? false;
+    readOnly = json['ReadOnly'] ?? json['readOnly'] ?? true;
+    error = json['Error'] ?? json['error'] ?? '';
+    enabled = json['Enabled'] ?? json['enabled'] ?? true;
+    disableModelInvocation = json['DisableModelInvocation'] ?? json['disableModelInvocation'] ?? false;
+    instructions = json['Instructions'] ?? json['instructions'] ?? '';
+    final rawTools = json['Tools'] ?? json['tools'];
+    tools = rawTools is List ? List<String>.from(rawTools) : <String>[];
+    final rawTemplates = json['Templates'] ?? json['templates'];
+    templates = rawTemplates is Map ? rawTemplates.map((key, value) => MapEntry(key.toString(), value.toString())) : <String, String>{};
+    final rawIcon = json['Icon'] ?? json['icon'];
+    icon = rawIcon is Map ? WoxImage.fromJson(Map<String, dynamic>.from(rawIcon)) : WoxImage.empty();
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['Id'] = id;
+    data['Name'] = name;
+    data['Description'] = description;
+    data['Path'] = path;
+    data['ManifestPath'] = manifestPath;
+    data['Source'] = source;
+    data['SourceName'] = sourceName;
+    data['Builtin'] = builtin;
+    data['ReadOnly'] = readOnly;
+    data['Error'] = error;
+    data['Enabled'] = enabled;
+    data['DisableModelInvocation'] = disableModelInvocation;
+    data['Instructions'] = instructions;
+    data['Tools'] = tools;
+    data['Templates'] = templates;
+    data['Icon'] = icon.toJson();
     return data;
   }
 }

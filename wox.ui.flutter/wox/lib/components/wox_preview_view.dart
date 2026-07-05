@@ -248,9 +248,9 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       contentHandlesScrolling = true;
       contentWidget = WoxPluginDetailView(pluginDetailJson: widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
-      var previewChatData = WoxAIChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
+      var previewChatData = WoxAIChatPreviewData.fromJson(jsonDecode(widget.woxPreview.previewData));
       var chatController = Get.find<WoxAIChatController>();
-      chatController.aiChatData.value = previewChatData;
+      chatController.loadPreviewData(widget.woxPreview.previewData, previewChatData);
 
       // Handle scroll position for chat view
       if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {
@@ -259,8 +259,8 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         });
       }
 
-      // Chat view has its own layout structure with Expanded widgets, return it directly
-      return Container(padding: const EdgeInsets.only(top: 10.0, bottom: 10.0), child: const WoxAIChatView());
+      // Chat view owns its own reading and input layout, so avoid preview-level padding.
+      return const WoxAIChatView();
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_UPDATE.code) {
       try {
         final previewData = UpdatePreviewData.fromJson(jsonDecode(widget.woxPreview.previewData));

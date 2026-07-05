@@ -22,7 +22,9 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   const WoxQueryResultView({super.key});
 
   Widget getActionPanelView() {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: action panel view container");
+    if (LoggerSwitch.enablePaintLog) {
+      Logger.instance.debug(const UuidV4().generate(), "repaint: action panel view container");
+    }
 
     return Obx(
       () =>
@@ -91,7 +93,9 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
         return const SizedBox();
       }
 
-      if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: action form view container");
+      if (LoggerSwitch.enablePaintLog) {
+        Logger.instance.debug(const UuidV4().generate(), "repaint: action form view container");
+      }
 
       return Positioned(
         right: WoxInterfaceSizeUtil.instance.current.actionPanelOffsetRight,
@@ -173,7 +177,9 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   }
 
   Widget getResultView() {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: result view container");
+    if (LoggerSwitch.enablePaintLog) {
+      Logger.instance.debug(const UuidV4().generate(), "repaint: result view container");
+    }
 
     return Obx(() {
       return controller.resultListViewController.items.isNotEmpty
@@ -187,7 +193,9 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   }
 
   Widget getPreviewView() {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: preview view container");
+    if (LoggerSwitch.enablePaintLog) {
+      Logger.instance.debug(const UuidV4().generate(), "repaint: preview view container");
+    }
 
     return Obx(() {
       if (!controller.isShowPreviewPanel.value) {
@@ -195,32 +203,46 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
       }
 
       final woxTheme = WoxThemeUtil.instance.currentTheme.value;
+      final currentPreview = controller.currentPreview.value;
+
+      Widget buildPreviewWithHoverClose({required Widget child, required bool isChatPreview}) {
+        return _PreviewPanelHoverClose(
+          // Preview-only layouts such as Selection Space Quick Look hide the
+          // launcher chrome, so they need a generic hover close affordance.
+          // Chat previews render their own exit control. Remote previews must be
+          // checked after unwrap because the outer preview type is just "remote".
+          showCloseButton: controller.isPreviewOnlyLayout && !isChatPreview,
+          woxTheme: woxTheme,
+          tooltip: controller.tr("ui_cancel"),
+          onClose: () => unawaited(controller.hideApp(const UuidV4().generate())),
+          child: child,
+        );
+      }
+
       final previewContent =
-          controller.currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code
+          currentPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code
               ? FutureBuilder(
-                future: controller.currentPreview.value.unWrap(const UuidV4().generate()),
+                future: currentPreview.unWrap(const UuidV4().generate()),
                 builder: (context, snapshot) {
                   if (snapshot.hasData) {
-                    return WoxPreviewView(woxPreview: snapshot.data!, woxTheme: woxTheme);
+                    final resolvedPreview = snapshot.data!;
+                    return buildPreviewWithHoverClose(
+                      isChatPreview: resolvedPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
+                      child: WoxPreviewView(woxPreview: resolvedPreview, woxTheme: woxTheme),
+                    );
                   } else if (snapshot.hasError) {
-                    return Text("${snapshot.error}");
+                    return buildPreviewWithHoverClose(isChatPreview: false, child: Text("${snapshot.error}"));
                   } else {
                     return const SizedBox();
                   }
                 },
               )
-              : WoxPreviewView(woxPreview: controller.currentPreview.value, woxTheme: woxTheme);
+              : buildPreviewWithHoverClose(
+                isChatPreview: currentPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
+                child: WoxPreviewView(woxPreview: currentPreview, woxTheme: woxTheme),
+              );
 
-      return Flexible(
-        flex: (100 - controller.resultPreviewRatio.value * 100).toInt(),
-        child: _PreviewPanelHoverClose(
-          showCloseButton: controller.isPreviewOnlyLayout,
-          woxTheme: woxTheme,
-          tooltip: controller.tr("ui_cancel"),
-          onClose: () => unawaited(controller.hideApp(const UuidV4().generate())),
-          child: previewContent,
-        ),
-      );
+      return Flexible(flex: (100 - controller.resultPreviewRatio.value * 100).toInt(), child: previewContent);
     });
   }
 

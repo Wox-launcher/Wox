@@ -41,66 +41,262 @@ class AIMCPTool {
   }
 }
 
-class AIAgent {
-  late String name;
-  late String prompt;
-  late AIModel model;
-  late List<String> tools;
-  late WoxImage icon;
+class AIQuestionOption {
+  late String value;
+  late String title;
+  late String subTitle;
+  late bool recommended;
+  late Map<String, String> extra;
 
-  AIAgent({
-    required this.name,
-    required this.prompt,
-    required this.model,
-    required this.tools,
-    WoxImage? icon,
-  }) : icon = icon ?? WoxImage(imageType: "emoji", imageData: "🤖");
+  AIQuestionOption({required this.value, required this.title, required this.subTitle, required this.recommended, required this.extra});
 
-  AIAgent.fromJson(Map<String, dynamic> json) {
-    name = json['Name'] ?? "";
-    prompt = json['Prompt'] ?? "";
-    model = json['Model'] != null ? AIModel.fromJson(json['Model']) : AIModel(name: "", provider: "", providerAlias: "");
-    tools = json['Tools'] != null ? List<String>.from(json['Tools']) : [];
-    icon = json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : WoxImage(imageType: "emoji", imageData: "🤖");
-  }
-
-  Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = <String, dynamic>{};
-    data['Name'] = name;
-    data['Prompt'] = prompt;
-    data['Model'] = model.toJson();
-    data['Tools'] = tools;
-    data['Icon'] = icon.toJson();
-    return data;
-  }
-
-  static AIAgent empty() {
-    return AIAgent(
-      name: "",
-      prompt: "",
-      model: AIModel(name: "", provider: "", providerAlias: ""),
-      tools: [],
-      icon: WoxImage(imageType: "emoji", imageData: "🤖"),
-    );
+  AIQuestionOption.fromJson(Map<String, dynamic> json) {
+    value = json['Value'] ?? json['value'] ?? "";
+    title = json['Title'] ?? json['title'] ?? value;
+    subTitle = json['SubTitle'] ?? json['subTitle'] ?? json['Subtitle'] ?? json['subtitle'] ?? "";
+    recommended = json['Recommended'] ?? json['recommended'] ?? false;
+    final rawExtra = json['Extra'] ?? json['extra'];
+    extra = rawExtra is Map ? rawExtra.map((key, value) => MapEntry(key.toString(), value.toString())) : <String, String>{};
+    if (value.isEmpty) {
+      value = title;
+    }
+    if (title.isEmpty) {
+      title = value;
+    }
   }
 }
 
-class ChatSelectItem {
-  final String id;
-  final String name;
-  final WoxImage icon;
-  final bool isCategory;
-  final List<ChatSelectItem> children;
-  Function(String traceId)? onExecute;
+class AIQuestion {
+  late String questionId;
+  late String question;
+  late List<AIQuestionOption> options;
 
-  ChatSelectItem({
+  AIQuestion({required this.questionId, required this.question, required this.options});
+
+  AIQuestion.fromJson(Map<String, dynamic> json) {
+    questionId = json['QuestionId'] ?? json['questionId'] ?? "";
+    question = json['Question'] ?? json['question'] ?? "";
+    final rawOptions = json['Options'] ?? json['options'];
+    options =
+        rawOptions is List
+            ? rawOptions
+                .map((option) {
+                  if (option is String) {
+                    return AIQuestionOption(value: option, title: option, subTitle: "", recommended: false, extra: <String, String>{});
+                  }
+                  if (option is Map) {
+                    return AIQuestionOption.fromJson(Map<String, dynamic>.from(option));
+                  }
+                  return null;
+                })
+                .whereType<AIQuestionOption>()
+                .where((option) => option.title.isNotEmpty)
+                .toList()
+            : <AIQuestionOption>[];
+  }
+}
+
+class AISkillRef {
+  late String id;
+  late String name;
+  late String path;
+  late String source;
+
+  AISkillRef({required this.id, required this.name, required this.path, required this.source});
+
+  AISkillRef.fromJson(Map<String, dynamic> json) {
+    id = json['Id'] ?? json['id'] ?? "";
+    name = json['Name'] ?? json['name'] ?? "";
+    path = json['Path'] ?? json['path'] ?? "";
+    source = json['Source'] ?? json['source'] ?? "";
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'Id': id, 'Name': name, 'Path': path, 'Source': source};
+  }
+}
+
+class AIChatCompactionEntry {
+  late String id;
+  late String summary;
+  late String firstCompactedConversationId;
+  late String lastCompactedConversationId;
+  late String firstKeptConversationId;
+  late int estimatedTokensBefore;
+  late int estimatedTokensAfter;
+  late int conversationCount;
+  late AIModel model;
+  late int createdAt;
+
+  AIChatCompactionEntry({
     required this.id,
-    required this.name,
-    required this.icon,
-    required this.isCategory,
-    required this.children,
-    this.onExecute,
+    required this.summary,
+    required this.firstCompactedConversationId,
+    required this.lastCompactedConversationId,
+    required this.firstKeptConversationId,
+    required this.estimatedTokensBefore,
+    required this.estimatedTokensAfter,
+    required this.conversationCount,
+    required this.model,
+    required this.createdAt,
   });
+
+  AIChatCompactionEntry.fromJson(Map<String, dynamic> json) {
+    id = json['Id'] ?? "";
+    summary = json['Summary'] ?? "";
+    firstCompactedConversationId = json['FirstCompactedConversationId'] ?? "";
+    lastCompactedConversationId = json['LastCompactedConversationId'] ?? "";
+    firstKeptConversationId = json['FirstKeptConversationId'] ?? "";
+    estimatedTokensBefore = json['EstimatedTokensBefore'] ?? 0;
+    estimatedTokensAfter = json['EstimatedTokensAfter'] ?? 0;
+    conversationCount = json['ConversationCount'] ?? 0;
+    model = json['Model'] != null ? AIModel.fromJson(json['Model']) : AIModel.empty();
+    createdAt = json['CreatedAt'] ?? 0;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'Id': id,
+      'Summary': summary,
+      'FirstCompactedConversationId': firstCompactedConversationId,
+      'LastCompactedConversationId': lastCompactedConversationId,
+      'FirstKeptConversationId': firstKeptConversationId,
+      'EstimatedTokensBefore': estimatedTokensBefore,
+      'EstimatedTokensAfter': estimatedTokensAfter,
+      'ConversationCount': conversationCount,
+      'Model': model.toJson(),
+      'CreatedAt': createdAt,
+    };
+  }
+}
+
+class AIChatDebugTrace {
+  late List<AIChatDebugEvent> events;
+  late int estimatedPersistedTokens;
+  late int estimatedRuntimeTokens;
+
+  AIChatDebugTrace({required this.events, required this.estimatedPersistedTokens, required this.estimatedRuntimeTokens});
+
+  AIChatDebugTrace.fromJson(Map<String, dynamic> json) {
+    events = _parseEvents(json['Events']);
+    estimatedPersistedTokens = json['EstimatedPersistedTokens'] ?? 0;
+    estimatedRuntimeTokens = json['EstimatedRuntimeTokens'] ?? 0;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'Events': events.map((e) => e.toJson()).toList(), 'EstimatedPersistedTokens': estimatedPersistedTokens, 'EstimatedRuntimeTokens': estimatedRuntimeTokens};
+  }
+
+  static List<WoxAIChatConversation> _parseConversations(dynamic raw) {
+    if (raw is! List) {
+      return <WoxAIChatConversation>[];
+    }
+    return raw.whereType<Map>().map((item) => WoxAIChatConversation.fromJson(Map<String, dynamic>.from(item))).toList();
+  }
+
+  static List<AIChatDebugEvent> _parseEvents(dynamic raw) {
+    if (raw is! List) {
+      return <AIChatDebugEvent>[];
+    }
+    return raw.whereType<Map>().map((item) => AIChatDebugEvent.fromJson(Map<String, dynamic>.from(item))).toList();
+  }
+}
+
+class AIChatDebugEvent {
+  late int seq;
+  late int timestamp;
+  late String type;
+  late String name;
+  late int iteration;
+  late String callId;
+  late String parentCallId;
+  late AIModel model;
+  late String status;
+  late String error;
+  late List<WoxAIChatConversation> request;
+  late List<WoxAIChatConversation> response;
+  late List<AIChatDebugTool> visibleTools;
+  ToolCallInfo? toolCallInfo;
+
+  AIChatDebugEvent({
+    required this.seq,
+    required this.timestamp,
+    required this.type,
+    required this.name,
+    required this.iteration,
+    required this.callId,
+    required this.parentCallId,
+    required this.model,
+    required this.status,
+    required this.error,
+    required this.request,
+    required this.response,
+    required this.visibleTools,
+    required this.toolCallInfo,
+  });
+
+  AIChatDebugEvent.fromJson(Map<String, dynamic> json) {
+    seq = json['Seq'] ?? 0;
+    timestamp = json['Timestamp'] ?? 0;
+    type = json['Type'] ?? "";
+    name = json['Name'] ?? "";
+    iteration = json['Iteration'] ?? 0;
+    callId = json['CallId'] ?? "";
+    parentCallId = json['ParentCallId'] ?? "";
+    model = json['Model'] is Map ? AIModel.fromJson(Map<String, dynamic>.from(json['Model'])) : AIModel.empty();
+    status = json['Status'] ?? "";
+    error = json['Error'] ?? "";
+    request = AIChatDebugTrace._parseConversations(json['Request']);
+    response = AIChatDebugTrace._parseConversations(json['Response']);
+    visibleTools = _parseVisibleTools(json['VisibleTools']);
+    toolCallInfo = json['ToolCallInfo'] is Map ? ToolCallInfo.fromJson(Map<String, dynamic>.from(json['ToolCallInfo'])) : null;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'Seq': seq,
+      'Timestamp': timestamp,
+      'Type': type,
+      'Name': name,
+      'Iteration': iteration,
+      'CallId': callId,
+      'ParentCallId': parentCallId,
+      'Model': model.toJson(),
+      'Status': status,
+      'Error': error,
+      'Request': request.map((e) => e.toJson()).toList(),
+      'Response': response.map((e) => e.toJson()).toList(),
+      'VisibleTools': visibleTools.map((e) => e.toJson()).toList(),
+      'ToolCallInfo': toolCallInfo?.toJson(),
+    };
+  }
+
+  static List<AIChatDebugTool> _parseVisibleTools(dynamic raw) {
+    if (raw is! List) {
+      return <AIChatDebugTool>[];
+    }
+    return raw.whereType<Map>().map((item) => AIChatDebugTool.fromJson(Map<String, dynamic>.from(item))).toList();
+  }
+}
+
+class AIChatDebugTool {
+  late String name;
+  late String description;
+  late String source;
+  late String server;
+
+  AIChatDebugTool({required this.name, required this.description, required this.source, required this.server});
+
+  AIChatDebugTool.fromJson(Map<String, dynamic> json) {
+    name = json['Name'] ?? "";
+    description = json['Description'] ?? "";
+    source = json['Source'] ?? "";
+    server = json['Server'] ?? "";
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'Name': name, 'Description': description, 'Source': source, 'Server': server};
+  }
 }
 
 // should be same as AIChatData in the ai chat plugin
@@ -108,21 +304,23 @@ class WoxAIChatData {
   late String id;
   late String title;
   late RxList<WoxAIChatConversation> conversations;
+  late RxList<AIChatCompactionEntry> compactionEntries;
   late Rx<AIModel> model;
+  late Rxn<AIChatDebugTrace> debugTrace;
   late int createdAt;
   late int updatedAt;
-  List<String>? tools;
-  String? agentName;
+  late bool isStreaming;
 
   WoxAIChatData({
     required this.id,
     required this.title,
     required this.conversations,
+    required this.compactionEntries,
     required this.model,
+    required this.debugTrace,
     required this.createdAt,
     required this.updatedAt,
-    this.tools,
-    this.agentName,
+    this.isStreaming = false,
   });
 
   static WoxAIChatData fromJson(Map<String, dynamic> json) {
@@ -133,14 +331,30 @@ class WoxAIChatData {
       }
     }
 
+    List<AIChatCompactionEntry> compactionEntries = [];
+    if (json['CompactionEntries'] is List) {
+      for (final e in json['CompactionEntries']) {
+        if (e is Map) {
+          compactionEntries.add(AIChatCompactionEntry.fromJson(Map<String, dynamic>.from(e)));
+        }
+      }
+    }
+
+    final parsedDebugTrace = Rxn<AIChatDebugTrace>();
+    if (json['DebugTrace'] is Map) {
+      parsedDebugTrace.value = AIChatDebugTrace.fromJson(Map<String, dynamic>.from(json['DebugTrace']));
+    }
+
     return WoxAIChatData(
       id: json['Id'] ?? "",
       title: json['Title'] ?? "",
       conversations: RxList<WoxAIChatConversation>.from(conversations),
+      compactionEntries: RxList<AIChatCompactionEntry>.from(compactionEntries),
       model: json['Model'] != null ? AIModel.fromJson(json['Model']).obs : AIModel(name: "", provider: "", providerAlias: "").obs,
+      debugTrace: parsedDebugTrace,
       createdAt: json['CreatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       updatedAt: json['UpdatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
-      agentName: json['AgentName'],
+      isStreaming: json['IsStreaming'] ?? false,
     );
   }
 
@@ -149,22 +363,17 @@ class WoxAIChatData {
       'Id': id,
       'Title': title,
       'Conversations': conversations.map((e) => e.toJson()).toList(),
+      'CompactionEntries': compactionEntries.map((e) => e.toJson()).toList(),
       'Model': model.toJson(),
       'CreatedAt': createdAt,
       'UpdatedAt': updatedAt,
     };
 
-    // Add selected tools to JSON if available
-    if (tools != null && tools!.isNotEmpty) {
-      json['Tools'] = tools;
-    }
-
-    // Add agent name if available
-    if (agentName != null && agentName!.isNotEmpty) {
-      json['AgentName'] = agentName;
-    }
-
     return json;
+  }
+
+  WoxAIChatData clone() {
+    return WoxAIChatData.fromJson(toJson());
   }
 
   static WoxAIChatData empty() {
@@ -172,12 +381,26 @@ class WoxAIChatData {
       id: "",
       title: "",
       conversations: RxList<WoxAIChatConversation>.from([]),
+      compactionEntries: RxList<AIChatCompactionEntry>.from([]),
       model: AIModel(name: "", provider: "", providerAlias: "").obs,
+      debugTrace: Rxn<AIChatDebugTrace>(),
       createdAt: 0,
       updatedAt: 0,
-      tools: null,
-      agentName: null,
+      isStreaming: false,
     );
+  }
+}
+
+class WoxAIChatPreviewData {
+  late WoxAIChatData activeChat;
+  late List<WoxAIChatData> chats;
+
+  WoxAIChatPreviewData({required this.activeChat, required this.chats});
+
+  WoxAIChatPreviewData.fromJson(Map<String, dynamic> json) {
+    activeChat = json['ActiveChat'] != null ? WoxAIChatData.fromJson(json['ActiveChat']) : WoxAIChatData.empty();
+    final rawChats = json['Chats'];
+    chats = rawChats is List ? rawChats.whereType<Map<String, dynamic>>().map(WoxAIChatData.fromJson).toList() : <WoxAIChatData>[];
   }
 }
 
@@ -193,10 +416,7 @@ enum ToolCallStatus {
 
   static ToolCallStatus fromString(String? value) {
     if (value == null) return ToolCallStatus.pending;
-    return ToolCallStatus.values.firstWhere(
-      (e) => e.value == value,
-      orElse: () => ToolCallStatus.pending,
-    );
+    return ToolCallStatus.values.firstWhere((e) => e.value == value, orElse: () => ToolCallStatus.pending);
   }
 }
 
@@ -214,9 +434,10 @@ class ToolCallInfo {
 
   bool isExpanded = false;
 
-  int get duration => (status == ToolCallStatus.streaming || status == ToolCallStatus.pending || status == ToolCallStatus.running)
-      ? DateTime.now().millisecondsSinceEpoch - startTimestamp
-      : endTimestamp - startTimestamp;
+  int get duration =>
+      (status == ToolCallStatus.streaming || status == ToolCallStatus.pending || status == ToolCallStatus.running)
+          ? DateTime.now().millisecondsSinceEpoch - startTimestamp
+          : endTimestamp - startTimestamp;
 
   ToolCallInfo({
     required this.id,
@@ -254,16 +475,7 @@ class ToolCallInfo {
   }
 
   static ToolCallInfo empty() {
-    return ToolCallInfo(
-      id: "",
-      name: "",
-      arguments: {},
-      response: "",
-      delta: "",
-      status: ToolCallStatus.pending,
-      startTimestamp: 0,
-      endTimestamp: 0,
-    );
+    return ToolCallInfo(id: "", name: "", arguments: {}, response: "", delta: "", status: ToolCallStatus.pending, startTimestamp: 0, endTimestamp: 0);
   }
 }
 
@@ -273,6 +485,7 @@ class WoxAIChatConversation {
   late String text;
   late String reasoning; // Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1, qwen3)
   late List<WoxImage> images;
+  late List<AISkillRef> skillRefs;
   late int timestamp;
   late ToolCallInfo toolCallInfo;
 
@@ -282,6 +495,7 @@ class WoxAIChatConversation {
     required this.text,
     required this.reasoning,
     required this.images,
+    required this.skillRefs,
     required this.timestamp,
     required this.toolCallInfo,
   });
@@ -291,6 +505,15 @@ class WoxAIChatConversation {
     if (json['Images'] != null) {
       for (var e in json['Images']) {
         images.add(WoxImage.fromJson(e));
+      }
+    }
+
+    List<AISkillRef> skillRefs = [];
+    if (json['SkillRefs'] is List) {
+      for (final e in json['SkillRefs']) {
+        if (e is Map) {
+          skillRefs.add(AISkillRef.fromJson(Map<String, dynamic>.from(e)));
+        }
       }
     }
 
@@ -305,6 +528,7 @@ class WoxAIChatConversation {
       text: json['Text'],
       reasoning: json['Reasoning'] ?? '',
       images: images,
+      skillRefs: skillRefs,
       timestamp: json['Timestamp'],
       toolCallInfo: toolCallInfo,
     );
@@ -317,6 +541,7 @@ class WoxAIChatConversation {
       'Text': text,
       'Reasoning': reasoning,
       'Images': images.map((e) => e.toJson()).toList(),
+      'SkillRefs': skillRefs.map((e) => e.toJson()).toList(),
       'Timestamp': timestamp,
       'ToolCallInfo': toolCallInfo.toJson(),
     };

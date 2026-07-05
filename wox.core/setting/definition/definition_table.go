@@ -19,6 +19,7 @@ const (
 	PluginSettingValueTableColumnTypeAIModelStatus          PluginSettingValueTableColumnType = "aiModelStatus"
 	PluginSettingValueTableColumnTypeAIMCPServerTools       PluginSettingValueTableColumnType = "aiMCPServerTools"
 	PluginSettingValueTableColumnTypeAISelectMCPServerTools PluginSettingValueTableColumnType = "aiSelectMCPServerTools"
+	PluginSettingValueTableColumnTypeAISelectSkills         PluginSettingValueTableColumnType = "aiSelectSkills"
 	PluginSettingValueTableColumnTypeWoxImage               PluginSettingValueTableColumnType = "woxImage"
 )
 

@@ -429,119 +429,370 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 		return providerErr
 	}
 
-	// // resize images in the conversation
-	// for i, conversation := range conversations {
-	// 	for j, image := range conversation.Images {
-	// 		image.Resize(600)
-	// 		resizeImage(ctx, image, 600)
-
-	// 		// resize image if it's too large
-	// 		maxWidth := 600
-	// 		if image.Bounds().Dx() > maxWidth {
-	// 			start := util.GetSystemTimestamp()
-	// 			conversations[i].Images[j] = imaging.Resize(image, maxWidth, 0, imaging.Lanczos)
-	// 			a.Log(ctx, LogLevelDebug, fmt.Sprintf("resizing image (%d -> %d) in ai chat, cost %d ms", image.Bounds().Dx(), maxWidth, util.GetSystemTimestamp()-start))
-	// 		}
-	// 	}
-	// }
-
-	stream, err := provider.ChatStream(ctx, model, conversations, options)
-	if err != nil {
-		return err
+	policy := options.LoopPolicy
+	if policy.MaxIterations == 0 {
+		policy.MaxIterations = 25
+	}
+	if policy.MaxRetries == 0 {
+		policy.MaxRetries = 3
 	}
 
 	if callback != nil {
 		util.Go(ctx, "ai chat stream", func() {
-			for {
-				streamResult, streamErr := stream.Receive(ctx)
-				if streamErr != nil {
-					// may be for loop too fast
-					if streamErr == ai.ChatStreamNoContentErr {
-						time.Sleep(time.Millisecond * 200)
-						continue
-					}
-
-					util.GetLogger().Info(ctx, fmt.Sprintf("AI: failed to read stream from ai provider: %s", streamErr.Error()))
-					callback(common.ChatStreamData{
-						Status:    common.ChatStreamStatusError,
-						Data:      streamErr.Error(),
-						ToolCalls: []common.ToolCallInfo{},
-					})
-					return
-				}
-
-				util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received stream from ai provider: status=%s, data=%s, tool calls=%d", streamResult.Status, streamResult.Data, len(streamResult.ToolCalls)))
-
-				a.applyStartTimeIfAbsent(&streamResult)
-
-				if streamResult.Status == common.ChatStreamStatusStreaming {
-					callback(streamResult)
-					continue
-				}
-
-				if streamResult.Status == common.ChatStreamStatusStreamed {
-					// execute tool calls
-					// we execute tool calls asynchronously, but wait for all tool calls to finish before sending the final result
-					var sw = sync.WaitGroup{}
-
-					for toolCallIndex, toolCall := range streamResult.ToolCalls {
-						util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool call is pending to execute, name: %s, args: %v", toolCall.Name, toolCall.Arguments))
-
-						for _, tool := range options.Tools {
-							if tool.Name == toolCall.Name {
-								sw.Add(1)
-
-								util.GetLogger().Info(ctx, fmt.Sprintf("AI: Executing tool: %s with args: %v, toolcall id: %s, toolcall status: %s", tool.Name, toolCall.Arguments, toolCall.Id, toolCall.Status))
-
-								// update tool call status to running and sync to caller
-								streamResult.Status = common.ChatStreamStatusRunningToolCall
-								streamResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusRunning
-
-								util.Go(ctx, "ai tool call execution", func() {
-									toolResponse, toolErr := tool.Callback(ctx, toolCall.Arguments)
-									if toolErr != nil {
-										util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool execution failed: %s", toolErr.Error()))
-										streamResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusFailed
-										streamResult.ToolCalls[toolCallIndex].Response = toolErr.Error()
-									} else {
-										streamResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusSucceeded
-										streamResult.ToolCalls[toolCallIndex].Response = toolResponse.Text
-										streamResult.ToolCalls[toolCallIndex].EndTimestamp = util.GetSystemTimestamp()
-									}
-
-									callback(streamResult)
-									sw.Done()
-								}, func() {
-									util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool execution failed with panic, name: %s", tool.Name))
-									streamResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusFailed
-									streamResult.ToolCalls[toolCallIndex].Response = "tool execution failed with panic"
-
-									callback(streamResult)
-									sw.Done()
-								})
-							}
-						}
-					}
-
-					sw.Wait()
-
-					anyToolCallFailed := lo.SomeBy(streamResult.ToolCalls, func(toolCall common.ToolCallInfo) bool {
-						return toolCall.Status == common.ToolCallStatusFailed
-					})
-					if anyToolCallFailed {
-						streamResult.Status = common.ChatStreamStatusError
-						callback(streamResult)
-					} else {
-						streamResult.Status = common.ChatStreamStatusFinished
-						callback(streamResult)
-					}
-					return
-				}
-			}
+			a.runChatLoop(ctx, model, conversations, options, policy, provider, callback)
 		})
 	}
 
 	return nil
+}
+
+// runChatLoop is the explicit tool-enabled loop. Each iteration starts a new
+// stream, drains it, executes any tool calls, and either finishes or feeds the
+// tool results back for the next iteration. Bounded by MaxIterations and the
+// loop context.
+func (a *APIImpl) runChatLoop(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, policy common.LoopPolicy, provider ai.Provider, callback common.ChatStreamFunc) {
+	var loopCtx context.Context
+	var cancel context.CancelFunc
+	if policy.Timeout > 0 {
+		loopCtx, cancel = context.WithTimeout(ctx, policy.Timeout)
+	} else {
+		loopCtx, cancel = context.WithCancel(ctx)
+	}
+	defer cancel()
+
+	// localCopy keeps iterations from mutating the shared options while still
+	// letting the loop update the conversations slice each round.
+	opts := options
+	debugTraceName := opts.DebugTraceName
+	if debugTraceName == "" {
+		debugTraceName = "chat"
+	}
+
+	for iteration := 0; policy.MaxIterations < 0 || iteration < policy.MaxIterations; iteration++ {
+		iterationNumber := iteration + 1
+		modelCallId := fmt.Sprintf("%s-%d", debugTraceName, iterationNumber)
+		if loopCtx.Err() != nil {
+			opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+				Type:      common.AIChatDebugEventModelCallError,
+				Name:      debugTraceName,
+				Iteration: iterationNumber,
+				CallId:    modelCallId,
+				Model:     model,
+				Status:    string(common.ChatStreamStatusError),
+				Error:     "chat loop cancelled",
+			})
+			callback(common.ChatStreamData{Status: common.ChatStreamStatusError, Data: "chat loop cancelled"})
+			return
+		}
+
+		opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+			Type:         common.AIChatDebugEventModelCallStarted,
+			Name:         debugTraceName,
+			Iteration:    iterationNumber,
+			CallId:       modelCallId,
+			Model:        model,
+			Status:       "started",
+			Request:      cloneDebugConversations(conversations),
+			VisibleTools: debugToolSummaries(opts.Tools),
+		})
+
+		stream, err := provider.ChatStream(loopCtx, model, conversations, opts)
+		if err != nil {
+			opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+				Type:      common.AIChatDebugEventModelCallError,
+				Name:      debugTraceName,
+				Iteration: iterationNumber,
+				CallId:    modelCallId,
+				Model:     model,
+				Status:    string(common.ChatStreamStatusError),
+				Error:     err.Error(),
+			})
+			callback(common.ChatStreamData{Status: common.ChatStreamStatusError, Data: err.Error(), ToolCalls: []common.ToolCallInfo{}})
+			return
+		}
+
+		streamedResult, drainErr := a.drainStream(loopCtx, stream, callback)
+		if drainErr != nil {
+			opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+				Type:      common.AIChatDebugEventModelCallError,
+				Name:      debugTraceName,
+				Iteration: iterationNumber,
+				CallId:    modelCallId,
+				Model:     model,
+				Status:    string(common.ChatStreamStatusError),
+				Error:     drainErr.Error(),
+			})
+			callback(common.ChatStreamData{Status: common.ChatStreamStatusError, Data: drainErr.Error(), ToolCalls: []common.ToolCallInfo{}})
+			return
+		}
+		if streamedResult == nil {
+			opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+				Type:      common.AIChatDebugEventModelCallError,
+				Name:      debugTraceName,
+				Iteration: iterationNumber,
+				CallId:    modelCallId,
+				Model:     model,
+				Status:    string(common.ChatStreamStatusError),
+				Error:     "stream ended without a result",
+			})
+			// drainStream already reported a terminal status; nothing more to do.
+			return
+		}
+
+		// No tool calls means the model is done.
+		if len(streamedResult.ToolCalls) == 0 {
+			finalResult := *streamedResult
+			finalResult.Status = common.ChatStreamStatusFinished
+			opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+				Type:      common.AIChatDebugEventModelCallFinished,
+				Name:      debugTraceName,
+				Iteration: iterationNumber,
+				CallId:    modelCallId,
+				Model:     model,
+				Status:    string(finalResult.Status),
+				Response:  buildDebugResponseConversations(modelCallId, &finalResult),
+			})
+			callback(finalResult)
+			return
+		}
+
+		opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+			Type:      common.AIChatDebugEventModelCallFinished,
+			Name:      debugTraceName,
+			Iteration: iterationNumber,
+			CallId:    modelCallId,
+			Model:     model,
+			Status:    string(streamedResult.Status),
+			Response:  buildDebugResponseConversations(modelCallId, streamedResult),
+		})
+
+		allSucceeded := a.executeToolCalls(loopCtx, streamedResult, opts, callback, iterationNumber, modelCallId)
+
+		if !allSucceeded && !policy.RetryOnFailure {
+			streamedResult.Status = common.ChatStreamStatusError
+			callback(*streamedResult)
+			return
+		}
+
+		// load_tools expands only this chat loop's visible tool set; the global
+		// registry remains the discovery source and is not mutated.
+		opts.Tools = ai.AppendRequestedTools(opts.Tools, streamedResult.ToolCalls)
+
+		// Append the assistant message so the model sees its own response
+		// in the next iteration. Without this the model may repeat itself
+		// because it has no memory of what it already said.
+		conversations = append(conversations, common.Conversation{
+			Id:        fmt.Sprintf("%s-assistant", modelCallId),
+			Role:      common.ConversationRoleAssistant,
+			Text:      streamedResult.Data,
+			Reasoning: streamedResult.Reasoning,
+			Timestamp: util.GetSystemTimestamp(),
+		})
+
+		// Append tool results as tool-role conversations so the next iteration
+		// shows the model what each tool returned.
+		conversations = append(conversations, buildToolConversations(streamedResult)...)
+
+		// Sync this iteration's tool results to the UI before looping.
+		callback(*streamedResult)
+	}
+
+	opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+		Type:      common.AIChatDebugEventModelCallError,
+		Name:      debugTraceName,
+		Iteration: policy.MaxIterations,
+		CallId:    fmt.Sprintf("%s-%d", debugTraceName, policy.MaxIterations),
+		Model:     model,
+		Status:    string(common.ChatStreamStatusError),
+		Error:     fmt.Sprintf("chat loop exceeded max iterations (%d)", policy.MaxIterations),
+	})
+	callback(common.ChatStreamData{
+		Status:    common.ChatStreamStatusError,
+		Data:      fmt.Sprintf("chat loop exceeded max iterations (%d)", policy.MaxIterations),
+		ToolCalls: []common.ToolCallInfo{},
+	})
+}
+
+// drainStream consumes a provider stream until it either reaches the Streamed
+// status (returning the aggregated result) or hits a terminal error. Streaming
+// chunks are forwarded to the callback as they arrive.
+func (a *APIImpl) drainStream(ctx context.Context, stream ai.ChatStream, callback common.ChatStreamFunc) (*common.ChatStreamData, error) {
+	noContentCount := 0
+	for {
+		streamResult, streamErr := stream.Receive(ctx)
+		if streamErr != nil {
+			if streamErr == ai.ChatStreamNoContentErr {
+				noContentCount++
+				if noContentCount > 10 {
+					return nil, fmt.Errorf("too many empty stream retries")
+				}
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+			return nil, streamErr
+		}
+
+		a.applyStartTimeIfAbsent(&streamResult)
+
+		if streamResult.Status == common.ChatStreamStatusStreaming {
+			callback(streamResult)
+			continue
+		}
+
+		if streamResult.Status == common.ChatStreamStatusStreamed {
+			return &streamResult, nil
+		}
+	}
+}
+
+// executeToolCalls runs every tool call in streamedResult concurrently and
+// reports per-call status updates to the callback. Returns true when all calls
+// succeeded. Honors LoopPolicy.MaxRetries for repeated same-name failures.
+func (a *APIImpl) executeToolCalls(ctx context.Context, streamedResult *common.ChatStreamData, options common.ChatOptions, callback common.ChatStreamFunc, iteration int, parentCallId string) bool {
+	streamedResult.Status = common.ChatStreamStatusRunningToolCall
+
+	var sw sync.WaitGroup
+	retryCounts := make(map[string]int)
+
+	for toolCallIndex, toolCall := range streamedResult.ToolCalls {
+		tool, ok := findVisibleTool(options.Tools, toolCall.Name)
+		if !ok {
+			options.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+				Type:         common.AIChatDebugEventToolCallStarted,
+				Name:         "tool_call",
+				Iteration:    iteration,
+				CallId:       toolCall.Id,
+				ParentCallId: parentCallId,
+				Status:       string(toolCall.Status),
+				ToolCallInfo: &toolCall,
+			})
+			util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool not available in this chat step: %s", toolCall.Name))
+			streamedResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusSucceeded
+			streamedResult.ToolCalls[toolCallIndex].Response = fmt.Sprintf("tool %q is not loaded; call load_tools first", toolCall.Name)
+			streamedResult.ToolCalls[toolCallIndex].EndTimestamp = util.GetSystemTimestamp()
+			failedToolCall := streamedResult.ToolCalls[toolCallIndex]
+			options.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+				Type:         common.AIChatDebugEventToolCallFinished,
+				Name:         "tool_call",
+				Iteration:    iteration,
+				CallId:       failedToolCall.Id,
+				ParentCallId: parentCallId,
+				Status:       string(failedToolCall.Status),
+				ToolCallInfo: &failedToolCall,
+			})
+			continue
+		}
+
+		sw.Add(1)
+		util.Go(ctx, "ai tool call execution", func() {
+			defer sw.Done()
+			a.runSingleToolCall(ctx, tool, streamedResult, toolCallIndex, options, callback, retryCounts, iteration, parentCallId)
+		}, func() {
+			defer sw.Done()
+			util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool execution panicked, name: %s", tool.Name))
+			streamedResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusFailed
+			streamedResult.ToolCalls[toolCallIndex].Response = "tool execution failed with panic"
+			streamedResult.ToolCalls[toolCallIndex].EndTimestamp = util.GetSystemTimestamp()
+			failedToolCall := streamedResult.ToolCalls[toolCallIndex]
+			options.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+				Type:         common.AIChatDebugEventToolCallFinished,
+				Name:         "tool_call",
+				Iteration:    iteration,
+				CallId:       failedToolCall.Id,
+				ParentCallId: parentCallId,
+				Status:       string(failedToolCall.Status),
+				ToolCallInfo: &failedToolCall,
+			})
+			callback(*streamedResult)
+		})
+	}
+
+	sw.Wait()
+
+	return !lo.SomeBy(streamedResult.ToolCalls, func(tc common.ToolCallInfo) bool {
+		return tc.Status == common.ToolCallStatusFailed
+	})
+}
+
+// findVisibleTool enforces the per-step tool boundary advertised to the model.
+func findVisibleTool(tools []common.Tool, name string) (common.Tool, bool) {
+	for _, tool := range tools {
+		if tool.Name == name {
+			return tool, true
+		}
+	}
+	return common.Tool{}, false
+}
+
+// runSingleToolCall invokes one tool and records its result. Failures are
+// recorded as the tool-call response so the model can see them when
+// RetryOnFailure is on.
+func (a *APIImpl) runSingleToolCall(ctx context.Context, tool common.Tool, streamedResult *common.ChatStreamData, toolCallIndex int, options common.ChatOptions, callback common.ChatStreamFunc, retryCounts map[string]int, iteration int, parentCallId string) {
+	toolCall := streamedResult.ToolCalls[toolCallIndex]
+	util.GetLogger().Info(ctx, fmt.Sprintf("AI: Executing tool: %s with args: %v, toolcall id: %s", tool.Name, toolCall.Arguments, toolCall.Id))
+
+	streamedResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusRunning
+	runningToolCall := streamedResult.ToolCalls[toolCallIndex]
+	options.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+		Type:         common.AIChatDebugEventToolCallStarted,
+		Name:         "tool_call",
+		Iteration:    iteration,
+		CallId:       runningToolCall.Id,
+		ParentCallId: parentCallId,
+		Status:       string(runningToolCall.Status),
+		ToolCallInfo: &runningToolCall,
+	})
+	callback(*streamedResult)
+
+	toolResponse, toolErr := tool.Callback(ctx, toolCall.Arguments)
+	if toolErr != nil {
+		util.GetLogger().Info(ctx, fmt.Sprintf("AI: tool returned error (still counts as a result): %s", toolErr.Error()))
+		// Allow a few retries for transient failures within the same iteration.
+		retryCounts[tool.Name]++
+		if retryCounts[tool.Name] < options.LoopPolicy.MaxRetries {
+			toolResponse, toolErr = tool.Callback(ctx, toolCall.Arguments)
+		}
+	}
+	// Any response from the tool — even an error message like "file not found"
+	// or "permission denied" — is a valid result. The AI can read the error
+	// and self-correct. Only mark as failed when the tool crashed without
+	// producing any usable output (handled by the panic recovery above).
+	if toolErr != nil {
+		streamedResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusSucceeded
+		streamedResult.ToolCalls[toolCallIndex].Response = toolErr.Error()
+	} else {
+		streamedResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusSucceeded
+		streamedResult.ToolCalls[toolCallIndex].Response = toolResponse.Text
+	}
+	streamedResult.ToolCalls[toolCallIndex].EndTimestamp = util.GetSystemTimestamp()
+	finishedToolCall := streamedResult.ToolCalls[toolCallIndex]
+	options.DebugTrace.AppendEvent(common.AIChatDebugEvent{
+		Type:         common.AIChatDebugEventToolCallFinished,
+		Name:         "tool_call",
+		Iteration:    iteration,
+		CallId:       finishedToolCall.Id,
+		ParentCallId: parentCallId,
+		Status:       string(finishedToolCall.Status),
+		ToolCallInfo: &finishedToolCall,
+	})
+	callback(*streamedResult)
+}
+
+// buildToolConversations turns a streamed result's tool calls into tool-role
+// conversation entries so the next loop iteration presents them to the model.
+func buildToolConversations(streamedResult *common.ChatStreamData) []common.Conversation {
+	convs := make([]common.Conversation, 0, len(streamedResult.ToolCalls))
+	for _, tc := range streamedResult.ToolCalls {
+		convs = append(convs, common.Conversation{
+			Id:           tc.Id,
+			Role:         common.ConversationRoleTool,
+			Text:         tc.Delta,
+			Reasoning:    "",
+			ToolCallInfo: tc,
+			Timestamp:    tc.StartTimestamp,
+		})
+	}
+	return convs
 }
 
 func (a *APIImpl) applyStartTimeIfAbsent(streamResult *common.ChatStreamData) {
@@ -554,6 +805,57 @@ func (a *APIImpl) applyStartTimeIfAbsent(streamResult *common.ChatStreamData) {
 		}
 		streamResult.ToolCalls[toolCallIndex].StartTimestamp = startTime
 	}
+}
+
+// debugToolSummaries strips executable callbacks from tool definitions for trace output.
+func debugToolSummaries(tools []common.Tool) []common.AIChatDebugTool {
+	summaries := make([]common.AIChatDebugTool, 0, len(tools))
+	for _, tool := range tools {
+		server := ""
+		if tool.ServerConfig != nil {
+			server = tool.ServerConfig.Name
+		}
+		summaries = append(summaries, common.AIChatDebugTool{
+			Name:        tool.Name,
+			Description: tool.Description,
+			Source:      tool.Source,
+			Server:      server,
+		})
+	}
+	return summaries
+}
+
+// buildDebugResponseConversations converts a streamed response into trace-friendly messages.
+func buildDebugResponseConversations(parentCallId string, streamedResult *common.ChatStreamData) []common.Conversation {
+	conversations := []common.Conversation{}
+	if streamedResult.Data != "" || streamedResult.Reasoning != "" {
+		conversations = append(conversations, common.Conversation{
+			Id:        parentCallId + "-assistant",
+			Role:      common.ConversationRoleAssistant,
+			Text:      streamedResult.Data,
+			Reasoning: streamedResult.Reasoning,
+			Timestamp: util.GetSystemTimestamp(),
+		})
+	}
+	conversations = append(conversations, buildToolConversations(streamedResult)...)
+	return cloneDebugConversations(conversations)
+}
+
+// cloneDebugConversations detaches trace snapshots from mutable stream state.
+func cloneDebugConversations(conversations []common.Conversation) []common.Conversation {
+	cloned := make([]common.Conversation, len(conversations))
+	for i, conversation := range conversations {
+		cloned[i] = conversation
+		cloned[i].Images = append([]common.WoxImage(nil), conversation.Images...)
+		cloned[i].SkillRefs = append([]common.AISkillRef(nil), conversation.SkillRefs...)
+		if conversation.ToolCallInfo.Arguments != nil {
+			cloned[i].ToolCallInfo.Arguments = map[string]any{}
+			for key, value := range conversation.ToolCallInfo.Arguments {
+				cloned[i].ToolCallInfo.Arguments[key] = value
+			}
+		}
+	}
+	return cloned
 }
 
 func (a *APIImpl) OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData MRUData) (*QueryResult, error)) {

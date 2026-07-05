@@ -1025,6 +1025,7 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     }
   }
 
+
   // updateLang persists the new language code. The language json and plugin
   // translation refresh is handled by reloadSetting, which updateConfig invokes
   // internally after detecting the LangCode change. Calling _applyLangResourcesChange
@@ -3049,6 +3050,8 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
   _BuiltInSettingSearchDefinition(settingKey: 'HideGlanceIcon', navPath: 'ui', titleKey: 'ui_glance_hide_icon', subtitleKey: 'ui_glance_hide_icon_tips'),
   _BuiltInSettingSearchDefinition(settingKey: 'PrimaryGlance', navPath: 'ui', titleKey: 'ui_glance_primary', subtitleKey: 'ui_glance_primary_tips'),
   _BuiltInSettingSearchDefinition(settingKey: 'AIProviders', navPath: 'ai', titleKey: 'ui_ai_model', searchKeywords: ['ai provider', 'api key', 'model']),
+  _BuiltInSettingSearchDefinition(settingKey: 'AIMCPServers', navPath: 'ai', titleKey: 'ui_ai_mcp_servers', searchKeywords: ['mcp', 'tool', 'server']),
+  _BuiltInSettingSearchDefinition(settingKey: 'AISkills', navPath: 'ai', titleKey: 'ui_ai_skills', searchKeywords: ['skill', 'repo', 'path']),
   _BuiltInSettingSearchDefinition(settingKey: 'HttpProxyEnabled', navPath: 'network', titleKey: 'ui_proxy_enabled', searchKeywords: ['proxy']),
   _BuiltInSettingSearchDefinition(settingKey: 'HttpProxyUrl', navPath: 'network', titleKey: 'ui_proxy_url', searchKeywords: ['proxy url']),
   _BuiltInSettingSearchDefinition(

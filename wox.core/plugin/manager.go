@@ -1113,6 +1113,9 @@ func (m *Manager) mergeQueryLayouts(metadataLayout QueryLayout, responseLayout Q
 	if responseLayout.GridLayout != nil {
 		merged.GridLayout = responseLayout.GridLayout
 	}
+	if responseLayout.ChatMode {
+		merged.ChatMode = true
+	}
 
 	return merged
 }
