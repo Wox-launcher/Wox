@@ -84,6 +84,10 @@ class WoxAIChatController extends GetxController {
   final RxList<ChatCommandPaletteItem> commandPaletteItems = <ChatCommandPaletteItem>[].obs;
   final RxInt commandPaletteSelectedIndex = 0.obs;
   final RxBool isConversationSidebarCollapsed = false.obs;
+  // When non-empty, the command palette is filtered to a single group. Used by
+  // the model status chip to open the palette showing only models, without
+  // requiring the user to type a slash first.
+  final Rxn<ChatCommandPaletteGroup> commandPaletteFilterGroup = Rxn<ChatCommandPaletteGroup>();
   double _commandPaletteItemHeight = 38;
   double _commandPaletteHeaderHeight = 28;
   double _commandPaletteVerticalPadding = 8;
@@ -92,6 +96,11 @@ class WoxAIChatController extends GetxController {
   final RxMap<String, bool> toolCallExpandedStates = <String, bool>{}.obs;
   final RxMap<String, bool> toolActivityExpandedStates = <String, bool>{}.obs;
   final RxMap<String, bool> reasoningExpandedStates = <String, bool>{}.obs;
+  // Per-round collapse state for assistant rounds. A round is the run of
+  // assistant/tool messages between two user messages. Completed rounds are
+  // collapsed by default (only the final assistant reply + toolbar show); the
+  // user can expand to reveal the intermediate process.
+  final RxMap<String, bool> roundCollapsedStates = <String, bool>{}.obs;
 
   WoxAIChatController() {
     textController.addListener(_handleChatInputChanged);
@@ -127,10 +136,21 @@ class WoxAIChatController extends GetxController {
     return reasoningExpandedStates[conversationId] ?? true;
   }
 
+  // Toggle a completed round's collapsed state. Default is collapsed (true),
+  // so the first toggle expands it.
+  void toggleRoundCollapsed(String roundId) {
+    roundCollapsedStates[roundId] = !(roundCollapsedStates[roundId] ?? true);
+  }
+
+  bool isRoundCollapsed(String roundId) {
+    return roundCollapsedStates[roundId] ?? true;
+  }
+
   void _clearChatExpansionStates() {
     toolCallExpandedStates.clear();
     toolActivityExpandedStates.clear();
     reasoningExpandedStates.clear();
+    roundCollapsedStates.clear();
   }
 
   // Loads the preview bootstrap payload once per query result. Runtime chat
@@ -345,7 +365,11 @@ class WoxAIChatController extends GetxController {
           if (providerCompare != 0) return providerCompare;
           return a.name.compareTo(b.name);
         });
+    final filterGroup = commandPaletteFilterGroup.value;
     for (final model in sortedModels) {
+      if (filterGroup != null && filterGroup != ChatCommandPaletteGroup.model) {
+        continue;
+      }
       final item = ChatCommandPaletteItem(
         id: "model:${model.provider}:${model.providerAlias}:${model.name}",
         group: ChatCommandPaletteGroup.model,
@@ -367,6 +391,9 @@ class WoxAIChatController extends GetxController {
           return a.name.compareTo(b.name);
         });
     for (final skill in sortedSkills) {
+      if (filterGroup != null && filterGroup != ChatCommandPaletteGroup.skill) {
+        continue;
+      }
       final item = ChatCommandPaletteItem(
         id: "skill:${skill.id}",
         group: ChatCommandPaletteGroup.skill,
@@ -471,10 +498,26 @@ class WoxAIChatController extends GetxController {
     return codeUnit == 32 || codeUnit == 9 || codeUnit == 10 || codeUnit == 13;
   }
 
+  // Opens the command palette showing only models, invoked by clicking the
+  // model status chip below the chat input. Loads models on demand and
+  // starts with the first item selected.
+  void showModelPalette() {
+    ensureModelsLoaded(const UuidV4().generate());
+    commandPaletteFilterGroup.value = ChatCommandPaletteGroup.model;
+    isCommandPaletteVisible.value = true;
+    _slashQuery = "";
+    updateCommandPaletteItems();
+    if (commandPaletteItems.isNotEmpty) {
+      commandPaletteSelectedIndex.value = 0;
+    }
+    ensureCommandPaletteSelectionVisible();
+  }
+
   void hideCommandPalette() {
     isCommandPaletteVisible.value = false;
     commandPaletteItems.clear();
     commandPaletteSelectedIndex.value = 0;
+    commandPaletteFilterGroup.value = null;
     _slashTokenStart = null;
     _slashTokenEnd = null;
     _slashQuery = "";

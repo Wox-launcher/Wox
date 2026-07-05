@@ -346,10 +346,8 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
             child: Row(
               children: [
                 Obx(
-                  () => _buildChatStatusChip(
-                    Icons.model_training_rounded,
-                    controller.aiChatData.value.model.value.name.isEmpty ? tr("ui_ai_chat_select_model") : controller.aiChatData.value.model.value.name,
-                  ),
+                  () =>
+                      _buildModelSelectorChip(controller.aiChatData.value.model.value.name.isEmpty ? tr("ui_ai_chat_select_model") : controller.aiChatData.value.model.value.name),
                 ),
                 SizedBox(width: _metrics.scaledSpacing(8)),
                 const Spacer(),
@@ -440,17 +438,42 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  Widget _buildChatStatusChip(IconData icon, String text) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: _metrics.scaledSpacing(16), color: getThemeTextColor().withAlpha(180)),
-        SizedBox(width: _metrics.scaledSpacing(5)),
-        ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: _metrics.scaledSpacing(220)),
-          child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: _metrics.smallLabelFontSize)),
-        ),
-      ],
+  // Model chip below the chat input. Tapping it opens the command palette
+  // filtered to models so the user can switch the current chat's model without
+  // typing a slash. Hover shows a subtle highlight to signal it's clickable.
+  Widget _buildModelSelectorChip(String text) {
+    bool isHovered = false;
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return MouseRegion(
+          onEnter: (_) => setState(() => isHovered = true),
+          onExit: (_) => setState(() => isHovered = false),
+          child: InkWell(
+            onTap: () => controller.showModelPalette(),
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(4), vertical: _metrics.scaledSpacing(2)),
+              decoration: BoxDecoration(
+                color: isHovered ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor).withAlpha(40) : Colors.transparent,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.model_training_rounded, size: _metrics.scaledSpacing(16), color: getThemeTextColor().withAlpha(180)),
+                  SizedBox(width: _metrics.scaledSpacing(5)),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: _metrics.scaledSpacing(220)),
+                    child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: _metrics.resultSubtitleFontSize)),
+                  ),
+                  SizedBox(width: _metrics.scaledSpacing(4)),
+                  Icon(Icons.keyboard_arrow_down, size: _metrics.scaledSpacing(14), color: getThemeTextColor().withAlpha(140)),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -560,45 +583,59 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   }
 
   Widget _buildCommandPaletteItem(ChatCommandPaletteItem item, int index) {
-    final isActive = controller.commandPaletteSelectedIndex.value == index;
     final icon = item.group == ChatCommandPaletteGroup.model ? Icons.model_training_rounded : Icons.extension_rounded;
-    final titleColor = isActive ? safeFromCssColor(woxTheme.resultItemActiveTitleColor) : safeFromCssColor(woxTheme.resultItemTitleColor);
     final subTitleColor = safeFromCssColor(woxTheme.resultItemSubTitleColor);
-    final backgroundColor = isActive ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor) : Colors.transparent;
 
-    return InkWell(
-      onTap: () => controller.executeCommandPaletteItem(item),
-      child: Container(
-        height: _commandPaletteItemHeight,
-        padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(14)),
-        color: backgroundColor,
-        child: Row(
-          children: [
-            Icon(icon, size: _metrics.scaledSpacing(18), color: titleColor),
-            SizedBox(width: _metrics.scaledSpacing(10)),
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      item.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: titleColor, fontSize: _metrics.resultSubtitleFontSize, fontWeight: FontWeight.w600),
-                    ),
+    bool isHovered = false;
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return MouseRegion(
+          onEnter: (_) => setState(() => isHovered = true),
+          onExit: (_) => setState(() => isHovered = false),
+          child: InkWell(onTap: () => controller.executeCommandPaletteItem(item), child: _buildCommandPaletteItemContent(item, index, icon, subTitleColor, isHovered)),
+        );
+      },
+    );
+  }
+
+  Widget _buildCommandPaletteItemContent(ChatCommandPaletteItem item, int index, IconData icon, Color subTitleColor, bool isHovered) {
+    final isActive = controller.commandPaletteSelectedIndex.value == index;
+    final titleColor = isActive ? safeFromCssColor(woxTheme.resultItemActiveTitleColor) : safeFromCssColor(woxTheme.resultItemTitleColor);
+    final backgroundColor =
+        isActive
+            ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor)
+            : isHovered
+            ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor).withAlpha(40)
+            : Colors.transparent;
+
+    return Container(
+      height: _commandPaletteItemHeight,
+      padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(14)),
+      color: backgroundColor,
+      child: Row(
+        children: [
+          Icon(icon, size: _metrics.scaledSpacing(18), color: titleColor),
+          SizedBox(width: _metrics.scaledSpacing(10)),
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: titleColor, fontSize: _metrics.smallLabelFontSize, fontWeight: FontWeight.w600),
                   ),
-                  if (item.subTitle.isNotEmpty) ...[
-                    SizedBox(width: _metrics.scaledSpacing(8)),
-                    Expanded(
-                      child: Text(item.subTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: subTitleColor, fontSize: _metrics.smallLabelFontSize)),
-                    ),
-                  ],
+                ),
+                if (item.subTitle.isNotEmpty) ...[
+                  SizedBox(width: _metrics.scaledSpacing(8)),
+                  Expanded(child: Text(item.subTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: subTitleColor, fontSize: _metrics.smallLabelFontSize))),
                 ],
-              ),
+              ],
             ),
-            if (item.selected) Icon(Icons.check_rounded, size: _metrics.scaledSpacing(18), color: titleColor),
-          ],
-        ),
+          ),
+          if (item.selected) Icon(Icons.check_rounded, size: _metrics.scaledSpacing(18), color: titleColor),
+        ],
       ),
     );
   }
@@ -983,34 +1020,95 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
+  // Build the flat list of render items by grouping the conversation into
+  // user messages and assistant rounds. Each assistant round (the run of
+  // assistant/tool messages between two user messages, or from the last user
+  // message to the end of conversation) is wrapped in a _ChatRoundRenderItem
+  // so the intermediate process can be collapsed once the round completes,
+  // leaving only the final assistant reply + toolbar visible.
   List<_ChatRenderItem> _buildChatRenderItems(List<WoxAIChatConversation> conversations) {
     final items = <_ChatRenderItem>[];
-    final pendingTools = <WoxAIChatConversation>[];
 
-    void flushToolActivity() {
-      if (pendingTools.isEmpty) {
-        return;
+    // Per-round accumulator: every conversation (assistant + tool) in order.
+    var roundMessages = <WoxAIChatConversation>[];
+    var roundStarted = false;
+
+    _ChatRoundRenderItem? buildRoundItem({required bool isComplete}) {
+      if (roundMessages.isEmpty) {
+        return null;
       }
-      items.add(_ChatToolActivityRenderItem(List<WoxAIChatConversation>.unmodifiable(pendingTools)));
-      pendingTools.clear();
+
+      // The final assistant reply is only the round's trailing assistant
+      // message — i.e. the last message in the round must be an assistant
+      // role. If the round ends with a tool call (still generating, tools
+      // running after the last assistant chunk) there is no final reply yet
+      // and every message renders as intermediate in original order. This
+      // preserves chronological order: reasoning → tool calls → answer,
+      // instead of promoting an earlier assistant chunk above later tools.
+      final lastMsg = roundMessages.last;
+      final finalAssistant = lastMsg.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_ASSISTANT.value ? lastMsg : null;
+      final lastAssistantIndex = finalAssistant == null ? -1 : roundMessages.length - 1;
+
+      // Rebuild intermediate render items from the non-final conversations,
+      // batching consecutive tool calls into tool-activity items.
+      final intermediateItems = <_ChatRenderItem>[];
+      final pending = <WoxAIChatConversation>[];
+      void flushPending() {
+        if (pending.isEmpty) {
+          return;
+        }
+        intermediateItems.add(_ChatToolActivityRenderItem(List<WoxAIChatConversation>.unmodifiable(pending)));
+        pending.clear();
+      }
+
+      for (var i = 0; i < roundMessages.length; i++) {
+        if (i == lastAssistantIndex) {
+          continue;
+        }
+        final msg = roundMessages[i];
+        if (msg.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_TOOL.value) {
+          pending.add(msg);
+          continue;
+        }
+        flushPending();
+        intermediateItems.add(_ChatMessageRenderItem(msg));
+      }
+      flushPending();
+
+      // The final reply's reasoning is part of the collapsible process, but
+      // only once the round is complete: while generating the reasoning stays
+      // inline with the streaming final reply. When complete it's appended as
+      // a trailing intermediate item so it shows only when expanded, and the
+      // final reply body renders without reasoning.
+      if (isComplete && finalAssistant != null && finalAssistant.reasoning.trim().isNotEmpty) {
+        intermediateItems.add(_ChatReasoningRenderItem(finalAssistant));
+      }
+
+      final firstAssistantTs = _firstAssistantTimestamp(roundMessages);
+      final lastAssistantTs = finalAssistant?.timestamp;
+      final roundId = _roundId(roundMessages, finalAssistant);
+
+      return _ChatRoundRenderItem(
+        id: roundId,
+        intermediateItems: intermediateItems,
+        finalAssistantMessage: finalAssistant,
+        finalAssistantReasoning: finalAssistant?.reasoning ?? '',
+        isComplete: isComplete,
+        workedForStart: firstAssistantTs,
+        workedForEnd: isComplete ? lastAssistantTs : null,
+      );
     }
 
-    // Mark the last assistant render item added before the given index as the
-    // final one in its round. We look backwards from the insertion point so
-    // we can resolve this lazily once the next user message (or end of list)
-    // arrives, instead of tracking rounds in a separate pass.
-    void markLastAssistantInRound(int endIndex) {
-      for (int i = endIndex - 1; i >= 0; i--) {
-        final item = items[i];
-        if (item is _ChatMessageRenderItem) {
-          if (item.message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_ASSISTANT.value) {
-            item.isLastAssistantInRound = true;
-          }
-          // Stop at the first message render item regardless of role: user
-          // messages break assistant runs and don't need marking.
-          break;
-        }
+    void closeRound({required bool isComplete}) {
+      if (!roundStarted) {
+        return;
       }
+      final round = buildRoundItem(isComplete: isComplete);
+      if (round != null) {
+        items.add(round);
+      }
+      roundMessages = <WoxAIChatConversation>[];
+      roundStarted = false;
     }
 
     for (final conversation in conversations) {
@@ -1018,45 +1116,64 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
         continue;
       }
 
-      if (_isToolConversation(conversation)) {
-        pendingTools.add(conversation);
+      final isUser = conversation.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
+      if (isUser) {
+        // A new user message closes the in-progress round (completed, since
+        // the user only types after a round finishes) and emits it as a round
+        // item before rendering the user message itself.
+        closeRound(isComplete: true);
+        items.add(_ChatMessageRenderItem(conversation));
         continue;
       }
 
-      // A new user message starts a fresh round, so the previous round's last
-      // assistant reply (if any) becomes the toolbar owner.
-      if (conversation.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value) {
-        markLastAssistantInRound(items.length);
-      }
-
-      flushToolActivity();
-      items.add(_ChatMessageRenderItem(conversation));
+      // assistant or tool: accumulate into the current round.
+      roundStarted = true;
+      roundMessages.add(conversation);
     }
 
-    flushToolActivity();
-    // End of conversation: the trailing round's last assistant reply, if any,
-    // owns the toolbar.
-    markLastAssistantInRound(items.length);
+    // The trailing round is only "complete" when generation has stopped; while
+    // generating it stays open so intermediate process stays visible.
+    closeRound(isComplete: !controller.isGenerating.value);
+
     return items;
   }
 
+  int _firstAssistantTimestamp(List<WoxAIChatConversation> messages) {
+    for (final msg in messages) {
+      if (msg.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_ASSISTANT.value) {
+        return msg.timestamp;
+      }
+    }
+    return 0;
+  }
+
+  String _roundId(List<WoxAIChatConversation> messages, WoxAIChatConversation? finalAssistant) {
+    final first = messages.isNotEmpty ? messages.first.id : 'empty';
+    final last = finalAssistant?.id ?? (messages.isNotEmpty ? messages.last.id : 'empty');
+    return 'round:$first:$last';
+  }
+
   Widget _buildChatRenderItem(_ChatRenderItem item, BuildContext context) {
+    if (item is _ChatRoundRenderItem) {
+      return _buildRoundItem(item, context);
+    }
+
     if (item is _ChatMessageRenderItem) {
-      return _buildMessageItem(item.message, context, showMetaRow: item.isLastAssistantInRound);
+      return _buildMessageItem(item.message, context);
     }
 
     if (item is _ChatToolActivityRenderItem) {
       return _buildToolActivityItem(item);
     }
 
+    if (item is _ChatReasoningRenderItem) {
+      return _buildAssistantReasoningBlock(item.message, item.message.reasoning);
+    }
+
     return const SizedBox.shrink();
   }
 
-  bool _isToolConversation(WoxAIChatConversation conversation) {
-    return conversation.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_TOOL.value;
-  }
-
-  Widget _buildMessageItem(WoxAIChatConversation message, BuildContext context, {required bool showMetaRow}) {
+  Widget _buildMessageItem(WoxAIChatConversation message, BuildContext context) {
     final isUser = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
     final isAssistant = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_ASSISTANT.value;
 
@@ -1065,7 +1182,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     }
 
     if (isAssistant) {
-      return _buildAssistantMessageItem(message, showMetaRow: showMetaRow);
+      // Standalone (non-round) assistant items hide the meta row: only the
+      // final assistant inside a round owns the toolbar.
+      return _buildAssistantMessageItem(message, showMetaRow: false);
     }
 
     return const SizedBox.shrink();
@@ -1122,7 +1241,11 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   // Renders assistant messages as a full-width reading column.
   // Only the last assistant reply in a round renders the meta row (timestamp
   // plus copy/regenerate actions); intermediate assistant replies hide it.
-  Widget _buildAssistantMessageItem(WoxAIChatConversation message, {required bool showMetaRow}) {
+  // Renders assistant messages as a full-width reading column.
+  // showReasoning controls whether the reasoning block is rendered; rounds
+  // fold the final reply's reasoning into the collapsible intermediate area,
+  // so the final reply only shows text + images when collapsed.
+  Widget _buildAssistantMessageItem(WoxAIChatConversation message, {required bool showMetaRow, bool showReasoning = true}) {
     final fontColor = safeFromCssColor(woxTheme.resultItemTitleColor);
     var isHovered = false;
 
@@ -1140,7 +1263,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                   width: double.infinity,
                   margin: EdgeInsets.only(bottom: _metrics.scaledSpacing(3)),
                   padding: EdgeInsets.only(top: _metrics.scaledSpacing(1), right: _metrics.scaledSpacing(4)),
-                  child: _buildMessageContent(message, fontColor),
+                  child: _buildMessageContent(message, fontColor, showReasoning: showReasoning),
                 ),
                 if (showMetaRow) _buildHoverVisibleMessageMetaRow(message: message, isUser: false, visible: isHovered),
               ],
@@ -1151,9 +1274,117 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
+  // Renders one assistant round. Completed rounds collapse the intermediate
+  // process (tool calls + earlier assistant messages + the final reply's
+  // reasoning) by default and show a "Worked for {duration}" header above the
+  // final reply. While generating, everything stays visible. The final
+  // assistant reply always renders with its toolbar (timestamp +
+  // copy/regenerate); when collapsed its reasoning is hidden inside the
+  // collapsible area so only the answer text + toolbar remain visible.
+  Widget _buildRoundItem(_ChatRoundRenderItem item, BuildContext context) {
+    return Obx(() {
+      final children = <Widget>[];
+
+      if (item.canCollapse) {
+        children.add(_buildRoundHeader(item));
+      }
+
+      if (item.canCollapse && controller.isRoundCollapsed(item.id)) {
+        // Collapsed: intermediate process and the final reply's reasoning are
+        // hidden inside the fold. The final reply body only shows text/images.
+        children.add(_buildAssistantMessageItem(item.finalAssistantMessage!, showMetaRow: true, showReasoning: false));
+      } else {
+        // Open: either the round is still generating (canCollapse is false)
+        // or the user expanded a completed round. In both cases intermediate
+        // items render first. The final reply keeps its toolbar. When the
+        // round can collapse, reasoning is rendered as the trailing
+        // intermediate item and the reply body hides it; while generating the
+        // reasoning has not been extracted yet, so the reply body shows it
+        // inline.
+        final showReasoningInline = !item.canCollapse;
+        for (final sub in item.intermediateItems) {
+          children.add(_buildChatRenderItem(sub, context));
+        }
+        if (item.finalAssistantMessage != null) {
+          children.add(_buildAssistantMessageItem(item.finalAssistantMessage!, showMetaRow: true, showReasoning: showReasoningInline));
+        }
+      }
+
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+    });
+  }
+
+  // Renders a standalone reasoning block (used when the final reply is
+  // collapsed and its reasoning needs to live inside the collapsible area).
+  Widget _buildAssistantReasoningBlock(WoxAIChatConversation message, String reasoning) {
+    final fontColor = safeFromCssColor(woxTheme.resultItemTitleColor);
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(12), vertical: _metrics.scaledSpacing(3)),
+      child: Container(
+        width: double.infinity,
+        margin: EdgeInsets.only(bottom: _metrics.scaledSpacing(3)),
+        padding: EdgeInsets.only(top: _metrics.scaledSpacing(1), right: _metrics.scaledSpacing(4)),
+        child: WoxSelectableText(reasoning.trim(), style: TextStyle(fontSize: _metrics.smallLabelFontSize, height: 1.4, color: fontColor.withAlpha(120))),
+      ),
+    );
+  }
+
+  // The collapsible round header: a clickable row showing the worked-for
+  // duration (or "Working..." while in progress) with an expand/collapse
+  // chevron. Mirrors the tool-activity header styling for consistency.
+  Widget _buildRoundHeader(_ChatRoundRenderItem item) {
+    final titleColor = safeFromCssColor(woxTheme.resultItemSubTitleColor);
+    final collapsed = controller.isRoundCollapsed(item.id);
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(12), vertical: _metrics.scaledSpacing(3)),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => controller.toggleRoundCollapsed(item.id),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(2), vertical: _metrics.scaledSpacing(4)),
+          child: Row(
+            children: [
+              Icon(collapsed ? Icons.keyboard_arrow_right : Icons.keyboard_arrow_down, size: _metrics.scaledSpacing(16), color: titleColor),
+              SizedBox(width: _metrics.scaledSpacing(6)),
+              WoxChatToolcallDuration(
+                id: item.id,
+                startTimestamp: item.workedForStart,
+                endTimestamp: item.workedForEnd,
+                showUnit: false,
+                style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: titleColor, fontWeight: FontWeight.w600),
+                builder: (context, durationMs) {
+                  final label = item.workedForEnd == null ? tr('ui_ai_chat_round_working') : Strings.format(tr('ui_ai_chat_round_worked_duration'), [_formatDuration(durationMs)]);
+                  return Text(label, style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: titleColor, fontWeight: FontWeight.w600));
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Format a millisecond duration as a compact human-readable string. Uses
+  // seconds for short durations and m/ss once it exceeds a minute.
+  String _formatDuration(int durationMs) {
+    if (durationMs < 0) {
+      durationMs = 0;
+    }
+    final totalSeconds = (durationMs / 1000).round();
+    if (totalSeconds < 60) {
+      return '${totalSeconds}s';
+    }
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return seconds == 0 ? '${minutes}m' : '${minutes}m ${seconds}s';
+  }
+
   // Renders the shared text and image payload for visible chat messages.
-  Widget _buildMessageContent(WoxAIChatConversation message, Color fontColor) {
-    final hasReasoning = message.reasoning.trim().isNotEmpty;
+  // showReasoning folds the reasoning block out of the final round reply when
+  // the round is collapsed (reasoning lives in the collapsible area instead).
+  Widget _buildMessageContent(WoxAIChatConversation message, Color fontColor, {bool showReasoning = true}) {
+    final hasReasoning = showReasoning && message.reasoning.trim().isNotEmpty;
     final hasText = message.text.trim().isNotEmpty;
 
     return Column(
@@ -1580,13 +1811,7 @@ abstract class _ChatRenderItem {
 class _ChatMessageRenderItem extends _ChatRenderItem {
   final WoxAIChatConversation message;
 
-  // True when this is the final assistant message in its round (the run of
-  // messages between two user messages, or from the last user message to the
-  // end of the conversation). Only the last assistant message in a round shows
-  // the action toolbar; intermediate assistant messages hide the meta row.
-  bool isLastAssistantInRound = false;
-
-  _ChatMessageRenderItem(this.message);
+  const _ChatMessageRenderItem(this.message);
 }
 
 class _ChatToolActivityRenderItem extends _ChatRenderItem {
@@ -1600,6 +1825,59 @@ class _ChatToolActivityRenderItem extends _ChatRenderItem {
     }
     return 'tool-activity:${tools.first.id}';
   }
+}
+
+// A standalone reasoning block for the final assistant reply. Rounds fold the
+// final reply's reasoning into the collapsible area, so it is rendered as a
+// trailing intermediate item (visible only when expanded) instead of inline
+// above the final answer.
+class _ChatReasoningRenderItem extends _ChatRenderItem {
+  final WoxAIChatConversation message;
+
+  const _ChatReasoningRenderItem(this.message);
+}
+
+// Aggregates one assistant round: everything between a user message and the
+// next user message (or end of conversation). The last assistant message is
+// rendered as the round's "final answer" (with toolbar); everything before it
+// is collapsible intermediate process. Completed rounds are collapsed by
+// default and show a "Worked for {duration}" header.
+class _ChatRoundRenderItem extends _ChatRenderItem {
+  final String id;
+  // Items in this round in original order, excluding the final assistant item.
+  final List<_ChatRenderItem> intermediateItems;
+  // The final assistant message in this round, shown outside the collapsed
+  // region. Null when the round has no assistant reply yet (e.g. only tool
+  // calls so far while generating).
+  final WoxAIChatConversation? finalAssistantMessage;
+  // The final assistant reply's reasoning, captured separately so it can be
+  // rendered inside the collapsible area when the round is collapsed (the
+  // final reply body only shows text + images when collapsed).
+  final String finalAssistantReasoning;
+
+  // True when the round is considered finished: a following user message
+  // exists, or generation has stopped and the round is the trailing one.
+  final bool isComplete;
+
+  // Timestamp (ms) of the first assistant message in the round; 0 if none.
+  final int workedForStart;
+  // Timestamp (ms) of the final assistant message; null while generating.
+  final int? workedForEnd;
+
+  const _ChatRoundRenderItem({
+    required this.id,
+    required this.intermediateItems,
+    required this.finalAssistantMessage,
+    required this.finalAssistantReasoning,
+    required this.isComplete,
+    required this.workedForStart,
+    required this.workedForEnd,
+  });
+
+  // A round only needs the collapse affordance when it has both intermediate
+  // process and a final assistant reply. Single-message rounds or in-progress
+  // rounds render as plain message lists.
+  bool get canCollapse => isComplete && intermediateItems.isNotEmpty && finalAssistantMessage != null;
 }
 
 class _ChatCommandPaletteOverlay extends StatefulWidget {
