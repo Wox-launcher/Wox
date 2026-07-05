@@ -1352,6 +1352,7 @@
   "plugin_explorer_hint_message_dialog": "A pesquisa do Wox está disponível aqui. Clique para pesquisar esta pasta.",
   "plugin_indicator_activate": "Ativar",
   "plugin_indicator_activate_plugin": "Ativar o plugin %s",
+  "plugin_indicator_open_plugin_settings": "Abrir configurações de %s",
   "plugin_paste_to_window": "Colar em %s",
   "plugin_sys_empty_trash": "Esvaziar lixeira",
   "plugin_sys_lock_computer": "Bloquear PC",
