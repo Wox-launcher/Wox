@@ -130,6 +130,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/ai/model/default":   handleAIDefaultModel,
 	"/ai/ping":            handleAIPing,
 	"/ai/chat":            handleAIChat,
+	"/ai/chat/stop":      handleAIChatStop,
 	"/ai/chat/delete":     handleAIChatDelete,
 	"/ai/chat/summarize":  handleAIChatSummarize,
 	"/ai/mcp/tools":       handleAIMCPServerTools,
@@ -3181,6 +3182,27 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	chater.Chat(ctx, chatData, 0)
 
 	writeSuccessResponse(w, "")
+}
+
+// handleAIChatStop cancels the active streaming session for a chat.
+func handleAIChatStop(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	chatId := gjson.GetBytes(body, "chatId").String()
+	if chatId == "" {
+		writeErrorResponse(w, "chatId is empty")
+		return
+	}
+
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		writeErrorResponse(w, "ai chat plugin not found")
+		return
+	}
+
+	stopped := chater.StopChat(ctx, chatId)
+	writeSuccessResponse(w, stopped)
 }
 
 // handleAIChatDelete lets the chat preview manage its own sidebar state.

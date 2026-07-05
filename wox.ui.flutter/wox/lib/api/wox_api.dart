@@ -242,6 +242,10 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/chat", {"chatData": data.toJson()});
   }
 
+  Future<void> stopChatRequest(String traceId, String chatId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/chat/stop", {"chatId": chatId});
+  }
+
   Future<void> deleteAIChat(String traceId, String chatId) async {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/chat/delete", {"chatId": chatId});
   }

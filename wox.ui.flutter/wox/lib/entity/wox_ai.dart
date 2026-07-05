@@ -309,6 +309,7 @@ class WoxAIChatData {
   late Rxn<AIChatDebugTrace> debugTrace;
   late int createdAt;
   late int updatedAt;
+  late bool isStreaming;
 
   WoxAIChatData({
     required this.id,
@@ -319,6 +320,7 @@ class WoxAIChatData {
     required this.debugTrace,
     required this.createdAt,
     required this.updatedAt,
+    this.isStreaming = false,
   });
 
   static WoxAIChatData fromJson(Map<String, dynamic> json) {
@@ -352,6 +354,7 @@ class WoxAIChatData {
       debugTrace: parsedDebugTrace,
       createdAt: json['CreatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       updatedAt: json['UpdatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
+      isStreaming: json['IsStreaming'] ?? false,
     );
   }
 
@@ -383,6 +386,7 @@ class WoxAIChatData {
       debugTrace: Rxn<AIChatDebugTrace>(),
       createdAt: 0,
       updatedAt: 0,
+      isStreaming: false,
     );
   }
 }

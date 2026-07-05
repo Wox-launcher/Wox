@@ -13,6 +13,8 @@ const (
 	ReadSkillToolName = "read_skill"
 	// LoadToolsToolName is the runtime tool used to request executable tools for the next loop step.
 	LoadToolsToolName = "load_tools"
+	// AskUserToolName is the built-in tool for asking the user a question through the chat UI.
+	AskUserToolName = "ask_user"
 	// WebSearchToolName is the built-in search tool exposed when AI web access is enabled.
 	WebSearchToolName = "web_search"
 	// WebFetchToolName is the built-in page fetch tool exposed when AI web access is enabled.

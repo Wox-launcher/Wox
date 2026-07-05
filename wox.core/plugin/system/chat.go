@@ -41,6 +41,9 @@ type AIChatPlugin struct {
 	mcpServers  []common.AIChatMCPServerConfig
 	mcpToolsMap []common.MCPTool
 	api         plugin.API
+
+	// activeChatCancels maps chatId to the cancel func for the active streaming context.
+	activeChatCancels sync.Map
 }
 
 type aiChatRuntimeContext struct {
@@ -351,10 +354,16 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	r.appendOrUpdateChatData(aiChatData)
 	r.saveChats(ctx)
 
+	// Create a cancellable context so StopChat can interrupt the streaming loop.
+	chatCtx, cancelChat := context.WithCancel(ctx)
+	r.activeChatCancels.Store(aiChatData.Id, cancelChat)
+	defer r.activeChatCancels.Delete(aiChatData.Id)
+
 	const chatStreamUIUpdateMinIntervalMs int64 = 120
 	var chatDataMu sync.Mutex
 	var lastChatResponseAt int64
 	var responseId = uuid.NewString()
+	var prevStatus common.ChatStreamDataStatus
 
 	snapshotChatData := func(force bool) (common.AIChatData, bool) {
 		now := util.GetSystemTimestamp()
@@ -372,7 +381,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 
 	// Plain chat exposes runtime discovery tools plus high-frequency web tools.
 	// Other catalog tools become callable after the model requests them with load_tools.
-	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, runtimeContext.Conversations, common.ChatOptions{
+	chatErr := r.api.AIChatStream(chatCtx, aiChatData.Model, runtimeContext.Conversations, common.ChatOptions{
 		Tools:          r.initialToolsForRuntime(ctx),
 		LoopPolicy:     common.LoopPolicy{MaxIterations: 25, RetryOnFailure: true, MaxRetries: 3},
 		DebugTrace:     runtimeContext.DebugTrace,
@@ -386,6 +395,16 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		var isFinished bool
 
 		chatDataMu.Lock()
+
+		// Detect the start of a new model call iteration (streaming after a
+		// non-streaming status like running_tool_call). Generate a fresh
+		// responseId so each iteration gets its own assistant message instead
+		// of overwriting the previous iteration's reasoning and text.
+		if streamResult.Status == common.ChatStreamStatusStreaming && prevStatus != "" && prevStatus != common.ChatStreamStatusStreaming {
+			responseId = uuid.NewString()
+		}
+		prevStatus = streamResult.Status
+
 		// Update conversations and sync to UI.
 		if streamResult.Data != "" || streamResult.Reasoning != "" {
 			r.appendOrUpdateConversationAtEnd(&aiChatData, common.Conversation{
@@ -397,21 +416,15 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 			})
 		}
 		if len(streamResult.ToolCalls) > 0 {
-			visibleToolCallIndex := 0
 			for _, toolCall := range streamResult.ToolCalls {
 				if isInternalChatToolCall(toolCall) {
 					continue
 				}
-				reasoning := ""
-				if visibleToolCallIndex == 0 {
-					reasoning = streamResult.Reasoning
-				}
-				visibleToolCallIndex++
 				r.appendOrUpdateConversation(&aiChatData, common.Conversation{
 					Id:           toolCall.Id,
 					Role:         common.ConversationRoleTool,
 					Text:         toolCall.Delta,
-					Reasoning:    reasoning,
+					Reasoning:    "",
 					ToolCallInfo: toolCall,
 					Timestamp:    toolCall.StartTimestamp,
 				})
@@ -422,10 +435,17 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		forceSend := streamResult.Status != common.ChatStreamStatusStreaming
 		snapshot, shouldSendSnapshot = snapshotChatData(forceSend)
 
+		// Set the transient IsStreaming flag so the UI knows when to toggle the stop button.
+		snapshot.IsStreaming = streamResult.IsNotFinished()
+
 		if streamResult.Status == common.ChatStreamStatusFinished {
 			isFinished = true
 			finishedSnapshot = snapshot
 		}
+		// When the loop ends with an error (e.g. max iterations exceeded),
+		// still persist the chat data so the user can see the conversation
+		// when they reopen the chat later.
+		isTerminalError := streamResult.Status == common.ChatStreamStatusError
 		chatDataMu.Unlock()
 
 		if shouldSendSnapshot {
@@ -443,6 +463,10 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 				r.summaryTitleIfNecessary(ctx, finishedSnapshot)
 			}
 			// The loop now continues inside AIChatStream; Chat() is only invoked once.
+		} else if isTerminalError {
+			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream ended with error, saving chat data: %s", streamResult.Data))
+			r.appendOrUpdateChatData(snapshot)
+			r.saveChats(ctx)
 		}
 	})
 
@@ -454,6 +478,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 			Text:      fmt.Sprintf(r.api.GetTranslation(ctx, "ui_ai_chat_error"), chatErr.Error()),
 			Timestamp: util.GetSystemTimestamp(),
 		})
+		aiChatData.IsStreaming = false
 		plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
 		r.appendOrUpdateChatData(aiChatData)
 		r.saveChats(ctx)
@@ -543,7 +568,7 @@ func formatRuntimeTimePrompt(now time.Time) string {
 
 // initialToolsForRuntime returns tools callable on the first model step.
 func (r *AIChatPlugin) initialToolsForRuntime(ctx context.Context) []common.Tool {
-	names := []string{ai.ReadSkillToolName, ai.LoadToolsToolName}
+	names := []string{ai.ReadSkillToolName, ai.LoadToolsToolName, ai.AskUserToolName}
 	if r.isWebAccessEnabled(ctx) {
 		names = append(names, ai.WebSearchToolName, ai.WebFetchToolName)
 	}
@@ -811,6 +836,7 @@ func cloneAIChatDataForUI(aiChatData common.AIChatData) common.AIChatData {
 func cloneAIChatDataForState(aiChatData common.AIChatData) common.AIChatData {
 	snapshot := cloneAIChatDataForUI(aiChatData)
 	snapshot.DebugTrace = nil
+	snapshot.IsStreaming = false
 	return snapshot
 }
 
@@ -882,12 +908,16 @@ func (r *AIChatPlugin) appendOrUpdateConversation(aiChatData *common.AIChatData,
 	aiChatData.Conversations = append(aiChatData.Conversations, conversation)
 }
 
-// appendOrUpdateConversationAtEnd keeps streaming assistant updates after tool cards.
+// appendOrUpdateConversationAtEnd appends a new conversation at the end of
+// the list, or updates it in place if it already exists. This preserves
+// chronological order: once an assistant message is positioned before its
+// tool calls, subsequent updates (e.g. tool result callbacks) will not
+// move it after the tool calls.
 func (r *AIChatPlugin) appendOrUpdateConversationAtEnd(aiChatData *common.AIChatData, conversation common.Conversation) {
 	for i := range aiChatData.Conversations {
 		if aiChatData.Conversations[i].Id == conversation.Id {
-			aiChatData.Conversations = append(aiChatData.Conversations[:i], aiChatData.Conversations[i+1:]...)
-			break
+			aiChatData.Conversations[i] = conversation
+			return
 		}
 	}
 
@@ -910,6 +940,19 @@ func (r *AIChatPlugin) appendOrUpdateChatData(aiChatData common.AIChatData) {
 	sort.Slice(r.chats, func(i, j int) bool {
 		return r.chats[i].UpdatedAt > r.chats[j].UpdatedAt
 	})
+}
+
+// StopChat cancels the active streaming context for the given chat id.
+// Returns true if a streaming session was found and cancelled.
+func (r *AIChatPlugin) StopChat(ctx context.Context, chatId string) bool {
+	if cancelFunc, ok := r.activeChatCancels.LoadAndDelete(chatId); ok {
+		if cancel, ok := cancelFunc.(context.CancelFunc); ok {
+			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Stopping chat with ID: %s", chatId))
+			cancel()
+			return true
+		}
+	}
+	return false
 }
 
 // DeleteChat removes a persisted chat by id and reports whether it existed.

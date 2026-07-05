@@ -900,6 +900,7 @@
   "ui_ai_chat_input_hint": "Digite uma mensagem aqui, pressione ← para enviar",
   "ui_ai_chat_configure_tools": "Configurar uso de ferramentas",
   "ui_ai_chat_send": "Enviar",
+  "ui_ai_chat_stop": "Parar",
   "ui_ai_chat_options": "Opções de chat",
   "ui_ai_chat_select_model_title": "Selecionar modelo",
   "ui_ai_chat_configure_tools_title": "Configurar ferramentas",

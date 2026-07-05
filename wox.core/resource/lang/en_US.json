@@ -960,6 +960,7 @@
   "ui_ai_chat_input_hint": "Type a message here, press ← to send",
   "ui_ai_chat_configure_tools": "Configure Tool Usage",
   "ui_ai_chat_send": "Send",
+  "ui_ai_chat_stop": "Stop",
   "ui_ai_chat_options": "Chat Options",
   "ui_ai_chat_select_model_title": "Select Model",
   "ui_ai_chat_configure_tools_title": "Configure Tools",

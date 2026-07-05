@@ -164,6 +164,9 @@ type AIChatData struct {
 
 	CreatedAt int64
 	UpdatedAt int64
+
+	// IsStreaming is a transient UI-only flag; never persisted.
+	IsStreaming bool
 }
 
 // AIChatCompactionEntry records a runtime context checkpoint for long chats.
@@ -343,6 +346,7 @@ type AIChatPreviewData struct {
 
 type AIChater interface {
 	Chat(ctx context.Context, aiChatData AIChatData, chatLoopCount int)
+	StopChat(ctx context.Context, chatId string) bool
 	DeleteChat(ctx context.Context, chatId string) bool
 	SummarizeChat(ctx context.Context, chatId string) bool
 	GetAllTools(ctx context.Context) []MCPTool

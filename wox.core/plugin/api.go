@@ -578,6 +578,17 @@ func (a *APIImpl) runChatLoop(ctx context.Context, model common.Model, conversat
 		// registry remains the discovery source and is not mutated.
 		opts.Tools = ai.AppendRequestedTools(opts.Tools, streamedResult.ToolCalls)
 
+		// Append the assistant message so the model sees its own response
+		// in the next iteration. Without this the model may repeat itself
+		// because it has no memory of what it already said.
+		conversations = append(conversations, common.Conversation{
+			Id:        fmt.Sprintf("%s-assistant", modelCallId),
+			Role:      common.ConversationRoleAssistant,
+			Text:      streamedResult.Data,
+			Reasoning: streamedResult.Reasoning,
+			Timestamp: util.GetSystemTimestamp(),
+		})
+
 		// Append tool results as tool-role conversations so the next iteration
 		// shows the model what each tool returned.
 		conversations = append(conversations, buildToolConversations(streamedResult)...)
@@ -656,7 +667,7 @@ func (a *APIImpl) executeToolCalls(ctx context.Context, streamedResult *common.C
 				ToolCallInfo: &toolCall,
 			})
 			util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool not available in this chat step: %s", toolCall.Name))
-			streamedResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusFailed
+			streamedResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusSucceeded
 			streamedResult.ToolCalls[toolCallIndex].Response = fmt.Sprintf("tool %q is not loaded; call load_tools first", toolCall.Name)
 			streamedResult.ToolCalls[toolCallIndex].EndTimestamp = util.GetSystemTimestamp()
 			failedToolCall := streamedResult.ToolCalls[toolCallIndex]
@@ -735,17 +746,19 @@ func (a *APIImpl) runSingleToolCall(ctx context.Context, tool common.Tool, strea
 
 	toolResponse, toolErr := tool.Callback(ctx, toolCall.Arguments)
 	if toolErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool execution failed: %s", toolErr.Error()))
+		util.GetLogger().Info(ctx, fmt.Sprintf("AI: tool returned error (still counts as a result): %s", toolErr.Error()))
 		// Allow a few retries for transient failures within the same iteration.
 		retryCounts[tool.Name]++
 		if retryCounts[tool.Name] < options.LoopPolicy.MaxRetries {
-			// Re-attempt once more before giving up; the model may still recover
-			// via the error message we record when we give up below.
 			toolResponse, toolErr = tool.Callback(ctx, toolCall.Arguments)
 		}
 	}
+	// Any response from the tool — even an error message like "file not found"
+	// or "permission denied" — is a valid result. The AI can read the error
+	// and self-correct. Only mark as failed when the tool crashed without
+	// producing any usable output (handled by the panic recovery above).
 	if toolErr != nil {
-		streamedResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusFailed
+		streamedResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusSucceeded
 		streamedResult.ToolCalls[toolCallIndex].Response = toolErr.Error()
 	} else {
 		streamedResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusSucceeded
@@ -769,16 +782,12 @@ func (a *APIImpl) runSingleToolCall(ctx context.Context, tool common.Tool, strea
 // conversation entries so the next loop iteration presents them to the model.
 func buildToolConversations(streamedResult *common.ChatStreamData) []common.Conversation {
 	convs := make([]common.Conversation, 0, len(streamedResult.ToolCalls))
-	for i, tc := range streamedResult.ToolCalls {
-		reasoning := ""
-		if i == 0 {
-			reasoning = streamedResult.Reasoning
-		}
+	for _, tc := range streamedResult.ToolCalls {
 		convs = append(convs, common.Conversation{
 			Id:           tc.Id,
 			Role:         common.ConversationRoleTool,
 			Text:         tc.Delta,
-			Reasoning:    reasoning,
+			Reasoning:    "",
 			ToolCallInfo: tc,
 			Timestamp:    tc.StartTimestamp,
 		})

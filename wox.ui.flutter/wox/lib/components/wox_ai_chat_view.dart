@@ -332,21 +332,47 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                 ),
                 SizedBox(width: _metrics.scaledSpacing(8)),
                 const Spacer(),
-                InkWell(
-                  onTap: () => controller.sendMessage(),
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(8), vertical: _metrics.scaledSpacing(4)),
-                    decoration: BoxDecoration(color: safeFromCssColor(woxTheme.actionItemActiveBackgroundColor), borderRadius: BorderRadius.circular(4)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.keyboard_return, size: _metrics.scaledSpacing(14), color: safeFromCssColor(woxTheme.actionItemActiveFontColor)),
-                        SizedBox(width: _metrics.scaledSpacing(4)),
-                        Text(tr('ui_ai_chat_send'), style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: safeFromCssColor(woxTheme.actionItemActiveFontColor))),
-                      ],
+                Obx(() {
+                  final generating = controller.isGenerating.value;
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => generating ? controller.stopChat() : controller.sendMessage(),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(10), vertical: _metrics.scaledSpacing(6)),
+                        decoration: BoxDecoration(
+                          color: generating
+                              ? safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(30)
+                              : safeFromCssColor(woxTheme.actionItemActiveBackgroundColor),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              generating ? Icons.stop_rounded : Icons.keyboard_return,
+                              size: _metrics.scaledSpacing(16),
+                              color: generating
+                                  ? safeFromCssColor(woxTheme.resultItemTitleColor)
+                                  : safeFromCssColor(woxTheme.actionItemActiveFontColor),
+                            ),
+                            SizedBox(width: _metrics.scaledSpacing(4)),
+                            Text(
+                              generating ? tr('ui_ai_chat_stop') : tr('ui_ai_chat_send'),
+                              style: TextStyle(
+                                fontSize: _metrics.smallLabelFontSize,
+                                color: generating
+                                    ? safeFromCssColor(woxTheme.resultItemTitleColor)
+                                    : safeFromCssColor(woxTheme.actionItemActiveFontColor),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                }),
               ],
             ),
           ),
@@ -583,7 +609,11 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
           if (controller.executeSelectedCommandPaletteItem()) {
             return KeyEventResult.handled;
           }
-          controller.sendMessage();
+          if (controller.isGenerating.value) {
+            controller.stopChat();
+          } else {
+            controller.sendMessage();
+          }
           return KeyEventResult.handled;
         case LogicalKeyboardKey.arrowDown:
           controller.moveCommandPaletteSelection(1);
@@ -1075,12 +1105,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   // Renders assistant messages as a full-width reading column.
   Widget _buildAssistantMessageItem(WoxAIChatConversation message) {
     final fontColor = safeFromCssColor(woxTheme.resultItemTitleColor);
-    final isThinkingOnly = _shouldShowReasoningActivity(message);
     var isHovered = false;
-
-    if (isThinkingOnly) {
-      return Padding(padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(12), vertical: _metrics.scaledSpacing(3)), child: _buildReasoningActivityItem(message));
-    }
 
     return StatefulBuilder(
       builder: (context, setHoverState) {
@@ -1096,7 +1121,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                   width: double.infinity,
                   margin: EdgeInsets.only(bottom: _metrics.scaledSpacing(3)),
                   padding: EdgeInsets.only(top: _metrics.scaledSpacing(1), right: _metrics.scaledSpacing(4)),
-                  child: _buildAssistantMessageContent(message, fontColor),
+                  child: _buildMessageContent(message, fontColor),
                 ),
                 _buildHoverVisibleMessageMetaRow(message: message, isUser: false, visible: isHovered),
               ],
@@ -1107,23 +1132,15 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  Widget _buildAssistantMessageContent(WoxAIChatConversation message, Color fontColor) {
-    final hasContent = message.text.trim().isNotEmpty || message.images.isNotEmpty;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [if (_shouldShowReasoningActivity(message)) _buildReasoningActivityItem(message), if (hasContent) _buildMessageContent(message, fontColor)],
-    );
-  }
-
   // Renders the shared text and image payload for visible chat messages.
   Widget _buildMessageContent(WoxAIChatConversation message, Color fontColor) {
-    final hasText = message.text.trim().isNotEmpty;
+    final data = _formatMessageWithReasoning(message);
+    final hasText = data.trim().isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (hasText) WoxMarkdownView(data: message.text, fontColor: fontColor, fontSize: _metrics.resultSubtitleFontSize),
+        if (hasText) WoxMarkdownView(data: data, fontColor: fontColor, fontSize: _metrics.resultSubtitleFontSize),
         if (message.images.isNotEmpty) ...[
           if (hasText) SizedBox(height: _metrics.scaledSpacing(8)),
           Wrap(
@@ -1139,50 +1156,24 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  bool _shouldShowReasoningActivity(WoxAIChatConversation message) {
-    return message.reasoning.trim().isNotEmpty && message.text.trim().isEmpty && message.images.isEmpty;
-  }
+  // Formats reasoning as a markdown blockquote prepended to the message text.
+  String _formatMessageWithReasoning(WoxAIChatConversation message) {
+    final content = message.text;
+    final reasoning = message.reasoning;
 
-  Widget _buildReasoningActivityItem(WoxAIChatConversation message) {
-    final titleColor = safeFromCssColor(woxTheme.resultItemSubTitleColor);
-    final contentColor = safeFromCssColor(woxTheme.resultItemTitleColor);
+    if (reasoning.trim().isEmpty) {
+      return content;
+    }
 
-    return Obx(() {
-      final expanded = controller.isReasoningExpanded(message.id);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => controller.toggleReasoningExpanded(message.id),
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(2), vertical: _metrics.scaledSpacing(6)),
-              child: Row(
-                children: [
-                  Icon(Icons.psychology_alt_outlined, size: _metrics.scaledSpacing(16), color: titleColor),
-                  SizedBox(width: _metrics.scaledSpacing(8)),
-                  Flexible(
-                    child: Text(
-                      tr("ui_ai_chat_reasoning_title"),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: _metrics.smallLabelFontSize, color: titleColor, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  SizedBox(width: _metrics.scaledSpacing(6)),
-                  Icon(expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right, size: _metrics.scaledSpacing(16), color: titleColor),
-                ],
-              ),
-            ),
-          ),
-          if (expanded)
-            Padding(
-              padding: EdgeInsets.only(left: _metrics.scaledSpacing(24), top: _metrics.scaledSpacing(2), bottom: _metrics.scaledSpacing(4)),
-              child: WoxSelectableText(message.reasoning.trim(), style: TextStyle(fontSize: _metrics.smallLabelFontSize, height: 1.35, color: contentColor.withAlpha(210))),
-            ),
-        ],
-      );
-    });
+    // Format reasoning as markdown blockquote (each line prefixed with "> ")
+    final reasoningLines = reasoning.split('\n');
+    final formattedReasoning = reasoningLines.map((line) => '> $line').join('\n');
+
+    if (content.trim().isEmpty) {
+      return formattedReasoning;
+    }
+
+    return '$formattedReasoning\n\n$content';
   }
 
   // Keeps the metadata row reserved while hiding actions until hover.

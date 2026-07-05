@@ -76,6 +76,7 @@ class WoxAIChatController extends GetxController {
   final RxBool isLoadingSkills = false.obs;
   final Rxn<AIQuestion> pendingAIQuestion = Rxn<AIQuestion>();
   final RxBool isDebugInspectorVisible = false.obs;
+  final RxBool isGenerating = false.obs;
 
   // State for slash command palette
   final RxBool isCommandPaletteVisible = false.obs;
@@ -118,11 +119,11 @@ class WoxAIChatController extends GetxController {
   }
 
   void toggleReasoningExpanded(String conversationId) {
-    reasoningExpandedStates[conversationId] = !(reasoningExpandedStates[conversationId] ?? false);
+    reasoningExpandedStates[conversationId] = !(reasoningExpandedStates[conversationId] ?? true);
   }
 
   bool isReasoningExpanded(String conversationId) {
-    return reasoningExpandedStates[conversationId] ?? false;
+    return reasoningExpandedStates[conversationId] ?? true;
   }
 
   void _clearChatExpansionStates() {
@@ -166,6 +167,7 @@ class WoxAIChatController extends GetxController {
     aiChatData.value = _createDraftChat();
     draftSkillRefs.clear();
     _clearChatExpansionStates();
+    isGenerating.value = false;
     hideCommandPalette();
     if (aiChatData.value.model.value.name.isEmpty) {
       _setDefaultModel(const UuidV4().generate());
@@ -177,6 +179,7 @@ class WoxAIChatController extends GetxController {
     aiChatData.value = chat.clone();
     draftSkillRefs.clear();
     _clearChatExpansionStates();
+    isGenerating.value = false;
     textController.clear();
     hideCommandPalette();
     SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -686,7 +689,13 @@ class WoxAIChatController extends GetxController {
       scrollToBottomOfAiChat();
     });
 
+    isGenerating.value = true;
     WoxApi.instance.sendChatRequest(const UuidV4().generate(), aiChatData.value);
+  }
+
+  // Stop the active streaming session for the current chat.
+  void stopChat() {
+    WoxApi.instance.stopChatRequest(const UuidV4().generate(), aiChatData.value.id);
   }
 
   String formatTimestamp(int timestamp) {
@@ -706,6 +715,9 @@ class WoxAIChatController extends GetxController {
       aiChatData.value.compactionEntries.assignAll(data.compactionEntries);
       aiChatData.value.debugTrace.value = data.debugTrace.value;
       aiChatData.value.updatedAt = data.updatedAt;
+
+      // Sync streaming state from backend so the send/stop button toggles correctly.
+      isGenerating.value = data.isStreaming;
 
       // Keep streaming pinned to the bottom while the user is already reading
       // the latest message, but preserve manual scrollback once they move away.
@@ -819,6 +831,7 @@ class WoxAIChatController extends GetxController {
     aiChatData.value.compactionEntries.clear();
     aiChatData.value.debugTrace.value = null;
 
+    isGenerating.value = true;
     WoxApi.instance.sendChatRequest(const UuidV4().generate(), aiChatData.value);
   }
 
