@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"unicode"
 
 	"wox/common"
+	"wox/setting"
 	"wox/util"
 
 	"gopkg.in/yaml.v3"
@@ -96,47 +96,40 @@ func DiscoverSkills(ctx context.Context) ([]common.Skill, error) {
 }
 
 func discoverSkillRoots() []skillDiscoveryRoot {
-	roots := []skillDiscoveryRoot{
-		{Path: util.GetLocation().GetAISkillsDirectory(), Source: "wox", SourceName: "Wox"},
-	}
+	var roots []skillDiscoveryRoot
 
-	if cwd, err := os.Getwd(); err == nil {
-		roots = append(roots,
-			skillDiscoveryRoot{Path: filepath.Join(cwd, ".agents", "skills"), Source: "wox-builtin", SourceName: "Wox Built-in", Builtin: true},
-			skillDiscoveryRoot{Path: filepath.Join(cwd, "..", ".agents", "skills"), Source: "wox-builtin", SourceName: "Wox Built-in", Builtin: true},
-		)
-	}
-
-	if home, err := os.UserHomeDir(); err == nil {
-		roots = append(roots,
-			skillDiscoveryRoot{Path: filepath.Join(home, ".codex", "skills"), Source: "codex", SourceName: "Codex"},
-			skillDiscoveryRoot{Path: filepath.Join(home, ".codex", "plugins", "cache"), Source: "codex-plugin", SourceName: "Codex Plugin"},
-			skillDiscoveryRoot{Path: filepath.Join(home, ".claude", "skills"), Source: "claude", SourceName: "Claude"},
-		)
-
-		if runtime.GOOS == "darwin" {
-			roots = append(roots, skillDiscoveryRoot{
-				Path:       filepath.Join(home, "Library", "Application Support", "Claude", "skills"),
-				Source:     "claude",
-				SourceName: "Claude",
-			})
+	// Skills are only added by the user (local directory or remote git URL).
+	// There is no built-in Wox skill directory scan — all skills come from the
+	// AISkills setting.
+	ctx := context.Background()
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	for _, skill := range woxSetting.AISkills.Get() {
+		dir := strings.TrimSpace(skill.Path)
+		if dir == "" {
+			continue
 		}
-		if runtime.GOOS == "linux" {
-			roots = append(roots, skillDiscoveryRoot{
-				Path:       filepath.Join(home, ".config", "claude", "skills"),
-				Source:     "claude",
-				SourceName: "Claude",
-			})
-		}
-		if runtime.GOOS == "windows" {
-			if appData := strings.TrimSpace(os.Getenv("APPDATA")); appData != "" {
-				roots = append(roots, skillDiscoveryRoot{
-					Path:       filepath.Join(appData, "Claude", "skills"),
-					Source:     "claude",
-					SourceName: "Claude",
-				})
+
+		source := "local"
+		sourceName := "Local"
+		if strings.TrimSpace(skill.SourceUrl) != "" {
+			source = "remote"
+			sourceName = "Remote"
+			// Re-clone if the local cache directory is missing.
+			if !util.IsDirExists(dir) {
+				if clonedDir, cloneErr := CloneSkillRepo(ctx, skill.SourceUrl); cloneErr == nil {
+					dir = clonedDir
+				} else {
+					// Skip this skill if re-clone fails; it will show an error in the UI.
+					continue
+				}
 			}
 		}
+
+		roots = append(roots, skillDiscoveryRoot{
+			Path:       dir,
+			Source:     source,
+			SourceName: sourceName,
+		})
 	}
 
 	return dedupeSkillRoots(roots)

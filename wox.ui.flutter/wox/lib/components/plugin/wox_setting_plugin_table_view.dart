@@ -26,7 +26,7 @@ import 'wox_setting_plugin_item_view.dart';
 import 'wox_setting_plugin_table_update_view.dart';
 
 typedef WoxSettingPluginTableCreateDialogBuilder =
-    Future<void> Function(BuildContext context, Future<String?> Function(Map<String, dynamic> row) saveRow, {Map<String, dynamic> initialRow});
+    Future<void> Function(BuildContext context, Future<String?> Function(Map<String, dynamic> row) saveRow, {Map<String, dynamic>? initialRow});
 typedef WoxSettingPluginTableEditDialogBuilder = Future<void> Function(BuildContext context, Map<String, dynamic> row, Future<String?> Function(Map<String, dynamic> row) saveRow);
 
 class WoxSettingPluginTable extends WoxSettingPluginItem {
@@ -46,6 +46,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final List<Widget> titleActions;
   final List<Widget> trailingActions;
   final bool showCloneAction;
+  final bool showEditAction;
+  final bool Function(Map<String, dynamic> row)? canDeleteRow;
   final int minimumRowCount;
   final String minimumRowDeleteMessage;
   final WoxSettingPluginTableCreateDialogBuilder? customCreateDialogBuilder;
@@ -73,6 +75,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     this.titleActions = const [],
     this.trailingActions = const [],
     this.showCloneAction = true,
+    this.showEditAction = true,
+    this.canDeleteRow,
     this.minimumRowCount = 0,
     this.minimumRowDeleteMessage = "",
     this.customCreateDialogBuilder,
@@ -695,7 +699,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   DataCell buildOperationCell(BuildContext context, Map<String, dynamic> row, List<dynamic> rows) {
     final originalRow = json.decode(json.encode(row)) as Map<String, dynamic>;
     originalRow.remove(rowUniqueIdKey);
-    final isDeleteDisabled = rows.length <= minimumRowCount;
+    final isDeleteDisabled = rows.length <= minimumRowCount || (canDeleteRow != null && !canDeleteRow!(row));
     final deleteDisabledMessage = minimumRowDeleteMessage.trim().isEmpty ? tr("ui_plugin_table_minimum_row_delete_message") : tr(minimumRowDeleteMessage);
 
     return DataCell(
@@ -705,14 +709,15 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           mainAxisAlignment: MainAxisAlignment.start, // Align buttons to the start
           mainAxisSize: MainAxisSize.min, // Use minimum space needed
           children: [
-            WoxButton.text(
-              text: '',
-              icon: Icon(Icons.edit, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              onPressed: () async {
-                await _showEditRowDialog(context, row);
-              },
-            ),
+            if (showEditAction)
+              WoxButton.text(
+                text: '',
+                icon: Icon(Icons.edit, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onPressed: () async {
+                  await _showEditRowDialog(context, row);
+                },
+              ),
             if (showCloneAction)
               WoxTooltip(
                 message: tr("ui_clone_row"),

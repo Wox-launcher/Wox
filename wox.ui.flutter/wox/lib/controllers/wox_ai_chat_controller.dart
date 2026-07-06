@@ -8,6 +8,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
+import 'package:wox/components/wox_skill_tag_text_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_toolbar.dart';
@@ -60,7 +61,7 @@ class WoxAIChatController extends GetxController {
   }
 
   // Controllers and focus nodes
-  final TextEditingController textController = TextEditingController();
+  final SkillTagTextEditingController textController = SkillTagTextEditingController();
   final TextEditingController aiQuestionAnswerController = TextEditingController();
   final WoxLauncherController launcherController = Get.find<WoxLauncherController>();
   final FocusNode aiChatFocusNode = FocusNode();
@@ -556,14 +557,33 @@ class WoxAIChatController extends GetxController {
 
     if (item.skill != null) {
       final skill = item.skill!;
-      if (isDraftSkillSelected(skill)) {
-        draftSkillRefs.removeWhere((ref) => ref.id == skill.id);
+      // Insert {skill:name} inline at the cursor position instead of adding
+      // a chip above the input. The tag stays in the message text and is
+      // parsed into SkillRefs on send.
+      final tag = '{skill:${skill.name}}';
+      final text = textController.text;
+      final selection = textController.selection;
+      final cursor = (selection.isValid ? selection.extentOffset : text.length).clamp(0, text.length).toInt();
+
+      // Replace the slash token (including the "/" prefix) with the skill tag.
+      final slashStart = _slashTokenStart;
+      final slashEnd = _slashTokenEnd;
+      String newText;
+      int newCursor;
+      if (slashStart != null && slashEnd != null && slashStart <= cursor && cursor <= slashEnd) {
+        newText = text.replaceRange(slashStart, slashEnd, tag);
+        newCursor = slashStart + tag.length;
       } else {
-        draftSkillRefs.add(_skillRefFromAISkill(skill));
+        newText = text.replaceRange(cursor, cursor, tag);
+        newCursor = cursor + tag.length;
       }
+      textController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: newCursor));
+      _slashTokenStart = null;
+      _slashTokenEnd = null;
+    } else {
+      _removeSlashTokenFromInput();
     }
 
-    _removeSlashTokenFromInput();
     hideCommandPalette();
     focusChatInput(const UuidV4().generate());
   }
@@ -675,12 +695,40 @@ class WoxAIChatController extends GetxController {
     _suppressInputListener = false;
   }
 
+  /// Parse {skill:name} tags from message text and resolve them to AISkillRefs
+  /// by matching against the skill registry fetched from the backend.
+  List<AISkillRef> _parseSkillRefsFromText(String text) {
+    final pattern = RegExp(r'\{skill:([^}]+)\}');
+    final matches = pattern.allMatches(text);
+    if (matches.isEmpty) return [];
+
+    // Use the cached aiSkills list (not commandPaletteItems) because the
+    // command palette is hidden and its items cleared by the time the user
+    // presses Enter to send.
+    final availableSkills = aiSkills.toList();
+
+    final refs = <AISkillRef>[];
+    final seen = <String>{};
+    for (final match in matches) {
+      final name = match.group(1)!.trim();
+      final skill = availableSkills.where((s) => s.name == name).firstOrNull;
+      if (skill != null && !seen.contains(skill.id)) {
+        seen.add(skill.id);
+        refs.add(_skillRefFromAISkill(skill));
+      }
+    }
+    return refs;
+  }
+
   bool isDraftSkillSelected(AISkill skill) {
-    return draftSkillRefs.any((ref) => ref.id == skill.id);
+    final tag = '{skill:${skill.name}}';
+    return textController.text.contains(tag);
   }
 
   void removeDraftSkillRef(AISkillRef ref) {
-    draftSkillRefs.removeWhere((item) => item.id == ref.id);
+    final tag = '{skill:${ref.name}}';
+    final text = textController.text.replaceAll(tag, '');
+    textController.text = text.trim();
     updateCommandPaletteItems();
     focusChatInput(const UuidV4().generate());
   }
@@ -723,6 +771,10 @@ class WoxAIChatController extends GetxController {
       return;
     }
 
+    // Parse {skill:name} tags from the message text and resolve them to
+    // SkillRefs. The tag text stays in the message for display.
+    final skillRefs = _parseSkillRefsFromText(text);
+
     // append user message to chat data
     aiChatData.value.conversations.add(
       WoxAIChatConversation(
@@ -731,7 +783,7 @@ class WoxAIChatController extends GetxController {
         text: text,
         reasoning: '',
         images: [],
-        skillRefs: List<AISkillRef>.from(draftSkillRefs),
+        skillRefs: skillRefs,
         timestamp: DateTime.now().millisecondsSinceEpoch,
         toolCallInfo: ToolCallInfo.empty(),
       ),
@@ -740,7 +792,6 @@ class WoxAIChatController extends GetxController {
     _upsertChat(aiChatData.value);
 
     textController.clear();
-    draftSkillRefs.clear();
     hideCommandPalette();
 
     SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -943,9 +994,9 @@ class WoxAIChatController extends GetxController {
 
   // Edit user message
   void editUserMessage(WoxAIChatConversation message) {
-    // Set the text controller to the message content
+    // Set the text controller to the message content. {skill:xxx} tags are
+    // already in the text, so no separate skill ref restoration is needed.
     textController.text = message.text;
-    draftSkillRefs.assignAll(message.skillRefs);
 
     // Find the index of the message
     int messageIndex = aiChatData.value.conversations.indexWhere((m) => m.id == message.id);

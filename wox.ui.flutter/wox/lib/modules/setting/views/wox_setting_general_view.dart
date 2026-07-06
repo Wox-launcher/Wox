@@ -281,7 +281,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                       inlineTitleActions: true,
                       tableWidth: GENERAL_SETTING_TABLE_WIDTH,
                       customCreateDialogBuilder:
-                          (context, saveRow, {initialRow = const <String, dynamic>{}}) => showWoxQueryHotkeyDialog(context: context, initialRow: initialRow, onSave: saveRow),
+                          (context, saveRow, {initialRow}) => showWoxQueryHotkeyDialog(context: context, initialRow: initialRow ?? const {}, onSave: saveRow),
                       customEditDialogBuilder: (context, row, saveRow) => showWoxQueryHotkeyDialog(context: context, initialRow: row, isEditing: true, onSave: saveRow),
                       titleActions: [
                         _buildDemoTitleAction(

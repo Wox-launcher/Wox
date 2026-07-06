@@ -321,7 +321,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildDraftSkillRefs(),
           TextField(
             controller: controller.textController,
             focusNode: controller.aiChatFocusNode,
@@ -386,58 +385,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  Widget _buildDraftSkillRefs() {
-    return Obx(() {
-      final refs = controller.draftSkillRefs.toList();
-      if (refs.isEmpty) {
-        return const SizedBox.shrink();
-      }
-
-      return Container(
-        width: double.infinity,
-        padding: EdgeInsets.fromLTRB(_metrics.scaledSpacing(10), _metrics.scaledSpacing(8), _metrics.scaledSpacing(10), _metrics.scaledSpacing(2)),
-        child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: refs.map((ref) => _buildSkillRefChip(ref, removable: true)).toList())),
-      );
-    });
-  }
-
-  Widget _buildSkillRefChip(AISkillRef ref, {required bool removable}) {
-    final borderColor = safeFromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(40);
-    final backgroundColor = safeFromCssColor(woxTheme.actionContainerBackgroundColor).withAlpha(80);
-    final textColor = safeFromCssColor(woxTheme.queryBoxFontColor);
-    final subTextColor = safeFromCssColor(woxTheme.resultItemSubTitleColor);
-
-    return Container(
-      margin: EdgeInsets.only(right: _metrics.scaledSpacing(6), bottom: _metrics.scaledSpacing(4)),
-      padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(7), vertical: _metrics.scaledSpacing(4)),
-      decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(5), border: Border.all(color: borderColor)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.extension_rounded, size: _metrics.scaledSpacing(13), color: subTextColor),
-          SizedBox(width: _metrics.scaledSpacing(5)),
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: _metrics.scaledSpacing(180)),
-            child: Text(
-              ref.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: textColor, fontSize: _metrics.smallLabelFontSize, fontWeight: FontWeight.w600),
-            ),
-          ),
-          if (removable) ...[
-            SizedBox(width: _metrics.scaledSpacing(5)),
-            InkWell(
-              onTap: () => controller.removeDraftSkillRef(ref),
-              borderRadius: BorderRadius.circular(8),
-              child: Icon(Icons.close_rounded, size: _metrics.scaledSpacing(13), color: subTextColor),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   // Model chip below the chat input. Tapping it opens the command palette
   // filtered to models so the user can switch the current chat's model without
   // typing a slash. Hover shows a subtle highlight to signal it's clickable.
@@ -484,6 +431,12 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       }
 
       final items = controller.commandPaletteItems.toList();
+      // Read selectedIndex here (inside the Obx build) so the Obx tracks this
+      // reactive dependency. Without this, the .value read only happens inside
+      // StatefulBuilder.State.build — which runs *after* Obx.build returns — so
+      // the Obx never subscribes to selectedIndex and won't rebuild when it
+      // changes, leaving the keyboard highlight stuck.
+      final selectedIndex = controller.commandPaletteSelectedIndex.value;
       controller.updateCommandPaletteLayoutMetrics(
         itemHeight: _commandPaletteItemHeight,
         headerHeight: _commandPaletteHeaderHeight,
@@ -498,7 +451,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
           currentGroup = item.group;
           children.add(_buildCommandPaletteGroupHeader(item.group));
         }
-        children.add(_buildCommandPaletteItem(item, i));
+        children.add(_buildCommandPaletteItem(item, i, selectedIndex));
       }
 
       return Material(
@@ -582,7 +535,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  Widget _buildCommandPaletteItem(ChatCommandPaletteItem item, int index) {
+  Widget _buildCommandPaletteItem(ChatCommandPaletteItem item, int index, int selectedIndex) {
     final icon = item.group == ChatCommandPaletteGroup.model ? Icons.model_training_rounded : Icons.extension_rounded;
     final subTitleColor = safeFromCssColor(woxTheme.resultItemSubTitleColor);
 
@@ -592,14 +545,17 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
         return MouseRegion(
           onEnter: (_) => setState(() => isHovered = true),
           onExit: (_) => setState(() => isHovered = false),
-          child: InkWell(onTap: () => controller.executeCommandPaletteItem(item), child: _buildCommandPaletteItemContent(item, index, icon, subTitleColor, isHovered)),
+          child: InkWell(
+            onTap: () => controller.executeCommandPaletteItem(item),
+            child: _buildCommandPaletteItemContent(item, index, icon, subTitleColor, isHovered, selectedIndex),
+          ),
         );
       },
     );
   }
 
-  Widget _buildCommandPaletteItemContent(ChatCommandPaletteItem item, int index, IconData icon, Color subTitleColor, bool isHovered) {
-    final isActive = controller.commandPaletteSelectedIndex.value == index;
+  Widget _buildCommandPaletteItemContent(ChatCommandPaletteItem item, int index, IconData icon, Color subTitleColor, bool isHovered, int selectedIndex) {
+    final isActive = selectedIndex == index;
     final titleColor = isActive ? safeFromCssColor(woxTheme.resultItemActiveTitleColor) : safeFromCssColor(woxTheme.resultItemTitleColor);
     final backgroundColor =
         isActive
@@ -643,6 +599,18 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   KeyEventResult _handleChatInputKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
       switch (event.logicalKey) {
+        case LogicalKeyboardKey.backspace:
+          // Delete the entire {skill:xxx} pill when backspace is pressed right
+          // after one, instead of deleting character by character.
+          if (controller.textController.deleteAdjacentSkillTag()) {
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        case LogicalKeyboardKey.delete:
+          if (controller.textController.deleteAdjacentSkillTag(forward: true)) {
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
         case LogicalKeyboardKey.escape:
           if (controller.handleCommandPaletteEscape()) {
             return KeyEventResult.handled;
@@ -659,6 +627,29 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
             controller.sendMessage();
           }
           return KeyEventResult.handled;
+        case LogicalKeyboardKey.arrowDown:
+          controller.moveCommandPaletteSelection(1);
+          return controller.isCommandPaletteVisible.value ? KeyEventResult.handled : KeyEventResult.ignored;
+        case LogicalKeyboardKey.arrowUp:
+          controller.moveCommandPaletteSelection(-1);
+          return controller.isCommandPaletteVisible.value ? KeyEventResult.handled : KeyEventResult.ignored;
+      }
+    }
+
+    // Handle key-repeat for arrow navigation so long-press quickly cycles
+    // through command palette items.
+    if (event is KeyRepeatEvent) {
+      switch (event.logicalKey) {
+        case LogicalKeyboardKey.backspace:
+          if (controller.textController.deleteAdjacentSkillTag()) {
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        case LogicalKeyboardKey.delete:
+          if (controller.textController.deleteAdjacentSkillTag(forward: true)) {
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
         case LogicalKeyboardKey.arrowDown:
           controller.moveCommandPaletteSelection(1);
           return controller.isCommandPaletteVisible.value ? KeyEventResult.handled : KeyEventResult.ignored;
@@ -1212,18 +1203,11 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        if (message.skillRefs.isNotEmpty) ...[
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Wrap(alignment: WrapAlignment.end, children: message.skillRefs.map((ref) => _buildSkillRefChip(ref, removable: false)).toList()),
-                          ),
-                          SizedBox(height: _metrics.scaledSpacing(3)),
-                        ],
                         Container(
                           margin: EdgeInsets.only(bottom: _metrics.scaledSpacing(3)),
                           padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(12), vertical: _metrics.scaledSpacing(8)),
                           decoration: BoxDecoration(color: safeFromCssColor(woxTheme.resultItemActiveBackgroundColor), borderRadius: BorderRadius.circular(8)),
-                          child: _buildMessageContent(message, fontColor),
+                          child: _buildMessageContent(message, fontColor, isUser: true),
                         ),
                         _buildHoverVisibleMessageMetaRow(message: message, isUser: true, visible: isHovered),
                       ],
@@ -1383,7 +1367,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   // Renders the shared text and image payload for visible chat messages.
   // showReasoning folds the reasoning block out of the final round reply when
   // the round is collapsed (reasoning lives in the collapsible area instead).
-  Widget _buildMessageContent(WoxAIChatConversation message, Color fontColor, {bool showReasoning = true}) {
+  Widget _buildMessageContent(WoxAIChatConversation message, Color fontColor, {bool showReasoning = true, bool isUser = false}) {
     final hasReasoning = showReasoning && message.reasoning.trim().isNotEmpty;
     final hasText = message.text.trim().isNotEmpty;
 
@@ -1397,7 +1381,10 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
             padding: EdgeInsets.only(bottom: hasText ? _metrics.scaledSpacing(6) : 0),
             child: WoxSelectableText(message.reasoning.trim(), style: TextStyle(fontSize: _metrics.smallLabelFontSize, height: 1.4, color: fontColor.withAlpha(120))),
           ),
-        if (hasText) WoxMarkdownView(data: message.text, fontColor: fontColor, fontSize: _metrics.resultSubtitleFontSize),
+        if (hasText)
+          isUser
+              ? _buildUserMessageText(message.text, fontColor)
+              : WoxMarkdownView(data: message.text, fontColor: fontColor, fontSize: _metrics.resultSubtitleFontSize),
         if (message.images.isNotEmpty) ...[
           if (hasText) SizedBox(height: _metrics.scaledSpacing(8)),
           Wrap(
@@ -1410,6 +1397,51 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
           ),
         ],
       ],
+    );
+  }
+
+  // Render user message text with {skill:name} tags displayed as inline
+  // highlighted chips. Falls back to WoxMarkdownView when no tags are present.
+  Widget _buildUserMessageText(String text, Color fontColor) {
+    final pattern = RegExp(r'\{skill:([^}]+)\}');
+    final matches = pattern.allMatches(text);
+    if (matches.isEmpty) {
+      return WoxMarkdownView(data: text, fontColor: fontColor, fontSize: _metrics.resultSubtitleFontSize);
+    }
+
+    final spans = <InlineSpan>[];
+    int lastEnd = 0;
+    for (final match in matches) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+      }
+      spans.add(WidgetSpan(alignment: PlaceholderAlignment.middle, child: _buildInlineSkillTag(match.group(1)!, fontColor)));
+      lastEnd = match.end;
+    }
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastEnd)));
+    }
+
+    return Text.rich(
+      TextSpan(children: spans, style: TextStyle(color: fontColor, fontSize: _metrics.resultSubtitleFontSize, height: 1.5)),
+    );
+  }
+
+  Widget _buildInlineSkillTag(String name, Color fontColor) {
+    final backgroundColor = safeFromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(40);
+    final borderColor = safeFromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(80);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(5), vertical: _metrics.scaledSpacing(1)),
+      decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(4), border: Border.all(color: borderColor)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.extension_rounded, size: _metrics.scaledSpacing(12), color: fontColor.withAlpha(180)),
+          SizedBox(width: _metrics.scaledSpacing(3)),
+          Text(name, style: TextStyle(color: fontColor, fontSize: _metrics.smallLabelFontSize, fontWeight: FontWeight.w600)),
+        ],
+      ),
     );
   }
 

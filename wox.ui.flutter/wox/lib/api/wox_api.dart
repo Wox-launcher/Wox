@@ -230,6 +230,10 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/skills", null);
   }
 
+  Future<List<AISkill>> cloneAISkill(String traceId, String url) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/skills/clone", {"url": url});
+  }
+
   Future<List<AICommandTemplate>> findAICommandTemplates(String traceId) async {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/commands/store", null);
   }
