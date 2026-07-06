@@ -1974,6 +1974,7 @@
   "plugin_theme_ai_generating": "Gerando...",
   "plugin_theme_ai_input_hint": "Descreva o tema que você quer gerar",
   "plugin_theme_ai_unmarshal_failed": "Falha ao analisar o modelo",
+  "plugin_theme_ai_preview_hint": "Pressione Enter para gerar um tema com IA. A IA criará uma configuração completa de tema com cores, fontes e espaçamento com base na sua descrição.",
   "plugin_theme_ai_waiting": "Aguardando resposta do provedor de IA",
   "plugin_theme_change_theme": "Alterar tema",
   "plugin_theme_group_available": "Disponíveis",

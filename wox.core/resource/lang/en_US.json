@@ -2213,6 +2213,7 @@
   "plugin_theme_ai_generating": "Generating...",
   "plugin_theme_ai_input_hint": "Please describe the theme you want to generate",
   "plugin_theme_ai_unmarshal_failed": "Failed to unmarshal model",
+  "plugin_theme_ai_preview_hint": "Press Enter to generate a theme with AI. The AI will create a complete theme configuration with colors, fonts, and spacing based on your description.",
   "plugin_theme_ai_waiting": "Waiting for response from AI provider",
   "plugin_theme_change_theme": "Change theme",
   "plugin_theme_group_available": "Available",

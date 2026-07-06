@@ -1975,6 +1975,7 @@
   "plugin_theme_ai_generating": "Создаем...",
   "plugin_theme_ai_input_hint": "Опишите тему, которую нужно сгенерировать",
   "plugin_theme_ai_unmarshal_failed": "Не удалось разобрать модель",
+  "plugin_theme_ai_preview_hint": "Нажмите Enter для генерации темы с помощью ИИ. ИИ создаст полную конфигурацию темы с цветами, шрифтами и отступами на основе вашего описания.",
   "plugin_theme_ai_waiting": "Ожидание ответа от провайдера ИИ",
   "plugin_theme_change_theme": "Сменить тему",
   "plugin_theme_group_available": "Доступные",
