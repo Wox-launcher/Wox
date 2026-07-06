@@ -2,6 +2,7 @@ package dictation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
+	"wox/util/audio"
 	"wox/util/keyboard"
 	"wox/util/mouse"
 	"wox/util/overlay"
@@ -21,13 +23,22 @@ import (
 )
 
 const (
-	dictationPluginID = "a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e"
-
 	// Setting keys
 	settingKeyHotkey      = "hotkey"
 	settingKeyInputDevice = "inputDevice"
 	settingKeyModel       = "model"
 	settingKeyTriggerMode = "triggerMode"
+	settingKeyPlaySound   = "playSound"
+	settingKeyAIRefine    = "aiRefineEnabled"
+	settingKeyAIModel     = "aiModel"
+
+	// AI refinement timeout. Picked to cover a normal model response for a
+	// short dictation transcript while keeping the wait perceptible.
+	aiRefineTimeout = 5 * time.Second
+
+	// Embedded audio clips played when the dictation overlay shows/hides.
+	soundStart = "dictation_start.wav"
+	soundStop  = "dictation_stop.wav"
 
 	// Trigger mode values
 	triggerModeToggle = "toggle"
@@ -86,11 +97,15 @@ type DictationPlugin struct {
 	// registeredHotkey tracks the currently bound hotkey so we can
 	// unregister the old one before binding a new one.
 	registeredHotkeyMu sync.Mutex
+
+	// history persists past dictation transcripts so the Query surface can
+	// list them by time. Stored as a plugin setting so cloud sync covers it.
+	history *historyStore
 }
 
 func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            dictationPluginID,
+		Id:            "a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e",
 		Name:          "i18n:plugin_dictation_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
@@ -109,15 +124,29 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 			"Windows",
 			"Linux",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureIgnoreAutoScore,
+			},
+			{
+				Name: plugin.MetadataFeatureQueryEnv,
+				Params: map[string]any{
+					"requireActiveWindowName": true,
+					"requireActiveWindowPid":  true,
+					"requireActiveWindowIcon": true,
+				},
+			},
+			// Required so the plugin can call AIChatStream for AI refinement.
+			{
+				Name: plugin.MetadataFeatureAI,
+			},
+		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
-			// Trigger mode - static select. Placed first so the user chooses how
-			// the hotkey fires before recording the key itself.
 			{
 				Type: definition.PluginSettingDefinitionTypeSelect,
 				Value: &definition.PluginSettingValueSelect{
 					Key:          settingKeyTriggerMode,
 					Label:        "i18n:plugin_dictation_trigger_mode",
-					Tooltip:      "i18n:plugin_dictation_trigger_mode_tooltip",
 					DefaultValue: triggerModeToggle,
 					Options: []definition.PluginSettingValueSelectOption{
 						{Label: "i18n:plugin_dictation_trigger_toggle", Value: triggerModeToggle},
@@ -151,12 +180,48 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 					Key: settingKeyInputDevice,
 				},
 			},
+			// Play a short beep when dictation starts and stops.
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          settingKeyPlaySound,
+					Label:        "i18n:plugin_dictation_play_sound",
+					Tooltip:      "i18n:plugin_dictation_play_sound_tooltip",
+					DefaultValue: "true",
+				},
+			},
+			// AI refinement group header.
+			{
+				Type: definition.PluginSettingDefinitionTypeHead,
+				Value: &definition.PluginSettingValueHead{
+					Content: "i18n:plugin_dictation_ai_group",
+				},
+			},
+			// Master switch for AI refinement after dictation stops.
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          settingKeyAIRefine,
+					Label:        "i18n:plugin_dictation_ai_enable",
+					Tooltip:      "i18n:plugin_dictation_ai_enable_tooltip",
+					DefaultValue: "false",
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeSelectAIModel,
+				Value: &definition.PluginSettingValueSelectAIModel{
+					Key:   settingKeyAIModel,
+					Label: "i18n:plugin_dictation_ai_model",
+				},
+			},
 		},
 	}
 }
 
 func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	p.api = initParams.API
+	p.history = newHistoryStore(p.api)
+	p.history.load(ctx)
 
 	// Initialize the model manager in the Wox data directory.
 	modelsDir := filepath.Join(util.GetLocation().GetWoxDataDirectory(), "dictation", "models")
@@ -440,7 +505,18 @@ func (p *DictationPlugin) GetModelStatuses(ctx context.Context) []ModelStatusInf
 }
 
 func (p *DictationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
-	return plugin.QueryResponse{}
+	// Only the bare trigger keyword surfaces history; sub-commands are not
+	// handled here yet.
+	if query.Command != "" {
+		return plugin.QueryResponse{}
+	}
+
+	if p.history.isEmpty() && strings.TrimSpace(query.Search) == "" {
+		return plugin.NewQueryResponse([]plugin.QueryResult{historyEmptyResult()})
+	}
+
+	results := p.history.buildHistoryResults(ctx, query)
+	return plugin.NewQueryResponse(results)
 }
 
 // ToggleDictation is called by the hotkey handler in toggle mode. It starts
@@ -545,10 +621,14 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 	p.sessionMu.Unlock()
 
 	p.showDictationOverlay(ctx)
+	p.playSoundIfEnabled(ctx, soundStart)
 }
 
 // stopAndOutput stops the recording, closes the overlay, and types the
-// recognized text into the focused window.
+// recognized text into the focused window. When AI refinement is enabled,
+// the overlay stays visible showing a loading state while the transcript is
+// rewritten by the selected AI model; on failure or timeout it falls back to
+// the raw transcript and notifies the user.
 func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 	p.sessionMu.Lock()
 	session := p.session
@@ -565,12 +645,43 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to stop dictation session: %s", err.Error()))
 	}
 
-	p.closeDictationOverlay()
-
 	text = strings.TrimSpace(text)
 	if text == "" {
+		p.closeDictationOverlay()
+		p.playSoundIfEnabled(ctx, soundStop)
 		return
 	}
+
+	// AI refinement is opt-in. When enabled we keep the overlay open as a
+	// loading indicator; on any failure we fall back to the raw transcript.
+	if p.isAIRefineEnabled(ctx) {
+		model, ok := p.getAIModel(ctx)
+		if !ok {
+			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_ai_no_model"))
+		} else {
+			p.showRefiningOverlay(ctx)
+			refined, refineErr := p.refineWithAI(ctx, model, text)
+			if refineErr != nil {
+				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI refine failed: %s", refineErr.Error()))
+				if ctxErr := refineErr; ctxErr != nil && strings.Contains(ctxErr.Error(), "timeout") {
+					p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_ai_timeout"))
+				} else {
+					p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_ai_failed"))
+				}
+			} else if strings.TrimSpace(refined) != "" {
+				text = strings.TrimSpace(refined)
+			}
+		}
+	}
+
+	// Persist the final transcript (refined if AI was applied, raw otherwise)
+	// after refinement resolves so history matches what the user actually gets.
+	// Best-effort: save failures are logged inside the store and do not block
+	// the typing output.
+	p.history.add(ctx, text, util.GetSystemTimestamp())
+
+	p.closeDictationOverlay()
+	p.playSoundIfEnabled(ctx, soundStop)
 
 	// Wait briefly for the overlay to close and focus to return to the
 	// previously focused window.
@@ -578,6 +689,124 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 	if err := keyboard.SimulateType(text); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to type dictation text: %s", err.Error()))
 		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_type_failed"), err.Error()))
+	}
+}
+
+// isAIRefineEnabled reports whether the user turned on AI refinement.
+func (p *DictationPlugin) isAIRefineEnabled(ctx context.Context) bool {
+	return parseBoolSetting(p.api.GetSetting(ctx, settingKeyAIRefine))
+}
+
+// getAIModel parses the stored AI model setting (a JSON-encoded common.Model,
+// the same format the selectAIModel component persists) and returns it. The
+// second return value is false when no model is selected or the stored value
+// is malformed.
+func (p *DictationPlugin) getAIModel(ctx context.Context) (common.Model, bool) {
+	raw := strings.TrimSpace(p.api.GetSetting(ctx, settingKeyAIModel))
+	if raw == "" {
+		return common.Model{}, false
+	}
+	var model common.Model
+	if err := json.Unmarshal([]byte(raw), &model); err != nil {
+		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to parse AI model setting: %s", err.Error()))
+		return common.Model{}, false
+	}
+	if model.Name == "" || model.Provider == "" {
+		return common.Model{}, false
+	}
+	return model, true
+}
+
+// showRefiningOverlay switches the existing dictation overlay into a loading
+// state with an "AI refining" message while the transcript is being rewritten.
+func (p *DictationPlugin) showRefiningOverlay(ctx context.Context) {
+	mouseScreen := screen.GetMouseScreen()
+
+	opts := overlay.OverlayOptions{
+		Name:             dictationOverlayName,
+		Message:          i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_ai_refining"),
+		Loading:          true,
+		Topmost:          true,
+		PreservePosition: true,
+		FontSize:         14,
+		MinWidth:         200,
+		MaxWidth:         600,
+		AbsolutePosition: true,
+		Anchor:           overlay.AnchorBottomCenter,
+		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
+		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
+		AutoCloseSeconds: 0,
+		Closable:         false,
+		CloseOnEscape:    false,
+		Movable:          false,
+	}
+
+	if mouseScreen.Width == 0 {
+		pos, ok := mouse.CurrentPosition()
+		if ok {
+			opts.OffsetX = pos.X
+			opts.OffsetY = pos.Y - overlayBottomOffset
+		}
+	}
+
+	showOverlay(opts)
+}
+
+// refineWithAI sends the raw transcript to the selected AI model and returns
+// the refined text. It blocks until the stream finishes, fails, or the
+// timeout elapses; on timeout it returns an error mentioning "timeout" so the
+// caller can surface a dedicated message.
+func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, rawText string) (string, error) {
+	refineCtx, cancel := context.WithTimeout(ctx, aiRefineTimeout)
+	defer cancel()
+
+	conversations := []common.Conversation{
+		{
+			Role: common.ConversationRoleSystem,
+			Text: "You are a transcription cleaner. Rewrite the user's dictated text to remove filler words (um, uh, like, you know), fix disfluencies and false starts, add appropriate punctuation, and preserve the original meaning and language. Output only the cleaned text, with no explanations, quotes, or extra formatting.",
+		},
+		{
+			Role: common.ConversationRoleUser,
+			Text: rawText,
+		},
+	}
+
+	// AIChatStream runs its loop in a goroutine and reports status via the
+	// callback. We wait on a channel for a terminal status so this function
+	// stays synchronous from stopAndOutput's perspective.
+	done := make(chan struct {
+		text string
+		err  error
+	}, 1)
+
+	var accumulated string
+	err := p.api.AIChatStream(refineCtx, model, conversations, common.ChatOptions{
+		ThinkingMode: common.ChatThinkingModeNonThinking,
+	}, func(streamResult common.ChatStreamData) {
+		switch streamResult.Status {
+		case common.ChatStreamStatusStreaming, common.ChatStreamStatusStreamed:
+			accumulated = streamResult.Data
+		case common.ChatStreamStatusFinished:
+			done <- struct {
+				text string
+				err  error
+			}{streamResult.Data, nil}
+		case common.ChatStreamStatusError:
+			done <- struct {
+				text string
+				err  error
+			}{accumulated, fmt.Errorf("ai stream error: %s", streamResult.Data)}
+		}
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to start AI stream: %w", err)
+	}
+
+	select {
+	case res := <-done:
+		return res.text, res.err
+	case <-refineCtx.Done():
+		return "", fmt.Errorf("AI refinement timeout")
 	}
 }
 
@@ -647,4 +876,22 @@ func (p *DictationPlugin) updateOverlay(ctx context.Context, text string) {
 // closeDictationOverlay removes the recording overlay.
 func (p *DictationPlugin) closeDictationOverlay() {
 	closeOverlay(dictationOverlayName)
+}
+
+// playSoundIfEnabled plays an embedded audio clip when the playSound setting
+// is on. Errors are logged but never propagated so they can't disrupt
+// recording or typing.
+func (p *DictationPlugin) playSoundIfEnabled(ctx context.Context, name string) {
+	if !parseBoolSetting(p.api.GetSetting(ctx, settingKeyPlaySound)) {
+		return
+	}
+	if err := audio.PlayEmbedded(ctx, name); err != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to play dictation sound %s: %s", name, err.Error()))
+	}
+}
+
+// parseBoolSetting maps the string setting value ("true"/"false") to a bool,
+// defaulting to false for unrecognized values.
+func parseBoolSetting(v string) bool {
+	return v == "true"
 }

@@ -74,7 +74,10 @@ class _WoxSettingPluginSelectAIModelState extends State<WoxSettingPluginSelectAI
             padding: const EdgeInsets.only(top: 6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [WoxAIModelSelectorView(initialValue: _currentValue, onModelSelected: _saveValue), validationMessage(_errorMessage)],
+          children: [
+            WoxAIModelSelectorView(initialValue: _currentValue, onModelSelected: _saveValue),
+            validationMessage(_errorMessage),
+          ],
             ),
           ),
           suffix(widget.item.suffix),

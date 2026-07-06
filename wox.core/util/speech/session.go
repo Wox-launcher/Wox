@@ -109,8 +109,10 @@ func (s *Session) handleAudioSamples(samples []float32) {
 	if result.Text != s.lastText {
 		s.lastText = result.Text
 		if s.onPartial != nil {
-			text := s.lastText
-			s.onPartial(text)
+			// Show the full accumulated text plus the current partial so the
+			// overlay reflects everything recognized so far, not just the
+			// latest segment.
+			s.onPartial(s.accumulatedText + s.lastText)
 		}
 	}
 
@@ -122,7 +124,9 @@ func (s *Session) handleAudioSamples(samples []float32) {
 		if finalText != "" {
 			s.accumulatedText += finalText
 			if s.onFinal != nil {
-				s.onFinal(finalText)
+				// Report the full accumulated text so consumers can display
+				// the complete transcription across all segments.
+				s.onFinal(s.accumulatedText)
 			}
 		}
 	}

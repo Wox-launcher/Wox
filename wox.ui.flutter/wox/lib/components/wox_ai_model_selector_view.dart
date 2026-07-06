@@ -100,10 +100,10 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         }
       }
 
-      // Default to first provider if none selected
-      if (selectedProviderKey == null && providerKeys.isNotEmpty) {
-        selectedProviderKey = providerKeys.first;
-      }
+      // When no initial value was provided, leave the selection empty so the
+      // dropdowns show a "not selected" state instead of silently picking the
+      // first available provider/model. The user must explicitly choose a model
+      // for the setting to be persisted.
 
       // If the selected provider key isn't available (e.g. old saved model without alias),
       // try to fall back to any available config for the same provider.
@@ -113,16 +113,9 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         final candidates = providerKeys.where((k) => parseProviderKey(k).$1 == provider).toList()..sort();
         if (candidates.isNotEmpty) {
           selectedProviderKey = candidates.first;
-        } else if (providerKeys.isNotEmpty) {
-          selectedProviderKey = providerKeys.first;
-        }
-      }
-
-      // Default to first model of selected provider if none selected
-      if (selectedModel == null && selectedProviderKey != null) {
-        final providerModels = allModels.where((m) => makeProviderKey(m.provider, m.providerAlias) == selectedProviderKey).toList();
-        if (providerModels.isNotEmpty) {
-          selectedModel = providerModels.first;
+        } else {
+          selectedProviderKey = null;
+          selectedModel = null;
         }
       }
 
@@ -249,6 +242,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
           child: WoxDropdownButton<String>(
             value: selectedProviderKey,
             isExpanded: true,
+            hint: Text(tr('ui_ai_model_selector_not_selected'), style: TextStyle(color: getThemeSubTextColor(), fontSize: 14)),
             items:
                 providerKeys
                     .map((providerKey) => WoxDropdownItem<String>(value: providerKey, label: getProviderLabel(providerKey), leading: buildProviderLeading(providerKey)))
@@ -298,6 +292,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
                     isExpanded: true,
                     enableFilter: true,
                     filterHintText: tr('ui_filter_placeholder'),
+                    hint: Text(tr('ui_ai_model_selector_not_selected'), style: TextStyle(color: getThemeSubTextColor(), fontSize: 14)),
                     items:
                         getProviderModels()
                             .map(

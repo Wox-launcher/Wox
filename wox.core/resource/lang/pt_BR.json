@@ -882,6 +882,7 @@
   "ui_ai_model_selector_open_ai_settings": "Abrir configurações de AI",
   "ui_ai_model_selector_cancel": "Cancelar",
   "ui_ai_model_selector_save": "Salvar",
+  "ui_ai_model_selector_not_selected": "Not selected",
   "ui_app_width": "Largura da janela",
   "ui_app_width_tips": "Ajuste a largura da janela do Wox",
   "ui_interface_size": "Tamanho da interface",
@@ -2226,5 +2227,17 @@
   "ui_hotkey_overview_webview_refresh": "Atualizar prévia webview",
   "ui_hotkey_overview_webview_back": "Voltar na prévia webview",
   "ui_hotkey_overview_webview_forward": "Avançar na prévia webview",
-  "ui_hotkey_overview_webview_inspector": "Abrir inspetor webview"
+  "ui_hotkey_overview_webview_inspector": "Abrir inspetor webview",
+  "plugin_dictation_play_sound": "Sound",
+  "plugin_dictation_play_sound_tooltip": "Play a short beep when dictation begins and ends.",
+  "plugin_dictation_ai_group": "AI Refinement",
+  "plugin_dictation_ai_group_tooltip": "Use an AI model to clean up the transcribed text after you stop speaking.",
+  "plugin_dictation_ai_enable": "Refine text with AI after dictation",
+  "plugin_dictation_ai_enable_tooltip": "When enabled, Wox sends the recognized text to the selected AI model to remove filler words, fix disfluencies, and add punctuation before typing it into the focused window.",
+  "plugin_dictation_ai_model": "AI model",
+  "plugin_dictation_ai_model_tooltip": "AI model used to refine the dictation transcript.",
+  "plugin_dictation_ai_refining": "Refining with AI...",
+  "plugin_dictation_ai_no_model": "AI refinement is enabled but no AI model is selected. Outputting raw transcript.",
+  "plugin_dictation_ai_failed": "AI refinement failed, outputting raw transcript.",
+  "plugin_dictation_ai_timeout": "AI refinement timed out, outputting raw transcript."
 }

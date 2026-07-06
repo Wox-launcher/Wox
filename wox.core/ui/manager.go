@@ -378,11 +378,11 @@ func (m *Manager) RegisterDictationHotkey(ctx context.Context, combineKey string
 		m.dictationTriggerMode = ""
 		return nil
 	}
-	// Re-register if either the key or the trigger mode changed.
-	if m.dictationHotkeyKey == combineKey && m.dictationHotkey != nil && m.dictationTriggerMode == triggerMode {
-		logger.Info(ctx, fmt.Sprintf("dictation hotkey already registered: %s (mode=%s)", combineKey, triggerMode))
-		return nil
-	}
+	// Always unregister the previous hotkey and register a fresh one so the
+	// callbacks match the current trigger mode. Even when key+mode look
+	// identical to the cached values, the existing hotkey instance may carry
+	// callbacks bound to a different mode (e.g. after toggling hold→toggle→hold),
+	// so skipping re-registration would leave stale callbacks in place.
 	logger.Info(ctx, fmt.Sprintf("register dictation hotkey: %s (mode=%s)", combineKey, triggerMode))
 
 	var onPress func()
@@ -1592,8 +1592,16 @@ func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool) {
 			hotkey.SetCapsLockComboRecorder(func(hotkeyStr string) {
 				m.ui.RecordHotkey(util.NewTraceContext(), hotkeyStr)
 			})
+			// Flutter's macOS engine does not reliably produce KeyDownEvent
+			// for every modifier key (notably right_ctrl). Feed hold-modifier
+			// presses from the Go-side raw key listener back to the UI so the
+			// hold-hotkey recorder can capture them.
+			hotkey.SetHoldModifierRecorder(func(hotkeyStr string) {
+				m.ui.RecordHotkey(util.NewTraceContext(), hotkeyStr)
+			})
 		} else {
 			hotkey.SetCapsLockComboRecorder(nil)
+			hotkey.SetHoldModifierRecorder(nil)
 		}
 		logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t", isRecording))
 	}

@@ -30,6 +30,9 @@ var appIconWindows []byte
 //go:embed others
 var OthersFS embed.FS
 
+//go:embed audio
+var AudioFS embed.FS
+
 var embedThemes = []string{}
 
 func Extract(ctx context.Context) error {
@@ -158,6 +161,11 @@ func GetLangJson(ctx context.Context, langCode string) ([]byte, error) {
 
 func GetEmbedThemes(ctx context.Context) []string {
 	return embedThemes
+}
+
+// GetAudioFile returns the embedded audio file bytes by name (e.g. "dictation_start.wav").
+func GetAudioFile(name string) ([]byte, error) {
+	return AudioFS.ReadFile(path.Join("audio", name))
 }
 
 func GetAppIcon() []byte {
