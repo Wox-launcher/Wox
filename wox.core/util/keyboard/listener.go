@@ -92,6 +92,16 @@ const (
 	// KeySuper represents the platform primary meta key:
 	// Command on macOS, Win/Super on Windows and Linux.
 	KeySuper
+	// Left/right specific modifier keys. Used by hold-mode hotkeys that
+	// need to distinguish which physical modifier key is pressed.
+	KeyLeftCtrl
+	KeyRightCtrl
+	KeyLeftShift
+	KeyRightShift
+	KeyLeftAlt
+	KeyRightAlt
+	KeyLeftSuper
+	KeyRightSuper
 )
 
 func ParseKey(token string) (Key, error) {
@@ -214,6 +224,22 @@ func ParseKey(token string) (Key, error) {
 		return KeyCapsLock, nil
 	case "backquote", "tilde", "~", "`":
 		return KeyBackquote, nil
+	case "left_ctrl", "left control", "left_control":
+		return KeyLeftCtrl, nil
+	case "right_ctrl", "right control", "right_control":
+		return KeyRightCtrl, nil
+	case "left_shift":
+		return KeyLeftShift, nil
+	case "right_shift":
+		return KeyRightShift, nil
+	case "left_alt", "left_option":
+		return KeyLeftAlt, nil
+	case "right_alt", "right_option":
+		return KeyRightAlt, nil
+	case "left_cmd", "left_win", "left_super":
+		return KeyLeftSuper, nil
+	case "right_cmd", "right_win", "right_super":
+		return KeyRightSuper, nil
 	default:
 		return KeyUnknown, fmt.Errorf("invalid key: %s", token)
 	}
@@ -295,6 +321,22 @@ func (k Key) Character() string {
 		return "9"
 	case KeyBackquote:
 		return "~"
+	case KeyLeftCtrl:
+		return "left_ctrl"
+	case KeyRightCtrl:
+		return "right_ctrl"
+	case KeyLeftShift:
+		return "left_shift"
+	case KeyRightShift:
+		return "right_shift"
+	case KeyLeftAlt:
+		return "left_alt"
+	case KeyRightAlt:
+		return "right_alt"
+	case KeyLeftSuper:
+		return "left_cmd"
+	case KeyRightSuper:
+		return "right_cmd"
 	default:
 		return ""
 	}

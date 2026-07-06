@@ -57,7 +57,7 @@ var (
 // so the dictation plugin can register/unregister its global hotkey without
 // importing the ui package directly.
 type HotkeyRegistrar interface {
-	RegisterDictationHotkey(ctx context.Context, combineKey string) error
+	RegisterDictationHotkey(ctx context.Context, combineKey string, triggerMode string) error
 }
 
 // SetHotkeyRegistrar is called by the UI Manager during startup to inject
@@ -110,22 +110,28 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 			"Linux",
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
+			// Trigger mode - static select. Placed first so the user chooses how
+			// the hotkey fires before recording the key itself.
 			{
-				Type: definition.PluginSettingDefinitionTypeHead,
-				Value: &definition.PluginSettingValueHead{
-					Content: "i18n:plugin_dictation_settings_head",
+				Type: definition.PluginSettingDefinitionTypeSelect,
+				Value: &definition.PluginSettingValueSelect{
+					Key:          settingKeyTriggerMode,
+					Label:        "i18n:plugin_dictation_trigger_mode",
+					Tooltip:      "i18n:plugin_dictation_trigger_mode_tooltip",
+					DefaultValue: triggerModeToggle,
+					Options: []definition.PluginSettingValueSelectOption{
+						{Label: "i18n:plugin_dictation_trigger_toggle", Value: triggerModeToggle},
+						{Label: "i18n:plugin_dictation_trigger_hold", Value: triggerModeHold},
+					},
 				},
 			},
-			// Hotkey recorder - a dedicated component for capturing the dictation
-			// global hotkey. The value is stored as a plugin setting and the
-			// plugin re-registers the hotkey via the UI Manager when it changes.
+			// Hotkey recorder - dynamic setting. The actual definition is built
+			// at render time by the OnGetDynamicSetting callback below, using a
+			// different tooltip depending on the selected trigger mode.
 			{
-				Type: definition.PluginSettingDefinitionTypeDictationHotkey,
-				Value: &definition.PluginSettingValueDictationHotkey{
-					Key:          settingKeyHotkey,
-					Label:        "i18n:plugin_dictation_hotkey",
-					Tooltip:      "i18n:plugin_dictation_hotkey_tooltip",
-					DefaultValue: "",
+				Type: definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{
+					Key: settingKeyHotkey,
 				},
 			},
 			// Model manager - a dedicated component showing recommended models
@@ -145,20 +151,6 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 					Key: settingKeyInputDevice,
 				},
 			},
-			// Trigger mode - static select.
-			{
-				Type: definition.PluginSettingDefinitionTypeSelect,
-				Value: &definition.PluginSettingValueSelect{
-					Key:          settingKeyTriggerMode,
-					Label:        "i18n:plugin_dictation_trigger_mode",
-					Tooltip:      "i18n:plugin_dictation_trigger_mode_tooltip",
-					DefaultValue: triggerModeToggle,
-					Options: []definition.PluginSettingValueSelectOption{
-						{Label: "i18n:plugin_dictation_trigger_toggle", Value: triggerModeToggle},
-						{Label: "i18n:plugin_dictation_trigger_hold", Value: triggerModeHold},
-					},
-				},
-			},
 		},
 	}
 }
@@ -175,9 +167,11 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		p.modelManager = mgr
 	}
 
-	// Register dynamic setting callbacks for input device and model.
+	// Register dynamic setting callbacks for hotkey, input device and model.
 	p.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
 		switch key {
+		case settingKeyHotkey:
+			return p.buildHotkeySetting(ctx)
 		case settingKeyInputDevice:
 			return p.buildInputDeviceSetting(ctx)
 		case settingKeyModel:
@@ -186,10 +180,17 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		return definition.PluginSettingDefinitionItem{}
 	})
 
-	// React to setting changes: re-register the hotkey when it changes.
+	// React to setting changes: re-register the hotkey when it or the trigger mode changes.
 	p.api.OnSettingChanged(ctx, func(ctx context.Context, key string, value string) {
 		if key == settingKeyHotkey {
 			p.reregisterHotkey(ctx, value)
+		}
+		if key == settingKeyTriggerMode {
+			// Trigger mode changed - re-register with the new mode.
+			hotkey := p.api.GetSetting(ctx, settingKeyHotkey)
+			if hotkey != "" {
+				p.reregisterHotkey(ctx, hotkey)
+			}
 		}
 	})
 
@@ -202,7 +203,7 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 
 // reregisterHotkey binds the dictation global hotkey via the injected
 // HotkeyRegistrar (the UI Manager). Called on init and whenever the hotkey
-// setting changes.
+// setting or trigger mode changes.
 func (p *DictationPlugin) reregisterHotkey(ctx context.Context, combineKey string) {
 	p.registeredHotkeyMu.Lock()
 	defer p.registeredHotkeyMu.Unlock()
@@ -210,8 +211,37 @@ func (p *DictationPlugin) reregisterHotkey(ctx context.Context, combineKey strin
 		p.api.Log(ctx, plugin.LogLevelDebug, "hotkey registrar not set, skipping hotkey registration")
 		return
 	}
-	if err := hotkeyRegistrar.RegisterDictationHotkey(ctx, combineKey); err != nil {
+	triggerMode := p.api.GetSetting(ctx, settingKeyTriggerMode)
+	if triggerMode == "" {
+		triggerMode = triggerModeToggle
+	}
+	if err := hotkeyRegistrar.RegisterDictationHotkey(ctx, combineKey, triggerMode); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to register dictation hotkey: %s", err.Error()))
+	}
+}
+
+// buildHotkeySetting returns the hotkey setting as a dictationHotkey
+// definition, with a tooltip that reflects the current trigger mode.
+func (p *DictationPlugin) buildHotkeySetting(ctx context.Context) definition.PluginSettingDefinitionItem {
+	triggerMode := p.api.GetSetting(ctx, settingKeyTriggerMode)
+	if triggerMode == "" {
+		triggerMode = triggerModeToggle
+	}
+
+	tooltip := "i18n:plugin_dictation_hotkey_tooltip"
+	if triggerMode == triggerModeHold {
+		tooltip = "i18n:plugin_dictation_hotkey_hold_tooltip"
+	}
+
+	return definition.PluginSettingDefinitionItem{
+		Type: definition.PluginSettingDefinitionTypeDictationHotkey,
+		Value: &definition.PluginSettingValueDictationHotkey{
+			Key:          settingKeyHotkey,
+			Label:        "i18n:plugin_dictation_hotkey",
+			Tooltip:      tooltip,
+			DefaultValue: "",
+			TriggerMode:  triggerMode,
+		},
 	}
 }
 
@@ -304,6 +334,9 @@ func (p *DictationPlugin) buildModelOptions(ctx context.Context) []definition.Di
 				case speech.DownloadStateDownloading:
 					status = definition.DictationModelStatusDownloading
 					progress = ds.Progress
+				case speech.DownloadStateExtracting:
+					status = definition.DictationModelStatusExtracting
+					progress = 100
 				case speech.DownloadStateFailed:
 					status = definition.DictationModelStatusFailed
 					errMsg = ds.Error
@@ -398,9 +431,9 @@ func (p *DictationPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	return plugin.QueryResponse{}
 }
 
-// ToggleDictation is called by the hotkey handler. In toggle mode, it starts
-// recording if idle and stops if recording. In hold mode, this is not used;
-// the hotkey release handler stops recording.
+// ToggleDictation is called by the hotkey handler in toggle mode. It starts
+// recording if idle and stops if recording. In hold mode, StartDictation and
+// StopDictation are called instead.
 func (p *DictationPlugin) ToggleDictation(ctx context.Context) {
 	p.sessionMu.Lock()
 	if p.isRecording {
@@ -410,6 +443,28 @@ func (p *DictationPlugin) ToggleDictation(ctx context.Context) {
 	}
 	p.sessionMu.Unlock()
 	p.startRecording(ctx)
+}
+
+// StartDictation is called by the hotkey press handler in hold mode.
+func (p *DictationPlugin) StartDictation(ctx context.Context) {
+	p.sessionMu.Lock()
+	if p.isRecording {
+		p.sessionMu.Unlock()
+		return
+	}
+	p.sessionMu.Unlock()
+	p.startRecording(ctx)
+}
+
+// StopDictation is called by the hotkey release handler in hold mode.
+func (p *DictationPlugin) StopDictation(ctx context.Context) {
+	p.sessionMu.Lock()
+	if !p.isRecording {
+		p.sessionMu.Unlock()
+		return
+	}
+	p.sessionMu.Unlock()
+	p.stopAndOutput(ctx)
 }
 
 // startRecording initializes the recognizer and audio capture, then shows the overlay.

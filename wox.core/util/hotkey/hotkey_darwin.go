@@ -17,6 +17,22 @@ func parseModifierToken(token string) (keyboard.Modifier, keyboard.Key, bool) {
 		return keyboard.ModifierAlt, keyboard.KeyAlt, true
 	case "cmd", "command":
 		return keyboard.ModifierSuper, keyboard.KeySuper, true
+	case "left_ctrl", "left control", "left_control":
+		return keyboard.ModifierCtrl, keyboard.KeyLeftCtrl, true
+	case "right_ctrl", "right control", "right_control":
+		return keyboard.ModifierCtrl, keyboard.KeyRightCtrl, true
+	case "left_shift":
+		return keyboard.ModifierShift, keyboard.KeyLeftShift, true
+	case "right_shift":
+		return keyboard.ModifierShift, keyboard.KeyRightShift, true
+	case "left_alt", "left_option":
+		return keyboard.ModifierAlt, keyboard.KeyLeftAlt, true
+	case "right_alt", "right_option":
+		return keyboard.ModifierAlt, keyboard.KeyRightAlt, true
+	case "left_cmd", "left_command":
+		return keyboard.ModifierSuper, keyboard.KeyLeftSuper, true
+	case "right_cmd", "right_command":
+		return keyboard.ModifierSuper, keyboard.KeyRightSuper, true
 	default:
 		return 0, keyboard.KeyUnknown, false
 	}

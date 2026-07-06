@@ -303,12 +303,28 @@ func keyToEvdevKeyCode(key Key) (uint16, error) {
 		return 108, nil
 	case KeyCtrl:
 		return 29, nil
+	case KeyLeftCtrl:
+		return 29, nil
+	case KeyRightCtrl:
+		return 97, nil
 	case KeyShift:
 		return 42, nil
+	case KeyLeftShift:
+		return 42, nil
+	case KeyRightShift:
+		return 54, nil
 	case KeyAlt:
 		return 56, nil
+	case KeyLeftAlt:
+		return 56, nil
+	case KeyRightAlt:
+		return 100, nil
 	case KeySuper:
 		return 125, nil
+	case KeyLeftSuper:
+		return 125, nil
+	case KeyRightSuper:
+		return 126, nil
 	case KeyCapsLock:
 		return 58, nil
 	case KeyBackquote:

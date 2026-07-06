@@ -1,3 +1,5 @@
+import '../wox_plugin_setting.dart';
+
 enum DictationModelStatus {
   notDownloaded,
   downloading,
@@ -44,6 +46,7 @@ class PluginSettingValueDictationModel {
   late String tooltip;
   late String defaultValue;
   late List<DictationModelOption> options;
+  late PluginSettingValueStyle style;
 
   PluginSettingValueDictationModel.fromJson(Map<String, dynamic> json) {
     key = json['Key'];
@@ -55,5 +58,7 @@ class PluginSettingValueDictationModel {
     } else {
       options = [];
     }
+    // Style is deprecated in plugin SDKs; ignore plugin JSON and let the UI layout own spacing and width.
+    style = PluginSettingValueStyle.defaults();
   }
 }

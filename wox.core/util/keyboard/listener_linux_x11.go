@@ -460,14 +460,22 @@ func linuxKeyCodeToKey(code uint32) Key {
 		return KeyF12
 	case 0xFFE5:
 		return KeyCapsLock
-	case 0xFFE3, 0xFFE4:
-		return KeyCtrl
-	case 0xFFE1, 0xFFE2:
-		return KeyShift
-	case 0xFFE9, 0xFFEA:
-		return KeyAlt
-	case 0xFFEB, 0xFFEC:
-		return KeySuper
+	case 0xFFE3:
+		return KeyLeftCtrl
+	case 0xFFE4:
+		return KeyRightCtrl
+	case 0xFFE1:
+		return KeyLeftShift
+	case 0xFFE2:
+		return KeyRightShift
+	case 0xFFE9:
+		return KeyLeftAlt
+	case 0xFFEA:
+		return KeyRightAlt
+	case 0xFFEB:
+		return KeyLeftSuper
+	case 0xFFEC:
+		return KeyRightSuper
 	case 0x0060:
 		return KeyBackquote
 	default:

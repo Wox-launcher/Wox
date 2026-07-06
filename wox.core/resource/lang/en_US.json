@@ -2434,6 +2434,8 @@
   "plugin_dictation_settings_head": "Dictation Settings",
   "plugin_dictation_hotkey": "Hotkey",
   "plugin_dictation_hotkey_tooltip": "Press the hotkey to start/stop dictation. Leave empty to disable.",
+  "plugin_dictation_hotkey_hold_tooltip": "Press and hold the hotkey to start dictation. Release to stop and output the recognized text. Leave empty to disable.",
+  "plugin_dictation_hotkey_hold_hint": "hold to talk…",
   "plugin_dictation_input_device": "Input device",
   "plugin_dictation_input_device_tooltip": "Select the microphone to use for dictation. System default uses the OS default input device.",
   "plugin_dictation_system_default": "System default",
@@ -2452,5 +2454,8 @@
   "plugin_dictation_type_failed": "Failed to type text",
   "plugin_dictation_downloading": "Downloading model",
   "plugin_dictation_download_failed": "Model download failed",
-  "plugin_dictation_download_complete": "Model download complete"
+  "plugin_dictation_download_complete": "Model download complete",
+  "plugin_dictation_model_download": "Download",
+  "plugin_dictation_model_retry": "Retry",
+  "plugin_dictation_model_ready": "Ready"
 }

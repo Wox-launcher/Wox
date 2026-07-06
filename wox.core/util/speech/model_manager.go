@@ -75,6 +75,7 @@ type DownloadState string
 const (
 	DownloadStateIdle        DownloadState = "idle"
 	DownloadStateDownloading DownloadState = "downloading"
+	DownloadStateExtracting  DownloadState = "extracting"
 	DownloadStateDone        DownloadState = "done"
 	DownloadStateFailed      DownloadState = "failed"
 )
@@ -200,6 +201,10 @@ func (m *ModelManager) DownloadModel(ctx context.Context, info ModelInfo, onProg
 		return fmt.Errorf("failed to download model: %w", err)
 	}
 
+	// Set status to extracting so the UI can show "extracting" instead of
+	// being stuck at 100% download progress.
+	m.setDownloadStatus(info.ID, DownloadStateExtracting, 100, "")
+
 	// Extract the tar.bz2 archive. The archive typically contains a single
 	// top-level directory with the model files inside.
 	if err := extractTarBz2(archivePath, tmpDir); err != nil {
@@ -240,7 +245,7 @@ func (m *ModelManager) IsDownloading(modelID string) bool {
 	m.downloadStatusMu.RLock()
 	defer m.downloadStatusMu.RUnlock()
 	s, ok := m.downloadStatus[modelID]
-	return ok && s.State == DownloadStateDownloading
+	return ok && (s.State == DownloadStateDownloading || s.State == DownloadStateExtracting)
 }
 
 // GetDownloadStatus returns the current download status for a model.

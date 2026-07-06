@@ -20,6 +20,8 @@ type PluginSettingValueDictationModel struct {
 	// (greyed-out + download button for not-downloaded, progress bar for
 	// downloading, selectable for downloaded).
 	Options []DictationModelOption
+
+	Style PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }
 
 // DictationModelStatus describes the download state of a model.
@@ -28,6 +30,7 @@ type DictationModelStatus string
 const (
 	DictationModelStatusNotDownloaded DictationModelStatus = "not_downloaded"
 	DictationModelStatusDownloading   DictationModelStatus = "downloading"
+	DictationModelStatusExtracting    DictationModelStatus = "extracting"
 	DictationModelStatusDownloaded    DictationModelStatus = "downloaded"
 	DictationModelStatusFailed        DictationModelStatus = "failed"
 )

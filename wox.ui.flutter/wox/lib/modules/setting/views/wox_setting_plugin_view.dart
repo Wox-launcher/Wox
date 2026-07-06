@@ -115,6 +115,12 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     if (settingType == "table") {
       return (settingDefinitionValue as PluginSettingValueTable).title;
     }
+    if (settingType == "dictationHotkey") {
+      return (settingDefinitionValue as PluginSettingValueDictationHotkey).label;
+    }
+    if (settingType == "dictationModel") {
+      return (settingDefinitionValue as PluginSettingValueDictationModel).label;
+    }
 
     return "";
   }
@@ -175,6 +181,12 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
       return value.key;
     }
     if (value is PluginSettingValueTable) {
+      return value.key;
+    }
+    if (value is PluginSettingValueDictationHotkey) {
+      return value.key;
+    }
+    if (value is PluginSettingValueDictationModel) {
       return value.key;
     }
     return "";

@@ -36,6 +36,13 @@ type Hotkey struct {
 
 	isCapsLockKey bool
 	capsLockKey   keyboard.Key
+
+	// holdMode indicates that this hotkey was registered with a release callback.
+	// When true, the parsed key is tracked via a raw key listener so the release
+	// callback fires when the key is let go.
+	holdMode    bool
+	holdKey     keyboard.Key
+	holdRelease func()
 }
 
 type Spec struct {
@@ -66,6 +73,19 @@ func (g *Group) RegisteredCombineKeys() []string {
 }
 
 func (h *Hotkey) Register(ctx context.Context, combineKey string, callback func()) error {
+	return h.RegisterWithRelease(ctx, combineKey, callback, nil)
+}
+
+// RegisterWithRelease registers a hotkey with an optional release callback. When
+// onRelease is non-nil, the hotkey operates in "hold" mode: onPress fires when
+// the key combination is pressed, and onRelease fires when the main key is
+// released. This is used by the dictation plugin's hold trigger mode.
+//
+// Hold mode is currently supported for normal hotkeys (modifier+key) and
+// double-modifier hotkeys. CapsLock combo hotkeys fall back to press-only
+// behaviour because the CapsLock key does not produce reliable key-up events on
+// all platforms.
+func (h *Hotkey) RegisterWithRelease(ctx context.Context, combineKey string, onPress func(), onRelease func()) error {
 	spec, parseErr := h.parseCombineKey(combineKey)
 	if parseErr != nil {
 		return parseErr
@@ -77,21 +97,41 @@ func (h *Hotkey) Register(ctx context.Context, combineKey string, callback func(
 	h.Unregister(ctx)
 	h.combineKey = combineKey
 
+	// Hold-modifier mode: a single left/right modifier key (e.g. "left_cmd").
+	// No system hotkey is registered; a raw key listener handles both press
+	// and release. This avoids OS-level hotkey conflicts and allows
+	// distinguishing left/right modifier keys.
+	if spec.isHoldModifier() {
+		util.GetLogger().Info(ctx, fmt.Sprintf("register hold-modifier hotkey: %s", combineKey))
+		h.holdMode = true
+		h.holdKey = spec.holdModifierKey
+		h.holdRelease = onRelease
+		return startHoldModifierTracking(spec.holdModifierKey, onPress, onRelease)
+	}
+
 	if spec.isDoubleModifier() {
 		util.GetLogger().Info(ctx, fmt.Sprintf("register double hotkey: %s", combineKey))
 		h.isDoubleKey = true
 		h.doubleModifierKey = spec.doubleModifierKey
-		return registerDoubleHotKey(spec.doubleModifierKey, callback)
+		if onRelease != nil {
+			h.holdMode = true
+			h.holdKey = spec.doubleModifierKey
+			h.holdRelease = onRelease
+			if err := startHoldTracking(spec.doubleModifierKey, onRelease); err != nil {
+				return err
+			}
+		}
+		return registerDoubleHotKey(spec.doubleModifierKey, onPress)
 	}
 
 	if spec.isCapsLockKey() {
 		util.GetLogger().Info(ctx, fmt.Sprintf("register caps lock hotkey: %s", combineKey))
 		h.isCapsLockKey = true
 		h.capsLockKey = spec.key
-		return registerCapsLockComboHotKey(spec.key, callback)
+		return registerCapsLockComboHotKey(spec.key, onPress)
 	}
 
-	registration, err := keyboard.RegisterGlobalHotkey(spec.modifiers, spec.key, callback)
+	registration, err := keyboard.RegisterGlobalHotkey(spec.modifiers, spec.key, onPress)
 	if err != nil {
 		return err
 	}
@@ -99,6 +139,18 @@ func (h *Hotkey) Register(ctx context.Context, combineKey string, callback func(
 	util.GetLogger().Info(ctx, fmt.Sprintf("register normal hotkey: %s", combineKey))
 	h.isDoubleKey = false
 	h.registration = registration
+
+	if onRelease != nil {
+		h.holdMode = true
+		h.holdKey = spec.key
+		h.holdRelease = onRelease
+		if err := startHoldTracking(spec.key, onRelease); err != nil {
+			_ = registration.Unregister()
+			h.registration = nil
+			return err
+		}
+		util.GetLogger().Info(ctx, fmt.Sprintf("hold mode enabled for hotkey: %s", combineKey))
+	}
 	return nil
 }
 
@@ -181,7 +233,7 @@ func isSpecialHotkeySpec(combineKey string, parser *Hotkey) bool {
 	if err != nil {
 		return false
 	}
-	return spec.isDoubleModifier() || spec.isCapsLockKey()
+	return spec.isDoubleModifier() || spec.isCapsLockKey() || spec.isHoldModifier()
 }
 
 func (g *Group) Unregister(ctx context.Context) {
@@ -212,6 +264,15 @@ func (h *Hotkey) Unregister(ctx context.Context) {
 
 // unregister releases the active registration and returns the native failure for callers that need probe diagnostics.
 func (h *Hotkey) unregister(ctx context.Context) error {
+	// Stop hold-mode release tracking first so the release callback does not
+	// fire while we are tearing down the press registration.
+	if h.holdMode {
+		stopHoldTracking(h.holdKey)
+		h.holdMode = false
+		h.holdKey = keyboard.KeyUnknown
+		h.holdRelease = nil
+	}
+
 	if h.isDoubleKey {
 		util.GetLogger().Info(ctx, fmt.Sprintf("unregister double hotkey: %s", h.combineKey))
 		unregisterDoubleHotKey(h.doubleModifierKey)

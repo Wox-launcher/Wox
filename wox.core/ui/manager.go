@@ -72,6 +72,7 @@ type Manager struct {
 	selectionHotkeyKey   string
 	dictationHotkey      *hotkey.Hotkey
 	dictationHotkeyKey   string
+	dictationTriggerMode string
 	waylandPortalHotkeys *hotkey.Group
 	waylandPortalQueries []setting.QueryHotkey
 	queryHotkeys         []*hotkey.Hotkey
@@ -359,12 +360,14 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 	return nil
 }
 
-// RegisterDictationHotkey binds the global dictation toggle hotkey. When
-// combineKey is empty the existing binding (if any) is removed. The callback
-// delegates to the DictationPlugin's ToggleDictation so the plugin owns the
-// recording lifecycle and trigger-mode logic.
-func (m *Manager) RegisterDictationHotkey(ctx context.Context, combineKey string) error {
+// RegisterDictationHotkey binds the global dictation hotkey. When combineKey
+// is empty the existing binding (if any) is removed. triggerMode controls how
+// the hotkey fires: "toggle" fires onPress on each key press; "hold" fires
+// onPress on key down and onRelease on key up. The callbacks delegate to the
+// DictationPlugin so the plugin owns the recording lifecycle.
+func (m *Manager) RegisterDictationHotkey(ctx context.Context, combineKey string, triggerMode string) error {
 	combineKey = strings.TrimSpace(combineKey)
+	triggerMode = strings.TrimSpace(triggerMode)
 	if combineKey == "" {
 		logger.Info(ctx, "remove dictation hotkey")
 		if m.dictationHotkey != nil {
@@ -372,18 +375,36 @@ func (m *Manager) RegisterDictationHotkey(ctx context.Context, combineKey string
 			m.dictationHotkey = nil
 		}
 		m.dictationHotkeyKey = ""
+		m.dictationTriggerMode = ""
 		return nil
 	}
-	if m.dictationHotkeyKey == combineKey && m.dictationHotkey != nil {
-		logger.Info(ctx, fmt.Sprintf("dictation hotkey already registered: %s", combineKey))
+	// Re-register if either the key or the trigger mode changed.
+	if m.dictationHotkeyKey == combineKey && m.dictationHotkey != nil && m.dictationTriggerMode == triggerMode {
+		logger.Info(ctx, fmt.Sprintf("dictation hotkey already registered: %s (mode=%s)", combineKey, triggerMode))
 		return nil
 	}
-	logger.Info(ctx, fmt.Sprintf("register dictation hotkey: %s", combineKey))
+	logger.Info(ctx, fmt.Sprintf("register dictation hotkey: %s (mode=%s)", combineKey, triggerMode))
+
+	var onPress func()
+	var onRelease func()
+
+	if triggerMode == "hold" {
+		// Hold mode: press starts recording, release stops it.
+		onPress = func() {
+			m.handleDictationHotkeyPress(ctx)
+		}
+		onRelease = func() {
+			m.handleDictationHotkeyRelease(ctx)
+		}
+	} else {
+		// Toggle mode: each press toggles recording on/off.
+		onPress = func() {
+			m.handleDictationHotkeyTrigger(ctx)
+		}
+	}
 
 	newHotkey := &hotkey.Hotkey{}
-	registerErr := newHotkey.Register(ctx, combineKey, func() {
-		m.handleDictationHotkeyTrigger(ctx)
-	})
+	registerErr := newHotkey.RegisterWithRelease(ctx, combineKey, onPress, onRelease)
 	if registerErr != nil {
 		return registerErr
 	}
@@ -391,16 +412,48 @@ func (m *Manager) RegisterDictationHotkey(ctx context.Context, combineKey string
 	oldHotkey := m.dictationHotkey
 	m.dictationHotkey = newHotkey
 	m.dictationHotkeyKey = combineKey
+	m.dictationTriggerMode = triggerMode
 	if oldHotkey != nil {
 		oldHotkey.Unregister(ctx)
 	}
 	return nil
 }
 
+// handleDictationHotkeyPress finds the loaded DictationPlugin and starts
+// the recording session.
+func (m *Manager) handleDictationHotkeyPress(ctx context.Context) {
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		logger.Error(ctx, "dictation plugin not found for hotkey press callback")
+		return
+	}
+	type dictationStarter interface {
+		StartDictation(ctx context.Context)
+	}
+	if ds, ok := sp.(dictationStarter); ok {
+		ds.StartDictation(ctx)
+	}
+}
+
+// handleDictationHotkeyRelease finds the loaded DictationPlugin and stops
+// the recording session, producing the recognized text.
+func (m *Manager) handleDictationHotkeyRelease(ctx context.Context) {
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		logger.Error(ctx, "dictation plugin not found for hotkey release callback")
+		return
+	}
+	type dictationStopper interface {
+		StopDictation(ctx context.Context)
+	}
+	if ds, ok := sp.(dictationStopper); ok {
+		ds.StopDictation(ctx)
+	}
+}
+
 // handleDictationHotkeyTrigger finds the loaded DictationPlugin and toggles
-// the recording session. In hold mode the plugin itself is responsible for
-// distinguishing press/release; the toggle call is idempotent when already
-// recording.
+// the recording session. Kept for backward compatibility with plugins that
+// only implement ToggleDictation.
 func (m *Manager) handleDictationHotkeyTrigger(ctx context.Context) {
 	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
 	if sp == nil {
