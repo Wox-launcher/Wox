@@ -2213,6 +2213,7 @@
   "plugin_theme_ai_generating": "正在生成...",
   "plugin_theme_ai_input_hint": "请描述你想生成的主题",
   "plugin_theme_ai_unmarshal_failed": "解析模型失败",
+  "plugin_theme_ai_preview_hint": "按 Enter 使用 AI 生成主题。AI 将根据你的描述创建包含颜色、字体和间距的完整主题配置。",
   "plugin_theme_ai_waiting": "正在等待 AI 服务返回结果",
   "plugin_theme_change_theme": "更换主题",
   "plugin_theme_group_available": "可用",
