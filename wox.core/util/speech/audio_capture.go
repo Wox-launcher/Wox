@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
+	"sync/atomic"
+	"time"
+	"wox/util"
 	"wox/util/mainthread"
 
 	"github.com/gen2brain/malgo"
@@ -61,6 +63,11 @@ func listCaptureDevicesOnMainThread(ctx context.Context) ([]AudioDevice, error) 
 
 // AudioCapture manages a single malgo capture device session. It reads
 // 16kHz mono S16 audio and converts samples to float32 for the recognizer.
+//
+// The onSamples callback is stored in an atomic pointer so it can be swapped
+// between sessions without recreating the device. This allows an
+// AudioCapturePool to keep the malgo context + device alive across sessions
+// and only Start/Stop it, saving the ~47ms InitDevice cost.
 type AudioCapture struct {
 	ctx        context.Context
 	allocator  *malgo.AllocatedContext
@@ -68,6 +75,10 @@ type AudioCapture struct {
 	sampleChan chan []float32
 	mu         sync.Mutex
 	started    bool
+
+	// onSamples is read from the malgo callback goroutine. Using atomic lets
+	// the pool swap it before Start without a lock in the hot path.
+	onSamples atomic.Pointer[func(samples []float32)]
 }
 
 // NewAudioCapture creates a new audio capture session. The deviceID can be
@@ -91,10 +102,14 @@ func NewAudioCapture(ctx context.Context, deviceID string, onSamples func(sample
 // newAudioCaptureOnMainThread performs the actual malgo initialization.
 // It must be called on the main thread (macOS) or any thread (other platforms).
 func newAudioCaptureOnMainThread(ctx context.Context, deviceID string, onSamples func(samples []float32)) (*AudioCapture, error) {
+	t0 := time.Now()
+	logger := util.GetLogger()
+
 	allocator, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init malgo context: %w", err)
 	}
+	logger.Debug(ctx, fmt.Sprintf("dictation timing: audio.InitContext cost=%dms", time.Since(t0).Milliseconds()))
 
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
@@ -105,13 +120,13 @@ func newAudioCaptureOnMainThread(ctx context.Context, deviceID string, onSamples
 	// Resolve the device ID. Leave DeviceID as nil (zeroed) for system default.
 	var captureDeviceID *malgo.DeviceID
 	if deviceID != "" && deviceID != "system" {
-		// Find the device by ID string.
 		infos, listErr := allocator.Devices(malgo.Capture)
 		if listErr != nil {
 			_ = allocator.Uninit()
 			allocator.Free()
 			return nil, fmt.Errorf("failed to enumerate capture devices: %w", listErr)
 		}
+		logger.Debug(ctx, fmt.Sprintf("dictation timing: audio.enumerateDevices cost=%dms", time.Since(t0).Milliseconds()))
 		found := false
 		for _, info := range infos {
 			if info.ID.String() == deviceID {
@@ -137,11 +152,16 @@ func newAudioCaptureOnMainThread(ctx context.Context, deviceID string, onSamples
 		ctx:       ctx,
 		allocator: allocator,
 	}
+	capture.onSamples.Store(&onSamples)
 
+	// The malgo callback reads onSamples via the atomic pointer so the pool
+	// can swap it between sessions without recreating the device.
 	onRecvFrames := func(_, pSample []byte, framecount uint32) {
 		samples := samplesInt16ToFloat(pSample)
 		if len(samples) > 0 {
-			onSamples(samples)
+			if cb := capture.onSamples.Load(); cb != nil {
+				(*cb)(samples)
+			}
 		}
 	}
 
@@ -153,8 +173,17 @@ func newAudioCaptureOnMainThread(ctx context.Context, deviceID string, onSamples
 		return nil, fmt.Errorf("failed to init capture device: %w", err)
 	}
 	capture.device = device
+	logger.Debug(ctx, fmt.Sprintf("dictation timing: audio.InitDevice cost=%dms", time.Since(t0).Milliseconds()))
+	logger.Debug(ctx, fmt.Sprintf("dictation timing: audio.total cost=%dms", time.Since(t0).Milliseconds()))
 
 	return capture, nil
+}
+
+// SetOnSamples swaps the sample callback. Safe to call when the device is
+// stopped (before Start). Used by the audio capture pool to rebind the
+// callback to a new session without recreating the device.
+func (c *AudioCapture) SetOnSamples(onSamples func(samples []float32)) {
+	c.onSamples.Store(&onSamples)
 }
 
 // Start begins audio capture. Samples are delivered to the callback

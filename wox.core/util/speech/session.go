@@ -20,10 +20,16 @@ const (
 
 // Session manages a single dictation recording session: audio capture,
 // streaming recognition, and result delivery via callbacks.
+//
+// When pool is non-nil, the recognizer model is acquired from the pool and
+// returned on Stop (model stays in memory for fast reuse). When pool is nil,
+// the recognizer is created and destroyed per session (legacy behavior).
 type Session struct {
 	ctx        context.Context
 	config     RecognizerConfig
 	deviceID   string
+	pool       *RecognizerPool
+	audioPool  *AudioCapturePool
 	recognizer Recognizer
 	capture    *AudioCapture
 	state      SessionState
@@ -44,6 +50,7 @@ type Session struct {
 }
 
 // NewSession creates a new dictation session. Call Start to begin recording.
+// The recognizer is created and destroyed per session (no pooling).
 func NewSession(ctx context.Context, config RecognizerConfig, deviceID string, onPartial func(string), onFinal func(string)) *Session {
 	return &Session{
 		ctx:       ctx,
@@ -54,43 +61,124 @@ func NewSession(ctx context.Context, config RecognizerConfig, deviceID string, o
 	}
 }
 
+// NewSessionWithPool creates a session that acquires the recognizer from the
+// given pool on Start and returns it on Stop. This keeps the model in memory
+// across sessions, eliminating the model-loading delay.
+func NewSessionWithPool(ctx context.Context, config RecognizerConfig, deviceID string, pool *RecognizerPool, onPartial func(string), onFinal func(string)) *Session {
+	return &Session{
+		ctx:       ctx,
+		config:    config,
+		deviceID:  deviceID,
+		pool:      pool,
+		onPartial: onPartial,
+		onFinal:   onFinal,
+	}
+}
+
+// NewSessionWithPools creates a session that uses both the recognizer pool
+// and the audio capture pool, keeping both the model and the audio device
+// alive across sessions for minimal startup latency.
+func NewSessionWithPools(ctx context.Context, config RecognizerConfig, deviceID string, pool *RecognizerPool, audioPool *AudioCapturePool, onPartial func(string), onFinal func(string)) *Session {
+	return &Session{
+		ctx:       ctx,
+		config:    config,
+		deviceID:  deviceID,
+		pool:      pool,
+		audioPool: audioPool,
+		onPartial: onPartial,
+		onFinal:   onFinal,
+	}
+}
+
 // Start initializes the recognizer and begins audio capture. It returns an
 // error if the model files are missing or the audio device cannot be opened.
 func (s *Session) Start() error {
+	t0 := time.Now()
+	logger := util.GetLogger()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.state != SessionStateIdle {
 		return fmt.Errorf("session already started or stopped")
 	}
 
-	// Create the recognizer first so we fail fast if the model is invalid.
-	recognizer, err := newSherpaRecognizer(s.ctx, s.config)
-	if err != nil {
-		return fmt.Errorf("failed to create recognizer (model=%s, type=%s): %w", s.config.ModelPath, s.config.ModelType, err)
+	// Acquire recognizer: from pool (fast path, model already in memory) or
+	// create from scratch (slow path, first load).
+	if s.pool != nil {
+		rec, err := s.pool.Acquire(s.ctx, s.config)
+		if err != nil {
+			return fmt.Errorf("failed to acquire recognizer from pool (model=%s, type=%s): %w", s.config.ModelPath, s.config.ModelType, err)
+		}
+		s.recognizer = rec
+	} else {
+		recognizer, err := newSherpaRecognizer(s.ctx, s.config)
+		if err != nil {
+			return fmt.Errorf("failed to create recognizer (model=%s, type=%s): %w", s.config.ModelPath, s.config.ModelType, err)
+		}
+		s.recognizer = recognizer
 	}
-	s.recognizer = recognizer
+	logger.Debug(s.ctx, fmt.Sprintf("dictation timing: session.newRecognizer cost=%dms", time.Since(t0).Milliseconds()))
 
-	// Create the audio capture device.
-	capture, err := NewAudioCapture(s.ctx, s.deviceID, func(samples []float32) {
-		s.handleAudioSamples(samples)
-	})
-	if err != nil {
-		recognizer.Close()
-		s.recognizer = nil
-		return fmt.Errorf("failed to create audio capture: %w", err)
+	// Create or acquire the audio capture device.
+	var capture *AudioCapture
+	if s.audioPool != nil {
+		c, err := s.audioPool.Acquire(s.ctx, s.deviceID, func(samples []float32) {
+			s.handleAudioSamples(samples)
+		})
+		if err != nil {
+			s.releaseRecognizer()
+			s.recognizer = nil
+			return fmt.Errorf("failed to acquire audio capture from pool: %w", err)
+		}
+		capture = c
+	} else {
+		c, err := NewAudioCapture(s.ctx, s.deviceID, func(samples []float32) {
+			s.handleAudioSamples(samples)
+		})
+		if err != nil {
+			s.releaseRecognizer()
+			s.recognizer = nil
+			return fmt.Errorf("failed to create audio capture: %w", err)
+		}
+		capture = c
 	}
 	s.capture = capture
+	logger.Debug(s.ctx, fmt.Sprintf("dictation timing: session.newAudioCapture cost=%dms", time.Since(t0).Milliseconds()))
 
 	if err := capture.Start(); err != nil {
-		capture.Close()
+		if s.audioPool != nil {
+			s.audioPool.Release(s.ctx, capture)
+		} else {
+			capture.Close()
+		}
 		s.capture = nil
-		s.recognizer.Close()
+		s.releaseRecognizer()
 		s.recognizer = nil
 		return fmt.Errorf("failed to start audio capture: %w", err)
 	}
+	logger.Debug(s.ctx, fmt.Sprintf("dictation timing: session.captureStart cost=%dms", time.Since(t0).Milliseconds()))
 
 	s.state = SessionStateRecording
+	logger.Debug(s.ctx, fmt.Sprintf("dictation timing: session.total cost=%dms", time.Since(t0).Milliseconds()))
 	return nil
+}
+
+// releaseRecognizer returns the recognizer to the pool (if pooled) or closes
+// it fully (if not pooled). The caller must hold s.mu.
+func (s *Session) releaseRecognizer() {
+	if s.recognizer == nil {
+		return
+	}
+	if s.pool != nil {
+		// Cast to access CloseStream; the pool path always produces sherpaRecognizer.
+		if sr, ok := s.recognizer.(*sherpaRecognizer); ok {
+			s.pool.Release(s.ctx, sr)
+		} else {
+			s.recognizer.Close()
+		}
+	} else {
+		s.recognizer.Close()
+	}
 }
 
 // handleAudioSamples is called from the malgo capture callback goroutine.
@@ -156,15 +244,19 @@ func (s *Session) Stop() (string, error) {
 
 	totalText := s.accumulatedText
 
-	// Clean up resources.
+	// Return audio capture to pool (keeps device alive) or close it fully.
 	if s.capture != nil {
-		s.capture.Close()
+		if s.audioPool != nil {
+			s.audioPool.Release(s.ctx, s.capture)
+		} else {
+			s.capture.Close()
+		}
 		s.capture = nil
 	}
-	if s.recognizer != nil {
-		s.recognizer.Close()
-		s.recognizer = nil
-	}
+
+	// Return recognizer to pool (keeps model in memory) or close it fully.
+	s.releaseRecognizer()
+	s.recognizer = nil
 
 	s.state = SessionStateStopped
 	return totalText, nil

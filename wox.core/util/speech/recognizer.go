@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
+	"wox/util"
 
 	sherpa "github.com/k2-fsa/sherpa-onnx-go/sherpa_onnx"
 )
@@ -34,15 +36,20 @@ func findModelFile(modelDir, pattern string) (string, error) {
 // sherpaRecognizer wraps sherpa-onnx OnlineRecognizer to implement the
 // Recognizer interface. The underlying C resources are managed through
 // the sherpa Go bindings; Close must be called to free them.
+//
+// The recognizer (loaded model) and the stream (per-session decode state) are
+// independent C objects. CloseStream releases only the stream, keeping the
+// model in memory for reuse by the recognizer pool. Close releases both.
 type sherpaRecognizer struct {
 	config     RecognizerConfig
 	recognizer *sherpa.OnlineRecognizer
 	stream     *sherpa.OnlineStream
 }
 
-// newSherpaRecognizer creates a streaming recognizer from the given config.
-// The model files must exist in ModelPath before calling this function.
-func newSherpaRecognizer(ctx context.Context, config RecognizerConfig) (Recognizer, error) {
+// newSherpaModel loads the ONNX model into memory and returns the
+// recognizer. This is the expensive call (hundreds of ms) and is cached by
+// the recognizer pool so it only happens once per model until idle eviction.
+func newSherpaModel(ctx context.Context, config RecognizerConfig) (*sherpa.OnlineRecognizer, error) {
 	sherpaConfig := sherpa.OnlineRecognizerConfig{
 		FeatConfig: sherpa.FeatureConfig{
 			SampleRate: 16000,
@@ -62,13 +69,8 @@ func newSherpaRecognizer(ctx context.Context, config RecognizerConfig) (Recogniz
 		Rule3MinUtteranceLength: 20,
 	}
 
-	// Configure model-specific paths based on the model type.
 	switch config.ModelType {
 	case "zipformer2":
-		// Streaming zipformer models use varying file names depending on the
-		// model version (e.g. encoder-epoch-99-avg-1-chunk-16-left-128.onnx,
-		// encoder-epoch-99-avg-1.onnx, or encoder.int8.onnx). Use glob to find
-		// the actual files. Match broadly with "encoder*.onnx".
 		encoder, err := findModelFile(config.ModelPath, "encoder*.onnx")
 		if err != nil {
 			return nil, fmt.Errorf("encoder model not found in %s: %w", config.ModelPath, err)
@@ -96,12 +98,43 @@ func newSherpaRecognizer(ctx context.Context, config RecognizerConfig) (Recogniz
 	if recognizer == nil {
 		return nil, fmt.Errorf("failed to create sherpa recognizer (model path: %s)", config.ModelPath)
 	}
+	return recognizer, nil
+}
+
+// newSherpaRecognizer creates a streaming recognizer with a fresh stream.
+// Used as a fallback when the pool is not available.
+func newSherpaRecognizer(ctx context.Context, config RecognizerConfig) (Recognizer, error) {
+	t0 := time.Now()
+	logger := util.GetLogger()
+
+	recognizer, err := newSherpaModel(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	logger.Debug(ctx, fmt.Sprintf("dictation timing: recognizer.NewOnlineRecognizer cost=%dms", time.Since(t0).Milliseconds()))
+
 	stream := sherpa.NewOnlineStream(recognizer)
 	if stream == nil {
 		sherpa.DeleteOnlineRecognizer(recognizer)
 		return nil, fmt.Errorf("failed to create sherpa stream")
 	}
+	logger.Debug(ctx, fmt.Sprintf("dictation timing: recognizer.NewOnlineStream cost=%dms", time.Since(t0).Milliseconds()))
+	logger.Debug(ctx, fmt.Sprintf("dictation timing: recognizer.total cost=%dms", time.Since(t0).Milliseconds()))
 
+	return &sherpaRecognizer{
+		config:     config,
+		recognizer: recognizer,
+		stream:     stream,
+	}, nil
+}
+
+// wrapSherpaRecognizer creates a recognizer wrapper from an already-loaded
+// model and a newly created stream. Used by the pool path.
+func wrapSherpaRecognizer(ctx context.Context, config RecognizerConfig, recognizer *sherpa.OnlineRecognizer) (*sherpaRecognizer, error) {
+	stream := sherpa.NewOnlineStream(recognizer)
+	if stream == nil {
+		return nil, fmt.Errorf("failed to create sherpa stream")
+	}
 	return &sherpaRecognizer{
 		config:     config,
 		recognizer: recognizer,
@@ -133,11 +166,20 @@ func (r *sherpaRecognizer) Reset() {
 	r.recognizer.Reset(r.stream)
 }
 
-func (r *sherpaRecognizer) Close() {
+// CloseStream releases only the per-session stream, keeping the loaded model
+// in memory for reuse. Call this when the recognizer came from a pool so the
+// model can be returned to the pool.
+func (r *sherpaRecognizer) CloseStream() {
 	if r.stream != nil {
 		sherpa.DeleteOnlineStream(r.stream)
 		r.stream = nil
 	}
+}
+
+// Close releases both the stream and the recognizer. Use this when the
+// recognizer is NOT pooled (e.g. pool miss fallback or error cleanup).
+func (r *sherpaRecognizer) Close() {
+	r.CloseStream()
 	if r.recognizer != nil {
 		sherpa.DeleteOnlineRecognizer(r.recognizer)
 		r.recognizer = nil

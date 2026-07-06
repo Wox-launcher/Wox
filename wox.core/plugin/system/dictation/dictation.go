@@ -36,6 +36,11 @@ const (
 	// short dictation transcript while keeping the wait perceptible.
 	aiRefineTimeout = 5 * time.Second
 
+	// recognizerPoolIdleTTL controls how long an unused speech model stays in
+	// memory before being evicted. 10 minutes covers typical back-to-back
+	// dictation bursts while reclaiming ~70-150MB during longer pauses.
+	recognizerPoolIdleTTL = 10 * time.Minute
+
 	// Embedded audio clips played when the dictation overlay shows/hides.
 	soundStart = "dictation_start.wav"
 	soundStop  = "dictation_stop.wav"
@@ -85,6 +90,16 @@ func init() {
 type DictationPlugin struct {
 	api          plugin.API
 	modelManager *speech.ModelManager
+
+	// recognizerPool keeps the speech model in memory across sessions so
+	// subsequent dictations start without the ~600ms model-loading delay.
+	// Idle models are evicted after recognizerPoolIdleTTL to reclaim memory.
+	recognizerPool *speech.RecognizerPool
+
+	// audioCapturePool keeps the malgo context + capture device alive across
+	// sessions so the ~47ms InitDevice cost is only paid once. Idle captures
+	// are evicted after recognizerPoolIdleTTL (shared with the recognizer).
+	audioCapturePool *speech.AudioCapturePool
 
 	// Session state
 	sessionMu   sync.Mutex
@@ -231,6 +246,17 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	} else {
 		p.modelManager = mgr
 	}
+
+	// Start the recognizer pool so the speech model stays in memory across
+	// sessions. The idle reaper evicts the model after recognizerPoolIdleTTL
+	// of inactivity to reclaim memory.
+	p.recognizerPool = speech.NewRecognizerPool(recognizerPoolIdleTTL)
+	p.recognizerPool.StartReaper(ctx)
+
+	// Start the audio capture pool so the malgo context + device stay alive
+	// across sessions, eliminating the InitDevice delay.
+	p.audioCapturePool = speech.NewAudioCapturePool(recognizerPoolIdleTTL)
+	p.audioCapturePool.StartReaper(ctx)
 
 	// Register dynamic setting callbacks for hotkey, input device and model.
 	p.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
@@ -557,6 +583,9 @@ func (p *DictationPlugin) StopDictation(ctx context.Context) {
 
 // startRecording initializes the recognizer and audio capture, then shows the overlay.
 func (p *DictationPlugin) startRecording(ctx context.Context) {
+	t0 := time.Now()
+	p.api.Log(ctx, plugin.LogLevelDebug, "dictation timing: plugin.startRecording enter")
+
 	// Read settings
 	deviceID := p.api.GetSetting(ctx, settingKeyInputDevice)
 	if deviceID == "" {
@@ -580,6 +609,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_error"), err.Error()))
 		return
 	}
+	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation timing: plugin.ListLocalModels cost=%dms", time.Since(t0).Milliseconds()))
 
 	var selectedModel *speech.LocalModel
 	for i := range models {
@@ -600,7 +630,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 		NumThreads: 1,
 	}
 
-	session := speech.NewSession(ctx, config, deviceID,
+	session := speech.NewSessionWithPools(ctx, config, deviceID, p.recognizerPool, p.audioCapturePool,
 		func(text string) {
 			p.updateOverlay(ctx, text)
 		},
@@ -609,24 +639,26 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 		},
 	)
 
-	// Show the overlay and play the start sound before loading the model so
-	// the user gets immediate feedback the moment they press the hotkey.
-	// session.Start() loads the speech model from disk and initializes audio
-	// capture, which can take a noticeable amount of time on first use.
-	p.showDictationOverlay(ctx)
-	p.playSoundIfEnabled(ctx, soundStart)
-
 	if err := session.Start(); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("dictation start failed: %s", err.Error()))
-		p.closeDictationOverlay()
 		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed"), err.Error()))
 		return
 	}
+	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation timing: plugin.sessionStart cost=%dms", time.Since(t0).Milliseconds()))
+
+	// Show the overlay and play the start sound only after the session is
+	// fully ready (model loaded + audio capture started). Showing it earlier
+	// would mislead the user into speaking before the recognizer can capture,
+	// causing the first few words to be lost.
+	p.showDictationOverlay(ctx)
+	p.playSoundIfEnabled(ctx, soundStart)
 
 	p.sessionMu.Lock()
 	p.session = session
 	p.isRecording = true
 	p.sessionMu.Unlock()
+
+	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation timing: plugin.total cost=%dms", time.Since(t0).Milliseconds()))
 }
 
 // stopAndOutput stops the recording, closes the overlay, and types the
