@@ -21,27 +21,6 @@ String? _physicalKeyToHoldString(PhysicalKeyboardKey key) {
   return null;
 }
 
-/// Parses a hold-hotkey string back to a display label.
-String _holdStringToLabel(String s) {
-  final lower = s.toLowerCase();
-  const map = {
-    'left_ctrl': 'Left Ctrl',
-    'right_ctrl': 'Right Ctrl',
-    'left_shift': 'Left Shift',
-    'right_shift': 'Right Shift',
-    'left_alt': 'Left Alt',
-    'right_alt': 'Right Alt',
-    'left_cmd': 'Left Cmd',
-    'right_cmd': 'Right Cmd',
-    'left_win': 'Left Win',
-    'right_win': 'Right Win',
-    'left_super': 'Left Super',
-    'right_super': 'Right Super',
-    'caps_lock': 'Caps Lock',
-  };
-  return map[lower] ?? s;
-}
-
 /// WoxHoldHotkeyRecorder is a specialised hotkey recorder for hold-mode
 /// triggers. Unlike the normal recorder which captures modifier+key
 /// combinations, this widget only accepts a single modifier key (with
@@ -106,10 +85,105 @@ class _WoxHoldHotkeyRecorderState extends State<WoxHoldHotkeyRecorder> {
     return true;
   }
 
+  /// Converts a hold-hotkey string to a display label, using the same
+  /// modifier naming convention as the rest of the app.
+  String _holdStringToLabel(String s) {
+    final lower = s.toLowerCase();
+    // Caps Lock is not a modifier key in the left/right sense.
+    if (lower == 'caps_lock') {
+      return tr('ui_hotkey_modifier_capslock');
+    }
+
+    // Parse "left_cmd" / "right_ctrl" etc. into "Left Cmd" / "Right Ctrl".
+    final parts = lower.split('_');
+    if (parts.length != 2) return s;
+
+    final side = parts[0]; // "left" or "right"
+    final modKey = parts[1]; // "cmd", "ctrl", "shift", "alt", "win", "super"
+
+    String sideLabel;
+    if (side == 'left') {
+      sideLabel = tr('ui_hotkey_side_left');
+    } else if (side == 'right') {
+      sideLabel = tr('ui_hotkey_side_right');
+    } else {
+      return s;
+    }
+
+    String modLabel;
+    switch (modKey) {
+      case 'cmd':
+      case 'win':
+      case 'super':
+        modLabel = Platform.isMacOS ? tr('ui_hotkey_modifier_cmd') : tr('ui_hotkey_modifier_win');
+        break;
+      case 'ctrl':
+        modLabel = tr('ui_hotkey_modifier_ctrl');
+        break;
+      case 'shift':
+        modLabel = tr('ui_hotkey_modifier_shift');
+        break;
+      case 'alt':
+        modLabel = Platform.isMacOS ? tr('ui_hotkey_modifier_option') : tr('ui_hotkey_modifier_alt');
+        break;
+      default:
+        return s;
+    }
+
+    return '$sideLabel $modLabel';
+  }
+
+  Widget _buildRecorderBox() {
+    final hasValue = widget.value.trim().isNotEmpty;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: _isFocused ? getThemeActiveBackgroundColor() : getThemeSubTextColor().withValues(alpha: 0.55)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
+        child: hasValue
+            ? Text(
+                '${tr('ui_hotkey_hold_prefix')} ${_holdStringToLabel(widget.value)}',
+                style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500),
+              )
+            : SizedBox(
+                width: 80,
+                height: 18,
+                child: Text(
+                  _isFocused ? tr('ui_hotkey_recording') : tr('ui_hotkey_click_to_set'),
+                  style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildFocusedHint() {
+    return Text(
+      tr('ui_hotkey_hold_press_hint'),
+      style: TextStyle(color: Colors.grey[500], fontSize: 13),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final hasValue = widget.value.trim().isNotEmpty;
-    final accentColor = getThemeActiveBackgroundColor();
+    final recorderBox = _buildRecorderBox();
+
+    Widget content;
+    if (!_isFocused) {
+      content = recorderBox;
+    } else {
+      // Show the hint to the right of the recorder box, matching the normal
+      // hotkey recorder's right-tip layout.
+      content = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          recorderBox,
+          Padding(padding: const EdgeInsets.only(left: 8.0), child: _buildFocusedHint()),
+        ],
+      );
+    }
 
     return Focus(
       focusNode: _focusNode,
@@ -119,54 +193,8 @@ class _WoxHoldHotkeyRecorderState extends State<WoxHoldHotkeyRecorder> {
         onTapDown: (_) {
           _focusNode.requestFocus();
         },
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: _isFocused ? accentColor : getThemeSubTextColor().withValues(alpha: 0.55)),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
-          child: hasValue
-              ? _buildKeyDisplay(accentColor)
-              : SizedBox(
-                  width: 120,
-                  height: 18,
-                  child: Text(
-                    _isFocused ? tr('ui_hotkey_recording') : tr('ui_hotkey_click_to_set'),
-                    style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                  ),
-                ),
-        ),
+        child: content,
       ),
-    );
-  }
-
-  Widget _buildKeyDisplay(Color accentColor) {
-    final label = _holdStringToLabel(widget.value);
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          widget.value.toLowerCase().contains('caps') ? Icons.keyboard_capslock : Icons.touch_app,
-          size: 16,
-          color: accentColor,
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: TextStyle(
-            color: getThemeTextColor(),
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(width: 8),
-        if (_isFocused)
-          Text(
-            tr('plugin_dictation_hotkey_hold_hint'),
-            style: TextStyle(color: Colors.grey[500], fontSize: 11),
-          ),
-      ],
     );
   }
 }

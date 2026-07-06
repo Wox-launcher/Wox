@@ -35,20 +35,20 @@ type ModelInfo struct {
 // download. They are ordered by recommendation (most useful first).
 var RecommendedModels = []ModelInfo{
 	{
-		ID:           "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
-		DisplayName:  "Zipformer ZH int8 (streaming, ~154MB)",
-		DownloadURL:  "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2",
-		ModelType:    "zipformer2",
-		Language:     "zh-CN",
-		SizeMB:       154,
+		ID:          "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
+		DisplayName: "Zipformer ZH int8 (streaming, ~154MB)",
+		DownloadURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2",
+		ModelType:   "zipformer2",
+		Language:    "zh-CN",
+		SizeMB:      154,
 	},
 	{
-		ID:           "sherpa-onnx-streaming-zipformer-multi-zh-hans-2023-12-12",
-		DisplayName:  "Zipformer Multi ZH-Hans int8 (streaming, ~67MB)",
-		DownloadURL:  "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-multi-zh-hans-2023-12-12.tar.bz2",
-		ModelType:    "zipformer2",
-		Language:     "zh-CN",
-		SizeMB:       67,
+		ID:          "sherpa-onnx-streaming-zipformer-multi-zh-hans-2023-12-12",
+		DisplayName: "Zipformer Multi ZH-Hans int8 (streaming, ~67MB)",
+		DownloadURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-multi-zh-hans-2023-12-12.tar.bz2",
+		ModelType:   "zipformer2",
+		Language:    "zh-CN",
+		SizeMB:      67,
 	},
 }
 
@@ -256,6 +256,24 @@ func (m *ModelManager) GetDownloadStatus(modelID string) *DownloadStatus {
 		copy := *s
 		return &copy
 	}
+	return nil
+}
+
+// DeleteModel removes a model from disk by its ID. The model directory is
+// deleted entirely. If the model does not exist on disk, the call is a no-op.
+// The download status entry (if any) is also cleared.
+func (m *ModelManager) DeleteModel(modelID string) error {
+	targetDir := filepath.Join(m.modelsDir, modelID)
+	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
+		m.setDownloadStatus(modelID, DownloadStateIdle, 0, "")
+		return nil
+	}
+
+	if err := os.RemoveAll(targetDir); err != nil {
+		return fmt.Errorf("failed to delete model directory: %w", err)
+	}
+
+	m.setDownloadStatus(modelID, DownloadStateIdle, 0, "")
 	return nil
 }
 

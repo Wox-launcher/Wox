@@ -396,6 +396,18 @@ func (p *DictationPlugin) StartModelDownload(ctx context.Context, modelID string
 	return nil
 }
 
+// DeleteModel removes a downloaded model from disk. If the model is the
+// currently selected one, the caller is responsible for clearing the setting.
+func (p *DictationPlugin) DeleteModel(ctx context.Context, modelID string) error {
+	if p.modelManager == nil {
+		return fmt.Errorf("model manager not initialized")
+	}
+	if p.modelManager.IsDownloading(modelID) {
+		return fmt.Errorf("cannot delete model %s while it is downloading", modelID)
+	}
+	return p.modelManager.DeleteModel(modelID)
+}
+
 // ModelStatusInfo is the JSON-serializable model status sent to the Flutter side.
 // The JSON tags use the same PascalCase keys as DictationModelOption.fromJson
 // expects (ID, DisplayName, Status, DownloadProgress, SizeMB, Error) so the

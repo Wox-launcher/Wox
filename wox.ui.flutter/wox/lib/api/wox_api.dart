@@ -474,6 +474,10 @@ class WoxApi {
     await WoxHttpUtil.instance.postData(traceId, "/dictation/model/download", {"modelId": modelId});
   }
 
+  Future<void> dictationModelDelete(String traceId, String modelId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/dictation/model/delete", {"modelId": modelId});
+  }
+
   Future<List<dynamic>> dictationModelStatus(String traceId) async {
     final result = await WoxHttpUtil.instance.postData(traceId, "/dictation/model/status", null);
     if (result is List) {

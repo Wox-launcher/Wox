@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_dictation_model.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/log.dart';
@@ -25,7 +25,12 @@ class WoxSettingPluginDictationModel extends StatefulWidget {
 class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictationModel> with WoxSettingPluginItemMixin<WoxSettingPluginDictationModel> {
   late List<DictationModelOption> _options;
   String _selectedId = "";
+  String _errorMessage = "";
   Timer? _pollTimer;
+
+  final GlobalKey _dropdownKey = GlobalKey();
+  OverlayEntry? _overlayEntry;
+  final LayerLink _layerLink = LayerLink();
 
   @override
   double get labelWidth => widget.labelWidth;
@@ -35,6 +40,9 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
     super.initState();
     _options = List.from(widget.item.options);
     _selectedId = widget.value.isNotEmpty ? widget.value : _findFirstDownloaded();
+    if (_selectedId.isNotEmpty) {
+      widget.onUpdate(widget.item.key, _selectedId);
+    }
     _startPollingIfDownloading();
   }
 
@@ -53,6 +61,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _removeOverlay();
     super.dispose();
   }
 
@@ -66,12 +75,12 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
   }
 
   void _startPollingIfDownloading() {
-    final hasDownloading = _options.any((o) => o.status == DictationModelStatus.downloading);
-    if (hasDownloading && _pollTimer == null) {
+    final hasActive = _options.any((o) => o.status == DictationModelStatus.downloading || o.status == DictationModelStatus.extracting);
+    if (hasActive && _pollTimer == null) {
       _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
         await _refreshStatus();
       });
-    } else if (!hasDownloading && _pollTimer != null) {
+    } else if (!hasActive && _pollTimer != null) {
       _pollTimer?.cancel();
       _pollTimer = null;
     }
@@ -89,7 +98,6 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
             _options[idx] = DictationModelOption.fromJson(s);
           }
         }
-        // Auto-select the first downloaded model if nothing is selected yet.
         if (_selectedId.isEmpty) {
           _selectedId = _findFirstDownloaded();
           if (_selectedId.isNotEmpty) {
@@ -98,6 +106,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
         }
       });
       _startPollingIfDownloading();
+      _overlayEntry?.markNeedsBuild();
     } catch (e) {
       Logger.instance.error('dictation_model_status', 'Failed to refresh model status: $e');
     }
@@ -108,6 +117,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
     try {
       await WoxApi.instance.dictationModelDownload(traceId, modelId);
       setState(() {
+        _errorMessage = "";
         final idx = _options.indexWhere((o) => o.id == modelId);
         if (idx >= 0) {
           _options[idx] = DictationModelOption.fromJson({
@@ -121,10 +131,68 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
         }
       });
       _startPollingIfDownloading();
+      _overlayEntry?.markNeedsBuild();
     } catch (e) {
       if (!mounted) return;
-      Get.snackbar('Error', 'Failed to start download: $e');
+      setState(() {
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+      _overlayEntry?.markNeedsBuild();
     }
+  }
+
+  Future<void> _deleteModel(String modelId) async {
+    final traceId = DateTime.now().millisecondsSinceEpoch.toString();
+    try {
+      await WoxApi.instance.dictationModelDelete(traceId, modelId);
+      setState(() {
+        _errorMessage = "";
+        final idx = _options.indexWhere((o) => o.id == modelId);
+        if (idx >= 0) {
+          _options[idx] = DictationModelOption.fromJson({
+            'ID': _options[idx].id,
+            'DisplayName': _options[idx].displayName,
+            'Status': 'not_downloaded',
+            'DownloadProgress': 0,
+            'SizeMB': _options[idx].sizeMB,
+            'Error': '',
+          });
+        }
+        // If the deleted model was selected, clear the selection.
+        if (_selectedId == modelId) {
+          _selectedId = _findFirstDownloaded();
+          widget.onUpdate(widget.item.key, _selectedId);
+        }
+      });
+      _overlayEntry?.markNeedsBuild();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+      _overlayEntry?.markNeedsBuild();
+    }
+  }
+
+  void _selectModel(String modelId) {
+    setState(() => _selectedId = modelId);
+    widget.onUpdate(widget.item.key, modelId);
+    _removeOverlay();
+  }
+
+  void _showDropdown() {
+    _removeOverlay();
+    final renderBox = _dropdownKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final size = renderBox.size;
+
+    _overlayEntry = OverlayEntry(builder: (context) => _buildDropdownOverlay(size));
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
   }
 
   @override
@@ -133,98 +201,184 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
       label: widget.item.label,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: _options.map((opt) => _buildModelRow(opt)).toList(),
+        children: [
+          _buildDropdownButton(),
+          validationMessage(_errorMessage),
+        ],
       ),
       style: widget.item.style,
       tooltip: widget.item.tooltip,
     );
   }
 
-  Widget _buildModelRow(DictationModelOption opt) {
+  /// Extracts the model name without parenthetical metadata.
+  /// E.g. "Zipformer ZH int8 (streaming, ~154MB)" → "Zipformer ZH int8"
+  String _modelDisplayName(String displayName) {
+    final parenIdx = displayName.indexOf('(');
+    if (parenIdx > 0) {
+      return displayName.substring(0, parenIdx).trim();
+    }
+    return displayName;
+  }
+
+  Widget _buildDropdownButton() {
+    final selectedOpt = _options.where((o) => o.id == _selectedId).firstOrNull;
+    final textColor = getThemeTextColor();
+    final borderColor = getThemeSubTextColor().withValues(alpha: 0.55);
+
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: GestureDetector(
+        key: _dropdownKey,
+        behavior: HitTestBehavior.translucent,
+        onTap: _showDropdown,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: borderColor),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  selectedOpt != null ? _modelDisplayName(selectedOpt.displayName) : tr('plugin_dictation_model_select_hint'),
+                  style: TextStyle(
+                    color: selectedOpt != null ? textColor : textColor.withValues(alpha: 0.5),
+                    fontSize: 13,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Icon(Icons.arrow_drop_down, color: textColor.withValues(alpha: 0.7), size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropdownOverlay(Size buttonSize) {
+    final dropdownBg = getThemePopupSurfaceColor();
+    final textColor = getThemeTextColor();
+    final subTextColor = getThemeSubTextColor();
+    final accentColor = getThemeActiveBackgroundColor();
+    final borderColor = getThemeSubTextColor().withValues(alpha: 0.55);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: _removeOverlay,
+      child: Stack(
+        children: [
+          Positioned(
+            width: buttonSize.width,
+            child: CompositedTransformFollower(
+              link: _layerLink,
+              showWhenUnlinked: false,
+              offset: Offset(0, buttonSize.height),
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(4),
+                color: dropdownBg,
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: borderColor),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _options.map((opt) => _buildMenuItem(opt, textColor, subTextColor, accentColor, dropdownBg)).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuItem(DictationModelOption opt, Color textColor, Color subTextColor, Color accentColor, Color dropdownBg) {
     final isSelected = _selectedId == opt.id;
     final isDownloaded = opt.status == DictationModelStatus.downloaded;
     final isDownloading = opt.status == DictationModelStatus.downloading;
+    final isExtracting = opt.status == DictationModelStatus.extracting;
     final isFailed = opt.status == DictationModelStatus.failed;
-    final accentColor = getThemeActiveBackgroundColor();
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+    return InkWell(
+      onTap: isDownloaded ? () => _selectModel(opt.id) : null,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: isDownloaded && isSelected ? accentColor.withValues(alpha: 0.4) : getThemeDividerColor(),
-            width: 1,
-          ),
-          borderRadius: BorderRadius.circular(6),
-          color: isDownloaded && isSelected ? accentColor.withValues(alpha: 0.06) : Colors.transparent,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        color: isSelected ? Theme.of(context).focusColor : null,
         child: Row(
           children: [
-            // Radio indicator
-            Icon(
-              isDownloaded && isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-              size: 18,
-              color: isDownloaded ? accentColor : getThemeSubTextColor(),
-            ),
-            const SizedBox(width: 10),
-            // Model name and size
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    opt.displayName,
+                    _modelDisplayName(opt.displayName),
                     style: TextStyle(
-                      color: isDownloaded ? getThemeTextColor() : getThemeSubTextColor(),
+                      color: isDownloaded ? textColor : subTextColor,
                       fontSize: 13,
-                      fontWeight: isDownloaded && isSelected ? FontWeight.w600 : FontWeight.normal,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   if (opt.sizeMB > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
                         '${opt.sizeMB}MB',
-                        style: TextStyle(color: getThemeSubTextColor(), fontSize: 11),
+                        style: TextStyle(color: subTextColor, fontSize: 11),
                       ),
                     ),
                 ],
               ),
             ),
-            // Status / action
-            _buildStatusAction(opt, isDownloading, isDownloaded, isFailed, accentColor),
+            const SizedBox(width: 12),
+            _buildMenuTrailing(opt, isDownloading, isExtracting, isDownloaded, isFailed, isSelected, accentColor, subTextColor),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatusAction(DictationModelOption opt, bool isDownloading, bool isDownloaded, bool isFailed, Color accentColor) {
+  Widget _buildMenuTrailing(
+    DictationModelOption opt,
+    bool isDownloading,
+    bool isExtracting,
+    bool isDownloaded,
+    bool isFailed,
+    bool isSelected,
+    Color accentColor,
+    Color subTextColor,
+  ) {
     if (isDownloaded) {
-      return GestureDetector(
-        onTap: () {
-          setState(() => _selectedId = opt.id);
-          widget.onUpdate(widget.item.key, opt.id);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: accentColor.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.check_circle, size: 14, color: accentColor),
-              const SizedBox(width: 4),
-              Text(
-                tr('plugin_dictation_model_ready'),
-                style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.w600),
+      // Selected: show checkmark + delete button. Not selected: show delete button only.
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isSelected) ...[
+            Icon(Icons.check, size: 16, color: accentColor),
+            const SizedBox(width: 8),
+          ],
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _deleteModel(opt.id),
+            child: WoxTooltip(
+              message: tr('plugin_dictation_model_delete'),
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(Icons.delete_outline, size: 16, color: subTextColor),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       );
     }
     if (isDownloading) {
@@ -232,26 +386,36 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 80,
+            width: 60,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: opt.downloadProgress / 100.0,
                 backgroundColor: getThemeDividerColor(),
                 valueColor: AlwaysStoppedAnimation(accentColor),
-                minHeight: 6,
+                minHeight: 4,
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           SizedBox(
-            width: 36,
+            width: 30,
             child: Text(
               '${opt.downloadProgress}%',
-              style: TextStyle(color: getThemeSubTextColor(), fontSize: 11),
+              style: TextStyle(color: subTextColor, fontSize: 11),
               textAlign: TextAlign.right,
             ),
           ),
+        ],
+      );
+    }
+    if (isExtracting) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(accentColor))),
+          const SizedBox(width: 6),
+          Text(tr('plugin_dictation_model_extracting'), style: TextStyle(color: subTextColor, fontSize: 11)),
         ],
       );
     }
@@ -261,14 +425,6 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
         children: [
           Icon(Icons.error_outline, size: 16, color: Colors.red),
           const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              opt.error,
-              style: const TextStyle(color: Colors.red, fontSize: 11),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
           WoxButton.secondary(
             text: tr('plugin_dictation_model_retry'),
             onPressed: () => _downloadModel(opt.id),
@@ -277,11 +433,16 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
         ],
       );
     }
-    return WoxButton.secondary(
-      text: tr('plugin_dictation_model_download'),
-      icon: Icon(Icons.download, size: 14, color: accentColor),
-      onPressed: () => _downloadModel(opt.id),
-      fontSize: 11,
+    // Not downloaded: download button.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _downloadModel(opt.id),
+      child: WoxButton.secondary(
+        text: tr('plugin_dictation_model_download'),
+        icon: Icon(Icons.download, size: 14, color: accentColor),
+        onPressed: () => _downloadModel(opt.id),
+        fontSize: 11,
+      ),
     );
   }
 }

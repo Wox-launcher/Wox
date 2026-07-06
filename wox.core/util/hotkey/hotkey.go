@@ -40,9 +40,8 @@ type Hotkey struct {
 	// holdMode indicates that this hotkey was registered with a release callback.
 	// When true, the parsed key is tracked via a raw key listener so the release
 	// callback fires when the key is let go.
-	holdMode    bool
-	holdKey     keyboard.Key
-	holdRelease func()
+	holdMode bool
+	holdKey  keyboard.Key
 }
 
 type Spec struct {
@@ -105,7 +104,7 @@ func (h *Hotkey) RegisterWithRelease(ctx context.Context, combineKey string, onP
 		util.GetLogger().Info(ctx, fmt.Sprintf("register hold-modifier hotkey: %s", combineKey))
 		h.holdMode = true
 		h.holdKey = spec.holdModifierKey
-		h.holdRelease = onRelease
+
 		return startHoldModifierTracking(spec.holdModifierKey, onPress, onRelease)
 	}
 
@@ -116,7 +115,7 @@ func (h *Hotkey) RegisterWithRelease(ctx context.Context, combineKey string, onP
 		if onRelease != nil {
 			h.holdMode = true
 			h.holdKey = spec.doubleModifierKey
-			h.holdRelease = onRelease
+
 			if err := startHoldTracking(spec.doubleModifierKey, onRelease); err != nil {
 				return err
 			}
@@ -143,7 +142,7 @@ func (h *Hotkey) RegisterWithRelease(ctx context.Context, combineKey string, onP
 	if onRelease != nil {
 		h.holdMode = true
 		h.holdKey = spec.key
-		h.holdRelease = onRelease
+
 		if err := startHoldTracking(spec.key, onRelease); err != nil {
 			_ = registration.Unregister()
 			h.registration = nil
@@ -270,7 +269,7 @@ func (h *Hotkey) unregister(ctx context.Context) error {
 		stopHoldTracking(h.holdKey)
 		h.holdMode = false
 		h.holdKey = keyboard.KeyUnknown
-		h.holdRelease = nil
+
 	}
 
 	if h.isDoubleKey {

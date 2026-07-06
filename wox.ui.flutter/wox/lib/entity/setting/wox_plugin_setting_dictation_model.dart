@@ -3,6 +3,7 @@ import '../wox_plugin_setting.dart';
 enum DictationModelStatus {
   notDownloaded,
   downloading,
+  extracting,
   downloaded,
   failed;
 
@@ -12,6 +13,8 @@ enum DictationModelStatus {
         return notDownloaded;
       case 'downloading':
         return downloading;
+      case 'extracting':
+        return extracting;
       case 'downloaded':
         return downloaded;
       case 'failed':

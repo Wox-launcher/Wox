@@ -452,8 +452,8 @@ func (m *Manager) handleDictationHotkeyRelease(ctx context.Context) {
 }
 
 // handleDictationHotkeyTrigger finds the loaded DictationPlugin and toggles
-// the recording session. Kept for backward compatibility with plugins that
-// only implement ToggleDictation.
+// the recording session. Used by toggle mode where each hotkey press flips
+// between recording and idle.
 func (m *Manager) handleDictationHotkeyTrigger(ctx context.Context) {
 	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
 	if sp == nil {
