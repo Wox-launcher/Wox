@@ -174,9 +174,28 @@ func (t *capsLockComboTracker) handleDarwinCapsLockEvent(event keyboard.RawKeyEv
 		return keyboard.KeyUnknown, false
 	}
 
+	// When the IOHID physical keyboard monitor is available, use it to
+	// determine the physical Caps Lock key state (the gold standard).
+	// When it is NOT available (some keyboards/macOS versions don't deliver
+	// Caps Lock HID events), fall back to the kCGEventFlagsChanged toggle
+	// event itself: EventTypeKeyDown means Caps Lock was toggled ON (key
+	// pressed), EventTypeKeyUp means it was toggled OFF (key pressed again).
+	iohidAvailable := event.NativeCapsLockStateAvailable
+
 	if !t.capsPressed {
-		if !event.NativeCapsLockStateAvailable || !event.NativeCapsLockPressed {
-			return keyboard.KeyUnknown, false
+		// Start combo mode.
+		if iohidAvailable {
+			// IOHID path: trust the physical key state.
+			if !event.NativeCapsLockPressed {
+				return keyboard.KeyUnknown, false
+			}
+		} else {
+			// Fallback path: only start on a toggle-ON event (KeyDown).
+			// A KeyUp event here means Caps Lock is being toggled OFF and
+		// we were not in combo mode, so just let it pass through.
+			if event.Type != keyboard.EventTypeKeyDown {
+				return keyboard.KeyUnknown, false
+			}
 		}
 
 		t.capsPressed = true
@@ -189,11 +208,20 @@ func (t *capsLockComboTracker) handleDarwinCapsLockEvent(event keyboard.RawKeyEv
 		return keyboard.KeyUnknown, true
 	}
 
+	// Caps Lock is already pressed (we're in combo mode). Another
+	// kCGEventFlagsChanged means the user pressed Caps Lock again to
+	// toggle it OFF. End the current combo sequence.
 	if t.comboTriggered {
 		t.finishDarwinCapsLockComboSequence(allowCapsLockStateUpdate, "caps-state-transition")
 		return keyboard.KeyUnknown, true
 	}
 
+	// Caps Lock was pressed but no combo key was pressed – the user
+	// toggled Caps Lock off without using it as a modifier. Reset the
+	// combo state and consume the event. The system has already toggled
+	// the state back, which matches capsLockStateBefore, so no explicit
+	// restoration is needed. Consuming prevents other apps from seeing
+	// a toggle-OFF event without a corresponding toggle-ON.
 	t.resetCapsSequence()
 	return keyboard.KeyUnknown, true
 }
@@ -202,12 +230,14 @@ func (t *capsLockComboTracker) handleDarwinCapsLockEvent(event keyboard.RawKeyEv
 // Caps Lock as lock-state transitions instead of a normal physical down/up pair.
 func (t *capsLockComboTracker) handleDarwinNonCapsLockEvent(event keyboard.RawKeyEvent, allowCapsLockStateUpdate bool) (keyboard.Key, bool) {
 	if !t.capsPressed {
+		// Recovery path: a non-CapsLock key event arrived while we're not in
+		// combo mode. This can happen when a Caps Lock state transition
+		// reset the Go state while IOHID still reports the physical key as
+		// held. Only attempt recovery when IOHID is available.
 		if event.Type != keyboard.EventTypeKeyDown || !event.NativeCapsLockStateAvailable || !event.NativeCapsLockPressed {
 			return keyboard.KeyUnknown, false
 		}
 
-		// Recover combos when a Caps Lock state transition reset the Go state while
-		// IOHID still reports the physical Caps Lock key as held.
 		t.capsPressed = true
 		t.comboTriggered = false
 		t.capsPressedAt = util.GetSystemTimestamp()
@@ -249,14 +279,32 @@ func (t *capsLockComboTracker) handleDarwinNonCapsLockEvent(event keyboard.RawKe
 	return event.Key, true
 }
 
-// shouldTreatDarwinKeyAsCombo trusts only the IOHID physical Caps Lock state.
+// shouldTreatDarwinKeyAsCombo decides whether a non-CapsLock key event should
+// be treated as part of a Caps Lock combo. When the IOHID physical keyboard
+// monitor is available, it trusts the physical Caps Lock state. When IOHID is
+// not available, it trusts the Go-level capsPressed state set by
+// handleDarwinCapsLockEvent (the kCGEventFlagsChanged fallback path).
 func (t *capsLockComboTracker) shouldTreatDarwinKeyAsCombo(event keyboard.RawKeyEvent) bool {
-	return event.NativeCapsLockStateAvailable && event.NativeCapsLockPressed
+	if event.NativeCapsLockStateAvailable {
+		return event.NativeCapsLockPressed
+	}
+	// Fallback: if we're in combo mode (capsPressed was set by the
+	// flagsChanged event), treat the key as part of the combo.
+	return true
 }
 
-// isDarwinCapsLockStillPressed trusts only the IOHID physical Caps Lock state.
+// isDarwinCapsLockStillPressed reports whether the physical Caps Lock key is
+// still held down. When IOHID is available, it trusts the physical state. When
+// IOHID is not available, it assumes the key is still pressed so that the combo
+// sequence ends via the normal "combo-keys-released" path instead of being
+// cut short prematurely.
 func (t *capsLockComboTracker) isDarwinCapsLockStillPressed(event keyboard.RawKeyEvent) bool {
-	return event.NativeCapsLockStateAvailable && event.NativeCapsLockPressed
+	if event.NativeCapsLockStateAvailable {
+		return event.NativeCapsLockPressed
+	}
+	// Fallback: assume still pressed; the combo will end when all combo
+	// keys are released (handled by the "combo-keys-released" path).
+	return true
 }
 
 // finishDarwinCapsLockComboSequence clears the synthetic Caps Lock combo state once the combo is no longer active.
