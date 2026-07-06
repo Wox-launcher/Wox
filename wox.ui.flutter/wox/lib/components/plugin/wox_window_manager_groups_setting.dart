@@ -102,17 +102,13 @@ class _WoxWindowManagerGroupsSettingState extends State<WoxWindowManagerGroupsSe
     }
   }
 
-  Future<void> _openCreateGroupDialog(
-    BuildContext dialogContext,
-    Future<String?> Function(Map<String, dynamic> row) saveRow, {
-    Map<String, dynamic> initialRow = const <String, dynamic>{},
-  }) async {
+  Future<void> _openCreateGroupDialog(BuildContext dialogContext, Future<String?> Function(Map<String, dynamic> row) saveRow, {Map<String, dynamic>? initialRow}) async {
     await _ensureDisplaysLoaded();
     if (!dialogContext.mounted) {
       return;
     }
 
-    final group = initialRow.isEmpty ? _newGroup() : _WindowManagerGroup.fromJson(initialRow).copy();
+    final group = (initialRow == null || initialRow.isEmpty) ? _newGroup() : _WindowManagerGroup.fromJson(initialRow).copy();
     if (group.id.trim().isEmpty) {
       group.id = const UuidV4().generate();
     }

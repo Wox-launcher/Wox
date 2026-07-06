@@ -490,7 +490,6 @@ class AIProvider {
   }
 }
 
-
 class AIMCPServer {
   late String name;
   late String type;
@@ -531,6 +530,7 @@ class AISkill {
   late String manifestPath;
   late String source;
   late String sourceName;
+  late String sourceUrl;
   late bool builtin;
   late bool readOnly;
   late String error;
@@ -549,6 +549,7 @@ class AISkill {
     required this.manifestPath,
     required this.source,
     required this.sourceName,
+    required this.sourceUrl,
     required this.builtin,
     required this.readOnly,
     required this.error,
@@ -568,6 +569,7 @@ class AISkill {
     manifestPath = json['ManifestPath'] ?? json['manifestPath'] ?? '';
     source = json['Source'] ?? json['source'] ?? '';
     sourceName = json['SourceName'] ?? json['sourceName'] ?? '';
+    sourceUrl = json['SourceUrl'] ?? json['sourceUrl'] ?? '';
     builtin = json['Builtin'] ?? json['builtin'] ?? false;
     readOnly = json['ReadOnly'] ?? json['readOnly'] ?? true;
     error = json['Error'] ?? json['error'] ?? '';
@@ -589,8 +591,9 @@ class AISkill {
     data['Description'] = description;
     data['Path'] = path;
     data['ManifestPath'] = manifestPath;
-    data['Source'] = source;
+    data['source'] = source;
     data['SourceName'] = sourceName;
+    data['SourceUrl'] = sourceUrl;
     data['Builtin'] = builtin;
     data['ReadOnly'] = readOnly;
     data['Error'] = error;

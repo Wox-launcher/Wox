@@ -5,6 +5,7 @@ import (
 	"html"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"wox/common"
@@ -13,6 +14,15 @@ import (
 const (
 	availableSkillsPromptMaxChars = 12000
 )
+
+var skillTagPattern = regexp.MustCompile(`\{skill:[^}]+\}`)
+
+// StripSkillTags removes all {skill:xxx} tags from the given text. Used to
+// clean the text sent to the AI model — the tags are an internal UI
+// representation and the skill content is injected separately.
+func StripSkillTags(text string) string {
+	return strings.TrimSpace(skillTagPattern.ReplaceAllString(text, ""))
+}
 
 // SkillRefFromSkill converts a discovered skill into the message-level reference saved in chat history.
 func SkillRefFromSkill(skill common.Skill) common.AISkillRef {

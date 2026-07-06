@@ -138,6 +138,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/ai/mcp/tools":       handleAIMCPServerTools,
 	"/ai/mcp/tools/all":   handleAIMCPServerToolsAll,
 	"/ai/skills":          handleAISkills,
+	"/ai/skills/clone":    handleAISkillsClone,
 	"/ai/question/answer": handleAIQuestionAnswer,
 
 	// doctor
@@ -3278,6 +3279,40 @@ func handleAISkills(w http.ResponseWriter, r *http.Request) {
 
 	skills := chater.GetAllSkills(ctx)
 	writeSuccessResponse(w, skills)
+}
+
+func handleAISkillsClone(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	parsed := gjson.ParseBytes(body)
+	url := parsed.Get("url").String()
+	if strings.TrimSpace(url) == "" {
+		writeErrorResponse(w, "url is required")
+		return
+	}
+
+	stubs, err := ai.DiscoverRemoteSkills(ctx, url)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	results := make([]map[string]interface{}, 0, len(stubs))
+	for _, stub := range stubs {
+		results = append(results, map[string]interface{}{
+			"Path":         stub.Path,
+			"ManifestPath": stub.ManifestPath,
+			"Name":         stub.Name,
+			"Description":  stub.Description,
+			"Error":        stub.Error,
+			"Source":       "remote",
+			"SourceName":   "Remote",
+			"SourceUrl":    stub.SourceUrl,
+			"Enabled":      true,
+		})
+	}
+	writeSuccessResponse(w, results)
 }
 
 func handleAIQuestionAnswer(w http.ResponseWriter, r *http.Request) {

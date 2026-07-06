@@ -704,7 +704,11 @@ func (r *AIChatPlugin) withMessageSkillReferences(ctx context.Context, conversat
 	}
 
 	cloned := cloneAIConversation(conversation)
-	cloned.Text = builder.String() + "\n\nUser request:\n" + conversation.Text
+	// Strip {skill:xxx} tags from the text sent to the model — they are an
+	// internal UI representation and the skill content is already injected
+	// above. The tags remain in the persisted conversation for display.
+	cleanedText := ai.StripSkillTags(conversation.Text)
+	cloned.Text = builder.String() + "\n\nUser request:\n" + cleanedText
 	return cloned
 }
 

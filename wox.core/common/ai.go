@@ -454,6 +454,7 @@ type Skill struct {
 	ManifestPath           string
 	Source                 string
 	SourceName             string
+	SourceUrl              string
 	Builtin                bool
 	ReadOnly               bool
 	Error                  string
