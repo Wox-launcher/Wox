@@ -404,18 +404,25 @@ func (m *Manager) RegisterDictationHotkey(ctx context.Context, combineKey string
 	}
 
 	newHotkey := &hotkey.Hotkey{}
+	// Unregister the previous hotkey BEFORE registering the new one. For
+	// hold-modifier keys (e.g. right_ctrl) the callback registry is keyed by
+	// the physical key, so registering first and then unregistering the old
+	// instance would delete the freshly-registered callback and leave the
+	// hotkey silently dead.
+	oldHotkey := m.dictationHotkey
+	if oldHotkey != nil {
+		oldHotkey.Unregister(ctx)
+		m.dictationHotkey = nil
+	}
+
 	registerErr := newHotkey.RegisterWithRelease(ctx, combineKey, onPress, onRelease)
 	if registerErr != nil {
 		return registerErr
 	}
 
-	oldHotkey := m.dictationHotkey
 	m.dictationHotkey = newHotkey
 	m.dictationHotkeyKey = combineKey
 	m.dictationTriggerMode = triggerMode
-	if oldHotkey != nil {
-		oldHotkey.Unregister(ctx)
-	}
 	return nil
 }
 

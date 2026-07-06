@@ -609,8 +609,16 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 		},
 	)
 
+	// Show the overlay and play the start sound before loading the model so
+	// the user gets immediate feedback the moment they press the hotkey.
+	// session.Start() loads the speech model from disk and initializes audio
+	// capture, which can take a noticeable amount of time on first use.
+	p.showDictationOverlay(ctx)
+	p.playSoundIfEnabled(ctx, soundStart)
+
 	if err := session.Start(); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("dictation start failed: %s", err.Error()))
+		p.closeDictationOverlay()
 		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed"), err.Error()))
 		return
 	}
@@ -619,9 +627,6 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 	p.session = session
 	p.isRecording = true
 	p.sessionMu.Unlock()
-
-	p.showDictationOverlay(ctx)
-	p.playSoundIfEnabled(ctx, soundStart)
 }
 
 // stopAndOutput stops the recording, closes the overlay, and types the
@@ -659,8 +664,13 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 		if !ok {
 			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_ai_no_model"))
 		} else {
+			// Gather recent context BEFORE persisting the current utterance so
+			// the context only contains prior dictations. The finalized
+			// transcripts help the model preserve continuity across consecutive
+			// sentences (pronouns, tense, topic).
+			recentCtx := p.history.recentContext(util.GetSystemTimestamp())
 			p.showRefiningOverlay(ctx)
-			refined, refineErr := p.refineWithAI(ctx, model, text)
+			refined, refineErr := p.refineWithAI(ctx, model, text, recentCtx)
 			if refineErr != nil {
 				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI refine failed: %s", refineErr.Error()))
 				if ctxErr := refineErr; ctxErr != nil && strings.Contains(ctxErr.Error(), "timeout") {
@@ -756,18 +766,39 @@ func (p *DictationPlugin) showRefiningOverlay(ctx context.Context) {
 // the refined text. It blocks until the stream finishes, fails, or the
 // timeout elapses; on timeout it returns an error mentioning "timeout" so the
 // caller can surface a dedicated message.
-func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, rawText string) (string, error) {
+//
+// recentContext carries the finalized transcripts from the last few minutes
+// (oldest-first). It lets the model understand pronouns, tense, and topic
+// continuity across consecutive dictations. The current utterance is the only
+// text that should be output; context is provided for reference only.
+func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, rawText string, recentContext []string) (string, error) {
 	refineCtx, cancel := context.WithTimeout(ctx, aiRefineTimeout)
 	defer cancel()
+
+	systemPrompt := "You are a transcription cleaner. Rewrite the user's dictated text to remove filler words (um, uh, like, you know), fix disfluencies and false starts, add appropriate punctuation, and preserve the original meaning and language. Output only the cleaned text, with no explanations, quotes, or extra formatting."
+
+	var userPrompt string
+	if len(recentContext) > 0 {
+		var ctxBuf strings.Builder
+		ctxBuf.WriteString("Previous dictation context (for reference only, do not repeat or rewrite these):\n")
+		for i, c := range recentContext {
+			ctxBuf.WriteString(fmt.Sprintf("%d. %s\n", i+1, c))
+		}
+		ctxBuf.WriteString("\nNow refine the following new dictation:\n")
+		ctxBuf.WriteString(rawText)
+		userPrompt = ctxBuf.String()
+	} else {
+		userPrompt = rawText
+	}
 
 	conversations := []common.Conversation{
 		{
 			Role: common.ConversationRoleSystem,
-			Text: "You are a transcription cleaner. Rewrite the user's dictated text to remove filler words (um, uh, like, you know), fix disfluencies and false starts, add appropriate punctuation, and preserve the original meaning and language. Output only the cleaned text, with no explanations, quotes, or extra formatting.",
+			Text: systemPrompt,
 		},
 		{
 			Role: common.ConversationRoleUser,
-			Text: rawText,
+			Text: userPrompt,
 		},
 	}
 

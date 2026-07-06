@@ -147,6 +147,45 @@ func (h *historyStore) snapshot(search string) []historyRecord {
 	return out
 }
 
+// recentContextMaxRecords caps how many prior transcripts are fed to the AI
+// refiner as context. Five sentences is enough for the model to pick up on
+// topic and tone without bloating the prompt.
+const recentContextMaxRecords = 5
+
+// recentContextWindow is the maximum age (from now) of a record that still
+// counts as context. Anything older is treated as unrelated to the current
+// dictation session.
+const recentContextWindow = 10 * time.Minute
+
+// recentContext returns the finalized transcripts (after AI refinement) from
+// the last 10 minutes, up to recentContextMaxRecords, oldest-first so the AI
+// reads them in chronological order. The current utterance is not yet in the
+// store when this is called, so it is never included.
+func (h *historyStore) recentContext(nowMillis int64) []string {
+	cutoff := nowMillis - recentContextWindow.Milliseconds()
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	var picked []historyRecord
+	for _, r := range h.records {
+		if r.Timestamp < cutoff {
+			continue
+		}
+		picked = append(picked, r)
+		if len(picked) >= recentContextMaxRecords {
+			break
+		}
+	}
+
+	// h.records is newest-first; reverse to oldest-first for the AI prompt.
+	out := make([]string, 0, len(picked))
+	for i := len(picked) - 1; i >= 0; i-- {
+		out = append(out, picked[i].Content)
+	}
+	return out
+}
+
 // isEmpty reports whether the history has any records.
 func (h *historyStore) isEmpty() bool {
 	h.mu.Lock()
