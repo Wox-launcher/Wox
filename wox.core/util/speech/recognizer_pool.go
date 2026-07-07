@@ -146,6 +146,24 @@ func (p *RecognizerPool) evictAll() {
 	p.mu.Unlock()
 }
 
+// EvictExcept closes and removes all cached recognizers whose key does not
+// match keepKey. Recognizers currently in use are left alone so they can be
+// returned to the pool normally. Use this when the user switches models so
+// the old model is immediately evicted from memory instead of waiting for the
+// idle timeout.
+func (p *RecognizerPool) EvictExcept(keepKey string) {
+	p.mu.Lock()
+	for key, entry := range p.entries {
+		if key == keepKey || entry.inUse {
+			continue
+		}
+		entry.recognizer.Close()
+		delete(p.entries, key)
+		util.GetLogger().Info(context.Background(), fmt.Sprintf("dictation: recognizer pool evicted model %s (model switch)", key))
+	}
+	p.mu.Unlock()
+}
+
 func poolKey(config RecognizerConfig) string {
 	return config.ModelPath
 }

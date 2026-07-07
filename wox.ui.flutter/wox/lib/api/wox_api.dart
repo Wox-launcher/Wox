@@ -11,6 +11,7 @@ import 'package:wox/entity/wox_glance.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_plugin.dart';
+import 'package:wox/entity/wox_preview_dictation_history.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -484,5 +485,23 @@ class WoxApi {
       return result;
     }
     return [];
+  }
+
+  Future<WoxDictationHistoryCorrectionResponse> correctDictationHistory(
+    String traceId, {
+    required String recordId,
+    required String previousContent,
+    required String selectedText,
+    required String replacementText,
+    required String updatedContent,
+  }) async {
+    final result = await WoxHttpUtil.instance.postData<dynamic>(traceId, "/dictation/history/correct", {
+      "recordId": recordId,
+      "previousContent": previousContent,
+      "selectedText": selectedText,
+      "replacementText": replacementText,
+      "updatedContent": updatedContent,
+    });
+    return WoxDictationHistoryCorrectionResponse.fromJson(Map<String, dynamic>.from(result as Map));
   }
 }

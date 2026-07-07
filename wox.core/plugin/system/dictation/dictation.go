@@ -3,6 +3,7 @@ package dictation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting/definition"
+	"wox/setting/validator"
 	"wox/util"
 	"wox/util/audio"
 	"wox/util/keyboard"
@@ -26,13 +28,16 @@ import (
 
 const (
 	// Setting keys
-	settingKeyHotkey      = "hotkey"
-	settingKeyInputDevice = "inputDevice"
-	settingKeyModel       = "model"
-	settingKeyTriggerMode = "triggerMode"
-	settingKeyPlaySound   = "playSound"
-	settingKeyAIRefine    = "aiRefineEnabled"
-	settingKeyAIModel     = "aiModel"
+	settingKeyHotkey          = "hotkey"
+	settingKeyInputDevice     = "inputDevice"
+	settingKeyInputDeviceName = "inputDeviceName"
+	settingKeyModel           = "model"
+	settingKeyTriggerMode     = "triggerMode"
+	settingKeyPlaySound       = "playSound"
+	settingKeyAIRefine        = "aiRefineEnabled"
+	settingKeyAIModel         = "aiModel"
+
+	inputDeviceSystem = "system"
 
 	// AI refinement timeout. Picked to cover a normal model response for a
 	// short dictation transcript while keeping the wait perceptible.
@@ -61,9 +66,12 @@ const (
 var (
 	dictationIcon = common.PluginDictationIcon
 
-	// showOverlay and closeOverlay are replaceable for testing.
-	showOverlay  = overlay.Show
-	closeOverlay = overlay.Close
+	errInputDeviceMissing = errors.New("input device missing")
+
+	// Platform hooks are replaceable for testing.
+	showOverlay        = overlay.Show
+	closeOverlay       = overlay.Close
+	listCaptureDevices = speech.ListCaptureDevices
 
 	// hotkeyRegistrar is set by the UI layer at startup to avoid a circular
 	// import (ui imports plugin/system/dictation, so dictation cannot import ui).
@@ -128,6 +136,9 @@ type DictationPlugin struct {
 	// history persists past dictation transcripts so the Query surface can
 	// list them by time. Stored as a plugin setting so cloud sync covers it.
 	history *historyStore
+
+	// dictionary keeps user-approved correction rules for future dictations.
+	dictionary *dictionaryStore
 }
 
 func (p *DictationPlugin) GetMetadata() plugin.Metadata {
@@ -217,6 +228,57 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 					DefaultValue: "true",
 				},
 			},
+			{
+				Type: definition.PluginSettingDefinitionTypeTable,
+				Value: &definition.PluginSettingValueTable{
+					Key:          settingKeyDictionary,
+					DefaultValue: "[]",
+					Title:        "i18n:plugin_dictation_dictionary",
+					Tooltip:      "i18n:plugin_dictation_dictionary_tooltip",
+					MaxHeight:    260,
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:          "context",
+							Label:        "i18n:plugin_dictation_dictionary_context",
+							Type:         definition.PluginSettingValueTableColumnTypeText,
+							Width:        260,
+							TextMaxLines: 3,
+							Validators: []validator.PluginSettingValidator{
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
+							},
+						},
+						{
+							Key:          "wrongPhrase",
+							Label:        "i18n:plugin_dictation_dictionary_wrong_phrase",
+							Type:         definition.PluginSettingValueTableColumnTypeText,
+							Width:        180,
+							TextMaxLines: 2,
+							Validators: []validator.PluginSettingValidator{
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
+							},
+						},
+						{
+							Key:          "correctPhrase",
+							Label:        "i18n:plugin_dictation_dictionary_correct_phrase",
+							Type:         definition.PluginSettingValueTableColumnTypeText,
+							Width:        180,
+							TextMaxLines: 2,
+							Validators: []validator.PluginSettingValidator{
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
+							},
+						},
+					},
+				},
+			},
 			// AI refinement group header.
 			{
 				Type: definition.PluginSettingDefinitionTypeHead,
@@ -249,6 +311,8 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	p.api = initParams.API
 	p.history = newHistoryStore(p.api)
 	p.history.load(ctx)
+	p.dictionary = newDictionaryStore(p.api)
+	p.dictionary.load(ctx)
 
 	// Initialize the model manager in the Wox data directory.
 	modelsDir := filepath.Join(util.GetLocation().GetWoxDataDirectory(), "dictation", "models")
@@ -288,17 +352,28 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		return definition.PluginSettingDefinitionItem{}
 	})
 
-	// React to setting changes: re-register the hotkey when it or the trigger mode changes.
+	// React to setting changes: re-register the hotkey and remember input device names.
 	p.api.OnSettingChanged(ctx, func(ctx context.Context, key string, value string) {
-		if key == settingKeyHotkey {
+		switch key {
+		case settingKeyHotkey:
 			p.reregisterHotkey(ctx, value)
-		}
-		if key == settingKeyTriggerMode {
+		case settingKeyTriggerMode:
 			// Trigger mode changed - re-register with the new mode.
 			hotkey := p.api.GetSetting(ctx, settingKeyHotkey)
 			if hotkey != "" {
 				p.reregisterHotkey(ctx, hotkey)
 			}
+		case settingKeyInputDevice:
+			p.rememberInputDeviceName(ctx, value)
+		case settingKeyDictionary:
+			if p.dictionary != nil {
+				p.dictionary.load(ctx)
+			}
+		case settingKeyModel:
+			// Model changed - evict the old model from the recognizer pool so
+			// its memory is freed immediately instead of waiting for the idle
+			// timeout.
+			p.evictOldModels(ctx, value)
 		}
 	})
 
@@ -356,20 +431,9 @@ func (p *DictationPlugin) buildHotkeySetting(ctx context.Context) definition.Plu
 // buildInputDeviceSetting enumerates capture devices and returns a select
 // definition with "system default" plus each available device.
 func (p *DictationPlugin) buildInputDeviceSetting(ctx context.Context) definition.PluginSettingDefinitionItem {
-	options := []definition.PluginSettingValueSelectOption{
-		{Label: "i18n:plugin_dictation_system_default", Value: "system"},
-	}
-
-	devices, err := speech.ListCaptureDevices(ctx)
+	devices, err := listCaptureDevices(ctx)
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to list capture devices: %s", err.Error()))
-	} else {
-		for _, d := range devices {
-			options = append(options, definition.PluginSettingValueSelectOption{
-				Label: d.Name,
-				Value: d.ID,
-			})
-		}
 	}
 
 	return definition.PluginSettingDefinitionItem{
@@ -378,10 +442,123 @@ func (p *DictationPlugin) buildInputDeviceSetting(ctx context.Context) definitio
 			Key:          settingKeyInputDevice,
 			Label:        "i18n:plugin_dictation_input_device",
 			Tooltip:      "i18n:plugin_dictation_input_device_tooltip",
-			DefaultValue: "system",
-			Options:      options,
+			DefaultValue: inputDeviceSystem,
+			Options:      buildInputDeviceOptions(ctx, p.api.GetSetting(ctx, settingKeyInputDevice), p.api.GetSetting(ctx, settingKeyInputDeviceName), devices),
 		},
 	}
+}
+
+// buildInputDeviceOptions keeps a missing selected device visible instead of
+// letting the UI display the first option as a fallback.
+func buildInputDeviceOptions(ctx context.Context, rawSelectedDeviceID string, savedDeviceName string, devices []speech.AudioDevice) []definition.PluginSettingValueSelectOption {
+	selectedDeviceID := normalizeInputDeviceID(rawSelectedDeviceID)
+	options := []definition.PluginSettingValueSelectOption{
+		{Label: "i18n:plugin_dictation_system_default", Value: inputDeviceSystem},
+	}
+
+	selectedFound := selectedDeviceID == inputDeviceSystem
+	for _, d := range devices {
+		options = append(options, definition.PluginSettingValueSelectOption{
+			Label: d.Name,
+			Value: d.ID,
+		})
+		if d.ID == selectedDeviceID {
+			selectedFound = true
+		}
+	}
+
+	if !selectedFound {
+		unavailable := buildUnavailableInputDeviceOption(ctx, selectedDeviceID, savedDeviceName)
+		options = append(options[:1], append([]definition.PluginSettingValueSelectOption{unavailable}, options[1:]...)...)
+	}
+
+	return options
+}
+
+// buildUnavailableInputDeviceOption represents a saved device that is no
+// longer present in the current capture device list.
+func buildUnavailableInputDeviceOption(ctx context.Context, deviceID string, savedDeviceName string) definition.PluginSettingValueSelectOption {
+	deviceName := inputDeviceDisplayName(deviceID, savedDeviceName)
+	return definition.PluginSettingValueSelectOption{
+		Label: translateDictationTemplate(ctx, "plugin_dictation_input_device_unavailable", map[string]string{
+			"device": deviceName,
+		}),
+		Value: deviceID,
+	}
+}
+
+func normalizeInputDeviceID(deviceID string) string {
+	deviceID = strings.TrimSpace(deviceID)
+	if deviceID == "" {
+		return inputDeviceSystem
+	}
+	return deviceID
+}
+
+func inputDeviceDisplayName(deviceID string, savedDeviceName string) string {
+	if name := strings.TrimSpace(savedDeviceName); name != "" {
+		return name
+	}
+	if normalized := strings.TrimSpace(deviceID); normalized != "" {
+		return normalized
+	}
+	return inputDeviceSystem
+}
+
+// resolveInputDeviceForStart verifies concrete devices before creating a
+// speech session. System default intentionally skips enumeration.
+func resolveInputDeviceForStart(ctx context.Context, rawDeviceID string, savedDeviceName string) (string, string, error) {
+	deviceID := normalizeInputDeviceID(rawDeviceID)
+	if deviceID == inputDeviceSystem {
+		return inputDeviceSystem, "", nil
+	}
+
+	devices, err := listCaptureDevices(ctx)
+	if err != nil {
+		return deviceID, inputDeviceDisplayName(deviceID, savedDeviceName), fmt.Errorf("failed to list capture devices: %w", err)
+	}
+
+	for _, device := range devices {
+		if device.ID == deviceID {
+			return deviceID, device.Name, nil
+		}
+	}
+
+	return deviceID, inputDeviceDisplayName(deviceID, savedDeviceName), errInputDeviceMissing
+}
+
+// translateDictationTemplate replaces simple named placeholders in localized
+// dictation messages.
+func translateDictationTemplate(ctx context.Context, key string, replacements map[string]string) string {
+	message := i18n.GetI18nManager().TranslateWox(ctx, key)
+	for name, value := range replacements {
+		message = strings.ReplaceAll(message, "{"+name+"}", value)
+	}
+	return message
+}
+
+// rememberInputDeviceName stores the current human-readable name for the
+// selected concrete device so the setting can still explain it after removal.
+func (p *DictationPlugin) rememberInputDeviceName(ctx context.Context, rawDeviceID string) {
+	deviceID := normalizeInputDeviceID(rawDeviceID)
+	if deviceID == inputDeviceSystem {
+		p.api.SaveSetting(ctx, settingKeyInputDeviceName, "", false)
+		return
+	}
+
+	devices, err := listCaptureDevices(ctx)
+	if err != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to remember dictation input device name: %s", err.Error()))
+		return
+	}
+
+	for _, device := range devices {
+		if device.ID == deviceID {
+			p.api.SaveSetting(ctx, settingKeyInputDeviceName, device.Name, false)
+			return
+		}
+	}
+	p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("selected dictation input device not found while saving name: %s", deviceID))
 }
 
 // buildModelSetting returns the model manager setting as a dictationModel
@@ -529,6 +706,23 @@ type ModelStatusInfo struct {
 	Error            string `json:"Error"`
 }
 
+type CorrectHistoryRequest struct {
+	RecordID        string `json:"recordId"`
+	PreviousContent string `json:"previousContent"`
+	SelectedText    string `json:"selectedText"`
+	ReplacementText string `json:"replacementText"`
+	UpdatedContent  string `json:"updatedContent"`
+}
+
+type CorrectHistoryResponse struct {
+	RecordID        string            `json:"recordId"`
+	OriginalContent string            `json:"originalContent"`
+	Content         string            `json:"content"`
+	Timestamp       int64             `json:"timestamp"`
+	Title           string            `json:"title"`
+	Preview         plugin.WoxPreview `json:"preview"`
+}
+
 // GetModelStatuses returns the current status of all known models, combining
 // recommended models with local models. Called by the HTTP status endpoint.
 func (p *DictationPlugin) GetModelStatuses(ctx context.Context) []ModelStatusInfo {
@@ -545,6 +739,44 @@ func (p *DictationPlugin) GetModelStatuses(ctx context.Context) []ModelStatusInf
 		})
 	}
 	return result
+}
+
+// CorrectHistory applies a user-approved inline correction and records the
+// same change as a future dictation dictionary rule.
+func (p *DictationPlugin) CorrectHistory(ctx context.Context, req CorrectHistoryRequest) (CorrectHistoryResponse, error) {
+	if p.history == nil {
+		return CorrectHistoryResponse{}, fmt.Errorf("dictation history is not initialized")
+	}
+	record, err := p.history.correct(ctx, historyCorrectRequest{
+		RecordID:        req.RecordID,
+		PreviousContent: req.PreviousContent,
+		SelectedText:    req.SelectedText,
+		ReplacementText: req.ReplacementText,
+		UpdatedContent:  req.UpdatedContent,
+	})
+	if err != nil {
+		return CorrectHistoryResponse{}, err
+	}
+	if p.dictionary != nil {
+		if err := p.dictionary.addOrUpdateCorrection(ctx, extractCorrectionContext(req.PreviousContent, req.SelectedText), req.SelectedText, req.ReplacementText, util.GetSystemTimestamp()); err != nil {
+			return CorrectHistoryResponse{}, err
+		}
+	}
+	if p.api != nil {
+		p.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+	}
+
+	return CorrectHistoryResponse{
+		RecordID:        record.ID,
+		OriginalContent: record.OriginalContent,
+		Content:         record.Content,
+		Timestamp:       record.Timestamp,
+		Title:           truncateHistoryTitle(record.Content),
+		Preview: plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeDictationHistory,
+			PreviewData: record.previewData(ctx, p.api),
+		},
+	}, nil
 }
 
 func (p *DictationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -627,7 +859,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 	// Read settings
 	deviceID := p.api.GetSetting(ctx, settingKeyInputDevice)
 	if deviceID == "" {
-		deviceID = "system"
+		deviceID = inputDeviceSystem
 	}
 	modelID := p.api.GetSetting(ctx, settingKeyModel)
 
@@ -673,9 +905,36 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 		return
 	}
 
+	resolvedDeviceID, resolvedDeviceName, deviceErr := resolveInputDeviceForStart(ctx, deviceID, p.api.GetSetting(ctx, settingKeyInputDeviceName))
+	if deviceErr != nil {
+		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("dictation input device validation failed: %s", deviceErr.Error()))
+		if errors.Is(deviceErr, errInputDeviceMissing) {
+			p.showErrorOverlay(ctx, translateDictationTemplate(ctx, "plugin_dictation_input_device_missing", map[string]string{
+				"device": resolvedDeviceName,
+			}))
+		} else {
+			p.showErrorOverlay(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_input_device_list_failed"), deviceErr.Error()))
+		}
+		p.sessionMu.Lock()
+		p.isStarting = false
+		p.pendingStop = false
+		p.sessionMu.Unlock()
+		return
+	}
+	deviceID = resolvedDeviceID
+	if resolvedDeviceName != "" {
+		p.api.SaveSetting(ctx, settingKeyInputDeviceName, resolvedDeviceName, false)
+	}
+
 	// Show the overlay immediately with "Loading model..." so the user
-	// gets instant feedback when they press the hotkey.
-	p.showLoadingOverlay(ctx)
+	// gets instant feedback when they press the hotkey. In hold mode, show
+	// a longer message reminding them to keep holding the key.
+	loadingKey := "plugin_dictation_loading_model"
+	triggerMode := p.api.GetSetting(ctx, settingKeyTriggerMode)
+	if triggerMode == triggerModeHold {
+		loadingKey = "plugin_dictation_loading_model_hold"
+	}
+	p.showLoadingOverlay(ctx, loadingKey)
 
 	// Create the session with VAD + offline recognizer pools.
 	config := speech.RecognizerConfig{
@@ -761,6 +1020,7 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 
 	// AI refinement is opt-in. When enabled we keep the overlay open as a
 	// loading indicator; on any failure we fall back to the raw transcript.
+	aiRefineSucceeded := false
 	if p.isAIRefineEnabled(ctx) {
 		model, ok := p.getAIModel(ctx)
 		if !ok {
@@ -772,7 +1032,11 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 			// sentences (pronouns, tense, topic).
 			recentCtx := p.history.recentContext(util.GetSystemTimestamp())
 			p.showRefiningOverlay(ctx)
-			refined, refineErr := p.refineWithAI(ctx, model, text, recentCtx)
+			var dictionaryEntries []dictionaryEntry
+			if p.dictionary != nil {
+				dictionaryEntries = p.dictionary.activeEntries()
+			}
+			refined, refineErr := p.refineWithAI(ctx, model, text, recentCtx, dictionaryEntries)
 			if refineErr != nil {
 				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI refine failed: %s", refineErr.Error()))
 				if ctxErr := refineErr; ctxErr != nil && strings.Contains(ctxErr.Error(), "timeout") {
@@ -782,8 +1046,13 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 				}
 			} else if strings.TrimSpace(refined) != "" {
 				text = strings.TrimSpace(refined)
+				aiRefineSucceeded = true
 			}
 		}
+	}
+
+	if !aiRefineSucceeded && p.dictionary != nil {
+		text = p.dictionary.applyExact(text)
 	}
 
 	// Persist the final transcript (refined if AI was applied, raw otherwise)
@@ -848,9 +1117,14 @@ func (p *DictationPlugin) showRefiningOverlay(ctx context.Context) {
 		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
 		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
 		AutoCloseSeconds: 0,
-		Closable:         false,
-		CloseOnEscape:    false,
+		Closable:         true,
+		CloseOnEscape:    true,
 		Movable:          false,
+		OnClose: func() {
+			// During AI refinement the session is already stopped; just close
+			// the overlay without typing the result.
+			p.api.Log(util.NewTraceContext(), plugin.LogLevelInfo, "dictation overlay closed during AI refinement")
+		},
 	}
 
 	if mouseScreen.Width == 0 {
@@ -873,20 +1147,39 @@ func (p *DictationPlugin) showRefiningOverlay(ctx context.Context) {
 // (oldest-first). It lets the model understand pronouns, tense, and topic
 // continuity across consecutive dictations. The current utterance is the only
 // text that should be output; context is provided for reference only.
-func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, rawText string, recentContext []string) (string, error) {
+func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, rawText string, recentContext []string, dictionaryEntries []dictionaryEntry) (string, error) {
 	refineCtx, cancel := context.WithTimeout(ctx, aiRefineTimeout)
 	defer cancel()
 
-	systemPrompt := "You are a transcription cleaner. Rewrite the user's dictated text to remove filler words (um, uh, like, you know), fix disfluencies and false starts, add appropriate punctuation, and preserve the original meaning and language. Output only the cleaned text, with no explanations, quotes, or extra formatting."
+	systemPrompt := strings.Join([]string{
+		"You are a transcription editor. Rewrite the user's dictated text into fluent, coherent, easy-to-understand sentences while preserving the original meaning and language.",
+		"Remove filler words (um, uh, like, you know), fix disfluencies, false starts, repeated words, and sentence fragments.",
+		"Choose punctuation based on grammar and meaning, not on speech pauses. Merge fragments that belong to the same sentence, and remove punctuation that splits a natural phrase or clause.",
+		"For Chinese, avoid inserting commas or periods inside short verb/result phrases. For example, write \"改为单击就可以更正\" instead of \"改为单击就可以，更正\" when that matches the intended meaning.",
+		"Do not add new facts, commands, explanations, quotes, or extra formatting. Output only the refined text.",
+	}, " ")
 
 	var userPrompt string
-	if len(recentContext) > 0 {
+	if len(recentContext) > 0 || len(dictionaryEntries) > 0 {
 		var ctxBuf strings.Builder
-		ctxBuf.WriteString("Previous dictation context (for reference only, do not repeat or rewrite these):\n")
-		for i, c := range recentContext {
-			ctxBuf.WriteString(fmt.Sprintf("%d. %s\n", i+1, c))
+		if len(dictionaryEntries) > 0 {
+			ctxBuf.WriteString("Personal dictionary corrections. Apply a correction only when the new dictation has the same or very similar context as the saved context; do not replace a phrase merely because the wrong phrase appears:\n")
+			for i, entry := range dictionaryEntries {
+				if i >= 80 {
+					break
+				}
+				ctxBuf.WriteString(fmt.Sprintf("%d. Context: %s\n   Wrong: %s\n   Correct: %s\n", i+1, entry.Context, entry.WrongPhrase, entry.CorrectPhrase))
+			}
+			ctxBuf.WriteString("\n")
 		}
-		ctxBuf.WriteString("\nNow refine the following new dictation:\n")
+		if len(recentContext) > 0 {
+			ctxBuf.WriteString("Previous dictation context (for reference only, do not repeat or rewrite these):\n")
+			for i, c := range recentContext {
+				ctxBuf.WriteString(fmt.Sprintf("%d. %s\n", i+1, c))
+			}
+			ctxBuf.WriteString("\n")
+		}
+		ctxBuf.WriteString("Now refine the following new dictation:\n")
 		ctxBuf.WriteString(rawText)
 		userPrompt = ctxBuf.String()
 	} else {
@@ -946,12 +1239,12 @@ func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, 
 // showLoadingOverlay displays the overlay with a "Loading model..." message
 // before the recognizer is ready. This gives the user immediate feedback when
 // they press the hotkey, even while the model is still being loaded.
-func (p *DictationPlugin) showLoadingOverlay(ctx context.Context) {
+func (p *DictationPlugin) showLoadingOverlay(ctx context.Context, messageKey string) {
 	mouseScreen := screen.GetMouseScreen()
 
 	opts := overlay.OverlayOptions{
 		Name:             dictationOverlayName,
-		Message:          i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_loading_model"),
+		Message:          i18n.GetI18nManager().TranslateWox(ctx, messageKey),
 		Loading:          true,
 		Topmost:          true,
 		AbsolutePosition: true,
@@ -959,12 +1252,49 @@ func (p *DictationPlugin) showLoadingOverlay(ctx context.Context) {
 		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
 		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
 		AutoCloseSeconds: 0,
-		Closable:         false,
-		CloseOnEscape:    false,
+		Closable:         true,
+		CloseOnEscape:    true,
 		Movable:          false,
 		FontSize:         14,
 		MinWidth:         200,
 		MaxWidth:         600,
+		OnClose: func() {
+			p.cancelDictation(util.NewTraceContext())
+		},
+	}
+
+	if mouseScreen.Width == 0 {
+		pos, ok := mouse.CurrentPosition()
+		if ok {
+			opts.OffsetX = pos.X
+			opts.OffsetY = pos.Y - overlayBottomOffset
+		}
+	}
+
+	showOverlay(opts)
+}
+
+// showErrorOverlay displays a closeable, auto-closing dictation error without
+// starting or cancelling a recording session.
+func (p *DictationPlugin) showErrorOverlay(ctx context.Context, message string) {
+	mouseScreen := screen.GetMouseScreen()
+
+	opts := overlay.OverlayOptions{
+		Name:             dictationOverlayName,
+		Message:          message,
+		Loading:          false,
+		Topmost:          true,
+		AbsolutePosition: true,
+		Anchor:           overlay.AnchorBottomCenter,
+		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
+		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
+		AutoCloseSeconds: 6,
+		Closable:         true,
+		CloseOnEscape:    true,
+		Movable:          false,
+		FontSize:         14,
+		MinWidth:         240,
+		MaxWidth:         680,
 	}
 
 	if mouseScreen.Width == 0 {
@@ -993,12 +1323,15 @@ func (p *DictationPlugin) showDictationOverlay(ctx context.Context) {
 		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
 		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
 		AutoCloseSeconds: 0,
-		Closable:         false,
-		CloseOnEscape:    false,
+		Closable:         true,
+		CloseOnEscape:    true,
 		Movable:          false,
 		FontSize:         14,
 		MinWidth:         200,
 		MaxWidth:         600,
+		OnClose: func() {
+			p.cancelDictation(util.NewTraceContext())
+		},
 	}
 
 	if mouseScreen.Width == 0 {
@@ -1044,6 +1377,53 @@ func (p *DictationPlugin) updateOverlay(ctx context.Context, text string) {
 // closeDictationOverlay removes the recording overlay.
 func (p *DictationPlugin) closeDictationOverlay() {
 	closeOverlay(dictationOverlayName)
+}
+
+// evictOldModels removes all cached recognizer models from the pool except
+// the one matching the newly selected model ID. Called when the user switches
+// models in settings so the old model's memory is freed immediately.
+func (p *DictationPlugin) evictOldModels(ctx context.Context, newModelID string) {
+	if p.recognizerPool == nil || p.modelManager == nil {
+		return
+	}
+	models, err := p.modelManager.ListLocalModels()
+	if err != nil {
+		return
+	}
+	for _, m := range models {
+		if m.ID == newModelID {
+			p.recognizerPool.EvictExcept(m.Path)
+			return
+		}
+	}
+	// New model not found on disk yet — evict everything.
+	p.recognizerPool.EvictExcept("")
+}
+
+// cancelDictation is called when the user clicks the close button on the
+// dictation overlay. It stops the recording session and discards the result
+// without typing it into the focused window.
+func (p *DictationPlugin) cancelDictation(ctx context.Context) {
+	p.api.Log(ctx, plugin.LogLevelInfo, "dictation cancelled by user via overlay close button")
+
+	p.sessionMu.Lock()
+	session := p.session
+	p.session = nil
+	p.isRecording = false
+	p.isStarting = false
+	p.pendingStop = false
+	p.sessionMu.Unlock()
+
+	if session != nil {
+		// Stop the session and discard the text. We still need to release
+		// resources back to the pools.
+		go func() {
+			_, _ = session.Stop()
+		}()
+	}
+
+	// Play the stop sound since the overlay is closing.
+	p.playSoundIfEnabled(ctx, soundStop)
 }
 
 // playSoundIfEnabled plays an embedded audio clip when the playSound setting

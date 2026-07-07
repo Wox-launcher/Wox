@@ -91,6 +91,7 @@ typedef struct {
 } OverlayOptions;
 
 extern bool overlayClickCallbackCGO(char* name);
+extern void overlayCloseCallbackCGO(char* name);
 
 // -----------------------------------------------------------------------------
 // Accent / Acrylic
@@ -3066,6 +3067,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 
         if (wasClosePressed && ow->closable && PtInRect(&ow->closeRect, pt))
         {
+            NotifyOverlayClose(ow);
             DestroyWindow(hwnd);
             return 0;
         }
@@ -3096,6 +3098,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         {
             // Escape is intentionally scoped to the overlay window that currently has focus instead
             // of being handled by a global keyboard hook that would close every pinned screenshot.
+            NotifyOverlayClose(ow);
             DestroyWindow(hwnd);
             return 0;
         }
@@ -3412,6 +3415,20 @@ static void HandleCloseCommand(const WCHAR *name)
     if (ow && ow->hwnd && IsWindow(ow->hwnd))
     {
         DestroyWindow(ow->hwnd);
+    }
+}
+
+// NotifyOverlayClose fires the Go-side OnClose callback (if any) before the
+// overlay window is destroyed by a user action (close button or Escape).
+static void NotifyOverlayClose(OverlayWindow *ow)
+{
+    if (!ow || !ow->name)
+        return;
+    char *nameUtf8 = DupWideToUtf8(ow->name);
+    if (nameUtf8)
+    {
+        overlayCloseCallbackCGO(nameUtf8);
+        free(nameUtf8);
     }
 }
 

@@ -169,4 +169,8 @@ type OverlayOptions struct {
 	CopyButtonSuccessTooltip string
 	// OnClick is a callback function invoked when the overlay body or copy button is clicked.
 	OnClick func() bool
+	// OnClose is a callback function invoked when the overlay is closed by the
+	// user (close button or Escape). It is NOT called when the overlay is
+	// closed programmatically via Close().
+	OnClose func()
 }

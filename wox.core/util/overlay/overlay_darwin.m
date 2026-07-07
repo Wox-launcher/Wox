@@ -84,6 +84,7 @@ typedef NS_OPTIONS(NSUInteger, OverlayResizeEdges) {
 };
 
 extern bool overlayClickCallbackCGO(char* name);
+extern void overlayCloseCallbackCGO(char* name);
 extern void overlayDebugLogCallbackCGO(char* message);
 
 static void OverlayDebugLog(NSString *message) {
@@ -1059,6 +1060,11 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     self.copyFeedbackTimer = nil;
     [self stopTrackingWindow];
     [self hideTooltipWindow];
+    // Notify the Go layer that the user closed this overlay (close button or
+    // Escape) so callers like the dictation plugin can cancel their operation.
+    if (self.name) {
+        overlayCloseCallbackCGO((char*)[self.name UTF8String]);
+    }
     [self close];
     if (gOverlayWindows && self.name) {
         [gOverlayWindows removeObjectForKey:self.name];

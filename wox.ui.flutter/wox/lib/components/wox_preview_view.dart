@@ -15,6 +15,7 @@ import 'package:wox/components/wox_list_preview_view.dart';
 import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/wox_preview_scaffold.dart';
+import 'package:wox/components/wox_dictation_history_preview_view.dart';
 import 'package:wox/components/wox_query_requirement_settings_preview_view.dart';
 import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/components/wox_theme_editor.dart';
@@ -28,6 +29,7 @@ import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_preview_ai_stream.dart';
+import 'package:wox/entity/wox_preview_dictation_history.dart';
 import 'package:wox/entity/wox_preview_list.dart';
 import 'package:wox/entity/wox_query_requirement_settings_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -204,6 +206,12 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       contentWidget = buildMarkdown(widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TEXT.code) {
       contentWidget = buildText(widget.woxPreview.previewData);
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_DICTATION_HISTORY.code) {
+      try {
+        contentWidget = WoxDictationHistoryPreviewView(data: WoxDictationHistoryPreviewData.fromPreviewData(widget.woxPreview.previewData), woxTheme: widget.woxTheme);
+      } catch (e) {
+        contentWidget = buildText("Invalid dictation history preview data: $e");
+      }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_FILE.code) {
       if (widget.woxPreview.previewData.isEmpty) {
         contentWidget = WoxSelectableText(

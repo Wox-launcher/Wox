@@ -55,6 +55,7 @@ typedef struct {
 void ShowOverlay(OverlayOptions opts);
 void CloseOverlay(char* name);
 bool overlayClickCallbackCGO(char* name);
+void overlayCloseCallbackCGO(char* name);
 */
 import "C"
 import (
@@ -68,14 +69,28 @@ import (
 var clickCallbacks = make(map[string]func() bool)
 var clickCallbacksMu sync.RWMutex
 
+var closeCallbacks = make(map[string]func())
+var closeCallbacksMu sync.RWMutex
+
 func Show(opts OverlayOptions) {
 	if opts.OnClick != nil {
-		// Reused overlays can refresh their callbacks while native click events are
-		// delivered from another thread. Guard replacement so the overlay API stays
-		// safe for high-frequency updates and ordinary notification windows.
 		clickCallbacksMu.Lock()
 		clickCallbacks[opts.Name] = opts.OnClick
 		clickCallbacksMu.Unlock()
+	} else {
+		clickCallbacksMu.Lock()
+		delete(clickCallbacks, opts.Name)
+		clickCallbacksMu.Unlock()
+	}
+
+	if opts.OnClose != nil {
+		closeCallbacksMu.Lock()
+		closeCallbacks[opts.Name] = opts.OnClose
+		closeCallbacksMu.Unlock()
+	} else {
+		closeCallbacksMu.Lock()
+		delete(closeCallbacks, opts.Name)
+		closeCallbacksMu.Unlock()
 	}
 
 	cName := C.CString(opts.Name)
@@ -176,6 +191,9 @@ func Close(name string) {
 	clickCallbacksMu.Lock()
 	delete(clickCallbacks, name)
 	clickCallbacksMu.Unlock()
+	closeCallbacksMu.Lock()
+	delete(closeCallbacks, name)
+	closeCallbacksMu.Unlock()
 	cName := C.CString(name)
 	defer C.free(unsafe.Pointer(cName))
 	C.CloseOverlay(cName)
@@ -191,6 +209,17 @@ func overlayClickCallbackCGO(cName *C.char) C.bool {
 		return C.bool(cb())
 	}
 	return C.bool(false)
+}
+
+//export overlayCloseCallbackCGO
+func overlayCloseCallbackCGO(cName *C.char) {
+	name := C.GoString(cName)
+	closeCallbacksMu.RLock()
+	cb, ok := closeCallbacks[name]
+	closeCallbacksMu.RUnlock()
+	if ok {
+		cb()
+	}
 }
 
 func imageToPNG(img image.Image) ([]byte, error) {

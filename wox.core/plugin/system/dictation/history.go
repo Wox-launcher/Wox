@@ -37,9 +37,38 @@ const historyTitleMaxRunes = 80
 
 // historyRecord is one persisted dictation transcript.
 type historyRecord struct {
-	ID        string `json:"id"`
-	Content   string `json:"content"`
-	Timestamp int64  `json:"timestamp"` // unix millis, matches util.FormatTimestamp
+	ID              string              `json:"id"`
+	OriginalContent string              `json:"originalContent,omitempty"`
+	Content         string              `json:"content"`
+	Timestamp       int64               `json:"timestamp"` // unix millis, matches util.FormatTimestamp
+	Corrections     []historyCorrection `json:"corrections,omitempty"`
+}
+
+// historyCorrection records one user-approved preview correction.
+type historyCorrection struct {
+	SelectedText    string `json:"selectedText"`
+	ReplacementText string `json:"replacementText"`
+	PreviousContent string `json:"previousContent"`
+	UpdatedContent  string `json:"updatedContent"`
+	Timestamp       int64  `json:"timestamp"`
+}
+
+// dictationHistoryPreviewData is the JSON payload for the dedicated Flutter
+// preview that owns inline correction UI.
+type dictationHistoryPreviewData struct {
+	RecordID        string              `json:"recordId"`
+	OriginalContent string              `json:"originalContent"`
+	Content         string              `json:"content"`
+	Timestamp       int64               `json:"timestamp"`
+	Corrections     []historyCorrection `json:"corrections,omitempty"`
+}
+
+type historyCorrectRequest struct {
+	RecordID        string
+	PreviousContent string
+	SelectedText    string
+	ReplacementText string
+	UpdatedContent  string
 }
 
 // historyStore keeps the in-memory copy of the dictation history and guards it
@@ -47,10 +76,14 @@ type historyRecord struct {
 type historyStore struct {
 	mu      sync.Mutex
 	records []historyRecord
-	api     plugin.API
+	api     dictationHistoryAPI
 }
 
 func newHistoryStore(api plugin.API) *historyStore {
+	return newHistoryStoreWithAPI(api)
+}
+
+func newHistoryStoreWithAPI(api dictationHistoryAPI) *historyStore {
 	return &historyStore{api: api}
 }
 
@@ -82,6 +115,65 @@ func (h *historyStore) save(ctx context.Context) {
 		return
 	}
 	h.api.SaveSetting(ctx, settingKeyHistory, string(data), false)
+}
+
+// correct applies one preview correction when the submitted base content still
+// matches the stored record, preventing stale edits from overwriting newer ones.
+func (h *historyStore) correct(ctx context.Context, req historyCorrectRequest) (historyRecord, error) {
+	req.RecordID = strings.TrimSpace(req.RecordID)
+	if req.RecordID == "" {
+		return historyRecord{}, fmt.Errorf("recordId is required")
+	}
+	if strings.TrimSpace(req.SelectedText) == "" {
+		return historyRecord{}, fmt.Errorf("selectedText is required")
+	}
+	if strings.TrimSpace(req.ReplacementText) == "" {
+		return historyRecord{}, fmt.Errorf("replacementText is required")
+	}
+	if req.UpdatedContent == "" {
+		return historyRecord{}, fmt.Errorf("updatedContent is required")
+	}
+	if req.PreviousContent == req.UpdatedContent {
+		return historyRecord{}, fmt.Errorf("updatedContent must be different")
+	}
+	if !strings.Contains(req.PreviousContent, req.SelectedText) {
+		return historyRecord{}, fmt.Errorf("selectedText is not part of previousContent")
+	}
+
+	h.mu.Lock()
+	index := -1
+	for i := range h.records {
+		if h.records[i].ID == req.RecordID {
+			index = i
+			break
+		}
+	}
+	if index == -1 {
+		h.mu.Unlock()
+		return historyRecord{}, fmt.Errorf("dictation history record not found")
+	}
+	if h.records[index].Content != req.PreviousContent {
+		h.mu.Unlock()
+		return historyRecord{}, fmt.Errorf("dictation history content changed")
+	}
+
+	record := h.records[index]
+	if record.OriginalContent == "" {
+		record.OriginalContent = req.PreviousContent
+	}
+	record.Content = req.UpdatedContent
+	record.Corrections = append(record.Corrections, historyCorrection{
+		SelectedText:    req.SelectedText,
+		ReplacementText: req.ReplacementText,
+		PreviousContent: req.PreviousContent,
+		UpdatedContent:  req.UpdatedContent,
+		Timestamp:       util.GetSystemTimestamp(),
+	})
+	h.records[index] = record
+	h.mu.Unlock()
+
+	h.save(ctx)
+	return record, nil
 }
 
 // add prepends a new record, trims to the cap, and persists. New records go to
@@ -253,11 +345,31 @@ func (h *historyStore) buildHistoryResult(ctx context.Context, record historyRec
 		GroupScore: groupScore,
 		Score:      record.Timestamp,
 		Preview: plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeText,
-			PreviewData: record.Content,
+			PreviewType: plugin.WoxPreviewTypeDictationHistory,
+			PreviewData: record.previewData(ctx, h.api),
 		},
 		Actions: actions,
 	}
+}
+
+func (r historyRecord) previewData(ctx context.Context, api dictationSettingAPI) string {
+	originalContent := r.OriginalContent
+	if originalContent == "" {
+		originalContent = r.Content
+	}
+
+	data, err := json.Marshal(dictationHistoryPreviewData{
+		RecordID:        r.ID,
+		OriginalContent: originalContent,
+		Content:         r.Content,
+		Timestamp:       r.Timestamp,
+		Corrections:     r.Corrections,
+	})
+	if err != nil {
+		api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to marshal dictation history preview: %s", err.Error()))
+		return r.Content
+	}
+	return string(data)
 }
 
 // historyEmptyResult is shown when the user opens the dictation query with no
@@ -307,7 +419,7 @@ func truncateHistoryTitle(content string) string {
 // Inlined here instead of calling system.GetPasteToActiveWindowAction to
 // avoid an import cycle (dictation -> system -> ui -> dictation). The logic
 // mirrors system.pasteToActiveWindow.
-func buildPasteToActiveWindowAction(ctx context.Context, api plugin.API, query plugin.Query, text string, recordID string) (plugin.QueryResultAction, bool) {
+func buildPasteToActiveWindowAction(ctx context.Context, api dictationSettingAPI, query plugin.Query, text string, recordID string) (plugin.QueryResultAction, bool) {
 	if strings.TrimSpace(query.Env.ActiveWindowTitle) == "" {
 		return plugin.QueryResultAction{}, false
 	}

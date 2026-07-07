@@ -36,6 +36,7 @@ class WoxSelectableText extends StatelessWidget {
   final TextHeightBehavior? textHeightBehavior;
   final TextWidthBasis? textWidthBasis;
   final SelectionChangedCallback? onSelectionChanged;
+  final EditableTextContextMenuBuilder? contextMenuBuilder;
   final TextMagnifierConfiguration? magnifierConfiguration;
 
   const WoxSelectableText(
@@ -68,6 +69,7 @@ class WoxSelectableText extends StatelessWidget {
     this.textHeightBehavior,
     this.textWidthBasis,
     this.onSelectionChanged,
+    this.contextMenuBuilder,
     this.magnifierConfiguration,
   }) : textSpan = null;
 
@@ -101,6 +103,7 @@ class WoxSelectableText extends StatelessWidget {
     this.textHeightBehavior,
     this.textWidthBasis,
     this.onSelectionChanged,
+    this.contextMenuBuilder,
     this.magnifierConfiguration,
   }) : data = null;
 
@@ -140,7 +143,7 @@ class WoxSelectableText extends StatelessWidget {
       textHeightBehavior: textHeightBehavior,
       textWidthBasis: textWidthBasis,
       onSelectionChanged: onSelectionChanged,
-      contextMenuBuilder: WoxSelectionTheme.editableTextContextMenuBuilder,
+      contextMenuBuilder: contextMenuBuilder ?? WoxSelectionTheme.editableTextContextMenuBuilder,
       magnifierConfiguration: magnifierConfiguration,
     );
   }
@@ -175,7 +178,7 @@ class WoxSelectableText extends StatelessWidget {
       textHeightBehavior: textHeightBehavior,
       textWidthBasis: textWidthBasis,
       onSelectionChanged: onSelectionChanged,
-      contextMenuBuilder: WoxSelectionTheme.editableTextContextMenuBuilder,
+      contextMenuBuilder: contextMenuBuilder ?? WoxSelectionTheme.editableTextContextMenuBuilder,
       magnifierConfiguration: magnifierConfiguration,
     );
   }
