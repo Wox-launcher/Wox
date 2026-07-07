@@ -35,6 +35,14 @@ type ModelInfo struct {
 // download. They are ordered by recommendation (most useful first).
 var RecommendedModels = []ModelInfo{
 	{
+		ID:          "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
+		DisplayName: "Qwen3-ASR 0.6B int8 (29 languages + Chinese dialects, ~600MB)",
+		DownloadURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25.tar.bz2",
+		ModelType:   "qwen3_asr",
+		Language:    "multi",
+		SizeMB:      600,
+	},
+	{
 		ID:          "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
 		DisplayName: "Zipformer ZH int8 (streaming, ~154MB)",
 		DownloadURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2",
@@ -125,10 +133,20 @@ type LocalModel struct {
 // inspectModelDir checks whether a directory contains a valid model and
 // returns its info. The model type is inferred from the file names.
 func (m *ModelManager) inspectModelDir(dir string) (LocalModel, bool) {
+	// Check for Qwen3-ASR (conv_frontend.onnx + encoder.int8.onnx + decoder.int8.onnx + tokenizer dir).
+	if fileExists(filepath.Join(dir, "conv_frontend.onnx")) &&
+		fileExists(filepath.Join(dir, "encoder.int8.onnx")) &&
+		fileExists(filepath.Join(dir, "decoder.int8.onnx")) &&
+		isDir(filepath.Join(dir, "tokenizer")) {
+		return LocalModel{
+			ID:          filepath.Base(dir),
+			Path:        dir,
+			ModelType:   "qwen3_asr",
+			DisplayName: filepath.Base(dir),
+		}, true
+	}
+
 	// Check for streaming zipformer (encoder/decoder/joiner onnx files).
-	// Model archives use varying naming conventions: some use
-	// "encoder-epoch-99-avg-1.onnx" (with dashes), others use
-	// "encoder.int8.onnx" or "encoder.onnx" (with dots). Match broadly.
 	encoderFiles, _ := filepath.Glob(filepath.Join(dir, "encoder*.onnx"))
 	if len(encoderFiles) > 0 {
 		if fileExists(filepath.Join(dir, "tokens.txt")) {
@@ -400,6 +418,11 @@ func extractTarBz2(archivePath, destDir string) error {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 // ModelsDir returns the models directory path.

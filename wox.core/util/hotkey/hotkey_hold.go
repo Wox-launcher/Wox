@@ -66,6 +66,7 @@ func ensureHoldKeyListener() error {
 			// If the hold-modifier key itself goes down (initial press or OS
 			// key-repeat), (re)arm its minimum-hold timer.
 			if mcb, ok := holdModifierCallbacks.Load(event.Key); ok && mcb != nil {
+				util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("hold-modifier keyDown: key=%s timer=%v fired=%v", event.Key.Character(), mcb.pressTimer != nil, mcb.pressFired))
 				armHoldModifierPress(mcb, event.Key)
 				holdTrackerMu.Unlock()
 				return false
@@ -89,6 +90,8 @@ func ensureHoldKeyListener() error {
 				mcb.pressFired = false
 				holdTrackerMu.Unlock()
 
+				util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("hold-modifier keyUp: key=%s timer=%v fired=%v", event.Key.Character(), timer != nil, fired))
+
 				if timer != nil {
 					// Timer was still pending: the key was released (or a chord
 					// already cancelled it) before the hold delay elapsed.
@@ -99,9 +102,12 @@ func ensureHoldKeyListener() error {
 
 				// Timer already fired: onPress ran, so dispatch onRelease.
 				if fired && mcb.onRelease != nil {
+					util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("hold-modifier dispatching onRelease: key=%s", event.Key.Character()))
 					util.Go(util.NewTraceContext(), fmt.Sprintf("hold-modifier hotkey release: %s", event.Key.Character()), func() {
 						mcb.onRelease()
 					})
+				} else {
+					util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("hold-modifier keyUp NOT dispatching: fired=%v onRelease=%v", fired, mcb.onRelease != nil))
 				}
 				return false
 			}

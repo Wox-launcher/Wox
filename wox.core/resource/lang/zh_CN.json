@@ -2459,6 +2459,7 @@
   "plugin_dictation_trigger_toggle": "开关式（按一次开始，再按一次停止）",
   "plugin_dictation_trigger_hold": "按住式（按住录音，松开结束）",
   "plugin_dictation_listening": "正在听写...",
+  "plugin_dictation_loading_model": "加载模型中...",
   "plugin_dictation_no_model_selected": "未选择识别模型，请在设置中下载模型。",
   "plugin_dictation_model_not_found": "所选模型不在磁盘上，请在设置中重新下载。",
   "plugin_dictation_start_failed": "听写启动失败",

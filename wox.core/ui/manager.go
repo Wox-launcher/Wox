@@ -445,6 +445,7 @@ func (m *Manager) handleDictationHotkeyPress(ctx context.Context) {
 // handleDictationHotkeyRelease finds the loaded DictationPlugin and stops
 // the recording session, producing the recognized text.
 func (m *Manager) handleDictationHotkeyRelease(ctx context.Context) {
+	logger.Info(ctx, "dictation: handleDictationHotkeyRelease enter")
 	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
 	if sp == nil {
 		logger.Error(ctx, "dictation plugin not found for hotkey release callback")
@@ -454,7 +455,10 @@ func (m *Manager) handleDictationHotkeyRelease(ctx context.Context) {
 		StopDictation(ctx context.Context)
 	}
 	if ds, ok := sp.(dictationStopper); ok {
+		logger.Info(ctx, "dictation: calling StopDictation")
 		ds.StopDictation(ctx)
+	} else {
+		logger.Error(ctx, "dictation: plugin does not implement dictationStopper")
 	}
 }
 

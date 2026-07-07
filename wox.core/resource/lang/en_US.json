@@ -2459,6 +2459,7 @@
   "plugin_dictation_trigger_toggle": "Toggle (press once to start, press again to stop)",
   "plugin_dictation_trigger_hold": "Hold (press and hold to record)",
   "plugin_dictation_listening": "Listening...",
+  "plugin_dictation_loading_model": "Loading model...",
   "plugin_dictation_no_model_selected": "No recognition model selected. Please download a model in settings.",
   "plugin_dictation_model_not_found": "Selected model not found on disk. Please re-download in settings.",
   "plugin_dictation_start_failed": "Failed to start dictation",

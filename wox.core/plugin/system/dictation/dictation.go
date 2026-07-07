@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/resource"
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/audio"
@@ -92,19 +94,29 @@ type DictationPlugin struct {
 	modelManager *speech.ModelManager
 
 	// recognizerPool keeps the speech model in memory across sessions so
-	// subsequent dictations start without the ~600ms model-loading delay.
-	// Idle models are evicted after recognizerPoolIdleTTL to reclaim memory.
+	// subsequent dictations start without the model-loading delay.
 	recognizerPool *speech.RecognizerPool
 
 	// audioCapturePool keeps the malgo context + capture device alive across
-	// sessions so the ~47ms InitDevice cost is only paid once. Idle captures
-	// are evicted after recognizerPoolIdleTTL (shared with the recognizer).
+	// sessions, eliminating the InitDevice delay.
 	audioCapturePool *speech.AudioCapturePool
+
+	// vadPool keeps the silero VAD model in memory across sessions.
+	vadPool *speech.VadPool
+
+	// vadModelPath is the extracted path to silero_vad.onnx.
+	vadModelPath string
 
 	// Session state
 	sessionMu   sync.Mutex
 	session     *speech.Session
 	isRecording bool
+	// isStarting tracks that startRecording is in progress (model loading,
+	// audio init). When the user releases the hotkey during this window,
+	// StopDictation sets pendingStop so startRecording can stop immediately
+	// after it finishes.
+	isStarting  bool
+	pendingStop bool
 
 	// Overlay update throttling
 	lastOverlayUpdate time.Time
@@ -257,6 +269,11 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	// across sessions, eliminating the InitDevice delay.
 	p.audioCapturePool = speech.NewAudioCapturePool(recognizerPoolIdleTTL)
 	p.audioCapturePool.StartReaper(ctx)
+
+	// Extract the embedded silero VAD model to a temp file and start the VAD pool.
+	p.vadModelPath = extractVadModel(ctx)
+	p.vadPool = speech.NewVadPool(recognizerPoolIdleTTL)
+	p.vadPool.StartReaper(ctx)
 
 	// Register dynamic setting callbacks for hotkey, input device and model.
 	p.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
@@ -571,13 +588,26 @@ func (p *DictationPlugin) StartDictation(ctx context.Context) {
 }
 
 // StopDictation is called by the hotkey release handler in hold mode.
+// If startRecording is still in progress (model loading), it sets a
+// pendingStop flag so startRecording can stop immediately after it
+// finishes — preventing the overlay from being stuck open.
 func (p *DictationPlugin) StopDictation(ctx context.Context) {
 	p.sessionMu.Lock()
+	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation: StopDictation enter, isStarting=%t isRecording=%t", p.isStarting, p.isRecording))
+	if p.isStarting {
+		// startRecording hasn't finished yet; mark for deferred stop.
+		p.pendingStop = true
+		p.sessionMu.Unlock()
+		p.api.Log(ctx, plugin.LogLevelDebug, "dictation: StopDictation during startup, pendingStop set")
+		return
+	}
 	if !p.isRecording {
 		p.sessionMu.Unlock()
+		p.api.Log(ctx, plugin.LogLevelDebug, "dictation: StopDictation not recording, ignoring")
 		return
 	}
 	p.sessionMu.Unlock()
+	p.api.Log(ctx, plugin.LogLevelDebug, "dictation: StopDictation calling stopAndOutput")
 	p.stopAndOutput(ctx)
 }
 
@@ -585,6 +615,14 @@ func (p *DictationPlugin) StopDictation(ctx context.Context) {
 func (p *DictationPlugin) startRecording(ctx context.Context) {
 	t0 := time.Now()
 	p.api.Log(ctx, plugin.LogLevelDebug, "dictation timing: plugin.startRecording enter")
+
+	// Mark that we are in the startup phase so StopDictation can defer
+	// its action via pendingStop if the user releases the key before the
+	// model finishes loading.
+	p.sessionMu.Lock()
+	p.isStarting = true
+	p.pendingStop = false
+	p.sessionMu.Unlock()
 
 	// Read settings
 	deviceID := p.api.GetSetting(ctx, settingKeyInputDevice)
@@ -595,11 +633,17 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 
 	if modelID == "" {
 		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_no_model_selected"))
+		p.sessionMu.Lock()
+		p.isStarting = false
+		p.sessionMu.Unlock()
 		return
 	}
 
 	if p.modelManager == nil {
 		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_error"))
+		p.sessionMu.Lock()
+		p.isStarting = false
+		p.sessionMu.Unlock()
 		return
 	}
 
@@ -607,6 +651,9 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 	models, err := p.modelManager.ListLocalModels()
 	if err != nil {
 		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_error"), err.Error()))
+		p.sessionMu.Lock()
+		p.isStarting = false
+		p.sessionMu.Unlock()
 		return
 	}
 	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation timing: plugin.ListLocalModels cost=%dms", time.Since(t0).Milliseconds()))
@@ -620,45 +667,68 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 	}
 	if selectedModel == nil {
 		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_not_found"))
+		p.sessionMu.Lock()
+		p.isStarting = false
+		p.sessionMu.Unlock()
 		return
 	}
 
-	// Create the session.
+	// Show the overlay immediately with "Loading model..." so the user
+	// gets instant feedback when they press the hotkey.
+	p.showLoadingOverlay(ctx)
+
+	// Create the session with VAD + offline recognizer pools.
 	config := speech.RecognizerConfig{
 		ModelPath:  selectedModel.Path,
 		ModelType:  selectedModel.ModelType,
 		NumThreads: 1,
 	}
+	vadConfig := speech.DefaultVadConfig(p.vadModelPath)
 
-	session := speech.NewSessionWithPools(ctx, config, deviceID, p.recognizerPool, p.audioCapturePool,
+	session := speech.NewSessionWithPools(ctx, config, vadConfig, deviceID, p.recognizerPool, p.audioCapturePool, p.vadPool,
 		func(text string) {
-			p.updateOverlay(ctx, text)
+			// onPartial: in streaming mode this is called with interim text.
+			// We don't update the overlay during recording — the overlay
+			// shows a voice activity animation only.
 		},
 		func(text string) {
-			p.updateOverlay(ctx, text)
+			// onFinal: full transcript so far. Not shown during recording.
 		},
 	)
 
 	if err := session.Start(); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("dictation start failed: %s", err.Error()))
 		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed"), err.Error()))
+		p.closeDictationOverlay()
+		p.sessionMu.Lock()
+		p.isStarting = false
+		p.pendingStop = false
+		p.sessionMu.Unlock()
 		return
 	}
 	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation timing: plugin.sessionStart cost=%dms", time.Since(t0).Milliseconds()))
 
-	// Show the overlay and play the start sound only after the session is
-	// fully ready (model loaded + audio capture started). Showing it earlier
-	// would mislead the user into speaking before the recognizer can capture,
-	// causing the first few words to be lost.
+	// Model loaded and audio capture started. Switch the overlay to
+	// "Listening..." and play the start sound to signal the user can speak.
 	p.showDictationOverlay(ctx)
 	p.playSoundIfEnabled(ctx, soundStart)
 
 	p.sessionMu.Lock()
 	p.session = session
 	p.isRecording = true
+	p.isStarting = false
+	shouldStop := p.pendingStop
+	p.pendingStop = false
 	p.sessionMu.Unlock()
 
 	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation timing: plugin.total cost=%dms", time.Since(t0).Milliseconds()))
+
+	// If the user released the hotkey while we were still loading the model,
+	// stop immediately so the overlay doesn't get stuck open.
+	if shouldStop {
+		p.api.Log(ctx, plugin.LogLevelDebug, "dictation: pendingStop triggered, stopping immediately")
+		p.stopAndOutput(ctx)
+	}
 }
 
 // stopAndOutput stops the recording, closes the overlay, and types the
@@ -873,6 +943,41 @@ func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, 
 	}
 }
 
+// showLoadingOverlay displays the overlay with a "Loading model..." message
+// before the recognizer is ready. This gives the user immediate feedback when
+// they press the hotkey, even while the model is still being loaded.
+func (p *DictationPlugin) showLoadingOverlay(ctx context.Context) {
+	mouseScreen := screen.GetMouseScreen()
+
+	opts := overlay.OverlayOptions{
+		Name:             dictationOverlayName,
+		Message:          i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_loading_model"),
+		Loading:          true,
+		Topmost:          true,
+		AbsolutePosition: true,
+		Anchor:           overlay.AnchorBottomCenter,
+		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
+		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
+		AutoCloseSeconds: 0,
+		Closable:         false,
+		CloseOnEscape:    false,
+		Movable:          false,
+		FontSize:         14,
+		MinWidth:         200,
+		MaxWidth:         600,
+	}
+
+	if mouseScreen.Width == 0 {
+		pos, ok := mouse.CurrentPosition()
+		if ok {
+			opts.OffsetX = pos.X
+			opts.OffsetY = pos.Y - overlayBottomOffset
+		}
+	}
+
+	showOverlay(opts)
+}
+
 // showDictationOverlay displays the recording overlay at the bottom-center
 // of the screen the mouse is currently on.
 func (p *DictationPlugin) showDictationOverlay(ctx context.Context) {
@@ -957,4 +1062,29 @@ func (p *DictationPlugin) playSoundIfEnabled(ctx context.Context, name string) {
 // defaulting to false for unrecognized values.
 func parseBoolSetting(v string) bool {
 	return v == "true"
+}
+
+// extractVadModel extracts the embedded silero_vad.onnx to a temp file and
+// returns its path. The file persists for the process lifetime.
+func extractVadModel(ctx context.Context) string {
+	data, err := resource.GetAudioFile("silero_vad.onnx")
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to read embedded silero_vad.onnx: %s", err.Error()))
+		return ""
+	}
+
+	dir, err := os.MkdirTemp("", "wox-vad")
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to create VAD temp dir: %s", err.Error()))
+		return ""
+	}
+
+	path := filepath.Join(dir, "silero_vad.onnx")
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to write silero_vad.onnx: %s", err.Error()))
+		return ""
+	}
+
+	util.GetLogger().Info(ctx, fmt.Sprintf("extracted silero VAD model to %s", path))
+	return path
 }

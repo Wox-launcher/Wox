@@ -18,80 +18,64 @@ const (
 	SessionStateStopped
 )
 
-// Session manages a single dictation recording session: audio capture,
-// streaming recognition, and result delivery via callbacks.
+// Session manages a dictation recording session. It supports two modes:
 //
-// When pool is non-nil, the recognizer model is acquired from the pool and
-// returned on Stop (model stays in memory for fast reuse). When pool is nil,
-// the recognizer is created and destroyed per session (legacy behavior).
+//   - Streaming (zipformer2/paraformer): audio is fed continuously into the
+//     online recognizer, partial results are delivered via onPartial.
+//
+//   - Offline (qwen3_asr): audio is fed into a VAD that splits it into speech
+//     segments, each segment is decoded by the offline recognizer. Results
+//     are delivered when each segment completes.
+//
+// Pools are used to keep the recognizer model, VAD, and audio device alive
+// across sessions for fast startup.
 type Session struct {
 	ctx        context.Context
 	config     RecognizerConfig
+	vadConfig  VadConfig
 	deviceID   string
 	pool       *RecognizerPool
 	audioPool  *AudioCapturePool
+	vadPool    *VadPool
 	recognizer Recognizer
+	vad        *VoiceActivityDetector
 	capture    *AudioCapture
 	state      SessionState
+	streaming  bool
 	mu         sync.Mutex
 
-	// onPartial is called whenever new interim text is available.
-	// It is called from the audio capture goroutine.
 	onPartial func(text string)
-	// onFinal is called when an endpoint is detected (sentence boundary)
-	// or when the session is stopped. It receives the final text of the
-	// current segment.
-	onFinal func(text string)
+	onFinal   func(text string)
 
-	// lastText tracks the most recent partial text for endpoint detection.
-	lastText string
-	// accumulatedText holds all recognized text across segments.
+	// Streaming mode state
+	lastText        string
 	accumulatedText string
+
+	// Offline mode state
+	decodeWG sync.WaitGroup
+	stopped  chan struct{}
 }
 
-// NewSession creates a new dictation session. Call Start to begin recording.
-// The recognizer is created and destroyed per session (no pooling).
-func NewSession(ctx context.Context, config RecognizerConfig, deviceID string, onPartial func(string), onFinal func(string)) *Session {
+// NewSessionWithPools creates a session that uses recognizer, VAD, and audio
+// capture pools. The VAD is only used for offline (non-streaming) models;
+// streaming models ignore the VAD and feed audio directly to the recognizer.
+func NewSessionWithPools(ctx context.Context, config RecognizerConfig, vadConfig VadConfig, deviceID string, pool *RecognizerPool, audioPool *AudioCapturePool, vadPool *VadPool, onPartial func(string), onFinal func(string)) *Session {
 	return &Session{
 		ctx:       ctx,
 		config:    config,
-		deviceID:  deviceID,
-		onPartial: onPartial,
-		onFinal:   onFinal,
-	}
-}
-
-// NewSessionWithPool creates a session that acquires the recognizer from the
-// given pool on Start and returns it on Stop. This keeps the model in memory
-// across sessions, eliminating the model-loading delay.
-func NewSessionWithPool(ctx context.Context, config RecognizerConfig, deviceID string, pool *RecognizerPool, onPartial func(string), onFinal func(string)) *Session {
-	return &Session{
-		ctx:       ctx,
-		config:    config,
-		deviceID:  deviceID,
-		pool:      pool,
-		onPartial: onPartial,
-		onFinal:   onFinal,
-	}
-}
-
-// NewSessionWithPools creates a session that uses both the recognizer pool
-// and the audio capture pool, keeping both the model and the audio device
-// alive across sessions for minimal startup latency.
-func NewSessionWithPools(ctx context.Context, config RecognizerConfig, deviceID string, pool *RecognizerPool, audioPool *AudioCapturePool, onPartial func(string), onFinal func(string)) *Session {
-	return &Session{
-		ctx:       ctx,
-		config:    config,
+		vadConfig: vadConfig,
 		deviceID:  deviceID,
 		pool:      pool,
 		audioPool: audioPool,
+		vadPool:   vadPool,
 		onPartial: onPartial,
 		onFinal:   onFinal,
+		stopped:   make(chan struct{}),
 	}
 }
 
-// Start initializes the recognizer and begins audio capture. It returns an
-// error if the model files are missing or the audio device cannot be opened.
+// Start initializes the recognizer (and VAD for offline mode), audio capture,
+// and begins recording.
 func (s *Session) Start() error {
 	t0 := time.Now()
 	logger := util.GetLogger()
@@ -102,163 +86,261 @@ func (s *Session) Start() error {
 		return fmt.Errorf("session already started or stopped")
 	}
 
-	// Acquire recognizer: from pool (fast path, model already in memory) or
-	// create from scratch (slow path, first load).
-	if s.pool != nil {
-		rec, err := s.pool.Acquire(s.ctx, s.config)
-		if err != nil {
-			return fmt.Errorf("failed to acquire recognizer from pool (model=%s, type=%s): %w", s.config.ModelPath, s.config.ModelType, err)
-		}
-		s.recognizer = rec
-	} else {
-		recognizer, err := newSherpaRecognizer(s.ctx, s.config)
-		if err != nil {
-			return fmt.Errorf("failed to create recognizer (model=%s, type=%s): %w", s.config.ModelPath, s.config.ModelType, err)
-		}
-		s.recognizer = recognizer
+	// Acquire recognizer from pool.
+	rec, err := s.pool.Acquire(s.ctx, s.config)
+	if err != nil {
+		return fmt.Errorf("failed to acquire recognizer: %w", err)
 	}
-	logger.Debug(s.ctx, fmt.Sprintf("dictation timing: session.newRecognizer cost=%dms", time.Since(t0).Milliseconds()))
+	s.recognizer = rec
+	s.streaming = rec.IsStreaming()
+	logger.Info(s.ctx, fmt.Sprintf("dictation timing: session.newRecognizer cost=%dms (streaming=%t)", time.Since(t0).Milliseconds(), s.streaming))
 
-	// Create or acquire the audio capture device.
-	var capture *AudioCapture
-	if s.audioPool != nil {
-		c, err := s.audioPool.Acquire(s.ctx, s.deviceID, func(samples []float32) {
-			s.handleAudioSamples(samples)
-		})
+	// Acquire VAD only for offline mode.
+	if !s.streaming {
+		vad, err := s.vadPool.Acquire(s.ctx, s.vadConfig)
 		if err != nil {
-			s.releaseRecognizer()
+			s.pool.Release(s.ctx, rec)
 			s.recognizer = nil
-			return fmt.Errorf("failed to acquire audio capture from pool: %w", err)
+			return fmt.Errorf("failed to acquire VAD: %w", err)
 		}
-		capture = c
-	} else {
-		c, err := NewAudioCapture(s.ctx, s.deviceID, func(samples []float32) {
-			s.handleAudioSamples(samples)
-		})
-		if err != nil {
-			s.releaseRecognizer()
-			s.recognizer = nil
-			return fmt.Errorf("failed to create audio capture: %w", err)
+		s.vad = vad
+		logger.Info(s.ctx, fmt.Sprintf("dictation timing: session.newVad cost=%dms", time.Since(t0).Milliseconds()))
+	}
+
+	// Acquire audio capture from pool.
+	capture, err := s.audioPool.Acquire(s.ctx, s.deviceID, func(samples []float32) {
+		s.handleAudioSamples(samples)
+	})
+	if err != nil {
+		if s.vad != nil {
+			s.vadPool.Release(s.ctx, s.vad)
+			s.vad = nil
 		}
-		capture = c
+		s.pool.Release(s.ctx, rec)
+		s.recognizer = nil
+		return fmt.Errorf("failed to create audio capture: %w", err)
 	}
 	s.capture = capture
-	logger.Debug(s.ctx, fmt.Sprintf("dictation timing: session.newAudioCapture cost=%dms", time.Since(t0).Milliseconds()))
+	logger.Info(s.ctx, fmt.Sprintf("dictation timing: session.newAudioCapture cost=%dms", time.Since(t0).Milliseconds()))
 
 	if err := capture.Start(); err != nil {
-		if s.audioPool != nil {
-			s.audioPool.Release(s.ctx, capture)
-		} else {
-			capture.Close()
+		s.audioPool.Release(s.ctx, capture)
+		if s.vad != nil {
+			s.vadPool.Release(s.ctx, s.vad)
+			s.vad = nil
 		}
+		s.pool.Release(s.ctx, rec)
 		s.capture = nil
-		s.releaseRecognizer()
+		s.recognizer = nil
 		s.recognizer = nil
 		return fmt.Errorf("failed to start audio capture: %w", err)
 	}
-	logger.Debug(s.ctx, fmt.Sprintf("dictation timing: session.captureStart cost=%dms", time.Since(t0).Milliseconds()))
+	logger.Info(s.ctx, fmt.Sprintf("dictation timing: session.captureStart cost=%dms", time.Since(t0).Milliseconds()))
 
 	s.state = SessionStateRecording
-	logger.Debug(s.ctx, fmt.Sprintf("dictation timing: session.total cost=%dms", time.Since(t0).Milliseconds()))
+	logger.Info(s.ctx, fmt.Sprintf("dictation timing: session.total cost=%dms", time.Since(t0).Milliseconds()))
 	return nil
 }
 
-// releaseRecognizer returns the recognizer to the pool (if pooled) or closes
-// it fully (if not pooled). The caller must hold s.mu.
-func (s *Session) releaseRecognizer() {
-	if s.recognizer == nil {
+// handleAudioSamples is called from the malgo capture callback goroutine.
+// In streaming mode it feeds audio directly to the recognizer and delivers
+// partial results. In offline mode it feeds audio to the VAD and dispatches
+// completed speech segments for async decoding.
+func (s *Session) handleAudioSamples(samples []float32) {
+	select {
+	case <-s.stopped:
+		return
+	default:
+	}
+
+	s.mu.Lock()
+	rec := s.recognizer
+	vad := s.vad
+	s.mu.Unlock()
+
+	if rec == nil {
 		return
 	}
-	if s.pool != nil {
-		// Cast to access CloseStream; the pool path always produces sherpaRecognizer.
-		if sr, ok := s.recognizer.(*sherpaRecognizer); ok {
-			s.pool.Release(s.ctx, sr)
-		} else {
-			s.recognizer.Close()
-		}
+
+	if s.streaming {
+		s.handleStreamingSamples(rec, samples)
 	} else {
-		s.recognizer.Close()
+		s.handleOfflineSamples(rec, vad, samples)
 	}
 }
 
-// handleAudioSamples is called from the malgo capture callback goroutine.
-// It feeds audio into the recognizer and runs decode passes in the same
-// goroutine to avoid contention with the UI thread.
-func (s *Session) handleAudioSamples(samples []float32) {
-	s.recognizer.AcceptWaveform(16000, samples)
+// handleStreamingSamples feeds audio to the online recognizer and delivers
+// partial results. Runs in the audio callback goroutine.
+func (s *Session) handleStreamingSamples(rec Recognizer, samples []float32) {
+	rec.AcceptWaveform(16000, samples)
 
-	// Run decode passes until the recognizer has no more buffered audio.
-	for s.recognizer.IsReady() {
-		s.recognizer.Decode()
+	for rec.IsReady() {
+		rec.Decode()
 	}
 
-	// Check for partial results.
-	result := s.recognizer.GetResult()
+	result := rec.GetResult()
 	if result.Text != s.lastText {
 		s.lastText = result.Text
 		if s.onPartial != nil {
-			// Show the full accumulated text plus the current partial so the
-			// overlay reflects everything recognized so far, not just the
-			// latest segment.
 			s.onPartial(s.accumulatedText + s.lastText)
 		}
 	}
 
-	// Check for endpoint (sentence boundary).
-	if s.recognizer.IsEndpoint() {
-		finalText := s.recognizer.GetResult().Text
-		s.recognizer.Reset()
+	if rec.IsEndpoint() {
+		finalText := rec.GetResult().Text
+		rec.Reset()
 		s.lastText = ""
 		if finalText != "" {
+			s.mu.Lock()
 			s.accumulatedText += finalText
+			full := s.accumulatedText
+			s.mu.Unlock()
 			if s.onFinal != nil {
-				// Report the full accumulated text so consumers can display
-				// the complete transcription across all segments.
-				s.onFinal(s.accumulatedText)
+				s.onFinal(full)
 			}
 		}
 	}
 }
 
+// handleOfflineSamples feeds audio to the VAD and dispatches completed speech
+// segments for async offline decoding.
+func (s *Session) handleOfflineSamples(rec Recognizer, vad *VoiceActivityDetector, samples []float32) {
+	if vad == nil {
+		return
+	}
+
+	vad.AcceptWaveform(samples)
+
+	// Log VAD state periodically for debugging.
+	if vad.IsSpeech() {
+		util.GetLogger().Debug(s.ctx, fmt.Sprintf("dictation: VAD speech detected, segments available=%v", !vad.IsEmpty()))
+	}
+
+	for !vad.IsEmpty() {
+		seg := vad.Front()
+		vad.Pop()
+		if seg == nil || len(seg.Samples) == 0 {
+			continue
+		}
+
+		util.GetLogger().Info(s.ctx, fmt.Sprintf("dictation: VAD segment ready, samples=%d", len(seg.Samples)))
+
+		samplesCopy := make([]float32, len(seg.Samples))
+		copy(samplesCopy, seg.Samples)
+
+		s.decodeWG.Add(1)
+		util.Go(s.ctx, "dictation decode segment", func() {
+			defer s.decodeWG.Done()
+
+			text := rec.DecodeSamples(samplesCopy)
+			if text == "" {
+				return
+			}
+
+			s.mu.Lock()
+			s.accumulatedText += text
+			full := s.accumulatedText
+			s.mu.Unlock()
+
+			if s.onPartial != nil {
+				s.onPartial(text)
+			}
+			if s.onFinal != nil {
+				s.onFinal(full)
+			}
+		})
+	}
+}
+
 // Stop stops the recording session and returns all accumulated text.
-// The caller should use this text as the final output. If the recognizer
-// has pending partial text that hasn't triggered an endpoint, it is
-// appended to the result.
 func (s *Session) Stop() (string, error) {
+	logger := util.GetLogger()
+	logger.Info(s.ctx, "dictation: session.Stop enter")
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.state != SessionStateRecording {
+		s.mu.Unlock()
+		logger.Info(s.ctx, "dictation: session.Stop not recording, returning")
 		return "", fmt.Errorf("session is not recording")
 	}
+	s.state = SessionStateStopped
+	s.mu.Unlock()
 
-	// Stop the audio capture first so no more samples arrive.
+	// Signal the audio callback to stop processing.
+	close(s.stopped)
+	logger.Info(s.ctx, "dictation: session.Stop signaled stopped")
+
+	// Stop audio capture first so no more samples arrive.
 	if s.capture != nil {
+		logger.Info(s.ctx, "dictation: session.Stop stopping capture")
 		_ = s.capture.Stop()
+		logger.Info(s.ctx, "dictation: session.Stop capture stopped")
 	}
 
-	// Flush any remaining partial text.
-	partial := s.recognizer.GetResult().Text
-	if partial != "" {
-		s.accumulatedText += partial
-	}
+	// Offline mode: flush VAD and queue remaining segments for decoding.
+	if !s.streaming && s.vad != nil {
+		logger.Info(s.ctx, "dictation: session.Stop flushing VAD")
+		s.vad.Flush()
+		for !s.vad.IsEmpty() {
+			seg := s.vad.Front()
+			s.vad.Pop()
+			if seg == nil || len(seg.Samples) == 0 {
+				continue
+			}
+			samplesCopy := make([]float32, len(seg.Samples))
+			copy(samplesCopy, seg.Samples)
 
-	totalText := s.accumulatedText
-
-	// Return audio capture to pool (keeps device alive) or close it fully.
-	if s.capture != nil {
-		if s.audioPool != nil {
-			s.audioPool.Release(s.ctx, s.capture)
-		} else {
-			s.capture.Close()
+			s.decodeWG.Add(1)
+			util.Go(s.ctx, "dictation decode flush segment", func() {
+				defer s.decodeWG.Done()
+				text := s.recognizer.DecodeSamples(samplesCopy)
+				if text == "" {
+					return
+				}
+				s.mu.Lock()
+				s.accumulatedText += text
+				s.mu.Unlock()
+			})
 		}
+		logger.Info(s.ctx, "dictation: session.Stop VAD flush done")
+	}
+
+	// Streaming mode: flush remaining partial text.
+	if s.streaming && s.recognizer != nil {
+		partial := s.recognizer.GetResult().Text
+		if partial != "" {
+			s.mu.Lock()
+			s.accumulatedText += partial
+			s.mu.Unlock()
+		}
+	}
+
+	// Wait for all in-flight decode goroutines (offline mode). This must be
+	// outside s.mu because decode goroutines acquire s.mu to update
+	// accumulatedText.
+	logger.Info(s.ctx, "dictation: session.Stop waiting for decode goroutines")
+	s.decodeWG.Wait()
+	logger.Info(s.ctx, "dictation: session.Stop decode goroutines done")
+
+	s.mu.Lock()
+	totalText := s.accumulatedText
+	s.mu.Unlock()
+
+	// Return resources to pools.
+	if s.capture != nil {
+		s.audioPool.Release(s.ctx, s.capture)
 		s.capture = nil
 	}
+	if s.vad != nil {
+		s.vadPool.Release(s.ctx, s.vad)
+		s.vad = nil
+	}
+	if s.recognizer != nil {
+		s.pool.Release(s.ctx, s.recognizer)
+		s.recognizer = nil
+	}
 
-	// Return recognizer to pool (keeps model in memory) or close it fully.
-	s.releaseRecognizer()
-	s.recognizer = nil
-
-	s.state = SessionStateStopped
+	logger.Info(s.ctx, fmt.Sprintf("dictation: session.Stop done, textLen=%d", len(totalText)))
 	return totalText, nil
 }
 
@@ -274,17 +356,17 @@ func (s *Session) GetAccumulatedText() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	text := s.accumulatedText
-	partial := s.lastText
-	return text + partial
+	if s.streaming {
+		text += s.lastText
+	}
+	return text
 }
 
-// sessionTimeout is the maximum duration a session can run before
-// auto-stopping. This prevents runaway sessions if the user forgets to stop.
+// sessionTimeout is the maximum duration a session can run before auto-stopping.
 const sessionTimeout = 5 * time.Minute
 
 // StartWithTimeout starts the session and schedules an auto-stop after
-// the timeout duration. The onTimeout callback is called if the session
-// is auto-stopped.
+// the timeout duration.
 func (s *Session) StartWithTimeout(onTimeout func()) error {
 	if err := s.Start(); err != nil {
 		return err
