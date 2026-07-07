@@ -2494,6 +2494,8 @@
   "plugin_dictation_correction_failed": "更正保存失败。",
   "plugin_dictation_play_sound": "提示音",
   "plugin_dictation_play_sound_tooltip": "听写开始和结束时播放一段短促的提示音。",
+  "plugin_dictation_duck_volume": "降低其他音频",
+  "plugin_dictation_duck_volume_tooltip": "听写时降低其他正在播放的音频音量，听写结束后恢复原音量。",
   "plugin_dictation_dictionary": "字典",
   "plugin_dictation_dictionary_tooltip": "听写使用的上下文纠正规则。不需要的规则请直接删除。",
   "plugin_dictation_dictionary_context": "上下文",

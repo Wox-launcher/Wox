@@ -2494,6 +2494,8 @@
   "plugin_dictation_correction_failed": "Failed to save correction.",
   "plugin_dictation_play_sound": "Sound",
   "plugin_dictation_play_sound_tooltip": "Play a short beep when dictation begins and ends.",
+  "plugin_dictation_duck_volume": "Lower other audio",
+  "plugin_dictation_duck_volume_tooltip": "Lower the volume of other audio while dictating. Restores the original volume when dictation ends.",
   "plugin_dictation_dictionary": "Dictionary",
   "plugin_dictation_dictionary_tooltip": "Context-aware correction rules used by dictation. Delete rules you no longer want.",
   "plugin_dictation_dictionary_context": "Context",

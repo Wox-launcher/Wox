@@ -2243,6 +2243,8 @@
   "plugin_dictation_correction_failed": "Failed to save correction.",
   "plugin_dictation_play_sound": "Sound",
   "plugin_dictation_play_sound_tooltip": "Play a short beep when dictation begins and ends.",
+  "plugin_dictation_duck_volume": "Lower other audio",
+  "plugin_dictation_duck_volume_tooltip": "Lower the volume of other audio while dictating. Restores the original volume when dictation ends.",
   "plugin_dictation_dictionary": "Dicionário",
   "plugin_dictation_dictionary_tooltip": "Regras de correção com contexto usadas pelo ditado. Exclua as regras que não quiser mais.",
   "plugin_dictation_dictionary_context": "Contexto",

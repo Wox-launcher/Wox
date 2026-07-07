@@ -34,6 +34,7 @@ const (
 	settingKeyModel           = "model"
 	settingKeyTriggerMode     = "triggerMode"
 	settingKeyPlaySound       = "playSound"
+	settingKeyDuckVolume      = "duckVolume"
 	settingKeyAIRefine        = "aiRefineEnabled"
 	settingKeyAIModel         = "aiModel"
 
@@ -114,6 +115,10 @@ type DictationPlugin struct {
 
 	// vadModelPath is the extracted path to silero_vad.onnx.
 	vadModelPath string
+
+	// volumeDucker lowers system audio during dictation and restores it
+	// afterwards when the duckVolume setting is enabled.
+	volumeDucker *audio.VolumeDucker
 
 	// Session state
 	sessionMu   sync.Mutex
@@ -233,6 +238,16 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 					Label:        "i18n:plugin_dictation_play_sound",
 					Tooltip:      "i18n:plugin_dictation_play_sound_tooltip",
 					DefaultValue: "true",
+				},
+			},
+			// Lower other audio during dictation.
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          settingKeyDuckVolume,
+					Label:        "i18n:plugin_dictation_duck_volume",
+					Tooltip:      "i18n:plugin_dictation_duck_volume_tooltip",
+					DefaultValue: "false",
 				},
 			},
 			{
@@ -941,6 +956,11 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 	if triggerMode == triggerModeHold {
 		loadingKey = "plugin_dictation_loading_model_hold"
 	}
+
+	// Lower other audio as soon as the overlay appears, before model
+	// loading, so the user's music is quiet while they wait.
+	p.startVolumeDucking(ctx)
+
 	p.showLoadingOverlay(ctx, loadingKey)
 
 	// Create the session with VAD + offline recognizer pools.
@@ -1008,6 +1028,9 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 // rewritten by the selected AI model; on failure or timeout it falls back to
 // the raw transcript and notifies the user.
 func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
+	// Restore system audio volume as early as possible.
+	p.stopVolumeDucking(ctx)
+
 	p.sessionMu.Lock()
 	session := p.session
 	p.session = nil
@@ -1504,6 +1527,7 @@ func (p *DictationPlugin) evictOldModels(ctx context.Context, newModelID string)
 func (p *DictationPlugin) cancelDictation(ctx context.Context) {
 	p.api.Log(ctx, plugin.LogLevelInfo, "dictation cancelled by user via overlay close button")
 	p.setVoiceOverlayVisible(false)
+	p.stopVolumeDucking(ctx)
 
 	p.sessionMu.Lock()
 	session := p.session
@@ -1528,6 +1552,35 @@ func (p *DictationPlugin) cancelDictation(ctx context.Context) {
 // playSoundIfEnabled plays an embedded audio clip when the playSound setting
 // is on. Errors are logged but never propagated so they can't disrupt
 // recording or typing.
+// startVolumeDucking lowers the system output volume when the duckVolume
+// setting is enabled, so other audio does not interfere with dictation.
+func (p *DictationPlugin) startVolumeDucking(ctx context.Context) {
+	enabled := parseBoolSetting(p.api.GetSetting(ctx, settingKeyDuckVolume))
+	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation: startVolumeDucking, enabled=%t", enabled))
+	if !enabled {
+		return
+	}
+	p.volumeDucker = audio.NewVolumeDucker()
+	if err := p.volumeDucker.Duck(0.3); err != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to duck volume: %s", err.Error()))
+		p.volumeDucker = nil
+	} else {
+		p.api.Log(ctx, plugin.LogLevelInfo, "dictation: volume ducked to 20%")
+	}
+}
+
+// stopVolumeDucking restores the system output volume if it was previously
+// lowered by startVolumeDucking.
+func (p *DictationPlugin) stopVolumeDucking(ctx context.Context) {
+	if p.volumeDucker == nil {
+		return
+	}
+	if err := p.volumeDucker.Restore(); err != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to restore volume: %s", err.Error()))
+	}
+	p.volumeDucker = nil
+}
+
 func (p *DictationPlugin) playSoundIfEnabled(ctx context.Context, name string) {
 	if !parseBoolSetting(p.api.GetSetting(ctx, settingKeyPlaySound)) {
 		return
