@@ -884,6 +884,7 @@
   "ui_ai_model_selector_save": "Salvar",
   "plugin_dictation_loading_model": "Loading model...",
   "plugin_dictation_loading_model_hold": "Loading model, please keep holding...",
+  "plugin_dictation_processing": "Processando ditado...",
   "plugin_dictation_input_device_unavailable": "Dispositivo de entrada selecionado indisponível: {device}",
   "plugin_dictation_input_device_missing": "Dispositivo de entrada selecionado não encontrado: {device}. Conecte o dispositivo ou escolha Padrão do sistema nas configurações de Ditado.",
   "plugin_dictation_input_device_list_failed": "Falha ao listar dispositivos de entrada",

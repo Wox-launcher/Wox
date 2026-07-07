@@ -106,21 +106,22 @@ func (p *AudioCapturePool) Acquire(ctx context.Context, deviceID string, onSampl
 	return capture, nil
 }
 
-// Release returns a capture to the pool. It stops the device (so the
-// microphone is not actively recording) but keeps the malgo context and
-// device initialized for fast reuse.
+// Release returns a capture to the pool. It closes the capture device fully
+// (not just Stop) so no residual audio buffer carries over to the next
+// session. The malgo context initialization is cheap (~47ms) and the
+// recognizer model load is the dominant cost, so this trade-off is worth it
+// for correctness.
 func (p *AudioCapturePool) Release(ctx context.Context, capture *AudioCapture) {
 	if capture == nil {
 		return
 	}
-	_ = capture.Stop()
+	capture.Close()
 
-	// Find the entry by pointer to mark it not in use.
+	// Remove the entry from the pool since the capture is now closed.
 	p.mu.Lock()
-	for _, entry := range p.entries {
+	for key, entry := range p.entries {
 		if entry.capture == capture {
-			entry.inUse = false
-			entry.lastUsed = time.Now()
+			delete(p.entries, key)
 			break
 		}
 	}

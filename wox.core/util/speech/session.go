@@ -393,6 +393,11 @@ func (s *Session) Stop() (string, error) {
 			s.accumulatedText += partial
 			s.mu.Unlock()
 		}
+		// The online stream result is "since last Reset"; reset at the session
+		// boundary so a pooled recognizer cannot carry this transcript into the
+		// next dictation.
+		s.recognizer.Reset()
+		s.lastText = ""
 	}
 
 	// Wait for all in-flight decode goroutines (offline mode). This must be

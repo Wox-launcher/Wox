@@ -50,14 +50,6 @@ var RecommendedModels = []ModelInfo{
 		Language:    "zh-CN",
 		SizeMB:      154,
 	},
-	{
-		ID:          "sherpa-onnx-streaming-zipformer-multi-zh-hans-2023-12-12",
-		DisplayName: "Zipformer Multi ZH-Hans int8 (streaming, ~67MB)",
-		DownloadURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-multi-zh-hans-2023-12-12.tar.bz2",
-		ModelType:   "zipformer2",
-		Language:    "zh-CN",
-		SizeMB:      67,
-	},
 }
 
 // ModelManager handles model discovery, download, and verification.

@@ -105,12 +105,16 @@ func (p *RecognizerPool) Acquire(ctx context.Context, config RecognizerConfig) (
 }
 
 // Release returns a recognizer to the pool, keeping the model in memory.
+// Streaming recognizers also keep per-stream decoder state, so clear that
+// state before reuse while still caching the loaded model.
 func (p *RecognizerPool) Release(ctx context.Context, rec Recognizer) {
 	if rec == nil {
 		return
 	}
 
-	// Find the entry by interface identity to mark it not in use.
+	if rec.IsStreaming() {
+		rec.Reset()
+	}
 	p.mu.Lock()
 	for _, entry := range p.entries {
 		if entry.recognizer == rec {

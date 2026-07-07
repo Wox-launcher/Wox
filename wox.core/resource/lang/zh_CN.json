@@ -2462,6 +2462,7 @@
   "plugin_dictation_trigger_toggle": "开关式（按一次开始，再按一次停止）",
   "plugin_dictation_trigger_hold": "按住式（按住录音，松开结束）",
   "plugin_dictation_listening": "正在听写...",
+  "plugin_dictation_processing": "正在识别...",
   "plugin_dictation_loading_model": "加载模型中...",
   "plugin_dictation_loading_model_hold": "正在加载模型中，请不要松手...",
   "plugin_dictation_no_model_selected": "未选择识别模型，请在设置中下载模型。",

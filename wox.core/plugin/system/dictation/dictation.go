@@ -1018,6 +1018,7 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 		return
 	}
 	p.setVoiceOverlayVisible(false)
+	p.showProcessingOverlay(ctx)
 
 	text, err := session.Stop()
 	if err != nil {
@@ -1137,6 +1138,44 @@ func (p *DictationPlugin) showRefiningOverlay(ctx context.Context) {
 			// During AI refinement the session is already stopped; just close
 			// the overlay without typing the result.
 			p.api.Log(util.NewTraceContext(), plugin.LogLevelInfo, "dictation overlay closed during AI refinement")
+		},
+	}
+
+	if mouseScreen.Width == 0 {
+		pos, ok := mouse.CurrentPosition()
+		if ok {
+			opts.OffsetX = pos.X
+			opts.OffsetY = pos.Y - overlayBottomOffset
+		}
+	}
+
+	showOverlay(opts)
+}
+
+// showProcessingOverlay replaces the waveform immediately after release so
+// the UI acknowledges the key-up event while local recognition finishes.
+func (p *DictationPlugin) showProcessingOverlay(ctx context.Context) {
+	mouseScreen := screen.GetMouseScreen()
+
+	opts := overlay.OverlayOptions{
+		Name:             dictationOverlayName,
+		Message:          i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_processing"),
+		Loading:          true,
+		Topmost:          true,
+		PreservePosition: true,
+		FontSize:         14,
+		MinWidth:         200,
+		MaxWidth:         600,
+		AbsolutePosition: true,
+		Anchor:           overlay.AnchorBottomCenter,
+		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
+		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
+		AutoCloseSeconds: 0,
+		Closable:         true,
+		CloseOnEscape:    true,
+		Movable:          false,
+		OnClose: func() {
+			p.api.Log(util.NewTraceContext(), plugin.LogLevelInfo, "dictation overlay closed while processing transcript")
 		},
 	}
 

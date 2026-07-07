@@ -2462,6 +2462,7 @@
   "plugin_dictation_trigger_toggle": "Toggle (press once to start, press again to stop)",
   "plugin_dictation_trigger_hold": "Hold (press and hold to record)",
   "plugin_dictation_listening": "Listening...",
+  "plugin_dictation_processing": "Processing dictation...",
   "plugin_dictation_loading_model": "Loading model...",
   "plugin_dictation_loading_model_hold": "Loading model, please keep holding...",
   "plugin_dictation_no_model_selected": "No recognition model selected. Please download a model in settings.",
