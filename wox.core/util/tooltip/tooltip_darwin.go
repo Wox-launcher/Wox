@@ -13,7 +13,7 @@ import (
 // tracker keeps the latest tooltip tracking bounds while the polling goroutine runs.
 type tracker struct {
 	mu     sync.RWMutex
-	opts   OverlayOptions
+	opts   Options
 	stopCh chan struct{}
 }
 
@@ -27,7 +27,7 @@ func tooltipFontSizePt() float64 {
 }
 
 // startVisibilityTracking mirrors the Windows tooltip lifetime behavior on macOS.
-func startVisibilityTracking(opts OverlayOptions) {
+func startVisibilityTracking(opts Options) {
 	if opts.Name == "" {
 		return
 	}
@@ -86,7 +86,7 @@ func (current *tracker) run() {
 }
 
 // isCursorInsideTooltipOrAnchor checks cursor position in the shared top-left desktop coordinate space.
-func isCursorInsideTooltipOrAnchor(opts OverlayOptions) (bool, bool) {
+func isCursorInsideTooltipOrAnchor(opts Options) (bool, bool) {
 	point, ok := mouse.CurrentPosition()
 	if !ok {
 		return false, false

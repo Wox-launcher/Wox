@@ -15,20 +15,15 @@ import (
 
 // ModelInfo describes a downloadable ASR model.
 type ModelInfo struct {
-	// ID is the unique identifier for this model, matching the directory
-	// name under the models root.
-	ID string
-	// DisplayName is the user-facing name shown in the settings UI.
+	ID          string
 	DisplayName string
-	// DownloadURL is the direct URL to the model tar.bz2 archive.
+	Description string
+	Languages   string
+	Recommended bool
 	DownloadURL string
-	// ModelType is the sherpa-onnx model architecture: "zipformer2" or
-	// "paraformer".
-	ModelType string
-	// Language is the BCP-47 language code this model supports.
-	Language string
-	// SizeMB is the approximate download size in megabytes.
-	SizeMB int
+	ModelType   string
+	Language    string
+	SizeMB      int
 }
 
 // RecommendedModels is the list of models offered to users for first-time
@@ -36,7 +31,10 @@ type ModelInfo struct {
 var RecommendedModels = []ModelInfo{
 	{
 		ID:          "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
-		DisplayName: "Qwen3-ASR 0.6B int8 (29 languages + Chinese dialects, ~600MB)",
+		DisplayName: "Qwen3-ASR 0.6B",
+		Description: "i18n:plugin_dictation_model_qwen3_desc",
+		Languages:   "i18n:plugin_dictation_model_qwen3_lang",
+		Recommended: true,
 		DownloadURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25.tar.bz2",
 		ModelType:   "qwen3_asr",
 		Language:    "multi",
@@ -44,11 +42,25 @@ var RecommendedModels = []ModelInfo{
 	},
 	{
 		ID:          "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
-		DisplayName: "Zipformer ZH int8 (streaming, ~154MB)",
+		DisplayName: "Zipformer ZH int8",
+		Description: "i18n:plugin_dictation_model_zipformer_zh_desc",
+		Languages:   "i18n:plugin_dictation_model_zipformer_zh_lang",
+		Recommended: false,
 		DownloadURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2",
 		ModelType:   "zipformer2",
 		Language:    "zh-CN",
 		SizeMB:      154,
+	},
+	{
+		ID:          "sherpa-onnx-streaming-zipformer-multi-zh-hans-2023-12-12",
+		DisplayName: "Zipformer Multi ZH-Hans int8",
+		Description: "i18n:plugin_dictation_model_zipformer_multi_desc",
+		Languages:   "i18n:plugin_dictation_model_zipformer_multi_lang",
+		Recommended: false,
+		DownloadURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-multi-zh-hans-2023-12-12.tar.bz2",
+		ModelType:   "zipformer2",
+		Language:    "zh-CN",
+		SizeMB:      67,
 	},
 }
 

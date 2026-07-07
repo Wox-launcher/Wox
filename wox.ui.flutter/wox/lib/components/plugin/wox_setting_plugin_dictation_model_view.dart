@@ -123,6 +123,9 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
           _options[idx] = DictationModelOption.fromJson({
             'ID': _options[idx].id,
             'DisplayName': _options[idx].displayName,
+            'Description': _options[idx].description,
+            'Languages': _options[idx].languages,
+            'Recommended': _options[idx].recommended,
             'Status': 'downloading',
             'DownloadProgress': 0,
             'SizeMB': _options[idx].sizeMB,
@@ -152,6 +155,9 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
           _options[idx] = DictationModelOption.fromJson({
             'ID': _options[idx].id,
             'DisplayName': _options[idx].displayName,
+            'Description': _options[idx].description,
+            'Languages': _options[idx].languages,
+            'Recommended': _options[idx].recommended,
             'Status': 'not_downloaded',
             'DownloadProgress': 0,
             'SizeMB': _options[idx].sizeMB,
@@ -211,16 +217,6 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
     );
   }
 
-  /// Extracts the model name without parenthetical metadata.
-  /// E.g. "Zipformer ZH int8 (streaming, ~154MB)" → "Zipformer ZH int8"
-  String _modelDisplayName(String displayName) {
-    final parenIdx = displayName.indexOf('(');
-    if (parenIdx > 0) {
-      return displayName.substring(0, parenIdx).trim();
-    }
-    return displayName;
-  }
-
   Widget _buildDropdownButton() {
     final selectedOpt = _options.where((o) => o.id == _selectedId).firstOrNull;
     final textColor = getThemeTextColor();
@@ -242,7 +238,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
             children: [
               Expanded(
                 child: Text(
-                  selectedOpt != null ? _modelDisplayName(selectedOpt.displayName) : tr('plugin_dictation_model_select_hint'),
+                  selectedOpt != null ? selectedOpt.displayName : tr('plugin_dictation_model_select_hint'),
                   style: TextStyle(
                     color: selectedOpt != null ? textColor : textColor.withValues(alpha: 0.5),
                     fontSize: 13,
@@ -320,28 +316,71 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    _modelDisplayName(opt.displayName),
-                    style: TextStyle(
-                      color: isDownloaded ? textColor : subTextColor,
-                      fontSize: 13,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  // Title row: model name + recommended badge + size
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          opt.displayName,
+                          style: TextStyle(
+                            color: isDownloaded ? textColor : subTextColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (opt.recommended) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: accentColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            tr('plugin_dictation_model_recommended'),
+                            style: TextStyle(color: accentColor, fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                      if (opt.sizeMB > 0) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          '~${opt.sizeMB}MB',
+                          style: TextStyle(color: subTextColor, fontSize: 11),
+                        ),
+                      ],
+                    ],
                   ),
-                  if (opt.sizeMB > 0)
+                  // Languages
+                  if (opt.languages.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
-                        '${opt.sizeMB}MB',
+                        opt.languages,
                         style: TextStyle(color: subTextColor, fontSize: 11),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  // Description
+                  if (opt.description.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        opt.description,
+                        style: TextStyle(color: subTextColor.withValues(alpha: 0.8), fontSize: 11),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                 ],
               ),
             ),
             const SizedBox(width: 12),
-            _buildMenuTrailing(opt, isDownloading, isExtracting, isDownloaded, isFailed, isSelected, accentColor, subTextColor),
+            _buildMenuTrailing(opt, isDownloading, isExtracting, isDownloaded, isFailed, accentColor, subTextColor),
           ],
         ),
       ),
@@ -354,31 +393,21 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
     bool isExtracting,
     bool isDownloaded,
     bool isFailed,
-    bool isSelected,
     Color accentColor,
     Color subTextColor,
   ) {
     if (isDownloaded) {
-      // Selected: show checkmark + delete button. Not selected: show delete button only.
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isSelected) ...[
-            Icon(Icons.check, size: 16, color: accentColor),
-            const SizedBox(width: 8),
-          ],
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _deleteModel(opt.id),
-            child: WoxTooltip(
-              message: tr('plugin_dictation_model_delete'),
-              child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: Icon(Icons.delete_outline, size: 16, color: subTextColor),
-              ),
-            ),
+      // Downloaded: show only the delete button (no checkmark).
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _deleteModel(opt.id),
+        child: WoxTooltip(
+          message: tr('plugin_dictation_model_delete'),
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Icon(Icons.delete_outline, size: 16, color: subTextColor),
           ),
-        ],
+        ),
       );
     }
     if (isDownloading) {

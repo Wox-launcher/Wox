@@ -1,4 +1,4 @@
-package overlay
+package imageoverlay
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"image"
 	_ "image/gif"  // Register GIF header decoding for image overlays.
 	_ "image/jpeg" // Register JPEG header decoding for image overlays.
-	_ "image/png"  // Register PNG header decoding for image overlays.
+	"image/png"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -18,18 +18,47 @@ import (
 	"wox/i18n"
 	"wox/util"
 	"wox/util/imagecache"
+	"wox/util/mouse"
+	"wox/util/overlay"
+	"wox/util/overlay/textoverlay"
 	"wox/util/screen"
 )
 
 const imageOverlayPrefix = "wox_image_overlay_"
 const defaultImageOverlayCornerRadius = 16
 
-// ImageOverlayOptions describes a native image overlay request shared by preview and pinning
+type overlayImageKind string
+
+const (
+	overlayImageKindImage overlayImageKind = "image"
+	overlayImageKindFile  overlayImageKind = "file"
+)
+
+type overlayImage struct {
+	kind     overlayImageKind
+	image    image.Image
+	filePath string
+}
+
+type imageRenderer struct {
+	handle uintptr
+	width  float64
+	height float64
+}
+
+func newImageOverlaySource(img image.Image) overlayImage {
+	return overlayImage{kind: overlayImageKindImage, image: img}
+}
+
+func newFileOverlaySource(filePath string) overlayImage {
+	return overlayImage{kind: overlayImageKindFile, filePath: filePath}
+}
+
+// Options describes a native image overlay request shared by preview and pinning
 // features. Width and height are optional; when either side is missing the helper reads image
 // metadata so callers do not duplicate file-header parsing.
-type ImageOverlayOptions struct {
-	Name             string
-	Title            string
+type Options struct {
+	ID               string
 	Image            common.WoxImage
 	Width            float64
 	Height           float64
@@ -42,12 +71,13 @@ type ImageOverlayOptions struct {
 	AbsolutePosition bool
 	CornerRadius     float64
 	CloseOnEscape    bool
+	Closable         bool
 }
 
-// ShowImageOverlay prepares the image source and displays it as a native overlay. The refactor keeps
+// Show prepares the image source and displays it as a native overlay. The refactor keeps
 // URL loading feedback, cache reuse, local file-backed icons, base64/SVG fallback decode, and common
 // sizing in one place for image preview, screenshot pinning, and future overlay image consumers.
-func ShowImageOverlay(ctx context.Context, opts ImageOverlayOptions) error {
+func Show(ctx context.Context, opts Options) error {
 	opts = normalizeImageOverlayOptions(opts)
 	showLoading := opts.Image.ImageType == common.WoxImageTypeUrl
 	if showLoading {
@@ -74,13 +104,8 @@ func ShowImageOverlay(ctx context.Context, opts ImageOverlayOptions) error {
 		width, height = fitImageOverlaySize(width, height)
 	}
 
-	// Image overlays share a transparent, movable native surface. Keeping this in the overlay
-	// utility prevents image preview, screenshot pinning, and future callers from reimplementing
-	// the same file-backed transport and sizing rules in separate modules.
-	Show(OverlayOptions{
-		Name:        opts.Name,
-		Title:       opts.Title,
-		Icon:        overlayImage,
+	window := overlay.WindowOptions{
+		ID:          opts.ID,
 		Transparent: true,
 		Movable:     opts.Movable,
 		// Feature change: image overlays are user-managed reference surfaces. Making only this
@@ -100,18 +125,20 @@ func ShowImageOverlay(ctx context.Context, opts ImageOverlayOptions) error {
 		OffsetY:          opts.OffsetY,
 		Width:            width,
 		Height:           height,
-		IconWidth:        width,
-		IconHeight:       height,
-	})
+	}
+	if renderer, ok := newImageRenderer(opts.ID, overlayImage, width, height, opts.CornerRadius, opts.Closable); ok {
+		attachment := renderer.nativeAttachment()
+		attachment.OnRelease = renderer.destroy
+		window.NativeAttachment = attachment
+	}
+	overlay.RegisterClickCallback(opts.ID, nil)
+	overlay.ShowWindow(window)
 	return nil
 }
 
-func normalizeImageOverlayOptions(opts ImageOverlayOptions) ImageOverlayOptions {
-	if opts.Name == "" {
-		opts.Name = imageOverlayPrefix + opts.Image.Hash()
-	}
-	if opts.Title == "" {
-		opts.Title = "Wox image overlay"
+func normalizeImageOverlayOptions(opts Options) Options {
+	if opts.ID == "" {
+		opts.ID = imageOverlayPrefix + opts.Image.Hash()
 	}
 	if opts.CornerRadius <= 0 {
 		// Feature change: image overlay corner radius is now configurable, while the default is
@@ -119,51 +146,63 @@ func normalizeImageOverlayOptions(opts ImageOverlayOptions) ImageOverlayOptions 
 		// rounded after scaling on high-DPI desktop screens.
 		opts.CornerRadius = defaultImageOverlayCornerRadius
 	}
+	if !opts.AbsolutePosition && opts.OffsetX == 0 && opts.OffsetY == 0 {
+		if pos, ok := mouse.CurrentPosition(); ok {
+			// Image previews are user-triggered reference surfaces, so the natural default is the
+			// current cursor location rather than the primary screen's notification position.
+			opts.AbsolutePosition = true
+			opts.Anchor = overlay.AnchorCenter
+			opts.OffsetX = pos.X
+			opts.OffsetY = pos.Y
+		}
+	}
 	return opts
 }
 
-func showImageOverlayLoadingOverlay(ctx context.Context, opts ImageOverlayOptions) {
+func showImageOverlayLoadingOverlay(ctx context.Context, opts Options) {
 	// Feature change: URL image overlays acknowledge the click before network download and cache
 	// preparation. Local files, screenshots, base64, and inline SVG stay direct because they do not
 	// need a separate waiting state.
 	start := time.Now()
-	Show(OverlayOptions{
-		Name:          opts.Name,
-		Title:         opts.Title,
-		Message:       i18n.GetI18nManager().TranslateWox(ctx, "ui_preview_image_loading"),
-		Loading:       true,
-		Anchor:        AnchorCenter,
-		Width:         200,
-		FontSize:      13,
-		IconSize:      20,
-		Movable:       true,
-		CloseOnEscape: true,
-		Topmost:       true,
+	textoverlay.Show(textoverlay.Options{
+		Window: overlay.WindowOptions{
+			ID:            opts.ID,
+			Anchor:        overlay.AnchorCenter,
+			Width:         200,
+			Movable:       true,
+			CloseOnEscape: true,
+			Topmost:       true,
+		},
+		Message:  i18n.GetI18nManager().TranslateWox(ctx, "ui_preview_image_loading"),
+		Loading:  true,
+		FontSize: 13,
+		IconSize: 20,
 	})
-	util.GetLogger().Info(ctx, fmt.Sprintf("image overlay loading shown: name=%s, cost=%s", opts.Name, time.Since(start)))
+	util.GetLogger().Info(ctx, fmt.Sprintf("image overlay loading shown: id=%s, cost=%s", opts.ID, time.Since(start)))
 }
 
-func showImageOverlayErrorOverlay(ctx context.Context, opts ImageOverlayOptions) {
+func showImageOverlayErrorOverlay(ctx context.Context, opts Options) {
 	// Bug fix: URL overlay failures replace the loading window with a localized error instead of
 	// leaving stale native UI while the caller receives the concrete error for route/API handling.
-	Show(OverlayOptions{
-		Name:             opts.Name,
-		Title:            opts.Title,
-		Message:          i18n.GetI18nManager().TranslateWox(ctx, "ui_preview_image_load_failed"),
-		Anchor:           AnchorCenter,
-		Width:            220,
-		FontSize:         13,
-		AutoCloseSeconds: 6,
+	textoverlay.Show(textoverlay.Options{
+		Window: overlay.WindowOptions{
+			ID:            opts.ID,
+			Anchor:        overlay.AnchorCenter,
+			Width:         220,
+			CloseOnEscape: true,
+			Topmost:       true,
+		},
 		Closable:         true,
-		CloseOnEscape:    true,
-		Topmost:          true,
+		AutoCloseSeconds: 6,
+		Message:          i18n.GetI18nManager().TranslateWox(ctx, "ui_preview_image_load_failed"),
+		FontSize:         13,
 	})
 }
 
 // prepareImageOverlay returns an overlay icon plus intrinsic dimensions without showing a window.
-// Raster files and cached URL images intentionally use NewFileIcon so large images avoid Go-side
-// full decode and PNG bridge encoding.
-func prepareImageOverlay(ctx context.Context, woxImage common.WoxImage) (OverlayImage, float64, float64, error) {
+// Raster files and cached URL images intentionally stay file-backed so large
+// images avoid Go-side full decode and PNG bridge encoding.
+func prepareImageOverlay(ctx context.Context, woxImage common.WoxImage) (overlayImage, float64, float64, error) {
 	if woxImage.ImageType == common.WoxImageTypeUrl {
 		return prepareURLImageOverlay(ctx, woxImage.ImageData)
 	}
@@ -173,47 +212,47 @@ func prepareImageOverlay(ctx context.Context, woxImage common.WoxImage) (Overlay
 	}
 
 	if woxImage.ImageType != common.WoxImageTypeAbsolutePath && woxImage.ImageType != common.WoxImageTypeBase64 && woxImage.ImageType != common.WoxImageTypeSvg {
-		return OverlayImage{}, 0, 0, fmt.Errorf("image overlay does not support image type: %s", woxImage.ImageType)
+		return overlayImage{}, 0, 0, fmt.Errorf("image overlay does not support image type: %s", woxImage.ImageType)
 	}
 
 	decodeStart := time.Now()
 	img, err := woxImage.ToImage()
 	if err != nil {
-		return OverlayImage{}, 0, 0, fmt.Errorf("failed to decode image overlay source: %w", err)
+		return overlayImage{}, 0, 0, fmt.Errorf("failed to decode image overlay source: %w", err)
 	}
 	bounds := img.Bounds()
 	if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
-		return OverlayImage{}, 0, 0, fmt.Errorf("image overlay source has invalid size")
+		return overlayImage{}, 0, 0, fmt.Errorf("image overlay source has invalid size")
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf("image overlay decoded: type=%s, dataLength=%d, size=%dx%d, decodeCost=%s", woxImage.ImageType, len(woxImage.ImageData), bounds.Dx(), bounds.Dy(), time.Since(decodeStart)))
-	return NewImageIcon(img), float64(bounds.Dx()), float64(bounds.Dy()), nil
+	return newImageOverlaySource(img), float64(bounds.Dx()), float64(bounds.Dy()), nil
 }
 
-func prepareFileImageOverlay(ctx context.Context, filePath string) (OverlayImage, float64, float64, error) {
+func prepareFileImageOverlay(ctx context.Context, filePath string) (overlayImage, float64, float64, error) {
 	info, err := os.Stat(filePath)
 	if err != nil {
-		return OverlayImage{}, 0, 0, fmt.Errorf("failed to read image overlay file info: %w", err)
+		return overlayImage{}, 0, 0, fmt.Errorf("failed to read image overlay file info: %w", err)
 	}
 	if info.IsDir() {
-		return OverlayImage{}, 0, 0, fmt.Errorf("image overlay path is a directory")
+		return overlayImage{}, 0, 0, fmt.Errorf("image overlay path is a directory")
 	}
 	if info.Size() == 0 {
-		return OverlayImage{}, 0, 0, fmt.Errorf("image overlay file is empty")
+		return overlayImage{}, 0, 0, fmt.Errorf("image overlay file is empty")
 	}
 
 	headerStart := time.Now()
 	width, height, err := readFileImageSize(filePath)
 	if err != nil {
-		return OverlayImage{}, 0, 0, fmt.Errorf("failed to read image overlay file size: %w", err)
+		return overlayImage{}, 0, 0, fmt.Errorf("failed to read image overlay file size: %w", err)
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf("image overlay file prepared: path=%s, fileBytes=%d, size=%dx%d, headerCost=%s", filePath, info.Size(), width, height, time.Since(headerStart)))
-	return NewFileIcon(filePath), float64(width), float64(height), nil
+	return newFileOverlaySource(filePath), float64(width), float64(height), nil
 }
 
-func prepareURLImageOverlay(ctx context.Context, imageURL string) (OverlayImage, float64, float64, error) {
+func prepareURLImageOverlay(ctx context.Context, imageURL string) (overlayImage, float64, float64, error) {
 	parsedURL, err := url.Parse(imageURL)
 	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
-		return OverlayImage{}, 0, 0, fmt.Errorf("image overlay only supports http/https image urls")
+		return overlayImage{}, 0, 0, fmt.Errorf("image overlay only supports http/https image urls")
 	}
 
 	cachePath := buildURLImageOverlayCachePath(imageURL, parsedURL.Path)
@@ -226,7 +265,7 @@ func prepareURLImageOverlay(ctx context.Context, imageURL string) (OverlayImage,
 			// native path as local screenshots instead of repeating decode and bridge encoding.
 			util.GetLogger().Info(ctx, fmt.Sprintf("image overlay url cache hit: url=%s, path=%s, fileBytes=%d, size=%dx%d, headerCost=%s", imageURL, cachePath, cachedInfo.Size(), width, height, time.Since(headerStart)))
 			imagecache.Touch(ctx, cachePath, cachedInfo)
-			return NewFileIcon(cachePath), float64(width), float64(height), nil
+			return newFileOverlaySource(cachePath), float64(width), float64(height), nil
 		}
 		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to read cached image overlay header, refreshing cache: url=%s path=%s err=%s", imageURL, cachePath, headerErr.Error()))
 	}
@@ -238,7 +277,7 @@ func prepareURLImageOverlay(ctx context.Context, imageURL string) (OverlayImage,
 	downloadStart := time.Now()
 	data, err := util.HttpGet(ctx, imageURL)
 	if err != nil {
-		return OverlayImage{}, 0, 0, fmt.Errorf("failed to download image overlay url: %w", err)
+		return overlayImage{}, 0, 0, fmt.Errorf("failed to download image overlay url: %w", err)
 	}
 	downloadCost := time.Since(downloadStart)
 
@@ -247,30 +286,30 @@ func prepareURLImageOverlay(ctx context.Context, imageURL string) (OverlayImage,
 		svgImage := common.NewWoxImageSvg(string(data))
 		img, err := svgImage.ToImage()
 		if err != nil {
-			return OverlayImage{}, 0, 0, fmt.Errorf("failed to decode image overlay svg url: %w", err)
+			return overlayImage{}, 0, 0, fmt.Errorf("failed to decode image overlay svg url: %w", err)
 		}
 		bounds := img.Bounds()
 		if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
-			return OverlayImage{}, 0, 0, fmt.Errorf("image overlay url has invalid size")
+			return overlayImage{}, 0, 0, fmt.Errorf("image overlay url has invalid size")
 		}
 		util.GetLogger().Info(ctx, fmt.Sprintf("image overlay url prepared: url=%s, downloadedBytes=%d, size=%dx%d, downloadCost=%s, decodeCost=%s, totalCost=%s", imageURL, len(data), bounds.Dx(), bounds.Dy(), downloadCost, time.Since(headerStart), time.Since(totalStart)))
-		return NewImageIcon(img), float64(bounds.Dx()), float64(bounds.Dy()), nil
+		return newImageOverlaySource(img), float64(bounds.Dx()), float64(bounds.Dy()), nil
 	}
 
 	config, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return OverlayImage{}, 0, 0, fmt.Errorf("failed to decode image overlay url header: %w", err)
+		return overlayImage{}, 0, 0, fmt.Errorf("failed to decode image overlay url header: %w", err)
 	}
 	if config.Width <= 0 || config.Height <= 0 {
-		return OverlayImage{}, 0, 0, fmt.Errorf("image overlay url has invalid size")
+		return overlayImage{}, 0, 0, fmt.Errorf("image overlay url has invalid size")
 	}
 
 	writeStart := time.Now()
 	if writeErr := writeURLImageOverlayCache(cachePath, data); writeErr != nil {
-		return OverlayImage{}, 0, 0, fmt.Errorf("failed to cache image overlay url: %w", writeErr)
+		return overlayImage{}, 0, 0, fmt.Errorf("failed to cache image overlay url: %w", writeErr)
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf("image overlay url prepared: url=%s, cachePath=%s, downloadedBytes=%d, size=%dx%d, downloadCost=%s, headerCost=%s, writeCost=%s, totalCost=%s", imageURL, cachePath, len(data), config.Width, config.Height, downloadCost, time.Since(headerStart), time.Since(writeStart), time.Since(totalStart)))
-	return NewFileIcon(cachePath), float64(config.Width), float64(config.Height), nil
+	return newFileOverlaySource(cachePath), float64(config.Width), float64(config.Height), nil
 }
 
 // fitImageOverlaySize caps preview-style overlays to the active screen while preserving aspect
@@ -333,7 +372,7 @@ func buildURLImageOverlayCachePath(imageURL string, urlPath string) string {
 	}
 	// Refactor compatibility: keep the original preview cache prefix so the shared helper reuses
 	// images already downloaded by the previous preview-only implementation instead of forcing one
-	// extra remote fetch after the code moves into util/overlay.
+	// extra remote fetch after the code moved into the shared image overlay package.
 	return filepath.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("preview_overlay_url_%s%s", util.Md5([]byte(imageURL)), ext))
 }
 
@@ -362,4 +401,15 @@ func writeURLImageOverlayCache(cachePath string, data []byte) error {
 		return err
 	}
 	return nil
+}
+
+func imageToPNG(img image.Image) ([]byte, error) {
+	if img == nil {
+		return nil, nil
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

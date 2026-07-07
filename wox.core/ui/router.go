@@ -35,6 +35,7 @@ import (
 	"wox/util/font"
 	"wox/util/keyboard"
 	"wox/util/overlay"
+	"wox/util/overlay/imageoverlay"
 	"wox/util/permission"
 	"wox/util/processmemory"
 	"wox/util/screen"
@@ -444,8 +445,7 @@ func handlePreviewImageOverlay(w http.ResponseWriter, r *http.Request) {
 	// Refactor: image preview routing now calls the single shared overlay entry directly. The
 	// overlay utility decides whether URL sources need loading/cache behavior, while non-URL sources
 	// are displayed immediately through the same API.
-	if err := overlay.ShowImageOverlay(ctx, overlay.ImageOverlayOptions{
-		Title:         "Wox image preview",
+	if err := imageoverlay.Show(ctx, imageoverlay.Options{
 		Image:         request.Image,
 		FitToScreen:   true,
 		Topmost:       true,

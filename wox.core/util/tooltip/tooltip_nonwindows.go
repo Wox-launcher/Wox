@@ -6,7 +6,7 @@ func tooltipFontSizePt() float64 {
 	return tooltipBaseFontSizePt
 }
 
-func startVisibilityTracking(opts OverlayOptions) {
+func startVisibilityTracking(opts Options) {
 	_ = opts
 }
 

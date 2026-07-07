@@ -22,6 +22,8 @@ import (
 	"wox/util/keyboard"
 	"wox/util/mouse"
 	"wox/util/overlay"
+	"wox/util/overlay/dictationoverlay"
+	"wox/util/overlay/textoverlay"
 	"wox/util/screen"
 	"wox/util/speech"
 )
@@ -69,11 +71,6 @@ var (
 
 	errInputDeviceMissing = errors.New("input device missing")
 
-	// Platform hooks are replaceable for testing.
-	showOverlay        = overlay.Show
-	closeOverlay       = overlay.Close
-	listCaptureDevices = speech.ListCaptureDevices
-
 	// hotkeyRegistrar is set by the UI layer at startup to avoid a circular
 	// import (ui imports plugin/system/dictation, so dictation cannot import ui).
 	// The UI Manager registers itself as the hotkey registrar via SetHotkeyRegistrar.
@@ -115,10 +112,6 @@ type DictationPlugin struct {
 
 	// vadModelPath is the extracted path to silero_vad.onnx.
 	vadModelPath string
-
-	// volumeDucker lowers system audio during dictation and restores it
-	// afterwards when the duckVolume setting is enabled.
-	volumeDucker *audio.VolumeDucker
 
 	// Session state
 	sessionMu   sync.Mutex
@@ -453,7 +446,7 @@ func (p *DictationPlugin) buildHotkeySetting(ctx context.Context) definition.Plu
 // buildInputDeviceSetting enumerates capture devices and returns a select
 // definition with "system default" plus each available device.
 func (p *DictationPlugin) buildInputDeviceSetting(ctx context.Context) definition.PluginSettingDefinitionItem {
-	devices, err := listCaptureDevices(ctx)
+	devices, err := speech.ListCaptureDevices(ctx)
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to list capture devices: %s", err.Error()))
 	}
@@ -535,11 +528,17 @@ func resolveInputDeviceForStart(ctx context.Context, rawDeviceID string, savedDe
 		return inputDeviceSystem, "", nil
 	}
 
-	devices, err := listCaptureDevices(ctx)
+	devices, err := speech.ListCaptureDevices(ctx)
 	if err != nil {
 		return deviceID, inputDeviceDisplayName(deviceID, savedDeviceName), fmt.Errorf("failed to list capture devices: %w", err)
 	}
 
+	return resolveInputDeviceFromDevices(deviceID, savedDeviceName, devices)
+}
+
+// resolveInputDeviceFromDevices applies the concrete-device validation once
+// the caller has already decided enumeration is required.
+func resolveInputDeviceFromDevices(deviceID string, savedDeviceName string, devices []speech.AudioDevice) (string, string, error) {
 	for _, device := range devices {
 		if device.ID == deviceID {
 			return deviceID, device.Name, nil
@@ -568,7 +567,7 @@ func (p *DictationPlugin) rememberInputDeviceName(ctx context.Context, rawDevice
 		return
 	}
 
-	devices, err := listCaptureDevices(ctx)
+	devices, err := speech.ListCaptureDevices(ctx)
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to remember dictation input device name: %s", err.Error()))
 		return
@@ -651,9 +650,22 @@ func (p *DictationPlugin) buildModelOptions(ctx context.Context) []definition.Di
 			}
 		}
 
+		// Translate i18n keys in Description and Languages.
+		desc := rec.Description
+		langs := rec.Languages
+		if strings.HasPrefix(desc, "i18n:") {
+			desc = i18n.GetI18nManager().TranslateWox(ctx, desc)
+		}
+		if strings.HasPrefix(langs, "i18n:") {
+			langs = i18n.GetI18nManager().TranslateWox(ctx, langs)
+		}
+
 		options = append(options, definition.DictationModelOption{
 			ID:               rec.ID,
 			DisplayName:      rec.DisplayName,
+			Description:      desc,
+			Languages:        langs,
+			Recommended:      rec.Recommended,
 			Status:           status,
 			DownloadProgress: progress,
 			SizeMB:           rec.SizeMB,
@@ -957,8 +969,8 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 		loadingKey = "plugin_dictation_loading_model_hold"
 	}
 
-	// Lower other audio as soon as the overlay appears, before model
-	// loading, so the user's music is quiet while they wait.
+	// Lower other audio as soon as the overlay appears. This pauses/ducks
+	// other apps' audio but does not affect Wox's own beep sounds.
 	p.startVolumeDucking(ctx)
 
 	p.showLoadingOverlay(ctx, loadingKey)
@@ -1002,6 +1014,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 	// "Listening..." and play the start sound to signal the user can speak.
 	p.setVoiceOverlayVisible(true)
 	p.showDictationOverlay(ctx, p.currentVoiceOverlayActive())
+
 	p.playSoundIfEnabled(ctx, soundStart)
 
 	p.sessionMu.Lock()
@@ -1135,33 +1148,18 @@ func (p *DictationPlugin) getAIModel(ctx context.Context) (common.Model, bool) {
 	return model, true
 }
 
-// showRefiningOverlay switches the existing dictation overlay into a loading
-// state with an "AI refining" message while the transcript is being rewritten.
-func (p *DictationPlugin) showRefiningOverlay(ctx context.Context) {
+// buildDictationTextOverlayWindow returns the shared window placement for dictation text HUD states.
+func buildDictationTextOverlayWindow() overlay.WindowOptions {
 	mouseScreen := screen.GetMouseScreen()
-
-	opts := overlay.OverlayOptions{
-		Name:             dictationOverlayName,
-		Message:          i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_ai_refining"),
-		Loading:          true,
+	opts := overlay.WindowOptions{
+		ID:               dictationOverlayName,
 		Topmost:          true,
-		PreservePosition: true,
-		FontSize:         14,
-		MinWidth:         200,
-		MaxWidth:         600,
 		AbsolutePosition: true,
 		Anchor:           overlay.AnchorBottomCenter,
 		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
 		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
-		AutoCloseSeconds: 0,
-		Closable:         true,
 		CloseOnEscape:    true,
 		Movable:          false,
-		OnClose: func() {
-			// During AI refinement the session is already stopped; just close
-			// the overlay without typing the result.
-			p.api.Log(util.NewTraceContext(), plugin.LogLevelInfo, "dictation overlay closed during AI refinement")
-		},
 	}
 
 	if mouseScreen.Width == 0 {
@@ -1172,45 +1170,51 @@ func (p *DictationPlugin) showRefiningOverlay(ctx context.Context) {
 		}
 	}
 
-	showOverlay(opts)
+	return opts
+}
+
+// showRefiningOverlay switches the existing dictation overlay into a loading
+// state with an "AI refining" message while the transcript is being rewritten.
+func (p *DictationPlugin) showRefiningOverlay(ctx context.Context) {
+	window := buildDictationTextOverlayWindow()
+	window.PreservePosition = true
+	window.MinWidth = 200
+	window.MaxWidth = 600
+	window.OnClose = func() {
+		// During AI refinement the session is already stopped; just close
+		// the overlay without typing the result.
+		p.api.Log(util.NewTraceContext(), plugin.LogLevelInfo, "dictation overlay closed during AI refinement")
+	}
+	opts := textoverlay.Options{
+		Window:   window,
+		Closable: true,
+		Message:  i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_ai_refining"),
+		Loading:  true,
+		FontSize: 14,
+	}
+
+	textoverlay.Show(opts)
 }
 
 // showProcessingOverlay replaces the waveform immediately after release so
 // the UI acknowledges the key-up event while local recognition finishes.
 func (p *DictationPlugin) showProcessingOverlay(ctx context.Context) {
-	mouseScreen := screen.GetMouseScreen()
-
-	opts := overlay.OverlayOptions{
-		Name:             dictationOverlayName,
-		Message:          i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_processing"),
-		Loading:          true,
-		Topmost:          true,
-		PreservePosition: true,
-		FontSize:         14,
-		MinWidth:         200,
-		MaxWidth:         600,
-		AbsolutePosition: true,
-		Anchor:           overlay.AnchorBottomCenter,
-		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
-		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
-		AutoCloseSeconds: 0,
-		Closable:         true,
-		CloseOnEscape:    true,
-		Movable:          false,
-		OnClose: func() {
-			p.api.Log(util.NewTraceContext(), plugin.LogLevelInfo, "dictation overlay closed while processing transcript")
-		},
+	window := buildDictationTextOverlayWindow()
+	window.PreservePosition = true
+	window.MinWidth = 200
+	window.MaxWidth = 600
+	window.OnClose = func() {
+		p.api.Log(util.NewTraceContext(), plugin.LogLevelInfo, "dictation overlay closed while processing transcript")
 	}
 
-	if mouseScreen.Width == 0 {
-		pos, ok := mouse.CurrentPosition()
-		if ok {
-			opts.OffsetX = pos.X
-			opts.OffsetY = pos.Y - overlayBottomOffset
-		}
-	}
-
-	showOverlay(opts)
+	textoverlay.Show(textoverlay.Options{
+		Window:   window,
+		Closable: true,
+		Message:  i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_processing"),
+		Loading:  true,
+		FontSize: 14,
+	})
+	dictationoverlay.Release(dictationOverlayName)
 }
 
 // refineWithAI sends the raw transcript to the selected AI model and returns
@@ -1315,72 +1319,36 @@ func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, 
 // before the recognizer is ready. This gives the user immediate feedback when
 // they press the hotkey, even while the model is still being loaded.
 func (p *DictationPlugin) showLoadingOverlay(ctx context.Context, messageKey string) {
-	mouseScreen := screen.GetMouseScreen()
-
-	opts := overlay.OverlayOptions{
-		Name:             dictationOverlayName,
-		Message:          i18n.GetI18nManager().TranslateWox(ctx, messageKey),
-		Loading:          true,
-		Topmost:          true,
-		AbsolutePosition: true,
-		Anchor:           overlay.AnchorBottomCenter,
-		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
-		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
-		AutoCloseSeconds: 0,
-		Closable:         true,
-		CloseOnEscape:    true,
-		Movable:          false,
-		FontSize:         14,
-		MinWidth:         200,
-		MaxWidth:         600,
-		OnClose: func() {
-			p.cancelDictation(util.NewTraceContext())
-		},
+	window := buildDictationTextOverlayWindow()
+	window.MinWidth = 200
+	window.MaxWidth = 600
+	window.OnClose = func() {
+		p.cancelDictation(util.NewTraceContext())
 	}
 
-	if mouseScreen.Width == 0 {
-		pos, ok := mouse.CurrentPosition()
-		if ok {
-			opts.OffsetX = pos.X
-			opts.OffsetY = pos.Y - overlayBottomOffset
-		}
-	}
-
-	showOverlay(opts)
+	textoverlay.Show(textoverlay.Options{
+		Window:   window,
+		Closable: true,
+		Message:  i18n.GetI18nManager().TranslateWox(ctx, messageKey),
+		Loading:  true,
+		FontSize: 14,
+	})
 }
 
 // showErrorOverlay displays a closeable, auto-closing dictation error without
 // starting or cancelling a recording session.
 func (p *DictationPlugin) showErrorOverlay(ctx context.Context, message string) {
-	mouseScreen := screen.GetMouseScreen()
+	window := buildDictationTextOverlayWindow()
+	window.MinWidth = 240
+	window.MaxWidth = 680
 
-	opts := overlay.OverlayOptions{
-		Name:             dictationOverlayName,
-		Message:          message,
-		Loading:          false,
-		Topmost:          true,
-		AbsolutePosition: true,
-		Anchor:           overlay.AnchorBottomCenter,
-		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
-		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
-		AutoCloseSeconds: 6,
+	textoverlay.Show(textoverlay.Options{
+		Window:           window,
 		Closable:         true,
-		CloseOnEscape:    true,
-		Movable:          false,
+		AutoCloseSeconds: 6,
+		Message:          message,
 		FontSize:         14,
-		MinWidth:         240,
-		MaxWidth:         680,
-	}
-
-	if mouseScreen.Width == 0 {
-		pos, ok := mouse.CurrentPosition()
-		if ok {
-			opts.OffsetX = pos.X
-			opts.OffsetY = pos.Y - overlayBottomOffset
-		}
-	}
-
-	showOverlay(opts)
+	})
 }
 
 // showDictationOverlay displays the recording waveform overlay at the
@@ -1388,22 +1356,15 @@ func (p *DictationPlugin) showErrorOverlay(ctx context.Context, message string) 
 func (p *DictationPlugin) showDictationOverlay(ctx context.Context, voiceActive bool) {
 	mouseScreen := screen.GetMouseScreen()
 
-	opts := overlay.OverlayOptions{
-		Name:             dictationOverlayName,
-		Title:            i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_listening"),
-		VoiceWaveform:    true,
-		VoiceActive:      voiceActive,
+	opts := overlay.WindowOptions{
+		ID:               dictationOverlayName,
 		Topmost:          true,
 		AbsolutePosition: true,
 		Anchor:           overlay.AnchorBottomCenter,
 		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
 		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
-		AutoCloseSeconds: 0,
-		Closable:         true,
 		CloseOnEscape:    true,
 		Movable:          false,
-		Width:            132,
-		Height:           48,
 		OnClose: func() {
 			p.cancelDictation(util.NewTraceContext())
 		},
@@ -1417,7 +1378,11 @@ func (p *DictationPlugin) showDictationOverlay(ctx context.Context, voiceActive 
 		}
 	}
 
-	showOverlay(opts)
+	dictationoverlay.Show(dictationoverlay.Options{
+		Window:   opts,
+		Active:   voiceActive,
+		Closable: true,
+	})
 }
 
 // resetVoiceOverlayState clears any activity remembered from a previous
@@ -1462,7 +1427,7 @@ func (p *DictationPlugin) updateVoiceOverlay(ctx context.Context, voiceActive bo
 	if !visible {
 		return
 	}
-	p.showDictationOverlay(ctx, voiceActive)
+	dictationoverlay.UpdateActive(dictationOverlayName, voiceActive)
 }
 
 // updateOverlay refreshes the overlay text with the latest partial result.
@@ -1474,30 +1439,24 @@ func (p *DictationPlugin) updateOverlay(ctx context.Context, text string) {
 	}
 	p.lastOverlayUpdate = now
 
-	mouseScreen := screen.GetMouseScreen()
+	window := buildDictationTextOverlayWindow()
+	window.PreservePosition = true
+	window.MinWidth = 200
+	window.MaxWidth = 600
 
-	opts := overlay.OverlayOptions{
-		Name:             dictationOverlayName,
-		Message:          text,
-		Loading:          true,
-		Topmost:          true,
-		PreservePosition: true,
-		FontSize:         14,
-		MinWidth:         200,
-		MaxWidth:         600,
-		AbsolutePosition: true,
-		Anchor:           overlay.AnchorBottomCenter,
-		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
-		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
-	}
-
-	showOverlay(opts)
+	textoverlay.Show(textoverlay.Options{
+		Window:   window,
+		Closable: true,
+		Message:  text,
+		Loading:  true,
+		FontSize: 14,
+	})
 }
 
 // closeDictationOverlay removes the recording overlay.
 func (p *DictationPlugin) closeDictationOverlay() {
 	p.setVoiceOverlayVisible(false)
-	closeOverlay(dictationOverlayName)
+	dictationoverlay.Close(dictationOverlayName)
 }
 
 // evictOldModels removes all cached recognizer models from the pool except
@@ -1552,33 +1511,40 @@ func (p *DictationPlugin) cancelDictation(ctx context.Context) {
 // playSoundIfEnabled plays an embedded audio clip when the playSound setting
 // is on. Errors are logged but never propagated so they can't disrupt
 // recording or typing.
-// startVolumeDucking lowers the system output volume when the duckVolume
+// startVolumeDucking pauses other media playback when the duckVolume
 // setting is enabled, so other audio does not interfere with dictation.
+// Uses InvokePluginCommand to ask the media player plugin to pause.
 func (p *DictationPlugin) startVolumeDucking(ctx context.Context) {
 	enabled := parseBoolSetting(p.api.GetSetting(ctx, settingKeyDuckVolume))
 	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation: startVolumeDucking, enabled=%t", enabled))
 	if !enabled {
 		return
 	}
-	p.volumeDucker = audio.NewVolumeDucker()
-	if err := p.volumeDucker.Duck(0.3); err != nil {
-		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to duck volume: %s", err.Error()))
-		p.volumeDucker = nil
+	_, err := p.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
+		PluginId: "b8f3d4e5-6c7a-4b9c-8d1e-2f3a4b5c6d7e",
+		Command:  "pause",
+	})
+	if err != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to pause media: %s", err.Error()))
 	} else {
-		p.api.Log(ctx, plugin.LogLevelInfo, "dictation: volume ducked to 20%")
+		p.api.Log(ctx, plugin.LogLevelInfo, "dictation: media paused via plugin command")
 	}
 }
 
-// stopVolumeDucking restores the system output volume if it was previously
-// lowered by startVolumeDucking.
+// stopVolumeDucking resumes media playback if it was previously paused.
 func (p *DictationPlugin) stopVolumeDucking(ctx context.Context) {
-	if p.volumeDucker == nil {
+	if !parseBoolSetting(p.api.GetSetting(ctx, settingKeyDuckVolume)) {
 		return
 	}
-	if err := p.volumeDucker.Restore(); err != nil {
-		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to restore volume: %s", err.Error()))
+	_, err := p.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
+		PluginId: "b8f3d4e5-6c7a-4b9c-8d1e-2f3a4b5c6d7e",
+		Command:  "play",
+	})
+	if err != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to resume media: %s", err.Error()))
+	} else {
+		p.api.Log(ctx, plugin.LogLevelInfo, "dictation: media resumed via plugin command")
 	}
-	p.volumeDucker = nil
 }
 
 func (p *DictationPlugin) playSoundIfEnabled(ctx context.Context, name string) {

@@ -15,6 +15,7 @@ import (
 	"wox/util"
 	"wox/util/browser"
 	"wox/util/overlay"
+	"wox/util/overlay/textoverlay"
 	"wox/util/shell"
 	"wox/util/window"
 )
@@ -454,20 +455,22 @@ func (p *WindowManagerPlugin) showWindowGroupLaunchPlaceholder(ctx context.Conte
 
 	name := windowGroupLaunchPlaceholderName(group.Id, placement.Identity)
 	message := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, messageKey), placement.AppName)
-	overlay.Show(overlay.OverlayOptions{
-		Name:             name,
-		Message:          message,
-		Loading:          true,
-		CenterContent:    true,
-		Topmost:          true,
-		AbsolutePosition: true,
-		Anchor:           overlay.AnchorTopLeft,
-		OffsetX:          float64(placement.Rect.X),
-		OffsetY:          float64(placement.Rect.Y),
-		Width:            float64(placement.Rect.Width),
-		Height:           float64(placement.Rect.Height),
-		CornerRadius:     windowGroupLaunchPlaceholderCornerRadius,
-		FontSize:         windowGroupLaunchPlaceholderFontSize,
+	textoverlay.Show(textoverlay.Options{
+		Window: overlay.WindowOptions{
+			ID:               name,
+			Topmost:          true,
+			AbsolutePosition: true,
+			Anchor:           overlay.AnchorTopLeft,
+			OffsetX:          float64(placement.Rect.X),
+			OffsetY:          float64(placement.Rect.Y),
+			Width:            float64(placement.Rect.Width),
+			Height:           float64(placement.Rect.Height),
+			CornerRadius:     windowGroupLaunchPlaceholderCornerRadius,
+		},
+		Message:       message,
+		Loading:       true,
+		CenterContent: true,
+		FontSize:      windowGroupLaunchPlaceholderFontSize,
 	})
 	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager showed launch placeholder: group=%s app=%s identity=%s overlay=%s rect=%+v", group.Id, placement.AppName, placement.Identity, name, placement.Rect))
 	return name

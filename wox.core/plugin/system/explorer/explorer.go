@@ -20,6 +20,7 @@ import (
 	"wox/ui"
 	"wox/util"
 	"wox/util/overlay"
+	"wox/util/overlay/textoverlay"
 	"wox/util/shell"
 	"wox/util/window"
 
@@ -970,16 +971,17 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			title := window.GetWindowNameByPid(pid)
 			dialogWindowId := GetOpenSaveDialogWindowIdByPid(pid)
 			c.prefetchOpenSaveDialogPath(localCtx, pid, title, dialogWindowId)
-			overlay.Show(overlay.OverlayOptions{
-				Name:             explorerDialogHintOverlayName,
-				Message:          c.api.GetTranslation(localCtx, "plugin_explorer_hint_message_dialog"),
-				StickyWindowPid:  pid,
-				Anchor:           overlay.AnchorBottomCenter,
-				OffsetY:          explorerDialogHintVerticalInset,
-				Topmost:          true,
-				FontSize:         12,
-				MaxWidth:         explorerDialogHintMaxWidth,
-				AutoCloseSeconds: 0,
+			textoverlay.Show(textoverlay.Options{
+				Window: overlay.WindowOptions{
+					ID:              explorerDialogHintOverlayName,
+					StickyWindowPid: pid,
+					Anchor:          overlay.AnchorBottomCenter,
+					OffsetY:         explorerDialogHintVerticalInset,
+					Topmost:         true,
+					MaxWidth:        explorerDialogHintMaxWidth,
+				},
+				Message:  c.api.GetTranslation(localCtx, "plugin_explorer_hint_message_dialog"),
+				FontSize: 12,
 				OnClick: func() bool {
 					clickCtx := context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
 					clickCtx = util.WithCoreSessionContext(clickCtx)

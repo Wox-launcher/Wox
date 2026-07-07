@@ -1,28 +1,19 @@
 package overlay
 
-import "sync"
-
-var closeCallbacks = make(map[string]func())
-var closeCallbacksMu sync.RWMutex
-
-func Show(opts OverlayOptions) {
+func showWindow(opts WindowOptions) {
 	// Stub implementation for Linux. Register the close callback so the
 	// API contract matches other platforms even though overlay is not
 	// natively supported here yet.
-	if opts.OnClose != nil {
-		closeCallbacksMu.Lock()
-		closeCallbacks[opts.Name] = opts.OnClose
-		closeCallbacksMu.Unlock()
-	} else {
-		closeCallbacksMu.Lock()
-		delete(closeCallbacks, opts.Name)
-		closeCallbacksMu.Unlock()
-	}
+	_ = opts
 }
 
-func Close(name string) {
+func Close(id string) {
 	// Stub implementation for Linux
+	clickCallbacksMu.Lock()
+	delete(clickCallbacks, id)
+	clickCallbacksMu.Unlock()
 	closeCallbacksMu.Lock()
-	delete(closeCallbacks, name)
+	delete(closeCallbacks, id)
 	closeCallbacksMu.Unlock()
+	ReleaseNativeAttachment(id)
 }

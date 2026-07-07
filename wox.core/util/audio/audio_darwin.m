@@ -31,6 +31,7 @@ int playSoundFileMac(const char* filePath) {
         if (sound == nil) {
             return 0;
         }
+        [sound setVolume:1.0f];
         [sound setDelegate:delegate];
         BOOL ok = [sound play];
         if (!ok) {

@@ -28,6 +28,9 @@ enum DictationModelStatus {
 class DictationModelOption {
   late String id;
   late String displayName;
+  late String description;
+  late String languages;
+  late bool recommended;
   late DictationModelStatus status;
   late int downloadProgress;
   late int sizeMB;
@@ -36,6 +39,9 @@ class DictationModelOption {
   DictationModelOption.fromJson(Map<String, dynamic> json) {
     id = json['ID'];
     displayName = json['DisplayName'];
+    description = json['Description'] ?? '';
+    languages = json['Languages'] ?? '';
+    recommended = json['Recommended'] ?? false;
     status = DictationModelStatus.fromString(json['Status']);
     downloadProgress = json['DownloadProgress'] ?? 0;
     sizeMB = json['SizeMB'] ?? 0;

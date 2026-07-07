@@ -39,8 +39,15 @@ const (
 type DictationModelOption struct {
 	// ID is the unique model identifier, used as the option value.
 	ID string
-	// DisplayName is the user-facing label for this model.
+	// DisplayName is the short user-facing label for this model.
 	DisplayName string
+	// Description is a detailed description shown in the dropdown, including
+	// architecture, accuracy notes, and memory characteristics.
+	Description string
+	// Languages is a human-readable list of supported languages.
+	Languages string
+	// Recommended indicates whether this model is recommended for most users.
+	Recommended bool
 	// Status reports the current download state.
 	Status DictationModelStatus
 	// DownloadProgress is 0-100 when Status is "downloading", 0 otherwise.

@@ -106,6 +106,20 @@ func (m *MediaPlayerPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	m.retriever.UpdateAPI(m.api)
 	m.trackedResults = util.NewHashMap[string, mediaTrackedResult]()
 
+	// Handle plugin-to-plugin commands for media control (e.g. dictation
+	// pauses media during voice input and resumes afterwards).
+	m.api.OnHandlePluginCommand(ctx, func(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
+		switch request.Command {
+		case "pause", "play", "toggle", "next", "previous":
+			if err := m.retriever.ControlMedia(ctx, request.Command); err != nil {
+				return plugin.PluginCommandResult{Handled: false, Message: err.Error()}
+			}
+			return plugin.PluginCommandResult{Handled: true}
+		default:
+			return plugin.PluginCommandResult{Handled: false, Message: "unknown command: " + request.Command}
+		}
+	})
+
 	// Start global refresh timer
 	util.Go(ctx, "refresh media player", func() {
 		ticker := time.NewTicker(time.Second)

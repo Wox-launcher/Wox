@@ -46,29 +46,19 @@
 // -----------------------------------------------------------------------------
 typedef struct {
     char* name;
-    char* title;
-    char* message;
-    unsigned char* iconData;
-    int iconLen;
-    char* iconFilePath;
     bool transparent;
     bool hitTestIconOnly;
-    float iconX;
-    float iconY;
-    float iconWidth;
-    float iconHeight;
-    bool closable;
     bool closeOnEscape;
-    bool loading;
-    bool voiceWaveform;
-    bool voiceActive;
-    bool centerContent;
+    bool nativeAttachment;
+    int nativeAttachmentKind;
+    void* nativeAttachmentHandle;
+    float nativeAttachmentWidth;
+    float nativeAttachmentHeight;
     bool topmost;
     bool absolutePosition;
     bool preservePosition;
     int stickyWindowPid; // 0 = Screen, >0 = Window
     int anchor;          // 0-8
-    int autoCloseSeconds;
     bool movable;
     bool resizable;
     float cornerRadius;
@@ -80,16 +70,6 @@ typedef struct {
     float maxWidth;      // 0 = no cap for auto width
     float height;        // 0 = auto
     float maxHeight;     // 0 = no cap for auto height
-    bool followScroll;
-    float fontSize;      // 0 = system default, unit: pt
-    float iconSize;      // 0 = default (16), unit: DIP
-    char* tooltip;
-    unsigned char* tooltipIconData;
-    int tooltipIconLen;
-    float tooltipIconSize;
-    bool showCopyButton;
-    char* copyButtonTooltip;
-    char* copyButtonSuccessTooltip;
 } OverlayOptions;
 
 extern bool overlayClickCallbackCGO(char* name);
@@ -202,16 +182,12 @@ static BOOL TryEnableAcrylic(HWND hwnd)
 #define IMAGE_SHADOW_PADDING_DIP 20
 #define IMAGE_SHADOW_MAX_ALPHA 96
 #define WHEEL_ZOOM_STEP 1.12f
-#define VOICE_WAVEFORM_WIDTH_DIP 132
-#define VOICE_WAVEFORM_HEIGHT_DIP 48
-#define VOICE_WAVEFORM_BAR_HEIGHT_DIP 24
+#define NATIVE_ATTACHMENT_KIND_WINDOW 2
 
-#define TIMER_AUTOCLOSE 1
 #define TIMER_TRACK 2
 #define TIMER_LIVE_FOLLOW 3
 #define TIMER_COPY_FEEDBACK 4
 #define TIMER_REPAINT 5
-#define TIMER_VOICE_WAVEFORM 6
 #define PREDICTIVE_CORRECTION_THRESHOLD_PX 48
 
 #define WM_WOX_OVERLAY_COMMAND (WM_APP + 0x610)
@@ -575,7 +551,6 @@ typedef struct OverlayWindow
     HWND hwnd;
     HWND shadowHwnd;
     WCHAR *name;
-    WCHAR *title;
     WCHAR *message;
     WCHAR *tooltip;
     WCHAR *copyButtonTooltip;
@@ -595,11 +570,13 @@ typedef struct OverlayWindow
     int tooltipIconWidth;
     int tooltipIconHeight;
     float tooltipIconSize;
-    BOOL closable;
     BOOL closeOnEscape;
     BOOL loading;
-    BOOL voiceWaveform;
-    BOOL voiceActive;
+    BOOL nativeAttachment;
+    int nativeAttachmentKind;
+    HWND nativeAttachmentHwnd;
+    float nativeAttachmentWidth;
+    float nativeAttachmentHeight;
     BOOL centerContent;
     BOOL topmost;
     BOOL absolutePosition;
@@ -608,7 +585,6 @@ typedef struct OverlayWindow
     BOOL resizable;
     float cornerRadius;
     float aspectRatio;
-    int autoCloseSeconds;
     int stickyWindowPid;
     int anchor;
     float offsetX;
@@ -627,9 +603,8 @@ typedef struct OverlayWindow
     UINT fontDpi;
     float appliedFontSize;
 
-    RECT closeRect;
     RECT copyButtonRect;
-    RECT voiceWaveformRect;
+    RECT nativeAttachmentRect;
     RECT textRect;
     RECT textScrollbarTrackRect;
     RECT textScrollbarThumbRect;
@@ -644,15 +619,11 @@ typedef struct OverlayWindow
     BOOL repaintPending;
     BOOL layoutSizeChanged;
     BOOL mouseInside;
-    BOOL closeHover;
-    BOOL closePressed;
     BOOL showCopyButton;
     BOOL copyButtonHover;
     BOOL copyButtonPressed;
     BOOL copyButtonFeedback;
-    int voiceWaveformPhase;
     BOOL dragging;
-    BOOL autoClosePending;
     POINT dragStart;
     POINT dragWindowOrigin;
     RECT lastTargetRect;
@@ -677,35 +648,19 @@ typedef struct OverlayWindow
 typedef struct OverlayPayload
 {
     WCHAR *name;
-    WCHAR *title;
-    WCHAR *message;
-    WCHAR *tooltip;
-    WCHAR *copyButtonTooltip;
-    WCHAR *copyButtonSuccessTooltip;
-    unsigned char *iconData;
-    int iconLen;
-    WCHAR *iconFilePath;
     BOOL transparent;
     BOOL hitTestIconOnly;
-    float iconX;
-    float iconY;
-    float iconWidth;
-    float iconHeight;
-    unsigned char *tooltipIconData;
-    int tooltipIconLen;
-    float tooltipIconSize;
-    BOOL closable;
     BOOL closeOnEscape;
-    BOOL loading;
-    BOOL voiceWaveform;
-    BOOL voiceActive;
-    BOOL centerContent;
+    BOOL nativeAttachment;
+    int nativeAttachmentKind;
+    void *nativeAttachmentHandle;
+    float nativeAttachmentWidth;
+    float nativeAttachmentHeight;
     BOOL topmost;
     BOOL absolutePosition;
     BOOL preservePosition;
     int stickyWindowPid;
     int anchor;
-    int autoCloseSeconds;
     BOOL movable;
     BOOL resizable;
     float cornerRadius;
@@ -717,10 +672,6 @@ typedef struct OverlayPayload
     float maxWidth;
     float height;
     float maxHeight;
-    BOOL followScroll;
-    float fontSize;
-    float iconSize;
-    BOOL showCopyButton;
 } OverlayPayload;
 
 typedef struct OverlayCommand
@@ -949,18 +900,6 @@ static LRESULT GetResizeHitTest(OverlayWindow *ow, POINT pt)
     return HTCLIENT;
 }
 
-static void StartAutoCloseTimer(OverlayWindow *ow)
-{
-    if (!ow || !ow->hwnd)
-        return;
-    KillTimer(ow->hwnd, TIMER_AUTOCLOSE);
-    ow->autoClosePending = FALSE;
-    if (ow->autoCloseSeconds > 0)
-    {
-        SetTimer(ow->hwnd, TIMER_AUTOCLOSE, (UINT)(ow->autoCloseSeconds * 1000), NULL);
-    }
-}
-
 static void StartTrackTimer(OverlayWindow *ow)
 {
     if (!ow || !ow->hwnd)
@@ -1069,25 +1008,6 @@ static void ShowOverlayWindowWithFocusPolicy(OverlayWindow *ow)
     ShowWindow(ow->hwnd, SW_SHOWNOACTIVATE);
 }
 
-static void UpdateCloseRect(OverlayWindow *ow, int width, int height, UINT dpi)
-{
-    RECT r = {0, 0, 0, 0};
-    if (!ow->closable)
-    {
-        ow->closeRect = r;
-        return;
-    }
-    int closeSize = MulDiv(CLOSE_SIZE_DIP, (int)dpi, 96);
-    int closePad = MulDiv(CLOSE_PAD_DIP, (int)dpi, 96);
-    int x = width - closePad - closeSize;
-    int y = closePad;
-    r.left = x;
-    r.top = y;
-    r.right = x + closeSize;
-    r.bottom = y + closeSize;
-    ow->closeRect = r;
-}
-
 // UpdateCopyButtonRect keeps the optional copy affordance anchored inside the HUD surface.
 static void UpdateCopyButtonRect(OverlayWindow *ow, int width, int height, UINT dpi)
 {
@@ -1125,8 +1045,6 @@ static void UpdateTextScrollbarRects(OverlayWindow *ow, int width, int height, i
     int trackLeft = trackRight - barWidth;
 
     int top = ow->textRect.top;
-    if (ow->closable)
-        top = max(top, ow->closeRect.bottom + MulDiv(8, (int)dpi, 96));
     int bottom = height - MulDiv(PADDING_Y_DIP, (int)dpi, 96) - copyButtonReserve;
     if (ow->showCopyButton)
         bottom = min(bottom, ow->copyButtonRect.top - MulDiv(8, (int)dpi, 96));
@@ -1215,66 +1133,50 @@ static void ScheduleOverlayRepaint(OverlayWindow *ow)
     SetTimer(ow->hwnd, TIMER_REPAINT, 16, NULL);
 }
 
-static void UpdateVoiceWaveformTimer(OverlayWindow *ow)
+static void DetachNativeAttachment(OverlayWindow *ow)
+{
+    if (!ow || !ow->nativeAttachmentHwnd)
+        return;
+
+    HWND child = ow->nativeAttachmentHwnd;
+    if (IsWindow(child))
+    {
+        ShowWindow(child, SW_HIDE);
+        SetParent(child, NULL);
+        LONG_PTR style = GetWindowLongPtrW(child, GWL_STYLE);
+        style &= ~WS_CHILD;
+        style |= WS_POPUP;
+        SetWindowLongPtrW(child, GWL_STYLE, style);
+    }
+
+    ow->nativeAttachmentHwnd = NULL;
+    RECT empty = {0, 0, 0, 0};
+    ow->nativeAttachmentRect = empty;
+}
+
+static void LayoutNativeAttachment(OverlayWindow *ow)
 {
     if (!ow || !ow->hwnd)
         return;
 
-    if (ow->voiceWaveform && ow->voiceActive)
+    if (!ow->nativeAttachment || ow->nativeAttachmentKind != NATIVE_ATTACHMENT_KIND_WINDOW || !ow->nativeAttachmentHwnd || !IsWindow(ow->nativeAttachmentHwnd))
     {
-        SetTimer(ow->hwnd, TIMER_VOICE_WAVEFORM, 33, NULL);
-    }
-    else
-    {
-        KillTimer(ow->hwnd, TIMER_VOICE_WAVEFORM);
-        ow->voiceWaveformPhase = 0;
-    }
-
-    if (ow->voiceWaveform)
-        InvalidateRect(ow->hwnd, &ow->voiceWaveformRect, FALSE);
-}
-
-static void DrawVoiceWaveform(HDC hdc, const RECT *rect, UINT dpi, BOOL active, int phase)
-{
-    if (!hdc || !rect)
+        DetachNativeAttachment(ow);
         return;
-
-    const int barCount = 7;
-    int barWidth = MulDiv(4, (int)dpi, 96);
-    int gap = MulDiv(5, (int)dpi, 96);
-    if (barWidth < 2)
-        barWidth = 2;
-    int totalWidth = barCount * barWidth + (barCount - 1) * gap;
-    int startX = rect->left + ((rect->right - rect->left) - totalWidth) / 2;
-    int centerY = rect->top + (rect->bottom - rect->top) / 2;
-    int maxHeight = (rect->bottom - rect->top) - MulDiv(2, (int)dpi, 96);
-    if (maxHeight < MulDiv(8, (int)dpi, 96))
-        maxHeight = MulDiv(8, (int)dpi, 96);
-
-    double idleScales[7] = {0.32, 0.46, 0.36, 0.56, 0.36, 0.46, 0.32};
-    HBRUSH brush = CreateSolidBrush(RGB(245, 245, 245));
-    HGDIOBJ oldBrush = SelectObject(hdc, brush);
-    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(NULL_PEN));
-
-    for (int i = 0; i < barCount; i++)
-    {
-        double scale = idleScales[i];
-        if (active)
-            scale = 0.28 + 0.72 * (0.5 + 0.5 * sin((double)phase * 0.32 + (double)i * 0.85));
-        int barHeight = (int)((double)maxHeight * scale + 0.5);
-        int minHeight = MulDiv(5, (int)dpi, 96);
-        if (barHeight < minHeight)
-            barHeight = minHeight;
-        int x = startX + i * (barWidth + gap);
-        int y = centerY - barHeight / 2;
-        RoundRect(hdc, x, y, x + barWidth, y + barHeight, barWidth, barWidth);
     }
 
-    if (oldPen)
-        SelectObject(hdc, oldPen);
-    if (oldBrush)
-        SelectObject(hdc, oldBrush);
-    DeleteObject(brush);
+    HWND child = ow->nativeAttachmentHwnd;
+    LONG_PTR style = GetWindowLongPtrW(child, GWL_STYLE);
+    style &= ~WS_POPUP;
+    style |= WS_CHILD | WS_VISIBLE;
+    SetWindowLongPtrW(child, GWL_STYLE, style);
+    SetParent(child, ow->hwnd);
+
+    int x = ow->nativeAttachmentRect.left;
+    int y = ow->nativeAttachmentRect.top;
+    int width = ow->nativeAttachmentRect.right - ow->nativeAttachmentRect.left;
+    int height = ow->nativeAttachmentRect.bottom - ow->nativeAttachmentRect.top;
+    SetWindowPos(child, HWND_TOP, x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
 static void SetTextScrollOffsetFromThumbPoint(OverlayWindow *ow, POINT pt)
@@ -1399,7 +1301,8 @@ static void ApplyCornerRadius(HWND hwnd, UINT dpi, int width, int height)
         HRGN rgn = CreateRoundRectRgn(0, 0, width + 1, height + 1, rr * 2, rr * 2);
         if (rgn)
         {
-            SetWindowRgn(hwnd, rgn, TRUE);
+            if (!SetWindowRgn(hwnd, rgn, TRUE))
+                DeleteObject(rgn);
         }
     }
 }
@@ -1805,16 +1708,11 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     int topPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
     int bottomPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
 
-    int closeSize = ow->closable ? MulDiv(CLOSE_SIZE_DIP, (int)ow->dpi, 96) : 0;
-    int closePad = ow->closable ? MulDiv(CLOSE_PAD_DIP, (int)ow->dpi, 96) : 0;
-
     float tooltipIconSizeDip = (ow->tooltipIconSize > 0.0f) ? ow->tooltipIconSize : DEFAULT_ICON_SIZE_DIP;
     int tooltipIconSize = (hasTooltip ? (int)roundf(tooltipIconSizeDip * (float)ow->dpi / 96.0f) : 0);
     int tooltipIconGap = (hasTooltip ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
 
     int rightReserved = rightPad;
-    if (ow->closable)
-        rightReserved += closePad + closeSize;
     if (hasTooltip)
         rightReserved += tooltipIconGap + tooltipIconSize;
 
@@ -1914,8 +1812,6 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     int contentHeight = textHeight;
     if (iconSize > contentHeight)
         contentHeight = iconSize;
-    if (closeSize > contentHeight)
-        contentHeight = closeSize;
     if (tooltipIconSize > contentHeight)
         contentHeight = tooltipIconSize;
 
@@ -1956,7 +1852,6 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         RECT iconRect = {iconX, iconY, iconX + drawW, iconY + drawH};
         ow->iconRect = iconRect;
         RECT empty = {0, 0, 0, 0};
-        ow->closeRect = empty;
         ow->tooltipRect = empty;
         ow->copyButtonRect = empty;
         ow->textRect = empty;
@@ -2027,7 +1922,6 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         if (ow->followScroll && ow->textScrollOffset >= ow->textMaxScrollOffset)
             ow->textUserScrolled = FALSE;
 
-        UpdateCloseRect(ow, width, height, ow->dpi);
         UpdateCopyButtonRect(ow, width, height, ow->dpi);
         UpdateTextScrollbarRects(ow, width, height, copyButtonReserve, ow->dpi);
 
@@ -2051,12 +1945,20 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         }
     }
 
-    if (ow->voiceWaveform && !ow->transparent)
+    if (ow->nativeAttachment && ow->nativeAttachmentKind == NATIVE_ATTACHMENT_KIND_WINDOW && ow->nativeAttachmentHwnd)
     {
-        width = (ow->width > 0.0f) ? (int)roundf(ow->width * (float)ow->dpi / 96.0f) : MulDiv(VOICE_WAVEFORM_WIDTH_DIP, (int)ow->dpi, 96);
-        height = (ow->height > 0.0f) ? (int)roundf(ow->height * (float)ow->dpi / 96.0f) : MulDiv(VOICE_WAVEFORM_HEIGHT_DIP, (int)ow->dpi, 96);
-        if (width < minWidth)
+        BOOL transparentAttachment = ow->transparent;
+        int attachmentWidth = (ow->nativeAttachmentWidth > 0.0f) ? (int)roundf(ow->nativeAttachmentWidth * (float)ow->dpi / 96.0f) : MulDiv(132, (int)ow->dpi, 96);
+        int attachmentHeight = (ow->nativeAttachmentHeight > 0.0f) ? (int)roundf(ow->nativeAttachmentHeight * (float)ow->dpi / 96.0f) : MulDiv(24, (int)ow->dpi, 96);
+        // Native attachments report their content size; base window chrome must be added around it.
+        width = (ow->width > 0.0f) ? (int)roundf(ow->width * (float)ow->dpi / 96.0f) : attachmentWidth + (transparentAttachment ? 0 : MulDiv(36, (int)ow->dpi, 96));
+        height = (ow->height > 0.0f) ? (int)roundf(ow->height * (float)ow->dpi / 96.0f) : attachmentHeight + (transparentAttachment ? 0 : MulDiv(24, (int)ow->dpi, 96));
+        if (!transparentAttachment && width < minWidth)
             width = minWidth;
+        if (width < 1)
+            width = 1;
+        if (height < 1)
+            height = 1;
 
         RECT empty = {0, 0, 0, 0};
         ow->iconRect = empty;
@@ -2070,21 +1972,25 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         ow->textMaxScrollOffset = 0;
         ow->textUserScrolled = FALSE;
 
-        int waveformPad = MulDiv(18, (int)ow->dpi, 96);
-        int waveformHeight = MulDiv(VOICE_WAVEFORM_BAR_HEIGHT_DIP, (int)ow->dpi, 96);
-        int closeReserve = ow->closable ? (closePad + closeSize) : 0;
-        int waveformLeft = waveformPad;
-        int waveformRight = width - waveformPad - closeReserve;
-        if (waveformRight - waveformLeft < MulDiv(48, (int)ow->dpi, 96))
-            waveformRight = waveformLeft + MulDiv(48, (int)ow->dpi, 96);
-        int waveformTop = (height - waveformHeight) / 2;
-        SetRect(&ow->voiceWaveformRect, waveformLeft, waveformTop, waveformRight, waveformTop + waveformHeight);
-        UpdateCloseRect(ow, width, height, ow->dpi);
+        if (transparentAttachment)
+        {
+            SetRect(&ow->nativeAttachmentRect, 0, 0, width, height);
+        }
+        else
+        {
+            int attachmentPad = MulDiv(18, (int)ow->dpi, 96);
+            int attachmentLeft = attachmentPad;
+            int attachmentRight = width - attachmentPad;
+            if (attachmentRight - attachmentLeft < MulDiv(48, (int)ow->dpi, 96))
+                attachmentRight = attachmentLeft + MulDiv(48, (int)ow->dpi, 96);
+            int attachmentTop = (height - attachmentHeight) / 2;
+            SetRect(&ow->nativeAttachmentRect, attachmentLeft, attachmentTop, attachmentRight, attachmentTop + attachmentHeight);
+        }
     }
     else
     {
         RECT empty = {0, 0, 0, 0};
-        ow->voiceWaveformRect = empty;
+        ow->nativeAttachmentRect = empty;
     }
 
     RECT targetRect;
@@ -2190,7 +2096,8 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     }
 
     SetWindowPos(ow->hwnd, NULL, x, y, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
-    if (ow->transparent)
+    LayoutNativeAttachment(ow);
+    if (ow->transparent && !ow->nativeAttachment)
     {
         // Feature change: the screenshot surface remains a clean image-only layered window. The
         // visible depth now comes from an independent shadow HWND, so no region or client padding
@@ -2200,6 +2107,13 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         DwmSetWindowAttribute(ow->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
         UpdateTransparentImageLayer(ow);
         UpdateTransparentImageShadow(ow);
+    }
+    else if (ow->transparent)
+    {
+        DestroyTransparentImageShadow(ow);
+        SetWindowRgn(ow->hwnd, NULL, TRUE);
+        UINT pref = DWMWCP_DONOTROUND;
+        DwmSetWindowAttribute(ow->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
     }
     else
     {
@@ -2214,9 +2128,7 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
             HideTooltipWindow(ow);
     }
 
-    StartAutoCloseTimer(ow);
     StartTrackTimer(ow);
-    UpdateVoiceWaveformTimer(ow);
 }
 
 static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BOOL isNew)
@@ -2228,8 +2140,6 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
 
     if (!isNew)
     {
-        if (ow->title)
-            free(ow->title);
         if (ow->message)
             free(ow->message);
         if (ow->tooltip)
@@ -2245,11 +2155,10 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     else if (payload->name)
         free(payload->name);
 
-    ow->title = payload->title;
-    ow->message = payload->message;
-    ow->tooltip = payload->tooltip;
-    ow->copyButtonTooltip = payload->copyButtonTooltip;
-    ow->copyButtonSuccessTooltip = payload->copyButtonSuccessTooltip;
+    ow->message = NULL;
+    ow->tooltip = NULL;
+    ow->copyButtonTooltip = NULL;
+    ow->copyButtonSuccessTooltip = NULL;
     ow->activeTooltip = NULL;
 
     if (ow->iconBitmap)
@@ -2258,65 +2167,37 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->iconWidth = 0;
     ow->iconHeight = 0;
 
-    if ((payload->iconFilePath && payload->iconFilePath[0]) || (payload->iconData && payload->iconLen > 0))
-    {
-        int iw = 0;
-        int ih = 0;
-        BOOL useFileIcon = payload->iconFilePath && payload->iconFilePath[0];
-        HBITMAP bmp = useFileIcon ? CreateBitmapFromImageFilePath(payload->iconFilePath, &iw, &ih) : CreateBitmapFromPngData(payload->iconData, payload->iconLen, &iw, &ih);
-        if (bmp)
-        {
-            ow->iconBitmap = bmp;
-            ow->iconWidth = iw;
-            ow->iconHeight = ih;
-        }
-    }
-
     if (ow->tooltipIconBitmap)
         DeleteObject(ow->tooltipIconBitmap);
     ow->tooltipIconBitmap = NULL;
     ow->tooltipIconWidth = 0;
     ow->tooltipIconHeight = 0;
 
-    if (payload->tooltipIconData && payload->tooltipIconLen > 0)
-    {
-        int iw = 0;
-        int ih = 0;
-        HBITMAP bmp = CreateBitmapFromPngData(payload->tooltipIconData, payload->tooltipIconLen, &iw, &ih);
-        if (bmp)
-        {
-            ow->tooltipIconBitmap = bmp;
-            ow->tooltipIconWidth = iw;
-            ow->tooltipIconHeight = ih;
-        }
-    }
-
-    if (payload->iconData)
-        free(payload->iconData);
-    if (payload->iconFilePath)
-        free(payload->iconFilePath);
-
-    if (payload->tooltipIconData)
-        free(payload->tooltipIconData);
-
-    ow->closable = payload->closable;
     ow->closeOnEscape = payload->closeOnEscape;
-    ow->loading = payload->loading;
-    ow->voiceWaveform = payload->voiceWaveform;
-    ow->voiceActive = payload->voiceActive;
-    ow->centerContent = payload->centerContent;
+    ow->loading = FALSE;
+    ow->nativeAttachment = payload->nativeAttachment;
+    ow->nativeAttachmentKind = payload->nativeAttachmentKind;
+    if (payload->nativeAttachment)
+    {
+        HWND nextAttachment = (HWND)payload->nativeAttachmentHandle;
+        if (ow->nativeAttachmentHwnd && ow->nativeAttachmentHwnd != nextAttachment)
+            DetachNativeAttachment(ow);
+        ow->nativeAttachmentHwnd = nextAttachment;
+    }
+    ow->nativeAttachmentWidth = payload->nativeAttachmentWidth;
+    ow->nativeAttachmentHeight = payload->nativeAttachmentHeight;
+    ow->centerContent = FALSE;
     ow->topmost = payload->topmost;
     ow->absolutePosition = payload->absolutePosition;
     ow->preservePosition = payload->preservePosition;
     ow->transparent = payload->transparent;
     ow->hitTestIconOnly = payload->hitTestIconOnly;
-    ow->iconX = payload->iconX;
-    ow->iconY = payload->iconY;
-    ow->iconDrawWidth = payload->iconWidth;
-    ow->iconDrawHeight = payload->iconHeight;
+    ow->iconX = 0;
+    ow->iconY = 0;
+    ow->iconDrawWidth = 0;
+    ow->iconDrawHeight = 0;
     ow->stickyWindowPid = payload->stickyWindowPid;
     ow->anchor = payload->anchor;
-    ow->autoCloseSeconds = payload->autoCloseSeconds;
     ow->movable = payload->movable;
     ow->resizable = payload->resizable;
     ow->cornerRadius = payload->cornerRadius;
@@ -2328,11 +2209,11 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->maxWidth = payload->maxWidth;
     ow->height = payload->height;
     ow->maxHeight = payload->maxHeight;
-    ow->followScroll = payload->followScroll;
-    ow->fontSize = payload->fontSize;
-    ow->iconSize = payload->iconSize;
-    ow->tooltipIconSize = payload->tooltipIconSize;
-    ow->showCopyButton = payload->showCopyButton;
+    ow->followScroll = FALSE;
+    ow->fontSize = 0;
+    ow->iconSize = 0;
+    ow->tooltipIconSize = 0;
+    ow->showCopyButton = FALSE;
     ow->copyButtonHover = FALSE;
     ow->copyButtonPressed = FALSE;
     ow->copyButtonFeedback = FALSE;
@@ -2353,7 +2234,7 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
         }
 
         LONG_PTR exStyle = GetWindowLongPtrW(ow->hwnd, GWL_EXSTYLE);
-        LONG_PTR updatedExStyle = ow->transparent ? (exStyle | WS_EX_LAYERED) : (exStyle & ~WS_EX_LAYERED);
+        LONG_PTR updatedExStyle = (ow->transparent && !ow->nativeAttachment) ? (exStyle | WS_EX_LAYERED) : (exStyle & ~WS_EX_LAYERED);
         if (updatedExStyle != exStyle)
         {
             // Bug fix: URL image overlays can reuse a non-transparent loading window for the final
@@ -2377,41 +2258,7 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
         ow->targetHwnd = NULL;
     }
 
-    if (ow->title && ow->hwnd)
-        SetWindowTextW(ow->hwnd, ow->title);
-
     free(payload);
-}
-
-static void DrawCloseButton(HDC hdc, const RECT *rect, UINT dpi, BOOL hover, BOOL pressed)
-{
-    if (!rect)
-        return;
-
-    if (hover || pressed)
-    {
-        COLORREF bg = pressed ? RGB(70, 70, 70) : RGB(55, 55, 55);
-        HBRUSH brush = CreateSolidBrush(bg);
-        FillRect(hdc, rect, brush);
-        DeleteObject(brush);
-    }
-
-    int pad = MulDiv(6, (int)dpi, 96);
-    int thickness = MulDiv(2, (int)dpi, 96);
-    if (thickness < 1)
-        thickness = 1;
-
-    HPEN pen = CreatePen(PS_SOLID, thickness, RGB(230, 230, 230));
-    HGDIOBJ oldPen = SelectObject(hdc, pen);
-
-    MoveToEx(hdc, rect->left + pad, rect->top + pad, NULL);
-    LineTo(hdc, rect->right - pad, rect->bottom - pad);
-    MoveToEx(hdc, rect->right - pad, rect->top + pad, NULL);
-    LineTo(hdc, rect->left + pad, rect->bottom - pad);
-
-    if (oldPen)
-        SelectObject(hdc, oldPen);
-    DeleteObject(pen);
 }
 
 // DrawCopyButton renders a small native copy affordance without requiring callers to pass an icon.
@@ -2738,7 +2585,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             // drag loop is still positioning the overlay from raw screen pixels. Re-running the
             // normal anchor layout here snaps preview overlays back to the primary work area, so
             // keep the drag-owned frame and only refresh DPI-sensitive transparent drawing assets.
-            if (ow->transparent)
+            if (ow->transparent && !ow->nativeAttachment)
             {
                 UpdateTransparentImageLayer(ow);
                 UpdateTransparentImageShadow(ow);
@@ -2783,6 +2630,14 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
     {
         if (ow && ow->transparent && ow->resizable)
         {
+            if (ow->nativeAttachment)
+            {
+                RECT client;
+                GetClientRect(hwnd, &client);
+                ow->nativeAttachmentRect = client;
+                LayoutNativeAttachment(ow);
+                return 0;
+            }
             RECT client;
             GetClientRect(hwnd, &client);
             ow->iconRect = client;
@@ -2826,11 +2681,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(240, 240, 240));
-        if (ow->voiceWaveform)
-        {
-            DrawVoiceWaveform(hdc, &ow->voiceWaveformRect, ow->dpi, ow->voiceActive, ow->voiceWaveformPhase);
-        }
-        else
+        if (!ow->nativeAttachment)
         {
             float iconSizeDip = (ow->iconSize > 0.0f) ? ow->iconSize : DEFAULT_ICON_SIZE_DIP;
             int iconSize = (ow->iconBitmap ? (int)roundf(iconSizeDip * (float)ow->dpi / 96.0f) : 0);
@@ -2892,12 +2743,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             }
         }
 
-        if (ow->closable)
-        {
-            DrawCloseButton(hdc, &ow->closeRect, ow->dpi, ow->closeHover, ow->closePressed);
-        }
-
-        if (ow->showCopyButton && !ow->voiceWaveform)
+        if (ow->showCopyButton && !ow->nativeAttachment)
         {
             DrawCopyButton(hdc, &ow->copyButtonRect, ow->dpi, ow->copyButtonHover, ow->copyButtonPressed, ow->copyButtonFeedback);
         }
@@ -2962,11 +2808,6 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             if (GetCursorPos(&pt))
             {
                 ScreenToClient(hwnd, &pt);
-                if (ow->closable && PtInRect(&ow->closeRect, pt))
-                {
-                    SetCursor(LoadCursor(NULL, IDC_HAND));
-                    return TRUE;
-                }
                 if (ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt))
                 {
                     SetCursor(LoadCursor(NULL, IDC_HAND));
@@ -3022,12 +2863,6 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                 }
             }
         }
-        BOOL hoverNow = ow->closable && PtInRect(&ow->closeRect, pt);
-        if (hoverNow != ow->closeHover)
-        {
-            ow->closeHover = hoverNow;
-            InvalidateRect(hwnd, NULL, FALSE);
-        }
         BOOL copyHoverNow = ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt);
         if (copyHoverNow != ow->copyButtonHover)
         {
@@ -3064,7 +2899,6 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         if (!ow)
             break;
         ow->mouseInside = FALSE;
-        ow->closeHover = FALSE;
         ow->copyButtonHover = FALSE;
         ow->textScrollbarHover = FALSE;
         if (ow->tooltipHwnd)
@@ -3072,12 +2906,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             ow->tooltipHover = FALSE;
             HideTooltipWindow(ow);
         }
-        if (!ow->closePressed)
-            InvalidateRect(hwnd, NULL, FALSE);
-        if (ow->autoClosePending && !ow->dragging)
-        {
-            DestroyWindow(hwnd);
-        }
+        InvalidateRect(hwnd, NULL, FALSE);
         return 0;
     }
     case WM_MOUSEWHEEL:
@@ -3112,13 +2941,6 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             SetFocus(hwnd);
         }
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-        if (ow->closable && PtInRect(&ow->closeRect, pt))
-        {
-            ow->closePressed = TRUE;
-            SetCapture(hwnd);
-            InvalidateRect(hwnd, NULL, FALSE);
-            return 0;
-        }
         if (ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt))
         {
             ow->copyButtonPressed = TRUE;
@@ -3174,23 +2996,14 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         if (!ow)
             break;
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-        BOOL wasClosePressed = ow->closePressed;
         BOOL wasCopyButtonPressed = ow->copyButtonPressed;
         BOOL wasDragging = ow->dragging;
-        ow->closePressed = FALSE;
         ow->copyButtonPressed = FALSE;
         ow->dragging = FALSE;
         ow->textScrollbarDragging = FALSE;
         if (GetCapture() == hwnd)
             ReleaseCapture();
         InvalidateRect(hwnd, NULL, FALSE);
-
-        if (wasClosePressed && ow->closable && PtInRect(&ow->closeRect, pt))
-        {
-            NotifyOverlayClose(ow);
-            DestroyWindow(hwnd);
-            return 0;
-        }
 
         if (wasCopyButtonPressed && ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt))
         {
@@ -3228,18 +3041,6 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
     {
         if (!ow)
             break;
-        if (wParam == TIMER_AUTOCLOSE)
-        {
-            if (ow->mouseInside || ow->dragging)
-            {
-                ow->autoClosePending = TRUE;
-            }
-            else
-            {
-                DestroyWindow(hwnd);
-            }
-            return 0;
-        }
         if (wParam == TIMER_TRACK)
         {
             if (ow->dragging)
@@ -3314,18 +3115,6 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
             return 0;
         }
-        if (wParam == TIMER_VOICE_WAVEFORM)
-        {
-            if (!ow->voiceWaveform || !ow->voiceActive)
-            {
-                KillTimer(hwnd, TIMER_VOICE_WAVEFORM);
-                ow->voiceWaveformPhase = 0;
-                return 0;
-            }
-            ow->voiceWaveformPhase++;
-            InvalidateRect(hwnd, &ow->voiceWaveformRect, FALSE);
-            return 0;
-        }
         break;
     }
     case WM_WOX_OVERLAY_REPOSITION:
@@ -3363,11 +3152,10 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                 UnhookWinEvent(ow->locationHook);
                 ow->locationHook = NULL;
             }
-            KillTimer(hwnd, TIMER_AUTOCLOSE);
             KillTimer(hwnd, TIMER_TRACK);
             KillTimer(hwnd, TIMER_LIVE_FOLLOW);
             KillTimer(hwnd, TIMER_REPAINT);
-            KillTimer(hwnd, TIMER_VOICE_WAVEFORM);
+            DetachNativeAttachment(ow);
             DestroyTransparentImageShadow(ow);
             RemoveOverlay(ow);
             if (ow->messageFont)
@@ -3378,8 +3166,6 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                 DeleteObject(ow->tooltipIconBitmap);
             if (ow->name)
                 free(ow->name);
-            if (ow->title)
-                free(ow->title);
             if (ow->message)
                 free(ow->message);
             if (ow->tooltip)
@@ -3402,21 +3188,7 @@ static void HandleShowCommand(OverlayPayload *payload)
     if (!payload || !payload->name)
     {
         if (payload)
-        {
-            if (payload->title)
-                free(payload->title);
-            if (payload->message)
-                free(payload->message);
-            if (payload->tooltip)
-                free(payload->tooltip);
-            if (payload->iconData)
-                free(payload->iconData);
-            if (payload->iconFilePath)
-                free(payload->iconFilePath);
-            if (payload->tooltipIconData)
-                free(payload->tooltipIconData);
             free(payload);
-        }
         return;
     }
 
@@ -3449,18 +3221,6 @@ static void HandleShowCommand(OverlayPayload *payload)
     {
         if (payload->name)
             free(payload->name);
-        if (payload->title)
-            free(payload->title);
-        if (payload->message)
-            free(payload->message);
-        if (payload->tooltip)
-            free(payload->tooltip);
-        if (payload->iconData)
-            free(payload->iconData);
-        if (payload->iconFilePath)
-            free(payload->iconFilePath);
-        if (payload->tooltipIconData)
-            free(payload->tooltipIconData);
         free(payload);
         return;
     }
@@ -3470,7 +3230,7 @@ static void HandleShowCommand(OverlayPayload *payload)
     DWORD exStyle = WS_EX_TOOLWINDOW;
     if (!ow->closeOnEscape)
         exStyle |= WS_EX_NOACTIVATE;
-    if (ow->transparent)
+    if (ow->transparent && !ow->nativeAttachment)
         exStyle |= WS_EX_LAYERED;
     if (ow->topmost || ow->stickyWindowPid <= 0)
         exStyle |= WS_EX_TOPMOST;
@@ -3494,7 +3254,7 @@ static void HandleShowCommand(OverlayPayload *payload)
         style |= WS_THICKFRAME;
     }
 
-    ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, ow->title ? ow->title : L"",
+    ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, L"",
                                style, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
     if (!ow->hwnd)
     {
@@ -3503,7 +3263,7 @@ static void HandleShowCommand(OverlayPayload *payload)
         {
             owner = NULL;
             exStyle |= WS_EX_TOPMOST;
-            ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, ow->title ? ow->title : L"",
+            ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, L"",
                                        style, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
         }
     }
@@ -3512,8 +3272,6 @@ static void HandleShowCommand(OverlayPayload *payload)
     {
         if (ow->name)
             free(ow->name);
-        if (ow->title)
-            free(ow->title);
         if (ow->message)
             free(ow->message);
         if (ow->tooltip)
@@ -3551,8 +3309,8 @@ static void HandleCloseCommand(const WCHAR *name)
     }
 }
 
-// NotifyOverlayClose fires the Go-side OnClose callback (if any) before the
-// overlay window is destroyed by a user action (close button or Escape).
+// NotifyOverlayClose fires the Go-side OnClose callback before the overlay
+// window is destroyed by a base-window action such as Escape.
 static void NotifyOverlayClose(OverlayWindow *ow)
 {
     if (!ow || !ow->name)
@@ -3678,9 +3436,17 @@ static BOOL CALLBACK InitOverlayThread(PINIT_ONCE InitOnce, PVOID Parameter, PVO
 
     g_overlayThread = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, &g_overlayThreadId);
     if (!g_overlayThread)
+    {
+        CloseHandle(g_threadReadyEvent);
+        g_threadReadyEvent = NULL;
         return FALSE;
+    }
 
     WaitForSingleObject(g_threadReadyEvent, INFINITE);
+    CloseHandle(g_threadReadyEvent);
+    g_threadReadyEvent = NULL;
+    CloseHandle(g_overlayThread);
+    g_overlayThread = NULL;
     return TRUE;
 }
 
@@ -3704,30 +3470,19 @@ void ShowOverlay(OverlayOptions opts)
         return;
 
     payload->name = DupUtf8ToWide(opts.name);
-    payload->title = DupUtf8ToWide(opts.title);
-    payload->message = DupUtf8ToWide(opts.message);
-    payload->tooltip = (opts.tooltip && opts.tooltip[0]) ? DupUtf8ToWide(opts.tooltip) : NULL;
-    payload->copyButtonTooltip = DupUtf8ToWide(opts.copyButtonTooltip);
-    payload->copyButtonSuccessTooltip = DupUtf8ToWide(opts.copyButtonSuccessTooltip);
-    payload->iconFilePath = DupUtf8ToWide(opts.iconFilePath);
     payload->transparent = opts.transparent ? TRUE : FALSE;
     payload->hitTestIconOnly = opts.hitTestIconOnly ? TRUE : FALSE;
-    payload->iconX = opts.iconX;
-    payload->iconY = opts.iconY;
-    payload->iconWidth = opts.iconWidth;
-    payload->iconHeight = opts.iconHeight;
-    payload->closable = opts.closable ? TRUE : FALSE;
     payload->closeOnEscape = opts.closeOnEscape ? TRUE : FALSE;
-    payload->loading = opts.loading ? TRUE : FALSE;
-    payload->voiceWaveform = opts.voiceWaveform ? TRUE : FALSE;
-    payload->voiceActive = opts.voiceActive ? TRUE : FALSE;
-    payload->centerContent = opts.centerContent ? TRUE : FALSE;
+    payload->nativeAttachment = opts.nativeAttachment ? TRUE : FALSE;
+    payload->nativeAttachmentKind = opts.nativeAttachmentKind;
+    payload->nativeAttachmentHandle = opts.nativeAttachmentHandle;
+    payload->nativeAttachmentWidth = opts.nativeAttachmentWidth;
+    payload->nativeAttachmentHeight = opts.nativeAttachmentHeight;
     payload->topmost = opts.topmost ? TRUE : FALSE;
     payload->absolutePosition = opts.absolutePosition ? TRUE : FALSE;
     payload->preservePosition = opts.preservePosition ? TRUE : FALSE;
     payload->stickyWindowPid = opts.stickyWindowPid;
     payload->anchor = opts.anchor;
-    payload->autoCloseSeconds = opts.autoCloseSeconds;
     payload->movable = opts.movable ? TRUE : FALSE;
     payload->resizable = opts.resizable ? TRUE : FALSE;
     payload->cornerRadius = opts.cornerRadius;
@@ -3739,49 +3494,12 @@ void ShowOverlay(OverlayOptions opts)
     payload->maxWidth = opts.maxWidth;
     payload->height = opts.height;
     payload->maxHeight = opts.maxHeight;
-    payload->followScroll = opts.followScroll ? TRUE : FALSE;
-    payload->fontSize = opts.fontSize;
-    payload->iconSize = opts.iconSize;
-    payload->tooltipIconSize = opts.tooltipIconSize;
-    payload->showCopyButton = opts.showCopyButton ? TRUE : FALSE;
-
-    if (opts.iconData && opts.iconLen > 0)
-    {
-        payload->iconData = (unsigned char *)malloc((size_t)opts.iconLen);
-        if (payload->iconData)
-        {
-            memcpy(payload->iconData, opts.iconData, (size_t)opts.iconLen);
-            payload->iconLen = opts.iconLen;
-        }
-    }
-
-    if (opts.tooltipIconData && opts.tooltipIconLen > 0)
-    {
-        payload->tooltipIconData = (unsigned char *)malloc((size_t)opts.tooltipIconLen);
-        if (payload->tooltipIconData)
-        {
-            memcpy(payload->tooltipIconData, opts.tooltipIconData, (size_t)opts.tooltipIconLen);
-            payload->tooltipIconLen = opts.tooltipIconLen;
-        }
-    }
 
     OverlayCommand *cmd = (OverlayCommand *)calloc(1, sizeof(OverlayCommand));
     if (!cmd)
     {
         if (payload->name)
             free(payload->name);
-        if (payload->title)
-            free(payload->title);
-        if (payload->message)
-            free(payload->message);
-        if (payload->tooltip)
-            free(payload->tooltip);
-        if (payload->iconData)
-            free(payload->iconData);
-        if (payload->iconFilePath)
-            free(payload->iconFilePath);
-        if (payload->tooltipIconData)
-            free(payload->tooltipIconData);
         free(payload);
         return;
     }
@@ -3792,18 +3510,6 @@ void ShowOverlay(OverlayOptions opts)
     {
         if (payload->name)
             free(payload->name);
-        if (payload->title)
-            free(payload->title);
-        if (payload->message)
-            free(payload->message);
-        if (payload->tooltip)
-            free(payload->tooltip);
-        if (payload->iconData)
-            free(payload->iconData);
-        if (payload->iconFilePath)
-            free(payload->iconFilePath);
-        if (payload->tooltipIconData)
-            free(payload->tooltipIconData);
         free(payload);
         free(cmd);
     }

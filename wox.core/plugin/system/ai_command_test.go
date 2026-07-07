@@ -9,7 +9,7 @@ import (
 	"wox/common"
 	"wox/plugin"
 	"wox/setting/definition"
-	"wox/util/overlay"
+	"wox/util/overlay/textoverlay"
 	"wox/util/selection"
 
 	"github.com/stretchr/testify/require"
@@ -238,7 +238,7 @@ func TestAICommandRequestsActiveWindowQueryEnv(t *testing.T) {
 func TestAICommandRunAndPasteNotifiesStreamErrors(t *testing.T) {
 	previousShowOverlay := aiCommandShowOverlay
 	previousCloseOverlay := aiCommandCloseOverlay
-	aiCommandShowOverlay = func(opts overlay.OverlayOptions) {}
+	aiCommandShowOverlay = func(opts textoverlay.Options) {}
 	aiCommandCloseOverlay = func(name string) {}
 	t.Cleanup(func() {
 		aiCommandShowOverlay = previousShowOverlay
