@@ -111,6 +111,9 @@ func (l *Location) Init() error {
 	if directoryErr := l.EnsureDirectoryExist(l.GetOthersDirectory()); directoryErr != nil {
 		return directoryErr
 	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetDictationDirectory()); directoryErr != nil {
+		return directoryErr
+	}
 	if directoryErr := l.EnsureDirectoryExist(l.GetAISkillsDirectory()); directoryErr != nil {
 		return directoryErr
 	}
@@ -208,6 +211,10 @@ func (l *Location) GetUIDirectory() string {
 
 func (l *Location) GetOthersDirectory() string {
 	return path.Join(l.woxDataDirectory, "others")
+}
+
+func (l *Location) GetDictationDirectory() string {
+	return path.Join(l.woxDataDirectory, "dictation")
 }
 
 func (l *Location) GetAISkillsDirectory() string {

@@ -330,7 +330,7 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	p.dictionary.load(ctx)
 
 	// Initialize the model manager in the Wox data directory.
-	modelsDir := filepath.Join(util.GetLocation().GetWoxDataDirectory(), "dictation", "models")
+	modelsDir := filepath.Join(util.GetLocation().GetDictationDirectory(), "models")
 	mgr, err := speech.NewModelManager(modelsDir)
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create model manager: %s", err.Error()))
@@ -1551,7 +1551,11 @@ func (p *DictationPlugin) playSoundIfEnabled(ctx context.Context, name string) {
 	if !parseBoolSetting(p.api.GetSetting(ctx, settingKeyPlaySound)) {
 		return
 	}
-	if err := audio.PlayEmbedded(ctx, name); err != nil {
+	soundPath := ensureDictationResourceFile(ctx, name)
+	if soundPath == "" {
+		return
+	}
+	if err := audio.Play(ctx, soundPath); err != nil {
 		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to play dictation sound %s: %s", name, err.Error()))
 	}
 }
@@ -1562,27 +1566,36 @@ func parseBoolSetting(v string) bool {
 	return v == "true"
 }
 
-// extractVadModel extracts the embedded silero_vad.onnx to a temp file and
-// returns its path. The file persists for the process lifetime.
+// extractVadModel returns the extracted silero_vad.onnx path, writing it from
+// embedded resources when the normal startup extraction has not run yet.
 func extractVadModel(ctx context.Context) string {
-	data, err := resource.GetAudioFile("silero_vad.onnx")
+	return ensureDictationResourceFile(ctx, "silero_vad.onnx")
+}
+
+// ensureDictationResourceFile returns the extracted resource path, writing it
+// from embedded resources when the normal startup extraction has not run yet.
+func ensureDictationResourceFile(ctx context.Context, name string) string {
+	resourcePath := resource.GetDictationResourcePath(name)
+	if util.IsFileExists(resourcePath) {
+		return resourcePath
+	}
+
+	data, err := resource.GetDictationFile(name)
 	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to read embedded silero_vad.onnx: %s", err.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to read embedded dictation resource %s: %s", name, err.Error()))
 		return ""
 	}
 
-	dir, err := os.MkdirTemp("", "wox-vad")
-	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to create VAD temp dir: %s", err.Error()))
+	if err := util.GetLocation().EnsureDirectoryExist(filepath.Dir(resourcePath)); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to create dictation resource dir: %s", err.Error()))
 		return ""
 	}
 
-	path := filepath.Join(dir, "silero_vad.onnx")
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to write silero_vad.onnx: %s", err.Error()))
+	if err := os.WriteFile(resourcePath, data, 0644); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to write dictation resource %s: %s", name, err.Error()))
 		return ""
 	}
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("extracted silero VAD model to %s", path))
-	return path
+	util.GetLogger().Info(ctx, fmt.Sprintf("extracted dictation resource %s to %s", name, resourcePath))
+	return resourcePath
 }

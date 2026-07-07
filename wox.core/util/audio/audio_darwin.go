@@ -21,14 +21,14 @@ import (
 // playFile dispatches macOS-native playback via NSSound. NSSound must be
 // created and played on the main thread for reliable audio output, so we
 // dispatch via mainthread.Call.
-func playFile(ctx context.Context, name, path string) error {
+func playFile(ctx context.Context, path string) error {
 	var result C.int
 	mainthread.Call(func() {
 		cPath := C.CString(path)
 		defer C.free(unsafe.Pointer(cPath))
 		result = C.playSoundFileMac(cPath)
 	})
-	util.GetLogger().Info(ctx, fmt.Sprintf("audio: playFile %s result=%d path=%s", name, int(result), path))
+	util.GetLogger().Info(ctx, fmt.Sprintf("audio: playFile result=%d path=%s", int(result), path))
 	if result != 1 {
 		return fmt.Errorf("NSSound failed to play %s", path)
 	}

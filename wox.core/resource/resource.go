@@ -30,8 +30,8 @@ var appIconWindows []byte
 //go:embed others
 var OthersFS embed.FS
 
-//go:embed audio
-var AudioFS embed.FS
+//go:embed dictation/dictation_start.wav dictation/dictation_stop.wav dictation/silero_vad.onnx
+var DictationFS embed.FS
 
 var embedThemes = []string{}
 
@@ -76,6 +76,18 @@ func Extract(ctx context.Context) error {
 	othersErr := extractFiles(ctx, OthersFS, othersDirectory, "others", true)
 	if othersErr != nil {
 		return othersErr
+	}
+
+	// Dictation resources live under .wox/dictation so native libraries can be loaded by path after startup.
+	dictationErr := extractFiles(ctx, DictationFS, GetDictationResourceDirectory(), "dictation", true)
+	if dictationErr != nil {
+		return dictationErr
+	}
+	if dictationNativeResourcePath != "" {
+		dictationNativeErr := extractFiles(ctx, DictationNativeFS, GetDictationResourceDirectory(), dictationNativeResourcePath, true)
+		if dictationNativeErr != nil {
+			return dictationNativeErr
+		}
 	}
 
 	// themes
@@ -163,9 +175,24 @@ func GetEmbedThemes(ctx context.Context) []string {
 	return embedThemes
 }
 
-// GetAudioFile returns the embedded audio file bytes by name (e.g. "dictation_start.wav").
-func GetAudioFile(name string) ([]byte, error) {
-	return AudioFS.ReadFile(path.Join("audio", name))
+// GetDictationFile returns the embedded dictation resource bytes by name.
+func GetDictationFile(name string) ([]byte, error) {
+	return DictationFS.ReadFile(path.Join("dictation", name))
+}
+
+// GetDictationNativeFile returns embedded dictation native library bytes by platform-relative name.
+func GetDictationNativeFile(name string) ([]byte, error) {
+	return DictationNativeFS.ReadFile(path.Join("dictation", name))
+}
+
+// GetDictationResourceDirectory returns the extracted dictation resource directory.
+func GetDictationResourceDirectory() string {
+	return util.GetLocation().GetDictationDirectory()
+}
+
+// GetDictationResourcePath returns the extracted path for a dictation resource.
+func GetDictationResourcePath(name string) string {
+	return filepath.Join(GetDictationResourceDirectory(), filepath.FromSlash(name))
 }
 
 func GetAppIcon() []byte {

@@ -705,6 +705,7 @@ static void StartLiveFollowTimerIfNeeded(OverlayWindow *ow);
 static void StopLiveFollowTimer(OverlayWindow *ow);
 static void RepositionOverlayToTargetRect(OverlayWindow *ow, const RECT *targetRect, BOOL preserveSmallPredictiveCorrection);
 static void ShowOverlayWindowWithFocusPolicy(OverlayWindow *ow);
+static void NotifyOverlayClose(OverlayWindow *ow);
 
 // -----------------------------------------------------------------------------
 // Overlay Helpers

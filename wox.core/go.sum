@@ -48,14 +48,6 @@ github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD
 github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkryuEj+Srlc=
 github.com/jinzhu/now v1.1.5 h1:/o9tlHleP7gOFmsnYNz3RGnqzefHA47wQpKrrdTIwXQ=
 github.com/jinzhu/now v1.1.5/go.mod h1:d3SSVoowX0Lcu0IBviAWJpolVfI5UJVZZ7cO71lE/z8=
-github.com/k2-fsa/sherpa-onnx-go v1.13.3 h1:USIZ9uTEqMV5zcet7GjybiLlRcv7xntY5DfW9sn7dkw=
-github.com/k2-fsa/sherpa-onnx-go v1.13.3/go.mod h1:wRxLqPesbWb3TnMxRMjE/+sqh5vGVgDz2Vx9OKx6ceo=
-github.com/k2-fsa/sherpa-onnx-go-linux v1.13.3 h1:FuO/vw+vBgS/wRJDTOMy2ikJdHRhWvleqpdjvSOnzYA=
-github.com/k2-fsa/sherpa-onnx-go-linux v1.13.3/go.mod h1:NXEH2rsBgTdqY59YpPq6CtSBlBAXy/8a9FmpLERU97I=
-github.com/k2-fsa/sherpa-onnx-go-macos v1.13.3 h1:nJTay2vlWTtkM68lbmyFB2dLuC4ssRpLFxQ6WyXuMfI=
-github.com/k2-fsa/sherpa-onnx-go-macos v1.13.3/go.mod h1:ZOhUAXC62Unj0ZNfu6zxSFKcW96aXf7P3BsqiUyOBbE=
-github.com/k2-fsa/sherpa-onnx-go-windows v1.13.3 h1:N2mPb/wgpSNR6yUKW+aHcF9vh+ZFkg4LG3m4T4A9A7c=
-github.com/k2-fsa/sherpa-onnx-go-windows v1.13.3/go.mod h1:5AX7TU8+P/gInjglY1ijtWUM2b8iyR0QX4yEngzMe64=
 github.com/klauspost/compress v1.18.0 h1:c/Cqfb0r+Yi+JtIEq73FWXVkRonBlf0CRNYc8Zttxdo=
 github.com/klauspost/compress v1.18.0/go.mod h1:2Pp+KzxcywXVXMr50+X0Q/Lsb43OQHYWRCY2AiWywWQ=
 github.com/kr/pretty v0.2.1/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=

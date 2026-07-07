@@ -9,6 +9,7 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/forPelevin/gomoji v1.4.1
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/gen2brain/malgo v0.11.25
 	github.com/go-ole/go-ole v1.3.0
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/uuid v1.6.0
@@ -43,6 +44,7 @@ require (
 	golang.org/x/image v0.34.0
 	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.39.0
+	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
 	howett.net/plist v1.0.1
@@ -53,16 +55,11 @@ require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/danieljoos/wincred v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/gen2brain/malgo v0.11.25 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/jsonschema-go v0.3.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/k2-fsa/sherpa-onnx-go v1.13.3 // indirect
-	github.com/k2-fsa/sherpa-onnx-go-linux v1.13.3 // indirect
-	github.com/k2-fsa/sherpa-onnx-go-macos v1.13.3 // indirect
-	github.com/k2-fsa/sherpa-onnx-go-windows v1.13.3 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -77,5 +74,4 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

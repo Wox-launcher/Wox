@@ -6,10 +6,10 @@ import (
 	"os/exec"
 )
 
-// playFile tries PulseAudio paplay, then alsa aplay, then oss play. Returns an
+// playFile tries PulseAudio paplay, then ALSA aplay, then SoX play. Returns an
 // error if no player is available. Playback is dispatched in a goroutine so it
 // never blocks the caller.
-func playFile(ctx context.Context, name, path string) error {
+func playFile(ctx context.Context, path string) error {
 	player, args := findLinuxPlayer()
 	if player == "" {
 		return fmt.Errorf("no audio player found (tried paplay, aplay, play)")
@@ -27,7 +27,7 @@ func findLinuxPlayer() (string, []string) {
 		args []string
 	}{
 		{"paplay", nil},
-		{"aplay", {"-q"}},
+		{"aplay", []string{"-q"}},
 		{"play", nil},
 	} {
 		if _, err := exec.LookPath(c.bin); err == nil {

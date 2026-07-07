@@ -24,11 +24,11 @@ import (
 // playFile uses Windows PlaySoundW (winmm). SND_FILENAME plays from file path;
 // playback is asynchronous when combined with SND_ASYNC, but we use the
 // default synchronous call inside a goroutine so it doesn't block the caller.
-func playFile(ctx context.Context, name, path string) error {
+func playFile(ctx context.Context, path string) error {
 	go func() {
 		wpath, _ := syscall.UTF16PtrFromString(path)
 		if C.playSoundFileWin((*C.wchar_t)(unsafe.Pointer(wpath))) != 1 {
-			logErr(ctx, name, fmt.Errorf("PlaySoundW failed for %s", path))
+			logErr(ctx, path, fmt.Errorf("PlaySoundW failed for %s", path))
 		}
 	}()
 	return nil
