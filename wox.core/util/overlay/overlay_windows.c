@@ -60,6 +60,8 @@ typedef struct {
     bool closable;
     bool closeOnEscape;
     bool loading;
+    bool voiceWaveform;
+    bool voiceActive;
     bool centerContent;
     bool topmost;
     bool absolutePosition;
@@ -200,12 +202,16 @@ static BOOL TryEnableAcrylic(HWND hwnd)
 #define IMAGE_SHADOW_PADDING_DIP 20
 #define IMAGE_SHADOW_MAX_ALPHA 96
 #define WHEEL_ZOOM_STEP 1.12f
+#define VOICE_WAVEFORM_WIDTH_DIP 132
+#define VOICE_WAVEFORM_HEIGHT_DIP 48
+#define VOICE_WAVEFORM_BAR_HEIGHT_DIP 24
 
 #define TIMER_AUTOCLOSE 1
 #define TIMER_TRACK 2
 #define TIMER_LIVE_FOLLOW 3
 #define TIMER_COPY_FEEDBACK 4
 #define TIMER_REPAINT 5
+#define TIMER_VOICE_WAVEFORM 6
 #define PREDICTIVE_CORRECTION_THRESHOLD_PX 48
 
 #define WM_WOX_OVERLAY_COMMAND (WM_APP + 0x610)
@@ -592,6 +598,8 @@ typedef struct OverlayWindow
     BOOL closable;
     BOOL closeOnEscape;
     BOOL loading;
+    BOOL voiceWaveform;
+    BOOL voiceActive;
     BOOL centerContent;
     BOOL topmost;
     BOOL absolutePosition;
@@ -621,6 +629,7 @@ typedef struct OverlayWindow
 
     RECT closeRect;
     RECT copyButtonRect;
+    RECT voiceWaveformRect;
     RECT textRect;
     RECT textScrollbarTrackRect;
     RECT textScrollbarThumbRect;
@@ -641,6 +650,7 @@ typedef struct OverlayWindow
     BOOL copyButtonHover;
     BOOL copyButtonPressed;
     BOOL copyButtonFeedback;
+    int voiceWaveformPhase;
     BOOL dragging;
     BOOL autoClosePending;
     POINT dragStart;
@@ -687,6 +697,8 @@ typedef struct OverlayPayload
     BOOL closable;
     BOOL closeOnEscape;
     BOOL loading;
+    BOOL voiceWaveform;
+    BOOL voiceActive;
     BOOL centerContent;
     BOOL topmost;
     BOOL absolutePosition;
@@ -1201,6 +1213,68 @@ static void ScheduleOverlayRepaint(OverlayWindow *ow)
 
     ow->repaintPending = TRUE;
     SetTimer(ow->hwnd, TIMER_REPAINT, 16, NULL);
+}
+
+static void UpdateVoiceWaveformTimer(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd)
+        return;
+
+    if (ow->voiceWaveform && ow->voiceActive)
+    {
+        SetTimer(ow->hwnd, TIMER_VOICE_WAVEFORM, 33, NULL);
+    }
+    else
+    {
+        KillTimer(ow->hwnd, TIMER_VOICE_WAVEFORM);
+        ow->voiceWaveformPhase = 0;
+    }
+
+    if (ow->voiceWaveform)
+        InvalidateRect(ow->hwnd, &ow->voiceWaveformRect, FALSE);
+}
+
+static void DrawVoiceWaveform(HDC hdc, const RECT *rect, UINT dpi, BOOL active, int phase)
+{
+    if (!hdc || !rect)
+        return;
+
+    const int barCount = 7;
+    int barWidth = MulDiv(4, (int)dpi, 96);
+    int gap = MulDiv(5, (int)dpi, 96);
+    if (barWidth < 2)
+        barWidth = 2;
+    int totalWidth = barCount * barWidth + (barCount - 1) * gap;
+    int startX = rect->left + ((rect->right - rect->left) - totalWidth) / 2;
+    int centerY = rect->top + (rect->bottom - rect->top) / 2;
+    int maxHeight = (rect->bottom - rect->top) - MulDiv(2, (int)dpi, 96);
+    if (maxHeight < MulDiv(8, (int)dpi, 96))
+        maxHeight = MulDiv(8, (int)dpi, 96);
+
+    double idleScales[7] = {0.32, 0.46, 0.36, 0.56, 0.36, 0.46, 0.32};
+    HBRUSH brush = CreateSolidBrush(RGB(245, 245, 245));
+    HGDIOBJ oldBrush = SelectObject(hdc, brush);
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(NULL_PEN));
+
+    for (int i = 0; i < barCount; i++)
+    {
+        double scale = idleScales[i];
+        if (active)
+            scale = 0.28 + 0.72 * (0.5 + 0.5 * sin((double)phase * 0.32 + (double)i * 0.85));
+        int barHeight = (int)((double)maxHeight * scale + 0.5);
+        int minHeight = MulDiv(5, (int)dpi, 96);
+        if (barHeight < minHeight)
+            barHeight = minHeight;
+        int x = startX + i * (barWidth + gap);
+        int y = centerY - barHeight / 2;
+        RoundRect(hdc, x, y, x + barWidth, y + barHeight, barWidth, barWidth);
+    }
+
+    if (oldPen)
+        SelectObject(hdc, oldPen);
+    if (oldBrush)
+        SelectObject(hdc, oldBrush);
+    DeleteObject(brush);
 }
 
 static void SetTextScrollOffsetFromThumbPoint(OverlayWindow *ow, POINT pt)
@@ -1977,6 +2051,42 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         }
     }
 
+    if (ow->voiceWaveform && !ow->transparent)
+    {
+        width = (ow->width > 0.0f) ? (int)roundf(ow->width * (float)ow->dpi / 96.0f) : MulDiv(VOICE_WAVEFORM_WIDTH_DIP, (int)ow->dpi, 96);
+        height = (ow->height > 0.0f) ? (int)roundf(ow->height * (float)ow->dpi / 96.0f) : MulDiv(VOICE_WAVEFORM_HEIGHT_DIP, (int)ow->dpi, 96);
+        if (width < minWidth)
+            width = minWidth;
+
+        RECT empty = {0, 0, 0, 0};
+        ow->iconRect = empty;
+        ow->copyButtonRect = empty;
+        ow->tooltipRect = empty;
+        ow->textRect = empty;
+        ow->textScrollbarTrackRect = empty;
+        ow->textScrollbarThumbRect = empty;
+        ow->textContentHeight = 0;
+        ow->textScrollOffset = 0;
+        ow->textMaxScrollOffset = 0;
+        ow->textUserScrolled = FALSE;
+
+        int waveformPad = MulDiv(18, (int)ow->dpi, 96);
+        int waveformHeight = MulDiv(VOICE_WAVEFORM_BAR_HEIGHT_DIP, (int)ow->dpi, 96);
+        int closeReserve = ow->closable ? (closePad + closeSize) : 0;
+        int waveformLeft = waveformPad;
+        int waveformRight = width - waveformPad - closeReserve;
+        if (waveformRight - waveformLeft < MulDiv(48, (int)ow->dpi, 96))
+            waveformRight = waveformLeft + MulDiv(48, (int)ow->dpi, 96);
+        int waveformTop = (height - waveformHeight) / 2;
+        SetRect(&ow->voiceWaveformRect, waveformLeft, waveformTop, waveformRight, waveformTop + waveformHeight);
+        UpdateCloseRect(ow, width, height, ow->dpi);
+    }
+    else
+    {
+        RECT empty = {0, 0, 0, 0};
+        ow->voiceWaveformRect = empty;
+    }
+
     RECT targetRect;
     BOOL targetFound = FALSE;
     BOOL preserveLiveFollowFrame = ow->stickyWindowPid > 0 && ow->liveFollowActive;
@@ -2106,6 +2216,7 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
 
     StartAutoCloseTimer(ow);
     StartTrackTimer(ow);
+    UpdateVoiceWaveformTimer(ow);
 }
 
 static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BOOL isNew)
@@ -2191,6 +2302,8 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->closable = payload->closable;
     ow->closeOnEscape = payload->closeOnEscape;
     ow->loading = payload->loading;
+    ow->voiceWaveform = payload->voiceWaveform;
+    ow->voiceActive = payload->voiceActive;
     ow->centerContent = payload->centerContent;
     ow->topmost = payload->topmost;
     ow->absolutePosition = payload->absolutePosition;
@@ -2711,64 +2824,71 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             return 0;
         }
 
-        float iconSizeDip = (ow->iconSize > 0.0f) ? ow->iconSize : DEFAULT_ICON_SIZE_DIP;
-        int iconSize = (ow->iconBitmap ? (int)roundf(iconSizeDip * (float)ow->dpi / 96.0f) : 0);
-
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(240, 240, 240));
-        if (ow->messageFont)
-            SelectObject(hdc, ow->messageFont);
-        RECT textRect = ow->textRect;
-        int savedDc = SaveDC(hdc);
-        if (savedDc)
-            IntersectClipRect(hdc, textRect.left, textRect.top, textRect.right, textRect.bottom);
-        RECT drawTextRect = textRect;
-        drawTextRect.top -= ow->textScrollOffset;
-        drawTextRect.bottom = drawTextRect.top + ow->textContentHeight + MulDiv(4, (int)ow->dpi, 96);
-        DrawTextW(hdc, ow->message ? ow->message : L"", -1, &drawTextRect,
-                  DT_LEFT | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
-        if (savedDc)
-            RestoreDC(hdc, savedDc);
-
-        DrawTextScrollbar(hdc, ow);
-
-        if (ow->iconBitmap)
+        if (ow->voiceWaveform)
         {
-            int iconX = ow->iconRect.left;
-            int iconY = ow->iconRect.top;
-            int drawWidth = ow->iconRect.right - ow->iconRect.left;
-            int drawHeight = ow->iconRect.bottom - ow->iconRect.top;
-            if (drawWidth <= 0)
-                drawWidth = iconSize;
-            if (drawHeight <= 0)
-                drawHeight = iconSize;
-
-            HDC memDC = CreateCompatibleDC(hdc);
-            if (memDC)
-            {
-                HGDIOBJ oldBmp = SelectObject(memDC, ow->iconBitmap);
-                BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-                AlphaBlend(hdc, iconX, iconY, drawWidth, drawHeight, memDC, 0, 0, ow->iconWidth, ow->iconHeight, bf);
-                if (oldBmp)
-                    SelectObject(memDC, oldBmp);
-                DeleteDC(memDC);
-            }
+            DrawVoiceWaveform(hdc, &ow->voiceWaveformRect, ow->dpi, ow->voiceActive, ow->voiceWaveformPhase);
         }
-
-        if (ow->tooltip && *ow->tooltip && ow->tooltipIconBitmap)
+        else
         {
-            HDC memDC = CreateCompatibleDC(hdc);
-            if (memDC)
+            float iconSizeDip = (ow->iconSize > 0.0f) ? ow->iconSize : DEFAULT_ICON_SIZE_DIP;
+            int iconSize = (ow->iconBitmap ? (int)roundf(iconSizeDip * (float)ow->dpi / 96.0f) : 0);
+
+            if (ow->messageFont)
+                SelectObject(hdc, ow->messageFont);
+            RECT textRect = ow->textRect;
+            int savedDc = SaveDC(hdc);
+            if (savedDc)
+                IntersectClipRect(hdc, textRect.left, textRect.top, textRect.right, textRect.bottom);
+            RECT drawTextRect = textRect;
+            drawTextRect.top -= ow->textScrollOffset;
+            drawTextRect.bottom = drawTextRect.top + ow->textContentHeight + MulDiv(4, (int)ow->dpi, 96);
+            DrawTextW(hdc, ow->message ? ow->message : L"", -1, &drawTextRect,
+                      DT_LEFT | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
+            if (savedDc)
+                RestoreDC(hdc, savedDc);
+
+            DrawTextScrollbar(hdc, ow);
+
+            if (ow->iconBitmap)
             {
-                HGDIOBJ oldBmp = SelectObject(memDC, ow->tooltipIconBitmap);
-                BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-                AlphaBlend(hdc, ow->tooltipRect.left, ow->tooltipRect.top, 
-                           ow->tooltipRect.right - ow->tooltipRect.left, 
-                           ow->tooltipRect.bottom - ow->tooltipRect.top, 
-                           memDC, 0, 0, ow->tooltipIconWidth, ow->tooltipIconHeight, bf);
-                if (oldBmp)
-                    SelectObject(memDC, oldBmp);
-                DeleteDC(memDC);
+                int iconX = ow->iconRect.left;
+                int iconY = ow->iconRect.top;
+                int drawWidth = ow->iconRect.right - ow->iconRect.left;
+                int drawHeight = ow->iconRect.bottom - ow->iconRect.top;
+                if (drawWidth <= 0)
+                    drawWidth = iconSize;
+                if (drawHeight <= 0)
+                    drawHeight = iconSize;
+
+                HDC memDC = CreateCompatibleDC(hdc);
+                if (memDC)
+                {
+                    HGDIOBJ oldBmp = SelectObject(memDC, ow->iconBitmap);
+                    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+                    AlphaBlend(hdc, iconX, iconY, drawWidth, drawHeight, memDC, 0, 0, ow->iconWidth, ow->iconHeight, bf);
+                    if (oldBmp)
+                        SelectObject(memDC, oldBmp);
+                    DeleteDC(memDC);
+                }
+            }
+
+            if (ow->tooltip && *ow->tooltip && ow->tooltipIconBitmap)
+            {
+                HDC memDC = CreateCompatibleDC(hdc);
+                if (memDC)
+                {
+                    HGDIOBJ oldBmp = SelectObject(memDC, ow->tooltipIconBitmap);
+                    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+                    AlphaBlend(hdc, ow->tooltipRect.left, ow->tooltipRect.top,
+                               ow->tooltipRect.right - ow->tooltipRect.left,
+                               ow->tooltipRect.bottom - ow->tooltipRect.top,
+                               memDC, 0, 0, ow->tooltipIconWidth, ow->tooltipIconHeight, bf);
+                    if (oldBmp)
+                        SelectObject(memDC, oldBmp);
+                    DeleteDC(memDC);
+                }
             }
         }
 
@@ -2777,7 +2897,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             DrawCloseButton(hdc, &ow->closeRect, ow->dpi, ow->closeHover, ow->closePressed);
         }
 
-        if (ow->showCopyButton)
+        if (ow->showCopyButton && !ow->voiceWaveform)
         {
             DrawCopyButton(hdc, &ow->copyButtonRect, ow->dpi, ow->copyButtonHover, ow->copyButtonPressed, ow->copyButtonFeedback);
         }
@@ -3194,6 +3314,18 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
             return 0;
         }
+        if (wParam == TIMER_VOICE_WAVEFORM)
+        {
+            if (!ow->voiceWaveform || !ow->voiceActive)
+            {
+                KillTimer(hwnd, TIMER_VOICE_WAVEFORM);
+                ow->voiceWaveformPhase = 0;
+                return 0;
+            }
+            ow->voiceWaveformPhase++;
+            InvalidateRect(hwnd, &ow->voiceWaveformRect, FALSE);
+            return 0;
+        }
         break;
     }
     case WM_WOX_OVERLAY_REPOSITION:
@@ -3235,6 +3367,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             KillTimer(hwnd, TIMER_TRACK);
             KillTimer(hwnd, TIMER_LIVE_FOLLOW);
             KillTimer(hwnd, TIMER_REPAINT);
+            KillTimer(hwnd, TIMER_VOICE_WAVEFORM);
             DestroyTransparentImageShadow(ow);
             RemoveOverlay(ow);
             if (ow->messageFont)
@@ -3586,6 +3719,8 @@ void ShowOverlay(OverlayOptions opts)
     payload->closable = opts.closable ? TRUE : FALSE;
     payload->closeOnEscape = opts.closeOnEscape ? TRUE : FALSE;
     payload->loading = opts.loading ? TRUE : FALSE;
+    payload->voiceWaveform = opts.voiceWaveform ? TRUE : FALSE;
+    payload->voiceActive = opts.voiceActive ? TRUE : FALSE;
     payload->centerContent = opts.centerContent ? TRUE : FALSE;
     payload->topmost = opts.topmost ? TRUE : FALSE;
     payload->absolutePosition = opts.absolutePosition ? TRUE : FALSE;

@@ -22,6 +22,8 @@ typedef struct {
     bool closable;
     bool closeOnEscape;
     bool loading;
+    bool voiceWaveform;
+    bool voiceActive;
     bool centerContent;
     bool topmost;
     bool absolutePosition;
@@ -154,6 +156,8 @@ func Show(opts OverlayOptions) {
 		closable:                 C.bool(opts.Closable),
 		closeOnEscape:            C.bool(opts.CloseOnEscape),
 		loading:                  C.bool(opts.Loading),
+		voiceWaveform:            C.bool(opts.VoiceWaveform),
+		voiceActive:              C.bool(opts.VoiceActive),
 		centerContent:            C.bool(opts.CenterContent),
 		topmost:                  C.bool(opts.Topmost),
 		absolutePosition:         C.bool(opts.AbsolutePosition),

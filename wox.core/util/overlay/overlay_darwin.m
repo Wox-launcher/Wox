@@ -25,6 +25,8 @@ typedef struct {
     bool closable;
     bool closeOnEscape;
     bool loading;
+    bool voiceWaveform;
+    bool voiceActive;
     bool centerContent;
     bool topmost;
     bool absolutePosition;
@@ -74,6 +76,9 @@ static const CGFloat kStickyPredictiveCorrectionThreshold = 48;
 static const CGFloat kResizeGripSize = 10;
 static const CGFloat kResizeMinSize = 64;
 static const CGFloat kWheelZoomStep = 1.12;
+static const CGFloat kVoiceWaveformDefaultWidth = 132;
+static const CGFloat kVoiceWaveformDefaultHeight = 48;
+static const CGFloat kVoiceWaveformHeight = 24;
 
 typedef NS_OPTIONS(NSUInteger, OverlayResizeEdges) {
     OverlayResizeEdgeNone = 0,
@@ -99,11 +104,13 @@ static void OverlayDebugLog(NSString *message) {
 // Overlay Window
 // -----------------------------------------------------------------------------
 @class OverlayTooltipWindow;
+@class VoiceWaveformView;
 @interface OverlayWindow : NSPanel
 @property(nonatomic, strong) NSString *name; // Store the ID
 @property(nonatomic, strong) NSTimer *closeTimer;
 @property(nonatomic, strong) NSImageView *iconView;
 @property(nonatomic, strong) NSProgressIndicator *loadingIndicator;
+@property(nonatomic, strong) VoiceWaveformView *voiceWaveformView;
 @property(nonatomic, strong) NSImageView *tooltipIconView;
 @property(nonatomic, strong) NSTextField *messageLabel;
 // Simplified text view for now, or use full NSTextView from notifier if needed for multiline.
@@ -281,6 +288,69 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 @implementation PassthroughVisualEffectView
 - (NSView *)hitTest:(NSPoint)point {
     return nil; // Let mouse events pass through to window
+}
+@end
+
+// -----------------------------------------------------------------------------
+// VoiceWaveformView - compact voice activity visualization for dictation
+// -----------------------------------------------------------------------------
+@interface VoiceWaveformView : NSView
+@property(nonatomic, assign) BOOL active;
+@property(nonatomic, assign) CGFloat phase;
+@property(nonatomic, strong) NSTimer *animationTimer;
+- (void)setVoiceActive:(BOOL)active;
+@end
+
+@implementation VoiceWaveformView
+- (BOOL)isOpaque {
+    return NO;
+}
+
+- (void)setVoiceActive:(BOOL)active {
+    if (_active == active) return;
+    _active = active;
+    if (active) {
+        if (!self.animationTimer) {
+            self.animationTimer = [NSTimer scheduledTimerWithTimeInterval:(1.0 / 30.0) target:self selector:@selector(onAnimationTimer:) userInfo:nil repeats:YES];
+        }
+    } else {
+        [self.animationTimer invalidate];
+        self.animationTimer = nil;
+        self.phase = 0;
+    }
+    [self setNeedsDisplay:YES];
+}
+
+- (void)onAnimationTimer:(NSTimer *)timer {
+    self.phase += 0.32;
+    [self setNeedsDisplay:YES];
+}
+
+- (void)drawRect:(NSRect)dirtyRect {
+    NSRect bounds = self.bounds;
+    NSRectFillUsingOperation(bounds, NSCompositingOperationClear);
+
+    NSInteger barCount = 7;
+    CGFloat gap = 5;
+    CGFloat barWidth = 4;
+    CGFloat totalWidth = barCount * barWidth + (barCount - 1) * gap;
+    CGFloat startX = bounds.origin.x + (bounds.size.width - totalWidth) / 2.0;
+    CGFloat centerY = NSMidY(bounds);
+    CGFloat maxHeight = MAX(8, bounds.size.height - 2);
+    CGFloat idleScales[] = {0.32, 0.46, 0.36, 0.56, 0.36, 0.46, 0.32};
+
+    [[NSColor colorWithWhite:1.0 alpha:0.9] setFill];
+    for (NSInteger i = 0; i < barCount; i++) {
+        CGFloat scale = idleScales[i];
+        if (self.active) {
+            scale = 0.28 + 0.72 * (0.5 + 0.5 * sin(self.phase + (CGFloat)i * 0.85));
+        }
+        CGFloat barHeight = MAX(5, maxHeight * scale);
+        CGFloat x = startX + (barWidth + gap) * i;
+        CGFloat y = centerY - barHeight / 2.0;
+        NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(x, y, barWidth, barHeight) xRadius:barWidth / 2.0 yRadius:barWidth / 2.0];
+        [path fill];
+    }
 }
 @end
 
@@ -510,6 +580,10 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         }
         self.loadingIndicator.hidden = YES;
         [self.contentView addSubview:self.loadingIndicator];
+
+        self.voiceWaveformView = [[VoiceWaveformView alloc] initWithFrame:NSZeroRect];
+        self.voiceWaveformView.hidden = YES;
+        [self.contentView addSubview:self.voiceWaveformView];
 
         // Tooltip Icon - use PassthroughImageView for drag support
         self.tooltipIconView = [[PassthroughImageView alloc] initWithFrame:NSMakeRect(0, 0, kDefaultIconSize, kDefaultIconSize)];
@@ -1241,6 +1315,11 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     [self resetCopyButtonFeedback];
 }
 
+- (void)close {
+    [self.voiceWaveformView setVoiceActive:NO];
+    [super close];
+}
+
 - (BOOL)canBecomeKeyWindow {
     return YES; // Allow interaction
 }
@@ -1375,7 +1454,37 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         }
         self.iconView.frame = NSMakeRect(iconX, iconY, iconWidth, iconHeight);
         self.iconHitRect = opts.resizable ? (icon ? self.contentView.bounds : NSZeroRect) : (self.iconView.hidden ? NSZeroRect : self.iconView.frame);
+        self.voiceWaveformView.hidden = YES;
+        [self.voiceWaveformView setVoiceActive:NO];
+    } else if (opts.voiceWaveform) {
+        windowWidth = (opts.width > 0) ? opts.width : kVoiceWaveformDefaultWidth;
+        windowHeight = (opts.height > 0) ? opts.height : kVoiceWaveformDefaultHeight;
+
+        self.messageView.hidden = YES;
+        self.iconView.hidden = YES;
+        self.tooltipIconView.hidden = YES;
+        self.copyButton.hidden = YES;
+        self.loadingIndicator.hidden = YES;
+        [self.loadingIndicator stopAnimation:nil];
+        self.tooltipIconRect = NSZeroRect;
+        self.iconHitRect = NSZeroRect;
+        [self updateTooltipTrackingAreaWithRect:NSZeroRect enabled:NO];
+
+        CGFloat padLeft = 18;
+        CGFloat padRight = 18;
+        if (!self.closeButton.hidden) padRight += kCloseSize + kCloseMargin;
+        CGFloat waveformWidth = MAX(48, windowWidth - padLeft - padRight);
+        CGFloat waveformY = (windowHeight - kVoiceWaveformHeight) / 2.0;
+        self.voiceWaveformView.hidden = NO;
+        self.voiceWaveformView.frame = NSMakeRect(padLeft, waveformY, waveformWidth, kVoiceWaveformHeight);
+        [self.voiceWaveformView setVoiceActive:opts.voiceActive];
+
+        if (!self.closeButton.hidden) {
+            self.closeButton.frame = NSMakeRect(windowWidth - kCloseSize - kCloseMargin, windowHeight - kCloseSize - kCloseMargin, kCloseSize, kCloseSize);
+        }
     } else {
+        self.voiceWaveformView.hidden = YES;
+        [self.voiceWaveformView setVoiceActive:NO];
         self.messageView.hidden = NO;
         self.iconHitRect = NSZeroRect;
 

@@ -18,6 +18,11 @@ const (
 	SessionStateStopped
 )
 
+// SpeechActivity reports whether the current audio input is likely speech.
+type SpeechActivity struct {
+	Speaking bool
+}
+
 // Session manages a dictation recording session. It supports two modes:
 //
 //   - Streaming (zipformer2/paraformer): audio is fed continuously into the
@@ -46,10 +51,13 @@ type Session struct {
 
 	onPartial func(text string)
 	onFinal   func(text string)
+	onSpeech  func(activity SpeechActivity)
 
 	// Streaming mode state
 	lastText        string
 	accumulatedText string
+	lastSpeech      bool
+	hasSpeechState  bool
 
 	// Offline mode state
 	decodeWG sync.WaitGroup
@@ -74,6 +82,13 @@ func NewSessionWithPools(ctx context.Context, config RecognizerConfig, vadConfig
 	}
 }
 
+// SetSpeechActivityCallback registers a callback for speech/silence state changes.
+func (s *Session) SetSpeechActivityCallback(onSpeech func(SpeechActivity)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onSpeech = onSpeech
+}
+
 // Start initializes the recognizer (and VAD for offline mode), audio capture,
 // and begins recording.
 func (s *Session) Start() error {
@@ -95,16 +110,26 @@ func (s *Session) Start() error {
 	s.streaming = rec.IsStreaming()
 	logger.Info(s.ctx, fmt.Sprintf("dictation timing: session.newRecognizer cost=%dms (streaming=%t)", time.Since(t0).Milliseconds(), s.streaming))
 
-	// Acquire VAD only for offline mode.
-	if !s.streaming {
+	// Offline recognition requires VAD for segmenting. Streaming recognition
+	// can still use VAD for the overlay activity indicator, but it must not
+	// block startup if the optional detector is unavailable.
+	if s.vadPool != nil && s.vadConfig.ModelPath != "" {
 		vad, err := s.vadPool.Acquire(s.ctx, s.vadConfig)
 		if err != nil {
-			s.pool.Release(s.ctx, rec)
-			s.recognizer = nil
-			return fmt.Errorf("failed to acquire VAD: %w", err)
+			if !s.streaming {
+				s.pool.Release(s.ctx, rec)
+				s.recognizer = nil
+				return fmt.Errorf("failed to acquire VAD: %w", err)
+			}
+			logger.Warn(s.ctx, fmt.Sprintf("dictation: optional VAD unavailable for speech activity overlay: %s", err.Error()))
+		} else {
+			s.vad = vad
+			logger.Info(s.ctx, fmt.Sprintf("dictation timing: session.newVad cost=%dms", time.Since(t0).Milliseconds()))
 		}
-		s.vad = vad
-		logger.Info(s.ctx, fmt.Sprintf("dictation timing: session.newVad cost=%dms", time.Since(t0).Milliseconds()))
+	} else if !s.streaming {
+		s.pool.Release(s.ctx, rec)
+		s.recognizer = nil
+		return fmt.Errorf("failed to acquire VAD: VAD pool or model path is unavailable")
 	}
 
 	// Acquire audio capture from pool.
@@ -156,17 +181,66 @@ func (s *Session) handleAudioSamples(samples []float32) {
 	s.mu.Lock()
 	rec := s.recognizer
 	vad := s.vad
+	streaming := s.streaming
 	s.mu.Unlock()
 
 	if rec == nil {
 		return
 	}
 
-	if s.streaming {
+	if streaming {
+		if vad != nil {
+			s.reportStreamingVadActivity(vad, samples)
+		} else {
+			s.reportSpeechActivity(isLikelySpeechLevel(samples))
+		}
 		s.handleStreamingSamples(rec, samples)
 	} else {
 		s.handleOfflineSamples(rec, vad, samples)
 	}
+}
+
+// reportStreamingVadActivity feeds the optional VAD used only for UI speech
+// activity while draining completed segments that streaming recognition ignores.
+func (s *Session) reportStreamingVadActivity(vad *VoiceActivityDetector, samples []float32) {
+	vad.AcceptWaveform(samples)
+	s.reportSpeechActivity(vad.IsSpeech())
+	for !vad.IsEmpty() {
+		vad.Pop()
+	}
+}
+
+// reportSpeechActivity emits activity changes only, keeping UI updates out of
+// the steady-state audio callback path.
+func (s *Session) reportSpeechActivity(speaking bool) {
+	s.mu.Lock()
+	if s.hasSpeechState && s.lastSpeech == speaking {
+		s.mu.Unlock()
+		return
+	}
+	s.hasSpeechState = true
+	s.lastSpeech = speaking
+	cb := s.onSpeech
+	s.mu.Unlock()
+
+	if cb != nil {
+		cb(SpeechActivity{Speaking: speaking})
+	}
+}
+
+// isLikelySpeechLevel is a fallback for streaming models when optional VAD is
+// unavailable. It intentionally uses a conservative mean-square threshold.
+func isLikelySpeechLevel(samples []float32) bool {
+	if len(samples) == 0 {
+		return false
+	}
+
+	var sumSquares float64
+	for _, sample := range samples {
+		sumSquares += float64(sample * sample)
+	}
+	meanSquare := sumSquares / float64(len(samples))
+	return meanSquare > 0.0001
 }
 
 // handleStreamingSamples feeds audio to the online recognizer and delivers
@@ -210,6 +284,7 @@ func (s *Session) handleOfflineSamples(rec Recognizer, vad *VoiceActivityDetecto
 	}
 
 	vad.AcceptWaveform(samples)
+	s.reportSpeechActivity(vad.IsSpeech())
 
 	// Log VAD state periodically for debugging.
 	if vad.IsSpeech() {
@@ -233,6 +308,7 @@ func (s *Session) handleOfflineSamples(rec Recognizer, vad *VoiceActivityDetecto
 			defer s.decodeWG.Done()
 
 			text := rec.DecodeSamples(samplesCopy)
+			util.GetLogger().Info(s.ctx, fmt.Sprintf("dictation: decode segment result, textLen=%d text=%q", len(text), text))
 			if text == "" {
 				return
 			}
@@ -294,6 +370,7 @@ func (s *Session) Stop() (string, error) {
 			util.Go(s.ctx, "dictation decode flush segment", func() {
 				defer s.decodeWG.Done()
 				text := s.recognizer.DecodeSamples(samplesCopy)
+				util.GetLogger().Info(s.ctx, fmt.Sprintf("dictation: decode flush segment result, textLen=%d text=%q", len(text), text))
 				if text == "" {
 					return
 				}
@@ -302,6 +379,9 @@ func (s *Session) Stop() (string, error) {
 				s.mu.Unlock()
 			})
 		}
+		// Clear the VAD buffer so no residual audio carries over to the
+		// next session when the VAD is reused from the pool.
+		s.vad.Clear()
 		logger.Info(s.ctx, "dictation: session.Stop VAD flush done")
 	}
 
@@ -340,7 +420,7 @@ func (s *Session) Stop() (string, error) {
 		s.recognizer = nil
 	}
 
-	logger.Info(s.ctx, fmt.Sprintf("dictation: session.Stop done, textLen=%d", len(totalText)))
+	logger.Info(s.ctx, fmt.Sprintf("dictation: session.Stop done, textLen=%d text=%q", len(totalText), totalText))
 	return totalText, nil
 }
 

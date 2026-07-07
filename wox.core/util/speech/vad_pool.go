@@ -99,11 +99,13 @@ func (p *VadPool) Acquire(ctx context.Context, config VadConfig) (*VoiceActivity
 	return vad, nil
 }
 
-// Release returns a VAD to the pool.
+// Release returns a VAD to the pool. It clears the VAD buffer so no residual
+// audio from this session carries over to the next.
 func (p *VadPool) Release(ctx context.Context, vad *VoiceActivityDetector) {
 	if vad == nil {
 		return
 	}
+	vad.Clear()
 
 	p.mu.Lock()
 	for _, entry := range p.entries {

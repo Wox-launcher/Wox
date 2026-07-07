@@ -129,6 +129,13 @@ type DictationPlugin struct {
 	// Overlay update throttling
 	lastOverlayUpdate time.Time
 
+	// Voice activity state drives the recording waveform overlay without
+	// forcing audio callbacks to refresh native UI on every sample buffer.
+	voiceOverlayMu       sync.Mutex
+	voiceOverlayActive   bool
+	voiceOverlayStateSet bool
+	voiceOverlayVisible  bool
+
 	// registeredHotkey tracks the currently bound hotkey so we can
 	// unregister the old one before binding a new one.
 	registeredHotkeyMu sync.Mutex
@@ -944,6 +951,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 	}
 	vadConfig := speech.DefaultVadConfig(p.vadModelPath)
 
+	p.resetVoiceOverlayState()
 	session := speech.NewSessionWithPools(ctx, config, vadConfig, deviceID, p.recognizerPool, p.audioCapturePool, p.vadPool,
 		func(text string) {
 			// onPartial: in streaming mode this is called with interim text.
@@ -954,6 +962,9 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 			// onFinal: full transcript so far. Not shown during recording.
 		},
 	)
+	session.SetSpeechActivityCallback(func(activity speech.SpeechActivity) {
+		p.updateVoiceOverlay(ctx, activity.Speaking)
+	})
 
 	if err := session.Start(); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("dictation start failed: %s", err.Error()))
@@ -969,7 +980,8 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 
 	// Model loaded and audio capture started. Switch the overlay to
 	// "Listening..." and play the start sound to signal the user can speak.
-	p.showDictationOverlay(ctx)
+	p.setVoiceOverlayVisible(true)
+	p.showDictationOverlay(ctx, p.currentVoiceOverlayActive())
 	p.playSoundIfEnabled(ctx, soundStart)
 
 	p.sessionMu.Lock()
@@ -1005,6 +1017,7 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 	if session == nil {
 		return
 	}
+	p.setVoiceOverlayVisible(false)
 
 	text, err := session.Stop()
 	if err != nil {
@@ -1308,15 +1321,16 @@ func (p *DictationPlugin) showErrorOverlay(ctx context.Context, message string) 
 	showOverlay(opts)
 }
 
-// showDictationOverlay displays the recording overlay at the bottom-center
-// of the screen the mouse is currently on.
-func (p *DictationPlugin) showDictationOverlay(ctx context.Context) {
+// showDictationOverlay displays the recording waveform overlay at the
+// bottom-center of the screen the mouse is currently on.
+func (p *DictationPlugin) showDictationOverlay(ctx context.Context, voiceActive bool) {
 	mouseScreen := screen.GetMouseScreen()
 
 	opts := overlay.OverlayOptions{
 		Name:             dictationOverlayName,
-		Message:          i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_listening"),
-		Loading:          true,
+		Title:            i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_listening"),
+		VoiceWaveform:    true,
+		VoiceActive:      voiceActive,
 		Topmost:          true,
 		AbsolutePosition: true,
 		Anchor:           overlay.AnchorBottomCenter,
@@ -1326,9 +1340,8 @@ func (p *DictationPlugin) showDictationOverlay(ctx context.Context) {
 		Closable:         true,
 		CloseOnEscape:    true,
 		Movable:          false,
-		FontSize:         14,
-		MinWidth:         200,
-		MaxWidth:         600,
+		Width:            132,
+		Height:           48,
 		OnClose: func() {
 			p.cancelDictation(util.NewTraceContext())
 		},
@@ -1343,6 +1356,51 @@ func (p *DictationPlugin) showDictationOverlay(ctx context.Context) {
 	}
 
 	showOverlay(opts)
+}
+
+// resetVoiceOverlayState clears any activity remembered from a previous
+// dictation before a new session starts delivering audio callbacks.
+func (p *DictationPlugin) resetVoiceOverlayState() {
+	p.voiceOverlayMu.Lock()
+	defer p.voiceOverlayMu.Unlock()
+	p.voiceOverlayActive = false
+	p.voiceOverlayStateSet = false
+	p.voiceOverlayVisible = false
+}
+
+// currentVoiceOverlayActive returns the latest speech activity state to use
+// when the recording overlay is first shown after session startup.
+func (p *DictationPlugin) currentVoiceOverlayActive() bool {
+	p.voiceOverlayMu.Lock()
+	defer p.voiceOverlayMu.Unlock()
+	return p.voiceOverlayActive
+}
+
+// setVoiceOverlayVisible gates native overlay refreshes until the recording
+// session has fully started and can be cancelled safely.
+func (p *DictationPlugin) setVoiceOverlayVisible(visible bool) {
+	p.voiceOverlayMu.Lock()
+	defer p.voiceOverlayMu.Unlock()
+	p.voiceOverlayVisible = visible
+}
+
+// updateVoiceOverlay refreshes the recording waveform only when speech
+// activity changes, so native animation owns the steady-state motion.
+func (p *DictationPlugin) updateVoiceOverlay(ctx context.Context, voiceActive bool) {
+	p.voiceOverlayMu.Lock()
+	if p.voiceOverlayStateSet && p.voiceOverlayActive == voiceActive {
+		p.voiceOverlayMu.Unlock()
+		return
+	}
+	p.voiceOverlayActive = voiceActive
+	p.voiceOverlayStateSet = true
+	visible := p.voiceOverlayVisible
+	p.voiceOverlayMu.Unlock()
+
+	if !visible {
+		return
+	}
+	p.showDictationOverlay(ctx, voiceActive)
 }
 
 // updateOverlay refreshes the overlay text with the latest partial result.
@@ -1376,6 +1434,7 @@ func (p *DictationPlugin) updateOverlay(ctx context.Context, text string) {
 
 // closeDictationOverlay removes the recording overlay.
 func (p *DictationPlugin) closeDictationOverlay() {
+	p.setVoiceOverlayVisible(false)
 	closeOverlay(dictationOverlayName)
 }
 
@@ -1405,6 +1464,7 @@ func (p *DictationPlugin) evictOldModels(ctx context.Context, newModelID string)
 // without typing it into the focused window.
 func (p *DictationPlugin) cancelDictation(ctx context.Context) {
 	p.api.Log(ctx, plugin.LogLevelInfo, "dictation cancelled by user via overlay close button")
+	p.setVoiceOverlayVisible(false)
 
 	p.sessionMu.Lock()
 	session := p.session
