@@ -32,6 +32,8 @@ typedef struct {
     BOOL centerContent;
     BOOL showCopyButton;
     BOOL copied;
+    BOOL closeHover;
+    BOOL closePressed;
     int autoCloseSeconds;
     float fontSize;
     float iconSize;
@@ -195,13 +197,37 @@ static RECT TextOverlayCloseButtonRect(TextOverlayState *state, UINT dpi)
     return rc;
 }
 
+// TextOverlayInvalidate repaints the parent backdrop before this transparent child redraws.
+static void TextOverlayInvalidate(HWND hwnd)
+{
+    HWND parent = GetParent(hwnd);
+    if (parent)
+        InvalidateRect(parent, NULL, FALSE);
+    InvalidateRect(hwnd, NULL, FALSE);
+}
+
+// TextOverlayForwardMouseMessage lets the parent overlay keep shared drag and click behavior.
+static BOOL TextOverlayForwardMouseMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    HWND parent = GetParent(hwnd);
+    if (!parent)
+        return FALSE;
+    LPARAM forwardedLParam = lParam;
+    if (msg != WM_MOUSEWHEEL)
+    {
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        MapWindowPoints(hwnd, parent, &pt, 1);
+        forwardedLParam = MAKELPARAM(pt.x, pt.y);
+    }
+    SendMessageW(parent, msg, wParam, forwardedLParam);
+    return TRUE;
+}
+
 static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
 {
     UINT dpi = TextOverlayGetDpi(state->hwnd);
-    HBRUSH bg = CreateSolidBrush(RGB(32, 32, 32));
-    FillRect(hdc, &rc, bg);
-    DeleteObject(bg);
-
+    // The base overlay owns the HUD background; the child paints only foreground
+    // content so it does not leave an opaque rectangle over acrylic/backdrop.
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, RGB(245, 245, 245));
 
@@ -261,17 +287,30 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
     if (state->closable)
     {
         RECT closeRc = TextOverlayCloseButtonRect(state, dpi);
-        HBRUSH brush = CreateSolidBrush(RGB(58, 58, 58));
-        HGDIOBJ oldBrush = SelectObject(hdc, brush);
-        HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(NULL_PEN));
-        RoundRect(hdc, closeRc.left, closeRc.top, closeRc.right, closeRc.bottom, closeSize, closeSize);
+        if (state->closeHover || state->closePressed)
+        {
+            COLORREF bg = state->closePressed ? RGB(70, 70, 70) : RGB(55, 55, 55);
+            HBRUSH brush = CreateSolidBrush(bg);
+            FillRect(hdc, &closeRc, brush);
+            DeleteObject(brush);
+        }
+
+        int pad = TextOverlayDip(6, dpi);
+        int thickness = TextOverlayDip(2, dpi);
+        if (thickness < 1)
+            thickness = 1;
+
+        HPEN pen = CreatePen(PS_SOLID, thickness, RGB(230, 230, 230));
+        HGDIOBJ oldPen = SelectObject(hdc, pen);
+
+        MoveToEx(hdc, closeRc.left + pad, closeRc.top + pad, NULL);
+        LineTo(hdc, closeRc.right - pad, closeRc.bottom - pad);
+        MoveToEx(hdc, closeRc.right - pad, closeRc.top + pad, NULL);
+        LineTo(hdc, closeRc.left + pad, closeRc.bottom - pad);
+
         if (oldPen)
             SelectObject(hdc, oldPen);
-        if (oldBrush)
-            SelectObject(hdc, oldBrush);
-        DeleteObject(brush);
-        SetTextColor(hdc, RGB(255, 255, 255));
-        DrawTextW(hdc, L"X", -1, &closeRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        DeleteObject(pen);
     }
 
     if (state->showCopyButton)
@@ -302,8 +341,55 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     }
     case WM_ERASEBKGND:
         return 1;
-    case WM_LBUTTONUP:
-        if (!state || !state->nameUtf8)
+    case WM_SETCURSOR:
+    {
+        if (!state || LOWORD(lParam) != HTCLIENT)
+            break;
+        POINT pt;
+        if (!GetCursorPos(&pt))
+            break;
+        ScreenToClient(hwnd, &pt);
+        if (state->closable)
+        {
+            RECT closeRc = TextOverlayCloseButtonRect(state, TextOverlayGetDpi(hwnd));
+            if (PtInRect(&closeRc, pt))
+            {
+                SetCursor(LoadCursor(NULL, IDC_HAND));
+                return TRUE;
+            }
+        }
+        break;
+    }
+    case WM_MOUSEMOVE:
+    {
+        if (!state)
+            break;
+        TRACKMOUSEEVENT tme = {sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0};
+        TrackMouseEvent(&tme);
+
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        RECT closeRc = TextOverlayCloseButtonRect(state, TextOverlayGetDpi(hwnd));
+        RECT copyRc = TextOverlayCopyButtonRect(state, TextOverlayGetDpi(hwnd));
+        BOOL closeHoverNow = state->closable && PtInRect(&closeRc, pt);
+        if (closeHoverNow != state->closeHover)
+        {
+            state->closeHover = closeHoverNow;
+            TextOverlayInvalidate(hwnd);
+        }
+        if (!closeHoverNow && !(state->showCopyButton && PtInRect(&copyRc, pt)))
+            TextOverlayForwardMouseMessage(hwnd, msg, wParam, lParam);
+        return 0;
+    }
+    case WM_MOUSELEAVE:
+        if (state)
+        {
+            state->closeHover = FALSE;
+            if (!state->closePressed)
+                TextOverlayInvalidate(hwnd);
+        }
+        return 0;
+    case WM_LBUTTONDOWN:
+        if (!state)
             return 0;
         if (state->closable)
         {
@@ -311,9 +397,38 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             RECT closeRc = TextOverlayCloseButtonRect(state, TextOverlayGetDpi(hwnd));
             if (PtInRect(&closeRc, pt))
             {
+                state->closePressed = TRUE;
+                SetCapture(hwnd);
+                TextOverlayInvalidate(hwnd);
+                return 0;
+            }
+        }
+        if (state->showCopyButton)
+        {
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            RECT copyRc = TextOverlayCopyButtonRect(state, TextOverlayGetDpi(hwnd));
+            if (PtInRect(&copyRc, pt))
+                return 0;
+        }
+        TextOverlayForwardMouseMessage(hwnd, msg, wParam, lParam);
+        return 0;
+    case WM_LBUTTONUP:
+        if (!state || !state->nameUtf8)
+            return 0;
+        if (state->closePressed)
+        {
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            RECT closeRc = TextOverlayCloseButtonRect(state, TextOverlayGetDpi(hwnd));
+            state->closePressed = FALSE;
+            if (GetCapture() == hwnd)
+                ReleaseCapture();
+            TextOverlayInvalidate(hwnd);
+            if (state->closable && PtInRect(&closeRc, pt))
+            {
                 overlayRequestCloseCallbackCGO(state->nameUtf8);
                 return 0;
             }
+            return 0;
         }
         if (state->showCopyButton)
         {
@@ -330,11 +445,12 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                 return 0;
             }
         }
-        else
-        {
-            overlayClickCallbackCGO(state->nameUtf8);
-        }
+        TextOverlayForwardMouseMessage(hwnd, msg, wParam, lParam);
         return 0;
+    case WM_MOUSEWHEEL:
+        if (TextOverlayForwardMouseMessage(hwnd, msg, wParam, lParam))
+            return 0;
+        break;
     case WM_TIMER:
         if (wParam == TEXT_OVERLAY_TIMER_COPY_FEEDBACK)
         {
@@ -411,7 +527,7 @@ static BOOL TextOverlayEnsureClass(void)
 static DWORD WINAPI TextOverlayThreadProc(LPVOID param)
 {
     TextOverlayState *state = (TextOverlayState *)param;
-    HWND hwnd = CreateWindowExW(WS_EX_NOACTIVATE, kTextOverlayClassName, L"", WS_POPUP, 0, 0, state->contentWidth, state->contentHeight, NULL, NULL, GetModuleHandleW(NULL), state);
+    HWND hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT, kTextOverlayClassName, L"", WS_POPUP, 0, 0, state->contentWidth, state->contentHeight, NULL, NULL, GetModuleHandleW(NULL), state);
     state->hwnd = hwnd;
     state->createOk = hwnd ? TRUE : FALSE;
     SetEvent(state->readyEvent);

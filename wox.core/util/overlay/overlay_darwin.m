@@ -1,7 +1,6 @@
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
 #import <CoreGraphics/CoreGraphics.h>
-#import <CoreVideo/CoreVideo.h>
 #import <ApplicationServices/ApplicationServices.h>
 #include <math.h>
 #include <stdlib.h>
@@ -41,19 +40,9 @@ typedef struct {
 // Constants
 // -----------------------------------------------------------------------------
 static const CGFloat kDefaultWindowWidth = 400;
-static const CGFloat kDefaultIconSize = 16;
-static const CGFloat kCopyButtonSize = 24;
-static const CGFloat kCopyButtonGap = 8;
-static const CGFloat kCopyButtonMargin = 10;
-static const CGFloat kTooltipIconGap = 8;
-static const CGFloat kTooltipGap = 6;
-static const CGFloat kTooltipPadding = 8;
-static const CGFloat kTooltipMaxWidth = 400;
-static const CGFloat kTooltipFontSize = 12;
 static const CGFloat kStickyPredictiveCorrectionThreshold = 48;
 static const CGFloat kResizeGripSize = 10;
 static const CGFloat kResizeMinSize = 64;
-static const CGFloat kWheelZoomStep = 1.12;
 static const int kNativeAttachmentKindView = 1;
 
 typedef NS_OPTIONS(NSUInteger, OverlayResizeEdges) {
@@ -79,28 +68,15 @@ static void OverlayDebugLog(NSString *message) {
 // -----------------------------------------------------------------------------
 // Overlay Window
 // -----------------------------------------------------------------------------
-@class OverlayTooltipWindow;
 @interface OverlayWindow : NSPanel
 @property(nonatomic, strong) NSString *name; // Store the ID
-@property(nonatomic, strong) NSImageView *iconView;
-@property(nonatomic, strong) NSProgressIndicator *loadingIndicator;
 @property(nonatomic, strong) NSView *nativeAttachmentView;
-@property(nonatomic, strong) NSImageView *tooltipIconView;
-@property(nonatomic, strong) NSTextField *messageLabel;
-// Simplified text view for now, or use full NSTextView from notifier if needed for multiline.
-// Plan said "use NotificationWindow's robust text logic". So I should use NSTextView.
-@property(nonatomic, strong) NSTextView *messageView;
-@property(nonatomic, strong) NSButton *copyButton;
-@property(nonatomic, copy) NSString *copyButtonTooltip;
-@property(nonatomic, copy) NSString *copyButtonSuccessTooltip;
-@property(nonatomic, strong) NSTimer *copyFeedbackTimer;
 @property(nonatomic, strong) NSVisualEffectView *backgroundView;
 @property(nonatomic, assign) int stickyPid;
 @end
 
 @interface OverlayWindow ()
 @property(nonatomic, strong) NSTrackingArea *trackingArea;
-@property(nonatomic, strong) NSTrackingArea *tooltipTrackingArea;
 @property(nonatomic, assign) BOOL isMouseInside;
 @property(nonatomic, assign) NSPoint initialLocation;
 @property(nonatomic, assign) BOOL isMovable;
@@ -110,7 +86,6 @@ static void OverlayDebugLog(NSString *message) {
 @property(nonatomic, assign) NSPoint initialWindowOrigin;
 @property(nonatomic, assign) NSRect initialResizeFrame;
 @property(nonatomic, assign) NSUInteger activeResizeEdges;
-@property(nonatomic, assign) CGFloat imageCornerRadius;
 @property(nonatomic, assign) CGFloat resizeAspectRatio;
 // AXObserver for tracking window movement
 @property(nonatomic, assign) AXObserverRef axObserver;
@@ -119,13 +94,10 @@ static void OverlayDebugLog(NSString *message) {
 @property(nonatomic, assign) OverlayOptions currentOpts;
 // Target window number for z-order management
 @property(nonatomic, assign) CGWindowID stickyWindowNumber;
-@property(nonatomic, strong) OverlayTooltipWindow *tooltipWindow;
-@property(nonatomic, copy) NSString *tooltipText;
-@property(nonatomic, assign) NSRect tooltipIconRect;
 @property(nonatomic, assign) BOOL transparentMode;
 @property(nonatomic, assign) BOOL hitTestIconOnly;
 @property(nonatomic, assign) BOOL closeOnEscape;
-@property(nonatomic, assign) NSRect iconHitRect;
+@property(nonatomic, assign) NSRect hitTestRect;
 @property(nonatomic, assign) unsigned long long stickyMoveEventCount;
 @property(nonatomic, assign) CFTimeInterval lastStickyMoveEventTime;
 @property(nonatomic, assign) unsigned long long layoutUpdateCount;
@@ -142,87 +114,6 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 // -----------------------------------------------------------------------------
 // Helper Classes
 // -----------------------------------------------------------------------------
-@interface HandCursorButton : NSButton
-@end
-
-@implementation HandCursorButton
-- (BOOL)acceptsFirstResponder {
-  return NO;
-}
-
-- (void)updateTrackingAreas {
-  [super updateTrackingAreas];
-  for (NSTrackingArea *area in self.trackingAreas) {
-    [self removeTrackingArea:area];
-  }
-  NSTrackingArea *area = [[NSTrackingArea alloc] initWithRect:self.bounds
-                                                      options:NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways | NSTrackingInVisibleRect | NSTrackingCursorUpdate
-                                                        owner:self
-                                                     userInfo:nil];
-  [self addTrackingArea:area];
-  [area release];
-}
-
-- (void)mouseEntered:(NSEvent *)event {
-  [[NSCursor pointingHandCursor] set];
-}
-
-- (void)mouseExited:(NSEvent *)event {
-  [[NSCursor arrowCursor] set];
-}
-
-- (void)cursorUpdate:(NSEvent *)event {
-  [[NSCursor pointingHandCursor] set];
-}
-@end
-
-// -----------------------------------------------------------------------------
-// Passthrough TextView - lets mouse events pass through to window for dragging
-// -----------------------------------------------------------------------------
-@interface PassthroughTextView : NSTextView
-@end
-
-@implementation PassthroughTextView
-- (NSView *)hitTest:(NSPoint)point {
-    return nil; // Let mouse events pass through to window
-}
-@end
-
-// -----------------------------------------------------------------------------
-// Passthrough ImageView - lets mouse events pass through to window for dragging
-// -----------------------------------------------------------------------------
-@interface PassthroughImageView : NSImageView
-@property(nonatomic, assign) CGFloat roundedClipRadius;
-@end
-
-@implementation PassthroughImageView
-- (NSView *)hitTest:(NSPoint)point {
-    return nil; // Let mouse events pass through to window
-}
-
-- (void)drawRect:(NSRect)dirtyRect {
-    if (self.roundedClipRadius > 0) {
-        // Bug fix: NSImageView can redraw through layer-backed paths that ignore or outlive the
-        // previous mask during transparent-window resizing. Draw the image ourselves: clear the
-        // whole backing area first, then paint only inside the current rounded bounds.
-        NSRect bounds = self.bounds;
-        NSRectFillUsingOperation(bounds, NSCompositingOperationClear);
-        NSImage *image = self.image;
-        if (!image) return;
-
-        [NSGraphicsContext saveGraphicsState];
-        NSBezierPath *clipPath = [NSBezierPath bezierPathWithRoundedRect:bounds xRadius:self.roundedClipRadius yRadius:self.roundedClipRadius];
-        [clipPath addClip];
-        [[NSGraphicsContext currentContext] setImageInterpolation:NSImageInterpolationHigh];
-        [image drawInRect:bounds fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1.0 respectFlipped:YES hints:nil];
-        [NSGraphicsContext restoreGraphicsState];
-        return;
-    }
-    [super drawRect:dirtyRect];
-}
-@end
-
-// -----------------------------------------------------------------------------
 // Passthrough VisualEffectView - lets mouse events pass through to window
 // -----------------------------------------------------------------------------
 @interface PassthroughVisualEffectView : NSVisualEffectView
@@ -238,31 +129,11 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 // Draggable Content View - accepts first mouse to enable immediate dragging
 // -----------------------------------------------------------------------------
 @interface DraggableContentView : NSView
-@property(nonatomic, strong) NSImage *roundedImage;
-@property(nonatomic, assign) CGFloat roundedImageCornerRadius;
 @end
 
 @implementation DraggableContentView
 - (BOOL)isOpaque {
     return NO;
-}
-
-- (void)drawRect:(NSRect)dirtyRect {
-    if (self.roundedImage && self.roundedImageCornerRadius > 0) {
-        // Bug fix: transparent overlay images must be drawn by the root content surface. Drawing
-        // through a child NSImageView left stale rectangular pixels after resizing because AppKit
-        // could reuse layer/backing contents outside the child view's rounded mask.
-        NSRect bounds = self.bounds;
-        NSRectFillUsingOperation(bounds, NSCompositingOperationClear);
-        [NSGraphicsContext saveGraphicsState];
-        NSBezierPath *clipPath = [NSBezierPath bezierPathWithRoundedRect:bounds xRadius:self.roundedImageCornerRadius yRadius:self.roundedImageCornerRadius];
-        [clipPath addClip];
-        [[NSGraphicsContext currentContext] setImageInterpolation:NSImageInterpolationHigh];
-        [self.roundedImage drawInRect:bounds fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1.0 respectFlipped:YES hints:nil];
-        [NSGraphicsContext restoreGraphicsState];
-        return;
-    }
-    [super drawRect:dirtyRect];
 }
 
 - (BOOL)acceptsFirstMouse:(NSEvent *)event {
@@ -271,151 +142,11 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
 - (NSView *)hitTest:(NSPoint)point {
     OverlayWindow *overlay = [self.window isKindOfClass:[OverlayWindow class]] ? (OverlayWindow *)self.window : nil;
-    if (overlay && overlay.transparentMode && overlay.hitTestIconOnly && !NSPointInRect(point, overlay.iconHitRect)) {
+    if (overlay && overlay.transparentMode && overlay.hitTestIconOnly && !NSPointInRect(point, overlay.hitTestRect)) {
         return nil;
     }
     return [super hitTest:point];
 }
-@end
-
-// -----------------------------------------------------------------------------
-// Tooltip Window
-// -----------------------------------------------------------------------------
-@interface OverlayTooltipWindow : NSPanel
-@property(nonatomic, strong) NSVisualEffectView *backgroundView;
-@property(nonatomic, strong) NSTextField *textLabel;
-- (void)showWithText:(NSString *)text relativeToRect:(NSRect)iconRect inWindow:(NSWindow *)owner;
-- (void)hideTooltip;
-@end
-
-@implementation OverlayTooltipWindow
-
-- (instancetype)init {
-    self = [super initWithContentRect:NSMakeRect(0, 0, 100, 40)
-                             styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
-                               backing:NSBackingStoreBuffered
-                                 defer:NO];
-    if (self) {
-        [self setOpaque:NO];
-        [self setHasShadow:YES];
-        [self setBackgroundColor:[NSColor clearColor]];
-        [self setLevel:NSFloatingWindowLevel];
-        [self setCollectionBehavior:NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorTransient];
-        [self setIgnoresMouseEvents:YES];
-
-        NSView *content = [[NSView alloc] initWithFrame:self.contentView.bounds];
-        [self setContentView:content];
-        content.wantsLayer = YES;
-        content.layer.cornerRadius = 6.0;
-        content.layer.masksToBounds = YES;
-
-        NSVisualEffectView *bg = [[NSVisualEffectView alloc] initWithFrame:content.bounds];
-        bg.material = NSVisualEffectMaterialHUDWindow;
-        bg.state = NSVisualEffectStateActive;
-        bg.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-        if (@available(macOS 10.14, *)) {
-            bg.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-        }
-        [content addSubview:bg positioned:NSWindowBelow relativeTo:nil];
-        self.backgroundView = bg;
-        [bg release];
-
-        NSTextField *label = [[NSTextField alloc] initWithFrame:NSZeroRect];
-        label.editable = NO;
-        label.selectable = NO;
-        label.drawsBackground = NO;
-        label.bezeled = NO;
-        label.font = [NSFont systemFontOfSize:kTooltipFontSize];
-        label.textColor = [NSColor whiteColor];
-        label.alignment = NSTextAlignmentLeft;
-        label.lineBreakMode = NSLineBreakByWordWrapping;
-        label.usesSingleLineMode = NO;
-        if ([label.cell respondsToSelector:@selector(setWraps:)]) {
-            label.cell.wraps = YES;
-        }
-        if ([label.cell respondsToSelector:@selector(setScrollable:)]) {
-            label.cell.scrollable = NO;
-        }
-        if ([label respondsToSelector:@selector(setMaximumNumberOfLines:)]) {
-            label.maximumNumberOfLines = 0;
-        }
-        [content addSubview:label];
-        self.textLabel = label;
-        [label release];
-        [content release];
-    }
-    return self;
-}
-
-- (void)dealloc {
-    self.backgroundView = nil;
-    self.textLabel = nil;
-    [super dealloc];
-}
-
-- (BOOL)canBecomeKeyWindow {
-    return NO;
-}
-
-- (void)showWithText:(NSString *)text relativeToRect:(NSRect)iconRect inWindow:(NSWindow *)owner {
-    if (!owner) return;
-    if (!text) text = @"";
-
-    self.textLabel.stringValue = text;
-    NSFont *font = self.textLabel.font ?: [NSFont systemFontOfSize:kTooltipFontSize];
-    NSDictionary *attrs = @{NSFontAttributeName: font};
-
-    NSRect textRect = [text boundingRectWithSize:NSMakeSize(kTooltipMaxWidth, CGFLOAT_MAX)
-                                         options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
-                                      attributes:attrs];
-    CGFloat textW = ceil(textRect.size.width);
-    CGFloat textH = ceil(textRect.size.height);
-    if (textW < 1) textW = 1;
-    if (textH < 1) textH = 1;
-
-    CGFloat width = textW + kTooltipPadding * 2;
-    CGFloat height = textH + kTooltipPadding * 2;
-
-    self.textLabel.frame = NSMakeRect(kTooltipPadding, kTooltipPadding, textW, textH);
-    self.backgroundView.frame = ((NSView *)self.contentView).bounds;
-
-    NSRect iconScreen = [owner convertRectToScreen:iconRect];
-    NSPoint iconCenter = NSMakePoint(NSMidX(iconScreen), NSMidY(iconScreen));
-
-    NSScreen *targetScreen = owner.screen ?: [NSScreen mainScreen];
-    for (NSScreen *screen in [NSScreen screens]) {
-        if (NSPointInRect(iconCenter, screen.frame)) {
-            targetScreen = screen;
-            break;
-        }
-    }
-    NSRect workArea = targetScreen.visibleFrame;
-
-    CGFloat x = iconScreen.origin.x + (iconScreen.size.width - width) / 2;
-    CGFloat y = iconScreen.origin.y + iconScreen.size.height + kTooltipGap;
-
-    if (y + height > NSMaxY(workArea)) {
-        y = iconScreen.origin.y - height - kTooltipGap;
-    }
-    if (x + width > NSMaxX(workArea)) {
-        x = NSMaxX(workArea) - width;
-    }
-    if (x < workArea.origin.x) {
-        x = workArea.origin.x;
-    }
-    if (y < workArea.origin.y) {
-        y = workArea.origin.y;
-    }
-
-    [self setFrame:NSMakeRect(x, y, width, height) display:YES];
-    self.backgroundView.frame = ((NSView *)self.contentView).bounds;
-    [self orderFront:nil];
-}
-
-- (void)hideTooltip {
-    [self orderOut:nil];
-}
-
 @end
 
 @implementation OverlayWindow
@@ -449,74 +180,6 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         self.backgroundView = bg;
         [bg release];
 
-        // Icon - use PassthroughImageView for drag support
-        self.iconView = [[[PassthroughImageView alloc] initWithFrame:NSMakeRect(12, 0, kDefaultIconSize, kDefaultIconSize)] autorelease];
-        self.iconView.imageScaling = NSImageScaleProportionallyUpOrDown;
-        self.iconView.hidden = YES;
-        [self.contentView addSubview:self.iconView];
-
-        // Loading indicator - used by overlays that should acknowledge a long-running operation
-        // without repeatedly mutating the message text from Go.
-        self.loadingIndicator = [[[NSProgressIndicator alloc] initWithFrame:NSMakeRect(12, 0, kDefaultIconSize, kDefaultIconSize)] autorelease];
-        self.loadingIndicator.style = NSProgressIndicatorStyleSpinning;
-        self.loadingIndicator.controlSize = NSControlSizeRegular;
-        self.loadingIndicator.indeterminate = YES;
-        self.loadingIndicator.displayedWhenStopped = NO;
-        if (@available(macOS 10.14, *)) {
-            // Bug fix: the default inherited appearance can make the system spinner too dark on
-            // our dark HUD material. DarkAqua lets AppKit render the native indicator with the
-            // light variant while preserving the system animation and accessibility behavior.
-            self.loadingIndicator.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-        }
-        self.loadingIndicator.hidden = YES;
-        [self.contentView addSubview:self.loadingIndicator];
-
-        // Tooltip Icon - use PassthroughImageView for drag support
-        self.tooltipIconView = [[[PassthroughImageView alloc] initWithFrame:NSMakeRect(0, 0, kDefaultIconSize, kDefaultIconSize)] autorelease];
-        self.tooltipIconView.imageScaling = NSImageScaleProportionallyUpOrDown;
-        self.tooltipIconView.hidden = YES;
-        [self.contentView addSubview:self.tooltipIconView];
-
-        // Message (TextView for multiline) - use PassthroughTextView for drag support
-        self.messageView = [[[PassthroughTextView alloc] initWithFrame:NSZeroRect] autorelease];
-        self.messageView.editable = NO;
-        self.messageView.selectable = NO;
-        self.messageView.drawsBackground = NO;
-        if (@available(macOS 10.14, *)) {
-            self.messageView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-        }
-        // NSTextView adds line-fragment padding by default. The overlay width is measured from
-        // the text itself, so leaving that hidden padding in place makes short tooltip text wrap
-        // on macOS while the Windows DrawText path stays on one line.
-        self.messageView.textContainer.lineFragmentPadding = 0;
-        [self.contentView addSubview:self.messageView];
-
-        self.copyButton = [[[HandCursorButton alloc] initWithFrame:NSMakeRect(0, 0, kCopyButtonSize, kCopyButtonSize)] autorelease];
-        [self.copyButton setBezelStyle:NSBezelStyleRegularSquare];
-        [self.copyButton setButtonType:NSButtonTypeMomentaryLight];
-        [self.copyButton setTarget:self];
-        [self.copyButton setAction:@selector(onClick)];
-        [self.copyButton setHidden:YES];
-        [self.copyButton setBordered:NO];
-        self.copyButton.focusRingType = NSFocusRingTypeNone;
-        [self.copyButton setWantsLayer:YES];
-        self.copyButton.layer.backgroundColor = [NSColor colorWithWhite:1.0 alpha:0.14].CGColor;
-        self.copyButton.layer.borderColor = [NSColor colorWithWhite:1.0 alpha:0.24].CGColor;
-        self.copyButton.layer.borderWidth = 1;
-        self.copyButton.layer.cornerRadius = 6;
-        if (@available(macOS 11.0, *)) {
-            self.copyButton.image = [NSImage imageWithSystemSymbolName:@"doc.on.doc" accessibilityDescription:@"Copy"];
-            self.copyButton.imagePosition = NSImageOnly;
-            self.copyButton.contentTintColor = [NSColor whiteColor];
-        } else {
-            NSMutableAttributedString *copyTitle = [[NSMutableAttributedString alloc] initWithString:@"⧉"];
-            [copyTitle addAttribute:NSForegroundColorAttributeName value:[NSColor whiteColor] range:NSMakeRange(0, copyTitle.length)];
-            [copyTitle addAttribute:NSFontAttributeName value:[NSFont systemFontOfSize:13 weight:NSFontWeightSemibold] range:NSMakeRange(0, copyTitle.length)];
-            [self.copyButton setAttributedTitle:copyTitle];
-            [copyTitle release];
-        }
-        [self.contentView addSubview:self.copyButton];
-
         // Tracking Area setup
         [self setupTrackingArea];
         [contentView release];
@@ -526,28 +189,24 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
 - (void)setFrame:(NSRect)frameRect display:(BOOL)flag {
     [super setFrame:frameRect display:flag];
-    [self refreshResizableImageOverlayAfterFrameChange];
+    [self refreshResizableOverlayAfterFrameChange];
 }
 
 - (void)setFrame:(NSRect)frameRect display:(BOOL)flag animate:(BOOL)animateFlag {
     [super setFrame:frameRect display:flag animate:animateFlag];
-    [self refreshResizableImageOverlayAfterFrameChange];
+    [self refreshResizableOverlayAfterFrameChange];
 }
 
-- (void)refreshResizableImageOverlayAfterFrameChange {
+- (void)refreshResizableOverlayAfterFrameChange {
     if (!self.isResizable || !self.transparentMode) return;
-    // Bug fix: frame changes can come from initial layout, manual edge dragging, or AppKit's
-    // internal live-resize bookkeeping. Refreshing from setFrame keeps the image frame and corner
-    // masks attached to every window-size change instead of only the mouseDragged path.
     [self.contentView layoutSubtreeIfNeeded];
     [self updateResizableContentFrame];
 }
 
 - (void)mouseDown:(NSEvent *)event {
-    [self hideTooltipWindow];
     if (self.closeOnEscape) {
-        // Focus-sensitive overlays, such as pinned screenshots, should close only when they own
-        // keyboard focus. Make the clicked overlay key here so Escape targets this window instead
+        // Focus-sensitive overlays should close only when they own keyboard focus. Make the clicked
+        // overlay key here so Escape targets this window instead
         // of relying on a process-wide shortcut that would dismiss unrelated overlays.
         [self makeKeyWindow];
     }
@@ -557,7 +216,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     if (self.isResizable) {
         NSUInteger resizeEdges = [self resizeEdgesForPoint:[event locationInWindow]];
         if (resizeEdges != OverlayResizeEdgeNone) {
-            // Feature change: borderless image overlays have no system resize frame, so edge
+            // Feature change: borderless overlays have no system resize frame, so edge
             // dragging is handled here while ordinary interior dragging still uses the existing
             // movable overlay path.
             self.isResizing = YES;
@@ -608,7 +267,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     CGFloat dy = currentLocation.y - self.initialLocation.y;
     
     // If movement is small, treat as click
-    if (dx*dx + dy*dy < 25.0 && self.copyButton.hidden) {
+    if (dx*dx + dy*dy < 25.0) {
         [self onClick];
     }
     
@@ -690,7 +349,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         width = height * self.resizeAspectRatio;
     }
 
-    // Feature change: image overlays must resize as images, not as free-form panels. The manual
+    // Feature change: transparent overlays may request aspect-locked resize. The manual
     // borderless resize loop therefore derives the second dimension from the source aspect ratio
     // while preserving the dragged edge as the fixed anchor.
     frame.size.width = width;
@@ -720,59 +379,11 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     [self updateResizableContentFrame];
 }
 
-- (void)zoomResizableImageOverlayAtPoint:(NSPoint)windowPoint factor:(CGFloat)factor {
-    if (!self.isResizable || !self.transparentMode || ![self hasResizableTransparentContent] || factor <= 0) return;
-
-    NSRect frame = self.frame;
-    if (frame.size.width <= 0 || frame.size.height <= 0) return;
-
-    CGFloat width = MAX(kResizeMinSize, frame.size.width * factor);
-    CGFloat height = MAX(kResizeMinSize, frame.size.height * factor);
-    if (self.resizeAspectRatio > 0) {
-        height = width / self.resizeAspectRatio;
-        if (height < kResizeMinSize) {
-            height = kResizeMinSize;
-            width = height * self.resizeAspectRatio;
-        }
-    }
-
-    CGFloat anchorX = windowPoint.x / frame.size.width;
-    CGFloat anchorY = windowPoint.y / frame.size.height;
-    anchorX = MIN(1.0, MAX(0.0, anchorX));
-    anchorY = MIN(1.0, MAX(0.0, anchorY));
-
-    // Feature change: edge dragging was the only resize path, which made quick preview inspection
-    // awkward for large images. Wheel zoom reuses the same aspect/min-size rules and keeps the
-    // cursor-anchored image point stable so zooming feels like adjusting the current view, not
-    // starting a separate resize mode.
-    NSRect nextFrame = NSMakeRect(NSMinX(frame) + windowPoint.x - width * anchorX,
-                                  NSMinY(frame) + windowPoint.y - height * anchorY,
-                                  width,
-                                  height);
-    [self setFrame:nextFrame display:YES];
-    [self updateResizableContentFrame];
-}
-
-- (void)scrollWheel:(NSEvent *)event {
-    if (!self.isResizable || !self.transparentMode || ![self hasResizableTransparentContent]) {
-        [super scrollWheel:event];
-        return;
-    }
-
-    CGFloat delta = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.deltaY;
-    if (delta == 0) {
-        [super scrollWheel:event];
-        return;
-    }
-
-    [self zoomResizableImageOverlayAtPoint:[event locationInWindow] factor:(delta > 0 ? kWheelZoomStep : 1.0 / kWheelZoomStep)];
-}
-
 - (NSCursor *)cursorForResizeEdges:(NSUInteger)edges {
     if ((edges & (OverlayResizeEdgeLeft | OverlayResizeEdgeRight)) &&
         (edges & (OverlayResizeEdgeTop | OverlayResizeEdgeBottom))) {
         // Feature change: AppKit only exposes diagonal frame cursors on newer macOS versions.
-        // A tiny custom cursor keeps the image overlay resize affordance consistent with the
+        // A tiny custom cursor keeps the borderless overlay resize affordance consistent with the
         // hand-written borderless resize logic while preserving the 10.15 deployment target.
         return [self diagonalResizeCursorForEdges:edges];
     }
@@ -842,47 +453,13 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     if (!self.isResizable || !self.transparentMode) return;
     if (self.nativeAttachmentView) {
         self.nativeAttachmentView.frame = self.contentView.bounds;
-        self.iconHitRect = self.contentView.bounds;
-        return;
     }
-    // Resizable image overlays use the root content view as the drawing surface. Keeping the hit
-    // rect on the same bounds as the painted image avoids a child-view clipping path that can go
-    // stale during transparent window resizing.
-    self.iconHitRect = [self roundedImageSurfaceHasImage] ? self.contentView.bounds : NSZeroRect;
-    [self refreshRoundedImageSurface];
-}
-
-- (BOOL)hasResizableTransparentContent {
-    return self.nativeAttachmentView != nil || [self roundedImageSurfaceHasImage];
-}
-
-- (BOOL)roundedImageSurfaceHasImage {
-    DraggableContentView *surface = [self.contentView isKindOfClass:[DraggableContentView class]] ? (DraggableContentView *)self.contentView : nil;
-    return surface.roundedImage != nil;
-}
-
-- (void)setRoundedImageSurfaceImage:(NSImage *)image radius:(CGFloat)radius {
-    DraggableContentView *surface = [self.contentView isKindOfClass:[DraggableContentView class]] ? (DraggableContentView *)self.contentView : nil;
-    if (!surface) return;
-    // Bug fix: image overlays now draw directly in the root transparent surface. Reset layer-backed
-    // clipping so old HUD/loading state cannot leave rectangular cached pixels behind.
-    surface.wantsLayer = NO;
-    surface.roundedImage = image;
-    surface.roundedImageCornerRadius = image ? radius : 0;
-    [surface setNeedsDisplay:YES];
-}
-
-- (void)refreshRoundedImageSurface {
-    DraggableContentView *surface = [self.contentView isKindOfClass:[DraggableContentView class]] ? (DraggableContentView *)self.contentView : nil;
-    if (!surface) return;
-    surface.roundedImageCornerRadius = surface.roundedImage ? self.imageCornerRadius : 0;
-    [surface setNeedsDisplay:YES];
+    self.hitTestRect = self.nativeAttachmentView ? self.contentView.bounds : NSZeroRect;
 }
 
 - (void)keyDown:(NSEvent *)event {
     if (self.closeOnEscape && event.keyCode == 53) {
-        // Escape is scoped to the focused overlay window. This preserves multiple pinned
-        // screenshots: clicking one gives it focus, and Escape dismisses only that image.
+        // Escape is scoped to the focused overlay window, so one focused overlay closes at a time.
         [self onClose];
         return;
     }
@@ -904,60 +481,11 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     [self.contentView addTrackingArea:self.trackingArea];
 }
 
-- (void)updateTooltipTrackingAreaWithRect:(NSRect)rect enabled:(BOOL)enabled {
-    if (self.tooltipTrackingArea) {
-        [self.contentView removeTrackingArea:self.tooltipTrackingArea];
-        self.tooltipTrackingArea = nil;
-    }
-
-    if (!enabled) return;
-
-    NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways;
-    NSDictionary *info = @{@"type": @"tooltip"};
-    NSTrackingArea *trackingArea = [[NSTrackingArea alloc] initWithRect:rect
-                                                                options:options
-                                                                  owner:self
-                                                               userInfo:info];
-    self.tooltipTrackingArea = trackingArea;
-    [trackingArea release];
-    [self.contentView addTrackingArea:self.tooltipTrackingArea];
-}
-
-- (void)ensureTooltipWindow {
-    if (!self.tooltipWindow) {
-        OverlayTooltipWindow *tooltipWindow = [[OverlayTooltipWindow alloc] init];
-        self.tooltipWindow = tooltipWindow;
-        [tooltipWindow release];
-    }
-}
-
-- (void)showTooltipWindow {
-    if (!self.tooltipText || self.tooltipText.length == 0) return;
-    if (NSIsEmptyRect(self.tooltipIconRect)) return;
-    [self ensureTooltipWindow];
-    [self.tooltipWindow showWithText:self.tooltipText relativeToRect:self.tooltipIconRect inWindow:self];
-}
-
-- (void)hideTooltipWindow {
-    if (self.tooltipWindow) {
-        [self.tooltipWindow hideTooltip];
-    }
-}
-
 - (void)mouseEntered:(NSEvent *)event {
-    if (event.trackingArea == self.tooltipTrackingArea) {
-        self.isMouseInside = YES;
-        [self showTooltipWindow];
-        return;
-    }
     self.isMouseInside = YES;
 }
 
 - (void)mouseExited:(NSEvent *)event {
-    if (event.trackingArea == self.tooltipTrackingArea) {
-        [self hideTooltipWindow];
-        return;
-    }
     self.isMouseInside = NO;
     if (!self.isDragging && !self.isResizing) {
         [[NSCursor arrowCursor] set];
@@ -971,10 +499,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 }
 
 - (void)onClose {
-    [self.copyFeedbackTimer invalidate];
-    self.copyFeedbackTimer = nil;
     [self stopTrackingWindow];
-    [self hideTooltipWindow];
     // Notify the Go layer that a base-window close action occurred so callers
     // like the dictation plugin can cancel their operation.
     if (self.name) {
@@ -1112,50 +637,8 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
 - (void)onClick {
     if (self.name) {
-       if (overlayClickCallbackCGO((char*)[self.name UTF8String])) {
-           [self showCopyButtonSuccessFeedback];
-       }
+       overlayClickCallbackCGO((char*)[self.name UTF8String]);
     }
-}
-
-- (void)showCopyButtonSuccessFeedback {
-    if (self.copyButton.hidden) return;
-    NSString *successTooltip = self.copyButtonSuccessTooltip.length > 0 ? self.copyButtonSuccessTooltip : self.copyButtonTooltip;
-    [self.copyButton setToolTip:successTooltip];
-    if (@available(macOS 11.0, *)) {
-        self.copyButton.image = [NSImage imageWithSystemSymbolName:@"checkmark" accessibilityDescription:@"Copied"];
-    } else {
-        NSMutableAttributedString *successTitle = [[NSMutableAttributedString alloc] initWithString:@"✓"];
-        [successTitle addAttribute:NSForegroundColorAttributeName value:[NSColor whiteColor] range:NSMakeRange(0, successTitle.length)];
-        [successTitle addAttribute:NSFontAttributeName value:[NSFont systemFontOfSize:14 weight:NSFontWeightBold] range:NSMakeRange(0, successTitle.length)];
-        [self.copyButton setAttributedTitle:successTitle];
-        [successTitle release];
-    }
-    self.copyButton.layer.backgroundColor = [NSColor colorWithCalibratedRed:0.18 green:0.44 blue:0.32 alpha:0.86].CGColor;
-
-    [self.copyFeedbackTimer invalidate];
-    self.copyFeedbackTimer = [NSTimer scheduledTimerWithTimeInterval:1.2 target:self selector:@selector(onCopyFeedbackTimerFired:) userInfo:nil repeats:NO];
-}
-
-- (void)resetCopyButtonFeedback {
-    [self.copyFeedbackTimer invalidate];
-    self.copyFeedbackTimer = nil;
-    if (self.copyButton.hidden) return;
-    [self.copyButton setToolTip:self.copyButtonTooltip];
-    if (@available(macOS 11.0, *)) {
-        self.copyButton.image = [NSImage imageWithSystemSymbolName:@"doc.on.doc" accessibilityDescription:@"Copy"];
-    } else {
-        NSMutableAttributedString *copyTitle = [[NSMutableAttributedString alloc] initWithString:@"⧉"];
-        [copyTitle addAttribute:NSForegroundColorAttributeName value:[NSColor whiteColor] range:NSMakeRange(0, copyTitle.length)];
-        [copyTitle addAttribute:NSFontAttributeName value:[NSFont systemFontOfSize:13 weight:NSFontWeightSemibold] range:NSMakeRange(0, copyTitle.length)];
-        [self.copyButton setAttributedTitle:copyTitle];
-        [copyTitle release];
-    }
-    self.copyButton.layer.backgroundColor = [NSColor colorWithWhite:1.0 alpha:0.14].CGColor;
-}
-
-- (void)onCopyFeedbackTimerFired:(NSTimer *)timer {
-    [self resetCopyButtonFeedback];
 }
 
 - (void)detachNativeAttachment {
@@ -1170,32 +653,15 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 }
 
 - (void)dealloc {
-    [self.copyFeedbackTimer invalidate];
-    self.copyFeedbackTimer = nil;
     [self stopTrackingWindow];
-    [self hideTooltipWindow];
     [self detachNativeAttachment];
     if (self.trackingArea) {
         [self.contentView removeTrackingArea:self.trackingArea];
     }
-    if (self.tooltipTrackingArea) {
-        [self.contentView removeTrackingArea:self.tooltipTrackingArea];
-    }
     self.name = nil;
-    self.iconView = nil;
-    self.loadingIndicator = nil;
     self.nativeAttachmentView = nil;
-    self.tooltipIconView = nil;
-    self.messageLabel = nil;
-    self.messageView = nil;
-    self.copyButton = nil;
-    self.copyButtonTooltip = nil;
-    self.copyButtonSuccessTooltip = nil;
     self.backgroundView = nil;
     self.trackingArea = nil;
-    self.tooltipTrackingArea = nil;
-    self.tooltipWindow = nil;
-    self.tooltipText = nil;
     [super dealloc];
 }
 
@@ -1215,43 +681,21 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     // 0. Reset State
     self.isMovable = opts.movable;
     self.isResizable = opts.resizable;
-    self.imageCornerRadius = opts.cornerRadius;
     self.resizeAspectRatio = (opts.resizable && opts.aspectRatio > 0) ? opts.aspectRatio : 0;
-    if (!opts.transparent || !opts.resizable) {
-        // Bug fix: URL overlays reuse the same native window for loading, error, and final image
-        // states. Reset the image-specific draw clip when leaving the resizable transparent surface.
-        [self setRoundedImageSurfaceImage:nil radius:0];
-        if ([self.iconView isKindOfClass:[PassthroughImageView class]]) {
-            ((PassthroughImageView *)self.iconView).roundedClipRadius = 0;
-        }
-    }
     self.isDragging = NO;
     self.isResizing = NO;
     self.activeResizeEdges = OverlayResizeEdgeNone;
     NSWindowStyleMask styleMask = NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel;
     if (opts.resizable) {
-        // Bug fix: NSWindowStyleMaskResizable lets AppKit run its own borderless resize loop, which
-        // can repaint the transparent image surface without our rounded clipping. Keep the panel
-        // borderless and use the explicit edge-drag resize path below so every size change refreshes
-        // the image frame and corner masks deterministically.
+        // Bug fix: NSWindowStyleMaskResizable lets AppKit run its own borderless resize loop. Keep
+        // the panel borderless and use the explicit edge-drag resize path below.
         self.minSize = NSMakeSize(kResizeMinSize, kResizeMinSize);
     }
     self.styleMask = styleMask;
 
     // 1. Content Update
-    [self hideTooltipWindow];
     self.closeOnEscape = opts.closeOnEscape;
-    self.messageView.hidden = YES;
-    self.iconView.hidden = YES;
-    self.tooltipIconView.hidden = YES;
-    self.copyButton.hidden = YES;
-    self.loadingIndicator.hidden = YES;
-    [self.loadingIndicator stopAnimation:nil];
-    self.tooltipText = @"";
-    self.tooltipIconRect = NSZeroRect;
-    self.iconHitRect = NSZeroRect;
-    [self updateTooltipTrackingAreaWithRect:NSZeroRect enabled:NO];
-    [self setRoundedImageSurfaceImage:nil radius:0];
+    self.hitTestRect = NSZeroRect;
 
     // 2. Measure & Layout
     CGFloat windowWidth = (opts.width > 0) ? opts.width : MAX(1, opts.nativeAttachmentWidth);
@@ -1271,16 +715,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         windowWidth = (opts.width > 0) ? opts.width : MAX(transparentAttachment ? 1 : 64, opts.nativeAttachmentWidth + horizontalChrome);
         windowHeight = (opts.height > 0) ? opts.height : MAX(transparentAttachment ? 1 : 40, opts.nativeAttachmentHeight + verticalChrome);
 
-        self.messageView.hidden = YES;
-        self.iconView.hidden = YES;
-        self.tooltipIconView.hidden = YES;
-        self.copyButton.hidden = YES;
-        self.loadingIndicator.hidden = YES;
-        [self.loadingIndicator stopAnimation:nil];
-        [self setRoundedImageSurfaceImage:nil radius:0];
-        self.tooltipIconRect = NSZeroRect;
-        self.iconHitRect = transparentAttachment ? self.contentView.bounds : NSZeroRect;
-        [self updateTooltipTrackingAreaWithRect:NSZeroRect enabled:NO];
+        self.hitTestRect = transparentAttachment ? self.contentView.bounds : NSZeroRect;
 
         NSView *attachmentView = (__bridge NSView *)opts.nativeAttachmentHandle;
         if (self.nativeAttachmentView != attachmentView) {
@@ -1325,8 +760,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     NSPoint liveFollowOrigin = self.frame.origin;
     
     if (opts.absolutePosition) {
-        // Feature addition: pointer-anchored progress overlays and pinned
-        // surfaces already pass desktop-absolute top-left coordinates from Go.
+        // Feature addition: absolute overlays already pass desktop top-left coordinates from Go.
         // Keep them independent from the primary screen work-area anchor used
         // by notifications.
         self.stickyWindowNumber = 0;
@@ -1438,8 +872,8 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     if (opts.absolutePosition) {
         // Match the Windows absolute-position contract: offset values name the
         // requested anchor point in top-left desktop coordinates, not always the
-        // overlay's top-left corner. Tooltips rely on BottomCenter/LeftCenter
-        // anchors so they can sit above or beside the hovered launcher item.
+        // overlay's top-left corner. Callers can use BottomCenter/LeftCenter
+        // anchors to place overlays above or beside a desktop point.
         CGFloat absoluteTopLeftX = opts.offsetX;
         if (col == 1) absoluteTopLeftX -= windowWidth / 2;
         else if (col == 2) absoluteTopLeftX -= windowWidth;
@@ -1476,9 +910,10 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         // Reapply after setFrame so measured HUD attachments keep their intended padding inside the
         // now-sized content view, instead of inheriting any intermediate AppKit resize adjustment.
         self.nativeAttachmentView.frame = requestedNativeAttachmentFrame;
+        if (opts.transparent) {
+            self.hitTestRect = self.contentView.bounds;
+        }
     }
-    // Feature change: rounded image overlays draw their own clipped surface. Keep the generic
-    // content-view layer square for transparent utility overlays and only use layer radius for HUDs.
     [self setCornerRadius:(opts.transparent ? 0 : 10.0)];
     
     // 4. Store options and setup window tracking
@@ -1531,7 +966,6 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
     [self startStickyLiveFollowTimerIfNeeded];
     [self orderRelativeToStickyWindow];
     self.alphaValue = 1.0;
-    [self hideTooltipWindow];
 
     if (shouldLog) {
         double totalMs = (CACurrentMediaTime() - eventStart) * 1000.0;
@@ -1861,7 +1295,6 @@ void CloseOverlay(char* name) {
         OverlayWindow *win = [gOverlayWindows objectForKey:key];
         if (win) {
             [win stopTrackingWindow];
-            [win hideTooltipWindow];
             [win close];
             [gOverlayWindows removeObjectForKey:key];
         }

@@ -8,6 +8,8 @@ extern void overlayRequestCloseCallbackCGO(char *name);
 
 static const CGFloat kImageOverlayCloseSize = 24.0;
 static const CGFloat kImageOverlayCloseMargin = 8.0;
+static const CGFloat kImageOverlayMinZoomSize = 64.0;
+static const CGFloat kImageOverlayWheelZoomStep = 1.12;
 
 @interface WoxImageOverlayView : NSView
 @property(nonatomic, copy) NSString *name;
@@ -98,6 +100,38 @@ static const CGFloat kImageOverlayCloseMargin = 8.0;
         overlayRequestCloseCallbackCGO(nameCopy);
         free(nameCopy);
     });
+}
+
+- (void)scrollWheel:(NSEvent *)event {
+    CGFloat delta = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.deltaY;
+    NSWindow *window = self.window;
+    if (!window || delta == 0) {
+        [super scrollWheel:event];
+        return;
+    }
+
+    NSRect frame = window.frame;
+    if (frame.size.width <= 0 || frame.size.height <= 0) {
+        return;
+    }
+
+    CGFloat factor = delta > 0 ? kImageOverlayWheelZoomStep : 1.0 / kImageOverlayWheelZoomStep;
+    CGFloat aspectRatio = frame.size.width / frame.size.height;
+    CGFloat width = MAX(kImageOverlayMinZoomSize, frame.size.width * factor);
+    CGFloat height = width / aspectRatio;
+    if (height < kImageOverlayMinZoomSize) {
+        height = kImageOverlayMinZoomSize;
+        width = height * aspectRatio;
+    }
+
+    NSPoint point = event.locationInWindow;
+    CGFloat anchorX = MIN(1.0, MAX(0.0, point.x / frame.size.width));
+    CGFloat anchorY = MIN(1.0, MAX(0.0, point.y / frame.size.height));
+    NSRect nextFrame = NSMakeRect(NSMinX(frame) + point.x - width * anchorX,
+                                  NSMinY(frame) + point.y - height * anchorY,
+                                  width,
+                                  height);
+    [window setFrame:nextFrame display:YES];
 }
 
 - (void)destroy {

@@ -7,9 +7,12 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #define IMAGE_OVERLAY_CLOSE_SIZE_DIP 24
 #define IMAGE_OVERLAY_CLOSE_MARGIN_DIP 8
+#define IMAGE_OVERLAY_MIN_ZOOM_DIP 64
+#define IMAGE_OVERLAY_WHEEL_ZOOM_STEP 1.12f
 
 extern void overlayRequestCloseCallbackCGO(char *name);
 
@@ -263,6 +266,68 @@ static RECT ImageOverlayCloseRect(const RECT *rect)
     return closeRc;
 }
 
+// ImageOverlayForwardMouseMessage keeps shared drag behavior owned by the parent overlay window.
+static BOOL ImageOverlayForwardMouseMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    HWND parent = GetParent(hwnd);
+    if (!parent)
+        return FALSE;
+    POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    MapWindowPoints(hwnd, parent, &pt, 1);
+    LPARAM forwardedLParam = MAKELPARAM(pt.x, pt.y);
+    SendMessageW(parent, msg, wParam, forwardedLParam);
+    return TRUE;
+}
+
+// ImageOverlayZoomAtScreenPoint scales the parent overlay while keeping image zoom behavior local.
+static BOOL ImageOverlayZoomAtScreenPoint(HWND hwnd, POINT screenPt, int wheelDelta)
+{
+    HWND parent = GetParent(hwnd);
+    if (!parent || wheelDelta == 0)
+        return FALSE;
+
+    RECT wr;
+    if (!GetWindowRect(parent, &wr))
+        return FALSE;
+
+    int currentWidth = wr.right - wr.left;
+    int currentHeight = wr.bottom - wr.top;
+    if (currentWidth <= 0 || currentHeight <= 0)
+        return FALSE;
+
+    float aspectRatio = (float)currentWidth / (float)currentHeight;
+    int minSize = ImageOverlayDip(IMAGE_OVERLAY_MIN_ZOOM_DIP);
+    float factor = powf(IMAGE_OVERLAY_WHEEL_ZOOM_STEP, (float)wheelDelta / (float)WHEEL_DELTA);
+    int newWidth = (int)roundf((float)currentWidth * factor);
+    int newHeight = (int)roundf((float)currentHeight * factor);
+    if (newWidth < minSize)
+    {
+        newWidth = minSize;
+        newHeight = (int)roundf((float)newWidth / aspectRatio);
+    }
+    if (newHeight < minSize)
+    {
+        newHeight = minSize;
+        newWidth = (int)roundf((float)newHeight * aspectRatio);
+    }
+
+    float anchorX = (float)(screenPt.x - wr.left) / (float)currentWidth;
+    float anchorY = (float)(screenPt.y - wr.top) / (float)currentHeight;
+    if (anchorX < 0.0f)
+        anchorX = 0.0f;
+    else if (anchorX > 1.0f)
+        anchorX = 1.0f;
+    if (anchorY < 0.0f)
+        anchorY = 0.0f;
+    else if (anchorY > 1.0f)
+        anchorY = 1.0f;
+
+    int newX = screenPt.x - (int)roundf((float)newWidth * anchorX);
+    int newY = screenPt.y - (int)roundf((float)newHeight * anchorY);
+    SetWindowPos(parent, NULL, newX, newY, newWidth, newHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+    return TRUE;
+}
+
 static void ImageOverlayDrawCloseButton(HDC hdc, const RECT *rect)
 {
     RECT closeRc = ImageOverlayCloseRect(rect);
@@ -309,6 +374,30 @@ static LRESULT CALLBACK ImageOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
         EndPaint(hwnd, &ps);
         return 0;
     }
+    case WM_MOUSEMOVE:
+        if (ImageOverlayForwardMouseMessage(hwnd, msg, wParam, lParam))
+            return 0;
+        break;
+    case WM_MOUSEWHEEL:
+    {
+        POINT screenPt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        if (ImageOverlayZoomAtScreenPoint(hwnd, screenPt, GET_WHEEL_DELTA_WPARAM(wParam)))
+            return 0;
+        break;
+    }
+    case WM_LBUTTONDOWN:
+        if (state && state->closable)
+        {
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            RECT closeRc = ImageOverlayCloseRect(&rc);
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            if (PtInRect(&closeRc, pt))
+                return 0;
+        }
+        if (ImageOverlayForwardMouseMessage(hwnd, msg, wParam, lParam))
+            return 0;
+        break;
     case WM_LBUTTONUP:
         if (state && state->closable && state->nameUtf8)
         {
@@ -322,6 +411,8 @@ static LRESULT CALLBACK ImageOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
                 return 0;
             }
         }
+        if (ImageOverlayForwardMouseMessage(hwnd, msg, wParam, lParam))
+            return 0;
         break;
     case WM_CLOSE:
         DestroyWindow(hwnd);
