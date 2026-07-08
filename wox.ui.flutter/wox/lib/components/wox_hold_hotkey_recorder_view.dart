@@ -26,11 +26,25 @@ String? _physicalKeyToHoldString(PhysicalKeyboardKey key) {
   return null;
 }
 
+const _holdModifierPhysicalKeyOrder = [
+  PhysicalKeyboardKey.controlLeft,
+  PhysicalKeyboardKey.controlRight,
+  PhysicalKeyboardKey.shiftLeft,
+  PhysicalKeyboardKey.shiftRight,
+  PhysicalKeyboardKey.altLeft,
+  PhysicalKeyboardKey.altRight,
+  PhysicalKeyboardKey.metaLeft,
+  PhysicalKeyboardKey.metaRight,
+];
+
+const _maxHoldModifierKeys = 2;
+const _holdHotkeyRecordDebounce = Duration(milliseconds: 120);
+
 /// WoxHoldHotkeyRecorder is a specialised hotkey recorder for hold-mode
 /// triggers. Unlike the normal recorder which captures modifier+key
-/// combinations, this widget only accepts a single modifier key (with
+/// combinations, this widget only accepts one or two modifier keys (with
 /// left/right distinction) or Caps Lock. The recorded value is a string like
-/// "left_cmd" that the Go backend interprets as a hold-modifier hotkey.
+/// "left_shift+left_cmd" that the Go backend interprets as a hold-modifier chord.
 class WoxHoldHotkeyRecorder extends StatefulWidget {
   final String value;
   final ValueChanged<String> onRecorded;
@@ -45,6 +59,8 @@ class _WoxHoldHotkeyRecorderState extends State<WoxHoldHotkeyRecorder> {
   bool _isFocused = false;
   late FocusNode _focusNode;
   StreamSubscription<String>? _recordingBusSubscription;
+  Timer? _recordDebounceTimer;
+  String? _pendingRecordedHotkey;
 
   String tr(String key) {
     return Get.find<WoxSettingController>().tr(key);
@@ -67,6 +83,7 @@ class _WoxHoldHotkeyRecorderState extends State<WoxHoldHotkeyRecorder> {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
     _recordingBusSubscription?.cancel();
+    _recordDebounceTimer?.cancel();
     _focusNode.removeListener(_onFocusChanged);
     _focusNode.dispose();
     if (_isFocused) {
@@ -78,6 +95,9 @@ class _WoxHoldHotkeyRecorderState extends State<WoxHoldHotkeyRecorder> {
   void _onFocusChanged() {
     final focused = _focusNode.hasFocus;
     if (focused == _isFocused) return;
+    if (!focused) {
+      _flushPendingRecordedHotkey();
+    }
     setState(() {
       _isFocused = focused;
     });
@@ -100,24 +120,141 @@ class _WoxHoldHotkeyRecorderState extends State<WoxHoldHotkeyRecorder> {
     final lower = hotkey.toLowerCase().trim();
     // Only accept hold-modifier candidate strings; the normal recorder shares
     // the same bus and may emit combo strings.
-    if (_isHoldModifierString(lower)) {
-      widget.onRecorded(lower);
+    final canonical = _canonicalHoldStringFromRaw(lower);
+    if (canonical != null) {
+      _recordHoldString(_mergeWithPressedHoldKeys(canonical));
+    }
+  }
+
+  void _recordHoldString(String hotkey) {
+    if (_pendingRecordedHotkey != null && _holdPartCount(_pendingRecordedHotkey!) > _holdPartCount(hotkey)) {
+      return;
+    }
+    _pendingRecordedHotkey = hotkey;
+    _recordDebounceTimer?.cancel();
+    _recordDebounceTimer = Timer(_holdHotkeyRecordDebounce, _flushPendingRecordedHotkey);
+  }
+
+  void _flushPendingRecordedHotkey() {
+    final hotkey = _pendingRecordedHotkey;
+    if (hotkey == null) {
+      return;
+    }
+    _recordDebounceTimer?.cancel();
+    _recordDebounceTimer = null;
+    _pendingRecordedHotkey = null;
+    widget.onRecorded(hotkey);
+    if (mounted) {
       setState(() {});
     }
   }
 
-  bool _isHoldModifierString(String s) {
-    const holdKeys = {
-      'left_ctrl', 'right_ctrl', 'left_shift', 'right_shift',
-      'left_alt', 'right_alt', 'left_cmd', 'right_cmd',
-      'left_win', 'right_win', 'caps_lock',
+  int _holdPartCount(String hotkey) {
+    return hotkey.split('+').where((part) => part.trim().isNotEmpty).length;
+  }
+
+  String _mergeWithPressedHoldKeys(String hotkey) {
+    if (hotkey == 'caps_lock') {
+      return hotkey;
+    }
+
+    final parts = hotkey.split('+').map((part) => part.trim()).where((part) => part.isNotEmpty).toSet();
+    for (final key in _holdModifierPhysicalKeyOrder) {
+      final holdString = _physicalKeyToHoldString(key);
+      if (holdString != null && HardwareKeyboard.instance.physicalKeysPressed.contains(key)) {
+        parts.add(holdString);
+      }
+    }
+    if (parts.length > _maxHoldModifierKeys) {
+      return hotkey;
+    }
+    return _canonicalHoldString(parts);
+  }
+
+  String? _canonicalHoldStringFromRaw(String s) {
+    final parts = s.split('+').map((part) => part.trim().toLowerCase()).where((part) => part.isNotEmpty).toList();
+    if (parts.length == 1 && _normalizeHoldPart(parts.first) == 'caps_lock') {
+      return 'caps_lock';
+    }
+    if (parts.isEmpty || parts.length > _maxHoldModifierKeys) {
+      return null;
+    }
+    final uniqueParts = <String>{};
+    for (final part in parts) {
+      final normalized = _normalizeHoldPart(part);
+      if (normalized == null || normalized == 'caps_lock' || !uniqueParts.add(normalized)) {
+        return null;
+      }
+    }
+    return _canonicalHoldString(uniqueParts);
+  }
+
+  String? _normalizeHoldPart(String part) {
+    if (part == 'caps_lock') {
+      return 'caps_lock';
+    }
+
+    final segments = part.split('_');
+    if (segments.length != 2) {
+      return null;
+    }
+
+    final side = segments[0];
+    if (side != 'left' && side != 'right') {
+      return null;
+    }
+
+    return switch (segments[1]) {
+      'ctrl' || 'control' => '${side}_ctrl',
+      'shift' => '${side}_shift',
+      'alt' || 'option' => '${side}_alt',
+      'cmd' || 'command' || 'super' || 'win' || 'windows' => Platform.isMacOS ? '${side}_cmd' : '${side}_win',
+      _ => null,
     };
-    return holdKeys.contains(s);
+  }
+
+  String? _currentHoldStringFromEvent(PhysicalKeyboardKey eventKey) {
+    final eventHoldString = _physicalKeyToHoldString(eventKey);
+    if (eventHoldString == null) {
+      return null;
+    }
+    if (eventHoldString == 'caps_lock') {
+      return 'caps_lock';
+    }
+
+    final pressed = <String>{eventHoldString};
+    for (final key in _holdModifierPhysicalKeyOrder) {
+      final holdString = _physicalKeyToHoldString(key);
+      if (holdString == null) {
+        continue;
+      }
+      if (HardwareKeyboard.instance.physicalKeysPressed.contains(key)) {
+        pressed.add(holdString);
+      }
+    }
+    if (pressed.length > _maxHoldModifierKeys) {
+      return null;
+    }
+    return _canonicalHoldString(pressed);
+  }
+
+  String _canonicalHoldString(Set<String> parts) {
+    final ordered = <String>[];
+    for (final key in _holdModifierPhysicalKeyOrder) {
+      final holdString = _physicalKeyToHoldString(key);
+      if (holdString != null && parts.contains(holdString)) {
+        ordered.add(holdString);
+      }
+    }
+
+    return ordered.join('+');
   }
 
   bool _handleKeyEvent(KeyEvent keyEvent) {
     // Backspace clears the recorded key.
     if (keyEvent.logicalKey == LogicalKeyboardKey.backspace && keyEvent is KeyDownEvent) {
+      _recordDebounceTimer?.cancel();
+      _pendingRecordedHotkey = null;
       widget.onRecorded('');
       setState(() {});
       return true;
@@ -127,15 +264,14 @@ class _WoxHoldHotkeyRecorderState extends State<WoxHoldHotkeyRecorder> {
       return false;
     }
 
-    // Only accept single modifier keys or Caps Lock.
+    // Only accept one/two modifier keys or Caps Lock.
     final physicalKey = keyEvent.physicalKey;
-    final holdStr = _physicalKeyToHoldString(physicalKey);
+    final holdStr = _currentHoldStringFromEvent(physicalKey);
     if (holdStr == null) {
       return false;
     }
 
-    widget.onRecorded(holdStr);
-    setState(() {});
+    _recordHoldString(holdStr);
     return true;
   }
 
@@ -151,17 +287,23 @@ class _WoxHoldHotkeyRecorderState extends State<WoxHoldHotkeyRecorder> {
   /// modifier naming convention as the rest of the app.
   String _holdStringToLabel(String s) {
     final lower = s.toLowerCase();
-    // Caps Lock is not a modifier key in the left/right sense.
-    if (lower == 'caps_lock') {
+    final parts = lower.split('+').map((part) => part.trim()).where((part) => part.isNotEmpty).toList();
+    if (parts.isEmpty) {
+      return s;
+    }
+    return parts.map(_holdPartToLabel).join(' + ');
+  }
+
+  String _holdPartToLabel(String part) {
+    if (part == 'caps_lock') {
       return tr('ui_hotkey_modifier_capslock');
     }
-
     // Parse "left_cmd" / "right_ctrl" etc. into "Left Cmd" / "Right Ctrl".
-    final parts = lower.split('_');
-    if (parts.length != 2) return s;
+    final parts = part.split('_');
+    if (parts.length != 2) return part;
 
     final side = parts[0]; // "left" or "right"
-    final modKey = parts[1]; // "cmd", "ctrl", "shift", "alt", "win", "super"
+    final modKey = parts[1]; // "cmd", "ctrl", "shift", "alt", "option", "win", "super"
 
     String sideLabel;
     if (side == 'left') {
@@ -169,7 +311,7 @@ class _WoxHoldHotkeyRecorderState extends State<WoxHoldHotkeyRecorder> {
     } else if (side == 'right') {
       sideLabel = tr('ui_hotkey_side_right');
     } else {
-      return s;
+      return part;
     }
 
     String modLabel;
@@ -186,10 +328,11 @@ class _WoxHoldHotkeyRecorderState extends State<WoxHoldHotkeyRecorder> {
         modLabel = tr('ui_hotkey_modifier_shift');
         break;
       case 'alt':
+      case 'option':
         modLabel = Platform.isMacOS ? tr('ui_hotkey_modifier_option') : tr('ui_hotkey_modifier_alt');
         break;
       default:
-        return s;
+        return part;
     }
 
     return '$sideLabel $modLabel';
@@ -209,6 +352,8 @@ class _WoxHoldHotkeyRecorderState extends State<WoxHoldHotkeyRecorder> {
                 ? Text(
                   '${tr('ui_hotkey_hold_prefix')} ${_holdStringToLabel(widget.value)}',
                   style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 )
                 : SizedBox(
                   width: 80,

@@ -11,7 +11,7 @@
   "ui_hotkey_click_to_set": "Click to set",
   "ui_hotkey_press_hint": "Press any key to set hotkey, or double click modifier keys",
   "ui_hotkey_hold_prefix": "Hold",
-  "ui_hotkey_hold_press_hint": "Press a modifier key to set hotkey, left/right keys are distinguished",
+  "ui_hotkey_hold_press_hint": "Press modifier keys to set hotkey, left/right keys are distinguished",
   "ui_hotkey_side_left": "Left",
   "ui_hotkey_side_right": "Right",
   "ui_hotkey_modifier_ctrl": "Ctrl",

@@ -2,6 +2,7 @@ package hotkey
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"wox/util/keyboard"
 
@@ -13,10 +14,10 @@ type hotkeySpec struct {
 	modifiers         keyboard.Modifier
 	key               keyboard.Key
 	doubleModifierKey keyboard.Key
-	// holdModifierKey is set when the hotkey is a single left/right modifier
-	// key (e.g. "left_cmd"). In this mode no system hotkey is registered;
-	// a raw key listener handles both press and release.
-	holdModifierKey keyboard.Key
+	// holdModifierKeys is set when the hotkey is a left/right modifier-only
+	// hold chord (e.g. "left_cmd" or "left_shift+left_cmd"). In this mode no
+	// system hotkey is registered; a raw key listener handles both press and release.
+	holdModifierKeys []keyboard.Key
 }
 
 func (s hotkeySpec) isCapsLockKey() bool {
@@ -28,7 +29,7 @@ func (s hotkeySpec) isDoubleModifier() bool {
 }
 
 func (s hotkeySpec) isHoldModifier() bool {
-	return s.holdModifierKey != keyboard.KeyUnknown
+	return len(s.holdModifierKeys) > 0
 }
 
 func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
@@ -71,11 +72,11 @@ func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
 			spec.doubleModifierKey = modifierKeys[0]
 			return spec, nil
 		}
-		// A single left/right specific modifier key (e.g. "left_cmd") is
-		// treated as a hold-modifier hotkey. No system hotkey is registered;
-		// a raw key listener handles press and release.
-		if len(modifierKeys) == 1 && isSpecificModifierKey(modifierKeys[0]) {
-			spec.holdModifierKey = modifierKeys[0]
+		// One or two left/right specific modifier keys (e.g. "left_cmd" or
+		// "left_shift+left_cmd") are treated as hold-modifier hotkeys. No
+		// system hotkey is registered; a raw key listener handles press and release.
+		if isHoldModifierKeyChord(modifierKeys) {
+			spec.holdModifierKeys = canonicalHoldModifierKeys(modifierKeys)
 			return spec, nil
 		}
 		return hotkeySpec{}, fmt.Errorf("missing key in hotkey: %s", combineKey)
@@ -105,6 +106,56 @@ func isSpecificModifierKey(key keyboard.Key) bool {
 	default:
 		return false
 	}
+}
+
+func isHoldModifierKeyChord(keys []keyboard.Key) bool {
+	if len(keys) == 0 || len(keys) > 2 {
+		return false
+	}
+
+	seen := map[keyboard.Key]bool{}
+	for _, key := range keys {
+		if !isSpecificModifierKey(key) || seen[key] {
+			return false
+		}
+		seen[key] = true
+	}
+	return true
+}
+
+func canonicalHoldModifierKeys(keys []keyboard.Key) []keyboard.Key {
+	canonical := make([]keyboard.Key, 0, len(keys))
+	seen := map[keyboard.Key]bool{}
+	for _, key := range keys {
+		if key == keyboard.KeyUnknown || seen[key] {
+			continue
+		}
+		canonical = append(canonical, key)
+		seen[key] = true
+	}
+	sort.Slice(canonical, func(i, j int) bool {
+		return canonical[i] < canonical[j]
+	})
+	return canonical
+}
+
+func holdModifierComboString(keys []keyboard.Key) string {
+	parts := []string{}
+	for _, key := range canonicalHoldModifierKeys(keys) {
+		if character := key.Character(); character != "" {
+			parts = append(parts, character)
+		}
+	}
+	return strings.Join(parts, "+")
+}
+
+func containsHoldModifierKey(keys []keyboard.Key, target keyboard.Key) bool {
+	for _, key := range keys {
+		if key == target {
+			return true
+		}
+	}
+	return false
 }
 
 func IsCapsLockHotkeyString(combineKey string) bool {

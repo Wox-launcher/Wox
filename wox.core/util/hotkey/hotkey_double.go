@@ -56,8 +56,15 @@ func (t *doubleTapTracker) HandleEvent(event keyboard.RawKeyEvent, now int64) []
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	matchedModifierKeys := map[keyboard.Key]bool{}
+	for modifierKey := range t.states {
+		if modifierKeyMatchesRawEvent(modifierKey, event.Key) {
+			matchedModifierKeys[modifierKey] = true
+		}
+	}
+
 	for modifierKey, state := range t.states {
-		if modifierKey == event.Key {
+		if matchedModifierKeys[modifierKey] {
 			continue
 		}
 
@@ -69,52 +76,59 @@ func (t *doubleTapTracker) HandleEvent(event keyboard.RawKeyEvent, now int64) []
 		t.states[modifierKey] = state
 	}
 
-	state, exists := t.states[event.Key]
-	if !exists {
+	if len(matchedModifierKeys) == 0 {
 		return nil
 	}
 
 	switch event.Type {
 	case keyboard.EventTypeKeyDown:
-		if !state.isPressed {
-			state.isPressed = true
-			state.currentTapInvalid = false
-			util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
-				"[double-tap] key down: %s, hasCompletedTap=%t", event.Key.Character(), state.hasCompletedTap))
+		for modifierKey := range matchedModifierKeys {
+			state := t.states[modifierKey]
+			if !state.isPressed {
+				state.isPressed = true
+				state.currentTapInvalid = false
+				util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
+					"[double-tap] key down: registered=%s event=%s, hasCompletedTap=%t", modifierKeyLogLabel(modifierKey), modifierKeyLogLabel(event.Key), state.hasCompletedTap))
+			}
+			t.states[modifierKey] = state
 		}
-		t.states[event.Key] = state
 		return nil
 	case keyboard.EventTypeKeyUp:
-		if !state.isPressed {
-			// Ignore duplicate key-up events from the OS. A tap must start with a
-			// fresh key-down, otherwise a single release can look like a double tap.
-			return nil
-		}
+		triggeredKeys := []keyboard.Key{}
+		for modifierKey := range matchedModifierKeys {
+			state := t.states[modifierKey]
+			if !state.isPressed {
+				// Ignore duplicate key-up events from the OS. A tap must start with a
+				// fresh key-down, otherwise a single release can look like a double tap.
+				continue
+			}
 
-		state.isPressed = false
-		if state.currentTapInvalid {
-			state.currentTapInvalid = false
-			state.hasCompletedTap = false
-			t.states[event.Key] = state
+			state.isPressed = false
+			if state.currentTapInvalid {
+				state.currentTapInvalid = false
+				state.hasCompletedTap = false
+				t.states[modifierKey] = state
+				util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
+					"[double-tap] key up: registered=%s event=%s, tap invalid (intervening key)", modifierKeyLogLabel(modifierKey), modifierKeyLogLabel(event.Key)))
+				continue
+			}
+
+			if state.hasCompletedTap && now-state.lastTapAt < 500 {
+				state.hasCompletedTap = false
+				t.states[modifierKey] = state
+				util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf(
+					"[double-tap] DOUBLE TAP DETECTED: registered=%s event=%s, interval=%dms", modifierKeyLogLabel(modifierKey), modifierKeyLogLabel(event.Key), now-state.lastTapAt))
+				triggeredKeys = append(triggeredKeys, modifierKey)
+				continue
+			}
+
+			state.hasCompletedTap = true
+			state.lastTapAt = now
+			t.states[modifierKey] = state
 			util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
-				"[double-tap] key up: %s, tap invalid (intervening key)", event.Key.Character()))
-			return nil
+				"[double-tap] key up: registered=%s event=%s, first tap recorded, waiting for second tap", modifierKeyLogLabel(modifierKey), modifierKeyLogLabel(event.Key)))
 		}
-
-		if state.hasCompletedTap && now-state.lastTapAt < 500 {
-			state.hasCompletedTap = false
-			t.states[event.Key] = state
-			util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf(
-				"[double-tap] DOUBLE TAP DETECTED: %s, interval=%dms", event.Key.Character(), now-state.lastTapAt))
-			return []keyboard.Key{event.Key}
-		}
-
-		state.hasCompletedTap = true
-		state.lastTapAt = now
-		t.states[event.Key] = state
-		util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
-			"[double-tap] key up: %s, first tap recorded, waiting for second tap", event.Key.Character()))
-		return nil
+		return triggeredKeys
 	default:
 		return nil
 	}
