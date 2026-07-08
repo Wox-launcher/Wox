@@ -37,38 +37,9 @@ const historyTitleMaxRunes = 80
 
 // historyRecord is one persisted dictation transcript.
 type historyRecord struct {
-	ID              string              `json:"id"`
-	OriginalContent string              `json:"originalContent,omitempty"`
-	Content         string              `json:"content"`
-	Timestamp       int64               `json:"timestamp"` // unix millis, matches util.FormatTimestamp
-	Corrections     []historyCorrection `json:"corrections,omitempty"`
-}
-
-// historyCorrection records one user-approved preview correction.
-type historyCorrection struct {
-	SelectedText    string `json:"selectedText"`
-	ReplacementText string `json:"replacementText"`
-	PreviousContent string `json:"previousContent"`
-	UpdatedContent  string `json:"updatedContent"`
-	Timestamp       int64  `json:"timestamp"`
-}
-
-// dictationHistoryPreviewData is the JSON payload for the dedicated Flutter
-// preview that owns inline correction UI.
-type dictationHistoryPreviewData struct {
-	RecordID        string              `json:"recordId"`
-	OriginalContent string              `json:"originalContent"`
-	Content         string              `json:"content"`
-	Timestamp       int64               `json:"timestamp"`
-	Corrections     []historyCorrection `json:"corrections,omitempty"`
-}
-
-type historyCorrectRequest struct {
-	RecordID        string
-	PreviousContent string
-	SelectedText    string
-	ReplacementText string
-	UpdatedContent  string
+	ID        string `json:"id"`
+	Content   string `json:"content"`
+	Timestamp int64  `json:"timestamp"` // unix millis, matches util.FormatTimestamp
 }
 
 // historyStore keeps the in-memory copy of the dictation history and guards it
@@ -115,65 +86,6 @@ func (h *historyStore) save(ctx context.Context) {
 		return
 	}
 	h.api.SaveSetting(ctx, settingKeyHistory, string(data), false)
-}
-
-// correct applies one preview correction when the submitted base content still
-// matches the stored record, preventing stale edits from overwriting newer ones.
-func (h *historyStore) correct(ctx context.Context, req historyCorrectRequest) (historyRecord, error) {
-	req.RecordID = strings.TrimSpace(req.RecordID)
-	if req.RecordID == "" {
-		return historyRecord{}, fmt.Errorf("recordId is required")
-	}
-	if strings.TrimSpace(req.SelectedText) == "" {
-		return historyRecord{}, fmt.Errorf("selectedText is required")
-	}
-	if strings.TrimSpace(req.ReplacementText) == "" {
-		return historyRecord{}, fmt.Errorf("replacementText is required")
-	}
-	if req.UpdatedContent == "" {
-		return historyRecord{}, fmt.Errorf("updatedContent is required")
-	}
-	if req.PreviousContent == req.UpdatedContent {
-		return historyRecord{}, fmt.Errorf("updatedContent must be different")
-	}
-	if !strings.Contains(req.PreviousContent, req.SelectedText) {
-		return historyRecord{}, fmt.Errorf("selectedText is not part of previousContent")
-	}
-
-	h.mu.Lock()
-	index := -1
-	for i := range h.records {
-		if h.records[i].ID == req.RecordID {
-			index = i
-			break
-		}
-	}
-	if index == -1 {
-		h.mu.Unlock()
-		return historyRecord{}, fmt.Errorf("dictation history record not found")
-	}
-	if h.records[index].Content != req.PreviousContent {
-		h.mu.Unlock()
-		return historyRecord{}, fmt.Errorf("dictation history content changed")
-	}
-
-	record := h.records[index]
-	if record.OriginalContent == "" {
-		record.OriginalContent = req.PreviousContent
-	}
-	record.Content = req.UpdatedContent
-	record.Corrections = append(record.Corrections, historyCorrection{
-		SelectedText:    req.SelectedText,
-		ReplacementText: req.ReplacementText,
-		PreviousContent: req.PreviousContent,
-		UpdatedContent:  req.UpdatedContent,
-		Timestamp:       util.GetSystemTimestamp(),
-	})
-	h.records[index] = record
-	h.mu.Unlock()
-
-	h.save(ctx)
-	return record, nil
 }
 
 // add prepends a new record, trims to the cap, and persists. New records go to
@@ -240,19 +152,27 @@ func (h *historyStore) snapshot(search string) []historyRecord {
 }
 
 // recentContextMaxRecords caps how many prior transcripts are fed to the AI
-// refiner as context. Five sentences is enough for the model to pick up on
-// topic and tone without bloating the prompt.
-const recentContextMaxRecords = 5
+// refiner as context. Ten sentences give the model enough topic and tone
+// continuity for dense dictation bursts without bloating the prompt.
+const recentContextMaxRecords = 10
 
 // recentContextWindow is the maximum age (from now) of a record that still
 // counts as context. Anything older is treated as unrelated to the current
 // dictation session.
 const recentContextWindow = 10 * time.Minute
 
-// recentContext returns the finalized transcripts (after AI refinement) from
-// the last 10 minutes, up to recentContextMaxRecords, oldest-first so the AI
-// reads them in chronological order. The current utterance is not yet in the
-// store when this is called, so it is never included.
+// recentContextTopicGap is the minimum gap between two consecutive records
+// that marks a topic boundary. When the gap exceeds this duration, a topic
+// separator is inserted so the AI can tell the earlier block may be unrelated
+// to the current dictation.
+const recentContextTopicGap = 2 * time.Minute
+
+// recentContext returns the finalized transcripts from the last 10 minutes,
+// up to recentContextMaxRecords, oldest-first so the AI reads them in
+// chronological order. When two consecutive records are separated by more than
+// recentContextTopicGap, a "--- (topic changed) ---" marker is inserted so the
+// model can recognize a possible topic switch. The current utterance is not
+// yet in the store when this is called, so it is never included.
 func (h *historyStore) recentContext(nowMillis int64) []string {
 	cutoff := nowMillis - recentContextWindow.Milliseconds()
 
@@ -271,9 +191,20 @@ func (h *historyStore) recentContext(nowMillis int64) []string {
 	}
 
 	// h.records is newest-first; reverse to oldest-first for the AI prompt.
-	out := make([]string, 0, len(picked))
-	for i := len(picked) - 1; i >= 0; i-- {
-		out = append(out, picked[i].Content)
+	ordered := make([]historyRecord, len(picked))
+	for i, r := range picked {
+		ordered[len(picked)-1-i] = r
+	}
+
+	out := make([]string, 0, len(ordered)*2)
+	for i, r := range ordered {
+		if i > 0 {
+			gap := time.Duration(r.Timestamp-ordered[i-1].Timestamp) * time.Millisecond
+			if gap >= recentContextTopicGap {
+				out = append(out, "--- (topic changed) ---")
+			}
+		}
+		out = append(out, r.Content)
 	}
 	return out
 }
@@ -345,31 +276,11 @@ func (h *historyStore) buildHistoryResult(ctx context.Context, record historyRec
 		GroupScore: groupScore,
 		Score:      record.Timestamp,
 		Preview: plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeDictationHistory,
-			PreviewData: record.previewData(ctx, h.api),
+			PreviewType: plugin.WoxPreviewTypeText,
+			PreviewData: record.Content,
 		},
 		Actions: actions,
 	}
-}
-
-func (r historyRecord) previewData(ctx context.Context, api dictationSettingAPI) string {
-	originalContent := r.OriginalContent
-	if originalContent == "" {
-		originalContent = r.Content
-	}
-
-	data, err := json.Marshal(dictationHistoryPreviewData{
-		RecordID:        r.ID,
-		OriginalContent: originalContent,
-		Content:         r.Content,
-		Timestamp:       r.Timestamp,
-		Corrections:     r.Corrections,
-	})
-	if err != nil {
-		api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to marshal dictation history preview: %s", err.Error()))
-		return r.Content
-	}
-	return string(data)
 }
 
 // historyEmptyResult is shown when the user opens the dictation query with no

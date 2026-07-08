@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"unicode"
-	"unicode/utf8"
 
 	"wox/plugin"
 
@@ -15,20 +13,17 @@ import (
 )
 
 const (
-	settingKeyDictionary       = "dictionary"
-	dictionarySourceCorrection = "correction"
-	dictionaryMaxEntries       = 500
+	settingKeyDictionary = "dictionary"
+	dictionaryMaxEntries = 100
 )
 
+// dictionaryEntry is a single phrase the user wants the AI refiner to know and
+// spell correctly. Unlike the previous context/wrong/correct triple, this is a
+// plain phrase list fed verbatim to the AI prompt when AI refinement is enabled.
 type dictionaryEntry struct {
-	ID            string `json:"id"`
-	Context       string `json:"context"`
-	WrongPhrase   string `json:"wrongPhrase"`
-	CorrectPhrase string `json:"correctPhrase"`
-	Source        string `json:"source"`
-	CreatedAt     int64  `json:"createdAt"`
-	UpdatedAt     int64  `json:"updatedAt"`
-	Count         int    `json:"count"`
+	ID        string `json:"id"`
+	Phrase    string `json:"phrase"`
+	CreatedAt int64  `json:"createdAt"`
 }
 
 type dictionaryStore struct {
@@ -41,12 +36,22 @@ func newDictionaryStore(api dictationSettingAPI) *dictionaryStore {
 	return &dictionaryStore{api: api}
 }
 
-// load reads persisted dictionary entries and ignores corrupt payloads so
-// dictation output never depends on optional personalization state.
+// load reads persisted dictionary entries. If the stored payload looks like the
+// legacy three-column format (has a wrongPhrase field), it is discarded and
+// cleared so old data does not interfere with the new phrase-only schema.
 func (d *dictionaryStore) load(ctx context.Context) {
 	raw := d.api.GetSetting(ctx, settingKeyDictionary)
 	if strings.TrimSpace(raw) == "" {
 		d.entries = nil
+		return
+	}
+
+	// Detect legacy format: entries had a WrongPhrase field. When found, clear
+	// the store so the user starts fresh with the new phrase-only schema.
+	if strings.Contains(raw, "wrongPhrase") {
+		d.api.Log(ctx, plugin.LogLevelInfo, "dictation dictionary: legacy format detected, clearing")
+		d.entries = nil
+		d.save(ctx)
 		return
 	}
 
@@ -68,61 +73,30 @@ func (d *dictionaryStore) save(ctx context.Context) {
 	d.api.SaveSetting(ctx, settingKeyDictionary, string(data), false)
 }
 
-// addOrUpdateCorrection records a user-approved correction with the sentence
-// context that made the phrase incorrect.
-func (d *dictionaryStore) addOrUpdateCorrection(ctx context.Context, contextText string, wrongPhrase string, correctPhrase string, timestamp int64) error {
-	contextText = strings.TrimSpace(contextText)
-	wrongPhrase = strings.TrimSpace(wrongPhrase)
-	correctPhrase = strings.TrimSpace(correctPhrase)
-	if contextText == "" {
-		return fmt.Errorf("context is required")
-	}
-	if wrongPhrase == "" {
-		return fmt.Errorf("wrongPhrase is required")
-	}
-	if correctPhrase == "" {
-		return fmt.Errorf("correctPhrase is required")
-	}
-	if wrongPhrase == correctPhrase {
-		return fmt.Errorf("wrongPhrase and correctPhrase are identical")
+// addOrUpdate adds a phrase to the dictionary. Duplicate phrases (case-insensitive,
+// whitespace-normalized) are ignored so the list stays clean.
+func (d *dictionaryStore) addOrUpdate(ctx context.Context, phrase string, timestamp int64) error {
+	phrase = strings.TrimSpace(phrase)
+	if phrase == "" {
+		return fmt.Errorf("phrase is required")
 	}
 
-	key := dictionaryKey(contextText, wrongPhrase)
+	key := normalizeDictionaryText(phrase)
 	d.mu.Lock()
-	found := -1
-	for i := range d.entries {
-		if dictionaryKey(d.entries[i].Context, d.entries[i].WrongPhrase) == key {
-			found = i
-			break
+	for _, entry := range d.entries {
+		if normalizeDictionaryText(entry.Phrase) == key {
+			d.mu.Unlock()
+			return nil
 		}
 	}
 
-	if found >= 0 {
-		entry := d.entries[found]
-		entry.Context = contextText
-		entry.WrongPhrase = wrongPhrase
-		entry.CorrectPhrase = correctPhrase
-		entry.Source = dictionarySourceCorrection
-		entry.UpdatedAt = timestamp
-		entry.Count++
-		if entry.Count <= 0 {
-			entry.Count = 1
-		}
-		d.entries[found] = entry
-	} else {
-		d.entries = append([]dictionaryEntry{{
-			ID:            uuid.NewString(),
-			Context:       contextText,
-			WrongPhrase:   wrongPhrase,
-			CorrectPhrase: correctPhrase,
-			Source:        dictionarySourceCorrection,
-			CreatedAt:     timestamp,
-			UpdatedAt:     timestamp,
-			Count:         1,
-		}}, d.entries...)
-		if len(d.entries) > dictionaryMaxEntries {
-			d.entries = d.entries[:dictionaryMaxEntries]
-		}
+	d.entries = append([]dictionaryEntry{{
+		ID:        uuid.NewString(),
+		Phrase:    phrase,
+		CreatedAt: timestamp,
+	}}, d.entries...)
+	if len(d.entries) > dictionaryMaxEntries {
+		d.entries = d.entries[:dictionaryMaxEntries]
 	}
 	d.mu.Unlock()
 
@@ -130,142 +104,20 @@ func (d *dictionaryStore) addOrUpdateCorrection(ctx context.Context, contextText
 	return nil
 }
 
-func (d *dictionaryStore) activeEntries() []dictionaryEntry {
+// activePhrases returns the user's phrase list for the AI refiner prompt.
+func (d *dictionaryStore) activePhrases() []string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	out := make([]dictionaryEntry, 0, len(d.entries))
+	out := make([]string, 0, len(d.entries))
 	for _, entry := range d.entries {
-		if strings.TrimSpace(entry.Context) != "" && strings.TrimSpace(entry.WrongPhrase) != "" && strings.TrimSpace(entry.CorrectPhrase) != "" {
-			out = append(out, entry)
+		if phrase := strings.TrimSpace(entry.Phrase); phrase != "" {
+			out = append(out, phrase)
 		}
 	}
 	return out
 }
 
-// applyExact performs conservative post-processing when AI refinement is off:
-// multi-word phrases use literal replacement, and single words require word
-// boundaries so substrings inside larger words are left untouched.
-func (d *dictionaryStore) applyExact(text string) string {
-	if strings.TrimSpace(text) == "" {
-		return text
-	}
-	for _, entry := range d.activeEntries() {
-		if dictionaryContextMatches(text, entry.Context) {
-			text = replaceExactPhrase(text, entry.WrongPhrase, entry.CorrectPhrase)
-		}
-	}
-	return text
-}
-
-func dictionaryKey(contextText string, phrase string) string {
-	return normalizeDictionaryText(contextText) + "\x00" + normalizeDictionaryText(phrase)
-}
-
 func normalizeDictionaryText(text string) string {
 	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(text)), " "))
-}
-
-func dictionaryContextMatches(text string, contextText string) bool {
-	normalizedText := normalizeDictionaryText(text)
-	normalizedContext := normalizeDictionaryText(contextText)
-	return normalizedContext != "" && strings.Contains(normalizedText, normalizedContext)
-}
-
-// extractCorrectionContext returns the sentence that contained the corrected
-// selection. If no sentence boundary is available, it falls back to the full content.
-func extractCorrectionContext(content string, selectedText string) string {
-	content = strings.TrimSpace(content)
-	selectedText = strings.TrimSpace(selectedText)
-	if content == "" || selectedText == "" {
-		return content
-	}
-
-	selectedIndex := strings.Index(content, selectedText)
-	if selectedIndex < 0 {
-		return content
-	}
-
-	start := 0
-	for i := selectedIndex; i > 0; {
-		r, size := utf8.DecodeLastRuneInString(content[:i])
-		if isSentenceBoundary(r) {
-			start = i
-			break
-		}
-		i -= size
-	}
-
-	end := len(content)
-	for i := selectedIndex + len(selectedText); i < len(content); {
-		r, size := utf8.DecodeRuneInString(content[i:])
-		i += size
-		if isSentenceBoundary(r) {
-			end = i
-			break
-		}
-	}
-
-	return strings.TrimSpace(content[start:end])
-}
-
-func isSentenceBoundary(r rune) bool {
-	switch r {
-	case '.', '!', '?', ';', '。', '！', '？', '；', '\n', '\r':
-		return true
-	default:
-		return false
-	}
-}
-
-func replaceExactPhrase(text string, wrongPhrase string, correctPhrase string) string {
-	wrongPhrase = strings.TrimSpace(wrongPhrase)
-	correctPhrase = strings.TrimSpace(correctPhrase)
-	if wrongPhrase == "" || correctPhrase == "" || wrongPhrase == correctPhrase {
-		return text
-	}
-	if strings.ContainsAny(wrongPhrase, " \t\r\n") {
-		return strings.ReplaceAll(text, wrongPhrase, correctPhrase)
-	}
-
-	var b strings.Builder
-	position := 0
-	for {
-		relativeIndex := strings.Index(text[position:], wrongPhrase)
-		if relativeIndex == -1 {
-			b.WriteString(text[position:])
-			break
-		}
-
-		start := position + relativeIndex
-		end := start + len(wrongPhrase)
-		if hasWordBoundaries(text, start, end) {
-			b.WriteString(text[position:start])
-			b.WriteString(correctPhrase)
-		} else {
-			b.WriteString(text[position:end])
-		}
-		position = end
-	}
-	return b.String()
-}
-
-func hasWordBoundaries(text string, start int, end int) bool {
-	if start > 0 {
-		before, _ := utf8.DecodeLastRuneInString(text[:start])
-		if isWordRune(before) {
-			return false
-		}
-	}
-	if end < len(text) {
-		after, _ := utf8.DecodeRuneInString(text[end:])
-		if isWordRune(after) {
-			return false
-		}
-	}
-	return true
-}
-
-func isWordRune(r rune) bool {
-	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }

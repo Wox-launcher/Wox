@@ -288,55 +288,13 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 					Key: settingKeyDefaultAIModel,
 				},
 			},
+			// Dictionary is a dynamic setting: it is only shown when AI refinement
+			// is enabled on the default action, because the phrase list is consumed
+			// exclusively by the AI refiner prompt.
 			{
-				Type: definition.PluginSettingDefinitionTypeTable,
-				Value: &definition.PluginSettingValueTable{
-					Key:          settingKeyDictionary,
-					DefaultValue: "[]",
-					Title:        "i18n:plugin_dictation_dictionary",
-					Tooltip:      "i18n:plugin_dictation_dictionary_tooltip",
-					MaxHeight:    260,
-					Columns: []definition.PluginSettingValueTableColumn{
-						{
-							Key:          "context",
-							Label:        "i18n:plugin_dictation_dictionary_context",
-							Type:         definition.PluginSettingValueTableColumnTypeText,
-							Width:        260,
-							TextMaxLines: 3,
-							Validators: []validator.PluginSettingValidator{
-								{
-									Type:  validator.PluginSettingValidatorTypeNotEmpty,
-									Value: &validator.PluginSettingValidatorNotEmpty{},
-								},
-							},
-						},
-						{
-							Key:          "wrongPhrase",
-							Label:        "i18n:plugin_dictation_dictionary_wrong_phrase",
-							Type:         definition.PluginSettingValueTableColumnTypeText,
-							Width:        180,
-							TextMaxLines: 2,
-							Validators: []validator.PluginSettingValidator{
-								{
-									Type:  validator.PluginSettingValidatorTypeNotEmpty,
-									Value: &validator.PluginSettingValidatorNotEmpty{},
-								},
-							},
-						},
-						{
-							Key:          "correctPhrase",
-							Label:        "i18n:plugin_dictation_dictionary_correct_phrase",
-							Type:         definition.PluginSettingValueTableColumnTypeText,
-							Width:        180,
-							TextMaxLines: 2,
-							Validators: []validator.PluginSettingValidator{
-								{
-									Type:  validator.PluginSettingValidatorTypeNotEmpty,
-									Value: &validator.PluginSettingValidatorNotEmpty{},
-								},
-							},
-						},
-					},
+				Type: definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{
+					Key: settingKeyDictionary,
 				},
 			},
 			{
@@ -487,6 +445,8 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			return p.buildModelSetting(ctx)
 		case settingKeyDefaultAIModel:
 			return p.buildDefaultAIModelSetting(ctx)
+		case settingKeyDictionary:
+			return p.buildDictionarySetting(ctx)
 		}
 		return definition.PluginSettingDefinitionItem{}
 	})
@@ -864,6 +824,41 @@ func (p *DictationPlugin) buildDefaultAIModelSetting(ctx context.Context) defini
 	}
 }
 
+// buildDictionarySetting hides the phrase dictionary until AI refinement is
+// enabled, because the phrase list is consumed exclusively by the AI refiner.
+func (p *DictationPlugin) buildDictionarySetting(ctx context.Context) definition.PluginSettingDefinitionItem {
+	defaultAction := defaultDictationActionFromSetting(p.api.GetSetting(ctx, settingKeyActions))
+	if !defaultAction.AIRefineEnabled {
+		return definition.PluginSettingDefinitionItem{}
+	}
+
+	return definition.PluginSettingDefinitionItem{
+		Type: definition.PluginSettingDefinitionTypeTable,
+		Value: &definition.PluginSettingValueTable{
+			Key:          settingKeyDictionary,
+			DefaultValue: "[]",
+			Title:        "i18n:plugin_dictation_dictionary",
+			Tooltip:      "i18n:plugin_dictation_dictionary_tooltip",
+			MaxHeight:    260,
+			Columns: []definition.PluginSettingValueTableColumn{
+				{
+					Key:          "phrase",
+					Label:        "i18n:plugin_dictation_dictionary_phrase",
+					Type:         definition.PluginSettingValueTableColumnTypeText,
+					Width:        260,
+					TextMaxLines: 2,
+					Validators: []validator.PluginSettingValidator{
+						{
+							Type:  validator.PluginSettingValidatorTypeNotEmpty,
+							Value: &validator.PluginSettingValidatorNotEmpty{},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 // buildModelOptions builds the list of model options for the dictationModel
 // setting, combining recommended models with their current download status.
 func (p *DictationPlugin) buildModelOptions(ctx context.Context) []definition.DictationModelOption {
@@ -1000,23 +995,6 @@ type ModelStatusInfo struct {
 	Error            string `json:"Error"`
 }
 
-type CorrectHistoryRequest struct {
-	RecordID        string `json:"recordId"`
-	PreviousContent string `json:"previousContent"`
-	SelectedText    string `json:"selectedText"`
-	ReplacementText string `json:"replacementText"`
-	UpdatedContent  string `json:"updatedContent"`
-}
-
-type CorrectHistoryResponse struct {
-	RecordID        string            `json:"recordId"`
-	OriginalContent string            `json:"originalContent"`
-	Content         string            `json:"content"`
-	Timestamp       int64             `json:"timestamp"`
-	Title           string            `json:"title"`
-	Preview         plugin.WoxPreview `json:"preview"`
-}
-
 // GetModelStatuses returns the current status of all known models, combining
 // recommended models with local models. Called by the HTTP status endpoint.
 func (p *DictationPlugin) GetModelStatuses(ctx context.Context) []ModelStatusInfo {
@@ -1036,44 +1014,6 @@ func (p *DictationPlugin) GetModelStatuses(ctx context.Context) []ModelStatusInf
 		})
 	}
 	return result
-}
-
-// CorrectHistory applies a user-approved inline correction and records the
-// same change as a future dictation dictionary rule.
-func (p *DictationPlugin) CorrectHistory(ctx context.Context, req CorrectHistoryRequest) (CorrectHistoryResponse, error) {
-	if p.history == nil {
-		return CorrectHistoryResponse{}, fmt.Errorf("dictation history is not initialized")
-	}
-	record, err := p.history.correct(ctx, historyCorrectRequest{
-		RecordID:        req.RecordID,
-		PreviousContent: req.PreviousContent,
-		SelectedText:    req.SelectedText,
-		ReplacementText: req.ReplacementText,
-		UpdatedContent:  req.UpdatedContent,
-	})
-	if err != nil {
-		return CorrectHistoryResponse{}, err
-	}
-	if p.dictionary != nil {
-		if err := p.dictionary.addOrUpdateCorrection(ctx, extractCorrectionContext(req.PreviousContent, req.SelectedText), req.SelectedText, req.ReplacementText, util.GetSystemTimestamp()); err != nil {
-			return CorrectHistoryResponse{}, err
-		}
-	}
-	if p.api != nil {
-		p.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
-	}
-
-	return CorrectHistoryResponse{
-		RecordID:        record.ID,
-		OriginalContent: record.OriginalContent,
-		Content:         record.Content,
-		Timestamp:       record.Timestamp,
-		Title:           truncateHistoryTitle(record.Content),
-		Preview: plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeDictationHistory,
-			PreviewData: record.previewData(ctx, p.api),
-		},
-	}, nil
 }
 
 func (p *DictationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -1416,16 +1356,22 @@ func (p *DictationPlugin) prepareActionOutput(ctx context.Context, action dictat
 	}
 
 	dictationText := rawText
-	if p.dictionary != nil {
-		dictationText = p.dictionary.applyExact(dictationText)
+	aiRefineSucceeded := false
+
+	// When the user has enabled AI Refine on the default action, refine the
+	// transcript before passing it to a custom action's AI prompt so the
+	// prompt receives clean, punctuated text instead of raw speech output.
+	defaultAction := defaultDictationActionFromSetting(p.api.GetSetting(ctx, settingKeyActions))
+	if defaultAction.AIRefineEnabled {
+		dictationText, aiRefineSucceeded = p.refineTranscript(ctx, defaultAction, dictationText)
 	}
 
 	if action.Output == dictationActionOutputChat {
-		return dictationText, dictationText, false, true
+		return dictationText, dictationText, aiRefineSucceeded, true
 	}
 
 	if strings.TrimSpace(action.Prompt) == "" {
-		return dictationText, dictationText, false, true
+		return dictationText, dictationText, aiRefineSucceeded, true
 	}
 
 	model, modelOk := parseActionAIModel(ctx, p.api, action.Model)
@@ -1434,10 +1380,13 @@ func (p *DictationPlugin) prepareActionOutput(ctx context.Context, action dictat
 		return "", "", false, false
 	}
 
-	p.showRefiningOverlay(ctx)
+	// Switch the overlay to the action-processing state so the user can see
+	// that the refined transcript is now being handled by the action's AI
+	// prompt, distinct from the earlier refinement stage.
+	p.showActionProcessingOverlay(ctx)
 	prompt := renderDictationActionPrompt(action, dictationText, inputContext)
 	if strings.TrimSpace(prompt) == "" {
-		return dictationText, dictationText, false, true
+		return dictationText, dictationText, aiRefineSucceeded, true
 	}
 	answer, actionErr := p.runPromptWithAI(ctx, model, prompt, aiActionTimeout)
 	if actionErr != nil {
@@ -1461,35 +1410,42 @@ func (p *DictationPlugin) prepareDefaultActionOutput(ctx context.Context, action
 	text := rawText
 	aiRefineSucceeded := false
 	if action.AIRefineEnabled {
-		model, modelOk := parseActionAIModel(ctx, p.api, action.Model)
-		if !modelOk {
-			p.api.Notify(ctx, "plugin_dictation_ai_no_model")
-		} else {
-			recentCtx := p.history.recentContext(util.GetSystemTimestamp())
-			p.showRefiningOverlay(ctx)
-			var dictionaryEntries []dictionaryEntry
-			if p.dictionary != nil {
-				dictionaryEntries = p.dictionary.activeEntries()
-			}
-			refined, refineErr := p.refineWithAI(ctx, model, text, recentCtx, dictionaryEntries)
-			if refineErr != nil {
-				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI refine failed: %s", refineErr.Error()))
-				if strings.Contains(refineErr.Error(), "timeout") {
-					p.api.Notify(ctx, "plugin_dictation_ai_timeout")
-				} else {
-					p.api.Notify(ctx, "plugin_dictation_ai_failed")
-				}
-			} else if strings.TrimSpace(refined) != "" {
-				text = strings.TrimSpace(refined)
-				aiRefineSucceeded = true
-			}
-		}
+		text, aiRefineSucceeded = p.refineTranscript(ctx, action, text)
 	}
 
-	if !aiRefineSucceeded && p.dictionary != nil {
-		text = p.dictionary.applyExact(text)
-	}
 	return text, text, aiRefineSucceeded, true
+}
+
+// refineTranscript sends rawText through the AI refinement model configured on
+// the supplied action and returns the refined text plus a flag indicating
+// whether refinement succeeded. On failure or when no model is selected it
+// notifies the user and returns the original text unchanged.
+func (p *DictationPlugin) refineTranscript(ctx context.Context, action dictationAction, rawText string) (string, bool) {
+	model, modelOk := parseActionAIModel(ctx, p.api, action.Model)
+	if !modelOk {
+		p.api.Notify(ctx, "plugin_dictation_ai_no_model")
+		return rawText, false
+	}
+	recentCtx := p.history.recentContext(util.GetSystemTimestamp())
+	p.showRefiningOverlay(ctx)
+	var phrases []string
+	if p.dictionary != nil {
+		phrases = p.dictionary.activePhrases()
+	}
+	refined, refineErr := p.refineWithAI(ctx, model, rawText, recentCtx, phrases)
+	if refineErr != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI refine failed: %s", refineErr.Error()))
+		if strings.Contains(refineErr.Error(), "timeout") {
+			p.api.Notify(ctx, "plugin_dictation_ai_timeout")
+		} else {
+			p.api.Notify(ctx, "plugin_dictation_ai_failed")
+		}
+		return rawText, false
+	}
+	if strings.TrimSpace(refined) == "" {
+		return rawText, false
+	}
+	return strings.TrimSpace(refined), true
 }
 
 // parseActionAIModel parses the JSON-encoded common.Model stored in an action.
@@ -1649,6 +1605,26 @@ func (p *DictationPlugin) showRefiningOverlay(ctx context.Context) {
 	textoverlay.Show(opts)
 }
 
+// showActionProcessingOverlay switches the overlay into a loading state while
+// a custom action's AI prompt is being processed by the selected model.
+func (p *DictationPlugin) showActionProcessingOverlay(ctx context.Context) {
+	window := buildDictationTextOverlayWindow()
+	window.PreservePosition = true
+	window.MinWidth = 200
+	window.MaxWidth = 600
+	window.OnClose = func() {
+		p.api.Log(util.NewTraceContext(), plugin.LogLevelInfo, "dictation overlay closed during AI action processing")
+	}
+	opts := textoverlay.Options{
+		Window:   window,
+		Closable: true,
+		Message:  i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_action_ai_processing"),
+		Loading:  true,
+	}
+
+	textoverlay.Show(opts)
+}
+
 // showProcessingOverlay replaces the waveform immediately after release so
 // the UI acknowledges the key-up event while local recognition finishes.
 func (p *DictationPlugin) showProcessingOverlay(ctx context.Context) {
@@ -1678,7 +1654,10 @@ func (p *DictationPlugin) showProcessingOverlay(ctx context.Context) {
 // (oldest-first). It lets the model understand pronouns, tense, and topic
 // continuity across consecutive dictations. The current utterance is the only
 // text that should be output; context is provided for reference only.
-func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, rawText string, recentContext []string, dictionaryEntries []dictionaryEntry) (string, error) {
+//
+// phrases is the user's dictionary: words/phrases the AI should recognize and
+// spell correctly in the refined output.
+func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, rawText string, recentContext []string, phrases []string) (string, error) {
 	refineCtx, cancel := context.WithTimeout(ctx, aiRefineTimeout)
 	defer cancel()
 
@@ -1691,17 +1670,12 @@ func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, 
 	}, " ")
 
 	var userPrompt string
-	if len(recentContext) > 0 || len(dictionaryEntries) > 0 {
+	if len(recentContext) > 0 || len(phrases) > 0 {
 		var ctxBuf strings.Builder
-		if len(dictionaryEntries) > 0 {
-			ctxBuf.WriteString("Personal dictionary corrections. Apply a correction only when the new dictation has the same or very similar context as the saved context; do not replace a phrase merely because the wrong phrase appears:\n")
-			for i, entry := range dictionaryEntries {
-				if i >= 80 {
-					break
-				}
-				ctxBuf.WriteString(fmt.Sprintf("%d. Context: %s\n   Wrong: %s\n   Correct: %s\n", i+1, entry.Context, entry.WrongPhrase, entry.CorrectPhrase))
-			}
-			ctxBuf.WriteString("\n")
+		if len(phrases) > 0 {
+			ctxBuf.WriteString("The user wants these words/phrases to be recognized and spelled correctly: ")
+			ctxBuf.WriteString(strings.Join(phrases, ", "))
+			ctxBuf.WriteString("\n\n")
 		}
 		if len(recentContext) > 0 {
 			ctxBuf.WriteString("Previous dictation context (for reference only, do not repeat or rewrite these):\n")
@@ -1861,7 +1835,7 @@ func (p *DictationPlugin) showDictationOverlay(ctx context.Context, voiceActive 
 		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
 		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
 		CloseOnEscape:    true,
-		Movable:          false,
+		Movable:          true,
 		OnClose: func() {
 			p.cancelDictation(util.NewTraceContext())
 		},

@@ -151,10 +151,9 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/permission/privacy/open":       handlePermissionPrivacyOpen,
 
 	// dictation
-	"/dictation/model/download":  handleDictationModelDownload,
-	"/dictation/model/delete":    handleDictationModelDelete,
-	"/dictation/model/status":    handleDictationModelStatus,
-	"/dictation/history/correct": handleDictationHistoryCorrect,
+	"/dictation/model/download": handleDictationModelDownload,
+	"/dictation/model/delete":   handleDictationModelDelete,
+	"/dictation/model/status":   handleDictationModelStatus,
 
 	// others
 	"/":                                   handleHome,
@@ -3697,37 +3696,4 @@ func handleDictationModelStatus(w http.ResponseWriter, r *http.Request) {
 
 	status := dp.GetModelStatuses(ctx)
 	writeSuccessResponse(w, status)
-}
-
-// handleDictationHistoryCorrect applies an inline preview correction and adds
-// the approved phrase pair to the dictation dictionary.
-func handleDictationHistoryCorrect(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	body, _ := io.ReadAll(r.Body)
-	parsed := gjson.ParseBytes(body)
-	req := dictationplugin.CorrectHistoryRequest{
-		RecordID:        parsed.Get("recordId").String(),
-		PreviousContent: parsed.Get("previousContent").String(),
-		SelectedText:    parsed.Get("selectedText").String(),
-		ReplacementText: parsed.Get("replacementText").String(),
-		UpdatedContent:  parsed.Get("updatedContent").String(),
-	}
-
-	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
-	if sp == nil {
-		writeErrorResponse(w, "dictation plugin not found")
-		return
-	}
-	dp, ok := sp.(*dictationplugin.DictationPlugin)
-	if !ok {
-		writeErrorResponse(w, "dictation plugin type assertion failed")
-		return
-	}
-
-	result, err := dp.CorrectHistory(ctx, req)
-	if err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-	writeSuccessResponse(w, result)
 }

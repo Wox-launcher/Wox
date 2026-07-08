@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <windowsx.h>
+#include <uxtheme.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -64,18 +65,12 @@ static RECT DictationOverlayCloseRect(const RECT *rect, UINT dpi)
     return closeRect;
 }
 
-// DictationOverlayInvalidate repaints the parent backdrop synchronously before this transparent child redraws.
+// DictationOverlayInvalidate only invalidates this window. After switching to WS_EX_LAYERED +
+// UpdateLayeredWindow the child owns an opaque alpha surface, so the parent backdrop no longer
+// needs to repaint behind it. This removes the cross-thread RDW_UPDATENOW that caused flicker.
 static void DictationOverlayInvalidate(HWND hwnd)
 {
-    HWND parent = GetParent(hwnd);
-    if (parent)
-    {
-        RECT parentRc;
-        GetWindowRect(hwnd, &parentRc);
-        MapWindowPoints(HWND_DESKTOP, parent, (POINT *)&parentRc, 2);
-        RedrawWindow(parent, &parentRc, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOCHILDREN);
-    }
-    RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE);
+    InvalidateRect(hwnd, NULL, FALSE);
 }
 
 static void DictationOverlayDraw(HDC hdc, const RECT *rect, UINT dpi, BOOL active, int phase)
@@ -123,6 +118,62 @@ static void DictationOverlayDraw(HDC hdc, const RECT *rect, UINT dpi, BOOL activ
     DeleteObject(brush);
 }
 
+// DictationOverlayPaint draws one full frame into the given DC using the same BufferedPaint API
+// the base overlay uses. Painting bars and close button into one buffered DC in a single pass
+// eliminates the flicker the old cross-thread parent invalidation caused.
+static void DictationOverlayPaint(HWND hwnd, HDC paintHdc, DictationOverlayState *state)
+{
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+
+    HDC hdc = paintHdc;
+    HPAINTBUFFER paintBuf = BeginBufferedPaint(paintHdc, &rc, BPBF_TOPDOWNDIB, NULL, &hdc);
+    if (paintBuf)
+        BufferedPaintClear(paintBuf, &rc);
+
+    SetBkMode(hdc, TRANSPARENT);
+    UINT dpi = DictationOverlayGetDpi(hwnd);
+    RECT contentRc = rc;
+    if (state && state->closable)
+    {
+        contentRc.right -= DictationOverlayDip(DICTATION_CLOSE_SIZE_DIP + DICTATION_CLOSE_GAP_DIP, dpi);
+        if (contentRc.right < contentRc.left)
+            contentRc.right = contentRc.left;
+    }
+    DictationOverlayDraw(hdc, &contentRc, dpi, state ? state->active : FALSE, state ? state->phase : 0);
+    if (state && state->closable)
+    {
+        RECT closeRc = DictationOverlayCloseRect(&rc, dpi);
+        if (state->closeHover || state->closePressed)
+        {
+            COLORREF bg = state->closePressed ? RGB(70, 70, 70) : RGB(55, 55, 55);
+            HBRUSH brush = CreateSolidBrush(bg);
+            FillRect(hdc, &closeRc, brush);
+            DeleteObject(brush);
+        }
+
+        int pad = DictationOverlayDip(6, dpi);
+        int thickness = DictationOverlayDip(2, dpi);
+        if (thickness < 1)
+            thickness = 1;
+
+        HPEN pen = CreatePen(PS_SOLID, thickness, RGB(230, 230, 230));
+        HGDIOBJ oldPen = SelectObject(hdc, pen);
+
+        MoveToEx(hdc, closeRc.left + pad, closeRc.top + pad, NULL);
+        LineTo(hdc, closeRc.right - pad, closeRc.bottom - pad);
+        MoveToEx(hdc, closeRc.right - pad, closeRc.top + pad, NULL);
+        LineTo(hdc, closeRc.left + pad, closeRc.bottom - pad);
+
+        if (oldPen)
+            SelectObject(hdc, oldPen);
+        DeleteObject(pen);
+    }
+
+    if (paintBuf)
+        EndBufferedPaint(paintBuf, TRUE);
+}
+
 static LRESULT CALLBACK DictationOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     DictationOverlayState *state = (DictationOverlayState *)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
@@ -137,6 +188,10 @@ static LRESULT CALLBACK DictationOverlayProc(HWND hwnd, UINT msg, WPARAM wParam,
     }
     case WM_ERASEBKGND:
         return 1;
+    case WM_SIZE:
+        // Size changes (from parent layout) must trigger a fresh paint at the new dimensions.
+        InvalidateRect(hwnd, NULL, FALSE);
+        return 0;
     case WM_SETCURSOR:
     {
         if (!state || LOWORD(lParam) != HTCLIENT)
@@ -235,47 +290,7 @@ static LRESULT CALLBACK DictationOverlayProc(HWND hwnd, UINT msg, WPARAM wParam,
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
-        RECT rc;
-        GetClientRect(hwnd, &rc);
-
-        SetBkMode(hdc, TRANSPARENT);
-        UINT dpi = DictationOverlayGetDpi(hwnd);
-        RECT contentRc = rc;
-        if (state && state->closable)
-        {
-            contentRc.right -= DictationOverlayDip(DICTATION_CLOSE_SIZE_DIP + DICTATION_CLOSE_GAP_DIP, dpi);
-            if (contentRc.right < contentRc.left)
-                contentRc.right = contentRc.left;
-        }
-        DictationOverlayDraw(hdc, &contentRc, dpi, state ? state->active : FALSE, state ? state->phase : 0);
-        if (state && state->closable)
-        {
-            RECT closeRc = DictationOverlayCloseRect(&rc, dpi);
-            if (state->closeHover || state->closePressed)
-            {
-                COLORREF bg = state->closePressed ? RGB(70, 70, 70) : RGB(55, 55, 55);
-                HBRUSH brush = CreateSolidBrush(bg);
-                FillRect(hdc, &closeRc, brush);
-                DeleteObject(brush);
-            }
-
-            int pad = DictationOverlayDip(6, dpi);
-            int thickness = DictationOverlayDip(2, dpi);
-            if (thickness < 1)
-                thickness = 1;
-
-            HPEN pen = CreatePen(PS_SOLID, thickness, RGB(230, 230, 230));
-            HGDIOBJ oldPen = SelectObject(hdc, pen);
-
-            MoveToEx(hdc, closeRc.left + pad, closeRc.top + pad, NULL);
-            LineTo(hdc, closeRc.right - pad, closeRc.bottom - pad);
-            MoveToEx(hdc, closeRc.right - pad, closeRc.top + pad, NULL);
-            LineTo(hdc, closeRc.left + pad, closeRc.bottom - pad);
-
-            if (oldPen)
-                SelectObject(hdc, oldPen);
-            DeleteObject(pen);
-        }
+        DictationOverlayPaint(hwnd, hdc, state);
         EndPaint(hwnd, &ps);
         return 0;
     }
@@ -337,6 +352,10 @@ static BOOL DictationOverlayEnsureClass(void)
 static DWORD WINAPI DictationOverlayThreadProc(LPVOID param)
 {
     DictationOverlayState *state = (DictationOverlayState *)param;
+    // WS_EX_TRANSPARENT keeps mouse forwarding to the parent while the child owns the visible
+    // painted surface. BufferedPaint (initialized per thread) gives the child the same flicker-free
+    // double-buffering the base overlay uses.
+    BufferedPaintInit();
     HWND hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT, kDictationOverlayClassName, L"", WS_POPUP, 0, 0, 132, 24, NULL, NULL, GetModuleHandleW(NULL), state);
     state->hwnd = hwnd;
     state->createOk = hwnd ? TRUE : FALSE;
@@ -344,6 +363,7 @@ static DWORD WINAPI DictationOverlayThreadProc(LPVOID param)
 
     if (!hwnd)
     {
+        BufferedPaintUnInit();
         return 0;
     }
 
@@ -353,6 +373,7 @@ static DWORD WINAPI DictationOverlayThreadProc(LPVOID param)
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    BufferedPaintUnInit();
     return 0;
 }
 

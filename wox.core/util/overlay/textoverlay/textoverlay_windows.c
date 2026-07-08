@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <windowsx.h>
+#include <uxtheme.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,7 +28,6 @@ extern void overlayRequestCloseCallbackCGO(char *name);
 
 typedef struct {
     HWND hwnd;
-    HWND spinnerHwnd;
     HANDLE readyEvent;
     BOOL createOk;
     char *nameUtf8;
@@ -51,9 +51,7 @@ typedef struct {
 } TextOverlayState;
 
 static const wchar_t *kTextOverlayClassName = L"WoxTextOverlayAttachmentWindow";
-static const wchar_t *kTextOverlaySpinnerClassName = L"WoxTextOverlaySpinnerWindow";
 static ATOM g_textOverlayClass = 0;
-static ATOM g_textOverlaySpinnerClass = 0;
 
 static char *TextOverlayCopyUtf8(const char *text)
 {
@@ -213,12 +211,11 @@ static RECT TextOverlayCloseButtonRect(TextOverlayState *state, UINT dpi)
     return rc;
 }
 
-// TextOverlayInvalidate repaints the parent backdrop before this transparent child redraws.
+// TextOverlayInvalidate only invalidates this window. After switching to WS_EX_LAYERED +
+// UpdateLayeredWindow the child owns an opaque alpha surface, so the parent backdrop no longer
+// needs to repaint behind it. This removes the cross-thread RDW_UPDATENOW that caused flicker.
 static void TextOverlayInvalidate(HWND hwnd)
 {
-    HWND parent = GetParent(hwnd);
-    if (parent)
-        InvalidateRect(parent, NULL, FALSE);
     InvalidateRect(hwnd, NULL, FALSE);
 }
 
@@ -416,118 +413,7 @@ static void TextOverlayDrawLoadingSpinner(HDC hdc, int x, int y, int size, int p
     DeleteObject(dib);
 }
 
-static LRESULT CALLBACK TextOverlaySpinnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-    switch (msg)
-    {
-    case WM_NCHITTEST:
-        return HTTRANSPARENT;
-    case WM_ERASEBKGND:
-        return 1;
-    }
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
-
-static BOOL TextOverlayEnsureSpinnerClass(void)
-{
-    if (g_textOverlaySpinnerClass)
-        return TRUE;
-
-    WNDCLASSEXW wc;
-    ZeroMemory(&wc, sizeof(wc));
-    wc.cbSize = sizeof(wc);
-    wc.lpfnWndProc = TextOverlaySpinnerProc;
-    wc.hInstance = GetModuleHandleW(NULL);
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.lpszClassName = kTextOverlaySpinnerClassName;
-    g_textOverlaySpinnerClass = RegisterClassExW(&wc);
-    return g_textOverlaySpinnerClass != 0;
-}
-
-static BOOL TextOverlayRenderSpinnerWindow(HWND hwnd, POINT position, int size, int phase)
-{
-    if (!hwnd || size < 8)
-        return FALSE;
-
-    HDC screenDC = GetDC(NULL);
-    if (!screenDC)
-        return FALSE;
-
-    BITMAPINFO bmi;
-    ZeroMemory(&bmi, sizeof(bmi));
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = size;
-    bmi.bmiHeader.biHeight = -size;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    void *rawBits = NULL;
-    HBITMAP dib = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &rawBits, NULL, 0);
-    if (!dib || !rawBits)
-    {
-        if (dib)
-            DeleteObject(dib);
-        ReleaseDC(NULL, screenDC);
-        return FALSE;
-    }
-    TextOverlayFillLoadingSpinnerPixels((BYTE *)rawBits, size, phase);
-
-    HDC memDC = CreateCompatibleDC(screenDC);
-    HGDIOBJ oldBitmap = SelectObject(memDC, dib);
-    POINT src = {0, 0};
-    SIZE layerSize = {size, size};
-    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    BOOL ok = UpdateLayeredWindow(hwnd, screenDC, &position, &layerSize, memDC, &src, 0, &blend, ULW_ALPHA);
-
-    if (oldBitmap)
-        SelectObject(memDC, oldBitmap);
-    DeleteDC(memDC);
-    DeleteObject(dib);
-    ReleaseDC(NULL, screenDC);
-    return ok;
-}
-
-static void TextOverlayDestroySpinnerWindow(TextOverlayState *state)
-{
-    if (state && state->spinnerHwnd)
-    {
-        DestroyWindow(state->spinnerHwnd);
-        state->spinnerHwnd = NULL;
-    }
-}
-
-static BOOL TextOverlayUpdateSpinnerWindow(TextOverlayState *state)
-{
-    if (!state || !state->hwnd || !state->loading)
-    {
-        TextOverlayDestroySpinnerWindow(state);
-        return TRUE;
-    }
-    RECT rc = state->loadingRect;
-    int size = rc.right - rc.left;
-    if (size < 8 || rc.bottom - rc.top != size)
-        return TRUE;
-
-    POINT position = {rc.left, rc.top};
-    if (!ClientToScreen(state->hwnd, &position))
-        return FALSE;
-
-    if (!state->spinnerHwnd)
-    {
-        if (!TextOverlayEnsureSpinnerClass())
-            return FALSE;
-        HWND owner = GetAncestor(state->hwnd, GA_ROOT);
-        if (!owner)
-            owner = state->hwnd;
-        state->spinnerHwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, kTextOverlaySpinnerClassName, L"", WS_POPUP | WS_VISIBLE, position.x, position.y, size, size, owner, NULL, GetModuleHandleW(NULL), NULL);
-        if (!state->spinnerHwnd)
-            return FALSE;
-        SetWindowPos(state->spinnerHwnd, HWND_TOP, position.x, position.y, size, size, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    }
-
-    return TextOverlayRenderSpinnerWindow(state->spinnerHwnd, position, size, state->loadingPhase);
-}
+static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
 {
@@ -582,15 +468,13 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
         state->loadingRect.top = y;
         state->loadingRect.right = x + iconSize;
         state->loadingRect.bottom = y + iconSize;
-        if (!TextOverlayUpdateSpinnerWindow(state))
-            TextOverlayDrawLoadingSpinner(hdc, x, y, iconSize, state->loadingPhase);
+        TextOverlayDrawLoadingSpinner(hdc, x, y, iconSize, state->loadingPhase);
         x += leadingWidth + leadingGap;
     }
     else
     {
         RECT empty = {0, 0, 0, 0};
         state->loadingRect = empty;
-        TextOverlayDestroySpinnerWindow(state);
     }
 
     int textY = rowY + (rowHeight - textHeight) / 2;
@@ -663,6 +547,26 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
     DeleteObject(font);
 }
 
+// TextOverlayPaint draws one full frame into the given DC using the same BufferedPaint API the
+// base overlay uses. Painting the spinner, text, and buttons into one buffered DC in a single
+// pass eliminates the flicker the old separate popup + cross-thread parent invalidation caused.
+static void TextOverlayPaint(HWND hwnd, HDC paintHdc, TextOverlayState *state)
+{
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+
+    HDC hdc = paintHdc;
+    HPAINTBUFFER paintBuf = BeginBufferedPaint(paintHdc, &rc, BPBF_TOPDOWNDIB, NULL, &hdc);
+    if (paintBuf)
+        BufferedPaintClear(paintBuf, &rc);
+
+    if (state)
+        TextOverlayDraw(hdc, rc, state);
+
+    if (paintBuf)
+        EndBufferedPaint(paintBuf, TRUE);
+}
+
 static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     TextOverlayState *state = (TextOverlayState *)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
@@ -676,6 +580,10 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     }
     case WM_ERASEBKGND:
         return 1;
+    case WM_SIZE:
+        // Size changes (from parent layout) must trigger a fresh paint at the new dimensions.
+        InvalidateRect(hwnd, NULL, FALSE);
+        return 0;
     case WM_SETCURSOR:
     {
         if (!state || LOWORD(lParam) != HTCLIENT)
@@ -820,8 +728,7 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                 return 0;
             }
             state->loadingPhase++;
-            if (!TextOverlayUpdateSpinnerWindow(state))
-                KillTimer(hwnd, TEXT_OVERLAY_TIMER_LOADING);
+            InvalidateRect(hwnd, NULL, FALSE);
             return 0;
         }
         break;
@@ -829,10 +736,8 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
-        RECT rc;
-        GetClientRect(hwnd, &rc);
         if (state)
-            TextOverlayDraw(hdc, rc, state);
+            TextOverlayPaint(hwnd, hdc, state);
         EndPaint(hwnd, &ps);
         return 0;
     }
@@ -845,7 +750,6 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         KillTimer(hwnd, TEXT_OVERLAY_TIMER_LOADING);
         if (state)
         {
-            TextOverlayDestroySpinnerWindow(state);
             free(state->nameUtf8);
             free(state->message);
             free(state);
@@ -876,12 +780,19 @@ static BOOL TextOverlayEnsureClass(void)
 static DWORD WINAPI TextOverlayThreadProc(LPVOID param)
 {
     TextOverlayState *state = (TextOverlayState *)param;
+    // WS_EX_TRANSPARENT keeps mouse forwarding to the parent while the child owns the visible
+    // painted surface. BufferedPaint (initialized per thread) gives the child the same flicker-free
+    // double-buffering the base overlay uses.
+    BufferedPaintInit();
     HWND hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT, kTextOverlayClassName, L"", WS_POPUP, 0, 0, state->contentWidth, state->contentHeight, NULL, NULL, GetModuleHandleW(NULL), state);
     state->hwnd = hwnd;
     state->createOk = hwnd ? TRUE : FALSE;
     SetEvent(state->readyEvent);
     if (!hwnd)
+    {
+        BufferedPaintUnInit();
         return 0;
+    }
     if (state->loading)
         SetTimer(hwnd, TEXT_OVERLAY_TIMER_LOADING, TEXT_OVERLAY_LOADING_INTERVAL_MS, NULL);
     if (state->autoCloseSeconds > 0)
@@ -893,6 +804,7 @@ static DWORD WINAPI TextOverlayThreadProc(LPVOID param)
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    BufferedPaintUnInit();
     return 0;
 }
 

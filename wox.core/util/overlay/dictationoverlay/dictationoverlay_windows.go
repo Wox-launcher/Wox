@@ -2,7 +2,7 @@ package dictationoverlay
 
 /*
 #cgo CFLAGS: -DUNICODE -D_UNICODE
-#cgo LDFLAGS: -lgdi32 -luser32
+#cgo LDFLAGS: -lgdi32 -luser32 -luxtheme
 #include <stdbool.h>
 #include <stdlib.h>
 
