@@ -109,6 +109,10 @@ type DictationPlugin struct {
 	// vadModelPath is the extracted path to silero_vad.onnx.
 	vadModelPath string
 
+	// runtimeMu keeps session startup and plugin unload from closing the speech
+	// pools while a model is still being acquired.
+	runtimeMu sync.Mutex
+
 	// Session state
 	sessionMu   sync.Mutex
 	session     *speech.Session
@@ -339,6 +343,10 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	p.vadModelPath = extractVadModel(ctx)
 	p.vadPool = speech.NewVadPool(recognizerPoolIdleTTL)
 	p.vadPool.StartReaper(ctx)
+
+	p.api.OnUnload(ctx, func(ctx context.Context) {
+		p.releaseRuntime(ctx)
+	})
 
 	// Register dynamic setting callbacks for input device and model.
 	p.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
@@ -948,7 +956,22 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 		p.updateVoiceOverlay(ctx, activity.Speaking)
 	})
 
+	p.runtimeMu.Lock()
+	if p.recognizerPool == nil || p.audioCapturePool == nil || p.vadPool == nil {
+		p.runtimeMu.Unlock()
+		p.api.Log(ctx, plugin.LogLevelError, "dictation start failed: runtime is not initialized")
+		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed"))
+		p.closeDictationOverlay()
+		p.stopVolumeDucking(ctx)
+		p.sessionMu.Lock()
+		p.isStarting = false
+		p.pendingStop = false
+		p.sessionMu.Unlock()
+		return
+	}
+
 	if err := session.Start(); err != nil {
+		p.runtimeMu.Unlock()
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("dictation start failed: %s", err.Error()))
 		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed"), err.Error()))
 		p.closeDictationOverlay()
@@ -975,6 +998,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 	shouldStop := p.pendingStop
 	p.pendingStop = false
 	p.sessionMu.Unlock()
+	p.runtimeMu.Unlock()
 
 	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation timing: plugin.total cost=%dms", time.Since(t0).Milliseconds()))
 
@@ -1408,6 +1432,44 @@ func (p *DictationPlugin) updateOverlay(ctx context.Context, text string) {
 func (p *DictationPlugin) closeDictationOverlay() {
 	p.setVoiceOverlayVisible(false)
 	dictationoverlay.Close(dictationOverlayName)
+}
+
+// releaseRuntime stops any active dictation session and closes cached speech
+// resources when the plugin is disabled, unloaded, or uninstalled.
+func (p *DictationPlugin) releaseRuntime(ctx context.Context) {
+	p.runtimeMu.Lock()
+	defer p.runtimeMu.Unlock()
+
+	p.reregisterHotkey(ctx, "")
+	p.stopVolumeDucking(ctx)
+	p.closeDictationOverlay()
+
+	p.sessionMu.Lock()
+	session := p.session
+	p.session = nil
+	p.isRecording = false
+	p.isStarting = false
+	p.pendingStop = false
+	p.sessionMu.Unlock()
+
+	if session != nil {
+		if _, err := session.Stop(); err != nil {
+			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to stop dictation session during unload: %s", err.Error()))
+		}
+	}
+
+	if p.recognizerPool != nil {
+		p.recognizerPool.Close()
+		p.recognizerPool = nil
+	}
+	if p.audioCapturePool != nil {
+		p.audioCapturePool.Close()
+		p.audioCapturePool = nil
+	}
+	if p.vadPool != nil {
+		p.vadPool.Close()
+		p.vadPool = nil
+	}
 }
 
 // evictOldModels removes all cached recognizer models from the pool except

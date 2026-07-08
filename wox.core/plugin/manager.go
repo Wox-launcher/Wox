@@ -429,6 +429,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 		PluginDirectory:       metadata.Directory,
 		Plugin:                plugin,
 		Host:                  host,
+		RuntimeLoaded:         true,
 		LoadStartTimestamp:    loadStartTimestamp,
 		LoadFinishedTimestamp: loadFinishTimestamp,
 		IsDevPlugin:           metadata.IsDev,
@@ -486,10 +487,7 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 }
 
 func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
-	for _, callback := range pluginInstance.UnloadCallbacks {
-		callback(ctx)
-	}
-	pluginInstance.Host.UnloadPlugin(ctx, pluginInstance.Metadata)
+	m.deactivatePlugin(ctx, pluginInstance)
 
 	var newInstances []*Instance
 	for _, instance := range m.instances {
@@ -498,6 +496,101 @@ func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
 		}
 	}
 	m.instances = newInstances
+}
+
+// DisablePlugin marks a plugin disabled and releases its runtime resources
+// while keeping the instance visible to settings and store views.
+func (m *Manager) DisablePlugin(ctx context.Context, pluginId string) error {
+	pluginInstance := m.GetPluginInstanceById(pluginId)
+	if pluginInstance == nil {
+		return fmt.Errorf("can't find plugin")
+	}
+	if err := pluginInstance.Setting.Disabled.Set(true); err != nil {
+		return err
+	}
+	m.deactivatePlugin(ctx, pluginInstance)
+	return nil
+}
+
+// EnablePlugin marks a plugin enabled and initializes its runtime if it was
+// previously deactivated by DisablePlugin.
+func (m *Manager) EnablePlugin(ctx context.Context, pluginId string) error {
+	pluginInstance := m.GetPluginInstanceById(pluginId)
+	if pluginInstance == nil {
+		return fmt.Errorf("can't find plugin")
+	}
+	if err := pluginInstance.Setting.Disabled.Set(false); err != nil {
+		return err
+	}
+	if err := m.activatePlugin(ctx, pluginInstance); err != nil {
+		_ = pluginInstance.Setting.Disabled.Set(true)
+		return err
+	}
+	return nil
+}
+
+// deactivatePlugin runs plugin unload callbacks and releases host runtime state
+// without removing the instance from the installed plugin list.
+func (m *Manager) deactivatePlugin(ctx context.Context, pluginInstance *Instance) {
+	if pluginInstance == nil {
+		return
+	}
+	if pluginInstance.Initialized {
+		for _, callback := range pluginInstance.UnloadCallbacks {
+			callback(ctx)
+		}
+	}
+	m.clearRuntimeCallbacks(pluginInstance)
+	pluginInstance.Initialized = false
+
+	if pluginInstance.Host != nil && pluginInstance.RuntimeLoaded {
+		pluginInstance.Host.UnloadPlugin(ctx, pluginInstance.Metadata)
+		pluginInstance.RuntimeLoaded = false
+		pluginInstance.Plugin = nil
+	}
+}
+
+// activatePlugin loads host runtime state if needed and runs Init once for the
+// current enabled lifecycle.
+func (m *Manager) activatePlugin(ctx context.Context, pluginInstance *Instance) error {
+	if pluginInstance == nil {
+		return fmt.Errorf("can't find plugin")
+	}
+	if pluginInstance.Initialized {
+		return nil
+	}
+	if pluginInstance.Host != nil && !pluginInstance.RuntimeLoaded {
+		if !pluginInstance.Host.IsStarted(ctx) {
+			if err := pluginInstance.Host.Start(ctx); err != nil {
+				return fmt.Errorf("failed to start host for runtime %s: %w", pluginInstance.Metadata.Runtime, err)
+			}
+		}
+		loadedPlugin, err := pluginInstance.Host.LoadPlugin(ctx, pluginInstance.Metadata, pluginInstance.PluginDirectory)
+		if err != nil {
+			return err
+		}
+		pluginInstance.Plugin = loadedPlugin
+		pluginInstance.RuntimeLoaded = true
+	}
+	if pluginInstance.Plugin == nil {
+		return fmt.Errorf("plugin runtime is not loaded: %s", pluginInstance.Metadata.GetName(ctx))
+	}
+	m.initPlugin(ctx, pluginInstance)
+	return nil
+}
+
+// clearRuntimeCallbacks drops callbacks registered during Init so a later
+// enable starts from a clean plugin lifecycle.
+func (m *Manager) clearRuntimeCallbacks(pluginInstance *Instance) {
+	pluginInstance.DynamicSettingCallbacks = nil
+	pluginInstance.SettingChangeCallbacks = nil
+	pluginInstance.DeepLinkCallbacks = nil
+	pluginInstance.UnloadCallbacks = nil
+	pluginInstance.MRURestoreCallbacks = nil
+	pluginInstance.PluginCommandHandlers = nil
+	pluginInstance.EnterPluginQueryCallbacks = nil
+	pluginInstance.LeavePluginQueryCallbacks = nil
+	pluginInstance.RuntimeQueryCommands = nil
 }
 
 func (m *Manager) RestartHostForRuntime(ctx context.Context, runtime Runtime, skipPluginIDs []string, progressCallback UninstallProgressCallback) error {
@@ -592,6 +685,7 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 				Plugin:                plugin,
 				Host:                  nil,
 				IsSystemPlugin:        true,
+				RuntimeLoaded:         true,
 				PluginDirectory:       metadata.Directory,
 				LoadStartTimestamp:    util.GetSystemTimestamp(),
 				LoadFinishedTimestamp: util.GetSystemTimestamp(),
@@ -640,6 +734,7 @@ func (m *Manager) initPlugin(ctx context.Context, instance *Instance) {
 		API:             instance.API,
 		PluginDirectory: instance.PluginDirectory,
 	})
+	instance.Initialized = true
 	instance.InitFinishedTimestamp = util.GetSystemTimestamp()
 	logger.Info(ctx, fmt.Sprintf("init plugin %s finished, cost %d ms", instance.Metadata.GetName(ctx), instance.InitFinishedTimestamp-instance.InitStartTimestamp))
 }

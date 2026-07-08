@@ -643,6 +643,7 @@ func handlePluginUninstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePluginDisable(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -652,23 +653,16 @@ func handlePluginDisable(w http.ResponseWriter, r *http.Request) {
 
 	pluginId := idResult.String()
 
-	plugins := plugin.GetPluginManager().GetPluginInstances()
-	findPlugin, exist := lo.Find(plugins, func(item *plugin.Instance) bool {
-		if item.Metadata.Id == pluginId {
-			return true
-		}
-		return false
-	})
-	if !exist {
-		writeErrorResponse(w, "can't find plugin")
+	if err := plugin.GetPluginManager().DisablePlugin(ctx, pluginId); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
 
-	findPlugin.Setting.Disabled.Set(true)
 	writeSuccessResponse(w, "")
 }
 
 func handlePluginEnable(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -678,16 +672,11 @@ func handlePluginEnable(w http.ResponseWriter, r *http.Request) {
 
 	pluginId := idResult.String()
 
-	plugins := plugin.GetPluginManager().GetPluginInstances()
-	findPlugin, exist := lo.Find(plugins, func(item *plugin.Instance) bool {
-		return item.Metadata.Id == pluginId
-	})
-	if !exist {
-		writeErrorResponse(w, "can't find plugin")
+	if err := plugin.GetPluginManager().EnablePlugin(ctx, pluginId); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
 
-	findPlugin.Setting.Disabled.Set(false)
 	writeSuccessResponse(w, "")
 }
 
@@ -2404,7 +2393,16 @@ func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if kv.Key == "Disabled" {
-		pluginInstance.Setting.Disabled.Set(kv.Value == "true")
+		var updateErr error
+		if kv.Value == "true" {
+			updateErr = plugin.GetPluginManager().DisablePlugin(getTraceContext(r), kv.PluginId)
+		} else {
+			updateErr = plugin.GetPluginManager().EnablePlugin(getTraceContext(r), kv.PluginId)
+		}
+		if updateErr != nil {
+			writeErrorResponse(w, updateErr.Error())
+			return
+		}
 	} else if kv.Key == "TriggerKeywords" {
 		pluginInstance.Setting.TriggerKeywords.Set(strings.Split(kv.Value, ","))
 	} else {

@@ -12,6 +12,8 @@ type Instance struct {
 	API                  API                    // APIs exposed to plugin
 	Metadata             Metadata               // metadata parsed from plugin.json
 	IsSystemPlugin       bool                   // is system plugin, see `plugin.md` for more detail
+	RuntimeLoaded        bool                   // host runtime has loaded this plugin
+	Initialized          bool                   // plugin Init has run and runtime callbacks may be registered
 	IsDevPlugin          bool                   // plugins loaded from `local plugin directories` which defined in wpm settings
 	DevPluginDirectory   string                 // absolute path to dev plugin directory defined in wpm settings
 	PluginDirectory      string                 // absolute path to plugin directory

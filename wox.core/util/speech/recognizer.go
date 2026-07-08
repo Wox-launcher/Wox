@@ -57,7 +57,7 @@ func IsStreamingModelType(modelType string) bool {
 
 // newRecognizer creates the appropriate recognizer for the given config.
 // Streaming models (zipformer2, paraformer) use OnlineRecognizer; offline
-// models (qwen3_asr) use OfflineRecognizer.
+// models (qwen3_asr, sense_voice) use OfflineRecognizer.
 func newRecognizer(ctx context.Context, config RecognizerConfig) (Recognizer, error) {
 	if IsStreamingModelType(config.ModelType) {
 		return newOnlineRecognizer(ctx, config)

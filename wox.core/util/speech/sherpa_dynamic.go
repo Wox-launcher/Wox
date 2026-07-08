@@ -572,7 +572,7 @@ func (r *sherpaOnlineRecognizer) Close() {
 }
 
 // ---------------------------------------------------------------------------
-// Offline recognizer — Qwen3-ASR
+// Offline recognizer — Qwen3-ASR / SenseVoice
 // ---------------------------------------------------------------------------
 
 type sherpaOfflineRecognizer struct {
@@ -609,6 +609,19 @@ func newOfflineRecognizer(ctx context.Context, config RecognizerConfig) (Recogni
 		c.model_config.qwen3_asr.tokenizer = cStrings.add(filepath.Join(config.ModelPath, "tokenizer"))
 		c.model_config.qwen3_asr.seed = C.int(42)
 		c.model_config.tokens = nil
+	case "sense_voice":
+		model, err := findModelFile(config.ModelPath, "model*.onnx")
+		if err != nil {
+			return nil, fmt.Errorf("SenseVoice model not found in %s: %w", config.ModelPath, err)
+		}
+		language := config.Language
+		if language == "" {
+			language = "auto"
+		}
+		c.model_config.sense_voice.model = cStrings.add(model)
+		c.model_config.sense_voice.language = cStrings.add(language)
+		c.model_config.sense_voice.use_itn = C.int(1)
+		c.model_config.tokens = cStrings.add(filepath.Join(config.ModelPath, "tokens.txt"))
 	default:
 		return nil, fmt.Errorf("unsupported offline model type: %s", config.ModelType)
 	}

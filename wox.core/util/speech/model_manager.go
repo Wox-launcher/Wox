@@ -44,15 +44,15 @@ var RecommendedModels = []ModelInfo{
 		SizeMB:      600,
 	},
 	{
-		ID:          "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
-		DisplayName: "Zipformer ZH int8",
-		Description: "i18n:plugin_dictation_model_zipformer_zh_desc",
-		Languages:   "i18n:plugin_dictation_model_zipformer_zh_lang",
+		ID:          "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17",
+		DisplayName: "SenseVoice-Small",
+		Description: "i18n:plugin_dictation_model_sensevoice_small_desc",
+		Languages:   "i18n:plugin_dictation_model_sensevoice_small_lang",
 		Recommended: false,
-		DownloadURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2",
-		ModelType:   "zipformer2",
-		Language:    "zh-CN",
-		SizeMB:      154,
+		DownloadURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2",
+		ModelType:   "sense_voice",
+		Language:    "auto",
+		SizeMB:      155,
 	},
 }
 
@@ -139,6 +139,17 @@ func (m *ModelManager) inspectModelDir(dir string) (LocalModel, bool) {
 			ID:          filepath.Base(dir),
 			Path:        dir,
 			ModelType:   "qwen3_asr",
+			DisplayName: filepath.Base(dir),
+		}, true
+	}
+
+	// Check for SenseVoice-Small (model.int8.onnx/model.onnx + tokens.txt).
+	if (fileExists(filepath.Join(dir, "model.int8.onnx")) || fileExists(filepath.Join(dir, "model.onnx"))) &&
+		fileExists(filepath.Join(dir, "tokens.txt")) {
+		return LocalModel{
+			ID:          filepath.Base(dir),
+			Path:        dir,
+			ModelType:   "sense_voice",
 			DisplayName: filepath.Base(dir),
 		}, true
 	}
