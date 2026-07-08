@@ -4053,11 +4053,12 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "RecordHotkey") {
       final data = msg.data as Map<String, dynamic>? ?? {};
       final hotkey = data["Hotkey"]?.toString() ?? "";
+      final kind = data["Kind"]?.toString() ?? "";
       Logger.instance.info(
         msg.traceId,
-        "Received RecordHotkey websocket request: hotkey=$hotkey",
+        "Received RecordHotkey websocket request: hotkey=$hotkey kind=$kind",
       );
-      WoxHotkeyRecordingBus.instance.emit(hotkey);
+      WoxHotkeyRecordingBus.instance.emit(hotkey, kind);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "GetCurrentQuery") {
       responseWoxWebsocketRequest(msg, true, currentQuery.value.toJson());

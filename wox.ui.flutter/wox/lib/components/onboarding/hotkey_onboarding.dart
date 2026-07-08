@@ -93,10 +93,10 @@ class _HotkeyContent extends StatelessWidget {
             alignment: Alignment.centerRight,
             child: WoxHotkeyRecorder(
               hotkey: WoxHotkey.parseHotkeyFromString(hotkey),
-              onHotKeyRecorded: (value) {
+              onHotKeyRecorded: (result) {
                 // Step extraction: the recorder UI is reusable for both hotkey
                 // steps, but the parent still decides which setting key is saved.
-                onHotkeyChanged(value);
+                onHotkeyChanged(result.hotkey);
               },
             ),
           ),

@@ -13,9 +13,6 @@ type PluginSettingValueDictationHotkey struct {
 	Label        string
 	Tooltip      string
 	DefaultValue string
-	// TriggerMode is "toggle" or "hold". The Flutter side uses this to
-	// decide which recorder widget to render.
-	TriggerMode string
 
 	Style PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }

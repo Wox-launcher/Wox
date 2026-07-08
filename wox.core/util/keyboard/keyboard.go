@@ -17,9 +17,9 @@ func SimulateBackspace() error {
 	return simulateBackspace()
 }
 
-// SimulateCapsLockTap sends one Caps Lock down/up pair through the platform input system.
-func SimulateCapsLockTap() error {
-	return simulateCapsLockTap()
+// SimulateCapsLockPress sends one Caps Lock down/up pair through the platform input system.
+func SimulateCapsLockPress() error {
+	return simulateCapsLockPress()
 }
 
 // SetCapsLockState explicitly sets the platform Caps Lock state when the OS supports it.

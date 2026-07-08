@@ -723,8 +723,8 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
                     hotkey: WoxHotkey.parseHotkeyFromString(_draft.hotkey),
                     tipPosition: WoxHotkeyRecorderTipPosition.right,
                     recordUnavailableHotkey: true,
-                    onHotKeyRecorded: (hotkey) {
-                      _handleHotkeyChanged(hotkey);
+                    onHotKeyRecorded: (result) {
+                      _handleHotkeyChanged(result.hotkey);
                     },
                     onUnavailableHotKeyRecorded: (hotkey) {
                       _handleHotkeyChanged(hotkey);

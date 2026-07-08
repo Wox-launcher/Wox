@@ -42,9 +42,10 @@ class HotkeyX {
   HotKey? normalHotkey; // normal hotkey, E.g. "ctrl+shift+a"
   KeyboardKey? capsLockHotkey; // Caps Lock combination, E.g. "capslock+a"
   HotKeyModifier? doubleHotkey; // double hotkey, E.g. "ctrl+ctrl"
+  List<String>? modifierChord; // left/right modifier chord, E.g. "left_shift+left_cmd"
   LogicalKeyboardKey? singleHotkey; // single hotkey, E.g. "enter", usually used for default action hotkey
 
-  HotkeyX(this.raw, {this.normalHotkey, this.capsLockHotkey, this.doubleHotkey, this.singleHotkey});
+  HotkeyX(this.raw, {this.normalHotkey, this.capsLockHotkey, this.doubleHotkey, this.modifierChord, this.singleHotkey});
 
   bool get isNormalHotkey => normalHotkey != null;
 
@@ -52,10 +53,29 @@ class HotkeyX {
 
   bool get isDoubleHotkey => doubleHotkey != null;
 
+  bool get isModifierChord => modifierChord != null && modifierChord!.isNotEmpty;
+
   bool get isSingleHotkey => singleHotkey != null;
 
   String toStr() {
     return raw;
+  }
+}
+
+class HotkeyRecordingCapability {
+  final bool rawRecorderAvailable;
+  final List<String> fallbackAllowedKinds;
+  final String unavailableReason;
+
+  HotkeyRecordingCapability({required this.rawRecorderAvailable, required this.fallbackAllowedKinds, required this.unavailableReason});
+
+  factory HotkeyRecordingCapability.fromJson(Map<String, dynamic>? json) {
+    final fallback = json?["FallbackAllowedKinds"];
+    return HotkeyRecordingCapability(
+      rawRecorderAvailable: json?["RawRecorderAvailable"] == true,
+      fallbackAllowedKinds: fallback is List ? fallback.map((item) => item.toString()).toList() : <String>[],
+      unavailableReason: json?["UnavailableReason"]?.toString() ?? "",
+    );
   }
 }
 
@@ -83,6 +103,11 @@ class WoxHotkey {
     var isCapsLockCombo = false;
     LogicalKeyboardKey? key;
     final tokens = value.split("+").map((element) => element.trim().toLowerCase()).where((element) => element.isNotEmpty).toList();
+    final modifierChord = _parseModifierChord(tokens);
+    if (modifierChord != null) {
+      return HotkeyX(value, modifierChord: modifierChord);
+    }
+
     for (final e in tokens) {
       if ((e == "capslock" || e == "caps_lock" || e == "caps lock") && tokens.length > 1) {
         isCapsLockCombo = true;
@@ -264,6 +289,50 @@ class WoxHotkey {
     }
 
     return HotkeyX(value, singleHotkey: key);
+  }
+
+  static List<String>? _parseModifierChord(List<String> tokens) {
+    if (tokens.isEmpty || tokens.length > 2) {
+      return null;
+    }
+
+    final normalized = <String>[];
+    final seen = <String>{};
+    for (final token in tokens) {
+      final part = _normalizeSpecificModifierPart(token);
+      if (part == null || !seen.add(part)) {
+        return null;
+      }
+      normalized.add(part);
+    }
+
+    normalized.sort((a, b) => _specificModifierOrder(a).compareTo(_specificModifierOrder(b)));
+    return normalized;
+  }
+
+  static String? _normalizeSpecificModifierPart(String token) {
+    final parts = token.split("_");
+    if (parts.length != 2) {
+      return null;
+    }
+
+    final side = parts[0];
+    if (side != "left" && side != "right") {
+      return null;
+    }
+
+    return switch (parts[1]) {
+      "ctrl" || "control" => "${side}_ctrl",
+      "shift" => "${side}_shift",
+      "alt" || "option" => "${side}_alt",
+      "cmd" || "command" || "super" || "win" || "windows" => Platform.isMacOS ? "${side}_cmd" : "${side}_win",
+      _ => null,
+    };
+  }
+
+  static int _specificModifierOrder(String part) {
+    const order = {"left_ctrl": 0, "right_ctrl": 1, "left_shift": 2, "right_shift": 3, "left_alt": 4, "right_alt": 5, "left_cmd": 6, "right_cmd": 7, "left_win": 6, "right_win": 7};
+    return order[part] ?? 100;
   }
 
   static HotKey? parseNormalHotkeyFromEvent(KeyEvent event) {

@@ -72,7 +72,6 @@ type Manager struct {
 	selectionHotkeyKey   string
 	dictationHotkey      *hotkey.Hotkey
 	dictationHotkeyKey   string
-	dictationTriggerMode string
 	waylandPortalHotkeys *hotkey.Group
 	waylandPortalQueries []setting.QueryHotkey
 	queryHotkeys         []*hotkey.Hotkey
@@ -360,35 +359,33 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 	return nil
 }
 
-// RegisterDictationHotkey binds the global dictation hotkey. When combineKey
-// is empty the existing binding (if any) is removed. triggerMode controls how
-// the hotkey fires: "toggle" fires onPress on each key press; "hold" fires
-// onPress on key down and onRelease on key up. The callbacks delegate to the
-// DictationPlugin so the plugin owns the recording lifecycle.
-func (m *Manager) RegisterDictationHotkey(ctx context.Context, combineKey string, triggerMode string) error {
-	combineKey = strings.TrimSpace(combineKey)
-	triggerMode = strings.TrimSpace(triggerMode)
-	if combineKey == "" {
+// RegisterDictationHotkey binds the global dictation hotkey. Bare saved values
+// are press-triggered; "hold:<hotkey>" values fire on press and release.
+func (m *Manager) RegisterDictationHotkey(ctx context.Context, bindingValue string) error {
+	bindingValue = strings.TrimSpace(bindingValue)
+	binding, bindingErr := parseDictationHotkeyBinding(bindingValue)
+	if bindingErr != nil {
+		return bindingErr
+	}
+	if binding.combineKey == "" {
 		logger.Info(ctx, "remove dictation hotkey")
 		if m.dictationHotkey != nil {
 			m.dictationHotkey.Unregister(ctx)
 			m.dictationHotkey = nil
 		}
 		m.dictationHotkeyKey = ""
-		m.dictationTriggerMode = ""
 		return nil
 	}
 	// Always unregister the previous hotkey and register a fresh one so the
-	// callbacks match the current trigger mode. Even when key+mode look
-	// identical to the cached values, the existing hotkey instance may carry
-	// callbacks bound to a different mode (e.g. after toggling hold→toggle→hold),
-	// so skipping re-registration would leave stale callbacks in place.
-	logger.Info(ctx, fmt.Sprintf("register dictation hotkey: %s (mode=%s)", combineKey, triggerMode))
+	// callbacks match the current trigger behavior. Even when bindings look
+	// identical, re-registering keeps stale callback state out of the raw-key
+	// trackers after switching between hold and press behavior.
+	logger.Info(ctx, fmt.Sprintf("register dictation hotkey: binding=%s trigger=%s hotkey=%s", bindingValue, binding.trigger, binding.combineKey))
 
 	var onPress func()
 	var onRelease func()
 
-	if triggerMode == "hold" {
+	if binding.trigger == dictationHotkeyTriggerHold {
 		// Hold mode: press starts recording, release stops it.
 		onPress = func() {
 			m.handleDictationHotkeyPress(ctx)
@@ -397,9 +394,9 @@ func (m *Manager) RegisterDictationHotkey(ctx context.Context, combineKey string
 			m.handleDictationHotkeyRelease(ctx)
 		}
 	} else {
-		// Toggle mode: each press toggles recording on/off.
+		// Press behavior: each hotkey press starts or stops recording.
 		onPress = func() {
-			m.handleDictationHotkeyTrigger(ctx)
+			m.handleDictationHotkeyPressAction(ctx)
 		}
 	}
 
@@ -415,14 +412,18 @@ func (m *Manager) RegisterDictationHotkey(ctx context.Context, combineKey string
 		m.dictationHotkey = nil
 	}
 
-	registerErr := newHotkey.RegisterWithRelease(ctx, combineKey, onPress, onRelease)
+	var registerErr error
+	if binding.trigger == dictationHotkeyTriggerHold {
+		registerErr = newHotkey.RegisterWithRelease(ctx, binding.combineKey, onPress, onRelease)
+	} else {
+		registerErr = newHotkey.RegisterWithModifierPress(ctx, binding.combineKey, onPress)
+	}
 	if registerErr != nil {
 		return registerErr
 	}
 
 	m.dictationHotkey = newHotkey
-	m.dictationHotkeyKey = combineKey
-	m.dictationTriggerMode = triggerMode
+	m.dictationHotkeyKey = bindingValue
 	return nil
 }
 
@@ -462,20 +463,19 @@ func (m *Manager) handleDictationHotkeyRelease(ctx context.Context) {
 	}
 }
 
-// handleDictationHotkeyTrigger finds the loaded DictationPlugin and toggles
-// the recording session. Used by toggle mode where each hotkey press flips
-// between recording and idle.
-func (m *Manager) handleDictationHotkeyTrigger(ctx context.Context) {
+// handleDictationHotkeyPressAction finds the loaded DictationPlugin and runs
+// the press-triggered dictation action.
+func (m *Manager) handleDictationHotkeyPressAction(ctx context.Context) {
 	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
 	if sp == nil {
 		logger.Error(ctx, "dictation plugin not found for hotkey callback")
 		return
 	}
-	type dictationToggler interface {
-		ToggleDictation(ctx context.Context)
+	type dictationPressHandler interface {
+		PressDictationHotkey(ctx context.Context)
 	}
-	if dt, ok := sp.(dictationToggler); ok {
-		dt.ToggleDictation(ctx)
+	if handler, ok := sp.(dictationPressHandler); ok {
+		handler.PressDictationHotkey(ctx)
 	}
 }
 
@@ -1595,27 +1595,28 @@ func (m *Manager) PostOnOnboarding(ctx context.Context, isInOnboardingView bool)
 	}
 }
 
-// PostOnHotkeyRecording tracks recorder focus so global hotkey callbacks can feed the active recorder.
-func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool) {
+// PostOnHotkeyRecording tracks recorder focus and starts the Go-side raw
+// recording session used by settings hotkey controls.
+func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool, purpose string, allowedKinds []string) (hotkey.RecordingCapability, error) {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isRecordingHotkey = isRecording
 		if isRecording {
-			hotkey.SetCapsLockComboRecorder(func(hotkeyStr string) {
-				m.ui.RecordHotkey(util.NewTraceContext(), hotkeyStr)
+			capability, err := hotkey.StartRecordingSession(allowedKinds, func(result hotkey.RecordingResult) {
+				m.ui.RecordHotkey(util.NewTraceContext(), result.Hotkey, result.Kind)
 			})
-			// Flutter's macOS engine does not reliably produce KeyDownEvent
-			// for every modifier key (notably right_ctrl). Feed hold-modifier
-			// presses from the Go-side raw key listener back to the UI so the
-			// hold-hotkey recorder can capture them.
-			hotkey.SetHoldModifierRecorder(func(hotkeyStr string) {
-				m.ui.RecordHotkey(util.NewTraceContext(), hotkeyStr)
-			})
+			logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t purpose=%s raw=%t fallback=%v", isRecording, purpose, capability.RawRecorderAvailable, capability.FallbackAllowedKinds))
+			return capability, err
 		} else {
-			hotkey.SetCapsLockComboRecorder(nil)
-			hotkey.SetHoldModifierRecorder(nil)
+			hotkey.StopRecordingSession()
 		}
-		logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t", isRecording))
+		logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t purpose=%s", isRecording, purpose))
 	}
+	return hotkey.RecordingCapability{}, nil
+}
+
+func (m *Manager) PostHotkeyRecordingCandidate(ctx context.Context, hotkeyStr string) error {
+	logger.Info(ctx, fmt.Sprintf("received hotkey recording fallback candidate: %s", hotkeyStr))
+	return hotkey.SubmitRecordingFallbackCandidate(hotkeyStr)
 }
 
 func (m *Manager) IsSystemTheme(id string) bool {
@@ -2400,7 +2401,7 @@ func (m *Manager) recordHotkeyIfRecording(ctx context.Context, hotkeyStr string)
 
 	logger.Info(ctx, fmt.Sprintf("record registered hotkey while recording: %s", hotkeyStr))
 	util.Go(ctx, "record global hotkey in UI", func() {
-		m.ui.RecordHotkey(ctx, hotkeyStr)
+		m.ui.RecordHotkey(ctx, hotkeyStr, hotkey.RecordingKindForHotkeyString(hotkeyStr))
 	})
 	return true
 }

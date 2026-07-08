@@ -6,9 +6,9 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/plugin/wox_ai_command_template_dialog.dart';
-import 'package:wox/components/plugin/wox_setting_plugin_dictation_hotkey_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_dictation_model_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_item_view.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_label_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_newline_view.dart';
@@ -17,6 +17,7 @@ import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/plugin/wox_window_manager_groups_setting.dart';
 import 'package:wox/components/wox_hint_box.dart';
+import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_textfield.dart';
@@ -28,6 +29,7 @@ import 'package:wox/entity/setting/wox_plugin_setting_select_ai_model.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_dictation_hotkey.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_dictation_model.dart';
@@ -57,6 +59,14 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   static const String _selectionPluginId = "d9e557ed-89bd-4b8b-bd64-2a7632cf3483";
   static const String _selectionSpaceQuickLookSettingKey = "enableSpaceQuickLook";
   static const double _pluginSettingLabelActionWidth = 28.0;
+  static const String _dictationHoldPrefix = "hold:";
+  static const List<WoxHotkeyRecorderKind> _dictationHotkeyKinds = [
+    WoxHotkeyRecorderKind.normalCombo,
+    WoxHotkeyRecorderKind.doubleModifier,
+    WoxHotkeyRecorderKind.capsLockCombo,
+    WoxHotkeyRecorderKind.pressModifier,
+    WoxHotkeyRecorderKind.holdModifier,
+  ];
   // Local refreshing state for showing loading spinner on refresh button
   static final RxBool _refreshing = false.obs;
   static final GlobalKey _pluginFilterIconKey = GlobalKey();
@@ -190,6 +200,29 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
       return value.key;
     }
     return "";
+  }
+
+  String _displayedDictationHotkeyValue(String savedValue) {
+    final trimmed = savedValue.trim();
+    if (!trimmed.startsWith(_dictationHoldPrefix)) {
+      return trimmed;
+    }
+    return trimmed.substring(_dictationHoldPrefix.length).trim();
+  }
+
+  bool _isDictationHoldBinding(String savedValue) {
+    return savedValue.trim().startsWith(_dictationHoldPrefix);
+  }
+
+  String _savedDictationHotkeyValue(String hotkey, String kind) {
+    final trimmedHotkey = hotkey.trim();
+    if (trimmedHotkey.isEmpty) {
+      return "";
+    }
+    if (kind == WoxHotkeyRecorderKind.holdModifier.value) {
+      return "$_dictationHoldPrefix$trimmedHotkey";
+    }
+    return trimmedHotkey;
   }
 
   Widget _buildPluginSettingTarget({required PluginDetail plugin, required PluginSettingDefinitionItem definition, required Widget child}) {
@@ -988,13 +1021,27 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 }
                 if (e.type == "dictationHotkey") {
                   final hotkeyValue = e.value as PluginSettingValueDictationHotkey;
-                  settingWidget = WoxSettingPluginDictationHotkey(
-                    value: plugin.setting.settings[hotkeyValue.key] ?? "",
-                    item: hotkeyValue,
+                  final savedHotkeyValue = plugin.setting.settings[hotkeyValue.key] ?? "";
+                  final displayedHotkeyValue = _displayedDictationHotkeyValue(savedHotkeyValue);
+                  settingWidget = WoxSettingPluginItem.layoutFor(
+                    label: hotkeyValue.label,
+                    style: hotkeyValue.style,
+                    tooltip: hotkeyValue.tooltip,
                     labelWidth: uniformLabelWidth,
-                    onUpdate: (key, value) async {
-                      return controller.updatePluginSetting(plugin.id, key, value);
-                    },
+                    translator: controller.tr,
+                    child: WoxHotkeyRecorder(
+                      hotkey: displayedHotkeyValue.isNotEmpty ? WoxHotkey.parseHotkeyFromString(displayedHotkeyValue) : null,
+                      hotkeyKind: _isDictationHoldBinding(savedHotkeyValue) ? WoxHotkeyRecorderKind.holdModifier : null,
+                      purpose: WoxHotkeyRecorderPurpose.dictation,
+                      allowedKinds: _dictationHotkeyKinds,
+                      tipPosition: WoxHotkeyRecorderTipPosition.right,
+                      onHotKeyRecorded: (result) {
+                        controller.updatePluginSetting(plugin.id, hotkeyValue.key, _savedDictationHotkeyValue(result.hotkey, result.kind));
+                      },
+                      onUnavailableHotKeyRecorded: (_) {
+                        controller.updatePluginSetting(plugin.id, hotkeyValue.key, "");
+                      },
+                    ),
                   );
                   return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }

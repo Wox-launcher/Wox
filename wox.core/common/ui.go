@@ -71,7 +71,7 @@ type UI interface {
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context, showContext ShowContext)
 	ToggleApp(ctx context.Context, showContext ShowContext)
-	RecordHotkey(ctx context.Context, hotkey string)
+	RecordHotkey(ctx context.Context, hotkey string, kind string)
 	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
 	OpenOnboardingWindow(ctx context.Context)
 	PickFiles(ctx context.Context, params PickFilesParams) []string

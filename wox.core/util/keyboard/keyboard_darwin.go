@@ -62,7 +62,7 @@ const char* simulatePaste() {
     return NULL;
 }
 
-const char* simulateCapsLockTap() {
+const char* simulateCapsLockPress() {
     CGEventRef pressCaps = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)57, true);
     if (pressCaps == NULL) return "Unable to create press event for Caps Lock";
 
@@ -229,8 +229,8 @@ func simulateBackspace() error {
 	return nil
 }
 
-func simulateCapsLockTap() error {
-	err := C.simulateCapsLockTap()
+func simulateCapsLockPress() error {
+	err := C.simulateCapsLockPress()
 	if err != nil {
 		errMsg := C.GoString(err)
 		return fmt.Errorf("failed to send CapsLock: %v", errMsg)

@@ -203,8 +203,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 controlMaxWidth: 520,
                 child: WoxHotkeyRecorder(
                   hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.mainHotkey),
-                  onHotKeyRecorded: (hotkey) {
-                    controller.updateConfig("MainHotkey", hotkey);
+                  onHotKeyRecorded: (result) {
+                    controller.updateConfig("MainHotkey", result.hotkey);
                   },
                 ),
               ),
@@ -223,8 +223,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                   controlMaxWidth: 520,
                   child: WoxHotkeyRecorder(
                     hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.selectionHotkey),
-                    onHotKeyRecorded: (hotkey) {
-                      controller.updateConfig("SelectionHotkey", hotkey);
+                    onHotKeyRecorded: (result) {
+                      controller.updateConfig("SelectionHotkey", result.hotkey);
                     },
                   ),
                 ),

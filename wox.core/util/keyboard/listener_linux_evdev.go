@@ -27,20 +27,28 @@ func evIOCGBIT(ev, length int) uintptr {
 }
 
 // evdevCodeToKey maps Linux kernel key codes (from <linux/input-event-codes.h>)
-// to Wox Key values. Modifier keys are essential for double-tap detection;
-// common alphanumeric and control keys are included so the double-tap tracker
+// to Wox Key values. Modifier keys are essential for double-press detection;
+// common alphanumeric and control keys are included so the double-press tracker
 // can properly invalidate a pending sequence when any non-modifier key is pressed.
 func evdevCodeToKey(code uint16) Key {
 	switch code {
 	// Modifiers
-	case 29, 97: // KEY_LEFTCTRL, KEY_RIGHTCTRL
-		return KeyCtrl
-	case 42, 54: // KEY_LEFTSHIFT, KEY_RIGHTSHIFT
-		return KeyShift
-	case 56, 100: // KEY_LEFTALT, KEY_RIGHTALT
-		return KeyAlt
-	case 125, 126: // KEY_LEFTMETA, KEY_RIGHTMETA
-		return KeySuper
+	case 29: // KEY_LEFTCTRL
+		return KeyLeftCtrl
+	case 97: // KEY_RIGHTCTRL
+		return KeyRightCtrl
+	case 42: // KEY_LEFTSHIFT
+		return KeyLeftShift
+	case 54: // KEY_RIGHTSHIFT
+		return KeyRightShift
+	case 56: // KEY_LEFTALT
+		return KeyLeftAlt
+	case 100: // KEY_RIGHTALT
+		return KeyRightAlt
+	case 125: // KEY_LEFTMETA
+		return KeyLeftSuper
+	case 126: // KEY_RIGHTMETA
+		return KeyRightSuper
 	case 58: // KEY_CAPSLOCK
 		return KeyCapsLock
 
@@ -260,7 +268,7 @@ func (s *evdevRawSubscription) Close() error {
 // addRawKeyListenerLinuxEvdev opens all readable keyboard evdev devices and
 // forwards key events to the handler. This is a passive read-only listener:
 // it does not grab, remap, or inject any keyboard input. It only works for
-// modifier-key double-tap detection and similar patterns that consume
+// modifier-key double-press detection and similar patterns that consume
 // RawKeyEvent sequences.
 func addRawKeyListenerLinuxEvdev(handler RawKeyHandler) (RawKeySubscription, error) {
 	if handler == nil {

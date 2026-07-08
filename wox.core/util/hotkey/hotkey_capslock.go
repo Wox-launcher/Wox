@@ -67,15 +67,15 @@ func (t *capsLockComboTracker) handleDefaultCapsLockEvent(event keyboard.RawKeyE
 			return keyboard.KeyUnknown, true
 		}
 
-		shouldReplayCaps := allowCapsLockReplay && shouldReplayCapsLockTap(t.comboTriggered)
+		shouldReplayCaps := allowCapsLockReplay && shouldReplayCapsLockPress(t.comboTriggered)
 		t.capsPressed = false
 		t.comboTriggered = false
 		t.pressedKeys = map[keyboard.Key]bool{}
 		if shouldReplayCaps {
 			t.passthroughCapsEvents = 2
-			util.Go(util.NewTraceContext(), "replay single Caps Lock tap", func() {
-				if err := keyboard.SimulateCapsLockTap(); err != nil {
-					util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("failed to replay single Caps Lock tap: %s", err.Error()))
+			util.Go(util.NewTraceContext(), "replay single Caps Lock press", func() {
+				if err := keyboard.SimulateCapsLockPress(); err != nil {
+					util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("failed to replay single Caps Lock press: %s", err.Error()))
 				}
 			})
 		}
@@ -99,7 +99,7 @@ func (t *capsLockComboTracker) handleDefaultCapsLockEvent(event keyboard.RawKeyE
 // alone (preserving the normal toggle behavior).
 func (t *capsLockComboTracker) handleStateCaptureCapsLockEvent(event keyboard.RawKeyEvent, allowCapsLockStateUpdate bool) (keyboard.Key, bool) {
 	if t.passthroughCapsEvents > 0 {
-		// These events are from our own simulated CapsLock tap; let them
+		// These events are from our own simulated CapsLock press; let them
 		// pass through to the system without processing.
 		t.passthroughCapsEvents--
 		return keyboard.KeyUnknown, false
@@ -124,7 +124,7 @@ func (t *capsLockComboTracker) handleStateCaptureCapsLockEvent(event keyboard.Ra
 		shouldUndoToggle := t.comboTriggered
 		t.resetCapsSequence()
 		if allowSetState && shouldUndoToggle {
-			// On Linux, the CapsLock undo tap is injected via /dev/uinput,
+			// On Linux, the CapsLock undo press is injected via /dev/uinput,
 			// which creates a separate virtual keyboard device. Our evdev
 			// listener only reads physical keyboard devices (/dev/input/event*),
 			// so it never sees the injected events. This means we do NOT need
@@ -192,7 +192,7 @@ func (t *capsLockComboTracker) handleDarwinCapsLockEvent(event keyboard.RawKeyEv
 		} else {
 			// Fallback path: only start on a toggle-ON event (KeyDown).
 			// A KeyUp event here means Caps Lock is being toggled OFF and
-		// we were not in combo mode, so just let it pass through.
+			// we were not in combo mode, so just let it pass through.
 			if event.Type != keyboard.EventTypeKeyDown {
 				return keyboard.KeyUnknown, false
 			}
@@ -345,8 +345,8 @@ func (t *capsLockComboTracker) resetCapsSequence() {
 	t.pressedKeys = map[keyboard.Key]bool{}
 }
 
-// shouldReplayCapsLockTap keeps Caps Lock's native toggle behavior aligned with the combo state machine.
-func shouldReplayCapsLockTap(comboTriggered bool) bool {
+// shouldReplayCapsLockPress keeps Caps Lock's native toggle behavior aligned with the combo state machine.
+func shouldReplayCapsLockPress(comboTriggered bool) bool {
 	return !comboTriggered
 }
 
@@ -355,33 +355,7 @@ var (
 	capsLockComboCallbacks = map[keyboard.Key]func(){}
 	capsLockComboListener  keyboard.RawKeySubscription
 	capsLockComboState     = newCapsLockComboTracker()
-	capsLockComboRecorder  func(string)
 )
-
-// SetCapsLockComboRecorder forwards Caps Lock combinations to the active UI recorder.
-func SetCapsLockComboRecorder(recorder func(string)) {
-	var listenerToClose keyboard.RawKeySubscription
-
-	capsLockComboMu.Lock()
-	capsLockComboRecorder = recorder
-	capsLockComboState = newCapsLockComboTracker()
-	if recorder == nil && len(capsLockComboCallbacks) == 0 && capsLockComboListener != nil {
-		listenerToClose = capsLockComboListener
-		capsLockComboListener = nil
-	}
-	capsLockComboMu.Unlock()
-
-	if listenerToClose != nil {
-		if err := listenerToClose.Close(); err != nil {
-			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("failed to close Caps Lock combo listener after recorder stopped: %s", err.Error()))
-		}
-	}
-	if recorder != nil {
-		if err := ensureCapsLockComboListener(); err != nil {
-			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("failed to start Caps Lock combo recorder listener: %s", err.Error()))
-		}
-	}
-}
 
 func registerCapsLockComboHotKey(key keyboard.Key, callback func()) error {
 	capsLockComboMu.Lock()
@@ -402,7 +376,7 @@ func registerCapsLockComboHotKey(key keyboard.Key, callback func()) error {
 	return nil
 }
 
-// ensureCapsLockComboListener starts the shared raw listener used by both Caps Lock recording and registered Caps Lock hotkeys.
+// ensureCapsLockComboListener starts the shared raw listener used by registered Caps Lock hotkeys.
 func ensureCapsLockComboListener() error {
 	capsLockComboMu.Lock()
 	if capsLockComboListener != nil {
@@ -411,18 +385,9 @@ func ensureCapsLockComboListener() error {
 	}
 	capsLockComboMu.Unlock()
 
-	listener, err := keyboard.AddRawKeyListener(func(event keyboard.RawKeyEvent) bool {
-		triggeredKey, consume, recorder := handleCapsLockComboEvent(event)
+	listener, err := addRawKeyListener(func(event keyboard.RawKeyEvent) bool {
+		triggeredKey, consume := handleCapsLockComboEvent(event)
 		if triggeredKey == keyboard.KeyUnknown {
-			return consume
-		}
-
-		if recorder != nil {
-			if hotkeyStr := capsLockComboToHotkeyString(triggeredKey); hotkeyStr != "" {
-				util.Go(util.NewTraceContext(), "record caps lock hotkey in UI", func() {
-					recorder(hotkeyStr)
-				})
-			}
 			return consume
 		}
 
@@ -468,7 +433,7 @@ func unregisterCapsLockComboHotKey(key keyboard.Key) {
 
 	capsLockComboMu.Lock()
 	delete(capsLockComboCallbacks, key)
-	shouldClose := len(capsLockComboCallbacks) == 0 && capsLockComboRecorder == nil
+	shouldClose := len(capsLockComboCallbacks) == 0
 	if shouldClose && capsLockComboListener != nil {
 		listenerToClose = capsLockComboListener
 		capsLockComboListener = nil
@@ -490,12 +455,10 @@ func unregisterCapsLockComboHotKey(key keyboard.Key) {
 	capsLockComboMu.Unlock()
 }
 
-func handleCapsLockComboEvent(event keyboard.RawKeyEvent) (keyboard.Key, bool, func(string)) {
+func handleCapsLockComboEvent(event keyboard.RawKeyEvent) (keyboard.Key, bool) {
 	capsLockComboMu.Lock()
 	defer capsLockComboMu.Unlock()
-	recorder := capsLockComboRecorder
-	triggeredKey, consume := capsLockComboState.HandleEvent(event, recorder == nil || runtime.GOOS == "darwin")
-	return triggeredKey, consume, recorder
+	return capsLockComboState.HandleEvent(event, true)
 }
 
 // waitForCapsLockComboRelease keeps synthetic keyboard input from being swallowed by the active Caps Lock raw-key sequence.

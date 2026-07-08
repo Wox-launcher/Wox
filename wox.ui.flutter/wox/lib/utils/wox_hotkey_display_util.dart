@@ -99,6 +99,10 @@ class WoxHotkeyDisplayUtil {
       return [label, label];
     }
 
+    if (hotkey.isModifierChord) {
+      return hotkey.modifierChord!.map(labelFromRawPart).toList();
+    }
+
     if (hotkey.isSingleHotkey) {
       return [keyLabel(hotkey.singleHotkey!)];
     }
@@ -155,6 +159,16 @@ class WoxHotkeyDisplayUtil {
       "windows" => Platform.isWindows ? "Win" : "Super",
       "win" => Platform.isWindows ? "Win" : "Super",
       "super" => "Super",
+      "left_ctrl" => "Left Ctrl",
+      "right_ctrl" => "Right Ctrl",
+      "left_shift" => "Left Shift",
+      "right_shift" => "Right Shift",
+      "left_alt" => Platform.isMacOS ? "Left Option" : "Left Alt",
+      "right_alt" => Platform.isMacOS ? "Right Option" : "Right Alt",
+      "left_cmd" => Platform.isMacOS ? "Left Cmd" : "Left Super",
+      "right_cmd" => Platform.isMacOS ? "Right Cmd" : "Right Super",
+      "left_win" => Platform.isWindows ? "Left Win" : "Left Super",
+      "right_win" => Platform.isWindows ? "Right Win" : "Right Super",
       "space" => "Space",
       "enter" => "⏎",
       "escape" || "esc" => "Esc",

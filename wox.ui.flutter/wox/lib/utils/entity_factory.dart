@@ -34,6 +34,7 @@ class EntityFactory {
     'DoctorCheckResult': (json) => DoctorCheckResult.fromJson(json),
     'WoxUsageStats': (json) => WoxUsageStats.fromJson(json),
     'HotkeyAvailability': (json) => HotkeyAvailability.fromJson(json),
+    'HotkeyRecordingCapability': (json) => HotkeyRecordingCapability.fromJson(json),
     'WoxCloudSyncStatus': (json) => WoxCloudSyncStatus.fromJson(json),
     'WoxCloudSyncBootstrapStatus': (json) => WoxCloudSyncBootstrapStatus.fromJson(json),
     'WoxAccountStatus': (json) => WoxAccountStatus.fromJson(json),

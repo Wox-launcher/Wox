@@ -112,15 +112,16 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/sync/devices/join":                handleSyncDeviceJoin,
 
 	// events
-	"/on/focus/lost":       handleOnFocusLost,
-	"/on/ready":            handleOnUIReady,
-	"/on/show":             handleOnShow,
-	"/on/querybox/focus":   handleOnQueryBoxFocus,
-	"/on/hide":             handleOnHide,
-	"/on/setting":          handleOnSetting,
-	"/on/hotkey/recording": handleOnHotkeyRecording,
-	"/on/onboarding":       handleOnOnboarding,
-	"/usage/stats":         handleUsageStats,
+	"/on/focus/lost":                 handleOnFocusLost,
+	"/on/ready":                      handleOnUIReady,
+	"/on/show":                       handleOnShow,
+	"/on/querybox/focus":             handleOnQueryBoxFocus,
+	"/on/hide":                       handleOnHide,
+	"/on/setting":                    handleOnSetting,
+	"/on/hotkey/recording":           handleOnHotkeyRecording,
+	"/on/hotkey/recording/candidate": handleOnHotkeyRecordingCandidate,
+	"/on/onboarding":                 handleOnOnboarding,
+	"/usage/stats":                   handleUsageStats,
 
 	// lang
 	"/lang/available": handleLangAvailable,
@@ -3040,8 +3041,47 @@ func handleOnHotkeyRecording(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Info(ctx, fmt.Sprintf("received hotkey recording state from UI: isRecording=%t", isRecordingResult.Bool()))
-	GetUIManager().PostOnHotkeyRecording(ctx, isRecordingResult.Bool())
+	purpose := strings.TrimSpace(gjson.GetBytes(body, "purpose").String())
+	allowedKinds := []string{}
+	gjson.GetBytes(body, "allowedKinds").ForEach(func(_, value gjson.Result) bool {
+		if kind := strings.TrimSpace(value.String()); kind != "" {
+			allowedKinds = append(allowedKinds, kind)
+		}
+		return true
+	})
+	if isRecordingResult.Bool() {
+		if purpose == "" {
+			writeErrorResponse(w, "purpose is required when recording starts")
+			return
+		}
+		if len(allowedKinds) == 0 {
+			writeErrorResponse(w, "allowedKinds is required when recording starts")
+			return
+		}
+	}
+
+	logger.Info(ctx, fmt.Sprintf("received hotkey recording state from UI: isRecording=%t purpose=%s allowedKinds=%v", isRecordingResult.Bool(), purpose, allowedKinds))
+	capability, err := GetUIManager().PostOnHotkeyRecording(ctx, isRecordingResult.Bool(), purpose, allowedKinds)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, capability)
+}
+
+func handleOnHotkeyRecordingCandidate(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	body, _ := io.ReadAll(r.Body)
+	hotkeyResult := gjson.GetBytes(body, "hotkey")
+	if !hotkeyResult.Exists() || strings.TrimSpace(hotkeyResult.String()) == "" {
+		writeErrorResponse(w, "hotkey is required")
+		return
+	}
+
+	if err := GetUIManager().PostHotkeyRecordingCandidate(ctx, strings.TrimSpace(hotkeyResult.String())); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
 	writeSuccessResponse(w, "")
 }
 

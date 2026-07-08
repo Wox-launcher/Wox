@@ -589,9 +589,9 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           hotkey: WoxHotkey.parseHotkeyFromString(getValue(column.key)),
           // Table edit rows keep the hint on the right so it stays inside the hotkey cell instead of competing with row labels and descriptions.
           tipPosition: WoxHotkeyRecorderTipPosition.right,
-          onHotKeyRecorded: (hotkey) {
-            updateValue(column.key, hotkey);
-            setFieldValidationError(column.key, validateValue(hotkey, column));
+          onHotKeyRecorded: (result) {
+            updateValue(column.key, result.hotkey);
+            setFieldValidationError(column.key, validateValue(result.hotkey, column));
             setState(() {});
           },
         );

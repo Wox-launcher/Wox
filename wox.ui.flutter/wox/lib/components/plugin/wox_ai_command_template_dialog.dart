@@ -691,9 +691,9 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
                       WoxHotkeyRecorder(
                         hotkey: WoxHotkey.parseHotkeyFromString(queryHotkey),
                         tipPosition: WoxHotkeyRecorderTipPosition.right,
-                        onHotKeyRecorded: (hotkey) {
+                        onHotKeyRecorded: (result) {
                           setState(() {
-                            queryHotkey = hotkey;
+                            queryHotkey = result.hotkey;
                             hotkeyAvailabilityError = "";
                             errorMessage = "";
                           });

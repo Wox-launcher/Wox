@@ -34,7 +34,6 @@ const (
 	settingKeyInputDevice     = "inputDevice"
 	settingKeyInputDeviceName = "inputDeviceName"
 	settingKeyModel           = "model"
-	settingKeyTriggerMode     = "triggerMode"
 	settingKeyPlaySound       = "playSound"
 	settingKeyDuckVolume      = "duckVolume"
 	settingKeyAIRefine        = "aiRefineEnabled"
@@ -54,10 +53,6 @@ const (
 	// Embedded audio clips played when the dictation overlay shows/hides.
 	soundStart = "dictation_start.wav"
 	soundStop  = "dictation_stop.wav"
-
-	// Trigger mode values
-	triggerModeToggle = "toggle"
-	triggerModeHold   = "hold"
 
 	// Overlay
 	dictationOverlayName = "dictation-indicator"
@@ -81,7 +76,7 @@ var (
 // so the dictation plugin can register/unregister its global hotkey without
 // importing the ui package directly.
 type HotkeyRegistrar interface {
-	RegisterDictationHotkey(ctx context.Context, combineKey string, triggerMode string) error
+	RegisterDictationHotkey(ctx context.Context, combineKey string) error
 }
 
 // SetHotkeyRegistrar is called by the UI Manager during startup to inject
@@ -185,21 +180,8 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 			},
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
-			{
-				Type: definition.PluginSettingDefinitionTypeSelect,
-				Value: &definition.PluginSettingValueSelect{
-					Key:          settingKeyTriggerMode,
-					Label:        "i18n:plugin_dictation_trigger_mode",
-					DefaultValue: triggerModeToggle,
-					Options: []definition.PluginSettingValueSelectOption{
-						{Label: "i18n:plugin_dictation_trigger_toggle", Value: triggerModeToggle},
-						{Label: "i18n:plugin_dictation_trigger_hold", Value: triggerModeHold},
-					},
-				},
-			},
 			// Hotkey recorder - dynamic setting. The actual definition is built
-			// at render time by the OnGetDynamicSetting callback below, using a
-			// different tooltip depending on the selected trigger mode.
+			// at render time by the OnGetDynamicSetting callback below.
 			{
 				Type: definition.PluginSettingDefinitionTypeDynamic,
 				Value: &definition.PluginSettingValueDynamic{
@@ -372,12 +354,6 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		switch key {
 		case settingKeyHotkey:
 			p.reregisterHotkey(ctx, value)
-		case settingKeyTriggerMode:
-			// Trigger mode changed - re-register with the new mode.
-			hotkey := p.api.GetSetting(ctx, settingKeyHotkey)
-			if hotkey != "" {
-				p.reregisterHotkey(ctx, hotkey)
-			}
 		case settingKeyInputDevice:
 			p.rememberInputDeviceName(ctx, value)
 		case settingKeyDictionary:
@@ -401,7 +377,7 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 
 // reregisterHotkey binds the dictation global hotkey via the injected
 // HotkeyRegistrar (the UI Manager). Called on init and whenever the hotkey
-// setting or trigger mode changes.
+// setting changes.
 func (p *DictationPlugin) reregisterHotkey(ctx context.Context, combineKey string) {
 	p.registeredHotkeyMu.Lock()
 	defer p.registeredHotkeyMu.Unlock()
@@ -409,36 +385,21 @@ func (p *DictationPlugin) reregisterHotkey(ctx context.Context, combineKey strin
 		p.api.Log(ctx, plugin.LogLevelDebug, "hotkey registrar not set, skipping hotkey registration")
 		return
 	}
-	triggerMode := p.api.GetSetting(ctx, settingKeyTriggerMode)
-	if triggerMode == "" {
-		triggerMode = triggerModeToggle
-	}
-	if err := hotkeyRegistrar.RegisterDictationHotkey(ctx, combineKey, triggerMode); err != nil {
+	if err := hotkeyRegistrar.RegisterDictationHotkey(ctx, combineKey); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to register dictation hotkey: %s", err.Error()))
 	}
 }
 
 // buildHotkeySetting returns the hotkey setting as a dictationHotkey
-// definition, with a tooltip that reflects the current trigger mode.
+// definition.
 func (p *DictationPlugin) buildHotkeySetting(ctx context.Context) definition.PluginSettingDefinitionItem {
-	triggerMode := p.api.GetSetting(ctx, settingKeyTriggerMode)
-	if triggerMode == "" {
-		triggerMode = triggerModeToggle
-	}
-
-	tooltip := "i18n:plugin_dictation_hotkey_tooltip"
-	if triggerMode == triggerModeHold {
-		tooltip = "i18n:plugin_dictation_hotkey_hold_tooltip"
-	}
-
 	return definition.PluginSettingDefinitionItem{
 		Type: definition.PluginSettingDefinitionTypeDictationHotkey,
 		Value: &definition.PluginSettingValueDictationHotkey{
 			Key:          settingKeyHotkey,
 			Label:        "i18n:plugin_dictation_hotkey",
-			Tooltip:      tooltip,
+			Tooltip:      "i18n:plugin_dictation_hotkey_tooltip",
 			DefaultValue: "",
-			TriggerMode:  triggerMode,
 		},
 	}
 }
@@ -837,10 +798,9 @@ func (p *DictationPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	return plugin.NewQueryResponse(results)
 }
 
-// ToggleDictation is called by the hotkey handler in toggle mode. It starts
-// recording if idle and stops if recording. In hold mode, StartDictation and
-// StopDictation are called instead.
-func (p *DictationPlugin) ToggleDictation(ctx context.Context) {
+// PressDictationHotkey is called by press-triggered hotkeys. It starts
+// recording if idle and stops if recording.
+func (p *DictationPlugin) PressDictationHotkey(ctx context.Context) {
 	p.sessionMu.Lock()
 	if p.isRecording {
 		p.sessionMu.Unlock()
@@ -971,17 +931,11 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 
 	// Show the overlay immediately so the user gets instant feedback while the
 	// native dictation engine and recognition model are being prepared.
-	loadingKey := "plugin_dictation_loading_model"
-	triggerMode := p.api.GetSetting(ctx, settingKeyTriggerMode)
-	if triggerMode == triggerModeHold {
-		loadingKey = "plugin_dictation_loading_model_hold"
-	}
-
 	// Lower other audio as soon as the overlay appears. This pauses/ducks
 	// other apps' audio but does not affect Wox's own beep sounds.
 	p.startVolumeDucking(ctx)
 
-	p.showLoadingOverlay(ctx, loadingKey)
+	p.showLoadingOverlay(ctx, "plugin_dictation_loading_model")
 
 	// Create the session with VAD + offline recognizer pools.
 	config := speech.RecognizerConfig{

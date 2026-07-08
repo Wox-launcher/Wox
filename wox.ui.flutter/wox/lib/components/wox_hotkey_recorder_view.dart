@@ -12,23 +12,51 @@ import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/log.dart';
 import 'package:get/get.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
+import 'package:wox/utils/wox_hotkey_display_util.dart';
 
 enum WoxHotkeyRecorderTipPosition { left, right }
 
+enum WoxHotkeyRecorderPurpose {
+  normal("normal"),
+  dictation("dictation");
+
+  const WoxHotkeyRecorderPurpose(this.value);
+
+  final String value;
+}
+
+enum WoxHotkeyRecorderKind {
+  normalCombo("normalCombo"),
+  doubleModifier("doubleModifier"),
+  capsLockCombo("capsLockCombo"),
+  holdModifier("holdModifier"),
+  pressModifier("pressModifier");
+
+  const WoxHotkeyRecorderKind(this.value);
+
+  final String value;
+}
+
 class WoxHotkeyRecorder extends StatefulWidget {
-  final ValueChanged<String> onHotKeyRecorded;
+  final ValueChanged<HotkeyRecordingResult> onHotKeyRecorded;
   final ValueChanged<String>? onUnavailableHotKeyRecorded;
   final HotkeyX? hotkey;
+  final WoxHotkeyRecorderKind? hotkeyKind;
   final WoxHotkeyRecorderTipPosition tipPosition;
   final bool recordUnavailableHotkey;
+  final WoxHotkeyRecorderPurpose purpose;
+  final List<WoxHotkeyRecorderKind>? allowedKinds;
 
   const WoxHotkeyRecorder({
     super.key,
     required this.onHotKeyRecorded,
     required this.hotkey,
+    this.hotkeyKind,
     this.onUnavailableHotKeyRecorded,
     this.tipPosition = WoxHotkeyRecorderTipPosition.left,
     this.recordUnavailableHotkey = false,
+    this.purpose = WoxHotkeyRecorderPurpose.normal,
+    this.allowedKinds,
   });
 
   @override
@@ -69,15 +97,15 @@ class _HotkeyTrackerResult {
 ///
 /// This approach:
 ///   - Works correctly even when OS intercepts key combinations
-///   - Handles both normal hotkeys (cmd+space) and double-click hotkeys (cmd+cmd)
+///   - Handles both normal hotkeys (cmd+space) and double-press hotkeys (cmd+cmd)
 ///   - Is cross-platform compatible (synthesized events occur on macOS, Linux, and potentially Windows)
 class _HotkeyTracker {
   final Set<PhysicalKeyboardKey> _pressedModifiers = {};
   final Set<PhysicalKeyboardKey> _realPressedModifiers = {};
   final Set<PhysicalKeyboardKey> _synthesizedPressedModifiers = {};
   final Map<PhysicalKeyboardKey, int> _synthesizedModifierReleaseTimestamp = {};
-  final Map<HotKeyModifier, int> _lastModifierTapTimestamp = {};
-  final Set<HotKeyModifier> _invalidModifierTaps = {};
+  final Map<HotKeyModifier, int> _lastModifierPressTimestamp = {};
+  final Set<HotKeyModifier> _invalidModifierPresses = {};
   bool _capsPressed = false;
   PhysicalKeyboardKey? _pendingOutOfOrderKey;
   int? _pendingOutOfOrderKeyTimestamp;
@@ -90,8 +118,8 @@ class _HotkeyTracker {
     _realPressedModifiers.clear();
     _synthesizedPressedModifiers.clear();
     _synthesizedModifierReleaseTimestamp.clear();
-    _lastModifierTapTimestamp.clear();
-    _invalidModifierTaps.clear();
+    _lastModifierPressTimestamp.clear();
+    _invalidModifierPresses.clear();
     _capsPressed = false;
     _clearPendingOutOfOrderKey();
   }
@@ -156,15 +184,15 @@ class _HotkeyTracker {
         "real=${_debugPhysicalKeys(_realPressedModifiers)} "
         "synth=${_debugPhysicalKeys(_synthesizedPressedModifiers)} "
         "modifierTypes=${_debugModifierTypes(_pressedModifierTypes())} "
-        "invalidModifierTaps=${_debugModifierTypes(_invalidModifierTaps)} "
+        "invalidModifierPresses=${_debugModifierTypes(_invalidModifierPresses)} "
         "pendingOutOfOrderKey=${_pendingOutOfOrderKey == null ? "" : "${_pendingOutOfOrderKey!.keyLabel}/${_pendingOutOfOrderKey!.usbHidUsage}"}";
   }
 
-  /// Marks any held modifiers as part of a combination and clears pending pure-tap state.
-  void _invalidateActiveModifierTaps() {
+  /// Marks any held modifiers as part of a combination and clears pending pure-press state.
+  void _invalidateActiveModifierPresses() {
     final modifiers = _pressedModifierTypes();
-    _invalidModifierTaps.addAll(modifiers);
-    _lastModifierTapTimestamp.clear();
+    _invalidModifierPresses.addAll(modifiers);
+    _lastModifierPressTimestamp.clear();
   }
 
   /// Keep a short-lived non-modifier key only for macOS cmd+space, where Flutter can report Space before synthesized Cmd.
@@ -237,7 +265,7 @@ class _HotkeyTracker {
         // Recorder events can arrive through both HardwareKeyboard.addHandler
         // and Focus.onKeyEvent, and some platform backends can also repeat a
         // modifier down while the key is still physically held. Treat the
-        // duplicate as the same press so it does not invalidate double-tap
+        // duplicate as the same press so it does not invalidate double-press
         // detection.
         if (!keyEvent.synthesized && _realPressedModifiers.contains(keyEvent.physicalKey)) {
           return const _HotkeyTrackerResult();
@@ -245,11 +273,11 @@ class _HotkeyTracker {
 
         final activeModifiersBeforeDown = _pressedModifierTypes();
         if (!keyEvent.synthesized && activeModifiersBeforeDown.isNotEmpty) {
-          _invalidModifierTaps
+          _invalidModifierPresses
             ..addAll(activeModifiersBeforeDown)
             ..add(modifier);
         }
-        _lastModifierTapTimestamp.removeWhere((tapModifier, _) => tapModifier != modifier);
+        _lastModifierPressTimestamp.removeWhere((pressModifier, _) => pressModifier != modifier);
 
         _synthesizedModifierReleaseTimestamp.remove(keyEvent.physicalKey);
         if (keyEvent.synthesized) {
@@ -278,28 +306,28 @@ class _HotkeyTracker {
           _realPressedModifiers.remove(keyEvent.physicalKey);
           _synthesizedPressedModifiers.remove(keyEvent.physicalKey);
           _synthesizedModifierReleaseTimestamp.remove(keyEvent.physicalKey);
-          _lastModifierTapTimestamp.removeWhere((tapModifier, _) => tapModifier != modifier);
+          _lastModifierPressTimestamp.removeWhere((pressModifier, _) => pressModifier != modifier);
 
-          if (_invalidModifierTaps.remove(modifier)) {
-            _lastModifierTapTimestamp.remove(modifier);
+          if (_invalidModifierPresses.remove(modifier)) {
+            _lastModifierPressTimestamp.remove(modifier);
             _syncPressedModifiers();
             return const _HotkeyTrackerResult();
           }
 
-          // Check for double-click modifier keys
+          // Check for double-press modifier keys
           final now = DateTime.now().millisecondsSinceEpoch;
-          final lastPress = _lastModifierTapTimestamp[modifier] ?? 0;
+          final lastPress = _lastModifierPressTimestamp[modifier] ?? 0;
 
           if (now - lastPress <= _doubleClickThreshold) {
             // Double click detected
             final modifierStr = WoxHotkey.getModifierStr(modifier);
-            _lastModifierTapTimestamp.remove(modifier);
+            _lastModifierPressTimestamp.remove(modifier);
             _syncPressedModifiers();
             _clearPendingOutOfOrderKey();
             return _HotkeyTrackerResult(hotkey: "$modifierStr+$modifierStr", handled: true);
           }
 
-          _lastModifierTapTimestamp[modifier] = now;
+          _lastModifierPressTimestamp[modifier] = now;
         }
       }
       _syncPressedModifiers();
@@ -312,7 +340,7 @@ class _HotkeyTracker {
       return const _HotkeyTrackerResult();
     }
 
-    _invalidateActiveModifierTaps();
+    _invalidateActiveModifierPresses();
 
     // Handle normal hotkeys (modifier + key)
     if (keyEvent is! KeyUpEvent && WoxHotkey.isAllowedKey(keyEvent.physicalKey)) {
@@ -356,11 +384,22 @@ class _HotkeyTracker {
 
 class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   HotkeyX? _hotKey;
+  String _hotKeyKind = "";
   bool _isFocused = false;
   String _availabilityMessage = "";
+  HotkeyRecordingCapability? _recordingCapability;
   late FocusNode _focusNode;
-  StreamSubscription<String>? _globalHotkeySubscription;
+  StreamSubscription<HotkeyRecordingResult>? _globalHotkeySubscription;
   final _tracker = _HotkeyTracker();
+
+  List<WoxHotkeyRecorderKind> get _allowedKinds {
+    if (widget.allowedKinds != null) {
+      return widget.allowedKinds!;
+    }
+    return const [WoxHotkeyRecorderKind.normalCombo, WoxHotkeyRecorderKind.doubleModifier, WoxHotkeyRecorderKind.capsLockCombo];
+  }
+
+  List<String> get _allowedKindValues => _allowedKinds.map((kind) => kind.value).toList();
 
   String tr(String key) {
     return Get.find<WoxSettingController>().tr(key);
@@ -372,12 +411,16 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
 
     _focusNode = FocusNode();
     _hotKey = widget.hotkey;
-    _globalHotkeySubscription = WoxHotkeyRecordingBus.instance.stream.listen((hotkey) {
+    _hotKeyKind = widget.hotkeyKind?.value ?? "";
+    _globalHotkeySubscription = WoxHotkeyRecordingBus.instance.stream.listen((result) {
       if (_isFocused) {
-        Logger.instance.info(const UuidV4().generate(), "Hotkey recorder received backend RecordHotkey event: hotkey=$hotkey");
-        _recordHotkey(hotkey);
+        Logger.instance.info(const UuidV4().generate(), "Hotkey recorder received backend RecordHotkey event: hotkey=${result.hotkey} kind=${result.kind}");
+        _recordHotkey(result.hotkey, kind: result.kind);
       } else {
-        Logger.instance.debug(const UuidV4().generate(), "Hotkey recorder ignored backend RecordHotkey event because it is not focused: hotkey=$hotkey");
+        Logger.instance.debug(
+          const UuidV4().generate(),
+          "Hotkey recorder ignored backend RecordHotkey event because it is not focused: hotkey=${result.hotkey} kind=${result.kind}",
+        );
       }
     });
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
@@ -399,19 +442,37 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     if (oldWidget.hotkey?.toStr() != widget.hotkey?.toStr()) {
       _hotKey = widget.hotkey;
     }
+    if (oldWidget.hotkeyKind != widget.hotkeyKind) {
+      _hotKeyKind = widget.hotkeyKind?.value ?? "";
+    }
   }
 
   // Reports recorder focus so core can forward Wox-owned global hotkey presses to this recorder instead of executing them.
   void _postHotkeyRecording(bool isRecording) {
     final traceId = const UuidV4().generate();
-    Logger.instance.info(traceId, "Hotkey recorder posts recording state: isRecording=$isRecording");
+    Logger.instance.info(traceId, "Hotkey recorder posts recording state: isRecording=$isRecording purpose=${widget.purpose.value} allowedKinds=$_allowedKindValues");
     WoxApi.instance
-        .onHotkeyRecording(traceId, isRecording)
-        .then((_) {
-          Logger.instance.info(traceId, "Hotkey recorder recording state accepted by core: isRecording=$isRecording");
+        .onHotkeyRecording(traceId, isRecording, purpose: widget.purpose.value, allowedKinds: _allowedKindValues)
+        .then((capability) {
+          Logger.instance.info(
+            traceId,
+            "Hotkey recorder recording state accepted by core: isRecording=$isRecording raw=${capability.rawRecorderAvailable} fallback=${capability.fallbackAllowedKinds}",
+          );
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _recordingCapability = isRecording ? capability : null;
+          });
         })
         .catchError((error) {
           Logger.instance.warn(traceId, "Failed to update hotkey recording state: $error");
+          if (!mounted || !isRecording) {
+            return;
+          }
+          setState(() {
+            _recordingCapability = HotkeyRecordingCapability(rawRecorderAvailable: false, fallbackAllowedKinds: const [], unavailableReason: error.toString());
+          });
         });
   }
 
@@ -425,12 +486,18 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     );
 
     // backspace to clear hotkey
-    if (keyEvent.logicalKey == LogicalKeyboardKey.backspace) {
+    if (keyEvent.logicalKey == LogicalKeyboardKey.backspace && keyEvent is KeyDownEvent) {
       _hotKey = null;
+      _hotKeyKind = "";
       _availabilityMessage = "";
-      widget.onHotKeyRecorded("");
+      widget.onHotKeyRecorded(const HotkeyRecordingResult(hotkey: "", kind: ""));
       setState(() {});
       Logger.instance.info(traceId, "Hotkey recorder cleared hotkey from Backspace");
+      return true;
+    }
+
+    if (!_shouldUseNormalFallbackRecorder()) {
+      Logger.instance.info(traceId, "Hotkey recorder waits for backend raw recorder result");
       return true;
     }
 
@@ -445,8 +512,27 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
       return result.handled;
     }
 
-    _recordHotkey(result.hotkey!);
+    final parsedHotkey = WoxHotkey.parseHotkeyFromString(result.hotkey!);
+    if (parsedHotkey?.isNormalHotkey != true) {
+      Logger.instance.info(traceId, "Hotkey recorder ignored non-normal fallback candidate: hotkey=${result.hotkey}");
+      return result.handled;
+    }
+
+    _submitFallbackHotkey(result.hotkey!);
     return true;
+  }
+
+  bool _shouldUseNormalFallbackRecorder() {
+    final capability = _recordingCapability;
+    return capability != null && !capability.rawRecorderAvailable && capability.fallbackAllowedKinds.contains(WoxHotkeyRecorderKind.normalCombo.value);
+  }
+
+  void _submitFallbackHotkey(String hotkeyStr) {
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, "Hotkey recorder submits fallback candidate: hotkey=$hotkeyStr");
+    WoxApi.instance.submitHotkeyRecordingCandidate(traceId, hotkeyStr).catchError((error) {
+      Logger.instance.warn(traceId, "Hotkey recorder fallback candidate rejected: hotkey=$hotkeyStr error=$error");
+    });
   }
 
   String _describeKeyEvent(KeyEvent keyEvent) {
@@ -463,9 +549,27 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     return "control=${keyboard.isControlPressed} shift=${keyboard.isShiftPressed} alt=${keyboard.isAltPressed} meta=${keyboard.isMetaPressed} physical=[${physicalKeys.join(",")}]";
   }
 
-  void _recordHotkey(String hotkeyStr) {
+  bool _isKindAllowed(String kind) {
+    if (kind.isEmpty) {
+      return true;
+    }
+    return _allowedKindValues.contains(kind);
+  }
+
+  void _recordHotkey(String hotkeyStr, {String kind = ""}) {
     final traceId = const UuidV4().generate();
-    Logger.instance.info(traceId, "Hotkey recorder checks availability: hotkey=$hotkeyStr recordUnavailable=${widget.recordUnavailableHotkey}");
+    if (!_isKindAllowed(kind)) {
+      Logger.instance.info(traceId, "Hotkey recorder ignored disallowed kind: hotkey=$hotkeyStr kind=$kind allowed=$_allowedKindValues");
+      return;
+    }
+
+    if (kind == WoxHotkeyRecorderKind.holdModifier.value || kind == WoxHotkeyRecorderKind.pressModifier.value) {
+      Logger.instance.info(traceId, "Hotkey recorder accepts modifier-only hotkey without availability probe: hotkey=$hotkeyStr kind=$kind");
+      _acceptRecordedHotkey(hotkeyStr, kind: kind);
+      return;
+    }
+
+    Logger.instance.info(traceId, "Hotkey recorder checks availability: hotkey=$hotkeyStr kind=$kind recordUnavailable=${widget.recordUnavailableHotkey}");
     WoxApi.instance
         .checkHotkeyAvailability(traceId, hotkeyStr)
         .then((availability) {
@@ -490,16 +594,21 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
             return false;
           }
 
-          _hotKey = WoxHotkey.parseHotkeyFromString(hotkeyStr);
-          _availabilityMessage = "";
-          widget.onHotKeyRecorded(hotkeyStr);
-          setState(() {});
+          _acceptRecordedHotkey(hotkeyStr, kind: kind);
           return true;
         })
         .catchError((error) {
           Logger.instance.warn(traceId, "Hotkey recorder availability check failed: hotkey=$hotkeyStr error=$error");
           return false;
         });
+  }
+
+  void _acceptRecordedHotkey(String hotkeyStr, {String kind = ""}) {
+    _hotKey = WoxHotkey.parseHotkeyFromString(hotkeyStr);
+    _hotKeyKind = kind;
+    _availabilityMessage = "";
+    widget.onHotKeyRecorded(HotkeyRecordingResult(hotkey: hotkeyStr, kind: kind));
+    setState(() {});
   }
 
   String _buildAvailabilityMessage(HotkeyAvailability availability) {
@@ -519,6 +628,8 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
 
   Widget _buildRecorderBox() {
     final hasAvailabilityError = _availabilityMessage.isNotEmpty;
+    final hotkey = _hotKey;
+    final isDisplayableHotkey = hotkey != null && (hotkey.isDoubleHotkey || hotkey.isCapsLockHotkey || hotkey.isNormalHotkey || hotkey.isSingleHotkey || hotkey.isModifierChord);
     return Container(
       // Match the quieter setting control treatment; focus still uses the accent color while idle borders no longer dominate the row.
       decoration: BoxDecoration(
@@ -528,16 +639,23 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
         child:
-            _hotKey == null || (!_hotKey!.isDoubleHotkey && !_hotKey!.isCapsLockHotkey && !_hotKey!.isNormalHotkey && !_hotKey!.isSingleHotkey)
+            !isDisplayableHotkey
                 ? SizedBox(
                   width: 80,
                   height: 18,
                   child: Text(_isFocused ? tr("ui_hotkey_recording") : tr("ui_hotkey_click_to_set"), style: TextStyle(color: Colors.grey[400], fontSize: 13)),
                 )
+                : _hotKeyKind == WoxHotkeyRecorderKind.holdModifier.value && hotkey.isModifierChord
+                ? Text(
+                  '${tr('ui_hotkey_hold_prefix')} ${WoxHotkeyDisplayUtil.labelsFromHotkey(hotkey).join(' + ')}',
+                  style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )
                 : WoxHotkeyView(
                   // Reusing WoxHotkeyView keeps settings and toolbar shortcut
                   // labels platform-consistent.
-                  hotkey: _hotKey!,
+                  hotkey: hotkey,
                   backgroundColor: Theme.of(context).canvasColor,
                   borderColor: Theme.of(context).dividerColor,
                   textColor: Theme.of(context).textTheme.bodyMedium?.color ?? getThemeTextColor(),
@@ -548,13 +666,36 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
 
   Widget _buildFocusedHint({bool singleLine = false}) {
     final hasAvailabilityError = _availabilityMessage.isNotEmpty;
+    final recordingUnavailable = _recordingUnavailableMessage();
     return Text(
-      hasAvailabilityError ? _availabilityMessage : tr("ui_hotkey_press_hint"),
+      hasAvailabilityError
+          ? _availabilityMessage
+          : recordingUnavailable.isNotEmpty
+          ? recordingUnavailable
+          : _focusedHintText(),
       maxLines: singleLine ? 1 : null,
       softWrap: !singleLine,
       overflow: singleLine ? TextOverflow.visible : TextOverflow.clip,
-      style: TextStyle(color: hasAvailabilityError ? Colors.red : Colors.grey[500], fontSize: 13),
+      style: TextStyle(color: hasAvailabilityError || recordingUnavailable.isNotEmpty ? Colors.red : Colors.grey[500], fontSize: 13),
     );
+  }
+
+  String _focusedHintText() {
+    if (widget.purpose == WoxHotkeyRecorderPurpose.dictation) {
+      return tr("ui_hotkey_dictation_press_hint");
+    }
+    if (_allowedKindValues.contains(WoxHotkeyRecorderKind.pressModifier.value)) {
+      return tr("ui_hotkey_modifier_press_hint");
+    }
+    return tr("ui_hotkey_press_hint");
+  }
+
+  String _recordingUnavailableMessage() {
+    final capability = _recordingCapability;
+    if (!_isFocused || capability == null || capability.rawRecorderAvailable || capability.fallbackAllowedKinds.isNotEmpty) {
+      return "";
+    }
+    return capability.unavailableReason.isNotEmpty ? capability.unavailableReason : tr("ui_hotkey_raw_recorder_unavailable");
   }
 
   Widget _buildRecorderContent() {
@@ -611,6 +752,8 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
         _isFocused = value;
         if (_isFocused) {
           _tracker.reset();
+        } else {
+          _recordingCapability = null;
         }
         _postHotkeyRecording(_isFocused);
 

@@ -179,8 +179,16 @@ class WoxApi {
     await WoxHttpUtil.instance.postData(traceId, "/on/setting", {"inSettingView": inSettingView});
   }
 
-  Future<void> onHotkeyRecording(String traceId, bool isRecording) async {
-    await WoxHttpUtil.instance.postData(traceId, "/on/hotkey/recording", {"isRecording": isRecording});
+  Future<HotkeyRecordingCapability> onHotkeyRecording(String traceId, bool isRecording, {required String purpose, required List<String> allowedKinds}) async {
+    return await WoxHttpUtil.instance.postData<HotkeyRecordingCapability>(traceId, "/on/hotkey/recording", {
+      "isRecording": isRecording,
+      "purpose": purpose,
+      "allowedKinds": allowedKinds,
+    });
+  }
+
+  Future<void> submitHotkeyRecordingCandidate(String traceId, String hotkey) async {
+    await WoxHttpUtil.instance.postData(traceId, "/on/hotkey/recording/candidate", {"hotkey": hotkey});
   }
 
   Future<void> onOnboarding(String traceId, bool inOnboardingView) async {

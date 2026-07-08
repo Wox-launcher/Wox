@@ -64,7 +64,7 @@ const char* simulateCtrlV() {
     return NULL;
 }
 
-const char* simulateCapsLockTap() {
+const char* simulateCapsLockPress() {
     INPUT ip[2];
     ZeroMemory(ip, sizeof(ip));
 
@@ -88,7 +88,7 @@ const char* setCapsLockState(int enabled) {
         return NULL;
     }
 
-    return simulateCapsLockTap();
+    return simulateCapsLockPress();
 }
 
 // simulateType sends Unicode text via SendInput with KEYEVENTF_UNICODE.
@@ -157,8 +157,8 @@ func simulateBackspace() error {
 	return nil
 }
 
-func simulateCapsLockTap() error {
-	err := C.simulateCapsLockTap()
+func simulateCapsLockPress() error {
+	err := C.simulateCapsLockPress()
 	if err != nil {
 		errMsg := C.GoString(err)
 		return fmt.Errorf("failed to send CapsLock: %v", errMsg)

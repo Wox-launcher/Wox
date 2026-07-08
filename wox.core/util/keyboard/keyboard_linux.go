@@ -12,7 +12,7 @@ import (
 )
 
 // Linux evdev key codes used for copy/paste injection via uinput.
-// Ctrl is held while C (copy) or V (paste) is tapped, matching the
+// Ctrl is held while C (copy) or V (paste) is pressed, matching the
 // Windows/Darwin implementations that use Cmd+C/Cmd+V.
 const (
 	evKeyLeftCtrlCode  = 29
@@ -345,7 +345,7 @@ func keyToEvdevKeyCode(key Key) (uint16, error) {
 //
 // We require uinput instead of just the 'input' group because:
 // 1. The 'input' group only grants read access to /dev/input/event* devices,
-//    which is sufficient for passive key event listening (double-tap detection).
+//    which is sufficient for passive key event listening (double-press detection).
 // 2. The 'uinput' group grants write access to /dev/uinput, which allows
 //    creating virtual input devices and injecting key events. This is needed
 //    to restore the CapsLock state after a combo is triggered.
@@ -468,10 +468,10 @@ func writeUinputEvent(fd int, evType, code uint16, value int32) error {
 	return err
 }
 
-// simulateCapsLockTap injects a CapsLock key press+release via the uinput
+// simulateCapsLockPress injects a CapsLock key press+release via the uinput
 // virtual keyboard device. This toggles the caps lock state without relying
 // on any external tools.
-func simulateCapsLockTap() error {
+func simulateCapsLockPress() error {
 	fd, err := ensureUinputDevice()
 	if err != nil {
 		return err
@@ -495,7 +495,7 @@ func simulateCapsLockTap() error {
 	return nil
 }
 
-// setCapsLockState sets the CapsLock toggle state by injecting a CapsLock tap
+// setCapsLockState sets the CapsLock toggle state by injecting a CapsLock press
 // only if the current state doesn't match the target. This mirrors the Windows
 // approach where we only toggle when needed.
 func setCapsLockState(enabled bool) error {
@@ -503,7 +503,7 @@ func setCapsLockState(enabled bool) error {
 	if current == enabled {
 		return nil
 	}
-	return simulateCapsLockTap()
+	return simulateCapsLockPress()
 }
 
 // simulateType inputs text into the focused window. Linux uinput does not

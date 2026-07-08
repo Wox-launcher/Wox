@@ -14,10 +14,10 @@ type hotkeySpec struct {
 	modifiers         keyboard.Modifier
 	key               keyboard.Key
 	doubleModifierKey keyboard.Key
-	// holdModifierKeys is set when the hotkey is a left/right modifier-only
-	// hold chord (e.g. "left_cmd" or "left_shift+left_cmd"). In this mode no
-	// system hotkey is registered; a raw key listener handles both press and release.
-	holdModifierKeys []keyboard.Key
+	// modifierChordKeys is set when the hotkey string is a pure left/right
+	// modifier chord. The registration intent decides whether it becomes a
+	// holdModifier or pressModifier runtime hotkey.
+	modifierChordKeys []keyboard.Key
 }
 
 func (s hotkeySpec) isCapsLockKey() bool {
@@ -28,8 +28,8 @@ func (s hotkeySpec) isDoubleModifier() bool {
 	return s.doubleModifierKey != keyboard.KeyUnknown
 }
 
-func (s hotkeySpec) isHoldModifier() bool {
-	return len(s.holdModifierKeys) > 0
+func (s hotkeySpec) isModifierChord() bool {
+	return len(s.modifierChordKeys) > 0
 }
 
 func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
@@ -73,10 +73,10 @@ func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
 			return spec, nil
 		}
 		// One or two left/right specific modifier keys (e.g. "left_cmd" or
-		// "left_shift+left_cmd") are treated as hold-modifier hotkeys. No
-		// system hotkey is registered; a raw key listener handles press and release.
+		// "left_shift+left_cmd") are parsed as a pure modifier chord. The
+		// registration intent decides whether this chord is hold or press.
 		if isHoldModifierKeyChord(modifierKeys) {
-			spec.holdModifierKeys = canonicalHoldModifierKeys(modifierKeys)
+			spec.modifierChordKeys = canonicalHoldModifierKeys(modifierKeys)
 			return spec, nil
 		}
 		return hotkeySpec{}, fmt.Errorf("missing key in hotkey: %s", combineKey)
@@ -156,6 +156,19 @@ func containsHoldModifierKey(keys []keyboard.Key, target keyboard.Key) bool {
 		}
 	}
 	return false
+}
+
+func orderedHoldModifierRecorderKeys() []keyboard.Key {
+	return []keyboard.Key{
+		keyboard.KeyLeftCtrl,
+		keyboard.KeyRightCtrl,
+		keyboard.KeyLeftShift,
+		keyboard.KeyRightShift,
+		keyboard.KeyLeftAlt,
+		keyboard.KeyRightAlt,
+		keyboard.KeyLeftSuper,
+		keyboard.KeyRightSuper,
+	}
 }
 
 func IsCapsLockHotkeyString(combineKey string) bool {

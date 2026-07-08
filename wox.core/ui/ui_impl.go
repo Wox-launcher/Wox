@@ -121,10 +121,11 @@ func (u *uiImpl) ToggleApp(ctx context.Context, showContext common.ShowContext) 
 	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, showContext))
 }
 
-func (u *uiImpl) RecordHotkey(ctx context.Context, hotkey string) {
-	logger.Info(ctx, fmt.Sprintf("send RecordHotkey to UI: hotkey=%s", hotkey))
+func (u *uiImpl) RecordHotkey(ctx context.Context, hotkey string, kind string) {
+	logger.Info(ctx, fmt.Sprintf("send RecordHotkey to UI: hotkey=%s kind=%s", hotkey, kind))
 	u.invokeWebsocketMethod(ctx, "RecordHotkey", map[string]any{
 		"Hotkey": hotkey,
+		"Kind":   kind,
 	})
 }
 

@@ -22,7 +22,7 @@ type holdCallback struct {
 //
 // State machine (all fields guarded by holdTrackerMu):
 //   - pressTimer != nil, pressFired == false: all keys in the chord are held
-//     but the minimum hold duration has not yet elapsed. A quick tap or any
+//     but the minimum hold duration has not yet elapsed. A quick press or any
 //     key press outside the chord cancels the timer and suppresses both callbacks.
 //   - pressTimer == nil, pressFired == true: the chord was held long enough and
 //     onPress has fired. The next key-up for any chord key triggers onRelease.
@@ -48,7 +48,7 @@ type holdModifierRelease struct {
 }
 
 // holdModifierPressDelay is the minimum time a hold-modifier key must remain
-// pressed alone before onPress fires. Taps shorter than this, or holds
+// pressed alone before onPress fires. Presses shorter than this, or holds
 // interrupted by another key press, are treated as accidental and ignored,
 // matching the "press and hold" semantics users expect from hold mode.
 const holdModifierPressDelay = 200 * time.Millisecond
@@ -69,7 +69,9 @@ func ensureHoldKeyListener() error {
 		return nil
 	}
 
-	listener, err := keyboard.AddRawKeyListener(func(event keyboard.RawKeyEvent) bool {
+	listener, err := addRawKeyListener(func(event keyboard.RawKeyEvent) bool {
+		handlePressModifierRawEvent(event)
+
 		holdTrackerMu.Lock()
 
 		if event.Type == keyboard.EventTypeKeyDown {
@@ -320,7 +322,7 @@ func stopHoldModifierTracking(keys []keyboard.Key) {
 }
 
 func closeHoldKeyListenerIfIdle() {
-	if holdCallbacks.Len() > 0 || holdModifierCallbacks.Len() > 0 {
+	if holdCallbacks.Len() > 0 || holdModifierCallbacks.Len() > 0 || pressModifierTracker.Len() > 0 {
 		return
 	}
 	if holdKeyListener != nil {
@@ -353,24 +355,8 @@ func startHoldModifierTracking(keys []keyboard.Key, onPress func(), onRelease fu
 	return ensureHoldKeyListener()
 }
 
-// ---------------------------------------------------------------------------
-// Hold-modifier recording
-//
-// Flutter's macOS engine does not reliably produce KeyDownEvent for every
-// modifier key (notably right_ctrl), so the hold-hotkey recorder cannot rely
-// on Flutter key events alone. When the UI enters hotkey-recording mode it
-// installs a recorder callback via SetHoldModifierRecorder; the Go-side raw
-// key listener (CGEventTap on macOS) captures the hold-modifier candidate
-// keys and forwards the matched hold string back to the UI.
-// ---------------------------------------------------------------------------
-
-var (
-	holdModifierRecorderMu       sync.Mutex
-	holdModifierRecorder         func(string)
-	holdModifierRecorderListener keyboard.RawKeySubscription
-)
-
-// holdModifierRecorderKeys are the keys the recorder will capture and forward.
+// holdModifierRecorderKeys are the left/right specific modifier keys tracked
+// by holdModifier and pressModifier runtime hotkeys.
 var holdModifierRecorderKeys = map[keyboard.Key]bool{
 	keyboard.KeyLeftCtrl:   true,
 	keyboard.KeyRightCtrl:  true,
@@ -380,93 +366,4 @@ var holdModifierRecorderKeys = map[keyboard.Key]bool{
 	keyboard.KeyRightAlt:   true,
 	keyboard.KeyLeftSuper:  true,
 	keyboard.KeyRightSuper: true,
-}
-
-// SetHoldModifierRecorder installs or removes a recorder that forwards
-// hold-modifier key presses to the UI. When recorder is non-nil, a dedicated
-// raw key listener is started; when nil, the listener is torn down. The
-// listener is separate from the registered-hotkey listener so recording does
-// not interfere with active hold-modifier hotkeys.
-func SetHoldModifierRecorder(recorder func(string)) {
-	var listenerToClose keyboard.RawKeySubscription
-
-	holdModifierRecorderMu.Lock()
-	holdModifierRecorder = recorder
-	if recorder == nil && holdModifierRecorderListener != nil {
-		listenerToClose = holdModifierRecorderListener
-		holdModifierRecorderListener = nil
-	}
-	holdModifierRecorderMu.Unlock()
-
-	if listenerToClose != nil {
-		_ = listenerToClose.Close()
-	}
-	if recorder != nil {
-		ensureHoldModifierRecorderListener()
-	}
-}
-
-func ensureHoldModifierRecorderListener() {
-	holdModifierRecorderMu.Lock()
-	if holdModifierRecorderListener != nil {
-		holdModifierRecorderMu.Unlock()
-		return
-	}
-	holdModifierRecorderMu.Unlock()
-
-	listener, err := keyboard.AddRawKeyListener(func(event keyboard.RawKeyEvent) bool {
-		if event.Type != keyboard.EventTypeKeyDown {
-			return false
-		}
-		if !holdModifierRecorderKeys[event.Key] {
-			return false
-		}
-
-		holdModifierRecorderMu.Lock()
-		rec := holdModifierRecorder
-		holdModifierRecorderMu.Unlock()
-		if rec == nil {
-			return false
-		}
-
-		holdStr := currentHoldModifierRecorderString(event.Key)
-		if holdStr == "" {
-			return false
-		}
-		util.Go(util.NewTraceContext(), fmt.Sprintf("record hold-modifier hotkey in UI: %s", holdStr), func() {
-			rec(holdStr)
-		})
-		return false
-	})
-	if err != nil {
-		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("failed to start hold-modifier recorder listener: %s", err.Error()))
-		return
-	}
-
-	holdModifierRecorderMu.Lock()
-	if holdModifierRecorderListener != nil {
-		holdModifierRecorderMu.Unlock()
-		_ = listener.Close()
-		return
-	}
-	holdModifierRecorderListener = listener
-	holdModifierRecorderMu.Unlock()
-}
-
-func currentHoldModifierRecorderString(eventKey keyboard.Key) string {
-	keys := []keyboard.Key{eventKey}
-	for key := range holdModifierRecorderKeys {
-		if key == eventKey {
-			continue
-		}
-		if keyboard.IsKeyPressed(key) {
-			keys = append(keys, key)
-		}
-	}
-
-	keys = canonicalHoldModifierKeys(keys)
-	if len(keys) == 0 || len(keys) > 2 {
-		return ""
-	}
-	return holdModifierComboString(keys)
 }
