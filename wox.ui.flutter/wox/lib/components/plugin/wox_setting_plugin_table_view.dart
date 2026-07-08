@@ -306,7 +306,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
 
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText ||
         column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeQueryHotkeyQuery ||
-        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAICommandPrompt) {
+        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAICommandPrompt ||
+        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeDictationPrompt) {
       return columnWidth(
         column: column,
         isHeader: false,

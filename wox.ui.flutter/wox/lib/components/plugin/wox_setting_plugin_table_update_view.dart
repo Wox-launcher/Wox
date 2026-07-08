@@ -75,7 +75,18 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   bool _isTextEditingColumn(PluginSettingValueTableColumn column) {
     return column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText ||
         column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeQueryHotkeyQuery ||
-        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAICommandPrompt;
+        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAICommandPrompt ||
+        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeDictationPrompt;
+  }
+
+  List<WoxHotkeyRecorderKind>? _allowedHotkeyKindsForColumn(PluginSettingValueTableColumn column) {
+    final allowedValues = column.allowedHotkeyKinds.map((kind) => kind.trim()).where((kind) => kind.isNotEmpty).toSet();
+    if (allowedValues.isEmpty) {
+      return null;
+    }
+
+    final allowedKinds = WoxHotkeyRecorderKind.values.where((kind) => allowedValues.contains(kind.name) || allowedValues.contains(kind.value)).toList();
+    return allowedKinds.isEmpty ? null : allowedKinds;
   }
 
   // Detects the AI command default action select without coupling the generic table editor to the AI plugin id.
@@ -575,6 +586,8 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         return _buildQueryVariableColumn(column: column, source: WoxQueryVariableSource.queryHotkey);
       case PluginSettingValueType.pluginSettingValueTableColumnTypeAICommandPrompt:
         return _buildQueryVariableColumn(column: column, source: WoxQueryVariableSource.aiCommand);
+      case PluginSettingValueType.pluginSettingValueTableColumnTypeDictationPrompt:
+        return _buildQueryVariableColumn(column: column, source: WoxQueryVariableSource.dictation);
       case PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox:
         return WoxCheckbox(
           value: getValueBool(column.key),
@@ -589,6 +602,8 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           hotkey: WoxHotkey.parseHotkeyFromString(getValue(column.key)),
           // Table edit rows keep the hint on the right so it stays inside the hotkey cell instead of competing with row labels and descriptions.
           tipPosition: WoxHotkeyRecorderTipPosition.right,
+          purpose: column.allowedHotkeyKinds.isNotEmpty ? WoxHotkeyRecorderPurpose.dictation : WoxHotkeyRecorderPurpose.normal,
+          allowedKinds: _allowedHotkeyKindsForColumn(column),
           onHotKeyRecorded: (result) {
             updateValue(column.key, result.hotkey);
             setFieldValidationError(column.key, validateValue(result.hotkey, column));

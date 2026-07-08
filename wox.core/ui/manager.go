@@ -70,8 +70,7 @@ type Manager struct {
 	mainHotkeyKey        string
 	selectionHotkey      *hotkey.Hotkey
 	selectionHotkeyKey   string
-	dictationHotkey      *hotkey.Hotkey
-	dictationHotkeyKey   string
+	dictationHotkeys     map[string]*hotkey.Hotkey
 	waylandPortalHotkeys *hotkey.Group
 	waylandPortalQueries []setting.QueryHotkey
 	queryHotkeys         []*hotkey.Hotkey
@@ -103,6 +102,7 @@ func GetUIManager() *Manager {
 		managerInstance = &Manager{}
 		managerInstance.mainHotkey = &hotkey.Hotkey{}
 		managerInstance.selectionHotkey = &hotkey.Hotkey{}
+		managerInstance.dictationHotkeys = map[string]*hotkey.Hotkey{}
 		managerInstance.ui = &uiImpl{
 			requestMap:      util.NewHashMap[string, chan WebsocketMsg](),
 			isVisible:       false, // Initially hidden
@@ -359,105 +359,83 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 	return nil
 }
 
-// RegisterDictationHotkey binds the global dictation hotkey using the trigger
-// mode parsed by the hotkey package.
-func (m *Manager) RegisterDictationHotkey(ctx context.Context, bindingValue string) error {
-	bindingValue = strings.TrimSpace(bindingValue)
-	binding, bindingErr := hotkey.ParseBinding(bindingValue)
-	if bindingErr != nil {
-		return bindingErr
+// RegisterDictationHotkeys binds all enabled dictation action hotkeys.
+func (m *Manager) RegisterDictationHotkeys(ctx context.Context, bindings []dictationplugin.HotkeyBinding) error {
+	for _, registeredHotkey := range m.dictationHotkeys {
+		registeredHotkey.Unregister(ctx)
 	}
-	if binding.CombineKey == "" {
-		logger.Info(ctx, "remove dictation hotkey")
-		if m.dictationHotkey != nil {
-			m.dictationHotkey.Unregister(ctx)
-			m.dictationHotkey = nil
+	m.dictationHotkeys = map[string]*hotkey.Hotkey{}
+
+	for _, binding := range bindings {
+		actionID := strings.TrimSpace(binding.ActionID)
+		bindingValue := strings.TrimSpace(binding.Hotkey)
+		parsedBinding, bindingErr := hotkey.ParseBinding(bindingValue)
+		if bindingErr != nil {
+			return bindingErr
 		}
-		m.dictationHotkeyKey = ""
-		return nil
-	}
-	// Always unregister the previous hotkey and register a fresh one so the
-	// callbacks match the current trigger behavior. Even when bindings look
-	// identical, re-registering keeps stale callback state out of the raw-key
-	// trackers after switching between hold and press behavior.
-	logger.Info(ctx, fmt.Sprintf("register dictation hotkey: binding=%s trigger=%s hotkey=%s", bindingValue, binding.Trigger, binding.CombineKey))
-
-	var onPress func()
-	var onRelease func()
-
-	if binding.Trigger == hotkey.TriggerHold {
-		// Hold mode: press starts recording, release stops it.
-		onPress = func() {
-			m.handleDictationHotkeyPress(ctx)
+		if actionID == "" || parsedBinding.CombineKey == "" {
+			continue
 		}
-		onRelease = func() {
-			m.handleDictationHotkeyRelease(ctx)
+
+		logger.Info(ctx, fmt.Sprintf("register dictation action hotkey: action=%s trigger=%s hotkey=%s", actionID, parsedBinding.Trigger, parsedBinding.CombineKey))
+
+		newHotkey := &hotkey.Hotkey{}
+		var registerErr error
+		if parsedBinding.Trigger == hotkey.TriggerHold {
+			registerErr = newHotkey.RegisterWithRelease(ctx, parsedBinding.CombineKey, func() {
+				m.handleDictationHotkeyPress(ctx, actionID)
+			}, func() {
+				m.handleDictationHotkeyRelease(ctx, actionID)
+			})
+		} else {
+			registerErr = newHotkey.RegisterWithModifierPress(ctx, parsedBinding.CombineKey, func() {
+				m.handleDictationHotkeyPressAction(ctx, actionID)
+			})
 		}
-	} else {
-		// Press behavior: each hotkey press starts or stops recording.
-		onPress = func() {
-			m.handleDictationHotkeyPressAction(ctx)
+		if registerErr != nil {
+			for _, registeredHotkey := range m.dictationHotkeys {
+				registeredHotkey.Unregister(ctx)
+			}
+			m.dictationHotkeys = map[string]*hotkey.Hotkey{}
+			return registerErr
 		}
+		m.dictationHotkeys[actionID] = newHotkey
 	}
 
-	newHotkey := &hotkey.Hotkey{}
-	// Unregister the previous hotkey BEFORE registering the new one. For
-	// hold-modifier keys (e.g. right_ctrl) the callback registry is keyed by
-	// the physical key, so registering first and then unregistering the old
-	// instance would delete the freshly-registered callback and leave the
-	// hotkey silently dead.
-	oldHotkey := m.dictationHotkey
-	if oldHotkey != nil {
-		oldHotkey.Unregister(ctx)
-		m.dictationHotkey = nil
-	}
-
-	var registerErr error
-	if binding.Trigger == hotkey.TriggerHold {
-		registerErr = newHotkey.RegisterWithRelease(ctx, binding.CombineKey, onPress, onRelease)
-	} else {
-		registerErr = newHotkey.RegisterWithModifierPress(ctx, binding.CombineKey, onPress)
-	}
-	if registerErr != nil {
-		return registerErr
-	}
-
-	m.dictationHotkey = newHotkey
-	m.dictationHotkeyKey = bindingValue
 	return nil
 }
 
 // handleDictationHotkeyPress finds the loaded DictationPlugin and starts
 // the recording session.
-func (m *Manager) handleDictationHotkeyPress(ctx context.Context) {
+func (m *Manager) handleDictationHotkeyPress(ctx context.Context, actionID string) {
 	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
 	if sp == nil {
-		logger.Error(ctx, "dictation plugin not found for hotkey press callback")
+		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey press callback: action=%s", actionID))
 		return
 	}
 	type dictationStarter interface {
-		StartDictation(ctx context.Context)
+		StartDictation(ctx context.Context, actionID string)
 	}
 	if ds, ok := sp.(dictationStarter); ok {
-		ds.StartDictation(ctx)
+		ds.StartDictation(ctx, actionID)
 	}
 }
 
 // handleDictationHotkeyRelease finds the loaded DictationPlugin and stops
 // the recording session, producing the recognized text.
-func (m *Manager) handleDictationHotkeyRelease(ctx context.Context) {
-	logger.Info(ctx, "dictation: handleDictationHotkeyRelease enter")
+func (m *Manager) handleDictationHotkeyRelease(ctx context.Context, actionID string) {
+	logger.Info(ctx, fmt.Sprintf("dictation: handleDictationHotkeyRelease enter, action=%s", actionID))
 	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
 	if sp == nil {
-		logger.Error(ctx, "dictation plugin not found for hotkey release callback")
+		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey release callback: action=%s", actionID))
 		return
 	}
 	type dictationStopper interface {
-		StopDictation(ctx context.Context)
+		StopDictation(ctx context.Context, actionID string)
 	}
 	if ds, ok := sp.(dictationStopper); ok {
-		logger.Info(ctx, "dictation: calling StopDictation")
-		ds.StopDictation(ctx)
+		logger.Info(ctx, fmt.Sprintf("dictation: calling StopDictation, action=%s", actionID))
+		ds.StopDictation(ctx, actionID)
 	} else {
 		logger.Error(ctx, "dictation: plugin does not implement dictationStopper")
 	}
@@ -465,17 +443,17 @@ func (m *Manager) handleDictationHotkeyRelease(ctx context.Context) {
 
 // handleDictationHotkeyPressAction finds the loaded DictationPlugin and runs
 // the press-triggered dictation action.
-func (m *Manager) handleDictationHotkeyPressAction(ctx context.Context) {
+func (m *Manager) handleDictationHotkeyPressAction(ctx context.Context, actionID string) {
 	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
 	if sp == nil {
-		logger.Error(ctx, "dictation plugin not found for hotkey callback")
+		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey callback: action=%s", actionID))
 		return
 	}
 	type dictationPressHandler interface {
-		PressDictationHotkey(ctx context.Context)
+		PressDictationHotkey(ctx context.Context, actionID string)
 	}
 	if handler, ok := sp.(dictationPressHandler); ok {
-		handler.PressDictationHotkey(ctx)
+		handler.PressDictationHotkey(ctx, actionID)
 	}
 }
 

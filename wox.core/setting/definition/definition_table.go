@@ -12,10 +12,12 @@ const (
 	PluginSettingValueTableColumnTypeTextList               PluginSettingValueTableColumnType = "textList"
 	PluginSettingValueTableColumnTypeCheckbox               PluginSettingValueTableColumnType = "checkbox"
 	PluginSettingValueTableColumnTypeDirPath                PluginSettingValueTableColumnType = "dirPath"
+	PluginSettingValueTableColumnTypeHotkey                 PluginSettingValueTableColumnType = "hotkey"
 	PluginSettingValueTableColumnTypeSelect                 PluginSettingValueTableColumnType = "select"
 	PluginSettingValueTableColumnTypeSelectAIModel          PluginSettingValueTableColumnType = "selectAIModel"
 	PluginSettingValueTableColumnTypeQueryHotkeyQuery       PluginSettingValueTableColumnType = "queryHotkeyQuery"
 	PluginSettingValueTableColumnTypeAICommandPrompt        PluginSettingValueTableColumnType = "aiCommandPrompt"
+	PluginSettingValueTableColumnTypeDictationPrompt        PluginSettingValueTableColumnType = "dictationPrompt"
 	PluginSettingValueTableColumnTypeAIModelStatus          PluginSettingValueTableColumnType = "aiModelStatus"
 	PluginSettingValueTableColumnTypeAIMCPServerTools       PluginSettingValueTableColumnType = "aiMCPServerTools"
 	PluginSettingValueTableColumnTypeAISelectMCPServerTools PluginSettingValueTableColumnType = "aiSelectMCPServerTools"
@@ -42,16 +44,17 @@ type PluginSettingValueTable struct {
 }
 
 type PluginSettingValueTableColumn struct {
-	Key           string
-	Label         string
-	Tooltip       string
-	Width         int
-	Type          PluginSettingValueTableColumnType
-	Validators    []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
-	SelectOptions []PluginSettingValueSelectOption   // Only used when Type is PluginSettingValueTableColumnTypeSelect
-	TextMaxLines  int                                // Only used by text-like table columns
-	HideInTable   bool                               // Hide this column in the table, but still show it in the setting dialog
-	HideInUpdate  bool                               // Hide this column in the update/add dialog, but still show it in the table
+	Key                string
+	Label              string
+	Tooltip            string
+	Width              int
+	Type               PluginSettingValueTableColumnType
+	Validators         []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
+	SelectOptions      []PluginSettingValueSelectOption   // Only used when Type is PluginSettingValueTableColumnTypeSelect
+	TextMaxLines       int                                // Only used by text-like table columns
+	HideInTable        bool                               // Hide this column in the table, but still show it in the setting dialog
+	HideInUpdate       bool                               // Hide this column in the update/add dialog, but still show it in the table
+	AllowedHotkeyKinds []string                           // Only used when Type is PluginSettingValueTableColumnTypeHotkey
 }
 
 func (p *PluginSettingValueTable) GetPluginSettingType() PluginSettingDefinitionType {
@@ -76,6 +79,7 @@ func (p *PluginSettingValueTable) Translate(translator func(ctx context.Context,
 		copy.Columns[i] = p.Columns[i]
 		copy.Columns[i].Label = translator(context.Background(), p.Columns[i].Label)
 		copy.Columns[i].Tooltip = translator(context.Background(), p.Columns[i].Tooltip)
+		copy.Columns[i].AllowedHotkeyKinds = append([]string{}, p.Columns[i].AllowedHotkeyKinds...)
 		copy.Columns[i].SelectOptions = make([]PluginSettingValueSelectOption, len(p.Columns[i].SelectOptions))
 		for j := range p.Columns[i].SelectOptions {
 			copy.Columns[i].SelectOptions[j].Label = translator(context.Background(), p.Columns[i].SelectOptions[j].Label)

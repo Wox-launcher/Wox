@@ -20,31 +20,39 @@ import (
 	"wox/setting/validator"
 	"wox/util"
 	"wox/util/audio"
+	"wox/util/clipboard"
 	"wox/util/keyboard"
 	"wox/util/mouse"
 	"wox/util/overlay"
 	"wox/util/overlay/dictationoverlay"
 	"wox/util/overlay/textoverlay"
 	"wox/util/screen"
+	"wox/util/selection"
 	"wox/util/speech"
+
+	"github.com/google/uuid"
 )
 
 const (
 	// Setting keys
-	settingKeyHotkey          = "hotkey"
+	settingKeyDefaultHotkey   = "defaultHotkey"
+	settingKeyDefaultAIRefine = "defaultAIRefineEnabled"
+	settingKeyDefaultAIModel  = "defaultAIModel"
 	settingKeyInputDevice     = "inputDevice"
 	settingKeyInputDeviceName = "inputDeviceName"
 	settingKeyModel           = "model"
 	settingKeyPlaySound       = "playSound"
 	settingKeyDuckVolume      = "duckVolume"
-	settingKeyAIRefine        = "aiRefineEnabled"
-	settingKeyAIModel         = "aiModel"
 
 	inputDeviceSystem = "system"
 
 	// AI refinement timeout. Picked to cover a normal model response for a
 	// short dictation transcript while keeping the wait perceptible.
 	aiRefineTimeout = 5 * time.Second
+
+	// Custom actions can ask the model to explain or transform selected text,
+	// so they get a longer timeout than default dictation cleanup.
+	aiActionTimeout = 60 * time.Second
 
 	// recognizerPoolIdleTTL controls how long an unused speech model stays in
 	// memory before being evicted. 10 minutes covers typical back-to-back
@@ -60,6 +68,8 @@ const (
 
 	// Overlay position: distance from the bottom of the mouse screen.
 	overlayBottomOffset = 80.0
+
+	dictationOverlayResultName = "dictation-action-result"
 )
 
 var (
@@ -73,11 +83,17 @@ var (
 	hotkeyRegistrar HotkeyRegistrar
 )
 
-// HotkeyRegistrar abstracts the UI Manager's RegisterDictationHotkey method
-// so the dictation plugin can register/unregister its global hotkey without
+// HotkeyRegistrar abstracts the UI Manager's dictation hotkey registration
+// so the dictation plugin can register/unregister global hotkeys without
 // importing the ui package directly.
 type HotkeyRegistrar interface {
-	RegisterDictationHotkey(ctx context.Context, combineKey string) error
+	RegisterDictationHotkeys(ctx context.Context, bindings []HotkeyBinding) error
+}
+
+// HotkeyBinding is the runtime hotkey binding for one dictation action.
+type HotkeyBinding struct {
+	ActionID string
+	Hotkey   string
 }
 
 // SetHotkeyRegistrar is called by the UI Manager during startup to inject
@@ -140,12 +156,18 @@ type DictationPlugin struct {
 	// unregister the old one before binding a new one.
 	registeredHotkeyMu sync.Mutex
 
+	actionsMu sync.RWMutex
+	actions   []dictationAction
+
 	// history persists past dictation transcripts so the Query surface can
 	// list them by time. Stored as a plugin setting so cloud sync covers it.
 	history *historyStore
 
 	// dictionary keeps user-approved correction rules for future dictations.
 	dictionary *dictionaryStore
+
+	activeAction       dictationAction
+	activeInputContext dictationActionInputContext
 }
 
 func (p *DictationPlugin) GetMetadata() plugin.Metadata {
@@ -190,7 +212,7 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 			{
 				Type: definition.PluginSettingDefinitionTypeDictationHotkey,
 				Value: &definition.PluginSettingValueDictationHotkey{
-					Key:          settingKeyHotkey,
+					Key:          settingKeyDefaultHotkey,
 					Label:        "i18n:plugin_dictation_hotkey",
 					Tooltip:      "i18n:plugin_dictation_hotkey_tooltip",
 					DefaultValue: "",
@@ -295,7 +317,7 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 			{
 				Type: definition.PluginSettingDefinitionTypeCheckBox,
 				Value: &definition.PluginSettingValueCheckBox{
-					Key:          settingKeyAIRefine,
+					Key:          settingKeyDefaultAIRefine,
 					Label:        "i18n:plugin_dictation_ai_enable",
 					Tooltip:      "i18n:plugin_dictation_ai_enable_tooltip",
 					DefaultValue: "false",
@@ -304,8 +326,107 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 			{
 				Type: definition.PluginSettingDefinitionTypeSelectAIModel,
 				Value: &definition.PluginSettingValueSelectAIModel{
-					Key:   settingKeyAIModel,
+					Key:   settingKeyDefaultAIModel,
 					Label: "i18n:plugin_dictation_ai_model",
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeHead,
+				Value: &definition.PluginSettingValueHead{
+					Content: "i18n:plugin_dictation_actions_group",
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeTable,
+				Value: &definition.PluginSettingValueTable{
+					Key:          settingKeyActions,
+					DefaultValue: "[]",
+					Title:        "i18n:plugin_dictation_actions",
+					Tooltip:      "i18n:plugin_dictation_actions_tooltip",
+					MaxHeight:    300,
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:          "id",
+							Label:        "ID",
+							Type:         definition.PluginSettingValueTableColumnTypeText,
+							HideInTable:  true,
+							HideInUpdate: true,
+						},
+						{
+							Key:          "type",
+							Label:        "Type",
+							Type:         definition.PluginSettingValueTableColumnTypeText,
+							HideInTable:  true,
+							HideInUpdate: true,
+						},
+
+						{
+							Key:     "name",
+							Label:   "i18n:plugin_dictation_action_name",
+							Type:    definition.PluginSettingValueTableColumnTypeText,
+							Width:   140,
+							Tooltip: "i18n:plugin_dictation_action_name_tooltip",
+							Validators: []validator.PluginSettingValidator{
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
+							},
+						},
+						{
+							Key:     "hotkey",
+							Label:   "i18n:plugin_dictation_action_hotkey",
+							Type:    definition.PluginSettingValueTableColumnTypeHotkey,
+							Width:   150,
+							Tooltip: "i18n:plugin_dictation_action_hotkey_tooltip",
+							AllowedHotkeyKinds: []string{
+								"normalCombo",
+								"doubleModifier",
+								"capsLockCombo",
+								"pressModifier",
+								"holdModifier",
+							},
+							Validators: []validator.PluginSettingValidator{
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
+							},
+						},
+						{
+							Key:     "output",
+							Label:   "i18n:plugin_dictation_action_output",
+							Type:    definition.PluginSettingValueTableColumnTypeSelect,
+							Width:   130,
+							Tooltip: "i18n:plugin_dictation_action_output_tooltip",
+							SelectOptions: []definition.PluginSettingValueSelectOption{
+								{Label: "i18n:plugin_dictation_action_output_input", Value: dictationActionOutputInput},
+								{Label: "i18n:plugin_dictation_action_output_overlay", Value: dictationActionOutputOverlay},
+								{Label: "i18n:plugin_dictation_action_output_chat", Value: dictationActionOutputChat},
+							},
+						},
+						{
+							Key:     "model",
+							Label:   "i18n:plugin_dictation_action_ai_model",
+							Type:    definition.PluginSettingValueTableColumnTypeSelectAIModel,
+							Width:   180,
+							Tooltip: "i18n:plugin_dictation_action_ai_model_tooltip",
+						},
+						{
+							Key:          "prompt",
+							Label:        "i18n:plugin_dictation_action_prompt",
+							Type:         definition.PluginSettingValueTableColumnTypeDictationPrompt,
+							TextMaxLines: 8,
+							Tooltip:      "i18n:plugin_dictation_action_prompt_tooltip",
+						},
+						{
+							Key:     "disabled",
+							Label:   "i18n:plugin_dictation_action_disabled",
+							Type:    definition.PluginSettingValueTableColumnTypeCheckbox,
+							Width:   80,
+							Tooltip: "i18n:plugin_dictation_action_disabled_tooltip",
+						},
+					},
 				},
 			},
 		},
@@ -318,6 +439,7 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	p.history.load(ctx)
 	p.dictionary = newDictionaryStore(p.api)
 	p.dictionary.load(ctx)
+	p.reloadActions(ctx, p.api.GetSetting(ctx, settingKeyActions))
 
 	// Initialize the model manager in the Wox data directory.
 	modelsDir := filepath.Join(util.GetLocation().GetDictationDirectory(), "models")
@@ -362,8 +484,8 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	// React to setting changes: re-register the hotkey and remember input device names.
 	p.api.OnSettingChanged(ctx, func(ctx context.Context, key string, value string) {
 		switch key {
-		case settingKeyHotkey:
-			p.reregisterHotkey(ctx, value)
+		case settingKeyActions:
+			p.reloadActions(ctx, value)
 		case settingKeyInputDevice:
 			p.rememberInputDeviceName(ctx, value)
 		case settingKeyDictionary:
@@ -377,26 +499,65 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			p.evictOldModels(ctx, value)
 		}
 	})
-
-	// Register the initial hotkey if one was previously saved.
-	initialHotkey := p.api.GetSetting(ctx, settingKeyHotkey)
-	if initialHotkey != "" {
-		p.reregisterHotkey(ctx, initialHotkey)
-	}
 }
 
-// reregisterHotkey binds the dictation global hotkey via the injected
-// HotkeyRegistrar (the UI Manager). Called on init and whenever the hotkey
-// setting changes.
-func (p *DictationPlugin) reregisterHotkey(ctx context.Context, combineKey string) {
+// reloadActions normalizes persisted action rows, updates the in-memory copy,
+// and refreshes runtime hotkey registrations.
+func (p *DictationPlugin) reloadActions(ctx context.Context, raw string) {
+	actions := normalizeDictationActions(parseDictationActions(raw))
+	normalizedRaw := marshalDictationActions(actions)
+
+	p.actionsMu.Lock()
+	p.actions = actions
+	p.actionsMu.Unlock()
+
+	if strings.TrimSpace(raw) != normalizedRaw {
+		p.api.SaveSetting(ctx, settingKeyActions, normalizedRaw, false)
+	}
+	p.reregisterActionHotkeys(ctx, actions)
+}
+
+func (p *DictationPlugin) actionSnapshot() []dictationAction {
+	p.actionsMu.RLock()
+	defer p.actionsMu.RUnlock()
+
+	actions := make([]dictationAction, len(p.actions))
+	copy(actions, p.actions)
+	return actions
+}
+
+func (p *DictationPlugin) actionByID(actionID string) (dictationAction, bool) {
+	for _, action := range p.actionSnapshot() {
+		if action.ID == actionID {
+			return action, true
+		}
+	}
+	return dictationAction{}, false
+}
+
+// reregisterActionHotkeys binds all active dictation action hotkeys via the
+// injected UI Manager registrar.
+func (p *DictationPlugin) reregisterActionHotkeys(ctx context.Context, actions []dictationAction) {
 	p.registeredHotkeyMu.Lock()
 	defer p.registeredHotkeyMu.Unlock()
 	if hotkeyRegistrar == nil {
 		p.api.Log(ctx, plugin.LogLevelDebug, "hotkey registrar not set, skipping hotkey registration")
 		return
 	}
-	if err := hotkeyRegistrar.RegisterDictationHotkey(ctx, combineKey); err != nil {
-		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to register dictation hotkey: %s", err.Error()))
+
+	bindings := make([]HotkeyBinding, 0, len(actions))
+	for _, action := range actions {
+		if action.Disabled || strings.TrimSpace(action.Hotkey) == "" {
+			continue
+		}
+		bindings = append(bindings, HotkeyBinding{
+			ActionID: action.ID,
+			Hotkey:   action.Hotkey,
+		})
+	}
+
+	if err := hotkeyRegistrar.RegisterDictationHotkeys(ctx, bindings); err != nil {
+		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to register dictation action hotkeys: %s", err.Error()))
 	}
 }
 
@@ -794,9 +955,9 @@ func (p *DictationPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	return plugin.NewQueryResponse(results)
 }
 
-// PressDictationHotkey is called by press-triggered hotkeys. It starts
+// PressDictationHotkey is called by press-triggered action hotkeys. It starts
 // recording if idle and stops if recording.
-func (p *DictationPlugin) PressDictationHotkey(ctx context.Context) {
+func (p *DictationPlugin) PressDictationHotkey(ctx context.Context, actionID string) {
 	p.sessionMu.Lock()
 	if p.isRecording {
 		p.sessionMu.Unlock()
@@ -804,25 +965,25 @@ func (p *DictationPlugin) PressDictationHotkey(ctx context.Context) {
 		return
 	}
 	p.sessionMu.Unlock()
-	p.startRecording(ctx)
+	p.startRecording(ctx, actionID)
 }
 
-// StartDictation is called by the hotkey press handler in hold mode.
-func (p *DictationPlugin) StartDictation(ctx context.Context) {
+// StartDictation is called by the action hotkey press handler in hold mode.
+func (p *DictationPlugin) StartDictation(ctx context.Context, actionID string) {
 	p.sessionMu.Lock()
 	if p.isRecording {
 		p.sessionMu.Unlock()
 		return
 	}
 	p.sessionMu.Unlock()
-	p.startRecording(ctx)
+	p.startRecording(ctx, actionID)
 }
 
-// StopDictation is called by the hotkey release handler in hold mode.
+// StopDictation is called by the action hotkey release handler in hold mode.
 // If startRecording is still in progress (model loading), it sets a
 // pendingStop flag so startRecording can stop immediately after it
 // finishes — preventing the overlay from being stuck open.
-func (p *DictationPlugin) StopDictation(ctx context.Context) {
+func (p *DictationPlugin) StopDictation(ctx context.Context, actionID string) {
 	p.sessionMu.Lock()
 	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation: StopDictation enter, isStarting=%t isRecording=%t", p.isStarting, p.isRecording))
 	if p.isStarting {
@@ -842,10 +1003,42 @@ func (p *DictationPlugin) StopDictation(ctx context.Context) {
 	p.stopAndOutput(ctx)
 }
 
+// prepareActionInputContext resolves prompt-declared external inputs before
+// recording starts, so the later overlay/focus changes cannot alter context.
+func (p *DictationPlugin) prepareActionInputContext(ctx context.Context, action dictationAction) (dictationActionInputContext, bool) {
+	if !actionNeedsSelectedText(action) {
+		return dictationActionInputContext{}, true
+	}
+
+	selected, selectedErr := selection.GetSelected(ctx)
+	if selectedErr != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to get selected text for dictation action %s: %s", action.ID, selectedErr.Error()))
+		p.api.Notify(ctx, "plugin_dictation_action_selected_text_required")
+		return dictationActionInputContext{}, false
+	}
+	if selected.Type != selection.SelectionTypeText || strings.TrimSpace(selected.Text) == "" {
+		p.api.Notify(ctx, "plugin_dictation_action_selected_text_required")
+		return dictationActionInputContext{}, false
+	}
+
+	return dictationActionInputContext{SelectedText: selected.Text}, true
+}
+
 // startRecording initializes the recognizer and audio capture, then shows the overlay.
-func (p *DictationPlugin) startRecording(ctx context.Context) {
+func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 	t0 := time.Now()
 	p.api.Log(ctx, plugin.LogLevelDebug, "dictation timing: plugin.startRecording enter")
+
+	action, actionFound := p.actionByID(actionID)
+	if !actionFound || action.Disabled {
+		p.api.Notify(ctx, "plugin_dictation_action_unavailable")
+		return
+	}
+
+	inputContext, ok := p.prepareActionInputContext(ctx, action)
+	if !ok {
+		return
+	}
 
 	// Mark that we are in the startup phase so StopDictation can defer
 	// its action via pendingStop if the user releases the key before the
@@ -994,6 +1187,8 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 	p.sessionMu.Lock()
 	p.session = session
 	p.isRecording = true
+	p.activeAction = action
+	p.activeInputContext = inputContext
 	p.isStarting = false
 	shouldStop := p.pendingStop
 	p.pendingStop = false
@@ -1021,8 +1216,12 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 
 	p.sessionMu.Lock()
 	session := p.session
+	action := p.activeAction
+	inputContext := p.activeInputContext
 	p.session = nil
 	p.isRecording = false
+	p.activeAction = dictationAction{}
+	p.activeInputContext = dictationActionInputContext{}
 	p.sessionMu.Unlock()
 
 	if session == nil {
@@ -1043,18 +1242,89 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 		return
 	}
 
-	// AI refinement is opt-in. When enabled we keep the overlay open as a
-	// loading indicator; on any failure we fall back to the raw transcript.
-	aiRefineSucceeded := false
-	if p.isAIRefineEnabled(ctx) {
-		model, ok := p.getAIModel(ctx)
-		if !ok {
-			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_ai_no_model"))
+	if action.ID == "" {
+		action = newDefaultDictationAction()
+	}
+	outputText, historyText, usedAI, ok := p.prepareActionOutput(ctx, action, text, inputContext)
+	if !ok {
+		p.closeDictationOverlay()
+		p.playSoundIfEnabled(ctx, soundStop)
+		return
+	}
+
+	// Persist after action processing so history matches the user-visible
+	// result for input/overlay actions and keeps the spoken request for chat.
+	// Best-effort: save failures are logged inside the store and do not block
+	// the output path.
+	p.history.add(ctx, historyText, util.GetSystemTimestamp())
+
+	p.closeDictationOverlay()
+	p.playSoundIfEnabled(ctx, soundStop)
+
+	// Wait briefly for the overlay to close and focus to return to the
+	// previously focused window.
+	time.Sleep(100 * time.Millisecond)
+	if err := p.executeActionOutput(ctx, action, outputText, text, inputContext, usedAI); err != nil {
+		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to output dictation action %s: %s", action.ID, err.Error()))
+		p.api.Notify(ctx, err.Error())
+	}
+}
+
+func (p *DictationPlugin) prepareActionOutput(ctx context.Context, action dictationAction, rawText string, inputContext dictationActionInputContext) (outputText string, historyText string, usedAI bool, ok bool) {
+	if action.Type == dictationActionTypeDefault {
+		return p.prepareDefaultActionOutput(ctx, action, rawText)
+	}
+
+	dictationText := rawText
+	if p.dictionary != nil {
+		dictationText = p.dictionary.applyExact(dictationText)
+	}
+
+	if action.Output == dictationActionOutputChat {
+		return dictationText, dictationText, false, true
+	}
+
+	if strings.TrimSpace(action.Prompt) == "" {
+		return dictationText, dictationText, false, true
+	}
+
+	model, modelOk := parseActionAIModel(ctx, p.api, action.Model)
+	if !modelOk {
+		p.api.Notify(ctx, "plugin_dictation_action_ai_no_model")
+		return "", "", false, false
+	}
+
+	p.showRefiningOverlay(ctx)
+	prompt := renderDictationActionPrompt(action, dictationText, inputContext)
+	if strings.TrimSpace(prompt) == "" {
+		return dictationText, dictationText, false, true
+	}
+	answer, actionErr := p.runPromptWithAI(ctx, model, prompt, aiActionTimeout)
+	if actionErr != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("dictation action AI failed: %s", actionErr.Error()))
+		if strings.Contains(actionErr.Error(), "timeout") {
+			p.api.Notify(ctx, "plugin_dictation_action_ai_timeout")
 		} else {
-			// Gather recent context BEFORE persisting the current utterance so
-			// the context only contains prior dictations. The finalized
-			// transcripts help the model preserve continuity across consecutive
-			// sentences (pronouns, tense, topic).
+			p.api.Notify(ctx, "plugin_dictation_action_ai_failed")
+		}
+		return "", "", false, false
+	}
+	answer = strings.TrimSpace(answer)
+	if answer == "" {
+		p.api.Notify(ctx, "plugin_dictation_action_ai_empty")
+		return "", "", false, false
+	}
+	return answer, answer, true, true
+}
+
+func (p *DictationPlugin) prepareDefaultActionOutput(ctx context.Context, action dictationAction, rawText string) (outputText string, historyText string, usedAI bool, ok bool) {
+	text := rawText
+	aiRefineSucceeded := false
+	if action.AIRefineEnabled {
+		model, modelOk := parseActionAIModel(ctx, p.api, action.Model)
+		if !modelOk {
+			p.api.Notify(ctx, "plugin_dictation_ai_no_model")
+		} else {
 			recentCtx := p.history.recentContext(util.GetSystemTimestamp())
 			p.showRefiningOverlay(ctx)
 			var dictionaryEntries []dictionaryEntry
@@ -1064,10 +1334,10 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 			refined, refineErr := p.refineWithAI(ctx, model, text, recentCtx, dictionaryEntries)
 			if refineErr != nil {
 				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI refine failed: %s", refineErr.Error()))
-				if ctxErr := refineErr; ctxErr != nil && strings.Contains(ctxErr.Error(), "timeout") {
-					p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_ai_timeout"))
+				if strings.Contains(refineErr.Error(), "timeout") {
+					p.api.Notify(ctx, "plugin_dictation_ai_timeout")
 				} else {
-					p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_ai_failed"))
+					p.api.Notify(ctx, "plugin_dictation_ai_failed")
 				}
 			} else if strings.TrimSpace(refined) != "" {
 				text = strings.TrimSpace(refined)
@@ -1079,48 +1349,117 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 	if !aiRefineSucceeded && p.dictionary != nil {
 		text = p.dictionary.applyExact(text)
 	}
-
-	// Persist the final transcript (refined if AI was applied, raw otherwise)
-	// after refinement resolves so history matches what the user actually gets.
-	// Best-effort: save failures are logged inside the store and do not block
-	// the typing output.
-	p.history.add(ctx, text, util.GetSystemTimestamp())
-
-	p.closeDictationOverlay()
-	p.playSoundIfEnabled(ctx, soundStop)
-
-	// Wait briefly for the overlay to close and focus to return to the
-	// previously focused window.
-	time.Sleep(100 * time.Millisecond)
-	if err := keyboard.SimulateType(text); err != nil {
-		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to type dictation text: %s", err.Error()))
-		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_type_failed"), err.Error()))
-	}
+	return text, text, aiRefineSucceeded, true
 }
 
-// isAIRefineEnabled reports whether the user turned on AI refinement.
-func (p *DictationPlugin) isAIRefineEnabled(ctx context.Context) bool {
-	return parseBoolSetting(p.api.GetSetting(ctx, settingKeyAIRefine))
-}
-
-// getAIModel parses the stored AI model setting (a JSON-encoded common.Model,
-// the same format the selectAIModel component persists) and returns it. The
-// second return value is false when no model is selected or the stored value
-// is malformed.
-func (p *DictationPlugin) getAIModel(ctx context.Context) (common.Model, bool) {
-	raw := strings.TrimSpace(p.api.GetSetting(ctx, settingKeyAIModel))
+// parseActionAIModel parses the JSON-encoded common.Model stored in an action.
+func parseActionAIModel(ctx context.Context, api plugin.API, raw string) (common.Model, bool) {
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return common.Model{}, false
 	}
 	var model common.Model
 	if err := json.Unmarshal([]byte(raw), &model); err != nil {
-		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to parse AI model setting: %s", err.Error()))
+		api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to parse dictation action AI model: %s", err.Error()))
 		return common.Model{}, false
 	}
 	if model.Name == "" || model.Provider == "" {
 		return common.Model{}, false
 	}
 	return model, true
+}
+
+func (p *DictationPlugin) executeActionOutput(ctx context.Context, action dictationAction, outputText string, rawText string, inputContext dictationActionInputContext, _ bool) error {
+	switch action.Output {
+	case dictationActionOutputOverlay:
+		p.showActionResultOverlay(ctx, outputText)
+		return nil
+	case dictationActionOutputChat:
+		return p.openActionChat(ctx, action, rawText, inputContext)
+	default:
+		if err := keyboard.SimulateType(outputText); err != nil {
+			return fmt.Errorf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_type_failed"), err.Error())
+		}
+		return nil
+	}
+}
+
+func (p *DictationPlugin) showActionResultOverlay(ctx context.Context, text string) {
+	window := buildDictationTextOverlayWindow()
+	window.ID = fmt.Sprintf("%s-%s", dictationOverlayResultName, uuid.NewString())
+	window.MinWidth = 260
+	window.MaxWidth = 720
+	window.MaxHeight = 600
+	window.Movable = true
+	window.CloseOnEscape = true
+
+	textoverlay.Show(textoverlay.Options{
+		Window:                   window,
+		Closable:                 true,
+		Message:                  text,
+		FontSize:                 14,
+		FollowScroll:             true,
+		ShowCopyButton:           true,
+		CopyButtonTooltip:        i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_action_copy"),
+		CopyButtonSuccessTooltip: i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_action_copied"),
+		OnClick: func() bool {
+			if err := clipboard.WriteText(text); err != nil {
+				p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy dictation action overlay result: %s", err.Error()))
+				return false
+			}
+			return true
+		},
+	})
+}
+
+func (p *DictationPlugin) openActionChat(ctx context.Context, action dictationAction, dictationText string, inputContext dictationActionInputContext) error {
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		return errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_action_chat_unavailable"))
+	}
+
+	model, modelOk := parseActionAIModel(ctx, p.api, action.Model)
+	if !modelOk {
+		model = chater.GetDefaultModel(ctx)
+	}
+	if model.Name == "" || model.Provider == "" {
+		return errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_action_ai_no_model"))
+	}
+
+	message := renderDictationActionPrompt(action, dictationText, inputContext)
+	if strings.TrimSpace(message) == "" {
+		message = strings.TrimSpace(dictationText)
+	}
+	if message == "" {
+		return errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_action_ai_empty"))
+	}
+
+	now := util.GetSystemTimestamp()
+	chatID := uuid.NewString()
+	chatData := common.AIChatData{
+		Id:    chatID,
+		Title: truncateHistoryTitle(dictationText),
+		Model: model,
+		Conversations: []common.Conversation{
+			{
+				Id:        uuid.NewString(),
+				Role:      common.ConversationRoleUser,
+				Text:      message,
+				Timestamp: now,
+			},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	chater.Chat(ctx, chatData, 0)
+	p.api.ChangeQuery(ctx, common.PlainQuery{
+		QueryType:   plugin.QueryTypeInput,
+		QueryText:   "chat " + message,
+		ContextData: common.ContextData{"ai_chat_active_id": chatID},
+	})
+	p.api.ShowApp(ctx)
+	return nil
 }
 
 // buildDictationTextOverlayWindow returns the shared window placement for dictation text HUD states.
@@ -1290,6 +1629,53 @@ func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, 
 	}
 }
 
+// runPromptWithAI sends a user-authored dictation action prompt to the selected
+// model and returns the final streamed answer.
+func (p *DictationPlugin) runPromptWithAI(ctx context.Context, model common.Model, prompt string, timeout time.Duration) (string, error) {
+	aiCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	done := make(chan struct {
+		text string
+		err  error
+	}, 1)
+
+	var accumulated string
+	err := p.api.AIChatStream(aiCtx, model, []common.Conversation{
+		{
+			Role: common.ConversationRoleUser,
+			Text: prompt,
+		},
+	}, common.ChatOptions{
+		ThinkingMode: common.ChatThinkingModeNonThinking,
+	}, func(streamResult common.ChatStreamData) {
+		switch streamResult.Status {
+		case common.ChatStreamStatusStreaming, common.ChatStreamStatusStreamed:
+			accumulated = streamResult.Data
+		case common.ChatStreamStatusFinished:
+			done <- struct {
+				text string
+				err  error
+			}{streamResult.Data, nil}
+		case common.ChatStreamStatusError:
+			done <- struct {
+				text string
+				err  error
+			}{accumulated, fmt.Errorf("ai stream error: %s", streamResult.Data)}
+		}
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to start AI stream: %w", err)
+	}
+
+	select {
+	case res := <-done:
+		return res.text, res.err
+	case <-aiCtx.Done():
+		return "", fmt.Errorf("AI action timeout")
+	}
+}
+
 // showLoadingOverlay displays the overlay with a "Loading model..." message
 // before the recognizer is ready. This gives the user immediate feedback when
 // they press the hotkey, even while the model is still being loaded.
@@ -1440,7 +1826,7 @@ func (p *DictationPlugin) releaseRuntime(ctx context.Context) {
 	p.runtimeMu.Lock()
 	defer p.runtimeMu.Unlock()
 
-	p.reregisterHotkey(ctx, "")
+	p.reregisterActionHotkeys(ctx, nil)
 	p.stopVolumeDucking(ctx)
 	p.closeDictationOverlay()
 
@@ -1450,6 +1836,8 @@ func (p *DictationPlugin) releaseRuntime(ctx context.Context) {
 	p.isRecording = false
 	p.isStarting = false
 	p.pendingStop = false
+	p.activeAction = dictationAction{}
+	p.activeInputContext = dictationActionInputContext{}
 	p.sessionMu.Unlock()
 
 	if session != nil {
