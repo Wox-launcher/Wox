@@ -643,6 +643,9 @@ func (p *DictationPlugin) buildModelOptions(ctx context.Context) []definition.Di
 				case speech.DownloadStateExtracting:
 					status = definition.DictationModelStatusExtracting
 					progress = 100
+				case speech.DownloadStateFinalizing:
+					status = definition.DictationModelStatusFinalizing
+					progress = 100
 				case speech.DownloadStateFailed:
 					status = definition.DictationModelStatusFailed
 					errMsg = ds.Error
@@ -729,11 +732,14 @@ func (p *DictationPlugin) DeleteModel(ctx context.Context, modelID string) error
 
 // ModelStatusInfo is the JSON-serializable model status sent to the Flutter side.
 // The JSON tags use the same PascalCase keys as DictationModelOption.fromJson
-// expects (ID, DisplayName, Status, DownloadProgress, SizeMB, Error) so the
-// Flutter entity can parse the response without a separate mapping.
+// expects so the Flutter entity can parse status refreshes without dropping
+// static model metadata such as description, languages, and recommendation.
 type ModelStatusInfo struct {
 	ID               string `json:"ID"`
 	DisplayName      string `json:"DisplayName"`
+	Description      string `json:"Description"`
+	Languages        string `json:"Languages"`
+	Recommended      bool   `json:"Recommended"`
 	Status           string `json:"Status"`
 	DownloadProgress int    `json:"DownloadProgress"`
 	SizeMB           int    `json:"SizeMB"`
@@ -766,6 +772,9 @@ func (p *DictationPlugin) GetModelStatuses(ctx context.Context) []ModelStatusInf
 		result = append(result, ModelStatusInfo{
 			ID:               opt.ID,
 			DisplayName:      opt.DisplayName,
+			Description:      opt.Description,
+			Languages:        opt.Languages,
+			Recommended:      opt.Recommended,
 			Status:           string(opt.Status),
 			DownloadProgress: opt.DownloadProgress,
 			SizeMB:           opt.SizeMB,
@@ -960,9 +969,8 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 		p.api.SaveSetting(ctx, settingKeyInputDeviceName, resolvedDeviceName, false)
 	}
 
-	// Show the overlay immediately with "Loading model..." so the user
-	// gets instant feedback when they press the hotkey. In hold mode, show
-	// a longer message reminding them to keep holding the key.
+	// Show the overlay immediately so the user gets instant feedback while the
+	// native dictation engine and recognition model are being prepared.
 	loadingKey := "plugin_dictation_loading_model"
 	triggerMode := p.api.GetSetting(ctx, settingKeyTriggerMode)
 	if triggerMode == triggerModeHold {

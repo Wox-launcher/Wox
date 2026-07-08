@@ -74,8 +74,44 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
     return "";
   }
 
+  // Status polling can return partial rows; keep static model metadata from the original setting option.
+  DictationModelOption _mergeStatus(DictationModelOption current, Map<String, dynamic> statusJson) {
+    final merged = <String, dynamic>{
+      'ID': statusJson['ID'] ?? current.id,
+      'DisplayName': statusJson['DisplayName'] ?? current.displayName,
+      'Description': statusJson['Description'] ?? current.description,
+      'Languages': statusJson['Languages'] ?? current.languages,
+      'Recommended': statusJson['Recommended'] ?? current.recommended,
+      'Status': statusJson['Status'] ?? _statusValue(current.status),
+      'DownloadProgress': statusJson['DownloadProgress'] ?? current.downloadProgress,
+      'SizeMB': statusJson['SizeMB'] ?? current.sizeMB,
+      'Error': statusJson['Error'] ?? current.error,
+    };
+    return DictationModelOption.fromJson(merged);
+  }
+
+  // Convert enum values back to backend status strings for partial refresh fallbacks.
+  String _statusValue(DictationModelStatus status) {
+    switch (status) {
+      case DictationModelStatus.notDownloaded:
+        return 'not_downloaded';
+      case DictationModelStatus.downloading:
+        return 'downloading';
+      case DictationModelStatus.extracting:
+        return 'extracting';
+      case DictationModelStatus.finalizing:
+        return 'finalizing';
+      case DictationModelStatus.downloaded:
+        return 'downloaded';
+      case DictationModelStatus.failed:
+        return 'failed';
+    }
+  }
+
   void _startPollingIfDownloading() {
-    final hasActive = _options.any((o) => o.status == DictationModelStatus.downloading || o.status == DictationModelStatus.extracting);
+    final hasActive = _options.any(
+      (o) => o.status == DictationModelStatus.downloading || o.status == DictationModelStatus.extracting || o.status == DictationModelStatus.finalizing,
+    );
     if (hasActive && _pollTimer == null) {
       _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
         await _refreshStatus();
@@ -93,9 +129,13 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
       if (!mounted) return;
       setState(() {
         for (final s in statuses) {
-          final idx = _options.indexWhere((o) => o.id == s['ID']);
+          if (s is! Map) {
+            continue;
+          }
+          final statusJson = Map<String, dynamic>.from(s);
+          final idx = _options.indexWhere((o) => o.id == statusJson['ID']);
           if (idx >= 0) {
-            _options[idx] = DictationModelOption.fromJson(s);
+            _options[idx] = _mergeStatus(_options[idx], statusJson);
           }
         }
         if (_selectedId.isEmpty) {
@@ -205,13 +245,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
   Widget build(BuildContext context) {
     return layout(
       label: widget.item.label,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildDropdownButton(),
-          validationMessage(_errorMessage),
-        ],
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildDropdownButton(), validationMessage(_errorMessage)]),
       style: widget.item.style,
       tooltip: widget.item.tooltip,
     );
@@ -229,20 +263,14 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
         behavior: HitTestBehavior.translucent,
         onTap: _showDropdown,
         child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: borderColor),
-            borderRadius: BorderRadius.circular(4),
-          ),
+          decoration: BoxDecoration(border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(4)),
           padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
           child: Row(
             children: [
               Expanded(
                 child: Text(
                   selectedOpt != null ? selectedOpt.displayName : tr('plugin_dictation_model_select_hint'),
-                  style: TextStyle(
-                    color: selectedOpt != null ? textColor : textColor.withValues(alpha: 0.5),
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: selectedOpt != null ? textColor : textColor.withValues(alpha: 0.5), fontSize: 13),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -280,14 +308,8 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
                 child: Container(
                   clipBehavior: Clip.antiAlias,
                   constraints: const BoxConstraints(maxHeight: 300),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: borderColor),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: _options.map((opt) => _buildMenuItem(opt, textColor, subTextColor, accentColor, dropdownBg)).toList(),
-                  ),
+                  decoration: BoxDecoration(border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(4)),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: _options.map((opt) => _buildMenuItem(opt, textColor, subTextColor, accentColor, dropdownBg)).toList()),
                 ),
               ),
             ),
@@ -302,6 +324,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
     final isDownloaded = opt.status == DictationModelStatus.downloaded;
     final isDownloading = opt.status == DictationModelStatus.downloading;
     final isExtracting = opt.status == DictationModelStatus.extracting;
+    final isFinalizing = opt.status == DictationModelStatus.finalizing;
     final isFailed = opt.status == DictationModelStatus.failed;
 
     return InkWell(
@@ -322,11 +345,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
                       Flexible(
                         child: Text(
                           opt.displayName,
-                          style: TextStyle(
-                            color: isDownloaded ? textColor : subTextColor,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: TextStyle(color: isDownloaded ? textColor : subTextColor, fontSize: 13, fontWeight: FontWeight.w600),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -335,52 +354,30 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
                         const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: accentColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: Text(
-                            tr('plugin_dictation_model_recommended'),
-                            style: TextStyle(color: accentColor, fontSize: 10, fontWeight: FontWeight.w600),
-                          ),
+                          decoration: BoxDecoration(color: accentColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(3)),
+                          child: Text(tr('plugin_dictation_model_recommended'), style: TextStyle(color: accentColor, fontSize: 10, fontWeight: FontWeight.w600)),
                         ),
                       ],
-                      if (opt.sizeMB > 0) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          '~${opt.sizeMB}MB',
-                          style: TextStyle(color: subTextColor, fontSize: 11),
-                        ),
-                      ],
+                      if (opt.sizeMB > 0) ...[const SizedBox(width: 6), Text('~${opt.sizeMB}MB', style: TextStyle(color: subTextColor, fontSize: 11))],
                     ],
                   ),
                   // Languages
                   if (opt.languages.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        opt.languages,
-                        style: TextStyle(color: subTextColor, fontSize: 11),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(opt.languages, style: TextStyle(color: subTextColor, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                     ),
                   // Description
                   if (opt.description.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 3),
-                      child: Text(
-                        opt.description,
-                        style: TextStyle(color: subTextColor.withValues(alpha: 0.8), fontSize: 11),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(opt.description, style: TextStyle(color: subTextColor.withValues(alpha: 0.8), fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
                     ),
                 ],
               ),
             ),
             const SizedBox(width: 12),
-            _buildMenuTrailing(opt, isDownloading, isExtracting, isDownloaded, isFailed, accentColor, subTextColor),
+            _buildMenuTrailing(opt, isDownloading, isExtracting, isFinalizing, isDownloaded, isFailed, accentColor, subTextColor),
           ],
         ),
       ),
@@ -391,6 +388,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
     DictationModelOption opt,
     bool isDownloading,
     bool isExtracting,
+    bool isFinalizing,
     bool isDownloaded,
     bool isFailed,
     Color accentColor,
@@ -403,10 +401,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
         onTap: () => _deleteModel(opt.id),
         child: WoxTooltip(
           message: tr('plugin_dictation_model_delete'),
-          child: Padding(
-            padding: const EdgeInsets.all(2),
-            child: Icon(Icons.delete_outline, size: 16, color: subTextColor),
-          ),
+          child: Padding(padding: const EdgeInsets.all(2), child: Icon(Icons.delete_outline, size: 16, color: subTextColor)),
         ),
       );
     }
@@ -427,14 +422,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
             ),
           ),
           const SizedBox(width: 6),
-          SizedBox(
-            width: 30,
-            child: Text(
-              '${opt.downloadProgress}%',
-              style: TextStyle(color: subTextColor, fontSize: 11),
-              textAlign: TextAlign.right,
-            ),
-          ),
+          SizedBox(width: 30, child: Text('${opt.downloadProgress}%', style: TextStyle(color: subTextColor, fontSize: 11), textAlign: TextAlign.right)),
         ],
       );
     }
@@ -448,17 +436,23 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
         ],
       );
     }
+    if (isFinalizing) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(accentColor))),
+          const SizedBox(width: 6),
+          Text(tr('plugin_dictation_model_finalizing'), style: TextStyle(color: subTextColor, fontSize: 11)),
+        ],
+      );
+    }
     if (isFailed) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.error_outline, size: 16, color: Colors.red),
           const SizedBox(width: 4),
-          WoxButton.secondary(
-            text: tr('plugin_dictation_model_retry'),
-            onPressed: () => _downloadModel(opt.id),
-            fontSize: 11,
-          ),
+          WoxButton.secondary(text: tr('plugin_dictation_model_retry'), onPressed: () => _downloadModel(opt.id), fontSize: 11),
         ],
       );
     }

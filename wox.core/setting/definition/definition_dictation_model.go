@@ -31,6 +31,7 @@ const (
 	DictationModelStatusNotDownloaded DictationModelStatus = "not_downloaded"
 	DictationModelStatusDownloading   DictationModelStatus = "downloading"
 	DictationModelStatusExtracting    DictationModelStatus = "extracting"
+	DictationModelStatusFinalizing    DictationModelStatus = "finalizing"
 	DictationModelStatusDownloaded    DictationModelStatus = "downloaded"
 	DictationModelStatusFailed        DictationModelStatus = "failed"
 )

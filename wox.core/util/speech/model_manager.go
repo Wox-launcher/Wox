@@ -11,6 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
+
+	"wox/util"
 )
 
 // ModelInfo describes a downloadable ASR model.
@@ -51,17 +54,6 @@ var RecommendedModels = []ModelInfo{
 		Language:    "zh-CN",
 		SizeMB:      154,
 	},
-	{
-		ID:          "sherpa-onnx-streaming-zipformer-multi-zh-hans-2023-12-12",
-		DisplayName: "Zipformer Multi ZH-Hans int8",
-		Description: "i18n:plugin_dictation_model_zipformer_multi_desc",
-		Languages:   "i18n:plugin_dictation_model_zipformer_multi_lang",
-		Recommended: false,
-		DownloadURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-multi-zh-hans-2023-12-12.tar.bz2",
-		ModelType:   "zipformer2",
-		Language:    "zh-CN",
-		SizeMB:      67,
-	},
 }
 
 // ModelManager handles model discovery, download, and verification.
@@ -88,6 +80,7 @@ const (
 	DownloadStateIdle        DownloadState = "idle"
 	DownloadStateDownloading DownloadState = "downloading"
 	DownloadStateExtracting  DownloadState = "extracting"
+	DownloadStateFinalizing  DownloadState = "finalizing"
 	DownloadStateDone        DownloadState = "done"
 	DownloadStateFailed      DownloadState = "failed"
 )
@@ -213,6 +206,7 @@ func (m *ModelManager) DownloadModel(ctx context.Context, info ModelInfo, onProg
 
 	// Download the archive.
 	archivePath := filepath.Join(tmpDir, "model.tar.bz2")
+	downloadStart := time.Now()
 	if err := downloadFile(ctx, info.DownloadURL, archivePath, func(percent int) {
 		m.setDownloadStatus(info.ID, DownloadStateDownloading, percent, "")
 		if onProgress != nil {
@@ -222,6 +216,7 @@ func (m *ModelManager) DownloadModel(ctx context.Context, info ModelInfo, onProg
 		m.setDownloadStatus(info.ID, DownloadStateFailed, 0, err.Error())
 		return fmt.Errorf("failed to download model: %w", err)
 	}
+	util.GetLogger().Info(ctx, fmt.Sprintf("dictation model download: downloaded %s cost=%dms", info.ID, time.Since(downloadStart).Milliseconds()))
 
 	// Set status to extracting so the UI can show "extracting" instead of
 	// being stuck at 100% download progress.
@@ -229,10 +224,15 @@ func (m *ModelManager) DownloadModel(ctx context.Context, info ModelInfo, onProg
 
 	// Extract the tar.bz2 archive. The archive typically contains a single
 	// top-level directory with the model files inside.
+	extractStart := time.Now()
 	if err := extractTarBz2(archivePath, tmpDir); err != nil {
 		m.setDownloadStatus(info.ID, DownloadStateFailed, 0, err.Error())
 		return fmt.Errorf("failed to extract model: %w", err)
 	}
+	util.GetLogger().Info(ctx, fmt.Sprintf("dictation model download: extracted %s cost=%dms", info.ID, time.Since(extractStart).Milliseconds()))
+
+	m.setDownloadStatus(info.ID, DownloadStateFinalizing, 100, "")
+	finalizeStart := time.Now()
 
 	// Find the extracted directory (the archive's top-level folder).
 	entries, err := os.ReadDir(tmpDir)
@@ -259,6 +259,7 @@ func (m *ModelManager) DownloadModel(ctx context.Context, info ModelInfo, onProg
 	}
 
 	m.setDownloadStatus(info.ID, DownloadStateDone, 100, "")
+	util.GetLogger().Info(ctx, fmt.Sprintf("dictation model download: finalized %s cost=%dms", info.ID, time.Since(finalizeStart).Milliseconds()))
 	return nil
 }
 
@@ -267,7 +268,7 @@ func (m *ModelManager) IsDownloading(modelID string) bool {
 	m.downloadStatusMu.RLock()
 	defer m.downloadStatusMu.RUnlock()
 	s, ok := m.downloadStatus[modelID]
-	return ok && (s.State == DownloadStateDownloading || s.State == DownloadStateExtracting)
+	return ok && (s.State == DownloadStateDownloading || s.State == DownloadStateExtracting || s.State == DownloadStateFinalizing)
 }
 
 // GetDownloadStatus returns the current download status for a model.

@@ -25,17 +25,24 @@ type holdCallback struct {
 //     duration has not yet elapsed. A quick tap or any other key press while in
 //     this state cancels the timer and suppresses both callbacks.
 //   - pressTimer == nil, pressFired == true: the key was held long enough and
-//     onPress has fired. The next key-up for this key triggers onRelease.
+//     onPress has fired. The next key-up for this key triggers onRelease. Any
+//     other key-down first ends the hold immediately and suppresses the later
+//     key-up release callback.
 //
 // This ensures the action only fires when the modifier key is held *alone* for
 // the full hold duration. Pressing another key (e.g. space while holding cmd
-// for cmd+space) cancels the pending action.
+// for cmd+space) cancels the action.
 type holdModifierCallback struct {
 	onPress    func()
 	onRelease  func()
 	key        keyboard.Key
 	pressTimer *time.Timer
 	pressFired bool
+}
+
+type holdModifierRelease struct {
+	key      keyboard.Key
+	callback func()
 }
 
 // holdModifierPressDelay is the minimum time a hold-modifier key must remain
@@ -63,9 +70,22 @@ func ensureHoldKeyListener() error {
 		holdTrackerMu.Lock()
 
 		if event.Type == keyboard.EventTypeKeyDown {
+			releases, canceledOther := cancelHoldModifierPressesForChord(event.Key)
+			if canceledOther {
+				holdTrackerMu.Unlock()
+				dispatchHoldModifierReleases(releases)
+				return false
+			}
+
 			// If the hold-modifier key itself goes down (initial press or OS
 			// key-repeat), (re)arm its minimum-hold timer.
 			if mcb, ok := holdModifierCallbacks.Load(event.Key); ok && mcb != nil {
+				if isOtherSpecificModifierPressed(event.Key) {
+					releases, _ = cancelHoldModifierPressesForChord(keyboard.KeyUnknown)
+					holdTrackerMu.Unlock()
+					dispatchHoldModifierReleases(releases)
+					return false
+				}
 				util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("hold-modifier keyDown: key=%s timer=%v fired=%v", event.Key.Character(), mcb.pressTimer != nil, mcb.pressFired))
 				armHoldModifierPress(mcb, event.Key)
 				holdTrackerMu.Unlock()
@@ -73,10 +93,11 @@ func ensureHoldKeyListener() error {
 			}
 
 			// A *different* key going down means the user is forming a chord
-			// (e.g. cmd+space), not holding the modifier alone. Cancel every
-			// pending hold-modifier press so the action does not fire.
-			cancelAllPendingHoldModifierPresses()
+			// (e.g. cmd+space), not holding the modifier alone. End every
+			// active hold-modifier press so the action does not keep running.
+			releases, _ = cancelHoldModifierPressesForChord(keyboard.KeyUnknown)
 			holdTrackerMu.Unlock()
+			dispatchHoldModifierReleases(releases)
 			return false
 		}
 
@@ -135,6 +156,20 @@ func ensureHoldKeyListener() error {
 	return nil
 }
 
+// dispatchHoldModifierReleases invokes release callbacks after holdTrackerMu is unlocked.
+func dispatchHoldModifierReleases(releases []holdModifierRelease) {
+	for _, release := range releases {
+		key := release.key
+		callback := release.callback
+		if callback == nil {
+			continue
+		}
+		util.Go(util.NewTraceContext(), fmt.Sprintf("hold-modifier hotkey chord-cancel release: %s", key.Character()), func() {
+			callback()
+		})
+	}
+}
+
 // armHoldModifierPress starts (or restarts) the minimum-hold timer for mcb.
 // The caller must hold holdTrackerMu.
 func armHoldModifierPress(mcb *holdModifierCallback, key keyboard.Key) {
@@ -144,6 +179,12 @@ func armHoldModifierPress(mcb *holdModifierCallback, key keyboard.Key) {
 	mcb.pressFired = false
 	mcb.pressTimer = time.AfterFunc(holdModifierPressDelay, func() {
 		holdTrackerMu.Lock()
+		if isOtherSpecificModifierPressed(key) {
+			mcb.pressTimer = nil
+			mcb.pressFired = false
+			holdTrackerMu.Unlock()
+			return
+		}
 		mcb.pressTimer = nil
 		mcb.pressFired = true
 		holdTrackerMu.Unlock()
@@ -153,19 +194,51 @@ func armHoldModifierPress(mcb *holdModifierCallback, key keyboard.Key) {
 	})
 }
 
-// cancelAllPendingHoldModifierPresses cancels every hold-modifier callback
-// whose timer is still pending (press not yet fired). Callbacks whose onPress
-// has already fired are left alone so their onRelease can still run on key-up.
+// cancelHoldModifierPressesForChord cancels pending holds and returns release
+// callbacks for already-fired holds. The except key is skipped so key-repeat on
+// the active hold key can re-arm normally.
 // The caller must hold holdTrackerMu.
-func cancelAllPendingHoldModifierPresses() {
+func cancelHoldModifierPressesForChord(except keyboard.Key) ([]holdModifierRelease, bool) {
+	releases := []holdModifierRelease{}
+	canceled := false
+
 	holdModifierCallbacks.Range(func(key keyboard.Key, mcb *holdModifierCallback) bool {
+		if key == except || mcb == nil {
+			return true
+		}
 		if mcb.pressTimer != nil {
 			mcb.pressTimer.Stop()
 			mcb.pressTimer = nil
 			mcb.pressFired = false
+			canceled = true
+			return true
+		}
+		if mcb.pressFired {
+			mcb.pressFired = false
+			canceled = true
+			if mcb.onRelease != nil {
+				releases = append(releases, holdModifierRelease{key: key, callback: mcb.onRelease})
+			}
 		}
 		return true
 	})
+
+	return releases, canceled
+}
+
+// isOtherSpecificModifierPressed catches simultaneous modifier chords whose
+// raw key-down ordering would otherwise arm the hold key after the other
+// modifier was already down.
+func isOtherSpecificModifierPressed(activeKey keyboard.Key) bool {
+	for key := range holdModifierRecorderKeys {
+		if key == activeKey {
+			continue
+		}
+		if keyboard.IsKeyPressed(key) {
+			return true
+		}
+	}
+	return false
 }
 
 // startHoldTracking begins watching for the release of the given key. When the
@@ -248,14 +321,14 @@ var (
 
 // holdModifierRecorderKeys are the keys the recorder will capture and forward.
 var holdModifierRecorderKeys = map[keyboard.Key]bool{
-	keyboard.KeyLeftCtrl:    true,
-	keyboard.KeyRightCtrl:   true,
-	keyboard.KeyLeftShift:   true,
-	keyboard.KeyRightShift:  true,
-	keyboard.KeyLeftAlt:     true,
-	keyboard.KeyRightAlt:    true,
-	keyboard.KeyLeftSuper:   true,
-	keyboard.KeyRightSuper:  true,
+	keyboard.KeyLeftCtrl:   true,
+	keyboard.KeyRightCtrl:  true,
+	keyboard.KeyLeftShift:  true,
+	keyboard.KeyRightShift: true,
+	keyboard.KeyLeftAlt:    true,
+	keyboard.KeyRightAlt:   true,
+	keyboard.KeyLeftSuper:  true,
+	keyboard.KeyRightSuper: true,
 }
 
 // SetHoldModifierRecorder installs or removes a recorder that forwards

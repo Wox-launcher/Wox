@@ -4,10 +4,11 @@ enum DictationModelStatus {
   notDownloaded,
   downloading,
   extracting,
+  finalizing,
   downloaded,
   failed;
 
-  static DictationModelStatus fromString(String s) {
+  static DictationModelStatus fromString(String? s) {
     switch (s) {
       case 'not_downloaded':
         return notDownloaded;
@@ -15,6 +16,8 @@ enum DictationModelStatus {
         return downloading;
       case 'extracting':
         return extracting;
+      case 'finalizing':
+        return finalizing;
       case 'downloaded':
         return downloaded;
       case 'failed':
