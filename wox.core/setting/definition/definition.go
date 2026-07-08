@@ -26,9 +26,10 @@ const (
 	PluginSettingDefinitionTypeDictationHotkey PluginSettingDefinitionType = "dictationHotkey"
 	PluginSettingDefinitionTypeDictationModel  PluginSettingDefinitionType = "dictationModel"
 
-	// dynamic setting will be replaced by the actual setting when retrieved
-	// this is useful when the setting is dynamic. E.g. a list of plugins for select
-	// if user define the dynamic setting, user should use api.
+	// dynamic setting will be replaced by the actual setting when retrieved.
+	// The callback may return an empty PluginSettingDefinitionItem to hide it.
+	// This is useful when the setting is dynamic. E.g. a list of plugins for select.
+	// If user defines the dynamic setting, user should use api.
 	PluginSettingDefinitionTypeDynamic PluginSettingDefinitionType = "dynamic"
 )
 
@@ -43,6 +44,11 @@ type PluginSettingDefinitionItem struct {
 	Value               PluginSettingDefinitionValue
 	DisabledInPlatforms []util.Platform
 	IsPlatformSpecific  bool // if true, this setting may be different in different platforms
+}
+
+// IsEmpty reports whether this item is the zero-value dynamic callback result.
+func (n PluginSettingDefinitionItem) IsEmpty() bool {
+	return n.Type == "" && n.Value == nil
 }
 
 // Deprecated: plugin-provided pixel styling is ignored when settings are loaded.

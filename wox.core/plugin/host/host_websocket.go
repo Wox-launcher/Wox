@@ -218,6 +218,29 @@ func (w *WebsocketHost) decodeHostResult(result any, target any) error {
 	return nil
 }
 
+// isEmptyDynamicSettingHostResult maps host callback placeholders such as None,
+// null, "", or {} to the same hidden dynamic setting contract used by Go plugins.
+func isEmptyDynamicSettingHostResult(result any) bool {
+	if result == nil {
+		return true
+	}
+
+	var raw []byte
+	switch typed := result.(type) {
+	case string:
+		raw = []byte(typed)
+	default:
+		marshalResult, marshalErr := json.Marshal(typed)
+		if marshalErr != nil {
+			return false
+		}
+		raw = marshalResult
+	}
+
+	trimmed := strings.TrimSpace(string(raw))
+	return trimmed == "" || trimmed == "null" || trimmed == "{}"
+}
+
 func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) error {
 	w.ws = util.NewWebsocketClient(fmt.Sprintf("ws://127.0.0.1:%d", port))
 	w.ws.OnMessage(ctx, func(data []byte) {
@@ -537,6 +560,9 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 						Content: fmt.Sprintf("failed to get dynamic setting: %s", err),
 					},
 				}
+			}
+			if isEmptyDynamicSettingHostResult(result) {
+				return definition.PluginSettingDefinitionItem{}
 			}
 
 			var setting definition.PluginSettingDefinitionItem

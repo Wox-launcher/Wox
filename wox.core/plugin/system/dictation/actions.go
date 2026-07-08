@@ -107,6 +107,16 @@ func normalizeDictationActions(actions []dictationAction) []dictationAction {
 	return normalized
 }
 
+// defaultDictationActionFromSetting returns the normalized default action from persisted JSON.
+func defaultDictationActionFromSetting(raw string) dictationAction {
+	for _, action := range normalizeDictationActions(parseDictationActions(raw)) {
+		if action.Type == dictationActionTypeDefault {
+			return action
+		}
+	}
+	return newDefaultDictationAction()
+}
+
 func normalizeDictationAction(action dictationAction) dictationAction {
 	if strings.TrimSpace(action.Type) == "" && strings.TrimSpace(action.ID) == dictationActionIDDefault {
 		action.Type = dictationActionTypeDefault

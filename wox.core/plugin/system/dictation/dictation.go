@@ -256,6 +256,21 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          settingKeyDefaultAIRefine,
+					Label:        "i18n:plugin_dictation_ai_enable",
+					Tooltip:      "i18n:plugin_dictation_ai_enable_tooltip",
+					DefaultValue: "false",
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{
+					Key: settingKeyDefaultAIModel,
+				},
+			},
+			{
 				Type: definition.PluginSettingDefinitionTypeTable,
 				Value: &definition.PluginSettingValueTable{
 					Key:          settingKeyDictionary,
@@ -304,36 +319,6 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 							},
 						},
 					},
-				},
-			},
-			// AI refinement group header.
-			{
-				Type: definition.PluginSettingDefinitionTypeHead,
-				Value: &definition.PluginSettingValueHead{
-					Content: "i18n:plugin_dictation_ai_group",
-				},
-			},
-			// Master switch for AI refinement after dictation stops.
-			{
-				Type: definition.PluginSettingDefinitionTypeCheckBox,
-				Value: &definition.PluginSettingValueCheckBox{
-					Key:          settingKeyDefaultAIRefine,
-					Label:        "i18n:plugin_dictation_ai_enable",
-					Tooltip:      "i18n:plugin_dictation_ai_enable_tooltip",
-					DefaultValue: "false",
-				},
-			},
-			{
-				Type: definition.PluginSettingDefinitionTypeSelectAIModel,
-				Value: &definition.PluginSettingValueSelectAIModel{
-					Key:   settingKeyDefaultAIModel,
-					Label: "i18n:plugin_dictation_ai_model",
-				},
-			},
-			{
-				Type: definition.PluginSettingDefinitionTypeHead,
-				Value: &definition.PluginSettingValueHead{
-					Content: "i18n:plugin_dictation_actions_group",
 				},
 			},
 			{
@@ -477,6 +462,8 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			return p.buildInputDeviceSetting(ctx)
 		case settingKeyModel:
 			return p.buildModelSetting(ctx)
+		case settingKeyDefaultAIModel:
+			return p.buildDefaultAIModelSetting(ctx)
 		}
 		return definition.PluginSettingDefinitionItem{}
 	})
@@ -724,6 +711,22 @@ func (p *DictationPlugin) buildModelSetting(ctx context.Context) definition.Plug
 			Tooltip:      "i18n:plugin_dictation_model_tooltip",
 			DefaultValue: defaultValue,
 			Options:      options,
+		},
+	}
+}
+
+// buildDefaultAIModelSetting hides the AI model picker until default dictation AI refinement is enabled.
+func (p *DictationPlugin) buildDefaultAIModelSetting(ctx context.Context) definition.PluginSettingDefinitionItem {
+	defaultAction := defaultDictationActionFromSetting(p.api.GetSetting(ctx, settingKeyActions))
+	if !defaultAction.AIRefineEnabled {
+		return definition.PluginSettingDefinitionItem{}
+	}
+
+	return definition.PluginSettingDefinitionItem{
+		Type: definition.PluginSettingDefinitionTypeSelectAIModel,
+		Value: &definition.PluginSettingValueSelectAIModel{
+			Key:   settingKeyDefaultAIModel,
+			Label: "i18n:plugin_dictation_ai_model",
 		},
 	}
 }
