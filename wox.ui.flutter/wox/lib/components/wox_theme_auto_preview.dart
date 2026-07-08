@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_theme.dart';
-import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
+import 'package:wox/utils/wox_hotkey_display_util.dart';
 
 class WoxThemeAutoPreview extends StatelessWidget {
   final WoxTheme theme;
@@ -116,7 +117,7 @@ class WoxThemeAutoPreview extends StatelessWidget {
           height: WoxThemeUtil.instance.getToolbarHeight(),
           decoration: BoxDecoration(
             color: safeFromCssColor(theme.toolbarBackgroundColor.isEmpty ? theme.appBackgroundColor : theme.toolbarBackgroundColor),
-            border: Border(top: BorderSide(color: safeFromCssColor(theme.toolbarFontColor).withOpacity(0.1), width: 1)),
+            border: Border(top: BorderSide(color: safeFromCssColor(theme.toolbarFontColor).withValues(alpha: 0.1), width: 1)),
           ),
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: theme.toolbarPaddingLeft.toDouble()),
@@ -129,8 +130,8 @@ class WoxThemeAutoPreview extends StatelessWidget {
                   children: [
                     Text(tr("ui_theme_preview_open"), style: TextStyle(color: safeFromCssColor(theme.toolbarFontColor))),
                     const SizedBox(width: 8),
-                    WoxHotkeyView(
-                      hotkey: WoxHotkey.parseHotkeyFromString("Enter")!,
+                    WoxHotkeyView.labels(
+                      labels: [WoxHotkeyDisplayUtil.keyLabel(LogicalKeyboardKey.enter)],
                       backgroundColor: safeFromCssColor(theme.toolbarBackgroundColor),
                       borderColor: safeFromCssColor(theme.toolbarFontColor),
                       textColor: safeFromCssColor(theme.toolbarFontColor),
@@ -245,7 +246,7 @@ class _DiagonalLinePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint =
         Paint()
-          ..color = Colors.black.withOpacity(0.15)
+          ..color = Colors.black.withValues(alpha: 0.15)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2;
     canvas.drawLine(Offset(size.width, 0), Offset(0, size.height), paint);

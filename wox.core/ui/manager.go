@@ -359,15 +359,15 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 	return nil
 }
 
-// RegisterDictationHotkey binds the global dictation hotkey. Bare saved values
-// are press-triggered; "hold:<hotkey>" values fire on press and release.
+// RegisterDictationHotkey binds the global dictation hotkey using the trigger
+// mode parsed by the hotkey package.
 func (m *Manager) RegisterDictationHotkey(ctx context.Context, bindingValue string) error {
 	bindingValue = strings.TrimSpace(bindingValue)
-	binding, bindingErr := parseDictationHotkeyBinding(bindingValue)
+	binding, bindingErr := hotkey.ParseBinding(bindingValue)
 	if bindingErr != nil {
 		return bindingErr
 	}
-	if binding.combineKey == "" {
+	if binding.CombineKey == "" {
 		logger.Info(ctx, "remove dictation hotkey")
 		if m.dictationHotkey != nil {
 			m.dictationHotkey.Unregister(ctx)
@@ -380,12 +380,12 @@ func (m *Manager) RegisterDictationHotkey(ctx context.Context, bindingValue stri
 	// callbacks match the current trigger behavior. Even when bindings look
 	// identical, re-registering keeps stale callback state out of the raw-key
 	// trackers after switching between hold and press behavior.
-	logger.Info(ctx, fmt.Sprintf("register dictation hotkey: binding=%s trigger=%s hotkey=%s", bindingValue, binding.trigger, binding.combineKey))
+	logger.Info(ctx, fmt.Sprintf("register dictation hotkey: binding=%s trigger=%s hotkey=%s", bindingValue, binding.Trigger, binding.CombineKey))
 
 	var onPress func()
 	var onRelease func()
 
-	if binding.trigger == dictationHotkeyTriggerHold {
+	if binding.Trigger == hotkey.TriggerHold {
 		// Hold mode: press starts recording, release stops it.
 		onPress = func() {
 			m.handleDictationHotkeyPress(ctx)
@@ -413,10 +413,10 @@ func (m *Manager) RegisterDictationHotkey(ctx context.Context, bindingValue stri
 	}
 
 	var registerErr error
-	if binding.trigger == dictationHotkeyTriggerHold {
-		registerErr = newHotkey.RegisterWithRelease(ctx, binding.combineKey, onPress, onRelease)
+	if binding.Trigger == hotkey.TriggerHold {
+		registerErr = newHotkey.RegisterWithRelease(ctx, binding.CombineKey, onPress, onRelease)
 	} else {
-		registerErr = newHotkey.RegisterWithModifierPress(ctx, binding.combineKey, onPress)
+		registerErr = newHotkey.RegisterWithModifierPress(ctx, binding.CombineKey, onPress)
 	}
 	if registerErr != nil {
 		return registerErr

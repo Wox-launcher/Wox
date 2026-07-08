@@ -14,6 +14,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/plugin/system/mediaplayer"
 	"wox/resource"
 	"wox/setting/definition"
 	"wox/setting/validator"
@@ -118,6 +119,8 @@ type DictationPlugin struct {
 	// after it finishes.
 	isStarting  bool
 	pendingStop bool
+	// mediaPausedForDictation tracks whether this dictation session paused external media.
+	mediaPausedForDictation bool
 
 	// Overlay update throttling
 	lastOverlayUpdate time.Time
@@ -180,12 +183,13 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 			},
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
-			// Hotkey recorder - dynamic setting. The actual definition is built
-			// at render time by the OnGetDynamicSetting callback below.
 			{
-				Type: definition.PluginSettingDefinitionTypeDynamic,
-				Value: &definition.PluginSettingValueDynamic{
-					Key: settingKeyHotkey,
+				Type: definition.PluginSettingDefinitionTypeDictationHotkey,
+				Value: &definition.PluginSettingValueDictationHotkey{
+					Key:          settingKeyHotkey,
+					Label:        "i18n:plugin_dictation_hotkey",
+					Tooltip:      "i18n:plugin_dictation_hotkey_tooltip",
+					DefaultValue: "",
 				},
 			},
 			// Model manager - a dedicated component showing recommended models
@@ -336,11 +340,9 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	p.vadPool = speech.NewVadPool(recognizerPoolIdleTTL)
 	p.vadPool.StartReaper(ctx)
 
-	// Register dynamic setting callbacks for hotkey, input device and model.
+	// Register dynamic setting callbacks for input device and model.
 	p.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
 		switch key {
-		case settingKeyHotkey:
-			return p.buildHotkeySetting(ctx)
 		case settingKeyInputDevice:
 			return p.buildInputDeviceSetting(ctx)
 		case settingKeyModel:
@@ -387,20 +389,6 @@ func (p *DictationPlugin) reregisterHotkey(ctx context.Context, combineKey strin
 	}
 	if err := hotkeyRegistrar.RegisterDictationHotkey(ctx, combineKey); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to register dictation hotkey: %s", err.Error()))
-	}
-}
-
-// buildHotkeySetting returns the hotkey setting as a dictationHotkey
-// definition.
-func (p *DictationPlugin) buildHotkeySetting(ctx context.Context) definition.PluginSettingDefinitionItem {
-	return definition.PluginSettingDefinitionItem{
-		Type: definition.PluginSettingDefinitionTypeDictationHotkey,
-		Value: &definition.PluginSettingValueDictationHotkey{
-			Key:          settingKeyHotkey,
-			Label:        "i18n:plugin_dictation_hotkey",
-			Tooltip:      "i18n:plugin_dictation_hotkey_tooltip",
-			DefaultValue: "",
-		},
 	}
 }
 
@@ -964,6 +952,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context) {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("dictation start failed: %s", err.Error()))
 		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed"), err.Error()))
 		p.closeDictationOverlay()
+		p.stopVolumeDucking(ctx)
 		p.sessionMu.Lock()
 		p.isStarting = false
 		p.pendingStop = false
@@ -1470,45 +1459,78 @@ func (p *DictationPlugin) cancelDictation(ctx context.Context) {
 	p.playSoundIfEnabled(ctx, soundStop)
 }
 
-// playSoundIfEnabled plays an embedded audio clip when the playSound setting
-// is on. Errors are logged but never propagated so they can't disrupt
-// recording or typing.
-// startVolumeDucking pauses other media playback when the duckVolume
-// setting is enabled, so other audio does not interfere with dictation.
-// Uses InvokePluginCommand to ask the media player plugin to pause.
+// startVolumeDucking pauses media only when it is already playing, then records
+// whether this session needs to restore playback later.
 func (p *DictationPlugin) startVolumeDucking(ctx context.Context) {
+	p.setMediaPausedForDictation(false)
+
 	enabled := parseBoolSetting(p.api.GetSetting(ctx, settingKeyDuckVolume))
 	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation: startVolumeDucking, enabled=%t", enabled))
 	if !enabled {
 		return
 	}
-	_, err := p.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
-		PluginId: "b8f3d4e5-6c7a-4b9c-8d1e-2f3a4b5c6d7e",
-		Command:  "pause",
+	result, err := p.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
+		PluginId: mediaplayer.PluginID,
+		Command:  mediaplayer.PluginCommandPauseIfPlaying,
 	})
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to pause media: %s", err.Error()))
-	} else {
+		return
+	}
+
+	switch result.Message {
+	case mediaplayer.PluginCommandResultPaused:
+		p.setMediaPausedForDictation(true)
 		p.api.Log(ctx, plugin.LogLevelInfo, "dictation: media paused via plugin command")
+	case mediaplayer.PluginCommandResultNotPlaying, mediaplayer.PluginCommandResultNoActiveMedia:
+		p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation: media pause skipped: %s", result.Message))
+	default:
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to pause media: %s", result.Message))
 	}
 }
 
-// stopVolumeDucking resumes media playback if it was previously paused.
+// stopVolumeDucking resumes media playback only when this dictation session
+// previously paused it.
 func (p *DictationPlugin) stopVolumeDucking(ctx context.Context) {
-	if !parseBoolSetting(p.api.GetSetting(ctx, settingKeyDuckVolume)) {
+	if !p.consumeMediaPausedForDictation() {
 		return
 	}
-	_, err := p.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
-		PluginId: "b8f3d4e5-6c7a-4b9c-8d1e-2f3a4b5c6d7e",
-		Command:  "play",
+	result, err := p.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
+		PluginId: mediaplayer.PluginID,
+		Command:  mediaplayer.PluginCommandPlay,
 	})
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to resume media: %s", err.Error()))
-	} else {
-		p.api.Log(ctx, plugin.LogLevelInfo, "dictation: media resumed via plugin command")
+		return
 	}
+	if result.Message != "" {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to resume media: %s", result.Message))
+		return
+	}
+
+	p.api.Log(ctx, plugin.LogLevelInfo, "dictation: media resumed via plugin command")
 }
 
+func (p *DictationPlugin) setMediaPausedForDictation(paused bool) {
+	p.sessionMu.Lock()
+	p.mediaPausedForDictation = paused
+	p.sessionMu.Unlock()
+}
+
+// consumeMediaPausedForDictation returns the recorded media pause state once
+// so duplicate stop/cancel paths do not resume playback multiple times.
+func (p *DictationPlugin) consumeMediaPausedForDictation() bool {
+	p.sessionMu.Lock()
+	defer p.sessionMu.Unlock()
+
+	paused := p.mediaPausedForDictation
+	p.mediaPausedForDictation = false
+	return paused
+}
+
+// playSoundIfEnabled plays an embedded audio clip when the playSound setting
+// is on. Errors are logged but never propagated so they can't disrupt
+// recording or typing.
 func (p *DictationPlugin) playSoundIfEnabled(ctx context.Context, name string) {
 	if !parseBoolSetting(p.api.GetSetting(ctx, settingKeyPlaySound)) {
 		return

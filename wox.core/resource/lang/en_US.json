@@ -2448,7 +2448,7 @@
   "plugin_dictation_plugin_description": "Voice-to-text dictation using local speech recognition. Speak into the microphone and the recognized text is typed into the focused window.",
   "plugin_dictation_settings_head": "Dictation Settings",
   "plugin_dictation_hotkey": "Hotkey",
-  "plugin_dictation_hotkey_tooltip": "Press-triggered hotkeys start/stop dictation. Hold modifier hotkeys record while held. Leave empty to disable.",
+  "plugin_dictation_hotkey_tooltip": "Supports pressing a modifier key once or holding a modifier key to record.",
   "plugin_dictation_input_device": "Input device",
   "plugin_dictation_input_device_tooltip": "Select the microphone to use for dictation. System default uses the OS default input device.",
   "plugin_dictation_system_default": "System default",

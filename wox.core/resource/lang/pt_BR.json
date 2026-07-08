@@ -888,6 +888,7 @@
   "ui_ai_model_selector_save": "Salvar",
   "plugin_dictation_loading_model": "Preparing dictation engine and recognition model...",
   "plugin_dictation_processing": "Processando ditado...",
+  "plugin_dictation_hotkey_tooltip": "Permite pressionar uma tecla modificadora uma vez ou mantê-la pressionada para gravar.",
   "plugin_dictation_input_device_unavailable": "Dispositivo de entrada selecionado indisponível: {device}",
   "plugin_dictation_input_device_missing": "Dispositivo de entrada selecionado não encontrado: {device}. Conecte o dispositivo ou escolha Padrão do sistema nas configurações de Ditado.",
   "plugin_dictation_input_device_list_failed": "Falha ao listar dispositivos de entrada",

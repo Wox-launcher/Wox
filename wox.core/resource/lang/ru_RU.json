@@ -888,6 +888,7 @@
   "ui_ai_model_selector_save": "Сохранить",
   "plugin_dictation_loading_model": "Preparing dictation engine and recognition model...",
   "plugin_dictation_processing": "Обработка диктовки...",
+  "plugin_dictation_hotkey_tooltip": "Поддерживает однократное нажатие клавиши-модификатора или запись при удержании клавиши-модификатора.",
   "plugin_dictation_input_device_unavailable": "Выбранное устройство ввода недоступно: {device}",
   "plugin_dictation_input_device_missing": "Выбранное устройство ввода не найдено: {device}. Подключите устройство или выберите системное по умолчанию в настройках диктовки.",
   "plugin_dictation_input_device_list_failed": "Не удалось получить список устройств ввода",

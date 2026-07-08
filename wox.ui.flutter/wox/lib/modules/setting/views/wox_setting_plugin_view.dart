@@ -59,7 +59,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   static const String _selectionPluginId = "d9e557ed-89bd-4b8b-bd64-2a7632cf3483";
   static const String _selectionSpaceQuickLookSettingKey = "enableSpaceQuickLook";
   static const double _pluginSettingLabelActionWidth = 28.0;
-  static const String _dictationHoldPrefix = "hold:";
   static const List<WoxHotkeyRecorderKind> _dictationHotkeyKinds = [
     WoxHotkeyRecorderKind.normalCombo,
     WoxHotkeyRecorderKind.doubleModifier,
@@ -200,29 +199,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
       return value.key;
     }
     return "";
-  }
-
-  String _displayedDictationHotkeyValue(String savedValue) {
-    final trimmed = savedValue.trim();
-    if (!trimmed.startsWith(_dictationHoldPrefix)) {
-      return trimmed;
-    }
-    return trimmed.substring(_dictationHoldPrefix.length).trim();
-  }
-
-  bool _isDictationHoldBinding(String savedValue) {
-    return savedValue.trim().startsWith(_dictationHoldPrefix);
-  }
-
-  String _savedDictationHotkeyValue(String hotkey, String kind) {
-    final trimmedHotkey = hotkey.trim();
-    if (trimmedHotkey.isEmpty) {
-      return "";
-    }
-    if (kind == WoxHotkeyRecorderKind.holdModifier.value) {
-      return "$_dictationHoldPrefix$trimmedHotkey";
-    }
-    return trimmedHotkey;
   }
 
   Widget _buildPluginSettingTarget({required PluginDetail plugin, required PluginSettingDefinitionItem definition, required Widget child}) {
@@ -1021,8 +997,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 }
                 if (e.type == "dictationHotkey") {
                   final hotkeyValue = e.value as PluginSettingValueDictationHotkey;
-                  final savedHotkeyValue = plugin.setting.settings[hotkeyValue.key] ?? "";
-                  final displayedHotkeyValue = _displayedDictationHotkeyValue(savedHotkeyValue);
+                  final savedHotkeyValue = (plugin.setting.settings[hotkeyValue.key] ?? "").trim();
                   settingWidget = WoxSettingPluginItem.layoutFor(
                     label: hotkeyValue.label,
                     style: hotkeyValue.style,
@@ -1030,13 +1005,12 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     labelWidth: uniformLabelWidth,
                     translator: controller.tr,
                     child: WoxHotkeyRecorder(
-                      hotkey: displayedHotkeyValue.isNotEmpty ? WoxHotkey.parseHotkeyFromString(displayedHotkeyValue) : null,
-                      hotkeyKind: _isDictationHoldBinding(savedHotkeyValue) ? WoxHotkeyRecorderKind.holdModifier : null,
+                      hotkey: savedHotkeyValue.isNotEmpty ? WoxHotkey.parseHotkeyFromString(savedHotkeyValue) : null,
                       purpose: WoxHotkeyRecorderPurpose.dictation,
                       allowedKinds: _dictationHotkeyKinds,
                       tipPosition: WoxHotkeyRecorderTipPosition.right,
                       onHotKeyRecorded: (result) {
-                        controller.updatePluginSetting(plugin.id, hotkeyValue.key, _savedDictationHotkeyValue(result.hotkey, result.kind));
+                        controller.updatePluginSetting(plugin.id, hotkeyValue.key, result.hotkey);
                       },
                       onUnavailableHotKeyRecorded: (_) {
                         controller.updatePluginSetting(plugin.id, hotkeyValue.key, "");

@@ -26,11 +26,11 @@ enum WoxHotkeyRecorderPurpose {
 }
 
 enum WoxHotkeyRecorderKind {
-  normalCombo("normalCombo"),
-  doubleModifier("doubleModifier"),
-  capsLockCombo("capsLockCombo"),
-  holdModifier("holdModifier"),
-  pressModifier("pressModifier");
+  normalCombo(WoxHotkey.kindNormalCombo),
+  doubleModifier(WoxHotkey.kindDoubleModifier),
+  capsLockCombo(WoxHotkey.kindCapsLockCombo),
+  holdModifier(WoxHotkey.kindHoldModifier),
+  pressModifier(WoxHotkey.kindPressModifier);
 
   const WoxHotkeyRecorderKind(this.value);
 
@@ -41,7 +41,6 @@ class WoxHotkeyRecorder extends StatefulWidget {
   final ValueChanged<HotkeyRecordingResult> onHotKeyRecorded;
   final ValueChanged<String>? onUnavailableHotKeyRecorded;
   final HotkeyX? hotkey;
-  final WoxHotkeyRecorderKind? hotkeyKind;
   final WoxHotkeyRecorderTipPosition tipPosition;
   final bool recordUnavailableHotkey;
   final WoxHotkeyRecorderPurpose purpose;
@@ -51,7 +50,6 @@ class WoxHotkeyRecorder extends StatefulWidget {
     super.key,
     required this.onHotKeyRecorded,
     required this.hotkey,
-    this.hotkeyKind,
     this.onUnavailableHotKeyRecorded,
     this.tipPosition = WoxHotkeyRecorderTipPosition.left,
     this.recordUnavailableHotkey = false,
@@ -384,7 +382,6 @@ class _HotkeyTracker {
 
 class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   HotkeyX? _hotKey;
-  String _hotKeyKind = "";
   bool _isFocused = false;
   String _availabilityMessage = "";
   HotkeyRecordingCapability? _recordingCapability;
@@ -411,7 +408,6 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
 
     _focusNode = FocusNode();
     _hotKey = widget.hotkey;
-    _hotKeyKind = widget.hotkeyKind?.value ?? "";
     _globalHotkeySubscription = WoxHotkeyRecordingBus.instance.stream.listen((result) {
       if (_isFocused) {
         Logger.instance.info(const UuidV4().generate(), "Hotkey recorder received backend RecordHotkey event: hotkey=${result.hotkey} kind=${result.kind}");
@@ -441,9 +437,6 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.hotkey?.toStr() != widget.hotkey?.toStr()) {
       _hotKey = widget.hotkey;
-    }
-    if (oldWidget.hotkeyKind != widget.hotkeyKind) {
-      _hotKeyKind = widget.hotkeyKind?.value ?? "";
     }
   }
 
@@ -488,11 +481,16 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     // backspace to clear hotkey
     if (keyEvent.logicalKey == LogicalKeyboardKey.backspace && keyEvent is KeyDownEvent) {
       _hotKey = null;
-      _hotKeyKind = "";
       _availabilityMessage = "";
       widget.onHotKeyRecorded(const HotkeyRecordingResult(hotkey: "", kind: ""));
       setState(() {});
       Logger.instance.info(traceId, "Hotkey recorder cleared hotkey from Backspace");
+      return true;
+    }
+
+    if (_shouldMoveFocusFromRecorder(keyEvent)) {
+      _moveFocusFromRecorder(backward: keyEvent.logicalKey == LogicalKeyboardKey.tab && HardwareKeyboard.instance.isShiftPressed);
+      Logger.instance.info(traceId, "Hotkey recorder moved focus from ${keyEvent.logicalKey.keyLabel}");
       return true;
     }
 
@@ -525,6 +523,30 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   bool _shouldUseNormalFallbackRecorder() {
     final capability = _recordingCapability;
     return capability != null && !capability.rawRecorderAvailable && capability.fallbackAllowedKinds.contains(WoxHotkeyRecorderKind.normalCombo.value);
+  }
+
+  // Treat plain navigation keys as focus controls before the raw recorder consumes them.
+  bool _shouldMoveFocusFromRecorder(KeyEvent keyEvent) {
+    if (keyEvent is! KeyDownEvent) {
+      return false;
+    }
+
+    if (keyEvent.logicalKey == LogicalKeyboardKey.tab) {
+      return !HardwareKeyboard.instance.isAltPressed && !HardwareKeyboard.instance.isControlPressed && !HardwareKeyboard.instance.isMetaPressed;
+    }
+
+    if (keyEvent.logicalKey == LogicalKeyboardKey.enter || keyEvent.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      return !WoxHotkey.isAnyModifierPressed();
+    }
+
+    return false;
+  }
+
+  void _moveFocusFromRecorder({required bool backward}) {
+    final moved = backward ? _focusNode.previousFocus() : _focusNode.nextFocus();
+    if (!moved) {
+      _focusNode.unfocus();
+    }
   }
 
   void _submitFallbackHotkey(String hotkeyStr) {
@@ -604,10 +626,11 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   }
 
   void _acceptRecordedHotkey(String hotkeyStr, {String kind = ""}) {
-    _hotKey = WoxHotkey.parseHotkeyFromString(hotkeyStr);
-    _hotKeyKind = kind;
+    final canonicalHotkey = WoxHotkey.recordedHotkeyToString(hotkeyStr, kind);
+    _hotKey = WoxHotkey.parseHotkeyFromString(canonicalHotkey);
+    final parsedKind = _hotKey?.kind ?? "";
     _availabilityMessage = "";
-    widget.onHotKeyRecorded(HotkeyRecordingResult(hotkey: hotkeyStr, kind: kind));
+    widget.onHotKeyRecorded(HotkeyRecordingResult(hotkey: canonicalHotkey, kind: parsedKind.isNotEmpty ? parsedKind : kind));
     setState(() {});
   }
 
@@ -629,7 +652,7 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   Widget _buildRecorderBox() {
     final hasAvailabilityError = _availabilityMessage.isNotEmpty;
     final hotkey = _hotKey;
-    final isDisplayableHotkey = hotkey != null && (hotkey.isDoubleHotkey || hotkey.isCapsLockHotkey || hotkey.isNormalHotkey || hotkey.isSingleHotkey || hotkey.isModifierChord);
+    final isDisplayableHotkey = hotkey != null && (hotkey.isDoubleHotkey || hotkey.isCapsLockHotkey || hotkey.isNormalHotkey || hotkey.isModifierChord || hotkey.isHoldModifier);
     return Container(
       // Match the quieter setting control treatment; focus still uses the accent color while idle borders no longer dominate the row.
       decoration: BoxDecoration(
@@ -645,7 +668,7 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
                   height: 18,
                   child: Text(_isFocused ? tr("ui_hotkey_recording") : tr("ui_hotkey_click_to_set"), style: TextStyle(color: Colors.grey[400], fontSize: 13)),
                 )
-                : _hotKeyKind == WoxHotkeyRecorderKind.holdModifier.value && hotkey.isModifierChord
+                : hotkey.isHoldModifier
                 ? Text(
                   '${tr('ui_hotkey_hold_prefix')} ${WoxHotkeyDisplayUtil.labelsFromHotkey(hotkey).join(' + ')}',
                   style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500),

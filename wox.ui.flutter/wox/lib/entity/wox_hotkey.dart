@@ -43,9 +43,9 @@ class HotkeyX {
   KeyboardKey? capsLockHotkey; // Caps Lock combination, E.g. "capslock+a"
   HotKeyModifier? doubleHotkey; // double hotkey, E.g. "ctrl+ctrl"
   List<String>? modifierChord; // left/right modifier chord, E.g. "left_shift+left_cmd"
-  LogicalKeyboardKey? singleHotkey; // single hotkey, E.g. "enter", usually used for default action hotkey
+  List<String>? holdModifiers; // hold-mode left/right modifier chord, E.g. "hold:left_alt"
 
-  HotkeyX(this.raw, {this.normalHotkey, this.capsLockHotkey, this.doubleHotkey, this.modifierChord, this.singleHotkey});
+  HotkeyX(this.raw, {this.normalHotkey, this.capsLockHotkey, this.doubleHotkey, this.modifierChord, this.holdModifiers});
 
   bool get isNormalHotkey => normalHotkey != null;
 
@@ -55,7 +55,28 @@ class HotkeyX {
 
   bool get isModifierChord => modifierChord != null && modifierChord!.isNotEmpty;
 
-  bool get isSingleHotkey => singleHotkey != null;
+  bool get isHoldModifier => holdModifiers != null && holdModifiers!.isNotEmpty;
+
+  List<String>? get displayModifierChord => isHoldModifier ? holdModifiers : modifierChord;
+
+  String get kind {
+    if (isNormalHotkey) {
+      return WoxHotkey.kindNormalCombo;
+    }
+    if (isCapsLockHotkey) {
+      return WoxHotkey.kindCapsLockCombo;
+    }
+    if (isDoubleHotkey) {
+      return WoxHotkey.kindDoubleModifier;
+    }
+    if (isHoldModifier) {
+      return WoxHotkey.kindHoldModifier;
+    }
+    if (isModifierChord) {
+      return WoxHotkey.kindPressModifier;
+    }
+    return "";
+  }
 
   String toStr() {
     return raw;
@@ -98,14 +119,35 @@ class HotkeyAvailability {
 
 /// A hotkey in Wox at least consists of a modifier and a key.
 class WoxHotkey {
+  static const String kindNormalCombo = "normalCombo";
+  static const String kindDoubleModifier = "doubleModifier";
+  static const String kindCapsLockCombo = "capsLockCombo";
+  static const String kindHoldModifier = "holdModifier";
+  static const String kindPressModifier = "pressModifier";
+  static const String holdModifierPrefix = "hold:";
+
   static HotkeyX? parseHotkeyFromString(String value) {
+    final trimmedValue = value.trim();
+    if (trimmedValue.startsWith(holdModifierPrefix)) {
+      final innerValue = trimmedValue.substring(holdModifierPrefix.length).trim();
+      final innerHotkey = parseHotkeyFromString(innerValue);
+      if (innerHotkey == null) {
+        return null;
+      }
+      final holdModifiers = innerHotkey.displayModifierChord;
+      if (holdModifiers == null || holdModifiers.isEmpty) {
+        return null;
+      }
+      return HotkeyX(trimmedValue, holdModifiers: holdModifiers);
+    }
+
     final modifiers = <HotKeyModifier>[];
     var isCapsLockCombo = false;
     LogicalKeyboardKey? key;
-    final tokens = value.split("+").map((element) => element.trim().toLowerCase()).where((element) => element.isNotEmpty).toList();
+    final tokens = trimmedValue.split("+").map((element) => element.trim().toLowerCase()).where((element) => element.isNotEmpty).toList();
     final modifierChord = _parseModifierChord(tokens);
     if (modifierChord != null) {
-      return HotkeyX(value, modifierChord: modifierChord);
+      return HotkeyX(trimmedValue, modifierChord: modifierChord);
     }
 
     for (final e in tokens) {
@@ -276,19 +318,31 @@ class WoxHotkey {
 
     // double hotkey
     if (key == null && modifiers.length == 2 && modifiers[0] == modifiers[1]) {
-      return HotkeyX(value, doubleHotkey: modifiers[0]);
+      return HotkeyX(trimmedValue, doubleHotkey: modifiers[0]);
     }
 
     if (isCapsLockCombo && key != null) {
-      return HotkeyX(value, capsLockHotkey: key);
+      return HotkeyX(trimmedValue, capsLockHotkey: key);
     }
 
     // normal hotkey
     if (key != null && modifiers.isNotEmpty) {
-      return HotkeyX(value, normalHotkey: HotKey(key: key, modifiers: modifiers));
+      return HotkeyX(trimmedValue, normalHotkey: HotKey(key: key, modifiers: modifiers));
     }
 
-    return HotkeyX(value, singleHotkey: key);
+    return null;
+  }
+
+  // recordedHotkeyToString folds backend recorder kind into the persisted hotkey string.
+  static String recordedHotkeyToString(String hotkey, String kind) {
+    final trimmedHotkey = hotkey.trim();
+    if (trimmedHotkey.isEmpty) {
+      return "";
+    }
+    if (kind == kindHoldModifier && !trimmedHotkey.startsWith(holdModifierPrefix)) {
+      return "$holdModifierPrefix$trimmedHotkey";
+    }
+    return trimmedHotkey;
   }
 
   static List<String>? _parseModifierChord(List<String> tokens) {

@@ -7,12 +7,17 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_text_measure_util.dart';
 
 class WoxHotkeyView extends StatelessWidget {
-  final HotkeyX hotkey;
+  final HotkeyX? hotkey;
+  final List<String>? labels;
   final Color backgroundColor;
   final Color borderColor;
   final Color textColor;
 
-  const WoxHotkeyView({super.key, required this.hotkey, required this.backgroundColor, required this.borderColor, required this.textColor});
+  const WoxHotkeyView({super.key, required this.hotkey, required this.backgroundColor, required this.borderColor, required this.textColor}) : labels = null, assert(hotkey != null);
+
+  const WoxHotkeyView.labels({super.key, required this.labels, required this.backgroundColor, required this.borderColor, required this.textColor})
+    : hotkey = null,
+      assert(labels != null);
 
   static TextStyle keyTextStyle({required Color color}) {
     final metrics = WoxInterfaceSizeUtil.instance.current;
@@ -59,8 +64,9 @@ class WoxHotkeyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hotkeyLabels = labels ?? (hotkey == null ? <String>[] : WoxHotkeyDisplayUtil.labelsFromHotkey(hotkey!));
     var hotkeyWidgets = <Widget>[];
-    hotkeyWidgets.addAll(WoxHotkeyDisplayUtil.labelsFromHotkey(hotkey).map((key) => buildSingleKey(context, key)));
+    hotkeyWidgets.addAll(hotkeyLabels.map((key) => buildSingleKey(context, key)));
 
     return Wrap(
       // Hotkey chips appear in result tails and the toolbar, so their physical

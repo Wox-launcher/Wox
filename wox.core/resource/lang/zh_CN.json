@@ -2443,12 +2443,11 @@
   "ui_hotkey_overview_webview_back": "Webview 预览后退",
   "ui_hotkey_overview_webview_forward": "Webview 预览前进",
   "ui_hotkey_overview_webview_inspector": "打开 Webview 检查器",
-
   "plugin_dictation_plugin_name": "听写",
   "plugin_dictation_plugin_description": "使用本地语音识别将语音转为文字。对着麦克风说话，识别出的文字会自动输入到当前焦点窗口。",
   "plugin_dictation_settings_head": "听写设置",
   "plugin_dictation_hotkey": "快捷键",
-  "plugin_dictation_hotkey_tooltip": "按一次触发的快捷键会开始/停止听写；按住修饰键会在按住期间录音。留空则禁用。",
+  "plugin_dictation_hotkey_tooltip": "支持按一次修饰键或者按住修饰键录音",
   "plugin_dictation_input_device": "输入设备",
   "plugin_dictation_input_device_tooltip": "选择用于听写的麦克风。系统默认使用操作系统的默认输入设备。",
   "plugin_dictation_system_default": "系统默认",

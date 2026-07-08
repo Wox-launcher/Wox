@@ -24,6 +24,15 @@ import (
 var mediaIcon = common.PluginMediaPlayerIcon
 
 const (
+	// PluginID identifies the built-in media player plugin for internal plugin commands.
+	PluginID = "b8f3d4e5-6c7a-4b9c-8d1e-2f3a4b5c6d7e"
+
+	PluginCommandPauseIfPlaying      = "pause_if_playing"
+	PluginCommandResultPaused        = "paused"
+	PluginCommandResultNotPlaying    = "not_playing"
+	PluginCommandResultNoActiveMedia = "no_active_media"
+	PluginCommandPlay                = "play"
+
 	mediaControlPlay     = "play"
 	mediaControlPause    = "pause"
 	mediaControlToggle   = "toggle"
@@ -76,7 +85,7 @@ type mediaTrackedResult struct{}
 
 func (m *MediaPlayerPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "b8f3d4e5-6c7a-4b9c-8d1e-2f3a4b5c6d7e",
+		Id:            PluginID,
 		Name:          "i18n:plugin_media_player_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
@@ -110,7 +119,9 @@ func (m *MediaPlayerPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	// pauses media during voice input and resumes afterwards).
 	m.api.OnHandlePluginCommand(ctx, func(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
 		switch request.Command {
-		case "pause", "play", "toggle", "next", "previous":
+		case PluginCommandPauseIfPlaying:
+			return m.pauseIfPlaying(ctx)
+		case mediaControlPause, mediaControlPlay, mediaControlToggle, mediaControlNext, mediaControlPrevious:
 			if err := m.retriever.ControlMedia(ctx, request.Command); err != nil {
 				return plugin.PluginCommandResult{Handled: false, Message: err.Error()}
 			}
@@ -128,6 +139,26 @@ func (m *MediaPlayerPlugin) Init(ctx context.Context, initParams plugin.InitPara
 			m.refreshMediaPlayer(util.NewTraceContext())
 		}
 	})
+}
+
+// pauseIfPlaying only sends a pause command when the active media session is
+// currently playing, allowing callers to restore playback only when they
+// actually changed it.
+func (m *MediaPlayerPlugin) pauseIfPlaying(ctx context.Context) plugin.PluginCommandResult {
+	mediaInfo, err := m.retriever.GetCurrentMedia(ctx)
+	if err != nil {
+		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	}
+	if mediaInfo == nil {
+		return plugin.PluginCommandResult{Handled: true, Message: PluginCommandResultNoActiveMedia}
+	}
+	if mediaInfo.State != PlaybackStatePlaying {
+		return plugin.PluginCommandResult{Handled: true, Message: PluginCommandResultNotPlaying}
+	}
+	if err := m.retriever.ControlMedia(ctx, mediaControlPause); err != nil {
+		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	}
+	return plugin.PluginCommandResult{Handled: true, Message: PluginCommandResultPaused}
 }
 
 func (m *MediaPlayerPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {

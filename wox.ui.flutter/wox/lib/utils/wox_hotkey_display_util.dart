@@ -99,12 +99,9 @@ class WoxHotkeyDisplayUtil {
       return [label, label];
     }
 
-    if (hotkey.isModifierChord) {
-      return hotkey.modifierChord!.map(labelFromRawPart).toList();
-    }
-
-    if (hotkey.isSingleHotkey) {
-      return [keyLabel(hotkey.singleHotkey!)];
+    final modifierChord = hotkey.displayModifierChord;
+    if (modifierChord != null && modifierChord.isNotEmpty) {
+      return modifierChord.map(labelFromRawPart).toList();
     }
 
     return [];
