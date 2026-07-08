@@ -23,6 +23,10 @@ static const CGFloat kTextCloseButtonSize = 20.0;
 static const CGFloat kTextCloseButtonGap = 8.0;
 static const NSStringDrawingOptions kTextDrawingOptions = NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading;
 
+static CGFloat WoxTextOverlayDefaultFontSize(void) {
+    return [NSFont systemFontSize];
+}
+
 @interface WoxTextOverlayView : NSView
 @property(nonatomic, copy) NSString *name;
 @property(nonatomic, copy) NSString *message;
@@ -79,7 +83,7 @@ static const NSStringDrawingOptions kTextDrawingOptions = NSStringDrawingUsesLin
     self.centerContent = centerContent;
     self.showCopyButton = showCopyButton;
     self.autoCloseSeconds = autoCloseSeconds;
-    self.fontSize = fontSize > 0 ? fontSize : [NSFont systemFontSize];
+    self.fontSize = fontSize > 0 ? fontSize : WoxTextOverlayDefaultFontSize();
     self.iconSize = iconSize > 0 ? iconSize : 24.0;
     self.tooltipIcon = tooltipIcon;
     self.tooltipIconSize = tooltipIconSize > 0 ? tooltipIconSize : 18.0;
@@ -449,7 +453,7 @@ TextOverlayAttachment TextOverlayCreateView(char *name,
     NSString *copyTooltip = copyButtonTooltip ? [NSString stringWithUTF8String:copyButtonTooltip] : @"";
     NSString *copySuccessTooltip = copyButtonSuccessTooltip ? [NSString stringWithUTF8String:copyButtonSuccessTooltip] : @"";
 
-    CGFloat resolvedFontSize = fontSize > 0 ? fontSize : [NSFont systemFontSize];
+    CGFloat resolvedFontSize = fontSize > 0 ? fontSize : WoxTextOverlayDefaultFontSize();
     CGFloat resolvedIconSize = iconSize > 0 ? iconSize : 24.0;
     CGFloat resolvedTooltipIconSize = tooltipIconSize > 0 ? tooltipIconSize : 18.0;
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -41,10 +42,14 @@ const (
 	settingKeyInputDevice     = "inputDevice"
 	settingKeyInputDeviceName = "inputDeviceName"
 	settingKeyModel           = "model"
+	settingKeyModelLoadMode   = "modelLoadMode"
 	settingKeyPlaySound       = "playSound"
 	settingKeyDuckVolume      = "duckVolume"
 
 	inputDeviceSystem = "system"
+
+	dictationModelLoadModeLazy  = "lazy"
+	dictationModelLoadModeEager = "eager"
 
 	// AI refinement timeout. Picked to cover a normal model response for a
 	// short dictation transcript while keeping the wait perceptible.
@@ -226,6 +231,19 @@ func (p *DictationPlugin) GetMetadata() plugin.Metadata {
 				Type: definition.PluginSettingDefinitionTypeDynamic,
 				Value: &definition.PluginSettingValueDynamic{
 					Key: settingKeyModel,
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeSelect,
+				Value: &definition.PluginSettingValueSelect{
+					Key:          settingKeyModelLoadMode,
+					Label:        "i18n:plugin_dictation_model_load_mode",
+					Tooltip:      "i18n:plugin_dictation_model_load_mode_tooltip",
+					DefaultValue: dictationModelLoadModeLazy,
+					Options: []definition.PluginSettingValueSelectOption{
+						{Label: "i18n:plugin_dictation_model_load_mode_lazy", Value: dictationModelLoadModeLazy},
+						{Label: "i18n:plugin_dictation_model_load_mode_eager", Value: dictationModelLoadModeEager},
+					},
 				},
 			},
 			// Input device - dynamic select populated at render time.
@@ -435,10 +453,11 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		p.modelManager = mgr
 	}
 
-	// Start the recognizer pool so the speech model stays in memory across
-	// sessions. The idle reaper evicts the model after recognizerPoolIdleTTL
-	// of inactivity to reclaim memory.
-	p.recognizerPool = speech.NewRecognizerPool(recognizerPoolIdleTTL)
+	loadMode := normalizeModelLoadMode(p.api.GetSetting(ctx, settingKeyModelLoadMode))
+
+	// Start the recognizer pool. Lazy mode evicts idle models; eager mode keeps
+	// the selected model resident until unload or model switch.
+	p.recognizerPool = speech.NewRecognizerPool(recognizerPoolIdleTTLForMode(loadMode))
 	p.recognizerPool.StartReaper(ctx)
 
 	// Start the audio capture pool so the malgo context + device stay alive
@@ -450,6 +469,10 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	p.vadModelPath = extractVadModel(ctx)
 	p.vadPool = speech.NewVadPool(recognizerPoolIdleTTL)
 	p.vadPool.StartReaper(ctx)
+
+	if loadMode == dictationModelLoadModeEager {
+		p.preloadSelectedModelAsync(ctx)
+	}
 
 	p.api.OnUnload(ctx, func(ctx context.Context) {
 		p.releaseRuntime(ctx)
@@ -484,6 +507,11 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			// its memory is freed immediately instead of waiting for the idle
 			// timeout.
 			p.evictOldModels(ctx, value)
+			if normalizeModelLoadMode(p.api.GetSetting(ctx, settingKeyModelLoadMode)) == dictationModelLoadModeEager {
+				p.preloadSelectedModelAsync(ctx)
+			}
+		case settingKeyModelLoadMode:
+			p.updateModelLoadMode(ctx, value)
 		}
 	})
 }
@@ -625,6 +653,22 @@ func inputDeviceDisplayName(deviceID string, savedDeviceName string) string {
 	return inputDeviceSystem
 }
 
+func normalizeModelLoadMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case dictationModelLoadModeEager:
+		return dictationModelLoadModeEager
+	default:
+		return dictationModelLoadModeLazy
+	}
+}
+
+func recognizerPoolIdleTTLForMode(mode string) time.Duration {
+	if normalizeModelLoadMode(mode) == dictationModelLoadModeEager {
+		return 0
+	}
+	return recognizerPoolIdleTTL
+}
+
 // resolveInputDeviceForStart verifies concrete devices before creating a
 // speech session. System default intentionally skips enumeration.
 func resolveInputDeviceForStart(ctx context.Context, rawDeviceID string, savedDeviceName string) (string, string, error) {
@@ -685,6 +729,95 @@ func (p *DictationPlugin) rememberInputDeviceName(ctx context.Context, rawDevice
 		}
 	}
 	p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("selected dictation input device not found while saving name: %s", deviceID))
+}
+
+// findLocalModel returns the selected downloaded model from disk.
+func (p *DictationPlugin) findLocalModel(ctx context.Context, modelID string) (*speech.LocalModel, error) {
+	if p.modelManager == nil {
+		return nil, fmt.Errorf("model manager unavailable")
+	}
+	models, err := p.modelManager.ListLocalModels()
+	if err != nil {
+		return nil, err
+	}
+	for i := range models {
+		if models[i].ID == modelID {
+			model := models[i]
+			return &model, nil
+		}
+	}
+	return nil, fmt.Errorf("selected model not found")
+}
+
+// recognizerConfigForModel keeps dictation thread selection consistent across
+// live sessions and eager preloading.
+func (p *DictationPlugin) recognizerConfigForModel(ctx context.Context, selectedModel speech.LocalModel) speech.RecognizerConfig {
+	cpuCount := runtime.NumCPU()
+	recognizerThreads := max(cpuCount/2, 1)
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("dictation: recognizer config model=%s modelType=%s cpu=%d numThreads=%d", selectedModel.ID, selectedModel.ModelType, cpuCount, recognizerThreads))
+	return speech.RecognizerConfig{
+		ModelPath:  selectedModel.Path,
+		ModelType:  selectedModel.ModelType,
+		NumThreads: recognizerThreads,
+	}
+}
+
+// updateModelLoadMode applies the selected memory/speed policy immediately.
+func (p *DictationPlugin) updateModelLoadMode(ctx context.Context, rawMode string) {
+	mode := normalizeModelLoadMode(rawMode)
+	if p.recognizerPool != nil {
+		p.recognizerPool.SetIdleTTL(recognizerPoolIdleTTLForMode(mode))
+	}
+	if mode == dictationModelLoadModeEager {
+		p.preloadSelectedModelAsync(ctx)
+	}
+}
+
+// preloadSelectedModelAsync loads the selected recognizer in the background
+// only after the user explicitly opts into eager loading.
+func (p *DictationPlugin) preloadSelectedModelAsync(ctx context.Context) {
+	modelID := strings.TrimSpace(p.api.GetSetting(ctx, settingKeyModel))
+	if modelID == "" {
+		p.api.Log(ctx, plugin.LogLevelDebug, "dictation: eager preload skipped because no model is selected")
+		return
+	}
+	util.Go(ctx, "dictation eager preload recognizer", func() {
+		p.preloadSelectedModel(ctx, modelID)
+	})
+}
+
+// preloadSelectedModel acquires then releases the recognizer so it stays cached.
+func (p *DictationPlugin) preloadSelectedModel(ctx context.Context, modelID string) {
+	t0 := time.Now()
+	if normalizeModelLoadMode(p.api.GetSetting(ctx, settingKeyModelLoadMode)) != dictationModelLoadModeEager {
+		return
+	}
+
+	selectedModel, err := p.findLocalModel(ctx, modelID)
+	if err != nil {
+		p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation: eager preload skipped for model=%s: %s", modelID, err.Error()))
+		return
+	}
+	config := p.recognizerConfigForModel(ctx, *selectedModel)
+
+	p.runtimeMu.Lock()
+	defer p.runtimeMu.Unlock()
+	if p.recognizerPool == nil {
+		return
+	}
+
+	rec, err := p.recognizerPool.Acquire(ctx, config)
+	if err != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("dictation: eager preload failed for model=%s: %s", selectedModel.ID, err.Error()))
+		return
+	}
+	p.recognizerPool.Release(ctx, rec)
+
+	if p.api.GetSetting(ctx, settingKeyModel) != modelID || normalizeModelLoadMode(p.api.GetSetting(ctx, settingKeyModelLoadMode)) != dictationModelLoadModeEager {
+		p.evictOldModels(ctx, p.api.GetSetting(ctx, settingKeyModel))
+		return
+	}
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("dictation: eager preload ready model=%s cost=%dms", selectedModel.ID, time.Since(t0).Milliseconds()))
 }
 
 // buildModelSetting returns the model manager setting as a dictationModel
@@ -967,6 +1100,12 @@ func (p *DictationPlugin) PressDictationHotkey(ctx context.Context, actionID str
 		p.stopAndOutput(ctx)
 		return
 	}
+	if p.isStarting {
+		p.pendingStop = true
+		p.sessionMu.Unlock()
+		p.api.Log(ctx, plugin.LogLevelDebug, "dictation: press hotkey during startup, pendingStop set")
+		return
+	}
 	p.sessionMu.Unlock()
 	p.startRecording(ctx, actionID)
 }
@@ -974,7 +1113,7 @@ func (p *DictationPlugin) PressDictationHotkey(ctx context.Context, actionID str
 // StartDictation is called by the action hotkey press handler in hold mode.
 func (p *DictationPlugin) StartDictation(ctx context.Context, actionID string) {
 	p.sessionMu.Lock()
-	if p.isRecording {
+	if p.isRecording || p.isStarting {
 		p.sessionMu.Unlock()
 		return
 	}
@@ -1032,24 +1171,35 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 	t0 := time.Now()
 	p.api.Log(ctx, plugin.LogLevelDebug, "dictation timing: plugin.startRecording enter")
 
+	p.sessionMu.Lock()
+	if p.isRecording || p.isStarting {
+		p.sessionMu.Unlock()
+		p.api.Log(ctx, plugin.LogLevelDebug, "dictation: startRecording ignored while busy")
+		return
+	}
+	p.isStarting = true
+	p.pendingStop = false
+	p.sessionMu.Unlock()
+
+	clearStarting := func() {
+		p.sessionMu.Lock()
+		p.isStarting = false
+		p.pendingStop = false
+		p.sessionMu.Unlock()
+	}
+
 	action, actionFound := p.actionByID(actionID)
 	if !actionFound || action.Disabled {
 		p.api.Notify(ctx, "plugin_dictation_action_unavailable")
+		clearStarting()
 		return
 	}
 
 	inputContext, ok := p.prepareActionInputContext(ctx, action)
 	if !ok {
+		clearStarting()
 		return
 	}
-
-	// Mark that we are in the startup phase so StopDictation can defer
-	// its action via pendingStop if the user releases the key before the
-	// model finishes loading.
-	p.sessionMu.Lock()
-	p.isStarting = true
-	p.pendingStop = false
-	p.sessionMu.Unlock()
 
 	// Read settings
 	deviceID := p.api.GetSetting(ctx, settingKeyInputDevice)
@@ -1060,17 +1210,13 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 
 	if modelID == "" {
 		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_no_model_selected"))
-		p.sessionMu.Lock()
-		p.isStarting = false
-		p.sessionMu.Unlock()
+		clearStarting()
 		return
 	}
 
 	if p.modelManager == nil {
 		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_error"))
-		p.sessionMu.Lock()
-		p.isStarting = false
-		p.sessionMu.Unlock()
+		clearStarting()
 		return
 	}
 
@@ -1078,9 +1224,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 	models, err := p.modelManager.ListLocalModels()
 	if err != nil {
 		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_error"), err.Error()))
-		p.sessionMu.Lock()
-		p.isStarting = false
-		p.sessionMu.Unlock()
+		clearStarting()
 		return
 	}
 	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation timing: plugin.ListLocalModels cost=%dms", time.Since(t0).Milliseconds()))
@@ -1094,9 +1238,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 	}
 	if selectedModel == nil {
 		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_not_found"))
-		p.sessionMu.Lock()
-		p.isStarting = false
-		p.sessionMu.Unlock()
+		clearStarting()
 		return
 	}
 
@@ -1110,10 +1252,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 		} else {
 			p.showErrorOverlay(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_input_device_list_failed"), deviceErr.Error()))
 		}
-		p.sessionMu.Lock()
-		p.isStarting = false
-		p.pendingStop = false
-		p.sessionMu.Unlock()
+		clearStarting()
 		return
 	}
 	deviceID = resolvedDeviceID
@@ -1130,11 +1269,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 	p.showLoadingOverlay(ctx, "plugin_dictation_loading_model")
 
 	// Create the session with VAD + offline recognizer pools.
-	config := speech.RecognizerConfig{
-		ModelPath:  selectedModel.Path,
-		ModelType:  selectedModel.ModelType,
-		NumThreads: 1,
-	}
+	config := p.recognizerConfigForModel(ctx, *selectedModel)
 	vadConfig := speech.DefaultVadConfig(p.vadModelPath)
 
 	p.resetVoiceOverlayState()
@@ -1159,10 +1294,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed"))
 		p.closeDictationOverlay()
 		p.stopVolumeDucking(ctx)
-		p.sessionMu.Lock()
-		p.isStarting = false
-		p.pendingStop = false
-		p.sessionMu.Unlock()
+		clearStarting()
 		return
 	}
 
@@ -1172,13 +1304,27 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed"), err.Error()))
 		p.closeDictationOverlay()
 		p.stopVolumeDucking(ctx)
-		p.sessionMu.Lock()
-		p.isStarting = false
-		p.pendingStop = false
-		p.sessionMu.Unlock()
+		clearStarting()
 		return
 	}
 	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation timing: plugin.sessionStart cost=%dms", time.Since(t0).Milliseconds()))
+
+	p.sessionMu.Lock()
+	shouldStop := p.pendingStop
+	p.pendingStop = false
+	if shouldStop {
+		p.isStarting = false
+		p.sessionMu.Unlock()
+		p.stopVolumeDucking(ctx)
+		if _, err := session.Stop(); err != nil {
+			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to stop dictation session during startup cancel: %s", err.Error()))
+		}
+		p.closeDictationOverlay()
+		p.runtimeMu.Unlock()
+		p.api.Log(ctx, plugin.LogLevelDebug, "dictation: startup cancelled before recording began")
+		return
+	}
+	p.sessionMu.Unlock()
 
 	// Model loaded and audio capture started. Switch the overlay to
 	// "Listening..." and play the start sound to signal the user can speak.
@@ -1193,19 +1339,10 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 	p.activeAction = action
 	p.activeInputContext = inputContext
 	p.isStarting = false
-	shouldStop := p.pendingStop
-	p.pendingStop = false
 	p.sessionMu.Unlock()
 	p.runtimeMu.Unlock()
 
 	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("dictation timing: plugin.total cost=%dms", time.Since(t0).Milliseconds()))
-
-	// If the user released the hotkey while we were still loading the model,
-	// stop immediately so the overlay doesn't get stuck open.
-	if shouldStop {
-		p.api.Log(ctx, plugin.LogLevelDebug, "dictation: pendingStop triggered, stopping immediately")
-		p.stopAndOutput(ctx)
-	}
 }
 
 // stopAndOutput stops the recording, closes the overlay, and types the
@@ -1476,7 +1613,7 @@ func buildDictationTextOverlayWindow() overlay.WindowOptions {
 		OffsetX:          float64(mouseScreen.X) + float64(mouseScreen.Width)/2,
 		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
 		CloseOnEscape:    true,
-		Movable:          false,
+		Movable:          true,
 	}
 
 	if mouseScreen.Width == 0 {
@@ -1507,7 +1644,6 @@ func (p *DictationPlugin) showRefiningOverlay(ctx context.Context) {
 		Closable: true,
 		Message:  i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_ai_refining"),
 		Loading:  true,
-		FontSize: 14,
 	}
 
 	textoverlay.Show(opts)
@@ -1529,7 +1665,6 @@ func (p *DictationPlugin) showProcessingOverlay(ctx context.Context) {
 		Closable: true,
 		Message:  i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_processing"),
 		Loading:  true,
-		FontSize: 14,
 	})
 	dictationoverlay.Release(dictationOverlayName)
 }
@@ -1695,7 +1830,6 @@ func (p *DictationPlugin) showLoadingOverlay(ctx context.Context, messageKey str
 		Closable: true,
 		Message:  i18n.GetI18nManager().TranslateWox(ctx, messageKey),
 		Loading:  true,
-		FontSize: 14,
 	})
 }
 
@@ -1711,7 +1845,6 @@ func (p *DictationPlugin) showErrorOverlay(ctx context.Context, message string) 
 		Closable:         true,
 		AutoCloseSeconds: 6,
 		Message:          message,
-		FontSize:         14,
 	})
 }
 
@@ -1813,7 +1946,6 @@ func (p *DictationPlugin) updateOverlay(ctx context.Context, text string) {
 		Closable: true,
 		Message:  text,
 		Loading:  true,
-		FontSize: 14,
 	})
 }
 
@@ -1894,6 +2026,12 @@ func (p *DictationPlugin) cancelDictation(ctx context.Context) {
 
 	p.sessionMu.Lock()
 	session := p.session
+	if p.isStarting && session == nil {
+		p.pendingStop = true
+		p.sessionMu.Unlock()
+		p.playSoundIfEnabled(ctx, soundStop)
+		return
+	}
 	p.session = nil
 	p.isRecording = false
 	p.isStarting = false

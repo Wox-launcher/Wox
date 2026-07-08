@@ -2,7 +2,7 @@ package textoverlay
 
 /*
 #cgo CFLAGS: -DUNICODE -D_UNICODE
-#cgo LDFLAGS: -lgdi32 -luser32
+#cgo LDFLAGS: -lgdi32 -luser32 -lmsimg32
 #include <stdlib.h>
 #include <stdbool.h>
 

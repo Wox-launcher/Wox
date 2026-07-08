@@ -3,14 +3,19 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #define TEXT_OVERLAY_TIMER_COPY_FEEDBACK 1
 #define TEXT_OVERLAY_TIMER_AUTOCLOSE 2
+#define TEXT_OVERLAY_TIMER_LOADING 3
 #define TEXT_OVERLAY_AUTOCLOSE_PENDING_MS 250
+#define TEXT_OVERLAY_LOADING_INTERVAL_MS 80
+#define TEXT_OVERLAY_DEFAULT_FONT_SIZE 10.0f
 #define TEXT_OVERLAY_COPY_SIZE_DIP 28
 #define TEXT_OVERLAY_COPY_GAP_DIP 8
 #define TEXT_OVERLAY_CLOSE_SIZE_DIP 20
 #define TEXT_OVERLAY_CLOSE_GAP_DIP 8
+#define TEXT_OVERLAY_TEXT_WIDTH_SLACK_DIP 8
 
 typedef struct {
     void *handle;
@@ -23,6 +28,7 @@ extern void overlayRequestCloseCallbackCGO(char *name);
 
 typedef struct {
     HWND hwnd;
+    HWND spinnerHwnd;
     HANDLE readyEvent;
     BOOL createOk;
     char *nameUtf8;
@@ -34,6 +40,9 @@ typedef struct {
     BOOL copied;
     BOOL closeHover;
     BOOL closePressed;
+    int loadingPhase;
+    RECT loadingRect;
+    RECT closeRect;
     int autoCloseSeconds;
     float fontSize;
     float iconSize;
@@ -43,7 +52,9 @@ typedef struct {
 } TextOverlayState;
 
 static const wchar_t *kTextOverlayClassName = L"WoxTextOverlayAttachmentWindow";
+static const wchar_t *kTextOverlaySpinnerClassName = L"WoxTextOverlaySpinnerWindow";
 static ATOM g_textOverlayClass = 0;
+static ATOM g_textOverlaySpinnerClass = 0;
 
 static char *TextOverlayCopyUtf8(const char *text)
 {
@@ -91,7 +102,7 @@ static int TextOverlayDip(float value, UINT dpi)
 
 static HFONT TextOverlayCreateFont(float fontSize, UINT dpi)
 {
-    float resolvedSize = fontSize > 0 ? fontSize : 13.0f;
+    float resolvedSize = fontSize > 0 ? fontSize : TEXT_OVERLAY_DEFAULT_FONT_SIZE;
     int height = -MulDiv((int)(resolvedSize + 0.5f), (int)dpi, 72);
     return CreateFontW(height, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 }
@@ -129,7 +140,10 @@ static SIZE TextOverlayMeasure(WCHAR *message, BOOL loading, BOOL hasIcon, BOOL 
     int chromeHeight = 24;
 
     SIZE naturalText = TextOverlayMeasureText(message, 4096, fontSize);
-    int naturalContentWidth = leadingWidth + leadingGap + naturalText.cx + tooltipGap + tooltipWidth + closeReserve;
+    // DrawText's calculated width can sit on the exact ink bounds; leave a small
+    // end cap so alpha-rendered glyphs are not clipped on fractional DPI scales.
+    int textSlack = (message && message[0]) ? TEXT_OVERLAY_TEXT_WIDTH_SLACK_DIP : 0;
+    int naturalContentWidth = leadingWidth + leadingGap + naturalText.cx + textSlack + tooltipGap + tooltipWidth + closeReserve;
     int contentWidth = naturalContentWidth;
     if (contentWidth < 64)
         contentWidth = 64;
@@ -193,7 +207,13 @@ static RECT TextOverlayCopyButtonRect(TextOverlayState *state, UINT dpi)
 static RECT TextOverlayCloseButtonRect(TextOverlayState *state, UINT dpi)
 {
     int size = TextOverlayDip(TEXT_OVERLAY_CLOSE_SIZE_DIP, dpi);
-    RECT rc = {state->contentWidth - size, 0, state->contentWidth, size};
+    if (state->closeRect.right > state->closeRect.left && state->closeRect.bottom > state->closeRect.top)
+        return state->closeRect;
+
+    int top = (state->contentHeight - size) / 2;
+    if (top < 0)
+        top = 0;
+    RECT rc = {state->contentWidth - size, top, state->contentWidth, top + size};
     return rc;
 }
 
@@ -223,13 +243,302 @@ static BOOL TextOverlayForwardMouseMessage(HWND hwnd, UINT msg, WPARAM wParam, L
     return TRUE;
 }
 
+static void TextOverlayPutAlphaPixel(BYTE *pixels, int width, int px, int py, BYTE alpha)
+{
+    BYTE *pixel = pixels + ((py * width + px) * 4);
+    if (alpha <= pixel[3])
+        return;
+    pixel[0] = alpha;
+    pixel[1] = alpha;
+    pixel[2] = alpha;
+    pixel[3] = alpha;
+}
+
+static void TextOverlayFillLoadingSpinnerPixels(BYTE *pixels, int size, int phase)
+{
+    ZeroMemory(pixels, (size_t)size * (size_t)size * 4);
+
+    static const int dx[8] = {0, 707, 1000, 707, 0, -707, -1000, -707};
+    static const int dy[8] = {-1000, -707, 0, 707, 1000, 707, 0, -707};
+    float center = ((float)size - 1.0f) / 2.0f;
+    float orbit = (float)size * 0.32f;
+    float radius = (float)size * 0.085f;
+    if (radius < 1.25f)
+        radius = 1.25f;
+    float inner = radius - 0.5f;
+    float outer = radius + 0.5f;
+    if (inner < 0.0f)
+        inner = 0.0f;
+    float innerSq = inner * inner;
+    float outerSq = outer * outer;
+    float fadeRange = outerSq - innerSq;
+    if (fadeRange <= 0.0f)
+        fadeRange = 1.0f;
+
+    int active = phase % 8;
+    for (int i = 0; i < 8; i++)
+    {
+        int age = (i - active + 8) % 8;
+        int alpha = 235 - age * 22;
+        if (alpha < 70)
+            alpha = 70;
+
+        float dotX = center + ((float)dx[i] * orbit / 1000.0f);
+        float dotY = center + ((float)dy[i] * orbit / 1000.0f);
+        int left = (int)floorf(dotX - outer);
+        int top = (int)floorf(dotY - outer);
+        int right = (int)ceilf(dotX + outer);
+        int bottom = (int)ceilf(dotY + outer);
+        if (left < 0)
+            left = 0;
+        if (top < 0)
+            top = 0;
+        if (right >= size)
+            right = size - 1;
+        if (bottom >= size)
+            bottom = size - 1;
+
+        for (int py = top; py <= bottom; py++)
+        {
+            for (int px = left; px <= right; px++)
+            {
+                float fx = (float)px + 0.5f - dotX;
+                float fy = (float)py + 0.5f - dotY;
+                float distSq = fx * fx + fy * fy;
+                if (distSq > outerSq)
+                    continue;
+
+                float coverage = 1.0f;
+                if (distSq > innerSq)
+                    coverage = (outerSq - distSq) / fadeRange;
+                int pixelAlpha = (int)((float)alpha * coverage + 0.5f);
+                if (pixelAlpha > 0)
+                    TextOverlayPutAlphaPixel(pixels, size, px, py, (BYTE)pixelAlpha);
+            }
+        }
+    }
+}
+
+// TextOverlayDrawTextAlpha avoids ClearType color fringes without painting an opaque child background.
+static void TextOverlayDrawTextAlpha(HDC hdc, HFONT font, WCHAR *text, RECT rc, UINT flags, COLORREF color)
+{
+    int width = rc.right - rc.left;
+    int height = rc.bottom - rc.top;
+    if (width <= 0 || height <= 0)
+        return;
+
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void *rawBits = NULL;
+    HBITMAP dib = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &rawBits, NULL, 0);
+    if (!dib || !rawBits)
+    {
+        if (dib)
+            DeleteObject(dib);
+        return;
+    }
+
+    HDC memDC = CreateCompatibleDC(hdc);
+    HGDIOBJ oldBitmap = SelectObject(memDC, dib);
+    HGDIOBJ oldFont = SelectObject(memDC, font);
+    SetBkMode(memDC, TRANSPARENT);
+    SetTextColor(memDC, RGB(255, 255, 255));
+
+    RECT textRc = {0, 0, width, height};
+    DrawTextW(memDC, text ? text : L"", -1, &textRc, flags);
+
+    BYTE textR = GetRValue(color);
+    BYTE textG = GetGValue(color);
+    BYTE textB = GetBValue(color);
+    BYTE *pixels = (BYTE *)rawBits;
+    for (int i = 0; i < width * height; i++)
+    {
+        BYTE b = pixels[i * 4 + 0];
+        BYTE g = pixels[i * 4 + 1];
+        BYTE r = pixels[i * 4 + 2];
+        BYTE alpha = r > g ? r : g;
+        if (b > alpha)
+            alpha = b;
+        pixels[i * 4 + 0] = (BYTE)((int)textB * alpha / 255);
+        pixels[i * 4 + 1] = (BYTE)((int)textG * alpha / 255);
+        pixels[i * 4 + 2] = (BYTE)((int)textR * alpha / 255);
+        pixels[i * 4 + 3] = alpha;
+    }
+
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    AlphaBlend(hdc, rc.left, rc.top, width, height, memDC, 0, 0, width, height, blend);
+
+    if (oldFont)
+        SelectObject(memDC, oldFont);
+    if (oldBitmap)
+        SelectObject(memDC, oldBitmap);
+    DeleteDC(memDC);
+    DeleteObject(dib);
+}
+
+// TextOverlayDrawLoadingSpinner uses a premultiplied alpha DIB so the small dots stay anti-aliased over the HUD backdrop.
+static void TextOverlayDrawLoadingSpinner(HDC hdc, int x, int y, int size, int phase)
+{
+    if (size < 8)
+        return;
+
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = size;
+    bmi.bmiHeader.biHeight = -size;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void *rawBits = NULL;
+    HBITMAP dib = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &rawBits, NULL, 0);
+    if (!dib || !rawBits)
+    {
+        if (dib)
+            DeleteObject(dib);
+        return;
+    }
+
+    BYTE *pixels = (BYTE *)rawBits;
+    TextOverlayFillLoadingSpinnerPixels(pixels, size, phase);
+
+    HDC memDC = CreateCompatibleDC(hdc);
+    HGDIOBJ oldBitmap = SelectObject(memDC, dib);
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    AlphaBlend(hdc, x, y, size, size, memDC, 0, 0, size, size, blend);
+    if (oldBitmap)
+        SelectObject(memDC, oldBitmap);
+    DeleteDC(memDC);
+    DeleteObject(dib);
+}
+
+static LRESULT CALLBACK TextOverlaySpinnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    switch (msg)
+    {
+    case WM_NCHITTEST:
+        return HTTRANSPARENT;
+    case WM_ERASEBKGND:
+        return 1;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+static BOOL TextOverlayEnsureSpinnerClass(void)
+{
+    if (g_textOverlaySpinnerClass)
+        return TRUE;
+
+    WNDCLASSEXW wc;
+    ZeroMemory(&wc, sizeof(wc));
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = TextOverlaySpinnerProc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.lpszClassName = kTextOverlaySpinnerClassName;
+    g_textOverlaySpinnerClass = RegisterClassExW(&wc);
+    return g_textOverlaySpinnerClass != 0;
+}
+
+static BOOL TextOverlayRenderSpinnerWindow(HWND hwnd, POINT position, int size, int phase)
+{
+    if (!hwnd || size < 8)
+        return FALSE;
+
+    HDC screenDC = GetDC(NULL);
+    if (!screenDC)
+        return FALSE;
+
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = size;
+    bmi.bmiHeader.biHeight = -size;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void *rawBits = NULL;
+    HBITMAP dib = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &rawBits, NULL, 0);
+    if (!dib || !rawBits)
+    {
+        if (dib)
+            DeleteObject(dib);
+        ReleaseDC(NULL, screenDC);
+        return FALSE;
+    }
+    TextOverlayFillLoadingSpinnerPixels((BYTE *)rawBits, size, phase);
+
+    HDC memDC = CreateCompatibleDC(screenDC);
+    HGDIOBJ oldBitmap = SelectObject(memDC, dib);
+    POINT src = {0, 0};
+    SIZE layerSize = {size, size};
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    BOOL ok = UpdateLayeredWindow(hwnd, screenDC, &position, &layerSize, memDC, &src, 0, &blend, ULW_ALPHA);
+
+    if (oldBitmap)
+        SelectObject(memDC, oldBitmap);
+    DeleteDC(memDC);
+    DeleteObject(dib);
+    ReleaseDC(NULL, screenDC);
+    return ok;
+}
+
+static void TextOverlayDestroySpinnerWindow(TextOverlayState *state)
+{
+    if (state && state->spinnerHwnd)
+    {
+        DestroyWindow(state->spinnerHwnd);
+        state->spinnerHwnd = NULL;
+    }
+}
+
+static BOOL TextOverlayUpdateSpinnerWindow(TextOverlayState *state)
+{
+    if (!state || !state->hwnd || !state->loading)
+    {
+        TextOverlayDestroySpinnerWindow(state);
+        return TRUE;
+    }
+    RECT rc = state->loadingRect;
+    int size = rc.right - rc.left;
+    if (size < 8 || rc.bottom - rc.top != size)
+        return TRUE;
+
+    POINT position = {rc.left, rc.top};
+    if (!ClientToScreen(state->hwnd, &position))
+        return FALSE;
+
+    if (!state->spinnerHwnd)
+    {
+        if (!TextOverlayEnsureSpinnerClass())
+            return FALSE;
+        HWND owner = GetAncestor(state->hwnd, GA_ROOT);
+        if (!owner)
+            owner = state->hwnd;
+        state->spinnerHwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, kTextOverlaySpinnerClassName, L"", WS_POPUP | WS_VISIBLE, position.x, position.y, size, size, owner, NULL, GetModuleHandleW(NULL), NULL);
+        if (!state->spinnerHwnd)
+            return FALSE;
+        SetWindowPos(state->spinnerHwnd, HWND_TOP, position.x, position.y, size, size, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+
+    return TextOverlayRenderSpinnerWindow(state->spinnerHwnd, position, size, state->loadingPhase);
+}
+
 static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
 {
     UINT dpi = TextOverlayGetDpi(state->hwnd);
-    // The base overlay owns the HUD background; the child paints only foreground
-    // content so it does not leave an opaque rectangle over acrylic/backdrop.
     SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, RGB(245, 245, 245));
+    COLORREF textColor = RGB(245, 245, 245);
+    SetTextColor(hdc, textColor);
 
     HFONT font = TextOverlayCreateFont(state->fontSize, dpi);
     HGDIOBJ oldFont = SelectObject(hdc, font);
@@ -249,12 +558,15 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
     RECT textMeasure = {0, 0, maxTextWidth, 1};
     DrawTextW(hdc, state->message ? state->message : L"", -1, &textMeasure, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
     int renderedTextWidth = textMeasure.right - textMeasure.left;
+    int textHeight = textMeasure.bottom - textMeasure.top;
     if (renderedTextWidth < 1)
         renderedTextWidth = 1;
     if (renderedTextWidth > maxTextWidth)
         renderedTextWidth = maxTextWidth;
+    if (textHeight < 1)
+        textHeight = 1;
     int textLayoutWidth = state->centerContent ? renderedTextWidth : maxTextWidth;
-    int rowHeight = textMeasure.bottom > iconSize ? textMeasure.bottom : iconSize;
+    int rowHeight = textHeight > iconSize ? textHeight : iconSize;
     int closeSize = TextOverlayDip(TEXT_OVERLAY_CLOSE_SIZE_DIP, dpi);
     if (state->closable && rowHeight < closeSize)
         rowHeight = closeSize;
@@ -268,25 +580,46 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
         x = 0;
     if (state->loading)
     {
-        HBRUSH brush = CreateSolidBrush(RGB(230, 230, 230));
-        HGDIOBJ oldBrush = SelectObject(hdc, brush);
-        HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(NULL_PEN));
         int y = rowY + (rowHeight - iconSize) / 2;
-        Ellipse(hdc, x, y, x + iconSize, y + iconSize);
-        if (oldPen)
-            SelectObject(hdc, oldPen);
-        if (oldBrush)
-            SelectObject(hdc, oldBrush);
-        DeleteObject(brush);
+        state->loadingRect.left = x;
+        state->loadingRect.top = y;
+        state->loadingRect.right = x + iconSize;
+        state->loadingRect.bottom = y + iconSize;
+        if (!TextOverlayUpdateSpinnerWindow(state))
+            TextOverlayDrawLoadingSpinner(hdc, x, y, iconSize, state->loadingPhase);
         x += leadingWidth + leadingGap;
     }
+    else
+    {
+        RECT empty = {0, 0, 0, 0};
+        state->loadingRect = empty;
+        TextOverlayDestroySpinnerWindow(state);
+    }
 
-    RECT textRc = {x, rowY, x + textLayoutWidth, rowY + rowHeight};
-    DrawTextW(hdc, state->message ? state->message : L"", -1, &textRc, DT_WORDBREAK | DT_NOPREFIX | DT_VCENTER);
+    int textY = rowY + (rowHeight - textHeight) / 2;
+    RECT textRc = {x, textY, x + textLayoutWidth, textY + textHeight};
+    TextOverlayDrawTextAlpha(hdc, font, state->message, textRc, DT_WORDBREAK | DT_NOPREFIX, textColor);
 
     if (state->closable)
     {
-        RECT closeRc = TextOverlayCloseButtonRect(state, dpi);
+        TEXTMETRICW metrics;
+        int lineHeight = GetTextMetricsW(hdc, &metrics) ? metrics.tmHeight : textHeight;
+        if (lineHeight < 1)
+            lineHeight = textHeight;
+        BOOL multiline = textHeight > lineHeight + TextOverlayDip(2, dpi);
+        int closeTop = multiline ? textY + (lineHeight - closeSize) / 2 : rowY + (rowHeight - closeSize) / 2;
+        if (closeTop < 0)
+            closeTop = 0;
+        if (closeTop + closeSize > state->contentHeight)
+            closeTop = state->contentHeight - closeSize;
+        if (closeTop < 0)
+            closeTop = 0;
+        state->closeRect.left = state->contentWidth - closeSize;
+        state->closeRect.top = closeTop;
+        state->closeRect.right = state->contentWidth;
+        state->closeRect.bottom = closeTop + closeSize;
+
+        RECT closeRc = state->closeRect;
         if (state->closeHover || state->closePressed)
         {
             COLORREF bg = state->closePressed ? RGB(70, 70, 70) : RGB(55, 55, 55);
@@ -311,6 +644,11 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
         if (oldPen)
             SelectObject(hdc, oldPen);
         DeleteObject(pen);
+    }
+    else
+    {
+        RECT empty = {0, 0, 0, 0};
+        state->closeRect = empty;
     }
 
     if (state->showCopyButton)
@@ -477,6 +815,18 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             overlayRequestCloseCallbackCGO(state->nameUtf8);
             return 0;
         }
+        if (wParam == TEXT_OVERLAY_TIMER_LOADING)
+        {
+            if (!state || !state->loading)
+            {
+                KillTimer(hwnd, TEXT_OVERLAY_TIMER_LOADING);
+                return 0;
+            }
+            state->loadingPhase++;
+            if (!TextOverlayUpdateSpinnerWindow(state))
+                KillTimer(hwnd, TEXT_OVERLAY_TIMER_LOADING);
+            return 0;
+        }
         break;
     case WM_PAINT:
     {
@@ -495,8 +845,10 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     case WM_NCDESTROY:
         KillTimer(hwnd, TEXT_OVERLAY_TIMER_COPY_FEEDBACK);
         KillTimer(hwnd, TEXT_OVERLAY_TIMER_AUTOCLOSE);
+        KillTimer(hwnd, TEXT_OVERLAY_TIMER_LOADING);
         if (state)
         {
+            TextOverlayDestroySpinnerWindow(state);
             free(state->nameUtf8);
             free(state->message);
             free(state);
@@ -533,6 +885,8 @@ static DWORD WINAPI TextOverlayThreadProc(LPVOID param)
     SetEvent(state->readyEvent);
     if (!hwnd)
         return 0;
+    if (state->loading)
+        SetTimer(hwnd, TEXT_OVERLAY_TIMER_LOADING, TEXT_OVERLAY_LOADING_INTERVAL_MS, NULL);
     if (state->autoCloseSeconds > 0)
         SetTimer(hwnd, TEXT_OVERLAY_TIMER_AUTOCLOSE, (UINT)(state->autoCloseSeconds * 1000), NULL);
 
@@ -589,7 +943,7 @@ TextOverlayAttachment TextOverlayCreateWindow(char *name,
     state->centerContent = centerContent ? TRUE : FALSE;
     state->showCopyButton = showCopyButton ? TRUE : FALSE;
     state->autoCloseSeconds = autoCloseSeconds;
-    state->fontSize = fontSize > 0 ? fontSize : 13.0f;
+    state->fontSize = fontSize > 0 ? fontSize : TEXT_OVERLAY_DEFAULT_FONT_SIZE;
     state->iconSize = iconSize > 0 ? iconSize : 24.0f;
     state->tooltipIconSize = tooltipIconSize > 0 ? tooltipIconSize : 18.0f;
     SIZE size = TextOverlayMeasure(state->message, state->loading, iconLen > 0, tooltipIconLen > 0, state->showCopyButton, closable, state->fontSize, state->iconSize, state->tooltipIconSize, windowWidth, minWindowWidth, maxWindowWidth, windowHeight, maxWindowHeight);

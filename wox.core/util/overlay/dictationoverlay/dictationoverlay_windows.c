@@ -19,6 +19,8 @@ typedef struct {
     char *nameUtf8;
     BOOL closable;
     BOOL active;
+    BOOL closeHover;
+    BOOL closePressed;
     int phase;
 } DictationOverlayState;
 
@@ -60,6 +62,20 @@ static RECT DictationOverlayCloseRect(const RECT *rect, UINT dpi)
     int size = DictationOverlayDip(DICTATION_CLOSE_SIZE_DIP, dpi);
     RECT closeRect = {rect->right - size, rect->top + ((rect->bottom - rect->top) - size) / 2, rect->right, rect->top + ((rect->bottom - rect->top) - size) / 2 + size};
     return closeRect;
+}
+
+// DictationOverlayInvalidate repaints the parent backdrop synchronously before this transparent child redraws.
+static void DictationOverlayInvalidate(HWND hwnd)
+{
+    HWND parent = GetParent(hwnd);
+    if (parent)
+    {
+        RECT parentRc;
+        GetWindowRect(hwnd, &parentRc);
+        MapWindowPoints(HWND_DESKTOP, parent, (POINT *)&parentRc, 2);
+        RedrawWindow(parent, &parentRc, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOCHILDREN);
+    }
+    RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE);
 }
 
 static void DictationOverlayDraw(HDC hdc, const RECT *rect, UINT dpi, BOOL active, int phase)
@@ -121,6 +137,27 @@ static LRESULT CALLBACK DictationOverlayProc(HWND hwnd, UINT msg, WPARAM wParam,
     }
     case WM_ERASEBKGND:
         return 1;
+    case WM_SETCURSOR:
+    {
+        if (!state || LOWORD(lParam) != HTCLIENT)
+            break;
+        POINT pt;
+        if (!GetCursorPos(&pt))
+            break;
+        ScreenToClient(hwnd, &pt);
+        if (state->closable)
+        {
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            RECT closeRc = DictationOverlayCloseRect(&rc, DictationOverlayGetDpi(hwnd));
+            if (PtInRect(&closeRc, pt))
+            {
+                SetCursor(LoadCursor(NULL, IDC_HAND));
+                return TRUE;
+            }
+        }
+        break;
+    }
     case WM_TIMER:
         if (wParam == DICTATION_OVERLAY_TIMER)
         {
@@ -130,7 +167,7 @@ static LRESULT CALLBACK DictationOverlayProc(HWND hwnd, UINT msg, WPARAM wParam,
                 return 0;
             }
             state->phase++;
-            InvalidateRect(hwnd, NULL, FALSE);
+            DictationOverlayInvalidate(hwnd);
             return 0;
         }
         break;
@@ -147,7 +184,52 @@ static LRESULT CALLBACK DictationOverlayProc(HWND hwnd, UINT msg, WPARAM wParam,
             KillTimer(hwnd, DICTATION_OVERLAY_TIMER);
             state->phase = 0;
         }
-        InvalidateRect(hwnd, NULL, FALSE);
+        DictationOverlayInvalidate(hwnd);
+        return 0;
+    case WM_MOUSEMOVE:
+    {
+        if (!state)
+            break;
+        TRACKMOUSEEVENT tme = {sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0};
+        TrackMouseEvent(&tme);
+
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        RECT closeRc = DictationOverlayCloseRect(&rc, DictationOverlayGetDpi(hwnd));
+        BOOL closeHoverNow = state->closable && PtInRect(&closeRc, pt);
+        if (closeHoverNow != state->closeHover)
+        {
+            state->closeHover = closeHoverNow;
+            DictationOverlayInvalidate(hwnd);
+        }
+        return 0;
+    }
+    case WM_MOUSELEAVE:
+        if (state)
+        {
+            state->closeHover = FALSE;
+            if (!state->closePressed)
+                DictationOverlayInvalidate(hwnd);
+        }
+        return 0;
+    case WM_LBUTTONDOWN:
+        if (!state)
+            return 0;
+        if (state->closable)
+        {
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            RECT closeRc = DictationOverlayCloseRect(&rc, DictationOverlayGetDpi(hwnd));
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            if (PtInRect(&closeRc, pt))
+            {
+                state->closePressed = TRUE;
+                SetCapture(hwnd);
+                DictationOverlayInvalidate(hwnd);
+                return 0;
+            }
+        }
         return 0;
     case WM_PAINT:
     {
@@ -155,10 +237,6 @@ static LRESULT CALLBACK DictationOverlayProc(HWND hwnd, UINT msg, WPARAM wParam,
         HDC hdc = BeginPaint(hwnd, &ps);
         RECT rc;
         GetClientRect(hwnd, &rc);
-
-        HBRUSH bg = CreateSolidBrush(RGB(32, 32, 32));
-        FillRect(hdc, &rc, bg);
-        DeleteObject(bg);
 
         SetBkMode(hdc, TRANSPARENT);
         UINT dpi = DictationOverlayGetDpi(hwnd);
@@ -173,36 +251,55 @@ static LRESULT CALLBACK DictationOverlayProc(HWND hwnd, UINT msg, WPARAM wParam,
         if (state && state->closable)
         {
             RECT closeRc = DictationOverlayCloseRect(&rc, dpi);
-            int closeSize = DictationOverlayDip(DICTATION_CLOSE_SIZE_DIP, dpi);
-            HBRUSH brush = CreateSolidBrush(RGB(58, 58, 58));
-            HGDIOBJ oldBrush = SelectObject(hdc, brush);
-            HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(NULL_PEN));
-            RoundRect(hdc, closeRc.left, closeRc.top, closeRc.right, closeRc.bottom, closeSize, closeSize);
+            if (state->closeHover || state->closePressed)
+            {
+                COLORREF bg = state->closePressed ? RGB(70, 70, 70) : RGB(55, 55, 55);
+                HBRUSH brush = CreateSolidBrush(bg);
+                FillRect(hdc, &closeRc, brush);
+                DeleteObject(brush);
+            }
+
+            int pad = DictationOverlayDip(6, dpi);
+            int thickness = DictationOverlayDip(2, dpi);
+            if (thickness < 1)
+                thickness = 1;
+
+            HPEN pen = CreatePen(PS_SOLID, thickness, RGB(230, 230, 230));
+            HGDIOBJ oldPen = SelectObject(hdc, pen);
+
+            MoveToEx(hdc, closeRc.left + pad, closeRc.top + pad, NULL);
+            LineTo(hdc, closeRc.right - pad, closeRc.bottom - pad);
+            MoveToEx(hdc, closeRc.right - pad, closeRc.top + pad, NULL);
+            LineTo(hdc, closeRc.left + pad, closeRc.bottom - pad);
+
             if (oldPen)
                 SelectObject(hdc, oldPen);
-            if (oldBrush)
-                SelectObject(hdc, oldBrush);
-            DeleteObject(brush);
-            SetTextColor(hdc, RGB(255, 255, 255));
-            DrawTextW(hdc, L"X", -1, &closeRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            DeleteObject(pen);
         }
         EndPaint(hwnd, &ps);
         return 0;
     }
     case WM_LBUTTONUP:
-        if (state && state->closable && state->nameUtf8)
+        if (!state || !state->nameUtf8)
+            return 0;
+        if (state->closePressed)
         {
             RECT rc;
             GetClientRect(hwnd, &rc);
             RECT closeRc = DictationOverlayCloseRect(&rc, DictationOverlayGetDpi(hwnd));
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            if (PtInRect(&closeRc, pt))
+            state->closePressed = FALSE;
+            if (GetCapture() == hwnd)
+                ReleaseCapture();
+            DictationOverlayInvalidate(hwnd);
+            if (state->closable && PtInRect(&closeRc, pt))
             {
                 overlayRequestCloseCallbackCGO(state->nameUtf8);
                 return 0;
             }
+            return 0;
         }
-        break;
+        return 0;
     case WM_CLOSE:
         DestroyWindow(hwnd);
         return 0;
@@ -240,7 +337,7 @@ static BOOL DictationOverlayEnsureClass(void)
 static DWORD WINAPI DictationOverlayThreadProc(LPVOID param)
 {
     DictationOverlayState *state = (DictationOverlayState *)param;
-    HWND hwnd = CreateWindowExW(WS_EX_NOACTIVATE, kDictationOverlayClassName, L"", WS_POPUP, 0, 0, 132, 24, NULL, NULL, GetModuleHandleW(NULL), state);
+    HWND hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT, kDictationOverlayClassName, L"", WS_POPUP, 0, 0, 132, 24, NULL, NULL, GetModuleHandleW(NULL), state);
     state->hwnd = hwnd;
     state->createOk = hwnd ? TRUE : FALSE;
     SetEvent(state->readyEvent);
