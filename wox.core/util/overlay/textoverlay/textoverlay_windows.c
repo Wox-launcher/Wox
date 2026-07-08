@@ -15,7 +15,6 @@
 #define TEXT_OVERLAY_COPY_GAP_DIP 8
 #define TEXT_OVERLAY_CLOSE_SIZE_DIP 20
 #define TEXT_OVERLAY_CLOSE_GAP_DIP 8
-#define TEXT_OVERLAY_TEXT_WIDTH_SLACK_DIP 8
 
 typedef struct {
     void *handle;
@@ -140,10 +139,7 @@ static SIZE TextOverlayMeasure(WCHAR *message, BOOL loading, BOOL hasIcon, BOOL 
     int chromeHeight = 24;
 
     SIZE naturalText = TextOverlayMeasureText(message, 4096, fontSize);
-    // DrawText's calculated width can sit on the exact ink bounds; leave a small
-    // end cap so alpha-rendered glyphs are not clipped on fractional DPI scales.
-    int textSlack = (message && message[0]) ? TEXT_OVERLAY_TEXT_WIDTH_SLACK_DIP : 0;
-    int naturalContentWidth = leadingWidth + leadingGap + naturalText.cx + textSlack + tooltipGap + tooltipWidth + closeReserve;
+    int naturalContentWidth = leadingWidth + leadingGap + naturalText.cx + tooltipGap + tooltipWidth + closeReserve;
     int contentWidth = naturalContentWidth;
     if (contentWidth < 64)
         contentWidth = 64;
@@ -566,7 +562,8 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
     if (textHeight < 1)
         textHeight = 1;
     int textLayoutWidth = state->centerContent ? renderedTextWidth : maxTextWidth;
-    int rowHeight = textHeight > iconSize ? textHeight : iconSize;
+    int leadingHeight = state->loading ? iconSize : 0;
+    int rowHeight = textHeight > leadingHeight ? textHeight : leadingHeight;
     int closeSize = TextOverlayDip(TEXT_OVERLAY_CLOSE_SIZE_DIP, dpi);
     if (state->closable && rowHeight < closeSize)
         rowHeight = closeSize;
