@@ -22,6 +22,7 @@ import (
 	"wox/cloudsync"
 	"wox/common"
 	"wox/diagnostic"
+	corehotkey "wox/hotkey"
 	"wox/i18n"
 	"wox/plugin"
 	pluginhost "wox/plugin/host"
@@ -1072,16 +1073,10 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 
 		uiManager := GetUIManager()
-		var registerErr error
-		if shouldGroupWaylandPortalHotkeys() {
-			uiManager.globalHotkeyMu.Lock()
-			registerErr = uiManager.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), woxSetting.SelectionHotkey.Get(), queryHotkeys)
-			uiManager.globalHotkeyMu.Unlock()
-		} else {
-			registerErr = uiManager.reregisterIndividualQueryHotkeys(ctx, queryHotkeys)
-		}
-		if registerErr != nil {
-			writeErrorResponse(w, registerErr.Error())
+		config := corehotkey.WoxConfigFromSetting(woxSetting)
+		config.QueryHotkeys = queryHotkeys
+		if err := uiManager.registerWoxHotkeys(ctx, config, true); err != nil {
+			writeErrorResponse(w, err.Error())
 			return
 		}
 

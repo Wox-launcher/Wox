@@ -276,6 +276,14 @@ func run() {
 
 	shareUI := ui.GetUIManager().GetUI(ctx)
 	clipboard.SetNativeImageFileWriter(shareUI.WriteClipboardImageFile)
+
+	// Discovery phase: publish Wox-setting hotkeys (main, selection, query) to
+	// the hotkey service. Dictation hotkeys are collected during plugin loading
+	// (dictation.Init calls reloadActions).
+	ui.GetUIManager().CollectWoxSettingHotkeys(ctx, woxSetting)
+
+	// Start plugins (dictation.Init collects dictation hotkeys via the registrar;
+	// registration stays deferred until the unified pass below).
 	plugin.GetPluginManager().Start(ctx, shareUI)
 
 	selection.InitSelection()
@@ -302,20 +310,14 @@ func run() {
 		telemetry.StartPeriodicHeartbeat(ctx)
 	}
 
-	// Platform-specific keyboard implementations handle their own main-thread dispatch.
-	registerMainHotkeyErr := ui.GetUIManager().RegisterMainHotkey(ctx, woxSetting.MainHotkey.Get())
-	if registerMainHotkeyErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to register main hotkey: %s", registerMainHotkeyErr.Error()))
-	}
-	registerSelectionHotkeyErr := ui.GetUIManager().RegisterSelectionHotkey(ctx, woxSetting.SelectionHotkey.Get())
-	if registerSelectionHotkeyErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to register selection hotkey: %s", registerSelectionHotkeyErr.Error()))
-	}
-	for _, queryHotkey := range woxSetting.QueryHotkeys.Get() {
-		registerQueryHotkeyErr := ui.GetUIManager().RegisterQueryHotkey(ctx, queryHotkey)
-		if registerQueryHotkeyErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to register query hotkey: %s", registerQueryHotkeyErr.Error()))
-		}
+	// Registration phase: bind all collected hotkeys to the platform in one pass.
+	// This runs after plugin.Start so dictation hotkeys are already in the
+	// collector. On Wayland-portal, all normal combos go into one portal session
+	// (one permission dialog). On other platforms, each hotkey is registered
+	// individually.
+	registerErr := ui.GetUIManager().RegisterAllHotkeys(ctx)
+	if registerErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to register hotkeys: %s", registerErr.Error()))
 	}
 
 	if util.IsProd() {

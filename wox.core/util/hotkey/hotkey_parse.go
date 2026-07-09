@@ -183,3 +183,25 @@ func IsDoubleModifierHotkeyString(combineKey string) bool {
 	spec, err := (&Hotkey{}).parseCombineKey(combineKey)
 	return err == nil && spec.isDoubleModifier()
 }
+
+// IsModifierChordHotkeyString reports whether combineKey is a pure modifier
+// chord (e.g. "left_alt", "left_ctrl+left_alt") that resolves to hold/press
+// behavior instead of a normal modifier+key combo. Callers use this to decide
+// whether a dictation hotkey belongs in the Wayland portal group (normal combos
+// only) or must stay on the evdev special-registration path (modifier chords).
+func IsModifierChordHotkeyString(combineKey string) bool {
+	spec, err := (&Hotkey{}).parseCombineKey(combineKey)
+	return err == nil && spec.isModifierChord()
+}
+
+// IsSpecialHotkeyString reports whether combineKey is a special hotkey
+// (double-modifier, CapsLock combo, or modifier chord). Special hotkeys cannot
+// be bound through the Wayland GlobalShortcuts portal group and must be
+// registered individually via the evdev/raw-key path.
+func IsSpecialHotkeyString(combineKey string) bool {
+	spec, err := (&Hotkey{}).parseCombineKey(combineKey)
+	if err != nil {
+		return false
+	}
+	return spec.isDoubleModifier() || spec.isCapsLockKey() || spec.isModifierChord()
+}

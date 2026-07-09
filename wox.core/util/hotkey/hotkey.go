@@ -37,7 +37,12 @@ type Hotkey struct {
 
 type Spec struct {
 	CombineKey string
-	Callback   func()
+	Callback   func() // onPress; required
+	// OnRelease, when non-nil, marks this spec as hold-mode: Callback fires on
+	// press and OnRelease fires on release. Only meaningful for special hotkeys
+	// (modifier chords) that go through the evdev path; normal combos always use
+	// press-only portal registration, so OnRelease is ignored for them.
+	OnRelease func()
 }
 
 type Group struct {
@@ -170,7 +175,21 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 
 		if parsed.isDoubleModifier() || parsed.isCapsLockKey() || parsed.isModifierChord() {
 			hk := &Hotkey{}
-			if err := hk.Register(ctx, spec.CombineKey, spec.Callback); err != nil {
+			var err error
+			if spec.OnRelease != nil {
+				// Hold-mode special hotkey: press fires Callback, release fires
+				// OnRelease. Only modifier chords use hold mode today; double-
+				// modifier and CapsLock fall back to press-only (RegisterWithRelease
+				// rejects non-chord release callbacks).
+				err = hk.RegisterWithRelease(ctx, spec.CombineKey, spec.Callback, spec.OnRelease)
+			} else if parsed.isModifierChord() {
+				// Press-only modifier chord needs RegisterWithModifierPress so the
+				// chord is resolved as a press trigger, not a normal combo.
+				err = hk.RegisterWithModifierPress(ctx, spec.CombineKey, spec.Callback)
+			} else {
+				err = hk.Register(ctx, spec.CombineKey, spec.Callback)
+			}
+			if err != nil {
 				util.GetLogger().Warn(ctx, fmt.Sprintf("skip special hotkey in group, register failed: %s: %s", spec.CombineKey, err.Error()))
 				continue
 			}

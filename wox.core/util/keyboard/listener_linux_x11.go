@@ -162,7 +162,7 @@ func runLinuxKeyboardCall(call func(errorOut **C.char) C.int) error {
 	}
 	if result == 0 {
 		if errorOut != nil {
-			return fmt.Errorf(C.GoString(errorOut))
+			return fmt.Errorf("%s", C.GoString(errorOut))
 		}
 		return fmt.Errorf("native linux keyboard call failed")
 	}

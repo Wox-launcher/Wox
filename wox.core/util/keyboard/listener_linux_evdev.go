@@ -368,7 +368,7 @@ func evdevReadLoop(fd int, stopCh <-chan struct{}, handler RawKeyHandler) {
 		}
 
 		util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
-			"[hotkey] evdev event: key=%s type=%s code=%d", key.Character(), event.Type, code))
+			"[hotkey] evdev event: key=%s type=%d code=%d", key.Character(), event.Type, code))
 
 		// Note: CapsLock combo key interception via EVIOCGRAB was considered
 		// but abandoned because the grab happens after the CapsLock key-down

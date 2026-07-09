@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"wox/common"
+	corehotkey "wox/hotkey"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/plugin/system/mediaplayer"
@@ -88,17 +89,11 @@ var (
 	hotkeyRegistrar HotkeyRegistrar
 )
 
-// HotkeyRegistrar abstracts the UI Manager's dictation hotkey registration
-// so the dictation plugin can register/unregister global hotkeys without
-// importing the ui package directly.
+// HotkeyRegistrar lets dictation publish hotkey changes without importing ui.
+// registerNow controls whether the hotkey service immediately re-registers all
+// hotkeys or defers registration to the startup unified pass.
 type HotkeyRegistrar interface {
-	RegisterDictationHotkeys(ctx context.Context, bindings []HotkeyBinding) error
-}
-
-// HotkeyBinding is the runtime hotkey binding for one dictation action.
-type HotkeyBinding struct {
-	ActionID string
-	Hotkey   string
+	CollectDictationHotkeys(ctx context.Context, bindings []corehotkey.DictationBinding, registerNow bool)
 }
 
 // SetHotkeyRegistrar is called by the UI Manager during startup to inject
@@ -400,7 +395,9 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	p.history.load(ctx)
 	p.dictionary = newDictionaryStore(p.api)
 	p.dictionary.load(ctx)
-	p.reloadActions(ctx, p.api.GetSetting(ctx, settingKeyActions))
+	// Startup: collect dictation hotkeys into the registrar without registering.
+	// main.go performs a single unified RegisterAll pass after all plugins load.
+	p.reloadActions(ctx, p.api.GetSetting(ctx, settingKeyActions), false)
 
 	// Initialize the model manager in the Wox data directory.
 	modelsDir := filepath.Join(util.GetLocation().GetDictationDirectory(), "models")
@@ -455,7 +452,7 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	p.api.OnSettingChanged(ctx, func(ctx context.Context, key string, value string) {
 		switch key {
 		case settingKeyActions:
-			p.reloadActions(ctx, value)
+			p.reloadActions(ctx, value, true)
 		case settingKeyInputDevice:
 			p.rememberInputDeviceName(ctx, value)
 		case settingKeyDictionary:
@@ -477,8 +474,11 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 }
 
 // reloadActions normalizes persisted action rows, updates the in-memory copy,
-// and refreshes runtime hotkey registrations.
-func (p *DictationPlugin) reloadActions(ctx context.Context, raw string) {
+// and refreshes runtime hotkey registrations. When registerNow is false
+// (startup), hotkeys are only collected into the registrar; main.go performs
+// the unified registration pass after all plugins have loaded. When true
+// (runtime setting change), the registrar immediately re-registers.
+func (p *DictationPlugin) reloadActions(ctx context.Context, raw string, registerNow bool) {
 	actions := normalizeDictationActions(parseDictationActions(raw))
 	normalizedRaw := marshalDictationActions(actions)
 
@@ -489,7 +489,7 @@ func (p *DictationPlugin) reloadActions(ctx context.Context, raw string) {
 	if strings.TrimSpace(raw) != normalizedRaw {
 		p.api.SaveSetting(ctx, settingKeyActions, normalizedRaw, false)
 	}
-	p.reregisterActionHotkeys(ctx, actions)
+	p.collectActionHotkeys(ctx, actions, registerNow)
 }
 
 func (p *DictationPlugin) actionSnapshot() []dictationAction {
@@ -510,30 +510,29 @@ func (p *DictationPlugin) actionByID(actionID string) (dictationAction, bool) {
 	return dictationAction{}, false
 }
 
-// reregisterActionHotkeys binds all active dictation action hotkeys via the
-// injected UI Manager registrar.
-func (p *DictationPlugin) reregisterActionHotkeys(ctx context.Context, actions []dictationAction) {
+// collectActionHotkeys publishes current dictation action hotkeys to the
+// injected registrar. Runtime changes re-register immediately; startup only
+// collects so main.go can perform one unified registration pass.
+func (p *DictationPlugin) collectActionHotkeys(ctx context.Context, actions []dictationAction, registerNow bool) {
 	p.registeredHotkeyMu.Lock()
 	defer p.registeredHotkeyMu.Unlock()
 	if hotkeyRegistrar == nil {
-		p.api.Log(ctx, plugin.LogLevelDebug, "hotkey registrar not set, skipping hotkey registration")
+		p.api.Log(ctx, plugin.LogLevelDebug, "hotkey registrar not set, skipping hotkey collection")
 		return
 	}
 
-	bindings := make([]HotkeyBinding, 0, len(actions))
+	bindings := make([]corehotkey.DictationBinding, 0, len(actions))
 	for _, action := range actions {
 		if action.Disabled || strings.TrimSpace(action.Hotkey) == "" {
 			continue
 		}
-		bindings = append(bindings, HotkeyBinding{
+		bindings = append(bindings, corehotkey.DictationBinding{
 			ActionID: action.ID,
 			Hotkey:   action.Hotkey,
 		})
 	}
 
-	if err := hotkeyRegistrar.RegisterDictationHotkeys(ctx, bindings); err != nil {
-		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to register dictation action hotkeys: %s", err.Error()))
-	}
+	hotkeyRegistrar.CollectDictationHotkeys(ctx, bindings, registerNow)
 }
 
 // buildInputDeviceSetting enumerates capture devices and returns a select
@@ -1950,7 +1949,9 @@ func (p *DictationPlugin) releaseRuntime(ctx context.Context) {
 	p.runtimeMu.Lock()
 	defer p.runtimeMu.Unlock()
 
-	p.reregisterActionHotkeys(ctx, nil)
+	// Runtime teardown: collect empty bindings and re-register immediately to
+	// remove dictation hotkeys from the platform.
+	p.collectActionHotkeys(ctx, nil, true)
 	p.stopVolumeDucking(ctx)
 	p.closeDictationOverlay()
 
