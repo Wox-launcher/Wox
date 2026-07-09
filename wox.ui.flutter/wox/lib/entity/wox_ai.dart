@@ -310,6 +310,7 @@ class WoxAIChatData {
   late int createdAt;
   late int updatedAt;
   late bool isStreaming;
+  late bool isSummary;
 
   WoxAIChatData({
     required this.id,
@@ -321,6 +322,7 @@ class WoxAIChatData {
     required this.createdAt,
     required this.updatedAt,
     this.isStreaming = false,
+    this.isSummary = false,
   });
 
   static WoxAIChatData fromJson(Map<String, dynamic> json) {
@@ -355,6 +357,7 @@ class WoxAIChatData {
       createdAt: json['CreatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       updatedAt: json['UpdatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       isStreaming: json['IsStreaming'] ?? false,
+      isSummary: json['IsSummary'] ?? false,
     );
   }
 
@@ -371,6 +374,7 @@ class WoxAIChatData {
       // snapshots reflect the real send/stop button state when a user
       // reselects a chat that is still generating.
       'IsStreaming': isStreaming,
+      'IsSummary': isSummary,
     };
 
     return json;
@@ -391,18 +395,21 @@ class WoxAIChatData {
       createdAt: 0,
       updatedAt: 0,
       isStreaming: false,
+      isSummary: false,
     );
   }
 }
 
 class WoxAIChatPreviewData {
   late WoxAIChatData activeChat;
+  late String activeChatId;
   late List<WoxAIChatData> chats;
 
-  WoxAIChatPreviewData({required this.activeChat, required this.chats});
+  WoxAIChatPreviewData({required this.activeChat, required this.chats, this.activeChatId = ""});
 
   WoxAIChatPreviewData.fromJson(Map<String, dynamic> json) {
     activeChat = json['ActiveChat'] != null ? WoxAIChatData.fromJson(json['ActiveChat']) : WoxAIChatData.empty();
+    activeChatId = json['ActiveChatId'] ?? "";
     final rawChats = json['Chats'];
     chats = rawChats is List ? rawChats.whereType<Map<String, dynamic>>().map(WoxAIChatData.fromJson).toList() : <WoxAIChatData>[];
   }

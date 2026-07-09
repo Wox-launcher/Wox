@@ -167,6 +167,10 @@ type AIChatData struct {
 
 	// IsStreaming is a transient UI-only flag; never persisted.
 	IsStreaming bool
+
+	// IsSummary marks preview sidebar entries that omit full conversations and
+	// must be loaded on demand before opening.
+	IsSummary bool
 }
 
 // AIChatCompactionEntry records a runtime context checkpoint for long chats.
@@ -338,14 +342,16 @@ func cloneDebugToolCallInfo(toolCallInfo ToolCallInfo) ToolCallInfo {
 	return cloned
 }
 
-// AIChatPreviewData bootstraps the chat preview app with an active draft and the saved chat list.
+// AIChatPreviewData bootstraps the chat preview app with an active draft and lightweight saved chat summaries.
 type AIChatPreviewData struct {
-	ActiveChat AIChatData
-	Chats      []AIChatData
+	ActiveChat   AIChatData
+	ActiveChatId string
+	Chats        []AIChatData
 }
 
 type AIChater interface {
 	Chat(ctx context.Context, aiChatData AIChatData, chatLoopCount int)
+	GetChat(ctx context.Context, chatId string) (AIChatData, bool)
 	StopChat(ctx context.Context, chatId string) bool
 	DeleteChat(ctx context.Context, chatId string) bool
 	SummarizeChat(ctx context.Context, chatId string) bool

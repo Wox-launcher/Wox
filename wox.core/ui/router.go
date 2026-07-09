@@ -134,6 +134,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/ai/model/default":   handleAIDefaultModel,
 	"/ai/ping":            handleAIPing,
 	"/ai/chat":            handleAIChat,
+	"/ai/chat/get":        handleAIChatGet,
 	"/ai/chat/stop":       handleAIChatStop,
 	"/ai/chat/delete":     handleAIChatDelete,
 	"/ai/chat/summarize":  handleAIChatSummarize,
@@ -3213,6 +3214,32 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	chater.Chat(ctx, chatData, 0)
 
 	writeSuccessResponse(w, "")
+}
+
+// handleAIChatGet returns the full chat data for a lightweight preview sidebar entry.
+func handleAIChatGet(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	chatId := gjson.GetBytes(body, "chatId").String()
+	if chatId == "" {
+		writeErrorResponse(w, "chatId is empty")
+		return
+	}
+
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		writeErrorResponse(w, "ai chat plugin not found")
+		return
+	}
+
+	chatData, ok := chater.GetChat(ctx, chatId)
+	if !ok {
+		writeErrorResponse(w, "chat not found")
+		return
+	}
+
+	writeSuccessResponse(w, chatData)
 }
 
 // handleAIChatStop cancels the active streaming session for a chat.

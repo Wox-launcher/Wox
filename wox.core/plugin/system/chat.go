@@ -849,7 +849,29 @@ func cloneAIChatDataForState(aiChatData common.AIChatData) common.AIChatData {
 	snapshot := cloneAIChatDataForUI(aiChatData)
 	snapshot.DebugTrace = nil
 	snapshot.IsStreaming = false
+	snapshot.IsSummary = false
 	return snapshot
+}
+
+// cloneAIChatDataForPreviewList keeps the chat sidebar lightweight while
+// preserving enough metadata for grouping and selection.
+func (r *AIChatPlugin) cloneAIChatDataForPreviewList(aiChatData common.AIChatData) common.AIChatData {
+	snapshot := aiChatData
+	snapshot.Conversations = nil
+	snapshot.CompactionEntries = nil
+	snapshot.DebugTrace = nil
+	snapshot.IsStreaming = r.isChatStreaming(aiChatData.Id)
+	snapshot.IsSummary = true
+	return snapshot
+}
+
+// isChatStreaming reports the transient runtime state omitted from persisted chat data.
+func (r *AIChatPlugin) isChatStreaming(chatId string) bool {
+	if chatId == "" {
+		return false
+	}
+	_, ok := r.activeChatCancels.Load(chatId)
+	return ok
 }
 
 // cloneAIConversations deep-copies conversation slices used by streaming UI snapshots.
@@ -980,6 +1002,20 @@ func (r *AIChatPlugin) DeleteChat(ctx context.Context, chatId string) bool {
 	return false
 }
 
+// GetChat returns the full chat payload for a summary item selected in the UI.
+func (r *AIChatPlugin) GetChat(ctx context.Context, chatId string) (common.AIChatData, bool) {
+	for i := range r.chats {
+		if r.chats[i].Id == chatId {
+			snapshot := cloneAIChatDataForUI(r.chats[i])
+			snapshot.IsStreaming = r.isChatStreaming(chatId)
+			snapshot.IsSummary = false
+			return snapshot, true
+		}
+	}
+
+	return common.AIChatData{}, false
+}
+
 // SummarizeChat starts an asynchronous title refresh for a persisted chat.
 func (r *AIChatPlugin) SummarizeChat(ctx context.Context, chatId string) bool {
 	for i := range r.chats {
@@ -1007,26 +1043,20 @@ func (r *AIChatPlugin) newChatData(ctx context.Context) common.AIChatData {
 }
 
 func (r *AIChatPlugin) getChatPreviewData(ctx context.Context, activeChatId string) plugin.QueryResult {
-	// When re-entering chat mode from search fallback, the caller passes the id
-	// of the chat that was just created and is already streaming. Use it as the
-	// ActiveChat so the UI lands on that conversation instead of a blank new
-	// one. Fallback to a fresh empty chat for normal "chat xxx" entry.
-	var activeChat common.AIChatData
+	activeChat := r.newChatData(ctx)
 	if activeChatId != "" {
-		for i := range r.chats {
-			if r.chats[i].Id == activeChatId {
-				activeChat = r.chats[i]
-				break
-			}
-		}
+		activeChat.Id = activeChatId
+		activeChat.IsStreaming = r.isChatStreaming(activeChatId)
 	}
-	if activeChat.Id == "" {
-		activeChat = r.newChatData(ctx)
+	chatSummaries := make([]common.AIChatData, 0, len(r.chats))
+	for _, chat := range r.chats {
+		chatSummaries = append(chatSummaries, r.cloneAIChatDataForPreviewList(chat))
 	}
 
 	previewData, err := json.Marshal(common.AIChatPreviewData{
-		ActiveChat: activeChat,
-		Chats:      r.chats,
+		ActiveChat:   activeChat,
+		ActiveChatId: activeChatId,
+		Chats:        chatSummaries,
 	})
 	if err != nil {
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to marshal chat preview data: %s", err.Error()))

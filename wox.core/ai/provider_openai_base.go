@@ -698,7 +698,17 @@ func (o *OpenAIBaseProvider) getClient(ctx context.Context) openai.Client {
 	var requestOption = []option.RequestOption{
 		option.WithBaseURL(o.connectContext.Host),
 		option.WithAPIKey(o.connectContext.ApiKey),
+		// Some OpenAI-compatible relays block SDK fingerprint headers even when the same bearer token works with curl. #4473
 		option.WithHTTPClient(util.GetHTTPClient(ctx)),
+		option.WithHeader("User-Agent", "Wox"),
+		option.WithHeaderDel("X-Stainless-Lang"),
+		option.WithHeaderDel("X-Stainless-Package-Version"),
+		option.WithHeaderDel("X-Stainless-OS"),
+		option.WithHeaderDel("X-Stainless-Arch"),
+		option.WithHeaderDel("X-Stainless-Runtime"),
+		option.WithHeaderDel("X-Stainless-Runtime-Version"),
+		option.WithHeaderDel("X-Stainless-Retry-Count"),
+		option.WithHeaderDel("X-Stainless-Timeout"),
 	}
 
 	// with custom headers
