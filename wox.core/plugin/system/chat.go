@@ -147,9 +147,13 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		r.chats = chats
 	}
 
-	if err := r.reloadSkills(ctx, false); err != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to load skills: %s", err.Error()))
-	}
+	util.Go(ctx, "reload AI skills", func() {
+		// Skill discovery can touch remote cache paths. Keep it off the startup path so UI readiness
+		// is not blocked by stale or relocated skill directories.
+		if err := r.reloadSkills(util.NewTraceContext(), true); err != nil {
+			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to load skills: %s", err.Error()))
+		}
+	})
 
 	util.Go(ctx, "reload MCP servers", func() {
 		// Startup only warms the core MCP tool cache; Flutter loads chat resources lazily after it is ready.

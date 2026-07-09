@@ -26,9 +26,10 @@ func CloneSkillRepo(ctx context.Context, url string) (string, error) {
 		return "", fmt.Errorf("failed to create skills cache directory: %w", err)
 	}
 
-	hash := sha1.Sum([]byte(url))
-	hashText := hex.EncodeToString(hash[:])[:12]
-	cloneDir := filepath.Join(cacheDir, hashText)
+	cloneDir, cacheDirErr := skillRepoCacheDirectory(url)
+	if cacheDirErr != nil {
+		return "", cacheDirErr
+	}
 
 	// Remove existing clone so we always get fresh content.
 	if util.IsDirExists(cloneDir) {
@@ -42,6 +43,18 @@ func CloneSkillRepo(ctx context.Context, url string) (string, error) {
 	}
 
 	return cloneDir, nil
+}
+
+// skillRepoCacheDirectory returns the stable cache directory used for a remote skill repository.
+func skillRepoCacheDirectory(url string) (string, error) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return "", fmt.Errorf("url is required")
+	}
+
+	hash := sha1.Sum([]byte(url))
+	hashText := hex.EncodeToString(hash[:])[:12]
+	return filepath.Join(util.GetLocation().GetAISkillsCacheDirectory(), hashText), nil
 }
 
 // DiscoverRemoteSkills clones the given git URL and scans it for SKILL.md
@@ -75,11 +88,11 @@ func DiscoverRemoteSkills(ctx context.Context, url string) ([]RemoteSkillStub, e
 		}
 
 		stub := RemoteSkillStub{
-			Path:        bundlePath,
+			Path:         bundlePath,
 			ManifestPath: path,
-			Name:        name,
-			Description: strings.TrimSpace(metadata.Description),
-			SourceUrl:   url,
+			Name:         name,
+			Description:  strings.TrimSpace(metadata.Description),
+			SourceUrl:    url,
 		}
 		if parseErr != nil {
 			stub.Error = parseErr.Error()

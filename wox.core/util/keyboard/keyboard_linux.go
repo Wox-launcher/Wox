@@ -520,10 +520,18 @@ func simulateType(text string) error {
 	return simulatePaste()
 }
 
-// writeTextToClipboard writes text to the X11 clipboard via xclip or xsel.
-// This avoids a circular dependency on the wox/util/clipboard package.
+// writeTextToClipboard writes text to the system clipboard. It tries the
+// Wayland-native wl-copy first, then falls back to X11 tools (xclip/xsel).
+// This avoids a circular dependency on the wox/util/clipboard package, which
+// already depends on packages that depend on this one via selection.
 func writeTextToClipboard(text string) error {
-	// Try xclip first, fall back to xsel
+	// Wayland: wl-copy is the standard CLI clipboard writer.
+	if _, err := exec.LookPath("wl-copy"); err == nil {
+		cmd := exec.Command("wl-copy", "--clipboard")
+		cmd.Stdin = strings.NewReader(text)
+		return cmd.Run()
+	}
+	// X11: xclip first, then xsel.
 	if _, err := exec.LookPath("xclip"); err == nil {
 		cmd := exec.Command("xclip", "-selection", "clipboard")
 		cmd.Stdin = strings.NewReader(text)
@@ -534,5 +542,5 @@ func writeTextToClipboard(text string) error {
 		cmd.Stdin = strings.NewReader(text)
 		return cmd.Run()
 	}
-	return fmt.Errorf("no clipboard utility found (xclip or xsel required)")
+	return fmt.Errorf("no clipboard utility found (wl-copy, xclip, or xsel required)")
 }

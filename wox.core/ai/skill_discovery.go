@@ -34,9 +34,7 @@ type skillManifestFrontMatter struct {
 
 // DiscoverSkills scans known local skill directories for SKILL.md bundles.
 func DiscoverSkills(ctx context.Context) ([]common.Skill, error) {
-	_ = ctx
-
-	roots := discoverSkillRoots()
+	roots := discoverSkillRoots(ctx)
 	skillsByManifestPath := map[string]common.Skill{}
 	var scanErrors []string
 
@@ -95,13 +93,17 @@ func DiscoverSkills(ctx context.Context) ([]common.Skill, error) {
 	return skills, nil
 }
 
-func discoverSkillRoots() []skillDiscoveryRoot {
+func discoverSkillRoots(ctx context.Context) []skillDiscoveryRoot {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var roots []skillDiscoveryRoot
+	remoteCacheByURL := map[string]string{}
 
 	// Skills are only added by the user (local directory or remote git URL).
 	// There is no built-in Wox skill directory scan — all skills come from the
 	// AISkills setting.
-	ctx := context.Background()
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	for _, skill := range woxSetting.AISkills.Get() {
 		dir := strings.TrimSpace(skill.Path)
@@ -111,17 +113,35 @@ func discoverSkillRoots() []skillDiscoveryRoot {
 
 		source := "local"
 		sourceName := "Local"
-		if strings.TrimSpace(skill.SourceUrl) != "" {
+		sourceURL := strings.TrimSpace(skill.SourceUrl)
+		if sourceURL != "" {
 			source = "remote"
 			sourceName = "Remote"
-			// Re-clone if the local cache directory is missing.
-			if !util.IsDirExists(dir) {
-				if clonedDir, cloneErr := CloneSkillRepo(ctx, skill.SourceUrl); cloneErr == nil {
-					dir = clonedDir
-				} else {
-					// Skip this skill if re-clone fails; it will show an error in the UI.
-					continue
+
+			cacheDir, cacheDirErr := skillRepoCacheDirectory(sourceURL)
+			dirExists := util.IsDirExists(dir)
+			cacheDirExists := cacheDirErr == nil && util.IsDirExists(cacheDir)
+			switch {
+			case dirExists && cacheDirErr == nil && isPathInside(cacheDir, dir):
+				// Old synced settings can point to another machine's cache path. The URL is stable,
+				// so prefer the local repo cache and scan it once instead of re-cloning per skill.
+				dir = cacheDir
+			case dirExists:
+				// Keep an explicitly configured existing directory, even when the remote cache also exists.
+			case cacheDirExists:
+				dir = cacheDir
+			default:
+				clonedDir, ok := remoteCacheByURL[sourceURL]
+				if !ok {
+					var cloneErr error
+					clonedDir, cloneErr = CloneSkillRepo(ctx, sourceURL)
+					if cloneErr != nil {
+						// Skip this skill if re-clone fails; it will show an error in the UI.
+						continue
+					}
+					remoteCacheByURL[sourceURL] = clonedDir
 				}
+				dir = clonedDir
 			}
 		}
 
@@ -133,6 +153,15 @@ func discoverSkillRoots() []skillDiscoveryRoot {
 	}
 
 	return dedupeSkillRoots(roots)
+}
+
+// isPathInside reports whether path is equal to or nested inside root after cleaning both paths.
+func isPathInside(root string, path string) bool {
+	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator)))
 }
 
 func dedupeSkillRoots(roots []skillDiscoveryRoot) []skillDiscoveryRoot {

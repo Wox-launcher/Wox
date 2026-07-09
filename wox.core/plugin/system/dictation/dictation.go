@@ -1474,6 +1474,18 @@ func (p *DictationPlugin) executeActionOutput(ctx context.Context, action dictat
 		return p.openActionChat(ctx, action, rawText, inputContext)
 	default:
 		if err := keyboard.SimulateType(outputText); err != nil {
+			// On Linux, SimulateType writes to the clipboard and injects
+			// Ctrl+V via uinput. Some compositors silently swallow injected
+			// key events, so the recognized text would be lost. Fall back to
+			// leaving the result on the clipboard and telling the user to
+			// paste manually, so the dictation output is never dropped.
+			if runtime.GOOS == "linux" {
+				if copyErr := clipboard.WriteText(outputText); copyErr != nil {
+					return fmt.Errorf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_type_failed"), copyErr.Error())
+				}
+				p.api.Notify(ctx, "plugin_dictation_copied_to_clipboard")
+				return nil
+			}
 			return fmt.Errorf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_type_failed"), err.Error())
 		}
 		return nil

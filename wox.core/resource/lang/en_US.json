@@ -2472,6 +2472,7 @@
   "plugin_dictation_model_not_found": "Selected model not found on disk. Please re-download in settings.",
   "plugin_dictation_start_failed": "Failed to start dictation",
   "plugin_dictation_type_failed": "Failed to type text",
+  "plugin_dictation_copied_to_clipboard": "Copied to clipboard, press Ctrl+V to paste",
   "plugin_dictation_downloading": "Downloading model",
   "plugin_dictation_download_failed": "Model download failed",
   "plugin_dictation_download_complete": "Model download complete",
