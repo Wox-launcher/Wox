@@ -69,6 +69,17 @@ func RelaunchLinuxFromDesktopEntry(ctx context.Context) error {
 
 func linuxDesktopLaunchCommands(desktopFilePath string) [][]string {
 	commands := [][]string{}
+
+	// systemd-run --user --scope gives Wox its own cgroup
+	// (app-<app_id>-<pid>.scope) so xdg-desktop-portal can identify Wox by
+	// its stable app id instead of inheriting the launcher's cgroup
+	// (e.g. FileManager1 from gio launch), which causes portal backends
+	// like GNOME's RemoteDesktop/Clipboard to reject the session with
+	// NotAllowed (response code 2).
+	if systemdScopeCommand := buildSystemdScopeLaunchCommand(desktopFilePath); systemdScopeCommand != nil {
+		commands = append(commands, systemdScopeCommand)
+	}
+
 	if IsKDEDesktopSession() {
 		commands = append(commands, []string{"kioclient", "exec", desktopFilePath})
 	}
@@ -77,6 +88,64 @@ func linuxDesktopLaunchCommands(desktopFilePath string) [][]string {
 		[]string{"gio", "launch", desktopFilePath},
 		[]string{"gtk-launch", strings.TrimSuffix(LinuxDesktopFileName(), ".desktop")},
 	)
+}
+
+// buildSystemdScopeLaunchCommand returns a systemd-run --user command that
+// starts the desktop entry in its own systemd service unit named
+// app-<escaped-app_id>-<pid>.service. xdg-desktop-portal parses this unit
+// name (from /proc/<pid>/cgroup) to recover the app id and grant portal
+// access. Without this, gio/gtk-launch inherits the launcher's cgroup (e.g.
+// FileManager1 from nautilus dbus activation), which causes GNOME's
+// RemoteDesktop/Clipboard portal to reject the session with NotAllowed
+// (response code 2).
+//
+// --no-block makes systemd-run return immediately after enqueueing the
+// service so the old Wox process can exit. --scope is intentionally avoided
+// because it blocks until the child exits.
+// Returns nil if systemd-run is unavailable or the exec path cannot be resolved.
+func buildSystemdScopeLaunchCommand(desktopFilePath string) []string {
+	if _, err := exec.LookPath("systemd-run"); err != nil {
+		return nil
+	}
+
+	execPath, err := linuxDesktopExecPath()
+	if err != nil {
+		return nil
+	}
+
+	unitName := fmt.Sprintf("app-%s-%d.service", escapeSystemdUnitName(LinuxDesktopAppID), os.Getpid())
+	args := []string{
+		"systemd-run", "--user", "--no-block",
+		"--unit=" + unitName,
+	}
+	// systemd-run services start with a minimal environment and do not inherit
+	// arbitrary variables from the launching process, so the relaunch control
+	// env vars must be passed explicitly via -E to prevent a relaunch loop.
+	for key, value := range map[string]string{
+		linuxDesktopRelaunchAttemptedEnv: "1",
+		linuxDesktopLaunchConfirmedEnv:   desktopFilePath,
+	} {
+		args = append(args, "-E", key+"="+value)
+	}
+	args = append(args, "--", execPath)
+	return args
+}
+
+// escapeSystemdUnitName escapes characters that systemd forbids in unit names
+// (only [a-zA-Z0-9:_-] are allowed unescaped). Dots in the app id must become
+// \x2e so the unit name is valid and xdg-desktop-portal can reverse the
+// escaping to recover the original app id.
+func escapeSystemdUnitName(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteString(fmt.Sprintf("\\x%02x", r))
+		}
+	}
+	return b.String()
 }
 
 func IsLinuxWaylandSession() bool {
@@ -132,5 +201,11 @@ func stableDesktopLaunchCgroupMatches() bool {
 		return false
 	}
 
-	return strings.Contains(string(cgroupContent), "app-"+LinuxDesktopAppID+"-")
+	// systemd escapes dots in unit names as \x2e, so the cgroup may contain
+	// either the raw app id (e.g. when launched via a .scope with unescaped
+	// name) or the systemd-escaped form. Match both.
+	raw := "app-" + LinuxDesktopAppID + "-"
+	escaped := "app-" + escapeSystemdUnitName(LinuxDesktopAppID) + "-"
+	content := string(cgroupContent)
+	return strings.Contains(content, raw) || strings.Contains(content, escaped)
 }
