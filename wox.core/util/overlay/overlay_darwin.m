@@ -13,6 +13,7 @@ typedef struct {
     bool transparent;
     bool hitTestIconOnly;
     bool closeOnEscape;
+    bool takeFocus;
     bool nativeAttachment;
     int nativeAttachmentKind;
     void* nativeAttachmentHandle;

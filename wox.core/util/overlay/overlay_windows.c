@@ -46,6 +46,7 @@ typedef struct {
     bool transparent;
     bool hitTestIconOnly;
     bool closeOnEscape;
+    bool takeFocus;
     bool nativeAttachment;
     int nativeAttachmentKind;
     void* nativeAttachmentHandle;
@@ -287,6 +288,7 @@ typedef struct OverlayWindow
     BOOL transparent;
     BOOL hitTestIconOnly;
     BOOL closeOnEscape;
+    BOOL takeFocus;
     BOOL nativeAttachment;
     int nativeAttachmentKind;
     HWND nativeAttachmentHwnd;
@@ -339,6 +341,7 @@ typedef struct OverlayPayload
     BOOL transparent;
     BOOL hitTestIconOnly;
     BOOL closeOnEscape;
+    BOOL takeFocus;
     BOOL nativeAttachment;
     int nativeAttachmentKind;
     void *nativeAttachmentHandle;
@@ -689,9 +692,13 @@ static void ShowOverlayWindowWithFocusPolicy(OverlayWindow *ow)
     if (!ow || !ow->hwnd)
         return;
 
-    // CloseOnEscape means "close if this overlay already has focus"; showing or refreshing
-    // the overlay must not steal focus from the user's active app.
+    // Most overlays must not steal focus from the user's active app, so they
+    // show without activating. Overlays that opt into TakeFocus (e.g. the
+    // dictation recording overlay, which needs Esc to cancel without an extra
+    // click) receive keyboard focus immediately after showing.
     ShowWindow(ow->hwnd, SW_SHOWNOACTIVATE);
+    if (ow->takeFocus)
+        SetFocus(ow->hwnd);
 }
 
 static void ScheduleOverlayRepaint(OverlayWindow *ow)
@@ -1107,6 +1114,7 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
         free(payload->name);
 
     ow->closeOnEscape = payload->closeOnEscape;
+    ow->takeFocus = payload->takeFocus;
     ow->nativeAttachment = payload->nativeAttachment;
     ow->nativeAttachmentKind = payload->nativeAttachmentKind;
     if (payload->nativeAttachment)
@@ -1865,6 +1873,7 @@ void ShowOverlay(OverlayOptions opts)
     payload->transparent = opts.transparent ? TRUE : FALSE;
     payload->hitTestIconOnly = opts.hitTestIconOnly ? TRUE : FALSE;
     payload->closeOnEscape = opts.closeOnEscape ? TRUE : FALSE;
+    payload->takeFocus = opts.takeFocus ? TRUE : FALSE;
     payload->nativeAttachment = opts.nativeAttachment ? TRUE : FALSE;
     payload->nativeAttachmentKind = opts.nativeAttachmentKind;
     payload->nativeAttachmentHandle = opts.nativeAttachmentHandle;

@@ -45,6 +45,11 @@ type WindowOptions struct {
 	HitTestIconOnly bool
 	// CloseOnEscape lets a focused overlay close itself on Esc.
 	CloseOnEscape bool
+	// TakeFocus makes the overlay steal keyboard focus when it appears so Esc
+	// works without an extra click. Only meaningful on Windows; macOS already
+	// focuses CloseOnEscape overlays via NonactivatingPanel. Use this only for
+	// overlays that need immediate keyboard dismissal (e.g. dictation recording).
+	TakeFocus bool
 	// NativeAttachment embeds platform-native content supplied by overlay subpackages.
 	NativeAttachment NativeAttachment
 	// Topmost puts the overlay above Wox's launcher window instead of using the default notification level.

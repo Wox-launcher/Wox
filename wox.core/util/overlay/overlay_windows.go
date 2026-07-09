@@ -11,6 +11,7 @@ typedef struct {
     bool transparent;
     bool hitTestIconOnly;
     bool closeOnEscape;
+    bool takeFocus;
     bool nativeAttachment;
     int nativeAttachmentKind;
     void* nativeAttachmentHandle;
@@ -54,6 +55,7 @@ func showWindow(opts WindowOptions) {
 		transparent:            C.bool(opts.Transparent),
 		hitTestIconOnly:        C.bool(opts.HitTestIconOnly),
 		closeOnEscape:          C.bool(opts.CloseOnEscape),
+		takeFocus:              C.bool(opts.TakeFocus),
 		nativeAttachment:       C.bool(opts.NativeAttachment.active()),
 		nativeAttachmentKind:   C.int(opts.NativeAttachment.Kind),
 		nativeAttachmentHandle: unsafe.Pointer(opts.NativeAttachment.Handle),

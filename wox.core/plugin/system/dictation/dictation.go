@@ -1665,7 +1665,6 @@ func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, 
 		"You are a transcription editor. Rewrite the user's dictated text into fluent, coherent, easy-to-understand sentences while preserving the original meaning and language.",
 		"Remove filler words (um, uh, like, you know), fix disfluencies, false starts, repeated words, and sentence fragments.",
 		"Choose punctuation based on grammar and meaning, not on speech pauses. Merge fragments that belong to the same sentence, and remove punctuation that splits a natural phrase or clause.",
-		"For Chinese, avoid inserting commas or periods inside short verb/result phrases. For example, write \"改为单击就可以更正\" instead of \"改为单击就可以，更正\" when that matches the intended meaning.",
 		"Do not add new facts, commands, explanations, quotes, or extra formatting. Output only the refined text.",
 	}, " ")
 
@@ -1836,6 +1835,7 @@ func (p *DictationPlugin) showDictationOverlay(ctx context.Context, voiceActive 
 		OffsetY:          float64(mouseScreen.Y+mouseScreen.Height) - overlayBottomOffset,
 		CloseOnEscape:    true,
 		Movable:          true,
+		TakeFocus:        true,
 		OnClose: func() {
 			p.cancelDictation(util.NewTraceContext())
 		},
