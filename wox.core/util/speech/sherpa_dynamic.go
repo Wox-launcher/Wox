@@ -631,12 +631,20 @@ func newOfflineRecognizer(ctx context.Context, config RecognizerConfig) (Recogni
 		return nil, fmt.Errorf("failed to create offline recognizer (model path: %s)", config.ModelPath)
 	}
 	logger.Info(ctx, fmt.Sprintf("dictation timing: recognizer.NewOfflineRecognizer cost=%dms", time.Since(t0).Milliseconds()))
-	logger.Info(ctx, fmt.Sprintf("dictation timing: recognizer.total cost=%dms", time.Since(t0).Milliseconds()))
 
-	return &sherpaOfflineRecognizer{
+	rec := &sherpaOfflineRecognizer{
 		config:     config,
 		recognizer: recognizer,
-	}, nil
+	}
+
+	// Warm up ONNX Runtime before the first real segment reaches Stop(), where
+	// short dictations otherwise pay the first inference cost after key release.
+	warmupT0 := time.Now()
+	_ = rec.DecodeSamples(make([]float32, 8000)) // 0.5s silence at 16kHz.
+	logger.Info(ctx, fmt.Sprintf("dictation timing: recognizer.warmup cost=%dms", time.Since(warmupT0).Milliseconds()))
+	logger.Info(ctx, fmt.Sprintf("dictation timing: recognizer.total cost=%dms", time.Since(t0).Milliseconds()))
+
+	return rec, nil
 }
 
 func (r *sherpaOfflineRecognizer) IsStreaming() bool { return false }

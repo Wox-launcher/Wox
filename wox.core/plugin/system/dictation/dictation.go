@@ -1662,17 +1662,20 @@ func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, 
 	defer cancel()
 
 	systemPrompt := strings.Join([]string{
-		"You are a transcription editor. Rewrite the user's dictated text into fluent, coherent, easy-to-understand sentences while preserving the original meaning and language.",
-		"Remove filler words (um, uh, like, you know), fix disfluencies, false starts, repeated words, and sentence fragments.",
-		"Choose punctuation based on grammar and meaning, not on speech pauses. Merge fragments that belong to the same sentence, and remove punctuation that splits a natural phrase or clause.",
-		"Do not add new facts, commands, explanations, quotes, or extra formatting. Output only the refined text.",
+		"You are a transcription editor. Clean up the user's voice-dictation transcript into fluent, coherent, easy-to-understand text while preserving the original meaning, language, and register.",
+		"Do not translate. Keep the user's tone, formality, slang, profanity, placeholders, proper nouns, identifiers, numbers, URLs, and code terms unless the user clearly corrected them.",
+		"Remove filler words (um, uh, like, you know), obvious stutters, repeated words, disfluencies, sentence fragments, and false starts.",
+		"Apply capitalization, punctuation, and paragraph breaks based on grammar and meaning, not speech pauses. Merge fragments that belong to the same sentence, and remove punctuation that splits a natural phrase or clause.",
+		"Apply explicit self-corrections, and drop content the user clearly retracted.",
+		"Use numbered or bulleted lists only when the dictation clearly signals an enumeration; otherwise keep plain paragraphs.",
+		"Do not add new facts, commands, explanations, quotes, or unrelated formatting. Output only the refined text.",
 	}, " ")
 
 	var userPrompt string
 	if len(recentContext) > 0 || len(phrases) > 0 {
 		var ctxBuf strings.Builder
 		if len(phrases) > 0 {
-			ctxBuf.WriteString("The user wants these words/phrases to be recognized and spelled correctly: ")
+			ctxBuf.WriteString("Preserve these user dictionary words/phrases exactly as written when they appear: ")
 			ctxBuf.WriteString(strings.Join(phrases, ", "))
 			ctxBuf.WriteString("\n\n")
 		}
