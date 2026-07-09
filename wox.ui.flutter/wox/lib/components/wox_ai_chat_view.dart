@@ -761,7 +761,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     final yesterday = <WoxAIChatData>[];
     final history = <WoxAIChatData>[];
     for (final chat in chats) {
-      if (chat.conversations.isEmpty) {
+      if (!chat.isSummary && chat.conversations.isEmpty) {
         continue;
       }
       final updatedAt = DateTime.fromMillisecondsSinceEpoch(chat.updatedAt);
@@ -1381,10 +1381,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
             padding: EdgeInsets.only(bottom: hasText ? _metrics.scaledSpacing(6) : 0),
             child: WoxSelectableText(message.reasoning.trim(), style: TextStyle(fontSize: _metrics.smallLabelFontSize, height: 1.4, color: fontColor.withAlpha(120))),
           ),
-        if (hasText)
-          isUser
-              ? _buildUserMessageText(message.text, fontColor)
-              : WoxMarkdownView(data: message.text, fontColor: fontColor, fontSize: _metrics.resultSubtitleFontSize),
+        if (hasText) isUser ? _buildUserMessageText(message.text, fontColor) : WoxMarkdownView(data: message.text, fontColor: fontColor, fontSize: _metrics.resultSubtitleFontSize),
         if (message.images.isNotEmpty) ...[
           if (hasText) SizedBox(height: _metrics.scaledSpacing(8)),
           Wrap(
@@ -1422,9 +1419,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       spans.add(TextSpan(text: text.substring(lastEnd)));
     }
 
-    return Text.rich(
-      TextSpan(children: spans, style: TextStyle(color: fontColor, fontSize: _metrics.resultSubtitleFontSize, height: 1.5)),
-    );
+    return Text.rich(TextSpan(children: spans, style: TextStyle(color: fontColor, fontSize: _metrics.resultSubtitleFontSize, height: 1.5)));
   }
 
   Widget _buildInlineSkillTag(String name, Color fontColor) {

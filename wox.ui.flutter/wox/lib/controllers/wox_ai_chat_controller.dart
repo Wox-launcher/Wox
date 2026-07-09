@@ -51,6 +51,7 @@ class WoxAIChatController extends GetxController {
   final Rx<WoxAIChatData> aiChatData = WoxAIChatData.empty().obs;
   final RxList<WoxAIChatData> chats = <WoxAIChatData>[].obs;
   String _loadedPreviewPayload = "";
+  int _selectChatRequestSeq = 0;
   int? _slashTokenStart;
   int? _slashTokenEnd;
   String _slashQuery = "";
@@ -167,6 +168,10 @@ class WoxAIChatController extends GetxController {
     _sortChats();
     aiChatData.value = data.activeChat.clone();
     _clearChatExpansionStates();
+
+    if (data.activeChatId.isNotEmpty) {
+      unawaited(_loadAndSelectChat(data.activeChatId, expectedCurrentChatId: aiChatData.value.id));
+    }
   }
 
   WoxAIChatData _createDraftChat() {
@@ -186,6 +191,7 @@ class WoxAIChatController extends GetxController {
   }
 
   void startNewChat() {
+    _selectChatRequestSeq++;
     aiChatData.value = _createDraftChat();
     draftSkillRefs.clear();
     _clearChatExpansionStates();
@@ -199,13 +205,48 @@ class WoxAIChatController extends GetxController {
   }
 
   void selectChat(WoxAIChatData chat) {
+    if (chat.isSummary && chat.id != aiChatData.value.id) {
+      unawaited(_loadAndSelectChat(chat.id));
+      return;
+    }
+
+    _applySelectedChat(chat.isSummary ? aiChatData.value : chat);
+  }
+
+  // Loads a summary chat on demand, then applies it if it is still the latest selection request.
+  Future<void> _loadAndSelectChat(String chatId, {String? expectedCurrentChatId}) async {
+    final traceId = const UuidV4().generate();
+    final requestSeq = ++_selectChatRequestSeq;
+    try {
+      final chat = await WoxApi.instance.getAIChat(traceId, chatId);
+      if (requestSeq != _selectChatRequestSeq) {
+        return;
+      }
+      if (expectedCurrentChatId != null && aiChatData.value.id != expectedCurrentChatId) {
+        return;
+      }
+      if (expectedCurrentChatId != null && aiChatData.value.id == chatId && aiChatData.value.conversations.isNotEmpty) {
+        _upsertChat(aiChatData.value);
+        return;
+      }
+      _applySelectedChat(chat);
+    } catch (error, stackTrace) {
+      Logger.instance.error(traceId, "AI: failed to load chat: $error $stackTrace");
+      launcherController.showToolbarMsg(traceId, ToolbarMsg(text: error.toString(), displaySeconds: 3));
+    }
+  }
+
+  // Applies a fully loaded chat to the preview surface.
+  void _applySelectedChat(WoxAIChatData chat) {
+    _selectChatRequestSeq++;
     aiChatData.value = chat.clone();
+    _upsertChat(aiChatData.value);
     draftSkillRefs.clear();
     _clearChatExpansionStates();
     // Sync the stop-button state with the target chat's real streaming flag.
     // Hardcoding false would hide the stop button when switching back to a chat
     // that is still generating.
-    isGenerating.value = chat.isStreaming;
+    isGenerating.value = aiChatData.value.isStreaming;
     textController.clear();
     hideCommandPalette();
     SchedulerBinding.instance.addPostFrameCallback((_) {
