@@ -31,8 +31,10 @@ import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_newline.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_path.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_checkbox_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_textbox_view.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_path_view.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
 import 'package:wox/utils/colors.dart';
@@ -990,6 +992,17 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     labelWidth: uniformLabelWidth,
                     inlineTitleActions: useInlineTableActions,
                     trailingActions: isAICommandCommandsTable ? [_buildAICommandTemplateAction(context, plugin, plugin.setting.settings[tableValue.key] ?? "")] : const [],
+                    onUpdate: (key, value) async {
+                      return controller.updatePluginSetting(plugin.id, key, value);
+                    },
+                  );
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
+                }
+                if (e.type == "path") {
+                  settingWidget = WoxSettingPluginPath(
+                    value: plugin.setting.settings[e.value.key] ?? "",
+                    item: e.value as PluginSettingValuePath,
+                    labelWidth: uniformLabelWidth,
                     onUpdate: (key, value) async {
                       return controller.updatePluginSetting(plugin.id, key, value);
                     },
