@@ -328,20 +328,31 @@ import "C"
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
 	"unsafe"
-	"wox/resource"
 	"wox/util"
 )
 
 var (
 	sherpaLoadOnce sync.Once
 	sherpaLoadErr  error
+
+	// nativeLibMgr is the global native library manager set by the dictation
+	// plugin during Init. When set, sherpa libraries are loaded from the
+	// manager's directory (downloading on first use if needed). When nil,
+	// libraries fall back to the legacy embedded-resource extraction.
+	nativeLibMgr *NativeLibManager
 )
+
+// SetNativeLibManager installs the global native library manager. Called by
+// the dictation plugin during Init so that ensureSherpaLoaded can download
+// libraries on first use instead of relying on embedded resources.
+func SetNativeLibManager(m *NativeLibManager) {
+	nativeLibMgr = m
+}
 
 type cStringScope struct {
 	values []*C.char
@@ -370,6 +381,14 @@ func ensureSherpaLoaded() error {
 	return sherpaLoadErr
 }
 
+// ResetSherpaLoaded clears the sync.Once so ensureSherpaLoaded can be retried
+// after a failed download. This is used when the user triggers a retry after
+// a native library download failure.
+func ResetSherpaLoaded() {
+	sherpaLoadOnce = sync.Once{}
+	sherpaLoadErr = nil
+}
+
 func loadSherpaLibraries() error {
 	libraryDir, err := ensureSherpaResourceLibraries()
 	if err != nil {
@@ -393,29 +412,16 @@ func loadSherpaLibraries() error {
 	return nil
 }
 
+// ensureSherpaResourceLibraries returns the directory containing the native
+// libraries, downloading them on first use via the NativeLibManager.
 func ensureSherpaResourceLibraries() (string, error) {
-	resourceDir := filepath.Join(runtime.GOOS, runtime.GOARCH)
-	libraryDir := resource.GetDictationResourcePath(filepath.ToSlash(resourceDir))
-
-	for _, name := range sherpaLibraryNames() {
-		targetPath := filepath.Join(libraryDir, name)
-		if util.IsFileExists(targetPath) {
-			continue
-		}
-
-		data, err := resource.GetDictationNativeFile(filepath.ToSlash(filepath.Join(resourceDir, name)))
-		if err != nil {
-			return "", fmt.Errorf("read embedded sherpa native library %s: %w", name, err)
-		}
-		if err := util.GetLocation().EnsureDirectoryExist(filepath.Dir(targetPath)); err != nil {
+	if nativeLibMgr != nil {
+		if err := nativeLibMgr.EnsureLibraries(context.Background()); err != nil {
 			return "", err
 		}
-		if err := os.WriteFile(targetPath, data, 0644); err != nil {
-			return "", fmt.Errorf("write sherpa native library %s: %w", targetPath, err)
-		}
+		return nativeLibMgr.LibDir(), nil
 	}
-
-	return libraryDir, nil
+	return "", fmt.Errorf("native lib manager not initialized")
 }
 
 func sherpaLibraryNames() []string {

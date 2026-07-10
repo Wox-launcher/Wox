@@ -498,4 +498,16 @@ class WoxApi {
     }
     return [];
   }
+
+  Future<Map<String, dynamic>?> dictationNativeLibStatus(String traceId) async {
+    final result = await WoxHttpUtil.instance.postData(traceId, "/dictation/native-lib/status", null);
+    if (result is Map) {
+      return Map<String, dynamic>.from(result);
+    }
+    return null;
+  }
+
+  Future<void> dictationNativeLibDownload(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/dictation/native-lib/download", null);
+  }
 }

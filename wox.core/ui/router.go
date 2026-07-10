@@ -153,9 +153,11 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/permission/privacy/open":       handlePermissionPrivacyOpen,
 
 	// dictation
-	"/dictation/model/download": handleDictationModelDownload,
-	"/dictation/model/delete":   handleDictationModelDelete,
-	"/dictation/model/status":   handleDictationModelStatus,
+	"/dictation/model/download":      handleDictationModelDownload,
+	"/dictation/model/delete":        handleDictationModelDelete,
+	"/dictation/model/status":        handleDictationModelStatus,
+	"/dictation/native-lib/status":   handleDictationNativeLibStatus,
+	"/dictation/native-lib/download": handleDictationNativeLibDownload,
 
 	// others
 	"/":                                   handleHome,
@@ -3718,4 +3720,43 @@ func handleDictationModelStatus(w http.ResponseWriter, r *http.Request) {
 
 	status := dp.GetModelStatuses(ctx)
 	writeSuccessResponse(w, status)
+}
+
+// handleDictationNativeLibStatus returns the native library download status.
+func handleDictationNativeLibStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		writeErrorResponse(w, "dictation plugin not found")
+		return
+	}
+	dp, ok := sp.(*dictationplugin.DictationPlugin)
+	if !ok {
+		writeErrorResponse(w, "dictation plugin type assertion failed")
+		return
+	}
+
+	status := dp.GetNativeLibStatus(ctx)
+	writeSuccessResponse(w, status)
+}
+
+// handleDictationNativeLibDownload triggers a native library download.
+func handleDictationNativeLibDownload(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		writeErrorResponse(w, "dictation plugin not found")
+		return
+	}
+	dp, ok := sp.(*dictationplugin.DictationPlugin)
+	if !ok {
+		writeErrorResponse(w, "dictation plugin type assertion failed")
+		return
+	}
+
+	if err := dp.StartNativeLibDownload(ctx); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, "")
 }

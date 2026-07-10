@@ -28,6 +28,12 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
   String _errorMessage = "";
   Timer? _pollTimer;
 
+  // Engine (native lib) download state
+  String _engineState = "done";
+  int _engineProgress = 0;
+  String _engineError = "";
+  bool _engineReady = true;
+
   final GlobalKey _dropdownKey = GlobalKey();
   OverlayEntry? _overlayEntry;
   final LayerLink _layerLink = LayerLink();
@@ -43,6 +49,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
     if (_selectedId.isNotEmpty) {
       widget.onUpdate(widget.item.key, _selectedId);
     }
+    _refreshEngineStatus();
     _startPollingIfDownloading();
   }
 
@@ -72,6 +79,43 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
       }
     }
     return "";
+  }
+
+  // Polls native lib download status while the engine is being downloaded.
+  Future<void> _refreshEngineStatus() async {
+    try {
+      final traceId = DateTime.now().millisecondsSinceEpoch.toString();
+      final status = await WoxApi.instance.dictationNativeLibStatus(traceId);
+      if (!mounted) return;
+      if (status != null) {
+        setState(() {
+          _engineState = status['State'] ?? 'done';
+          _engineProgress = (status['Progress'] ?? 0) as int;
+          _engineError = status['Error'] ?? '';
+          _engineReady = (status['Ready'] ?? true) as bool;
+        });
+      }
+    } catch (e) {
+      Logger.instance.error('dictation_engine_status', 'Failed to refresh engine status: $e');
+    }
+  }
+
+  Future<void> _downloadEngine() async {
+    final traceId = DateTime.now().millisecondsSinceEpoch.toString();
+    try {
+      await WoxApi.instance.dictationNativeLibDownload(traceId);
+      setState(() {
+        _engineState = 'downloading';
+        _engineProgress = 0;
+        _engineError = '';
+      });
+      _startPollingIfDownloading();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _engineError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   // Status polling can return partial rows; keep static model metadata from the original setting option.
@@ -109,12 +153,15 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
   }
 
   void _startPollingIfDownloading() {
-    final hasActive = _options.any(
+    final hasModelActive = _options.any(
       (o) => o.status == DictationModelStatus.downloading || o.status == DictationModelStatus.extracting || o.status == DictationModelStatus.finalizing,
     );
+    final hasEngineActive = _engineState == 'downloading' || _engineState == 'extracting';
+    final hasActive = hasModelActive || hasEngineActive;
     if (hasActive && _pollTimer == null) {
       _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
         await _refreshStatus();
+        await _refreshEngineStatus();
       });
     } else if (!hasActive && _pollTimer != null) {
       _pollTimer?.cancel();
@@ -243,11 +290,100 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
 
   @override
   Widget build(BuildContext context) {
+    final children = <Widget>[];
+    if (!_engineReady) {
+      children.add(_buildEngineBanner());
+    }
+    children.add(_buildDropdownButton());
+    children.add(validationMessage(_errorMessage));
     return layout(
       label: widget.item.label,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildDropdownButton(), validationMessage(_errorMessage)]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
       style: widget.item.style,
       tooltip: widget.item.tooltip,
+    );
+  }
+
+  // Banner showing the native engine download state, displayed above the model
+  // dropdown when the native libraries are not yet on disk.
+  Widget _buildEngineBanner() {
+    final accentColor = getThemeActiveBackgroundColor();
+    final subTextColor = getThemeSubTextColor();
+    final borderColor = subTextColor.withValues(alpha: 0.55);
+
+    if (_engineState == 'downloading') {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Container(
+          decoration: BoxDecoration(border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(4)),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(accentColor))),
+              const SizedBox(width: 8),
+              Expanded(child: Text('${tr('plugin_dictation_engine_downloading')} ($_engineProgress%)', style: TextStyle(color: subTextColor, fontSize: 11))),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_engineState == 'extracting') {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Container(
+          decoration: BoxDecoration(border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(4)),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(accentColor))),
+              const SizedBox(width: 8),
+              Text(tr('plugin_dictation_engine_extracting'), style: TextStyle(color: subTextColor, fontSize: 11)),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_engineState == 'failed') {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Container(
+          decoration: BoxDecoration(border: Border.all(color: Colors.red.withValues(alpha: 0.5)), borderRadius: BorderRadius.circular(4)),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.error_outline, size: 16, color: Colors.red),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '${tr('plugin_dictation_engine_download_failed')}: $_engineError',
+                  style: TextStyle(color: subTextColor, fontSize: 11),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              WoxButton.secondary(text: tr('plugin_dictation_model_retry'), onPressed: _downloadEngine, fontSize: 11),
+            ],
+          ),
+        ),
+      );
+    }
+    // not_downloaded: show download button
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        decoration: BoxDecoration(border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(4)),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          children: [
+            Icon(Icons.memory, size: 16, color: subTextColor),
+            const SizedBox(width: 6),
+            Expanded(child: Text(tr('plugin_dictation_engine_not_downloaded'), style: TextStyle(color: subTextColor, fontSize: 11))),
+            const SizedBox(width: 6),
+            WoxButton.secondary(text: tr('plugin_dictation_engine_download'), icon: Icon(Icons.download, size: 14, color: accentColor), onPressed: _downloadEngine, fontSize: 11),
+          ],
+        ),
+      ),
     );
   }
 

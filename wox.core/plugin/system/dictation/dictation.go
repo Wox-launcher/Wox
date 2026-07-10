@@ -111,6 +111,11 @@ type DictationPlugin struct {
 	api          plugin.API
 	modelManager *speech.ModelManager
 
+	// nativeLibManager downloads and caches sherpa-onnx native libraries
+	// (onnxruntime, sherpa-onnx-c-api, sherpa-onnx-cxx-api) and the silero
+	// VAD model on first use, instead of bundling them in the binary.
+	nativeLibManager *speech.NativeLibManager
+
 	// recognizerPool keeps the speech model in memory across sessions so
 	// subsequent dictations start without the model-loading delay.
 	recognizerPool *speech.RecognizerPool
@@ -408,6 +413,17 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		p.modelManager = mgr
 	}
 
+	// Initialize the native library manager. Libraries are downloaded on
+	// first use from GitHub releases instead of being embedded in the binary.
+	nativeLibDir := filepath.Join(util.GetLocation().GetDictationDirectory(), runtime.GOOS+"-"+runtime.GOARCH)
+	nativeMgr, err := speech.NewNativeLibManager(nativeLibDir)
+	if err != nil {
+		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create native lib manager: %s", err.Error()))
+	} else {
+		p.nativeLibManager = nativeMgr
+		speech.SetNativeLibManager(nativeMgr)
+	}
+
 	loadMode := normalizeModelLoadMode(p.api.GetSetting(ctx, settingKeyModelLoadMode))
 
 	// Start the recognizer pool. Lazy mode evicts idle models; eager mode keeps
@@ -420,8 +436,13 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	p.audioCapturePool = speech.NewAudioCapturePool(recognizerPoolIdleTTL)
 	p.audioCapturePool.StartReaper(ctx)
 
-	// Extract the embedded silero VAD model to a temp file and start the VAD pool.
-	p.vadModelPath = extractVadModel(ctx)
+	// The silero VAD model is downloaded alongside the native libraries by the
+	// NativeLibManager. Use its path; the model is downloaded lazily on first
+	// use via EnsureLibraries/EnsureVadModel when a session starts.
+	p.vadModelPath = ""
+	if p.nativeLibManager != nil {
+		p.vadModelPath = p.nativeLibManager.VadModelPath()
+	}
 	p.vadPool = speech.NewVadPool(recognizerPoolIdleTTL)
 	p.vadPool.StartReaper(ctx)
 
@@ -741,6 +762,14 @@ func (p *DictationPlugin) preloadSelectedModelAsync(ctx context.Context) {
 		return
 	}
 	util.Go(ctx, "dictation eager preload recognizer", func() {
+		// Ensure native libraries are downloaded before attempting to preload.
+		if p.nativeLibManager != nil && !p.nativeLibManager.IsReady() {
+			if err := p.nativeLibManager.EnsureLibraries(ctx); err != nil {
+				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("dictation: eager preload skipped, native libs not ready: %s", err.Error()))
+				return
+			}
+			speech.ResetSherpaLoaded()
+		}
 		p.preloadSelectedModel(ctx, modelID)
 	})
 }
@@ -929,6 +958,8 @@ func (p *DictationPlugin) buildModelOptions(ctx context.Context) []definition.Di
 
 // StartModelDownload triggers a model download asynchronously. It is called
 // by the HTTP handler when the user clicks download in the settings UI.
+// Before downloading the model, it ensures the native libraries are ready so
+// the model can be used immediately after download completes.
 func (p *DictationPlugin) StartModelDownload(ctx context.Context, modelID string) error {
 	if p.modelManager == nil {
 		return fmt.Errorf("model manager not initialized")
@@ -957,6 +988,14 @@ func (p *DictationPlugin) StartModelDownload(ctx context.Context, modelID string
 	}
 
 	util.Go(ctx, "download dictation model", func() {
+		// Ensure native libraries are downloaded before the model so the
+		// model can be used immediately after download.
+		if p.nativeLibManager != nil && !p.nativeLibManager.IsReady() {
+			if err := p.nativeLibManager.EnsureLibraries(ctx); err != nil {
+				p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to download native libs for model %s: %s", modelID, err.Error()))
+				return
+			}
+		}
 		err := p.modelManager.DownloadModel(ctx, *info, nil)
 		if err != nil {
 			p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to download model %s: %s", modelID, err.Error()))
@@ -1013,6 +1052,48 @@ func (p *DictationPlugin) GetModelStatuses(ctx context.Context) []ModelStatusInf
 		})
 	}
 	return result
+}
+
+// NativeLibStatusInfo is the JSON-serializable native library status sent to
+// the Flutter side for rendering download progress in the dictation settings.
+type NativeLibStatusInfo struct {
+	State    string `json:"State"`
+	Progress int    `json:"Progress"`
+	Error    string `json:"Error"`
+	Ready    bool   `json:"Ready"`
+}
+
+// GetNativeLibStatus returns the current native library download status.
+func (p *DictationPlugin) GetNativeLibStatus(ctx context.Context) NativeLibStatusInfo {
+	if p.nativeLibManager == nil {
+		return NativeLibStatusInfo{State: string(speech.NativeLibStateFailed), Error: "native lib manager not initialized"}
+	}
+	status := p.nativeLibManager.GetStatus()
+	return NativeLibStatusInfo{
+		State:    string(status.State),
+		Progress: status.Progress,
+		Error:    status.Error,
+		Ready:    p.nativeLibManager.IsReady(),
+	}
+}
+
+// StartNativeLibDownload triggers a download of the native libraries if they
+// are not already present. Called by the HTTP handler when the user clicks a
+// download/retry button in the settings UI.
+func (p *DictationPlugin) StartNativeLibDownload(ctx context.Context) error {
+	if p.nativeLibManager == nil {
+		return fmt.Errorf("native lib manager not initialized")
+	}
+	if p.nativeLibManager.IsReady() {
+		return nil
+	}
+	util.Go(ctx, "download dictation native libs", func() {
+		err := p.nativeLibManager.EnsureLibraries(ctx)
+		if err != nil {
+			p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to download native libs: %s", err.Error()))
+		}
+	})
+	return nil
 }
 
 func (p *DictationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -1157,6 +1238,22 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_error"))
 		clearStarting()
 		return
+	}
+
+	// Ensure native libraries (sherpa-onnx + onnxruntime) and the silero VAD
+	// model are downloaded before attempting to start a session. This triggers
+	// a download on first use; subsequent calls skip the download.
+	if p.nativeLibManager != nil && !p.nativeLibManager.IsReady() {
+		p.showLoadingOverlay(ctx, "plugin_dictation_downloading_engine")
+		if err := p.nativeLibManager.EnsureLibraries(ctx); err != nil {
+			p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("dictation native lib download failed: %s", err.Error()))
+			p.showErrorOverlay(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_engine_download_failed"), err.Error()))
+			p.stopVolumeDucking(ctx)
+			clearStarting()
+			return
+		}
+		// Reset the sync.Once so ensureSherpaLoaded retries after a prior failure.
+		speech.ResetSherpaLoaded()
 	}
 
 	// Find the model on disk.
@@ -2131,14 +2228,9 @@ func parseBoolSetting(v string) bool {
 	return v == "true"
 }
 
-// extractVadModel returns the extracted silero_vad.onnx path, writing it from
-// embedded resources when the normal startup extraction has not run yet.
-func extractVadModel(ctx context.Context) string {
-	return ensureDictationResourceFile(ctx, "silero_vad.onnx")
-}
-
 // ensureDictationResourceFile returns the extracted resource path, writing it
 // from embedded resources when the normal startup extraction has not run yet.
+// Used for small embedded assets like dictation_start.wav and dictation_stop.wav.
 func ensureDictationResourceFile(ctx context.Context, name string) string {
 	resourcePath := resource.GetDictationResourcePath(name)
 	if util.IsFileExists(resourcePath) {

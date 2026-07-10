@@ -30,7 +30,7 @@ var appIconWindows []byte
 //go:embed others
 var OthersFS embed.FS
 
-//go:embed dictation/dictation_start.wav dictation/dictation_stop.wav dictation/silero_vad.onnx
+//go:embed dictation/dictation_start.wav dictation/dictation_stop.wav
 var DictationFS embed.FS
 
 var embedThemes = []string{}
@@ -78,16 +78,12 @@ func Extract(ctx context.Context) error {
 		return othersErr
 	}
 
-	// Dictation resources live under .wox/dictation so native libraries can be loaded by path after startup.
+	// Dictation audio resources (start/stop beeps) live under .wox/dictation.
+	// Native libraries and the silero VAD model are downloaded on first use
+	// by the NativeLibManager, not extracted at startup.
 	dictationErr := extractFiles(ctx, DictationFS, GetDictationResourceDirectory(), "dictation", true)
 	if dictationErr != nil {
 		return dictationErr
-	}
-	if dictationNativeResourcePath != "" {
-		dictationNativeErr := extractFiles(ctx, DictationNativeFS, GetDictationResourceDirectory(), dictationNativeResourcePath, true)
-		if dictationNativeErr != nil {
-			return dictationNativeErr
-		}
 	}
 
 	// themes
@@ -178,11 +174,6 @@ func GetEmbedThemes(ctx context.Context) []string {
 // GetDictationFile returns the embedded dictation resource bytes by name.
 func GetDictationFile(name string) ([]byte, error) {
 	return DictationFS.ReadFile(path.Join("dictation", name))
-}
-
-// GetDictationNativeFile returns embedded dictation native library bytes by platform-relative name.
-func GetDictationNativeFile(name string) ([]byte, error) {
-	return DictationNativeFS.ReadFile(path.Join("dictation", name))
 }
 
 // GetDictationResourceDirectory returns the extracted dictation resource directory.
