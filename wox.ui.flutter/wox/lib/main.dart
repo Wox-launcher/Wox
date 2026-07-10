@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:protocol_handler/protocol_handler.dart';
@@ -161,7 +162,7 @@ class MyApp extends StatelessWidget {
   }
 
   TextTheme buildAppTextTheme(String appFontFamily) {
-    final baseTextTheme = Typography.material2021().black;
+    final baseTextTheme = Typography.material2021(platform: defaultTargetPlatform).black;
     final scaledTextTheme = baseTextTheme.copyWith(
       bodyLarge: baseTextTheme.bodyLarge?.copyWith(fontSize: 13),
       bodyMedium: baseTextTheme.bodyMedium?.copyWith(fontSize: 13),
