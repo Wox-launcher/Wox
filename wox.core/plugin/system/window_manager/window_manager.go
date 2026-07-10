@@ -13,16 +13,12 @@ import (
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
-	"wox/setting/validator"
 	"wox/util/window"
 )
 
 const (
-	windowManagerSettingGap    = "gap"
 	windowManagerSettingGroups = "windowGroups"
 	windowManagerCommandGroup  = "group"
-	windowManagerDefaultGap    = 0
-	windowManagerMaxGap        = 64
 	windowManagerMoveTolerance = 2
 )
 
@@ -127,28 +123,6 @@ func (p *WindowManagerPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
-			{
-				Type: definition.PluginSettingDefinitionTypeTextBox,
-				Value: &definition.PluginSettingValueTextBox{
-					Key:          windowManagerSettingGap,
-					Label:        "i18n:plugin_window_manager_setting_gap",
-					Tooltip:      "i18n:plugin_window_manager_setting_gap_tooltip",
-					Suffix:       "i18n:plugin_window_manager_setting_gap_suffix",
-					DefaultValue: strconv.Itoa(windowManagerDefaultGap),
-					Validators: []validator.PluginSettingValidator{
-						{
-							Type:  validator.PluginSettingValidatorTypeNotEmpty,
-							Value: &validator.PluginSettingValidatorNotEmpty{},
-						},
-						{
-							Type: validator.PluginSettingValidatorTypeIsNumber,
-							Value: &validator.PluginSettingValidatorIsNumber{
-								IsInteger: true,
-							},
-						},
-					},
-				},
-			},
 			{
 				Type:               definition.PluginSettingDefinitionTypeTable,
 				IsPlatformSpecific: true,
@@ -460,13 +434,12 @@ func (p *WindowManagerPlugin) applyCommand(ctx context.Context, command windowMa
 		}
 	}
 
-	gap := p.getGap(ctx)
-	targetRect, err := p.targetRect(ctx, command.Op, managedWindow, gap)
+	targetRect, err := p.targetRect(ctx, command.Op, managedWindow)
 	if err != nil {
 		p.notifyFailure(ctx, err)
 		return
 	}
-	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager target rect: command=%s gap=%d target=%+v", command.Command, gap, targetRect))
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager target rect: command=%s target=%+v", command.Command, targetRect))
 
 	p.storeRestoreRect(managedWindow, managedWindow.Bounds)
 	if err := window.MoveResizeWindow(managedWindow, targetRect); err != nil {
@@ -513,16 +486,6 @@ func (p *WindowManagerPlugin) storeRestoreRect(managedWindow window.ManagedWindo
 	p.restore[restoreKey(managedWindow)] = rect
 }
 
-// getGap applies a runtime clamp because settings validators only enforce numeric input.
-func (p *WindowManagerPlugin) getGap(ctx context.Context) int {
-	value := strings.TrimSpace(p.api.GetSetting(ctx, windowManagerSettingGap))
-	gap, err := strconv.Atoi(value)
-	if err != nil {
-		return windowManagerDefaultGap
-	}
-	return clamp(gap, 0, windowManagerMaxGap)
-}
-
 // notifyFailure maps platform errors to user-facing messages while keeping the detailed error in logs.
 func (p *WindowManagerPlugin) notifyFailure(ctx context.Context, err error) {
 	switch {
@@ -537,7 +500,7 @@ func (p *WindowManagerPlugin) notifyFailure(ctx context.Context, err error) {
 }
 
 // targetRect converts a semantic command into a concrete desktop rectangle.
-func (p *WindowManagerPlugin) targetRect(ctx context.Context, operation windowOperation, managedWindow window.ManagedWindow, gap int) (window.WindowRect, error) {
+func (p *WindowManagerPlugin) targetRect(ctx context.Context, operation windowOperation, managedWindow window.ManagedWindow) (window.WindowRect, error) {
 	workArea := managedWindow.Display.WorkArea
 	if workArea.Width <= 0 || workArea.Height <= 0 {
 		return window.WindowRect{}, window.ErrWindowManagementDisplayNotFound
@@ -545,47 +508,47 @@ func (p *WindowManagerPlugin) targetRect(ctx context.Context, operation windowOp
 
 	switch operation {
 	case operationLeftHalf:
-		return gridRect(workArea, 2, 1, 0, 0, 1, 1, gap), nil
+		return gridRect(workArea, 2, 1, 0, 0, 1, 1), nil
 	case operationRightHalf:
-		return gridRect(workArea, 2, 1, 1, 0, 1, 1, gap), nil
+		return gridRect(workArea, 2, 1, 1, 0, 1, 1), nil
 	case operationTopHalf:
-		return gridRect(workArea, 1, 2, 0, 0, 1, 1, gap), nil
+		return gridRect(workArea, 1, 2, 0, 0, 1, 1), nil
 	case operationBottomHalf:
-		return gridRect(workArea, 1, 2, 0, 1, 1, 1, gap), nil
+		return gridRect(workArea, 1, 2, 0, 1, 1, 1), nil
 	case operationTopLeftQuarter:
-		return gridRect(workArea, 2, 2, 0, 0, 1, 1, gap), nil
+		return gridRect(workArea, 2, 2, 0, 0, 1, 1), nil
 	case operationTopRightQuarter:
-		return gridRect(workArea, 2, 2, 1, 0, 1, 1, gap), nil
+		return gridRect(workArea, 2, 2, 1, 0, 1, 1), nil
 	case operationBottomLeftQuarter:
-		return gridRect(workArea, 2, 2, 0, 1, 1, 1, gap), nil
+		return gridRect(workArea, 2, 2, 0, 1, 1, 1), nil
 	case operationBottomRightQuarter:
-		return gridRect(workArea, 2, 2, 1, 1, 1, 1, gap), nil
+		return gridRect(workArea, 2, 2, 1, 1, 1, 1), nil
 	case operationFirstThird:
-		return gridRect(workArea, 3, 1, 0, 0, 1, 1, gap), nil
+		return gridRect(workArea, 3, 1, 0, 0, 1, 1), nil
 	case operationCenterThird:
-		return gridRect(workArea, 3, 1, 1, 0, 1, 1, gap), nil
+		return gridRect(workArea, 3, 1, 1, 0, 1, 1), nil
 	case operationLastThird:
-		return gridRect(workArea, 3, 1, 2, 0, 1, 1, gap), nil
+		return gridRect(workArea, 3, 1, 2, 0, 1, 1), nil
 	case operationFirstTwoThirds:
-		return gridRect(workArea, 3, 1, 0, 0, 2, 1, gap), nil
+		return gridRect(workArea, 3, 1, 0, 0, 2, 1), nil
 	case operationLastTwoThirds:
-		return gridRect(workArea, 3, 1, 1, 0, 2, 1, gap), nil
+		return gridRect(workArea, 3, 1, 1, 0, 2, 1), nil
 	case operationMaximize:
-		return insetRect(workArea, gap), nil
+		return workArea, nil
 	case operationAlmostMaximize:
-		return insetRect(workArea, max(gap, 24)), nil
+		return insetRect(workArea, 24), nil
 	case operationCenter:
-		return centerCurrentRect(managedWindow.Bounds, insetRect(workArea, gap)), nil
+		return centerCurrentRect(managedWindow.Bounds, workArea), nil
 	case operationReasonableSize:
-		return centeredRatioRect(insetRect(workArea, gap), 0.7, 0.75), nil
+		return centeredRatioRect(workArea, 0.7, 0.75), nil
 	case operationMaximizeHeight:
-		return maximizeHeightRect(managedWindow.Bounds, insetRect(workArea, gap)), nil
+		return maximizeHeightRect(managedWindow.Bounds, workArea), nil
 	case operationMaximizeWidth:
-		return maximizeWidthRect(managedWindow.Bounds, insetRect(workArea, gap)), nil
+		return maximizeWidthRect(managedWindow.Bounds, workArea), nil
 	case operationNextDisplay:
-		return adjacentDisplayRect(managedWindow, gap, true)
+		return adjacentDisplayRect(managedWindow, true)
 	case operationPreviousDisplay:
-		return adjacentDisplayRect(managedWindow, gap, false)
+		return adjacentDisplayRect(managedWindow, false)
 	default:
 		return window.WindowRect{}, fmt.Errorf("unsupported window operation: %s", operation)
 	}
@@ -629,36 +592,33 @@ func restoreKey(managedWindow window.ManagedWindow) string {
 	return fmt.Sprintf("%d:%s", managedWindow.Pid, managedWindow.Title)
 }
 
-// gridRect divides a work area into a gap-aware grid and returns the requested cell span.
-func gridRect(area window.WindowRect, cols int, rows int, col int, row int, colSpan int, rowSpan int, gap int) window.WindowRect {
-	area = insetRect(area, gap)
+// gridRect divides a work area into a contiguous grid and returns the requested cell span.
+func gridRect(area window.WindowRect, cols int, rows int, col int, row int, colSpan int, rowSpan int) window.WindowRect {
 	if cols <= 0 || rows <= 0 {
 		return area
 	}
 
-	usableWidth := max(1, area.Width-gap*(cols-1))
-	usableHeight := max(1, area.Height-gap*(rows-1))
-	startX := roundToInt(float64(usableWidth) * float64(col) / float64(cols))
-	endX := roundToInt(float64(usableWidth) * float64(col+colSpan) / float64(cols))
-	startY := roundToInt(float64(usableHeight) * float64(row) / float64(rows))
-	endY := roundToInt(float64(usableHeight) * float64(row+rowSpan) / float64(rows))
+	startX := roundToInt(float64(area.Width) * float64(col) / float64(cols))
+	endX := roundToInt(float64(area.Width) * float64(col+colSpan) / float64(cols))
+	startY := roundToInt(float64(area.Height) * float64(row) / float64(rows))
+	endY := roundToInt(float64(area.Height) * float64(row+rowSpan) / float64(rows))
 
 	return window.WindowRect{
-		X:      area.X + startX + gap*col,
-		Y:      area.Y + startY + gap*row,
-		Width:  max(1, endX-startX+gap*(colSpan-1)),
-		Height: max(1, endY-startY+gap*(rowSpan-1)),
+		X:      area.X + startX,
+		Y:      area.Y + startY,
+		Width:  max(1, endX-startX),
+		Height: max(1, endY-startY),
 	}
 }
 
-// insetRect applies the user gap while preserving at least one desktop unit in each dimension.
-func insetRect(rect window.WindowRect, gap int) window.WindowRect {
-	gap = clamp(gap, 0, max(0, min(rect.Width-1, rect.Height-1)/2))
+// insetRect applies fixed command padding while preserving at least one desktop unit in each dimension.
+func insetRect(rect window.WindowRect, inset int) window.WindowRect {
+	inset = clamp(inset, 0, max(0, min(rect.Width-1, rect.Height-1)/2))
 	return window.WindowRect{
-		X:      rect.X + gap,
-		Y:      rect.Y + gap,
-		Width:  max(1, rect.Width-gap*2),
-		Height: max(1, rect.Height-gap*2),
+		X:      rect.X + inset,
+		Y:      rect.Y + inset,
+		Width:  max(1, rect.Width-inset*2),
+		Height: max(1, rect.Height-inset*2),
 	}
 }
 
@@ -709,7 +669,7 @@ func maximizeWidthRect(current window.WindowRect, area window.WindowRect) window
 }
 
 // adjacentDisplayRect preserves the window's relative frame when moving between displays.
-func adjacentDisplayRect(managedWindow window.ManagedWindow, gap int, next bool) (window.WindowRect, error) {
+func adjacentDisplayRect(managedWindow window.ManagedWindow, next bool) (window.WindowRect, error) {
 	displays, err := window.ListDisplays()
 	if err != nil {
 		return window.WindowRect{}, err
@@ -731,7 +691,7 @@ func adjacentDisplayRect(managedWindow window.ManagedWindow, gap int, next bool)
 	}
 
 	source := managedWindow.Display.WorkArea
-	target := insetRect(displays[targetIndex].WorkArea, gap)
+	target := displays[targetIndex].WorkArea
 	if source.Width <= 0 || source.Height <= 0 {
 		return centerCurrentRect(managedWindow.Bounds, target), nil
 	}

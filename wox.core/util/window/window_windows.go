@@ -3,7 +3,7 @@
 package window
 
 /*
-#cgo LDFLAGS: -lpsapi -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -luiautomationcore
+#cgo LDFLAGS: -lpsapi -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -luiautomationcore -ldwmapi
 #include <windows.h>
 #include <psapi.h>
 #include <shellapi.h>
@@ -46,6 +46,7 @@ void freeDisplaysForManagement(WoxDisplayInfoC* displays);
 int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, int width, int height);
 int maximizeWindowForManagement(const char* windowId, int pid);
 int minimizeWindowForManagement(const char* windowId, int pid);
+int activateWindowForManagement(const char* windowId, int pid);
 int activateWindowByPid(int pid);
 int focusFileExplorerContentByHwnd(uintptr_t hwnd);
 int isOpenSaveDialog();
@@ -359,6 +360,15 @@ func managedWindowFromWindowsWindow(rawWindow C.WoxManagedWindowC, fallbackTitle
 
 func ActivateWindowByPid(pid int) bool {
 	result := C.activateWindowByPid(C.int(pid))
+	return int(result) == 1
+}
+
+// ActivateWindow raises the captured top-level window and verifies that it became foreground.
+func ActivateWindow(managedWindow ManagedWindow) bool {
+	cWindowId := C.CString(managedWindow.Id)
+	defer C.free(unsafe.Pointer(cWindowId))
+
+	result := C.activateWindowForManagement(cWindowId, C.int(managedWindow.Pid))
 	return int(result) == 1
 }
 

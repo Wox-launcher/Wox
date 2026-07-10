@@ -78,6 +78,11 @@ func ActivateWindowByPid(pid int) bool {
 	return false
 }
 
+// ActivateWindow is not implemented on Linux yet.
+func ActivateWindow(managedWindow ManagedWindow) bool {
+	return false
+}
+
 func IsOpenSaveDialog() (bool, error) {
 	return false, nil
 }

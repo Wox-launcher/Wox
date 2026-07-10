@@ -331,6 +331,11 @@ func ActivateWindowByPid(pid int) bool {
 	return int(result) == 1
 }
 
+// ActivateWindow raises the captured window through the owning macOS application.
+func ActivateWindow(managedWindow ManagedWindow) bool {
+	return ActivateWindowByPid(managedWindow.Pid)
+}
+
 func IsOpenSaveDialog() (bool, error) {
 	return int(C.isOpenSaveDialog()) == 1, nil
 }

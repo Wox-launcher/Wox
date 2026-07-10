@@ -84,6 +84,7 @@ type windowGroupPlacement struct {
 	Urls      []string
 	Window    window.ManagedWindow
 	Rect      window.WindowRect
+	Maximize  bool
 }
 
 type windowGroupApplySummary struct {
@@ -310,7 +311,7 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 		return summary, err
 	}
 
-	placements, err := p.buildWindowGroupPlacements(ctx, group, displays, p.getGap(ctx))
+	placements, err := p.buildWindowGroupPlacements(ctx, group, displays)
 	if err != nil {
 		return summary, err
 	}
@@ -421,8 +422,8 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 		// Skip URL opening for placements we just launched — their URLs were
 		// already opened during the launch step above.
 		if launchedIdentities[placement.Identity] {
-			p.applyWindowGroupPlacement(ctx, group, placement, windowsByIdentity, &summary)
 			p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, placement.Identity)
+			p.applyWindowGroupPlacement(ctx, group, placement, windowsByIdentity, &summary)
 			continue
 		}
 
@@ -434,8 +435,8 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 			}
 		}
 
-		p.applyWindowGroupPlacement(ctx, group, placement, windowsByIdentity, &summary)
 		p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, placement.Identity)
+		p.applyWindowGroupPlacement(ctx, group, placement, windowsByIdentity, &summary)
 	}
 
 	if len(launchWaitPlacements) > 0 {
@@ -598,26 +599,30 @@ func (p *WindowManagerPlugin) applyWindowGroupPlacement(ctx context.Context, gro
 		if !windowRectApproximatelyEqual(updatedWindow.Bounds, placement.Rect) {
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager group target mismatch after move: group=%s app=%s identity=%s target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect, updatedWindow.Bounds))
 			// Windows can scale the first cross-DPI move before the window updates its target monitor DPI.
-			if retryErr := window.MoveResizeWindow(updatedWindow, placement.Rect); retryErr != nil {
+			retryPlacement := placement
+			retryPlacement.Window = updatedWindow
+			retriedWindow, retryErr := p.moveResizeWindowGroupPlacement(ctx, group, retryPlacement)
+			if retryErr != nil {
 				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to retry group window move: group=%s app=%s identity=%s windowId=%s err=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Id, retryErr.Error()))
-			} else if retriedWindow, retryVerifyErr := window.GetManagedWindow(updatedWindow.Id, updatedWindow.Pid, updatedWindow.Title); retryVerifyErr != nil {
+			} else if verifiedWindow, retryVerifyErr := window.GetManagedWindow(retriedWindow.Id, retriedWindow.Pid, retriedWindow.Title); retryVerifyErr != nil {
 				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to verify retried group window move: group=%s app=%s identity=%s windowId=%s pid=%d err=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Id, placement.Window.Pid, retryVerifyErr.Error()))
 			} else {
-				p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager retried group rect: group=%s app=%s identity=%s target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect, retriedWindow.Bounds))
-				if !windowRectApproximatelyEqual(retriedWindow.Bounds, placement.Rect) {
-					p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager group target mismatch after retry: group=%s app=%s identity=%s target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect, retriedWindow.Bounds))
+				p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager retried group rect: group=%s app=%s identity=%s target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect, verifiedWindow.Bounds))
+				if !windowRectApproximatelyEqual(verifiedWindow.Bounds, placement.Rect) {
+					p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager group target mismatch after retry: group=%s app=%s identity=%s target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect, verifiedWindow.Bounds))
 				}
 			}
 		}
 	}
-	if !window.ActivateWindowByPid(placement.Window.Pid) {
-		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to activate group window: group=%s app=%s identity=%s windowId=%s pid=%d", group.Id, placement.AppName, placement.Identity, placement.Window.Id, placement.Window.Pid))
+	if !window.ActivateWindow(movedWindow) {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to activate group window: group=%s app=%s identity=%s targetWindowId=%s targetPid=%d actualForegroundWindowId=%s", group.Id, placement.AppName, placement.Identity, movedWindow.Id, movedWindow.Pid, window.GetActiveWindowId()))
 	}
 	summary.Moved++
 }
 
-// moveResizeWindowGroupPlacement falls back to the process window when a saved AX window id becomes stale.
+// moveResizeWindowGroupPlacement falls back to the process window and maximizes full-screen placements after moving displays.
 func (p *WindowManagerPlugin) moveResizeWindowGroupPlacement(ctx context.Context, group windowManagerWindowGroup, placement windowGroupPlacement) (window.ManagedWindow, error) {
+	movedWindow := placement.Window
 	if err := window.MoveResizeWindow(placement.Window, placement.Rect); err != nil {
 		if errors.Is(err, window.ErrWindowManagementPermissionDenied) {
 			return placement.Window, err
@@ -627,19 +632,23 @@ func (p *WindowManagerPlugin) moveResizeWindowGroupPlacement(ctx context.Context
 		fallbackWindow.Id = ""
 		if fallbackErr := window.MoveResizeWindow(fallbackWindow, placement.Rect); fallbackErr == nil {
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager moved group window with pid fallback: group=%s app=%s identity=%s pid=%d originalWindowId=%s originalErr=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Pid, placement.Window.Id, err.Error()))
-			return fallbackWindow, nil
+			movedWindow = fallbackWindow
 		} else {
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager pid fallback failed for group window: group=%s app=%s identity=%s pid=%d originalWindowId=%s originalErr=%s fallbackErr=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Pid, placement.Window.Id, err.Error(), fallbackErr.Error()))
+			return placement.Window, err
 		}
-
-		return placement.Window, err
 	}
 
-	return placement.Window, nil
+	if placement.Maximize {
+		if err := window.MaximizeWindow(movedWindow); err != nil {
+			return movedWindow, err
+		}
+	}
+	return movedWindow, nil
 }
 
 // buildWindowGroupPlacements converts configured screen slots into concrete desktop rectangles.
-func (p *WindowManagerPlugin) buildWindowGroupPlacements(ctx context.Context, group windowManagerWindowGroup, displays []window.DisplayInfo, gap int) ([]windowGroupPlacement, error) {
+func (p *WindowManagerPlugin) buildWindowGroupPlacements(ctx context.Context, group windowManagerWindowGroup, displays []window.DisplayInfo) ([]windowGroupPlacement, error) {
 	placements := []windowGroupPlacement{}
 	seenIdentities := map[string]bool{}
 
@@ -655,6 +664,8 @@ func (p *WindowManagerPlugin) buildWindowGroupPlacements(ctx context.Context, gr
 			layoutId = windowGroupLayoutFull
 		}
 
+		maximize := util.IsWindows() && layoutId == windowGroupLayoutFull
+
 		for _, assignment := range screen.Assignments {
 			identity := normalizeWindowGroupIdentity(assignment.App.Identity)
 			if identity == "" {
@@ -665,7 +676,7 @@ func (p *WindowManagerPlugin) buildWindowGroupPlacements(ctx context.Context, gr
 				continue
 			}
 
-			rect, ok := windowGroupSlotRect(layoutId, assignment.Slot, display.WorkArea, gap)
+			rect, ok := windowGroupSlotRect(layoutId, assignment.Slot, display.WorkArea)
 			if !ok {
 				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager group slot skipped, layout not found: group=%s layout=%s slot=%s", group.Id, layoutId, assignment.Slot))
 				continue
@@ -679,6 +690,7 @@ func (p *WindowManagerPlugin) buildWindowGroupPlacements(ctx context.Context, gr
 				AppPath:   strings.TrimSpace(assignment.App.Path),
 				Urls:      assignment.Urls,
 				Rect:      rect,
+				Maximize:  maximize,
 			})
 		}
 	}
@@ -687,7 +699,7 @@ func (p *WindowManagerPlugin) buildWindowGroupPlacements(ctx context.Context, gr
 }
 
 // windowGroupSlotRect maps one stable layout slot id to a grid rectangle.
-func windowGroupSlotRect(layoutId string, slotId string, area window.WindowRect, gap int) (window.WindowRect, bool) {
+func windowGroupSlotRect(layoutId string, slotId string, area window.WindowRect) (window.WindowRect, bool) {
 	layout, ok := windowGroupLayoutDefinitions[layoutId]
 	if !ok {
 		return window.WindowRect{}, false
@@ -700,7 +712,7 @@ func windowGroupSlotRect(layoutId string, slotId string, area window.WindowRect,
 
 	for _, slot := range layout.Slots {
 		if slot.Id == slotId {
-			return gridRect(area, slot.Cols, slot.Rows, slot.Col, slot.Row, slot.ColSpan, slot.RowSpan, gap), true
+			return gridRect(area, slot.Cols, slot.Rows, slot.Col, slot.Row, slot.ColSpan, slot.RowSpan), true
 		}
 	}
 	return window.WindowRect{}, false
@@ -834,10 +846,7 @@ func (p *WindowManagerPlugin) notifyWindowGroupSummary(ctx context.Context, grou
 
 	if len(issues) > 0 {
 		p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_group_partial"), summary.Moved, groupName, strings.Join(issues, "; ")))
-		return
 	}
-
-	p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_group_applied"), groupName))
 }
 
 func normalizeWindowGroupIdentity(identity string) string {
