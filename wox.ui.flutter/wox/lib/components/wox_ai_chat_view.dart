@@ -321,22 +321,25 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(
-            controller: controller.textController,
-            focusNode: controller.aiChatFocusNode,
-            decoration: InputDecoration(
-              hintText: tr('ui_ai_chat_input_hint'),
-              hintStyle: TextStyle(color: safeFromCssColor(woxTheme.previewPropertyTitleColor)),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(14), vertical: _metrics.scaledSpacing(8)),
+          TextSelectionTheme(
+            data: TextSelectionThemeData(selectionColor: safeFromCssColor(woxTheme.queryBoxTextSelectionBackgroundColor)),
+            child: TextField(
+              controller: controller.textController,
+              focusNode: controller.aiChatFocusNode,
+              decoration: InputDecoration(
+                hintText: tr('ui_ai_chat_input_hint'),
+                hintStyle: TextStyle(color: safeFromCssColor(woxTheme.previewPropertyTitleColor)),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(14), vertical: _metrics.scaledSpacing(8)),
+              ),
+              minLines: 1,
+              maxLines: 4,
+              keyboardType: TextInputType.multiline,
+              cursorColor: safeFromCssColor(woxTheme.queryBoxCursorColor),
+              // AI chat lives in the launcher preview surface, so its controls
+              // follow density metrics while settings controls keep their own sizes.
+              style: TextStyle(fontSize: _metrics.resultSubtitleFontSize, color: safeFromCssColor(woxTheme.queryBoxFontColor)),
             ),
-            minLines: 1,
-            maxLines: 4,
-            keyboardType: TextInputType.multiline,
-            cursorColor: safeFromCssColor(woxTheme.queryBoxCursorColor),
-            // AI chat lives in the launcher preview surface, so its controls
-            // follow density metrics while settings controls keep their own sizes.
-            style: TextStyle(fontSize: _metrics.resultSubtitleFontSize, color: safeFromCssColor(woxTheme.queryBoxFontColor)),
           ),
           Container(
             height: _metrics.scaledSpacing(42),

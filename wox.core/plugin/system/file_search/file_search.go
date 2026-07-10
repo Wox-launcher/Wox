@@ -676,6 +676,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 			Title:    item.Name,
 			SubTitle: item.Path,
 			Icon:     icon,
+			Score:    item.Score,
 			Actions:  actions,
 			DragData: &plugin.QueryResultDragData{
 				Type:  plugin.QueryResultDragDataTypeFiles,
@@ -735,7 +736,7 @@ func (c *FileSearchPlugin) searchContent(ctx context.Context, queryText string, 
 	var diagnostics fileSearchQueryDiagnostics // for icon resolution, not logged
 
 	results := make([]plugin.QueryResult, 0, len(contentHits))
-	for _, hit := range contentHits {
+	for index, hit := range contentHits {
 		if existingPaths[hit.Path] {
 			continue
 		}
@@ -748,10 +749,13 @@ func (c *FileSearchPlugin) searchContent(ctx context.Context, queryText string, 
 		icon := resolveFileSearchResultIcon(ctx, item, fileTypeIcons, &diagnostics)
 		actions := c.buildFileSearchResultActions(ctx, item)
 
+		// BM25 and filename matching use different score scales, so preserve
+		// content relevance by rank without letting raw BM25 scores dominate.
 		queryResult := plugin.QueryResult{
 			Title:    name,
 			SubTitle: hit.Path,
 			Icon:     icon,
+			Score:    int64(len(contentHits) - index),
 			Actions:  actions,
 			DragData: &plugin.QueryResultDragData{
 				Type:  plugin.QueryResultDragDataTypeFiles,
