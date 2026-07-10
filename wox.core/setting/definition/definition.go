@@ -42,6 +42,7 @@ type PluginSettingDefinitionValue interface {
 type PluginSettingDefinitionItem struct {
 	Type                PluginSettingDefinitionType
 	Value               PluginSettingDefinitionValue
+	SearchAliases       []string // Additional stable terms indexed by the settings search.
 	DisabledInPlatforms []util.Platform
 	IsPlatformSpecific  bool // if true, this setting may be different in different platforms
 }
@@ -66,6 +67,12 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 	value := gjson.GetBytes(b, "Type")
 	if !value.Exists() {
 		return errors.New("setting must have Type property")
+	}
+	searchAliases := gjson.GetBytes(b, "SearchAliases")
+	if searchAliases.Exists() {
+		if err := json.Unmarshal([]byte(searchAliases.Raw), &n.SearchAliases); err != nil {
+			return err
+		}
 	}
 
 	contentResult := gjson.GetBytes(b, "Value")

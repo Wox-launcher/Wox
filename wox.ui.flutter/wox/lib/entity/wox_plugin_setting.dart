@@ -13,10 +13,12 @@ import 'setting/wox_plugin_setting_textbox.dart';
 class PluginSettingDefinitionItem {
   late String type;
   late dynamic value;
+  late List<String> searchAliases;
   late List<String> disabledInPlatforms;
   late bool isPlatformSpecific;
 
   PluginSettingDefinitionItem.fromJson(Map<String, dynamic> json) {
+    searchAliases = (json['SearchAliases'] as List<dynamic>? ?? []).map((alias) => alias.toString()).toList();
     if (json['DisabledInPlatforms'] == null) {
       disabledInPlatforms = <String>[];
     } else {

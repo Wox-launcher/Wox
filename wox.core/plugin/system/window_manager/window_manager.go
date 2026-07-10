@@ -126,6 +126,7 @@ func (p *WindowManagerPlugin) GetMetadata() plugin.Metadata {
 			{
 				Type:               definition.PluginSettingDefinitionTypeTable,
 				IsPlatformSpecific: true,
+				SearchAliases:      []string{"workspace"},
 				Value: &definition.PluginSettingValueTable{
 					Key:          windowManagerSettingGroups,
 					Title:        "i18n:plugin_window_manager_setting_groups",

@@ -253,7 +253,7 @@ static BOOL fillDisplayInfoForRect(WoxWindowRectC windowRect, WoxDisplayInfoC *o
 
     CGFloat desktopTop = desktopTopForScreens(screens);
     CGPoint center = CGPointMake(windowRect.x + windowRect.width / 2.0, windowRect.y + windowRect.height / 2.0);
-    NSScreen *primary = [NSScreen mainScreen];
+    NSScreen *primary = [screens firstObject];
 
     NSScreen *fallback = [screens objectAtIndex:0];
     for (NSScreen *screen in screens) {
@@ -762,7 +762,7 @@ int listDisplaysForManagement(WoxDisplayInfoC **outDisplays, int *outCount) {
         }
 
         CGFloat desktopTop = desktopTopForScreens(screens);
-        NSScreen *primary = [NSScreen mainScreen];
+        NSScreen *primary = [screens firstObject];
         for (NSUInteger i = 0; i < count; i++) {
             NSScreen *screen = [screens objectAtIndex:i];
             fillDisplayInfoFromScreen(screen, screen == primary, desktopTop, &displays[i]);

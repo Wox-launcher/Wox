@@ -97,9 +97,7 @@ class _WoxWindowManagerGroupsSettingState extends State<WoxWindowManagerGroupsSe
   }
 
   void _populateGroupScreens(_WindowManagerGroup group) {
-    for (final entry in _displays.asMap().entries) {
-      group.screenFor(entry.value, entry.key);
-    }
+    group.reconcileScreens(_displays);
   }
 
   Future<void> _openCreateGroupDialog(BuildContext dialogContext, Future<String?> Function(Map<String, dynamic> row) saveRow, {Map<String, dynamic>? initialRow}) async {
@@ -283,9 +281,7 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
     });
     if (widget.displays.isNotEmpty) {
       _selectedDisplayIndex = 0;
-      for (final entry in widget.displays.asMap().entries) {
-        _group.screenFor(entry.value, entry.key);
-      }
+      _group.reconcileScreens(widget.displays);
     }
   }
 
@@ -864,6 +860,51 @@ class _WindowManagerGroup {
 
   _WindowManagerGroup copy() {
     return _WindowManagerGroup(id: id, name: name, screens: screens.map((screen) => screen.copy()).toList());
+  }
+
+  // Resolve the whole display set before editing so an index fallback cannot reuse a screen already claimed by an exact display id match.
+  void reconcileScreens(List<WindowManagerDisplay> displays) {
+    if (displays.isEmpty) {
+      return;
+    }
+
+    final resolvedScreens = List<_WindowManagerGroupScreen?>.filled(displays.length, null);
+    final usedScreens = <_WindowManagerGroupScreen>{};
+
+    for (final entry in displays.asMap().entries) {
+      final displayId = entry.value.id.trim();
+      if (displayId.isEmpty) {
+        continue;
+      }
+      for (final screen in screens) {
+        if (!usedScreens.contains(screen) && screen.displayId.trim() == displayId) {
+          resolvedScreens[entry.key] = screen;
+          usedScreens.add(screen);
+          break;
+        }
+      }
+    }
+
+    for (final entry in displays.asMap().entries) {
+      if (resolvedScreens[entry.key] != null) {
+        continue;
+      }
+      for (final screen in screens) {
+        if (!usedScreens.contains(screen) && screen.displayIndex == entry.key) {
+          resolvedScreens[entry.key] = screen;
+          usedScreens.add(screen);
+          break;
+        }
+      }
+    }
+
+    screens = <_WindowManagerGroupScreen>[
+      for (final entry in displays.asMap().entries)
+        (resolvedScreens[entry.key] ??
+              _WindowManagerGroupScreen(displayId: entry.value.id, displayIndex: entry.key, layout: _WindowGroupLayouts.full.id, assignments: <_WindowManagerAssignment>[]))
+          ..displayId = entry.value.id
+          ..displayIndex = entry.key,
+    ];
   }
 
   _WindowManagerGroupScreen screenFor(WindowManagerDisplay display, int displayIndex) {

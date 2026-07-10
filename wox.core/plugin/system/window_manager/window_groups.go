@@ -651,9 +651,10 @@ func (p *WindowManagerPlugin) moveResizeWindowGroupPlacement(ctx context.Context
 func (p *WindowManagerPlugin) buildWindowGroupPlacements(ctx context.Context, group windowManagerWindowGroup, displays []window.DisplayInfo) ([]windowGroupPlacement, error) {
 	placements := []windowGroupPlacement{}
 	seenIdentities := map[string]bool{}
+	resolvedDisplays := resolveWindowGroupDisplays(displays, group.Screens)
 
-	for _, screen := range group.Screens {
-		display, ok := resolveWindowGroupDisplay(displays, screen)
+	for screenIndex, screen := range group.Screens {
+		display, ok := resolvedDisplays[screenIndex]
 		if !ok {
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager group screen skipped, display not found: group=%s displayId=%s displayIndex=%d", group.Id, screen.DisplayId, screen.DisplayIndex))
 			continue
@@ -718,21 +719,36 @@ func windowGroupSlotRect(layoutId string, slotId string, area window.WindowRect)
 	return window.WindowRect{}, false
 }
 
-// resolveWindowGroupDisplay uses display id first and falls back to the sorted display index.
-func resolveWindowGroupDisplay(displays []window.DisplayInfo, screen windowManagerWindowGroupScreen) (window.DisplayInfo, bool) {
-	displayId := strings.TrimSpace(screen.DisplayId)
-	if displayId != "" {
-		for _, display := range displays {
-			if display.Id == displayId {
-				return display, true
+// resolveWindowGroupDisplays reserves exact id matches before index fallbacks so one display cannot receive multiple screen configurations.
+func resolveWindowGroupDisplays(displays []window.DisplayInfo, screens []windowManagerWindowGroupScreen) map[int]window.DisplayInfo {
+	resolved := make(map[int]window.DisplayInfo, len(screens))
+	usedDisplays := make([]bool, len(displays))
+
+	for screenIndex, screen := range screens {
+		displayId := strings.TrimSpace(screen.DisplayId)
+		if displayId == "" {
+			continue
+		}
+		for displayIndex, display := range displays {
+			if !usedDisplays[displayIndex] && display.Id == displayId {
+				resolved[screenIndex] = display
+				usedDisplays[displayIndex] = true
+				break
 			}
 		}
 	}
 
-	if screen.DisplayIndex >= 0 && screen.DisplayIndex < len(displays) {
-		return displays[screen.DisplayIndex], true
+	for screenIndex, screen := range screens {
+		if _, ok := resolved[screenIndex]; ok {
+			continue
+		}
+		if screen.DisplayIndex >= 0 && screen.DisplayIndex < len(displays) && !usedDisplays[screen.DisplayIndex] {
+			resolved[screenIndex] = displays[screen.DisplayIndex]
+			usedDisplays[screen.DisplayIndex] = true
+		}
 	}
-	return window.DisplayInfo{}, false
+
+	return resolved
 }
 
 func findExactWindowGroup(groups []windowManagerWindowGroup, search string) (windowManagerWindowGroup, bool) {

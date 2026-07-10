@@ -633,7 +633,7 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
             // Search refinement: the plugin name is the result subtitle for
             // plugin settings. Match the setting's own visible title/key instead
             // so searching a plugin does not fan out into every setting it owns.
-            searchTexts: _normalizeSettingSearchTexts([extracted.settingKey, title, ...extracted.searchTexts]),
+            searchTexts: _normalizeSettingSearchTexts([extracted.settingKey, title, ...extracted.searchTexts, ...definition.searchAliases]),
             score: 0,
           ),
         );
@@ -1024,7 +1024,6 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
       }
     }
   }
-
 
   // updateLang persists the new language code. The language json and plugin
   // translation refresh is handled by reloadSetting, which updateConfig invokes
