@@ -429,7 +429,7 @@ func sherpaLibraryNames() []string {
 	case "windows":
 		return []string{"onnxruntime.dll", "sherpa-onnx-cxx-api.dll", "sherpa-onnx-c-api.dll"}
 	case "darwin":
-		return []string{"libonnxruntime.1.24.4.dylib", "libsherpa-onnx-cxx-api.dylib", "libsherpa-onnx-c-api.dylib"}
+		return []string{"libonnxruntime.1.27.0.dylib", "libsherpa-onnx-cxx-api.dylib", "libsherpa-onnx-c-api.dylib"}
 	default:
 		return []string{"libonnxruntime.so", "libsherpa-onnx-cxx-api.so", "libsherpa-onnx-c-api.so"}
 	}
