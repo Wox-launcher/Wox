@@ -21,8 +21,11 @@ import (
 )
 
 const (
-	windowGroupLaunchWaitTimeout  = 12 * time.Second
-	windowGroupLaunchPollInterval = 250 * time.Millisecond
+	windowGroupLaunchWaitTimeout      = 8 * time.Second
+	windowGroupLaunchPollInterval     = 250 * time.Millisecond
+	windowGroupTargetedPollInterval   = 25 * time.Millisecond
+	windowGroupGlobalFallbackDelay    = 500 * time.Millisecond
+	windowGroupGlobalFallbackInterval = 250 * time.Millisecond
 )
 
 const (
@@ -321,11 +324,6 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 	}
 
 	launchPlaceholders := map[string]string{}
-	for _, placement := range placements {
-		if placeholderName := p.showWindowGroupLaunchPlaceholder(ctx, group, placement, "plugin_window_manager_group_arranging_app"); placeholderName != "" {
-			launchPlaceholders[placement.Identity] = placeholderName
-		}
-	}
 	defer p.closeWindowGroupLaunchPlaceholders(ctx, group, launchPlaceholders)
 
 	listStart := time.Now()
@@ -508,14 +506,60 @@ func (p *WindowManagerPlugin) waitAndApplyLaunchedWindowGroupPlacements(ctx cont
 	}
 
 	var lastWindows []window.ManagedWindow
+	targetedPolling := util.IsMacOS()
+	pollInterval := windowGroupLaunchPollInterval
+	nextGlobalFallback := waitStart.Add(windowGroupGlobalFallbackDelay)
+	if targetedPolling {
+		pollInterval = windowGroupTargetedPollInterval
+	}
+	pollCount := 0
+	globalFallbackCount := 0
+	lastTargetedDiagnostics := map[string]string{}
 	for len(pending) > 0 {
-		windows, err := window.ListManagedWindows()
-		if err != nil {
-			return err
+		if pollCount > 0 && !time.Now().Before(deadline) {
+			break
 		}
-		lastWindows = windows
+		pollCount++
+		windowsByIdentity := map[string][]window.ManagedWindow{}
+		lastWindows = lastWindows[:0]
+		useGlobalFallback := targetedPolling && !time.Now().Before(nextGlobalFallback)
+		if useGlobalFallback {
+			fallbackStart := time.Now()
+			windows, err := window.ListManagedWindows()
+			if err != nil {
+				return err
+			}
+			lastWindows = windows
+			windowsByIdentity = indexManagedWindowsByIdentity(windows)
+			globalFallbackCount++
+			nextGlobalFallback = time.Now().Add(windowGroupGlobalFallbackInterval)
+			candidateSummary, candidateCount := windowGroupCandidatePidSummary(placements, pending, windowsByIdentity)
+			if globalFallbackCount == 1 || candidateCount > 0 {
+				p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager global fallback scan: group=%s fallback=%d windows=%d pending=%d candidateWindows=%d candidates=%s targetedDiagnostics=%s costMs=%d", group.Id, globalFallbackCount, len(windows), len(pending), candidateCount, candidateSummary, windowGroupTargetedDiagnosticSummary(placements, pending, lastTargetedDiagnostics), time.Since(fallbackStart).Milliseconds()))
+			}
+		} else if targetedPolling {
+			for _, placement := range placements {
+				if _, ok := pending[placement.Identity]; !ok {
+					continue
+				}
 
-		windowsByIdentity := indexManagedWindowsByIdentity(windows)
+				windows, diagnostics, err := refreshManagedWindowsForIdentity(placement.Identity)
+				if err != nil {
+					return err
+				}
+				lastTargetedDiagnostics[placement.Identity] = diagnostics
+				lastWindows = append(lastWindows, windows...)
+				windowsByIdentity[placement.Identity] = append(windowsByIdentity[placement.Identity], windows...)
+			}
+		} else {
+			windows, err := window.ListManagedWindows()
+			if err != nil {
+				return err
+			}
+			lastWindows = windows
+			windowsByIdentity = indexManagedWindowsByIdentity(windows)
+		}
+
 		for _, placement := range placements {
 			if _, ok := pending[placement.Identity]; !ok {
 				continue
@@ -529,13 +573,20 @@ func (p *WindowManagerPlugin) waitAndApplyLaunchedWindowGroupPlacements(ctx cont
 			delete(pending, placement.Identity)
 		}
 
-		if len(pending) == 0 || time.Now().After(deadline) {
+		if len(pending) == 0 || !time.Now().Before(deadline) {
 			break
 		}
-		time.Sleep(windowGroupLaunchPollInterval)
+		sleepDuration := pollInterval
+		if remaining := time.Until(deadline); remaining < sleepDuration {
+			sleepDuration = remaining
+		}
+		if sleepDuration > 0 {
+			time.Sleep(sleepDuration)
+		}
 	}
 
 	missingCount := len(pending)
+	finalTargetedDiagnostics := windowGroupTargetedDiagnosticSummary(placements, pending, lastTargetedDiagnostics)
 	if missingCount > 0 {
 		windowsByIdentity := indexManagedWindowsByIdentity(lastWindows)
 		for _, placement := range placements {
@@ -548,8 +599,39 @@ func (p *WindowManagerPlugin) waitAndApplyLaunchedWindowGroupPlacements(ctx cont
 		}
 	}
 
-	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager waited for launched group windows: group=%s launched=%d windows=%d missing=%d costMs=%d", group.Id, len(placements), len(lastWindows), missingCount, time.Since(waitStart).Milliseconds()))
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager waited for launched group windows: group=%s launched=%d windows=%d missing=%d polls=%d targeted=%t globalFallbacks=%d targetedDiagnostics=%s costMs=%d", group.Id, len(placements), len(lastWindows), missingCount, pollCount, targetedPolling, globalFallbackCount, finalTargetedDiagnostics, time.Since(waitStart).Milliseconds()))
 	return nil
+}
+
+// windowGroupCandidatePidSummary records which owner PIDs a global fallback found for each pending app.
+func windowGroupCandidatePidSummary(placements []windowGroupPlacement, pending map[string]windowGroupPlacement, windowsByIdentity map[string][]window.ManagedWindow) (string, int) {
+	details := make([]string, 0, len(pending))
+	candidateCount := 0
+	for _, placement := range placements {
+		if _, ok := pending[placement.Identity]; !ok {
+			continue
+		}
+
+		pids := make([]string, 0, len(windowsByIdentity[placement.Identity]))
+		for _, candidate := range windowsByIdentity[placement.Identity] {
+			pids = append(pids, fmt.Sprintf("%d", candidate.Pid))
+			candidateCount++
+		}
+		details = append(details, fmt.Sprintf("%s=[%s]", placement.Identity, strings.Join(pids, ",")))
+	}
+	return strings.Join(details, ";"), candidateCount
+}
+
+// windowGroupTargetedDiagnosticSummary keeps the latest native AX result for each pending app.
+func windowGroupTargetedDiagnosticSummary(placements []windowGroupPlacement, pending map[string]windowGroupPlacement, diagnosticsByIdentity map[string]string) string {
+	details := make([]string, 0, len(pending))
+	for _, placement := range placements {
+		if _, ok := pending[placement.Identity]; !ok {
+			continue
+		}
+		details = append(details, fmt.Sprintf("%s={%s}", placement.Identity, diagnosticsByIdentity[placement.Identity]))
+	}
+	return strings.Join(details, ";")
 }
 
 // applyWindowGroupPlacement moves one matched placement and records any partial failure in the group summary.
@@ -580,6 +662,14 @@ func (p *WindowManagerPlugin) applyWindowGroupPlacement(ctx context.Context, gro
 	placement.Window = candidates[largestIndex]
 	candidates = append(candidates[:largestIndex], candidates[largestIndex+1:]...)
 	windowsByIdentity[placement.Identity] = candidates
+	if !placement.Window.IsMinimized && !placement.Maximize && windowRectApproximatelyEqual(placement.Window.Bounds, placement.Rect) {
+		p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager skipped unchanged group rect: group=%s app=%s identity=%s rect=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect))
+		if !window.ActivateWindow(placement.Window) {
+			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to activate unchanged group window: group=%s app=%s identity=%s targetWindowId=%s targetPid=%d actualForegroundWindowId=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Id, placement.Window.Pid, window.GetActiveWindowId()))
+		}
+		summary.Moved++
+		return
+	}
 	p.storeRestoreRect(placement.Window, placement.Window.Bounds)
 	movedWindow, err := p.moveResizeWindowGroupPlacement(ctx, group, placement)
 	if err != nil {
@@ -614,7 +704,8 @@ func (p *WindowManagerPlugin) applyWindowGroupPlacement(ctx context.Context, gro
 			}
 		}
 	}
-	if !window.ActivateWindow(movedWindow) {
+	// macOS MoveResizeWindow already activates the owning application before applying the AX frame.
+	if !util.IsMacOS() && !window.ActivateWindow(movedWindow) {
 		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to activate group window: group=%s app=%s identity=%s targetWindowId=%s targetPid=%d actualForegroundWindowId=%s", group.Id, placement.AppName, placement.Identity, movedWindow.Id, movedWindow.Pid, window.GetActiveWindowId()))
 	}
 	summary.Moved++

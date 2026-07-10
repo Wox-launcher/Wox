@@ -38,6 +38,7 @@ int getActiveWindowPid();
 char* getActiveWindowIdForManagement();
 int getManagedWindowForManagement(const char* windowId, int pid, WoxManagedWindowC* outWindow);
 int listManagedWindowsForManagement(WoxManagedWindowC** outWindows, int* outCount);
+int listManagedWindowsForIdentityForManagement(const char* identity, WoxManagedWindowC** outWindows, int* outCount, char* outDiagnostics, int diagnosticsSize);
 void freeManagedWindowsForManagement(WoxManagedWindowC* windows);
 int listDisplaysForManagement(WoxDisplayInfoC** outDisplays, int* outCount);
 void freeDisplaysForManagement(WoxDisplayInfoC* displays);
@@ -209,6 +210,33 @@ func ListManagedWindows() ([]ManagedWindow, error) {
 		windows = append(windows, managedWindowFromDarwinWindow(rawWindow, ""))
 	}
 	return windows, nil
+}
+
+// ListManagedWindowsForIdentity refreshes one running macOS application and returns AX diagnostics for fallback logging.
+func ListManagedWindowsForIdentity(identity string) ([]ManagedWindow, string, error) {
+	cIdentity := C.CString(strings.TrimSpace(identity))
+	defer C.free(unsafe.Pointer(cIdentity))
+
+	var outWindows *C.WoxManagedWindowC
+	var outCount C.int
+	var diagnostics [2048]C.char
+	result := int(C.listManagedWindowsForIdentityForManagement(cIdentity, &outWindows, &outCount, &diagnostics[0], C.int(len(diagnostics))))
+	if result != 1 {
+		return nil, C.GoString(&diagnostics[0]), windowManagementErrorFromCode(result)
+	}
+	defer C.freeManagedWindowsForManagement(outWindows)
+
+	count := int(outCount)
+	if count == 0 {
+		return []ManagedWindow{}, C.GoString(&diagnostics[0]), nil
+	}
+
+	rawWindows := unsafe.Slice(outWindows, count)
+	windows := make([]ManagedWindow, 0, count)
+	for _, rawWindow := range rawWindows {
+		windows = append(windows, managedWindowFromDarwinWindow(rawWindow, ""))
+	}
+	return windows, C.GoString(&diagnostics[0]), nil
 }
 
 // ListDisplays returns macOS screen bounds and visible frames in top-left desktop coordinates.
