@@ -1130,10 +1130,14 @@ func (e *Engine) GetContentCrawlState(ctx context.Context) (string, error) {
 	if e == nil {
 		return "", nil
 	}
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if e.closed || e.contentDB == nil {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed {
 		return "", nil
 	}
-	return e.contentDB.GetContentCrawlState(ctx)
+	contentDB, err := e.ensureContentDBLocked(ctx)
+	if err != nil {
+		return "", err
+	}
+	return contentDB.GetContentCrawlState(ctx)
 }
