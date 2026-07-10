@@ -91,16 +91,27 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       return isBusy ? controller.tr("ui_cloud_sync_progress_starting") : '';
     }
 
-    final countText = progress.total > 0 ? "${progress.current}/${progress.total}" : progress.current.toString();
+    // Build a human-friendly count suffix. When total is unknown (restore/pull
+    // use paged fetches), show only the processed count; when both are known
+    // (push), show current/total. Omit the suffix entirely at the start before
+    // any item has been processed to avoid showing a bare "0".
+    String countSuffix(WoxCloudSyncProgress p) {
+      if (p.current == 0 && p.total == 0) {
+        return '';
+      }
+      final countText = p.total > 0 ? '${p.current}/${p.total}' : '${p.current}';
+      return controller.tr("ui_cloud_sync_progress_count").replaceAll("{count}", countText);
+    }
+
     switch (progress.operation) {
       case 'snapshot':
         return controller.tr("ui_cloud_sync_progress_snapshot");
       case 'push':
-        return controller.tr("ui_cloud_sync_progress_uploading").replaceAll("{target}", cloudSyncProgressTarget(progress)).replaceAll("{count}", countText);
+        return controller.tr("ui_cloud_sync_progress_uploading").replaceAll("{target}", cloudSyncProgressTarget(progress)).replaceAll("{count}", countSuffix(progress));
       case 'pull':
-        return controller.tr("ui_cloud_sync_progress_downloading").replaceAll("{target}", cloudSyncProgressTarget(progress)).replaceAll("{count}", countText);
+        return controller.tr("ui_cloud_sync_progress_downloading").replaceAll("{target}", cloudSyncProgressTarget(progress)).replaceAll("{count}", countSuffix(progress));
       case 'restore':
-        return controller.tr("ui_cloud_sync_progress_restoring").replaceAll("{count}", countText);
+        return controller.tr("ui_cloud_sync_progress_restoring").replaceAll("{count}", countSuffix(progress));
       default:
         return controller.tr("ui_cloud_sync_progress_starting");
     }
@@ -160,16 +171,48 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
   }
 
   // Continues account actions into email verification without treating cancellation as login success.
-  Future<void> showEmailVerificationIfNeeded(BuildContext context, WoxAccountActionResult? result) async {
+  // Returns true when the account became authenticated (either no verification was needed or
+  // verification completed successfully), so callers can chain post-login flows like sync bootstrap.
+  Future<bool> showEmailVerificationIfNeeded(BuildContext context, WoxAccountActionResult? result) async {
     if (result == null || !result.needsEmailVerification) {
-      return;
+      return result?.isOk ?? false;
     }
 
     final email = result.email.isNotEmpty ? result.email : controller.accountStatus.value.email;
     if (email.isEmpty || !context.mounted) {
+      return false;
+    }
+    final verified = await showAccountVerifyEmailDialog(context, email);
+    return verified == true;
+  }
+
+  // After login or registration, automatically prompts the user to set up cloud
+  // sync if it has not been configured yet. Without this prompt, many users log
+  // in but never discover they need to manually click "Sync" to begin syncing.
+  Future<void> showCloudSyncBootstrapIfNeeded(BuildContext context) async {
+    final account = controller.accountStatus.value;
+    final status = controller.cloudSyncStatus.value;
+    final state = status.state;
+
+    if (!account.loggedIn || account.sessionExpired || !account.syncEligible) {
       return;
     }
-    await showAccountVerifyEmailDialog(context, email);
+
+    final isSynced = account.syncEnabled && status.keyStatus.available && state != null && state.bootstrapped;
+    if (isSynced) {
+      return;
+    }
+
+    final isBootstrapInProgress = account.syncEnabled && status.keyStatus.available && state != null && !state.bootstrapped && state.lastError.isEmpty;
+    if (isBootstrapInProgress) {
+      return;
+    }
+
+    final bootstrapStatus = await controller.cloudSyncBootstrapStatus();
+    if (!context.mounted || bootstrapStatus == null) {
+      return;
+    }
+    await showCloudSyncBootstrapDialog(context, bootstrapStatus);
   }
 
   Future<bool?> showAccountChangePasswordDialog(BuildContext context) async {
@@ -517,8 +560,18 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
                     text: controller.tr("ui_cloud_sync_account_login"),
                     onPressed: () async {
                       final result = await showAccountLoginDialog(context);
-                      if (context.mounted) {
-                        await showEmailVerificationIfNeeded(context, result);
+                      if (!context.mounted || result == null) {
+                        return;
+                      }
+                      final authenticated = result.isOk || result.needsEmailVerification;
+                      if (result.needsEmailVerification) {
+                        final verified = await showEmailVerificationIfNeeded(context, result);
+                        if (!context.mounted || !verified) {
+                          return;
+                        }
+                      }
+                      if (authenticated) {
+                        await showCloudSyncBootstrapIfNeeded(context);
                       }
                     },
                   ),
@@ -526,8 +579,18 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
                     text: controller.tr("ui_cloud_sync_account_register"),
                     onPressed: () async {
                       final result = await showAccountRegisterDialog(context);
-                      if (context.mounted) {
-                        await showEmailVerificationIfNeeded(context, result);
+                      if (!context.mounted || result == null) {
+                        return;
+                      }
+                      final authenticated = result.isOk || result.needsEmailVerification;
+                      if (result.needsEmailVerification) {
+                        final verified = await showEmailVerificationIfNeeded(context, result);
+                        if (!context.mounted || !verified) {
+                          return;
+                        }
+                      }
+                      if (authenticated) {
+                        await showCloudSyncBootstrapIfNeeded(context);
                       }
                     },
                   ),
