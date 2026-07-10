@@ -1,5 +1,29 @@
 # Changelog
 
+## v2.4.0-beta.1
+
+This beta introduces local, offline Dictation for fast voice-to-text workflows, alongside file content search and a more capable AI Chat experience.
+
+- Add
+  - [`Dictation`] Add local voice-to-text dictation with downloadable offline models, configurable microphones and model loading, press, double-press, and hold hotkeys, live status overlays, audio ducking, and custom actions that can refine speech with AI, type into the active window, show an overlay, or start AI Chat.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/dictation.png)
+  - [`File Search`] Add optional file-content indexing and search so users can find supported text, PDF, and Office files by words inside them, choose indexed extensions, track indexing progress, use quoted phrases, and open theme-aware previews with clear large-file limits.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/file_content_search.png)
+
+- Improve
+  - [`AI Chat`] Improve AI Chat with reusable local and remote skills, built-in tools, inline model and skill selection, configurable tool usage, cancellable streaming, summarized conversation history, and a fallback search action.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_chat.mp4)
+  - [`Hotkey`] Improve hotkey recording and registration with left/right-specific modifier keys, multi-key hold shortcuts, and more reliable press, double-press, hold, and Caps Lock combo handling.
+  - [`Media Player`] Expand Linux support with MPRIS track metadata and playback controls.
+  - [`AI`] Support Ollama Cloud with its default endpoint and improve compatibility with OpenAI-compatible relays #4473
+  - [`Indicator`] Let plugin results open the corresponding plugin settings directly.
+  - [`Theme`] Improve AI-generated themes with more reliable JSON extraction and clearer preview guidance.
+
+- Fix
+  - [`Updater`] Fix Windows updates when the downloaded executable and Wox installation are on different drives #4471
+  - [`Plugin`] Fix toolbar messages without an explicit icon by falling back to the plugin icon.
+  - [`Overlay`] Fix text overlay sizing and improve close-button and focus behavior.
+
 ## v2.3.0 - 2026-07-04
 
 This stable release brings Cloud Sync to Wox and adds workspace layouts, while rolling up the Linux, preview, file search, hotkey, settings, and stability improvements from the v2.3.0 betas.
