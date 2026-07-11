@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:wox/components/file_preview/audio_file_preview_renderer.dart';
 import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/entity/wox_preview_dictation_history.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -69,6 +70,47 @@ class WoxDictationHistoryPreviewView extends StatelessWidget {
               ),
             ),
           ],
+          if (data.hasDiagnosticAudio) ...[
+            Padding(padding: EdgeInsets.symmetric(vertical: metrics.scaledSpacing(24)), child: Divider(height: 1, thickness: 1, color: dividerColor)),
+            _SectionHeader(label: data.audioLabel, icon: Icons.multitrack_audio_rounded, iconColor: accentColor.withValues(alpha: 0.78), mutedColor: mutedColor),
+            SizedBox(height: metrics.scaledSpacing(14)),
+            _AudioTrack(label: data.rawAudioLabel, filePath: data.rawAudioPath, textColor: textColor, mutedColor: mutedColor, borderColor: dividerColor),
+            SizedBox(height: metrics.scaledSpacing(12)),
+            _AudioTrack(label: data.processedAudioLabel, filePath: data.processedAudioPath, textColor: textColor, mutedColor: mutedColor, borderColor: dividerColor),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AudioTrack extends StatelessWidget {
+  final String label;
+  final String filePath;
+  final Color textColor;
+  final Color mutedColor;
+  final Color borderColor;
+
+  const _AudioTrack({required this.label, required this.filePath, required this.textColor, required this.mutedColor, required this.borderColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    return Container(
+      padding: EdgeInsets.fromLTRB(metrics.scaledSpacing(14), metrics.scaledSpacing(12), metrics.scaledSpacing(14), metrics.scaledSpacing(8)),
+      decoration: BoxDecoration(color: textColor.withValues(alpha: 0.025), border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(metrics.scaledSpacing(12))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.play_circle_outline_rounded, color: mutedColor.withValues(alpha: 0.62), size: metrics.scaledSpacing(15)),
+              SizedBox(width: metrics.scaledSpacing(7)),
+              Text(label, style: TextStyle(color: mutedColor.withValues(alpha: 0.78), fontSize: metrics.smallLabelFontSize, fontWeight: FontWeight.w600, height: 1.1)),
+            ],
+          ),
+          SizedBox(height: metrics.scaledSpacing(4)),
+          WoxAudioFilePlayer(filePath: filePath, height: metrics.scaledSpacing(62)),
         ],
       ),
     );

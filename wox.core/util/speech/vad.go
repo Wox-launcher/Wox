@@ -28,9 +28,9 @@ type SpeechSegment struct {
 func DefaultVadConfig(modelPath string) VadConfig {
 	return VadConfig{
 		ModelPath:          modelPath,
-		Threshold:          0.5,
+		Threshold:          0.35,
 		MinSilenceDuration: 0.5,
-		MinSpeechDuration:  0.25,
+		MinSpeechDuration:  0.15,
 		WindowSize:         512,
 		MaxSpeechDuration:  5.0,
 		NumThreads:         1,

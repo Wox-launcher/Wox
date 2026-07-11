@@ -3,12 +3,17 @@ package speech
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 
 	"wox/util"
 	"wox/util/permission"
 )
+
+const maxSessionAudioSamples = audioSampleRate * 60 * 5
 
 // SessionState tracks the lifecycle of a dictation recording session.
 type SessionState int
@@ -17,6 +22,17 @@ const (
 	SessionStateIdle SessionState = iota
 	SessionStateRecording
 	SessionStateStopped
+)
+
+// SessionStopReason records why a recording session ended.
+type SessionStopReason string
+
+const (
+	SessionStopReasonCompleted        SessionStopReason = "completed"
+	SessionStopReasonCancelled        SessionStopReason = "cancelled"
+	SessionStopReasonStartupCancelled SessionStopReason = "startup_cancelled"
+	SessionStopReasonTimeout          SessionStopReason = "timeout"
+	SessionStopReasonPluginUnload     SessionStopReason = "plugin_unload"
 )
 
 // SpeechActivity reports whether the current audio input is likely speech.
@@ -61,8 +77,16 @@ type Session struct {
 	hasSpeechState  bool
 
 	// Offline mode state
-	decodeWG sync.WaitGroup
-	stopped  chan struct{}
+	decodeWG          sync.WaitGroup
+	stopped           chan struct{}
+	audioProcessor    *AdaptiveAudioProcessor
+	offlineAudio      []float32
+	devRawAudio       []float32
+	devProcessedAudio []float32
+	diagnosticID      string
+	startedAt         time.Time
+	primarySegments   int
+	fallbackType      string
 }
 
 // NewSessionWithPools creates a session that uses recognizer, VAD, and audio
@@ -70,16 +94,19 @@ type Session struct {
 // streaming models ignore the VAD and feed audio directly to the recognizer.
 func NewSessionWithPools(ctx context.Context, config RecognizerConfig, vadConfig VadConfig, deviceID string, pool *RecognizerPool, audioPool *AudioCapturePool, vadPool *VadPool, onPartial func(string), onFinal func(string)) *Session {
 	return &Session{
-		ctx:       ctx,
-		config:    config,
-		vadConfig: vadConfig,
-		deviceID:  deviceID,
-		pool:      pool,
-		audioPool: audioPool,
-		vadPool:   vadPool,
-		onPartial: onPartial,
-		onFinal:   onFinal,
-		stopped:   make(chan struct{}),
+		ctx:            ctx,
+		config:         config,
+		vadConfig:      vadConfig,
+		deviceID:       deviceID,
+		pool:           pool,
+		audioPool:      audioPool,
+		vadPool:        vadPool,
+		onPartial:      onPartial,
+		onFinal:        onFinal,
+		stopped:        make(chan struct{}),
+		audioProcessor: NewAdaptiveAudioProcessor(),
+		diagnosticID:   uuid.NewString(),
+		fallbackType:   "none",
 	}
 }
 
@@ -104,6 +131,7 @@ func (s *Session) Start() error {
 	if !permission.RequestMicrophonePermission(s.ctx) {
 		return fmt.Errorf("microphone permission was denied")
 	}
+	s.startedAt = time.Now()
 
 	// Acquire recognizer from pool.
 	rec, err := s.pool.Acquire(s.ctx, s.config)
@@ -190,6 +218,17 @@ func (s *Session) handleAudioSamples(samples []float32) {
 
 	if rec == nil {
 		return
+	}
+
+	if util.IsDev() {
+		s.devRawAudio = appendCappedAudio(s.devRawAudio, samples, maxSessionAudioSamples)
+	}
+	s.audioProcessor.Process(samples)
+	if util.IsDev() && streaming {
+		s.devProcessedAudio = appendCappedAudio(s.devProcessedAudio, samples, maxSessionAudioSamples)
+	}
+	if !streaming {
+		s.offlineAudio = appendCappedAudio(s.offlineAudio, samples, maxSessionAudioSamples)
 	}
 
 	if streaming {
@@ -304,38 +343,48 @@ func (s *Session) handleOfflineSamples(rec Recognizer, vad *VoiceActivityDetecto
 
 		util.GetLogger().Info(s.ctx, fmt.Sprintf("dictation: VAD segment ready, samples=%d", len(seg.Samples)))
 
-		samplesCopy := make([]float32, len(seg.Samples))
-		copy(samplesCopy, seg.Samples)
-
-		s.decodeWG.Add(1)
-		util.Go(s.ctx, "dictation decode segment", func() {
-			defer s.decodeWG.Done()
-
-			text := rec.DecodeSamples(samplesCopy)
-			util.GetLogger().Info(s.ctx, fmt.Sprintf("dictation: decode segment result, textLen=%d text=%q", len(text), text))
-			if text == "" {
-				return
-			}
-
-			s.mu.Lock()
-			s.accumulatedText += text
-			full := s.accumulatedText
-			s.mu.Unlock()
-
-			if s.onPartial != nil {
-				s.onPartial(text)
-			}
-			if s.onFinal != nil {
-				s.onFinal(full)
-			}
-		})
+		s.queueOfflineSegment(rec, seg.Samples, true, "segment")
 	}
 }
 
-// Stop stops the recording session and returns all accumulated text.
+// queueOfflineSegment copies a VAD segment and decodes it outside the capture callback.
+func (s *Session) queueOfflineSegment(rec Recognizer, samples []float32, notify bool, source string) {
+	samplesCopy := append([]float32(nil), samples...)
+	s.mu.Lock()
+	s.primarySegments++
+	s.mu.Unlock()
+
+	s.decodeWG.Add(1)
+	util.Go(s.ctx, "dictation decode "+source, func() {
+		defer s.decodeWG.Done()
+		text := rec.DecodeSamples(samplesCopy)
+		util.GetLogger().Info(s.ctx, fmt.Sprintf("dictation: decode %s result, textLen=%d text=%q", source, len(text), text))
+		if text == "" {
+			return
+		}
+
+		s.mu.Lock()
+		s.accumulatedText += text
+		full := s.accumulatedText
+		s.mu.Unlock()
+		if notify && s.onPartial != nil {
+			s.onPartial(text)
+		}
+		if notify && s.onFinal != nil {
+			s.onFinal(full)
+		}
+	})
+}
+
+// Stop stops the recording session as a normal completed session.
 func (s *Session) Stop() (string, error) {
+	return s.StopWithReason(SessionStopReasonCompleted)
+}
+
+// StopWithReason stops the recording session and records its lifecycle outcome.
+func (s *Session) StopWithReason(reason SessionStopReason) (string, error) {
 	logger := util.GetLogger()
-	logger.Info(s.ctx, "dictation: session.Stop enter")
+	logger.Info(s.ctx, fmt.Sprintf("dictation: session.Stop enter, reason=%s", reason))
 
 	s.mu.Lock()
 	if s.state != SessionStateRecording {
@@ -367,21 +416,7 @@ func (s *Session) Stop() (string, error) {
 			if seg == nil || len(seg.Samples) == 0 {
 				continue
 			}
-			samplesCopy := make([]float32, len(seg.Samples))
-			copy(samplesCopy, seg.Samples)
-
-			s.decodeWG.Add(1)
-			util.Go(s.ctx, "dictation decode flush segment", func() {
-				defer s.decodeWG.Done()
-				text := s.recognizer.DecodeSamples(samplesCopy)
-				util.GetLogger().Info(s.ctx, fmt.Sprintf("dictation: decode flush segment result, textLen=%d text=%q", len(text), text))
-				if text == "" {
-					return
-				}
-				s.mu.Lock()
-				s.accumulatedText += text
-				s.mu.Unlock()
-			})
+			s.queueOfflineSegment(s.recognizer, seg.Samples, false, "flush segment")
 		}
 		logger.Info(s.ctx, "dictation: session.Stop VAD flush done")
 	}
@@ -411,6 +446,49 @@ func (s *Session) Stop() (string, error) {
 	s.mu.Lock()
 	totalText := s.accumulatedText
 	s.mu.Unlock()
+	if !s.streaming && totalText == "" && s.audioProcessor.Stats().CandidateDuration >= 250*time.Millisecond {
+		fallbackText, fallbackType := s.decodeOfflineFallback()
+		if fallbackText != "" {
+			s.mu.Lock()
+			s.accumulatedText += fallbackText
+			totalText = s.accumulatedText
+			s.mu.Unlock()
+		}
+		s.fallbackType = fallbackType
+	}
+
+	stats := s.audioProcessor.Stats()
+	logger.Info(s.ctx, fmt.Sprintf(
+		"dictation: audio summary inputRms=%.1fdBFS inputPeak=%.1fdBFS outputRms=%.1fdBFS outputPeak=%.1fdBFS noiseFloor=%.1fdBFS averageGain=%.1fdB maxGain=%.1fdB candidateMs=%d vadSegments=%d fallback=%s",
+		stats.InputRMSDBFS, stats.InputPeakDBFS, stats.OutputRMSDBFS, stats.OutputPeakDBFS, stats.NoiseFloorDBFS, stats.AverageGainDB, stats.MaximumGainDB, stats.CandidateDuration.Milliseconds(), s.primarySegments, s.fallbackType,
+	))
+	if util.IsDev() {
+		diagnosticProcessedAudio := s.devProcessedAudio
+		if !s.streaming {
+			// The offline fallback buffer is already the exact processed stream,
+			// so diagnostics share it instead of retaining a third five-minute copy.
+			diagnosticProcessedAudio = s.offlineAudio
+		}
+		dump := sessionAudioDump{
+			SessionID:       s.diagnosticID,
+			StartedAt:       s.startedAt,
+			EndedAt:         time.Now(),
+			StopReason:      reason,
+			DeviceID:        s.deviceID,
+			ModelType:       s.config.ModelType,
+			Raw:             s.devRawAudio,
+			Processed:       diagnosticProcessedAudio,
+			Stats:           stats,
+			VadConfig:       s.vadConfig,
+			PrimarySegments: s.primarySegments,
+			FallbackType:    s.fallbackType,
+			ResultEmpty:     totalText == "",
+		}
+		s.devRawAudio = nil
+		s.devProcessedAudio = nil
+		scheduleSessionAudioDump(s.ctx, dump)
+	}
+	s.offlineAudio = nil
 
 	// Return resources to pools.
 	if s.capture != nil {
@@ -428,6 +506,139 @@ func (s *Session) Stop() (string, error) {
 
 	logger.Info(s.ctx, fmt.Sprintf("dictation: session.Stop done, textLen=%d text=%q", len(totalText), totalText))
 	return totalText, nil
+}
+
+// DevelopmentAudioSessionID returns the local diagnostic link for development history previews.
+func (s *Session) DevelopmentAudioSessionID() string {
+	if !util.IsDev() {
+		return ""
+	}
+	return s.diagnosticID
+}
+
+// decodeOfflineFallback retries quiet candidate audio sequentially after the primary path returns no text.
+func (s *Session) decodeOfflineFallback() (string, string) {
+	if s.recognizer == nil || len(s.offlineAudio) == 0 {
+		return "", "none"
+	}
+
+	fallbackConfig := s.vadConfig
+	fallbackConfig.Threshold = 0.20
+	fallbackConfig.MinSpeechDuration = 0.10
+	fallbackConfig.MinSilenceDuration = 0.70
+	fallbackConfig.MaxSpeechDuration = 15
+	fallbackVad, err := NewVoiceActivityDetector(s.ctx, fallbackConfig)
+	if err != nil {
+		util.GetLogger().Warn(s.ctx, fmt.Sprintf("dictation: low-threshold fallback VAD unavailable: %s", err))
+	} else {
+		var text string
+		segmentCount := 0
+		drainFallbackSegments := func() {
+			for !fallbackVad.IsEmpty() {
+				segment := fallbackVad.Front()
+				fallbackVad.Pop()
+				if segment != nil && len(segment.Samples) > 0 {
+					segmentCount++
+					text += s.recognizer.DecodeSamples(segment.Samples)
+				}
+			}
+		}
+		for start := 0; start < len(s.offlineAudio); start += audioSampleRate / 10 {
+			end := min(start+audioSampleRate/10, len(s.offlineAudio))
+			fallbackVad.AcceptWaveform(s.offlineAudio[start:end])
+			drainFallbackSegments()
+		}
+		fallbackVad.Flush()
+		drainFallbackSegments()
+		fallbackVad.Close()
+		if segmentCount > 0 {
+			util.GetLogger().Info(s.ctx, fmt.Sprintf("dictation: low-threshold VAD fallback finished, segments=%d textLen=%d", segmentCount, len(text)))
+			return text, "low_threshold_vad"
+		}
+	}
+
+	ranges := prepareCandidateRanges(s.audioProcessor.CandidateRanges(), s.offlineAudio)
+	var text string
+	for _, candidateRange := range ranges {
+		text += s.recognizer.DecodeSamples(s.offlineAudio[candidateRange.StartSample:candidateRange.EndSample])
+	}
+	if len(ranges) > 0 {
+		util.GetLogger().Info(s.ctx, fmt.Sprintf("dictation: candidate-region fallback finished, regions=%d textLen=%d", len(ranges), len(text)))
+		return text, "candidate_regions"
+	}
+	return "", "none"
+}
+
+// prepareCandidateRanges pads, merges, and splits speech-like regions for sequential decoding.
+func prepareCandidateRanges(input []audioCandidateRange, audio []float32) []audioCandidateRange {
+	const (
+		paddingSamples  = audioSampleRate * 300 / 1000
+		mergeGapSamples = audioSampleRate * 500 / 1000
+		maximumSamples  = audioSampleRate * 15
+	)
+	var merged []audioCandidateRange
+	for _, candidateRange := range input {
+		candidateRange.StartSample = max(0, candidateRange.StartSample-paddingSamples)
+		candidateRange.EndSample = min(len(audio), candidateRange.EndSample+paddingSamples)
+		if candidateRange.StartSample >= candidateRange.EndSample {
+			continue
+		}
+		if len(merged) > 0 && candidateRange.StartSample-merged[len(merged)-1].EndSample < mergeGapSamples {
+			merged[len(merged)-1].EndSample = max(merged[len(merged)-1].EndSample, candidateRange.EndSample)
+			continue
+		}
+		merged = append(merged, candidateRange)
+	}
+
+	var result []audioCandidateRange
+	for _, candidateRange := range merged {
+		for candidateRange.EndSample-candidateRange.StartSample > maximumSamples {
+			preferredEnd := candidateRange.StartSample + maximumSamples
+			end := quietestFrameBoundary(audio, preferredEnd-audioSampleRate, preferredEnd+audioSampleRate)
+			if end <= candidateRange.StartSample {
+				end = preferredEnd
+			}
+			result = append(result, audioCandidateRange{StartSample: candidateRange.StartSample, EndSample: end})
+			candidateRange.StartSample = end
+		}
+		if candidateRange.StartSample < candidateRange.EndSample {
+			result = append(result, candidateRange)
+		}
+	}
+	return result
+}
+
+// quietestFrameBoundary finds the lowest-RMS 100 ms boundary near a forced split.
+func quietestFrameBoundary(audio []float32, start int, end int) int {
+	const frameSamples = audioSampleRate / 10
+	start = max(frameSamples, start/frameSamples*frameSamples)
+	end = min(len(audio)-frameSamples, end/frameSamples*frameSamples)
+	bestBoundary := start
+	bestRMS := math.MaxFloat64
+	for boundary := start; boundary <= end; boundary += frameSamples {
+		var sumSquares float64
+		for _, sample := range audio[boundary-frameSamples : boundary] {
+			sumSquares += float64(sample * sample)
+		}
+		rms := math.Sqrt(sumSquares / frameSamples)
+		if rms < bestRMS {
+			bestRMS = rms
+			bestBoundary = boundary
+		}
+	}
+	return bestBoundary
+}
+
+// appendCappedAudio appends only the portion that fits the per-session memory limit.
+func appendCappedAudio(destination []float32, samples []float32, limit int) []float32 {
+	remaining := limit - len(destination)
+	if remaining <= 0 {
+		return destination
+	}
+	if len(samples) > remaining {
+		samples = samples[:remaining]
+	}
+	return append(destination, samples...)
 }
 
 // IsRecording reports whether the session is currently capturing audio.
@@ -463,10 +674,10 @@ func (s *Session) StartWithTimeout(onTimeout func()) error {
 		select {
 		case <-timer.C:
 			if s.IsRecording() {
+				_, _ = s.StopWithReason(SessionStopReasonTimeout)
 				if onTimeout != nil {
 					onTimeout()
 				}
-				_, _ = s.Stop()
 			}
 		case <-s.ctx.Done():
 		}

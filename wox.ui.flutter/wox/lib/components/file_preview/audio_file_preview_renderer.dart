@@ -24,17 +24,34 @@ class AudioFilePreviewRenderer implements WoxFilePreviewRenderer {
     }
 
     final typeLabel = context.tr("ui_file_preview_type_audio");
-    final previewData = WoxPreviewWebviewData(url: "", html: _buildPausedAudioPreviewHtml(file), cacheDisabled: true);
 
     return WoxFilePreviewResult(
-      content: SizedBox(height: 86, child: WoxWebViewPreview(previewData: jsonEncode(previewData.toJson()), showToolbar: false)),
+      content: WoxAudioFilePlayer(filePath: file.path, height: 86),
       previewTags: [WoxPreviewTag(label: typeLabel, tooltip: context.tr("ui_file_preview_property_type"))],
     );
   }
+}
 
-  // Use Wox core's loopback media endpoint so large audio files stream through
-  // browser range requests instead of becoming a data URL in Flutter memory.
+// WoxAudioFilePlayer reuses the file-preview streaming path for compact inline players.
+class WoxAudioFilePlayer extends StatelessWidget {
+  final String filePath;
+  final double height;
+
+  const WoxAudioFilePlayer({super.key, required this.filePath, this.height = 72});
+
+  @override
+  Widget build(BuildContext context) {
+    final file = File(filePath);
+    if (!file.existsSync()) {
+      return const SizedBox.shrink();
+    }
+    final previewData = WoxPreviewWebviewData(url: "", html: _buildPausedAudioPreviewHtml(file), cacheDisabled: true);
+    return SizedBox(height: height, child: WoxWebViewPreview(previewData: jsonEncode(previewData.toJson()), showToolbar: false));
+  }
+
   String _buildPausedAudioPreviewHtml(File file) {
+    // Use Wox core's loopback media endpoint so audio streams through browser
+    // range requests instead of becoming a data URL in Flutter memory.
     final source = buildFilePreviewMediaSource(file);
     return '''
 <!doctype html>

@@ -15,6 +15,7 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/keyboard"
+	"wox/util/speech"
 	"wox/util/window"
 
 	"github.com/google/uuid"
@@ -92,15 +93,21 @@ func (h *historyStore) save(ctx context.Context) {
 // add prepends a new record, trims to the cap, and persists. Original content
 // is retained whenever AI refinement succeeds, while Content stays the final
 // text used for history actions and future AI context.
-func (h *historyStore) add(ctx context.Context, content string, originalContent string, timestamp int64) {
+func (h *historyStore) add(ctx context.Context, content string, originalContent string, timestamp int64, audioSessionID string) {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return
 	}
 	originalContent = strings.TrimSpace(originalContent)
+	// Development sessions reuse their diagnostic ID as the history ID. This
+	// keeps the audio association stable without persisting a local file path.
+	recordID := strings.TrimSpace(audioSessionID)
+	if recordID == "" {
+		recordID = uuid.NewString()
+	}
 
 	record := historyRecord{
-		ID:              uuid.NewString(),
+		ID:              recordID,
 		Content:         content,
 		OriginalContent: originalContent,
 		Timestamp:       timestamp,
@@ -227,14 +234,15 @@ func (h *historyStore) isEmpty() bool {
 func (h *historyStore) buildHistoryResults(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	records := h.snapshot(query.Search)
 	results := make([]plugin.QueryResult, 0, len(records))
+	audioFilesBySession := speech.DevelopmentAudioFilesBySession()
 
 	for i := range records {
-		results = append(results, h.buildHistoryResult(ctx, records[i], query))
+		results = append(results, h.buildHistoryResult(ctx, records[i], query, audioFilesBySession[records[i].ID]))
 	}
 	return results
 }
 
-func (h *historyStore) buildHistoryResult(ctx context.Context, record historyRecord, query plugin.Query) plugin.QueryResult {
+func (h *historyStore) buildHistoryResult(ctx context.Context, record historyRecord, query plugin.Query, audioFiles speech.DevelopmentAudioFiles) plugin.QueryResult {
 	group, groupScore := historyGroup(record.Timestamp)
 
 	// Copy is the default action when no active window is available for paste.
@@ -279,7 +287,7 @@ func (h *historyStore) buildHistoryResult(ctx context.Context, record historyRec
 		Group:      group,
 		GroupScore: groupScore,
 		Score:      record.Timestamp,
-		Preview:    buildHistoryPreview(ctx, record),
+		Preview:    buildHistoryPreview(ctx, record, audioFiles),
 		Actions:    actions,
 	}
 }
@@ -288,18 +296,23 @@ func (h *historyStore) buildHistoryResult(ctx context.Context, record historyRec
 // versions because custom preview payloads are not passed through core's normal
 // text-preview translation path.
 type dictationHistoryPreviewData struct {
-	RefinedText   string `json:"refinedText"`
-	OriginalText  string `json:"originalText"`
-	RefinedLabel  string `json:"refinedLabel"`
-	OriginalLabel string `json:"originalLabel"`
-	StatusLabel   string `json:"statusLabel"`
-	IsChanged     bool   `json:"isChanged"`
+	RefinedText         string `json:"refinedText"`
+	OriginalText        string `json:"originalText"`
+	RefinedLabel        string `json:"refinedLabel"`
+	OriginalLabel       string `json:"originalLabel"`
+	StatusLabel         string `json:"statusLabel"`
+	IsChanged           bool   `json:"isChanged"`
+	RawAudioPath        string `json:"rawAudioPath,omitempty"`
+	ProcessedAudioPath  string `json:"processedAudioPath,omitempty"`
+	AudioLabel          string `json:"audioLabel,omitempty"`
+	RawAudioLabel       string `json:"rawAudioLabel,omitempty"`
+	ProcessedAudioLabel string `json:"processedAudioLabel,omitempty"`
 }
 
 // buildHistoryPreview routes every history record through the dedicated
 // dictation reader. AI-refined records add the original transcript comparison,
 // while plain dictation records keep the same visual language with one section.
-func buildHistoryPreview(ctx context.Context, record historyRecord) plugin.WoxPreview {
+func buildHistoryPreview(ctx context.Context, record historyRecord, audioFiles speech.DevelopmentAudioFiles) plugin.WoxPreview {
 	originalText := strings.TrimSpace(record.OriginalContent)
 	refinedLabelKey := "plugin_dictation_history_transcript"
 	statusLabel := ""
@@ -313,14 +326,18 @@ func buildHistoryPreview(ctx context.Context, record historyRecord) plugin.WoxPr
 		}
 		statusLabel = i18n.GetI18nManager().TranslateWox(ctx, statusKey)
 	}
-
 	payload, err := json.Marshal(dictationHistoryPreviewData{
-		RefinedText:   record.Content,
-		OriginalText:  originalText,
-		RefinedLabel:  i18n.GetI18nManager().TranslateWox(ctx, refinedLabelKey),
-		OriginalLabel: i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_history_original_transcript"),
-		StatusLabel:   statusLabel,
-		IsChanged:     isChanged,
+		RefinedText:         record.Content,
+		OriginalText:        originalText,
+		RefinedLabel:        i18n.GetI18nManager().TranslateWox(ctx, refinedLabelKey),
+		OriginalLabel:       i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_history_original_transcript"),
+		StatusLabel:         statusLabel,
+		IsChanged:           isChanged,
+		RawAudioPath:        audioFiles.RawPath,
+		ProcessedAudioPath:  audioFiles.ProcessedPath,
+		AudioLabel:          i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_history_audio_diagnostics"),
+		RawAudioLabel:       i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_history_raw_audio"),
+		ProcessedAudioLabel: i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_history_processed_audio"),
 	})
 	if err != nil {
 		return plugin.WoxPreview{

@@ -1375,7 +1375,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 		p.isStarting = false
 		p.sessionMu.Unlock()
 		p.stopVolumeDucking(ctx)
-		if _, err := session.Stop(); err != nil {
+		if _, err := session.StopWithReason(speech.SessionStopReasonStartupCancelled); err != nil {
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to stop dictation session during startup cancel: %s", err.Error()))
 		}
 		p.closeDictationOverlay()
@@ -1459,7 +1459,7 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 	if aiRefineSucceeded {
 		originalHistoryText = text
 	}
-	p.history.add(ctx, historyText, originalHistoryText, util.GetSystemTimestamp())
+	p.history.add(ctx, historyText, originalHistoryText, util.GetSystemTimestamp(), session.DevelopmentAudioSessionID())
 
 	p.closeDictationOverlay()
 	p.playSoundIfEnabled(ctx, soundStop)
@@ -2094,7 +2094,7 @@ func (p *DictationPlugin) releaseRuntime(ctx context.Context) {
 	p.sessionMu.Unlock()
 
 	if session != nil {
-		if _, err := session.Stop(); err != nil {
+		if _, err := session.StopWithReason(speech.SessionStopReasonPluginUnload); err != nil {
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to stop dictation session during unload: %s", err.Error()))
 		}
 	}
@@ -2160,7 +2160,7 @@ func (p *DictationPlugin) cancelDictation(ctx context.Context) {
 		// Stop the session and discard the text. We still need to release
 		// resources back to the pools.
 		go func() {
-			_, _ = session.Stop()
+			_, _ = session.StopWithReason(speech.SessionStopReasonCancelled)
 		}()
 	}
 
