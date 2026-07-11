@@ -125,8 +125,6 @@ func (d *ContentSearchDB) ensureTables(ctx context.Context) error {
 			extension TEXT NOT NULL DEFAULT '',
 			indexed_text_bytes INTEGER NOT NULL DEFAULT 0
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_content_entries_path ON content_entries(path)`,
-		`CREATE INDEX IF NOT EXISTS idx_content_entries_extension ON content_entries(extension)`,
 		// contentless FTS5: content='' means FTS5 doesn't store or look up
 		// original text. detail='full' keeps token offsets so quoted phrase
 		// queries can be resolved by FTS5 without storing full file contents.

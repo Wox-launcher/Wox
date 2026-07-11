@@ -1021,8 +1021,18 @@ func (e *Engine) StartContentCrawl(ctx context.Context, roots []RootRecord, poli
 		close(done)
 		return done
 	}
+	// Close the query window before attaching the hook and launching the goroutine:
+	// callers must not observe the previous complete snapshot while catch-up starts.
+	if err := contentDB.SetContentCrawlState(ctx, "in_progress"); err != nil {
+		done <- err
+		close(done)
+		return done
+	}
 
 	crawler := NewContentCrawler(contentDB, roots, policy, extensions, maxReadBytes, progressCB)
+	e.mu.RLock()
+	crawler.setNameDB(e.db)
+	e.mu.RUnlock()
 	go func() {
 		err := crawler.Run(ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {
@@ -1063,7 +1073,7 @@ func (e *Engine) StartContentHook(ctx context.Context, extensions map[string]boo
 	// take effect cleanly.
 	e.closeContentHookLocked()
 
-	hook := NewContentIndexHook(contentDB, e.db, extensions, maxReadBytes, e.policy)
+	hook := NewContentIndexHook(contentDB, e.db, extensions, maxReadBytes)
 	e.contentHook = hook
 
 	scanner := e.scanner

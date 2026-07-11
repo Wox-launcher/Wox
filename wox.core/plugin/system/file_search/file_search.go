@@ -51,6 +51,7 @@ const (
 	toolbarActivityPathMaxChars             = 42
 	toolbarErrorReasonMaxChars              = 28
 	fileSearchResultLimit                   = 100
+	fileSearchContentResultLimit            = 20
 	fileSearchRefinedCandidateLimit         = 300
 	fileSearchRefinementSortScoreStep       = 1000000
 )
@@ -278,7 +279,8 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	c.syncUserRoots(ctx)
 
 	// Initialize content index if enabled. Full crawl requests are debounced and
-	// serialized; the incremental hook is installed after the active crawl completes.
+	// serialized; the incremental hook is installed before the crawl so changes
+	// arriving during a long catch-up pass are not lost.
 	if c.isContentSearchEnabled(ctx) {
 		generation := c.nextContentSearchGeneration()
 		c.requestContentCrawl(ctx, generation)
@@ -454,15 +456,7 @@ func (c *FileSearchPlugin) startPendingContentCrawl(ctx context.Context) {
 	// Wait for filesearch to finish indexing before starting content crawl.
 	c.waitForFileSearchIdle(runningCtx)
 	if runningCtx.Err() != nil || !c.isContentSearchCurrent(ctx, generation) {
-		c.finishContentCrawl(ctx, generation, false)
-		return
-	}
-
-	crawlState, _ := c.engine.GetContentCrawlState(runningCtx)
-	stats, _ := c.engine.ContentStats(runningCtx)
-	if crawlState == "complete" && stats.DocCount > 0 {
-		c.api.Log(runningCtx, plugin.LogLevelInfo, "Content index already complete, skipping crawl")
-		c.finishContentCrawl(runningCtx, generation, true)
+		c.finishContentCrawl(ctx, generation)
 		return
 	}
 
@@ -474,11 +468,12 @@ func (c *FileSearchPlugin) startPendingContentCrawl(ctx context.Context) {
 	if !c.contentCrawlRunning || c.contentCrawlRunningGen != generation || !c.isContentSearchCurrentLocked(ctx, generation) {
 		c.contentSearchStateMu.Unlock()
 		cancel()
-		c.finishContentCrawl(runningCtx, generation, false)
+		c.finishContentCrawl(runningCtx, generation)
 		return
 	}
 	c.contentSearchStateMu.Unlock()
 
+	c.startContentHook(runningCtx, generation)
 	c.api.Log(runningCtx, plugin.LogLevelInfo, "Content index: starting full crawl")
 	done := c.engine.StartContentCrawl(runningCtx, roots, fsPolicy, exts, filesearch.ContentDefaultMaxReadBytes, func(progress filesearch.ContentCrawlProgress) {
 		if runningCtx.Err() == nil && c.isContentSearchCurrent(runningCtx, generation) {
@@ -486,15 +481,13 @@ func (c *FileSearchPlugin) startPendingContentCrawl(ctx context.Context) {
 		}
 	})
 	util.Go(runningCtx, "content crawl completion", func() {
-		err := <-done
-		c.finishContentCrawl(runningCtx, generation, err == nil && runningCtx.Err() == nil)
+		<-done
+		c.finishContentCrawl(runningCtx, generation)
 	})
 }
 
-// finishContentCrawl releases the single full-crawl slot and starts either the
-// latest pending crawl or the incremental hook for the completed policy.
-func (c *FileSearchPlugin) finishContentCrawl(ctx context.Context, generation int64, completed bool) {
-	startHook := false
+// finishContentCrawl releases the single full-crawl slot and schedules the latest pending policy.
+func (c *FileSearchPlugin) finishContentCrawl(ctx context.Context, generation int64) {
 	c.contentSearchStateMu.Lock()
 	if c.contentCrawlRunning && c.contentCrawlRunningGen == generation {
 		c.contentCrawlRunning = false
@@ -502,20 +495,15 @@ func (c *FileSearchPlugin) finishContentCrawl(ctx context.Context, generation in
 		c.contentCrawlCancel = nil
 		if c.contentCrawlPending {
 			c.resetContentCrawlTimerLocked()
-		} else if completed && c.isContentSearchCurrentLocked(ctx, generation) {
-			startHook = true
 		}
 	}
 	c.contentSearchStateMu.Unlock()
-	if startHook {
-		c.startContentHook(ctx, generation)
-	}
 }
 
 // startContentHook installs the incremental content index hook so file changes
 // detected by the scanner's change feed are applied to the content FTS index
-// without waiting for the next full crawl. The hook reuses the same extension
-// whitelist and read-byte cap as the full crawler.
+// even while a catch-up crawl is running. The hook reuses the same extension
+// whitelist and read-byte cap as the crawler.
 func (c *FileSearchPlugin) startContentHook(ctx context.Context, generation int64) {
 	if c.engine == nil {
 		return
@@ -553,9 +541,15 @@ func (c *FileSearchPlugin) waitForFileSearchIdle(ctx context.Context) {
 // handleContentCrawlProgress shows or clears the content crawl toolbar message.
 func (c *FileSearchPlugin) handleContentCrawlProgress(ctx context.Context, generation int64, progress filesearch.ContentCrawlProgress) {
 	if progress.Complete {
+		averageRate := estimateCompletedIndexRate(int64(progress.FilesIndexed), progress.ElapsedMillis)
 		c.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
-			Id:    contentSearchToolbarMsgID,
-			Title: fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_file_content_index_ready"), progress.FilesIndexed),
+			Id: contentSearchToolbarMsgID,
+			Title: fmt.Sprintf(
+				c.api.GetTranslation(ctx, "plugin_file_content_index_ready"),
+				formatFileSearchCount(int64(progress.FilesIndexed)),
+				c.formatFileSearchIndexDuration(ctx, progress.ElapsedMillis),
+				formatFileSearchCount(averageRate),
+			),
 		})
 		time.AfterFunc(5*time.Second, func() {
 			if c.isContentSearchCurrent(ctx, generation) {
@@ -609,7 +603,7 @@ func (c *FileSearchPlugin) getContentSearchRootRecords(ctx context.Context) []fi
 		roots = append(roots, filesearch.RootRecord{
 			ID:     fmt.Sprintf("content-root-%d", i),
 			Path:   p,
-			Kind:   filesearch.RootKindDefault,
+			Kind:   filesearch.RootKindUser,
 			Status: filesearch.RootStatusIdle,
 		})
 	}
@@ -655,7 +649,14 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		c.api.Notify(ctx, err.Error())
 		return plugin.QueryResponse{}
 	}
-	results = refineFileSearchResults(results, selectedType, selectedSort, fileSearchResultLimit)
+	resultLimit := fileSearchResultLimit
+	if selectedType != fileSearchTypeRefinementFolder {
+		results = c.appendContentSearchResults(ctx, query.Search, results, fileSearchResultLimit+fileSearchContentResultLimit)
+		if selectedSort == fileSearchSortRefinementRelevance {
+			resultLimit += fileSearchContentResultLimit
+		}
+	}
+	results = refineFileSearchResults(results, selectedType, selectedSort, resultLimit)
 
 	// Split result-materialization timing out from engine search timing because
 	// os.Stat/icon setup can make the plugin itself look slow even when the
@@ -696,11 +697,6 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	}
 	diagnostics.buildElapsedMs = util.GetSystemTimestamp() - buildStartedAt
 
-	// Content search: if enabled, search the content index and append results
-	// after name/path results, de-duplicated by path (name/path results win).
-	contentResults := c.searchContent(ctx, query.Search, queryResults)
-	queryResults = append(queryResults, contentResults...)
-
 	c.logQueryDiagnostics(ctx, query.Search, diagnostics, len(queryResults), util.GetSystemTimestamp()-queryStartedAt)
 
 	response := plugin.NewQueryResponse(queryResults)
@@ -708,70 +704,48 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	return response
 }
 
-// searchContent queries the content index and returns QueryResults for files
-// whose contents match the query, excluding paths already in nameResults.
-// Returns nil if content search is disabled or the crawl is still in progress.
-func (c *FileSearchPlugin) searchContent(ctx context.Context, queryText string, nameResults []plugin.QueryResult) []plugin.QueryResult {
+// appendContentSearchResults adds existing content hits to the common result envelope before refinements run.
+func (c *FileSearchPlugin) appendContentSearchResults(ctx context.Context, queryText string, nameResults []filesearch.SearchResult, limit int) []filesearch.SearchResult {
 	if !c.isContentSearchEnabled(ctx) {
-		return nil
+		return nameResults
 	}
 
-	contentHits, err := c.engine.SearchContent(ctx, queryText, 20)
+	contentHits, err := c.engine.SearchContent(ctx, queryText, limit)
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("content search failed for query %q: %s", queryText, err.Error()))
-		return nil
+		return nameResults
 	}
 	if len(contentHits) == 0 {
-		return nil
+		return nameResults
 	}
 
-	// Build a set of paths already in nameResults for de-duplication.
 	existingPaths := make(map[string]bool, len(nameResults))
-	for _, r := range nameResults {
-		existingPaths[r.SubTitle] = true // SubTitle is the file path
+	for _, result := range nameResults {
+		existingPaths[result.Path] = true
 	}
 
-	fileTypeIcons := map[string]common.WoxImage{}
-	showPreview := c.getConfiguredShowPreview(ctx)
-	var diagnostics fileSearchQueryDiagnostics // for icon resolution, not logged
-
-	results := make([]plugin.QueryResult, 0, len(contentHits))
 	for index, hit := range contentHits {
 		if existingPaths[hit.Path] {
 			continue
 		}
-
-		name := filepath.Base(hit.Path)
-		item := filesearch.SearchResult{
-			Path: hit.Path,
-			Name: name,
+		info, err := os.Lstat(hit.Path)
+		if err != nil || info.IsDir() {
+			continue
 		}
-		icon := resolveFileSearchResultIcon(ctx, item, fileTypeIcons, &diagnostics)
-		actions := c.buildFileSearchResultActions(ctx, item)
-
-		// BM25 and filename matching use different score scales, so preserve
-		// content relevance by rank without letting raw BM25 scores dominate.
-		queryResult := plugin.QueryResult{
-			Title:    name,
-			SubTitle: hit.Path,
-			Icon:     icon,
-			Score:    int64(len(contentHits) - index),
-			Actions:  actions,
-			DragData: &plugin.QueryResultDragData{
-				Type:  plugin.QueryResultDragDataTypeFiles,
-				Files: []string{hit.Path},
-			},
+		nameResults = append(nameResults, filesearch.SearchResult{
+			Path:       hit.Path,
+			Name:       filepath.Base(hit.Path),
+			ParentPath: filepath.Dir(hit.Path),
+			Mtime:      info.ModTime().UnixMilli(),
+			Size:       info.Size(),
+			Score:      int64(len(contentHits) - index),
+		})
+		existingPaths[hit.Path] = true
+		if limit > 0 && len(nameResults) >= limit {
+			break
 		}
-		if showPreview {
-			queryResult.Preview = plugin.WoxPreview{
-				PreviewType: plugin.WoxPreviewTypeFile,
-				PreviewData: hit.Path,
-			}
-		}
-		results = append(results, queryResult)
 	}
-
-	return results
+	return nameResults
 }
 
 // buildFileSearchResultActions keeps folder navigation integrated with the path-browse plugin.
@@ -851,6 +825,9 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 		// and ordinary filename searches while still making recovery easy.
 		c.buildIndexFilesAction(),
 	)
+	if c.isContentSearchEnabled(ctx) {
+		actions = append(actions, c.buildRebuildContentIndexAction())
+	}
 
 	return actions
 }
@@ -913,6 +890,43 @@ func (c *FileSearchPlugin) buildIndexFilesAction() plugin.QueryResultAction {
 	}
 }
 
+// buildRebuildContentIndexAction exposes content-only recovery without rebuilding the name/path index.
+func (c *FileSearchPlugin) buildRebuildContentIndexAction() plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_file_rebuild_content_index",
+		Icon:                   common.ExecuteRunIcon,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			c.rebuildContentIndex(ctx)
+		},
+	}
+}
+
+// rebuildContentIndex removes only contentsearch.db and schedules a fresh content crawl.
+func (c *FileSearchPlugin) rebuildContentIndex(ctx context.Context) {
+	if c.engine == nil || !c.isContentSearchEnabled(ctx) {
+		return
+	}
+	generation := c.nextContentSearchGeneration()
+	c.stopContentCrawlWork()
+
+	rebuildCtx := util.NewTraceContext()
+	util.Go(rebuildCtx, "filesearch reset content index", func() {
+		if !c.isContentSearchCurrent(rebuildCtx, generation) {
+			return
+		}
+		if err := c.engine.ResetContentIndex(rebuildCtx); err != nil {
+			c.api.Log(rebuildCtx, plugin.LogLevelError, "Failed to reset content search index: "+err.Error())
+			c.api.Notify(rebuildCtx, "i18n:plugin_file_rebuild_content_index_failed")
+			return
+		}
+		c.api.ClearToolbarMsg(rebuildCtx, contentSearchToolbarMsgID)
+		if c.isContentSearchCurrent(rebuildCtx, generation) {
+			c.requestContentCrawl(rebuildCtx, generation)
+		}
+	})
+}
+
 func (c *FileSearchPlugin) indexFilesFromScratch(ctx context.Context) {
 	if c.engine == nil {
 		return
@@ -942,7 +956,7 @@ func (c *FileSearchPlugin) indexFilesFromScratch(ctx context.Context) {
 
 		// Restart content crawl if enabled. RebuildIndex removed the old
 		// contentsearch.db, so this will open a fresh DB and do a full crawl.
-		// The hook is installed after that crawl completes.
+		// The hook is installed before the crawl so concurrent changes are retained.
 		if c.isContentSearchCurrent(rebuildCtx, generation) {
 			c.requestContentCrawl(rebuildCtx, generation)
 		}

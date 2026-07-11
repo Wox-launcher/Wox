@@ -24,12 +24,43 @@ type ContentStats struct {
 	CrawlComplete    bool
 }
 
+// ContentEntryMetadata is the persisted file identity used to skip unchanged content during a full crawl.
+type ContentEntryMetadata struct {
+	Mtime     int64
+	Size      int64
+	Extension string
+}
+
+// ContentIndexCandidate is one authoritative file candidate read from the name index.
+type ContentIndexCandidate struct {
+	EntryID   int64
+	Path      string
+	Mtime     int64
+	Size      int64
+	Extension string
+}
+
+type contentIndexDocument struct {
+	Path      string
+	Mtime     int64
+	Size      int64
+	Extension string
+	Text      string
+}
+
+type preparedContentIndexDocument struct {
+	contentIndexDocument
+	Hash         uint32
+	Tokenized    string
+	IndexedBytes int64
+}
+
 // contentCrawlStateKey is the meta key for content crawl state.
 const contentCrawlStateKey = "content_crawl_state"
 
 const (
 	contentIndexSchemaVersionKey     = "content_index_schema_version"
-	currentContentIndexSchemaVersion = "2"
+	currentContentIndexSchemaVersion = "3"
 )
 
 // IndexContent indexes or updates a file's content in the content index.
@@ -38,89 +69,201 @@ const (
 // exists with the same hash, it skips (no change). Returns true if the index
 // was actually updated. Retries on "database is locked" up to 3 times.
 func (d *ContentSearchDB) IndexContent(ctx context.Context, path string, mtime, size int64, extension, text string) (bool, error) {
+	updated, err := d.indexContentBatch(ctx, []contentIndexDocument{{
+		Path:      path,
+		Mtime:     mtime,
+		Size:      size,
+		Extension: extension,
+		Text:      text,
+	}})
+	return updated > 0, err
+}
+
+// indexContentBatch tokenizes documents before entering one SQLite transaction and returns the number of changed rows.
+func (d *ContentSearchDB) indexContentBatch(ctx context.Context, documents []contentIndexDocument) (int, error) {
 	if d == nil || d.db == nil {
-		return false, fmt.Errorf("content search db not open")
+		return 0, fmt.Errorf("content search db not open")
+	}
+	if len(documents) == 0 {
+		return 0, nil
 	}
 
-	hash := fnv32aContent(text)
-	tokenized := TokenizeForContentIndex(text)
-	indexedBytes := int64(len(text))
+	prepared := make([]preparedContentIndexDocument, 0, len(documents))
+	for _, document := range documents {
+		prepared = append(prepared, preparedContentIndexDocument{
+			contentIndexDocument: document,
+			Hash:                 fnv32aContent(document.Text),
+			Tokenized:            TokenizeForContentIndex(document.Text),
+			IndexedBytes:         int64(len(document.Text)),
+		})
+	}
 
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
-		updated, err := d.indexContentOnce(ctx, path, mtime, size, extension, hash, tokenized, indexedBytes)
+		updated, err := d.indexContentBatchOnce(ctx, prepared)
 		if err == nil {
 			return updated, nil
 		}
 		lastErr = err
 		// Retry only on "database is locked" or "SQLITE_BUSY".
 		if !strings.Contains(err.Error(), "locked") && !strings.Contains(err.Error(), "busy") {
-			return false, err
+			return 0, err
 		}
 		select {
 		case <-ctx.Done():
-			return false, ctx.Err()
+			return 0, ctx.Err()
 		case <-time.After(time.Duration(100*(attempt+1)) * time.Millisecond):
 		}
 	}
-	return false, lastErr
+	return 0, lastErr
 }
 
-// indexContentOnce performs a single IndexContent attempt without retry.
-func (d *ContentSearchDB) indexContentOnce(ctx context.Context, path string, mtime, size int64, extension string, hash uint32, tokenized string, indexedBytes int64) (bool, error) {
+// indexContentBatchOnce applies one prepared batch atomically without retrying inside the transaction.
+func (d *ContentSearchDB) indexContentBatchOnce(ctx context.Context, documents []preparedContentIndexDocument) (int, error) {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, fmt.Errorf("begin tx: %w", err)
+		return 0, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Check if this path already exists with the same content hash (inside the tx).
-	var existingRowid int64
-	var existingHash int64
-	err = tx.QueryRowContext(ctx, `SELECT rowid, content_hash FROM content_entries WHERE path = ?`, path).Scan(&existingRowid, &existingHash)
-	if err == nil && uint32(existingHash) == hash {
-		return false, nil // no content change, skip
-	}
-
-	// If path exists with different content, delete old FTS row first.
-	if err == nil && existingRowid > 0 {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO entries_content_fts(entries_content_fts, rowid) VALUES('delete', ?)`, existingRowid); err != nil {
-			return false, fmt.Errorf("delete old content fts: %w", err)
+	updatedCount := 0
+	for _, document := range documents {
+		var existingRowid int64
+		var existingHash int64
+		var existingMtime, existingSize int64
+		var existingExtension string
+		err = tx.QueryRowContext(ctx, `SELECT rowid, content_hash, mtime, size, extension FROM content_entries WHERE path = ?`, document.Path).Scan(&existingRowid, &existingHash, &existingMtime, &existingSize, &existingExtension)
+		if err != nil && err != sql.ErrNoRows {
+			return 0, fmt.Errorf("query existing content entry %s: %w", document.Path, err)
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM content_entries WHERE rowid = ?`, existingRowid); err != nil {
-			return false, fmt.Errorf("delete old content entry: %w", err)
+		if err == nil && uint32(existingHash) == document.Hash {
+			if existingMtime != document.Mtime || existingSize != document.Size || existingExtension != document.Extension {
+				if _, err := tx.ExecContext(ctx, `UPDATE content_entries SET mtime = ?, size = ?, extension = ?, indexed_text_bytes = ? WHERE rowid = ?`, document.Mtime, document.Size, document.Extension, document.IndexedBytes, existingRowid); err != nil {
+					return 0, fmt.Errorf("refresh unchanged content metadata: %w", err)
+				}
+			}
+			continue
 		}
-	}
 
-	// Insert new content_entries row.
-	res, err := tx.ExecContext(ctx,
-		`INSERT INTO content_entries (path, mtime, size, content_hash, extension, indexed_text_bytes) VALUES (?, ?, ?, ?, ?, ?)`,
-		path, mtime, size, int64(hash), extension, indexedBytes)
-	if err != nil {
-		return false, fmt.Errorf("insert content entry: %w", err)
-	}
-	newRowid, err := res.LastInsertId()
-	if err != nil {
-		return false, fmt.Errorf("get last insert id: %w", err)
-	}
-
-	// Insert FTS row with tokenized content.
-	if tokenized != "" {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO entries_content_fts(rowid, content) VALUES (?, ?)`, newRowid, tokenized); err != nil {
-			return false, fmt.Errorf("insert content fts: %w", err)
+		if err == nil && existingRowid > 0 {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO entries_content_fts(entries_content_fts, rowid) VALUES('delete', ?)`, existingRowid); err != nil {
+				return 0, fmt.Errorf("delete old content fts: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, `DELETE FROM content_entries WHERE rowid = ?`, existingRowid); err != nil {
+				return 0, fmt.Errorf("delete old content entry: %w", err)
+			}
 		}
+
+		res, err := tx.ExecContext(ctx,
+			`INSERT INTO content_entries (path, mtime, size, content_hash, extension, indexed_text_bytes) VALUES (?, ?, ?, ?, ?, ?)`,
+			document.Path, document.Mtime, document.Size, int64(document.Hash), document.Extension, document.IndexedBytes)
+		if err != nil {
+			return 0, fmt.Errorf("insert content entry: %w", err)
+		}
+		newRowid, err := res.LastInsertId()
+		if err != nil {
+			return 0, fmt.Errorf("get last insert id: %w", err)
+		}
+		if document.Tokenized != "" {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO entries_content_fts(rowid, content) VALUES (?, ?)`, newRowid, document.Tokenized); err != nil {
+				return 0, fmt.Errorf("insert content fts: %w", err)
+			}
+		}
+		updatedCount++
 	}
 
 	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("commit: %w", err)
+		return 0, fmt.Errorf("commit: %w", err)
 	}
-	return true, nil
+	return updatedCount, nil
+}
+
+// ListContentEntryMetadata loads the small metadata working set used by one full content crawl.
+func (d *ContentSearchDB) ListContentEntryMetadata(ctx context.Context) (map[string]ContentEntryMetadata, error) {
+	if d == nil || d.db == nil {
+		return nil, fmt.Errorf("content search db not open")
+	}
+	rows, err := d.db.QueryContext(ctx, `SELECT path, mtime, size, extension FROM content_entries`)
+	if err != nil {
+		return nil, fmt.Errorf("list content entry metadata: %w", err)
+	}
+	defer rows.Close()
+
+	metadata := make(map[string]ContentEntryMetadata)
+	for rows.Next() {
+		var path string
+		var entry ContentEntryMetadata
+		if err := rows.Scan(&path, &entry.Mtime, &entry.Size, &entry.Extension); err != nil {
+			return nil, err
+		}
+		metadata[path] = entry
+	}
+	return metadata, rows.Err()
+}
+
+// ListContentIndexCandidates reads one stable keyset page of eligible files from the name index.
+func (d *FileSearchDB) ListContentIndexCandidates(ctx context.Context, afterEntryID int64, extensions map[string]bool, limit int) ([]ContentIndexCandidate, error) {
+	if d == nil || d.db == nil {
+		return nil, fmt.Errorf("filesearch db not open")
+	}
+	if limit <= 0 || len(extensions) == 0 {
+		return nil, nil
+	}
+
+	extensionList := make([]string, 0, len(extensions))
+	for extension, enabled := range extensions {
+		if enabled {
+			extensionList = append(extensionList, extension)
+		}
+	}
+	if len(extensionList) == 0 {
+		return nil, nil
+	}
+	sort.Strings(extensionList)
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(extensionList)), ",")
+	args := make([]any, 0, len(extensionList)+2)
+	args = append(args, afterEntryID)
+	for _, extension := range extensionList {
+		args = append(args, extension)
+	}
+	args = append(args, limit)
+
+	rows, err := d.db.QueryContext(ctx, `
+		SELECT entry_id, path, mtime, size, extension
+		FROM entries
+		WHERE entry_id > ? AND is_dir = 0 AND extension IN (`+placeholders+`)
+		ORDER BY entry_id ASC
+		LIMIT ?
+	`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list content index candidates: %w", err)
+	}
+	defer rows.Close()
+
+	candidates := make([]ContentIndexCandidate, 0, limit)
+	for rows.Next() {
+		var candidate ContentIndexCandidate
+		if err := rows.Scan(&candidate.EntryID, &candidate.Path, &candidate.Mtime, &candidate.Size, &candidate.Extension); err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, candidate)
+	}
+	return candidates, rows.Err()
 }
 
 // DeleteContent removes a file's content from the index.
 func (d *ContentSearchDB) DeleteContent(ctx context.Context, path string) error {
+	return d.DeleteContentBatch(ctx, []string{path})
+}
+
+// DeleteContentBatch removes multiple paths in one transaction.
+func (d *ContentSearchDB) DeleteContentBatch(ctx context.Context, paths []string) error {
 	if d == nil || d.db == nil {
 		return fmt.Errorf("content search db not open")
+	}
+	if len(paths) == 0 {
+		return nil
 	}
 
 	tx, err := d.db.BeginTx(ctx, nil)
@@ -129,20 +272,22 @@ func (d *ContentSearchDB) DeleteContent(ctx context.Context, path string) error 
 	}
 	defer tx.Rollback()
 
-	var rowid int64
-	err = tx.QueryRowContext(ctx, `SELECT rowid FROM content_entries WHERE path = ?`, path).Scan(&rowid)
-	if err == sql.ErrNoRows {
-		return nil // not indexed, nothing to delete
-	}
-	if err != nil {
-		return fmt.Errorf("query content entry: %w", err)
-	}
+	for _, path := range paths {
+		var rowid int64
+		err = tx.QueryRowContext(ctx, `SELECT rowid FROM content_entries WHERE path = ?`, path).Scan(&rowid)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("query content entry: %w", err)
+		}
 
-	if _, err := tx.ExecContext(ctx, `INSERT INTO entries_content_fts(entries_content_fts, rowid) VALUES('delete', ?)`, rowid); err != nil {
-		return fmt.Errorf("delete content fts: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM content_entries WHERE rowid = ?`, rowid); err != nil {
-		return fmt.Errorf("delete content entry: %w", err)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO entries_content_fts(entries_content_fts, rowid) VALUES('delete', ?)`, rowid); err != nil {
+			return fmt.Errorf("delete content fts: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM content_entries WHERE rowid = ?`, rowid); err != nil {
+			return fmt.Errorf("delete content entry: %w", err)
+		}
 	}
 
 	return tx.Commit()
@@ -313,10 +458,11 @@ func (d *ContentSearchDB) ListContentEntryPathsUnderScope(ctx context.Context, s
 	// Match the scope path exactly and any path beneath it (scopePath + "/" or "\").
 	// SQLite LIKE with escaped separator handles both separators because paths
 	// are stored with os-specific separators via filepath.Clean.
-	likePattern := scopePath + string(filepath.Separator) + "%"
+	cleanScope := filepath.Clean(scopePath)
+	likePattern := escapeLikePattern(cleanScope+string(filepath.Separator)) + "%"
 	rows, err := d.db.QueryContext(ctx,
-		`SELECT path FROM content_entries WHERE path = ? OR path LIKE ? ORDER BY path ASC`,
-		scopePath, likePattern)
+		`SELECT path FROM content_entries WHERE path = ? OR path LIKE ? ESCAPE '\' ORDER BY path ASC`,
+		cleanScope, likePattern)
 	if err != nil {
 		return nil, err
 	}
@@ -333,22 +479,33 @@ func (d *ContentSearchDB) ListContentEntryPathsUnderScope(ctx context.Context, s
 	return paths, rows.Err()
 }
 
-// EntryPathExists reports whether a path is currently present in the name
-// index entries table. Used by the content hook to decide whether a content
-// entry should be deleted during scope reconciliation.
-func (d *FileSearchDB) EntryPathExists(ctx context.Context, path string) (bool, error) {
+// ListEntryPathsUnderScope returns indexed file paths for one authoritative name-index scope.
+func (d *FileSearchDB) ListEntryPathsUnderScope(ctx context.Context, rootID, scopePath string) ([]string, error) {
 	if d == nil || d.db == nil {
-		return false, fmt.Errorf("filesearch db not open")
+		return nil, fmt.Errorf("filesearch db not open")
 	}
-	var exists int
-	err := d.db.QueryRowContext(ctx, `SELECT 1 FROM entries WHERE path = ? LIMIT 1`, path).Scan(&exists)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
+	cleanScope := filepath.Clean(scopePath)
+	likePattern := escapeLikePattern(cleanScope+string(filepath.Separator)) + "%"
+	rows, err := d.db.QueryContext(ctx, `
+		SELECT path
+		FROM entries
+		WHERE root_id = ? AND is_dir = 0 AND (path = ? OR path LIKE ? ESCAPE '\')
+		ORDER BY path ASC
+	`, rootID, cleanScope, likePattern)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return true, nil
+	defer rows.Close()
+
+	paths := make([]string, 0)
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, err
+		}
+		paths = append(paths, path)
+	}
+	return paths, rows.Err()
 }
 
 func buildContentFTS5MatchExpression(query string) string {

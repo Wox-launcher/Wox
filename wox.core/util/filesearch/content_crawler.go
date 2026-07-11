@@ -14,32 +14,44 @@ import (
 )
 
 const (
-	contentCrawlYieldInterval = 10 * time.Millisecond
-	contentCrawlFilesPerYield = 50
+	contentCrawlBatchSize     = 32
+	contentCrawlCandidatePage = 512
+	contentCrawlFilesPerYield = 256
 	contentCrawlReportEvery   = 2 * time.Second
 )
 
 // ContentCrawlProgress is reported periodically during content crawl.
 type ContentCrawlProgress struct {
-	FilesIndexed int
-	CurrentRoot  string
-	RootIndex    int
-	RootTotal    int
-	BytesIndexed int64
-	Complete     bool
+	FilesIndexed   int
+	FilesUpdated   int
+	FilesProcessed int
+	FilesSkipped   int
+	FilesFailed    int
+	ElapsedMillis  int64
+	CurrentRoot    string
+	RootIndex      int
+	RootTotal      int
+	BytesIndexed   int64
+	BytesProcessed int64
+	Complete       bool
 }
 
-// ContentCrawler walks the effective roots and indexes file contents into the
-// content_entries + entries_content_fts tables. It runs as a low-priority
-// background goroutine, yielding frequently to avoid competing with the
-// filesearch scanner or UI.
+// ContentCrawler indexes name-index candidates into the content_entries and
+// entries_content_fts tables. The filesystem walk remains only as a fallback
+// for isolated callers that do not provide a name database.
 type ContentCrawler struct {
 	db           *ContentSearchDB
+	nameDB       *FileSearchDB
 	extensions   map[string]bool
 	maxReadBytes int64
 	roots        []RootRecord
 	policy       Policy
 	progressCB   func(ContentCrawlProgress)
+}
+
+// setNameDB makes the persisted name index authoritative for stale-content cleanup.
+func (c *ContentCrawler) setNameDB(nameDB *FileSearchDB) {
+	c.nameDB = nameDB
 }
 
 // NewContentCrawler creates a crawler for the given DB, roots, and policy.
@@ -54,12 +66,12 @@ func NewContentCrawler(db *ContentSearchDB, roots []RootRecord, policy Policy, e
 	}
 }
 
-// Run walks all roots and indexes eligible file contents. Sets crawl state
-// to in_progress at start and complete at end.
+// Run indexes eligible file contents and records the crawl lifecycle in the content database.
 func (c *ContentCrawler) Run(ctx context.Context) error {
 	if c.db == nil {
 		return fmt.Errorf("db not open")
 	}
+	startedAt := time.Now()
 
 	if err := c.db.SetContentCrawlState(ctx, "in_progress"); err != nil {
 		return fmt.Errorf("set crawl state: %w", err)
@@ -67,26 +79,49 @@ func (c *ContentCrawler) Run(ctx context.Context) error {
 
 	c.report(ContentCrawlProgress{RootTotal: len(c.roots)})
 
-	fileCount := 0
-	var lastYield time.Time
+	existing, err := c.db.ListContentEntryMetadata(ctx)
+	if err != nil {
+		return fmt.Errorf("load content metadata: %w", err)
+	}
+
+	counters := contentCrawlCounters{}
+	seenPaths := make(map[string]struct{}, len(existing))
 	lastReport := time.Now()
 	rootTotal := len(c.roots)
+	var firstErr error
 
-	for rootIdx, root := range c.roots {
-		if ctx.Err() != nil {
-			return ctx.Err()
+	if c.nameDB != nil {
+		firstErr = c.crawlNameIndex(ctx, existing, seenPaths, &counters, &lastReport)
+	} else {
+		for rootIdx, root := range c.roots {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+
+			c.report(ContentCrawlProgress{
+				FilesIndexed:   counters.indexed + counters.skipped,
+				FilesUpdated:   counters.indexed,
+				FilesProcessed: counters.extracted,
+				FilesSkipped:   counters.skipped,
+				FilesFailed:    counters.failed,
+				CurrentRoot:    root.Path,
+				RootIndex:      rootIdx,
+				RootTotal:      rootTotal,
+			})
+
+			if err := c.crawlRoot(ctx, root, rootIdx, rootTotal, existing, seenPaths, &counters, &lastReport); err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("content crawl root %s failed: %v", root.Path, err))
+				if firstErr == nil {
+					firstErr = err
+				}
+			}
 		}
-
-		c.report(ContentCrawlProgress{
-			FilesIndexed: fileCount,
-			CurrentRoot:  root.Path,
-			RootIndex:    rootIdx,
-			RootTotal:    rootTotal,
-		})
-
-		if err := c.crawlRoot(ctx, root, rootIdx, rootTotal, &fileCount, &lastYield, &lastReport); err != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("content crawl root %s failed: %v", root.Path, err))
-		}
+	}
+	if firstErr != nil {
+		return firstErr
+	}
+	if err := c.deleteMissingContent(ctx, existing, seenPaths); err != nil {
+		return err
 	}
 
 	if err := c.db.SetContentCrawlState(ctx, "complete"); err != nil {
@@ -94,24 +129,137 @@ func (c *ContentCrawler) Run(ctx context.Context) error {
 	}
 
 	stats, _ := c.db.ContentStats(ctx)
+	elapsedMillis := time.Since(startedAt).Milliseconds()
 	c.report(ContentCrawlProgress{
-		FilesIndexed: fileCount,
-		RootTotal:    rootTotal,
-		BytesIndexed: stats.IndexedTextBytes,
-		Complete:     true,
+		FilesIndexed:   stats.DocCount,
+		FilesUpdated:   counters.indexed,
+		FilesProcessed: counters.extracted,
+		FilesSkipped:   counters.skipped,
+		FilesFailed:    counters.failed,
+		ElapsedMillis:  elapsedMillis,
+		RootTotal:      rootTotal,
+		BytesIndexed:   stats.IndexedTextBytes,
+		BytesProcessed: counters.extractedBytes,
+		Complete:       true,
 	})
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("content crawl complete: %d files indexed", fileCount))
+	filesPerSecond := float64(0)
+	if elapsedMillis > 0 {
+		filesPerSecond = float64(stats.DocCount) * 1000 / float64(elapsedMillis)
+	}
+	source := "filesystem"
+	if c.nameDB != nil {
+		source = "name_index"
+	}
+	util.GetLogger().Info(ctx, fmt.Sprintf(
+		"content crawl complete: source=%s candidates=%d files=%d elapsed=%dms files_per_second=%.2f updated=%d skipped=%d failed=%d",
+		source,
+		counters.visited,
+		stats.DocCount,
+		elapsedMillis,
+		filesPerSecond,
+		counters.indexed,
+		counters.skipped,
+		counters.failed,
+	))
 	return nil
 }
 
-func (c *ContentCrawler) crawlRoot(ctx context.Context, root RootRecord, rootIdx, rootTotal int, fileCount *int, lastYield *time.Time, lastReport *time.Time) error {
+type contentCrawlCounters struct {
+	visited        int
+	indexed        int
+	skipped        int
+	failed         int
+	extracted      int
+	extractedBytes int64
+}
+
+// crawlNameIndex indexes only files already accepted by the authoritative name index.
+func (c *ContentCrawler) crawlNameIndex(ctx context.Context, existing map[string]ContentEntryMetadata, seenPaths map[string]struct{}, counters *contentCrawlCounters, lastReport *time.Time) error {
+	var afterEntryID int64
+	batch := make([]contentIndexDocument, 0, contentCrawlBatchSize)
+	flushBatch := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		updated, err := c.db.indexContentBatch(ctx, batch)
+		if err != nil {
+			return err
+		}
+		counters.indexed += updated
+		batch = batch[:0]
+		return nil
+	}
+
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		candidates, err := c.nameDB.ListContentIndexCandidates(ctx, afterEntryID, c.extensions, contentCrawlCandidatePage)
+		if err != nil {
+			return err
+		}
+		if len(candidates) == 0 {
+			break
+		}
+
+		for _, candidate := range candidates {
+			afterEntryID = candidate.EntryID
+			counters.visited++
+			seenPaths[candidate.Path] = struct{}{}
+			if metadata, ok := existing[candidate.Path]; ok && metadata.Mtime == candidate.Mtime && metadata.Size == candidate.Size && metadata.Extension == candidate.Extension {
+				counters.skipped++
+				c.yieldAndReportPath("", 0, 0, counters, lastReport)
+				continue
+			}
+
+			readBytes := contentExtractionMaxBytes(candidate.Path, candidate.Size, c.maxReadBytes)
+			text, err := extractContentText(candidate.Path, readBytes)
+			if err != nil {
+				counters.failed++
+				c.yieldAndReportPath("", 0, 0, counters, lastReport)
+				continue
+			}
+
+			batch = append(batch, contentIndexDocument{Path: candidate.Path, Mtime: candidate.Mtime, Size: candidate.Size, Extension: candidate.Extension, Text: text})
+			counters.extracted++
+			counters.extractedBytes += int64(len(text))
+			if len(batch) >= contentCrawlBatchSize {
+				if err := flushBatch(); err != nil {
+					return err
+				}
+			}
+			c.yieldAndReportPath("", 0, 0, counters, lastReport)
+		}
+	}
+	return flushBatch()
+}
+
+func (c *ContentCrawler) crawlRoot(ctx context.Context, root RootRecord, rootIdx, rootTotal int, existing map[string]ContentEntryMetadata, seenPaths map[string]struct{}, counters *contentCrawlCounters, lastReport *time.Time) error {
 	if c.policy.NewTraversalContext == nil {
 		return fmt.Errorf("no traversal context in policy")
 	}
-	traversalCtx := c.policy.NewTraversalContext(root, root.Path)
+	rootPath := filepath.Clean(root.Path)
+	type traversalFrame struct {
+		path    string
+		context TraversalPolicyContext
+	}
+	policyStack := []traversalFrame{{path: rootPath, context: c.policy.NewTraversalContext(root, rootPath)}}
+	batch := make([]contentIndexDocument, 0, contentCrawlBatchSize)
+	flushBatch := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		updated, err := c.db.indexContentBatch(ctx, batch)
+		if err != nil {
+			return err
+		}
+		counters.indexed += updated
+		batch = batch[:0]
+		return nil
+	}
 
-	return filepath.WalkDir(root.Path, func(path string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(rootPath, func(path string, d os.DirEntry, err error) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -119,7 +267,26 @@ func (c *ContentCrawler) crawlRoot(ctx context.Context, root RootRecord, rootIdx
 			return nil
 		}
 
-		if !traversalCtx.ShouldIndexPath(path, d.IsDir()) {
+		if path == rootPath {
+			return nil
+		}
+		if shouldSkipSystemPathForRoot(root, path, d.IsDir()) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		parentPath := filepath.Dir(path)
+		for len(policyStack) > 0 && policyStack[len(policyStack)-1].path != parentPath {
+			policyStack = policyStack[:len(policyStack)-1]
+		}
+		var parentContext TraversalPolicyContext
+		if len(policyStack) > 0 {
+			parentContext = policyStack[len(policyStack)-1].context
+		} else {
+			parentContext = c.policy.NewTraversalContext(root, filepath.Dir(path))
+		}
+		if !parentContext.ShouldIndexPath(path, d.IsDir()) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -127,57 +294,114 @@ func (c *ContentCrawler) crawlRoot(ctx context.Context, root RootRecord, rootIdx
 		}
 
 		if d.IsDir() {
-			traversalCtx = traversalCtx.Descend(path)
+			policyStack = append(policyStack, traversalFrame{path: path, context: parentContext.Descend(path)})
 			return nil
 		}
+		counters.visited++
 
 		// Check extension whitelist.
 		if !IsContentSearchableExtension(path, c.extensions) {
+			c.yieldAndReport(root, rootIdx, rootTotal, counters, lastReport)
 			return nil
 		}
+		seenPaths[path] = struct{}{}
 
 		info, err := d.Info()
 		if err != nil {
+			counters.failed++
+			return nil
+		}
+		ext := contentNormalizeExtension(path)
+		if metadata, ok := existing[path]; ok && metadata.Mtime == info.ModTime().UnixMilli() && metadata.Size == info.Size() && metadata.Extension == ext {
+			counters.skipped++
+			c.yieldAndReport(root, rootIdx, rootTotal, counters, lastReport)
 			return nil
 		}
 
 		readBytes := contentExtractionMaxBytes(path, info.Size(), c.maxReadBytes)
 		text, err := extractContentText(path, readBytes)
 		if err != nil {
+			counters.failed++
 			return nil
 		}
 
-		ext := contentNormalizeExtension(path)
-		_, _ = c.db.IndexContent(ctx, path, info.ModTime().UnixMilli(), info.Size(), ext, text)
-		*fileCount++
-
-		// Report progress periodically.
-		if time.Since(*lastReport) > contentCrawlReportEvery {
-			stats, _ := c.db.ContentStats(ctx)
-			c.report(ContentCrawlProgress{
-				FilesIndexed: *fileCount,
-				CurrentRoot:  root.Path,
-				RootIndex:    rootIdx,
-				RootTotal:    rootTotal,
-				BytesIndexed: stats.IndexedTextBytes,
-			})
-			*lastReport = time.Now()
-		}
-
-		// Yield.
-		if time.Since(*lastYield) > contentCrawlYieldInterval {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(contentCrawlYieldInterval):
+		batch = append(batch, contentIndexDocument{Path: path, Mtime: info.ModTime().UnixMilli(), Size: info.Size(), Extension: ext, Text: text})
+		counters.extracted++
+		counters.extractedBytes += int64(len(text))
+		if len(batch) >= contentCrawlBatchSize {
+			if err := flushBatch(); err != nil {
+				return err
 			}
-			*lastYield = time.Now()
-		} else if *fileCount%contentCrawlFilesPerYield == 0 {
-			runtime.Gosched()
 		}
+		c.yieldAndReport(root, rootIdx, rootTotal, counters, lastReport)
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	return flushBatch()
+}
+
+func (c *ContentCrawler) yieldAndReport(root RootRecord, rootIdx, rootTotal int, counters *contentCrawlCounters, lastReport *time.Time) {
+	c.yieldAndReportPath(root.Path, rootIdx, rootTotal, counters, lastReport)
+}
+
+func (c *ContentCrawler) yieldAndReportPath(currentRoot string, rootIdx, rootTotal int, counters *contentCrawlCounters, lastReport *time.Time) {
+	if counters.visited%contentCrawlFilesPerYield == 0 {
+		runtime.Gosched()
+	}
+	if time.Since(*lastReport) < contentCrawlReportEvery {
+		return
+	}
+	c.report(ContentCrawlProgress{
+		FilesIndexed:   counters.indexed + counters.skipped,
+		FilesUpdated:   counters.indexed,
+		FilesProcessed: counters.extracted,
+		FilesSkipped:   counters.skipped,
+		FilesFailed:    counters.failed,
+		CurrentRoot:    currentRoot,
+		RootIndex:      rootIdx,
+		RootTotal:      rootTotal,
+		BytesIndexed:   counters.extractedBytes,
+		BytesProcessed: counters.extractedBytes,
+	})
+	*lastReport = time.Now()
+}
+
+// deleteMissingContent prunes records for files that disappeared or no longer belong to the configured roots/extensions.
+func (c *ContentCrawler) deleteMissingContent(ctx context.Context, existing map[string]ContentEntryMetadata, seenPaths map[string]struct{}) error {
+	if c.nameDB != nil {
+		stalePaths := make([]string, 0)
+		for path := range existing {
+			if _, seen := seenPaths[path]; !seen {
+				stalePaths = append(stalePaths, path)
+			}
+		}
+		return c.db.DeleteContentBatch(ctx, stalePaths)
+	}
+
+	stalePaths := make([]string, 0)
+	for path := range existing {
+		if _, seen := seenPaths[path]; seen {
+			continue
+		}
+		withinRoot := false
+		for _, root := range c.roots {
+			if pathWithinScope(root.Path, path) {
+				withinRoot = true
+				break
+			}
+		}
+		if !withinRoot || !IsContentSearchableExtension(path, c.extensions) {
+			stalePaths = append(stalePaths, path)
+			continue
+		}
+		if _, err := os.Lstat(path); os.IsNotExist(err) {
+			stalePaths = append(stalePaths, path)
+		}
+	}
+	return c.db.DeleteContentBatch(ctx, stalePaths)
 }
 
 func (c *ContentCrawler) report(progress ContentCrawlProgress) {

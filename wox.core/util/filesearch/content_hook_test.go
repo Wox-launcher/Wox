@@ -54,8 +54,8 @@ func TestContentIndexHookCloseCancelsScopeReconcile(t *testing.T) {
 		t.Fatalf("reserve content db connection: %v", err)
 	}
 
-	hook := NewContentIndexHook(contentDB, nameDB, ContentExtensionsFromList([]string{"txt"}), ContentDefaultMaxReadBytes, newPolicyState(Policy{}))
-	hook.processScopeReplaced(ctx, "root", scopePath)
+	hook := NewContentIndexHook(contentDB, nameDB, ContentExtensionsFromList([]string{"txt"}), ContentDefaultMaxReadBytes)
+	hook.Notify(ctx, ContentHookNotification{Kind: ContentHookKindScopeReplaced, RootID: "root", ScopePath: scopePath})
 
 	time.Sleep(50 * time.Millisecond)
 

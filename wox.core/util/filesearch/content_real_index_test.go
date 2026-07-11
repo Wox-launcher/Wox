@@ -50,6 +50,7 @@ type contentRealIndexCrawlMetric struct {
 	ProcessedFiles     int     `json:"processed_files"`
 	StoredDocuments    int     `json:"stored_documents"`
 	IndexedTextBytes   int64   `json:"indexed_text_bytes"`
+	ProcessedTextBytes int64   `json:"processed_text_bytes"`
 	DocumentsPerSecond float64 `json:"documents_per_second"`
 	TextMiBPerSecond   float64 `json:"text_mib_per_second"`
 	AllocatedBytes     uint64  `json:"allocated_bytes"`
@@ -166,7 +167,7 @@ func captureContentRealIndexCrawl(t *testing.T, ctx context.Context, db *Content
 	err := crawler.Run(ctx)
 	elapsed := time.Since(startedAt)
 	metric.ElapsedMillis = elapsed.Milliseconds()
-	metric.ProcessedFiles = progress.FilesIndexed
+	metric.ProcessedFiles = progress.FilesProcessed
 	metric.Complete = progress.Complete
 	if err != nil {
 		metric.Error = err.Error()
@@ -182,10 +183,11 @@ func captureContentRealIndexCrawl(t *testing.T, ctx context.Context, db *Content
 	}
 	metric.StoredDocuments = stats.DocCount
 	metric.IndexedTextBytes = stats.IndexedTextBytes
+	metric.ProcessedTextBytes = progress.BytesProcessed
 	seconds := elapsed.Seconds()
 	if seconds > 0 {
 		metric.DocumentsPerSecond = float64(metric.ProcessedFiles) / seconds
-		metric.TextMiBPerSecond = float64(metric.IndexedTextBytes) / (1024 * 1024) / seconds
+		metric.TextMiBPerSecond = float64(metric.ProcessedTextBytes) / (1024 * 1024) / seconds
 	}
 
 	var after runtime.MemStats
@@ -194,11 +196,12 @@ func captureContentRealIndexCrawl(t *testing.T, ctx context.Context, db *Content
 	metric.AllocationCount = after.Mallocs - before.Mallocs
 
 	t.Logf(
-		"content crawl baseline: elapsed=%dms processed=%d stored=%d indexed_text_bytes=%d docs_per_second=%.2f text_mib_per_second=%.2f allocated_bytes=%d allocations=%d complete=%t error=%q",
+		"content crawl baseline: elapsed=%dms processed=%d stored=%d indexed_text_bytes=%d processed_text_bytes=%d docs_per_second=%.2f text_mib_per_second=%.2f allocated_bytes=%d allocations=%d complete=%t error=%q",
 		metric.ElapsedMillis,
 		metric.ProcessedFiles,
 		metric.StoredDocuments,
 		metric.IndexedTextBytes,
+		metric.ProcessedTextBytes,
 		metric.DocumentsPerSecond,
 		metric.TextMiBPerSecond,
 		metric.AllocatedBytes,
