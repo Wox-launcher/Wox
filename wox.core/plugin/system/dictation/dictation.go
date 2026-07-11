@@ -1797,12 +1797,16 @@ func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, 
 	defer cancel()
 
 	systemPrompt := strings.Join([]string{
-		"You are a transcription editor. Clean up the user's voice-dictation transcript into fluent, coherent, easy-to-understand text while preserving the original meaning, language, and register.",
-		"Do not translate. Keep the user's tone, formality, slang, profanity, placeholders, proper nouns, identifiers, numbers, URLs, and code terms unless the user clearly corrected them.",
+		"You are a transcription editor. Turn the user's voice-dictation transcript into fluent, coherent, easy-to-understand text while preserving the intended meaning, language, and register.",
+		"First correct likely speech-recognition errors, including homophones, near-homophones, wrong word boundaries, missing or extra words or characters, and malformed domain terms. Infer the intended wording from the full sentence, previous dictation context, and user dictionary.",
+		"If the literal transcript is nonsensical, ungrammatical, or contradicts its surrounding context, do not preserve it mechanically; replace it with the most contextually plausible wording that expresses the user's evident intent.",
+		"Do not translate. Keep the user's tone, formality, slang, profanity, placeholders, proper nouns, identifiers, numbers, URLs, and code terms when they make sense in context. Latin letters alone do not prove that a nearby nonsensical phrase is an identifier or code term.",
 		"Remove filler words (um, uh, like, you know), obvious stutters, repeated words, disfluencies, sentence fragments, and false starts.",
 		"Apply capitalization, punctuation, and paragraph breaks based on grammar and meaning, not speech pauses. Merge fragments that belong to the same sentence, and remove punctuation that splits a natural phrase or clause.",
 		"Apply explicit self-corrections, and drop content the user clearly retracted.",
+		"Examples of intended correction behavior: in a discussion about AI text refinement, '后AI用色没有多大的效果' should become '然后，AI润色没有多大效果'; '改为单击就可以，更正' should become '改为单击就可以更正'. These are examples only; never repeat them unless they are the user's actual text.",
 		"Use numbered or bulleted lists only when the dictation clearly signals an enumeration; otherwise keep plain paragraphs.",
+		"Before answering, silently verify that every sentence is grammatically and semantically coherent. Return the transcript unchanged only when it is already natural and unambiguous.",
 		"Do not add new facts, commands, explanations, quotes, or unrelated formatting. Output only the refined text.",
 	}, " ")
 
@@ -1810,12 +1814,12 @@ func (p *DictationPlugin) refineWithAI(ctx context.Context, model common.Model, 
 	if len(recentContext) > 0 || len(phrases) > 0 {
 		var ctxBuf strings.Builder
 		if len(phrases) > 0 {
-			ctxBuf.WriteString("Preserve these user dictionary words/phrases exactly as written when they appear: ")
+			ctxBuf.WriteString("User dictionary (authoritative spelling; normalize likely phonetic or ASR variants to these forms): ")
 			ctxBuf.WriteString(strings.Join(phrases, ", "))
 			ctxBuf.WriteString("\n\n")
 		}
 		if len(recentContext) > 0 {
-			ctxBuf.WriteString("Previous dictation context (for reference only, do not repeat or rewrite these):\n")
+			ctxBuf.WriteString("Previous dictation context (use it to disambiguate recurring terms and intended meaning; do not repeat or rewrite these):\n")
 			for i, c := range recentContext {
 				ctxBuf.WriteString(fmt.Sprintf("%d. %s\n", i+1, c))
 			}
