@@ -10,6 +10,7 @@ import 'package:wox/components/file_preview/file_preview_renderer.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
 import 'package:wox/components/wox_ai_stream_preview_view.dart';
+import 'package:wox/components/wox_dictation_history_preview_view.dart';
 import 'package:wox/components/wox_hotkey_overview_preview_view.dart';
 import 'package:wox/components/wox_list_preview_view.dart';
 import 'package:wox/components/wox_markdown.dart';
@@ -28,6 +29,7 @@ import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_preview_ai_stream.dart';
+import 'package:wox/entity/wox_preview_dictation_history.dart';
 import 'package:wox/entity/wox_preview_list.dart';
 import 'package:wox/entity/wox_query_requirement_settings_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -275,6 +277,12 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         contentWidget = WoxAIStreamPreviewView(data: WoxPreviewAIStream.fromPreviewData(widget.woxPreview.previewData), woxTheme: widget.woxTheme);
       } catch (e) {
         contentWidget = buildText("Invalid AI stream preview data: $e");
+      }
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_DICTATION_HISTORY.code) {
+      try {
+        contentWidget = WoxDictationHistoryPreviewView(data: WoxPreviewDictationHistory.fromPreviewData(widget.woxPreview.previewData), woxTheme: widget.woxTheme);
+      } catch (e) {
+        contentWidget = buildText("Invalid dictation history preview data: $e");
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_QUERY_REQUIREMENT_SETTINGS.code) {
       try {

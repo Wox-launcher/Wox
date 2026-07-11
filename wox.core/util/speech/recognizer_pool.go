@@ -75,6 +75,19 @@ func (p *RecognizerPool) Close() {
 	p.evictAll()
 }
 
+// IsCached reports whether the recognizer model for config is already loaded
+// so callers can avoid transient model-loading feedback.
+func (p *RecognizerPool) IsCached(config RecognizerConfig) bool {
+	if p == nil {
+		return false
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	entry, ok := p.entries[poolKey(config)]
+	return ok && !entry.evictOnRelease
+}
+
 // Acquire returns a recognizer for the given config. If the model is already
 // cached and not in use, it reuses it (fast path). Otherwise it loads the
 // model from disk once and caches it.

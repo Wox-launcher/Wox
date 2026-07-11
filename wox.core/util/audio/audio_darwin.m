@@ -1,43 +1,99 @@
-#import <AppKit/AppKit.h>
+#import <AVFoundation/AVFoundation.h>
 #import <stdlib.h>
 
-// Retain sounds for the duration of playback; released when playback ends.
-static NSMutableArray* g_playingSounds = nil;
+extern void audioPlaybackFinished(char* filePath, int success);
+extern void audioPlaybackDecodeFailed(char* filePath, char* message);
 
-@interface SoundDelegate : NSObject <NSSoundDelegate>
+@class SoundDelegate;
+
+// Retain and prewarm players by file path so a short dictation cue does not
+// race player creation with the microphone device startup.
+static NSMutableDictionary* g_audioPlayers = nil;
+static SoundDelegate* g_audioPlayerDelegate = nil;
+
+@interface SoundDelegate : NSObject <AVAudioPlayerDelegate>
 @end
 
-@implementation SoundDelegate
-- (void)sound:(NSSound*)sound didFinishPlaying:(BOOL)finishedPlaying {
-    if (g_playingSounds) {
-        [g_playingSounds removeObject:sound];
+static void initializeAudioPlayers(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        g_audioPlayerDelegate = [[SoundDelegate alloc] init];
+        g_audioPlayers = [[NSMutableDictionary alloc] init];
+    });
+}
+
+static NSString* pathForPlayer(AVAudioPlayer* player) {
+    for (NSString* path in g_audioPlayers) {
+        if ([g_audioPlayers objectForKey:path] == player) {
+            return path;
+        }
     }
+    return @"";
+}
+
+@implementation SoundDelegate
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer*)player successfully:(BOOL)successfully {
+    audioPlaybackFinished((char*)[pathForPlayer(player) UTF8String], successfully ? 1 : 0);
+}
+
+- (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer*)player error:(NSError*)error {
+    const char* message = error == nil ? "unknown decode error" : [[error localizedDescription] UTF8String];
+    if (message == NULL) {
+        message = "unknown decode error";
+    }
+    audioPlaybackDecodeFailed((char*)[pathForPlayer(player) UTF8String], (char*)message);
 }
 @end
 
-// playSoundFileMac loads the wav file at filePath into an NSSound and plays it
-// asynchronously. Returns 1 if the sound was created and started, 0 otherwise.
-int playSoundFileMac(const char* filePath) {
+static AVAudioPlayer* preparedPlayerForPath(const char* filePath) {
     @autoreleasepool {
-        static SoundDelegate* delegate = nil;
-        static dispatch_once_t once;
-        dispatch_once(&once, ^{
-            delegate = [[SoundDelegate alloc] init];
-            g_playingSounds = [[NSMutableArray alloc] init];
-        });
+        initializeAudioPlayers();
 
         NSString* nsPath = [NSString stringWithUTF8String:filePath];
-        NSSound* sound = [[NSSound alloc] initWithContentsOfFile:nsPath byReference:YES];
-        if (sound == nil) {
+        AVAudioPlayer* player = [g_audioPlayers objectForKey:nsPath];
+        if (player != nil) {
+            return player;
+        }
+
+        NSError* error = nil;
+        player = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:nsPath] error:&error];
+        if (player == nil) {
+            return nil;
+        }
+
+        [player setVolume:1.0f];
+        [player setDelegate:g_audioPlayerDelegate];
+        if (![player prepareToPlay]) {
+            [player release];
+            return nil;
+        }
+        [g_audioPlayers setObject:player forKey:nsPath];
+        [player release];
+        return [g_audioPlayers objectForKey:nsPath];
+    }
+}
+
+// prepareSoundFileMac loads a dictation cue once so playback can start
+// immediately when the recording overlay becomes visible.
+int prepareSoundFileMac(const char* filePath) {
+    return preparedPlayerForPath(filePath) == nil ? 0 : 1;
+}
+
+// playSoundFileMac plays a prepared cue asynchronously. Returns 1 when the
+// system accepts playback; completion is reported through the delegate.
+int playSoundFileMac(const char* filePath) {
+    @autoreleasepool {
+        AVAudioPlayer* player = preparedPlayerForPath(filePath);
+        if (player == nil) {
             return 0;
         }
-        [sound setVolume:1.0f];
-        [sound setDelegate:delegate];
-        BOOL ok = [sound play];
-        if (!ok) {
+        if ([player isPlaying]) {
+            [player stop];
+        }
+        [player setCurrentTime:0];
+        if (![player play]) {
             return 0;
         }
-        [g_playingSounds addObject:sound];
         return 1;
     }
 }

@@ -37,9 +37,10 @@ const historyTitleMaxRunes = 80
 
 // historyRecord is one persisted dictation transcript.
 type historyRecord struct {
-	ID        string `json:"id"`
-	Content   string `json:"content"`
-	Timestamp int64  `json:"timestamp"` // unix millis, matches util.FormatTimestamp
+	ID              string `json:"id"`
+	Content         string `json:"content"`
+	OriginalContent string `json:"originalContent,omitempty"`
+	Timestamp       int64  `json:"timestamp"` // unix millis, matches util.FormatTimestamp
 }
 
 // historyStore keeps the in-memory copy of the dictation history and guards it
@@ -88,18 +89,21 @@ func (h *historyStore) save(ctx context.Context) {
 	h.api.SaveSetting(ctx, settingKeyHistory, string(data), false)
 }
 
-// add prepends a new record, trims to the cap, and persists. New records go to
-// the front so the in-memory slice stays newest-first, matching the order the
-// Query surface renders.
-func (h *historyStore) add(ctx context.Context, content string, timestamp int64) {
-	if strings.TrimSpace(content) == "" {
+// add prepends a new record, trims to the cap, and persists. Original content
+// is retained whenever AI refinement succeeds, while Content stays the final
+// text used for history actions and future AI context.
+func (h *historyStore) add(ctx context.Context, content string, originalContent string, timestamp int64) {
+	content = strings.TrimSpace(content)
+	if content == "" {
 		return
 	}
+	originalContent = strings.TrimSpace(originalContent)
 
 	record := historyRecord{
-		ID:        uuid.NewString(),
-		Content:   content,
-		Timestamp: timestamp,
+		ID:              uuid.NewString(),
+		Content:         content,
+		OriginalContent: originalContent,
+		Timestamp:       timestamp,
 	}
 
 	h.mu.Lock()
@@ -144,7 +148,7 @@ func (h *historyStore) snapshot(search string) []historyRecord {
 
 	out := make([]historyRecord, 0, len(h.records))
 	for _, r := range h.records {
-		if strings.Contains(strings.ToLower(r.Content), search) {
+		if strings.Contains(strings.ToLower(r.Content), search) || strings.Contains(strings.ToLower(r.OriginalContent), search) {
 			out = append(out, r)
 		}
 	}
@@ -275,11 +279,59 @@ func (h *historyStore) buildHistoryResult(ctx context.Context, record historyRec
 		Group:      group,
 		GroupScore: groupScore,
 		Score:      record.Timestamp,
-		Preview: plugin.WoxPreview{
+		Preview:    buildHistoryPreview(ctx, record),
+		Actions:    actions,
+	}
+}
+
+// dictationHistoryPreviewData keeps the labels alongside both transcript
+// versions because custom preview payloads are not passed through core's normal
+// text-preview translation path.
+type dictationHistoryPreviewData struct {
+	RefinedText   string `json:"refinedText"`
+	OriginalText  string `json:"originalText"`
+	RefinedLabel  string `json:"refinedLabel"`
+	OriginalLabel string `json:"originalLabel"`
+	StatusLabel   string `json:"statusLabel"`
+	IsChanged     bool   `json:"isChanged"`
+}
+
+// buildHistoryPreview routes every history record through the dedicated
+// dictation reader. AI-refined records add the original transcript comparison,
+// while plain dictation records keep the same visual language with one section.
+func buildHistoryPreview(ctx context.Context, record historyRecord) plugin.WoxPreview {
+	originalText := strings.TrimSpace(record.OriginalContent)
+	refinedLabelKey := "plugin_dictation_history_transcript"
+	statusLabel := ""
+	isChanged := false
+	if originalText != "" {
+		refinedLabelKey = "plugin_dictation_history_ai_result"
+		statusKey := "plugin_dictation_history_ai_unchanged"
+		isChanged = record.Content != originalText
+		if isChanged {
+			statusKey = "plugin_dictation_history_ai_refined"
+		}
+		statusLabel = i18n.GetI18nManager().TranslateWox(ctx, statusKey)
+	}
+
+	payload, err := json.Marshal(dictationHistoryPreviewData{
+		RefinedText:   record.Content,
+		OriginalText:  originalText,
+		RefinedLabel:  i18n.GetI18nManager().TranslateWox(ctx, refinedLabelKey),
+		OriginalLabel: i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_history_original_transcript"),
+		StatusLabel:   statusLabel,
+		IsChanged:     isChanged,
+	})
+	if err != nil {
+		return plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeText,
 			PreviewData: record.Content,
-		},
-		Actions: actions,
+		}
+	}
+
+	return plugin.WoxPreview{
+		PreviewType: plugin.WoxPreviewTypeDictationHistory,
+		PreviewData: string(payload),
 	}
 }
 

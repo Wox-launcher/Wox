@@ -153,7 +153,7 @@ func (s *Session) Start() error {
 	logger.Info(s.ctx, fmt.Sprintf("dictation timing: session.newAudioCapture cost=%dms", time.Since(t0).Milliseconds()))
 
 	if err := capture.Start(); err != nil {
-		s.audioPool.Release(s.ctx, capture)
+		s.audioPool.Discard(s.ctx, capture)
 		if s.vad != nil {
 			s.vadPool.Release(s.ctx, s.vad)
 			s.vad = nil

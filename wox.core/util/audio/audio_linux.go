@@ -6,6 +6,10 @@ import (
 	"os/exec"
 )
 
+func prepareFile(context.Context, string) error {
+	return nil
+}
+
 // playFile tries PulseAudio paplay, then ALSA aplay, then SoX play. Returns an
 // error if no player is available. Playback is dispatched in a goroutine so it
 // never blocks the caller.

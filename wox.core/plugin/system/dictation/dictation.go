@@ -445,6 +445,7 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	}
 	p.vadPool = speech.NewVadPool(recognizerPoolIdleTTL)
 	p.vadPool.StartReaper(ctx)
+	p.prepareSoundsAsync(ctx)
 
 	if loadMode == dictationModelLoadModeEager {
 		p.preloadSelectedModelAsync(ctx)
@@ -476,6 +477,9 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			p.reloadActions(ctx, value, true)
 		case settingKeyInputDevice:
 			p.rememberInputDeviceName(ctx, value)
+			if p.audioCapturePool != nil {
+				p.audioCapturePool.EvictExcept(normalizeInputDeviceID(value))
+			}
 		case settingKeyDictionary:
 			if p.dictionary != nil {
 				p.dictionary.load(ctx)
@@ -490,6 +494,22 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			}
 		case settingKeyModelLoadMode:
 			p.updateModelLoadMode(ctx, value)
+		}
+	})
+}
+
+// prepareSoundsAsync preloads the short dictation feedback sounds before the
+// user first starts recording, keeping the hotkey path free of decoder setup.
+func (p *DictationPlugin) prepareSoundsAsync(ctx context.Context) {
+	util.Go(ctx, "prepare dictation sounds", func() {
+		for _, name := range []string{soundStart, soundStop} {
+			soundPath := ensureDictationResourceFile(ctx, name)
+			if soundPath == "" {
+				continue
+			}
+			if err := audio.Prepare(ctx, soundPath); err != nil {
+				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to prepare dictation sound %s: %s", name, err.Error()))
+			}
 		}
 	})
 }
@@ -1277,6 +1297,8 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 		clearStarting()
 		return
 	}
+	config := p.recognizerConfigForModel(ctx, *selectedModel)
+	modelCached := p.recognizerPool.IsCached(config)
 
 	resolvedDeviceID, resolvedDeviceName, deviceErr := resolveInputDeviceForStart(ctx, deviceID, p.api.GetSetting(ctx, settingKeyInputDeviceName))
 	if deviceErr != nil {
@@ -1296,16 +1318,17 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 		p.api.SaveSetting(ctx, settingKeyInputDeviceName, resolvedDeviceName, false)
 	}
 
-	// Show the overlay immediately so the user gets instant feedback while the
-	// native dictation engine and recognition model are being prepared.
-	// Lower other audio as soon as the overlay appears. This pauses/ducks
-	// other apps' audio but does not affect Wox's own beep sounds.
+	// Lower other audio before capture starts. This pauses/ducks other apps'
+	// audio but does not affect Wox's own beep sounds.
 	p.startVolumeDucking(ctx)
 
-	p.showLoadingOverlay(ctx, "plugin_dictation_loading_model")
+	// A cached model starts quickly enough to transition directly to the
+	// waveform; showing the loading state would only create a brief flash.
+	if !modelCached {
+		p.showLoadingOverlay(ctx, "plugin_dictation_loading_model")
+	}
 
 	// Create the session with VAD + offline recognizer pools.
-	config := p.recognizerConfigForModel(ctx, *selectedModel)
 	vadConfig := speech.DefaultVadConfig(p.vadModelPath)
 
 	p.resetVoiceOverlayState()
@@ -1421,7 +1444,7 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 	if action.ID == "" {
 		action = newDefaultDictationAction()
 	}
-	outputText, historyText, usedAI, ok := p.prepareActionOutput(ctx, action, text, inputContext)
+	outputText, historyText, aiRefineSucceeded, ok := p.prepareActionOutput(ctx, action, text, inputContext)
 	if !ok {
 		p.closeDictationOverlay()
 		p.playSoundIfEnabled(ctx, soundStop)
@@ -1432,7 +1455,11 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 	// result for input/overlay actions and keeps the spoken request for chat.
 	// Best-effort: save failures are logged inside the store and do not block
 	// the output path.
-	p.history.add(ctx, historyText, util.GetSystemTimestamp())
+	originalHistoryText := ""
+	if aiRefineSucceeded {
+		originalHistoryText = text
+	}
+	p.history.add(ctx, historyText, originalHistoryText, util.GetSystemTimestamp())
 
 	p.closeDictationOverlay()
 	p.playSoundIfEnabled(ctx, soundStop)
@@ -1440,7 +1467,7 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 	// Wait briefly for the overlay to close and focus to return to the
 	// previously focused window.
 	time.Sleep(100 * time.Millisecond)
-	if err := p.executeActionOutput(ctx, action, outputText, text, inputContext, usedAI); err != nil {
+	if err := p.executeActionOutput(ctx, action, outputText, text, inputContext, aiRefineSucceeded); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to output dictation action %s: %s", action.ID, err.Error()))
 		p.api.Notify(ctx, err.Error())
 	}
@@ -1499,7 +1526,7 @@ func (p *DictationPlugin) prepareActionOutput(ctx context.Context, action dictat
 		p.api.Notify(ctx, "plugin_dictation_action_ai_empty")
 		return "", "", false, false
 	}
-	return answer, answer, true, true
+	return answer, answer, aiRefineSucceeded, true
 }
 
 func (p *DictationPlugin) prepareDefaultActionOutput(ctx context.Context, action dictationAction, rawText string) (outputText string, historyText string, usedAI bool, ok bool) {

@@ -21,6 +21,10 @@ import (
 	"unsafe"
 )
 
+func prepareFile(context.Context, string) error {
+	return nil
+}
+
 // playFile uses Windows PlaySoundW (winmm). SND_FILENAME plays from file path;
 // playback is asynchronous when combined with SND_ASYNC, but we use the
 // default synchronous call inside a goroutine so it doesn't block the caller.
