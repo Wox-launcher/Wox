@@ -1,4 +1,4 @@
-.PHONY: clean build help woxmr-build filesearch-real-index filesearch-real-index-release
+.PHONY: clean build help woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 FILESEARCH_REAL_INDEX_ROOT ?= ~/
@@ -16,6 +16,14 @@ endif
 FILESEARCH_REAL_INDEX_GOFLAGS :=
 ifneq ($(strip $(FILESEARCH_REAL_INDEX_GCFLAGS)),)
 FILESEARCH_REAL_INDEX_GOFLAGS += -gcflags="$(FILESEARCH_REAL_INDEX_GCFLAGS)"
+endif
+FILESEARCH_CONTENT_REAL_INDEX_ROOT ?= $(FILESEARCH_REAL_INDEX_ROOT)
+FILESEARCH_CONTENT_REAL_INDEX_KEYWORD ?= $(FILESEARCH_REAL_INDEX_KEYWORD)
+FILESEARCH_CONTENT_REAL_INDEX_ARTIFACT ?=
+FILESEARCH_CONTENT_REAL_INDEX_MAX_READ_BYTES ?= 262144
+FILESEARCH_CONTENT_REAL_INDEX_ARGS := -filesearch-content-real-index -filesearch-content-real-index-root "$(FILESEARCH_CONTENT_REAL_INDEX_ROOT)" -filesearch-content-real-index-keyword "$(FILESEARCH_CONTENT_REAL_INDEX_KEYWORD)" -filesearch-content-real-index-max-read-bytes $(FILESEARCH_CONTENT_REAL_INDEX_MAX_READ_BYTES)
+ifneq ($(strip $(FILESEARCH_CONTENT_REAL_INDEX_ARTIFACT)),)
+FILESEARCH_CONTENT_REAL_INDEX_ARGS += -filesearch-content-real-index-artifact "$(FILESEARCH_CONTENT_REAL_INDEX_ARTIFACT)"
 endif
 
 # Determine the current platform
@@ -64,6 +72,8 @@ help:
 	@echo "  make build         - Build Flutter UI for current platform ($(PLATFORM))"
 	@echo "  make filesearch-real-index - Capture debugger-aligned filesearch/fd/rg comparison for $(FILESEARCH_REAL_INDEX_ROOT), keyword $(FILESEARCH_REAL_INDEX_KEYWORD)"
 	@echo "  make filesearch-real-index-release - Capture optimized filesearch/fd/rg comparison for $(FILESEARCH_REAL_INDEX_ROOT), keyword $(FILESEARCH_REAL_INDEX_KEYWORD)"
+	@echo "  make filesearch-content-real-index - Capture debugger-aligned content indexing and rg comparison for $(FILESEARCH_CONTENT_REAL_INDEX_ROOT), keyword $(FILESEARCH_CONTENT_REAL_INDEX_KEYWORD)"
+	@echo "  make filesearch-content-real-index-release - Capture optimized content indexing and rg comparison for $(FILESEARCH_CONTENT_REAL_INDEX_ROOT), keyword $(FILESEARCH_CONTENT_REAL_INDEX_KEYWORD)"
 	@echo "  make woxmr-build   - Build and install WoxMR.bundle for current platform ($(PLATFORM))"
 
 clean:
@@ -103,6 +113,16 @@ filesearch-real-index:
 # can separate debugger overhead from release-shaped scanner behavior.
 filesearch-real-index-release:
 	$(MAKE) filesearch-real-index FILESEARCH_REAL_INDEX_GCFLAGS=
+
+# Content indexing uses the same explicit real-root build tag and debugger/release
+# split as name indexing. Keeping it outside normal tests prevents CI from reading
+# workstation files while giving optimization work a repeatable cold/warm baseline.
+filesearch-content-real-index:
+	@echo "Capturing filesearch content-index comparison for $(FILESEARCH_CONTENT_REAL_INDEX_ROOT) with keyword $(FILESEARCH_CONTENT_REAL_INDEX_KEYWORD), max_read_bytes=$(FILESEARCH_CONTENT_REAL_INDEX_MAX_READ_BYTES), gcflags=$(if $(strip $(FILESEARCH_REAL_INDEX_GCFLAGS)),$(FILESEARCH_REAL_INDEX_GCFLAGS),<default>)"
+	WOX_FILESEARCH_REAL_INDEX_GCFLAGS="$(FILESEARCH_REAL_INDEX_GCFLAGS)" go test $(FILESEARCH_REAL_INDEX_GOFLAGS) -tags "$(FILESEARCH_REAL_INDEX_TAGS)" ./util/filesearch -run TestCaptureFileSearchContentRealIndex -count=1 -v -args $(FILESEARCH_CONTENT_REAL_INDEX_ARGS)
+
+filesearch-content-real-index-release:
+	$(MAKE) filesearch-content-real-index FILESEARCH_REAL_INDEX_GCFLAGS=
 
 # -----------------------------
 # MediaRemote XS (Perl) builder
