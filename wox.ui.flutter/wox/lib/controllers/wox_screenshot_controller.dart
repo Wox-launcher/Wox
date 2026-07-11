@@ -157,7 +157,7 @@ class WoxScreenshotController extends GetxController {
     final handle = await WoxMultipleWindow.createWindow(
       id: WoxMultipleWindowIds.screenshot,
       title: 'Screenshot',
-      preferredSize: const Size(64, 64),
+      size: const Size(64, 64),
       builder: (_) => const WoxScreenshotView(),
       showTitleBar: false,
       mica: false,

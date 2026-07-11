@@ -4333,8 +4333,8 @@ class WoxLauncherController extends GetxController {
     await WoxMultipleWindow.createWindow(
       id: WoxMultipleWindowIds.settings,
       title: settingController.tr("ui_tray_open_setting_window"),
-      preferredSize: settingWindowSize,
-      preferredConstraints: BoxConstraints.tight(settingWindowSize),
+      size: settingWindowSize,
+      constraints: BoxConstraints.tight(settingWindowSize),
       showTitleBar: true,
       mica: true,
       resizable: false,
@@ -4480,8 +4480,8 @@ class WoxLauncherController extends GetxController {
     await WoxMultipleWindow.createWindow(
       id: WoxMultipleWindowIds.onboarding,
       title: settingController.tr("onboarding_title"),
-      preferredSize: _onboardingWindowSize,
-      preferredConstraints: BoxConstraints.tight(_onboardingWindowSize),
+      size: _onboardingWindowSize,
+      constraints: BoxConstraints.tight(_onboardingWindowSize),
       showTitleBar: false,
       mica: true,
       resizable: false,

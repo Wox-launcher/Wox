@@ -221,10 +221,10 @@ class WoxMultipleWindowStyle {
   }
 
   /// Centers a newly created window on the display currently containing the mouse cursor.
-  static Future<void> centerOnCursorDisplay(Object controller, {Size? preferredSize}) async {
+  static Future<void> centerOnCursorDisplay(Object controller, {Size? size}) async {
     if (Platform.isMacOS) {
       await _invokeMacOSWindowMethod<void>(controller, "center", {
-        if (preferredSize != null) ...{"width": preferredSize.width, "height": preferredSize.height},
+        if (size != null) ...{"width": size.width, "height": size.height},
       });
       return;
     }
@@ -270,9 +270,9 @@ class WoxMultipleWindowStyle {
 
       final workArea = monitorInfo.ref.rcWork;
       final targetDpiScale = _dpiScaleForMonitor(monitor);
-      final hasPreferredSize = preferredSize != null && targetDpiScale > 0;
-      final windowWidth = hasPreferredSize ? (preferredSize.width * targetDpiScale).round() : windowRect.ref.right - windowRect.ref.left;
-      final windowHeight = hasPreferredSize ? (preferredSize.height * targetDpiScale).round() : windowRect.ref.bottom - windowRect.ref.top;
+      final hasSize = size != null && targetDpiScale > 0;
+      final windowWidth = hasSize ? (size.width * targetDpiScale).round() : windowRect.ref.right - windowRect.ref.left;
+      final windowHeight = hasSize ? (size.height * targetDpiScale).round() : windowRect.ref.bottom - windowRect.ref.top;
       if (windowWidth <= 0 || windowHeight <= 0) {
         return;
       }
@@ -288,24 +288,24 @@ class WoxMultipleWindowStyle {
     }
   }
 
-  /// Caps a preferred window size to the cursor display work area before the window is created.
-  static Size constrainSizeToCursorDisplayWorkArea(Size preferredSize, {double maxWorkAreaFraction = 1}) {
+  /// Caps a window size to the cursor display work area before the window is created.
+  static Size constrainSizeToCursorDisplayWorkArea(Size size, {double maxWorkAreaFraction = 1}) {
     if (!Platform.isWindows) {
-      return preferredSize;
+      return size;
     }
 
     final availableWorkAreaSize = _cursorDisplayLogicalWorkAreaSize();
     if (availableWorkAreaSize == null) {
-      return preferredSize;
+      return size;
     }
 
     final safeMaxWorkAreaFraction = maxWorkAreaFraction <= 0 ? 1.0 : maxWorkAreaFraction.clamp(0.0, 1.0).toDouble();
     final maxWidth = availableWorkAreaSize.width * safeMaxWorkAreaFraction;
     final maxHeight = availableWorkAreaSize.height * safeMaxWorkAreaFraction;
-    final constrainedWidth = preferredSize.width > maxWidth ? maxWidth.floorToDouble() : preferredSize.width;
-    final constrainedHeight = preferredSize.height > maxHeight ? maxHeight.floorToDouble() : preferredSize.height;
+    final constrainedWidth = size.width > maxWidth ? maxWidth.floorToDouble() : size.width;
+    final constrainedHeight = size.height > maxHeight ? maxHeight.floorToDouble() : size.height;
     if (constrainedWidth <= 0 || constrainedHeight <= 0) {
-      return preferredSize;
+      return size;
     }
     return Size(constrainedWidth, constrainedHeight);
   }

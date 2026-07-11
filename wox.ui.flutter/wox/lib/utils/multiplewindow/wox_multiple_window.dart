@@ -160,8 +160,8 @@ class WoxMultipleWindow {
   static Future<WoxMultipleWindowHandle> createWindow({
     required String id,
     required String title,
-    required Size preferredSize,
-    BoxConstraints? preferredConstraints,
+    required Size size,
+    BoxConstraints? constraints,
     required WidgetBuilder builder,
     bool showTitleBar = true,
     bool mica = true,
@@ -189,8 +189,8 @@ class WoxMultipleWindow {
     late final flutter_windowing.WindowEntry entry;
     final navigatorKey = GlobalKey<NavigatorState>(debugLabel: "window-navigator-$id");
     final delegate = _WoxMultipleWindowDelegate(id: id, closeOnRequest: closeOnRequest);
-    final effectiveConstraints = resizable ? preferredConstraints : BoxConstraints.tight(preferredSize);
-    final controller = flutter_windowing.RegularWindowController(preferredSize: preferredSize, preferredConstraints: effectiveConstraints, title: title, delegate: delegate);
+    final effectiveConstraints = resizable ? constraints : BoxConstraints.tight(size);
+    final controller = flutter_windowing.RegularWindowController(size: size, constraints: effectiveConstraints, title: title, delegate: delegate);
     final handle = _WoxMultipleWindowHandleImpl(id: id, controller: controller);
     // Windows can keep the HWND hidden until Flutter is ready. macOS shows the
     // NSWindow during controller creation, so moving it offscreen only creates
@@ -242,7 +242,7 @@ class WoxMultipleWindow {
     if (Platform.isMacOS) {
       await WoxMultipleWindowStyle.apply(controller, mica: mica, darkMode: isThemeDark(), roundedCorners: roundedCorners, minimizable: minimizable, resizable: resizable);
       if (centerOnCreate) {
-        await WoxMultipleWindowStyle.centerOnCursorDisplay(controller, preferredSize: preferredSize);
+        await WoxMultipleWindowStyle.centerOnCursorDisplay(controller, size: size);
       }
     }
     registry.register(entry);
@@ -251,7 +251,7 @@ class WoxMultipleWindow {
       await preparationReady.future.timeout(const Duration(milliseconds: 500), onTimeout: () {});
     }
     if (!Platform.isMacOS && centerOnCreate) {
-      await WoxMultipleWindowStyle.centerOnCursorDisplay(controller, preferredSize: preferredSize);
+      await WoxMultipleWindowStyle.centerOnCursorDisplay(controller, size: size);
     }
     return handle;
   }

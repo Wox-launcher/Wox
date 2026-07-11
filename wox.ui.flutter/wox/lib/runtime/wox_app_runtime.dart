@@ -222,8 +222,8 @@ class WoxInstanceRegistry {
     final handle = await WoxMultipleWindow.createWindow(
       id: windowId,
       title: "Wox",
-      preferredSize: initialSize,
-      preferredConstraints: BoxConstraints.tight(initialSize),
+      size: initialSize,
+      constraints: BoxConstraints.tight(initialSize),
       showTitleBar: false,
       mica: true,
       focusIfExists: true,
