@@ -29,6 +29,16 @@ var timeUnits = map[string]TimeUnit{
 	"y":  {365 * 24 * time.Hour, "years"},
 }
 
+var weekdayTranslationKeys = [...]string{
+	"ui_weekday_sun",
+	"ui_weekday_mon",
+	"ui_weekday_tue",
+	"ui_weekday_wed",
+	"ui_weekday_thu",
+	"ui_weekday_fri",
+	"ui_weekday_sat",
+}
+
 // getDisplayUnit returns the most appropriate display unit and value for a given duration
 func getDisplayUnit(duration time.Duration) (string, float64) {
 	switch {
@@ -389,7 +399,7 @@ func (m *TimeModule) Convert(ctx context.Context, result core.Result, toUnit cor
 		timeInTargetZone := time.Unix(unixTimestamp, 0).In(loc)
 		result.RawValue = decimal.NewFromInt(timeInTargetZone.Unix())
 		result.Unit = core.Unit{Name: toUnit.Name, Type: core.UnitTypeTime}
-		result.DisplayValue = m.formatTimeForDisplay(timeInTargetZone)
+		result.DisplayValue = m.formatTimeForDisplay(ctx, timeInTargetZone)
 		return result, nil
 	}
 
@@ -427,7 +437,7 @@ func (m *TimeModule) handleTimeInLocation(ctx context.Context, matches []string)
 	now := time.Now().In(loc)
 	val := decimal.NewFromInt(now.Unix())
 	return core.Result{
-		DisplayValue: m.formatTimeForDisplay(now),
+		DisplayValue: m.formatTimeForDisplay(ctx, now),
 		RawValue:     val,
 		Unit:         core.Unit{Name: location, Type: core.UnitTypeTime},
 		Module:       m,
@@ -459,7 +469,7 @@ func (m *TimeModule) handleSpecificTime(ctx context.Context, matches []string) (
 	sourceTime := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, sourceLoc)
 	localTime := sourceTime.In(time.Local)
 
-	displayValue := m.formatTimeForDisplay(localTime)
+	displayValue := m.formatTimeForDisplay(ctx, localTime)
 	val := decimal.NewFromInt(localTime.Unix())
 	return core.Result{
 		DisplayValue: displayValue,
@@ -595,7 +605,7 @@ func (m *TimeModule) parseTime(ctx context.Context, timeStr string) (time.Time, 
 	return time.Time{}, fmt.Errorf("unsupported time format: %s", timeStr)
 }
 
-func (m *TimeModule) formatTimeForDisplay(t time.Time) string {
+func (m *TimeModule) formatTimeForDisplay(ctx context.Context, t time.Time) string {
 	hour := t.Hour()
 	ampm := "AM"
 	if hour >= 12 {
@@ -607,7 +617,8 @@ func (m *TimeModule) formatTimeForDisplay(t time.Time) string {
 	if hour == 0 {
 		hour = 12
 	}
-	return fmt.Sprintf("%d:%02d %s", hour, t.Minute(), ampm)
+	weekday := m.api.GetTranslation(ctx, weekdayTranslationKeys[t.Weekday()])
+	return fmt.Sprintf("%d:%02d %s (%s)", hour, t.Minute(), ampm, weekday)
 }
 
 func (m *TimeModule) handleSimpleTimeUnit(ctx context.Context, matches []string) (core.Result, error) {
