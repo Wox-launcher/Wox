@@ -2,10 +2,18 @@ package speech
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -13,33 +21,34 @@ import (
 	"wox/util"
 )
 
-// NativeLibVersion is the sherpa-onnx release version used for native library
-// downloads. The version must match the onnxruntime ABI that the embedded
-// sherpa-onnx C header expects.
-const NativeLibVersion = "v1.13.4"
+// NativeLibVersion identifies the Wox-owned, signed native dependency release.
+const NativeLibVersion = "v1.13.4-wox.1"
 
-// nativeLibDownloadURL returns the GitHub release URL for the platform's
-// shared library archive. Each archive contains a lib/ directory with the
-// three files we need: onnxruntime, sherpa-onnx-c-api, sherpa-onnx-cxx-api.
-func nativeLibDownloadURL(goos, goarch string) (string, error) {
-	switch goos {
-	case "windows":
-		if goarch == "amd64" {
-			return fmt.Sprintf("https://github.com/k2-fsa/sherpa-onnx/releases/download/%s/sherpa-onnx-%s-win-x64-shared-MD-Release-lib.tar.bz2", NativeLibVersion, NativeLibVersion), nil
-		}
-	case "linux":
-		if goarch == "amd64" {
-			return fmt.Sprintf("https://github.com/k2-fsa/sherpa-onnx/releases/download/%s/sherpa-onnx-%s-linux-x64-shared-lib.tar.bz2", NativeLibVersion, NativeLibVersion), nil
-		}
-	case "darwin":
-		switch goarch {
-		case "amd64":
-			return fmt.Sprintf("https://github.com/k2-fsa/sherpa-onnx/releases/download/%s/sherpa-onnx-%s-osx-x64-shared-lib.tar.bz2", NativeLibVersion, NativeLibVersion), nil
-		case "arm64":
-			return fmt.Sprintf("https://github.com/k2-fsa/sherpa-onnx/releases/download/%s/sherpa-onnx-%s-osx-arm64-shared-lib.tar.bz2", NativeLibVersion, NativeLibVersion), nil
-		}
-	}
-	return "", fmt.Errorf("unsupported platform: %s/%s", goos, goarch)
+const (
+	nativeLibReleaseBaseURL           = "https://github.com/Wox-launcher/Wox.Dictation.Native.Dependecies/releases/download/" + NativeLibVersion
+	nativeLibReleaseManifestURL       = nativeLibReleaseBaseURL + "/manifest.json"
+	nativeLibReleaseManifestSignature = nativeLibReleaseBaseURL + "/manifest.sig"
+	nativeLibManifestPublicKeyDER     = "MCowBQYDK2VwAyEAEGuDVKMKBl3z0BFqbZJpOLraySwug7wCdH0FqCKgEp8="
+	nativeLibCachedManifestName       = ".wox-native-manifest.json"
+	nativeLibCachedSignatureName      = ".wox-native-manifest.sig"
+)
+
+type nativeLibReleaseManifest struct {
+	SchemaVersion  int                         `json:"schema_version"`
+	ReleaseVersion string                      `json:"release_version"`
+	Packages       map[string]nativeLibPackage `json:"packages"`
+}
+
+type nativeLibPackage struct {
+	URL    string                   `json:"url"`
+	SHA256 string                   `json:"sha256"`
+	Size   int64                    `json:"size"`
+	Files  map[string]nativeLibFile `json:"files"`
+}
+
+type nativeLibFile struct {
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
 }
 
 // sileroVadDownloadURL is the GitHub release URL for silero_vad.onnx.
@@ -98,14 +107,25 @@ func (m *NativeLibManager) LibDir() string {
 	return m.libDir
 }
 
-// IsReady checks whether all required native libraries are present on disk.
+// IsReady checks the signed cached manifest and every native library digest.
 func (m *NativeLibManager) IsReady() bool {
-	for _, name := range sherpaLibraryNames() {
-		if !util.IsFileExists(filepath.Join(m.libDir, name)) {
-			return false
-		}
+	manifestData, err := os.ReadFile(filepath.Join(m.libDir, nativeLibCachedManifestName))
+	if err != nil {
+		return false
 	}
-	return true
+	signature, err := os.ReadFile(filepath.Join(m.libDir, nativeLibCachedSignatureName))
+	if err != nil {
+		return false
+	}
+	manifest, err := verifyNativeLibReleaseManifest(manifestData, signature)
+	if err != nil {
+		return false
+	}
+	packageInfo, err := manifest.packageForCurrentPlatform()
+	if err != nil {
+		return false
+	}
+	return validateNativeLibraryFiles(m.libDir, packageInfo) == nil
 }
 
 // VadModelPath returns the on-disk path for silero_vad.onnx. The file may
@@ -201,28 +221,51 @@ func (m *NativeLibManager) downloadAndExtract(ctx context.Context) error {
 // downloadLibraries downloads and extracts the platform-specific archive
 // containing onnxruntime + sherpa-onnx native libraries.
 func (m *NativeLibManager) downloadLibraries(ctx context.Context) error {
-	url, err := nativeLibDownloadURL(runtime.GOOS, runtime.GOARCH)
-	if err != nil {
-		return err
-	}
-
 	tmpDir, err := os.MkdirTemp(m.libDir, ".downloading-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
+	manifestPath := filepath.Join(tmpDir, "manifest.json")
+	signaturePath := filepath.Join(tmpDir, "manifest.sig")
+	if err := downloadFile(ctx, nativeLibReleaseManifestURL, manifestPath, nil); err != nil {
+		return fmt.Errorf("download native library manifest: %w", err)
+	}
+	if err := downloadFile(ctx, nativeLibReleaseManifestSignature, signaturePath, nil); err != nil {
+		return fmt.Errorf("download native library manifest signature: %w", err)
+	}
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("read native library manifest: %w", err)
+	}
+	signature, err := os.ReadFile(signaturePath)
+	if err != nil {
+		return fmt.Errorf("read native library manifest signature: %w", err)
+	}
+	manifest, err := verifyNativeLibReleaseManifest(manifestData, signature)
+	if err != nil {
+		return err
+	}
+	packageInfo, err := manifest.packageForCurrentPlatform()
+	if err != nil {
+		return err
+	}
+
 	// Download archive.
 	archivePath := filepath.Join(tmpDir, "native.tar.bz2")
 	downloadStart := time.Now()
-	if err := downloadFile(ctx, url, archivePath, func(percent int) {
+	if err := downloadFile(ctx, packageInfo.URL, archivePath, func(percent int) {
 		m.mu.Lock()
 		m.status = NativeLibStatus{State: NativeLibStateDownloading, Progress: percent}
 		m.mu.Unlock()
 	}); err != nil {
 		return fmt.Errorf("download native libraries: %w", err)
 	}
-	util.GetLogger().Info(ctx, fmt.Sprintf("dictation native lib: downloaded %s cost=%dms", url, time.Since(downloadStart).Milliseconds()))
+	if err := verifyFileDigest(archivePath, packageInfo.SHA256, packageInfo.Size); err != nil {
+		return fmt.Errorf("verify native library archive: %w", err)
+	}
+	util.GetLogger().Info(ctx, fmt.Sprintf("dictation native lib: downloaded %s cost=%dms", packageInfo.URL, time.Since(downloadStart).Milliseconds()))
 
 	// Extract archive.
 	m.mu.Lock()
@@ -241,13 +284,11 @@ func (m *NativeLibManager) downloadLibraries(ctx context.Context) error {
 		return fmt.Errorf("no lib/ directory found in native library archive")
 	}
 
-	// Copy only the three libraries we need from the extracted archive.
-	for _, name := range sherpaLibraryNames() {
-		src := filepath.Join(libDir, name)
-		dst := filepath.Join(m.libDir, name)
-		if err := copyFile(src, dst); err != nil {
-			return fmt.Errorf("copy %s: %w", name, err)
-		}
+	if err := validateNativeLibraryFiles(libDir, packageInfo); err != nil {
+		return fmt.Errorf("verify extracted native libraries: %w", err)
+	}
+	if err := m.installNativeLibraries(libDir, packageInfo, manifestData, signature); err != nil {
+		return fmt.Errorf("install native libraries: %w", err)
 	}
 
 	return nil
@@ -273,14 +314,163 @@ func (m *NativeLibManager) findExtractedLibDir(tmpDir string) string {
 	return ""
 }
 
+// packageForCurrentPlatform returns the package covered by the signed manifest.
+func (m *nativeLibReleaseManifest) packageForCurrentPlatform() (nativeLibPackage, error) {
+	platform := runtime.GOOS + "-" + runtime.GOARCH
+	packageInfo, ok := m.Packages[platform]
+	if !ok {
+		return nativeLibPackage{}, fmt.Errorf("native library release does not support %s", platform)
+	}
+	return packageInfo, nil
+}
+
+// verifyNativeLibReleaseManifest authenticates and parses a release manifest.
+func verifyNativeLibReleaseManifest(manifestData, signature []byte) (*nativeLibReleaseManifest, error) {
+	publicKeyDER, err := base64.StdEncoding.DecodeString(nativeLibManifestPublicKeyDER)
+	if err != nil {
+		return nil, fmt.Errorf("decode native library manifest public key: %w", err)
+	}
+	parsedPublicKey, err := x509.ParsePKIXPublicKey(publicKeyDER)
+	if err != nil {
+		return nil, fmt.Errorf("parse native library manifest public key: %w", err)
+	}
+	publicKey, ok := parsedPublicKey.(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("native library manifest public key is not Ed25519")
+	}
+	if !ed25519.Verify(publicKey, manifestData, signature) {
+		return nil, fmt.Errorf("native library manifest signature is invalid")
+	}
+
+	var manifest nativeLibReleaseManifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		return nil, fmt.Errorf("parse native library manifest: %w", err)
+	}
+	if manifest.SchemaVersion != 1 {
+		return nil, fmt.Errorf("unsupported native library manifest schema: %d", manifest.SchemaVersion)
+	}
+	if manifest.ReleaseVersion != NativeLibVersion {
+		return nil, fmt.Errorf("native library manifest version mismatch: expected %s, got %s", NativeLibVersion, manifest.ReleaseVersion)
+	}
+	return &manifest, nil
+}
+
+// validateNativeLibraryFiles verifies the allowlist, sizes, digests, and platform signatures.
+func validateNativeLibraryFiles(libDir string, packageInfo nativeLibPackage) error {
+	requiredNames := append([]string(nil), sherpaLibraryNames()...)
+	manifestNames := make([]string, 0, len(packageInfo.Files))
+	for name := range packageInfo.Files {
+		manifestNames = append(manifestNames, name)
+	}
+	sort.Strings(requiredNames)
+	sort.Strings(manifestNames)
+	if strings.Join(requiredNames, "\x00") != strings.Join(manifestNames, "\x00") {
+		return fmt.Errorf("native library manifest allowlist mismatch")
+	}
+
+	for _, name := range requiredNames {
+		fileInfo := packageInfo.Files[name]
+		if err := verifyFileDigest(filepath.Join(libDir, name), fileInfo.SHA256, fileInfo.Size); err != nil {
+			return fmt.Errorf("verify %s: %w", name, err)
+		}
+	}
+	if err := validateNativeLibraryPlatformSignatures(libDir, requiredNames); err != nil {
+		return err
+	}
+	return nil
+}
+
+// verifyFileDigest compares a file against its signed size and SHA-256 digest.
+func verifyFileDigest(path, expectedDigest string, expectedSize int64) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if expectedSize <= 0 || stat.Size() != expectedSize {
+		return fmt.Errorf("size mismatch: expected %d, got %d", expectedSize, stat.Size())
+	}
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return err
+	}
+	actualDigest := hex.EncodeToString(hasher.Sum(nil))
+	if len(expectedDigest) != sha256.Size*2 || !strings.EqualFold(actualDigest, expectedDigest) {
+		return fmt.Errorf("SHA-256 mismatch: expected %s, got %s", expectedDigest, actualDigest)
+	}
+	return nil
+}
+
+// installNativeLibraries atomically publishes verified files and commits the signed manifest last.
+func (m *NativeLibManager) installNativeLibraries(sourceDir string, packageInfo nativeLibPackage, manifestData, signature []byte) error {
+	_ = os.Remove(filepath.Join(m.libDir, nativeLibCachedManifestName))
+	_ = os.Remove(filepath.Join(m.libDir, nativeLibCachedSignatureName))
+
+	for _, name := range sherpaLibraryNames() {
+		source := filepath.Join(sourceDir, name)
+		destination := filepath.Join(m.libDir, name)
+		temporaryDestination := destination + ".new"
+		_ = os.Remove(temporaryDestination)
+		if err := copyFile(source, temporaryDestination); err != nil {
+			return fmt.Errorf("copy %s: %w", name, err)
+		}
+		if err := verifyFileDigest(temporaryDestination, packageInfo.Files[name].SHA256, packageInfo.Files[name].Size); err != nil {
+			_ = os.Remove(temporaryDestination)
+			return fmt.Errorf("verify copied %s: %w", name, err)
+		}
+		_ = os.Remove(destination)
+		if err := os.Rename(temporaryDestination, destination); err != nil {
+			_ = os.Remove(temporaryDestination)
+			return fmt.Errorf("replace %s: %w", name, err)
+		}
+	}
+	if err := writeFileAtomically(filepath.Join(m.libDir, nativeLibCachedManifestName), manifestData, 0644); err != nil {
+		return err
+	}
+	if err := writeFileAtomically(filepath.Join(m.libDir, nativeLibCachedSignatureName), signature, 0644); err != nil {
+		_ = os.Remove(filepath.Join(m.libDir, nativeLibCachedManifestName))
+		return err
+	}
+	return nil
+}
+
+// writeFileAtomically replaces a cache metadata file without exposing partial contents.
+func writeFileAtomically(path string, data []byte, permission os.FileMode) error {
+	temporaryPath := path + ".new"
+	_ = os.Remove(temporaryPath)
+	if err := os.WriteFile(temporaryPath, data, permission); err != nil {
+		return err
+	}
+	_ = os.Remove(path)
+	if err := os.Rename(temporaryPath, path); err != nil {
+		_ = os.Remove(temporaryPath)
+		return err
+	}
+	return nil
+}
+
 // copyFile copies a file from src to dst, creating parent dirs as needed.
 func copyFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return err
 	}
-	data, err := os.ReadFile(src)
+	source, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0644)
+	defer source.Close()
+	destination, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(destination, source); err != nil {
+		destination.Close()
+		return err
+	}
+	return destination.Close()
 }
