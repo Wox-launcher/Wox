@@ -112,6 +112,8 @@ Future<void> initialServices(List<String> arguments) async {
 
   final runtime = WoxAppRuntime.initializePrimary(sessionId: Env.sessionId);
   var launcherController = runtime.primaryInstance.launcherController;
+  // GetX runs onInit during registration, so register before controller methods or websocket messages can access its late child controllers.
+  Get.put(launcherController);
   launcherController.doctorCheck();
   await launcherController.loadDiagnosticStatus(traceId);
 

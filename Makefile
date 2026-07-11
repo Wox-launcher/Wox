@@ -3,7 +3,7 @@
 SMOKE_FILTER := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 FLUTTER_MASTER_COMMIT_FILE ?= .flutter-master-commit
-FLUTTER_MASTER_COMMIT ?= $(strip $(file <$(FLUTTER_MASTER_COMMIT_FILE)))
+FLUTTER_MASTER_COMMIT ?= $(strip $(shell cat $(FLUTTER_MASTER_COMMIT_FILE)))
 
 # GNU Make on Windows may choose Git's sh.exe without exposing Git usr/bin to
 # recipes or $(shell ...) calls. The root build relies on sed/rm/uname before

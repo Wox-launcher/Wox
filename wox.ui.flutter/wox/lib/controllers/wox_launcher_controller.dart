@@ -65,7 +65,6 @@ import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_platform_hotkey_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
-import 'package:wox/utils/wox_system_wallpaper_util.dart';
 import 'package:wox/utils/wox_time_tracker.dart';
 import 'package:wox/utils/webview/wox_webview_util.dart';
 
@@ -299,7 +298,7 @@ class WoxLauncherController extends GetxController {
   final glanceItems = <GlanceItem>[].obs;
   final attentionUnreadCount = 0.obs;
   Timer? glanceRefreshTimer;
-  Timer? hiddenCacheClearTimer;
+  bool _isLauncherWindowVisible = false;
   QueryContext backendQueryContext = QueryContext.empty();
   String backendQueryContextQueryId = "";
   final queryCompletionHint = Rxn<QueryCompletionHint>();
@@ -414,24 +413,6 @@ class WoxLauncherController extends GetxController {
     });
   }
 
-  // scheduleHiddenCacheClear clears Flutter caches again after hide animations settle.
-  void scheduleHiddenCacheClear(String traceId) {
-    hiddenCacheClearTimer?.cancel();
-    hiddenCacheClearTimer = Timer(const Duration(seconds: 10), () {
-      unawaited(clearHiddenCaches());
-    });
-  }
-
-  Future<void> clearHiddenCaches() async {
-    hiddenCacheClearTimer = null;
-    if (await windowDriver.isVisible()) {
-      return;
-    }
-
-    PaintingBinding.instance.imageCache.clear();
-    PaintingBinding.instance.imageCache.clearLiveImages();
-  }
-
   Duration? resolveSelectedGlanceRefreshInterval() {
     final refs = selectedGlanceRefs();
     if (refs.isEmpty || !Get.isRegistered<WoxSettingController>()) {
@@ -477,7 +458,6 @@ class WoxLauncherController extends GetxController {
     // Smoke teardown bypasses hideApp(), so invalidate show-time focus retries
     // before the test unmounts widgets and disposes Flutter's FocusManager.
     _visibleLauncherFocusToken++;
-    hiddenCacheClearTimer?.cancel();
     await Get.find<WoxScreenshotController>().resetForIntegrationTest();
 
     // Avoid focus restoration during smoke teardown. The regular hide helpers
@@ -1991,14 +1971,6 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> showApp(String traceId, ShowAppParams params) async {
-    hiddenCacheClearTimer?.cancel();
-
-    // Restore image cache capacity so images can be cached again while the
-    // launcher is visible. hideApp shrinks it to zero. Values match the
-    // desktop-tuned defaults set in main.dart (200 entries / 20 MB).
-    PaintingBinding.instance.imageCache.maximumSize = 200;
-    PaintingBinding.instance.imageCache.maximumSizeBytes = 20 * 1024 * 1024;
-
     final screenshotController = Get.find<WoxScreenshotController>();
     if (screenshotController.isSessionActive.value) {
       await screenshotController.focusSessionWindow(traceId);
@@ -2140,6 +2112,7 @@ class WoxLauncherController extends GetxController {
     // when the window becomes visible, avoiding transient blur on Windows.
     await windowDriver.setAlwaysOnTop(true);
     await windowDriver.show();
+    _isLauncherWindowVisible = true;
     final visibleActivationCost = _captureDevLauncherVisibleActivationCost(params);
     await windowDriver.focus();
 
@@ -2294,6 +2267,8 @@ class WoxLauncherController extends GetxController {
     // hide first to avoid the potential delay caused by some heavy operations in onHide callback
     // E.g. on tray query mode, hideActionPanel will call resize height, which may cause a noticeable
     // resize animation if the window is still visible while resizing, so we hide the window first and then do the rest of the operations
+    _isLauncherWindowVisible = false;
+    cancelLauncherResizeRequests(traceId, "hide app");
     await windowDriver.hide();
 
     //clear query box text if query type is selection or launch mode is fresh
@@ -2307,13 +2282,6 @@ class WoxLauncherController extends GetxController {
     hideFormActionPanel(traceId, reason: "hide app");
     glanceRefreshTimer?.cancel();
     glanceItems.clear();
-    PaintingBinding.instance.imageCache.clear();
-    PaintingBinding.instance.imageCache.clearLiveImages();
-    // Shrink image cache capacity to zero so no new decoded images can accumulate
-    // while the window is hidden. showApp restores the default capacity.
-    PaintingBinding.instance.imageCache.maximumSize = 0;
-    PaintingBinding.instance.imageCache.maximumSizeBytes = 0;
-    scheduleHiddenCacheClear(traceId);
 
     // Clean up quick select state
     if (isQuickSelectMode.value) {
@@ -2322,21 +2290,6 @@ class WoxLauncherController extends GetxController {
     quickSelectTimer?.cancel();
     isQuickSelectKeyPressed = false;
     resetLayoutState(traceId);
-
-    // Release large reference lists and preview streams that are lazily rebuilt after the launcher is shown again.
-    Get.find<WoxSettingController>().clearStoreCache();
-    activeAIChatController.clearReferenceDataCache();
-    WoxSystemWallpaperUtil.instance.releaseImageCache();
-    for (final controller in terminalChunkControllers.values) {
-      controller.close();
-    }
-    for (final controller in terminalStateControllers.values) {
-      controller.close();
-    }
-    terminalChunkControllers.clear();
-    terminalStateControllers.clear();
-    queryStartTimeMap.clear();
-    queryOnReceivedElapsedByResultKey.clear();
 
     if (!suppressBackendHideForScreenshot) {
       await WoxApi.instance.onHide(traceId, sessionId: sessionId);
@@ -3898,6 +3851,17 @@ class WoxLauncherController extends GetxController {
     double targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
     final targetSize = Size(targetWidth, totalHeight.toDouble());
 
+    // A hidden Flutter view has no stable Metal render target. Keep query state current, but defer native sizing until showApp configures the surface again.
+    if (!_isLauncherWindowVisible) {
+      Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, launcherWindowVisible=false");
+      tracker.setDouble("targetWidth", targetSize.width);
+      tracker.setDouble("targetHeight", targetSize.height);
+      tracker.setBool("skippedHiddenWindow", true);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
+      return;
+    }
+
     // Linux Wayland resize can race with show/hide and result updates. In that
     // path, Dart-side target tracking can be stale while the native window is
     // still at the old height, so Linux always sends the target to the runner.
@@ -4319,7 +4283,6 @@ class WoxLauncherController extends GetxController {
   void dispose() {
     _visibleLauncherFocusToken++;
     glanceRefreshTimer?.cancel();
-    hiddenCacheClearTimer?.cancel();
     cancelPendingResultTransitions();
     loadingTimer?.cancel();
     launcherFocusNode.dispose();
