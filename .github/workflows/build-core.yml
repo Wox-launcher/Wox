@@ -472,6 +472,9 @@ jobs:
         shell: bash
         run: echo "FLUTTER_MASTER_COMMIT=$(tr -d '\r\n' < .flutter-master-commit)" >> "$GITHUB_ENV"
 
+      - name: Enable Git long paths
+        run: git config --global core.longpaths true
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
