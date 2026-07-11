@@ -118,9 +118,24 @@ func TestCaptureFileSearchContentRealIndex(t *testing.T) {
 	policy, _, _ := realIndexBenchmarkPolicy()
 	extensionList := ContentDefaultExtensions()
 	extensions := ContentExtensionsFromList(extensionList)
+	nameDB, err := NewFileSearchDB(ctx)
+	if err != nil {
+		t.Fatalf("open isolated name index: %v", err)
+	}
+	defer nameDB.Close()
+	if err := nameDB.UpsertRoot(ctx, root); err != nil {
+		t.Fatalf("insert content benchmark root: %v", err)
+	}
+	entries, err := NewSnapshotBuilder(newPolicyState(policy)).BuildRootEntries(ctx, root)
+	if err != nil {
+		t.Fatalf("build content benchmark name snapshot: %v", err)
+	}
+	if err := nameDB.ReplaceRootEntries(ctx, root, entries, nil); err != nil {
+		t.Fatalf("persist content benchmark name snapshot: %v", err)
+	}
 
-	initial := captureContentRealIndexCrawl(t, ctx, db, []RootRecord{root}, policy, extensions, maxReadBytes)
-	unchanged := captureContentRealIndexCrawl(t, ctx, db, []RootRecord{root}, policy, extensions, maxReadBytes)
+	initial := captureContentRealIndexCrawl(t, ctx, db, nameDB, []RootRecord{root}, policy, extensions, maxReadBytes)
+	unchanged := captureContentRealIndexCrawl(t, ctx, db, nameDB, []RootRecord{root}, policy, extensions, maxReadBytes)
 	search := captureContentRealIndexSearch(t, ctx, db, contentRealIndexKeyword())
 	database := captureContentRealIndexDatabase(db.dbPath)
 	rgBaseline := captureRealIndexToolBaseline(t, ctx, realIndexToolCapture{
@@ -152,7 +167,7 @@ func TestCaptureFileSearchContentRealIndex(t *testing.T) {
 }
 
 // captureContentRealIndexCrawl records one complete crawl without changing the crawler's production behavior.
-func captureContentRealIndexCrawl(t *testing.T, ctx context.Context, db *ContentSearchDB, roots []RootRecord, policy Policy, extensions map[string]bool, maxReadBytes int64) contentRealIndexCrawlMetric {
+func captureContentRealIndexCrawl(t *testing.T, ctx context.Context, db *ContentSearchDB, nameDB *FileSearchDB, roots []RootRecord, policy Policy, extensions map[string]bool, maxReadBytes int64) contentRealIndexCrawlMetric {
 	t.Helper()
 
 	var before runtime.MemStats
@@ -162,6 +177,7 @@ func captureContentRealIndexCrawl(t *testing.T, ctx context.Context, db *Content
 	crawler := NewContentCrawler(db, roots, policy, extensions, maxReadBytes, func(update ContentCrawlProgress) {
 		progress = update
 	})
+	crawler.setNameDB(nameDB)
 
 	startedAt := time.Now()
 	err := crawler.Run(ctx)

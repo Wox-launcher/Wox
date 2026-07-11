@@ -56,138 +56,124 @@ func TokenizeForContentIndex(text string) string {
 		return ""
 	}
 
-	tokens := tokenizeContent(text)
-	return strings.Join(tokens, " ")
-}
-
-// tokenizeContent is the core tokenizer that returns a slice of tokens.
-// Exported via TokenizeForContentIndex (joined string) for FTS5 insertion.
-func tokenizeContent(text string) []string {
-	var tokens []string
-	var cjkRun []rune
-	var latinRun strings.Builder
-
-	flushCJK := func() {
-		if len(cjkRun) == 0 {
-			return
-		}
-		tokens = emitCJKTokens(tokens, cjkRun)
-		cjkRun = cjkRun[:0]
-	}
-
-	flushLatin := func() {
-		if latinRun.Len() == 0 {
-			return
-		}
-		s := latinRun.String()
-		latinRun.Reset()
-		for _, sub := range splitIdentifier(s) {
-			tokens = appendLatinTokenIfValid(tokens, sub)
-		}
-	}
-
+	builder := contentTokenBuilder{}
+	builder.output.Grow(len(text))
 	for _, r := range text {
 		switch {
 		case isContentCJK(r):
-			flushLatin()
-			cjkRun = append(cjkRun, r)
+			builder.flushLatin()
+			builder.appendCJK(r)
 		case isContentTokenBoundary(r):
-			flushCJK()
-			flushLatin()
+			builder.flushCJK()
+			builder.flushLatin()
 		default:
-			flushCJK()
-			latinRun.WriteRune(r)
+			builder.flushCJK()
+			builder.appendLatin(r)
 		}
 	}
-	flushCJK()
-	flushLatin()
-
-	return tokens
+	builder.flushCJK()
+	builder.flushLatin()
+	return builder.output.String()
 }
 
-// emitCJKTokens emits unigrams (minus stop-list) and bigrams for a CJK run.
-// CJK tokens bypass the min-char filter (single Han chars are valid unigrams);
-// only the byte cap applies (which they never hit).
-func emitCJKTokens(tokens []string, run []rune) []string {
-	for i, r := range run {
-		if !cjkStoplist[r] {
-			tokens = appendCJKTokenIfValid(tokens, string(r))
-		}
-		if i+1 < len(run) {
-			bigram := string(run[i : i+2])
-			tokens = appendCJKTokenIfValid(tokens, bigram)
-		}
-	}
-	return tokens
+// contentTokenBuilder streams normalized tokens directly into the final FTS input.
+type contentTokenBuilder struct {
+	output           strings.Builder
+	hasToken         bool
+	latin            [contentMaxTokenBytes]byte
+	latinBytes       int
+	latinRunes       int
+	latinTooLong     bool
+	latinPrevIsLower bool
+	cjk              rune
+	hasCJK           bool
 }
 
-// splitIdentifier applies camelCase and snake_case splitting to a raw token,
-// then lowercases each sub-token. Example: "getUserById" -> ["get","user","by","id"],
-// "my_var_name" -> ["my","var","name"], "config.json" -> ["config","json"].
-func splitIdentifier(s string) []string {
-	if s == "" {
-		return nil
-	}
-
-	var subs []string
-	var current strings.Builder
-	prevIsLower := false
-
-	for i, r := range s {
-		if r == '_' || r == '-' || r == '.' {
-			if current.Len() > 0 {
-				subs = append(subs, current.String())
-				current.Reset()
-			}
-			prevIsLower = false
-			continue
+func (b *contentTokenBuilder) appendCJK(r rune) {
+	if b.hasCJK {
+		if !cjkStoplist[b.cjk] {
+			b.writeRunes(b.cjk)
 		}
-
-		isUpper := unicode.IsUpper(r)
-		if i > 0 && isUpper && prevIsLower {
-			if current.Len() > 0 {
-				subs = append(subs, current.String())
-				current.Reset()
-			}
-		}
-		current.WriteRune(unicode.ToLower(r))
-		prevIsLower = !isUpper
+		b.writeRunes(b.cjk, r)
 	}
-	if current.Len() > 0 {
-		subs = append(subs, current.String())
-	}
-
-	return subs
+	b.cjk = r
+	b.hasCJK = true
 }
 
-// appendLatinTokenIfValid appends a lowercased Latin/code token if it passes
-// length filters: min 2 chars, max 64 bytes.
-func appendLatinTokenIfValid(tokens []string, token string) []string {
-	if token == "" {
-		return tokens
+func (b *contentTokenBuilder) flushCJK() {
+	if !b.hasCJK {
+		return
 	}
-	lower := strings.ToLower(token)
-	if utf8.RuneCountInString(lower) < contentMinTokenChars {
-		return tokens
+	if !cjkStoplist[b.cjk] {
+		b.writeRunes(b.cjk)
 	}
-	if len(lower) > contentMaxTokenBytes {
-		return tokens
-	}
-	return append(tokens, lower)
+	b.cjk = 0
+	b.hasCJK = false
 }
 
-// appendCJKTokenIfValid appends a lowercased CJK token if it passes the byte
-// cap only. The min-char filter does not apply — single Han chars are valid
-// unigrams.
-func appendCJKTokenIfValid(tokens []string, token string) []string {
-	if token == "" {
-		return tokens
+func (b *contentTokenBuilder) appendLatin(r rune) {
+	if r == '_' || r == '-' || r == '.' {
+		b.flushLatin()
+		return
 	}
-	lower := strings.ToLower(token)
-	if len(lower) > contentMaxTokenBytes {
-		return tokens
+
+	isUpper := unicode.IsUpper(r)
+	if isUpper && b.latinPrevIsLower {
+		b.flushLatin()
 	}
-	return append(tokens, lower)
+	lower := unicode.ToLower(r)
+	b.latinRunes++
+	runeBytes := utf8.RuneLen(lower)
+	if runeBytes < 0 {
+		runeBytes = utf8.RuneLen(unicode.ReplacementChar)
+		lower = unicode.ReplacementChar
+	}
+	if b.latinBytes+runeBytes <= len(b.latin) {
+		b.latinBytes += utf8.EncodeRune(b.latin[b.latinBytes:], lower)
+	} else {
+		b.latinTooLong = true
+	}
+	b.latinPrevIsLower = !isUpper
+}
+
+func (b *contentTokenBuilder) flushLatin() {
+	if b.latinRunes >= contentMinTokenChars && !b.latinTooLong {
+		b.writeBytes(b.latin[:b.latinBytes])
+	}
+	b.latinBytes = 0
+	b.latinRunes = 0
+	b.latinTooLong = false
+	b.latinPrevIsLower = false
+}
+
+func (b *contentTokenBuilder) beginToken() {
+	if b.hasToken {
+		b.output.WriteByte(' ')
+	} else {
+		b.hasToken = true
+	}
+}
+
+func (b *contentTokenBuilder) writeBytes(token []byte) {
+	if len(token) == 0 {
+		return
+	}
+	b.beginToken()
+	b.output.Write(token)
+}
+
+func (b *contentTokenBuilder) writeRunes(runes ...rune) {
+	byteCount := 0
+	for _, r := range runes {
+		byteCount += utf8.RuneLen(r)
+	}
+	if byteCount <= 0 || byteCount > contentMaxTokenBytes {
+		return
+	}
+	b.beginToken()
+	for _, r := range runes {
+		b.output.WriteRune(unicode.ToLower(r))
+	}
 }
 
 func isContentCJK(r rune) bool {

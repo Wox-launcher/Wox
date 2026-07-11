@@ -8,16 +8,18 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"wox/util"
 )
 
 const (
-	contentCrawlBatchSize     = 32
-	contentCrawlCandidatePage = 512
-	contentCrawlFilesPerYield = 256
-	contentCrawlReportEvery   = 2 * time.Second
+	contentCrawlBatchSize         = 128
+	contentCrawlBatchMaxTextBytes = 16 * 1024 * 1024
+	contentCrawlCandidatePage     = 512
+	contentCrawlFilesPerYield     = 256
+	contentCrawlReportEvery       = 2 * time.Second
 )
 
 // ContentCrawlProgress is reported periodically during content crawl.
@@ -177,17 +179,28 @@ type contentCrawlCounters struct {
 // crawlNameIndex indexes only files already accepted by the authoritative name index.
 func (c *ContentCrawler) crawlNameIndex(ctx context.Context, existing map[string]ContentEntryMetadata, seenPaths map[string]struct{}, counters *contentCrawlCounters, lastReport *time.Time) error {
 	var afterEntryID int64
-	batch := make([]contentIndexDocument, 0, contentCrawlBatchSize)
+	batch := make([]ContentIndexCandidate, 0, contentCrawlBatchSize)
+	batchReadBytes := int64(0)
 	flushBatch := func() error {
 		if len(batch) == 0 {
 			return nil
 		}
-		updated, err := c.db.indexContentBatch(ctx, batch)
+		documents, failed, extractedBytes, err := c.extractContentCandidateBatch(ctx, batch)
 		if err != nil {
 			return err
 		}
-		counters.indexed += updated
+		counters.failed += failed
+		counters.extracted += len(documents)
+		counters.extractedBytes += extractedBytes
+		if len(documents) > 0 {
+			updated, err := c.db.indexContentBatch(ctx, documents)
+			if err != nil {
+				return err
+			}
+			counters.indexed += updated
+		}
 		batch = batch[:0]
+		batchReadBytes = 0
 		return nil
 	}
 
@@ -214,17 +227,14 @@ func (c *ContentCrawler) crawlNameIndex(ctx context.Context, existing map[string
 			}
 
 			readBytes := contentExtractionMaxBytes(candidate.Path, candidate.Size, c.maxReadBytes)
-			text, err := extractContentText(candidate.Path, readBytes)
-			if err != nil {
-				counters.failed++
-				c.yieldAndReportPath("", 0, 0, counters, lastReport)
-				continue
+			if len(batch) > 0 && (len(batch) >= contentCrawlBatchSize || batchReadBytes+readBytes > contentCrawlBatchMaxTextBytes) {
+				if err := flushBatch(); err != nil {
+					return err
+				}
 			}
-
-			batch = append(batch, contentIndexDocument{Path: candidate.Path, Mtime: candidate.Mtime, Size: candidate.Size, Extension: candidate.Extension, Text: text})
-			counters.extracted++
-			counters.extractedBytes += int64(len(text))
-			if len(batch) >= contentCrawlBatchSize {
+			batch = append(batch, candidate)
+			batchReadBytes += readBytes
+			if len(batch) >= contentCrawlBatchSize || batchReadBytes >= contentCrawlBatchMaxTextBytes {
 				if err := flushBatch(); err != nil {
 					return err
 				}
@@ -233,6 +243,73 @@ func (c *ContentCrawler) crawlNameIndex(ctx context.Context, existing map[string
 		}
 	}
 	return flushBatch()
+}
+
+type contentCandidateExtractionResult struct {
+	text string
+	err  error
+}
+
+// extractContentCandidateBatch bounds parallel file parsing while preserving candidate order for SQLite writes.
+func (c *ContentCrawler) extractContentCandidateBatch(ctx context.Context, candidates []ContentIndexCandidate) ([]contentIndexDocument, int, int64, error) {
+	if len(candidates) == 0 {
+		return nil, 0, 0, nil
+	}
+
+	workerCount := runtime.GOMAXPROCS(0)
+	if workerCount > 4 {
+		workerCount = 4
+	}
+	if workerCount > len(candidates) {
+		workerCount = len(candidates)
+	}
+
+	results := make([]contentCandidateExtractionResult, len(candidates))
+	jobs := make(chan int)
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for worker := 0; worker < workerCount; worker++ {
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				if ctx.Err() != nil {
+					results[index].err = ctx.Err()
+					continue
+				}
+				candidate := candidates[index]
+				readBytes := contentExtractionMaxBytes(candidate.Path, candidate.Size, c.maxReadBytes)
+				results[index].text, results[index].err = extractContentText(candidate.Path, readBytes)
+			}
+		}()
+	}
+
+sendLoop:
+	for index := range candidates {
+		select {
+		case jobs <- index:
+		case <-ctx.Done():
+			break sendLoop
+		}
+	}
+	close(jobs)
+	workers.Wait()
+	if ctx.Err() != nil {
+		return nil, 0, 0, ctx.Err()
+	}
+
+	documents := make([]contentIndexDocument, 0, len(candidates))
+	failed := 0
+	var extractedBytes int64
+	for index, candidate := range candidates {
+		result := results[index]
+		if result.err != nil {
+			failed++
+			continue
+		}
+		documents = append(documents, contentIndexDocument{Path: candidate.Path, Mtime: candidate.Mtime, Size: candidate.Size, Extension: candidate.Extension, Text: result.text})
+		extractedBytes += int64(len(result.text))
+	}
+	return documents, failed, extractedBytes, nil
 }
 
 func (c *ContentCrawler) crawlRoot(ctx context.Context, root RootRecord, rootIdx, rootTotal int, existing map[string]ContentEntryMetadata, seenPaths map[string]struct{}, counters *contentCrawlCounters, lastReport *time.Time) error {
@@ -246,6 +323,7 @@ func (c *ContentCrawler) crawlRoot(ctx context.Context, root RootRecord, rootIdx
 	}
 	policyStack := []traversalFrame{{path: rootPath, context: c.policy.NewTraversalContext(root, rootPath)}}
 	batch := make([]contentIndexDocument, 0, contentCrawlBatchSize)
+	batchTextBytes := 0
 	flushBatch := func() error {
 		if len(batch) == 0 {
 			return nil
@@ -256,6 +334,7 @@ func (c *ContentCrawler) crawlRoot(ctx context.Context, root RootRecord, rootIdx
 		}
 		counters.indexed += updated
 		batch = batch[:0]
+		batchTextBytes = 0
 		return nil
 	}
 
@@ -326,9 +405,10 @@ func (c *ContentCrawler) crawlRoot(ctx context.Context, root RootRecord, rootIdx
 		}
 
 		batch = append(batch, contentIndexDocument{Path: path, Mtime: info.ModTime().UnixMilli(), Size: info.Size(), Extension: ext, Text: text})
+		batchTextBytes += len(text)
 		counters.extracted++
 		counters.extractedBytes += int64(len(text))
-		if len(batch) >= contentCrawlBatchSize {
+		if len(batch) >= contentCrawlBatchSize || batchTextBytes >= contentCrawlBatchMaxTextBytes {
 			if err := flushBatch(); err != nil {
 				return err
 			}
