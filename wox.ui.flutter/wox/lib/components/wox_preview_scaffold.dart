@@ -61,7 +61,8 @@ class WoxPreviewScaffold extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context) {
-    final themedContent = Theme(data: ThemeData(textSelectionTheme: TextSelectionThemeData(selectionColor: safeFromCssColor(woxTheme.previewTextSelectionColor))), child: child);
+    final selectionTheme = TextSelectionThemeData(selectionColor: safeFromCssColor(woxTheme.previewTextSelectionColor));
+    final themedContent = Theme(data: Theme.of(context).copyWith(textSelectionTheme: selectionTheme), child: child);
 
     if (contentHandlesScrolling) {
       return LayoutBuilder(builder: (context, constraints) => SizedBox(width: constraints.maxWidth, height: constraints.maxHeight, child: themedContent));
@@ -108,14 +109,18 @@ class WoxPreviewTagPills extends StatelessWidget {
     // the launcher toolbar.
     // Tags show only their label by default to keep the metadata strip compact;
     // the tooltip carries explanatory text without expanding the footer.
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final pillHeight = metrics.scaledSpacing(26);
+    final fontSize = metrics.smallLabelFontSize;
+
     return SizedBox(
       // Preview metadata belongs to the launcher surface, so pill height and
       // text follow density while borders and radii remain theme-owned.
-      height: WoxInterfaceSizeUtil.instance.current.scaledSpacing(26),
+      height: pillHeight,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: tags.length,
-        separatorBuilder: (context, index) => SizedBox(width: WoxInterfaceSizeUtil.instance.current.scaledSpacing(8)),
+        separatorBuilder: (context, index) => SizedBox(width: metrics.scaledSpacing(8)),
         itemBuilder: (context, index) {
           final tag = tags[index];
           final visibleText = tag.label.trim().isEmpty ? tag.tooltip : tag.label;
@@ -124,22 +129,22 @@ class WoxPreviewTagPills extends StatelessWidget {
           return WoxTooltip(
             message: tooltip,
             child: Container(
-              constraints: BoxConstraints(maxWidth: WoxInterfaceSizeUtil.instance.current.scaledSpacing(220)),
-              padding: EdgeInsets.symmetric(horizontal: WoxInterfaceSizeUtil.instance.current.scaledSpacing(9), vertical: WoxInterfaceSizeUtil.instance.current.scaledSpacing(4)),
+              height: pillHeight,
+              constraints: BoxConstraints(maxWidth: metrics.scaledSpacing(220)),
+              padding: EdgeInsets.symmetric(horizontal: metrics.scaledSpacing(9)),
               decoration: BoxDecoration(
                 color: fontColor.withValues(alpha: 0.035),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: borderColor.withValues(alpha: 0.48)),
               ),
-              child: Text(
-                visibleText,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-                style: TextStyle(
-                  color: contentColor.withValues(alpha: 0.9),
-                  fontSize: WoxInterfaceSizeUtil.instance.current.smallLabelFontSize,
-                  height: 1.2,
-                  fontWeight: FontWeight.w600,
+              child: Align(
+                alignment: Alignment.center,
+                widthFactor: 1,
+                child: Text(
+                  visibleText,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: TextStyle(color: contentColor.withValues(alpha: 0.9), fontSize: fontSize, height: 1.0, fontWeight: FontWeight.w600),
                 ),
               ),
             ),

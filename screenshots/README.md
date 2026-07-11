@@ -4,7 +4,7 @@
 
 # AI Chat
 
-![AI Chat](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/ai_chat.png)
+![AI Chat](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/ai_chat.mp4)
 
 # Setting
 

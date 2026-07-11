@@ -154,6 +154,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 				},
 			},
 		}
+		actions = append(actions, i.createOpenPluginSettingsAction(ctx, pluginInstance))
 		if hasStorePlugin && plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, storePlugin.Version) {
 			actions = append(actions, i.createIndicatorUpgradeAction(storePlugin))
 		}
@@ -203,6 +204,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 					},
 				},
 			}
+			commandActions = append(commandActions, i.createOpenPluginSettingsAction(ctx, pluginInstance))
 			if hasStorePlugin && plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, storePlugin.Version) {
 				commandActions = append(commandActions, i.createIndicatorUpgradeAction(storePlugin))
 			}
@@ -277,6 +279,20 @@ func (i *IndicatorPlugin) createIndicatorUpgradeAction(storePlugin plugin.StoreP
 	}
 }
 
+func (i *IndicatorPlugin) createOpenPluginSettingsAction(ctx context.Context, pluginInstance *plugin.Instance) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Name:                   fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_open_plugin_settings"), pluginInstance.GetName(ctx)),
+		Icon:                   pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.SettingIcon),
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
+				Path:  "/plugin/setting",
+				Param: pluginInstance.Metadata.Id,
+			})
+		},
+	}
+}
+
 func (i *IndicatorPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
 	triggerKeyword := mruData.ContextData["triggerKeyword"]
 	pluginId := mruData.ContextData["pluginId"]
@@ -323,6 +339,7 @@ func (i *IndicatorPlugin) handleMRURestore(ctx context.Context, mruData plugin.M
 			},
 		},
 	}
+	actions = append(actions, i.createOpenPluginSettingsAction(ctx, pluginInstance))
 	storePlugin, storeErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
 	if storeErr == nil {
 		upgradeTails = i.buildIndicatorUpgradeTails(pluginInstance.Metadata.Version, storePlugin.Version, true)

@@ -172,3 +172,189 @@ func TestSQLiteSearchProviderRenameDoesNotLeaveGhostResult(t *testing.T) {
 		t.Fatalf("expected renamed new name to be searchable, got %#v", newResults)
 	}
 }
+
+func TestSQLiteSearchProviderQuotedNamePhraseMatchesLiteralSubstring(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	provider := NewSQLiteSearchProvider(db)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-sqlite-provider-quoted-name")
+	root := RootRecord{
+		ID:        "root-sqlite-provider-quoted-name",
+		Path:      rootPath,
+		Kind:      RootKindUser,
+		Status:    RootStatusIdle,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	mustInsertRoot(t, ctx, db, root)
+
+	phrasePath := filepath.Join(rootPath, "Initialize content index if enabled.md")
+	scrambledPath := filepath.Join(rootPath, "Initialize index content if enabled.md")
+	if err := db.ReplaceRootEntries(ctx, root, []EntryRecord{
+		{
+			Path:           phrasePath,
+			RootID:         root.ID,
+			ParentPath:     rootPath,
+			Name:           "Initialize content index if enabled.md",
+			NormalizedName: normalizeIndexText("Initialize content index if enabled.md"),
+			NormalizedPath: normalizeIndexText(phrasePath),
+			IsDir:          false,
+			Mtime:          now,
+			Size:           1,
+			UpdatedAt:      now,
+		},
+		{
+			Path:           scrambledPath,
+			RootID:         root.ID,
+			ParentPath:     rootPath,
+			Name:           "Initialize index content if enabled.md",
+			NormalizedName: normalizeIndexText("Initialize index content if enabled.md"),
+			NormalizedPath: normalizeIndexText(scrambledPath),
+			IsDir:          false,
+			Mtime:          now,
+			Size:           1,
+			UpdatedAt:      now,
+		},
+	}, nil); err != nil {
+		t.Fatalf("seed quoted name entries: %v", err)
+	}
+
+	results, err := provider.Search(context.Background(), SearchQuery{Raw: `"content index"`}, 10)
+	if err != nil {
+		t.Fatalf("search quoted name phrase: %v", err)
+	}
+	if len(results) != 1 || results[0].Path != phrasePath {
+		t.Fatalf("expected only literal quoted name phrase match, got %#v", results)
+	}
+}
+
+func TestSQLiteSearchProviderQuotedPathPhraseMatchesLiteralSubstring(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	provider := NewSQLiteSearchProvider(db)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-sqlite-provider-quoted-path")
+	root := RootRecord{
+		ID:        "root-sqlite-provider-quoted-path",
+		Path:      rootPath,
+		Kind:      RootKindUser,
+		Status:    RootStatusIdle,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	mustInsertRoot(t, ctx, db, root)
+
+	phraseDir := filepath.Join(rootPath, "release notes")
+	scrambledDir := filepath.Join(rootPath, "release internal notes")
+	phrasePath := filepath.Join(phraseDir, "report.txt")
+	scrambledPath := filepath.Join(scrambledDir, "report.txt")
+	if err := db.ReplaceRootEntries(ctx, root, []EntryRecord{
+		{
+			Path:           phrasePath,
+			RootID:         root.ID,
+			ParentPath:     phraseDir,
+			Name:           "report.txt",
+			NormalizedName: "report.txt",
+			NormalizedPath: normalizeIndexText(phrasePath),
+			IsDir:          false,
+			Mtime:          now,
+			Size:           1,
+			UpdatedAt:      now,
+		},
+		{
+			Path:           scrambledPath,
+			RootID:         root.ID,
+			ParentPath:     scrambledDir,
+			Name:           "report.txt",
+			NormalizedName: "report.txt",
+			NormalizedPath: normalizeIndexText(scrambledPath),
+			IsDir:          false,
+			Mtime:          now,
+			Size:           1,
+			UpdatedAt:      now,
+		},
+	}, nil); err != nil {
+		t.Fatalf("seed quoted path entries: %v", err)
+	}
+
+	results, err := provider.Search(context.Background(), SearchQuery{Raw: `"release notes"`}, 10)
+	if err != nil {
+		t.Fatalf("search quoted path phrase: %v", err)
+	}
+	if len(results) != 1 || results[0].Path != phrasePath {
+		t.Fatalf("expected only literal quoted path phrase match, got %#v", results)
+	}
+}
+
+func TestSQLiteSearchProviderWildcardWithQuotedPhraseRequiresBoth(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	provider := NewSQLiteSearchProvider(db)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-sqlite-provider-wildcard-quoted")
+	root := RootRecord{
+		ID:        "root-sqlite-provider-wildcard-quoted",
+		Path:      rootPath,
+		Kind:      RootKindUser,
+		Status:    RootStatusIdle,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	mustInsertRoot(t, ctx, db, root)
+
+	matchingPath := filepath.Join(rootPath, "task content index.md")
+	wildcardOnlyPath := filepath.Join(rootPath, "task index content.md")
+	if err := db.ReplaceRootEntries(ctx, root, []EntryRecord{
+		{
+			Path:           matchingPath,
+			RootID:         root.ID,
+			ParentPath:     rootPath,
+			Name:           "task content index.md",
+			NormalizedName: "task content index.md",
+			NormalizedPath: normalizeIndexText(matchingPath),
+			IsDir:          false,
+			Mtime:          now,
+			Size:           1,
+			UpdatedAt:      now,
+		},
+		{
+			Path:           wildcardOnlyPath,
+			RootID:         root.ID,
+			ParentPath:     rootPath,
+			Name:           "task index content.md",
+			NormalizedName: "task index content.md",
+			NormalizedPath: normalizeIndexText(wildcardOnlyPath),
+			IsDir:          false,
+			Mtime:          now,
+			Size:           1,
+			UpdatedAt:      now,
+		},
+	}, nil); err != nil {
+		t.Fatalf("seed wildcard quoted entries: %v", err)
+	}
+
+	results, err := provider.Search(context.Background(), SearchQuery{Raw: `task* "content index"`}, 10)
+	if err != nil {
+		t.Fatalf("search wildcard with quoted phrase: %v", err)
+	}
+	if len(results) != 1 || results[0].Path != matchingPath {
+		t.Fatalf("expected wildcard result to also satisfy quoted phrase, got %#v", results)
+	}
+}
+
+func TestScoreDocAgainstQueryWildcardWithQuotedPhraseRequiresBoth(t *testing.T) {
+	query := normalizeSearchQuery(SearchQuery{Raw: `task* "content index"`})
+	matched, _ := scoreDocAgainstQuery(query, docRecord{
+		Path:  "/tmp/task index content.md",
+		IsDir: false,
+	})
+	if matched {
+		t.Fatal("wildcard match should still be rejected when quoted phrase is missing")
+	}
+
+	matched, _ = scoreDocAgainstQuery(query, docRecord{
+		Path:  "/tmp/task content index.md",
+		IsDir: false,
+	})
+	if !matched {
+		t.Fatal("wildcard match should pass when quoted phrase is present")
+	}
+}

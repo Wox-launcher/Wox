@@ -256,6 +256,15 @@ var defaultIgnorePatterns = []string{
 	"*.lrdata",
 	"**/_work/**",
 	"**/externals.*/**",
+	// Developer package/version caches: tens of thousands of tiny files that
+	// are never useful as launcher results and dominate full-scan traversal.
+	"**/go/pkg/mod/**",
+	"**/go/pkg/sumdb/**",
+	".npm",
+	"**/.cargo/registry/**",
+	"**/.m2/repository/**",
+	"**/.nuget/packages/**",
+	"**/.rustup/toolchains/**",
 }
 
 // DefaultIgnorePatterns returns a copy so callers can expose or sort the

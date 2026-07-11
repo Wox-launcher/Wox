@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_drag_move_view.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/components/wox_tooltip.dart';
@@ -462,13 +463,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   Widget _buildToolbarDragHandle() {
     return MouseRegion(
       cursor: SystemMouseCursors.move,
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onPanStart: (_) {
-          launcherController.windowDriver.startDragging();
-        },
-        child: SizedBox(height: _scaled(32)),
-      ),
+      child: WoxDragMoveArea(onDragStart: launcherController.windowDriver.startDragging, debugSource: "webview-preview-toolbar", child: SizedBox(height: _scaled(32))),
     );
   }
 

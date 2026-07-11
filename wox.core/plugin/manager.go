@@ -429,6 +429,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 		PluginDirectory:       metadata.Directory,
 		Plugin:                plugin,
 		Host:                  host,
+		RuntimeLoaded:         true,
 		LoadStartTimestamp:    loadStartTimestamp,
 		LoadFinishedTimestamp: loadFinishTimestamp,
 		IsDevPlugin:           metadata.IsDev,
@@ -486,10 +487,7 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 }
 
 func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
-	for _, callback := range pluginInstance.UnloadCallbacks {
-		callback(ctx)
-	}
-	pluginInstance.Host.UnloadPlugin(ctx, pluginInstance.Metadata)
+	m.deactivatePlugin(ctx, pluginInstance)
 
 	var newInstances []*Instance
 	for _, instance := range m.instances {
@@ -498,6 +496,101 @@ func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
 		}
 	}
 	m.instances = newInstances
+}
+
+// DisablePlugin marks a plugin disabled and releases its runtime resources
+// while keeping the instance visible to settings and store views.
+func (m *Manager) DisablePlugin(ctx context.Context, pluginId string) error {
+	pluginInstance := m.GetPluginInstanceById(pluginId)
+	if pluginInstance == nil {
+		return fmt.Errorf("can't find plugin")
+	}
+	if err := pluginInstance.Setting.Disabled.Set(true); err != nil {
+		return err
+	}
+	m.deactivatePlugin(ctx, pluginInstance)
+	return nil
+}
+
+// EnablePlugin marks a plugin enabled and initializes its runtime if it was
+// previously deactivated by DisablePlugin.
+func (m *Manager) EnablePlugin(ctx context.Context, pluginId string) error {
+	pluginInstance := m.GetPluginInstanceById(pluginId)
+	if pluginInstance == nil {
+		return fmt.Errorf("can't find plugin")
+	}
+	if err := pluginInstance.Setting.Disabled.Set(false); err != nil {
+		return err
+	}
+	if err := m.activatePlugin(ctx, pluginInstance); err != nil {
+		_ = pluginInstance.Setting.Disabled.Set(true)
+		return err
+	}
+	return nil
+}
+
+// deactivatePlugin runs plugin unload callbacks and releases host runtime state
+// without removing the instance from the installed plugin list.
+func (m *Manager) deactivatePlugin(ctx context.Context, pluginInstance *Instance) {
+	if pluginInstance == nil {
+		return
+	}
+	if pluginInstance.Initialized {
+		for _, callback := range pluginInstance.UnloadCallbacks {
+			callback(ctx)
+		}
+	}
+	m.clearRuntimeCallbacks(pluginInstance)
+	pluginInstance.Initialized = false
+
+	if pluginInstance.Host != nil && pluginInstance.RuntimeLoaded {
+		pluginInstance.Host.UnloadPlugin(ctx, pluginInstance.Metadata)
+		pluginInstance.RuntimeLoaded = false
+		pluginInstance.Plugin = nil
+	}
+}
+
+// activatePlugin loads host runtime state if needed and runs Init once for the
+// current enabled lifecycle.
+func (m *Manager) activatePlugin(ctx context.Context, pluginInstance *Instance) error {
+	if pluginInstance == nil {
+		return fmt.Errorf("can't find plugin")
+	}
+	if pluginInstance.Initialized {
+		return nil
+	}
+	if pluginInstance.Host != nil && !pluginInstance.RuntimeLoaded {
+		if !pluginInstance.Host.IsStarted(ctx) {
+			if err := pluginInstance.Host.Start(ctx); err != nil {
+				return fmt.Errorf("failed to start host for runtime %s: %w", pluginInstance.Metadata.Runtime, err)
+			}
+		}
+		loadedPlugin, err := pluginInstance.Host.LoadPlugin(ctx, pluginInstance.Metadata, pluginInstance.PluginDirectory)
+		if err != nil {
+			return err
+		}
+		pluginInstance.Plugin = loadedPlugin
+		pluginInstance.RuntimeLoaded = true
+	}
+	if pluginInstance.Plugin == nil {
+		return fmt.Errorf("plugin runtime is not loaded: %s", pluginInstance.Metadata.GetName(ctx))
+	}
+	m.initPlugin(ctx, pluginInstance)
+	return nil
+}
+
+// clearRuntimeCallbacks drops callbacks registered during Init so a later
+// enable starts from a clean plugin lifecycle.
+func (m *Manager) clearRuntimeCallbacks(pluginInstance *Instance) {
+	pluginInstance.DynamicSettingCallbacks = nil
+	pluginInstance.SettingChangeCallbacks = nil
+	pluginInstance.DeepLinkCallbacks = nil
+	pluginInstance.UnloadCallbacks = nil
+	pluginInstance.MRURestoreCallbacks = nil
+	pluginInstance.PluginCommandHandlers = nil
+	pluginInstance.EnterPluginQueryCallbacks = nil
+	pluginInstance.LeavePluginQueryCallbacks = nil
+	pluginInstance.RuntimeQueryCommands = nil
 }
 
 func (m *Manager) RestartHostForRuntime(ctx context.Context, runtime Runtime, skipPluginIDs []string, progressCallback UninstallProgressCallback) error {
@@ -592,6 +685,7 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 				Plugin:                plugin,
 				Host:                  nil,
 				IsSystemPlugin:        true,
+				RuntimeLoaded:         true,
 				PluginDirectory:       metadata.Directory,
 				LoadStartTimestamp:    util.GetSystemTimestamp(),
 				LoadFinishedTimestamp: util.GetSystemTimestamp(),
@@ -640,6 +734,7 @@ func (m *Manager) initPlugin(ctx context.Context, instance *Instance) {
 		API:             instance.API,
 		PluginDirectory: instance.PluginDirectory,
 	})
+	instance.Initialized = true
 	instance.InitFinishedTimestamp = util.GetSystemTimestamp()
 	logger.Info(ctx, fmt.Sprintf("init plugin %s finished, cost %d ms", instance.Metadata.GetName(ctx), instance.InitFinishedTimestamp-instance.InitStartTimestamp))
 }
@@ -984,6 +1079,16 @@ func (m *Manager) GetPluginInstanceById(pluginId string) *Instance {
 	return nil
 }
 
+// GetSystemPlugin returns the SystemPlugin implementation for the given plugin ID,
+// or nil if the plugin is not found or not a system plugin.
+func (m *Manager) GetSystemPlugin(pluginId string) SystemPlugin {
+	instance := m.GetPluginInstanceById(pluginId)
+	if instance == nil || !instance.IsSystemPlugin {
+		return nil
+	}
+	return instance.Plugin.(SystemPlugin)
+}
+
 // InvokePluginCommand routes a plugin-to-plugin command to the target plugin.
 func (m *Manager) InvokePluginCommand(ctx context.Context, caller *Instance, request PluginCommandRequest) (PluginCommandResult, error) {
 	if strings.TrimSpace(request.PluginId) == "" {
@@ -1102,6 +1207,9 @@ func (m *Manager) mergeQueryLayouts(metadataLayout QueryLayout, responseLayout Q
 	}
 	if responseLayout.GridLayout != nil {
 		merged.GridLayout = responseLayout.GridLayout
+	}
+	if responseLayout.ChatMode {
+		merged.ChatMode = true
 	}
 
 	return merged
@@ -1554,7 +1662,7 @@ func (m *Manager) newOpenPluginSettingAction(ctx context.Context, pluginInstance
 	return QueryResultAction{
 		Id:                     systemActionOpenPluginSettingID,
 		Name:                   fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), pluginInstance.GetName(ctx)),
-		Icon:                   common.SettingIcon,
+		Icon:                   pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.SettingIcon),
 		IsSystemAction:         true,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext ActionContext) {
@@ -2738,6 +2846,11 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	scoreFeatureTimingStart := time.Now()
 	// ignoreAutoScore is a plugin-context control; global search still needs actioned-result ranking across providers.
 	ignoreAutoScore := !query.IsGlobalQuery() && pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
+	isMRUQuery := query.Env.IsMRU
+	if isMRUQuery {
+		// MRU restore owns ranking; plugin/action/favorite scores would leak normal query ranking into the MRU page.
+		ignoreAutoScore = true
+	}
 	ScoreFeatureCost := util.GetSystemTimestamp() - scoreFeatureStart
 	ScoreFeatureCostUs := time.Since(scoreFeatureTimingStart).Microseconds()
 	autoScoreStart := util.GetSystemTimestamp()
@@ -2754,8 +2867,8 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	favoriteStart := util.GetSystemTimestamp()
 	favoriteTimingStart := time.Now()
 	// check if result is favorite result
-	// favorite result will not be affected by ignoreAutoScore setting, so we add score here
-	isFavorite := setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+	// favorite result will not be affected by ignoreAutoScore setting, except on the MRU page where MRU score owns ranking.
+	isFavorite := !isMRUQuery && setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
 	if isFavorite {
 		favScore := int64(100000)
 		logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) is favorite result, add score: %d", pluginInstance.GetName(ctx), result.Title, favScore))
@@ -4091,6 +4204,11 @@ func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResul
 					hashTitle = resultCache.Query.Search
 					hashSubTitle = ""
 				}
+			case "scorekey":
+				if resultCache.Result.ScoreKey != "" {
+					hashTitle = resultCache.Result.ScoreKey
+					hashSubTitle = ""
+				}
 			default:
 				// "title" or unknown: keep default Title/SubTitle based hash
 			}
@@ -4335,12 +4453,19 @@ func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, ar
 }
 
 func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string) []QueryResultUI {
+	activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 	query := Query{
-		Id:             queryId,
-		SessionId:      sessionId,
-		Type:           QueryTypeInput,
-		TriggerKeyword: "mru",
+		Id:        queryId,
+		SessionId: sessionId,
+		Type:      QueryTypeInput,
 	}
+	query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
+	query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
+	query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
+	query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
+	query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
+	query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
+	query.Env.IsMRU = true
 	m.startSessionQueryCache(query)
 
 	mruItems, err := setting.GetSettingManager().GetMRUItems(ctx, 10)
@@ -4365,7 +4490,8 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 			continue
 		}
 
-		if restored := m.restoreFromMRU(ctx, pluginInstance, item); restored != nil {
+		pluginQuery := m.buildPluginQueryEnv(ctx, pluginInstance, query)
+		if restored := m.restoreFromMRU(ctx, pluginInstance, item, pluginQuery.Env); restored != nil {
 			util.GetLogger().Debug(ctx, fmt.Sprintf("mru item restored: %s", item.Title))
 
 			// Build a stable dedupe key using restored values, which are language-independent for Go plugins
@@ -4393,6 +4519,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 
 			// Add the remove action to the result
 			restored.Actions = append(restored.Actions, removeMRUAction)
+			restored.Score = item.Score
 
 			polishedResult := m.PolishResult(ctx, pluginInstance, query, QueryLayout{}, *restored)
 			results = append(results, polishedResult.ToUI())
@@ -4418,7 +4545,7 @@ func (m *Manager) getPluginInstance(pluginID string) *Instance {
 }
 
 // restoreFromMRU attempts to restore a QueryResult from MRU data
-func (m *Manager) restoreFromMRU(ctx context.Context, pluginInstance *Instance, item setting.MRUItem) *QueryResult {
+func (m *Manager) restoreFromMRU(ctx context.Context, pluginInstance *Instance, item setting.MRUItem, env QueryEnv) *QueryResult {
 	// For Go plugins, call MRU restore callbacks directly
 	if len(pluginInstance.MRURestoreCallbacks) > 0 {
 		mruData := MRUData{
@@ -4427,6 +4554,7 @@ func (m *Manager) restoreFromMRU(ctx context.Context, pluginInstance *Instance, 
 			SubTitle:    item.SubTitle,
 			Icon:        item.Icon,
 			ContextData: item.ContextData,
+			Env:         env,
 			LastUsed:    item.LastUsed,
 			UseCount:    item.UseCount,
 		}
@@ -4765,7 +4893,11 @@ func (m *Manager) resolveActiveToolbarMsgContext(ctx context.Context, pluginId s
 // normalizeToolbarMsg translates user-facing text, normalizes UI-facing icons, clones context data,
 // and backfills host proxies for external plugin action callbacks.
 func (m *Manager) normalizeToolbarMsg(ctx context.Context, pluginInstance *Instance, msg ToolbarMsg) ToolbarMsg {
-	normalizedIcon := common.ConvertIcon(ctx, msg.Icon, pluginInstance.PluginDirectory)
+	icon := msg.Icon
+	if icon.IsEmpty() {
+		icon = common.ParseWoxImageOrDefault(pluginInstance.Metadata.Icon, common.WoxImage{})
+	}
+	normalizedIcon := common.ConvertIcon(ctx, icon, pluginInstance.PluginDirectory)
 
 	normalized := ToolbarMsg{
 		Id:            msg.Id,

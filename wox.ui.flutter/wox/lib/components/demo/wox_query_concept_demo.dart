@@ -445,6 +445,12 @@ class _ConceptDemoWindow extends StatelessWidget {
         // Panel width matches WoxDemoWindow's formula so the overlay looks
         // identical to the real launcher's action-panel overlay.
         final panelWidth = (constraints.maxWidth * 0.42).clamp(250.0, 320.0);
+        final actionPanelBottom = footerHeight + 12.0;
+        const actionPanelNaturalHeight = 176.0;
+        // Windows CI can give the welcome demo less vertical room during the
+        // reopen-onboarding path; scale the overlay down instead of letting the
+        // fixed action rows overflow while the animation is being disposed.
+        final actionPanelMaxHeight = math.max(0.0, constraints.maxHeight - actionPanelBottom - 12.0);
 
         final effectiveBg = _conceptMicaSurfaceColor(getThemeBackgroundColor());
         final effectiveBorderColor = getThemeTextColor().withValues(alpha: 0.10);
@@ -531,16 +537,32 @@ class _ConceptDemoWindow extends StatelessWidget {
                 // Action panel – mirrors WoxDemoWindow's own panel overlay:
                 // Positioned to the bottom-right corner above the toolbar,
                 // with the same slide+scale entrance animation.
-                if (actionPanelProgress > 0.01)
+                if (actionPanelProgress > 0.01 && actionPanelMaxHeight > 24)
                   Positioned(
                     right: 16,
-                    bottom: footerHeight + 12,
+                    bottom: actionPanelBottom,
                     width: panelWidth,
-                    child: Opacity(
-                      opacity: actionPanelProgress,
-                      child: Transform.translate(
-                        offset: Offset(18 * (1 - actionPanelProgress), 10 * (1 - actionPanelProgress)),
-                        child: Transform.scale(alignment: Alignment.bottomRight, scale: 0.96 + (0.04 * actionPanelProgress), child: WoxDemoActionPanel(accent: accent, tr: tr)),
+                    height: actionPanelMaxHeight,
+                    child: Align(
+                      alignment: Alignment.bottomRight,
+                      child: FittedBox(
+                        alignment: Alignment.bottomRight,
+                        fit: BoxFit.scaleDown,
+                        child: SizedBox(
+                          width: panelWidth,
+                          height: actionPanelNaturalHeight,
+                          child: Opacity(
+                            opacity: actionPanelProgress,
+                            child: Transform.translate(
+                              offset: Offset(18 * (1 - actionPanelProgress), 10 * (1 - actionPanelProgress)),
+                              child: Transform.scale(
+                                alignment: Alignment.bottomRight,
+                                scale: 0.96 + (0.04 * actionPanelProgress),
+                                child: WoxDemoActionPanel(accent: accent, tr: tr),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),

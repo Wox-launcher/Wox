@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"wox/util/overlay"
+	"wox/util/overlay/textoverlay"
 	"wox/util/screen"
 )
 
@@ -36,8 +37,8 @@ const (
 	tooltipSideBottom = "bottom"
 )
 
-// OverlayOptions describes a lightweight native tooltip request.
-type OverlayOptions struct {
+// Options describes a lightweight native tooltip request.
+type Options struct {
 	Name          string
 	Text          string
 	Side          string
@@ -53,7 +54,7 @@ type OverlayOptions struct {
 
 // Show renders a native tooltip window that is independent of the Flutter
 // launcher surface, so it can extend beyond the launcher bounds.
-func Show(ctx context.Context, opts OverlayOptions) {
+func Show(ctx context.Context, opts Options) {
 	if opts.Text == "" {
 		return
 	}
@@ -63,20 +64,21 @@ func Show(ctx context.Context, opts OverlayOptions) {
 	width, estimatedHeight := estimateBounds(opts.Text)
 	placement := computePlacement(opts, width, estimatedHeight)
 
-	overlay.Show(overlay.OverlayOptions{
-		Name:             opts.Name,
-		Title:            "Wox tooltip",
-		Message:          opts.Text,
-		Topmost:          true,
-		AbsolutePosition: true,
-		Anchor:           placement.overlayAnchor,
-		OffsetX:          placement.offsetX,
-		OffsetY:          placement.offsetY,
-		MinWidth:         tooltipMinWidthDip,
-		MaxWidth:         tooltipMaxWidthDip,
-		MaxHeight:        tooltipMaxHeightDip,
-		FontSize:         tooltipFontSizePt(),
-		CornerRadius:     8,
+	textoverlay.Show(textoverlay.Options{
+		Window: overlay.WindowOptions{
+			ID:               opts.Name,
+			Topmost:          true,
+			AbsolutePosition: true,
+			Anchor:           placement.overlayAnchor,
+			OffsetX:          placement.offsetX,
+			OffsetY:          placement.offsetY,
+			MinWidth:         tooltipMinWidthDip,
+			MaxWidth:         tooltipMaxWidthDip,
+			MaxHeight:        tooltipMaxHeightDip,
+			CornerRadius:     8,
+		},
+		Message:  opts.Text,
+		FontSize: tooltipFontSizePt(),
 	})
 	startVisibilityTracking(opts.withBounds(placement.trackingX, placement.trackingY, width, placement.trackingHeight))
 
@@ -92,8 +94,8 @@ func Close(name string) {
 	overlay.Close(name)
 }
 
-func (opts OverlayOptions) withBounds(x float64, y float64, width float64, height float64) OverlayOptions {
-	return OverlayOptions{
+func (opts Options) withBounds(x float64, y float64, width float64, height float64) Options {
+	return Options{
 		Name:          opts.Name,
 		Text:          opts.Text,
 		Side:          opts.Side,
@@ -138,7 +140,7 @@ type tooltipPlacement struct {
 
 // computePlacement keeps side-specific tooltip positioning in the native tooltip
 // layer so Flutter only needs to report the anchor bounds.
-func computePlacement(opts OverlayOptions, width float64, height float64) tooltipPlacement {
+func computePlacement(opts Options, width float64, height float64) tooltipPlacement {
 	anchor := tooltipRect{
 		X:      opts.AnchorX,
 		Y:      opts.AnchorY,

@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:wox/components/file_preview/file_info_preview.dart';
+import 'package:wox/components/file_preview/file_preview_policy.dart';
 import 'package:wox/components/file_preview/file_preview_renderer.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/utils/colors.dart';
@@ -23,7 +24,18 @@ class ZipFilePreviewRenderer implements WoxFilePreviewRenderer {
       return WoxFilePreviewResult(content: context.buildText(context.tr("ui_file_preview_archive_not_found", {"path": context.filePath})));
     }
 
-    return WoxFilePreviewResult(content: _ZipFilePreview(file: file, tr: context.tr, kind: _ArchivePreviewKind.fromPath(file.path)));
+    final kind = _ArchivePreviewKind.fromPath(file.path);
+
+    return WoxFilePreviewPolicy.buildDeferredPreview(
+      context: context,
+      file: file,
+      manualLoadThresholdBytes: WoxFilePreviewPolicy.archiveThresholdBytes,
+      icon: Icons.folder_zip_rounded,
+      accent: const Color(0xFFF59E0B),
+      typeLabel: context.tr(kind.typeKey),
+      loadedPreviewHandlesScrolling: false,
+      previewBuilder: (_) => _ZipFilePreview(file: file, tr: context.tr, kind: kind),
+    );
   }
 }
 

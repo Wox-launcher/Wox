@@ -68,8 +68,30 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
     bool includeBottomSpacing = true,
     List<Widget> labelActions = const [],
   }) {
+    return WoxSettingPluginItem.layoutFor(
+      label: label,
+      child: child,
+      style: style,
+      labelWidth: labelWidth,
+      tooltip: tooltip,
+      translator: tr,
+      includeBottomSpacing: includeBottomSpacing,
+      labelActions: labelActions,
+    );
+  }
+
+  static Widget layoutFor({
+    required String label,
+    required Widget child,
+    required PluginSettingValueStyle style,
+    required double labelWidth,
+    required String Function(String key) translator,
+    String tooltip = "",
+    bool includeBottomSpacing = true,
+    List<Widget> labelActions = const [],
+  }) {
     final hasLabel = label.trim().isNotEmpty;
-    final tipsWidget = tooltip.trim().isNotEmpty ? tooltipText(tooltip) : null;
+    final tipsWidget = tooltip.trim().isNotEmpty ? tooltipTextFor(tooltip, translator) : null;
     final bottomSpacing = includeBottomSpacing ? 10.0 : 0.0;
     // Text-only labels need a small top offset to align with controls. Title-side
     // actions are taller, so keep them centered with 24px controls instead.
@@ -78,48 +100,83 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
     if (!hasLabel) {
       final content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [child, if (tipsWidget != null) tipsWidget]);
       final wrappedContent = bottomSpacing > 0 ? Padding(padding: EdgeInsets.only(bottom: bottomSpacing), child: content) : content;
-      return applyStylePadding(style: style, child: wrappedContent);
+      return applyStylePaddingFor(style: style, child: wrappedContent);
     }
 
-    return applyStylePadding(
+    return applyStylePaddingFor(
       style: style,
       child: Padding(
         padding: EdgeInsets.only(bottom: bottomSpacing),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Plugin setting panes and table-edit dialogs are narrower than top-level
-            // settings, so the classic label/control split keeps controls aligned while
-            // leaving the right column to carry longer descriptions.
-            SizedBox(
-              width: labelWidth,
-              child: Padding(
-                padding: EdgeInsets.only(top: labelTopPadding),
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500)),
-                    ),
-                    if (labelActions.isNotEmpty) ...[const SizedBox(width: 6), ...labelActions],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: defaultLabelGap),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final shouldStack = constraints.maxWidth < labelWidth + defaultLabelGap + 160;
+            final labelContent = Padding(
+              padding: EdgeInsets.only(top: shouldStack ? 0 : labelTopPadding),
+              child: Row(
                 children: [
-                  child,
-                  if (tipsWidget != null)
-                    Padding(padding: const EdgeInsets.only(top: 4), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 620), child: tipsWidget)),
+                  Flexible(
+                    child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500)),
+                  ),
+                  if (labelActions.isNotEmpty) ...[const SizedBox(width: 6), ...labelActions],
                 ],
               ),
-            ),
-          ],
+            );
+            final fieldContent = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ConstrainedBox(constraints: BoxConstraints(maxWidth: constraints.maxWidth), child: child),
+                if (tipsWidget != null) Padding(padding: const EdgeInsets.only(top: 4), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 620), child: tipsWidget)),
+              ],
+            );
+
+            if (shouldStack) {
+              // Search jumps can briefly lay out plugin settings inside a very
+              // narrow pane while routes switch; stack the label above the control
+              // so the fixed plugin label column does not overflow.
+              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [labelContent, const SizedBox(height: 8), fieldContent]);
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Plugin setting panes and table-edit dialogs are narrower than top-level
+                // settings, so the classic label/control split keeps controls aligned while
+                // leaving the right column to carry longer descriptions.
+                SizedBox(width: labelWidth, child: labelContent),
+                const SizedBox(width: defaultLabelGap),
+                Expanded(child: fieldContent),
+              ],
+            );
+          },
         ),
       ),
     );
+  }
+
+  static Widget tooltipTextFor(String tooltip, String Function(String key) translator) {
+    if (tooltip.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final accentColor = getThemeActiveBackgroundColor();
+
+    return Padding(
+      padding: EdgeInsets.only(top: 2),
+      child: ExcludeFocus(
+        child: WoxMarkdownView(
+          data: translator(tooltip),
+          fontColor: getThemeSubTextColor(),
+          fontSize: SETTING_TOOLTIP_DEFAULT_SIZE,
+          linkColor: accentColor,
+          linkHoverColor: accentColor.withValues(alpha: 0.8),
+          selectable: true,
+        ),
+      ),
+    );
+  }
+
+  static Widget applyStylePaddingFor({required PluginSettingValueStyle style, required Widget child}) {
+    return Padding(padding: EdgeInsets.only(top: style.paddingTop, bottom: style.paddingBottom, left: style.paddingLeft, right: style.paddingRight), child: child);
   }
 
   Widget suffix(String text) {
@@ -197,38 +254,47 @@ mixin WoxSettingPluginItemMixin<T extends StatefulWidget> on State<T> {
       style: style,
       child: Padding(
         padding: EdgeInsets.only(bottom: bottomSpacing),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Plugin setting panes and table-edit dialogs are narrower than top-level
-            // settings, so the classic label/control split keeps controls aligned while
-            // leaving the right column to carry longer descriptions.
-            SizedBox(
-              width: labelWidth,
-              child: Padding(
-                padding: EdgeInsets.only(top: labelTopPadding),
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500)),
-                    ),
-                    if (labelActions.isNotEmpty) ...[const SizedBox(width: 6), ...labelActions],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: WoxSettingPluginItem.defaultLabelGap),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final shouldStack = constraints.maxWidth < labelWidth + WoxSettingPluginItem.defaultLabelGap + 160;
+            final labelContent = Padding(
+              padding: EdgeInsets.only(top: shouldStack ? 0 : labelTopPadding),
+              child: Row(
                 children: [
-                  child,
-                  if (tipsWidget != null)
-                    Padding(padding: const EdgeInsets.only(top: 4), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 620), child: tipsWidget)),
+                  Flexible(
+                    child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500)),
+                  ),
+                  if (labelActions.isNotEmpty) ...[const SizedBox(width: 6), ...labelActions],
                 ],
               ),
-            ),
-          ],
+            );
+            final fieldContent = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ConstrainedBox(constraints: BoxConstraints(maxWidth: constraints.maxWidth), child: child),
+                if (tipsWidget != null) Padding(padding: const EdgeInsets.only(top: 4), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 620), child: tipsWidget)),
+              ],
+            );
+
+            if (shouldStack) {
+              // Search jumps can briefly lay out plugin settings inside a very
+              // narrow pane while routes switch; stack the label above the control
+              // so the fixed plugin label column does not overflow.
+              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [labelContent, const SizedBox(height: 8), fieldContent]);
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Plugin setting panes and table-edit dialogs are narrower than top-level
+                // settings, so the classic label/control split keeps controls aligned while
+                // leaving the right column to carry longer descriptions.
+                SizedBox(width: labelWidth, child: labelContent),
+                const SizedBox(width: WoxSettingPluginItem.defaultLabelGap),
+                Expanded(child: fieldContent),
+              ],
+            );
+          },
         ),
       ),
     );

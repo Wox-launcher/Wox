@@ -65,7 +65,6 @@ static constexpr UINT kScreenshotSelectionStartupHoverProbeDelayMs = 1200;
 static constexpr UINT kDelayedResizeRepaintNudgeDelayMs = 100;
 static constexpr wchar_t kScrollingCaptureOverlayWindowClassName[] = L"WoxScrollingCaptureOverlayWindow";
 static constexpr wchar_t kScreenshotSelectionInputWindowClassName[] = L"WoxScreenshotSelectionInputWindow";
-static constexpr wchar_t kScreenshotSelectionBorderWindowClassName[] = L"WoxScreenshotSelectionBorderWindow";
 static constexpr double kScrollingCaptureToolbarSlotHeightDip = 72.0;
 static constexpr double kScrollingCaptureToolbarHeightDip = 56.0;
 static constexpr double kScrollingCaptureToolbarWidthDip = 124.0;
@@ -80,6 +79,96 @@ static constexpr int kScreenshotHoverChromeMaxHeight = 96;
 FlutterWindow *g_window_instance = nullptr;
 static std::once_flag g_gdiplus_init_once;
 static ULONG_PTR g_gdiplus_token = 0;
+
+struct MonitorFindData
+{
+  double targetX;
+  double targetY;
+  double targetWidth;
+  double targetHeight;
+  double bestArea;
+  HMONITOR foundMonitor;
+  UINT foundDpi;
+};
+
+// Windows monitor rectangles are physical pixels. Wox core sends positions in
+// its Windows logical space: physical coordinates divided by the scale of the
+// monitor that produced the position. Test each monitor by applying that
+// candidate monitor's scale, then choose the monitor with the largest overlap.
+static BOOL CALLBACK FindMonitorForGoLogicalBounds(HMONITOR hMon, HDC, LPRECT, LPARAM lParam)
+{
+  auto *data = reinterpret_cast<MonitorFindData *>(lParam);
+  MONITORINFO mi = {sizeof(mi)};
+  if (!GetMonitorInfo(hMon, &mi))
+  {
+    return TRUE;
+  }
+
+  UINT dpi = FlutterDesktopGetDpiForMonitor(hMon);
+  if (dpi == 0)
+  {
+    dpi = 96;
+  }
+
+  const double scale = dpi / 96.0;
+  const double width = data->targetWidth > 0 ? data->targetWidth : 1.0;
+  const double height = data->targetHeight > 0 ? data->targetHeight : 1.0;
+  const double physicalLeft = data->targetX * scale;
+  const double physicalTop = data->targetY * scale;
+  const double physicalRight = (data->targetX + width) * scale;
+  const double physicalBottom = (data->targetY + height) * scale;
+
+  // The launcher can be taller than a scaled work area, so a correctly centered
+  // window may have its top-left outside the monitor. Overlap keeps that case
+  // on the intended display instead of falling back to the primary monitor.
+  const double overlapWidth = std::max(
+      0.0,
+      std::min(physicalRight, static_cast<double>(mi.rcMonitor.right)) - std::max(physicalLeft, static_cast<double>(mi.rcMonitor.left)));
+  const double overlapHeight = std::max(
+      0.0,
+      std::min(physicalBottom, static_cast<double>(mi.rcMonitor.bottom)) - std::max(physicalTop, static_cast<double>(mi.rcMonitor.top)));
+  const double area = overlapWidth * overlapHeight;
+  if (area > data->bestArea)
+  {
+    data->foundMonitor = hMon;
+    data->foundDpi = dpi;
+    data->bestArea = area;
+  }
+
+  return TRUE;
+}
+
+// Formats HWND values for focus diagnostics without relying on platform-specific printf width.
+static std::string FormatHwnd(HWND hwnd)
+{
+  if (hwnd == nullptr)
+  {
+    return "null";
+  }
+
+  std::ostringstream stream;
+  stream << "0x" << std::hex << std::uppercase << reinterpret_cast<uintptr_t>(hwnd);
+  return stream.str();
+}
+
+// Captures the foreground/focus state around Windows show/focus/blur transitions.
+static std::string FormatFocusSnapshot(HWND selfHwnd, HWND childHwnd)
+{
+  const HWND foreground = GetForegroundWindow();
+  const HWND foreground_root = foreground == nullptr ? nullptr : GetAncestor(foreground, GA_ROOT);
+  const HWND thread_focus = GetFocus();
+  const bool is_foreground = foreground == selfHwnd || foreground == childHwnd || foreground_root == selfHwnd;
+
+  std::ostringstream stream;
+  stream << "self=" << FormatHwnd(selfHwnd)
+         << " child=" << FormatHwnd(childHwnd)
+         << " foreground=" << FormatHwnd(foreground)
+         << " foregroundRoot=" << FormatHwnd(foreground_root)
+         << " threadFocus=" << FormatHwnd(thread_focus)
+         << " visible=" << (IsWindowVisible(selfHwnd) ? "true" : "false")
+         << " isForeground=" << (is_foreground ? "true" : "false");
+  return stream.str();
+}
 
 // GetWindowsBuildNumberForCapabilities mirrors the backdrop support check without
 // exposing Win32Window internals to the Flutter method channel.
@@ -1582,6 +1671,7 @@ void FlutterWindow::NotifyWindowBlur(HWND selfHwnd, HWND activatedHwnd, const ch
 {
   if (activatedHwnd != nullptr && ShouldSuppressBlurForActivatedWindow(selfHwnd, activatedHwnd))
   {
+    Log(std::string(source) + ": blur suppressed (activated Wox window) activated=" + FormatHwnd(activatedHwnd) + " " + FormatFocusSnapshot(selfHwnd, child_window_));
     return;
   }
 
@@ -1590,24 +1680,25 @@ void FlutterWindow::NotifyWindowBlur(HWND selfHwnd, HWND activatedHwnd, const ch
   {
     if (blur_guard_active_)
     {
-      Log(std::string(source) + ": blur suppressed (show-to-focus transition)");
+      Log(std::string(source) + ": blur suppressed (show-to-focus transition) activated=" + FormatHwnd(activatedHwnd) + " " + FormatFocusSnapshot(selfHwnd, child_window_));
     }
     else
     {
-      Log(std::string(source) + ": blur suppressed (post-show grace)");
+      Log(std::string(source) + ": blur suppressed (post-show grace) activated=" + FormatHwnd(activatedHwnd) + " " + FormatFocusSnapshot(selfHwnd, child_window_));
     }
     return;
   }
 
   if (blur_event_sent_since_focus_)
   {
-    Log(std::string(source) + ": duplicate blur suppressed");
+    Log(std::string(source) + ": duplicate blur suppressed activated=" + FormatHwnd(activatedHwnd) + " " + FormatFocusSnapshot(selfHwnd, child_window_));
     return;
   }
 
   blur_event_sent_since_focus_ = true;
   restore_previous_window_on_hide_ = false;
   previous_active_window_ = nullptr;
+  Log(std::string(source) + ": send onWindowBlur activated=" + FormatHwnd(activatedHwnd) + " " + FormatFocusSnapshot(selfHwnd, child_window_));
   SendWindowEvent("onWindowBlur");
 }
 
@@ -2396,19 +2487,6 @@ bool FlutterWindow::BeginScreenshotSelectionOverlay(HWND hwnd, const RECT &works
     input_class_registered = true;
   }
 
-  static bool border_class_registered = false;
-  if (!border_class_registered)
-  {
-    WNDCLASS window_class{};
-    window_class.hCursor = LoadCursor(nullptr, IDC_CROSS);
-    window_class.lpszClassName = kScreenshotSelectionBorderWindowClassName;
-    window_class.hInstance = GetModuleHandle(nullptr);
-    window_class.hbrBackground = ScreenshotSelectionBorderBrush();
-    window_class.lpfnWndProc = FlutterWindow::ScreenshotSelectionPassiveWindowProc;
-    RegisterClass(&window_class);
-    border_class_registered = true;
-  }
-
   SavePreviousActiveWindow(hwnd);
   FlushPendingChildKeyUps();
 
@@ -2477,39 +2555,6 @@ bool FlutterWindow::BeginScreenshotSelectionOverlay(HWND hwnd, const RECT &works
   // continue showing through after the snapshot has been taken.
   SetLayeredWindowAttributes(input_window, 0, 255, LWA_ALPHA);
 
-  for (int i = 0; i < 4; ++i)
-  {
-    HWND border_window = CreateWindowEx(
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        kScreenshotSelectionBorderWindowClassName,
-        L"Wox screenshot selection border",
-        WS_POPUP,
-        workspace_bounds.left,
-        workspace_bounds.top,
-        1,
-        1,
-        nullptr,
-        nullptr,
-        GetModuleHandle(nullptr),
-        nullptr);
-    if (border_window == nullptr)
-    {
-      DestroyScreenshotSelectionOverlayWindows();
-      screenshot_selection_overlay_state_ = ScreenshotSelectionOverlayState{};
-      if (error_out != nullptr)
-      {
-        *error_out = "Failed to create screenshot selection border windows";
-      }
-      if (result != nullptr)
-      {
-        result->Error("SELECTION_ERROR", "Failed to create screenshot selection border windows");
-      }
-      return false;
-    }
-
-    screenshot_selection_overlay_state_.border_windows.push_back(border_window);
-  }
-
   screenshot_selection_overlay_state_.pending_result = std::move(result);
 
   // Feature change: paint cached HBITMAP snapshots into the selector so the user sees the exact
@@ -2575,39 +2620,8 @@ void FlutterWindow::LayoutScreenshotSelectionOverlay()
     return;
   }
 
-  const RECT workspace = screenshot_selection_overlay_state_.workspace_bounds;
-  const RECT committed_selection = ClampRectToBounds(screenshot_selection_overlay_state_.selection_bounds, workspace);
-  const bool has_committed_selection = !IsRectEmptyOrInvalid(committed_selection);
-  const RECT hover_selection = ClampRectToBounds(screenshot_selection_overlay_state_.hover_selection_bounds, workspace);
-  const bool has_hover_selection = !has_committed_selection && screenshot_selection_overlay_state_.has_hover_selection && !IsRectEmptyOrInvalid(hover_selection);
-  const RECT selection = has_committed_selection ? committed_selection : hover_selection;
-  const bool has_selection = has_committed_selection || has_hover_selection;
-  auto &border_windows = screenshot_selection_overlay_state_.border_windows;
-
-  if (!has_selection)
-  {
-    for (const auto border_window : border_windows)
-    {
-      if (border_window != nullptr && IsWindow(border_window))
-      {
-        ShowWindow(border_window, SW_HIDE);
-      }
-    }
-    return;
-  }
-
-  if (border_windows.size() >= 4)
-  {
-    const int border = 2;
-    // Feature change: hover previews reuse the same tiny border windows as committed drag
-    // selections. The previous flow could only show a rectangle after mouse-down; keeping hover
-    // feedback in the lightweight border path avoids recomputing the full dim region on every
-    // mouse move while still making UIA/window targets visible before the click.
-    MoveSelectionOverlayWindow(border_windows[0], RECT{selection.left, selection.top, selection.right, selection.top + border});
-    MoveSelectionOverlayWindow(border_windows[1], RECT{selection.left, selection.bottom - border, selection.right, selection.bottom});
-    MoveSelectionOverlayWindow(border_windows[2], RECT{selection.left, selection.top, selection.left + border, selection.bottom});
-    MoveSelectionOverlayWindow(border_windows[3], RECT{selection.right - border, selection.top, selection.right, selection.bottom});
-  }
+  // Selection feedback is painted into the input HWND so the border and cut-out are committed in
+  // the same WM_PAINT frame. Callers still own the precise dirty-region invalidation.
 }
 
 // Apply a hover result from either the fast window path or the deferred UIA timer while preserving
@@ -3416,18 +3430,9 @@ bool FlutterWindow::IsScreenshotOverlayWindow(HWND hwnd)
     return true;
   }
 
-  for (const auto border_window : screenshot_selection_overlay_state_.border_windows)
-  {
-    if (hwnd == border_window)
-    {
-      return true;
-    }
-  }
-
   wchar_t class_name[128]{};
   GetClassNameW(hwnd, class_name, static_cast<int>(_countof(class_name)));
   return wcscmp(class_name, kScreenshotSelectionInputWindowClassName) == 0 ||
-         wcscmp(class_name, kScreenshotSelectionBorderWindowClassName) == 0 ||
          wcscmp(class_name, kScrollingCaptureOverlayWindowClassName) == 0 ||
          wcscmp(class_name, L"Shell_TrayWnd") == 0 ||
          wcscmp(class_name, L"Shell_SecondaryTrayWnd") == 0 ||
@@ -3909,14 +3914,6 @@ void FlutterWindow::DestroyScreenshotSelectionOverlayWindows()
   }
   screenshot_selection_overlay_state_.input_window = nullptr;
 
-  for (const auto border_window : screenshot_selection_overlay_state_.border_windows)
-  {
-    if (border_window != nullptr && IsWindow(border_window))
-    {
-      DestroyWindow(border_window);
-    }
-  }
-  screenshot_selection_overlay_state_.border_windows.clear();
 }
 
 const FlutterWindow::CachedDisplayCapture *FlutterWindow::PreferredDisplayCaptureForSelection(const RECT &selection_bounds) const
@@ -4364,6 +4361,38 @@ void FlutterWindow::PaintScreenshotSelectionOverlay(HWND hwnd)
   if (has_undim_rect)
   {
     drawSnapshotArea(undim_rect);
+  }
+
+  const RECT committed_selection = ClampRectToBounds(screenshot_selection_overlay_state_.selection_bounds, workspace);
+  const RECT hover_selection = ClampRectToBounds(screenshot_selection_overlay_state_.hover_selection_bounds, workspace);
+  const RECT selection =
+      !IsRectEmptyOrInvalid(committed_selection)
+          ? committed_selection
+          : (screenshot_selection_overlay_state_.has_hover_selection ? hover_selection : RECT{0, 0, 0, 0});
+  if (!IsRectEmptyOrInvalid(selection))
+  {
+    const int border = 2;
+    const RECT border_rects[] = {
+        RECT{selection.left, selection.top, selection.right, selection.top + border},
+        RECT{selection.left, selection.bottom - border, selection.right, selection.bottom},
+        RECT{selection.left, selection.top, selection.left + border, selection.bottom},
+        RECT{selection.right - border, selection.top, selection.right, selection.bottom}};
+    HBRUSH border_brush = ScreenshotSelectionBorderBrush();
+    for (const auto &border_rect : border_rects)
+    {
+      RECT clipped_border{};
+      if (!TryIntersectRects(border_rect, dirty_workspace_rect, &clipped_border))
+      {
+        continue;
+      }
+
+      RECT local_border{
+          clipped_border.left - surface_workspace_left,
+          clipped_border.top - surface_workspace_top,
+          clipped_border.right - surface_workspace_left,
+          clipped_border.bottom - surface_workspace_top};
+      FillRect(paint_dc, &local_border, border_brush);
+    }
   }
 
   if (buffer_dc != nullptr && buffer_bitmap != nullptr)
@@ -4830,20 +4859,6 @@ LRESULT CALLBACK FlutterWindow::ScreenshotSelectionInputWindowProc(HWND hwnd, UI
   }
 
   return DefWindowProc(hwnd, message, wparam, lparam);
-}
-
-LRESULT CALLBACK FlutterWindow::ScreenshotSelectionPassiveWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
-{
-  switch (message)
-  {
-  case WM_NCHITTEST:
-    return HTTRANSPARENT;
-  case WM_SETCURSOR:
-    SetCursor(LoadCursor(nullptr, IDC_CROSS));
-    return TRUE;
-  default:
-    return DefWindowProc(hwnd, message, wparam, lparam);
-  }
 }
 
 LRESULT CALLBACK FlutterWindow::ScreenshotSelectionMouseHookProc(int code, WPARAM wparam, LPARAM lparam)
@@ -5591,41 +5606,17 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           double width = std::get<double>(width_it->second);
           double height = std::get<double>(height_it->second);
 
-          struct MonitorFindData
-          {
-            LONG targetX, targetY;
-            HMONITOR foundMonitor;
-            UINT foundDpi;
-          } findData = {static_cast<LONG>(x), static_cast<LONG>(y), nullptr, 96};
-
-          EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR hMon, HDC, LPRECT, LPARAM lParam) -> BOOL
-                              {
-                                auto *data = reinterpret_cast<MonitorFindData *>(lParam);
-                                MONITORINFO mi = {sizeof(mi)};
-                                if (GetMonitorInfo(hMon, &mi))
-                                {
-                                  UINT dpi = FlutterDesktopGetDpiForMonitor(hMon);
-                                  float scale = dpi / 96.0f;
-
-                                  LONG logLeft = static_cast<LONG>(mi.rcMonitor.left / scale);
-                                  LONG logTop = static_cast<LONG>(mi.rcMonitor.top / scale);
-                                  LONG logRight = static_cast<LONG>(mi.rcMonitor.right / scale);
-                                  LONG logBottom = static_cast<LONG>(mi.rcMonitor.bottom / scale);
-
-                                  if (data->targetX >= logLeft && data->targetX < logRight &&
-                                      data->targetY >= logTop && data->targetY < logBottom)
-                                  {
-                                    data->foundMonitor = hMon;
-                                    data->foundDpi = dpi;
-                                    return FALSE;
-                                  }
-                                }
-                                return TRUE; }, reinterpret_cast<LPARAM>(&findData));
+          MonitorFindData findData = {x, y, width, height, 0.0, nullptr, 96};
+          EnumDisplayMonitors(nullptr, nullptr, FindMonitorForGoLogicalBounds, reinterpret_cast<LPARAM>(&findData));
 
           if (findData.foundMonitor == nullptr)
           {
             findData.foundMonitor = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
             findData.foundDpi = FlutterDesktopGetDpiForMonitor(findData.foundMonitor);
+            if (findData.foundDpi == 0)
+            {
+              findData.foundDpi = 96;
+            }
           }
 
           float dpiScale = findData.foundDpi / 96.0f;
@@ -5705,55 +5696,41 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           double x = std::get<double>(x_it->second);
           double y = std::get<double>(y_it->second);
 
-          // COORDINATE SYSTEM EXPLANATION:
-          // ... (existing logic) ...
-
-          struct MonitorFindData
+          RECT rect;
+          GetWindowRect(hwnd, &rect);
+          float currentDpiScale = GetDpiScale(hwnd);
+          if (currentDpiScale <= 0)
           {
-            LONG targetX, targetY;
-            HMONITOR foundMonitor;
-            UINT foundDpi;
-          } findData = {static_cast<LONG>(x), static_cast<LONG>(y), nullptr, 96};
+            currentDpiScale = 1.0f;
+          }
 
-          // Enumerate all monitors to find which one contains our logical point
-          EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR hMon, HDC, LPRECT, LPARAM lParam) -> BOOL
-                              {
-                                auto *data = reinterpret_cast<MonitorFindData *>(lParam);
-                                MONITORINFO mi = {sizeof(mi)};
-                                if (GetMonitorInfo(hMon, &mi))
-                                {
-                                  UINT dpi = FlutterDesktopGetDpiForMonitor(hMon);
-                                  float scale = dpi / 96.0f;
-
-                                  LONG logLeft = static_cast<LONG>(mi.rcMonitor.left / scale);
-                                  LONG logTop = static_cast<LONG>(mi.rcMonitor.top / scale);
-                                  LONG logRight = static_cast<LONG>(mi.rcMonitor.right / scale);
-                                  LONG logBottom = static_cast<LONG>(mi.rcMonitor.bottom / scale);
-
-                                  if (data->targetX >= logLeft && data->targetX < logRight &&
-                                      data->targetY >= logTop && data->targetY < logBottom)
-                                  {
-                                    data->foundMonitor = hMon;
-                                    data->foundDpi = dpi;
-                                    return FALSE; // Found the correct monitor, stop enumeration
-                                  }
-                                }
-                                return TRUE; // Not this monitor, continue searching
-                              },
-                              reinterpret_cast<LPARAM>(&findData));
+          // setPosition only receives a top-left point. Use the current window
+          // size so monitor selection still uses rectangle overlap, matching
+          // setBounds and avoiding false primary fallbacks on mixed-DPI layouts.
+          MonitorFindData findData = {
+              x,
+              y,
+              static_cast<double>(rect.right - rect.left) / currentDpiScale,
+              static_cast<double>(rect.bottom - rect.top) / currentDpiScale,
+              0.0,
+              nullptr,
+              96};
+          EnumDisplayMonitors(nullptr, nullptr, FindMonitorForGoLogicalBounds, reinterpret_cast<LPARAM>(&findData));
 
           if (findData.foundMonitor == nullptr)
           {
             findData.foundMonitor = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
             findData.foundDpi = FlutterDesktopGetDpiForMonitor(findData.foundMonitor);
+            if (findData.foundDpi == 0)
+            {
+              findData.foundDpi = 96;
+            }
           }
 
           float dpiScale = findData.foundDpi / 96.0f;
           int scaledX = static_cast<int>(x * dpiScale);
           int scaledY = static_cast<int>(y * dpiScale);
 
-          RECT rect;
-          GetWindowRect(hwnd, &rect);
           int width = rect.right - rect.left;
           int height = rect.bottom - rect.top;
           SetWindowPos(hwnd, nullptr, scaledX, scaledY, width, height, SWP_NOZORDER | SWP_NOSIZE);
@@ -5880,6 +5857,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     else if (method_name == "show")
     {
       SavePreviousActiveWindow(hwnd);
+      Log("Show: before ShowWindow previous=" + FormatHwnd(previous_active_window_) + " " + FormatFocusSnapshot(hwnd, child_window_));
 
       // Flush stale keyboard state before showing the window.
       // If the previous hide-flush was ineffective (e.g. the engine dropped
@@ -5896,6 +5874,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       blur_guard_until_tick_ = GetTickCount64() + kPostShowBlurGraceMs;
       blur_event_sent_since_focus_ = false;
       ShowWindow(hwnd, SW_SHOW);
+      Log("Show: after ShowWindow " + FormatFocusSnapshot(hwnd, child_window_));
       result->Success();
     }
     else if (method_name == "hide")
@@ -5956,6 +5935,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       // Save current foreground window before bringing Wox to front.
       SavePreviousActiveWindow(hwnd);
+      Log("Focus: begin previous=" + FormatHwnd(previous_active_window_) + " " + FormatFocusSnapshot(hwnd, child_window_));
 
       // Optimization: Try SetForegroundWindow directly first.
       // If we already have permission or are in foreground, this avoids AttachThreadInput
@@ -5964,6 +5944,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       {
         FocusFlutterViewOrRoot(hwnd);
         BringWindowToTop(hwnd);
+        Log("Focus: direct SetForegroundWindow succeeded " + FormatFocusSnapshot(hwnd, child_window_));
         blur_guard_active_ = false;
         blur_event_sent_since_focus_ = false;
         result->Success();
@@ -5995,12 +5976,13 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       if (GetForegroundWindow() == hwnd)
       {
-        Log("Focus: use attach thread input");
+        Log("Focus: use attach thread input " + FormatFocusSnapshot(hwnd, child_window_));
         blur_guard_active_ = false;
         blur_event_sent_since_focus_ = false;
         result->Success();
         return;
       }
+      Log(std::string("Focus: attach thread input did not foreground Wox attached=") + (attached ? "true " : "false ") + FormatFocusSnapshot(hwnd, child_window_));
 
       INPUT pInputs[2];
       ZeroMemory(pInputs, sizeof(INPUT));
@@ -6022,7 +6004,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       if (GetForegroundWindow() == hwnd)
       {
-        Log("Focus: use Alt key injection");
+        Log("Focus: use Alt key injection " + FormatFocusSnapshot(hwnd, child_window_));
         blur_guard_active_ = false;
         blur_event_sent_since_focus_ = false;
         result->Success();
@@ -6031,10 +6013,10 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       Log("Focus: both methods failed, trying AllowSetForegroundWindow");
       AllowSetForegroundWindow(ASFW_ANY);
-      SetForegroundWindow(hwnd);
+      const BOOL final_set_foreground_result = SetForegroundWindow(hwnd);
       FocusFlutterViewOrRoot(hwnd);
 
-      Log("Focus: final attempt completed");
+      Log(std::string("Focus: final attempt completed setForeground=") + (final_set_foreground_result ? "true " : "false ") + FormatFocusSnapshot(hwnd, child_window_));
       blur_guard_active_ = false;
       blur_event_sent_since_focus_ = false;
       result->Success();

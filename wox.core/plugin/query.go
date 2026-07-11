@@ -130,11 +130,11 @@ type QueryEnv struct {
 	// Only available when active window is browser and https://github.com/Wox-launcher/Wox.Chrome.Extension is installed
 	ActiveBrowserUrl string
 
-	// These fields are core-only for built-in system plugins. Do not add them
-	// to SDK models or public plugin docs unless we explicitly decide to expose
-	// the native window handle/dialog state as public plugin API.
+	// These fields are core-only. Do not add them to SDK models or public plugin
+	// docs unless we explicitly decide to expose the behavior as public plugin API.
 	ActiveWindowId               string `json:"-"` // exact top-level window id; Windows HWND, macOS CGWindowID
 	ActiveWindowIsOpenSaveDialog bool   `json:"-"` // active window is open/save dialog when user query
+	IsMRU                        bool   `json:"-"` // query is restoring MRU results
 }
 
 // QueryResponse is the complete plugin answer for one query execution.
@@ -161,6 +161,8 @@ type QueryLayout struct {
 	Icon                    *common.WoxImage                 `json:"Icon,omitempty"`
 	ResultPreviewWidthRatio *float64                         `json:"ResultPreviewWidthRatio,omitempty"`
 	GridLayout              *MetadataFeatureParamsGridLayout `json:"GridLayout,omitempty"`
+	// ChatMode is an internal UI hint used by the built-in chat plugin.
+	ChatMode bool `json:"ChatMode,omitempty"`
 }
 
 // QueryContext carries the backend's canonical classification for a query.

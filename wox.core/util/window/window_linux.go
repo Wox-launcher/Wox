@@ -40,6 +40,11 @@ func GetManagedWindow(windowId string, pid int, title string) (ManagedWindow, er
 	return ManagedWindow{}, ErrWindowManagementUnsupported
 }
 
+// ListManagedWindows is not implemented on Linux yet.
+func ListManagedWindows() ([]ManagedWindow, error) {
+	return nil, ErrWindowManagementUnsupported
+}
+
 // ListDisplays is not implemented on Linux yet.
 func ListDisplays() ([]DisplayInfo, error) {
 	return nil, ErrWindowManagementUnsupported
@@ -64,7 +69,17 @@ func GetProcessIdentity(pid int) string {
 	return ""
 }
 
+// IsProcessIdentityRunning is not implemented on Linux yet.
+func IsProcessIdentityRunning(identity string) bool {
+	return false
+}
+
 func ActivateWindowByPid(pid int) bool {
+	return false
+}
+
+// ActivateWindow is not implemented on Linux yet.
+func ActivateWindow(managedWindow ManagedWindow) bool {
 	return false
 }
 

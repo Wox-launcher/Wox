@@ -152,7 +152,7 @@ func (o *OpenAIBaseProvider) Ping(ctx context.Context) error {
 	return err
 }
 
-func (o *OpenAIBaseProvider) convertTools(tools []common.MCPTool) []openai.ChatCompletionToolUnionParam {
+func (o *OpenAIBaseProvider) convertTools(tools []common.Tool) []openai.ChatCompletionToolUnionParam {
 	/*
 		{
 			Type: "function",
@@ -508,16 +508,10 @@ func (s *OpenAIBaseProviderStream) contentMarkerPrefixLength(content string, mar
 func (s *OpenAIBaseProviderStream) normalizeArguments(ctx context.Context, toolName string, argsMap map[string]any) map[string]any {
 	util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Start normalizing tool call arguments for tool: %s, args: %v", toolName, argsMap))
 
-	var tool common.MCPTool
-	mcpTools.Range(func(key string, value []common.MCPTool) bool {
-		for _, t := range value {
-			if t.Name == toolName {
-				tool = t
-				return false
-			}
-		}
-		return true
-	})
+	var tool common.Tool
+	if t, ok := GetToolRegistry().Get(toolName); ok {
+		tool = t
+	}
 
 	if tool.Name == "" {
 		util.GetLogger().Error(ctx, fmt.Sprintf("AI: Tool not found: %s", toolName))
@@ -612,7 +606,9 @@ func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk
 // convertConversations converts the conversations to OpenAI format
 func (o *OpenAIBaseProvider) convertConversations(conversations []common.Conversation) []openai.ChatCompletionMessageParamUnion {
 	var chatMessages []openai.ChatCompletionMessageParamUnion
-	for _, conversation := range conversations {
+	pendingToolReasoning := ""
+	for i := 0; i < len(conversations); i++ {
+		conversation := conversations[i]
 		if conversation.Role == common.ConversationRoleSystem {
 			chatMessages = append(chatMessages, openai.SystemMessage(conversation.Text))
 		}
@@ -620,28 +616,81 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 			chatMessages = append(chatMessages, openai.UserMessage(conversation.Text))
 		}
 		if conversation.Role == common.ConversationRoleAssistant {
+			if o.shouldFoldReasoningIntoNextToolCall(conversations, i) {
+				pendingToolReasoning = conversation.Reasoning
+				continue
+			}
 			chatMessages = append(chatMessages, openai.AssistantMessage(conversation.Text))
 		}
 		if conversation.Role == common.ConversationRoleTool {
-			// add tool message first, and then add tool output message
-			chatMessages = append(chatMessages, openai.ChatCompletionMessageParamUnion{OfAssistant: &openai.ChatCompletionAssistantMessageParam{
-				ToolCalls: []openai.ChatCompletionMessageToolCallUnionParam{
-					{
-						OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
-							ID: conversation.ToolCallInfo.Id,
-							Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
-								Name:      conversation.ToolCallInfo.Name,
-								Arguments: conversation.ToolCallInfo.Delta,
-							},
-						},
-					},
-				},
-			}})
-			chatMessages = append(chatMessages, openai.ToolMessage(conversation.ToolCallInfo.Response, conversation.ToolCallInfo.Id))
+			toolConversations := []common.Conversation{conversation}
+			for i+1 < len(conversations) && conversations[i+1].Role == common.ConversationRoleTool {
+				i++
+				toolConversations = append(toolConversations, conversations[i])
+			}
+
+			reasoning := firstToolCallReasoning(toolConversations)
+			if reasoning == "" {
+				reasoning = pendingToolReasoning
+			}
+			pendingToolReasoning = ""
+
+			chatMessages = append(chatMessages, o.convertToolCallAssistantMessage(toolConversations, reasoning))
+			for _, toolConversation := range toolConversations {
+				chatMessages = append(chatMessages, openai.ToolMessage(toolConversation.ToolCallInfo.Response, toolConversation.ToolCallInfo.Id))
+			}
 		}
 	}
 
 	return chatMessages
+}
+
+func (o *OpenAIBaseProvider) shouldFoldReasoningIntoNextToolCall(conversations []common.Conversation, index int) bool {
+	if !o.shouldReplayToolReasoningContent() {
+		return false
+	}
+	conversation := conversations[index]
+	return conversation.Text == "" && conversation.Reasoning != "" && index+1 < len(conversations) && conversations[index+1].Role == common.ConversationRoleTool
+}
+
+func (o *OpenAIBaseProvider) convertToolCallAssistantMessage(toolConversations []common.Conversation, reasoning string) openai.ChatCompletionMessageParamUnion {
+	toolCalls := make([]openai.ChatCompletionMessageToolCallUnionParam, 0, len(toolConversations))
+	for _, toolConversation := range toolConversations {
+		toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnionParam{
+			OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
+				ID: toolConversation.ToolCallInfo.Id,
+				Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
+					Name:      toolConversation.ToolCallInfo.Name,
+					Arguments: toolConversation.ToolCallInfo.Delta,
+				},
+			},
+		})
+	}
+
+	assistant := openai.ChatCompletionAssistantMessageParam{ToolCalls: toolCalls}
+	if o.shouldReplayToolReasoningContent() {
+		// DeepSeek V4 thinking mode requires reasoning_content to be replayed
+		// on assistant messages that contain tool_calls. The OpenAI-compatible
+		// SDK has no typed field for this provider extension, so use extras.
+		assistant.SetExtraFields(map[string]any{"reasoning_content": reasoning})
+	}
+
+	return openai.ChatCompletionMessageParamUnion{OfAssistant: &assistant}
+}
+
+func firstToolCallReasoning(toolConversations []common.Conversation) string {
+	for _, toolConversation := range toolConversations {
+		if toolConversation.Reasoning != "" {
+			return toolConversation.Reasoning
+		}
+	}
+	return ""
+}
+
+func (o *OpenAIBaseProvider) shouldReplayToolReasoningContent() bool {
+	providerName := strings.ToLower(string(o.connectContext.Name))
+	providerHost := strings.ToLower(o.connectContext.Host)
+	return providerName == "deepseek" || strings.Contains(providerHost, "deepseek.com")
 }
 
 // getClient returns an OpenAI client
@@ -649,7 +698,17 @@ func (o *OpenAIBaseProvider) getClient(ctx context.Context) openai.Client {
 	var requestOption = []option.RequestOption{
 		option.WithBaseURL(o.connectContext.Host),
 		option.WithAPIKey(o.connectContext.ApiKey),
+		// Some OpenAI-compatible relays block SDK fingerprint headers even when the same bearer token works with curl. #4473
 		option.WithHTTPClient(util.GetHTTPClient(ctx)),
+		option.WithHeader("User-Agent", "Wox"),
+		option.WithHeaderDel("X-Stainless-Lang"),
+		option.WithHeaderDel("X-Stainless-Package-Version"),
+		option.WithHeaderDel("X-Stainless-OS"),
+		option.WithHeaderDel("X-Stainless-Arch"),
+		option.WithHeaderDel("X-Stainless-Runtime"),
+		option.WithHeaderDel("X-Stainless-Runtime-Version"),
+		option.WithHeaderDel("X-Stainless-Retry-Count"),
+		option.WithHeaderDel("X-Stainless-Timeout"),
 	}
 
 	// with custom headers

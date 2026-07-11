@@ -5,7 +5,26 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 )
+
+var (
+	cachedUserHomeDirOnce sync.Once
+	cachedUserHomeDirPath string
+)
+
+// cachedUserHomeDir returns the process-stable home path used by hot traversal
+// filters without calling os.UserHomeDir for every scanned entry.
+func cachedUserHomeDir() string {
+	cachedUserHomeDirOnce.Do(func() {
+		homeDir, err := os.UserHomeDir()
+		if err != nil || strings.TrimSpace(homeDir) == "" {
+			return
+		}
+		cachedUserHomeDirPath = filepath.Clean(homeDir)
+	})
+	return cachedUserHomeDirPath
+}
 
 func shouldSkipSystemPathForRoot(root RootRecord, fullPath string, isDir bool) bool {
 	if shouldSkipSystemPath(fullPath, isDir) {
@@ -73,12 +92,11 @@ func shouldSkipDarwinHomeNoisePath(root RootRecord, fullPath string) bool {
 		return false
 	}
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(homeDir) == "" {
+	cleanHome := cachedUserHomeDir()
+	if cleanHome == "" {
 		return false
 	}
 
-	cleanHome := filepath.Clean(homeDir)
 	cleanRoot := filepath.Clean(strings.TrimSpace(root.Path))
 	cleanPath := filepath.Clean(strings.TrimSpace(fullPath))
 	if cleanRoot != cleanHome || cleanPath == cleanRoot {

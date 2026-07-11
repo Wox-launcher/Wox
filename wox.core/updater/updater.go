@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-	"wox/i18n"
 	"wox/setting"
 
 	"wox/util"
@@ -118,11 +117,12 @@ func CheckForUpdatesWithCallback(ctx context.Context, callback UpdateInfoCallbac
 
 	if woxSetting != nil && !woxSetting.EnableAutoUpdate.Get() {
 		util.GetLogger().Info(ctx, "auto update is disabled, skipping")
-		currentUpdateInfo.Status = UpdateStatusNone
-		currentUpdateInfo.ReleaseChannel = string(releaseChannel)
-		currentUpdateInfo.HasUpdate = false
-		currentUpdateInfo.DownloadedPath = ""
-		currentUpdateInfo.UpdateError = errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_auto_update_disabled"))
+		currentUpdateInfo = UpdateInfo{
+			CurrentVersion: CURRENT_VERSION,
+			ReleaseChannel: string(setting.NormalizeReleaseChannel(string(releaseChannel))),
+			Status:         UpdateStatusNone,
+			HasUpdate:      false,
+		}
 		if callback != nil {
 			callback(currentUpdateInfo)
 		}

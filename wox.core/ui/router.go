@@ -17,25 +17,33 @@ import (
 
 	"wox/account"
 	"wox/ai"
+	_ "wox/ai/builtintool"
+	aitool "wox/ai/builtintool/wox"
 	"wox/cloudsync"
 	"wox/common"
 	"wox/diagnostic"
+	corehotkey "wox/hotkey"
 	"wox/i18n"
 	"wox/plugin"
 	pluginhost "wox/plugin/host"
 	appplugin "wox/plugin/system/app"
+	dictationplugin "wox/plugin/system/dictation"
 	"wox/setting"
 	"wox/telemetry"
 	"wox/ui/dto"
 	"wox/updater"
 	"wox/util"
 	"wox/util/font"
+	"wox/util/keyboard"
 	"wox/util/overlay"
+	"wox/util/overlay/imageoverlay"
 	"wox/util/permission"
+	"wox/util/processmemory"
 	"wox/util/screen"
 	utilselection "wox/util/selection"
 	"wox/util/shell"
 	"wox/util/tray"
+	utilwindow "wox/util/window"
 
 	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
@@ -66,6 +74,8 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/setting/wox":                      handleSettingWox,
 	"/setting/wox/update":               handleSettingWoxUpdate,
 	"/setting/hotkey/apps":              handleHotkeyAppCandidates,
+	"/setting/window-manager/displays":  handleWindowManagerDisplays,
+	"/browser/extension/status":         handleBrowserExtensionStatus,
 	"/setting/ui/fonts":                 handleSettingUIFontList,
 	"/setting/plugin/update":            handleSettingPluginUpdate,
 	"/setting/userdata/location":        handleUserDataLocation,
@@ -103,36 +113,52 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/sync/devices/join":                handleSyncDeviceJoin,
 
 	// events
-	"/on/focus/lost":         handleOnFocusLost,
-	"/on/ready":              handleOnUIReady,
-	"/on/show":               handleOnShow,
-	"/on/querybox/focus":     handleOnQueryBoxFocus,
-	"/on/hide":               handleOnHide,
-	"/on/setting":            handleOnSetting,
-	"/on/hotkey/recording":   handleOnHotkeyRecording,
-	"/on/onboarding":         handleOnOnboarding,
-	"/on/instance/destroyed": handleOnInstanceDestroyed,
-	"/usage/stats":           handleUsageStats,
+	"/on/focus/lost":                 handleOnFocusLost,
+	"/on/ready":                      handleOnUIReady,
+	"/on/show":                       handleOnShow,
+	"/on/querybox/focus":             handleOnQueryBoxFocus,
+	"/on/hide":                       handleOnHide,
+	"/on/setting":                    handleOnSetting,
+	"/on/hotkey/recording":           handleOnHotkeyRecording,
+	"/on/hotkey/recording/candidate": handleOnHotkeyRecordingCandidate,
+	"/on/onboarding":                 handleOnOnboarding,
+	"/on/instance/destroyed":         handleOnInstanceDestroyed,
+	"/usage/stats":                   handleUsageStats,
 
 	// lang
 	"/lang/available": handleLangAvailable,
 	"/lang/json":      handleLangJson,
 
 	// ai
-	"/ai/providers":      handleAIProviders,
-	"/ai/commands/store": handleAICommandStore,
-	"/ai/models":         handleAIModels,
-	"/ai/model/default":  handleAIDefaultModel,
-	"/ai/ping":           handleAIPing,
-	"/ai/chat":           handleAIChat,
-	"/ai/mcp/tools":      handleAIMCPServerTools,
-	"/ai/mcp/tools/all":  handleAIMCPServerToolsAll,
-	"/ai/agents":         handleAIAgents,
+	"/ai/providers":       handleAIProviders,
+	"/ai/commands/store":  handleAICommandStore,
+	"/ai/models":          handleAIModels,
+	"/ai/model/default":   handleAIDefaultModel,
+	"/ai/ping":            handleAIPing,
+	"/ai/chat":            handleAIChat,
+	"/ai/chat/get":        handleAIChatGet,
+	"/ai/chat/stop":       handleAIChatStop,
+	"/ai/chat/delete":     handleAIChatDelete,
+	"/ai/chat/summarize":  handleAIChatSummarize,
+	"/ai/mcp/tools":       handleAIMCPServerTools,
+	"/ai/mcp/tools/all":   handleAIMCPServerToolsAll,
+	"/ai/skills":          handleAISkills,
+	"/ai/skills/clone":    handleAISkillsClone,
+	"/ai/question/answer": handleAIQuestionAnswer,
 
 	// doctor
 	"/doctor/check":                  handleDoctorCheck,
+	"/doctor/ignore":                 handleDoctorIgnore,
+	"/doctor/unignore":               handleDoctorUnignore,
 	"/permission/accessibility/open": handlePermissionAccessibilityOpen,
 	"/permission/privacy/open":       handlePermissionPrivacyOpen,
+
+	// dictation
+	"/dictation/model/download":      handleDictationModelDownload,
+	"/dictation/model/delete":        handleDictationModelDelete,
+	"/dictation/model/status":        handleDictationModelStatus,
+	"/dictation/native-lib/status":   handleDictationNativeLibStatus,
+	"/dictation/native-lib/download": handleDictationNativeLibDownload,
 
 	// others
 	"/":                                   handleHome,
@@ -424,8 +450,7 @@ func handlePreviewImageOverlay(w http.ResponseWriter, r *http.Request) {
 	// Refactor: image preview routing now calls the single shared overlay entry directly. The
 	// overlay utility decides whether URL sources need loading/cache behavior, while non-URL sources
 	// are displayed immediately through the same API.
-	if err := overlay.ShowImageOverlay(ctx, overlay.ImageOverlayOptions{
-		Title:         "Wox image preview",
+	if err := imageoverlay.Show(ctx, imageoverlay.Options{
 		Image:         request.Image,
 		FitToScreen:   true,
 		Topmost:       true,
@@ -622,6 +647,7 @@ func handlePluginUninstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePluginDisable(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -631,23 +657,16 @@ func handlePluginDisable(w http.ResponseWriter, r *http.Request) {
 
 	pluginId := idResult.String()
 
-	plugins := plugin.GetPluginManager().GetPluginInstances()
-	findPlugin, exist := lo.Find(plugins, func(item *plugin.Instance) bool {
-		if item.Metadata.Id == pluginId {
-			return true
-		}
-		return false
-	})
-	if !exist {
-		writeErrorResponse(w, "can't find plugin")
+	if err := plugin.GetPluginManager().DisablePlugin(ctx, pluginId); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
 
-	findPlugin.Setting.Disabled.Set(true)
 	writeSuccessResponse(w, "")
 }
 
 func handlePluginEnable(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -657,16 +676,11 @@ func handlePluginEnable(w http.ResponseWriter, r *http.Request) {
 
 	pluginId := idResult.String()
 
-	plugins := plugin.GetPluginManager().GetPluginInstances()
-	findPlugin, exist := lo.Find(plugins, func(item *plugin.Instance) bool {
-		return item.Metadata.Id == pluginId
-	})
-	if !exist {
-		writeErrorResponse(w, "can't find plugin")
+	if err := plugin.GetPluginManager().EnablePlugin(ctx, pluginId); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
 
-	findPlugin.Setting.Disabled.Set(false)
 	writeSuccessResponse(w, "")
 }
 
@@ -909,10 +923,16 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.LaunchMode = woxSetting.LaunchMode.Get()
 	settingDto.StartPage = woxSetting.StartPage.Get()
 	settingDto.AIProviders = woxSetting.AIProviders.Get()
+	settingDto.AIMCPServers = woxSetting.AIMCPServers.Get()
+	settingDto.AISkills = woxSetting.AISkills.Get()
+	if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
+		settingDto.AISkills = chater.GetAllSkills(ctx)
+	}
 	settingDto.HttpProxyEnabled = woxSetting.HttpProxyEnabled.Get()
 	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
 	settingDto.ShowPosition = woxSetting.ShowPosition.Get()
 	settingDto.IsLinuxWaylandSession = util.IsLinuxWaylandSession()
+	settingDto.IsEvdevReadAvailable = keyboard.IsEvdevReadAvailable()
 	settingDto.EnableAutoBackup = woxSetting.EnableAutoBackup.Get()
 	settingDto.EnableAutoUpdate = woxSetting.EnableAutoUpdate.Get()
 	settingDto.ReleaseChannel = woxSetting.ReleaseChannel.Get()
@@ -943,6 +963,33 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 
 func handleHotkeyAppCandidates(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, appplugin.GetHotkeyAppCandidates(getTraceContext(r)))
+}
+
+func handleWindowManagerDisplays(w http.ResponseWriter, r *http.Request) {
+	displays, err := utilwindow.ListDisplays()
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, displays)
+}
+
+func handleBrowserExtensionStatus(w http.ResponseWriter, r *http.Request) {
+	const browserPluginID = "8f68a760-86a0-46a9-b331-58dcaf091daa"
+	sp := plugin.GetPluginManager().GetSystemPlugin(browserPluginID)
+	type extensionStatus struct {
+		Connected bool `json:"connected"`
+	}
+	connected := false
+	if sp != nil {
+		type connector interface {
+			IsExtensionConnected() bool
+		}
+		if c, ok := sp.(connector); ok {
+			connected = c.IsExtensionConnected()
+		}
+	}
+	writeSuccessResponse(w, extensionStatus{Connected: connected})
 }
 
 func handleUpdateChannelVersions(w http.ResponseWriter, r *http.Request) {
@@ -1029,16 +1076,10 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 
 		uiManager := GetUIManager()
-		var registerErr error
-		if shouldGroupWaylandPortalHotkeys() {
-			uiManager.globalHotkeyMu.Lock()
-			registerErr = uiManager.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), woxSetting.SelectionHotkey.Get(), queryHotkeys)
-			uiManager.globalHotkeyMu.Unlock()
-		} else {
-			registerErr = uiManager.reregisterIndividualQueryHotkeys(ctx, queryHotkeys)
-		}
-		if registerErr != nil {
-			writeErrorResponse(w, registerErr.Error())
+		config := corehotkey.WoxConfigFromSetting(woxSetting)
+		config.QueryHotkeys = queryHotkeys
+		if err := uiManager.registerWoxHotkeys(ctx, config, true); err != nil {
+			writeErrorResponse(w, err.Error())
 			return
 		}
 
@@ -1164,6 +1205,20 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		woxSetting.AIProviders.Set(aiProviders)
+	case "AIMCPServers":
+		var mcpServers []common.AIChatMCPServerConfig
+		if err := json.Unmarshal([]byte(vs), &mcpServers); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		woxSetting.AIMCPServers.Set(mcpServers)
+	case "AISkills":
+		var skills []common.Skill
+		if err := json.Unmarshal([]byte(vs), &skills); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		woxSetting.AISkills.Set(skills)
 	case "EnableAutoBackup":
 		woxSetting.EnableAutoBackup.Set(vb)
 	case "EnableAutoUpdate":
@@ -2336,7 +2391,16 @@ func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if kv.Key == "Disabled" {
-		pluginInstance.Setting.Disabled.Set(kv.Value == "true")
+		var updateErr error
+		if kv.Value == "true" {
+			updateErr = plugin.GetPluginManager().DisablePlugin(getTraceContext(r), kv.PluginId)
+		} else {
+			updateErr = plugin.GetPluginManager().EnablePlugin(getTraceContext(r), kv.PluginId)
+		}
+		if updateErr != nil {
+			writeErrorResponse(w, updateErr.Error())
+			return
+		}
 	} else if kv.Key == "TriggerKeywords" {
 		pluginInstance.Setting.TriggerKeywords.Set(strings.Split(kv.Value, ","))
 	} else {
@@ -2856,7 +2920,7 @@ func handleOnUIReady(w http.ResponseWriter, r *http.Request) {
 	if request.Pid > 0 {
 		// Dev mode usually starts Flutter outside the core process tree, so the
 		// ready callback is the reliable boundary where core can learn the UI PID.
-		util.SetWoxUIProcessPid(request.Pid)
+		processmemory.SetWoxUIProcessPid(request.Pid)
 	}
 	GetUIManager().PostUIReady(ctx)
 	startCloudSyncManagerAfterUIReady(ctx)
@@ -2968,8 +3032,47 @@ func handleOnHotkeyRecording(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Info(ctx, fmt.Sprintf("received hotkey recording state from UI: isRecording=%t", isRecordingResult.Bool()))
-	GetUIManager().PostOnHotkeyRecording(ctx, isRecordingResult.Bool())
+	purpose := strings.TrimSpace(gjson.GetBytes(body, "purpose").String())
+	allowedKinds := []string{}
+	gjson.GetBytes(body, "allowedKinds").ForEach(func(_, value gjson.Result) bool {
+		if kind := strings.TrimSpace(value.String()); kind != "" {
+			allowedKinds = append(allowedKinds, kind)
+		}
+		return true
+	})
+	if isRecordingResult.Bool() {
+		if purpose == "" {
+			writeErrorResponse(w, "purpose is required when recording starts")
+			return
+		}
+		if len(allowedKinds) == 0 {
+			writeErrorResponse(w, "allowedKinds is required when recording starts")
+			return
+		}
+	}
+
+	logger.Info(ctx, fmt.Sprintf("received hotkey recording state from UI: isRecording=%t purpose=%s allowedKinds=%v", isRecordingResult.Bool(), purpose, allowedKinds))
+	capability, err := GetUIManager().PostOnHotkeyRecording(ctx, isRecordingResult.Bool(), purpose, allowedKinds)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, capability)
+}
+
+func handleOnHotkeyRecordingCandidate(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	body, _ := io.ReadAll(r.Body)
+	hotkeyResult := gjson.GetBytes(body, "hotkey")
+	if !hotkeyResult.Exists() || strings.TrimSpace(hotkeyResult.String()) == "" {
+		writeErrorResponse(w, "hotkey is required")
+		return
+	}
+
+	if err := GetUIManager().PostHotkeyRecordingCandidate(ctx, strings.TrimSpace(hotkeyResult.String())); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
 	writeSuccessResponse(w, "")
 }
 
@@ -3112,6 +3215,103 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
+// handleAIChatGet returns the full chat data for a lightweight preview sidebar entry.
+func handleAIChatGet(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	chatId := gjson.GetBytes(body, "chatId").String()
+	if chatId == "" {
+		writeErrorResponse(w, "chatId is empty")
+		return
+	}
+
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		writeErrorResponse(w, "ai chat plugin not found")
+		return
+	}
+
+	chatData, ok := chater.GetChat(ctx, chatId)
+	if !ok {
+		writeErrorResponse(w, "chat not found")
+		return
+	}
+
+	writeSuccessResponse(w, chatData)
+}
+
+// handleAIChatStop cancels the active streaming session for a chat.
+func handleAIChatStop(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	chatId := gjson.GetBytes(body, "chatId").String()
+	if chatId == "" {
+		writeErrorResponse(w, "chatId is empty")
+		return
+	}
+
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		writeErrorResponse(w, "ai chat plugin not found")
+		return
+	}
+
+	stopped := chater.StopChat(ctx, chatId)
+	writeSuccessResponse(w, stopped)
+}
+
+// handleAIChatDelete lets the chat preview manage its own sidebar state.
+func handleAIChatDelete(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	chatId := gjson.GetBytes(body, "chatId").String()
+	if chatId == "" {
+		writeErrorResponse(w, "chatId is empty")
+		return
+	}
+
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		writeErrorResponse(w, "ai chat plugin not found")
+		return
+	}
+
+	if !chater.DeleteChat(ctx, chatId) {
+		writeErrorResponse(w, "chat not found")
+		return
+	}
+
+	writeSuccessResponse(w, true)
+}
+
+// handleAIChatSummarize starts a title refresh without going through result actions.
+func handleAIChatSummarize(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	chatId := gjson.GetBytes(body, "chatId").String()
+	if chatId == "" {
+		writeErrorResponse(w, "chatId is empty")
+		return
+	}
+
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		writeErrorResponse(w, "ai chat plugin not found")
+		return
+	}
+
+	if !chater.SummarizeChat(ctx, chatId) {
+		writeErrorResponse(w, "chat not found")
+		return
+	}
+
+	writeSuccessResponse(w, true)
+}
+
 func handleAIMCPServerToolsAll(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 
@@ -3133,7 +3333,7 @@ func handleAIMCPServerToolsAll(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, results)
 }
 
-func handleAIAgents(w http.ResponseWriter, r *http.Request) {
+func handleAISkills(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 
 	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
@@ -3142,8 +3342,59 @@ func handleAIAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agents := chater.GetAllAgents(ctx)
-	writeSuccessResponse(w, agents)
+	skills := chater.GetAllSkills(ctx)
+	writeSuccessResponse(w, skills)
+}
+
+func handleAISkillsClone(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	parsed := gjson.ParseBytes(body)
+	url := parsed.Get("url").String()
+	if strings.TrimSpace(url) == "" {
+		writeErrorResponse(w, "url is required")
+		return
+	}
+
+	stubs, err := ai.DiscoverRemoteSkills(ctx, url)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	results := make([]map[string]interface{}, 0, len(stubs))
+	for _, stub := range stubs {
+		results = append(results, map[string]interface{}{
+			"Path":         stub.Path,
+			"ManifestPath": stub.ManifestPath,
+			"Name":         stub.Name,
+			"Description":  stub.Description,
+			"Error":        stub.Error,
+			"Source":       "remote",
+			"SourceName":   "Remote",
+			"SourceUrl":    stub.SourceUrl,
+			"Enabled":      true,
+		})
+	}
+	writeSuccessResponse(w, results)
+}
+
+func handleAIQuestionAnswer(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	parsed := gjson.ParseBytes(body)
+	questionId := parsed.Get("questionId").String()
+	answer := parsed.Get("answer").String()
+	if questionId == "" {
+		writeErrorResponse(w, "questionId is required")
+		return
+	}
+
+	util.GetLogger().Info(ctx, fmt.Sprintf("AI: resolving question answer for questionId=%s", questionId))
+	aitool.ResolveAIQuestionAnswer(questionId, answer)
+	writeSuccessResponse(w, "")
 }
 
 func handleAIDefaultModel(w http.ResponseWriter, r *http.Request) {
@@ -3199,6 +3450,48 @@ func handleDoctorCheck(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 	results := plugin.RunDoctorChecks(ctx)
 	writeSuccessResponse(w, results)
+}
+
+func handleDoctorIgnore(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	var req struct {
+		CheckType string `json:"checkType"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	current := woxSetting.IgnoredDoctorChecks.Get()
+	for _, t := range current {
+		if t == req.CheckType {
+			writeSuccessResponse(w, nil)
+			return
+		}
+	}
+	_ = woxSetting.IgnoredDoctorChecks.Set(append(current, req.CheckType))
+	writeSuccessResponse(w, nil)
+}
+
+func handleDoctorUnignore(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	var req struct {
+		CheckType string `json:"checkType"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	current := woxSetting.IgnoredDoctorChecks.Get()
+	filtered := current[:0]
+	for _, t := range current {
+		if t != req.CheckType {
+			filtered = append(filtered, t)
+		}
+	}
+	_ = woxSetting.IgnoredDoctorChecks.Set(filtered)
+	writeSuccessResponse(w, nil)
 }
 
 func handlePermissionAccessibilityOpen(w http.ResponseWriter, r *http.Request) {
@@ -3351,4 +3644,121 @@ func handlePluginDetail(w http.ResponseWriter, r *http.Request) {
 
 func handleVersion(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, updater.CURRENT_VERSION)
+}
+
+// handleDictationModelDownload starts a model download for the dictation plugin.
+// The request body should contain {"modelId": "..."} where modelId is one of the
+// recommended model IDs. The download runs asynchronously and progress is
+// reported via the model status endpoint.
+func handleDictationModelDownload(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	body, _ := io.ReadAll(r.Body)
+	modelID := gjson.GetBytes(body, "modelId").String()
+	if modelID == "" {
+		writeErrorResponse(w, "modelId is required")
+		return
+	}
+
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		writeErrorResponse(w, "dictation plugin not found")
+		return
+	}
+	dp, ok := sp.(*dictationplugin.DictationPlugin)
+	if !ok {
+		writeErrorResponse(w, "dictation plugin type assertion failed")
+		return
+	}
+
+	if err := dp.StartModelDownload(ctx, modelID); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, "")
+}
+
+// handleDictationModelDelete deletes a downloaded model from disk.
+func handleDictationModelDelete(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	body, _ := io.ReadAll(r.Body)
+	modelID := gjson.GetBytes(body, "modelId").String()
+	if modelID == "" {
+		writeErrorResponse(w, "modelId is required")
+		return
+	}
+
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		writeErrorResponse(w, "dictation plugin not found")
+		return
+	}
+	dp, ok := sp.(*dictationplugin.DictationPlugin)
+	if !ok {
+		writeErrorResponse(w, "dictation plugin type assertion failed")
+		return
+	}
+
+	if err := dp.DeleteModel(ctx, modelID); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, "")
+}
+
+// handleDictationModelStatus returns the download status for all known models.
+// The Flutter side polls this to update the model dropdown with live progress.
+func handleDictationModelStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		writeErrorResponse(w, "dictation plugin not found")
+		return
+	}
+	dp, ok := sp.(*dictationplugin.DictationPlugin)
+	if !ok {
+		writeErrorResponse(w, "dictation plugin type assertion failed")
+		return
+	}
+
+	status := dp.GetModelStatuses(ctx)
+	writeSuccessResponse(w, status)
+}
+
+// handleDictationNativeLibStatus returns the native library download status.
+func handleDictationNativeLibStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		writeErrorResponse(w, "dictation plugin not found")
+		return
+	}
+	dp, ok := sp.(*dictationplugin.DictationPlugin)
+	if !ok {
+		writeErrorResponse(w, "dictation plugin type assertion failed")
+		return
+	}
+
+	status := dp.GetNativeLibStatus(ctx)
+	writeSuccessResponse(w, status)
+}
+
+// handleDictationNativeLibDownload triggers a native library download.
+func handleDictationNativeLibDownload(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		writeErrorResponse(w, "dictation plugin not found")
+		return
+	}
+	dp, ok := sp.(*dictationplugin.DictationPlugin)
+	if !ok {
+		writeErrorResponse(w, "dictation plugin type assertion failed")
+		return
+	}
+
+	if err := dp.StartNativeLibDownload(ctx); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, "")
 }

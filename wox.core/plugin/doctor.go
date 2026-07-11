@@ -7,6 +7,7 @@ import (
 	"wox/common"
 	"wox/database"
 	"wox/i18n"
+	"wox/setting"
 	"wox/updater"
 	"wox/util"
 	"wox/util/permission"
@@ -21,12 +22,28 @@ const (
 	DoctorCheckTriggerKeywordConflict DoctorCheckType = "triggerKeywordConflict"
 	DoctorCheckGnomeTrayIndicator     DoctorCheckType = "gnomeTrayIndicator"
 	DoctorCheckWaylandDesktopLaunch   DoctorCheckType = "waylandDesktopLaunch"
+	DoctorCheckLinuxInputGroup        DoctorCheckType = "linuxInputGroup"
+	DoctorCheckLinuxUinputGroup       DoctorCheckType = "linuxUinputGroup"
+)
+
+type DoctorCheckSeverity string
+
+const (
+	DoctorCheckSeverityDefault DoctorCheckSeverity = ""
+	DoctorCheckSeverityWarning DoctorCheckSeverity = "warning"
 )
 
 type DoctorCheckResult struct {
-	Name                   string
-	Type                   DoctorCheckType
-	Passed                 bool
+	Name   string
+	Type   DoctorCheckType
+	Passed bool
+	// Severity controls the visual state in the doctor query without changing
+	// whether a check should be treated as a blocking launcher warning.
+	Severity DoctorCheckSeverity
+	// Ignored is true when the user has dismissed this check type. Ignored
+	// checks are skipped in the launcher toolbar but still appear in the
+	// doctor query so the user can un-ignore them.
+	Ignored                bool
 	Description            string
 	ActionName             string
 	Action                 func(ctx context.Context, actionContext ActionContext) `json:"-"`
@@ -50,14 +67,39 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 	if result, ok := checkWaylandDesktopLaunch(ctx); ok {
 		results = append(results, result)
 	}
+	if result, ok := checkLinuxInputGroup(ctx); ok {
+		results = append(results, result)
+	}
+	if result, ok := checkLinuxUinputGroup(ctx); ok {
+		results = append(results, result)
+	}
 
+	// Mark ignored checks so the toolbar can skip them. The doctor query
+	// still shows them with an Unignore action so the user can restore them.
+	ignoredChecks := setting.GetSettingManager().GetWoxSetting(ctx).IgnoredDoctorChecks.Get()
+	ignoredSet := make(map[DoctorCheckType]bool, len(ignoredChecks))
+	for _, t := range ignoredChecks {
+		ignoredSet[DoctorCheckType(t)] = true
+	}
 	for i := range results {
+		if ignoredSet[results[i].Type] {
+			results[i].Ignored = true
+		}
 		results[i] = translateDoctorCheckResult(ctx, results[i])
 	}
 
-	//sort by status, false first
+	// Sort by status: non-ignored failing checks first, then ignored, then passed.
+	// This ensures the toolbar surfaces the most actionable warnings.
 	sort.Slice(results, func(i, j int) bool {
-		return !results[i].Passed && results[j].Passed
+		ri, rj := !results[i].Passed, !results[j].Passed
+		ii, ij := results[i].Ignored, results[j].Ignored
+		if ri != rj {
+			return ri && !rj
+		}
+		if ii != ij {
+			return !ii && ij
+		}
+		return false
 	})
 
 	return results
@@ -117,6 +159,20 @@ func translateDoctorCheckText(ctx context.Context, text string) string {
 }
 
 func checkWoxVersion(ctx context.Context) DoctorCheckResult {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if woxSetting != nil && !woxSetting.EnableAutoUpdate.Get() {
+		return DoctorCheckResult{
+			Name:        i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_doctor_version"),
+			Type:        DoctorCheckUpdate,
+			Passed:      true,
+			Severity:    DoctorCheckSeverityWarning,
+			Description: i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_doctor_version_auto_update_disabled"),
+			ActionName:  "",
+			Action: func(ctx context.Context, actionContext ActionContext) {
+			},
+		}
+	}
+
 	updateInfo := updater.GetUpdateInfo()
 	if updateInfo.Status == updater.UpdateStatusError || updateInfo.UpdateError != nil {
 		description := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_error")

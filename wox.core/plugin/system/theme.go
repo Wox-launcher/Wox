@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
@@ -261,7 +262,28 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 		}
 	}
 
+	// Use the Wox Dark theme as the example for AI generation, because it contains
+	// all the visual properties (colors, paddings, etc.) that the AI needs to see.
+	// The Auto theme only has metadata fields (no visual properties), so using it as
+	// the example would cause the AI to generate themes without any visual properties.
+	// We also strip platform-specific overrides (windows/macos/linux) from the
+	// example so the AI doesn't copy nested objects that would break JSON extraction.
+	darkThemeId := "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03"
 	exampleThemeJson := embedThemes[0]
+	for _, themeJson := range embedThemes {
+		var theme common.Theme
+		if err := json.Unmarshal([]byte(themeJson), &theme); err == nil {
+			if theme.ThemeId == darkThemeId {
+				theme.Windows = nil
+				theme.MacOS = nil
+				theme.Linux = nil
+				if cleanJson, err := json.MarshalIndent(theme, "", "  "); err == nil {
+					exampleThemeJson = string(cleanJson)
+				}
+				break
+			}
+		}
+	}
 
 	var conversations []common.Conversation
 	conversations = append(conversations, common.Conversation{
@@ -292,7 +314,7 @@ Please directly output the JSON configuration, do not add any other content.
 		Title:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_generate_title"),
 		SubTitle: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_generate_subtitle"),
 		Icon:     themeIcon,
-		Preview:  plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
+		Preview:  plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_preview_hint")},
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   i18n.GetI18nManager().TranslateWox(ctx, "ui_setting_theme_apply"),
@@ -323,7 +345,7 @@ Please directly output the JSON configuration, do not add any other content.
 								subTitle := "i18n:plugin_theme_ai_generating"
 								preview := plugin.WoxPreview{
 									PreviewType:    plugin.WoxPreviewTypeMarkdown,
-									PreviewData:    streamResult.Data,
+									PreviewData:    streamResult.ToMarkdown(),
 									ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 								}
 								updatable.SubTitle = &subTitle
@@ -334,7 +356,7 @@ Please directly output the JSON configuration, do not add any other content.
 								subTitle := "i18n:plugin_theme_ai_generated"
 								preview := plugin.WoxPreview{
 									PreviewType:    plugin.WoxPreviewTypeMarkdown,
-									PreviewData:    streamResult.Data,
+									PreviewData:    streamResult.ToMarkdown(),
 									ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 								}
 								updatable.SubTitle = &subTitle
@@ -344,13 +366,11 @@ Please directly output the JSON configuration, do not add any other content.
 								// Extract and install theme
 								themeJson := streamResult.Data
 								util.Go(ctx, "theme generated", func() {
-									group := util.FindRegexGroup(`(?ms){(?P<json>.*?)}`, themeJson)
-									if len(group) == 0 {
+									jsonTheme := extractJsonObject(themeJson)
+									if jsonTheme == "" {
 										c.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_extract_failed"))
 										return
 									}
-
-									jsonTheme := fmt.Sprintf("{%s}", group["json"])
 									var theme common.Theme
 									unmarshalErr := json.Unmarshal([]byte(jsonTheme), &theme)
 									if unmarshalErr != nil {
@@ -432,4 +452,45 @@ func (c *ThemePlugin) queryEdit(ctx context.Context) []plugin.QueryResult {
 			},
 		},
 	}
+}
+
+// extractJsonObject finds the first complete JSON object in raw by matching
+// balanced braces. This handles nested objects correctly, unlike a simple
+// non-greedy regex which would stop at the first closing brace.
+func extractJsonObject(raw string) string {
+	start := strings.Index(raw, "{")
+	if start == -1 {
+		return ""
+	}
+
+	depth := 0
+	inString := false
+	escape := false
+	for i := start; i < len(raw); i++ {
+		ch := raw[i]
+		if escape {
+			escape = false
+			continue
+		}
+		if ch == '\\' {
+			escape = true
+			continue
+		}
+		if ch == '"' {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+		if ch == '{' {
+			depth++
+		} else if ch == '}' {
+			depth--
+			if depth == 0 {
+				return raw[start : i+1]
+			}
+		}
+	}
+	return ""
 }

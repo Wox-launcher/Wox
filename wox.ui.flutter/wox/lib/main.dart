@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:chinese_font_library/chinese_font_library.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart' as flutter_windowing show WindowManager;
 import 'package:get/get.dart';
@@ -15,6 +15,7 @@ import 'package:wox/controllers/wox_screenshot_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/utils/windows/window_manager_interface.dart';
+import 'package:wox/utils/windows/windows_keydata_compatibility.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
 import 'package:wox/runtime/wox_app_runtime.dart';
@@ -91,7 +92,15 @@ Future<void> initialServices(List<String> arguments) async {
   final traceId = const UuidV4().generate();
 
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Desktop-tuned image cache: the launcher shows small icons, not large
+  // photos. 200 entries / 20 MB is plenty and avoids reserving the full
+  // 1000 entries / 100 MB default that mobile apps expect.
+  PaintingBinding.instance.imageCache.maximumSize = 200;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 20 * 1024 * 1024;
+
   await Logger.instance.initLogger();
+  WindowsKeyDataCompatibility.install();
   registerFlutterGlobalErrorHandlers(traceId);
   HeartbeatChecker().init();
   await WoxWebsocketMsgUtil.instance.init();
@@ -103,12 +112,11 @@ Future<void> initialServices(List<String> arguments) async {
 
   final runtime = WoxAppRuntime.initializePrimary(sessionId: Env.sessionId);
   var launcherController = runtime.primaryInstance.launcherController;
-  launcherController.startDoctorCheckTimer();
+  launcherController.doctorCheck();
   await launcherController.loadDiagnosticStatus(traceId);
 
   await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://127.0.0.1:${Env.serverPort}/ws"), onMessageReceived: runtime.handleCoreWebSocketMessage);
   HeartbeatChecker().startChecking();
-  Get.put(launcherController);
   var woxSettingController = WoxSettingController();
   Get.put(woxSettingController);
   Get.put(WoxScreenshotController());
@@ -139,8 +147,18 @@ Future<void> initWindow() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  // Platform-specific CJK font fallback list. Flutter's engine-level fallback
+  // on desktop is unreliable for CJK glyphs, so we explicitly name the system
+  // fonts that ship with each OS. This replaces chinese_font_library without
+  // pulling in any dependency or bundling font files.
+  List<String> get _cjkFontFallback {
+    if (Platform.isWindows) return ['Microsoft YaHei', 'SimSun'];
+    if (Platform.isMacOS) return ['PingFang SC', 'Heiti SC', 'STHeiti'];
+    return ['Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'Droid Sans Fallback'];
+  }
+
   TextTheme buildAppTextTheme(String appFontFamily) {
-    final baseTextTheme = SystemChineseFont.textTheme(Brightness.light);
+    final baseTextTheme = Typography.material2021(platform: defaultTargetPlatform).black;
     final scaledTextTheme = baseTextTheme.copyWith(
       bodyLarge: baseTextTheme.bodyLarge?.copyWith(fontSize: 13),
       bodyMedium: baseTextTheme.bodyMedium?.copyWith(fontSize: 13),
@@ -150,11 +168,12 @@ class MyApp extends StatelessWidget {
       labelSmall: baseTextTheme.labelSmall?.copyWith(fontSize: 11),
     );
 
+    final fallback = _cjkFontFallback;
     if (appFontFamily.isEmpty) {
-      return scaledTextTheme;
+      return scaledTextTheme.apply(fontFamilyFallback: fallback);
     }
 
-    return scaledTextTheme.apply(fontFamily: appFontFamily);
+    return scaledTextTheme.apply(fontFamily: appFontFamily, fontFamilyFallback: fallback);
   }
 
   @override
@@ -164,7 +183,14 @@ class MyApp extends StatelessWidget {
     return Obx(() {
       final appFontFamily = settingController.woxSetting.value.appFontFamily.trim();
       final textTheme = buildAppTextTheme(appFontFamily);
-      final theme = ThemeData(useMaterial3: true, textTheme: textTheme, fontFamily: appFontFamily.isEmpty ? null : appFontFamily);
+      final theme = ThemeData(
+        useMaterial3: true,
+        textTheme: textTheme,
+        fontFamily: appFontFamily.isEmpty ? null : appFontFamily,
+        splashFactory: NoSplash.splashFactory,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+      );
 
       return flutter_windowing.WindowManager(
         child: WoxMultipleWindowHost(theme: theme, child: MaterialApp(navigatorKey: Get.key, theme: theme, debugShowCheckedModeBanner: false, home: const WoxApp())),

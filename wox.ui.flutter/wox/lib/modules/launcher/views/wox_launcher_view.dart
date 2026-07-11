@@ -85,6 +85,11 @@ class WoxLauncherView extends StatelessWidget {
 
           final traceId = const UuidV4().generate();
           if (!isQueryBoxVisible) {
+            if (controller.isChatModeActive.value) {
+              controller.exitChatInputMode(traceId);
+              return KeyEventResult.handled;
+            }
+
             unawaited(controller.hideApp(traceId));
             return KeyEventResult.handled;
           }

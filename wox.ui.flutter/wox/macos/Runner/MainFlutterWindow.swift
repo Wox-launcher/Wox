@@ -55,6 +55,7 @@ class MainFlutterWindow: NSPanel {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     WoxWebViewPreviewPlugin.register(with: flutterViewController.registrar(forPlugin: "WoxWebViewPreviewPlugin"))
+    WoxQuickLookPreviewPlugin.register(with: flutterViewController.registrar(forPlugin: "WoxQuickLookPreviewPlugin"))
 
     let webViewPreviewChannel = FlutterMethodChannel(
       name: "com.wox.webview_preview",

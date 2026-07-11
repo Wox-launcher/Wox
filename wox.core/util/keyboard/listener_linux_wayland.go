@@ -22,6 +22,7 @@ const (
 	portalSessionIFace            = "org.freedesktop.portal.Session"
 	portalRequestResponseSignal   = portalRequestIFace + ".Response"
 	portalShortcutActivatedSignal = portalGlobalShortcutsIFace + ".Activated"
+	portalRegistryIFace           = "org.freedesktop.host.portal.Registry"
 )
 
 type waylandHotkeyRegistration struct {
@@ -92,6 +93,12 @@ func registerGlobalHotkeysLinuxWayland(specs []GlobalHotkeySpec) (HotkeyRegistra
 			callback:   spec.Callback,
 		}
 		preferredTriggers[shortcutID] = preferredTrigger
+		// preferred_trigger is the standard XDG portal option for suggesting a
+		// trigger string. Some backends (notably xdg-desktop-portal-hyprland)
+		// do not implement it and log "unknown shortcut data type preferred_trigger".
+		// Including it is harmless on backends that understand it, and is ignored
+		// (with a warning) on those that do not. Hyprland users bind shortcuts
+		// manually in hyprland.conf using the "global" keyword.
 		shortcutSpecs = append(shortcutSpecs, portalShortcutSpec{
 			ID: shortcutID,
 			Options: map[string]dbus.Variant{
@@ -148,9 +155,14 @@ func registerGlobalHotkeysLinuxWayland(specs []GlobalHotkeySpec) (HotkeyRegistra
 			_ = closeWaylandPortalSession(conn, sessionPath)
 			return nil, fmt.Errorf("wayland global hotkey was not bound by portal")
 		}
+		// Some portal backends (e.g. xdg-desktop-portal-hyprland) accept the
+		// shortcut and register it successfully but do not populate
+		// trigger_description in the bind response. An empty description is not
+		// an error — the shortcut is still active and the compositor will fire
+		// Activated signals for it. Only warn so the log is debuggable.
 		if strings.TrimSpace(triggerDescription) == "" {
-			_ = closeWaylandPortalSession(conn, sessionPath)
-			return nil, fmt.Errorf("wayland global hotkey portal returned an empty trigger description")
+			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
+				"[hotkey] wayland portal bind returned empty trigger_description for shortcut=%s (portal may still have registered it)", shortcutID))
 		}
 	}
 
@@ -234,6 +246,30 @@ func ensureWaylandPortalReady() (*dbus.Conn, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to session bus: %w", err)
+	}
+
+	// Register the well-known bus name matching Wox's desktop entry so that
+	// portal backends (e.g. xdg-desktop-portal-hyprland) can identify the caller.
+	// Without this, CreateSession fails with "An app id is required" because the
+	// portal maps the D-Bus sender name to the application identity.
+	reply, err := conn.RequestName(util.LinuxDesktopAppID, dbus.NameFlagDoNotQueue)
+	if err != nil {
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("[hotkey] failed to request well-known bus name %s: %v", util.LinuxDesktopAppID, err))
+	} else if reply != 1 && reply != 4 {
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("[hotkey] well-known bus name %s not acquired (reply=%d); portal app-id resolution may fail", util.LinuxDesktopAppID, reply))
+	}
+
+	// xdg-desktop-portal >= 1.22 requires applications to register their app id
+	// via the org.freedesktop.host.portal.Registry interface before using portal
+	// features like GlobalShortcuts. Without this, CreateSession fails with
+	// "An app id is required". The Register call is best-effort: older portal
+	// versions that do not implement the Registry interface will return an error
+	// which we safely ignore.
+	registerCall := conn.Object(portalBusName, portalObjectPath).Call(portalRegistryIFace+".Register", 0, util.LinuxDesktopAppID, map[string]dbus.Variant{})
+	if registerCall.Err != nil {
+		util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("[hotkey] portal Registry.Register failed (may be unsupported on older portal versions): %v", registerCall.Err))
+	} else {
+		util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("[hotkey] portal Registry.Register succeeded for app_id=%s", util.LinuxDesktopAppID))
 	}
 
 	portalObject := conn.Object(portalBusName, portalObjectPath)
@@ -713,6 +749,8 @@ func keyToWaylandTriggerName(key Key) (string, error) {
 		return "F12", nil
 	case KeyCapsLock:
 		return "Caps_Lock", nil
+	case KeyBackquote:
+		return "grave", nil
 	default:
 		return "", fmt.Errorf("unsupported Wayland hotkey key: %d", key)
 	}

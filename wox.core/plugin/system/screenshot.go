@@ -21,6 +21,7 @@ import (
 	"wox/util/clipboard"
 	"wox/util/ocr"
 	"wox/util/overlay"
+	"wox/util/overlay/imageoverlay"
 	"wox/util/shell"
 
 	"github.com/disintegration/imaging"
@@ -738,9 +739,8 @@ func (p *ScreenshotPlugin) pinScreenshotToScreen(ctx context.Context, screenshot
 	// Refactor: pinned screenshots now use the same file-backed image overlay helper as preview
 	// overlays. The helper validates the file and reads header dimensions when Flutter does not
 	// provide a logical selection size, keeping screenshot pinning and image preview on one path.
-	err := overlay.ShowImageOverlay(ctx, overlay.ImageOverlayOptions{
-		Name:          name,
-		Title:         "Wox pinned screenshot",
+	err := imageoverlay.Show(ctx, imageoverlay.Options{
+		ID:            name,
 		Image:         common.NewWoxImageAbsolutePath(screenshotPath),
 		Width:         width,
 		Height:        height,

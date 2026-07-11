@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -32,6 +34,7 @@ import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_fuzzy_match_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
+import 'package:wox/utils/windows/linux_window_manager.dart';
 
 // WoxThemeEditorDraftSession carries the original active theme, saved baseline, and current unsaved draft.
 class WoxThemeEditorDraftSession {
@@ -115,8 +118,12 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
   final Map<String, GlobalKey> pluginListItemKeys = <String, GlobalKey>{};
   TabController? activePluginTabController;
 
-  // UI state: show loading spinner when refreshing visible plugin list
   final isRefreshingPluginList = false.obs;
+
+  // Whether the active Wayland compositor supports wlr-layer-shell, enabling
+  // precise launcher placement (Hyprland/sway). Populated from the GTK backend
+  // on Linux so the UI settings can re-expose the ShowPosition selector.
+  final linuxLayerShellSupported = false.obs;
 
   //themes
   final themeList = <WoxTheme>[];
@@ -173,6 +180,22 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
     ever<String>(activeNavPath, _handleActiveNavPathChanged);
+    if (Platform.isLinux) {
+      _refreshLinuxLayerShellSupported();
+    }
+  }
+
+  Future<void> _refreshLinuxLayerShellSupported() async {
+    if (!Platform.isLinux) {
+      return;
+    }
+    try {
+      final info = await LinuxWindowManager.instance.getBackendInfo();
+      final supported = info["supportsLayerShell"] == true || info["supportsLayerShell"].toString().toLowerCase() == "true";
+      linuxLayerShellSupported.value = supported;
+    } catch (_) {
+      // Keep the default (false); the settings UI will hide ShowPosition.
+    }
   }
 
   @override
@@ -561,7 +584,11 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     if (!woxSetting.value.isLinuxWaylandSession) {
       return true;
     }
-    return definition.settingKey != 'ShowPosition' &&
+    // wlr-layer-shell restores precise window placement (Hyprland/sway), so the
+    // ShowPosition selector stays reachable there. Selection/tray-query capture
+    // and ignored-hotkey-apps remain unavailable on native Wayland regardless.
+    final showPositionAvailable = linuxLayerShellSupported.value;
+    return (definition.settingKey != 'ShowPosition' || showPositionAvailable) &&
         definition.settingKey != 'SelectionHotkey' &&
         definition.settingKey != 'IgnoredHotkeyApps' &&
         definition.settingKey != 'TrayQueries';
@@ -606,7 +633,7 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
             // Search refinement: the plugin name is the result subtitle for
             // plugin settings. Match the setting's own visible title/key instead
             // so searching a plugin does not fan out into every setting it owns.
-            searchTexts: _normalizeSettingSearchTexts([extracted.settingKey, title, ...extracted.searchTexts]),
+            searchTexts: _normalizeSettingSearchTexts([extracted.settingKey, title, ...extracted.searchTexts, ...definition.searchAliases]),
             score: 0,
           ),
         );
@@ -998,8 +1025,20 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     }
   }
 
+  // updateLang persists the new language code. The language json and plugin
+  // translation refresh is handled by reloadSetting, which updateConfig invokes
+  // internally after detecting the LangCode change. Calling _applyLangResourcesChange
+  // here as well would duplicate the work, so it is intentionally omitted.
   Future<void> updateLang(String langCode) async {
     await updateConfig("LangCode", langCode);
+  }
+
+  // _applyLangResourcesChange reloads the language json and refreshes plugin
+  // translations. It is shared by the manual language switch (updateLang) and
+  // by reloadSetting when a remote change (e.g. cloud sync bootstrap restore)
+  // updates LangCode without going through updateConfig, so the UI keeps
+  // langMap and plugin translations in sync with the persisted value.
+  Future<void> _applyLangResourcesChange(String langCode) async {
     final traceId = const UuidV4().generate();
     langMap.value = await WoxApi.instance.getLangJson(traceId, langCode);
 
@@ -1070,6 +1109,15 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
   void preloadPlugins(String traceId) {
     unawaited(loadInstalledPlugins(traceId));
     unawaited(loadStorePlugins(traceId));
+  }
+
+  /// Drop store-side caches (plugins + themes) so hidden window memory is released.
+  /// Both lists are lazily reloaded by their respective load methods when the
+  /// settings view is opened again.
+  void clearStoreCache() {
+    storePlugins.clear();
+    storeThemesList.clear();
+    _hasLoadedStoreThemes = false;
   }
 
   Future<void> refreshSettingGlancePreviewsForUIEntry(String traceId) async {
@@ -2424,6 +2472,8 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
       accountStatus.value = await WoxApi.instance.accountRefresh(traceId);
       await refreshCloudSyncStatus();
     } catch (e) {
+      await refreshAccountStatus();
+      _updateCloudSyncStatusWaiting();
       accountSubscriptionError.value = e.toString();
       Logger.instance.error(traceId, 'Refresh account subscription status failed: $e');
     } finally {
@@ -2449,6 +2499,8 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
       _updateCloudSyncStatusWaiting();
       Logger.instance.info(traceId, 'Account subscription status refreshed after app resume');
     } catch (e) {
+      await refreshAccountStatus();
+      _updateCloudSyncStatusWaiting();
       Logger.instance.error(traceId, 'Failed to refresh account subscription status after app resume: $e');
     } finally {
       _isRefreshingAccountStatusOnResume = false;
@@ -2580,6 +2632,7 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     final state = status.state;
     return activeNavPath.value == 'data.cloudsync' &&
         account.loggedIn &&
+        !account.sessionExpired &&
         account.syncEligible &&
         account.syncEnabled &&
         status.keyStatus.available &&
@@ -2852,8 +2905,15 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
   }
 
   Future<void> reloadSetting(String traceId) async {
+    final previousLangCode = woxSetting.value.langCode;
     await WoxSettingUtil.instance.loadSetting(traceId);
     woxSetting.value = WoxSettingUtil.instance.currentSetting;
+    // Cloud sync (e.g. bootstrap restore) and other remote sources can change
+    // LangCode without going through updateLang, so reload the language json
+    // and plugin translations to keep the UI in sync with the persisted value.
+    if (woxSetting.value.langCode != previousLangCode) {
+      await _applyLangResourcesChange(woxSetting.value.langCode);
+    }
     WoxInterfaceSizeUtil.instance.refreshFromDensity(woxSetting.value.uiDensity);
     Logger.instance.setLogLevel(woxSetting.value.logLevel);
     if (Get.isRegistered<WoxLauncherController>()) {
@@ -2989,6 +3049,8 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
   _BuiltInSettingSearchDefinition(settingKey: 'HideGlanceIcon', navPath: 'ui', titleKey: 'ui_glance_hide_icon', subtitleKey: 'ui_glance_hide_icon_tips'),
   _BuiltInSettingSearchDefinition(settingKey: 'PrimaryGlance', navPath: 'ui', titleKey: 'ui_glance_primary', subtitleKey: 'ui_glance_primary_tips'),
   _BuiltInSettingSearchDefinition(settingKey: 'AIProviders', navPath: 'ai', titleKey: 'ui_ai_model', searchKeywords: ['ai provider', 'api key', 'model']),
+  _BuiltInSettingSearchDefinition(settingKey: 'AIMCPServers', navPath: 'ai', titleKey: 'ui_ai_mcp_servers', searchKeywords: ['mcp', 'tool', 'server']),
+  _BuiltInSettingSearchDefinition(settingKey: 'AISkills', navPath: 'ai', titleKey: 'ui_ai_skills', searchKeywords: ['skill', 'repo', 'path']),
   _BuiltInSettingSearchDefinition(settingKey: 'HttpProxyEnabled', navPath: 'network', titleKey: 'ui_proxy_enabled', searchKeywords: ['proxy']),
   _BuiltInSettingSearchDefinition(settingKey: 'HttpProxyUrl', navPath: 'network', titleKey: 'ui_proxy_url', searchKeywords: ['proxy url']),
   _BuiltInSettingSearchDefinition(

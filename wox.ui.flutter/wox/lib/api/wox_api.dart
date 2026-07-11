@@ -16,6 +16,7 @@ import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_update_channel_version.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
+import 'package:wox/entity/wox_window_manager.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_http_util.dart';
@@ -45,6 +46,18 @@ class WoxApi {
 
   Future<List<IgnoredHotkeyApp>> getHotkeyAppCandidates(String traceId) async {
     return await WoxHttpUtil.instance.postData<List<IgnoredHotkeyApp>>(traceId, "/setting/hotkey/apps", null);
+  }
+
+  Future<List<WindowManagerDisplay>> getWindowManagerDisplays(String traceId) async {
+    return await WoxHttpUtil.instance.postData<List<WindowManagerDisplay>>(traceId, "/setting/window-manager/displays", null);
+  }
+
+  Future<bool> getBrowserExtensionConnected(String traceId) async {
+    final result = await WoxHttpUtil.instance.postData(traceId, "/browser/extension/status", null);
+    if (result is Map) {
+      return result['connected'] == true;
+    }
+    return false;
   }
 
   Future<List<String>> getSystemFontFamilies(String traceId) async {
@@ -165,8 +178,16 @@ class WoxApi {
     await WoxHttpUtil.instance.postData(traceId, "/on/setting", {"inSettingView": inSettingView}, sessionId: sessionId);
   }
 
-  Future<void> onHotkeyRecording(String traceId, bool isRecording, {String? sessionId}) async {
-    await WoxHttpUtil.instance.postData(traceId, "/on/hotkey/recording", {"isRecording": isRecording}, sessionId: sessionId);
+  Future<HotkeyRecordingCapability> onHotkeyRecording(String traceId, bool isRecording, {required String purpose, required List<String> allowedKinds, String? sessionId}) async {
+    return await WoxHttpUtil.instance.postData<HotkeyRecordingCapability>(traceId, "/on/hotkey/recording", {
+      "isRecording": isRecording,
+      "purpose": purpose,
+      "allowedKinds": allowedKinds,
+    }, sessionId: sessionId);
+  }
+
+  Future<void> submitHotkeyRecordingCandidate(String traceId, String hotkey, {String? sessionId}) async {
+    await WoxHttpUtil.instance.postData(traceId, "/on/hotkey/recording/candidate", {"hotkey": hotkey}, sessionId: sessionId);
   }
 
   Future<void> onOnboarding(String traceId, bool inOnboardingView, {String? sessionId}) async {
@@ -217,8 +238,12 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/mcp/tools/all", null);
   }
 
-  Future<List<AIAgent>> findAIAgents(String traceId) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/ai/agents", null);
+  Future<List<AISkill>> findAISkills(String traceId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/skills", null);
+  }
+
+  Future<List<AISkill>> cloneAISkill(String traceId, String url) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/skills/clone", {"url": url});
   }
 
   Future<List<AICommandTemplate>> findAICommandTemplates(String traceId) async {
@@ -231,6 +256,27 @@ class WoxApi {
 
   Future<void> sendChatRequest(String traceId, WoxAIChatData data) async {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/chat", {"chatData": data.toJson()});
+  }
+
+  Future<WoxAIChatData> getAIChat(String traceId, String chatId) async {
+    final data = await WoxHttpUtil.instance.postData<Map<String, dynamic>>(traceId, "/ai/chat/get", {"chatId": chatId});
+    return WoxAIChatData.fromJson(data);
+  }
+
+  Future<void> stopChatRequest(String traceId, String chatId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/chat/stop", {"chatId": chatId});
+  }
+
+  Future<void> deleteAIChat(String traceId, String chatId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/chat/delete", {"chatId": chatId});
+  }
+
+  Future<void> summarizeAIChat(String traceId, String chatId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/chat/summarize", {"chatId": chatId});
+  }
+
+  Future<void> answerAIQuestion(String traceId, String questionId, String answer) async {
+    await WoxHttpUtil.instance.postData(traceId, "/ai/question/answer", {"questionId": questionId, "answer": answer});
   }
 
   Future<List<DoctorCheckResult>> doctorCheck(String traceId) async {
@@ -439,5 +485,33 @@ class WoxApi {
 
   Future<void> cloudSyncKeyReset(String traceId, String resetToken) async {
     await WoxHttpUtil.instance.postData(traceId, "/sync/key/reset", {"reset_token": resetToken, "confirm": true});
+  }
+
+  Future<void> dictationModelDownload(String traceId, String modelId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/dictation/model/download", {"modelId": modelId});
+  }
+
+  Future<void> dictationModelDelete(String traceId, String modelId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/dictation/model/delete", {"modelId": modelId});
+  }
+
+  Future<List<dynamic>> dictationModelStatus(String traceId) async {
+    final result = await WoxHttpUtil.instance.postData(traceId, "/dictation/model/status", null);
+    if (result is List) {
+      return result;
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>?> dictationNativeLibStatus(String traceId) async {
+    final result = await WoxHttpUtil.instance.postData(traceId, "/dictation/native-lib/status", null);
+    if (result is Map) {
+      return Map<String, dynamic>.from(result);
+    }
+    return null;
+  }
+
+  Future<void> dictationNativeLibDownload(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/dictation/native-lib/download", null);
   }
 }

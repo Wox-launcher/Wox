@@ -5,8 +5,8 @@ import (
 	"wox/util/keyboard"
 )
 
-func TestDoubleTapTrackerTriggersOnlyOnPureModifierDoubleTap(t *testing.T) {
-	tracker := newDoubleTapTracker()
+func TestDoublePressTrackerTriggersOnlyOnPureModifierDoublePress(t *testing.T) {
+	tracker := newDoublePressTracker()
 	tracker.Register(keyboard.KeyCtrl)
 
 	triggered := tracker.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyCtrl), 100)
@@ -22,8 +22,20 @@ func TestDoubleTapTrackerTriggersOnlyOnPureModifierDoubleTap(t *testing.T) {
 	assertTriggered(t, triggered, keyboard.KeyCtrl)
 }
 
-func TestDoubleTapTrackerRejectsInterveningNonModifierKey(t *testing.T) {
-	tracker := newDoubleTapTracker()
+func TestDoublePressTrackerMatchesSpecificRawModifierKeys(t *testing.T) {
+	tracker := newDoublePressTracker()
+	tracker.Register(keyboard.KeyCtrl)
+
+	tracker.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyLeftCtrl), 100)
+	tracker.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyUp, keyboard.KeyLeftCtrl), 120)
+	tracker.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyRightCtrl), 200)
+
+	triggered := tracker.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyUp, keyboard.KeyRightCtrl), 220)
+	assertTriggered(t, triggered, keyboard.KeyCtrl)
+}
+
+func TestDoublePressTrackerRejectsInterveningNonModifierKey(t *testing.T) {
+	tracker := newDoublePressTracker()
 	tracker.Register(keyboard.KeyCtrl)
 
 	tracker.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyCtrl), 100)
@@ -37,8 +49,8 @@ func TestDoubleTapTrackerRejectsInterveningNonModifierKey(t *testing.T) {
 	assertNoTrigger(t, triggered)
 }
 
-func TestDoubleTapTrackerRejectsDuplicateKeyUpWithoutNewKeyDown(t *testing.T) {
-	tracker := newDoubleTapTracker()
+func TestDoublePressTrackerRejectsDuplicateKeyUpWithoutNewKeyDown(t *testing.T) {
+	tracker := newDoublePressTracker()
 	tracker.Register(keyboard.KeyCtrl)
 
 	tracker.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyCtrl), 100)
@@ -53,8 +65,8 @@ func TestDoubleTapTrackerRejectsDuplicateKeyUpWithoutNewKeyDown(t *testing.T) {
 	assertNoTrigger(t, triggered)
 }
 
-func TestDoubleTapTrackerRejectsInterveningOtherModifier(t *testing.T) {
-	tracker := newDoubleTapTracker()
+func TestDoublePressTrackerRejectsInterveningOtherModifier(t *testing.T) {
+	tracker := newDoublePressTracker()
 	tracker.Register(keyboard.KeyCtrl)
 
 	tracker.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyCtrl), 100)

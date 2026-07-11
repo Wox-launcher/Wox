@@ -13,12 +13,14 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	shellplugin "wox/plugin/system/shell"
 	"wox/setting"
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/ui"
 	"wox/util"
 	"wox/util/overlay"
+	"wox/util/overlay/textoverlay"
 	"wox/util/shell"
 	"wox/util/window"
 
@@ -316,6 +318,7 @@ func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title str
 					shell.Open(fullPath)
 				},
 			},
+			c.buildExecuteCommandAtLocationAction(fullPath, isDir),
 			{
 				Name:      "i18n:plugin_explorer_reveal_in_explorer",
 				IsDefault: true,
@@ -323,6 +326,46 @@ func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title str
 					c.revealEntry(ctx, query.Env, fullPath, isDir)
 				},
 			},
+		},
+	}
+}
+
+// buildExecuteCommandAtLocationAction opens Shell with the selected location as its working directory.
+func (c *ExplorerPlugin) buildExecuteCommandAtLocationAction(path string, isDir bool) plugin.QueryResultAction {
+	workingDirectory := path
+	if !isDir {
+		workingDirectory = filepath.Dir(path)
+	}
+
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_file_execute_command_here",
+		Icon:                   common.PluginShellIcon,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			result, err := c.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
+				PluginId: shellplugin.PluginID,
+				Command:  shellplugin.PluginCommandPrepareCommandAtDirectory,
+				Data: common.ContextData{
+					shellplugin.PluginCommandDataWorkingDirectory: workingDirectory,
+				},
+			})
+			if err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to invoke shell plugin command: %s", err.Error()))
+				c.api.Notify(ctx, err.Error())
+				return
+			}
+			if !result.Handled {
+				message := result.Message
+				if message == "" {
+					message = "shell plugin command was not handled"
+				}
+				c.api.Log(ctx, plugin.LogLevelWarning, message)
+				c.api.Notify(ctx, message)
+				return
+			}
+			if result.Message != "" {
+				c.api.Notify(ctx, result.Message)
+			}
 		},
 	}
 }
@@ -412,6 +455,7 @@ func (c *ExplorerPlugin) buildJumpFolderResult(query plugin.Query, title string,
 					c.jumpToFolder(ctx, query.Env, folderPath)
 				},
 			},
+			c.buildExecuteCommandAtLocationAction(folderPath, true),
 		},
 	}
 }
@@ -949,16 +993,17 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			title := window.GetWindowNameByPid(pid)
 			dialogWindowId := GetOpenSaveDialogWindowIdByPid(pid)
 			c.prefetchOpenSaveDialogPath(localCtx, pid, title, dialogWindowId)
-			overlay.Show(overlay.OverlayOptions{
-				Name:             explorerDialogHintOverlayName,
-				Message:          c.api.GetTranslation(localCtx, "plugin_explorer_hint_message_dialog"),
-				StickyWindowPid:  pid,
-				Anchor:           overlay.AnchorBottomCenter,
-				OffsetY:          explorerDialogHintVerticalInset,
-				Topmost:          true,
-				FontSize:         12,
-				MaxWidth:         explorerDialogHintMaxWidth,
-				AutoCloseSeconds: 0,
+			textoverlay.Show(textoverlay.Options{
+				Window: overlay.WindowOptions{
+					ID:              explorerDialogHintOverlayName,
+					StickyWindowPid: pid,
+					Anchor:          overlay.AnchorBottomCenter,
+					OffsetY:         explorerDialogHintVerticalInset,
+					Topmost:         true,
+					MaxWidth:        explorerDialogHintMaxWidth,
+				},
+				Message:  c.api.GetTranslation(localCtx, "plugin_explorer_hint_message_dialog"),
+				FontSize: 12,
 				OnClick: func() bool {
 					clickCtx := context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
 					clickCtx = util.WithCoreSessionContext(clickCtx)

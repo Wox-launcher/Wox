@@ -33,6 +33,8 @@ type WoxSetting struct {
 	StartPage          *WoxSettingValue[StartPage]
 	ShowPosition       *WoxSettingValue[PositionType]
 	AIProviders        *WoxSettingValue[[]AIProvider]
+	AIMCPServers       *WoxSettingValue[[]common.AIChatMCPServerConfig]
+	AISkills           *WoxSettingValue[[]common.Skill]
 	EnableAutoBackup   *WoxSettingValue[bool]
 	EnableAutoUpdate   *WoxSettingValue[bool]
 	ReleaseChannel     *WoxSettingValue[ReleaseChannel]
@@ -87,6 +89,11 @@ type WoxSetting struct {
 
 	// Anonymous usage statistics
 	EnableAnonymousUsageStats *WoxSettingValue[bool]
+
+	// IgnoredDoctorChecks stores doctor check types the user has dismissed.
+	// Ignored checks are skipped in the toolbar but still visible in the
+	// doctor query with an Unignore action.
+	IgnoredDoctorChecks *WoxSettingValue[[]string]
 }
 
 type LaunchMode = string
@@ -159,6 +166,27 @@ type AIProvider struct {
 	Alias  string              // optional, used to distinguish multiple configs for the same provider
 	ApiKey string
 	Host   string
+}
+
+const (
+	DefaultAIWebSearchResultCount        = 5
+	MaxAIWebSearchResultCount            = 10
+	DefaultAIWebSearchFetchMaxCharacters = 12000
+	MaxAIWebSearchFetchMaxCharacters     = 50000
+	DefaultAIWebSearchExaEndpoint        = "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa"
+)
+
+func normalizeAIWebSearchInt(value int, defaultValue int, minValue int, maxValue int) int {
+	if value <= 0 {
+		return defaultValue
+	}
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
 }
 
 type QueryHotkey struct {
@@ -339,10 +367,13 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		QueryShortcuts:                     NewWoxSettingValue(store, "QueryShortcuts", []QueryShortcut{}),
 		TrayQueries:                        NewWoxSettingValue(store, "TrayQueries", []TrayQuery{}),
 		AIProviders:                        NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
+		AIMCPServers:                       NewWoxSettingValue(store, "AIMCPServers", []common.AIChatMCPServerConfig{}),
+		AISkills:                           NewWoxSettingValue(store, "AISkills", []common.Skill{}),
 		QueryHistories:                     NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
 		QueryCompletionFeedbacks:           NewWoxSettingValue(store, "QueryCompletionFeedback", []QueryCompletionFeedback{}),
 		PinedResults:                       NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),
 		ActionedResults:                    NewWoxSettingValue(store, "ActionedResults", util.NewHashMap[ResultHash, []ActionedResult]()),
 		EnableAnonymousUsageStats:          NewWoxSettingValue(store, "EnableAnonymousUsageStats", true),
+		IgnoredDoctorChecks:                NewWoxSettingValue(store, "IgnoredDoctorChecks", []string{}),
 	}
 }

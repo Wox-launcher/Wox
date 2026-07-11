@@ -97,9 +97,10 @@ class WoxSettingUIView extends WoxSettingBaseView {
           formSection(
             title: controller.tr("ui_ui_section_launcher"),
             children: [
-              if (!controller.woxSetting.value.isLinuxWaylandSession)
+              if (!controller.woxSetting.value.isLinuxWaylandSession || controller.linuxLayerShellSupported.value)
                 // Wayland compositors own top-level window placement, so Wox cannot honor
-                // launcher position preferences there.
+                // launcher position preferences there unless wlr-layer-shell is available
+                // (Hyprland/sway). When it is, the same position selector becomes effective.
                 formField(
                   settingKey: "ShowPosition",
                   label: controller.tr("ui_show_position"),

@@ -132,9 +132,6 @@ func defaultSubtreeTraversalWorkerCount() int {
 	if count <= 0 {
 		return 1
 	}
-	if count > 8 {
-		return 8
-	}
 	return count
 }
 

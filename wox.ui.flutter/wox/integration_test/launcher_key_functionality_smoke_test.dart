@@ -24,7 +24,7 @@ void registerLauncherKeyFunctionalitySmokeTests() {
       final launcherController = await launchAndShowLauncher(tester);
       final settingController = await openSettings(tester, launcherController, 'general');
 
-      await tapSettingNavItem(tester, settingController, 'data');
+      await tapSettingNavItem(tester, settingController, 'data.backup');
 
       expectSettingsWindowOpen(launcherController);
 
@@ -80,7 +80,7 @@ void registerLauncherKeyFunctionalitySmokeTests() {
 
         // Smoke runs exercise the same RecordHotkey bus used when core forwards
         // a captured global hotkey to the focused recorder.
-        WoxHotkeyRecordingBus.instance.emit(recordedHotkey);
+        WoxHotkeyRecordingBus.instance.emit(recordedHotkey, "normal");
         await pumpUntil(tester, () => settingController.woxSetting.value.mainHotkey == recordedHotkey, timeout: const Duration(seconds: 10));
 
         expect(settingController.woxSetting.value.mainHotkey, recordedHotkey);

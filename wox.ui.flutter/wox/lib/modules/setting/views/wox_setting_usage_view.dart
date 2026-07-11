@@ -250,7 +250,10 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
         const cellGap = 2.5;
         const horizontalInset = 4.0;
         final availableGridWidth = math.max(0.0, constraints.maxWidth - horizontalInset * 2);
-        final cellSize = ((availableGridWidth - cellGap * (weekCount - 1)) / weekCount).clamp(6.0, 13.0).toDouble();
+        // Windows CI can render the settings content a few pixels narrower than
+        // macOS. Let the yearly heatmap cells shrink slightly instead of forcing
+        // a one-row overflow when 53 weeks are visible.
+        final cellSize = ((availableGridWidth - cellGap * (weekCount - 1)) / weekCount).clamp(5.0, 13.0).toDouble();
         final weekStride = cellSize + cellGap;
         final gridWidth = weekCount * cellSize + (weekCount - 1) * cellGap;
         final gridHeight = cellSize * 7 + cellGap * 6;

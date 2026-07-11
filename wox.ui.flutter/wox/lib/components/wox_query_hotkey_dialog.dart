@@ -92,7 +92,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
 
   bool get _showsDisplayFields => _selectedPreset == _QueryHotkeyPreset.webPanel || _selectedPreset == _QueryHotkeyPreset.custom;
 
-  bool get _supportsWindowPositionSetting => !controller.woxSetting.value.isLinuxWaylandSession;
+  bool get _supportsWindowPositionSetting => !controller.woxSetting.value.isLinuxWaylandSession || controller.linuxLayerShellSupported.value;
 
   bool get _showsCustomChromeFields => _selectedPreset == _QueryHotkeyPreset.custom;
 
@@ -724,8 +724,8 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
                     hotkey: WoxHotkey.parseHotkeyFromString(_draft.hotkey),
                     tipPosition: WoxHotkeyRecorderTipPosition.right,
                     recordUnavailableHotkey: true,
-                    onHotKeyRecorded: (hotkey) {
-                      _handleHotkeyChanged(hotkey);
+                    onHotKeyRecorded: (result) {
+                      _handleHotkeyChanged(result.hotkey);
                     },
                     onUnavailableHotKeyRecorded: (hotkey) {
                       _handleHotkeyChanged(hotkey);

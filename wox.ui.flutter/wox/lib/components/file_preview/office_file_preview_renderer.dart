@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:wox/components/file_preview/file_info_preview.dart';
+import 'package:wox/components/file_preview/file_preview_policy.dart';
 import 'package:wox/components/file_preview/file_preview_renderer.dart';
+import 'package:wox/components/file_preview/macos_quick_look_preview_view.dart';
 import 'package:wox/components/file_preview/windows_preview_handler_view.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
@@ -46,6 +48,34 @@ class OfficeFilePreviewRenderer implements WoxFilePreviewRenderer {
     final kind = _OfficePreviewKind.fromExtension(context.fileExtension);
     if (kind == null) {
       return WoxFilePreviewResult(content: context.buildText(context.tr("ui_file_preview_unsupported_type", {"extension": context.fileExtension})));
+    }
+
+    if (Platform.isWindows) {
+      final typeLabel = context.tr(kind.typeKey);
+
+      return WoxFilePreviewPolicy.buildDeferredPreview(
+        context: context,
+        file: file,
+        manualLoadThresholdBytes: WoxFilePreviewPolicy.officeThresholdBytes,
+        icon: kind.icon,
+        accent: kind.accent,
+        typeLabel: typeLabel,
+        previewBuilder: (_) => WoxWindowsPreviewHandlerView(filePath: file.path, fallbackBuilder: (error) => _buildFallbackPreview(context, file, kind, error)),
+      );
+    }
+
+    if (Platform.isMacOS) {
+      final typeLabel = context.tr(kind.typeKey);
+
+      return WoxFilePreviewPolicy.buildDeferredPreview(
+        context: context,
+        file: file,
+        manualLoadThresholdBytes: WoxFilePreviewPolicy.officeThresholdBytes,
+        icon: kind.icon,
+        accent: kind.accent,
+        typeLabel: typeLabel,
+        previewBuilder: (_) => WoxMacosQuickLookPreviewView(filePath: file.path),
+      );
     }
 
     return WoxFilePreviewResult(

@@ -428,7 +428,7 @@ void registerLauncherCoreSmokeTests() {
       await tapSettingNavItem(tester, settingController, 'ui');
       expectSettingsWindowOpen(launcherController);
 
-      await tapSettingNavItem(tester, settingController, 'data');
+      await tapSettingNavItem(tester, settingController, 'data.backup');
       expectSettingsWindowOpen(launcherController);
 
       final navScrollPosition = _settingsNavScrollPosition(tester);

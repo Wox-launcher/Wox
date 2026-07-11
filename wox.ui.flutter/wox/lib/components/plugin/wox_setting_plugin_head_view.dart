@@ -13,13 +13,20 @@ class WoxSettingPluginHead extends WoxSettingPluginItem {
   Widget build(BuildContext context) {
     // Add padding to the head if it doesn't have any
     if (item.style.paddingTop == 0 && item.style.paddingBottom == 0) {
-      item.style.paddingTop = 4;
+      item.style.paddingTop = 8;
       item.style.paddingBottom = 4;
     }
 
     return layout(
       label: "",
-      child: Row(children: [Text(item.content, style: TextStyle(fontSize: 16, color: getThemeTextColor()))]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(item.content, style: TextStyle(fontSize: 16, color: getThemeTextColor())),
+          Padding(padding: EdgeInsets.only(top: 6), child: Container(height: 1, color: getThemeSettingDividerColor())),
+        ],
+      ),
       style: item.style,
       tooltip: item.tooltip,
       includeBottomSpacing: false,

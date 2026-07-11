@@ -63,9 +63,11 @@ class PluginSettingValueType {
   static const pluginSettingValueTableColumnTypeSelectAIModel = "selectAIModel";
   static const pluginSettingValueTableColumnTypeQueryHotkeyQuery = "queryHotkeyQuery";
   static const pluginSettingValueTableColumnTypeAICommandPrompt = "aiCommandPrompt";
+  static const pluginSettingValueTableColumnTypeDictationPrompt = "dictationPrompt";
   static const pluginSettingValueTableColumnTypeAIModelStatus = "aiModelStatus";
   static const pluginSettingValueTableColumnTypeAIMCPServerTools = "aiMCPServerTools";
   static const pluginSettingValueTableColumnTypeAISelectMCPServerTools = "aiSelectMCPServerTools";
+  static const pluginSettingValueTableColumnTypeAISelectSkills = "aiSelectSkills";
   static const pluginSettingValueTableColumnTypeWoxImage = "woxImage";
   static const pluginSettingValueTableColumnTypeHotkey = "hotkey";
   static const pluginSettingValueTableColumnTypeApp = "app";
@@ -81,6 +83,7 @@ class PluginSettingValueTableColumn {
   late int textMaxLines; // Only used by text-like table columns
   late bool hideInTable; // Hide this column in the table, but still show it in the setting dialog
   late bool hideInUpdate; // Hide this column in the update dialog
+  late List<String> allowedHotkeyKinds; // Only used when Type is PluginSettingValueTableColumnTypeHotkey
   late List<PluginSettingValidatorItem> validators;
   late List<PluginSettingValueTableColumnChangeAction> onChangedActions;
 
@@ -101,6 +104,7 @@ class PluginSettingValueTableColumn {
     }
     hideInTable = json['HideInTable'] ?? false;
     hideInUpdate = json['HideInUpdate'] ?? false;
+    allowedHotkeyKinds = json['AllowedHotkeyKinds'] is List ? (json['AllowedHotkeyKinds'] as List).map((e) => e.toString()).toList() : [];
 
     if (json['Validators'] != null) {
       validators = (json['Validators'] as List).map((e) => PluginSettingValidatorItem.fromJson(e)).toList();

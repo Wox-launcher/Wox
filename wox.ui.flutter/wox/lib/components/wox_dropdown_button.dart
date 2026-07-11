@@ -1,4 +1,3 @@
-import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wox/components/wox_checkbox.dart';
@@ -280,7 +279,6 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
   }
 
   void _showFilterableMenu() {
-    final tooltipWindow = WoxMultipleWindowScope.maybeHandleOf(context);
     final dropdownBg = _getDropdownBackgroundColor();
     final dropdownTextColor = _getDropdownTextColor(dropdownBg);
     final searchBg =
@@ -341,10 +339,10 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                                   focusNode: _filterFocusNode,
                                   autofocus: true,
                                   textAlignVertical: TextAlignVertical.center,
-                                  style: TextStyle(color: searchTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
+                                  style: TextStyle(color: searchTextColor, fontSize: widget.fontSize),
                                   decoration: InputDecoration(
                                     hintText: widget.filterHintText ?? 'Filter...',
-                                    hintStyle: TextStyle(color: searchHintColor, fontSize: widget.fontSize).useSystemChineseFont(),
+                                    hintStyle: TextStyle(color: searchHintColor, fontSize: widget.fontSize),
                                     border: InputBorder.none,
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -375,8 +373,8 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                         color: isSelected ? getThemeActiveBackgroundColor().withValues(alpha: dropdownBg.computeLuminance() < 0.5 ? 0.25 : 0.12) : null,
                                         child: DefaultTextStyle(
-                                          style: TextStyle(color: dropdownTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
-                                          child: _buildDropdownMenuItem(item, dropdownTextColor, tooltipWindow: tooltipWindow),
+                                          style: TextStyle(color: dropdownTextColor, fontSize: widget.fontSize),
+                                          child: _buildDropdownMenuItem(item, dropdownTextColor),
                                         ),
                                       ),
                                     );
@@ -428,7 +426,6 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
   }
 
   void _showMultiSelectMenu() {
-    final tooltipWindow = WoxMultipleWindowScope.maybeHandleOf(context);
     final dropdownBg = _getDropdownBackgroundColor();
     final dropdownTextColor = _getDropdownTextColor(dropdownBg);
     final borderColor = getThemeSubTextColor().withValues(alpha: 0.55);
@@ -474,8 +471,8 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: DefaultTextStyle(
-                                        style: TextStyle(color: dropdownTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
-                                        child: _buildDropdownMenuItem(item, dropdownTextColor, tooltipWindow: tooltipWindow),
+                                        style: TextStyle(color: dropdownTextColor, fontSize: widget.fontSize),
+                                        child: _buildDropdownMenuItem(item, dropdownTextColor),
                                       ),
                                     ),
                                   ],
@@ -532,6 +529,19 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
     return KeyEventResult.ignored;
   }
 
+  // Dropdowns have a 300px preferred width, but settings search can temporarily
+  // reveal controls inside much narrower panes; cap the preferred width so the
+  // button shrinks with its parent instead of overflowing during route changes.
+  Widget _buildButtonFrame({required Color borderColor, required Widget child}) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: widget.width ?? 300.0),
+      child: SizedBox(
+        width: widget.width ?? double.infinity,
+        child: Container(decoration: BoxDecoration(border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(4)), child: child),
+      ),
+    );
+  }
+
   // Build dropdown menu item with optional tooltip icon
   Widget _buildDropdownMenuItem(WoxDropdownItem<T> item, Color activeTextColor, {WoxMultipleWindowHandle? tooltipWindow}) {
     final hasLeading = item.leading != null;
@@ -584,7 +594,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
       child: Row(
         children: [
           if (item.leading != null) ...[SizedBox(width: 18, height: 18, child: item.leading!), const SizedBox(width: 8)],
-          Expanded(child: Text(item.label, style: TextStyle(color: textColor, fontSize: widget.fontSize).useSystemChineseFont())),
+          Expanded(child: Text(item.label, style: TextStyle(color: textColor, fontSize: widget.fontSize))),
           if (item.trailing != null) ...[
             // Selected dropdowns stay one line, but metadata previews such as Glance still need room to show the value users are choosing.
             const SizedBox(width: 10),
@@ -610,30 +620,23 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
 
       return CompositedTransformTarget(
         link: _layerLink,
-        child: SizedBox(
-          width: widget.width ?? 300.0,
-          child: Container(
-            decoration: BoxDecoration(border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(4)),
-            child: Focus(
-              focusNode: widget.focusNode,
-              autofocus: widget.autofocus,
-              onKeyEvent: _handleMultiTriggerKey,
-              child: _buildNoRippleInkWell(
-                onTap: widget.onMultiChanged != null ? _showMultiSelectMenu : null,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          selectedText.isNotEmpty ? selectedText : "",
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: textColor, fontSize: widget.fontSize).useSystemChineseFont(),
-                        ),
-                      ),
-                      Icon(Icons.arrow_drop_down, color: widget.onMultiChanged != null ? textColor : textColor.withValues(alpha: 0.5), size: widget.iconSize ?? 24.0),
-                    ],
-                  ),
+        child: _buildButtonFrame(
+          borderColor: borderColor,
+          child: Focus(
+            focusNode: widget.focusNode,
+            autofocus: widget.autofocus,
+            onKeyEvent: _handleMultiTriggerKey,
+            child: _buildNoRippleInkWell(
+              onTap: widget.onMultiChanged != null ? _showMultiSelectMenu : null,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(selectedText.isNotEmpty ? selectedText : "", overflow: TextOverflow.ellipsis, style: TextStyle(color: textColor, fontSize: widget.fontSize)),
+                    ),
+                    Icon(Icons.arrow_drop_down, color: widget.onMultiChanged != null ? textColor : textColor.withValues(alpha: 0.5), size: widget.iconSize ?? 24.0),
+                  ],
                 ),
               ),
             ),
@@ -660,7 +663,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
             focusNode: widget.focusNode,
             autofocus: widget.autofocus,
             isExpanded: widget.isExpanded,
-            style: TextStyle(color: dropdownTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
+            style: TextStyle(color: dropdownTextColor, fontSize: widget.fontSize),
             selectedItemBuilder: (BuildContext context) {
               return widget.items.map<Widget>((item) {
                 return _buildSelectedItem(item, textColor);
@@ -682,13 +685,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
         ),
       );
 
-      return SizedBox(
-        width: widget.width ?? 300.0,
-        child: Container(
-          decoration: BoxDecoration(border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(4)),
-          child: Padding(padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0), child: dropdown),
-        ),
-      );
+      return _buildButtonFrame(borderColor: borderColor, child: Padding(padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0), child: dropdown));
     }
 
     // Filterable dropdown with custom overlay
@@ -712,24 +709,21 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
 
     return CompositedTransformTarget(
       link: _layerLink,
-      child: SizedBox(
-        width: widget.width ?? 300.0,
-        child: Container(
-          decoration: BoxDecoration(border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(4)),
-          child: Focus(
-            focusNode: widget.focusNode,
-            autofocus: widget.autofocus,
-            onKeyEvent: _handleFilterTriggerKey,
-            child: _buildNoRippleInkWell(
-              onTap: widget.onChanged != null ? _showFilterableMenu : null,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
-                child: Row(
-                  children: [
-                    Expanded(child: DefaultTextStyle(style: TextStyle(color: textColor, fontSize: widget.fontSize).useSystemChineseFont(), child: selectedChild)),
-                    Icon(Icons.arrow_drop_down, color: widget.onChanged != null ? textColor : textColor.withValues(alpha: 0.5), size: widget.iconSize ?? 24.0),
-                  ],
-                ),
+      child: _buildButtonFrame(
+        borderColor: borderColor,
+        child: Focus(
+          focusNode: widget.focusNode,
+          autofocus: widget.autofocus,
+          onKeyEvent: _handleFilterTriggerKey,
+          child: _buildNoRippleInkWell(
+            onTap: widget.onChanged != null ? _showFilterableMenu : null,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
+              child: Row(
+                children: [
+                  Expanded(child: DefaultTextStyle(style: TextStyle(color: textColor, fontSize: widget.fontSize), child: selectedChild)),
+                  Icon(Icons.arrow_drop_down, color: widget.onChanged != null ? textColor : textColor.withValues(alpha: 0.5), size: widget.iconSize ?? 24.0),
+                ],
               ),
             ),
           ),

@@ -17,17 +17,46 @@ func parseModifierToken(token string) (keyboard.Modifier, keyboard.Key, bool) {
 		return keyboard.ModifierShift, keyboard.KeyShift, true
 	case "alt":
 		return keyboard.ModifierAlt, keyboard.KeyAlt, true
-	case "super", "win", "window":
+	case "cmd", "command", "super", "win", "window":
 		return keyboard.ModifierSuper, keyboard.KeySuper, true
+	case "left_ctrl", "left control", "left_control":
+		return keyboard.ModifierCtrl, keyboard.KeyLeftCtrl, true
+	case "right_ctrl", "right control", "right_control":
+		return keyboard.ModifierCtrl, keyboard.KeyRightCtrl, true
+	case "left_shift":
+		return keyboard.ModifierShift, keyboard.KeyLeftShift, true
+	case "right_shift":
+		return keyboard.ModifierShift, keyboard.KeyRightShift, true
+	case "left_alt":
+		return keyboard.ModifierAlt, keyboard.KeyLeftAlt, true
+	case "right_alt":
+		return keyboard.ModifierAlt, keyboard.KeyRightAlt, true
+	case "left_cmd", "left_command", "left_super", "left_win":
+		return keyboard.ModifierSuper, keyboard.KeyLeftSuper, true
+	case "right_cmd", "right_command", "right_super", "right_win":
+		return keyboard.ModifierSuper, keyboard.KeyRightSuper, true
 	default:
 		return 0, keyboard.KeyUnknown, false
 	}
 }
 
 func validateHotkeySpec(spec hotkeySpec) error {
-	if spec.isDoubleModifier() && keyboard.IsWaylandSession() {
-		return fmt.Errorf("double modifier hotkeys are not supported on Wayland")
+	if !keyboard.IsWaylandSession() {
+		return nil
 	}
+
+	if spec.isDoubleModifier() {
+		if !keyboard.IsEvdevReadAvailable() {
+			return fmt.Errorf("double modifier hotkeys require evdev access on Wayland; add user to 'input' group")
+		}
+	}
+
+	if spec.isCapsLockKey() {
+		if !keyboard.IsEvdevReadAvailable() {
+			return fmt.Errorf("CapsLock combo hotkeys require evdev access on Wayland; add user to 'input' group")
+		}
+	}
+
 	return nil
 }
 
@@ -42,8 +71,7 @@ func init() {
 	//   2. Even when the portal is available, creating a session only to destroy
 	//      it immediately can trigger DE confirmation dialogs or cause spurious
 	//      D-Bus errors.
-	// Instead, on Wayland we only validate the spec itself (e.g. reject double
-	// modifier keys which we explicitly do not support) and always return true
+	// Instead, on Wayland we only validate the spec itself and always return true
 	// for well-formed hotkeys.
 	platformHotkeyAvailableCheck = func(_ context.Context, hotkeyStr string) (bool, bool) {
 		if !keyboard.IsWaylandSession() {
@@ -51,7 +79,6 @@ func init() {
 			return false, false
 		}
 
-		// Validate the spec without touching the portal at all.
 		hk := &Hotkey{}
 		spec, parseErr := hk.parseCombineKey(hotkeyStr)
 		if parseErr != nil {

@@ -13,7 +13,7 @@ import (
 	"wox/util"
 )
 
-const fileSearchSchemaVersion = 1
+const fileSearchSchemaVersion = 3
 
 const (
 	searchBigramFieldName       = "name"
@@ -93,7 +93,12 @@ type sqliteIndexDefinition struct {
 	SQL  string
 }
 
-var entriesIndexDefinitions = []sqliteIndexDefinition{
+var foregroundEntriesIndexDefinitions = []sqliteIndexDefinition{
+	{Name: "idx_entries_name_key", SQL: `CREATE INDEX IF NOT EXISTS idx_entries_name_key ON entries(name_key)`},
+	{Name: "idx_entries_extension", SQL: `CREATE INDEX IF NOT EXISTS idx_entries_extension ON entries(extension)`},
+}
+
+var maintenanceEntriesIndexDefinitions = []sqliteIndexDefinition{
 	// collect_diff_stale/changed_old always constrain by root_id and a scope path
 	// prefix together. The previous root_id-only index forced tiny subtree diffs
 	// under large roots such as C:\Windows to rescan far too much of the root on
@@ -101,14 +106,31 @@ var entriesIndexDefinitions = []sqliteIndexDefinition{
 	// both predicates without changing query behavior.
 	{Name: "idx_entries_root_id_path", SQL: `CREATE INDEX IF NOT EXISTS idx_entries_root_id_path ON entries(root_id, path)`},
 	{Name: "idx_entries_parent_path", SQL: `CREATE INDEX IF NOT EXISTS idx_entries_parent_path ON entries(parent_path)`},
-	{Name: "idx_entries_name_key", SQL: `CREATE INDEX IF NOT EXISTS idx_entries_name_key ON entries(name_key)`},
-	{Name: "idx_entries_extension", SQL: `CREATE INDEX IF NOT EXISTS idx_entries_extension ON entries(extension)`},
 	{Name: "idx_entries_is_dir", SQL: `CREATE INDEX IF NOT EXISTS idx_entries_is_dir ON entries(is_dir)`},
+}
+
+var entriesIndexDefinitions = []sqliteIndexDefinition{
+	maintenanceEntriesIndexDefinitions[0],
+	maintenanceEntriesIndexDefinitions[1],
+	foregroundEntriesIndexDefinitions[0],
+	foregroundEntriesIndexDefinitions[1],
+	maintenanceEntriesIndexDefinitions[2],
 }
 
 var retiredEntriesIndexNames = []string{
 	"idx_entries_root_id",
 }
+
+const (
+	entryForegroundIndexesStateKey    = "entry_foreground_indexes_state"
+	entryMaintenanceIndexesStateKey   = "entry_maintenance_indexes_state"
+	entryMaintenanceIndexesGeneration = "entry_maintenance_indexes_generation"
+
+	entryIndexStatePending  = "pending"
+	entryIndexStateBuilding = "building"
+	entryIndexStateReady    = "ready"
+	entryIndexStateError    = "error"
+)
 
 type sqliteTxBeginner interface {
 	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
@@ -210,28 +232,53 @@ func (d *FileSearchDB) ensureSQLiteSearchSchema(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	shouldRebuildArtifacts := currentVersion < fileSearchSchemaVersion || entriesRebuilt || searchArtifactsCreated
+	// Content search now owns a standalone contentsearch.db. The filename schema
+	// version stays compatible with existing filesearch.db files that may still
+	// contain retired content tables from earlier releases.
+	const entriesSchemaVersion = 2
+	shouldRebuildArtifacts := currentVersion < entriesSchemaVersion || entriesRebuilt || searchArtifactsCreated
 	if shouldRebuildArtifacts {
-		// Rebuild derived search artifacts only when schema state changed. The
-		// previous startup path rebuilt every FTS/bigram structure on every launch,
-		// which blocked the system file plugin init for minutes on large indexes
-		// and prevented `f ` from entering file-plugin query mode at all.
-		if err := rebuildAllSearchArtifactsTx(ctx, tx); err != nil {
-			return err
-		}
+		d.searchArtifactsNeedRebuild = true
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d`, fileSearchSchemaVersion)); err != nil {
 		return err
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf(
-		"filesearch sqlite schema ready: current_version=%d target_version=%d rebuild_artifacts=%v",
+		"filesearch sqlite schema ready: current_version=%d target_version=%d rebuild_artifacts_queued=%v",
 		currentVersion,
 		fileSearchSchemaVersion,
 		shouldRebuildArtifacts,
 	))
 
 	return tx.Commit()
+}
+
+// NeedsSearchArtifactRebuild reports whether schema init found stale derived search tables.
+func (d *FileSearchDB) NeedsSearchArtifactRebuild() bool {
+	return d != nil && d.searchArtifactsNeedRebuild
+}
+
+// RebuildSearchArtifacts refreshes derived FTS and bigram tables after DB open.
+func (d *FileSearchDB) RebuildSearchArtifacts(ctx context.Context) error {
+	if d == nil || d.db == nil {
+		return nil
+	}
+
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := rebuildAllSearchArtifactsTx(ctx, tx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	d.searchArtifactsNeedRebuild = false
+	return nil
 }
 
 func (d *FileSearchDB) probeFTS5(ctx context.Context) error {
@@ -420,10 +467,10 @@ func dropEntriesSecondaryIndexes(ctx context.Context, exec rootExecContext) erro
 }
 
 func (d *FileSearchDB) recreateEntryIndexes(ctx context.Context) error {
-	return recreateEntryIndexesWithBeginner(ctx, d.db)
+	return recreateEntryIndexesWithBeginner(ctx, d.db, entriesIndexDefinitions)
 }
 
-func recreateEntryIndexesWithBeginner(ctx context.Context, beginner sqliteTxBeginner) error {
+func recreateEntryIndexesWithBeginner(ctx context.Context, beginner sqliteTxBeginner, definitions []sqliteIndexDefinition) error {
 	tx, err := beginner.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -433,7 +480,7 @@ func recreateEntryIndexesWithBeginner(ctx context.Context, beginner sqliteTxBegi
 	if err := dropRetiredEntriesIndexes(ctx, tx); err != nil {
 		return err
 	}
-	for _, definition := range entriesIndexDefinitions {
+	for _, definition := range definitions {
 		startedAt := util.GetSystemTimestamp()
 		if _, err := tx.ExecContext(ctx, definition.SQL); err != nil {
 			return fmt.Errorf("create %s: %w", definition.Name, err)
@@ -518,8 +565,8 @@ func rebuildAllSearchArtifactsTx(ctx context.Context, tx *sql.Tx) error {
 	}
 
 	for _, tableName := range filesearchFTSTables {
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s(%s) VALUES('rebuild')`, tableName, tableName)); err != nil {
-			return fmt.Errorf("rebuild %s: %w", tableName, err)
+		if err := rebuildFTSTableTx(ctx, tx, tableName); err != nil {
+			return err
 		}
 	}
 
@@ -1002,10 +1049,32 @@ func (d *FileSearchDB) EndBulkSync(ctx context.Context) error {
 	return d.withBulkFinalizeConnection(ctx, func(conn *sql.Conn) error {
 		if entryIndexesDropped {
 			startedAt := util.GetSystemTimestamp()
-			if err := recreateEntryIndexesWithBeginner(ctx, conn); err != nil {
+			logFilesearchIndexPhase(ctx, "bulk_finalize_recreate_entry_indexes_start", "bulk", 0, map[string]any{
+				"group":   "foreground",
+				"indexes": len(foregroundEntriesIndexDefinitions),
+			})
+			if err := d.setEntryIndexState(ctx, entryForegroundIndexesStateKey, entryIndexStateBuilding); err != nil {
 				return err
 			}
-			logFilesearchSQLiteMaintenance(ctx, "recreate_entry_indexes", "bulk", util.GetSystemTimestamp()-startedAt, len(entriesIndexDefinitions))
+			if err := recreateEntryIndexesWithBeginner(ctx, conn, foregroundEntriesIndexDefinitions); err != nil {
+				_ = d.setEntryIndexState(ctx, entryForegroundIndexesStateKey, entryIndexStateError)
+				return err
+			}
+			if err := d.setEntryIndexState(ctx, entryForegroundIndexesStateKey, entryIndexStateReady); err != nil {
+				return err
+			}
+			if err := d.setEntryIndexState(ctx, entryMaintenanceIndexesStateKey, entryIndexStatePending); err != nil {
+				return err
+			}
+			if err := d.setEntryIndexGeneration(ctx); err != nil {
+				return err
+			}
+			elapsedMs := util.GetSystemTimestamp() - startedAt
+			logFilesearchSQLiteMaintenance(ctx, "recreate_entry_indexes", "foreground", elapsedMs, len(foregroundEntriesIndexDefinitions))
+			logFilesearchIndexPhase(ctx, "bulk_finalize_recreate_entry_indexes_done", "bulk", elapsedMs, map[string]any{
+				"group":   "foreground",
+				"indexes": len(foregroundEntriesIndexDefinitions),
+			})
 		}
 
 		// Bulk mode now defers both bigram and FTS maintenance until the end of the
@@ -1147,6 +1216,13 @@ func (d *FileSearchDB) maybeDropEntryIndexesForFreshBulkSync(ctx context.Context
 		return nil
 	}
 
+	if err := d.setEntryIndexState(ctx, entryForegroundIndexesStateKey, entryIndexStatePending); err != nil {
+		return err
+	}
+	if err := d.setEntryIndexState(ctx, entryMaintenanceIndexesStateKey, entryIndexStatePending); err != nil {
+		return err
+	}
+
 	startedAt := util.GetSystemTimestamp()
 	if err := dropEntriesSecondaryIndexes(ctx, d.db); err != nil {
 		return err
@@ -1179,6 +1255,131 @@ func (d *FileSearchDB) entriesTableEmpty(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return false, nil
+}
+
+func (d *FileSearchDB) setEntryIndexState(ctx context.Context, key string, state string) error {
+	if d == nil || d.db == nil {
+		return nil
+	}
+	_, err := d.db.ExecContext(ctx, `
+		INSERT INTO meta(key, value)
+		VALUES(?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, key, state)
+	if err != nil {
+		return fmt.Errorf("set filesearch index state %s=%s: %w", key, state, err)
+	}
+	return nil
+}
+
+func (d *FileSearchDB) setEntryIndexGeneration(ctx context.Context) error {
+	if d == nil || d.db == nil {
+		return nil
+	}
+	_, err := d.db.ExecContext(ctx, `
+		INSERT INTO meta(key, value)
+		VALUES(?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, entryMaintenanceIndexesGeneration, fmt.Sprintf("%d", util.GetSystemTimestamp()))
+	if err != nil {
+		return fmt.Errorf("set filesearch maintenance index generation: %w", err)
+	}
+	return nil
+}
+
+func (d *FileSearchDB) entryIndexState(ctx context.Context, key string) (string, error) {
+	if d == nil || d.db == nil {
+		return entryIndexStateReady, nil
+	}
+	var state string
+	err := d.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, key).Scan(&state)
+	if err == sql.ErrNoRows {
+		return entryIndexStateReady, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("load filesearch index state %s: %w", key, err)
+	}
+	state = strings.TrimSpace(state)
+	if state == "" {
+		return entryIndexStateReady, nil
+	}
+	return state, nil
+}
+
+// EntryMaintenanceIndexesReady reports whether incremental reconcile can use
+// the maintenance indexes that keep dirty-scope diffs off full table scans.
+func (d *FileSearchDB) EntryMaintenanceIndexesReady(ctx context.Context) (bool, error) {
+	state, err := d.entryIndexState(ctx, entryMaintenanceIndexesStateKey)
+	if err != nil {
+		return false, err
+	}
+	return state == entryIndexStateReady, nil
+}
+
+// EnsureForegroundEntryIndexes recovers the minimal query indexes after a crash
+// during a fresh full scan's foreground finalize.
+func (d *FileSearchDB) EnsureForegroundEntryIndexes(ctx context.Context) error {
+	state, err := d.entryIndexState(ctx, entryForegroundIndexesStateKey)
+	if err != nil {
+		return err
+	}
+	if state == entryIndexStateReady {
+		return nil
+	}
+
+	startedAt := util.GetSystemTimestamp()
+	if err := d.setEntryIndexState(ctx, entryForegroundIndexesStateKey, entryIndexStateBuilding); err != nil {
+		return err
+	}
+	if err := d.withBulkFinalizeConnection(ctx, func(conn *sql.Conn) error {
+		return recreateEntryIndexesWithBeginner(ctx, conn, foregroundEntriesIndexDefinitions)
+	}); err != nil {
+		_ = d.setEntryIndexState(ctx, entryForegroundIndexesStateKey, entryIndexStateError)
+		return err
+	}
+	if err := d.setEntryIndexState(ctx, entryForegroundIndexesStateKey, entryIndexStateReady); err != nil {
+		return err
+	}
+	logFilesearchIndexPhase(ctx, "foreground_entry_indexes_recovered", "startup", util.GetSystemTimestamp()-startedAt, map[string]any{
+		"indexes": len(foregroundEntriesIndexDefinitions),
+	})
+	return nil
+}
+
+// BuildMaintenanceEntryIndexes recreates deferred maintenance indexes in the
+// background after search results are already foreground-ready.
+func (d *FileSearchDB) BuildMaintenanceEntryIndexes(ctx context.Context) error {
+	if d == nil {
+		return nil
+	}
+	d.entryIndexMaintenanceMu.Lock()
+	defer d.entryIndexMaintenanceMu.Unlock()
+
+	ready, err := d.EntryMaintenanceIndexesReady(ctx)
+	if err != nil {
+		return err
+	}
+	if ready {
+		return nil
+	}
+
+	startedAt := util.GetSystemTimestamp()
+	if err := d.setEntryIndexState(ctx, entryMaintenanceIndexesStateKey, entryIndexStateBuilding); err != nil {
+		return err
+	}
+	if err := d.withBulkFinalizeConnection(ctx, func(conn *sql.Conn) error {
+		return recreateEntryIndexesWithBeginner(ctx, conn, maintenanceEntriesIndexDefinitions)
+	}); err != nil {
+		_ = d.setEntryIndexState(ctx, entryMaintenanceIndexesStateKey, entryIndexStateError)
+		return err
+	}
+	if err := d.setEntryIndexState(ctx, entryMaintenanceIndexesStateKey, entryIndexStateReady); err != nil {
+		return err
+	}
+	logFilesearchIndexPhase(ctx, "maintenance_entry_indexes_done", "background", util.GetSystemTimestamp()-startedAt, map[string]any{
+		"indexes": len(maintenanceEntriesIndexDefinitions),
+	})
+	return nil
 }
 
 func (d *FileSearchDB) applyDirectFilesEntriesTx(ctx context.Context, tx *sql.Tx, batch SubtreeSnapshotBatch) error {
@@ -1513,17 +1714,6 @@ func insertEntriesAsNewFactsTx(ctx context.Context, tx *sql.Tx, operation string
 		return nil
 	}
 
-	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO entries (
-			path, root_id, parent_path, name, normalized_name, name_key, normalized_path,
-			pinyin_full, pinyin_initials, extension, is_dir, mtime, size, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`)
-	if err != nil {
-		return fmt.Errorf("prepare direct entry insert for scope %q: %w", scopePath, err)
-	}
-	defer stmt.Close()
-
 	// The staged fast path inserted facts with ORDER BY path ASC. Preserve that
 	// deterministic order when bypassing the temp table so bulk full scans keep
 	// the same entry_id assignment and derived search rows as before.
@@ -1532,27 +1722,8 @@ func insertEntriesAsNewFactsTx(ctx context.Context, tx *sql.Tx, operation string
 		return orderedEntries[left].Path < orderedEntries[right].Path
 	})
 
-	for _, entry := range orderedEntries {
-		row := buildStoredEntryRecord(entry)
-		if _, err := stmt.ExecContext(
-			ctx,
-			row.Path,
-			row.RootID,
-			row.ParentPath,
-			row.Name,
-			row.NormalizedName,
-			row.NameKey,
-			row.NormalizedPath,
-			row.PinyinFull,
-			row.PinyinInitials,
-			row.Extension,
-			boolToInt(row.IsDir),
-			row.Mtime,
-			row.Size,
-			row.UpdatedAt,
-		); err != nil {
-			return fmt.Errorf("insert direct entry %q for scope %q: %w", row.Path, scopePath, err)
-		}
+	if err := insertEntryFactsNoReturningBatchTx(ctx, tx, orderedEntries); err != nil {
+		return fmt.Errorf("insert direct entries for scope %q: %w", scopePath, err)
 	}
 
 	logFilesearchSQLiteMaintenance(ctx, operation, scopePath, util.GetSystemTimestamp()-startedAt, len(orderedEntries))
@@ -1957,7 +2128,7 @@ func upsertEntryFactsNoReturningBatchTx(ctx context.Context, tx *sql.Tx, entries
 	for start := 0; start < len(rows); {
 		chunkSize := sqliteBatchRows(len(rows)-start, entryFactColumnCount)
 		end := start + chunkSize
-		if err := upsertStoredEntryFactRowsNoReturningBatchTx(ctx, tx, rows[start:end]); err != nil {
+		if err := writeStoredEntryFactRowsNoReturningBatchTx(ctx, tx, rows[start:end], false); err != nil {
 			return err
 		}
 		start = end
@@ -1965,7 +2136,32 @@ func upsertEntryFactsNoReturningBatchTx(ctx context.Context, tx *sql.Tx, entries
 	return nil
 }
 
-func upsertStoredEntryFactRowsNoReturningBatchTx(ctx context.Context, tx *sql.Tx, rows []storedEntryRecord) error {
+// insertEntryFactsNoReturningBatchTx skips conflict handling for fresh full-index
+// roots, where the sealed plan owns non-overlapping entry paths.
+func insertEntryFactsNoReturningBatchTx(ctx context.Context, tx *sql.Tx, entries []EntryRecord) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	rows := make([]storedEntryRecord, 0, len(entries))
+	for _, entry := range entries {
+		rows = append(rows, buildStoredEntryRecord(entry))
+	}
+
+	for start := 0; start < len(rows); {
+		chunkSize := sqliteBatchRows(len(rows)-start, entryFactColumnCount)
+		end := start + chunkSize
+		if err := writeStoredEntryFactRowsNoReturningBatchTx(ctx, tx, rows[start:end], true); err != nil {
+			return err
+		}
+		start = end
+	}
+	return nil
+}
+
+// writeStoredEntryFactRowsNoReturningBatchTx writes one chunk of entry facts and
+// can optionally omit ON CONFLICT for fresh bulk-loads.
+func writeStoredEntryFactRowsNoReturningBatchTx(ctx context.Context, tx *sql.Tx, rows []storedEntryRecord, plainInsert bool) error {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -2001,24 +2197,30 @@ func upsertStoredEntryFactRowsNoReturningBatchTx(ctx context.Context, tx *sql.Tx
 		)
 	}
 
-	builder.WriteString(`
-		ON CONFLICT(path) DO UPDATE SET
-			root_id = excluded.root_id,
-			parent_path = excluded.parent_path,
-			name = excluded.name,
-			normalized_name = excluded.normalized_name,
-			name_key = excluded.name_key,
-			normalized_path = excluded.normalized_path,
-			pinyin_full = excluded.pinyin_full,
-			pinyin_initials = excluded.pinyin_initials,
-			extension = excluded.extension,
-			is_dir = excluded.is_dir,
-			mtime = excluded.mtime,
-			size = excluded.size,
-			updated_at = excluded.updated_at
-	`)
+	if !plainInsert {
+		builder.WriteString(`
+			ON CONFLICT(path) DO UPDATE SET
+				root_id = excluded.root_id,
+				parent_path = excluded.parent_path,
+				name = excluded.name,
+				normalized_name = excluded.normalized_name,
+				name_key = excluded.name_key,
+				normalized_path = excluded.normalized_path,
+				pinyin_full = excluded.pinyin_full,
+				pinyin_initials = excluded.pinyin_initials,
+				extension = excluded.extension,
+				is_dir = excluded.is_dir,
+				mtime = excluded.mtime,
+				size = excluded.size,
+				updated_at = excluded.updated_at
+		`)
+	}
 	if _, err := tx.ExecContext(ctx, builder.String(), args...); err != nil {
-		return fmt.Errorf("batch upsert %d entry facts: %w", len(rows), err)
+		operation := "upsert"
+		if plainInsert {
+			operation = "insert"
+		}
+		return fmt.Errorf("batch %s %d entry facts: %w", operation, len(rows), err)
 	}
 	return nil
 }
@@ -2259,9 +2461,15 @@ func deleteEntryFTSWithSyncTx(ctx context.Context, syncer *entrySearchArtifactSy
 		value string
 	}{
 		{name: "entries_name_fts", stmt: syncer.deleteNameFTSStmt, value: row.NormalizedName},
-		{name: "entries_path_fts", stmt: syncer.deletePathFTSStmt, value: row.NormalizedPath},
 		{name: "entries_pinyin_full_fts", stmt: syncer.deletePinyinFullFTSStmt, value: row.PinyinFull},
 		{name: "entries_initials_fts", stmt: syncer.deleteInitialsFTSStmt, value: row.PinyinInitials},
+	}
+	if row.IsDir {
+		commands = append(commands, struct {
+			name  string
+			stmt  *sql.Stmt
+			value string
+		}{name: "entries_path_fts", stmt: syncer.deletePathFTSStmt, value: row.NormalizedPath})
 	}
 	for _, command := range commands {
 		if strings.TrimSpace(command.value) == "" {
@@ -2290,9 +2498,15 @@ func insertEntryFTSWithSyncTx(ctx context.Context, syncer *entrySearchArtifactSy
 		value string
 	}{
 		{name: "entries_name_fts", stmt: syncer.insertNameFTSStmt, value: row.NormalizedName},
-		{name: "entries_path_fts", stmt: syncer.insertPathFTSStmt, value: row.NormalizedPath},
 		{name: "entries_pinyin_full_fts", stmt: syncer.insertPinyinFullFTSStmt, value: row.PinyinFull},
 		{name: "entries_initials_fts", stmt: syncer.insertInitialsFTSStmt, value: row.PinyinInitials},
+	}
+	if row.IsDir {
+		commands = append(commands, struct {
+			name  string
+			stmt  *sql.Stmt
+			value string
+		}{name: "entries_path_fts", stmt: syncer.insertPathFTSStmt, value: row.NormalizedPath})
 	}
 	for _, command := range commands {
 		if strings.TrimSpace(command.value) == "" {
@@ -2409,6 +2623,12 @@ func (d *FileSearchDB) rebuildFTSTables(ctx context.Context, optimize bool) erro
 		logFilesearchSQLiteMaintenance(ctx, "optimize_fts", "standalone", optimizeElapsedMs, len(filesearchFTSTables))
 	}
 	logFilesearchSQLiteMaintenance(ctx, "rebuild_fts_total", fmt.Sprintf("optimize=%t", optimize), util.GetSystemTimestamp()-startedAt, len(filesearchFTSTables))
+	// Mark search artifacts as built so NeedsSearchArtifactRebuild() returns
+	// false. EndBulkSync is the bulk-sync path's replacement for
+	// RebuildSearchArtifacts, so it owns the same flag reset. Without this,
+	// callers like waitForFileSearchIdle poll forever after a RebuildIndex
+	// because the flag was set during schema init and never cleared.
+	d.searchArtifactsNeedRebuild = false
 	return nil
 }
 
@@ -2417,18 +2637,22 @@ func (d *FileSearchDB) rebuildBulkSearchArtifacts(ctx context.Context, optimize 
 }
 
 func (d *FileSearchDB) rebuildBulkSearchArtifactsWithBeginner(ctx context.Context, beginner sqliteTxBeginner, optimize bool, freshEmptyIndex bool) error {
-	bigramStartedAt := util.GetSystemTimestamp()
+	totalStartedAt := util.GetSystemTimestamp()
 	tx, err := beginner.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
+	bigramStartedAt := util.GetSystemTimestamp()
 	bigramRows, err := rebuildAllBigramsTx(ctx, tx)
 	if err != nil {
 		return err
 	}
 	bigramElapsedMs := util.GetSystemTimestamp() - bigramStartedAt
+	logFilesearchIndexPhase(ctx, "bulk_finalize_rebuild_bigrams", "bulk", bigramElapsedMs, map[string]any{
+		"rows": bigramRows,
+	})
 
 	rebuildElapsedMs := int64(0)
 	optimizeElapsedMs := int64(0)
@@ -2446,9 +2670,14 @@ func (d *FileSearchDB) rebuildBulkSearchArtifactsWithBeginner(ctx context.Contex
 			return err
 		}
 	}
+	commitStartedAt := util.GetSystemTimestamp()
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	commitElapsedMs := util.GetSystemTimestamp() - commitStartedAt
+	logFilesearchIndexPhase(ctx, "bulk_finalize_commit", "bulk", commitElapsedMs, map[string]any{
+		"fresh_empty_index": freshEmptyIndex,
+	})
 
 	// Bulk finalization now owns the single source of truth for derived search
 	// artifacts. Split the logs so the next trace can tell whether time is going
@@ -2462,6 +2691,10 @@ func (d *FileSearchDB) rebuildBulkSearchArtifactsWithBeginner(ctx context.Contex
 	if optimize {
 		logFilesearchSQLiteMaintenance(ctx, "optimize_fts", "bulk", optimizeElapsedMs, len(filesearchFTSTables))
 	}
+	logFilesearchIndexPhase(ctx, "bulk_finalize_artifacts_done", "bulk", util.GetSystemTimestamp()-totalStartedAt, map[string]any{
+		"fresh_empty_index": freshEmptyIndex,
+		"optimize":          optimize,
+	})
 	return nil
 }
 
@@ -2470,26 +2703,36 @@ func populateFreshFTSTablesTx(ctx context.Context, tx *sql.Tx) (int64, error) {
 	statements := []struct {
 		table  string
 		column string
+		where  string
 	}{
-		{table: "entries_name_fts", column: "normalized_name"},
-		{table: "entries_path_fts", column: "normalized_path"},
-		{table: "entries_pinyin_full_fts", column: "pinyin_full"},
-		{table: "entries_initials_fts", column: "pinyin_initials"},
+		{table: "entries_name_fts", column: "normalized_name", where: "normalized_name <> ''"},
+		{table: "entries_path_fts", column: "normalized_path", where: "is_dir = 1 AND normalized_path <> ''"},
+		{table: "entries_pinyin_full_fts", column: "pinyin_full", where: "pinyin_full <> ''"},
+		{table: "entries_initials_fts", column: "pinyin_initials", where: "pinyin_initials <> ''"},
 	}
 	for _, statement := range statements {
 		statementStartedAt := util.GetSystemTimestamp()
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
+		logFilesearchIndexPhase(ctx, "bulk_finalize_populate_fts_start", statement.table, 0, map[string]any{
+			"column": statement.column,
+		})
+		result, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				INSERT INTO %s(rowid, %s)
 				SELECT entry_id, %s
 				FROM entries
-				WHERE %s <> ''
-			`, statement.table, statement.column, statement.column, statement.column)); err != nil {
+				WHERE %s
+			`, statement.table, statement.column, statement.column, statement.where))
+		if err != nil {
 			return 0, fmt.Errorf("populate %s: %w", statement.table, err)
 		}
+		rowsAffected, _ := result.RowsAffected()
+		statementElapsedMs := util.GetSystemTimestamp() - statementStartedAt
 		// Diagnostic addition: populate_fts used to hide which derived token table
 		// was expensive. Keep FTS semantics unchanged, but expose each table so the
 		// real-index artifact can decide whether pinyin/initials need a later design.
-		logFilesearchSQLiteMaintenance(ctx, "populate_fts_"+statement.table, statement.table, util.GetSystemTimestamp()-statementStartedAt, 1)
+		logFilesearchSQLiteMaintenance(ctx, "populate_fts_"+statement.table, statement.table, statementElapsedMs, 1)
+		logFilesearchIndexPhase(ctx, "bulk_finalize_populate_fts_done", statement.table, statementElapsedMs, map[string]any{
+			"rows": rowsAffected,
+		})
 	}
 	return util.GetSystemTimestamp() - startedAt, nil
 }
@@ -2502,22 +2745,62 @@ func rebuildFTSTablesTx(ctx context.Context, tx *sql.Tx, optimize bool) error {
 func rebuildFTSTablesTimedTx(ctx context.Context, tx *sql.Tx, optimize bool) (int64, int64, error) {
 	rebuildStartedAt := util.GetSystemTimestamp()
 	for _, tableName := range filesearchFTSTables {
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s(%s) VALUES('rebuild')`, tableName, tableName)); err != nil {
-			return 0, 0, fmt.Errorf("rebuild %s: %w", tableName, err)
+		tableStartedAt := util.GetSystemTimestamp()
+		logFilesearchIndexPhase(ctx, "bulk_finalize_rebuild_fts_start", tableName, 0, map[string]any{
+			"table": tableName,
+		})
+		if err := rebuildFTSTableTx(ctx, tx, tableName); err != nil {
+			return 0, 0, err
 		}
+		logFilesearchIndexPhase(ctx, "bulk_finalize_rebuild_fts_done", tableName, util.GetSystemTimestamp()-tableStartedAt, map[string]any{
+			"table": tableName,
+		})
 	}
 	rebuildElapsedMs := util.GetSystemTimestamp() - rebuildStartedAt
 	optimizeElapsedMs := int64(0)
 	if optimize {
 		optimizeStartedAt := util.GetSystemTimestamp()
 		for _, tableName := range filesearchFTSTables {
+			tableStartedAt := util.GetSystemTimestamp()
+			logFilesearchIndexPhase(ctx, "bulk_finalize_optimize_fts_start", tableName, 0, map[string]any{
+				"table": tableName,
+			})
 			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s(%s) VALUES('optimize')`, tableName, tableName)); err != nil {
 				return rebuildElapsedMs, 0, fmt.Errorf("optimize %s: %w", tableName, err)
 			}
+			logFilesearchIndexPhase(ctx, "bulk_finalize_optimize_fts_done", tableName, util.GetSystemTimestamp()-tableStartedAt, map[string]any{
+				"table": tableName,
+			})
 		}
 		optimizeElapsedMs = util.GetSystemTimestamp() - optimizeStartedAt
 	}
 	return rebuildElapsedMs, optimizeElapsedMs, nil
+}
+
+// rebuildFTSTableTx rebuilds one FTS table while keeping path FTS limited to
+// directory entries instead of every full file path.
+func rebuildFTSTableTx(ctx context.Context, tx *sql.Tx, tableName string) error {
+	if tableName != "entries_path_fts" {
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s(%s) VALUES('rebuild')`, tableName, tableName)); err != nil {
+			return fmt.Errorf("rebuild %s: %w", tableName, err)
+		}
+		return nil
+	}
+
+	// Path recall only needs directory paths. Keeping entries_path_fts sparse
+	// avoids trigram-indexing every file's full path during bulk finalize.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO entries_path_fts(entries_path_fts) VALUES('delete-all')`); err != nil {
+		return fmt.Errorf("clear entries_path_fts: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO entries_path_fts(rowid, normalized_path)
+		SELECT entry_id, normalized_path
+		FROM entries
+		WHERE is_dir = 1 AND normalized_path <> ''
+	`); err != nil {
+		return fmt.Errorf("rebuild entries_path_fts: %w", err)
+	}
+	return nil
 }
 
 func rebuildAllBigramsTx(ctx context.Context, tx *sql.Tx) (int, error) {

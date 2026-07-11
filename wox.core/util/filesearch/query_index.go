@@ -24,6 +24,9 @@ type queryPlan struct {
 	pathSegments          []string
 	wildcardLiterals      []string
 	nameTerm              string
+	exactPhrases          []string
+	exactNamePhrases      []string
+	exactPathPhrases      []string
 	usePinyin             bool
 	perClauseLimit        int
 	postIntersectionLimit int
@@ -45,18 +48,32 @@ const (
 )
 
 func buildQueryPlan(query SearchQuery) *queryPlan {
-	raw := normalizeQuery(query.Raw)
-	if raw == "" {
+	inputRaw := normalizeQuery(query.Raw)
+	if inputRaw == "" {
 		return nil
+	}
+
+	quoted := parseQuotedSearchQuery(inputRaw)
+	raw := normalizeQuery(quoted.unquoted)
+	exactPhrases := normalizeExactPhrases(quoted.phrases)
+	if raw == "" && len(exactPhrases) == 0 {
+		return nil
+	}
+	recallRaw := raw
+	if recallRaw == "" {
+		recallRaw = longestString(exactPhrases)
 	}
 
 	rawLower := normalizeIndexText(raw)
 	lettersDigits := keepLettersAndDigits(rawLower)
-	pathLike := strings.ContainsAny(raw, `/\`)
-	pathQuery := normalizePathQuery(raw)
+	pathLike := strings.ContainsAny(recallRaw, `/\`)
+	pathQuery := normalizePathQuery(recallRaw)
 	pathSegments := splitDirectorySegments(pathQuery)
 
 	nameTerm := rawLower
+	if nameTerm == "" {
+		nameTerm = normalizeIndexText(recallRaw)
+	}
 	wildcardLiterals := buildWildcardLiterals(raw)
 	if query.wildcard != nil && len(wildcardLiterals) > 0 {
 		nameTerm = longestString(wildcardLiterals)
@@ -77,6 +94,9 @@ func buildQueryPlan(query SearchQuery) *queryPlan {
 		pathSegments:       pathSegments,
 		wildcardLiterals:   wildcardLiterals,
 		nameTerm:           nameTerm,
+		exactPhrases:       exactPhrases,
+		exactNamePhrases:   normalizeExactNamePhrases(exactPhrases),
+		exactPathPhrases:   normalizeExactPathPhrases(exactPhrases),
 		// Pinyin recall used to be unconditional inside filesearch, bypassing
 		// Wox's global UsePinYin setting. Keeping the flag in the plan makes every
 		// recall and rerank path use one normalized decision for this query.
@@ -103,13 +123,18 @@ func scoreDocAgainstQuery(query SearchQuery, record docRecord) (bool, int64) {
 		return false, 0
 	}
 
-	if query.wildcard != nil {
-		return query.wildcard.match(record.name(), record.Path)
-	}
-
 	plan := query.plan
 	if plan == nil {
 		return false, 0
+	}
+	if !recordMatchesExactPhrases(plan, record) {
+		return false, 0
+	}
+	if query.wildcard != nil {
+		return query.wildcard.match(record.name(), record.Path)
+	}
+	if plan.raw == "" && len(plan.exactPhrases) > 0 {
+		return true, scoreExactPhraseMatch(plan, record)
 	}
 
 	var (
@@ -161,6 +186,44 @@ func scoreDocAgainstQuery(query SearchQuery, record docRecord) (bool, int64) {
 	return matched, bestScore
 }
 
+func recordMatchesExactPhrases(plan *queryPlan, record docRecord) bool {
+	if plan == nil || len(plan.exactPhrases) == 0 {
+		return true
+	}
+	nameTarget := normalizeIndexText(record.name())
+	pathTarget := record.pathKey()
+	for i := range plan.exactPhrases {
+		namePhrase := plan.exactNamePhrases[i]
+		pathPhrase := plan.exactPathPhrases[i]
+		if namePhrase != "" && strings.Contains(nameTarget, namePhrase) {
+			continue
+		}
+		if pathPhrase != "" && strings.Contains(pathTarget, pathPhrase) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func scoreExactPhraseMatch(plan *queryPlan, record docRecord) int64 {
+	nameTarget := normalizeIndexText(record.name())
+	pathTarget := record.pathKey()
+	score := int64(3000)
+	for i := range plan.exactPhrases {
+		namePhrase := plan.exactNamePhrases[i]
+		pathPhrase := plan.exactPathPhrases[i]
+		if namePhrase != "" && strings.Contains(nameTarget, namePhrase) {
+			score += int64(5000 + utf8Len(namePhrase)*100 - utf8Len(nameTarget))
+			continue
+		}
+		if pathPhrase != "" && strings.Contains(pathTarget, pathPhrase) {
+			score += int64(2500 + utf8Len(pathPhrase)*100 - utf8Len(pathTarget))
+		}
+	}
+	return score
+}
+
 type fuzzyScore struct {
 	matched bool
 	score   int64
@@ -206,6 +269,34 @@ func normalizeIndexText(value string) string {
 
 func normalizeEntryPathKey(entry EntryRecord) string {
 	return normalizeIndexText(entry.NormalizedPath)
+}
+
+func normalizeExactPhrases(phrases []string) []string {
+	normalized := make([]string, 0, len(phrases))
+	for _, phrase := range phrases {
+		phrase = strings.TrimSpace(phrase)
+		if phrase == "" {
+			continue
+		}
+		normalized = append(normalized, phrase)
+	}
+	return normalized
+}
+
+func normalizeExactNamePhrases(phrases []string) []string {
+	normalized := make([]string, 0, len(phrases))
+	for _, phrase := range phrases {
+		normalized = append(normalized, normalizeIndexText(phrase))
+	}
+	return normalized
+}
+
+func normalizeExactPathPhrases(phrases []string) []string {
+	normalized := make([]string, 0, len(phrases))
+	for _, phrase := range phrases {
+		normalized = append(normalized, normalizePathQuery(phrase))
+	}
+	return normalized
 }
 
 func shouldDropRedundantPinyinPayload(normalizedName string, pinyinFull string, pinyinInitials string) bool {

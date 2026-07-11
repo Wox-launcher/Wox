@@ -1,5 +1,89 @@
 # Changelog
 
+## v2.4.0-beta.1
+
+This beta introduces local, offline Dictation for fast voice-to-text workflows, alongside file content search and a more capable AI Chat experience.
+
+- Add
+  - [`Dictation`] Add local voice-to-text dictation with downloadable offline models, configurable microphones and model loading, press, double-press, and hold hotkeys, live status overlays, audio ducking, and custom actions that can refine speech with AI, type into the active window, show an overlay, or start AI Chat.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/dictation.png)
+  - [`File Search`] Add optional file-content indexing and search so users can find supported text, PDF, and Office files by words inside them, choose indexed extensions, track indexing progress, use quoted phrases, and open theme-aware previews with clear large-file limits.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/file_content_search.png)
+
+- Improve
+  - [`AI Chat`] Improve AI Chat with reusable local and remote skills, built-in tools, inline model and skill selection, configurable tool usage, cancellable streaming, summarized conversation history, and a fallback search action.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_chat.mp4)
+  - [`Hotkey`] Improve hotkey recording and registration with left/right-specific modifier keys, multi-key hold shortcuts, and more reliable press, double-press, hold, and Caps Lock combo handling.
+  - [`Media Player`] Expand Linux support with MPRIS track metadata and playback controls.
+  - [`AI`] Support Ollama Cloud with its default endpoint and improve compatibility with OpenAI-compatible relays #4473
+  - [`Indicator`] Let plugin results open the corresponding plugin settings directly.
+  - [`Theme`] Improve AI-generated themes with more reliable JSON extraction and clearer preview guidance.
+
+- Fix
+  - [`Updater`] Fix Windows updates when the downloaded executable and Wox installation are on different drives #4471
+  - [`Plugin`] Fix toolbar messages without an explicit icon by falling back to the plugin icon.
+  - [`Overlay`] Fix text overlay sizing and improve close-button and focus behavior.
+
+## v2.3.0 - 2026-07-04
+
+This stable release brings Cloud Sync to Wox and adds workspace layouts, while rolling up the Linux, preview, file search, hotkey, settings, and stability improvements from the v2.3.0 betas.
+
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/cloud_sync.png)
+
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/windows_workspace.png)
+
+- Add
+  - [`Cloud Sync`] Add encrypted cloud sync for settings, installed plugins, and themes, with recovery-code setup, local snapshots, sync history, account plan and device management, device join and revoke flows, legal agreement checks, auto-sync, partial-success history, and clearer server error feedback.
+  - [`Window Manager`] Add workspace layouts so users can save apps across displays, restore them from launcher commands or query hotkeys, launch missing apps, place windows into saved layouts, and open browser URLs with duplicate-tab handling.
+
+- Improve
+  - [`Linux`] Improve Wayland and Hyprland support with wlroots layer-shell detection, Hyprland hotkeys, KDE image clipboard handling, desktop launch environment fixes, draggable window state handling, screenshot monitor capture, uinput doctor checks for Caps Lock combo hotkeys, localized Wayland hotkey help, and FAQ guidance for disabling window animation #4458
+  - [`Hotkey`] Expand Linux hotkey support with Double Ctrl, Caps Lock combo keys, Backspace injection, better input permission checks, and clearer doctor diagnostics. Also support backquote and tilde hotkeys across platforms.
+  - [`Preview`] Improve file previews with on-demand loading, macOS Quick Look support, PDF and large-file handling, and a File Search setting to control whether previews are shown #4463
+  - [`File Search`] Improve indexing performance, fresh full-index bulk sync, direct-entry insertion, and user-home path normalization for faster and more reliable searches.
+  - [`Shell`] Improve selected-folder workflows by letting shell commands run at the selected location and normalizing user-home paths.
+  - [`Window`] Improve Windows monitor detection, DPI-scaled window positioning, launcher focus diagnostics, and settings/onboarding transitions #4436
+  - [`App`] Improve Windows app search with richer UWP metadata retrieval and icon handling.
+  - [`MRU`] Improve query ranking with per-command and context-aware scoring so repeated actions and saved layouts surface more predictably.
+  - [`Settings`] Improve responsive settings layouts, label handling, runtime language updates, platform-specific setting sync behavior, and Cloud Sync configuration notes so settings pages stay readable and clearer after resizing, switching languages, or syncing.
+  - [`Doctor`] Improve doctor check severity handling so update and environment checks can distinguish warnings from blocking issues #4459
+  - [`Theme`] Improve macOS wallpaper retrieval and cache handling for wallpaper-aware theme previews.
+
+- Fix
+  - [`Linux`] Fix startup on systems without `gtk-layer-shell` by loading it dynamically instead of requiring the library at launch.
+  - [`Clipboard`] Fix image paste support on KDE Wayland desktop sessions and improve Windows clipboard history key compatibility #4467
+  - [`Hotkey`] Fix duplicate modifier presses from triggering false-positive hotkey events #4465
+  - [`Calculator`] Fix expression ranking so calculator results prioritize the intended expression matches #4469
+  - [`Launcher`] Fix focus and action handling during launcher lifecycle transitions.
+
+## v2.3.0-beta.2 - 2026.07-01
+
+This beta improves Linux and Wayland reliability while expanding file previews, File Search controls, and selected-folder Shell workflows.
+
+- Improve
+  - [`Linux`] Improve Wayland and Hyprland support with wlroots layer-shell detection, Hyprland hotkeys, KDE image clipboard handling, desktop launch environment fixes, draggable window state handling, screenshot monitor capture, and FAQ guidance for disabling window animation #4458
+  - [`Hotkey`] Expand Linux hotkey support with Double Ctrl, Caps Lock combo keys, Backspace injection, better input permission checks, and clearer doctor diagnostics. Also support backquote and tilde hotkeys across platforms.
+  - [`Preview`] Improve file previews with on-demand loading, macOS Quick Look support, PDF and large-file handling, and a File Search setting to control whether previews are shown #4463
+  - [`File Search`] Improve indexing performance, fresh full-index bulk sync, direct-entry insertion, and user-home path normalization for faster and more reliable searches.
+  - [`Window`] Improve Windows monitor detection, DPI-scaled window positioning, and launcher focus diagnostics #4436
+  - [`Cloud Sync`] Improve account token recovery and expired-session feedback so sync actions handle refresh failures more clearly.
+  - [`Settings`] Improve responsive settings layouts, label handling, and runtime language updates so settings pages stay readable after resizing or switching languages.
+  - [`Doctor`] Improve doctor check severity handling so update and environment checks can distinguish warnings from blocking issues #4459
+  - [`Theme`] Improve macOS wallpaper retrieval and cache handling for wallpaper-aware theme previews.
+
+- Fix
+  - [`Clipboard`] Fix image paste support on KDE Wayland desktop sessions.
+
+## v2.3.0-beta.1 - 2026-06-20
+
+This beta release introduces Cloud Sync, giving users encrypted backup and restore for settings, installed plugins, and themes across devices.
+
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/cloud_sync.png)
+
+- Add
+  - [`Cloud Sync`] Add encrypted cloud sync for settings, installed plugins, and themes, with recovery-code setup, local snapshots, sync history, account plan and device management, device join and revoke flows, and plan-aware auto-sync.
+
+
 ## v2.2.0 - 2026-06-18
 
 This stable release rolls up the v2.1.2 beta work with additional Theme Editor, Linux Wayland, Caps Lock hotkey, update, and stability improvements.

@@ -111,6 +111,15 @@ func (l *Location) Init() error {
 	if directoryErr := l.EnsureDirectoryExist(l.GetOthersDirectory()); directoryErr != nil {
 		return directoryErr
 	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetDictationDirectory()); directoryErr != nil {
+		return directoryErr
+	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetAISkillsDirectory()); directoryErr != nil {
+		return directoryErr
+	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetAISkillsCacheDirectory()); directoryErr != nil {
+		return directoryErr
+	}
 	if directoryErr := l.EnsureDirectoryExist(l.GetScriptPluginTemplatesDirectory()); directoryErr != nil {
 		return directoryErr
 	}
@@ -204,8 +213,20 @@ func (l *Location) GetOthersDirectory() string {
 	return path.Join(l.woxDataDirectory, "others")
 }
 
+func (l *Location) GetDictationDirectory() string {
+	return path.Join(l.woxDataDirectory, "dictation")
+}
+
+func (l *Location) GetAISkillsDirectory() string {
+	return path.Join(l.woxDataDirectory, "ai", "skills")
+}
+
+func (l *Location) GetAISkillsCacheDirectory() string {
+	return path.Join(l.woxDataDirectory, "ai", "skills-cache")
+}
+
 func (l *Location) GetScriptPluginTemplatesDirectory() string {
-	return path.Join(l.woxDataDirectory, "ai", "skills", "wox-plugin-creator", "assets", "script_plugin_templates")
+	return path.Join(l.GetAISkillsDirectory(), "wox-plugin-creator", "assets", "script_plugin_templates")
 }
 
 func (l *Location) GetCacheDirectory() string {

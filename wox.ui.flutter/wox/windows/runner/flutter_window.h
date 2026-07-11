@@ -99,7 +99,6 @@ private:
     // because the layered full-screen HWND can receive its first button messages late while DWM is
     // still presenting the mask; the HWND input handlers remain as a fallback when the hook is unavailable.
     HWND input_window = nullptr;
-    std::vector<HWND> border_windows;
     HHOOK mouse_hook = nullptr;
     POINT drag_start{0, 0};
     RECT workspace_bounds{0, 0, 0, 0};
@@ -278,9 +277,6 @@ private:
 
   // Static procedure for native screenshot region selection input.
   static LRESULT CALLBACK ScreenshotSelectionInputWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
-
-  // Static procedure for passive native screenshot dim/border windows.
-  static LRESULT CALLBACK ScreenshotSelectionPassiveWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
 
   // Static low-level mouse hook for native screenshot region selection.
   static LRESULT CALLBACK ScreenshotSelectionMouseHookProc(int code, WPARAM wparam, LPARAM lparam);

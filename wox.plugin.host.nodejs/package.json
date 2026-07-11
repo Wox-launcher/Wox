@@ -7,7 +7,7 @@
     "url": "https://github.com/Wox-launcher/Wox.git"
   },
   "scripts": {
-    "build": "pnpm clean && ncc build src/index.ts -o dist && babel dist --out-dir dist",
+    "build": "node ./scripts/clean.mjs && ncc build src/index.ts -o dist && babel dist --out-dir dist",
     "clean": "node ./scripts/clean.mjs",
     "clean:all": "npm run clean && (rm -r ./node_modules || true)"
   },
@@ -37,5 +37,5 @@
     "winston-daily-rotate-file": "^4.7.1",
     "ws": "^8.14.1"
   },
-  "packageManager": "pnpm@8.15.5+sha1.a58c038faac410c947dbdb93eb30994037d0fce2"
+  "packageManager": "pnpm@11.9.0"
 }

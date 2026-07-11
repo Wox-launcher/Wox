@@ -16,15 +16,57 @@ type wildcardQuery struct {
 	literalCount     int
 }
 
+type quotedSearchQuery struct {
+	unquoted string
+	phrases  []string
+}
+
 func normalizeQuery(raw string) string {
 	return strings.TrimSpace(raw)
 }
 
 func normalizeSearchQuery(query SearchQuery) SearchQuery {
 	query.Raw = normalizeQuery(query.Raw)
-	query.wildcard = buildWildcardQuery(query.Raw)
+	query.wildcard = buildWildcardQuery(parseQuotedSearchQuery(query.Raw).unquoted)
 	query.plan = buildQueryPlan(query)
 	return query
+}
+
+func parseQuotedSearchQuery(query string) quotedSearchQuery {
+	var unquoted strings.Builder
+	var quoted strings.Builder
+	inQuote := false
+	var phrases []string
+
+	for _, r := range query {
+		if r == '"' {
+			if inQuote {
+				if phrase := strings.TrimSpace(quoted.String()); phrase != "" {
+					phrases = append(phrases, phrase)
+				}
+				quoted.Reset()
+				inQuote = false
+			} else {
+				inQuote = true
+			}
+			continue
+		}
+		if inQuote {
+			quoted.WriteRune(r)
+		} else {
+			unquoted.WriteRune(r)
+		}
+	}
+
+	if inQuote {
+		unquoted.WriteRune('"')
+		unquoted.WriteString(quoted.String())
+	}
+
+	return quotedSearchQuery{
+		unquoted: strings.TrimSpace(unquoted.String()),
+		phrases:  phrases,
+	}
 }
 
 func normalizePath(path string) string {
@@ -48,6 +90,9 @@ func buildSearchTerms(name string, path string, pinyinFull string, pinyinInitial
 
 func matchSearchQuery(query SearchQuery, name string, path string, pinyinFull string, pinyinInitials string) (bool, int64) {
 	if query.Raw == "" {
+		return false, 0
+	}
+	if query.plan != nil && !recordMatchesExactPhrases(query.plan, docRecord{Path: path}) {
 		return false, 0
 	}
 	if query.wildcard != nil {

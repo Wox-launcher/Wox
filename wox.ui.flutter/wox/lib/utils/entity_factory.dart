@@ -14,6 +14,7 @@ import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_update_channel_version.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
+import 'package:wox/entity/wox_window_manager.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/log.dart';
 
@@ -33,6 +34,7 @@ class EntityFactory {
     'DoctorCheckResult': (json) => DoctorCheckResult.fromJson(json),
     'WoxUsageStats': (json) => WoxUsageStats.fromJson(json),
     'HotkeyAvailability': (json) => HotkeyAvailability.fromJson(json),
+    'HotkeyRecordingCapability': (json) => HotkeyRecordingCapability.fromJson(json),
     'WoxCloudSyncStatus': (json) => WoxCloudSyncStatus.fromJson(json),
     'WoxCloudSyncBootstrapStatus': (json) => WoxCloudSyncBootstrapStatus.fromJson(json),
     'WoxAccountStatus': (json) => WoxAccountStatus.fromJson(json),
@@ -52,12 +54,13 @@ class EntityFactory {
     'List<IgnoredHotkeyApp>': (json) => _createList<IgnoredHotkeyApp>(json, (e) => IgnoredHotkeyApp.fromJson(e)),
     'List<AIMCPTool>': (json) => _createList<AIMCPTool>(json, (e) => AIMCPTool.fromJson(e)),
     'List<AIProviderInfo>': (json) => _createList<AIProviderInfo>(json, (e) => AIProviderInfo.fromJson(e)),
-    'List<AIAgent>': (json) => _createList<AIAgent>(json, (e) => AIAgent.fromJson(e)),
+    'List<AISkill>': (json) => _createList<AISkill>(json, (e) => AISkill.fromJson(e)),
     'List<AICommandTemplate>': (json) => _createList<AICommandTemplate>(json, (e) => AICommandTemplate.fromJson(e)),
     'List<DoctorCheckResult>': (json) => _createList<DoctorCheckResult>(json, (e) => DoctorCheckResult.fromJson(e)),
     'List<WoxRuntimeStatus>': (json) => _createList<WoxRuntimeStatus>(json, (e) => WoxRuntimeStatus.fromJson(e)),
     'List<GlanceItem>': (json) => _createList<GlanceItem>(json, (e) => GlanceItem.fromJson(e)),
     'List<WoxUpdateChannelVersion>': (json) => _createList<WoxUpdateChannelVersion>(json, (e) => WoxUpdateChannelVersion.fromJson(e)),
+    'List<WindowManagerDisplay>': (json) => _createList<WindowManagerDisplay>(json, (e) => WindowManagerDisplay.fromJson(e)),
     'List<String>': (json) => _createList<String>(json, (e) => e.toString()),
   };
 

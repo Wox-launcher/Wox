@@ -3,6 +3,7 @@ package filesearch
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"wox/util"
 )
@@ -237,6 +238,29 @@ func logFilesearchSQLiteMaintenance(ctx context.Context, operation string, scope
 		return
 	}
 	util.GetLogger().Debug(ctx, msg)
+}
+
+// logFilesearchIndexPhase keeps detailed index timing logs behind diagnostics.
+func logFilesearchIndexPhase(ctx context.Context, operation string, detail string, elapsedMs int64, fields map[string]any) {
+	if !fileSearchDiagnosticLoggingEnabled {
+		return
+	}
+
+	parts := []string{
+		"filesearch index phase:",
+		fmt.Sprintf("operation=%s", strings.TrimSpace(operation)),
+		fmt.Sprintf("detail=%s", summarizeLogPath(detail)),
+		fmt.Sprintf("elapsed=%dms", elapsedMs),
+	}
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", key, fields[key]))
+	}
+	util.GetLogger().Info(ctx, strings.Join(parts, " "))
 }
 
 func logFilesearchScanDiagnostic(ctx context.Context, operation string, scope string, elapsedMs int64, workCount int) {

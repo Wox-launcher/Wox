@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,8 +22,10 @@ import (
 	"wox/analytics"
 	"wox/common"
 	"wox/diagnostic"
+	corehotkey "wox/hotkey"
 	"wox/i18n"
 	"wox/plugin"
+	dictationplugin "wox/plugin/system/dictation"
 	"wox/plugin/system/shell/terminal"
 	"wox/resource"
 	"wox/setting"
@@ -30,10 +33,11 @@ import (
 	"wox/util"
 	"wox/util/appearance"
 	"wox/util/autostart"
-	"wox/util/hotkey"
+	utilhotkey "wox/util/hotkey"
 	"wox/util/ime"
 	"wox/util/keyboard"
 	"wox/util/osvariant"
+	"wox/util/processmemory"
 	"wox/util/screen"
 	"wox/util/selection"
 	"wox/util/shell"
@@ -63,25 +67,19 @@ type uiLaunchConfig struct {
 }
 
 type Manager struct {
-	mainHotkey           *hotkey.Hotkey
-	mainHotkeyKey        string
-	selectionHotkey      *hotkey.Hotkey
-	selectionHotkeyKey   string
-	waylandPortalHotkeys *hotkey.Group
-	waylandPortalQueries []setting.QueryHotkey
-	queryHotkeys         []*hotkey.Hotkey
-	queryHotkeySettings  []setting.QueryHotkey
-	globalHotkeyMu       sync.Mutex
-	ui                   common.UI
-	serverPort           int
-	uiProcess            *os.Process
-	uiStopRequested      atomic.Bool
-	uiReadyAt            atomic.Int64
-	themes               *util.HashMap[string, common.Theme]
-	systemThemeIds       []string
-	isUIReadyHandled     bool
-	isSystemDark         bool
-	exitOnce             sync.Once
+	hotkeyService      *corehotkey.Service
+	ui                 common.UI
+	serverPort         int
+	uiProcess          *os.Process
+	uiStopRequested    atomic.Bool
+	uiReadyAt          atomic.Int64
+	themes             *util.HashMap[string, common.Theme]
+	systemThemeIds     []string
+	isUIReadyHandled   bool
+	isSystemDark       bool
+	exitOnce           sync.Once
+	hyprlandToggleMu   sync.Mutex
+	hyprlandToggleLast time.Time
 
 	activeWindowSnapshot    common.ActiveWindowSnapshot // cached active window snapshot
 	activeWindowSnapshotMu  sync.RWMutex
@@ -94,8 +92,26 @@ type Manager struct {
 func GetUIManager() *Manager {
 	managerOnce.Do(func() {
 		managerInstance = &Manager{}
-		managerInstance.mainHotkey = &hotkey.Hotkey{}
-		managerInstance.selectionHotkey = &hotkey.Hotkey{}
+		managerInstance.hotkeyService = corehotkey.NewService(corehotkey.Callbacks{
+			OnMain: func(combineKey string) {
+				managerInstance.handleMainHotkeyTrigger(combineKey)
+			},
+			OnSelection: func(combineKey string) {
+				managerInstance.handleSelectionHotkeyTrigger(combineKey)
+			},
+			OnQuery: func(combineKey string, queryHotkey setting.QueryHotkey) {
+				managerInstance.handleQueryHotkeyTrigger(combineKey, queryHotkey)
+			},
+			OnDictationHoldPress: func(ctx context.Context, actionID string) {
+				managerInstance.handleDictationHotkeyPress(ctx, actionID)
+			},
+			OnDictationHoldRelease: func(ctx context.Context, actionID string) {
+				managerInstance.handleDictationHotkeyRelease(ctx, actionID)
+			},
+			OnDictationPressAction: func(ctx context.Context, actionID string) {
+				managerInstance.handleDictationHotkeyPressAction(ctx, actionID)
+			},
+		})
 		managerInstance.ui = &uiImpl{
 			requestMap:             util.NewHashMap[string, chan WebsocketMsg](),
 			sessionStates:          map[string]*uiSessionState{},
@@ -115,8 +131,30 @@ func GetUIManager() *Manager {
 		})
 		managerInstance.themes = util.NewHashMap[string, common.Theme]()
 		logger = util.GetLogger()
+		// Inject the UI Manager as the dictation hotkey registrar to break the
+		// import cycle between ui and plugin/system/dictation.
+		dictationplugin.SetHotkeyRegistrar(managerInstance)
 	})
 	return managerInstance
+}
+
+// CollectDictationHotkeys implements the dictation.HotkeyRegistrar interface.
+func (m *Manager) CollectDictationHotkeys(ctx context.Context, bindings []corehotkey.DictationBinding, registerNow bool) {
+	if err := m.hotkeyService.UpdateDictationBindings(ctx, bindings, registerNow); err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to update dictation hotkeys: %s", err.Error()))
+	}
+}
+
+// CollectWoxSettingHotkeys collects startup Wox-setting hotkeys before plugins load.
+func (m *Manager) CollectWoxSettingHotkeys(ctx context.Context, woxSetting *setting.WoxSetting) {
+	m.hotkeyService.CollectWoxSettings(ctx, woxSetting)
+}
+
+// RegisterAllHotkeys performs a single registration pass of all collected
+// hotkeys. This is the registration-phase entry point called after all sources
+// (Wox settings + dictation plugin) have populated the collector.
+func (m *Manager) RegisterAllHotkeys(ctx context.Context) error {
+	return m.hotkeyService.RegisterAll(ctx)
 }
 
 func (m *Manager) Start(ctx context.Context) error {
@@ -247,194 +285,75 @@ func (m *Manager) Stop(ctx context.Context) {
 	}
 }
 
+// RegisterMainHotkey updates the main hotkey in the hotkey service and re-registers
+// all hotkeys. This is the unified entry point for both startup and setting-change
+// paths: the service holds the current definition, RegisterAll binds it.
 func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) error {
-	if shouldGroupWaylandPortalHotkeys() {
-		m.globalHotkeyMu.Lock()
-		defer m.globalHotkeyMu.Unlock()
-
-		if m.mainHotkeyKey == combineKey && m.waylandPortalHotkeys != nil {
-			logger.Info(ctx, fmt.Sprintf("main hotkey already registered: %s", combineKey))
-			return nil
-		}
-		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-		return m.reregisterWaylandPortalGlobalHotkeys(ctx, combineKey, woxSetting.SelectionHotkey.Get(), woxSetting.QueryHotkeys.Get())
-	}
-
-	if combineKey == "" {
-		// remove hotkey
-		logger.Info(ctx, "remove main hotkey")
-		if m.mainHotkey != nil {
-			m.mainHotkey.Unregister(ctx)
-			m.mainHotkey = nil
-		}
-		m.mainHotkeyKey = ""
-		return nil
-	}
-	if m.mainHotkeyKey == combineKey && m.mainHotkey != nil {
-		logger.Info(ctx, fmt.Sprintf("main hotkey already registered: %s", combineKey))
-		return nil
-	}
-	logger.Info(ctx, fmt.Sprintf("register main hotkey: %s", combineKey))
-
-	callback := func() {
-		m.handleMainHotkeyTrigger(combineKey)
-	}
-
-	newHotkey := &hotkey.Hotkey{}
-	registerErr := newHotkey.Register(ctx, combineKey, callback)
-	if registerErr != nil {
-		return registerErr
-	}
-
-	oldHotkey := m.mainHotkey
-	m.mainHotkey = newHotkey
-	m.mainHotkeyKey = combineKey
-	if oldHotkey != nil {
-		oldHotkey.Unregister(ctx)
-	}
-	return nil
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	config := corehotkey.WoxConfigFromSetting(woxSetting)
+	config.MainHotkey = combineKey
+	return m.registerWoxHotkeys(ctx, config, true)
 }
 
-func effectiveSelectionHotkeyForRuntime(selectionHotkey string) string {
-	if util.IsLinuxWaylandSession() {
-		return ""
-	}
-	return strings.TrimSpace(selectionHotkey)
-}
-
+// RegisterSelectionHotkey updates the selection hotkey in the hotkey service and
+// re-registers all hotkeys.
 func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string) error {
-	combineKey = effectiveSelectionHotkeyForRuntime(combineKey)
-	if shouldGroupWaylandPortalHotkeys() {
-		m.globalHotkeyMu.Lock()
-		defer m.globalHotkeyMu.Unlock()
-
-		if m.selectionHotkeyKey == combineKey && m.waylandPortalHotkeys != nil {
-			logger.Info(ctx, fmt.Sprintf("selection hotkey already registered: %s", combineKey))
-			return nil
-		}
-		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-		return m.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), combineKey, woxSetting.QueryHotkeys.Get())
-	}
-
-	if combineKey == "" {
-		// remove hotkey
-		logger.Info(ctx, "remove selection hotkey")
-		if m.selectionHotkey != nil {
-			m.selectionHotkey.Unregister(ctx)
-			m.selectionHotkey = nil
-		}
-		m.selectionHotkeyKey = ""
-		return nil
-	}
-	if m.selectionHotkeyKey == combineKey && m.selectionHotkey != nil {
-		logger.Info(ctx, fmt.Sprintf("selection hotkey already registered: %s", combineKey))
-		return nil
-	}
-	logger.Info(ctx, fmt.Sprintf("register selection hotkey: %s", combineKey))
-
-	callback := func() {
-		m.handleSelectionHotkeyTrigger(combineKey)
-	}
-
-	newHotkey := &hotkey.Hotkey{}
-	registerErr := newHotkey.Register(ctx, combineKey, callback)
-	if registerErr != nil {
-		return registerErr
-	}
-
-	oldHotkey := m.selectionHotkey
-	m.selectionHotkey = newHotkey
-	m.selectionHotkeyKey = combineKey
-	if oldHotkey != nil {
-		oldHotkey.Unregister(ctx)
-	}
-	return nil
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	config := corehotkey.WoxConfigFromSetting(woxSetting)
+	config.SelectionHotkey = combineKey
+	return m.registerWoxHotkeys(ctx, config, true)
 }
 
-// reregisterWaylandPortalGlobalHotkeys binds all Wox shortcuts in one portal
-// session whenever the Wayland GlobalShortcuts portal is the active backend.
-func (m *Manager) reregisterWaylandPortalGlobalHotkeys(ctx context.Context, mainHotkey string, selectionHotkey string, queryHotkeys []setting.QueryHotkey) error {
-	previousGroup := m.waylandPortalHotkeys
-	previousMainHotkey := m.mainHotkeyKey
-	previousSelectionHotkey := m.selectionHotkeyKey
-	previousQueryHotkeys := cloneQueryHotkeys(m.waylandPortalQueries)
-
-	if previousGroup != nil {
-		previousGroup.Unregister(ctx)
-		m.waylandPortalHotkeys = nil
+// handleDictationHotkeyPress finds the loaded DictationPlugin and starts
+// the recording session.
+func (m *Manager) handleDictationHotkeyPress(ctx context.Context, actionID string) {
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey press callback: action=%s", actionID))
+		return
 	}
-
-	newGroup, err := hotkey.RegisterGroup(ctx, m.buildWaylandPortalGlobalHotkeySpecs(mainHotkey, selectionHotkey, queryHotkeys))
-	if err != nil {
-		if previousGroup != nil {
-			restoreGroup, restoreErr := hotkey.RegisterGroup(ctx, m.buildWaylandPortalGlobalHotkeySpecs(previousMainHotkey, previousSelectionHotkey, previousQueryHotkeys))
-			if restoreErr != nil {
-				return fmt.Errorf("failed to register Wayland portal global hotkeys: %w; failed to restore previous hotkeys: %v", err, restoreErr)
-			}
-			m.waylandPortalHotkeys = restoreGroup
-			m.mainHotkeyKey = previousMainHotkey
-			m.selectionHotkeyKey = previousSelectionHotkey
-			m.waylandPortalQueries = previousQueryHotkeys
-		}
-		return err
+	type dictationStarter interface {
+		StartDictation(ctx context.Context, actionID string)
 	}
-
-	m.waylandPortalHotkeys = newGroup
-	m.mainHotkeyKey = strings.TrimSpace(mainHotkey)
-	m.selectionHotkeyKey = effectiveSelectionHotkeyForRuntime(selectionHotkey)
-	m.waylandPortalQueries = cloneQueryHotkeys(queryHotkeys)
-	return nil
+	if ds, ok := sp.(dictationStarter); ok {
+		ds.StartDictation(ctx, actionID)
+	}
 }
 
-// buildWaylandPortalGlobalHotkeySpecs keeps every Wox shortcut in the same portal
-// bind request so the compositor treats Wox shortcuts as one lifecycle.
-func (m *Manager) buildWaylandPortalGlobalHotkeySpecs(mainHotkey string, selectionHotkey string, queryHotkeys []setting.QueryHotkey) []hotkey.Spec {
-	specs := make([]hotkey.Spec, 0, 2+len(queryHotkeys))
-
-	mainHotkey = strings.TrimSpace(mainHotkey)
-	if mainHotkey != "" {
-		combineKey := mainHotkey
-		specs = append(specs, hotkey.Spec{
-			CombineKey: combineKey,
-			Callback: func() {
-				m.handleMainHotkeyTrigger(combineKey)
-			},
-		})
+// handleDictationHotkeyRelease finds the loaded DictationPlugin and stops
+// the recording session, producing the recognized text.
+func (m *Manager) handleDictationHotkeyRelease(ctx context.Context, actionID string) {
+	logger.Info(ctx, fmt.Sprintf("dictation: handleDictationHotkeyRelease enter, action=%s", actionID))
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey release callback: action=%s", actionID))
+		return
 	}
-
-	selectionHotkey = effectiveSelectionHotkeyForRuntime(selectionHotkey)
-	if selectionHotkey != "" {
-		combineKey := selectionHotkey
-		specs = append(specs, hotkey.Spec{
-			CombineKey: combineKey,
-			Callback: func() {
-				m.handleSelectionHotkeyTrigger(combineKey)
-			},
-		})
+	type dictationStopper interface {
+		StopDictation(ctx context.Context, actionID string)
 	}
-
-	for _, queryHotkey := range queryHotkeys {
-		if queryHotkey.Disabled || strings.TrimSpace(queryHotkey.Hotkey) == "" {
-			continue
-		}
-		queryHotkey := queryHotkey
-		combineKey := strings.TrimSpace(queryHotkey.Hotkey)
-		specs = append(specs, hotkey.Spec{
-			CombineKey: combineKey,
-			Callback: func() {
-				m.handleQueryHotkeyTrigger(combineKey, queryHotkey)
-			},
-		})
+	if ds, ok := sp.(dictationStopper); ok {
+		logger.Info(ctx, fmt.Sprintf("dictation: calling StopDictation, action=%s", actionID))
+		ds.StopDictation(ctx, actionID)
+	} else {
+		logger.Error(ctx, "dictation: plugin does not implement dictationStopper")
 	}
-
-	return specs
 }
 
-func cloneQueryHotkeys(queryHotkeys []setting.QueryHotkey) []setting.QueryHotkey {
-	if len(queryHotkeys) == 0 {
-		return nil
+// handleDictationHotkeyPressAction finds the loaded DictationPlugin and runs
+// the press-triggered dictation action.
+func (m *Manager) handleDictationHotkeyPressAction(ctx context.Context, actionID string) {
+	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	if sp == nil {
+		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey callback: action=%s", actionID))
+		return
 	}
-	return append([]setting.QueryHotkey(nil), queryHotkeys...)
+	type dictationPressHandler interface {
+		PressDictationHotkey(ctx context.Context, actionID string)
+	}
+	if handler, ok := sp.(dictationPressHandler); ok {
+		handler.PressDictationHotkey(ctx, actionID)
+	}
 }
 
 // handleMainHotkeyTrigger runs the main shortcut callback shared by native and
@@ -490,14 +409,7 @@ func (m *Manager) handleQueryHotkeyTrigger(combineKey string, queryHotkey settin
 	}
 }
 
-// shouldGroupWaylandPortalHotkeys is true only when Wox is running on Wayland
-// and the GlobalShortcuts portal is available. The portal-backed path must bind
-// all Wox shortcuts together because portal sessions own shortcut lifetimes as
-// a group; changing one shortcut requires rebuilding the whole group.
-func shouldGroupWaylandPortalHotkeys() bool {
-	return util.IsLinuxWaylandSession() && keyboard.IsWaylandGlobalShortcutsPortalAvailable()
-}
-
+// QuerySelection captures the current text selection and opens a Wox query for it.
 func (m *Manager) QuerySelection(ctx context.Context) {
 	newCtx := util.NewTraceContext()
 	if util.IsLinuxWaylandSession() {
@@ -506,18 +418,18 @@ func (m *Manager) QuerySelection(ctx context.Context) {
 	}
 
 	start := util.GetSystemTimestamp()
-	selection, err := selection.GetSelected(newCtx)
-	logger.Debug(newCtx, fmt.Sprintf("took %d ms to get selection", util.GetSystemTimestamp()-start))
+	selectionResult, err := selection.GetSelected(newCtx)
+	logger.Debug(newCtx, fmt.Sprintf("took %d ms to get selected", util.GetSystemTimestamp()-start))
 	if err != nil {
 		logger.Error(newCtx, fmt.Sprintf("failed to get selected: %s", err.Error()))
 		return
 	}
-	if selection.IsEmpty() {
+	if selectionResult.IsEmpty() {
 		logger.Info(newCtx, "no selection")
 		return
 	}
 
-	if err := m.triggerSelectionQuery(newCtx, selection); err != nil {
+	if err := m.triggerSelectionQuery(newCtx, selectionResult); err != nil {
 		logger.Error(newCtx, fmt.Sprintf("failed to trigger selection query: %s", err.Error()))
 	}
 }
@@ -551,15 +463,13 @@ func (m *Manager) openSecondaryInstance(ctx context.Context, instanceName string
 	})
 }
 
+// triggerQueryHotkey builds and executes a query hotkey action.
 func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
 	queryCtx := util.WithCoreSessionContext(ctx)
 	queryCtx = util.WithShowSourceContext(queryCtx, string(common.ShowSourceQueryHotkey))
 	plainQuery := plugin.GetPluginManager().ReplaceQueryVariable(queryCtx, queryHotkey.Query)
 	plainQuery.QueryId = uuid.NewString()
 
-	// Query hotkeys build the plugin query immediately, so they keep the
-	// blocking snapshot path while normal launcher activation can refresh slow
-	// details in the background.
 	m.RefreshActiveWindowSnapshotBlocking(queryCtx)
 	q, _, err := plugin.GetPluginManager().NewQuery(queryCtx, plainQuery)
 	if err != nil {
@@ -575,16 +485,8 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 		return nil
 	}
 
-	isQueryFocus := false
-	if plugin.GetPluginManager().IsTriggerKeywordAIChat(ctx, q.TriggerKeyword) {
-		if plugin.GetPluginManager().GetAIChatPluginChater(ctx).IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx) {
-			isQueryFocus = true
-		}
-	}
-
 	showContext := common.ShowContext{
 		SelectAll:      false,
-		IsQueryFocus:   isQueryFocus,
 		HideQueryBox:   queryHotkey.HideQueryBox,
 		HideToolbar:    queryHotkey.HideToolbar,
 		WindowWidth:    normalizedWindowWidth(queryHotkey.Width),
@@ -606,88 +508,8 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 	return nil
 }
 
-func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
-	if shouldGroupWaylandPortalHotkeys() {
-		m.globalHotkeyMu.Lock()
-		defer m.globalHotkeyMu.Unlock()
-
-		if m.waylandPortalHotkeys != nil {
-			logger.Info(ctx, fmt.Sprintf("query hotkey handled by Wayland portal group registration: hotkey=%s", queryHotkey.Hotkey))
-			return nil
-		}
-		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-		return m.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), woxSetting.SelectionHotkey.Get(), woxSetting.QueryHotkeys.Get())
-	}
-
-	combineKey := strings.TrimSpace(queryHotkey.Hotkey)
-	if queryHotkey.Disabled || combineKey == "" {
-		logger.Info(ctx, fmt.Sprintf("skip register query hotkey: disabled=%t hotkey=%s", queryHotkey.Disabled, queryHotkey.Hotkey))
-		return nil
-	}
-	hk := &hotkey.Hotkey{}
-
-	err := hk.Register(ctx, combineKey, func() {
-		m.handleQueryHotkeyTrigger(combineKey, queryHotkey)
-	})
-	if err != nil {
-		return err
-	}
-
-	m.queryHotkeys = append(m.queryHotkeys, hk)
-	m.queryHotkeySettings = append(m.queryHotkeySettings, queryHotkey)
-	return nil
-}
-
-func (m *Manager) unregisterQueryHotkeys(ctx context.Context) {
-	for _, hk := range m.queryHotkeys {
-		hk.Unregister(ctx)
-	}
-	m.queryHotkeys = nil
-	m.queryHotkeySettings = nil
-}
-
-// reregisterIndividualQueryHotkeys rebuilds non-portal query hotkeys as one
-// setting update, restoring the previous registrations if a new bind fails.
-func (m *Manager) reregisterIndividualQueryHotkeys(ctx context.Context, queryHotkeys []setting.QueryHotkey) error {
-	previousHotkeys := m.queryHotkeys
-	previousSettings := cloneQueryHotkeys(m.queryHotkeySettings)
-	m.queryHotkeys = nil
-	m.queryHotkeySettings = nil
-
-	for _, hk := range previousHotkeys {
-		hk.Unregister(ctx)
-	}
-
-	for _, queryHotkey := range queryHotkeys {
-		if err := m.RegisterQueryHotkey(ctx, queryHotkey); err != nil {
-			m.unregisterQueryHotkeys(ctx)
-			for _, previousSetting := range previousSettings {
-				if restoreErr := m.RegisterQueryHotkey(ctx, previousSetting); restoreErr != nil {
-					return fmt.Errorf("failed to register query hotkeys: %w; failed to restore previous query hotkeys: %v", err, restoreErr)
-				}
-			}
-			return err
-		}
-	}
-	return nil
-}
-
-func (m *Manager) reregisterGlobalHotkeys(ctx context.Context) {
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if shouldGroupWaylandPortalHotkeys() {
-		m.globalHotkeyMu.Lock()
-		defer m.globalHotkeyMu.Unlock()
-		if err := m.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), effectiveSelectionHotkeyForRuntime(woxSetting.SelectionHotkey.Get()), woxSetting.QueryHotkeys.Get()); err != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to register Wayland portal global hotkeys: %s", err.Error()))
-		}
-		return
-	}
-
-	_ = m.RegisterMainHotkey(ctx, woxSetting.MainHotkey.Get())
-	_ = m.RegisterSelectionHotkey(ctx, woxSetting.SelectionHotkey.Get())
-	if err := m.reregisterIndividualQueryHotkeys(ctx, woxSetting.QueryHotkeys.Get()); err != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to register query hotkeys after global hotkey setting update: %s", err.Error()))
-	}
+func (m *Manager) registerWoxHotkeys(ctx context.Context, config corehotkey.WoxConfig, restoreCollectorOnFailure bool) error {
+	return m.hotkeyService.UpdateWoxConfig(ctx, config, restoreCollectorOnFailure)
 }
 
 type HotkeyAvailability struct {
@@ -700,6 +522,7 @@ const (
 	hotkeyConflictTypeMain      = "main"
 	hotkeyConflictTypeSelection = "selection"
 	hotkeyConflictTypeQuery     = "query"
+	hotkeyConflictTypeDictation = "dictation"
 	hotkeyConflictTypeSystem    = "system"
 )
 
@@ -710,7 +533,7 @@ func (m *Manager) CheckHotkeyAvailability(ctx context.Context, hotkeyStr string)
 		return conflict
 	}
 
-	isAvailable := hotkey.IsHotkeyAvailable(ctx, hotkeyStr)
+	isAvailable := utilhotkey.IsHotkeyAvailable(ctx, hotkeyStr)
 	logger.Info(ctx, fmt.Sprintf("hotkey availability check: hotkey=%s available=%t reason=platform_probe", hotkeyStr, isAvailable))
 	if !isAvailable {
 		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeSystem}
@@ -734,7 +557,7 @@ func (m *Manager) findConfiguredHotkeyConflict(ctx context.Context, hotkeyStr st
 	if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(woxSetting.MainHotkey.Get())) {
 		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeMain}
 	}
-	if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(effectiveSelectionHotkeyForRuntime(woxSetting.SelectionHotkey.Get()))) {
+	if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(corehotkey.EffectiveSelectionHotkeyForRuntime(woxSetting.SelectionHotkey.Get()))) {
 		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeSelection}
 	}
 
@@ -744,6 +567,16 @@ func (m *Manager) findConfiguredHotkeyConflict(ctx context.Context, hotkeyStr st
 		}
 		if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(queryHotkey.Hotkey)) {
 			return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeQuery, ConflictValue: queryHotkey.DisplayName()}
+		}
+	}
+
+	// Dictation hotkeys are collected into the same collector; check all
+	// entries for conflicts by source.
+	for _, entry := range m.hotkeyService.Snapshot() {
+		if entry.Source == corehotkey.SourceDictation {
+			if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(entry.CombineKey)) {
+				return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeDictation, ConflictValue: entry.ID}
+			}
 		}
 	}
 
@@ -903,6 +736,7 @@ func linuxDesktopDiagnostics() string {
 	for _, key := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%q", key, os.Getenv(key)))
 	}
+	parts = append(parts, fmt.Sprintf("isHyprland=%v", util.IsHyprlandSession()))
 
 	if data, err := os.ReadFile("/etc/os-release"); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
@@ -980,7 +814,7 @@ func (m *Manager) startUIAppWithConfig(ctx context.Context, appPath string, conf
 	// Debug Glance reads this PID to report combined core + Flutter memory.
 	// Prod launches the UI from core, while dev mode can later replace it with
 	// the PID reported by Flutter's ready callback.
-	util.SetWoxUIProcessPid(pid)
+	processmemory.SetWoxUIProcessPid(pid)
 	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", pid))
 
 	processDone := make(chan struct{})
@@ -988,7 +822,7 @@ func (m *Manager) startUIAppWithConfig(ctx context.Context, appPath string, conf
 		defer close(processDone)
 		waitErr := cmd.Wait()
 		// Clear only this exited process so a restarted UI keeps its newer PID.
-		util.ClearWoxUIProcessPid(pid)
+		processmemory.ClearWoxUIProcessPid(pid)
 		waitCtx := util.NewTraceContext()
 
 		stopRequested := m.uiStopRequested.Load()
@@ -1439,6 +1273,20 @@ func (m *Manager) PostOnHide(ctx context.Context) {
 		}
 		impl.sessionStatesMu.Unlock()
 	}
+	m.releaseHiddenCoreMemory(ctx)
+}
+
+// releaseHiddenCoreMemory lets Go return idle heap pages after hide cleanup settles.
+func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
+	util.Go(ctx, "release hidden core memory", func() {
+		time.Sleep(10 * time.Second)
+
+		if impl, ok := m.ui.(*uiImpl); ok && impl.IsVisible(ctx) {
+			return
+		}
+
+		debug.FreeOSMemory()
+	})
 }
 
 func (m *Manager) PostOnSetting(ctx context.Context, isSettingWindowOpen bool) {
@@ -1495,8 +1343,9 @@ func (m *Manager) PostOnOnboarding(ctx context.Context, isOnboardingWindowOpen b
 	}
 }
 
-// PostOnHotkeyRecording tracks recorder focus so global hotkey callbacks can feed the active recorder.
-func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool) {
+// PostOnHotkeyRecording tracks recorder focus and starts the Go-side raw
+// recording session used by settings hotkey controls.
+func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool, purpose string, allowedKinds []string) (utilhotkey.RecordingCapability, error) {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		sessionId := util.GetContextSessionId(ctx)
 		impl.sessionStatesMu.Lock()
@@ -1508,14 +1357,22 @@ func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool) {
 		}
 		impl.sessionStatesMu.Unlock()
 		if isRecording {
-			hotkey.SetCapsLockComboRecorder(func(hotkeyStr string) {
-				m.ui.RecordHotkey(util.NewTraceContext(), hotkeyStr)
+			capability, err := utilhotkey.StartRecordingSession(allowedKinds, func(result utilhotkey.RecordingResult) {
+				m.ui.RecordHotkey(util.NewTraceContext(), result.Hotkey, result.Kind)
 			})
+			logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t purpose=%s raw=%t fallback=%v", isRecording, purpose, capability.RawRecorderAvailable, capability.FallbackAllowedKinds))
+			return capability, err
 		} else {
-			hotkey.SetCapsLockComboRecorder(nil)
+			utilhotkey.StopRecordingSession()
 		}
-		logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t", isRecording))
+		logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t purpose=%s", isRecording, purpose))
 	}
+	return utilhotkey.RecordingCapability{}, nil
+}
+
+func (m *Manager) PostHotkeyRecordingCandidate(ctx context.Context, hotkeyStr string) error {
+	logger.Info(ctx, fmt.Sprintf("received hotkey recording fallback candidate: %s", hotkeyStr))
+	return utilhotkey.SubmitRecordingFallbackCandidate(hotkeyStr)
 }
 
 func (m *Manager) PostOnInstanceDestroyed(ctx context.Context) {
@@ -1615,18 +1472,8 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 	case "LogLevel":
 		util.GetLogger().SetLevel(vs)
 	case "QueryHotkeys":
-		if shouldGroupWaylandPortalHotkeys() {
-			m.globalHotkeyMu.Lock()
-			defer m.globalHotkeyMu.Unlock()
-			woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-			if err := m.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), woxSetting.SelectionHotkey.Get(), woxSetting.QueryHotkeys.Get()); err != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to update Wayland portal query hotkeys: %s", err.Error()))
-			}
-			return
-		}
-
-		queryHotkeys := setting.GetSettingManager().GetWoxSetting(ctx).QueryHotkeys.Get()
-		if err := m.reregisterIndividualQueryHotkeys(ctx, queryHotkeys); err != nil {
+		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+		if err := m.registerWoxHotkeys(ctx, corehotkey.WoxConfigFromSetting(woxSetting), false); err != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to update query hotkeys: %s", err.Error()))
 		}
 	case "TrayQueries":
@@ -1650,6 +1497,16 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 		updater.CheckForUpdatesWithCallback(ctx, nil)
 	case "AIProviders":
 		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "models")
+	case "AIMCPServers":
+		if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
+			chater.ReloadMCPServers(ctx, true)
+		}
+	case "AISkills":
+		if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
+			if err := chater.ReloadSkills(ctx); err != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to reload AI skills: %s", err.Error()))
+			}
+		}
 	}
 }
 
@@ -1719,17 +1576,10 @@ func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQu
 	// Tray queries create and execute a plugin query in this call stack, so they
 	// need the fully-populated snapshot instead of the launcher fast path.
 	m.RefreshActiveWindowSnapshotBlocking(queryCtx)
-	q, _, err := plugin.GetPluginManager().NewQuery(queryCtx, plainQuery)
+	_, _, err := plugin.GetPluginManager().NewQuery(queryCtx, plainQuery)
 	if err != nil {
 		logger.Error(queryCtx, fmt.Sprintf("failed to create tray query: %s", err.Error()))
 		return
-	}
-
-	isQueryFocus := false
-	if plugin.GetPluginManager().IsTriggerKeywordAIChat(queryCtx, q.TriggerKeyword) {
-		if plugin.GetPluginManager().GetAIChatPluginChater(queryCtx).IsAutoFocusToChatInputWhenOpenWithQueryHotkey(queryCtx) {
-			isQueryFocus = true
-		}
 	}
 
 	windowWidth := m.getTrayQueryWindowWidth(queryCtx, trayQuery)
@@ -1753,7 +1603,6 @@ func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQu
 	}
 	m.openSecondaryInstance(queryCtx, "tray-query:"+strings.TrimSpace(trayQuery.Query), plainQuery, common.ShowContext{
 		SelectAll:        false,
-		IsQueryFocus:     isQueryFocus,
 		HideQueryBox:     trayQuery.HideQueryBox,
 		HideToolbar:      trayQuery.HideToolbar,
 		QueryBoxAtBottom: runtime.GOOS == "windows",
@@ -2287,6 +2136,19 @@ func (m *Manager) shouldIgnoreHotkeyTrigger(ctx context.Context) bool {
 	return false
 }
 
+// debounceHyprlandToggle prevents rapid repeat toggle requests (from Hyprland
+// key-repeat or fast double-press) from causing the main instance to receive
+// multiple toggles in quick succession, which can shut it down.
+func (m *Manager) debounceHyprlandToggle() bool {
+	m.hyprlandToggleMu.Lock()
+	defer m.hyprlandToggleMu.Unlock()
+	if time.Since(m.hyprlandToggleLast) < 300*time.Millisecond {
+		return false
+	}
+	m.hyprlandToggleLast = time.Now()
+	return true
+}
+
 // recordHotkeyIfRecording forwards Wox-owned global hotkey presses to the active recorder instead of executing them.
 func (m *Manager) recordHotkeyIfRecording(ctx context.Context, hotkeyStr string) bool {
 	if !m.isHotkeyRecordingActive() {
@@ -2295,7 +2157,7 @@ func (m *Manager) recordHotkeyIfRecording(ctx context.Context, hotkeyStr string)
 
 	logger.Info(ctx, fmt.Sprintf("record registered hotkey while recording: %s", hotkeyStr))
 	util.Go(ctx, "record global hotkey in UI", func() {
-		m.ui.RecordHotkey(ctx, hotkeyStr)
+		m.ui.RecordHotkey(ctx, hotkeyStr, utilhotkey.RecordingKindForHotkeyString(hotkeyStr))
 	})
 	return true
 }
@@ -2367,6 +2229,12 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 	}
 
 	if command == "toggle" {
+		// Debounce rapid toggle requests from Hyprland key-repeat to prevent
+		// the main instance from receiving multiple toggles in quick succession
+		// (show then immediately hide), which can cause it to exit.
+		if !m.debounceHyprlandToggle() {
+			return
+		}
 		m.ui.ToggleApp(ctx, common.ShowContext{
 			SelectAll: true,
 		})
@@ -2381,6 +2249,17 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 		binding := arguments["binding"]
 		if binding != "" {
 			keyboard.InvokeGnomeHotkeyCallback(binding)
+		}
+	}
+
+	// wox://hyprland-hotkey?key=<url-encoded-key>
+	// Invoked when a Hyprland hl.bind fires and the secondary wox process
+	// forwards the deeplink to the already-running instance. The key is the
+	// Hyprland Lua key string (e.g. "CTRL+K"), URL-decoded by ProcessDeeplink.
+	if command == "hyprland-hotkey" {
+		key := arguments["key"]
+		if key != "" {
+			keyboard.InvokeHyprlandHotkeyCallback(key)
 		}
 	}
 

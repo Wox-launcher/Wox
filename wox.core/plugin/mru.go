@@ -8,6 +8,7 @@ type MRUData struct {
 	SubTitle    string
 	Icon        common.WoxImage
 	ContextData map[string]string
+	Env         QueryEnv
 	LastUsed    int64
 	UseCount    int
 }

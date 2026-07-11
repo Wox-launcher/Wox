@@ -353,6 +353,8 @@ func keyToDarwinKeyCode(key Key) (uint32, error) {
 		return 111, nil
 	case KeyCapsLock:
 		return 57, nil
+	case KeyBackquote:
+		return 50, nil
 	default:
 		return 0, fmt.Errorf("unsupported macOS hotkey key: %d", key)
 	}
@@ -476,14 +478,24 @@ func darwinKeyCodeToKey(keyCode uint32) Key {
 		return KeyF12
 	case 57:
 		return KeyCapsLock
-	case 55, 54:
-		return KeySuper
-	case 56, 60:
-		return KeyShift
-	case 58, 61:
-		return KeyAlt
-	case 59, 62:
-		return KeyCtrl
+	case 55:
+		return KeyLeftSuper
+	case 54:
+		return KeyRightSuper
+	case 56:
+		return KeyLeftShift
+	case 60:
+		return KeyRightShift
+	case 58:
+		return KeyLeftAlt
+	case 61:
+		return KeyRightAlt
+	case 59:
+		return KeyLeftCtrl
+	case 62:
+		return KeyRightCtrl
+	case 50:
+		return KeyBackquote
 	default:
 		return KeyUnknown
 	}

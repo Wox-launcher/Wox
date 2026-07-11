@@ -7,7 +7,7 @@ project(runner LANGUAGES CXX)
 set(BINARY_NAME "wox-ui")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
-set(APPLICATION_ID "com.github.com.woxlauncer.wox")
+set(APPLICATION_ID "io.github.WoxLauncher.Wox")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -51,6 +51,10 @@ set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
 # System-level dependencies.
+# gtk-layer-shell is loaded at runtime via dlopen so Wox does not hard-depend
+# on libgtk-layer-shell.so.0. Distros without it (e.g. stock Ubuntu 24.04 GNOME)
+# still launch and fall back to compositor-managed window placement; systems
+# that have the library (Hyprland, sway, ...) get precise layer-shell placement.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0)
@@ -135,6 +139,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GLIB)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GIO)
-# 链接X11库
+# link x11 lib
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::X11)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::XTEST)
+# dlopen-based runtime loading of libgtk-layer-shell.so.0 (optional)
+target_link_libraries(${BINARY_NAME} PRIVATE ${CMAKE_DL_LIBS})

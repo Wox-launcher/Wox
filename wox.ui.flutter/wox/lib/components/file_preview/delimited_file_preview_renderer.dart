@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:wox/components/file_preview/file_info_preview.dart';
+import 'package:wox/components/file_preview/file_preview_policy.dart';
 import 'package:wox/components/file_preview/file_preview_renderer.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
@@ -22,31 +23,42 @@ class DelimitedFilePreviewRenderer implements WoxFilePreviewRenderer {
     }
 
     final delimiter = context.fileExtension == "tsv" ? "\t" : ",";
-    final data = _loadDelimitedPreview(file, delimiter);
     final typeLabel = context.fileExtension == "tsv" ? context.tr("ui_file_preview_type_tsv") : context.tr("ui_file_preview_type_csv");
 
-    return WoxFilePreviewResult(
-      content: WoxFileInfoPreview(
-        icon: Icons.table_chart_rounded,
-        fileIconPath: file.path,
-        accent: const Color(0xFF22C55E),
-        title: path.basename(file.path),
-        subtitle: context.tr("ui_file_preview_delimited_summary", {"rows": data.rowCount.toString(), "columns": data.columnCount.toString()}),
-        properties: [
-          ...buildWoxFilePreviewCommonProperties(file, typeLabel: typeLabel, tr: context.tr),
-          WoxFilePreviewProperty(label: context.tr("ui_file_preview_delimited_rows"), value: data.rowCount.toString()),
-          WoxFilePreviewProperty(label: context.tr("ui_file_preview_delimited_columns"), value: data.columnCount.toString()),
-        ],
-        sections: [
-          WoxFilePreviewSection(
-            title:
-                data.hasMoreRows ? context.tr("ui_file_preview_delimited_preview_first", {"count": data.rows.length.toString()}) : context.tr("ui_file_preview_delimited_preview"),
-            child: _DelimitedTablePreview(data: data),
-          ),
-        ],
-      ),
+    return WoxFilePreviewPolicy.buildDeferredPreview(
+      context: context,
+      file: file,
+      manualLoadThresholdBytes: WoxFilePreviewPolicy.tableThresholdBytes,
+      icon: Icons.table_chart_rounded,
+      accent: const Color(0xFF22C55E),
+      typeLabel: typeLabel,
+      loadedPreviewHandlesScrolling: false,
+      previewBuilder: (_) => _buildDelimitedPreview(file: file, delimiter: delimiter, typeLabel: typeLabel, tr: context.tr),
     );
   }
+}
+
+Widget _buildDelimitedPreview({required File file, required String delimiter, required String typeLabel, required WoxFilePreviewTranslationFormatter tr}) {
+  final data = _loadDelimitedPreview(file, delimiter);
+
+  return WoxFileInfoPreview(
+    icon: Icons.table_chart_rounded,
+    fileIconPath: file.path,
+    accent: const Color(0xFF22C55E),
+    title: path.basename(file.path),
+    subtitle: tr("ui_file_preview_delimited_summary", {"rows": data.rowCount.toString(), "columns": data.columnCount.toString()}),
+    properties: [
+      ...buildWoxFilePreviewCommonProperties(file, typeLabel: typeLabel, tr: tr),
+      WoxFilePreviewProperty(label: tr("ui_file_preview_delimited_rows"), value: data.rowCount.toString()),
+      WoxFilePreviewProperty(label: tr("ui_file_preview_delimited_columns"), value: data.columnCount.toString()),
+    ],
+    sections: [
+      WoxFilePreviewSection(
+        title: data.hasMoreRows ? tr("ui_file_preview_delimited_preview_first", {"count": data.rows.length.toString()}) : tr("ui_file_preview_delimited_preview"),
+        child: _DelimitedTablePreview(data: data),
+      ),
+    ],
+  );
 }
 
 class _DelimitedTablePreview extends StatelessWidget {

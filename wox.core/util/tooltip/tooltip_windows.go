@@ -12,7 +12,7 @@ import (
 
 type tracker struct {
 	mu     sync.RWMutex
-	opts   OverlayOptions
+	opts   Options
 	stopCh chan struct{}
 }
 
@@ -25,7 +25,7 @@ func tooltipFontSizePt() float64 {
 	return tooltipBaseFontSizePt
 }
 
-func startVisibilityTracking(opts OverlayOptions) {
+func startVisibilityTracking(opts Options) {
 	if opts.Name == "" {
 		return
 	}
@@ -81,7 +81,7 @@ func (current *tracker) run() {
 	}
 }
 
-func isCursorInsideTooltipOrAnchor(opts OverlayOptions) (bool, bool) {
+func isCursorInsideTooltipOrAnchor(opts Options) (bool, bool) {
 	point, ok := mouse.CurrentPosition()
 	if !ok {
 		return false, false

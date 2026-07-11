@@ -17,6 +17,7 @@ import (
 	"wox/util/clipboard"
 	"wox/util/mouse"
 	"wox/util/overlay"
+	"wox/util/overlay/textoverlay"
 	"wox/util/selection"
 
 	"github.com/google/uuid"
@@ -30,7 +31,7 @@ var (
 	// Native overlays require the app main thread. Keeping the calls replaceable
 	// lets package tests cover stream/error behavior without opening UI, while
 	// production still uses the real overlay backend.
-	aiCommandShowOverlay  = overlay.Show
+	aiCommandShowOverlay  = textoverlay.Show
 	aiCommandCloseOverlay = overlay.Close
 )
 
@@ -356,24 +357,26 @@ func (c *Plugin) notifyAICommandActionError(ctx context.Context, err error) {
 	c.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_action_failed_with_error"), err.Error()))
 }
 
-func buildAICommandLoadingOverlayOptions(name string, position mouse.Point, message string) overlay.OverlayOptions {
+func buildAICommandLoadingOptions(name string, position mouse.Point, message string) textoverlay.Options {
 	// UX change: Run And Paste no longer asks the selection API for text bounds.
 	// Accessibility geometry is inconsistent across source apps, while the
 	// pointer position is cheap, stable, and still tells the user that the hidden
 	// AI action is running near the place they just invoked it. The label is
 	// resolved before building options so the native overlay stays language
 	// agnostic and only receives display-ready text.
-	return overlay.OverlayOptions{
-		Name:             name,
-		Message:          message,
-		Loading:          true,
-		Topmost:          true,
-		AbsolutePosition: true,
-		Anchor:           overlay.AnchorTopLeft,
-		OffsetX:          position.X + aiCommandLoadingOverlayOffsetX,
-		OffsetY:          position.Y + aiCommandLoadingOverlayOffsetY,
-		Width:            estimateAICommandLoadingOverlayWidth(message),
-		FontSize:         12,
+	return textoverlay.Options{
+		Window: overlay.WindowOptions{
+			ID:               name,
+			Topmost:          true,
+			AbsolutePosition: true,
+			Anchor:           overlay.AnchorTopLeft,
+			OffsetX:          position.X + aiCommandLoadingOverlayOffsetX,
+			OffsetY:          position.Y + aiCommandLoadingOverlayOffsetY,
+			Width:            estimateAICommandLoadingOverlayWidth(message),
+		},
+		Message:  message,
+		Loading:  true,
+		FontSize: 12,
 	}
 }
 
@@ -410,8 +413,8 @@ func (c *Plugin) showAICommandLoadingOverlay(ctx context.Context, name string) b
 	}
 
 	message := i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_thinking")
-	opts := buildAICommandLoadingOverlayOptions(name, position, message)
-	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("show ai command loading overlay: name=%s mouse=(%.1f,%.1f) offset=(%.1f,%.1f)", name, position.X, position.Y, opts.OffsetX, opts.OffsetY))
+	opts := buildAICommandLoadingOptions(name, position, message)
+	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("show ai command loading overlay: name=%s mouse=(%.1f,%.1f) offset=(%.1f,%.1f)", name, position.X, position.Y, opts.Window.OffsetX, opts.Window.OffsetY))
 	aiCommandShowOverlay(opts)
 	return true
 }
@@ -428,27 +431,29 @@ func (c *Plugin) currentAICommandOverlayPosition(ctx context.Context) mouse.Poin
 func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, position *mouse.Point, streamResult common.ChatStreamData) {
 	message := formatAICommandResultOverlayMessage(ctx, streamResult)
 	copyText := strings.TrimSpace(streamResult.Data)
-	opts := overlay.OverlayOptions{
-		Name:          name,
-		Message:       message,
-		Loading:       streamResult.Status == common.ChatStreamStatusStreaming && copyText == "",
-		Topmost:       true,
-		MinWidth:      aiCommandResultOverlayMinWidth,
-		MaxWidth:      aiCommandResultOverlayMaxWidth,
-		MaxHeight:     aiCommandResultOverlayMaxHeight,
-		FontSize:      12,
-		Movable:       true,
-		Closable:      true,
-		CloseOnEscape: true,
-		FollowScroll:  true,
+	opts := textoverlay.Options{
+		Window: overlay.WindowOptions{
+			ID:            name,
+			Topmost:       true,
+			MinWidth:      aiCommandResultOverlayMinWidth,
+			MaxWidth:      aiCommandResultOverlayMaxWidth,
+			MaxHeight:     aiCommandResultOverlayMaxHeight,
+			Movable:       true,
+			CloseOnEscape: true,
+		},
+		Closable:     true,
+		Message:      message,
+		Loading:      streamResult.Status == common.ChatStreamStatusStreaming && copyText == "",
+		FontSize:     12,
+		FollowScroll: true,
 	}
 	if position != nil {
-		opts.AbsolutePosition = true
-		opts.Anchor = overlay.AnchorTopLeft
-		opts.OffsetX = position.X + aiCommandLoadingOverlayOffsetX
-		opts.OffsetY = position.Y + aiCommandLoadingOverlayOffsetY
+		opts.Window.AbsolutePosition = true
+		opts.Window.Anchor = overlay.AnchorTopLeft
+		opts.Window.OffsetX = position.X + aiCommandLoadingOverlayOffsetX
+		opts.Window.OffsetY = position.Y + aiCommandLoadingOverlayOffsetY
 	} else {
-		opts.PreservePosition = true
+		opts.Window.PreservePosition = true
 	}
 
 	if copyText != "" {

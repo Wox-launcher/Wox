@@ -169,7 +169,7 @@ class MacOSWindowManager extends BaseWindowManager {
   }
 
   @override
-  Future<void> startDragging() async {
+  Future<void> startDragging({String? traceId, String? source}) async {
     try {
       await _channel.invokeMethod('startDragging');
     } catch (e) {

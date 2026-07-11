@@ -1,62 +1,112 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
-import 'package:wox/controllers/wox_list_controller.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
+import 'package:wox/components/wox_skill_tag_text_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
-import 'package:wox/entity/wox_image.dart';
-import 'package:wox/entity/wox_list_item.dart';
+import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
-import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/log.dart';
-import 'package:wox/utils/wox_theme_util.dart';
+
+enum ChatCommandPaletteGroup { model, skill }
+
+class ChatCommandPaletteItem {
+  final String id;
+  final ChatCommandPaletteGroup group;
+  final String title;
+  final String subTitle;
+  final String searchText;
+  final bool selected;
+  final AIModel? model;
+  final AISkill? skill;
+
+  ChatCommandPaletteItem({
+    required this.id,
+    required this.group,
+    required this.title,
+    required this.subTitle,
+    required this.searchText,
+    required this.selected,
+    this.model,
+    this.skill,
+  });
+}
+
+class _SlashToken {
+  final int start;
+  final int end;
+  final String query;
+
+  _SlashToken({required this.start, required this.end, required this.query});
+}
 
 class WoxAIChatController extends GetxController {
   final Rx<WoxAIChatData> aiChatData = WoxAIChatData.empty().obs;
-  late final WoxListController<ChatSelectItem> chatSelectListController;
+  final RxList<WoxAIChatData> chats = <WoxAIChatData>[].obs;
+  String _loadedPreviewPayload = "";
+  int _selectChatRequestSeq = 0;
+  int? _slashTokenStart;
+  int? _slashTokenEnd;
+  String _slashQuery = "";
+  bool _suppressInputListener = false;
 
   String tr(String key) {
     return Get.find<WoxSettingController>().tr(key);
   }
 
-  String _makeProviderKey(String provider, String alias) {
-    return alias.isEmpty ? provider : "${provider}_$alias";
-  }
-
-  (String provider, String alias) _parseProviderKey(String providerKey) {
-    final idx = providerKey.indexOf("_");
-    if (idx <= 0) return (providerKey, "");
-    return (providerKey.substring(0, idx), providerKey.substring(idx + 1));
-  }
-
   // Controllers and focus nodes
-  final TextEditingController textController = TextEditingController();
+  final SkillTagTextEditingController textController = SkillTagTextEditingController();
+  final TextEditingController aiQuestionAnswerController = TextEditingController();
   final WoxLauncherController launcherController;
   final FocusNode aiChatFocusNode = FocusNode();
+  final FocusNode aiQuestionPanelFocusNode = FocusNode();
+  final FocusNode aiQuestionAnswerFocusNode = FocusNode();
   final ScrollController aiChatScrollController = ScrollController();
+  final ScrollController commandPaletteScrollController = ScrollController();
   final RxList<AIModel> aiModels = <AIModel>[].obs;
-
-  // State for chat select panel
-  final RxBool isShowChatSelectPanel = false.obs;
-  final RxString currentChatSelectCategory = "".obs; // models, tools or empty
-
-  // State for tool usage
-  final RxSet<String> selectedTools = <String>{}.obs;
-  final RxList<AIMCPTool> availableTools = <AIMCPTool>[].obs;
-  final RxBool isLoadingTools = false.obs;
-
-  // State for agents
-  final RxList<AIAgent> availableAgents = <AIAgent>[].obs;
-  final RxBool isLoadingAgents = false.obs;
+  final RxList<AISkill> aiSkills = <AISkill>[].obs;
+  // Skill refs are draft-only until the user sends the current message.
+  final RxList<AISkillRef> draftSkillRefs = <AISkillRef>[].obs;
   final RxBool isLoadingModels = false.obs;
+  final RxBool isLoadingSkills = false.obs;
+  final Rxn<AIQuestion> pendingAIQuestion = Rxn<AIQuestion>();
+  final Rxn<AIQuestionOption> selectedAIQuestionOption = Rxn<AIQuestionOption>();
+  final RxBool isDebugInspectorVisible = false.obs;
+  final RxBool isGenerating = false.obs;
 
-  // Tool call expanded/collapsed states
+  // State for slash command palette
+  final RxBool isCommandPaletteVisible = false.obs;
+  final RxList<ChatCommandPaletteItem> commandPaletteItems = <ChatCommandPaletteItem>[].obs;
+  final RxInt commandPaletteSelectedIndex = 0.obs;
+  final RxBool isConversationSidebarCollapsed = false.obs;
+  // When non-empty, the command palette is filtered to a single group. Used by
+  // the model status chip to open the palette showing only models, without
+  // requiring the user to type a slash first.
+  final Rxn<ChatCommandPaletteGroup> commandPaletteFilterGroup = Rxn<ChatCommandPaletteGroup>();
+  double _commandPaletteItemHeight = 38;
+  double _commandPaletteHeaderHeight = 28;
+  double _commandPaletteVerticalPadding = 8;
+
+  // Chat disclosure states stay local to the current preview/chat selection.
   final RxMap<String, bool> toolCallExpandedStates = <String, bool>{}.obs;
+  final RxMap<String, bool> toolActivityExpandedStates = <String, bool>{}.obs;
+  final RxMap<String, bool> reasoningExpandedStates = <String, bool>{}.obs;
+  // Per-round collapse state for assistant rounds. A round is the run of
+  // assistant/tool messages between two user messages. Completed rounds are
+  // collapsed by default (only the final assistant reply + toolbar show); the
+  // user can expand to reveal the intermediate process.
+  final RxMap<String, bool> roundCollapsedStates = <String, bool>{}.obs;
+
+  WoxAIChatController({WoxLauncherController? launcherController}) : launcherController = launcherController ?? Get.find<WoxLauncherController>() {
+    textController.addListener(_handleChatInputChanged);
+  }
 
   // Toggle tool call expanded/collapsed state
   void toggleToolCallExpanded(String conversationId) {
@@ -72,30 +122,221 @@ class WoxAIChatController extends GetxController {
     return toolCallExpandedStates[conversationId] ?? false;
   }
 
-  WoxAIChatController({WoxLauncherController? launcherController}) : launcherController = launcherController ?? Get.find<WoxLauncherController>() {
-    chatSelectListController = WoxListController<ChatSelectItem>(
-      onItemExecuted: _onChatSelectItemExecuted,
-      onFilterBoxEscPressed: (traceId) => hideChatSelectPanel(),
-      itemHeightGetter: () => WoxThemeUtil.instance.getActionItemHeight(),
+  void toggleToolActivityExpanded(String activityId) {
+    toolActivityExpandedStates[activityId] = !(toolActivityExpandedStates[activityId] ?? false);
+  }
+
+  bool isToolActivityExpanded(String activityId) {
+    return toolActivityExpandedStates[activityId] ?? false;
+  }
+
+  void toggleReasoningExpanded(String conversationId) {
+    reasoningExpandedStates[conversationId] = !(reasoningExpandedStates[conversationId] ?? true);
+  }
+
+  bool isReasoningExpanded(String conversationId) {
+    return reasoningExpandedStates[conversationId] ?? true;
+  }
+
+  // Toggle a completed round's collapsed state. Default is collapsed (true),
+  // so the first toggle expands it.
+  void toggleRoundCollapsed(String roundId) {
+    roundCollapsedStates[roundId] = !(roundCollapsedStates[roundId] ?? true);
+  }
+
+  bool isRoundCollapsed(String roundId) {
+    return roundCollapsedStates[roundId] ?? true;
+  }
+
+  void _clearChatExpansionStates() {
+    toolCallExpandedStates.clear();
+    toolActivityExpandedStates.clear();
+    reasoningExpandedStates.clear();
+    roundCollapsedStates.clear();
+  }
+
+  // Loads the preview bootstrap payload once per query result. Runtime chat
+  // updates arrive through SendChatResponse and must not be overwritten by
+  // repeated preview rebuilds using the original payload.
+  void loadPreviewData(String payload, WoxAIChatPreviewData data) {
+    if (_loadedPreviewPayload == payload && aiChatData.value.id.isNotEmpty) {
+      return;
+    }
+
+    _loadedPreviewPayload = payload;
+    chats.assignAll(data.chats.map((chat) => chat.clone()));
+    _sortChats();
+    aiChatData.value = data.activeChat.clone();
+    _clearChatExpansionStates();
+
+    if (data.activeChatId.isNotEmpty) {
+      unawaited(_loadAndSelectChat(data.activeChatId, expectedCurrentChatId: aiChatData.value.id));
+    }
+  }
+
+  WoxAIChatData _createDraftChat() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final currentModel = aiChatData.value.model.value;
+    final model = currentModel.name.isEmpty ? AIModel.empty() : AIModel(name: currentModel.name, provider: currentModel.provider, providerAlias: currentModel.providerAlias);
+    return WoxAIChatData(
+      id: const UuidV4().generate(),
+      title: "",
+      conversations: RxList<WoxAIChatConversation>.from([]),
+      compactionEntries: RxList<AIChatCompactionEntry>.from([]),
+      model: model.obs,
+      debugTrace: Rxn<AIChatDebugTrace>(),
+      createdAt: now,
+      updatedAt: now,
     );
+  }
+
+  void startNewChat() {
+    _selectChatRequestSeq++;
+    aiChatData.value = _createDraftChat();
+    draftSkillRefs.clear();
+    _clearChatExpansionStates();
+    isGenerating.value = false;
+    hideCommandPalette();
+    collapseConversationSidebar(const UuidV4().generate());
+    if (aiChatData.value.model.value.name.isEmpty) {
+      _setDefaultModel(const UuidV4().generate());
+    }
+    focusChatInput(const UuidV4().generate());
+  }
+
+  void selectChat(WoxAIChatData chat) {
+    if (chat.isSummary && chat.id != aiChatData.value.id) {
+      unawaited(_loadAndSelectChat(chat.id));
+      return;
+    }
+
+    _applySelectedChat(chat.isSummary ? aiChatData.value : chat);
+  }
+
+  // Loads a summary chat on demand, then applies it if it is still the latest selection request.
+  Future<void> _loadAndSelectChat(String chatId, {String? expectedCurrentChatId}) async {
+    final traceId = const UuidV4().generate();
+    final requestSeq = ++_selectChatRequestSeq;
+    try {
+      final chat = await WoxApi.instance.getAIChat(traceId, chatId);
+      if (requestSeq != _selectChatRequestSeq) {
+        return;
+      }
+      if (expectedCurrentChatId != null && aiChatData.value.id != expectedCurrentChatId) {
+        return;
+      }
+      if (expectedCurrentChatId != null && aiChatData.value.id == chatId && aiChatData.value.conversations.isNotEmpty) {
+        _upsertChat(aiChatData.value);
+        return;
+      }
+      _applySelectedChat(chat);
+    } catch (error, stackTrace) {
+      Logger.instance.error(traceId, "AI: failed to load chat: $error $stackTrace");
+      launcherController.showToolbarMsg(traceId, ToolbarMsg(text: error.toString(), displaySeconds: 3));
+    }
+  }
+
+  // Applies a fully loaded chat to the preview surface.
+  void _applySelectedChat(WoxAIChatData chat) {
+    _selectChatRequestSeq++;
+    aiChatData.value = chat.clone();
+    _upsertChat(aiChatData.value);
+    draftSkillRefs.clear();
+    _clearChatExpansionStates();
+    // Sync the stop-button state with the target chat's real streaming flag.
+    // Hardcoding false would hide the stop button when switching back to a chat
+    // that is still generating.
+    isGenerating.value = aiChatData.value.isStreaming;
+    textController.clear();
+    hideCommandPalette();
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      scrollToBottomOfAiChat();
+    });
+    focusChatInput(const UuidV4().generate());
+  }
+
+  // Hides the conversation sidebar after selecting a chat so the message pane
+  // gets the full preview width and the input field can receive focus cleanly.
+  void collapseConversationSidebar(String traceId) {
+    if (isConversationSidebarCollapsed.value) {
+      return;
+    }
+    isConversationSidebarCollapsed.value = true;
+    Logger.instance.debug(traceId, "AI chat conversation sidebar collapsed after chat selection");
+  }
+
+  // Chat mode starts with the conversation list folded so the message surface gets the full preview width.
+  void collapseConversationSidebarForChatMode(String traceId) {
+    if (isConversationSidebarCollapsed.value) {
+      return;
+    }
+    isConversationSidebarCollapsed.value = true;
+    Logger.instance.debug(traceId, "AI chat conversation sidebar collapsed for chat mode");
+  }
+
+  void toggleConversationSidebar(String traceId) {
+    isConversationSidebarCollapsed.value = !isConversationSidebarCollapsed.value;
+    Logger.instance.debug(traceId, "AI chat conversation sidebar collapsed: ${isConversationSidebarCollapsed.value}");
+  }
+
+  // Delete the chat through the preview-owned chat channel and update the local sidebar.
+  Future<void> deleteChat(WoxAIChatData chat) async {
+    final traceId = const UuidV4().generate();
+    try {
+      await WoxApi.instance.deleteAIChat(traceId, chat.id);
+      chats.removeWhere((item) => item.id == chat.id);
+      if (aiChatData.value.id == chat.id) {
+        startNewChat();
+      }
+    } catch (error, stackTrace) {
+      Logger.instance.error(traceId, "AI: failed to delete chat: $error $stackTrace");
+      launcherController.showToolbarMsg(traceId, ToolbarMsg(text: error.toString(), displaySeconds: 3));
+    }
+  }
+
+  // Ask the backend to refresh the title; the final title arrives via SendChatResponse.
+  Future<void> summarizeChat(WoxAIChatData chat) async {
+    final traceId = const UuidV4().generate();
+    try {
+      await WoxApi.instance.summarizeAIChat(traceId, chat.id);
+    } catch (error, stackTrace) {
+      Logger.instance.error(traceId, "AI: failed to summarize chat: $error $stackTrace");
+      launcherController.showToolbarMsg(traceId, ToolbarMsg(text: error.toString(), displaySeconds: 3));
+    }
+  }
+
+  void _upsertChat(WoxAIChatData data) {
+    if (data.conversations.isEmpty) {
+      return;
+    }
+
+    final snapshot = data.clone();
+    final index = chats.indexWhere((chat) => chat.id == snapshot.id);
+    if (index >= 0) {
+      chats[index] = snapshot;
+    } else {
+      chats.add(snapshot);
+    }
+    _sortChats();
+  }
+
+  void _sortChats() {
+    chats.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
   }
 
   void reloadChatResources(String traceId, {String resourceName = "all"}) {
     Logger.instance.debug(traceId, "start reloading AI chat resources");
     if (resourceName == "models") {
       reloadAIModels(traceId);
-    } else if (resourceName == "tools") {
-      fetchAvailableTools(traceId);
-    } else if (resourceName == "agents") {
-      fetchAvailableAgents(traceId);
+    } else if (resourceName == "skills") {
+      reloadAISkills(traceId);
     } else if (resourceName == "all") {
       reloadAIModels(traceId);
-      fetchAvailableTools(traceId);
-      fetchAvailableAgents(traceId);
+      reloadAISkills(traceId);
     }
   }
 
-  // Load available AI models
+  // Load available AI models.
   void reloadAIModels(String traceId) {
     Logger.instance.debug(traceId, "start reloading ai models");
 
@@ -105,13 +346,12 @@ class WoxAIChatController extends GetxController {
         .then((models) {
           aiModels.assignAll(models);
           Logger.instance.debug(traceId, "reload ai models: ${aiModels.length}");
-          if (isShowChatSelectPanel.value && currentChatSelectCategory.value == "models") {
-            updateChatSelectItems();
-          }
+          updateCommandPaletteItems();
         })
         .catchError((error, stackTrace) {
           Logger.instance.error(traceId, 'Error fetching AI models: $error $stackTrace');
           aiModels.clear();
+          updateCommandPaletteItems();
         })
         .whenComplete(() {
           isLoadingModels.value = false;
@@ -125,304 +365,418 @@ class WoxAIChatController extends GetxController {
     reloadAIModels(traceId);
   }
 
-  void ensureToolsLoaded(String traceId) {
-    if (availableTools.isNotEmpty || isLoadingTools.value) {
+  // Load available AI skills.
+  void reloadAISkills(String traceId) {
+    Logger.instance.debug(traceId, "start reloading ai skills");
+
+    isLoadingSkills.value = true;
+    WoxApi.instance
+        .findAISkills(traceId)
+        .then((skills) {
+          aiSkills.assignAll(skills);
+          Logger.instance.debug(traceId, "reload ai skills: ${aiSkills.length}");
+          updateCommandPaletteItems();
+        })
+        .catchError((error, stackTrace) {
+          Logger.instance.error(traceId, 'Error fetching AI skills: $error $stackTrace');
+          aiSkills.clear();
+          updateCommandPaletteItems();
+        })
+        .whenComplete(() {
+          isLoadingSkills.value = false;
+        });
+  }
+
+  void ensureSkillsLoaded(String traceId) {
+    if (aiSkills.isNotEmpty || isLoadingSkills.value) {
       return;
     }
-    fetchAvailableTools(traceId);
+    reloadAISkills(traceId);
   }
 
-  void ensureAgentsLoaded(String traceId) {
-    if (availableAgents.isNotEmpty || isLoadingAgents.value) {
+  // Rebuild the command palette from the current slash token and resource lists.
+  void updateCommandPaletteItems() {
+    if (!isCommandPaletteVisible.value) {
       return;
     }
-    fetchAvailableAgents(traceId);
-  }
 
-  void _onChatSelectItemExecuted(String traceId, WoxListItem<ChatSelectItem> item) {
-    final chatSelectItem = item.data;
-    if (chatSelectItem.onExecute != null) {
-      chatSelectItem.onExecute!(traceId);
-    }
-  }
+    final query = _slashQuery.toLowerCase();
+    final items = <ChatCommandPaletteItem>[];
+    final selectedModel = aiChatData.value.model.value;
 
-  // Update chat select items based on current category
-  void updateChatSelectItems() {
-    final List<WoxListItem<ChatSelectItem>> items = [];
-    Logger.instance.debug(const UuidV4().generate(), "AI: Updating chat select items for category: ${currentChatSelectCategory.value}");
-
-    if (currentChatSelectCategory.isEmpty) {
-      items.add(
-        WoxListItem<ChatSelectItem>(
-          id: "agents",
-          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-          title: tr("ui_ai_chat_select_agent"),
-          subTitle: "",
-          tails: [],
-          isGroup: false,
-          data: ChatSelectItem(
-            id: "agents",
-            name: tr("ui_ai_chat_select_agent"),
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-            isCategory: true,
-            children: [],
-            onExecute: (String traceId) {
-              currentChatSelectCategory.value = "agents";
-              chatSelectListController.clearFilter(traceId);
-              updateChatSelectItems();
-            },
-          ),
-        ),
-      );
-
-      items.add(
-        WoxListItem<ChatSelectItem>(
-          id: "models",
-          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-          title: tr("ui_ai_chat_select_model"),
-          subTitle: "",
-          tails: [],
-          isGroup: false,
-          data: ChatSelectItem(
-            id: "models",
-            name: tr("ui_ai_chat_select_model"),
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-            isCategory: true,
-            children: [],
-            onExecute: (String traceId) {
-              currentChatSelectCategory.value = "models";
-              chatSelectListController.clearFilter(traceId);
-              updateChatSelectItems();
-            },
-          ),
-        ),
-      );
-
-      items.add(
-        WoxListItem<ChatSelectItem>(
-          id: "tools",
-          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-          title: tr("ui_ai_chat_configure_tools"),
-          subTitle: "",
-          tails: [],
-          isGroup: false,
-          data: ChatSelectItem(
-            id: "tools",
-            name: tr("ui_ai_chat_configure_tools"),
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-            isCategory: true,
-            children: [],
-            onExecute: (String traceId) {
-              currentChatSelectCategory.value = "tools";
-              chatSelectListController.clearFilter(traceId);
-              updateChatSelectItems();
-            },
-          ),
-        ),
-      );
-    } else if (currentChatSelectCategory.value == "models") {
-      // Show models grouped by provider
-      // Group models by provider
-      final modelsByProvider = <String, List<AIModel>>{};
-      for (final model in aiModels) {
-        final providerKey = _makeProviderKey(model.provider, model.providerAlias);
-        modelsByProvider.putIfAbsent(providerKey, () => []).add(model);
+    final sortedModels =
+        aiModels.toList()..sort((a, b) {
+          final providerCompare = _modelProviderLabel(a).compareTo(_modelProviderLabel(b));
+          if (providerCompare != 0) return providerCompare;
+          return a.name.compareTo(b.name);
+        });
+    final filterGroup = commandPaletteFilterGroup.value;
+    for (final model in sortedModels) {
+      if (filterGroup != null && filterGroup != ChatCommandPaletteGroup.model) {
+        continue;
       }
-
-      // Sort providers
-      final providers = modelsByProvider.keys.toList()..sort();
-
-      // Add groups and models
-      for (final providerKey in providers) {
-        // Skip empty groups
-        if (modelsByProvider[providerKey]!.isEmpty) continue;
-
-        final providerInfo = _parseProviderKey(providerKey);
-        final provider = providerInfo.$1;
-        final alias = providerInfo.$2;
-        final providerDisplayName = alias.isEmpty ? provider : "$provider ($alias)";
-
-        // Add provider group header
-        items.add(
-          WoxListItem<ChatSelectItem>(
-            id: "group_$providerKey",
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🏢"),
-            title: providerDisplayName,
-            subTitle: "",
-            tails: [],
-            isGroup: true,
-            data: ChatSelectItem(
-              id: "group_$providerKey",
-              name: providerDisplayName,
-              icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🏢"),
-              isCategory: true,
-              children: [],
-              onExecute: null,
-            ),
-          ),
-        );
-
-        // Sort models within this provider
-        final models = modelsByProvider[providerKey]!;
-        models.sort((a, b) => a.name.compareTo(b.name));
-
-        // Add models for this provider
-        for (final model in models) {
-          items.add(
-            WoxListItem<ChatSelectItem>(
-              id: "${providerKey}_${model.name}",
-              icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-              title: model.name,
-              subTitle: "",
-              tails: [],
-              isGroup: false,
-              data: ChatSelectItem(
-                id: "${providerKey}_${model.name}",
-                name: model.name,
-                icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-                isCategory: false,
-                children: [],
-                onExecute: (String traceId) {
-                  aiChatData.value.model.value = AIModel(name: model.name, provider: model.provider, providerAlias: model.providerAlias);
-                  hideChatSelectPanel();
-                },
-              ),
-            ),
-          );
-        }
-      }
-    } else if (currentChatSelectCategory.value == "tools") {
-      // Show tools
-      for (final tool in availableTools) {
-        // Check if this tool is selected to determine if we should show the checkmark
-        final bool isSelected = selectedTools.contains(tool.name);
-
-        items.add(
-          WoxListItem<ChatSelectItem>(
-            id: tool.name,
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-            title: tool.name,
-            subTitle: "",
-            tails: isSelected ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))] : [],
-            isGroup: false,
-            data: ChatSelectItem(
-              id: tool.name,
-              name: tool.name,
-              icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-              isCategory: false,
-              children: [],
-              onExecute: (String traceId) {
-                if (selectedTools.contains(tool.name)) {
-                  selectedTools.remove(tool.name);
-                } else {
-                  selectedTools.add(tool.name);
-                }
-                // Update the items to reflect the change in selection status
-                updateChatSelectItems();
-              },
-            ),
-          ),
-        );
-      }
-    } else if (currentChatSelectCategory.value == "agents") {
-      // Add "Cancel Selection" option at the top
-      items.add(
-        WoxListItem<ChatSelectItem>(
-          id: "cancel_agent_selection",
-          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "❌"),
-          title: tr("ui_ai_chat_cancel_agent_selection"),
-          subTitle: tr("ui_ai_chat_use_default_model_and_tools"),
-          tails:
-              (aiChatData.value.agentName == null || aiChatData.value.agentName!.isEmpty)
-                  ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))]
-                  : [],
-          isGroup: false,
-          data: ChatSelectItem(
-            id: "cancel_agent_selection",
-            name: tr("ui_ai_chat_cancel_agent_selection"),
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "❌"),
-            isCategory: false,
-            children: [],
-            onExecute: (String traceId) {
-              setCurrentAgent("");
-              hideChatSelectPanel();
-            },
-          ),
-        ),
+      final item = ChatCommandPaletteItem(
+        id: "model:${model.provider}:${model.providerAlias}:${model.name}",
+        group: ChatCommandPaletteGroup.model,
+        title: model.name,
+        subTitle: _modelProviderLabel(model),
+        searchText: "model 模型 ${model.name} ${model.provider} ${model.providerAlias}",
+        selected: selectedModel.name == model.name && selectedModel.provider == model.provider && selectedModel.providerAlias == model.providerAlias,
+        model: model,
       );
-
-      // Display all available agents
-      for (final agent in availableAgents) {
-        final bool isSelected = aiChatData.value.agentName == agent.name;
-        items.add(
-          WoxListItem<ChatSelectItem>(
-            id: agent.name,
-            icon: agent.icon, // 使用agent自定义头像
-            title: agent.name,
-            subTitle: "${tr("ui_ai_chat_model")}: ${agent.model.name}",
-            tails: isSelected ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))] : [],
-            isGroup: false,
-            data: ChatSelectItem(
-              id: agent.name,
-              name: agent.name,
-              icon: agent.icon, // 使用agent自定义头像
-              isCategory: false,
-              children: [],
-              onExecute: (String traceId) {
-                setCurrentAgent(agent.name);
-                hideChatSelectPanel();
-              },
-            ),
-          ),
-        );
+      if (_matchesPaletteQuery(item, query)) {
+        items.add(item);
       }
     }
 
-    Logger.instance.debug(const UuidV4().generate(), "AI: Updating chat select list with ${items.length} items");
-    chatSelectListController.updateItems(const UuidV4().generate(), items);
+    final sortedSkills =
+        aiSkills.where((skill) => skill.enabled).toList()..sort((a, b) {
+          final sourceCompare = _skillSourceLabel(a).compareTo(_skillSourceLabel(b));
+          if (sourceCompare != 0) return sourceCompare;
+          return a.name.compareTo(b.name);
+        });
+    for (final skill in sortedSkills) {
+      if (filterGroup != null && filterGroup != ChatCommandPaletteGroup.skill) {
+        continue;
+      }
+      final item = ChatCommandPaletteItem(
+        id: "skill:${skill.id}",
+        group: ChatCommandPaletteGroup.skill,
+        title: skill.name,
+        subTitle: _skillSubtitle(skill),
+        searchText: "skill 技能 ${skill.name} ${skill.description} ${skill.source} ${skill.sourceName}",
+        selected: isDraftSkillSelected(skill),
+        skill: skill,
+      );
+      if (_matchesPaletteQuery(item, query)) {
+        items.add(item);
+      }
+    }
+
+    commandPaletteItems.assignAll(items);
+    if (items.isEmpty) {
+      commandPaletteSelectedIndex.value = 0;
+    } else if (commandPaletteSelectedIndex.value >= items.length) {
+      commandPaletteSelectedIndex.value = items.length - 1;
+    }
+    ensureCommandPaletteSelectionVisible();
+  }
+
+  bool _matchesPaletteQuery(ChatCommandPaletteItem item, String query) {
+    if (query.isEmpty) {
+      return true;
+    }
+    return item.searchText.toLowerCase().contains(query) || item.title.toLowerCase().contains(query) || item.subTitle.toLowerCase().contains(query);
+  }
+
+  String _modelProviderLabel(AIModel model) {
+    if (model.providerAlias.isEmpty) {
+      return model.provider;
+    }
+    return "${model.provider} (${model.providerAlias})";
+  }
+
+  String _skillSourceLabel(AISkill skill) {
+    return skill.sourceName.isEmpty ? skill.source : skill.sourceName;
+  }
+
+  String _skillSubtitle(AISkill skill) {
+    final source = _skillSourceLabel(skill);
+    if (skill.description.isEmpty) {
+      return source;
+    }
+    if (source.isEmpty) {
+      return skill.description;
+    }
+    return "$source · ${skill.description}";
+  }
+
+  void _handleChatInputChanged() {
+    if (_suppressInputListener) {
+      return;
+    }
+
+    final token = _findSlashToken();
+    if (token == null) {
+      hideCommandPalette();
+      return;
+    }
+
+    final queryChanged = _slashQuery != token.query;
+    _slashTokenStart = token.start;
+    _slashTokenEnd = token.end;
+    _slashQuery = token.query;
+    isCommandPaletteVisible.value = true;
+    if (queryChanged) {
+      commandPaletteSelectedIndex.value = 0;
+    }
+    ensureModelsLoaded(const UuidV4().generate());
+    ensureSkillsLoaded(const UuidV4().generate());
+    updateCommandPaletteItems();
+  }
+
+  _SlashToken? _findSlashToken() {
+    final text = textController.text;
+    if (text.isEmpty) {
+      return null;
+    }
+
+    final selection = textController.selection;
+    final cursor = (selection.isValid ? selection.extentOffset : text.length).clamp(0, text.length).toInt();
+    var start = cursor;
+    while (start > 0 && !_isTokenBoundary(text.codeUnitAt(start - 1))) {
+      start--;
+    }
+    if (start >= text.length || text[start] != "/") {
+      return null;
+    }
+
+    var end = cursor;
+    while (end < text.length && !_isTokenBoundary(text.codeUnitAt(end))) {
+      end++;
+    }
+
+    return _SlashToken(start: start, end: end, query: text.substring(start + 1, end).trim());
+  }
+
+  bool _isTokenBoundary(int codeUnit) {
+    return codeUnit == 32 || codeUnit == 9 || codeUnit == 10 || codeUnit == 13;
+  }
+
+  // Opens the command palette showing only models, invoked by clicking the
+  // model status chip below the chat input. Loads models on demand and
+  // starts with the first item selected.
+  void showModelPalette() {
+    ensureModelsLoaded(const UuidV4().generate());
+    commandPaletteFilterGroup.value = ChatCommandPaletteGroup.model;
+    isCommandPaletteVisible.value = true;
+    _slashQuery = "";
+    updateCommandPaletteItems();
+    if (commandPaletteItems.isNotEmpty) {
+      commandPaletteSelectedIndex.value = 0;
+    }
+    ensureCommandPaletteSelectionVisible();
+  }
+
+  void hideCommandPalette() {
+    isCommandPaletteVisible.value = false;
+    commandPaletteItems.clear();
+    commandPaletteSelectedIndex.value = 0;
+    commandPaletteFilterGroup.value = null;
+    _slashTokenStart = null;
+    _slashTokenEnd = null;
+    _slashQuery = "";
+  }
+
+  bool handleCommandPaletteEscape() {
+    if (!isCommandPaletteVisible.value) {
+      return false;
+    }
+    hideCommandPalette();
+    focusChatInput(const UuidV4().generate());
+    return true;
+  }
+
+  bool executeSelectedCommandPaletteItem() {
+    if (!isCommandPaletteVisible.value) {
+      return false;
+    }
+    if (commandPaletteItems.isEmpty) {
+      return true;
+    }
+
+    final index = commandPaletteSelectedIndex.value.clamp(0, commandPaletteItems.length - 1).toInt();
+    executeCommandPaletteItem(commandPaletteItems[index]);
+    return true;
+  }
+
+  void executeCommandPaletteItem(ChatCommandPaletteItem item) {
+    if (item.model != null) {
+      final model = item.model!;
+      aiChatData.value.model.value = AIModel(name: model.name, provider: model.provider, providerAlias: model.providerAlias);
+    }
+
+    if (item.skill != null) {
+      final skill = item.skill!;
+      // Insert {skill:name} inline at the cursor position instead of adding
+      // a chip above the input. The tag stays in the message text and is
+      // parsed into SkillRefs on send.
+      final tag = '{skill:${skill.name}}';
+      final text = textController.text;
+      final selection = textController.selection;
+      final cursor = (selection.isValid ? selection.extentOffset : text.length).clamp(0, text.length).toInt();
+
+      // Replace the slash token (including the "/" prefix) with the skill tag.
+      final slashStart = _slashTokenStart;
+      final slashEnd = _slashTokenEnd;
+      String newText;
+      int newCursor;
+      if (slashStart != null && slashEnd != null && slashStart <= cursor && cursor <= slashEnd) {
+        newText = text.replaceRange(slashStart, slashEnd, tag);
+        newCursor = slashStart + tag.length;
+      } else {
+        newText = text.replaceRange(cursor, cursor, tag);
+        newCursor = cursor + tag.length;
+      }
+      textController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: newCursor));
+      _slashTokenStart = null;
+      _slashTokenEnd = null;
+    } else {
+      _removeSlashTokenFromInput();
+    }
+
+    hideCommandPalette();
+    focusChatInput(const UuidV4().generate());
+  }
+
+  void moveCommandPaletteSelection(int delta) {
+    if (!isCommandPaletteVisible.value || commandPaletteItems.isEmpty) {
+      return;
+    }
+    final nextIndex = (commandPaletteSelectedIndex.value + delta).clamp(0, commandPaletteItems.length - 1).toInt();
+    commandPaletteSelectedIndex.value = nextIndex;
+    ensureCommandPaletteSelectionVisible();
+  }
+
+  void updateCommandPaletteLayoutMetrics({required double itemHeight, required double headerHeight, required double verticalPadding}) {
+    _commandPaletteItemHeight = itemHeight;
+    _commandPaletteHeaderHeight = headerHeight;
+    _commandPaletteVerticalPadding = verticalPadding;
+  }
+
+  void ensureCommandPaletteSelectionVisible() {
+    if (!isCommandPaletteVisible.value || commandPaletteItems.isEmpty) {
+      return;
+    }
 
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      chatSelectListController.filterBoxFocusNode.requestFocus();
+      if (!commandPaletteScrollController.hasClients || commandPaletteItems.isEmpty) {
+        return;
+      }
+
+      final index = commandPaletteSelectedIndex.value.clamp(0, commandPaletteItems.length - 1).toInt();
+      final itemTop = _commandPaletteItemOffset(index);
+      final itemBottom = itemTop + _commandPaletteItemHeight;
+      final position = commandPaletteScrollController.position;
+      final viewportTop = position.pixels;
+      final viewportBottom = viewportTop + position.viewportDimension;
+      final margin = 4.0;
+
+      double? targetOffset;
+      if (itemTop < viewportTop + margin) {
+        targetOffset = itemTop - margin;
+      } else if (itemBottom > viewportBottom - margin) {
+        targetOffset = itemBottom - position.viewportDimension + margin;
+      }
+
+      if (targetOffset == null) {
+        return;
+      }
+
+      final clampedOffset = targetOffset.clamp(position.minScrollExtent, position.maxScrollExtent);
+      commandPaletteScrollController.animateTo(clampedOffset.toDouble(), duration: const Duration(milliseconds: 90), curve: Curves.easeOut);
     });
   }
 
-  // Show chat select panel
-  void showChatSelectPanel() {
-    Logger.instance.debug(const UuidV4().generate(), "AI: Showing chat select panel");
-    isShowChatSelectPanel.value = true;
-    currentChatSelectCategory.value = "";
-    updateChatSelectItems();
+  double _commandPaletteItemOffset(int targetIndex) {
+    var offset = _commandPaletteVerticalPadding;
+    ChatCommandPaletteGroup? currentGroup;
+    for (var i = 0; i <= targetIndex; i++) {
+      final item = commandPaletteItems[i];
+      if (currentGroup != item.group) {
+        currentGroup = item.group;
+        offset += _commandPaletteHeaderHeight;
+      }
+      if (i == targetIndex) {
+        return offset;
+      }
+      offset += _commandPaletteItemHeight;
+    }
+    return offset;
   }
 
-  // Show models panel directly
-  void showModelsPanel() {
-    ensureModelsLoaded(const UuidV4().generate());
-    showChatSelectPanel();
-    currentChatSelectCategory.value = "models";
-    updateChatSelectItems();
+  // Opens the same slash palette from the launcher action hotkey by inserting a slash token.
+  void openCommandPaletteFromActionHotkey() {
+    if (_findSlashToken() != null) {
+      _handleChatInputChanged();
+      return;
+    }
+
+    final text = textController.text;
+    final selection = textController.selection;
+    final cursor = (selection.isValid ? selection.extentOffset : text.length).clamp(0, text.length).toInt();
+    final needsLeadingSpace = cursor > 0 && !_isTokenBoundary(text.codeUnitAt(cursor - 1));
+    final insertedText = needsLeadingSpace ? " /" : "/";
+    final newText = text.replaceRange(cursor, cursor, insertedText);
+    final newCursor = cursor + insertedText.length;
+    textController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: newCursor));
   }
 
-  // Show tools panel directly
-  void showToolsPanel() {
-    ensureToolsLoaded(const UuidV4().generate());
-    showChatSelectPanel();
-    currentChatSelectCategory.value = "tools";
-    updateChatSelectItems();
+  void _removeSlashTokenFromInput() {
+    final start = _slashTokenStart;
+    final end = _slashTokenEnd;
+    if (start == null || end == null) {
+      return;
+    }
+
+    final text = textController.text;
+    if (start < 0 || end > text.length || start > end) {
+      return;
+    }
+
+    final before = text.substring(0, start);
+    final after = text.substring(end);
+    final needsSpace = before.isNotEmpty && after.isNotEmpty && !before.endsWith(" ") && !after.startsWith(" ");
+    final replacement = needsSpace ? " " : "";
+    final newText = before + replacement + after;
+    final cursor = before.length + replacement.length;
+
+    _suppressInputListener = true;
+    textController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: cursor));
+    _suppressInputListener = false;
   }
 
-  // Show agents panel directly
-  void showAgentsPanel() {
-    ensureAgentsLoaded(const UuidV4().generate());
-    showChatSelectPanel();
-    currentChatSelectCategory.value = "agents";
-    updateChatSelectItems();
+  /// Parse {skill:name} tags from message text and resolve them to AISkillRefs
+  /// by matching against the skill registry fetched from the backend.
+  List<AISkillRef> _parseSkillRefsFromText(String text) {
+    final pattern = RegExp(r'\{skill:([^}]+)\}');
+    final matches = pattern.allMatches(text);
+    if (matches.isEmpty) return [];
+
+    // Use the cached aiSkills list (not commandPaletteItems) because the
+    // command palette is hidden and its items cleared by the time the user
+    // presses Enter to send.
+    final availableSkills = aiSkills.toList();
+
+    final refs = <AISkillRef>[];
+    final seen = <String>{};
+    for (final match in matches) {
+      final name = match.group(1)!.trim();
+      final skill = availableSkills.where((s) => s.name == name).firstOrNull;
+      if (skill != null && !seen.contains(skill.id)) {
+        seen.add(skill.id);
+        refs.add(_skillRefFromAISkill(skill));
+      }
+    }
+    return refs;
   }
 
-  // Hide chat select panel
-  void hideChatSelectPanel() {
-    isShowChatSelectPanel.value = false;
-    chatSelectListController.clearFilter(const UuidV4().generate());
-    focusToChatInput(const UuidV4().generate());
+  bool isDraftSkillSelected(AISkill skill) {
+    final tag = '{skill:${skill.name}}';
+    return textController.text.contains(tag);
+  }
+
+  void removeDraftSkillRef(AISkillRef ref) {
+    final tag = '{skill:${ref.name}}';
+    final text = textController.text.replaceAll(tag, '');
+    textController.text = text.trim();
+    updateCommandPaletteItems();
+    focusChatInput(const UuidV4().generate());
+  }
+
+  AISkillRef _skillRefFromAISkill(AISkill skill) {
+    final refPath = skill.manifestPath.isNotEmpty ? skill.manifestPath : skill.path;
+    return AISkillRef(id: skill.id, name: skill.name, path: refPath, source: skill.source);
   }
 
   // Scroll to bottom of AI chat
@@ -432,119 +786,17 @@ class WoxAIChatController extends GetxController {
     }
   }
 
-  // Focus to chat input
-  void focusToChatInput(String traceId) {
+  // Focus the chat input field after the chat preview is visible.
+  void focusChatInput(String traceId) {
     Logger.instance.info(traceId, "focus to chat input");
     SchedulerBinding.instance.addPostFrameCallback((_) {
       aiChatFocusNode.requestFocus();
     });
   }
 
-  // Method to fetch available tools based on the current model
-  Future<void> fetchAvailableTools(String traceId) async {
-    Logger.instance.info(traceId, "start fetching AI tools");
-
-    if (isLoadingTools.value) return;
-    isLoadingTools.value = true;
-
-    try {
-      final tools = await WoxApi.instance.findAIMCPServerToolsAll(traceId);
-      availableTools.assignAll(tools);
-      // Default select all tools
-      selectedTools.assignAll(tools.map((tool) => tool.name).toSet());
-
-      Logger.instance.debug(traceId, "AI: loaded ${tools.length} tools");
-      if (isShowChatSelectPanel.value && currentChatSelectCategory.value == "tools") {
-        updateChatSelectItems();
-      }
-    } catch (e, s) {
-      Logger.instance.error(traceId, 'Error fetching AI tools: $e $s');
-      availableTools.clear();
-      selectedTools.clear();
-    } finally {
-      isLoadingTools.value = false;
-    }
-  }
-
-  // Method to fetch available agents
-  Future<void> fetchAvailableAgents(String traceId) async {
-    Logger.instance.info(traceId, "start fetching AI agents");
-
-    if (isLoadingAgents.value) return;
-    isLoadingAgents.value = true;
-
-    try {
-      final agents = await WoxApi.instance.findAIAgents(traceId);
-      availableAgents.assignAll(agents);
-      Logger.instance.debug(traceId, "AI: loaded ${agents.length} agents");
-
-      // Log each agent for debugging
-      for (final agent in agents) {
-        Logger.instance.debug(traceId, "AI: agent details - Name: ${agent.name}, Model: ${agent.model.name}");
-      }
-
-      // If currently displaying agent selection panel, update the list
-      if (isShowChatSelectPanel.value && currentChatSelectCategory.value == "agents") {
-        updateChatSelectItems();
-      }
-    } catch (e, s) {
-      Logger.instance.error(traceId, 'AI: Error fetching AI agents: $e $s');
-      availableAgents.clear();
-    } finally {
-      isLoadingAgents.value = false;
-    }
-  }
-
-  // Method to set current agent
-  void setCurrentAgent(String agentName) {
-    Logger.instance.debug(const UuidV4().generate(), "AI: Setting current agent to: $agentName");
-    aiChatData.value.agentName = agentName;
-
-    // If an agent is selected, try to get agent details
-    if (agentName.isNotEmpty) {
-      bool agentFound = false;
-      for (var agent in availableAgents) {
-        if (agent.name == agentName) {
-          Logger.instance.debug(const UuidV4().generate(), "AI: Found agent: ${agent.name}, setting model to ${agent.model.name} and tools to ${agent.tools.length} tools");
-          aiChatData.value.model.value = agent.model;
-          aiChatData.value.tools = agent.tools;
-          agentFound = true;
-          break;
-        }
-      }
-      if (!agentFound) {
-        Logger.instance.error(const UuidV4().generate(), "AI: Agent with name $agentName not found in available agents");
-      }
-    } else {
-      Logger.instance.debug(const UuidV4().generate(), "AI: No agent selected (empty agentName), setting default model and all tools");
-
-      _setDefaultModel(const UuidV4().generate());
-
-      // Select all available tools
-      selectedTools.clear();
-      selectedTools.addAll(availableTools.map((tool) => tool.name).toSet());
-      aiChatData.value.tools = selectedTools.toList();
-    }
-  }
-
   Future<void> _setDefaultModel(String traceId) async {
     var defaultModel = await WoxApi.instance.findDefaultAIModel(traceId);
     aiChatData.value.model.value = defaultModel;
-  }
-
-  // Get the name of the current agent
-  String getCurrentAgentName() {
-    if (aiChatData.value.agentName == null || aiChatData.value.agentName!.isEmpty) {
-      return "";
-    }
-
-    for (var agent in availableAgents) {
-      if (agent.name == aiChatData.value.agentName) {
-        return agent.name;
-      }
-    }
-
-    return "";
   }
 
   void sendMessage() {
@@ -560,6 +812,10 @@ class WoxAIChatController extends GetxController {
       return;
     }
 
+    // Parse {skill:name} tags from the message text and resolve them to
+    // SkillRefs. The tag text stays in the message for display.
+    final skillRefs = _parseSkillRefsFromText(text);
+
     // append user message to chat data
     aiChatData.value.conversations.add(
       WoxAIChatConversation(
@@ -568,21 +824,28 @@ class WoxAIChatController extends GetxController {
         text: text,
         reasoning: '',
         images: [],
+        skillRefs: skillRefs,
         timestamp: DateTime.now().millisecondsSinceEpoch,
         toolCallInfo: ToolCallInfo.empty(),
       ),
     );
     aiChatData.value.updatedAt = DateTime.now().millisecondsSinceEpoch;
+    _upsertChat(aiChatData.value);
 
     textController.clear();
+    hideCommandPalette();
 
     SchedulerBinding.instance.addPostFrameCallback((_) {
       scrollToBottomOfAiChat();
     });
 
-    aiChatData.value.tools = selectedTools.toList();
-
+    isGenerating.value = true;
     WoxApi.instance.sendChatRequest(const UuidV4().generate(), aiChatData.value);
+  }
+
+  // Stop the active streaming session for the current chat.
+  void stopChat() {
+    WoxApi.instance.stopChatRequest(const UuidV4().generate(), aiChatData.value.id);
   }
 
   String formatTimestamp(int timestamp) {
@@ -591,18 +854,24 @@ class WoxAIChatController extends GetxController {
   }
 
   void handleChatResponse(String traceId, WoxAIChatData data) {
+    _upsertChat(data);
+
     // Update the chat data with the response
     if (data.id == aiChatData.value.id) {
+      final shouldStickToBottom = !aiChatScrollController.hasClients || aiChatScrollController.position.maxScrollExtent - aiChatScrollController.position.pixels <= 64;
+
       aiChatData.value.title = data.title;
       aiChatData.value.conversations.assignAll(data.conversations);
+      aiChatData.value.compactionEntries.assignAll(data.compactionEntries);
+      aiChatData.value.debugTrace.value = data.debugTrace.value;
       aiChatData.value.updatedAt = data.updatedAt;
 
-      if (data.agentName != null) {
-        aiChatData.value.agentName = data.agentName;
-      }
+      // Sync streaming state from backend so the send/stop button toggles correctly.
+      isGenerating.value = data.isStreaming;
 
-      // if the scrollbar is already at the bottom, scroll to bottom, otherwise, do nothing
-      if (aiChatScrollController.hasClients && aiChatScrollController.position.pixels == aiChatScrollController.position.maxScrollExtent) {
+      // Keep streaming pinned to the bottom while the user is already reading
+      // the latest message, but preserve manual scrollback once they move away.
+      if (shouldStickToBottom) {
         // Scroll to bottom after a short delay to ensure the new message is rendered
         SchedulerBinding.instance.addPostFrameCallback((_) {
           scrollToBottomOfAiChat();
@@ -611,9 +880,121 @@ class WoxAIChatController extends GetxController {
     }
   }
 
+  // Handles ask_user inside the chat preview surface; the launcher only routes the websocket event here.
+  void handleAIQuestionRequest(String traceId, dynamic data) {
+    String questionId = "";
+    try {
+      final rawQuestion = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+      final question = AIQuestion.fromJson(rawQuestion);
+      questionId = question.questionId;
+      if (questionId.isEmpty) {
+        Logger.instance.warn(traceId, "AIQuestion request missing questionId");
+        return;
+      }
+
+      final currentQuestion = pendingAIQuestion.value;
+      if (currentQuestion != null && currentQuestion.questionId != question.questionId) {
+        unawaited(WoxApi.instance.answerAIQuestion(traceId, currentQuestion.questionId, "User cancelled"));
+      }
+
+      aiQuestionAnswerController.clear();
+      selectedAIQuestionOption.value = null;
+      pendingAIQuestion.value = question;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!isClosed && pendingAIQuestion.value?.questionId == question.questionId) {
+          if (question.options.isEmpty) {
+            aiQuestionAnswerFocusNode.requestFocus();
+          } else {
+            aiQuestionPanelFocusNode.requestFocus();
+          }
+        }
+      });
+    } catch (e, s) {
+      Logger.instance.error(traceId, "AIQuestion request failed: $e $s");
+      if (questionId.isNotEmpty) {
+        unawaited(WoxApi.instance.answerAIQuestion(traceId, questionId, "Failed to show question UI: $e"));
+      }
+    }
+  }
+
+  void submitPendingAIQuestionAnswer() {
+    final answer = aiQuestionAnswerController.text.trim();
+    answerPendingAIQuestion(answer.isEmpty ? "User cancelled" : answer);
+  }
+
+  // Select an option from the ask_user panel (does not submit).
+  void selectAIQuestionOption(AIQuestionOption option) {
+    if (selectedAIQuestionOption.value?.value == option.value) {
+      selectedAIQuestionOption.value = null;
+    } else {
+      selectedAIQuestionOption.value = option;
+    }
+    // Focus the text input when the free-text (last) option is selected.
+    final question = pendingAIQuestion.value;
+    if (question != null && question.options.isNotEmpty && selectedAIQuestionOption.value != null) {
+      final isLastOption = question.options.last.value == selectedAIQuestionOption.value!.value;
+      if (isLastOption) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!isClosed) aiQuestionAnswerFocusNode.requestFocus();
+        });
+      }
+    }
+  }
+
+  // Submit the selected option or typed free-text answer.
+  void submitSelectedAIQuestionAnswer() {
+    final question = pendingAIQuestion.value;
+    if (question == null) return;
+
+    final selected = selectedAIQuestionOption.value;
+    if (selected != null) {
+      // If the free-text (last) option is selected, use typed text if available.
+      final isLastOption = question.options.isNotEmpty && question.options.last.value == selected.value;
+      if (isLastOption) {
+        final typed = aiQuestionAnswerController.text.trim();
+        answerPendingAIQuestion(typed.isEmpty ? selected.value : typed);
+      } else {
+        answerPendingAIQuestion(selected.value);
+      }
+    } else {
+      answerPendingAIQuestion("User cancelled");
+    }
+  }
+
+  bool isAIQuestionFreeTextSelected() {
+    final question = pendingAIQuestion.value;
+    final selected = selectedAIQuestionOption.value;
+    if (question == null || selected == null || question.options.isEmpty) return false;
+    return question.options.last.value == selected.value;
+  }
+
+  void cancelPendingAIQuestion() {
+    answerPendingAIQuestion("User cancelled");
+  }
+
+  // Resolves the current ask_user request through the chat HTTP channel.
+  void answerPendingAIQuestion(String answer) {
+    final question = pendingAIQuestion.value;
+    if (question == null) {
+      return;
+    }
+
+    pendingAIQuestion.value = null;
+    selectedAIQuestionOption.value = null;
+    aiQuestionAnswerController.clear();
+    unawaited(WoxApi.instance.answerAIQuestion(const UuidV4().generate(), question.questionId, answer));
+    focusChatInput(const UuidV4().generate());
+  }
+
   // Copy message content to clipboard
   void copyMessageContent(WoxAIChatConversation message) {
     Clipboard.setData(ClipboardData(text: message.text));
+    launcherController.showToolbarMsg(const UuidV4().generate(), ToolbarMsg(text: tr("ui_ai_chat_message_copied"), displaySeconds: 2));
+  }
+
+  // Copy debug inspector section content to clipboard.
+  void copyDebugSectionContent(String content) {
+    Clipboard.setData(ClipboardData(text: content));
     launcherController.showToolbarMsg(const UuidV4().generate(), ToolbarMsg(text: tr("ui_ai_chat_message_copied"), displaySeconds: 2));
   }
 
@@ -645,15 +1026,17 @@ class WoxAIChatController extends GetxController {
     if (userMessageIndex < aiChatData.value.conversations.length - 1) {
       aiChatData.value.conversations.removeRange(userMessageIndex + 1, aiChatData.value.conversations.length);
     }
+    aiChatData.value.compactionEntries.clear();
+    aiChatData.value.debugTrace.value = null;
 
-    // Send the chat request to regenerate the response
-    aiChatData.value.tools = selectedTools.toList();
+    isGenerating.value = true;
     WoxApi.instance.sendChatRequest(const UuidV4().generate(), aiChatData.value);
   }
 
   // Edit user message
   void editUserMessage(WoxAIChatConversation message) {
-    // Set the text controller to the message content
+    // Set the text controller to the message content. {skill:xxx} tags are
+    // already in the text, so no separate skill ref restoration is needed.
     textController.text = message.text;
 
     // Find the index of the message
@@ -670,16 +1053,33 @@ class WoxAIChatController extends GetxController {
       // If it's the last message, just remove it
       aiChatData.value.conversations.removeLast();
     }
+    aiChatData.value.compactionEntries.clear();
+    aiChatData.value.debugTrace.value = null;
 
-    focusToChatInput(const UuidV4().generate());
+    focusChatInput(const UuidV4().generate());
+  }
+
+  void toggleDebugInspector() {
+    isDebugInspectorVisible.value = !isDebugInspectorVisible.value;
   }
 
   @override
   void onClose() {
+    textController.removeListener(_handleChatInputChanged);
     textController.dispose();
-    chatSelectListController.dispose();
+    aiQuestionAnswerController.dispose();
     aiChatFocusNode.dispose();
+    aiQuestionPanelFocusNode.dispose();
+    aiQuestionAnswerFocusNode.dispose();
     aiChatScrollController.dispose();
+    commandPaletteScrollController.dispose();
     super.onClose();
+  }
+
+  /// Drop reference lists so hidden window memory is released. Lists are lazily
+  /// reloaded when the command palette is opened again.
+  void clearReferenceDataCache() {
+    aiModels.clear();
+    aiSkills.clear();
   }
 }

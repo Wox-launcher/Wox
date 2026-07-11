@@ -32,7 +32,19 @@ class WoxSettingFormField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labelText = Text(label, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500), maxLines: 2, overflow: TextOverflow.ellipsis);
-    final labelContent = labelTrailing == null ? labelText : Row(mainAxisSize: MainAxisSize.min, children: [labelText, const SizedBox(width: 5), labelTrailing!]);
+    final labelContent =
+        labelTrailing == null
+            ? labelText
+            : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Settings search can briefly reveal targets while the pane is
+                // very narrow; keep label adornments from forcing a flex overflow.
+                Flexible(child: labelText),
+                const SizedBox(width: 5),
+                labelTrailing!,
+              ],
+            );
     final description = tips == null ? null : Padding(padding: EdgeInsets.only(top: tipsTopSpacing), child: tips!);
 
     if (fullWidth) {
@@ -49,12 +61,13 @@ class WoxSettingFormField extends StatelessWidget {
         builder: (context, constraints) {
           final shouldStack = constraints.maxWidth < labelWidth + labelGap + 260;
           final control = controlMaxWidth == null ? child : ConstrainedBox(constraints: BoxConstraints(maxWidth: controlMaxWidth!), child: child);
+          final stackedControl = ConstrainedBox(constraints: BoxConstraints(maxWidth: constraints.maxWidth), child: control);
 
           if (shouldStack) {
             // Narrow settings panes fall back to a vertical row to prevent controls and descriptions from colliding.
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [labelContent, if (description != null) description, const SizedBox(height: 8), Align(alignment: Alignment.centerLeft, child: control)],
+              children: [labelContent, if (description != null) description, const SizedBox(height: 8), Align(alignment: Alignment.centerLeft, child: stackedControl)],
             );
           }
 

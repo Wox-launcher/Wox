@@ -39,3 +39,7 @@ wox.test/artifacts
 .superpowers
 log
 docs
+!www/docs/
+!www/docs/**
+www/docs/.vitepress/cache
+www/docs/.vitepress/dist

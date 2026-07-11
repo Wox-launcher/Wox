@@ -26,7 +26,7 @@ help:
 	@echo "  make install    - Install dependencies"
 
 clean:
-	$(PNPM) run clean
+	node ./scripts/clean.mjs
 
 sdk:
 	# The host bundles SDK runtime code, so build the local SDK before pnpm resolves the file dependency and captures its dist output.

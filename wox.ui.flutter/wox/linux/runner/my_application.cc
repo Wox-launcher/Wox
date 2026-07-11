@@ -8,6 +8,7 @@
 #include <math.h>
 #include <string>
 #include <stdarg.h>
+#include <unistd.h>
 #include <vector>
 #ifdef GDK_WINDOWING_X11
 #include <X11/Xatom.h>
@@ -16,6 +17,7 @@
 #include <X11/extensions/XTest.h>
 #include <gdk/gdkx.h>
 #endif
+#include <dlfcn.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -68,6 +70,7 @@ struct _MyApplication
   int pending_bounds_y;
   int pending_bounds_width;
   int pending_bounds_height;
+  gboolean layer_shell_enabled;
   std::vector<struct CachedLinuxDisplayCapture> cached_x11_display_captures;
   struct CachedPortalCapture cached_portal_capture;
 };
@@ -201,6 +204,214 @@ static const char *safe_string(const char *value)
   return value != nullptr ? value : "";
 }
 
+// gtk-layer-shell is loaded at runtime via dlopen so the Wox binary no longer
+// hard-depends on libgtk-layer-shell.so.0. On distros where that library is not
+// installed (e.g. stock Ubuntu 24.04 GNOME), the dynamic linker used to reject
+// the whole binary at launch with "cannot open shared object file" and the
+// existing fallback path never had a chance to run. With dlopen, the binary
+// loads without the library, layer-shell is simply reported as unavailable,
+// and Wox falls back to compositor-managed placement. The enum values mirror
+// gtk-layer-shell.h so the dlopen path stays source-compatible with the GTK
+// API without linking against the header.
+typedef enum {
+    WOX_GTK_LAYER_SHELL_LAYER_BACKGROUND = 0,
+    WOX_GTK_LAYER_SHELL_LAYER_BOTTOM = 1,
+    WOX_GTK_LAYER_SHELL_LAYER_TOP = 2,
+    WOX_GTK_LAYER_SHELL_LAYER_OVERLAY = 3,
+} WoxGtkLayerShellLayer;
+
+typedef enum {
+    WOX_GTK_LAYER_SHELL_EDGE_LEFT = 0,
+    WOX_GTK_LAYER_SHELL_EDGE_RIGHT = 1,
+    WOX_GTK_LAYER_SHELL_EDGE_TOP = 2,
+    WOX_GTK_LAYER_SHELL_EDGE_BOTTOM = 3,
+} WoxGtkLayerShellEdge;
+
+typedef enum {
+    WOX_GTK_LAYER_SHELL_KEYBOARD_MODE_NONE = 0,
+    WOX_GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE = 1,
+} WoxGtkLayerShellKeyboardMode;
+
+// Function pointer types for the gtk-layer-shell API we use.
+typedef gboolean (*WoxGtkLayerIsSupportedFn)();
+typedef void (*WoxGtkLayerInitForWindowFn)(GtkWindow *);
+typedef void (*WoxGtkLayerSetLayerFn)(GtkWindow *, WoxGtkLayerShellLayer);
+typedef void (*WoxGtkLayerSetKeyboardModeFn)(GtkWindow *, WoxGtkLayerShellKeyboardMode);
+typedef void (*WoxGtkLayerSetAnchorFn)(GtkWindow *, WoxGtkLayerShellEdge, gboolean);
+typedef void (*WoxGtkLayerSetMonitorFn)(GtkWindow *, GdkMonitor *);
+typedef void (*WoxGtkLayerSetMarginFn)(GtkWindow *, WoxGtkLayerShellEdge, int);
+
+// Cached function pointers; populated by wox_ensure_layer_shell_symbols.
+static WoxGtkLayerIsSupportedFn gtk_layer_is_supported_fn = nullptr;
+static WoxGtkLayerInitForWindowFn gtk_layer_init_for_window_fn = nullptr;
+static WoxGtkLayerSetLayerFn gtk_layer_set_layer_fn = nullptr;
+static WoxGtkLayerSetKeyboardModeFn gtk_layer_set_keyboard_mode_fn = nullptr;
+static WoxGtkLayerSetAnchorFn gtk_layer_set_anchor_fn = nullptr;
+static WoxGtkLayerSetMonitorFn gtk_layer_set_monitor_fn = nullptr;
+static WoxGtkLayerSetMarginFn gtk_layer_set_margin_fn = nullptr;
+
+// Resolves and caches all gtk-layer-shell symbols on first call. Subsequent
+// calls return the cached result without touching dlopen. Returns TRUE when
+// the library was loaded and every symbol Wox needs was resolved; FALSE when
+// the library is missing or incomplete, in which case layer-shell is treated
+// as unavailable and Wox falls back to compositor-managed placement.
+static gboolean wox_ensure_layer_shell_symbols()
+{
+  static gboolean checked = FALSE;
+  static gboolean ok = FALSE;
+  static void *handle = nullptr;
+  if (checked)
+  {
+    return ok;
+  }
+  checked = TRUE;
+
+  handle = dlopen("libgtk-layer-shell.so.0", RTLD_LAZY | RTLD_LOCAL);
+  if (handle == nullptr)
+  {
+    return FALSE;
+  }
+
+  ok = TRUE;
+#define WOX_RESOLVE(var, type, name)                                            \
+  do                                                                           \
+  {                                                                            \
+    dlerror();                                                                 \
+    var = reinterpret_cast<type>(dlsym(handle, name));                          \
+    const char *err = dlerror();                                               \
+    if (var == nullptr || err != nullptr)                                     \
+    {                                                                          \
+      ok = FALSE;                                                              \
+    }                                                                          \
+  } while (0)
+
+  WOX_RESOLVE(gtk_layer_is_supported_fn, WoxGtkLayerIsSupportedFn, "gtk_layer_is_supported");
+  WOX_RESOLVE(gtk_layer_init_for_window_fn, WoxGtkLayerInitForWindowFn, "gtk_layer_init_for_window");
+  WOX_RESOLVE(gtk_layer_set_layer_fn, WoxGtkLayerSetLayerFn, "gtk_layer_set_layer");
+  WOX_RESOLVE(gtk_layer_set_keyboard_mode_fn, WoxGtkLayerSetKeyboardModeFn, "gtk_layer_set_keyboard_mode");
+  WOX_RESOLVE(gtk_layer_set_anchor_fn, WoxGtkLayerSetAnchorFn, "gtk_layer_set_anchor");
+  WOX_RESOLVE(gtk_layer_set_monitor_fn, WoxGtkLayerSetMonitorFn, "gtk_layer_set_monitor");
+  WOX_RESOLVE(gtk_layer_set_margin_fn, WoxGtkLayerSetMarginFn, "gtk_layer_set_margin");
+#undef WOX_RESOLVE
+
+  if (!ok)
+  {
+    // A partial library is not useful; drop the handle so we never call
+    // half-resolved symbols.
+    dlclose(handle);
+    handle = nullptr;
+  }
+  return ok;
+}
+
+// gtk_layer_is_supported probes the compositor at runtime; the library can be
+// linked and present but the active compositor may still not implement
+// wlr-layer-shell (e.g. GNOME Shell on Wayland). Used to gate Dart-side fallback.
+//
+// wox_is_wlroots_compositor further restricts layer-shell usage to compositors
+// where Wox needs it. KWin/Wayland also advertises zwlr_layer_shell_v1 (so
+// gtk_layer_is_supported() returns true), but on KDE the previous flow
+// (show the toplevel and let KWin place it on the active output) already
+// follows the focused monitor. Driving layer-shell placement on KDE would
+// instead anchor Wox to the primary monitor because Wayland hides the global
+// pointer from regular clients, so Wox would open on the wrong screen when
+// the active monitor is not the primary one. We therefore enable layer-shell
+// only on wlroots-based compositors (Hyprland, sway, Wayfire, river, ...),
+// where the portal backend cannot deliver keyboard focus and precise placement
+// via margins is the only workable option.
+static gboolean wox_is_wlroots_compositor()
+{
+  const char *desktops_env = g_getenv("XDG_CURRENT_DESKTOP");
+  if (desktops_env == nullptr || desktops_env[0] == '\0')
+  {
+    desktops_env = g_getenv("XDG_SESSION_DESKTOP");
+  }
+  if (desktops_env == nullptr || desktops_env[0] == '\0')
+  {
+    desktops_env = g_getenv("DESKTOP_SESSION");
+  }
+  if (desktops_env == nullptr)
+  {
+    return FALSE;
+  }
+  // XDG_CURRENT_DESKTOP is a colon-separated list of registered desktop IDs;
+  // XDG_SESSION_DESKTOP / DESKTOP_SESSION are single values. Match any entry
+  // case-insensitively against the known wlroots-based compositors.
+  const char *const known_wlroots[] = {"hyprland", "sway", "wayfire", "river", "wlroots", nullptr};
+  for (const char *cursor = desktops_env; cursor != nullptr && cursor[0] != '\0';)
+  {
+    const char *sep = strchr(cursor, ':');
+    size_t len = sep != nullptr ? (size_t)(sep - cursor) : strlen(cursor);
+    for (const char *const *name = known_wlroots; *name != nullptr; name++)
+    {
+      if (strlen(*name) == len && g_ascii_strncasecmp(cursor, *name, len) == 0)
+      {
+        return TRUE;
+      }
+    }
+    if (sep == nullptr)
+    {
+      break;
+    }
+    cursor = sep + 1;
+  }
+  return FALSE;
+}
+
+static gboolean wox_layer_shell_available()
+{
+  if (!wox_ensure_layer_shell_symbols())
+  {
+    return FALSE;
+  }
+  if (gtk_layer_is_supported_fn == nullptr)
+  {
+    return FALSE;
+  }
+  return gtk_layer_is_supported_fn() && wox_is_wlroots_compositor();
+}
+
+// init_layer_shell_for_window turns a realized GtkWindow into a layer-shell
+// surface anchored to the top-left of its output at the OVERLAY layer. This
+// keeps Wox above normal windows and out of the taskbar on wlroots compositors
+// (Hyprland, sway, etc.) while still allowing precise placement via margins.
+// Keyboard interactivity is set to EXCLUSIVE so the launcher receives keyboard
+// input as soon as it is shown; layer-shell surfaces default to NONE and would
+// otherwise ignore all key events.
+static void init_layer_shell_for_window(GtkWindow *window)
+{
+  if (gtk_layer_init_for_window_fn == nullptr || gtk_layer_set_layer_fn == nullptr ||
+      gtk_layer_set_keyboard_mode_fn == nullptr || gtk_layer_set_anchor_fn == nullptr)
+  {
+    return;
+  }
+  gtk_layer_init_for_window_fn(window);
+  gtk_layer_set_layer_fn(window, WOX_GTK_LAYER_SHELL_LAYER_OVERLAY);
+  gtk_layer_set_keyboard_mode_fn(window, WOX_GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE);
+  gtk_layer_set_anchor_fn(window, WOX_GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+  gtk_layer_set_anchor_fn(window, WOX_GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
+  gtk_layer_set_anchor_fn(window, WOX_GTK_LAYER_SHELL_EDGE_BOTTOM, FALSE);
+  gtk_layer_set_anchor_fn(window, WOX_GTK_LAYER_SHELL_EDGE_RIGHT, FALSE);
+}
+
+// apply_layer_shell_placement sets the output (monitor) and the top/left
+// margins relative to that output so the launcher lands exactly where the
+// backend requested. The size is still driven by the existing resize path.
+static void apply_layer_shell_placement(GtkWindow *window, GdkMonitor *monitor,
+                                        int x, int y)
+{
+  if (gtk_layer_set_monitor_fn == nullptr || gtk_layer_set_margin_fn == nullptr)
+  {
+    return;
+  }
+  if (monitor != nullptr)
+  {
+    gtk_layer_set_monitor_fn(window, monitor);
+  }
+  gtk_layer_set_margin_fn(window, WOX_GTK_LAYER_SHELL_EDGE_LEFT, x);
+  gtk_layer_set_margin_fn(window, WOX_GTK_LAYER_SHELL_EDGE_TOP, y);
+}
+
 // create_linux_window_backend_info exposes GTK backend details to Dart logs so
 // visual placement bugs can be tied to X11 or Wayland behavior.
 static FlValue *create_linux_window_backend_info(GtkWindow *window)
@@ -245,6 +456,7 @@ static FlValue *create_linux_window_backend_info(GtkWindow *window)
   fl_value_set_string_take(result, "gdkBackendEnv", fl_value_new_string(safe_string(g_getenv("GDK_BACKEND"))));
   fl_value_set_string_take(result, "waylandDisplayEnv", fl_value_new_string(safe_string(g_getenv("WAYLAND_DISPLAY"))));
   fl_value_set_string_take(result, "displayEnv", fl_value_new_string(safe_string(g_getenv("DISPLAY"))));
+  fl_value_set_string_take(result, "supportsLayerShell", fl_value_new_bool(wox_layer_shell_available()));
 
   return result;
 }
@@ -363,6 +575,9 @@ static gboolean on_window_focus_out(GtkWidget *widget, GdkEventFocus *event,
 {
   MyApplication *self = MY_APPLICATION(user_data);
   log("FLUTTER: Window lost focus");
+  log("linux-window-focus native stage=focus-out visible=%d active=%d realized=%d mapped=%d",
+      gtk_widget_get_visible(widget), gtk_window_is_active(GTK_WINDOW(widget)),
+      gtk_widget_get_realized(widget), gtk_widget_get_mapped(widget));
 
   if (self != nullptr && gtk_widget_get_visible(widget))
   {
@@ -670,6 +885,72 @@ static gboolean intersect_rectangles(const GdkRectangle *first, const GdkRectang
   return TRUE;
 }
 
+// Uses GDK monitor geometry so Wayland screenshot metadata does not trigger the ScreenCast picker.
+static gboolean collect_gdk_monitor_snapshots(std::vector<PortalMonitorSnapshot> *monitors_out, GdkRectangle *union_out)
+{
+  if (monitors_out == nullptr || union_out == nullptr)
+  {
+    return FALSE;
+  }
+
+  GdkDisplay *display = gdk_display_get_default();
+  if (display == nullptr)
+  {
+    return FALSE;
+  }
+
+  const int monitor_count = gdk_display_get_n_monitors(display);
+  gboolean union_initialized = FALSE;
+  GdkRectangle logical_union{};
+  for (int index = 0; index < monitor_count; ++index)
+  {
+    GdkMonitor *monitor = gdk_display_get_monitor(display, index);
+    if (monitor == nullptr)
+    {
+      continue;
+    }
+
+    GdkRectangle geometry{};
+    gdk_monitor_get_geometry(monitor, &geometry);
+    if (geometry.width <= 0 || geometry.height <= 0)
+    {
+      continue;
+    }
+
+    monitors_out->push_back(PortalMonitorSnapshot{
+        "gdk-monitor-" + std::to_string(index),
+        geometry.x,
+        geometry.y,
+        geometry.width,
+        geometry.height,
+    });
+
+    if (!union_initialized)
+    {
+      logical_union = geometry;
+      union_initialized = TRUE;
+      continue;
+    }
+
+    const int left = MIN(logical_union.x, geometry.x);
+    const int top = MIN(logical_union.y, geometry.y);
+    const int right = MAX(logical_union.x + logical_union.width, geometry.x + geometry.width);
+    const int bottom = MAX(logical_union.y + logical_union.height, geometry.y + geometry.height);
+    logical_union.x = left;
+    logical_union.y = top;
+    logical_union.width = right - left;
+    logical_union.height = bottom - top;
+  }
+
+  if (monitors_out->empty())
+  {
+    return FALSE;
+  }
+
+  *union_out = logical_union;
+  return TRUE;
+}
+
 static gboolean encode_pixbuf_to_png_base64(GdkPixbuf *pixbuf, gchar **base64_out, gchar **error_out)
 {
   gchar *png_buffer = nullptr;
@@ -687,6 +968,49 @@ static gboolean encode_pixbuf_to_png_base64(GdkPixbuf *pixbuf, gchar **base64_ou
 
   *base64_out = g_base64_encode(reinterpret_cast<const guchar *>(png_buffer), png_size);
   g_free(png_buffer);
+  return TRUE;
+}
+
+// Writes native screenshot payloads to temp PNGs to avoid large MethodChannel base64 copies.
+static gboolean write_pixbuf_to_temp_png_file(GdkPixbuf *pixbuf, gchar **file_path_out, gchar **error_out)
+{
+  if (pixbuf == nullptr || file_path_out == nullptr)
+  {
+    if (error_out != nullptr)
+    {
+      *error_out = g_strdup("Invalid screenshot image payload");
+    }
+    return FALSE;
+  }
+
+  GError *file_error = nullptr;
+  gchar *file_path = nullptr;
+  const int file_descriptor = g_file_open_tmp("wox-screenshot-XXXXXX", &file_path, &file_error);
+  if (file_descriptor == -1)
+  {
+    if (error_out != nullptr)
+    {
+      *error_out = g_strdup(file_error != nullptr ? file_error->message : "Failed to create screenshot temp file");
+    }
+    g_clear_error(&file_error);
+    return FALSE;
+  }
+  close(file_descriptor);
+
+  GError *save_error = nullptr;
+  if (!gdk_pixbuf_save(pixbuf, file_path, "png", &save_error, nullptr))
+  {
+    if (error_out != nullptr)
+    {
+      *error_out = g_strdup(save_error != nullptr ? save_error->message : "Failed to write screenshot temp file");
+    }
+    g_clear_error(&save_error);
+    unlink(file_path);
+    g_free(file_path);
+    return FALSE;
+  }
+
+  *file_path_out = file_path;
   return TRUE;
 }
 
@@ -1714,6 +2038,45 @@ static gboolean cache_portal_capture(MyApplication *self, gchar **error_out)
     return FALSE;
   }
 
+  std::vector<PortalMonitorSnapshot> gdk_monitors;
+  GdkRectangle gdk_union{};
+  if (collect_gdk_monitor_snapshots(&gdk_monitors, &gdk_union))
+  {
+    GdkPixbuf *desktop_pixbuf = nullptr;
+    gchar *screenshot_error = nullptr;
+    const gint64 portal_screenshot_start_us = g_get_monotonic_time();
+    if (!call_portal_screenshot(connection, &desktop_pixbuf, &screenshot_error))
+    {
+      if (error_out != nullptr)
+      {
+        *error_out = g_strdup(screenshot_error != nullptr ? screenshot_error : "Failed to capture portal screenshot");
+      }
+      g_free(screenshot_error);
+      g_object_unref(connection);
+      return FALSE;
+    }
+    const gint64 portal_screenshot_elapsed_ms = (g_get_monotonic_time() - portal_screenshot_start_us) / 1000;
+
+    // Wayland does not expose pixels directly, but GDK still exposes monitor geometry without a
+    // ScreenCast source picker. Use that geometry to slice the Screenshot portal desktop image so
+    // the capture flow behaves like the macOS/Windows full-desktop annotation workspace.
+    self->cached_portal_capture.has_value = TRUE;
+    self->cached_portal_capture.is_single_desktop = FALSE;
+    self->cached_portal_capture.monitors = gdk_monitors;
+    self->cached_portal_capture.logical_union = gdk_union;
+    self->cached_portal_capture.scale_x = gdk_union.width > 0 ? static_cast<double>(gdk_pixbuf_get_width(desktop_pixbuf)) / gdk_union.width : 1.0;
+    self->cached_portal_capture.scale_y = gdk_union.height > 0 ? static_cast<double>(gdk_pixbuf_get_height(desktop_pixbuf)) / gdk_union.height : 1.0;
+    self->cached_portal_capture.desktop_pixbuf = desktop_pixbuf;
+    log("screenshot portal source mapping: source=gdk-monitor monitorCount=%zu sourceUnion=%d,%d %dx%d pixbuf=%dx%d",
+        gdk_monitors.size(),
+        gdk_union.x, gdk_union.y, gdk_union.width, gdk_union.height,
+        gdk_pixbuf_get_width(desktop_pixbuf), gdk_pixbuf_get_height(desktop_pixbuf));
+    log("screenshot native timing: stage=portal_screenshot elapsedMs=%lld", static_cast<long long>(portal_screenshot_elapsed_ms));
+    g_free(screenshot_error);
+    g_object_unref(connection);
+    return TRUE;
+  }
+
   std::vector<PortalMonitorSnapshot> monitors;
   gchar *monitor_error = nullptr;
   const gboolean metadata_ok = capture_portal_monitor_metadata(connection, &monitors, &monitor_error);
@@ -1922,13 +2285,13 @@ static gboolean build_portal_snapshot_payloads(MyApplication *self, FlValue *dis
         }
       }
 
-      gchar *image_base64 = nullptr;
+      gchar *image_file_path = nullptr;
       gchar *encode_error = nullptr;
-      if (!encode_pixbuf_to_png_base64(image_pixbuf, &image_base64, &encode_error))
+      if (!write_pixbuf_to_temp_png_file(image_pixbuf, &image_file_path, &encode_error))
       {
         if (error_out != nullptr)
         {
-          *error_out = encode_error != nullptr ? encode_error : g_strdup("Failed to encode portal screenshot");
+          *error_out = encode_error != nullptr ? encode_error : g_strdup("Failed to write portal screenshot");
         }
         else
         {
@@ -1940,8 +2303,8 @@ static gboolean build_portal_snapshot_payloads(MyApplication *self, FlValue *dis
         }
         return FALSE;
       }
-      fl_value_set_string_take(snapshot, "imageBytesBase64", fl_value_new_string(image_base64));
-      g_free(image_base64);
+      fl_value_set_string_take(snapshot, "imageFilePath", fl_value_new_string(image_file_path));
+      g_free(image_file_path);
       if (should_unref_image_pixbuf)
       {
         g_object_unref(image_pixbuf);
@@ -2008,13 +2371,13 @@ static gboolean build_portal_snapshot_payloads(MyApplication *self, FlValue *dis
           return FALSE;
         }
 
-        gchar *image_base64 = nullptr;
+        gchar *image_file_path = nullptr;
         gchar *encode_error = nullptr;
-        if (!encode_pixbuf_to_png_base64(monitor_pixbuf, &image_base64, &encode_error))
+        if (!write_pixbuf_to_temp_png_file(monitor_pixbuf, &image_file_path, &encode_error))
         {
           if (error_out != nullptr)
           {
-            *error_out = encode_error != nullptr ? encode_error : g_strdup("Failed to encode portal monitor snapshot");
+            *error_out = encode_error != nullptr ? encode_error : g_strdup("Failed to write portal monitor snapshot");
           }
           else
           {
@@ -2024,8 +2387,8 @@ static gboolean build_portal_snapshot_payloads(MyApplication *self, FlValue *dis
           return FALSE;
         }
 
-        fl_value_set_string_take(snapshot, "imageBytesBase64", fl_value_new_string(image_base64));
-        g_free(image_base64);
+        fl_value_set_string_take(snapshot, "imageFilePath", fl_value_new_string(image_file_path));
+        g_free(image_file_path);
         g_object_unref(monitor_pixbuf);
       }
 
@@ -2223,6 +2586,7 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
     const GdkRectangle *logical_selection_ptr = has_logical_selection ? &logical_selection : nullptr;
     FlValue *snapshots = nullptr;
     gchar *capture_error = nullptr;
+    const gint64 method_start_us = g_get_monotonic_time();
 #ifdef GDK_WINDOWING_X11
     GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
     if (display != nullptr && GDK_IS_X11_DISPLAY(display))
@@ -2253,6 +2617,12 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
       clear_screenshot_capture_cache(self);
       if (build_portal_snapshot_payloads(self, nullptr, include_image_bytes, logical_selection_ptr, &snapshots, &capture_error))
       {
+        log("screenshot native timing: method=%s backend=portal includeImages=%d selection=%d elapsedMs=%lld snapshotCount=%zu",
+            method,
+            include_image_bytes,
+            has_logical_selection,
+            static_cast<long long>((g_get_monotonic_time() - method_start_us) / 1000),
+            fl_value_get_length(snapshots));
         response = FL_METHOD_RESPONSE(fl_method_success_response_new(snapshots));
         if (has_logical_selection)
         {
@@ -2285,6 +2655,7 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
       {
         FlValue *snapshots = nullptr;
         gchar *capture_error = nullptr;
+        const gint64 method_start_us = g_get_monotonic_time();
 #ifdef GDK_WINDOWING_X11
         GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
         if (display != nullptr && GDK_IS_X11_DISPLAY(display))
@@ -2304,6 +2675,10 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
         {
           if (build_portal_snapshot_payloads(self, display_ids, TRUE, nullptr, &snapshots, &capture_error))
           {
+            log("screenshot native timing: method=%s backend=portal includeImages=1 selection=0 elapsedMs=%lld snapshotCount=%zu",
+                method,
+                static_cast<long long>((g_get_monotonic_time() - method_start_us) / 1000),
+                fl_value_get_length(snapshots));
             response = FL_METHOD_RESPONSE(fl_method_success_response_new(snapshots));
           }
           else
@@ -2528,6 +2903,68 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
           fl_method_success_response_new(fl_value_new_null()));
     }
   }
+  else if (strcmp(method, "applyLayerShellPlacement") == 0)
+  {
+    // Place the launcher on a specific output at an exact position using
+    // wlr-layer-shell margins. x/y are absolute virtual-screen coordinates;
+    // we resolve them to the monitor that contains the target point and then
+    // express the placement as margins relative to that output's origin. Only
+    // meaningful when layer-shell was initialized for this window.
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP)
+    {
+      double x = fl_value_get_float(fl_value_lookup_string(args, "x"));
+      double y = fl_value_get_float(fl_value_lookup_string(args, "y"));
+      double width = fl_value_get_float(fl_value_lookup_string(args, "width"));
+      double height = fl_value_get_float(fl_value_lookup_string(args, "height"));
+      const int target_x = (int)x;
+      const int target_y = (int)y;
+      const int target_width = (int)width;
+      const int target_height = (int)height;
+
+      GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
+      GdkMonitor *target_monitor = nullptr;
+      if (display != nullptr)
+      {
+        const int n_monitors = gdk_display_get_n_monitors(display);
+        for (int i = 0; i < n_monitors; i++)
+        {
+          GdkMonitor *m = gdk_display_get_monitor(display, i);
+          GdkRectangle geom;
+          gdk_monitor_get_geometry(m, &geom);
+          if (target_x >= geom.x && target_x < geom.x + geom.width &&
+              target_y >= geom.y && target_y < geom.y + geom.height)
+          {
+            target_monitor = m;
+            break;
+          }
+        }
+        if (target_monitor == nullptr && n_monitors > 0)
+        {
+          target_monitor = gdk_display_get_monitor_at_point(display, target_x, target_y);
+        }
+      }
+
+      if (self->layer_shell_enabled && target_monitor != nullptr)
+      {
+        GdkRectangle geom;
+        gdk_monitor_get_geometry(target_monitor, &geom);
+        const int margin_left = target_x - geom.x;
+        const int margin_top = target_y - geom.y;
+        apply_layer_shell_placement(window, target_monitor, margin_left, margin_top);
+        apply_window_size(window, target_width, target_height);
+        log("FLUTTER: applyLayerShellPlacement monitor=%d,%d margins=%d,%d size=%dx%d",
+            geom.x, geom.y, margin_left, margin_top, target_width, target_height);
+      }
+      else
+      {
+        // Without layer-shell this call is a no-op; Dart should not have sent
+        // it, but keep the size request so a stray call still resizes cleanly.
+        apply_window_size(window, target_width, target_height);
+      }
+      response = FL_METHOD_RESPONSE(
+          fl_method_success_response_new(fl_value_new_null()));
+    }
+  }
   else if (strcmp(method, "getPosition") == 0)
   {
     int x, y;
@@ -2557,7 +2994,30 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
     {
       double x = fl_value_get_float(fl_value_lookup_string(args, "x"));
       double y = fl_value_get_float(fl_value_lookup_string(args, "y"));
-      gtk_window_move(window, (int)x, (int)y);
+      const int target_x = (int)x;
+      const int target_y = (int)y;
+
+      if (self->layer_shell_enabled)
+      {
+        // layer-shell windows ignore gtk_window_move; resolve the monitor at
+        // the target point and use margin-based placement relative to it.
+        GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
+        GdkMonitor *monitor = nullptr;
+        if (display != nullptr)
+        {
+          monitor = gdk_display_get_monitor_at_point(display, target_x, target_y);
+        }
+        if (monitor != nullptr)
+        {
+          GdkRectangle geom;
+          gdk_monitor_get_geometry(monitor, &geom);
+          apply_layer_shell_placement(window, monitor, target_x - geom.x, target_y - geom.y);
+        }
+      }
+      else
+      {
+        gtk_window_move(window, target_x, target_y);
+      }
       log("FLUTTER: setPosition, x: %f, y: %f", x, y);
       response = FL_METHOD_RESPONSE(
           fl_method_success_response_new(fl_value_new_null()));
@@ -2620,8 +3080,15 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
 
     log("FLUTTER: center, window to %d,%d on monitor at %d,%d", x, y, workarea.x, workarea.y);
 
-    // 设置窗口位置
-    gtk_window_move(window, x, y);
+    if (self->layer_shell_enabled)
+    {
+      // layer-shell windows ignore gtk_window_move; use margin-based placement.
+      apply_layer_shell_placement(window, monitor, x - workarea.x, y - workarea.y);
+    }
+    else
+    {
+      gtk_window_move(window, x, y);
+    }
 
     response =
         FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
@@ -2732,17 +3199,65 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
     // gtk_window_begin_move_drag is the cross-backend GTK3 API for this:
     // it sends a _NET_WM_MOVERESIZE message on X11 and uses the xdg-shell
     // move request on Wayland, so no special-casing is needed here.
-    GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
-    GdkSeat *seat = gdk_display_get_default_seat(display);
-    GdkDevice *pointer = gdk_seat_get_pointer(seat);
+    const char *trace_id = "";
+    const char *source = "unknown";
+    if (args != nullptr && fl_value_get_type(args) == FL_VALUE_TYPE_MAP)
+    {
+      FlValue *trace_id_value = fl_value_lookup_string(args, "traceId");
+      if (trace_id_value != nullptr && fl_value_get_type(trace_id_value) == FL_VALUE_TYPE_STRING)
+      {
+        trace_id = fl_value_get_string(trace_id_value);
+      }
+      FlValue *source_value = fl_value_lookup_string(args, "source");
+      if (source_value != nullptr && fl_value_get_type(source_value) == FL_VALUE_TYPE_STRING)
+      {
+        source = fl_value_get_string(source_value);
+      }
+    }
 
-    gint root_x = 0, root_y = 0;
-    gdk_device_get_position(pointer, NULL, &root_x, &root_y);
+    GtkWidget *widget = GTK_WIDGET(window);
+    GdkWindow *gdk_window = gtk_widget_get_window(widget);
+    GdkDisplay *display = gtk_widget_get_display(widget);
+    GdkSeat *seat = display != nullptr ? gdk_display_get_default_seat(display) : nullptr;
+    GdkDevice *pointer = seat != nullptr ? gdk_seat_get_pointer(seat) : nullptr;
+    const char *display_name = display != nullptr ? gdk_display_get_name(display) : "none";
+    const char *display_type = display != nullptr ? G_OBJECT_TYPE_NAME(display) : "none";
+    const char *window_type = gdk_window != nullptr ? G_OBJECT_TYPE_NAME(gdk_window) : "none";
+    const char *backend = window_type;
+#ifdef GDK_WINDOWING_X11
+    if (gdk_window != nullptr && GDK_IS_X11_WINDOW(gdk_window))
+    {
+      backend = "x11";
+    }
+#endif
 
-    log("FLUTTER: startDragging at %d,%d", root_x, root_y);
-    gtk_window_begin_move_drag(window, 1, root_x, root_y, GDK_CURRENT_TIME);
-    response =
-        FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
+    if (pointer == nullptr)
+    {
+      log("linux-window-drag native stage=missing-pointer traceId=%s source=%s backend=%s displayType=%s display=%s windowType=%s visible=%d realized=%d mapped=%d",
+          trace_id, source, backend, display_type, display_name, window_type,
+          gtk_widget_get_visible(widget), gtk_widget_get_realized(widget),
+          gtk_widget_get_mapped(widget));
+      response = FL_METHOD_RESPONSE(fl_method_error_response_new(
+          "POINTER_UNAVAILABLE", "Unable to resolve the current pointer device", nullptr));
+    }
+    else
+    {
+      gint root_x = 0, root_y = 0;
+      gdk_device_get_position(pointer, NULL, &root_x, &root_y);
+
+      log("linux-window-drag native stage=begin traceId=%s source=%s backend=%s displayType=%s display=%s windowType=%s visible=%d active=%d realized=%d mapped=%d root=%d,%d time=%u",
+          trace_id, source, backend, display_type, display_name, window_type,
+          gtk_widget_get_visible(widget), gtk_window_is_active(window),
+          gtk_widget_get_realized(widget), gtk_widget_get_mapped(widget), root_x,
+          root_y, GDK_CURRENT_TIME);
+      gtk_window_begin_move_drag(window, 1, root_x, root_y, GDK_CURRENT_TIME);
+      log("linux-window-drag native stage=after-begin traceId=%s source=%s visible=%d active=%d realized=%d mapped=%d",
+          trace_id, source, gtk_widget_get_visible(widget),
+          gtk_window_is_active(window), gtk_widget_get_realized(widget),
+          gtk_widget_get_mapped(widget));
+      response =
+          FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
+    }
   }
   else
   {
@@ -2807,6 +3322,17 @@ static void my_application_activate(GApplication *application)
   gtk_window_set_skip_taskbar_hint(window, TRUE);
   gtk_window_set_type_hint(window, GDK_WINDOW_TYPE_HINT_UTILITY);
   gtk_window_set_keep_above(window, TRUE);
+
+  // On wlroots-based Wayland compositors (Hyprland, sway, etc.) the
+  // wlr-layer-shell protocol lets Wox place itself precisely on a chosen
+  // output and stay above normal windows. Initialize the layer surface before
+  // realize so GTK composes it as a layer surface from the start. The runtime
+  // availability check guards compositors that do not implement the protocol.
+  if (wox_layer_shell_available())
+  {
+    init_layer_shell_for_window(window);
+    self->layer_shell_enabled = TRUE;
+  }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
@@ -2949,6 +3475,7 @@ static void my_application_init(MyApplication *self)
   self->pending_bounds_y = 0;
   self->pending_bounds_width = 0;
   self->pending_bounds_height = 0;
+  self->layer_shell_enabled = FALSE;
 }
 
 MyApplication *my_application_new()

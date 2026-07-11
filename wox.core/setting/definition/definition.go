@@ -21,9 +21,15 @@ const (
 	PluginSettingDefinitionTypeNewLine       PluginSettingDefinitionType = "newline"
 	PluginSettingDefinitionTypeTable         PluginSettingDefinitionType = "table"
 
-	// dynamic setting will be replaced by the actual setting when retrieved
-	// this is useful when the setting is dynamic. E.g. a list of plugins for select
-	// if user define the dynamic setting, user should use api.
+	// Wox-internal setting types used by system plugins. These are not part
+	// of the public plugin API and are rendered by dedicated Flutter widgets.
+	PluginSettingDefinitionTypeDictationHotkey PluginSettingDefinitionType = "dictationHotkey"
+	PluginSettingDefinitionTypeDictationModel  PluginSettingDefinitionType = "dictationModel"
+
+	// dynamic setting will be replaced by the actual setting when retrieved.
+	// The callback may return an empty PluginSettingDefinitionItem to hide it.
+	// This is useful when the setting is dynamic. E.g. a list of plugins for select.
+	// If user defines the dynamic setting, user should use api.
 	PluginSettingDefinitionTypeDynamic PluginSettingDefinitionType = "dynamic"
 )
 
@@ -36,8 +42,14 @@ type PluginSettingDefinitionValue interface {
 type PluginSettingDefinitionItem struct {
 	Type                PluginSettingDefinitionType
 	Value               PluginSettingDefinitionValue
+	SearchAliases       []string // Additional stable terms indexed by the settings search.
 	DisabledInPlatforms []util.Platform
 	IsPlatformSpecific  bool // if true, this setting may be different in different platforms
+}
+
+// IsEmpty reports whether this item is the zero-value dynamic callback result.
+func (n PluginSettingDefinitionItem) IsEmpty() bool {
+	return n.Type == "" && n.Value == nil
 }
 
 // Deprecated: plugin-provided pixel styling is ignored when settings are loaded.
@@ -55,6 +67,12 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 	value := gjson.GetBytes(b, "Type")
 	if !value.Exists() {
 		return errors.New("setting must have Type property")
+	}
+	searchAliases := gjson.GetBytes(b, "SearchAliases")
+	if searchAliases.Exists() {
+		if err := json.Unmarshal([]byte(searchAliases.Raw), &n.SearchAliases); err != nil {
+			return err
+		}
 	}
 
 	contentResult := gjson.GetBytes(b, "Value")
@@ -119,6 +137,22 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 	case "selectAIModel":
 		n.Type = PluginSettingDefinitionTypeSelectAIModel
 		var v PluginSettingValueSelectAIModel
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "dictationHotkey":
+		n.Type = PluginSettingDefinitionTypeDictationHotkey
+		var v PluginSettingValueDictationHotkey
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "dictationModel":
+		n.Type = PluginSettingDefinitionTypeDictationModel
+		var v PluginSettingValueDictationModel
 		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
 		if unmarshalErr != nil {
 			return unmarshalErr

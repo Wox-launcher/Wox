@@ -2,6 +2,7 @@ package browser
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +26,14 @@ type BrowserOption struct {
 	ID    string
 	Label string
 	Icon  common.WoxImage
+}
+
+// TabInfo carries the info needed to identify and activate a browser tab.
+type TabInfo struct {
+	TabId    int
+	WindowId int
+	TabIndex int
+	Url      string
 }
 
 var SupportedBrowsers = []BrowserOption{
@@ -262,4 +271,128 @@ func uniqueNonEmptyStrings(values []string) []string {
 	}
 
 	return result
+}
+
+// BrowserIDForIdentity maps a window-manager app identity (and optional app path)
+// to a canonical browser ID. Returns "" when the identity is not a known browser.
+// On Windows, identity is the lowercased executable base name (e.g. "chrome.exe").
+// On macOS, identity is the bundle id (e.g. "com.google.Chrome").
+// On Linux, identity is the executable command (e.g. "google-chrome").
+// appPath is used to disambiguate Chrome vs Chromium (both use "chrome.exe" on Windows).
+func BrowserIDForIdentity(identity string, appPath string) string {
+	id := strings.ToLower(strings.TrimSpace(identity))
+	if id == "" {
+		return ""
+	}
+
+	switch {
+	case util.IsWindows():
+		return windowsIdentityToBrowserID(id, strings.ToLower(strings.TrimSpace(appPath)))
+	case util.IsMacOS():
+		return macIdentityToBrowserID(id)
+	case util.IsLinux():
+		return linuxIdentityToBrowserID(id)
+	}
+	return ""
+}
+
+// windowsIdentityToBrowserID maps a Windows exe base name to a browser ID.
+// Uses appPath to distinguish Chromium from Chrome (both use "chrome.exe").
+func windowsIdentityToBrowserID(id string, appPath string) string {
+	switch id {
+	case "chrome.exe":
+		if strings.Contains(appPath, "chromium") {
+			return BrowserIDChromium
+		}
+		return BrowserIDChrome
+	case "msedge.exe":
+		return BrowserIDEdge
+	case "firefox.exe":
+		return BrowserIDFirefox
+	case "brave.exe":
+		return BrowserIDBrave
+	case "opera.exe", "launcher.exe":
+		return BrowserIDOpera
+	}
+	return ""
+}
+
+// macIdentityToBrowserID maps a macOS bundle id to a browser ID.
+func macIdentityToBrowserID(id string) string {
+	switch id {
+	case "com.google.chrome":
+		return BrowserIDChrome
+	case "org.chromium.chromium":
+		return BrowserIDChromium
+	case "com.microsoft.edgemac":
+		return BrowserIDEdge
+	case "org.mozilla.firefox":
+		return BrowserIDFirefox
+	case "com.brave.browser":
+		return BrowserIDBrave
+	case "com.operasoftware.opera":
+		return BrowserIDOpera
+	case "com.apple.safari":
+		return BrowserIDSafari
+	}
+	return ""
+}
+
+// linuxIdentityToBrowserID maps a Linux executable command to a browser ID.
+func linuxIdentityToBrowserID(id string) string {
+	base := filepath.Base(id)
+	switch base {
+	case "google-chrome", "google-chrome-stable":
+		return BrowserIDChrome
+	case "chromium", "chromium-browser":
+		return BrowserIDChromium
+	case "microsoft-edge", "microsoft-edge-stable":
+		return BrowserIDEdge
+	case "firefox":
+		return BrowserIDFirefox
+	case "brave-browser":
+		return BrowserIDBrave
+	case "opera":
+		return BrowserIDOpera
+	}
+	return ""
+}
+
+// NormalizeURL ensures a user-entered URL has a scheme, defaulting to https.
+// Returns "" for blank input or URLs with non-http(s) schemes.
+func NormalizeURL(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	if !strings.Contains(s, "://") {
+		s = "https://" + s
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return ""
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return ""
+	}
+	return s
+}
+
+// NormalizeURLForComparison strips trailing slash, lowercases scheme+host+path,
+// and removes the leading "www." subdomain so that two URLs pointing at the
+// same page compare equal regardless of www prefix, fragment, or minor
+// formatting differences. Used for tab dedup.
+func NormalizeURLForComparison(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return strings.ToLower(strings.TrimRight(s, "/"))
+	}
+	host := strings.ToLower(u.Host)
+	host = strings.TrimPrefix(host, "www.")
+	key := strings.ToLower(u.Scheme) + "://" + host + u.Path
+	return strings.TrimRight(key, "/")
 }

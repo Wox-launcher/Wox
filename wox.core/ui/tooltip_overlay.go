@@ -32,7 +32,7 @@ func handleTooltipOverlayShow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tooltip.Show(ctx, tooltip.OverlayOptions{
+	tooltip.Show(ctx, tooltip.Options{
 		Name:         request.Name,
 		Text:         request.Text,
 		Side:         request.Side,

@@ -71,3 +71,77 @@ macOS 可能会限制 Desktop、Documents、Downloads、外置磁盘等位置。
 ### 如何修改快捷键？
 
 打开 **设置 -> 常规**，编辑快捷键字段。
+
+## Wayland
+
+### 在 Wayland 下如何使用双修饰键热键或 CapsLock 组合键？ {#wayland-double-modifier-hotkeys}
+
+在 Wayland 下，Wox 无法像在 X11 上那样通过显示服务器全局拦截原始按键事件。为了启用双修饰键热键（如 `ctrl+ctrl`、`shift+shift`）和 CapsLock 组合键热键（如 `capslock+a`），Wox 会直接从 Linux evdev 接口读取键盘事件。
+
+所需权限取决于你要使用哪种热键：
+
+#### 双修饰键热键（如 `ctrl+ctrl`）— 只需要 `input` 组
+
+这授予对 `/dev/input/event*` 设备的读权限。Wox 被动监听键盘事件，不会 grab 或重映射键盘。
+
+```bash
+sudo usermod -aG input $USER
+```
+
+重新登录，然后重启 Wox。
+
+#### CapsLock 组合键（如 `capslock+a`）— 需要 `input` 组，推荐 `uinput` 组
+
+CapsLock 组合键需要 `input` 组（evdev 读取权限）来检测组合键。`uinput` 组**不是**注册或触发热键的必需条件——它仅在组合键触发后用于恢复 CapsLock 状态并删除多打的组合字符。
+
+当 CapsLock 被用作组合键前缀时，由于 Wox 在 Wayland 下无法拦截原始事件，系统会切换 CapsLock 状态。Wox 通过 uinput 虚拟键盘注入一个 CapsLock 按键事件来撤销这个切换。如果没有 uinput，热键仍会触发，但大小写灯可能被切换，并可能在当前输入框里多输入一个字符。
+
+要启用完整的 CapsLock 状态恢复，请将自己加入 `uinput` 组：
+
+```bash
+sudo groupadd -r uinput 2>/dev/null
+sudo usermod -aG input,uinput $USER
+```
+
+然后确保 `/dev/uinput` 对组可写。许多原版发行版将 `/dev/uinput` 设为 `crw------- root:root`，仅加入组还不够——还需要一条 udev 规则：
+
+```bash
+echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' | sudo tee /etc/udev/rules.d/80-uinput.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger /dev/uinput
+```
+
+重新登录，然后重启 Wox。
+
+> **排障：** 如果 Wox doctor 提示你已经在 `uinput` 组里，但 `/dev/uinput` 仍然不可写，说明设备节点缺少组权限。执行上面的 udev 规则并运行 `sudo udevadm trigger /dev/uinput` 即可——设备节点变更不需要重新登录，但需要重启 Wox。
+
+设置完成后，单独按下 CapsLock 时正常切换大小写；将 CapsLock 用作组合键前缀时，系统的 CapsLock 切换会被自动撤销。普通组合键热键（如 `ctrl+space`）不受此设置影响，始终通过 `org.freedesktop.portal.GlobalShortcuts` portal 工作。
+
+> **注意：** 此方案不需要 root 权限或系统守护进程。Wox 只是被动读取 evdev 事件，仅在组合键触发后使用 uinput 注入一个 CapsLock 按键事件来恢复大小写状态。如果没有 uinput，CapsLock 组合键仍然可用——仅跳过状态恢复（会记录一条警告日志）。
+
+### 如何在 Wayland 下禁用 Wox 窗口动画？ {#wayland-disable-animation}
+
+在 Wayland 下，Wox 的主窗口是 layer-shell 表面（namespace 为 `gtk-layer-shell`），位于 overlay 层，并不是普通的 XDG 顶层窗口。因此，合成器中针对应用窗口（按 app id 或窗口 class 匹配）的动画规则对 Wox 不生效。要去除打开/关闭/调整大小时的过渡动画，需要配置针对 `gtk-layer-shell` namespace 的 layer 规则。
+
+#### Hyprland
+
+在 `~/.config/hypr/hyprland.conf`（或对应的 Lua 配置）中添加 `layer_rule`：
+
+```ini
+layerrule noanim, gtk-layer-shell
+```
+
+使用 Lua 配置（`hyprland.lua`）时：
+
+```lua
+hl.layer_rule({
+    name    = "wox-no-anim",
+    match   = { namespace = "gtk-layer-shell" },
+    no_anim = true,
+})
+```
+
+Hyprland 会热重载配置，修改后立即生效。如果 Wox 当前已显示，切换一次让 layer 表面按新规则重新创建即可。
+
+#### 其他合成器
+
+查阅你所使用的合成器文档中对应的 layer-surface 动画选项，并针对 `gtk-layer-shell` namespace 进行配置。Wox 本身无法从应用内部控制合成器侧的动画。

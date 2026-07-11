@@ -35,6 +35,17 @@ class LinuxWindowManager extends BaseWindowManager {
     }
   }
 
+  /// Place the window on a specific output at an exact position using the
+  /// wlr-layer-shell protocol. Only effective when [getBackendInfo] reports
+  /// `supportsLayerShell == true`; otherwise the compositor owns placement.
+  Future<void> applyLayerShellPlacement(Offset position, Size size) async {
+    try {
+      await _channel.invokeMethod('applyLayerShellPlacement', {'x': position.dx, 'y': position.dy, 'width': size.width, 'height': size.height});
+    } catch (e) {
+      Logger.instance.error(const UuidV4().generate(), "Error applying layer-shell placement: $e");
+    }
+  }
+
   @override
   Future<void> setSize(Size size) async {
     try {
@@ -145,11 +156,15 @@ class LinuxWindowManager extends BaseWindowManager {
   }
 
   @override
-  Future<void> startDragging() async {
+  Future<void> startDragging({String? traceId, String? source}) async {
+    final dragTraceId = traceId ?? const UuidV4().generate();
+    final dragSource = source ?? "unknown";
     try {
-      await _channel.invokeMethod('startDragging');
+      Logger.instance.info(dragTraceId, "linux-window-drag dart stage=invoke-start source=$dragSource");
+      await _channel.invokeMethod('startDragging', {'traceId': dragTraceId, 'source': dragSource});
+      Logger.instance.info(dragTraceId, "linux-window-drag dart stage=invoke-done source=$dragSource");
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error starting window drag: $e");
+      Logger.instance.error(dragTraceId, "linux-window-drag dart stage=invoke-error source=$dragSource error=$e");
     }
   }
 

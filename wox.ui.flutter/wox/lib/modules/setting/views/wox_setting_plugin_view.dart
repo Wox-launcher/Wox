@@ -6,14 +6,18 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/plugin/wox_ai_command_template_dialog.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_dictation_model_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_item_view.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_label_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_newline_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_select_ai_model_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
+import 'package:wox/components/plugin/wox_window_manager_groups_setting.dart';
 import 'package:wox/components/wox_hint_box.dart';
+import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_textfield.dart';
@@ -25,7 +29,10 @@ import 'package:wox/entity/setting/wox_plugin_setting_select_ai_model.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_dictation_hotkey.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_dictation_model.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_newline.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
@@ -47,8 +54,29 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   static const String _triggerKeywordOriginalColumnKey = "_wox_original_trigger_keyword";
   static const String _globalTriggerKeyword = "*";
   static const String _aiCommandPluginId = "c9910664-1c28-47ae-bad6-e7332a02d471";
+  static const String _windowManagerPluginId = "5b7d9f22-4d87-4c0f-a2c1-8e2b50c8bca0";
+  static const String _windowManagerGroupsSettingKey = "windowGroups";
   static const String _selectionPluginId = "d9e557ed-89bd-4b8b-bd64-2a7632cf3483";
   static const String _selectionSpaceQuickLookSettingKey = "enableSpaceQuickLook";
+  static const String _dictationPluginId = "a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e";
+  static const String _dictationActionsSettingKey = "actions";
+  static const String _dictationDefaultHotkeySettingKey = "defaultHotkey";
+  static const String _dictationDefaultAIRefineSettingKey = "defaultAIRefineEnabled";
+  static const String _dictationDefaultAIModelSettingKey = "defaultAIModel";
+  static const String _dictationDefaultActionId = "default";
+  static const String _dictationActionTypeDefault = "default";
+  static const String _dictationActionTypeCustom = "custom";
+  static const String _dictationActionOutputInput = "input";
+  static const String _dictationActionOutputOverlay = "overlay";
+  static const String _dictationActionOutputChat = "chat";
+  static const double _pluginSettingLabelActionWidth = 28.0;
+  static const List<WoxHotkeyRecorderKind> _dictationHotkeyKinds = [
+    WoxHotkeyRecorderKind.normalCombo,
+    WoxHotkeyRecorderKind.doubleModifier,
+    WoxHotkeyRecorderKind.capsLockCombo,
+    WoxHotkeyRecorderKind.pressModifier,
+    WoxHotkeyRecorderKind.holdModifier,
+  ];
   // Local refreshing state for showing loading spinner on refresh button
   static final RxBool _refreshing = false.obs;
   static final GlobalKey _pluginFilterIconKey = GlobalKey();
@@ -107,6 +135,12 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     if (settingType == "table") {
       return (settingDefinitionValue as PluginSettingValueTable).title;
     }
+    if (settingType == "dictationHotkey") {
+      return (settingDefinitionValue as PluginSettingValueDictationHotkey).label;
+    }
+    if (settingType == "dictationModel") {
+      return (settingDefinitionValue as PluginSettingValueDictationModel).label;
+    }
 
     return "";
   }
@@ -131,16 +165,147 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         continue;
       }
 
-      final labelActionWidth =
-          plugin.id == _selectionPluginId &&
-                  definition.value is PluginSettingValueCheckBox &&
-                  (definition.value as PluginSettingValueCheckBox).key == _selectionSpaceQuickLookSettingKey
-              ? 28.0
-              : 0.0;
+      final labelActionWidth = _pluginSettingLabelActionWidthFor(plugin: plugin, definition: definition);
       maxLabelWidth = math.max(maxLabelWidth, _measureLabelWidthByText(context, translatedLabel, minWidth: 0) + labelActionWidth);
     }
 
     return maxLabelWidth.clamp(PLUGIN_SETTING_LABEL_MIN_WIDTH, PLUGIN_SETTING_LABEL_MAX_WIDTH).toDouble();
+  }
+
+  double _pluginSettingLabelActionWidthFor({required PluginDetail plugin, required PluginSettingDefinitionItem definition}) {
+    if (plugin.id == _selectionPluginId &&
+        definition.value is PluginSettingValueCheckBox &&
+        (definition.value as PluginSettingValueCheckBox).key == _selectionSpaceQuickLookSettingKey) {
+      return _pluginSettingLabelActionWidth;
+    }
+
+    if (plugin.id == _windowManagerPluginId && definition.value is PluginSettingValueTable && (definition.value as PluginSettingValueTable).key == _windowManagerGroupsSettingKey) {
+      return _pluginSettingLabelActionWidth;
+    }
+
+    return 0;
+  }
+
+  List<Map<String, dynamic>> _decodeDictationActionRows(String raw) {
+    final normalized = raw.trim();
+    if (normalized.isEmpty || normalized == "null") {
+      return [];
+    }
+
+    try {
+      final decoded = jsonDecode(normalized);
+      if (decoded is! List) {
+        return [];
+      }
+
+      return decoded.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Map<String, dynamic> _newDictationDefaultAction() {
+    return <String, dynamic>{
+      "id": _dictationDefaultActionId,
+      "type": _dictationActionTypeDefault,
+      "name": "i18n:plugin_dictation_default_action_name",
+      "disabled": false,
+      "hotkey": "",
+      "output": _dictationActionOutputInput,
+      "model": "",
+      "prompt": "",
+      "aiRefineEnabled": false,
+    };
+  }
+
+  String _normalizeDictationActionOutput(dynamic output) {
+    switch (output?.toString().trim()) {
+      case _dictationActionOutputOverlay:
+        return _dictationActionOutputOverlay;
+      case _dictationActionOutputChat:
+        return _dictationActionOutputChat;
+      default:
+        return _dictationActionOutputInput;
+    }
+  }
+
+  String _dictationActionDisplayHotkey(Map<String, dynamic> action) {
+    return action["hotkey"]?.toString().trim() ?? "";
+  }
+
+  Map<String, dynamic> _normalizeDictationDefaultAction(Map<String, dynamic> action) {
+    final normalized = _newDictationDefaultAction();
+    normalized.addAll(action);
+    normalized["id"] = _dictationDefaultActionId;
+    normalized["type"] = _dictationActionTypeDefault;
+    normalized["name"] = normalized["name"]?.toString().trim().isNotEmpty == true ? normalized["name"].toString().trim() : "i18n:plugin_dictation_default_action_name";
+    normalized["disabled"] = false;
+    normalized["hotkey"] = normalized["hotkey"]?.toString().trim() ?? "";
+    normalized["output"] = _dictationActionOutputInput;
+    normalized["model"] = normalized["model"]?.toString().trim() ?? "";
+    normalized["prompt"] = normalized["prompt"]?.toString().trim() ?? "";
+    normalized["aiRefineEnabled"] = normalized["aiRefineEnabled"] == true || normalized["aiRefineEnabled"]?.toString() == "true";
+    normalized.remove("enabled");
+    return normalized;
+  }
+
+  Map<String, dynamic> _normalizeDictationCustomAction(Map<String, dynamic> action) {
+    final normalized = Map<String, dynamic>.from(action);
+    normalized.remove(WoxSettingPluginTable.rowUniqueIdKey);
+    normalized["id"] = normalized["id"]?.toString().trim().isNotEmpty == true ? normalized["id"].toString().trim() : const UuidV4().generate();
+    normalized["type"] = _dictationActionTypeCustom;
+    normalized["name"] = normalized["name"]?.toString().trim() ?? "";
+    normalized["disabled"] = normalized["disabled"] == true || normalized["disabled"]?.toString() == "true";
+    normalized["hotkey"] = normalized["hotkey"]?.toString().trim() ?? "";
+    normalized["output"] = _normalizeDictationActionOutput(normalized["output"]);
+    normalized["model"] = normalized["model"]?.toString().trim() ?? "";
+    normalized["prompt"] = normalized["prompt"]?.toString().trim() ?? "";
+    normalized.remove("enabled");
+    normalized.remove("aiRefineEnabled");
+    return normalized;
+  }
+
+  Map<String, dynamic> _dictationDefaultAction(PluginDetail plugin) {
+    for (final action in _decodeDictationActionRows(plugin.setting.settings[_dictationActionsSettingKey] ?? "")) {
+      if (action["type"] == _dictationActionTypeDefault || action["id"] == _dictationDefaultActionId) {
+        return _normalizeDictationDefaultAction(action);
+      }
+    }
+    return _newDictationDefaultAction();
+  }
+
+  List<Map<String, dynamic>> _dictationCustomActions(PluginDetail plugin) {
+    final customActions = <Map<String, dynamic>>[];
+    for (final action in _decodeDictationActionRows(plugin.setting.settings[_dictationActionsSettingKey] ?? "")) {
+      if (action["type"] == _dictationActionTypeDefault || action["id"] == _dictationDefaultActionId) {
+        continue;
+      }
+      customActions.add(_normalizeDictationCustomAction(action));
+    }
+    return customActions;
+  }
+
+  String _dictationCustomActionsValue(PluginDetail plugin) {
+    final rows =
+        _dictationCustomActions(plugin).map((action) {
+          final displayAction = Map<String, dynamic>.from(action);
+          displayAction["hotkey"] = _dictationActionDisplayHotkey(action);
+          return displayAction;
+        }).toList();
+    return jsonEncode(rows);
+  }
+
+  Future<String?> _updateDictationDefaultAction(PluginDetail plugin, void Function(Map<String, dynamic> action) updateAction) {
+    final defaultAction = _dictationDefaultAction(plugin);
+    updateAction(defaultAction);
+    final customActions = _dictationCustomActions(plugin);
+    return controller.updatePluginSetting(plugin.id, _dictationActionsSettingKey, jsonEncode([_normalizeDictationDefaultAction(defaultAction), ...customActions]));
+  }
+
+  String _mergeDictationCustomActions(PluginDetail plugin, String customActionsValue) {
+    final defaultAction = _dictationDefaultAction(plugin);
+    final customActions = _decodeDictationActionRows(customActionsValue).map(_normalizeDictationCustomAction).toList();
+    return jsonEncode([defaultAction, ...customActions]);
   }
 
   String _extractStablePluginSettingKey(PluginSettingDefinitionItem definition) {
@@ -158,6 +323,12 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
       return value.key;
     }
     if (value is PluginSettingValueTable) {
+      return value.key;
+    }
+    if (value is PluginSettingValueDictationHotkey) {
+      return value.key;
+    }
+    if (value is PluginSettingValueDictationModel) {
       return value.key;
     }
     return "";
@@ -896,12 +1067,21 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 late final Widget settingWidget;
                 if (e.type == "checkbox") {
                   final checkboxValue = e.value as PluginSettingValueCheckBox;
+                  final isDictationDefaultAIRefine = plugin.id == _dictationPluginId && checkboxValue.key == _dictationDefaultAIRefineSettingKey;
                   settingWidget = WoxSettingPluginCheckbox(
-                    value: plugin.setting.settings[checkboxValue.key] ?? "",
+                    value:
+                        isDictationDefaultAIRefine
+                            ? (_dictationDefaultAction(plugin)["aiRefineEnabled"] == true ? "true" : "false")
+                            : (plugin.setting.settings[checkboxValue.key] ?? ""),
                     item: checkboxValue,
                     labelWidth: uniformLabelWidth,
                     labelActions: _buildPluginSettingLabelActions(plugin: plugin, settingKey: checkboxValue.key),
                     onUpdate: (key, value) async {
+                      if (isDictationDefaultAIRefine) {
+                        return _updateDictationDefaultAction(plugin, (action) {
+                          action["aiRefineEnabled"] = value == "true";
+                        });
+                      }
                       return controller.updatePluginSetting(plugin.id, key, value);
                     },
                   );
@@ -939,11 +1119,18 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
                 if (e.type == "selectAIModel") {
+                  final modelValue = e.value as PluginSettingValueSelectAIModel;
+                  final isDictationDefaultAIModel = plugin.id == _dictationPluginId && modelValue.key == _dictationDefaultAIModelSettingKey;
                   settingWidget = WoxSettingPluginSelectAIModel(
-                    value: plugin.setting.settings[e.value.key] ?? "",
-                    item: e.value as PluginSettingValueSelectAIModel,
+                    value: isDictationDefaultAIModel ? (_dictationDefaultAction(plugin)["model"]?.toString() ?? "") : (plugin.setting.settings[modelValue.key] ?? ""),
+                    item: modelValue,
                     labelWidth: uniformLabelWidth,
                     onUpdate: (key, value) async {
+                      if (isDictationDefaultAIModel) {
+                        return _updateDictationDefaultAction(plugin, (action) {
+                          action["model"] = value;
+                        });
+                      }
                       return controller.updatePluginSetting(plugin.id, key, value);
                     },
                   );
@@ -957,16 +1144,82 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   settingWidget = WoxSettingPluginLabel(value: "", item: e.value as PluginSettingValueLabel, labelWidth: uniformLabelWidth, onUpdate: (key, value) async => null);
                   return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
+                if (e.type == "dictationHotkey") {
+                  final hotkeyValue = e.value as PluginSettingValueDictationHotkey;
+                  final savedHotkeyValue =
+                      plugin.id == _dictationPluginId && hotkeyValue.key == _dictationDefaultHotkeySettingKey
+                          ? _dictationActionDisplayHotkey(_dictationDefaultAction(plugin))
+                          : (plugin.setting.settings[hotkeyValue.key] ?? "").trim();
+                  settingWidget = WoxSettingPluginItem.layoutFor(
+                    label: hotkeyValue.label,
+                    style: hotkeyValue.style,
+                    tooltip: hotkeyValue.tooltip,
+                    labelWidth: uniformLabelWidth,
+                    translator: controller.tr,
+                    child: WoxHotkeyRecorder(
+                      hotkey: savedHotkeyValue.isNotEmpty ? WoxHotkey.parseHotkeyFromString(savedHotkeyValue) : null,
+                      purpose: WoxHotkeyRecorderPurpose.dictation,
+                      allowedKinds: _dictationHotkeyKinds,
+                      tipPosition: WoxHotkeyRecorderTipPosition.right,
+                      onHotKeyRecorded: (result) {
+                        if (plugin.id == _dictationPluginId && hotkeyValue.key == _dictationDefaultHotkeySettingKey) {
+                          _updateDictationDefaultAction(plugin, (action) {
+                            action["hotkey"] = result.hotkey.trim();
+                          });
+                          return;
+                        }
+                        controller.updatePluginSetting(plugin.id, hotkeyValue.key, result.hotkey);
+                      },
+                      onUnavailableHotKeyRecorded: (_) {
+                        if (plugin.id == _dictationPluginId && hotkeyValue.key == _dictationDefaultHotkeySettingKey) {
+                          _updateDictationDefaultAction(plugin, (action) {
+                            action["hotkey"] = "";
+                          });
+                          return;
+                        }
+                        controller.updatePluginSetting(plugin.id, hotkeyValue.key, "");
+                      },
+                    ),
+                  );
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
+                }
+                if (e.type == "dictationModel") {
+                  final modelValue = e.value as PluginSettingValueDictationModel;
+                  settingWidget = WoxSettingPluginDictationModel(
+                    value: plugin.setting.settings[modelValue.key] ?? "",
+                    item: modelValue,
+                    labelWidth: uniformLabelWidth,
+                    onUpdate: (key, value) async {
+                      return controller.updatePluginSetting(plugin.id, key, value);
+                    },
+                  );
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
+                }
                 if (e.type == "table") {
                   final tableValue = e.value as PluginSettingValueTable;
+                  if (plugin.id == _windowManagerPluginId && tableValue.key == _windowManagerGroupsSettingKey) {
+                    settingWidget = WoxWindowManagerGroupsSetting(
+                      value: plugin.setting.settings[tableValue.key] ?? "",
+                      labelWidth: uniformLabelWidth,
+                      onUpdate: (key, value) async {
+                        return controller.updatePluginSetting(plugin.id, key, value);
+                      },
+                    );
+                    return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
+                  }
+
                   final isAICommandCommandsTable = plugin.id == _aiCommandPluginId && tableValue.key == "commands";
+                  final isDictationActionsTable = plugin.id == _dictationPluginId && tableValue.key == _dictationActionsSettingKey;
                   settingWidget = WoxSettingPluginTable(
-                    value: plugin.setting.settings[e.value.key] ?? "",
+                    value: isDictationActionsTable ? _dictationCustomActionsValue(plugin) : plugin.setting.settings[e.value.key] ?? "",
                     item: tableValue,
                     labelWidth: uniformLabelWidth,
                     inlineTitleActions: useInlineTableActions,
                     trailingActions: isAICommandCommandsTable ? [_buildAICommandTemplateAction(context, plugin, plugin.setting.settings[tableValue.key] ?? "")] : const [],
                     onUpdate: (key, value) async {
+                      if (isDictationActionsTable) {
+                        return controller.updatePluginSetting(plugin.id, key, _mergeDictationCustomActions(plugin, value));
+                      }
                       return controller.updatePluginSetting(plugin.id, key, value);
                     },
                   );

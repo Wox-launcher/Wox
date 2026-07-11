@@ -282,6 +282,12 @@ class _WoxHotkeyOverviewPreviewViewState extends State<WoxHotkeyOverviewPreviewV
             _tr("ui_hotkey_overview_source_builtin"),
           ),
           _keyboardEntry(
+            _launcherController.filePreviewLoadHotkey,
+            _tr("ui_hotkey_overview_file_preview_load"),
+            _tr("ui_hotkey_overview_preview"),
+            _tr("ui_hotkey_overview_source_builtin"),
+          ),
+          _keyboardEntry(
             _launcherController.previewRefreshHotkey,
             _tr("ui_hotkey_overview_webview_refresh"),
             _tr("ui_hotkey_overview_preview"),

@@ -72,11 +72,13 @@ type UI interface {
 	ShowApp(ctx context.Context, showContext ShowContext)
 	ToggleApp(ctx context.Context, showContext ShowContext)
 	OpenWoxInstance(ctx context.Context, request OpenWoxInstanceRequest)
-	RecordHotkey(ctx context.Context, hotkey string)
+	RecordHotkey(ctx context.Context, hotkey string, kind string)
 	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
 	OpenOnboardingWindow(ctx context.Context)
 	PickFiles(ctx context.Context, params PickFilesParams) []string
 	CaptureScreenshot(ctx context.Context, request CaptureScreenshotRequest) (CaptureScreenshotResult, error)
+	// WriteClipboardImageFile asks the UI process to write an image file using its native clipboard owner.
+	WriteClipboardImageFile(ctx context.Context, filePath string) error
 	GetActiveWindowSnapshot(ctx context.Context) ActiveWindowSnapshot
 	GetServerPort(ctx context.Context) int
 	GetAllThemes(ctx context.Context) []Theme
@@ -102,9 +104,9 @@ type UI interface {
 	IsVisible(ctx context.Context) bool
 
 	// AI chat plugin related methods
-	FocusToChatInput(ctx context.Context)
 	SendChatResponse(ctx context.Context, chatData AIChatData)
 	ReloadChatResources(ctx context.Context, resouceName string)
+	SendAIQuestion(ctx context.Context, questionId string, question string, options []AIQuestionOption)
 
 	// ReloadSettingPlugins asks the UI to refresh plugin lists.
 	ReloadSettingPlugins(ctx context.Context)
@@ -136,7 +138,6 @@ type ActiveWindowSnapshot struct {
 
 type ShowContext struct {
 	SelectAll        bool
-	IsQueryFocus     bool // auto focus chat input on next ui update
 	HideQueryBox     bool
 	HideToolbar      bool
 	QueryBoxAtBottom bool

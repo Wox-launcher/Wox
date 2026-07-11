@@ -22,6 +22,7 @@ typedef struct {
 typedef struct {
 	char id[64];
 	int pid;
+	char title[1024];
 	WoxWindowRectC bounds;
 	WoxDisplayInfoC display;
 	int isMinimized;
@@ -32,9 +33,13 @@ int getWindowIconByPid(int pid, unsigned char **iconData);
 char* getActiveWindowName();
 char* getWindowNameByPid(int pid);
 char* getProcessBundleIdentifier(int pid);
+int isProcessIdentityRunning(const char* identity);
 int getActiveWindowPid();
 char* getActiveWindowIdForManagement();
 int getManagedWindowForManagement(const char* windowId, int pid, WoxManagedWindowC* outWindow);
+int listManagedWindowsForManagement(WoxManagedWindowC** outWindows, int* outCount);
+int listManagedWindowsForIdentityForManagement(const char* identity, WoxManagedWindowC** outWindows, int* outCount, char* outDiagnostics, int diagnosticsSize);
+void freeManagedWindowsForManagement(WoxManagedWindowC* windows);
 int listDisplaysForManagement(WoxDisplayInfoC** outDisplays, int* outCount);
 void freeDisplaysForManagement(WoxDisplayInfoC* displays);
 int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, int width, int height);
@@ -143,6 +148,18 @@ func GetProcessIdentity(pid int) string {
 	return strings.TrimSpace(C.GoString(identity))
 }
 
+// IsProcessIdentityRunning checks app process identity without touching Accessibility windows.
+func IsProcessIdentityRunning(identity string) bool {
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return false
+	}
+
+	cIdentity := C.CString(identity)
+	defer C.free(unsafe.Pointer(cIdentity))
+	return int(C.isProcessIdentityRunning(cIdentity)) == 1
+}
+
 func GetActiveWindowPid() int {
 	pid := C.getActiveWindowPid()
 	return int(pid)
@@ -169,14 +186,57 @@ func GetManagedWindow(windowId string, pid int, title string) (ManagedWindow, er
 		return ManagedWindow{}, windowManagementErrorFromCode(result)
 	}
 
-	return ManagedWindow{
-		Id:          C.GoString(&out.id[0]),
-		Pid:         int(out.pid),
-		Title:       title,
-		Bounds:      windowRectFromDarwinRect(out.bounds),
-		Display:     displayInfoFromDarwinDisplay(out.display),
-		IsMinimized: int(out.isMinimized) == 1,
-	}, nil
+	return managedWindowFromDarwinWindow(out, title), nil
+}
+
+// ListManagedWindows returns visible windows that macOS Accessibility can later move.
+func ListManagedWindows() ([]ManagedWindow, error) {
+	var outWindows *C.WoxManagedWindowC
+	var outCount C.int
+	result := int(C.listManagedWindowsForManagement(&outWindows, &outCount))
+	if result != 1 {
+		return nil, windowManagementErrorFromCode(result)
+	}
+	defer C.freeManagedWindowsForManagement(outWindows)
+
+	count := int(outCount)
+	if count == 0 {
+		return []ManagedWindow{}, nil
+	}
+
+	rawWindows := unsafe.Slice(outWindows, count)
+	windows := make([]ManagedWindow, 0, count)
+	for _, rawWindow := range rawWindows {
+		windows = append(windows, managedWindowFromDarwinWindow(rawWindow, ""))
+	}
+	return windows, nil
+}
+
+// ListManagedWindowsForIdentity refreshes one running macOS application and returns AX diagnostics for fallback logging.
+func ListManagedWindowsForIdentity(identity string) ([]ManagedWindow, string, error) {
+	cIdentity := C.CString(strings.TrimSpace(identity))
+	defer C.free(unsafe.Pointer(cIdentity))
+
+	var outWindows *C.WoxManagedWindowC
+	var outCount C.int
+	var diagnostics [2048]C.char
+	result := int(C.listManagedWindowsForIdentityForManagement(cIdentity, &outWindows, &outCount, &diagnostics[0], C.int(len(diagnostics))))
+	if result != 1 {
+		return nil, C.GoString(&diagnostics[0]), windowManagementErrorFromCode(result)
+	}
+	defer C.freeManagedWindowsForManagement(outWindows)
+
+	count := int(outCount)
+	if count == 0 {
+		return []ManagedWindow{}, C.GoString(&diagnostics[0]), nil
+	}
+
+	rawWindows := unsafe.Slice(outWindows, count)
+	windows := make([]ManagedWindow, 0, count)
+	for _, rawWindow := range rawWindows {
+		windows = append(windows, managedWindowFromDarwinWindow(rawWindow, ""))
+	}
+	return windows, C.GoString(&diagnostics[0]), nil
 }
 
 // ListDisplays returns macOS screen bounds and visible frames in top-left desktop coordinates.
@@ -275,9 +335,33 @@ func displayInfoFromDarwinDisplay(display C.WoxDisplayInfoC) DisplayInfo {
 	}
 }
 
+// managedWindowFromDarwinWindow converts Accessibility data and resolves the app identity used by settings.
+func managedWindowFromDarwinWindow(rawWindow C.WoxManagedWindowC, fallbackTitle string) ManagedWindow {
+	pid := int(rawWindow.pid)
+	title := strings.TrimSpace(fallbackTitle)
+	if title == "" {
+		title = C.GoString(&rawWindow.title[0])
+	}
+
+	return ManagedWindow{
+		Id:          C.GoString(&rawWindow.id[0]),
+		Pid:         pid,
+		Title:       title,
+		AppIdentity: strings.TrimSpace(GetProcessIdentity(pid)),
+		Bounds:      windowRectFromDarwinRect(rawWindow.bounds),
+		Display:     displayInfoFromDarwinDisplay(rawWindow.display),
+		IsMinimized: int(rawWindow.isMinimized) == 1,
+	}
+}
+
 func ActivateWindowByPid(pid int) bool {
 	result := C.activateWindowByPid(C.int(pid))
 	return int(result) == 1
+}
+
+// ActivateWindow raises the captured window through the owning macOS application.
+func ActivateWindow(managedWindow ManagedWindow) bool {
+	return ActivateWindowByPid(managedWindow.Pid)
 }
 
 func IsOpenSaveDialog() (bool, error) {

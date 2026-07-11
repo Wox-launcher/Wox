@@ -4,6 +4,7 @@ class DoctorCheckResult {
   final String name;
   final String type;
   final bool passed;
+  final bool ignored;
   final String description;
   final String actionName;
   final Map<String, dynamic>? preview;
@@ -12,6 +13,7 @@ class DoctorCheckResult {
     required this.name,
     required this.type,
     required this.passed,
+    required this.ignored,
     required this.description,
     required this.actionName,
     this.preview,
@@ -22,6 +24,7 @@ class DoctorCheckResult {
       name: json['Name'] ?? '',
       type: json['Type'] ?? '',
       passed: json['Passed'] ?? false,
+      ignored: json['Ignored'] ?? false,
       description: json['Description'] ?? '',
       actionName: json['ActionName'] ?? '',
       preview: json['Preview'],

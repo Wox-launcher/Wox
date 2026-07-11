@@ -1,6 +1,7 @@
 #define NTDDI_VERSION NTDDI_VISTA
 #define _WIN32_WINNT _WIN32_WINNT_VISTA
 #include <windows.h>
+#include <dwmapi.h>
 #include <psapi.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -33,6 +34,7 @@ typedef struct
 {
     char id[64];
     int pid;
+    char title[1024];
     WoxWindowRectC bounds;
     WoxDisplayInfoC display;
     int isMinimized;
@@ -292,6 +294,24 @@ static void copyWindowIdForManagement(char *dest, size_t destSize, HWND hwnd)
     dest[destSize - 1] = '\0';
 }
 
+static void copyWindowTitleForManagement(char *dest, size_t destSize, HWND hwnd)
+{
+    if (!dest || destSize == 0)
+    {
+        return;
+    }
+    dest[0] = '\0';
+
+    WCHAR windowTitle[1024];
+    if (!hwnd || GetWindowTextW(hwnd, windowTitle, 1024) == 0)
+    {
+        return;
+    }
+
+    WideCharToMultiByte(CP_UTF8, 0, windowTitle, -1, dest, (int)destSize, NULL, NULL);
+    dest[destSize - 1] = '\0';
+}
+
 static char *formatWindowIdForManagement(HWND hwnd)
 {
     HWND root = rootWindowForManagement(hwnd);
@@ -394,6 +414,58 @@ static int fillDisplayInfoForManagement(HMONITOR monitor, WoxDisplayInfoC *outDi
     return 1;
 }
 
+// Returns the visible DWM frame when it is a valid subset of the Win32 window rectangle.
+static int getWindowFrameRectsForManagement(HWND hwnd, RECT *windowRect, RECT *visibleRect)
+{
+    if (!hwnd || !windowRect || !visibleRect || !GetWindowRect(hwnd, windowRect))
+    {
+        return 0;
+    }
+
+    *visibleRect = *windowRect;
+    RECT dwmRect;
+    if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &dwmRect, sizeof(dwmRect))) &&
+        dwmRect.left >= windowRect->left && dwmRect.top >= windowRect->top &&
+        dwmRect.right <= windowRect->right && dwmRect.bottom <= windowRect->bottom &&
+        dwmRect.right > dwmRect.left && dwmRect.bottom > dwmRect.top)
+    {
+        *visibleRect = dwmRect;
+    }
+    return 1;
+}
+
+static int fillManagedWindowForManagement(HWND hwnd, int pid, WoxManagedWindowC *outWindow)
+{
+    if (!hwnd || !outWindow)
+    {
+        return -1;
+    }
+
+    RECT windowRect;
+    RECT visibleRect;
+    if (!getWindowFrameRectsForManagement(hwnd, &windowRect, &visibleRect))
+    {
+        return -1;
+    }
+
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    WoxDisplayInfoC display;
+    ZeroMemory(&display, sizeof(display));
+    if (!fillDisplayInfoForManagement(monitor, &display))
+    {
+        return -3;
+    }
+
+    ZeroMemory(outWindow, sizeof(*outWindow));
+    copyWindowIdForManagement(outWindow->id, sizeof(outWindow->id), hwnd);
+    copyWindowTitleForManagement(outWindow->title, sizeof(outWindow->title), hwnd);
+    outWindow->pid = pid > 0 ? pid : (int)getWindowPidForManagement(hwnd);
+    outWindow->bounds = rectFromWinRectForManagement(visibleRect);
+    outWindow->display = display;
+    outWindow->isMinimized = IsIconic(hwnd) ? 1 : 0;
+    return 1;
+}
+
 char *getActiveWindowIdForManagement()
 {
     return formatWindowIdForManagement(GetForegroundWindow());
@@ -412,27 +484,97 @@ int getManagedWindowForManagement(const char *windowId, int pid, WoxManagedWindo
         return 0;
     }
 
-    RECT rect;
-    if (!GetWindowRect(hwnd, &rect))
+    return fillManagedWindowForManagement(hwnd, pid, outWindow);
+}
+
+typedef struct
+{
+    WoxManagedWindowC *windows;
+    int count;
+    int capacity;
+    int failed;
+} ManagedWindowEnumForManagementData;
+
+static int appendManagedWindowForManagement(ManagedWindowEnumForManagementData *data, HWND hwnd)
+{
+    if (!data || !hwnd)
+    {
+        return 1;
+    }
+
+    if (data->count >= data->capacity)
+    {
+        int newCapacity = data->capacity == 0 ? 16 : data->capacity * 2;
+        WoxManagedWindowC *newWindows = (WoxManagedWindowC *)realloc(data->windows, sizeof(WoxManagedWindowC) * (size_t)newCapacity);
+        if (!newWindows)
+        {
+            data->failed = 1;
+            return 0;
+        }
+        data->windows = newWindows;
+        data->capacity = newCapacity;
+    }
+
+    int result = fillManagedWindowForManagement(hwnd, 0, &data->windows[data->count]);
+    if (result == 1 && data->windows[data->count].title[0] != '\0')
+    {
+        data->count++;
+    }
+    return 1;
+}
+
+int listManagedWindowsForManagement(WoxManagedWindowC **outWindows, int *outCount)
+{
+    if (!outWindows || !outCount)
     {
         return -1;
     }
 
-    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    WoxDisplayInfoC display;
-    ZeroMemory(&display, sizeof(display));
-    if (!fillDisplayInfoForManagement(monitor, &display))
+    *outWindows = NULL;
+    *outCount = 0;
+
+    ManagedWindowEnumForManagementData data;
+    ZeroMemory(&data, sizeof(data));
+
+    for (HWND candidate = GetWindow(GetDesktopWindow(), GW_CHILD); candidate != NULL; candidate = GetWindow(candidate, GW_HWNDNEXT))
     {
-        return -3;
+        if (!isManageableWindowForManagement(candidate))
+        {
+            continue;
+        }
+
+        HWND hwnd = rootWindowForManagement(candidate);
+        if (!hwnd || hwnd != candidate)
+        {
+            continue;
+        }
+
+        if (!appendManagedWindowForManagement(&data, hwnd))
+        {
+            break;
+        }
     }
 
-    ZeroMemory(outWindow, sizeof(*outWindow));
-    copyWindowIdForManagement(outWindow->id, sizeof(outWindow->id), hwnd);
-    outWindow->pid = pid > 0 ? pid : (int)getWindowPidForManagement(hwnd);
-    outWindow->bounds = rectFromWinRectForManagement(rect);
-    outWindow->display = display;
-    outWindow->isMinimized = IsIconic(hwnd) ? 1 : 0;
+    if (data.failed)
+    {
+        if (data.windows)
+        {
+            free(data.windows);
+        }
+        return -1;
+    }
+
+    *outWindows = data.windows;
+    *outCount = data.count;
     return 1;
+}
+
+void freeManagedWindowsForManagement(WoxManagedWindowC *windows)
+{
+    if (windows)
+    {
+        free(windows);
+    }
 }
 
 typedef struct
@@ -548,7 +690,32 @@ int moveResizeWindowForManagement(const char *windowId, int pid, int x, int y, i
         height = 1;
     }
 
-    return SetWindowPos(hwnd, HWND_TOP, x, y, width, height, SWP_SHOWWINDOW) ? 1 : -1;
+    RECT windowRect;
+    RECT visibleRect;
+    if (getWindowFrameRectsForManagement(hwnd, &windowRect, &visibleRect))
+    {
+        // SetWindowPos consumes the outer frame, while window layouts target the visible DWM frame.
+        int leftInset = visibleRect.left - windowRect.left;
+        int topInset = visibleRect.top - windowRect.top;
+        int rightInset = windowRect.right - visibleRect.right;
+        int bottomInset = windowRect.bottom - visibleRect.bottom;
+        x -= leftInset;
+        y -= topInset;
+        width += leftInset + rightInset;
+        height += topInset + bottomInset;
+    }
+
+    if (SetWindowPos(hwnd, HWND_TOP, x, y, width, height, SWP_SHOWWINDOW))
+    {
+        return 1;
+    }
+
+    DWORD err = GetLastError();
+    if (err > 0 && err < 100000)
+    {
+        return -1000 - (int)err;
+    }
+    return -1;
 }
 
 int maximizeWindowForManagement(const char *windowId, int pid)
@@ -1831,6 +1998,59 @@ typedef struct
     HWND foundWindow;
 } FindWindowData;
 
+// Raises one exact top-level window and reports whether Windows accepted it as foreground.
+static int activateWindowForManagementHwnd(HWND hwnd)
+{
+    if (!hwnd || !IsWindow(hwnd))
+    {
+        return 0;
+    }
+
+    hwnd = rootWindowForManagement(hwnd);
+    if (IsIconic(hwnd))
+    {
+        ShowWindow(hwnd, SW_RESTORE);
+    }
+    if (!IsWindowVisible(hwnd))
+    {
+        ShowWindow(hwnd, SW_SHOW);
+    }
+
+    HWND foreground = GetForegroundWindow();
+    DWORD currentThreadId = GetCurrentThreadId();
+    DWORD foregroundThreadId = foreground ? GetWindowThreadProcessId(foreground, NULL) : 0;
+    DWORD targetThreadId = GetWindowThreadProcessId(hwnd, NULL);
+    BOOL attachedForeground = FALSE;
+    BOOL attachedTarget = FALSE;
+
+    if (foregroundThreadId != 0 && foregroundThreadId != currentThreadId)
+    {
+        attachedForeground = AttachThreadInput(currentThreadId, foregroundThreadId, TRUE);
+    }
+    if (targetThreadId != 0 && targetThreadId != currentThreadId && targetThreadId != foregroundThreadId)
+    {
+        attachedTarget = AttachThreadInput(currentThreadId, targetThreadId, TRUE);
+    }
+
+    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    SetForegroundWindow(hwnd);
+    BringWindowToTop(hwnd);
+    SetActiveWindow(hwnd);
+    SetFocus(hwnd);
+
+    if (attachedTarget)
+    {
+        AttachThreadInput(currentThreadId, targetThreadId, FALSE);
+    }
+    if (attachedForeground)
+    {
+        AttachThreadInput(currentThreadId, foregroundThreadId, FALSE);
+    }
+
+    HWND actualForeground = GetForegroundWindow();
+    return actualForeground && rootWindowForManagement(actualForeground) == hwnd;
+}
+
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
 {
     FindWindowData *data = (FindWindowData *)lParam;
@@ -1886,39 +2106,13 @@ int activateWindowByPid(int pid)
         return 0; // Window not found
     }
 
-    HWND hwnd = data.foundWindow;
+    return activateWindowForManagementHwnd(data.foundWindow);
+}
 
-    // Restore window if minimized
-    if (IsIconic(hwnd))
-    {
-        ShowWindow(hwnd, SW_RESTORE);
-    }
-
-    // Show window if hidden
-    if (!IsWindowVisible(hwnd))
-    {
-        ShowWindow(hwnd, SW_SHOW);
-    }
-
-    // Bring window to foreground with proper activation
-    DWORD curThreadId = GetCurrentThreadId();
-    DWORD fgThreadId = GetWindowThreadProcessId(GetForegroundWindow(), NULL);
-
-    if (fgThreadId != 0 && fgThreadId != curThreadId)
-    {
-        AttachThreadInput(fgThreadId, curThreadId, TRUE);
-    }
-
-    SetForegroundWindow(hwnd);
-    BringWindowToTop(hwnd);
-    SetFocus(hwnd);
-
-    if (fgThreadId != 0 && fgThreadId != curThreadId)
-    {
-        AttachThreadInput(fgThreadId, curThreadId, FALSE);
-    }
-
-    return 1; // Success
+int activateWindowForManagement(const char *windowId, int pid)
+{
+    HWND hwnd = resolveWindowForManagement(windowId, pid);
+    return activateWindowForManagementHwnd(hwnd);
 }
 
 typedef struct

@@ -1,6 +1,8 @@
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 
 import 'setting/wox_plugin_setting_checkbox.dart';
+import 'setting/wox_plugin_setting_dictation_hotkey.dart';
+import 'setting/wox_plugin_setting_dictation_model.dart';
 import 'setting/wox_plugin_setting_head.dart';
 import 'setting/wox_plugin_setting_label.dart';
 import 'setting/wox_plugin_setting_newline.dart';
@@ -11,10 +13,12 @@ import 'setting/wox_plugin_setting_textbox.dart';
 class PluginSettingDefinitionItem {
   late String type;
   late dynamic value;
+  late List<String> searchAliases;
   late List<String> disabledInPlatforms;
   late bool isPlatformSpecific;
 
   PluginSettingDefinitionItem.fromJson(Map<String, dynamic> json) {
+    searchAliases = (json['SearchAliases'] as List<dynamic>? ?? []).map((alias) => alias.toString()).toList();
     if (json['DisabledInPlatforms'] == null) {
       disabledInPlatforms = <String>[];
     } else {
@@ -39,6 +43,10 @@ class PluginSettingDefinitionItem {
       value = PluginSettingValueTable.fromJson(json['Value']);
     } else if (type == "textbox") {
       value = PluginSettingValueTextBox.fromJson(json['Value']);
+    } else if (type == "dictationHotkey") {
+      value = PluginSettingValueDictationHotkey.fromJson(json['Value']);
+    } else if (type == "dictationModel") {
+      value = PluginSettingValueDictationModel.fromJson(json['Value']);
     } else {
       throw Exception("Unknown setting type: $type");
     }

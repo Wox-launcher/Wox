@@ -322,7 +322,7 @@ class WoxQueryBoxView extends StatelessWidget {
     }
 
     return Positioned(
-      left: 100 + textWidth,
+      left: 260 + textWidth,
       top: 0,
       width: blankWidth,
       height: boxHeight,
@@ -336,6 +336,7 @@ class WoxQueryBoxView extends StatelessWidget {
           child: MouseRegion(
             child: WoxDragMoveArea(
               onDragStart: controller.windowDriver.startDragging,
+              debugSource: "query-box-right-blank",
               onDragEnd: () {
                 controller.focusQueryBox();
               },
@@ -561,9 +562,10 @@ class WoxQueryBoxView extends StatelessWidget {
                     SchedulerBinding.instance.addPostFrameCallback((_) {
                       controller.updateQueryBoxTextWrapWidth(const UuidV4().generate(), (constraints.maxWidth - 8 - rightAccessoryWidth).clamp(0, double.infinity));
                     });
+                    final selectionTheme = TextSelectionThemeData(selectionColor: safeFromCssColor(currentTheme.queryBoxTextSelectionBackgroundColor));
 
                     return Theme(
-                      data: ThemeData(textSelectionTheme: TextSelectionThemeData(selectionColor: safeFromCssColor(currentTheme.queryBoxTextSelectionBackgroundColor))),
+                      data: Theme.of(context).copyWith(textSelectionTheme: selectionTheme),
                       child: Stack(
                         children: [
                           _buildTextField(currentTheme, rightAccessoryWidth),

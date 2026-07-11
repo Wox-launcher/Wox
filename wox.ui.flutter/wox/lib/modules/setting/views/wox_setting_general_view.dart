@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
+import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_query_hotkey_dialog.dart';
 import 'package:wox/components/wox_switch.dart';
@@ -201,11 +203,16 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 controlMaxWidth: 520,
                 child: WoxHotkeyRecorder(
                   hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.mainHotkey),
-                  onHotKeyRecorded: (hotkey) {
-                    controller.updateConfig("MainHotkey", hotkey);
+                  onHotKeyRecorded: (result) {
+                    controller.updateConfig("MainHotkey", result.hotkey);
                   },
                 ),
               ),
+              // On Wayland without evdev access, double-modifier hotkeys (e.g.
+              // double Ctrl) and CapsLock combos cannot work. Show a guiding
+              // prompt with a link to the help article.
+              if (controller.woxSetting.value.isLinuxWaylandSession && !controller.woxSetting.value.isEvdevReadAvailable)
+                Padding(padding: const EdgeInsets.only(bottom: 18), child: _buildWaylandEvdevHint()),
               if (!controller.woxSetting.value.isLinuxWaylandSession)
                 // Wayland does not expose the active app selection to Wox, so the
                 // selection hotkey cannot produce a selection query there.
@@ -216,8 +223,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                   controlMaxWidth: 520,
                   child: WoxHotkeyRecorder(
                     hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.selectionHotkey),
-                    onHotKeyRecorded: (hotkey) {
-                      controller.updateConfig("SelectionHotkey", hotkey);
+                    onHotKeyRecorded: (result) {
+                      controller.updateConfig("SelectionHotkey", result.hotkey);
                     },
                   ),
                 ),
@@ -274,7 +281,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                       inlineTitleActions: true,
                       tableWidth: GENERAL_SETTING_TABLE_WIDTH,
                       customCreateDialogBuilder:
-                          (context, saveRow, {initialRow = const <String, dynamic>{}}) => showWoxQueryHotkeyDialog(context: context, initialRow: initialRow, onSave: saveRow),
+                          (context, saveRow, {initialRow}) => showWoxQueryHotkeyDialog(context: context, initialRow: initialRow ?? const {}, onSave: saveRow),
                       customEditDialogBuilder: (context, row, saveRow) => showWoxQueryHotkeyDialog(context: context, initialRow: row, isEditing: true, onSave: saveRow),
                       titleActions: [
                         _buildDemoTitleAction(
@@ -319,7 +326,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                             "Type": "select",
                             "Width": 120,
                             "HideInTable": true,
-                            "HideInUpdate": controller.woxSetting.value.isLinuxWaylandSession,
+                            "HideInUpdate": controller.woxSetting.value.isLinuxWaylandSession && !controller.linuxLayerShellSupported.value,
                             "SelectOptions": [
                               {"Label": controller.tr("ui_query_position_system_default"), "Value": "system_default"},
                               {"Label": controller.tr("ui_query_position_top_left"), "Value": "top_left"},
@@ -550,6 +557,38 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
             child: Icon(Icons.play_circle_outline_rounded, color: foreground.withValues(alpha: 0.88), size: 18),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildWaylandEvdevHint() {
+    final isLight = getThemeBackgroundColor().computeLuminance() > 0.5;
+    final accentColor = isLight ? const Color(0xFFB96D18) : const Color(0xFFF3B75C);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: accentColor.withValues(alpha: isLight ? 0.12 : 0.08),
+        border: Border.all(color: accentColor, width: 1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 20, color: accentColor),
+          const SizedBox(width: 10),
+          Expanded(child: Text(controller.tr('ui_hotkey_wayland_evdev_hint'), style: TextStyle(fontSize: 13, color: getThemeTextColor()))),
+          WoxButton.text(
+            text: controller.tr('ui_hotkey_wayland_evdev_learn_more'),
+            icon: Icon(Icons.open_in_new, size: 14, color: getThemeTextColor()),
+            onPressed: () async {
+              final uri = Uri.parse('https://wox-launcher.github.io/Wox/guide/faq#wayland-double-modifier-hotkeys');
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri);
+              }
+            },
+          ),
+        ],
       ),
     );
   }

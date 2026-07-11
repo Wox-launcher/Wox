@@ -27,6 +27,24 @@ const (
 	progressUpdateGap                 = 250 * time.Millisecond
 )
 
+var (
+	woxFileSearchStoragePathOnce sync.Once
+	woxFileSearchStoragePath     string
+)
+
+// cachedWoxFileSearchStoragePath returns Wox's internal filesearch storage path
+// without recomputing the home-relative path for every scanned entry.
+func cachedWoxFileSearchStoragePath() string {
+	woxFileSearchStoragePathOnce.Do(func() {
+		homeDir := cachedUserHomeDir()
+		if homeDir == "" {
+			return
+		}
+		woxFileSearchStoragePath = filepath.Clean(filepath.Join(homeDir, ".wox", "filesearch"))
+	})
+	return woxFileSearchStoragePath
+}
+
 type Scanner struct {
 	db                     *FileSearchDB
 	policy                 *policyState
@@ -59,6 +77,11 @@ type Scanner struct {
 	transientSyncState  *TransientSyncState
 	dirtyBackpressureMu sync.Mutex
 	lastDirtyRunElapsed time.Duration
+	// Content index hook receives incremental file change notifications after
+	// the name index has been updated, so the content FTS index stays in sync
+	// without waiting for the next full crawl.
+	contentHookMu sync.RWMutex
+	contentHook   ContentHook
 	// Tests override the preparation budget so run-based smoke coverage can force
 	// job splitting without manufacturing thousands of files just to cross the
 	// production thresholds.
@@ -119,6 +142,20 @@ func (s *Scanner) SetStateChangeHandler(handler func(ctx context.Context)) {
 	s.onStateChange = handler
 }
 
+// SetContentHook installs the content index hook. The hook is notified after
+// name index mutations so the content FTS index receives incremental updates.
+func (s *Scanner) SetContentHook(hook ContentHook) {
+	s.contentHookMu.Lock()
+	defer s.contentHookMu.Unlock()
+	s.contentHook = hook
+}
+
+func (s *Scanner) getContentHook() ContentHook {
+	s.contentHookMu.RLock()
+	defer s.contentHookMu.RUnlock()
+	return s.contentHook
+}
+
 func (s *Scanner) Start(ctx context.Context) {
 	s.wg.Add(1)
 	util.Go(ctx, "filesearch change feed loop", func() {
@@ -130,7 +167,11 @@ func (s *Scanner) Start(ctx context.Context) {
 	util.Go(ctx, "filesearch scan loop", func() {
 		defer s.wg.Done()
 		util.GetLogger().Info(ctx, "filesearch scanner started")
+		if err := s.db.EnsureForegroundEntryIndexes(ctx); err != nil {
+			util.GetLogger().Warn(ctx, "filesearch failed to recover foreground entry indexes: "+err.Error())
+		}
 		s.startupRestore(ctx)
+		s.buildMaintenanceEntryIndexesAsync(util.NewTraceContext(), false)
 
 		ftsOptimizeTimer := time.NewTimer(defaultFTSOptimizeInterval)
 		defer ftsOptimizeTimer.Stop()
@@ -441,6 +482,9 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		// settle, so log the boundary explicitly instead of hiding that cost in a
 		// generic "scan cycle completed" message.
 		logFilesearchSQLiteMaintenance(ctx, "bulk_finalize", string(kind), util.GetSystemTimestamp()-bulkFinalizeStartedAt, len(filesearchFTSTables))
+		logFilesearchIndexPhase(ctx, "bulk_finalize", string(kind), util.GetSystemTimestamp()-bulkFinalizeStartedAt, map[string]any{
+			"fts_tables": len(filesearchFTSTables),
+		})
 		// Run preparation, execution, and deferred bulk finalize all belong to one
 		// user-visible full-index attempt. Record that outer elapsed time here,
 		// after bulk finalize succeeds, so later optimizations can compare one
@@ -449,6 +493,7 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		logFilesearchFullIndexTotal(ctx, reason, elapsedMs, len(plan.RootPlans), len(plan.Jobs), plan.TotalWorkUnits)
 		if runSucceeded {
 			s.emitCompletedFullRunSummary(ctx, plan, elapsedMs)
+			s.buildMaintenanceEntryIndexesAsync(util.NewTraceContext(), true)
 		}
 	}()
 
@@ -472,7 +517,12 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		s.emitStateChange(ctx)
 		logFilesearchRunStage(ctx, kind, snapshot.ActiveStage, rootRecordForRunLog(roots, job.RootID), job, snapshot.ActiveRootIndex, snapshot.ActiveRootTotal, snapshot.RunProgressCurrent, snapshot.RunProgressTotal)
 	})
-	logFilesearchRunExecution(ctx, kind, util.GetSystemTimestamp()-executionStartedAt, len(plan.Jobs), plan.TotalWorkUnits)
+	executionElapsedMs := util.GetSystemTimestamp() - executionStartedAt
+	logFilesearchRunExecution(ctx, kind, executionElapsedMs, len(plan.Jobs), plan.TotalWorkUnits)
+	logFilesearchIndexPhase(ctx, "run_execution", string(kind), executionElapsedMs, map[string]any{
+		"jobs":  len(plan.Jobs),
+		"units": plan.TotalWorkUnits,
+	})
 	if err != nil {
 		s.handleRunFailure(ctx, run, roots)
 		return err
@@ -480,19 +530,6 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 	runSucceeded = true
 
 	s.clearTransientRunState()
-	if kind == RunKindFull {
-		// Bug fix: incremental dirty flushes should not restart the platform
-		// change feed. FSEvents replays from the oldest root cursor when a stream
-		// is recreated, so restarting after every small sync can replay the same
-		// event for a quiet root and keep the toolbar stuck in "Syncing file changes".
-		// Full scans already committed the searchable index and root cursors, so the
-		// feed refresh can finish as a background handoff instead of extending the
-		// user-visible index duration measured by the toolbar and real-index smoke.
-		refreshCtx := util.NewTraceContext()
-		util.Go(refreshCtx, "filesearch refresh change feed after full scan", func() {
-			s.refreshChangeFeed(refreshCtx)
-		})
-	}
 	return nil
 }
 
@@ -588,6 +625,14 @@ func (s *Scanner) emitCompletedFullRunSummary(ctx context.Context, plan RunPlan,
 }
 
 func (s *Scanner) applyRunJob(ctx context.Context, kind RunKind, root RootRecord, job Job, batch *SubtreeSnapshotBatch) error {
+	if err := s.applyRunJobInternal(ctx, kind, root, job, batch); err != nil {
+		return err
+	}
+	s.notifyContentHook(ctx, root, job, batch)
+	return nil
+}
+
+func (s *Scanner) applyRunJobInternal(ctx context.Context, kind RunKind, root RootRecord, job Job, batch *SubtreeSnapshotBatch) error {
 	switch job.Kind {
 	case JobKindDirectDelta:
 		return s.db.ApplyDirectDeltaJob(ctx, root, job, s.policy)
@@ -625,6 +670,58 @@ func (s *Scanner) applyRunJob(ctx context.Context, kind RunKind, root RootRecord
 		return nil
 	default:
 		return fmt.Errorf("unsupported run job kind %q", job.Kind)
+	}
+}
+
+// notifyContentHook delivers incremental content index updates after the name
+// index has been mutated. Direct-delta jobs produce per-file notifications,
+// while scope-replacing jobs (direct-files, subtree, finalize-root for full
+// runs) trigger a scope reconcile so stale content entries are pruned and new
+// searchable files are queued.
+func (s *Scanner) notifyContentHook(ctx context.Context, root RootRecord, job Job, batch *SubtreeSnapshotBatch) {
+	hook := s.getContentHook()
+	if hook == nil {
+		return
+	}
+	switch job.Kind {
+	case JobKindDirectDelta:
+		for _, delta := range job.DirectDeltas {
+			if delta.PathIsDir {
+				continue
+			}
+			if isDeleteOnlyDelta(delta.SemanticKind) {
+				hook.Notify(ctx, ContentHookNotification{
+					Kind: ContentHookKindDelete,
+					Path: delta.Path,
+				})
+			} else {
+				hook.Notify(ctx, ContentHookNotification{
+					Kind: ContentHookKindUpsert,
+					Path: delta.Path,
+				})
+			}
+		}
+	case JobKindDirectFiles, JobKindSubtree:
+		// Scope replacement: queue individual file upserts from the batch and
+		// trigger a reconcile to prune stale content entries. Per-file upserts
+		// are preferred over a blind scope walk because the batch already has
+		// the exact set of files the scanner observed.
+		if batch != nil {
+			for _, entry := range batch.Entries {
+				if entry.IsDir {
+					continue
+				}
+				hook.Notify(ctx, ContentHookNotification{
+					Kind: ContentHookKindUpsert,
+					Path: entry.Path,
+				})
+			}
+		}
+		hook.Notify(ctx, ContentHookNotification{
+			Kind:      ContentHookKindScopeReplaced,
+			ScopePath: job.ScopePath,
+			RootID:    job.RootID,
+		})
 	}
 }
 
@@ -788,6 +885,27 @@ func rootRecordForRunLog(roots []RootRecord, rootID string) RootRecord {
 
 func (s *Scanner) refreshChangeFeed(ctx context.Context) {
 	s.refreshChangeFeedWithRoots(ctx, nil)
+}
+
+// buildMaintenanceEntryIndexesAsync keeps maintenance-only SQLite indexes off
+// the user-visible full-index critical path.
+func (s *Scanner) buildMaintenanceEntryIndexesAsync(ctx context.Context, refreshChangeFeedAfter bool) {
+	if s == nil || s.db == nil {
+		return
+	}
+	util.Go(ctx, "filesearch build maintenance entry indexes", func() {
+		if err := s.db.BuildMaintenanceEntryIndexes(ctx); err != nil {
+			util.GetLogger().Warn(ctx, "filesearch failed to build maintenance entry indexes: "+err.Error())
+			return
+		}
+		if refreshChangeFeedAfter {
+			s.refreshChangeFeed(ctx)
+		}
+		select {
+		case s.dirtyCh <- struct{}{}:
+		default:
+		}
+	})
 }
 
 func (s *Scanner) refreshChangeFeedWithRoots(ctx context.Context, roots []RootRecord) {
@@ -1566,6 +1684,18 @@ func (s *Scanner) enqueueDirtyForPath(ctx context.Context, path string) bool {
 func (s *Scanner) processDirtyQueue(ctx context.Context, now time.Time) error {
 	if s.dirtyQueue == nil {
 		return nil
+	}
+	if s.db != nil {
+		ready, err := s.db.EntryMaintenanceIndexesReady(ctx)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			// Fresh full scans publish foreground search before maintenance indexes
+			// are rebuilt. Keep watcher signals queued until dirty diffs can use
+			// their scoped lookup indexes again.
+			return nil
+		}
 	}
 
 	rootDirectoryCounts, rootsByID, _, err := s.loadDirtyQueueContext(ctx)
@@ -2634,26 +2764,18 @@ func shouldSkipSystemPath(fullPath string, isDir bool) bool {
 }
 
 func isWoxFileSearchStoragePath(fullPath string) bool {
-	homeDir, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(homeDir) == "" {
+	cleanStoragePath := cachedWoxFileSearchStoragePath()
+	if cleanStoragePath == "" {
 		return false
 	}
 
-	cleanStoragePath := filepath.Clean(filepath.Join(homeDir, ".wox", "filesearch"))
 	cleanPath := filepath.Clean(strings.TrimSpace(fullPath))
 	if cleanPath == "" || cleanPath == "." {
 		return false
 	}
-	if cleanPath == cleanStoragePath {
-		return true
-	}
 
-	relPath, err := filepath.Rel(cleanStoragePath, cleanPath)
-	if err != nil {
-		return false
-	}
 	// Bug fix: Wox's own File Search SQLite files live under ~/.wox/filesearch.
 	// Treat that subtree as an engine-level internal path so full scans and change
 	// feeds both skip the storage before it can enqueue work against itself.
-	return relPath != "." && relPath != ".." && !strings.HasPrefix(relPath, ".."+string(filepath.Separator))
+	return pathWithinScope(cleanStoragePath, cleanPath)
 }

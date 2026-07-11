@@ -2,6 +2,7 @@ package filesearch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,10 +19,12 @@ type Engine struct {
 	resetMu         sync.Mutex
 	closed          bool
 	db              *FileSearchDB
+	contentDB       *ContentSearchDB
 	searchProvider  *SQLiteSearchProvider
 	scanner         *Scanner
 	policy          *policyState
 	statusListeners *util.HashMap[string, func(StatusSnapshot)]
+	contentHook     ContentHook
 }
 
 func NewEngine(ctx context.Context) (*Engine, error) {
@@ -49,11 +52,49 @@ func NewEngineWithOptions(ctx context.Context, options EngineOptions) (*Engine, 
 	// The previous runtime mirrored every entry into a second in-memory provider,
 	// which doubled storage responsibilities and made memory usage scale with the
 	// number of indexed roots.
-	engine.scanner.Start(util.NewTraceContext())
+	if db.NeedsSearchArtifactRebuild() {
+		engine.startScannerAfterSearchArtifactRebuild(ctx)
+	} else {
+		engine.scanner.Start(util.NewTraceContext())
+	}
 	util.GetLogger().Info(ctx, "filesearch engine initialized: indexed_provider=sqlite-search")
 	engine.logInitSnapshotAsync(ctx)
 
 	return engine, nil
+}
+
+// startScannerAfterSearchArtifactRebuild keeps schema migration work off the plugin init path.
+func (e *Engine) startScannerAfterSearchArtifactRebuild(ctx context.Context) {
+	util.Go(ctx, "filesearch search artifact rebuild", func() {
+		rebuildCtx := util.NewTraceContext()
+
+		e.resetMu.Lock()
+		defer e.resetMu.Unlock()
+
+		e.mu.RLock()
+		if e.closed || e.db == nil || e.scanner == nil {
+			e.mu.RUnlock()
+			return
+		}
+		db := e.db
+		scanner := e.scanner
+		e.mu.RUnlock()
+
+		startedAt := util.GetSystemTimestamp()
+		util.GetLogger().Info(rebuildCtx, "filesearch search artifact rebuild started")
+		if err := db.RebuildSearchArtifacts(rebuildCtx); err != nil {
+			util.GetLogger().Warn(rebuildCtx, "filesearch search artifact rebuild failed: "+err.Error())
+		} else {
+			util.GetLogger().Info(rebuildCtx, fmt.Sprintf("filesearch search artifact rebuild finished, cost %d ms", util.GetSystemTimestamp()-startedAt))
+		}
+
+		e.mu.RLock()
+		shouldStartScanner := !e.closed && e.scanner == scanner
+		e.mu.RUnlock()
+		if shouldStartScanner {
+			scanner.Start(util.NewTraceContext())
+		}
+	})
 }
 
 func (e *Engine) logInitSnapshotAsync(ctx context.Context) {
@@ -162,14 +203,28 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 	}
 
 	oldDB := e.db
+	oldContentDB := e.contentDB
+	e.closeContentHookLocked()
 	e.db = nil
+	e.contentDB = nil
 	e.searchProvider = nil
 	e.scanner = nil
+	var closeErr error
 	if oldDB != nil {
 		if err := oldDB.Close(); err != nil {
-			e.mu.Unlock()
-			return fmt.Errorf("close old filesearch database: %w", err)
+			closeErr = fmt.Errorf("close old filesearch database: %w", err)
 		}
+	}
+	if oldContentDB != nil {
+		if err := oldContentDB.Close(); err != nil {
+			if closeErr == nil {
+				closeErr = fmt.Errorf("close old content search database: %w", err)
+			}
+		}
+	}
+	if closeErr != nil {
+		e.mu.Unlock()
+		return closeErr
 	}
 
 	fileSearchDir := util.GetLocation().GetFileSearchDirectory()
@@ -220,11 +275,27 @@ func (e *Engine) Close() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.closed = true
+	if e.contentHook != nil {
+		e.contentHook.Close()
+		e.contentHook = nil
+	}
 	if e.db != nil {
 		err := e.db.Close()
 		e.db = nil
 		e.searchProvider = nil
 		e.scanner = nil
+		if e.contentDB != nil {
+			contentErr := e.contentDB.Close()
+			e.contentDB = nil
+			if err == nil {
+				err = contentErr
+			}
+		}
+		return err
+	}
+	if e.contentDB != nil {
+		err := e.contentDB.Close()
+		e.contentDB = nil
 		return err
 	}
 	return nil
@@ -656,10 +727,10 @@ func (e *Engine) SyncUserRoots(ctx context.Context, rootPaths []string) error {
 
 // NormalizeUserRootPaths returns the concrete user roots that should participate
 // in indexing. Exact duplicates are redundant, and nested roots are actively
-// harmful because the parent scan already writes the child's paths into the
-// unique entries table. Keeping only the parent root prevents accidental
-// settings like "$HOME" plus "$HOME/Projects" from making full runs fail with
-// duplicate entry paths while preserving the broadest configured coverage.
+// harmful when the parent scan can write the child's paths into the unique
+// entries table. Keeping only the parent root prevents accidental settings like
+// "$HOME" plus "$HOME/Projects" from making full runs fail with duplicate entry
+// paths while preserving explicit child roots that the parent scan prunes.
 func NormalizeUserRootPaths(ctx context.Context, rootPaths []string) []string {
 	candidates := make([]string, 0, len(rootPaths))
 	seen := map[string]struct{}{}
@@ -694,7 +765,7 @@ func NormalizeUserRootPaths(ctx context.Context, rootPaths []string) []string {
 	for _, candidate := range candidates {
 		parent := ""
 		for _, other := range candidates {
-			if other == candidate || !pathWithinScope(other, candidate) {
+			if other == candidate || !parentRootCoversChildRoot(other, candidate) {
 				continue
 			}
 			if parent == "" || len(other) > len(parent) {
@@ -709,6 +780,15 @@ func NormalizeUserRootPaths(ctx context.Context, rootPaths []string) []string {
 	}
 
 	return normalized
+}
+
+// parentRootCoversChildRoot reports whether indexing parentRoot can produce the
+// childRoot entries, so the child root is redundant.
+func parentRootCoversChildRoot(parentRoot string, childRoot string) bool {
+	if !pathWithinScope(parentRoot, childRoot) {
+		return false
+	}
+	return !shouldSkipSystemPathForRoot(RootRecord{Path: parentRoot}, childRoot, true)
 }
 
 func syncUserRootsToDB(ctx context.Context, db *FileSearchDB, scanner *Scanner, rootPaths []string, requestRescan bool) (bool, error) {
@@ -839,4 +919,225 @@ func (e *Engine) IndexTopRootsSummary() string {
 		return ""
 	}
 	return formatSQLiteIndexTopRoots("manual", snapshot)
+}
+
+// SearchContent queries the content index for files matching the query terms.
+// Returns results sorted by FTS5 relevance. Only returns results when the
+// content crawl is complete (avoids slow queries during indexing).
+// This method does NOT take the engine RLock to avoid contending with the
+// filesearch scanner — the content tables are independent and SQLite handles
+// concurrent reads via WAL.
+func (e *Engine) SearchContent(ctx context.Context, query string, limit int) ([]ContentSearchResult, error) {
+	if e == nil {
+		return nil, nil
+	}
+	e.mu.RLock()
+	if e.closed || e.contentDB == nil {
+		e.mu.RUnlock()
+		return nil, nil
+	}
+	contentDB := e.contentDB
+	e.mu.RUnlock()
+
+	// Skip content search if crawl is not complete.
+	crawlState, _ := contentDB.GetContentCrawlState(ctx)
+	if crawlState != "complete" {
+		return nil, nil
+	}
+
+	return contentDB.SearchContent(ctx, query, limit)
+}
+
+// ContentStats returns statistics about the content index.
+func (e *Engine) ContentStats(ctx context.Context) (ContentStats, error) {
+	if e == nil {
+		return ContentStats{}, nil
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.closed || e.contentDB == nil {
+		return ContentStats{}, nil
+	}
+	return e.contentDB.ContentStats(ctx)
+}
+
+// ResetContentIndex removes the standalone content index database.
+func (e *Engine) ResetContentIndex(ctx context.Context) error {
+	if e == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	e.mu.Lock()
+	if e.closed {
+		e.mu.Unlock()
+		return nil
+	}
+	e.closeContentHookLocked()
+	contentDB := e.contentDB
+	e.contentDB = nil
+	e.mu.Unlock()
+
+	var closeErr error
+	if contentDB != nil {
+		closeErr = contentDB.Close()
+	}
+	if err := removeContentSearchDBFiles(); err != nil {
+		if closeErr != nil {
+			return fmt.Errorf("close content search database: %w; %v", closeErr, err)
+		}
+		return err
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close content search database: %w", closeErr)
+	}
+	return nil
+}
+
+// StartContentCrawl launches a content crawl in a background goroutine.
+func (e *Engine) StartContentCrawl(ctx context.Context, roots []RootRecord, policy Policy, extensions map[string]bool, maxReadBytes int64, progressCB func(ContentCrawlProgress)) <-chan error {
+	done := make(chan error, 1)
+	if e == nil {
+		close(done)
+		return done
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	e.mu.Lock()
+	if e.closed {
+		e.mu.Unlock()
+		close(done)
+		return done
+	}
+	contentDB, err := e.ensureContentDBLocked(ctx)
+	e.mu.Unlock()
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("open content search database for crawl failed: %v", err))
+		done <- err
+		close(done)
+		return done
+	}
+
+	crawler := NewContentCrawler(contentDB, roots, policy, extensions, maxReadBytes, progressCB)
+	go func() {
+		err := crawler.Run(ctx)
+		if err != nil && !errors.Is(err, context.Canceled) {
+			util.GetLogger().Error(ctx, fmt.Sprintf("content crawl failed: %v", err))
+		}
+		done <- err
+		close(done)
+	}()
+	return done
+}
+
+// StartContentHook installs the incremental content index hook on the scanner.
+// After this call, file changes detected by the scanner's change feed (USN on
+// Windows, FSEvents on macOS, fsnotify elsewhere) will incrementally update
+// the content FTS index without waiting for the next full crawl. The hook
+// reuses the same extension whitelist and max-read-bytes as the full crawler.
+// Call StopContentHook before installing a new hook or when content search is
+// disabled.
+func (e *Engine) StartContentHook(ctx context.Context, extensions map[string]bool, maxReadBytes int64) {
+	if e == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed || e.db == nil {
+		return
+	}
+	contentDB, err := e.ensureContentDBLocked(ctx)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("open content search database for hook failed: %v", err))
+		return
+	}
+
+	// Stop any existing hook before installing a new one so extension changes
+	// take effect cleanly.
+	e.closeContentHookLocked()
+
+	hook := NewContentIndexHook(contentDB, e.db, extensions, maxReadBytes, e.policy)
+	e.contentHook = hook
+
+	scanner := e.scanner
+	if scanner != nil {
+		scanner.SetContentHook(hook)
+	}
+}
+
+// StopContentHook removes the incremental content index hook and stops its
+// background worker. Called when content search is disabled or the engine is
+// being rebuilt.
+func (e *Engine) StopContentHook() {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.closeContentHookLocked()
+}
+
+// closeContentHookLocked detaches and closes the incremental content hook while e.mu is held.
+func (e *Engine) closeContentHookLocked() {
+	hook := e.contentHook
+	e.contentHook = nil
+	scanner := e.scanner
+	if scanner != nil {
+		scanner.SetContentHook(nil)
+	}
+	if hook != nil {
+		hook.Close()
+	}
+}
+
+// ensureContentDBLocked opens the optional content database on first use while e.mu is held.
+func (e *Engine) ensureContentDBLocked(ctx context.Context) (*ContentSearchDB, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if e.contentDB != nil {
+		return e.contentDB, nil
+	}
+	contentDB, err := NewContentSearchDB(ctx)
+	if err != nil {
+		return nil, err
+	}
+	e.contentDB = contentDB
+	return contentDB, nil
+}
+
+// NeedsSearchArtifactRebuild reports whether the FTS search artifacts are
+// still being rebuilt. The content crawl waits for this to return false
+// before starting, to avoid "database is locked" errors.
+func (e *Engine) NeedsSearchArtifactRebuild() bool {
+	if e == nil {
+		return false
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.db != nil && e.db.NeedsSearchArtifactRebuild()
+}
+
+// GetContentCrawlState returns the content crawl state from the DB meta table.
+func (e *Engine) GetContentCrawlState(ctx context.Context) (string, error) {
+	if e == nil {
+		return "", nil
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed {
+		return "", nil
+	}
+	contentDB, err := e.ensureContentDBLocked(ctx)
+	if err != nil {
+		return "", err
+	}
+	return contentDB.GetContentCrawlState(ctx)
 }

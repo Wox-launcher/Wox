@@ -804,14 +804,16 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 				Type: AppTypeUWP,
 			}
 
-			// Get app icon
-			icon, err := a.GetUWPAppIcon(ctx, appID)
-			if err == nil {
-				app.Icon = icon
-				a.uwpIconCache.Store(appID, icon.ImageData)
-			} else {
-				util.GetLogger().Error(ctx, fmt.Sprintf("Error getting UWP icon for %s (%s), using default icon: %s", name, appID, err.Error()))
-				// Keep using default appIcon when UWP icon fails
+			metadata, err := a.getUWPAppMetadata(ctx, appID)
+			if metadata.Identity != "" {
+				app.Identity = metadata.Identity
+			}
+			if !metadata.Icon.IsEmpty() {
+				app.Icon = metadata.Icon
+				a.uwpIconCache.Store(appID, metadata.Icon.ImageData)
+			}
+			if err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("Error getting UWP metadata for %s (%s), using available defaults: %s", name, appID, err.Error()))
 			}
 
 			apps = append(apps, app)
@@ -975,110 +977,155 @@ func (a *WindowsRetriever) getRunningProcesses(ctx context.Context) []processInf
 	return infos
 }
 
-func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (common.WoxImage, error) {
+type uwpAppMetadata struct {
+	Icon     common.WoxImage
+	Identity string
+}
+
+// getUWPAppMetadata reads the manifest entry matching the AppID so selectors can match runtime processes.
+func (a *WindowsRetriever) getUWPAppMetadata(ctx context.Context, appID string) (uwpAppMetadata, error) {
+	var cachedIconPath string
 	if value, ok := a.uwpIconCache.Load(appID); ok {
 		iconPath := value.(string)
 		// Verify cached path still exists
 		if _, err := os.Stat(iconPath); err == nil {
-			return common.NewWoxImageAbsolutePath(iconPath), nil
+			cachedIconPath = iconPath
 		} else {
 			// Remove invalid cache entry
 			a.uwpIconCache.Delete(appID)
 		}
 	}
 
+	powershellAppID := strings.ReplaceAll(appID, "'", "''")
 	powershellCmd := fmt.Sprintf(`
 		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 		try {
 			$packageFamilyName = ($('%s' -split '!')[0])
+			$applicationId = ($('%s' -split '!', 2)[1])
 			$package = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq $packageFamilyName }
 			if (!$package) { exit 1 }
 
 			$manifest = Get-AppxPackageManifest $package
 			if (!$manifest) { exit 1 }
 
-			$logo = $manifest.Package.Properties.Logo
-			if (!$logo) {
-				$visual = $manifest.Package.Applications.Application.VisualElements
-				if ($visual.Square44x44Logo) {
-					$logo = $visual.Square44x44Logo
-				} elseif ($visual.Square150x150Logo) {
-					$logo = $visual.Square150x150Logo
-				} elseif ($visual.Logo) {
-					$logo = $visual.Logo
-				}
+			$applications = @($manifest.Package.Applications.Application)
+			$application = $applications | Where-Object { $_.Id -eq $applicationId } | Select-Object -First 1
+			if (!$application) {
+				$application = $applications | Select-Object -First 1
 			}
 
-			if (!$logo) { exit 1 }
+			$executable = ''
+			if ($application -and $application.Executable) {
+				$executable = [string]$application.Executable
+			}
 
-			$logoPath = Join-Path $package.InstallLocation $logo
-			if (!(Test-Path $package.InstallLocation)) { exit 1 }
-
-			$directory = Split-Path $logoPath
-			$filename = Split-Path $logoPath -Leaf
-			$baseFilename = [System.IO.Path]::GetFileNameWithoutExtension($filename)
-			$extension = [System.IO.Path]::GetExtension($filename)
-
-			# Try different scaling versions and target sizes (prioritize larger sizes)
-			$scales = @('scale-200', 'scale-400', 'scale-150', 'scale-125', 'scale-100', '')
-			$targetSizes = @('256', '64', '48', '44', '32', '24', '16')
-
-			# First try filenames with sizes
-			foreach ($size in $targetSizes) {
-				foreach ($scale in $scales) {
-					$targetPath = if ($scale) {
-						Join-Path $directory "$baseFilename.targetsize-$size.$scale$extension"
-					} else {
-						Join-Path $directory "$baseFilename.targetsize-$size$extension"
-					}
-					if (Test-Path $targetPath) {
-						Write-Output $targetPath
-						exit 0
+			$iconPath = ''
+			if (Test-Path $package.InstallLocation) {
+				$logo = ''
+				$visual = if ($application) { $application.VisualElements } else { $null }
+				if ($visual) {
+					if ($visual.Square44x44Logo) {
+						$logo = $visual.Square44x44Logo
+					} elseif ($visual.Square150x150Logo) {
+						$logo = $visual.Square150x150Logo
+					} elseif ($visual.Logo) {
+						$logo = $visual.Logo
 					}
 				}
+				if (!$logo) {
+					$logo = $manifest.Package.Properties.Logo
+				}
+
+				if ($logo) {
+					$logoPath = Join-Path $package.InstallLocation $logo
+
+					$directory = Split-Path $logoPath
+					$filename = Split-Path $logoPath -Leaf
+					$baseFilename = [System.IO.Path]::GetFileNameWithoutExtension($filename)
+					$extension = [System.IO.Path]::GetExtension($filename)
+
+					# Try different scaling versions and target sizes (prioritize larger sizes)
+					$scales = @('scale-200', 'scale-400', 'scale-150', 'scale-125', 'scale-100', '')
+					$targetSizes = @('256', '64', '48', '44', '32', '24', '16')
+
+					# First try filenames with sizes
+					foreach ($size in $targetSizes) {
+						foreach ($scale in $scales) {
+							$targetPath = if ($scale) {
+								Join-Path $directory "$baseFilename.targetsize-$size.$scale$extension"
+							} else {
+								Join-Path $directory "$baseFilename.targetsize-$size$extension"
+							}
+							if (Test-Path $targetPath) {
+								$iconPath = $targetPath
+								break
+							}
+						}
+						if ($iconPath) {
+							break
+						}
+					}
+
+					# Then try scaled versions
+					if (!$iconPath) {
+						foreach ($scale in $scales) {
+							$scaledPath = if ($scale) {
+								Join-Path $directory "$baseFilename.$scale$extension"
+							} else {
+								$logoPath
+							}
+							if (Test-Path $scaledPath) {
+								$iconPath = $scaledPath
+								break
+							}
+						}
+					}
+
+					# If nothing found, return original path if it exists
+					if (!$iconPath -and (Test-Path $logoPath)) {
+						$iconPath = $logoPath
+					}
+				}
 			}
 
-			# Then try scaled versions
-			foreach ($scale in $scales) {
-				$scaledPath = if ($scale) {
-					Join-Path $directory "$baseFilename.$scale$extension"
-				} else {
-					$logoPath
-				}
-				if (Test-Path $scaledPath) {
-					Write-Output $scaledPath
-					exit 0
-				}
-			}
-
-			# If nothing found, return original path if it exists
-			if (Test-Path $logoPath) {
-				Write-Output $logoPath
-				exit 0
-			}
-			exit 1
+			[PSCustomObject]@{ IconPath = $iconPath; Executable = $executable } | ConvertTo-Csv -NoTypeInformation
 		} catch {
 			exit 1
 		}
-	`, appID)
+	`, powershellAppID, powershellAppID)
 
 	output, err := shell.RunOutput("powershell", "-Command", powershellCmd)
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error running powershell command for UWP app %s: %v", appID, err))
-		return common.WoxImage{}, err
+		return uwpAppMetadata{}, err
 	}
 
 	outputStr := strings.TrimSpace(string(output))
 	if outputStr == "" {
 		util.GetLogger().Error(ctx, fmt.Sprintf("No output from PowerShell for UWP app %s", appID))
-		return common.WoxImage{}, fmt.Errorf("no output from PowerShell")
+		return uwpAppMetadata{}, fmt.Errorf("no output from PowerShell")
 	}
 
-	// The output should be the icon path
-	iconPath := outputStr
+	reader := csv.NewReader(strings.NewReader(outputStr))
+	records, err := reader.ReadAll()
+	if err != nil {
+		return uwpAppMetadata{}, fmt.Errorf("error parsing UWP metadata output: %w", err)
+	}
+	if len(records) < 2 || len(records[1]) < 2 {
+		return uwpAppMetadata{}, fmt.Errorf("invalid UWP metadata output")
+	}
+
+	iconPath := strings.TrimSpace(records[1][0])
+	executable := strings.TrimSpace(records[1][1])
+	metadata := uwpAppMetadata{}
+	if executable != "" {
+		metadata.Identity = strings.ToLower(filepath.Base(executable))
+	}
 	if iconPath == "" {
-		util.GetLogger().Error(ctx, fmt.Sprintf("No valid icon path found for UWP app %s", appID))
-		return common.WoxImage{}, fmt.Errorf("no valid icon path found")
+		iconPath = cachedIconPath
+	}
+	if iconPath == "" {
+		return metadata, nil
 	}
 
 	// Verify the path exists
@@ -1089,13 +1136,15 @@ func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (com
 		packageFamilyName := strings.Split(appID, "!")[0]
 		fallbackIcon, fallbackErr := a.findFallbackUWPIcon(ctx, packageFamilyName)
 		if fallbackErr == nil {
-			return common.NewWoxImageAbsolutePath(fallbackIcon), nil
+			metadata.Icon = common.NewWoxImageAbsolutePath(fallbackIcon)
+			return metadata, nil
 		}
 
-		return common.WoxImage{}, fmt.Errorf("icon path does not exist: %s", iconPath)
+		return metadata, fmt.Errorf("icon path does not exist: %s", iconPath)
 	}
 
-	return common.NewWoxImageAbsolutePath(iconPath), nil
+	metadata.Icon = common.NewWoxImageAbsolutePath(iconPath)
+	return metadata, nil
 }
 
 func (a *WindowsRetriever) findFallbackUWPIcon(ctx context.Context, packageFamilyName string) (string, error) {

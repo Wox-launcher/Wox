@@ -14,7 +14,7 @@ help:
 	@echo "  make publish    - Publish to npm registry"
 
 clean:
-	$(PNPM) run clean
+	node ./scripts/clean.mjs
 
 install: clean
 	# Make recipes are non-interactive, so tell pnpm it may replace an incompatible node_modules layout without prompting.

@@ -205,7 +205,7 @@ class _FilePropertyTile extends StatelessWidget {
           SizedBox(height: metrics.scaledSpacing(4)),
           Text(
             property.value,
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(color: getThemeTextColor(), fontSize: metrics.resultSubtitleFontSize, height: 1.25, fontWeight: FontWeight.w700),
           ),

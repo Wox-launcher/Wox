@@ -41,6 +41,7 @@ import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/enums/wox_msg_method_enum.dart';
 import 'package:wox/enums/wox_msg_type_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
+import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/enums/wox_query_refinement_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_result_action_type_enum.dart';
@@ -59,16 +60,17 @@ import 'package:wox/utils/multiplewindow/wox_multiple_window_ids.dart';
 import 'package:wox/utils/multiplewindow/wox_multiple_window_style.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/result_drag_platform_bridge.dart';
+import 'package:wox/utils/screenshot/screenshot_platform_bridge.dart';
 import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_platform_hotkey_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
+import 'package:wox/utils/wox_system_wallpaper_util.dart';
 import 'package:wox/utils/wox_time_tracker.dart';
 import 'package:wox/utils/webview/wox_webview_util.dart';
 
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
-import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/utils/window_flicker_detector.dart';
 import 'package:wox/utils/color_util.dart';
 
@@ -89,6 +91,7 @@ class WoxLauncherController extends GetxController {
   static const int _slowLauncherActivationWarningThresholdMs = 50;
   static const String _onReceivedTailTooltip = "onReceivedQueryResults elapsed since Flutter query request";
   static const String _queryActionIconRefType = "iconref";
+  static const String internalActionEnterChatModeId = "__wox_internal_enter_chat_mode__";
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
   static const String localActionPreviewSearchId = "__local_preview_search__";
   static const String localActionOpenUpdateId = "__local_open_update__";
@@ -98,6 +101,7 @@ class WoxLauncherController extends GetxController {
   static const String localActionWebViewBackId = "__local_webview_back__";
   static const String localActionWebViewForwardId = "__local_webview_forward__";
   static const String localActionWebViewClearStateId = "__local_webview_clear_state__";
+  static const String localActionLoadFilePreviewId = "__local_load_file_preview__";
 
   int _captureDevLauncherVisibleActivationCost(ShowAppParams params) {
     if (!Env.isDev || params.activationStartedAt <= 0) {
@@ -205,6 +209,9 @@ class WoxLauncherController extends GetxController {
   final isShowPreviewPanel = false.obs;
   final terminalFindTrigger = 0.obs;
   final isPreviewFullscreen = false.obs;
+  final isManualFilePreviewLoadAvailable = false.obs;
+  String _manualFilePreviewLoadAvailabilityKey = "";
+  final _manualFilePreviewLoadRequests = StreamController<String>.broadcast();
   final Map<String, StreamController<Map<String, dynamic>>> terminalChunkControllers = {};
   final Map<String, StreamController<Map<String, dynamic>>> terminalStateControllers = {};
   static const double defaultResultPreviewRatio = 0.4;
@@ -238,6 +245,9 @@ class WoxLauncherController extends GetxController {
   final windowFlickerDetector = WindowFlickerDetector();
   Size? ongoingResizeTargetSize;
   int resizeRequestToken = 0;
+
+  /// True while a fixed-size management window is being staged before its Flutter route mounts.
+  bool isManagementWindowTransitionActive = false;
   bool isShowingPendingResultPlaceholder = false;
   double? pendingResultPlaceholderHeight;
   double? committedWindowHeight;
@@ -258,6 +268,7 @@ class WoxLauncherController extends GetxController {
   // UI Control Flags
   final isQueryBoxAtBottom = false.obs;
   final isQueryBoxVisible = true.obs;
+  final isChatModeActive = false.obs;
   final isToolbarHiddenForce = false.obs;
   // Keeps Windows tray-query resizes tied to the original tray click instead of
   // transient HWND bounds from early show/resize frames.
@@ -288,6 +299,7 @@ class WoxLauncherController extends GetxController {
   final glanceItems = <GlanceItem>[].obs;
   final attentionUnreadCount = 0.obs;
   Timer? glanceRefreshTimer;
+  Timer? hiddenCacheClearTimer;
   QueryContext backendQueryContext = QueryContext.empty();
   String backendQueryContextQueryId = "";
   final queryCompletionHint = Rxn<QueryCompletionHint>();
@@ -321,24 +333,6 @@ class WoxLauncherController extends GetxController {
   final isLoading = false.obs;
   Timer? loadingTimer;
   final loadingDelay = const Duration(milliseconds: 500);
-
-  // doctor check timer
-  Timer? doctorCheckTimer;
-  static const doctorCheckInterval = Duration(minutes: 1);
-
-  /// Start the periodic doctor check timer. Call this after controller initialization.
-  void startDoctorCheckTimer() {
-    doctorCheckTimer?.cancel();
-    doctorCheckTimer = Timer.periodic(doctorCheckInterval, (_) {
-      doctorCheck();
-    });
-  }
-
-  /// Stop the periodic doctor check timer. Call this during cleanup.
-  void stopDoctorCheckTimer() {
-    doctorCheckTimer?.cancel();
-    doctorCheckTimer = null;
-  }
 
   bool get shouldShowGlance {
     final setting = WoxSettingUtil.instance.currentSetting;
@@ -420,6 +414,24 @@ class WoxLauncherController extends GetxController {
     });
   }
 
+  // scheduleHiddenCacheClear clears Flutter caches again after hide animations settle.
+  void scheduleHiddenCacheClear(String traceId) {
+    hiddenCacheClearTimer?.cancel();
+    hiddenCacheClearTimer = Timer(const Duration(seconds: 10), () {
+      unawaited(clearHiddenCaches());
+    });
+  }
+
+  Future<void> clearHiddenCaches() async {
+    hiddenCacheClearTimer = null;
+    if (await windowDriver.isVisible()) {
+      return;
+    }
+
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+  }
+
   Duration? resolveSelectedGlanceRefreshInterval() {
     final refs = selectedGlanceRefs();
     if (refs.isEmpty || !Get.isRegistered<WoxSettingController>()) {
@@ -462,7 +474,10 @@ class WoxLauncherController extends GetxController {
   /// Reset controller state for integration testing without full disposal.
   /// This clears pending timers, hides panels, and resets query state.
   Future<void> resetForIntegrationTest() async {
-    stopDoctorCheckTimer();
+    // Smoke teardown bypasses hideApp(), so invalidate show-time focus retries
+    // before the test unmounts widgets and disposes Flutter's FocusManager.
+    _visibleLauncherFocusToken++;
+    hiddenCacheClearTimer?.cancel();
     await Get.find<WoxScreenshotController>().resetForIntegrationTest();
 
     // Avoid focus restoration during smoke teardown. The regular hide helpers
@@ -925,6 +940,7 @@ class WoxLauncherController extends GetxController {
     } else {
       nextRefinements[refinement.id] = normalizedValues;
     }
+    queryRefinementValues.assignAll(nextRefinements);
 
     // Feature addition: changing a refinement is equivalent to changing the
     // query. Reusing onQueryChanged keeps loading, stale-result clearing, and
@@ -1147,7 +1163,7 @@ class WoxLauncherController extends GetxController {
 
   bool get isShowToolbar => activeResultViewController.items.isNotEmpty || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator;
 
-  bool get isToolbarVisible => isShowToolbar && !isToolbarHiddenForce.value;
+  bool get isToolbarVisible => isShowToolbar && !isToolbarHiddenForce.value && !isChatModeActive.value;
 
   bool get isToolbarShowedWithoutResults => isToolbarVisible && activeResultViewController.items.isEmpty;
 
@@ -1241,6 +1257,12 @@ class WoxLauncherController extends GetxController {
   String get previewRefreshHotkey => WoxPlatformHotkeyUtil.primaryHotkey("r");
   String get previewBackHotkey => WoxPlatformHotkeyUtil.primaryHotkey("[");
   String get previewForwardHotkey => WoxPlatformHotkeyUtil.primaryHotkey("]");
+
+  String get filePreviewLoadHotkey => WoxPlatformHotkeyUtil.primaryHotkey("l");
+
+  String get filePreviewLoadHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("l");
+
+  Stream<String> get manualFilePreviewLoadRequests => _manualFilePreviewLoadRequests.stream;
 
   String get moreActionsHotkey => WoxPlatformHotkeyUtil.primaryHotkey("j");
 
@@ -1627,6 +1649,18 @@ class WoxLauncherController extends GetxController {
       return actions;
     }
 
+    if (currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_FILE.code && isManualFilePreviewLoadAvailable.value) {
+      actions.add(
+        WoxResultAction.local(
+          id: localActionLoadFilePreviewId,
+          name: tr("ui_file_preview_load_full_preview"),
+          hotkey: filePreviewLoadHotkey,
+          emoji: "👁️",
+          handler: requestManualFilePreviewLoad,
+        ),
+      );
+    }
+
     if (currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code) {
       actions.add(
         WoxResultAction.local(
@@ -1711,10 +1745,14 @@ class WoxLauncherController extends GetxController {
     }
 
     if (supportsPreviewFullscreen(currentPreview.value)) {
+      final actionName =
+          currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code
+              ? tr("ui_action_toggle_sidebar")
+              : (isPreviewFullscreen.value ? tr("ui_action_exit_fullscreen") : tr("ui_action_toggle_fullscreen"));
       actions.add(
         WoxResultAction.local(
           id: localActionTogglePreviewFullscreenId,
-          name: isPreviewFullscreen.value ? tr("ui_action_exit_fullscreen") : tr("ui_action_toggle_fullscreen"),
+          name: actionName,
           hotkey: previewFullscreenHotkey,
           emoji: isPreviewFullscreen.value ? "🗗" : "🗖",
           handler: (traceId) => togglePreviewFullscreen(traceId),
@@ -1812,6 +1850,47 @@ class WoxLauncherController extends GetxController {
     }
 
     return action.runLocalAction(traceId);
+  }
+
+  bool isEnterChatModeAction(WoxResultAction action) {
+    return action.id == internalActionEnterChatModeId;
+  }
+
+  // Keeps the load-preview toolbar action owned by the currently mounted
+  // deferred preview so stale preview widgets cannot clear a newer action.
+  void updateManualFilePreviewLoadAvailability(String traceId, String previewKey, bool available) {
+    final normalizedKey = previewKey.trim();
+    if (normalizedKey.isEmpty) {
+      return;
+    }
+
+    if (available) {
+      if (isManualFilePreviewLoadAvailable.value && _manualFilePreviewLoadAvailabilityKey == normalizedKey) {
+        return;
+      }
+      _manualFilePreviewLoadAvailabilityKey = normalizedKey;
+      isManualFilePreviewLoadAvailable.value = true;
+      refreshToolbarActionsForCurrentState(traceId);
+      return;
+    }
+
+    if (_manualFilePreviewLoadAvailabilityKey != normalizedKey) {
+      return;
+    }
+
+    _manualFilePreviewLoadAvailabilityKey = "";
+    isManualFilePreviewLoadAvailable.value = false;
+    refreshToolbarActionsForCurrentState(traceId);
+  }
+
+  // Emits a load request back into the visible deferred preview widget.
+  bool requestManualFilePreviewLoad(String traceId) {
+    if (!isManualFilePreviewLoadAvailable.value) {
+      return false;
+    }
+
+    _manualFilePreviewLoadRequests.add(traceId);
+    return true;
   }
 
   List<ToolbarActionInfo> buildToolbarActionsForCurrentState(WoxQueryResult? activeResult) {
@@ -1912,6 +1991,14 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> showApp(String traceId, ShowAppParams params) async {
+    hiddenCacheClearTimer?.cancel();
+
+    // Restore image cache capacity so images can be cached again while the
+    // launcher is visible. hideApp shrinks it to zero. Values match the
+    // desktop-tuned defaults set in main.dart (200 entries / 20 MB).
+    PaintingBinding.instance.imageCache.maximumSize = 200;
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 20 * 1024 * 1024;
+
     final screenshotController = Get.find<WoxScreenshotController>();
     if (screenshotController.isSessionActive.value) {
       await screenshotController.focusSessionWindow(traceId);
@@ -1993,6 +2080,7 @@ class WoxLauncherController extends GetxController {
     final initialShowResizeToken = resizeRequestToken;
     Map<String, dynamic> linuxBackendInfo = <String, dynamic>{};
     var skipAbsolutePosition = false;
+    var layerShellPlacement = false;
     var initialShowSizeApplied = false;
     if (Platform.isLinux) {
       Logger.instance.info(
@@ -2002,15 +2090,19 @@ class WoxLauncherController extends GetxController {
     }
 
     // Linux native Wayland does not allow reliable absolute top-level placement.
-    // Show first so the compositor can choose the active monitor, then only apply the requested size.
-    // This intentionally trades exact centering for correct monitor switching. Exact centered
-    // placement on Wayland needs compositor support such as layer-shell, a GNOME Shell extension,
-    // or another compositor-specific protocol; a regular GTK client cannot do it portably.
+    // When the compositor supports wlr-layer-shell (Hyprland/sway), apply the
+    // placement before show so the surface is mapped at the right position from
+    // the start. Otherwise show first so the compositor chooses the active
+    // monitor, then only apply the requested size. Exact centered placement on
+    // Wayland without layer-shell needs compositor-specific protocols a regular
+    // GTK client cannot do portably.
     if (Platform.isLinux) {
       await windowDriver.show();
       linuxBackendInfo = await LinuxWindowManager.instance.getBackendInfo();
       skipAbsolutePosition = _isLinuxNativeWaylandBackend(linuxBackendInfo);
-      Logger.instance.info(traceId, "linux-window-bounds dart stage=backend-info $linuxBackendInfo skipAbsolutePosition=$skipAbsolutePosition");
+      final layerShellSupported = linuxBackendInfo["supportsLayerShell"] == true || linuxBackendInfo["supportsLayerShell"].toString().toLowerCase() == "true";
+      layerShellPlacement = skipAbsolutePosition && layerShellSupported;
+      Logger.instance.info(traceId, "linux-window-bounds dart stage=backend-info $linuxBackendInfo skipAbsolutePosition=$skipAbsolutePosition layerShell=$layerShellPlacement");
     }
 
     // Linux Wayland query results can arrive while showApp is still waiting for
@@ -2066,17 +2158,8 @@ class WoxLauncherController extends GetxController {
       });
     }
 
-    unawaited(_focusQueryBoxAfterLauncherShow(selectAll: params.selectAll));
+    unawaited(_focusQueryBoxAfterLauncherShow(traceId: traceId, selectAll: params.selectAll));
     unawaited(_showDevLauncherActivationWarningIfSlow(traceId, visibleActivationCost));
-
-    if (params.isQueryFocus) {
-      Logger.instance.debug(traceId, "need to auto focus to chat input on show app (query focus)");
-      if (isShowPreviewPanel.value && currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
-        final chatController = activeAIChatController;
-        chatController.focusToChatInput(traceId);
-        enterPreviewFullscreen(traceId);
-      }
-    }
 
     WoxApi.instance.onShow(traceId, sessionId: sessionId);
     unawaited(refreshGlance(traceId, "windowShown"));
@@ -2085,6 +2168,7 @@ class WoxLauncherController extends GetxController {
   void resetLayoutState(String traceId) {
     isQueryBoxAtBottom.value = false;
     isQueryBoxVisible.value = true;
+    isChatModeActive.value = false;
     isToolbarHiddenForce.value = false;
     activeTrayAnchor = null;
     forceWindowWidth = 0;
@@ -2221,6 +2305,15 @@ class WoxLauncherController extends GetxController {
 
     hideActionPanel(traceId);
     hideFormActionPanel(traceId, reason: "hide app");
+    glanceRefreshTimer?.cancel();
+    glanceItems.clear();
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+    // Shrink image cache capacity to zero so no new decoded images can accumulate
+    // while the window is hidden. showApp restores the default capacity.
+    PaintingBinding.instance.imageCache.maximumSize = 0;
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 0;
+    scheduleHiddenCacheClear(traceId);
 
     // Clean up quick select state
     if (isQuickSelectMode.value) {
@@ -2229,6 +2322,21 @@ class WoxLauncherController extends GetxController {
     quickSelectTimer?.cancel();
     isQuickSelectKeyPressed = false;
     resetLayoutState(traceId);
+
+    // Release large reference lists and preview streams that are lazily rebuilt after the launcher is shown again.
+    Get.find<WoxSettingController>().clearStoreCache();
+    activeAIChatController.clearReferenceDataCache();
+    WoxSystemWallpaperUtil.instance.releaseImageCache();
+    for (final controller in terminalChunkControllers.values) {
+      controller.close();
+    }
+    for (final controller in terminalStateControllers.values) {
+      controller.close();
+    }
+    terminalChunkControllers.clear();
+    terminalStateControllers.clear();
+    queryStartTimeMap.clear();
+    queryOnReceivedElapsedByResultKey.clear();
 
     if (!suppressBackendHideForScreenshot) {
       await WoxApi.instance.onHide(traceId, sessionId: sessionId);
@@ -2251,10 +2359,15 @@ class WoxLauncherController extends GetxController {
       if (Platform.isLinux) {
         backendInfo = await LinuxWindowManager.instance.getBackendInfo();
         if (_isLinuxNativeWaylandBackend(backendInfo)) {
-          // Native Wayland positions are compositor-owned and gtk_window_get_position may return
-          // synthetic or stale coordinates, so persisting them would poison last_location.
-          Logger.instance.info(traceId, "linux-window-bounds dart stage=skip-save-last-location reason=$reason backendInfo=$backendInfo note=native-wayland-position-unreliable");
-          return;
+          final layerShellSupported = backendInfo["supportsLayerShell"] == true || backendInfo["supportsLayerShell"].toString().toLowerCase() == "true";
+          if (!layerShellSupported) {
+            // Native Wayland positions are compositor-owned and gtk_window_get_position may return
+            // synthetic or stale coordinates, so persisting them would poison last_location.
+            Logger.instance.info(traceId, "linux-window-bounds dart stage=skip-save-last-location reason=$reason backendInfo=$backendInfo note=native-wayland-position-unreliable");
+            return;
+          }
+          // With layer-shell the window is placed via explicit margins, so the
+          // GTK-reported coordinates are meaningful and safe to persist.
         }
       }
 
@@ -2311,8 +2424,8 @@ class WoxLauncherController extends GetxController {
     final wasShowActionPanel = isShowActionPanel.value;
     isShowActionPanel.value = false;
     actionListViewController.clearFilter(traceId);
-    focusQueryBox();
     if (wasShowActionPanel) {
+      unawaited(focusQueryBox());
       resizeHeight(traceId: traceId, reason: "hide action panel");
     }
   }
@@ -2344,8 +2457,8 @@ class WoxLauncherController extends GetxController {
     activeFormResultId.value = "";
     formActionValues.clear();
     isShowFormActionPanel.value = false;
-    focusQueryBox();
     if (wasShowFormActionPanel) {
+      unawaited(focusQueryBox());
       resizeHeight(traceId: traceId, reason: "hide form action panel: $reason");
     }
   }
@@ -2353,8 +2466,17 @@ class WoxLauncherController extends GetxController {
   /// Focuses the active launcher keyboard target.
   /// Hidden-query preview mode has no editable query box, so it needs a stable
   /// launcher-level focus node to keep Escape and other global keys reachable.
-  Future<void> focusLauncherKeyboardTarget({bool selectAll = false, bool Function()? shouldSelectAll}) async {
+  Future<void> focusLauncherKeyboardTarget({bool selectAll = false, bool Function()? shouldSelectAll, bool ensureNativeWindowFocus = false}) async {
     if (isQueryBoxVisible.value) {
+      // Windows can briefly lose OS foreground after show; the delayed launcher focus retry
+      // may need to reclaim native focus before asking Flutter's query box to accept input.
+      if (ensureNativeWindowFocus && Platform.isWindows) {
+        final isVisible = await windowDriver.isVisible();
+        if (!isVisible) {
+          return;
+        }
+        await windowDriver.focus();
+      }
       await focusQueryBox(selectAll: selectAll, shouldSelectAll: shouldSelectAll);
       return;
     }
@@ -2370,6 +2492,10 @@ class WoxLauncherController extends GetxController {
     }
 
     await windowDriver.focus();
+    // Chat mode owns an editable preview target; native focus recovery must not replace it with the launcher root focus node.
+    if (isChatModeActive.value) {
+      return;
+    }
     launcherFocusNode.requestFocus();
   }
 
@@ -2433,15 +2559,21 @@ class WoxLauncherController extends GetxController {
     return queryBoxTextFieldController.text == textBeforeFocusSequence;
   }
 
-  Future<void> _focusQueryBoxAfterLauncherShow({required bool selectAll}) async {
+  Future<void> _focusQueryBoxAfterLauncherShow({required String traceId, required bool selectAll}) async {
     final focusToken = ++_visibleLauncherFocusToken;
     final textBeforeFocusSequence = queryBoxTextFieldController.text;
 
+    if (isClosed) {
+      return;
+    }
+    if (Platform.isWindows) {
+      Logger.instance.debug(traceId, "windows launcher focus sequence start: token=$focusToken, textLength=${textBeforeFocusSequence.length}");
+    }
     await focusLauncherKeyboardTarget(
       selectAll: selectAll,
       shouldSelectAll: () => _shouldSelectAllForVisibleLauncherFocus(selectAll: selectAll, focusToken: focusToken, textBeforeFocusSequence: textBeforeFocusSequence),
     );
-    if (focusToken != _visibleLauncherFocusToken) {
+    if (isClosed || focusToken != _visibleLauncherFocusToken) {
       return;
     }
 
@@ -2452,11 +2584,13 @@ class WoxLauncherController extends GetxController {
     if (Platform.isWindows) {
       unawaited(
         Future.delayed(const Duration(milliseconds: 100), () async {
-          if (focusToken != _visibleLauncherFocusToken) {
+          if (isClosed || focusToken != _visibleLauncherFocusToken) {
             return;
           }
+          Logger.instance.debug(traceId, "windows launcher delayed native focus retry: token=$focusToken");
           await focusLauncherKeyboardTarget(
             selectAll: selectAll,
+            ensureNativeWindowFocus: true,
             shouldSelectAll: () => _shouldSelectAllForVisibleLauncherFocus(selectAll: selectAll, focusToken: focusToken, textBeforeFocusSequence: textBeforeFocusSequence),
           );
         }),
@@ -2581,6 +2715,14 @@ class WoxLauncherController extends GetxController {
     var preventHideAfterAction = action.preventHideAfterAction;
     Logger.instance.debug(traceId, "execute action: ${action.name}, prevent hide after action: $preventHideAfterAction");
 
+    if (isEnterChatModeAction(action)) {
+      actionListViewController.clearFilter(traceId);
+      hideActionPanel(traceId);
+      hideFormActionPanel(traceId, reason: "enter chat mode action");
+      await enterChatMode(traceId, reason: "result action");
+      return;
+    }
+
     if (action.type == WoxResultActionTypeEnum.WOX_RESULT_ACTION_TYPE_LOCAL.code) {
       final executed = action.runLocalAction(traceId);
       if (!executed) {
@@ -2605,25 +2747,30 @@ class WoxLauncherController extends GetxController {
     if (action.type == WoxResultActionTypeEnum.WOX_RESULT_ACTION_TYPE_FORM.code) {
       showFormActionPanel(traceId, action, result.id);
       return;
-    } else {
-      await sendWebsocketMessage(
-        WoxWebsocketMsg(
-          requestId: const UuidV4().generate(),
-          traceId: traceId,
-          type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
-          method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
-          data: {"resultId": result.id, "actionId": action.id, "queryId": result.queryId},
-        ),
-      );
     }
 
-    // clear the search text after action is executed
-    actionListViewController.clearFilter(traceId);
+    final actionResponse = WoxWebsocketMsgUtil.instance.sendMessage(
+      WoxWebsocketMsg(
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
+        data: {"resultId": result.id, "actionId": action.id, "queryId": result.queryId},
+      ),
+    );
 
+    // if preventHideAfterAction is false, we hide the launcher first to avoid the potential delay caused by some heavy operations in onAction callback
     if (!preventHideAfterAction) {
-      hideApp(traceId);
+      await hideApp(traceId);
+      actionListViewController.clearFilter(traceId);
+      hideActionPanel(traceId);
+      hideFormActionPanel(traceId, reason: "non-form action executed");
+      unawaited(actionResponse.catchError((err, stack) => Logger.instance.error(traceId, "execute action failed after launcher hide: $err")));
+      return;
     }
 
+    await actionResponse;
+    actionListViewController.clearFilter(traceId);
     hideActionPanel(traceId);
     hideFormActionPanel(traceId, reason: "non-form action executed");
   }
@@ -3024,6 +3171,20 @@ class WoxLauncherController extends GetxController {
       final screenshotController = Get.find<WoxScreenshotController>();
       final result = await screenshotController.startCaptureSession(msg.traceId, CaptureScreenshotRequest.fromJson(msg.data), ownerLauncherController: this);
       responseWoxWebsocketRequest(msg, true, result.toJson());
+    } else if (msg.method == "WriteClipboardImageFile") {
+      final data = (msg.data as Map).map<String, dynamic>((key, value) => MapEntry(key.toString(), value));
+      final filePath = data['filePath'] as String? ?? data['FilePath'] as String? ?? "";
+      if (filePath.isEmpty) {
+        responseWoxWebsocketRequest(msg, false, "filePath must be a non-empty string");
+      } else {
+        try {
+          await ScreenshotPlatformBridge.instance.writeClipboardImageFile(filePath: filePath);
+          responseWoxWebsocketRequest(msg, true, null);
+        } catch (e) {
+          Logger.instance.warn(msg.traceId, "WriteClipboardImageFile failed: $e");
+          responseWoxWebsocketRequest(msg, false, e.toString());
+        }
+      }
     } else if (msg.method == "FocusSettingWindow") {
       await focusSettingWindow();
       responseWoxWebsocketRequest(msg, true, null);
@@ -3052,19 +3213,20 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "RecordHotkey") {
       final data = msg.data as Map<String, dynamic>? ?? {};
       final hotkey = data["Hotkey"]?.toString() ?? "";
-      Logger.instance.info(msg.traceId, "Received RecordHotkey websocket request: hotkey=$hotkey");
-      WoxHotkeyRecordingBus.instance.emit(hotkey);
+      final kind = data["Kind"]?.toString() ?? "";
+      Logger.instance.info(msg.traceId, "Received RecordHotkey websocket request: hotkey=$hotkey kind=$kind");
+      WoxHotkeyRecordingBus.instance.emit(hotkey, kind);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "GetCurrentQuery") {
       responseWoxWebsocketRequest(msg, true, currentQuery.value.toJson());
-    } else if (msg.method == "FocusToChatInput") {
-      activeAIChatController.focusToChatInput(msg.traceId);
-      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "SendChatResponse") {
       handleChatResponse(msg.traceId, WoxAIChatData.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ReloadChatResources") {
       activeAIChatController.reloadChatResources(msg.traceId, resourceName: msg.data as String);
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "AIQuestion") {
+      Get.find<WoxAIChatController>().handleAIQuestionRequest(msg.traceId, msg.data);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ReloadSettingPlugins") {
       Get.find<WoxSettingController>().reloadPlugins(msg.traceId);
@@ -3184,13 +3346,16 @@ class WoxLauncherController extends GetxController {
         applyQueryContextForQueryId(msg.traceId, queryId, QueryContext.fromJson(Map<String, dynamic>.from(contextData)));
         applyTracker.setElapsedUs("contextApplyUs", contextStartUs);
       }
+      QueryLayout? responseLayout;
       final layoutData = queryResponse['Layout'];
       if (layoutData is Map && layoutData.isNotEmpty) {
         // QueryResponse layout replaces the old /query/metadata side request.
         // Apply it before results so list/grid switches happen under the same
         // query id and stale rows cannot be rendered with the new layout.
         final layoutStartUs = applyTracker.checkpointUs();
-        applyQueryLayoutForQueryId(msg.traceId, queryId, QueryLayout.fromJson(Map<String, dynamic>.from(layoutData)));
+        responseLayout = QueryLayout.fromJson(Map<String, dynamic>.from(layoutData));
+        applyQueryLayoutForQueryId(msg.traceId, queryId, responseLayout);
+        applyTracker.setBool("chatMode", responseLayout.chatMode);
         applyTracker.setElapsedUs("layoutApplyUs", layoutStartUs);
       }
       if (queryResponse.containsKey('Refinements')) {
@@ -3226,6 +3391,10 @@ class WoxLauncherController extends GetxController {
         applyTracker.log();
         queryStartTimeMap.remove(msg.traceId);
         return;
+      }
+
+      if (responseLayout?.chatMode == true && queryId == currentQuery.value.queryId) {
+        await enterChatMode(msg.traceId, reason: "query response");
       }
 
       // If this is the final final response, we must stop loading animation explicitly
@@ -3499,6 +3668,47 @@ class WoxLauncherController extends GetxController {
     return togglePreviewFullscreen(traceId);
   }
 
+  // Enters chat mode without taking over preview ownership; the query response already owns preview data.
+  Future<void> enterChatMode(String traceId, {required String reason}) async {
+    isShowPreviewPanel.value = true;
+    if (!isPreviewFullscreen.value) {
+      final restoreRatio = resultPreviewRatio.value > 0 ? resultPreviewRatio.value : getPreferredResultPreviewRatio();
+      lastResultPreviewRatioBeforePreviewFullscreen = restoreRatio;
+    }
+    resultPreviewRatio.value = 0;
+    isPreviewFullscreen.value = true;
+
+    queryBoxFocusNode.unfocus();
+    isQueryBoxVisible.value = false;
+    isChatModeActive.value = true;
+    Get.find<WoxAIChatController>().collapseConversationSidebarForChatMode(traceId);
+    Logger.instance.debug(traceId, "chat mode entered: reason=$reason");
+
+    await resizeHeight(traceId: traceId, reason: "enter chat mode: $reason");
+    Get.find<WoxAIChatController>().focusChatInput(traceId);
+  }
+
+  // Exits chat mode and returns keyboard focus to the launcher query box.
+  void exitChatInputMode(String traceId) {
+    if (isQueryBoxVisible.value) {
+      isChatModeActive.value = false;
+      unawaited(focusQueryBox(selectAll: true));
+      return;
+    }
+
+    isChatModeActive.value = false;
+    isQueryBoxVisible.value = true;
+    Logger.instance.debug(traceId, "chat input mode exited");
+    unawaited(resizeHeight(traceId: traceId, reason: "exit chat mode"));
+
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (isClosed || !isQueryBoxVisible.value) {
+        return;
+      }
+      unawaited(focusQueryBox(selectAll: true));
+    });
+  }
+
   void syncPreviewFullscreenState() {
     final isFullscreenPreviewVisible = isShowPreviewPanel.value && supportsPreviewFullscreen(currentPreview.value);
     if (isFullscreenPreviewVisible) {
@@ -3564,7 +3774,7 @@ class WoxLauncherController extends GetxController {
     // Only add toolbar height when toolbar is actually shown in UI.
     // Use local hasItems instead of the isShowToolbar getter so that
     // overrideItemCount is respected.
-    final showToolbar = (hasItems || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator) && !isToolbarHiddenForce.value;
+    final showToolbar = (hasItems || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator) && !isToolbarHiddenForce.value && !isChatModeActive.value;
     if (showToolbar) {
       resultHeight += WoxThemeUtil.instance.getToolbarHeight();
     }
@@ -3579,7 +3789,8 @@ class WoxLauncherController extends GetxController {
 
     final queryBoxHeight = isQueryBoxVisible.value ? getQueryBoxTotalHeight() : 0.0;
     final refinementHeight = getQueryRefinementBarHeight();
-    var totalHeight = queryBoxHeight + refinementHeight + resultHeight;
+    final hiddenChatModeChromeHeight = isChatModeActive.value && !isQueryBoxVisible.value ? _getHiddenChatModeChromeHeight(hasItems: hasItems) : 0.0;
+    var totalHeight = queryBoxHeight + refinementHeight + resultHeight + hiddenChatModeChromeHeight;
 
     // On Windows with high DPI, add one pixel to avoid fractional cut-off.
     if (Platform.isWindows) {
@@ -3599,6 +3810,16 @@ class WoxLauncherController extends GetxController {
     }
 
     return totalHeight;
+  }
+
+  // Chat mode hides launcher chrome visually but keeps the window height stable.
+  double _getHiddenChatModeChromeHeight({required bool hasItems}) {
+    var hiddenHeight = getQueryBoxTotalHeight();
+    final wouldShowToolbarOutsideChatMode = (hasItems || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator) && !isToolbarHiddenForce.value;
+    if (wouldShowToolbarOutsideChatMode) {
+      hiddenHeight += WoxThemeUtil.instance.getToolbarHeight();
+    }
+    return hiddenHeight;
   }
 
   /// Calculate the initial window height when showing the app.
@@ -4045,9 +4266,14 @@ class WoxLauncherController extends GetxController {
 
   /// Process doctor check results and update the doctor check info
   DoctorCheckInfo processDoctorCheckResults(List<DoctorCheckResult> results) {
-    // Check if all tests passed
+    // Ignored checks are skipped in the toolbar but remain visible in the
+    // results list so the doctor query can still show them with an Unignore
+    // action.
+    final activeResults = results.where((r) => !r.ignored).toList();
+
+    // Check if all non-ignored tests passed
     bool allPassed = true;
-    for (var result in results) {
+    for (var result in activeResults) {
       if (!result.passed) {
         allPassed = false;
         break;
@@ -4059,7 +4285,7 @@ class WoxLauncherController extends GetxController {
     WoxImage icon = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING);
     String message = "";
 
-    for (var result in results) {
+    for (var result in activeResults) {
       if (!result.passed) {
         message = result.description;
         if (result.isVersionIssue) {
@@ -4091,8 +4317,9 @@ class WoxLauncherController extends GetxController {
 
   @override
   void dispose() {
-    stopDoctorCheckTimer();
+    _visibleLauncherFocusToken++;
     glanceRefreshTimer?.cancel();
+    hiddenCacheClearTimer?.cancel();
     cancelPendingResultTransitions();
     loadingTimer?.cancel();
     launcherFocusNode.dispose();
@@ -4109,6 +4336,7 @@ class WoxLauncherController extends GetxController {
     }
     terminalChunkControllers.clear();
     terminalStateControllers.clear();
+    _manualFilePreviewLoadRequests.close();
     super.dispose();
   }
 
@@ -4285,9 +4513,6 @@ class WoxLauncherController extends GetxController {
 
     cancelLauncherResizeRequests(traceId, "open onboarding window");
     await WoxApi.instance.onSetting(traceId, false, sessionId: sessionId);
-
-    await WoxThemeUtil.instance.loadTheme(traceId);
-    await settingController.reloadSetting(traceId);
 
     await WoxMultipleWindow.createWindow(
       id: WoxMultipleWindowIds.onboarding,
@@ -4689,6 +4914,16 @@ class WoxLauncherController extends GetxController {
       return;
     }
     if (isGlobalInputQuery(query)) {
+      preferredResultPreviewRatio = nextRatio;
+      if (isPreviewFullscreen.value) {
+        lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;
+      } else {
+        resultPreviewRatio.value = nextRatio;
+      }
+      return;
+    }
+    if (queryLayout.chatMode) {
+      nextRatio = 0;
       preferredResultPreviewRatio = nextRatio;
       if (isPreviewFullscreen.value) {
         lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;

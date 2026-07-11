@@ -10,6 +10,7 @@ import (
 	"image"
 	"image/png"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"wox/util"
@@ -20,10 +21,31 @@ var notImplement = errors.New("not implemented")
 var watchList = make([]func(Data), 0)
 var isWatching = false
 var WatchIntervalMillisecond = 250
+var nativeImageFileWriterMu sync.RWMutex
+var nativeImageFileWriter func(context.Context, string) error
 
 // lastWriteTimestamp tracks the last time Wox wrote to the clipboard (UnixMilli).
 // Used to prevent the polling loop from self-triggering on our own writes.
 var lastWriteTimestamp atomic.Int64
+
+// SetNativeImageFileWriter registers a UI-owned image clipboard writer for platforms where
+// background clipboard ownership is restricted by the compositor.
+func SetNativeImageFileWriter(writer func(context.Context, string) error) {
+	nativeImageFileWriterMu.Lock()
+	defer nativeImageFileWriterMu.Unlock()
+	nativeImageFileWriter = writer
+}
+
+// writeNativeImageFile calls the registered UI-owned image clipboard writer.
+func writeNativeImageFile(ctx context.Context, filePath string) error {
+	nativeImageFileWriterMu.RLock()
+	writer := nativeImageFileWriter
+	nativeImageFileWriterMu.RUnlock()
+	if writer == nil {
+		return errors.New("clipboard: native image file writer is not registered")
+	}
+	return writer(ctx, filePath)
+}
 
 type Type string
 

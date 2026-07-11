@@ -12,6 +12,7 @@ import (
 	"wox/i18n"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/clipboard"
 )
 
 var (
@@ -257,9 +258,21 @@ func (p *CloudSyncPlugin) historyDetailResults(ctx context.Context, historyID ui
 		}}
 	}
 
-	results := make([]plugin.QueryResult, 0, len(record.Details))
-	for index, detail := range record.Details {
-		results = append(results, plugin.QueryResult{
+	// Sort failed details first so partial-succeeded rows surface failures at the top of the launcher list.
+	sortedDetails := make([]cloudsync.CloudSyncHistoryRecordDetail, len(record.Details))
+	copy(sortedDetails, record.Details)
+	sort.SliceStable(sortedDetails, func(i, j int) bool {
+		iFailed := sortedDetails[i].Status == cloudsync.CloudSyncHistoryStatusFailed
+		jFailed := sortedDetails[j].Status == cloudsync.CloudSyncHistoryStatusFailed
+		if iFailed != jFailed {
+			return iFailed && !jFailed
+		}
+		return false
+	})
+
+	results := make([]plugin.QueryResult, 0, len(sortedDetails))
+	for index, detail := range sortedDetails {
+		result := plugin.QueryResult{
 			Id:         fmt.Sprintf("cloudsync-history-%d-detail-%d", historyID, index),
 			Title:      p.historyDetailTitle(ctx, detail),
 			SubTitle:   p.historyDetailSubtitle(ctx, detail),
@@ -268,7 +281,20 @@ func (p *CloudSyncPlugin) historyDetailResults(ctx context.Context, historyID ui
 			Group:      "i18n:plugin_cloudsync_history_detail_group",
 			GroupScore: cloudSyncHistoryGroupScore,
 			Tails:      p.historyDetailTails(ctx, detail),
-		})
+		}
+		if detail.Status == cloudsync.CloudSyncHistoryStatusFailed && detail.Error != "" {
+			errorText := detail.Error
+			result.Actions = []plugin.QueryResultAction{
+				{
+					Name: "i18n:plugin_cloudsync_history_action_copy_error",
+					Icon: common.CopyIcon,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						clipboard.WriteText(errorText)
+					},
+				},
+			}
+		}
+		results = append(results, result)
 	}
 	return results
 }
@@ -306,6 +332,8 @@ func (p *CloudSyncPlugin) historyTitle(ctx context.Context, record cloudsync.Clo
 		return p.tr(ctx, "plugin_cloudsync_history_push_failed")
 	case record.Operation == cloudsync.CloudSyncProgressOperationPull && record.Status == cloudsync.CloudSyncHistoryStatusSucceeded:
 		return p.tr(ctx, "plugin_cloudsync_history_pull_succeeded")
+	case record.Operation == cloudsync.CloudSyncProgressOperationPull && record.Status == cloudsync.CloudSyncHistoryStatusPartialSucceeded:
+		return p.tr(ctx, "plugin_cloudsync_history_pull_partial_succeeded")
 	case record.Operation == cloudsync.CloudSyncProgressOperationPull && record.Status == cloudsync.CloudSyncHistoryStatusFailed:
 		return p.tr(ctx, "plugin_cloudsync_history_pull_failed")
 	case record.Status == cloudsync.CloudSyncHistoryStatusFailed:
@@ -455,9 +483,15 @@ func (p *CloudSyncPlugin) historyDetailTails(ctx context.Context, detail cloudsy
 	return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_succeeded"), plugin.QueryResultTailTextCategorySuccess)}
 }
 
+// historyPluginLabel resolves IDs from both installed plugins and store manifests so failed install rows stay readable.
 func (p *CloudSyncPlugin) historyPluginLabel(ctx context.Context, pluginID string) string {
 	if instance := plugin.GetPluginManager().GetPluginInstanceById(pluginID); instance != nil {
 		if name := strings.TrimSpace(instance.GetName(ctx)); name != "" {
+			return name
+		}
+	}
+	if manifest, err := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginID); err == nil {
+		if name := strings.TrimSpace(manifest.GetName(ctx)); name != "" {
 			return name
 		}
 	}

@@ -23,6 +23,7 @@ typedef struct {
 typedef struct {
     char id[64];
     int pid;
+    char title[1024];
     WoxWindowRectC bounds;
     WoxDisplayInfoC display;
     int isMinimized;
@@ -155,6 +156,33 @@ char* getProcessBundleIdentifier(int pid) {
     }
 }
 
+int isProcessIdentityRunning(const char *identity) {
+    @autoreleasepool {
+        if (!identity || identity[0] == '\0') {
+            return 0;
+        }
+
+        NSString *target = [NSString stringWithUTF8String:identity];
+        if (!target || [target length] == 0) {
+            return 0;
+        }
+
+        for (NSRunningApplication *app in [[NSWorkspace sharedWorkspace] runningApplications]) {
+            NSString *identifier = [app bundleIdentifier];
+            if (identifier && [identifier caseInsensitiveCompare:target] == NSOrderedSame) {
+                return 1;
+            }
+
+            NSString *name = [app localizedName];
+            if (name && [name caseInsensitiveCompare:target] == NSOrderedSame) {
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+}
+
 int getActiveWindowPid() {
     @autoreleasepool {
         NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
@@ -225,7 +253,7 @@ static BOOL fillDisplayInfoForRect(WoxWindowRectC windowRect, WoxDisplayInfoC *o
 
     CGFloat desktopTop = desktopTopForScreens(screens);
     CGPoint center = CGPointMake(windowRect.x + windowRect.width / 2.0, windowRect.y + windowRect.height / 2.0);
-    NSScreen *primary = [NSScreen mainScreen];
+    NSScreen *primary = [screens firstObject];
 
     NSScreen *fallback = [screens objectAtIndex:0];
     for (NSScreen *screen in screens) {
@@ -329,6 +357,103 @@ static BOOL getAXWindowRect(AXUIElementRef window, WoxWindowRectC *outRect) {
     return YES;
 }
 
+static void copyAXWindowTitle(AXUIElementRef window, char *dest, size_t destSize) {
+    if (!dest || destSize == 0) {
+        return;
+    }
+    dest[0] = '\0';
+
+    if (!window) {
+        return;
+    }
+
+    CFTypeRef titleValue = NULL;
+    if (AXUIElementCopyAttributeValue(window, kAXTitleAttribute, &titleValue) != kAXErrorSuccess || !titleValue) {
+        return;
+    }
+
+    if (CFGetTypeID(titleValue) == CFStringGetTypeID()) {
+        CFStringGetCString((CFStringRef)titleValue, dest, destSize, kCFStringEncodingUTF8);
+        dest[destSize - 1] = '\0';
+    }
+    CFRelease(titleValue);
+}
+
+static BOOL readAXWindowMinimized(AXUIElementRef window) {
+    if (!window) {
+        return NO;
+    }
+
+    CFTypeRef minimizedValue = NULL;
+    if (AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute, &minimizedValue) != kAXErrorSuccess || !minimizedValue) {
+        return NO;
+    }
+
+    BOOL minimized = NO;
+    if (CFGetTypeID(minimizedValue) == CFBooleanGetTypeID()) {
+        minimized = CFBooleanGetValue((CFBooleanRef)minimizedValue);
+    }
+    CFRelease(minimizedValue);
+    return minimized;
+}
+
+static int fillManagedWindowFromAXWindow(pid_t pid, AXUIElementRef window, WoxManagedWindowC *outWindow) {
+    if (pid <= 0 || !window || !outWindow) {
+        return -1;
+    }
+
+    CGWindowID windowId = 0;
+    if (!getAXWindowId(window, &windowId)) {
+        return 0;
+    }
+
+    WoxWindowRectC rect;
+    if (!getAXWindowRect(window, &rect) || rect.width <= 0 || rect.height <= 0) {
+        return 0;
+    }
+
+    memset(outWindow, 0, sizeof(WoxManagedWindowC));
+    NSString *windowIdString = [NSString stringWithFormat:@"%u", windowId];
+    copyCString(outWindow->id, sizeof(outWindow->id), [windowIdString UTF8String]);
+    copyAXWindowTitle(window, outWindow->title, sizeof(outWindow->title));
+    outWindow->pid = (int)pid;
+    outWindow->bounds = rect;
+    outWindow->isMinimized = readAXWindowMinimized(window) ? 1 : 0;
+    if (!fillDisplayInfoForRect(rect, &outWindow->display)) {
+        return -3;
+    }
+    return 1;
+}
+
+static int appendManagedWindowFromAXWindow(pid_t pid, AXUIElementRef window, WoxManagedWindowC **windows, int *count, int *capacity, NSMutableSet<NSNumber *> *seenWindowIds) {
+    CGWindowID windowId = 0;
+    if (!getAXWindowId(window, &windowId)) {
+        return 1;
+    }
+
+    NSNumber *windowIdNumber = [NSNumber numberWithUnsignedInt:windowId];
+    if ([seenWindowIds containsObject:windowIdNumber]) {
+        return 1;
+    }
+
+    if (*count >= *capacity) {
+        int newCapacity = *capacity == 0 ? 16 : *capacity * 2;
+        WoxManagedWindowC *newWindows = (WoxManagedWindowC *)realloc(*windows, sizeof(WoxManagedWindowC) * (size_t)newCapacity);
+        if (!newWindows) {
+            return -1;
+        }
+        *windows = newWindows;
+        *capacity = newCapacity;
+    }
+
+    int result = fillManagedWindowFromAXWindow(pid, window, &(*windows)[*count]);
+    if (result == 1) {
+        [seenWindowIds addObject:windowIdNumber];
+        (*count)++;
+    }
+    return 1;
+}
+
 static BOOL windowRectApproximatelyMatchesTarget(WoxWindowRectC rect, int x, int y, int width, int height) {
     const int tolerance = 2;
     return abs(rect.x - x) <= tolerance &&
@@ -373,19 +498,27 @@ static BOOL applyAXWindowFrame(AXUIElementRef window, int x, int y, int width, i
     CGPoint position = CGPointMake(x, y);
     CGSize size = CGSizeMake(MAX(1, width), MAX(1, height));
 
+    if (axWindowMatchesTargetFrame(window, x, y, width, height)) {
+        return YES;
+    }
+
     for (int attempt = 0; attempt < maxAttempts; attempt++) {
         if (!setAXWindowSize(window, size)) {
             return NO;
         }
-        usleep(settleInterval);
 
         if (!setAXWindowPosition(window, position)) {
             return NO;
         }
-        usleep(settleInterval);
 
         if (axWindowMatchesTargetFrame(window, x, y, width, height)) {
             return YES;
+        }
+        if (attempt + 1 < maxAttempts) {
+            usleep(settleInterval);
+            if (axWindowMatchesTargetFrame(window, x, y, width, height)) {
+                return YES;
+            }
         }
     }
 
@@ -545,6 +678,7 @@ int getManagedWindowForManagement(const char *windowId, int pid, WoxManagedWindo
         memset(outWindow, 0, sizeof(WoxManagedWindowC));
         NSString *windowIdString = [NSString stringWithFormat:@"%u", actualWindowId];
         copyCString(outWindow->id, sizeof(outWindow->id), [windowIdString UTF8String]);
+        copyAXWindowTitle(window, outWindow->title, sizeof(outWindow->title));
         outWindow->pid = pid;
         outWindow->bounds = rect;
         outWindow->isMinimized = 0;
@@ -555,6 +689,168 @@ int getManagedWindowForManagement(const char *windowId, int pid, WoxManagedWindo
 
         CFRelease(window);
         return 1;
+    }
+}
+
+// appendManagedWindowsForPid reads one application's AX window list once and appends every movable window.
+static int appendManagedWindowsForPid(pid_t pid, WoxManagedWindowC **windows, int *count, int *capacity, NSMutableSet<NSNumber *> *seenWindowIds, AXError *outAXError, int *outAXWindowCount) {
+    if (outAXError) {
+        *outAXError = kAXErrorSuccess;
+    }
+    if (outAXWindowCount) {
+        *outAXWindowCount = 0;
+    }
+
+    AXUIElementRef app = AXUIElementCreateApplication(pid);
+    if (!app) {
+        if (outAXError) {
+            *outAXError = kAXErrorFailure;
+        }
+        return 1;
+    }
+
+    CFTypeRef windowsValue = NULL;
+    AXError windowsErr = AXUIElementCopyAttributeValue(app, kAXWindowsAttribute, &windowsValue);
+    if (outAXError) {
+        *outAXError = windowsErr;
+    }
+    CFRelease(app);
+    if (windowsErr != kAXErrorSuccess || !windowsValue || CFGetTypeID(windowsValue) != CFArrayGetTypeID()) {
+        if (windowsValue) {
+            CFRelease(windowsValue);
+        }
+        return 1;
+    }
+
+    CFArrayRef appWindows = (CFArrayRef)windowsValue;
+    if (outAXWindowCount) {
+        *outAXWindowCount = (int)CFArrayGetCount(appWindows);
+    }
+    for (CFIndex i = 0; i < CFArrayGetCount(appWindows); i++) {
+        AXUIElementRef window = (AXUIElementRef)CFArrayGetValueAtIndex(appWindows, i);
+        int appendResult = appendManagedWindowFromAXWindow(pid, window, windows, count, capacity, seenWindowIds);
+        if (appendResult < 0) {
+            CFRelease(windowsValue);
+            return appendResult;
+        }
+    }
+    CFRelease(windowsValue);
+    return 1;
+}
+
+int listManagedWindowsForManagement(WoxManagedWindowC **outWindows, int *outCount) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+        if (!outWindows || !outCount) {
+            return -1;
+        }
+
+        *outWindows = NULL;
+        *outCount = 0;
+
+        WoxManagedWindowC *windows = NULL;
+        int count = 0;
+        int capacity = 0;
+        NSMutableSet<NSNumber *> *seenWindowIds = [NSMutableSet set];
+        NSMutableOrderedSet<NSNumber *> *ownerPids = [NSMutableOrderedSet orderedSet];
+
+        // Use optionAll instead of optionOnScreenOnly so windows on other macOS Spaces
+        // or dragged offscreen are still discoverable. Skip the CGWindowLayer filter too:
+        // some apps (e.g. Ghostty) place their main window on a non-zero layer, and the
+        // Accessibility kAXWindowsAttribute + zero-size guard below already rejects helper
+        // windows that previously relied on the layer check.
+        CFArrayRef allWindows = CGWindowListCopyWindowInfo(kCGWindowListOptionAll | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
+        if (allWindows) {
+            NSArray *windowInfos = (__bridge NSArray *)allWindows;
+            for (NSDictionary *windowInfo in windowInfos) {
+                NSNumber *ownerPid = [windowInfo objectForKey:(__bridge NSString *)kCGWindowOwnerPID];
+                if (!ownerPid || [ownerPid intValue] <= 0) {
+                    continue;
+                }
+                [ownerPids addObject:ownerPid];
+            }
+
+            for (NSNumber *ownerPid in ownerPids) {
+                int appendResult = appendManagedWindowsForPid((pid_t)[ownerPid intValue], &windows, &count, &capacity, seenWindowIds, NULL, NULL);
+                if (appendResult < 0) {
+                    CFRelease(allWindows);
+                    free(windows);
+                    return appendResult;
+                }
+            }
+            CFRelease(allWindows);
+        }
+
+        *outWindows = windows;
+        *outCount = count;
+        return 1;
+    }
+}
+
+int listManagedWindowsForIdentityForManagement(const char *identity, WoxManagedWindowC **outWindows, int *outCount, char *outDiagnostics, int diagnosticsSize) {
+    @autoreleasepool {
+        copyCString(outDiagnostics, diagnosticsSize > 0 ? (size_t)diagnosticsSize : 0, "");
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+        if (!identity || identity[0] == '\0' || !outWindows || !outCount) {
+            return -1;
+        }
+
+        *outWindows = NULL;
+        *outCount = 0;
+        NSString *target = [NSString stringWithUTF8String:identity];
+        if (!target || [target length] == 0) {
+            return -1;
+        }
+
+        WoxManagedWindowC *windows = NULL;
+        int count = 0;
+        int capacity = 0;
+        NSMutableSet<NSNumber *> *seenWindowIds = [NSMutableSet set];
+        NSMutableArray<NSString *> *diagnostics = [NSMutableArray array];
+        for (NSRunningApplication *app in [[NSWorkspace sharedWorkspace] runningApplications]) {
+            NSString *identifier = [app bundleIdentifier];
+            NSString *name = [app localizedName];
+            BOOL matchesIdentity = identifier && [identifier caseInsensitiveCompare:target] == NSOrderedSame;
+            BOOL matchesName = name && [name caseInsensitiveCompare:target] == NSOrderedSame;
+            if (!matchesIdentity && !matchesName) {
+                continue;
+            }
+
+            int countBefore = count;
+            AXError axError = kAXErrorSuccess;
+            int axWindowCount = 0;
+            int appendResult = appendManagedWindowsForPid([app processIdentifier], &windows, &count, &capacity, seenWindowIds, &axError, &axWindowCount);
+            [diagnostics addObject:[NSString stringWithFormat:@"pid=%d bundle=%@ name=%@ axError=%d axWindows=%d managed=%d",
+                                                              [app processIdentifier],
+                                                              identifier ?: @"",
+                                                              name ?: @"",
+                                                              axError,
+                                                              axWindowCount,
+                                                              count - countBefore]];
+            if (appendResult < 0) {
+                free(windows);
+                return appendResult;
+            }
+        }
+
+        if ([diagnostics count] == 0) {
+            [diagnostics addObject:@"matches=0"];
+        }
+        copyCString(outDiagnostics, diagnosticsSize > 0 ? (size_t)diagnosticsSize : 0, [[diagnostics componentsJoinedByString:@";"] UTF8String]);
+
+        *outWindows = windows;
+        *outCount = count;
+        return 1;
+    }
+}
+
+void freeManagedWindowsForManagement(WoxManagedWindowC *windows) {
+    if (windows) {
+        free(windows);
     }
 }
 
@@ -576,7 +872,7 @@ int listDisplaysForManagement(WoxDisplayInfoC **outDisplays, int *outCount) {
         }
 
         CGFloat desktopTop = desktopTopForScreens(screens);
-        NSScreen *primary = [NSScreen mainScreen];
+        NSScreen *primary = [screens firstObject];
         for (NSUInteger i = 0; i < count; i++) {
             NSScreen *screen = [screens objectAtIndex:i];
             fillDisplayInfoFromScreen(screen, screen == primary, desktopTop, &displays[i]);

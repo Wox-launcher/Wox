@@ -137,6 +137,7 @@ jobs:
             libxtst-dev \
             libayatana-appindicator3-dev \
             libkeybinder-3.0-dev \
+            libgtk-layer-shell0 \
             patchelf \
             libfuse2 \
             xvfb
@@ -165,11 +166,11 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 8.15.5
+          version: 11.9.0
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
           cache-dependency-path: |
             wox.plugin.host.nodejs/pnpm-lock.yaml
@@ -295,11 +296,11 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 8.15.5
+          version: 11.9.0
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
           cache-dependency-path: |
             wox.plugin.host.nodejs/pnpm-lock.yaml
@@ -446,12 +447,12 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 8.15.5
+          version: 11.9.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
           cache-dependency-path: |
             wox.plugin.host.nodejs/pnpm-lock.yaml
@@ -580,6 +581,7 @@ jobs:
             libxtst-dev \
             libayatana-appindicator3-dev \
             libkeybinder-3.0-dev \
+            libgtk-layer-shell0 \
             libfuse2 \
             xvfb
       - name: Setup Go
@@ -590,11 +592,11 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 8.15.5
+          version: 11.9.0
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
           cache-dependency-path: |
             wox.plugin.host.nodejs/pnpm-lock.yaml

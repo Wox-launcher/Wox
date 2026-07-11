@@ -72,6 +72,20 @@ private func formatTimingRect(_ rect: NSRect) -> String {
   return "\(Int(rect.width.rounded()))x\(Int(rect.height.rounded()))@\(Int(rect.origin.x.rounded())),\(Int(rect.origin.y.rounded()))"
 }
 
+private extension Array where Element: Equatable {
+  mutating func appendUnique(_ element: Element) {
+    if !contains(element) {
+      append(element)
+    }
+  }
+
+  mutating func appendUnique(contentsOf elements: [Element]) {
+    for element in elements {
+      appendUnique(element)
+    }
+  }
+}
+
 private let screenshotHoverMinimumSide: CGFloat = 12
 private let screenshotHoverMinimumArea: CGFloat = 256
 private let screenshotHoverDisplaySizedWidthRatio: CGFloat = 0.90
@@ -1211,10 +1225,10 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
     window.styleMask.remove(.resizable)
   }
 
-  // Carries both a resolved file path and whether macOS' image wallpaper extension owns the current Space.
+  // Carries both a resolved file path and whether WallpaperAgent owns a rendered cache for the current Space.
   private struct WallpaperStoreResolution {
     let imagePath: String?
-    let usesImageExtension: Bool
+    let wallpaperAgentCacheDirectoryNames: [String]
   }
 
   private func describeFrontmostApplication() -> String {
@@ -1257,7 +1271,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       return path
     }
 
-    if storeResolution.usesImageExtension, let path = latestWallpaperAgentImageCachePath() {
+    if let path = latestWallpaperAgentRenderedCachePath(directoryNames: storeResolution.wallpaperAgentCacheDirectoryNames) {
       return path
     }
 
@@ -1297,15 +1311,15 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       let data = try? Data(contentsOf: storeURL),
       let root = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
     else {
-      return WallpaperStoreResolution(imagePath: nil, usesImageExtension: false)
+      return WallpaperStoreResolution(imagePath: nil, wallpaperAgentCacheDirectoryNames: [])
     }
 
-    var usesImageExtension = false
+    var wallpaperAgentCacheDirectoryNames: [String] = []
     for spaceID in currentDesktopSpaceIdentifiers() {
       let resolution = desktopWallpaperPath(fromSpaceID: spaceID, root: root)
-      usesImageExtension = usesImageExtension || resolution.usesImageExtension
+      wallpaperAgentCacheDirectoryNames.appendUnique(contentsOf: resolution.wallpaperAgentCacheDirectoryNames)
       if let imagePath = resolution.imagePath {
-        return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+        return WallpaperStoreResolution(imagePath: imagePath, wallpaperAgentCacheDirectoryNames: wallpaperAgentCacheDirectoryNames)
       }
     }
 
@@ -1315,14 +1329,14 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
           continue
         }
         let resolution = wallpaperStoreResolution(fromDesktop: display["Desktop"] as? [String: Any])
-        usesImageExtension = usesImageExtension || resolution.usesImageExtension
+        wallpaperAgentCacheDirectoryNames.appendUnique(contentsOf: resolution.wallpaperAgentCacheDirectoryNames)
         if let imagePath = resolution.imagePath {
-          return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+          return WallpaperStoreResolution(imagePath: imagePath, wallpaperAgentCacheDirectoryNames: wallpaperAgentCacheDirectoryNames)
         }
       }
     }
 
-    return WallpaperStoreResolution(imagePath: nil, usesImageExtension: usesImageExtension)
+    return WallpaperStoreResolution(imagePath: nil, wallpaperAgentCacheDirectoryNames: wallpaperAgentCacheDirectoryNames)
   }
 
   // Read the active macOS Space IDs so per-Space wallpapers override global defaults.
@@ -1363,32 +1377,32 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       let spaces = root["Spaces"] as? [String: Any],
       let space = spaces[spaceID] as? [String: Any]
     else {
-      return WallpaperStoreResolution(imagePath: nil, usesImageExtension: false)
+      return WallpaperStoreResolution(imagePath: nil, wallpaperAgentCacheDirectoryNames: [])
     }
 
-    var usesImageExtension = false
+    var wallpaperAgentCacheDirectoryNames: [String] = []
     if let displays = space["Displays"] as? [String: Any] {
       for display in displays.values {
         guard let display = display as? [String: Any] else {
           continue
         }
         let resolution = wallpaperStoreResolution(fromDesktop: display["Desktop"] as? [String: Any])
-        usesImageExtension = usesImageExtension || resolution.usesImageExtension
+        wallpaperAgentCacheDirectoryNames.appendUnique(contentsOf: resolution.wallpaperAgentCacheDirectoryNames)
         if let imagePath = resolution.imagePath {
-          return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+          return WallpaperStoreResolution(imagePath: imagePath, wallpaperAgentCacheDirectoryNames: wallpaperAgentCacheDirectoryNames)
         }
       }
     }
 
     if let defaultSpace = space["Default"] as? [String: Any] {
       let resolution = wallpaperStoreResolution(fromDesktop: defaultSpace["Desktop"] as? [String: Any])
-      usesImageExtension = usesImageExtension || resolution.usesImageExtension
+      wallpaperAgentCacheDirectoryNames.appendUnique(contentsOf: resolution.wallpaperAgentCacheDirectoryNames)
       if let imagePath = resolution.imagePath {
-        return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+        return WallpaperStoreResolution(imagePath: imagePath, wallpaperAgentCacheDirectoryNames: wallpaperAgentCacheDirectoryNames)
       }
     }
 
-    return WallpaperStoreResolution(imagePath: nil, usesImageExtension: usesImageExtension)
+    return WallpaperStoreResolution(imagePath: nil, wallpaperAgentCacheDirectoryNames: wallpaperAgentCacheDirectoryNames)
   }
 
   // Decode one Desktop content entry and return either its source image or the provider kind.
@@ -1397,17 +1411,17 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       let content = desktop?["Content"] as? [String: Any],
       let choices = content["Choices"] as? [[String: Any]]
     else {
-      return WallpaperStoreResolution(imagePath: nil, usesImageExtension: false)
+      return WallpaperStoreResolution(imagePath: nil, wallpaperAgentCacheDirectoryNames: [])
     }
 
-    var usesImageExtension = false
+    var wallpaperAgentCacheDirectoryNames: [String] = []
     for choice in choices {
-      if choice["Provider"] as? String == "com.apple.wallpaper.extension.image" {
-        usesImageExtension = true
+      if let cacheDirectoryName = wallpaperAgentCacheDirectoryName(for: choice["Provider"] as? String) {
+        wallpaperAgentCacheDirectoryNames.appendUnique(cacheDirectoryName)
       }
 
       if let imagePath = firstExistingImagePath(in: choice["Files"]) {
-        return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+        return WallpaperStoreResolution(imagePath: imagePath, wallpaperAgentCacheDirectoryNames: wallpaperAgentCacheDirectoryNames)
       }
 
       guard
@@ -1417,28 +1431,52 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       else {
         continue
       }
-      return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+      return WallpaperStoreResolution(imagePath: imagePath, wallpaperAgentCacheDirectoryNames: wallpaperAgentCacheDirectoryNames)
     }
 
-    return WallpaperStoreResolution(imagePath: nil, usesImageExtension: usesImageExtension)
+    return WallpaperStoreResolution(imagePath: nil, wallpaperAgentCacheDirectoryNames: wallpaperAgentCacheDirectoryNames)
   }
 
-  // Use WallpaperAgent's rendered image cache for photo shuffle choices that do not expose a source path.
-  private func latestWallpaperAgentImageCachePath() -> String? {
-    let cacheURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches/com.apple.wallpaper.caches/extension-com.apple.wallpaper.extension.image")
-    guard let files = try? FileManager.default.contentsOfDirectory(at: cacheURL, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey], options: [.skipsHiddenFiles]) else {
+  // WallpaperAgent keeps rendered previews for still-image and aerial wallpapers when the original source is unavailable.
+  private func wallpaperAgentCacheDirectoryName(for provider: String?) -> String? {
+    guard let provider else {
+      return nil
+    }
+    if provider == "com.apple.wallpaper.choice.image" || provider == "com.apple.wallpaper.extension.image" {
+      return "extension-com.apple.wallpaper.extension.image"
+    }
+    if provider == "com.apple.wallpaper.choice.aerials" || provider == "com.apple.wallpaper.extension.aerials" || provider == "com.apple.wallpaper.choice.screen-saver" {
+      return "extension-com.apple.wallpaper.extension.aerials"
+    }
+    return nil
+  }
+
+  // Use WallpaperAgent's rendered cache for choices that do not expose a usable source path.
+  private func latestWallpaperAgentRenderedCachePath(directoryNames: [String]) -> String? {
+    if directoryNames.isEmpty {
       return nil
     }
 
-    let imageFiles = files.compactMap { url -> (url: URL, modificationDate: Date)? in
-      guard
-        isSupportedWallpaperImagePath(url.path),
-        (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
-        let modificationDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-      else {
-        return nil
+    let cacheRootURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches/com.apple.wallpaper.caches")
+
+    var imageFiles: [(url: URL, modificationDate: Date)] = []
+    for directoryName in directoryNames {
+      let cacheDirectory = cacheRootURL.appendingPathComponent(directoryName)
+      guard let files = try? FileManager.default.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey], options: [.skipsHiddenFiles]) else {
+        continue
       }
-      return (url, modificationDate)
+      imageFiles.append(
+        contentsOf: files.compactMap { url -> (url: URL, modificationDate: Date)? in
+          guard
+            isSupportedWallpaperImagePath(url.path),
+            (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+            let modificationDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+          else {
+            return nil
+          }
+          return (url, modificationDate)
+        }
+      )
     }
 
     return imageFiles.max { $0.modificationDate < $1.modificationDate }?.url.path

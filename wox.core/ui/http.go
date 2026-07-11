@@ -549,8 +549,13 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 		for i, settingDefinition := range pluginDto.SettingDefinitions {
 			if settingDefinition.Type == definition.PluginSettingDefinitionTypeDynamic {
 				replaced := false
+				hidden := false
 				for _, callback := range pluginInstance.DynamicSettingCallbacks {
 					newSettingDefinition := callback(ctx, settingDefinition.Value.GetKey())
+					if newSettingDefinition.IsEmpty() {
+						hidden = true
+						continue
+					}
 					if newSettingDefinition.Value != nil && newSettingDefinition.Type != definition.PluginSettingDefinitionTypeDynamic {
 						logger.Debug(ctx, fmt.Sprintf("dynamic setting replaced: %s(%s) -> %s(%s)", settingDefinition.Value.GetKey(), settingDefinition.Type, newSettingDefinition.Value.GetKey(), newSettingDefinition.Type))
 						pluginDto.SettingDefinitions[i] = newSettingDefinition
@@ -560,14 +565,16 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 				}
 
 				if !replaced {
-					logger.Error(ctx, "dynamic setting not replaced")
-					//remove invalid dynamic setting
+					if !hidden {
+						logger.Error(ctx, "dynamic setting not replaced")
+					}
+					//remove hidden or invalid dynamic setting
 					removedKeys = append(removedKeys, settingDefinition.Value.GetKey())
 				}
 			}
 		}
 
-		//remove invalid dynamic setting
+		//remove hidden or invalid dynamic setting
 		pluginDto.SettingDefinitions = lo.Filter(pluginDto.SettingDefinitions, func(item definition.PluginSettingDefinitionItem, _ int) bool {
 			if item.Value == nil {
 				return true

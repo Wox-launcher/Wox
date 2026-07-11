@@ -6,7 +6,7 @@ import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/colors.dart';
 
-enum WoxQueryVariableSource { queryHotkey, aiCommand }
+enum WoxQueryVariableSource { queryHotkey, aiCommand, dictation }
 
 class WoxQueryVariableTextField extends StatefulWidget {
   final TextEditingController? controller;
@@ -71,6 +71,23 @@ class _WoxQueryVariableTextFieldState extends State<WoxQueryVariableTextField> {
       labelKey: 'ui_query_variable_input_text',
       descriptionKey: 'ui_query_variable_input_text_tooltip',
       icon: Icons.short_text,
+    ),
+  ];
+
+  final List<_QueryVariableOption> _dictationOptions = const [
+    _QueryVariableOption(
+      id: 'dictation_text',
+      value: '{wox:dictation_text}',
+      labelKey: 'ui_query_variable_dictation_text',
+      descriptionKey: 'ui_query_variable_dictation_text_tooltip',
+      icon: Icons.mic_none,
+    ),
+    _QueryVariableOption(
+      id: 'selected_text',
+      value: '{wox:selected_text}',
+      labelKey: 'ui_query_variable_selected_text',
+      descriptionKey: 'ui_query_variable_selected_text_tooltip',
+      icon: Icons.text_fields,
     ),
   ];
 
@@ -148,7 +165,11 @@ class _WoxQueryVariableTextFieldState extends State<WoxQueryVariableTextField> {
   }
 
   List<_QueryVariableOption> get _filteredOptions {
-    final options = widget.source == WoxQueryVariableSource.aiCommand ? _aiCommandOptions : _queryHotkeyOptions;
+    final options = switch (widget.source) {
+      WoxQueryVariableSource.aiCommand => _aiCommandOptions,
+      WoxQueryVariableSource.dictation => _dictationOptions,
+      WoxQueryVariableSource.queryHotkey => _queryHotkeyOptions,
+    };
     final triggerStart = _replaceStart;
     if (triggerStart == null || _openedFromButton) {
       return options;
