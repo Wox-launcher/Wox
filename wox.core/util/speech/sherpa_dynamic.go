@@ -45,7 +45,7 @@ typedef void (*SherpaOnnxVoiceActivityDetectorAcceptWaveformFn)(const SherpaOnnx
 typedef int32_t (*SherpaOnnxVoiceActivityDetectorEmptyFn)(const SherpaOnnxVoiceActivityDetector *);
 typedef int32_t (*SherpaOnnxVoiceActivityDetectorDetectedFn)(const SherpaOnnxVoiceActivityDetector *);
 typedef void (*SherpaOnnxVoiceActivityDetectorPopFn)(const SherpaOnnxVoiceActivityDetector *);
-typedef void (*SherpaOnnxVoiceActivityDetectorClearFn)(const SherpaOnnxVoiceActivityDetector *);
+typedef void (*SherpaOnnxVoiceActivityDetectorResetFn)(const SherpaOnnxVoiceActivityDetector *);
 typedef const SherpaOnnxSpeechSegment *(*SherpaOnnxVoiceActivityDetectorFrontFn)(const SherpaOnnxVoiceActivityDetector *);
 typedef void (*SherpaOnnxDestroySpeechSegmentFn)(const SherpaOnnxSpeechSegment *);
 typedef void (*SherpaOnnxVoiceActivityDetectorFlushFn)(const SherpaOnnxVoiceActivityDetector *);
@@ -77,7 +77,7 @@ static SherpaOnnxVoiceActivityDetectorAcceptWaveformFn p_SherpaOnnxVoiceActivity
 static SherpaOnnxVoiceActivityDetectorEmptyFn p_SherpaOnnxVoiceActivityDetectorEmpty;
 static SherpaOnnxVoiceActivityDetectorDetectedFn p_SherpaOnnxVoiceActivityDetectorDetected;
 static SherpaOnnxVoiceActivityDetectorPopFn p_SherpaOnnxVoiceActivityDetectorPop;
-static SherpaOnnxVoiceActivityDetectorClearFn p_SherpaOnnxVoiceActivityDetectorClear;
+static SherpaOnnxVoiceActivityDetectorResetFn p_SherpaOnnxVoiceActivityDetectorReset;
 static SherpaOnnxVoiceActivityDetectorFrontFn p_SherpaOnnxVoiceActivityDetectorFront;
 static SherpaOnnxDestroySpeechSegmentFn p_SherpaOnnxDestroySpeechSegment;
 static SherpaOnnxVoiceActivityDetectorFlushFn p_SherpaOnnxVoiceActivityDetectorFlush;
@@ -177,7 +177,7 @@ static int wox_sherpa_load_symbols(char *err, int err_len) {
   WOX_LOAD_SHERPA_SYMBOL(SherpaOnnxVoiceActivityDetectorEmpty)
   WOX_LOAD_SHERPA_SYMBOL(SherpaOnnxVoiceActivityDetectorDetected)
   WOX_LOAD_SHERPA_SYMBOL(SherpaOnnxVoiceActivityDetectorPop)
-  WOX_LOAD_SHERPA_SYMBOL(SherpaOnnxVoiceActivityDetectorClear)
+  WOX_LOAD_SHERPA_SYMBOL(SherpaOnnxVoiceActivityDetectorReset)
   WOX_LOAD_SHERPA_SYMBOL(SherpaOnnxVoiceActivityDetectorFront)
   WOX_LOAD_SHERPA_SYMBOL(SherpaOnnxDestroySpeechSegment)
   WOX_LOAD_SHERPA_SYMBOL(SherpaOnnxVoiceActivityDetectorFlush)
@@ -307,8 +307,8 @@ static void wox_sherpa_vad_pop(const SherpaOnnxVoiceActivityDetector *vad) {
   p_SherpaOnnxVoiceActivityDetectorPop(vad);
 }
 
-static void wox_sherpa_vad_clear(const SherpaOnnxVoiceActivityDetector *vad) {
-  p_SherpaOnnxVoiceActivityDetectorClear(vad);
+static void wox_sherpa_vad_reset(const SherpaOnnxVoiceActivityDetector *vad) {
+  p_SherpaOnnxVoiceActivityDetectorReset(vad);
 }
 
 static const SherpaOnnxSpeechSegment *wox_sherpa_vad_front(const SherpaOnnxVoiceActivityDetector *vad) {
@@ -796,9 +796,9 @@ func (v *VoiceActivityDetector) Flush() {
 	C.wox_sherpa_vad_flush(v.vad)
 }
 
-// Clear resets the VAD internal buffer and state.
-func (v *VoiceActivityDetector) Clear() {
-	C.wox_sherpa_vad_clear(v.vad)
+// Reset clears all VAD stream state before the detector is reused.
+func (v *VoiceActivityDetector) Reset() {
+	C.wox_sherpa_vad_reset(v.vad)
 }
 
 // Close releases the VAD resources. Must be called exactly once.

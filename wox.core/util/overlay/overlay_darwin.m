@@ -108,6 +108,7 @@ static void OverlayDebugLog(NSString *message) {
 @property(nonatomic, assign) BOOL hasStickyPredictiveAnchor;
 @property(nonatomic, assign) CGRect stickyPredictiveAnchorTargetRect;
 @property(nonatomic, assign) NSPoint stickyPredictiveAnchorMouse;
+@property(nonatomic, strong) NSRunningApplication *previousFrontmostApplication;
 @end
 
 static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
@@ -632,8 +633,40 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     // Bug fix: showing a panel with orderFront/orderFrontRegardless only changes visibility and
     // z-order; it does not guarantee keyboard focus. Overlays that advertise Escape-to-close must
     // become the key window as soon as they appear so Escape works without an extra click.
+    NSRunningApplication *frontmostApplication = [[NSWorkspace sharedWorkspace] frontmostApplication];
+    if (frontmostApplication && frontmostApplication.processIdentifier != [[NSProcessInfo processInfo] processIdentifier]) {
+        // Preserve the original target only once. Overlay content updates happen after Wox becomes
+        // frontmost and must not replace the application that should regain focus on close.
+        if (!self.previousFrontmostApplication) {
+            self.previousFrontmostApplication = frontmostApplication;
+        }
+    }
     [NSApp activateIgnoringOtherApps:YES];
     [self makeKeyAndOrderFront:nil];
+}
+
+- (void)restorePreviousFrontmostApplication {
+    NSRunningApplication *application = [[self.previousFrontmostApplication retain] autorelease];
+    self.previousFrontmostApplication = nil;
+    if (!application || application.terminated) {
+        return;
+    }
+
+    NSRunningApplication *frontmostApplication = [[NSWorkspace sharedWorkspace] frontmostApplication];
+    if (frontmostApplication && frontmostApplication.processIdentifier != [[NSProcessInfo processInfo] processIdentifier]) {
+        // Do not override a focus change the user made while the overlay was visible.
+        return;
+    }
+
+    if (@available(macOS 14.0, *)) {
+        [application activateWithOptions:0];
+        return;
+    }
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    [application activateWithOptions:NSApplicationActivateIgnoringOtherApps];
+#pragma clang diagnostic pop
 }
 
 - (void)onClick {
@@ -651,6 +684,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 - (void)close {
     [self detachNativeAttachment];
     [super close];
+    [self restorePreviousFrontmostApplication];
 }
 
 - (void)dealloc {
@@ -663,6 +697,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     self.nativeAttachmentView = nil;
     self.backgroundView = nil;
     self.trackingArea = nil;
+    self.previousFrontmostApplication = nil;
     [super dealloc];
 }
 

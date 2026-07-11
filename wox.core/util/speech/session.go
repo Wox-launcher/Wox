@@ -383,9 +383,6 @@ func (s *Session) Stop() (string, error) {
 				s.mu.Unlock()
 			})
 		}
-		// Clear the VAD buffer so no residual audio carries over to the
-		// next session when the VAD is reused from the pool.
-		s.vad.Clear()
 		logger.Info(s.ctx, "dictation: session.Stop VAD flush done")
 	}
 

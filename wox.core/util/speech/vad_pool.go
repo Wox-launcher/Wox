@@ -71,8 +71,8 @@ func (p *VadPool) Acquire(ctx context.Context, config VadConfig) (*VoiceActivity
 		entry.lastUsed = time.Now()
 		vad := entry.vad
 		p.mu.Unlock()
-		// Reset VAD state for a fresh session.
-		vad.Clear()
+		// Clear the complete stream state, including buffered audio and speech boundaries.
+		vad.Reset()
 		util.GetLogger().Debug(ctx, "dictation timing: vad pool reused cached VAD")
 		return vad, nil
 	}
@@ -99,13 +99,12 @@ func (p *VadPool) Acquire(ctx context.Context, config VadConfig) (*VoiceActivity
 	return vad, nil
 }
 
-// Release returns a VAD to the pool. It clears the VAD buffer so no residual
-// audio from this session carries over to the next.
+// Release returns a fully reset VAD to the pool so no stream state carries over.
 func (p *VadPool) Release(ctx context.Context, vad *VoiceActivityDetector) {
 	if vad == nil {
 		return
 	}
-	vad.Clear()
+	vad.Reset()
 
 	p.mu.Lock()
 	for _, entry := range p.entries {
