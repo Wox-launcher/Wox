@@ -735,8 +735,6 @@ class _WoxSettingViewState extends State<WoxSettingView> {
               Container(
                 width: 250,
                 decoration: BoxDecoration(
-                  // A slightly wider, quieter rail matches the refined content rhythm and gives nested items room to breathe.
-                  color: getThemeTextColor().withValues(alpha: 0.035),
                   // Settings separators should use one visual token. The old dimmed
                   // sidebar border was weaker than the plugin/detail splitter, so it
                   // made the three-pane layout look like separate components.

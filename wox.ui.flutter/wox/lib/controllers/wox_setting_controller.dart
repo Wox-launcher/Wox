@@ -691,6 +691,8 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     return texts;
   }
 
+  String get activeNavTitle => tr(_settingNavTitleKey(activeNavPath.value));
+
   String _settingNavTitleKey(String navPath) {
     switch (navPath) {
       case 'general':
@@ -707,6 +709,10 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
         return 'ui_data_backup_restore_nav';
       case 'data.cloudsync':
         return 'ui_cloud_sync';
+      case 'plugins.store':
+        return 'ui_store_plugins';
+      case 'plugins.installed':
+        return 'ui_installed_plugins';
       case 'plugins.runtime':
         return 'ui_runtime_settings';
       case 'themes.store':
@@ -715,12 +721,16 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
         return 'ui_installed_themes';
       case 'themes.edit':
         return 'ui_theme_editor_title';
+      case 'usage':
+        return 'ui_usage';
       case 'debug':
         return 'ui_debug';
       case 'update':
         return 'ui_update';
       case 'privacy':
         return 'ui_privacy';
+      case 'about':
+        return 'ui_about';
       default:
         return 'ui_settings';
     }

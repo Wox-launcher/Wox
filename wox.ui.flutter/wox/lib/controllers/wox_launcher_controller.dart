@@ -4333,6 +4333,7 @@ class WoxLauncherController extends GetxController {
     await WoxMultipleWindow.createWindow(
       id: WoxMultipleWindowIds.settings,
       title: settingController.tr("ui_tray_open_setting_window"),
+      titleBuilder: () => settingController.activeNavTitle,
       size: settingWindowSize,
       constraints: BoxConstraints.tight(settingWindowSize),
       showTitleBar: true,

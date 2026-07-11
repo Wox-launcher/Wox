@@ -15,6 +15,7 @@ import 'package:flutter/src/widgets/_window.dart' as flutter_windowing;
 import 'package:get/get.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/consts.dart';
+import 'package:wox/utils/multiplewindow/wox_multiple_window_ids.dart';
 import 'package:wox/utils/multiplewindow/wox_multiple_window_style.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
@@ -160,6 +161,7 @@ class WoxMultipleWindow {
   static Future<WoxMultipleWindowHandle> createWindow({
     required String id,
     required String title,
+    String Function()? titleBuilder,
     required Size size,
     BoxConstraints? constraints,
     required WidgetBuilder builder,
@@ -212,6 +214,7 @@ class WoxMultipleWindow {
         return _WoxMultipleWindowRoot(
           id: id,
           title: title,
+          titleBuilder: titleBuilder,
           controller: controller,
           handle: handle,
           navigatorKey: navigatorKey,
@@ -419,6 +422,7 @@ class _WoxMultipleWindowRoot extends StatefulWidget {
   const _WoxMultipleWindowRoot({
     required this.id,
     required this.title,
+    required this.titleBuilder,
     required this.controller,
     required this.handle,
     required this.navigatorKey,
@@ -434,6 +438,7 @@ class _WoxMultipleWindowRoot extends StatefulWidget {
 
   final String id;
   final String title;
+  final String Function()? titleBuilder;
   final flutter_windowing.RegularWindowController controller;
   final WoxMultipleWindowHandle handle;
   final GlobalKey<NavigatorState> navigatorKey;
@@ -525,6 +530,7 @@ class _WoxMultipleWindowRootState extends State<_WoxMultipleWindowRoot> {
             child: _WoxMultipleWindowFrame(
               windowId: widget.id,
               title: widget.title,
+              titleBuilder: widget.titleBuilder,
               showTitleBar: widget.showTitleBar,
               resizable: widget.resizable,
               minimizable: widget.minimizable,
@@ -542,6 +548,7 @@ class _WoxMultipleWindowFrame extends StatelessWidget {
   const _WoxMultipleWindowFrame({
     required this.windowId,
     required this.title,
+    required this.titleBuilder,
     required this.showTitleBar,
     required this.resizable,
     required this.minimizable,
@@ -551,6 +558,7 @@ class _WoxMultipleWindowFrame extends StatelessWidget {
 
   final String windowId;
   final String title;
+  final String Function()? titleBuilder;
   final bool showTitleBar;
   final bool resizable;
   final bool minimizable;
@@ -565,7 +573,9 @@ class _WoxMultipleWindowFrame extends StatelessWidget {
     } else {
       frame = Material(
         type: MaterialType.transparency,
-        child: Column(children: [_WoxSimulatedTitleBar(windowId: windowId, title: title, resizable: resizable, minimizable: minimizable), Expanded(child: child)]),
+        child: Column(
+          children: [_WoxSimulatedTitleBar(windowId: windowId, title: title, titleBuilder: titleBuilder, resizable: resizable, minimizable: minimizable), Expanded(child: child)],
+        ),
       );
     }
 
@@ -577,12 +587,13 @@ class _WoxMultipleWindowFrame extends StatelessWidget {
 }
 
 class _WoxSimulatedTitleBar extends StatelessWidget {
-  const _WoxSimulatedTitleBar({required this.windowId, required this.title, required this.resizable, required this.minimizable});
+  const _WoxSimulatedTitleBar({required this.windowId, required this.title, required this.titleBuilder, required this.resizable, required this.minimizable});
 
   static const double height = 40;
 
   final String windowId;
   final String title;
+  final String Function()? titleBuilder;
   final bool resizable;
   final bool minimizable;
 
@@ -592,18 +603,20 @@ class _WoxSimulatedTitleBar extends StatelessWidget {
       final backgroundColor = getThemeBackgroundColor();
       final borderColor = getThemeDividerColor().withValues(alpha: isThemeDark() ? 0.42 : 0.30);
       final textColor = getThemeTextColor();
+      final effectiveTitle = titleBuilder?.call() ?? title;
 
       return SizedBox(
+        width: double.infinity,
         height: height,
         child: DecoratedBox(
-          decoration: BoxDecoration(color: backgroundColor, border: Border(bottom: BorderSide(color: borderColor, width: 1))),
-          child: Platform.isMacOS ? _buildMacTitleBar(textColor) : _buildDefaultTitleBar(textColor),
+          decoration: BoxDecoration(color: backgroundColor, border: Platform.isMacOS ? null : Border(bottom: BorderSide(color: borderColor, width: 1))),
+          child: Platform.isMacOS ? _buildMacTitleBar(textColor, effectiveTitle) : _buildDefaultTitleBar(textColor, effectiveTitle),
         ),
       );
     });
   }
 
-  Widget _buildDefaultTitleBar(Color textColor) {
+  Widget _buildDefaultTitleBar(Color textColor, String effectiveTitle) {
     return Row(
       children: [
         Expanded(
@@ -617,7 +630,7 @@ class _WoxSimulatedTitleBar extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      title,
+                      effectiveTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: textColor, fontSize: 13, fontWeight: FontWeight.w600, decoration: TextDecoration.none),
@@ -634,8 +647,37 @@ class _WoxSimulatedTitleBar extends StatelessWidget {
     );
   }
 
-  Widget _buildMacTitleBar(Color textColor) {
-    return Row(
+  Widget _buildMacTitleBar(Color textColor, String effectiveTitle) {
+    if (windowId == WoxMultipleWindowIds.settings) {
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: WoxMultipleWindowDragMoveArea(
+              windowId: windowId,
+              child: Row(
+                children: [
+                  const SizedBox(width: 250),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        effectiveTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: textColor, fontSize: 13, fontWeight: FontWeight.w600, decoration: TextDecoration.none),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(left: 0, top: 0, bottom: 0, child: _WoxMacTrafficLightGroup(windowId: windowId, minimizable: minimizable, resizable: resizable)),
+          Positioned(left: 249, top: 0, bottom: 0, child: SizedBox(width: 1, child: ColoredBox(color: getThemeSettingDividerColor()))),
+        ],
+      );
+    }
+
+    final titleBar = Row(
       children: [
         _WoxMacTrafficLightGroup(windowId: windowId, minimizable: minimizable, resizable: resizable),
         Expanded(
@@ -643,7 +685,7 @@ class _WoxSimulatedTitleBar extends StatelessWidget {
             windowId: windowId,
             child: Center(
               child: Text(
-                title,
+                effectiveTitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: textColor, fontSize: 13, fontWeight: FontWeight.w600, decoration: TextDecoration.none),
@@ -654,6 +696,8 @@ class _WoxSimulatedTitleBar extends StatelessWidget {
         const SizedBox(width: _WoxMacTrafficLightGroup.width),
       ],
     );
+
+    return titleBar;
   }
 }
 
@@ -710,7 +754,7 @@ class _WoxTitleBarButtonState extends State<_WoxTitleBarButton> {
 class _WoxMacTrafficLightGroup extends StatefulWidget {
   const _WoxMacTrafficLightGroup({required this.windowId, required this.minimizable, required this.resizable});
 
-  static const double _leftPadding = 18;
+  static const double _leftPadding = 10;
   static const double _rightPadding = 8;
   static const double _buttonSize = 20;
   static const double _buttonGap = 3;
@@ -775,8 +819,13 @@ class _WoxMacTrafficLight extends StatelessWidget {
     final enabled = onPressed != null;
     final color = switch (kind) {
       _WoxMacTrafficLightKind.close => const Color(0xFFFF5F57),
-      _WoxMacTrafficLightKind.minimize => enabled ? const Color(0xFFFFBD2E) : const Color(0xFF6E6E73),
-      _WoxMacTrafficLightKind.zoom => enabled ? const Color(0xFF28C840) : const Color(0xFF6E6E73),
+      _WoxMacTrafficLightKind.minimize => enabled ? const Color(0xFFFFBD2E) : const Color(0xFF8E8E93),
+      _WoxMacTrafficLightKind.zoom => enabled ? const Color(0xFF28C840) : const Color(0xFF8E8E93),
+    };
+    final borderColor = switch (kind) {
+      _WoxMacTrafficLightKind.close => const Color(0xFFE0443E),
+      _WoxMacTrafficLightKind.minimize => enabled ? const Color(0xFFDFA023) : const Color(0xFF77777C),
+      _WoxMacTrafficLightKind.zoom => enabled ? const Color(0xFF1AAB29) : const Color(0xFF77777C),
     };
 
     return GestureDetector(
@@ -790,7 +839,7 @@ class _WoxMacTrafficLight extends StatelessWidget {
             width: 14,
             height: 14,
             child: DecoratedBox(
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: borderColor, width: 0.5)),
               child: hovered && enabled ? CustomPaint(painter: _WoxMacTrafficLightGlyphPainter(kind)) : const SizedBox.expand(),
             ),
           ),
@@ -807,24 +856,46 @@ class _WoxMacTrafficLightGlyphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint =
-        Paint()
-          ..color = Colors.black.withValues(alpha: 0.58)
-          ..strokeCap = StrokeCap.round
-          ..strokeWidth = 1.45
-          ..style = PaintingStyle.stroke;
     final center = Offset(size.width / 2, size.height / 2);
-    const half = 2.6;
 
     switch (kind) {
       case _WoxMacTrafficLightKind.close:
+        final paint =
+            Paint()
+              ..color = const Color(0xFF7E1D18)
+              ..strokeCap = StrokeCap.round
+              ..strokeWidth = 1.15
+              ..style = PaintingStyle.stroke;
+        const half = 2.45;
         canvas.drawLine(center.translate(-half, -half), center.translate(half, half), paint);
         canvas.drawLine(center.translate(half, -half), center.translate(-half, half), paint);
       case _WoxMacTrafficLightKind.minimize:
-        canvas.drawLine(center.translate(-3.0, 0), center.translate(3.0, 0), paint);
+        final paint =
+            Paint()
+              ..color = const Color(0xFF8A5A00)
+              ..strokeCap = StrokeCap.round
+              ..strokeWidth = 1.15
+              ..style = PaintingStyle.stroke;
+        canvas.drawLine(center.translate(-2.8, 0), center.translate(2.8, 0), paint);
       case _WoxMacTrafficLightKind.zoom:
-        canvas.drawLine(center.translate(-3.0, 0), center.translate(3.0, 0), paint);
-        canvas.drawLine(center.translate(0, -3.0), center.translate(0, 3.0), paint);
+        final paint =
+            Paint()
+              ..color = const Color(0xFF0B6E1D)
+              ..style = PaintingStyle.fill;
+        final upperLeft =
+            Path()
+              ..moveTo(center.dx - 3.1, center.dy - 3.1)
+              ..lineTo(center.dx + 0.7, center.dy - 3.1)
+              ..lineTo(center.dx - 3.1, center.dy + 0.7)
+              ..close();
+        final lowerRight =
+            Path()
+              ..moveTo(center.dx + 3.1, center.dy + 3.1)
+              ..lineTo(center.dx - 0.7, center.dy + 3.1)
+              ..lineTo(center.dx + 3.1, center.dy - 0.7)
+              ..close();
+        canvas.drawPath(upperLeft, paint);
+        canvas.drawPath(lowerRight, paint);
     }
   }
 
