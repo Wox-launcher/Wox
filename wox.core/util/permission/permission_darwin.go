@@ -1,8 +1,10 @@
 package permission
 
 // #cgo CFLAGS: -x objective-c
-// #cgo LDFLAGS: -framework Cocoa
+// #cgo LDFLAGS: -framework Cocoa -framework AVFoundation
+// #import <AVFoundation/AVFoundation.h>
 // #import <Cocoa/Cocoa.h>
+// #import <Dispatch/Dispatch.h>
 // #import <Foundation/Foundation.h>
 //
 // bool hasAccessibilityPermission() {
@@ -18,6 +20,25 @@ package permission
 // void openPrivacySecurityPreferences() {
 //     NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension"];
 //     [[NSWorkspace sharedWorkspace] openURL:url];
+// }
+//
+// bool requestMicrophonePermission() {
+//     AVAuthorizationStatus status = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];
+//     if (status == AVAuthorizationStatusAuthorized) {
+//         return true;
+//     }
+//     if (status != AVAuthorizationStatusNotDetermined) {
+//         return false;
+//     }
+//
+//     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+//     __block BOOL granted = NO;
+//     [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL allowed) {
+//         granted = allowed;
+//         dispatch_semaphore_signal(semaphore);
+//     }];
+//     dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+//     return granted == YES;
 // }
 import "C"
 
@@ -40,4 +61,9 @@ func OpenPrivacySecuritySettings(ctx context.Context) {
 	mainthread.Call(func() {
 		C.openPrivacySecurityPreferences()
 	})
+}
+
+// RequestMicrophonePermission requests access when needed and reports whether recording is authorized.
+func RequestMicrophonePermission(ctx context.Context) bool {
+	return bool(C.requestMicrophonePermission())
 }

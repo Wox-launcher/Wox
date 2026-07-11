@@ -22,6 +22,8 @@
         <string>2.3.0</string>
         <key>NSHighResolutionCapable</key>
         <true/>
+        <key>NSMicrophoneUsageDescription</key>
+        <string>Wox needs microphone access for dictation.</string>
         <key>LSUIElement</key>
         <true/>
     </dict>

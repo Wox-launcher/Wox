@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"wox/util"
+	"wox/util/permission"
 )
 
 // SessionState tracks the lifecycle of a dictation recording session.
@@ -99,6 +100,9 @@ func (s *Session) Start() error {
 	defer s.mu.Unlock()
 	if s.state != SessionStateIdle {
 		return fmt.Errorf("session already started or stopped")
+	}
+	if !permission.RequestMicrophonePermission(s.ctx) {
+		return fmt.Errorf("microphone permission was denied")
 	}
 
 	// Acquire recognizer from pool.
