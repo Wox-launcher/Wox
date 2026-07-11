@@ -13,20 +13,20 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// TimeUnit represents a time unit with its duration and display name
+// TimeUnit represents a time unit with its duration and localized display key.
 type TimeUnit struct {
-	Duration    time.Duration
-	DisplayName string
+	Duration       time.Duration
+	TranslationKey string
 }
 
 var timeUnits = map[string]TimeUnit{
-	"ms": {time.Millisecond, "milliseconds"},
-	"s":  {time.Second, "seconds"},
-	"m":  {time.Minute, "minutes"},
-	"h":  {time.Hour, "hours"},
-	"d":  {24 * time.Hour, "days"},
-	"w":  {7 * 24 * time.Hour, "weeks"},
-	"y":  {365 * 24 * time.Hour, "years"},
+	"ms": {time.Millisecond, "plugin_converter_time_unit_milliseconds"},
+	"s":  {time.Second, "plugin_converter_time_unit_seconds"},
+	"m":  {time.Minute, "plugin_converter_time_unit_minutes"},
+	"h":  {time.Hour, "plugin_converter_time_unit_hours"},
+	"d":  {24 * time.Hour, "plugin_converter_time_unit_days"},
+	"w":  {7 * 24 * time.Hour, "plugin_converter_time_unit_weeks"},
+	"y":  {365 * 24 * time.Hour, "plugin_converter_time_unit_years"},
 }
 
 var weekdayTranslationKeys = [...]string{
@@ -39,34 +39,40 @@ var weekdayTranslationKeys = [...]string{
 	"ui_weekday_sat",
 }
 
-// getDisplayUnit returns the most appropriate display unit and value for a given duration
-func getDisplayUnit(duration time.Duration) (string, float64) {
-	switch {
-	case duration < time.Second:
-		return "milliseconds", float64(duration.Milliseconds())
-	case duration < time.Minute:
-		return "seconds", duration.Seconds()
-	case duration < time.Hour:
-		return "minutes", duration.Minutes()
-	case duration < 24*time.Hour:
-		return "hours", duration.Hours()
-	case duration < 7*24*time.Hour:
-		return "days", duration.Hours() / 24
-	case duration < 30*24*time.Hour:
-		return "weeks", duration.Hours() / (24 * 7)
-	default:
-		return "years", duration.Hours() / (24 * 365)
-	}
+var weekdayByName = map[string]time.Weekday{
+	"monday":    time.Monday,
+	"tuesday":   time.Tuesday,
+	"wednesday": time.Wednesday,
+	"thursday":  time.Thursday,
+	"friday":    time.Friday,
+	"saturday":  time.Saturday,
+	"sunday":    time.Sunday,
 }
 
-// formatDurationValue formats a duration value with appropriate unit
-func formatDurationValue(duration time.Duration) string {
-	unit, value := getDisplayUnit(duration)
-	if unit == "milliseconds" {
-		return fmt.Sprintf("%d %s", int64(value), unit)
-	}
-	return fmt.Sprintf("%.2f %s", value, unit)
+var monthByAbbreviation = map[string]time.Month{
+	"jan": time.January,
+	"feb": time.February,
+	"mar": time.March,
+	"apr": time.April,
+	"may": time.May,
+	"jun": time.June,
+	"jul": time.July,
+	"aug": time.August,
+	"sep": time.September,
+	"oct": time.October,
+	"nov": time.November,
+	"dec": time.December,
 }
+
+const (
+	timeInLocationPattern  = `(?i)time\s+in\s+([a-z0-9_+\-\s/]+)`
+	specificTimePattern    = `(?i)([0-9]{1,2}(?::[0-9]{2})?\s*(?:am|pm)?)\s+in\s+([a-z0-9_+\-\s/]+)`
+	weekdayInFuturePattern = `(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+in\s+(\d+)\s*([a-z]*)`
+	daysUntilPattern       = `(?i)days?\s+until\s+(\d+)(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)(?:\s+(\d{4}))?`
+	durationTargetPattern  = `(?i)(?:in|to)\s+(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`
+	durationEqualsPattern  = `(?i)=\s*\?\s*(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`
+	simpleTimeUnitPattern  = `(?i)(\d+)\s*(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`
+)
 
 // Country aliases with multiple time zones point to a representative zone because time queries return a single result.
 var timeZoneAliases = map[string]string{
@@ -263,6 +269,29 @@ var timeZoneAliases = map[string]string{
 	"ma":           "Africa/Casablanca",
 }
 
+// resolveTimeZone accepts friendly aliases while preserving canonical IANA identifiers.
+func resolveTimeZone(input string) (string, *time.Location, error) {
+	locationName := strings.TrimSpace(input)
+	if alias, ok := timeZoneAliases[strings.ToLower(locationName)]; ok {
+		locationName = alias
+	}
+
+	location, err := time.LoadLocation(locationName)
+	if err != nil {
+		return "", nil, fmt.Errorf("unknown location: %s", strings.TrimSpace(input))
+	}
+	return locationName, location, nil
+}
+
+// isTimeZoneUnit distinguishes timezone results from duration units.
+func isTimeZoneUnit(name string) bool {
+	if name != "UTC" && !strings.Contains(name, "/") {
+		return false
+	}
+	_, err := time.LoadLocation(name)
+	return err == nil
+}
+
 type TimeModule struct {
 	*regexBaseModule
 }
@@ -273,43 +302,43 @@ func NewTimeModule(ctx context.Context, api plugin.API) *TimeModule {
 	// Initialize pattern handlers
 	handlers := []*patternHandler{
 		{
-			Pattern:     `time\s+in\s+([a-zA-Z\s/]+)`,
+			Pattern:     timeInLocationPattern,
 			Priority:    1000,
 			Description: "Get current time in a specific location (E.g. time in Tokyo)",
 			Handler:     m.handleTimeInLocation,
 		},
 		{
-			Pattern:     `([0-9]{1,2}(?::[0-9]{2})?\s*(?i:(?:am|pm))?)` + `\s+in\s+([a-zA-Z\s/]+)`,
+			Pattern:     specificTimePattern,
 			Priority:    900,
 			Description: "Convert specific time from one location to local time (E.g. 3pm in Tokyo)",
 			Handler:     m.handleSpecificTime,
 		},
 		{
-			Pattern:     `(monday|tuesday|wednesday|thursday|friday|saturday|sunday)` + `\s+in\s+(\d+)\s*([a-z]*)`,
+			Pattern:     weekdayInFuturePattern,
 			Priority:    800,
 			Description: "Calculate future weekday (E.g. Monday in 3 days)",
 			Handler:     m.handleWeekdayInFuture,
 		},
 		{
-			Pattern:     `days?\s+until\s+(\d+)(?:st|nd|rd|th)?\s+` + `((?i:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))` + `(?:\s+(\d{4}))?`,
+			Pattern:     daysUntilPattern,
 			Priority:    800,
 			Description: "Calculate days until a specific date, (E.g. days until 25th Dec 2023)",
 			Handler:     m.handleDaysUntil,
 		},
 		{
-			Pattern:     `(?i)(?:in|to)\s+(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
+			Pattern:     durationTargetPattern,
 			Priority:    700,
 			Description: "Handle duration conversion target (E.g. to minutes)",
 			Handler:     m.handleDurationConversion,
 		},
 		{
-			Pattern:     `(?i)=\s*\?\s*(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
+			Pattern:     durationEqualsPattern,
 			Priority:    650,
 			Description: "Handle duration conversion target (E.g. =?minutes)",
 			Handler:     m.handleDurationConversion,
 		},
 		{
-			Pattern:     `(?i)(\d+)\s*(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
+			Pattern:     simpleTimeUnitPattern,
 			Priority:    10, //this should be the lowest priority, so it will be the last one to be matched
 			Description: "Convert simple time units (e.g., 1s, 1ms, 1h, 2d, 5w, 8m, 7y), (E.g. 1h to minutes)",
 			Handler:     m.handleSimpleTimeUnit,
@@ -317,49 +346,51 @@ func NewTimeModule(ctx context.Context, api plugin.API) *TimeModule {
 	}
 
 	m.regexBaseModule = NewRegexBaseModule(api, "time", handlers)
+	// IANA identifiers are case-sensitive, so the time module keeps the original query text.
+	m.regexBaseModule.preserveCase = true
 	return m
 }
 
 func (m *TimeModule) TokenPatterns() []core.TokenPattern {
 	return []core.TokenPattern{
 		{
-			Pattern:   `time\s+in\s+([a-zA-Z\s/]+)`,
+			Pattern:   timeInLocationPattern,
 			Type:      core.IdentToken,
 			Priority:  1000,
 			FullMatch: false,
 		},
 		{
-			Pattern:   `([0-9]{1,2}(?::[0-9]{2})?\s*(?i:(?:am|pm))?)` + `\s+in\s+([a-zA-Z\s/]+)`,
+			Pattern:   specificTimePattern,
 			Type:      core.IdentToken,
 			Priority:  900,
 			FullMatch: false,
 		},
 		{
-			Pattern:   `(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)` + `\s+in\s+(\d+)\s*([a-z]*)`,
+			Pattern:   weekdayInFuturePattern,
 			Type:      core.IdentToken,
 			Priority:  800,
 			FullMatch: false,
 		},
 		{
-			Pattern:   `days?\s+until\s+(\d+)(?:st|nd|rd|th)?\s+` + `((?i:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))` + `(?:\s+(\d{4}))?`,
+			Pattern:   daysUntilPattern,
 			Type:      core.IdentToken,
 			Priority:  800,
 			FullMatch: false,
 		},
 		{
-			Pattern:   `(?i)(?:in|to)\s+(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
+			Pattern:   durationTargetPattern,
 			Type:      core.ConversionToken,
 			Priority:  700,
 			FullMatch: false,
 		},
 		{
-			Pattern:   `(?i)=\s*\?\s*(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
+			Pattern:   durationEqualsPattern,
 			Type:      core.ConversionToken,
 			Priority:  650,
 			FullMatch: false,
 		},
 		{
-			Pattern:   `(?i)(\d+)\s*(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
+			Pattern:   simpleTimeUnitPattern,
 			Type:      core.IdentToken,
 			Priority:  10,
 			FullMatch: false,
@@ -378,19 +409,7 @@ func (m *TimeModule) Convert(ctx context.Context, result core.Result, toUnit cor
 		return result, nil
 	}
 
-	//if result unit name is timezone, and to unit is timezone, convert result to target timezone
-	//convert result to unix timestamp, and then convert to target timezone
-	isResultTimeZone := false
-	isTargetTimeZone := false
-	for _, tz := range timeZoneAliases {
-		if result.Unit.Name == tz {
-			isResultTimeZone = true
-		}
-		if toUnit.Name == tz {
-			isTargetTimeZone = true
-		}
-	}
-	if isResultTimeZone && isTargetTimeZone {
+	if isTimeZoneUnit(result.Unit.Name) && isTimeZoneUnit(toUnit.Name) {
 		loc, err := time.LoadLocation(toUnit.Name)
 		if err != nil {
 			return core.Result{}, fmt.Errorf("unknown location: %s", toUnit.Name)
@@ -409,7 +428,7 @@ func (m *TimeModule) Convert(ctx context.Context, result core.Result, toUnit cor
 	if fromOk && toOk {
 		newValue := result.RawValue.Mul(decimal.NewFromInt(int64(fromUnit.Duration))).Div(decimal.NewFromInt(int64(toTimeUnit.Duration)))
 		return core.Result{
-			DisplayValue: m.formatDurationWithUnit(newValue, toUnit.Name),
+			DisplayValue: m.formatDurationWithUnit(ctx, newValue, toUnit.Name),
 			RawValue:     newValue,
 			Unit:         toUnit,
 			Module:       m,
@@ -420,17 +439,9 @@ func (m *TimeModule) Convert(ctx context.Context, result core.Result, toUnit cor
 }
 
 func (m *TimeModule) handleTimeInLocation(ctx context.Context, matches []string) (core.Result, error) {
-	location := strings.ToLower(strings.TrimSpace(matches[1]))
-
-	// Try to find the timezone alias
-	if tzName, ok := timeZoneAliases[location]; ok {
-		location = tzName
-	}
-
-	// Load the location
-	loc, err := time.LoadLocation(location)
+	location, loc, err := resolveTimeZone(matches[1])
 	if err != nil {
-		return core.Result{}, fmt.Errorf("unknown location: %s", location)
+		return core.Result{}, err
 	}
 
 	// Get current time in location
@@ -446,30 +457,25 @@ func (m *TimeModule) handleTimeInLocation(ctx context.Context, matches []string)
 
 func (m *TimeModule) handleSpecificTime(ctx context.Context, matches []string) (core.Result, error) {
 	timeStr := matches[1]
-	location := strings.ToLower(strings.TrimSpace(matches[2]))
-
-	// Try to find the timezone alias
-	if tzName, ok := timeZoneAliases[location]; ok {
-		location = tzName
-	}
-
-	// Load the source location
-	sourceLoc, err := time.LoadLocation(location)
-	if err != nil {
-		return core.Result{}, fmt.Errorf("unknown location: %s", location)
-	}
-
-	// Parse time in source timezone
-	t, err := m.parseTime(ctx, timeStr)
+	_, sourceLoc, err := resolveTimeZone(matches[2])
 	if err != nil {
 		return core.Result{}, err
 	}
 
-	// Convert time from source timezone to local timezone
-	sourceTime := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, sourceLoc)
+	hour, minute, err := parseClock(timeStr)
+	if err != nil {
+		return core.Result{}, err
+	}
+
+	// The source location owns the date. Using the local date here can shift the conversion by one day.
+	sourceNow := time.Now().In(sourceLoc)
+	sourceTime := time.Date(sourceNow.Year(), sourceNow.Month(), sourceNow.Day(), hour, minute, 0, 0, sourceLoc)
+	if sourceTime.Hour() != hour || sourceTime.Minute() != minute {
+		return core.Result{}, fmt.Errorf("time does not exist in location due to daylight saving transition: %s", timeStr)
+	}
 	localTime := sourceTime.In(time.Local)
 
-	displayValue := m.formatTimeForDisplay(ctx, localTime)
+	displayValue := fmt.Sprintf(m.api.GetTranslation(ctx, "plugin_converter_time_with_date_format"), m.formatTimeForDisplay(ctx, localTime), localTime.Format("2006-01-02"))
 	val := decimal.NewFromInt(localTime.Unix())
 	return core.Result{
 		DisplayValue: displayValue,
@@ -491,17 +497,7 @@ func (m *TimeModule) handleWeekdayInFuture(ctx context.Context, matches []string
 		return core.Result{}, fmt.Errorf("invalid number of days: %s", daysStr)
 	}
 
-	// Get target weekday
-	weekdayMap := map[string]time.Weekday{
-		"monday":    time.Monday,
-		"tuesday":   time.Tuesday,
-		"wednesday": time.Wednesday,
-		"thursday":  time.Thursday,
-		"friday":    time.Friday,
-		"saturday":  time.Saturday,
-		"sunday":    time.Sunday,
-	}
-	targetDay, ok := weekdayMap[targetWeekday]
+	targetDay, ok := weekdayByName[targetWeekday]
 	if !ok {
 		return core.Result{}, fmt.Errorf("invalid weekday: %s", targetWeekday)
 	}
@@ -510,13 +506,13 @@ func (m *TimeModule) handleWeekdayInFuture(ctx context.Context, matches []string
 	now := time.Now()
 	targetDate := now.AddDate(0, 0, days)
 
-	// Find the next occurrence of the target weekday after the target date
-	for targetDate.Weekday() != targetDay {
-		targetDate = targetDate.AddDate(0, 0, 1)
-	}
+	// Find the target weekday on or after the requested minimum date.
+	weekdayOffset := (int(targetDay) - int(targetDate.Weekday()) + 7) % 7
+	targetDate = targetDate.AddDate(0, 0, weekdayOffset)
 
 	val := decimal.NewFromInt(targetDate.Unix())
-	displayValue := fmt.Sprintf("%s, %s", targetDate.Weekday().String(), targetDate.Format("2006-01-02"))
+	weekday := m.api.GetTranslation(ctx, weekdayTranslationKeys[targetDate.Weekday()])
+	displayValue := fmt.Sprintf(m.api.GetTranslation(ctx, "plugin_converter_weekday_date_format"), weekday, targetDate.Format("2006-01-02"))
 	return core.Result{
 		DisplayValue: displayValue,
 		RawValue:     val,
@@ -532,45 +528,42 @@ func (m *TimeModule) handleDaysUntil(ctx context.Context, matches []string) (cor
 		return core.Result{}, fmt.Errorf("invalid day: %s", matches[1])
 	}
 
-	// Parse month
-	monthMap := map[string]time.Month{
-		"jan": time.January,
-		"feb": time.February,
-		"mar": time.March,
-		"apr": time.April,
-		"may": time.May,
-		"jun": time.June,
-		"jul": time.July,
-		"aug": time.August,
-		"sep": time.September,
-		"oct": time.October,
-		"nov": time.November,
-		"dec": time.December,
-	}
 	// The month is in the second capture group, which is in matches[2]
 	// The year is in the third capture group (if present), which is in matches[3]
-	month, ok := monthMap[strings.ToLower(matches[2])]
+	month, ok := monthByAbbreviation[strings.ToLower(matches[2])]
 	if !ok {
 		return core.Result{}, fmt.Errorf("invalid month: %s", matches[2])
 	}
 
-	// Parse year (use current year if not specified)
-	year := time.Now().Year()
-	if len(matches) > 3 && matches[3] != "" {
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	year := today.Year()
+	hasExplicitYear := len(matches) > 3 && matches[3] != ""
+	if hasExplicitYear {
 		year, err = strconv.Atoi(matches[3])
 		if err != nil {
 			return core.Result{}, fmt.Errorf("invalid year: %s", matches[3])
 		}
 	}
 
-	// Create target date
 	targetDate := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
-	now := time.Now()
+	if targetDate.Year() != year || targetDate.Month() != month || targetDate.Day() != day {
+		return core.Result{}, fmt.Errorf("invalid date: %d %s %d", day, matches[2], year)
+	}
+	if !hasExplicitYear && targetDate.Before(today) {
+		year++
+		targetDate = time.Date(year, month, day, 0, 0, 0, 0, time.Local)
+		if targetDate.Year() != year || targetDate.Month() != month || targetDate.Day() != day {
+			return core.Result{}, fmt.Errorf("invalid date: %d %s %d", day, matches[2], year)
+		}
+	}
 
-	// Calculate days until target date
-	days := int(targetDate.Sub(now).Hours() / 24)
+	// Compare UTC calendar dates so daylight saving changes cannot add or remove a day.
+	todayUTC := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	targetUTC := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, time.UTC)
+	days := int(targetUTC.Sub(todayUTC).Hours() / 24)
 	val := decimal.NewFromInt(int64(days))
-	displayValue := fmt.Sprintf("%d days", days)
+	displayValue := fmt.Sprintf(m.api.GetTranslation(ctx, "plugin_converter_days_count"), days)
 	return core.Result{
 		DisplayValue: displayValue,
 		RawValue:     val,
@@ -579,12 +572,9 @@ func (m *TimeModule) handleDaysUntil(ctx context.Context, matches []string) (cor
 	}, nil
 }
 
-func (m *TimeModule) parseTime(ctx context.Context, timeStr string) (time.Time, error) {
+// parseClock parses a supported clock value without assigning it to the wrong timezone date.
+func parseClock(timeStr string) (int, int, error) {
 	timeStr = strings.ToLower(strings.TrimSpace(timeStr))
-
-	// Get current time as base
-	now := time.Now()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
 	// Try parsing with AM/PM format first
 	formats := []string{
@@ -597,28 +587,17 @@ func (m *TimeModule) parseTime(ctx context.Context, timeStr string) (time.Time, 
 
 	for _, format := range formats {
 		if t, err := time.Parse(format, timeStr); err == nil {
-			// Use the parsed hour and minute, but keep today's date and local timezone
-			return time.Date(today.Year(), today.Month(), today.Day(), t.Hour(), t.Minute(), 0, 0, today.Location()), nil
+			return t.Hour(), t.Minute(), nil
 		}
 	}
 
-	return time.Time{}, fmt.Errorf("unsupported time format: %s", timeStr)
+	return 0, 0, fmt.Errorf("unsupported time format: %s", timeStr)
 }
 
 func (m *TimeModule) formatTimeForDisplay(ctx context.Context, t time.Time) string {
-	hour := t.Hour()
-	ampm := "AM"
-	if hour >= 12 {
-		ampm = "PM"
-		if hour > 12 {
-			hour -= 12
-		}
-	}
-	if hour == 0 {
-		hour = 12
-	}
 	weekday := m.api.GetTranslation(ctx, weekdayTranslationKeys[t.Weekday()])
-	return fmt.Sprintf("%d:%02d %s (%s)", hour, t.Minute(), ampm, weekday)
+	format := m.api.GetTranslation(ctx, "plugin_converter_time_format")
+	return fmt.Sprintf(format, t.Hour(), t.Minute(), weekday)
 }
 
 func (m *TimeModule) handleSimpleTimeUnit(ctx context.Context, matches []string) (core.Result, error) {
@@ -655,7 +634,7 @@ func (m *TimeModule) handleSimpleTimeUnit(ctx context.Context, matches []string)
 	}
 
 	return core.Result{
-		DisplayValue: m.formatDurationWithUnit(displayValueDecimal, displayUnit),
+		DisplayValue: m.formatDurationWithUnit(ctx, displayValueDecimal, displayUnit),
 		RawValue:     displayValueDecimal,
 		Unit:         core.Unit{Name: displayUnit, Type: core.UnitTypeTime},
 		Module:       m,
@@ -670,15 +649,15 @@ func (m *TimeModule) handleDurationConversion(ctx context.Context, matches []str
 	}
 
 	return core.Result{
-		DisplayValue: fmt.Sprintf("to %s", timeUnits[normalizedUnit].DisplayName),
+		DisplayValue: fmt.Sprintf(m.api.GetTranslation(ctx, "plugin_converter_time_to_unit"), m.api.GetTranslation(ctx, timeUnits[normalizedUnit].TranslationKey)),
 		RawValue:     decimal.NewFromInt(0),
 		Unit:         core.Unit{Name: normalizedUnit, Type: core.UnitTypeTime},
 		Module:       m,
 	}, nil
 }
 
-func (m *TimeModule) formatDurationWithUnit(value decimal.Decimal, unitName string) string {
-	displayName := timeUnits[unitName].DisplayName
+func (m *TimeModule) formatDurationWithUnit(ctx context.Context, value decimal.Decimal, unitName string) string {
+	displayName := m.api.GetTranslation(ctx, timeUnits[unitName].TranslationKey)
 	if unitName == "w" {
 		if value.Equal(value.Truncate(0)) {
 			return fmt.Sprintf("%s %s", value.StringFixed(0), displayName)

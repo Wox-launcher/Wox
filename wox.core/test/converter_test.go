@@ -177,27 +177,16 @@ func TestConverterCurrency(t *testing.T) {
 func TestCalculatorTime(t *testing.T) {
 	suite := NewTestSuite(t)
 	now := time.Now()
+	time24Re := regexp.MustCompile(`^\d{2}:\d{2}`)
 
-	// Get current time
-	hour := now.Hour()
-	ampm := "AM"
-	if hour >= 12 {
-		ampm = "PM"
-		if hour > 12 {
-			hour -= 12
-		}
-	}
-	if hour == 0 {
-		hour = 12
-	}
-	expectedTime := fmt.Sprintf("%d:%02d %s", hour, now.Minute(), ampm)
+	expectedTime := now.Format("15:04")
 
 	// Calculate expected date for "monday in 10 days"
 	targetDate := now.AddDate(0, 0, 10)
 	for targetDate.Weekday() != time.Monday {
 		targetDate = targetDate.AddDate(0, 0, 1)
 	}
-	expectedMonday := fmt.Sprintf("%s (Monday)", targetDate.Format("2006-01-02"))
+	expectedMonday := fmt.Sprintf("Mon, %s", targetDate.Format("2006-01-02"))
 
 	// Calculate expected days until Christmas 2030
 	christmas := time.Date(2030, time.December, 25, 0, 0, 0, 0, time.Local)
@@ -212,8 +201,7 @@ func TestCalculatorTime(t *testing.T) {
 			ExpectedTitle:  expectedTime,
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				// More flexible time check - should contain time format
-				return strings.Contains(title, "AM") || strings.Contains(title, "PM") || strings.Contains(title, ":")
+				return time24Re.MatchString(title)
 			},
 		},
 		{
@@ -222,8 +210,7 @@ func TestCalculatorTime(t *testing.T) {
 			ExpectedTitle:  expectedMonday,
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				// Should contain date and Monday
-				return strings.Contains(title, "Monday") && strings.Contains(title, "-")
+				return strings.Contains(title, "Mon") && strings.Contains(title, "-")
 			},
 		},
 		{
@@ -241,8 +228,7 @@ func TestCalculatorTime(t *testing.T) {
 			ExpectedTitle:  "",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				// Should contain time format
-				return strings.Contains(title, "PM") || strings.Contains(title, "AM") || strings.Contains(title, ":")
+				return time24Re.MatchString(title)
 			},
 		},
 		{
@@ -263,7 +249,7 @@ func TestCalculatorTime(t *testing.T) {
 			ExpectedTitle:  "",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return strings.Contains(title, "PM") || strings.Contains(title, "AM")
+				return time24Re.MatchString(title)
 			},
 		},
 		{
@@ -328,6 +314,7 @@ func TestCalculatorTime(t *testing.T) {
 
 func TestTimeZoneConversions(t *testing.T) {
 	suite := NewTestSuite(t)
+	time24Re := regexp.MustCompile(`^\d{2}:\d{2}`)
 
 	tests := []QueryTest{
 		{
@@ -336,7 +323,7 @@ func TestTimeZoneConversions(t *testing.T) {
 			ExpectedTitle:  "",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return strings.Contains(title, ":") && (strings.Contains(title, "AM") || strings.Contains(title, "PM"))
+				return time24Re.MatchString(title)
 			},
 		},
 		{
@@ -345,7 +332,7 @@ func TestTimeZoneConversions(t *testing.T) {
 			ExpectedTitle:  "",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return strings.Contains(title, ":") && (strings.Contains(title, "AM") || strings.Contains(title, "PM"))
+				return time24Re.MatchString(title)
 			},
 		},
 		{
@@ -354,7 +341,7 @@ func TestTimeZoneConversions(t *testing.T) {
 			ExpectedTitle:  "",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return strings.Contains(title, ":") && (strings.Contains(title, "AM") || strings.Contains(title, "PM"))
+				return time24Re.MatchString(title)
 			},
 		},
 	}

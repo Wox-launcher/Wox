@@ -24,6 +24,7 @@ type regexBaseModule struct {
 	api             plugin.API
 	name            string
 	patternHandlers []*patternHandler
+	preserveCase    bool // Keep case-sensitive identifiers intact for modules such as timezones.
 }
 
 // NewregexBaseModule creates a new regexBaseModule
@@ -70,8 +71,13 @@ func (m *regexBaseModule) Calculate(ctx context.Context, token core.Token) (core
 
 	m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Processing in module %s", m.name))
 
+	input := token.Str
+	if !m.preserveCase {
+		input = strings.ToLower(input)
+	}
+
 	for _, handler := range m.patternHandlers {
-		if matches := handler.regexp.FindStringSubmatch(strings.ToLower(token.Str)); len(matches) > 0 {
+		if matches := handler.regexp.FindStringSubmatch(input); len(matches) > 0 {
 			result, err := handler.Handler(ctx, matches)
 			if err != nil {
 				m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("	=> Pattern '%s': %v", handler.Description, err))
