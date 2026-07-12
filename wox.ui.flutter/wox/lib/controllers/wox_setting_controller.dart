@@ -1337,22 +1337,20 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     if (targetIndex < 0) {
       return;
     }
-    final itemKey = pluginListItemKeys[pluginId];
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (pluginListScrollController.hasClients) {
-        const estimatedItemExtent = 88.0;
-        final targetOffset = targetIndex * estimatedItemExtent;
         final maxExtent = pluginListScrollController.position.maxScrollExtent;
-        final clampedOffset = targetOffset.clamp(0.0, maxExtent);
+        // Map the item's list position onto the actual scroll range so dynamic row heights do not accumulate offset errors.
+        final targetOffset = filteredPluginList.length == 1 ? 0.0 : maxExtent * targetIndex / (filteredPluginList.length - 1);
 
-        if ((pluginListScrollController.offset - clampedOffset).abs() > 4) {
-          await pluginListScrollController.animateTo(clampedOffset, duration: const Duration(milliseconds: 180), curve: Curves.easeOutCubic);
+        if ((pluginListScrollController.offset - targetOffset).abs() > 4) {
+          await pluginListScrollController.animateTo(targetOffset, duration: const Duration(milliseconds: 180), curve: Curves.easeOutCubic);
         }
       }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final itemContext = itemKey?.currentContext;
+        final itemContext = pluginListItemKeys[pluginId]?.currentContext;
         if (itemContext != null) {
           Scrollable.ensureVisible(itemContext, duration: const Duration(milliseconds: 120), curve: Curves.easeOutCubic, alignment: 0.5);
         }
