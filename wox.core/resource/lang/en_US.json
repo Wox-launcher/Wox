@@ -2225,6 +2225,7 @@
   "plugin_mediaplayer_toggle": "Play/Pause",
   "plugin_mediaplayer_next": "Next",
   "plugin_mediaplayer_previous": "Previous",
+  "plugin_mediaplayer_open": "Open Media Player",
   "plugin_mediaplayer_copy_info": "Copy info",
   "plugin_mediaplayer_no_media": "No media",
   "plugin_mediaplayer_artist": "Artist",

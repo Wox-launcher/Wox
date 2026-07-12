@@ -104,6 +104,10 @@ class WoxHotkeyDisplayUtil {
       return modifierChord.map(labelFromRawPart).toList();
     }
 
+    if (hotkey.isSingleHotkey) {
+      return [keyLabel(hotkey.singleHotkey!)];
+    }
+
     return [];
   }
 

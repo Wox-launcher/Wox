@@ -43,6 +43,8 @@ const (
 	// dictation_history carries both the refined output and its original ASR
 	// transcript so Flutter can render a readable comparison instead of a quote.
 	WoxPreviewTypeDictationHistory = "dictation_history"
+	// media carries now-playing metadata for Flutter's animated record preview.
+	WoxPreviewTypeMedia = "media"
 )
 
 const (

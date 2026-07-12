@@ -3,6 +3,7 @@ package mediaplayer
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -40,11 +41,7 @@ const (
 	mediaControlPrevious = "previous"
 
 	mediaControlGlobalResultScore int64 = 200
-
-	recordArtworkSize = 96
-
-	recordAnimatedRotationJSON = `"r":{"a":1,"k":[{"t":0,"s":[0]},{"t":119,"s":[360]}]}`
-	recordStaticRotationJSON   = `"r":{"a":0,"k":0}`
+	recordArtworkSize                   = 96
 )
 
 type mediaControlAction struct {
@@ -81,7 +78,24 @@ type mediaContextData struct {
 	AppBundleID string `json:"appBundleId"`
 }
 
-type mediaTrackedResult struct{}
+// mediaPreviewData is the internal payload for Flutter's dedicated now-playing surface.
+type mediaPreviewData struct {
+	Title     string `json:"title"`
+	Artist    string `json:"artist"`
+	Album     string `json:"album"`
+	AppName   string `json:"appName"`
+	Artwork   string `json:"artwork"`
+	Position  int64  `json:"position"`
+	Duration  int64  `json:"duration"`
+	IsPlaying bool   `json:"isPlaying"`
+}
+
+type mediaTrackedResult struct {
+	playbackState       PlaybackState
+	artworkFingerprint  [sha256.Size]byte
+	trackFingerprint    [sha256.Size]byte
+	showOpenMediaAction bool
+}
 
 func (m *MediaPlayerPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
@@ -185,11 +199,13 @@ func (m *MediaPlayerPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		return plugin.NewQueryResponse(results)
 	}
 
-	result := m.buildMediaResult(mediaInfo)
+	result := m.buildMediaResult(mediaInfo, false)
 
 	results = append(results, result)
-
-	return plugin.NewQueryResponse(results)
+	response := plugin.NewQueryResponse(results)
+	fullPreviewWidthRatio := 0.0
+	response.Layout.ResultPreviewWidthRatio = &fullPreviewWidthRatio
+	return response
 }
 
 // queryGlobalControls keeps MediaRemote lookups limited to inputs that look like media commands.
@@ -204,7 +220,7 @@ func (m *MediaPlayerPlugin) queryGlobalControls(ctx context.Context, query plugi
 		return nil
 	}
 
-	result := m.buildMediaResult(mediaInfo)
+	result := m.buildMediaResult(mediaInfo, true)
 	result.Score = mediaControlGlobalResultScore
 	return []plugin.QueryResult{result}
 }
@@ -240,18 +256,33 @@ func (a mediaControlAction) matches(search string) bool {
 }
 
 // buildMediaResult creates the shared media status result used by both the media keyword and global commands.
-func (m *MediaPlayerPlugin) buildMediaResult(mediaInfo *MediaInfo) plugin.QueryResult {
+func (m *MediaPlayerPlugin) buildMediaResult(mediaInfo *MediaInfo, showOpenMediaAction bool) plugin.QueryResult {
+	actions := m.buildMediaActions(mediaInfo)
+	if showOpenMediaAction {
+		actions = append(actions, m.buildOpenMediaAction())
+	}
+
 	result := plugin.QueryResult{
 		Id:       uuid.NewString(),
 		Title:    mediaInfo.Title,
 		SubTitle: m.formatSubTitle(mediaInfo),
-		Icon:     m.formatIcon(mediaInfo),
+		Icon:     m.formatIcon(mediaInfo, false),
 		Preview:  m.formatPreview(mediaInfo),
 		Tails:    plugin.NewQueryResultTailTexts(m.formatProgress(mediaInfo)),
-		Actions:  m.buildMediaActions(mediaInfo),
+		Actions:  actions,
 	}
-	m.trackMediaResult(result.Id, mediaTrackedResult{})
+	m.trackMediaResult(result.Id, mediaTrackedResult{
+		playbackState:       mediaInfo.State,
+		artworkFingerprint:  sha256.Sum256(mediaInfo.Artwork),
+		trackFingerprint:    buildMediaTrackFingerprint(mediaInfo),
+		showOpenMediaAction: showOpenMediaAction,
+	})
 	return result
+}
+
+// buildMediaTrackFingerprint detects track changes even when consecutive items reuse the same artwork.
+func buildMediaTrackFingerprint(mediaInfo *MediaInfo) [sha256.Size]byte {
+	return sha256.Sum256([]byte(mediaInfo.Title + "\x00" + mediaInfo.Artist + "\x00" + mediaInfo.Album))
 }
 
 // trackMediaResult is nil-safe so tests and direct plugin construction still get refresh behavior.
@@ -293,6 +324,22 @@ func (m *MediaPlayerPlugin) buildMediaCommandAction(command string, name string,
 	}
 }
 
+// buildOpenMediaAction enters the dedicated media query without changing playback state.
+func (m *MediaPlayerPlugin) buildOpenMediaAction() plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Id:                     "media-open-player",
+		Name:                   "i18n:plugin_mediaplayer_open",
+		Icon:                   mediaIcon,
+		Hotkey:                 util.PrimaryHotkey("enter"),
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			if m.api != nil {
+				m.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: "media "})
+			}
+		},
+	}
+}
+
 func (m *MediaPlayerPlugin) formatProgress(mediaInfo *MediaInfo) string {
 	durationStr := m.formatDuration(mediaInfo.Duration)
 	positionStr := m.formatDuration(mediaInfo.Position)
@@ -314,7 +361,7 @@ func (m *MediaPlayerPlugin) formatSubTitle(mediaInfo *MediaInfo) string {
 	return newSubtitle
 }
 
-func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo) common.WoxImage {
+func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo, animateRecordChange bool) common.WoxImage {
 	if len(mediaInfo.Artwork) == 0 {
 		if mediaInfo.State == PlaybackStatePlaying {
 			return common.MediaPlayingIcon
@@ -322,49 +369,60 @@ func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo) common.WoxImage {
 		return mediaIcon
 	}
 
-	coverDataURI, ok := m.formatRecordArtworkDataURI(mediaInfo.Artwork)
+	coverDataURI, ok := formatRecordArtworkDataURI(mediaInfo.Artwork)
 	if !ok {
 		if mediaInfo.State == PlaybackStatePlaying {
 			return common.MediaPlayingIcon
 		}
 		return mediaIcon
 	}
-	if mediaInfo.State != PlaybackStatePlaying {
-		return common.NewWoxImageLottie(m.buildStaticRecordLottie(coverDataURI))
-	}
-	return common.NewWoxImageLottie(m.buildRecordLottie(coverDataURI))
+	return common.NewWoxImageLottie(buildRecordLottie(coverDataURI, mediaInfo.State == PlaybackStatePlaying, animateRecordChange))
 }
 
-// formatRecordArtworkDataURI normalizes album artwork before Lottie overlays are drawn on top.
-func (m *MediaPlayerPlugin) formatRecordArtworkDataURI(artwork []byte) (string, bool) {
-	normalizedArtwork, err := buildCircularArtworkPNG(artwork)
-	if err != nil {
-		return "", false
-	}
-	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(normalizedArtwork), true
-}
-
-// buildCircularArtworkPNG crops, scales, and alpha-masks the artwork so Lottie does not need image masks.
-func buildCircularArtworkPNG(artwork []byte) ([]byte, error) {
+// formatRecordArtworkDataURI keeps the animated result icon small and gives its center artwork a clean circular edge.
+func formatRecordArtworkDataURI(artwork []byte) (string, bool) {
 	decodedArtwork, err := decodeArtworkImageData(artwork)
 	if err != nil {
-		return nil, err
+		return "", false
 	}
 
 	source, _, err := image.Decode(bytes.NewReader(decodedArtwork))
 	if err != nil {
-		return nil, err
+		return "", false
 	}
-
 	scaled := image.NewNRGBA(image.Rect(0, 0, recordArtworkSize, recordArtworkSize))
 	xdraw.CatmullRom.Scale(scaled, scaled.Bounds(), source, centerSquare(source.Bounds()), xdraw.Src, nil)
 	applyCircleAlpha(scaled)
 
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, scaled); err != nil {
-		return nil, err
+	var output bytes.Buffer
+	if err := png.Encode(&output, scaled); err != nil {
+		return "", false
 	}
-	return buf.Bytes(), nil
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(output.Bytes()), true
+}
+
+// buildRecordLottie mirrors the native media preview as a compact vinyl, artwork, and tonearm composition.
+func buildRecordLottie(coverDataURI string, isPlaying bool, animateRecordChange bool) string {
+	// A long composition keeps the one-shot tonearm cue from replaying on each 12-second record rotation.
+	rotation := `{"a":0,"k":0}`
+	tonearmPath := `{"a":1,"k":[{"t":0,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[69,34]]}]},{"t":15,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[84,33]]}]},{"t":107999,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[84,33]]}]}]}`
+	if isPlaying {
+		rotation = `{"a":1,"k":[{"t":0,"s":[0]},{"t":107999,"s":[108000]}]}`
+		tonearmPath = `{"a":1,"k":[{"t":0,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[84,33]]}]},{"t":15,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[69,34]]}]},{"t":107999,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[69,34]]}]}]}`
+	}
+	artworkScale := `{"a":0,"k":[43,43,100]}`
+	vinylScale := `{"a":0,"k":[100,100,100]}`
+	recordOpacity := `{"a":0,"k":100}`
+	if animateRecordChange {
+		artworkScale = `{"a":1,"k":[{"t":0,"s":[30,30,100]},{"t":18,"s":[43,43,100]}]}`
+		vinylScale = `{"a":1,"k":[{"t":0,"s":[72,72,100]},{"t":18,"s":[100,100,100]}]}`
+		recordOpacity = `{"a":1,"k":[{"t":0,"s":[0]},{"t":18,"s":[100]}]}`
+		if isPlaying {
+			tonearmPath = `{"a":1,"k":[{"t":0,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[84,33]]}]},{"t":18,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[84,33]]}]},{"t":33,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[69,34]]}]},{"t":107999,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[69,34]]}]}]}`
+		}
+	}
+
+	return fmt.Sprintf(`{"v":"5.7.4","fr":30,"ip":0,"op":108000,"w":100,"h":100,"nm":"Media Record","ddd":0,"assets":[{"id":"cover","w":96,"h":96,"u":"","p":%q,"e":1}],"layers":[{"ddd":0,"ind":1,"ty":4,"nm":"Spindle","ks":{"a":{"a":0,"k":[50,50,0]},"p":{"a":0,"k":[50,50,0]},"s":{"a":0,"k":[100,100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}},"ip":0,"op":108000,"st":0,"shapes":[{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[6,6]}},{"ty":"fl","c":{"a":0,"k":[0.90,0.84,0.75,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]}]},{"ddd":0,"ind":2,"ty":4,"nm":"Tonearm","ks":{"a":{"a":0,"k":[0,0,0]},"p":{"a":0,"k":[0,0,0]},"s":{"a":0,"k":[100,100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}},"ip":0,"op":108000,"st":0,"shapes":[{"ty":"gr","it":[{"ty":"sh","ks":%s},{"ty":"st","c":{"a":0,"k":[0.72,0.70,0.67,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":1.8},"lc":2,"lj":2},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[80,14]},"s":{"a":0,"k":[9,9]}},{"ty":"fl","c":{"a":0,"k":[0.30,0.28,0.26,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]}]},{"ddd":0,"ind":3,"ty":2,"nm":"Artwork","refId":"cover","ks":{"a":{"a":0,"k":[48,48,0]},"p":{"a":0,"k":[50,50,0]},"s":%s,"r":%s,"o":%s},"ip":0,"op":108000,"st":0},{"ddd":0,"ind":4,"ty":4,"nm":"Vinyl","ks":{"a":{"a":0,"k":[50,50,0]},"p":{"a":0,"k":[50,50,0]},"s":%s,"r":%s,"o":%s},"ip":0,"op":108000,"st":0,"shapes":[{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[88,88]}},{"ty":"fl","c":{"a":0,"k":[0.035,0.035,0.043,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[82,82]}},{"ty":"st","c":{"a":0,"k":[0.20,0.20,0.22,1]},"o":{"a":0,"k":65},"w":{"a":0,"k":1.1},"lc":1,"lj":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[70,70]}},{"ty":"st","c":{"a":0,"k":[0.15,0.15,0.17,1]},"o":{"a":0,"k":55},"w":{"a":0,"k":1},"lc":1,"lj":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[58,58]}},{"ty":"st","c":{"a":0,"k":[0.11,0.11,0.13,1]},"o":{"a":0,"k":50},"w":{"a":0,"k":0.9},"lc":1,"lj":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]}]}]}`, coverDataURI, tonearmPath, artworkScale, rotation, recordOpacity, vinylScale, rotation, recordOpacity)
 }
 
 // decodeArtworkImageData accepts the macOS base64 payload and Windows raw image bytes.
@@ -391,7 +449,7 @@ func decodeArtworkImageData(artwork []byte) ([]byte, error) {
 	return artwork, nil
 }
 
-// centerSquare returns the largest centered square inside the source artwork bounds.
+// centerSquare returns the largest centered crop inside the source artwork.
 func centerSquare(bounds image.Rectangle) image.Rectangle {
 	width := bounds.Dx()
 	height := bounds.Dy()
@@ -401,7 +459,7 @@ func centerSquare(bounds image.Rectangle) image.Rectangle {
 	return image.Rect(x, y, x+size, y+size)
 }
 
-// applyCircleAlpha cuts the scaled artwork into a circle with a one-pixel antialiased edge.
+// applyCircleAlpha masks the thumbnail because the artwork sits inside a round record label.
 func applyCircleAlpha(img *image.NRGBA) {
 	center := (float64(recordArtworkSize) - 1) / 2
 	radius := float64(recordArtworkSize) / 2
@@ -423,56 +481,21 @@ func applyCircleAlpha(img *image.NRGBA) {
 	}
 }
 
-// buildRecordLottie embeds artwork into a spinning vinyl-style Lottie icon.
-func (m *MediaPlayerPlugin) buildRecordLottie(coverDataURI string) string {
-	return fmt.Sprintf(`{"v":"5.7.4","fr":30,"ip":0,"op":120,"w":100,"h":100,"nm":"Media Record","ddd":0,"assets":[{"id":"cover","w":96,"h":96,"u":"","p":%q,"e":1}],"layers":[{"ddd":0,"ind":1,"ty":4,"nm":"Center Hub","sr":1,"ks":{"a":{"a":0,"k":[50,50,0]},"p":{"a":0,"k":[50,50,0]},"s":{"a":0,"k":[100,100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}},"ip":0,"op":120,"st":0,"shapes":[{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[22,22]}},{"ty":"fl","c":{"a":0,"k":[0.54,0.02,0.04,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]}]},{"ddd":0,"ind":2,"ty":4,"nm":"Record Needle","sr":1,"ks":{"a":{"a":0,"k":[0,0,0]},"p":{"a":0,"k":[0,0,0]},"s":{"a":0,"k":[100,100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}},"ip":0,"op":120,"st":0,"shapes":[{"ty":"gr","it":[{"ty":"sh","ks":{"a":0,"k":{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[73,17],[54,46]]}}},{"ty":"st","c":{"a":0,"k":[0.82,0.76,0.66,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":4},"lc":2,"lj":2},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[73,17]},"s":{"a":0,"k":[9,9]}},{"ty":"fl","c":{"a":0,"k":[0.42,0.38,0.34,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"sh","ks":{"a":0,"k":{"c":true,"i":[[0,0],[0,0],[0,0]],"o":[[0,0],[0,0],[0,0]],"v":[[53,44],[59,48],[52,51]]}}},{"ty":"fl","c":{"a":0,"k":[0.92,0.88,0.76,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]}]},{"ddd":0,"ind":3,"ty":4,"nm":"Vinyl Overlay","sr":1,"ks":{"a":{"a":0,"k":[50,50,0]},"p":{"a":0,"k":[50,50,0]},"s":{"a":0,"k":[100,100,100]},"r":{"a":1,"k":[{"t":0,"s":[0]},{"t":119,"s":[360]}]},"o":{"a":0,"k":100}},"ip":0,"op":120,"st":0,"shapes":[{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[76,76]}},{"ty":"st","c":{"a":0,"k":[0.015,0.015,0.018,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":20},"lc":1,"lj":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[82,82]}},{"ty":"st","c":{"a":0,"k":[0.11,0.11,0.12,1]},"o":{"a":0,"k":75},"w":{"a":0,"k":1.4},"lc":1,"lj":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[72,72]}},{"ty":"st","c":{"a":0,"k":[0.07,0.07,0.08,1]},"o":{"a":0,"k":65},"w":{"a":0,"k":1.2},"lc":1,"lj":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[62,62]}},{"ty":"st","c":{"a":0,"k":[0.04,0.04,0.045,1]},"o":{"a":0,"k":55},"w":{"a":0,"k":1},"lc":1,"lj":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]}]},{"ddd":0,"ind":4,"ty":2,"nm":"Artwork","refId":"cover","sr":1,"ks":{"a":{"a":0,"k":[48,48,0]},"p":{"a":0,"k":[50,50,0]},"s":{"a":0,"k":[100,100,100]},"r":{"a":1,"k":[{"t":0,"s":[0]},{"t":119,"s":[360]}]},"o":{"a":0,"k":100},"sk":{"a":0,"k":0},"sa":{"a":0,"k":0}},"ip":0,"op":120,"st":0}]}`, coverDataURI)
-}
-
-// buildStaticRecordLottie keeps the vinyl-style icon visible without rotation for paused media.
-func (m *MediaPlayerPlugin) buildStaticRecordLottie(coverDataURI string) string {
-	lottieJSON := strings.ReplaceAll(m.buildRecordLottie(coverDataURI), recordAnimatedRotationJSON, recordStaticRotationJSON)
-	return removeLottieLayer(lottieJSON, "Record Needle")
-}
-
-// removeLottieLayer deletes a named top-level layer while preserving a valid Lottie document.
-func removeLottieLayer(lottieJSON string, layerName string) string {
-	var data map[string]any
-	if err := json.Unmarshal([]byte(lottieJSON), &data); err != nil {
-		return lottieJSON
-	}
-
-	layers, ok := data["layers"].([]any)
-	if !ok {
-		return lottieJSON
-	}
-
-	filteredLayers := make([]any, 0, len(layers))
-	for _, layer := range layers {
-		layerData, ok := layer.(map[string]any)
-		if ok && layerData["nm"] == layerName {
-			continue
-		}
-		filteredLayers = append(filteredLayers, layer)
-	}
-	data["layers"] = filteredLayers
-
-	encoded, err := json.Marshal(data)
-	if err != nil {
-		return lottieJSON
-	}
-	return string(encoded)
-}
-
 func (m *MediaPlayerPlugin) formatPreview(mediaInfo *MediaInfo) plugin.WoxPreview {
-	coverImg := m.getMediaIcon(mediaInfo)
+	artwork := m.getMediaIcon(mediaInfo)
+	previewData, _ := json.Marshal(mediaPreviewData{
+		Title:     mediaInfo.Title,
+		Artist:    mediaInfo.Artist,
+		Album:     mediaInfo.Album,
+		AppName:   mediaInfo.AppName,
+		Artwork:   artwork.String(),
+		Position:  mediaInfo.Position,
+		Duration:  mediaInfo.Duration,
+		IsPlaying: mediaInfo.State == PlaybackStatePlaying,
+	})
 	return plugin.WoxPreview{
-		PreviewType: plugin.WoxPreviewTypeImage,
-		PreviewData: coverImg.String(),
-		PreviewTags: []plugin.WoxPreviewTag{
-			{Label: m.formatDuration(mediaInfo.Duration), Tooltip: "i18n:plugin_mediaplayer_duration"},
-			{Label: mediaInfo.Artist, Tooltip: "i18n:plugin_mediaplayer_artist"},
-			{Label: mediaInfo.Album, Tooltip: "i18n:plugin_mediaplayer_album"},
-		},
+		PreviewType: plugin.WoxPreviewTypeMedia,
+		PreviewData: string(previewData),
 	}
 }
 
@@ -535,8 +558,9 @@ func (m *MediaPlayerPlugin) refreshMediaPlayer(ctx context.Context) {
 	}
 
 	var toRemove []string
+	trackedUpdates := make(map[string]mediaTrackedResult)
 
-	m.trackedResults.Range(func(resultId string, _ mediaTrackedResult) bool {
+	m.trackedResults.Range(func(resultId string, tracked mediaTrackedResult) bool {
 		// Try to get the result, if it returns nil, the result is no longer visible
 		updatableResult := m.api.GetUpdatableResult(ctx, resultId)
 		if updatableResult == nil {
@@ -555,14 +579,32 @@ func (m *MediaPlayerPlugin) refreshMediaPlayer(ctx context.Context) {
 		// Update all fields
 		title := mediaInfo.Title
 		subTitle := m.formatSubTitle(mediaInfo)
-		icon := m.formatIcon(mediaInfo)
 		preview := m.formatPreview(mediaInfo)
 		tails := plugin.NewQueryResultTailTexts(m.formatProgress(mediaInfo))
 		actions := m.buildMediaActions(mediaInfo)
+		if tracked.showOpenMediaAction {
+			actions = append(actions, m.buildOpenMediaAction())
+		}
 
 		updatableResult.Title = &title
 		updatableResult.SubTitle = &subTitle
-		updatableResult.Icon = &icon
+		nextArtworkFingerprint := sha256.Sum256(mediaInfo.Artwork)
+		nextTrackFingerprint := buildMediaTrackFingerprint(mediaInfo)
+		trackChanged := tracked.trackFingerprint != nextTrackFingerprint
+		recordChanged := trackChanged || tracked.artworkFingerprint != nextArtworkFingerprint
+		var nextTracked *mediaTrackedResult
+		// Progress changes every second; leave the icon untouched so its tonearm transition only runs on meaningful state changes.
+		if tracked.playbackState != mediaInfo.State || recordChanged {
+			icon := m.formatIcon(mediaInfo, recordChanged)
+			updatableResult.Icon = &icon
+			updatedTracked := mediaTrackedResult{
+				playbackState:       mediaInfo.State,
+				artworkFingerprint:  nextArtworkFingerprint,
+				trackFingerprint:    nextTrackFingerprint,
+				showOpenMediaAction: tracked.showOpenMediaAction,
+			}
+			nextTracked = &updatedTracked
+		}
 		updatableResult.Preview = &preview
 		updatableResult.Tails = &tails
 		updatableResult.Actions = &actions
@@ -571,9 +613,16 @@ func (m *MediaPlayerPlugin) refreshMediaPlayer(ctx context.Context) {
 		// If UpdateResult returns false, the result is no longer visible in UI
 		if !m.api.UpdateResult(ctx, *updatableResult) {
 			toRemove = append(toRemove, resultId)
+		} else if nextTracked != nil {
+			trackedUpdates[resultId] = *nextTracked
 		}
 		return true
 	})
+
+	// Range holds a read lock, so changed tracking state must be written back after iteration.
+	for resultId, tracked := range trackedUpdates {
+		m.trackedResults.Store(resultId, tracked)
+	}
 
 	// Clean up results that are no longer visible
 	for _, resultId := range toRemove {

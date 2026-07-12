@@ -44,8 +44,9 @@ class HotkeyX {
   HotKeyModifier? doubleHotkey; // double hotkey, E.g. "ctrl+ctrl"
   List<String>? modifierChord; // left/right modifier chord, E.g. "left_shift+left_cmd"
   List<String>? holdModifiers; // hold-mode left/right modifier chord, E.g. "hold:left_alt"
+  LogicalKeyboardKey? singleHotkey; // single hotkey, E.g. "enter", usually used for default action hotkey
 
-  HotkeyX(this.raw, {this.normalHotkey, this.capsLockHotkey, this.doubleHotkey, this.modifierChord, this.holdModifiers});
+  HotkeyX(this.raw, {this.normalHotkey, this.capsLockHotkey, this.doubleHotkey, this.modifierChord, this.holdModifiers, this.singleHotkey});
 
   bool get isNormalHotkey => normalHotkey != null;
 
@@ -56,6 +57,8 @@ class HotkeyX {
   bool get isModifierChord => modifierChord != null && modifierChord!.isNotEmpty;
 
   bool get isHoldModifier => holdModifiers != null && holdModifiers!.isNotEmpty;
+
+  bool get isSingleHotkey => singleHotkey != null;
 
   List<String>? get displayModifierChord => isHoldModifier ? holdModifiers : modifierChord;
 
@@ -330,7 +333,7 @@ class WoxHotkey {
       return HotkeyX(trimmedValue, normalHotkey: HotKey(key: key, modifiers: modifiers));
     }
 
-    return null;
+    return key == null ? null : HotkeyX(trimmedValue, singleHotkey: key);
   }
 
   // recordedHotkeyToString folds backend recorder kind into the persisted hotkey string.

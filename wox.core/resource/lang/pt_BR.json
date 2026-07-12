@@ -1986,6 +1986,7 @@
   "plugin_mediaplayer_toggle": "Reproduzir/Pausar",
   "plugin_mediaplayer_next": "Próxima",
   "plugin_mediaplayer_previous": "Anterior",
+  "plugin_mediaplayer_open": "Abrir reprodutor de mídia",
   "plugin_mediaplayer_copy_info": "Copiar informações",
   "plugin_mediaplayer_no_media": "Nenhum mídia",
   "plugin_mediaplayer_artist": "Artista",

@@ -1987,6 +1987,7 @@
   "plugin_mediaplayer_toggle": "Воспроизвести/Пауза",
   "plugin_mediaplayer_next": "Следующий",
   "plugin_mediaplayer_previous": "Предыдущий",
+  "plugin_mediaplayer_open": "Открыть медиаплеер",
   "plugin_mediaplayer_copy_info": "Копировать информацию",
   "plugin_mediaplayer_no_media": "Нет медиа",
   "plugin_mediaplayer_artist": "Исполнитель",

@@ -2225,6 +2225,7 @@
   "plugin_mediaplayer_toggle": "播放/暂停",
   "plugin_mediaplayer_next": "下一首",
   "plugin_mediaplayer_previous": "上一首",
+  "plugin_mediaplayer_open": "进入媒体播放器",
   "plugin_mediaplayer_copy_info": "复制信息",
   "plugin_mediaplayer_no_media": "没有正在播放的媒体",
   "plugin_mediaplayer_artist": "艺术家",

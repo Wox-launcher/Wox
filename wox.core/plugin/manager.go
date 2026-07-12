@@ -2586,7 +2586,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 		if result.Actions[actionIndex].Icon.IsEmpty() {
 			// set default action icon if not present
-			result.Actions[actionIndex].Icon = common.ExecuteRunIcon
+			result.Actions[actionIndex].Icon = common.ExecuteActionIcon
 		}
 		if result.Actions[actionIndex].Type == "" {
 			if len(result.Actions[actionIndex].Form) > 0 || result.Actions[actionIndex].OnSubmit != nil {
@@ -3107,7 +3107,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 				actions[actionIndex].Id = uuid.NewString()
 			}
 			if actions[actionIndex].Icon.IsEmpty() {
-				actions[actionIndex].Icon = common.ExecuteRunIcon
+				actions[actionIndex].Icon = common.ExecuteActionIcon
 			} else {
 				actions[actionIndex].Icon = common.ConvertIcon(ctx, actions[actionIndex].Icon, pluginInstance.PluginDirectory)
 			}
@@ -4490,6 +4490,9 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 			}
 			seen[key] = true
 
+			// Keep the core-owned plugin settings action consistent with regular query results.
+			restored.Actions = append(restored.Actions, m.newOpenPluginSettingAction(ctx, pluginInstance))
+
 			// Add "Remove from MRU" action to each MRU result
 			removeMRUAction := QueryResultAction{
 				Id:   uuid.NewString(),
@@ -4505,7 +4508,6 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 				},
 			}
 
-			// Add the remove action to the result
 			restored.Actions = append(restored.Actions, removeMRUAction)
 			restored.Score = item.Score
 

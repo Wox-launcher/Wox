@@ -13,6 +13,7 @@ import 'package:wox/components/wox_ai_stream_preview_view.dart';
 import 'package:wox/components/wox_dictation_history_preview_view.dart';
 import 'package:wox/components/wox_hotkey_overview_preview_view.dart';
 import 'package:wox/components/wox_list_preview_view.dart';
+import 'package:wox/components/wox_media_preview_view.dart';
 import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/wox_preview_scaffold.dart';
@@ -31,6 +32,7 @@ import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_preview_ai_stream.dart';
 import 'package:wox/entity/wox_preview_dictation_history.dart';
 import 'package:wox/entity/wox_preview_list.dart';
+import 'package:wox/entity/wox_preview_media.dart';
 import 'package:wox/entity/wox_query_requirement_settings_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_trigger_keyword_conflict_preview.dart';
@@ -167,6 +169,20 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     }
   }
 
+  void executeMediaAction(String actionId) {
+    final activeResult = launcherController.getActiveResult();
+    if (activeResult == null) {
+      return;
+    }
+
+    for (final action in activeResult.actions) {
+      if (action.id == actionId) {
+        unawaited(launcherController.executeAction(const UuidV4().generate(), activeResult, action));
+        return;
+      }
+    }
+  }
+
   Widget buildImageSurface(Widget image, {WoxImage? overlayImage}) {
     // The scaffold now supplies the shared image/text/markdown substrate. This
     // renderer only centers the asset and keeps the overlay affordance so images
@@ -283,6 +299,22 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         contentWidget = WoxDictationHistoryPreviewView(data: WoxPreviewDictationHistory.fromPreviewData(widget.woxPreview.previewData), woxTheme: widget.woxTheme);
       } catch (e) {
         contentWidget = buildText("Invalid dictation history preview data: $e");
+      }
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MEDIA.code) {
+      try {
+        final mediaData = WoxPreviewMedia.fromPreviewData(widget.woxPreview.previewData);
+        return WoxMediaPreviewView(
+          data: mediaData,
+          woxTheme: widget.woxTheme,
+          previousTooltip: launcherController.tr("plugin_mediaplayer_previous"),
+          toggleTooltip: launcherController.tr(mediaData.isPlaying ? "plugin_mediaplayer_pause" : "plugin_mediaplayer_play"),
+          nextTooltip: launcherController.tr("plugin_mediaplayer_next"),
+          onPrevious: () => executeMediaAction("media-control-previous"),
+          onToggle: () => executeMediaAction(mediaData.isPlaying ? "media-control-pause" : "media-control-play"),
+          onNext: () => executeMediaAction("media-control-next"),
+        );
+      } catch (e) {
+        contentWidget = buildText("Invalid media preview data: $e");
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_QUERY_REQUIREMENT_SETTINGS.code) {
       try {

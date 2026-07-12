@@ -19,7 +19,8 @@ enum WoxPreviewTypeEnum {
   WOX_PREVIEW_TYPE_THEME_EDIT("theme_edit", "theme_edit"),
   WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT("trigger_keyword_conflict", "trigger_keyword_conflict"),
   WOX_PREVIEW_TYPE_HOTKEY_OVERVIEW("hotkey_overview", "hotkey_overview"),
-  WOX_PREVIEW_TYPE_DICTATION_HISTORY("dictation_history", "dictation_history");
+  WOX_PREVIEW_TYPE_DICTATION_HISTORY("dictation_history", "dictation_history"),
+  WOX_PREVIEW_TYPE_MEDIA("media", "media");
 
   final String code;
   final String value;
