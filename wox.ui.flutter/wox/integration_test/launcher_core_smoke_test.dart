@@ -168,20 +168,16 @@ void registerLauncherCoreSmokeTests() {
       final settingController = await openSettings(tester, controller, 'general');
 
       // Smoke setup: native focus transitions can leave only the route/window scope
-      // focused. Temporarily stop the concrete settings focus nodes from claiming
+      // focused. Temporarily stop the settings route descendants from claiming
       // focus so this test exercises the window-level Escape fallback.
-      settingController.settingFocusNode.canRequestFocus = false;
-      settingController.settingSearchFocusNode.canRequestFocus = false;
+      final settingRouteFocusScope = FocusScope.of(tester.element(find.byType(WoxSettingView)));
+      settingRouteFocusScope.descendantsAreFocusable = false;
       addTearDown(() {
-        settingController.settingFocusNode.canRequestFocus = true;
-        settingController.settingSearchFocusNode.canRequestFocus = true;
+        settingRouteFocusScope.descendantsAreFocusable = true;
       });
 
-      final settingRouteFocusScope = FocusScope.of(tester.element(find.byType(WoxSettingView)));
       settingRouteFocusScope.requestFocus();
-      settingController.settingFocusNode.unfocus();
-      settingController.settingSearchFocusNode.unfocus();
-      await tester.pump(const Duration(milliseconds: 100));
+      await pumpUntil(tester, () => FocusManager.instance.primaryFocus == settingRouteFocusScope, timeout: const Duration(seconds: 5));
       expect(settingController.settingFocusNode.hasFocus, isFalse);
       expect(settingController.settingSearchFocusNode.hasFocus, isFalse);
 
@@ -197,6 +193,7 @@ void registerLauncherCoreSmokeTests() {
       expect(find.byType(WoxSettingView), findsOneWidget);
 
       await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
+      settingRouteFocusScope.descendantsAreFocusable = true;
       await waitForQueryBoxFocus(tester, controller);
 
       expect(await windowManager.isVisible(), isTrue);

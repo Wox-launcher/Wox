@@ -81,7 +81,7 @@ void registerLauncherKeyFunctionalitySmokeTests() {
 
         // Smoke runs exercise the same RecordHotkey bus used when core forwards
         // a captured global hotkey to the focused recorder.
-        WoxHotkeyRecordingBus.instance.emit(recordedHotkey);
+        WoxHotkeyRecordingBus.instance.emit(recordedHotkey, WoxHotkeyRecorderKind.normalCombo.value);
         await pumpUntil(tester, () => settingController.woxSetting.value.mainHotkey == recordedHotkey, timeout: const Duration(seconds: 10));
 
         expect(settingController.woxSetting.value.mainHotkey, recordedHotkey);
