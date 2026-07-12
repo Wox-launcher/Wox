@@ -844,22 +844,22 @@ func runQueryWithRefinementsAndSession(ctx context.Context, sessionID string, ra
 	}
 
 	plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, queryPlugin)
-	resultChan, _, doneChan := plugin.GetPluginManager().Query(ctx, query)
+	execution := plugin.GetPluginManager().Query(ctx, query)
 	var allResults []plugin.QueryResultUI
 	var queryRefinements []plugin.QueryRefinement
 
 collect:
 	for {
 		select {
-		case response := <-resultChan:
+		case response := <-execution.Results:
 			allResults = append(allResults, response.Results...)
 			if len(response.Refinements) > 0 {
 				queryRefinements = response.Refinements
 			}
-		case <-doneChan:
+		case <-execution.Done:
 			for {
 				select {
-				case response := <-resultChan:
+				case response := <-execution.Results:
 					allResults = append(allResults, response.Results...)
 					if len(response.Refinements) > 0 {
 						queryRefinements = response.Refinements
@@ -1203,18 +1203,18 @@ func runColorQueryForAction(ctx context.Context, rawQuery string) ([]plugin.Quer
 	}
 
 	plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, queryPlugin)
-	resultChan, _, doneChan := plugin.GetPluginManager().Query(ctx, query)
+	execution := plugin.GetPluginManager().Query(ctx, query)
 	var allResults []plugin.QueryResultUI
 
 collect:
 	for {
 		select {
-		case response := <-resultChan:
+		case response := <-execution.Results:
 			allResults = append(allResults, response.Results...)
-		case <-doneChan:
+		case <-execution.Done:
 			for {
 				select {
-				case response := <-resultChan:
+				case response := <-execution.Results:
 					allResults = append(allResults, response.Results...)
 				default:
 					break collect

@@ -14,11 +14,14 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/setting"
 	"wox/ui"
 	"wox/updater"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/fuzzymatch"
 	"wox/util/notifier"
+	"wox/util/timetracking"
 
 	"github.com/google/uuid"
 )
@@ -583,18 +586,26 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 		return plugin.QueryResponse{}
 	}
 
+	queryStart := time.Now()
+	usePinyin := setting.GetSettingManager().GetWoxSetting(ctx).UsePinYin.Get()
 	var results []plugin.QueryResult
+	commandMatchStart := time.Now()
 	for _, command := range r.commands {
-		if matched, score := r.commandMatches(ctx, command, query.Search); matched {
+		if matched, score := r.commandMatches(ctx, command, query.Search, usePinyin); matched {
 			results = append(results, r.buildCommandResult(ctx, query, command, score))
 		}
 	}
+	commandMatchUs := time.Since(commandMatchStart).Microseconds()
 
+	pluginSettingMatchStart := time.Now()
 	pluginSettingsFormat := i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings")
-	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
+	pluginInstances := plugin.GetPluginManager().GetPluginInstances()
+	for _, instance := range pluginInstances {
 		pluginName := instance.GetName(ctx)
 		title := fmt.Sprintf(pluginSettingsFormat, pluginName)
-		isNameMatch, matchScore := plugin.IsStringMatchScore(ctx, title, query.Search)
+		matchResult := fuzzymatch.FuzzyMatch(title, query.Search, usePinyin)
+		isNameMatch := matchResult.IsMatch
+		matchScore := matchResult.Score
 		isTriggerKeywordMatch := slices.Contains(instance.GetTriggerKeywords(), query.Search)
 		if isNameMatch || isTriggerKeywordMatch {
 			pluginIcon := common.SettingIcon
@@ -623,6 +634,19 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 			})
 		}
 	}
+	pluginSettingMatchUs := time.Since(pluginSettingMatchStart).Microseconds()
+	if tracker := timetracking.New("sys_query"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetString("search", query.Search)
+		tracker.SetBool("usePinyin", usePinyin)
+		tracker.SetInt("commandCount", len(r.commands))
+		tracker.SetInt("pluginCount", len(pluginInstances))
+		tracker.SetInt("resultCount", len(results))
+		tracker.SetInt64("commandMatchUs", commandMatchUs)
+		tracker.SetInt64("pluginSettingMatchUs", pluginSettingMatchUs)
+		tracker.SetInt64("totalUs", time.Since(queryStart).Microseconds())
+		tracker.Log(ctx)
+	}
 
 	return plugin.NewQueryResponse(results)
 }
@@ -636,7 +660,7 @@ func (r *SysPlugin) findCommand(commandID string) (SysCommand, bool) {
 	return SysCommand{}, false
 }
 
-func (r *SysPlugin) commandMatches(ctx context.Context, command SysCommand, search string) (bool, int64) {
+func (r *SysPlugin) commandMatches(ctx context.Context, command SysCommand, search string, usePinyin bool) (bool, int64) {
 	if !r.isCommandAvailable(command) {
 		return false, 0
 	}
@@ -655,9 +679,9 @@ func (r *SysPlugin) commandMatches(ctx context.Context, command SysCommand, sear
 
 	var bestScore int64
 	for _, candidate := range candidates {
-		matched, score := plugin.IsStringMatchScore(ctx, candidate, search)
-		if matched && score > bestScore {
-			bestScore = score
+		matchResult := fuzzymatch.FuzzyMatch(candidate, search, usePinyin)
+		if matchResult.IsMatch && matchResult.Score > bestScore {
+			bestScore = matchResult.Score
 		}
 	}
 

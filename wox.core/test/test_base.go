@@ -106,7 +106,7 @@ func (ts *TestSuite) RunQueryTest(test QueryTest) (bool, *QueryTestFailure) {
 	}
 	ts.t.Logf("Query created successfully, executing...")
 
-	resultChan, _, doneChan := plugin.GetPluginManager().Query(ts.ctx, query)
+	execution := plugin.GetPluginManager().Query(ts.ctx, query)
 
 	// Collect all results
 	var allResults []plugin.QueryResultUI
@@ -114,14 +114,14 @@ func (ts *TestSuite) RunQueryTest(test QueryTest) (bool, *QueryTestFailure) {
 CollectResults:
 	for {
 		select {
-		case response := <-resultChan:
+		case response := <-execution.Results:
 			allResults = append(allResults, response.Results...)
-		case <-doneChan:
+		case <-execution.Done:
 			// Query completion only means all plugin goroutines have finished.
 			// Drain buffered results to avoid dropping late-collected plugin results.
 			for {
 				select {
-				case response := <-resultChan:
+				case response := <-execution.Results:
 					allResults = append(allResults, response.Results...)
 				default:
 					break CollectResults

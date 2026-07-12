@@ -32,8 +32,8 @@ type queryRun struct {
 	// startTimestamp records the end-to-end query start time for elapsed metrics and debug tails.
 	// Prefer the Flutter request send timestamp; fall back to backend start for non-UI callers.
 	startTimestamp int64
-	// firstFlushDelayMs records the first visible flush delay chosen for this query.
-	firstFlushDelayMs int64
+	// firstFlushDeadlineMs is the end-to-end deadline for the first visible snapshot.
+	firstFlushDeadlineMs int64
 	// firstVisibleFlushElapsedMs records when the first non-empty snapshot is sent.
 	firstVisibleFlushElapsedMs int64
 	// resultFlushBatch tracks the visible snapshot batch number shown in dev performance tails.
@@ -75,31 +75,7 @@ func (r *queryRun) start() {
 	if r.startTimestamp <= 0 {
 		r.startTimestamp = backendStartTimestamp
 	}
-	r.firstFlushDelayMs = plugin.GetPluginManager().GetQueryFirstFlushDelayMs(r.query)
-	logger.Info(r.ctx, fmt.Sprintf("query %s: %s, first flush delay: %d ms", r.query.Type, r.query.String(), r.firstFlushDelayMs))
-	if tracker := timetracking.New("query_run_start"); tracker.Enabled() {
-		tracker.SetRawString("queryId", r.queryId)
-		tracker.SetRawString("query", r.query.String())
-		tracker.SetBool("usesClientStartTimestamp", r.request.SendTimestamp > 0)
-		tracker.SetInt64("clientToBackendStartMs", backendStartTimestamp-r.startTimestamp)
-		tracker.SetInt64("firstFlushDelayMs", r.firstFlushDelayMs)
-		tracker.Log(r.ctx)
-	}
 
-	debouncerStart := util.GetSystemTimestamp()
-	r.resultDebouncer = util.NewDebouncer(r.firstFlushDelayMs, resultDebounceIntervalMs, r.flush)
-	r.resultDebouncer.Start(r.ctx)
-	if tracker := timetracking.New("debouncer_start"); tracker.Enabled() {
-		tracker.SetRawString("queryId", r.queryId)
-		tracker.SetInt64("costMs", util.GetSystemTimestamp()-debouncerStart)
-		tracker.Log(r.ctx)
-	}
-	logger.Info(r.ctx, fmt.Sprintf("query %s: %s, result flushed (new start)", r.query.Type, r.query.String()))
-
-	// Bug diagnostics: Manager.Query starts plugin work and returns the result
-	// channels used by the select loop below. If a future log has "query pipeline
-	// starting" but not "ready", the stall is inside scheduler setup rather than
-	// UI result handling.
 	managerQueryStart := util.GetSystemTimestamp()
 	if tracker := timetracking.New("manager_query_call"); tracker.Enabled() {
 		tracker.SetRawString("queryId", r.queryId)
@@ -107,7 +83,7 @@ func (r *queryRun) start() {
 		tracker.SetRawString("ownerPlugin", queryPipelinePluginLabel(r.ctx, r.ownerPlugin))
 		tracker.Log(r.ctx)
 	}
-	resultChan, fallbackReadyChan, doneChan := plugin.GetPluginManager().Query(r.ctx, r.query)
+	execution := plugin.GetPluginManager().Query(r.ctx, r.query)
 	if tracker := timetracking.New("manager_query_return"); tracker.Enabled() {
 		tracker.SetRawString("queryId", r.queryId)
 		tracker.SetRawString("query", r.query.String())
@@ -116,11 +92,41 @@ func (r *queryRun) start() {
 		tracker.Log(r.ctx)
 	}
 
+	r.firstFlushDeadlineMs = execution.FirstFlushDeadlineMs
+	firstFlushRemainingMs := r.firstFlushDeadlineMs - (util.GetSystemTimestamp() - r.startTimestamp)
+	if firstFlushRemainingMs < 0 {
+		firstFlushRemainingMs = 0
+	}
+	logger.Info(r.ctx, fmt.Sprintf("query %s: %s, first flush deadline: %d ms, remaining: %d ms", r.query.Type, r.query.String(), r.firstFlushDeadlineMs, firstFlushRemainingMs))
+	if tracker := timetracking.New("query_run_start"); tracker.Enabled() {
+		tracker.SetRawString("queryId", r.queryId)
+		tracker.SetRawString("query", r.query.String())
+		tracker.SetBool("usesClientStartTimestamp", r.request.SendTimestamp > 0)
+		tracker.SetInt64("clientToBackendStartMs", backendStartTimestamp-r.startTimestamp)
+		tracker.SetInt64("firstFlushDeadlineMs", r.firstFlushDeadlineMs)
+		tracker.SetInt64("firstFlushRemainingMs", firstFlushRemainingMs)
+		tracker.Log(r.ctx)
+	}
+
+	debouncerStart := util.GetSystemTimestamp()
+	r.resultDebouncer = util.NewDebouncer(firstFlushRemainingMs, resultDebounceIntervalMs, r.flush)
+	// Plugin jobs start as soon as Manager.Query returns. Move any responses that
+	// already reached the buffered channel into the debouncer before arming a
+	// zero-duration deadline, otherwise an already-ready result could miss B1.
+	r.drainPendingResults(execution.Results)
+	r.resultDebouncer.Start(r.ctx)
+	if tracker := timetracking.New("debouncer_start"); tracker.Enabled() {
+		tracker.SetRawString("queryId", r.queryId)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-debouncerStart)
+		tracker.Log(r.ctx)
+	}
+	logger.Info(r.ctx, fmt.Sprintf("query %s: %s, result flushed (new start)", r.query.Type, r.query.String()))
+
 	for {
 		select {
-		case response := <-resultChan:
+		case response := <-execution.Results:
 			r.addResponse(response)
-		case <-fallbackReadyChan:
+		case <-execution.ImmediateDone:
 			if tracker := timetracking.New("fallback_ready"); tracker.Enabled() {
 				tracker.SetRawString("queryId", r.queryId)
 				tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-r.startTimestamp)
@@ -128,21 +134,19 @@ func (r *queryRun) start() {
 				tracker.Log(r.ctx)
 			}
 			// Consume any already-produced results before checking whether fallback is needed.
-			r.drainPendingResults(resultChan)
+			r.drainPendingResults(execution.Results)
 			r.showFallbackResults()
-		case <-doneChan:
-			if tracker := timetracking.New("done_signal"); tracker.Enabled() {
-				tracker.SetRawString("queryId", r.queryId)
-				tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-r.startTimestamp)
-				tracker.SetInt("totalResults", r.totalResultCount)
-				tracker.Log(r.ctx)
+			select {
+			case <-execution.Done:
+				r.finish(execution.Results)
+				return
+			default:
+				r.resultDebouncer.FlushNow(r.ctx, "immediate")
 			}
+		case <-execution.Done:
 			// Run the same fallback check at final completion so queries without any
 			// fallback-blocking plugins still get a fallback result when appropriate.
-			r.drainPendingResults(resultChan)
-			r.showFallbackResults()
-			logger.Info(r.ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", r.totalResultCount, util.GetSystemTimestamp()-r.startTimestamp))
-			r.resultDebouncer.Done(r.ctx)
+			r.finish(execution.Results)
 			return
 		case <-time.After(time.Minute):
 			logger.Info(r.ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", r.query.String(), r.request.RequestId))
@@ -151,6 +155,20 @@ func (r *queryRun) start() {
 			return
 		}
 	}
+}
+
+// finish drains every delivered response before sending the one terminal snapshot.
+func (r *queryRun) finish(resultChan <-chan plugin.QueryResponseUI) {
+	if tracker := timetracking.New("done_signal"); tracker.Enabled() {
+		tracker.SetRawString("queryId", r.queryId)
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-r.startTimestamp)
+		tracker.SetInt("totalResults", r.totalResultCount)
+		tracker.Log(r.ctx)
+	}
+	r.drainPendingResults(resultChan)
+	r.showFallbackResults()
+	logger.Info(r.ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", r.totalResultCount, util.GetSystemTimestamp()-r.startTimestamp))
+	r.resultDebouncer.Done(r.ctx)
 }
 
 func (r *queryRun) addResponse(response plugin.QueryResponseUI) {
