@@ -444,6 +444,10 @@ func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, f
 		}
 
 		// Keep the exact dialog target after Wox changes foreground focus.
+		if selectFileDialogItemWithHook(ctx, env.ActiveWindowId, env.ActiveWindowPid, entryPath, isGlobalResult && !isDir) {
+			c.api.HideApp(ctx)
+			return
+		}
 		if window.SelectInFileDialog(env.ActiveWindowId, env.ActiveWindowPid, entryPath) {
 			util.Go(ctx, "highlight open/save dialog entry", func() {
 				window.HighlightInFileDialog(env.ActiveWindowId, env.ActiveWindowPid, entryPath)

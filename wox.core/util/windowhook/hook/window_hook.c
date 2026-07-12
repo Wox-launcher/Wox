@@ -21,7 +21,8 @@ enum WoxWindowHookCommandType
 {
     woxWindowHookCommandNavigateDialog = 1,
     woxWindowHookCommandAttachSticky = 2,
-    woxWindowHookCommandDetachSticky = 3
+    woxWindowHookCommandDetachSticky = 3,
+    woxWindowHookCommandSelectDialogItem = 4
 };
 
 enum WoxWindowHookStage
@@ -41,7 +42,12 @@ enum WoxWindowHookStage
     woxWindowHookStageGetShellBrowser = 12,
     woxWindowHookStageParsePath = 13,
     woxWindowHookStageBrowse = 14,
-    woxWindowHookStageCompleted = 15
+    woxWindowHookStageCompleted = 15,
+    woxWindowHookStageQueryActiveView = 16,
+    woxWindowHookStageBindParent = 17,
+    woxWindowHookStageGetViewFolder = 18,
+    woxWindowHookStageCompareParent = 19,
+    woxWindowHookStageSelectItem = 20
 };
 
 typedef struct
@@ -201,6 +207,133 @@ static HRESULT navigateShellView(HWND dialog, const WCHAR *targetPath, WoxWindow
     return result;
 }
 
+// selectShellViewItem uses the dialog's native Shell view so selection and filename state stay synchronized.
+static HRESULT selectShellViewItem(HWND dialog, const WCHAR *targetPath, WoxWindowHookDiagnostic *diagnostic)
+{
+    HWND shellViewWindow = findShellView(dialog);
+    diagnostic->shellViewFound = shellViewWindow != NULL;
+    if (!shellViewWindow || !targetPath || targetPath[0] == L'\0')
+    {
+        diagnostic->stage = woxWindowHookStageCallbackValidate;
+        diagnostic->hresult = E_INVALIDARG;
+        return E_INVALIDARG;
+    }
+
+    diagnostic->stage = woxWindowHookStageCoInitialize;
+    HRESULT initializeResult = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    diagnostic->hresult = initializeResult;
+    BOOL shouldUninitialize = SUCCEEDED(initializeResult);
+    if (FAILED(initializeResult) && initializeResult != RPC_E_CHANGED_MODE)
+    {
+        return initializeResult;
+    }
+
+    IShellBrowser *shellBrowser = NULL;
+    IShellView *shellView = NULL;
+    IFolderView *folderView = NULL;
+    IShellFolder *parentFolder = NULL;
+    IShellFolder *viewFolder = NULL;
+    PIDLIST_ABSOLUTE pidl = NULL;
+    PIDLIST_ABSOLUTE parentPidl = NULL;
+    PIDLIST_ABSOLUTE viewPidl = NULL;
+    PCUITEMID_CHILD childPidl = NULL;
+
+    diagnostic->stage = woxWindowHookStageGetShellBrowser;
+    shellBrowser = (IShellBrowser *)SendMessageW(dialog, WOX_WM_GETISHELLBROWSER, 0, 0);
+    HRESULT result = shellBrowser ? S_OK : E_NOINTERFACE;
+    diagnostic->hresult = result;
+    if (shellBrowser)
+    {
+        IShellBrowser_AddRef(shellBrowser);
+    }
+    if (SUCCEEDED(result))
+    {
+        diagnostic->stage = woxWindowHookStageQueryActiveView;
+        result = IShellBrowser_QueryActiveShellView(shellBrowser, &shellView);
+        diagnostic->hresult = result;
+    }
+    if (SUCCEEDED(result))
+    {
+        diagnostic->stage = woxWindowHookStageParsePath;
+        result = SHParseDisplayName(targetPath, NULL, &pidl, 0, NULL);
+        diagnostic->hresult = result;
+    }
+    if (SUCCEEDED(result))
+    {
+        diagnostic->stage = woxWindowHookStageBindParent;
+        result = SHBindToParent(pidl, &IID_IShellFolder, (void **)&parentFolder, &childPidl);
+        diagnostic->hresult = result;
+    }
+    if (SUCCEEDED(result))
+    {
+        diagnostic->stage = woxWindowHookStageGetViewFolder;
+        result = IShellView_QueryInterface(shellView, &IID_IFolderView, (void **)&folderView);
+        if (SUCCEEDED(result))
+        {
+            result = IFolderView_GetFolder(folderView, &IID_IShellFolder, (void **)&viewFolder);
+        }
+        diagnostic->hresult = result;
+    }
+    if (SUCCEEDED(result))
+    {
+        diagnostic->stage = woxWindowHookStageCompareParent;
+        result = SHGetIDListFromObject((IUnknown *)parentFolder, &parentPidl);
+        if (SUCCEEDED(result))
+        {
+            result = SHGetIDListFromObject((IUnknown *)viewFolder, &viewPidl);
+        }
+        if (SUCCEEDED(result) && !ILIsEqual(parentPidl, viewPidl))
+        {
+            result = HRESULT_FROM_WIN32(ERROR_RETRY);
+        }
+        diagnostic->hresult = result;
+    }
+    if (SUCCEEDED(result))
+    {
+        diagnostic->stage = woxWindowHookStageSelectItem;
+        result = IShellView_SelectItem(shellView, childPidl, SVSI_SELECT | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE | SVSI_FOCUSED);
+        diagnostic->hresult = result;
+    }
+
+    if (viewPidl)
+    {
+        CoTaskMemFree(viewPidl);
+    }
+    if (parentPidl)
+    {
+        CoTaskMemFree(parentPidl);
+    }
+    if (viewFolder)
+    {
+        IShellFolder_Release(viewFolder);
+    }
+    if (parentFolder)
+    {
+        IShellFolder_Release(parentFolder);
+    }
+    if (folderView)
+    {
+        IFolderView_Release(folderView);
+    }
+    if (pidl)
+    {
+        CoTaskMemFree(pidl);
+    }
+    if (shellView)
+    {
+        IShellView_Release(shellView);
+    }
+    if (shellBrowser)
+    {
+        IShellBrowser_Release(shellBrowser);
+    }
+    if (shouldUninitialize)
+    {
+        CoUninitialize();
+    }
+    return result;
+}
+
 // stickySubclassProc emits a lightweight signal and leaves all positioning to the overlay process.
 static LRESULT CALLBACK stickySubclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR subclassId, DWORD_PTR refData)
 {
@@ -271,6 +404,10 @@ static void executeCommand(DWORD ownerPid)
         if (valid && command->type == woxWindowHookCommandNavigateDialog && findShellView(command->target))
         {
             succeeded = SUCCEEDED(navigateShellView(command->target, command->path, &command->diagnostic));
+        }
+        else if (valid && command->type == woxWindowHookCommandSelectDialogItem && findShellView(command->target))
+        {
+            succeeded = SUCCEEDED(selectShellViewItem(command->target, command->path, &command->diagnostic));
         }
         else if (valid && command->type == woxWindowHookCommandAttachSticky && IsWindow(command->overlay))
         {
@@ -384,8 +521,8 @@ static BOOL sendCommand(HHOOK hook, DWORD targetThread, WoxWindowHookCommand *in
     return succeeded;
 }
 
-// WoxWindowHookNavigateDialog injects this DLL into one verified dialog thread for one navigation command.
-__declspec(dllexport) BOOL WINAPI WoxWindowHookNavigateDialog(HWND dialog, DWORD expectedPid, const WCHAR *targetPath, WoxWindowHookDiagnostic *diagnostic)
+// sendDialogPathCommand injects one path command into a verified dialog thread.
+static BOOL sendDialogPathCommand(HWND dialog, DWORD expectedPid, const WCHAR *targetPath, DWORD commandType, WoxWindowHookDiagnostic *diagnostic)
 {
     WoxWindowHookDiagnostic localDiagnostic;
     if (!diagnostic)
@@ -394,7 +531,8 @@ __declspec(dllexport) BOOL WINAPI WoxWindowHookNavigateDialog(HWND dialog, DWORD
     diagnostic->stage = woxWindowHookStageValidateInput;
 
     UINT commandMessage = getCommandMessage();
-    if (!gModule || !commandMessage || expectedPid == 0 || !targetPath || targetPath[0] == L'\0')
+    if (!gModule || !commandMessage || expectedPid == 0 || !targetPath || targetPath[0] == L'\0' ||
+        (commandType != woxWindowHookCommandNavigateDialog && commandType != woxWindowHookCommandSelectDialogItem))
     {
         diagnostic->win32Error = ERROR_INVALID_PARAMETER;
         return FALSE;
@@ -428,7 +566,7 @@ __declspec(dllexport) BOOL WINAPI WoxWindowHookNavigateDialog(HWND dialog, DWORD
         WoxWindowHookCommand command;
         ZeroMemory(&command, sizeof(command));
         command.version = WOX_WINDOW_HOOK_VERSION;
-        command.type = woxWindowHookCommandNavigateDialog;
+        command.type = commandType;
         command.target = dialog;
         wcsncpy_s(command.path, WOX_WINDOW_PATH_CAPACITY, targetPath, _TRUNCATE);
         succeeded = sendCommand(hook, dialogThread, &command, diagnostic);
@@ -440,6 +578,18 @@ __declspec(dllexport) BOOL WINAPI WoxWindowHookNavigateDialog(HWND dialog, DWORD
     }
     ReleaseSRWLockExclusive(&gCommandLock);
     return succeeded;
+}
+
+// WoxWindowHookNavigateDialog runs one native Shell browser navigation.
+__declspec(dllexport) BOOL WINAPI WoxWindowHookNavigateDialog(HWND dialog, DWORD expectedPid, const WCHAR *targetPath, WoxWindowHookDiagnostic *diagnostic)
+{
+    return sendDialogPathCommand(dialog, expectedPid, targetPath, woxWindowHookCommandNavigateDialog, diagnostic);
+}
+
+// WoxWindowHookSelectDialogItem selects one item in the dialog's active Shell view.
+__declspec(dllexport) BOOL WINAPI WoxWindowHookSelectDialogItem(HWND dialog, DWORD expectedPid, const WCHAR *targetPath, WoxWindowHookDiagnostic *diagnostic)
+{
+    return sendDialogPathCommand(dialog, expectedPid, targetPath, woxWindowHookCommandSelectDialogItem, diagnostic);
 }
 
 // WoxWindowHookAttachSticky keeps the injected hook alive until the overlay explicitly detaches it.
