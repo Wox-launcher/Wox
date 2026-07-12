@@ -22,6 +22,7 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/filesearch"
+	"wox/util/fuzzymatch"
 	"wox/util/nativecontextmenu"
 	"wox/util/shell"
 	"wox/util/timetracking"
@@ -110,9 +111,9 @@ type appContextData struct {
 // appQueryEntry keeps query-only derived data so typing does not rebuild the same
 // candidate lists for every app on every keystroke.
 type appQueryEntry struct {
-	info             appInfo
-	searchCandidates []string
-	ignoreCandidates []string
+	info                     appInfo
+	preparedSearchCandidates []*fuzzymatch.PreparedText
+	ignoreCandidates         []string
 }
 
 // Query results usually shrink as the user extends the same search text.
@@ -498,6 +499,8 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 
 	isLaunchpadQuery := query.Command == appCommandLaunchpad
 	queryStartedAt := util.GetSystemTimestamp()
+	usePinyin := setting.GetSettingManager().GetWoxSetting(ctx).UsePinYin.Get()
+	preparedPattern := fuzzymatch.PreparePattern(query.Search)
 
 	// Query against a stable snapshot so reindexing or settings changes do not
 	// force extra work in the middle of a keystroke.
@@ -541,15 +544,15 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		for _, candidate := range searchCandidates {
 			scoreCandidateCount++
 			scoreMatchStart := time.Now()
-			matched, score := plugin.IsStringMatchScore(ctx, candidate, query.Search)
+			matchResult := fuzzymatch.FuzzyMatchPrepared(candidate, preparedPattern, usePinyin)
 			scoreMatchUs += time.Since(scoreMatchStart).Microseconds()
-			if !matched {
+			if !matchResult.IsMatch {
 				continue
 			}
 
-			if !isMatch || score > bestScore {
+			if !isMatch || matchResult.Score > bestScore {
 				isMatch = true
-				bestScore = score
+				bestScore = matchResult.Score
 			}
 		}
 
@@ -1585,12 +1588,15 @@ func (a *ApplicationPlugin) buildQueryEntry(ctx context.Context, info appInfo) a
 		// Translated titles can change with locale, so keep the translated form in
 		// the entry used by matching and ignore rules.
 		displayName := a.api.GetTranslation(ctx, info.Name)
-		entry.searchCandidates = info.GetSearchCandidates(displayName)
 		entry.ignoreCandidates = buildIgnoreRuleCandidates(info, displayName)
 		return entry
 	}
 
-	entry.searchCandidates = info.GetSearchCandidates(info.Name)
+	searchCandidates := info.GetSearchCandidates(info.Name)
+	entry.preparedSearchCandidates = make([]*fuzzymatch.PreparedText, 0, len(searchCandidates))
+	for _, candidate := range searchCandidates {
+		entry.preparedSearchCandidates = append(entry.preparedSearchCandidates, fuzzymatch.PrepareText(candidate))
+	}
 	entry.ignoreCandidates = buildIgnoreRuleCandidates(info, info.Name)
 	return entry
 }
@@ -1603,13 +1609,17 @@ func (a *ApplicationPlugin) getQueryEntriesSnapshot() ([]appQueryEntry, uint64) 
 	return entries, generation
 }
 
-func (a *ApplicationPlugin) resolveQueryEntryDisplay(ctx context.Context, entry appQueryEntry) (displayName string, displayPath string, searchCandidates []string) {
+func (a *ApplicationPlugin) resolveQueryEntryDisplay(ctx context.Context, entry appQueryEntry) (displayName string, displayPath string, searchCandidates []*fuzzymatch.PreparedText) {
 	displayName = entry.info.Name
 	if strings.HasPrefix(displayName, "i18n:") {
 		displayName = a.api.GetTranslation(ctx, displayName)
-		searchCandidates = entry.info.GetSearchCandidates(displayName)
+		candidateTexts := entry.info.GetSearchCandidates(displayName)
+		searchCandidates = make([]*fuzzymatch.PreparedText, 0, len(candidateTexts))
+		for _, candidate := range candidateTexts {
+			searchCandidates = append(searchCandidates, fuzzymatch.PrepareText(candidate))
+		}
 	} else {
-		searchCandidates = entry.searchCandidates
+		searchCandidates = entry.preparedSearchCandidates
 	}
 
 	displayPath = entry.info.GetDisplayPath()

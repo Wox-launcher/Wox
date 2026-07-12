@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"wox/common"
 	"wox/i18n"
@@ -33,8 +34,10 @@ func init() {
 }
 
 type SysPlugin struct {
-	api      plugin.API
-	commands []SysCommand
+	api                  plugin.API
+	commands             []SysCommand
+	commandSearchIndexMu sync.RWMutex
+	commandSearchIndexes map[i18n.LangCode][][]*fuzzymatch.PreparedText
 }
 
 type SysCommand struct {
@@ -111,6 +114,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	if util.IsDev() {
 		r.commands = append(r.commands, r.buildDevCommands()...)
 	}
+	r.getCommandSearchIndex(ctx)
 
 	r.api.OnMRURestore(ctx, r.handleMRURestore)
 }
@@ -588,10 +592,21 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 
 	queryStart := time.Now()
 	usePinyin := setting.GetSettingManager().GetWoxSetting(ctx).UsePinYin.Get()
+	search := strings.TrimSpace(query.Search)
+	var preparedPattern *fuzzymatch.PreparedPattern
+	var commandSearchIndex [][]*fuzzymatch.PreparedText
+	if search != "" {
+		preparedPattern = fuzzymatch.PreparePattern(search)
+		commandSearchIndex = r.getCommandSearchIndex(ctx)
+	}
 	var results []plugin.QueryResult
 	commandMatchStart := time.Now()
-	for _, command := range r.commands {
-		if matched, score := r.commandMatches(ctx, command, query.Search, usePinyin); matched {
+	for i, command := range r.commands {
+		var candidates []*fuzzymatch.PreparedText
+		if commandSearchIndex != nil {
+			candidates = commandSearchIndex[i]
+		}
+		if matched, score := r.commandMatches(command, search, candidates, preparedPattern, usePinyin); matched {
 			results = append(results, r.buildCommandResult(ctx, query, command, score))
 		}
 	}
@@ -660,26 +675,18 @@ func (r *SysPlugin) findCommand(commandID string) (SysCommand, bool) {
 	return SysCommand{}, false
 }
 
-func (r *SysPlugin) commandMatches(ctx context.Context, command SysCommand, search string, usePinyin bool) (bool, int64) {
+func (r *SysPlugin) commandMatches(command SysCommand, search string, candidates []*fuzzymatch.PreparedText, preparedPattern *fuzzymatch.PreparedPattern, usePinyin bool) (bool, int64) {
 	if !r.isCommandAvailable(command) {
 		return false, 0
 	}
 
-	search = strings.TrimSpace(search)
 	if search == "" {
 		return true, 100
 	}
 
-	candidates := []string{
-		command.ID,
-		i18n.GetI18nManager().TranslateWox(ctx, command.Title),
-		i18n.GetI18nManager().TranslateWoxEnUs(ctx, command.Title),
-	}
-	candidates = append(candidates, command.Aliases...)
-
 	var bestScore int64
 	for _, candidate := range candidates {
-		matchResult := fuzzymatch.FuzzyMatch(candidate, search, usePinyin)
+		matchResult := fuzzymatch.FuzzyMatchPrepared(candidate, preparedPattern, usePinyin)
 		if matchResult.IsMatch && matchResult.Score > bestScore {
 			bestScore = matchResult.Score
 		}
@@ -689,6 +696,46 @@ func (r *SysPlugin) commandMatches(ctx context.Context, command SysCommand, sear
 		return true, bestScore
 	}
 	return false, 0
+}
+
+// getCommandSearchIndex prepares static command candidates once per UI language.
+func (r *SysPlugin) getCommandSearchIndex(ctx context.Context) [][]*fuzzymatch.PreparedText {
+	langCode := i18n.GetI18nManager().GetCurrentLangCode()
+	r.commandSearchIndexMu.RLock()
+	index, ok := r.commandSearchIndexes[langCode]
+	r.commandSearchIndexMu.RUnlock()
+	if ok {
+		return index
+	}
+
+	index = make([][]*fuzzymatch.PreparedText, len(r.commands))
+	for i, command := range r.commands {
+		candidateStrings := make([]string, 0, len(command.Aliases)+3)
+		candidateStrings = append(candidateStrings,
+			command.ID,
+			i18n.GetI18nManager().TranslateWox(ctx, command.Title),
+			i18n.GetI18nManager().TranslateWoxEnUs(ctx, command.Title),
+		)
+		candidateStrings = append(candidateStrings, command.Aliases...)
+
+		candidates := make([]*fuzzymatch.PreparedText, 0, len(candidateStrings))
+		for _, candidate := range candidateStrings {
+			candidates = append(candidates, fuzzymatch.PrepareText(candidate))
+		}
+		index[i] = candidates
+	}
+
+	r.commandSearchIndexMu.Lock()
+	if r.commandSearchIndexes == nil {
+		r.commandSearchIndexes = make(map[i18n.LangCode][][]*fuzzymatch.PreparedText)
+	}
+	if existing, exists := r.commandSearchIndexes[langCode]; exists {
+		index = existing
+	} else {
+		r.commandSearchIndexes[langCode] = index
+	}
+	r.commandSearchIndexMu.Unlock()
+	return index
 }
 
 func (r *SysPlugin) isCommandAvailable(command SysCommand) bool {

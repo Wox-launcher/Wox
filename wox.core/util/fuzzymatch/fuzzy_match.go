@@ -21,6 +21,24 @@ type FuzzyMatchResult struct {
 	Score   int64 // The match score (higher is better)
 }
 
+// PreparedText stores query-independent text data for repeated fuzzy matching.
+type PreparedText struct {
+	raw                     string
+	isASCII                 bool
+	originalRunes           []rune
+	normalizedRunes         []rune
+	hasChinese              bool
+	pinyinSegments          []PinyinSegment
+	pinyinLetterUpperBounds [26]int
+}
+
+// PreparedPattern stores normalized pattern data that can be shared across candidates.
+type PreparedPattern struct {
+	raw             string
+	isASCII         bool
+	normalizedRunes []rune
+}
+
 // Scoring constants inspired by fzf algorithm
 const (
 	scoreMatch          = 16
@@ -87,6 +105,74 @@ func FuzzyMatch(text string, pattern string, usePinYin bool) FuzzyMatchResult {
 	textRunes := *textBufPtr
 	originalRunes := *originalBufPtr
 
+	return fuzzyMatchRunes(text, pattern, originalRunes, textRunes, patternRunes, hasChineseChar, nil, nil, usePinYin)
+}
+
+// PrepareText precomputes immutable text data for repeated fuzzy matching.
+func PrepareText(text string) *PreparedText {
+	prepared := &PreparedText{
+		raw:     text,
+		isASCII: isASCII(text),
+	}
+	if text == "" {
+		return prepared
+	}
+
+	runeCount := 0
+	for range text {
+		runeCount++
+	}
+	prepared.originalRunes = make([]rune, 0, runeCount)
+	prepared.normalizedRunes = make([]rune, 0, runeCount)
+	prepared.hasChinese = processText(text, &prepared.originalRunes, &prepared.normalizedRunes)
+	if prepared.hasChinese {
+		prepared.pinyinSegments = getPinYin(text)
+		prepared.pinyinLetterUpperBounds = buildPinyinLetterUpperBounds(prepared.pinyinSegments)
+	}
+	return prepared
+}
+
+// PreparePattern normalizes a pattern once for matching against many candidates.
+func PreparePattern(pattern string) *PreparedPattern {
+	prepared := &PreparedPattern{
+		raw:     pattern,
+		isASCII: isASCII(pattern),
+	}
+	if pattern == "" {
+		return prepared
+	}
+
+	prepared.normalizedRunes = normalizeToRunes(pattern, make([]rune, 0, len(pattern)))
+	return prepared
+}
+
+// FuzzyMatchPrepared matches precomputed text and pattern data with FuzzyMatch semantics.
+func FuzzyMatchPrepared(text *PreparedText, pattern *PreparedPattern, usePinYin bool) FuzzyMatchResult {
+	if pattern.raw == "" {
+		return FuzzyMatchResult{IsMatch: true, Score: 0}
+	}
+	if text.raw == "" {
+		return FuzzyMatchResult{IsMatch: false, Score: 0}
+	}
+	if text.isASCII && pattern.isASCII {
+		return fuzzyMatchASCII(text.raw, pattern.raw)
+	}
+
+	return fuzzyMatchRunes(
+		text.raw,
+		pattern.raw,
+		text.originalRunes,
+		text.normalizedRunes,
+		pattern.normalizedRunes,
+		text.hasChinese,
+		text.pinyinSegments,
+		&text.pinyinLetterUpperBounds,
+		usePinYin,
+	)
+}
+
+// fuzzyMatchRunes applies the shared scoring pipeline to normalized text and pattern data.
+func fuzzyMatchRunes(text string, pattern string, originalRunes []rune, textRunes []rune, patternRunes []rune, hasChineseChar bool, pinyinSegments []PinyinSegment, pinyinLetterUpperBounds *[26]int, usePinYin bool) FuzzyMatchResult {
 	// Try exact match first (highest priority)
 	if equalRunes(textRunes, patternRunes) {
 		return FuzzyMatchResult{IsMatch: true, Score: bonusExactMatch + int64(len(pattern)*scoreMatch)}
@@ -107,9 +193,14 @@ func FuzzyMatch(text string, pattern string, usePinYin bool) FuzzyMatchResult {
 
 	// Try pinyin matching for Chinese text
 	if usePinYin && hasChineseChar {
-		pinyinResult := matchPinyinStrict(text, patternRunes)
-		if pinyinResult.IsMatch {
-			return pinyinResult
+		if pinyinLetterUpperBounds == nil || canPossiblyMatchPinyin(patternRunes, *pinyinLetterUpperBounds) {
+			if pinyinSegments == nil {
+				pinyinSegments = getPinYin(text)
+			}
+			pinyinResult := matchPinyinStrict(pinyinSegments, patternRunes)
+			if pinyinResult.IsMatch {
+				return pinyinResult
+			}
 		}
 	}
 
@@ -577,12 +668,54 @@ type pinyinSearchState struct {
 	matchMode           int // 0: Any, 1: FirstLetter, 2: FullPinyin
 }
 
+// buildPinyinLetterUpperBounds computes a lossless letter-count upper bound across pinyin variants.
+func buildPinyinLetterUpperBounds(segments []PinyinSegment) [26]int {
+	var total [26]int
+	for _, segment := range segments {
+		var segmentMaximum [26]int
+		for _, syllable := range segment.Syllables {
+			var syllableCounts [26]int
+			for i := 0; i < len(syllable); i++ {
+				letter := toLowerByte(syllable[i])
+				if letter >= 'a' && letter <= 'z' {
+					syllableCounts[letter-'a']++
+				}
+			}
+			for i, count := range syllableCounts {
+				if count > segmentMaximum[i] {
+					segmentMaximum[i] = count
+				}
+			}
+		}
+		for i, count := range segmentMaximum {
+			total[i] += count
+		}
+	}
+	return total
+}
+
+// canPossiblyMatchPinyin rejects only patterns whose letter counts exceed every possible pinyin path.
+func canPossiblyMatchPinyin(patternRunes []rune, upperBounds [26]int) bool {
+	var required [26]int
+	for _, patternRune := range patternRunes {
+		patternRune = toLowerASCII(patternRune)
+		if patternRune < 'a' || patternRune > 'z' {
+			return true
+		}
+		index := patternRune - 'a'
+		required[index]++
+		if required[index] > upperBounds[index] {
+			return false
+		}
+	}
+	return true
+}
+
 // matchPinyinStrict performs strict pinyin matching using segment graph.
 // Only allows: all first letters (e.g., "nh" for "你好") OR all full pinyin (e.g., "nihao" for "你好")
 // Does NOT allow mixed mode (e.g., "nhao" or "nih")
 // Now uses a state-based search (limited beam) to handle polyphonic ambiguities without exponential complexity.
-func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
-	segments := getPinYin(text)
+func matchPinyinStrict(segments []PinyinSegment, patternRunes []rune) FuzzyMatchResult {
 	if len(segments) == 0 {
 		return FuzzyMatchResult{IsMatch: false, Score: 0}
 	}

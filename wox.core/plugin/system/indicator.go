@@ -4,14 +4,16 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/setting"
 	"wox/util"
+	"wox/util/fuzzymatch"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 )
 
 var indicatorIcon = common.PluginIndicatorIcon
@@ -22,6 +24,36 @@ func init() {
 
 type IndicatorPlugin struct {
 	api plugin.API
+	// Search metadata changes rarely, so keep translated and normalized candidates out of the query hot path.
+	searchIndexMu  sync.RWMutex
+	searchIndex    []indicatorSearchEntry
+	searchIndexKey string
+}
+
+type indicatorSearchCandidate struct {
+	text     string
+	prepared *fuzzymatch.PreparedText
+}
+
+type indicatorCommandSearchEntry struct {
+	command             plugin.MetadataCommand
+	preparedCommand     *fuzzymatch.PreparedText
+	preparedDescription *fuzzymatch.PreparedText
+}
+
+type indicatorSearchEntry struct {
+	pluginInstance        *plugin.Instance
+	primaryTriggerKeyword string
+	triggerKeywords       []indicatorSearchCandidate
+	pluginName            string
+	preparedPluginName    *fuzzymatch.PreparedText
+	preparedDescription   *fuzzymatch.PreparedText
+	commands              []indicatorCommandSearchEntry
+}
+
+type indicatorMatchedCommand struct {
+	command plugin.MetadataCommand
+	score   int64
 }
 
 func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
@@ -64,55 +96,38 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	}
 
 	pluginInstances := plugin.GetPluginManager().GetPluginInstances()
+	searchIndex := i.getSearchIndex(ctx, pluginInstances)
+	preparedPattern := fuzzymatch.PreparePattern(search)
+	usePinyin := setting.GetSettingManager().GetWoxSetting(ctx).UsePinYin.Get()
 
 	var results []plugin.QueryResult
-	for _, pluginInstance := range pluginInstances {
-		storePlugin, storeErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
-		hasStorePlugin := storeErr == nil
-		upgradeTails := i.buildIndicatorUpgradeTails(pluginInstance.Metadata.Version, storePlugin.Version, hasStorePlugin)
-
-		primaryTriggerKeyword := lo.FindOrElse(pluginInstance.GetTriggerKeywords(), "", func(triggerKeyword string) bool {
-			return triggerKeyword != "*"
-		})
-
+	for _, entry := range searchIndex {
 		var matchedTriggerKeyword string
 		var triggerKeywordScore int64
-		for _, triggerKeyword := range pluginInstance.GetTriggerKeywords() {
-			if triggerKeyword == "*" {
-				continue
-			}
-			match, score := plugin.IsStringMatchScoreNoPinYin(ctx, triggerKeyword, search)
-			if match && score > triggerKeywordScore {
-				matchedTriggerKeyword = triggerKeyword
-				triggerKeywordScore = score
+		for _, triggerKeyword := range entry.triggerKeywords {
+			matchResult := fuzzymatch.FuzzyMatchPrepared(triggerKeyword.prepared, preparedPattern, false)
+			if matchResult.IsMatch && matchResult.Score > triggerKeywordScore {
+				matchedTriggerKeyword = triggerKeyword.text
+				triggerKeywordScore = matchResult.Score
 			}
 		}
 
-		pluginName := pluginInstance.GetName(ctx)
-		pluginDescription := pluginInstance.GetDescription(ctx)
+		pluginNameMatch := fuzzymatch.FuzzyMatchPrepared(entry.preparedPluginName, preparedPattern, usePinyin)
+		pluginDescriptionMatch := fuzzymatch.FuzzyMatchPrepared(entry.preparedDescription, preparedPattern, usePinyin)
+		pluginTextMatch := pluginNameMatch.IsMatch || pluginDescriptionMatch.IsMatch
+		pluginTextScore := max(pluginNameMatch.Score, pluginDescriptionMatch.Score)
 
-		pluginNameMatch, pluginNameScore := plugin.IsStringMatchScore(ctx, pluginName, search)
-		pluginDescMatch, pluginDescScore := plugin.IsStringMatchScore(ctx, pluginDescription, search)
-		pluginTextMatch := pluginNameMatch || pluginDescMatch
-		pluginTextScore := max(pluginNameScore, pluginDescScore)
-
-		type matchedCommand struct {
-			command plugin.MetadataCommand
-			score   int64
-		}
-
-		var matchedCommands []matchedCommand
+		var matchedCommands []indicatorMatchedCommand
 		var matchedCommandsBestScore int64
-		translatedCommands := pluginInstance.GetQueryCommands()
-		for _, metadataCommand := range translatedCommands {
-			cmdMatch, cmdScore := plugin.IsStringMatchScoreNoPinYin(ctx, metadataCommand.Command, search)
-			descMatch, descScore := plugin.IsStringMatchScore(ctx, string(metadataCommand.Description), search)
-			if !cmdMatch && !descMatch {
+		for _, commandEntry := range entry.commands {
+			commandMatch := fuzzymatch.FuzzyMatchPrepared(commandEntry.preparedCommand, preparedPattern, false)
+			descriptionMatch := fuzzymatch.FuzzyMatchPrepared(commandEntry.preparedDescription, preparedPattern, usePinyin)
+			if !commandMatch.IsMatch && !descriptionMatch.IsMatch {
 				continue
 			}
-			commandBestScore := max(cmdScore, descScore)
-			matchedCommands = append(matchedCommands, matchedCommand{
-				command: metadataCommand,
+			commandBestScore := max(commandMatch.Score, descriptionMatch.Score)
+			matchedCommands = append(matchedCommands, indicatorMatchedCommand{
+				command: commandEntry.command,
 				score:   commandBestScore,
 			})
 			if commandBestScore > matchedCommandsBestScore {
@@ -127,7 +142,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 
 		triggerKeywordToUse := matchedTriggerKeyword
 		if triggerKeywordToUse == "" {
-			triggerKeywordToUse = primaryTriggerKeyword
+			triggerKeywordToUse = entry.primaryTriggerKeyword
 		}
 		if triggerKeywordToUse == "" {
 			continue
@@ -137,6 +152,14 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		if resultBaseScore <= 0 {
 			resultBaseScore = 10
 		}
+
+		pluginInstance := entry.pluginInstance
+		storePlugin, storeErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
+		hasStorePlugin := storeErr == nil
+		isUpgradable := hasStorePlugin && plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, storePlugin.Version)
+		upgradeTails := i.buildIndicatorUpgradeTails(pluginInstance.Metadata.Version, storePlugin.Version, hasStorePlugin)
+		openSettingsAction := i.createOpenPluginSettingsAction(ctx, pluginInstance, entry.pluginName)
+		resultIcon := pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon)
 
 		actions := []plugin.QueryResultAction{
 			{
@@ -154,28 +177,29 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 				},
 			},
 		}
-		actions = append(actions, i.createOpenPluginSettingsAction(ctx, pluginInstance))
-		if hasStorePlugin && plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, storePlugin.Version) {
+		actions = append(actions, openSettingsAction)
+		if isUpgradable {
 			actions = append(actions, i.createIndicatorUpgradeAction(storePlugin))
 		}
 
 		results = append(results, plugin.QueryResult{
 			Id:       uuid.NewString(),
 			Title:    triggerKeywordToUse,
-			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginName),
+			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), entry.pluginName),
 			Score:    resultBaseScore,
-			Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
+			Icon:     resultIcon,
 			Tails:    upgradeTails,
 			Actions:  actions,
 		})
 
-		var commandsToShow []matchedCommand
+		var commandsToShow []indicatorMatchedCommand
 		if len(matchedCommands) > 0 {
 			commandsToShow = matchedCommands
 		} else {
-			commandsToShow = lo.Map(translatedCommands, func(cmd plugin.MetadataCommand, index int) matchedCommand {
-				return matchedCommand{command: cmd, score: resultBaseScore - 1}
-			})
+			commandsToShow = make([]indicatorMatchedCommand, 0, len(entry.commands))
+			for _, commandEntry := range entry.commands {
+				commandsToShow = append(commandsToShow, indicatorMatchedCommand{command: commandEntry.command, score: resultBaseScore - 1})
+			}
 		}
 
 		for _, matchedCommandShadow := range commandsToShow {
@@ -204,8 +228,8 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 					},
 				},
 			}
-			commandActions = append(commandActions, i.createOpenPluginSettingsAction(ctx, pluginInstance))
-			if hasStorePlugin && plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, storePlugin.Version) {
+			commandActions = append(commandActions, openSettingsAction)
+			if isUpgradable {
 				commandActions = append(commandActions, i.createIndicatorUpgradeAction(storePlugin))
 			}
 
@@ -214,13 +238,86 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 				Title:    fmt.Sprintf("%s %s ", triggerKeywordToUse, metadataCommand.Command),
 				SubTitle: string(metadataCommand.Description),
 				Score:    commandScore,
-				Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
+				Icon:     resultIcon,
 				Tails:    upgradeTails,
 				Actions:  commandActions,
 			})
 		}
 	}
 	return plugin.NewQueryResponse(results)
+}
+
+// getSearchIndex reuses translated and normalized plugin metadata until the plugin snapshot changes.
+func (i *IndicatorPlugin) getSearchIndex(ctx context.Context, pluginInstances []*plugin.Instance) []indicatorSearchEntry {
+	indexKey := buildIndicatorSearchIndexKey(pluginInstances)
+	i.searchIndexMu.RLock()
+	if i.searchIndexKey == indexKey {
+		index := i.searchIndex
+		i.searchIndexMu.RUnlock()
+		return index
+	}
+	i.searchIndexMu.RUnlock()
+
+	index := make([]indicatorSearchEntry, 0, len(pluginInstances))
+	for _, pluginInstance := range pluginInstances {
+		triggerKeywords := pluginInstance.GetTriggerKeywords()
+		entry := indicatorSearchEntry{
+			pluginInstance:      pluginInstance,
+			pluginName:          pluginInstance.GetName(ctx),
+			preparedDescription: fuzzymatch.PrepareText(pluginInstance.GetDescription(ctx)),
+		}
+		entry.preparedPluginName = fuzzymatch.PrepareText(entry.pluginName)
+		for _, triggerKeyword := range triggerKeywords {
+			if triggerKeyword == "*" {
+				continue
+			}
+			if entry.primaryTriggerKeyword == "" {
+				entry.primaryTriggerKeyword = triggerKeyword
+			}
+			entry.triggerKeywords = append(entry.triggerKeywords, indicatorSearchCandidate{
+				text:     triggerKeyword,
+				prepared: fuzzymatch.PrepareText(triggerKeyword),
+			})
+		}
+
+		commands := pluginInstance.GetQueryCommands()
+		entry.commands = make([]indicatorCommandSearchEntry, 0, len(commands))
+		for _, command := range commands {
+			entry.commands = append(entry.commands, indicatorCommandSearchEntry{
+				command:             command,
+				preparedCommand:     fuzzymatch.PrepareText(command.Command),
+				preparedDescription: fuzzymatch.PrepareText(string(command.Description)),
+			})
+		}
+		index = append(index, entry)
+	}
+
+	i.searchIndexMu.Lock()
+	if i.searchIndexKey != indexKey {
+		i.searchIndex = index
+		i.searchIndexKey = indexKey
+	} else {
+		index = i.searchIndex
+	}
+	i.searchIndexMu.Unlock()
+	return index
+}
+
+// buildIndicatorSearchIndexKey invalidates cached translations when language, plugins, keywords, or runtime commands change.
+func buildIndicatorSearchIndexKey(pluginInstances []*plugin.Instance) string {
+	var builder strings.Builder
+	builder.WriteString(string(i18n.GetI18nManager().GetCurrentLangCode()))
+	for _, pluginInstance := range pluginInstances {
+		fmt.Fprintf(&builder, "|%p", pluginInstance)
+		for _, triggerKeyword := range pluginInstance.GetTriggerKeywords() {
+			fmt.Fprintf(&builder, "|k%d:%s", len(triggerKeyword), triggerKeyword)
+		}
+		for _, command := range pluginInstance.RuntimeQueryCommands {
+			description := string(command.Description)
+			fmt.Fprintf(&builder, "|c%d:%s%d:%s", len(command.Command), command.Command, len(description), description)
+		}
+	}
+	return builder.String()
 }
 
 func (i *IndicatorPlugin) buildIndicatorUpgradeTails(installedVersion string, storeVersion string, hasStoreVersion bool) []plugin.QueryResultTail {
@@ -279,9 +376,9 @@ func (i *IndicatorPlugin) createIndicatorUpgradeAction(storePlugin plugin.StoreP
 	}
 }
 
-func (i *IndicatorPlugin) createOpenPluginSettingsAction(ctx context.Context, pluginInstance *plugin.Instance) plugin.QueryResultAction {
+func (i *IndicatorPlugin) createOpenPluginSettingsAction(ctx context.Context, pluginInstance *plugin.Instance, pluginName string) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
-		Name:                   fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_open_plugin_settings"), pluginInstance.GetName(ctx)),
+		Name:                   fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_open_plugin_settings"), pluginName),
 		Icon:                   pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, common.SettingIcon),
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -339,7 +436,7 @@ func (i *IndicatorPlugin) handleMRURestore(ctx context.Context, mruData plugin.M
 			},
 		},
 	}
-	actions = append(actions, i.createOpenPluginSettingsAction(ctx, pluginInstance))
+	actions = append(actions, i.createOpenPluginSettingsAction(ctx, pluginInstance, translatedName))
 	storePlugin, storeErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
 	if storeErr == nil {
 		upgradeTails = i.buildIndicatorUpgradeTails(pluginInstance.Metadata.Version, storePlugin.Version, true)
