@@ -36,14 +36,44 @@ TextOverlayAttachment TextOverlayCreateWindow(
     float windowHeight,
     float maxWindowHeight
 );
+TextOverlayAttachment TextOverlayUpdateWindow(
+    void* hwnd,
+    char* message,
+    int iconLen,
+    bool loading,
+    bool centerContent,
+    float fontSize,
+    float iconSize,
+    int tooltipIconLen,
+    float tooltipIconSize,
+    bool showCopyButton,
+    bool closable,
+    int autoCloseSeconds,
+    float windowWidth,
+    float minWindowWidth,
+    float maxWindowWidth,
+    float windowHeight,
+    float maxWindowHeight
+);
 void TextOverlayDestroyWindow(void* hwnd);
 */
 import "C"
 import (
+	"sync"
 	"unsafe"
 
 	"wox/util/overlay"
 )
+
+// windowsTextRendererRegistration prevents stale release callbacks from destroying a reused HWND.
+type windowsTextRendererRegistration struct {
+	handle     uintptr
+	generation uint64
+}
+
+var windowsTextRenderersMu sync.Mutex
+var windowsTextRenderers = map[string]windowsTextRendererRegistration{}
+var windowsTextRendererGeneration uint64
 
 func newTextRenderer(opts Options) (*textRenderer, bool) {
 	cName := C.CString(opts.Window.ID)
@@ -77,6 +107,43 @@ func newTextRenderer(opts Options) (*textRenderer, bool) {
 		cTooltipIconLen = C.int(len(tooltipPngBytes))
 	}
 
+	windowsTextRenderersMu.Lock()
+	defer windowsTextRenderersMu.Unlock()
+
+	if existing, ok := windowsTextRenderers[opts.Window.ID]; ok && existing.handle != 0 {
+		result := C.TextOverlayUpdateWindow(
+			unsafe.Pointer(existing.handle),
+			cMessage,
+			cIconLen,
+			C.bool(opts.Loading),
+			C.bool(opts.CenterContent),
+			C.float(opts.FontSize),
+			C.float(opts.IconSize),
+			cTooltipIconLen,
+			C.float(opts.TooltipIconSize),
+			C.bool(opts.ShowCopyButton),
+			C.bool(opts.Closable),
+			C.int(opts.AutoCloseSeconds),
+			C.float(opts.Window.Width),
+			C.float(opts.Window.MinWidth),
+			C.float(opts.Window.MaxWidth),
+			C.float(opts.Window.Height),
+			C.float(opts.Window.MaxHeight),
+		)
+		if result.handle != nil {
+			windowsTextRendererGeneration++
+			windowsTextRenderers[opts.Window.ID] = windowsTextRendererRegistration{handle: uintptr(result.handle), generation: windowsTextRendererGeneration}
+			return &textRenderer{
+				id:         opts.Window.ID,
+				generation: windowsTextRendererGeneration,
+				handle:     uintptr(result.handle),
+				width:      float64(result.width),
+				height:     float64(result.height),
+			}, true
+		}
+		delete(windowsTextRenderers, opts.Window.ID)
+	}
+
 	result := C.TextOverlayCreateWindow(
 		cName,
 		cMessage,
@@ -104,10 +171,14 @@ func newTextRenderer(opts Options) (*textRenderer, bool) {
 	if result.handle == nil {
 		return nil, false
 	}
+	windowsTextRendererGeneration++
+	windowsTextRenderers[opts.Window.ID] = windowsTextRendererRegistration{handle: uintptr(result.handle), generation: windowsTextRendererGeneration}
 	return &textRenderer{
-		handle: uintptr(result.handle),
-		width:  float64(result.width),
-		height: float64(result.height),
+		id:         opts.Window.ID,
+		generation: windowsTextRendererGeneration,
+		handle:     uintptr(result.handle),
+		width:      float64(result.width),
+		height:     float64(result.height),
 	}, true
 }
 
@@ -127,6 +198,21 @@ func (renderer *textRenderer) destroy() {
 	if renderer == nil || renderer.handle == 0 {
 		return
 	}
-	C.TextOverlayDestroyWindow(unsafe.Pointer(renderer.handle))
+
+	handle := renderer.handle
+	shouldDestroy := true
+	windowsTextRenderersMu.Lock()
+	if current, ok := windowsTextRenderers[renderer.id]; ok {
+		if current.handle == handle && current.generation == renderer.generation {
+			delete(windowsTextRenderers, renderer.id)
+		} else if current.handle == handle {
+			shouldDestroy = false
+		}
+	}
+	windowsTextRenderersMu.Unlock()
+
+	if shouldDestroy {
+		C.TextOverlayDestroyWindow(unsafe.Pointer(handle))
+	}
 	renderer.handle = 0
 }

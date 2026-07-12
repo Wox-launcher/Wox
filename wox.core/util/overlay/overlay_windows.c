@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define COBJMACROS
 #include <windows.h>
+#include <stdint.h>
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <uxtheme.h>
@@ -56,6 +57,7 @@ typedef struct {
     bool absolutePosition;
     bool preservePosition;
     int stickyWindowPid; // 0 = Screen, >0 = Window
+    uintptr_t stickyWindowHandle;
     int anchor;          // 0-8
     bool movable;
     bool resizable;
@@ -181,6 +183,8 @@ static BOOL TryEnableAcrylic(HWND hwnd)
 typedef UINT(WINAPI *pfnGetDpiForSystem)(void);
 typedef UINT(WINAPI *pfnGetDpiForWindow)(HWND);
 typedef BOOL(WINAPI *pfnSetProcessDpiAwarenessContext)(HANDLE);
+typedef void *(WINAPI *pfnAttachStickyHook)(HWND, DWORD, HWND);
+typedef BOOL(WINAPI *pfnDetachStickyHook)(void *);
 
 static UINT GetSystemDpiSafe(void)
 {
@@ -302,6 +306,7 @@ typedef struct OverlayWindow
     float cornerRadius;
     float aspectRatio;
     int stickyWindowPid;
+    HWND stickyWindowHwnd;
     int anchor;
     float offsetX;
     float offsetY;
@@ -331,6 +336,9 @@ typedef struct OverlayWindow
     
     HWND targetHwnd;
     HWINEVENTHOOK locationHook;
+    HMODULE windowHookModule;
+    void *injectedStickyHook;
+    HWND injectedStickyTarget;
 
     struct OverlayWindow *next;
 } OverlayWindow;
@@ -351,6 +359,7 @@ typedef struct OverlayPayload
     BOOL absolutePosition;
     BOOL preservePosition;
     int stickyWindowPid;
+    HWND stickyWindowHwnd;
     int anchor;
     BOOL movable;
     BOOL resizable;
@@ -380,6 +389,8 @@ static HANDLE g_overlayThread = NULL;
 static DWORD g_overlayThreadId = 0;
 static HWND g_controllerHwnd = NULL;
 static INIT_ONCE g_initOnce = INIT_ONCE_STATIC_INIT;
+static WCHAR *g_windowHookDllPath = NULL;
+static UINT g_stickyChangedMessage = 0;
 
 
 // -----------------------------------------------------------------------------
@@ -388,12 +399,14 @@ static INIT_ONCE g_initOnce = INIT_ONCE_STATIC_INIT;
 static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static LRESULT CALLBACK OverlayControllerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static DWORD WINAPI OverlayThreadProc(LPVOID param);
-static BOOL GetTargetContentRect(HWND target, RECT *outRect);
+static BOOL GetTargetWindowRect(HWND target, RECT *outRect);
 static void StartLiveFollowTimerIfNeeded(OverlayWindow *ow);
 static void StopLiveFollowTimer(OverlayWindow *ow);
 static void RepositionOverlayToTargetRect(OverlayWindow *ow, const RECT *targetRect, BOOL preserveSmallPredictiveCorrection);
 static void ShowOverlayWindowWithFocusPolicy(OverlayWindow *ow);
 static void NotifyOverlayClose(OverlayWindow *ow);
+static void AttachInjectedStickyHook(OverlayWindow *ow);
+static void DetachInjectedStickyHook(OverlayWindow *ow);
 
 // -----------------------------------------------------------------------------
 // Overlay Helpers
@@ -533,6 +546,16 @@ static BOOL FindWindowByPid(int pid, HWND *out)
     return data.hwnd != NULL;
 }
 
+// IsWindowFromPid validates an exact sticky HWND before it is reused across tracking ticks.
+static BOOL IsWindowFromPid(HWND hwnd, int pid)
+{
+    if (!hwnd || !IsWindow(hwnd) || pid <= 0)
+        return FALSE;
+    DWORD windowPid = 0;
+    GetWindowThreadProcessId(hwnd, &windowPid);
+    return (int)windowPid == pid;
+}
+
 static void UpdateOverlayOwner(HWND hwnd, HWND target)
 {
     if (!hwnd)
@@ -600,30 +623,81 @@ static void StartTrackTimer(OverlayWindow *ow)
     }
 }
 
+// GetStickyChangedMessage shares the registered notification name with the injected DLL.
+static UINT GetStickyChangedMessage(void)
+{
+    if (g_stickyChangedMessage == 0)
+        g_stickyChangedMessage = RegisterWindowMessageW(L"Wox.WindowHook.StickyChanged.v1");
+    return g_stickyChangedMessage;
+}
+
+// DetachInjectedStickyHook removes the target subclass before unloading the DLL from Wox.
+static void DetachInjectedStickyHook(OverlayWindow *ow)
+{
+    if (!ow)
+        return;
+
+    if (ow->windowHookModule && ow->injectedStickyHook)
+    {
+        pfnDetachStickyHook detach = (pfnDetachStickyHook)GetProcAddress(ow->windowHookModule, "WoxWindowHookDetachSticky");
+        if (detach)
+            detach(ow->injectedStickyHook);
+    }
+    ow->injectedStickyHook = NULL;
+    ow->injectedStickyTarget = NULL;
+    if (ow->windowHookModule)
+    {
+        FreeLibrary(ow->windowHookModule);
+        ow->windowHookModule = NULL;
+    }
+}
+
+// AttachInjectedStickyHook adds the target-thread signal used instead of the fallback position sources.
+static void AttachInjectedStickyHook(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd || !ow->targetHwnd || ow->stickyWindowPid <= 0 || !g_windowHookDllPath)
+        return;
+    if (ow->injectedStickyHook && ow->injectedStickyTarget == ow->targetHwnd)
+        return;
+
+    DetachInjectedStickyHook(ow);
+    HMODULE module = LoadLibraryW(g_windowHookDllPath);
+    if (!module)
+        return;
+    pfnAttachStickyHook attach = (pfnAttachStickyHook)GetProcAddress(module, "WoxWindowHookAttachSticky");
+    if (!attach)
+    {
+        FreeLibrary(module);
+        return;
+    }
+
+    void *hook = attach(ow->targetHwnd, (DWORD)ow->stickyWindowPid, ow->hwnd);
+    if (!hook)
+    {
+        FreeLibrary(module);
+        return;
+    }
+    ow->windowHookModule = module;
+    ow->injectedStickyHook = hook;
+    ow->injectedStickyTarget = ow->targetHwnd;
+    StopLiveFollowTimer(ow);
+}
+
 static BOOL IsLeftButtonDown(void)
 {
     return (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 }
 
-static BOOL GetTargetContentRect(HWND target, RECT *outRect)
+static BOOL GetTargetWindowRect(HWND target, RECT *outRect)
 {
     if (!target || !IsWindow(target) || !outRect)
         return FALSE;
 
     RECT targetRect;
-    RECT clientRect;
-    if (GetClientRect(target, &clientRect))
-    {
-        POINT tl = {clientRect.left, clientRect.top};
-        POINT br = {clientRect.right, clientRect.bottom};
-        ClientToScreen(target, &tl);
-        ClientToScreen(target, &br);
-        targetRect.left = tl.x;
-        targetRect.top = tl.y;
-        targetRect.right = br.x;
-        targetRect.bottom = br.y;
-    }
-    else if (!GetWindowRect(target, &targetRect))
+    // DWM exposes the committed visual frame used by the compositor. Falling back
+    // to GetWindowRect keeps sticky overlays working when DWM bounds are unavailable.
+    if (FAILED(DwmGetWindowAttribute(target, DWMWA_EXTENDED_FRAME_BOUNDS, &targetRect, sizeof(targetRect))) &&
+        !GetWindowRect(target, &targetRect))
     {
         return FALSE;
     }
@@ -667,7 +741,7 @@ static BOOL GetPredictiveTargetRect(OverlayWindow *ow, RECT *outRect)
 
 static void StartLiveFollowTimerIfNeeded(OverlayWindow *ow)
 {
-    if (!ow || !ow->hwnd || ow->liveFollowActive || ow->stickyWindowPid <= 0 || !IsLeftButtonDown())
+    if (!ow || !ow->hwnd || ow->injectedStickyHook || ow->liveFollowActive || ow->stickyWindowPid <= 0 || !IsLeftButtonDown())
         return;
 
     // Optimization: Windows location hooks can still be coalesced during native
@@ -988,11 +1062,16 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     BOOL preserveLiveFollowFrame = ow->stickyWindowPid > 0 && ow->liveFollowActive;
     if (ow->stickyWindowPid > 0)
     {
-        HWND target = NULL;
-        if (FindWindowByPid(ow->stickyWindowPid, &target))
+        HWND target = ow->stickyWindowHwnd;
+        if (!IsWindowFromPid(target, ow->stickyWindowPid))
+        {
+            target = NULL;
+            FindWindowByPid(ow->stickyWindowPid, &target);
+        }
+        if (target)
         {
             ow->targetHwnd = target;
-            if (GetTargetContentRect(target, &targetRect))
+            if (GetTargetWindowRect(target, &targetRect))
             {
                 targetFound = TRUE;
                 if (IsLeftButtonDown())
@@ -1099,6 +1178,7 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     }
 
     StartTrackTimer(ow);
+    AttachInjectedStickyHook(ow);
 }
 
 static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BOOL isNew)
@@ -1107,6 +1187,7 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
         return;
 
     int previousStickyWindowPid = ow->stickyWindowPid;
+    HWND previousStickyWindowHwnd = ow->stickyWindowHwnd;
 
     if (isNew)
         ow->name = payload->name;
@@ -1132,6 +1213,7 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->transparent = payload->transparent;
     ow->hitTestIconOnly = payload->hitTestIconOnly;
     ow->stickyWindowPid = payload->stickyWindowPid;
+    ow->stickyWindowHwnd = payload->stickyWindowHwnd;
     ow->anchor = payload->anchor;
     ow->movable = payload->movable;
     ow->resizable = payload->resizable;
@@ -1169,12 +1251,12 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
             SetWindowLongPtrW(ow->hwnd, GWL_EXSTYLE, updatedExStyle);
         }
     }
-    if (!isNew && previousStickyWindowPid != ow->stickyWindowPid)
+    if (!isNew && (previousStickyWindowPid != ow->stickyWindowPid || previousStickyWindowHwnd != ow->stickyWindowHwnd))
     {
-        // Bug fix: predictive anchors are tied to a specific target window. When
-        // an overlay is reused for a different sticky PID, keep the generic API
-        // simple by clearing the old live-follow state at the platform boundary.
+        // Predictive anchors are tied to one exact target. Clear the old live-follow
+        // state when either the PID or the caller-provided HWND changes.
         StopLiveFollowTimer(ow);
+        DetachInjectedStickyHook(ow);
         if (ow->locationHook)
         {
             UnhookWinEvent(ow->locationHook);
@@ -1185,6 +1267,40 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     }
 
     free(payload);
+}
+
+// OverlayPayloadMatchesCurrent keeps repeated Show calls from relaying out and repainting an unchanged native attachment.
+static BOOL OverlayPayloadMatchesCurrent(OverlayWindow *ow, OverlayPayload *payload)
+{
+    if (!ow || !payload)
+        return FALSE;
+
+    return ow->transparent == payload->transparent &&
+           ow->hitTestIconOnly == payload->hitTestIconOnly &&
+           ow->closeOnEscape == payload->closeOnEscape &&
+           ow->takeFocus == payload->takeFocus &&
+           ow->nativeAttachment == payload->nativeAttachment &&
+           ow->nativeAttachmentKind == payload->nativeAttachmentKind &&
+           ow->nativeAttachmentHwnd == (HWND)payload->nativeAttachmentHandle &&
+           ow->nativeAttachmentWidth == payload->nativeAttachmentWidth &&
+           ow->nativeAttachmentHeight == payload->nativeAttachmentHeight &&
+           ow->topmost == payload->topmost &&
+           ow->absolutePosition == payload->absolutePosition &&
+           ow->preservePosition == payload->preservePosition &&
+           ow->stickyWindowPid == payload->stickyWindowPid &&
+           ow->stickyWindowHwnd == payload->stickyWindowHwnd &&
+           ow->anchor == payload->anchor &&
+           ow->movable == payload->movable &&
+           ow->resizable == payload->resizable &&
+           ow->cornerRadius == payload->cornerRadius &&
+           ow->aspectRatio == payload->aspectRatio &&
+           ow->offsetX == payload->offsetX &&
+           ow->offsetY == payload->offsetY &&
+           ow->width == payload->width &&
+           ow->minWidth == payload->minWidth &&
+           ow->maxWidth == payload->maxWidth &&
+           ow->height == payload->height &&
+           ow->maxHeight == payload->maxHeight;
 }
 
 static BOOL HandleOverlayClick(OverlayWindow *ow)
@@ -1213,9 +1329,7 @@ static void CALLBACK OverlayLocationChangeHook(HWINEVENTHOOK hWinEventHook, DWOR
     for (OverlayWindow *ow = g_overlays; ow; ow = ow->next)
     {
         if (ow->targetHwnd == hwnd && ow->hwnd && IsWindow(ow->hwnd))
-        {
             PostMessageW(ow->hwnd, WM_WOX_OVERLAY_REPOSITION, 0, 0);
-        }
     }
 }
 
@@ -1230,6 +1344,9 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
     }
 
     OverlayWindow *ow = (OverlayWindow *)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+
+    if (ow && uMsg == GetStickyChangedMessage() && (HWND)wParam == ow->targetHwnd)
+        uMsg = WM_WOX_OVERLAY_REPOSITION;
 
     switch (uMsg)
     {
@@ -1504,35 +1621,74 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                 return 0;
             if (ow->stickyWindowPid > 0)
             {
-                HWND target = NULL;
-                if (FindWindowByPid(ow->stickyWindowPid, &target))
+                // Keep following the exact window selected during initial layout. Tooltips and menus
+                // can share its PID and must not replace the sticky target while that HWND is alive.
+                HWND target = ow->targetHwnd;
+                if (!IsWindowFromPid(target, ow->stickyWindowPid))
                 {
-                    if (ow->targetHwnd != target || !ow->locationHook)
+                    target = ow->stickyWindowHwnd;
+                    if (!IsWindowFromPid(target, ow->stickyWindowPid))
                     {
-                        if (ow->locationHook) UnhookWinEvent(ow->locationHook);
+                        target = NULL;
+                        FindWindowByPid(ow->stickyWindowPid, &target);
+                    }
+                }
+                if (target)
+                {
+                    BOOL targetChanged = ow->targetHwnd != target;
+                    if (targetChanged)
+                    {
+                        if (ow->locationHook)
+                        {
+                            UnhookWinEvent(ow->locationHook);
+                            ow->locationHook = NULL;
+                        }
                         ow->targetHwnd = target;
+                        AttachInjectedStickyHook(ow);
+                    }
+                    if (ow->injectedStickyHook)
+                    {
+                        if (ow->locationHook)
+                        {
+                            // The injected target event is lower latency; WinEvent remains available only when injection fails.
+                            UnhookWinEvent(ow->locationHook);
+                            ow->locationHook = NULL;
+                        }
+                    }
+                    else if (!ow->locationHook)
+                    {
                         DWORD pid = 0;
                         DWORD tid = GetWindowThreadProcessId(target, &pid);
                         ow->locationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, 
                                                            NULL, OverlayLocationChangeHook, pid, tid, WINEVENT_OUTOFCONTEXT);
                     }
-                    StartLiveFollowTimerIfNeeded(ow);
-                    SendMessage(hwnd, WM_WOX_OVERLAY_REPOSITION, 0, 0);
+                    if (!ow->injectedStickyHook)
+                    {
+                        StartLiveFollowTimerIfNeeded(ow);
+                        SendMessage(hwnd, WM_WOX_OVERLAY_REPOSITION, 0, 0);
+                    }
                 }
                 else
                 {
-                   if (ow->locationHook) {
+                    DetachInjectedStickyHook(ow);
+                    if (ow->locationHook)
+                    {
                         UnhookWinEvent(ow->locationHook);
                         ow->locationHook = NULL;
-                   }
-                   ow->targetHwnd = NULL;
-                   DestroyWindow(hwnd);
+                    }
+                    ow->targetHwnd = NULL;
+                    DestroyWindow(hwnd);
                 }
             }
             return 0;
         }
         if (wParam == TIMER_LIVE_FOLLOW)
         {
+            if (ow->injectedStickyHook)
+            {
+                StopLiveFollowTimer(ow);
+                return 0;
+            }
             if (!IsLeftButtonDown() || ow->dragging)
             {
                 StopLiveFollowTimer(ow);
@@ -1543,7 +1699,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             RECT targetRect;
             BOOL targetFound = GetPredictiveTargetRect(ow, &targetRect);
             if (!targetFound && ow->targetHwnd && IsWindow(ow->targetHwnd))
-                targetFound = GetTargetContentRect(ow->targetHwnd, &targetRect);
+                targetFound = GetTargetWindowRect(ow->targetHwnd, &targetRect);
             if (!targetFound)
                 return 0;
 
@@ -1572,19 +1728,19 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 
         HWND target = ow->targetHwnd;
         RECT targetRect;
-        if (!GetTargetContentRect(target, &targetRect))
+        if (!GetTargetWindowRect(target, &targetRect))
         {
             return 0;
         }
 
-        if (IsLeftButtonDown())
+        if (!ow->injectedStickyHook && IsLeftButtonDown())
         {
             RefreshPredictiveAnchor(ow, &targetRect);
             StartLiveFollowTimerIfNeeded(ow);
         }
 
         SetOverlayZOrder(hwnd, target);
-        RepositionOverlayToTargetRect(ow, &targetRect, TRUE);
+        RepositionOverlayToTargetRect(ow, &targetRect, !ow->injectedStickyHook);
         
         if (!IsWindowVisible(hwnd))
              ShowOverlayWindowWithFocusPolicy(ow);
@@ -1595,6 +1751,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
     {
         if (ow)
         {
+            DetachInjectedStickyHook(ow);
             if (ow->locationHook)
             {
                 UnhookWinEvent(ow->locationHook);
@@ -1632,6 +1789,12 @@ static void HandleShowCommand(OverlayPayload *payload)
     OverlayWindow *ow = FindOverlayByName(payload->name);
     if (ow && ow->hwnd && IsWindow(ow->hwnd))
     {
+        if (IsWindowVisible(ow->hwnd) && OverlayPayloadMatchesCurrent(ow, payload))
+        {
+            free(payload->name);
+            free(payload);
+            return;
+        }
         ApplyPayloadToOverlay(ow, payload, FALSE);
         ApplyOverlayLayout(ow);
         ShowOverlayWindowWithFocusPolicy(ow);
@@ -1675,7 +1838,12 @@ static void HandleShowCommand(OverlayPayload *payload)
     HWND owner = NULL;
     if (ow->stickyWindowPid > 0)
     {
-        FindWindowByPid(ow->stickyWindowPid, &owner);
+        owner = ow->stickyWindowHwnd;
+        if (!IsWindowFromPid(owner, ow->stickyWindowPid))
+        {
+            owner = NULL;
+            FindWindowByPid(ow->stickyWindowPid, &owner);
+        }
         if (!owner)
         {
             exStyle |= WS_EX_TOPMOST;
@@ -1859,6 +2027,17 @@ static void EnsureOverlayThread(void)
 // C Exported Functions
 // -----------------------------------------------------------------------------
 
+// SetOverlayWindowHookDllPath configures the extracted Windows-only hook before overlays are shown.
+void SetOverlayWindowHookDllPath(char *path)
+{
+    WCHAR *widePath = DupUtf8ToWide(path);
+    if (!widePath)
+        return;
+    if (g_windowHookDllPath)
+        free(g_windowHookDllPath);
+    g_windowHookDllPath = widePath;
+}
+
 void ShowOverlay(OverlayOptions opts)
 {
     EnsureOverlayThread();
@@ -1883,6 +2062,7 @@ void ShowOverlay(OverlayOptions opts)
     payload->absolutePosition = opts.absolutePosition ? TRUE : FALSE;
     payload->preservePosition = opts.preservePosition ? TRUE : FALSE;
     payload->stickyWindowPid = opts.stickyWindowPid;
+    payload->stickyWindowHwnd = (HWND)opts.stickyWindowHandle;
     payload->anchor = opts.anchor;
     payload->movable = opts.movable ? TRUE : FALSE;
     payload->resizable = opts.resizable ? TRUE : FALSE;
@@ -1907,13 +2087,9 @@ void ShowOverlay(OverlayOptions opts)
     cmd->type = 1;
     cmd->payload = payload;
 
-    if (!PostMessageW(g_controllerHwnd, WM_WOX_OVERLAY_COMMAND, 0, (LPARAM)cmd))
-    {
-        if (payload->name)
-            free(payload->name);
-        free(payload);
-        free(cmd);
-    }
+    // Apply attachment replacements before returning so Go can safely release
+    // the previous native attachment without exposing an empty overlay frame.
+    SendMessageW(g_controllerHwnd, WM_WOX_OVERLAY_COMMAND, 0, (LPARAM)cmd);
 }
 
 void CloseOverlay(char *name)

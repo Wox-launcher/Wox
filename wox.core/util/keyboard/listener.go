@@ -363,6 +363,20 @@ type RawKeyEvent struct {
 
 type RawKeyHandler func(event RawKeyEvent) bool
 
+// IsModifier reports whether the key represents a generic or side-specific modifier.
+func (k Key) IsModifier() bool {
+	switch k {
+	case KeyCtrl, KeyShift, KeyAlt, KeySuper,
+		KeyLeftCtrl, KeyRightCtrl,
+		KeyLeftShift, KeyRightShift,
+		KeyLeftAlt, KeyRightAlt,
+		KeyLeftSuper, KeyRightSuper:
+		return true
+	default:
+		return false
+	}
+}
+
 type RawKeySubscription interface {
 	Close() error
 }

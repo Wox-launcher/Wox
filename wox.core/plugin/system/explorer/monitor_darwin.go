@@ -287,6 +287,10 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 		}
 	}
 	if state == stateDialog && dialogListener != nil {
+		if isExplorerOpenSearchShortcut(event) {
+			dialogListener(explorerOpenSearchShortcutKey)
+			return true
+		}
 		if shouldDispatchTypeToSearch(event) {
 			dialogListener(key)
 		}
@@ -296,6 +300,7 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 
 func shouldDispatchTypeToSearch(event keyboard.RawKeyEvent) bool {
 	return event.Type == keyboard.EventTypeKeyDown &&
+		!event.Key.IsModifier() &&
 		event.Character != "" &&
 		event.Modifiers&(keyboard.ModifierCtrl|keyboard.ModifierAlt|keyboard.ModifierSuper) == 0
 }

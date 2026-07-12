@@ -19,4 +19,5 @@ type PluginCommandRequest struct {
 type PluginCommandResult struct {
 	Handled bool
 	Message string
+	Data    common.ContextData
 }

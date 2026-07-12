@@ -111,6 +111,7 @@ clean:
 
 dev: _check_deps ensure-resources
 	$(MAKE) -C wox.core woxmr-build
+	$(MAKE) -C wox.core window-hook-build
 	$(MAKE) host
 
 host:

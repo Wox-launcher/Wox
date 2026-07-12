@@ -2,7 +2,7 @@ package overlay
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa -framework ApplicationServices -framework CoreVideo -framework QuartzCore
+#cgo LDFLAGS: -framework Cocoa -framework ApplicationServices -framework CoreVideo
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -42,15 +42,12 @@ void CloseOverlay(char* name);
 bool overlayClickCallbackCGO(char* name);
 void overlayCloseCallbackCGO(char* name);
 void overlayRequestCloseCallbackCGO(char* name);
-void overlayDebugLogCallbackCGO(char* message);
 
 */
 import "C"
 import (
-	"context"
 	"unsafe"
 
-	"wox/util"
 	"wox/util/mainthread"
 )
 
@@ -74,17 +71,6 @@ func overlayCloseCallbackCGO(cName *C.char) {
 //export overlayRequestCloseCallbackCGO
 func overlayRequestCloseCallbackCGO(cName *C.char) {
 	RequestClose(C.GoString(cName))
-}
-
-//export overlayDebugLogCallbackCGO
-func overlayDebugLogCallbackCGO(cMessage *C.char) {
-	if cMessage == nil {
-		return
-	}
-	// Diagnostics are emitted at INFO because the default Wox log level filters
-	// DEBUG. Native-side sampling keeps the output useful without hiding the drag
-	// timing evidence needed to diagnose sticky overlay lag.
-	util.GetLogger().Info(context.Background(), "[Overlay] "+C.GoString(cMessage))
 }
 
 func showWindow(opts WindowOptions) {

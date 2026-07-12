@@ -366,6 +366,17 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 		return false
 	}
 
+	// The dialog shortcut must work while focus is in the filename field, not only in the file list.
+	stateMu.RLock()
+	shortcutState := currentState
+	shortcutListener := dialogKeyListener
+	stateMu.RUnlock()
+	if shortcutState == stateDialog && isExplorerOpenSearchShortcut(event) && shortcutListener != nil {
+		markTypeToSearchConsumedKey(event)
+		shortcutListener(explorerOpenSearchShortcutKey)
+		return true
+	}
+
 	// Focus filtering must happen after the state refresh so the file-list check
 	// is evaluated against the actual foreground Explorer/dialog window.
 	if int(C.isForegroundExplorerFileListFocused()) == 0 {
@@ -438,6 +449,7 @@ func copyExplorerRawKeyListeners(listeners map[int]ExplorerRawKeyListener) []Exp
 
 func shouldDispatchTypeToSearch(event keyboard.RawKeyEvent) bool {
 	return event.Type == keyboard.EventTypeKeyDown &&
+		!event.Key.IsModifier() &&
 		event.Character != "" &&
 		event.Modifiers&(keyboard.ModifierCtrl|keyboard.ModifierAlt|keyboard.ModifierSuper) == 0
 }

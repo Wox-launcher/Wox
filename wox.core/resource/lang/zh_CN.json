@@ -1488,7 +1488,7 @@
   "plugin_explorer_setting_quick_jump_paths": "快速跳转路径",
   "plugin_explorer_setting_quick_jump_paths_tips": "添加后可在键入搜索中快速跳转到该文件夹。当文件管理器处于焦点时，也可以输入 explorer add 快速添加当前路径。",
   "plugin_explorer_setting_quick_jump_path": "路径",
-  "plugin_explorer_hint_message_dialog": "可用 Wox 搜索当前文件夹，点击开始搜索。",
+  "plugin_explorer_hint_message_dialog": "可用 Wox 搜索当前文件夹，按 Ctrl+G 或点击开始搜索。",
   "plugin_clipboard_copy_date": "复制日期",
   "plugin_clipboard_copy_characters": "复制字符",
   "plugin_clipboard_copy_characters_value": "%d字",

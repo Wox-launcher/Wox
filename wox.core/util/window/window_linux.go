@@ -97,11 +97,26 @@ func NavigateActiveFileDialog(targetPath string) bool {
 	return false
 }
 
+// NavigateFileDialog is not supported on Linux yet.
+func NavigateFileDialog(windowId string, pid int, targetPath string) bool {
+	return false
+}
+
 func SelectInActiveFileDialog(targetPath string) bool {
 	return false
 }
 
+// SelectInFileDialog is not supported on Linux yet.
+func SelectInFileDialog(windowId string, pid int, targetPath string) bool {
+	return false
+}
+
 func HighlightInActiveFileDialog(targetPath string) bool {
+	return false
+}
+
+// HighlightInFileDialog is not supported on Linux yet.
+func HighlightInFileDialog(windowId string, pid int, targetPath string) bool {
 	return false
 }
 
@@ -121,7 +136,7 @@ func GetLastFileDialogPathResolveDebug() string {
 	return ""
 }
 
-func NavigateInFileExplorer(pid int, targetPath string, windowTitle string) bool {
+func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, windowId string) bool {
 	return false
 }
 
@@ -150,7 +165,7 @@ func GetOpenFinderWindowPaths() []string {
 	return []string{}
 }
 
-// SelectInFileExplorerByPid is not supported on this platform.
-func SelectInFileExplorerByPid(pid int, fullPath string) bool {
+// SelectInFileExplorer is not supported on this platform.
+func SelectInFileExplorer(pid int, fullPath string, windowTitle string, windowId string) bool {
 	return false
 }

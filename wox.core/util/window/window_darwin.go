@@ -387,6 +387,14 @@ func NavigateActiveFileDialog(targetPath string) bool {
 	return int(C.navigateActiveFileDialog(cPath)) == 1
 }
 
+// NavigateFileDialog uses the active Accessibility dialog because macOS does not expose a stable dialog window ID here.
+func NavigateFileDialog(windowId string, pid int, targetPath string) bool {
+	if pid > 0 && !ActivateWindowByPid(pid) {
+		return false
+	}
+	return NavigateActiveFileDialog(targetPath)
+}
+
 // SelectInActiveFileDialog selects a file/folder item in the currently active
 // open/save dialog list without entering/opening it.
 func SelectInActiveFileDialog(targetPath string) bool {
@@ -399,8 +407,21 @@ func SelectInActiveFileDialog(targetPath string) bool {
 	return int(C.selectInActiveFileDialog(cPath)) == 1
 }
 
+// SelectInFileDialog uses the active Accessibility dialog on macOS.
+func SelectInFileDialog(windowId string, pid int, targetPath string) bool {
+	if pid > 0 && !ActivateWindowByPid(pid) {
+		return false
+	}
+	return SelectInActiveFileDialog(targetPath)
+}
+
 func HighlightInActiveFileDialog(targetPath string) bool {
 	return SelectInActiveFileDialog(targetPath)
+}
+
+// HighlightInFileDialog uses the active Accessibility dialog on macOS.
+func HighlightInFileDialog(windowId string, pid int, targetPath string) bool {
+	return HighlightInActiveFileDialog(targetPath)
 }
 
 // GetActiveFileDialogPath returns the currently opened directory path in the
@@ -437,7 +458,7 @@ func GetLastFileDialogPathResolveDebug() string {
 }
 
 // NavigateInFileExplorer navigates the active Finder window to targetPath.
-func NavigateInFileExplorer(pid int, targetPath string, windowTitle string) bool {
+func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, windowId string) bool {
 	if pid <= 0 || targetPath == "" {
 		return false
 	}
@@ -506,8 +527,8 @@ func GetOpenFinderWindowPaths() []string {
 	return strings.Split(raw, "\n")
 }
 
-// SelectInFileExplorerByPid selects a file in a Finder window owned by pid.
-func SelectInFileExplorerByPid(pid int, fullPath string) bool {
+// SelectInFileExplorer selects a file in a Finder window owned by pid.
+func SelectInFileExplorer(pid int, fullPath string, windowTitle string, windowId string) bool {
 	if pid <= 0 || fullPath == "" {
 		return false
 	}

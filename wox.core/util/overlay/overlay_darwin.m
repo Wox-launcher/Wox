@@ -1,5 +1,4 @@
 #import <Cocoa/Cocoa.h>
-#import <QuartzCore/QuartzCore.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <ApplicationServices/ApplicationServices.h>
 #include <math.h>
@@ -56,15 +55,6 @@ typedef NS_OPTIONS(NSUInteger, OverlayResizeEdges) {
 
 extern bool overlayClickCallbackCGO(char* name);
 extern void overlayCloseCallbackCGO(char* name);
-extern void overlayDebugLogCallbackCGO(char* message);
-
-static void OverlayDebugLog(NSString *message) {
-    if (!message) return;
-    char *raw = strdup([message UTF8String]);
-    if (!raw) return;
-    overlayDebugLogCallbackCGO(raw);
-    free(raw);
-}
 
 // -----------------------------------------------------------------------------
 // Overlay Window
@@ -99,12 +89,7 @@ static void OverlayDebugLog(NSString *message) {
 @property(nonatomic, assign) BOOL hitTestIconOnly;
 @property(nonatomic, assign) BOOL closeOnEscape;
 @property(nonatomic, assign) NSRect hitTestRect;
-@property(nonatomic, assign) unsigned long long stickyMoveEventCount;
-@property(nonatomic, assign) CFTimeInterval lastStickyMoveEventTime;
-@property(nonatomic, assign) unsigned long long layoutUpdateCount;
-@property(nonatomic, assign) CFTimeInterval lastLayoutUpdateTime;
 @property(nonatomic, strong) NSTimer *stickyLiveFollowTimer;
-@property(nonatomic, assign) unsigned long long stickyLiveFollowPollCount;
 @property(nonatomic, assign) BOOL hasStickyPredictiveAnchor;
 @property(nonatomic, assign) CGRect stickyPredictiveAnchorTargetRect;
 @property(nonatomic, assign) NSPoint stickyPredictiveAnchorMouse;
@@ -514,7 +499,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 }
 
 - (void)stopTrackingWindow {
-    [self stopStickyLiveFollowTimerWithReason:@"tracking-stopped"];
+    [self stopStickyLiveFollowTimer];
     self.hasStickyPredictiveAnchor = NO;
 
     if (self.axObserver) {
@@ -706,14 +691,6 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 }
 
 - (void)updateLayoutWithOptions:(OverlayOptions)opts {
-    CFTimeInterval layoutStart = CACurrentMediaTime();
-    double layoutIntervalMs = -1;
-    if (self.lastLayoutUpdateTime > 0) {
-        layoutIntervalMs = (layoutStart - self.lastLayoutUpdateTime) * 1000.0;
-    }
-    self.lastLayoutUpdateTime = layoutStart;
-    self.layoutUpdateCount++;
-
     // 0. Reset State
     self.isMovable = opts.movable;
     self.isResizable = opts.resizable;
@@ -791,7 +768,6 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
     // 3. Position Calculation (Anchor)
     CGRect targetRect;
-    NSString *targetSource = @"screen";
     BOOL preserveLiveFollowFrame = opts.stickyWindowPid > 0 && self.stickyLiveFollowTimer != nil;
     NSPoint liveFollowOrigin = self.frame.origin;
     
@@ -801,7 +777,6 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         // by notifications.
         self.stickyWindowNumber = 0;
         targetRect = CGRectZero;
-        targetSource = @"absolute";
     } else if (preserveLiveFollowFrame) {
         // Bug fix: content refreshes can arrive while a sticky overlay is being
         // live-followed. Re-anchoring from AX here can use stale geometry and pull
@@ -809,10 +784,8 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         // origin and let the poller own position updates during the active drag.
         self.stickyWindowNumber = [self getWindowNumberForPid:(pid_t)opts.stickyWindowPid];
         targetRect = CGRectMake(liveFollowOrigin.x, liveFollowOrigin.y, windowWidth, windowHeight);
-        targetSource = @"live-follow-preserve";
     } else if (opts.stickyWindowPid > 0) {
         pid_t pid = (pid_t)opts.stickyWindowPid;
-        targetSource = @"none";
         
         // Get window number for z-order management
         self.stickyWindowNumber = [self getWindowNumberForPid:pid];
@@ -853,7 +826,6 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
                 CGFloat cocoaY = mainScreenH - pos.y - size.height;
                 targetRect = CGRectMake(pos.x, cocoaY, size.width, size.height);
                 targetFound = YES;
-                targetSource = @"initial-ax";
             }
             if (posVal) CFRelease(posVal);
             if (sizeVal) CFRelease(sizeVal);
@@ -861,11 +833,8 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         }
         if (app) CFRelease(app);
         if (!targetFound) {
-            if ([self getWindowFrameForPid:pid outRect:&targetRect]) {
-                targetSource = @"initial-cg-window-list";
-            } else {
+            if (![self getWindowFrameForPid:pid outRect:&targetRect]) {
                 targetRect = [NSScreen mainScreen].visibleFrame;
-                targetSource = @"initial-screen-fallback";
             }
         }
     } else {
@@ -936,7 +905,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         // move notification. Seeding the predictive anchor here gives the live
         // poller a usable baseline instead of waiting for the low-frequency AX
         // movement event.
-        [self refreshStickyPredictiveAnchorWithTargetRect:targetRect source:targetSource debug:NO];
+        [self refreshStickyPredictiveAnchorWithTargetRect:targetRect];
     }
 
     [self setFrame:NSMakeRect(finalX, finalY, windowWidth, windowHeight) display:YES];
@@ -965,17 +934,6 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         [self stopTrackingWindow];
     }
 
-    BOOL shouldLogLayout = opts.stickyWindowPid > 0 && (self.layoutUpdateCount <= 5 || self.layoutUpdateCount % 10 == 0 || layoutIntervalMs > 150.0);
-    if (shouldLogLayout) {
-        // Diagnostics: ShowOverlay can be called independently from sticky move
-        // notifications. Sampling this path separates animation/layout refresh
-        // cost from native window-follow cost when investigating drag lag.
-        double elapsedMs = (CACurrentMediaTime() - layoutStart) * 1000.0;
-        OverlayDebugLog([NSString stringWithFormat:@"sticky-layout name=%@ pid=%d count=%llu intervalMs=%.2f elapsedMs=%.2f source=%@ frame=(%.1f,%.1f %.1fx%.1f) transparent=%@ nativeAttachment=%@",
-                         self.name ?: @"", opts.stickyWindowPid, self.layoutUpdateCount, layoutIntervalMs, elapsedMs, targetSource,
-                         self.frame.origin.x, self.frame.origin.y, self.frame.size.width, self.frame.size.height,
-                         opts.transparent ? @"true" : @"false", opts.nativeAttachment ? @"true" : @"false"]);
-    }
 }
 
 // AXObserver callback - called when tracked window moves or resizes
@@ -985,30 +943,14 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
 }
 
 - (void)handleTrackedWindowMoved {
-    CFTimeInterval eventStart = CACurrentMediaTime();
-    double eventIntervalMs = -1;
-    if (self.lastStickyMoveEventTime > 0) {
-        eventIntervalMs = (eventStart - self.lastStickyMoveEventTime) * 1000.0;
-    }
-    self.lastStickyMoveEventTime = eventStart;
-    self.stickyMoveEventCount++;
-    BOOL shouldLog = self.stickyMoveEventCount <= 5 || self.stickyMoveEventCount % 10 == 0 || eventIntervalMs > 50.0;
-
     // Sticky overlays are a generic base capability. The earlier implementation
     // hid overlays until the user released the target window, which made attached
     // surfaces flicker and lag. Always live-follow here so every module gets the
     // same stable window attachment behavior.
-    BOOL updated = [self updatePositionFromTrackedWindowWithDebug:shouldLog eventIntervalMs:eventIntervalMs];
+    [self updatePositionFromTrackedWindow];
     [self startStickyLiveFollowTimerIfNeeded];
     [self orderRelativeToStickyWindow];
     self.alphaValue = 1.0;
-
-    if (shouldLog) {
-        double totalMs = (CACurrentMediaTime() - eventStart) * 1000.0;
-        OverlayDebugLog([NSString stringWithFormat:@"sticky-move event name=%@ pid=%d count=%llu intervalMs=%.2f updated=%@ totalMs=%.2f frame=(%.1f,%.1f %.1fx%.1f)",
-                         self.name ?: @"", self.currentOpts.stickyWindowPid, self.stickyMoveEventCount, eventIntervalMs,
-                         updated ? @"true" : @"false", totalMs, self.frame.origin.x, self.frame.origin.y, self.frame.size.width, self.frame.size.height]);
-    }
 }
 
 - (void)startStickyLiveFollowTimerIfNeeded {
@@ -1019,7 +961,6 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
         return;
     }
 
-    self.stickyLiveFollowPollCount = 0;
     // Bug fix: AX moved notifications are coalesced by macOS and can arrive only
     // every 90-120ms while the target window is dragged. Polling during the active
     // drag keeps sticky overlays attached at frame cadence without changing the
@@ -1030,21 +971,18 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
                                                        userInfo:nil
                                                         repeats:YES];
     [[NSRunLoop mainRunLoop] addTimer:self.stickyLiveFollowTimer forMode:NSRunLoopCommonModes];
-    OverlayDebugLog([NSString stringWithFormat:@"sticky-live-poll started name=%@ pid=%d", self.name ?: @"", self.currentOpts.stickyWindowPid]);
 }
 
-- (void)stopStickyLiveFollowTimerWithReason:(NSString *)reason {
+- (void)stopStickyLiveFollowTimer {
     if (!self.stickyLiveFollowTimer) {
         return;
     }
     [self.stickyLiveFollowTimer invalidate];
     self.stickyLiveFollowTimer = nil;
     self.hasStickyPredictiveAnchor = NO;
-    OverlayDebugLog([NSString stringWithFormat:@"sticky-live-poll stopped name=%@ pid=%d reason=%@ count=%llu",
-                     self.name ?: @"", self.currentOpts.stickyWindowPid, reason ?: @"unknown", self.stickyLiveFollowPollCount]);
 }
 
-- (void)refreshStickyPredictiveAnchorWithTargetRect:(CGRect)targetRect source:(NSString *)source debug:(BOOL)debug {
+- (void)refreshStickyPredictiveAnchorWithTargetRect:(CGRect)targetRect {
     if (!CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft)) {
         return;
     }
@@ -1054,13 +992,6 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
     self.stickyPredictiveAnchorTargetRect = targetRect;
     self.stickyPredictiveAnchorMouse = [NSEvent mouseLocation];
     self.hasStickyPredictiveAnchor = YES;
-
-    if (debug) {
-        OverlayDebugLog([NSString stringWithFormat:@"sticky-predictive anchor name=%@ pid=%d source=%@ target=(%.1f,%.1f %.1fx%.1f) mouse=(%.1f,%.1f)",
-                         self.name ?: @"", self.currentOpts.stickyWindowPid, source ?: @"unknown",
-                         targetRect.origin.x, targetRect.origin.y, targetRect.size.width, targetRect.size.height,
-                         self.stickyPredictiveAnchorMouse.x, self.stickyPredictiveAnchorMouse.y]);
-    }
 }
 
 - (BOOL)getStickyPredictiveTargetRect:(CGRect *)outRect {
@@ -1076,21 +1007,13 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
 
 - (void)handleStickyLiveFollowTimer:(NSTimer *)timer {
     if (!CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft)) {
-        [self stopStickyLiveFollowTimerWithReason:@"mouse-up"];
+        [self stopStickyLiveFollowTimer];
         return;
     }
 
-    self.stickyLiveFollowPollCount++;
-    BOOL shouldLog = self.stickyLiveFollowPollCount <= 5 || self.stickyLiveFollowPollCount % 15 == 0;
-    BOOL updated = [self updatePositionFromTrackedWindowWithDebug:shouldLog eventIntervalMs:-1 preferCGWindowList:YES];
+    [self updatePositionFromTrackedWindowPreferCGWindowList:YES];
     [self orderRelativeToStickyWindow];
     self.alphaValue = 1.0;
-
-    if (shouldLog) {
-        OverlayDebugLog([NSString stringWithFormat:@"sticky-live-poll tick name=%@ pid=%d count=%llu updated=%@ frame=(%.1f,%.1f %.1fx%.1f)",
-                         self.name ?: @"", self.currentOpts.stickyWindowPid, self.stickyLiveFollowPollCount,
-                         updated ? @"true" : @"false", self.frame.origin.x, self.frame.origin.y, self.frame.size.width, self.frame.size.height]);
-    }
 }
 
 - (void)startTrackingWindowWithPid:(pid_t)pid {
@@ -1103,21 +1026,15 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
 
     // Stop any existing tracking first
     [self stopTrackingWindow];
-    self.stickyMoveEventCount = 0;
-    self.lastStickyMoveEventTime = 0;
-    
     // Create AXUIElement for the application
     AXUIElementRef app = AXUIElementCreateApplication(pid);
-    if (!app) {
-        OverlayDebugLog([NSString stringWithFormat:@"sticky-track failed name=%@ pid=%d reason=create-application", self.name ?: @"", pid]);
+    if (!app)
         return;
-    }
     
     // Get the focused window
     AXUIElementRef frontWindow = NULL;
     AXError err = AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, (CFTypeRef *)&frontWindow);
     if (err != kAXErrorSuccess || !frontWindow) {
-        OverlayDebugLog([NSString stringWithFormat:@"sticky-track failed name=%@ pid=%d reason=focused-window axErr=%d", self.name ?: @"", pid, err]);
         CFRelease(app);
         return;
     }
@@ -1130,7 +1047,6 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
     AXObserverRef observer = NULL;
     err = AXObserverCreate(pid, axObserverCallback, &observer);
     if (err != kAXErrorSuccess || !observer) {
-        OverlayDebugLog([NSString stringWithFormat:@"sticky-track failed name=%@ pid=%d reason=observer axErr=%d", self.name ?: @"", pid, err]);
         CFRelease(app);
         CFRelease(frontWindow);
         self.trackedWindow = NULL;
@@ -1147,27 +1063,18 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
     // Add observer to run loop
     CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), kCFRunLoopDefaultMode);
     
-    OverlayDebugLog([NSString stringWithFormat:@"sticky-track started name=%@ pid=%d windowNumber=%u", self.name ?: @"", pid, self.stickyWindowNumber]);
-
     CFRelease(app);
 }
 
 - (BOOL)updatePositionFromTrackedWindow {
-    return [self updatePositionFromTrackedWindowWithDebug:NO eventIntervalMs:-1];
+    return [self updatePositionFromTrackedWindowPreferCGWindowList:NO];
 }
 
-- (BOOL)updatePositionFromTrackedWindowWithDebug:(BOOL)debug eventIntervalMs:(double)eventIntervalMs {
-    return [self updatePositionFromTrackedWindowWithDebug:debug eventIntervalMs:eventIntervalMs preferCGWindowList:NO];
-}
-
-- (BOOL)updatePositionFromTrackedWindowWithDebug:(BOOL)debug eventIntervalMs:(double)eventIntervalMs preferCGWindowList:(BOOL)preferCGWindowList {
+- (BOOL)updatePositionFromTrackedWindowPreferCGWindowList:(BOOL)preferCGWindowList {
     if (self.currentOpts.stickyWindowPid <= 0) return NO;
-
-    CFTimeInterval start = CACurrentMediaTime();
 
     CGRect targetRect;
     BOOL targetFound = NO;
-    NSString *source = @"none";
     CFTypeRef posVal = NULL, sizeVal = NULL;
     CGPoint pos; CGSize size;
     BOOL preserveSmallPredictiveCorrection = self.stickyLiveFollowTimer != nil &&
@@ -1178,7 +1085,6 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
 
     if (preferCGWindowList && [self getStickyPredictiveTargetRect:&targetRect]) {
         targetFound = YES;
-        source = @"predictive-mouse";
     }
 
     if (!targetFound && preferCGWindowList) {
@@ -1188,7 +1094,6 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
         // waiting for the next AX notification.
         if ([self getWindowFrameForPid:(pid_t)self.currentOpts.stickyWindowPid outRect:&targetRect]) {
             targetFound = YES;
-            source = @"cg-window-list-live";
         }
     }
 
@@ -1206,7 +1111,6 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
             CGFloat cocoaY = mainScreenH - pos.y - size.height;
             targetRect = CGRectMake(pos.x, cocoaY, size.width, size.height);
             targetFound = YES;
-            source = @"tracked-ax";
         }
         if (posVal) CFRelease(posVal);
         if (sizeVal) CFRelease(sizeVal);
@@ -1215,19 +1119,13 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
     if (!targetFound) {
         if ([self getWindowFrameForPid:(pid_t)self.currentOpts.stickyWindowPid outRect:&targetRect]) {
             targetFound = YES;
-            source = @"cg-window-list";
         } else {
-            if (debug) {
-                double elapsedMs = (CACurrentMediaTime() - start) * 1000.0;
-                OverlayDebugLog([NSString stringWithFormat:@"sticky-position failed name=%@ pid=%d intervalMs=%.2f elapsedMs=%.2f",
-                                 self.name ?: @"", self.currentOpts.stickyWindowPid, eventIntervalMs, elapsedMs]);
-            }
             return NO;
         }
     }
 
     if (targetFound && !preferCGWindowList) {
-        [self refreshStickyPredictiveAnchorWithTargetRect:targetRect source:source debug:debug];
+        [self refreshStickyPredictiveAnchorWithTargetRect:targetRect];
     }
 
     // Calculate new position based on anchor
@@ -1276,18 +1174,10 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
             // edge changes, or other cases where prediction has genuinely drifted.
             finalX = predictedOriginBeforeRealSample.x;
             finalY = predictedOriginBeforeRealSample.y;
-            source = [source stringByAppendingString:@"-preserve"];
         }
     }
     
     [self setFrameOrigin:NSMakePoint(finalX, finalY)];
-    if (debug) {
-        double elapsedMs = (CACurrentMediaTime() - start) * 1000.0;
-        OverlayDebugLog([NSString stringWithFormat:@"sticky-position name=%@ pid=%d source=%@ intervalMs=%.2f elapsedMs=%.2f target=(%.1f,%.1f %.1fx%.1f) final=(%.1f,%.1f) overlaySize=(%.1fx%.1f)",
-                         self.name ?: @"", self.currentOpts.stickyWindowPid, source, eventIntervalMs, elapsedMs,
-                         targetRect.origin.x, targetRect.origin.y, targetRect.size.width, targetRect.size.height,
-                         finalX, finalY, self.frame.size.width, self.frame.size.height]);
-    }
     return YES;
 }
 

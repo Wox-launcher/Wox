@@ -16,6 +16,7 @@
 #define TEXT_OVERLAY_COPY_GAP_DIP 8
 #define TEXT_OVERLAY_CLOSE_SIZE_DIP 20
 #define TEXT_OVERLAY_CLOSE_GAP_DIP 8
+#define TEXT_OVERLAY_MESSAGE_UPDATE (WM_APP + 1)
 
 typedef struct {
     void *handle;
@@ -49,6 +50,29 @@ typedef struct {
     int contentWidth;
     int contentHeight;
 } TextOverlayState;
+
+// TextOverlayUpdatePayload moves mutable renderer state to the HWND owner thread.
+typedef struct {
+    WCHAR *message;
+    BOOL loading;
+    BOOL closable;
+    BOOL centerContent;
+    BOOL showCopyButton;
+    BOOL hasIcon;
+    BOOL hasTooltip;
+    int autoCloseSeconds;
+    float fontSize;
+    float iconSize;
+    float tooltipIconSize;
+    float windowWidth;
+    float minWindowWidth;
+    float maxWindowWidth;
+    float windowHeight;
+    float maxWindowHeight;
+    int contentWidth;
+    int contentHeight;
+    BOOL success;
+} TextOverlayUpdatePayload;
 
 static const wchar_t *kTextOverlayClassName = L"WoxTextOverlayAttachmentWindow";
 static ATOM g_textOverlayClass = 0;
@@ -139,15 +163,17 @@ static SIZE TextOverlayMeasure(WCHAR *message, BOOL loading, BOOL hasIcon, BOOL 
     SIZE naturalText = TextOverlayMeasureText(message, 4096, fontSize);
     int naturalContentWidth = leadingWidth + leadingGap + naturalText.cx + tooltipGap + tooltipWidth + closeReserve;
     int contentWidth = naturalContentWidth;
+    // Use the legacy 400 DIP window cap only when the caller does not provide a larger or smaller maximum.
+    int maxContentWidth = maxWindowWidth > 0 ? (int)maxWindowWidth - chromeWidth : 364;
+    if (maxContentWidth < 1)
+        maxContentWidth = 1;
     if (contentWidth < 64)
         contentWidth = 64;
-    if (contentWidth > 364)
-        contentWidth = 364;
+    if (contentWidth > maxContentWidth)
+        contentWidth = maxContentWidth;
 
     if (windowWidth > 0)
         contentWidth = (int)windowWidth - chromeWidth;
-    else if (maxWindowWidth > 0 && contentWidth > (int)maxWindowWidth - chromeWidth)
-        contentWidth = (int)maxWindowWidth - chromeWidth;
     if (minWindowWidth > 0 && contentWidth < (int)minWindowWidth - chromeWidth)
         contentWidth = (int)minWindowWidth - chromeWidth;
     if (contentWidth < 1)
@@ -584,6 +610,66 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         // Size changes (from parent layout) must trigger a fresh paint at the new dimensions.
         InvalidateRect(hwnd, NULL, FALSE);
         return 0;
+    case TEXT_OVERLAY_MESSAGE_UPDATE:
+    {
+        TextOverlayUpdatePayload *payload = (TextOverlayUpdatePayload *)lParam;
+        if (!state || !payload || !payload->message)
+            return 0;
+
+        float resolvedFontSize = payload->fontSize > 0 ? payload->fontSize : TEXT_OVERLAY_DEFAULT_FONT_SIZE;
+        float resolvedIconSize = payload->iconSize > 0 ? payload->iconSize : 24.0f;
+        float resolvedTooltipIconSize = payload->tooltipIconSize > 0 ? payload->tooltipIconSize : 18.0f;
+        SIZE size = TextOverlayMeasure(payload->message, payload->loading, payload->hasIcon, payload->hasTooltip, payload->showCopyButton, payload->closable, resolvedFontSize, resolvedIconSize, resolvedTooltipIconSize, payload->windowWidth, payload->minWindowWidth, payload->maxWindowWidth, payload->windowHeight, payload->maxWindowHeight);
+        BOOL sizeChanged = state->contentWidth != size.cx || state->contentHeight != size.cy;
+        BOOL visualChanged = sizeChanged ||
+                             wcscmp(state->message ? state->message : L"", payload->message) != 0 ||
+                             state->loading != payload->loading ||
+                             state->closable != payload->closable ||
+                             state->centerContent != payload->centerContent ||
+                             state->showCopyButton != payload->showCopyButton ||
+                             state->fontSize != resolvedFontSize ||
+                             state->iconSize != resolvedIconSize ||
+                             state->tooltipIconSize != resolvedTooltipIconSize ||
+                             state->copied || state->closeHover || state->closePressed;
+
+        free(state->message);
+        state->message = payload->message;
+        payload->message = NULL;
+        state->loading = payload->loading;
+        state->closable = payload->closable;
+        state->centerContent = payload->centerContent;
+        state->showCopyButton = payload->showCopyButton;
+        state->autoCloseSeconds = payload->autoCloseSeconds;
+        state->fontSize = resolvedFontSize;
+        state->iconSize = resolvedIconSize;
+        state->tooltipIconSize = resolvedTooltipIconSize;
+        if (visualChanged)
+        {
+            if (GetCapture() == hwnd)
+                ReleaseCapture();
+            state->copied = FALSE;
+            state->closeHover = FALSE;
+            state->closePressed = FALSE;
+            state->loadingPhase = 0;
+        }
+
+        KillTimer(hwnd, TEXT_OVERLAY_TIMER_COPY_FEEDBACK);
+        KillTimer(hwnd, TEXT_OVERLAY_TIMER_AUTOCLOSE);
+        KillTimer(hwnd, TEXT_OVERLAY_TIMER_LOADING);
+        if (state->loading)
+            SetTimer(hwnd, TEXT_OVERLAY_TIMER_LOADING, TEXT_OVERLAY_LOADING_INTERVAL_MS, NULL);
+        if (state->autoCloseSeconds > 0)
+            SetTimer(hwnd, TEXT_OVERLAY_TIMER_AUTOCLOSE, (UINT)(state->autoCloseSeconds * 1000), NULL);
+
+        state->contentWidth = size.cx;
+        state->contentHeight = size.cy;
+        payload->contentWidth = size.cx;
+        payload->contentHeight = size.cy;
+        payload->success = TRUE;
+        if (visualChanged && !sizeChanged)
+            InvalidateRect(hwnd, NULL, FALSE);
+        return 0;
+    }
     case WM_SETCURSOR:
     {
         if (!state || LOWORD(lParam) != HTCLIENT)
@@ -892,6 +978,62 @@ TextOverlayAttachment TextOverlayCreateWindow(char *name,
     result.handle = state->hwnd;
     result.width = (float)state->contentWidth;
     result.height = (float)state->contentHeight;
+    return result;
+}
+
+// TextOverlayUpdateWindow updates an existing renderer without replacing its HWND.
+TextOverlayAttachment TextOverlayUpdateWindow(void *rawHwnd,
+                                              char *message,
+                                              int iconLen,
+                                              bool loading,
+                                              bool centerContent,
+                                              float fontSize,
+                                              float iconSize,
+                                              int tooltipIconLen,
+                                              float tooltipIconSize,
+                                              bool showCopyButton,
+                                              bool closable,
+                                              int autoCloseSeconds,
+                                              float windowWidth,
+                                              float minWindowWidth,
+                                              float maxWindowWidth,
+                                              float windowHeight,
+                                              float maxWindowHeight)
+{
+    TextOverlayAttachment result = {0};
+    HWND hwnd = (HWND)rawHwnd;
+    if (!hwnd || !IsWindow(hwnd))
+        return result;
+
+    TextOverlayUpdatePayload payload = {0};
+    payload.message = TextOverlayUtf8ToWide(message);
+    if (!payload.message)
+        return result;
+    payload.loading = loading ? TRUE : FALSE;
+    payload.closable = closable ? TRUE : FALSE;
+    payload.centerContent = centerContent ? TRUE : FALSE;
+    payload.showCopyButton = showCopyButton ? TRUE : FALSE;
+    payload.hasIcon = iconLen > 0 ? TRUE : FALSE;
+    payload.hasTooltip = tooltipIconLen > 0 ? TRUE : FALSE;
+    payload.autoCloseSeconds = autoCloseSeconds;
+    payload.fontSize = fontSize;
+    payload.iconSize = iconSize;
+    payload.tooltipIconSize = tooltipIconSize;
+    payload.windowWidth = windowWidth;
+    payload.minWindowWidth = minWindowWidth;
+    payload.maxWindowWidth = maxWindowWidth;
+    payload.windowHeight = windowHeight;
+    payload.maxWindowHeight = maxWindowHeight;
+
+    SendMessageW(hwnd, TEXT_OVERLAY_MESSAGE_UPDATE, 0, (LPARAM)&payload);
+    if (payload.message)
+        free(payload.message);
+    if (!payload.success)
+        return result;
+
+    result.handle = hwnd;
+    result.width = (float)payload.contentWidth;
+    result.height = (float)payload.contentHeight;
     return result;
 }
 

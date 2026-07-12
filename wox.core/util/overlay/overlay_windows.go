@@ -5,6 +5,7 @@ package overlay
 #cgo LDFLAGS: -ldwmapi -luxtheme -lmsimg32 -lgdi32 -luser32 -lole32 -luuid -lwindowscodecs -lcomctl32
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct {
     char* name;
@@ -21,6 +22,7 @@ typedef struct {
     bool absolutePosition;
     bool preservePosition;
     int stickyWindowPid;
+    uintptr_t stickyWindowHandle;
     int anchor;
     bool movable;
     bool resizable;
@@ -37,18 +39,34 @@ typedef struct {
 
 void ShowOverlay(OverlayOptions opts);
 void CloseOverlay(char* name);
+void SetOverlayWindowHookDllPath(char* path);
 bool overlayClickCallbackCGO(char* name);
 void overlayCloseCallbackCGO(char* name);
 void overlayRequestCloseCallbackCGO(char* name);
 */
 import "C"
 import (
+	"strconv"
+	"sync"
 	"unsafe"
+	"wox/util/windowhook"
 )
 
+var configureWindowHookOnce sync.Once
+
 func showWindow(opts WindowOptions) {
+	configureWindowHookOnce.Do(func() {
+		cPath := C.CString(windowhook.DLLPath())
+		defer C.free(unsafe.Pointer(cPath))
+		C.SetOverlayWindowHookDllPath(cPath)
+	})
+
 	cName := C.CString(opts.ID)
 	defer C.free(unsafe.Pointer(cName))
+	var stickyWindowHandle C.uintptr_t
+	if parsed, err := strconv.ParseUint(opts.StickyWindowId, 10, 64); err == nil {
+		stickyWindowHandle = C.uintptr_t(parsed)
+	}
 
 	cOpts := C.OverlayOptions{
 		name:                   cName,
@@ -65,6 +83,7 @@ func showWindow(opts WindowOptions) {
 		absolutePosition:       C.bool(opts.AbsolutePosition),
 		preservePosition:       C.bool(opts.PreservePosition),
 		stickyWindowPid:        C.int(opts.StickyWindowPid),
+		stickyWindowHandle:     stickyWindowHandle,
 		anchor:                 C.int(opts.Anchor),
 		movable:                C.bool(opts.Movable),
 		resizable:              C.bool(opts.Resizable),

@@ -19,6 +19,7 @@ wox.plugin.python/wox_plugin.egg-info/
 .ruff_cache/
 .mypy_cache/
 wox.core/resource/others/woxmr
+wox.core/resource/others/window_hook
 wox.exe
 wox.core/wox
 www/docs/.vitepress/cache

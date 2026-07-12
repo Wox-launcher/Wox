@@ -32,6 +32,29 @@ typedef struct {
 	int isMinimized;
 } WoxManagedWindowC;
 
+// FileDialogNavigationDiagnosticC captures the attempted native route without changing navigation behavior.
+typedef struct {
+	int route;
+	int directControlFound;
+	int directSetResult;
+	int cdmSetResult;
+	int cdmGetSpecChars;
+	int cdmMatched;
+	int uiaStage;
+	long uiaLastHr;
+	int uiaElementCount;
+	int uiaEditOrComboCount;
+	int uiaPathCandidateCount;
+	int uiaValuePatternCount;
+	int uiaWritableCount;
+	int uiaSetValueSucceeded;
+	int uiaSetFocusSucceeded;
+	unsigned long long directElapsedMs;
+	unsigned long long uiaElapsedMs;
+	unsigned long long fallbackElapsedMs;
+	unsigned long long totalElapsedMs;
+} FileDialogNavigationDiagnosticC;
+
 char* getActiveWindowIcon(unsigned char **iconData, int *iconSize, int *width, int *height);
 char* getWindowIconByPid(int pid, unsigned char **iconData, int *iconSize, int *width, int *height);
 char* getActiveWindowName();
@@ -52,8 +75,11 @@ int focusFileExplorerContentByHwnd(uintptr_t hwnd);
 int isOpenSaveDialog();
 int isOpenSaveDialogByPid(int pid);
 int navigateActiveFileDialog(const char* path);
+int navigateFileDialogByWindowId(const char* windowId, int pid, const char* path, FileDialogNavigationDiagnosticC* diagnostic);
 int selectInActiveFileDialog(const char* path);
+int selectInFileDialogByWindowId(const char* windowId, int pid, const char* path);
 int highlightInActiveFileDialog(const char* path);
+int highlightInFileDialogByWindowId(const char* windowId, int pid, const char* path);
 char* getActiveFileDialogPath();
 char* getFileDialogPathByWindowId(const char* windowId, int pid);
 char* getFileDialogPathByPid(int pid);
@@ -63,8 +89,10 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -397,6 +425,25 @@ func NavigateActiveFileDialog(targetPath string) bool {
 	return int(C.navigateActiveFileDialog(cPath)) == 1
 }
 
+// NavigateFileDialog navigates the captured open/save dialog without relying on foreground state.
+func NavigateFileDialog(windowId string, pid int, targetPath string) bool {
+	if strings.TrimSpace(windowId) == "" {
+		return NavigateActiveFileDialog(targetPath)
+	}
+
+	cWindowId := C.CString(windowId)
+	defer C.free(unsafe.Pointer(cWindowId))
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	var diagnostic C.FileDialogNavigationDiagnosticC
+	succeeded := int(C.navigateFileDialogByWindowId(cWindowId, C.int(pid), cPath, &diagnostic)) == 1
+	log.Printf("[file-dialog-navigation] succeeded=%t route=%d directControl=%d directSet=%d cdmSet=%d cdmGetSpecChars=%d cdmMatched=%d uiaStage=%d uiaHr=0x%08X uiaElements=%d uiaEditOrCombo=%d uiaPathCandidates=%d uiaValuePatterns=%d uiaWritable=%d uiaSetValue=%d uiaSetFocus=%d elapsedMs={direct:%d,uia:%d,fallback:%d,total:%d}",
+		succeeded, int(diagnostic.route), int(diagnostic.directControlFound), int(diagnostic.directSetResult), int(diagnostic.cdmSetResult), int(diagnostic.cdmGetSpecChars), int(diagnostic.cdmMatched),
+		int(diagnostic.uiaStage), uint32(diagnostic.uiaLastHr), int(diagnostic.uiaElementCount), int(diagnostic.uiaEditOrComboCount), int(diagnostic.uiaPathCandidateCount), int(diagnostic.uiaValuePatternCount),
+		int(diagnostic.uiaWritableCount), int(diagnostic.uiaSetValueSucceeded), int(diagnostic.uiaSetFocusSucceeded), uint64(diagnostic.directElapsedMs), uint64(diagnostic.uiaElapsedMs), uint64(diagnostic.fallbackElapsedMs), uint64(diagnostic.totalElapsedMs))
+	return succeeded
+}
+
 func SelectInActiveFileDialog(targetPath string) bool {
 	if targetPath == "" {
 		return false
@@ -407,6 +454,19 @@ func SelectInActiveFileDialog(targetPath string) bool {
 	return int(C.selectInActiveFileDialog(cPath)) == 1
 }
 
+// SelectInFileDialog updates the captured dialog's filename field.
+func SelectInFileDialog(windowId string, pid int, targetPath string) bool {
+	if strings.TrimSpace(windowId) == "" {
+		return SelectInActiveFileDialog(targetPath)
+	}
+
+	cWindowId := C.CString(windowId)
+	defer C.free(unsafe.Pointer(cWindowId))
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.selectInFileDialogByWindowId(cWindowId, C.int(pid), cPath)) == 1
+}
+
 func HighlightInActiveFileDialog(targetPath string) bool {
 	if targetPath == "" {
 		return false
@@ -415,6 +475,19 @@ func HighlightInActiveFileDialog(targetPath string) bool {
 	cPath := C.CString(targetPath)
 	defer C.free(unsafe.Pointer(cPath))
 	return int(C.highlightInActiveFileDialog(cPath)) == 1
+}
+
+// HighlightInFileDialog highlights an item in the captured dialog's file list.
+func HighlightInFileDialog(windowId string, pid int, targetPath string) bool {
+	if strings.TrimSpace(windowId) == "" {
+		return HighlightInActiveFileDialog(targetPath)
+	}
+
+	cWindowId := C.CString(windowId)
+	defer C.free(unsafe.Pointer(cWindowId))
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.highlightInFileDialogByWindowId(cWindowId, C.int(pid), cPath)) == 1
 }
 
 func GetActiveFileDialogPath() string {
@@ -459,6 +532,15 @@ type explorerShellWindowCandidate struct {
 	path         string
 	locationName string
 	z            int
+}
+
+// parseWindowID converts the decimal HWND captured in QueryEnv.
+func parseWindowID(windowId string) uintptr {
+	value, err := strconv.ParseUint(strings.TrimSpace(windowId), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return uintptr(value)
 }
 
 func getExplorerWindowZOrder() map[uintptr]int {
@@ -528,7 +610,7 @@ func selectBestExplorerShellWindowCandidate(candidates []explorerShellWindowCand
 // one automation entry per tab. Navigating by pid/HWND alone can therefore hit the first
 // tab entry instead of the focused tab. We rank ShellWindows candidates with the active
 // window title and z-order before calling Navigate so type-to-search stays on the current tab.
-func NavigateInFileExplorer(pid int, targetPath string, windowTitle string) bool {
+func NavigateInFileExplorer(pid int, targetPath string, windowTitle string, windowId string) bool {
 	if pid <= 0 || targetPath == "" {
 		return false
 	}
@@ -645,10 +727,13 @@ func NavigateInFileExplorer(pid int, targetPath string, windowTitle string) bool
 		return false
 	}
 
-	// Prefer the foreground window if it belongs to our target PID.
+	// Prefer the exact window captured before Wox took foreground focus.
+	targetHwnd := parseWindowID(windowId)
+	if _, ok := uniqueHwnds[targetHwnd]; !ok {
+		targetHwnd = 0
+	}
 	foreground := uintptr(win.GetForegroundWindow())
-	var targetHwnd uintptr
-	if foreground != 0 {
+	if targetHwnd == 0 && foreground != 0 {
 		if _, ok := uniqueHwnds[foreground]; ok {
 			targetHwnd = foreground
 		}
@@ -1319,8 +1404,8 @@ func GetOpenFinderWindowPaths() []string {
 	return []string{}
 }
 
-// SelectInFileExplorerByPid selects a file in an Explorer window owned by pid.
-func SelectInFileExplorerByPid(pid int, fullPath string) bool {
+// SelectInFileExplorer selects a file in the captured Explorer window/tab and restores its file-list focus.
+func SelectInFileExplorer(pid int, fullPath string, windowTitle string, windowId string) bool {
 	if pid <= 0 || fullPath == "" {
 		return false
 	}
@@ -1438,9 +1523,10 @@ func SelectInFileExplorerByPid(pid int, fullPath string) bool {
 	}
 
 	type shellWindowCandidate struct {
-		index int
-		hwnd  uintptr
-		path  string
+		index        int
+		hwnd         uintptr
+		path         string
+		locationName string
 	}
 
 	candidates := make([]shellWindowCandidate, 0, 4)
@@ -1471,8 +1557,13 @@ func SelectInFileExplorerByPid(pid int, fullPath string) bool {
 			continue
 		}
 
+		locationName := ""
+		if locationVar, locationErr := oleutil.GetProperty(wDisp, "LocationName"); locationErr == nil {
+			locationName = strings.TrimSpace(locationVar.ToString())
+			locationVar.Clear()
+		}
 		p := getShellWindowPath(wDisp)
-		candidates = append(candidates, shellWindowCandidate{index: i, hwnd: wnd, path: p})
+		candidates = append(candidates, shellWindowCandidate{index: i, hwnd: wnd, path: p, locationName: locationName})
 		uniqueHwnds[wnd] = struct{}{}
 		itemVar.Clear()
 	}
@@ -1481,10 +1572,13 @@ func SelectInFileExplorerByPid(pid int, fullPath string) bool {
 		return false
 	}
 
-	// Prefer the foreground window if it belongs to our target PID.
+	// Prefer the exact window captured before Wox took foreground focus.
+	targetHwnd := parseWindowID(windowId)
+	if _, ok := uniqueHwnds[targetHwnd]; !ok {
+		targetHwnd = 0
+	}
 	foreground := uintptr(win.GetForegroundWindow())
-	var targetHwnd uintptr
-	if foreground != 0 {
+	if targetHwnd == 0 && foreground != 0 {
 		if _, ok := uniqueHwnds[foreground]; ok {
 			targetHwnd = foreground
 		}
@@ -1522,7 +1616,16 @@ func SelectInFileExplorerByPid(pid int, fullPath string) bool {
 			break
 		}
 	}
-	// 2) Next: any tab with matching folder path.
+	// 2) Next: the captured tab title on the captured HWND.
+	if bestIndex == -1 {
+		for _, c := range candidates {
+			if c.hwnd == targetHwnd && windowTitle != "" && strings.EqualFold(c.locationName, strings.TrimSpace(windowTitle)) {
+				bestIndex = c.index
+				break
+			}
+		}
+	}
+	// 3) Next: any tab with matching folder path.
 	if bestIndex == -1 {
 		for _, c := range candidates {
 			if cleanEqualFold(c.path, targetDir) {
@@ -1531,7 +1634,7 @@ func SelectInFileExplorerByPid(pid int, fullPath string) bool {
 			}
 		}
 	}
-	// 3) Next: same hwnd.
+	// 4) Next: same hwnd.
 	if bestIndex == -1 {
 		for _, c := range candidates {
 			if c.hwnd == targetHwnd {
@@ -1540,7 +1643,7 @@ func SelectInFileExplorerByPid(pid int, fullPath string) bool {
 			}
 		}
 	}
-	// 4) Final: first candidate.
+	// 5) Final: first candidate.
 	if bestIndex == -1 {
 		bestIndex = candidates[0].index
 	}
@@ -1610,6 +1713,9 @@ func SelectInFileExplorerByPid(pid int, fullPath string) bool {
 	documentVar.Clear()
 	itemVar.Clear()
 
+	if err == nil {
+		C.focusFileExplorerContentByHwnd(C.uintptr_t(targetHwnd))
+	}
 	return err == nil
 
 }

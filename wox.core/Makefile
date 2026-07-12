@@ -1,4 +1,4 @@
-.PHONY: clean build help woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
+.PHONY: clean build help window-hook-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 FILESEARCH_REAL_INDEX_ROOT ?= ~/
@@ -82,6 +82,7 @@ clean:
 
 build: clean
 	$(MAKE) woxmr-build
+	$(MAKE) window-hook-build
 ifeq ($(PLATFORM),windows)
 	# Generate Windows VERSIONINFO using the version from updater.CURRENT_VERSION
 	cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0 \
@@ -92,11 +93,26 @@ ifeq ($(PLATFORM),windows)
 		-propagate-ver-strings
 	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
 endif
+
 ifeq ($(PLATFORM),linux)
 	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-$(GOARCH)
 endif
 ifeq ($(PLATFORM),macos)
 	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15 -Wl,-no_warn_duplicate_libraries" go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(GOARCH)
+endif
+
+WINDOW_HOOK_SOURCE := util/windowhook/hook/window_hook.c
+WINDOW_HOOK_DIR := resource/others/window_hook
+WINDOW_HOOK_DLL := $(WINDOW_HOOK_DIR)/WoxWindowHook64.dll
+
+# Build the native window hook only for Windows so other platform binaries never embed it.
+window-hook-build:
+	rm -rf $(WINDOW_HOOK_DIR)
+ifeq ($(PLATFORM),windows)
+	mkdir -p $(WINDOW_HOOK_DIR)
+	gcc -shared -O2 -s -o $(WINDOW_HOOK_DLL) $(WINDOW_HOOK_SOURCE) -lole32 -lshell32 -luuid -lcomctl32
+else
+	@echo "Window hook is only supported on Windows"
 endif
 
 # Feature addition: real-root filesearch comparisons are intentionally exposed

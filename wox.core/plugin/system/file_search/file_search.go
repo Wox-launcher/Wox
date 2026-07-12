@@ -29,6 +29,13 @@ import (
 
 var fileIcon = common.PluginFileIcon
 
+const (
+	PluginID                       = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
+	PluginCommandSearch            = "search"
+	PluginCommandDataQuery         = "query"
+	PluginCommandResultDataResults = "results"
+)
+
 const fileRootsSettingKey = "roots"
 const fileIgnorePatternsSettingKey = "ignorePatterns"
 const fileSkipHiddenFilesSettingKey = "skipHiddenFiles"
@@ -113,7 +120,7 @@ type fileSearchQueryDiagnostics struct {
 
 func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "979d6363-025a-4f51-88d3-0b04e9dc56bf",
+		Id:            PluginID,
 		Name:          "i18n:plugin_file_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
@@ -248,6 +255,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	}
 	c.engine = engine
 	c.api.Log(ctx, plugin.LogLevelInfo, "File search engine initialized")
+	c.api.OnHandlePluginCommand(ctx, c.handlePluginCommand)
 	c.unsubscribeStatusChange = c.engine.OnStatusChanged(func(status filesearch.StatusSnapshot) {
 		c.handleStatusChanged(status)
 	})
@@ -610,6 +618,48 @@ func (c *FileSearchPlugin) getContentSearchRootRecords(ctx context.Context) []fi
 	return roots
 }
 
+// search runs the shared indexed name-search path for queries and plugin commands.
+func (c *FileSearchPlugin) search(ctx context.Context, raw string, limit int) ([]filesearch.SearchResult, error) {
+	if c.engine == nil {
+		return nil, fmt.Errorf("file search engine is not initialized")
+	}
+	if limit <= 0 {
+		limit = fileSearchResultLimit
+	}
+
+	// File search bypasses plugin.IsStringMatch, so every caller must carry the
+	// global pinyin setting into the indexed search path.
+	usePinyin := setting.GetSettingManager().GetWoxSetting(ctx).UsePinYin.Get()
+	return c.engine.Search(ctx, filesearch.SearchQuery{Raw: raw, DisablePinyin: !usePinyin}, limit)
+}
+
+// handlePluginCommand exposes raw indexed results to other plugins without leaking the engine instance.
+func (c *FileSearchPlugin) handlePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
+	if request.Command != PluginCommandSearch {
+		return plugin.PluginCommandResult{Handled: false}
+	}
+
+	raw := strings.TrimSpace(request.Data[PluginCommandDataQuery])
+	if raw == "" {
+		return plugin.PluginCommandResult{Handled: true, Message: "query is required"}
+	}
+
+	results, err := c.search(ctx, raw, fileSearchResultLimit)
+	if err != nil {
+		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	}
+	payload, err := json.Marshal(results)
+	if err != nil {
+		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	}
+	return plugin.PluginCommandResult{
+		Handled: true,
+		Data: common.ContextData{
+			PluginCommandResultDataResults: string(payload),
+		},
+	}
+}
+
 func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	queryStartedAt := util.GetSystemTimestamp()
 	diagnostics := fileSearchQueryDiagnostics{}
@@ -627,11 +677,6 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	}
 
 	searchStartedAt := util.GetSystemTimestamp()
-	usePinyin := setting.GetSettingManager().GetWoxSetting(ctx).UsePinYin.Get()
-	// File search uses its own indexed engine instead of plugin.IsStringMatch,
-	// so the global pinyin option must be passed explicitly. Without this bridge,
-	// disabling pinyin in Wox settings still allowed pinyin-derived candidates
-	// such as ASCII "abc..." cache files to appear for mixed Chinese queries.
 	selectedType := selectedFileSearchType(query)
 	selectedSort := selectedFileSearchSort(query)
 	searchLimit := fileSearchResultLimit
@@ -641,7 +686,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		// for the default path preserves the fast historical relevance search.
 		searchLimit = fileSearchRefinedCandidateLimit
 	}
-	results, err := c.engine.Search(ctx, filesearch.SearchQuery{Raw: query.Search, DisablePinyin: !usePinyin}, searchLimit)
+	results, err := c.search(ctx, query.Search, searchLimit)
 	diagnostics.searchElapsedMs = util.GetSystemTimestamp() - searchStartedAt
 	if err != nil {
 		c.logQueryDiagnostics(ctx, query.Search, diagnostics, 0, util.GetSystemTimestamp()-queryStartedAt)

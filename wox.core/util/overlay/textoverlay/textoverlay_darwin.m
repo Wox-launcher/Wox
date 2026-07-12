@@ -397,12 +397,12 @@ static NSSize WoxTextOverlayMeasure(NSString *message,
                                                 attributes:attrs];
     CGFloat naturalTextWidth = MAX(1, ceil(naturalTextRect.size.width));
     CGFloat naturalContentWidth = leadingWidth + leadingGap + naturalTextWidth + tooltipGap + tooltipWidth + closeReserve;
-    CGFloat contentWidth = MIN(MAX(naturalContentWidth, kTextMinContentWidth), kTextDefaultContentWidth);
+    // Use the default 400-point window cap only when the caller does not provide an explicit maximum.
+    CGFloat maxContentWidth = maxWindowWidth > 0 ? MAX(1, maxWindowWidth - chromeWidth) : kTextDefaultContentWidth;
+    CGFloat contentWidth = MIN(MAX(naturalContentWidth, kTextMinContentWidth), maxContentWidth);
 
     if (windowWidth > 0) {
         contentWidth = MAX(1, windowWidth - chromeWidth);
-    } else if (maxWindowWidth > 0) {
-        contentWidth = MIN(contentWidth, MAX(1, maxWindowWidth - chromeWidth));
     }
     if (minWindowWidth > 0) {
         contentWidth = MAX(contentWidth, MAX(1, minWindowWidth - chromeWidth));

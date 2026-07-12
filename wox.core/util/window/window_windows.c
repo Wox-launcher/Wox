@@ -40,6 +40,30 @@ typedef struct
     int isMinimized;
 } WoxManagedWindowC;
 
+// FileDialogNavigationDiagnosticC captures the attempted native route without changing navigation behavior.
+typedef struct
+{
+    int route; // 0=none, 1=direct edit, 2=CDM, 3=UIA, 4=keyboard fallback
+    int directControlFound;
+    int directSetResult;
+    int cdmSetResult;
+    int cdmGetSpecChars;
+    int cdmMatched;
+    int uiaStage; // 1=COM, 2=automation, 3=root, 4=condition, 5=find, 6=enumerate, 7=pattern, 8=write check, 9=set value, 10=focus
+    long uiaLastHr;
+    int uiaElementCount;
+    int uiaEditOrComboCount;
+    int uiaPathCandidateCount;
+    int uiaValuePatternCount;
+    int uiaWritableCount;
+    int uiaSetValueSucceeded;
+    int uiaSetFocusSucceeded;
+    unsigned long long directElapsedMs;
+    unsigned long long uiaElapsedMs;
+    unsigned long long fallbackElapsedMs;
+    unsigned long long totalElapsedMs;
+} FileDialogNavigationDiagnosticC;
+
 char *getWindowIconByPid(int pid, unsigned char **iconData, int *iconSize, int *width, int *height);
 static char *dupEmptyString();
 
@@ -834,6 +858,24 @@ int isOpenSaveDialogByPid(int pid)
     return data.found;
 }
 
+static int activateWindowForManagementHwnd(HWND hwnd);
+
+// Resolves the captured dialog HWND and rejects stale or cross-process handles.
+static HWND fileDialogWindowById(const char *windowId, int pid)
+{
+    HWND hwnd = parseWindowIdForManagement(windowId);
+    if (!hwnd || !IsWindow(hwnd) || !isOpenSaveDialogWindow(hwnd))
+    {
+        return NULL;
+    }
+
+    if (pid > 0 && getWindowPidForManagement(hwnd) != (DWORD)pid)
+    {
+        return NULL;
+    }
+    return hwnd;
+}
+
 static char *dupEmptyString()
 {
     char *result = (char *)malloc(1);
@@ -1283,6 +1325,180 @@ static int copyUiaDialogDirectoryPath(HWND hwnd, WCHAR *out, size_t outLen)
     }
 
 	return data.found;
+}
+
+// setUiaDialogAddress updates the existing address edit and records the failing UIA stage for diagnosis.
+static int setUiaDialogAddress(HWND hwnd, const WCHAR *targetPath, FileDialogNavigationDiagnosticC *diagnostic)
+{
+    ULONGLONG startedAt = GetTickCount64();
+    if (!hwnd || !targetPath || targetPath[0] == L'\0')
+    {
+        return 0;
+    }
+
+    HRESULT initHr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (diagnostic)
+    {
+        diagnostic->uiaStage = 1;
+        diagnostic->uiaLastHr = initHr;
+    }
+    int shouldUninitialize = SUCCEEDED(initHr);
+    if (FAILED(initHr) && initHr != RPC_E_CHANGED_MODE)
+    {
+        if (diagnostic)
+        {
+            diagnostic->uiaElapsedMs = GetTickCount64() - startedAt;
+        }
+        return 0;
+    }
+
+    int updated = 0;
+    IUIAutomation *automation = NULL;
+    IUIAutomationElement *root = NULL;
+    IUIAutomationCondition *condition = NULL;
+    IUIAutomationElementArray *elements = NULL;
+    HRESULT hr = CoCreateInstance(&CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER, &IID_IUIAutomation, (void **)&automation);
+    if (diagnostic)
+    {
+        diagnostic->uiaStage = 2;
+        diagnostic->uiaLastHr = hr;
+    }
+    if (FAILED(hr) || !automation)
+    {
+        goto cleanup;
+    }
+    hr = automation->lpVtbl->ElementFromHandle(automation, hwnd, &root);
+    if (diagnostic)
+    {
+        diagnostic->uiaStage = 3;
+        diagnostic->uiaLastHr = hr;
+    }
+    if (FAILED(hr) || !root)
+    {
+        goto cleanup;
+    }
+    hr = automation->lpVtbl->CreateTrueCondition(automation, &condition);
+    if (diagnostic)
+    {
+        diagnostic->uiaStage = 4;
+        diagnostic->uiaLastHr = hr;
+    }
+    if (FAILED(hr) || !condition)
+    {
+        goto cleanup;
+    }
+    hr = root->lpVtbl->FindAll(root, TreeScope_Subtree, condition, &elements);
+    if (diagnostic)
+    {
+        diagnostic->uiaStage = 5;
+        diagnostic->uiaLastHr = hr;
+    }
+    if (FAILED(hr) || !elements)
+    {
+        goto cleanup;
+    }
+
+    int length = 0;
+    elements->lpVtbl->get_Length(elements, &length);
+    if (diagnostic)
+    {
+        diagnostic->uiaStage = 6;
+        diagnostic->uiaElementCount = length;
+    }
+    for (int i = 0; i < length && !updated; i++)
+    {
+        IUIAutomationElement *element = NULL;
+        if (FAILED(elements->lpVtbl->GetElement(elements, i, &element)) || !element)
+        {
+            continue;
+        }
+
+        CONTROLTYPEID controlType = 0;
+        element->lpVtbl->get_CurrentControlType(element, &controlType);
+        if (controlType == UIA_EditControlTypeId || controlType == UIA_ComboBoxControlTypeId)
+        {
+            if (diagnostic)
+            {
+                diagnostic->uiaEditOrComboCount++;
+            }
+            VARIANT value;
+            VariantInit(&value);
+            if (SUCCEEDED(element->lpVtbl->GetCurrentPropertyValue(element, UIA_ValueValuePropertyId, &value)) && value.vt == VT_BSTR && value.bstrVal)
+            {
+                WCHAR currentPath[32768];
+                if (copyExistingDirectoryPathCandidate(value.bstrVal, currentPath, sizeof(currentPath) / sizeof(currentPath[0])))
+                {
+                    if (diagnostic)
+                    {
+                        diagnostic->uiaPathCandidateCount++;
+                    }
+                    IUIAutomationValuePattern *valuePattern = NULL;
+                    hr = element->lpVtbl->GetCurrentPatternAs(element, UIA_ValuePatternId, &IID_IUIAutomationValuePattern, (void **)&valuePattern);
+                    if (diagnostic)
+                    {
+                        diagnostic->uiaStage = 7;
+                        diagnostic->uiaLastHr = hr;
+                    }
+                    if (SUCCEEDED(hr) && valuePattern)
+                    {
+                        if (diagnostic)
+                        {
+                            diagnostic->uiaValuePatternCount++;
+                        }
+                        BOOL readOnly = TRUE;
+                        BSTR targetValue = SysAllocString(targetPath);
+                        hr = valuePattern->lpVtbl->get_CurrentIsReadOnly(valuePattern, &readOnly);
+                        if (diagnostic)
+                        {
+                            diagnostic->uiaStage = 8;
+                            diagnostic->uiaLastHr = hr;
+                            diagnostic->uiaWritableCount += SUCCEEDED(hr) && !readOnly;
+                        }
+                        if (targetValue && SUCCEEDED(hr) && !readOnly)
+                        {
+                            hr = valuePattern->lpVtbl->SetValue(valuePattern, targetValue);
+                            if (diagnostic)
+                            {
+                                diagnostic->uiaStage = 9;
+                                diagnostic->uiaLastHr = hr;
+                                diagnostic->uiaSetValueSucceeded = SUCCEEDED(hr);
+                            }
+                            if (SUCCEEDED(hr))
+                            {
+                                hr = element->lpVtbl->SetFocus(element);
+                                if (diagnostic)
+                                {
+                                    diagnostic->uiaStage = 10;
+                                    diagnostic->uiaLastHr = hr;
+                                    diagnostic->uiaSetFocusSucceeded = SUCCEEDED(hr);
+                                }
+                                updated = SUCCEEDED(hr);
+                            }
+                        }
+                        SysFreeString(targetValue);
+                        valuePattern->lpVtbl->Release(valuePattern);
+                    }
+                }
+            }
+            VariantClear(&value);
+        }
+        element->lpVtbl->Release(element);
+    }
+
+cleanup:
+    if (elements)
+        elements->lpVtbl->Release(elements);
+    if (condition)
+        condition->lpVtbl->Release(condition);
+    if (root)
+        root->lpVtbl->Release(root);
+    if (automation)
+        automation->lpVtbl->Release(automation);
+    if (shouldUninitialize)
+        CoUninitialize();
+    if (diagnostic)
+        diagnostic->uiaElapsedMs = GetTickCount64() - startedAt;
+    return updated;
 }
 
 typedef struct
@@ -1798,6 +2014,12 @@ static void SendUnicodeString(const WCHAR *text)
 
 static HWND findFileNameEdit(HWND hDialog)
 {
+    HWND hEdit = GetDlgItem(hDialog, 0x0480); // edt1
+    if (hEdit)
+    {
+        return hEdit;
+    }
+
     // Try Common Item Dialog (Vista+) style: ComboBoxEx32 (0x47c) -> ComboBox -> Edit
     HWND hComboEx = GetDlgItem(hDialog, 0x047c); // cmb13
     if (hComboEx)
@@ -1823,41 +2045,95 @@ static HWND findFileNameEdit(HWND hDialog)
     return NULL;
 }
 
-int navigateActiveFileDialog(const char *path)
+// setCommonDialogFileName asks the dialog manager to update edt1 and records its observable response.
+static int setCommonDialogFileName(HWND hwnd, const WCHAR *value, FileDialogNavigationDiagnosticC *diagnostic)
 {
+    if (!hwnd || !value || value[0] == L'\0')
+    {
+        return 0;
+    }
+
+    LRESULT setResult = SendMessageW(hwnd, CDM_SETCONTROLTEXT, 0x0480, (LPARAM)value);
+    WCHAR current[32768];
+    ZeroMemory(current, sizeof(current));
+    LRESULT currentChars = SendMessageW(hwnd, CDM_GETSPEC, (WPARAM)(sizeof(current) / sizeof(current[0])), (LPARAM)current);
+    int matched = _wcsicmp(current, value) == 0;
+    if (diagnostic)
+    {
+        diagnostic->cdmSetResult = (int)setResult;
+        diagnostic->cdmGetSpecChars = (int)currentChars;
+        diagnostic->cdmMatched = matched;
+    }
+    return matched;
+}
+
+static int navigateFileDialogWindow(HWND hwnd, const char *path, FileDialogNavigationDiagnosticC *diagnostic)
+{
+    ULONGLONG startedAt = GetTickCount64();
+    if (diagnostic)
+    {
+        ZeroMemory(diagnostic, sizeof(*diagnostic));
+    }
     if (!path || path[0] == '\0')
     {
+        if (diagnostic)
+            diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
         return 0;
     }
 
-    if (!isOpenSaveDialog())
+    if (!hwnd || !isOpenSaveDialogWindow(hwnd))
     {
+        if (diagnostic)
+            diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
         return 0;
     }
 
-    HWND hwnd = GetForegroundWindow();
-    if (!hwnd)
+    if (!activateWindowForManagementHwnd(hwnd))
     {
+        if (diagnostic)
+            diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
         return 0;
     }
 
     int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, NULL, 0);
     if (wlen <= 1)
     {
+        if (diagnostic)
+            diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
         return 0;
     }
     WCHAR *wpath = (WCHAR *)malloc(sizeof(WCHAR) * (size_t)wlen);
     if (!wpath)
     {
+        if (diagnostic)
+            diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
         return 0;
     }
     MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
 
+    ULONGLONG directStartedAt = GetTickCount64();
     HWND hEdit = findFileNameEdit(hwnd);
+    int directFileNameSet = 0;
+    if (diagnostic)
+        diagnostic->directControlFound = hEdit != NULL;
     if (hEdit)
     {
-        SendMessageW(hEdit, WM_SETTEXT, 0, (LPARAM)wpath);
+        LRESULT setResult = SendMessageW(hEdit, WM_SETTEXT, 0, (LPARAM)wpath);
+        if (diagnostic)
+            diagnostic->directSetResult = (int)setResult;
+        directFileNameSet = 1;
+    }
+    else
+    {
+        directFileNameSet = setCommonDialogFileName(hwnd, wpath, diagnostic);
+    }
+    if (diagnostic)
+        diagnostic->directElapsedMs = GetTickCount64() - directStartedAt;
 
+    if (directFileNameSet)
+    {
+        if (diagnostic)
+            diagnostic->route = hEdit ? 1 : 2;
         // Trigger command
         HWND hButton = GetDlgItem(hwnd, IDOK);
         if (hButton)
@@ -1871,9 +2147,26 @@ int navigateActiveFileDialog(const char *path)
         }
 
         free(wpath);
+        if (diagnostic)
+            diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
         return 1;
     }
 
+    if (setUiaDialogAddress(hwnd, wpath, diagnostic))
+    {
+        if (diagnostic)
+            diagnostic->route = 3;
+        SendKey(VK_RETURN, TRUE);
+        SendKey(VK_RETURN, FALSE);
+        free(wpath);
+        if (diagnostic)
+            diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
+        return 1;
+    }
+
+    ULONGLONG fallbackStartedAt = GetTickCount64();
+    if (diagnostic)
+        diagnostic->route = 4;
     SetForegroundWindow(hwnd);
     Sleep(30);
 
@@ -1904,23 +2197,37 @@ int navigateActiveFileDialog(const char *path)
     SendKey(VK_RETURN, FALSE);
 
 	free(wpath);
+	if (diagnostic)
+	{
+		diagnostic->fallbackElapsedMs = GetTickCount64() - fallbackStartedAt;
+		diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
+	}
 	return 1;
 }
 
-int setActiveFileDialogFileName(const char *path)
+int navigateActiveFileDialog(const char *path)
+{
+    return navigateFileDialogWindow(GetForegroundWindow(), path, NULL);
+}
+
+int navigateFileDialogByWindowId(const char *windowId, int pid, const char *path, FileDialogNavigationDiagnosticC *diagnostic)
+{
+    return navigateFileDialogWindow(fileDialogWindowById(windowId, pid), path, diagnostic);
+}
+
+static int setFileDialogFileName(HWND hwnd, const char *path)
 {
 	if (!path || path[0] == '\0')
 	{
 		return 0;
 	}
 
-	if (!isOpenSaveDialog())
+	if (!hwnd || !isOpenSaveDialogWindow(hwnd))
 	{
 		return 0;
 	}
 
-	HWND hwnd = GetForegroundWindow();
-	if (!hwnd)
+	if (!activateWindowForManagementHwnd(hwnd))
 	{
 		return 0;
 	}
@@ -1952,20 +2259,14 @@ int setActiveFileDialogFileName(const char *path)
 	return 1;
 }
 
-int highlightInActiveFileDialog(const char *path)
+static int highlightFileDialogItem(HWND hwnd, const char *path)
 {
 	if (!path || path[0] == '\0')
 	{
 		return 0;
 	}
 
-	if (!isOpenSaveDialog())
-	{
-		return 0;
-	}
-
-	HWND hwnd = GetForegroundWindow();
-	if (!hwnd)
+	if (!hwnd || !isOpenSaveDialogWindow(hwnd))
 	{
 		return 0;
 	}
@@ -1989,7 +2290,22 @@ int highlightInActiveFileDialog(const char *path)
 
 int selectInActiveFileDialog(const char *path)
 {
-	return setActiveFileDialogFileName(path);
+	return setFileDialogFileName(GetForegroundWindow(), path);
+}
+
+int selectInFileDialogByWindowId(const char *windowId, int pid, const char *path)
+{
+	return setFileDialogFileName(fileDialogWindowById(windowId, pid), path);
+}
+
+int highlightInActiveFileDialog(const char *path)
+{
+	return highlightFileDialogItem(GetForegroundWindow(), path);
+}
+
+int highlightInFileDialogByWindowId(const char *windowId, int pid, const char *path)
+{
+	return highlightFileDialogItem(fileDialogWindowById(windowId, pid), path);
 }
 
 typedef struct

@@ -13,12 +13,14 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	filesearchplugin "wox/plugin/system/file_search"
 	shellplugin "wox/plugin/system/shell"
 	"wox/setting"
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/ui"
 	"wox/util"
+	"wox/util/filesearch"
 	"wox/util/overlay"
 	"wox/util/overlay/textoverlay"
 	"wox/util/shell"
@@ -52,7 +54,6 @@ const (
 	explorerCommandAdd              = "add"
 	explorerDialogHintOverlayName   = "explorer_dialog_hint"
 	explorerDialogHintQueryText     = "explorer "
-	explorerDialogHintMaxWidth      = 420
 	explorerDialogHintVerticalInset = 40
 	explorerDialogPathCacheDuration = 30 * time.Second
 )
@@ -157,6 +158,7 @@ func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams)
 
 	// Start overlay hint listener if enabled
 	enableTypeToSearch := c.api.GetSetting(ctx, enableTypeToSearchSettingKey)
+	setExplorerDialogHookEnabled(enableTypeToSearch == "true")
 	if enableTypeToSearch == "true" {
 		c.startOverlayListener(ctx)
 	}
@@ -164,6 +166,7 @@ func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams)
 	// Listen for setting changes
 	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == enableTypeToSearchSettingKey {
+			setExplorerDialogHookEnabled(value == "true")
 			if value == "true" {
 				c.startOverlayListener(callbackCtx)
 			} else {
@@ -204,13 +207,61 @@ func (c *ExplorerPlugin) shouldHandleQuery(ctx context.Context, query plugin.Que
 }
 
 func (c *ExplorerPlugin) queryExplorerResults(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	directoryResults := c.queryCurrentDirectoryEntries(ctx, query)
+	search := strings.TrimSpace(query.Search)
+	var directoryResults []plugin.QueryResult
+	if search == "" {
+		directoryResults = c.queryCurrentDirectoryEntries(ctx, query)
+	} else if indexedResults, ok := c.queryFileSearchResults(ctx, query, search); ok {
+		directoryResults = indexedResults
+	} else {
+		directoryResults = c.queryCurrentDirectoryEntries(ctx, query)
+	}
 	jumpResults := c.queryJumpFolders(ctx, query)
 
 	results := make([]plugin.QueryResult, 0, len(directoryResults)+len(jumpResults))
 	results = append(results, directoryResults...)
 	results = append(results, jumpResults...)
 	return results
+}
+
+// queryFileSearchResults converts global indexed results into Explorer-specific actions.
+func (c *ExplorerPlugin) queryFileSearchResults(ctx context.Context, query plugin.Query, search string) ([]plugin.QueryResult, bool) {
+	commandResult, err := c.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
+		PluginId: filesearchplugin.PluginID,
+		Command:  filesearchplugin.PluginCommandSearch,
+		Data: common.ContextData{
+			filesearchplugin.PluginCommandDataQuery: search,
+		},
+	})
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelWarning, "Explorer global file search failed: "+err.Error())
+		return nil, false
+	}
+	if !commandResult.Handled || commandResult.Message != "" {
+		if commandResult.Message != "" {
+			c.api.Log(ctx, plugin.LogLevelWarning, "Explorer global file search failed: "+commandResult.Message)
+		}
+		return nil, false
+	}
+
+	var indexedResults []filesearch.SearchResult
+	if err := json.Unmarshal([]byte(commandResult.Data[filesearchplugin.PluginCommandResultDataResults]), &indexedResults); err != nil {
+		c.api.Log(ctx, plugin.LogLevelWarning, "Explorer global file search result decode failed: "+err.Error())
+		return nil, false
+	}
+
+	results := make([]plugin.QueryResult, 0, len(indexedResults))
+	for _, item := range indexedResults {
+		icon := common.NewWoxImageLazyLoadCandidate(common.NewWoxImageFileIcon(item.Path), common.ResultListIconSize)
+		if item.IsDir {
+			icon = common.FolderIcon
+			if util.IsMacOS() && strings.HasSuffix(strings.ToLower(item.Name), ".app") {
+				icon = common.NewWoxImageLazyLoadCandidate(common.NewWoxImageFileIcon(item.Path), common.ResultListIconSize)
+			}
+		}
+		results = append(results, c.buildDirectoryEntryResult(query, item.Name, item.Path, item.IsDir, icon, item.Score, true))
+	}
+	return results, true
 }
 
 func (c *ExplorerPlugin) queryAddQuickJumpPath(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -299,13 +350,28 @@ func (c *ExplorerPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query 
 			icon = common.NewWoxImageFileIcon(fullPath)
 		}
 
-		results = append(results, c.buildDirectoryEntryResult(query, entry.Name(), fullPath, isDir, icon, matchScore))
+		results = append(results, c.buildDirectoryEntryResult(query, entry.Name(), fullPath, isDir, icon, matchScore, false))
 	}
 
 	return results
 }
 
-func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title string, fullPath string, isDir bool, icon common.WoxImage, score int64) plugin.QueryResult {
+func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title string, fullPath string, isDir bool, icon common.WoxImage, score int64, isGlobalResult bool) plugin.QueryResult {
+	defaultAction := plugin.QueryResultAction{
+		Name:                   "i18n:plugin_explorer_reveal_in_explorer",
+		IsDefault:              true,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			c.revealEntry(ctx, query.Env, fullPath, isDir, isGlobalResult)
+		},
+	}
+	if isDir {
+		defaultAction.Name = "i18n:plugin_explorer_jump_to"
+		defaultAction.Action = func(ctx context.Context, actionContext plugin.ActionContext) {
+			c.jumpToFolder(ctx, query.Env, fullPath)
+		}
+	}
+
 	return plugin.QueryResult{
 		Title:    title,
 		SubTitle: fullPath,
@@ -319,13 +385,7 @@ func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title str
 				},
 			},
 			c.buildExecuteCommandAtLocationAction(fullPath, isDir),
-			{
-				Name:      "i18n:plugin_explorer_reveal_in_explorer",
-				IsDefault: true,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					c.revealEntry(ctx, query.Env, fullPath, isDir)
-				},
-			},
+			defaultAction,
 		},
 	}
 }
@@ -370,7 +430,7 @@ func (c *ExplorerPlugin) buildExecuteCommandAtLocationAction(path string, isDir 
 	}
 }
 
-func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, fullPath string, isDir bool) {
+func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, fullPath string, isDir bool, isGlobalResult bool) {
 	if env.ActiveWindowIsOpenSaveDialog {
 		entryPath := strings.TrimSpace(fullPath)
 		if entryPath == "" {
@@ -378,13 +438,17 @@ func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, f
 			return
 		}
 
-		c.activateOwnerWindow(ctx, env.ActiveWindowPid)
+		if isGlobalResult && !isDir && !c.navigateFileDialog(ctx, env, filepath.Dir(entryPath)) {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Navigate open/save dialog to entry parent failed: pid=%d entry=%q", env.ActiveWindowPid, entryPath))
+			return
+		}
 
-		// For current directory search results in open/save, select the item without entering it.
-		if window.SelectInActiveFileDialog(entryPath) {
+		// Keep the exact dialog target after Wox changes foreground focus.
+		if window.SelectInFileDialog(env.ActiveWindowId, env.ActiveWindowPid, entryPath) {
 			util.Go(ctx, "highlight open/save dialog entry", func() {
-				window.HighlightInActiveFileDialog(entryPath)
+				window.HighlightInFileDialog(env.ActiveWindowId, env.ActiveWindowPid, entryPath)
 			})
+			c.api.HideApp(ctx)
 			return
 		}
 
@@ -392,23 +456,30 @@ func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, f
 		return
 	}
 
+	if isGlobalResult && !isDir {
+		if !window.NavigateInFileExplorer(env.ActiveWindowPid, filepath.Dir(fullPath), env.ActiveWindowTitle, env.ActiveWindowId) {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Navigate explorer to entry parent failed: pid=%d path=%s", env.ActiveWindowPid, fullPath))
+			return
+		}
+	}
+
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Select in explorer by pid: pid=%d path=%s", env.ActiveWindowPid, fullPath))
-	if !window.SelectInFileExplorerByPid(env.ActiveWindowPid, fullPath) {
-		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Select in explorer by pid failed: pid=%d path=%s", env.ActiveWindowPid, fullPath))
-		return
+	selectionDeadline := time.Now()
+	if isGlobalResult && !isDir {
+		// ShellWindows updates the navigated tab asynchronously; select as soon as its new document is ready.
+		selectionDeadline = selectionDeadline.Add(250 * time.Millisecond)
 	}
-
-	window.ActivateWindowByPid(env.ActiveWindowPid)
-}
-
-func (c *ExplorerPlugin) activateOwnerWindow(ctx context.Context, pid int) {
-	if pid <= 0 {
-		return
+	for {
+		if window.SelectInFileExplorer(env.ActiveWindowPid, fullPath, env.ActiveWindowTitle, env.ActiveWindowId) {
+			c.api.HideApp(ctx)
+			return
+		}
+		if time.Now().After(selectionDeadline) {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Select in explorer by pid failed: pid=%d path=%s", env.ActiveWindowPid, fullPath))
+			return
+		}
+		time.Sleep(15 * time.Millisecond)
 	}
-	if !window.ActivateWindowByPid(pid) {
-		c.api.Log(ctx, plugin.LogLevelError, "Failed to activate dialog owner window")
-	}
-	time.Sleep(150 * time.Millisecond)
 }
 
 func (c *ExplorerPlugin) queryJumpFolders(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -450,7 +521,8 @@ func (c *ExplorerPlugin) buildJumpFolderResult(query plugin.Query, title string,
 		Score:    score,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name: "i18n:plugin_explorer_jump_to",
+				Name:                   "i18n:plugin_explorer_jump_to",
+				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					c.jumpToFolder(ctx, query.Env, folderPath)
 				},
@@ -707,30 +779,40 @@ func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plu
 }
 
 func (c *ExplorerPlugin) jumpToFolder(ctx context.Context, env plugin.QueryEnv, folderPath string) {
-	util.Go(ctx, "navigate to folder", func() {
-		if env.ActiveWindowIsOpenSaveDialog {
-			c.activateOwnerWindow(ctx, env.ActiveWindowPid)
-			if !window.NavigateActiveFileDialog(folderPath) {
-				c.api.Log(ctx, plugin.LogLevelError, "Failed to navigate open/save dialog to path: "+folderPath)
-				c.clearOpenSaveDialogPathCache(env.ActiveWindowPid)
-				return
-			}
-			c.setCachedOpenSaveDialogPath(env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId, folderPath)
-			c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+	startedAt := time.Now()
+	if env.ActiveWindowIsOpenSaveDialog {
+		if !c.navigateFileDialog(ctx, env, folderPath) {
+			c.api.Log(ctx, plugin.LogLevelError, "Failed to navigate open/save dialog to path: "+folderPath)
+			c.clearOpenSaveDialogPathCache(env.ActiveWindowPid)
 			return
 		}
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Navigate open/save dialog succeeded: pid=%d windowId=%q path=%s elapsedMs=%d", env.ActiveWindowPid, env.ActiveWindowId, folderPath, time.Since(startedAt).Milliseconds()))
+		c.setCachedOpenSaveDialogPath(env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId, folderPath)
+		c.api.HideApp(ctx)
+		return
+	}
 
-		if window.NavigateInFileExplorer(env.ActiveWindowPid, folderPath, env.ActiveWindowTitle) {
-			return
-		}
+	if window.NavigateInFileExplorer(env.ActiveWindowPid, folderPath, env.ActiveWindowTitle, env.ActiveWindowId) {
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Navigate explorer succeeded: pid=%d windowId=%q path=%s elapsedMs=%d", env.ActiveWindowPid, env.ActiveWindowId, folderPath, time.Since(startedAt).Milliseconds()))
+		c.api.HideApp(ctx)
+		return
+	}
 
-		if env.ActiveWindowPid > 0 && window.SelectInFileExplorerByPid(env.ActiveWindowPid, folderPath) {
-			window.ActivateWindowByPid(env.ActiveWindowPid)
-			return
-		}
+	if env.ActiveWindowPid > 0 && window.SelectInFileExplorer(env.ActiveWindowPid, folderPath, env.ActiveWindowTitle, env.ActiveWindowId) {
+		c.api.HideApp(ctx)
+		return
+	}
 
-		shell.Open(folderPath)
-	})
+	shell.Open(folderPath)
+	c.api.HideApp(ctx)
+}
+
+// navigateFileDialog prefers the in-process Shell browser route and keeps the existing automation path as a compatibility fallback.
+func (c *ExplorerPlugin) navigateFileDialog(ctx context.Context, env plugin.QueryEnv, folderPath string) bool {
+	if navigateFileDialogWithHook(ctx, env.ActiveWindowId, env.ActiveWindowPid, folderPath) {
+		return true
+	}
+	return window.NavigateFileDialog(env.ActiveWindowId, env.ActiveWindowPid, folderPath)
 }
 
 func (c *ExplorerPlugin) addQuickJumpPath(ctx context.Context, path string) bool {
@@ -854,6 +936,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 		overlayEventActivate overlayEventType = iota
 		overlayEventDeactivate
 		overlayEventKey
+		overlayEventOpenDialogSearch
 	)
 
 	type overlayEvent struct {
@@ -888,15 +971,27 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 		traceCtx = util.WithCoreSessionContext(traceCtx)
 		pushEvent(overlayEvent{eventType: overlayEventKey, key: key, ctx: traceCtx})
 	}
+	onDialogKey := func(key string) {
+		if key != explorerOpenSearchShortcutKey {
+			onKey(key)
+			return
+		}
+		traceCtx := context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
+		traceCtx = util.WithCoreSessionContext(traceCtx)
+		pushEvent(overlayEvent{eventType: overlayEventOpenDialogSearch, ctx: traceCtx})
+	}
 
 	go func() {
 		var (
 			active         bool
+			activePid      int
 			waitingVisible bool
 			waitingSince   time.Time
 			handoffUntil   time.Time
 			pending        string
 			pendingCtx     context.Context
+			pendingHintPid int
+			pendingHintEnd time.Time
 		)
 
 		resetState := func() {
@@ -978,10 +1073,11 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					Anchor:          overlay.AnchorBottomCenter,
 					OffsetY:         explorerDialogHintVerticalInset,
 					Topmost:         true,
-					MaxWidth:        explorerDialogHintMaxWidth,
+					StickyWindowId:  dialogWindowId,
+					MaxWidth:        500,
 				},
 				Message:  c.api.GetTranslation(localCtx, "plugin_explorer_hint_message_dialog"),
-				FontSize: 12,
+				FontSize: 10,
 				OnClick: func() bool {
 					clickCtx := context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
 					clickCtx = util.WithCoreSessionContext(clickCtx)
@@ -1032,9 +1128,21 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				case overlayEventActivate:
 					c.typeToSearchDebugLog(ctx, "event activate active=%v waitingVisible=%v pending=%q", active, waitingVisible, pending)
 					active = true
+					activePid = ev.pid
 					if ev.isDialog {
-						showDialogHint(ctx, ev.pid)
+						if c.api.IsVisible(ctx) {
+							// The dialog can regain foreground before UI posts /on/hide. Retry after
+							// the cached visibility state catches up instead of waiting for a key event.
+							pendingHintPid = ev.pid
+							pendingHintEnd = time.Now().Add(2 * time.Second)
+						} else {
+							pendingHintPid = 0
+							pendingHintEnd = time.Time{}
+							showDialogHint(ctx, ev.pid)
+						}
 					} else {
+						pendingHintPid = 0
+						pendingHintEnd = time.Time{}
 						overlay.Close(explorerDialogHintOverlayName)
 					}
 					// Bug fix: keep pending keys while waiting for visible and during the handoff
@@ -1047,9 +1155,22 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				case overlayEventDeactivate:
 					c.typeToSearchDebugLog(ctx, "event deactivate active=%v waitingVisible=%v pending=%q", active, waitingVisible, pending)
 					active = false
+					activePid = 0
+					pendingHintPid = 0
+					pendingHintEnd = time.Time{}
 					overlay.Close(explorerDialogHintOverlayName)
 					if !waitingVisible && handoffUntil.IsZero() {
 						resetState()
+					}
+				case overlayEventOpenDialogSearch:
+					localCtx := ev.ctx
+					if localCtx == nil {
+						localCtx = ctx
+					}
+					if active && activePid > 0 && !c.api.IsVisible(localCtx) {
+						pendingHintPid = 0
+						pendingHintEnd = time.Time{}
+						openDialogQuery(localCtx, activePid)
 					}
 				case overlayEventKey:
 					localCtx := ev.ctx
@@ -1100,7 +1221,16 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			case <-ticker.C:
 				if !handoffUntil.IsZero() && time.Now().After(handoffUntil) {
 					resetState()
-					continue
+				}
+				if pendingHintPid > 0 {
+					if time.Now().After(pendingHintEnd) {
+						pendingHintPid = 0
+						pendingHintEnd = time.Time{}
+					} else if active && activePid == pendingHintPid && !c.api.IsVisible(ctx) {
+						showDialogHint(ctx, pendingHintPid)
+						pendingHintPid = 0
+						pendingHintEnd = time.Time{}
+					}
 				}
 				if !waitingVisible {
 					continue
@@ -1134,7 +1264,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 	StartExplorerMonitor(onActivated, onDeactivated, onKey)
 
 	// Start monitoring open/save dialogs
-	StartExplorerOpenSaveMonitor(onDialogActivated, onDeactivated, onKey)
+	StartExplorerOpenSaveMonitor(onDialogActivated, onDeactivated, onDialogKey)
 }
 
 func getExplorerInitialWindowHeight(ctx context.Context) int {

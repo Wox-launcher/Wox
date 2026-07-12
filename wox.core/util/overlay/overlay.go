@@ -60,6 +60,8 @@ type WindowOptions struct {
 	PreservePosition bool
 	// StickyWindowPid determines the positioning context. If 0, the overlay is positioned relative to the screen.
 	StickyWindowPid int
+	// StickyWindowId optionally identifies the exact native target window on platforms that support it.
+	StickyWindowId string
 	// Anchor defines the reference point on the target and the overlay itself.
 	Anchor int
 	// OffsetX moves the overlay horizontally from the anchor point.
