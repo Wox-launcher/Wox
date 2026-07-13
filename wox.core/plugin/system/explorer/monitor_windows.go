@@ -373,7 +373,7 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 	stateMu.RUnlock()
 	if shortcutState == stateDialog && isExplorerOpenSearchShortcut(event) && shortcutListener != nil {
 		markTypeToSearchConsumedKey(event)
-		shortcutListener(explorerOpenSearchShortcutKey)
+		shortcutListener(explorerOpenSearchEventKey)
 		return true
 	}
 

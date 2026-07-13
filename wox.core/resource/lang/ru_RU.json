@@ -1383,6 +1383,7 @@
   "plugin_explorer_setting_quick_jump_path": "Путь",
   "plugin_explorer_hint_message": "Нажмите, чтобы отфильтровать",
   "plugin_explorer_hint_message_dialog": "Здесь доступен поиск Wox. Нажмите Ctrl+G или щёлкните, чтобы искать в этой папке.",
+  "plugin_explorer_hint_message_dialog_macos": "Здесь доступен поиск Wox. Нажмите Cmd+G или щёлкните, чтобы искать в этой папке.",
   "plugin_indicator_activate": "Активировать",
   "plugin_indicator_activate_plugin": "Активировать плагин %s",
   "plugin_indicator_open_plugin_settings": "Открыть настройки %s",

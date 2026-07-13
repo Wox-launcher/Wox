@@ -3,17 +3,25 @@ package explorer
 import (
 	"strings"
 	"sync/atomic"
+	"wox/util"
 	"wox/util/keyboard"
 )
 
-const explorerOpenSearchShortcutKey = "ctrl+g"
+const explorerOpenSearchEventKey = "open-search"
 
-// isExplorerOpenSearchShortcut matches the dialog-only keyboard equivalent of clicking the Wox hint.
+// isExplorerOpenSearchShortcut matches the platform-specific dialog keyboard equivalent of clicking the Wox hint.
 func isExplorerOpenSearchShortcut(event keyboard.RawKeyEvent) bool {
+	requiredModifier := keyboard.ModifierCtrl
+	blockedModifiers := keyboard.ModifierShift | keyboard.ModifierAlt | keyboard.ModifierSuper
+	if util.IsMacOS() {
+		requiredModifier = keyboard.ModifierSuper
+		blockedModifiers = keyboard.ModifierShift | keyboard.ModifierAlt | keyboard.ModifierCtrl
+	}
+
 	return event.Type == keyboard.EventTypeKeyDown &&
 		(event.Key == keyboard.KeyG || strings.EqualFold(event.Character, "g")) &&
-		event.Modifiers&keyboard.ModifierCtrl != 0 &&
-		event.Modifiers&(keyboard.ModifierShift|keyboard.ModifierAlt|keyboard.ModifierSuper) == 0
+		event.Modifiers&requiredModifier != 0 &&
+		event.Modifiers&blockedModifiers == 0
 }
 
 // ExplorerRawKeyListener observes raw keys while the native file explorer or an

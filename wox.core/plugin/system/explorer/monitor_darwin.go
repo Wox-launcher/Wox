@@ -288,7 +288,7 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 	}
 	if state == stateDialog && dialogListener != nil {
 		if isExplorerOpenSearchShortcut(event) {
-			dialogListener(explorerOpenSearchShortcutKey)
+			dialogListener(explorerOpenSearchEventKey)
 			return true
 		}
 		if shouldDispatchTypeToSearch(event) {

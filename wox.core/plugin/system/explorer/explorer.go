@@ -976,7 +976,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 		pushEvent(overlayEvent{eventType: overlayEventKey, key: key, ctx: traceCtx})
 	}
 	onDialogKey := func(key string) {
-		if key != explorerOpenSearchShortcutKey {
+		if key != explorerOpenSearchEventKey {
 			onKey(key)
 			return
 		}
@@ -1066,6 +1066,12 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			if pid <= 0 || c.api.IsVisible(localCtx) {
 				return
 			}
+			messageKey := "plugin_explorer_hint_message_dialog"
+			fontSize := 10.0
+			if util.IsMacOS() {
+				messageKey = "plugin_explorer_hint_message_dialog_macos"
+				fontSize = 12
+			}
 
 			title := window.GetWindowNameByPid(pid)
 			dialogWindowId := GetOpenSaveDialogWindowIdByPid(pid)
@@ -1080,8 +1086,8 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					StickyWindowId:  dialogWindowId,
 					MaxWidth:        500,
 				},
-				Message:  c.api.GetTranslation(localCtx, "plugin_explorer_hint_message_dialog"),
-				FontSize: 10,
+				Message:  c.api.GetTranslation(localCtx, messageKey),
+				FontSize: fontSize,
 				OnClick: func() bool {
 					clickCtx := context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
 					clickCtx = util.WithCoreSessionContext(clickCtx)
