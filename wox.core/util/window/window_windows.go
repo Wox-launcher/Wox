@@ -1396,14 +1396,6 @@ func GetFileExplorerPathByPid(pid int) string {
 	return ""
 }
 
-// GetOpenFinderWindowPaths returns a list of paths for all currently open Finder windows.
-// Not applicable on Windows.
-func GetOpenFinderWindowPaths() []string {
-	// Theoretically we could implement this for Explorer windows too,
-	// but currently the request is specific to Finder paths.
-	return []string{}
-}
-
 // SelectInFileExplorer selects a file in the captured Explorer window/tab and restores its file-list focus.
 func SelectInFileExplorer(pid int, fullPath string, windowTitle string, windowId string) bool {
 	if pid <= 0 || fullPath == "" {

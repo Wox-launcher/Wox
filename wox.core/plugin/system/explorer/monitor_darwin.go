@@ -7,6 +7,7 @@ extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, i
 extern void fileExplorerDeactivatedCallbackCGO();
 int getCurrentFinderWindowRect(int *x, int *y, int *w, int *h);
 int refreshFileExplorerMonitorState();
+int isOpenSaveDialogTextInputFocused();
 void startFileExplorerMonitor();
 void stopFileExplorerMonitor();
 */
@@ -291,7 +292,8 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 			dialogListener(explorerOpenSearchEventKey)
 			return true
 		}
-		if shouldDispatchTypeToSearch(event) {
+		// Keep filename typing native without hiding the dialog hint or disabling its explicit shortcut.
+		if int(C.isOpenSaveDialogTextInputFocused()) == 0 && shouldDispatchTypeToSearch(event) {
 			dialogListener(key)
 		}
 	}

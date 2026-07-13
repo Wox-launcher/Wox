@@ -487,7 +487,7 @@ func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, f
 }
 
 func (c *ExplorerPlugin) queryJumpFolders(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	folders := c.getJumpFolderCandidates(ctx, query.Env)
+	folders := c.getJumpFolderCandidates(ctx)
 	if len(folders) == 0 {
 		return []plugin.QueryResult{}
 	}
@@ -536,7 +536,7 @@ func (c *ExplorerPlugin) buildJumpFolderResult(query plugin.Query, title string,
 	}
 }
 
-func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context, env plugin.QueryEnv) []openSaveFolder {
+func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context) []openSaveFolder {
 	candidateIndex := make(map[string]int)
 	candidates := make([]openSaveFolder, 0)
 
@@ -574,19 +574,7 @@ func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context, env plugin
 		})
 	}
 
-	// 2) Open Finder window paths.
-	openPaths := window.GetOpenFinderWindowPaths()
-	for _, p := range openPaths {
-		if p == "" {
-			continue
-		}
-		addCandidate(openSaveFolder{
-			titleKey: filepath.Base(p),
-			path:     p,
-		})
-	}
-
-	// 3) Common system folders.
+	// 2) Common system folders.
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
 		systemFolders := []struct {

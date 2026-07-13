@@ -653,14 +653,30 @@ static BOOL getOpenSaveDialogRect(pid_t pid, int *x, int *y, int *w, int *h) {
     BOOL found = NO;
     AXUIElementRef dialogWindow = copyOpenSaveDialogWindow(appElement);
     if (dialogWindow) {
-        if (!appHasFocusedTextInput(appElement)) {
-            found = getAXWindowRect(dialogWindow, x, y, w, h);
-        }
+        found = getAXWindowRect(dialogWindow, x, y, w, h);
         CFRelease(dialogWindow);
     }
 
     CFRelease(appElement);
     return found;
+}
+
+// Reports text focus without suppressing dialog activation, so raw-key dispatch can preserve native filename input.
+int isOpenSaveDialogTextInputFocused() {
+    @autoreleasepool {
+        if (gCurrentState != MonitorContextStateDialog || gCurrentPid <= 0 || !AXIsProcessTrusted()) {
+            return 0;
+        }
+
+        AXUIElementRef appElement = AXUIElementCreateApplication(gCurrentPid);
+        if (!appElement) {
+            return 0;
+        }
+
+        BOOL focused = appHasFocusedTextInput(appElement);
+        CFRelease(appElement);
+        return focused ? 1 : 0;
+    }
 }
 
 static void deactivateIfNeeded() {

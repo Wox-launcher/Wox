@@ -53,7 +53,6 @@ int selectInActiveFileDialog(const char* path);
 char* getActiveFileDialogPath();
 char* getFileDialogPathByPid(int pid);
 int isFinder(int pid);
-char* getOpenFinderWindowPaths();
 char* getActiveFinderWindowPath();
 char* getFinderWindowPathByPid(int pid);
 int selectInFinder(const char* path);
@@ -510,21 +509,6 @@ func GetFileExplorerPathByPid(pid int) string {
 // On macOS, Finder does not have the same tab/HWND behavior, so we fall back to PID-based resolution.
 func GetFileExplorerPathByPidAndWindowTitle(pid int, windowTitle string) string {
 	return GetFileExplorerPathByPid(pid)
-}
-
-// GetOpenFinderWindowPaths returns a list of paths for all currently open Finder windows.
-func GetOpenFinderWindowPaths() []string {
-	result := C.getOpenFinderWindowPaths()
-	if result == nil {
-		return []string{}
-	}
-	defer C.free(unsafe.Pointer(result))
-
-	raw := strings.TrimSpace(C.GoString(result))
-	if raw == "" {
-		return []string{}
-	}
-	return strings.Split(raw, "\n")
 }
 
 // SelectInFileExplorer selects a file in a Finder window owned by pid.

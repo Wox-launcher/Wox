@@ -161,10 +161,6 @@ func IsFileExplorer(pid int) (bool, error) {
 	return false, nil
 }
 
-func GetOpenFinderWindowPaths() []string {
-	return []string{}
-}
-
 // SelectInFileExplorer is not supported on this platform.
 func SelectInFileExplorer(pid int, fullPath string, windowTitle string, windowId string) bool {
 	return false

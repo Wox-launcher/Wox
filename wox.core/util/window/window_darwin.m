@@ -2024,36 +2024,6 @@ static BOOL finderWindowListContainsPath(NSArray *windowList, NSString *path) {
     return NO;
 }
 
-char* getOpenFinderWindowPaths() {
-    @autoreleasepool {
-        id finder = [SBApplication applicationWithBundleIdentifier:@"com.apple.finder"];
-        if (!finder) {
-            return strdup("");
-        }
-
-        id windows = [finder valueForKey:@"windows"];
-        if (![windows isKindOfClass:[NSArray class]]) {
-            return strdup("");
-        }
-
-        NSArray *windowList = (NSArray *)windows;
-        NSMutableArray<NSString *> *paths = [NSMutableArray arrayWithCapacity:[windowList count]];
-        for (id window in windowList) {
-            NSString *path = getFinderWindowPathValue(window);
-            if (path) {
-                [paths addObject:path];
-            }
-        }
-
-        if ([paths count] == 0) {
-            return strdup("");
-        }
-
-        NSString *joined = [paths componentsJoinedByString:@"\n"];
-        return strdup([joined UTF8String]);
-    }
-}
-
 char* getActiveFinderWindowPath() {
     @autoreleasepool {
         NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
