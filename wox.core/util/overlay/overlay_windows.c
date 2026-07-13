@@ -1667,6 +1667,11 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                         StartLiveFollowTimerIfNeeded(ow);
                         SendMessage(hwnd, WM_WOX_OVERLAY_REPOSITION, 0, 0);
                     }
+                    else if (ow->hiddenForMove)
+                    {
+                        // The injected hook reports future moves, so retry an overlay hidden before target geometry was ready.
+                        SendMessage(hwnd, WM_WOX_OVERLAY_REPOSITION, 0, 0);
+                    }
                 }
                 else
                 {
@@ -1741,7 +1746,8 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 
         SetOverlayZOrder(hwnd, target);
         RepositionOverlayToTargetRect(ow, &targetRect, !ow->injectedStickyHook);
-        
+
+        ow->hiddenForMove = FALSE;
         if (!IsWindowVisible(hwnd))
              ShowOverlayWindowWithFocusPolicy(ow);
 
