@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.4.0-beta.1
+## v2.4.0-beta.1 - 2026-07-14
 
 This beta introduces local, offline Dictation for fast voice-to-text workflows, alongside file content search and a more capable AI Chat experience.
 ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/dictation_setting.png)
