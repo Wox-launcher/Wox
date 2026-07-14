@@ -25,6 +25,7 @@ import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/windows/windows_window_manager.dart';
 import 'package:wox/utils/windows/linux_window_manager.dart';
+import 'package:wox/utils/windows/macos_window_manager.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -3180,6 +3181,19 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "ShowApp") {
       showApp(msg.traceId, ShowAppParams.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "ToggleRecordingMode") {
+      if (!Env.isDev || !Platform.isMacOS) {
+        responseWoxWebsocketRequest(msg, false, "Recording mode is only available in macOS dev builds");
+      } else {
+        try {
+          final enabled = await MacOSWindowManager.instance.toggleRecordingMode();
+          Logger.instance.info(msg.traceId, "Launcher recording mode enabled: $enabled");
+          responseWoxWebsocketRequest(msg, true, enabled);
+        } catch (e) {
+          Logger.instance.error(msg.traceId, "Failed to toggle launcher recording mode: $e");
+          responseWoxWebsocketRequest(msg, false, e.toString());
+        }
+      }
     } else if (msg.method == "ChangeQuery") {
       final showSource = msg.data['ShowSource'] as String? ?? WoxShowSourceEnum.WOX_SHOW_SOURCE_DEFAULT.code;
       if (shouldRestoreQueryAfterHide(showSource)) {

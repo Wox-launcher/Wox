@@ -146,6 +146,11 @@ class MacOSWindowManager extends BaseWindowManager {
     }
   }
 
+  /// Toggles the dev-only normal window level used by screen recording tools.
+  Future<bool> toggleRecordingMode() async {
+    return await _channel.invokeMethod<bool>('toggleRecordingMode') ?? false;
+  }
+
   @override
   Future<void> setAppearance(String appearance) async {
     try {

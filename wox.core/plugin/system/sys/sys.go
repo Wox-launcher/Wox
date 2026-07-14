@@ -430,6 +430,31 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 func (r *SysPlugin) buildDevCommands() []SysCommand {
 	return []SysCommand{
 		{
+			ID:                     "toggle_recording_mode",
+			Title:                  "Toggle recording mode",
+			SubTitle:               "Use a normal launcher window level so screen recording tools can capture Wox",
+			Icon:                   common.WoxIcon,
+			Aliases:                []string{"recording mode", "screen recording", "capture wox"},
+			SupportedOS:            []string{util.PlatformMacOS},
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				enabled, err := ui.GetUIManager().ToggleRecordingMode(ctx)
+				if err != nil {
+					subtitle := "Failed to toggle recording mode: " + err.Error()
+					r.api.UpdateResult(ctx, plugin.UpdatableResult{Id: actionContext.ResultId, SubTitle: &subtitle})
+					return
+				}
+
+				title := "Enable recording mode"
+				subtitle := "Recording mode is disabled; Wox uses its normal always-on-top level"
+				if enabled {
+					title = "Disable recording mode"
+					subtitle = "Recording mode is enabled; Wox now uses a capture-friendly normal window level"
+				}
+				r.api.UpdateResult(ctx, plugin.UpdatableResult{Id: actionContext.ResultId, Title: &title, SubTitle: &subtitle})
+			},
+		},
+		{
 			Title: "test notification long",
 			Icon:  common.CPUProfileIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {

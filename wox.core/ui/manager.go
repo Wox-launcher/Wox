@@ -1166,6 +1166,19 @@ func (m *Manager) GetUI(ctx context.Context) common.UI {
 	return m.ui
 }
 
+// ToggleRecordingMode exposes the capture-friendly launcher level only to macOS development builds.
+func (m *Manager) ToggleRecordingMode(ctx context.Context) (bool, error) {
+	if !util.IsDev() || runtime.GOOS != util.PlatformMacOS {
+		return false, errors.New("recording mode is only available in macOS dev builds")
+	}
+
+	impl, ok := m.GetUI(ctx).(*uiImpl)
+	if !ok {
+		return false, errors.New("UI does not support recording mode")
+	}
+	return impl.ToggleRecordingMode(ctx)
+}
+
 // called after UI is ready to show, and will execute only once
 func (m *Manager) PostUIReady(ctx context.Context) {
 	logger.Info(ctx, "app is ready to show")

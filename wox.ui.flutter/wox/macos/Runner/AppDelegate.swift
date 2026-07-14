@@ -105,6 +105,11 @@ private func isDisplaySizedScreenshotHoverCandidate(_ rect: NSRect, displayBound
     rect.height >= displayBounds.height * screenshotHoverDisplaySizedHeightRatio
 }
 
+// Recording mode keeps the launcher discoverable by window-based capture tools without changing normal launches.
+private func launcherWindowLevel(recordingModeEnabled: Bool) -> NSWindow.Level {
+  return recordingModeEnabled ? .normal : .popUpMenu
+}
+
 private func screenshotWindowLevel() -> NSWindow.Level {
   // `.popUpMenu` was high enough for regular launcher panels but still sat underneath some
   // fullscreen and always-on-top utility windows, which made the capture UI appear to vanish right
@@ -1208,6 +1213,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
   private var resultDragBridge: ResultDragBridge?
   // Current appearance (light/dark)
   private var currentAppearance: String = "light"
+  private var isLauncherRecordingModeEnabled = ProcessInfo.processInfo.environment["WOX_RECORDING_MODE"] == "1"
   private var screenshotPresentationState: ScreenshotPresentationState?
   private var isCapturePresentationActive = false
   private var captureWorkspaceBounds = NSRect.zero
@@ -3049,6 +3055,12 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
         case "isVisible":
           result(window.isVisible)
 
+        case "toggleRecordingMode":
+          self?.isLauncherRecordingModeEnabled.toggle()
+          let recordingModeEnabled = self?.isLauncherRecordingModeEnabled ?? false
+          window.level = launcherWindowLevel(recordingModeEnabled: recordingModeEnabled)
+          result(recordingModeEnabled)
+
         case "setAlwaysOnTop":
           if let alwaysOnTop = call.arguments as? Bool {
             if self?.isCapturePresentationActive == true {
@@ -3060,7 +3072,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
               return
             }
             if alwaysOnTop {
-              window.level = .popUpMenu
+              window.level = launcherWindowLevel(recordingModeEnabled: self?.isLauncherRecordingModeEnabled ?? false)
             } else {
               window.level = .normal
             }
@@ -3102,7 +3114,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
             NSApp.appearance = NSAppearance(named: .aqua)
           }
 
-          window.level = .popUpMenu
+          window.level = launcherWindowLevel(recordingModeEnabled: self?.isLauncherRecordingModeEnabled ?? false)
           window.titlebarAppearsTransparent = true
           window.styleMask.insert(.fullSizeContentView)
           window.styleMask.insert(.nonactivatingPanel)

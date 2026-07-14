@@ -329,6 +329,20 @@ func (u *uiImpl) IsVisible(ctx context.Context) bool {
 	return u.isVisible
 }
 
+// ToggleRecordingMode asks the macOS UI to switch between launcher and capture-friendly window levels.
+func (u *uiImpl) ToggleRecordingMode(ctx context.Context) (bool, error) {
+	response, err := u.invokeWebsocketMethod(ctx, "ToggleRecordingMode", nil)
+	if err != nil {
+		return false, err
+	}
+
+	enabled, ok := response.(bool)
+	if !ok {
+		return false, fmt.Errorf("recording mode response is not a boolean: %T", response)
+	}
+	return enabled, nil
+}
+
 func (u *uiImpl) PickFiles(ctx context.Context, params common.PickFilesParams) []string {
 	respData, err := u.invokeWebsocketMethod(ctx, "PickFiles", params)
 	if err != nil {
