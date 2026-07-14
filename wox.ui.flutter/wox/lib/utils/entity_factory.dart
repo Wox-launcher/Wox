@@ -16,6 +16,7 @@ import 'package:wox/entity/wox_update_channel_version.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
 import 'package:wox/entity/wox_window_manager.dart';
 import 'package:wox/models/doctor_check_result.dart';
+import 'package:wox/models/macos_permission_status.dart';
 import 'package:wox/utils/log.dart';
 
 /// Factory function type for creating objects from JSON
@@ -32,6 +33,7 @@ class EntityFactory {
     'PluginDetail': (json) => PluginDetail.fromJson(json),
     'AIModel': (json) => AIModel.fromJson(json),
     'DoctorCheckResult': (json) => DoctorCheckResult.fromJson(json),
+    'MacOSPermissionStatus': (json) => MacOSPermissionStatus.fromJson(json),
     'WoxUsageStats': (json) => WoxUsageStats.fromJson(json),
     'HotkeyAvailability': (json) => HotkeyAvailability.fromJson(json),
     'HotkeyRecordingCapability': (json) => HotkeyRecordingCapability.fromJson(json),

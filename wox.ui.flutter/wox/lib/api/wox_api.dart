@@ -18,6 +18,7 @@ import 'package:wox/entity/wox_update_channel_version.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
 import 'package:wox/entity/wox_window_manager.dart';
 import 'package:wox/models/doctor_check_result.dart';
+import 'package:wox/models/macos_permission_status.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_http_util.dart';
 
@@ -279,12 +280,16 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData<List<DoctorCheckResult>>(traceId, "/doctor/check", null);
   }
 
-  Future<void> openAccessibilityPermission(String traceId) async {
-    await WoxHttpUtil.instance.postData(traceId, "/permission/accessibility/open", null);
+  Future<MacOSPermissionStatus> getMacOSPermissionStatus(String traceId) async {
+    return await WoxHttpUtil.instance.postData<MacOSPermissionStatus>(traceId, "/permission/macos/status", null);
   }
 
-  Future<void> openPrivacyPermission(String traceId) async {
-    await WoxHttpUtil.instance.postData(traceId, "/permission/privacy/open", null);
+  Future<MacOSPermissionStatus> reconcileMacOSPermissions(String traceId) async {
+    return await WoxHttpUtil.instance.postData<MacOSPermissionStatus>(traceId, "/permission/macos/reconcile", null);
+  }
+
+  Future<void> openMacOSPermission(String traceId, String permissionType) async {
+    await WoxHttpUtil.instance.postData(traceId, "/permission/macos/open", {"permissionType": permissionType});
   }
 
   Future<List<GlanceItem>> getGlanceItems(String traceId, List<GlanceRef> glances, String reason) async {

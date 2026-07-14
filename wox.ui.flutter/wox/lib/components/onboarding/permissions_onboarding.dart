@@ -1,15 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:uuid/v4.dart';
-import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/onboarding/wox_onboarding_step_layout.dart';
 import 'package:wox/components/wox_tooltip.dart';
+import 'package:wox/models/macos_permission_status.dart';
 import 'package:wox/utils/colors.dart';
 
 class WoxPermissionsOnboarding extends StatelessWidget {
-  const WoxPermissionsOnboarding({super.key, required this.accent, required this.tr, required this.isPermissionLoading, required this.accessibilityPassed});
+  const WoxPermissionsOnboarding({super.key, required this.accent, required this.tr, required this.isPermissionLoading, required this.status, required this.onOpenPermission});
 
   static const _permissionAttentionColor = Color(0xFFF59E0B);
   static const _permissionReadyColor = Color(0xFF22C55E);
@@ -17,11 +16,13 @@ class WoxPermissionsOnboarding extends StatelessWidget {
   final Color accent;
   final String Function(String key) tr;
   final bool isPermissionLoading;
-  final bool? accessibilityPassed;
+  final MacOSPermissionStatus status;
+  final ValueChanged<String> onOpenPermission;
 
   @override
   Widget build(BuildContext context) {
-    final accessibilityReady = accessibilityPassed == true;
+    final accessibilityReady = status.accessibility == MacOSPermissionState.granted;
+    final fullDiskAccessReady = status.fullDiskAccess == MacOSPermissionState.granted;
     return WoxOnboardingStepLayout(
       previewKey: const ValueKey('onboarding-media-permissions'),
       content: _buildContent(),
@@ -34,28 +35,15 @@ class WoxPermissionsOnboarding extends StatelessWidget {
             subtitle: tr('onboarding_permission_accessibility_body'),
             icon: const Icon(Icons.accessibility_new_outlined, color: Colors.white, size: 22),
             selected: true,
-            tail: tr(accessibilityReady ? 'onboarding_permission_ready' : 'onboarding_permission_needs_action'),
+            tail: tr(accessibilityReady ? 'onboarding_permission_ready' : 'onboarding_permission_authorize'),
             tailColor: accessibilityReady ? _permissionReadyColor : _permissionAttentionColor,
           ),
           WoxDemoResult(
             title: tr('onboarding_permission_disk_title'),
             subtitle: tr('onboarding_permission_disk_body'),
             icon: Icon(Icons.folder_open_outlined, color: accent, size: 22),
-            tail: tr('onboarding_permission_optional'),
-            tailColor: _permissionAttentionColor,
-          ),
-          WoxDemoResult(
-            title: tr('onboarding_permission_privacy_card'),
-            subtitle: Platform.isMacOS ? tr('onboarding_permission_open_privacy') : tr('onboarding_permissions_lite_body'),
-            icon: Icon(Icons.security_outlined, color: accent, size: 22),
-            tail: tr('onboarding_permission_ready'),
-            tailColor: _permissionReadyColor,
-          ),
-          WoxDemoResult(
-            title: tr('onboarding_permissions_lite_title'),
-            subtitle: tr('onboarding_permissions_lite_body'),
-            icon: Icon(Icons.verified_user_outlined, color: accent, size: 22),
-            tail: Platform.operatingSystem,
+            tail: tr(fullDiskAccessReady ? 'onboarding_permission_ready' : 'onboarding_permission_authorize'),
+            tailColor: fullDiskAccessReady ? _permissionReadyColor : _permissionAttentionColor,
           ),
         ],
       ),
@@ -72,66 +60,63 @@ class WoxPermissionsOnboarding extends StatelessWidget {
       );
     }
 
-    final statusText = isPermissionLoading ? tr('onboarding_permission_checking') : tr('onboarding_permission_needs_action');
+    final statusText = isPermissionLoading ? tr('onboarding_permission_checking') : tr('onboarding_permission_authorize');
     return _PermissionSetupPanel(
       key: const ValueKey('onboarding-permission-macos'),
       rows: [
-        _PermissionSetupRow(
+        _buildPermissionRow(
           icon: Icons.accessibility_new_rounded,
-          iconColor: accessibilityPassed == true ? _permissionReadyColor : _permissionAttentionColor,
+          state: status.accessibility,
           title: tr('onboarding_permission_accessibility_title'),
           body: tr('onboarding_permission_accessibility_body'),
-          trailing: [
-            accessibilityPassed == true ? _buildPermissionReadyIndicator() : _buildPermissionStatusPill(statusText, _permissionAttentionColor),
-            if (accessibilityPassed != true)
-              _buildPermissionActionButton(
-                text: tr('onboarding_permission_open_accessibility'),
-                onPressed: () => WoxApi.instance.openAccessibilityPermission(const UuidV4().generate()),
-              ),
-          ],
+          onPressed: () => onOpenPermission('accessibility'),
+          pendingText: statusText,
         ),
-        _PermissionSetupRow(
+        _buildPermissionRow(
           icon: Icons.folder_open_rounded,
-          iconColor: _permissionAttentionColor,
+          state: status.fullDiskAccess,
           title: tr('onboarding_permission_disk_title'),
           body: tr('onboarding_permission_disk_body'),
-          trailing: [
-            _buildPermissionStatusPill(tr('onboarding_permission_optional'), _permissionAttentionColor),
-            _buildPermissionActionButton(text: tr('onboarding_permission_open_privacy'), onPressed: () => WoxApi.instance.openPrivacyPermission(const UuidV4().generate())),
-          ],
+          onPressed: () => onOpenPermission('fullDiskAccess'),
+          pendingText: statusText,
         ),
       ],
     );
   }
 
-  Widget _buildPermissionStatusPill(String text, Color color) {
-    // Status refinement: pending and optional states are small supporting
-    // labels, not primary controls. Keeping them as quiet tinted pills makes
-    // the action chip the only clickable element in the row.
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(999), border: Border.all(color: color.withValues(alpha: 0.22))),
-      child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700, height: 1.0)),
+  Widget _buildPermissionRow({
+    required IconData icon,
+    required MacOSPermissionState state,
+    required String title,
+    required String body,
+    required VoidCallback onPressed,
+    required String pendingText,
+  }) {
+    final ready = state == MacOSPermissionState.granted;
+    return _PermissionSetupRow(
+      icon: icon,
+      iconColor: ready ? _permissionReadyColor : _permissionAttentionColor,
+      title: title,
+      body: body,
+      trailing: [if (ready) _buildPermissionReadyIndicator() else _buildPermissionActionButton(text: pendingText, onPressed: isPermissionLoading ? null : onPressed)],
     );
   }
 
-  Widget _buildPermissionActionButton({required String text, required VoidCallback onPressed}) {
-    // Visual refinement: permission shortcuts open macOS System Settings, so a
-    // compact filled chip is clearer than the previous heavy outlined button
-    // and reads as a secondary row action.
+  Widget _buildPermissionActionButton({required String text, required VoidCallback? onPressed}) {
+    // The permission state and action share one control so every pending row has a single clear next step.
     return TextButton.icon(
       onPressed: onPressed,
       icon: const Icon(Icons.open_in_new_rounded, size: 14),
       label: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
       style: ButtonStyle(
-        foregroundColor: WidgetStatePropertyAll(getThemeTextColor()),
+        foregroundColor: const WidgetStatePropertyAll(_permissionAttentionColor),
         backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-          return getThemeTextColor().withValues(alpha: states.contains(WidgetState.hovered) ? 0.13 : 0.075);
+          return _permissionAttentionColor.withValues(alpha: states.contains(WidgetState.hovered) ? 0.20 : 0.12);
         }),
-        overlayColor: WidgetStatePropertyAll(getThemeTextColor().withValues(alpha: 0.08)),
+        overlayColor: WidgetStatePropertyAll(_permissionAttentionColor.withValues(alpha: 0.10)),
         padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 12, vertical: 7)),
         textStyle: const WidgetStatePropertyAll(TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(999))),
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(999), side: BorderSide(color: _permissionAttentionColor, width: 1))),
         minimumSize: const WidgetStatePropertyAll(Size.zero),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),

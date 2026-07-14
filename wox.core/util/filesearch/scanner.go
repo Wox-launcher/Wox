@@ -967,21 +967,24 @@ func (s *Scanner) prunePolicyRejectedDynamicRoots(ctx context.Context, roots []R
 			kept = append(kept, root)
 			continue
 		}
-		if s.shouldProcessChange(parentRoot, ChangeSignal{
-			Kind:          ChangeSignalKindDirtyPath,
-			RootID:        parentRoot.ID,
-			Path:          root.Path,
-			PathIsDir:     true,
-			PathTypeKnown: true,
-		}) {
+		allowedByPolicy := !shouldSkipSystemPathForRoot(parentRoot, root.Path, true)
+		if allowedByPolicy {
+			allowedByPolicy = s.shouldProcessChange(parentRoot, ChangeSignal{
+				Kind:          ChangeSignalKindDirtyPath,
+				RootID:        parentRoot.ID,
+				Path:          root.Path,
+				PathIsDir:     true,
+				PathTypeKnown: true,
+			})
+		}
+		if allowedByPolicy {
 			kept = append(kept, root)
 			continue
 		}
 
-		// Bug fix: ignore-rule changes must also retire hidden dynamic roots that
-		// were persisted before the rule existed. Deleting the dynamic root drops
-		// its indexed rows instead of moving them back to the parent, because the
-		// parent policy now says this subtree should not be indexed at all.
+		// Bug fix: system pruning and ignore-rule changes must also retire dynamic
+		// roots persisted before the policy existed. Deleting the dynamic root drops
+		// its indexed rows instead of moving them back to a parent that now excludes it.
 		if err := s.db.DeleteRoot(ctx, root.ID); err != nil {
 			return nil, err
 		}

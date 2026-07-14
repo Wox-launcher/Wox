@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 	"wox/util/clipboard"
 	"wox/util/imagecache"
 	"wox/util/mainthread"
+	"wox/util/permission"
 	"wox/util/selection"
 
 	_ "wox/plugin/host"
@@ -65,6 +67,15 @@ import (
 )
 
 func main() {
+	// Permission APIs cache an initial denial for the lifetime of a process. Run the
+	// passive checks before AppKit and the normal Wox lifecycle initialize so the
+	// parent can observe permissions granted while it is already running.
+	if permission.IsMacOSPermissionProbeProcess() {
+		if err := json.NewEncoder(os.Stdout).Encode(permission.GetMacOSPermissionStatusDirect(context.Background())); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	if diagnostic.GetManager().IsSupervisorArg(os.Args) {
 		ctx := util.NewTraceContext()
 		if locationErr := util.GetLocation().Init(); locationErr != nil {

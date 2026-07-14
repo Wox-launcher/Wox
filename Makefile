@@ -230,10 +230,16 @@ _bundle_mac_app:
 	@if [ -n "$(MACOS_KEYCHAINPWD)" ]; then \
 		security unlock-keychain -p "$(MACOS_KEYCHAINPWD)"; \
 	fi
+	# Keep local development builds separate from an installed production Wox.
+	# The outer development bundle gets a stable designated requirement so TCC grants
+	# survive code changes without requiring an interactive signing certificate.
 	@if [ -n "$(MACOS_SIGN_IDENTITY)" ]; then \
-		codesign --options=runtime --force --deep --sign "$(MACOS_SIGN_IDENTITY)" Wox.app/Contents/MacOS/wox; \
+		codesign --options=runtime --force --deep --sign "$(MACOS_SIGN_IDENTITY)" Wox.app; \
 	else \
-		echo "MACOS_SIGN_IDENTITY is empty; skip codesign"; \
+		/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.github.wox.dev" Wox.app/Contents/Info.plist; \
+		codesign --force --deep --sign - Wox.app; \
+		codesign --force --sign - --requirements '=designated => identifier "com.github.wox.dev"' Wox.app; \
+		echo "MACOS_SIGN_IDENTITY is empty; use the stable com.github.wox.dev development requirement"; \
 	fi
 	@if [ -n "$(MACOS_SIGN_IDENTITY)" ]; then \
 		create-dmg \

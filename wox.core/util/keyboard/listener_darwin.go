@@ -11,6 +11,7 @@ int woxDarwinEnsureKeyboardReady(char **errorOut);
 int woxDarwinRegisterHotkey(int id, unsigned int modifiers, unsigned int keyCode, char **errorOut);
 int woxDarwinUnregisterHotkey(int id, char **errorOut);
 int woxDarwinSetRawKeyboardHookEnabled(int enabled, char **errorOut);
+int woxDarwinHasRawKeyboardAccess(void);
 */
 import "C"
 
@@ -33,13 +34,20 @@ type rawKeySubscription struct {
 }
 
 var (
-	managerMu        sync.Mutex
-	nextHotkeyID     = 1
-	nextListenerID   = 1
-	hotkeyCallbacks  = map[int]func(){}
-	rawKeyListeners  = map[int]RawKeyHandler{}
-	rawHookIsEnabled bool
+	managerMu            sync.Mutex
+	nextHotkeyID         = 1
+	nextListenerID       = 1
+	hotkeyCallbacks      = map[int]func(){}
+	rawKeyListeners      = map[int]RawKeyHandler{}
+	rawHookIsEnabled     bool
+	rawHookIsDeferred    bool
+	rawHookAccessKnown   bool
+	rawHookAccessGranted bool
 )
+
+func init() {
+	reconcileRawKeyListenerAccessWithPermissionStatusPlatform = reconcileRawKeyListenerAccessWithPermissionStatusDarwin
+}
 
 func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {
 	keyCode, err := keyToDarwinKeyCode(key)
@@ -100,16 +108,13 @@ func AddRawKeyListener(handler RawKeyHandler) (RawKeySubscription, error) {
 	id := nextListenerID
 	nextListenerID++
 	rawKeyListeners[id] = handler
-	needEnable := !rawHookIsEnabled
 	managerMu.Unlock()
 
-	if needEnable {
-		if err := setRawHookEnabled(true); err != nil {
-			managerMu.Lock()
-			delete(rawKeyListeners, id)
-			managerMu.Unlock()
-			return nil, err
-		}
+	// Keep the subscription pending when macOS permissions are missing. The
+	// listener becomes active after the explicit permission flow reconciles the
+	// backend, without forcing every subsystem to register again.
+	if err := reconcileRawKeyListenerAccessDarwin(); err != nil {
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("raw keyboard listener remains pending: %s", err.Error()))
 	}
 
 	return &rawKeySubscription{id: id}, nil
@@ -124,12 +129,9 @@ func (s *rawKeySubscription) Close() error {
 	s.once.Do(func() {
 		managerMu.Lock()
 		delete(rawKeyListeners, s.id)
-		needDisable := rawHookIsEnabled && len(rawKeyListeners) == 0
 		managerMu.Unlock()
 
-		if needDisable {
-			closeErr = setRawHookEnabled(false)
-		}
+		closeErr = reconcileRawKeyListenerAccessDarwin()
 	})
 	return closeErr
 }
@@ -154,6 +156,69 @@ func setRawHookEnabled(enabled bool) error {
 
 	managerMu.Lock()
 	rawHookIsEnabled = enabled
+	managerMu.Unlock()
+	return nil
+}
+
+// reconcileRawKeyListenerAccessDarwin starts privacy-sensitive keyboard hooks only after Accessibility is granted.
+func reconcileRawKeyListenerAccessDarwin() error {
+	managerMu.Lock()
+	accessKnown := rawHookAccessKnown
+	accessGranted := rawHookAccessGranted
+	managerMu.Unlock()
+	// macOS can cache the pre-grant denial in the long-lived core process, so a
+	// later recorder must reuse the most recent isolated permission probe.
+	if !accessKnown {
+		accessGranted = C.woxDarwinHasRawKeyboardAccess() != 0
+	}
+	return reconcileRawKeyListenerAccessWithPermissionStatusDarwin(accessGranted)
+}
+
+// reconcileRawKeyListenerAccessWithPermissionStatusDarwin uses the fresh probe result instead of the process-cached preflight APIs.
+func reconcileRawKeyListenerAccessWithPermissionStatusDarwin(accessibilityGranted bool) error {
+	managerMu.Lock()
+	rawHookAccessKnown = true
+	rawHookAccessGranted = accessibilityGranted
+	hasListeners := len(rawKeyListeners) > 0
+	isEnabled := rawHookIsEnabled
+	isDeferred := rawHookIsDeferred
+	managerMu.Unlock()
+
+	if !hasListeners {
+		if isEnabled {
+			if err := setRawHookEnabled(false); err != nil {
+				return err
+			}
+		}
+		managerMu.Lock()
+		rawHookIsDeferred = false
+		managerMu.Unlock()
+		return nil
+	}
+
+	if !accessibilityGranted {
+		if isEnabled {
+			if err := setRawHookEnabled(false); err != nil {
+				return err
+			}
+		}
+		if !isDeferred {
+			util.GetLogger().Info(util.NewTraceContext(), "raw keyboard listener deferred until Accessibility permission is granted")
+		}
+		managerMu.Lock()
+		rawHookIsDeferred = true
+		managerMu.Unlock()
+		return nil
+	}
+
+	if !isEnabled {
+		if err := setRawHookEnabled(true); err != nil {
+			return err
+		}
+		util.GetLogger().Info(util.NewTraceContext(), "raw keyboard listener enabled after permission reconciliation")
+	}
+	managerMu.Lock()
+	rawHookIsDeferred = false
 	managerMu.Unlock()
 	return nil
 }

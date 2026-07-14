@@ -185,6 +185,11 @@ func (u *uiImpl) OpenOnboardingWindow(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "OpenOnboardingWindow", nil)
 }
 
+// OpenMacOSPermissionFlow asks the Flutter host to present the native permission guide for one permission.
+func (u *uiImpl) OpenMacOSPermissionFlow(ctx context.Context, permissionType string) {
+	u.invokeWebsocketMethod(ctx, "OpenMacOSPermissionFlow", map[string]string{"permissionType": permissionType})
+}
+
 func (u *uiImpl) GetAllThemes(ctx context.Context) []common.Theme {
 	return GetUIManager().GetAllThemes(ctx)
 }

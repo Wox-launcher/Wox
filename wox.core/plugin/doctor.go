@@ -59,7 +59,12 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 	}
 
 	if util.IsMacOS() {
-		results = append(results, checkAccessibilityPermission(ctx))
+		permissionStatus, err := permission.ProbeMacOSPermissionStatus(ctx)
+		if err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to run isolated macOS permission probe for Doctor: %s", err.Error()))
+			permissionStatus = permission.GetMacOSPermissionStatusDirect(ctx)
+		}
+		results = append(results, checkAccessibilityPermission(ctx, permissionStatus.Accessibility == permission.MacOSPermissionGranted))
 	}
 	if result, ok := checkGnomeTrayIndicator(ctx); ok {
 		results = append(results, result)
@@ -219,9 +224,7 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 	}
 }
 
-func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
-	hasPermission := permission.HasAccessibilityPermission(ctx)
-
+func checkAccessibilityPermission(ctx context.Context, hasPermission bool) DoctorCheckResult {
 	if !hasPermission {
 		return DoctorCheckResult{
 			Name:        "i18n:plugin_doctor_accessibility",
@@ -230,7 +233,7 @@ func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
 			Description: "i18n:plugin_doctor_accessibility_required",
 			ActionName:  "i18n:plugin_doctor_accessibility_open_settings",
 			Action: func(ctx context.Context, actionContext ActionContext) {
-				permission.GrantAccessibilityPermission(ctx)
+				GetPluginManager().GetUI().OpenMacOSPermissionFlow(ctx, string(permission.MacOSPermissionAccessibility))
 			},
 		}
 	}

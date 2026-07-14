@@ -5,6 +5,13 @@ import (
 	"strings"
 )
 
+var reconcileRawKeyListenerAccessWithPermissionStatusPlatform = func(accessibilityGranted bool) error { return nil }
+
+// ReconcileRawKeyListenerAccessWithPermissionStatus applies a freshly probed macOS permission state to pending listeners.
+func ReconcileRawKeyListenerAccessWithPermissionStatus(accessibilityGranted bool) error {
+	return reconcileRawKeyListenerAccessWithPermissionStatusPlatform(accessibilityGranted)
+}
+
 type Modifier uint32
 
 const (

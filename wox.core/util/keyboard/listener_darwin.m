@@ -40,7 +40,7 @@ static char *copyStatusErrorMessage(const char *message, OSStatus status) {
 
 static char *copyRawEventTapErrorMessage(const char *message) {
     BOOL accessibilityTrusted = AXIsProcessTrusted();
-    char buffer[192];
+    char buffer[160];
     snprintf(buffer, sizeof(buffer), "%s (accessibilityTrusted=%d)", message, accessibilityTrusted ? 1 : 0);
     return copyErrorMessage(buffer);
 }
@@ -181,6 +181,19 @@ static void ensurePhysicalKeyboardMonitor(void) {
     }
 }
 
+static void stopPhysicalKeyboardMonitor(void) {
+    if (!gPhysicalKeyboardManager) {
+        return;
+    }
+
+    IOHIDManagerUnscheduleFromRunLoop(gPhysicalKeyboardManager, CFRunLoopGetMain(), kCFRunLoopCommonModes);
+    IOHIDManagerClose(gPhysicalKeyboardManager, kIOHIDOptionsTypeNone);
+    CFRelease(gPhysicalKeyboardManager);
+    gPhysicalKeyboardManager = NULL;
+    gPhysicalKeyboardManagerReady = NO;
+    gPhysicalCapsLockPressed = NO;
+}
+
 int woxDarwinIsPhysicalCapsLockPressed(int *available) {
     if (available) {
         *available = gPhysicalKeyboardManagerReady ? 1 : 0;
@@ -197,8 +210,6 @@ static OSStatus hotkeyHandler(EventHandlerCallRef nextHandler, EventRef event, v
 
 int woxDarwinEnsureKeyboardReady(char **errorOut) {
     @autoreleasepool {
-        ensurePhysicalKeyboardMonitor();
-
         if (!gHotkeyRefs) {
             gHotkeyRefs = [[NSMutableDictionary alloc] init];
         }
@@ -218,6 +229,10 @@ int woxDarwinEnsureKeyboardReady(char **errorOut) {
 
         return 1;
     }
+}
+
+int woxDarwinHasRawKeyboardAccess(void) {
+    return AXIsProcessTrusted() ? 1 : 0;
 }
 
 int woxDarwinRegisterHotkey(int id, unsigned int modifiers, unsigned int keyCode, char **errorOut) {
@@ -315,6 +330,9 @@ static CGEventRef rawKeyboardEventTapCallback(CGEventTapProxy proxy, CGEventType
 int woxDarwinSetRawKeyboardHookEnabled(int enabled, char **errorOut) {
     @autoreleasepool {
         if (enabled) {
+            // Go gates this call with a fresh-process permission probe. Repeating
+            // the process-cached preflight here would reject permissions granted
+            // after Wox started, even though WindowServer already accepts them.
             if (!gRawKeyboardEventTap) {
                 CGEventMask mask = CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventKeyUp) | CGEventMaskBit(kCGEventFlagsChanged);
                 gRawKeyboardEventTap = CGEventTapCreate(kCGSessionEventTap,
@@ -343,6 +361,7 @@ int woxDarwinSetRawKeyboardHookEnabled(int enabled, char **errorOut) {
                 CFRunLoopAddSource(CFRunLoopGetMain(), gRawKeyboardEventTapSource, kCFRunLoopCommonModes);
                 CGEventTapEnable(gRawKeyboardEventTap, true);
             }
+            ensurePhysicalKeyboardMonitor();
             return 1;
         }
 
@@ -357,6 +376,7 @@ int woxDarwinSetRawKeyboardHookEnabled(int enabled, char **errorOut) {
             CFRelease(gRawKeyboardEventTap);
             gRawKeyboardEventTap = NULL;
         }
+        stopPhysicalKeyboardMonitor();
         return 1;
     }
 }

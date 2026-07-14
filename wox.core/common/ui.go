@@ -74,6 +74,7 @@ type UI interface {
 	RecordHotkey(ctx context.Context, hotkey string, kind string)
 	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
 	OpenOnboardingWindow(ctx context.Context)
+	OpenMacOSPermissionFlow(ctx context.Context, permissionType string)
 	PickFiles(ctx context.Context, params PickFilesParams) []string
 	CaptureScreenshot(ctx context.Context, request CaptureScreenshotRequest) (CaptureScreenshotResult, error)
 	// WriteClipboardImageFile asks the UI process to write an image file using its native clipboard owner.

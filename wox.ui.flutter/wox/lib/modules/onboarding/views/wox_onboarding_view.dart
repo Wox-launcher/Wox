@@ -25,8 +25,10 @@ import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_glance.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_lang.dart';
+import 'package:wox/models/macos_permission_status.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/consts.dart';
+import 'package:wox/utils/macos_permission_flow_bridge.dart';
 
 const double _onboardingSidebarWidth = 256;
 const double _onboardingFooterHeight = 72;
@@ -45,7 +47,7 @@ class _OnboardingStep {
   final String titleKey;
 }
 
-class _WoxOnboardingViewState extends State<WoxOnboardingView> {
+class _WoxOnboardingViewState extends State<WoxOnboardingView> with WidgetsBindingObserver {
   final launcherController = Get.find<WoxLauncherController>();
   final settingController = Get.find<WoxSettingController>();
   final FocusNode onboardingFocusNode = FocusNode();
@@ -54,7 +56,8 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
   bool isGlanceLoadFailed = false;
   bool hasRequestedGlanceLoad = false;
   bool isPermissionLoading = false;
-  bool? accessibilityPassed;
+  bool isPermissionRequestInFlight = false;
+  MacOSPermissionStatus permissionStatus = const MacOSPermissionStatus.unknown();
   late final Future<List<WoxLang>> availableLanguagesFuture = WoxApi.instance.getAllLanguages(const UuidV4().generate());
 
   late final List<_OnboardingStep> steps = [
@@ -131,6 +134,8 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    MacOSPermissionFlowBridge.instance.addRefreshListener(_refreshPermissionStatus);
     // Kick off glance loading immediately so the data is ready (or still
     // loading in the background) by the time the user reaches that step.
     // Previously this only started when the glance step was entered, which
@@ -154,8 +159,17 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    MacOSPermissionFlowBridge.instance.removeRefreshListener(_refreshPermissionStatus);
     onboardingFocusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && Platform.isMacOS) {
+      _refreshPermissionStatus();
+    }
   }
 
   KeyEventResult _handleOnboardingKeyEvent(FocusNode node, KeyEvent event) {
@@ -185,29 +199,40 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
       hasRequestedGlanceLoad = true;
       unawaited(_loadGlanceChoices());
     }
-    if (activeStep.id == 'permissions' && Platform.isMacOS && accessibilityPassed == null && !isPermissionLoading) {
+    if (activeStep.id == 'permissions' && Platform.isMacOS && !isPermissionLoading) {
       unawaited(_loadPermissionStatus());
     }
   }
 
-  Future<void> _loadPermissionStatus() async {
-    setState(() {
-      isPermissionLoading = true;
-    });
+  void _refreshPermissionStatus() {
+    if (mounted && Platform.isMacOS) {
+      unawaited(_loadPermissionStatus(showLoading: false));
+    }
+  }
+
+  Future<void> _loadPermissionStatus({bool showLoading = true}) async {
+    if (isPermissionRequestInFlight) return;
+    isPermissionRequestInFlight = true;
+    if (showLoading) {
+      setState(() {
+        isPermissionLoading = true;
+      });
+    }
     try {
-      final results = await WoxApi.instance.doctorCheck(const UuidV4().generate());
-      final accessibility = results.where((item) => item.type.toLowerCase() == 'accessibility').toList();
+      final traceId = const UuidV4().generate();
+      final status = await WoxApi.instance.getMacOSPermissionStatus(traceId);
       if (!mounted) return;
       setState(() {
-        accessibilityPassed = accessibility.isEmpty ? true : accessibility.first.passed;
+        permissionStatus = status;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        accessibilityPassed = null;
+        permissionStatus = const MacOSPermissionStatus.unknown();
       });
     } finally {
-      if (mounted) {
+      isPermissionRequestInFlight = false;
+      if (mounted && showLoading) {
         setState(() {
           isPermissionLoading = false;
         });
@@ -474,7 +499,13 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
   Widget _buildActiveStep(Color accent) {
     switch (activeStep.id) {
       case 'permissions':
-        return WoxPermissionsOnboarding(accent: accent, tr: tr, isPermissionLoading: isPermissionLoading, accessibilityPassed: accessibilityPassed);
+        return WoxPermissionsOnboarding(
+          accent: accent,
+          tr: tr,
+          isPermissionLoading: isPermissionLoading,
+          status: permissionStatus,
+          onOpenPermission: (permissionType) => WoxApi.instance.openMacOSPermission(const UuidV4().generate(), permissionType),
+        );
       case 'mainHotkey':
         return WoxMainHotkeyOnboarding(
           accent: accent,

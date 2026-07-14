@@ -6,8 +6,8 @@ func HasAccessibilityPermission(ctx context.Context) bool {
 	return true
 }
 
-func GrantAccessibilityPermission(ctx context.Context) {
-
+func GetFullDiskAccessPermissionState(ctx context.Context) MacOSPermissionState {
+	return MacOSPermissionUnknown
 }
 
 func OpenPrivacySecuritySettings(ctx context.Context) {

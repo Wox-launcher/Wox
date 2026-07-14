@@ -85,6 +85,7 @@ type Manager struct {
 	activeWindowSnapshotMu  sync.RWMutex
 	activeWindowSnapshotSeq uint64
 	pendingStartupNotify    *common.NotifyMsg
+	trayHiddenForOnboarding atomic.Bool
 	trayEmojiWarmMu         sync.Mutex
 	trayEmojiWarmInFlight   map[string]struct{}
 }
@@ -1293,6 +1294,18 @@ func (m *Manager) PostOnOnboarding(ctx context.Context, isInOnboardingView bool)
 			impl.isInSettingView = false
 		}
 	}
+
+	if isInOnboardingView {
+		// Suppress every tray entry before removing it so concurrent setting or
+		// icon refreshes cannot recreate a path around onboarding.
+		m.trayHiddenForOnboarding.Store(true)
+		m.HideTray()
+		return
+	}
+
+	if m.trayHiddenForOnboarding.Swap(false) && setting.GetSettingManager().GetWoxSetting(ctx).ShowTray.Get() {
+		m.ShowTray()
+	}
 }
 
 // PostOnHotkeyRecording tracks recorder focus and starts the Go-side raw
@@ -1339,6 +1352,10 @@ func (m *Manager) IsThemeUpgradable(id string, version string) bool {
 
 func (m *Manager) ShowTray() {
 	ctx := util.NewTraceContext()
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if m.trayHiddenForOnboarding.Load() || !woxSetting.OnboardingFinished.Get() {
+		return
+	}
 
 	tray.CreateTray(resource.GetAppIcon(), func() {
 		m.GetUI(ctx).ToggleApp(ctx, common.ShowContext{
@@ -1444,6 +1461,10 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 }
 
 func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
+	if m.trayHiddenForOnboarding.Load() || !setting.GetSettingManager().GetWoxSetting(ctx).OnboardingFinished.Get() {
+		return
+	}
+
 	if util.IsLinuxWaylandSession() {
 		logger.Info(ctx, "skip tray query icon refresh: tray query is unavailable on Wayland")
 		return

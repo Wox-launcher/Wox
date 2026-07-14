@@ -54,6 +54,7 @@ import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/macos_permission_flow_bridge.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/result_drag_platform_bridge.dart';
 import 'package:wox/utils/screenshot/screenshot_platform_bridge.dart';
@@ -85,6 +86,7 @@ class WoxLauncherController extends GetxController {
   static const String localActionWebViewForwardId = "__local_webview_forward__";
   static const String localActionWebViewClearStateId = "__local_webview_clear_state__";
   static const String localActionLoadFilePreviewId = "__local_load_file_preview__";
+  bool _isMacOSPermissionReconcileInFlight = false;
 
   int _captureDevLauncherVisibleActivationCost(ShowAppParams params) {
     if (!Env.isDev || params.activationStartedAt <= 0) {
@@ -474,6 +476,10 @@ class WoxLauncherController extends GetxController {
   void onInit() {
     super.onInit();
 
+    if (Platform.isMacOS) {
+      MacOSPermissionFlowBridge.instance.addRefreshListener(_reconcileMacOSPermissions);
+    }
+
     // On Linux, the IME (IBus/Fcitx) can consume the first keydown after focus gain.
     // Escape still needs a focus-node fallback because the shared query-box handler only reacts
     // to KeyDown for hide, while Enter fallback now lives in the query-box view's KeyRepeat path
@@ -567,6 +573,32 @@ class WoxLauncherController extends GetxController {
 
     // Initialize doctor check info
     doctorCheckInfo.value = DoctorCheckInfo.empty();
+  }
+
+  // Permission flow notifications are app-global so Doctor and pending raw-key consumers recover even when onboarding is not visible.
+  void _reconcileMacOSPermissions() {
+    if (_isMacOSPermissionReconcileInFlight) return;
+    _isMacOSPermissionReconcileInFlight = true;
+    unawaited(_runMacOSPermissionReconcile());
+  }
+
+  Future<void> _runMacOSPermissionReconcile() async {
+    final traceId = const UuidV4().generate();
+    try {
+      try {
+        await WoxApi.instance.reconcileMacOSPermissions(traceId);
+      } catch (e) {
+        Logger.instance.warn(traceId, "Failed to reconcile macOS permissions: $e");
+        return;
+      }
+      try {
+        await doctorCheck();
+      } catch (e) {
+        Logger.instance.warn(traceId, "Failed to refresh Doctor after macOS permission reconciliation: $e");
+      }
+    } finally {
+      _isMacOSPermissionReconcileInFlight = false;
+    }
   }
 
   void updateQueryBoxSelectedTextStyle() {
@@ -3253,6 +3285,26 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "OpenOnboardingWindow") {
       openOnboarding(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "OpenMacOSPermissionFlow") {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      final permissionType = data['permissionType']?.toString() ?? '';
+      final titleKey = switch (permissionType) {
+        'accessibility' => 'onboarding_permission_accessibility_title',
+        'fullDiskAccess' => 'onboarding_permission_disk_title',
+        _ => 'onboarding_permissions_title',
+      };
+      try {
+        await MacOSPermissionFlowBridge.instance.open(
+          permissionType: permissionType,
+          title: tr(titleKey),
+          rightInstruction: tr('macos_permission_flow_drag_left_instruction'),
+          bottomInstruction: tr('macos_permission_flow_drag_above_instruction'),
+          manualInstruction: tr('macos_permission_flow_manual_instruction'),
+        );
+        responseWoxWebsocketRequest(msg, true, null);
+      } catch (e) {
+        responseWoxWebsocketRequest(msg, false, e.toString());
+      }
     } else if (msg.method == "ShowToolbarMsg") {
       await showToolbarMsg(msg.traceId, ToolbarMsg.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
@@ -4387,7 +4439,7 @@ class WoxLauncherController extends GetxController {
     return DoctorCheckInfo(results: results, allPassed: allPassed, icon: icon, message: message);
   }
 
-  void doctorCheck() async {
+  Future<void> doctorCheck() async {
     final traceId = const UuidV4().generate();
     final wasToolbarVisible = isToolbarVisible;
     var results = await WoxApi.instance.doctorCheck(traceId);
@@ -4403,6 +4455,9 @@ class WoxLauncherController extends GetxController {
 
   @override
   void dispose() {
+    if (Platform.isMacOS) {
+      MacOSPermissionFlowBridge.instance.removeRefreshListener(_reconcileMacOSPermissions);
+    }
     _visibleLauncherFocusToken++;
     glanceRefreshTimer?.cancel();
     hiddenCacheClearTimer?.cancel();

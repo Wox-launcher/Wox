@@ -146,11 +146,12 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/ai/question/answer": handleAIQuestionAnswer,
 
 	// doctor
-	"/doctor/check":                  handleDoctorCheck,
-	"/doctor/ignore":                 handleDoctorIgnore,
-	"/doctor/unignore":               handleDoctorUnignore,
-	"/permission/accessibility/open": handlePermissionAccessibilityOpen,
-	"/permission/privacy/open":       handlePermissionPrivacyOpen,
+	"/doctor/check":               handleDoctorCheck,
+	"/doctor/ignore":              handleDoctorIgnore,
+	"/doctor/unignore":            handleDoctorUnignore,
+	"/permission/macos/status":    handleMacOSPermissionStatus,
+	"/permission/macos/reconcile": handleMacOSPermissionReconcile,
+	"/permission/macos/open":      handleMacOSPermissionOpen,
 
 	// dictation
 	"/dictation/model/download":      handleDictationModelDownload,
@@ -3492,20 +3493,44 @@ func handleDoctorUnignore(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, nil)
 }
 
-func handlePermissionAccessibilityOpen(w http.ResponseWriter, r *http.Request) {
+func handleMacOSPermissionStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
-	// The onboarding permission page should be non-blocking: opening System
-	// Settings is a best-effort side effect and the guide remains skippable if
-	// the platform has no corresponding permission panel.
-	permission.GrantAccessibilityPermission(ctx)
-	writeSuccessResponse(w, "")
+	writeSuccessResponse(w, currentMacOSPermissionStatus(ctx))
 }
 
-func handlePermissionPrivacyOpen(w http.ResponseWriter, r *http.Request) {
+func handleMacOSPermissionReconcile(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
-	// Full Disk Access cannot be detected reliably here, so onboarding only
-	// opens the privacy page and explains the File Search impact in UI text.
-	permission.OpenPrivacySecuritySettings(ctx)
+	status := currentMacOSPermissionStatus(ctx)
+	if err := keyboard.ReconcileRawKeyListenerAccessWithPermissionStatus(status.Accessibility == permission.MacOSPermissionGranted); err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to reconcile macOS raw keyboard access: %s", err.Error()))
+	}
+	writeSuccessResponse(w, status)
+}
+
+// currentMacOSPermissionStatus falls back to the in-process checks if the isolated probe cannot start.
+func currentMacOSPermissionStatus(ctx context.Context) permission.MacOSPermissionStatus {
+	status, err := permission.ProbeMacOSPermissionStatus(ctx)
+	if err == nil {
+		return status
+	}
+	logger.Warn(ctx, fmt.Sprintf("failed to run isolated macOS permission probe: %s", err.Error()))
+	return permission.GetMacOSPermissionStatusDirect(ctx)
+}
+
+func handleMacOSPermissionOpen(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	var req struct {
+		PermissionType permission.MacOSPermissionType `json:"permissionType"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if !permission.IsValidMacOSPermissionType(req.PermissionType) {
+		writeErrorResponse(w, "invalid macOS permission type")
+		return
+	}
+	GetUIManager().GetUI(ctx).OpenMacOSPermissionFlow(ctx, string(req.PermissionType))
 	writeSuccessResponse(w, "")
 }
 
