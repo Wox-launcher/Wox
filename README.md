@@ -14,7 +14,7 @@ Wox is an open-source launcher for macOS, Linux, and Windows. It keeps local sea
 
 > Press <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>Space</kbd>, type what you need, and press <kbd>Enter</kbd>.
 
-![Wox screenshot](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/intro.mp4)
+https://github.com/user-attachments/assets/1b282fde-c1c5-426a-b45d-cd0aa329386a
 
 ## Install
 
