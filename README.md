@@ -14,33 +14,7 @@ Wox is an open-source launcher for macOS, Linux, and Windows. It keeps local sea
 
 > Press <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>Space</kbd>, type what you need, and press <kbd>Enter</kbd>.
 
-![Wox searching screenshots with a file preview and actions to copy, open, or reveal the selected result](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/search_result_and_action_panel.png)
-
-## One query, real work
-
-### Find the thing you need
-
-Search applications, folders, files, and file content. Then open it, copy it, preview it, or reveal it in its folder without leaving the keyboard.
-
-![Wox searching local files named main.go and showing matching paths](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/system-plugin-filesearch.png)
-
-### Make it yours
-
-Start with the built-ins, then add plugins and themes for the workflows you actually use. Wox plugins can be written with Python or JavaScript.
-
-![Wox plugin settings showing installed plugins and the selected Awake plugin](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/plugin_setting.png)
-
-### Capture it, keep it handy
-
-Take a screenshot, crop or annotate it, and pin it above the work you are doing.
-
-![Wox screenshot tool with an active selection and annotation controls](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/screenshot.png)
-
-### Ask in plain language
-
-Describe the emoji you want, pick it, and carry on. Wox also handles quick calculations and unit conversions without opening another app.
-
-![Wox finding cold-weather emoji from the query emoji so cold](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/emoji_ai_search.png)
+![Wox screenshot](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/intro.mp4)
 
 ## Install
 
