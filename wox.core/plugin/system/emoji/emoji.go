@@ -285,7 +285,9 @@ func (e *EmojiPlugin) maybeStartAIMatch(ctx context.Context, query plugin.Query,
 		}
 
 		var finalData string
-		err := e.api.AIChatStream(ctx, model, conversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
+		err := e.api.AIChatStream(ctx, model, conversations, common.ChatOptions{
+			ThinkingMode: common.ChatThinkingModeNonThinking,
+		}, func(streamResult common.ChatStreamData) {
 			if streamResult.Status == common.ChatStreamStatusStreaming || streamResult.Status == common.ChatStreamStatusStreamed || streamResult.Status == common.ChatStreamStatusFinished {
 				finalData = streamResult.Data
 			}
