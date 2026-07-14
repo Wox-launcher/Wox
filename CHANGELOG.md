@@ -3,18 +3,26 @@
 ## v2.4.0-beta.1
 
 This beta introduces local, offline Dictation for fast voice-to-text workflows, alongside file content search and a more capable AI Chat experience.
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/dictation_setting.png)
+
 
 - Add
-  - [`Dictation`] Add local voice-to-text dictation with downloadable offline models, configurable microphones and model loading, press, double-press, and hold hotkeys, live status overlays, audio ducking, and custom actions that can refine speech with AI, type into the active window, show an overlay, or start AI Chat.
+  - [`Dictation`] Add local voice-to-text dictation with downloadable offline models, configurable microphones and model loading, press, double-press, and hold hotkeys, live status overlays, audio ducking, searchable history that preserves original and AI-refined transcripts, and custom actions that can refine speech with AI, type into the active window, show an overlay, or start AI Chat.  
+
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/dictation.png)
-  - [`File Search`] Add optional file-content indexing and search so users can find supported text, PDF, and Office files by words inside them, choose indexed extensions, track indexing progress, use quoted phrases, and open theme-aware previews with clear large-file limits.
+  - [`File Search`] Add optional file-content indexing and search so users can find supported text, PDF, and Office files by words inside them, choose indexed extensions, track indexing progress, use quoted phrases, benefit from faster parallel indexing and more reliable index reconciliation, and open theme-aware previews with clear large-file limits.  
+
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/file_content_search.png)
 
 - Improve
   - [`AI Chat`] Improve AI Chat with reusable local and remote skills, built-in tools, inline model and skill selection, configurable tool usage, cancellable streaming, summarized conversation history, and a fallback search action.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_chat.mp4)
   - [`Hotkey`] Improve hotkey recording and registration with left/right-specific modifier keys, multi-key hold shortcuts, and more reliable press, double-press, hold, and Caps Lock combo handling.
-  - [`Media Player`] Expand Linux support with MPRIS track metadata and playback controls.
+  - [`Media Player`] Improve now-playing results with artwork, a dedicated preview, live progress, playback controls, and an action to open the full Media Player view, while expanding Linux support through MPRIS.
+  - [`Explorer`] Improve type-to-search with indexed results beyond the current folder, faster in-place navigation and item selection in Windows open/save dialogs, and Cmd+G search hints on macOS.
+  - [`Window Manager`] Improve workspace restoration with more reliable display matching across resolution changes and faster placement of newly launched apps.
+  - [`Cloud Sync`] Improve setup guidance after sign-in and make per-item synchronization progress clearer.
+  - [`Converter`] Improve time and duration results with localized weekdays and units, 24-hour formatting, and more reliable date and timezone calculations.
   - [`AI`] Support Ollama Cloud with its default endpoint and improve compatibility with OpenAI-compatible relays #4473
   - [`Indicator`] Let plugin results open the corresponding plugin settings directly.
   - [`Theme`] Improve AI-generated themes with more reliable JSON extraction and clearer preview guidance.
@@ -23,6 +31,8 @@ This beta introduces local, offline Dictation for fast voice-to-text workflows, 
   - [`Updater`] Fix Windows updates when the downloaded executable and Wox installation are on different drives #4471
   - [`Plugin`] Fix toolbar messages without an explicit icon by falling back to the plugin icon.
   - [`Overlay`] Fix text overlay sizing and improve close-button and focus behavior.
+  - [`Settings`] Fix plugin-list navigation scrolling to the wrong position when navigating directly to a plugin.
+  - [`Emoji`] Fix AI-assisted emoji matching with models that enable thinking by default.
 
 ## v2.3.0 - 2026-07-04
 
