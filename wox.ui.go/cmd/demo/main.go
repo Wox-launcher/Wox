@@ -3,10 +3,8 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"log"
-	"os"
 
 	woxui "github.com/Wox-launcher/wox.ui.go"
 )
@@ -14,10 +12,9 @@ import (
 func main() {
 	err := woxui.Run(func() error {
 		window, err := woxui.Open(woxui.WindowOptions{
-			Title:      "Wox Go UI - Native GPU",
-			Size:       woxui.Size{Width: 760, Height: 500},
-			HideOnBlur: true,
-			OnFrame:    drawLauncher,
+			Title:   "Wox Go UI - Native GPU",
+			Size:    woxui.Size{Width: 760, Height: 500},
+			OnFrame: drawLauncher,
 			OnFocus: func(event woxui.FocusEvent) {
 				log.Printf("focus epoch=%d active=%t", event.Epoch, event.Active)
 			},
@@ -30,13 +27,7 @@ func main() {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("window shown with focus epoch %d; press Enter to close\n", epoch)
-		go func() {
-			_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
-			if err := window.Close(); err != nil {
-				log.Printf("close window: %v", err)
-			}
-		}()
+		fmt.Printf("window shown with focus epoch %d\n", epoch)
 		return nil
 	})
 	if err != nil {

@@ -112,7 +112,7 @@ static const char *const wox_metal_source =
      "  float2 point = uniforms.rect.xy + corner * uniforms.rect.zw;\n"
      "  TextureVertexOut output;\n"
      "  output.position = float4(point.x / uniforms.viewport_size.x * 2.0 - 1.0, 1.0 - point.y / uniforms.viewport_size.y * 2.0, 0.0, 1.0);\n"
-     "  output.uv = float2(corner.x, 1.0 - corner.y);\n"
+     "  output.uv = corner;\n"
      "  return output;\n"
      "}\n"
      "fragment float4 texture_fragment(TextureVertexOut input [[stage_in]], texture2d<float> image [[texture(0)]], constant TextureUniforms &uniforms [[buffer(0)]]) {\n"
@@ -303,13 +303,13 @@ static void emit_focus(WoxDarwinWindow *window, bool active) {
 - (void)viewDidChangeBackingProperties {
   [super viewDidChangeBackingProperties];
   [self updateDrawableSize];
-  [self setNeedsDisplay:YES];
+  [self renderFrame];
 }
 
 - (void)setFrameSize:(NSSize)newSize {
   [super setFrameSize:newSize];
   [self updateDrawableSize];
-  [self setNeedsDisplay:YES];
+  [self renderFrame];
 }
 
 - (void)updateLayer {
@@ -318,7 +318,7 @@ static void emit_focus(WoxDarwinWindow *window, bool active) {
 
 - (void)renderFrame {
   WoxDarwinWindow *owner = _owner;
-  if (owner == NULL || owner->closed || owner->context == 0) {
+  if (owner == NULL || owner->closed || !owner->visible || owner->context == 0) {
     return;
   }
   [self updateDrawableSize];
@@ -455,7 +455,8 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
       emit_focus(window, true);
     }
     if (!window->closed) {
-      [window->view setNeedsDisplay:YES];
+      // CAMetalLayer rendering is explicit; AppKit does not reliably deliver updateLayer for the first frame.
+      [window->view renderFrame];
     }
   });
   return epoch;
@@ -490,7 +491,7 @@ int32_t wox_darwin_window_invalidate(WoxDarwinWindow *window) {
       result = -1;
       return;
     }
-    [window->view setNeedsDisplay:YES];
+    [window->view renderFrame];
   });
   return result;
 }
