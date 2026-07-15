@@ -25,6 +25,7 @@ const (
 	// of the public plugin API and are rendered by dedicated Flutter widgets.
 	PluginSettingDefinitionTypeDictationHotkey PluginSettingDefinitionType = "dictationHotkey"
 	PluginSettingDefinitionTypeDictationModel  PluginSettingDefinitionType = "dictationModel"
+	PluginSettingDefinitionTypeOCRModel        PluginSettingDefinitionType = "ocrModel"
 
 	// dynamic setting will be replaced by the actual setting when retrieved.
 	// The callback may return an empty PluginSettingDefinitionItem to hide it.
@@ -153,6 +154,14 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 	case "dictationModel":
 		n.Type = PluginSettingDefinitionTypeDictationModel
 		var v PluginSettingValueDictationModel
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "ocrModel":
+		n.Type = PluginSettingDefinitionTypeOCRModel
+		var v PluginSettingValueOCRModel
 		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
 		if unmarshalErr != nil {
 			return unmarshalErr

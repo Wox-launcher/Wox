@@ -24,6 +24,10 @@ import (
 // NativeLibVersion identifies the Wox-owned, signed native dependency release.
 const NativeLibVersion = "v1.13.4-wox.1"
 
+// ONNXRuntimeVersion identifies the ONNX Runtime ABI bundled with the signed
+// sherpa-onnx release.
+const ONNXRuntimeVersion = "1.27.0"
+
 const (
 	nativeLibReleaseBaseURL           = "https://github.com/Wox-launcher/Wox.Dictation.Native.Dependecies/releases/download/" + NativeLibVersion
 	nativeLibReleaseManifestURL       = nativeLibReleaseBaseURL + "/manifest.json"
@@ -51,6 +55,19 @@ type nativeLibFile struct {
 	Size   int64  `json:"size"`
 }
 
+func nativeLibraryNames() []string {
+	return append([]string{onnxRuntimeLibraryName()}, sherpaLibraryNames()...)
+}
+
+// nativeLibraryPath places ONNX Runtime separately from sherpa-onnx files.
+func nativeLibraryPath(sherpaLibDir string, onnxRuntimeLibDir string, name string) string {
+	directory := sherpaLibDir
+	if name == onnxRuntimeLibraryName() {
+		directory = onnxRuntimeLibDir
+	}
+	return filepath.Join(directory, name)
+}
+
 // sileroVadDownloadURL is the GitHub release URL for silero_vad.onnx.
 const sileroVadDownloadURL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
 
@@ -73,12 +90,13 @@ type NativeLibStatus struct {
 }
 
 // NativeLibManager handles on-demand download and extraction of platform-
-// specific sherpa-onnx native libraries (onnxruntime, sherpa-onnx-c-api,
-// sherpa-onnx-cxx-api) and the silero VAD model. Libraries are downloaded
-// from GitHub releases the first time dictation is used, then cached on disk
-// so subsequent starts skip the download.
+// specific sherpa-onnx libraries, their shared ONNX Runtime dependency, and
+// the silero VAD model. The files are stored by runtime/model ownership so
+// future ONNX consumers can use the same ONNX Runtime directory.
 type NativeLibManager struct {
-	libDir string
+	sherpaLibDir      string
+	onnxRuntimeLibDir string
+	vadModelDir       string
 
 	mu     sync.Mutex
 	status NativeLibStatus
@@ -91,29 +109,56 @@ type NativeLibManager struct {
 	downloadWait *sync.Cond
 }
 
-// NewNativeLibManager creates a native library manager rooted at libDir.
-// The directory is created if it does not exist.
-func NewNativeLibManager(libDir string) (*NativeLibManager, error) {
-	if err := os.MkdirAll(libDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create native lib directory: %w", err)
+var nativeLibManagersMu sync.Mutex
+var nativeLibManagers = map[string]*NativeLibManager{}
+
+// NewNativeLibManager creates a native library manager with separate
+// directories for sherpa-onnx, ONNX Runtime, and the VAD model.
+func NewNativeLibManager(sherpaLibDir string, onnxRuntimeLibDir string, vadModelDir string) (*NativeLibManager, error) {
+	key := strings.Join([]string{sherpaLibDir, onnxRuntimeLibDir, vadModelDir}, "\x00")
+	nativeLibManagersMu.Lock()
+	defer nativeLibManagersMu.Unlock()
+	if manager, ok := nativeLibManagers[key]; ok {
+		return manager, nil
 	}
-	m := &NativeLibManager{libDir: libDir}
+
+	for _, dir := range []string{sherpaLibDir, onnxRuntimeLibDir, vadModelDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create native runtime directory: %w", err)
+		}
+	}
+	m := &NativeLibManager{
+		sherpaLibDir:      sherpaLibDir,
+		onnxRuntimeLibDir: onnxRuntimeLibDir,
+		vadModelDir:       vadModelDir,
+	}
 	m.downloadWait = sync.NewCond(&m.mu)
+	nativeLibManagers[key] = m
 	return m, nil
 }
 
-// LibDir returns the directory where native libraries are stored.
-func (m *NativeLibManager) LibDir() string {
-	return m.libDir
+// SherpaLibDir returns the directory where sherpa-onnx libraries are stored.
+func (m *NativeLibManager) SherpaLibDir() string {
+	return m.sherpaLibDir
+}
+
+// OnnxRuntimeLibDir returns the directory where ONNX Runtime is stored.
+func (m *NativeLibManager) OnnxRuntimeLibDir() string {
+	return m.onnxRuntimeLibDir
+}
+
+// OnnxRuntimeLibraryPath returns the absolute path of the shared ONNX Runtime library.
+func (m *NativeLibManager) OnnxRuntimeLibraryPath() string {
+	return filepath.Join(m.onnxRuntimeLibDir, onnxRuntimeLibraryName())
 }
 
 // IsReady checks the signed cached manifest and every native library digest.
 func (m *NativeLibManager) IsReady() bool {
-	manifestData, err := os.ReadFile(filepath.Join(m.libDir, nativeLibCachedManifestName))
+	manifestData, err := os.ReadFile(filepath.Join(m.sherpaLibDir, nativeLibCachedManifestName))
 	if err != nil {
 		return false
 	}
-	signature, err := os.ReadFile(filepath.Join(m.libDir, nativeLibCachedSignatureName))
+	signature, err := os.ReadFile(filepath.Join(m.sherpaLibDir, nativeLibCachedSignatureName))
 	if err != nil {
 		return false
 	}
@@ -125,13 +170,13 @@ func (m *NativeLibManager) IsReady() bool {
 	if err != nil {
 		return false
 	}
-	return validateNativeLibraryFiles(m.libDir, packageInfo) == nil
+	return validateNativeLibraryFiles(m.sherpaLibDir, m.onnxRuntimeLibDir, packageInfo) == nil
 }
 
 // VadModelPath returns the on-disk path for silero_vad.onnx. The file may
 // not exist yet; callers should ensure it has been downloaded first.
 func (m *NativeLibManager) VadModelPath() string {
-	return filepath.Join(m.libDir, "silero_vad.onnx")
+	return filepath.Join(m.vadModelDir, "silero_vad.onnx")
 }
 
 // IsVadModelReady checks whether the silero VAD model exists on disk.
@@ -150,7 +195,20 @@ func (m *NativeLibManager) GetStatus() NativeLibStatus {
 // model if they are not already on disk. If a download is already in progress,
 // the caller waits for the existing download to finish and then returns its result.
 func (m *NativeLibManager) EnsureLibraries(ctx context.Context) error {
-	if m.IsReady() && m.IsVadModelReady() {
+	return m.ensure(ctx, true)
+}
+
+// EnsureNativeLibraries downloads and extracts only the shared native runtime.
+// OCR uses this path because VAD is owned by dictation rather than ONNX Runtime.
+func (m *NativeLibManager) EnsureNativeLibraries(ctx context.Context) error {
+	return m.ensure(ctx, false)
+}
+
+func (m *NativeLibManager) ensure(ctx context.Context, includeVadModel bool) error {
+	ready := func() bool {
+		return m.IsReady() && (!includeVadModel || m.IsVadModelReady())
+	}
+	if ready() {
 		m.mu.Lock()
 		m.status = NativeLibStatus{State: NativeLibStateDone, Progress: 100}
 		m.mu.Unlock()
@@ -167,7 +225,7 @@ func (m *NativeLibManager) EnsureLibraries(ctx context.Context) error {
 		}
 		m.mu.Unlock()
 		// Check if the wait succeeded.
-		if m.IsReady() && m.IsVadModelReady() {
+		if ready() {
 			return nil
 		}
 		// Prior download failed; caller can retry.
@@ -178,7 +236,7 @@ func (m *NativeLibManager) EnsureLibraries(ctx context.Context) error {
 	m.status = NativeLibStatus{State: NativeLibStateDownloading, Progress: 0}
 	m.mu.Unlock()
 
-	err := m.downloadAndExtract(ctx)
+	err := m.downloadAndExtract(ctx, includeVadModel)
 
 	m.mu.Lock()
 	m.downloading = false
@@ -194,9 +252,9 @@ func (m *NativeLibManager) EnsureLibraries(ctx context.Context) error {
 }
 
 // downloadAndExtract downloads the platform-specific archive, extracts the
-// required libraries into libDir, and downloads the silero VAD model. Steps
-// for resources that are already on disk are skipped.
-func (m *NativeLibManager) downloadAndExtract(ctx context.Context) error {
+// required libraries into their runtime directories, and optionally downloads
+// the dictation-owned silero VAD model.
+func (m *NativeLibManager) downloadAndExtract(ctx context.Context, includeVadModel bool) error {
 	// Download and extract native libraries (onnxruntime + sherpa-onnx).
 	if !m.IsReady() {
 		if err := m.downloadLibraries(ctx); err != nil {
@@ -205,7 +263,7 @@ func (m *NativeLibManager) downloadAndExtract(ctx context.Context) error {
 	}
 
 	// Download silero VAD model separately (small file, ~629KB).
-	if !m.IsVadModelReady() {
+	if includeVadModel && !m.IsVadModelReady() {
 		vadStart := time.Now()
 		if err := downloadFile(ctx, sileroVadDownloadURL, m.VadModelPath(), func(percent int) {
 			// VAD model is small; no separate progress phase needed.
@@ -221,7 +279,7 @@ func (m *NativeLibManager) downloadAndExtract(ctx context.Context) error {
 // downloadLibraries downloads and extracts the platform-specific archive
 // containing onnxruntime + sherpa-onnx native libraries.
 func (m *NativeLibManager) downloadLibraries(ctx context.Context) error {
-	tmpDir, err := os.MkdirTemp(m.libDir, ".downloading-*")
+	tmpDir, err := os.MkdirTemp(m.sherpaLibDir, ".downloading-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
@@ -284,7 +342,7 @@ func (m *NativeLibManager) downloadLibraries(ctx context.Context) error {
 		return fmt.Errorf("no lib/ directory found in native library archive")
 	}
 
-	if err := validateNativeLibraryFiles(libDir, packageInfo); err != nil {
+	if err := validateExtractedNativeLibraryFiles(libDir, packageInfo); err != nil {
 		return fmt.Errorf("verify extracted native libraries: %w", err)
 	}
 	if err := m.installNativeLibraries(libDir, packageInfo, manifestData, signature); err != nil {
@@ -355,9 +413,20 @@ func verifyNativeLibReleaseManifest(manifestData, signature []byte) (*nativeLibR
 	return &manifest, nil
 }
 
-// validateNativeLibraryFiles verifies the allowlist, sizes, digests, and platform signatures.
-func validateNativeLibraryFiles(libDir string, packageInfo nativeLibPackage) error {
-	requiredNames := append([]string(nil), sherpaLibraryNames()...)
+// validateExtractedNativeLibraryFiles verifies an archive before files are
+// separated into their ONNX Runtime and sherpa-onnx directories.
+func validateExtractedNativeLibraryFiles(libDir string, packageInfo nativeLibPackage) error {
+	return validateNativeLibraryFilesAtPaths(libDir, libDir, packageInfo)
+}
+
+// validateNativeLibraryFiles verifies installed files after they are separated
+// into their runtime-specific directories.
+func validateNativeLibraryFiles(sherpaLibDir string, onnxRuntimeLibDir string, packageInfo nativeLibPackage) error {
+	return validateNativeLibraryFilesAtPaths(sherpaLibDir, onnxRuntimeLibDir, packageInfo)
+}
+
+func validateNativeLibraryFilesAtPaths(sherpaLibDir string, onnxRuntimeLibDir string, packageInfo nativeLibPackage) error {
+	requiredNames := append([]string(nil), nativeLibraryNames()...)
 	manifestNames := make([]string, 0, len(packageInfo.Files))
 	for name := range packageInfo.Files {
 		manifestNames = append(manifestNames, name)
@@ -370,11 +439,11 @@ func validateNativeLibraryFiles(libDir string, packageInfo nativeLibPackage) err
 
 	for _, name := range requiredNames {
 		fileInfo := packageInfo.Files[name]
-		if err := verifyFileDigest(filepath.Join(libDir, name), fileInfo.SHA256, fileInfo.Size); err != nil {
+		if err := verifyFileDigest(nativeLibraryPath(sherpaLibDir, onnxRuntimeLibDir, name), fileInfo.SHA256, fileInfo.Size); err != nil {
 			return fmt.Errorf("verify %s: %w", name, err)
 		}
 	}
-	if err := validateNativeLibraryPlatformSignatures(libDir, requiredNames); err != nil {
+	if err := validateNativeLibraryPlatformSignaturesForPaths(sherpaLibDir, onnxRuntimeLibDir, requiredNames); err != nil {
 		return err
 	}
 	return nil
@@ -408,12 +477,12 @@ func verifyFileDigest(path, expectedDigest string, expectedSize int64) error {
 
 // installNativeLibraries atomically publishes verified files and commits the signed manifest last.
 func (m *NativeLibManager) installNativeLibraries(sourceDir string, packageInfo nativeLibPackage, manifestData, signature []byte) error {
-	_ = os.Remove(filepath.Join(m.libDir, nativeLibCachedManifestName))
-	_ = os.Remove(filepath.Join(m.libDir, nativeLibCachedSignatureName))
+	_ = os.Remove(filepath.Join(m.sherpaLibDir, nativeLibCachedManifestName))
+	_ = os.Remove(filepath.Join(m.sherpaLibDir, nativeLibCachedSignatureName))
 
-	for _, name := range sherpaLibraryNames() {
+	for _, name := range nativeLibraryNames() {
 		source := filepath.Join(sourceDir, name)
-		destination := filepath.Join(m.libDir, name)
+		destination := nativeLibraryPath(m.sherpaLibDir, m.onnxRuntimeLibDir, name)
 		temporaryDestination := destination + ".new"
 		_ = os.Remove(temporaryDestination)
 		if err := copyFile(source, temporaryDestination); err != nil {
@@ -429,11 +498,11 @@ func (m *NativeLibManager) installNativeLibraries(sourceDir string, packageInfo 
 			return fmt.Errorf("replace %s: %w", name, err)
 		}
 	}
-	if err := writeFileAtomically(filepath.Join(m.libDir, nativeLibCachedManifestName), manifestData, 0644); err != nil {
+	if err := writeFileAtomically(filepath.Join(m.sherpaLibDir, nativeLibCachedManifestName), manifestData, 0644); err != nil {
 		return err
 	}
-	if err := writeFileAtomically(filepath.Join(m.libDir, nativeLibCachedSignatureName), signature, 0644); err != nil {
-		_ = os.Remove(filepath.Join(m.libDir, nativeLibCachedManifestName))
+	if err := writeFileAtomically(filepath.Join(m.sherpaLibDir, nativeLibCachedSignatureName), signature, 0644); err != nil {
+		_ = os.Remove(filepath.Join(m.sherpaLibDir, nativeLibCachedManifestName))
 		return err
 	}
 	return nil

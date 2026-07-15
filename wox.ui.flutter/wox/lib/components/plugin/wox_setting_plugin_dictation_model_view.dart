@@ -121,11 +121,11 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
   // Status polling can return partial rows; keep static model metadata from the original setting option.
   DictationModelOption _mergeStatus(DictationModelOption current, Map<String, dynamic> statusJson) {
     final merged = <String, dynamic>{
-      'ID': statusJson['ID'] ?? current.id,
-      'DisplayName': statusJson['DisplayName'] ?? current.displayName,
-      'Description': statusJson['Description'] ?? current.description,
-      'Languages': statusJson['Languages'] ?? current.languages,
-      'Recommended': statusJson['Recommended'] ?? current.recommended,
+      'ID': current.id,
+      'DisplayName': current.displayName,
+      'Description': current.description,
+      'Languages': current.languages,
+      'Recommended': current.recommended,
       'Status': statusJson['Status'] ?? _statusValue(current.status),
       'DownloadProgress': statusJson['DownloadProgress'] ?? current.downloadProgress,
       'SizeMB': statusJson['SizeMB'] ?? current.sizeMB,

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -111,7 +112,10 @@ func (l *Location) Init() error {
 	if directoryErr := l.EnsureDirectoryExist(l.GetOthersDirectory()); directoryErr != nil {
 		return directoryErr
 	}
-	if directoryErr := l.EnsureDirectoryExist(l.GetDictationDirectory()); directoryErr != nil {
+	if directoryErr := l.EnsureDirectoryExist(l.GetRuntimeDirectory()); directoryErr != nil {
+		return directoryErr
+	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetModelsDirectory()); directoryErr != nil {
 		return directoryErr
 	}
 	if directoryErr := l.EnsureDirectoryExist(l.GetAISkillsDirectory()); directoryErr != nil {
@@ -213,7 +217,38 @@ func (l *Location) GetOthersDirectory() string {
 	return path.Join(l.woxDataDirectory, "others")
 }
 
-func (l *Location) GetDictationDirectory() string {
+// GetRuntimeDirectory returns the directory for versioned native runtimes.
+func (l *Location) GetRuntimeDirectory() string {
+	return path.Join(l.woxDataDirectory, "runtime")
+}
+
+// GetModelsDirectory returns the directory for downloadable models.
+func (l *Location) GetModelsDirectory() string {
+	return path.Join(l.woxDataDirectory, "models")
+}
+
+// GetONNXRuntimeDirectory returns the platform-specific ONNX Runtime location.
+func (l *Location) GetONNXRuntimeDirectory(version string) string {
+	return path.Join(l.GetRuntimeDirectory(), "onnxruntime", version, runtime.GOOS+"-"+runtime.GOARCH)
+}
+
+// GetSherpaONNXRuntimeDirectory returns the platform-specific sherpa-onnx location.
+func (l *Location) GetSherpaONNXRuntimeDirectory(version string) string {
+	return path.Join(l.GetRuntimeDirectory(), "sherpa-onnx", version, runtime.GOOS+"-"+runtime.GOARCH)
+}
+
+// GetDictationModelsDirectory returns the directory for dictation models.
+func (l *Location) GetDictationModelsDirectory() string {
+	return path.Join(l.GetModelsDirectory(), "dictation")
+}
+
+// GetOCRModelsDirectory returns the directory for OCR models.
+func (l *Location) GetOCRModelsDirectory() string {
+	return path.Join(l.GetModelsDirectory(), "ocr")
+}
+
+// GetLegacyDictationDirectory returns the pre-runtime-layout directory for migration only.
+func (l *Location) GetLegacyDictationDirectory() string {
 	return path.Join(l.woxDataDirectory, "dictation")
 }
 

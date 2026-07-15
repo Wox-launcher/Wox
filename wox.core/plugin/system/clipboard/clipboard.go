@@ -39,6 +39,7 @@ var textHistoryDaysSettingKey = "text_history_days"
 var isKeepImageHistorySettingKey = "is_keep_image_history"
 var imageHistoryDaysSettingKey = "image_history_days"
 var clipboardImageTextRecognitionSettingKey = "image_text_recognition_enabled"
+var clipboardOCRModelSettingKey = "ocr_model"
 var primaryActionSettingKey = "primary_action"
 var primaryActionValueCopy = "copy"
 var primaryActionValuePaste = "paste"
@@ -196,6 +197,12 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
+				Type: definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{
+					Key: clipboardOCRModelSettingKey,
+				},
+			},
+			{
 				Type: definition.PluginSettingDefinitionTypeSelect,
 				Value: &definition.PluginSettingValueSelect{
 					Key:          primaryActionSettingKey,
@@ -214,6 +221,12 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 
 func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
+		if key != clipboardOCRModelSettingKey || !c.isImageTextRecognitionEnabled(ctx) {
+			return definition.PluginSettingDefinitionItem{}
+		}
+		return system.BuildOCRModelSetting(ctx, clipboardOCRModelSettingKey, "i18n:plugin_clipboard_ocr_model", "i18n:plugin_clipboard_ocr_model_tooltip")
+	})
 
 	// Initialize database
 	db, err := NewClipboardDB(ctx, c.GetMetadata().Id)
@@ -1497,7 +1510,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: "OCR", Tooltip: strings.TrimSpace(*record.OCRText)})
 	}
 
-	return plugin.QueryResult{
+	result := plugin.QueryResult{
 		Title:      record.Content, // Already formatted as "Image (WxH) (size)"
 		Icon:       iconWoxImage,
 		Group:      group,
@@ -1602,6 +1615,13 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 			},
 		},
 	}
+	if record.OCRText != nil {
+		if ocrText := strings.TrimSpace(*record.OCRText); ocrText != "" {
+			actions := []plugin.QueryResultAction{result.Actions[0], system.NewCopyOCRTextAction(c.api, ocrText)}
+			result.Actions = append(actions, result.Actions[1:]...)
+		}
+	}
+	return result
 }
 
 // deleteRecord removes a clipboard record from its storage (DB or favorites) and cleans up related assets
@@ -1854,6 +1874,10 @@ func (c *ClipboardPlugin) isImageTextRecognitionEnabled(ctx context.Context) boo
 	return c.api.GetSetting(ctx, clipboardImageTextRecognitionSettingKey) == "true"
 }
 
+func (c *ClipboardPlugin) ocrModel(ctx context.Context) string {
+	return system.NormalizeOCRModelID(c.api.GetSetting(ctx, clipboardOCRModelSettingKey))
+}
+
 func (c *ClipboardPlugin) scheduleClipboardImageTextRecognition(ctx context.Context, recordID string, imagePath string) {
 	if recordID == "" || imagePath == "" {
 		return
@@ -1865,7 +1889,7 @@ func (c *ClipboardPlugin) scheduleClipboardImageTextRecognition(ctx context.Cont
 }
 
 func (c *ClipboardPlugin) recognizeClipboardImageText(ctx context.Context, recordID string, imagePath string) {
-	result, err := ocr.Recognize(ctx, ocr.Request{ImagePath: imagePath})
+	result, err := ocr.Recognize(ctx, ocr.Request{ImagePath: imagePath, ModelID: c.ocrModel(ctx)})
 	if err != nil {
 		if errors.Is(err, ocr.ErrUnsupported) || errors.Is(err, ocr.ErrUnavailable) {
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("clipboard image text recognition skipped: id=%s err=%s", recordID, err.Error()))

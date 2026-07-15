@@ -34,6 +34,7 @@ var screenshotHistoryIconWidth = 40
 var screenshotPinnedOverlayPrefix = "wox_screenshot_pin_"
 var screenshotRetentionDaysSettingKey = "retention_days"
 var screenshotOCREnabledSettingKey = "ocr_enabled"
+var screenshotOCRModelSettingKey = "ocr_model"
 var screenshotDefaultRetentionDays = 30
 var screenshotOCRSidecarVersion = 1
 
@@ -85,6 +86,12 @@ func (p *ScreenshotPlugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
+				Type: definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{
+					Key: screenshotOCRModelSettingKey,
+				},
+			},
+			{
 				Type: definition.PluginSettingDefinitionTypeTextBox,
 				Value: &definition.PluginSettingValueTextBox{
 					Key:          screenshotRetentionDaysSettingKey,
@@ -112,6 +119,12 @@ func (p *ScreenshotPlugin) GetMetadata() plugin.Metadata {
 
 func (p *ScreenshotPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	p.api = initParams.API
+	p.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
+		if key != screenshotOCRModelSettingKey || !p.isScreenshotOCREnabled(ctx) {
+			return definition.PluginSettingDefinitionItem{}
+		}
+		return BuildOCRModelSetting(ctx, screenshotOCRModelSettingKey, "i18n:plugin_screenshot_ocr_model", "i18n:plugin_screenshot_ocr_model_tooltip")
+	})
 
 	// Screenshot history thumbnails are warmed during plugin startup so the first user query does
 	// not pay the old cost of decoding every original screenshot through the generic icon pipeline.
@@ -293,6 +306,10 @@ func (p *ScreenshotPlugin) isScreenshotOCREnabled(ctx context.Context) bool {
 		return true
 	}
 	return enabled
+}
+
+func (p *ScreenshotPlugin) screenshotOCRModel(ctx context.Context) string {
+	return NormalizeOCRModelID(p.api.GetSetting(ctx, screenshotOCRModelSettingKey))
 }
 
 func (p *ScreenshotPlugin) getScreenshotRetentionDays(ctx context.Context) int {
@@ -568,7 +585,7 @@ func (p *ScreenshotPlugin) writeScreenshotOCRSidecar(ctx context.Context, screen
 		return fmt.Errorf("failed to stat screenshot for ocr: %w", err)
 	}
 
-	result, err := ocr.Recognize(ctx, ocr.Request{ImagePath: screenshotPath})
+	result, err := ocr.Recognize(ctx, ocr.Request{ImagePath: screenshotPath, ModelID: p.screenshotOCRModel(ctx)})
 	if err != nil {
 		return err
 	}
@@ -626,7 +643,7 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: "OCR", Tooltip: strings.TrimSpace(item.ocrText)})
 	}
 
-	return plugin.QueryResult{
+	result := plugin.QueryResult{
 		Title:      item.fileName,
 		SubTitle:   util.FormatTimestamp(item.timestamp),
 		Icon:       iconImage,
@@ -674,6 +691,11 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 			},
 		},
 	}
+	if ocrText := strings.TrimSpace(item.ocrText); ocrText != "" {
+		actions := []plugin.QueryResultAction{result.Actions[0], NewCopyOCRTextAction(p.api, ocrText)}
+		result.Actions = append(actions, result.Actions[1:]...)
+	}
+	return result
 }
 
 func (p *ScreenshotPlugin) screenshotHistoryGroup(timestamp int64) (string, int64) {

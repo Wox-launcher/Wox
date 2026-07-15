@@ -515,4 +515,28 @@ class WoxApi {
   Future<void> dictationNativeLibDownload(String traceId) async {
     await WoxHttpUtil.instance.postData(traceId, "/dictation/native-lib/download", null);
   }
+
+  Future<void> ocrModelDownload(String traceId, String modelId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/ocr/model/download", {"modelId": modelId});
+  }
+
+  Future<List<dynamic>> ocrModelStatus(String traceId) async {
+	final result = await WoxHttpUtil.instance.postData(traceId, "/ocr/model/status", null);
+	if (result is List) {
+		return result;
+	}
+	return [];
+  }
+
+  Future<Map<String, dynamic>?> ocrEngineStatus(String traceId) async {
+    final result = await WoxHttpUtil.instance.postData(traceId, "/ocr/engine/status", null);
+    if (result is Map) {
+      return Map<String, dynamic>.from(result);
+    }
+    return null;
+  }
+
+  Future<void> ocrEngineDownload(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/ocr/engine/download", null);
+  }
 }

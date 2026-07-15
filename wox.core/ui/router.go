@@ -35,6 +35,7 @@ import (
 	"wox/util"
 	"wox/util/font"
 	"wox/util/keyboard"
+	"wox/util/ocr"
 	"wox/util/overlay"
 	"wox/util/overlay/imageoverlay"
 	"wox/util/permission"
@@ -159,6 +160,12 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/dictation/model/status":        handleDictationModelStatus,
 	"/dictation/native-lib/status":   handleDictationNativeLibStatus,
 	"/dictation/native-lib/download": handleDictationNativeLibDownload,
+
+	// OCR
+	"/ocr/model/status":    handleOCRModelStatus,
+	"/ocr/model/download":  handleOCRModelDownload,
+	"/ocr/engine/status":   handleOCREngineStatus,
+	"/ocr/engine/download": handleOCREngineDownload,
 
 	// others
 	"/":                                   handleHome,
@@ -3783,5 +3790,55 @@ func handleDictationNativeLibDownload(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
+	writeSuccessResponse(w, "")
+}
+
+// handleOCRModelStatus returns the shared downloadable OCR model status.
+func handleOCRModelStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := ocr.GetPaddleModelStatus()
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, []ocr.PaddleModelStatus{status})
+}
+
+// handleOCRModelDownload starts a PP-OCRv6 small download without blocking
+// the settings request. The picker polls the status endpoint for progress.
+func handleOCRModelDownload(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	body, _ := io.ReadAll(r.Body)
+	modelID := gjson.GetBytes(body, "modelId").String()
+	if modelID != ocr.ModelPaddlePPOCRv6Small {
+		writeErrorResponse(w, "unsupported OCR model")
+		return
+	}
+
+	util.Go(ctx, "download OCR model", func() {
+		if err := ocr.DownloadPaddleModel(ctx); err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to download OCR model: %s", err.Error()))
+		}
+	})
+	writeSuccessResponse(w, "")
+}
+
+// handleOCREngineStatus returns the shared ONNX Runtime state for PaddleOCR.
+func handleOCREngineStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := ocr.GetPaddleEngineStatus()
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, status)
+}
+
+// handleOCREngineDownload starts the OCR runtime download without blocking settings.
+func handleOCREngineDownload(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	util.Go(ctx, "download OCR engine", func() {
+		if err := ocr.DownloadPaddleEngine(ctx); err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to download OCR engine: %s", err.Error()))
+		}
+	})
 	writeSuccessResponse(w, "")
 }

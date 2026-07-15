@@ -7,6 +7,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/plugin/wox_ai_command_template_dialog.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_dictation_model_view.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_ocr_model_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_item_view.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
@@ -33,6 +34,7 @@ import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_dictation_hotkey.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_dictation_model.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_ocr_model.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_newline.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
@@ -140,6 +142,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     }
     if (settingType == "dictationModel") {
       return (settingDefinitionValue as PluginSettingValueDictationModel).label;
+    }
+    if (settingType == "ocrModel") {
+      return (settingDefinitionValue as PluginSettingValueOCRModel).label;
     }
 
     return "";
@@ -1186,6 +1191,18 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 if (e.type == "dictationModel") {
                   final modelValue = e.value as PluginSettingValueDictationModel;
                   settingWidget = WoxSettingPluginDictationModel(
+                    value: plugin.setting.settings[modelValue.key] ?? "",
+                    item: modelValue,
+                    labelWidth: uniformLabelWidth,
+                    onUpdate: (key, value) async {
+                      return controller.updatePluginSetting(plugin.id, key, value);
+                    },
+                  );
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
+                }
+                if (e.type == "ocrModel") {
+                  final modelValue = e.value as PluginSettingValueOCRModel;
+                  settingWidget = WoxSettingPluginOCRModel(
                     value: plugin.setting.settings[modelValue.key] ?? "",
                     item: modelValue,
                     labelWidth: uniformLabelWidth,

@@ -390,17 +390,30 @@ func ResetSherpaLoaded() {
 }
 
 func loadSherpaLibraries() error {
-	libraryDir, err := ensureSherpaResourceLibraries()
+	onnxRuntimeLibDir, sherpaLibDir, err := ensureSherpaResourceLibraries()
 	if err != nil {
 		return err
 	}
 
+	libraries := []struct {
+		directory string
+		name      string
+	}{
+		{directory: onnxRuntimeLibDir, name: onnxRuntimeLibraryName()},
+	}
 	for _, name := range sherpaLibraryNames() {
-		libraryPath := filepath.Join(libraryDir, name)
+		libraries = append(libraries, struct {
+			directory string
+			name      string
+		}{directory: sherpaLibDir, name: name})
+	}
+
+	for _, library := range libraries {
+		libraryPath := filepath.Join(library.directory, library.name)
 		cPath := C.CString(libraryPath)
 		errBuf := make([]C.char, 1024)
 		isCAPI := C.int(0)
-		if name == sherpaCAPILibraryName() {
+		if library.name == sherpaCAPILibraryName() {
 			isCAPI = 1
 		}
 		ok := C.wox_sherpa_load_library(cPath, isCAPI, &errBuf[0], C.int(len(errBuf)))
@@ -414,24 +427,35 @@ func loadSherpaLibraries() error {
 
 // ensureSherpaResourceLibraries returns the directory containing the native
 // libraries, downloading them on first use via the NativeLibManager.
-func ensureSherpaResourceLibraries() (string, error) {
+func ensureSherpaResourceLibraries() (string, string, error) {
 	if nativeLibMgr != nil {
 		if err := nativeLibMgr.EnsureLibraries(context.Background()); err != nil {
-			return "", err
+			return "", "", err
 		}
-		return nativeLibMgr.LibDir(), nil
+		return nativeLibMgr.OnnxRuntimeLibDir(), nativeLibMgr.SherpaLibDir(), nil
 	}
-	return "", fmt.Errorf("native lib manager not initialized")
+	return "", "", fmt.Errorf("native lib manager not initialized")
 }
 
 func sherpaLibraryNames() []string {
 	switch runtime.GOOS {
 	case "windows":
-		return []string{"onnxruntime.dll", "sherpa-onnx-cxx-api.dll", "sherpa-onnx-c-api.dll"}
+		return []string{"sherpa-onnx-cxx-api.dll", "sherpa-onnx-c-api.dll"}
 	case "darwin":
-		return []string{"libonnxruntime.1.27.0.dylib", "libsherpa-onnx-cxx-api.dylib", "libsherpa-onnx-c-api.dylib"}
+		return []string{"libsherpa-onnx-cxx-api.dylib", "libsherpa-onnx-c-api.dylib"}
 	default:
-		return []string{"libonnxruntime.so", "libsherpa-onnx-cxx-api.so", "libsherpa-onnx-c-api.so"}
+		return []string{"libsherpa-onnx-cxx-api.so", "libsherpa-onnx-c-api.so"}
+	}
+}
+
+func onnxRuntimeLibraryName() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "onnxruntime.dll"
+	case "darwin":
+		return "libonnxruntime." + ONNXRuntimeVersion + ".dylib"
+	default:
+		return "libonnxruntime.so"
 	}
 }
 

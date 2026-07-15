@@ -30,9 +30,6 @@ var appIconWindows []byte
 //go:embed others
 var OthersFS embed.FS
 
-//go:embed dictation/dictation_start.wav dictation/dictation_stop.wav
-var DictationFS embed.FS
-
 var embedThemes = []string{}
 
 func Extract(ctx context.Context) error {
@@ -72,18 +69,10 @@ func Extract(ctx context.Context) error {
 			return rmErr
 		}
 	}
-	// Enable recursive extraction for 'others' to support nested directories like 'others/woxmr'
+	// Enable recursive extraction for nested directories such as others/dictation and others/woxmr.
 	othersErr := extractFiles(ctx, OthersFS, othersDirectory, "others", true)
 	if othersErr != nil {
 		return othersErr
-	}
-
-	// Dictation audio resources (start/stop beeps) live under .wox/dictation.
-	// Native libraries and the silero VAD model are downloaded on first use
-	// by the NativeLibManager, not extracted at startup.
-	dictationErr := extractFiles(ctx, DictationFS, GetDictationResourceDirectory(), "dictation", true)
-	if dictationErr != nil {
-		return dictationErr
 	}
 
 	// themes
@@ -173,17 +162,12 @@ func GetEmbedThemes(ctx context.Context) []string {
 
 // GetDictationFile returns the embedded dictation resource bytes by name.
 func GetDictationFile(name string) ([]byte, error) {
-	return DictationFS.ReadFile(path.Join("dictation", name))
-}
-
-// GetDictationResourceDirectory returns the extracted dictation resource directory.
-func GetDictationResourceDirectory() string {
-	return util.GetLocation().GetDictationDirectory()
+	return OthersFS.ReadFile(path.Join("others", "dictation", name))
 }
 
 // GetDictationResourcePath returns the extracted path for a dictation resource.
 func GetDictationResourcePath(name string) string {
-	return filepath.Join(GetDictationResourceDirectory(), filepath.FromSlash(name))
+	return filepath.Join(util.GetLocation().GetOthersDirectory(), "dictation", filepath.FromSlash(name))
 }
 
 func GetAppIcon() []byte {

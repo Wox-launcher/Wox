@@ -2,6 +2,6 @@
 
 package speech
 
-func validateNativeLibraryPlatformSignatures(libDir string, names []string) error {
+func validateNativeLibraryPlatformSignaturesForPaths(sherpaLibDir string, onnxRuntimeLibDir string, names []string) error {
 	return nil
 }

@@ -404,8 +404,10 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	// main.go performs a single unified RegisterAll pass after all plugins load.
 	p.reloadActions(ctx, p.api.GetSetting(ctx, settingKeyActions), false)
 
-	// Initialize the model manager in the Wox data directory.
-	modelsDir := filepath.Join(util.GetLocation().GetDictationDirectory(), "models")
+	location := util.GetLocation()
+
+	// Initialize the model manager in the shared Wox models directory.
+	modelsDir := location.GetDictationModelsDirectory()
 	mgr, err := speech.NewModelManager(modelsDir)
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create model manager: %s", err.Error()))
@@ -413,10 +415,14 @@ func (p *DictationPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		p.modelManager = mgr
 	}
 
-	// Initialize the native library manager. Libraries are downloaded on
-	// first use from GitHub releases instead of being embedded in the binary.
-	nativeLibDir := filepath.Join(util.GetLocation().GetDictationDirectory(), runtime.GOOS+"-"+runtime.GOARCH)
-	nativeMgr, err := speech.NewNativeLibManager(nativeLibDir)
+	// Initialize the native library manager. The shared ONNX Runtime and
+	// sherpa-onnx libraries are downloaded on first use instead of being
+	// embedded in the binary.
+	nativeMgr, err := speech.NewNativeLibManager(
+		location.GetSherpaONNXRuntimeDirectory(speech.NativeLibVersion),
+		location.GetONNXRuntimeDirectory(speech.ONNXRuntimeVersion),
+		filepath.Join(modelsDir, "silero-vad"),
+	)
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create native lib manager: %s", err.Error()))
 	} else {

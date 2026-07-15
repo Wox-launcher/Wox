@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 )
 
@@ -23,6 +25,7 @@ var (
 type Request struct {
 	ImagePath string
 	Languages []string
+	ModelID   string
 }
 
 type Result struct {
@@ -55,12 +58,34 @@ func Recognize(ctx context.Context, request Request) (Result, error) {
 		return Result{}, err
 	}
 
-	result, err := recognizePlatform(ctx, normalizedRequest)
+	var result Result
+	if normalizedRequest.ModelID == "" || normalizedRequest.ModelID == ModelSystem {
+		result, err = recognizePlatform(ctx, normalizedRequest)
+	} else if normalizedRequest.ModelID == ModelPaddlePPOCRv6Small {
+		manager, managerErr := GetPaddleModelManager()
+		if managerErr != nil {
+			return Result{}, managerErr
+		}
+		result, err = manager.Recognize(ctx, normalizedRequest.ImagePath)
+	} else {
+		return Result{}, fmt.Errorf("%w: unknown OCR model %s", ErrUnavailable, normalizedRequest.ModelID)
+	}
 	if err != nil {
 		return Result{}, err
 	}
 
-	result.Text = normalizeText(result.Text)
+	if len(result.Lines) > 0 {
+		sortLinesByReadingOrder(result.Lines)
+		textLines := make([]string, 0, len(result.Lines))
+		for _, line := range result.Lines {
+			if text := strings.TrimSpace(line.Text); text != "" {
+				textLines = append(textLines, text)
+			}
+		}
+		result.Text = normalizeText(strings.Join(textLines, "\n"))
+	} else {
+		result.Text = normalizeText(result.Text)
+	}
 	if len(result.Lines) == 0 && result.Text != "" {
 		for _, line := range strings.Split(result.Text, "\n") {
 			line = strings.TrimSpace(line)
@@ -71,6 +96,84 @@ func Recognize(ctx context.Context, request Request) (Result, error) {
 		}
 	}
 	return result, nil
+}
+
+type lineLayout struct {
+	line   Line
+	center float64
+	height float64
+	left   float64
+}
+
+// sortLinesByReadingOrder groups text boxes by their vertical centers before
+// ordering each row from left to right. Engines without complete bounds keep
+// their original line order.
+// ponytail: Center-based grouping targets horizontal UI text; add document layout analysis only for multi-column OCR.
+func sortLinesByReadingOrder(lines []Line) {
+	layouts := make([]lineLayout, 0, len(lines))
+	for _, line := range lines {
+		if len(line.Bounds) == 0 {
+			return
+		}
+
+		top, bottom := line.Bounds[0].Y, line.Bounds[0].Y
+		layout := lineLayout{line: line, left: line.Bounds[0].X}
+		for _, point := range line.Bounds[1:] {
+			if point.Y < top {
+				top = point.Y
+			}
+			if point.Y > bottom {
+				bottom = point.Y
+			}
+			if point.X < layout.left {
+				layout.left = point.X
+			}
+		}
+		layout.center = (top + bottom) / 2
+		layout.height = bottom - top
+		layouts = append(layouts, layout)
+	}
+
+	sort.SliceStable(layouts, func(i, j int) bool {
+		if layouts[i].center != layouts[j].center {
+			return layouts[i].center < layouts[j].center
+		}
+		return layouts[i].left < layouts[j].left
+	})
+
+	heights := make([]float64, 0, len(layouts))
+	for _, layout := range layouts {
+		heights = append(heights, layout.height)
+	}
+	sort.Float64s(heights)
+	rowTolerance := heights[len(heights)/2] / 2
+	if rowTolerance == 0 {
+		rowTolerance = 1
+	}
+
+	rows := make([][]lineLayout, 0, len(layouts))
+	rowCenters := make([]float64, 0, len(layouts))
+	for _, layout := range layouts {
+		rowIndex := len(rows) - 1
+		if rowIndex < 0 || layout.center-rowCenters[rowIndex] > rowTolerance {
+			rows = append(rows, []lineLayout{layout})
+			rowCenters = append(rowCenters, layout.center)
+			continue
+		}
+
+		rows[rowIndex] = append(rows[rowIndex], layout)
+	}
+
+	index := 0
+	for _, row := range rows {
+		sort.SliceStable(row, func(i, j int) bool {
+			return row[i].left < row[j].left
+		})
+		for _, layout := range row {
+			lines[index] = layout.line
+			index++
+		}
+	}
 }
 
 func normalizeRequest(request Request) (Request, error) {
@@ -103,6 +206,7 @@ func normalizeRequest(request Request) (Request, error) {
 	// locale-style values such as zh_CN. Normalize the request once at the OCR boundary so
 	// native engines can choose the right model instead of silently falling back to English.
 	request.Languages = normalizeLanguages(request.Languages)
+	request.ModelID = strings.TrimSpace(strings.ToLower(request.ModelID))
 	request.ImagePath = imagePath
 	return request, nil
 }
@@ -142,4 +246,9 @@ func normalizeText(text string) string {
 		normalized = append(normalized, line)
 	}
 	return strings.Join(normalized, "\n")
+}
+
+// IsSystemModelAvailable reports whether Wox has a platform OCR implementation.
+func IsSystemModelAvailable() bool {
+	return runtime.GOOS == "darwin" || runtime.GOOS == "windows"
 }
