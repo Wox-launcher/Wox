@@ -605,6 +605,9 @@ func TestScannerQueuesDirtySignalsForNextRunDuringExecution(t *testing.T) {
 	}
 	engine := &Engine{db: db, scanner: scanner}
 	scanner.scanAllRoots(ctx)
+	if err := db.BuildMaintenanceEntryIndexes(ctx); err != nil {
+		t.Fatalf("build maintenance indexes after full scan: %v", err)
+	}
 
 	mustWriteTestFile(t, firstFilePath, "first")
 	if ok := scanner.enqueueDirtyForPath(ctx, firstFilePath); !ok {

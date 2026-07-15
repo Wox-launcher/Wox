@@ -42,10 +42,10 @@ type ClipboardRecord struct {
 func NewClipboardDB(ctx context.Context, pluginId string) (*ClipboardDB, error) {
 	dbPath := path.Join(util.GetLocation().GetPluginSettingDirectory(), pluginId+"_clipboard.db")
 
-	// Configure SQLite with proper concurrency settings
+	// DELETE journaling keeps the database in one file for reliable cloud sync.
 	dsn := dbPath + "?" +
-		"_journal_mode=DELETE&" + // Enable WAL mode for better concurrency
-		"_synchronous=FULL&" + // Balance between safety and performance
+		"_journal_mode=DELETE&" + // Avoid WAL sidecar files
+		"_synchronous=FULL&" + // Preserve durability in DELETE mode
 		"_cache_size=1000&" + // Set cache size
 		"_foreign_keys=true&" + // Enable foreign key constraints
 		"_busy_timeout=5000" // Set busy timeout to 5 seconds
@@ -60,10 +60,10 @@ func NewClipboardDB(ctx context.Context, pluginId string) (*ClipboardDB, error) 
 	db.SetMaxIdleConns(5)            // Maximum number of idle connections
 	db.SetConnMaxLifetime(time.Hour) // Maximum lifetime of a connection
 
-	// Execute additional PRAGMA statements for optimal concurrency
+	// Apply the same durability settings to every pooled connection.
 	pragmas := []string{
-		"PRAGMA journal_mode=DELETE", // Ensure WAL mode is enabled
-		"PRAGMA synchronous=FULL",    // Balance safety and performance
+		"PRAGMA journal_mode=DELETE", // Keep single-file journaling enabled
+		"PRAGMA synchronous=FULL",    // Preserve durability in DELETE mode
 		"PRAGMA cache_size=1000",     // Set cache size
 		"PRAGMA foreign_keys=ON",     // Enable foreign key constraints
 		"PRAGMA temp_store=memory",   // Store temporary tables in memory
@@ -82,7 +82,7 @@ func NewClipboardDB(ctx context.Context, pluginId string) (*ClipboardDB, error) 
 		return nil, fmt.Errorf("failed to initialize tables: %w", err)
 	}
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("clipboard database initialized at %s with WAL mode enabled", dbPath))
+	util.GetLogger().Info(ctx, fmt.Sprintf("clipboard database initialized at %s with DELETE journal mode enabled", dbPath))
 	return clipboardDB, nil
 }
 

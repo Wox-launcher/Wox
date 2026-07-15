@@ -1189,6 +1189,7 @@
   "plugin_file_setting_content_extension": "Расширение",
   "plugin_file_content_indexing_progress": "Индексация содержимого файлов: проиндексировано %d файлов",
   "plugin_file_content_index_ready": "Содержимое %s файлов проиндексировано за %s, в среднем %s файлов/с",
+  "plugin_file_content_index_failed": "Не удалось проиндексировать содержимое файлов",
   "plugin_file_rebuild_content_index": "Перестроить индекс содержимого",
   "plugin_file_rebuild_content_index_failed": "Не удалось перестроить индекс содержимого",
   "plugin_file_refinement_type": "Тип",

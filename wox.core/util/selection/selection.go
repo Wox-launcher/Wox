@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"time"
 	"wox/util"
 	"wox/util/clipboard"
@@ -12,7 +13,7 @@ import (
 
 var noSelection = errors.New("no selection")
 var ErrSelectionUnsupported = errors.New("selection retrieval unsupported")
-var lastClipboardChangeTimestamp int64 = 0
+var lastClipboardChangeTimestamp atomic.Int64
 
 type SelectionType string
 
@@ -31,7 +32,7 @@ type Selection struct {
 
 func InitSelection() {
 	clipboard.Watch(func(data clipboard.Data) {
-		lastClipboardChangeTimestamp = util.GetSystemTimestamp()
+		lastClipboardChangeTimestamp.Store(util.GetSystemTimestamp())
 	})
 }
 
@@ -84,7 +85,7 @@ func getSelectedByClipboard(ctx context.Context) (Selection, error) {
 
 		// clipboard data must be updated between simulateStartTimestamp and simulateEndTimestamp
 		// otherwise, it means that the clipboard data is not updated by the simulated ctrl c
-		if lastClipboardChangeTimestamp < simulateStartTimestamp {
+		if lastClipboardChangeTimestamp.Load() < simulateStartTimestamp {
 			if isLastLoop {
 				return Selection{}, noSelection
 			} else {

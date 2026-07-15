@@ -199,6 +199,9 @@ func init() {
 type ApplicationPlugin struct {
 	api             plugin.API
 	pluginDirectory string
+	runtimeCtx      context.Context
+	appChangeMu     sync.Mutex
+	appChangeCancel context.CancelFunc
 
 	apps      []appInfo
 	retriever Retriever
@@ -305,6 +308,8 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	a.api = initParams.API
 	a.pluginDirectory = initParams.PluginDirectory
+	runtimeCtx, cancelRuntime := context.WithCancel(util.NewTraceContext())
+	a.runtimeCtx = runtimeCtx
 	a.retriever = a.getRetriever(ctx)
 	a.retriever.UpdateAPI(a.api)
 	a.trackedResults = util.NewHashMap[string, appInfo]()
@@ -318,23 +323,28 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 		a.rebuildQueryEntries(ctx)
 	}
 
-	util.Go(ctx, "index apps", func() {
-		a.indexApps(util.NewTraceContext())
+	util.Go(runtimeCtx, "index apps", func() {
+		a.indexApps(runtimeCtx)
+		a.startAppChangeWatcher()
 	})
-	util.Go(ctx, "watch app changes", func() {
-		a.watchAppChanges(util.NewTraceContext())
-	})
-	util.Go(ctx, "refresh running apps", func() {
+	util.Go(runtimeCtx, "refresh running apps", func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			a.refreshRunningApps(util.NewTraceContext())
+		for {
+			select {
+			case <-runtimeCtx.Done():
+				return
+			case <-ticker.C:
+				a.refreshRunningApps(runtimeCtx)
+			}
 		}
 	})
 
 	a.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == "AppDirectories" {
+			a.stopAppChangeWatcher()
 			a.indexApps(callbackCtx)
+			a.startAppChangeWatcher()
 			return
 		}
 		if key == "IgnoreRules" {
@@ -344,6 +354,10 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	})
 
 	a.api.OnMRURestore(ctx, a.handleMRURestore)
+	a.api.OnUnload(ctx, func(ctx context.Context) {
+		cancelRuntime()
+		a.stopAppChangeWatcher()
+	})
 }
 
 func (a *ApplicationPlugin) pathCacheKey(appPath string) string {
@@ -473,6 +487,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 						Icon: common.ExecuteRunIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							util.Go(ctx, "reindex app", func() {
+								a.stopAppChangeWatcher()
 								// clean cache file first
 								cachePath := a.getAppCachePath()
 								if err := os.Remove(cachePath); err == nil {
@@ -488,6 +503,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 								a.hotkeyAppCandidates = []setting.IgnoredHotkeyApp{}
 
 								a.indexApps(ctx)
+								a.startAppChangeWatcher()
 								a.api.Notify(ctx, "i18n:plugin_app_reindex_completed")
 							})
 						},
@@ -798,7 +814,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 				}
 				if runErr != nil {
 					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))
-					a.api.Notify(ctx, fmt.Sprintf("i18n:plugin_app_open_failed_description: %s", runErr.Error()))
+					a.api.Notify(ctx, fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), runErr.Error()))
 				}
 			},
 		},
@@ -812,6 +828,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := a.retriever.OpenAppFolder(ctx, info); err != nil {
 					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening folder: %s", err.Error()))
+					a.api.Notify(ctx, fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
 				}
 			},
 		})
@@ -822,7 +839,10 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 		Icon:        common.CopyIcon,
 		ContextData: contextData,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-			clipboard.WriteText(info.Path)
+			if err := clipboard.WriteText(info.Path); err != nil {
+				a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error copying app path: %s", err.Error()))
+				a.api.Notify(ctx, err.Error())
+			}
 		},
 	})
 
@@ -916,6 +936,33 @@ func (a *ApplicationPlugin) getRunningProcessResult(app appInfo) (tails []plugin
 
 func (a *ApplicationPlugin) getRetriever(ctx context.Context) Retriever {
 	return appRetriever
+}
+
+// startAppChangeWatcher binds app-directory monitoring to the current plugin lifecycle.
+func (a *ApplicationPlugin) startAppChangeWatcher() {
+	a.stopAppChangeWatcher()
+	if a.runtimeCtx == nil || a.runtimeCtx.Err() != nil {
+		return
+	}
+
+	watchCtx, cancel := context.WithCancel(a.runtimeCtx)
+	a.appChangeMu.Lock()
+	a.appChangeCancel = cancel
+	a.appChangeMu.Unlock()
+	util.Go(watchCtx, "watch app changes", func() {
+		a.watchAppChanges(watchCtx)
+	})
+}
+
+// stopAppChangeWatcher releases active watchers before reindexing or unloading the plugin.
+func (a *ApplicationPlugin) stopAppChangeWatcher() {
+	a.appChangeMu.Lock()
+	cancel := a.appChangeCancel
+	a.appChangeCancel = nil
+	a.appChangeMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {

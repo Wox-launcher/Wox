@@ -18,8 +18,10 @@ import (
 
 var noDataErr = errors.New("no such data")
 var notImplement = errors.New("not implemented")
-var watchList = make([]func(Data), 0)
-var isWatching = false
+var watchMutex sync.Mutex
+var watchList = make(map[uint64]*watchSubscription)
+var nextWatchID uint64
+var isWatching bool
 var WatchIntervalMillisecond = 250
 var nativeImageFileWriterMu sync.RWMutex
 var nativeImageFileWriter func(context.Context, string) error
@@ -60,6 +62,28 @@ type Data interface {
 	String() string
 	MarshalJSON() ([]byte, error)
 	UnmarshalJSON([]byte) error
+}
+
+type watchSubscription struct {
+	mutex    sync.Mutex
+	callback func(Data)
+	closed   bool
+}
+
+// call serializes one subscriber so unsubscribe can wait for an active callback.
+func (s *watchSubscription) call(data Data) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if !s.closed {
+		s.callback(data)
+	}
+}
+
+// close prevents future callbacks after the current callback returns.
+func (s *watchSubscription) close() {
+	s.mutex.Lock()
+	s.closed = true
+	s.mutex.Unlock()
 }
 
 func Read() (Data, error) {
@@ -142,7 +166,13 @@ func WriteImageBytes(pngData []byte, dibData []byte) error {
 	return err
 }
 
-func Watch(cb func(Data)) {
+// Watch subscribes to clipboard changes and returns a function that waits for any active callback before unsubscribing.
+func Watch(cb func(Data)) func() {
+	watchMutex.Lock()
+	nextWatchID++
+	id := nextWatchID
+	subscription := &watchSubscription{callback: cb}
+	watchList[id] = subscription
 	if !isWatching {
 		isWatching = true
 		go func() {
@@ -152,8 +182,17 @@ func Watch(cb func(Data)) {
 			}
 		}()
 	}
+	watchMutex.Unlock()
 
-	watchList = append(watchList, cb)
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			watchMutex.Lock()
+			delete(watchList, id)
+			watchMutex.Unlock()
+			subscription.close()
+		})
+	}
 }
 
 func watchChange() {
@@ -218,16 +257,23 @@ func watchChange() {
 		util.GetLogger().Warn(context.Background(), fmt.Sprintf("clipboard: Read took %s (type=%s)", d.String(), data.GetType()))
 	}
 
-	for _, cb := range watchList {
-		go func() {
+	watchMutex.Lock()
+	subscriptions := make([]*watchSubscription, 0, len(watchList))
+	for _, subscription := range watchList {
+		subscriptions = append(subscriptions, subscription)
+	}
+	watchMutex.Unlock()
+
+	for _, subscription := range subscriptions {
+		go func(subscription *watchSubscription) {
 			defer func() {
 				if err1 := recover(); err1 != nil {
 					util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: callback panic: %v", err1))
 				}
 			}()
 
-			cb(data)
-		}()
+			subscription.call(data)
+		}(subscription)
 	}
 }
 

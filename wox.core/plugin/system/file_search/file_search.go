@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -105,6 +106,7 @@ type FileSearchPlugin struct {
 	contentCrawlPendingGen   int64
 	contentCrawlRunning      bool
 	contentCrawlRunningGen   int64
+	contentCrawlStopped      chan struct{}
 }
 
 type fileSearchQueryDiagnostics struct {
@@ -363,13 +365,16 @@ func (c *FileSearchPlugin) nextContentSearchGeneration() int64 {
 // stopContentCrawlWork cancels scheduled and running content crawl work.
 func (c *FileSearchPlugin) stopContentCrawlWork() {
 	c.contentSearchStateMu.Lock()
-	defer c.contentSearchStateMu.Unlock()
-	c.stopContentCrawlWorkLocked()
+	stopped := c.stopContentCrawlWorkLocked()
+	c.contentSearchStateMu.Unlock()
+	if stopped != nil {
+		<-stopped
+	}
 }
 
 // stopContentCrawlWorkLocked clears queued crawl work and cancels the active
-// crawl context while leaving the running slot to be released by completion.
-func (c *FileSearchPlugin) stopContentCrawlWorkLocked() {
+// crawl context. The returned channel closes after the active crawler exits.
+func (c *FileSearchPlugin) stopContentCrawlWorkLocked() <-chan struct{} {
 	if c.contentCrawlTimer != nil {
 		c.contentCrawlTimer.Stop()
 		c.contentCrawlTimer = nil
@@ -380,6 +385,7 @@ func (c *FileSearchPlugin) stopContentCrawlWorkLocked() {
 		c.contentCrawlCancel()
 		c.contentCrawlCancel = nil
 	}
+	return c.contentCrawlStopped
 }
 
 // isContentSearchCurrent checks whether delayed content-search work is still current.
@@ -458,8 +464,15 @@ func (c *FileSearchPlugin) startPendingContentCrawl(ctx context.Context) {
 	c.contentCrawlRunning = true
 	c.contentCrawlRunningGen = generation
 	c.contentCrawlCancel = cancel
+	c.contentCrawlStopped = make(chan struct{})
 	c.contentCrawlTimer = nil
 	c.contentSearchStateMu.Unlock()
+
+	c.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
+		Id:            contentSearchToolbarMsgID,
+		Title:         fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_file_content_indexing_progress"), 0),
+		Indeterminate: true,
+	})
 
 	// Wait for filesearch to finish indexing before starting content crawl.
 	c.waitForFileSearchIdle(runningCtx)
@@ -489,7 +502,12 @@ func (c *FileSearchPlugin) startPendingContentCrawl(ctx context.Context) {
 		}
 	})
 	util.Go(runningCtx, "content crawl completion", func() {
-		<-done
+		err := <-done
+		if err != nil && !errors.Is(err, context.Canceled) && c.isContentSearchCurrent(runningCtx, generation) {
+			c.api.Log(runningCtx, plugin.LogLevelError, "Content index failed: "+err.Error())
+			c.api.ClearToolbarMsg(runningCtx, contentSearchToolbarMsgID)
+			c.api.Notify(runningCtx, "i18n:plugin_file_content_index_failed")
+		}
 		c.finishContentCrawl(runningCtx, generation)
 	})
 }
@@ -497,15 +515,21 @@ func (c *FileSearchPlugin) startPendingContentCrawl(ctx context.Context) {
 // finishContentCrawl releases the single full-crawl slot and schedules the latest pending policy.
 func (c *FileSearchPlugin) finishContentCrawl(ctx context.Context, generation int64) {
 	c.contentSearchStateMu.Lock()
+	var stopped chan struct{}
 	if c.contentCrawlRunning && c.contentCrawlRunningGen == generation {
 		c.contentCrawlRunning = false
 		c.contentCrawlRunningGen = 0
 		c.contentCrawlCancel = nil
+		stopped = c.contentCrawlStopped
+		c.contentCrawlStopped = nil
 		if c.contentCrawlPending {
 			c.resetContentCrawlTimerLocked()
 		}
 	}
 	c.contentSearchStateMu.Unlock()
+	if stopped != nil {
+		close(stopped)
+	}
 }
 
 // startContentHook installs the incremental content index hook so file changes
@@ -800,7 +824,10 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 			Name: "i18n:plugin_file_open",
 			Icon: common.PreviewIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				shell.Open(item.Path)
+				if err := shell.Open(item.Path); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open file search result: path=%s err=%s", item.Path, err.Error()))
+					c.api.Notify(ctx, fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
+				}
 			},
 		},
 	}
@@ -823,7 +850,10 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 			Name: "i18n:plugin_file_open_containing_folder",
 			Icon: common.OpenContainingFolderIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				shell.OpenFileInFolder(item.Path)
+				if err := shell.OpenFileInFolder(item.Path); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to reveal file search result: path=%s err=%s", item.Path, err.Error()))
+					c.api.Notify(ctx, fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
+				}
 			},
 			Hotkey: util.PrimaryHotkey("enter"),
 		})

@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 	"wox/common"
@@ -57,7 +58,7 @@ const (
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ClipboardPlugin{
 		maxHistoryCount: 5000,
-		imageCache:      make(map[string]*ImageCacheEntry),
+		imageCache:      util.NewHashMap[string, *ImageCacheEntry](),
 	})
 }
 
@@ -109,8 +110,9 @@ type ClipboardPlugin struct {
 	api             plugin.API
 	db              ClipboardDBInterface
 	maxHistoryCount int
+	backgroundTasks sync.WaitGroup
 	// Cache for generated preview and icon images to avoid regeneration
-	imageCache map[string]*ImageCacheEntry
+	imageCache *util.HashMap[string, *ImageCacheEntry]
 }
 
 func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
@@ -221,6 +223,10 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 
 func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.backgroundTasks = sync.WaitGroup{}
+	if c.imageCache == nil {
+		c.imageCache = util.NewHashMap[string, *ImageCacheEntry]()
+	}
 	c.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
 		if key != clipboardOCRModelSettingKey || !c.isImageTextRecognitionEnabled(ctx) {
 			return definition.PluginSettingDefinitionItem{}
@@ -235,43 +241,55 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		return
 	}
 	c.db = db
+	runtimeCtx, cancelRuntime := context.WithCancel(util.NewTraceContext())
 
 	// Migration is now handled by the central migrator during app startup
 	// No need for plugin-specific migration code here
 
-	// Register unload callback to close database connection
-	c.api.OnUnload(ctx, func(callbackCtx context.Context) {
-		if c.db != nil {
-			c.db.Close()
-		}
-	})
-
 	// Start periodic cleanup routine
-	util.Go(ctx, "clipboard cleanup routine", func() {
-		c.startCleanupRoutine(ctx)
+	c.backgroundTasks.Add(1)
+	util.Go(runtimeCtx, "clipboard cleanup routine", func() {
+		defer c.backgroundTasks.Done()
+		c.startCleanupRoutine(runtimeCtx)
 	})
 
 	// Log initial database statistics
 	c.logDatabaseStats(ctx)
 
-	clipboard.Watch(func(data clipboard.Data) {
-		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("clipboard data changed, type=%s", data.GetType()))
+	unwatch := clipboard.Watch(func(data clipboard.Data) {
+		if runtimeCtx.Err() != nil {
+			return
+		}
+		c.api.Log(runtimeCtx, plugin.LogLevelInfo, fmt.Sprintf("clipboard data changed, type=%s", data.GetType()))
 
 		if data.GetType() == clipboard.ClipboardTypeFile {
 			fileData := data.(*clipboard.FilePathData)
 			if c.shouldTreatFileClipboardAsImages(fileData.FilePaths) {
-				imageDataList := c.getImageDataListFromFilePaths(ctx, fileData.FilePaths)
+				imageDataList := c.getImageDataListFromFilePaths(runtimeCtx, fileData.FilePaths)
 				if len(imageDataList) == 0 {
 					return
 				}
 				for _, imageData := range imageDataList {
-					c.processClipboardData(ctx, imageData)
+					c.processClipboardData(runtimeCtx, imageData)
 				}
 				return
 			}
 		}
 
-		c.processClipboardData(ctx, data)
+		c.processClipboardData(runtimeCtx, data)
+	})
+
+	// Stop producers and background database users before closing the connection.
+	c.api.OnUnload(ctx, func(callbackCtx context.Context) {
+		cancelRuntime()
+		unwatch()
+		c.backgroundTasks.Wait()
+		if c.db != nil {
+			if err := c.db.Close(); err != nil {
+				c.api.Log(callbackCtx, plugin.LogLevelError, fmt.Sprintf("failed to close clipboard database: %s", err.Error()))
+			}
+			c.db = nil
+		}
 	})
 }
 
@@ -387,10 +405,10 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 		}
 		// Pre-warm memory cache so first query is instant
 		if util.IsFileExists(imagePreviewFile) && util.IsFileExists(imageIconFile) {
-			c.imageCache[record.ID] = &ImageCacheEntry{
+			c.imageCache.Store(record.ID, &ImageCacheEntry{
 				Preview: common.NewWoxImageAbsolutePath(imagePreviewFile),
 				Icon:    common.NewWoxImageAbsolutePath(imageIconFile),
-			}
+			})
 		}
 	} else if data.GetType() == clipboard.ClipboardTypeFile {
 		fileData := data.(*clipboard.FilePathData)
@@ -967,11 +985,12 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 	}
 
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("active window info: name=%s, pid=%d", query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid))
-	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func() {
-		c.moveRecordToTop(ctx, record.ID)
+	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func(actionCtx context.Context) error {
 		if err := clipboard.Write(&clipboard.FilePathData{FilePaths: append([]string(nil), filePaths...)}); err != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to restore file clipboard record before paste: id=%s err=%s", record.ID, err.Error()))
+			return fmt.Errorf("failed to restore file clipboard record before paste: %w", err)
 		}
+		c.moveRecordToTop(actionCtx, record.ID)
+		return nil
 	})
 	if pasteToActiveWindowErr == nil {
 		actions = append(actions, pasteToActiveWindowAction)
@@ -1230,11 +1249,12 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 
 	// paste to active window
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("active window info: name=%s, pid=%d", query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid))
-	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func() {
-		c.moveRecordToTop(ctx, record.ID)
+	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func(actionCtx context.Context) error {
 		if err := clipboard.WriteText(record.Content); err != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy text record before paste action: id=%s err=%s", record.ID, err.Error()))
+			return fmt.Errorf("failed to copy text record before paste action: %w", err)
 		}
+		c.moveRecordToTop(actionCtx, record.ID)
+		return nil
 	})
 	if pasteToActiveWindowErr == nil {
 		actions = append(actions, pasteToActiveWindowAction)
@@ -1664,7 +1684,7 @@ func (c *ClipboardPlugin) deleteRecordAssets(ctx context.Context, record Clipboa
 	_ = os.Remove(c.getDibCachePath(record.ID))
 
 	// Remove memory cache
-	delete(c.imageCache, record.ID)
+	c.imageCache.Delete(record.ID)
 }
 
 // moveRecordToTop updates the timestamp of a record to move it to the top
@@ -1698,7 +1718,8 @@ func (c *ClipboardPlugin) getDefaultTextIcon() common.WoxImage {
 // generateImagePreviewAndIcon generates preview and icon for image records
 func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, record ClipboardRecord) (previewImg, iconImg common.WoxImage) {
 	// Check memory cache first
-	if cached, exists := c.imageCache[record.ID]; exists {
+	cached, exists := c.imageCache.Load(record.ID)
+	if exists {
 		return cached.Preview, cached.Icon
 	}
 
@@ -1710,10 +1731,10 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 		iconImg = common.NewWoxImageAbsolutePath(imageIconFile)
 
 		// Cache the result in memory for faster access
-		c.imageCache[record.ID] = &ImageCacheEntry{
+		c.imageCache.Store(record.ID, &ImageCacheEntry{
 			Preview: previewImg,
 			Icon:    iconImg,
-		}
+		})
 		return
 	}
 
@@ -1763,10 +1784,10 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 	iconImage := common.NewWoxImageAbsolutePath(imageIconFile)
 
 	// Cache the generated images in memory for faster access
-	c.imageCache[record.ID] = &ImageCacheEntry{
+	c.imageCache.Store(record.ID, &ImageCacheEntry{
 		Preview: previewImage,
 		Icon:    iconImage,
-	}
+	})
 
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("generated image preview and icon cache, id=%s", record.ID))
 	return previewImage, iconImage
@@ -1879,11 +1900,13 @@ func (c *ClipboardPlugin) ocrModel(ctx context.Context) string {
 }
 
 func (c *ClipboardPlugin) scheduleClipboardImageTextRecognition(ctx context.Context, recordID string, imagePath string) {
-	if recordID == "" || imagePath == "" {
+	if recordID == "" || imagePath == "" || ctx.Err() != nil {
 		return
 	}
 
+	c.backgroundTasks.Add(1)
 	util.Go(ctx, "clipboard image text recognition", func() {
+		defer c.backgroundTasks.Done()
 		c.recognizeClipboardImageText(ctx, recordID, imagePath)
 	})
 }
@@ -1943,6 +1966,11 @@ func (c *ClipboardPlugin) getImageHistoryDays(ctx context.Context) int {
 
 // startCleanupRoutine starts a background routine to periodically clean up expired data
 func (c *ClipboardPlugin) startCleanupRoutine(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	c.performCleanup(ctx)
+
 	ticker := time.NewTicker(30 * time.Minute) // Run cleanup every 30 minutes
 	defer ticker.Stop()
 
@@ -2047,7 +2075,7 @@ func (c *ClipboardPlugin) cleanupOrphanedCacheFiles(ctx context.Context) {
 
 // cleanupMemoryCache removes cache entries for records that no longer exist
 func (c *ClipboardPlugin) cleanupMemoryCache(ctx context.Context) {
-	if len(c.imageCache) == 0 {
+	if c.imageCache.Len() == 0 {
 		return
 	}
 
@@ -2064,9 +2092,9 @@ func (c *ClipboardPlugin) cleanupMemoryCache(ctx context.Context) {
 
 	// Remove cache entries for non-existent records
 	removedCount := 0
-	for id := range c.imageCache {
+	for _, id := range c.imageCache.Keys() {
 		if !validIds[id] {
-			delete(c.imageCache, id)
+			c.imageCache.Delete(id)
 			removedCount++
 		}
 	}

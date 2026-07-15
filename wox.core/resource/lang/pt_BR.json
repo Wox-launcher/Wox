@@ -1189,6 +1189,7 @@
   "plugin_file_setting_content_extension": "Extensão",
   "plugin_file_content_indexing_progress": "Indexando conteúdo dos arquivos: %d arquivos indexados",
   "plugin_file_content_index_ready": "Conteúdo indexado para %s arquivos em %s, média de %s arquivos/s",
+  "plugin_file_content_index_failed": "Falha ao indexar o conteúdo dos arquivos",
   "plugin_file_rebuild_content_index": "Reconstruir índice de conteúdo",
   "plugin_file_rebuild_content_index_failed": "Falha ao reconstruir o índice de conteúdo",
   "plugin_file_refinement_type": "Tipo",

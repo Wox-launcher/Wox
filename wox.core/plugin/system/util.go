@@ -189,7 +189,7 @@ func GetActiveWindowIcon(ctx context.Context) (common.WoxImage, error) {
 	return woxIcon, nil
 }
 
-func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowName string, windowPid int, windowIcon common.WoxImage, actionCallback func()) (plugin.QueryResultAction, error) {
+func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowName string, windowPid int, windowIcon common.WoxImage, actionCallback func(context.Context) error) (plugin.QueryResultAction, error) {
 	if windowName == "" {
 		return plugin.QueryResultAction{}, fmt.Errorf("no active window")
 	}
@@ -199,11 +199,16 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowNam
 		IsDefault: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if actionCallback != nil {
-				actionCallback()
+				if err := actionCallback(ctx); err != nil {
+					api.Log(ctx, plugin.LogLevelError, err.Error())
+					api.Notify(ctx, err.Error())
+					return
+				}
 			}
-			util.Go(ctx, "ai command paste", func() {
+			util.Go(ctx, "paste to active window", func() {
 				if err := pasteToActiveWindow(ctx, api, windowPid); err != nil {
 					api.Log(ctx, plugin.LogLevelError, err.Error())
+					api.Notify(ctx, err.Error())
 				}
 			})
 		},

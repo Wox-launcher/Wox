@@ -267,7 +267,8 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 							},
 						},
 						{
-							Name: "i18n:plugin_calculator_recalculate",
+							Name:                   "i18n:plugin_calculator_recalculate",
+							PreventHideAfterAction: true,
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								c.api.ChangeQuery(ctx, common.PlainQuery{
 									QueryType: plugin.QueryTypeInput,

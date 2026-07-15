@@ -1270,6 +1270,7 @@
   "plugin_file_setting_content_extension": "扩展名",
   "plugin_file_content_indexing_progress": "正在索引文件内容：已索引 %d 个文件",
   "plugin_file_content_index_ready": "已为 %s 个文件建立内容索引，用时 %s，平均 %s/秒",
+  "plugin_file_content_index_failed": "文件内容索引失败",
   "plugin_file_refinement_type": "类型",
   "plugin_file_refinement_type_all": "全部",
   "plugin_file_refinement_type_file": "文件",

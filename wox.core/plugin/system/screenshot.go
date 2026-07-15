@@ -45,8 +45,13 @@ func init() {
 }
 
 type ScreenshotPlugin struct {
-	api        plugin.API
-	thumbnailM sync.Mutex
+	api                plugin.API
+	thumbnailM         sync.Mutex
+	backgroundM        sync.Mutex
+	backgroundWG       sync.WaitGroup
+	backgroundCtx      context.Context
+	backgroundCancel   context.CancelFunc
+	backgroundStopping bool
 }
 
 func (p *ScreenshotPlugin) GetMetadata() plugin.Metadata {
@@ -119,6 +124,11 @@ func (p *ScreenshotPlugin) GetMetadata() plugin.Metadata {
 
 func (p *ScreenshotPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	p.api = initParams.API
+	p.backgroundM.Lock()
+	p.backgroundCtx, p.backgroundCancel = context.WithCancel(util.NewTraceContext())
+	p.backgroundWG = sync.WaitGroup{}
+	p.backgroundStopping = false
+	p.backgroundM.Unlock()
 	p.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
 		if key != screenshotOCRModelSettingKey || !p.isScreenshotOCREnabled(ctx) {
 			return definition.PluginSettingDefinitionItem{}
@@ -126,16 +136,50 @@ func (p *ScreenshotPlugin) Init(ctx context.Context, initParams plugin.InitParam
 		return BuildOCRModelSetting(ctx, screenshotOCRModelSettingKey, "i18n:plugin_screenshot_ocr_model", "i18n:plugin_screenshot_ocr_model_tooltip")
 	})
 
-	// Screenshot history thumbnails are warmed during plugin startup so the first user query does
-	// not pay the old cost of decoding every original screenshot through the generic icon pipeline.
-	util.Go(ctx, "warm screenshot history thumbnails", func() {
-		p.warmScreenshotHistoryThumbnails(ctx)
+	// Remove expired captures before warming thumbnails so startup never generates caches for files
+	// that the retention policy is about to delete.
+	p.runScreenshotBackgroundTask("initialize screenshot history", func(runtimeCtx context.Context) {
+		p.cleanupExpiredScreenshots(runtimeCtx)
+		p.warmScreenshotHistoryThumbnails(runtimeCtx)
 	})
 	// Screenshot retention uses one scheduled owner instead of tying deletion to capture or query
 	// flows. Keeping cleanup periodic avoids surprising file removal during user-driven actions.
-	util.Go(ctx, "cleanup screenshot history", func() {
-		p.startScreenshotCleanupRoutine(ctx)
+	p.runScreenshotBackgroundTask("cleanup screenshot history", func(runtimeCtx context.Context) {
+		p.startScreenshotCleanupRoutine(runtimeCtx)
 	})
+	p.api.OnUnload(ctx, func(ctx context.Context) {
+		p.stopScreenshotBackgroundTasks()
+	})
+}
+
+// runScreenshotBackgroundTask starts work only while the current plugin lifecycle accepts new tasks.
+func (p *ScreenshotPlugin) runScreenshotBackgroundTask(message string, job func(context.Context)) {
+	p.backgroundM.Lock()
+	if p.backgroundStopping || p.backgroundCtx == nil || p.backgroundCtx.Err() != nil {
+		p.backgroundM.Unlock()
+		return
+	}
+	runtimeCtx := p.backgroundCtx
+	p.backgroundWG.Add(1)
+	p.backgroundM.Unlock()
+
+	util.Go(runtimeCtx, message, func() {
+		defer p.backgroundWG.Done()
+		job(runtimeCtx)
+	})
+}
+
+// stopScreenshotBackgroundTasks prevents new work and waits for active file operations before unload completes.
+func (p *ScreenshotPlugin) stopScreenshotBackgroundTasks() {
+	p.backgroundM.Lock()
+	p.backgroundStopping = true
+	cancel := p.backgroundCancel
+	p.backgroundM.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	p.backgroundWG.Wait()
 }
 
 func (p *ScreenshotPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -260,6 +304,9 @@ func (p *ScreenshotPlugin) listScreenshotHistory() ([]screenshotHistoryItem, err
 
 		info, infoErr := entry.Info()
 		if infoErr != nil {
+			if os.IsNotExist(infoErr) {
+				continue
+			}
 			return nil, fmt.Errorf("failed to read screenshot file info: %w", infoErr)
 		}
 		if info.Size() == 0 {
@@ -357,6 +404,9 @@ func (p *ScreenshotPlugin) cleanupExpiredScreenshots(ctx context.Context) {
 
 	removedCount := 0
 	for _, entry := range entries {
+		if ctx.Err() != nil {
+			return
+		}
 		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".png") {
 			continue
 		}
@@ -398,6 +448,9 @@ func (p *ScreenshotPlugin) cleanupExpiredScreenshots(ctx context.Context) {
 }
 
 func (p *ScreenshotPlugin) warmScreenshotHistoryThumbnails(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
 	items, err := p.listScreenshotHistory()
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to warm screenshot history thumbnails: %s", err.Error()))
@@ -405,6 +458,9 @@ func (p *ScreenshotPlugin) warmScreenshotHistoryThumbnails(ctx context.Context) 
 	}
 
 	for _, item := range items {
+		if ctx.Err() != nil {
+			return
+		}
 		if err := p.ensureScreenshotHistoryThumbnails(ctx, item); err != nil {
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to warm screenshot history thumbnail: path=%s err=%s", item.path, err.Error()))
 		}
@@ -560,21 +616,23 @@ func (p *ScreenshotPlugin) removeScreenshotOCRSidecar(ctx context.Context, scree
 	}
 }
 
-func (p *ScreenshotPlugin) scheduleScreenshotOCR(ctx context.Context, screenshotPath string) {
-	if !p.isScreenshotOCREnabled(ctx) {
-		return
-	}
-
+func (p *ScreenshotPlugin) scheduleScreenshotOCR(screenshotPath string) {
 	// OCR runs after the screenshot file is already durable. The old history path had no text index,
 	// but blocking screenshot completion on platform OCR would make capture feel unreliable on
 	// machines where Windows/macOS OCR models are missing or still warming up.
-	util.Go(ctx, "recognize screenshot text", func() {
-		if err := p.writeScreenshotOCRSidecar(ctx, screenshotPath); err != nil {
-			if errors.Is(err, ocr.ErrUnsupported) || errors.Is(err, ocr.ErrUnavailable) {
-				p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("screenshot ocr skipped: path=%s err=%s", screenshotPath, err.Error()))
+	p.runScreenshotBackgroundTask("recognize screenshot text", func(runtimeCtx context.Context) {
+		if !p.isScreenshotOCREnabled(runtimeCtx) {
+			return
+		}
+		if err := p.writeScreenshotOCRSidecar(runtimeCtx, screenshotPath); err != nil {
+			if errors.Is(err, context.Canceled) {
 				return
 			}
-			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to recognize screenshot text: path=%s err=%s", screenshotPath, err.Error()))
+			if errors.Is(err, ocr.ErrUnsupported) || errors.Is(err, ocr.ErrUnavailable) {
+				p.api.Log(runtimeCtx, plugin.LogLevelDebug, fmt.Sprintf("screenshot ocr skipped: path=%s err=%s", screenshotPath, err.Error()))
+				return
+			}
+			p.api.Log(runtimeCtx, plugin.LogLevelWarning, fmt.Sprintf("failed to recognize screenshot text: path=%s err=%s", screenshotPath, err.Error()))
 		}
 	})
 }
@@ -587,6 +645,9 @@ func (p *ScreenshotPlugin) writeScreenshotOCRSidecar(ctx context.Context, screen
 
 	result, err := ocr.Recognize(ctx, ocr.Request{ImagePath: screenshotPath, ModelID: p.screenshotOCRModel(ctx)})
 	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(result.Text) == "" {
@@ -677,6 +738,7 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if err := shell.Open(item.path); err != nil {
 						p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open screenshot history item: path=%s err=%s", item.path, err.Error()))
+						p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
 					}
 				},
 			},
@@ -686,6 +748,7 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if err := shell.OpenFileInFolder(item.path); err != nil {
 						p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open screenshot history item folder: path=%s err=%s", item.path, err.Error()))
+						p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
 					}
 				},
 			},
@@ -720,11 +783,13 @@ func (p *ScreenshotPlugin) copyScreenshotHistoryItem(ctx context.Context, screen
 	img, err := imaging.Open(screenshotPath)
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to decode screenshot history item: path=%s err=%s", screenshotPath, err.Error()))
+		p.api.Notify(ctx, "i18n:plugin_screenshot_capture_clipboard_warning")
 		return
 	}
 
 	if err := clipboard.Write(&clipboard.ImageData{Image: img}); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy screenshot history item: path=%s err=%s", screenshotPath, err.Error()))
+		p.api.Notify(ctx, "i18n:plugin_screenshot_capture_clipboard_warning")
 	}
 }
 
@@ -829,7 +894,7 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 			// can repair the cache.
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to generate screenshot history thumbnails: path=%s err=%s", result.ScreenshotPath, err.Error()))
 		}
-		p.scheduleScreenshotOCR(ctx, result.ScreenshotPath)
+		p.scheduleScreenshotOCR(result.ScreenshotPath)
 		if result.PinToScreen {
 			// Flutter owns final image composition, but the pinned desktop window belongs in Go because
 			// util/overlay is already the native surface abstraction used by core. Branching on the

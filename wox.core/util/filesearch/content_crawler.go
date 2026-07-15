@@ -513,7 +513,8 @@ func formatContentBytes(b int64) string {
 }
 
 // ContentExtensionListFromSetting parses the table JSON setting value into
-// an extension set. Falls back to defaults on parse failure.
+// an extension set. Missing or malformed settings use defaults, while an
+// explicit empty table disables content indexing for every extension.
 func ContentExtensionListFromSetting(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -535,9 +536,6 @@ func ContentExtensionListFromSetting(raw string) []string {
 		if e := strings.TrimSpace(row.Extension); e != "" {
 			exts = append(exts, e)
 		}
-	}
-	if len(exts) == 0 {
-		return ContentDefaultExtensions()
 	}
 	return exts
 }
