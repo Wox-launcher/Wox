@@ -1790,11 +1790,6 @@ func handleSyncBootstrapStart(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	if strings.TrimSpace(payload.RecoveryCode) == "" {
-		writeErrorResponse(w, "recovery_code is empty")
-		return
-	}
-
 	if err := startSyncBootstrap(getTraceContext(r), payload.RecoveryCode); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -1833,12 +1828,21 @@ func startSyncBootstrap(ctx context.Context, recoveryCode string) error {
 	}
 
 	if status.HasRemoteKey {
-		if _, err := service.KeyManager.FetchWithRecoveryCode(ctx, recoveryCode); err != nil {
-			return err
+		// A failed snapshot apply does not invalidate the locally restored key, so retries must not request the recovery code again.
+		if !service.KeyManager.GetStatus(ctx).Available {
+			if strings.TrimSpace(recoveryCode) == "" {
+				return fmt.Errorf("recovery_code is empty")
+			}
+			if _, err := service.KeyManager.FetchWithRecoveryCode(ctx, recoveryCode); err != nil {
+				return err
+			}
 		}
 	} else {
 		if status.HasRemoteData {
 			return fmt.Errorf("cloud sync key is missing")
+		}
+		if strings.TrimSpace(recoveryCode) == "" {
+			return fmt.Errorf("recovery_code is empty")
 		}
 		if _, err := service.KeyManager.InitWithRecoveryCode(ctx, recoveryCode, ""); err != nil {
 			return err
@@ -1896,6 +1900,7 @@ func scheduleCloudSyncBootstrapInitialPush(ctx context.Context, service *cloudsy
 			return
 		}
 		cloudsync.MarkCloudSyncBootstrapComplete(ctx)
+		startCloudSyncManagerIfSyncEnabled(ctx, service)
 	})
 }
 
@@ -2959,6 +2964,14 @@ func startCloudSyncManagerIfSyncEnabled(ctx context.Context, service *cloudsync.
 		return
 	}
 	if service.KeyManager == nil || !service.KeyManager.GetStatus(ctx).Available {
+		return
+	}
+	state, err := cloudsync.LoadCloudSyncState(ctx)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to load cloud sync state before starting scheduler: %v", err))
+		return
+	}
+	if !state.Bootstrapped {
 		return
 	}
 	service.StartManager(ctx)

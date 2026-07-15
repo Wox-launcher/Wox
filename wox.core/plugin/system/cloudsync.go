@@ -132,6 +132,17 @@ func (p *CloudSyncPlugin) loginRequiredResult(ctx context.Context) plugin.QueryR
 		Icon:       cloudSyncIcon,
 		Score:      cloudSyncStatusResultScore,
 		GroupScore: cloudSyncStatusResultScore,
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:                   "i18n:plugin_update_action_open_settings",
+				Icon:                   common.SettingIcon,
+				IsDefault:              true,
+				PreventHideAfterAction: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/data/cloudsync"})
+				},
+			},
+		},
 	}
 }
 

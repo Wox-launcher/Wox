@@ -186,9 +186,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     return verified == true;
   }
 
-  // After login or registration, automatically prompts the user to set up cloud
-  // sync if it has not been configured yet. Without this prompt, many users log
-  // in but never discover they need to manually click "Sync" to begin syncing.
+  // After login or registration, resumes bootstrap with a local key or prompts for the recovery code when no key is available.
   Future<void> showCloudSyncBootstrapIfNeeded(BuildContext context) async {
     final account = controller.accountStatus.value;
     final status = controller.cloudSyncStatus.value;
@@ -203,8 +201,14 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       return;
     }
 
-    final isBootstrapInProgress = account.syncEnabled && status.keyStatus.available && state != null && !state.bootstrapped && state.lastError.isEmpty;
+    final isBootstrapInProgress =
+        controller.isCloudSyncBootstrapWaiting.value && account.syncEnabled && status.keyStatus.available && state != null && !state.bootstrapped && state.lastError.isEmpty;
     if (isBootstrapInProgress) {
+      return;
+    }
+
+    if (status.keyStatus.available) {
+      await controller.cloudSyncBootstrapStart('');
       return;
     }
 
@@ -357,7 +361,8 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       final nextAvailableSyncTime = state != null && state.backoffUntil > DateTime.now().millisecondsSinceEpoch ? formatCloudSyncTime(state.backoffUntil) : '';
       final progressText = formatCloudSyncProgress(status.progress, isBusy: isBusy);
       final isSynced = account.syncEnabled && status.keyStatus.available && state != null && state.bootstrapped;
-      final isBootstrapInProgress = account.syncEnabled && status.keyStatus.available && state != null && !state.bootstrapped && stateError.isEmpty;
+      final isBootstrapInProgress =
+          controller.isCloudSyncBootstrapWaiting.value && account.syncEnabled && status.keyStatus.available && state != null && !state.bootstrapped && stateError.isEmpty;
       final String statusText;
       final Color? statusColor;
       final String? statusDetailText;
@@ -454,9 +459,13 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     });
   }
 
-  // Routes the single sync button to bootstrap when setup is incomplete, otherwise performs an immediate sync.
+  // Routes the single sync button to bootstrap when setup is incomplete, reusing an available local key before requesting the recovery code.
   Future<void> handleCloudSyncButtonPressed(BuildContext context, {required bool shouldBootstrap}) async {
     if (shouldBootstrap) {
+      if (controller.cloudSyncStatus.value.keyStatus.available) {
+        await controller.cloudSyncBootstrapStart('');
+        return;
+      }
       final bootstrapStatus = await controller.cloudSyncBootstrapStatus();
       if (!context.mounted || bootstrapStatus == null) {
         return;

@@ -4580,6 +4580,12 @@ class WoxLauncherController extends GetxController {
           await settingController.switchToBackupView(traceId);
         });
       }
+      if (context.path == "/data/cloudsync") {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await Future.delayed(const Duration(milliseconds: 100));
+          await settingController.switchToCloudSyncView(traceId);
+        });
+      }
       if (context.path == "/general" && context.param.trim().isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           settingController.focusGeneralSection(context.param);

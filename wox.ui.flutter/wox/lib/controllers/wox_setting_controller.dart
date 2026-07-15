@@ -77,6 +77,7 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
   final isCloudSyncStatusLoading = false.obs;
   final cloudSyncStatusError = ''.obs;
   final isCloudSyncActionLoading = false.obs;
+  final isCloudSyncBootstrapWaiting = false.obs;
   final cloudSyncActionError = ''.obs;
   final accountActionError = ''.obs;
   final accountSubscriptionError = ''.obs;
@@ -2598,6 +2599,7 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     cloudSyncActionError.value = '';
     try {
       await WoxApi.instance.cloudSyncBootstrapStart(traceId, recoveryCode);
+      isCloudSyncBootstrapWaiting.value = true;
       await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
       _updateCloudSyncStatusWaiting();
       return true;
@@ -2612,6 +2614,9 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
 
   // Starts a bounded status poll while first-time bootstrap work continues in the backend.
   void _updateCloudSyncStatusWaiting() {
+    if (!isCloudSyncBootstrapWaiting.value) {
+      return;
+    }
     if (!_shouldPollCloudSyncStatus(accountStatus.value, cloudSyncStatus.value)) {
       _stopCloudSyncStatusWaiting();
       return;
@@ -2643,6 +2648,7 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     _cloudSyncStatusPollTimer?.cancel();
     _cloudSyncStatusPollTimer = null;
     _cloudSyncStatusWaitDeadline = null;
+    isCloudSyncBootstrapWaiting.value = false;
   }
 
   Future<void> _pollCloudSyncStatus() async {
