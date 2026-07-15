@@ -50,6 +50,7 @@ class _WoxSettingPluginDictationModelState extends State<WoxSettingPluginDictati
       widget.onUpdate(widget.item.key, _selectedId);
     }
     _refreshEngineStatus();
+    _refreshStatus();
     _startPollingIfDownloading();
   }
 

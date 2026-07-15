@@ -9,6 +9,7 @@ import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_path_finder.dart';
 import 'package:wox/components/wox_textfield.dart';
+import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/utils/color_util.dart';
@@ -147,6 +148,21 @@ class WoxSettingAIView extends WoxSettingBaseView {
                           return Text(label, style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor), fontSize: 13));
                         }
                         return null;
+                      },
+                      rowTrailingActionsBuilder: (context, row) {
+                        final path = row["Path"]?.toString().trim() ?? "";
+                        if (path.isEmpty) return const <Widget>[];
+                        return [
+                          WoxTooltip(
+                            message: controller.tr("plugin_file_open"),
+                            child: WoxButton.text(
+                              text: '',
+                              icon: Icon(Icons.folder_open, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              onPressed: () => controller.openFolder(path),
+                            ),
+                          ),
+                        ];
                       },
                       customCreateDialogBuilder: (context, saveRow, {initialRow}) async {
                         await _showAddSkillDialog(context, saveRow, initialRow: initialRow);

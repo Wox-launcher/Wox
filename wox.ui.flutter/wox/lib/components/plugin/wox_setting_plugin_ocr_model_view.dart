@@ -43,6 +43,7 @@ class _WoxSettingPluginOCRModelState extends State<WoxSettingPluginOCRModel> wit
     _options = List.from(widget.item.options);
     _selectedID = widget.value.isNotEmpty ? widget.value : widget.item.defaultValue;
     _refreshEngineStatus();
+    _refreshStatus();
     _startPollingIfNeeded();
   }
 

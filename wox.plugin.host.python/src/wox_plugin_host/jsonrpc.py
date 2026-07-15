@@ -115,10 +115,10 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
             await logger.info(ctx.get_trace_id(), f"add: {deps_dir} to sys.path")
             sys.path.append(deps_dir)
 
+        # Convert entry path to module path
+        # e.g., "replaceme_with_projectname/main.py" -> "replaceme_with_projectname.main"
+        module_name = entry.replace(".py", "").replace("/", ".")
         try:
-            # Convert entry path to module path
-            # e.g., "replaceme_with_projectname/main.py" -> "replaceme_with_projectname.main"
-            module_name = entry.replace(".py", "").replace("/", ".")
             await logger.info(ctx.get_trace_id(), f"module_path: {module_name}")
 
             # Import the module
@@ -139,6 +139,12 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
 
             await logger.info(ctx.get_trace_id(), f"<{plugin_name}> load plugin successfully")
         except Exception as e:
+            # A failed package import can remain cached and shadow a newly installed plugin on retry.
+            _remove_module(module_name.split(".", 1)[0])
+            if deps_dir in sys.path:
+                sys.path.remove(deps_dir)
+            if plugin_directory in sys.path:
+                sys.path.remove(plugin_directory)
             error_stack = traceback.format_exc()
             await logger.error(
                 ctx.get_trace_id(),

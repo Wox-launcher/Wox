@@ -585,6 +585,13 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
       return;
     }
 
+    final canonicalHotkey = WoxHotkey.recordedHotkeyToString(hotkeyStr, kind);
+    // Registering the saved key can replay the same key press through the global callback.
+    if (_hotKey?.toStr() == canonicalHotkey) {
+      Logger.instance.info(traceId, "Hotkey recorder ignored duplicate recorded hotkey: hotkey=$canonicalHotkey kind=$kind");
+      return;
+    }
+
     if (kind == WoxHotkeyRecorderKind.holdModifier.value || kind == WoxHotkeyRecorderKind.pressModifier.value) {
       Logger.instance.info(traceId, "Hotkey recorder accepts modifier-only hotkey without availability probe: hotkey=$hotkeyStr kind=$kind");
       _acceptRecordedHotkey(hotkeyStr, kind: kind);

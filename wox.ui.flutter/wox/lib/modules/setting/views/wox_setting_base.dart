@@ -16,6 +16,7 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
     return Align(
       alignment: Alignment.topLeft,
       child: SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
         child: Padding(
           // The settings surface now uses a wider, page-like content column so controls can align to the right while descriptions stay readable.
           padding: const EdgeInsets.only(left: 38, right: 44, bottom: 28, top: 34),

@@ -28,6 +28,7 @@ import 'wox_setting_plugin_table_update_view.dart';
 typedef WoxSettingPluginTableCreateDialogBuilder =
     Future<void> Function(BuildContext context, Future<String?> Function(Map<String, dynamic> row) saveRow, {Map<String, dynamic>? initialRow});
 typedef WoxSettingPluginTableEditDialogBuilder = Future<void> Function(BuildContext context, Map<String, dynamic> row, Future<String?> Function(Map<String, dynamic> row) saveRow);
+typedef WoxSettingPluginTableRowActionsBuilder = List<Widget> Function(BuildContext context, Map<String, dynamic> row);
 
 class WoxSettingPluginTable extends WoxSettingPluginItem {
   static const int tableMaxHeightMin = 120;
@@ -45,6 +46,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final bool inlineTitleActions;
   final List<Widget> titleActions;
   final List<Widget> trailingActions;
+  final WoxSettingPluginTableRowActionsBuilder? rowTrailingActionsBuilder;
   final bool showCloneAction;
   final bool showEditAction;
   final bool Function(Map<String, dynamic> row)? canDeleteRow;
@@ -74,6 +76,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     this.inlineTitleActions = false,
     this.titleActions = const [],
     this.trailingActions = const [],
+    this.rowTrailingActionsBuilder,
     this.showCloneAction = true,
     this.showEditAction = true,
     this.canDeleteRow,
@@ -700,6 +703,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   DataCell buildOperationCell(BuildContext context, Map<String, dynamic> row, List<dynamic> rows) {
     final originalRow = json.decode(json.encode(row)) as Map<String, dynamic>;
     originalRow.remove(rowUniqueIdKey);
+    final rowTrailingActions = rowTrailingActionsBuilder?.call(context, row) ?? const <Widget>[];
     final isDeleteDisabled = rows.length <= minimumRowCount || (canDeleteRow != null && !canDeleteRow!(row));
     final deleteDisabledMessage = minimumRowDeleteMessage.trim().isEmpty ? tr("ui_plugin_table_minimum_row_delete_message") : tr(minimumRowDeleteMessage);
 
@@ -786,6 +790,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                         },
               ),
             ),
+            ...rowTrailingActions,
           ],
         ),
       ),
@@ -798,14 +803,11 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       column: operationColumn,
       isHeader: true,
       isOperation: true,
-      child: WoxTooltip(
-        message: tr("ui_operation"),
-        child: Text(
-          tr("ui_operation"),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-          style: TextStyle(color: getThemeTextColor().withValues(alpha: 0.88), fontSize: 13, fontWeight: FontWeight.w600),
-        ),
+      child: Text(
+        tr("ui_operation"),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+        style: TextStyle(color: getThemeTextColor().withValues(alpha: 0.88), fontSize: 13, fontWeight: FontWeight.w600),
       ),
     );
   }

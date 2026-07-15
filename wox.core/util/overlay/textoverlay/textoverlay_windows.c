@@ -167,8 +167,11 @@ static SIZE TextOverlayMeasure(WCHAR *message, BOOL loading, BOOL hasIcon, BOOL 
     int maxContentWidth = maxWindowWidth > 0 ? (int)maxWindowWidth - chromeWidth : 364;
     if (maxContentWidth < 1)
         maxContentWidth = 1;
-    if (contentWidth < 64)
-        contentWidth = 64;
+    int minContentWidth = minWindowWidth > 0 ? (int)minWindowWidth - chromeWidth : 64;
+    if (minContentWidth < 1)
+        minContentWidth = 1;
+    if (contentWidth < minContentWidth)
+        contentWidth = minContentWidth;
     if (contentWidth > maxContentWidth)
         contentWidth = maxContentWidth;
 
