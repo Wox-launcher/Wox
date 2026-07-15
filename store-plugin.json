@@ -365,7 +365,7 @@
     "Id": "cb491ba6-e73f-4434-922e-738a55f87558",
     "Name": "i18n:plugin_name",
     "Author": "Wox-launcher",
-    "Version": "0.0.2",
+    "Version": "0.0.3",
     "MinWoxVersion": "2.0.0",
     "Runtime": "python",
     "Description": "i18n:plugin_description",
@@ -381,7 +381,7 @@
       "linux"
     ],
     "DateCreated": "2025-12-27 19:55:00",
-    "DateUpdated": "2026-06-19 21:24:08",
+    "DateUpdated": "2026-07-15 09:36:00",
     "I18n": {
       "en_US": {
         "plugin_name": "Kill Process",
