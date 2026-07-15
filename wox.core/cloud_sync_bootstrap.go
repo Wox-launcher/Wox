@@ -19,7 +19,7 @@ func initCloudSync(ctx context.Context) {
 	accountService := account.NewService(baseURL)
 	account.SetService(accountService)
 	accountService.StartTokenRefresh(ctx)
-	deviceProvider := cloudsync.NewFileDeviceProvider("")
+	deviceProvider := cloudsync.NewDatabaseDeviceProvider()
 
 	client, err := cloudsync.NewCloudSyncHTTPClient(cloudsync.CloudSyncHTTPClientConfig{
 		BaseURL:        baseURL,

@@ -2,61 +2,49 @@ package cloudsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
-	"wox/util"
+	"wox/database"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
-type FileDeviceProvider struct {
-	mu   sync.Mutex
-	path string
+const deviceIdentityID = 1
+
+type DatabaseDeviceProvider struct {
+	mu sync.Mutex
 }
 
-func NewFileDeviceProvider(path string) *FileDeviceProvider {
-	return &FileDeviceProvider{path: strings.TrimSpace(path)}
+func NewDatabaseDeviceProvider() *DatabaseDeviceProvider {
+	return &DatabaseDeviceProvider{}
 }
 
-func (p *FileDeviceProvider) DeviceID(ctx context.Context) (string, error) {
+func (p *DatabaseDeviceProvider) DeviceID(ctx context.Context) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	devicePath := p.path
-	if devicePath == "" {
-		devicePath = filepath.Join(util.GetLocation().GetWoxDataDirectory(), "device_id")
+	db := database.GetDB()
+	if db == nil {
+		return "", fmt.Errorf("database not initialized")
 	}
 
-	if value, ok := readDeviceID(devicePath); ok {
-		return value, nil
+	var identity database.DeviceIdentity
+	err := db.First(&identity, deviceIdentityID).Error
+	if err == nil && strings.TrimSpace(identity.DeviceID) != "" {
+		return identity.DeviceID, nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", fmt.Errorf("load device identity: %w", err)
 	}
 
 	id := uuid.NewString()
-	if err := writeDeviceID(devicePath, id); err != nil {
-		return "", err
+	identity = database.DeviceIdentity{ID: deviceIdentityID, DeviceID: id}
+	if err := db.Save(&identity).Error; err != nil {
+		return "", fmt.Errorf("save device identity: %w", err)
 	}
 
 	return id, nil
-}
-
-func readDeviceID(path string) (string, bool) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", false
-	}
-	id := strings.TrimSpace(string(data))
-	if id == "" {
-		return "", false
-	}
-	return id, true
-}
-
-func writeDeviceID(path string, value string) error {
-	if value == "" {
-		return fmt.Errorf("device id is empty")
-	}
-	return os.WriteFile(path, []byte(value), 0600)
 }

@@ -75,6 +75,20 @@ type CloudSyncState struct {
 	Bootstrapped bool
 }
 
+// DeviceIdentity stores the local cloud sync device identifier outside synced settings.
+type DeviceIdentity struct {
+	ID       uint `gorm:"primaryKey"`
+	DeviceID string
+}
+
+// TelemetryState stores anonymous telemetry delivery state locally.
+type TelemetryState struct {
+	ID              uint `gorm:"primaryKey"`
+	InstallID       string
+	LastSentAt      int64
+	LastSentVersion string
+}
+
 // CloudSyncHistory stores local device sync attempts for user-visible diagnostics.
 type CloudSyncHistory struct {
 	ID               uint `gorm:"primaryKey;autoIncrement"`
@@ -196,6 +210,8 @@ func Init(ctx context.Context) error {
 		&PluginSetting{},
 		&Oplog{},
 		&CloudSyncState{},
+		&DeviceIdentity{},
+		&TelemetryState{},
 		&CloudSyncHistory{},
 		&AccountState{},
 		&MRURecord{},
