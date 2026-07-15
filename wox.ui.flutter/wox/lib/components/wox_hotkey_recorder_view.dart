@@ -14,7 +14,7 @@ import 'package:get/get.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/wox_hotkey_display_util.dart';
 
-enum WoxHotkeyRecorderTipPosition { left, right }
+enum WoxHotkeyRecorderTipPosition { left, right, bottom }
 
 enum WoxHotkeyRecorderPurpose {
   normal("normal"),
@@ -736,6 +736,11 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     } else if (widget.tipPosition == WoxHotkeyRecorderTipPosition.right) {
       // Dense table-edit rows have their labels below the control area, so the recording hint stays to the right to avoid covering the row content.
       content = Row(mainAxisSize: MainAxisSize.min, children: [recorderBox, Padding(padding: const EdgeInsets.only(left: 8.0), child: _buildFocusedHint())]);
+    } else if (widget.tipPosition == WoxHotkeyRecorderTipPosition.bottom) {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [recorderBox, const SizedBox(height: 6), ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420), child: _buildFocusedHint())],
+      );
     } else {
       // General settings align the recorder itself to the right edge. The left hint is painted outside the recorder's layout box
       // so focusing the control does not push the keycaps away from their idle position.

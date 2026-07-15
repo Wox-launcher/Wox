@@ -67,32 +67,23 @@ class _HotkeyContent extends StatelessWidget {
     final textColor = getThemeTextColor();
     final subTextColor = getThemeSubTextColor();
 
-    // Hotkey redesign: mirror the permissions checklist layout so onboarding
-    // steps use a consistent left context / right control rhythm. The previous
-    // vertical stack made the recorder feel detached from its explanation.
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(color: textColor.withValues(alpha: 0.038), border: Border.all(color: subTextColor.withValues(alpha: 0.18)), borderRadius: BorderRadius.circular(8)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 6),
-                Text(body, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: subTextColor, fontSize: 13, height: 1.35)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 18),
+          Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(body, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: subTextColor, fontSize: 13, height: 1.35)),
+          const SizedBox(height: 4),
           Align(
             alignment: Alignment.centerRight,
             child: WoxHotkeyRecorder(
               hotkey: WoxHotkey.parseHotkeyFromString(hotkey),
+              tipPosition: WoxHotkeyRecorderTipPosition.bottom,
               onHotKeyRecorded: (result) {
                 // Step extraction: the recorder UI is reusable for both hotkey
                 // steps, but the parent still decides which setting key is saved.

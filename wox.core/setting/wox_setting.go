@@ -319,7 +319,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 
 	return &WoxSetting{
 		MainHotkey:        NewPlatformValue(store, "MainHotkey", "alt+space", "cmd+space", "ctrl+space"),
-		SelectionHotkey:   NewPlatformValue(store, "SelectionHotkey", "ctrl+alt+space", "command+option+space", "ctrl+shift+j"),
+		SelectionHotkey:   NewPlatformValue(store, "SelectionHotkey", "win+alt+space", "command+option+space", "ctrl+shift+j"),
 		IgnoredHotkeyApps: NewPlatformValue(store, "IgnoredHotkeyApps", []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}),
 		LogLevel: NewWoxSettingValueWithValidator(store, "LogLevel", LogLevelInfo, func(level string) bool {
 			return strings.EqualFold(level, LogLevelInfo) || strings.EqualFold(level, LogLevelDebug)
