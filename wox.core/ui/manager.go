@@ -29,6 +29,7 @@ import (
 	"wox/plugin/system/shell/terminal"
 	"wox/resource"
 	"wox/setting"
+	"wox/ui/contract"
 	"wox/updater"
 	"wox/util"
 	"wox/util/appearance"
@@ -57,6 +58,8 @@ var logger *util.Log
 type Manager struct {
 	hotkeyService      *corehotkey.Service
 	ui                 common.UI
+	viewMu             sync.RWMutex
+	view               contract.View
 	serverPort         int
 	themes             *util.HashMap[string, common.Theme]
 	systemThemeIds     []string
@@ -99,19 +102,16 @@ func GetUIManager() *Manager {
 			},
 		})
 		managerInstance.ui = &uiImpl{
-			requestMap:      util.NewHashMap[string, chan UIMessage](),
 			isVisible:       false, // Initially hidden
 			isInSettingView: false,
 		}
-		terminal.GetSessionManager().SetEmitter(func(ctx context.Context, uiSessionID string, method string, data any) {
-			responseUI(ctx, UIMessage{
-				RequestId: uuid.NewString(),
-				TraceId:   util.GetContextTraceId(ctx),
-				SessionId: uiSessionID,
-				Method:    method,
-				Success:   true,
-				Data:      data,
-			})
+		terminal.GetSessionManager().SetEmitter(terminal.EventEmitter{
+			Chunk: func(ctx context.Context, uiSessionID string, chunk terminal.TerminalChunk) {
+				managerInstance.applyTerminalChunk(ctx, uiSessionID, chunk)
+			},
+			State: func(ctx context.Context, uiSessionID string, state terminal.SessionState) {
+				managerInstance.applyTerminalState(ctx, uiSessionID, state)
+			},
 		})
 		managerInstance.themes = util.NewHashMap[string, common.Theme]()
 		logger = util.GetLogger()
@@ -120,6 +120,41 @@ func GetUIManager() *Manager {
 		dictationplugin.SetHotkeyRegistrar(managerInstance)
 	})
 	return managerInstance
+}
+
+// AttachView replaces the process-local UI target used by core push updates.
+func (m *Manager) AttachView(view contract.View) {
+	m.viewMu.Lock()
+	m.view = view
+	m.viewMu.Unlock()
+}
+
+func (m *Manager) getView() contract.View {
+	m.viewMu.RLock()
+	defer m.viewMu.RUnlock()
+	return m.view
+}
+
+func (m *Manager) applyTerminalChunk(ctx context.Context, uiSessionID string, chunk terminal.TerminalChunk) {
+	view := m.getView()
+	if view == nil {
+		logger.Warn(ctx, "UI view not ready, skipping terminal chunk")
+		return
+	}
+	if err := view.ApplyTerminalChunk(ctx, uiSessionID, chunk); err != nil {
+		logger.Error(ctx, fmt.Sprintf("apply terminal UI chunk failed: %v", err))
+	}
+}
+
+func (m *Manager) applyTerminalState(ctx context.Context, uiSessionID string, state terminal.SessionState) {
+	view := m.getView()
+	if view == nil {
+		logger.Warn(ctx, "UI view not ready, skipping terminal state")
+		return
+	}
+	if err := view.ApplyTerminalState(ctx, uiSessionID, state); err != nil {
+		logger.Error(ctx, fmt.Sprintf("apply terminal UI state failed: %v", err))
+	}
 }
 
 // CollectDictationHotkeys implements the dictation.HotkeyRegistrar interface.
@@ -624,11 +659,6 @@ func normalizeHotkeyToken(token string) string {
 
 func isHotkeyModifierToken(token string) bool {
 	return token == "ctrl" || token == "shift" || token == "alt" || token == "meta"
-}
-
-// StartHTTPAndWait serves process coordination and resource routes for the embedded UI.
-func (m *Manager) StartHTTPAndWait(ctx context.Context) {
-	serveHTTPOnlyAndWait(ctx, m.serverPort)
 }
 
 func (m *Manager) UpdateServerPort(port int) {

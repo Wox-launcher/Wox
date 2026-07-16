@@ -1,4 +1,4 @@
-.PHONY: clean build help window-hook-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
+.PHONY: clean build help ui-resources window-hook-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 FILESEARCH_REAL_INDEX_ROOT ?= ~/
@@ -70,6 +70,7 @@ help:
 	@echo "Available commands:"
 	@echo "  make clean         - Clean build artifacts"
 	@echo "  make build         - Build Wox with the embedded Go UI for current platform ($(PLATFORM))"
+	@echo "  make ui-resources  - Prepare platform resources used by the embedded Go UI"
 	@echo "  make filesearch-real-index - Capture debugger-aligned filesearch/fd/rg comparison for $(FILESEARCH_REAL_INDEX_ROOT), keyword $(FILESEARCH_REAL_INDEX_KEYWORD)"
 	@echo "  make filesearch-real-index-release - Capture optimized filesearch/fd/rg comparison for $(FILESEARCH_REAL_INDEX_ROOT), keyword $(FILESEARCH_REAL_INDEX_KEYWORD)"
 	@echo "  make filesearch-content-real-index - Capture debugger-aligned content indexing and rg comparison for $(FILESEARCH_CONTENT_REAL_INDEX_ROOT), keyword $(FILESEARCH_CONTENT_REAL_INDEX_KEYWORD)"
@@ -79,6 +80,13 @@ help:
 clean:
 	rm -rf $(RELEASE_DIR)
 	rm -f resource_windows.syso rsrc_windows.syso
+
+ui-resources:
+ifeq ($(PLATFORM),windows)
+	@echo "WebView2Loader.dll is managed under resource/ui/go for Windows builds"
+else
+	@echo "The embedded Go UI does not require staged resources on $(PLATFORM)"
+endif
 
 build: clean
 	$(MAKE) woxmr-build

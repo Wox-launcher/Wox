@@ -22,16 +22,14 @@ func TestSessionManagerSubscribeAndSearch(t *testing.T) {
 
 	var mu sync.Mutex
 	var chunkEvents []TerminalChunk
-	manager.SetEmitter(func(_ context.Context, uiSessionID string, method string, data any) {
-		if uiSessionID != "ui-1" || method != "TerminalChunk" {
+	manager.SetEmitter(EventEmitter{Chunk: func(_ context.Context, uiSessionID string, chunk TerminalChunk) {
+		if uiSessionID != "ui-1" {
 			return
 		}
 		mu.Lock()
 		defer mu.Unlock()
-		if chunk, ok := data.(TerminalChunk); ok {
-			chunkEvents = append(chunkEvents, chunk)
-		}
-	})
+		chunkEvents = append(chunkEvents, chunk)
+	}})
 
 	session, err := manager.CreateSession(context.Background(), CreateSessionParams{
 		Command:     "echo hello",
@@ -82,16 +80,14 @@ func TestSessionManagerSubscribeUsesTrimmedStartCursor(t *testing.T) {
 
 	var mu sync.Mutex
 	var chunkEvents []TerminalChunk
-	manager.SetEmitter(func(_ context.Context, uiSessionID string, method string, data any) {
-		if uiSessionID != "ui-2" || method != "TerminalChunk" {
+	manager.SetEmitter(EventEmitter{Chunk: func(_ context.Context, uiSessionID string, chunk TerminalChunk) {
+		if uiSessionID != "ui-2" {
 			return
 		}
 		mu.Lock()
 		defer mu.Unlock()
-		if chunk, ok := data.(TerminalChunk); ok {
-			chunkEvents = append(chunkEvents, chunk)
-		}
-	})
+		chunkEvents = append(chunkEvents, chunk)
+	}})
 
 	session, err := manager.CreateSession(context.Background(), CreateSessionParams{
 		Command:     "tail -f file.log",
@@ -143,16 +139,14 @@ func TestSessionManagerSubscribeLoadsSessionFromFile(t *testing.T) {
 
 	var mu sync.Mutex
 	var chunks []TerminalChunk
-	manager.SetEmitter(func(_ context.Context, uiSessionID string, method string, data any) {
-		if uiSessionID != "ui-load-file" || method != "TerminalChunk" {
+	manager.SetEmitter(EventEmitter{Chunk: func(_ context.Context, uiSessionID string, chunk TerminalChunk) {
+		if uiSessionID != "ui-load-file" {
 			return
 		}
-		if chunk, ok := data.(TerminalChunk); ok {
-			mu.Lock()
-			chunks = append(chunks, chunk)
-			mu.Unlock()
-		}
-	})
+		mu.Lock()
+		chunks = append(chunks, chunk)
+		mu.Unlock()
+	}})
 
 	if _, err := manager.Subscribe(context.Background(), "ui-load-file", sessionID, 0); err != nil {
 		t.Fatalf("subscribe failed: %v", err)

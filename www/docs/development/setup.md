@@ -7,7 +7,7 @@ This guide is for contributors who want to build, run, and debug Wox locally.
 The repository contains four parts that usually move together during development:
 
 - `wox.core/`: Go backend, built-in plugins, settings, storage, packaging entrypoint
-- `wox.ui.go/`: native Go UI imported by `wox.core`
+- `wox.core/ui/`: native Go UI compiled in the same Go module and process
 - `wox.plugin.host.nodejs/`: Node.js plugin host
 - `wox.plugin.host.python/`: Python plugin host
 
@@ -66,6 +66,8 @@ From the repository root:
 ```bash
 make dev
 make test
+make test-go-ui-unit
+make test-go-ui-smoke
 make build
 ```
 
@@ -73,6 +75,8 @@ What they mean:
 
 - `make dev`: prepare the local development environment
 - `make test`: run the Go integration-style test suite under `wox.core/test`
+- `make test-go-ui-unit`: run retained-widget and automation contract tests without opening a window
+- `make test-go-ui-smoke`: build the test-only automation binary and run a real native launcher smoke
 - `make build`: compile the Go UI into `wox.core`, then build plugin hosts and platform packaging output
 
 If you are changing backend/plugin contracts, `make build` is the safest final verification because it catches cross-project drift.
@@ -93,7 +97,7 @@ Useful command:
 make -C wox.core build
 ```
 
-### Go UI (`wox.ui.go`)
+### Go UI (`wox.core/ui`)
 
 Typical tasks:
 
@@ -105,7 +109,8 @@ Typical tasks:
 Useful command:
 
 ```bash
-cd wox.ui.go && go test ./...
+make test-go-ui-unit
+make test-go-ui-smoke
 ```
 
 ### Plugin hosts

@@ -1,0 +1,179 @@
+name: Go UI Quality
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/go-ui.yml"
+      - "Makefile"
+      - "wox.core/appcontrol/**"
+      - "wox.core/common/**"
+      - "wox.core/main.go"
+      - "wox.core/plugin/system/shell/terminal/**"
+      - "wox.core/ui/**"
+      - "wox.core/test/automationdriver/**"
+      - "wox.core/test/gouismoke/**"
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Retained widget and automation contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Linux UI dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libgtk-3-dev \
+            libsecret-1-dev \
+            libx11-dev \
+            libxfixes-dev \
+            libxi-dev \
+            libxrandr-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libxtst-dev \
+            libayatana-appindicator3-dev \
+            libkeybinder-3.0-dev
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: wox.core/go.mod
+          cache: true
+          cache-dependency-path: wox.core/go.sum
+      - name: Test Go UI contracts
+        run: make test-go-ui-unit
+
+  native-compile-pr:
+    name: Native UI compile (${{ matrix.name }})
+    if: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: wox.core/go.mod
+          cache: true
+          cache-dependency-path: wox.core/go.sum
+      - name: Compile native UI packages
+        shell: bash
+        working-directory: wox.core
+        run: go test ./ui/runtime ./ui/widget ./ui/launcher -run TestDoesNotExist
+
+  native-smoke-pr:
+    name: Native launcher smoke (Linux)
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Linux UI dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libgtk-3-dev \
+            libsecret-1-dev \
+            libx11-dev \
+            libxfixes-dev \
+            libxi-dev \
+            libxrandr-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libxtst-dev \
+            libayatana-appindicator3-dev \
+            libkeybinder-3.0-dev \
+            xvfb
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: wox.core/go.mod
+          cache: true
+          cache-dependency-path: wox.core/go.sum
+      - name: Run native smoke
+        env:
+          GO_UI_SMOKE_RUNNER: xvfb-run -a
+          WOX_GO_UI_ARTIFACT_DIR: ${{ runner.temp }}/go-ui-artifacts
+        run: make test-go-ui-smoke
+      - name: Upload native visual
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-ui-smoke-linux
+          path: ${{ runner.temp }}/go-ui-artifacts
+          if-no-files-found: warn
+
+  native-smoke-daily:
+    name: Native launcher smoke (${{ matrix.name }})
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            runner: xvfb-run -a
+          - name: macOS
+            os: macos-latest
+            runner: ""
+          - name: Windows
+            os: windows-latest
+            runner: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Linux UI dependencies
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libgtk-3-dev \
+            libsecret-1-dev \
+            libx11-dev \
+            libxfixes-dev \
+            libxi-dev \
+            libxrandr-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libxtst-dev \
+            libayatana-appindicator3-dev \
+            libkeybinder-3.0-dev \
+            xvfb
+      - name: Install make on Windows
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: choco install -y make
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: wox.core/go.mod
+          cache: true
+          cache-dependency-path: wox.core/go.sum
+      - name: Run native smoke
+        shell: bash
+        env:
+          GO_UI_SMOKE_RUNNER: ${{ matrix.runner }}
+          WOX_GO_UI_ARTIFACT_DIR: ${{ runner.temp }}/go-ui-artifacts
+        run: make test-go-ui-smoke
+      - name: Upload native visual
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-ui-smoke-${{ matrix.name }}
+          path: ${{ runner.temp }}/go-ui-artifacts
+          if-no-files-found: warn

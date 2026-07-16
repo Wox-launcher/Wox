@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
+.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke test-go-ui-smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 
@@ -67,6 +67,8 @@ help:
 	@echo "  help       Show this help message"
 	@echo "  dev        Setup development environment"
 	@echo "  test       Run tests"
+	@echo "  test-go-ui-unit  Run retained-widget, automation-contract, and driver tests"
+	@echo "  test-go-ui-smoke Build the test-only Wox binary and run native launcher smoke"
 	@echo "  build      Build all components"
 	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
 	@echo "  appimage   Build Linux AppImage"
@@ -180,6 +182,28 @@ test: ensure-resources
 # runs, which makes CI and local reruns fail for reasons unrelated to code.
 test-isolated:
 	cd wox.core && WOX_TEST_CLEANUP=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
+
+# The fast Go UI layer runs on every relevant change and never opens a native window.
+test-go-ui-unit: ensure-resources
+	cd wox.core && go test -tags "wox_automation" ./appcontrol ./ui/automation ./ui/runtime ./ui/widget ./ui/launcher ./test/automationdriver -count=1
+
+GO_UI_SMOKE_BINARY_NAME := wox-go-ui-smoke$(if $(filter windows,$(PLATFORM)),.exe,)
+GO_UI_SMOKE_BINARY := $(CURDIR)/wox.core/.tmp/$(GO_UI_SMOKE_BINARY_NAME)
+GO_UI_SMOKE_RUNNER ?=
+
+# Keep the smoke binary build reusable by CI, make, and editor launch configurations.
+build-go-ui-smoke: ensure-resources
+	@mkdir -p wox.core/.tmp
+	cd wox.core && go build -tags "$(SQLITE_BUILD_TAGS) wox_automation" -o "$(GO_UI_SMOKE_BINARY)" .
+
+clean-go-ui-smoke:
+	@rm -f "$(GO_UI_SMOKE_BINARY)"
+
+# The native smoke uses the same product binary with only the authenticated automation server added.
+test-go-ui-smoke: build-go-ui-smoke
+	@trap 'rm -f "$(GO_UI_SMOKE_BINARY)"' EXIT; \
+		cd wox.core && \
+		WOX_GO_UI_SMOKE_BINARY="$(GO_UI_SMOKE_BINARY)" $(GO_UI_SMOKE_RUNNER) go test -tags "wox_ui_smoke" ./test/gouismoke -count=1 -v
 
 # Test without network dependencies
 test-offline:

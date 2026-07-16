@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"wox/ai"
 	"wox/analytics"
+	"wox/appcontrol"
 	"wox/database"
 	"wox/diagnostic"
 	"wox/migration"
@@ -22,6 +23,7 @@ import (
 	"wox/resource"
 	"wox/setting"
 	"wox/ui"
+	"wox/ui/automation"
 	"wox/updater"
 	"wox/util"
 	"wox/util/clipboard"
@@ -30,8 +32,8 @@ import (
 	"wox/util/permission"
 	"wox/util/selection"
 
-	woxui "github.com/Wox-launcher/wox.ui.go"
-	golauncher "github.com/Wox-launcher/wox.ui.go/launcher"
+	golauncher "wox/ui/launcher"
+	woxui "wox/ui/runtime"
 
 	_ "wox/plugin/host"
 
@@ -363,14 +365,38 @@ func run() {
 			}
 		}
 	}
-	embeddedGoUIApp = golauncher.New(util.IsDev(), ui.LocalBackendFactory)
+	coreServices := ui.NewCoreServices()
+	embeddedGoUIApp = golauncher.New(util.IsDev(), coreServices, ui.LocalBackendFactory)
+	coreServices.AttachView(embeddedGoUIApp)
 	if err := embeddedGoUIApp.Start(); err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to start embedded Go UI: %s", err.Error()))
+		coreServices.AttachView(nil)
 		embeddedGoUIApp = nil
 		return
 	}
-	util.Go(ctx, "start core HTTP server", func() {
-		ui.GetUIManager().StartHTTPAndWait(ctx)
+	automationInfo, automationErr := automation.Start(ctx, embeddedGoUIApp)
+	if automationErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to start test automation: %s", automationErr.Error()))
+	} else if automationInfo.Address != "" {
+		util.GetLogger().Info(ctx, fmt.Sprintf("test automation listening on %s", automationInfo.Address))
+	}
+	util.Go(ctx, "start primary instance control server", func() {
+		err := appcontrol.ServeAndWait(ctx, serverPort, appcontrol.Handlers{
+			Show: func(requestCtx context.Context) error {
+				ui.GetUIManager().GetUI(requestCtx).ShowApp(requestCtx, common.ShowContext{SelectAll: true})
+				return nil
+			},
+			DeepLink: func(requestCtx context.Context, deepLink string) error {
+				ui.GetUIManager().ProcessDeeplink(requestCtx, deepLink)
+				return nil
+			},
+			EnableDiagnosticsAndRestart: func(requestCtx context.Context) (any, error) {
+				return ui.EnableDiagnosticsMonitorAndRestart(requestCtx)
+			},
+		})
+		if err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("primary instance control server stopped: %s", err.Error()))
+		}
 	})
 }
 

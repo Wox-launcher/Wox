@@ -22,7 +22,7 @@ Go UI + wox.core  <->  插件宿主  <->  插件
 - 内置插件执行
 - 第三方插件生命周期和元数据加载
 - 设置与数据存储
-- 进程内 UI 桥接和供插件宿主使用的 loopback HTTP 接口
+- 进程内 UI 契约，以及主实例的最小 loopback 控制接口
 - 最终桌面运行时资源的打包
 
 建议优先熟悉这些目录：
@@ -30,9 +30,11 @@ Go UI + wox.core  <->  插件宿主  <->  插件
 - `wox.core/plugin/`：插件协议、管理器、查询/结果模型、宿主桥接
 - `wox.core/common/`：共享 UI 载荷和通用运行时类型
 - `wox.core/setting/`：设置定义与持久化
+- `wox.core/appcontrol/`：仅包含 `/ping`、`/show`、deeplink 和诊断重启控制
+- `wox.core/ui/`：launcher、retained widget、自动化契约与原生平台 runtime
 - `wox.core/resource/`：嵌入式 UI、宿主二进制、翻译和其他运行时资源
 
-### `wox.ui.go`
+### `wox.core/ui`
 
 这是用户真正看到的桌面 UI，负责渲染：
 
@@ -42,7 +44,9 @@ Go UI + wox.core  <->  插件宿主  <->  插件
 - 截图流程
 - webview 预览和相关原生桥接
 
-`wox.ui.go` 由 `wox.core` 直接 import，并通过进程内 backend 调用 core。它不负责执行插件，重点是渲染状态、回传用户操作，并承载平台相关展示逻辑。
+Go UI 与 `wox.core` 位于同一个 Go module，并运行在同一进程。它不负责执行插件，重点是渲染状态、回传用户操作，并承载平台相关展示逻辑。
+
+生命周期、查询/操作执行、terminal 订阅以及全部 core→UI 更新都通过类型化的 `Services`/`View` 接口。设置和目录类页面尚有一个过渡期的进程内适配器复用旧 router，后续会按领域迁移；该适配器不会监听任何端口。生产环境唯一的 loopback HTTP 表面是 `appcontrol`，测试自动化只在 `wox_automation` build tag 下编译。
 
 ### `wox.plugin.host.nodejs` 与 `wox.plugin.host.python`
 
@@ -69,7 +73,7 @@ Go UI + wox.core  <->  插件宿主  <->  插件
 
 用户在 Wox 输入查询后：
 
-1. Go UI 通过进程内 backend 把查询交给 `wox.core`
+1. Go UI 调用 `wox.core` 的类型化查询服务
 2. `wox.core` 判断应该触发哪些内置插件和第三方插件
 3. 内置插件直接在 Go 内执行
 4. 第三方插件通过对应语言宿主被调用
@@ -102,7 +106,7 @@ Go UI + wox.core  <->  插件宿主  <->  插件
 很多问题一开始看起来像 UI bug，实际可能是协议或运行时边界问题。一个简单判断方法：
 
 - 查询路由、插件元数据、设置持久化、运行时契约问题，先看 `wox.core`
-- 视觉表现、交互、输入处理问题，先看 `wox.ui.go`
+- 视觉表现、交互、输入处理问题，先看 `wox.core/ui`
 - 同一套插件 API 在不同语言 SDK 表现不一致，就一起看宿主和 SDK
 
 ## 仓库级工作流
@@ -111,6 +115,8 @@ Go UI + wox.core  <->  插件宿主  <->  插件
 
 - `make dev`：准备共享资源并构建插件宿主
 - `make test`：运行 `wox.core/test` 下的 Go 测试
+- `make test-go-ui-unit`：运行 retained widget 与自动化契约测试
+- `make test-go-ui-smoke`：运行认证的原生 launcher smoke 与视觉 golden
 - `make build`：构建完整应用和打包产物
 
 只要改动涉及共享契约，`make build` 都应该作为最后检查。

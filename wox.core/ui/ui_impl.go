@@ -2,69 +2,21 @@ package ui
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
 	"strings"
-	"time"
+	"wox/cloudsync"
 	"wox/common"
 	"wox/plugin"
-	"wox/plugin/system/shell/terminal"
 	"wox/setting"
+	"wox/ui/contract"
 	"wox/util"
 	"wox/util/notifier"
-	"wox/util/selection"
 	"wox/util/timetracking"
-
-	"github.com/google/uuid"
-	"github.com/samber/lo"
-	"github.com/tidwall/gjson"
 )
 
-func parseQueryRefinementsFromUI(rawJson string) (map[string]string, error) {
-	refinements := map[string]string{}
-	if rawJson == "" {
-		return refinements, nil
-	}
-
-	var rawValues map[string]any
-	if err := json.Unmarshal([]byte(rawJson), &rawValues); err != nil {
-		return nil, err
-	}
-
-	for key, rawValue := range rawValues {
-		switch value := rawValue.(type) {
-		case string:
-			refinements[key] = value
-		case []any:
-			// Protocol migration: older UI builds sent refinement selections as
-			// string arrays. The public plugin API now uses map[string]string, so
-			// the UI boundary joins legacy multi-select values once instead of
-			// forcing every plugin and runtime host to understand both shapes.
-			parts := []string{}
-			for _, item := range value {
-				text := fmt.Sprint(item)
-				if text != "" {
-					parts = append(parts, text)
-				}
-			}
-			joined := strings.Join(parts, ",")
-			if joined != "" {
-				refinements[key] = joined
-			}
-		default:
-			if rawValue != nil {
-				refinements[key] = fmt.Sprint(rawValue)
-			}
-		}
-	}
-
-	return refinements, nil
-}
-
 type uiImpl struct {
-	requestMap         *util.HashMap[string, chan UIMessage]
 	isVisible          bool // cached visibility state, updated by PostOnShow/PostOnHide
 	isInSettingView    bool // cached setting-view state, updated by PostOnSetting
 	isInOnboardingView bool // cached onboarding state, updated by PostOnOnboarding
@@ -72,61 +24,43 @@ type uiImpl struct {
 }
 
 func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
-	data := map[string]any{
-		"QueryId":        query.QueryId,
-		"QueryType":      query.QueryType,
-		"QueryText":      query.QueryText,
-		"QuerySelection": query.QuerySelection,
-		"ContextData":    query.ContextData,
-	}
-
-	if showSource := util.GetContextShowSource(ctx); showSource != "" {
-		data["ShowSource"] = showSource
-	}
-
-	u.invokeUIMethod(ctx, "ChangeQuery", data)
+	u.applyView(ctx, "change query", func(view contract.View) error { return view.ChangeQuery(ctx, query) })
 }
 
 func (u *uiImpl) RefreshQuery(ctx context.Context, preserveSelectedIndex bool) {
-	u.invokeUIMethod(ctx, "RefreshQuery", map[string]any{
-		"preserveSelectedIndex": preserveSelectedIndex,
-	})
+	u.applyView(ctx, "refresh query", func(view contract.View) error { return view.RefreshQuery(ctx, preserveSelectedIndex) })
 }
 
 func (u *uiImpl) RefreshGlance(ctx context.Context, pluginId string, ids []string) {
-	u.invokeUIMethod(ctx, "RefreshGlance", map[string]any{
-		"PluginId": pluginId,
-		"Ids":      ids,
-	})
+	u.applyView(ctx, "refresh glance", func(view contract.View) error { return view.RefreshGlance(ctx, pluginId, ids) })
 }
 
 func (u *uiImpl) UpdateDiagnosticStatus(ctx context.Context, enabled bool) {
 	// New feature: bug aware status is a global launcher decoration, so core
 	// pushes it separately from plugin toolbar messages to avoid ownership
 	// conflicts with normal plugin status updates.
-	u.invokeUIMethod(ctx, "DiagnosticStatusChanged", map[string]any{"enabled": enabled})
+	u.applyView(ctx, "update diagnostic status", func(view contract.View) error { return view.UpdateDiagnosticStatus(ctx, enabled) })
 }
 
 func (u *uiImpl) HideApp(ctx context.Context) {
-	u.invokeUIMethod(ctx, "HideApp", nil)
+	u.applyView(ctx, "hide app", func(view contract.View) error { return view.Hide(ctx) })
 }
 
 func (u *uiImpl) ShowApp(ctx context.Context, showContext common.ShowContext) {
 	GetUIManager().RefreshActiveWindowSnapshot(ctx)
-	u.invokeUIMethod(ctx, "ShowApp", getShowAppParams(ctx, showContext))
+	options := getShowOptions(ctx, showContext)
+	u.applyView(ctx, "show app", func(view contract.View) error { return view.Show(ctx, options) })
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context, showContext common.ShowContext) {
 	GetUIManager().RefreshActiveWindowSnapshot(ctx)
-	u.invokeUIMethod(ctx, "ToggleApp", getShowAppParams(ctx, showContext))
+	options := getShowOptions(ctx, showContext)
+	u.applyView(ctx, "toggle app", func(view contract.View) error { return view.Toggle(ctx, options) })
 }
 
 func (u *uiImpl) RecordHotkey(ctx context.Context, hotkey string, kind string) {
 	logger.Info(ctx, fmt.Sprintf("send RecordHotkey to UI: hotkey=%s kind=%s", hotkey, kind))
-	u.invokeUIMethod(ctx, "RecordHotkey", map[string]any{
-		"Hotkey": hotkey,
-		"Kind":   kind,
-	})
+	u.applyView(ctx, "record hotkey", func(view contract.View) error { return view.RecordHotkey(ctx, hotkey, kind) })
 }
 
 func (u *uiImpl) GetServerPort(ctx context.Context) int {
@@ -149,14 +83,15 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme common.Theme) {
 	effectiveTheme := GetUIManager().resolvePlatformTheme(ctx, theme)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	woxSetting.ThemeId.Set(effectiveTheme.ThemeId)
-	u.invokeUIMethod(ctx, "ChangeTheme", effectiveTheme)
+	u.applyView(ctx, "change theme", func(view contract.View) error { return view.ChangeTheme(ctx, effectiveTheme) })
 }
 
 // ChangeThemeWithoutSave applies the theme without saving to settings
 // This is used for auto appearance theme switching
 func (u *uiImpl) ChangeThemeWithoutSave(ctx context.Context, theme common.Theme) {
 	logger.Info(ctx, fmt.Sprintf("change theme (without save): %s", theme.ThemeName))
-	u.invokeUIMethod(ctx, "ChangeTheme", GetUIManager().resolvePlatformTheme(ctx, theme))
+	effectiveTheme := GetUIManager().resolvePlatformTheme(ctx, theme)
+	u.applyView(ctx, "change theme without save", func(view contract.View) error { return view.ChangeTheme(ctx, effectiveTheme) })
 }
 
 func (u *uiImpl) InstallTheme(ctx context.Context, theme common.Theme) {
@@ -171,23 +106,23 @@ func (u *uiImpl) UninstallTheme(ctx context.Context, theme common.Theme) {
 }
 
 func (u *uiImpl) OpenSettingWindow(ctx context.Context, windowContext common.SettingWindowContext) {
-	u.invokeUIMethod(ctx, "OpenSettingWindow", windowContext)
+	u.applyView(ctx, "open setting", func(view contract.View) error { return view.OpenSetting(ctx, windowContext) })
 }
 
 func (u *uiImpl) FocusSettingWindow(ctx context.Context) {
-	u.invokeUIMethod(ctx, "FocusSettingWindow", nil)
+	u.applyView(ctx, "focus setting", func(view contract.View) error { return view.FocusSetting(ctx) })
 }
 
 func (u *uiImpl) OpenOnboardingWindow(ctx context.Context) {
 	// Onboarding reuses the same UI process and command path as the
 	// settings window. Keeping it here avoids a second desktop window lifecycle
 	// while still letting UI choose the dedicated onboarding view.
-	u.invokeUIMethod(ctx, "OpenOnboardingWindow", nil)
+	u.applyView(ctx, "open onboarding", func(view contract.View) error { return view.OpenOnboarding(ctx) })
 }
 
 // OpenMacOSPermissionFlow asks the UI host to present the native permission guide for one permission.
 func (u *uiImpl) OpenMacOSPermissionFlow(ctx context.Context, permissionType string) {
-	u.invokeUIMethod(ctx, "OpenMacOSPermissionFlow", map[string]string{"permissionType": permissionType})
+	u.applyView(ctx, "open macOS permission flow", func(view contract.View) error { return view.OpenMacOSPermissionFlow(ctx, permissionType) })
 }
 
 func (u *uiImpl) GetAllThemes(ctx context.Context) []common.Theme {
@@ -200,7 +135,7 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 
 func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 	if u.IsVisible(ctx) && !u.IsInManagementView() && !plugin.GetPluginManager().HasVisibleToolbarMsg(ctx) {
-		u.invokeUIMethod(ctx, "ShowToolbarMsg", msg)
+		u.applyView(ctx, "show notification message", func(view contract.View) error { return view.ShowNotificationMessage(ctx, msg) })
 	} else {
 		var icon image.Image
 		if msg.Icon != "" {
@@ -221,19 +156,20 @@ func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 }
 
 func (u *uiImpl) UpdateAttentionUnreadCount(ctx context.Context, unreadCount int) {
-	u.invokeUIMethod(ctx, "AttentionUnreadCountChanged", map[string]any{
-		"unreadCount": unreadCount,
-	})
+	u.applyView(ctx, "update attention unread count", func(view contract.View) error { return view.UpdateAttentionUnreadCount(ctx, unreadCount) })
 }
 
 func (u *uiImpl) ShowToolbarMsg(ctx context.Context, msg interface{}) {
-	u.invokeUIMethod(ctx, "ShowToolbarMsg", msg)
+	message, ok := msg.(plugin.ToolbarMsgUI)
+	if !ok {
+		logger.Error(ctx, fmt.Sprintf("invalid toolbar message type: %T", msg))
+		return
+	}
+	u.applyView(ctx, "show toolbar message", func(view contract.View) error { return view.ShowToolbarMessage(ctx, message) })
 }
 
 func (u *uiImpl) ClearToolbarMsg(ctx context.Context, toolbarMsgId string) {
-	u.invokeUIMethod(ctx, "ClearToolbarMsg", map[string]any{
-		"toolbarMsgId": toolbarMsgId,
-	})
+	u.applyView(ctx, "clear toolbar message", func(view contract.View) error { return view.ClearToolbarMessage(ctx, toolbarMsgId) })
 }
 
 func (u *uiImpl) IsInSettingView() bool {
@@ -251,78 +187,79 @@ func (u *uiImpl) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWindo
 }
 
 func (u *uiImpl) SendChatResponse(ctx context.Context, aiChatData common.AIChatData) {
-	u.invokeUIMethod(ctx, "SendChatResponse", aiChatData)
+	u.applyView(ctx, "send chat response", func(view contract.View) error { return view.SendChatResponse(ctx, aiChatData) })
 }
 
 func (u *uiImpl) ReloadChatResources(ctx context.Context, resouceName string) {
-	u.invokeUIMethod(ctx, "ReloadChatResources", resouceName)
+	u.applyView(ctx, "reload chat resources", func(view contract.View) error { return view.ReloadChatResources(ctx, resouceName) })
 }
 
 // SendAIQuestion pushes a question to the UI. The answer comes back via the
 // /ai/question/answer HTTP route, which resolves the pending ask_user channel.
 func (u *uiImpl) SendAIQuestion(ctx context.Context, questionId string, question string, options []common.AIQuestionOption) {
-	u.invokeUIMethod(ctx, "AIQuestion", map[string]any{
-		"QuestionId": questionId,
-		"Question":   question,
-		"Options":    options,
-	})
+	u.applyView(ctx, "send AI question", func(view contract.View) error { return view.SendAIQuestion(ctx, questionId, question, options) })
 }
 
 func (u *uiImpl) ReloadSettingPlugins(ctx context.Context) {
-	u.invokeUIMethod(ctx, "ReloadSettingPlugins", nil)
+	u.applyView(ctx, "reload setting plugins", func(view contract.View) error { return view.ReloadSettingPlugins(ctx) })
 }
 
 func (u *uiImpl) ReloadSetting(ctx context.Context) {
-	u.invokeUIMethod(ctx, "ReloadSetting", nil)
+	u.applyView(ctx, "reload setting", func(view contract.View) error { return view.ReloadSetting(ctx) })
 }
 
 func (u *uiImpl) ReloadSettingThemes(ctx context.Context) {
-	u.invokeUIMethod(ctx, "ReloadSettingThemes", nil)
+	u.applyView(ctx, "reload setting themes", func(view contract.View) error { return view.ReloadSettingThemes(ctx) })
 }
 
 func (u *uiImpl) CloudSyncProgressChanged(ctx context.Context, progress any) {
-	u.invokeUIMethod(ctx, "CloudSyncProgressChanged", progress)
+	typedProgress, ok := progress.(cloudsync.CloudSyncProgress)
+	if !ok {
+		logger.Error(ctx, fmt.Sprintf("invalid cloud sync progress type: %T", progress))
+		return
+	}
+	u.applyView(ctx, "cloud sync progress changed", func(view contract.View) error { return view.CloudSyncProgressChanged(ctx, typedProgress) })
 }
 
 func (u *uiImpl) RefreshAccountStatus(ctx context.Context) {
-	u.invokeUIMethod(ctx, "RefreshAccountStatus", nil)
+	u.applyView(ctx, "refresh account status", func(view contract.View) error { return view.RefreshAccountStatus(ctx) })
 }
 
 func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
 	// Type assert to plugin.UpdatableResult
 	// We use interface{} in the signature to avoid circular dependency between common and plugin packages
-	response, err := u.invokeUIMethod(ctx, "UpdateResult", result)
+	typedResult, ok := result.(plugin.UpdatableResult)
+	if !ok {
+		logger.Error(ctx, fmt.Sprintf("invalid update result type: %T", result))
+		return false
+	}
+	view, err := u.getView()
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("UpdateResult error: %s", err.Error()))
 		return false
 	}
-
-	// The UI returns true if the result was found and updated, false otherwise
-	if response == nil {
+	success, err := view.UpdateResult(ctx, typedResult)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("UpdateResult error: %s", err.Error()))
 		return false
 	}
-
-	success, ok := response.(bool)
-	if !ok {
-		logger.Error(ctx, "UpdateResult response is not a boolean")
-		return false
-	}
-
 	return success
 }
 
 func (u *uiImpl) PushResults(ctx context.Context, payload interface{}) bool {
-	response, err := u.invokeUIMethod(ctx, "PushResults", payload)
+	typedPayload, ok := payload.(plugin.PushResultsPayload)
+	if !ok {
+		logger.Error(ctx, fmt.Sprintf("invalid push results type: %T", payload))
+		return false
+	}
+	view, err := u.getView()
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("PushResults error: %s", err.Error()))
 		return false
 	}
-	if response == nil {
-		return false
-	}
-	success, ok := response.(bool)
-	if !ok {
-		logger.Error(ctx, "PushResults response is not a boolean")
+	success, err := view.PushResults(ctx, typedPayload)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("PushResults error: %s", err.Error()))
 		return false
 	}
 	return success
@@ -336,32 +273,23 @@ func (u *uiImpl) IsVisible(ctx context.Context) bool {
 
 // ToggleRecordingMode asks the macOS UI to switch between launcher and capture-friendly window levels.
 func (u *uiImpl) ToggleRecordingMode(ctx context.Context) (bool, error) {
-	response, err := u.invokeUIMethod(ctx, "ToggleRecordingMode", nil)
+	view, err := u.getView()
 	if err != nil {
 		return false, err
 	}
-
-	enabled, ok := response.(bool)
-	if !ok {
-		return false, fmt.Errorf("recording mode response is not a boolean: %T", response)
-	}
-	return enabled, nil
+	return view.ToggleRecordingMode(ctx)
 }
 
 func (u *uiImpl) PickFiles(ctx context.Context, params common.PickFilesParams) []string {
-	respData, err := u.invokeUIMethod(ctx, "PickFiles", params)
+	view, err := u.getView()
 	if err != nil {
 		return nil
 	}
-	if _, ok := respData.([]any); !ok {
-		logger.Error(ctx, fmt.Sprintf("pick files response data type error: %T", respData))
+	result, err := view.PickFiles(ctx, params)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("pick files failed: %v", err))
 		return nil
 	}
-
-	var result []string
-	lo.ForEach(respData.([]any), func(file any, _ int) {
-		result = append(result, file.(string))
-	})
 	return result
 }
 
@@ -381,17 +309,11 @@ func (u *uiImpl) CaptureScreenshot(ctx context.Context, request common.CaptureSc
 		request.ExportFilePath = exportFilePath
 	}
 
-	respData, err := u.invokeUIMethod(ctx, "CaptureScreenshot", request)
+	view, err := u.getView()
 	if err != nil {
 		return common.CaptureScreenshotResult{}, err
 	}
-
-	result, mapErr := decodeUIResponse[common.CaptureScreenshotResult](respData)
-	if mapErr != nil {
-		return common.CaptureScreenshotResult{}, mapErr
-	}
-
-	return result, nil
+	return view.CaptureScreenshot(ctx, request)
 }
 
 // WriteClipboardImageFile delegates image clipboard ownership to the UI process.
@@ -400,85 +322,32 @@ func (u *uiImpl) WriteClipboardImageFile(ctx context.Context, filePath string) e
 		return errors.New("clipboard image file path is empty")
 	}
 
-	respData, err := u.invokeUIMethod(ctx, "WriteClipboardImageFile", map[string]string{
-		"filePath": filePath,
-	})
+	view, err := u.getView()
 	if err != nil {
-		if message, ok := respData.(string); ok && message != "" {
-			return fmt.Errorf("%w: %s", err, message)
-		}
 		return err
 	}
-	return nil
+	return view.WriteClipboardImageFile(ctx, filePath)
 }
 
-func (u *uiImpl) invokeUIMethod(ctx context.Context, method string, data any) (responseData any, responseErr error) {
-	requestID := uuid.NewString()
-	resultChan := make(chan UIMessage)
-	u.requestMap.Store(requestID, resultChan)
-	defer u.requestMap.Delete(requestID)
+func (u *uiImpl) getView() (contract.View, error) {
+	view := GetUIManager().getView()
+	if view == nil {
+		return nil, errors.New("embedded UI view is not attached")
+	}
+	return view, nil
+}
 
-	traceId := util.GetContextTraceId(ctx)
-	sessionId := util.GetContextSessionId(ctx)
-
-	err := requestUI(ctx, UIMessage{
-		RequestId: requestID,
-		TraceId:   traceId,
-		SessionId: sessionId,
-		Method:    method,
-		Data:      data,
-	})
+func (u *uiImpl) applyView(ctx context.Context, operation string, apply func(view contract.View) error) {
+	view, err := u.getView()
+	if err == nil {
+		err = apply(view)
+	}
 	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("send message to UI error: %s", err.Error()))
-		return "", err
-	}
-
-	timeout := getUIMethodTimeout(method)
-	select {
-	case <-time.NewTimer(timeout).C:
-		logger.Error(ctx, fmt.Sprintf("invoke ui method %s response timeout", method))
-		return "", fmt.Errorf("request timeout, request id: %s", requestID)
-	case response := <-resultChan:
-		if !response.Success {
-			return response.Data, errors.New("ui method response error")
-		} else {
-			return response.Data, nil
-		}
+		logger.Error(ctx, fmt.Sprintf("%s failed: %v", operation, err))
 	}
 }
 
-func getUIMethodTimeout(method string) time.Duration {
-	switch method {
-	case "PickFiles", "CaptureScreenshot":
-		// File pickers and screenshot sessions both wait on direct user interaction,
-		// so the previous fixed 2s request timeout was not enough for these long-lived UI tasks.
-		return 180 * time.Second
-	case "WriteClipboardImageFile":
-		return 10 * time.Second
-	case "AIQuestion":
-		// The ask_user tool blocks on user input with no fixed bound; rely on
-		// the loop-level context cancellation to terminate a stale question.
-		return 30 * time.Minute
-	default:
-		return 2 * time.Second
-	}
-}
-
-func decodeUIResponse[T any](data any) (T, error) {
-	var target T
-
-	jsonBytes, marshalErr := json.Marshal(data)
-	if marshalErr != nil {
-		return target, fmt.Errorf("marshal UI response failed: %w", marshalErr)
-	}
-	if unmarshalErr := json.Unmarshal(jsonBytes, &target); unmarshalErr != nil {
-		return target, fmt.Errorf("unmarshal UI response failed: %w", unmarshalErr)
-	}
-
-	return target, nil
-}
-
-func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[string]any {
+func getShowOptions(ctx context.Context, showContext common.ShowContext) contract.ShowOptions {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	var position Position
 	showQueryBox := !showContext.HideQueryBox
@@ -520,260 +389,22 @@ func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[s
 		}
 	}
 
-	params := map[string]any{
-		"SelectAll":            showContext.SelectAll,
-		"HideQueryBox":         showContext.HideQueryBox,
-		"HideToolbar":          hideToolbar,
-		"QueryBoxAtBottom":     showContext.QueryBoxAtBottom,
-		"HideOnBlur":           showContext.HideOnBlur,
-		"Position":             position,
-		"TrayAnchor":           showContext.TrayAnchor,
-		"WindowWidth":          windowWidth,
-		"MaxResultCount":       maxResultCount,
-		"QueryHistories":       setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
-		"LaunchMode":           woxSetting.LaunchMode.Get(),
-		"StartPage":            woxSetting.StartPage.Get(),
-		"ShowSource":           showSource,
-		"ActivationStartedAt":  showContext.ActivationStartedAt,
-		"AttentionUnreadCount": getAttentionUnreadCount(ctx),
-	}
-
-	return params
-}
-
-func getAttentionUnreadCount(ctx context.Context) int {
-	count, err := plugin.GetAttentionManager().UnreadCount(ctx)
-	if err != nil {
-		logger.Warn(ctx, fmt.Sprintf("failed to count unread attention items for show app: %v", err))
-		return 0
-	}
-	return int(count)
-}
-
-func onUIRequest(ctx context.Context, request UIMessage) {
-	if request.Method != "Log" {
-		logger.Debug(ctx, fmt.Sprintf("got <%s> request from ui", request.Method))
-	}
-	if request.Method == "Query" {
-		tracker := timetracking.New("ui_request_dispatch_enter")
-		if tracker.Enabled() {
-			tracker.SetRawString("queryId", uiMessageStringParam(request, "queryId"))
-			tracker.SetRawString("method", request.Method)
-			tracker.Log(ctx)
-		}
-	}
-
-	// we handle time/amount sensitive requests in process, while other requests use the core HTTP router (see router.go)
-	switch request.Method {
-	case "Log":
-		handleUILog(ctx, request)
-	case "Query":
-		handleUIQuery(ctx, request)
-	case "QueryCompletionHintAccepted":
-		handleUIQueryCompletionHintAccepted(ctx, request)
-	case "QueryMRU":
-		handleUIQueryMRU(ctx, request)
-	case "Action":
-		handleUIAction(ctx, request)
-	case "FormAction":
-		handleUIFormAction(ctx, request)
-	case "ToolbarMsgAction":
-		handleUIToolbarMsgAction(ctx, request)
-	case "TerminalSubscribe":
-		handleUITerminalSubscribe(ctx, request)
-	case "TerminalUnsubscribe":
-		handleUITerminalUnsubscribe(ctx, request)
-	case "TerminalSearch":
-		handleUITerminalSearch(ctx, request)
+	return contract.ShowOptions{
+		SelectAll: showContext.SelectAll, HideQueryBox: showContext.HideQueryBox, HideToolbar: hideToolbar,
+		QueryBoxAtBottom: showContext.QueryBoxAtBottom, HideOnBlur: showContext.HideOnBlur,
+		Position:    contract.Position{Type: string(position.Type), X: position.X, Y: position.Y},
+		WindowWidth: windowWidth, MaxResultCount: maxResultCount, LaunchMode: woxSetting.LaunchMode.Get(),
+		StartPage: woxSetting.StartPage.Get(), ShowSource: string(showSource),
 	}
 }
 
-func onUIResponse(ctx context.Context, response UIMessage) {
-	// ShowToolbarMsg acknowledgements arrive at very high frequency during file
-	// indexing, and logging each one added noise without helping diagnose UI
-	// behavior because the request side already knows which toolbar snapshot it sent.
-	if response.Method != "ShowToolbarMsg" {
-		logger.Debug(ctx, fmt.Sprintf("got <%s> response from ui", response.Method))
-	}
-
-	requestID := response.RequestId
-	if requestID == "" {
-		logger.Error(ctx, "response id not found")
-		return
-	}
-
-	resultChan, exist := GetUIManager().GetUI(ctx).(*uiImpl).requestMap.Load(requestID)
-	if !exist {
-		logger.Error(ctx, fmt.Sprintf("response id not found: %s", requestID))
-		return
-	}
-
-	resultChan <- response
-}
-
-func handleUILog(ctx context.Context, request UIMessage) {
-	traceId, traceIdErr := getUIMessageParameter(ctx, request, "traceId")
-	if traceIdErr != nil {
-		logger.Error(ctx, traceIdErr.Error())
-		responseUIError(ctx, request, traceIdErr.Error())
-		return
-	}
-	level, levelErr := getUIMessageParameter(ctx, request, "level")
-	if levelErr != nil {
-		logger.Error(ctx, levelErr.Error())
-		responseUIError(ctx, request, levelErr.Error())
-		return
-	}
-	message, messageErr := getUIMessageParameter(ctx, request, "message")
-	if messageErr != nil {
-		logger.Error(ctx, messageErr.Error())
-		responseUIError(ctx, request, messageErr.Error())
-		return
-	}
-
-	// UI log should use its own conponent name
-	logCtx := util.WithComponentContext(util.NewTraceContextWith(traceId), " UI")
-
-	switch level {
-	case "debug":
-		logger.Debug(logCtx, message)
-	case "info":
-		logger.Info(logCtx, message)
-	case "warn":
-		logger.Warn(logCtx, message)
-	case "error":
-		logger.Error(logCtx, message)
-	default:
-		logger.Error(ctx, fmt.Sprintf("unsupported log level: %s", level))
-		responseUIError(ctx, request, fmt.Sprintf("unsupported log level: %s", level))
-	}
-	responseUISuccess(ctx, request)
-}
-
-func handleUIQuery(ctx context.Context, request UIMessage) {
+// runUIQuery executes one decoded query and reports snapshots through a typed view.
+func runUIQuery(ctx context.Context, request contract.QueryRequest, view contract.QueryView) {
 	handlerStart := util.GetSystemTimestamp()
-	sessionId := request.SessionId
-	queryIdParamStart := util.GetSystemTimestamp()
-	queryId, queryIdErr := getUIMessageParameter(ctx, request, "queryId")
-	if queryIdErr != nil {
-		logger.Error(ctx, queryIdErr.Error())
-		responseUIError(ctx, request, queryIdErr.Error())
-		return
-	} else {
-		ctx = util.WithQueryIdContext(ctx, queryId)
-	}
-	queryIdParamCost := util.GetSystemTimestamp() - queryIdParamStart
-	if tracker := timetracking.New("handle_query_enter"); tracker.Enabled() {
-		tracker.SetRawString("queryId", queryId)
-		tracker.SetRawString("requestId", request.RequestId)
-		tracker.SetRawString("sessionId", sessionId)
-		tracker.SetInt64("queryIdParamMs", queryIdParamCost)
-		tracker.Log(ctx)
-	}
-
-	queryTypeParamStart := util.GetSystemTimestamp()
-	queryType, queryTypeErr := getUIMessageParameter(ctx, request, "queryType")
-	if queryTypeErr != nil {
-		logger.Error(ctx, queryTypeErr.Error())
-		responseUIError(ctx, request, queryTypeErr.Error())
-		return
-	}
-	queryTypeParamCost := util.GetSystemTimestamp() - queryTypeParamStart
-	queryTextParamStart := util.GetSystemTimestamp()
-	queryText, queryTextErr := getUIMessageParameter(ctx, request, "queryText")
-	if queryTextErr != nil {
-		logger.Error(ctx, queryTextErr.Error())
-		responseUIError(ctx, request, queryTextErr.Error())
-		return
-	}
-	queryTextParamCost := util.GetSystemTimestamp() - queryTextParamStart
-	querySelectionParamStart := util.GetSystemTimestamp()
-	querySelectionJson, querySelectionErr := getUIMessageParameter(ctx, request, "querySelection")
-	if querySelectionErr != nil {
-		logger.Error(ctx, querySelectionErr.Error())
-		responseUIError(ctx, request, querySelectionErr.Error())
-		return
-	}
-	querySelectionParamCost := util.GetSystemTimestamp() - querySelectionParamStart
-	var querySelection selection.Selection
-	selectionParseStart := util.GetSystemTimestamp()
-	json.Unmarshal([]byte(querySelectionJson), &querySelection)
-	selectionParseCost := util.GetSystemTimestamp() - selectionParseStart
-
-	queryRefinements := map[string]string{}
-	contextData := common.ContextData{}
-	requestDataMarshalStart := util.GetSystemTimestamp()
-	queryRequestJson, queryRequestMarshalErr := json.Marshal(request.Data)
-	if queryRequestMarshalErr != nil {
-		logger.Error(ctx, queryRequestMarshalErr.Error())
-		responseUIError(ctx, request, queryRequestMarshalErr.Error())
-		return
-	}
-	requestDataMarshalCost := util.GetSystemTimestamp() - requestDataMarshalStart
-	refinementsParseStart := util.GetSystemTimestamp()
-	refinementsData := gjson.GetBytes(queryRequestJson, "queryRefinements")
-	if refinementsData.Exists() {
-		// queryRefinements is optional for compatibility with older UI clients.
-		// When present, keep the map value shape simple and let each plugin
-		// interpret single or comma-separated multi-select values.
-		parsedRefinements, parseRefinementsErr := parseQueryRefinementsFromUI(refinementsData.Raw)
-		if parseRefinementsErr != nil {
-			logger.Error(ctx, parseRefinementsErr.Error())
-			responseUIError(ctx, request, parseRefinementsErr.Error())
-			return
-		}
-		queryRefinements = parsedRefinements
-	}
-	contextDataRaw := gjson.GetBytes(queryRequestJson, "contextData")
-	if !contextDataRaw.Exists() {
-		contextDataRaw = gjson.GetBytes(queryRequestJson, "ContextData")
-	}
-	if contextDataRaw.Exists() {
-		contextData = common.UnmarshalContextData(contextDataRaw.Raw)
-	}
-	refinementsParseCost := util.GetSystemTimestamp() - refinementsParseStart
-	skipCompletionHint := gjson.GetBytes(queryRequestJson, "skipCompletionHint").Bool()
-	if tracker := timetracking.New("handle_query_parse"); tracker.Enabled() {
-		tracker.SetRawString("queryId", queryId)
-		tracker.SetRawString("queryType", queryType)
-		tracker.SetString("queryText", queryText)
-		tracker.SetInt("queryTextLen", len(queryText))
-		tracker.SetInt("selectionBytes", len(querySelectionJson))
-		tracker.SetInt64("queryIdParamMs", queryIdParamCost)
-		tracker.SetInt64("queryTypeParamMs", queryTypeParamCost)
-		tracker.SetInt64("queryTextParamMs", queryTextParamCost)
-		tracker.SetInt64("querySelectionParamMs", querySelectionParamCost)
-		tracker.SetInt64("selectionParseMs", selectionParseCost)
-		tracker.SetInt64("requestDataMarshalMs", requestDataMarshalCost)
-		tracker.SetInt64("refinementsParseMs", refinementsParseCost)
-		tracker.SetInt64("totalMs", util.GetSystemTimestamp()-handlerStart)
-		tracker.Log(ctx)
-	}
-
-	var changedQuery common.PlainQuery
-	switch queryType {
-	case plugin.QueryTypeInput:
-		changedQuery = common.PlainQuery{
-			QueryId:          queryId,
-			QueryType:        plugin.QueryTypeInput,
-			QueryText:        queryText,
-			QueryRefinements: queryRefinements,
-			ContextData:      contextData,
-		}
-	case plugin.QueryTypeSelection:
-		changedQuery = common.PlainQuery{
-			QueryId:          queryId,
-			QueryType:        plugin.QueryTypeSelection,
-			QueryText:        queryText,
-			QuerySelection:   querySelection,
-			QueryRefinements: queryRefinements,
-			ContextData:      contextData,
-		}
-	default:
-		logger.Error(ctx, fmt.Sprintf("unsupported query type: %s", queryType))
-		responseUIError(ctx, request, fmt.Sprintf("unsupported query type: %s", queryType))
-		return
-	}
+	changedQuery := request.Query
+	queryId := changedQuery.QueryId
+	sessionId := request.SessionID
+	ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, sessionId), queryId)
 
 	logger.Info(ctx, fmt.Sprintf("start to handle query changed: %s, queryId: %s", changedQuery.String(), queryId))
 
@@ -789,10 +420,10 @@ func handleUIQuery(ctx context.Context, request UIMessage) {
 		// so the UI treated a cleared search as plugin/selection context and hid
 		// Glance. Return the same backend-owned classification used by normal
 		// queries so clearing search keeps the global accessory visible.
-		responseUIQueryResponse(ctx, request, queryId, plugin.QueryResponseUI{
+		view.ApplyQueryResponse(ctx, contract.QueryResponse{QueryID: queryId, Response: plugin.QueryResponseUI{
 			Results: []plugin.QueryResultUI{},
 			Context: plugin.BuildQueryContext(emptyInputQuery, nil),
-		}, true)
+		}, IsFinal: true})
 		return
 	}
 	if changedQuery.QueryType == plugin.QueryTypeSelection && changedQuery.QuerySelection.String() == "" {
@@ -801,7 +432,7 @@ func handleUIQuery(ctx context.Context, request UIMessage) {
 			SessionId: sessionId,
 			Type:      plugin.QueryTypeSelection,
 		}, nil)
-		responseUIQueryResults(ctx, request, queryId, []plugin.QueryResultUI{}, true)
+		view.ApplyQueryResponse(ctx, contract.QueryResponse{QueryID: queryId, Response: plugin.QueryResponseUI{Results: []plugin.QueryResultUI{}}, IsFinal: true})
 		return
 	}
 
@@ -810,11 +441,11 @@ func handleUIQuery(ctx context.Context, request UIMessage) {
 	if queryErr != nil {
 		if conflictErr, ok := plugin.AsTriggerKeywordConflictError(queryErr); ok {
 			plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, nil)
-			responseUIQueryResponse(ctx, request, queryId, plugin.GetPluginManager().BuildTriggerKeywordConflictResponse(ctx, query, conflictErr.Conflict), true)
+			view.ApplyQueryResponse(ctx, contract.QueryResponse{QueryID: queryId, Response: plugin.GetPluginManager().BuildTriggerKeywordConflictResponse(ctx, query, conflictErr.Conflict), IsFinal: true})
 			return
 		}
 		logger.Error(ctx, queryErr.Error())
-		responseUIError(ctx, request, queryErr.Error())
+		view.ApplyQueryError(ctx, queryId, queryErr)
 		return
 	}
 	if tracker := timetracking.New("handle_query_new_query"); tracker.Enabled() {
@@ -828,11 +459,10 @@ func handleUIQuery(ctx context.Context, request UIMessage) {
 
 	completionHintScheduleStart := util.GetSystemTimestamp()
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if !skipCompletionHint && woxSetting.EnableQueryCompletionHint.Get() {
+	if !request.SkipCompletionHint && woxSetting.EnableQueryCompletionHint.Get() {
 		util.Go(ctx, "query completion hint", func() {
-			responseUIQueryCompletionHint(
+			view.ApplyQueryCompletionHint(
 				ctx,
-				request,
 				queryId,
 				plugin.BuildQueryCompletionHintForInputPrefixWithFeedback(
 					query,
@@ -847,7 +477,7 @@ func handleUIQuery(ctx context.Context, request UIMessage) {
 	if tracker := timetracking.New("handle_query_completion_hint_schedule"); tracker.Enabled() {
 		tracker.SetRawString("queryId", queryId)
 		tracker.SetBool("enabled", woxSetting.EnableQueryCompletionHint.Get())
-		tracker.SetBool("skipped", skipCompletionHint)
+		tracker.SetBool("skipped", request.SkipCompletionHint)
 		tracker.SetInt64("costMs", util.GetSystemTimestamp()-completionHintScheduleStart)
 		tracker.Log(ctx)
 	}
@@ -866,7 +496,7 @@ func handleUIQuery(ctx context.Context, request UIMessage) {
 		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-handlerStart)
 		tracker.Log(ctx)
 	}
-	newQueryRun(ctx, request, query, ownerPlugin).start()
+	newQueryRun(ctx, request, view, query, ownerPlugin).start()
 }
 
 func queryPipelinePluginLabel(ctx context.Context, pluginInstance *plugin.Instance) string {
@@ -950,261 +580,4 @@ func queryDebugPluginQueryTailTextCategory(elapsedMs int64) plugin.QueryResultTa
 		return plugin.QueryResultTailTextCategoryWarning
 	}
 	return plugin.QueryResultTailTextCategoryDefault
-}
-
-func handleUIAction(ctx context.Context, request UIMessage) {
-	sessionId := request.SessionId
-	resultId, idErr := getUIMessageParameter(ctx, request, "resultId")
-	if idErr != nil {
-		logger.Error(ctx, idErr.Error())
-		responseUIError(ctx, request, idErr.Error())
-		return
-	}
-	actionId, actionIdErr := getUIMessageParameter(ctx, request, "actionId")
-	if actionIdErr != nil {
-		logger.Error(ctx, actionIdErr.Error())
-		responseUIError(ctx, request, actionIdErr.Error())
-		return
-	}
-	queryId, queryErr := getUIMessageParameter(ctx, request, "queryId")
-	if queryErr != nil {
-		logger.Error(ctx, queryErr.Error())
-		responseUIError(ctx, request, queryErr.Error())
-		return
-	}
-
-	actionCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, sessionId), queryId)
-	executeErr := plugin.GetPluginManager().ExecuteAction(actionCtx, sessionId, queryId, resultId, actionId)
-	if executeErr != nil {
-		responseUIError(ctx, request, executeErr.Error())
-		return
-	}
-
-	responseUISuccess(ctx, request)
-}
-
-func handleUIFormAction(ctx context.Context, request UIMessage) {
-	resultId, idErr := getUIMessageParameter(ctx, request, "resultId")
-	if idErr != nil {
-		logger.Error(ctx, idErr.Error())
-		responseUIError(ctx, request, idErr.Error())
-		return
-	}
-	actionId, actionIdErr := getUIMessageParameter(ctx, request, "actionId")
-	if actionIdErr != nil {
-		logger.Error(ctx, actionIdErr.Error())
-		responseUIError(ctx, request, actionIdErr.Error())
-		return
-	}
-	values, valuesErr := getUIMessageParameterMap(ctx, request, "values")
-	if valuesErr != nil {
-		logger.Error(ctx, valuesErr.Error())
-		responseUIError(ctx, request, valuesErr.Error())
-		return
-	}
-	queryId, queryErr := getUIMessageParameter(ctx, request, "queryId")
-	if queryErr != nil {
-		logger.Error(ctx, queryErr.Error())
-		responseUIError(ctx, request, queryErr.Error())
-		return
-	} else {
-		ctx = util.WithQueryIdContext(ctx, queryId)
-	}
-
-	executeErr := plugin.GetPluginManager().SubmitFormAction(ctx, request.SessionId, queryId, resultId, actionId, values)
-	if executeErr != nil {
-		responseUIError(ctx, request, executeErr.Error())
-		return
-	}
-
-	responseUISuccess(ctx, request)
-}
-
-func handleUIToolbarMsgAction(ctx context.Context, request UIMessage) {
-	toolbarMsgId, statusErr := getUIMessageParameter(ctx, request, "toolbarMsgId")
-	if statusErr != nil {
-		logger.Error(ctx, statusErr.Error())
-		responseUIError(ctx, request, statusErr.Error())
-		return
-	}
-
-	actionId, actionErr := getUIMessageParameter(ctx, request, "actionId")
-	if actionErr != nil {
-		logger.Error(ctx, actionErr.Error())
-		responseUIError(ctx, request, actionErr.Error())
-		return
-	}
-
-	executeErr := plugin.GetPluginManager().ExecuteToolbarMsgAction(ctx, request.SessionId, toolbarMsgId, actionId)
-	if executeErr != nil {
-		responseUIError(ctx, request, executeErr.Error())
-		return
-	}
-
-	responseUISuccess(ctx, request)
-}
-
-func handleUIQueryMRU(ctx context.Context, request UIMessage) {
-	queryId, _ := getUIMessageParameter(ctx, request, "queryId")
-	mruResults := plugin.GetPluginManager().QueryMRU(ctx, request.SessionId, queryId)
-	logger.Info(ctx, fmt.Sprintf("found %d MRU results from UI", len(mruResults)))
-	responseUISuccessWithData(ctx, request, mruResults)
-}
-
-// handleUIQueryCompletionHintAccepted records positive feedback from accepted inline hints.
-func handleUIQueryCompletionHintAccepted(ctx context.Context, request UIMessage) {
-	inputPrefix, inputPrefixErr := getUIMessageParameter(ctx, request, "inputPrefix")
-	if inputPrefixErr != nil {
-		logger.Error(ctx, inputPrefixErr.Error())
-		responseUIError(ctx, request, inputPrefixErr.Error())
-		return
-	}
-
-	completionText, completionTextErr := getUIMessageParameter(ctx, request, "completionText")
-	if completionTextErr != nil {
-		logger.Error(ctx, completionTextErr.Error())
-		responseUIError(ctx, request, completionTextErr.Error())
-		return
-	}
-
-	source, sourceErr := getUIMessageParameter(ctx, request, "source")
-	if sourceErr != nil {
-		logger.Error(ctx, sourceErr.Error())
-		responseUIError(ctx, request, sourceErr.Error())
-		return
-	}
-
-	if !setting.GetSettingManager().RecordQueryCompletionFeedback(ctx, inputPrefix, completionText, source) {
-		logger.Debug(ctx, fmt.Sprintf("ignore invalid query completion feedback: inputPrefix=%q, completionText=%q, source=%q", inputPrefix, completionText, source))
-	}
-	responseUISuccess(ctx, request)
-}
-
-func handleUITerminalSubscribe(ctx context.Context, request UIMessage) {
-	dataMap, ok := request.Data.(map[string]any)
-	if !ok {
-		responseUIError(ctx, request, "invalid terminal subscribe payload")
-		return
-	}
-
-	sessionID, _ := dataMap["sessionId"].(string)
-	if sessionID == "" {
-		responseUIError(ctx, request, "sessionId is required")
-		return
-	}
-
-	cursor := int64(0)
-	if rawCursor, exists := dataMap["cursor"]; exists {
-		switch value := rawCursor.(type) {
-		case float64:
-			cursor = int64(value)
-		case int64:
-			cursor = value
-		case int:
-			cursor = int64(value)
-		}
-	}
-
-	state, err := terminal.GetSessionManager().Subscribe(ctx, request.SessionId, sessionID, cursor)
-	if err != nil {
-		responseUIError(ctx, request, err.Error())
-		return
-	}
-
-	responseUISuccessWithData(ctx, request, state)
-}
-
-func handleUITerminalUnsubscribe(ctx context.Context, request UIMessage) {
-	dataMap, ok := request.Data.(map[string]any)
-	if !ok {
-		responseUIError(ctx, request, "invalid terminal unsubscribe payload")
-		return
-	}
-
-	sessionID, _ := dataMap["sessionId"].(string)
-	if sessionID == "" {
-		responseUIError(ctx, request, "sessionId is required")
-		return
-	}
-
-	terminal.GetSessionManager().Unsubscribe(request.SessionId, sessionID)
-	responseUISuccess(ctx, request)
-}
-
-func handleUITerminalSearch(ctx context.Context, request UIMessage) {
-	dataMap, ok := request.Data.(map[string]any)
-	if !ok {
-		responseUIError(ctx, request, "invalid terminal search payload")
-		return
-	}
-
-	sessionID, _ := dataMap["sessionId"].(string)
-	pattern, _ := dataMap["pattern"].(string)
-	if sessionID == "" || pattern == "" {
-		responseUIError(ctx, request, "sessionId and pattern are required")
-		return
-	}
-
-	cursor := int64(0)
-	if rawCursor, exists := dataMap["cursor"]; exists {
-		switch value := rawCursor.(type) {
-		case float64:
-			cursor = int64(value)
-		case int64:
-			cursor = value
-		case int:
-			cursor = int64(value)
-		}
-	}
-	backward, _ := dataMap["backward"].(bool)
-	caseSensitive, _ := dataMap["caseSensitive"].(bool)
-
-	result, err := terminal.GetSessionManager().Search(ctx, terminal.TerminalSearchRequest{
-		SessionID:     sessionID,
-		Pattern:       pattern,
-		Cursor:        cursor,
-		Backward:      backward,
-		CaseSensitive: caseSensitive,
-	})
-	if err != nil {
-		responseUIError(ctx, request, err.Error())
-		return
-	}
-	responseUISuccessWithData(ctx, request, result)
-}
-
-func getUIMessageParameter(ctx context.Context, msg UIMessage, key string) (string, error) {
-	jsonData, marshalErr := json.Marshal(msg.Data)
-	if marshalErr != nil {
-		return "", marshalErr
-	}
-
-	paramterData := gjson.GetBytes(jsonData, key)
-	if !paramterData.Exists() {
-		return "", fmt.Errorf("%s parameter not found", key)
-	}
-
-	return paramterData.String(), nil
-}
-
-func getUIMessageParameterMap(ctx context.Context, msg UIMessage, key string) (map[string]string, error) {
-	jsonData, marshalErr := json.Marshal(msg.Data)
-	if marshalErr != nil {
-		return nil, marshalErr
-	}
-
-	paramterData := gjson.GetBytes(jsonData, key)
-	if !paramterData.Exists() {
-		return nil, fmt.Errorf("%s parameter not found", key)
-	}
-	if !paramterData.IsObject() {
-		return nil, fmt.Errorf("%s parameter must be an object", key)
-	}
-
-	var values map[string]string
-	if unmarshalErr := json.Unmarshal([]byte(paramterData.Raw), &values); unmarshalErr != nil {
-		return nil, unmarshalErr
-	}
-
-	return values, nil
 }

@@ -153,9 +153,9 @@ func newQueryResultSet(query Query) *QueryResultSet {
 }
 
 type Manager struct {
-	instances       []*Instance
-	systemPluginsWg sync.WaitGroup // waits for all system plugins to finish loading
-	ui              common.UI
+	instances          []*Instance
+	systemPluginsReady chan struct{}
+	ui                 common.UI
 
 	// Query pipelines are concurrent in core even though UI displays only
 	// one active query. Key by session and query id so a late pipeline cannot
@@ -196,6 +196,7 @@ const (
 func GetPluginManager() *Manager {
 	managerOnce.Do(func() {
 		managerInstance = &Manager{
+			systemPluginsReady:          make(chan struct{}),
 			sessionQueryResultCache:     util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
 			debounceQueryTimer:          util.NewHashMap[string, *debounceTimer](),
 			aiProviders:                 util.NewHashMap[string, ai.Provider](),
@@ -653,69 +654,48 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 	start := util.GetSystemTimestamp()
 	logger.Info(ctx, fmt.Sprintf("start loading system plugins, found %d system plugins", len(AllSystemPlugin)))
 
-	// Add all plugins to wait group before starting goroutines
-	m.systemPluginsWg.Add(len(AllSystemPlugin))
-
-	loadedInstances := make([]*Instance, len(AllSystemPlugin))
-	for i, p := range AllSystemPlugin {
-		index := i
-		plugin := p
+	// Native startup invokes plugin loading on the UI thread before the platform
+	// event loop begins. Keep system plugin initialization on that thread because
+	// plugins may synchronously call mainthread; waiting here for parallel plugin
+	// goroutines would deadlock with their dispatch to the blocked UI thread.
+	for _, plugin := range AllSystemPlugin {
 		metadata := plugin.GetMetadata()
-		pluginName := metadata.GetName(ctx)
-
-		util.Go(ctx, fmt.Sprintf("load system plugin <%s>", pluginName), func() {
-			defer m.systemPluginsWg.Done()
-
-			metadata := plugin.GetMetadata()
-			// System plugins use Wox's central i18n keys directly. The old path
-			// flattened every central language file into every system plugin metadata,
-			// which duplicated the same translation maps across all system plugins.
-			// Metadata.translate already falls back to TranslateWox, so keeping the
-			// central translations owned by the i18n manager preserves behavior while
-			// avoiding the per-plugin live heap copy.
-			instance := &Instance{
-				Metadata:              metadata,
-				Plugin:                plugin,
-				Host:                  nil,
-				IsSystemPlugin:        true,
-				RuntimeLoaded:         true,
-				PluginDirectory:       metadata.Directory,
-				LoadStartTimestamp:    util.GetSystemTimestamp(),
-				LoadFinishedTimestamp: util.GetSystemTimestamp(),
-			}
-			instance.API = NewAPI(instance)
-
-			startTimestamp := util.GetSystemTimestamp()
-			pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions.ToMap())
-			if settingErr != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.GetName(ctx), settingErr.Error()))
-				return
-			}
-
-			instance.Setting = pluginSetting
-			if util.GetSystemTimestamp()-startTimestamp > 100 {
-				logger.Warn(ctx, fmt.Sprintf("load system plugin[%s] setting too slow, cost %d ms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
-			}
-
-			// Init plugin BEFORE adding to instances list
-			// This ensures the plugin is fully initialized before it can be queried
-			m.initPlugin(util.NewTraceContext(), instance)
-
-			// Bug fix: system plugins initialize in parallel, but appending to the
-			// shared manager slice from those goroutines races and can drop a
-			// plugin from one CI run. Store each initialized instance in a stable
-			// slot, then publish the slice on this goroutine after the wait so
-			// global queries always see the full system plugin set.
-			loadedInstances[index] = instance
-		})
-	}
-
-	m.systemPluginsWg.Wait()
-	for _, instance := range loadedInstances {
-		if instance != nil {
-			m.instances = append(m.instances, instance)
+		// System plugins use Wox's central i18n keys directly. The old path
+		// flattened every central language file into every system plugin metadata,
+		// which duplicated the same translation maps across all system plugins.
+		// Metadata.translate already falls back to TranslateWox, so keeping the
+		// central translations owned by the i18n manager preserves behavior while
+		// avoiding the per-plugin live heap copy.
+		instance := &Instance{
+			Metadata:              metadata,
+			Plugin:                plugin,
+			Host:                  nil,
+			IsSystemPlugin:        true,
+			RuntimeLoaded:         true,
+			PluginDirectory:       metadata.Directory,
+			LoadStartTimestamp:    util.GetSystemTimestamp(),
+			LoadFinishedTimestamp: util.GetSystemTimestamp(),
 		}
+		instance.API = NewAPI(instance)
+
+		startTimestamp := util.GetSystemTimestamp()
+		pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions.ToMap())
+		if settingErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.GetName(ctx), settingErr.Error()))
+			continue
+		}
+
+		instance.Setting = pluginSetting
+		if util.GetSystemTimestamp()-startTimestamp > 100 {
+			logger.Warn(ctx, fmt.Sprintf("load system plugin[%s] setting too slow, cost %d ms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
+		}
+
+		// Init plugin BEFORE adding to instances list
+		// This ensures the plugin is fully initialized before it can be queried
+		m.initPlugin(util.NewTraceContext(), instance)
+		m.instances = append(m.instances, instance)
 	}
+	close(m.systemPluginsReady)
 
 	logger.Debug(ctx, fmt.Sprintf("finish loading system plugins, cost %d ms", util.GetSystemTimestamp()-start))
 }
@@ -1056,7 +1036,7 @@ func (m *Manager) unloadScriptPluginByPath(ctx context.Context, scriptPath strin
 // WaitForSystemPlugins blocks until all system plugins have finished loading and initializing.
 // This is useful for tests or callers that need to ensure all plugins are ready before querying.
 func (m *Manager) WaitForSystemPlugins() {
-	m.systemPluginsWg.Wait()
+	<-m.systemPluginsReady
 }
 
 func (m *Manager) GetPluginInstances() []*Instance {

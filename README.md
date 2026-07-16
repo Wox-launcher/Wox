@@ -1,8 +1,12 @@
-# Wox
+<p align="center">
+  <a href="https://trendshift.io/repositories/746?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-746" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/746" alt="Wox-launcher%2FWox | Trendshift" width="250" height="55"/></a>
+</p>
 
-[![Build status](https://github.com/Wox-launcher/Wox/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/Wox-launcher/Wox/actions)
-[![GitHub release](https://img.shields.io/github/v/release/Wox-launcher/wox)](https://github.com/Wox-launcher/Wox/releases)
-[![Downloads](https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg)](https://github.com/Wox-launcher/Wox/releases)
+<p align="center">
+<a href="https://github.com/Wox-launcher/Wox/actions"><img src="https://github.com/Wox-launcher/Wox/actions/workflows/build.yml/badge.svg?branch=master" alt="Build status"></a>
+<a href="https://github.com/Wox-launcher/Wox/releases"><img src="https://img.shields.io/github/v/release/Wox-launcher/wox" alt="GitHub release"></a>
+<a href="https://github.com/Wox-launcher/Wox/releases"><img src="https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg" alt="Downloads"></a>
+</p>
 
 ## A launcher that stays out of your way
 
@@ -24,15 +28,6 @@ https://github.com/user-attachments/assets/1b282fde-c1c5-426a-b45d-cd0aa329386a
 | Windows | Winget | `winget install -e --id Wox.Wox` |
 | Windows | Scoop | `scoop install extras/wox` |
 | macOS / Linux / Windows | Manual | Download the latest stable package from [Releases](https://github.com/Wox-launcher/Wox/releases) and run it directly |
-
-
-## More than a launcher
-
-- Search and launch applications, files, folders, commands, bookmarks, clipboard history, and emoji
-- Calculate, convert units, and search the web from the same input
-- Use AI chat with MCP integration and multiple provider backends when it helps
-- Switch themes or build your own, with online plugin and theme stores
-- Run directly from a lightweight package with no mandatory installation flow
 
 ## Documentation
 

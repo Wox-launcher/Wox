@@ -7,7 +7,7 @@
 这个仓库里通常一起协作的部分主要有四块：
 
 - `wox.core/`：Go 后端、内置插件、设置、存储、打包入口
-- `wox.ui.go/`：macOS / Windows / Linux 的 Go UI 桌面 UI
+- `wox.core/ui/`：与 core 同一 Go module、同一进程的 macOS / Windows / Linux 原生 UI
 - `wox.plugin.host.nodejs/`：Node.js 插件宿主
 - `wox.plugin.host.python/`：Python 插件宿主
 
@@ -66,6 +66,8 @@ make dev
 ```bash
 make dev
 make test
+make test-go-ui-unit
+make test-go-ui-smoke
 make build
 ```
 
@@ -73,6 +75,8 @@ make build
 
 - `make dev`：准备本地开发环境
 - `make test`：运行 `wox.core/test` 下的 Go 测试
+- `make test-go-ui-unit`：不打开窗口，运行 retained widget 和自动化契约测试
+- `make test-go-ui-smoke`：构建测试专用自动化二进制并运行真实原生 launcher smoke
 - `make build`：把 Go UI 编译进 `wox.core`，并构建插件宿主和平台打包产物
 
 如果你改的是后端和 UI、宿主之间的共享协议，最后一定要跑一次 `make build`，这是最容易暴露跨项目不一致的检查。
@@ -93,7 +97,7 @@ make build
 make -C wox.core build
 ```
 
-### Go UI（`wox.ui.go`）
+### Go UI（`wox.core/ui`）
 
 适合处理：
 
@@ -105,7 +109,8 @@ make -C wox.core build
 常用命令：
 
 ```bash
-cd wox.ui.go && go test ./...
+make test-go-ui-unit
+make test-go-ui-smoke
 ```
 
 ### 插件宿主

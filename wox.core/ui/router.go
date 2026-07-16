@@ -39,10 +39,7 @@ import (
 	"wox/util/overlay"
 	"wox/util/overlay/imageoverlay"
 	"wox/util/permission"
-	"wox/util/screen"
-	utilselection "wox/util/selection"
 	"wox/util/shell"
-	"wox/util/tray"
 	utilwindow "wox/util/window"
 
 	"github.com/disintegration/imaging"
@@ -114,12 +111,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/sync/devices/join":                handleSyncDeviceJoin,
 
 	// events
-	"/on/focus/lost":                 handleOnFocusLost,
-	"/on/ready":                      handleOnUIReady,
-	"/on/show":                       handleOnShow,
 	"/on/querybox/focus":             handleOnQueryBoxFocus,
-	"/on/hide":                       handleOnHide,
-	"/on/setting":                    handleOnSetting,
 	"/on/hotkey/recording":           handleOnHotkeyRecording,
 	"/on/hotkey/recording/candidate": handleOnHotkeyRecordingCandidate,
 	"/on/onboarding":                 handleOnOnboarding,
@@ -168,46 +160,32 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/ocr/engine/download": handleOCREngineDownload,
 
 	// others
-	"/":                                   handleHome,
-	"/show":                               handleShow,
-	"/tooltip/show":                       handleTooltipOverlayShow,
-	"/tooltip/hide":                       handleTooltipOverlayHide,
-	"/ping":                               handlePing,
-	"/preview":                            handlePreview,
-	"/preview/image/overlay":              handlePreviewImageOverlay,
-	"/preview/file/media":                 handlePreviewFileMedia,
-	"/image/file/icon":                    handleFileIcon,
-	"/image/resolve":                      handleResolveImage,
-	"/image/lazy/load":                    handleLazyImageLoad,
-	"/open":                               handleOpen,
-	"/backup/now":                         handleBackupNow,
-	"/backup/restore":                     handleBackupRestore,
-	"/backup/all":                         handleBackupAll,
-	"/backup/folder":                      handleBackupFolder,
-	"/log/clear":                          handleLogClear,
-	"/log/open":                           handleLogOpen,
-	"/diagnostics/status":                 handleDiagnosticsStatus,
-	"/diagnostics/monitor/enable":         handleDiagnosticsMonitorEnable,
-	"/diagnostics/monitor/enable-restart": handleDiagnosticsMonitorEnableRestart,
-	"/diagnostics/monitor/disable":        handleDiagnosticsMonitorDisable,
-	"/diagnostics/export":                 handleDiagnosticsExport,
-	"/hotkey/available":                   handleHotkeyAvailable,
-	"/hotkey/availability":                handleHotkeyAvailability,
-	"/glance":                             handleGlance,
-	"/glance/action":                      handleGlanceAction,
-	"/updater/channel/versions":           handleUpdateChannelVersions,
-	"/deeplink":                           handleDeeplink,
-	"/version":                            handleVersion,
-
-	// test-only triggers
-	"/test/plugin/install_local":     handleTestInstallLocalPlugin,
-	"/test/trigger/open_setting":     handleTestTriggerOpenSetting,
-	"/test/trigger/open_onboarding":  handleTestTriggerOpenOnboarding,
-	"/test/trigger/query_hotkey":     handleTestTriggerQueryHotkey,
-	"/test/trigger/screenshot":       handleTestTriggerScreenshot,
-	"/test/trigger/selection_hotkey": handleTestTriggerSelectionHotkey,
-	"/test/screen/mouse":             handleTestMouseScreen,
-	"/test/trigger/tray_query":       handleTestTriggerTrayQuery,
+	"/":                            handleHome,
+	"/tooltip/show":                handleTooltipOverlayShow,
+	"/tooltip/hide":                handleTooltipOverlayHide,
+	"/preview":                     handlePreview,
+	"/preview/image/overlay":       handlePreviewImageOverlay,
+	"/preview/file/media":          handlePreviewFileMedia,
+	"/image/file/icon":             handleFileIcon,
+	"/image/resolve":               handleResolveImage,
+	"/image/lazy/load":             handleLazyImageLoad,
+	"/open":                        handleOpen,
+	"/backup/now":                  handleBackupNow,
+	"/backup/restore":              handleBackupRestore,
+	"/backup/all":                  handleBackupAll,
+	"/backup/folder":               handleBackupFolder,
+	"/log/clear":                   handleLogClear,
+	"/log/open":                    handleLogOpen,
+	"/diagnostics/status":          handleDiagnosticsStatus,
+	"/diagnostics/monitor/enable":  handleDiagnosticsMonitorEnable,
+	"/diagnostics/monitor/disable": handleDiagnosticsMonitorDisable,
+	"/diagnostics/export":          handleDiagnosticsExport,
+	"/hotkey/available":            handleHotkeyAvailable,
+	"/hotkey/availability":         handleHotkeyAvailability,
+	"/glance":                      handleGlance,
+	"/glance/action":               handleGlanceAction,
+	"/updater/channel/versions":    handleUpdateChannelVersions,
+	"/version":                     handleVersion,
 }
 
 var updateChannelVersionsProvider = updater.GetUpdateChannelVersions
@@ -2630,20 +2608,28 @@ func handleDiagnosticsMonitorEnable(w http.ResponseWriter, r *http.Request) {
 
 func handleDiagnosticsMonitorEnableRestart(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
-	state, err := enableDiagnosticsMonitor(ctx)
+	state, err := EnableDiagnosticsMonitorAndRestart(ctx)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	if err := diagnostic.GetManager().StartSupervisorDetached(ctx, true); err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
 	writeSuccessResponse(w, state)
+}
+
+// EnableDiagnosticsMonitorAndRestart enables bug-aware monitoring before restarting the primary instance.
+func EnableDiagnosticsMonitorAndRestart(ctx context.Context) (diagnostic.State, error) {
+	state, err := enableDiagnosticsMonitor(ctx)
+	if err != nil {
+		return diagnostic.State{}, err
+	}
+	if err := diagnostic.GetManager().StartSupervisorDetached(ctx, true); err != nil {
+		return diagnostic.State{}, err
+	}
 	util.Go(ctx, "restart wox for bug aware monitor", func() {
 		time.Sleep(200 * time.Millisecond)
 		GetUIManager().ExitApp(util.NewTraceContext())
 	})
+	return state, nil
 }
 
 // enableDiagnosticsMonitor keeps all HTTP entry points aligned with the system plugin's enable behavior.
@@ -2715,274 +2701,6 @@ func handleHotkeyAvailability(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, availability)
 }
 
-func handleShow(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	GetUIManager().GetUI(ctx).ShowApp(ctx, common.ShowContext{
-		SelectAll: true,
-	})
-	writeSuccessResponse(w, "")
-}
-
-func ensureTestTriggerEnabled(w http.ResponseWriter) bool {
-	if util.IsDev() || util.IsTestMode() {
-		return true
-	}
-
-	writeErrorResponse(w, "test trigger endpoints are only available in dev/test mode")
-	return false
-}
-
-func handleTestTriggerQueryHotkey(w http.ResponseWriter, r *http.Request) {
-	if !ensureTestTriggerEnabled(w) {
-		return
-	}
-
-	type request struct {
-		Query             string
-		IsSilentExecution bool
-		HideQueryBox      bool
-		HideToolbar       bool
-		Width             int
-		MaxResultCount    int
-		Position          string
-	}
-
-	var req request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-	if strings.TrimSpace(req.Query) == "" {
-		writeErrorResponse(w, "query is empty")
-		return
-	}
-
-	ctx := getTraceContext(r)
-	err := GetUIManager().triggerQueryHotkey(ctx, setting.QueryHotkey{
-		Query:             req.Query,
-		IsSilentExecution: req.IsSilentExecution,
-		HideQueryBox:      req.HideQueryBox,
-		HideToolbar:       req.HideToolbar,
-		Width:             req.Width,
-		MaxResultCount:    normalizeOptionalMaxResultCount(req.MaxResultCount),
-		Position:          normalizeQueryHotkeyPosition(req.Position),
-	})
-	if err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-
-	writeSuccessResponse(w, "")
-}
-
-func handleTestInstallLocalPlugin(w http.ResponseWriter, r *http.Request) {
-	if !ensureTestTriggerEnabled(w) {
-		return
-	}
-
-	type request struct {
-		FilePath string
-	}
-
-	var req request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-
-	filePath := filepath.Clean(strings.TrimSpace(req.FilePath))
-	if filePath == "" {
-		writeErrorResponse(w, "filePath is empty")
-		return
-	}
-	if _, err := os.Stat(filePath); err != nil {
-		writeErrorResponse(w, fmt.Sprintf("plugin package does not exist: %s", filePath))
-		return
-	}
-
-	ctx := getTraceContext(r)
-	if err := plugin.GetStoreManager().InstallFromLocal(ctx, filePath); err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-
-	writeSuccessResponse(w, "")
-}
-
-func handleTestTriggerOpenSetting(w http.ResponseWriter, r *http.Request) {
-	if !ensureTestTriggerEnabled(w) {
-		return
-	}
-
-	type request struct {
-		Path   string
-		Param  string
-		Source string
-	}
-
-	var req request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-
-	ctx := getTraceContext(r)
-	GetUIManager().GetUI(ctx).OpenSettingWindow(ctx, common.SettingWindowContext{
-		Path:   strings.TrimSpace(req.Path),
-		Param:  strings.TrimSpace(req.Param),
-		Source: common.SettingWindowSource(strings.TrimSpace(req.Source)),
-	})
-	writeSuccessResponse(w, "")
-}
-
-func handleTestTriggerOpenOnboarding(w http.ResponseWriter, r *http.Request) {
-	if !ensureTestTriggerEnabled(w) {
-		return
-	}
-
-	ctx := getTraceContext(r)
-	GetUIManager().GetUI(ctx).OpenOnboardingWindow(ctx)
-	writeSuccessResponse(w, "")
-}
-
-func handleTestTriggerSelectionHotkey(w http.ResponseWriter, r *http.Request) {
-	if !ensureTestTriggerEnabled(w) {
-		return
-	}
-
-	type request struct {
-		Type      string
-		Text      string
-		FilePaths []string
-	}
-
-	var req request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-
-	selected := utilselection.Selection{
-		Type:      utilselection.SelectionType(req.Type),
-		Text:      req.Text,
-		FilePaths: req.FilePaths,
-	}
-	switch selected.Type {
-	case utilselection.SelectionTypeText, utilselection.SelectionTypeFile:
-	default:
-		writeErrorResponse(w, "selection type is invalid")
-		return
-	}
-	if selected.IsEmpty() {
-		writeErrorResponse(w, "selection is empty")
-		return
-	}
-
-	ctx := getTraceContext(r)
-	uiManager := GetUIManager()
-	uiManager.RefreshActiveWindowSnapshot(ctx)
-	uiManager.GetUI(ctx).ChangeQuery(ctx, common.PlainQuery{
-		QueryType:      plugin.QueryTypeSelection,
-		QuerySelection: selected,
-	})
-	time.Sleep(150 * time.Millisecond)
-	uiManager.GetUI(ctx).ShowApp(ctx, common.ShowContext{
-		ShowSource: common.ShowSourceSelection,
-	})
-
-	writeSuccessResponse(w, "")
-}
-
-func handleTestTriggerScreenshot(w http.ResponseWriter, r *http.Request) {
-	if !ensureTestTriggerEnabled(w) {
-		return
-	}
-
-	ctx := getTraceContext(r)
-	// The screenshot smoke path needs a backend-triggered session so integration tests can verify
-	// the same core-to-UI request path used by the real system plugin action.
-	result, err := GetUIManager().GetUI(ctx).CaptureScreenshot(ctx, common.DefaultCaptureScreenshotRequest())
-	if err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-
-	writeSuccessResponse(w, result)
-}
-
-func handleTestMouseScreen(w http.ResponseWriter, r *http.Request) {
-	if !ensureTestTriggerEnabled(w) {
-		return
-	}
-
-	writeSuccessResponse(w, screen.GetMouseScreen())
-}
-
-func handleTestTriggerTrayQuery(w http.ResponseWriter, r *http.Request) {
-	if !ensureTestTriggerEnabled(w) {
-		return
-	}
-
-	type rectRequest struct {
-		X      int
-		Y      int
-		Width  int
-		Height int
-	}
-
-	type request struct {
-		Query          string
-		Width          int
-		HideQueryBox   bool
-		HideToolbar    bool
-		Disabled       bool
-		MaxResultCount int
-		Rect           rectRequest
-	}
-
-	var req request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-	if strings.TrimSpace(req.Query) == "" {
-		writeErrorResponse(w, "query is empty")
-		return
-	}
-
-	clickRect := tray.ClickRect{
-		X:      req.Rect.X,
-		Y:      req.Rect.Y,
-		Width:  req.Rect.Width,
-		Height: req.Rect.Height,
-	}
-	if clickRect.Width <= 0 {
-		clickRect.Width = 40
-	}
-	if clickRect.Height <= 0 {
-		clickRect.Height = 40
-	}
-
-	ctx := getTraceContext(r)
-	GetUIManager().executeTrayQuery(ctx, setting.TrayQuery{
-		Query:          req.Query,
-		Width:          req.Width,
-		HideQueryBox:   req.HideQueryBox,
-		HideToolbar:    req.HideToolbar,
-		MaxResultCount: normalizeOptionalMaxResultCount(req.MaxResultCount),
-		Disabled:       req.Disabled,
-	}, clickRect)
-
-	writeSuccessResponse(w, "")
-}
-
-func handleOnUIReady(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	GetUIManager().PostUIReady(ctx)
-	startCloudSyncManagerAfterUIReady(ctx)
-	writeSuccessResponse(w, "")
-}
-
 // startCloudSyncManagerAfterUIReady starts the scheduler only after the UI can apply settings from a scheduled pull.
 func startCloudSyncManagerAfterUIReady(ctx context.Context) {
 	startCloudSyncManagerIfSyncEnabled(ctx, cloudsync.GetService())
@@ -3013,15 +2731,6 @@ func startCloudSyncManagerIfSyncEnabled(ctx context.Context, service *cloudsync.
 		return
 	}
 	service.StartManager(ctx)
-}
-
-func handleOnFocusLost(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if woxSetting.HideOnLostFocus.Get() {
-		GetUIManager().GetUI(ctx).HideApp(ctx)
-	}
-	writeSuccessResponse(w, "")
 }
 
 func handleLangAvailable(w http.ResponseWriter, r *http.Request) {
@@ -3055,34 +2764,9 @@ func handleLangJson(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, langJson)
 }
 
-func handleOnShow(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	GetUIManager().PostOnShow(ctx)
-	writeSuccessResponse(w, "")
-}
-
 func handleOnQueryBoxFocus(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 	GetUIManager().PostOnQueryBoxFocus(ctx)
-	writeSuccessResponse(w, "")
-}
-
-func handleOnHide(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	GetUIManager().PostOnHide(ctx)
-	writeSuccessResponse(w, "")
-}
-
-func handleOnSetting(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	body, _ := io.ReadAll(r.Body)
-	inSettingViewResult := gjson.GetBytes(body, "inSettingView")
-	if !inSettingViewResult.Exists() {
-		writeErrorResponse(w, "inSettingView is required")
-		return
-	}
-
-	GetUIManager().PostOnSetting(ctx, inSettingViewResult.Bool())
 	writeSuccessResponse(w, "")
 }
 

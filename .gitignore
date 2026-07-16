@@ -43,5 +43,4 @@ docs
 !www/docs/**
 www/docs/.vitepress/cache
 www/docs/.vitepress/dist
-wox.ui.go/.deps/
 .deps

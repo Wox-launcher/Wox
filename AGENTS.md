@@ -1,7 +1,6 @@
 ## Architecture
 
-- `wox.core/`: Go backend and app core. Imports the Go UI, manages settings, plugins, database, i18n, and updates. Tests live under `wox.core/test/`.
-- `wox.ui.go/`: Cross-platform Go UI library. Owns the native window, focus lifecycle, and GPU rendering path inside the core process.
+- `wox.core/`: Go backend and app core. It also owns the embedded Go UI under `wox.core/ui`, including native windows, focus lifecycle, widgets, and GPU rendering. Tests live under `wox.core/test/`.
 - `wox.plugin.host.*/`: Runtime hosts for plugins (`wox.plugin.host.python`, `wox.plugin.host.nodejs`). They connect to `wox.core` (WebSocket/JSON-RPC), load plugin processes, and proxy plugin API calls.
 - `wox.plugin.*/`: SDKs for third‑party plugins (`wox.plugin.python`, `wox.plugin.nodejs`) – provide typed APIs, models, and helper logic for plugin authors.
 

@@ -33,7 +33,7 @@ git checkout -b feature/your-change
 2. 在正确的层里修改代码
 
 - `wox.core/`：后端逻辑、内置插件、设置、共享契约
-- `wox.ui.go/`：启动器 UI、设置页、截图 UI、平台展示逻辑
+- `wox.core/ui/`：启动器 UI、widget、原生 runtime、截图 UI、平台展示逻辑
 - `wox.plugin.host.*`：插件宿主桥接行为
 - `wox.plugin.*`：对外插件 SDK
 - `www/docs/`：文档站
@@ -45,7 +45,7 @@ git checkout -b feature/your-change
 ```bash
 make -C wox.core build
 make -C wox.plugin.host.nodejs build
-cd wox.ui.go && go test ./...
+make test-go-ui-unit
 ```
 
 4. 提交 PR 前做更广的验证
@@ -62,12 +62,16 @@ make build
 
 ```bash
 make test
+make test-go-ui-unit
+make test-go-ui-smoke
 make build
 ```
 
 一般可以这样理解：
 
 - `make test`：默认的后端回归检查
+- `make test-go-ui-unit`：不打开窗口，验证 retained widget 和自动化契约
+- `make test-go-ui-smoke`：构建测试专用自动化二进制并运行原生 launcher smoke
 - `make build`：适合共享契约或跨项目改动的最终守门
 
 ## 提交信息

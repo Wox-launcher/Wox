@@ -35,7 +35,7 @@ git checkout -b feature/your-change
 2. Make the change in the correct layer
 
 - `wox.core/` for backend logic, built-in plugins, settings, contracts
-- `wox.ui.go/` for launcher UI, settings UI, screenshot UI, platform presentation
+- `wox.core/ui/` for launcher UI, widgets, native runtime, screenshot UI, platform presentation
 - `wox.plugin.host.*` for plugin runtime bridge behavior
 - `wox.plugin.*` for public plugin SDK changes
 - `www/docs/` for documentation
@@ -47,7 +47,7 @@ Examples:
 ```bash
 make -C wox.core build
 make -C wox.plugin.host.nodejs build
-cd wox.ui.go && go test ./...
+make test-go-ui-unit
 ```
 
 4. Run broader verification before opening a PR
@@ -64,12 +64,16 @@ Useful commands:
 
 ```bash
 make test
+make test-go-ui-unit
+make test-go-ui-smoke
 make build
 ```
 
 In practice:
 
 - `make test` is the default backend regression check
+- `make test-go-ui-unit` covers retained widgets and automation contracts without opening a window
+- `make test-go-ui-smoke` builds the test-only automation binary and runs the native launcher smoke
 - `make build` is the final cross-project guardrail for shared contract changes
 
 ## Commit messages
