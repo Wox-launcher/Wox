@@ -64,7 +64,7 @@ func parseQueryRefinementsFromUI(rawJson string) (map[string]string, error) {
 }
 
 type uiImpl struct {
-	requestMap         *util.HashMap[string, chan WebsocketMsg]
+	requestMap         *util.HashMap[string, chan UIMessage]
 	isVisible          bool // cached visibility state, updated by PostOnShow/PostOnHide
 	isInSettingView    bool // cached setting-view state, updated by PostOnSetting
 	isInOnboardingView bool // cached onboarding state, updated by PostOnOnboarding
@@ -84,17 +84,17 @@ func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 		data["ShowSource"] = showSource
 	}
 
-	u.invokeWebsocketMethod(ctx, "ChangeQuery", data)
+	u.invokeUIMethod(ctx, "ChangeQuery", data)
 }
 
 func (u *uiImpl) RefreshQuery(ctx context.Context, preserveSelectedIndex bool) {
-	u.invokeWebsocketMethod(ctx, "RefreshQuery", map[string]any{
+	u.invokeUIMethod(ctx, "RefreshQuery", map[string]any{
 		"preserveSelectedIndex": preserveSelectedIndex,
 	})
 }
 
 func (u *uiImpl) RefreshGlance(ctx context.Context, pluginId string, ids []string) {
-	u.invokeWebsocketMethod(ctx, "RefreshGlance", map[string]any{
+	u.invokeUIMethod(ctx, "RefreshGlance", map[string]any{
 		"PluginId": pluginId,
 		"Ids":      ids,
 	})
@@ -104,26 +104,26 @@ func (u *uiImpl) UpdateDiagnosticStatus(ctx context.Context, enabled bool) {
 	// New feature: bug aware status is a global launcher decoration, so core
 	// pushes it separately from plugin toolbar messages to avoid ownership
 	// conflicts with normal plugin status updates.
-	u.invokeWebsocketMethod(ctx, "DiagnosticStatusChanged", map[string]any{"enabled": enabled})
+	u.invokeUIMethod(ctx, "DiagnosticStatusChanged", map[string]any{"enabled": enabled})
 }
 
 func (u *uiImpl) HideApp(ctx context.Context) {
-	u.invokeWebsocketMethod(ctx, "HideApp", nil)
+	u.invokeUIMethod(ctx, "HideApp", nil)
 }
 
 func (u *uiImpl) ShowApp(ctx context.Context, showContext common.ShowContext) {
 	GetUIManager().RefreshActiveWindowSnapshot(ctx)
-	u.invokeWebsocketMethod(ctx, "ShowApp", getShowAppParams(ctx, showContext))
+	u.invokeUIMethod(ctx, "ShowApp", getShowAppParams(ctx, showContext))
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context, showContext common.ShowContext) {
 	GetUIManager().RefreshActiveWindowSnapshot(ctx)
-	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, showContext))
+	u.invokeUIMethod(ctx, "ToggleApp", getShowAppParams(ctx, showContext))
 }
 
 func (u *uiImpl) RecordHotkey(ctx context.Context, hotkey string, kind string) {
 	logger.Info(ctx, fmt.Sprintf("send RecordHotkey to UI: hotkey=%s kind=%s", hotkey, kind))
-	u.invokeWebsocketMethod(ctx, "RecordHotkey", map[string]any{
+	u.invokeUIMethod(ctx, "RecordHotkey", map[string]any{
 		"Hotkey": hotkey,
 		"Kind":   kind,
 	})
@@ -145,18 +145,18 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme common.Theme) {
 	// For normal themes, save and apply directly
 	// New feature: direct common.UI callers may bypass Manager.ChangeTheme, so
 	// resolve platform overrides here as well before sending the flat payload to
-	// Flutter.
+	// UI.
 	effectiveTheme := GetUIManager().resolvePlatformTheme(ctx, theme)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	woxSetting.ThemeId.Set(effectiveTheme.ThemeId)
-	u.invokeWebsocketMethod(ctx, "ChangeTheme", effectiveTheme)
+	u.invokeUIMethod(ctx, "ChangeTheme", effectiveTheme)
 }
 
 // ChangeThemeWithoutSave applies the theme without saving to settings
 // This is used for auto appearance theme switching
 func (u *uiImpl) ChangeThemeWithoutSave(ctx context.Context, theme common.Theme) {
 	logger.Info(ctx, fmt.Sprintf("change theme (without save): %s", theme.ThemeName))
-	u.invokeWebsocketMethod(ctx, "ChangeTheme", GetUIManager().resolvePlatformTheme(ctx, theme))
+	u.invokeUIMethod(ctx, "ChangeTheme", GetUIManager().resolvePlatformTheme(ctx, theme))
 }
 
 func (u *uiImpl) InstallTheme(ctx context.Context, theme common.Theme) {
@@ -171,23 +171,23 @@ func (u *uiImpl) UninstallTheme(ctx context.Context, theme common.Theme) {
 }
 
 func (u *uiImpl) OpenSettingWindow(ctx context.Context, windowContext common.SettingWindowContext) {
-	u.invokeWebsocketMethod(ctx, "OpenSettingWindow", windowContext)
+	u.invokeUIMethod(ctx, "OpenSettingWindow", windowContext)
 }
 
 func (u *uiImpl) FocusSettingWindow(ctx context.Context) {
-	u.invokeWebsocketMethod(ctx, "FocusSettingWindow", nil)
+	u.invokeUIMethod(ctx, "FocusSettingWindow", nil)
 }
 
 func (u *uiImpl) OpenOnboardingWindow(ctx context.Context) {
-	// Onboarding reuses the same UI process and WebSocket command path as the
+	// Onboarding reuses the same UI process and command path as the
 	// settings window. Keeping it here avoids a second desktop window lifecycle
-	// while still letting Flutter choose the dedicated onboarding view.
-	u.invokeWebsocketMethod(ctx, "OpenOnboardingWindow", nil)
+	// while still letting UI choose the dedicated onboarding view.
+	u.invokeUIMethod(ctx, "OpenOnboardingWindow", nil)
 }
 
-// OpenMacOSPermissionFlow asks the Flutter host to present the native permission guide for one permission.
+// OpenMacOSPermissionFlow asks the UI host to present the native permission guide for one permission.
 func (u *uiImpl) OpenMacOSPermissionFlow(ctx context.Context, permissionType string) {
-	u.invokeWebsocketMethod(ctx, "OpenMacOSPermissionFlow", map[string]string{"permissionType": permissionType})
+	u.invokeUIMethod(ctx, "OpenMacOSPermissionFlow", map[string]string{"permissionType": permissionType})
 }
 
 func (u *uiImpl) GetAllThemes(ctx context.Context) []common.Theme {
@@ -200,7 +200,7 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 
 func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 	if u.IsVisible(ctx) && !u.IsInManagementView() && !plugin.GetPluginManager().HasVisibleToolbarMsg(ctx) {
-		u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
+		u.invokeUIMethod(ctx, "ShowToolbarMsg", msg)
 	} else {
 		var icon image.Image
 		if msg.Icon != "" {
@@ -221,17 +221,17 @@ func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 }
 
 func (u *uiImpl) UpdateAttentionUnreadCount(ctx context.Context, unreadCount int) {
-	u.invokeWebsocketMethod(ctx, "AttentionUnreadCountChanged", map[string]any{
+	u.invokeUIMethod(ctx, "AttentionUnreadCountChanged", map[string]any{
 		"unreadCount": unreadCount,
 	})
 }
 
 func (u *uiImpl) ShowToolbarMsg(ctx context.Context, msg interface{}) {
-	u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
+	u.invokeUIMethod(ctx, "ShowToolbarMsg", msg)
 }
 
 func (u *uiImpl) ClearToolbarMsg(ctx context.Context, toolbarMsgId string) {
-	u.invokeWebsocketMethod(ctx, "ClearToolbarMsg", map[string]any{
+	u.invokeUIMethod(ctx, "ClearToolbarMsg", map[string]any{
 		"toolbarMsgId": toolbarMsgId,
 	})
 }
@@ -251,17 +251,17 @@ func (u *uiImpl) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWindo
 }
 
 func (u *uiImpl) SendChatResponse(ctx context.Context, aiChatData common.AIChatData) {
-	u.invokeWebsocketMethod(ctx, "SendChatResponse", aiChatData)
+	u.invokeUIMethod(ctx, "SendChatResponse", aiChatData)
 }
 
 func (u *uiImpl) ReloadChatResources(ctx context.Context, resouceName string) {
-	u.invokeWebsocketMethod(ctx, "ReloadChatResources", resouceName)
+	u.invokeUIMethod(ctx, "ReloadChatResources", resouceName)
 }
 
 // SendAIQuestion pushes a question to the UI. The answer comes back via the
 // /ai/question/answer HTTP route, which resolves the pending ask_user channel.
 func (u *uiImpl) SendAIQuestion(ctx context.Context, questionId string, question string, options []common.AIQuestionOption) {
-	u.invokeWebsocketMethod(ctx, "AIQuestion", map[string]any{
+	u.invokeUIMethod(ctx, "AIQuestion", map[string]any{
 		"QuestionId": questionId,
 		"Question":   question,
 		"Options":    options,
@@ -269,29 +269,29 @@ func (u *uiImpl) SendAIQuestion(ctx context.Context, questionId string, question
 }
 
 func (u *uiImpl) ReloadSettingPlugins(ctx context.Context) {
-	u.invokeWebsocketMethod(ctx, "ReloadSettingPlugins", nil)
+	u.invokeUIMethod(ctx, "ReloadSettingPlugins", nil)
 }
 
 func (u *uiImpl) ReloadSetting(ctx context.Context) {
-	u.invokeWebsocketMethod(ctx, "ReloadSetting", nil)
+	u.invokeUIMethod(ctx, "ReloadSetting", nil)
 }
 
 func (u *uiImpl) ReloadSettingThemes(ctx context.Context) {
-	u.invokeWebsocketMethod(ctx, "ReloadSettingThemes", nil)
+	u.invokeUIMethod(ctx, "ReloadSettingThemes", nil)
 }
 
 func (u *uiImpl) CloudSyncProgressChanged(ctx context.Context, progress any) {
-	u.invokeWebsocketMethod(ctx, "CloudSyncProgressChanged", progress)
+	u.invokeUIMethod(ctx, "CloudSyncProgressChanged", progress)
 }
 
 func (u *uiImpl) RefreshAccountStatus(ctx context.Context) {
-	u.invokeWebsocketMethod(ctx, "RefreshAccountStatus", nil)
+	u.invokeUIMethod(ctx, "RefreshAccountStatus", nil)
 }
 
 func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
 	// Type assert to plugin.UpdatableResult
 	// We use interface{} in the signature to avoid circular dependency between common and plugin packages
-	response, err := u.invokeWebsocketMethod(ctx, "UpdateResult", result)
+	response, err := u.invokeUIMethod(ctx, "UpdateResult", result)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("UpdateResult error: %s", err.Error()))
 		return false
@@ -312,7 +312,7 @@ func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
 }
 
 func (u *uiImpl) PushResults(ctx context.Context, payload interface{}) bool {
-	response, err := u.invokeWebsocketMethod(ctx, "PushResults", payload)
+	response, err := u.invokeUIMethod(ctx, "PushResults", payload)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("PushResults error: %s", err.Error()))
 		return false
@@ -329,14 +329,14 @@ func (u *uiImpl) PushResults(ctx context.Context, payload interface{}) bool {
 }
 
 func (u *uiImpl) IsVisible(ctx context.Context) bool {
-	// Return cached visibility state instead of querying UI via WebSocket
+	// Return cached visibility state instead of querying the UI.
 	// The state is updated by PostOnShow/PostOnHide callbacks
 	return u.isVisible
 }
 
 // ToggleRecordingMode asks the macOS UI to switch between launcher and capture-friendly window levels.
 func (u *uiImpl) ToggleRecordingMode(ctx context.Context) (bool, error) {
-	response, err := u.invokeWebsocketMethod(ctx, "ToggleRecordingMode", nil)
+	response, err := u.invokeUIMethod(ctx, "ToggleRecordingMode", nil)
 	if err != nil {
 		return false, err
 	}
@@ -349,7 +349,7 @@ func (u *uiImpl) ToggleRecordingMode(ctx context.Context) (bool, error) {
 }
 
 func (u *uiImpl) PickFiles(ctx context.Context, params common.PickFilesParams) []string {
-	respData, err := u.invokeWebsocketMethod(ctx, "PickFiles", params)
+	respData, err := u.invokeUIMethod(ctx, "PickFiles", params)
 	if err != nil {
 		return nil
 	}
@@ -367,12 +367,12 @@ func (u *uiImpl) PickFiles(ctx context.Context, params common.PickFilesParams) [
 
 func (u *uiImpl) CaptureScreenshot(ctx context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error) {
 	if request.SessionId == "" {
-		// The UI request itself needs a stable session identifier so Flutter can correlate this long-lived
+		// The UI request itself needs a stable session identifier so UI can correlate this long-lived
 		// screenshot session with the same window instance that owns the current query/action context.
 		request.SessionId = util.GetContextSessionId(ctx)
 	}
 	if request.ExportFilePath == "" {
-		// Screenshot export now depends on a backend-owned file target so Flutter writes into the
+		// Screenshot export now depends on a backend-owned file target so UI writes into the
 		// same woxDataDirectory policy regardless of which Go caller initiated the session.
 		exportFilePath, err := reserveScreenshotExportFilePath()
 		if err != nil {
@@ -381,12 +381,12 @@ func (u *uiImpl) CaptureScreenshot(ctx context.Context, request common.CaptureSc
 		request.ExportFilePath = exportFilePath
 	}
 
-	respData, err := u.invokeWebsocketMethod(ctx, "CaptureScreenshot", request)
+	respData, err := u.invokeUIMethod(ctx, "CaptureScreenshot", request)
 	if err != nil {
 		return common.CaptureScreenshotResult{}, err
 	}
 
-	result, mapErr := decodeWebsocketResponse[common.CaptureScreenshotResult](respData)
+	result, mapErr := decodeUIResponse[common.CaptureScreenshotResult](respData)
 	if mapErr != nil {
 		return common.CaptureScreenshotResult{}, mapErr
 	}
@@ -400,7 +400,7 @@ func (u *uiImpl) WriteClipboardImageFile(ctx context.Context, filePath string) e
 		return errors.New("clipboard image file path is empty")
 	}
 
-	respData, err := u.invokeWebsocketMethod(ctx, "WriteClipboardImageFile", map[string]string{
+	respData, err := u.invokeUIMethod(ctx, "WriteClipboardImageFile", map[string]string{
 		"filePath": filePath,
 	})
 	if err != nil {
@@ -412,16 +412,16 @@ func (u *uiImpl) WriteClipboardImageFile(ctx context.Context, filePath string) e
 	return nil
 }
 
-func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data any) (responseData any, responseErr error) {
+func (u *uiImpl) invokeUIMethod(ctx context.Context, method string, data any) (responseData any, responseErr error) {
 	requestID := uuid.NewString()
-	resultChan := make(chan WebsocketMsg)
+	resultChan := make(chan UIMessage)
 	u.requestMap.Store(requestID, resultChan)
 	defer u.requestMap.Delete(requestID)
 
 	traceId := util.GetContextTraceId(ctx)
 	sessionId := util.GetContextSessionId(ctx)
 
-	err := requestUI(ctx, WebsocketMsg{
+	err := requestUI(ctx, UIMessage{
 		RequestId: requestID,
 		TraceId:   traceId,
 		SessionId: sessionId,
@@ -433,7 +433,7 @@ func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data 
 		return "", err
 	}
 
-	timeout := getWebsocketMethodTimeout(method)
+	timeout := getUIMethodTimeout(method)
 	select {
 	case <-time.NewTimer(timeout).C:
 		logger.Error(ctx, fmt.Sprintf("invoke ui method %s response timeout", method))
@@ -447,7 +447,7 @@ func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data 
 	}
 }
 
-func getWebsocketMethodTimeout(method string) time.Duration {
+func getUIMethodTimeout(method string) time.Duration {
 	switch method {
 	case "PickFiles", "CaptureScreenshot":
 		// File pickers and screenshot sessions both wait on direct user interaction,
@@ -464,15 +464,15 @@ func getWebsocketMethodTimeout(method string) time.Duration {
 	}
 }
 
-func decodeWebsocketResponse[T any](data any) (T, error) {
+func decodeUIResponse[T any](data any) (T, error) {
 	var target T
 
 	jsonBytes, marshalErr := json.Marshal(data)
 	if marshalErr != nil {
-		return target, fmt.Errorf("marshal websocket response failed: %w", marshalErr)
+		return target, fmt.Errorf("marshal UI response failed: %w", marshalErr)
 	}
 	if unmarshalErr := json.Unmarshal(jsonBytes, &target); unmarshalErr != nil {
-		return target, fmt.Errorf("unmarshal websocket response failed: %w", unmarshalErr)
+		return target, fmt.Errorf("unmarshal UI response failed: %w", unmarshalErr)
 	}
 
 	return target, nil
@@ -550,45 +550,45 @@ func getAttentionUnreadCount(ctx context.Context) int {
 	return int(count)
 }
 
-func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
+func onUIRequest(ctx context.Context, request UIMessage) {
 	if request.Method != "Log" {
 		logger.Debug(ctx, fmt.Sprintf("got <%s> request from ui", request.Method))
 	}
 	if request.Method == "Query" {
 		tracker := timetracking.New("ui_request_dispatch_enter")
 		if tracker.Enabled() {
-			tracker.SetRawString("queryId", websocketMsgStringParam(request, "queryId"))
+			tracker.SetRawString("queryId", uiMessageStringParam(request, "queryId"))
 			tracker.SetRawString("method", request.Method)
 			tracker.Log(ctx)
 		}
 	}
 
-	// we handle time/amount sensitive requests in websocket, other requests in http (see router.go)
+	// we handle time/amount sensitive requests in process, while other requests use the core HTTP router (see router.go)
 	switch request.Method {
 	case "Log":
-		handleWebsocketLog(ctx, request)
+		handleUILog(ctx, request)
 	case "Query":
-		handleWebsocketQuery(ctx, request)
+		handleUIQuery(ctx, request)
 	case "QueryCompletionHintAccepted":
-		handleWebsocketQueryCompletionHintAccepted(ctx, request)
+		handleUIQueryCompletionHintAccepted(ctx, request)
 	case "QueryMRU":
-		handleWebsocketQueryMRU(ctx, request)
+		handleUIQueryMRU(ctx, request)
 	case "Action":
-		handleWebsocketAction(ctx, request)
+		handleUIAction(ctx, request)
 	case "FormAction":
-		handleWebsocketFormAction(ctx, request)
+		handleUIFormAction(ctx, request)
 	case "ToolbarMsgAction":
-		handleWebsocketToolbarMsgAction(ctx, request)
+		handleUIToolbarMsgAction(ctx, request)
 	case "TerminalSubscribe":
-		handleWebsocketTerminalSubscribe(ctx, request)
+		handleUITerminalSubscribe(ctx, request)
 	case "TerminalUnsubscribe":
-		handleWebsocketTerminalUnsubscribe(ctx, request)
+		handleUITerminalUnsubscribe(ctx, request)
 	case "TerminalSearch":
-		handleWebsocketTerminalSearch(ctx, request)
+		handleUITerminalSearch(ctx, request)
 	}
 }
 
-func onUIWebsocketResponse(ctx context.Context, response WebsocketMsg) {
+func onUIResponse(ctx context.Context, response UIMessage) {
 	// ShowToolbarMsg acknowledgements arrive at very high frequency during file
 	// indexing, and logging each one added noise without helping diagnose UI
 	// behavior because the request side already knows which toolbar snapshot it sent.
@@ -611,20 +611,20 @@ func onUIWebsocketResponse(ctx context.Context, response WebsocketMsg) {
 	resultChan <- response
 }
 
-func handleWebsocketLog(ctx context.Context, request WebsocketMsg) {
-	traceId, traceIdErr := getWebsocketMsgParameter(ctx, request, "traceId")
+func handleUILog(ctx context.Context, request UIMessage) {
+	traceId, traceIdErr := getUIMessageParameter(ctx, request, "traceId")
 	if traceIdErr != nil {
 		logger.Error(ctx, traceIdErr.Error())
 		responseUIError(ctx, request, traceIdErr.Error())
 		return
 	}
-	level, levelErr := getWebsocketMsgParameter(ctx, request, "level")
+	level, levelErr := getUIMessageParameter(ctx, request, "level")
 	if levelErr != nil {
 		logger.Error(ctx, levelErr.Error())
 		responseUIError(ctx, request, levelErr.Error())
 		return
 	}
-	message, messageErr := getWebsocketMsgParameter(ctx, request, "message")
+	message, messageErr := getUIMessageParameter(ctx, request, "message")
 	if messageErr != nil {
 		logger.Error(ctx, messageErr.Error())
 		responseUIError(ctx, request, messageErr.Error())
@@ -650,11 +650,11 @@ func handleWebsocketLog(ctx context.Context, request WebsocketMsg) {
 	responseUISuccess(ctx, request)
 }
 
-func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
+func handleUIQuery(ctx context.Context, request UIMessage) {
 	handlerStart := util.GetSystemTimestamp()
 	sessionId := request.SessionId
 	queryIdParamStart := util.GetSystemTimestamp()
-	queryId, queryIdErr := getWebsocketMsgParameter(ctx, request, "queryId")
+	queryId, queryIdErr := getUIMessageParameter(ctx, request, "queryId")
 	if queryIdErr != nil {
 		logger.Error(ctx, queryIdErr.Error())
 		responseUIError(ctx, request, queryIdErr.Error())
@@ -672,7 +672,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	}
 
 	queryTypeParamStart := util.GetSystemTimestamp()
-	queryType, queryTypeErr := getWebsocketMsgParameter(ctx, request, "queryType")
+	queryType, queryTypeErr := getUIMessageParameter(ctx, request, "queryType")
 	if queryTypeErr != nil {
 		logger.Error(ctx, queryTypeErr.Error())
 		responseUIError(ctx, request, queryTypeErr.Error())
@@ -680,7 +680,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	}
 	queryTypeParamCost := util.GetSystemTimestamp() - queryTypeParamStart
 	queryTextParamStart := util.GetSystemTimestamp()
-	queryText, queryTextErr := getWebsocketMsgParameter(ctx, request, "queryText")
+	queryText, queryTextErr := getUIMessageParameter(ctx, request, "queryText")
 	if queryTextErr != nil {
 		logger.Error(ctx, queryTextErr.Error())
 		responseUIError(ctx, request, queryTextErr.Error())
@@ -688,7 +688,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	}
 	queryTextParamCost := util.GetSystemTimestamp() - queryTextParamStart
 	querySelectionParamStart := util.GetSystemTimestamp()
-	querySelectionJson, querySelectionErr := getWebsocketMsgParameter(ctx, request, "querySelection")
+	querySelectionJson, querySelectionErr := getUIMessageParameter(ctx, request, "querySelection")
 	if querySelectionErr != nil {
 		logger.Error(ctx, querySelectionErr.Error())
 		responseUIError(ctx, request, querySelectionErr.Error())
@@ -923,7 +923,7 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 			if showBackendPreparedTail {
 				backendPreparedCategory := plugin.QueryResultTailTextCategoryDefault
 				elapsedTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", backendPreparedElapsedMs), backendPreparedCategory)
-				elapsedTail.Tooltip = "Backend ready to send elapsed since Flutter query request"
+				elapsedTail.Tooltip = "Backend ready to send elapsed since UI query request"
 				resultCopy.Tails = append(resultCopy.Tails, elapsedTail)
 			}
 		}
@@ -952,21 +952,21 @@ func queryDebugPluginQueryTailTextCategory(elapsedMs int64) plugin.QueryResultTa
 	return plugin.QueryResultTailTextCategoryDefault
 }
 
-func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {
+func handleUIAction(ctx context.Context, request UIMessage) {
 	sessionId := request.SessionId
-	resultId, idErr := getWebsocketMsgParameter(ctx, request, "resultId")
+	resultId, idErr := getUIMessageParameter(ctx, request, "resultId")
 	if idErr != nil {
 		logger.Error(ctx, idErr.Error())
 		responseUIError(ctx, request, idErr.Error())
 		return
 	}
-	actionId, actionIdErr := getWebsocketMsgParameter(ctx, request, "actionId")
+	actionId, actionIdErr := getUIMessageParameter(ctx, request, "actionId")
 	if actionIdErr != nil {
 		logger.Error(ctx, actionIdErr.Error())
 		responseUIError(ctx, request, actionIdErr.Error())
 		return
 	}
-	queryId, queryErr := getWebsocketMsgParameter(ctx, request, "queryId")
+	queryId, queryErr := getUIMessageParameter(ctx, request, "queryId")
 	if queryErr != nil {
 		logger.Error(ctx, queryErr.Error())
 		responseUIError(ctx, request, queryErr.Error())
@@ -983,26 +983,26 @@ func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {
 	responseUISuccess(ctx, request)
 }
 
-func handleWebsocketFormAction(ctx context.Context, request WebsocketMsg) {
-	resultId, idErr := getWebsocketMsgParameter(ctx, request, "resultId")
+func handleUIFormAction(ctx context.Context, request UIMessage) {
+	resultId, idErr := getUIMessageParameter(ctx, request, "resultId")
 	if idErr != nil {
 		logger.Error(ctx, idErr.Error())
 		responseUIError(ctx, request, idErr.Error())
 		return
 	}
-	actionId, actionIdErr := getWebsocketMsgParameter(ctx, request, "actionId")
+	actionId, actionIdErr := getUIMessageParameter(ctx, request, "actionId")
 	if actionIdErr != nil {
 		logger.Error(ctx, actionIdErr.Error())
 		responseUIError(ctx, request, actionIdErr.Error())
 		return
 	}
-	values, valuesErr := getWebsocketMsgParameterMap(ctx, request, "values")
+	values, valuesErr := getUIMessageParameterMap(ctx, request, "values")
 	if valuesErr != nil {
 		logger.Error(ctx, valuesErr.Error())
 		responseUIError(ctx, request, valuesErr.Error())
 		return
 	}
-	queryId, queryErr := getWebsocketMsgParameter(ctx, request, "queryId")
+	queryId, queryErr := getUIMessageParameter(ctx, request, "queryId")
 	if queryErr != nil {
 		logger.Error(ctx, queryErr.Error())
 		responseUIError(ctx, request, queryErr.Error())
@@ -1020,15 +1020,15 @@ func handleWebsocketFormAction(ctx context.Context, request WebsocketMsg) {
 	responseUISuccess(ctx, request)
 }
 
-func handleWebsocketToolbarMsgAction(ctx context.Context, request WebsocketMsg) {
-	toolbarMsgId, statusErr := getWebsocketMsgParameter(ctx, request, "toolbarMsgId")
+func handleUIToolbarMsgAction(ctx context.Context, request UIMessage) {
+	toolbarMsgId, statusErr := getUIMessageParameter(ctx, request, "toolbarMsgId")
 	if statusErr != nil {
 		logger.Error(ctx, statusErr.Error())
 		responseUIError(ctx, request, statusErr.Error())
 		return
 	}
 
-	actionId, actionErr := getWebsocketMsgParameter(ctx, request, "actionId")
+	actionId, actionErr := getUIMessageParameter(ctx, request, "actionId")
 	if actionErr != nil {
 		logger.Error(ctx, actionErr.Error())
 		responseUIError(ctx, request, actionErr.Error())
@@ -1044,30 +1044,30 @@ func handleWebsocketToolbarMsgAction(ctx context.Context, request WebsocketMsg) 
 	responseUISuccess(ctx, request)
 }
 
-func handleWebsocketQueryMRU(ctx context.Context, request WebsocketMsg) {
-	queryId, _ := getWebsocketMsgParameter(ctx, request, "queryId")
+func handleUIQueryMRU(ctx context.Context, request UIMessage) {
+	queryId, _ := getUIMessageParameter(ctx, request, "queryId")
 	mruResults := plugin.GetPluginManager().QueryMRU(ctx, request.SessionId, queryId)
-	logger.Info(ctx, fmt.Sprintf("found %d MRU results via websocket", len(mruResults)))
+	logger.Info(ctx, fmt.Sprintf("found %d MRU results from UI", len(mruResults)))
 	responseUISuccessWithData(ctx, request, mruResults)
 }
 
-// handleWebsocketQueryCompletionHintAccepted records positive feedback from accepted inline hints.
-func handleWebsocketQueryCompletionHintAccepted(ctx context.Context, request WebsocketMsg) {
-	inputPrefix, inputPrefixErr := getWebsocketMsgParameter(ctx, request, "inputPrefix")
+// handleUIQueryCompletionHintAccepted records positive feedback from accepted inline hints.
+func handleUIQueryCompletionHintAccepted(ctx context.Context, request UIMessage) {
+	inputPrefix, inputPrefixErr := getUIMessageParameter(ctx, request, "inputPrefix")
 	if inputPrefixErr != nil {
 		logger.Error(ctx, inputPrefixErr.Error())
 		responseUIError(ctx, request, inputPrefixErr.Error())
 		return
 	}
 
-	completionText, completionTextErr := getWebsocketMsgParameter(ctx, request, "completionText")
+	completionText, completionTextErr := getUIMessageParameter(ctx, request, "completionText")
 	if completionTextErr != nil {
 		logger.Error(ctx, completionTextErr.Error())
 		responseUIError(ctx, request, completionTextErr.Error())
 		return
 	}
 
-	source, sourceErr := getWebsocketMsgParameter(ctx, request, "source")
+	source, sourceErr := getUIMessageParameter(ctx, request, "source")
 	if sourceErr != nil {
 		logger.Error(ctx, sourceErr.Error())
 		responseUIError(ctx, request, sourceErr.Error())
@@ -1080,7 +1080,7 @@ func handleWebsocketQueryCompletionHintAccepted(ctx context.Context, request Web
 	responseUISuccess(ctx, request)
 }
 
-func handleWebsocketTerminalSubscribe(ctx context.Context, request WebsocketMsg) {
+func handleUITerminalSubscribe(ctx context.Context, request UIMessage) {
 	dataMap, ok := request.Data.(map[string]any)
 	if !ok {
 		responseUIError(ctx, request, "invalid terminal subscribe payload")
@@ -1114,7 +1114,7 @@ func handleWebsocketTerminalSubscribe(ctx context.Context, request WebsocketMsg)
 	responseUISuccessWithData(ctx, request, state)
 }
 
-func handleWebsocketTerminalUnsubscribe(ctx context.Context, request WebsocketMsg) {
+func handleUITerminalUnsubscribe(ctx context.Context, request UIMessage) {
 	dataMap, ok := request.Data.(map[string]any)
 	if !ok {
 		responseUIError(ctx, request, "invalid terminal unsubscribe payload")
@@ -1131,7 +1131,7 @@ func handleWebsocketTerminalUnsubscribe(ctx context.Context, request WebsocketMs
 	responseUISuccess(ctx, request)
 }
 
-func handleWebsocketTerminalSearch(ctx context.Context, request WebsocketMsg) {
+func handleUITerminalSearch(ctx context.Context, request UIMessage) {
 	dataMap, ok := request.Data.(map[string]any)
 	if !ok {
 		responseUIError(ctx, request, "invalid terminal search payload")
@@ -1173,7 +1173,7 @@ func handleWebsocketTerminalSearch(ctx context.Context, request WebsocketMsg) {
 	responseUISuccessWithData(ctx, request, result)
 }
 
-func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string) (string, error) {
+func getUIMessageParameter(ctx context.Context, msg UIMessage, key string) (string, error) {
 	jsonData, marshalErr := json.Marshal(msg.Data)
 	if marshalErr != nil {
 		return "", marshalErr
@@ -1187,7 +1187,7 @@ func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string)
 	return paramterData.String(), nil
 }
 
-func getWebsocketMsgParameterMap(ctx context.Context, msg WebsocketMsg, key string) (map[string]string, error) {
+func getUIMessageParameterMap(ctx context.Context, msg UIMessage, key string) (map[string]string, error) {
 	jsonData, marshalErr := json.Marshal(msg.Data)
 	if marshalErr != nil {
 		return nil, marshalErr

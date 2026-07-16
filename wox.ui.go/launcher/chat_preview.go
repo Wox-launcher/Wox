@@ -251,7 +251,7 @@ func snapshotChatPreviewLocked(state *chatPreviewState) *chatPreviewSnapshot {
 	return snapshot
 }
 
-// ensureChatPreview bootstraps one shared chat state without overwriting newer websocket snapshots on rebuild.
+// ensureChatPreview bootstraps one shared chat state without overwriting newer streamed snapshots on rebuild.
 func (a *App) ensureChatPreview(result queryResult, preview queryPreview) (*chatPreviewSnapshot, error) {
 	var data chatPreviewData
 	if err := json.Unmarshal([]byte(preview.PreviewData), &data); err != nil {

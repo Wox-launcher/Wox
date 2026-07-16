@@ -78,7 +78,7 @@ type mediaContextData struct {
 	AppBundleID string `json:"appBundleId"`
 }
 
-// mediaPreviewData is the internal payload for Flutter's dedicated now-playing surface.
+// mediaPreviewData is the internal payload for UI's dedicated now-playing surface.
 type mediaPreviewData struct {
 	Title     string `json:"title"`
 	Artist    string `json:"artist"`

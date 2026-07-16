@@ -185,6 +185,7 @@ func (a *App) build(frame woxui.FrameInfo) woxwidget.Widget {
 func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
 	const queryLeftPadding = float32(8)
 	const accessoryGap = float32(12)
+	const queryVerticalPadding = float32(queryBoxHeight-queryEditorHeight) / 2
 	horizontalPadding := snapshot.palette.appPadding.Left + snapshot.palette.appPadding.Right
 	contentWidth := max(float32(0), width-horizontalPadding-queryLeftPadding-6)
 	queryWidth := contentWidth
@@ -212,7 +213,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidge
 	}
 	queryWidth = max(float32(140), queryWidth)
 	children := []woxwidget.Widget{woxwidget.Container{
-		Width: queryWidth, Height: queryBoxHeight, Padding: woxwidget.Insets{Top: 4, Bottom: queryBoxHeight - 4 - queryEditorHeight},
+		Width: queryWidth, Height: queryBoxHeight, Padding: woxwidget.Insets{Top: queryVerticalPadding, Bottom: queryVerticalPadding},
 		Child: a.buildQuery(snapshot, queryWidth, queryEditorHeight),
 	}}
 	if len(snapshot.refinements) > 0 {
@@ -245,6 +246,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidge
 }
 
 func (a *App) buildQuery(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
+	const caretHeight = float32(34)
 	style := woxui.TextStyle{Size: 28}
 	return woxwidget.Gesture{
 		ID: "query-editor",
@@ -254,6 +256,7 @@ func (a *App) buildQuery(snapshot viewSnapshot, width, height float32) woxwidget
 		Child: woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			state := snapshot.editing
 			queryFocused := snapshot.form == nil && !snapshot.requirementFormActive && !snapshot.actionPanel
+			caretY := bounds.Y + (bounds.Height-caretHeight)/2
 			runes := []rune(state.Text)
 			start := max(0, min(len(runes), state.Selection.Start()))
 			end := max(start, min(len(runes), state.Selection.End()))
@@ -275,7 +278,7 @@ func (a *App) buildQuery(snapshot viewSnapshot, width, height float32) woxwidget
 			prefixMetrics, _ := a.window.MeasureText(prefix, style)
 			selectedMetrics, _ := a.window.MeasureText(selected, style)
 			if queryFocused && state.Composition == "" && start != end {
-				displayList.FillRoundedRect(woxui.Rect{X: bounds.X + prefixMetrics.Size.Width, Y: bounds.Y, Width: selectedMetrics.Size.Width, Height: 34}, 3, snapshot.palette.selectionBackground)
+				displayList.FillRoundedRect(woxui.Rect{X: bounds.X + prefixMetrics.Size.Width, Y: caretY, Width: selectedMetrics.Size.Width, Height: caretHeight}, 3, snapshot.palette.selectionBackground)
 			}
 			displayList.DrawText(displayValue, bounds, style, color)
 			if queryFocused && state.Composition == "" && selected != "" {
@@ -291,11 +294,11 @@ func (a *App) buildQuery(snapshot viewSnapshot, width, height float32) woxwidget
 			}
 			caretMetrics, _ := a.window.MeasureText(caretPrefix, style)
 			cursorX := bounds.X + caretMetrics.Size.Width
-			displayList.FillRect(woxui.Rect{X: cursorX, Y: bounds.Y, Width: 1, Height: 34}, snapshot.palette.cursor)
-			_ = a.window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: cursorX, Y: bounds.Y, Width: 1, Height: 34}})
+			displayList.FillRect(woxui.Rect{X: cursorX, Y: caretY, Width: 1, Height: caretHeight}, snapshot.palette.cursor)
+			_ = a.window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: cursorX, Y: caretY, Width: 1, Height: caretHeight}})
 			if state.Composition != "" {
 				compositionMetrics, _ := a.window.MeasureText(state.Composition, style)
-				displayList.FillRect(woxui.Rect{X: bounds.X + prefixMetrics.Size.Width, Y: bounds.Y + 33, Width: compositionMetrics.Size.Width, Height: 1}, snapshot.palette.cursor)
+				displayList.FillRect(woxui.Rect{X: bounds.X + prefixMetrics.Size.Width, Y: caretY + caretHeight - 1, Width: compositionMetrics.Size.Width, Height: 1}, snapshot.palette.cursor)
 			}
 		}},
 	}
@@ -660,7 +663,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidge
 	}}
 }
 
-// buildToolbarAction renders the same label-and-keycap unit used by Flutter's launcher toolbar.
+// buildToolbarAction renders one label-and-keycap unit for the launcher toolbar.
 func (a *App) buildToolbarAction(id, label, hotkey string, palette uiPalette, onTap func()) (woxwidget.Widget, float32) {
 	labelStyle := woxui.TextStyle{Size: 12}
 	labelMetrics, _ := a.window.MeasureText(label, labelStyle)
@@ -673,7 +676,7 @@ func (a *App) buildToolbarAction(id, label, hotkey string, palette uiPalette, on
 	return woxwidget.Gesture{ID: id, OnTap: onTap, Child: content}, width
 }
 
-// buildHotkeyView mirrors Flutter's separate 22px keycaps while using the native system font.
+// buildHotkeyView renders separate 22px keycaps with the native system font.
 func (a *App) buildHotkeyView(hotkey string, foreground, background woxui.Color) (woxwidget.Widget, float32) {
 	style := woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}
 	labels := formatHotkeyLabels(hotkey)

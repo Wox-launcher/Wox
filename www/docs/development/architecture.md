@@ -4,12 +4,12 @@ This guide explains how Wox is split across the repository and how data moves th
 
 ## The big picture
 
-Wox is a desktop launcher with a Go core and a Flutter desktop UI. Third-party plugins do not run inside the Go process directly. They run inside dedicated language hosts and communicate with the core over WebSocket-based JSON-RPC.
+Wox is a desktop launcher whose Go core and native Go UI run in one process. Third-party plugins run inside dedicated language hosts and communicate with the core over WebSocket-based JSON-RPC.
 
 At a high level:
 
 ```text
-Flutter UI  <->  wox.core  <->  plugin hosts  <->  plugins
+Go UI + wox.core  <->  plugin hosts  <->  plugins
 ```
 
 ## Main components
@@ -22,7 +22,7 @@ Flutter UI  <->  wox.core  <->  plugin hosts  <->  plugins
 - built-in plugin execution
 - third-party plugin lifecycle and metadata loading
 - settings and data storage
-- WebSocket and HTTP endpoints used by the UI
+- the in-process UI bridge and loopback HTTP endpoints
 - packaging the final desktop runtime assets
 
 Areas worth knowing early:
@@ -32,7 +32,7 @@ Areas worth knowing early:
 - `wox.core/setting/`: setting definitions and persistence
 - `wox.core/resource/`: embedded UI, host binaries, translations, other runtime resources
 
-### `wox.ui.flutter/wox`
+### `wox.ui.go`
 
 This is the desktop UI that users see. It renders:
 
@@ -42,7 +42,7 @@ This is the desktop UI that users see. It renders:
 - screenshot flows
 - webview previews and related native bridges
 
-The UI talks to `wox.core` over WebSocket and HTTP. It does not own plugin execution. Its job is to render state, send user intent back to the core, and host platform-specific presentation logic.
+The UI is imported by `wox.core` and uses an in-process backend. It does not own plugin execution. Its job is to render state, send user intent back to the core, and host platform-specific presentation logic.
 
 ### `wox.plugin.host.nodejs` and `wox.plugin.host.python`
 
@@ -69,7 +69,7 @@ These are the SDKs used by third-party plugin authors. They provide:
 
 When a user types in Wox:
 
-1. the Flutter UI sends the query to `wox.core`
+1. the Go UI sends the query to `wox.core` through the in-process backend
 2. `wox.core` decides which built-in plugins and third-party plugins should run
 3. built-in plugins execute directly in Go
 4. third-party plugins are invoked through the matching plugin host
@@ -102,7 +102,7 @@ The plugin calls the SDK API, the host forwards the request to `wox.core`, and t
 Understanding the ownership boundary saves a lot of debugging time:
 
 - If the problem is about query routing, plugin metadata, settings persistence, or runtime contracts, start in `wox.core`.
-- If the problem is visual or input-related, start in `wox.ui.flutter/wox`.
+- If the problem is visual or input-related, start in `wox.ui.go`.
 - If a third-party plugin API works in one language but not another, inspect the host and SDK layers together.
 
 ## Repository workflow
@@ -111,7 +111,6 @@ The top-level `Makefile` is the entrypoint for cross-project development:
 
 - `make dev`: prepare shared resources and build plugin hosts
 - `make test`: run the Go test suite under `wox.core/test`
-- `make smoke`: run desktop smoke tests from `wox.test`
 - `make build`: build the full application and packaging outputs
 
 For changes that touch shared contracts, `make build` is the verification step that matters most.

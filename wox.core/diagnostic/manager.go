@@ -356,7 +356,7 @@ func (m *Manager) addMacOSCrashReports(zipWriter *zip.Writer) {
 		if !(strings.HasSuffix(lower, ".ips") || strings.HasSuffix(lower, ".crash")) {
 			continue
 		}
-		if !(strings.HasPrefix(lower, "wox") || strings.HasPrefix(lower, "wox-ui")) {
+		if !strings.HasPrefix(lower, "wox") {
 			continue
 		}
 		info, statErr := entry.Info()

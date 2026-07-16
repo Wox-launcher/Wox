@@ -35,7 +35,7 @@ type ToolbarMsgActionContext struct {
 	ContextData        common.ContextData
 }
 
-// ToolbarMsgActionUI is the UI-safe action snapshot sent to Flutter.
+// ToolbarMsgActionUI is the UI-safe action snapshot sent to UI.
 type ToolbarMsgActionUI struct {
 	Id                     string
 	Name                   string
@@ -46,7 +46,7 @@ type ToolbarMsgActionUI struct {
 	ContextData            common.ContextData
 }
 
-// ToolbarMsgUI is the UI-safe toolbar msg snapshot sent to Flutter.
+// ToolbarMsgUI is the UI-safe toolbar msg snapshot sent to UI.
 type ToolbarMsgUI struct {
 	Id            string
 	Title         string

@@ -315,7 +315,7 @@ func (p *ScreenshotPlugin) listScreenshotHistory() ([]screenshotHistoryItem, err
 
 		// Reusing the existing screenshot export directory keeps the history feature storage-free.
 		// The file modification time is the simplest durable ordering signal for captures already
-		// written by Flutter, and zero-byte reservation files are skipped above.
+		// written by UI, and zero-byte reservation files are skipped above.
 		ocrText := ""
 		if sidecar, sidecarErr := p.readScreenshotOCRSidecar(filepath.Join(screenshotDirectory, entry.Name()), info); sidecarErr == nil {
 			ocrText = sidecar.Text
@@ -810,7 +810,7 @@ func (p *ScreenshotPlugin) pinScreenshotToScreen(ctx context.Context, screenshot
 	offsetY := 0.0
 	if selectionRect != nil {
 		// The PNG may be device-pixel sized on high-DPI screens, while the overlay API positions and
-		// sizes windows in logical desktop coordinates. Use Flutter's selection rect for the pinned
+		// sizes windows in logical desktop coordinates. Use UI's selection rect for the pinned
 		// window so the image appears at the same desktop size the user selected.
 		if selectionRect.Width >= 1 {
 			width = selectionRect.Width
@@ -824,7 +824,7 @@ func (p *ScreenshotPlugin) pinScreenshotToScreen(ctx context.Context, screenshot
 
 	name := screenshotPinnedOverlayPrefix + util.Md5([]byte(fmt.Sprintf("%s:%d", screenshotPath, time.Now().UnixNano())))
 	// Refactor: pinned screenshots now use the same file-backed image overlay helper as preview
-	// overlays. The helper validates the file and reads header dimensions when Flutter does not
+	// overlays. The helper validates the file and reads header dimensions when UI does not
 	// provide a logical selection size, keeping screenshot pinning and image preview on one path.
 	err := imageoverlay.Show(ctx, imageoverlay.Options{
 		ID:            name,
@@ -872,7 +872,7 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 	request := common.DefaultCaptureScreenshotRequest()
 	result, err := plugin.GetPluginManager().GetUI().CaptureScreenshot(ctx, request)
 	if err != nil {
-		// The screenshot session spans Go, Flutter, and the native bridge, so transport failures need a local
+		// The screenshot session spans Go, UI, and the native bridge, so transport failures need a local
 		// notification here instead of silently falling through to keep the action predictable for the user.
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("capture screenshot request failed: %s", err.Error()))
 		p.notifyCaptureFailure(ctx, "", err.Error())
@@ -881,7 +881,7 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 
 	switch result.Status {
 	case common.CaptureScreenshotStatusCompleted:
-		// Screenshot export and clipboard write now complete inside Flutter plus the platform runner.
+		// Screenshot export and clipboard write now complete inside UI plus the platform runner.
 		// Go treats a completed export as success and only surfaces clipboard warnings separately.
 		if result.ScreenshotPath == "" {
 			p.api.Log(ctx, plugin.LogLevelError, "screenshot completed without an export path")
@@ -896,7 +896,7 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 		}
 		p.scheduleScreenshotOCR(result.ScreenshotPath)
 		if result.PinToScreen {
-			// Flutter owns final image composition, but the pinned desktop window belongs in Go because
+			// UI owns final image composition, but the pinned desktop window belongs in Go because
 			// util/overlay is already the native surface abstraction used by core. Branching on the
 			// explicit result flag avoids overloading normal clipboard confirmation with pin behavior.
 			if err := p.pinScreenshotToScreen(ctx, result.ScreenshotPath, result.LogicalSelectionRect); err != nil {

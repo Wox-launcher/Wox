@@ -99,7 +99,7 @@ type pluginQueryInput struct {
 	query Query
 	// metadataLayout is the layout derived from plugin metadata before Plugin.Query runs.
 	metadataLayout QueryLayout
-	// queryContext is the backend-owned query classification returned to Flutter.
+	// queryContext is the backend-owned query classification returned to UI.
 	queryContext QueryContext
 	// blocked means query requirements produced a settings row instead of calling Plugin.Query.
 	blocked bool
@@ -157,7 +157,7 @@ type Manager struct {
 	systemPluginsWg sync.WaitGroup // waits for all system plugins to finish loading
 	ui              common.UI
 
-	// Query pipelines are concurrent in core even though Flutter displays only
+	// Query pipelines are concurrent in core even though UI displays only
 	// one active query. Key by session and query id so a late pipeline cannot
 	// overwrite the result snapshot needed by another query's final response.
 	sessionQueryResultCache *util.HashMap[string, *util.HashMap[string, *QueryResultSet]]
@@ -1763,7 +1763,7 @@ func (m *Manager) normalizeListPreviewData(ctx context.Context, pluginInstance *
 
 func (m *Manager) normalizePreviewMetadata(ctx context.Context, pluginInstance *Instance, preview WoxPreview) WoxPreview {
 	// PreviewTags are the UI-facing metadata contract. Translate them in core so
-	// Flutter only consumes one tag list and does not need to know about the
+	// UI only consumes one tag list and does not need to know about the
 	// deprecated key/value PreviewProperties compatibility shape.
 	for i := range preview.PreviewTags {
 		preview.PreviewTags[i].Label = m.translatePlugin(ctx, pluginInstance, preview.PreviewTags[i].Label)
@@ -1876,8 +1876,8 @@ func (m *Manager) startSessionQueryCache(query Query) {
 
 	sessionQueries, _ := m.sessionQueryResultCache.LoadOrStore(query.SessionId, util.NewHashMap[string, *QueryResultSet]())
 
-	// Bug fix: a UI session can have multiple backend query pipelines in flight
-	// because WebSocket requests and plugin responses are handled concurrently.
+	// A UI session can have multiple backend query pipelines in flight because UI
+	// requests and plugin responses are handled concurrently.
 	// Store every query under its own query id so a late old query cannot erase
 	// the result cache required to send the newer query's final response.
 	sessionQueries.Store(query.Id, newQueryResultSet(query))
@@ -1909,7 +1909,7 @@ func (m *Manager) pruneSessionQueryCache(sessionQueries *util.HashMap[string, *Q
 	// Query caches are now keyed by query id, so without a small cap every typed
 	// character would leave a completed result set behind. Keep the newest sets
 	// plus the query that was just started; old non-current responses are still
-	// safe to drop because Flutter ignores them by query id.
+	// safe to drop because UI ignores them by query id.
 	for sessionQueries.Len() > maxCachedQueriesPerSession && len(entries) > 0 {
 		if entries[0].queryId == keepQueryId {
 			entries = entries[1:]
@@ -1966,7 +1966,7 @@ func (m *Manager) clearLazyResultIconsForSessionExcept(sessionId string, keepQue
 
 	// Lazy image tokens are scoped to the polished query result that created them.
 	// When the same launcher session starts a newer query, old tokens should stop
-	// resolving so a late Flutter image request cannot hydrate an icon for stale UI.
+	// resolving so a late UI image request cannot hydrate an icon for stale UI.
 	var tokensToDelete []string
 	m.lazyResultIcons.Range(func(token string, entry *lazyResultIconEntry) bool {
 		if entry != nil && entry.SessionId == sessionId && entry.QueryId != keepQueryId {
@@ -2007,7 +2007,9 @@ func (m *Manager) convertResultIconWithRecorder(ctx context.Context, pluginInsta
 		return convertedIcon
 	}
 
-	// Lazy load markers are returned when the plugin-provided icon is too large to send directly through the WebSocket. They contain the original source plus a token that can be used to retrieve the converted thumbnail later. If parsing fails, fall back to returning the lazy marker itself so at least some icon gets to Flutter instead of nothing.
+	// Lazy load markers keep large plugin icons out of every result payload. They
+	// contain the original source plus a token used to retrieve the converted
+	// thumbnail later. If parsing fails, return the marker so UI still receives an icon.
 	payload, payloadErr := common.ParseWoxLazyLoadImagePayload(convertedIcon)
 	if payloadErr != nil || payload.Source == nil || payload.Source.IsEmpty() {
 		return convertedIcon
@@ -2026,7 +2028,7 @@ func (m *Manager) convertResultIconWithRecorder(ctx context.Context, pluginInsta
 	}
 
 	// If a result cannot be tokenized, keep old behavior instead of leaking an
-	// unregistered lazy marker to Flutter.
+	// unregistered lazy marker to UI.
 	if recorder != nil {
 		diagnostics.Purpose = "result_icon_lazy_fallback"
 		return common.ConvertIconWithSizeWithDiagnostics(ctx, *payload.Source, pluginDirectory, targetSize, diagnostics)
@@ -2040,7 +2042,7 @@ func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *In
 	}
 
 	// Store the original normalized image, not a pre-decoded bitmap. The expensive
-	// decode/crop/resize work is intentionally deferred until Flutter asks for this
+	// decode/crop/resize work is intentionally deferred until UI asks for this
 	// token from a visible result image widget.
 	token := uuid.NewString()
 	m.lazyResultIcons.Store(token, &lazyResultIconEntry{
@@ -2099,7 +2101,7 @@ func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.
 
 	startedAt := util.GetSystemTimestamp()
 	// Lazy load requests intentionally use the original synchronous converter
-	// because this path runs after Flutter has built an image widget for the
+	// because this path runs after UI has built an image widget for the
 	// result. That keeps the query response fast while still reusing the existing
 	// crop/resize/cache behavior for the actual thumbnail artifact.
 	converted := common.ConvertIconWithSize(ctx, entry.OriginalIcon, entry.PluginDirectory, entry.TargetSize)
@@ -2343,7 +2345,7 @@ func (m *Manager) GetQueryInfoByResultId(resultId string) (string, string) {
 func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) QueryResultUI {
 	uiResult := resultCache.Result
 	// Core-owned interactive previews must keep their concrete preview type in the
-	// result payload. If they were wrapped as remote previews, Flutter could not
+	// result payload. If they were wrapped as remote previews, UI could not
 	// choose the dedicated fullscreen/editing surface before loading the preview.
 	if !uiResult.Preview.IsEmpty() &&
 		uiResult.Preview.PreviewType != WoxPreviewTypeRemote &&
@@ -2453,7 +2455,7 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 	}
 	// Bug fix: snapshot lookup must use the query id, not the session's latest
 	// query. Multiple backend query pipelines can finish out of order, while
-	// Flutter filters visibility by QueryId after the response is delivered.
+	// UI filters visibility by QueryId after the response is delivered.
 	set, found := m.getQueryResultSet(sessionId, queryId)
 	if !found {
 		return []QueryResultUI{}
@@ -3058,7 +3060,7 @@ func (m *Manager) getResultIconSizeForQuery(pluginInstance *Instance, query Quer
 
 	// QueryResponse layout is now the preferred grid source. The previous check
 	// only read deprecated metadata, which made plugins that migrated to
-	// QueryResponse render grid images at list size before Flutter placed them
+	// QueryResponse render grid images at list size before UI placed them
 	// into grid cells.
 	if layout.GridLayout != nil {
 		return common.ResultGridIconSize

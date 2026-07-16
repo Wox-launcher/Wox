@@ -176,7 +176,7 @@ func applyAIProviderOptionsToRowFormLocked(fields *formFieldsState, definition f
 	}
 }
 
-// applyAIProviderDefaultHostLocked mirrors the provider-to-default-host mapping used by the Flutter settings form.
+// applyAIProviderDefaultHostLocked mirrors the provider-to-default-host mapping used by the UI settings form.
 func applyAIProviderDefaultHostLocked(state *formTableEditorState, overwrite bool, providers []aiProviderInfo) {
 	if state == nil || state.definition.Value.Key != "AIProviders" || state.rowForm == nil {
 		return

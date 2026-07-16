@@ -66,7 +66,7 @@ func (a *App) imageFor(source woxImage) *woxui.Image {
 	return a.imageForTint(source, nil, 256)
 }
 
-// imageForTint applies a Flutter-compatible srcIn tint to SVG images without changing raster assets.
+// imageForTint applies a source-in tint to SVG images without changing raster assets.
 func (a *App) imageForTint(source woxImage, tint *woxui.Color, svgSize int) *woxui.Image {
 	if source.ImageType == "" || source.ImageData == "" {
 		return nil

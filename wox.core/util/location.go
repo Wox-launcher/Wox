@@ -11,11 +11,6 @@ import (
 	"github.com/mitchellh/go-homedir"
 )
 
-const (
-	UIImplementationEnv = "WOX_UI_IMPLEMENTATION"
-	UIImplementationGo  = "go"
-)
-
 var locationInstance *Location
 var locationOnce sync.Once
 
@@ -283,30 +278,6 @@ func (l *Location) GetBackupDirectory() string {
 
 func (l *Location) GetFileSearchDirectory() string {
 	return path.Join(l.woxDataDirectory, "filesearch")
-}
-
-func (l *Location) GetUIAppPath() string {
-	if IsGoUIImplementation() {
-		if IsWindows() {
-			return path.Join(l.GetUIDirectory(), "go", "wox-ui.exe")
-		}
-		return path.Join(l.GetUIDirectory(), "go", "wox-ui")
-	}
-	if IsWindows() {
-		return path.Join(l.GetUIDirectory(), "flutter", "wox", "wox-ui.exe")
-	}
-	if IsLinux() {
-		return path.Join(l.GetUIDirectory(), "flutter", "wox", "wox-ui")
-	}
-	if IsMacOS() {
-		return path.Join(l.GetUIDirectory(), "flutter", "wox-ui.app", "Contents", "MacOS", "wox-ui")
-	}
-	return ""
-}
-
-// IsGoUIImplementation reports whether core should run the embedded Go UI.
-func IsGoUIImplementation() bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv(UIImplementationEnv)), UIImplementationGo)
 }
 
 func (l *Location) GetAppLockPath() string {

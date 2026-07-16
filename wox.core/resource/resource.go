@@ -56,14 +56,8 @@ func Extract(ctx context.Context) error {
 			return rmErr
 		}
 	}
-	if util.IsGoUIImplementation() {
-		if goUIErr := extractFiles(ctx, UIFS, uiDiretory, "ui/go", true); goUIErr != nil {
-			return goUIErr
-		}
-	} else {
-		if flutterErr := extractFiles(ctx, UIFS, uiDiretory, "ui/flutter", true); flutterErr != nil {
-			return flutterErr
-		}
+	if goUIErr := extractFiles(ctx, UIFS, uiDiretory, "ui/go", true); goUIErr != nil {
+		return goUIErr
 	}
 
 	// others

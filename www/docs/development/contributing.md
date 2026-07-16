@@ -35,7 +35,7 @@ git checkout -b feature/your-change
 2. Make the change in the correct layer
 
 - `wox.core/` for backend logic, built-in plugins, settings, contracts
-- `wox.ui.flutter/wox/` for launcher UI, settings UI, screenshot UI, platform presentation
+- `wox.ui.go/` for launcher UI, settings UI, screenshot UI, platform presentation
 - `wox.plugin.host.*` for plugin runtime bridge behavior
 - `wox.plugin.*` for public plugin SDK changes
 - `www/docs/` for documentation
@@ -47,7 +47,7 @@ Examples:
 ```bash
 make -C wox.core build
 make -C wox.plugin.host.nodejs build
-make -C wox.ui.flutter/wox build
+cd wox.ui.go && go test ./...
 ```
 
 4. Run broader verification before opening a PR
@@ -55,8 +55,6 @@ make -C wox.ui.flutter/wox build
 ```bash
 make build
 ```
-
-Use `make smoke` when you changed a user-facing desktop flow and need end-to-end coverage.
 
 ## Testing expectations
 
@@ -66,14 +64,12 @@ Useful commands:
 
 ```bash
 make test
-make smoke
 make build
 ```
 
 In practice:
 
 - `make test` is the default backend regression check
-- `make smoke` is valuable for launcher, screenshot, settings, and other real UI workflows
 - `make build` is the final cross-project guardrail for shared contract changes
 
 ## Commit messages
@@ -111,7 +107,6 @@ A good pull request should make review easy:
 Follow the conventions already used in the repository:
 
 - Go: `gofmt`
-- Dart: `dart format`
 - TypeScript/JavaScript: existing repo lint/style rules
 - Python: existing repo formatter/style rules
 

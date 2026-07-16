@@ -7,7 +7,7 @@ This guide is for contributors who want to build, run, and debug Wox locally.
 The repository contains four parts that usually move together during development:
 
 - `wox.core/`: Go backend, built-in plugins, settings, storage, packaging entrypoint
-- `wox.ui.flutter/wox/`: Flutter desktop UI for macOS, Windows, and Linux
+- `wox.ui.go/`: native Go UI imported by `wox.core`
 - `wox.plugin.host.nodejs/`: Node.js plugin host
 - `wox.plugin.host.python/`: Python plugin host
 
@@ -18,7 +18,6 @@ The top-level `Makefile` wires these pieces together. In most cases you should s
 Install these tools first:
 
 - [Go](https://go.dev/dl/)
-- [Flutter](https://docs.flutter.dev/get-started/install)
 - [Node.js](https://nodejs.org/)
 - [pnpm](https://pnpm.io/)
 - [uv](https://github.com/astral-sh/uv)
@@ -37,6 +36,7 @@ Recommended editor:
 
 - Run build commands from a `MINGW64` shell
 - Install [MinGW-w64](https://www.mingw-w64.org/) so native Windows runner code can compile
+- Install the [NuGet CLI](https://www.nuget.org/downloads) so the build can stage the pinned `WebView2Loader.dll`
 
 ### Linux
 
@@ -58,7 +58,7 @@ What this does:
 - builds `woxmr` under `wox.core`
 - builds both plugin hosts
 
-`make dev` does not build the Flutter desktop app. Use it first to get the shared runtime pieces in place, then build the UI when you need a runnable app package.
+`make dev` prepares the shared runtime pieces. Use `make build` when you need a runnable package with the embedded Go UI.
 
 ## Common commands
 
@@ -67,7 +67,6 @@ From the repository root:
 ```bash
 make dev
 make test
-make smoke
 make build
 ```
 
@@ -75,8 +74,7 @@ What they mean:
 
 - `make dev`: prepare the local development environment
 - `make test`: run the Go integration-style test suite under `wox.core/test`
-- `make smoke`: run desktop smoke flows from `wox.test`
-- `make build`: build the plugin hosts, Flutter UI, `wox.core`, and platform packaging output
+- `make build`: compile the Go UI into `wox.core`, then build plugin hosts and platform packaging output
 
 If you are changing backend/plugin contracts, `make build` is the safest final verification because it catches cross-project drift.
 
@@ -96,7 +94,7 @@ Useful command:
 make -C wox.core build
 ```
 
-### Flutter UI (`wox.ui.flutter/wox`)
+### Go UI (`wox.ui.go`)
 
 Typical tasks:
 
@@ -108,7 +106,7 @@ Typical tasks:
 Useful command:
 
 ```bash
-make -C wox.ui.flutter/wox build
+cd wox.ui.go && go test ./...
 ```
 
 ### Plugin hosts
@@ -156,8 +154,9 @@ Useful subdirectories:
 
 If `make dev` fails early:
 
-- confirm `go`, `flutter`, `node`, `pnpm`, and `uv` are all on `PATH`
+- confirm `go`, `node`, `pnpm`, and `uv` are all on `PATH`
+- on Windows, confirm `nuget` is also on `PATH`
 - on Windows, confirm you are in a `MINGW64` shell instead of PowerShell or CMD
 - on Linux packaging builds, confirm `patchelf` and `appimagetool` are installed
 
-If a change compiles in one subproject but Wox still breaks end to end, run `make build` from the repository root. That is the fastest way to catch contract mismatches between `wox.core`, Flutter, and the plugin hosts.
+If a change compiles in one subproject but Wox still breaks end to end, run `make build` from the repository root. That is the fastest way to catch contract mismatches between `wox.core`, the Go UI, and the plugin hosts.

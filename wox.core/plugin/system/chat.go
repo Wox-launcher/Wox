@@ -156,7 +156,7 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	})
 
 	util.Go(ctx, "reload MCP servers", func() {
-		// Startup only warms the core MCP tool cache; Flutter loads chat resources lazily after it is ready.
+		// Startup only warms the core MCP tool cache; UI loads chat resources lazily after it is ready.
 		r.ReloadMCPServers(util.NewTraceContext(), false)
 	})
 }
@@ -839,8 +839,8 @@ func estimateTextTokens(text string) int {
 	return (runeCount + 3) / 4
 }
 
-// cloneAIChatDataForUI copies mutable slices before websocket serialization so
-// concurrent stream callbacks cannot mutate the payload while it is sent.
+// cloneAIChatDataForUI copies mutable slices before delivery so concurrent
+// stream callbacks cannot mutate the payload while it is sent.
 func cloneAIChatDataForUI(aiChatData common.AIChatData) common.AIChatData {
 	snapshot := aiChatData
 	snapshot.Conversations = cloneAIConversations(aiChatData.Conversations)
@@ -1081,7 +1081,7 @@ func (r *AIChatPlugin) getChatPreviewData(ctx context.Context, activeChatId stri
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					// Flutter handles this internal action locally because entering chat mode is UI-only state.
+					// UI handles this internal action locally because entering chat mode is UI-only state.
 				},
 			},
 		},

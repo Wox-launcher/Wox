@@ -1145,7 +1145,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					}
 					// Bug fix: keep pending keys while waiting for visible and during the handoff
 					// grace window. ShowApp can trigger activation churn before all fast-typed
-					// keys have either been pushed through ChangeQuery or handed to Flutter's
+					// keys have either been pushed through ChangeQuery or handed to UI's
 					// EditableText, so the old eager reset still dropped early characters.
 					if !waitingVisible && handoffUntil.IsZero() {
 						resetState()
@@ -1190,8 +1190,8 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 						}
 						// Bug fix: Finder-to-Wox focus handoff is not atomic on macOS. Wox can
 						// become visible before the ticker starts the grace window and before
-						// Flutter's EditableText is ready, so fast typing after the first key was
-						// ignored here and also missed by Flutter. Treat waitingVisible as part of
+						// UI's EditableText is ready, so fast typing after the first key was
+						// ignored here and also missed by UI. Treat waitingVisible as part of
 						// the handoff and push the full query immediately.
 						pending += strings.ToLower(ev.key)
 						changeExplorerQuery(localCtx)
@@ -1242,7 +1242,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				if visible {
 					changeExplorerQuery(tickCtx)
 					// Keep a short raw-key capture window after the first ChangeQuery. The
-					// previous immediate reset assumed Flutter had already taken keyboard focus,
+					// previous immediate reset assumed UI had already taken keyboard focus,
 					// but macOS can still deliver the next few Finder key events before the
 					// launcher text input is ready, which dropped characters in fast typing.
 					waitingVisible = false
@@ -1267,7 +1267,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 
 func getExplorerInitialWindowHeight(ctx context.Context) int {
 	theme := ui.GetUIManager().GetCurrentTheme(ctx)
-	// Explorer overlays position Wox before Flutter paints the query box. Using
+	// Explorer overlays position Wox before UI paints the query box. Using
 	// the shared density helper keeps compact and comfortable launcher sizes from
 	// appearing offset while preserving theme padding exactly as before.
 	queryBoxHeight := ui.DensityQueryBoxBaseHeight(ctx) + theme.AppPaddingTop + theme.AppPaddingBottom

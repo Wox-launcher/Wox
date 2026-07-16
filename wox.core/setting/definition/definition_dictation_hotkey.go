@@ -6,7 +6,7 @@ import (
 
 // PluginSettingValueDictationHotkey is a Wox-internal setting component for
 // recording a global hotkey used by the dictation plugin. Unlike a textbox,
-// the Flutter side renders a dedicated hotkey recorder widget that captures
+// the UI side renders a dedicated hotkey recorder widget that captures
 // physical key presses and produces a combine-key string (e.g. "cmd+shift+d").
 type PluginSettingValueDictationHotkey struct {
 	Key          string

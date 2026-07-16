@@ -1460,7 +1460,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	previewData := record.Content
 	if normalizedLink != "" {
 		// Feature addition: link clipboard entries use Markdown preview so the
-		// existing Flutter markdown renderer can expose a clickable URL without
+		// existing UI markdown renderer can expose a clickable URL without
 		// adding a clipboard-specific preview surface.
 		previewType = plugin.WoxPreviewTypeMarkdown
 		previewData = formatClipboardLinkMarkdown(record.Content, normalizedLink)

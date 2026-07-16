@@ -17,7 +17,7 @@ func primaryHotkey(key string) string {
 	return "control+" + key
 }
 
-// formatHotkeyLabels mirrors Flutter's platform labels while keeping each physical key separate.
+// formatHotkeyLabels applies platform labels while keeping each physical key separate.
 func formatHotkeyLabels(hotkey string) []string {
 	parts := strings.Split(strings.TrimSpace(hotkey), "+")
 	labels := make([]string, 0, len(parts))

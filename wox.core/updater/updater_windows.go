@@ -31,9 +31,6 @@ if "%TARGET%"=="" (
   exit /b 1
 )
 echo [%date% %time%] target: %TARGET% >> "%LOG%"
-echo [%date% %time%] killing wox-ui.exe >> "%LOG%"
-taskkill /T /F /IM wox-ui.exe >> "%LOG%" 2>&1
-timeout /t 1 /nobreak >nul
 echo [%date% %time%] removing backup >> "%LOG%"
 if exist "%TARGET%.old" (
   attrib -H -S -R "%TARGET%.old" >> "%LOG%" 2>&1

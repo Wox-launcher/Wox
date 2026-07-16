@@ -16,7 +16,6 @@ import (
 
 	"runtime"
 	"strings"
-	"time"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
@@ -70,10 +69,7 @@ import (
 	_ "wox/plugin/system/dictation"
 )
 
-var (
-	useEmbeddedGoUI bool
-	embeddedGoUIApp *golauncher.App
-)
+var embeddedGoUIApp *golauncher.App
 
 func main() {
 	// Permission APIs cache an initial denial for the lifetime of a process. Run the
@@ -92,31 +88,26 @@ func main() {
 		}
 		os.Exit(diagnostic.GetManager().RunSupervisor(ctx, os.Args))
 	}
-	if util.IsGoUIImplementation() {
-		useEmbeddedGoUI = true
-		mainthread.SetDispatcher(func(fn func()) {
-			if err := woxui.Call(fn); err != nil {
-				panic(err)
-			}
-		})
-		err := woxui.Run(func() error {
-			run()
-			if embeddedGoUIApp == nil {
-				return fmt.Errorf("embedded Go UI did not start")
-			}
-			return nil
-		})
-		mainthread.SetDispatcher(nil)
-		if embeddedGoUIApp != nil {
-			_ = embeddedGoUIApp.Close()
+	mainthread.SetDispatcher(func(fn func()) {
+		if err := woxui.Call(fn); err != nil {
+			panic(err)
 		}
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+	})
+	err := woxui.Run(func() error {
+		run()
+		if embeddedGoUIApp == nil {
+			return fmt.Errorf("embedded Go UI did not start")
 		}
-		return
+		return nil
+	})
+	mainthread.SetDispatcher(nil)
+	if embeddedGoUIApp != nil {
+		_ = embeddedGoUIApp.Close()
 	}
-	mainthread.Init(run)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
 func run() {
@@ -150,7 +141,7 @@ func run() {
 	// migrations). When this process is launched as a one-shot deeplink forwarder (e.g. via the
 	// desktop URL-scheme handler on Linux), we just need to forward the request and exit.
 	// Running the full startup sequence in that case wastes time and leaves an orphan process,
-	// because mainthread.Init keeps the main goroutine alive in its event loop even after run()
+	// because the native UI event loop keeps the main goroutine alive even after run()
 	// returns. Using os.Exit(0) is the only reliable way to terminate cleanly here.
 	if existingPort := getExistingInstancePort(ctx); existingPort > 0 {
 		util.GetLogger().Info(ctx, fmt.Sprintf("there is existing instance running, port: %d", existingPort))
@@ -364,39 +355,23 @@ func run() {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to register hotkeys: %s", registerErr.Error()))
 	}
 
-	if useEmbeddedGoUI {
-		if util.IsWindows() {
-			loaderPath := filepath.Join(util.GetLocation().GetUIDirectory(), "go", "WebView2Loader.dll")
-			if util.IsFileExists(loaderPath) {
-				if err := os.Setenv("WOX_WEBVIEW2_LOADER_PATH", loaderPath); err != nil {
-					util.GetLogger().Warn(ctx, fmt.Sprintf("failed to configure embedded WebView2 loader: %s", err.Error()))
-				}
+	if util.IsWindows() {
+		loaderPath := filepath.Join(util.GetLocation().GetUIDirectory(), "go", "WebView2Loader.dll")
+		if util.IsFileExists(loaderPath) {
+			if err := os.Setenv("WOX_WEBVIEW2_LOADER_PATH", loaderPath); err != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("failed to configure embedded WebView2 loader: %s", err.Error()))
 			}
 		}
-		embeddedGoUIApp = golauncher.NewWithBackendFactory(util.IsDev(), ui.LocalBackendFactory)
-		if err := embeddedGoUIApp.Start(); err != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start embedded Go UI: %s", err.Error()))
-			embeddedGoUIApp = nil
-			return
-		}
-		util.Go(ctx, "start core HTTP server", func() {
-			ui.GetUIManager().StartHTTPAndWait(ctx)
-		})
+	}
+	embeddedGoUIApp = golauncher.New(util.IsDev(), ui.LocalBackendFactory)
+	if err := embeddedGoUIApp.Start(); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to start embedded Go UI: %s", err.Error()))
+		embeddedGoUIApp = nil
 		return
 	}
-
-	if util.IsProd() {
-		util.Go(ctx, "start ui", func() {
-			time.Sleep(time.Millisecond * 200) // wait websocket server start
-			appErr := ui.GetUIManager().StartUIApp(ctx)
-			if appErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to start ui app: %s", appErr.Error()))
-				return
-			}
-		})
-	}
-
-	ui.GetUIManager().StartWebsocketAndWait(ctx)
+	util.Go(ctx, "start core HTTP server", func() {
+		ui.GetUIManager().StartHTTPAndWait(ctx)
+	})
 }
 
 func resolveServerPort(ctx context.Context) (int, error) {

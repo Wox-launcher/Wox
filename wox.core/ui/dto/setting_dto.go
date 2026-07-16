@@ -15,7 +15,7 @@ type WoxSettingDto struct {
 	UsePinYin            bool
 	SwitchInputMethodABC bool
 	HideOnStart          bool
-	// OnboardingFinished is sent with the regular settings DTO so Flutter can
+	// OnboardingFinished is sent with the regular settings DTO so UI can
 	// update the guide completion flag through the existing key-value API and
 	// avoid a separate first-run state endpoint.
 	OnboardingFinished    bool
@@ -35,7 +35,7 @@ type WoxSettingDto struct {
 	ShowPosition          setting.PositionType
 	IsLinuxWaylandSession bool
 	// IsEvdevReadAvailable reports whether evdev keyboard devices are readable
-	// (user is in the 'input' group). Flutter uses this to decide whether to
+	// (user is in the 'input' group). UI uses this to decide whether to
 	// show the Wayland double-modifier hotkey guidance prompt.
 	IsEvdevReadAvailable      bool
 	EnableAutoBackup          bool
@@ -51,7 +51,7 @@ type WoxSettingDto struct {
 	AppWidth       int
 	MaxResultCount int
 	// UiDensity is a compact enum rather than per-control dimensions because
-	// backend window sizing and Flutter rendering both derive their local
+	// backend window sizing and UI rendering both derive their local
 	// metrics from the same three scale buckets.
 	UiDensity                 setting.UiDensity
 	ThemeId                   string
@@ -59,12 +59,12 @@ type WoxSettingDto struct {
 	EnableQueryCompletionHint bool
 	EnableGlance              bool
 	PrimaryGlance             setting.GlanceRef
-	// HideGlanceIcon is kept beside the Glance selection because Flutter needs
+	// HideGlanceIcon is kept beside the Glance selection because UI needs
 	// it with the rest of the UI settings to render the query-box accessory.
 	HideGlanceIcon bool
 
 	// Debug display switches are only shown by the dev UI, but the DTO keeps
-	// them beside other settings so backend tail rendering and Flutter toggles
+	// them beside other settings so backend tail rendering and UI toggles
 	// stay synchronized through the existing settings API.
 	ShowScoreTail                      bool
 	ShowPerformanceTail                bool

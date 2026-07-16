@@ -7,7 +7,6 @@ wox.core/resource/hosts/
 wox.plugin.host.python/python-host/
 wox.plugin.host.python/python-host.pyz
 *.pyz
-wox.core/resource/ui/flutter/
 node_modules/
 __pycache__/
 Release/
@@ -33,7 +32,6 @@ wox.ui.macos/.build/
 wox.ui.macos/.swiftpm/
 wox.ui.windows/bin/
 wox.ui.windows/obj/
-wox.test/artifacts
 .tmp
 .worktrees/
 .tmp-*
@@ -45,4 +43,5 @@ docs
 www/docs/.vitepress/cache
 www/docs/.vitepress/dist
 wox.core/resource/ui/go/WebView2Loader.dll
-wox.ui.go/build/
+wox.ui.go/.deps/
+.deps

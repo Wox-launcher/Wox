@@ -836,7 +836,7 @@ func (p *DictationPlugin) preloadSelectedModel(ctx context.Context, modelID stri
 
 // buildModelSetting returns the model manager setting as a dictationModel
 // definition, populated with recommended models and their current download
-// status. The Flutter side renders this as a dropdown where not-downloaded
+// status. The UI side renders this as a dropdown where not-downloaded
 // models show a download button and downloading models show a progress bar.
 func (p *DictationPlugin) buildModelSetting(ctx context.Context) definition.PluginSettingDefinitionItem {
 	options := p.buildModelOptions(ctx)
@@ -1043,9 +1043,9 @@ func (p *DictationPlugin) DeleteModel(ctx context.Context, modelID string) error
 	return p.modelManager.DeleteModel(modelID)
 }
 
-// ModelStatusInfo is the JSON-serializable model status sent to the Flutter side.
+// ModelStatusInfo is the JSON-serializable model status sent to the UI side.
 // The JSON tags use the same PascalCase keys as DictationModelOption.fromJson
-// expects so the Flutter entity can parse status refreshes without dropping
+// expects so the UI entity can parse status refreshes without dropping
 // static model metadata such as description, languages, and recommendation.
 type ModelStatusInfo struct {
 	ID               string `json:"ID"`
@@ -1081,7 +1081,7 @@ func (p *DictationPlugin) GetModelStatuses(ctx context.Context) []ModelStatusInf
 }
 
 // NativeLibStatusInfo is the JSON-serializable native library status sent to
-// the Flutter side for rendering download progress in the dictation settings.
+// the UI side for rendering download progress in the dictation settings.
 type NativeLibStatusInfo struct {
 	State    string `json:"State"`
 	Progress int    `json:"Progress"`

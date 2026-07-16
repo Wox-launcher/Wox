@@ -2,7 +2,7 @@ param(
     [int]$Samples = 1,
     [int]$IntervalSeconds = 10,
     [double]$BudgetMB = 200,
-    [string[]]$ProcessNames = @("wox", "wox-ui", "wox-windows-amd64", "wox-windows-arm64"),
+    [string[]]$ProcessNames = @("wox", "wox-windows-amd64", "wox-windows-arm64"),
     [int[]]$Pids = @(),
     [switch]$Json
 )
@@ -19,28 +19,6 @@ function Convert-ToMB {
     return [Math]::Round($Bytes / 1MB, 1)
 }
 
-function Test-ContainsIgnoreCase {
-    param(
-        [string]$Value,
-        [string]$Needle
-    )
-
-    return $Value.IndexOf($Needle, [StringComparison]::OrdinalIgnoreCase) -ge 0
-}
-
-function Get-Role {
-    param($Process)
-
-    $name = [IO.Path]::GetFileNameWithoutExtension($Process.Name).ToLowerInvariant()
-    $path = [string]$Process.ExecutablePath
-    $commandLine = [string]$Process.CommandLine
-
-    if ($name -eq "wox-ui" -or (Test-ContainsIgnoreCase $path "\wox-ui.exe") -or (Test-ContainsIgnoreCase $commandLine "wox.ui.flutter")) {
-        return "Flutter"
-    }
-    return "Core"
-}
-
 function Get-WoxProcessRows {
     $processRows = Get-CimInstance Win32_Process | Where-Object {
         $name = [IO.Path]::GetFileNameWithoutExtension($_.Name)
@@ -50,13 +28,11 @@ function Get-WoxProcessRows {
         ($Pids -contains [int]$_.ProcessId) -or
         ($ProcessNames -contains $name) -or
         ($path -match "\\Wox\\wox\.core\\") -or
-        ($commandLine -match "\\Wox\\wox\.core\\") -or
-        ($path -match "\\Wox\\wox\.ui\.flutter\\") -or
-        ($commandLine -match "\\Wox\\wox\.ui\.flutter\\")
+        ($commandLine -match "\\Wox\\wox\.core\\")
     }
 
     if (-not $processRows) {
-        throw "No Wox core or wox-ui process found. Pass -Pids for debugger-launched processes with temporary names."
+        throw "No Wox process found. Pass -Pids for debugger-launched processes with temporary names."
     }
 
     $perfByPid = @{}
@@ -76,7 +52,7 @@ function Get-WoxProcessRows {
 
         [pscustomobject]@{
             Timestamp = $timestamp
-            Role = Get-Role $process
+            Role = "Wox"
             Pid = $processId
             Name = $process.Name
             PrivateWorkingSetMB = Convert-ToMB ([UInt64]$perf.WorkingSetPrivate)
@@ -93,22 +69,20 @@ $allSamples = @()
 for ($i = 1; $i -le $Samples; $i++) {
     $rows = @(Get-WoxProcessRows)
     $total = [Math]::Round((($rows | Measure-Object PrivateWorkingSetMB -Sum).Sum), 1)
-    $roles = @($rows | ForEach-Object { $_.Role } | Sort-Object -Unique)
-    $missingRoles = @("Core", "Flutter") | Where-Object { $roles -notcontains $_ }
     $sample = [pscustomobject]@{
         Sample = $i
         TotalMB = $total
         BudgetMB = $BudgetMB
         OverBudget = $total -gt $BudgetMB
-        MissingRoles = $missingRoles
+        ProcessCount = $rows.Count
         Processes = $rows
     }
     $allSamples += $sample
 
     if (-not $Json) {
         Write-Host ("Sample {0}: TotalMB={1} BudgetMB={2} OverBudget={3}" -f $i, $total, $BudgetMB, ($total -gt $BudgetMB))
-        if ($missingRoles.Count -gt 0) {
-            Write-Warning ("Missing expected role(s): {0}. Pass -Pids for debugger-launched processes with temporary names." -f ($missingRoles -join ", "))
+        if ($rows.Count -ne 1) {
+            Write-Warning ("Expected one Wox app process, found {0}. Pass -Pids to select the intended process." -f $rows.Count)
         }
         $rows | Format-Table Role, Pid, Name, PrivateWorkingSetMB, Path -AutoSize
     }

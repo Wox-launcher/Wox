@@ -3,37 +3,9 @@ package processmemory
 import (
 	"fmt"
 	"math"
-	"sync/atomic"
 
 	"github.com/struCoder/pidusage"
 )
-
-var woxUIProcessPid atomic.Int64
-
-func SetWoxUIProcessPid(pid int) {
-	if pid <= 0 {
-		return
-	}
-
-	// Debug Glance needs the Flutter process even when dev mode launches it
-	// outside the core process tree, so keep the latest UI-reported PID here.
-	woxUIProcessPid.Store(int64(pid))
-}
-
-func ClearWoxUIProcessPid(pid int) {
-	if pid <= 0 {
-		return
-	}
-
-	// The UI process can restart while an older wait goroutine is still
-	// unwinding. Compare-and-swap prevents that stale exit from erasing the new
-	// Flutter PID used by Wox memory diagnostics.
-	woxUIProcessPid.CompareAndSwap(int64(pid), 0)
-}
-
-func GetWoxUIProcessPid() int {
-	return int(woxUIProcessPid.Load())
-}
 
 func GetProcessRSSBytes(pid int) (uint64, error) {
 	return getProcessRSSBytes(pid)

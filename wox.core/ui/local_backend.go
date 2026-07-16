@@ -17,8 +17,8 @@ import (
 )
 
 type localUISink interface {
-	deliverRequest(message WebsocketMsg) error
-	deliverResponse(message WebsocketMsg) error
+	deliverRequest(message UIMessage) error
+	deliverResponse(message UIMessage) error
 }
 
 var localUISinkState struct {
@@ -27,12 +27,11 @@ var localUISinkState struct {
 }
 
 // LocalBackendFactory creates the launcher-facing backend for the embedded Go UI.
-func LocalBackendFactory(sessionID string, onRequest coreclient.RequestHandler, onResponse coreclient.ResponseHandler, onError func(error)) coreclient.Backend {
+func LocalBackendFactory(sessionID string, onRequest coreclient.RequestHandler, onResponse coreclient.ResponseHandler) coreclient.Backend {
 	return &localBackend{
 		sessionID:  sessionID,
 		onRequest:  onRequest,
 		onResponse: onResponse,
-		onError:    onError,
 		handler:    newRouterMux(context.Background()),
 		messages:   make(chan coreclient.Message, 64),
 		done:       make(chan struct{}),
@@ -43,7 +42,6 @@ type localBackend struct {
 	sessionID  string
 	onRequest  coreclient.RequestHandler
 	onResponse coreclient.ResponseHandler
-	onError    func(error)
 	handler    http.Handler
 	messages   chan coreclient.Message
 	done       chan struct{}
@@ -85,18 +83,17 @@ func (b *localBackend) SendRequestWithID(requestID string, method string, data a
 		return err
 	}
 	ctx := util.WithSessionContext(util.NewTraceContext(), b.sessionID)
-	request := WebsocketMsg{
+	request := UIMessage{
 		RequestId:     requestID,
 		TraceId:       util.GetContextTraceId(ctx),
 		SessionId:     b.sessionID,
-		Type:          WebsocketMsgTypeRequest,
 		Method:        method,
 		Success:       true,
 		Data:          data,
 		SendTimestamp: util.GetSystemTimestamp(),
 	}
 	util.Go(ctx, "handle in-process UI request", func() {
-		onUIWebsocketRequest(ctx, request)
+		onUIRequest(ctx, request)
 	})
 	return nil
 }
@@ -172,15 +169,15 @@ func (b *localBackend) Close() error {
 	return nil
 }
 
-func (b *localBackend) deliverRequest(message WebsocketMsg) error {
+func (b *localBackend) deliverRequest(message UIMessage) error {
 	return b.deliver(message, coreclient.MessageRequest)
 }
 
-func (b *localBackend) deliverResponse(message WebsocketMsg) error {
+func (b *localBackend) deliverResponse(message UIMessage) error {
 	return b.deliver(message, coreclient.MessageResponse)
 }
 
-func (b *localBackend) deliver(message WebsocketMsg, messageType string) error {
+func (b *localBackend) deliver(message UIMessage, messageType string) error {
 	data, err := json.Marshal(message.Data)
 	if err != nil {
 		return err
@@ -232,11 +229,10 @@ func (b *localBackend) handleRequest(message coreclient.Message) {
 	} else {
 		data, err = b.onRequest(message)
 	}
-	response := WebsocketMsg{
+	response := UIMessage{
 		RequestId: message.RequestID,
 		TraceId:   message.TraceID,
 		SessionId: message.SessionID,
-		Type:      WebsocketMsgTypeResponse,
 		Method:    message.Method,
 		Success:   err == nil,
 		Data:      data,
@@ -246,7 +242,7 @@ func (b *localBackend) handleRequest(message coreclient.Message) {
 	}
 	ctx := util.WithSessionContext(util.NewTraceContextWith(message.TraceID), message.SessionID)
 	util.Go(ctx, "handle in-process UI response", func() {
-		onUIWebsocketResponse(ctx, response)
+		onUIResponse(ctx, response)
 	})
 }
 

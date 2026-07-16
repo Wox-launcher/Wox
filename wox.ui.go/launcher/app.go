@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -26,8 +25,8 @@ const (
 	resultRowGap        = 0
 )
 
-// BackendFactory binds one launcher session to either a remote or in-process core backend.
-type BackendFactory func(sessionID string, onRequest coreclient.RequestHandler, onResponse coreclient.ResponseHandler, onError func(error)) coreclient.Backend
+// BackendFactory binds one launcher session to the embedding core backend.
+type BackendFactory func(sessionID string, onRequest coreclient.RequestHandler, onResponse coreclient.ResponseHandler) coreclient.Backend
 
 func resultRowHeightForPalette(palette uiPalette) float32 {
 	return resultRowBaseHeight + palette.resultItemPadding.Top + palette.resultItemPadding.Bottom
@@ -219,15 +218,8 @@ type App struct {
 	aiSkillsError        string
 }
 
-// New creates a hidden launcher app connected to the given Wox core port when Start runs.
-func New(port int, isDev bool) *App {
-	return NewWithBackendFactory(isDev, func(sessionID string, onRequest coreclient.RequestHandler, onResponse coreclient.ResponseHandler, onError func(error)) coreclient.Backend {
-		return coreclient.New(port, sessionID, onRequest, onResponse, onError)
-	})
-}
-
-// NewWithBackendFactory creates a launcher whose core transport is supplied by the process composition root.
-func NewWithBackendFactory(isDev bool, clientFactory BackendFactory) *App {
+// New creates a launcher whose core backend is supplied by the process composition root.
+func New(isDev bool, clientFactory BackendFactory) *App {
 	return &App{
 		isDev:           isDev,
 		sessionID:       coreclient.NewID(),
@@ -262,9 +254,7 @@ func (a *App) Start() error {
 	if a.clientFactory == nil {
 		return errors.New("core backend factory is required")
 	}
-	a.client = a.clientFactory(a.sessionID, a.handleRequest, a.handleResponse, func(err error) {
-		log.Printf("Wox core connection failed: %v", err)
-	})
+	a.client = a.clientFactory(a.sessionID, a.handleRequest, a.handleResponse)
 	connectContext, cancelConnect := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelConnect()
 	if err := a.client.Connect(connectContext); err != nil {
@@ -305,7 +295,7 @@ func (a *App) Start() error {
 
 	readyContext, cancelReady := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelReady()
-	if err := a.client.Post(readyContext, "/on/ready", map[string]any{"Pid": os.Getpid()}, nil); err != nil {
+	if err := a.client.Post(readyContext, "/on/ready", nil, nil); err != nil {
 		return fmt.Errorf("notify Wox core that Go UI is ready: %w", err)
 	}
 	return nil

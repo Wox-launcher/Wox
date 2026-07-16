@@ -136,7 +136,7 @@ type WoxImage struct {
 
 // WoxLazyLoadImagePayload is an internal payload created by core after a plugin
 // has already returned a normal WoxImage. Source is used only inside core before
-// manager token registration; Flutter receives the token form and asks core for
+// manager token registration; UI receives the token form and asks core for
 // the real resized icon only after the result image widget is built.
 type WoxLazyLoadImagePayload struct {
 	Token       string    `json:"token,omitempty"`
@@ -607,7 +607,7 @@ func NewWoxImageTheme(theme Theme) WoxImage {
 
 func NewWoxImageLazyLoad(token string, placeholder WoxImage, targetSize int) WoxImage {
 	// LazyLoad is an internal image type: core serializes the placeholder and
-	// token together so Flutter can render immediately, then ask core for the
+	// token together so UI can render immediately, then ask core for the
 	// resized raster only when the image widget is built.
 	payload, _ := json.Marshal(WoxLazyLoadImagePayload{
 		Token:       token,
@@ -717,7 +717,7 @@ func ConvertIconWithSizeWithDiagnostics(ctx context.Context, image WoxImage, plu
 }
 
 // Converted icons can be large and expensive to prepare, so this variant allows the manager to return a lazy load marker for large icons instead of blocking on conversion.
-// The manager replaces the marker with the real resized icon later after it has registered the result in its cache and received the surface size from Flutter.
+// The manager replaces the marker with the real resized icon later after it has registered the result in its cache and received the surface size from UI.
 func ConvertIconWithSizeMaybeLazy(ctx context.Context, image WoxImage, pluginDirectory string, size int) (newImage WoxImage) {
 	return convertIconWithSize(ctx, image, pluginDirectory, size, true, timetracking.IconConversionDiagnostics{})
 }
@@ -851,7 +851,7 @@ func convertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory st
 	timing.RelativeCostUs = time.Since(relativeTimingStart).Microseconds()
 	timing.NormalizedType = newImage.ImageType
 
-	// Keep SVG data and SVG files as-is so Flutter can render vectors directly.
+	// Keep SVG data and SVG files as-is so UI can render vectors directly.
 	svgCheckStart := util.GetSystemTimestamp()
 	svgCheckTimingStart := time.Now()
 	if newImage.ImageType == WoxImageTypeSvg || (newImage.ImageType == WoxImageTypeAbsolutePath && isSvgFilePath(newImage.ImageData)) {
@@ -911,7 +911,7 @@ func convertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory st
 	if allowLazy && lazy {
 		// Optimization: large local raster icons are expensive because the old
 		// polish path decoded, optionally cropped, resized, and wrote every image
-		// before the query response reached Flutter. Return a source-bearing marker
+		// before the query response reached UI. Return a source-bearing marker
 		// here and let the manager decide whether to register it as a token, which
 		// keeps cache ownership out of common image conversion.
 		lazyImage := NewWoxImageLazyLoadCandidate(newImage, size)

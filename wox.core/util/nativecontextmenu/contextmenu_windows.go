@@ -153,7 +153,7 @@ int ShowContextMenu(const wchar_t* path) {
 
     // Determine the owner window: prefer Wox UI if available
     HWND ownerHwnd = hwnd;
-    HWND woxHwnd = FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"wox-ui");
+    HWND woxHwnd = FindWindowW(L"WoxGoUIWindow", L"Wox");
     if (woxHwnd) { ownerHwnd = woxHwnd; }
 
     // Display the context menu (hidden window receives Shell menu messages)

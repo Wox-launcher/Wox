@@ -1160,7 +1160,7 @@ func (w *platformWindow) centerNative(size Size) error {
 	return nil
 }
 
-// findMonitorForLogicalBounds mirrors the logical monitor selection used by Wox core and the Flutter runner.
+// findMonitorForLogicalBounds mirrors the logical monitor selection used by Wox core and the UI runner.
 func findMonitorForLogicalBounds(monitor win.HMONITOR, _ win.HDC, _ *win.RECT, parameter uintptr) uintptr {
 	search := cgo.Handle(parameter).Value().(*monitorBoundsSearch)
 	var info win.MONITORINFO

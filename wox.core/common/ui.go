@@ -144,8 +144,8 @@ type ShowContext struct {
 	HideOnBlur       bool
 	ShowSource       ShowSource
 	// ActivationStartedAt carries the original hotkey callback timestamp to the
-	// UI. Go receives the websocket acknowledgement before Flutter actually
-	// shows the native window, so visibility diagnostics must finish in Flutter.
+	// UI. The bridge acknowledgement arrives before the native window is visible,
+	// so visibility diagnostics must finish in the UI.
 	ActivationStartedAt int64
 
 	WindowPosition *WindowPosition
@@ -185,7 +185,7 @@ const (
 )
 
 // ScreenshotRect keeps screenshot geometry in logical desktop coordinates.
-// The Flutter workspace uses this rect shape for selection, display bounds, and export metadata
+// The UI workspace uses this rect shape for selection, display bounds, and export metadata
 // so Go can forward one stable contract without depending on platform-specific geometry types.
 type ScreenshotRect struct {
 	X      float64 `json:"x"`
@@ -195,7 +195,7 @@ type ScreenshotRect struct {
 }
 
 // CaptureScreenshotRequest defines the single v1 screenshot workflow that the system plugin supports.
-// We keep the request explicit instead of inferring defaults in Flutter so both layers stay aligned
+// We keep the request explicit instead of inferring defaults in UI so both layers stay aligned
 // when tests trigger the flow directly through the UI bridge.
 type CaptureScreenshotRequest struct {
 	SessionId      string   `json:"sessionId"`
@@ -213,12 +213,12 @@ type CaptureScreenshotRequest struct {
 	// identical to an explicit confirm button press.
 	AutoConfirm bool `json:"autoConfirm"`
 	// CallerIcon is set only by plugin-originated screenshot API calls. The previous request did not
-	// carry caller identity, so Flutter could not visually distinguish a third-party capture from the
+	// carry caller identity, so UI could not visually distinguish a third-party capture from the
 	// built-in Wox screenshot flow; passing the already-resolved icon keeps that decision in Go.
 	CallerIcon *WoxImage `json:"callerIcon,omitempty"`
 }
 
-// DisplaySnapshot describes one native capture surface that Flutter can render and crop from.
+// DisplaySnapshot describes one native capture surface that UI can render and crop from.
 // The platform bridge must provide both image bytes and geometry from the same native source
 // so mixed-DPI export does not drift because of mismatched coordinate systems.
 type DisplaySnapshot struct {
@@ -231,15 +231,14 @@ type DisplaySnapshot struct {
 }
 
 // CaptureScreenshotResult carries the exported screenshot file back to Go.
-// The previous websocket contract base64-wrapped full PNG payloads, which added avoidable transport
-// cost on every completed screenshot. Returning the exported file path keeps annotation state in the
-// UI while still giving Go the saved artifact path and clipboard warning state without re-sending
-// the PNG bytes over the websocket.
+// Returning the exported file path keeps annotation state in the UI while giving
+// core the saved artifact path and clipboard warning state without copying the PNG
+// bytes back through the bridge.
 type CaptureScreenshotResult struct {
 	Status               CaptureScreenshotStatus `json:"status"`
 	ScreenshotPath       string                  `json:"screenshotPath,omitempty"`
 	LogicalSelectionRect *ScreenshotRect         `json:"logicalSelectionRect,omitempty"`
-	// PinToScreen tells the Go screenshot plugin that Flutter exported the image for a pinned
+	// PinToScreen tells the Go screenshot plugin that UI exported the image for a pinned
 	// desktop overlay. The previous completed result only described file/clipboard output, so Go had
 	// no way to distinguish a normal confirmation from a toolbar pin action.
 	PinToScreen bool `json:"pinToScreen,omitempty"`

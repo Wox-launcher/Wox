@@ -33,7 +33,7 @@ git checkout -b feature/your-change
 2. 在正确的层里修改代码
 
 - `wox.core/`：后端逻辑、内置插件、设置、共享契约
-- `wox.ui.flutter/wox/`：启动器 UI、设置页、截图 UI、平台展示逻辑
+- `wox.ui.go/`：启动器 UI、设置页、截图 UI、平台展示逻辑
 - `wox.plugin.host.*`：插件宿主桥接行为
 - `wox.plugin.*`：对外插件 SDK
 - `www/docs/`：文档站
@@ -45,19 +45,13 @@ git checkout -b feature/your-change
 ```bash
 make -C wox.core build
 make -C wox.plugin.host.nodejs build
-make -C wox.ui.flutter/wox build
+cd wox.ui.go && go test ./...
 ```
 
 4. 提交 PR 前做更广的验证
 
 ```bash
 make build
-```
-
-如果你改的是用户可见的桌面流程，再加上：
-
-```bash
-make smoke
 ```
 
 ## 测试建议
@@ -68,14 +62,12 @@ make smoke
 
 ```bash
 make test
-make smoke
 make build
 ```
 
 一般可以这样理解：
 
 - `make test`：默认的后端回归检查
-- `make smoke`：适合启动器、截图、设置等真实 UI 流程
 - `make build`：适合共享契约或跨项目改动的最终守门
 
 ## 提交信息
@@ -113,7 +105,6 @@ git commit -m "docs(development): refresh contributor setup guide"
 优先遵循仓库现有约定：
 
 - Go：`gofmt`
-- Dart：`dart format`
 - TypeScript / JavaScript：使用仓库现有规则
 - Python：使用仓库现有格式化和风格约定
 

@@ -4,24 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 	"unsafe"
 	"wox/common"
 	"wox/plugin"
 	"wox/setting"
-	"wox/ui"
 	"wox/util"
 	"wox/util/filesearch"
-
-	"github.com/gorilla/websocket"
 )
 
 func TestUrlPlugin(t *testing.T) {
@@ -1289,151 +1283,4 @@ func submitColorFormAction(t *testing.T, ctx context.Context, result plugin.Quer
 	}
 
 	t.Fatalf("form action %q not found in %#v", actionName, result.Actions)
-}
-
-var (
-	testUIWebsocketOnce sync.Once
-	testUIWebsocketPort int
-	testUIWebsocketErr  error
-)
-
-type toolbarObserver struct {
-	t      *testing.T
-	conn   *websocket.Conn
-	mu     sync.Mutex
-	titles []string
-}
-
-func newToolbarObserver(t *testing.T) *toolbarObserver {
-	t.Helper()
-
-	wsURL := ensureTestUIWebsocket(t)
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil {
-		t.Fatalf("failed to connect to test UI websocket: %v", err)
-	}
-
-	observer := &toolbarObserver{
-		t:    t,
-		conn: conn,
-	}
-	go observer.readLoop()
-	return observer
-}
-
-func (o *toolbarObserver) readLoop() {
-	for {
-		_, payload, err := o.conn.ReadMessage()
-		if err != nil {
-			return
-		}
-
-		var message map[string]any
-		if err := json.Unmarshal(payload, &message); err != nil {
-			continue
-		}
-
-		if message["Type"] != "WebsocketMsgTypeRequest" {
-			continue
-		}
-
-		if method, _ := message["Method"].(string); method == "ShowToolbarMsg" {
-			if data, ok := message["Data"].(map[string]any); ok {
-				if title, ok := data["Title"].(string); ok && title != "" {
-					o.mu.Lock()
-					o.titles = append(o.titles, title)
-					o.mu.Unlock()
-				}
-			}
-		}
-
-		response := map[string]any{
-			"RequestId": message["RequestId"],
-			"TraceId":   message["TraceId"],
-			"SessionId": message["SessionId"],
-			"Type":      "WebsocketMsgTypeResponse",
-			"Method":    message["Method"],
-			"Success":   true,
-			"Data":      nil,
-		}
-		if err := o.conn.WriteJSON(response); err != nil {
-			return
-		}
-	}
-}
-
-func (o *toolbarObserver) HasToolbarTitle(expected string) bool {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	for _, title := range o.titles {
-		if title == expected {
-			return true
-		}
-	}
-	return false
-}
-
-func (o *toolbarObserver) HasToolbarTitlePrefix(expected string) bool {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	for _, title := range o.titles {
-		if strings.HasPrefix(title, expected) {
-			return true
-		}
-	}
-	return false
-}
-
-func (o *toolbarObserver) ToolbarTitles() []string {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	return append([]string(nil), o.titles...)
-}
-
-func (o *toolbarObserver) Close() {
-	_ = o.conn.Close()
-}
-
-func ensureTestUIWebsocket(t *testing.T) string {
-	t.Helper()
-
-	testUIWebsocketOnce.Do(func() {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			testUIWebsocketErr = err
-			return
-		}
-		testUIWebsocketPort = listener.Addr().(*net.TCPAddr).Port
-		_ = listener.Close()
-
-		ui.GetUIManager().UpdateServerPort(testUIWebsocketPort)
-		go ui.GetUIManager().StartWebsocketAndWait(context.Background())
-
-		wsURL := testUIWebsocketURL(testUIWebsocketPort)
-		testUIWebsocketErr = pollUntil(5*time.Second, 100*time.Millisecond, func() (bool, error) {
-			conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-			if err != nil {
-				return false, nil
-			}
-			_ = conn.Close()
-			return true, nil
-		})
-	})
-
-	if testUIWebsocketErr != nil {
-		t.Fatalf("failed to start test UI websocket: %v", testUIWebsocketErr)
-	}
-
-	return testUIWebsocketURL(testUIWebsocketPort)
-}
-
-func testUIWebsocketURL(port int) string {
-	return (&url.URL{
-		Scheme: "ws",
-		Host:   fmt.Sprintf("127.0.0.1:%d", port),
-		Path:   "/ws",
-	}).String()
 }

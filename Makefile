@@ -1,6 +1,5 @@
-.PHONY: build clean host go-ui _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage smoke www
+.PHONY: build clean host go-ui _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
 
-SMOKE_FILTER := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 
 # GNU Make on Windows may choose Git's sh.exe without exposing Git usr/bin to
@@ -67,10 +66,9 @@ help:
 	@echo "Targets:"
 	@echo "  help       Show this help message"
 	@echo "  dev        Setup development environment"
-	@echo "  go-ui      Build the experimental standalone Go UI"
+	@echo "  go-ui      Prepare embedded Go UI resources"
 	@echo "  test       Run tests"
 	@echo "  build      Build all components"
-	@echo "  smoke      Run the desktop smoke E2E flow"
 	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
 	@echo "  appimage   Build Linux AppImage"
 	@echo "  plugins    Update plugin store"
@@ -83,7 +81,6 @@ help:
 _check_deps:
 	@echo "Checking required dependencies..."
 	@command -v go >/dev/null 2>&1 || { echo "go is required but not installed. Visit https://golang.org/doc/install" >&2; exit 1; }
-	@command -v flutter >/dev/null 2>&1 || { echo "flutter is required but not installed. Visit https://flutter.dev/docs/get-started/install" >&2; exit 1; }
 	@command -v node >/dev/null 2>&1 || { echo "nodejs is required but not installed. Visit https://nodejs.org/" >&2; exit 1; }
 	@$(PNPM) --version >/dev/null 2>&1 || { echo "pnpm is required but unavailable. Install pnpm globally or enable Corepack for this Node.js installation." >&2; exit 1; }
 	@command -v uv >/dev/null 2>&1 || { echo "uv is required but not installed. Visit https://github.com/astral-sh/uv" >&2; exit 1; }
@@ -99,6 +96,7 @@ ifeq ($(PLATFORM),macos)
 endif
 
 ifeq ($(PLATFORM),windows)
+	@command -v nuget >/dev/null 2>&1 || { echo "nuget is required on Windows to prepare WebView2Loader.dll" >&2; exit 1; }
 	@uname -s | grep -q '^MINGW64_NT' || { \
 		echo "Please run this command in MINGW64 environment. If you have not installed MINGW64, please install it first. refer to https://www.mingw-w64.org/downloads/ or scoop install mingw" >&2; \
 		exit 1; \
@@ -110,7 +108,7 @@ endif
 clean:
 	rm -rf $(RELEASE_DIR)
 
-dev: _check_deps ensure-resources
+dev: _check_deps ensure-resources go-ui
 	$(MAKE) -C wox.core woxmr-build
 	$(MAKE) -C wox.core window-hook-build
 	$(MAKE) host
@@ -120,7 +118,7 @@ host:
 	$(MAKE) -C wox.plugin.host.python build
 
 go-ui:
-	$(MAKE) -C wox.ui.go build
+	$(MAKE) -C wox.ui.go embed-resources
 
 # SDK releases bump both SDK patch versions before publish because both npm and
 # PyPI reject already-published versions. The host dependency update still waits
@@ -145,8 +143,6 @@ _sync_sdk_versions:
 # Ensure required resource directories exist with dummy files for go:embed
 ensure-resources:
 	@echo "Ensuring required resource directories exist..."
-	@mkdir -p wox.core/resource/ui/flutter
-	@touch wox.core/resource/ui/flutter/placeholder
 	@mkdir -p wox.core/resource/ui/go
 	@touch wox.core/resource/ui/go/placeholder
 	@mkdir -p wox.core/resource/hosts
@@ -155,9 +151,8 @@ ensure-resources:
 	@touch wox.core/resource/others/placeholder
 
 # Bug fix: keep the tracked others placeholder because go:embed rejects an
-# empty directory, and deleting it after tests makes the next smoke build fail.
+# empty directory, and deleting it after tests makes the next Go build fail.
 clean-resources:
-	@rm -f wox.core/resource/ui/flutter/placeholder
 	@rm -f wox.core/resource/ui/go/placeholder
 	@rm -f wox.core/resource/hosts/placeholder
 
@@ -205,17 +200,12 @@ test-verbose:
 test-debug:
 	cd wox.core && WOX_TEST_DATA_DIR=/tmp/wox-test-debug WOX_TEST_CLEANUP=false WOX_TEST_VERBOSE=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
-smoke: ensure-resources
-	@trap '$(MAKE) clean-resources' EXIT; $(MAKE) -C wox.test smoke SMOKE_FILTER="$(SMOKE_FILTER)"
-
 %:
 	@:
 
 
 build: clean dev
-	    $(MAKE) -C wox.ui.flutter/wox build
-		$(MAKE) -C wox.ui.go embed-resources
-		$(MAKE) -C wox.core build
+	$(MAKE) -C wox.core build
 
 ifeq ($(PLATFORM),linux)
 		$(MAKE) appimage

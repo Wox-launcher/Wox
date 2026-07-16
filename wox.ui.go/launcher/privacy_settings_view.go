@@ -5,7 +5,7 @@ import (
 	woxwidget "github.com/Wox-launcher/wox.ui.go/widget"
 )
 
-// buildPrivacySettingsPage exposes the telemetry opt-in and the same representative payload as Flutter.
+// buildPrivacySettingsPage exposes the telemetry opt-in and core's representative payload.
 func (a *App) buildPrivacySettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	contentWidth := min(float32(760), max(float32(0), width-72))
 	items := settingItemsForSnapshot(snapshot)

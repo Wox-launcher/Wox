@@ -849,7 +849,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->web_view_content_keys = [[NSMutableDictionary alloc] init];
     window->context = context;
     window->hide_on_blur = hide_on_blur != 0;
-    // Match Flutter's launcher material instead of compositing the transparent Metal surface directly over the desktop.
+    // Use launcher material instead of compositing the transparent Metal surface directly over the desktop.
     NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
     effect_view.material = NSVisualEffectMaterialPopover;
     effect_view.state = NSVisualEffectStateActive;

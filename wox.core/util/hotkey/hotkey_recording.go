@@ -34,7 +34,7 @@ type RecordingResult struct {
 	Kind   string
 }
 
-// RecordingCapability tells Flutter whether it should wait for Go raw-key
+// RecordingCapability tells UI whether it should wait for Go raw-key
 // events or fall back to local normal-combo parsing.
 type RecordingCapability struct {
 	RawRecorderAvailable bool
@@ -78,7 +78,7 @@ func StopRecordingSession() {
 	defaultRecordingSessionManager.Stop()
 }
 
-// SubmitRecordingFallbackCandidate accepts Flutter's local normal-combo
+// SubmitRecordingFallbackCandidate accepts UI's local normal-combo
 // fallback only when the active Go recorder session explicitly allows it.
 func SubmitRecordingFallbackCandidate(hotkey string) error {
 	return defaultRecordingSessionManager.SubmitFallbackCandidate(hotkey)

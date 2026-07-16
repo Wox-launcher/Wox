@@ -15,12 +15,12 @@ import (
 const resultDebounceIntervalMs = 32
 
 // queryRun owns the per-query execution state that used to live in
-// handleWebsocketQuery. Keeping this state together makes it clear that result
+// handleUIQuery. Keeping this state together makes it clear that result
 // batching, fallback, and final response delivery are scoped by query id, not by
 // the session's latest visible query.
 type queryRun struct {
 	ctx     context.Context
-	request WebsocketMsg
+	request UIMessage
 	// sessionId scopes the query result cache to the launcher window session.
 	sessionId string
 	// queryId scopes result snapshots so concurrent queries in the same session do not overwrite each other.
@@ -30,7 +30,7 @@ type queryRun struct {
 	// ownerPlugin is set for plugin-scoped queries and nil for global queries.
 	ownerPlugin *plugin.Instance
 	// startTimestamp records the end-to-end query start time for elapsed metrics and debug tails.
-	// Prefer the Flutter request send timestamp; fall back to backend start for non-UI callers.
+	// Prefer the UI request send timestamp; fall back to backend start for non-UI callers.
 	startTimestamp int64
 	// firstFlushDeadlineMs is the end-to-end deadline for the first visible snapshot.
 	firstFlushDeadlineMs int64
@@ -50,11 +50,11 @@ type queryRun struct {
 	latestResponse plugin.QueryResponseUI
 	// fallbackHandled prevents duplicate fallback checks after fallbackReady and done both fire.
 	fallbackHandled bool
-	// resultDebouncer batches plugin results before flushing snapshots back to Flutter.
+	// resultDebouncer batches plugin results before flushing snapshots back to UI.
 	resultDebouncer *util.Debouncer[plugin.QueryResultUI]
 }
 
-func newQueryRun(ctx context.Context, request WebsocketMsg, query plugin.Query, ownerPlugin *plugin.Instance) *queryRun {
+func newQueryRun(ctx context.Context, request UIMessage, query plugin.Query, ownerPlugin *plugin.Instance) *queryRun {
 	return &queryRun{
 		ctx:                 ctx,
 		request:             request,
@@ -335,7 +335,7 @@ func (r *queryRun) flush(results []plugin.QueryResultUI, reason string) {
 
 	// Bug fix: core query pipelines are concurrent, so backend "current query"
 	// state can move while an older or newer pipeline is still flushing. Send
-	// the queryId-specific snapshot and let Flutter decide whether it is still
+	// the queryId-specific snapshot and let UI decide whether it is still
 	// the visible query; otherwise the current query can miss its final response
 	// and keep the loading indicator alive.
 	//

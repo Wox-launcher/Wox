@@ -207,7 +207,7 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 		if err := writeKDEWaylandImageBytesViaUI(pngData); err != nil {
 			return err
 		}
-		util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("clipboard: KDE Wayland image write via Flutter, pngBytes=%d", len(pngData)))
+		util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("clipboard: KDE Wayland image write via UI, pngBytes=%d", len(pngData)))
 		return nil
 	}
 
@@ -226,9 +226,9 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 	)
 }
 
-// writeKDEWaylandImageBytesViaUI delegates image clipboard ownership to Flutter.
+// writeKDEWaylandImageBytesViaUI delegates image clipboard ownership to UI.
 // KWin does not reliably request image payloads from the background portal session,
-// while the focused Flutter runner already has a working GTK/native clipboard path.
+// while the focused UI runner already has a working GTK/native clipboard path.
 func writeKDEWaylandImageBytesViaUI(pngData []byte) error {
 	cacheDir := util.GetLocation().GetCacheDirectory()
 	if cacheDir == "" {
@@ -256,7 +256,7 @@ func writeKDEWaylandImageBytesViaUI(pngData []byte) error {
 	}
 
 	if err = writeNativeImageFile(util.NewTraceContext(), tempPath); err != nil {
-		return fmt.Errorf("clipboard: KDE Wayland Flutter image write failed: %w", err)
+		return fmt.Errorf("clipboard: KDE Wayland UI image write failed: %w", err)
 	}
 	return nil
 }

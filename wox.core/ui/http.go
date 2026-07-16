@@ -14,25 +14,14 @@ import (
 	"wox/util/timetracking"
 
 	"github.com/google/uuid"
-	"github.com/olahol/melody"
 	"github.com/rs/cors"
 	"github.com/samber/lo"
 )
 
-var m *melody.Melody
-
-type websocketMsgType string
-
-const (
-	WebsocketMsgTypeRequest  websocketMsgType = "WebsocketMsgTypeRequest"
-	WebsocketMsgTypeResponse websocketMsgType = "WebsocketMsgTypeResponse"
-)
-
-type WebsocketMsg struct {
+type UIMessage struct {
 	RequestId     string // unique id for each request
 	TraceId       string // trace id between ui and wox, used for logging
 	SessionId     string // ui session id for isolating messages
-	Type          websocketMsgType
 	Method        string
 	Success       bool
 	Data          any
@@ -92,7 +81,7 @@ func writeErrorResponse(w http.ResponseWriter, errMsg string) {
 	w.Write(d)
 }
 
-// newRouterMux exposes the same core-owned HTTP API to socket and in-process callers.
+// newRouterMux exposes the same core-owned HTTP API to loopback and in-process callers.
 func newRouterMux(ctx context.Context) *http.ServeMux {
 	mux := http.NewServeMux()
 	for path, callback := range routers {
@@ -106,88 +95,7 @@ func newRouterMux(ctx context.Context) *http.ServeMux {
 	return mux
 }
 
-func serveAndWait(ctx context.Context, port int) {
-	m = melody.New()
-	m.Config.MaxMessageSize = 1024 * 1024 * 10 // 10MB
-
-	mux := newRouterMux(ctx)
-
-	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		m.HandleRequest(w, r)
-	})
-
-	m.HandleMessage(func(s *melody.Session, msg []byte) {
-		receivedAt := util.GetSystemTimestamp()
-		ctxNew := util.NewTraceContext()
-		msgText := string(msg)
-
-		if strings.Contains(msgText, string(WebsocketMsgTypeRequest)) {
-			var request WebsocketMsg
-			unmarshalStart := util.GetSystemTimestamp()
-			unmarshalErr := json.Unmarshal(msg, &request)
-			if unmarshalErr != nil {
-				logger.Error(ctxNew, fmt.Sprintf("failed to unmarshal websocket request: %s", unmarshalErr.Error()))
-				return
-			}
-			requestCtx := util.WithSessionContext(
-				util.NewTraceContextWith(request.TraceId),
-				request.SessionId,
-			)
-			if request.Method == "Query" {
-				tracker := timetracking.New("websocket_request_unmarshal")
-				if tracker.Enabled() {
-					tracker.SetRawString("queryId", websocketMsgStringParam(request, "queryId"))
-					tracker.SetRawString("method", request.Method)
-					tracker.SetRawString("queryType", websocketMsgStringParam(request, "queryType"))
-					tracker.SetString("queryText", websocketMsgStringParam(request, "queryText"))
-					tracker.SetInt("payloadBytes", len(msg))
-					tracker.SetInt64("costMs", util.GetSystemTimestamp()-unmarshalStart)
-					tracker.SetInt64("sinceReceiveMs", util.GetSystemTimestamp()-receivedAt)
-					tracker.Log(requestCtx)
-				}
-			}
-			dispatchStart := util.GetSystemTimestamp()
-			util.Go(ctxNew, "handle ui query", func() {
-				if request.Method == "Query" {
-					tracker := timetracking.New("websocket_request_handler_start")
-					if tracker.Enabled() {
-						tracker.SetRawString("queryId", websocketMsgStringParam(request, "queryId"))
-						tracker.SetRawString("method", request.Method)
-						tracker.SetInt64("queuedMs", util.GetSystemTimestamp()-dispatchStart)
-						tracker.SetInt64("sinceReceiveMs", util.GetSystemTimestamp()-receivedAt)
-						tracker.Log(requestCtx)
-					}
-				}
-				onUIWebsocketRequest(requestCtx, request)
-			})
-		} else if strings.Contains(msgText, string(WebsocketMsgTypeResponse)) {
-			var response WebsocketMsg
-			unmarshalErr := json.Unmarshal(msg, &response)
-			if unmarshalErr != nil {
-				logger.Error(ctxNew, fmt.Sprintf("failed to unmarshal websocket response: %s", unmarshalErr.Error()))
-				return
-			}
-			responseCtx := util.WithSessionContext(
-				context.WithValue(ctxNew, util.ContextKeyTraceId, response.TraceId),
-				response.SessionId,
-			)
-			util.Go(ctxNew, "handle ui response", func() {
-				onUIWebsocketResponse(responseCtx, response)
-			})
-		} else {
-			logger.Error(ctxNew, fmt.Sprintf("unknown websocket msg: %s", string(msg)))
-		}
-	})
-
-	logger.Info(ctx, fmt.Sprintf("websocket server start at：ws://127.0.0.1:%d", port))
-	handler := cors.Default().Handler(mux)
-	err := http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", port), handler)
-	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to start server: %s", err.Error()))
-	}
-}
-
-// serveHTTPOnlyAndWait keeps loopback APIs available without exposing the UI WebSocket in embedded mode.
+// serveHTTPOnlyAndWait keeps loopback APIs available to plugin hosts and secondary processes.
 func serveHTTPOnlyAndWait(ctx context.Context, port int) {
 	logger.Info(ctx, fmt.Sprintf("HTTP server start at: http://127.0.0.1:%d", port))
 	handler := cors.Default().Handler(newRouterMux(ctx))
@@ -196,36 +104,26 @@ func serveHTTPOnlyAndWait(ctx context.Context, port int) {
 	}
 }
 
-func requestUI(ctx context.Context, request WebsocketMsg) error {
+func requestUI(ctx context.Context, request UIMessage) error {
 	localSink := getLocalUISink()
-	if localSink == nil && m == nil {
+	if localSink == nil {
 		logger.Warn(ctx, fmt.Sprintf("UI transport not ready, skipping request: %s", request.Method))
 		return fmt.Errorf("UI transport is not initialized")
 	}
 
-	request.Type = WebsocketMsgTypeRequest
 	request.Success = true
-	marshalData, marshalErr := json.Marshal(request)
-	if marshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to marshal websocket request: %s", marshalErr.Error()))
-		return marshalErr
-	}
-
 	jsonData, _ := json.Marshal(request.Data)
 
 	// some messages are too frequent, skip logging to avoid performance issue
 	if request.Method != "UpdateResult" && request.Method != "ShowToolbarMsg" {
 		util.GetLogger().Debug(ctx, fmt.Sprintf("[Wox -> UI] %s: %s", request.Method, jsonData))
 	}
-	if localSink != nil {
-		return localSink.deliverRequest(request)
-	}
-	return m.Broadcast(marshalData)
+	return localSink.deliverRequest(request)
 }
 
-func responseUI(ctx context.Context, response WebsocketMsg) {
+func responseUI(ctx context.Context, response UIMessage) {
 	localSink := getLocalUISink()
-	if localSink == nil && m == nil {
+	if localSink == nil {
 		logger.Warn(ctx, fmt.Sprintf("UI transport not ready, skipping response: %s", response.Method))
 		return
 	}
@@ -242,11 +140,10 @@ func responseUI(ctx context.Context, response WebsocketMsg) {
 			queryResponse, _ = response.Data.(QueryResponse)
 		}
 	}
-	response.Type = WebsocketMsgTypeResponse
 	marshalStart := util.GetSystemTimestamp()
 	marshalData, marshalErr := json.Marshal(response)
 	if marshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to marshal UI response: %s", marshalErr.Error()))
 		return
 	}
 	marshalCost := util.GetSystemTimestamp() - marshalStart
@@ -261,51 +158,45 @@ func responseUI(ctx context.Context, response WebsocketMsg) {
 			tracker.Log(ctx)
 		}
 	}
-	broadcastStart := util.GetSystemTimestamp()
-	var broadcastErr error
-	if localSink != nil {
-		broadcastErr = localSink.deliverResponse(response)
-	} else {
-		broadcastErr = m.Broadcast(marshalData)
-	}
-	broadcastCost := util.GetSystemTimestamp() - broadcastStart
+	deliveryStart := util.GetSystemTimestamp()
+	deliveryErr := localSink.deliverResponse(response)
+	deliveryCost := util.GetSystemTimestamp() - deliveryStart
 	if isQueryResponse {
-		tracker := timetracking.New("response_ui_broadcast")
+		tracker := timetracking.New("response_ui_delivery")
 		if tracker.Enabled() {
 			tracker.SetRawString("queryId", queryId)
 			tracker.SetInt("responseCount", responseCount)
 			tracker.SetBool("isFinal", isFinal)
 			tracker.SetInt("payloadBytes", len(marshalData))
-			tracker.SetInt64("costMs", broadcastCost)
+			tracker.SetInt64("costMs", deliveryCost)
 			tracker.SetInt64("totalMs", util.GetSystemTimestamp()-responseStart)
 			tracker.Log(ctx)
 		}
 	}
-	if broadcastErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to broadcast websocket response: %s", broadcastErr.Error()))
+	if deliveryErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to deliver UI response: %s", deliveryErr.Error()))
 	}
 	if isQueryResponse {
 		logQueryPayloadBreakdown(ctx, queryResponse, len(marshalData))
 	}
 }
 
-func responseUISuccessWithData(ctx context.Context, request WebsocketMsg, data any) {
-	responseUI(ctx, WebsocketMsg{
+func responseUISuccessWithData(ctx context.Context, request UIMessage, data any) {
+	responseUI(ctx, UIMessage{
 		RequestId: request.RequestId,
 		TraceId:   util.GetContextTraceId(ctx),
 		SessionId: request.SessionId,
-		Type:      WebsocketMsgTypeResponse,
 		Method:    request.Method,
 		Success:   true,
 		Data:      data,
 	})
 }
 
-func responseUIQueryResults(ctx context.Context, request WebsocketMsg, queryId string, results []plugin.QueryResultUI, isFinal bool) {
+func responseUIQueryResults(ctx context.Context, request UIMessage, queryId string, results []plugin.QueryResultUI, isFinal bool) {
 	responseUIQueryResponse(ctx, request, queryId, plugin.QueryResponseUI{Results: results}, isFinal)
 }
 
-func responseUIQueryResponse(ctx context.Context, request WebsocketMsg, queryId string, response plugin.QueryResponseUI, isFinal bool) {
+func responseUIQueryResponse(ctx context.Context, request UIMessage, queryId string, response plugin.QueryResponseUI, isFinal bool) {
 	payloadStart := util.GetSystemTimestamp()
 	sendTimestamp := util.GetSystemTimestamp()
 	queryPayload := QueryResponse{
@@ -327,11 +218,10 @@ func responseUIQueryResponse(ctx context.Context, request WebsocketMsg, queryId 
 		tracker.SetInt64("sendTimestamp", sendTimestamp)
 		tracker.Log(ctx)
 	}
-	responseUI(ctx, WebsocketMsg{
+	responseUI(ctx, UIMessage{
 		RequestId:     request.RequestId,
 		TraceId:       util.GetContextTraceId(ctx),
 		SessionId:     request.SessionId,
-		Type:          WebsocketMsgTypeResponse,
 		Method:        request.Method,
 		Success:       true,
 		SendTimestamp: sendTimestamp, // Only set timestamp for Query responses
@@ -339,8 +229,8 @@ func responseUIQueryResponse(ctx context.Context, request WebsocketMsg, queryId 
 	})
 }
 
-// websocketMsgStringParam reads lightweight query diagnostics from websocket data before the normal typed handler parses it.
-func websocketMsgStringParam(msg WebsocketMsg, key string) string {
+// uiMessageStringParam reads lightweight query diagnostics before the normal typed handler parses it.
+func uiMessageStringParam(msg UIMessage, key string) string {
 	dataMap, ok := msg.Data.(map[string]any)
 	if !ok {
 		return ""
@@ -357,8 +247,8 @@ func websocketMsgStringParam(msg WebsocketMsg, key string) string {
 	return ""
 }
 
-// responseUIQueryTimingInfo extracts query response dimensions so generic websocket response logging can stay query-scoped.
-func responseUIQueryTimingInfo(response WebsocketMsg) (queryId string, responseCount int, isFinal bool, ok bool) {
+// responseUIQueryTimingInfo extracts query response dimensions so generic delivery logging can stay query-scoped.
+func responseUIQueryTimingInfo(response UIMessage) (queryId string, responseCount int, isFinal bool, ok bool) {
 	if response.Method != "Query" {
 		return "", 0, false, false
 	}
@@ -520,16 +410,15 @@ func marshalSize(value any) int {
 	return len(data)
 }
 
-func responseUIQueryCompletionHint(ctx context.Context, request WebsocketMsg, queryId string, hint *plugin.QueryCompletionHint) {
+func responseUIQueryCompletionHint(ctx context.Context, request UIMessage, queryId string, hint *plugin.QueryCompletionHint) {
 	if hint == nil {
 		return
 	}
 
-	responseUI(ctx, WebsocketMsg{
+	responseUI(ctx, UIMessage{
 		RequestId:     uuid.NewString(),
 		TraceId:       util.GetContextTraceId(ctx),
 		SessionId:     request.SessionId,
-		Type:          WebsocketMsgTypeResponse,
 		Method:        "QueryCompletionHint",
 		Success:       true,
 		SendTimestamp: util.GetSystemTimestamp(),
@@ -540,16 +429,15 @@ func responseUIQueryCompletionHint(ctx context.Context, request WebsocketMsg, qu
 	})
 }
 
-func responseUISuccess(ctx context.Context, request WebsocketMsg) {
+func responseUISuccess(ctx context.Context, request UIMessage) {
 	responseUISuccessWithData(ctx, request, nil)
 }
 
-func responseUIError(ctx context.Context, request WebsocketMsg, errMsg string) {
-	responseUI(ctx, WebsocketMsg{
+func responseUIError(ctx context.Context, request UIMessage, errMsg string) {
+	responseUI(ctx, UIMessage{
 		RequestId: request.RequestId,
 		TraceId:   util.GetContextTraceId(ctx),
 		SessionId: request.SessionId,
-		Type:      WebsocketMsgTypeResponse,
 		Method:    request.Method,
 		Success:   false,
 		Data:      errMsg,

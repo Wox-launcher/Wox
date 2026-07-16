@@ -10,7 +10,7 @@ const themePlatformOverrideVariantsField = "variants"
 
 // ThemePlatformOverride preserves a raw top-level platform node from theme JSON.
 // The backend merges the node for the current OS before sending the flat theme to
-// Flutter, while keeping the raw node available so store-installed themes do not
+// UI, while keeping the raw node available so store-installed themes do not
 // lose platform-specific settings for other operating systems.
 type ThemePlatformOverride map[string]json.RawMessage
 

@@ -890,7 +890,7 @@ func (a *APIImpl) PushResults(ctx context.Context, query Query, results []QueryR
 	}
 
 	// Bug fix: core no longer owns "current query" state because backend query
-	// pipelines are concurrent. Push by query id and let Flutter accept or reject
+	// pipelines are concurrent. Push by query id and let UI accept or reject
 	// the payload against the visible query, matching normal Query responses.
 	layout := GetPluginManager().getCachedLayoutForPluginQuery(ctx, a.pluginInstance, query)
 	for i := range results {
@@ -953,13 +953,13 @@ func (a *APIImpl) Screenshot(ctx context.Context, option ScreenshotOption) Scree
 	request := common.DefaultCaptureScreenshotRequest()
 	// Plugin screenshots return a saved file path and leave clipboard handling to the caller.
 	request.Output = "file"
-	// Screenshot API options are translated in core where the plugin caller is known. Keeping Flutter
+	// Screenshot API options are translated in core where the plugin caller is known. Keeping UI
 	// on a request-only contract avoids making the UI infer SDK defaults from plugin runtime details.
 	request.HideAnnotationToolbar = option.HideAnnotationToolbar
 	request.AutoConfirm = option.AutoConfirm
 	if !a.pluginInstance.IsSystemPlugin {
 		// Third-party screenshot callers need a visible identity marker in the floating toolbox.
-		// The UI cannot reliably infer the plugin from the generic CaptureScreenshot websocket method,
+		// The UI cannot reliably infer the plugin from the generic CaptureScreenshot method,
 		// so core resolves the metadata icon here and sends only the render-ready WoxImage.
 		callerIcon := a.pluginInstance.Metadata.GetIconOrDefault(a.pluginInstance.PluginDirectory, common.WoxIcon)
 		request.CallerIcon = &callerIcon

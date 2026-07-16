@@ -197,7 +197,7 @@ func GetMouseScreen() Size {
 		// Do not fall back to X11/XRandR while the session is Wayland: DISPLAY may
 		// only describe the XWayland compatibility server, whose pointer and monitor
 		// state can disagree with the compositor that actually places the window.
-		// Return a neutral monitor only for sizing/logging; Flutter skips absolute
+		// Return a neutral monitor only for sizing/logging; UI skips absolute
 		// placement on native Wayland and lets the compositor choose the screen.
 		size, err := getPrimaryScreenGtk()
 		if err == nil {

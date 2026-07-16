@@ -404,7 +404,7 @@ type QueryResponseUI struct {
 	Refinements         []QueryRefinement
 	Layout              QueryLayout
 	Context             QueryContext
-	QueryStartTimestamp int64 // end-to-end query start timestamp, preferably from Flutter request send time
+	QueryStartTimestamp int64 // end-to-end query start timestamp, preferably from UI request send time
 }
 
 // PushResultsPayload is used to push additional results to UI for a query.

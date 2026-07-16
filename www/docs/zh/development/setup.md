@@ -7,7 +7,7 @@
 这个仓库里通常一起协作的部分主要有四块：
 
 - `wox.core/`：Go 后端、内置插件、设置、存储、打包入口
-- `wox.ui.flutter/wox/`：macOS / Windows / Linux 的 Flutter 桌面 UI
+- `wox.ui.go/`：macOS / Windows / Linux 的 Go UI 桌面 UI
 - `wox.plugin.host.nodejs/`：Node.js 插件宿主
 - `wox.plugin.host.python/`：Python 插件宿主
 
@@ -18,7 +18,6 @@
 先安装这些工具：
 
 - [Go](https://go.dev/dl/)
-- [Flutter](https://docs.flutter.dev/get-started/install)
 - [Node.js](https://nodejs.org/)
 - [pnpm](https://pnpm.io/)
 - [uv](https://github.com/astral-sh/uv)
@@ -37,6 +36,7 @@
 
 - 请在 `MINGW64` shell 中运行构建命令
 - 安装 [MinGW-w64](https://www.mingw-w64.org/)，这样 Windows 原生 runner 代码才能正常编译
+- 安装 [NuGet CLI](https://www.nuget.org/downloads)，用于准备固定版本的 `WebView2Loader.dll`
 
 ### Linux
 
@@ -58,7 +58,7 @@ make dev
 - 构建 `wox.core` 里的 `woxmr`
 - 构建两个插件宿主
 
-注意：`make dev` 不会构建 Flutter 桌面应用本体。它的作用是先把共享运行时准备好，真正需要可运行产物时再执行完整构建。
+`make dev` 会准备嵌入式 Go UI 的原生资源和共享运行时。需要生成可运行的单文件 Wox 程序和平台安装包时，再执行完整构建。
 
 ## 常用命令
 
@@ -67,7 +67,6 @@ make dev
 ```bash
 make dev
 make test
-make smoke
 make build
 ```
 
@@ -75,8 +74,7 @@ make build
 
 - `make dev`：准备本地开发环境
 - `make test`：运行 `wox.core/test` 下的 Go 测试
-- `make smoke`：运行 `wox.test` 里的桌面 smoke 流程
-- `make build`：构建插件宿主、Flutter UI、`wox.core` 以及平台打包产物
+- `make build`：把 Go UI 编译进 `wox.core`，并构建插件宿主和平台打包产物
 
 如果你改的是后端和 UI、宿主之间的共享协议，最后一定要跑一次 `make build`，这是最容易暴露跨项目不一致的检查。
 
@@ -96,7 +94,7 @@ make build
 make -C wox.core build
 ```
 
-### Flutter UI（`wox.ui.flutter/wox`）
+### Go UI（`wox.ui.go`）
 
 适合处理：
 
@@ -108,7 +106,7 @@ make -C wox.core build
 常用命令：
 
 ```bash
-make -C wox.ui.flutter/wox build
+cd wox.ui.go && go test ./...
 ```
 
 ### 插件宿主
@@ -156,8 +154,9 @@ Wox 会把运行时数据存到用户主目录下：
 
 如果 `make dev` 一开始就失败：
 
-- 先确认 `go`、`flutter`、`node`、`pnpm`、`uv` 都在 `PATH` 里
+- 先确认 `go`、`node`、`pnpm`、`uv` 都在 `PATH` 里
+- Windows 上还要确认 `nuget` 在 `PATH` 里
 - Windows 上确认你在 `MINGW64` shell，而不是 PowerShell 或 CMD
 - Linux 打包时确认 `patchelf` 和 `appimagetool` 已安装
 
-如果某个子项目单独能编译，但 Wox 整体还是跑不起来，回到仓库根目录执行 `make build`。这是发现 `wox.core`、Flutter、插件宿主之间契约漂移的最快办法。
+如果某个子项目单独能编译，但 Wox 整体还是跑不起来，回到仓库根目录执行 `make build`。这是发现 `wox.core`、Go UI、插件宿主之间契约漂移的最快办法。

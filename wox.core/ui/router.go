@@ -39,7 +39,6 @@ import (
 	"wox/util/overlay"
 	"wox/util/overlay/imageoverlay"
 	"wox/util/permission"
-	"wox/util/processmemory"
 	"wox/util/screen"
 	utilselection "wox/util/selection"
 	"wox/util/shell"
@@ -251,7 +250,7 @@ type fileIconRequest struct {
 }
 
 func handleFileIcon(w http.ResponseWriter, r *http.Request) {
-	// File previews run in Flutter, but icon extraction already belongs to core's
+	// File previews run in UI, but icon extraction already belongs to core's
 	// platform-specific fileicon pipeline. Keep this endpoint small so previews
 	// reuse the same cached icon artifacts as launcher results.
 	ctx := getTraceContext(r)
@@ -348,7 +347,7 @@ func handleResolveImage(w http.ResponseWriter, r *http.Request) {
 
 func handlePreviewFileMedia(w http.ResponseWriter, r *http.Request) {
 	// Media previews need ordinary HTTP range requests so large video files can
-	// stream into WebView without loading the whole file into Flutter memory.
+	// stream into WebView without loading the whole file into UI memory.
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -433,7 +432,7 @@ func resolvePreviewFileMediaContentType(filePath string) string {
 
 func handleLazyImageLoad(w http.ResponseWriter, r *http.Request) {
 	// Result icon lazy loading is intentionally an internal UI/core endpoint.
-	// Plugins still return ordinary WoxImage values, while Flutter exchanges the
+	// Plugins still return ordinary WoxImage values, while UI exchanges the
 	// manager-issued token for a resized cache image only after the widget exists.
 	ctx := getTraceContext(r)
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
@@ -630,7 +629,7 @@ func translatePluginGlances(ctx context.Context, pluginInstance *plugin.Instance
 	glances := make([]plugin.MetadataGlance, 0, len(pluginInstance.Metadata.Glances))
 	for _, glance := range pluginInstance.Metadata.Glances {
 		// Glance definitions are metadata used by settings. Translating them here
-		// keeps Flutter dropdowns simple while preserving i18n keys in plugin.json.
+		// keeps UI dropdowns simple while preserving i18n keys in plugin.json.
 		glance.Name = common.I18nString(pluginInstance.TranslateMetadataText(ctx, glance.Name))
 		glance.Description = common.I18nString(pluginInstance.TranslateMetadataText(ctx, glance.Description))
 		glances = append(glances, glance)
@@ -1320,7 +1319,7 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		// New launcher presentation setting: store only the normalized density
 		// enum. The old fixed-size behavior maps to normal, while unsupported
 		// values fall back here before they can desync Go height estimates from
-		// Flutter's rendered metrics.
+		// UI's rendered metrics.
 		normalizedDensity := setting.NormalizeUiDensity(vs)
 		updatedValue = string(normalizedDensity)
 		if err := woxSetting.UiDensity.Set(normalizedDensity); err != nil {
@@ -2901,7 +2900,7 @@ func handleTestTriggerScreenshot(w http.ResponseWriter, r *http.Request) {
 
 	ctx := getTraceContext(r)
 	// The screenshot smoke path needs a backend-triggered session so integration tests can verify
-	// the same Go -> WebSocket -> Flutter round-trip used by the real system plugin action.
+	// the same core-to-UI request path used by the real system plugin action.
 	result, err := GetUIManager().GetUI(ctx).CaptureScreenshot(ctx, common.DefaultCaptureScreenshotRequest())
 	if err != nil {
 		writeErrorResponse(w, err.Error())
@@ -2979,26 +2978,12 @@ func handleTestTriggerTrayQuery(w http.ResponseWriter, r *http.Request) {
 
 func handleOnUIReady(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
-	type uiReadyRequest struct {
-		Pid int
-	}
-	var request uiReadyRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && err != io.EOF {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-	if request.Pid > 0 && request.Pid != os.Getpid() {
-		// Dev mode usually starts Flutter outside the core process tree, so the
-		// ready callback is the reliable boundary where core can learn the UI PID.
-		processmemory.SetWoxUIProcessPid(request.Pid)
-	}
 	GetUIManager().PostUIReady(ctx)
 	startCloudSyncManagerAfterUIReady(ctx)
 	writeSuccessResponse(w, "")
 }
 
-// startCloudSyncManagerAfterUIReady starts the scheduler only after Flutter can
-// acknowledge websocket requests if a scheduled pull applies settings.
+// startCloudSyncManagerAfterUIReady starts the scheduler only after the UI can apply settings from a scheduled pull.
 func startCloudSyncManagerAfterUIReady(ctx context.Context) {
 	startCloudSyncManagerIfSyncEnabled(ctx, cloudsync.GetService())
 }
@@ -3802,7 +3787,7 @@ func handleDictationModelDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDictationModelStatus returns the download status for all known models.
-// The Flutter side polls this to update the model dropdown with live progress.
+// The UI side polls this to update the model dropdown with live progress.
 func handleDictationModelStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")

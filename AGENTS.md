@@ -1,8 +1,7 @@
 ## Architecture
 
-- `wox.core/`: Go backend and app core. Provides HTTP/WebSocket bridge to the UI, manages settings, plugins, database, i18n, and updates. Tests live under `wox.core/test/`.
-- `wox.ui.go/`: Experimental standalone Go UI runtime. Owns the native window, focus lifecycle, and GPU rendering path without depending on Flutter or Gio.
-- `wox.ui.flutter/wox/`: Flutter desktop UI (macOS/Linux/Windows). Talks to `wox.core` via WebSocket/HTTP. Build output is embedded under `wox.core/resource/ui/flutter/`.
+- `wox.core/`: Go backend and app core. Imports the Go UI, manages settings, plugins, database, i18n, and updates. Tests live under `wox.core/test/`.
+- `wox.ui.go/`: Cross-platform Go UI library. Owns the native window, focus lifecycle, and GPU rendering path inside the core process.
 - `wox.plugin.host.*/`: Runtime hosts for plugins (`wox.plugin.host.python`, `wox.plugin.host.nodejs`). They connect to `wox.core` (WebSocket/JSON-RPC), load plugin processes, and proxy plugin API calls.
 - `wox.plugin.*/`: SDKs for third‑party plugins (`wox.plugin.python`, `wox.plugin.nodejs`) – provide typed APIs, models, and helper logic for plugin authors.
 
@@ -15,9 +14,8 @@
 - **Inline Small Logic**: Prefer keeping very small, single-use logic inline. Do not extract a 3-4 line block into a helper unless it is reused, clarifies a meaningful boundary, or clearly reduces complexity.
 - **Explain Structures And Logic**: Add comments for complex structs, state transitions, control-flow branches, and non-obvious or counterintuitive logic. Do not comment obvious code just to satisfy a rule.
 - **Refactors**: Scan `AGENTS.md` and `README.md` files first
-- **Verification**: After code changes, run code formatting according to the project style. Go build may be run for Go/backend changes. Do not run Flutter build; for Flutter changes, only check syntax/static errors. Do not run smoke test unless the user explicitly asks; the user will verify behavior.
+- **Verification**: After code changes, run code formatting according to the project style. Go build may be run for Go/backend changes.
 - **Unit Tests**: Do not write unit tests unless the user requests them
-- **Smoke Tests**: Do not add or run smoke tests unless the user explicitly asks for them.
 - **Format**: When formatting code, you must adhere to the coding style guidelines specified in Wox.code-workspace file.
 
 ## User Coding Style Preferences

@@ -37,10 +37,8 @@ import (
 	"wox/util/ime"
 	"wox/util/keyboard"
 	"wox/util/osvariant"
-	"wox/util/processmemory"
 	"wox/util/screen"
 	"wox/util/selection"
-	"wox/util/shell"
 	"wox/util/tray"
 	"wox/util/window"
 
@@ -56,23 +54,10 @@ var managerInstance *Manager
 var managerOnce sync.Once
 var logger *util.Log
 
-const uiReadyTimeout = 10 * time.Second
-
-// uiLaunchConfig describes one concrete Flutter UI backend launch attempt.
-type uiLaunchConfig struct {
-	Backend string
-	Env     []string
-	Mode    string
-	Reason  string
-}
-
 type Manager struct {
 	hotkeyService      *corehotkey.Service
 	ui                 common.UI
 	serverPort         int
-	uiProcess          *os.Process
-	uiStopRequested    atomic.Bool
-	uiReadyAt          atomic.Int64
 	themes             *util.HashMap[string, common.Theme]
 	systemThemeIds     []string
 	isUIReadyHandled   bool
@@ -114,12 +99,12 @@ func GetUIManager() *Manager {
 			},
 		})
 		managerInstance.ui = &uiImpl{
-			requestMap:      util.NewHashMap[string, chan WebsocketMsg](),
+			requestMap:      util.NewHashMap[string, chan UIMessage](),
 			isVisible:       false, // Initially hidden
 			isInSettingView: false,
 		}
 		terminal.GetSessionManager().SetEmitter(func(ctx context.Context, uiSessionID string, method string, data any) {
-			responseUI(ctx, WebsocketMsg{
+			responseUI(ctx, UIMessage{
 				RequestId: uuid.NewString(),
 				TraceId:   util.GetContextTraceId(ctx),
 				SessionId: uiSessionID,
@@ -261,27 +246,6 @@ func (m *Manager) Start(ctx context.Context) error {
 	})
 
 	return nil
-}
-
-func (m *Manager) Stop(ctx context.Context) {
-	if util.IsDev() {
-		logger.Info(ctx, "skip stopping ui app in dev mode")
-		return
-	}
-	if m.uiProcess == nil {
-		logger.Info(ctx, "skip stopping ui app because no ui process is tracked")
-		return
-	}
-
-	logger.Info(ctx, "start stopping ui app")
-	m.uiStopRequested.Store(true)
-	var pid = m.uiProcess.Pid
-	killErr := m.uiProcess.Kill()
-	if killErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to kill ui process(%d): %s", pid, killErr))
-	} else {
-		util.GetLogger().Info(ctx, fmt.Sprintf("killed ui process(%d)", pid))
-	}
 }
 
 // RegisterMainHotkey updates the main hotkey in the hotkey service and re-registers
@@ -662,10 +626,6 @@ func isHotkeyModifierToken(token string) bool {
 	return token == "ctrl" || token == "shift" || token == "alt" || token == "meta"
 }
 
-func (m *Manager) StartWebsocketAndWait(ctx context.Context) {
-	serveAndWait(ctx, m.serverPort)
-}
-
 // StartHTTPAndWait serves process coordination and resource routes for the embedded UI.
 func (m *Manager) StartHTTPAndWait(ctx context.Context) {
 	serveHTTPOnlyAndWait(ctx, m.serverPort)
@@ -673,249 +633,6 @@ func (m *Manager) StartHTTPAndWait(ctx context.Context) {
 
 func (m *Manager) UpdateServerPort(port int) {
 	m.serverPort = port
-}
-
-// getUILaunchConfig chooses the GTK backend for the Flutter UI and records why it was selected.
-// Linux effectively has X11, native Wayland, and XWayland, but Wox keeps its default
-// policy to two stable modes: use real X11 when the desktop is X11, and inherit native
-// Wayland when the desktop is Wayland. Wox should not force XWayland itself: it can
-// make absolute moves possible in some setups, but its pointer and monitor view can
-// disagree with the Wayland compositor that actually places the window.
-func (m *Manager) getUILaunchConfig(ctx context.Context) (uiLaunchConfig, *uiLaunchConfig) {
-	config := uiLaunchConfig{
-		Backend: "system",
-		Mode:    "system",
-		Reason:  "non-linux platform uses the inherited desktop backend",
-	}
-	if !util.IsLinux() {
-		return config, nil
-	}
-
-	hasWayland := os.Getenv("WAYLAND_DISPLAY") != "" || strings.EqualFold(os.Getenv("XDG_SESSION_TYPE"), "wayland")
-	config.Mode = "auto"
-	if hasWayland {
-		config.Reason = "Wayland session detected, so Wox inherits the desktop backend instead of forcing XWayland"
-	} else if os.Getenv("GDK_BACKEND") != "" {
-		config.Reason = "non-Wayland session already defines GDK_BACKEND, so Wox inherits it"
-	} else {
-		config.Reason = "non-Wayland session uses the inherited desktop backend"
-	}
-	return config, nil
-}
-
-// linuxDesktopDiagnostics returns Linux session details that are useful when GTK backend selection fails.
-func linuxDesktopDiagnostics() string {
-	keys := []string{
-		"XDG_SESSION_TYPE",
-		"XDG_CURRENT_DESKTOP",
-		"XDG_SESSION_DESKTOP",
-		"DESKTOP_SESSION",
-		"GDMSESSION",
-		"WAYLAND_DISPLAY",
-		"DISPLAY",
-		"GDK_BACKEND",
-		"QT_QPA_PLATFORM",
-		"XDG_SESSION_CLASS",
-		"XDG_SESSION_ID",
-	}
-	parts := []string{fmt.Sprintf("goos=%s", runtime.GOOS), fmt.Sprintf("goarch=%s", runtime.GOARCH)}
-	for _, key := range keys {
-		parts = append(parts, fmt.Sprintf("%s=%q", key, os.Getenv(key)))
-	}
-	parts = append(parts, fmt.Sprintf("isHyprland=%v", util.IsHyprlandSession()))
-
-	if data, err := os.ReadFile("/etc/os-release"); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
-			if strings.HasPrefix(line, "PRETTY_NAME=") || strings.HasPrefix(line, "ID=") || strings.HasPrefix(line, "VERSION_ID=") {
-				parts = append(parts, strings.TrimSpace(line))
-			}
-		}
-	}
-
-	return strings.Join(parts, " ")
-}
-
-// logUILaunchConfig records the selected UI backend together with the desktop state that led to it.
-func logUILaunchConfig(ctx context.Context, config uiLaunchConfig, fallback *uiLaunchConfig) {
-	fallbackBackend := "none"
-	if fallback != nil {
-		fallbackBackend = fallback.Backend
-	}
-	logger.Info(ctx, fmt.Sprintf("ui launch backend selected: mode=%s backend=%s env=%v fallback=%s reason=%s", config.Mode, config.Backend, config.Env, fallbackBackend, config.Reason))
-	if util.IsLinux() {
-		logger.Info(ctx, "linux desktop environment: "+linuxDesktopDiagnostics())
-	}
-}
-
-func (m *Manager) StartUIApp(ctx context.Context) error {
-	var appPath = util.GetLocation().GetUIAppPath()
-	if fileInfo, statErr := os.Stat(appPath); os.IsNotExist(statErr) {
-		logger.Info(ctx, "UI app not exist: "+appPath)
-		return errors.New("UI app not exist")
-	} else {
-		if !util.IsFileExecAny(fileInfo.Mode()) {
-			// add execute permission
-			chmodErr := os.Chmod(appPath, 0755)
-			if chmodErr != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to add execute permission to ui app: %s", chmodErr.Error()))
-				return chmodErr
-			} else {
-				logger.Info(ctx, "added execute permission to ui app")
-			}
-		}
-	}
-
-	m.uiReadyAt.Store(0)
-	m.isUIReadyHandled = false
-	config, fallback := m.getUILaunchConfig(ctx)
-	logUILaunchConfig(ctx, config, fallback)
-	return m.startUIAppWithConfig(ctx, appPath, config, fallback)
-}
-
-// startUIAppWithConfig launches the Flutter UI with one selected GTK backend and wires exit/ready monitoring.
-func (m *Manager) startUIAppWithConfig(ctx context.Context, appPath string, config uiLaunchConfig, fallback *uiLaunchConfig) error {
-	// Bug fix: on a fresh Windows 10 install the Flutter runner can fail before
-	// Dart code starts if the MSVC runtime is absent. Check the native runtime
-	// dependencies while the Go backend can still explain the cause and direct
-	// the user to Microsoft's installer instead of launching an opaque failing
-	// child process.
-	if dependencyErr := ensureUIRuntimeDependencies(ctx, appPath); dependencyErr != nil {
-		m.ExitApp(ctx)
-		return dependencyErr
-	}
-
-	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d, backend=%s, env=%v", appPath, m.serverPort, os.Getpid(), config.Backend, config.Env))
-	cmd, cmdErr := shell.RunWithEnv(appPath, config.Env,
-		fmt.Sprintf("%d", m.serverPort),
-		fmt.Sprintf("%d", os.Getpid()),
-		fmt.Sprintf("%t", util.IsDev()),
-	)
-	if cmdErr != nil {
-		return cmdErr
-	}
-
-	m.uiProcess = cmd.Process
-	m.uiStopRequested.Store(false)
-	pid := cmd.Process.Pid
-	// Debug Glance reads this PID to report combined core + Flutter memory.
-	// Prod launches the UI from core, while dev mode can later replace it with
-	// the PID reported by Flutter's ready callback.
-	processmemory.SetWoxUIProcessPid(pid)
-	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", pid))
-
-	processDone := make(chan struct{})
-	util.Go(ctx, "watch ui app", func() {
-		defer close(processDone)
-		waitErr := cmd.Wait()
-		// Clear only this exited process so a restarted UI keeps its newer PID.
-		processmemory.ClearWoxUIProcessPid(pid)
-		waitCtx := util.NewTraceContext()
-
-		stopRequested := m.uiStopRequested.Load()
-		diagnostic.GetManager().RecordUIExit(waitCtx, pid, waitErr, stopRequested)
-
-		markerPath := filepath.Join(filepath.Dir(util.GetLocation().GetUIAppPath()), "gpu_recovery.marker")
-		gpuRecovery := false
-		if util.IsFileExists(markerPath) {
-			gpuRecovery = true
-			logger.Info(waitCtx, "detected GPU recovery marker, will restart UI instead of quitting")
-			if removeErr := os.Remove(markerPath); removeErr != nil {
-				logger.Warn(waitCtx, fmt.Sprintf("failed to remove GPU recovery marker: %s", removeErr.Error()))
-			}
-		}
-
-		if stopRequested {
-			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited after stop request", pid))
-			return
-		}
-
-		if fallback != nil && m.uiReadyAt.Load() == 0 {
-			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited before ready with backend=%s, retrying with backend=%s", pid, config.Backend, fallback.Backend))
-			logUILaunchConfig(waitCtx, *fallback, nil)
-			if fallbackErr := m.startUIAppWithConfig(waitCtx, appPath, *fallback, nil); fallbackErr != nil {
-				logger.Error(waitCtx, fmt.Sprintf("failed to start fallback ui backend %s: %s", fallback.Backend, fallbackErr.Error()))
-				m.ExitApp(waitCtx)
-			}
-			return
-		}
-
-		if waitErr != nil {
-			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited with error: %s", pid, waitErr.Error()))
-			if !gpuRecovery {
-				handleUIRuntimeLaunchFailure(waitCtx, waitErr)
-			}
-		} else {
-			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited", pid))
-		}
-
-		if gpuRecovery {
-			// This is a GPU recovery, restart the UI instead of quitting
-			logger.Info(waitCtx, "restarting UI after GPU recovery")
-			// Wait a bit for GPU to stabilize
-			time.Sleep(500 * time.Millisecond)
-			restartErr := m.StartUIApp(waitCtx)
-			if restartErr != nil {
-				logger.Error(waitCtx, fmt.Sprintf("failed to restart UI after GPU recovery: %s", restartErr.Error()))
-				m.ExitApp(waitCtx)
-			}
-		} else if !m.uiStopRequested.Load() {
-			// Normal exit, quit the backend
-			logger.Warn(waitCtx, "ui app exited, quitting backend")
-			m.ExitApp(waitCtx)
-		}
-	})
-
-	m.scheduleUIReadyMonitor(ctx, appPath, pid, config, fallback, processDone)
-	return nil
-}
-
-// scheduleUIReadyMonitor retries the UI once in auto mode and otherwise leaves a detailed diagnostic trail.
-func (m *Manager) scheduleUIReadyMonitor(ctx context.Context, appPath string, pid int, config uiLaunchConfig, fallback *uiLaunchConfig, processDone <-chan struct{}) {
-	util.Go(ctx, "monitor ui ready", func() {
-		timer := time.NewTimer(uiReadyTimeout)
-		defer timer.Stop()
-
-		select {
-		case <-processDone:
-			return
-		case <-timer.C:
-		}
-
-		if m.uiReadyAt.Load() > 0 {
-			return
-		}
-		if m.uiProcess == nil || m.uiProcess.Pid != pid {
-			return
-		}
-
-		monitorCtx := util.NewTraceContext()
-		logger.Warn(monitorCtx, fmt.Sprintf("ui app did not become ready within %s, backend=%s, mode=%s, env=%v, reason=%s", uiReadyTimeout, config.Backend, config.Mode, config.Env, config.Reason))
-		if util.IsLinux() {
-			logger.Warn(monitorCtx, "linux desktop environment when ui ready timed out: "+linuxDesktopDiagnostics())
-		}
-		if fallback == nil {
-			return
-		}
-
-		logger.Warn(monitorCtx, fmt.Sprintf("restart ui with fallback backend=%s", fallback.Backend))
-		m.uiStopRequested.Store(true)
-		killErr := m.uiProcess.Kill()
-		if killErr != nil {
-			logger.Error(monitorCtx, fmt.Sprintf("failed to kill ui process(%d) before fallback: %s", pid, killErr.Error()))
-			return
-		}
-		select {
-		case <-processDone:
-		case <-time.After(2 * time.Second):
-			logger.Warn(monitorCtx, fmt.Sprintf("ui process(%d) did not exit within fallback wait window", pid))
-		}
-
-		logUILaunchConfig(monitorCtx, *fallback, nil)
-		if fallbackErr := m.startUIAppWithConfig(monitorCtx, appPath, *fallback, nil); fallbackErr != nil {
-			logger.Error(monitorCtx, fmt.Sprintf("failed to start fallback ui backend %s: %s", fallback.Backend, fallbackErr.Error()))
-			m.ExitApp(monitorCtx)
-		}
-	})
 }
 
 func (m *Manager) GetCurrentTheme(ctx context.Context) common.Theme {
@@ -1017,7 +734,7 @@ func resolvePlatformThemeForTarget(ctx context.Context, theme common.Theme, plat
 		return clearThemePlatformOverrides(theme)
 	}
 
-	// New feature: platform nodes are preserved on the stored Theme, but Flutter
+	// New feature: platform nodes are preserved on the stored Theme, but UI
 	// still expects the old flat payload. Merge the current OS override here so
 	// every caller receives the same effective style without teaching the UI about
 	// platform-specific schema details.
@@ -1152,7 +869,7 @@ func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 	}
 }
 
-// ApplyCurrentTheme pushes the currently configured theme to Flutter without writing ThemeId again.
+// ApplyCurrentTheme pushes the currently configured theme to UI without writing ThemeId again.
 func (m *Manager) ApplyCurrentTheme(ctx context.Context) {
 	theme := m.GetCurrentTheme(ctx)
 	if theme.ThemeId == "" {
@@ -1188,7 +905,6 @@ func (m *Manager) ToggleRecordingMode(ctx context.Context) (bool, error) {
 // called after UI is ready to show, and will execute only once
 func (m *Manager) PostUIReady(ctx context.Context) {
 	logger.Info(ctx, "app is ready to show")
-	m.uiReadyAt.Store(util.GetSystemTimestamp())
 	if m.isUIReadyHandled {
 		logger.Warn(ctx, "app is already handled ready to show event")
 		return
@@ -1288,7 +1004,7 @@ func (m *Manager) PostOnSetting(ctx context.Context, isInSettingView bool) {
 func (m *Manager) PostOnOnboarding(ctx context.Context, isInOnboardingView bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		// Onboarding is a management surface like settings, but it needs its own
-		// state so Flutter can keep isInSettingView false while backend routing
+		// state so UI can keep isInSettingView false while backend routing
 		// still suppresses toolbar notifications over the guide.
 		impl.isInOnboardingView = isInOnboardingView
 		if !isInOnboardingView {
@@ -1635,7 +1351,7 @@ func (m *Manager) getTrayQueryWindowAnchorBottom(rect tray.ClickRect, screenRect
 
 func (m *Manager) getTrayQueryInitialWindowHeight(ctx context.Context, trayQuery setting.TrayQuery) int {
 	theme := m.GetCurrentTheme(ctx)
-	// Tray query popups start before Flutter has measured content, so backend
+	// Tray query popups start before UI has measured content, so backend
 	// positioning must use the same density-scaled base heights as the launcher
 	// render path while leaving theme padding untouched.
 	queryBoxHeight := DensityQueryBoxBaseHeight(ctx) + theme.AppPaddingTop + theme.AppPaddingBottom
@@ -1953,7 +1669,6 @@ func (m *Manager) ExitApp(ctx context.Context) {
 	m.exitOnce.Do(func() {
 		util.GetLogger().Info(ctx, "start quitting")
 		plugin.GetPluginManager().Stop(ctx)
-		m.Stop(ctx)
 		diagnostic.GetManager().MarkCleanExit(ctx)
 		util.GetLogger().Info(ctx, "bye~")
 		os.Exit(0)
@@ -2004,7 +1719,7 @@ func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetail
 		return
 	}
 
-	if m.isUIWindow("", activeWindowPid) {
+	if m.isUIWindow(activeWindowPid) {
 		return
 	}
 
@@ -2077,7 +1792,7 @@ func (m *Manager) shouldIgnoreHotkeyTrigger(ctx context.Context) bool {
 
 	activeWindowName := window.GetActiveWindowName()
 	activeWindowPid := window.GetActiveWindowPid()
-	if m.isUIWindow(activeWindowName, activeWindowPid) {
+	if m.isUIWindow(activeWindowPid) {
 		return false
 	}
 
@@ -2137,14 +1852,8 @@ func (m *Manager) isOnboardingViewActive() bool {
 	return false
 }
 
-func (m *Manager) isUIWindow(activeWindowName string, activeWindowPid int) bool {
-	if util.IsGoUIImplementation() && activeWindowPid == os.Getpid() {
-		return true
-	}
-	if m.uiProcess != nil && activeWindowPid != 0 && m.uiProcess.Pid == activeWindowPid {
-		return true
-	}
-	return strings.EqualFold(activeWindowName, "wox-ui")
+func (m *Manager) isUIWindow(activeWindowPid int) bool {
+	return activeWindowPid == os.Getpid()
 }
 
 func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
