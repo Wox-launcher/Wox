@@ -46,6 +46,7 @@ import (
 	"wox/util/tray"
 	utilwindow "wox/util/window"
 
+	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
@@ -177,6 +178,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/preview/image/overlay":              handlePreviewImageOverlay,
 	"/preview/file/media":                 handlePreviewFileMedia,
 	"/image/file/icon":                    handleFileIcon,
+	"/image/resolve":                      handleResolveImage,
 	"/image/lazy/load":                    handleLazyImageLoad,
 	"/open":                               handleOpen,
 	"/backup/now":                         handleBackupNow,
@@ -291,6 +293,57 @@ func handleFileIcon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSuccessResponse(w, icon)
+}
+
+type resolveImageRequest struct {
+	Image common.WoxImage
+	Size  int
+}
+
+// handleResolveImage converts image types whose cache and network policy belong to core into a raster payload.
+func handleResolveImage(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	var request resolveImageRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeErrorResponse(w, fmt.Sprintf("invalid image resolve request: %s", err.Error()))
+		return
+	}
+	if request.Image.IsEmpty() {
+		writeErrorResponse(w, "image is empty")
+		return
+	}
+	size := request.Size
+	if size <= 0 {
+		size = 128
+	}
+	size = min(max(size, 16), 512)
+	if request.Image.ImageType == common.WoxImageTypeFileIcon {
+		resolved := common.ConvertFileIconToAbsolutePathWithSize(ctx, request.Image, size)
+		if resolved.ImageType == common.WoxImageTypeFileIcon || resolved.IsEmpty() {
+			writeErrorResponse(w, "failed to resolve file icon")
+			return
+		}
+		writeSuccessResponse(w, resolved)
+		return
+	}
+	if request.Image.ImageType != common.WoxImageTypeUrl && request.Image.ImageType != common.WoxImageTypeEmoji {
+		writeErrorResponse(w, fmt.Sprintf("image type %s does not require core resolution", request.Image.ImageType))
+		return
+	}
+	decoded, err := request.Image.ToImageWithContext(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if decoded.Bounds().Dx() > size || decoded.Bounds().Dy() > size {
+		decoded = imaging.Fit(decoded, size, size, imaging.Lanczos)
+	}
+	resolved, err := common.NewWoxImage(decoded)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, resolved)
 }
 
 func handlePreviewFileMedia(w http.ResponseWriter, r *http.Request) {

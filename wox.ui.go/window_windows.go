@@ -5,10 +5,13 @@ package woxui
 import (
 	"errors"
 	"fmt"
+	"math"
 	"runtime"
+	"runtime/cgo"
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf16"
 	"unsafe"
 
 	"github.com/lxn/win"
@@ -17,9 +20,20 @@ import (
 const (
 	windowClassName         = "WoxGoUIWindow"
 	windowCommandMessage    = win.WM_APP + 1
+	windowTextInputMessage  = win.WM_APP + 2
 	windowBlurGuardDuration = 300 * time.Millisecond
 	wsExNoRedirectionBitmap = 0x00200000
 	errorClassAlreadyExists = syscall.Errno(1410)
+	wmIMEStartComposition   = 0x010D
+	wmIMEEndComposition     = 0x010E
+	wmIMEComposition        = 0x010F
+	wmIMEChar               = 0x0286
+	gcsCompositionString    = 0x0008
+	gcsResultString         = 0x0800
+	cfsCandidatePosition    = 0x0040
+	unicodeNoCharacter      = 0xFFFF
+	wmMouseHorizontalWheel  = 0x020E
+	pointerScrollLine       = 40
 )
 
 var (
@@ -30,6 +44,14 @@ var (
 	setProcessDPIAwarenessContext        = syscall.NewLazyDLL("user32.dll").NewProc("SetProcessDpiAwarenessContext")
 	setThreadDPIAwarenessContext         = syscall.NewLazyDLL("user32.dll").NewProc("SetThreadDpiAwarenessContext")
 	setProcessDPIAware                   = syscall.NewLazyDLL("user32.dll").NewProc("SetProcessDPIAware")
+	enumDisplayMonitors                  = syscall.NewLazyDLL("user32.dll").NewProc("EnumDisplayMonitors")
+	getDPIForMonitor                     = syscall.NewLazyDLL("shcore.dll").NewProc("GetDpiForMonitor")
+	monitorBoundsCallback                = syscall.NewCallback(findMonitorForLogicalBounds)
+	immGetContext                        = syscall.NewLazyDLL("imm32.dll").NewProc("ImmGetContext")
+	immReleaseContext                    = syscall.NewLazyDLL("imm32.dll").NewProc("ImmReleaseContext")
+	immGetCompositionString              = syscall.NewLazyDLL("imm32.dll").NewProc("ImmGetCompositionStringW")
+	immSetCandidateWindow                = syscall.NewLazyDLL("imm32.dll").NewProc("ImmSetCandidateWindow")
+	shellExecuteW                        = syscall.NewLazyDLL("shell32.dll").NewProc("ShellExecuteW")
 	dpiAwarenessContextPerMonitorAwareV2 = ^uintptr(3)
 	platformRuntime                      struct {
 		sync.Mutex
@@ -46,16 +68,37 @@ type windowCommandKind uint8
 const (
 	windowCommandShow windowCommandKind = iota
 	windowCommandHide
+	windowCommandSetBounds
+	windowCommandCenter
+	windowCommandSetHideOnBlur
+	windowCommandSetFontFamily
+	windowCommandPickFile
+	windowCommandOpenExternalURL
+	windowCommandWriteClipboardText
+	windowCommandWriteClipboardImage
+	windowCommandShowWebView
+	windowCommandHideWebView
 	windowCommandClose
 )
 
 type windowCommand struct {
-	kind  windowCommandKind
-	reply chan windowCommandResult
+	kind          windowCommandKind
+	bounds        Rect
+	size          Size
+	hideOnBlur    bool
+	fontFamily    string
+	fileDialog    FileDialogOptions
+	externalURL   string
+	clipboardText string
+	clipboard     *clipboardImage
+	webView       WebViewContent
+	webViewBounds Rect
+	reply         chan windowCommandResult
 }
 
 type windowCommandResult struct {
 	epoch FocusEpoch
+	path  string
 	err   error
 }
 
@@ -80,7 +123,27 @@ type platformWindow struct {
 	done       chan struct{}
 
 	renderer *nativeRenderer
+	webView  *windowsWebView
 	focus    focusRuntime
+	scale    float32
+
+	inputState         TextInputState
+	inputHighSurrogate uint16
+	inputComposing     bool
+	pointerInside      bool
+	pointerPosition    Point
+}
+
+type candidateForm struct {
+	Index        uint32
+	Style        uint32
+	CurrentPoint win.POINT
+	Area         win.RECT
+}
+
+type monitorBoundsSearch struct {
+	bounds   Rect
+	bestArea float64
 	scale    float32
 }
 
@@ -178,12 +241,53 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 }
 
 func (w *platformWindow) show() (FocusEpoch, error) {
-	result := w.call(windowCommandShow)
+	result := w.call(windowCommand{kind: windowCommandShow})
 	return result.epoch, result.err
 }
 
 func (w *platformWindow) hide() error {
-	return w.call(windowCommandHide).err
+	return w.call(windowCommand{kind: windowCommandHide}).err
+}
+
+func (w *platformWindow) setBounds(bounds Rect) error {
+	return w.call(windowCommand{kind: windowCommandSetBounds, bounds: bounds}).err
+}
+
+func (w *platformWindow) center(size Size) error {
+	return w.call(windowCommand{kind: windowCommandCenter, size: size}).err
+}
+
+func (w *platformWindow) setHideOnBlur(enabled bool) error {
+	return w.call(windowCommand{kind: windowCommandSetHideOnBlur, hideOnBlur: enabled}).err
+}
+
+func (w *platformWindow) setFontFamily(family string) error {
+	return w.call(windowCommand{kind: windowCommandSetFontFamily, fontFamily: family}).err
+}
+
+func (w *platformWindow) pickFile(options FileDialogOptions) (string, error) {
+	result := w.call(windowCommand{kind: windowCommandPickFile, fileDialog: options})
+	return result.path, result.err
+}
+
+func (w *platformWindow) openExternalURL(rawURL string) error {
+	return w.call(windowCommand{kind: windowCommandOpenExternalURL, externalURL: rawURL}).err
+}
+
+func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error {
+	return w.call(windowCommand{kind: windowCommandShowWebView, webView: content, webViewBounds: bounds}).err
+}
+
+func (w *platformWindow) hideWebView() error {
+	return w.call(windowCommand{kind: windowCommandHideWebView}).err
+}
+
+func (w *platformWindow) writeClipboardText(text string) error {
+	return w.call(windowCommand{kind: windowCommandWriteClipboardText, clipboardText: text}).err
+}
+
+func (w *platformWindow) writeClipboardImage(image *clipboardImage) error {
+	return w.call(windowCommand{kind: windowCommandWriteClipboardImage, clipboard: image}).err
 }
 
 func (w *platformWindow) invalidate() error {
@@ -199,8 +303,36 @@ func (w *platformWindow) invalidate() error {
 	return nil
 }
 
+// setTextInputState stores logical editor geometry for the next native IME interaction.
+func (w *platformWindow) setTextInputState(state TextInputState) error {
+	w.mu.Lock()
+	if w.hwnd == 0 {
+		w.mu.Unlock()
+		return errors.New("window is closed")
+	}
+	w.inputState = state
+	hwnd := w.hwnd
+	w.mu.Unlock()
+	if win.PostMessage(hwnd, windowTextInputMessage, 0, 0) == 0 {
+		return errors.New("failed to post text input state")
+	}
+	return nil
+}
+
+// measureText stays on the UI thread because the renderer is destroyed with its HWND.
+func (w *platformWindow) measureText(text string, style TextStyle) (TextMetrics, error) {
+	if win.GetCurrentThreadId() != w.uiThreadID {
+		// ponytail: Route this through the command queue only when background layout exists.
+		return TextMetrics{}, errors.New("text measurement must run on the Windows UI thread")
+	}
+	if w.renderer == nil {
+		return TextMetrics{}, errors.New("window is closed")
+	}
+	return w.renderer.measureText(text, style)
+}
+
 func (w *platformWindow) close() error {
-	return w.call(windowCommandClose).err
+	return w.call(windowCommand{kind: windowCommandClose}).err
 }
 
 // createNativeWindow publishes the HWND only after CreateWindowEx has completed its synchronous messages.
@@ -342,6 +474,11 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 	case windowCommandMessage:
 		window.drainCommands()
 		return 0
+	case windowTextInputMessage:
+		if window.inputComposing {
+			window.updateIMECandidatePosition(hwnd)
+		}
+		return 0
 	case win.WM_SIZE:
 		if window.renderer != nil {
 			width := int(win.LOWORD(uint32(lParam)))
@@ -386,6 +523,76 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		return 0
 	case win.WM_ERASEBKGND:
 		return 1
+	case win.WM_MOUSEMOVE:
+		position := window.logicalPointerPosition(lParam)
+		if !window.pointerInside {
+			window.pointerInside = true
+			win.TrackMouseEvent(&win.TRACKMOUSEEVENT{CbSize: uint32(unsafe.Sizeof(win.TRACKMOUSEEVENT{})), DwFlags: win.TME_LEAVE, HwndTrack: hwnd})
+			window.emitPointer(PointerEvent{Kind: PointerEnter, Position: position, Modifiers: windowsKeyModifiers()})
+		}
+		window.emitPointer(PointerEvent{Kind: PointerMove, Position: position, Modifiers: windowsKeyModifiers()})
+		return 0
+	case win.WM_MOUSELEAVE:
+		window.pointerInside = false
+		window.emitPointer(PointerEvent{Kind: PointerLeave, Position: window.pointerPosition, Modifiers: windowsKeyModifiers()})
+		return 0
+	case win.WM_LBUTTONDOWN, win.WM_RBUTTONDOWN, win.WM_MBUTTONDOWN:
+		win.SetCapture(hwnd)
+		window.emitPointer(PointerEvent{Kind: PointerDown, Position: window.logicalPointerPosition(lParam), Button: windowsPointerButton(message), Modifiers: windowsKeyModifiers()})
+		return 0
+	case win.WM_LBUTTONUP, win.WM_RBUTTONUP, win.WM_MBUTTONUP:
+		win.ReleaseCapture()
+		window.emitPointer(PointerEvent{Kind: PointerUp, Position: window.logicalPointerPosition(lParam), Button: windowsPointerButton(message), Modifiers: windowsKeyModifiers()})
+		return 0
+	case win.WM_MOUSEWHEEL, wmMouseHorizontalWheel:
+		position := win.POINT{X: win.GET_X_LPARAM(lParam), Y: win.GET_Y_LPARAM(lParam)}
+		win.ScreenToClient(hwnd, &position)
+		delta := float32(int16(win.HIWORD(uint32(wParam)))) / 120 * pointerScrollLine
+		scroll := Point{Y: delta}
+		if message == wmMouseHorizontalWheel {
+			scroll = Point{X: delta}
+		}
+		window.emitPointer(PointerEvent{Kind: PointerScroll, Position: window.logicalPoint(position), Scroll: scroll, Modifiers: windowsKeyModifiers()})
+		return 0
+	case win.WM_KEYDOWN, win.WM_SYSKEYDOWN:
+		if window.emitKey(wParam, true, lParam&(1<<30) != 0) {
+			return 0
+		}
+	case win.WM_KEYUP, win.WM_SYSKEYUP:
+		if window.emitKey(wParam, false, false) {
+			return 0
+		}
+	case win.WM_CHAR:
+		if window.handleUTF16Character(uint16(wParam)) {
+			return 0
+		}
+	case win.WM_UNICHAR:
+		if wParam == unicodeNoCharacter {
+			return 1
+		}
+		if window.emitCommittedText(string(rune(wParam))) {
+			return 0
+		}
+	case wmIMEStartComposition:
+		if window.textInputEnabled() {
+			window.inputComposing = true
+			window.updateIMECandidatePosition(hwnd)
+			return 0
+		}
+	case wmIMEComposition:
+		if window.textInputEnabled() {
+			window.handleIMEComposition(hwnd, lParam)
+			return 0
+		}
+	case wmIMEEndComposition:
+		if window.textInputEnabled() {
+			window.endIMEComposition()
+			return 0
+		}
+	case wmIMEChar:
+		if window.textInputEnabled() {
+			return 0
+		}
 	case win.WM_ACTIVATE:
 		if win.LOWORD(uint32(wParam)) == win.WA_INACTIVE {
 			window.handleBlur(win.HWND(lParam))
@@ -429,8 +636,231 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 	return win.DefWindowProc(hwnd, message, wParam, lParam)
 }
 
+func (w *platformWindow) textInputEnabled() bool {
+	w.mu.Lock()
+	enabled := w.inputState.Enabled
+	w.mu.Unlock()
+	return enabled && w.options.OnTextInput != nil
+}
+
+func (w *platformWindow) emitKey(virtualKey uintptr, down bool, repeat bool) bool {
+	if w.options.OnKey == nil {
+		return false
+	}
+	return w.options.OnKey(KeyEvent{
+		Key:       windowsKey(virtualKey),
+		Modifiers: windowsKeyModifiers(),
+		Down:      down,
+		Repeat:    repeat,
+		Composing: w.inputComposing,
+	})
+}
+
+func (w *platformWindow) emitTextInput(kind TextInputEventKind, text string) bool {
+	if !w.textInputEnabled() {
+		return false
+	}
+	w.options.OnTextInput(TextInputEvent{Kind: kind, Text: text})
+	return true
+}
+
+func (w *platformWindow) emitCommittedText(text string) bool {
+	if text == "" {
+		return false
+	}
+	w.inputComposing = false
+	return w.emitTextInput(TextInputCommit, text)
+}
+
+// handleUTF16Character combines WM_CHAR surrogate pairs before exposing UTF-8 text.
+func (w *platformWindow) handleUTF16Character(value uint16) bool {
+	if !w.textInputEnabled() {
+		return false
+	}
+	if value >= 0xD800 && value <= 0xDBFF {
+		w.inputHighSurrogate = value
+		return true
+	}
+	var character rune
+	if value >= 0xDC00 && value <= 0xDFFF && w.inputHighSurrogate != 0 {
+		character = utf16.DecodeRune(rune(w.inputHighSurrogate), rune(value))
+	} else {
+		character = rune(value)
+	}
+	w.inputHighSurrogate = 0
+	if character < 0x20 || character == 0x7F {
+		return true
+	}
+	return w.emitCommittedText(string(character))
+}
+
+// handleIMEComposition translates IMM composition and result strings into the shared event model.
+func (w *platformWindow) handleIMEComposition(hwnd win.HWND, flags uintptr) bool {
+	if !w.textInputEnabled() {
+		return false
+	}
+	handled := false
+	if flags&gcsResultString != 0 {
+		if text, ok := readIMEString(hwnd, gcsResultString); ok {
+			handled = w.emitCommittedText(text) || handled
+		}
+	}
+	if flags&gcsCompositionString != 0 {
+		if text, ok := readIMEString(hwnd, gcsCompositionString); ok {
+			w.inputComposing = text != ""
+			handled = w.emitTextInput(TextInputCompose, text) || handled
+		}
+	}
+	return handled
+}
+
+func (w *platformWindow) endIMEComposition() bool {
+	if !w.inputComposing {
+		return false
+	}
+	w.inputComposing = false
+	return w.emitTextInput(TextInputCompose, "")
+}
+
+// updateIMECandidatePosition converts the logical caret rectangle to Win32 client pixels.
+func (w *platformWindow) updateIMECandidatePosition(hwnd win.HWND) {
+	w.mu.Lock()
+	state := w.inputState
+	scale := w.scale
+	w.mu.Unlock()
+	if !state.Enabled {
+		return
+	}
+	context, _, _ := immGetContext.Call(uintptr(hwnd))
+	if context == 0 {
+		return
+	}
+	defer immReleaseContext.Call(uintptr(hwnd), context)
+	form := candidateForm{
+		Style: cfsCandidatePosition,
+		CurrentPoint: win.POINT{
+			X: int32(state.CursorRect.X * scale),
+			Y: int32((state.CursorRect.Y + state.CursorRect.Height) * scale),
+		},
+	}
+	immSetCandidateWindow.Call(context, uintptr(unsafe.Pointer(&form)))
+}
+
+// readIMEString copies one UTF-16 IMM payload while its input context is held.
+func readIMEString(hwnd win.HWND, kind uintptr) (string, bool) {
+	context, _, _ := immGetContext.Call(uintptr(hwnd))
+	if context == 0 {
+		return "", false
+	}
+	defer immReleaseContext.Call(uintptr(hwnd), context)
+	byteCount, _, _ := immGetCompositionString.Call(context, kind, 0, 0)
+	if int32(byteCount) < 0 {
+		return "", false
+	}
+	if byteCount == 0 {
+		return "", true
+	}
+	buffer := make([]uint16, int(byteCount)/2+1)
+	written, _, _ := immGetCompositionString.Call(context, kind, uintptr(unsafe.Pointer(&buffer[0])), byteCount)
+	if int32(written) < 0 {
+		return "", false
+	}
+	return syscall.UTF16ToString(buffer[:int(written)/2]), true
+}
+
+func windowsKey(virtualKey uintptr) Key {
+	if virtualKey >= 'A' && virtualKey <= 'Z' {
+		return Key(string(rune(virtualKey - 'A' + 'a')))
+	}
+	if virtualKey >= '0' && virtualKey <= '9' {
+		return Key(string(rune(virtualKey)))
+	}
+	switch virtualKey {
+	case win.VK_BACK:
+		return KeyBackspace
+	case win.VK_TAB:
+		return KeyTab
+	case win.VK_RETURN:
+		return KeyEnter
+	case win.VK_ESCAPE:
+		return KeyEscape
+	case win.VK_SPACE:
+		return KeySpace
+	case win.VK_PRIOR:
+		return KeyPageUp
+	case win.VK_NEXT:
+		return KeyPageDown
+	case win.VK_END:
+		return KeyEnd
+	case win.VK_HOME:
+		return KeyHome
+	case win.VK_LEFT:
+		return KeyArrowLeft
+	case win.VK_UP:
+		return KeyArrowUp
+	case win.VK_RIGHT:
+		return KeyArrowRight
+	case win.VK_DOWN:
+		return KeyArrowDown
+	case win.VK_DELETE:
+		return KeyDelete
+	default:
+		return KeyUnknown
+	}
+}
+
+func windowsKeyModifiers() KeyModifiers {
+	var modifiers KeyModifiers
+	if win.GetKeyState(win.VK_SHIFT) < 0 {
+		modifiers |= KeyModifierShift
+	}
+	if win.GetKeyState(win.VK_CONTROL) < 0 {
+		modifiers |= KeyModifierControl
+	}
+	if win.GetKeyState(win.VK_MENU) < 0 {
+		modifiers |= KeyModifierAlt
+	}
+	if win.GetKeyState(win.VK_LWIN) < 0 || win.GetKeyState(win.VK_RWIN) < 0 {
+		modifiers |= KeyModifierMeta
+	}
+	return modifiers
+}
+
+func (w *platformWindow) logicalPointerPosition(lParam uintptr) Point {
+	return w.logicalPoint(win.POINT{X: win.GET_X_LPARAM(lParam), Y: win.GET_Y_LPARAM(lParam)})
+}
+
+func (w *platformWindow) logicalPoint(point win.POINT) Point {
+	scale := w.scale
+	if scale <= 0 {
+		scale = 1
+	}
+	position := Point{X: float32(point.X) / scale, Y: float32(point.Y) / scale}
+	w.pointerPosition = position
+	return position
+}
+
+func (w *platformWindow) emitPointer(event PointerEvent) {
+	if w.options.OnPointer != nil {
+		w.options.OnPointer(event)
+	}
+}
+
+func windowsPointerButton(message uint32) PointerButton {
+	switch message {
+	case win.WM_LBUTTONDOWN, win.WM_LBUTTONUP:
+		return PointerButtonPrimary
+	case win.WM_RBUTTONDOWN, win.WM_RBUTTONUP:
+		return PointerButtonSecondary
+	case win.WM_MBUTTONDOWN, win.WM_MBUTTONUP:
+		return PointerButtonMiddle
+	default:
+		return PointerButtonNone
+	}
+}
+
 // call posts work to the UI thread while still allowing callbacks already on that thread to act directly.
-func (w *platformWindow) call(kind windowCommandKind) windowCommandResult {
+func (w *platformWindow) call(command windowCommand) windowCommandResult {
 	w.mu.Lock()
 	if w.hwnd == 0 {
 		w.mu.Unlock()
@@ -438,11 +868,12 @@ func (w *platformWindow) call(kind windowCommandKind) windowCommandResult {
 	}
 	if w.uiThreadID == win.GetCurrentThreadId() {
 		w.mu.Unlock()
-		return w.executeCommand(kind)
+		return w.executeCommand(command)
 	}
 
 	reply := make(chan windowCommandResult, 1)
-	w.pending = append(w.pending, windowCommand{kind: kind, reply: reply})
+	command.reply = reply
+	w.pending = append(w.pending, command)
 	if win.PostMessage(w.hwnd, windowCommandMessage, 0, 0) == 0 {
 		w.pending = w.pending[:len(w.pending)-1]
 		w.mu.Unlock()
@@ -480,17 +911,56 @@ func (w *platformWindow) drainCommands() {
 			win.DestroyWindow(w.hwnd)
 			return
 		}
-		command.reply <- w.executeCommand(command.kind)
+		command.reply <- w.executeCommand(command)
 	}
 }
 
-func (w *platformWindow) executeCommand(kind windowCommandKind) windowCommandResult {
-	switch kind {
+func (w *platformWindow) executeCommand(command windowCommand) windowCommandResult {
+	switch command.kind {
 	case windowCommandShow:
 		return windowCommandResult{epoch: w.showNative()}
 	case windowCommandHide:
 		w.hideNative()
 		return windowCommandResult{epoch: w.focus.epoch}
+	case windowCommandSetBounds:
+		return windowCommandResult{err: w.setBoundsNative(command.bounds)}
+	case windowCommandCenter:
+		return windowCommandResult{err: w.centerNative(command.size)}
+	case windowCommandSetHideOnBlur:
+		w.options.HideOnBlur = command.hideOnBlur
+		return windowCommandResult{}
+	case windowCommandSetFontFamily:
+		if w.renderer == nil {
+			return windowCommandResult{err: errors.New("window is closed")}
+		}
+		err := w.renderer.setFontFamily(command.fontFamily)
+		if err == nil {
+			win.InvalidateRect(w.hwnd, nil, false)
+		}
+		return windowCommandResult{err: err}
+	case windowCommandPickFile:
+		path, err := pickFileNative(uintptr(w.hwnd), command.fileDialog)
+		return windowCommandResult{path: path, err: err}
+	case windowCommandOpenExternalURL:
+		return windowCommandResult{err: openExternalURLNative(w.hwnd, command.externalURL)}
+	case windowCommandWriteClipboardText:
+		return windowCommandResult{err: writeClipboardTextNative(uintptr(w.hwnd), command.clipboardText)}
+	case windowCommandWriteClipboardImage:
+		return windowCommandResult{err: writeClipboardImageNative(uintptr(w.hwnd), command.clipboard)}
+	case windowCommandShowWebView:
+		if w.webView == nil {
+			webView, err := newWindowsWebView(uintptr(w.hwnd))
+			if err != nil {
+				return windowCommandResult{err: err}
+			}
+			w.webView = webView
+		}
+		return windowCommandResult{err: w.webView.show(command.webView, command.webViewBounds, w.scale)}
+	case windowCommandHideWebView:
+		if w.webView == nil {
+			return windowCommandResult{}
+		}
+		return windowCommandResult{err: w.webView.hide()}
 	case windowCommandClose:
 		w.hideNative()
 		win.DestroyWindow(w.hwnd)
@@ -498,6 +968,110 @@ func (w *platformWindow) executeCommand(kind windowCommandKind) windowCommandRes
 	default:
 		return windowCommandResult{err: errors.New("unknown window command")}
 	}
+}
+
+// openExternalURLNative keeps ShellExecute and its Win32 error convention behind the shared URL contract.
+func openExternalURLNative(hwnd win.HWND, rawURL string) error {
+	operation, err := syscall.UTF16PtrFromString("open")
+	if err != nil {
+		return err
+	}
+	target, err := syscall.UTF16PtrFromString(rawURL)
+	if err != nil {
+		return err
+	}
+	result, _, _ := shellExecuteW.Call(uintptr(hwnd), uintptr(unsafe.Pointer(operation)), uintptr(unsafe.Pointer(target)), 0, 0, win.SW_SHOWNORMAL)
+	if result <= 32 {
+		return fmt.Errorf("ShellExecuteW failed with code %d", result)
+	}
+	return nil
+}
+
+// setBoundsNative converts the core's per-monitor logical coordinate space back to Win32 pixels.
+func (w *platformWindow) setBoundsNative(bounds Rect) error {
+	search := monitorBoundsSearch{bounds: bounds}
+	if enumDisplayMonitors.Find() == nil {
+		handle := cgo.NewHandle(&search)
+		result, _, _ := enumDisplayMonitors.Call(0, 0, monitorBoundsCallback, uintptr(handle))
+		handle.Delete()
+		if result == 0 {
+			return errors.New("failed to enumerate Windows monitors")
+		}
+	}
+	scale := search.scale
+	if scale <= 0 {
+		scale = primaryDisplayScale()
+	}
+	x := int32(math.Round(float64(bounds.X * scale)))
+	y := int32(math.Round(float64(bounds.Y * scale)))
+	width := int32(logicalToPhysical(bounds.Width, scale))
+	height := int32(logicalToPhysical(bounds.Height, scale))
+	if !win.SetWindowPos(w.hwnd, 0, x, y, width, height, win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
+		return errors.New("failed to set Windows window bounds")
+	}
+	win.InvalidateRect(w.hwnd, nil, false)
+	return nil
+}
+
+// centerNative centers a logical client size in the nearest monitor work area.
+func (w *platformWindow) centerNative(size Size) error {
+	monitor := win.MonitorFromWindow(w.hwnd, win.MONITOR_DEFAULTTONEAREST)
+	if monitor == 0 {
+		return errors.New("failed to resolve Windows monitor")
+	}
+	var info win.MONITORINFO
+	info.CbSize = uint32(unsafe.Sizeof(info))
+	if !win.GetMonitorInfo(monitor, &info) {
+		return errors.New("failed to read Windows monitor work area")
+	}
+	scale := monitorScale(monitor)
+	width := int32(logicalToPhysical(size.Width, scale))
+	height := int32(logicalToPhysical(size.Height, scale))
+	width = min(width, info.RcWork.Right-info.RcWork.Left)
+	height = min(height, info.RcWork.Bottom-info.RcWork.Top)
+	x := info.RcWork.Left + (info.RcWork.Right-info.RcWork.Left-width)/2
+	y := info.RcWork.Top + (info.RcWork.Bottom-info.RcWork.Top-height)/2
+	if !win.SetWindowPos(w.hwnd, 0, x, y, width, height, win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
+		return errors.New("failed to center Windows window")
+	}
+	win.InvalidateRect(w.hwnd, nil, false)
+	return nil
+}
+
+// findMonitorForLogicalBounds mirrors the logical monitor selection used by Wox core and the Flutter runner.
+func findMonitorForLogicalBounds(monitor win.HMONITOR, _ win.HDC, _ *win.RECT, parameter uintptr) uintptr {
+	search := cgo.Handle(parameter).Value().(*monitorBoundsSearch)
+	var info win.MONITORINFO
+	info.CbSize = uint32(unsafe.Sizeof(info))
+	if !win.GetMonitorInfo(monitor, &info) {
+		return 1
+	}
+	scale := monitorScale(monitor)
+	left := float64(search.bounds.X * scale)
+	top := float64(search.bounds.Y * scale)
+	right := float64((search.bounds.X + search.bounds.Width) * scale)
+	bottom := float64((search.bounds.Y + search.bounds.Height) * scale)
+	overlapWidth := math.Max(0, math.Min(right, float64(info.RcMonitor.Right))-math.Max(left, float64(info.RcMonitor.Left)))
+	overlapHeight := math.Max(0, math.Min(bottom, float64(info.RcMonitor.Bottom))-math.Max(top, float64(info.RcMonitor.Top)))
+	area := overlapWidth * overlapHeight
+	if area > search.bestArea {
+		search.bestArea = area
+		search.scale = scale
+	}
+	return 1
+}
+
+// monitorScale returns the effective DPI scale for one monitor.
+func monitorScale(monitor win.HMONITOR) float32 {
+	if getDPIForMonitor.Find() == nil {
+		var dpiX uint32
+		var dpiY uint32
+		result, _, _ := getDPIForMonitor.Call(uintptr(monitor), 0, uintptr(unsafe.Pointer(&dpiX)), uintptr(unsafe.Pointer(&dpiY)))
+		if int32(result) == 0 && dpiX > 0 {
+			return float32(dpiX) / 96
+		}
+	}
+	return 1
 }
 
 // showNative combines show, foreground activation, and keyboard focus into one epoch.
@@ -661,6 +1235,10 @@ func (w *platformWindow) drawFrame(hwnd win.HWND) {
 
 // destroyNativeResources releases GPU state before invalidating the HWND-backed command queue.
 func (w *platformWindow) destroyNativeResources() {
+	if w.webView != nil {
+		w.webView.destroy()
+		w.webView = nil
+	}
 	if w.renderer != nil {
 		w.renderer.destroy()
 		w.renderer = nil

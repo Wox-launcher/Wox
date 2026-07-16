@@ -6,16 +6,36 @@
 #import <CoreText/CoreText.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <WebKit/WebKit.h>
 #import <dispatch/dispatch.h>
 #import <simd/simd.h>
 
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 extern int32_t woxGoDarwinStart(uintptr_t context);
 extern void woxGoDarwinFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
 extern void woxGoDarwinFocus(uintptr_t context, uint64_t epoch, int32_t active);
+extern int32_t woxGoDarwinKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
+extern void woxGoDarwinTextInput(uintptr_t context, uint8_t kind, const char *text);
+extern void woxGoDarwinPointer(uintptr_t context, uint8_t kind, float x, float y, uint8_t button, float scroll_x, float scroll_y, uint8_t modifiers);
+
+enum {
+  WOX_KEY_MODIFIER_SHIFT = 1 << 0,
+  WOX_KEY_MODIFIER_CONTROL = 1 << 1,
+  WOX_KEY_MODIFIER_ALT = 1 << 2,
+  WOX_KEY_MODIFIER_META = 1 << 3,
+  WOX_TEXT_INPUT_COMMIT = 0,
+  WOX_TEXT_INPUT_COMPOSE = 1,
+  WOX_POINTER_MOVE = 0,
+  WOX_POINTER_ENTER = 1,
+  WOX_POINTER_LEAVE = 2,
+  WOX_POINTER_DOWN = 3,
+  WOX_POINTER_UP = 4,
+  WOX_POINTER_SCROLL = 5,
+};
 
 typedef struct WoxDarwinRenderer WoxDarwinRenderer;
 @class WoxMetalView;
@@ -26,12 +46,23 @@ struct WoxDarwinWindow {
   WoxMetalView *view;
   WoxWindowDelegate *delegate;
   WoxDarwinRenderer *renderer;
+  NSMutableDictionary *web_view_cache;
+  NSMutableDictionary *web_view_signatures;
+  NSMutableDictionary *web_view_content_keys;
+  WKWebView *active_web_view;
+  NSString *active_web_view_key;
+  NSString *active_web_view_signature;
+  NSString *active_web_view_content_key;
+  bool active_web_view_transient;
   uintptr_t context;
   uint64_t epoch;
   bool visible;
   bool active;
   bool hide_on_blur;
+  bool native_dialog_active;
+  bool input_enabled;
   bool closed;
+  NSRect input_cursor_rect;
 };
 
 struct WoxDarwinRenderer {
@@ -133,9 +164,12 @@ static const char *const wox_metal_source =
 }
 @end
 
-@interface WoxMetalView : NSView {
+@interface WoxMetalView : NSView <NSTextInputClient> {
 @public
   WoxDarwinWindow *_owner;
+  NSString *_marked_text;
+  NSRange _marked_selection;
+  NSTrackingArea *_tracking_area;
 }
 - (void)updateDrawableSize;
 - (void)renderFrame;
@@ -262,6 +296,185 @@ static void emit_focus(WoxDarwinWindow *window, bool active) {
   }
 }
 
+static NSString *web_view_string(const char *value) {
+  if (value == NULL || value[0] == '\0') {
+    return @"";
+  }
+  return [NSString stringWithUTF8String:value] ?: @"";
+}
+
+static NSString *web_view_css_script(NSString *css) {
+  if (css.length == 0) {
+    return nil;
+  }
+  NSData *json_data = [NSJSONSerialization dataWithJSONObject:@[ css ] options:0 error:nil];
+  if (json_data == nil) {
+    return nil;
+  }
+  NSString *json = [[[NSString alloc] initWithData:json_data encoding:NSUTF8StringEncoding] autorelease];
+  return [NSString stringWithFormat:
+                       @"(()=>{const c=%@[0];let s=document.getElementById('wox-webview-preview-style');"
+                        "if(!s){s=document.createElement('style');s.id='wox-webview-preview-style';"
+                        "(document.head||document.documentElement).appendChild(s)}s.textContent=c})()",
+                       json];
+}
+
+@interface WoxWebViewMessageHandler : NSObject <WKScriptMessageHandler> {
+@public
+  WoxDarwinWindow *_owner;
+}
+@end
+
+@implementation WoxWebViewMessageHandler
+- (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message {
+  (void)userContentController;
+  WoxDarwinWindow *owner = _owner;
+  if (![message.name isEqualToString:@"woxWebViewPreview"] || owner == NULL || owner->closed || owner->context == 0) {
+    return;
+  }
+  woxGoDarwinKey(owner->context, "escape", 0, 1, 0, 0);
+}
+@end
+
+static NSString *web_view_escape_script(void) {
+  return @"(()=>{if(window.__woxUnhandledEscapeInstalled__)return;window.__woxUnhandledEscapeInstalled__=true;"
+          "document.addEventListener('keydown',e=>{if(e.key!=='Escape'||e.repeat)return;setTimeout(()=>{"
+          "if(e.defaultPrevented||e.cancelBubble)return;window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
+}
+
+static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css) {
+  WKWebViewConfiguration *configuration = [[[WKWebViewConfiguration alloc] init] autorelease];
+  configuration.websiteDataStore = [WKWebsiteDataStore defaultDataStore];
+  WoxWebViewMessageHandler *message_handler = [[WoxWebViewMessageHandler alloc] init];
+  message_handler->_owner = window;
+  [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewPreview"];
+  [message_handler release];
+  WKUserScript *escape_script = [[[WKUserScript alloc] initWithSource:web_view_escape_script() injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES] autorelease];
+  [configuration.userContentController addUserScript:escape_script];
+  NSString *script = web_view_css_script(inject_css);
+  if (script != nil) {
+    WKUserScript *user_script = [[[WKUserScript alloc] initWithSource:script injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES] autorelease];
+    [configuration.userContentController addUserScript:user_script];
+  }
+  WKWebView *web_view = [[WKWebView alloc] initWithFrame:NSZeroRect configuration:configuration];
+  web_view.autoresizingMask = NSViewNotSizable;
+  web_view.customUserAgent = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1";
+  if (@available(macOS 13.3, *)) {
+    web_view.inspectable = YES;
+  }
+  return web_view;
+}
+
+static void clear_active_web_view(WoxDarwinWindow *window, bool discard_transient) {
+  if (window->active_web_view != nil) {
+    [window->active_web_view removeFromSuperview];
+    if (window->active_web_view_transient && discard_transient) {
+      [window->active_web_view stopLoading];
+      [window->active_web_view release];
+    }
+  }
+  window->active_web_view = nil;
+  window->active_web_view_transient = false;
+  [window->active_web_view_key release];
+  [window->active_web_view_signature release];
+  [window->active_web_view_content_key release];
+  window->active_web_view_key = nil;
+  window->active_web_view_signature = nil;
+  window->active_web_view_content_key = nil;
+}
+
+// desktop_top returns the AppKit Y coordinate used to map Wox's top-left virtual desktop space.
+static CGFloat desktop_top(void) {
+  CGFloat top = 0.0;
+  for (NSScreen *screen in [NSScreen screens]) {
+    top = MAX(top, NSMaxY(screen.frame));
+  }
+  return top;
+}
+
+static uint8_t portable_modifiers(NSEventModifierFlags flags) {
+  uint8_t modifiers = 0;
+  if ((flags & NSEventModifierFlagShift) != 0) {
+    modifiers |= WOX_KEY_MODIFIER_SHIFT;
+  }
+  if ((flags & NSEventModifierFlagControl) != 0) {
+    modifiers |= WOX_KEY_MODIFIER_CONTROL;
+  }
+  if ((flags & NSEventModifierFlagOption) != 0) {
+    modifiers |= WOX_KEY_MODIFIER_ALT;
+  }
+  if ((flags & NSEventModifierFlagCommand) != 0) {
+    modifiers |= WOX_KEY_MODIFIER_META;
+  }
+  return modifiers;
+}
+
+// portable_key keeps AppKit function-key values out of the shared Go input contract.
+static const char *portable_key(NSEvent *event) {
+  NSString *characters = [[event charactersIgnoringModifiers] lowercaseString];
+  if (characters.length == 0) {
+    return "";
+  }
+  switch ([characters characterAtIndex:0]) {
+  case NSBackspaceCharacter:
+  case NSDeleteCharacter:
+    return "backspace";
+  case NSTabCharacter:
+  case NSBackTabCharacter:
+    return "tab";
+  case NSCarriageReturnCharacter:
+  case NSEnterCharacter:
+    return "enter";
+  case 0x1B:
+    return "escape";
+  case 0x20:
+    return "space";
+  case NSPageUpFunctionKey:
+    return "page-up";
+  case NSPageDownFunctionKey:
+    return "page-down";
+  case NSEndFunctionKey:
+    return "end";
+  case NSHomeFunctionKey:
+    return "home";
+  case NSLeftArrowFunctionKey:
+    return "arrow-left";
+  case NSUpArrowFunctionKey:
+    return "arrow-up";
+  case NSRightArrowFunctionKey:
+    return "arrow-right";
+  case NSDownArrowFunctionKey:
+    return "arrow-down";
+  case NSDeleteFunctionKey:
+    return "delete";
+  default:
+    return characters.UTF8String;
+  }
+}
+
+static NSString *plain_text(id value) {
+  if ([value isKindOfClass:[NSAttributedString class]]) {
+    return [(NSAttributedString *)value string];
+  }
+  if ([value isKindOfClass:[NSString class]]) {
+    return (NSString *)value;
+  }
+  return [value description];
+}
+
+static uint8_t portable_pointer_button(NSEvent *event) {
+  switch (event.buttonNumber) {
+  case 0:
+    return 1;
+  case 1:
+    return 2;
+  case 2:
+    return 3;
+  default:
+    return 0;
+  }
+}
+
 @implementation WoxMetalView
 - (CALayer *)makeBackingLayer {
   CAMetalLayer *layer = [CAMetalLayer layer];
@@ -282,6 +495,204 @@ static void emit_focus(WoxDarwinWindow *window, bool active) {
 
 - (BOOL)acceptsFirstResponder {
   return YES;
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+  (void)event;
+  return YES;
+}
+
+- (void)dealloc {
+  [_marked_text release];
+  [_tracking_area release];
+  [super dealloc];
+}
+
+- (void)updateTrackingAreas {
+  [super updateTrackingAreas];
+  if (_tracking_area != nil) {
+    [self removeTrackingArea:_tracking_area];
+    [_tracking_area release];
+  }
+  _tracking_area = [[NSTrackingArea alloc]
+      initWithRect:NSZeroRect
+           options:NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved | NSTrackingActiveAlways | NSTrackingInVisibleRect
+             owner:self
+          userInfo:nil];
+  [self addTrackingArea:_tracking_area];
+}
+
+- (void)emitPointer:(NSEvent *)event kind:(uint8_t)kind button:(uint8_t)button scrollX:(float)scroll_x scrollY:(float)scroll_y {
+  WoxDarwinWindow *owner = _owner;
+  if (owner == NULL || owner->closed || owner->context == 0) {
+    return;
+  }
+  NSPoint position = [self convertPoint:event.locationInWindow fromView:nil];
+  woxGoDarwinPointer(owner->context, kind, (float)position.x, (float)position.y, button, scroll_x, scroll_y, portable_modifiers(event.modifierFlags));
+}
+
+- (void)mouseEntered:(NSEvent *)event {
+  [self emitPointer:event kind:WOX_POINTER_ENTER button:0 scrollX:0.0f scrollY:0.0f];
+}
+
+- (void)mouseExited:(NSEvent *)event {
+  [self emitPointer:event kind:WOX_POINTER_LEAVE button:0 scrollX:0.0f scrollY:0.0f];
+}
+
+- (void)mouseMoved:(NSEvent *)event {
+  [self emitPointer:event kind:WOX_POINTER_MOVE button:0 scrollX:0.0f scrollY:0.0f];
+}
+
+- (void)mouseDragged:(NSEvent *)event {
+  [self mouseMoved:event];
+}
+
+- (void)rightMouseDragged:(NSEvent *)event {
+  [self mouseMoved:event];
+}
+
+- (void)otherMouseDragged:(NSEvent *)event {
+  [self mouseMoved:event];
+}
+
+- (void)mouseDown:(NSEvent *)event {
+  [self.window makeFirstResponder:self];
+  [self emitPointer:event kind:WOX_POINTER_DOWN button:portable_pointer_button(event) scrollX:0.0f scrollY:0.0f];
+}
+
+- (void)mouseUp:(NSEvent *)event {
+  [self emitPointer:event kind:WOX_POINTER_UP button:portable_pointer_button(event) scrollX:0.0f scrollY:0.0f];
+}
+
+- (void)rightMouseDown:(NSEvent *)event {
+  [self mouseDown:event];
+}
+
+- (void)rightMouseUp:(NSEvent *)event {
+  [self mouseUp:event];
+}
+
+- (void)otherMouseDown:(NSEvent *)event {
+  [self mouseDown:event];
+}
+
+- (void)otherMouseUp:(NSEvent *)event {
+  [self mouseUp:event];
+}
+
+- (void)scrollWheel:(NSEvent *)event {
+  CGFloat unit = event.hasPreciseScrollingDeltas ? 1.0 : 40.0;
+  [self emitPointer:event kind:WOX_POINTER_SCROLL button:0 scrollX:(float)(event.scrollingDeltaX * unit) scrollY:(float)(event.scrollingDeltaY * unit)];
+}
+
+- (void)keyDown:(NSEvent *)event {
+  WoxDarwinWindow *owner = _owner;
+  if (owner == NULL || owner->closed || owner->context == 0) {
+    [super keyDown:event];
+    return;
+  }
+  int32_t handled = woxGoDarwinKey(owner->context, portable_key(event), portable_modifiers(event.modifierFlags), 1, event.isARepeat ? 1 : 0, _marked_text.length > 0 ? 1 : 0);
+  if (handled != 0) {
+    return;
+  }
+  if (owner->input_enabled) {
+    [self interpretKeyEvents:@[ event ]];
+  } else {
+    [super keyDown:event];
+  }
+}
+
+- (void)keyUp:(NSEvent *)event {
+  WoxDarwinWindow *owner = _owner;
+  if (owner != NULL && !owner->closed && owner->context != 0) {
+    int32_t handled = woxGoDarwinKey(owner->context, portable_key(event), portable_modifiers(event.modifierFlags), 0, 0, _marked_text.length > 0 ? 1 : 0);
+    if (handled != 0) {
+      return;
+    }
+  }
+  [super keyUp:event];
+}
+
+// NSTextInputClient keeps marked text separate from committed UTF-8 text.
+- (void)insertText:(id)value replacementRange:(NSRange)replacement_range {
+  (void)replacement_range;
+  WoxDarwinWindow *owner = _owner;
+  NSString *text = plain_text(value);
+  [_marked_text release];
+  _marked_text = nil;
+  _marked_selection = NSMakeRange(NSNotFound, 0);
+  if (owner != NULL && !owner->closed && owner->input_enabled && owner->context != 0 && text.length > 0) {
+    woxGoDarwinTextInput(owner->context, WOX_TEXT_INPUT_COMMIT, text.UTF8String);
+  }
+}
+
+- (void)setMarkedText:(id)value selectedRange:(NSRange)selected_range replacementRange:(NSRange)replacement_range {
+  (void)replacement_range;
+  NSString *text = plain_text(value);
+  [_marked_text release];
+  _marked_text = [text copy];
+  _marked_selection = selected_range;
+  WoxDarwinWindow *owner = _owner;
+  if (owner != NULL && !owner->closed && owner->input_enabled && owner->context != 0) {
+    woxGoDarwinTextInput(owner->context, WOX_TEXT_INPUT_COMPOSE, text.UTF8String);
+  }
+}
+
+- (void)unmarkText {
+  bool had_marked_text = _marked_text.length > 0;
+  [_marked_text release];
+  _marked_text = nil;
+  _marked_selection = NSMakeRange(NSNotFound, 0);
+  WoxDarwinWindow *owner = _owner;
+  if (had_marked_text && owner != NULL && !owner->closed && owner->input_enabled && owner->context != 0) {
+    woxGoDarwinTextInput(owner->context, WOX_TEXT_INPUT_COMPOSE, "");
+  }
+}
+
+- (BOOL)hasMarkedText {
+  return _marked_text.length > 0;
+}
+
+- (NSRange)markedRange {
+  return _marked_text.length > 0 ? NSMakeRange(0, _marked_text.length) : NSMakeRange(NSNotFound, 0);
+}
+
+- (NSRange)selectedRange {
+  return _marked_selection;
+}
+
+- (NSArray<NSAttributedStringKey> *)validAttributesForMarkedText {
+  return @[];
+}
+
+- (NSAttributedString *)attributedSubstringForProposedRange:(NSRange)range actualRange:(NSRangePointer)actual_range {
+  (void)range;
+  if (actual_range != NULL) {
+    *actual_range = NSMakeRange(NSNotFound, 0);
+  }
+  return nil;
+}
+
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actual_range {
+  (void)range;
+  if (actual_range != NULL) {
+    *actual_range = NSMakeRange(NSNotFound, 0);
+  }
+  WoxDarwinWindow *owner = _owner;
+  if (owner == NULL || owner->closed || self.window == nil) {
+    return NSZeroRect;
+  }
+  NSRect window_rect = [self convertRect:owner->input_cursor_rect toView:nil];
+  return [self.window convertRectToScreen:window_rect];
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point {
+  (void)point;
+  return 0;
+}
+
+- (void)doCommandBySelector:(SEL)selector {
+  (void)selector;
 }
 
 - (void)updateDrawableSize {
@@ -346,6 +757,9 @@ static void emit_focus(WoxDarwinWindow *window, bool active) {
   if (owner == NULL || owner->closed) {
     return;
   }
+  if (owner->native_dialog_active) {
+    return;
+  }
   emit_focus(owner, false);
   if (!owner->closed && owner->hide_on_blur && owner->visible) {
     owner->visible = false;
@@ -389,6 +803,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     native_window.opaque = NO;
     native_window.backgroundColor = [NSColor clearColor];
     native_window.hasShadow = YES;
+    native_window.acceptsMouseMovedEvents = YES;
     native_window.level = NSFloatingWindowLevel;
     native_window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
     if (title != NULL) {
@@ -401,6 +816,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     WoxDarwinWindow *window = calloc(1, sizeof(WoxDarwinWindow));
     WoxMetalView *view = [[WoxMetalView alloc] initWithFrame:frame];
     view->_owner = window;
+    view->_marked_selection = NSMakeRange(NSNotFound, 0);
     view.wantsLayer = YES;
     CAMetalLayer *layer = (CAMetalLayer *)view.layer;
 
@@ -419,6 +835,9 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->view = view;
     window->delegate = delegate;
     window->renderer = renderer;
+    window->web_view_cache = [[NSMutableDictionary alloc] init];
+    window->web_view_signatures = [[NSMutableDictionary alloc] init];
+    window->web_view_content_keys = [[NSMutableDictionary alloc] init];
     window->context = context;
     window->hide_on_blur = hide_on_blur != 0;
     native_window.contentView = view;
@@ -481,6 +900,292 @@ int32_t wox_darwin_window_hide(WoxDarwinWindow *window) {
   return result;
 }
 
+int32_t wox_darwin_window_set_bounds(WoxDarwinWindow *window, float x, float y, float width, float height) {
+  if (window == NULL || width <= 0.0f || height <= 0.0f) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    NSRect frame = NSMakeRect(x, desktop_top() - y - height, width, height);
+    [window->window setFrame:frame display:window->visible];
+    if (window->visible) {
+      [window->view renderFrame];
+    }
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float height) {
+  if (window == NULL || width <= 0.0f || height <= 0.0f) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    NSScreen *screen = window->window.screen ?: [NSScreen mainScreen];
+    if (screen == nil) {
+      result = -1;
+      return;
+    }
+    NSRect work_area = screen.visibleFrame;
+    width = fmin(width, NSWidth(work_area));
+    height = fmin(height, NSHeight(work_area));
+    NSRect frame = NSMakeRect(NSMidX(work_area) - width * 0.5, NSMidY(work_area) - height * 0.5, width, height);
+    [window->window setFrame:frame display:window->visible];
+    if (window->visible) {
+      [window->view renderFrame];
+    }
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_set_hide_on_blur(WoxDarwinWindow *window, int32_t enabled) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    window->hide_on_blur = enabled != 0;
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_pick_file(WoxDarwinWindow *window, int32_t directory, char **path) {
+  if (window == NULL || path == NULL) {
+    return -1;
+  }
+  *path = NULL;
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+
+    NSOpenPanel *panel = [NSOpenPanel openPanel];
+    panel.canChooseDirectories = directory != 0;
+    panel.canChooseFiles = directory == 0;
+    panel.allowsMultipleSelection = NO;
+    panel.resolvesAliases = YES;
+
+    // Keep the native picker inside the Wox focus domain so hide-on-blur does not close its owner.
+    window->native_dialog_active = true;
+    NSInteger response = [panel runModal];
+    window->native_dialog_active = false;
+
+    if (response == NSModalResponseOK) {
+      const char *selected_path = panel.URL.path.fileSystemRepresentation;
+      if (selected_path == NULL) {
+        result = -1;
+      } else {
+        *path = strdup(selected_path);
+        if (*path == NULL) {
+          result = -1;
+        }
+      }
+    } else {
+      result = 1;
+    }
+
+    if (!window->closed && window->visible) {
+      [NSApp activateIgnoringOtherApps:YES];
+      [window->window makeKeyAndOrderFront:nil];
+      [window->window makeFirstResponder:window->view];
+    }
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_open_external_url(WoxDarwinWindow *window, const char *url) {
+  if (window == NULL || url == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    NSString *value = [NSString stringWithUTF8String:url];
+    NSURL *target = value != nil ? [NSURL URLWithString:value] : nil;
+    if (target == nil || ![[NSWorkspace sharedWorkspace] openURL:target]) {
+      result = -1;
+    }
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height) {
+  if (window == NULL || url == NULL || html == NULL || inject_css == NULL || cache_key == NULL || width <= 0.0f || height <= 0.0f) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    NSString *url_value = web_view_string(url);
+    NSString *html_value = web_view_string(html);
+    NSString *css_value = web_view_string(inject_css);
+    NSString *key_value = web_view_string(cache_key);
+    bool use_cache = cache_disabled == 0 && key_value.length > 0;
+    NSString *signature = css_value;
+    NSString *content_key = html_value.length > 0 ? [@"html|" stringByAppendingString:html_value] : [@"url|" stringByAppendingString:url_value];
+
+    WKWebView *web_view = nil;
+    bool should_load = true;
+    if (use_cache) {
+      NSString *cached_signature = [window->web_view_signatures objectForKey:key_value];
+      if ([cached_signature isEqualToString:signature]) {
+        web_view = [window->web_view_cache objectForKey:key_value];
+        should_load = ![[window->web_view_content_keys objectForKey:key_value] isEqualToString:content_key];
+      } else {
+        WKWebView *stale = [window->web_view_cache objectForKey:key_value];
+        [stale stopLoading];
+        [stale removeFromSuperview];
+        [window->web_view_cache removeObjectForKey:key_value];
+        [window->web_view_signatures removeObjectForKey:key_value];
+        [window->web_view_content_keys removeObjectForKey:key_value];
+      }
+      if (web_view == nil) {
+        web_view = create_web_view(window, css_value);
+        [window->web_view_cache setObject:web_view forKey:key_value];
+        [window->web_view_signatures setObject:signature forKey:key_value];
+        [web_view release];
+      }
+      [window->web_view_content_keys setObject:content_key forKey:key_value];
+    } else if (window->active_web_view_transient && [window->active_web_view_signature isEqualToString:signature] && [window->active_web_view_content_key isEqualToString:content_key]) {
+      web_view = window->active_web_view;
+      should_load = false;
+    } else {
+      web_view = create_web_view(window, css_value);
+    }
+
+    bool same_active = web_view == window->active_web_view;
+    if (!same_active) {
+      clear_active_web_view(window, true);
+      window->active_web_view = web_view;
+      window->active_web_view_transient = !use_cache;
+      window->active_web_view_key = [key_value copy];
+      window->active_web_view_signature = [signature copy];
+      window->active_web_view_content_key = [content_key copy];
+      [window->view addSubview:web_view positioned:NSWindowAbove relativeTo:nil];
+    } else if (web_view.superview == nil) {
+      [window->view addSubview:web_view positioned:NSWindowAbove relativeTo:nil];
+    }
+    web_view.frame = NSMakeRect(x, y, width, height);
+    web_view.hidden = NO;
+
+    if (!should_load) {
+      return;
+    }
+    if (html_value.length > 0) {
+      [web_view loadHTMLString:html_value baseURL:nil];
+      return;
+    }
+    NSURL *target = [NSURL URLWithString:url_value];
+    if (target == nil) {
+      result = -1;
+      return;
+    }
+    [web_view loadRequest:[NSURLRequest requestWithURL:target]];
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_hide_webview(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    clear_active_web_view(window, true);
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_write_clipboard_text(WoxDarwinWindow *window, const char *text) {
+  if (window == NULL || text == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    NSString *value = [NSString stringWithUTF8String:text];
+    if (value == nil) {
+      result = -1;
+      return;
+    }
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents];
+    if (![pasteboard setString:value forType:NSPasteboardTypeString]) {
+      result = -1;
+    }
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_write_clipboard_image(WoxDarwinWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride) {
+  if (window == NULL || pixels == NULL || width <= 0 || height <= 0 || row_stride < width * 4) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+
+    NSBitmapImageRep *representation = [[NSBitmapImageRep alloc]
+        initWithBitmapDataPlanes:NULL
+                  pixelsWide:width
+                  pixelsHigh:height
+               bitsPerSample:8
+             samplesPerPixel:4
+                    hasAlpha:YES
+                    isPlanar:NO
+              colorSpaceName:NSCalibratedRGBColorSpace
+                 bitmapFormat:NSBitmapFormatAlphaNonpremultiplied
+                  bytesPerRow:row_stride
+                 bitsPerPixel:32];
+    if (representation == nil || representation.bitmapData == NULL) {
+      [representation release];
+      result = -1;
+      return;
+    }
+    memcpy(representation.bitmapData, pixels, (size_t)row_stride * (size_t)height);
+    NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(width, height)];
+    [image addRepresentation:representation];
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents];
+    if (![pasteboard writeObjects:@[ image ]]) {
+      result = -1;
+    }
+    [image release];
+    [representation release];
+  });
+  return result;
+}
+
 int32_t wox_darwin_window_invalidate(WoxDarwinWindow *window) {
   if (window == NULL) {
     return -1;
@@ -492,6 +1197,83 @@ int32_t wox_darwin_window_invalidate(WoxDarwinWindow *window) {
       return;
     }
     [window->view renderFrame];
+  });
+  return result;
+}
+
+// wox_darwin_window_set_text_input_state updates AppKit's candidate position on its owning thread.
+int32_t wox_darwin_window_set_text_input_state(WoxDarwinWindow *window, int32_t enabled, float x, float y, float width, float height) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    window->input_enabled = enabled != 0;
+    window->input_cursor_rect = NSMakeRect(x, y, fmaxf(width, 1.0f), fmaxf(height, 1.0f));
+    if (!window->input_enabled) {
+      [window->view unmarkText];
+    } else if (window->window.isKeyWindow) {
+      [window->window makeFirstResponder:window->view];
+    }
+    [[window->view inputContext] invalidateCharacterCoordinates];
+  });
+  return result;
+}
+
+static NSFont *wox_font(const char *font_family, CGFloat size, uint8_t font_weight) {
+  NSFontWeight weight = font_weight == 1 ? NSFontWeightSemibold : NSFontWeightRegular;
+  if (font_family != NULL && font_family[0] != '\0') {
+    NSString *family = [NSString stringWithUTF8String:font_family];
+    if (family != nil) {
+      NSFontDescriptor *descriptor = [NSFontDescriptor fontDescriptorWithFontAttributes:@{
+        NSFontFamilyAttribute: family,
+        NSFontTraitsAttribute: @{NSFontWeightTrait: @(weight)},
+      }];
+      NSFont *font = [NSFont fontWithDescriptor:descriptor size:size];
+      if (font != nil) {
+        return font;
+      }
+    }
+  }
+  return [NSFont systemFontOfSize:size weight:weight];
+}
+
+// wox_darwin_window_measure_text returns logical CoreText metrics for the configured UI font.
+int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, float *width, float *height, float *baseline) {
+  if (window == NULL || text == NULL || width == NULL || height == NULL || baseline == NULL || font_size <= 0.0f || font_weight > 1) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    *width = 0.0f;
+    *height = 0.0f;
+    *baseline = 0.0f;
+    if (window->closed || text[0] == '\0') {
+      result = window->closed ? -1 : 0;
+      return;
+    }
+    NSString *string = [[NSString alloc] initWithUTF8String:text];
+    if (string == nil) {
+      result = -1;
+      return;
+    }
+    NSFont *font = wox_font(font_family, font_size, font_weight);
+    NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:string attributes:@{(id)kCTFontAttributeName : font}];
+    CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)attributed);
+    CGFloat ascent = 0.0;
+    CGFloat descent = 0.0;
+    CGFloat leading = 0.0;
+    double measured_width = CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
+    *width = (float)measured_width;
+    *height = (float)(ascent + descent + leading);
+    *baseline = (float)ascent;
+    CFRelease(line);
+    [attributed release];
+    [string release];
   });
   return result;
 }
@@ -517,6 +1299,16 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
 
     window->view->_owner = NULL;
     window->delegate->_owner = NULL;
+    clear_active_web_view(window, true);
+    [window->web_view_cache removeAllObjects];
+    [window->web_view_signatures removeAllObjects];
+    [window->web_view_content_keys removeAllObjects];
+    [window->web_view_cache release];
+    [window->web_view_signatures release];
+    [window->web_view_content_keys release];
+    window->web_view_cache = nil;
+    window->web_view_signatures = nil;
+    window->web_view_content_keys = nil;
     window->window.delegate = nil;
     [window->window close];
     destroy_renderer(window->renderer);
@@ -609,7 +1401,7 @@ int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, fl
   return 0;
 }
 
-int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, const char *font_family, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL || window->renderer == NULL || !window->renderer->frame_open || text == NULL) {
     return -1;
   }
@@ -651,8 +1443,7 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, f
     free(pixels);
     return -1;
   }
-  NSFontWeight weight = font_weight == 1 ? NSFontWeightSemibold : NSFontWeightRegular;
-  NSFont *font = [NSFont systemFontOfSize:font_size * renderer->scale weight:weight];
+  NSFont *font = wox_font(font_family, font_size * renderer->scale, font_weight);
   NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
       font, (id)kCTFontAttributeName,
       (id)[[NSColor whiteColor] CGColor], (id)kCTForegroundColorAttributeName,
@@ -700,6 +1491,70 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, f
   [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
   [renderer->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
   [texture release];
+  return 0;
+}
+
+int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height) {
+  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open || pixels == NULL || image_width <= 0 || image_height <= 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
+    return -1;
+  }
+  WoxDarwinRenderer *renderer = window->renderer;
+  MTLTextureDescriptor *descriptor = [MTLTextureDescriptor
+      texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                   width:(NSUInteger)image_width
+                                  height:(NSUInteger)image_height
+                               mipmapped:NO];
+  descriptor.usage = MTLTextureUsageShaderRead;
+  id<MTLTexture> texture = [renderer->device newTextureWithDescriptor:descriptor];
+  if (texture == nil) {
+    return -1;
+  }
+  [texture replaceRegion:MTLRegionMake2D(0, 0, (NSUInteger)image_width, (NSUInteger)image_height)
+             mipmapLevel:0
+               withBytes:pixels
+             bytesPerRow:(NSUInteger)row_stride];
+
+  WoxTextureUniforms uniforms = {
+      .viewport_size = renderer->viewport_size,
+      .rect = (vector_float4){x, y, width, height},
+      .color = premultiplied_color(255, 255, 255, 255),
+  };
+  [renderer->encoder setRenderPipelineState:renderer->texture_pipeline];
+  [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
+  [renderer->encoder setFragmentTexture:texture atIndex:0];
+  [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
+  [renderer->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+  [texture release];
+  return 0;
+}
+
+int32_t wox_darwin_window_set_clip_rect(WoxDarwinWindow *window, float x, float y, float width, float height) {
+  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
+    return -1;
+  }
+  WoxDarwinRenderer *renderer = window->renderer;
+  float max_width = renderer->viewport_size.x;
+  float max_height = renderer->viewport_size.y;
+  float left = fmaxf(0.0f, fminf(max_width, x));
+  float top = fmaxf(0.0f, fminf(max_height, y));
+  float right = fmaxf(left, fminf(max_width, x + fmaxf(0.0f, width)));
+  float bottom = fmaxf(top, fminf(max_height, y + fmaxf(0.0f, height)));
+  NSUInteger pixel_left = (NSUInteger)floorf(left * renderer->scale);
+  NSUInteger pixel_top = (NSUInteger)floorf(top * renderer->scale);
+  NSUInteger pixel_right = (NSUInteger)ceilf(right * renderer->scale);
+  NSUInteger pixel_bottom = (NSUInteger)ceilf(bottom * renderer->scale);
+  [renderer->encoder setScissorRect:(MTLScissorRect){pixel_left, pixel_top, pixel_right - pixel_left, pixel_bottom - pixel_top}];
+  return 0;
+}
+
+int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window) {
+  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
+    return -1;
+  }
+  WoxDarwinRenderer *renderer = window->renderer;
+  NSUInteger width = (NSUInteger)ceilf(renderer->viewport_size.x * renderer->scale);
+  NSUInteger height = (NSUInteger)ceilf(renderer->viewport_size.y * renderer->scale);
+  [renderer->encoder setScissorRect:(MTLScissorRect){0, 0, width, height}];
   return 0;
 }
 

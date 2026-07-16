@@ -14,10 +14,17 @@ type TextStyle struct {
 	Weight FontWeight
 }
 
+// TextMetrics describes one shaped line in logical pixels.
+type TextMetrics struct {
+	Size     Size
+	Baseline float32
+}
+
 // DisplayList records the drawing commands for one frame.
 type DisplayList struct {
 	clearColor Color
 	commands   []displayCommand
+	clipStack  []Rect
 }
 
 type displayCommandKind uint8
@@ -25,6 +32,9 @@ type displayCommandKind uint8
 const (
 	displayCommandFillRoundedRect displayCommandKind = iota
 	displayCommandDrawText
+	displayCommandDrawImage
+	displayCommandSetClipRect
+	displayCommandClearClip
 )
 
 type displayCommand struct {
@@ -34,6 +44,45 @@ type displayCommand struct {
 	color  Color
 	text   string
 	style  TextStyle
+	image  *Image
+}
+
+// PushClipRect intersects rect with the active clip for subsequent commands.
+func (d *DisplayList) PushClipRect(rect Rect) {
+	if len(d.clipStack) > 0 {
+		rect = intersectRects(d.clipStack[len(d.clipStack)-1], rect)
+	}
+	d.clipStack = append(d.clipStack, rect)
+	d.commands = append(d.commands, displayCommand{kind: displayCommandSetClipRect, rect: rect})
+}
+
+// PopClipRect restores the previous clip rectangle.
+func (d *DisplayList) PopClipRect() {
+	if len(d.clipStack) == 0 {
+		return
+	}
+	d.clipStack = d.clipStack[:len(d.clipStack)-1]
+	if len(d.clipStack) == 0 {
+		d.commands = append(d.commands, displayCommand{kind: displayCommandClearClip})
+		return
+	}
+	d.commands = append(d.commands, displayCommand{kind: displayCommandSetClipRect, rect: d.clipStack[len(d.clipStack)-1]})
+}
+
+// ClipRect returns the effective clip while widgets record the current subtree.
+func (d *DisplayList) ClipRect() (Rect, bool) {
+	if len(d.clipStack) == 0 {
+		return Rect{}, false
+	}
+	return d.clipStack[len(d.clipStack)-1], true
+}
+
+func intersectRects(left, right Rect) Rect {
+	x := max(left.X, right.X)
+	y := max(left.Y, right.Y)
+	rightEdge := min(left.X+left.Width, right.X+right.Width)
+	bottomEdge := min(left.Y+left.Height, right.Y+right.Height)
+	return Rect{X: x, Y: y, Width: max(float32(0), rightEdge-x), Height: max(float32(0), bottomEdge-y)}
 }
 
 // Clear replaces the entire frame with color.
@@ -77,4 +126,12 @@ func (d *DisplayList) DrawText(text string, rect Rect, style TextStyle, color Co
 		text:  text,
 		style: style,
 	})
+}
+
+// DrawImage scales one immutable raster image into the destination rectangle.
+func (d *DisplayList) DrawImage(image *Image, rect Rect) {
+	if image == nil || image.Width <= 0 || image.Height <= 0 || len(image.pixels) == 0 || rect.Width <= 0 || rect.Height <= 0 {
+		return
+	}
+	d.commands = append(d.commands, displayCommand{kind: displayCommandDrawImage, rect: rect, image: image})
 }

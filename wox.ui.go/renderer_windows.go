@@ -4,7 +4,7 @@ package woxui
 
 /*
 #cgo CXXFLAGS: -std=c++17 -DUNICODE -D_UNICODE
-#cgo LDFLAGS: -ld3d11 -ldxgi -ldcomp -ld2d1 -ldwrite -lole32 -luuid -lstdc++
+#cgo LDFLAGS: -static -static-libgcc -static-libstdc++ -ld3d11 -ldxgi -ldcomp -ld2d1 -ldwrite -lole32 -luuid -lstdc++
 #include <stdlib.h>
 #include "renderer_windows.h"
 */
@@ -35,6 +35,30 @@ func (r *nativeRenderer) resize(width, height int) error {
 		return hresultError("resize renderer", result)
 	}
 	return nil
+}
+
+func (r *nativeRenderer) setFontFamily(family string) error {
+	nativeFamily := C.CString(family)
+	defer C.free(unsafe.Pointer(nativeFamily))
+	result := C.wox_renderer_set_font_family(r.handle, nativeFamily)
+	if result < 0 {
+		return hresultError("set font family", result)
+	}
+	return nil
+}
+
+// measureText uses DirectWrite without opening a draw transaction.
+func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics, error) {
+	nativeText := C.CString(text)
+	defer C.free(unsafe.Pointer(nativeText))
+	var width C.float
+	var height C.float
+	var baseline C.float
+	result := C.wox_renderer_measure_text(r.handle, nativeText, C.float(style.Size), C.uint8_t(style.Weight), &width, &height, &baseline)
+	if result < 0 {
+		return TextMetrics{}, hresultError("measure text", result)
+	}
+	return TextMetrics{Size: Size{Width: float32(width), Height: float32(height)}, Baseline: float32(baseline)}, nil
 }
 
 // render replays one logical display list into the physical DirectComposition surface.
@@ -77,6 +101,22 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 				C.uint8_t(command.color.A),
 			)
 			C.free(unsafe.Pointer(text))
+		case displayCommandDrawImage:
+			commandResult = C.wox_renderer_draw_image(
+				r.handle,
+				(*C.uint8_t)(unsafe.Pointer(&command.image.pixels[0])),
+				C.uint32_t(command.image.Width),
+				C.uint32_t(command.image.Height),
+				C.uint32_t(command.image.Width*4),
+				C.float(command.rect.X),
+				C.float(command.rect.Y),
+				C.float(command.rect.Width),
+				C.float(command.rect.Height),
+			)
+		case displayCommandSetClipRect:
+			commandResult = C.wox_renderer_set_clip_rect(r.handle, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+		case displayCommandClearClip:
+			commandResult = C.wox_renderer_clear_clip(r.handle)
 		}
 		if commandResult < 0 {
 			_ = r.endFrame()

@@ -60,6 +60,10 @@ func Extract(ctx context.Context) error {
 	if flutterErr != nil {
 		return flutterErr
 	}
+	goUIErr := extractFiles(ctx, UIFS, uiDiretory, "ui/go", true)
+	if goUIErr != nil {
+		return goUIErr
+	}
 
 	// others
 	othersDirectory := util.GetLocation().GetOthersDirectory()

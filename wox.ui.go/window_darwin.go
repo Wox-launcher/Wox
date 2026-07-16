@@ -4,7 +4,7 @@ package woxui
 
 /*
 #cgo CFLAGS: -fblocks -Wno-deprecated-declarations
-#cgo LDFLAGS: -framework Cocoa -framework Metal -framework QuartzCore -framework CoreText -framework CoreGraphics
+#cgo LDFLAGS: -framework Cocoa -framework Metal -framework QuartzCore -framework CoreText -framework CoreGraphics -framework WebKit
 #include <stdlib.h>
 #include "native_darwin.h"
 */
@@ -33,13 +33,14 @@ var darwinRuntime struct {
 }
 
 type platformWindow struct {
-	mu        sync.Mutex
-	native    *C.WoxDarwinWindow
-	options   WindowOptions
-	handle    cgo.Handle
-	closing   bool
-	closed    bool
-	renderErr error
+	mu         sync.Mutex
+	native     *C.WoxDarwinWindow
+	options    WindowOptions
+	handle     cgo.Handle
+	closing    bool
+	closed     bool
+	renderErr  error
+	fontFamily string
 }
 
 // AppKit requires the package's main goroutine to remain on the process main thread.
@@ -143,6 +144,154 @@ func (w *platformWindow) hide() error {
 	return nil
 }
 
+func (w *platformWindow) setBounds(bounds Rect) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_set_bounds(native, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
+		return errors.New("woxui: failed to set macOS window bounds")
+	}
+	return nil
+}
+
+func (w *platformWindow) center(size Size) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_center(native, C.float(size.Width), C.float(size.Height)) != 0 {
+		return errors.New("woxui: failed to center macOS window")
+	}
+	return nil
+}
+
+func (w *platformWindow) setHideOnBlur(enabled bool) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	nativeEnabled := C.int32_t(0)
+	if enabled {
+		nativeEnabled = 1
+	}
+	if C.wox_darwin_window_set_hide_on_blur(native, nativeEnabled) != 0 {
+		return errors.New("woxui: failed to update macOS hide-on-blur behavior")
+	}
+	return nil
+}
+
+func (w *platformWindow) setFontFamily(family string) error {
+	w.mu.Lock()
+	w.fontFamily = family
+	w.mu.Unlock()
+	return w.invalidate()
+}
+
+func (w *platformWindow) pickFile(options FileDialogOptions) (string, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return "", err
+	}
+	directory := C.int32_t(0)
+	if options.Directory {
+		directory = 1
+	}
+	var path *C.char
+	result := C.wox_darwin_window_pick_file(native, directory, &path)
+	if result == 1 {
+		return "", nil
+	}
+	if result != 0 {
+		return "", errors.New("woxui: failed to open macOS file dialog")
+	}
+	if path == nil {
+		return "", errors.New("woxui: macOS file dialog returned no path")
+	}
+	defer C.free(unsafe.Pointer(path))
+	return C.GoString(path), nil
+}
+
+func (w *platformWindow) openExternalURL(rawURL string) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	nativeURL := C.CString(rawURL)
+	defer C.free(unsafe.Pointer(nativeURL))
+	if C.wox_darwin_window_open_external_url(native, nativeURL) != 0 {
+		return errors.New("woxui: failed to open external URL on macOS")
+	}
+	return nil
+}
+
+func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	url := C.CString(content.URL)
+	html := C.CString(content.HTML)
+	css := C.CString(content.InjectCSS)
+	cacheKey := C.CString(content.CacheKey)
+	defer C.free(unsafe.Pointer(url))
+	defer C.free(unsafe.Pointer(html))
+	defer C.free(unsafe.Pointer(css))
+	defer C.free(unsafe.Pointer(cacheKey))
+	cacheDisabled := C.int32_t(0)
+	if content.CacheDisabled {
+		cacheDisabled = 1
+	}
+	if C.wox_darwin_window_show_webview(native, url, html, css, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
+		return errors.New("woxui: failed to show macOS WebView")
+	}
+	return nil
+}
+
+func (w *platformWindow) hideWebView() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_hide_webview(native) != 0 {
+		return errors.New("woxui: failed to hide macOS WebView")
+	}
+	return nil
+}
+
+func (w *platformWindow) writeClipboardText(text string) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	nativeText := C.CString(text)
+	defer C.free(unsafe.Pointer(nativeText))
+	if C.wox_darwin_window_write_clipboard_text(native, nativeText) != 0 {
+		return errors.New("woxui: failed to write macOS clipboard text")
+	}
+	return nil
+}
+
+func (w *platformWindow) writeClipboardImage(image *clipboardImage) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if image == nil || len(image.pixels) == 0 {
+		return errors.New("woxui: clipboard image is empty")
+	}
+	if C.wox_darwin_window_write_clipboard_image(
+		native,
+		(*C.uint8_t)(unsafe.Pointer(&image.pixels[0])),
+		C.int32_t(image.width),
+		C.int32_t(image.height),
+		C.int32_t(image.stride),
+	) != 0 {
+		return errors.New("woxui: failed to write macOS clipboard image")
+	}
+	return nil
+}
+
 func (w *platformWindow) invalidate() error {
 	w.mu.Lock()
 	if w.renderErr != nil {
@@ -160,6 +309,52 @@ func (w *platformWindow) invalidate() error {
 		return errors.New("woxui: failed to invalidate macOS window")
 	}
 	return nil
+}
+
+// setTextInputState updates NSTextInputClient activation and candidate geometry on the AppKit thread.
+func (w *platformWindow) setTextInputState(state TextInputState) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	enabled := C.int32_t(0)
+	if state.Enabled {
+		enabled = 1
+	}
+	if C.wox_darwin_window_set_text_input_state(
+		native,
+		enabled,
+		C.float(state.CursorRect.X),
+		C.float(state.CursorRect.Y),
+		C.float(state.CursorRect.Width),
+		C.float(state.CursorRect.Height),
+	) != 0 {
+		return errors.New("woxui: failed to update macOS text input state")
+	}
+	return nil
+}
+
+// measureText uses CoreText on the AppKit thread so it matches the native renderer.
+func (w *platformWindow) measureText(text string, style TextStyle) (TextMetrics, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return TextMetrics{}, err
+	}
+	nativeText := C.CString(text)
+	defer C.free(unsafe.Pointer(nativeText))
+	w.mu.Lock()
+	fontFamily := w.fontFamily
+	w.mu.Unlock()
+	nativeFontFamily := C.CString(fontFamily)
+	defer C.free(unsafe.Pointer(nativeFontFamily))
+	var width C.float
+	var height C.float
+	var baseline C.float
+	result := C.wox_darwin_window_measure_text(native, nativeText, nativeFontFamily, C.float(style.Size), C.uint8_t(style.Weight), &width, &height, &baseline)
+	if result != 0 {
+		return TextMetrics{}, errors.New("woxui: failed to measure macOS text")
+	}
+	return TextMetrics{Size: Size{Width: float32(width), Height: float32(height)}, Baseline: float32(baseline)}, nil
 }
 
 func (w *platformWindow) close() error {
@@ -220,6 +415,11 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 	if err != nil {
 		return
 	}
+	w.mu.Lock()
+	fontFamily := w.fontFamily
+	w.mu.Unlock()
+	nativeFontFamily := C.CString(fontFamily)
+	defer C.free(unsafe.Pointer(nativeFontFamily))
 	result := C.wox_darwin_window_begin_frame(
 		native,
 		C.float(frame.Size.Width),
@@ -258,6 +458,7 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 			result = C.wox_darwin_window_draw_text(
 				native,
 				text,
+				nativeFontFamily,
 				C.float(command.rect.X),
 				C.float(command.rect.Y),
 				C.float(command.rect.Width),
@@ -270,6 +471,22 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 				C.uint8_t(command.color.A),
 			)
 			C.free(unsafe.Pointer(text))
+		case displayCommandDrawImage:
+			result = C.wox_darwin_window_draw_image(
+				native,
+				(*C.uint8_t)(unsafe.Pointer(&command.image.pixels[0])),
+				C.int32_t(command.image.Width),
+				C.int32_t(command.image.Height),
+				C.int32_t(command.image.Width*4),
+				C.float(command.rect.X),
+				C.float(command.rect.Y),
+				C.float(command.rect.Width),
+				C.float(command.rect.Height),
+			)
+		case displayCommandSetClipRect:
+			result = C.wox_darwin_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+		case displayCommandClearClip:
+			result = C.wox_darwin_window_clear_clip(native)
 		}
 		if result != 0 {
 			_ = C.wox_darwin_window_end_frame(native)
@@ -315,5 +532,52 @@ func woxGoDarwinFocus(context C.uintptr_t, epoch C.uint64_t, active C.int32_t) {
 	window := cgo.Handle(context).Value().(*platformWindow)
 	if window.options.OnFocus != nil {
 		window.options.OnFocus(FocusEvent{Epoch: FocusEpoch(epoch), Active: active != 0})
+	}
+}
+
+// woxGoDarwinKey forwards a normalized AppKit key event into the window callback.
+//
+//export woxGoDarwinKey
+func woxGoDarwinKey(context C.uintptr_t, key *C.char, modifiers C.uint8_t, down C.int32_t, repeat C.int32_t, composing C.int32_t) C.int32_t {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnKey == nil {
+		return 0
+	}
+	handled := window.options.OnKey(KeyEvent{
+		Key:       Key(C.GoString(key)),
+		Modifiers: KeyModifiers(modifiers),
+		Down:      down != 0,
+		Repeat:    repeat != 0,
+		Composing: composing != 0,
+	})
+	if handled {
+		return 1
+	}
+	return 0
+}
+
+// woxGoDarwinTextInput forwards NSTextInputClient commit and marked-text changes.
+//
+//export woxGoDarwinTextInput
+func woxGoDarwinTextInput(context C.uintptr_t, kind C.uint8_t, text *C.char) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnTextInput != nil {
+		window.options.OnTextInput(TextInputEvent{Kind: TextInputEventKind(kind), Text: C.GoString(text)})
+	}
+}
+
+// woxGoDarwinPointer forwards AppKit mouse and trackpad events in logical coordinates.
+//
+//export woxGoDarwinPointer
+func woxGoDarwinPointer(context C.uintptr_t, kind C.uint8_t, x C.float, y C.float, button C.uint8_t, scrollX C.float, scrollY C.float, modifiers C.uint8_t) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnPointer != nil {
+		window.options.OnPointer(PointerEvent{
+			Kind:      PointerEventKind(kind),
+			Position:  Point{X: float32(x), Y: float32(y)},
+			Button:    PointerButton(button),
+			Scroll:    Point{X: float32(scrollX), Y: float32(scrollY)},
+			Modifiers: KeyModifiers(modifiers),
+		})
 	}
 }

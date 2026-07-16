@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage smoke www
+.PHONY: build clean host go-ui _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage smoke www
 
 SMOKE_FILTER := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 SQLITE_BUILD_TAGS ?= sqlite_fts5
@@ -67,6 +67,7 @@ help:
 	@echo "Targets:"
 	@echo "  help       Show this help message"
 	@echo "  dev        Setup development environment"
+	@echo "  go-ui      Build the experimental standalone Go UI"
 	@echo "  test       Run tests"
 	@echo "  build      Build all components"
 	@echo "  smoke      Run the desktop smoke E2E flow"
@@ -118,6 +119,9 @@ host:
 	$(MAKE) -C wox.plugin.host.nodejs build
 	$(MAKE) -C wox.plugin.host.python build
 
+go-ui:
+	$(MAKE) -C wox.ui.go build
+
 # SDK releases bump both SDK patch versions before publish because both npm and
 # PyPI reject already-published versions. The host dependency update still waits
 # until both publishes succeed so bundled hosts never point at an SDK release
@@ -143,6 +147,8 @@ ensure-resources:
 	@echo "Ensuring required resource directories exist..."
 	@mkdir -p wox.core/resource/ui/flutter
 	@touch wox.core/resource/ui/flutter/placeholder
+	@mkdir -p wox.core/resource/ui/go
+	@touch wox.core/resource/ui/go/placeholder
 	@mkdir -p wox.core/resource/hosts
 	@touch wox.core/resource/hosts/placeholder
 	@mkdir -p wox.core/resource/others
@@ -152,6 +158,7 @@ ensure-resources:
 # empty directory, and deleting it after tests makes the next smoke build fail.
 clean-resources:
 	@rm -f wox.core/resource/ui/flutter/placeholder
+	@rm -f wox.core/resource/ui/go/placeholder
 	@rm -f wox.core/resource/hosts/placeholder
 
 appimage:

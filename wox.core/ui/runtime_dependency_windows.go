@@ -35,6 +35,9 @@ var (
 )
 
 func ensureUIRuntimeDependencies(ctx context.Context, appPath string) error {
+	if util.IsGoUIImplementation() {
+		return nil
+	}
 	missingDLLs := findMissingWindowsUIRuntimeDLLs(appPath)
 	if len(missingDLLs) == 0 {
 		return nil

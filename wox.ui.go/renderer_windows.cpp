@@ -25,7 +25,9 @@ struct WoxRenderer {
   ID2D1Bitmap1 *target_bitmap = nullptr;
   ID2D1SolidColorBrush *brush = nullptr;
   IDWriteFactory *dwrite_factory = nullptr;
+	std::wstring font_family = L"Segoe UI";
   bool frame_open = false;
+  bool clip_active = false;
 };
 
 template <typename T>
@@ -85,12 +87,56 @@ static std::wstring utf8_to_wide(const char *text) {
   return result;
 }
 
+// create_text_format keeps drawing and measurement on identical DirectWrite settings.
+static HRESULT create_text_format(WoxRenderer *renderer, float font_size, uint8_t font_weight, IDWriteTextFormat **format) {
+  if (renderer == nullptr || renderer->dwrite_factory == nullptr || format == nullptr || font_size <= 0.0f) {
+    return E_INVALIDARG;
+  }
+  DWRITE_FONT_WEIGHT native_font_weight;
+  switch (font_weight) {
+  case 0:
+    native_font_weight = DWRITE_FONT_WEIGHT_NORMAL;
+    break;
+  case 1:
+    native_font_weight = DWRITE_FONT_WEIGHT_SEMI_BOLD;
+    break;
+  default:
+    return E_INVALIDARG;
+  }
+  HRESULT result = renderer->dwrite_factory->CreateTextFormat(
+		renderer->font_family.c_str(),
+      nullptr,
+      native_font_weight,
+      DWRITE_FONT_STYLE_NORMAL,
+      DWRITE_FONT_STRETCH_NORMAL,
+      font_size,
+      L"en-us",
+      format);
+  if (SUCCEEDED(result)) {
+    (*format)->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+  }
+  return result;
+}
+
+extern "C" int32_t wox_renderer_set_font_family(WoxRenderer *renderer, const char *font_family) {
+	if (renderer == nullptr) {
+		return E_INVALIDARG;
+	}
+	const std::wstring family = utf8_to_wide(font_family);
+	renderer->font_family = family.empty() ? L"Segoe UI" : family;
+	return S_OK;
+}
+
 static void destroy_renderer(WoxRenderer *renderer) {
   if (renderer == nullptr) {
     return;
   }
 
   if (renderer->frame_open && renderer->d2d_context != nullptr) {
+    if (renderer->clip_active) {
+      renderer->d2d_context->PopAxisAlignedClip();
+      renderer->clip_active = false;
+    }
     renderer->d2d_context->EndDraw();
   }
   if (renderer->d2d_context != nullptr) {
@@ -292,33 +338,12 @@ extern "C" int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *tex
     return S_OK;
   }
 
-  DWRITE_FONT_WEIGHT native_font_weight;
-  switch (font_weight) {
-  case 0:
-    native_font_weight = DWRITE_FONT_WEIGHT_NORMAL;
-    break;
-  case 1:
-    native_font_weight = DWRITE_FONT_WEIGHT_SEMI_BOLD;
-    break;
-  default:
-    return E_INVALIDARG;
-  }
-
   // ponytail: create formats per invalidated frame; cache by style when animated text makes this measurable.
   IDWriteTextFormat *format = nullptr;
-  HRESULT result = renderer->dwrite_factory->CreateTextFormat(
-      L"Segoe UI",
-      nullptr,
-      native_font_weight,
-      DWRITE_FONT_STYLE_NORMAL,
-      DWRITE_FONT_STRETCH_NORMAL,
-      font_size,
-      L"en-us",
-      &format);
+  HRESULT result = create_text_format(renderer, font_size, font_weight, &format);
   if (FAILED(result)) {
     return result;
   }
-  format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 
   const D2D1_COLOR_F color = make_color(red, green, blue, alpha);
   renderer->brush->SetColor(color);
@@ -335,11 +360,103 @@ extern "C" int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *tex
   return S_OK;
 }
 
+extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, float x, float y, float width, float height) {
+  if (renderer == nullptr || !renderer->frame_open || pixels == nullptr || image_width == 0 || image_height == 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
+    return E_INVALIDARG;
+  }
+
+  D2D1_BITMAP_PROPERTIES1 properties = D2D1::BitmapProperties1(
+      D2D1_BITMAP_OPTIONS_NONE,
+      D2D1::PixelFormat(DXGI_FORMAT_R8G8B8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+      96.0f,
+      96.0f);
+  ID2D1Bitmap1 *bitmap = nullptr;
+  HRESULT result = renderer->d2d_context->CreateBitmap(D2D1::SizeU(image_width, image_height), pixels, row_stride, &properties, &bitmap);
+  if (FAILED(result)) {
+    return result;
+  }
+  const D2D1_RECT_F destination = {x, y, x + width, y + height};
+  const D2D1_RECT_F source = {0.0f, 0.0f, static_cast<float>(image_width), static_cast<float>(image_height)};
+  renderer->d2d_context->DrawBitmap(bitmap, &destination, 1.0f, D2D1_INTERPOLATION_MODE_LINEAR, &source);
+  bitmap->Release();
+  return S_OK;
+}
+
+extern "C" int32_t wox_renderer_set_clip_rect(WoxRenderer *renderer, float x, float y, float width, float height) {
+  if (renderer == nullptr || !renderer->frame_open) {
+    return E_UNEXPECTED;
+  }
+  if (renderer->clip_active) {
+    renderer->d2d_context->PopAxisAlignedClip();
+  }
+  const float clipped_width = width > 0.0f ? width : 0.0f;
+  const float clipped_height = height > 0.0f ? height : 0.0f;
+  const D2D1_RECT_F rect = {x, y, x + clipped_width, y + clipped_height};
+  renderer->d2d_context->PushAxisAlignedClip(rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+  renderer->clip_active = true;
+  return S_OK;
+}
+
+extern "C" int32_t wox_renderer_clear_clip(WoxRenderer *renderer) {
+  if (renderer == nullptr || !renderer->frame_open) {
+    return E_UNEXPECTED;
+  }
+  if (renderer->clip_active) {
+    renderer->d2d_context->PopAxisAlignedClip();
+    renderer->clip_active = false;
+  }
+  return S_OK;
+}
+
+extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, float *width, float *height, float *baseline) {
+  if (renderer == nullptr || text == nullptr || width == nullptr || height == nullptr || baseline == nullptr) {
+    return E_INVALIDARG;
+  }
+  *width = 0.0f;
+  *height = 0.0f;
+  *baseline = 0.0f;
+  const std::wstring wide_text = utf8_to_wide(text);
+  if (wide_text.empty()) {
+    return S_OK;
+  }
+
+  IDWriteTextFormat *format = nullptr;
+  HRESULT result = create_text_format(renderer, font_size, font_weight, &format);
+  if (FAILED(result)) {
+    return result;
+  }
+  IDWriteTextLayout *layout = nullptr;
+  result = renderer->dwrite_factory->CreateTextLayout(wide_text.c_str(), static_cast<UINT32>(wide_text.size()), format, 1000000.0f, 1000000.0f, &layout);
+  format->Release();
+  if (FAILED(result)) {
+    return result;
+  }
+
+  DWRITE_TEXT_METRICS metrics = {};
+  result = layout->GetMetrics(&metrics);
+  if (SUCCEEDED(result)) {
+    DWRITE_LINE_METRICS line = {};
+    UINT32 line_count = 0;
+    result = layout->GetLineMetrics(&line, 1, &line_count);
+    if (SUCCEEDED(result) && line_count > 0) {
+      *width = metrics.widthIncludingTrailingWhitespace;
+      *height = metrics.height;
+      *baseline = line.baseline;
+    }
+  }
+  layout->Release();
+  return result;
+}
+
 extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
   if (renderer == nullptr || !renderer->frame_open) {
     return E_UNEXPECTED;
   }
 
+  if (renderer->clip_active) {
+    renderer->d2d_context->PopAxisAlignedClip();
+    renderer->clip_active = false;
+  }
   HRESULT result = renderer->d2d_context->EndDraw();
   renderer->frame_open = false;
   if (result == D2DERR_RECREATE_TARGET) {
