@@ -35,7 +35,8 @@ wox.ui.windows/obj/
 .tmp
 .worktrees/
 .tmp-*
-.superpowers
+superpowers
+.superpowers/*
 log
 docs
 !www/docs/

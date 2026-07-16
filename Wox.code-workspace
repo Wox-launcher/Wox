@@ -41,7 +41,8 @@
 			"wox.plugin.host.python": true,
 			"wox.plugin.nodejs": true,
 			"wox.plugin.python": true,
-			"wox.core": true
+			"wox.core": true,
+			"wox.ui.go": true
 		},
 		"[python]": {
 			"editor.formatOnSave": true,
@@ -71,35 +72,6 @@
 			"esbenp.prettier-vscode",
 			// others
 			"ms-vscode.makefile-tools"
-		]
-	},
-	"launch": {
-		"version": "0.2.0",
-		"configurations": [
-			{
-				"name": "Run Go UI",
-				"type": "go",
-				"request": "launch",
-				"mode": "auto",
-				"program": "${workspaceFolder:wox.core}",
-				// Filesearch's SQLite-first index requires FTS5 support at runtime.
-				// Keep the development launch configuration aligned with Makefile builds
-				// so VS Code runs do not start a backend that silently lacks the search schema.
-				"buildFlags": "-tags=sqlite_fts5",
-				"env": {
-					"CGO_ENABLED": "1"
-				}
-			},
-			{
-				"name": "Run CI",
-				"type": "go",
-				"request": "launch",
-				"mode": "auto",
-				"program": "${workspaceFolder:wox}/ci",
-				"args": [
-					"plugin"
-				]
-			}
 		]
 	}
 }
