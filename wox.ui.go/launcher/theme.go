@@ -32,55 +32,61 @@ type themeData struct {
 	ActionItemFontColor                  string
 	PreviewFontColor                     string
 	PreviewSplitLineColor                string
+	PreviewPropertyTitleColor            string
+	PreviewPropertyContentColor          string
 	ToolbarFontColor                     string
 	ToolbarBackgroundColor               string
 }
 
 type uiPalette struct {
-	background          woxui.Color
-	queryBackground     woxui.Color
-	queryText           woxui.Color
-	cursor              woxui.Color
-	selectionBackground woxui.Color
-	selectionText       woxui.Color
-	resultTitle         woxui.Color
-	resultSubtitle      woxui.Color
-	selectedBackground  woxui.Color
-	selectedTitle       woxui.Color
-	selectedSubtitle    woxui.Color
-	actionBackground    woxui.Color
-	actionHeader        woxui.Color
-	actionSelected      woxui.Color
-	actionSelectedText  woxui.Color
-	actionText          woxui.Color
-	previewText         woxui.Color
-	previewSplit        woxui.Color
-	toolbarBackground   woxui.Color
-	toolbarText         woxui.Color
+	background             woxui.Color
+	queryBackground        woxui.Color
+	queryText              woxui.Color
+	cursor                 woxui.Color
+	selectionBackground    woxui.Color
+	selectionText          woxui.Color
+	resultTitle            woxui.Color
+	resultSubtitle         woxui.Color
+	selectedBackground     woxui.Color
+	selectedTitle          woxui.Color
+	selectedSubtitle       woxui.Color
+	actionBackground       woxui.Color
+	actionHeader           woxui.Color
+	actionSelected         woxui.Color
+	actionSelectedText     woxui.Color
+	actionText             woxui.Color
+	previewText            woxui.Color
+	previewSplit           woxui.Color
+	previewPropertyTitle   woxui.Color
+	previewPropertyContent woxui.Color
+	toolbarBackground      woxui.Color
+	toolbarText            woxui.Color
 }
 
 func defaultPalette() uiPalette {
 	return uiPalette{
-		background:          woxui.Color{R: 24, G: 29, B: 38, A: 242},
-		queryBackground:     woxui.Color{R: 56, G: 67, B: 82, A: 230},
-		queryText:           woxui.Color{R: 244, G: 247, B: 250, A: 255},
-		cursor:              woxui.Color{R: 57, G: 204, B: 183, A: 255},
-		selectionBackground: woxui.Color{R: 57, G: 204, B: 183, A: 120},
-		selectionText:       woxui.Color{R: 244, G: 247, B: 250, A: 255},
-		resultTitle:         woxui.Color{R: 244, G: 247, B: 250, A: 255},
-		resultSubtitle:      woxui.Color{R: 166, G: 176, B: 190, A: 255},
-		selectedBackground:  woxui.Color{R: 43, G: 181, B: 168, A: 210},
-		selectedTitle:       woxui.Color{R: 244, G: 247, B: 250, A: 255},
-		selectedSubtitle:    woxui.Color{R: 225, G: 251, B: 248, A: 255},
-		actionBackground:    woxui.Color{R: 31, G: 36, B: 46, A: 250},
-		actionHeader:        woxui.Color{R: 166, G: 176, B: 190, A: 255},
-		actionSelected:      woxui.Color{R: 43, G: 181, B: 168, A: 210},
-		actionSelectedText:  woxui.Color{R: 244, G: 247, B: 250, A: 255},
-		actionText:          woxui.Color{R: 244, G: 247, B: 250, A: 255},
-		previewText:         woxui.Color{R: 244, G: 247, B: 250, A: 255},
-		previewSplit:        woxui.Color{R: 85, G: 96, B: 112, A: 150},
-		toolbarBackground:   woxui.Color{R: 20, G: 24, B: 31, A: 180},
-		toolbarText:         woxui.Color{R: 166, G: 176, B: 190, A: 255},
+		background:             woxui.Color{R: 24, G: 29, B: 38, A: 242},
+		queryBackground:        woxui.Color{R: 56, G: 67, B: 82, A: 230},
+		queryText:              woxui.Color{R: 244, G: 247, B: 250, A: 255},
+		cursor:                 woxui.Color{R: 57, G: 204, B: 183, A: 255},
+		selectionBackground:    woxui.Color{R: 57, G: 204, B: 183, A: 120},
+		selectionText:          woxui.Color{R: 244, G: 247, B: 250, A: 255},
+		resultTitle:            woxui.Color{R: 244, G: 247, B: 250, A: 255},
+		resultSubtitle:         woxui.Color{R: 166, G: 176, B: 190, A: 255},
+		selectedBackground:     woxui.Color{R: 43, G: 181, B: 168, A: 210},
+		selectedTitle:          woxui.Color{R: 244, G: 247, B: 250, A: 255},
+		selectedSubtitle:       woxui.Color{R: 225, G: 251, B: 248, A: 255},
+		actionBackground:       woxui.Color{R: 31, G: 36, B: 46, A: 250},
+		actionHeader:           woxui.Color{R: 166, G: 176, B: 190, A: 255},
+		actionSelected:         woxui.Color{R: 43, G: 181, B: 168, A: 210},
+		actionSelectedText:     woxui.Color{R: 244, G: 247, B: 250, A: 255},
+		actionText:             woxui.Color{R: 244, G: 247, B: 250, A: 255},
+		previewText:            woxui.Color{R: 244, G: 247, B: 250, A: 255},
+		previewSplit:           woxui.Color{R: 85, G: 96, B: 112, A: 150},
+		previewPropertyTitle:   woxui.Color{R: 166, G: 176, B: 190, A: 255},
+		previewPropertyContent: woxui.Color{R: 224, G: 224, B: 230, A: 255},
+		toolbarBackground:      woxui.Color{R: 20, G: 24, B: 31, A: 180},
+		toolbarText:            woxui.Color{R: 166, G: 176, B: 190, A: 255},
 	}
 }
 
@@ -119,26 +125,28 @@ func (a *App) applyTheme(theme themeData) {
 func paletteForTheme(theme themeData) uiPalette {
 	fallback := defaultPalette()
 	return uiPalette{
-		background:          parseThemeColor(theme.AppBackgroundColor, fallback.background),
-		queryBackground:     parseThemeColor(theme.QueryBoxBackgroundColor, fallback.queryBackground),
-		queryText:           parseThemeColor(theme.QueryBoxFontColor, fallback.queryText),
-		cursor:              parseThemeColor(theme.QueryBoxCursorColor, fallback.cursor),
-		selectionBackground: parseThemeColor(theme.QueryBoxTextSelectionBackgroundColor, fallback.selectionBackground),
-		selectionText:       parseThemeColor(theme.QueryBoxTextSelectionColor, fallback.selectionText),
-		resultTitle:         parseThemeColor(theme.ResultItemTitleColor, fallback.resultTitle),
-		resultSubtitle:      parseThemeColor(theme.ResultItemSubTitleColor, fallback.resultSubtitle),
-		selectedBackground:  parseThemeColor(theme.ResultItemActiveBackgroundColor, fallback.selectedBackground),
-		selectedTitle:       parseThemeColor(theme.ResultItemActiveTitleColor, fallback.selectedTitle),
-		selectedSubtitle:    parseThemeColor(theme.ResultItemActiveSubTitleColor, fallback.selectedSubtitle),
-		actionBackground:    parseThemeColor(theme.ActionContainerBackgroundColor, fallback.actionBackground),
-		actionHeader:        parseThemeColor(theme.ActionContainerHeaderFontColor, fallback.actionHeader),
-		actionSelected:      parseThemeColor(theme.ActionItemActiveBackgroundColor, fallback.actionSelected),
-		actionSelectedText:  parseThemeColor(theme.ActionItemActiveFontColor, fallback.actionSelectedText),
-		actionText:          parseThemeColor(theme.ActionItemFontColor, fallback.actionText),
-		previewText:         parseThemeColor(theme.PreviewFontColor, fallback.previewText),
-		previewSplit:        parseThemeColor(theme.PreviewSplitLineColor, fallback.previewSplit),
-		toolbarBackground:   parseThemeColor(theme.ToolbarBackgroundColor, fallback.toolbarBackground),
-		toolbarText:         parseThemeColor(theme.ToolbarFontColor, fallback.toolbarText),
+		background:             parseThemeColor(theme.AppBackgroundColor, fallback.background),
+		queryBackground:        parseThemeColor(theme.QueryBoxBackgroundColor, fallback.queryBackground),
+		queryText:              parseThemeColor(theme.QueryBoxFontColor, fallback.queryText),
+		cursor:                 parseThemeColor(theme.QueryBoxCursorColor, fallback.cursor),
+		selectionBackground:    parseThemeColor(theme.QueryBoxTextSelectionBackgroundColor, fallback.selectionBackground),
+		selectionText:          parseThemeColor(theme.QueryBoxTextSelectionColor, fallback.selectionText),
+		resultTitle:            parseThemeColor(theme.ResultItemTitleColor, fallback.resultTitle),
+		resultSubtitle:         parseThemeColor(theme.ResultItemSubTitleColor, fallback.resultSubtitle),
+		selectedBackground:     parseThemeColor(theme.ResultItemActiveBackgroundColor, fallback.selectedBackground),
+		selectedTitle:          parseThemeColor(theme.ResultItemActiveTitleColor, fallback.selectedTitle),
+		selectedSubtitle:       parseThemeColor(theme.ResultItemActiveSubTitleColor, fallback.selectedSubtitle),
+		actionBackground:       parseThemeColor(theme.ActionContainerBackgroundColor, fallback.actionBackground),
+		actionHeader:           parseThemeColor(theme.ActionContainerHeaderFontColor, fallback.actionHeader),
+		actionSelected:         parseThemeColor(theme.ActionItemActiveBackgroundColor, fallback.actionSelected),
+		actionSelectedText:     parseThemeColor(theme.ActionItemActiveFontColor, fallback.actionSelectedText),
+		actionText:             parseThemeColor(theme.ActionItemFontColor, fallback.actionText),
+		previewText:            parseThemeColor(theme.PreviewFontColor, fallback.previewText),
+		previewSplit:           parseThemeColor(theme.PreviewSplitLineColor, fallback.previewSplit),
+		previewPropertyTitle:   parseThemeColor(theme.PreviewPropertyTitleColor, fallback.previewPropertyTitle),
+		previewPropertyContent: parseThemeColor(theme.PreviewPropertyContentColor, fallback.previewPropertyContent),
+		toolbarBackground:      parseThemeColor(theme.ToolbarBackgroundColor, fallback.toolbarBackground),
+		toolbarText:            parseThemeColor(theme.ToolbarFontColor, fallback.toolbarText),
 	}
 }
 

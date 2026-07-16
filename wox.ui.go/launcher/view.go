@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"fmt"
+	"strings"
 
 	woxui "github.com/Wox-launcher/wox.ui.go"
 	woxwidget "github.com/Wox-launcher/wox.ui.go/widget"
@@ -18,6 +19,7 @@ var resultColors = []woxui.Color{
 type viewSnapshot struct {
 	editing               woxui.TextEditingState
 	results               []queryResult
+	pendingResults        bool
 	selected              int
 	layout                queryLayout
 	refinements           []queryRefinement
@@ -71,6 +73,7 @@ func (a *App) snapshot() viewSnapshot {
 	return viewSnapshot{
 		editing:               a.editor.State(),
 		results:               append([]queryResult(nil), a.results...),
+		pendingResults:        a.pendingResults,
 		selected:              a.selected,
 		layout:                a.layout,
 		refinements:           append([]queryRefinement(nil), a.refinements...),
@@ -166,43 +169,55 @@ func (a *App) build(frame woxui.FrameInfo) woxwidget.Widget {
 }
 
 func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
-	foreground := snapshot.palette.queryText
-	muted := snapshot.palette.resultSubtitle
-	var identity woxwidget.Widget = woxwidget.Text{Value: "WOX", Style: woxui.TextStyle{Size: 22, Weight: woxui.FontWeightSemibold}, Color: foreground}
-	if image := a.imageFor(snapshot.layout.Icon); image != nil {
-		identity = woxwidget.Image{Source: image, Width: 28, Height: 28}
-	}
-	children := []woxwidget.Widget{identity}
-	queryWidth := max(float32(140), width-300)
+	const horizontalPadding = float32(10)
+	const queryLeftPadding = float32(8)
+	const accessoryGap = float32(12)
+	contentWidth := max(float32(0), width-horizontalPadding*2-queryLeftPadding-6)
+	queryWidth := contentWidth
 	glanceWidth := float32(0)
 	if snapshot.glance != nil {
-		glanceWidth = 160
-		queryWidth = max(float32(140), queryWidth-glanceWidth-12)
+		metrics, _ := a.window.MeasureText(strings.TrimSpace(snapshot.glance.Text), woxui.TextStyle{Size: 15})
+		glanceWidth = metrics.Size.Width + 20
+		if !snapshot.hideGlanceIcon && snapshot.glance.Icon.ImageData != "" {
+			glanceWidth += 21
+		}
+		glanceWidth = min(float32(192), max(float32(44), glanceWidth))
+		queryWidth -= glanceWidth + accessoryGap
 	}
 	if len(snapshot.refinements) > 0 {
-		queryWidth = max(float32(140), queryWidth-140)
+		queryWidth -= a.refinementToggleWidth(snapshot) + accessoryGap
 	}
-	children = append(children, a.buildQuery(snapshot, queryWidth, 30))
+	var queryIcon woxwidget.Widget
+	if snapshot.glance == nil {
+		if image := a.imageFor(snapshot.layout.Icon); image != nil {
+			queryIcon = woxwidget.Container{Width: 30, Height: 34, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Image{Source: image, Width: 30, Height: 30}}
+			queryWidth -= 30 + accessoryGap
+		}
+	}
+	queryWidth = max(float32(140), queryWidth)
+	children := []woxwidget.Widget{a.buildQuery(snapshot, queryWidth, 34)}
 	if len(snapshot.refinements) > 0 {
 		children = append(children, a.buildRefinementToggle(snapshot))
 	}
 	if snapshot.glance != nil {
 		children = append(children, a.buildGlance(*snapshot.glance, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth))
 	}
-	children = append(children, woxwidget.Text{Value: "Alt + Space", Style: woxui.TextStyle{Size: 13}, Color: muted})
+	if queryIcon != nil {
+		children = append(children, queryIcon)
+	}
 	return woxwidget.Container{
 		Width: width, Height: height,
-		Padding: woxwidget.Insets{Left: 20, Top: 18, Right: 20, Bottom: 18},
+		Padding: woxwidget.Insets{Left: horizontalPadding, Top: 10, Right: horizontalPadding, Bottom: 10},
 		Child: woxwidget.Container{
-			Width: width - 40, Height: 52, Radius: 9, Color: snapshot.palette.queryBackground,
-			Padding: woxwidget.Insets{Left: 16, Top: 11, Right: 16, Bottom: 11},
-			Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: children},
+			Width: width - horizontalPadding*2, Height: 55, Radius: 8, Color: snapshot.palette.queryBackground,
+			Padding: woxwidget.Insets{Left: queryLeftPadding, Top: 4, Right: 6, Bottom: 17},
+			Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: accessoryGap, Children: children},
 		},
 	}
 }
 
 func (a *App) buildQuery(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
-	style := woxui.TextStyle{Size: 16}
+	style := woxui.TextStyle{Size: 28}
 	return woxwidget.Gesture{
 		ID: "query-editor",
 		OnTapAt: func(position woxui.Point) {
@@ -222,10 +237,6 @@ func (a *App) buildQuery(snapshot viewSnapshot, width, height float32) woxwidget
 				displayValue = prefix + state.Composition + string(runes[end:])
 			}
 			color := snapshot.palette.queryText
-			if displayValue == "" {
-				displayValue = "Start typing to search"
-				color = snapshot.palette.resultSubtitle
-			}
 			if queryFocused && state.Composition == "" && state.Selection.Collapsed() && state.Selection.Focus == len(runes) && snapshot.completionHint != nil && snapshot.completionHint.InputPrefix == state.Text {
 				valueMetrics, _ := a.window.MeasureText(state.Text, style)
 				hintColor := snapshot.palette.queryText
@@ -236,7 +247,7 @@ func (a *App) buildQuery(snapshot viewSnapshot, width, height float32) woxwidget
 			prefixMetrics, _ := a.window.MeasureText(prefix, style)
 			selectedMetrics, _ := a.window.MeasureText(selected, style)
 			if queryFocused && state.Composition == "" && start != end {
-				displayList.FillRoundedRect(woxui.Rect{X: bounds.X + prefixMetrics.Size.Width, Y: bounds.Y, Width: selectedMetrics.Size.Width, Height: 22}, 3, snapshot.palette.selectionBackground)
+				displayList.FillRoundedRect(woxui.Rect{X: bounds.X + prefixMetrics.Size.Width, Y: bounds.Y, Width: selectedMetrics.Size.Width, Height: 34}, 3, snapshot.palette.selectionBackground)
 			}
 			displayList.DrawText(displayValue, bounds, style, color)
 			if queryFocused && state.Composition == "" && selected != "" {
@@ -252,11 +263,11 @@ func (a *App) buildQuery(snapshot viewSnapshot, width, height float32) woxwidget
 			}
 			caretMetrics, _ := a.window.MeasureText(caretPrefix, style)
 			cursorX := bounds.X + caretMetrics.Size.Width
-			displayList.FillRect(woxui.Rect{X: cursorX, Y: bounds.Y, Width: 1, Height: 22}, snapshot.palette.cursor)
-			_ = a.window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: cursorX, Y: bounds.Y, Width: 1, Height: 24}})
+			displayList.FillRect(woxui.Rect{X: cursorX, Y: bounds.Y, Width: 1, Height: 34}, snapshot.palette.cursor)
+			_ = a.window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: cursorX, Y: bounds.Y, Width: 1, Height: 34}})
 			if state.Composition != "" {
 				compositionMetrics, _ := a.window.MeasureText(state.Composition, style)
-				displayList.FillRect(woxui.Rect{X: bounds.X + prefixMetrics.Size.Width, Y: bounds.Y + 23, Width: compositionMetrics.Size.Width, Height: 1}, snapshot.palette.cursor)
+				displayList.FillRect(woxui.Rect{X: bounds.X + prefixMetrics.Size.Width, Y: bounds.Y + 33, Width: compositionMetrics.Size.Width, Height: 1}, snapshot.palette.cursor)
 			}
 		}},
 	}
@@ -286,6 +297,9 @@ func (a *App) placeQueryCaret(x float32, style woxui.TextStyle) {
 
 func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
 	if len(snapshot.results) == 0 {
+		if snapshot.pendingResults {
+			return woxwidget.Container{Width: width, Height: height}
+		}
 		return woxwidget.Container{
 			Width: width, Height: height, Padding: woxwidget.Insets{Left: 28, Top: 18},
 			Child: woxwidget.Text{Value: "Type a query to search Wox plugins", Style: woxui.TextStyle{Size: 14}, Color: snapshot.palette.resultSubtitle},
@@ -307,7 +321,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidg
 		a.deactivateChatPreview()
 		return a.buildResults(snapshot, width, height)
 	}
-	ratio := float32(0.56)
+	ratio := float32(0.4)
 	if snapshot.layout.ResultPreviewWidthRatio != nil && *snapshot.layout.ResultPreviewWidthRatio >= 0 && *snapshot.layout.ResultPreviewWidthRatio <= 1 {
 		ratio = float32(*snapshot.layout.ResultPreviewWidthRatio)
 	}
@@ -328,10 +342,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidg
 	splitX := width * ratio
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 		a.buildResults(snapshot, splitX, height),
-		woxwidget.Painter{Width: 1, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			displayList.FillRect(bounds, snapshot.palette.previewSplit)
-		}},
-		a.buildPreview(snapshot.results[snapshot.selected], snapshot.palette, width-splitX-1, height),
+		a.buildPreview(snapshot.results[snapshot.selected], snapshot.palette, width-splitX, height),
 	}}
 }
 
@@ -354,24 +365,22 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 		}
 		if result.IsGroup {
 			rows = append(rows, woxwidget.Container{
-				Width: width - 28, Height: resultRowHeight, Padding: woxwidget.Insets{Left: 14, Top: 18},
-				Child: woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: subtitle},
+				Width: width - 20, Height: resultRowHeight, Padding: woxwidget.Insets{Left: 8, Top: 18},
+				Child: woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 15}, Color: subtitle},
 			})
 			continue
 		}
-		var icon woxwidget.Widget = woxwidget.Container{Width: 32, Height: 32, Radius: 8, Color: resultColors[index%len(resultColors)]}
+		var icon woxwidget.Widget = woxwidget.Container{Width: 28, Height: 28, Radius: 7, Color: resultColors[index%len(resultColors)]}
 		if image := a.imageFor(result.Icon); image != nil {
-			icon = woxwidget.Image{Source: image, Width: 32, Height: 32}
+			icon = woxwidget.Image{Source: image, Width: 28, Height: 28}
 		}
 		tailWidth := float32(0)
-		gapWidth := float32(16)
 		var tail woxwidget.Widget
 		if len(result.Tails) > 0 {
 			tail, tailWidth = a.buildResultTails(result.Tails, snapshot.palette, subtitle, width)
-			gapWidth = 32
 		}
-		contentWidth := max(float32(0), width-56)
-		labelWidth := max(float32(50), contentWidth-32-gapWidth-tailWidth)
+		contentWidth := max(float32(0), width-46)
+		labelWidth := max(float32(50), contentWidth-28-20-tailWidth)
 		rows = append(rows, woxwidget.Gesture{
 			ID: fmt.Sprintf("result-%s", result.ID),
 			OnHover: func(inside bool) {
@@ -388,20 +397,20 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 				}
 			},
 			Child: woxwidget.Container{
-				Width: width - 28, Height: resultRowHeight, Radius: 9, Color: background,
-				Padding: woxwidget.Insets{Left: 14, Top: 7, Right: 14, Bottom: 7},
-				Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: []woxwidget.Widget{
-					icon,
-					woxwidget.Container{Width: labelWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-						woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 17, Weight: woxui.FontWeightSemibold}, Color: title},
-						woxwidget.Text{Value: result.SubTitle, Style: woxui.TextStyle{Size: 13}, Color: subtitle},
+				Width: width - 20, Height: resultRowHeight, Radius: 8, Color: background,
+				Padding: woxwidget.Insets{Left: 13, Top: 3, Right: 13, Bottom: 3},
+				Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+					woxwidget.Container{Width: 28, Height: 50, Padding: woxwidget.Insets{Top: 11}, Child: icon},
+					woxwidget.Container{Width: labelWidth, Height: 50, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
+						woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 15}, Color: title},
+						woxwidget.Text{Value: result.SubTitle, Style: woxui.TextStyle{Size: 12}, Color: subtitle},
 					}}},
-					tail,
+					woxwidget.Container{Width: tailWidth, Height: 50, Padding: woxwidget.Insets{Top: 9}, Child: tail},
 				}},
 			},
 		})
 	}
-	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 14, Right: 14}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: resultRowGap, Children: rows}}
+	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 10, Top: resultListInset, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: resultRowGap, Children: rows}}
 }
 
 // buildResultTails keeps plugin and debug tails visible in one bounded row without stealing the title column.
@@ -440,8 +449,18 @@ func (a *App) buildResultTails(tails []resultTail, palette uiPalette, foreground
 }
 
 func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
-	muted := snapshot.palette.toolbarText
-	leftLabel := "Wox core + Go GPU UI"
+	type footerAction struct {
+		id     string
+		label  string
+		hotkey string
+		onTap  func()
+	}
+	type measuredFooterAction struct {
+		widget woxwidget.Widget
+		width  float32
+	}
+
+	leftLabel := ""
 	var leftIcon *woxui.Image
 	progressLabel := ""
 	if snapshot.toolbarMsg != nil {
@@ -455,28 +474,63 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidge
 			progressLabel = "Working…"
 		}
 	}
-	actionLabel := "Enter to run"
-	var toolbarAction *toolbarMessageAction
+	actions := make([]footerAction, 0)
 	if snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) {
-		if action, ok := defaultAction(snapshot.results[snapshot.selected].Actions); ok && action.Name != "" {
-			actionLabel = a.translate(action.Name)
+		resultIndex := snapshot.selected
+		for actionIndex, action := range snapshot.results[resultIndex].Actions {
+			if strings.TrimSpace(action.Hotkey) == "" {
+				continue
+			}
+			actionIndex := actionIndex
+			action := action
+			actions = append(actions, footerAction{
+				id: fmt.Sprintf("result-toolbar-action-%d", actionIndex), label: a.translate(action.Name), hotkey: action.Hotkey,
+				onTap: func() { a.activateAction(resultIndex, actionIndex) },
+			})
+		}
+		if len(snapshot.results[resultIndex].Actions) > 0 {
+			actions = append(actions, footerAction{id: "result-toolbar-more", label: a.translate("i18n:toolbar_more_actions"), hotkey: primaryHotkey("j"), onTap: a.toggleActionPanel})
 		}
 	} else if snapshot.toolbarMsg != nil {
-		if action, ok := defaultToolbarAction(snapshot.toolbarMsg.Actions); ok {
-			actionLabel = a.translate(action.Name)
-			copy := action
-			toolbarAction = &copy
+		for _, action := range snapshot.toolbarMsg.Actions {
+			if strings.TrimSpace(action.Hotkey) == "" {
+				continue
+			}
+			action := action
+			actions = append(actions, footerAction{id: "toolbar-action-" + action.ID, label: a.translate(action.Name), hotkey: action.Hotkey, onTap: func() { a.activateToolbarAction(action) }})
 		}
 	}
-	var actionWidget woxwidget.Widget = woxwidget.Text{Value: actionLabel, Style: woxui.TextStyle{Size: 13}, Color: muted}
-	if toolbarAction != nil {
-		action := *toolbarAction
-		actionWidget = woxwidget.Gesture{ID: "toolbar-action-" + action.ID, OnTap: func() { a.activateToolbarAction(action) }, Child: actionWidget}
+	contentWidth := max(float32(0), width-20)
+	leftWidth := float32(0)
+	if leftLabel != "" || leftIcon != nil || progressLabel != "" {
+		leftWidth = min(contentWidth*0.42, float32(320))
 	}
-	contentWidth := max(float32(0), width-56)
-	actionMetrics, _ := a.window.MeasureText(actionLabel, woxui.TextStyle{Size: 13})
-	actionWidth := min(max(float32(90), actionMetrics.Size.Width+4), max(float32(90), contentWidth*0.45))
-	leftWidth := max(float32(0), contentWidth-actionWidth-16)
+	rightAvailable := max(float32(0), contentWidth-leftWidth)
+	if leftWidth > 0 && len(actions) > 0 {
+		rightAvailable -= 16
+	}
+	measured := make([]measuredFooterAction, 0, len(actions))
+	for _, action := range actions {
+		widget, actionWidth := a.buildToolbarAction(action.id, action.label, action.hotkey, snapshot.palette, action.onTap)
+		measured = append(measured, measuredFooterAction{widget: widget, width: actionWidth})
+	}
+	shown := make([]measuredFooterAction, 0, len(measured))
+	rightWidth := float32(0)
+	for index := len(measured) - 1; index >= 0; index-- {
+		nextWidth := measured[index].width
+		if len(shown) > 0 {
+			nextWidth += 16
+		}
+		if rightWidth+nextWidth > rightAvailable {
+			break
+		}
+		rightWidth += nextWidth
+		shown = append([]measuredFooterAction{measured[index]}, shown...)
+	}
+	rightChildren := make([]woxwidget.Widget, 0, len(shown))
+	for _, action := range shown {
+		rightChildren = append(rightChildren, action.widget)
+	}
 	extraWidth := float32(0)
 	if leftIcon != nil {
 		extraWidth += 26
@@ -488,22 +542,49 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidge
 		extraWidth += progressWidth + 8
 	}
 	labelWidth := max(float32(0), leftWidth-extraWidth)
-	label := woxwidget.Container{Width: labelWidth, Height: 20, Child: woxwidget.Text{Value: leftLabel, Style: woxui.TextStyle{Size: 13}, Color: muted}}
+	label := woxwidget.Container{Width: labelWidth, Height: 28, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{Value: leftLabel, Style: woxui.TextStyle{Size: 12}, Color: snapshot.palette.toolbarText}}
 	leftWidgets := make([]woxwidget.Widget, 0, 3)
 	if leftIcon != nil {
-		leftWidgets = append(leftWidgets, woxwidget.Image{Source: leftIcon, Width: 18, Height: 18})
+		leftWidgets = append(leftWidgets, woxwidget.Container{Width: 18, Height: 28, Padding: woxwidget.Insets{Top: 5}, Child: woxwidget.Image{Source: leftIcon, Width: 18, Height: 18}})
 	}
 	leftWidgets = append(leftWidgets, label)
 	if progressLabel != "" {
-		leftWidgets = append(leftWidgets, woxwidget.Container{Width: progressWidth, Height: 20, Child: woxwidget.Text{Value: progressLabel, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: snapshot.palette.cursor}})
+		leftWidgets = append(leftWidgets, woxwidget.Container{Width: progressWidth, Height: 28, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{Value: progressLabel, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: snapshot.palette.cursor}})
 	}
-	return woxwidget.Container{
-		Width: width, Height: height, Color: snapshot.palette.toolbarBackground,
-		Padding: woxwidget.Insets{Left: 28, Top: 13, Right: 28, Bottom: 10},
+	body := woxwidget.Container{
+		Width: width, Height: height, Color: snapshot.palette.toolbarBackground, Padding: woxwidget.Insets{Left: 10, Top: 6, Right: 10, Bottom: 6},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: leftWidth, Height: 20, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: leftWidgets}},
-			woxwidget.Painter{Width: 16, Height: 1},
-			woxwidget.Container{Width: actionWidth, Height: 20, Child: actionWidget},
+			woxwidget.Container{Width: leftWidth, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: leftWidgets}},
+			woxwidget.Painter{Width: max(float32(0), contentWidth-leftWidth-rightWidth), Height: 1},
+			woxwidget.Container{Width: rightWidth, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: rightChildren}},
 		}},
 	}
+	border := snapshot.palette.toolbarText
+	border.A = min(border.A, uint8(26))
+	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		{Child: body},
+		{Child: woxwidget.Painter{Width: width, Height: 1, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) { displayList.FillRect(bounds, border) }}},
+	}}
+}
+
+// buildToolbarAction renders the same label-and-keycap unit used by Flutter's launcher toolbar.
+func (a *App) buildToolbarAction(id, label, hotkey string, palette uiPalette, onTap func()) (woxwidget.Widget, float32) {
+	labelStyle := woxui.TextStyle{Size: 12}
+	hotkeyStyle := woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}
+	hotkeyLabel := formatHotkeyLabel(hotkey)
+	labelMetrics, _ := a.window.MeasureText(label, labelStyle)
+	hotkeyMetrics, _ := a.window.MeasureText(hotkeyLabel, hotkeyStyle)
+	chipWidth := max(float32(28), hotkeyMetrics.Size.Width+12)
+	width := labelMetrics.Size.Width + 8 + chipWidth
+	border := palette.toolbarText
+	border.A = min(border.A, uint8(110))
+	chip := woxwidget.Container{Width: chipWidth, Height: 28, Radius: 5, Color: border, Padding: woxwidget.UniformInsets(1), Child: woxwidget.Container{
+		Width: chipWidth - 2, Height: 26, Radius: 4, Color: palette.toolbarBackground,
+		Padding: woxwidget.Insets{Left: 5, Top: 6, Right: 5, Bottom: 4}, Child: woxwidget.Text{Value: hotkeyLabel, Style: hotkeyStyle, Color: palette.toolbarText},
+	}}
+	content := woxwidget.Container{Width: width, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: labelMetrics.Size.Width, Height: 28, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{Value: label, Style: labelStyle, Color: palette.toolbarText}},
+		chip,
+	}}}
+	return woxwidget.Gesture{ID: id, OnTap: onTap, Child: content}, width
 }

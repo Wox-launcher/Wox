@@ -3,11 +3,68 @@ package launcher
 import (
 	"encoding/json"
 	"log"
+	"runtime"
 	"strings"
 	"time"
 
 	woxui "github.com/Wox-launcher/wox.ui.go"
 )
+
+func primaryHotkey(key string) string {
+	if runtime.GOOS == "darwin" {
+		return "command+" + key
+	}
+	return "control+" + key
+}
+
+// formatHotkeyLabel keeps platform shortcut names compact enough for toolbar keycaps.
+func formatHotkeyLabel(hotkey string) string {
+	parts := strings.Split(strings.TrimSpace(hotkey), "+")
+	labels := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		switch strings.ToLower(part) {
+		case "cmd", "command", "meta":
+			if runtime.GOOS == "darwin" {
+				part = "⌘"
+			} else {
+				part = "Ctrl"
+			}
+		case "ctrl", "control":
+			if runtime.GOOS == "darwin" {
+				part = "⌃"
+			} else {
+				part = "Ctrl"
+			}
+		case "alt", "option":
+			if runtime.GOOS == "darwin" {
+				part = "⌥"
+			} else {
+				part = "Alt"
+			}
+		case "shift":
+			if runtime.GOOS == "darwin" {
+				part = "⇧"
+			} else {
+				part = "Shift"
+			}
+		case "enter", "return":
+			part = "↵"
+		default:
+			if len([]rune(part)) == 1 {
+				part = strings.ToUpper(part)
+			}
+		}
+		if part != "" {
+			labels = append(labels, part)
+		}
+	}
+	separator := "+"
+	if runtime.GOOS == "darwin" {
+		separator = " "
+	}
+	return strings.Join(labels, separator)
+}
 
 type toolbarMessage struct {
 	ID             string                 `json:"Id"`

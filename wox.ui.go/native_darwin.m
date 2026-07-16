@@ -817,6 +817,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     WoxMetalView *view = [[WoxMetalView alloc] initWithFrame:frame];
     view->_owner = window;
     view->_marked_selection = NSMakeRange(NSNotFound, 0);
+    view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     view.wantsLayer = YES;
     CAMetalLayer *layer = (CAMetalLayer *)view.layer;
 
@@ -840,7 +841,18 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->web_view_content_keys = [[NSMutableDictionary alloc] init];
     window->context = context;
     window->hide_on_blur = hide_on_blur != 0;
-    native_window.contentView = view;
+    // Match Flutter's launcher material instead of compositing the transparent Metal surface directly over the desktop.
+    NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
+    effect_view.material = NSVisualEffectMaterialPopover;
+    effect_view.state = NSVisualEffectStateActive;
+    effect_view.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+    effect_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    effect_view.wantsLayer = YES;
+    effect_view.layer.cornerRadius = 14.0;
+    effect_view.layer.masksToBounds = YES;
+    [effect_view addSubview:view];
+    native_window.contentView = effect_view;
+    [effect_view release];
     native_window.delegate = delegate;
     [native_window center];
     [view updateDrawableSize];
@@ -935,9 +947,9 @@ int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float hei
       return;
     }
     NSRect work_area = screen.visibleFrame;
-    width = fmin(width, NSWidth(work_area));
-    height = fmin(height, NSHeight(work_area));
-    NSRect frame = NSMakeRect(NSMidX(work_area) - width * 0.5, NSMidY(work_area) - height * 0.5, width, height);
+    float clamped_width = fmin(width, NSWidth(work_area));
+    float clamped_height = fmin(height, NSHeight(work_area));
+    NSRect frame = NSMakeRect(NSMidX(work_area) - clamped_width * 0.5, NSMidY(work_area) - clamped_height * 0.5, clamped_width, clamped_height);
     [window->window setFrame:frame display:window->visible];
     if (window->visible) {
       [window->view renderFrame];

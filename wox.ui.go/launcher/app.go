@@ -18,10 +18,11 @@ import (
 const (
 	defaultWidth     = 760
 	defaultMaxResult = 10
-	headerHeight     = 88
-	footerHeight     = 44
-	resultRowHeight  = 58
-	resultRowGap     = 8
+	headerHeight     = 75
+	footerHeight     = 40
+	resultRowHeight  = 56
+	resultRowGap     = 0
+	resultListInset  = 8
 )
 
 type viewMode uint8
@@ -49,6 +50,9 @@ type App struct {
 	queryContextKnown    bool
 	editor               *woxui.TextEditor
 	results              []queryResult
+	resultsQueryID       string
+	queryTransitionTimer *time.Timer
+	pendingResults       bool
 	selected             int
 	layout               queryLayout
 	refinements          []queryRefinement
@@ -615,7 +619,9 @@ func (a *App) setQuery(query plainQuery) {
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
 	a.editor.SetText(query.QueryText, false)
+	a.resetQueryTransitionLocked()
 	a.results = nil
+	a.resultsQueryID = ""
 	a.selected = -1
 	a.layout = queryLayout{}
 	a.stopGlanceLocked(true)
@@ -668,7 +674,9 @@ func (a *App) requestMRU() error {
 	a.queryContextKnown = true
 	a.editor.SetText("", false)
 	queryID := a.query.QueryID
+	a.resetQueryTransitionLocked()
 	a.results = nil
+	a.resultsQueryID = ""
 	a.selected = -1
 	a.layout = queryLayout{}
 	a.stopGlanceLocked(true)
@@ -715,7 +723,9 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 			results[index].QueryID = queryID
 		}
 	}
+	a.resetQueryTransitionLocked()
 	a.results = results
+	a.resultsQueryID = queryID
 	if layout != nil {
 		enterChatMode := layout.ChatMode && !a.layout.ChatMode
 		a.layout = *layout
@@ -831,6 +841,13 @@ func (a *App) pushResults(raw json.RawMessage) (bool, error) {
 			payload.Results[index].QueryID = payload.QueryID
 		}
 	}
+	a.resetQueryTransitionLocked()
+	if a.resultsQueryID != payload.QueryID {
+		a.results = nil
+		a.selected = -1
+		a.layout = queryLayout{}
+	}
+	a.resultsQueryID = payload.QueryID
 	a.results = append(a.results, payload.Results...)
 	if a.selected < 0 {
 		a.selected = selectableIndex(a.results, "")
@@ -881,14 +898,14 @@ func (a *App) applyWindowBounds() error {
 		if layout.GridLayout != nil {
 			height += gridResultsHeight(results[:visibleResults], float32(width), layout.GridLayout)
 		} else {
-			height += visibleResults*resultRowHeight + max(0, visibleResults-1)*resultRowGap
+			height += resultListInset + visibleResults*resultRowHeight + max(0, visibleResults-1)*resultRowGap
 		}
 	}
 	if !params.HideToolbar {
 		height += footerHeight
 	}
 	if previewVisible {
-		previewHeight := maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
+		previewHeight := resultListInset + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
 		if !params.HideQueryBox {
 			previewHeight += headerHeight
 		}

@@ -124,11 +124,12 @@
 				]
 			},
 			{
-				"name": "Run Go UI",
+				"name": "Run Go UI Client",
 				"type": "go",
 				"request": "launch",
 				"mode": "auto",
-				"program": "${workspaceFolder:wox.ui.go}/cmd/demo",
+				"program": "${workspaceFolder:wox.ui.go}/cmd/wox-ui",
+				"preLaunchTask": "Wait Core Dev Server",
 				"args": []
 			},
 		],
@@ -140,6 +141,14 @@
 					"Run Flutter"
 				],
 				"stopAll": true
+			},
+			{
+				"name": "Run Go UI",
+				"configurations": [
+					"Run Go",
+					"Run Go UI Client"
+				],
+				"stopAll": true
 			}
 		]
 	},
@@ -149,8 +158,8 @@
 			{
 				"label": "Wait Core Dev Server",
 				"type": "process",
-				// Bug fix: Flutter launch must wait for the backend socket instead of assuming
-				// compound launch order. Polling /ping keeps the task independent from Go log
+				// Bug fix: UI clients must wait for the backend socket instead of assuming
+				// compound launch order. Polling /ping keeps the task independent from core log
 				// formatting and avoids platform-specific shells so Windows VS Code uses the same
 				// readiness gate as macOS/Linux.
 				"command": "node",

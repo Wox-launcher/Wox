@@ -4,11 +4,14 @@ import (
 	"log"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Wox-launcher/wox.ui.go/coreclient"
 )
 
-const refinementBarHeight = 78
+const refinementBarHeight = 44
+
+const staleQueryResultsDuration = 80 * time.Millisecond
 
 // applyRefinementsLocked replaces query-scoped controls and materializes their normalized defaults.
 func (a *App) applyRefinementsLocked(refinements []queryRefinement) {
@@ -47,9 +50,18 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	a.query.QueryID = coreclient.NewID()
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
-	a.results = nil
-	a.selected = -1
-	a.layout = queryLayout{}
+	a.resetQueryTransitionLocked()
+	if text != "" && a.visible && len(a.results) > 0 {
+		queryID := a.query.QueryID
+		a.queryTransitionTimer = time.AfterFunc(staleQueryResultsDuration, func() {
+			a.showPendingQueryResults(queryID)
+		})
+	} else {
+		a.results = nil
+		a.resultsQueryID = ""
+		a.selected = -1
+		a.layout = queryLayout{}
+	}
 	a.stopGlanceLocked(true)
 	a.actionPanel = false
 	a.actionSelected = 0
@@ -58,6 +70,33 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	a.themeEditor = nil
 	a.chatPreview = nil
 	a.chatFullscreen = false
+}
+
+func (a *App) resetQueryTransitionLocked() {
+	if a.queryTransitionTimer != nil {
+		a.queryTransitionTimer.Stop()
+		a.queryTransitionTimer = nil
+	}
+	a.pendingResults = false
+}
+
+// showPendingQueryResults clears stale content without shrinking the window while the current query is still waiting.
+func (a *App) showPendingQueryResults(queryID string) {
+	a.mu.Lock()
+	if a.query.QueryID != queryID || a.resultsQueryID == queryID {
+		a.mu.Unlock()
+		return
+	}
+	a.queryTransitionTimer = nil
+	a.pendingResults = true
+	a.results = nil
+	a.resultsQueryID = ""
+	a.selected = -1
+	a.layout = queryLayout{}
+	a.mu.Unlock()
+	a.deactivateTerminalPreview()
+	a.deactivateWebViewPreview()
+	_ = a.window.Invalidate()
 }
 
 func (a *App) toggleRefinementBar() bool {
@@ -109,7 +148,9 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
 	a.completionHint = nil
+	a.resetQueryTransitionLocked()
 	a.results = nil
+	a.resultsQueryID = ""
 	a.selected = -1
 	a.layout = queryLayout{}
 	a.stopGlanceLocked(true)
