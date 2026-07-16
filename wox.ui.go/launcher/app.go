@@ -19,6 +19,7 @@ const (
 	defaultWidth        = 760
 	defaultMaxResult    = 10
 	queryBoxHeight      = 55
+	queryEditorHeight   = 38
 	footerHeight        = 40
 	resultRowBaseHeight = 50
 	resultRowGap        = 0
@@ -758,8 +759,11 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		a.queryContext = *context
 		a.queryContextKnown = true
 	}
-	refreshGlance := a.glanceEligibleLocked() && a.glanceItem == nil && !a.glanceLoading
-	if !a.glanceEligibleLocked() {
+	glanceEligible := a.glanceEligibleLocked()
+	refreshGlance := glanceEligible && a.glanceItem == nil && !a.glanceLoading
+	if glanceEligible && a.glanceItem != nil && !a.glanceLoading && a.glanceTimer == nil {
+		a.scheduleGlanceRefreshLocked(a.settings.PrimaryGlance)
+	} else if !glanceEligible {
 		a.stopGlanceLocked(true)
 	}
 	a.selected = selectableIndex(results, selectedID)

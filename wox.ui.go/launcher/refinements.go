@@ -62,7 +62,8 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 		a.selected = -1
 		a.layout = queryLayout{}
 	}
-	a.stopGlanceLocked(true)
+	// Preserve the visible global accessory until the backend classifies the new query.
+	a.stopGlanceLocked(false)
 	a.actionPanel = false
 	a.actionSelected = 0
 	a.actionFilter = nil

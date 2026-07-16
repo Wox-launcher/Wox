@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -99,6 +100,14 @@ type uiPalette struct {
 	toolbarBackground      woxui.Color
 	toolbarText            woxui.Color
 	toolbarPadding         woxwidget.Insets
+}
+
+// appSurfaceRadius leaves compositor-backed platforms to clip the native window.
+func appSurfaceRadius() float32 {
+	if runtime.GOOS == "linux" {
+		return 14
+	}
+	return 0
 }
 
 func defaultPalette() uiPalette {

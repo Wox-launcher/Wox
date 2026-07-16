@@ -177,7 +177,7 @@ func (a *App) build(frame woxui.FrameInfo) woxwidget.Widget {
 		Width:  width,
 		Height: height,
 		Color:  snapshot.palette.background,
-		Radius: 14,
+		Radius: appSurfaceRadius(),
 		Child:  body,
 	}
 }
@@ -212,8 +212,8 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidge
 	}
 	queryWidth = max(float32(140), queryWidth)
 	children := []woxwidget.Widget{woxwidget.Container{
-		Width: queryWidth, Height: queryBoxHeight, Padding: woxwidget.Insets{Top: 4, Bottom: 17},
-		Child: a.buildQuery(snapshot, queryWidth, 34),
+		Width: queryWidth, Height: queryBoxHeight, Padding: woxwidget.Insets{Top: 4, Bottom: queryBoxHeight - 4 - queryEditorHeight},
+		Child: a.buildQuery(snapshot, queryWidth, queryEditorHeight),
 	}}
 	if len(snapshot.refinements) > 0 {
 		children = append(children, woxwidget.Container{
