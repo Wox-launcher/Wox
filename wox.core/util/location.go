@@ -304,7 +304,7 @@ func (l *Location) GetUIAppPath() string {
 	return ""
 }
 
-// IsGoUIImplementation reports whether core should launch the standalone Go UI process.
+// IsGoUIImplementation reports whether core should run the embedded Go UI.
 func IsGoUIImplementation() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv(UIImplementationEnv)), UIImplementationGo)
 }

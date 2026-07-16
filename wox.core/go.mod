@@ -5,6 +5,7 @@ go 1.26
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/PuerkitoBio/goquery v1.11.0
+	github.com/Wox-launcher/wox.ui.go v0.0.0
 	github.com/cdfmlr/ellipsis v0.0.1
 	github.com/disintegration/imaging v1.6.2
 	github.com/forPelevin/gomoji v1.4.1
@@ -51,6 +52,8 @@ require (
 	gorm.io/gorm v1.31.1
 	howett.net/plist v1.0.1
 )
+
+replace github.com/Wox-launcher/wox.ui.go => ../wox.ui.go
 
 require (
 	github.com/alessio/shellescape v1.4.1 // indirect

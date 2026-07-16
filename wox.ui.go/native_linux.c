@@ -21,6 +21,7 @@
 #include <string.h>
 
 extern int32_t woxGoLinuxStart(uintptr_t context);
+extern void woxGoLinuxCall(uintptr_t context);
 extern void woxGoLinuxFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
 extern void woxGoLinuxFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern void woxGoLinuxDestroyed(uintptr_t context, uint64_t epoch, int32_t active);
@@ -353,6 +354,17 @@ static bool run_on_main_sync(WoxMainFunction function, void *data) {
   g_cond_clear(&call.condition);
   g_mutex_clear(&call.mutex);
   return true;
+}
+
+static void execute_go_call(void *data) {
+  woxGoLinuxCall((uintptr_t)data);
+}
+
+int32_t wox_linux_call(uintptr_t context) {
+  if (context == 0 || !run_on_main_sync(execute_go_call, (void *)context)) {
+    return -1;
+  }
+  return 0;
 }
 
 static void premultiplied_color(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha, float color[4]) {

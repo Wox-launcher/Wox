@@ -21,6 +21,7 @@ const (
 	windowClassName         = "WoxGoUIWindow"
 	windowCommandMessage    = win.WM_APP + 1
 	windowTextInputMessage  = win.WM_APP + 2
+	runtimeCallMessage      = win.WM_APP + 3
 	windowBlurGuardDuration = 300 * time.Millisecond
 	wsExNoRedirectionBitmap = 0x00200000
 	errorClassAlreadyExists = syscall.Errno(1410)
@@ -62,6 +63,7 @@ var (
 	dwmSetWindowAttribute                = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmSetWindowAttribute")
 	dwmExtendFrameIntoClientArea         = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmExtendFrameIntoClientArea")
 	setWindowCompositionAttribute        = syscall.NewLazyDLL("user32.dll").NewProc("SetWindowCompositionAttribute")
+	postThreadMessageW                   = syscall.NewLazyDLL("user32.dll").NewProc("PostThreadMessageW")
 	dpiAwarenessContextPerMonitorAwareV2 = ^uintptr(3)
 	platformRuntime                      struct {
 		sync.Mutex
@@ -70,8 +72,15 @@ var (
 		uiThreadID        uint32
 		windowCount       int
 		runErr            error
+		nextCallID        uintptr
+		calls             map[uintptr]windowsRuntimeCall
 	}
 )
+
+type windowsRuntimeCall struct {
+	fn   func()
+	done chan error
+}
 
 type windowCommandKind uint8
 
@@ -193,6 +202,8 @@ func platformRun(start func() error) (runErr error) {
 	platformRuntime.uiThreadID = win.GetCurrentThreadId()
 	platformRuntime.windowCount = 0
 	platformRuntime.runErr = nil
+	platformRuntime.nextCallID = 0
+	platformRuntime.calls = map[uintptr]windowsRuntimeCall{}
 	platformRuntime.Unlock()
 	defer func() {
 		platformRuntime.Lock()
@@ -204,7 +215,12 @@ func platformRun(start func() error) (runErr error) {
 		platformRuntime.uiThreadID = 0
 		platformRuntime.windowCount = 0
 		platformRuntime.runErr = nil
+		pendingCalls := platformRuntime.calls
+		platformRuntime.calls = nil
 		platformRuntime.Unlock()
+		for _, call := range pendingCalls {
+			call.done <- errors.New("window runtime stopped before UI callback ran")
+		}
 	}()
 
 	comResult := win.CoInitializeEx(nil, win.COINIT_APARTMENTTHREADED)
@@ -216,6 +232,8 @@ func platformRun(start func() error) (runErr error) {
 	if err := ensureWindowClass(); err != nil {
 		return err
 	}
+	var queueMessage win.MSG
+	win.PeekMessage(&queueMessage, 0, 0, 0, win.PM_NOREMOVE)
 	if start == nil {
 		return errors.New("window runtime start callback is nil")
 	}
@@ -243,9 +261,55 @@ func platformRun(start func() error) (runErr error) {
 		if result == -1 {
 			return errors.New("GetMessage failed")
 		}
+		if message.Message == runtimeCallMessage {
+			runWindowsRuntimeCall(message.WParam)
+			continue
+		}
 		win.TranslateMessage(&message)
 		win.DispatchMessage(&message)
 	}
+}
+
+func platformCall(fn func()) error {
+	platformRuntime.Lock()
+	if !platformRuntime.running {
+		platformRuntime.Unlock()
+		return errors.New("window runtime is not running")
+	}
+	uiThreadID := platformRuntime.uiThreadID
+	if uiThreadID == win.GetCurrentThreadId() {
+		platformRuntime.Unlock()
+		fn()
+		return nil
+	}
+	platformRuntime.nextCallID++
+	callID := platformRuntime.nextCallID
+	done := make(chan error, 1)
+	platformRuntime.calls[callID] = windowsRuntimeCall{fn: fn, done: done}
+	platformRuntime.Unlock()
+
+	posted, _, postErr := postThreadMessageW.Call(uintptr(uiThreadID), runtimeCallMessage, callID, 0)
+	if posted == 0 {
+		platformRuntime.Lock()
+		delete(platformRuntime.calls, callID)
+		platformRuntime.Unlock()
+		return fmt.Errorf("post UI callback: %w", postErr)
+	}
+	return <-done
+}
+
+func runWindowsRuntimeCall(callID uintptr) {
+	platformRuntime.Lock()
+	call, ok := platformRuntime.calls[callID]
+	if ok {
+		delete(platformRuntime.calls, callID)
+	}
+	platformRuntime.Unlock()
+	if !ok {
+		return
+	}
+	call.fn()
+	call.done <- nil
 }
 
 // openPlatformWindow creates a hidden window on the runtime thread.

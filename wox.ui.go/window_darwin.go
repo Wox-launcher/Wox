@@ -79,6 +79,15 @@ func platformRun(start func() error) error {
 	return nil
 }
 
+func platformCall(fn func()) error {
+	handle := cgo.NewHandle(fn)
+	defer handle.Delete()
+	if C.wox_darwin_call(C.uintptr_t(handle)) != 0 {
+		return errors.New("woxui: AppKit runtime is not running")
+	}
+	return nil
+}
+
 func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	darwinRuntime.Lock()
 	run := darwinRuntime.current
@@ -529,6 +538,11 @@ func woxGoDarwinStart(context C.uintptr_t) C.int32_t {
 		return -1
 	}
 	return 0
+}
+
+//export woxGoDarwinCall
+func woxGoDarwinCall(context C.uintptr_t) {
+	cgo.Handle(context).Value().(func())()
 }
 
 //export woxGoDarwinFrame

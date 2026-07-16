@@ -12,3 +12,11 @@ func Run(start func() error) error {
 	}
 	return platformRun(start)
 }
+
+// Call executes fn synchronously on the native UI thread owned by Run.
+func Call(fn func()) error {
+	if fn == nil {
+		return errors.New("UI callback is required")
+	}
+	return platformCall(fn)
+}

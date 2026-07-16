@@ -214,6 +214,7 @@ smoke: ensure-resources
 
 build: clean dev
 	    $(MAKE) -C wox.ui.flutter/wox build
+		$(MAKE) -C wox.ui.go embed-resources
 		$(MAKE) -C wox.core build
 
 ifeq ($(PLATFORM),linux)

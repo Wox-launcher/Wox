@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -25,6 +26,9 @@ const (
 	resultRowGap        = 0
 )
 
+// BackendFactory binds one launcher session to either a remote or in-process core backend.
+type BackendFactory func(sessionID string, onRequest coreclient.RequestHandler, onResponse coreclient.ResponseHandler, onError func(error)) coreclient.Backend
+
 func resultRowHeightForPalette(palette uiPalette) float32 {
 	return resultRowBaseHeight + palette.resultItemPadding.Top + palette.resultItemPadding.Bottom
 }
@@ -42,12 +46,12 @@ type App struct {
 	terminalSubscriptionMu sync.Mutex
 	terminalSubscribed     string
 
-	port      int
-	isDev     bool
-	sessionID string
-	client    *coreclient.Client
-	window    *woxui.Window
-	host      *woxwidget.Host
+	isDev         bool
+	sessionID     string
+	clientFactory BackendFactory
+	client        coreclient.Backend
+	window        *woxui.Window
+	host          *woxwidget.Host
 
 	query                plainQuery
 	queryContext         queryContext
@@ -217,10 +221,17 @@ type App struct {
 
 // New creates a hidden launcher app connected to the given Wox core port when Start runs.
 func New(port int, isDev bool) *App {
+	return NewWithBackendFactory(isDev, func(sessionID string, onRequest coreclient.RequestHandler, onResponse coreclient.ResponseHandler, onError func(error)) coreclient.Backend {
+		return coreclient.New(port, sessionID, onRequest, onResponse, onError)
+	})
+}
+
+// NewWithBackendFactory creates a launcher whose core transport is supplied by the process composition root.
+func NewWithBackendFactory(isDev bool, clientFactory BackendFactory) *App {
 	return &App{
-		port:            port,
 		isDev:           isDev,
 		sessionID:       coreclient.NewID(),
+		clientFactory:   clientFactory,
 		query:           newInputQuery(""),
 		editor:          woxui.NewTextEditor(""),
 		selected:        -1,
@@ -248,7 +259,10 @@ func New(port int, isDev bool) *App {
 
 // Start connects to core and creates the hidden native window on the UI runtime thread.
 func (a *App) Start() error {
-	a.client = coreclient.New(a.port, a.sessionID, a.handleRequest, a.handleResponse, func(err error) {
+	if a.clientFactory == nil {
+		return errors.New("core backend factory is required")
+	}
+	a.client = a.clientFactory(a.sessionID, a.handleRequest, a.handleResponse, func(err error) {
 		log.Printf("Wox core connection failed: %v", err)
 	})
 	connectContext, cancelConnect := context.WithTimeout(context.Background(), 10*time.Second)

@@ -8,6 +8,10 @@ func platformRun(start func() error) error {
 	return ErrPlatformUnsupported
 }
 
+func platformCall(fn func()) error {
+	return ErrPlatformUnsupported
+}
+
 func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	return nil, ErrPlatformUnsupported
 }

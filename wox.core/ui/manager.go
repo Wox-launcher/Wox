@@ -666,6 +666,11 @@ func (m *Manager) StartWebsocketAndWait(ctx context.Context) {
 	serveAndWait(ctx, m.serverPort)
 }
 
+// StartHTTPAndWait serves process coordination and resource routes for the embedded UI.
+func (m *Manager) StartHTTPAndWait(ctx context.Context) {
+	serveHTTPOnlyAndWait(ctx, m.serverPort)
+}
+
 func (m *Manager) UpdateServerPort(port int) {
 	m.serverPort = port
 }
@@ -2133,6 +2138,9 @@ func (m *Manager) isOnboardingViewActive() bool {
 }
 
 func (m *Manager) isUIWindow(activeWindowName string, activeWindowPid int) bool {
+	if util.IsGoUIImplementation() && activeWindowPid == os.Getpid() {
+		return true
+	}
 	if m.uiProcess != nil && activeWindowPid != 0 && m.uiProcess.Pid == activeWindowPid {
 		return true
 	}

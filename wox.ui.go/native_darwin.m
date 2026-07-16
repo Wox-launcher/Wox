@@ -16,6 +16,7 @@
 #include <string.h>
 
 extern int32_t woxGoDarwinStart(uintptr_t context);
+extern void woxGoDarwinCall(uintptr_t context);
 extern void woxGoDarwinFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
 extern void woxGoDarwinFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoDarwinKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
@@ -1418,6 +1419,20 @@ int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, fl
   [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
   [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
   [renderer->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+  return 0;
+}
+
+int32_t wox_darwin_call(uintptr_t context) {
+  if (context == 0 || [NSApplication sharedApplication] == nil) {
+    return -1;
+  }
+  if ([NSThread isMainThread]) {
+    woxGoDarwinCall(context);
+    return 0;
+  }
+  dispatch_sync(dispatch_get_main_queue(), ^{
+    woxGoDarwinCall(context);
+  });
   return 0;
 }
 

@@ -39,6 +39,16 @@ type RequestHandler func(message Message) (any, error)
 // ResponseHandler receives asynchronous UI-to-core responses, including query result batches.
 type ResponseHandler func(message Message)
 
+// Backend is the launcher-facing core API implemented by remote and in-process transports.
+type Backend interface {
+	Connect(ctx context.Context) error
+	SendRequest(method string, data any) (string, error)
+	SendRequestWithID(requestID string, method string, data any) error
+	Post(ctx context.Context, path string, data any, target any) error
+	Get(ctx context.Context, path string, target any) error
+	Close() error
+}
+
 // Client connects the standalone Go UI process to Wox core's existing HTTP and WebSocket protocol.
 type Client struct {
 	port       int

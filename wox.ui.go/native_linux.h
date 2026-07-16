@@ -6,6 +6,7 @@
 typedef struct WoxLinuxWindow WoxLinuxWindow;
 
 int32_t wox_linux_run(uintptr_t context);
+int32_t wox_linux_call(uintptr_t context);
 WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, uintptr_t context);
 uint64_t wox_linux_window_show(WoxLinuxWindow *window);
 int32_t wox_linux_window_hide(WoxLinuxWindow *window);

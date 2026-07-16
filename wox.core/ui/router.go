@@ -2987,7 +2987,7 @@ func handleOnUIReady(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	if request.Pid > 0 {
+	if request.Pid > 0 && request.Pid != os.Getpid() {
 		// Dev mode usually starts Flutter outside the core process tree, so the
 		// ready callback is the reliable boundary where core can learn the UI PID.
 		processmemory.SetWoxUIProcessPid(request.Pid)

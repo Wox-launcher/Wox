@@ -92,22 +92,25 @@ func writeErrorResponse(w http.ResponseWriter, errMsg string) {
 	w.Write(d)
 }
 
-func serveAndWait(ctx context.Context, port int) {
-	m = melody.New()
-	m.Config.MaxMessageSize = 1024 * 1024 * 10 // 10MB
-
+// newRouterMux exposes the same core-owned HTTP API to socket and in-process callers.
+func newRouterMux(ctx context.Context) *http.ServeMux {
 	mux := http.NewServeMux()
-
 	for path, callback := range routers {
-		//add panic handler
 		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 			defer util.GoRecover(ctx, "http request panic", func(err error) {
 				writeErrorResponse(w, err.Error())
 			})
-
 			callback(w, r)
 		})
 	}
+	return mux
+}
+
+func serveAndWait(ctx context.Context, port int) {
+	m = melody.New()
+	m.Config.MaxMessageSize = 1024 * 1024 * 10 // 10MB
+
+	mux := newRouterMux(ctx)
 
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		m.HandleRequest(w, r)
@@ -184,11 +187,20 @@ func serveAndWait(ctx context.Context, port int) {
 	}
 }
 
+// serveHTTPOnlyAndWait keeps loopback APIs available without exposing the UI WebSocket in embedded mode.
+func serveHTTPOnlyAndWait(ctx context.Context, port int) {
+	logger.Info(ctx, fmt.Sprintf("HTTP server start at: http://127.0.0.1:%d", port))
+	handler := cors.Default().Handler(newRouterMux(ctx))
+	if err := http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", port), handler); err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to start server: %s", err.Error()))
+	}
+}
+
 func requestUI(ctx context.Context, request WebsocketMsg) error {
-	// Check if melody websocket server is initialized
-	if m == nil {
-		logger.Warn(ctx, fmt.Sprintf("websocket server not ready, skipping UI request: %s", request.Method))
-		return fmt.Errorf("websocket server not initialized")
+	localSink := getLocalUISink()
+	if localSink == nil && m == nil {
+		logger.Warn(ctx, fmt.Sprintf("UI transport not ready, skipping request: %s", request.Method))
+		return fmt.Errorf("UI transport is not initialized")
 	}
 
 	request.Type = WebsocketMsgTypeRequest
@@ -205,13 +217,16 @@ func requestUI(ctx context.Context, request WebsocketMsg) error {
 	if request.Method != "UpdateResult" && request.Method != "ShowToolbarMsg" {
 		util.GetLogger().Debug(ctx, fmt.Sprintf("[Wox -> UI] %s: %s", request.Method, jsonData))
 	}
+	if localSink != nil {
+		return localSink.deliverRequest(request)
+	}
 	return m.Broadcast(marshalData)
 }
 
 func responseUI(ctx context.Context, response WebsocketMsg) {
-	// Check if melody websocket server is initialized
-	if m == nil {
-		logger.Warn(ctx, fmt.Sprintf("websocket server not ready, skipping UI response: %s", response.Method))
+	localSink := getLocalUISink()
+	if localSink == nil && m == nil {
+		logger.Warn(ctx, fmt.Sprintf("UI transport not ready, skipping response: %s", response.Method))
 		return
 	}
 
@@ -247,7 +262,12 @@ func responseUI(ctx context.Context, response WebsocketMsg) {
 		}
 	}
 	broadcastStart := util.GetSystemTimestamp()
-	broadcastErr := m.Broadcast(marshalData)
+	var broadcastErr error
+	if localSink != nil {
+		broadcastErr = localSink.deliverResponse(response)
+	} else {
+		broadcastErr = m.Broadcast(marshalData)
+	}
 	broadcastCost := util.GetSystemTimestamp() - broadcastStart
 	if isQueryResponse {
 		tracker := timetracking.New("response_ui_broadcast")

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"wox/ai"
 	"wox/analytics"
@@ -29,6 +30,9 @@ import (
 	"wox/util/mainthread"
 	"wox/util/permission"
 	"wox/util/selection"
+
+	woxui "github.com/Wox-launcher/wox.ui.go"
+	golauncher "github.com/Wox-launcher/wox.ui.go/launcher"
 
 	_ "wox/plugin/host"
 
@@ -66,6 +70,11 @@ import (
 	_ "wox/plugin/system/dictation"
 )
 
+var (
+	useEmbeddedGoUI bool
+	embeddedGoUIApp *golauncher.App
+)
+
 func main() {
 	// Permission APIs cache an initial denial for the lifetime of a process. Run the
 	// passive checks before AppKit and the normal Wox lifecycle initialize so the
@@ -82,6 +91,30 @@ func main() {
 			os.Exit(1)
 		}
 		os.Exit(diagnostic.GetManager().RunSupervisor(ctx, os.Args))
+	}
+	if util.IsGoUIImplementation() {
+		useEmbeddedGoUI = true
+		mainthread.SetDispatcher(func(fn func()) {
+			if err := woxui.Call(fn); err != nil {
+				panic(err)
+			}
+		})
+		err := woxui.Run(func() error {
+			run()
+			if embeddedGoUIApp == nil {
+				return fmt.Errorf("embedded Go UI did not start")
+			}
+			return nil
+		})
+		mainthread.SetDispatcher(nil)
+		if embeddedGoUIApp != nil {
+			_ = embeddedGoUIApp.Close()
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	}
 	mainthread.Init(run)
 }
@@ -329,6 +362,27 @@ func run() {
 	registerErr := ui.GetUIManager().RegisterAllHotkeys(ctx)
 	if registerErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to register hotkeys: %s", registerErr.Error()))
+	}
+
+	if useEmbeddedGoUI {
+		if util.IsWindows() {
+			loaderPath := filepath.Join(util.GetLocation().GetUIDirectory(), "go", "WebView2Loader.dll")
+			if util.IsFileExists(loaderPath) {
+				if err := os.Setenv("WOX_WEBVIEW2_LOADER_PATH", loaderPath); err != nil {
+					util.GetLogger().Warn(ctx, fmt.Sprintf("failed to configure embedded WebView2 loader: %s", err.Error()))
+				}
+			}
+		}
+		embeddedGoUIApp = golauncher.NewWithBackendFactory(util.IsDev(), ui.LocalBackendFactory)
+		if err := embeddedGoUIApp.Start(); err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start embedded Go UI: %s", err.Error()))
+			embeddedGoUIApp = nil
+			return
+		}
+		util.Go(ctx, "start core HTTP server", func() {
+			ui.GetUIManager().StartHTTPAndWait(ctx)
+		})
+		return
 	}
 
 	if util.IsProd() {

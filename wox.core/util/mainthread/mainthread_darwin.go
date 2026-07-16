@@ -49,6 +49,9 @@ func Call(f func()) {
 	if f == nil {
 		return
 	}
+	if callDispatcher(f) {
+		return
+	}
 
 	if C.isMainThread() {
 		f()

@@ -6,6 +6,7 @@
 typedef struct WoxDarwinWindow WoxDarwinWindow;
 
 int32_t wox_darwin_run(uintptr_t context);
+int32_t wox_darwin_call(uintptr_t context);
 WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, uintptr_t context);
 uint64_t wox_darwin_window_show(WoxDarwinWindow *window);
 int32_t wox_darwin_window_hide(WoxDarwinWindow *window);
