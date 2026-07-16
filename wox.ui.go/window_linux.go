@@ -163,6 +163,18 @@ func (w *platformWindow) setBounds(bounds Rect) error {
 	return nil
 }
 
+func (w *platformWindow) bounds() (Rect, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return Rect{}, err
+	}
+	var x, y, width, height C.float
+	if C.wox_linux_window_get_bounds(native, &x, &y, &width, &height) != 0 {
+		return Rect{}, errors.New("woxui: failed to read Linux window bounds")
+	}
+	return Rect{X: float32(x), Y: float32(y), Width: float32(width), Height: float32(height)}, nil
+}
+
 func (w *platformWindow) center(size Size) error {
 	native, err := w.openNative()
 	if err != nil {
@@ -170,6 +182,17 @@ func (w *platformWindow) center(size Size) error {
 	}
 	if C.wox_linux_window_center(native, C.float(size.Width), C.float(size.Height)) != 0 {
 		return errors.New("woxui: failed to center Linux window")
+	}
+	return nil
+}
+
+func (w *platformWindow) startDragging() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_start_dragging(native) != 0 {
+		return errors.New("woxui: failed to start Linux window drag")
 	}
 	return nil
 }

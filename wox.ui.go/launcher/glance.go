@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	woxui "github.com/Wox-launcher/wox.ui.go"
 )
 
 type glanceRef struct {
@@ -136,10 +138,52 @@ func (a *App) cancelGlanceTimerLocked() {
 func (a *App) stopGlanceLocked(clear bool) {
 	a.glanceRevision++
 	a.glanceLoading = false
+	a.glanceHovered = false
 	a.cancelGlanceTimerLocked()
 	if clear {
 		a.glanceItem = nil
 	}
+}
+
+func (a *App) setGlanceHover(inside bool, text string, anchor woxui.Rect) {
+	a.mu.Lock()
+	a.glanceHovered = inside
+	a.glanceTooltipRevision++
+	revision := a.glanceTooltipRevision
+	a.mu.Unlock()
+	_ = a.window.Invalidate()
+
+	go func() {
+		a.tooltipMu.Lock()
+		defer a.tooltipMu.Unlock()
+		a.mu.RLock()
+		current := revision == a.glanceTooltipRevision
+		a.mu.RUnlock()
+		if !current {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if !inside {
+			if err := a.client.Post(ctx, "/tooltip/hide", map[string]string{"name": "go-ui-glance"}, nil); err != nil {
+				log.Printf("hide glance tooltip: %v", err)
+			}
+			return
+		}
+		windowBounds, err := a.window.Bounds()
+		if err != nil {
+			log.Printf("read launcher bounds for glance tooltip: %v", err)
+			return
+		}
+		err = a.client.Post(ctx, "/tooltip/show", map[string]any{
+			"name": "go-ui-glance", "text": text, "side": "top",
+			"anchorX": windowBounds.X + anchor.X, "anchorY": windowBounds.Y + anchor.Y,
+			"anchorWidth": anchor.Width, "anchorHeight": anchor.Height,
+		}, nil)
+		if err != nil {
+			log.Printf("show glance tooltip: %v", err)
+		}
+	}()
 }
 
 func (a *App) scheduleGlanceRefreshLocked(ref glanceRef) {

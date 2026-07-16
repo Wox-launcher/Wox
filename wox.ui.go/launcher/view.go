@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	woxui "github.com/Wox-launcher/wox.ui.go"
@@ -21,6 +22,7 @@ type viewSnapshot struct {
 	results               []queryResult
 	pendingResults        bool
 	selected              int
+	hoveredResult         int
 	layout                queryLayout
 	refinements           []queryRefinement
 	refinementValues      map[string]string
@@ -28,6 +30,7 @@ type viewSnapshot struct {
 	completionHint        *queryCompletionHint
 	toolbarMsg            *toolbarMessage
 	glance                *glanceItem
+	glanceHovered         bool
 	hideGlanceIcon        bool
 	form                  *formSnapshot
 	tableEditor           *formTableEditorSnapshot
@@ -85,6 +88,7 @@ func (a *App) snapshot() viewSnapshot {
 		results:               append([]queryResult(nil), a.results...),
 		pendingResults:        a.pendingResults,
 		selected:              a.selected,
+		hoveredResult:         a.hoveredResult,
 		layout:                a.layout,
 		refinements:           append([]queryRefinement(nil), a.refinements...),
 		refinementValues:      refinementValues,
@@ -92,6 +96,7 @@ func (a *App) snapshot() viewSnapshot {
 		completionHint:        completionHint,
 		toolbarMsg:            toolbarMsg,
 		glance:                glance,
+		glanceHovered:         a.glanceHovered,
 		hideGlanceIcon:        a.settings.HideGlanceIcon,
 		form:                  snapshotFormLocked(a.form),
 		tableEditor:           tableEditor,
@@ -225,7 +230,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidge
 	if snapshot.glance != nil {
 		children = append(children, woxwidget.Container{
 			Width: glanceWidth, Height: queryBoxHeight, Padding: woxwidget.Insets{Top: 12.5, Bottom: 12.5},
-			Child: a.buildGlance(*snapshot.glance, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth),
+			Child: a.buildGlance(*snapshot.glance, snapshot.glanceHovered, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth),
 		})
 	}
 	if queryIcon != nil {
@@ -248,7 +253,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidge
 func (a *App) buildQuery(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
 	const caretHeight = float32(34)
 	style := woxui.TextStyle{Size: 28}
-	return woxwidget.Gesture{
+	editor := woxwidget.Gesture{
 		ID: "query-editor",
 		OnTapAt: func(position woxui.Point) {
 			a.placeQueryCaret(position.X, style)
@@ -301,6 +306,29 @@ func (a *App) buildQuery(snapshot viewSnapshot, width, height float32) woxwidget
 				displayList.FillRect(woxui.Rect{X: bounds.X + prefixMetrics.Size.Width, Y: caretY + caretHeight - 1, Width: compositionMetrics.Size.Width, Height: 1}, snapshot.palette.cursor)
 			}
 		}},
+	}
+	textMetrics, _ := a.window.MeasureText(snapshot.editing.Text, style)
+	dragLeft := min(width, textMetrics.Size.Width+6)
+	if dragLeft >= width {
+		return editor
+	}
+	return woxwidget.Stack{
+		Width: width, Height: height,
+		Children: []woxwidget.StackChild{
+			{Child: editor},
+			{Left: dragLeft, Child: woxwidget.Gesture{
+				ID: "query-drag-area",
+				OnTap: func() {
+					a.placeQueryCaret(width, style)
+				},
+				OnDragStart: func() {
+					if err := a.window.StartDragging(); err != nil {
+						log.Printf("start launcher window drag: %v", err)
+					}
+				},
+				Child: woxwidget.Container{Width: width - dragLeft, Height: height},
+			}},
+		},
 	}
 }
 
@@ -389,6 +417,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 		index := index
 		result := result
 		selected := index == snapshot.selected
+		hovered := index == snapshot.hoveredResult
 		background := woxui.Color{}
 		title := snapshot.palette.resultTitle
 		subtitle := snapshot.palette.resultSubtitle
@@ -398,6 +427,9 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 			title = snapshot.palette.selectedTitle
 			subtitle = snapshot.palette.selectedSubtitle
 			tailColor = snapshot.palette.selectedTail
+		} else if hovered {
+			background = snapshot.palette.selectedBackground
+			background.A = uint8(float32(background.A)*0.25 + 0.5)
 		}
 		if result.IsGroup {
 			rows = append(rows, woxwidget.Container{
@@ -431,11 +463,10 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 		rows = append(rows, woxwidget.Gesture{
 			ID: fmt.Sprintf("result-%s", result.ID),
 			OnHover: func(inside bool) {
-				if inside {
-					a.selectResult(index)
-				}
+				a.hoverResult(index, inside)
 			},
-			OnTap: func() { a.activateResult(index) },
+			OnTap:       func() { a.selectResult(index) },
+			OnDoubleTap: func() { a.selectResult(index); a.activateResult(index) },
 			Child: woxwidget.Container{
 				Width: rowWidth, Height: rowHeight, Radius: snapshot.palette.resultItemRadius, Color: background,
 				Padding: rowPadding,
@@ -481,6 +512,15 @@ func (a *App) ensureResultIndexVisibleLocked(results []queryResult, layout *grid
 	bottom := top + rowHeight
 	if layout != nil {
 		top, bottom = gridResultVerticalBounds(results, selected, a.resultWidth, layout)
+	} else {
+		for index := selected - 1; index >= 0; index-- {
+			if results[index].IsGroup {
+				if selected-index <= 2 {
+					top = a.palette.resultContainerPadding.Top + float32(index)*(rowHeight+resultRowGap)
+				}
+				break
+			}
+		}
 	}
 	if top < a.resultScroll {
 		a.resultScroll = top

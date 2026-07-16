@@ -88,7 +88,10 @@ const (
 	windowCommandShow windowCommandKind = iota
 	windowCommandHide
 	windowCommandSetBounds
+	windowCommandSetPhysicalBounds
+	windowCommandGetBounds
 	windowCommandCenter
+	windowCommandStartDragging
 	windowCommandSetHideOnBlur
 	windowCommandSetFontFamily
 	windowCommandPickFile
@@ -116,9 +119,10 @@ type windowCommand struct {
 }
 
 type windowCommandResult struct {
-	epoch FocusEpoch
-	path  string
-	err   error
+	epoch  FocusEpoch
+	bounds Rect
+	path   string
+	err    error
 }
 
 type focusRuntime struct {
@@ -347,8 +351,21 @@ func (w *platformWindow) setBounds(bounds Rect) error {
 	return w.call(windowCommand{kind: windowCommandSetBounds, bounds: bounds}).err
 }
 
+func (w *platformWindow) setPhysicalBounds(bounds Rect) error {
+	return w.call(windowCommand{kind: windowCommandSetPhysicalBounds, bounds: bounds}).err
+}
+
+func (w *platformWindow) bounds() (Rect, error) {
+	result := w.call(windowCommand{kind: windowCommandGetBounds})
+	return result.bounds, result.err
+}
+
 func (w *platformWindow) center(size Size) error {
 	return w.call(windowCommand{kind: windowCommandCenter, size: size}).err
+}
+
+func (w *platformWindow) startDragging() error {
+	return w.call(windowCommand{kind: windowCommandStartDragging}).err
 }
 
 func (w *platformWindow) setHideOnBlur(enabled bool) error {
@@ -1046,8 +1063,17 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		return windowCommandResult{epoch: w.focus.epoch}
 	case windowCommandSetBounds:
 		return windowCommandResult{err: w.setBoundsNative(command.bounds)}
+	case windowCommandSetPhysicalBounds:
+		return windowCommandResult{err: w.setPhysicalBoundsNative(command.bounds)}
+	case windowCommandGetBounds:
+		bounds, err := w.boundsNative()
+		return windowCommandResult{bounds: bounds, err: err}
 	case windowCommandCenter:
 		return windowCommandResult{err: w.centerNative(command.size)}
+	case windowCommandStartDragging:
+		win.ReleaseCapture()
+		win.SendMessage(w.hwnd, win.WM_NCLBUTTONDOWN, win.HTCAPTION, 0)
+		return windowCommandResult{}
 	case windowCommandSetHideOnBlur:
 		w.options.HideOnBlur = command.hideOnBlur
 		return windowCommandResult{}
@@ -1133,6 +1159,32 @@ func (w *platformWindow) setBoundsNative(bounds Rect) error {
 	}
 	win.InvalidateRect(w.hwnd, nil, false)
 	return nil
+}
+
+func (w *platformWindow) setPhysicalBoundsNative(bounds Rect) error {
+	if !win.SetWindowPos(w.hwnd, 0, int32(math.Round(float64(bounds.X))), int32(math.Round(float64(bounds.Y))), int32(math.Round(float64(bounds.Width))), int32(math.Round(float64(bounds.Height))), win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
+		return errors.New("failed to set physical Windows window bounds")
+	}
+	win.InvalidateRect(w.hwnd, nil, false)
+	return nil
+}
+
+func (w *platformWindow) boundsNative() (Rect, error) {
+	var bounds win.RECT
+	if !win.GetWindowRect(w.hwnd, &bounds) {
+		return Rect{}, errors.New("failed to read Windows window bounds")
+	}
+	monitor := win.MonitorFromWindow(w.hwnd, win.MONITOR_DEFAULTTONEAREST)
+	scale := monitorScale(monitor)
+	if scale <= 0 {
+		scale = 1
+	}
+	return Rect{
+		X:      float32(bounds.Left) / scale,
+		Y:      float32(bounds.Top) / scale,
+		Width:  float32(bounds.Right-bounds.Left) / scale,
+		Height: float32(bounds.Bottom-bounds.Top) / scale,
+	}, nil
 }
 
 // centerNative centers a logical client size in the nearest monitor work area.

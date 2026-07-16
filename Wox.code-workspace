@@ -86,7 +86,6 @@
 				// Keep the development launch configuration aligned with Makefile builds
 				// so VS Code runs do not start a backend that silently lacks the search schema.
 				"buildFlags": "-tags=sqlite_fts5",
-				"preLaunchTask": "Prepare Go UI Resources",
 				"env": {
 					"CGO_ENABLED": "1"
 				}
@@ -100,20 +99,6 @@
 				"args": [
 					"plugin"
 				]
-			}
-		]
-	},
-	"tasks": {
-		"version": "2.0.0",
-		"tasks": [
-			{
-				"label": "Prepare Go UI Resources",
-				"type": "process",
-				"command": "make",
-				"args": [
-					"go-ui"
-				],
-				"problemMatcher": []
 			}
 		]
 	}

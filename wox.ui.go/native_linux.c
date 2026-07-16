@@ -84,6 +84,9 @@ struct WoxLinuxWindow {
   float preferred_height;
   float preferred_x;
   float preferred_y;
+  double pointer_root_x;
+  double pointer_root_y;
+  guint32 pointer_time;
   bool visible;
   bool active;
   bool hide_on_blur;
@@ -632,7 +635,11 @@ static void emit_pointer(WoxLinuxWindow *window, uint8_t kind, double x, double 
 
 static gboolean on_pointer_motion(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
   (void)widget;
-  emit_pointer(data, WOX_POINTER_MOVE, event->x, event->y, 0, 0.0, 0.0, event->state);
+  WoxLinuxWindow *window = data;
+  window->pointer_root_x = event->x_root;
+  window->pointer_root_y = event->y_root;
+  window->pointer_time = event->time;
+  emit_pointer(window, WOX_POINTER_MOVE, event->x, event->y, 0, 0.0, 0.0, event->state);
   return TRUE;
 }
 
@@ -644,11 +651,15 @@ static gboolean on_pointer_crossing(GtkWidget *widget, GdkEventCrossing *event, 
 }
 
 static gboolean on_pointer_button(GtkWidget *widget, GdkEventButton *event, gpointer data) {
+  WoxLinuxWindow *window = data;
+  window->pointer_root_x = event->x_root;
+  window->pointer_root_y = event->y_root;
+  window->pointer_time = event->time;
   if (event->type == GDK_BUTTON_PRESS) {
     gtk_widget_grab_focus(widget);
   }
   uint8_t kind = event->type == GDK_BUTTON_RELEASE ? WOX_POINTER_UP : WOX_POINTER_DOWN;
-  emit_pointer(data, kind, event->x, event->y, portable_pointer_button(event->button), 0.0, 0.0, event->state);
+  emit_pointer(window, kind, event->x, event->y, portable_pointer_button(event->button), 0.0, 0.0, event->state);
   return TRUE;
 }
 
@@ -1266,6 +1277,40 @@ int32_t wox_linux_window_set_bounds(WoxLinuxWindow *window, float x, float y, fl
   return run_on_main_sync(set_bounds_main, &call) ? call.result : -1;
 }
 
+static void get_bounds_main(void *data) {
+  WoxBoundsCall *call = data;
+  WoxLinuxWindow *window = call->window;
+  if (window->closed) {
+    call->result = -1;
+    return;
+  }
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+  gtk_window_get_position(GTK_WINDOW(window->window), &x, &y);
+  gtk_window_get_size(GTK_WINDOW(window->window), &width, &height);
+  call->x = (float)x;
+  call->y = (float)y;
+  call->width = (float)width;
+  call->height = (float)height;
+}
+
+int32_t wox_linux_window_get_bounds(WoxLinuxWindow *window, float *x, float *y, float *width, float *height) {
+  if (window == NULL || x == NULL || y == NULL || width == NULL || height == NULL) {
+    return -1;
+  }
+  WoxBoundsCall call = {.window = window};
+  if (!run_on_main_sync(get_bounds_main, &call) || call.result != 0) {
+    return -1;
+  }
+  *x = call.x;
+  *y = call.y;
+  *width = call.width;
+  *height = call.height;
+  return 0;
+}
+
 static void center_main(void *data) {
   WoxBoundsCall *call = data;
   WoxLinuxWindow *window = call->window;
@@ -1309,6 +1354,29 @@ int32_t wox_linux_window_center(WoxLinuxWindow *window, float width, float heigh
   }
   WoxBoundsCall call = {.window = window, .width = width, .height = height};
   return run_on_main_sync(center_main, &call) ? call.result : -1;
+}
+
+typedef struct {
+  WoxLinuxWindow *window;
+  int32_t result;
+} WoxDragCall;
+
+static void start_dragging_main(void *data) {
+  WoxDragCall *call = data;
+  WoxLinuxWindow *window = call->window;
+  if (window->closed) {
+    call->result = -1;
+    return;
+  }
+  gtk_window_begin_move_drag(GTK_WINDOW(window->window), GDK_BUTTON_PRIMARY, (int)round(window->pointer_root_x), (int)round(window->pointer_root_y), window->pointer_time);
+}
+
+int32_t wox_linux_window_start_dragging(WoxLinuxWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxDragCall call = {.window = window};
+  return run_on_main_sync(start_dragging_main, &call) ? call.result : -1;
 }
 
 typedef struct {

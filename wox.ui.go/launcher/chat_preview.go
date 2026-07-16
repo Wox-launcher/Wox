@@ -1349,6 +1349,7 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 
 // onChatPreviewTextInput routes committed and composing text to the currently visible chat editor.
 func (a *App) onChatPreviewTextInput(event woxui.TextInputEvent) bool {
+	openSkills := false
 	a.mu.Lock()
 	state := a.chatPreview
 	if state == nil || !state.active {
@@ -1369,8 +1370,16 @@ func (a *App) onChatPreviewTextInput(event woxui.TextInputEvent) bool {
 	}
 	if editor != nil && editor.HandleTextInput(event) {
 		state.error = ""
+		if editor == state.editor && editor.State().Text == "/" && editor.State().Composition == "" {
+			editor.SetText("", false)
+			openSkills = true
+		}
 	}
 	a.mu.Unlock()
+	if openSkills {
+		a.toggleChatPanel("skills")
+		return true
+	}
 	_ = a.window.Invalidate()
 	return true
 }

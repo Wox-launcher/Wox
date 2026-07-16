@@ -7,7 +7,7 @@ import (
 	woxwidget "github.com/Wox-launcher/wox.ui.go/widget"
 )
 
-func (a *App) buildGlance(item glanceItem, hideIcon bool, palette uiPalette, width float32) woxwidget.Widget {
+func (a *App) buildGlance(item glanceItem, hovered, hideIcon bool, palette uiPalette, width float32) woxwidget.Widget {
 	children := make([]woxwidget.Widget, 0, 2)
 	textWidth := width - 16
 	foreground := palette.queryText
@@ -31,8 +31,19 @@ func (a *App) buildGlance(item glanceItem, hideIcon bool, palette uiPalette, wid
 	if item.Action != nil {
 		onTap = a.executeGlanceAction
 	}
-	return woxwidget.Gesture{ID: "query-glance", OnTap: onTap, Child: woxwidget.Container{
-		Width: width, Height: 30, Radius: 5, Padding: woxwidget.Insets{Left: 8, Top: 1, Right: 8, Bottom: 1},
+	background := woxui.Color{}
+	if hovered {
+		background = palette.queryText
+		background.A = uint8(float32(background.A) * 0.1)
+	}
+	tooltip := strings.TrimSpace(item.Tooltip)
+	if tooltip == "" {
+		tooltip = text
+	}
+	return woxwidget.Gesture{ID: "query-glance", OnTap: onTap, OnHoverAt: func(inside bool, bounds woxui.Rect) {
+		a.setGlanceHover(inside, tooltip, bounds)
+	}, Child: woxwidget.Container{
+		Width: width, Height: 30, Radius: 5, Color: background, Padding: woxwidget.Insets{Left: 8, Top: 1, Right: 8, Bottom: 1},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, Children: children},
 	}}
 }

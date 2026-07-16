@@ -125,9 +125,13 @@ func gridResultVerticalBounds(results []queryResult, target int, width float32, 
 func (a *App) buildGridResult(snapshot viewSnapshot, index int, cellWidth, cellHeight, visualWidth, visualHeight float32, layout gridLayout) woxwidget.Widget {
 	result := snapshot.results[index]
 	selected := index == snapshot.selected
+	hovered := index == snapshot.hoveredResult
 	frameColor := woxui.Color{}
 	if selected {
 		frameColor = snapshot.palette.selectedBackground
+	} else if hovered {
+		frameColor = snapshot.palette.selectedBackground
+		frameColor.A = uint8(float32(frameColor.A)*0.25 + 0.5)
 	}
 	var visual woxwidget.Widget = woxwidget.Painter{Width: visualWidth, Height: visualHeight}
 	if image := a.imageFor(result.Icon); image != nil {
@@ -147,11 +151,10 @@ func (a *App) buildGridResult(snapshot viewSnapshot, index int, cellWidth, cellH
 	return woxwidget.Gesture{
 		ID: fmt.Sprintf("grid-result-%s", result.ID),
 		OnHover: func(inside bool) {
-			if inside {
-				a.selectResult(index)
-			}
+			a.hoverResult(index, inside)
 		},
-		OnTap: func() { a.activateResult(index) },
+		OnTap:       func() { a.selectResult(index) },
+		OnDoubleTap: func() { a.selectResult(index); a.activateResult(index) },
 		Child: woxwidget.Container{
 			Width: cellWidth, Height: cellHeight,
 			Padding: woxwidget.UniformInsets(float32(layout.ItemMargin)),

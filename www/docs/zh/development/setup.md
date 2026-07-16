@@ -36,7 +36,6 @@
 
 - 请在 `MINGW64` shell 中运行构建命令
 - 安装 [MinGW-w64](https://www.mingw-w64.org/)，这样 Windows 原生 runner 代码才能正常编译
-- 安装 [NuGet CLI](https://www.nuget.org/downloads)，用于准备固定版本的 `WebView2Loader.dll`
 
 ### Linux
 

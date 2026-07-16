@@ -28,7 +28,15 @@ func (w *platformWindow) setBounds(bounds Rect) error {
 	return ErrPlatformUnsupported
 }
 
+func (w *platformWindow) bounds() (Rect, error) {
+	return Rect{}, ErrPlatformUnsupported
+}
+
 func (w *platformWindow) center(size Size) error {
+	return ErrPlatformUnsupported
+}
+
+func (w *platformWindow) startDragging() error {
 	return ErrPlatformUnsupported
 }
 

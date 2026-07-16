@@ -939,6 +939,25 @@ int32_t wox_darwin_window_set_bounds(WoxDarwinWindow *window, float x, float y, 
   return result;
 }
 
+int32_t wox_darwin_window_get_bounds(WoxDarwinWindow *window, float *x, float *y, float *width, float *height) {
+  if (window == NULL || x == NULL || y == NULL || width == NULL || height == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    NSRect frame = window->window.frame;
+    *x = (float)NSMinX(frame);
+    *y = (float)(desktop_top() - NSMaxY(frame));
+    *width = (float)NSWidth(frame);
+    *height = (float)NSHeight(frame);
+  });
+  return result;
+}
+
 int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float height) {
   if (window == NULL || width <= 0.0f || height <= 0.0f) {
     return -1;
@@ -962,6 +981,22 @@ int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float hei
     if (window->visible) {
       [window->view renderFrame];
     }
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_start_dragging(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    NSEvent *event = [NSApp currentEvent];
+    if (window->closed || event == nil) {
+      result = -1;
+      return;
+    }
+    [window->window performWindowDragWithEvent:event];
   });
   return result;
 }

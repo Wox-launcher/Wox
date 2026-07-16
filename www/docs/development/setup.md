@@ -36,7 +36,6 @@ Recommended editor:
 
 - Run build commands from a `MINGW64` shell
 - Install [MinGW-w64](https://www.mingw-w64.org/) so native Windows runner code can compile
-- Install the [NuGet CLI](https://www.nuget.org/downloads) so the build can stage the pinned `WebView2Loader.dll`
 
 ### Linux
 

@@ -42,6 +42,5 @@ docs
 !www/docs/**
 www/docs/.vitepress/cache
 www/docs/.vitepress/dist
-wox.core/resource/ui/go/WebView2Loader.dll
 wox.ui.go/.deps/
 .deps

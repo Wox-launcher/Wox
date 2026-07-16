@@ -11,7 +11,9 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
 uint64_t wox_darwin_window_show(WoxDarwinWindow *window);
 int32_t wox_darwin_window_hide(WoxDarwinWindow *window);
 int32_t wox_darwin_window_set_bounds(WoxDarwinWindow *window, float x, float y, float width, float height);
+int32_t wox_darwin_window_get_bounds(WoxDarwinWindow *window, float *x, float *y, float *width, float *height);
 int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float height);
+int32_t wox_darwin_window_start_dragging(WoxDarwinWindow *window);
 int32_t wox_darwin_window_set_hide_on_blur(WoxDarwinWindow *window, int32_t enabled);
 int32_t wox_darwin_window_pick_file(WoxDarwinWindow *window, int32_t directory, char **path);
 int32_t wox_darwin_window_open_external_url(WoxDarwinWindow *window, const char *url);

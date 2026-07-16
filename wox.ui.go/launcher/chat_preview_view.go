@@ -21,35 +21,45 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 		}}
 	}
 
-	const headerHeight = float32(56)
-	const inputHeight = float32(92)
-	innerWidth := max(float32(0), width-24)
-	innerHeight := max(float32(0), height-20)
+	const headerHeight = float32(52)
+	const inputHeight = float32(98)
+	innerWidth := max(float32(0), width-20)
+	innerHeight := max(float32(0), height-14)
 	questionHeight := chatQuestionPanelHeight(snapshot, innerHeight)
-	panelHeight := chatCatalogPanelHeight(snapshot, innerHeight-questionHeight)
-	messagesHeight := max(float32(80), innerHeight-headerHeight-inputHeight-questionHeight-panelHeight)
+	debugHeight := float32(0)
+	if snapshot.panel == "debug" {
+		debugHeight = chatCatalogPanelHeight(snapshot, innerHeight-questionHeight)
+	}
+	messagesHeight := max(float32(80), innerHeight-headerHeight-inputHeight-questionHeight-debugHeight)
 	children := []woxwidget.Widget{
 		a.buildChatHeader(snapshot, palette, innerWidth, headerHeight),
+		a.buildChatMessages(snapshot, palette, innerWidth, messagesHeight),
 	}
-	if panelHeight > 0 {
-		if snapshot.panel == "debug" {
-			children = append(children, a.buildChatDebugPanel(snapshot, palette, innerWidth, panelHeight))
-		} else {
-			children = append(children, a.buildChatCatalogPanel(snapshot, palette, innerWidth, panelHeight))
-		}
+	if debugHeight > 0 {
+		children = append(children, a.buildChatDebugPanel(snapshot, palette, innerWidth, debugHeight))
 	}
-	children = append(children, a.buildChatMessages(snapshot, palette, innerWidth, messagesHeight))
 	if questionHeight > 0 {
 		children = append(children, a.buildAIQuestionPanel(snapshot, palette, innerWidth, questionHeight))
 	}
 	children = append(children, a.buildChatInput(snapshot, palette, innerWidth, inputHeight))
-	return woxwidget.Container{
-		Width: width, Height: height, Padding: woxwidget.Insets{Left: 12, Top: 8, Right: 12, Bottom: 12},
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children},
+	mainPane := woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}
+	layers := []woxwidget.StackChild{{Left: 10, Top: 6, Child: mainPane}}
+	if snapshot.panel == "history" {
+		drawerWidth := min(float32(260), max(float32(220), innerWidth*0.46))
+		layers = append(layers, woxwidget.StackChild{Child: woxwidget.Gesture{ID: "chat-panel-dismiss-" + snapshot.key, OnTap: func() { a.toggleChatPanel("history") }, Child: woxwidget.Container{Width: width, Height: height}}})
+		layers = append(layers, woxwidget.StackChild{Left: 10, Top: 6, Child: a.buildChatCatalogPanel(snapshot, palette, drawerWidth, innerHeight)})
+	} else if snapshot.panel == "models" || snapshot.panel == "skills" {
+		panelWidth := min(float32(440), innerWidth)
+		panelHeight := chatCatalogPanelHeight(snapshot, innerHeight-questionHeight)
+		panelTop := max(headerHeight, innerHeight-inputHeight-panelHeight-6)
+		panel := snapshot.panel
+		layers = append(layers, woxwidget.StackChild{Child: woxwidget.Gesture{ID: "chat-panel-dismiss-" + snapshot.key, OnTap: func() { a.toggleChatPanel(panel) }, Child: woxwidget.Container{Width: width, Height: height}}})
+		layers = append(layers, woxwidget.StackChild{Left: 10 + (innerWidth-panelWidth)/2, Top: 6 + panelTop, Child: a.buildChatCatalogPanel(snapshot, palette, panelWidth, panelHeight)})
 	}
+	return woxwidget.Stack{Width: width, Height: height, Children: layers}
 }
 
-// buildChatHeader exposes the active model and authoritative stream state without platform UI.
+// buildChatHeader mirrors Flutter's compact title bar and keeps catalogs out of the main reading flow.
 func (a *App) buildChatHeader(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
 	title := strings.TrimSpace(snapshot.chat.Title)
 	if title == "" {
@@ -58,64 +68,28 @@ func (a *App) buildChatHeader(snapshot *chatPreviewSnapshot, palette uiPalette, 
 	if strings.TrimSpace(title) == "" || title == "i18n:ui_ai_chat_new_chat" {
 		title = "New chat"
 	}
-	model := snapshot.chat.Model.Name
-	if model == "" {
-		model = "No model selected"
+	menuBackground := woxui.Color{}
+	menuLabel := "☰"
+	if snapshot.panel == "history" {
+		menuBackground = palette.actionBackground
+		menuLabel = "×"
 	}
-	status := "Ready"
-	statusColor := palette.resultSubtitle
-	if snapshot.loading {
-		status = "Loading…"
-	} else if snapshot.chat.IsStreaming || snapshot.sending {
-		status = "Streaming"
-		statusColor = woxui.Color{R: 68, G: 196, B: 120, A: 255}
-	} else if snapshot.error != "" {
-		status = snapshot.error
-		statusColor = woxui.Color{R: 232, G: 95, B: 95, A: 255}
+	hasDebug := len(bytes.TrimSpace(snapshot.chat.DebugTrace)) > 0 && !bytes.Equal(bytes.TrimSpace(snapshot.chat.DebugTrace), []byte("null"))
+	debugWidth := float32(0)
+	if hasDebug {
+		debugWidth = 48
 	}
-	contentWidth := max(float32(0), width-28)
-	newWidth := float32(48)
-	debugWidth := float32(48)
-	historyWidth := float32(72)
-	skillsWidth := float32(58)
-	modelWidth := min(float32(150), max(float32(92), width*0.22))
-	historyLabel := fmt.Sprintf("History %d", len(snapshot.chats))
-	skillsLabel := "Skills"
-	newLabel := "New"
-	debugLabel := "Trace"
-	if width < 520 {
-		newWidth = 38
-		debugWidth = 34
-		historyWidth = 34
-		skillsWidth = 34
-		modelWidth = 76
-		historyLabel = "H"
-		skillsLabel = "S"
-		newLabel = "+"
-		debugLabel = "D"
-	}
-	buttonGap := float32(7)
-	newLeft := max(float32(0), contentWidth-newWidth)
-	debugLeft := newLeft
-	if len(bytes.TrimSpace(snapshot.chat.DebugTrace)) > 0 && !bytes.Equal(bytes.TrimSpace(snapshot.chat.DebugTrace), []byte("null")) {
-		debugLeft = max(float32(0), newLeft-buttonGap-debugWidth)
-	}
-	modelLeft := max(float32(0), debugLeft-buttonGap-modelWidth)
-	skillsLeft := max(float32(0), modelLeft-buttonGap-skillsWidth)
-	historyLeft := max(float32(0), skillsLeft-buttonGap-historyWidth)
-	titleWidth := max(float32(70), historyLeft-10)
+	titleWidth := max(float32(60), width-48-debugWidth)
 	headerChildren := []woxwidget.StackChild{
-		{Child: woxwidget.Container{Width: titleWidth, Height: 18, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: palette.previewText}}},
-		{Top: 23, Child: woxwidget.Container{Width: titleWidth, Height: 16, Child: woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: statusColor}}},
-		{Left: historyLeft, Top: 3, Child: a.buildChatHeaderButton("chat-history-"+snapshot.key, historyLabel, historyWidth, snapshot.panel == "history", palette, func() { a.toggleChatPanel("history") })},
-		{Left: skillsLeft, Top: 3, Child: a.buildChatHeaderButton("chat-skills-"+snapshot.key, skillsLabel, skillsWidth, snapshot.panel == "skills", palette, func() { a.toggleChatPanel("skills") })},
-		{Left: modelLeft, Top: 3, Child: a.buildChatHeaderButton("chat-models-"+snapshot.key, model, modelWidth, snapshot.panel == "models", palette, func() { a.toggleChatPanel("models") })},
-		{Left: newLeft, Top: 3, Child: a.buildChatHeaderButton("chat-new-"+snapshot.key, newLabel, newWidth, false, palette, a.startNewChat)},
+		{Left: 2, Top: 5, Child: woxwidget.Gesture{ID: "chat-history-" + snapshot.key, OnTap: func() { a.toggleChatPanel("history") }, Child: woxwidget.Container{
+			Width: 36, Height: 36, Radius: 7, Color: menuBackground, Padding: woxwidget.Insets{Left: 9, Top: 7}, Child: woxwidget.Text{Value: menuLabel, Style: woxui.TextStyle{Size: 18}, Color: palette.resultSubtitle},
+		}}},
+		{Left: 44, Top: 14, Child: woxwidget.Container{Width: titleWidth, Height: 22, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: palette.previewText}}},
 	}
-	if debugLeft != newLeft {
-		headerChildren = append(headerChildren, woxwidget.StackChild{Left: debugLeft, Top: 3, Child: a.buildChatHeaderButton("chat-debug-"+snapshot.key, debugLabel, debugWidth, snapshot.panel == "debug", palette, func() { a.toggleChatPanel("debug") })})
+	if hasDebug {
+		headerChildren = append(headerChildren, woxwidget.StackChild{Left: width - 48, Top: 6, Child: a.buildChatHeaderButton("chat-debug-"+snapshot.key, "Trace", 46, snapshot.panel == "debug", palette, func() { a.toggleChatPanel("debug") })})
 	}
-	return woxwidget.Container{Width: width, Height: height, Radius: 9, Color: palette.queryBackground, Padding: woxwidget.Insets{Left: 14, Top: 8, Right: 14}, Child: woxwidget.Stack{Width: contentWidth, Height: height - 16, Children: headerChildren}}
+	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Stack{Width: width, Height: height, Children: headerChildren}}
 }
 
 // buildChatHeaderButton keeps compact header actions consistent across catalogs.
@@ -204,8 +178,15 @@ func (a *App) buildChatCatalogPanel(snapshot *chatPreviewSnapshot, palette uiPal
 		}
 		rows = append(rows, woxwidget.Container{Width: innerWidth, Height: viewportHeight, Padding: woxwidget.Insets{Left: 10, Top: 18}, Child: woxwidget.TextBlock{Value: message, Width: max(float32(0), innerWidth-20), Height: 48, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: palette.resultSubtitle}})
 	}
+	header := woxwidget.Widget(woxwidget.Container{Width: innerWidth, Height: 24, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: palette.actionHeader}})
+	if snapshot.panel == "history" {
+		header = woxwidget.Stack{Width: innerWidth, Height: 24, Children: []woxwidget.StackChild{
+			{Top: 5, Child: woxwidget.Container{Width: max(float32(0), innerWidth-54), Height: 18, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: palette.actionHeader}}},
+			{Left: innerWidth - 48, Child: a.buildChatHeaderButton("chat-new-"+snapshot.key, "New", 48, false, palette, a.startNewChat)},
+		}}
+	}
 	return woxwidget.Container{Width: width, Height: height, Radius: 9, Color: palette.actionBackground, Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 10, Bottom: 7}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: innerWidth, Height: 24, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: palette.actionHeader}},
+		header,
 		woxwidget.Gesture{ID: "chat-catalog-scroll-" + snapshot.key, OnScroll: func(delta woxui.Point) { a.scrollChatPanel(-delta.Y) }, Child: woxwidget.ScrollView{
 			Width: innerWidth, Height: viewportHeight, ContentHeight: contentHeight, Offset: offset, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
 		}},
@@ -261,7 +242,7 @@ func formatChatDebugTrace(raw json.RawMessage) (string, string) {
 
 // buildChatHistoryRow separates selection and deletion into distinct hit targets.
 func (a *App) buildChatHistoryRow(snapshot *chatPreviewSnapshot, index int, chat chatData, palette uiPalette, width, height float32) woxwidget.Widget {
-	background := palette.queryBackground
+	background := woxui.Color{}
 	if index == snapshot.panelSelected {
 		background = palette.selectedBackground
 	}
@@ -341,6 +322,27 @@ func (a *App) buildChatMessages(snapshot *chatPreviewSnapshot, palette uiPalette
 	// ponytail: Add viewport virtualization after profiling a real long chat; the current full list preserves exact scroll height with less state.
 	innerWidth := max(float32(0), width-20)
 	innerHeight := max(float32(0), height-16)
+	if len(snapshot.chat.Conversations) == 0 {
+		message := a.translate("i18n:ui_ai_chat_empty_prompt")
+		if strings.TrimSpace(message) == "" || message == "i18n:ui_ai_chat_empty_prompt" {
+			message = "What do you want to ask Wox today?"
+		}
+		if snapshot.loading {
+			message = "Loading conversation…"
+		}
+		color := palette.resultTitle
+		color.A = uint8(float32(color.A) * 0.59)
+		style := woxui.TextStyle{Size: 28, Weight: woxui.FontWeightSemibold}
+		return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 10, Top: 8, Right: 10, Bottom: 8}, Child: woxwidget.Painter{
+			Width: innerWidth, Height: innerHeight, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+				metrics, _ := a.window.MeasureText(message, style)
+				textWidth := min(max(float32(0), bounds.Width-48), metrics.Size.Width)
+				left := bounds.X + max(float32(24), (bounds.Width-textWidth)/2)
+				top := bounds.Y + max(float32(0), (bounds.Height-metrics.Size.Height)/2)
+				displayList.DrawText(message, woxui.Rect{X: left, Y: top, Width: textWidth, Height: metrics.Size.Height}, style, color)
+			},
+		}}
+	}
 	rows := make([]woxwidget.Widget, 0, len(snapshot.chat.Conversations))
 	contentHeight := float32(0)
 	actionsEnabled := !snapshot.chat.IsStreaming && !snapshot.sending && snapshot.question == nil
@@ -438,16 +440,19 @@ func (a *App) buildChatConversation(key string, index int, conversation chatConv
 			appendAction("retry", "Retry", 40, func() { a.regenerateChatConversation(conversation.ID) })
 		}
 	}
-	metaWidth := innerWidth
-	if len(actionWidgets) > 0 {
-		metaWidth = max(float32(0), innerWidth-actionWidth-8)
+	showRoleHeader := conversation.Role == "tool" || conversation.Role == "system" || conversation.ToolCallInfo.Name != ""
+	if showRoleHeader {
+		metaWidth := innerWidth
+		if len(actionWidgets) > 0 {
+			metaWidth = max(float32(0), innerWidth-actionWidth-8)
+		}
+		headerChildren := []woxwidget.StackChild{{Child: woxwidget.Container{Width: metaWidth, Height: 18, Child: woxwidget.Text{Value: meta, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: palette.resultSubtitle}}}}
+		if len(actionWidgets) > 0 {
+			headerChildren = append(headerChildren, woxwidget.StackChild{Left: innerWidth - actionWidth, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: actionWidgets}})
+		}
+		children = append(children, woxwidget.Stack{Width: innerWidth, Height: 18, Children: headerChildren})
+		bodyHeight += 18
 	}
-	headerChildren := []woxwidget.StackChild{{Child: woxwidget.Container{Width: metaWidth, Height: 18, Child: woxwidget.Text{Value: meta, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: palette.resultSubtitle}}}}
-	if len(actionWidgets) > 0 {
-		headerChildren = append(headerChildren, woxwidget.StackChild{Left: innerWidth - actionWidth, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: actionWidgets}})
-	}
-	children = append(children, woxwidget.Stack{Width: innerWidth, Height: 18, Children: headerChildren})
-	bodyHeight += 18
 
 	if conversation.Role == "tool" || conversation.ToolCallInfo.Name != "" {
 		toolText := formatChatToolCall(conversation)
@@ -498,6 +503,22 @@ func (a *App) buildChatConversation(key string, index int, conversation chatConv
 		children = append(children, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: imageChildren})
 		bodyHeight += 82
 	}
+	if !showRoleHeader && (conversation.Timestamp > 0 || len(actionWidgets) > 0) {
+		footerMeta := ""
+		if conversation.Timestamp > 0 {
+			footerMeta = time.UnixMilli(conversation.Timestamp).Local().Format("15:04")
+		}
+		metaWidth := innerWidth
+		if len(actionWidgets) > 0 {
+			metaWidth = max(float32(0), innerWidth-actionWidth-8)
+		}
+		footerChildren := []woxwidget.StackChild{{Top: 3, Child: woxwidget.Container{Width: metaWidth, Height: 15, Child: woxwidget.Text{Value: footerMeta, Style: woxui.TextStyle{Size: 9}, Color: palette.resultSubtitle}}}}
+		if len(actionWidgets) > 0 {
+			footerChildren = append(footerChildren, woxwidget.StackChild{Left: innerWidth - actionWidth, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: actionWidgets}})
+		}
+		children = append(children, woxwidget.Stack{Width: innerWidth, Height: 18, Children: footerChildren})
+		bodyHeight += 18
+	}
 
 	gapHeight := float32(max(0, len(children)-1)) * 6
 	cardHeight := bodyHeight + gapHeight + 20
@@ -543,43 +564,86 @@ func formatChatToolCall(conversation chatConversation) string {
 	return strings.Join(lines, "\n")
 }
 
-// buildChatInput reuses the shared multiline editor and swaps Send for Stop during streaming.
+// buildChatInput mirrors Flutter's input card: multiline editor above a compact model and send toolbar.
 func (a *App) buildChatInput(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
-	buttonWidth := float32(84)
-	inputWidth := max(float32(120), width-buttonWidth-10)
-	inputHeight := max(float32(54), height-16)
+	const toolbarHeight = float32(42)
+	cardHeight := max(float32(78), height-14)
+	editorHeight := max(float32(36), cardHeight-toolbarHeight-1)
 	style := woxui.TextStyle{Size: 13}
 	active := snapshot.active && snapshot.question == nil && snapshot.panel == ""
 	input := woxwidget.Gesture{
 		ID: "chat-input-" + snapshot.key,
 		OnTapAt: func(position woxui.Point) {
-			offset := formTextOffsetAt(snapshot.editing, a.window, style, 5, inputWidth-24, woxui.Point{X: max(float32(0), position.X-12), Y: max(float32(0), position.Y-10)})
+			offset := formTextOffsetAt(snapshot.editing, a.window, style, 5, width-28, woxui.Point{X: max(float32(0), position.X-14), Y: max(float32(0), position.Y-8)})
 			a.setChatCaret(offset)
 		},
-		Child: woxwidget.Container{Width: inputWidth, Height: inputHeight, Radius: 9, Color: palette.queryBackground, Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 12, Bottom: 8}, Child: woxwidget.Painter{
-			Width: max(float32(0), inputWidth-24), Height: max(float32(0), inputHeight-18), Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		Child: woxwidget.Container{Width: width, Height: editorHeight, Padding: woxwidget.Insets{Left: 14, Top: 8, Right: 14, Bottom: 7}, Child: woxwidget.Painter{
+			Width: max(float32(0), width-28), Height: max(float32(0), editorHeight-15), Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 				if snapshot.editing.Text == "" && snapshot.editing.Composition == "" {
-					displayList.DrawText("Message Wox…", bounds, style, palette.resultSubtitle)
+					hint := a.translate("i18n:ui_ai_chat_input_hint")
+					if strings.TrimSpace(hint) == "" || hint == "i18n:ui_ai_chat_input_hint" {
+						hint = "Type a message. Use / to switch models or insert skills"
+					}
+					displayList.DrawText(hint, bounds, style, palette.resultSubtitle)
 				}
 				drawFormEditor(displayList, bounds, snapshot.editing, style, palette, active, 5, a.window)
 			},
 		}},
 	}
+	divider := palette.resultSubtitle
+	divider.A = uint8(float32(divider.A) * 0.14)
+	model := strings.TrimSpace(snapshot.chat.Model.Name)
+	if model == "" {
+		model = a.translate("i18n:ui_ai_chat_select_model")
+	}
+	if strings.TrimSpace(model) == "" || model == "i18n:ui_ai_chat_select_model" {
+		model = "Select model"
+	}
+	modelMetrics, _ := a.window.MeasureText(model, woxui.TextStyle{Size: 11})
+	modelWidth := min(float32(230), max(float32(110), modelMetrics.Size.Width+34))
+	modelButton := woxwidget.Gesture{ID: "chat-models-" + snapshot.key, OnTap: func() { a.toggleChatPanel("models") }, Child: woxwidget.Container{
+		Width: modelWidth, Height: 34, Radius: 5, Color: palette.actionBackground, Padding: woxwidget.Insets{Left: 9, Top: 9, Right: 8}, Child: woxwidget.Text{
+			Value: model + "  ▾", Style: woxui.TextStyle{Size: 11}, Color: palette.previewText,
+		},
+	}}
 	streaming := snapshot.chat.IsStreaming || snapshot.sending
 	label := "Send"
 	action := a.sendChatMessage
 	buttonColor := palette.actionSelected
+	foreground := palette.actionSelectedText
 	if streaming {
 		label = "Stop"
 		action = a.stopChatMessage
-		buttonColor = woxui.Color{R: 200, G: 74, B: 74, A: 220}
+		buttonColor = palette.actionBackground
+		foreground = palette.previewText
 	}
-	button := woxwidget.Gesture{ID: "chat-send-" + snapshot.key, OnTap: action, Child: woxwidget.Container{
-		Width: buttonWidth, Height: inputHeight, Radius: 9, Color: buttonColor, Padding: woxwidget.Insets{Left: 24, Top: max(float32(12), inputHeight*0.5-7)}, Child: woxwidget.Text{
-			Value: label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: palette.actionSelectedText,
-		},
-	}}
-	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{input, button}}}
+	sendButton := a.buildChatPanelButton("chat-send-"+snapshot.key, label, 82, buttonColor, foreground, action)
+	status := ""
+	statusColor := palette.resultSubtitle
+	if snapshot.error != "" {
+		status = snapshot.error
+		statusColor = woxui.Color{R: 232, G: 95, B: 95, A: 255}
+	} else if snapshot.loading {
+		status = "Loading…"
+	} else if streaming {
+		status = "Streaming…"
+		statusColor = woxui.Color{R: 68, G: 196, B: 120, A: 255}
+	}
+	statusLeft := modelWidth + 18
+	statusWidth := max(float32(0), width-statusLeft-100)
+	toolbarChildren := []woxwidget.StackChild{
+		{Left: 8, Top: 4, Child: modelButton},
+		{Left: width - 90, Top: 6, Child: sendButton},
+	}
+	if status != "" && statusWidth > 30 {
+		toolbarChildren = append(toolbarChildren, woxwidget.StackChild{Left: statusLeft, Top: 14, Child: woxwidget.Container{Width: statusWidth, Height: 16, Child: woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 9}, Color: statusColor}}})
+	}
+	card := woxwidget.Container{Width: width, Height: cardHeight, Radius: 9, Color: palette.queryBackground, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+		input,
+		woxwidget.Container{Width: width, Height: 1, Color: divider},
+		woxwidget.Stack{Width: width, Height: toolbarHeight, Children: toolbarChildren},
+	}}}
+	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: card}
 }
 
 // chatQuestionPanelHeight bounds the tool question without starving the conversation viewport.

@@ -2,6 +2,7 @@ package widget
 
 import (
 	"strings"
+	"time"
 	"unicode"
 
 	woxui "github.com/Wox-launcher/wox.ui.go"
@@ -84,11 +85,15 @@ func (n *node) hitTestScroll(point woxui.Point) *node {
 
 // Host rebuilds, lays out, paints, and dispatches pointer events for one widget tree.
 type Host struct {
-	window  *woxui.Window
-	build   func(frame woxui.FrameInfo) Widget
-	root    *node
-	hovered *node
-	pressed *node
+	window    *woxui.Window
+	build     func(frame woxui.FrameInfo) Widget
+	root      *node
+	hovered   *node
+	pressed   *node
+	pressedAt woxui.Point
+	dragging  bool
+	lastTapID string
+	lastTapAt time.Time
 }
 
 // NewHost creates a host whose builder runs once per invalidated frame.
@@ -140,20 +145,53 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 			if h.hovered != nil && h.hovered.gesture.onHover != nil {
 				h.hovered.gesture.onHover(false)
 			}
+			if h.hovered != nil && h.hovered.gesture.onHoverAt != nil {
+				h.hovered.gesture.onHoverAt(false, h.hovered.bounds)
+			}
 			h.hovered = target
 			if h.hovered != nil && h.hovered.gesture.onHover != nil {
 				h.hovered.gesture.onHover(true)
+			}
+			if h.hovered != nil && h.hovered.gesture.onHoverAt != nil {
+				h.hovered.gesture.onHoverAt(true, h.hovered.bounds)
 			}
 			h.invalidate()
 		}
 	}
 	if event.Kind == woxui.PointerDown && event.Button == woxui.PointerButtonPrimary {
 		h.pressed = target
+		h.pressedAt = event.Position
+		h.dragging = false
+	}
+	if event.Kind == woxui.PointerMove && h.pressed != nil && h.pressed.gesture.onDragStart != nil && !h.dragging {
+		deltaX := event.Position.X - h.pressedAt.X
+		deltaY := event.Position.Y - h.pressedAt.Y
+		if deltaX*deltaX+deltaY*deltaY >= 9 {
+			dragTarget := h.pressed
+			h.pressed = nil
+			h.dragging = true
+			dragTarget.gesture.onDragStart()
+		}
 	}
 	if event.Kind == woxui.PointerUp && event.Button == woxui.PointerButtonPrimary {
+		if h.dragging {
+			h.dragging = false
+			h.pressed = nil
+			return
+		}
 		if target != nil && target == h.pressed {
-			if target.gesture.onTap != nil {
+			now := time.Now()
+			doubleTap := target.gesture.onDoubleTap != nil && target.gesture.id != "" && target.gesture.id == h.lastTapID && now.Sub(h.lastTapAt) <= 200*time.Millisecond
+			if doubleTap {
+				target.gesture.onDoubleTap()
+				h.lastTapID = ""
+				h.lastTapAt = time.Time{}
+			} else if target.gesture.onTap != nil {
 				target.gesture.onTap()
+				if target.gesture.onDoubleTap != nil && target.gesture.id != "" {
+					h.lastTapID = target.gesture.id
+					h.lastTapAt = now
+				}
 			}
 			if target.gesture.onTapAt != nil {
 				target.gesture.onTapAt(woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y})
@@ -597,28 +635,34 @@ func fittingRunePrefix(window *woxui.Window, runes []rune, style woxui.TextStyle
 }
 
 type gesture struct {
-	id       string
-	onHover  func(bool)
-	onTap    func()
-	onTapAt  func(woxui.Point)
-	onScroll func(woxui.Point)
+	id          string
+	onHover     func(bool)
+	onHoverAt   func(bool, woxui.Rect)
+	onTap       func()
+	onDoubleTap func()
+	onTapAt     func(woxui.Point)
+	onDragStart func()
+	onScroll    func(woxui.Point)
 }
 
 // Gesture adds pointer behavior without changing its child's layout or paint.
 type Gesture struct {
-	ID       string
-	Child    Widget
-	OnHover  func(bool)
-	OnTap    func()
-	OnTapAt  func(position woxui.Point)
-	OnScroll func(delta woxui.Point)
+	ID          string
+	Child       Widget
+	OnHover     func(bool)
+	OnHoverAt   func(inside bool, bounds woxui.Rect)
+	OnTap       func()
+	OnDoubleTap func()
+	OnTapAt     func(position woxui.Point)
+	OnDragStart func()
+	OnScroll    func(delta woxui.Point)
 }
 
 func (w Gesture) layout(ctx context, available constraints) *node {
 	child := w.Child.layout(ctx, available)
 	return &node{
 		bounds:   woxui.Rect{Width: child.bounds.Width, Height: child.bounds.Height},
-		gesture:  &gesture{id: w.ID, onHover: w.OnHover, onTap: w.OnTap, onTapAt: w.OnTapAt, onScroll: w.OnScroll},
+		gesture:  &gesture{id: w.ID, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap, onTapAt: w.OnTapAt, onDragStart: w.OnDragStart, onScroll: w.OnScroll},
 		children: []*node{child},
 	}
 }

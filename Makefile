@@ -1,4 +1,4 @@
-.PHONY: build clean host go-ui _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
+.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 
@@ -66,7 +66,6 @@ help:
 	@echo "Targets:"
 	@echo "  help       Show this help message"
 	@echo "  dev        Setup development environment"
-	@echo "  go-ui      Prepare embedded Go UI resources"
 	@echo "  test       Run tests"
 	@echo "  build      Build all components"
 	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
@@ -96,7 +95,6 @@ ifeq ($(PLATFORM),macos)
 endif
 
 ifeq ($(PLATFORM),windows)
-	@command -v nuget >/dev/null 2>&1 || { echo "nuget is required on Windows to prepare WebView2Loader.dll" >&2; exit 1; }
 	@uname -s | grep -q '^MINGW64_NT' || { \
 		echo "Please run this command in MINGW64 environment. If you have not installed MINGW64, please install it first. refer to https://www.mingw-w64.org/downloads/ or scoop install mingw" >&2; \
 		exit 1; \
@@ -108,7 +106,7 @@ endif
 clean:
 	rm -rf $(RELEASE_DIR)
 
-dev: _check_deps ensure-resources go-ui
+dev: _check_deps ensure-resources
 	$(MAKE) -C wox.core woxmr-build
 	$(MAKE) -C wox.core window-hook-build
 	$(MAKE) host
@@ -116,9 +114,6 @@ dev: _check_deps ensure-resources go-ui
 host:
 	$(MAKE) -C wox.plugin.host.nodejs build
 	$(MAKE) -C wox.plugin.host.python build
-
-go-ui:
-	$(MAKE) -C wox.ui.go embed-resources
 
 # SDK releases bump both SDK patch versions before publish because both npm and
 # PyPI reject already-published versions. The host dependency update still waits
@@ -143,8 +138,6 @@ _sync_sdk_versions:
 # Ensure required resource directories exist with dummy files for go:embed
 ensure-resources:
 	@echo "Ensuring required resource directories exist..."
-	@mkdir -p wox.core/resource/ui/go
-	@touch wox.core/resource/ui/go/placeholder
 	@mkdir -p wox.core/resource/hosts
 	@touch wox.core/resource/hosts/placeholder
 	@mkdir -p wox.core/resource/others
@@ -153,7 +146,6 @@ ensure-resources:
 # Bug fix: keep the tracked others placeholder because go:embed rejects an
 # empty directory, and deleting it after tests makes the next Go build fail.
 clean-resources:
-	@rm -f wox.core/resource/ui/go/placeholder
 	@rm -f wox.core/resource/hosts/placeholder
 
 appimage:

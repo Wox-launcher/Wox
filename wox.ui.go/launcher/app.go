@@ -43,6 +43,7 @@ const (
 type App struct {
 	mu                     sync.RWMutex
 	terminalSubscriptionMu sync.Mutex
+	tooltipMu              sync.Mutex
 	terminalSubscribed     string
 
 	isDev         bool
@@ -52,170 +53,173 @@ type App struct {
 	window        *woxui.Window
 	host          *woxwidget.Host
 
-	query                plainQuery
-	queryContext         queryContext
-	queryContextKnown    bool
-	editor               *woxui.TextEditor
-	results              []queryResult
-	resultsQueryID       string
-	queryTransitionTimer *time.Timer
-	pendingResults       bool
-	selected             int
-	resultScroll         float32
-	resultViewport       float32
-	resultContent        float32
-	resultWidth          float32
-	layout               queryLayout
-	refinements          []queryRefinement
-	refinementOpen       bool
-	refinementScope      string
-	completionHint       *queryCompletionHint
-	toolbarMsg           *toolbarMessage
-	toolbarRevision      uint64
-	form                 *formState
-	requirementForm      *requirementFormState
-	triggerConflict      *triggerConflictPreviewState
-	themeEditor          *themeEditorPreviewState
-	chatPreview          *chatPreviewState
-	webViewPreviewData   string
-	webViewPreviewError  string
-	chatFullscreen       bool
-	actionPanel          bool
-	actionSelected       int
-	actionFilter         *woxui.TextEditor
-	actionScroll         float32
-	visible              bool
-	show                 showAppParams
-	pendingMRU           string
-	mode                 viewMode
-	settings             settingsData
-	settingsCtx          settingWindowContext
-	settingTab           string
-	settingRow           int
-	settingNote          string
-	settingSaving        bool
-	settingEditKey       string
-	settingEditor        *woxui.TextEditor
-	settingChoicePicker  *settingChoicePickerState
-	settingPageScroll    float32
-	settingPageViewport  float32
-	settingRailScroll    float32
-	settingRailViewport  float32
-	systemFontFamilies   []string
-	systemFontsLoading   bool
-	systemFontsLoaded    bool
-	systemFontsError     string
-	plugins              []pluginSettingsPlugin
-	pluginsLoading       bool
-	pluginsLoaded        bool
-	pluginsError         string
-	pluginSelected       int
-	pluginListScroll     float32
-	pluginListViewport   float32
-	pluginForm           *pluginSettingsFormState
-	pluginsStore         bool
-	pluginOperation      string
-	pluginOperationError string
-	pluginUninstallArmed string
-	hotkeySettingsForm   *formFieldsState
-	hotkeyRecording      *hotkeyRecordingState
-	hotkeyAppCandidates  []ignoredHotkeyApp
-	hotkeyAppsLoading    bool
-	hotkeyAppsLoaded     bool
-	hotkeyAppsError      string
-	themes               []themeSettingsTheme
-	themesMode           string
-	themesLoading        bool
-	themesLoaded         bool
-	themesError          string
-	themeSelected        int
-	themeListScroll      float32
-	themeListViewport    float32
-	themeOperation       string
-	themeUninstallArmed  string
-	aiSettingsForm       *formFieldsState
-	aiProviderCatalog    []aiProviderInfo
-	aiProvidersLoading   bool
-	aiProvidersLoaded    bool
-	aiProvidersError     string
-	tableEditor          *formTableEditorState
-	modelManager         *modelManagerState
-	usageStats           usageStatsData
-	usagePeriod          string
-	usageLoading         bool
-	usageLoaded          bool
-	usageError           string
-	usageRevision        uint64
-	aboutVersion         string
-	aboutLoading         bool
-	aboutLoaded          bool
-	aboutError           string
-	privacySample        string
-	privacyError         string
-	dataBackups          []backupInfo
-	dataLocation         string
-	dataLoading          bool
-	dataLoaded           bool
-	dataBusy             string
-	dataError            string
-	dataRestoreArmed     string
-	dataPendingLocation  string
-	dataClearLogsArmed   bool
-	dataListScroll       float32
-	dataListViewport     float32
-	runtimeStatuses      []runtimeStatus
-	runtimeLoading       bool
-	runtimeLoaded        bool
-	runtimeError         string
-	runtimeRestarting    string
-	runtimeRevision      uint64
-	runtimePageScroll    float32
-	runtimePageViewport  float32
-	runtimePageContent   float32
-	runtimeRowsTop       float32
-	cloudAccount         cloudAccountStatus
-	cloudSync            cloudSyncStatus
-	cloudDevices         cloudDeviceList
-	cloudLoading         bool
-	cloudLoaded          bool
-	cloudBusy            string
-	cloudError           string
-	cloudRevision        uint64
-	cloudPageScroll      float32
-	cloudPageViewport    float32
-	cloudPageContent     float32
-	cloudForm            *cloudFormState
-	cloudPlugins         []pluginSettingsPlugin
-	cloudPluginScroll    float32
-	cloudPluginViewport  float32
-	glanceItem           *glanceItem
-	glanceLoading        bool
-	glanceRevision       uint64
-	glanceTimer          *time.Timer
-	glanceCatalog        []glanceCatalogItem
-	glanceCatalogLoading bool
-	glanceCatalogLoaded  bool
-	glanceCatalogError   string
-	palette              uiPalette
-	translations         map[string]string
-	images               map[string]*woxui.Image
-	imageRequested       map[string]bool
-	imageErrors          map[string]string
-	remotePreviews       map[string]queryPreview
-	previewRequests      map[string]bool
-	filePreviews         map[string]filePreviewContent
-	fileRequests         map[string]bool
-	previewScroll        map[string]float32
-	previewLayouts       map[string]woxwidget.TextBlockLayout
-	terminalPreview      *terminalPreviewState
-	aiModels             []aiModel
-	aiModelsLoading      bool
-	aiModelsLoaded       bool
-	aiModelsError        string
-	aiSkills             []chatSkill
-	aiSkillsLoading      bool
-	aiSkillsLoaded       bool
-	aiSkillsError        string
+	query                 plainQuery
+	queryContext          queryContext
+	queryContextKnown     bool
+	editor                *woxui.TextEditor
+	results               []queryResult
+	resultsQueryID        string
+	queryTransitionTimer  *time.Timer
+	pendingResults        bool
+	selected              int
+	hoveredResult         int
+	resultScroll          float32
+	resultViewport        float32
+	resultContent         float32
+	resultWidth           float32
+	layout                queryLayout
+	refinements           []queryRefinement
+	refinementOpen        bool
+	refinementScope       string
+	completionHint        *queryCompletionHint
+	toolbarMsg            *toolbarMessage
+	toolbarRevision       uint64
+	form                  *formState
+	requirementForm       *requirementFormState
+	triggerConflict       *triggerConflictPreviewState
+	themeEditor           *themeEditorPreviewState
+	chatPreview           *chatPreviewState
+	webViewPreviewData    string
+	webViewPreviewError   string
+	chatFullscreen        bool
+	actionPanel           bool
+	actionSelected        int
+	actionFilter          *woxui.TextEditor
+	actionScroll          float32
+	visible               bool
+	show                  showAppParams
+	pendingMRU            string
+	mode                  viewMode
+	settings              settingsData
+	settingsCtx           settingWindowContext
+	settingTab            string
+	settingRow            int
+	settingNote           string
+	settingSaving         bool
+	settingEditKey        string
+	settingEditor         *woxui.TextEditor
+	settingChoicePicker   *settingChoicePickerState
+	settingPageScroll     float32
+	settingPageViewport   float32
+	settingRailScroll     float32
+	settingRailViewport   float32
+	systemFontFamilies    []string
+	systemFontsLoading    bool
+	systemFontsLoaded     bool
+	systemFontsError      string
+	plugins               []pluginSettingsPlugin
+	pluginsLoading        bool
+	pluginsLoaded         bool
+	pluginsError          string
+	pluginSelected        int
+	pluginListScroll      float32
+	pluginListViewport    float32
+	pluginForm            *pluginSettingsFormState
+	pluginsStore          bool
+	pluginOperation       string
+	pluginOperationError  string
+	pluginUninstallArmed  string
+	hotkeySettingsForm    *formFieldsState
+	hotkeyRecording       *hotkeyRecordingState
+	hotkeyAppCandidates   []ignoredHotkeyApp
+	hotkeyAppsLoading     bool
+	hotkeyAppsLoaded      bool
+	hotkeyAppsError       string
+	themes                []themeSettingsTheme
+	themesMode            string
+	themesLoading         bool
+	themesLoaded          bool
+	themesError           string
+	themeSelected         int
+	themeListScroll       float32
+	themeListViewport     float32
+	themeOperation        string
+	themeUninstallArmed   string
+	aiSettingsForm        *formFieldsState
+	aiProviderCatalog     []aiProviderInfo
+	aiProvidersLoading    bool
+	aiProvidersLoaded     bool
+	aiProvidersError      string
+	tableEditor           *formTableEditorState
+	modelManager          *modelManagerState
+	usageStats            usageStatsData
+	usagePeriod           string
+	usageLoading          bool
+	usageLoaded           bool
+	usageError            string
+	usageRevision         uint64
+	aboutVersion          string
+	aboutLoading          bool
+	aboutLoaded           bool
+	aboutError            string
+	privacySample         string
+	privacyError          string
+	dataBackups           []backupInfo
+	dataLocation          string
+	dataLoading           bool
+	dataLoaded            bool
+	dataBusy              string
+	dataError             string
+	dataRestoreArmed      string
+	dataPendingLocation   string
+	dataClearLogsArmed    bool
+	dataListScroll        float32
+	dataListViewport      float32
+	runtimeStatuses       []runtimeStatus
+	runtimeLoading        bool
+	runtimeLoaded         bool
+	runtimeError          string
+	runtimeRestarting     string
+	runtimeRevision       uint64
+	runtimePageScroll     float32
+	runtimePageViewport   float32
+	runtimePageContent    float32
+	runtimeRowsTop        float32
+	cloudAccount          cloudAccountStatus
+	cloudSync             cloudSyncStatus
+	cloudDevices          cloudDeviceList
+	cloudLoading          bool
+	cloudLoaded           bool
+	cloudBusy             string
+	cloudError            string
+	cloudRevision         uint64
+	cloudPageScroll       float32
+	cloudPageViewport     float32
+	cloudPageContent      float32
+	cloudForm             *cloudFormState
+	cloudPlugins          []pluginSettingsPlugin
+	cloudPluginScroll     float32
+	cloudPluginViewport   float32
+	glanceItem            *glanceItem
+	glanceHovered         bool
+	glanceLoading         bool
+	glanceRevision        uint64
+	glanceTooltipRevision uint64
+	glanceTimer           *time.Timer
+	glanceCatalog         []glanceCatalogItem
+	glanceCatalogLoading  bool
+	glanceCatalogLoaded   bool
+	glanceCatalogError    string
+	palette               uiPalette
+	translations          map[string]string
+	images                map[string]*woxui.Image
+	imageRequested        map[string]bool
+	imageErrors           map[string]string
+	remotePreviews        map[string]queryPreview
+	previewRequests       map[string]bool
+	filePreviews          map[string]filePreviewContent
+	fileRequests          map[string]bool
+	previewScroll         map[string]float32
+	previewLayouts        map[string]woxwidget.TextBlockLayout
+	terminalPreview       *terminalPreviewState
+	aiModels              []aiModel
+	aiModelsLoading       bool
+	aiModelsLoaded        bool
+	aiModelsError         string
+	aiSkills              []chatSkill
+	aiSkillsLoading       bool
+	aiSkillsLoaded        bool
+	aiSkillsError         string
 }
 
 // New creates a launcher whose core backend is supplied by the process composition root.
@@ -227,6 +231,7 @@ func New(isDev bool, clientFactory BackendFactory) *App {
 		query:           newInputQuery(""),
 		editor:          woxui.NewTextEditor(""),
 		selected:        -1,
+		hoveredResult:   -1,
 		mode:            viewLauncher,
 		settingTab:      "general",
 		usagePeriod:     "30d",
@@ -404,6 +409,8 @@ func (a *App) handleRequest(message coreclient.Message) (any, error) {
 			return nil, err
 		}
 		return nil, a.window.WriteClipboardImageFile(params.FilePath)
+	case "CaptureScreenshot":
+		return a.captureScreenshot(message.Data), nil
 	case "UpdateResult":
 		return a.updateResult(message.Data)
 	case "PushResults":
@@ -640,6 +647,7 @@ func (a *App) setQuery(query plainQuery) {
 	a.results = nil
 	a.resultsQueryID = ""
 	a.selected = -1
+	a.hoveredResult = -1
 	a.resultScroll = 0
 	a.layout = queryLayout{}
 	a.stopGlanceLocked(true)
@@ -697,6 +705,7 @@ func (a *App) requestMRU() error {
 	a.results = nil
 	a.resultsQueryID = ""
 	a.selected = -1
+	a.hoveredResult = -1
 	a.resultScroll = 0
 	a.layout = queryLayout{}
 	a.stopGlanceLocked(true)
@@ -747,6 +756,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	a.resetQueryTransitionLocked()
 	a.results = results
 	a.resultsQueryID = queryID
+	a.hoveredResult = -1
 	if layout != nil {
 		enterChatMode := layout.ChatMode && !a.layout.ChatMode
 		a.layout = *layout
@@ -871,6 +881,7 @@ func (a *App) pushResults(raw json.RawMessage) (bool, error) {
 	if a.resultsQueryID != payload.QueryID {
 		a.results = nil
 		a.selected = -1
+		a.hoveredResult = -1
 		a.resultScroll = 0
 		a.layout = queryLayout{}
 	}
@@ -935,7 +946,7 @@ func (a *App) applyWindowBounds() error {
 	}
 	if visibleResults > 0 {
 		if layout.GridLayout != nil {
-			height += gridResultsHeight(results[:visibleResults], float32(width), layout.GridLayout)
+			height += min(gridResultsHeight(results, float32(width), layout.GridLayout), maxResults*resultRowHeight)
 		} else {
 			height += resultVerticalPadding + visibleResults*resultRowHeight + max(0, visibleResults-1)*resultRowGap
 		}
@@ -1241,6 +1252,19 @@ func (a *App) selectResult(index int) {
 	if closedPanel {
 		_ = a.applyWindowBounds()
 	}
+	_ = a.window.Invalidate()
+}
+
+func (a *App) hoverResult(index int, inside bool) {
+	a.mu.Lock()
+	if inside {
+		if index >= 0 && index < len(a.results) && !a.results[index].IsGroup {
+			a.hoveredResult = index
+		}
+	} else if a.hoveredResult == index {
+		a.hoveredResult = -1
+	}
+	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 

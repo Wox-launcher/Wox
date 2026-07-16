@@ -134,6 +134,14 @@ func (w *Window) SetBounds(bounds Rect) error {
 	return w.native.setBounds(bounds)
 }
 
+// Bounds returns the current window rectangle in logical virtual-desktop coordinates.
+func (w *Window) Bounds() (Rect, error) {
+	if w == nil || w.native == nil {
+		return Rect{}, errors.New("window is not initialized")
+	}
+	return w.native.bounds()
+}
+
 // Center resizes the window and centers it in the current display work area.
 // Native backends clamp oversized requests so management windows remain reachable.
 func (w *Window) Center(size Size) error {
@@ -144,6 +152,14 @@ func (w *Window) Center(size Size) error {
 		return errors.New("window size must be positive")
 	}
 	return w.native.center(size)
+}
+
+// StartDragging hands the active primary-pointer gesture to the native window manager.
+func (w *Window) StartDragging() error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.startDragging()
 }
 
 // SetHideOnBlur changes whether the current window hides after leaving its focus domain.
