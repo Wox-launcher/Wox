@@ -453,6 +453,20 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 				C.uint8_t(command.color.B),
 				C.uint8_t(command.color.A),
 			)
+		case displayCommandStrokeRoundedRect:
+			result = C.wox_darwin_window_stroke_rounded_rect(
+				native,
+				C.float(command.rect.X),
+				C.float(command.rect.Y),
+				C.float(command.rect.Width),
+				C.float(command.rect.Height),
+				C.float(command.radius),
+				C.float(command.stroke),
+				C.uint8_t(command.color.R),
+				C.uint8_t(command.color.G),
+				C.uint8_t(command.color.B),
+				C.uint8_t(command.color.A),
+			)
 		case displayCommandDrawText:
 			text := C.CString(command.text)
 			result = C.wox_darwin_window_draw_text(

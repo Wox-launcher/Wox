@@ -84,6 +84,20 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 				C.uint8_t(command.color.B),
 				C.uint8_t(command.color.A),
 			)
+		case displayCommandStrokeRoundedRect:
+			commandResult = C.wox_renderer_stroke_rounded_rect(
+				r.handle,
+				C.float(command.rect.X),
+				C.float(command.rect.Y),
+				C.float(command.rect.Width),
+				C.float(command.rect.Height),
+				C.float(command.radius),
+				C.float(command.stroke),
+				C.uint8_t(command.color.R),
+				C.uint8_t(command.color.G),
+				C.uint8_t(command.color.B),
+				C.uint8_t(command.color.A),
+			)
 		case displayCommandDrawText:
 			text := C.CString(command.text)
 			commandResult = C.wox_renderer_draw_text(

@@ -8,6 +8,8 @@
 #include <dwrite.h>
 #include <dxgi1_2.h>
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 
 #include "renderer_windows.h"
@@ -26,6 +28,7 @@ struct WoxRenderer {
   ID2D1SolidColorBrush *brush = nullptr;
   IDWriteFactory *dwrite_factory = nullptr;
 	std::wstring font_family = L"Segoe UI";
+  float scale = 1.0f;
   bool frame_open = false;
   bool clip_active = false;
 };
@@ -305,6 +308,7 @@ extern "C" int32_t wox_renderer_begin_frame(WoxRenderer *renderer, float scale, 
   }
   renderer->d2d_context->BeginDraw();
   renderer->frame_open = true;
+  renderer->scale = scale;
   renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
   const D2D1_COLOR_F color = make_color(red, green, blue, alpha);
   renderer->d2d_context->Clear(&color);
@@ -324,6 +328,24 @@ extern "C" int32_t wox_renderer_fill_rounded_rect(WoxRenderer *renderer, float x
   } else {
     const D2D1_ROUNDED_RECT rounded_rect = {rect, radius, radius};
     renderer->d2d_context->FillRoundedRectangle(&rounded_rect, renderer->brush);
+  }
+  return S_OK;
+}
+
+extern "C" int32_t wox_renderer_stroke_rounded_rect(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float stroke_width, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  if (renderer == nullptr || !renderer->frame_open || renderer->brush == nullptr || width <= 0.0f || height <= 0.0f || stroke_width <= 0.0f) {
+    return E_INVALIDARG;
+  }
+
+  renderer->brush->SetColor(make_color(red, green, blue, alpha));
+  const float inset = stroke_width * 0.5f;
+  const D2D1_RECT_F rect = {x + inset, y + inset, x + width - inset, y + height - inset};
+  if (radius <= 0.0f) {
+    renderer->d2d_context->DrawRectangle(&rect, renderer->brush, stroke_width);
+  } else {
+    const float inset_radius = std::max(0.0f, radius - inset);
+    const D2D1_ROUNDED_RECT rounded_rect = {rect, inset_radius, inset_radius};
+    renderer->d2d_context->DrawRoundedRectangle(&rounded_rect, renderer->brush, stroke_width);
   }
   return S_OK;
 }
@@ -375,9 +397,10 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, const uint8_t 
   if (FAILED(result)) {
     return result;
   }
-  const D2D1_RECT_F destination = {x, y, x + width, y + height};
+  const auto snap = [renderer](float value) { return std::round(value * renderer->scale) / renderer->scale; };
+  const D2D1_RECT_F destination = {snap(x), snap(y), snap(x + width), snap(y + height)};
   const D2D1_RECT_F source = {0.0f, 0.0f, static_cast<float>(image_width), static_cast<float>(image_height)};
-  renderer->d2d_context->DrawBitmap(bitmap, &destination, 1.0f, D2D1_INTERPOLATION_MODE_LINEAR, &source);
+  renderer->d2d_context->DrawBitmap(bitmap, &destination, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, &source);
   bitmap->Release();
   return S_OK;
 }
@@ -459,7 +482,7 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
   }
   HRESULT result = renderer->d2d_context->EndDraw();
   renderer->frame_open = false;
-  if (result == D2DERR_RECREATE_TARGET) {
+  if (result == static_cast<HRESULT>(D2DERR_RECREATE_TARGET)) {
     renderer->d2d_context->SetTarget(nullptr);
     release_com(&renderer->target_bitmap);
     return create_target_bitmap(renderer);

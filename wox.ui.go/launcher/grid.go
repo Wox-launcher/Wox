@@ -90,7 +90,36 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height float32) wox
 		}
 		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells})
 	}
-	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 14, Right: 14}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}}
+	contentHeight := float32(gridResultsHeight(snapshot.results, width, snapshot.layout.GridLayout))
+	offset := a.configureResultScroll(snapshot.results, snapshot.layout.GridLayout, snapshot.selected, width, height, contentHeight)
+	content := woxwidget.Container{Width: width, Height: contentHeight, Padding: woxwidget.Insets{Left: 14, Right: 14}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}}
+	return a.buildResultScrollSurface(content, snapshot.palette, width, height, contentHeight, offset)
+}
+
+// gridResultVerticalBounds maps a source index through group headers and wrapped grid rows.
+func gridResultVerticalBounds(results []queryResult, target int, width float32, raw *gridLayout) (float32, float32) {
+	layout := normalizedGridLayout(raw)
+	_, cellHeight, _, _ := gridCellMetrics(width, layout)
+	y := float32(0)
+	for index := 0; index < len(results); {
+		if results[index].IsGroup {
+			if index == target {
+				return y, y + gridGroupHeaderHeight
+			}
+			y += gridGroupHeaderHeight
+			index++
+			continue
+		}
+		rowStart := index
+		for index < len(results) && !results[index].IsGroup && index-rowStart < layout.Columns {
+			index++
+		}
+		if target >= rowStart && target < index {
+			return y, y + cellHeight
+		}
+		y += cellHeight
+	}
+	return y, y
 }
 
 func (a *App) buildGridResult(snapshot viewSnapshot, index int, cellWidth, cellHeight, visualWidth, visualHeight float32, layout gridLayout) woxwidget.Widget {
@@ -100,7 +129,7 @@ func (a *App) buildGridResult(snapshot viewSnapshot, index int, cellWidth, cellH
 	if selected {
 		frameColor = snapshot.palette.selectedBackground
 	}
-	var visual woxwidget.Widget = woxwidget.Container{Width: visualWidth, Height: visualHeight, Radius: 7, Color: resultColors[index%len(resultColors)]}
+	var visual woxwidget.Widget = woxwidget.Painter{Width: visualWidth, Height: visualHeight}
 	if image := a.imageFor(result.Icon); image != nil {
 		visual = woxwidget.Image{Source: image, Width: visualWidth, Height: visualHeight}
 	}
@@ -123,13 +152,6 @@ func (a *App) buildGridResult(snapshot viewSnapshot, index int, cellWidth, cellH
 			}
 		},
 		OnTap: func() { a.activateResult(index) },
-		OnScroll: func(delta woxui.Point) {
-			if delta.Y > 0 {
-				a.moveSelection(-layout.Columns)
-			} else if delta.Y < 0 {
-				a.moveSelection(layout.Columns)
-			}
-		},
 		Child: woxwidget.Container{
 			Width: cellWidth, Height: cellHeight,
 			Padding: woxwidget.UniformInsets(float32(layout.ItemMargin)),

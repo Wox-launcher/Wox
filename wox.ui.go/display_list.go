@@ -31,6 +31,7 @@ type displayCommandKind uint8
 
 const (
 	displayCommandFillRoundedRect displayCommandKind = iota
+	displayCommandStrokeRoundedRect
 	displayCommandDrawText
 	displayCommandDrawImage
 	displayCommandSetClipRect
@@ -41,10 +42,25 @@ type displayCommand struct {
 	kind   displayCommandKind
 	rect   Rect
 	radius float32
+	stroke float32
 	color  Color
 	text   string
 	style  TextStyle
 	image  *Image
+}
+
+// StrokeRoundedRect draws an inset border without filling the interior.
+func (d *DisplayList) StrokeRoundedRect(rect Rect, radius, width float32, color Color) {
+	if rect.Width <= 0 || rect.Height <= 0 || width <= 0 {
+		return
+	}
+	d.commands = append(d.commands, displayCommand{
+		kind:   displayCommandStrokeRoundedRect,
+		rect:   rect,
+		radius: max(float32(0), radius),
+		stroke: min(width, min(rect.Width, rect.Height)/2),
+		color:  color,
+	})
 }
 
 // PushClipRect intersects rect with the active clip for subsequent commands.

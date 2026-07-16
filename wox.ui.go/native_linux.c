@@ -51,6 +51,7 @@ typedef struct {
   GLint rect_bounds;
   GLint rect_color;
   GLint rect_radius;
+  GLint rect_stroke_width;
   GLint texture_viewport;
   GLint texture_bounds;
   GLint texture_color;
@@ -255,16 +256,24 @@ static const char *const rect_fragment_source =
     "uniform vec4 u_rect;\n"
     "uniform vec4 u_color;\n"
     "uniform float u_radius;\n"
+    "uniform float u_stroke_width;\n"
     "in vec2 v_local;\n"
     "out vec4 fragment_color;\n"
     "void main() {\n"
     "  float radius = clamp(u_radius, 0.0, min(u_rect.z, u_rect.w) * 0.5);\n"
-    "  if (radius == 0.0) { fragment_color = u_color; return; }\n"
     "  vec2 half_size = u_rect.zw * 0.5;\n"
     "  vec2 edge = abs(v_local - half_size) - (half_size - radius);\n"
     "  float distance_value = length(max(edge, vec2(0.0))) + min(max(edge.x, edge.y), 0.0) - radius;\n"
     "  float antialias = max(fwidth(distance_value), 0.001);\n"
-    "  float coverage = 1.0 - smoothstep(-antialias * 0.5, antialias * 0.5, distance_value);\n"
+    "  float outer_coverage = 1.0 - smoothstep(-antialias * 0.5, antialias * 0.5, distance_value);\n"
+    "  if (u_stroke_width <= 0.0) { fragment_color = u_color * outer_coverage; return; }\n"
+    "  float inner_radius = max(radius - u_stroke_width, 0.0);\n"
+    "  vec2 inner_half = max(half_size - u_stroke_width, vec2(0.0));\n"
+    "  vec2 inner_edge = abs(v_local - half_size) - max(inner_half - inner_radius, vec2(0.0));\n"
+    "  float inner_distance = length(max(inner_edge, vec2(0.0))) + min(max(inner_edge.x, inner_edge.y), 0.0) - inner_radius;\n"
+    "  float inner_antialias = max(fwidth(inner_distance), 0.001);\n"
+    "  float inner_coverage = 1.0 - smoothstep(-inner_antialias * 0.5, inner_antialias * 0.5, inner_distance);\n"
+    "  float coverage = clamp(outer_coverage - inner_coverage, 0.0, 1.0);\n"
     "  fragment_color = u_color * coverage;\n"
     "}\n";
 
@@ -424,6 +433,7 @@ static bool initialize_renderer(WoxLinuxWindow *window) {
   renderer->rect_bounds = glGetUniformLocation(renderer->rect_program, "u_rect");
   renderer->rect_color = glGetUniformLocation(renderer->rect_program, "u_color");
   renderer->rect_radius = glGetUniformLocation(renderer->rect_program, "u_radius");
+  renderer->rect_stroke_width = glGetUniformLocation(renderer->rect_program, "u_stroke_width");
   renderer->texture_viewport = glGetUniformLocation(renderer->texture_program, "u_viewport");
   renderer->texture_bounds = glGetUniformLocation(renderer->texture_program, "u_rect");
   renderer->texture_color = glGetUniformLocation(renderer->texture_program, "u_color");
@@ -1826,6 +1836,27 @@ int32_t wox_linux_window_fill_rounded_rect(WoxLinuxWindow *window, float x, floa
   glUniform4f(renderer->rect_bounds, x, y, width, height);
   glUniform4fv(renderer->rect_color, 1, color);
   glUniform1f(renderer->rect_radius, radius);
+  glUniform1f(renderer->rect_stroke_width, 0.0f);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  return 0;
+}
+
+int32_t wox_linux_window_stroke_rounded_rect(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, float stroke_width, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  if (window == NULL || !window->renderer.frame_open) {
+    return -1;
+  }
+  if (width <= 0.0f || height <= 0.0f || stroke_width <= 0.0f) {
+    return 0;
+  }
+  WoxLinuxRenderer *renderer = &window->renderer;
+  float color[4];
+  premultiplied_color(red, green, blue, alpha, color);
+  glUseProgram(renderer->rect_program);
+  glUniform2f(renderer->rect_viewport, renderer->logical_width, renderer->logical_height);
+  glUniform4f(renderer->rect_bounds, x, y, width, height);
+  glUniform4fv(renderer->rect_color, 1, color);
+  glUniform1f(renderer->rect_radius, radius);
+  glUniform1f(renderer->rect_stroke_width, stroke_width);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   return 0;
 }

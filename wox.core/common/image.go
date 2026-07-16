@@ -446,8 +446,9 @@ func renderSvgImage(svg string) (image.Image, error) {
 	return rgba, nil
 }
 
-// normalizeSvgForRasterizer removes CSS-relative root dimensions that oksvg cannot parse.
+// normalizeSvgForRasterizer resolves CSS values that oksvg cannot inherit or parse.
 func normalizeSvgForRasterizer(svg string) string {
+	svg = strings.ReplaceAll(svg, "currentColor", "#000000")
 	rootEnd := strings.Index(svg, ">")
 	if rootEnd < 0 || !strings.Contains(svg[:rootEnd], "<svg") {
 		return svg

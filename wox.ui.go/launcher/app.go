@@ -16,14 +16,17 @@ import (
 )
 
 const (
-	defaultWidth     = 760
-	defaultMaxResult = 10
-	headerHeight     = 75
-	footerHeight     = 40
-	resultRowHeight  = 56
-	resultRowGap     = 0
-	resultListInset  = 8
+	defaultWidth        = 760
+	defaultMaxResult    = 10
+	queryBoxHeight      = 55
+	footerHeight        = 40
+	resultRowBaseHeight = 50
+	resultRowGap        = 0
 )
+
+func resultRowHeightForPalette(palette uiPalette) float32 {
+	return resultRowBaseHeight + palette.resultItemPadding.Top + palette.resultItemPadding.Bottom
+}
 
 type viewMode uint8
 
@@ -54,6 +57,10 @@ type App struct {
 	queryTransitionTimer *time.Timer
 	pendingResults       bool
 	selected             int
+	resultScroll         float32
+	resultViewport       float32
+	resultContent        float32
+	resultWidth          float32
 	layout               queryLayout
 	refinements          []queryRefinement
 	refinementOpen       bool
@@ -71,6 +78,8 @@ type App struct {
 	chatFullscreen       bool
 	actionPanel          bool
 	actionSelected       int
+	actionFilter         *woxui.TextEditor
+	actionScroll         float32
 	visible              bool
 	show                 showAppParams
 	pendingMRU           string
@@ -259,7 +268,7 @@ func (a *App) Start() error {
 	a.host = woxwidget.NewHost(a.build)
 	window, err := woxui.Open(woxui.WindowOptions{
 		Title:       "Wox",
-		Size:        woxui.Size{Width: defaultWidth, Height: headerHeight + footerHeight},
+		Size:        woxui.Size{Width: defaultWidth, Height: queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom + footerHeight},
 		OnFrame:     a.host.Frame,
 		OnPointer:   a.host.Pointer,
 		OnKey:       a.onKey,
@@ -451,6 +460,7 @@ func (a *App) handleResponse(message coreclient.Message) {
 			log.Printf("decode query response: %v", err)
 			return
 		}
+		resolveActionIconRefs(response.Results, response.ActionIconRefs)
 		a.applyResults(response.QueryID, response.Results, &response.Layout, &response.Refinements, &response.Context, response.QueryStartTimestamp)
 		return
 	}
@@ -496,6 +506,7 @@ func (a *App) showWindow(params showAppParams) error {
 	}
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionFilter = nil
 	a.form = nil
 	a.requirementForm = nil
 	a.visible = true
@@ -537,6 +548,7 @@ func (a *App) hideWindow(notify bool) error {
 	a.mode = viewLauncher
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionFilter = nil
 	a.form = nil
 	a.requirementForm = nil
 	a.triggerConflict = nil
@@ -623,6 +635,7 @@ func (a *App) setQuery(query plainQuery) {
 	a.results = nil
 	a.resultsQueryID = ""
 	a.selected = -1
+	a.resultScroll = 0
 	a.layout = queryLayout{}
 	a.stopGlanceLocked(true)
 	a.refinements = nil
@@ -631,6 +644,7 @@ func (a *App) setQuery(query plainQuery) {
 	a.completionHint = nil
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionFilter = nil
 	a.form = nil
 	a.requirementForm = nil
 	a.triggerConflict = nil
@@ -678,6 +692,7 @@ func (a *App) requestMRU() error {
 	a.results = nil
 	a.resultsQueryID = ""
 	a.selected = -1
+	a.resultScroll = 0
 	a.layout = queryLayout{}
 	a.stopGlanceLocked(true)
 	a.refinements = nil
@@ -686,6 +701,7 @@ func (a *App) requestMRU() error {
 	a.completionHint = nil
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionFilter = nil
 	a.form = nil
 	a.requirementForm = nil
 	a.triggerConflict = nil
@@ -747,6 +763,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		a.stopGlanceLocked(true)
 	}
 	a.selected = selectableIndex(results, selectedID)
+	a.ensureResultSelectionVisibleLocked()
 	if a.requirementForm != nil {
 		if a.selected < 0 || a.selected >= len(results) || results[a.selected].Preview.PreviewType != "query_requirement_settings" || !strings.HasPrefix(a.requirementForm.key, queryID+"|"+results[a.selected].ID+"|") {
 			a.requirementForm = nil
@@ -771,8 +788,9 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	if a.actionPanel && (a.selected < 0 || a.selected >= len(results) || len(results[a.selected].Actions) == 0) {
 		a.actionPanel = false
 		a.actionSelected = 0
-	} else if a.actionPanel && a.actionSelected >= len(results[a.selected].Actions) {
-		a.actionSelected = len(results[a.selected].Actions) - 1
+		a.actionFilter = nil
+	} else if a.actionPanel {
+		a.normalizeActionSelectionLocked()
 	}
 	a.mu.Unlock()
 	if refreshGlance {
@@ -845,6 +863,7 @@ func (a *App) pushResults(raw json.RawMessage) (bool, error) {
 	if a.resultsQueryID != payload.QueryID {
 		a.results = nil
 		a.selected = -1
+		a.resultScroll = 0
 		a.layout = queryLayout{}
 	}
 	a.resultsQueryID = payload.QueryID
@@ -852,6 +871,7 @@ func (a *App) pushResults(raw json.RawMessage) (bool, error) {
 	if a.selected < 0 {
 		a.selected = selectableIndex(a.results, "")
 	}
+	a.ensureResultSelectionVisibleLocked()
 	a.mu.Unlock()
 	if err := a.applyWindowBounds(); err != nil {
 		return false, err
@@ -868,12 +888,19 @@ func (a *App) applyWindowBounds() error {
 	layout := a.layout
 	refinementVisible := len(a.refinements) > 0 && a.refinementOpen && !params.HideQueryBox
 	actionPanel := a.actionPanel
+	palette := a.palette
 	formHeight := formPanelHeight(a.form)
 	actionCount := 0
 	requirementPreview := false
 	previewVisible := false
+	toolbarMessageVisible := a.toolbarMsg != nil
+	chatFullscreen := a.chatFullscreen
 	if a.selected >= 0 && a.selected < len(a.results) {
-		actionCount = len(a.results[a.selected].Actions)
+		if actionPanel && a.actionFilter != nil {
+			actionCount = len(filteredActionIndices(a.results[a.selected].Actions, a.actionFilter.State().Text, a.translations))
+		} else {
+			actionCount = len(a.results[a.selected].Actions)
+		}
 		requirementPreview = a.results[a.selected].Preview.PreviewType == "query_requirement_settings"
 		previewVisible = a.results[a.selected].Preview.PreviewData != ""
 	}
@@ -887,9 +914,13 @@ func (a *App) applyWindowBounds() error {
 		maxResults = defaultMaxResult
 	}
 	visibleResults := min(resultCount, maxResults)
+	resultRowHeight := int(resultRowHeightForPalette(palette))
+	resultVerticalPadding := int(palette.resultContainerPadding.Top + palette.resultContainerPadding.Bottom)
+	queryAreaHeight := int(queryBoxHeight + palette.appPadding.Top + palette.appPadding.Bottom)
+	toolbarVisible := !params.HideToolbar && !chatFullscreen && (resultCount > 0 || toolbarMessageVisible)
 	height := 0
 	if !params.HideQueryBox {
-		height += headerHeight
+		height += queryAreaHeight
 	}
 	if refinementVisible {
 		height += refinementBarHeight
@@ -898,21 +929,21 @@ func (a *App) applyWindowBounds() error {
 		if layout.GridLayout != nil {
 			height += gridResultsHeight(results[:visibleResults], float32(width), layout.GridLayout)
 		} else {
-			height += resultListInset + visibleResults*resultRowHeight + max(0, visibleResults-1)*resultRowGap
+			height += resultVerticalPadding + visibleResults*resultRowHeight + max(0, visibleResults-1)*resultRowGap
 		}
 	}
-	if !params.HideToolbar {
+	if toolbarVisible {
 		height += footerHeight
 	}
 	if previewVisible {
-		previewHeight := resultListInset + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
+		previewHeight := resultVerticalPadding + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
 		if !params.HideQueryBox {
-			previewHeight += headerHeight
+			previewHeight += queryAreaHeight
 		}
 		if refinementVisible {
 			previewHeight += refinementBarHeight
 		}
-		if !params.HideToolbar {
+		if toolbarVisible {
 			previewHeight += footerHeight
 		}
 		height = max(height, previewHeight)
@@ -920,25 +951,25 @@ func (a *App) applyWindowBounds() error {
 	if requirementPreview {
 		minimumHeight := 360
 		if !params.HideQueryBox {
-			minimumHeight += headerHeight
+			minimumHeight += queryAreaHeight
 		}
 		if refinementVisible {
 			minimumHeight += refinementBarHeight
 		}
-		if !params.HideToolbar {
+		if toolbarVisible {
 			minimumHeight += footerHeight
 		}
 		height = max(height, minimumHeight)
 	}
-	if actionPanel && actionCount > 0 {
-		actionHeight := 66 + min(actionCount, maxVisibleActions)*actionRowHeight + 20
+	if actionPanel {
+		actionHeight := int(actionPanelBaseHeightForPalette(palette)) + max(1, min(actionCount, maxVisibleActions))*actionRowHeight
 		if !params.HideQueryBox {
-			actionHeight += headerHeight
+			actionHeight += queryAreaHeight
 		}
 		if refinementVisible {
 			actionHeight += refinementBarHeight
 		}
-		if !params.HideToolbar {
+		if toolbarVisible {
 			actionHeight += footerHeight
 		}
 		height = max(height, actionHeight)
@@ -946,12 +977,12 @@ func (a *App) applyWindowBounds() error {
 	if formHeight > 0 {
 		formWindowHeight := formHeight + 20
 		if !params.HideQueryBox {
-			formWindowHeight += headerHeight
+			formWindowHeight += queryAreaHeight
 		}
 		if refinementVisible {
 			formWindowHeight += refinementBarHeight
 		}
-		if !params.HideToolbar {
+		if toolbarVisible {
 			formWindowHeight += footerHeight
 		}
 		height = max(height, formWindowHeight)
@@ -1074,6 +1105,9 @@ func (a *App) resultNavigationColumns() int {
 }
 
 func (a *App) onTextInput(event woxui.TextInputEvent) {
+	if a.onActionTextInput(event) {
+		return
+	}
 	if a.onFormTableTextInput(event) {
 		return
 	}
@@ -1138,9 +1172,11 @@ func (a *App) moveSelection(delta int) {
 		}
 		if !a.results[index].IsGroup {
 			a.selected = index
+			a.ensureResultSelectionVisibleLocked()
 			changed = true
 			a.actionPanel = false
 			a.actionSelected = 0
+			a.actionFilter = nil
 			if a.requirementForm != nil {
 				a.requirementForm.active = false
 			}
@@ -1174,6 +1210,7 @@ func (a *App) selectResult(index int) {
 			closedPanel = a.actionPanel
 			a.actionPanel = false
 			a.actionSelected = 0
+			a.actionFilter = nil
 			if a.requirementForm != nil {
 				a.requirementForm.active = false
 			}
@@ -1298,13 +1335,29 @@ type position struct {
 }
 
 type queryResponse struct {
-	QueryID             string            `json:"QueryId"`
-	Results             []queryResult     `json:"Results"`
-	Refinements         []queryRefinement `json:"Refinements"`
-	Layout              queryLayout       `json:"Layout"`
-	Context             queryContext      `json:"Context"`
-	IsFinal             bool              `json:"IsFinal"`
-	QueryStartTimestamp int64             `json:"QueryStartTimestamp"`
+	QueryID             string              `json:"QueryId"`
+	Results             []queryResult       `json:"Results"`
+	Refinements         []queryRefinement   `json:"Refinements"`
+	Layout              queryLayout         `json:"Layout"`
+	Context             queryContext        `json:"Context"`
+	IsFinal             bool                `json:"IsFinal"`
+	QueryStartTimestamp int64               `json:"QueryStartTimestamp"`
+	ActionIconRefs      map[string]woxImage `json:"ActionIconRefs"`
+}
+
+// resolveActionIconRefs restores response-local action icons before shared widgets see the result batch.
+func resolveActionIconRefs(results []queryResult, refs map[string]woxImage) {
+	for resultIndex := range results {
+		for actionIndex := range results[resultIndex].Actions {
+			icon := &results[resultIndex].Actions[actionIndex].Icon
+			if icon.ImageType != "iconref" {
+				continue
+			}
+			if resolved, ok := refs[icon.ImageData]; ok {
+				*icon = resolved
+			}
+		}
+	}
 }
 
 type queryContext struct {

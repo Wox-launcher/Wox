@@ -84,6 +84,7 @@ typedef struct {
   vector_float4 rect;
   vector_float4 color;
   float radius;
+  float stroke_width;
 } WoxRectUniforms;
 
 typedef struct {
@@ -102,6 +103,7 @@ static const char *const wox_metal_source =
      "  float4 rect;\n"
      "  float4 color;\n"
      "  float radius;\n"
+     "  float stroke_width;\n"
      "};\n"
      "struct TextureUniforms {\n"
      "  float2 viewport_size;\n"
@@ -123,14 +125,19 @@ static const char *const wox_metal_source =
      "}\n"
      "fragment float4 rect_fragment(VertexOut input [[stage_in]], constant RectUniforms &uniforms [[buffer(0)]]) {\n"
      "  float radius = clamp(uniforms.radius, 0.0, min(uniforms.rect.z, uniforms.rect.w) * 0.5);\n"
-     "  if (radius == 0.0) {\n"
-     "    return uniforms.color;\n"
-     "  }\n"
      "  float2 half_size = uniforms.rect.zw * 0.5;\n"
      "  float2 edge = abs(input.local - half_size) - (half_size - radius);\n"
      "  float distance = length(max(edge, float2(0.0))) + min(max(edge.x, edge.y), 0.0) - radius;\n"
      "  float antialias = max(fwidth(distance), 0.001);\n"
-     "  float coverage = 1.0 - smoothstep(-antialias * 0.5, antialias * 0.5, distance);\n"
+     "  float outer_coverage = 1.0 - smoothstep(-antialias * 0.5, antialias * 0.5, distance);\n"
+     "  if (uniforms.stroke_width <= 0.0) { return uniforms.color * outer_coverage; }\n"
+     "  float inner_radius = max(radius - uniforms.stroke_width, 0.0);\n"
+     "  float2 inner_half = max(half_size - uniforms.stroke_width, float2(0.0));\n"
+     "  float2 inner_edge = abs(input.local - half_size) - max(inner_half - inner_radius, float2(0.0));\n"
+     "  float inner_distance = length(max(inner_edge, float2(0.0))) + min(max(inner_edge.x, inner_edge.y), 0.0) - inner_radius;\n"
+     "  float inner_antialias = max(fwidth(inner_distance), 0.001);\n"
+     "  float inner_coverage = 1.0 - smoothstep(-inner_antialias * 0.5, inner_antialias * 0.5, inner_distance);\n"
+     "  float coverage = clamp(outer_coverage - inner_coverage, 0.0, 1.0);\n"
      "  return uniforms.color * coverage;\n"
      "}\n"
      "struct TextureVertexOut {\n"
@@ -1405,6 +1412,30 @@ int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, fl
       .rect = (vector_float4){x, y, width, height},
       .color = premultiplied_color(red, green, blue, alpha),
       .radius = radius,
+      .stroke_width = 0.0f,
+  };
+  [renderer->encoder setRenderPipelineState:renderer->rect_pipeline];
+  [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
+  [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
+  [renderer->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+  return 0;
+}
+
+int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, float stroke_width, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
+    return -1;
+  }
+  if (width <= 0.0f || height <= 0.0f || stroke_width <= 0.0f) {
+    return 0;
+  }
+
+  WoxDarwinRenderer *renderer = window->renderer;
+  WoxRectUniforms uniforms = {
+      .viewport_size = renderer->viewport_size,
+      .rect = (vector_float4){x, y, width, height},
+      .color = premultiplied_color(red, green, blue, alpha),
+      .radius = radius,
+      .stroke_width = stroke_width,
   };
   [renderer->encoder setRenderPipelineState:renderer->rect_pipeline];
   [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];

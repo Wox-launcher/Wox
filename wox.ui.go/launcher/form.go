@@ -283,6 +283,7 @@ func (a *App) openFormAction(result queryResult, action resultAction) {
 	a.form = state
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionFilter = nil
 	a.mu.Unlock()
 	a.updateFormTextInput(state.editor != nil)
 	_ = a.applyWindowBounds()

@@ -17,8 +17,8 @@ func primaryHotkey(key string) string {
 	return "control+" + key
 }
 
-// formatHotkeyLabel keeps platform shortcut names compact enough for toolbar keycaps.
-func formatHotkeyLabel(hotkey string) string {
+// formatHotkeyLabels mirrors Flutter's platform labels while keeping each physical key separate.
+func formatHotkeyLabels(hotkey string) []string {
 	parts := strings.Split(strings.TrimSpace(hotkey), "+")
 	labels := make([]string, 0, len(parts))
 	for _, part := range parts {
@@ -26,30 +26,38 @@ func formatHotkeyLabel(hotkey string) string {
 		switch strings.ToLower(part) {
 		case "cmd", "command", "meta":
 			if runtime.GOOS == "darwin" {
-				part = "⌘"
+				part = "Cmd"
+			} else if runtime.GOOS == "windows" {
+				part = "Win"
 			} else {
-				part = "Ctrl"
+				part = "Super"
 			}
 		case "ctrl", "control":
-			if runtime.GOOS == "darwin" {
-				part = "⌃"
-			} else {
-				part = "Ctrl"
-			}
+			part = "Ctrl"
 		case "alt", "option":
 			if runtime.GOOS == "darwin" {
-				part = "⌥"
+				part = "Option"
 			} else {
 				part = "Alt"
 			}
 		case "shift":
-			if runtime.GOOS == "darwin" {
-				part = "⇧"
-			} else {
-				part = "Shift"
-			}
+			part = "Shift"
 		case "enter", "return":
-			part = "↵"
+			part = "Enter"
+		case "space":
+			part = "Space"
+		case "escape", "esc":
+			part = "Esc"
+		case "backquote", "tilde":
+			part = "~"
+		case "arrowup", "up":
+			part = "↑"
+		case "arrowdown", "down":
+			part = "↓"
+		case "arrowleft", "left":
+			part = "←"
+		case "arrowright", "right":
+			part = "→"
 		default:
 			if len([]rune(part)) == 1 {
 				part = strings.ToUpper(part)
@@ -59,11 +67,7 @@ func formatHotkeyLabel(hotkey string) string {
 			labels = append(labels, part)
 		}
 	}
-	separator := "+"
-	if runtime.GOOS == "darwin" {
-		separator = " "
-	}
-	return strings.Join(labels, separator)
+	return labels
 }
 
 type toolbarMessage struct {

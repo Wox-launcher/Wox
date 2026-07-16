@@ -35,6 +35,8 @@ type viewSnapshot struct {
 	chatFullscreen        bool
 	actionPanel           bool
 	actionSelected        int
+	actionEditing         woxui.TextEditingState
+	actionIndices         []int
 	show                  showAppParams
 	palette               uiPalette
 }
@@ -70,6 +72,14 @@ func (a *App) snapshot() viewSnapshot {
 		}
 		glance = &copy
 	}
+	var actionEditing woxui.TextEditingState
+	var actionIndices []int
+	if a.actionPanel && a.actionFilter != nil {
+		actionEditing = a.actionFilter.State()
+		if a.selected >= 0 && a.selected < len(a.results) {
+			actionIndices = filteredActionIndices(a.results[a.selected].Actions, actionEditing.Text, a.translations)
+		}
+	}
 	return viewSnapshot{
 		editing:               a.editor.State(),
 		results:               append([]queryResult(nil), a.results...),
@@ -89,6 +99,8 @@ func (a *App) snapshot() viewSnapshot {
 		chatFullscreen:        a.chatFullscreen,
 		actionPanel:           a.actionPanel,
 		actionSelected:        a.actionSelected,
+		actionEditing:         actionEditing,
+		actionIndices:         actionIndices,
 		show:                  a.show,
 		palette:               a.palette,
 	}
@@ -106,10 +118,10 @@ func (a *App) build(frame woxui.FrameInfo) woxwidget.Widget {
 	height := frame.Size.Height
 	queryHeight := float32(0)
 	if !snapshot.show.HideQueryBox && !snapshot.chatFullscreen {
-		queryHeight = headerHeight
+		queryHeight = queryBoxHeight + snapshot.palette.appPadding.Top
 	}
 	toolbarHeight := float32(0)
-	if !snapshot.show.HideToolbar && !snapshot.chatFullscreen {
+	if !snapshot.show.HideToolbar && !snapshot.chatFullscreen && (len(snapshot.results) > 0 || snapshot.toolbarMsg != nil) {
 		toolbarHeight = footerHeight
 	}
 	refinementHeight := float32(0)
@@ -147,9 +159,11 @@ func (a *App) build(frame woxui.FrameInfo) woxwidget.Widget {
 		queryChromeHeight := queryHeight + refinementHeight
 		panel, panelWidth, panelHeight := a.buildActionPanel(snapshot, width, height, queryChromeHeight, toolbarHeight)
 		if panel != nil {
+			rightOffset := snapshot.palette.appPadding.Right + 10
+			bottomOffset := snapshot.palette.appPadding.Bottom + 10
 			body = woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 				{Child: body},
-				{Left: max(float32(12), width-panelWidth-14), Top: max(queryHeight+8, height-toolbarHeight-panelHeight-12), Child: panel},
+				{Left: max(rightOffset, width-panelWidth-rightOffset), Top: max(queryChromeHeight+8, height-toolbarHeight-panelHeight-bottomOffset), Child: panel},
 			}}
 		}
 	}
@@ -169,10 +183,10 @@ func (a *App) build(frame woxui.FrameInfo) woxwidget.Widget {
 }
 
 func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
-	const horizontalPadding = float32(10)
 	const queryLeftPadding = float32(8)
 	const accessoryGap = float32(12)
-	contentWidth := max(float32(0), width-horizontalPadding*2-queryLeftPadding-6)
+	horizontalPadding := snapshot.palette.appPadding.Left + snapshot.palette.appPadding.Right
+	contentWidth := max(float32(0), width-horizontalPadding-queryLeftPadding-6)
 	queryWidth := contentWidth
 	glanceWidth := float32(0)
 	if snapshot.glance != nil {
@@ -184,8 +198,10 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidge
 		glanceWidth = min(float32(192), max(float32(44), glanceWidth))
 		queryWidth -= glanceWidth + accessoryGap
 	}
+	refinementWidth := float32(0)
 	if len(snapshot.refinements) > 0 {
-		queryWidth -= a.refinementToggleWidth(snapshot) + accessoryGap
+		refinementWidth = a.refinementToggleWidth(snapshot)
+		queryWidth -= refinementWidth + accessoryGap
 	}
 	var queryIcon woxwidget.Widget
 	if snapshot.glance == nil {
@@ -195,22 +211,34 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidge
 		}
 	}
 	queryWidth = max(float32(140), queryWidth)
-	children := []woxwidget.Widget{a.buildQuery(snapshot, queryWidth, 34)}
+	children := []woxwidget.Widget{woxwidget.Container{
+		Width: queryWidth, Height: queryBoxHeight, Padding: woxwidget.Insets{Top: 4, Bottom: 17},
+		Child: a.buildQuery(snapshot, queryWidth, 34),
+	}}
 	if len(snapshot.refinements) > 0 {
-		children = append(children, a.buildRefinementToggle(snapshot))
+		children = append(children, woxwidget.Container{
+			Width: refinementWidth, Height: queryBoxHeight, Padding: woxwidget.Insets{Top: 10.5, Bottom: 10.5},
+			Child: a.buildRefinementToggle(snapshot),
+		})
 	}
 	if snapshot.glance != nil {
-		children = append(children, a.buildGlance(*snapshot.glance, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth))
+		children = append(children, woxwidget.Container{
+			Width: glanceWidth, Height: queryBoxHeight, Padding: woxwidget.Insets{Top: 12.5, Bottom: 12.5},
+			Child: a.buildGlance(*snapshot.glance, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth),
+		})
 	}
 	if queryIcon != nil {
-		children = append(children, queryIcon)
+		children = append(children, woxwidget.Container{
+			Width: 30, Height: queryBoxHeight, Padding: woxwidget.Insets{Top: 10.5, Bottom: 10.5},
+			Child: queryIcon,
+		})
 	}
 	return woxwidget.Container{
 		Width: width, Height: height,
-		Padding: woxwidget.Insets{Left: horizontalPadding, Top: 10, Right: horizontalPadding, Bottom: 10},
+		Padding: woxwidget.Insets{Left: snapshot.palette.appPadding.Left, Top: snapshot.palette.appPadding.Top, Right: snapshot.palette.appPadding.Right},
 		Child: woxwidget.Container{
-			Width: width - horizontalPadding*2, Height: 55, Radius: 8, Color: snapshot.palette.queryBackground,
-			Padding: woxwidget.Insets{Left: queryLeftPadding, Top: 4, Right: 6, Bottom: 17},
+			Width: width - horizontalPadding, Height: queryBoxHeight, Radius: snapshot.palette.queryRadius, Color: snapshot.palette.queryBackground,
+			Padding: woxwidget.Insets{Left: queryLeftPadding, Right: 6},
 			Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: accessoryGap, Children: children},
 		},
 	}
@@ -225,7 +253,7 @@ func (a *App) buildQuery(snapshot viewSnapshot, width, height float32) woxwidget
 		},
 		Child: woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			state := snapshot.editing
-			queryFocused := snapshot.form == nil && !snapshot.requirementFormActive
+			queryFocused := snapshot.form == nil && !snapshot.requirementFormActive && !snapshot.actionPanel
 			runes := []rune(state.Text)
 			start := max(0, min(len(runes), state.Selection.Start()))
 			end := max(start, min(len(runes), state.Selection.End()))
@@ -305,13 +333,6 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidg
 			Child: woxwidget.Text{Value: "Type a query to search Wox plugins", Style: woxui.TextStyle{Size: 14}, Color: snapshot.palette.resultSubtitle},
 		}
 	}
-	maxResults := snapshot.show.MaxResultCount
-	if maxResults <= 0 {
-		maxResults = defaultMaxResult
-	}
-	if len(snapshot.results) > maxResults {
-		snapshot.results = snapshot.results[:maxResults]
-	}
 	previewVisible := snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) && snapshot.results[snapshot.selected].Preview.PreviewData != ""
 	if !previewVisible {
 		a.deactivateTerminalPreview()
@@ -350,6 +371,16 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 	if snapshot.layout.GridLayout != nil {
 		return a.buildGridResults(snapshot, width, height)
 	}
+	rowHeight := resultRowHeightForPalette(snapshot.palette)
+	containerPadding := snapshot.palette.resultContainerPadding
+	containerPadding.Left += snapshot.palette.appPadding.Left
+	containerPadding.Right += snapshot.palette.appPadding.Right
+	containerPadding.Bottom += snapshot.palette.appPadding.Bottom
+	rowWidth := max(float32(0), width-containerPadding.Left-containerPadding.Right)
+	rowPadding := snapshot.palette.resultItemPadding
+	rowPadding.Left += 5
+	rowPadding.Right += 5
+	innerRowWidth := max(float32(0), rowWidth-rowPadding.Left-rowPadding.Right)
 	rows := make([]woxwidget.Widget, 0, len(snapshot.results))
 	for index, result := range snapshot.results {
 		index := index
@@ -358,29 +389,42 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 		background := woxui.Color{}
 		title := snapshot.palette.resultTitle
 		subtitle := snapshot.palette.resultSubtitle
+		tailColor := snapshot.palette.resultTail
 		if selected {
 			background = snapshot.palette.selectedBackground
 			title = snapshot.palette.selectedTitle
 			subtitle = snapshot.palette.selectedSubtitle
+			tailColor = snapshot.palette.selectedTail
 		}
 		if result.IsGroup {
 			rows = append(rows, woxwidget.Container{
-				Width: width - 20, Height: resultRowHeight, Padding: woxwidget.Insets{Left: 8, Top: 18},
+				Width: rowWidth, Height: rowHeight, Padding: woxwidget.Insets{Left: 8, Top: 18},
 				Child: woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 15}, Color: subtitle},
 			})
 			continue
 		}
-		var icon woxwidget.Widget = woxwidget.Container{Width: 28, Height: 28, Radius: 7, Color: resultColors[index%len(resultColors)]}
+		var icon woxwidget.Widget = woxwidget.Painter{Width: 28, Height: 28}
 		if image := a.imageFor(result.Icon); image != nil {
 			icon = woxwidget.Image{Source: image, Width: 28, Height: 28}
 		}
 		tailWidth := float32(0)
 		var tail woxwidget.Widget
 		if len(result.Tails) > 0 {
-			tail, tailWidth = a.buildResultTails(result.Tails, snapshot.palette, subtitle, width)
+			tail, tailWidth = a.buildResultTails(result.Tails, snapshot.palette, tailColor, width)
 		}
-		contentWidth := max(float32(0), width-46)
-		labelWidth := max(float32(50), contentWidth-28-20-tailWidth)
+		labelWidth := max(float32(50), innerRowWidth-28-20-tailWidth)
+		labelChildren := []woxwidget.Widget{
+			woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 15}, Color: title},
+		}
+		labelTop := float32(7)
+		labelGap := float32(0)
+		if result.SubTitle != "" {
+			labelChildren = append(labelChildren, woxwidget.Text{Value: result.SubTitle, Style: woxui.TextStyle{Size: 12}, Color: subtitle})
+			labelGap = 2
+		} else {
+			metrics, _ := a.window.MeasureText(result.Title, woxui.TextStyle{Size: 15})
+			labelTop = max(float32(0), (50-metrics.Size.Height)/2)
+		}
 		rows = append(rows, woxwidget.Gesture{
 			ID: fmt.Sprintf("result-%s", result.ID),
 			OnHover: func(inside bool) {
@@ -389,28 +433,77 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 				}
 			},
 			OnTap: func() { a.activateResult(index) },
-			OnScroll: func(delta woxui.Point) {
-				if delta.Y > 0 {
-					a.moveSelection(-1)
-				} else if delta.Y < 0 {
-					a.moveSelection(1)
-				}
-			},
 			Child: woxwidget.Container{
-				Width: width - 20, Height: resultRowHeight, Radius: 8, Color: background,
-				Padding: woxwidget.Insets{Left: 13, Top: 3, Right: 13, Bottom: 3},
+				Width: rowWidth, Height: rowHeight, Radius: snapshot.palette.resultItemRadius, Color: background,
+				Padding: rowPadding,
 				Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 					woxwidget.Container{Width: 28, Height: 50, Padding: woxwidget.Insets{Top: 11}, Child: icon},
-					woxwidget.Container{Width: labelWidth, Height: 50, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
-						woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 15}, Color: title},
-						woxwidget.Text{Value: result.SubTitle, Style: woxui.TextStyle{Size: 12}, Color: subtitle},
-					}}},
+					woxwidget.Container{Width: labelWidth, Height: 50, Padding: woxwidget.Insets{Top: labelTop}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: labelGap, Children: labelChildren}},
 					woxwidget.Container{Width: tailWidth, Height: 50, Padding: woxwidget.Insets{Top: 9}, Child: tail},
 				}},
 			},
 		})
 	}
-	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 10, Top: resultListInset, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: resultRowGap, Children: rows}}
+	contentHeight := containerPadding.Top + containerPadding.Bottom + float32(len(rows))*rowHeight + float32(max(0, len(rows)-1)*resultRowGap)
+	offset := a.configureResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight)
+	content := woxwidget.Container{Width: width, Height: contentHeight, Padding: containerPadding, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: resultRowGap, Children: rows}}
+	return a.buildResultScrollSurface(content, snapshot.palette, width, height, contentHeight, offset)
+}
+
+// configureResultScroll keeps the portable viewport geometry aligned with the current result layout.
+func (a *App) configureResultScroll(results []queryResult, layout *gridLayout, selected int, width, viewport, content float32) float32 {
+	a.mu.Lock()
+	a.resultWidth = width
+	a.resultViewport = viewport
+	a.resultContent = content
+	a.resultScroll = min(max(float32(0), a.resultScroll), max(float32(0), content-viewport))
+	a.ensureResultIndexVisibleLocked(results, layout, selected)
+	offset := a.resultScroll
+	a.mu.Unlock()
+	return offset
+}
+
+// ensureResultSelectionVisibleLocked follows keyboard selection without changing pointer-driven scrolling.
+func (a *App) ensureResultSelectionVisibleLocked() {
+	a.ensureResultIndexVisibleLocked(a.results, a.layout.GridLayout, a.selected)
+}
+
+func (a *App) ensureResultIndexVisibleLocked(results []queryResult, layout *gridLayout, selected int) {
+	if selected < 0 || selected >= len(results) || a.resultViewport <= 0 || a.resultContent <= a.resultViewport {
+		a.resultScroll = min(max(float32(0), a.resultScroll), max(float32(0), a.resultContent-a.resultViewport))
+		return
+	}
+	rowHeight := resultRowHeightForPalette(a.palette)
+	top := a.palette.resultContainerPadding.Top + float32(selected)*(rowHeight+resultRowGap)
+	bottom := top + rowHeight
+	if layout != nil {
+		top, bottom = gridResultVerticalBounds(results, selected, a.resultWidth, layout)
+	}
+	if top < a.resultScroll {
+		a.resultScroll = top
+	} else if bottom > a.resultScroll+a.resultViewport {
+		a.resultScroll = bottom - a.resultViewport
+	}
+	a.resultScroll = min(max(float32(0), a.resultScroll), max(float32(0), a.resultContent-a.resultViewport))
+}
+
+func (a *App) scrollResults(delta float32) {
+	a.mu.Lock()
+	a.resultScroll = min(max(float32(0), a.resultScroll+delta), max(float32(0), a.resultContent-a.resultViewport))
+	a.mu.Unlock()
+}
+
+// buildResultScrollSurface overlays the portable thumb on the same clipped content used by list and grid results.
+func (a *App) buildResultScrollSurface(content woxwidget.Widget, palette uiPalette, width, height, contentHeight, offset float32) woxwidget.Widget {
+	children := []woxwidget.StackChild{{Child: woxwidget.ScrollView{Width: width, Height: height, ContentHeight: contentHeight, Offset: offset, Child: content}}}
+	if contentHeight > height && height > 0 {
+		thumbHeight := max(float32(24), height*height/contentHeight)
+		thumbTop := (height - thumbHeight) * offset / (contentHeight - height)
+		thumbColor := palette.resultSubtitle
+		thumbColor.A = min(150, thumbColor.A)
+		children = append(children, woxwidget.StackChild{Left: max(float32(0), width-5), Top: thumbTop, Child: woxwidget.Container{Width: 3, Height: thumbHeight, Radius: 2, Color: thumbColor}})
+	}
+	return woxwidget.Gesture{ID: "result-scroll", OnScroll: func(delta woxui.Point) { a.scrollResults(-delta.Y) }, Child: woxwidget.Stack{Width: width, Height: height, Children: children}}
 }
 
 // buildResultTails keeps plugin and debug tails visible in one bounded row without stealing the title column.
@@ -500,7 +593,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidge
 			actions = append(actions, footerAction{id: "toolbar-action-" + action.ID, label: a.translate(action.Name), hotkey: action.Hotkey, onTap: func() { a.activateToolbarAction(action) }})
 		}
 	}
-	contentWidth := max(float32(0), width-20)
+	contentWidth := max(float32(0), width-snapshot.palette.toolbarPadding.Left-snapshot.palette.toolbarPadding.Right)
 	leftWidth := float32(0)
 	if leftLabel != "" || leftIcon != nil || progressLabel != "" {
 		leftWidth = min(contentWidth*0.42, float32(320))
@@ -552,7 +645,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidge
 		leftWidgets = append(leftWidgets, woxwidget.Container{Width: progressWidth, Height: 28, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{Value: progressLabel, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: snapshot.palette.cursor}})
 	}
 	body := woxwidget.Container{
-		Width: width, Height: height, Color: snapshot.palette.toolbarBackground, Padding: woxwidget.Insets{Left: 10, Top: 6, Right: 10, Bottom: 6},
+		Width: width, Height: height, Color: snapshot.palette.toolbarBackground, Padding: woxwidget.Insets{Left: snapshot.palette.toolbarPadding.Left, Top: 6, Right: snapshot.palette.toolbarPadding.Right, Bottom: 6},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: leftWidth, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: leftWidgets}},
 			woxwidget.Painter{Width: max(float32(0), contentWidth-leftWidth-rightWidth), Height: 1},
@@ -570,21 +663,36 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidge
 // buildToolbarAction renders the same label-and-keycap unit used by Flutter's launcher toolbar.
 func (a *App) buildToolbarAction(id, label, hotkey string, palette uiPalette, onTap func()) (woxwidget.Widget, float32) {
 	labelStyle := woxui.TextStyle{Size: 12}
-	hotkeyStyle := woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}
-	hotkeyLabel := formatHotkeyLabel(hotkey)
 	labelMetrics, _ := a.window.MeasureText(label, labelStyle)
-	hotkeyMetrics, _ := a.window.MeasureText(hotkeyLabel, hotkeyStyle)
-	chipWidth := max(float32(28), hotkeyMetrics.Size.Width+12)
+	chip, chipWidth := a.buildHotkeyView(hotkey, palette.toolbarText, palette.toolbarBackground)
 	width := labelMetrics.Size.Width + 8 + chipWidth
-	border := palette.toolbarText
-	border.A = min(border.A, uint8(110))
-	chip := woxwidget.Container{Width: chipWidth, Height: 28, Radius: 5, Color: border, Padding: woxwidget.UniformInsets(1), Child: woxwidget.Container{
-		Width: chipWidth - 2, Height: 26, Radius: 4, Color: palette.toolbarBackground,
-		Padding: woxwidget.Insets{Left: 5, Top: 6, Right: 5, Bottom: 4}, Child: woxwidget.Text{Value: hotkeyLabel, Style: hotkeyStyle, Color: palette.toolbarText},
-	}}
 	content := woxwidget.Container{Width: width, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: labelMetrics.Size.Width, Height: 28, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{Value: label, Style: labelStyle, Color: palette.toolbarText}},
 		chip,
 	}}}
 	return woxwidget.Gesture{ID: id, OnTap: onTap, Child: content}, width
+}
+
+// buildHotkeyView mirrors Flutter's separate 22px keycaps while using the native system font.
+func (a *App) buildHotkeyView(hotkey string, foreground, background woxui.Color) (woxwidget.Widget, float32) {
+	style := woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}
+	labels := formatHotkeyLabels(hotkey)
+	children := make([]woxwidget.Widget, 0, len(labels))
+	totalWidth := float32(0)
+	for _, label := range labels {
+		metrics, _ := a.window.MeasureText(label, style)
+		width := max(float32(28), metrics.Size.Width+14)
+		children = append(children, woxwidget.Stack{Width: width, Height: 22, Children: []woxwidget.StackChild{
+			{Child: woxwidget.Container{Width: width, Height: 22, Radius: 4, Color: background}},
+			{Child: woxwidget.Painter{Width: width, Height: 22, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+				displayList.StrokeRoundedRect(bounds, 4, 1, foreground)
+			}}},
+			{Left: max(float32(0), (width-metrics.Size.Width)/2), Top: max(float32(0), (float32(22)-metrics.Size.Height)/2), Child: woxwidget.Text{Value: label, Style: style, Color: foreground}},
+		}})
+		totalWidth += width
+	}
+	if len(children) > 1 {
+		totalWidth += float32(len(children)-1) * 4
+	}
+	return woxwidget.Container{Width: totalWidth, Height: 28, Padding: woxwidget.Insets{Top: 3, Bottom: 3}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, Children: children}}, totalWidth
 }

@@ -65,6 +65,7 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	a.stopGlanceLocked(true)
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionFilter = nil
 	a.requirementForm = nil
 	a.triggerConflict = nil
 	a.themeEditor = nil
@@ -156,6 +157,7 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 	a.stopGlanceLocked(true)
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionFilter = nil
 	a.requirementForm = nil
 	a.triggerConflict = nil
 	a.themeEditor = nil

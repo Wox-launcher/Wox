@@ -63,10 +63,19 @@ type lazyImagePayload struct {
 }
 
 func (a *App) imageFor(source woxImage) *woxui.Image {
+	return a.imageForTint(source, nil, 256)
+}
+
+// imageForTint applies a Flutter-compatible srcIn tint to SVG images without changing raster assets.
+func (a *App) imageForTint(source woxImage, tint *woxui.Color, svgSize int) *woxui.Image {
 	if source.ImageType == "" || source.ImageData == "" {
 		return nil
 	}
 	key := imageKey(source)
+	key += fmt.Sprintf("-svg-%d", svgSize)
+	if tint != nil {
+		key += fmt.Sprintf("-tint-%02x%02x%02x%02x", tint.R, tint.G, tint.B, tint.A)
+	}
 	a.mu.Lock()
 	image := a.images[key]
 	if image != nil || a.imageRequested[key] {
@@ -75,11 +84,11 @@ func (a *App) imageFor(source woxImage) *woxui.Image {
 	}
 	a.imageRequested[key] = true
 	a.mu.Unlock()
-	go a.loadImage(key, source)
+	go a.loadImage(key, source, tint, svgSize)
 	return nil
 }
 
-func (a *App) loadImage(key string, source woxImage) {
+func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgSize int) {
 	if source.ImageType == "lazyloadimage" {
 		var payload lazyImagePayload
 		if err := json.Unmarshal([]byte(source.ImageData), &payload); err != nil {
@@ -87,7 +96,7 @@ func (a *App) loadImage(key string, source woxImage) {
 			a.storeImageError(key, err)
 			return
 		}
-		if placeholder, err := decodeWoxImage(payload.Placeholder); err == nil {
+		if placeholder, err := decodeWoxImageWithTint(payload.Placeholder, tint, svgSize); err == nil {
 			a.storeImage(key, placeholder)
 		}
 		if payload.Token == "" {
@@ -102,7 +111,7 @@ func (a *App) loadImage(key string, source woxImage) {
 			a.storeImageError(key, err)
 			return
 		}
-		image, err := decodeWoxImage(resolved)
+		image, err := decodeWoxImageWithTint(resolved, tint, svgSize)
 		if err != nil {
 			log.Printf("decode resolved lazy result image: %v", err)
 			a.storeImageError(key, err)
@@ -117,11 +126,11 @@ func (a *App) loadImage(key string, source woxImage) {
 		err := a.client.Post(ctx, "/image/resolve", map[string]any{"Image": source, "Size": 256}, &resolved)
 		cancel()
 		if err != nil {
-			log.Printf("resolve %s result image: %v", source.ImageType, err)
+			log.Printf("resolve %s result image %q: %v", source.ImageType, source.ImageData, err)
 			a.storeImageError(key, err)
 			return
 		}
-		image, err := decodeWoxImage(resolved)
+		image, err := decodeWoxImageWithTint(resolved, tint, svgSize)
 		if err != nil {
 			log.Printf("decode resolved %s result image: %v", source.ImageType, err)
 			a.storeImageError(key, err)
@@ -131,7 +140,7 @@ func (a *App) loadImage(key string, source woxImage) {
 		return
 	}
 
-	image, err := decodeWoxImage(source)
+	image, err := decodeWoxImageWithTint(source, tint, svgSize)
 	if err != nil {
 		log.Printf("decode %s result image: %v", source.ImageType, err)
 		a.storeImageError(key, err)
@@ -174,6 +183,10 @@ func (a *App) imageErrorFor(source woxImage) string {
 }
 
 func decodeWoxImage(source woxImage) (*woxui.Image, error) {
+	return decodeWoxImageWithTint(source, nil, 256)
+}
+
+func decodeWoxImageWithTint(source woxImage, tint *woxui.Color, svgSize int) (*woxui.Image, error) {
 	switch source.ImageType {
 	case "absolute":
 		if strings.EqualFold(filepath.Ext(source.ImageData), ".svg") {
@@ -181,7 +194,7 @@ func decodeWoxImage(source woxImage) (*woxui.Image, error) {
 			if err != nil {
 				return nil, err
 			}
-			return decodeSVGImage(string(data), 256)
+			return decodeSVGImage(string(data), svgSize, tint)
 		}
 		file, err := os.Open(source.ImageData)
 		if err != nil {
@@ -199,11 +212,11 @@ func decodeWoxImage(source woxImage) (*woxui.Image, error) {
 			return nil, err
 		}
 		if strings.Contains(strings.ToLower(source.ImageData), "image/svg+xml") {
-			return decodeSVGImage(string(pixels), 256)
+			return decodeSVGImage(string(pixels), svgSize, tint)
 		}
 		return woxui.DecodeImage(bytes.NewReader(pixels))
 	case "svg":
-		return decodeSVGImage(source.ImageData, 256)
+		return decodeSVGImage(source.ImageData, svgSize, tint)
 	case "theme":
 		return decodeThemeImage(source.ImageData)
 	default:
@@ -211,7 +224,8 @@ func decodeWoxImage(source woxImage) (*woxui.Image, error) {
 	}
 }
 
-func decodeSVGImage(data string, size int) (*woxui.Image, error) {
+func decodeSVGImage(data string, size int, tint *woxui.Color) (*woxui.Image, error) {
+	data = strings.ReplaceAll(data, "currentColor", "#000000")
 	rootEnd := strings.IndexByte(data, '>')
 	if rootEnd >= 0 && strings.Contains(data[:rootEnd], "<svg") {
 		data = svgRootEmDimensionPattern.ReplaceAllString(data[:rootEnd], "") + data[rootEnd:]
@@ -223,6 +237,15 @@ func decodeSVGImage(data string, size int) (*woxui.Image, error) {
 	icon.SetTarget(0, 0, float64(size), float64(size))
 	rgba := image.NewRGBA(image.Rect(0, 0, size, size))
 	icon.Draw(rasterx.NewDasher(size, size, rasterx.NewScannerGV(size, size, rgba, rgba.Bounds())), 1)
+	if tint != nil {
+		for index := 0; index < len(rgba.Pix); index += 4 {
+			alpha := uint8((uint16(rgba.Pix[index+3])*uint16(tint.A) + 127) / 255)
+			rgba.Pix[index] = uint8((uint16(tint.R)*uint16(alpha) + 127) / 255)
+			rgba.Pix[index+1] = uint8((uint16(tint.G)*uint16(alpha) + 127) / 255)
+			rgba.Pix[index+2] = uint8((uint16(tint.B)*uint16(alpha) + 127) / 255)
+			rgba.Pix[index+3] = alpha
+		}
+	}
 	return woxui.NewImage(rgba)
 }
 

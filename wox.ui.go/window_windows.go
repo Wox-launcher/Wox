@@ -34,6 +34,13 @@ const (
 	unicodeNoCharacter      = 0xFFFF
 	wmMouseHorizontalWheel  = 0x020E
 	pointerScrollLine       = 40
+	dwmwaUseImmersiveDark   = 20
+	dwmwaWindowCorner       = 33
+	dwmwaSystemBackdrop     = 38
+	dwmWindowCornerRound    = 2
+	dwmSystemBackdropMica   = 3
+	wcaAccentPolicy         = 19
+	accentAcrylicBlurBehind = 4
 )
 
 var (
@@ -52,6 +59,9 @@ var (
 	immGetCompositionString              = syscall.NewLazyDLL("imm32.dll").NewProc("ImmGetCompositionStringW")
 	immSetCandidateWindow                = syscall.NewLazyDLL("imm32.dll").NewProc("ImmSetCandidateWindow")
 	shellExecuteW                        = syscall.NewLazyDLL("shell32.dll").NewProc("ShellExecuteW")
+	dwmSetWindowAttribute                = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmSetWindowAttribute")
+	dwmExtendFrameIntoClientArea         = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmExtendFrameIntoClientArea")
+	setWindowCompositionAttribute        = syscall.NewLazyDLL("user32.dll").NewProc("SetWindowCompositionAttribute")
 	dpiAwarenessContextPerMonitorAwareV2 = ^uintptr(3)
 	platformRuntime                      struct {
 		sync.Mutex
@@ -139,6 +149,26 @@ type candidateForm struct {
 	Style        uint32
 	CurrentPoint win.POINT
 	Area         win.RECT
+}
+
+type windowsMargins struct {
+	left   int32
+	right  int32
+	top    int32
+	bottom int32
+}
+
+type windowsAccentPolicy struct {
+	state         uint32
+	flags         uint32
+	gradientColor uint32
+	animationID   uint32
+}
+
+type windowsCompositionAttributeData struct {
+	attribute uint32
+	data      uintptr
+	size      uintptr
 }
 
 type monitorBoundsSearch struct {
@@ -369,6 +399,7 @@ func (w *platformWindow) createNativeWindow() error {
 	if hwnd == 0 {
 		return fmt.Errorf("create native window failed: %w", syscall.GetLastError())
 	}
+	applyWindowsBackdrop(hwnd)
 	w.mu.Lock()
 	w.hwnd = hwnd
 	w.mu.Unlock()
@@ -400,6 +431,33 @@ func (w *platformWindow) createNativeWindow() error {
 	platformRuntime.Unlock()
 	win.InvalidateRect(hwnd, nil, false)
 	return nil
+}
+
+// applyWindowsBackdrop uses Mica on Windows 11 and the existing Acrylic fallback on older systems.
+func applyWindowsBackdrop(hwnd win.HWND) {
+	dark := int32(1)
+	corner := int32(dwmWindowCornerRound)
+	backdrop := int32(dwmSystemBackdropMica)
+	margins := windowsMargins{left: -1, right: -1, top: -1, bottom: -1}
+	if dwmSetWindowAttribute.Find() == nil {
+		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaUseImmersiveDark, uintptr(unsafe.Pointer(&dark)), unsafe.Sizeof(dark))
+		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaWindowCorner, uintptr(unsafe.Pointer(&corner)), unsafe.Sizeof(corner))
+	}
+	if dwmExtendFrameIntoClientArea.Find() == nil {
+		_, _, _ = dwmExtendFrameIntoClientArea.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&margins)))
+	}
+	if dwmSetWindowAttribute.Find() == nil {
+		result, _, _ := dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaSystemBackdrop, uintptr(unsafe.Pointer(&backdrop)), unsafe.Sizeof(backdrop))
+		if int32(result) >= 0 {
+			return
+		}
+	}
+	if setWindowCompositionAttribute.Find() != nil {
+		return
+	}
+	policy := windowsAccentPolicy{state: accentAcrylicBlurBehind, flags: 2, gradientColor: 0xCC202020}
+	data := windowsCompositionAttributeData{attribute: wcaAccentPolicy, data: uintptr(unsafe.Pointer(&policy)), size: unsafe.Sizeof(policy)}
+	_, _, _ = setWindowCompositionAttribute.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&data)))
 }
 
 // enablePerMonitorDPIAwareness keeps native sizes in physical pixels while the public API stays logical.
