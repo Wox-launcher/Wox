@@ -13,9 +13,11 @@ import "C"
 import (
 	"errors"
 	"fmt"
+	"log"
 	"runtime"
 	"runtime/cgo"
 	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -33,14 +35,27 @@ var darwinRuntime struct {
 }
 
 type platformWindow struct {
-	mu         sync.Mutex
-	native     *C.WoxDarwinWindow
-	options    WindowOptions
-	handle     cgo.Handle
-	closing    bool
-	closed     bool
-	renderErr  error
-	fontFamily string
+	mu            sync.Mutex
+	renderMu      sync.Mutex
+	native        *C.WoxDarwinWindow
+	options       WindowOptions
+	handle        cgo.Handle
+	closing       bool
+	closed        bool
+	renderErr     error
+	fontFamily    string
+	renderWake    chan struct{}
+	renderStop    chan struct{}
+	renderDone    chan struct{}
+	renderStopped bool
+	pendingFrame  *darwinRenderFrame
+}
+
+type darwinRenderFrame struct {
+	frame       FrameInfo
+	displayList *DisplayList
+	fontFamily  string
+	buildCost   time.Duration
 }
 
 // AppKit requires the package's main goroutine to remain on the process main thread.
@@ -129,6 +144,7 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		window.handle.Delete()
 		return nil, errors.New("woxui: failed to create AppKit window or Metal renderer")
 	}
+	window.startRenderWorker()
 	run.mu.Lock()
 	run.windows = append(run.windows, window)
 	run.mu.Unlock()
@@ -159,6 +175,8 @@ func (w *platformWindow) hide() error {
 }
 
 func (w *platformWindow) setBounds(bounds Rect) error {
+	w.renderMu.Lock()
+	defer w.renderMu.Unlock()
 	native, err := w.openNative()
 	if err != nil {
 		return err
@@ -182,6 +200,8 @@ func (w *platformWindow) bounds() (Rect, error) {
 }
 
 func (w *platformWindow) capturePNG(path string) error {
+	w.renderMu.Lock()
+	defer w.renderMu.Unlock()
 	native, err := w.openNative()
 	if err != nil {
 		return err
@@ -195,6 +215,8 @@ func (w *platformWindow) capturePNG(path string) error {
 }
 
 func (w *platformWindow) center(size Size) error {
+	w.renderMu.Lock()
+	defer w.renderMu.Unlock()
 	native, err := w.openNative()
 	if err != nil {
 		return err
@@ -415,7 +437,12 @@ func (w *platformWindow) close() error {
 	}
 	w.closing = true
 	native := w.native
+	w.stopRenderWorkerLocked()
+	renderDone := w.renderDone
 	w.mu.Unlock()
+	if renderDone != nil {
+		<-renderDone
+	}
 
 	if native == nil || C.wox_darwin_window_close(native) != 0 {
 		w.mu.Lock()
@@ -467,21 +494,125 @@ func (w *platformWindow) recordRenderError(operation string, result C.int32_t) {
 	w.mu.Unlock()
 }
 
+// startRenderWorker owns ordinary Metal encoding so AppKit callbacks can return after building the display list.
+func (w *platformWindow) startRenderWorker() {
+	w.mu.Lock()
+	w.renderWake = make(chan struct{}, 1)
+	w.renderStop = make(chan struct{})
+	w.renderDone = make(chan struct{})
+	w.mu.Unlock()
+	go w.renderLoop()
+}
+
+// stopRenderWorkerLocked discards queued ordinary frames before native renderer destruction.
+func (w *platformWindow) stopRenderWorkerLocked() {
+	if w.renderStopped || w.renderStop == nil {
+		return
+	}
+	w.renderStopped = true
+	w.pendingFrame = nil
+	close(w.renderStop)
+}
+
+// renderLoop serializes Metal access and consumes only the newest frame queued while encoding.
+func (w *platformWindow) renderLoop() {
+	// Objective-C autorelease pools are thread-affine across the frame's cgo calls.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	defer close(w.renderDone)
+	for {
+		select {
+		case <-w.renderStop:
+			return
+		case <-w.renderWake:
+			for {
+				w.mu.Lock()
+				frame := w.pendingFrame
+				w.pendingFrame = nil
+				stopped := w.renderStopped
+				w.mu.Unlock()
+				if stopped {
+					return
+				}
+				if frame == nil {
+					break
+				}
+				w.encodeFrame(frame, false)
+			}
+		}
+	}
+}
+
+// queueFrame replaces an obsolete unencoded frame instead of letting rendering fall behind input.
+func (w *platformWindow) queueFrame(frame *darwinRenderFrame) {
+	w.mu.Lock()
+	if w.closed || w.closing || w.renderStopped {
+		w.mu.Unlock()
+		return
+	}
+	w.pendingFrame = frame
+	wake := w.renderWake
+	w.mu.Unlock()
+	select {
+	case wake <- struct{}{}:
+	default:
+	}
+}
+
 func (w *platformWindow) drawFrame(frame FrameInfo) {
+	frameStart := time.Now()
 	displayList := &DisplayList{}
 	if w.options.OnFrame != nil {
 		w.options.OnFrame(displayList, frame)
 	}
+	buildCost := time.Since(frameStart)
+	w.mu.Lock()
+	fontFamily := w.fontFamily
+	w.mu.Unlock()
+	w.queueFrame(&darwinRenderFrame{frame: frame, displayList: displayList, fontFamily: fontFamily, buildCost: buildCost})
+}
 
+// drawFrameSync keeps resize and capture frames ordered with their native window operation.
+func (w *platformWindow) drawFrameSync(frame FrameInfo, transactional bool) {
+	frameStart := time.Now()
+	displayList := &DisplayList{}
+	if w.options.OnFrame != nil {
+		w.options.OnFrame(displayList, frame)
+	}
+	buildCost := time.Since(frameStart)
+	w.mu.Lock()
+	fontFamily := w.fontFamily
+	// The synchronous frame is newer than every ordinary frame still waiting to encode.
+	w.pendingFrame = nil
+	w.mu.Unlock()
+	w.encodeFrameLocked(&darwinRenderFrame{frame: frame, displayList: displayList, fontFamily: fontFamily, buildCost: buildCost}, transactional)
+}
+
+// encodeFrame records and submits one display list while holding exclusive renderer ownership.
+func (w *platformWindow) encodeFrame(renderFrame *darwinRenderFrame, transactional bool) {
+	w.renderMu.Lock()
+	defer w.renderMu.Unlock()
+	w.encodeFrameLocked(renderFrame, transactional)
+}
+
+// encodeFrameLocked records a frame for callers that already own the renderer transaction.
+func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, transactional bool) {
 	native, err := w.openNative()
 	if err != nil {
 		return
 	}
-	w.mu.Lock()
-	fontFamily := w.fontFamily
-	w.mu.Unlock()
-	nativeFontFamily := C.CString(fontFamily)
+	pool := C.wox_darwin_autorelease_pool_push()
+	defer C.wox_darwin_autorelease_pool_pop(pool)
+	frameStart := time.Now()
+	frame := renderFrame.frame
+	displayList := renderFrame.displayList
+	transactionalFrame := C.int32_t(0)
+	if transactional {
+		transactionalFrame = 1
+	}
+	nativeFontFamily := C.CString(renderFrame.fontFamily)
 	defer C.free(unsafe.Pointer(nativeFontFamily))
+	beginStart := time.Now()
 	result := C.wox_darwin_window_begin_frame(
 		native,
 		C.float(frame.Size.Width),
@@ -492,6 +623,7 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 		C.uint8_t(displayList.clearColor.B),
 		C.uint8_t(displayList.clearColor.A),
 	)
+	beginCost := time.Since(beginStart)
 	if result > 0 {
 		return
 	}
@@ -500,6 +632,11 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 		return
 	}
 
+	encodeStart := time.Now()
+	var textCost time.Duration
+	var imageCost time.Duration
+	var textCount int
+	var imageCount int
 	for _, command := range displayList.commands {
 		switch command.kind {
 		case displayCommandFillRoundedRect:
@@ -530,6 +667,7 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 				C.uint8_t(command.color.A),
 			)
 		case displayCommandDrawText:
+			commandStart := time.Now()
 			text := C.CString(command.text)
 			result = C.wox_darwin_window_draw_text(
 				native,
@@ -547,7 +685,10 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 				C.uint8_t(command.color.A),
 			)
 			C.free(unsafe.Pointer(text))
+			textCost += time.Since(commandStart)
+			textCount++
 		case displayCommandDrawImage:
+			commandStart := time.Now()
 			result = C.wox_darwin_window_draw_image(
 				native,
 				(*C.uint8_t)(unsafe.Pointer(&command.image.pixels[0])),
@@ -559,20 +700,30 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 				C.float(command.rect.Width),
 				C.float(command.rect.Height),
 			)
+			imageCost += time.Since(commandStart)
+			imageCount++
 		case displayCommandSetClipRect:
 			result = C.wox_darwin_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		case displayCommandClearClip:
 			result = C.wox_darwin_window_clear_clip(native)
 		}
 		if result != 0 {
-			_ = C.wox_darwin_window_end_frame(native)
+			_ = C.wox_darwin_window_end_frame(native, transactionalFrame)
 			w.recordRenderError("encode Metal frame", result)
 			return
 		}
 	}
+	encodeCost := time.Since(encodeStart)
 
-	if result = C.wox_darwin_window_end_frame(native); result != 0 {
+	endStart := time.Now()
+	if result = C.wox_darwin_window_end_frame(native, transactionalFrame); result != 0 {
 		w.recordRenderError("present Metal frame", result)
+	}
+	endCost := time.Since(endStart)
+	totalCost := renderFrame.buildCost + time.Since(frameStart)
+	if totalCost >= 16*time.Millisecond {
+		log.Printf("darwin frame timing: totalUs=%d buildUs=%d beginUs=%d encodeUs=%d textUs=%d imageUs=%d endUs=%d commands=%d text=%d image=%d size=%.0fx%.0f scale=%.2f transactional=%t",
+			totalCost.Microseconds(), renderFrame.buildCost.Microseconds(), beginCost.Microseconds(), encodeCost.Microseconds(), textCost.Microseconds(), imageCost.Microseconds(), endCost.Microseconds(), len(displayList.commands), textCount, imageCount, frame.Size.Width, frame.Size.Height, frame.Scale, transactional)
 	}
 }
 
@@ -620,6 +771,16 @@ func woxGoDarwinFrame(context C.uintptr_t, width C.float, height C.float, pixelW
 		PixelSize: PixelSize{Width: int(pixelWidth), Height: int(pixelHeight)},
 		Scale:     float32(scale),
 	})
+}
+
+//export woxGoDarwinFrameSync
+func woxGoDarwinFrameSync(context C.uintptr_t, width C.float, height C.float, pixelWidth C.int32_t, pixelHeight C.int32_t, scale C.float, transactional C.int32_t) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	window.drawFrameSync(FrameInfo{
+		Size:      Size{Width: float32(width), Height: float32(height)},
+		PixelSize: PixelSize{Width: int(pixelWidth), Height: int(pixelHeight)},
+		Scale:     float32(scale),
+	}, transactional != 0)
 }
 
 //export woxGoDarwinFocus

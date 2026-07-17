@@ -172,6 +172,11 @@ func (a *App) resetQueryTransitionLocked() {
 		a.queryTransitionTimer.Stop()
 		a.queryTransitionTimer = nil
 	}
+	if a.queryResizeTimer != nil {
+		a.queryResizeTimer.Stop()
+		a.queryResizeTimer = nil
+	}
+	a.queryResizeRevision++
 	a.pendingResults = false
 }
 

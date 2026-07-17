@@ -512,7 +512,6 @@ func (a *App) reloadSettings() error {
 			return fmt.Errorf("apply Wox settings UI font: %w", err)
 		}
 	}
-	a.publishSettingsChanged(data)
 	return nil
 }
 

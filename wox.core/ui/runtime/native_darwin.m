@@ -21,6 +21,7 @@ extern int32_t woxGoDarwinStart(uintptr_t context);
 extern void woxGoDarwinCloseRequested(uintptr_t context);
 extern void woxGoDarwinCall(uintptr_t context);
 extern void woxGoDarwinFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
+extern void woxGoDarwinFrameSync(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale, int32_t transactional);
 extern void woxGoDarwinFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoDarwinKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
 extern void woxGoDarwinTextInput(uintptr_t context, uint8_t kind, const char *text);
@@ -100,6 +101,7 @@ struct WoxDarwinRenderer {
   id<MTLCommandQueue> queue;
   id<MTLRenderPipelineState> rect_pipeline;
   id<MTLRenderPipelineState> texture_pipeline;
+  NSCache *text_texture_cache;
   CAMetalLayer *layer;
   id<CAMetalDrawable> drawable;
   id<MTLCommandBuffer> command_buffer;
@@ -212,6 +214,7 @@ static const char *const wox_metal_source =
 }
 - (void)updateDrawableSize;
 - (void)renderFrame;
+- (void)renderFrameSynchronously:(BOOL)transactional;
 - (void)setWoxAccessibilityChildren:(NSArray *)children;
 @end
 
@@ -230,9 +233,7 @@ static const char *const wox_metal_source =
 }
 @end
 
-// schedule_render coalesces state changes into one Metal frame on the next main-queue turn.
-// Rendering synchronously from every bounds and invalidation call blocks AppKit input and can
-// present old-size drawables after a resize.
+// schedule_render coalesces ordinary state changes into one Metal frame on the next main-queue turn.
 static void schedule_render(WoxDarwinWindow *window) {
   if (window == NULL) {
     return;
@@ -257,6 +258,16 @@ static void schedule_render(WoxDarwinWindow *window) {
   } else {
     dispatch_async(dispatch_get_main_queue(), request);
   }
+}
+
+// render_resize_frame presents the target-size drawable in the current Core Animation transaction.
+static void render_resize_frame(WoxDarwinWindow *window) {
+  if (window == NULL || window->closed || !window->visible || window->view == nil || window->context == 0) {
+    return;
+  }
+  window->render_scheduled = false;
+  ((CAMetalLayer *)window->view.layer).presentsWithTransaction = YES;
+  [window->view renderFrameSynchronously:YES];
 }
 
 // run_on_main_sync serializes all AppKit access while allowing UI callbacks to reenter directly.
@@ -294,6 +305,9 @@ static WoxDarwinRenderer *create_renderer(CAMetalLayer *layer) {
   WoxDarwinRenderer *renderer = calloc(1, sizeof(WoxDarwinRenderer));
   renderer->device = [device retain];
   renderer->queue = [device newCommandQueue];
+  renderer->text_texture_cache = [[NSCache alloc] init];
+  renderer->text_texture_cache.countLimit = 256;
+  renderer->text_texture_cache.totalCostLimit = 32 * 1024 * 1024;
   renderer->layer = layer;
   renderer->scale = 1.0f;
   layer.device = device;
@@ -303,6 +317,7 @@ static WoxDarwinRenderer *create_renderer(CAMetalLayer *layer) {
   id<MTLLibrary> library = [device newLibraryWithSource:metal_source options:nil error:&error];
   if (library == nil) {
     NSLog(@"Wox Go UI: Metal shader compilation failed: %@", error);
+    [renderer->text_texture_cache release];
     [renderer->queue release];
     [renderer->device release];
     free(renderer);
@@ -338,6 +353,7 @@ static WoxDarwinRenderer *create_renderer(CAMetalLayer *layer) {
   if (renderer->rect_pipeline == nil || renderer->texture_pipeline == nil) {
     [renderer->texture_pipeline release];
     [renderer->rect_pipeline release];
+    [renderer->text_texture_cache release];
     [renderer->queue release];
     [renderer->device release];
     free(renderer);
@@ -356,6 +372,8 @@ static void destroy_renderer(WoxDarwinRenderer *renderer) {
   [renderer->encoder release];
   [renderer->command_buffer release];
   [renderer->drawable release];
+  [renderer->text_texture_cache removeAllObjects];
+  [renderer->text_texture_cache release];
   [renderer->texture_pipeline release];
   [renderer->rect_pipeline release];
   [renderer->queue release];
@@ -867,7 +885,7 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   schedule_render(_owner);
 }
 
-- (void)renderFrame {
+- (void)renderFrameWithSynchronousMode:(BOOL)synchronous transactional:(BOOL)transactional {
   WoxDarwinWindow *owner = _owner;
   if (owner == NULL || owner->closed || !owner->visible || owner->context == 0) {
     return;
@@ -879,8 +897,20 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   int32_t pixel_width = (int32_t)ceil(size.width * scale);
   int32_t pixel_height = (int32_t)ceil(size.height * scale);
   if (size.width > 0.0 && size.height > 0.0 && pixel_width > 0 && pixel_height > 0) {
-    woxGoDarwinFrame(owner->context, (float)size.width, (float)size.height, pixel_width, pixel_height, (float)scale);
+    if (synchronous) {
+      woxGoDarwinFrameSync(owner->context, (float)size.width, (float)size.height, pixel_width, pixel_height, (float)scale, transactional ? 1 : 0);
+    } else {
+      woxGoDarwinFrame(owner->context, (float)size.width, (float)size.height, pixel_width, pixel_height, (float)scale);
+    }
   }
+}
+
+- (void)renderFrame {
+  [self renderFrameWithSynchronousMode:NO transactional:NO];
+}
+
+- (void)renderFrameSynchronously:(BOOL)transactional {
+  [self renderFrameWithSynchronousMode:YES transactional:transactional];
 }
 @end
 
@@ -1093,10 +1123,14 @@ int32_t wox_darwin_window_set_bounds(WoxDarwinWindow *window, float x, float y, 
       return;
     }
     NSRect frame = NSMakeRect(x, desktop_top() - y - height, width, height);
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
     window->suppress_resize_render = true;
     [window->window setFrame:frame display:NO];
     window->suppress_resize_render = false;
-    schedule_render(window);
+    render_resize_frame(window);
+    [CATransaction commit];
+    ((CAMetalLayer *)window->view.layer).presentsWithTransaction = NO;
   });
   return result;
 }
@@ -1132,7 +1166,7 @@ int32_t wox_darwin_window_capture_png(WoxDarwinWindow *window, const char *path)
     }
     // Captures need the freshly encoded drawable, while normal UI frames remain asynchronous.
     window->synchronous_frame = true;
-    [window->view renderFrame];
+    [window->view renderFrameSynchronously:NO];
     window->synchronous_frame = false;
     [CATransaction flush];
     typedef CGImageRef (*WoxWindowCaptureFunction)(CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption);
@@ -1178,10 +1212,14 @@ int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float hei
     float clamped_width = fmin(width, NSWidth(work_area));
     float clamped_height = fmin(height, NSHeight(work_area));
     NSRect frame = NSMakeRect(NSMidX(work_area) - clamped_width * 0.5, NSMidY(work_area) - clamped_height * 0.5, clamped_width, clamped_height);
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
     window->suppress_resize_render = true;
     [window->window setFrame:frame display:NO];
     window->suppress_resize_render = false;
-    schedule_render(window);
+    render_resize_frame(window);
+    [CATransaction commit];
+    ((CAMetalLayer *)window->view.layer).presentsWithTransaction = NO;
   });
   return result;
 }
@@ -1743,6 +1781,14 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
   return 0;
 }
 
+void *wox_darwin_autorelease_pool_push(void) {
+  return [[NSAutoreleasePool alloc] init];
+}
+
+void wox_darwin_autorelease_pool_pop(void *pool) {
+  [(NSAutoreleasePool *)pool drain];
+}
+
 int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_width, float logical_height, float scale, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL || window->closed || window->renderer == NULL || logical_width <= 0.0f || logical_height <= 0.0f || scale <= 0.0f) {
     return -1;
@@ -1855,68 +1901,74 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
   if (pixel_width == 0 || pixel_height == 0 || pixel_width > 16384 || pixel_height > 16384) {
     return -1;
   }
-  // ponytail: rasterize text per invalidated frame; cache textures when animated text makes this measurable.
-  size_t row_bytes = pixel_width * 4;
-  void *pixels = calloc(pixel_height, row_bytes);
-  if (pixels == NULL) {
-    return -1;
-  }
-
-  CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
-  CGContextRef context = CGBitmapContextCreate(
-      pixels,
-      pixel_width,
-      pixel_height,
-      8,
-      row_bytes,
-      color_space,
-      kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
-  CGColorSpaceRelease(color_space);
-  if (context == NULL) {
-    free(pixels);
-    return -1;
-  }
-
   NSString *string = [[NSString alloc] initWithUTF8String:text];
   if (string == nil) {
-    CGContextRelease(context);
-    free(pixels);
     return -1;
   }
-  NSFont *font = wox_font(font_family, font_size * renderer->scale, font_weight);
-  NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
-      font, (id)kCTFontAttributeName,
-      (id)[[NSColor whiteColor] CGColor], (id)kCTForegroundColorAttributeName,
-      nil];
-  NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:string attributes:attributes];
-  CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)attributed);
-  CGFloat ascent = 0.0;
-  CTLineGetTypographicBounds(line, &ascent, NULL, NULL);
-  CGContextSetTextMatrix(context, CGAffineTransformIdentity);
-  CGContextSetShouldAntialias(context, true);
-  CGContextSetTextPosition(context, 0.0, fmax(0.0, (CGFloat)pixel_height - ascent));
-  CTLineDraw(line, context);
-
-  MTLTextureDescriptor *texture_descriptor = [MTLTextureDescriptor
-      texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-                                   width:pixel_width
-                                  height:pixel_height
-                               mipmapped:NO];
-  texture_descriptor.usage = MTLTextureUsageShaderRead;
-  id<MTLTexture> texture = [renderer->device newTextureWithDescriptor:texture_descriptor];
-  if (texture != nil) {
-    [texture replaceRegion:MTLRegionMake2D(0, 0, pixel_width, pixel_height)
-               mipmapLevel:0
-                 withBytes:pixels
-               bytesPerRow:row_bytes];
-  }
-
-  CFRelease(line);
-  [attributed release];
-  [string release];
-  CGContextRelease(context);
-  free(pixels);
+  NSString *family = font_family == NULL ? @"" : [NSString stringWithUTF8String:font_family];
+  NSArray *cache_key = @[ string, family ?: @"", @(pixel_width), @(pixel_height), @(font_size * renderer->scale), @(font_weight) ];
+  id<MTLTexture> texture = [[renderer->text_texture_cache objectForKey:cache_key] retain];
   if (texture == nil) {
+    size_t row_bytes = pixel_width * 4;
+    void *pixels = calloc(pixel_height, row_bytes);
+    if (pixels == NULL) {
+      [string release];
+      return -1;
+    }
+
+    CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(
+        pixels,
+        pixel_width,
+        pixel_height,
+        8,
+        row_bytes,
+        color_space,
+        kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(color_space);
+    if (context == NULL) {
+      free(pixels);
+      [string release];
+      return -1;
+    }
+
+    NSFont *font = wox_font(font_family, font_size * renderer->scale, font_weight);
+    NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+        font, (id)kCTFontAttributeName,
+        (id)[[NSColor whiteColor] CGColor], (id)kCTForegroundColorAttributeName,
+        nil];
+    NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:string attributes:attributes];
+    CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)attributed);
+    CGFloat ascent = 0.0;
+    CTLineGetTypographicBounds(line, &ascent, NULL, NULL);
+    CGContextSetTextMatrix(context, CGAffineTransformIdentity);
+    CGContextSetShouldAntialias(context, true);
+    CGContextSetTextPosition(context, 0.0, fmax(0.0, (CGFloat)pixel_height - ascent));
+    CTLineDraw(line, context);
+
+    MTLTextureDescriptor *texture_descriptor = [MTLTextureDescriptor
+        texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                     width:pixel_width
+                                    height:pixel_height
+                                 mipmapped:NO];
+    texture_descriptor.usage = MTLTextureUsageShaderRead;
+    texture = [renderer->device newTextureWithDescriptor:texture_descriptor];
+    if (texture != nil) {
+      [texture replaceRegion:MTLRegionMake2D(0, 0, pixel_width, pixel_height)
+                 mipmapLevel:0
+                   withBytes:pixels
+                 bytesPerRow:row_bytes];
+      // Text colors are applied by the shader, so one bounded white-mask cache serves every frame and theme color.
+      [renderer->text_texture_cache setObject:texture forKey:cache_key cost:row_bytes * pixel_height];
+    }
+
+    CFRelease(line);
+    [attributed release];
+    CGContextRelease(context);
+    free(pixels);
+  }
+  if (texture == nil) {
+    [string release];
     return -1;
   }
 
@@ -1931,6 +1983,7 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
   [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
   [renderer->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
   [texture release];
+  [string release];
   return 0;
 }
 
@@ -1998,14 +2051,20 @@ int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window) {
   return 0;
 }
 
-int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window) {
+int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transactional) {
   if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
     return -1;
   }
   WoxDarwinRenderer *renderer = window->renderer;
   [renderer->encoder endEncoding];
-  [renderer->command_buffer presentDrawable:renderer->drawable];
-  [renderer->command_buffer commit];
+  if (transactional != 0) {
+    [renderer->command_buffer commit];
+    [renderer->command_buffer waitUntilScheduled];
+    [renderer->drawable present];
+  } else {
+    [renderer->command_buffer presentDrawable:renderer->drawable];
+    [renderer->command_buffer commit];
+  }
   if (window->synchronous_frame) {
     [renderer->command_buffer waitUntilCompleted];
   }

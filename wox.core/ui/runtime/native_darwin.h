@@ -29,6 +29,8 @@ int32_t wox_darwin_accessibility_add_node(WoxDarwinWindow *window, uint64_t id, 
 int32_t wox_darwin_accessibility_end(WoxDarwinWindow *window);
 int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, float *width, float *height, float *baseline);
 int32_t wox_darwin_window_close(WoxDarwinWindow *window);
+void *wox_darwin_autorelease_pool_push(void);
+void wox_darwin_autorelease_pool_pop(void *pool);
 
 int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_width, float logical_height, float scale, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
@@ -37,6 +39,6 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
 int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height);
 int32_t wox_darwin_window_set_clip_rect(WoxDarwinWindow *window, float x, float y, float width, float height);
 int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window);
-int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window);
+int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transactional);
 
 #endif

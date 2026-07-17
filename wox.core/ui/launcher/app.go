@@ -16,13 +16,14 @@ import (
 )
 
 const (
-	defaultWidth        = 760
-	defaultMaxResult    = 10
-	queryBoxHeight      = 55
-	queryEditorHeight   = 38
-	footerHeight        = 40
-	resultRowBaseHeight = 50
-	resultRowGap        = 0
+	defaultWidth              = 760
+	defaultMaxResult          = 10
+	queryBoxHeight            = 55
+	queryEditorHeight         = 38
+	footerHeight              = 40
+	resultRowBaseHeight       = 50
+	resultRowGap              = 0
+	queryResizeSettleDuration = 80 * time.Millisecond
 )
 
 // BackendFactory binds one launcher session to the embedding core backend.
@@ -73,6 +74,8 @@ type App struct {
 	results               []queryResult
 	resultsQueryID        string
 	queryTransitionTimer  *time.Timer
+	queryResizeTimer      *time.Timer
+	queryResizeRevision   uint64
 	pendingResults        bool
 	selected              int
 	hoveredResult         int
@@ -733,10 +736,37 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	if refreshGlance {
 		go a.refreshGlance("manualRefresh", "", nil)
 	}
-	if err := a.applyWindowBounds(); err != nil {
-		log.Printf("resize launcher for query results: %v", err)
-	}
+	a.scheduleQueryWindowBounds(queryID)
 	_ = a.window.Invalidate()
+}
+
+// scheduleQueryWindowBounds coalesces streaming query snapshots into one resize after input settles.
+func (a *App) scheduleQueryWindowBounds(queryID string) {
+	a.mu.Lock()
+	if a.destroyed || queryID == "" || queryID != a.query.QueryID {
+		a.mu.Unlock()
+		return
+	}
+	a.queryResizeRevision++
+	revision := a.queryResizeRevision
+	if a.queryResizeTimer != nil {
+		a.queryResizeTimer.Stop()
+	}
+	a.queryResizeTimer = time.AfterFunc(queryResizeSettleDuration, func() {
+		_ = woxui.Call(func() {
+			a.mu.Lock()
+			if a.destroyed || revision != a.queryResizeRevision || queryID != a.query.QueryID {
+				a.mu.Unlock()
+				return
+			}
+			a.queryResizeTimer = nil
+			a.mu.Unlock()
+			if err := a.applyWindowBounds(); err != nil {
+				log.Printf("resize launcher for query results: %v", err)
+			}
+		})
+	})
+	a.mu.Unlock()
 }
 
 func (a *App) applyWindowBounds() error {
