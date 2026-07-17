@@ -1127,7 +1127,7 @@ func (a *App) activateSetting(direction int) {
 	}
 	a.mu.Lock()
 	a.settingSaving = true
-	a.settingNote = "Saving " + item.title + "…"
+	a.settingNote = ""
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 	go a.saveSetting(item, next)

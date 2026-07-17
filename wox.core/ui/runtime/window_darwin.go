@@ -678,6 +678,16 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 				C.uint8_t(command.color.B),
 				C.uint8_t(command.color.A),
 			)
+		case displayCommandFillConvexPolygon:
+			result = C.wox_darwin_window_fill_convex_polygon(
+				native,
+				(*C.float)(unsafe.Pointer(&command.points[0])),
+				C.int32_t(len(command.points)),
+				C.uint8_t(command.color.R),
+				C.uint8_t(command.color.G),
+				C.uint8_t(command.color.B),
+				C.uint8_t(command.color.A),
+			)
 		case displayCommandStrokeRoundedRect:
 			result = C.wox_darwin_window_stroke_rounded_rect(
 				native,

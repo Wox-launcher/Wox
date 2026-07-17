@@ -332,6 +332,34 @@ extern "C" int32_t wox_renderer_fill_rounded_rect(WoxRenderer *renderer, float x
   return S_OK;
 }
 
+extern "C" int32_t wox_renderer_fill_convex_polygon(WoxRenderer *renderer, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  if (renderer == nullptr || !renderer->frame_open || renderer->brush == nullptr || renderer->d2d_factory == nullptr || points == nullptr || point_count < 3 || point_count > 16) {
+    return E_INVALIDARG;
+  }
+
+  ID2D1PathGeometry *geometry = nullptr;
+  HRESULT result = renderer->d2d_factory->CreatePathGeometry(&geometry);
+  ID2D1GeometrySink *sink = nullptr;
+  if (SUCCEEDED(result)) {
+    result = geometry->Open(&sink);
+  }
+  if (SUCCEEDED(result)) {
+    sink->BeginFigure(D2D1::Point2F(points[0], points[1]), D2D1_FIGURE_BEGIN_FILLED);
+    for (int32_t index = 1; index < point_count; index++) {
+      sink->AddLine(D2D1::Point2F(points[index * 2], points[index * 2 + 1]));
+    }
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    result = sink->Close();
+  }
+  if (SUCCEEDED(result)) {
+    renderer->brush->SetColor(make_color(red, green, blue, alpha));
+    renderer->d2d_context->FillGeometry(geometry, renderer->brush);
+  }
+  release_com(&sink);
+  release_com(&geometry);
+  return result;
+}
+
 extern "C" int32_t wox_renderer_stroke_rounded_rect(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float stroke_width, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (renderer == nullptr || !renderer->frame_open || renderer->brush == nullptr || width <= 0.0f || height <= 0.0f || stroke_width <= 0.0f) {
     return E_INVALIDARG;

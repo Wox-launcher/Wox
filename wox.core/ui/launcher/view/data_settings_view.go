@@ -293,10 +293,10 @@ func dataLogLevelField(props DataSettingsProps, width float32) woxwidget.Widget 
 	controlWidth := min(float32(280), width*0.34)
 	labelWidth := max(float32(220), width-controlWidth-32)
 	choice := woxwidget.Gesture{ID: "data-log-level", OnTap: props.OnCycleLogLevel, Child: woxwidget.Container{
-		Width: controlWidth, Height: 38, Radius: 4, BorderColor: props.Theme.ResultSubtitle, BorderWidth: 1,
-		Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: max(float32(0), controlWidth-38), Height: 24, Child: woxwidget.Text{Value: level, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultTitle}},
-			woxwidget.Text{Value: "▾", Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},
+		Width: controlWidth, Height: 34, Radius: 4, BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 140), BorderWidth: 1,
+		Padding: woxwidget.Insets{Left: 8, Top: 5, Right: 8, Bottom: 5}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+			woxwidget.Align{Width: max(float32(0), controlWidth-40), Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: level, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultTitle}},
+			dropdownIndicator(24, 24, props.Theme.ResultTitle),
 		}},
 	}}
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{

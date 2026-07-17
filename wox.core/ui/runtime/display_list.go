@@ -29,8 +29,12 @@ type DisplayList struct {
 
 type displayCommandKind uint8
 
+// MaxConvexPolygonPoints is the portable vertex limit shared by every native renderer.
+const MaxConvexPolygonPoints = 16
+
 const (
 	displayCommandFillRoundedRect displayCommandKind = iota
+	displayCommandFillConvexPolygon
 	displayCommandStrokeRoundedRect
 	displayCommandDrawText
 	displayCommandDrawImage
@@ -47,6 +51,42 @@ type displayCommand struct {
 	text   string
 	style  TextStyle
 	image  *Image
+	points []Point
+}
+
+// FillConvexPolygon fills 3 to MaxConvexPolygonPoints ordered vertices with portable edge antialiasing.
+func (d *DisplayList) FillConvexPolygon(points []Point, color Color) {
+	if len(points) < 3 || len(points) > MaxConvexPolygonPoints {
+		return
+	}
+	minX, maxX := points[0].X, points[0].X
+	minY, maxY := points[0].Y, points[0].Y
+	turn := float32(0)
+	for index, current := range points {
+		next := points[(index+1)%len(points)]
+		after := points[(index+2)%len(points)]
+		if current == next {
+			return
+		}
+		cross := (next.X-current.X)*(after.Y-next.Y) - (next.Y-current.Y)*(after.X-next.X)
+		if cross != 0 {
+			if turn != 0 && turn*cross < 0 {
+				return
+			}
+			turn = cross
+		}
+		minX = min(minX, current.X)
+		maxX = max(maxX, current.X)
+		minY = min(minY, current.Y)
+		maxY = max(maxY, current.Y)
+	}
+	if turn == 0 || maxX <= minX || maxY <= minY {
+		return
+	}
+	immutablePoints := append([]Point(nil), points...)
+	d.commands = append(d.commands, displayCommand{
+		kind: displayCommandFillConvexPolygon, rect: Rect{X: minX, Y: minY, Width: maxX - minX, Height: maxY - minY}, color: color, points: immutablePoints,
+	})
 }
 
 // StrokeRoundedRect draws an inset border without filling the interior.

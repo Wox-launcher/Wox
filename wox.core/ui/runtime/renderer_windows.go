@@ -84,6 +84,16 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 				C.uint8_t(command.color.B),
 				C.uint8_t(command.color.A),
 			)
+		case displayCommandFillConvexPolygon:
+			commandResult = C.wox_renderer_fill_convex_polygon(
+				r.handle,
+				(*C.float)(unsafe.Pointer(&command.points[0])),
+				C.int32_t(len(command.points)),
+				C.uint8_t(command.color.R),
+				C.uint8_t(command.color.G),
+				C.uint8_t(command.color.B),
+				C.uint8_t(command.color.A),
+			)
 		case displayCommandStrokeRoundedRect:
 			commandResult = C.wox_renderer_stroke_rounded_rect(
 				r.handle,

@@ -67,6 +67,8 @@ typedef struct {
   GLint rect_color;
   GLint rect_radius;
   GLint rect_stroke_width;
+  GLint rect_polygon;
+  GLint rect_polygon_count;
   GLint texture_viewport;
   GLint texture_bounds;
   GLint texture_color;
@@ -276,9 +278,29 @@ static const char *const rect_fragment_source =
     "uniform vec4 u_color;\n"
     "uniform float u_radius;\n"
     "uniform float u_stroke_width;\n"
+    "uniform vec2 u_polygon[16];\n"
+    "uniform int u_polygon_count;\n"
     "in vec2 v_local;\n"
     "out vec4 fragment_color;\n"
+    "float cross2(vec2 left, vec2 right) { return left.x * right.y - left.y * right.x; }\n"
     "void main() {\n"
+    "  if (u_polygon_count >= 3) {\n"
+    "    float area = 0.0;\n"
+    "    for (int index = 0; index < u_polygon_count; index++) {\n"
+    "      area += cross2(u_polygon[index], u_polygon[(index + 1) % u_polygon_count]);\n"
+    "    }\n"
+    "    float orientation = area >= 0.0 ? 1.0 : -1.0;\n"
+    "    vec2 point = u_rect.xy + v_local;\n"
+    "    float distance_value = 1e20;\n"
+    "    for (int index = 0; index < u_polygon_count; index++) {\n"
+    "      vec2 start = u_polygon[index];\n"
+    "      vec2 edge = u_polygon[(index + 1) % u_polygon_count] - start;\n"
+    "      distance_value = min(distance_value, orientation * cross2(edge, point - start) / max(length(edge), 0.001));\n"
+    "    }\n"
+    "    float antialias = max(fwidth(distance_value), 0.001);\n"
+    "    fragment_color = u_color * smoothstep(-antialias * 0.5, antialias * 0.5, distance_value);\n"
+    "    return;\n"
+    "  }\n"
     "  float radius = clamp(u_radius, 0.0, min(u_rect.z, u_rect.w) * 0.5);\n"
     "  vec2 half_size = u_rect.zw * 0.5;\n"
     "  vec2 edge = abs(v_local - half_size) - (half_size - radius);\n"
@@ -464,6 +486,8 @@ static bool initialize_renderer(WoxLinuxWindow *window) {
   renderer->rect_color = glGetUniformLocation(renderer->rect_program, "u_color");
   renderer->rect_radius = glGetUniformLocation(renderer->rect_program, "u_radius");
   renderer->rect_stroke_width = glGetUniformLocation(renderer->rect_program, "u_stroke_width");
+  renderer->rect_polygon = glGetUniformLocation(renderer->rect_program, "u_polygon[0]");
+  renderer->rect_polygon_count = glGetUniformLocation(renderer->rect_program, "u_polygon_count");
   renderer->texture_viewport = glGetUniformLocation(renderer->texture_program, "u_viewport");
   renderer->texture_bounds = glGetUniformLocation(renderer->texture_program, "u_rect");
   renderer->texture_color = glGetUniformLocation(renderer->texture_program, "u_color");
@@ -2142,6 +2166,41 @@ int32_t wox_linux_window_fill_rounded_rect(WoxLinuxWindow *window, float x, floa
   glUniform4fv(renderer->rect_color, 1, color);
   glUniform1f(renderer->rect_radius, radius);
   glUniform1f(renderer->rect_stroke_width, 0.0f);
+  glUniform1i(renderer->rect_polygon_count, 0);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  return 0;
+}
+
+int32_t wox_linux_window_fill_convex_polygon(WoxLinuxWindow *window, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  if (window == NULL || !window->renderer.frame_open) {
+    return -1;
+  }
+  if (points == NULL || point_count < 3 || point_count > 16) {
+    return -1;
+  }
+  WoxLinuxRenderer *renderer = &window->renderer;
+  float min_x = points[0];
+  float max_x = points[0];
+  float min_y = points[1];
+  float max_y = points[1];
+  for (int32_t index = 1; index < point_count; index++) {
+    float point_x = points[index * 2];
+    float point_y = points[index * 2 + 1];
+    min_x = fminf(min_x, point_x);
+    max_x = fmaxf(max_x, point_x);
+    min_y = fminf(min_y, point_y);
+    max_y = fmaxf(max_y, point_y);
+  }
+  float color[4];
+  premultiplied_color(red, green, blue, alpha, color);
+  glUseProgram(renderer->rect_program);
+  glUniform2f(renderer->rect_viewport, renderer->logical_width, renderer->logical_height);
+  glUniform4f(renderer->rect_bounds, min_x, min_y, max_x - min_x, max_y - min_y);
+  glUniform4fv(renderer->rect_color, 1, color);
+  glUniform1f(renderer->rect_radius, 0.0f);
+  glUniform1f(renderer->rect_stroke_width, 0.0f);
+  glUniform2fv(renderer->rect_polygon, point_count, points);
+  glUniform1i(renderer->rect_polygon_count, point_count);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   return 0;
 }
@@ -2162,6 +2221,7 @@ int32_t wox_linux_window_stroke_rounded_rect(WoxLinuxWindow *window, float x, fl
   glUniform4fv(renderer->rect_color, 1, color);
   glUniform1f(renderer->rect_radius, radius);
   glUniform1f(renderer->rect_stroke_width, stroke_width);
+  glUniform1i(renderer->rect_polygon_count, 0);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   return 0;
 }

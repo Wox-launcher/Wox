@@ -705,14 +705,12 @@ func formTableRowSelectControl(props FormTableRowFieldProps, width, height float
 	indicatorWidth := min(float32(24), contentWidth)
 	valueWidth := max(float32(0), contentWidth-indicatorWidth)
 	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap, Child: woxwidget.Container{
-		Width: width, Height: height, Radius: 4, BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1, Padding: woxwidget.Insets{Left: 10, Right: 6},
+		Width: width, Height: height, Radius: 4, BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1, Padding: woxwidget.Insets{Left: 8, Right: 8},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: valueWidth, Height: height, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
+			woxwidget.Align{Width: valueWidth, Height: height, Vertical: 0.5, Child: woxwidget.TextBlock{
 				Value: props.Value, Width: valueWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: foreground,
 			}},
-			woxwidget.Align{Width: indicatorWidth, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
-				Value: "▾", Style: woxui.TextStyle{Size: 18}, Color: indicator,
-			}},
+			dropdownIndicator(indicatorWidth, height, indicator),
 		}},
 	}}
 }

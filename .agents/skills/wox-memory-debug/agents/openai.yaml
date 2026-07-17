@@ -1,4 +1,4 @@
 interface:
   display_name: "Wox Memory Debug"
-  short_description: "Check Go UI memory growth after repeated searches"
-  default_prompt: "Use $wox-memory-debug to run the Wox Go UI automation debug build, replay repeated searches, and diagnose retained memory growth."
+  short_description: "Check Go UI query and settings memory growth"
+  default_prompt: "Use $wox-memory-debug to run the Wox Go UI automation debug build, replay searches and settings open/close cycles, and diagnose retained memory growth."

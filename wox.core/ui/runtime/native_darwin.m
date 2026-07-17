@@ -126,6 +126,8 @@ typedef struct {
   vector_float4 color;
   float radius;
   float stroke_width;
+  vector_float2 polygon[16];
+  uint32_t polygon_count;
 } WoxRectUniforms;
 
 typedef struct {
@@ -146,6 +148,8 @@ static const char *const wox_metal_source =
      "  float4 color;\n"
      "  float radius;\n"
      "  float stroke_width;\n"
+     "  float2 polygon[16];\n"
+     "  uint polygon_count;\n"
      "};\n"
      "struct TextureUniforms {\n"
      "  float2 viewport_size;\n"
@@ -165,7 +169,24 @@ static const char *const wox_metal_source =
      "  output.local = corner * uniforms.rect.zw;\n"
      "  return output;\n"
      "}\n"
+     "float cross2(float2 left, float2 right) { return left.x * right.y - left.y * right.x; }\n"
      "fragment float4 rect_fragment(VertexOut input [[stage_in]], constant RectUniforms &uniforms [[buffer(0)]]) {\n"
+     "  if (uniforms.polygon_count >= 3) {\n"
+     "    float area = 0.0;\n"
+     "    for (uint index = 0; index < uniforms.polygon_count; index++) {\n"
+     "      area += cross2(uniforms.polygon[index], uniforms.polygon[(index + 1) % uniforms.polygon_count]);\n"
+     "    }\n"
+     "    float orientation = area >= 0.0 ? 1.0 : -1.0;\n"
+     "    float2 point = uniforms.rect.xy + input.local;\n"
+     "    float distance = 1e20;\n"
+     "    for (uint index = 0; index < uniforms.polygon_count; index++) {\n"
+     "      float2 start = uniforms.polygon[index];\n"
+     "      float2 edge = uniforms.polygon[(index + 1) % uniforms.polygon_count] - start;\n"
+     "      distance = min(distance, orientation * cross2(edge, point - start) / max(length(edge), 0.001));\n"
+     "    }\n"
+     "    float antialias = max(fwidth(distance), 0.001);\n"
+     "    return uniforms.color * smoothstep(-antialias * 0.5, antialias * 0.5, distance);\n"
+     "  }\n"
      "  float radius = clamp(uniforms.radius, 0.0, min(uniforms.rect.z, uniforms.rect.w) * 0.5);\n"
      "  float2 half_size = uniforms.rect.zw * 0.5;\n"
      "  float2 edge = abs(input.local - half_size) - (half_size - radius);\n"
@@ -1969,7 +1990,45 @@ int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, fl
       .color = premultiplied_color(red, green, blue, alpha),
       .radius = radius,
       .stroke_width = 0.0f,
+      .polygon_count = 0,
   };
+  [renderer->encoder setRenderPipelineState:renderer->rect_pipeline];
+  [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
+  [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
+  [renderer->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+  return 0;
+}
+
+int32_t wox_darwin_window_fill_convex_polygon(WoxDarwinWindow *window, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
+    return -1;
+  }
+  if (points == NULL || point_count < 3 || point_count > 16) {
+    return -1;
+  }
+
+  WoxDarwinRenderer *renderer = window->renderer;
+  float min_x = points[0];
+  float max_x = points[0];
+  float min_y = points[1];
+  float max_y = points[1];
+  WoxRectUniforms uniforms = {
+      .viewport_size = renderer->viewport_size,
+      .color = premultiplied_color(red, green, blue, alpha),
+      .radius = 0.0f,
+      .stroke_width = 0.0f,
+      .polygon_count = (uint32_t)point_count,
+  };
+  for (int32_t index = 0; index < point_count; index++) {
+    float point_x = points[index * 2];
+    float point_y = points[index * 2 + 1];
+    uniforms.polygon[index] = (vector_float2){point_x, point_y};
+    min_x = fminf(min_x, point_x);
+    max_x = fmaxf(max_x, point_x);
+    min_y = fminf(min_y, point_y);
+    max_y = fmaxf(max_y, point_y);
+  }
+  uniforms.rect = (vector_float4){min_x, min_y, max_x - min_x, max_y - min_y};
   [renderer->encoder setRenderPipelineState:renderer->rect_pipeline];
   [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
   [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
@@ -2006,6 +2065,7 @@ int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, 
       .color = premultiplied_color(red, green, blue, alpha),
       .radius = radius,
       .stroke_width = stroke_width,
+      .polygon_count = 0,
   };
   [renderer->encoder setRenderPipelineState:renderer->rect_pipeline];
   [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];

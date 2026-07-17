@@ -1,13 +1,13 @@
 ---
 name: wox-memory-debug
-description: Diagnose memory leaks in the current single-process Wox Go UI by launching the real debug build with its automation endpoint enabled, replaying representative launcher searches, sampling the same process across repeated workload blocks, and comparing Go heap profiles when retained memory keeps growing. Use for Wox memory-leak checks, search-result retention, Go UI memory growth, or repeated-query memory regressions on Windows or macOS.
+description: Diagnose memory leaks in the current single-process Wox Go UI by launching the real debug build with its automation endpoint enabled, replaying representative launcher searches and settings-window open/close cycles, sampling the same process across repeated workload blocks, and comparing Go heap profiles when retained memory keeps growing. Use for Wox memory-leak checks, search-result retention, settings cleanup, Go UI memory growth, or repeated UI lifecycle regressions on Windows or macOS.
 ---
 
 # Wox Memory Debug
 
 ## Goal
 
-Run the real Go UI in debug mode with the `wox_automation` endpoint, exercise normal launcher searches through the semantics tree, and decide whether memory settles after warm-up or grows with repeated work. Treat Wox as one Go process and use post-warm-up growth rather than an absolute memory budget as the leak criterion.
+Run the real Go UI in debug mode with the `wox_automation` endpoint, exercise normal launcher searches and the independent settings-window lifecycle through the semantics tree, and decide whether memory settles after warm-up or grows with repeated work. Treat Wox as one Go process and use post-warm-up growth rather than an absolute memory budget as the leak criterion.
 
 ## Run the Debug Build
 
@@ -66,7 +66,7 @@ Use `PrivateWorkingSetMB`.
 
 Do not compare macOS physical footprint with Windows private working set. Compare checkpoints from the same PID, OS, debug session, workload, and idle state.
 
-## Run the Measured Workload
+## Run the Measured Query Workload
 
 1. Record the warm baseline.
 2. Run five measured blocks of 10 or 20 queries using distinct seeds and the same query pool.
@@ -76,19 +76,43 @@ Do not compare macOS physical footprint with Windows private working set. Compar
 
 Use more blocks only when the trend is ambiguous. Keep the process alive for the whole run; restarting Wox invalidates the comparison.
 
+## Test Settings Window Cleanup
+
+Run this lifecycle check after the query workload. It opens settings through the real `Open Wox Settings` result, waits for the independent settings semantics host, closes the settings window, waits until the launcher host owns automation again, and clears the opening query:
+
+```bash
+cd /Users/qianlifeng/Projects/Wox/wox.core
+go run ../.agents/skills/wox-memory-debug/scripts/run-query-workload.go -info /tmp/wox-memory-automation.json -mode settings -count 1
+```
+
+1. Run one settings cycle as warm-up. Wait 10 seconds and record the closed-settings baseline.
+2. Run at least three measured blocks of five open/close cycles:
+
+```bash
+go run ../.agents/skills/wox-memory-debug/scripts/run-query-workload.go -info /tmp/wox-memory-automation.json -mode settings -count 5
+```
+
+3. After each block, keep both launcher and settings closed, wait 10 seconds, and sample the same PID three times. Record the median.
+4. Confirm every cycle reports both an `opened_generation` and `closed_generation`. The driver considers close complete only after `settings-search-field` disappears and `launcher.query.input` returns, which means `settingsView` and `settingsHost` have left the active automation surface.
+5. Compare measured block medians with the post-warm-up closed-settings baseline. Repeat one identical five-cycle block after a 30-second idle checkpoint when the trend is ambiguous.
+
+The first settings open may retain shared fonts, icons, and reusable renderer caches. Do not require the process to return to its pre-first-open value. Window-scoped settings state and native resources must not accumulate across later cycles: after warm-up, closed-settings checkpoints should plateau within sampler jitter instead of growing with cumulative open/close count.
+
 ## Decide Whether Memory Leaks
 
 Interpret the post-warm-up series, not a single number:
 
 - **No leak signal:** memory rises during warm-up and then plateaus, oscillates within a stable range, or drops after an idle checkpoint.
 - **Possible leak:** the settled checkpoint median keeps increasing across at least three consecutive measured blocks and the increase is materially larger than sampler jitter.
-- **Strong leak signal:** retained growth continues after another identical workload, scales with cumulative query count, and does not settle during a longer 30-60 second idle checkpoint.
+- **Strong leak signal:** retained growth continues after another identical workload, scales with cumulative query or settings-cycle count, and does not settle during a longer 30-60 second idle checkpoint.
+
+Apply the same classification independently to cumulative queries and cumulative settings cycles. A stable query series does not rule out a settings-window lifecycle leak.
 
 Go may retain heap arenas after objects become unreachable, so a high or non-decreasing process footprint alone is not proof. Report the result as `no leak signal`, `possible leak`, or `strong leak signal`, together with the measurements that support it.
 
 ## Attribute Persistent Growth
 
-Only profile after the repeated-query run shows a possible or strong leak signal.
+Only profile after the repeated-query or settings-lifecycle run shows a possible or strong leak signal.
 
 1. Trigger the dev-only memory profiling action through the automation driver after warm-up:
 
@@ -115,7 +139,7 @@ cp ~/.wox/memory.prof /tmp/wox-memory-after.prof
 go tool pprof -top -base /tmp/wox-memory-before.prof /tmp/wox-memory-after.prof
 ```
 
-If process memory grows but the Go heap delta stays small, inspect Go UI native owners next: GPU textures and image caches, decoded result icons, preview resources, platform window allocations, and query-result cleanup. On macOS, compare `vmmap <PID> -summary` checkpoints and pay particular attention to `IOAccelerator` and `IOSurface`. If repeated identical queries still grow, inspect lazy-image cache identity, per-draw Metal texture creation, and drawable-size churn before attributing growth to unique query strings.
+If process memory grows but the Go heap delta stays small, inspect Go UI native owners next: GPU textures and image caches, decoded result icons, preview resources, platform window allocations, and query-result cleanup. For settings-only growth, inspect `settingsView`, `settingsHost`, settings editors/forms, theme wallpaper previews, cloud/model state, asynchronous reloads, and native window/renderer destruction. On macOS, compare `vmmap <PID> -summary` checkpoints and pay particular attention to `IOAccelerator` and `IOSurface`. If repeated identical queries still grow, inspect lazy-image cache identity, per-draw Metal texture creation, and drawable-size churn before attributing growth to unique query strings.
 
 Use `-query terminal` with query mode for an identical-query control only when the mixed workload needs further attribution.
 
@@ -125,6 +149,7 @@ Include:
 
 - OS, debug configuration, PID, workload, and checkpoint timing.
 - A checkpoint table with cumulative queries and median process memory.
+- A separate closed-settings checkpoint table with cumulative open/close cycles and median process memory.
 - The trend classification and whether a longer confirmation block was needed.
 - Go heap delta owners only when profiling was necessary.
 - Any limitation that prevented consistent UI automation or reliable sampling.
