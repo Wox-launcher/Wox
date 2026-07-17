@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"strings"
+	"sync"
 	"wox/cloudsync"
 	"wox/common"
 	"wox/plugin"
@@ -21,6 +22,9 @@ type uiImpl struct {
 	isInSettingView    bool // cached setting-view state, updated by PostOnSetting
 	isInOnboardingView bool // cached onboarding state, updated by PostOnOnboarding
 	isRecordingHotkey  bool // cached hotkey-recorder focus state, updated by PostOnHotkeyRecording
+	sessionMu          sync.RWMutex
+	primarySessionID   string
+	sessionVisible     map[string]bool
 }
 
 func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
@@ -56,6 +60,16 @@ func (u *uiImpl) ToggleApp(ctx context.Context, showContext common.ShowContext) 
 	GetUIManager().RefreshActiveWindowSnapshot(ctx)
 	options := getShowOptions(ctx, showContext)
 	u.applyView(ctx, "toggle app", func(view contract.View) error { return view.Toggle(ctx, options) })
+}
+
+// OpenWoxInstance delegates named launcher reuse to the embedded UI runtime.
+func (u *uiImpl) OpenWoxInstance(ctx context.Context, request common.OpenWoxInstanceRequest) {
+	u.applyView(ctx, "open Wox instance", func(view contract.View) error {
+		return view.OpenInstance(ctx, contract.OpenInstanceOptions{
+			Role: string(request.Role), InstanceName: request.InstanceName, Query: request.Query,
+			Show: getShowOptions(ctx, request.ShowApp),
+		})
+	})
 }
 
 func (u *uiImpl) RecordHotkey(ctx context.Context, hotkey string, kind string) {
@@ -177,8 +191,8 @@ func (u *uiImpl) IsInSettingView() bool {
 }
 
 func (u *uiImpl) IsInManagementView() bool {
-	// Settings and onboarding both occupy the shared Wox window as management
-	// surfaces, so toolbar notifications should not overlay either of them.
+	// Settings and onboarding are management surfaces even when they own
+	// independent native windows, so toolbar notifications should not overlay them.
 	return u.isInSettingView || u.isInOnboardingView
 }
 
@@ -233,7 +247,7 @@ func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
 		logger.Error(ctx, fmt.Sprintf("invalid update result type: %T", result))
 		return false
 	}
-	view, err := u.getView()
+	view, err := u.getView(ctx)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("UpdateResult error: %s", err.Error()))
 		return false
@@ -252,7 +266,7 @@ func (u *uiImpl) PushResults(ctx context.Context, payload interface{}) bool {
 		logger.Error(ctx, fmt.Sprintf("invalid push results type: %T", payload))
 		return false
 	}
-	view, err := u.getView()
+	view, err := u.getView(ctx)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("PushResults error: %s", err.Error()))
 		return false
@@ -268,12 +282,25 @@ func (u *uiImpl) PushResults(ctx context.Context, payload interface{}) bool {
 func (u *uiImpl) IsVisible(ctx context.Context) bool {
 	// Return cached visibility state instead of querying the UI.
 	// The state is updated by PostOnShow/PostOnHide callbacks
+	sessionID := util.GetContextSessionId(ctx)
+	u.sessionMu.RLock()
+	defer u.sessionMu.RUnlock()
+	if sessionID != "" {
+		if visible, ok := u.sessionVisible[sessionID]; ok {
+			return visible
+		}
+	}
+	for _, visible := range u.sessionVisible {
+		if visible {
+			return true
+		}
+	}
 	return u.isVisible
 }
 
 // ToggleRecordingMode asks the macOS UI to switch between launcher and capture-friendly window levels.
 func (u *uiImpl) ToggleRecordingMode(ctx context.Context) (bool, error) {
-	view, err := u.getView()
+	view, err := u.getView(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -281,7 +308,7 @@ func (u *uiImpl) ToggleRecordingMode(ctx context.Context) (bool, error) {
 }
 
 func (u *uiImpl) PickFiles(ctx context.Context, params common.PickFilesParams) []string {
-	view, err := u.getView()
+	view, err := u.getView(ctx)
 	if err != nil {
 		return nil
 	}
@@ -309,7 +336,7 @@ func (u *uiImpl) CaptureScreenshot(ctx context.Context, request common.CaptureSc
 		request.ExportFilePath = exportFilePath
 	}
 
-	view, err := u.getView()
+	view, err := u.getView(ctx)
 	if err != nil {
 		return common.CaptureScreenshotResult{}, err
 	}
@@ -322,15 +349,15 @@ func (u *uiImpl) WriteClipboardImageFile(ctx context.Context, filePath string) e
 		return errors.New("clipboard image file path is empty")
 	}
 
-	view, err := u.getView()
+	view, err := u.getView(ctx)
 	if err != nil {
 		return err
 	}
 	return view.WriteClipboardImageFile(ctx, filePath)
 }
 
-func (u *uiImpl) getView() (contract.View, error) {
-	view := GetUIManager().getView()
+func (u *uiImpl) getView(ctx context.Context) (contract.View, error) {
+	view := GetUIManager().getViewForSession(util.GetContextSessionId(ctx))
 	if view == nil {
 		return nil, errors.New("embedded UI view is not attached")
 	}
@@ -338,7 +365,7 @@ func (u *uiImpl) getView() (contract.View, error) {
 }
 
 func (u *uiImpl) applyView(ctx context.Context, operation string, apply func(view contract.View) error) {
-	view, err := u.getView()
+	view, err := u.getView(ctx)
 	if err == nil {
 		err = apply(view)
 	}

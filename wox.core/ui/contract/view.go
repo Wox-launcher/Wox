@@ -31,12 +31,21 @@ type ShowOptions struct {
 	ShowSource       string
 }
 
+// OpenInstanceOptions describes a primary handoff or an independently hosted secondary launcher.
+type OpenInstanceOptions struct {
+	Role         string
+	InstanceName string
+	Query        common.PlainQuery
+	Show         ShowOptions
+}
+
 // View is the typed boundary used by core to update the embedded UI.
 type View interface {
 	SessionID() string
 	Show(ctx context.Context, options ShowOptions) error
 	Hide(ctx context.Context) error
 	Toggle(ctx context.Context, options ShowOptions) error
+	OpenInstance(ctx context.Context, options OpenInstanceOptions) error
 	ChangeQuery(ctx context.Context, query common.PlainQuery) error
 	RefreshQuery(ctx context.Context, preserveSelectedIndex bool) error
 	RefreshGlance(ctx context.Context, pluginID string, ids []string) error

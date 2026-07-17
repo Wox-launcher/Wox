@@ -54,36 +54,51 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		return ScreenshotResult{}, fmt.Errorf("prepare screenshot overlay image: %w", err)
 	}
 	state := &screenshotOverlayState{image: uiImage, autoConfirm: options.AutoConfirm, result: make(chan screenshotOverlayOutcome, 1)}
-	var overlay *Window
+	manager := options.WindowManager
+	if manager == nil {
+		manager = NewWindowManager()
+	}
+	var managed *ManagedWindow
+	var created bool
 	var openErr error
 	err = Call(func() {
-		overlay, openErr = Open(WindowOptions{
+		managed, created, openErr = manager.Open(ScreenshotWindowID, WindowOptions{
 			Title:      "Wox Screenshot",
 			Size:       Size{Width: 100, Height: 100},
 			HideOnBlur: false,
 			OnFrame:    state.draw,
 			OnPointer:  state.pointer,
 			OnKey:      state.key,
+			OnClosed:   func() { state.complete(true) },
 		})
 		if openErr != nil {
 			return
 		}
+		if !created {
+			openErr = errors.New("a screenshot window is already active")
+			return
+		}
+		overlay := managed.Window()
 		state.window = overlay
 		openErr = overlay.native.setPhysicalBounds(Rect{X: float32(virtualBounds.Min.X), Y: float32(virtualBounds.Min.Y), Width: float32(virtualBounds.Dx()), Height: float32(virtualBounds.Dy())})
 		if openErr == nil {
-			_, openErr = overlay.Show()
+			_, openErr = managed.Show()
 		}
 	})
 	if err != nil {
+		if created && managed != nil {
+			_ = managed.Close()
+		}
 		return ScreenshotResult{}, err
 	}
 	if openErr != nil {
-		if overlay != nil {
-			_ = overlay.Close()
+		if created && managed != nil {
+			_ = managed.Close()
 		}
 		return ScreenshotResult{}, openErr
 	}
-	defer overlay.Close()
+	overlay := managed.Window()
+	defer managed.Close()
 
 	var outcome screenshotOverlayOutcome
 	select {

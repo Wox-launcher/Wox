@@ -984,6 +984,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			pendingCtx     context.Context
 			pendingHintPid int
 			pendingHintEnd time.Time
+			explorerShow   *common.ShowContext
 		)
 
 		resetState := func() {
@@ -992,6 +993,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			handoffUntil = time.Time{}
 			pending = ""
 			pendingCtx = nil
+			explorerShow = nil
 		}
 
 		changeExplorerQuery := func(localCtx context.Context) {
@@ -999,10 +1001,19 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				return
 			}
 			queryText := "explorer " + pending
-			c.typeToSearchDebugLog(localCtx, "changeQuery %q", queryText)
-			c.api.ChangeQuery(localCtx, common.PlainQuery{
-				QueryType: plugin.QueryTypeInput,
-				QueryText: queryText,
+			if explorerShow == nil {
+				return
+			}
+			c.typeToSearchDebugLog(localCtx, "openExplorerInstance %q", queryText)
+			plugin.GetPluginManager().GetUI().OpenWoxInstance(localCtx, common.OpenWoxInstanceRequest{
+				Role:         common.WoxInstanceRoleSecondary,
+				InstanceName: string(common.ShowSourceExplorer),
+				Query: common.PlainQuery{
+					QueryId:   uuid.NewString(),
+					QueryType: plugin.QueryTypeInput,
+					QueryText: queryText,
+				},
+				ShowApp: *explorerShow,
 			})
 		}
 
@@ -1026,25 +1037,30 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx)
 			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
 			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
-			plugin.GetPluginManager().GetUI().ShowApp(localCtx, common.ShowContext{
+			showContext := common.ShowContext{
 				HideToolbar:      true,
 				QueryBoxAtBottom: true,
 				HideOnBlur:       true,
 				ShowSource:       common.ShowSourceExplorer,
 				WindowPosition:   &position,
 				WindowWidth:      woxSetting.AppWidth.Get() / 2,
-			})
-			// ShowApp refreshes foreground state, so seed the dialog owner after
-			// Wox is visible and before ChangeQuery builds the plugin QueryEnv.
+			}
+			// Seed the owner before the new session query builds its QueryEnv.
 			ui.GetUIManager().SeedActiveWindowSnapshotForQuery(common.ActiveWindowSnapshot{
 				Name:             window.GetWindowNameByPid(pid),
 				Pid:              pid,
 				WindowId:         dialogWindowId,
 				IsOpenSaveDialog: true,
 			})
-			c.api.ChangeQuery(localCtx, common.PlainQuery{
-				QueryType: plugin.QueryTypeInput,
-				QueryText: explorerDialogHintQueryText,
+			plugin.GetPluginManager().GetUI().OpenWoxInstance(localCtx, common.OpenWoxInstanceRequest{
+				Role:         common.WoxInstanceRoleSecondary,
+				InstanceName: string(common.ShowSourceExplorer),
+				Query: common.PlainQuery{
+					QueryId:   uuid.NewString(),
+					QueryType: plugin.QueryTypeInput,
+					QueryText: explorerDialogHintQueryText,
+				},
+				ShowApp: showContext,
 			})
 		}
 
@@ -1103,14 +1119,16 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx)
 			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
 			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
-			plugin.GetPluginManager().GetUI().ShowApp(localCtx, common.ShowContext{
+			showContext := common.ShowContext{
 				HideToolbar:      true,
 				QueryBoxAtBottom: true,
 				HideOnBlur:       true,
 				ShowSource:       common.ShowSourceExplorer,
 				WindowPosition:   &position,
 				WindowWidth:      woxSetting.AppWidth.Get() / 2,
-			})
+			}
+			explorerShow = &showContext
+			changeExplorerQuery(localCtx)
 			return true
 		}
 

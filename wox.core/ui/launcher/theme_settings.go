@@ -37,7 +37,7 @@ func (a *App) reloadThemes(mode, preferredID string) error {
 	a.themesLoading = true
 	a.themesError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -92,7 +92,7 @@ func (a *App) reloadThemes(mode, preferredID string) error {
 	}
 	a.ensureThemeSelectionVisibleLocked()
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 	return nil
 }
 
@@ -103,7 +103,7 @@ func (a *App) finishThemeLoadError(err error) error {
 	a.themesLoaded = false
 	a.themesError = err.Error()
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 	return err
 }
 
@@ -131,7 +131,7 @@ func (a *App) switchThemeSettingsMode(mode string) {
 	if a.themesMode == "editor" && themeEditorDirtyLocked(a.themeEditor) {
 		a.themeEditor.error = "Save the current theme changes before switching views."
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 		return
 	}
 	a.themesMode = mode
@@ -146,8 +146,8 @@ func (a *App) switchThemeSettingsMode(mode string) {
 	}
 	loadEditor := mode == "editor" && (a.themeEditor == nil || !strings.HasPrefix(a.themeEditor.key, "settings-theme|"))
 	a.mu.Unlock()
-	_ = a.window.SetTextInputState(woxui.TextInputState{})
-	_ = a.window.Invalidate()
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
 
 	if loadEditor {
 		go func() {
@@ -155,7 +155,7 @@ func (a *App) switchThemeSettingsMode(mode string) {
 				a.mu.Lock()
 				a.themesError = err.Error()
 				a.mu.Unlock()
-				_ = a.window.Invalidate()
+				a.invalidateSettingsWindow()
 			}
 		}()
 		return
@@ -215,7 +215,7 @@ func (a *App) runThemeOperation(kind string) {
 			a.themeUninstallArmed = theme.ID
 			a.settingNote = "Press Confirm uninstall to remove " + theme.Name + "."
 			a.mu.Unlock()
-			_ = a.window.Invalidate()
+			a.invalidateSettingsWindow()
 			return
 		}
 	default:
@@ -227,7 +227,7 @@ func (a *App) runThemeOperation(kind string) {
 	a.themeOperation = kind + ":" + theme.ID
 	mode := a.themesMode
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	go func() {
 		path := "/theme/" + kind
@@ -267,7 +267,7 @@ func (a *App) runThemeOperation(kind string) {
 		if err != nil {
 			log.Printf("%s theme %s: %v", kind, theme.ID, err)
 		}
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 	}()
 }
 
@@ -282,11 +282,11 @@ func (a *App) openSelectedThemeWebsite() {
 	if target == "" {
 		return
 	}
-	if err := a.window.OpenExternalURL(target); err != nil {
+	if err := a.settingsNativeWindow().OpenExternalURL(target); err != nil {
 		a.mu.Lock()
 		a.themesError = err.Error()
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 	}
 }
 
@@ -301,7 +301,7 @@ func (a *App) selectTheme(index int) {
 	a.themesError = ""
 	a.ensureThemeSelectionVisibleLocked()
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) setThemeListViewport(height float32) {
@@ -316,7 +316,7 @@ func (a *App) scrollThemeList(delta float32) {
 	a.themeListScroll += delta
 	a.clampThemeListScrollLocked()
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) clampThemeListScrollLocked() {
@@ -343,7 +343,7 @@ func (a *App) ensureThemeSelectionVisibleLocked() {
 // onThemeSettingsKey gives catalog selection the same basic keyboard access as plugin settings.
 func (a *App) onThemeSettingsKey(event woxui.KeyEvent) bool {
 	a.mu.RLock()
-	active := a.mode == viewSettings && a.settingTab == "theme" && a.themesMode != "editor"
+	active := a.settingsOpen && a.settingTab == "theme" && a.themesMode != "editor"
 	selected := a.themeSelected
 	themeCount := len(a.themes)
 	a.mu.RUnlock()

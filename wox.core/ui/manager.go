@@ -59,7 +59,8 @@ type Manager struct {
 	hotkeyService      *corehotkey.Service
 	ui                 common.UI
 	viewMu             sync.RWMutex
-	view               contract.View
+	primaryView        contract.View
+	views              map[string]contract.View
 	serverPort         int
 	themes             *util.HashMap[string, common.Theme]
 	systemThemeIds     []string
@@ -122,21 +123,61 @@ func GetUIManager() *Manager {
 	return managerInstance
 }
 
-// AttachView replaces the process-local UI target used by core push updates.
+// AttachView replaces the primary process-local UI target used by core push updates.
 func (m *Manager) AttachView(view contract.View) {
 	m.viewMu.Lock()
-	m.view = view
+	m.primaryView = view
+	m.views = map[string]contract.View{}
+	if view != nil && view.SessionID() != "" {
+		m.views[view.SessionID()] = view
+	}
 	m.viewMu.Unlock()
 }
 
 func (m *Manager) getView() contract.View {
 	m.viewMu.RLock()
 	defer m.viewMu.RUnlock()
-	return m.view
+	return m.primaryView
+}
+
+// RegisterView adds one secondary launcher without changing the primary command target.
+func (m *Manager) RegisterView(view contract.View) {
+	if view == nil || view.SessionID() == "" {
+		return
+	}
+	m.viewMu.Lock()
+	if m.views == nil {
+		m.views = map[string]contract.View{}
+	}
+	m.views[view.SessionID()] = view
+	m.viewMu.Unlock()
+}
+
+// UnregisterView removes one secondary launcher from session-routed core pushes.
+func (m *Manager) UnregisterView(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	m.viewMu.Lock()
+	if m.primaryView == nil || m.primaryView.SessionID() != sessionID {
+		delete(m.views, sessionID)
+	}
+	m.viewMu.Unlock()
+}
+
+func (m *Manager) getViewForSession(sessionID string) contract.View {
+	m.viewMu.RLock()
+	defer m.viewMu.RUnlock()
+	if sessionID != "" {
+		if view := m.views[sessionID]; view != nil {
+			return view
+		}
+	}
+	return m.primaryView
 }
 
 func (m *Manager) applyTerminalChunk(ctx context.Context, uiSessionID string, chunk terminal.TerminalChunk) {
-	view := m.getView()
+	view := m.getViewForSession(uiSessionID)
 	if view == nil {
 		logger.Warn(ctx, "UI view not ready, skipping terminal chunk")
 		return
@@ -147,7 +188,7 @@ func (m *Manager) applyTerminalChunk(ctx context.Context, uiSessionID string, ch
 }
 
 func (m *Manager) applyTerminalState(ctx context.Context, uiSessionID string, state terminal.SessionState) {
-	view := m.getView()
+	view := m.getViewForSession(uiSessionID)
 	if view == nil {
 		logger.Warn(ctx, "UI view not ready, skipping terminal state")
 		return
@@ -438,14 +479,23 @@ func (m *Manager) triggerSelectionQuery(ctx context.Context, selected selection.
 	}
 
 	m.RefreshActiveWindowSnapshot(ctx)
-	m.ui.ChangeQuery(ctx, common.PlainQuery{
+	m.openSecondaryInstance(ctx, string(common.ShowSourceSelection), common.PlainQuery{
 		QueryType:      plugin.QueryTypeSelection,
 		QuerySelection: selected,
-	})
-	m.ui.ShowApp(ctx, common.ShowContext{
+	}, common.ShowContext{
 		ShowSource: common.ShowSourceSelection,
 	})
 	return nil
+}
+
+// openSecondaryInstance preserves the primary launcher while opening a session-owned query window.
+func (m *Manager) openSecondaryInstance(ctx context.Context, instanceName string, query common.PlainQuery, showContext common.ShowContext) {
+	if query.QueryId == "" {
+		query.QueryId = uuid.NewString()
+	}
+	m.ui.OpenWoxInstance(ctx, common.OpenWoxInstanceRequest{
+		Role: common.WoxInstanceRoleSecondary, InstanceName: instanceName, Query: query, ShowApp: showContext,
+	})
 }
 
 // triggerQueryHotkey builds and executes a query hotkey action.
@@ -470,8 +520,6 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 		return nil
 	}
 
-	m.ui.ChangeQuery(queryCtx, plainQuery)
-
 	showContext := common.ShowContext{
 		SelectAll:      false,
 		HideQueryBox:   queryHotkey.HideQueryBox,
@@ -483,7 +531,12 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 	if position, ok := m.getQueryHotkeyWindowPosition(queryCtx, queryHotkey); ok {
 		showContext.WindowPosition = &position
 	}
+	if queryHotkey.HideQueryBox && queryHotkey.HideToolbar {
+		m.openSecondaryInstance(queryCtx, "query-hotkey:"+normalizeHotkeyForCompare(queryHotkey.Hotkey), plainQuery, showContext)
+		return nil
+	}
 
+	m.ui.ChangeQuery(queryCtx, plainQuery)
 	m.ui.ShowApp(queryCtx, showContext)
 	return nil
 }
@@ -940,6 +993,16 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 		return
 	}
 	m.isUIReadyHandled = true
+	if impl, ok := m.ui.(*uiImpl); ok {
+		sessionID := util.GetContextSessionId(ctx)
+		impl.sessionMu.Lock()
+		impl.primarySessionID = sessionID
+		if impl.sessionVisible == nil {
+			impl.sessionVisible = map[string]bool{}
+		}
+		impl.sessionVisible[sessionID] = false
+		impl.sessionMu.Unlock()
+	}
 
 	// Apply auto appearance theme on startup
 	m.applyAutoAppearanceThemeIfNeed(ctx)
@@ -960,10 +1023,20 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 func (m *Manager) PostOnShow(ctx context.Context) {
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
-		impl.isVisible = true
-		impl.isInSettingView = false
-		impl.isInOnboardingView = false
-		impl.isRecordingHotkey = false
+		sessionID := util.GetContextSessionId(ctx)
+		impl.sessionMu.Lock()
+		if impl.sessionVisible == nil {
+			impl.sessionVisible = map[string]bool{}
+		}
+		impl.sessionVisible[sessionID] = true
+		isPrimary := sessionID == "" || sessionID == impl.primarySessionID
+		impl.sessionMu.Unlock()
+		if isPrimary {
+			impl.isVisible = true
+			impl.isInSettingView = false
+			impl.isInOnboardingView = false
+			impl.isRecordingHotkey = false
+		}
 	}
 
 	analytics.TrackUIOpened(ctx)
@@ -994,10 +1067,20 @@ func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
 func (m *Manager) PostOnHide(ctx context.Context) {
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
-		impl.isVisible = false
-		impl.isInSettingView = false
-		impl.isInOnboardingView = false
-		impl.isRecordingHotkey = false
+		sessionID := util.GetContextSessionId(ctx)
+		impl.sessionMu.Lock()
+		if impl.sessionVisible == nil {
+			impl.sessionVisible = map[string]bool{}
+		}
+		impl.sessionVisible[sessionID] = false
+		isPrimary := sessionID == "" || sessionID == impl.primarySessionID
+		impl.sessionMu.Unlock()
+		if isPrimary {
+			impl.isVisible = false
+			impl.isInSettingView = false
+			impl.isInOnboardingView = false
+			impl.isRecordingHotkey = false
+		}
 	}
 	m.releaseHiddenCoreMemory(ctx)
 }
@@ -1023,12 +1106,32 @@ func (m *Manager) PostOnSetting(ctx context.Context, isInSettingView bool) {
 		}
 		if isInSettingView {
 			// Settings can be opened while the launcher is hidden. Marking the
-			// shared window visible here keeps backend notification routing in
+			// application visible here keeps backend notification routing in
 			// sync without waiting for launcher-specific onShow.
 			impl.isVisible = true
 			impl.isInOnboardingView = false
+			impl.sessionMu.Lock()
+			if impl.sessionVisible == nil {
+				impl.sessionVisible = map[string]bool{}
+			}
+			impl.sessionVisible[util.GetContextSessionId(ctx)] = true
+			impl.sessionMu.Unlock()
 		}
 	}
+}
+
+// PostOnInstanceDestroyed forgets visibility and query caches owned by a secondary launcher.
+func (m *Manager) PostOnInstanceDestroyed(ctx context.Context) {
+	sessionID := util.GetContextSessionId(ctx)
+	if sessionID == "" {
+		return
+	}
+	if impl, ok := m.ui.(*uiImpl); ok {
+		impl.sessionMu.Lock()
+		delete(impl.sessionVisible, sessionID)
+		impl.sessionMu.Unlock()
+	}
+	plugin.GetPluginManager().ClearSessionState(ctx, sessionID)
 }
 
 func (m *Manager) PostOnOnboarding(ctx context.Context, isInOnboardingView bool) {
@@ -1306,8 +1409,7 @@ func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQu
 		}
 		logger.Debug(queryCtx, fmt.Sprintf("tray query anchor resolved: windowX=%d bottom=%d screen=(x=%d y=%d w=%d h=%d)", trayAnchor.WindowX, trayAnchor.Bottom, trayAnchor.ScreenRect.X, trayAnchor.ScreenRect.Y, trayAnchor.ScreenRect.Width, trayAnchor.ScreenRect.Height))
 	}
-	m.ui.ChangeQuery(queryCtx, plainQuery)
-	m.ui.ShowApp(queryCtx, common.ShowContext{
+	m.openSecondaryInstance(queryCtx, "tray-query:"+strings.TrimSpace(trayQuery.Query), plainQuery, common.ShowContext{
 		SelectAll:        false,
 		HideQueryBox:     trayQuery.HideQueryBox,
 		HideToolbar:      trayQuery.HideToolbar,

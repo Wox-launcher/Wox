@@ -33,13 +33,32 @@ func (s *CoreServices) Ready(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-// Shown records that the shared launcher window became visible.
+// RegisterInstance makes a secondary launcher addressable by its UI session.
+func (s *CoreServices) RegisterInstance(_ context.Context, view contract.View) error {
+	if view == nil || view.SessionID() == "" {
+		return errors.New("secondary UI view and session are required")
+	}
+	GetUIManager().RegisterView(view)
+	return nil
+}
+
+// DestroyInstance releases session-routed view and plugin query state.
+func (s *CoreServices) DestroyInstance(ctx context.Context, sessionID string) error {
+	if sessionID == "" {
+		return nil
+	}
+	GetUIManager().UnregisterView(sessionID)
+	GetUIManager().PostOnInstanceDestroyed(uiServiceContext(ctx, sessionID))
+	return nil
+}
+
+// Shown records that the launcher window became visible.
 func (s *CoreServices) Shown(ctx context.Context, sessionID string) error {
 	GetUIManager().PostOnShow(uiServiceContext(ctx, sessionID))
 	return nil
 }
 
-// Hidden records that the shared launcher window became hidden.
+// Hidden records that the final user-facing Wox window became hidden.
 func (s *CoreServices) Hidden(ctx context.Context, sessionID string) error {
 	GetUIManager().PostOnHide(uiServiceContext(ctx, sessionID))
 	return nil
@@ -55,7 +74,7 @@ func (s *CoreServices) FocusLost(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-// SettingViewChanged keeps the core's shared-window state synchronized.
+// SettingViewChanged keeps core management state synchronized with the independent settings window.
 func (s *CoreServices) SettingViewChanged(ctx context.Context, sessionID string, inSettingView bool) error {
 	GetUIManager().PostOnSetting(uiServiceContext(ctx, sessionID), inSettingView)
 	return nil

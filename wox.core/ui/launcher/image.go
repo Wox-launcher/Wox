@@ -163,16 +163,14 @@ func (a *App) storeImage(key string, image *woxui.Image) {
 	a.images[key] = image
 	delete(a.imageErrors, key)
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateAllWindows()
 }
 
 func (a *App) storeImageError(key string, err error) {
 	a.mu.Lock()
 	a.imageErrors[key] = err.Error()
 	a.mu.Unlock()
-	if a.window != nil {
-		_ = a.window.Invalidate()
-	}
+	a.invalidateAllWindows()
 }
 
 func (a *App) imageErrorFor(source woxImage) string {

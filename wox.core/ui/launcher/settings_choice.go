@@ -68,11 +68,15 @@ func (a *App) openOrActivateSetting() {
 	if item.disabled {
 		return
 	}
-	if item.text || item.key == "UsagePeriod" || len(item.choices) <= 3 {
+	if item.text || isBooleanSettingItem(item) {
 		a.activateSetting(1)
 		return
 	}
 	a.openSettingChoicePicker(item)
+}
+
+func isBooleanSettingItem(item settingItem) bool {
+	return len(item.choices) == 2 && item.choices[0].value == "false" && item.choices[1].value == "true"
 }
 
 func (a *App) openSettingChoicePicker(item settingItem) {
@@ -94,8 +98,8 @@ func (a *App) openSettingChoicePicker(item settingItem) {
 	a.settingEditor = nil
 	a.settingNote = "Filter and select " + item.title
 	a.mu.Unlock()
-	a.updateFormTextInput(true)
-	_ = a.window.Invalidate()
+	a.updateSettingsTextInput(true)
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) closeSettingChoicePicker() {
@@ -105,8 +109,8 @@ func (a *App) closeSettingChoicePicker() {
 		a.settingNote = ""
 	}
 	a.mu.Unlock()
-	a.updateFormTextInput(false)
-	_ = a.window.Invalidate()
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) chooseSettingChoice(index int) {
@@ -127,8 +131,8 @@ func (a *App) chooseSettingChoice(index int) {
 	a.settingSaving = true
 	a.settingNote = "Saving " + item.title + "…"
 	a.mu.Unlock()
-	a.updateFormTextInput(false)
-	_ = a.window.Invalidate()
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
 	go a.saveSetting(item, choice)
 }
 
@@ -143,7 +147,7 @@ func (a *App) moveSettingChoice(delta int) {
 		}
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) setSettingChoicePickerCaret(offset int) {
@@ -152,7 +156,7 @@ func (a *App) setSettingChoicePickerCaret(offset int) {
 		state.editor.SetCaret(offset)
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) setSettingChoicePickerViewport(height float32) {
@@ -172,7 +176,7 @@ func (a *App) scrollSettingChoicePicker(delta float32) {
 		state.scroll = min(max(float32(0), state.scroll+delta), maximum)
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) ensureSettingChoiceVisibleLocked() {
@@ -223,7 +227,7 @@ func (a *App) onSettingChoicePickerKey(event woxui.KeyEvent) bool {
 			}
 		}
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 	}
 	return true
 }
@@ -240,7 +244,7 @@ func (a *App) onSettingChoicePickerTextInput(event woxui.TextInputEvent) bool {
 		state.scroll = 0
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 	return true
 }
 
@@ -284,7 +288,7 @@ func (a *App) loadSystemFontFamilies() {
 		a.systemFontsError = ""
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func systemFontSettingItem(snapshot settingsSnapshot) settingItem {

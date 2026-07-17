@@ -274,6 +274,7 @@ func (a *App) buildFormChoice(fields formFieldsSnapshot, callbacks formFieldCall
 }
 
 func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
+	window := a.formFieldNativeWindow(callbacks.idPrefix)
 	focused := fields.active && fields.focused == index
 	background := palette.queryBackground
 	if focused {
@@ -304,14 +305,14 @@ func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCal
 	input := woxwidget.Gesture{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index),
 		OnTapAt: func(position woxui.Point) {
-			offset := formTextOffsetAt(renderState, a.window, style, maxLines, inputWidth-22, woxui.Point{X: max(float32(0), position.X-12), Y: max(float32(0), position.Y-10)})
+			offset := formTextOffsetAt(renderState, window, style, maxLines, inputWidth-22, woxui.Point{X: max(float32(0), position.X-12), Y: max(float32(0), position.Y-10)})
 			callbacks.focus(index)
 			callbacks.setCaret(index, offset)
 		},
 		Child: woxwidget.Container{Width: inputWidth, Height: fieldHeight, Radius: 8, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 10, Bottom: 8}, Child: woxwidget.Clip{
 			Width: inputWidth - 22, Height: editorHeight, Child: woxwidget.Painter{Width: inputWidth - 22, Height: editorHeight,
 				Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-					drawFormEditor(displayList, bounds, renderState, style, palette, focused, maxLines, a.window)
+					drawFormEditor(displayList, bounds, renderState, style, palette, focused, maxLines, window)
 				},
 			},
 		}},

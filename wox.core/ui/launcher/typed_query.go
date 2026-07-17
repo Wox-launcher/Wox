@@ -16,7 +16,14 @@ import (
 )
 
 func (a *App) startTypedQuery(query plainQuery, skipCompletionHint bool) error {
-	return a.services.StartQuery(context.Background(), contract.QueryRequest{
+	a.mu.RLock()
+	if a.destroyed {
+		a.mu.RUnlock()
+		return context.Canceled
+	}
+	ctx := a.lifecycleCtx
+	a.mu.RUnlock()
+	return a.services.StartQuery(ctx, contract.QueryRequest{
 		RequestID:          coreclient.NewID(),
 		SessionID:          a.sessionID,
 		Query:              toCorePlainQuery(query),
@@ -42,6 +49,9 @@ func toCorePlainQuery(query plainQuery) common.PlainQuery {
 
 // ApplyQueryResponse updates launcher rendering from one typed core snapshot.
 func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryResponse) {
+	if a.isDestroyed() {
+		return
+	}
 	results := make([]queryResult, len(response.Response.Results))
 	for index := range response.Response.Results {
 		results[index] = fromCoreQueryResult(response.Response.Results[index])
@@ -54,6 +64,9 @@ func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryRespo
 
 // ApplyQueryCompletionHint applies a typed inline-completion candidate.
 func (a *App) ApplyQueryCompletionHint(_ context.Context, queryID string, hint *plugin.QueryCompletionHint) {
+	if a.isDestroyed() {
+		return
+	}
 	var converted *queryCompletionHint
 	if hint != nil {
 		converted = &queryCompletionHint{
@@ -80,7 +93,7 @@ func (a *App) ApplyQueryCompletionHint(_ context.Context, queryID string, hint *
 
 // ApplyQueryError reports typed query failures without disturbing a newer query.
 func (a *App) ApplyQueryError(_ context.Context, queryID string, err error) {
-	if err == nil {
+	if err == nil || a.isDestroyed() {
 		return
 	}
 	a.mu.RLock()

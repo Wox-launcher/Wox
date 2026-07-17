@@ -508,7 +508,7 @@ func (a *App) updateFormTextInput(enabled bool) {
 
 func (a *App) restoreQueryTextInput() {
 	a.mu.RLock()
-	enabled := a.mode == viewLauncher && !a.show.HideQueryBox && !a.chatFullscreen && a.form == nil && (a.requirementForm == nil || !a.requirementForm.active) && (a.triggerConflict == nil || !a.triggerConflict.active) && (a.themeEditor == nil || !a.themeEditor.active) && (a.chatPreview == nil || !a.chatPreview.active) && (a.terminalPreview == nil || !a.terminalPreview.SearchOpen)
+	enabled := !a.show.HideQueryBox && !a.chatFullscreen && a.form == nil && (a.requirementForm == nil || !a.requirementForm.active) && (a.triggerConflict == nil || !a.triggerConflict.active) && (a.themeEditor == nil || !a.themeEditor.active) && (a.chatPreview == nil || !a.chatPreview.active) && (a.terminalPreview == nil || !a.terminalPreview.SearchOpen)
 	a.mu.RUnlock()
 	state := woxui.TextInputState{}
 	if enabled {

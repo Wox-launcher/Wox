@@ -142,6 +142,7 @@ type platformWindow struct {
 	options WindowOptions
 
 	mu         sync.Mutex
+	closedOnce sync.Once
 	hwnd       win.HWND
 	uiThreadID uint32
 	pending    []windowCommand
@@ -492,8 +493,13 @@ func (w *platformWindow) createNativeWindow() error {
 	height := logicalToPhysical(w.options.Size.Height, scale)
 	x := (win.GetSystemMetrics(win.SM_CXSCREEN) - int32(width)) / 2
 	y := (win.GetSystemMetrics(win.SM_CYSCREEN) - int32(height)) / 3
+	exStyle := uint32(win.WS_EX_TOPMOST | win.WS_EX_TOOLWINDOW | wsExNoRedirectionBitmap)
+	// Normal management windows use the taskbar; transient launcher surfaces keep utility/topmost semantics.
+	if w.options.Role == WindowRoleApplication {
+		exStyle = uint32(win.WS_EX_APPWINDOW | wsExNoRedirectionBitmap)
+	}
 	hwnd := win.CreateWindowEx(
-		win.WS_EX_TOPMOST|win.WS_EX_TOOLWINDOW|wsExNoRedirectionBitmap,
+		exStyle,
 		className,
 		title,
 		win.WS_POPUP,
@@ -1461,6 +1467,11 @@ func (w *platformWindow) destroyNativeResources() {
 	for _, command := range pending {
 		command.reply <- windowCommandResult{err: errors.New("window closed before command completed")}
 	}
+	w.closedOnce.Do(func() {
+		if w.options.OnClosed != nil {
+			w.options.OnClosed()
+		}
+	})
 }
 
 func (w *platformWindow) setRunError(err error) {

@@ -112,11 +112,16 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	if options.HideOnBlur {
 		hideOnBlur = 1
 	}
+	applicationWindow := C.int32_t(0)
+	if options.Role == WindowRoleApplication {
+		applicationWindow = 1
+	}
 	window.native = C.wox_linux_window_create(
 		title,
 		C.float(options.Size.Width),
 		C.float(options.Size.Height),
 		hideOnBlur,
+		applicationWindow,
 		C.uintptr_t(window.handle),
 	)
 	if window.native == nil {
@@ -445,9 +450,13 @@ func (w *platformWindow) markClosed() {
 	w.closed = true
 	handle := w.handle
 	w.handle = 0
+	onClosed := w.options.OnClosed
 	w.mu.Unlock()
 	if handle != 0 {
 		handle.Delete()
+	}
+	if onClosed != nil {
+		onClosed()
 	}
 }
 

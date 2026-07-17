@@ -163,7 +163,7 @@ func (a *App) loadSettingsThemeEditor() error {
 	a.themeEditor = newThemeEditorState(fmt.Sprintf("settings-theme|%x", hash[:8]), raw)
 	a.mu.Unlock()
 	if a.window != nil {
-		_ = a.window.Invalidate()
+		a.invalidateThemeEditorWindow()
 	}
 	return nil
 }
@@ -257,7 +257,7 @@ func (a *App) onThemeEditorPreviewTextInput(event woxui.TextInputEvent) bool {
 		}
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateThemeEditorWindow()
 	return true
 }
 
@@ -271,7 +271,7 @@ func (a *App) editThemeEditorKey(event woxui.KeyEvent) {
 		}
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) moveThemeEditorFocus(delta int) {
@@ -292,8 +292,8 @@ func (a *App) moveThemeEditorFocus(delta int) {
 	}
 	textInput := state.editor != nil
 	a.mu.Unlock()
-	a.updateFormTextInput(textInput)
-	_ = a.window.Invalidate()
+	a.updateThemeEditorTextInput(textInput)
+	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) focusThemeEditorField(index int) {
@@ -308,8 +308,8 @@ func (a *App) focusThemeEditorField(index int) {
 	state.error = ""
 	textInput := state.editor != nil
 	a.mu.Unlock()
-	a.updateFormTextInput(textInput)
-	_ = a.window.Invalidate()
+	a.updateThemeEditorTextInput(textInput)
+	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) setThemeEditorCaret(index, offset int) {
@@ -321,7 +321,7 @@ func (a *App) setThemeEditorCaret(index, offset int) {
 	}
 	state.editor.SetCaret(offset)
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) deactivateThemeEditorPreview() {
@@ -335,8 +335,8 @@ func (a *App) deactivateThemeEditorPreview() {
 	if !wasActive {
 		return
 	}
-	a.restoreQueryTextInput()
-	_ = a.window.Invalidate()
+	a.restoreThemeEditorTextInput()
+	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) setThemeEditorViewport(key string, height float32) {
@@ -358,7 +358,7 @@ func (a *App) scrollThemeEditorPreview(key string, delta float32) {
 	maxOffset := max(float32(0), formDefinitionsContentHeight(state.definitions)-state.viewportHeight)
 	state.scroll = min(max(float32(0), state.scroll+delta), maxOffset)
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateThemeEditorWindow()
 }
 
 func validateThemeEditorValues(values map[string]string) string {
@@ -385,7 +385,7 @@ func (a *App) submitThemeEditorPreview() {
 	if validationError := validateThemeEditorValues(state.values); validationError != "" {
 		state.error = validationError
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateThemeEditorWindow()
 		return
 	}
 	values := copyStringMap(state.values)
@@ -403,8 +403,8 @@ func (a *App) submitThemeEditorPreview() {
 	revision := state.revision
 	key := state.key
 	a.mu.Unlock()
-	a.restoreQueryTextInput()
-	_ = a.window.Invalidate()
+	a.restoreThemeEditorTextInput()
+	a.invalidateThemeEditorWindow()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -449,6 +449,6 @@ func (a *App) submitThemeEditorPreview() {
 		if err != nil {
 			log.Printf("save theme editor preview: %v", err)
 		}
-		_ = a.window.Invalidate()
+		a.invalidateThemeEditorWindow()
 	}()
 }

@@ -70,17 +70,28 @@ type FocusEvent struct {
 	Active bool
 }
 
+// WindowRole controls whether a window behaves like a transient utility surface or a normal application window.
+type WindowRole uint8
+
+const (
+	WindowRoleUtility WindowRole = iota
+	WindowRoleApplication
+)
+
 // WindowOptions configures a launcher window using platform-neutral units and behavior.
 // Size is the preferred initial logical client size; FrameInfo reports the actual drawable size.
 type WindowOptions struct {
-	Title       string
-	Size        Size
-	HideOnBlur  bool
-	OnFrame     func(displayList *DisplayList, frame FrameInfo)
-	OnFocus     func(event FocusEvent)
-	OnKey       func(event KeyEvent) bool
-	OnTextInput func(event TextInputEvent)
-	OnPointer   func(event PointerEvent)
+	Title            string
+	Size             Size
+	Role             WindowRole
+	HideOnBlur       bool
+	OnFrame          func(displayList *DisplayList, frame FrameInfo)
+	OnFocus          func(event FocusEvent)
+	OnKey            func(event KeyEvent) bool
+	OnTextInput      func(event TextInputEvent)
+	OnPointer        func(event PointerEvent)
+	OnCloseRequested func()
+	OnClosed         func()
 }
 
 // Window wraps the native implementation selected for the current platform.

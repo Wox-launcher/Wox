@@ -114,9 +114,18 @@ type settingsSnapshot struct {
 	saving               bool
 	editKey              string
 	editing              woxui.TextEditingState
+	searchQuery          woxui.TextEditingState
+	searchFocused        bool
+	searchPanel          bool
+	searchSelected       int
+	searchScroll         float32
+	searchPlugins        []pluginSettingsPlugin
+	searchLoading        bool
+	searchError          string
 	choicePicker         *settingChoicePickerSnapshot
 	pageScroll           float32
 	railScroll           float32
+	languages            []settingChoice
 	data                 settingsData
 	palette              uiPalette
 	plugins              []pluginSettingsPlugin
@@ -124,12 +133,16 @@ type settingsSnapshot struct {
 	pluginsError         string
 	pluginSelected       int
 	pluginListScroll     float32
+	pluginSearch         woxui.TextEditingState
+	pluginSearchFocused  bool
+	pluginDetailTab      string
 	pluginForm           *pluginSettingsFormSnapshot
 	pluginsStore         bool
 	pluginOperation      string
 	pluginOperationError string
 	pluginUninstallArmed string
 	hotkeyForm           *formFieldsSnapshot
+	hotkeyFocused        bool
 	glanceCatalog        []glanceCatalogItem
 	glanceCatalogLoading bool
 	glanceCatalogError   string
@@ -180,6 +193,7 @@ type settingsSnapshot struct {
 	cloudError           string
 	cloudPageScroll      float32
 	cloudForm            *cloudFormSnapshot
+	cloudActionMenu      string
 	cloudPlugins         []pluginSettingsPlugin
 	cloudPluginScroll    float32
 }
@@ -191,7 +205,6 @@ type settingTab struct {
 
 var baseSettingTabs = []settingTab{
 	{id: "general", label: "General"},
-	{id: "hotkeys", label: "Hotkeys"},
 	{id: "appearance", label: "Appearance"},
 	{id: "network", label: "Network"},
 	{id: "data", label: "Data & backup"},
@@ -221,9 +234,83 @@ func settingTabs(isDev bool) []settingTab {
 
 var boolChoices = []settingChoice{{value: "false", label: "Off"}, {value: "true", label: "On"}}
 
-// openSettings switches the shared launcher window into the platform-neutral management layout.
+type settingNavSpec struct {
+	id       string
+	tab      string
+	labelKey string
+	fallback string
+	icon     string
+	mode     string
+	depth    int
+	parent   bool
+}
+
+func settingNavSpecs(isDev bool) []settingNavSpec {
+	specs := []settingNavSpec{
+		{id: "general", tab: "general", labelKey: "ui_general", fallback: "General", icon: "⚙"},
+		{id: "ui", tab: "appearance", labelKey: "ui_ui", fallback: "Interface", icon: "◉"},
+		{id: "ai", tab: "ai", labelKey: "ui_ai", fallback: "AI", icon: "◇"},
+		{id: "network", tab: "network", labelKey: "ui_network", fallback: "Network", icon: "●"},
+		{id: "data", labelKey: "ui_data", fallback: "Data", icon: "□", parent: true},
+		{id: "data.backup", tab: "data", labelKey: "ui_data_backup_restore_nav", fallback: "Backup & Logs", icon: "☁", depth: 1},
+		{id: "data.cloudsync", tab: "cloud", labelKey: "ui_cloud_sync", fallback: "Cloud Sync", icon: "☁", depth: 1},
+		{id: "plugins", labelKey: "ui_plugins", fallback: "Plugins", icon: "♧", parent: true},
+		{id: "plugins.store", tab: "plugins", labelKey: "ui_store_plugins", fallback: "Plugin Store", icon: "▢", mode: "store", depth: 1},
+		{id: "plugins.installed", tab: "plugins", labelKey: "ui_installed_plugins", fallback: "Installed Plugins", icon: "▦", mode: "installed", depth: 1},
+		{id: "plugins.runtime", tab: "runtime", labelKey: "ui_runtime_settings", fallback: "Runtime Settings", icon: "▣", depth: 1},
+		{id: "themes", labelKey: "ui_themes", fallback: "Themes", icon: "◉", parent: true},
+		{id: "themes.store", tab: "theme", labelKey: "ui_store_themes", fallback: "Theme Store", icon: "▢", mode: "store", depth: 1},
+		{id: "themes.installed", tab: "theme", labelKey: "ui_installed_themes", fallback: "Installed Themes", icon: "⌁", mode: "installed", depth: 1},
+		{id: "themes.edit", tab: "theme", labelKey: "ui_theme_editor_title", fallback: "Theme Editor", icon: "⚑", mode: "editor", depth: 1},
+		{id: "usage", tab: "usage", labelKey: "ui_usage", fallback: "Usage", icon: "⌁"},
+	}
+	if isDev {
+		specs = append(specs, settingNavSpec{id: "debug", tab: "debug", labelKey: "ui_debug", fallback: "Debug", icon: "!"})
+	}
+	return append(specs,
+		settingNavSpec{id: "update", tab: "updates", labelKey: "ui_update", fallback: "Updates", icon: "↻"},
+		settingNavSpec{id: "privacy", tab: "privacy", labelKey: "ui_privacy", fallback: "Privacy", icon: "◇"},
+		settingNavSpec{id: "about", tab: "about", labelKey: "ui_about", fallback: "About", icon: "ⓘ"},
+	)
+}
+
+func activeSettingNavID(tab string, pluginsStore bool, themesMode string) string {
+	switch tab {
+	case "appearance":
+		return "ui"
+	case "data":
+		return "data.backup"
+	case "cloud":
+		return "data.cloudsync"
+	case "plugins":
+		if pluginsStore {
+			return "plugins.store"
+		}
+		return "plugins.installed"
+	case "runtime":
+		return "plugins.runtime"
+	case "theme":
+		switch themesMode {
+		case "store":
+			return "themes.store"
+		case "editor":
+			return "themes.edit"
+		default:
+			return "themes.installed"
+		}
+	case "updates":
+		return "update"
+	default:
+		return tab
+	}
+}
+
+// openSettings creates or focuses the independent settings window at one platform-neutral route.
 func (a *App) openSettings(windowContext settingWindowContext) error {
 	if err := a.reloadSettings(); err != nil {
+		return err
+	}
+	if err := a.hideWindow(true); err != nil {
 		return err
 	}
 	tab, note := settingTabForPath(windowContext.Path)
@@ -245,7 +332,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		}
 	}
 	a.mu.Lock()
-	a.mode = viewSettings
+	a.settingsOpen = true
 	a.settingsCtx = windowContext
 	a.settingTab = tab
 	a.settingRow = 0
@@ -253,17 +340,27 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	a.settingSaving = false
 	a.settingEditKey = ""
 	a.settingEditor = nil
+	a.settingSearchEditor = woxui.NewTextEditor("")
+	a.settingSearchFocused = true
+	a.settingSearchPanel = false
+	a.settingSearchSelected = 0
+	a.settingSearchScroll = 0
+	a.settingsHotkeyFocus = false
 	a.settingChoicePicker = nil
 	a.modelManager = nil
 	a.runtimePageScroll = 0
 	a.cloudPageScroll = 0
 	a.cloudForm = nil
+	a.cloudActionMenu = ""
 	a.form = nil
 	a.requirementForm = nil
 	a.triggerConflict = nil
 	a.themeEditor = nil
 	if a.hotkeySettingsForm != nil {
-		a.hotkeySettingsForm.active = tab == "hotkeys"
+		a.hotkeySettingsForm.active = tab == "general"
+	}
+	if a.aiSettingsForm != nil {
+		a.aiSettingsForm.active = tab == "ai"
 	}
 	if tab == "theme" {
 		a.themesMode = themeMode
@@ -279,7 +376,6 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if a.pluginForm != nil {
 		a.pluginForm.active = false
 	}
-	a.visible = true
 	a.mu.Unlock()
 	a.deactivateTerminalPreview()
 	a.resetChatPreview()
@@ -303,7 +399,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if tab == "ai" {
 		go a.loadAIProviderCatalog()
 	}
-	if tab == "hotkeys" {
+	if tab == "general" {
 		go a.loadHotkeyAppCandidates()
 	}
 	if tab == "appearance" {
@@ -326,23 +422,35 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		go a.reloadAboutVersion()
 	}
 
-	if err := a.window.SetHideOnBlur(false); err != nil {
+	settingsView, err := a.ensureSettingsWindow()
+	if err != nil {
+		a.mu.Lock()
+		a.settingsOpen = false
+		a.mu.Unlock()
 		return err
 	}
-	if err := a.window.SetTextInputState(woxui.TextInputState{}); err != nil {
+	settingsWindow := settingsView.Window()
+	if err := settingsWindow.SetHideOnBlur(false); err != nil {
 		return err
 	}
-	if err := a.window.Center(woxui.Size{Width: settingsWindowWidth, Height: settingsWindowHeight}); err != nil {
+	if err := settingsWindow.SetTextInputState(woxui.TextInputState{}); err != nil {
 		return err
+	}
+	if settingsView.Lifecycle() == woxui.WindowLifecycleCreated {
+		if err := settingsWindow.Center(woxui.Size{Width: settingsWindowWidth, Height: settingsWindowHeight}); err != nil {
+			return err
+		}
 	}
 	if err := a.notifySettingViewChanged(true); err != nil {
 		return err
 	}
-	if _, err := a.window.Show(); err != nil {
-		_ = a.notifySettingViewChanged(false)
+	if _, err := settingsView.Show(); err != nil {
+		_ = settingsView.Close()
 		return err
 	}
-	return a.window.Invalidate()
+	a.updateSettingsTextInput(false)
+	go a.loadSettingsSearchPlugins()
+	return settingsWindow.Invalidate()
 }
 
 // reloadSettings refreshes the shared DTO without coupling the widget layer to Wox core packages.
@@ -352,6 +460,17 @@ func (a *App) reloadSettings() error {
 	var data settingsData
 	if err := a.client.Post(ctx, "/setting/wox", map[string]any{}, &data); err != nil {
 		return fmt.Errorf("load Wox settings: %w", err)
+	}
+	var languages []struct {
+		Code string `json:"Code"`
+		Name string `json:"Name"`
+	}
+	_ = a.client.Post(ctx, "/lang/available", map[string]any{}, &languages)
+	languageChoices := make([]settingChoice, 0, len(languages))
+	for _, language := range languages {
+		if strings.TrimSpace(language.Code) != "" {
+			languageChoices = append(languageChoices, settingChoice{value: language.Code, label: firstNonEmpty(language.Name, language.Code)})
+		}
 	}
 	if data.LaunchMode == "" {
 		data.LaunchMode = "continue"
@@ -375,9 +494,10 @@ func (a *App) reloadSettings() error {
 	hotkeyForm := newHotkeySettingsForm(data)
 	a.mu.Lock()
 	applyAIProviderCatalogLocked(&aiForm, a.aiProviderCatalog)
-	aiForm.active = a.mode == viewSettings && a.settingTab == "ai"
-	hotkeyForm.active = a.mode == viewSettings && a.settingTab == "hotkeys"
+	aiForm.active = a.settingsOpen && a.settingTab == "ai"
+	hotkeyForm.active = a.settingsOpen && a.settingTab == "general"
 	a.settings = data
+	a.settingLanguages = languageChoices
 	a.aiSettingsForm = &aiForm
 	a.hotkeySettingsForm = &hotkeyForm
 	a.mu.Unlock()
@@ -387,52 +507,24 @@ func (a *App) reloadSettings() error {
 		}
 		_ = a.window.Invalidate()
 	}
+	if settingsWindow := a.settingsNativeWindow(); settingsWindow != nil {
+		if err := settingsWindow.SetFontFamily(data.AppFontFamily); err != nil {
+			return fmt.Errorf("apply Wox settings UI font: %w", err)
+		}
+	}
+	a.publishSettingsChanged(data)
 	return nil
 }
 
 func (a *App) closeSettings() error {
 	a.stopHotkeyRecording()
-	a.mu.Lock()
-	windowContext := a.settingsCtx
-	hideOnBlur := a.settings.HideOnLostFocus
-	a.mode = viewLauncher
-	a.show.HideOnBlur = hideOnBlur
-	a.settingSaving = false
-	a.settingEditKey = ""
-	a.settingEditor = nil
-	a.settingChoicePicker = nil
-	a.cloudForm = nil
-	if a.pluginForm != nil {
-		syncFormFieldsEditorLocked(&a.pluginForm.formFieldsState)
-		a.pluginForm.active = false
+	a.mu.RLock()
+	settingsView := a.settingsView
+	a.mu.RUnlock()
+	if settingsView == nil {
+		return nil
 	}
-	if a.themeEditor != nil {
-		a.themeEditor.active = false
-	}
-	a.mu.Unlock()
-	if err := a.notifySettingViewChanged(false); err != nil {
-		return err
-	}
-	if windowContext.Source == "tray" {
-		return a.hideWindow(true)
-	}
-	if err := a.window.SetHideOnBlur(hideOnBlur); err != nil {
-		return err
-	}
-	if err := a.window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 130, Y: 29, Width: 1, Height: 24}}); err != nil {
-		return err
-	}
-	if err := a.applyWindowBoundsAtShowPosition(); err != nil {
-		return err
-	}
-	if _, err := a.window.Show(); err != nil {
-		return err
-	}
-	if err := a.window.Invalidate(); err != nil {
-		return err
-	}
-	go a.refreshGlance("settingsChanged", "", nil)
-	return nil
+	return settingsView.Close()
 }
 
 func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
@@ -443,6 +535,9 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 		return true
 	}
 	if a.onSettingChoicePickerKey(event) {
+		return true
+	}
+	if a.onSettingsSearchKey(event) {
 		return true
 	}
 	if a.onPluginSettingsKey(event) {
@@ -506,6 +601,14 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	if a.settingEditor != nil {
 		editing = a.settingEditor.State()
 	}
+	var searchQuery woxui.TextEditingState
+	if a.settingSearchEditor != nil {
+		searchQuery = a.settingSearchEditor.State()
+	}
+	var pluginSearch woxui.TextEditingState
+	if a.pluginSearchEditor != nil {
+		pluginSearch = a.pluginSearchEditor.State()
+	}
 	var aiForm *formFieldsSnapshot
 	if a.aiSettingsForm != nil {
 		snapshot := snapshotFormFieldsLocked(a.aiSettingsForm)
@@ -527,9 +630,18 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		saving:               a.settingSaving,
 		editKey:              a.settingEditKey,
 		editing:              editing,
+		searchQuery:          searchQuery,
+		searchFocused:        a.settingSearchFocused,
+		searchPanel:          a.settingSearchPanel,
+		searchSelected:       a.settingSearchSelected,
+		searchScroll:         a.settingSearchScroll,
+		searchPlugins:        append([]pluginSettingsPlugin(nil), a.settingSearchPlugins...),
+		searchLoading:        a.settingSearchLoading,
+		searchError:          a.settingSearchError,
 		choicePicker:         choicePicker,
 		pageScroll:           a.settingPageScroll,
 		railScroll:           a.settingRailScroll,
+		languages:            append([]settingChoice(nil), a.settingLanguages...),
 		data:                 a.settings,
 		palette:              a.palette,
 		plugins:              append([]pluginSettingsPlugin(nil), a.plugins...),
@@ -537,12 +649,16 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		pluginsError:         a.pluginsError,
 		pluginSelected:       a.pluginSelected,
 		pluginListScroll:     a.pluginListScroll,
+		pluginSearch:         pluginSearch,
+		pluginSearchFocused:  a.pluginSearchFocused,
+		pluginDetailTab:      a.pluginDetailTab,
 		pluginForm:           snapshotPluginSettingsFormLocked(a.pluginForm),
 		pluginsStore:         a.pluginsStore,
 		pluginOperation:      a.pluginOperation,
 		pluginOperationError: a.pluginOperationError,
 		pluginUninstallArmed: a.pluginUninstallArmed,
 		hotkeyForm:           hotkeyForm,
+		hotkeyFocused:        a.settingsHotkeyFocus,
 		glanceCatalog:        append([]glanceCatalogItem(nil), a.glanceCatalog...),
 		glanceCatalogLoading: a.glanceCatalogLoading,
 		glanceCatalogError:   a.glanceCatalogError,
@@ -593,6 +709,7 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		cloudError:           a.cloudError,
 		cloudPageScroll:      a.cloudPageScroll,
 		cloudForm:            cloudForm,
+		cloudActionMenu:      a.cloudActionMenu,
 		cloudPlugins:         append([]pluginSettingsPlugin(nil), a.cloudPlugins...),
 		cloudPluginScroll:    a.cloudPluginScroll,
 	}
@@ -602,6 +719,7 @@ func (a *App) selectSettingTab(tab string) {
 	if tab == "debug" && !a.isDev {
 		return
 	}
+	a.blurSettingsSearch()
 	a.stopHotkeyRecording()
 	loadPlugins := false
 	loadTheme := false
@@ -647,8 +765,8 @@ func (a *App) selectSettingTab(tab string) {
 		}
 	}
 	if a.hotkeySettingsForm != nil {
-		a.hotkeySettingsForm.active = tab == "hotkeys"
-		if tab == "hotkeys" {
+		a.hotkeySettingsForm.active = tab == "general"
+		if tab == "general" {
 			setFormFieldsFocusLocked(a.hotkeySettingsForm, max(0, a.hotkeySettingsForm.focused))
 		}
 	}
@@ -661,14 +779,14 @@ func (a *App) selectSettingTab(tab string) {
 	loadUsage = tab == "usage" && !a.usageLoaded && !a.usageLoading
 	loadAbout = (tab == "about" || tab == "privacy") && !a.aboutLoaded && !a.aboutLoading
 	loadAIProviders = tab == "ai" && !a.aiProvidersLoaded && !a.aiProvidersLoading
-	loadHotkeyApps = tab == "hotkeys" && !a.hotkeyAppsLoaded && !a.hotkeyAppsLoading
+	loadHotkeyApps = tab == "general" && !a.hotkeyAppsLoaded && !a.hotkeyAppsLoading
 	loadGlanceCatalog = tab == "appearance" && !a.glanceCatalogLoaded && !a.glanceCatalogLoading
 	loadSystemFonts = tab == "appearance" && !a.systemFontsLoaded && !a.systemFontsLoading
 	loadData = tab == "data" && !a.dataLoaded && !a.dataLoading
 	loadRuntime = tab == "runtime" && !a.runtimeLoaded && !a.runtimeLoading
 	loadCloud = tab == "cloud" && !a.cloudLoaded && !a.cloudLoading
 	a.mu.Unlock()
-	_ = a.window.SetTextInputState(woxui.TextInputState{})
+	a.updateSettingsTextInput(false)
 	if loadPlugins {
 		go func() {
 			a.mu.RLock()
@@ -685,7 +803,7 @@ func (a *App) selectSettingTab(tab string) {
 				a.mu.Lock()
 				a.settingNote = "Could not load theme editor: " + err.Error()
 				a.mu.Unlock()
-				_ = a.window.Invalidate()
+				a.invalidateSettingsWindow()
 			}
 		}()
 	}
@@ -726,7 +844,57 @@ func (a *App) selectSettingTab(tab string) {
 	if loadCloud {
 		go a.reloadCloudSync()
 	}
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
+}
+
+// selectSettingsNavItem keeps hierarchical Flutter routes mapped onto the existing page and catalog state.
+func (a *App) selectSettingsNavItem(item settingNavSpec) {
+	if item.parent || item.tab == "" {
+		return
+	}
+	a.mu.RLock()
+	currentTab := a.settingTab
+	a.mu.RUnlock()
+	if item.tab == "plugins" {
+		store := item.mode == "store"
+		if currentTab == "plugins" {
+			a.switchPluginList(store)
+			return
+		}
+		a.mu.Lock()
+		if a.pluginsStore != store {
+			a.pluginsStore = store
+			a.plugins = nil
+			a.pluginsLoaded = false
+			a.pluginsLoading = false
+			a.pluginSelected = -1
+			a.pluginForm = nil
+			a.pluginListScroll = 0
+		}
+		a.mu.Unlock()
+		a.selectSettingTab("plugins")
+		return
+	}
+	if item.tab == "theme" {
+		mode := item.mode
+		if currentTab == "theme" {
+			a.switchThemeSettingsMode(mode)
+			return
+		}
+		a.mu.Lock()
+		if a.themesMode != mode {
+			a.themesMode = mode
+			a.themes = nil
+			a.themesLoaded = false
+			a.themesLoading = false
+			a.themeSelected = -1
+			a.themeListScroll = 0
+		}
+		a.mu.Unlock()
+		a.selectSettingTab("theme")
+		return
+	}
+	a.selectSettingTab(item.tab)
 }
 
 func (a *App) moveSettingTab(delta int) {
@@ -754,18 +922,19 @@ func (a *App) setSettingsRailViewport(height float32) {
 
 func (a *App) scrollSettingsRail(delta float32) {
 	a.mu.Lock()
-	contentHeight := settingsRailContentHeight(len(settingTabs(a.isDev)))
+	contentHeight := settingsRailContentHeight(len(settingNavSpecs(a.isDev)))
 	maximum := max(float32(0), contentHeight-a.settingRailViewport)
 	a.settingRailScroll = min(max(float32(0), a.settingRailScroll+delta), maximum)
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) ensureSettingTabVisibleLocked(tabID string) {
-	tabs := settingTabs(a.isDev)
+	items := settingNavSpecs(a.isDev)
+	activeID := activeSettingNavID(tabID, a.pluginsStore, a.themesMode)
 	index := -1
-	for candidate, tab := range tabs {
-		if tab.id == tabID {
+	for candidate, item := range items {
+		if item.id == activeID {
 			index = candidate
 			break
 		}
@@ -774,19 +943,19 @@ func (a *App) ensureSettingTabVisibleLocked(tabID string) {
 		return
 	}
 	viewport := max(float32(1), a.settingRailViewport)
-	top := float32(66 + index*56)
-	bottom := top + 48
+	top := float32(index * 50)
+	bottom := top + 46
 	if top < a.settingRailScroll {
 		a.settingRailScroll = top
 	} else if bottom > a.settingRailScroll+viewport {
 		a.settingRailScroll = bottom - viewport
 	}
-	maximum := max(float32(0), settingsRailContentHeight(len(tabs))-viewport)
+	maximum := max(float32(0), settingsRailContentHeight(len(items))-viewport)
 	a.settingRailScroll = min(max(float32(0), a.settingRailScroll), maximum)
 }
 
 func settingsRailContentHeight(tabCount int) float32 {
-	return 58 + float32(tabCount*56)
+	return float32(tabCount * 50)
 }
 
 func (a *App) moveSettingRow(delta int) {
@@ -799,10 +968,11 @@ func (a *App) moveSettingRow(delta int) {
 	a.settingRow = (a.settingRow + delta + len(items)) % len(items)
 	a.ensureSettingRowVisibleLocked(len(items))
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) selectSettingRow(index int) {
+	a.blurSettingsSearch()
 	snapshot := a.settingsSnapshot()
 	items := settingItemsForSnapshot(snapshot)
 	if index < 0 || index >= len(items) {
@@ -815,31 +985,32 @@ func (a *App) selectSettingRow(index int) {
 			return
 		}
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 		return
 	}
 	a.settingRow = index
+	a.settingsHotkeyFocus = false
 	a.ensureSettingRowVisibleLocked(len(items))
 	a.mu.Unlock()
-	_ = a.window.SetTextInputState(woxui.TextInputState{})
-	_ = a.window.Invalidate()
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
 }
 
-func (a *App) setSettingsPageViewport(height float32, itemCount int) {
+// setSettingsPageGeometry keeps scrolling bounded to the measured flat settings form.
+func (a *App) setSettingsPageGeometry(height, contentHeight float32, itemCount int) {
 	a.mu.Lock()
 	a.settingPageViewport = max(float32(1), height)
+	a.settingPageContent = max(float32(0), contentHeight)
 	a.ensureSettingRowVisibleLocked(itemCount)
 	a.mu.Unlock()
 }
 
 func (a *App) scrollSettingsPage(delta float32) {
-	snapshot := a.settingsSnapshot()
-	contentHeight := settingsPageContentHeight(len(settingItemsForSnapshot(snapshot)))
 	a.mu.Lock()
-	maximum := max(float32(0), contentHeight-a.settingPageViewport)
+	maximum := max(float32(0), a.settingPageContent-a.settingPageViewport)
 	a.settingPageScroll = min(max(float32(0), a.settingPageScroll+delta), maximum)
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) ensureSettingRowVisibleLocked(itemCount int) {
@@ -858,7 +1029,7 @@ func (a *App) ensureSettingRowVisibleLocked(itemCount int) {
 	} else if bottom > a.settingPageScroll+viewport {
 		a.settingPageScroll = bottom - viewport
 	}
-	maximum := max(float32(0), settingsPageContentHeight(itemCount)-viewport)
+	maximum := max(float32(0), a.settingPageContent-viewport)
 	a.settingPageScroll = min(max(float32(0), a.settingPageScroll), maximum)
 }
 
@@ -895,7 +1066,7 @@ func (a *App) activateSetting(direction int) {
 	a.settingSaving = true
 	a.settingNote = "Saving " + item.title + "…"
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 	go a.saveSetting(item, next)
 }
 
@@ -918,8 +1089,8 @@ func (a *App) startBuiltInSettingEdit(item settingItem, caret int) {
 	}
 	a.settingNote = "Editing " + item.title + " · Enter saves · Esc cancels"
 	a.mu.Unlock()
-	a.updateFormTextInput(true)
-	_ = a.window.Invalidate()
+	a.updateSettingsTextInput(true)
+	a.invalidateSettingsWindow()
 }
 
 // cancelBuiltInSettingEdit discards an unsaved text value without mutating the loaded settings DTO.
@@ -929,8 +1100,8 @@ func (a *App) cancelBuiltInSettingEdit() {
 	a.settingEditor = nil
 	a.settingNote = ""
 	a.mu.Unlock()
-	_ = a.window.SetTextInputState(woxui.TextInputState{})
-	_ = a.window.Invalidate()
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
 }
 
 // submitBuiltInSettingEdit persists the active text row through the same key-value route as choice settings.
@@ -957,15 +1128,15 @@ func (a *App) submitBuiltInSettingEdit() {
 	a.settingSaving = true
 	a.settingNote = "Saving " + item.title + "…"
 	a.mu.Unlock()
-	_ = a.window.SetTextInputState(woxui.TextInputState{})
-	_ = a.window.Invalidate()
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
 	go a.saveSetting(item, settingChoice{value: value, label: value})
 }
 
 // onBuiltInSettingsEditorKey keeps text editing separate from rail and choice navigation.
 func (a *App) onBuiltInSettingsEditorKey(event woxui.KeyEvent) bool {
 	a.mu.RLock()
-	active := a.mode == viewSettings && a.settingEditKey != "" && a.settingEditor != nil
+	active := a.settingsOpen && a.settingEditKey != "" && a.settingEditor != nil
 	saving := a.settingSaving
 	a.mu.RUnlock()
 	if !active {
@@ -987,7 +1158,7 @@ func (a *App) onBuiltInSettingsEditorKey(event woxui.KeyEvent) bool {
 		a.settingEditor.HandleKey(event)
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 	return true
 }
 
@@ -997,13 +1168,13 @@ func (a *App) onBuiltInSettingsTextInput(event woxui.TextInputEvent) bool {
 		return true
 	}
 	a.mu.Lock()
-	if a.mode != viewSettings || a.settingSaving || a.settingEditKey == "" || a.settingEditor == nil {
+	if !a.settingsOpen || a.settingSaving || a.settingEditKey == "" || a.settingEditor == nil {
 		a.mu.Unlock()
 		return false
 	}
 	a.settingEditor.HandleTextInput(event)
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 	return true
 }
 
@@ -1012,12 +1183,16 @@ func (a *App) browseBuiltInSettingFile(item settingItem) {
 	if !item.text || !item.browseFile {
 		return
 	}
-	path, err := a.window.PickFile(woxui.FileDialogOptions{})
+	settingsWindow := a.settingsNativeWindow()
+	if settingsWindow == nil {
+		return
+	}
+	path, err := settingsWindow.PickFile(woxui.FileDialogOptions{})
 	if err != nil {
 		a.mu.Lock()
 		a.settingNote = "Could not select " + item.title + ": " + err.Error()
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 		return
 	}
 	if path == "" {
@@ -1029,7 +1204,7 @@ func (a *App) browseBuiltInSettingFile(item settingItem) {
 		a.settingEditor.SetText(path, false)
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) saveSetting(item settingItem, choice settingChoice) {
@@ -1041,6 +1216,9 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 	cancel()
 	if err == nil {
 		err = a.reloadSettings()
+	}
+	if err == nil && item.key == "LangCode" {
+		err = a.reloadTranslations()
 	}
 	restoreTextInput := false
 	a.mu.Lock()
@@ -1068,9 +1246,9 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 		a.mu.Unlock()
 	}
 	if restoreTextInput {
-		a.updateFormTextInput(true)
+		a.updateSettingsTextInput(true)
 	} else {
-		_ = a.window.SetTextInputState(woxui.TextInputState{})
+		a.updateSettingsTextInput(false)
 	}
 	if refreshGlance {
 		go a.refreshGlance("settingsChanged", "", nil)
@@ -1078,7 +1256,7 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 	if err == nil && (item.key == "CustomPythonPath" || item.key == "CustomNodejsPath") {
 		go a.reloadRuntimeStatuses()
 	}
-	_ = a.window.Invalidate()
+	a.publishSettingsChanged(item.key)
 }
 
 func settingTabForPath(path string) (string, string) {
@@ -1088,7 +1266,7 @@ func settingTabForPath(path string) (string, string) {
 	case "/ui", "/appearance":
 		return "appearance", ""
 	case "/hotkeys", "hotkeys", "/query/hotkeys":
-		return "hotkeys", ""
+		return "general", ""
 	case "/network":
 		return "network", ""
 	case "/data", "/data/backup", "/data.backup", "data", "data.backup":
@@ -1128,12 +1306,22 @@ func settingItemsForSnapshot(snapshot settingsSnapshot) []settingItem {
 			choices: []settingChoice{{"7d", "7 days"}, {"30d", "30 days"}, {"365d", "365 days"}, {"all", "All time"}},
 		}}
 	}
-	if snapshot.tab == "ai" || snapshot.tab == "hotkeys" || snapshot.tab == "data" || snapshot.tab == "cloud" || snapshot.tab == "plugins" || snapshot.tab == "theme" || snapshot.tab == "about" {
+	if snapshot.tab == "ai" || snapshot.tab == "data" || snapshot.tab == "cloud" || snapshot.tab == "plugins" || snapshot.tab == "theme" || snapshot.tab == "about" {
 		return nil
 	}
 	items := settingItems(snapshot.tab, snapshot.data)
+	if snapshot.tab == "general" && len(snapshot.languages) > 0 {
+		for index := range items {
+			if items[index].key == "LangCode" {
+				items[index].choices = append([]settingChoice(nil), snapshot.languages...)
+				break
+			}
+		}
+	}
 	if snapshot.tab == "appearance" {
-		items = append(items, systemFontSettingItem(snapshot))
+		font := systemFontSettingItem(snapshot)
+		insertAt := min(4, len(items))
+		items = append(items[:insertAt], append([]settingItem{font}, items[insertAt:]...)...)
 		items = append(items, primaryGlanceSettingItem(snapshot))
 	}
 	return items
@@ -1193,12 +1381,12 @@ func settingItems(tab string, data settingsData) []settingItem {
 			resultChoices = append(resultChoices, settingChoice{value: fmt.Sprintf("%d", count), label: fmt.Sprintf("%d", count)})
 		}
 		return []settingItem{
-			{key: "AppWidth", title: "Launcher width", description: "Logical width of the query and result window", value: fmt.Sprintf("%d", data.AppWidth), choices: widthChoices},
-			{key: "MaxResultCount", title: "Maximum results", description: "Number of result rows visible before scrolling", value: fmt.Sprintf("%d", data.MaxResultCount), choices: resultChoices},
-			{key: "UiDensity", title: "UI density", description: "Spacing and row size across the launcher", value: data.UIDensity, choices: []settingChoice{{"compact", "Compact"}, {"normal", "Normal"}, {"comfortable", "Comfortable"}}},
-			{key: "LaunchMode", title: "Launch mode", description: "Start fresh or continue the previous query", value: data.LaunchMode, choices: []settingChoice{{"fresh", "Fresh"}, {"continue", "Continue"}}},
-			{key: "StartPage", title: "Start page", description: "Content shown for an empty query", value: data.StartPage, choices: []settingChoice{{"blank", "Blank"}, {"mru", "Recent"}}},
 			{key: "ShowPosition", title: "Window position", description: "Display used when Wox opens", value: data.ShowPosition, choices: []settingChoice{{"mouse_screen", "Mouse display"}, {"active_screen", "Active display"}, {"last_location", "Last location"}}},
+			{key: "ShowTray", title: "Tray icon", description: "Show Wox in the system tray or menu bar", value: boolValue(data.ShowTray), choices: boolChoices},
+			{key: "AppWidth", title: "Launcher width", description: "Logical width of the query and result window", value: fmt.Sprintf("%d", data.AppWidth), choices: widthChoices},
+			{key: "UiDensity", title: "UI density", description: "Spacing and row size across the launcher", value: data.UIDensity, choices: []settingChoice{{"compact", "Compact"}, {"normal", "Normal"}, {"comfortable", "Comfortable"}}},
+			{key: "EnableQueryCompletionHint", title: "Query completion hints", description: "Show completion text while typing", value: boolValue(data.EnableQueryCompletionHint), choices: boolChoices},
+			{key: "MaxResultCount", title: "Maximum results", description: "Number of result rows visible before scrolling", value: fmt.Sprintf("%d", data.MaxResultCount), choices: resultChoices},
 			{key: "EnableGlance", title: "Glance", description: "Show glance content beside the query", value: boolValue(data.EnableGlance), choices: boolChoices},
 			{key: "HideGlanceIcon", title: "Hide glance icon", description: "Keep the query box visually minimal", value: boolValue(data.HideGlanceIcon), choices: boolChoices},
 		}
@@ -1238,11 +1426,12 @@ func settingItems(tab string, data settingsData) []settingItem {
 		return []settingItem{
 			{key: "EnableAutostart", title: "Start at login", description: "Launch Wox when the desktop session starts", value: boolValue(data.EnableAutostart), choices: boolChoices},
 			{key: "HideOnStart", title: "Start hidden", description: "Keep Wox hidden after startup", value: boolValue(data.HideOnStart), choices: boolChoices},
+			{key: "LaunchMode", title: "Launch mode", description: "Start fresh or continue the previous query", value: data.LaunchMode, choices: []settingChoice{{"fresh", "Fresh"}, {"continue", "Continue"}}},
+			{key: "StartPage", title: "Start page", description: "Content shown for an empty query", value: data.StartPage, choices: []settingChoice{{"blank", "Blank"}, {"mru", "Recent"}}},
 			{key: "HideOnLostFocus", title: "Hide on focus loss", description: "Dismiss the launcher when focus moves away", value: boolValue(data.HideOnLostFocus), choices: boolChoices},
-			{key: "ShowTray", title: "Tray icon", description: "Show Wox in the system tray or menu bar", value: boolValue(data.ShowTray), choices: boolChoices},
 			{key: "UsePinYin", title: "Pinyin search", description: "Match Chinese text with Pinyin", value: boolValue(data.UsePinYin), choices: boolChoices},
 			{key: "SwitchInputMethodABC", title: "Switch input method", description: "Use the Latin input source when Wox opens", value: boolValue(data.SwitchInputMethodABC), choices: boolChoices},
-			{key: "EnableQueryCompletionHint", title: "Query completion hints", description: "Show completion text while typing", value: boolValue(data.EnableQueryCompletionHint), choices: boolChoices},
+			{key: "LangCode", title: "Language", description: "Language used by Wox", value: data.LangCode, choices: []settingChoice{{data.LangCode, data.LangCode}}},
 		}
 	}
 }

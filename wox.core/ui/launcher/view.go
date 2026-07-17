@@ -112,13 +112,7 @@ func (a *App) snapshot() viewSnapshot {
 	}
 }
 
-func (a *App) build(frame woxui.FrameInfo) woxwidget.Widget {
-	a.mu.RLock()
-	mode := a.mode
-	a.mu.RUnlock()
-	if mode == viewSettings {
-		return a.buildSettings(frame)
-	}
+func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	snapshot := a.snapshot()
 	width := frame.Size.Width
 	height := frame.Size.Height

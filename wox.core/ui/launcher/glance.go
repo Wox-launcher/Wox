@@ -42,7 +42,7 @@ type glanceCatalogItem struct {
 }
 
 func (a *App) glanceEligibleLocked() bool {
-	if !a.visible || a.mode != viewLauncher || !a.settings.EnableGlance || a.settings.PrimaryGlance.PluginID == "" || a.settings.PrimaryGlance.GlanceID == "" {
+	if !a.visible || !a.settings.EnableGlance || a.settings.PrimaryGlance.PluginID == "" || a.settings.PrimaryGlance.GlanceID == "" {
 		return false
 	}
 	if a.query.QueryType != "input" || a.layout.Icon.ImageData != "" {

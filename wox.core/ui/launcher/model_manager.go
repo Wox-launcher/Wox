@@ -147,8 +147,8 @@ func (a *App) openPluginModelManager(index int) {
 	}
 	a.modelManager = manager
 	a.mu.Unlock()
-	_ = a.window.SetTextInputState(woxui.TextInputState{})
-	_ = a.window.Invalidate()
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
 	go a.refreshModelManager(manager)
 }
 
@@ -167,7 +167,7 @@ func (a *App) refreshModelManager(state *modelManagerState) {
 	state.error = ""
 	kind := state.kind
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	statusRoute := "/dictation/model/status"
 	engineRoute := "/dictation/native-lib/status"
@@ -216,7 +216,7 @@ func (a *App) refreshModelManager(state *modelManagerState) {
 	state.target.definitions[state.fieldIndex].Value.Options = append([]formOption(nil), state.options...)
 	poll := modelManagerNeedsPoll(state)
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 	if poll {
 		time.AfterFunc(time.Second, func() { a.refreshModelManager(state) })
 	}
@@ -251,7 +251,7 @@ func (a *App) closeModelManager() {
 	}
 	a.modelManager = nil
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) selectModelManagerRow(index int) {
@@ -264,7 +264,7 @@ func (a *App) selectModelManagerRow(index int) {
 	state.selectedRow = index
 	a.ensureModelManagerRowVisibleLocked(state)
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) setModelManagerViewport(height float32) {
@@ -283,7 +283,7 @@ func (a *App) scrollModelManager(delta float32) {
 		state.scroll = min(max(float32(0), state.scroll+delta), maximum)
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) ensureModelManagerRowVisibleLocked(state *modelManagerState) {
@@ -336,7 +336,7 @@ func (a *App) runModelManagerAction(action string, index int) {
 	state.error = ""
 	kind := state.kind
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	go func() {
 		route := "/dictation/model/download"
@@ -370,7 +370,7 @@ func (a *App) runModelManagerAction(action string, index int) {
 			state.target.values[key] = ""
 		}
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 		if err == nil {
 			go a.refreshModelManager(state)
 		}

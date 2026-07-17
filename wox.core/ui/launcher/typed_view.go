@@ -19,7 +19,7 @@ func (a *App) SessionID() string {
 	return a.sessionID
 }
 
-// Show switches the shared window to launcher mode and makes it visible.
+// Show presents the launcher without changing any independent management window.
 func (a *App) Show(_ context.Context, options contract.ShowOptions) error {
 	return a.showWindow(fromCoreShowOptions(options))
 }
@@ -114,17 +114,30 @@ func (a *App) RecordHotkey(_ context.Context, hotkey string, kind string) error 
 // ChangeTheme applies a platform-resolved core theme without transport serialization.
 func (a *App) ChangeTheme(_ context.Context, theme common.Theme) error {
 	a.applyTheme(fromCoreTheme(theme))
+	a.publishSettingsChanged("theme")
 	return nil
 }
 
-// OpenSetting opens the shared management surface at one explicit path.
+// OpenSetting opens the independent management window at one explicit path.
 func (a *App) OpenSetting(_ context.Context, windowContext common.SettingWindowContext) error {
+	if !a.isPrimary && a.primary != nil {
+		return a.primary.OpenSetting(context.Background(), windowContext)
+	}
 	return a.openSettings(settingWindowContext{Path: windowContext.Path, Param: windowContext.Param, Source: string(windowContext.Source)})
 }
 
-// FocusSetting raises the current native window without changing its management state.
+// FocusSetting raises the current settings window without changing its management state.
 func (a *App) FocusSetting(_ context.Context) error {
-	_, err := a.window.Show()
+	if !a.isPrimary && a.primary != nil {
+		return a.primary.FocusSetting(context.Background())
+	}
+	a.mu.RLock()
+	settingsView := a.settingsView
+	a.mu.RUnlock()
+	if settingsView == nil {
+		return nil
+	}
+	_, err := settingsView.Show()
 	return err
 }
 
@@ -185,6 +198,7 @@ func (a *App) SendAIQuestion(_ context.Context, questionID string, question stri
 // ReloadSettingPlugins refreshes plugin-backed settings and glance catalogs.
 func (a *App) ReloadSettingPlugins(_ context.Context) error {
 	go a.reloadGlanceCatalogFromCore()
+	a.publishSettingsChanged("plugins")
 	return nil
 }
 
@@ -203,6 +217,7 @@ func (a *App) ReloadSetting(_ context.Context) error {
 	if refreshGlance {
 		go a.refreshGlance("settingsChanged", "", nil)
 	}
+	a.publishSettingsChanged("settings")
 	return nil
 }
 
@@ -261,7 +276,7 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 	}
 	result, err := woxui.CaptureScreenshot(woxui.ScreenshotOptions{
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
-		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm,
+		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, WindowManager: a.windows,
 	})
 	if err != nil {
 		return common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusFailed, ErrorCode: "capture_failed", ErrorMessage: err.Error()}, nil

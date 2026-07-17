@@ -113,11 +113,16 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	if options.HideOnBlur {
 		hideOnBlur = 1
 	}
+	applicationWindow := C.int32_t(0)
+	if options.Role == WindowRoleApplication {
+		applicationWindow = 1
+	}
 	window.native = C.wox_darwin_window_create(
 		title,
 		C.float(options.Size.Width),
 		C.float(options.Size.Height),
 		hideOnBlur,
+		applicationWindow,
 		C.uintptr_t(window.handle),
 	)
 	if window.native == nil {
@@ -420,17 +425,29 @@ func (w *platformWindow) close() error {
 	}
 
 	// Native close drains onto the AppKit thread and clears its callback context before the handle is deleted.
+	w.markClosed()
+	return nil
+}
+
+func (w *platformWindow) markClosed() {
 	w.mu.Lock()
+	if w.closed {
+		w.mu.Unlock()
+		return
+	}
 	w.native = nil
 	w.closing = false
 	w.closed = true
 	handle := w.handle
 	w.handle = 0
+	onClosed := w.options.OnClosed
 	w.mu.Unlock()
 	if handle != 0 {
 		handle.Delete()
 	}
-	return nil
+	if onClosed != nil {
+		onClosed()
+	}
 }
 
 func (w *platformWindow) openNative() (*C.WoxDarwinWindow, error) {
@@ -579,6 +596,20 @@ func woxGoDarwinStart(context C.uintptr_t) C.int32_t {
 //export woxGoDarwinCall
 func woxGoDarwinCall(context C.uintptr_t) {
 	cgo.Handle(context).Value().(func())()
+}
+
+//export woxGoDarwinCloseRequested
+func woxGoDarwinCloseRequested(context C.uintptr_t) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnCloseRequested != nil {
+		window.options.OnCloseRequested()
+		return
+	}
+	go func() {
+		if err := window.close(); err != nil {
+			window.recordRenderError("close requested window", -1)
+		}
+	}()
 }
 
 //export woxGoDarwinFrame

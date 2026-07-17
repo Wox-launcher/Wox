@@ -91,7 +91,7 @@ func (a *App) loadAIProviderCatalog() {
 	a.aiProvidersLoading = true
 	a.aiProvidersError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -116,7 +116,7 @@ func (a *App) loadAIProviderCatalog() {
 		}
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 // applyAIProviderCatalogLocked merges live provider names with configured names that core may no longer advertise.
@@ -196,7 +196,7 @@ func applyAIProviderDefaultHostLocked(state *formTableEditorState, overwrite boo
 // onAISettingsKey keeps table selection portable while the modal editor owns row-level input.
 func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
 	a.mu.RLock()
-	active := a.mode == viewSettings && a.settingTab == "ai" && a.aiSettingsForm != nil && a.tableEditor == nil
+	active := a.settingsOpen && a.settingTab == "ai" && a.aiSettingsForm != nil && a.tableEditor == nil
 	a.mu.RUnlock()
 	if !active {
 		return false
@@ -222,7 +222,7 @@ func (a *App) selectAISettingsTable(index int) {
 		setFormFieldsFocusLocked(a.aiSettingsForm, index)
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 // moveAISettingsTable wraps table-card selection without entering the modal editor.
@@ -233,7 +233,7 @@ func (a *App) moveAISettingsTable(delta int) {
 		setFormFieldsFocusLocked(a.aiSettingsForm, a.settingRow)
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) openSelectedAISettingsTable() {
@@ -246,7 +246,7 @@ func (a *App) openSelectedAISettingsTable() {
 // openAISettingsTable opens a settings-owned target in the same modal table editor used by plugin forms.
 func (a *App) openAISettingsTable(index int) {
 	a.mu.Lock()
-	if a.mode == viewSettings && a.settingTab == "ai" && a.aiSettingsForm != nil {
+	if a.settingsOpen && a.settingTab == "ai" && a.aiSettingsForm != nil {
 		a.settingRow = index
 		a.openFormTableLocked(a.aiSettingsForm, index)
 	}
@@ -276,8 +276,8 @@ func (a *App) beginCloneRemoteAISkill() {
 	state.status = ""
 	state.deleteArmed = -1
 	a.mu.Unlock()
-	a.updateFormTextInput(true)
-	_ = a.window.Invalidate()
+	a.updateSettingsTextInput(true)
+	a.invalidateSettingsWindow()
 }
 
 // cloneRemoteAISkills discovers repository skills, appends them atomically, then saves the combined setting.
@@ -299,7 +299,7 @@ func (a *App) cloneRemoteAISkills(state *formTableEditorState, url, previousValu
 		}
 		a.settingNote = "Could not clone remote skills: " + err.Error()
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 		return
 	}
 	state.rows = append(state.rows, cloneFormTableRows(skills)...)
@@ -313,7 +313,7 @@ func (a *App) cloneRemoteAISkills(state *formTableEditorState, url, previousValu
 			state.status = commitErr.Error()
 		}
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 		return
 	}
 	value := state.target.values[state.definition.Value.Key]
@@ -376,7 +376,7 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 			}
 			a.settingNote = "Could not save " + settingsTableLabel(key) + ": " + err.Error()
 			a.mu.Unlock()
-			_ = a.window.Invalidate()
+			a.invalidateSettingsWindow()
 			return
 		}
 	}
@@ -410,7 +410,7 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 		a.settingNote = settingsTableLabel(key) + " saved"
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func settingsTableLabel(key string) string {

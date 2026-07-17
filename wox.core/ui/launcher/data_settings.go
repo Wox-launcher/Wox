@@ -30,7 +30,7 @@ func (a *App) reloadDataSettings() {
 	a.dataLoading = true
 	a.dataError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -62,7 +62,7 @@ func (a *App) reloadDataSettings() {
 	}
 	a.dataError = errorText
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 // createDataBackup runs the potentially slow archive operation away from the UI event loop.
@@ -75,7 +75,7 @@ func (a *App) createDataBackup() {
 	a.dataBusy = "backup"
 	a.dataError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -89,7 +89,7 @@ func (a *App) createDataBackup() {
 			a.settingNote = "Manual backup created"
 		}
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 		if err == nil {
 			a.reloadDataSettings()
 		}
@@ -107,14 +107,14 @@ func (a *App) restoreDataBackup(id string) {
 		a.dataRestoreArmed = id
 		a.settingNote = "Press Confirm restore to replace current settings with this backup."
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 		return
 	}
 	a.dataRestoreArmed = ""
 	a.dataBusy = "restore"
 	a.dataError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -131,13 +131,13 @@ func (a *App) restoreDataBackup(id string) {
 			a.settingNote = "Backup restored"
 		}
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 	}()
 }
 
 // chooseDataLocation separates native directory selection from the destructive move confirmation.
 func (a *App) chooseDataLocation() {
-	path, err := a.window.PickFile(woxui.FileDialogOptions{Directory: true})
+	path, err := a.settingsNativeWindow().PickFile(woxui.FileDialogOptions{Directory: true})
 	a.mu.Lock()
 	if err != nil {
 		a.dataError = "Could not select data directory: " + err.Error()
@@ -146,7 +146,7 @@ func (a *App) chooseDataLocation() {
 		a.settingNote = "Confirm the new data directory before Wox moves its files."
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) cancelDataLocationChange() {
@@ -154,7 +154,7 @@ func (a *App) cancelDataLocationChange() {
 	a.dataPendingLocation = ""
 	a.settingNote = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 // confirmDataLocationChange delegates the actual migration to core after the visible confirmation step.
@@ -169,7 +169,7 @@ func (a *App) confirmDataLocationChange() {
 	a.dataBusy = "location"
 	a.dataError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -185,7 +185,7 @@ func (a *App) confirmDataLocationChange() {
 			a.settingNote = "Data directory updated"
 		}
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 	}()
 }
 
@@ -204,7 +204,7 @@ func (a *App) toggleDataAutoBackup() {
 	a.settingSaving = true
 	a.settingNote = "Saving Automatic backup…"
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 	go a.saveSetting(
 		settingItem{key: "EnableAutoBackup", title: "Automatic backup", value: fmt.Sprintf("%t", !next), choices: boolChoices},
 		settingChoice{value: fmt.Sprintf("%t", next), label: label},
@@ -226,7 +226,7 @@ func (a *App) cycleDataLogLevel() {
 	a.settingSaving = true
 	a.settingNote = "Saving Log level…"
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 	go a.saveSetting(
 		settingItem{key: "LogLevel", title: "Log level", value: current, choices: []settingChoice{{"INFO", "Info"}, {"DEBUG", "Debug"}}},
 		settingChoice{value: next, label: strings.ToLower(next)},
@@ -244,14 +244,14 @@ func (a *App) clearDataLogs() {
 		a.dataClearLogsArmed = true
 		a.settingNote = "Press Confirm clear to delete historical logs."
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 		return
 	}
 	a.dataClearLogsArmed = false
 	a.dataBusy = "logs"
 	a.dataError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -265,7 +265,7 @@ func (a *App) clearDataLogs() {
 			a.settingNote = "Logs cleared"
 		}
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 	}()
 }
 
@@ -282,7 +282,7 @@ func (a *App) openDataPath(path string) {
 			a.mu.Lock()
 			a.dataError = "Could not open path: " + err.Error()
 			a.mu.Unlock()
-			_ = a.window.Invalidate()
+			a.invalidateSettingsWindow()
 		}
 	}()
 }
@@ -298,7 +298,7 @@ func (a *App) openDataBackupFolder() {
 			a.mu.Lock()
 			a.dataError = "Could not open backup folder: " + err.Error()
 			a.mu.Unlock()
-			_ = a.window.Invalidate()
+			a.invalidateSettingsWindow()
 			return
 		}
 		a.openDataPath(path)
@@ -315,7 +315,7 @@ func (a *App) openDataLog() {
 			a.mu.Lock()
 			a.dataError = "Could not open log: " + err.Error()
 			a.mu.Unlock()
-			_ = a.window.Invalidate()
+			a.invalidateSettingsWindow()
 		}
 	}()
 }
@@ -332,7 +332,7 @@ func (a *App) scrollDataBackups(delta float32) {
 	a.dataListScroll += delta
 	a.clampDataBackupScrollLocked()
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) clampDataBackupScrollLocked() {

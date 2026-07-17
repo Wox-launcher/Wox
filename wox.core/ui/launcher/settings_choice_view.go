@@ -21,6 +21,7 @@ func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnaps
 }
 
 func (a *App) buildSettingChoicePickerPanel(snapshot *settingChoicePickerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+	window := a.settingsNativeWindow()
 	innerWidth := width - 32
 	headerHeight := float32(46)
 	searchHeight := float32(48)
@@ -29,17 +30,17 @@ func (a *App) buildSettingChoicePickerPanel(snapshot *settingChoicePickerSnapsho
 	a.setSettingChoicePickerViewport(viewportHeight)
 	style := woxui.TextStyle{Size: 13}
 	search := woxwidget.Gesture{ID: "setting-choice-search", OnTapAt: func(position woxui.Point) {
-		offset := formTextOffsetAt(snapshot.query, a.window, style, 1, innerWidth-24, woxui.Point{X: max(float32(0), position.X-12), Y: max(float32(0), position.Y-9)})
+		offset := formTextOffsetAt(snapshot.query, window, style, 1, innerWidth-24, woxui.Point{X: max(float32(0), position.X-12), Y: max(float32(0), position.Y-9)})
 		a.setSettingChoicePickerCaret(offset)
 	}, Child: woxwidget.Container{Width: innerWidth, Height: 40, Radius: 8, Color: palette.queryBackground, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 12, Bottom: 7}, Child: woxwidget.Painter{
 		Width: innerWidth - 24, Height: 24, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			state := snapshot.query
 			if state.Text == "" {
 				displayList.DrawText("Filter choices…", bounds, style, palette.resultSubtitle)
-				_ = a.window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X, Y: bounds.Y, Width: 1, Height: 22}})
+				_ = window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X, Y: bounds.Y, Width: 1, Height: 22}})
 				return
 			}
-			drawFormEditor(displayList, bounds, state, style, palette, true, 1, a.window)
+			drawFormEditor(displayList, bounds, state, style, palette, true, 1, window)
 		},
 	}}}
 	rows := make([]woxwidget.Widget, 0, len(snapshot.choices))

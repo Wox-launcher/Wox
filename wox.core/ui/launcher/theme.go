@@ -164,14 +164,12 @@ func (a *App) applyTheme(theme themeData) {
 	palette := paletteForTheme(theme)
 	a.mu.Lock()
 	a.palette = palette
-	mode := a.mode
 	a.mu.Unlock()
 	if a.window != nil {
-		if mode == viewLauncher {
-			_ = a.applyWindowBounds()
-		}
+		_ = a.applyWindowBounds()
 		_ = a.window.Invalidate()
 	}
+	a.invalidateSettingsWindow()
 }
 
 // paletteForTheme resolves a complete portable palette without mutating the active UI.

@@ -22,7 +22,7 @@ func (a *App) togglePrivacySample() {
 		a.privacySample = ""
 		a.privacyError = ""
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 		return
 	}
 	version := a.aboutVersion
@@ -44,7 +44,7 @@ func (a *App) togglePrivacySample() {
 		a.privacyError = ""
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 // copyPrivacySample publishes the visible sample through the portable clipboard boundary.
@@ -55,7 +55,7 @@ func (a *App) copyPrivacySample() {
 	if value == "" {
 		return
 	}
-	err := a.window.WriteClipboardText(value)
+	err := a.settingsNativeWindow().WriteClipboardText(value)
 	a.mu.Lock()
 	if err != nil {
 		a.privacyError = fmt.Sprintf("Could not copy sample: %v", err)
@@ -63,5 +63,5 @@ func (a *App) copyPrivacySample() {
 		a.privacyError = "Sample copied to clipboard."
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }

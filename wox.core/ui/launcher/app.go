@@ -32,11 +32,9 @@ func resultRowHeightForPalette(palette uiPalette) float32 {
 	return resultRowBaseHeight + palette.resultItemPadding.Top + palette.resultItemPadding.Bottom
 }
 
-type viewMode uint8
-
 const (
-	viewLauncher viewMode = iota
-	viewSettings
+	launcherWindowID woxui.WindowID = "wox.launcher"
+	settingsWindowID woxui.WindowID = "wox.settings"
 )
 
 // App owns the launcher window, query state, and Wox core protocol client.
@@ -47,12 +45,26 @@ type App struct {
 	terminalSubscribed     string
 
 	isDev         bool
+	isPrimary     bool
+	instanceName  string
 	sessionID     string
+	windowID      woxui.WindowID
 	services      contract.Services
 	clientFactory BackendFactory
 	client        coreclient.Backend
+	windows       *woxui.WindowManager
+	instances     *appInstanceRegistry
+	primary       *App
+	destroyOnce   sync.Once
+	unsubscribers []func()
+	lifecycleCtx  context.Context
+	cancel        context.CancelFunc
+	destroyed     bool
+	launcher      *woxui.ManagedWindow
+	settingsView  *woxui.ManagedWindow
 	window        *woxui.Window
 	host          *woxwidget.Host
+	settingsHost  *woxwidget.Host
 
 	query                 plainQuery
 	queryContext          queryContext
@@ -89,7 +101,7 @@ type App struct {
 	actionScroll          float32
 	visible               bool
 	show                  showAppParams
-	mode                  viewMode
+	settingsOpen          bool
 	settings              settingsData
 	settingsCtx           settingWindowContext
 	settingTab            string
@@ -98,11 +110,23 @@ type App struct {
 	settingSaving         bool
 	settingEditKey        string
 	settingEditor         *woxui.TextEditor
+	settingSearchEditor   *woxui.TextEditor
+	settingSearchFocused  bool
+	settingSearchPanel    bool
+	settingSearchSelected int
+	settingSearchScroll   float32
+	settingSearchViewport float32
+	settingSearchPlugins  []pluginSettingsPlugin
+	settingSearchLoading  bool
+	settingSearchLoaded   bool
+	settingSearchError    string
 	settingChoicePicker   *settingChoicePickerState
 	settingPageScroll     float32
 	settingPageViewport   float32
+	settingPageContent    float32
 	settingRailScroll     float32
 	settingRailViewport   float32
+	settingLanguages      []settingChoice
 	systemFontFamilies    []string
 	systemFontsLoading    bool
 	systemFontsLoaded     bool
@@ -114,12 +138,16 @@ type App struct {
 	pluginSelected        int
 	pluginListScroll      float32
 	pluginListViewport    float32
+	pluginSearchEditor    *woxui.TextEditor
+	pluginSearchFocused   bool
+	pluginDetailTab       string
 	pluginForm            *pluginSettingsFormState
 	pluginsStore          bool
 	pluginOperation       string
 	pluginOperationError  string
 	pluginUninstallArmed  string
 	hotkeySettingsForm    *formFieldsState
+	settingsHotkeyFocus   bool
 	hotkeyRecording       *hotkeyRecordingState
 	hotkeyAppCandidates   []ignoredHotkeyApp
 	hotkeyAppsLoading     bool
@@ -187,6 +215,7 @@ type App struct {
 	cloudPageViewport     float32
 	cloudPageContent      float32
 	cloudForm             *cloudFormState
+	cloudActionMenu       string
 	cloudPlugins          []pluginSettingsPlugin
 	cloudPluginScroll     float32
 	cloudPluginViewport   float32
@@ -224,16 +253,38 @@ type App struct {
 
 // New creates a launcher whose core services and transitional backend are supplied by the process composition root.
 func New(isDev bool, services contract.Services, clientFactory BackendFactory) *App {
-	return &App{
+	windows := woxui.NewWindowManager()
+	instances := newAppInstanceRegistry()
+	app := newApp(isDev, services, clientFactory, windows, instances, nil, true, "", launcherWindowID)
+	app.primary = app
+	instances.registerPrimary(app)
+	return app
+}
+
+// newApp builds isolated launcher state while sharing only process-wide window and message infrastructure.
+func newApp(isDev bool, services contract.Services, clientFactory BackendFactory, windows *woxui.WindowManager, instances *appInstanceRegistry, primary *App, isPrimary bool, instanceName string, windowID woxui.WindowID) *App {
+	sessionID := coreclient.NewID()
+	lifecycleCtx, cancel := context.WithCancel(context.Background())
+	if windowID == "" {
+		windowID = woxui.WindowID("wox.instance." + sessionID)
+	}
+	app := &App{
 		isDev:           isDev,
-		sessionID:       coreclient.NewID(),
+		isPrimary:       isPrimary,
+		instanceName:    instanceName,
+		sessionID:       sessionID,
+		windowID:        windowID,
 		services:        services,
 		clientFactory:   clientFactory,
+		windows:         windows,
+		instances:       instances,
+		primary:         primary,
+		lifecycleCtx:    lifecycleCtx,
+		cancel:          cancel,
 		query:           newInputQuery(""),
 		editor:          woxui.NewTextEditor(""),
 		selected:        -1,
 		hoveredResult:   -1,
-		mode:            viewLauncher,
 		settingTab:      "general",
 		usagePeriod:     "30d",
 		palette:         defaultPalette(),
@@ -253,10 +304,17 @@ func New(isDev bool, services contract.Services, clientFactory BackendFactory) *
 			StartPage:      "mru",
 		},
 	}
+	app.unsubscribers = append(app.unsubscribers, app.windows.SubscribeMessages(app.windowID, settingsChangedTopic, app.onSharedSettingsChanged))
+	return app
 }
 
 // Start connects to core and creates the hidden native window on the UI runtime thread.
 func (a *App) Start() error {
+	return a.start()
+}
+
+// start initializes one independent launcher session against the shared window runtime.
+func (a *App) start() error {
 	if a.services == nil {
 		return errors.New("core lifecycle services are required")
 	}
@@ -279,58 +337,90 @@ func (a *App) Start() error {
 		log.Printf("load Wox translations, using source labels: %v", err)
 	}
 
-	a.host = woxwidget.NewHost(a.build)
-	window, err := woxui.Open(woxui.WindowOptions{
+	host := woxwidget.NewHost(a.buildLauncher)
+	launcher, _, err := a.windows.Open(a.windowID, woxui.WindowOptions{
 		Title:     "Wox",
-		Size:      woxui.Size{Width: defaultWidth, Height: queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom + footerHeight},
-		OnFrame:   a.host.Frame,
-		OnPointer: a.host.Pointer,
+		Size:      woxui.Size{Width: float32(a.show.WindowWidth), Height: queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom + footerHeight},
+		OnFrame:   host.Frame,
+		OnPointer: host.Pointer,
 		OnKey: func(event woxui.KeyEvent) bool {
-			if a.host.Key(event) {
+			if host.Key(event) {
 				return true
 			}
 			return a.onKey(event)
 		},
 		OnTextInput: func(event woxui.TextInputEvent) {
-			if !a.host.TextInput(event) {
+			if !host.TextInput(event) {
 				a.onTextInput(event)
 			}
 		},
-		OnFocus: a.onFocus,
+		OnFocus:  a.onFocus,
+		OnClosed: a.onLauncherWindowClosed,
 	})
 	if err != nil {
 		_ = a.client.Close()
 		return err
 	}
-	a.window = window
-	a.host.Attach(window)
-	if err := window.SetFontFamily(a.settings.AppFontFamily); err != nil {
+	a.launcher = launcher
+	a.window = launcher.Window()
+	a.host = host
+	host.Attach(a.window)
+	if err := a.window.SetFontFamily(a.settings.AppFontFamily); err != nil {
 		return fmt.Errorf("apply Wox UI font: %w", err)
 	}
-	if err := window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 130, Y: 29, Width: 1, Height: 24}}); err != nil {
+	if err := a.window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 130, Y: 29, Width: 1, Height: 24}}); err != nil {
 		return err
 	}
 
-	readyContext, cancelReady := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancelReady()
-	if err := a.services.Ready(readyContext, a.sessionID); err != nil {
-		return fmt.Errorf("notify Wox core that Go UI is ready: %w", err)
+	lifecycleContext, cancelLifecycle := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelLifecycle()
+	if a.isPrimary {
+		if err := a.services.Ready(lifecycleContext, a.sessionID); err != nil {
+			return fmt.Errorf("notify Wox core that Go UI is ready: %w", err)
+		}
+	} else if err := a.services.RegisterInstance(lifecycleContext, a); err != nil {
+		return fmt.Errorf("register secondary Wox UI instance: %w", err)
 	}
 	return nil
 }
 
 // Close releases the protocol connection after the final native window closes.
 func (a *App) Close() error {
-	if a.client == nil {
+	if !a.isPrimary {
+		a.mu.RLock()
+		launcher := a.launcher
+		a.mu.RUnlock()
+		if launcher != nil {
+			return launcher.Close()
+		}
+		a.destroySecondary()
 		return nil
 	}
-	return a.client.Close()
+
+	a.mu.Lock()
+	a.destroyed = true
+	cancel := a.cancel
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	var closeErr error
+	if a.windows != nil {
+		closeErr = a.windows.CloseAll()
+	}
+	a.unsubscribeAll()
+	if a.client == nil {
+		return closeErr
+	}
+	clientErr := a.client.Close()
+	if closeErr != nil {
+		return closeErr
+	}
+	return clientErr
 }
 
 func (a *App) showWindow(params showAppParams) error {
 	a.mu.Lock()
-	wasSettings := a.mode == viewSettings
-	a.mode = viewLauncher
 	if params.WindowWidth <= 0 {
 		params.WindowWidth = defaultWidth
 	}
@@ -348,13 +438,12 @@ func (a *App) showWindow(params showAppParams) error {
 	a.requirementForm = nil
 	a.visible = true
 	queryEmpty := a.query.QueryText == ""
+	launcher := a.launcher
 	a.mu.Unlock()
-	a.restoreQueryTextInput()
-	if wasSettings {
-		if err := a.notifySettingViewChanged(false); err != nil {
-			return err
-		}
+	if launcher == nil {
+		return errors.New("launcher window is not initialized")
 	}
+	a.restoreQueryTextInput()
 
 	if err := a.window.SetHideOnBlur(params.HideOnBlur); err != nil {
 		return err
@@ -362,7 +451,7 @@ func (a *App) showWindow(params showAppParams) error {
 	if err := a.applyWindowBoundsAtShowPosition(); err != nil {
 		return err
 	}
-	if _, err := a.window.Show(); err != nil {
+	if _, err := launcher.Show(); err != nil {
 		return err
 	}
 	if err := a.notifyShown(); err != nil {
@@ -381,8 +470,6 @@ func (a *App) hideWindow(notify bool) error {
 		a.mu.Unlock()
 		return nil
 	}
-	wasSettings := a.mode == viewSettings
-	a.mode = viewLauncher
 	a.actionPanel = false
 	a.actionSelected = 0
 	a.actionFilter = nil
@@ -392,18 +479,17 @@ func (a *App) hideWindow(notify bool) error {
 	a.themeEditor = nil
 	a.visible = false
 	a.stopGlanceLocked(false)
+	launcher := a.launcher
 	a.mu.Unlock()
+	if launcher == nil {
+		return errors.New("launcher window is not initialized")
+	}
 	a.deactivateTerminalPreview()
 	a.resetChatPreview()
-	if err := a.window.Hide(); err != nil {
+	if err := launcher.Hide(); err != nil {
 		return err
 	}
 	if notify {
-		if wasSettings {
-			if err := a.notifySettingViewChanged(false); err != nil {
-				return err
-			}
-		}
 		return a.notifyHidden()
 	}
 	return nil
@@ -414,11 +500,12 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 		return
 	}
 	a.mu.Lock()
-	if !a.visible || a.mode != viewLauncher {
+	if !a.visible {
 		a.mu.Unlock()
 		return
 	}
 	hideOnBlur := a.show.HideOnBlur
+	launcher := a.launcher
 	if hideOnBlur {
 		a.visible = false
 		a.stopGlanceLocked(false)
@@ -434,6 +521,9 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 	}
 	a.mu.Unlock()
 	if hideOnBlur {
+		if launcher != nil {
+			_ = launcher.Hide()
+		}
 		a.deactivateTerminalPreview()
 		a.resetChatPreview()
 	}
@@ -566,7 +656,7 @@ func (a *App) requestMRU() error {
 
 func (a *App) applyResults(queryID string, results []queryResult, layout *queryLayout, refinements *[]queryRefinement, context *queryContext, queryStartTimestamp int64) {
 	a.mu.Lock()
-	if queryID == "" || queryID != a.query.QueryID {
+	if a.destroyed || queryID == "" || queryID != a.query.QueryID {
 		a.mu.Unlock()
 		return
 	}
@@ -800,17 +890,11 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
-	if a.onHotkeyRecordingKey(event) {
+	if !a.hotkeyRecordingUsesSettingsWindow() && a.onHotkeyRecordingKey(event) {
 		return true
 	}
-	if a.onFormTableKey(event) {
+	if !a.formTableUsesSettingsWindow() && a.onFormTableKey(event) {
 		return true
-	}
-	a.mu.RLock()
-	mode := a.mode
-	a.mu.RUnlock()
-	if mode == viewSettings {
-		return a.onSettingsKey(event)
 	}
 	if a.onFormKey(event) {
 		return true
@@ -906,7 +990,7 @@ func (a *App) onTextInput(event woxui.TextInputEvent) {
 	if a.onActionTextInput(event) {
 		return
 	}
-	if a.onFormTableTextInput(event) {
+	if !a.formTableUsesSettingsWindow() && a.onFormTableTextInput(event) {
 		return
 	}
 	if a.onFormTextInput(event) {
@@ -927,20 +1011,7 @@ func (a *App) onTextInput(event woxui.TextInputEvent) {
 	if a.onTerminalPreviewTextInput(event) {
 		return
 	}
-	if a.onCloudFormTextInput(event) {
-		return
-	}
-	if a.onBuiltInSettingsTextInput(event) {
-		return
-	}
-	if a.onPluginSettingsTextInput(event) {
-		return
-	}
 	a.mu.Lock()
-	if a.mode != viewLauncher {
-		a.mu.Unlock()
-		return
-	}
 	committed := a.editor.HandleTextInput(event)
 	if committed {
 		a.applyQueryTextChangeLocked(a.editor.State().Text)
@@ -1275,8 +1346,9 @@ type resultAction struct {
 }
 
 type formDefinition struct {
-	Type  string              `json:"Type"`
-	Value formDefinitionValue `json:"Value"`
+	Type          string              `json:"Type"`
+	Value         formDefinitionValue `json:"Value"`
+	SearchAliases []string            `json:"SearchAliases"`
 }
 
 type formDefinitionValue struct {

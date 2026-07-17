@@ -39,7 +39,7 @@ func (a *App) reloadRuntimeStatuses() {
 	a.runtimeLoading = true
 	a.runtimeError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -59,7 +59,7 @@ func (a *App) reloadRuntimeStatuses() {
 		a.runtimeLoaded = true
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 // restartRuntimeHost restarts a recoverable Node.js or Python host and then reloads the authoritative status.
@@ -84,7 +84,7 @@ func (a *App) restartRuntimeHost(runtime string) {
 	a.runtimeRestarting = runtime
 	a.runtimeError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -98,7 +98,7 @@ func (a *App) restartRuntimeHost(runtime string) {
 			a.mu.Lock()
 			a.runtimeError = fmt.Sprintf("Could not restart %s: %v", runtimeDisplayName(runtime), err)
 			a.mu.Unlock()
-			_ = a.window.Invalidate()
+			a.invalidateSettingsWindow()
 		}
 	}()
 }
@@ -108,11 +108,11 @@ func (a *App) openRuntimeInstallURL(status runtimeStatus) {
 	if strings.TrimSpace(status.InstallURL) == "" {
 		return
 	}
-	if err := a.window.OpenExternalURL(status.InstallURL); err != nil {
+	if err := a.settingsNativeWindow().OpenExternalURL(status.InstallURL); err != nil {
 		a.mu.Lock()
 		a.runtimeError = "Could not open runtime website: " + err.Error()
 		a.mu.Unlock()
-		_ = a.window.Invalidate()
+		a.invalidateSettingsWindow()
 	}
 }
 
@@ -182,7 +182,7 @@ func (a *App) scrollRuntimePage(delta float32) {
 	a.runtimePageScroll += delta
 	a.clampRuntimePageScrollLocked()
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) clampRuntimePageScrollLocked() {

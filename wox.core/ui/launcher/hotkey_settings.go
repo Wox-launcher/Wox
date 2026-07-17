@@ -125,7 +125,7 @@ func (a *App) loadHotkeyAppCandidates() {
 	a.hotkeyAppsLoading = true
 	a.hotkeyAppsError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	var apps []ignoredHotkeyApp
@@ -152,7 +152,7 @@ func (a *App) loadHotkeyAppCandidates() {
 		a.hotkeyAppsError = ""
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func settingsRowsJSON(value any) string {
@@ -179,7 +179,7 @@ func queryHotkeyPositionOptions() []formOption {
 // onHotkeySettingsKey moves between shared fields without stealing keys from an active recorder.
 func (a *App) onHotkeySettingsKey(event woxui.KeyEvent) bool {
 	a.mu.RLock()
-	active := a.mode == viewSettings && a.settingTab == "hotkeys" && a.hotkeySettingsForm != nil && a.tableEditor == nil
+	active := a.settingsOpen && a.settingTab == "general" && a.settingsHotkeyFocus && a.hotkeySettingsForm != nil && a.tableEditor == nil
 	a.mu.RUnlock()
 	if !active {
 		return false
@@ -214,7 +214,7 @@ func (a *App) moveHotkeySettingsFocus(delta int) {
 		}
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) focusHotkeySettingsField(index int) {
@@ -223,9 +223,10 @@ func (a *App) focusHotkeySettingsField(index int) {
 	if fields := a.hotkeySettingsForm; fields != nil && index >= 0 && index < len(fields.definitions) && formDefinitionFocusable(fields.definitions[index]) {
 		setFormFieldsFocusLocked(fields, index)
 		a.settingRow = index
+		a.settingsHotkeyFocus = true
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) activateHotkeySettingsField() {
@@ -259,7 +260,7 @@ func (a *App) recordHotkeySettingsField(index int) {
 
 func (a *App) openHotkeySettingsTable(index int) {
 	a.mu.Lock()
-	if a.mode == viewSettings && a.settingTab == "hotkeys" && a.hotkeySettingsForm != nil {
+	if a.settingsOpen && a.settingTab == "general" && a.hotkeySettingsForm != nil {
 		a.settingRow = index
 		a.openFormTableLocked(a.hotkeySettingsForm, index)
 	}
@@ -283,7 +284,7 @@ func (a *App) scrollHotkeySettings(delta float32) {
 		fields.scroll = min(max(float32(0), fields.scroll+delta), maxOffset)
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func hotkeySettingsLabel(key string) string {

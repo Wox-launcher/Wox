@@ -19,7 +19,7 @@ func (a *App) reloadAboutVersion() {
 	a.aboutLoading = true
 	a.aboutError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -35,7 +35,7 @@ func (a *App) reloadAboutVersion() {
 		a.aboutLoaded = true
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 // buildAboutSettingsPage presents core-owned version data and platform-neutral browser actions.
@@ -71,12 +71,12 @@ func (a *App) buildAboutSettingsPage(snapshot settingsSnapshot, width, height fl
 
 func (a *App) buildAboutLink(label, target string, palette uiPalette) woxwidget.Widget {
 	return woxwidget.Gesture{ID: "about-link-" + label, OnTap: func() {
-		if err := a.window.OpenExternalURL(target); err != nil {
+		if err := a.settingsNativeWindow().OpenExternalURL(target); err != nil {
 			log.Printf("open About link: %v", err)
 			a.mu.Lock()
 			a.aboutError = err.Error()
 			a.mu.Unlock()
-			_ = a.window.Invalidate()
+			a.invalidateSettingsWindow()
 		}
 	}, Child: woxwidget.Container{
 		Width: 150, Height: 42, Radius: 9, Color: palette.queryBackground, Padding: woxwidget.Insets{Left: 18, Top: 12},

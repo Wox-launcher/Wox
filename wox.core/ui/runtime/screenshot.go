@@ -6,7 +6,10 @@ type ScreenshotOptions struct {
 	CopyToClipboard       bool
 	HideAnnotationToolbar bool
 	AutoConfirm           bool
+	WindowManager         *WindowManager
 }
+
+const ScreenshotWindowID WindowID = "wox.screenshot"
 
 // ScreenshotResult reports the exported image and its logical desktop selection.
 type ScreenshotResult struct {

@@ -1089,7 +1089,7 @@ int32_t wox_linux_run(uintptr_t context) {
   return start_result == 0 ? 0 : -1;
 }
 
-WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, uintptr_t context) {
+WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t application_window, uintptr_t context) {
   if (!is_main_thread() || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
   }
@@ -1131,9 +1131,16 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_window_set_title(GTK_WINDOW(window->window), title != NULL ? title : "Wox Go UI");
   gtk_window_set_default_size(GTK_WINDOW(window->window), (int)ceilf(width), (int)ceilf(height));
   gtk_window_set_decorated(GTK_WINDOW(window->window), FALSE);
-  gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window->window), TRUE);
-  gtk_window_set_type_hint(GTK_WINDOW(window->window), GDK_WINDOW_TYPE_HINT_UTILITY);
-  gtk_window_set_keep_above(GTK_WINDOW(window->window), TRUE);
+  // Application windows must stay visible to the desktop shell instead of using launcher-only utility hints.
+  if (application_window != 0) {
+    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window->window), FALSE);
+    gtk_window_set_type_hint(GTK_WINDOW(window->window), GDK_WINDOW_TYPE_HINT_NORMAL);
+    gtk_window_set_keep_above(GTK_WINDOW(window->window), FALSE);
+  } else {
+    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window->window), TRUE);
+    gtk_window_set_type_hint(GTK_WINDOW(window->window), GDK_WINDOW_TYPE_HINT_UTILITY);
+    gtk_window_set_keep_above(GTK_WINDOW(window->window), TRUE);
+  }
   gtk_window_set_accept_focus(GTK_WINDOW(window->window), TRUE);
   gtk_window_set_focus_on_map(GTK_WINDOW(window->window), TRUE);
   gtk_window_set_position(GTK_WINDOW(window->window), GTK_WIN_POS_CENTER);
@@ -1144,7 +1151,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   if (visual != NULL) {
     gtk_widget_set_visual(window->window, visual);
   }
-  window->layer_shell_enabled = enable_layer_shell(GTK_WINDOW(window->window));
+  window->layer_shell_enabled = application_window == 0 && enable_layer_shell(GTK_WINDOW(window->window));
 
   gtk_gl_area_set_required_version(GTK_GL_AREA(window->gl_area), 3, 3);
   gtk_gl_area_set_use_es(GTK_GL_AREA(window->gl_area), FALSE);

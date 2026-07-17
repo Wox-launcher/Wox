@@ -18,6 +18,7 @@
 #include <string.h>
 
 extern int32_t woxGoDarwinStart(uintptr_t context);
+extern void woxGoDarwinCloseRequested(uintptr_t context);
 extern void woxGoDarwinCall(uintptr_t context);
 extern void woxGoDarwinFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
 extern void woxGoDarwinFocus(uintptr_t context, uint64_t epoch, int32_t active);
@@ -80,6 +81,7 @@ struct WoxDarwinWindow {
   bool visible;
   bool active;
   bool hide_on_blur;
+  bool application_window;
   bool native_dialog_active;
   bool input_enabled;
   bool closed;
@@ -122,6 +124,7 @@ typedef struct {
 } WoxTextureUniforms;
 
 static NSInteger wox_open_window_count = 0;
+static NSInteger wox_application_window_count = 0;
 
 static const char *const wox_metal_source =
     "#include <metal_stdlib>\n"
@@ -882,6 +885,17 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 @end
 
 @implementation WoxWindowDelegate
+- (BOOL)windowShouldClose:(NSWindow *)sender {
+  (void)sender;
+  WoxDarwinWindow *owner = _owner;
+  if (owner == NULL || owner->closed || owner->context == 0) {
+    return YES;
+  }
+  // Native traffic-light closes still flow through Go so the named-window lifecycle and host cleanup run first.
+  woxGoDarwinCloseRequested(owner->context);
+  return NO;
+}
+
 - (void)windowDidBecomeKey:(NSNotification *)notification {
   (void)notification;
   if (_owner != NULL && !_owner->closed && _owner->visible) {
@@ -925,16 +939,21 @@ int32_t wox_darwin_run(uintptr_t context) {
   return 0;
 }
 
-WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, uintptr_t context) {
+WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t application_window, uintptr_t context) {
   if (![NSThread isMainThread] || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
   }
 
   @autoreleasepool {
     NSRect frame = NSMakeRect(0.0, 0.0, width, height);
+    bool is_application_window = application_window != 0;
+    NSWindowStyleMask style_mask = NSWindowStyleMaskBorderless;
+    if (is_application_window) {
+      style_mask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskFullSizeContentView;
+    }
     WoxNativeWindow *native_window = [[WoxNativeWindow alloc]
         initWithContentRect:frame
-                  styleMask:NSWindowStyleMaskBorderless
+                  styleMask:style_mask
                     backing:NSBackingStoreBuffered
                       defer:NO];
     native_window.releasedWhenClosed = NO;
@@ -942,8 +961,16 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     native_window.backgroundColor = [NSColor clearColor];
     native_window.hasShadow = YES;
     native_window.acceptsMouseMovedEvents = YES;
-    native_window.level = NSFloatingWindowLevel;
-    native_window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
+    // Management windows participate in normal app switching while launcher surfaces remain cross-space utilities.
+    if (is_application_window) {
+      native_window.level = NSNormalWindowLevel;
+      native_window.collectionBehavior = NSWindowCollectionBehaviorDefault;
+      native_window.titlebarAppearsTransparent = YES;
+      native_window.titleVisibility = NSWindowTitleHidden;
+    } else {
+      native_window.level = NSFloatingWindowLevel;
+      native_window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
+    }
     if (title != NULL) {
       NSString *window_title = [NSString stringWithUTF8String:title];
       if (window_title != nil) {
@@ -979,6 +1006,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->web_view_content_keys = [[NSMutableDictionary alloc] init];
     window->context = context;
     window->hide_on_blur = hide_on_blur != 0;
+    window->application_window = is_application_window;
     // Use launcher material instead of compositing the transparent Metal surface directly over the desktop.
     NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
     effect_view.material = NSVisualEffectMaterialPopover;
@@ -995,6 +1023,10 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     [native_window center];
     [view updateDrawableSize];
     wox_open_window_count++;
+    if (window->application_window) {
+      wox_application_window_count++;
+      [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+    }
     return window;
   }
 }
@@ -1686,6 +1718,12 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
 
     if (wox_open_window_count > 0) {
       wox_open_window_count--;
+    }
+    if (window->application_window && wox_application_window_count > 0) {
+      wox_application_window_count--;
+      if (wox_application_window_count == 0) {
+        [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+      }
     }
     if (wox_open_window_count == 0) {
       [NSApp stop:nil];

@@ -62,7 +62,7 @@ func (a *App) reloadUsageStats(period string) {
 	a.usageLoading = true
 	a.usageError = ""
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
@@ -84,7 +84,7 @@ func (a *App) reloadUsageStats(period string) {
 		a.usageLoaded = true
 	}
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.invalidateSettingsWindow()
 }
 
 func normalizeUsagePeriod(period string) string {
