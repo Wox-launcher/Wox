@@ -52,7 +52,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		page = a.buildSettingsPage(snapshot, items, width-railWidth, contentHeight)
 	}
 	content := woxwidget.Container{
-		Width: width, Height: contentHeight, Color: snapshot.palette.background,
+		Width: width, Height: contentHeight,
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			a.buildSettingsRail(snapshot, railWidth, contentHeight),
 			page,
@@ -63,25 +63,25 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		content,
 	}}}
 	if snapshot.tableEditor != nil {
-		return woxwidget.Container{Width: width, Height: height, Color: snapshot.palette.background, Radius: surfaceRadius, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		return woxwidget.Container{Width: width, Height: height, Radius: surfaceRadius, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 			{Child: body},
 			{Child: a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height)},
 		}}}
 	}
 	if snapshot.modelManager != nil {
-		return woxwidget.Container{Width: width, Height: height, Color: snapshot.palette.background, Radius: surfaceRadius, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		return woxwidget.Container{Width: width, Height: height, Radius: surfaceRadius, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 			{Child: body},
 			{Child: a.buildModelManagerOverlay(snapshot.modelManager, snapshot.palette, width, height)},
 		}}}
 	}
 	if snapshot.choicePicker != nil {
-		return woxwidget.Container{Width: width, Height: height, Color: snapshot.palette.background, Radius: surfaceRadius, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		return woxwidget.Container{Width: width, Height: height, Radius: surfaceRadius, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 			{Child: body},
 			{Child: a.buildSettingChoicePickerOverlay(snapshot.choicePicker, snapshot.palette, width, height)},
 		}}}
 	}
 	if snapshot.cloudForm != nil {
-		return woxwidget.Container{Width: width, Height: height, Color: snapshot.palette.background, Radius: surfaceRadius, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		return woxwidget.Container{Width: width, Height: height, Radius: surfaceRadius, Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 			{Child: body},
 			{Child: a.buildCloudFormOverlay(snapshot.cloudForm, snapshot.palette, width, height)},
 		}}}
@@ -102,7 +102,7 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width float32) wo
 		if window := a.settingsNativeWindow(); window != nil {
 			_ = window.StartDragging()
 		}
-	}, Child: woxwidget.Container{Width: width, Height: settingsTitleBarHeight, Color: snapshot.palette.toolbarBackground}}
+	}, Child: woxwidget.Container{Width: width, Height: settingsTitleBarHeight}}
 	children := []woxwidget.StackChild{
 		{Child: dragArea},
 		{Left: max(float32(0), (width-titleWidth)/2), Top: 12, Child: woxwidget.Container{Width: titleWidth, Height: 24, Child: woxwidget.Text{Value: title, Style: titleStyle, Color: snapshot.palette.toolbarText}}},
@@ -117,7 +117,7 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width float32) wo
 				log.Printf("close settings window: %v", err)
 			}
 		}()
-	}, Child: woxwidget.Container{Width: closeWidth, Height: settingsTitleBarHeight, Color: snapshot.palette.toolbarBackground, Padding: woxwidget.Insets{Left: 20, Top: 10}, Child: woxwidget.Text{
+	}, Child: woxwidget.Container{Width: closeWidth, Height: settingsTitleBarHeight, Padding: woxwidget.Insets{Left: 20, Top: 10}, Child: woxwidget.Text{
 		Value: "×", Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: snapshot.palette.toolbarText,
 	}}}
 	children = append(children, woxwidget.StackChild{Left: max(float32(0), width-closeWidth), Child: closeButton})
@@ -174,9 +174,11 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height float32
 		spec := spec
 		label := a.settingNavLabel(spec)
 		color := woxui.Color{}
+		border := woxui.Color{}
 		foreground := snapshot.palette.toolbarText
 		if spec.id == activeID {
-			color = snapshot.palette.selectedBackground
+			color = settingsAlpha(snapshot.palette.selectedBackground, 41)
+			border = settingsAlpha(snapshot.palette.selectedBackground, 82)
 			foreground = snapshot.palette.selectedTitle
 		}
 		labelStyle := woxui.TextStyle{Size: 13}
@@ -195,7 +197,7 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height float32
 			}
 		}
 		row := woxwidget.Container{
-			Width: width - 28, Height: 46, Radius: 6, Color: color,
+			Width: width - 28, Height: 46, Radius: 6, Color: color, BorderColor: border, BorderWidth: 1,
 			Padding: woxwidget.Insets{Left: leftPadding, Top: 12, Right: 10},
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 				woxwidget.Container{Width: 22, Height: 24, Child: icon},
@@ -211,7 +213,8 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height float32
 	}
 	innerWidth := width - 28
 	searchAreaHeight := float32(58)
-	viewportHeight := max(float32(1), height-searchAreaHeight-28)
+	backHeight := float32(50)
+	viewportHeight := max(float32(1), height-searchAreaHeight-backHeight-28)
 	a.setSettingsRailViewport(viewportHeight)
 	nav := woxwidget.Gesture{ID: "settings-rail-scroll", OnScroll: func(delta woxui.Point) { a.scrollSettingsRail(-delta.Y) }, Child: woxwidget.ScrollView{
 		Width: innerWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, settingsRailContentHeight(len(items))), Offset: snapshot.railScroll,
@@ -221,14 +224,29 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height float32
 	if snapshot.searchPanel && strings.TrimSpace(snapshot.searchQuery.Text) != "" {
 		stackChildren = append(stackChildren, woxwidget.StackChild{Child: a.buildSettingsSearchResultPanel(snapshot, innerWidth, viewportHeight)})
 	}
-	return woxwidget.Container{
-		Width: width, Height: height, Color: snapshot.palette.toolbarBackground,
+	back := woxwidget.Gesture{ID: "settings-nav-back", OnTap: func() {
+		go func() {
+			if err := a.closeSettings(); err != nil {
+				log.Printf("close settings window: %v", err)
+			}
+		}()
+	}, Child: woxwidget.Container{Width: innerWidth, Height: backHeight, Padding: woxwidget.Insets{Left: 10, Top: 16}, Child: woxwidget.Text{
+		Value: a.translate("i18n:ui_back"), Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: snapshot.palette.toolbarText,
+	}}}
+	railColor := settingsAlpha(snapshot.palette.toolbarText, 9)
+	rail := woxwidget.Container{
+		Width: width, Height: height, Color: railColor,
 		Padding: woxwidget.Insets{Left: 14, Top: 14, Right: 14, Bottom: 14},
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 			a.buildSettingsSearchBox(snapshot, innerWidth),
 			woxwidget.Stack{Width: innerWidth, Height: viewportHeight, Children: stackChildren},
+			back,
 		}},
 	}
+	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		{Child: rail},
+		{Left: width - 1, Child: woxwidget.Container{Width: 1, Height: height, Color: settingsAlpha(snapshot.palette.previewSplit, 128)}},
+	}}
 }
 
 // settingNavIconSource maps the Flutter rail's line-icon semantics onto portable monochrome SVGs.
@@ -313,11 +331,11 @@ func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width float32) w
 			Value: "×", Style: woxui.TextStyle{Size: 17, Weight: woxui.FontWeightSemibold}, Color: snapshot.palette.resultSubtitle,
 		}}})
 	}
-	fieldColor := snapshot.palette.queryBackground
+	borderColor := snapshot.palette.resultSubtitle
 	if snapshot.searchFocused {
-		fieldColor = snapshot.palette.actionQueryBackground
+		borderColor = snapshot.palette.cursor
 	}
-	return woxwidget.Container{Width: width, Height: 50, Child: woxwidget.Container{Width: width, Height: 42, Radius: 6, Color: fieldColor,
+	return woxwidget.Container{Width: width, Height: 50, Child: woxwidget.Container{Width: width, Height: 42, Radius: 4, BorderColor: borderColor, BorderWidth: 1,
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children},
 	}}
 }
@@ -392,8 +410,14 @@ func (a *App) settingsSearchResultTypeLabel(kind settingsSearchResultKind) strin
 
 func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, width, height float32) woxwidget.Widget {
 	contentWidth := max(float32(0), width-82)
-	children := make([]woxwidget.Widget, 0, len(items)+8)
-	contentHeight := float32(0)
+	children := make([]woxwidget.Widget, 0, len(items)+9)
+	children = append(children, a.buildSettingsPageHeader(
+		a.activeSettingsNavLabel(snapshot),
+		a.settingsPageDescription(snapshot.tab),
+		contentWidth,
+		snapshot.palette,
+	))
+	contentHeight := float32(72)
 	currentSection := ""
 	for index, item := range items {
 		index := index
@@ -404,11 +428,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			children = append(children, a.buildSettingsSectionHeader(section, contentWidth, snapshot.palette))
 			contentHeight += 43
 		}
-		selected := index == snapshot.row
 		background := woxui.Color{}
-		if selected {
-			background = snapshot.palette.selectedBackground
-		}
 		children = append(children, woxwidget.Gesture{
 			ID: "setting-" + item.key,
 			OnTap: func() {
@@ -420,7 +440,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			},
 			Child: a.buildSettingRow(snapshot, item, contentWidth, background),
 		})
-		contentHeight += 74
+		contentHeight += 62
 	}
 	if snapshot.tab == "general" && snapshot.hotkeyForm != nil {
 		children = append(children, a.buildSettingsSectionHeader(a.translate("i18n:ui_general_section_hotkeys"), contentWidth, snapshot.palette))
@@ -451,6 +471,30 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			Width: contentWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, contentHeight), Offset: snapshot.pageScroll, Child: content,
 		}},
 	}
+}
+
+// buildSettingsPageHeader keeps built-in pages aligned with Flutter's wide settings form.
+func (a *App) buildSettingsPageHeader(title, description string, width float32, palette uiPalette) woxwidget.Widget {
+	return woxwidget.Container{Width: width, Height: 72, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
+		woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 22, Weight: woxui.FontWeightSemibold}, Color: palette.queryText},
+		woxwidget.Text{Value: description, Style: woxui.TextStyle{Size: 13}, Color: palette.resultSubtitle},
+	}}}
+}
+
+func (a *App) settingsPageDescription(tab string) string {
+	switch tab {
+	case "general":
+		return a.translate("i18n:ui_general_description")
+	case "appearance":
+		return a.translate("i18n:ui_ui_description")
+	default:
+		return ""
+	}
+}
+
+func settingsAlpha(color woxui.Color, alpha uint8) woxui.Color {
+	color.A = alpha
+	return color
 }
 
 func (a *App) buildSettingsSectionHeader(label string, width float32, palette uiPalette) woxwidget.Widget {
@@ -579,13 +623,13 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, width
 			trackColor = palette.cursor
 			knobLeft = 22
 		}
-		valueField = woxwidget.Container{Width: valueWidth, Height: 52, Padding: woxwidget.Insets{Top: 15}, Child: woxwidget.Stack{Width: 42, Height: 22, Children: []woxwidget.StackChild{
+		valueField = woxwidget.Container{Width: valueWidth, Height: 44, Padding: woxwidget.Insets{Top: 10}, Child: woxwidget.Stack{Width: 42, Height: 22, Children: []woxwidget.StackChild{
 			{Child: woxwidget.Container{Width: 42, Height: 22, Radius: 11, Color: trackColor}},
 			{Left: knobLeft, Top: 2, Child: woxwidget.Container{Width: 18, Height: 18, Radius: 9, Color: woxui.Color{R: 248, G: 248, B: 248, A: 255}}},
 		}}}
 	} else {
 		valueField = woxwidget.Container{
-			Width: valueWidth, Height: 38, Radius: 6, Color: palette.toolbarBackground,
+			Width: valueWidth, Height: 38, Radius: 4, BorderColor: palette.resultSubtitle, BorderWidth: 1,
 			Padding: woxwidget.Insets{Left: 14, Top: 10, Right: 12},
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 				woxwidget.Container{Width: max(float32(0), valueWidth-42), Height: 24, Child: woxwidget.Text{Value: settingValueLabel(item), Style: woxui.TextStyle{Size: 13}, Color: valueColor}},
@@ -594,8 +638,8 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, width
 		}
 	}
 	return woxwidget.Container{
-		Width: width, Height: 74, Radius: 6, Color: background,
-		Padding: woxwidget.Insets{Left: 2, Top: 11, Right: 2, Bottom: 11},
+		Width: width, Height: 62, Radius: 6, Color: background,
+		Padding: woxwidget.Insets{Left: 2, Top: 5, Right: 2, Bottom: 5},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 28, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 52, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
 				woxwidget.Text{Value: item.title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: foreground},

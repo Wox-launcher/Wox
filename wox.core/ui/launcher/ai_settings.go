@@ -22,45 +22,48 @@ func newAISettingsForm(data settingsData) formFieldsState {
 			Type: "table",
 			Value: formDefinitionValue{
 				Key:   "AIProviders",
-				Title: "AI providers",
+				Title: "i18n:ui_ai_model",
 				Columns: []formTableColumn{
-					{Key: "Name", Label: "Provider", Type: "select", Validators: []formValidator{{Type: "not_empty"}}},
-					{Key: "Alias", Label: "Alias", Type: "text"},
-					{Key: "Host", Label: "Host", Type: "text"},
-					{Key: "ApiKey", Label: "API key", Type: "text", HideInTable: true},
+					{Key: "Name", Label: "i18n:ui_ai_providers_name", Type: "select", Validators: []formValidator{{Type: "not_empty"}}},
+					{Key: "Alias", Label: "i18n:ui_ai_providers_alias", Type: "text"},
+					{Key: "Host", Label: "i18n:ui_ai_providers_host", Type: "text"},
+					{Key: "ApiKey", Label: "i18n:ui_ai_providers_api_key", Type: "text", HideInTable: true},
 				},
 			},
 		},
 		{
 			Type: "table",
 			Value: formDefinitionValue{
-				Key:   "AIMCPServers",
-				Title: "MCP servers",
+				Key:     "AIMCPServers",
+				Title:   "i18n:ui_ai_mcp_servers",
+				Tooltip: "i18n:ui_ai_mcp_servers_tooltip",
 				Columns: []formTableColumn{
-					{Key: "Name", Label: "Name", Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
-					{Key: "Disabled", Label: "Disabled", Type: "checkbox"},
-					{Key: "Type", Label: "Type", Type: "select", SelectOptions: []formOption{{Label: "STDIO", Value: "stdio"}, {Label: "Streamable HTTP", Value: "streamable-http"}}, Validators: []formValidator{{Type: "not_empty"}}},
-					{Key: "Command", Label: "Command", Type: "text"},
-					{Key: "EnvironmentVariables", Label: "Environment variables", Type: "textList", TextMaxLines: 6},
-					{Key: "Url", Label: "URL", Type: "text", TextMaxLines: 4},
+					{Key: "Name", Label: "i18n:plugin_ai_chat_mcp_server_name", Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
+					{Key: "Tools", Label: "i18n:plugin_ai_chat_mcp_server_tools", Type: "text", HideInUpdate: true},
+					{Key: "Disabled", Label: "i18n:plugin_ai_chat_mcp_server_disabled", Type: "checkbox"},
+					{Key: "Type", Label: "i18n:plugin_ai_chat_mcp_server_type", Type: "select", SelectOptions: []formOption{{Label: "STDIO", Value: "stdio"}, {Label: "Streamable HTTP", Value: "streamable-http"}}, Validators: []formValidator{{Type: "not_empty"}}},
+					{Key: "Command", Label: "i18n:plugin_ai_chat_mcp_server_command", Type: "text"},
+					{Key: "EnvironmentVariables", Label: "i18n:plugin_ai_chat_mcp_server_environment_variables", Type: "textList", TextMaxLines: 6},
+					{Key: "Url", Label: "i18n:plugin_ai_chat_mcp_server_url", Type: "text", TextMaxLines: 4},
 				},
 			},
 		},
 		{
 			Type: "table",
 			Value: formDefinitionValue{
-				Key:   "AISkills",
-				Title: "Skills",
+				Key:     "AISkills",
+				Title:   "i18n:ui_ai_skills",
+				Tooltip: "i18n:ui_ai_skills_tooltip",
 				Columns: []formTableColumn{
-					{Key: "Name", Label: "Name", Type: "text", HideInUpdate: true},
-					{Key: "Source", Label: "Source", Type: "text", HideInUpdate: true},
-					{Key: "Description", Label: "Description", Type: "text", HideInUpdate: true},
-					{Key: "SourceUrl", Label: "Source URL", Type: "text", HideInUpdate: true, HideInTable: true},
+					{Key: "Name", Label: "i18n:plugin_ai_chat_skill_name", Type: "text", HideInUpdate: true},
+					{Key: "Source", Label: "i18n:plugin_ai_chat_skill_type", Type: "text", HideInUpdate: true},
+					{Key: "Description", Label: "i18n:plugin_ai_chat_skill_description", Type: "text", HideInUpdate: true},
+					{Key: "SourceUrl", Label: "i18n:plugin_ai_chat_skill_source_url", Type: "text", HideInUpdate: true, HideInTable: true},
 					{Key: "SourceName", Type: "text", HideInUpdate: true, HideInTable: true},
 					{Key: "ManifestPath", Type: "text", HideInUpdate: true, HideInTable: true},
 					{Key: "Enabled", Type: "checkbox", HideInUpdate: true, HideInTable: true},
 					{Key: "Error", Type: "text", HideInUpdate: true, HideInTable: true},
-					{Key: "Path", Label: "Local directory", Type: "dirPath", Validators: []formValidator{{Type: "not_empty"}}},
+					{Key: "Path", Label: "i18n:ui_ai_skill_add_path", Type: "dirPath", Validators: []formValidator{{Type: "not_empty"}}},
 				},
 			},
 		},
@@ -252,6 +255,31 @@ func (a *App) openAISettingsTable(index int) {
 	}
 	a.mu.Unlock()
 	a.finishOpeningFormTable()
+}
+
+// addAISettingsTableRow opens the shared editor directly at its create flow while preserving the skills source chooser.
+func (a *App) addAISettingsTableRow(index int) {
+	a.openAISettingsTable(index)
+	if index < 2 {
+		a.beginAddFormTableRow()
+	}
+}
+
+// openAISettingsTableRow carries the inline row selection into the shared table editor.
+func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
+	a.mu.Lock()
+	if a.settingsOpen && a.settingTab == "ai" && a.aiSettingsForm != nil {
+		a.settingRow = tableIndex
+		a.openFormTableLocked(a.aiSettingsForm, tableIndex)
+		if a.tableEditor != nil && rowIndex >= 0 && rowIndex < len(a.tableEditor.rows) {
+			a.tableEditor.selected = rowIndex
+		}
+	}
+	a.mu.Unlock()
+	a.finishOpeningFormTable()
+	if tableIndex < 2 {
+		a.beginEditFormTableRow()
+	}
 }
 
 // beginCloneRemoteAISkill reuses the row form surface for the one URL needed by core's clone endpoint.

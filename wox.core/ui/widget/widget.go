@@ -108,12 +108,14 @@ func UniformInsets(value float32) Insets {
 
 // Container paints an optional background and positions one child.
 type Container struct {
-	Width   float32
-	Height  float32
-	Padding Insets
-	Color   woxui.Color
-	Radius  float32
-	Child   Widget
+	Width       float32
+	Height      float32
+	Padding     Insets
+	Color       woxui.Color
+	BorderColor woxui.Color
+	BorderWidth float32
+	Radius      float32
+	Child       Widget
 }
 
 func (w Container) layout(ctx context, available constraints) *node {
@@ -147,9 +149,14 @@ func (w Container) layout(ctx context, available constraints) *node {
 		}
 	}
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}}
-	if w.Color.A != 0 {
+	if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) {
 		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			displayList.FillRoundedRect(bounds, w.Radius, w.Color)
+			if w.Color.A != 0 {
+				displayList.FillRoundedRect(bounds, w.Radius, w.Color)
+			}
+			if w.BorderColor.A != 0 && w.BorderWidth > 0 {
+				displayList.StrokeRoundedRect(bounds, w.Radius, w.BorderWidth, w.BorderColor)
+			}
 		}
 	}
 	if child != nil {
