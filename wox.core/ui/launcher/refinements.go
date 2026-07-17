@@ -36,7 +36,7 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height float32) 
 			option := option
 			refinementID := refinement.ID
 			converted = append(converted, launcherview.RefinementOption{
-				Value: option.Value, Label: a.translate(option.Title), Count: option.Count, Icon: a.imageFor(option.Icon),
+				Value: option.Value, Label: a.translate(option.Title), Count: option.Count, Icon: a.imageForSize(option.Icon, 16),
 				Selected: slices.Contains(splitRefinementValues(snapshot.refinementValues[refinement.ID]), option.Value),
 				OnTap:    func() { a.selectRefinementOption(refinementID, option.Value) },
 			})

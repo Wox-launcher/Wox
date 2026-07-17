@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/draw"
 	"io"
+	"sync/atomic"
 
 	_ "image/gif"
 	_ "image/jpeg"
@@ -15,8 +16,11 @@ import (
 type Image struct {
 	Width  int
 	Height int
+	id     uint64
 	pixels []byte
 }
+
+var nextImageID atomic.Uint64
 
 // DecodeImage decodes a supported raster image into the renderer's shared pixel format.
 func DecodeImage(reader io.Reader) (*Image, error) {
@@ -38,5 +42,5 @@ func NewImage(source image.Image) (*Image, error) {
 	}
 	rgba := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
 	draw.Draw(rgba, rgba.Bounds(), source, bounds.Min, draw.Src)
-	return &Image{Width: rgba.Rect.Dx(), Height: rgba.Rect.Dy(), pixels: rgba.Pix}, nil
+	return &Image{Width: rgba.Rect.Dx(), Height: rgba.Rect.Dy(), id: nextImageID.Add(1), pixels: rgba.Pix}, nil
 }

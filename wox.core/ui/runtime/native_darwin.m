@@ -101,7 +101,16 @@ struct WoxDarwinRenderer {
   id<MTLCommandQueue> queue;
   id<MTLRenderPipelineState> rect_pipeline;
   id<MTLRenderPipelineState> texture_pipeline;
-  NSCache *text_texture_cache;
+  NSMutableDictionary *text_texture_cache;
+  NSMutableDictionary *text_texture_costs;
+  NSMutableDictionary *text_texture_uses;
+  NSUInteger text_texture_total_cost;
+  uint64_t text_texture_use_sequence;
+  NSMutableDictionary *image_texture_cache;
+  NSMutableDictionary *image_texture_costs;
+  NSMutableDictionary *image_texture_uses;
+  NSUInteger image_texture_total_cost;
+  uint64_t image_texture_use_sequence;
   CAMetalLayer *layer;
   id<CAMetalDrawable> drawable;
   id<MTLCommandBuffer> command_buffer;
@@ -305,9 +314,12 @@ static WoxDarwinRenderer *create_renderer(CAMetalLayer *layer) {
   WoxDarwinRenderer *renderer = calloc(1, sizeof(WoxDarwinRenderer));
   renderer->device = [device retain];
   renderer->queue = [device newCommandQueue];
-  renderer->text_texture_cache = [[NSCache alloc] init];
-  renderer->text_texture_cache.countLimit = 256;
-  renderer->text_texture_cache.totalCostLimit = 32 * 1024 * 1024;
+  renderer->text_texture_cache = [[NSMutableDictionary alloc] init];
+  renderer->text_texture_costs = [[NSMutableDictionary alloc] init];
+  renderer->text_texture_uses = [[NSMutableDictionary alloc] init];
+  renderer->image_texture_cache = [[NSMutableDictionary alloc] init];
+  renderer->image_texture_costs = [[NSMutableDictionary alloc] init];
+  renderer->image_texture_uses = [[NSMutableDictionary alloc] init];
   renderer->layer = layer;
   renderer->scale = 1.0f;
   layer.device = device;
@@ -317,6 +329,11 @@ static WoxDarwinRenderer *create_renderer(CAMetalLayer *layer) {
   id<MTLLibrary> library = [device newLibraryWithSource:metal_source options:nil error:&error];
   if (library == nil) {
     NSLog(@"Wox Go UI: Metal shader compilation failed: %@", error);
+    [renderer->image_texture_uses release];
+    [renderer->image_texture_costs release];
+    [renderer->image_texture_cache release];
+    [renderer->text_texture_uses release];
+    [renderer->text_texture_costs release];
     [renderer->text_texture_cache release];
     [renderer->queue release];
     [renderer->device release];
@@ -353,6 +370,11 @@ static WoxDarwinRenderer *create_renderer(CAMetalLayer *layer) {
   if (renderer->rect_pipeline == nil || renderer->texture_pipeline == nil) {
     [renderer->texture_pipeline release];
     [renderer->rect_pipeline release];
+    [renderer->image_texture_uses release];
+    [renderer->image_texture_costs release];
+    [renderer->image_texture_cache release];
+    [renderer->text_texture_uses release];
+    [renderer->text_texture_costs release];
     [renderer->text_texture_cache release];
     [renderer->queue release];
     [renderer->device release];
@@ -372,6 +394,16 @@ static void destroy_renderer(WoxDarwinRenderer *renderer) {
   [renderer->encoder release];
   [renderer->command_buffer release];
   [renderer->drawable release];
+  [renderer->image_texture_uses removeAllObjects];
+  [renderer->image_texture_uses release];
+  [renderer->image_texture_costs removeAllObjects];
+  [renderer->image_texture_costs release];
+  [renderer->image_texture_cache removeAllObjects];
+  [renderer->image_texture_cache release];
+  [renderer->text_texture_uses removeAllObjects];
+  [renderer->text_texture_uses release];
+  [renderer->text_texture_costs removeAllObjects];
+  [renderer->text_texture_costs release];
   [renderer->text_texture_cache removeAllObjects];
   [renderer->text_texture_cache release];
   [renderer->texture_pipeline release];
@@ -379,6 +411,62 @@ static void destroy_renderer(WoxDarwinRenderer *renderer) {
   [renderer->queue release];
   [renderer->device release];
   free(renderer);
+}
+
+// trim_image_texture_cache deterministically bounds GPU textures without allowing NSCache pressure eviction to recreate hot images.
+static void trim_image_texture_cache(WoxDarwinRenderer *renderer, NSNumber *keep_key) {
+  const NSUInteger maximum_count = 512;
+  const NSUInteger maximum_cost = 64 * 1024 * 1024;
+  while (renderer->image_texture_cache.count > maximum_count || renderer->image_texture_total_cost > maximum_cost) {
+    NSNumber *oldest_key = nil;
+    uint64_t oldest_use = UINT64_MAX;
+    for (NSNumber *key in renderer->image_texture_uses) {
+      if ([key isEqualToNumber:keep_key]) {
+        continue;
+      }
+      uint64_t use = [[renderer->image_texture_uses objectForKey:key] unsignedLongLongValue];
+      if (oldest_key == nil || use < oldest_use) {
+        oldest_key = key;
+        oldest_use = use;
+      }
+    }
+    if (oldest_key == nil) {
+      return;
+    }
+    NSUInteger cost = [[renderer->image_texture_costs objectForKey:oldest_key] unsignedIntegerValue];
+    renderer->image_texture_total_cost = cost < renderer->image_texture_total_cost ? renderer->image_texture_total_cost - cost : 0;
+    [renderer->image_texture_uses removeObjectForKey:oldest_key];
+    [renderer->image_texture_costs removeObjectForKey:oldest_key];
+    [renderer->image_texture_cache removeObjectForKey:oldest_key];
+  }
+}
+
+// trim_text_texture_cache retains the launcher text working set while bounding its GPU cost and entry count.
+static void trim_text_texture_cache(WoxDarwinRenderer *renderer, NSArray *keep_key) {
+  const NSUInteger maximum_count = 2048;
+  const NSUInteger maximum_cost = 64 * 1024 * 1024;
+  while (renderer->text_texture_cache.count > maximum_count || renderer->text_texture_total_cost > maximum_cost) {
+    NSArray *oldest_key = nil;
+    uint64_t oldest_use = UINT64_MAX;
+    for (NSArray *key in renderer->text_texture_uses) {
+      if ([key isEqualToArray:keep_key]) {
+        continue;
+      }
+      uint64_t use = [[renderer->text_texture_uses objectForKey:key] unsignedLongLongValue];
+      if (oldest_key == nil || use < oldest_use) {
+        oldest_key = key;
+        oldest_use = use;
+      }
+    }
+    if (oldest_key == nil) {
+      return;
+    }
+    NSUInteger cost = [[renderer->text_texture_costs objectForKey:oldest_key] unsignedIntegerValue];
+    renderer->text_texture_total_cost = cost < renderer->text_texture_total_cost ? renderer->text_texture_total_cost - cost : 0;
+    [renderer->text_texture_uses removeObjectForKey:oldest_key];
+    [renderer->text_texture_costs removeObjectForKey:oldest_key];
+    [renderer->text_texture_cache removeObjectForKey:oldest_key];
+  }
 }
 
 static void emit_focus(WoxDarwinWindow *window, bool active) {
@@ -1935,9 +2023,9 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
     return 0;
   }
 
-  NSUInteger pixel_width = (NSUInteger)ceil(width * renderer->scale);
+  NSUInteger available_pixel_width = (NSUInteger)ceil(width * renderer->scale);
   NSUInteger pixel_height = (NSUInteger)ceil(height * renderer->scale);
-  if (pixel_width == 0 || pixel_height == 0 || pixel_width > 16384 || pixel_height > 16384) {
+  if (available_pixel_width == 0 || pixel_height == 0 || available_pixel_width > 16384 || pixel_height > 16384) {
     return -1;
   }
   NSString *string = [[NSString alloc] initWithUTF8String:text];
@@ -1945,12 +2033,27 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
     return -1;
   }
   NSString *family = font_family == NULL ? @"" : [NSString stringWithUTF8String:font_family];
+  NSFont *font = wox_font(font_family, font_size * renderer->scale, font_weight);
+  NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+      font, (id)kCTFontAttributeName,
+      (id)[[NSColor whiteColor] CGColor], (id)kCTForegroundColorAttributeName,
+      nil];
+  NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:string attributes:attributes];
+  CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)attributed);
+  CGFloat ascent = 0.0;
+  double typographic_width = CTLineGetTypographicBounds(line, &ascent, NULL, NULL);
+  NSUInteger natural_pixel_width = (NSUInteger)ceil(fmax(1.0, typographic_width + 1.0));
+  NSUInteger pixel_width = MIN(available_pixel_width, natural_pixel_width);
   NSArray *cache_key = @[ string, family ?: @"", @(pixel_width), @(pixel_height), @(font_size * renderer->scale), @(font_weight) ];
   id<MTLTexture> texture = [[renderer->text_texture_cache objectForKey:cache_key] retain];
+  renderer->text_texture_use_sequence++;
+  [renderer->text_texture_uses setObject:[NSNumber numberWithUnsignedLongLong:renderer->text_texture_use_sequence] forKey:cache_key];
   if (texture == nil) {
     size_t row_bytes = pixel_width * 4;
     void *pixels = calloc(pixel_height, row_bytes);
     if (pixels == NULL) {
+      CFRelease(line);
+      [attributed release];
       [string release];
       return -1;
     }
@@ -1967,19 +2070,12 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
     CGColorSpaceRelease(color_space);
     if (context == NULL) {
       free(pixels);
+      CFRelease(line);
+      [attributed release];
       [string release];
       return -1;
     }
 
-    NSFont *font = wox_font(font_family, font_size * renderer->scale, font_weight);
-    NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
-        font, (id)kCTFontAttributeName,
-        (id)[[NSColor whiteColor] CGColor], (id)kCTForegroundColorAttributeName,
-        nil];
-    NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:string attributes:attributes];
-    CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)attributed);
-    CGFloat ascent = 0.0;
-    CTLineGetTypographicBounds(line, &ascent, NULL, NULL);
     CGContextSetTextMatrix(context, CGAffineTransformIdentity);
     CGContextSetShouldAntialias(context, true);
     CGContextSetTextPosition(context, 0.0, fmax(0.0, (CGFloat)pixel_height - ascent));
@@ -1997,15 +2093,19 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
                  mipmapLevel:0
                    withBytes:pixels
                  bytesPerRow:row_bytes];
+      NSUInteger cost = row_bytes * pixel_height;
       // Text colors are applied by the shader, so one bounded white-mask cache serves every frame and theme color.
-      [renderer->text_texture_cache setObject:texture forKey:cache_key cost:row_bytes * pixel_height];
+      [renderer->text_texture_cache setObject:texture forKey:cache_key];
+      [renderer->text_texture_costs setObject:[NSNumber numberWithUnsignedInteger:cost] forKey:cache_key];
+      renderer->text_texture_total_cost += cost;
+      trim_text_texture_cache(renderer, cache_key);
     }
 
-    CFRelease(line);
-    [attributed release];
     CGContextRelease(context);
     free(pixels);
   }
+  CFRelease(line);
+  [attributed release];
   if (texture == nil) {
     [string release];
     return -1;
@@ -2013,7 +2113,7 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
 
   WoxTextureUniforms uniforms = {
       .viewport_size = renderer->viewport_size,
-      .rect = (vector_float4){x, y, width, height},
+      .rect = (vector_float4){x, y, fminf(width, (float)pixel_width / renderer->scale), height},
       .color = premultiplied_color(red, green, blue, alpha),
   };
   [renderer->encoder setRenderPipelineState:renderer->texture_pipeline];
@@ -2026,25 +2126,36 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
   return 0;
 }
 
-int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height) {
-  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open || pixels == NULL || image_width <= 0 || image_height <= 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
+int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height) {
+  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open || image_id == 0 || pixels == NULL || image_width <= 0 || image_height <= 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
   WoxDarwinRenderer *renderer = window->renderer;
-  MTLTextureDescriptor *descriptor = [MTLTextureDescriptor
-      texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-                                   width:(NSUInteger)image_width
-                                  height:(NSUInteger)image_height
-                               mipmapped:NO];
-  descriptor.usage = MTLTextureUsageShaderRead;
-  id<MTLTexture> texture = [renderer->device newTextureWithDescriptor:descriptor];
+  NSNumber *cache_key = [NSNumber numberWithUnsignedLongLong:image_id];
+  id<MTLTexture> texture = [[renderer->image_texture_cache objectForKey:cache_key] retain];
+  renderer->image_texture_use_sequence++;
+  [renderer->image_texture_uses setObject:[NSNumber numberWithUnsignedLongLong:renderer->image_texture_use_sequence] forKey:cache_key];
   if (texture == nil) {
-    return -1;
+    MTLTextureDescriptor *descriptor = [MTLTextureDescriptor
+        texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                     width:(NSUInteger)image_width
+                                    height:(NSUInteger)image_height
+                                 mipmapped:NO];
+    descriptor.usage = MTLTextureUsageShaderRead;
+    texture = [renderer->device newTextureWithDescriptor:descriptor];
+    if (texture == nil) {
+      return -1;
+    }
+    [texture replaceRegion:MTLRegionMake2D(0, 0, (NSUInteger)image_width, (NSUInteger)image_height)
+               mipmapLevel:0
+                 withBytes:pixels
+               bytesPerRow:(NSUInteger)row_stride];
+    NSUInteger cost = (NSUInteger)image_width * (NSUInteger)image_height * 4;
+    [renderer->image_texture_cache setObject:texture forKey:cache_key];
+    [renderer->image_texture_costs setObject:[NSNumber numberWithUnsignedInteger:cost] forKey:cache_key];
+    renderer->image_texture_total_cost += cost;
+    trim_image_texture_cache(renderer, cache_key);
   }
-  [texture replaceRegion:MTLRegionMake2D(0, 0, (NSUInteger)image_width, (NSUInteger)image_height)
-             mipmapLevel:0
-               withBytes:pixels
-             bytesPerRow:(NSUInteger)row_stride];
 
   WoxTextureUniforms uniforms = {
       .viewport_size = renderer->viewport_size,

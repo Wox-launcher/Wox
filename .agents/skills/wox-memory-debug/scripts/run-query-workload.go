@@ -129,20 +129,24 @@ func captureHeapProfile(ctx context.Context, client *automationdriver.Client) er
 	if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, "memory_profiling"); err != nil {
 		return err
 	}
-	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, found := findMemoryProfileResult(snapshot)
-		return found
-	})
-	if err != nil {
-		return err
+	var resultID string
+	for attempt := 0; attempt < 5; attempt++ {
+		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			_, found := findMemoryProfileResult(snapshot)
+			return found
+		})
+		if err != nil {
+			return err
+		}
+		resultID, _ = findMemoryProfileResult(snapshot)
+		if err := client.Perform(ctx, resultID, woxui.AccessibilityActionActivate, ""); err == nil {
+			time.Sleep(time.Second)
+			fmt.Printf("activated=%s\n", resultID)
+			return client.Hide(ctx)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	resultID, _ := findMemoryProfileResult(snapshot)
-	if err := client.Perform(ctx, resultID, woxui.AccessibilityActionActivate, ""); err != nil {
-		return err
-	}
-	time.Sleep(time.Second)
-	fmt.Printf("activated=%s\n", resultID)
-	return client.Hide(ctx)
+	return fmt.Errorf("memory profile result kept changing before activation")
 }
 
 func showAndWaitForInput(ctx context.Context, client *automationdriver.Client) error {

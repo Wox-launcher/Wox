@@ -20,7 +20,7 @@ func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, pale
 			detail = candidate.Identity
 		}
 		candidates[index] = launcherview.FormAppCandidate{
-			Name: candidate.Name, Detail: detail, Icon: a.imageFor(candidate.Icon), FallbackColor: resultColors[index%len(resultColors)],
+			Name: candidate.Name, Detail: detail, Icon: a.imageForSize(candidate.Icon, 34), FallbackColor: resultColors[index%len(resultColors)],
 		}
 	}
 	return launcherview.FormAppPickerView(launcherview.FormAppPickerProps{

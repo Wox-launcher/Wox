@@ -198,7 +198,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidge
 	}
 	var queryIcon *woxui.Image
 	if snapshot.glance == nil {
-		if image := a.imageFor(snapshot.layout.Icon); image != nil {
+		if image := a.imageForSize(snapshot.layout.Icon, 32); image != nil {
 			queryIcon = image
 			queryWidth -= 30 + accessoryGap
 		}
@@ -362,7 +362,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 		}
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
-			Icon: a.imageFor(result.Icon), TitleHeight: titleHeight, Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
+			Icon: a.imageForSize(result.Icon, 32), TitleHeight: titleHeight, Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnActivate: func() { a.activateResult(index) },
 		})
 	}
@@ -401,10 +401,6 @@ func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32) ([]launc
 			item.Width = min(maximumTextWidth, metrics.Size.Width+textPadding)
 			item.Height = textHeight
 		case "image":
-			item.Image = a.imageFor(tail.Image)
-			if item.Image == nil {
-				continue
-			}
 			item.Width = defaultImageSize
 			item.Height = defaultImageSize
 			if tail.ImageWidth != nil && *tail.ImageWidth > 0 {
@@ -412,6 +408,10 @@ func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32) ([]launc
 			}
 			if tail.ImageHeight != nil && *tail.ImageHeight > 0 {
 				item.Height = float32(*tail.ImageHeight)
+			}
+			item.Image = a.imageForSize(tail.Image, int(math.Ceil(float64(max(item.Width, item.Height)))))
+			if item.Image == nil {
+				continue
 			}
 		default:
 			continue
@@ -493,7 +493,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidge
 	progressLabel := ""
 	if snapshot.toolbarMsg != nil {
 		leftLabel = snapshot.toolbarMsg.displayText()
-		if image := a.imageFor(snapshot.toolbarMsg.Icon); image != nil {
+		if image := a.imageForSize(snapshot.toolbarMsg.Icon, 18); image != nil {
 			leftIcon = image
 		}
 		if snapshot.toolbarMsg.Progress != nil {

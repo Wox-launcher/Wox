@@ -55,8 +55,11 @@ func (w *woxImage) UnmarshalJSON(data []byte) error {
 
 type lazyImagePayload struct {
 	Token       string   `json:"token"`
+	CacheKey    string   `json:"cacheKey"`
 	Placeholder woxImage `json:"placeholder"`
 }
+
+const launcherImageCacheLimit = 512
 
 func (a *App) imageFor(source woxImage) *woxui.Image {
 	return a.imageForTint(source, nil, 256)
@@ -78,12 +81,16 @@ func (a *App) imageForTint(source woxImage, tint *woxui.Color, svgSize int) *wox
 		key += fmt.Sprintf("-tint-%02x%02x%02x%02x", tint.R, tint.G, tint.B, tint.A)
 	}
 	a.mu.Lock()
+	a.imageUseSequence++
+	a.imageLastUsed[key] = a.imageUseSequence
 	image := a.images[key]
-	if image != nil || a.imageRequested[key] {
+	requestedSource, requested := a.imageRequested[key]
+	if image != nil || requested && requestedSource == source.ImageData {
 		a.mu.Unlock()
 		return image
 	}
-	a.imageRequested[key] = true
+	a.imageRequested[key] = source.ImageData
+	delete(a.imageErrors, key)
 	a.mu.Unlock()
 	go a.loadImage(key, source, tint, svgSize)
 	return nil
@@ -155,11 +162,8 @@ func (a *App) storeImage(key string, image *woxui.Image) {
 		return
 	}
 	a.mu.Lock()
-	if len(a.images) >= 512 {
-		// ponytail: A bounded reset is enough for invalidated launcher frames; add LRU bookkeeping only if real sessions churn this cache.
-		a.images = map[string]*woxui.Image{}
-		a.imageRequested = map[string]bool{key: true}
-		a.imageErrors = map[string]string{}
+	if _, exists := a.images[key]; !exists && len(a.images) >= launcherImageCacheLimit {
+		a.evictOldestImageLocked(key)
 	}
 	a.images[key] = image
 	delete(a.imageErrors, key)
@@ -172,6 +176,29 @@ func (a *App) storeImageError(key string, err error) {
 	a.imageErrors[key] = err.Error()
 	a.mu.Unlock()
 	a.invalidateAllWindows()
+}
+
+// evictOldestImageLocked removes one cold image without invalidating the rest of the decoded cache.
+func (a *App) evictOldestImageLocked(keepKey string) {
+	oldestKey := ""
+	oldestUse := ^uint64(0)
+	for key := range a.images {
+		if key == keepKey {
+			continue
+		}
+		used := a.imageLastUsed[key]
+		if oldestKey == "" || used < oldestUse {
+			oldestKey = key
+			oldestUse = used
+		}
+	}
+	if oldestKey == "" {
+		return
+	}
+	delete(a.images, oldestKey)
+	delete(a.imageRequested, oldestKey)
+	delete(a.imageLastUsed, oldestKey)
+	delete(a.imageErrors, oldestKey)
 }
 
 func (a *App) imageErrorFor(source woxImage) string {
@@ -264,6 +291,14 @@ func themeRasterColor(value woxui.Color) color.NRGBA {
 }
 
 func imageKey(source woxImage) string {
+	if source.ImageType == "lazyloadimage" {
+		var payload lazyImagePayload
+		if json.Unmarshal([]byte(source.ImageData), &payload) == nil && payload.CacheKey != "" {
+			// Lazy authorization tokens change for every query and must not invalidate
+			// an icon that was already resolved from the same stable source.
+			return "lazy-" + payload.CacheKey
+		}
+	}
 	hash := sha256.Sum256([]byte(source.ImageType + "\x00" + source.ImageData))
 	return fmt.Sprintf("%x", hash[:])
 }

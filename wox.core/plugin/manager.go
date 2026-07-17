@@ -2057,7 +2057,10 @@ func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *In
 		pluginName = pluginInstance.GetName(ctx)
 	}
 	logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) icon deferred as lazyloadimage, size: %d", pluginName, resultId, size))
-	return common.NewWoxImageLazyLoad(token, common.ImageThumbnailPlaceholderIcon, size)
+	// The authorization token is query-scoped, while the source hash is stable
+	// across queries so UI can reuse an already decoded icon.
+	cacheKey := fmt.Sprintf("%s-%d", normalized.Hash(), size)
+	return common.NewWoxImageLazyLoad(token, cacheKey, common.ImageThumbnailPlaceholderIcon, size)
 }
 
 func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.WoxImage, error) {

@@ -247,7 +247,9 @@ type App struct {
 	palette               uiPalette
 	translations          map[string]string
 	images                map[string]*woxui.Image
-	imageRequested        map[string]bool
+	imageRequested        map[string]string
+	imageLastUsed         map[string]uint64
+	imageUseSequence      uint64
 	imageErrors           map[string]string
 	remotePreviews        map[string]queryPreview
 	previewRequests       map[string]bool
@@ -305,7 +307,8 @@ func newApp(isDev bool, services contract.Services, clientFactory BackendFactory
 		palette:         defaultPalette(),
 		translations:    map[string]string{},
 		images:          map[string]*woxui.Image{},
-		imageRequested:  map[string]bool{},
+		imageRequested:  map[string]string{},
+		imageLastUsed:   map[string]uint64{},
 		imageErrors:     map[string]string{},
 		remotePreviews:  map[string]queryPreview{},
 		previewRequests: map[string]bool{},

@@ -717,6 +717,7 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 			commandStart := time.Now()
 			result = C.wox_darwin_window_draw_image(
 				native,
+				C.uint64_t(command.image.id),
 				(*C.uint8_t)(unsafe.Pointer(&command.image.pixels[0])),
 				C.int32_t(command.image.Width),
 				C.int32_t(command.image.Height),

@@ -75,7 +75,7 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height float32) wox
 			ID: result.ID, Title: result.Title, Group: result.IsGroup, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 		}
 		if !result.IsGroup {
-			item.Icon = a.imageFor(result.Icon)
+			item.Icon = a.imageForSize(result.Icon, int(math.Ceil(float64(max(visualWidth, visualHeight)))))
 			item.OnHover = func(inside bool) { a.hoverResult(index, inside) }
 			item.OnSelect = func() { a.selectResult(index) }
 			item.OnActivate = func() { a.activateResult(index) }

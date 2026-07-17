@@ -98,7 +98,7 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 		}
 		action := snapshot.actionEntries[index]
 		items = append(items, launcherview.ActionItem{
-			Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: a.imageFor(action.Icon), HotkeyLabels: formatHotkeyLabels(action.Hotkey),
+			Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: a.imageForSize(action.Icon, 22), HotkeyLabels: formatHotkeyLabels(action.Hotkey),
 		})
 	}
 	scroll := a.configureActionScroll(len(items))
