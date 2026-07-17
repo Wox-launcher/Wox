@@ -14,7 +14,6 @@
 - **Explain Structures And Logic**: Add comments for complex structs, state transitions, control-flow branches, and non-obvious or counterintuitive logic. Do not comment obvious code just to satisfy a rule.
 - **Refactors**: Scan `AGENTS.md` and `README.md` files first
 - **Verification**: After code changes, run code formatting according to the project style. Go build may be run for Go/backend changes.
-- **Unit Tests**: Do not write unit tests unless the user requests them
 - **Format**: When formatting code, you must adhere to the coding style guidelines specified in Wox.code-workspace file.
 
 ## User Coding Style Preferences
