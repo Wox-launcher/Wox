@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -17,7 +17,7 @@ import (
 func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
 	snapshot, err := a.ensureChatPreview(result, preview)
 	if err != nil {
-		return launcherview.PreviewError(fmt.Sprintf("Invalid chat preview: %v", err), width, height, palette.componentTheme())
+		return previewview.PreviewError(fmt.Sprintf("Invalid chat preview: %v", err), width, height, palette.componentTheme())
 	}
 
 	const headerHeight = float32(52)
@@ -31,17 +31,17 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 	}
 	messagesHeight := max(float32(80), innerHeight-headerHeight-inputHeight-questionHeight-debugHeight)
 
-	var debug *launcherview.ChatDebugProps
+	var debug *previewview.ChatDebugProps
 	if debugHeight > 0 {
 		props := a.chatDebugProps(snapshot, palette, innerWidth, debugHeight)
 		debug = &props
 	}
-	var question *launcherview.ChatQuestionProps
+	var question *previewview.ChatQuestionProps
 	if questionHeight > 0 {
 		props := a.chatQuestionProps(snapshot, palette, innerWidth, questionHeight)
 		question = &props
 	}
-	var catalog *launcherview.ChatCatalogProps
+	var catalog *previewview.ChatCatalogProps
 	if snapshot.panel == "history" {
 		catalogWidth := min(float32(260), max(float32(220), innerWidth*0.46))
 		props := a.chatCatalogProps(snapshot, palette, catalogWidth, innerHeight)
@@ -53,7 +53,7 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 		catalog = &props
 	}
 	panel := snapshot.panel
-	return launcherview.ChatPreview(launcherview.ChatPreviewProps{
+	return previewview.ChatPreview(previewview.ChatPreviewProps{
 		Width: width, Height: height, Key: snapshot.key, Panel: panel,
 		Header:   a.chatHeaderProps(snapshot, palette, innerWidth, headerHeight),
 		Messages: a.chatMessagesProps(snapshot, palette, innerWidth, messagesHeight),
@@ -64,7 +64,7 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 }
 
 // chatHeaderProps resolves the current title and available controller actions.
-func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) launcherview.ChatHeaderProps {
+func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatHeaderProps {
 	title := strings.TrimSpace(snapshot.chat.Title)
 	if title == "" {
 		title = a.translate("i18n:ui_ai_chat_new_chat")
@@ -73,7 +73,7 @@ func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, 
 		title = "New chat"
 	}
 	hasDebug := len(bytes.TrimSpace(snapshot.chat.DebugTrace)) > 0 && !bytes.Equal(bytes.TrimSpace(snapshot.chat.DebugTrace), []byte("null"))
-	return launcherview.ChatHeaderProps{
+	return previewview.ChatHeaderProps{
 		Width: width, Height: height, Key: snapshot.key, Title: title, HistoryOpen: snapshot.panel == "history",
 		ShowDebug: hasDebug, DebugOpen: snapshot.panel == "debug", Theme: palette.componentTheme(),
 		OnHistory: func() { a.toggleChatPanel("history") }, OnDebug: func() { a.toggleChatPanel("debug") },
@@ -89,7 +89,7 @@ func chatCatalogPanelHeight(snapshot *chatPreviewSnapshot, available float32) fl
 }
 
 // chatCatalogProps prepares history, model, and skill rows without constructing widgets.
-func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) launcherview.ChatCatalogProps {
+func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatCatalogProps {
 	const rowHeight = float32(44)
 	viewportHeight := max(float32(40), height-42)
 	count := len(snapshot.chats)
@@ -116,7 +116,7 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 	}
 	a.setChatPanelViewport(viewportHeight)
 
-	items := make([]launcherview.ChatCatalogItemProps, 0, count)
+	items := make([]previewview.ChatCatalogItemProps, 0, count)
 	if snapshot.panel == "history" {
 		for index, chat := range snapshot.chats {
 			index := index
@@ -132,7 +132,7 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 			if chatID == snapshot.chat.ID {
 				subtitle += " · Active"
 			}
-			items = append(items, launcherview.ChatCatalogItemProps{
+			items = append(items, previewview.ChatCatalogItemProps{
 				SelectID: fmt.Sprintf("chat-history-row-%s-%d", snapshot.key, index), DeleteID: fmt.Sprintf("chat-history-delete-%s-%d", snapshot.key, index),
 				Title: title, Subtitle: subtitle, Selected: index == snapshot.panelSelected,
 				OnSelect: func() { a.selectChatHistory(chatID) }, OnDelete: func() { a.deleteChatHistory(chatID) },
@@ -148,7 +148,7 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 			if model == snapshot.chat.Model {
 				provider += " · Selected"
 			}
-			items = append(items, launcherview.ChatCatalogItemProps{
+			items = append(items, previewview.ChatCatalogItemProps{
 				SelectID: fmt.Sprintf("chat-model-row-%s-%d", snapshot.key, index), Title: model.Name, Subtitle: provider,
 				Selected: index == snapshot.panelSelected, OnSelect: func() { a.selectChatModel(index) },
 			})
@@ -166,7 +166,7 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 				}
 				subtitle += skill.Description
 			}
-			items = append(items, launcherview.ChatCatalogItemProps{
+			items = append(items, previewview.ChatCatalogItemProps{
 				SelectID: fmt.Sprintf("chat-skill-row-%s-%d", snapshot.key, index), Title: skill.Name, Subtitle: subtitle,
 				Selected: index == snapshot.panelSelected, OnSelect: func() { a.insertChatSkill(index) },
 			})
@@ -188,7 +188,7 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 			emptyMessage = snapshot.skillsError
 		}
 	}
-	return launcherview.ChatCatalogProps{
+	return previewview.ChatCatalogProps{
 		Width: width, Height: height, Key: snapshot.key, Label: label, Items: items, EmptyMessage: emptyMessage,
 		Scroll: offset, ContentHeight: contentHeight, ShowNew: snapshot.panel == "history", Theme: palette.componentTheme(),
 		OnScroll: a.scrollChatPanel, OnNew: a.startNewChat,
@@ -196,7 +196,7 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 }
 
 // chatDebugProps prepares the copyable trace while the controller owns cached text measurement and scrolling.
-func (a *App) chatDebugProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) launcherview.ChatDebugProps {
+func (a *App) chatDebugProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatDebugProps {
 	innerWidth := max(float32(0), width-20)
 	viewportHeight := max(float32(40), height-42)
 	summary, value := formatChatDebugTrace(snapshot.chat.DebugTrace)
@@ -207,7 +207,7 @@ func (a *App) chatDebugProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 	maxOffset := max(float32(0), contentHeight-viewportHeight)
 	offset := min(max(float32(0), snapshot.panelScroll), maxOffset)
 	a.clampChatDebugScroll(maxOffset)
-	return launcherview.ChatDebugProps{
+	return previewview.ChatDebugProps{
 		Width: width, Height: height, Key: snapshot.key, Summary: summary, Value: value, Layout: layout,
 		Scroll: offset, ContentHeight: contentHeight, Theme: palette.componentTheme(), OnScroll: a.scrollChatDebugPanel, OnCopy: func() { a.copyChatText(value) },
 	}
@@ -234,7 +234,7 @@ func formatChatDebugTrace(raw json.RawMessage) (string, string) {
 }
 
 // chatMessagesProps prepares semantic messages and leaves their widget composition to the view.
-func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) launcherview.ChatMessagesProps {
+func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatMessagesProps {
 	// ponytail: Add viewport virtualization after profiling a real long chat; the current full list preserves exact scroll height with less state.
 	innerWidth := max(float32(0), width-20)
 	innerHeight := max(float32(0), height-16)
@@ -246,7 +246,7 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 		emptyMessage = "Loading conversation…"
 	}
 	emptyMetrics, _ := a.window.MeasureText(emptyMessage, woxui.TextStyle{Size: 28, Weight: woxui.FontWeightSemibold})
-	props := launcherview.ChatMessagesProps{
+	props := previewview.ChatMessagesProps{
 		Width: width, Height: height, Key: snapshot.key, EmptyMessage: emptyMessage,
 		EmptyTextWidth: emptyMetrics.Size.Width, EmptyTextHeight: emptyMetrics.Size.Height,
 		ContentHeight: innerHeight, Scroll: snapshot.scroll, Theme: palette.componentTheme(), OnScroll: a.scrollChatPreview,
@@ -255,24 +255,24 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 		return props
 	}
 	actionsEnabled := !snapshot.chat.IsStreaming && !snapshot.sending && snapshot.question == nil
-	props.Messages = make([]launcherview.ChatMessageProps, 0, len(snapshot.chat.Conversations))
+	props.Messages = make([]previewview.ChatMessageProps, 0, len(snapshot.chat.Conversations))
 	for index, conversation := range snapshot.chat.Conversations {
 		props.Messages = append(props.Messages, a.chatMessageProps(snapshot.key, index, conversation, palette, innerWidth, actionsEnabled))
 	}
-	props.ContentHeight = launcherview.ChatMessagesContentHeight(props.Messages, innerHeight)
+	props.ContentHeight = previewview.ChatMessagesContentHeight(props.Messages, innerHeight)
 	maxOffset := max(float32(0), props.ContentHeight-innerHeight)
 	a.clampChatPreviewScroll(maxOffset)
 	return props
 }
 
 // chatMessageProps resolves text layouts, images, and controller actions for one conversation.
-func (a *App) chatMessageProps(key string, index int, conversation chatConversation, palette uiPalette, width float32, actionsEnabled bool) launcherview.ChatMessageProps {
+func (a *App) chatMessageProps(key string, index int, conversation chatConversation, palette uiPalette, width float32, actionsEnabled bool) previewview.ChatMessageProps {
 	cardWidth := width
 	if conversation.Role == "user" {
 		cardWidth = max(float32(180), width*0.82)
 	}
 	innerWidth := max(float32(40), cardWidth-24)
-	props := launcherview.ChatMessageProps{
+	props := previewview.ChatMessageProps{
 		Key: fmt.Sprintf("%s-%d", key, index), Role: conversation.Role, Theme: palette.componentTheme(),
 	}
 	if conversation.Timestamp > 0 {
@@ -364,7 +364,7 @@ func formatChatToolCall(conversation chatConversation) string {
 }
 
 // chatInputProps prepares the controlled editor and toolbar actions.
-func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) launcherview.ChatInputProps {
+func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatInputProps {
 	hint := a.translate("i18n:ui_ai_chat_input_hint")
 	if strings.TrimSpace(hint) == "" || hint == "i18n:ui_ai_chat_input_hint" {
 		hint = "Type a message. Use / to switch models or insert skills"
@@ -394,7 +394,7 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 		status = "Streaming…"
 		statusColor = woxui.Color{R: 68, G: 196, B: 120, A: 255}
 	}
-	return launcherview.ChatInputProps{
+	return previewview.ChatInputProps{
 		Width: width, Height: height, Key: snapshot.key, Editing: snapshot.editing,
 		Focused: snapshot.active && snapshot.question == nil && snapshot.panel == "", Hint: hint, Window: a.window,
 		Model: model, ModelWidth: modelWidth, Status: status, StatusColor: statusColor, Sending: streaming, Theme: palette.componentTheme(),
@@ -418,13 +418,13 @@ func chatQuestionPanelHeight(snapshot *chatPreviewSnapshot, available float32) f
 }
 
 // chatQuestionProps prepares ask-user options and keeps selection and submission in the controller.
-func (a *App) chatQuestionProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) launcherview.ChatQuestionProps {
+func (a *App) chatQuestionProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatQuestionProps {
 	question := snapshot.question
-	props := launcherview.ChatQuestionProps{
+	props := previewview.ChatQuestionProps{
 		Width: width, Height: height, Question: question.Question, Theme: palette.componentTheme(),
 		OnCancel: func() { a.submitAIQuestionAnswer("User cancelled") }, OnSubmit: a.submitSelectedAIQuestionAnswer,
 	}
-	props.Options = make([]launcherview.ChatQuestionOptionProps, 0, len(question.Options))
+	props.Options = make([]previewview.ChatQuestionOptionProps, 0, len(question.Options))
 	for index, option := range question.Options {
 		index := index
 		label := option.Title
@@ -434,7 +434,7 @@ func (a *App) chatQuestionProps(snapshot *chatPreviewSnapshot, palette uiPalette
 		if option.Recommended {
 			label += "  · Recommended"
 		}
-		props.Options = append(props.Options, launcherview.ChatQuestionOptionProps{
+		props.Options = append(props.Options, previewview.ChatQuestionOptionProps{
 			ID: fmt.Sprintf("chat-question-%s-%d", question.QuestionID, index), Label: label,
 			Selected: index == snapshot.questionSelected, OnSelect: func() { a.selectAIQuestionOption(index) },
 		})
@@ -446,7 +446,7 @@ func (a *App) chatQuestionProps(snapshot *chatPreviewSnapshot, palette uiPalette
 		inputHeight = 48
 	}
 	if inputHeight > 0 {
-		props.Input = &launcherview.ChatQuestionInputProps{
+		props.Input = &previewview.ChatQuestionInputProps{
 			ID: "chat-question-input-" + question.QuestionID, Height: inputHeight, Editing: snapshot.questionEditing,
 			Focused: snapshot.active, Window: a.window, OnCaret: a.setAIQuestionCaret,
 		}

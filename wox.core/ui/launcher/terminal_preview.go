@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -86,7 +86,7 @@ type terminalMatch struct {
 // buildTerminalPreview delegates presentation to the pure view while retaining controller-owned text layout caching.
 func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
 	key := "terminal\x00" + snapshot.SessionID
-	return launcherview.TerminalPreviewView(launcherview.TerminalPreviewProps{
+	return previewview.TerminalPreviewView(previewview.TerminalPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Window: a.window,
 		SessionID: snapshot.SessionID, Command: snapshot.Command, Status: snapshot.Status, Error: snapshot.Error, Text: snapshot.Text,
 		Scroll: snapshot.Scroll, LoadingHistory: snapshot.LoadingHistory, SearchOpen: snapshot.SearchOpen, SearchEditing: snapshot.SearchEditing,

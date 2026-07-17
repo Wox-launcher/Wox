@@ -1,4 +1,4 @@
-package view
+package preview
 
 import (
 	"fmt"

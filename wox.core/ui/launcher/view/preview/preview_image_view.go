@@ -1,4 +1,4 @@
-package view
+package preview
 
 import (
 	woxui "wox/ui/runtime"

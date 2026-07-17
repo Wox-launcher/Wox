@@ -3,7 +3,7 @@ package launcher
 import (
 	"strings"
 
-	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -34,7 +34,7 @@ func (a *App) buildMediaPreview(result queryResult, data mediaPreviewData, palet
 	action := func(id string) func() {
 		return func() { a.activateResultActionByID(result.QueryID, result.ID, id) }
 	}
-	return launcherview.MediaPreviewView(launcherview.MediaPreviewProps{
+	return previewview.MediaPreviewView(previewview.MediaPreviewProps{
 		Width: width, Height: height, Title: title, Artist: artist, Details: strings.Join(details, "  ·  "), Artwork: artwork,
 		Position: position, Duration: duration, Playing: data.IsPlaying, Theme: palette.componentTheme(),
 		OnPrevious: action("media-control-previous"), OnPlay: action("media-control-play"), OnPause: action("media-control-pause"), OnNext: action("media-control-next"),

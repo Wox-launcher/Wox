@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -37,7 +37,7 @@ func (a *App) buildPreview(result queryResult, palette uiPalette, width, height 
 	if preview.PreviewType == "media" {
 		data, err := decodeMediaPreview(preview.PreviewData)
 		if err != nil {
-			return launcherview.PreviewError(fmt.Sprintf("Invalid media preview: %v", err), width, height, palette.componentTheme())
+			return previewview.PreviewError(fmt.Sprintf("Invalid media preview: %v", err), width, height, palette.componentTheme())
 		}
 		return a.buildMediaPreview(result, data, palette, width, height)
 	}
@@ -46,9 +46,9 @@ func (a *App) buildPreview(result queryResult, palette uiPalette, width, height 
 	}
 	scrollKey := result.QueryID + "\x00" + result.ID + "\x00" + preview.PreviewType
 	tags := append(a.previewTagLabels(preview.PreviewTags), a.previewTagLabels(a.previewBodyTags(preview))...)
-	layout := launcherview.ResolvePreviewLayout(width, height, len(tags) > 0)
+	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0)
 	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight)
-	return launcherview.PreviewView(launcherview.PreviewProps{
+	return previewview.PreviewView(previewview.PreviewProps{
 		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window,
 	})
 }
@@ -178,7 +178,7 @@ func (a *App) buildScrollablePreviewText(scrollKey, value string, color woxui.Co
 	}
 	offset = min(max(float32(0), offset), maxOffset)
 	a.mu.Unlock()
-	return launcherview.ScrollablePreviewText(launcherview.ScrollablePreviewTextProps{
+	return previewview.ScrollablePreviewText(previewview.ScrollablePreviewTextProps{
 		ID: scrollKey, Value: value, Color: color, Width: width, Height: height, Layout: layout, Offset: offset,
 		OnScroll: func(delta, scrollMax float32) { a.scrollPreview(scrollKey, delta, scrollMax) },
 	})
@@ -192,10 +192,10 @@ func (a *App) buildTextPreview(scrollKey, value, scrollPosition string, palette 
 	style := woxui.TextStyle{Size: 17}
 	textWidth := max(float32(0), width-horizontalPadding*2)
 	layout := a.previewTextLayout(scrollKey+"|quote", value, style, textWidth, 25)
-	if !launcherview.TextPreviewFits(layout, width, height) {
+	if !previewview.TextPreviewFits(layout, width, height) {
 		return a.buildScrollablePreviewText(scrollKey, value, previewColorWithOpacity(palette.previewText, 0.86), scrollPosition, width, height)
 	}
-	return launcherview.TextPreview(launcherview.TextPreviewProps{
+	return previewview.TextPreview(previewview.TextPreviewProps{
 		Value: value, Width: width, Height: height, Layout: layout, Theme: palette.componentTheme(), Window: a.window,
 	})
 }
@@ -243,7 +243,7 @@ func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, wid
 			color = palette.componentTheme().ErrorText
 		}
 	}
-	return launcherview.PreviewImage(launcherview.PreviewImageProps{
+	return previewview.PreviewImage(previewview.PreviewImageProps{
 		Width: width, Height: height, Image: image, Message: message, MessageColor: color,
 		OnTap: func() { a.openPreviewImageOverlay(overlay) },
 	})
@@ -260,7 +260,7 @@ func (a *App) openPreviewImageOverlay(image woxImage) {
 }
 
 func (a *App) buildListPreview(data previewListData, palette uiPalette, width, height float32) woxwidget.Widget {
-	items := make([]launcherview.PreviewListItem, 0, len(data.Items))
+	items := make([]previewview.PreviewListItem, 0, len(data.Items))
 	for index, item := range data.Items {
 		tail := ""
 		if len(item.Tails) > 0 {
@@ -270,11 +270,11 @@ func (a *App) buildListPreview(data previewListData, palette uiPalette, width, h
 		if item.Icon != nil {
 			icon = a.imageFor(*item.Icon)
 		}
-		items = append(items, launcherview.PreviewListItem{
+		items = append(items, previewview.PreviewListItem{
 			Title: item.Title, Subtitle: item.Subtitle, Tail: tail, Icon: icon, FallbackColor: resultColors[index%len(resultColors)],
 		})
 	}
-	return launcherview.PreviewList(launcherview.PreviewListProps{Width: width, Height: height, Items: items, Theme: palette.componentTheme()})
+	return previewview.PreviewList(previewview.PreviewListProps{Width: width, Height: height, Items: items, Theme: palette.componentTheme()})
 }
 
 func (a *App) previewTagLabels(tags []previewTag) []string {

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"wox/ui/coreclient"
-	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -66,7 +66,7 @@ type aiModel struct {
 func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
 	form, err := a.ensureRequirementForm(result, preview)
 	if err != nil {
-		return launcherview.RequirementPreviewView(launcherview.RequirementPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
+		return previewview.RequirementPreviewView(previewview.RequirementPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
 	}
 	errorMessage := form.error
 	if errorMessage == "" && form.modelsError != "" && hasFormDefinitionType(form.definitions, "selectAIModel") {
@@ -80,7 +80,7 @@ func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, 
 	for index, definition := range form.definitions {
 		rows = append(rows, a.buildFormField(form.formFieldsSnapshot, callbacks, palette, index, definition, width-36, formDefinitionHeight(definition)))
 	}
-	return launcherview.RequirementPreviewView(launcherview.RequirementPreviewProps{
+	return previewview.RequirementPreviewView(previewview.RequirementPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Title: form.title, Message: form.message, PluginName: form.pluginName,
 		Error: errorMessage, SaveLabel: a.translate("i18n:ui_save"), Saving: form.saving, Rows: rows,
 		RowsHeight: formDefinitionsContentHeight(form.definitions), Scroll: form.scroll,

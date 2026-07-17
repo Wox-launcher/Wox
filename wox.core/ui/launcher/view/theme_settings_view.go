@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	woxcomponent "wox/ui/launcher/component"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -169,7 +170,7 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 			}},
 			woxwidget.TextBlock{Value: description, Width: innerWidth, Height: 58, MaxLines: 3, Style: woxui.TextStyle{Size: 11}, LineHeight: 18, Color: props.Theme.ResultSubtitle},
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: actions},
-			ThemeDraftSample(theme.PreviewTheme, innerWidth, min(float32(260), max(float32(130), height-230))),
+			previewview.ThemeDraftSample(theme.PreviewTheme, innerWidth, min(float32(260), max(float32(130), height-230))),
 			woxwidget.TextBlock{Value: props.Error, Width: innerWidth, Height: 42, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, Color: errorColor},
 		},
 	}}

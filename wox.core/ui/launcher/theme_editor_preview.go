@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -87,7 +87,7 @@ type themeEditorPreviewSnapshot struct {
 func (a *App) buildThemeEditorPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
 	state, err := a.ensureThemeEditorPreview(result, preview)
 	if err != nil {
-		return launcherview.ThemeEditorPreviewView(launcherview.ThemeEditorPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
+		return previewview.ThemeEditorPreviewView(previewview.ThemeEditorPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
 	}
 	return a.buildThemeEditorSurface(state, palette, width, height)
 }
@@ -111,7 +111,7 @@ func (a *App) buildThemeEditorSurface(state *themeEditorPreviewSnapshot, palette
 	if state.isSystem || strings.TrimSpace(state.values["ThemeName"]) != state.sourceName {
 		saveLabel = "Save copy"
 	}
-	return launcherview.ThemeEditorPreviewView(launcherview.ThemeEditorPreviewProps{
+	return previewview.ThemeEditorPreviewView(previewview.ThemeEditorPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), DraftTheme: themeEditorPalette(state.values).componentTheme(),
 		Error: state.error, SaveLabel: saveLabel, Dirty: dirty, Saving: state.saving,
 		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions), Scroll: state.scroll,
@@ -121,7 +121,7 @@ func (a *App) buildThemeEditorSurface(state *themeEditorPreviewSnapshot, palette
 }
 
 func (a *App) buildThemeDraftSample(values map[string]string, width, height float32) woxwidget.Widget {
-	return launcherview.ThemeDraftSample(themeEditorPalette(values).componentTheme(), width, height)
+	return previewview.ThemeDraftSample(themeEditorPalette(values).componentTheme(), width, height)
 }
 
 func themeEditorTokens() []themeColorToken {

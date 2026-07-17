@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"wox/ui/coreclient"
-	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -56,7 +56,7 @@ type triggerConflictPreviewSnapshot struct {
 func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
 	state, err := a.ensureTriggerConflictPreview(result, preview)
 	if err != nil {
-		return launcherview.TriggerConflictPreviewView(launcherview.TriggerConflictPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
+		return previewview.TriggerConflictPreviewView(previewview.TriggerConflictPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
 	}
 	callbacks := formFieldCallbacks{idPrefix: "trigger-conflict", focus: a.focusTriggerConflictField, setCaret: a.setTriggerConflictCaret}
 	rows := make([]woxwidget.Widget, 0, len(state.definitions))
@@ -70,7 +70,7 @@ func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPrevi
 			break
 		}
 	}
-	return launcherview.TriggerConflictPreviewView(launcherview.TriggerConflictPreviewProps{
+	return previewview.TriggerConflictPreviewView(previewview.TriggerConflictPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Keyword: state.keyword, Title: state.title, Message: state.message,
 		Error: state.error, SaveLabel: a.translate("i18n:ui_save"), Dirty: dirty, Saving: state.saving,
 		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions), Scroll: state.scroll,

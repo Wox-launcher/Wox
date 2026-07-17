@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxwidget "wox/ui/widget"
 )
 
@@ -30,7 +30,7 @@ func (a *App) buildPluginDetailPreview(data pluginDetailPreviewData, palette uiP
 		source := woxImage{ImageType: "url", ImageData: data.ScreenshotURLs[0]}
 		screenshot = a.buildPreviewImage(source, source, palette, width, screenshotHeight)
 	}
-	return launcherview.PluginDetailPreviewView(launcherview.PluginDetailPreviewProps{
+	return previewview.PluginDetailPreviewView(previewview.PluginDetailPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Name: data.Name, Description: data.Description,
 		Author: data.Author, Version: data.Version, Runtime: data.Runtime, Website: data.Website,
 		Icon: a.imageFor(data.Icon), HasIcon: data.Icon.ImageType != "" && data.Icon.ImageData != "", Screenshot: screenshot,

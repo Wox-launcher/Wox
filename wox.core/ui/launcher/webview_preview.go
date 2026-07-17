@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -64,17 +64,17 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 	data, err := decodeWebViewPreview(previewData)
 	if err != nil {
 		_ = a.window.HideWebView()
-		return launcherview.WebViewPreviewMessage(fmt.Sprintf("Invalid WebView preview: %v", err), theme.ErrorText, theme, width, height)
+		return previewview.WebViewPreviewMessage(fmt.Sprintf("Invalid WebView preview: %v", err), theme.ErrorText, theme, width, height)
 	}
 	a.mu.RLock()
 	webViewError := a.webViewPreviewError
 	a.mu.RUnlock()
 	if webViewError != "" {
 		_ = a.window.HideWebView()
-		return launcherview.WebViewPreviewMessage(webViewError, theme.ErrorText, theme, width, height)
+		return previewview.WebViewPreviewMessage(webViewError, theme.ErrorText, theme, width, height)
 	}
 	content := data.content()
-	return launcherview.WebViewPreview(launcherview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnBounds: func(bounds woxui.Rect) {
+	return previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnBounds: func(bounds woxui.Rect) {
 		if err := a.window.ShowWebView(content, bounds); err != nil {
 			a.setWebViewPreviewError(err)
 		}
