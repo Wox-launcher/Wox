@@ -2,7 +2,7 @@
 
 #include "native_windows.h"
 
-#include <UIAutomationCore.h>
+#include <UIAutomation.h>
 #include <oleauto.h>
 #include <windows.h>
 
