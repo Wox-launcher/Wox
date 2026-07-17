@@ -1,17 +1,110 @@
 package launcher
 
 import (
+	"fmt"
 	"log"
 	"slices"
 	"strings"
 	"time"
 
 	"wox/ui/coreclient"
+	launcherview "wox/ui/launcher/view"
+	woxwidget "wox/ui/widget"
 )
 
 const refinementBarHeight = 44
 
 const staleQueryResultsDuration = 80 * time.Millisecond
+
+func (a *App) refinementViewProps(snapshot viewSnapshot, width, height float32) launcherview.RefinementsProps {
+	fallback := a.translate("i18n:ui_query_refinement_filters")
+	if strings.HasPrefix(fallback, "ui query refinement") || fallback == "" {
+		fallback = "Filters"
+	}
+	groups := make([]launcherview.RefinementGroup, 0, len(snapshot.refinements))
+	for _, refinement := range snapshot.refinements {
+		options := refinement.Options
+		if len(options) == 0 {
+			value := "true"
+			if len(refinement.DefaultValue) > 0 && refinement.DefaultValue[0] != "" {
+				value = refinement.DefaultValue[0]
+			}
+			options = []queryRefinementOption{{Value: value, Title: refinement.Title}}
+		}
+		converted := make([]launcherview.RefinementOption, 0, len(options))
+		for _, option := range options {
+			option := option
+			refinementID := refinement.ID
+			converted = append(converted, launcherview.RefinementOption{
+				Value: option.Value, Label: a.translate(option.Title), Count: option.Count, Icon: a.imageFor(option.Icon),
+				Selected: slices.Contains(splitRefinementValues(snapshot.refinementValues[refinement.ID]), option.Value),
+				OnTap:    func() { a.selectRefinementOption(refinementID, option.Value) },
+			})
+		}
+		groups = append(groups, launcherview.RefinementGroup{Title: a.translate(refinement.Title), Options: converted})
+	}
+	return launcherview.RefinementsProps{
+		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Window: a.window,
+		Summary: a.refinementSummary(snapshot, fallback), DefaultLabel: fallback, Open: snapshot.refinementOpen,
+		Groups: groups, OnToggle: func() { a.toggleRefinementBar() },
+	}
+}
+
+func (a *App) buildRefinementToggle(snapshot viewSnapshot) woxwidget.Widget {
+	return launcherview.RefinementToggle(a.refinementViewProps(snapshot, 0, 0))
+}
+
+func (a *App) refinementToggleWidth(snapshot viewSnapshot) float32 {
+	return launcherview.RefinementToggleWidth(a.refinementViewProps(snapshot, 0, 0))
+}
+
+func (a *App) buildRefinementBar(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
+	return launcherview.RefinementsView(a.refinementViewProps(snapshot, width, height))
+}
+
+func (a *App) refinementSummary(snapshot viewSnapshot, fallback string) string {
+	labels := make([]string, 0, 2)
+	activeControls := 0
+	for _, refinement := range snapshot.refinements {
+		selected := normalizeRefinementValues(refinement, splitRefinementValues(snapshot.refinementValues[refinement.ID]))
+		defaults := normalizeRefinementValues(refinement, nil)
+		if sameStringSet(selected, defaults) {
+			continue
+		}
+		activeControls++
+		for _, value := range selected {
+			for _, option := range refinement.Options {
+				if option.Value == value {
+					labels = append(labels, a.translate(option.Title))
+					break
+				}
+			}
+			if len(labels) == 2 {
+				break
+			}
+		}
+	}
+	if len(labels) == 0 {
+		return fallback
+	}
+	label := strings.Join(labels, ", ")
+	if activeControls > len(labels) {
+		label += fmt.Sprintf(" +%d", activeControls-len(labels))
+	}
+	return label
+}
+
+func sameStringSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for _, value := range left {
+		if !slices.Contains(right, value) {
+			return false
+		}
+	}
+	return true
+}
 
 // applyRefinementsLocked replaces query-scoped controls and materializes their normalized defaults.
 func (a *App) applyRefinementsLocked(refinements []queryRefinement) {

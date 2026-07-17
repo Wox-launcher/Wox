@@ -8,7 +8,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 const (
@@ -79,6 +81,24 @@ type terminalPreviewSnapshot struct {
 
 type terminalMatch struct {
 	start int
+}
+
+// buildTerminalPreview delegates presentation to the pure view while retaining controller-owned text layout caching.
+func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+	key := "terminal\x00" + snapshot.SessionID
+	return launcherview.TerminalPreviewView(launcherview.TerminalPreviewProps{
+		Width: width, Height: height, Theme: palette.componentTheme(), Window: a.window,
+		SessionID: snapshot.SessionID, Command: snapshot.Command, Status: snapshot.Status, Error: snapshot.Error, Text: snapshot.Text,
+		Scroll: snapshot.Scroll, LoadingHistory: snapshot.LoadingHistory, SearchOpen: snapshot.SearchOpen, SearchEditing: snapshot.SearchEditing,
+		CaseSensitive: snapshot.CaseSensitive, MatchCount: snapshot.MatchCount, MatchIndex: snapshot.MatchIndex,
+		LayoutText: func(value string, style woxui.TextStyle, textWidth, lineHeight float32) woxwidget.TextBlockLayout {
+			return a.previewTextLayout(key, value, style, textWidth, lineHeight)
+		},
+		OnClampScroll: a.clampTerminalPreviewScroll, OnScroll: a.scrollTerminalPreview, OnOpenSearch: a.openTerminalSearch,
+		OnSearchCaret: a.setTerminalSearchCaret, OnSetSearch: a.setTerminalSearchQuery,
+		OnSearchKey: a.onTerminalPreviewKey, OnSearchTextInput: a.onTerminalPreviewTextInput,
+		OnMoveSearch: a.moveTerminalSearch, OnToggleSearchCase: a.toggleTerminalSearchCase, OnCloseSearch: a.closeTerminalSearch,
+	})
 }
 
 func decodeTerminalPreviewData(value string) terminalPreviewData {
@@ -418,6 +438,18 @@ func (a *App) setTerminalSearchCaret(offset int) {
 	}
 	a.mu.Unlock()
 	_ = a.window.Invalidate()
+}
+
+// setTerminalSearchQuery replaces the local find value for accessibility set-value actions.
+func (a *App) setTerminalSearchQuery(value string) error {
+	a.mu.Lock()
+	if state := a.terminalPreview; state != nil && state.SearchOpen && state.SearchEditor != nil {
+		state.SearchEditor.SetText(value, false)
+		rebuildTerminalMatchesLocked(state, false)
+	}
+	a.mu.Unlock()
+	_ = a.window.Invalidate()
+	return nil
 }
 
 // moveTerminalSearch advances through loaded matches and scrolls to an approximate text-layout position.

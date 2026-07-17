@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -99,6 +100,35 @@ type uiPalette struct {
 	toolbarBackground      woxui.Color
 	toolbarText            woxui.Color
 	toolbarPadding         woxwidget.Insets
+}
+
+// componentTheme exposes launcher colors through the stable component package boundary.
+func (palette uiPalette) componentTheme() woxcomponent.Theme {
+	return woxcomponent.Theme{
+		Background:             palette.background,
+		QueryBackground:        palette.queryBackground,
+		QueryText:              palette.queryText,
+		Cursor:                 palette.cursor,
+		SelectionBackground:    palette.selectionBackground,
+		SelectionText:          palette.selectionText,
+		ResultTitle:            palette.resultTitle,
+		ResultSubtitle:         palette.resultSubtitle,
+		ErrorText:              woxui.Color{R: 232, G: 95, B: 95, A: 255},
+		SelectedBackground:     palette.selectedBackground,
+		SelectedTitle:          palette.selectedTitle,
+		SelectedSubtitle:       palette.selectedSubtitle,
+		ActionBackground:       palette.actionBackground,
+		ActionHeader:           palette.actionHeader,
+		ActionText:             palette.actionText,
+		ActionSelected:         palette.actionSelected,
+		ActionSelectedText:     palette.actionSelectedText,
+		PreviewText:            palette.previewText,
+		PreviewSplit:           palette.previewSplit,
+		PreviewPropertyTitle:   palette.previewPropertyTitle,
+		PreviewPropertyContent: palette.previewPropertyContent,
+		ToolbarBackground:      palette.toolbarBackground,
+		ToolbarText:            palette.toolbarText,
+	}
 }
 
 // appSurfaceRadius leaves compositor-backed platforms to clip the native window.

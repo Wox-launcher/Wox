@@ -9,10 +9,12 @@ import (
 	"strings"
 	"time"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
-const themeSettingsListRowHeight = float32(62)
+const themeSettingsListRowHeight = launcherview.ThemeListRowHeight
 
 type themeSettingsTheme struct {
 	ID            string `json:"ThemeId"`
@@ -26,6 +28,25 @@ type themeSettingsTheme struct {
 	IsUpgradable  bool   `json:"IsUpgradable"`
 	IsAuto        bool   `json:"IsAutoAppearance"`
 	previewValues map[string]string
+}
+
+// buildThemeCatalog converts core theme metadata into the pure catalog view.
+func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+	items := make([]launcherview.ThemeCatalogItem, len(snapshot.themes))
+	for index, theme := range snapshot.themes {
+		items[index] = launcherview.ThemeCatalogItem{
+			ID: theme.ID, Name: theme.Name, Author: theme.Author, URL: theme.URL, Version: theme.Version, Description: theme.Description,
+			IsSystem: theme.IsSystem, IsInstalled: theme.IsInstalled, IsUpgradable: theme.IsUpgradable, IsAuto: theme.IsAuto,
+			Active: theme.ID == snapshot.data.ThemeID, PreviewTheme: themeEditorPalette(theme.previewValues).componentTheme(),
+		}
+	}
+	return launcherview.ThemeSettingsView(launcherview.ThemeSettingsProps{
+		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Mode: snapshot.themesMode,
+		Loading: snapshot.themesLoading, Error: snapshot.themesError, Selected: snapshot.themeSelected, Scroll: snapshot.themeListScroll,
+		Operation: snapshot.themeOperation, UninstallArmed: snapshot.themeUninstallArmed, Items: items,
+		OnSelect: a.selectTheme, OnScroll: a.scrollThemeList, OnSetViewport: a.setThemeListViewport,
+		OnOpenWebsite: a.openSelectedThemeWebsite, OnOperation: a.runThemeOperation,
+	})
 }
 
 // reloadThemes fetches one catalog while retaining the full resolved palette for local preview.

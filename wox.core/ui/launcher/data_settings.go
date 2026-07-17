@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 const dataBackupRowHeight = float32(46)
@@ -18,6 +20,64 @@ type backupInfo struct {
 	Timestamp int64  `json:"Timestamp"`
 	Type      string `json:"Type"`
 	Path      string `json:"Path"`
+}
+
+// buildDataSettingsPage adapts controller state to the package-independent data settings view.
+func (a *App) buildDataSettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+	backups := make([]launcherview.DataBackup, len(snapshot.dataBackups))
+	for index, backup := range snapshot.dataBackups {
+		backups[index] = launcherview.DataBackup{ID: backup.ID, Timestamp: backup.Timestamp, Type: backup.Type, Path: backup.Path}
+	}
+	return launcherview.DataSettingsView(launcherview.DataSettingsProps{
+		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Labels: a.dataSettingsLabels(),
+		Location: snapshot.dataLocation, PendingLocation: snapshot.dataPendingLocation, AutoBackup: snapshot.data.EnableAutoBackup,
+		Backups: backups, RestoreArmed: snapshot.dataRestoreArmed, LogLevel: snapshot.data.LogLevel, ClearLogsArmed: snapshot.dataClearLogsArmed,
+		PageScroll: snapshot.pageScroll, Note: snapshot.note, Loading: snapshot.dataLoading, Error: snapshot.dataError,
+		OnOpenPath: a.openDataPath, OnChooseLocation: a.chooseDataLocation, OnCancelLocation: a.cancelDataLocationChange,
+		OnConfirmLocation: a.confirmDataLocationChange, OnToggleAutoBackup: a.toggleDataAutoBackup, OnCreateBackup: a.createDataBackup,
+		OnRestoreBackup: a.restoreDataBackup, OnCycleLogLevel: a.cycleDataLogLevel, OnClearLogs: a.clearDataLogs, OnOpenLog: a.openDataLog,
+		OnScroll: a.scrollSettingsPage,
+		OnSetPageGeometry: func(viewportHeight, contentHeight float32) {
+			a.setSettingsPageGeometry(viewportHeight, contentHeight, 0)
+		},
+	})
+}
+
+// dataSettingsLabels resolves all user-facing copy before entering the view layer.
+func (a *App) dataSettingsLabels() launcherview.DataSettingsLabels {
+	return launcherview.DataSettingsLabels{
+		Title:                 a.translate("i18n:ui_data"),
+		Description:           a.translate("i18n:ui_data_description"),
+		StorageSection:        a.translate("i18n:ui_data_section_storage"),
+		BackupSection:         a.translate("i18n:ui_data_section_backup"),
+		LogsSection:           a.translate("i18n:ui_data_section_logs"),
+		Open:                  a.translate("i18n:plugin_file_open"),
+		Cancel:                a.translate("i18n:ui_cancel"),
+		LocationChange:        a.translate("i18n:ui_data_config_location_change"),
+		LocationChangeConfirm: a.translate("i18n:ui_data_config_location_change_confirm_button"),
+		LocationTitle:         a.translate("i18n:ui_data_config_location"),
+		LocationDescription:   a.translate("i18n:ui_data_config_location_tips"),
+		AutoBackupTitle:       a.translate("i18n:ui_data_backup_auto_title"),
+		AutoBackupDescription: a.translate("i18n:ui_data_backup_auto_tips"),
+		BackupListTitle:       a.translate("i18n:ui_data_backup_list_title"),
+		BackupNow:             a.translate("i18n:ui_data_backup_now"),
+		BackupEmpty:           a.translate("i18n:ui_data_backup_empty"),
+		BackupDate:            a.translate("i18n:ui_data_backup_date"),
+		BackupType:            a.translate("i18n:ui_data_backup_type"),
+		BackupOperation:       a.translate("i18n:ui_operation"),
+		BackupTypeManual:      a.translate("i18n:ui_data_backup_type_manual"),
+		BackupTypeAuto:        a.translate("i18n:ui_data_backup_type_auto"),
+		BackupRestore:         a.translate("i18n:ui_data_backup_restore"),
+		BackupRestoreConfirm:  a.translate("i18n:ui_data_backup_restore_confirm"),
+		LogLevelTitle:         a.translate("i18n:ui_data_log_level_title"),
+		LogLevelDescription:   a.translate("i18n:ui_data_log_level_tips"),
+		LogClearButton:        a.translate("i18n:ui_data_log_clear_button"),
+		LogClearConfirm:       a.translate("i18n:ui_data_log_clear_confirm"),
+		LogClearTitle:         a.translate("i18n:ui_data_log_clear_title"),
+		LogClearDescription:   a.translate("i18n:ui_data_log_clear_tips"),
+		LogOpenButton:         a.translate("i18n:ui_data_log_open_button"),
+		Loading:               "Loading storage and backups…",
+	}
 }
 
 // reloadDataSettings refreshes the storage location and backup catalog through existing core routes.

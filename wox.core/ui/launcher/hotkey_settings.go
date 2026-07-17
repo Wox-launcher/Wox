@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 type ignoredHotkeyApp struct {
@@ -15,6 +17,26 @@ type ignoredHotkeyApp struct {
 	Identity string
 	Path     string
 	Icon     woxImage
+}
+
+// buildHotkeySettingsPage prepares shared form fields for the pure settings page.
+func (a *App) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+	if snapshot.hotkeyForm == nil {
+		return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{Width: width, Height: height, Theme: snapshot.palette.componentTheme()})
+	}
+	innerWidth := max(float32(0), width-72)
+	callbacks := formFieldCallbacks{
+		idPrefix: "hotkey-settings", focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
+	}
+	rows := make([]woxwidget.Widget, 0, len(snapshot.hotkeyForm.definitions))
+	for index, definition := range snapshot.hotkeyForm.definitions {
+		rows = append(rows, a.buildFormField(*snapshot.hotkeyForm, callbacks, snapshot.palette, index, definition, innerWidth, formDefinitionHeight(definition)))
+	}
+	return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{
+		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: true,
+		Rows: rows, RowsHeight: formDefinitionsContentHeight(snapshot.hotkeyForm.definitions), Scroll: snapshot.hotkeyForm.scroll, Note: snapshot.note,
+		OnScroll: a.scrollHotkeySettings, OnSetViewport: a.setHotkeySettingsViewport,
+	})
 }
 
 // newHotkeySettingsForm maps global bindings and query launchers onto the shared form/table engine.

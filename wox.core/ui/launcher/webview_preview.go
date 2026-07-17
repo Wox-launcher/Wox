@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -49,6 +50,7 @@ func (d webViewPreviewData) content() woxui.WebViewContent {
 }
 
 func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, height float32) woxwidget.Widget {
+	theme := palette.componentTheme()
 	a.mu.Lock()
 	previewChanged := a.webViewPreviewData != previewData
 	if previewChanged {
@@ -62,26 +64,21 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 	data, err := decodeWebViewPreview(previewData)
 	if err != nil {
 		_ = a.window.HideWebView()
-		return a.webViewPreviewMessage(fmt.Sprintf("Invalid WebView preview: %v", err), woxui.Color{R: 232, G: 95, B: 95, A: 255}, palette, width, height)
+		return launcherview.WebViewPreviewMessage(fmt.Sprintf("Invalid WebView preview: %v", err), theme.ErrorText, theme, width, height)
 	}
 	a.mu.RLock()
 	webViewError := a.webViewPreviewError
 	a.mu.RUnlock()
 	if webViewError != "" {
 		_ = a.window.HideWebView()
-		return a.webViewPreviewMessage(webViewError, woxui.Color{R: 232, G: 95, B: 95, A: 255}, palette, width, height)
+		return launcherview.WebViewPreviewMessage(webViewError, theme.ErrorText, theme, width, height)
 	}
 	content := data.content()
-	return woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		displayList.FillRoundedRect(bounds, 10, palette.queryBackground)
+	return launcherview.WebViewPreview(launcherview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnBounds: func(bounds woxui.Rect) {
 		if err := a.window.ShowWebView(content, bounds); err != nil {
 			a.setWebViewPreviewError(err)
 		}
-	}}
-}
-
-func (a *App) webViewPreviewMessage(message string, color woxui.Color, palette uiPalette, width, height float32) woxwidget.Widget {
-	return woxwidget.Container{Width: width, Height: height, Radius: 10, Color: palette.queryBackground, Padding: woxwidget.UniformInsets(14), Child: woxwidget.TextBlock{Value: message, Width: max(float32(0), width-28), Height: max(float32(0), height-28), Style: woxui.TextStyle{Size: 13}, Color: color}}
+	}})
 }
 
 func (a *App) setWebViewPreviewError(err error) {

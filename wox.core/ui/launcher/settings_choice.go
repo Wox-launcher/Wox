@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 const settingChoicePickerRowHeight = float32(46)
@@ -25,6 +27,21 @@ type settingChoicePickerSnapshot struct {
 	choices  []settingChoice
 	selected int
 	scroll   float32
+}
+
+// buildSettingChoicePickerOverlay adapts controller state to the package-independent choice picker view.
+func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+	choices := make([]launcherview.SettingsChoice, len(snapshot.choices))
+	for index, choice := range snapshot.choices {
+		choices[index] = launcherview.SettingsChoice{Value: choice.value, Label: choice.label}
+	}
+	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
+		Width: width, Height: height, Theme: palette.componentTheme(), Window: a.settingsNativeWindow(), Title: snapshot.item.title,
+		CurrentValue: snapshot.item.value, Query: snapshot.query, Choices: choices, Selected: snapshot.selected, Scroll: snapshot.scroll,
+		OnCaret: a.setSettingChoicePickerCaret, OnSetQuery: a.setSettingChoicePickerQuery,
+		OnKey: a.onSettingChoicePickerKey, OnTextInput: a.onSettingChoicePickerTextInput,
+		OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnScroll: a.scrollSettingChoicePicker, OnSetViewport: a.setSettingChoicePickerViewport,
+	})
 }
 
 func filteredSettingChoices(item settingItem, query string) []settingChoice {
@@ -157,6 +174,19 @@ func (a *App) setSettingChoicePickerCaret(offset int) {
 	}
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
+}
+
+// setSettingChoicePickerQuery replaces the filter value for accessibility set-value actions.
+func (a *App) setSettingChoicePickerQuery(value string) error {
+	a.mu.Lock()
+	if state := a.settingChoicePicker; state != nil && state.editor != nil {
+		state.editor.SetText(value, false)
+		state.selected = 0
+		state.scroll = 0
+	}
+	a.mu.Unlock()
+	a.invalidateSettingsWindow()
+	return nil
 }
 
 func (a *App) setSettingChoicePickerViewport(height float32) {

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	launcherview "wox/ui/launcher/view"
+	woxwidget "wox/ui/widget"
 )
 
 type runtimeStatus struct {
@@ -19,6 +22,70 @@ type runtimeStatus struct {
 	InstallURL        string `json:"InstallUrl"`
 	LoadedPluginCount int
 	LoadedPluginNames []string
+}
+
+// buildRuntimeSettingsPage prepares runtime status and setting rows for the pure page view.
+func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settingItem, width, height float32) woxwidget.Widget {
+	statuses := make([]launcherview.RuntimeStatus, 0, len(snapshot.runtimeStatuses))
+	for _, status := range snapshot.runtimeStatuses {
+		status := status
+		version := strings.TrimSpace(status.HostVersion)
+		if version != "" && !strings.HasPrefix(strings.ToLower(version), "v") {
+			version = "v" + version
+		}
+		mark := strings.ToUpper(runtimeDisplayName(status.Runtime))
+		if len(mark) > 2 {
+			mark = mark[:2]
+		}
+		pluginLabel := fmt.Sprintf("%d loaded plugins", status.LoadedPluginCount)
+		if status.LoadedPluginCount == 1 {
+			pluginLabel = "1 loaded plugin"
+		}
+		converted := launcherview.RuntimeStatus{
+			Runtime: status.Runtime, DisplayName: runtimeDisplayName(status.Runtime), Mark: mark, Version: version,
+			StatusCode: status.StatusCode, StatusLabel: runtimeStatusLabel(status), Detail: runtimeStatusDetail(status),
+			PluginLabel: pluginLabel, Actionable: runtimeStatusActionable(status),
+		}
+		if status.InstallURL != "" && (status.StatusCode == "executable_missing" || status.StatusCode == "unsupported_version") {
+			converted.InstallLabel = "Install ↗"
+			if status.StatusCode == "unsupported_version" {
+				converted.InstallLabel = "Upgrade ↗"
+			}
+			converted.OnInstall = func() { a.openRuntimeInstallURL(status) }
+		}
+		if status.CanRestart {
+			converted.RestartLabel = "Restart host"
+			if strings.EqualFold(snapshot.runtimeRestarting, status.Runtime) {
+				converted.RestartLabel = "Restarting…"
+			}
+			converted.OnRestart = func() { a.restartRuntimeHost(status.Runtime) }
+		}
+		statuses = append(statuses, converted)
+	}
+	contentWidth := max(float32(0), width-72)
+	rows := make([]launcherview.RuntimeSettingRow, 0, len(items))
+	for index, item := range items {
+		index := index
+		item := item
+		background := snapshot.palette.queryBackground
+		if index == snapshot.row {
+			background = snapshot.palette.selectedBackground
+		}
+		rows = append(rows, launcherview.RuntimeSettingRow{
+			ID: "runtime-setting-" + item.key, Child: a.buildSettingRow(snapshot, item, index, contentWidth, background),
+			OnHover: func() { a.selectSettingRow(index) },
+			OnTap: func() {
+				a.selectSettingRow(index)
+				a.openOrActivateSetting()
+			},
+		})
+	}
+	return launcherview.RuntimeSettingsView(launcherview.RuntimeSettingsProps{
+		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Loading: snapshot.runtimeLoading,
+		Restarting: snapshot.runtimeRestarting != "", Error: snapshot.runtimeError, Note: snapshot.note,
+		Scroll: snapshot.runtimePageScroll, Statuses: statuses, Settings: rows,
+		OnRefresh: a.reloadRuntimeStatuses, OnScroll: a.scrollRuntimePage, OnSetGeometry: a.setRuntimePageGeometry,
+	})
 }
 
 // cloneRuntimeStatuses isolates snapshot rendering from plugin-name slice updates.

@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"wox/ui/coreclient"
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 type triggerConflictPreviewPlugin struct {
@@ -48,6 +50,33 @@ type triggerConflictPreviewSnapshot struct {
 	initial map[string]string
 	saving  bool
 	error   string
+}
+
+// buildTriggerConflictPreview adapts conflict state and form rows to the pure preview view.
+func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
+	state, err := a.ensureTriggerConflictPreview(result, preview)
+	if err != nil {
+		return launcherview.TriggerConflictPreviewView(launcherview.TriggerConflictPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
+	}
+	callbacks := formFieldCallbacks{idPrefix: "trigger-conflict", focus: a.focusTriggerConflictField, setCaret: a.setTriggerConflictCaret}
+	rows := make([]woxwidget.Widget, 0, len(state.definitions))
+	for index, definition := range state.definitions {
+		rows = append(rows, a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, width-36, formDefinitionHeight(definition)))
+	}
+	dirty := false
+	for key, value := range state.values {
+		if strings.Join(parseTriggerKeywords(value), ",") != strings.Join(parseTriggerKeywords(state.initial[key]), ",") {
+			dirty = true
+			break
+		}
+	}
+	return launcherview.TriggerConflictPreviewView(launcherview.TriggerConflictPreviewProps{
+		Width: width, Height: height, Theme: palette.componentTheme(), Keyword: state.keyword, Title: state.title, Message: state.message,
+		Error: state.error, SaveLabel: a.translate("i18n:ui_save"), Dirty: dirty, Saving: state.saving,
+		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions), Scroll: state.scroll,
+		OnScroll:      func(delta float32) { a.scrollTriggerConflictPreview(state.key, delta) },
+		OnSetViewport: func(viewport float32) { a.setTriggerConflictViewport(state.key, viewport) }, OnSubmit: a.submitTriggerConflictPreview,
+	})
 }
 
 // ensureTriggerConflictPreview reuses the shared form engine for the current conflict payload.

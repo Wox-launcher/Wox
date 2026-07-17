@@ -7,12 +7,124 @@ import (
 	"strings"
 	"time"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
+
+type settingsInlineColumn struct {
+	key    string
+	label  string
+	weight float32
+}
 
 type aiProviderInfo struct {
 	Name        string
 	DefaultHost string
+}
+
+// buildAISettingsPage converts core-backed table values into the pure settings view.
+func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+	props := launcherview.AISettingsProps{
+		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: snapshot.aiForm != nil,
+		Title: a.translate("i18n:ui_ai"), Description: a.translate("i18n:ui_ai_description"),
+		AddLabel: a.translate("i18n:ui_add"), NoDataLabel: a.translate("i18n:ui_no_data"), Scroll: snapshot.pageScroll,
+		OnScroll: a.scrollSettingsPage, OnSetGeometry: func(viewport, content, _ float32) { a.setSettingsPageGeometry(viewport, content, 0) },
+	}
+	if snapshot.aiForm == nil {
+		return launcherview.AISettingsView(props)
+	}
+	props.Tables = make([]launcherview.AISettingsTable, 0, len(snapshot.aiForm.definitions))
+	for index, definition := range snapshot.aiForm.definitions {
+		index := index
+		definition := definition
+		rows, err := decodeFormTableRows(snapshot.aiForm.values[definition.Value.Key])
+		if err != nil {
+			rows = nil
+		}
+		columns, description, maxRows := a.aiInlineTableColumns(definition.Value.Key)
+		visibleRows := min(len(rows), maxRows)
+		convertedColumns := make([]launcherview.AISettingsColumn, len(columns))
+		for columnIndex, column := range columns {
+			convertedColumns[columnIndex] = launcherview.AISettingsColumn{Label: a.translate(column.label), Weight: column.weight}
+		}
+		convertedRows := make([][]launcherview.AISettingsCell, 0, visibleRows)
+		for _, row := range rows[:visibleRows] {
+			cells := make([]launcherview.AISettingsCell, len(columns))
+			for columnIndex, column := range columns {
+				kind := launcherview.AISettingsCellText
+				if column.key == "Status" {
+					kind = launcherview.AISettingsCellStatus
+				} else if column.key == "_action" {
+					kind = launcherview.AISettingsCellAction
+				}
+				cells[columnIndex] = launcherview.AISettingsCell{Text: a.inlineTableCellValue(definition, column.key, row), Kind: kind}
+			}
+			convertedRows = append(convertedRows, cells)
+		}
+		props.Tables = append(props.Tables, launcherview.AISettingsTable{
+			Index: index, Title: a.translate(formTableTitle(definition)), Description: description,
+			Columns: convertedColumns, Rows: convertedRows,
+			OnAdd:     func() { a.addAISettingsTableRow(index) },
+			OnOpenRow: func(row int) { a.openAISettingsTableRow(index, row) },
+		})
+	}
+	props.Note = snapshot.note
+	if snapshot.aiProvidersLoading {
+		props.Note = "Loading the provider catalog…"
+	} else if snapshot.aiProvidersError != "" {
+		props.Note = snapshot.aiProvidersError
+	}
+	return launcherview.AISettingsView(props)
+}
+
+func (a *App) aiInlineTableColumns(key string) ([]settingsInlineColumn, string, int) {
+	switch key {
+	case "AIProviders":
+		return []settingsInlineColumn{
+			{key: "Status", label: "i18n:ui_ai_providers_status", weight: 0.06},
+			{key: "Name", label: "i18n:ui_ai_providers_name", weight: 0.15},
+			{key: "Alias", label: "i18n:ui_ai_providers_alias", weight: 0.17},
+			{key: "Host", label: "i18n:ui_ai_providers_host", weight: 0.23},
+			{key: "ApiKey", label: "i18n:ui_ai_providers_api_key", weight: 0.27},
+			{key: "_action", label: "i18n:ui_operation", weight: 0.12},
+		}, "", 4
+	case "AIMCPServers":
+		return []settingsInlineColumn{
+			{key: "Name", label: "i18n:plugin_ai_chat_mcp_server_name", weight: 0.15},
+			{key: "Tools", label: "i18n:plugin_ai_chat_mcp_server_tools", weight: 0.09},
+			{key: "Disabled", label: "i18n:plugin_ai_chat_mcp_server_disabled", weight: 0.10},
+			{key: "Type", label: "i18n:plugin_ai_chat_mcp_server_type", weight: 0.13},
+			{key: "Command", label: "i18n:plugin_ai_chat_mcp_server_command", weight: 0.15},
+			{key: "EnvironmentVariables", label: "i18n:plugin_ai_chat_mcp_server_environment_variables", weight: 0.19},
+			{key: "Url", label: "i18n:plugin_ai_chat_mcp_server_url", weight: 0.19},
+		}, a.translate("i18n:ui_ai_mcp_servers_tooltip"), 3
+	default:
+		return []settingsInlineColumn{
+			{key: "Name", label: "i18n:plugin_ai_chat_skill_name", weight: 0.26},
+			{key: "Source", label: "i18n:plugin_ai_chat_skill_type", weight: 0.14},
+			{key: "Description", label: "i18n:plugin_ai_chat_skill_description", weight: 0.48},
+			{key: "_action", label: "i18n:ui_operation", weight: 0.12},
+		}, a.translate("i18n:ui_ai_skills_tooltip"), 6
+	}
+}
+
+func (a *App) inlineTableCellValue(definition formDefinition, key string, row map[string]any) string {
+	if key == "_action" {
+		return a.translate("i18n:ui_setting_theme_edit")
+	}
+	if key == "Source" {
+		if strings.EqualFold(fmt.Sprint(row[key]), "remote") {
+			return a.translate("i18n:ui_ai_skill_type_remote")
+		}
+		return a.translate("i18n:ui_ai_skill_type_local")
+	}
+	for _, column := range definition.Value.Columns {
+		if column.Key == key {
+			return compactFormTableText(a.formTableDisplayValue(column, row), 34)
+		}
+	}
+	return compactFormTableText(fmt.Sprint(row[key]), 34)
 }
 
 // newAISettingsForm maps the core settings arrays onto the shared portable table editor.

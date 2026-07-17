@@ -5,8 +5,52 @@ import (
 	"log"
 	"strings"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
+
+const (
+	actionRowHeight   = launcherview.ActionRowHeight
+	maxVisibleActions = launcherview.MaxVisibleActions
+)
+
+func actionPanelBaseHeightForPalette(palette uiPalette) float32 {
+	return launcherview.ActionPanelBaseHeight(palette.actionPadding)
+}
+
+// buildActionPanel resolves action labels and icons before delegating to the pure panel view.
+func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight, queryHeight, toolbarHeight float32) (woxwidget.Widget, float32, float32) {
+	if snapshot.selected < 0 || snapshot.selected >= len(snapshot.results) {
+		return nil, 0, 0
+	}
+	actions := snapshot.results[snapshot.selected].Actions
+	if len(actions) == 0 {
+		return nil, 0, 0
+	}
+	items := make([]launcherview.ActionItem, 0, len(snapshot.actionIndices))
+	for _, index := range snapshot.actionIndices {
+		if index < 0 || index >= len(actions) {
+			continue
+		}
+		action := actions[index]
+		items = append(items, launcherview.ActionItem{
+			Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: a.imageFor(action.Icon), HotkeyLabels: formatHotkeyLabels(action.Hotkey),
+		})
+	}
+	scroll := a.configureActionScroll(len(items))
+	return launcherview.ActionsView(launcherview.ActionsProps{
+		Window: a.window, WindowWidth: windowWidth, WindowHeight: windowHeight, QueryHeight: queryHeight, ToolbarHeight: toolbarHeight,
+		Theme: snapshot.palette.componentTheme(), ActionHeader: snapshot.palette.actionHeader,
+		ActionQueryBackground: snapshot.palette.actionQueryBackground, ActionQueryText: snapshot.palette.actionQueryText,
+		ResultTail: snapshot.palette.resultTail, SelectedTail: snapshot.palette.selectedTail,
+		ResultItemRadius: snapshot.palette.resultItemRadius, ActionQueryRadius: snapshot.palette.actionQueryRadius,
+		ActionPadding: snapshot.palette.actionPadding, HeaderLabel: a.translate("i18n:ui_actions"), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
+		Items: items, Selected: snapshot.actionSelected, Editing: snapshot.actionEditing, Scroll: scroll,
+		OnSelect: a.selectAction, OnActivate: a.activateSelectedAction,
+		OnScroll: func(delta float32) { a.scrollActions(delta, len(items)) }, OnCaret: a.setActionFilterCaret,
+	})
+}
 
 func (a *App) onActionKey(event woxui.KeyEvent) bool {
 	if event.Key == woxui.Key("j") && event.Modifiers.HasPrimary() {

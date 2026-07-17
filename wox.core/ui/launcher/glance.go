@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 type glanceRef struct {
@@ -39,6 +41,24 @@ type glanceCatalogItem struct {
 	Name              string
 	Description       string
 	RefreshIntervalMs int
+}
+
+// buildGlance resolves controller-owned image resources before delegating to the pure view.
+func (a *App) buildGlance(item glanceItem, hovered, hideIcon bool, palette uiPalette, width float32) woxwidget.Widget {
+	var icon *woxui.Image
+	if !hideIcon && item.Icon.ImageData != "" {
+		iconTint := palette.queryText
+		iconTint.A = uint8(float32(iconTint.A) * 0.8 * 0.72)
+		icon = a.imageForTint(item.Icon, &iconTint, 16)
+	}
+	var onTap func()
+	if item.Action != nil {
+		onTap = a.executeGlanceAction
+	}
+	return launcherview.GlanceView(launcherview.GlanceProps{
+		Text: item.Text, Tooltip: item.Tooltip, Width: width, Hovered: hovered, Icon: icon, Theme: palette.componentTheme(),
+		OnTap: onTap, OnHover: a.setGlanceHover,
+	})
 }
 
 func (a *App) glanceEligibleLocked() bool {

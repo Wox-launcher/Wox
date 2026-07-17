@@ -4,10 +4,30 @@ import (
 	"encoding/json"
 	"strings"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 const formTableAppPickerRowHeight = float32(58)
+
+// buildFormTableAppPicker resolves controller-owned image resources before delegating to the pure view.
+func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+	candidates := make([]launcherview.FormAppCandidate, len(snapshot.candidates))
+	for index, candidate := range snapshot.candidates {
+		detail := strings.TrimSpace(candidate.Path)
+		if detail == "" {
+			detail = candidate.Identity
+		}
+		candidates[index] = launcherview.FormAppCandidate{
+			Name: candidate.Name, Detail: detail, Icon: a.imageFor(candidate.Icon), FallbackColor: resultColors[index%len(resultColors)],
+		}
+	}
+	return launcherview.FormAppPickerView(launcherview.FormAppPickerProps{
+		Width: width, Height: height, Theme: palette.componentTheme(), Candidates: candidates, Selected: snapshot.selected, Scroll: snapshot.scroll,
+		OnChoose: a.chooseFormTableAppCandidate, OnCancel: a.closeFormTableAppPicker, OnScroll: a.scrollFormTableAppPicker, OnSetViewport: a.setFormTableAppPickerViewport,
+	})
+}
 
 // openFormTableAppPicker opens a shared DTO picker after core has supplied the current platform's application identities.
 func (a *App) openFormTableAppPicker(index int) {

@@ -6,10 +6,12 @@ import (
 	"strings"
 	"time"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
-const modelManagerRowHeight = float32(82)
+const modelManagerRowHeight = launcherview.ModelManagerRowHeight
 
 type modelEngineStatus struct {
 	Known    bool
@@ -44,6 +46,101 @@ type modelManagerSnapshot struct {
 	busy        string
 	error       string
 	scroll      float32
+}
+
+// buildModelManagerOverlay converts controller state into the pure modal view.
+func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+	title := "Dictation models"
+	if snapshot.kind == "ocrModel" {
+		title = "OCR models"
+	}
+	engineLabel := "Checking inference engine…"
+	engineButtonLabel := "Download engine"
+	engineEnabled := false
+	if snapshot.engine.Known {
+		if snapshot.engine.Ready {
+			engineLabel = "Inference engine ready"
+		} else {
+			switch snapshot.engine.State {
+			case "downloading", "extracting", "finalizing":
+				engineLabel = fmt.Sprintf("Engine %s · %d%%", snapshot.engine.State, snapshot.engine.Progress)
+			case "failed":
+				engineLabel = "Engine failed"
+				engineButtonLabel = "Retry engine"
+				engineEnabled = snapshot.busy == "" && !snapshot.loading
+			default:
+				engineLabel = "Inference engine is not installed"
+				engineEnabled = snapshot.busy == "" && !snapshot.loading
+			}
+		}
+	}
+	if snapshot.engine.Error != "" {
+		engineLabel += " · " + snapshot.engine.Error
+	}
+	options := make([]launcherview.ModelManagerOption, 0, len(snapshot.options))
+	for index, option := range snapshot.options {
+		index := index
+		option := option
+		selected := modelOptionID(option) == snapshot.selected
+		usable := modelOptionUsable(snapshot.kind, option)
+		actionLabel := "Download"
+		actionEnabled := snapshot.busy == "" && !snapshot.loading
+		action := func() { a.runModelManagerAction("download", index) }
+		if usable {
+			actionLabel = "Select"
+			actionEnabled = actionEnabled && !selected
+			action = func() { a.chooseManagedModel(index) }
+		} else if snapshot.kind == "ocrModel" && option.Status == "downloaded" && !option.Available {
+			actionLabel = "Unavailable"
+			actionEnabled = false
+		} else if option.Status == "downloading" || option.Status == "extracting" || option.Status == "finalizing" {
+			actionLabel = fmt.Sprintf("%d%%", option.DownloadProgress)
+			actionEnabled = false
+		} else if option.Status == "failed" {
+			actionLabel = "Retry"
+		}
+		if selected {
+			actionLabel = "Selected"
+		}
+		detail := strings.TrimSpace(option.Description)
+		if option.Languages != "" {
+			if detail != "" {
+				detail += " · "
+			}
+			detail += option.Languages
+		}
+		if detail == "" {
+			detail = modelStatusLabel(option)
+		}
+		name := modelOptionLabel(option)
+		if option.Recommended {
+			name += " · Recommended"
+		}
+		converted := launcherview.ModelManagerOption{
+			Name: name, Detail: detail, Status: modelStatusLabel(option), SelectedRow: index == snapshot.selectedRow,
+			PrimaryAction: usable, ActionLabel: actionLabel, ActionEnabled: actionEnabled, OnAction: action,
+			OnSelect: func() { a.selectModelManagerRow(index) },
+		}
+		if snapshot.kind == "dictationModel" && option.Status == "downloaded" {
+			converted.OnDelete = func() { a.runModelManagerAction("delete", index) }
+		}
+		options = append(options, converted)
+	}
+	return launcherview.ModelManagerView(launcherview.ModelManagerProps{
+		Width: width, Height: height, Theme: palette.componentTheme(), Title: title,
+		Loading: snapshot.loading, Busy: snapshot.busy != "", Error: snapshot.error, Scroll: snapshot.scroll,
+		EngineLabel: engineLabel, EngineButtonLabel: engineButtonLabel, EngineEnabled: engineEnabled, Options: options,
+		OnEngine: func() { a.runModelManagerAction("engine", -1) },
+		OnRefresh: func() {
+			a.mu.RLock()
+			state := a.modelManager
+			a.mu.RUnlock()
+			if state != nil {
+				go a.refreshModelManager(state)
+			}
+		},
+		OnClose: a.closeModelManager, OnScroll: a.scrollModelManager, OnSetViewport: a.setModelManagerViewport,
+	})
 }
 
 func snapshotModelManagerLocked(state *modelManagerState) *modelManagerSnapshot {

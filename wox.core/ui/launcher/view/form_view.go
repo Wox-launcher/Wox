@@ -1,0 +1,240 @@
+package view
+
+import (
+	woxcomponent "wox/ui/launcher/component"
+	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
+)
+
+// FormPanelProps contains the prepared rows and actions rendered by a launcher form.
+type FormPanelProps struct {
+	Width         float32
+	Height        float32
+	Title         string
+	Rows          []woxwidget.Widget
+	ContentHeight float32
+	Scroll        float32
+	CancelLabel   string
+	SaveLabel     string
+	Theme         woxcomponent.Theme
+	OnScroll      func(float32)
+	OnCancel      func()
+	OnSave        func()
+}
+
+// FormPanel builds the shared launcher form shell.
+func FormPanel(props FormPanelProps) woxwidget.Widget {
+	bodyHeight := props.Height - 100
+	body := woxwidget.Gesture{
+		ID: "form-scroll",
+		OnScroll: func(delta woxui.Point) {
+			if props.OnScroll != nil {
+				props.OnScroll(-delta.Y)
+			}
+		},
+		Child: woxwidget.ScrollView{
+			Width: props.Width - 28, Height: bodyHeight, ContentHeight: max(bodyHeight, props.ContentHeight), Offset: props.Scroll,
+			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
+		},
+	}
+	buttons := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		woxwidget.Painter{Width: max(float32(0), props.Width-28-210), Height: 36},
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-cancel", Label: props.CancelLabel, Width: 86, Height: 36, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnCancel, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-save", Label: props.SaveLabel, Width: 104, Height: 36, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
+	}}
+	return woxwidget.Container{
+		Width: props.Width, Height: props.Height, Radius: 12, Color: props.Theme.ActionBackground,
+		Padding: woxwidget.Insets{Left: 14, Top: 12, Right: 14, Bottom: 12},
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
+			woxwidget.Container{Width: props.Width - 28, Height: 28, Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText}},
+			body,
+			buttons,
+		}},
+	}
+}
+
+// FormStaticFieldProps contains one non-interactive form row.
+type FormStaticFieldProps struct {
+	Width  float32
+	Height float32
+	Value  string
+	Kind   string
+	Theme  woxcomponent.Theme
+}
+
+// FormStaticField builds a heading, label, spacer, or unsupported field row.
+func FormStaticField(props FormStaticFieldProps) woxwidget.Widget {
+	if props.Kind == "newline" {
+		return woxwidget.Painter{Width: props.Width, Height: props.Height}
+	}
+	style := woxui.TextStyle{Size: 12}
+	color := props.Theme.ActionHeader
+	padding := woxwidget.Insets{Top: 8}
+	if props.Kind == "head" {
+		style = woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
+		color = props.Theme.ActionText
+	}
+	if props.Kind == "unsupported" {
+		style = woxui.TextStyle{Size: 11}
+		padding.Top = 10
+	}
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: padding, Child: woxwidget.Text{Value: props.Value, Style: style, Color: color}}
+}
+
+// FormModelFieldProps contains one model selector row.
+type FormModelFieldProps struct {
+	ID      string
+	Label   string
+	Value   string
+	Status  string
+	Width   float32
+	Height  float32
+	Focused bool
+	Theme   woxcomponent.Theme
+	OnTap   func()
+}
+
+// FormModelField builds a model selector row.
+func FormModelField(props FormModelFieldProps) woxwidget.Widget {
+	background := formFieldBackground(props.Focused, props.Theme)
+	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		formFieldLabel(props.Label, 132, 56, 16, props.Theme),
+		woxwidget.Container{Width: props.Width - 142, Height: 56, Radius: 8, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: props.Value, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
+			woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.ActionHeader},
+		}}},
+	}}}}
+}
+
+// FormAppFieldProps contains one application selector row.
+type FormAppFieldProps struct {
+	ID      string
+	Label   string
+	Name    string
+	Detail  string
+	Width   float32
+	Height  float32
+	Focused bool
+	Theme   woxcomponent.Theme
+	OnTap   func()
+}
+
+// FormAppField builds an application selector row.
+func FormAppField(props FormAppFieldProps) woxwidget.Widget {
+	fieldWidth := props.Width - 142
+	value := woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
+		Width: fieldWidth, Height: 42, Radius: 8, Color: formFieldBackground(props.Focused, props.Theme), Padding: woxwidget.Insets{Left: 12, Top: 7, Right: 12},
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
+			woxwidget.Text{Value: props.Detail, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.ActionHeader},
+		}},
+	}}
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		formFieldLabel(props.Label, 132, 42, 11, props.Theme), value,
+	}}}
+}
+
+// FormValueFieldProps contains one compact tappable form value.
+type FormValueFieldProps struct {
+	ID      string
+	Label   string
+	Value   string
+	Width   float32
+	Height  float32
+	Focused bool
+	Theme   woxcomponent.Theme
+	OnTap   func()
+}
+
+// FormValueField builds a hotkey, checkbox, or selector row.
+func FormValueField(props FormValueFieldProps) woxwidget.Widget {
+	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		formFieldLabel(props.Label, 132, 42, 11, props.Theme),
+		woxwidget.Container{Width: props.Width - 142, Height: 42, Radius: 8, Color: formFieldBackground(props.Focused, props.Theme), Padding: woxwidget.Insets{Left: 12, Top: 12}, Child: woxwidget.Text{
+			Value: props.Value, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText,
+		}},
+	}}}}
+}
+
+// FormTextFieldProps contains one editable form row.
+type FormTextFieldProps struct {
+	ID        string
+	Label     string
+	Width     float32
+	Height    float32
+	State     woxui.TextEditingState
+	Focused   bool
+	Protected bool
+	MaxLines  int
+	Window    *woxui.Window
+	Theme     woxcomponent.Theme
+	OnCaret   func(int)
+	OnBrowse  func()
+}
+
+// FormTextField builds a shared text input row with an optional directory picker.
+func FormTextField(props FormTextFieldProps) woxwidget.Widget {
+	fieldWidth := props.Width - 142
+	inputWidth := fieldWidth
+	if props.OnBrowse != nil {
+		inputWidth = max(float32(80), fieldWidth-92)
+	}
+	fieldHeight := max(float32(42), props.Height-14)
+	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
+		ID: props.ID, Label: props.Label, Width: inputWidth, Height: fieldHeight, Radius: 8,
+		Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 10, Bottom: 8}, Background: formFieldBackground(props.Focused, props.Theme),
+		Style: woxui.TextStyle{Size: 13}, State: props.State, Focused: props.Focused, Protected: props.Protected,
+		MaxLines: props.MaxLines, Window: props.Window, Theme: props.Theme, ControllerManagedFocus: true, OnCaret: props.OnCaret,
+	})
+	var valueField woxwidget.Widget = input
+	if props.OnBrowse != nil {
+		valueField = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
+			input,
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-browse", Label: "Browse", Width: 84, Height: fieldHeight, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnBrowse, Theme: props.Theme}),
+		}}
+	}
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		formFieldLabel(props.Label, 132, fieldHeight, 11, props.Theme), valueField,
+	}}}
+}
+
+// FormTableFieldProps contains the summary displayed by a table form field.
+type FormTableFieldProps struct {
+	ID         string
+	Label      string
+	CountLabel string
+	Preview    string
+	Width      float32
+	Height     float32
+	Focused    bool
+	Theme      woxcomponent.Theme
+	OnTap      func()
+}
+
+// FormTableField builds the compact entry point for the shared table editor.
+func FormTableField(props FormTableFieldProps) woxwidget.Widget {
+	fieldWidth := props.Width - 142
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		formFieldLabel(props.Label, 132, props.Height-14, 11, props.Theme),
+		woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
+			Width: fieldWidth, Height: props.Height - 14, Radius: 8, Color: formFieldBackground(props.Focused, props.Theme), Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 10, Bottom: 8},
+			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
+				woxwidget.Text{Value: props.CountLabel, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
+				woxwidget.TextBlock{Value: props.Preview, Width: max(float32(0), fieldWidth-22), Height: max(float32(0), props.Height-52), MaxLines: 2, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ActionHeader},
+			}},
+		}},
+	}}}
+}
+
+func formFieldLabel(label string, width, height, top float32, theme woxcomponent.Theme) woxwidget.Widget {
+	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: top}, Child: woxwidget.Text{
+		Value: label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText,
+	}}
+}
+
+func formFieldBackground(focused bool, theme woxcomponent.Theme) woxui.Color {
+	if focused {
+		return theme.SelectedBackground
+	}
+	return theme.QueryBackground
+}

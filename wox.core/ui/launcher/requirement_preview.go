@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"wox/ui/coreclient"
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 type queryRequirementPreviewRequirement struct {
@@ -58,6 +60,33 @@ type aiModel struct {
 	Name          string `json:"Name"`
 	Provider      string `json:"Provider"`
 	ProviderAlias string `json:"ProviderAlias"`
+}
+
+// buildRequirementPreview adapts requirement state and form rows to the pure preview view.
+func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
+	form, err := a.ensureRequirementForm(result, preview)
+	if err != nil {
+		return launcherview.RequirementPreviewView(launcherview.RequirementPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
+	}
+	errorMessage := form.error
+	if errorMessage == "" && form.modelsError != "" && hasFormDefinitionType(form.definitions, "selectAIModel") {
+		errorMessage = "Unable to load AI models: " + form.modelsError
+	}
+	callbacks := formFieldCallbacks{
+		idPrefix: "requirement-form", focus: a.focusRequirementFormField, change: a.changeRequirementFormChoice,
+		setCaret: a.setRequirementFormCaret, openTable: a.openRequirementFormTable,
+	}
+	rows := make([]woxwidget.Widget, 0, len(form.definitions))
+	for index, definition := range form.definitions {
+		rows = append(rows, a.buildFormField(form.formFieldsSnapshot, callbacks, palette, index, definition, width-36, formDefinitionHeight(definition)))
+	}
+	return launcherview.RequirementPreviewView(launcherview.RequirementPreviewProps{
+		Width: width, Height: height, Theme: palette.componentTheme(), Title: form.title, Message: form.message, PluginName: form.pluginName,
+		Error: errorMessage, SaveLabel: a.translate("i18n:ui_save"), Saving: form.saving, Rows: rows,
+		RowsHeight: formDefinitionsContentHeight(form.definitions), Scroll: form.scroll,
+		OnScroll:      func(delta float32) { a.scrollRequirementForm(form.key, delta) },
+		OnSetViewport: func(viewport float32) { a.setRequirementFormViewport(form.key, viewport) }, OnSubmit: a.submitRequirementForm,
+	})
 }
 
 // ensureRequirementForm creates one portable field state for the currently selected requirement result.

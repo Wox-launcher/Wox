@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	launcherview "wox/ui/launcher/view"
+	woxwidget "wox/ui/widget"
 )
 
 type pluginDetailPreviewData struct {
@@ -16,6 +19,22 @@ type pluginDetailPreviewData struct {
 	Website        string   `json:"Website"`
 	Runtime        string   `json:"Runtime"`
 	ScreenshotURLs []string `json:"ScreenshotUrls"`
+}
+
+// buildPluginDetailPreview resolves controller-owned images before rendering the pure metadata view.
+func (a *App) buildPluginDetailPreview(data pluginDetailPreviewData, palette uiPalette, width, height float32) woxwidget.Widget {
+	var screenshot woxwidget.Widget
+	headerHeight := min(float32(108), height)
+	if len(data.ScreenshotURLs) > 0 && height > headerHeight+20 {
+		screenshotHeight := max(float32(0), height-headerHeight-10)
+		source := woxImage{ImageType: "url", ImageData: data.ScreenshotURLs[0]}
+		screenshot = a.buildPreviewImage(source, source, palette, width, screenshotHeight)
+	}
+	return launcherview.PluginDetailPreviewView(launcherview.PluginDetailPreviewProps{
+		Width: width, Height: height, Theme: palette.componentTheme(), Name: data.Name, Description: data.Description,
+		Author: data.Author, Version: data.Version, Runtime: data.Runtime, Website: data.Website,
+		Icon: a.imageFor(data.Icon), HasIcon: data.Icon.ImageType != "" && data.Icon.ImageData != "", Screenshot: screenshot,
+	})
 }
 
 type updatePreviewData struct {

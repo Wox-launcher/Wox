@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 type themeColorToken struct {
@@ -79,6 +81,47 @@ type themeEditorPreviewSnapshot struct {
 	isSystem   bool
 	saving     bool
 	error      string
+}
+
+// buildThemeEditorPreview prepares the current editor state for the pure preview view.
+func (a *App) buildThemeEditorPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
+	state, err := a.ensureThemeEditorPreview(result, preview)
+	if err != nil {
+		return launcherview.ThemeEditorPreviewView(launcherview.ThemeEditorPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
+	}
+	return a.buildThemeEditorSurface(state, palette, width, height)
+}
+
+// buildThemeEditorSurface adapts controller-owned form fields to the shared theme editor view.
+func (a *App) buildThemeEditorSurface(state *themeEditorPreviewSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+	innerWidth := max(float32(0), width-32)
+	callbacks := formFieldCallbacks{idPrefix: "theme-editor", focus: a.focusThemeEditorField, setCaret: a.setThemeEditorCaret}
+	rows := make([]woxwidget.Widget, 0, len(state.definitions))
+	for index, definition := range state.definitions {
+		rows = append(rows, a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, innerWidth, formDefinitionHeight(definition)))
+	}
+	dirty := false
+	for key, value := range state.values {
+		if value != state.initial[key] {
+			dirty = true
+			break
+		}
+	}
+	saveLabel := a.translate("i18n:ui_save")
+	if state.isSystem || strings.TrimSpace(state.values["ThemeName"]) != state.sourceName {
+		saveLabel = "Save copy"
+	}
+	return launcherview.ThemeEditorPreviewView(launcherview.ThemeEditorPreviewProps{
+		Width: width, Height: height, Theme: palette.componentTheme(), DraftTheme: themeEditorPalette(state.values).componentTheme(),
+		Error: state.error, SaveLabel: saveLabel, Dirty: dirty, Saving: state.saving,
+		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions), Scroll: state.scroll,
+		OnScroll:      func(delta float32) { a.scrollThemeEditorPreview(state.key, delta) },
+		OnSetViewport: func(viewport float32) { a.setThemeEditorViewport(state.key, viewport) }, OnSubmit: a.submitThemeEditorPreview,
+	})
+}
+
+func (a *App) buildThemeDraftSample(values map[string]string, width, height float32) woxwidget.Widget {
+	return launcherview.ThemeDraftSample(themeEditorPalette(values).componentTheme(), width, height)
 }
 
 func themeEditorTokens() []themeColorToken {
