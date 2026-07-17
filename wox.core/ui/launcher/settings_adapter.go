@@ -58,7 +58,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildPrivacySampleOverlay(snapshot, width, height)
 	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
-		Width: width, Height: height, Radius: appSurfaceRadius(), Theme: snapshot.palette.componentTheme(),
+		Width: width, Height: height, Theme: snapshot.palette.componentTheme(),
 		TitleBar: a.buildSettingsTitleBar(snapshot, width), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight), Page: page, Overlay: overlay,
 	})
 }

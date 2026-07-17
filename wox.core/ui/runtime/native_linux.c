@@ -1146,16 +1146,12 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_window_set_position(GTK_WINDOW(window->window), GTK_WIN_POS_CENTER);
   gtk_widget_set_app_paintable(window->window, TRUE);
 
-  GdkScreen *screen = gtk_widget_get_screen(window->window);
-  GdkVisual *visual = screen != NULL ? gdk_screen_get_rgba_visual(screen) : NULL;
-  if (visual != NULL) {
-    gtk_widget_set_visual(window->window, visual);
-  }
   window->layer_shell_enabled = application_window == 0 && enable_layer_shell(GTK_WINDOW(window->window));
 
   gtk_gl_area_set_required_version(GTK_GL_AREA(window->gl_area), 3, 3);
   gtk_gl_area_set_use_es(GTK_GL_AREA(window->gl_area), FALSE);
-  gtk_gl_area_set_has_alpha(GTK_GL_AREA(window->gl_area), TRUE);
+  // Linux compositors do not provide a consistent backdrop blur, so use an opaque surface.
+  gtk_gl_area_set_has_alpha(GTK_GL_AREA(window->gl_area), FALSE);
   gtk_gl_area_set_has_depth_buffer(GTK_GL_AREA(window->gl_area), FALSE);
   gtk_gl_area_set_has_stencil_buffer(GTK_GL_AREA(window->gl_area), FALSE);
   gtk_gl_area_set_auto_render(GTK_GL_AREA(window->gl_area), FALSE);
@@ -2097,7 +2093,9 @@ int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, float logical_width
   int pixel_width = (int)ceilf(logical_width * scale);
   int pixel_height = (int)ceilf(logical_height * scale);
   float clear[4];
-  premultiplied_color(red, green, blue, alpha, clear);
+  // Keep every Linux frame opaque even when a caller clears with a transparent color.
+  (void)alpha;
+  premultiplied_color(red, green, blue, 255, clear);
   glViewport(0, 0, pixel_width, pixel_height);
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_SCISSOR_TEST);

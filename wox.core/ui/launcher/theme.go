@@ -131,17 +131,17 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 	}
 }
 
-// appSurfaceRadius leaves compositor-backed platforms to clip the native window.
-func appSurfaceRadius() float32 {
+// opaqueWindowBackground disables unsupported desktop translucency without changing component blending.
+func opaqueWindowBackground(color woxui.Color) woxui.Color {
 	if runtime.GOOS == "linux" {
-		return 14
+		color.A = 255
 	}
-	return 0
+	return color
 }
 
 func defaultPalette() uiPalette {
 	return uiPalette{
-		background:             woxui.Color{R: 24, G: 29, B: 38, A: 242},
+		background:             opaqueWindowBackground(woxui.Color{R: 24, G: 29, B: 38, A: 242}),
 		appPadding:             woxwidget.UniformInsets(10),
 		queryBackground:        woxui.Color{R: 56, G: 67, B: 82, A: 230},
 		queryRadius:            8,
@@ -210,7 +210,7 @@ func paletteForTheme(theme themeData) uiPalette {
 		actionQueryRadius = fallback.actionQueryRadius
 	}
 	return uiPalette{
-		background:             parseThemeColor(theme.AppBackgroundColor, fallback.background),
+		background:             opaqueWindowBackground(parseThemeColor(theme.AppBackgroundColor, fallback.background)),
 		appPadding:             themeInsets(theme.AppPaddingLeft, theme.AppPaddingTop, theme.AppPaddingRight, theme.AppPaddingBottom),
 		queryBackground:        parseThemeColor(theme.QueryBoxBackgroundColor, fallback.queryBackground),
 		queryRadius:            max(float32(0), float32(theme.QueryBoxBorderRadius)),

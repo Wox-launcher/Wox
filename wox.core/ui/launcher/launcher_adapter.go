@@ -170,7 +170,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height)
 	}
 	return launcherview.LauncherView(launcherview.LauncherViewProps{
-		Width: width, Height: height, Radius: appSurfaceRadius(), Header: header, Refinements: refinements, Content: content, Footer: footer,
+		Width: width, Height: height, Header: header, Refinements: refinements, Content: content, Footer: footer,
 		QueryAtBottom: snapshot.show.QueryBoxAtBottom, Floating: floating, Overlay: overlay, Theme: snapshot.palette.componentTheme(),
 	})
 }
