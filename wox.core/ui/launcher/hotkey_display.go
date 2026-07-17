@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// formatHotkeyLabels applies Flutter's platform labels while keeping each physical key separate.
+// formatHotkeyLabels applies platform labels while keeping each physical key separate.
 func formatHotkeyLabels(hotkey string) []string {
 	hotkey = strings.TrimSpace(hotkey)
 	hotkey = strings.TrimPrefix(hotkey, "hold:")
@@ -71,7 +71,7 @@ func formatHotkeyLabels(hotkey string) []string {
 				part = "Right Super"
 			}
 		case "enter", "return":
-			part = "⏎"
+			part = "Enter"
 		case "space":
 			part = "Space"
 		case "escape", "esc":
@@ -85,13 +85,13 @@ func formatHotkeyLabels(hotkey string) []string {
 		case "backquote", "tilde":
 			part = "~"
 		case "arrowup", "up":
-			part = "↑"
+			part = "Up"
 		case "arrowdown", "down":
-			part = "↓"
+			part = "Down"
 		case "arrowleft", "left":
-			part = "←"
+			part = "Left"
 		case "arrowright", "right":
-			part = "→"
+			part = "Right"
 		case "pageup":
 			part = "PageUp"
 		case "pagedown":

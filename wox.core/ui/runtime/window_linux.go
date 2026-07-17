@@ -215,6 +215,17 @@ func (w *platformWindow) startDragging() error {
 	return nil
 }
 
+func (w *platformWindow) minimize() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_minimize(native) != 0 {
+		return errors.New("woxui: failed to minimize Linux window")
+	}
+	return nil
+}
+
 func (w *platformWindow) setHideOnBlur(enabled bool) error {
 	native, err := w.openNative()
 	if err != nil {
@@ -227,6 +238,10 @@ func (w *platformWindow) setHideOnBlur(enabled bool) error {
 	if C.wox_linux_window_set_hide_on_blur(native, nativeEnabled) != 0 {
 		return errors.New("woxui: failed to update Linux hide-on-blur behavior")
 	}
+	return nil
+}
+
+func (w *platformWindow) setAppearance(isDark bool) error {
 	return nil
 }
 

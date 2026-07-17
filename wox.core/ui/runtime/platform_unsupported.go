@@ -44,7 +44,15 @@ func (w *platformWindow) startDragging() error {
 	return ErrPlatformUnsupported
 }
 
+func (w *platformWindow) minimize() error {
+	return ErrPlatformUnsupported
+}
+
 func (w *platformWindow) setHideOnBlur(enabled bool) error {
+	return ErrPlatformUnsupported
+}
+
+func (w *platformWindow) setAppearance(isDark bool) error {
 	return ErrPlatformUnsupported
 }
 

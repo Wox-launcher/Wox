@@ -104,6 +104,7 @@ type App struct {
 	visible               bool
 	show                  showAppParams
 	settingsOpen          bool
+	settingsTitleBarHover string
 	settings              settingsData
 	settingsCtx           settingWindowContext
 	settingTab            string
@@ -379,6 +380,9 @@ func (a *App) start() error {
 	a.window = launcher.Window()
 	a.host = host
 	host.Attach(a.window)
+	if err := a.window.SetAppearance(themeColorIsDark(a.palette.background)); err != nil {
+		return fmt.Errorf("apply Wox UI appearance: %w", err)
+	}
 	if err := a.window.SetFontFamily(a.settings.AppFontFamily); err != nil {
 		return fmt.Errorf("apply Wox UI font: %w", err)
 	}

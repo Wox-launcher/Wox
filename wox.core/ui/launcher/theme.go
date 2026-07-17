@@ -192,14 +192,31 @@ func (a *App) reloadTheme() error {
 
 func (a *App) applyTheme(theme themeData) {
 	palette := paletteForTheme(theme)
+	isDark := themeColorIsDark(palette.background)
 	a.mu.Lock()
 	a.palette = palette
+	settingsView := a.settingsView
 	a.mu.Unlock()
 	if a.window != nil {
+		_ = a.window.SetAppearance(isDark)
 		_ = a.applyWindowBounds()
 		_ = a.window.Invalidate()
 	}
+	if settingsView != nil {
+		_ = settingsView.Window().SetAppearance(isDark)
+	}
 	a.invalidateSettingsWindow()
+}
+
+func themeColorIsDark(color woxui.Color) bool {
+	linear := func(value uint8) float64 {
+		channel := float64(value) / 255
+		if channel <= 0.03928 {
+			return channel / 12.92
+		}
+		return math.Pow((channel+0.055)/1.055, 2.4)
+	}
+	return 0.2126*linear(color.R)+0.7152*linear(color.G)+0.0722*linear(color.B) < 0.5
 }
 
 // paletteForTheme resolves a complete portable palette without mutating the active UI.

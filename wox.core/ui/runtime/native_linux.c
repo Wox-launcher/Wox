@@ -1447,6 +1447,23 @@ int32_t wox_linux_window_start_dragging(WoxLinuxWindow *window) {
   return run_on_main_sync(start_dragging_main, &call) ? call.result : -1;
 }
 
+static void minimize_main(void *data) {
+  WoxDragCall *call = data;
+  if (call->window->closed) {
+    call->result = -1;
+    return;
+  }
+  gtk_window_iconify(GTK_WINDOW(call->window->window));
+}
+
+int32_t wox_linux_window_minimize(WoxLinuxWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxDragCall call = {.window = window};
+  return run_on_main_sync(minimize_main, &call) ? call.result : -1;
+}
+
 typedef struct {
   WoxLinuxWindow *window;
   bool enabled;

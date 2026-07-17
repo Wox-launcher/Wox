@@ -186,12 +186,28 @@ func (w *Window) StartDragging() error {
 	return w.native.startDragging()
 }
 
+// Minimize sends the window to the platform taskbar or dock.
+func (w *Window) Minimize() error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.minimize()
+}
+
 // SetHideOnBlur changes whether the current window hides after leaving its focus domain.
 func (w *Window) SetHideOnBlur(enabled bool) error {
 	if w == nil || w.native == nil {
 		return errors.New("window is not initialized")
 	}
 	return w.native.setHideOnBlur(enabled)
+}
+
+// SetAppearance updates native window materials to match the active light or dark theme.
+func (w *Window) SetAppearance(isDark bool) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.setAppearance(isDark)
 }
 
 // SetFontFamily changes the window-wide UI font while preserving platform fallback when family is empty or unavailable.

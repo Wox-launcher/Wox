@@ -15,6 +15,7 @@ int32_t wox_linux_window_get_bounds(WoxLinuxWindow *window, float *x, float *y, 
 int32_t wox_linux_window_capture_png(WoxLinuxWindow *window, const char *path);
 int32_t wox_linux_window_center(WoxLinuxWindow *window, float width, float height);
 int32_t wox_linux_window_start_dragging(WoxLinuxWindow *window);
+int32_t wox_linux_window_minimize(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_hide_on_blur(WoxLinuxWindow *window, int32_t enabled);
 int32_t wox_linux_window_pick_file(WoxLinuxWindow *window, int32_t directory, char **path);
 int32_t wox_linux_window_open_external_url(WoxLinuxWindow *window, const char *url);

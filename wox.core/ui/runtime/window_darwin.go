@@ -238,6 +238,17 @@ func (w *platformWindow) startDragging() error {
 	return nil
 }
 
+func (w *platformWindow) minimize() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_minimize(native) != 0 {
+		return errors.New("woxui: failed to minimize macOS window")
+	}
+	return nil
+}
+
 func (w *platformWindow) setHideOnBlur(enabled bool) error {
 	native, err := w.openNative()
 	if err != nil {
@@ -249,6 +260,21 @@ func (w *platformWindow) setHideOnBlur(enabled bool) error {
 	}
 	if C.wox_darwin_window_set_hide_on_blur(native, nativeEnabled) != 0 {
 		return errors.New("woxui: failed to update macOS hide-on-blur behavior")
+	}
+	return nil
+}
+
+func (w *platformWindow) setAppearance(isDark bool) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	nativeDark := C.int32_t(0)
+	if isDark {
+		nativeDark = 1
+	}
+	if C.wox_darwin_window_set_appearance(native, nativeDark) != 0 {
+		return errors.New("woxui: failed to update macOS window appearance")
 	}
 	return nil
 }

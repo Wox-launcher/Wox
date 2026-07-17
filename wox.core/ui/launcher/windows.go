@@ -67,7 +67,12 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 	a.settingsHost = host
 	a.settingsOpen = true
 	fontFamily := a.settings.AppFontFamily
+	isDark := themeColorIsDark(a.palette.background)
 	a.mu.Unlock()
+	if err := managed.Window().SetAppearance(isDark); err != nil {
+		_ = managed.Close()
+		return nil, err
+	}
 	if err := managed.Window().SetFontFamily(fontFamily); err != nil {
 		_ = managed.Close()
 		return nil, err
@@ -297,6 +302,7 @@ func (a *App) onSettingsWindowClosed() {
 	wasOpen := a.settingsOpen
 	wasRecording := a.hotkeyRecording != nil
 	a.settingsOpen = false
+	a.settingsTitleBarHover = ""
 	a.settingsView = nil
 	a.settingsHost = nil
 	a.settingSaving = false

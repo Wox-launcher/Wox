@@ -111,6 +111,7 @@ type settingItem struct {
 
 type settingsSnapshot struct {
 	isDev                 bool
+	titleBarHover         string
 	tab                   string
 	row                   int
 	note                  string
@@ -651,6 +652,7 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	modelManager := snapshotModelManagerLocked(a.modelManager)
 	return settingsSnapshot{
 		isDev:                 a.isDev,
+		titleBarHover:         a.settingsTitleBarHover,
 		tab:                   a.settingTab,
 		row:                   a.settingRow,
 		note:                  a.settingNote,

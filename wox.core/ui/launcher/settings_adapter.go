@@ -5,13 +5,14 @@ import (
 	"runtime"
 	"strings"
 
+	"wox/common"
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
-const settingsTitleBarHeight = 42
+const settingsTitleBarHeight = launcherview.SettingsTitleBarHeight
 
 func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	snapshot := a.settingsSnapshot()
@@ -59,11 +60,11 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(),
-		TitleBar: a.buildSettingsTitleBar(snapshot, width), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight), Page: page, Overlay: overlay,
+		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight), Page: page, Overlay: overlay,
 	})
 }
 
-func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width float32) woxwidget.Widget {
+func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth float32) woxwidget.Widget {
 	title := a.activeSettingsNavLabel(snapshot)
 	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
 	titleWidth := float32(160)
@@ -73,10 +74,16 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width float32) wo
 		}
 	}
 	return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
-		Width: width, Title: title, TitleWidth: titleWidth, ShowClose: runtime.GOOS != "darwin", Theme: snapshot.palette.componentTheme(),
+		Width: width, RailWidth: railWidth, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.imageFor(fromCoreImage(common.WoxIcon)),
+		Hovered: snapshot.titleBarHover, Theme: snapshot.palette.componentTheme(),
 		OnDrag: func() {
 			if window := a.settingsNativeWindow(); window != nil {
 				_ = window.StartDragging()
+			}
+		},
+		OnMinimize: func() {
+			if window := a.settingsNativeWindow(); window != nil {
+				_ = window.Minimize()
 			}
 		},
 		OnClose: func() {
@@ -86,7 +93,18 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width float32) wo
 				}
 			}()
 		},
+		OnHover: a.setSettingsTitleBarHover,
 	})
+}
+
+func (a *App) setSettingsTitleBarHover(control string, hovered bool) {
+	a.mu.Lock()
+	if hovered {
+		a.settingsTitleBarHover = control
+	} else if a.settingsTitleBarHover == control {
+		a.settingsTitleBarHover = ""
+	}
+	a.mu.Unlock()
 }
 
 // buildSettingsThemePage mounts theme catalogs and the shared live editor under one portable route.

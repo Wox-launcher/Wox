@@ -997,6 +997,9 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
       native_window.collectionBehavior = NSWindowCollectionBehaviorDefault;
       native_window.titlebarAppearsTransparent = YES;
       native_window.titleVisibility = NSWindowTitleHidden;
+      [[native_window standardWindowButton:NSWindowCloseButton] setHidden:YES];
+      [[native_window standardWindowButton:NSWindowMiniaturizeButton] setHidden:YES];
+      [[native_window standardWindowButton:NSWindowZoomButton] setHidden:YES];
     } else {
       native_window.level = NSFloatingWindowLevel;
       native_window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
@@ -1080,6 +1083,9 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
     epoch = window->epoch;
     window->visible = true;
     [NSApp activateIgnoringOtherApps:YES];
+    if (window->window.isMiniaturized) {
+      [window->window deminiaturize:nil];
+    }
     [window->window makeKeyAndOrderFront:nil];
     [window->window makeFirstResponder:window->view];
     if (!window->closed && window->window.isKeyWindow) {
@@ -1240,6 +1246,21 @@ int32_t wox_darwin_window_start_dragging(WoxDarwinWindow *window) {
   return result;
 }
 
+int32_t wox_darwin_window_minimize(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    [window->window miniaturize:nil];
+  });
+  return result;
+}
+
 int32_t wox_darwin_window_set_hide_on_blur(WoxDarwinWindow *window, int32_t enabled) {
   if (window == NULL) {
     return -1;
@@ -1251,6 +1272,24 @@ int32_t wox_darwin_window_set_hide_on_blur(WoxDarwinWindow *window, int32_t enab
       return;
     }
     window->hide_on_blur = enabled != 0;
+  });
+  return result;
+}
+
+// wox_darwin_window_set_appearance keeps AppKit materials aligned with the active Wox theme.
+int32_t wox_darwin_window_set_appearance(WoxDarwinWindow *window, int32_t is_dark) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    NSAppearance *appearance = [NSAppearance appearanceNamed:is_dark != 0 ? NSAppearanceNameDarkAqua : NSAppearanceNameAqua];
+    window->window.appearance = appearance;
+    NSApp.appearance = appearance;
   });
   return result;
 }

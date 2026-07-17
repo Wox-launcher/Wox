@@ -94,7 +94,9 @@ const (
 	windowCommandGetBounds
 	windowCommandCenter
 	windowCommandStartDragging
+	windowCommandMinimize
 	windowCommandSetHideOnBlur
+	windowCommandSetAppearance
 	windowCommandSetFontFamily
 	windowCommandPickFile
 	windowCommandOpenExternalURL
@@ -106,18 +108,19 @@ const (
 )
 
 type windowCommand struct {
-	kind          windowCommandKind
-	bounds        Rect
-	size          Size
-	hideOnBlur    bool
-	fontFamily    string
-	fileDialog    FileDialogOptions
-	externalURL   string
-	clipboardText string
-	clipboard     *clipboardImage
-	webView       WebViewContent
-	webViewBounds Rect
-	reply         chan windowCommandResult
+	kind           windowCommandKind
+	bounds         Rect
+	size           Size
+	hideOnBlur     bool
+	darkAppearance bool
+	fontFamily     string
+	fileDialog     FileDialogOptions
+	externalURL    string
+	clipboardText  string
+	clipboard      *clipboardImage
+	webView        WebViewContent
+	webViewBounds  Rect
+	reply          chan windowCommandResult
 }
 
 type windowCommandResult struct {
@@ -398,8 +401,16 @@ func (w *platformWindow) startDragging() error {
 	return w.call(windowCommand{kind: windowCommandStartDragging}).err
 }
 
+func (w *platformWindow) minimize() error {
+	return w.call(windowCommand{kind: windowCommandMinimize}).err
+}
+
 func (w *platformWindow) setHideOnBlur(enabled bool) error {
 	return w.call(windowCommand{kind: windowCommandSetHideOnBlur, hideOnBlur: enabled}).err
+}
+
+func (w *platformWindow) setAppearance(isDark bool) error {
+	return w.call(windowCommand{kind: windowCommandSetAppearance, darkAppearance: isDark}).err
 }
 
 func (w *platformWindow) setFontFamily(family string) error {
@@ -515,7 +526,7 @@ func (w *platformWindow) createNativeWindow() error {
 	if hwnd == 0 {
 		return fmt.Errorf("create native window failed: %w", syscall.GetLastError())
 	}
-	applyWindowsBackdrop(hwnd)
+	applyWindowsBackdrop(hwnd, true)
 	w.mu.Lock()
 	w.hwnd = hwnd
 	w.mu.Unlock()
@@ -550,8 +561,11 @@ func (w *platformWindow) createNativeWindow() error {
 }
 
 // applyWindowsBackdrop uses Mica on Windows 11 and the existing Acrylic fallback on older systems.
-func applyWindowsBackdrop(hwnd win.HWND) {
-	dark := int32(1)
+func applyWindowsBackdrop(hwnd win.HWND, isDark bool) {
+	dark := int32(0)
+	if isDark {
+		dark = 1
+	}
 	corner := int32(dwmWindowCornerRound)
 	backdrop := int32(dwmSystemBackdropMica)
 	margins := windowsMargins{left: -1, right: -1, top: -1, bottom: -1}
@@ -571,7 +585,11 @@ func applyWindowsBackdrop(hwnd win.HWND) {
 	if setWindowCompositionAttribute.Find() != nil {
 		return
 	}
-	policy := windowsAccentPolicy{state: accentAcrylicBlurBehind, flags: 2, gradientColor: 0xCC202020}
+	tint := uint32(0xCCF5F5F5)
+	if isDark {
+		tint = 0xCC202020
+	}
+	policy := windowsAccentPolicy{state: accentAcrylicBlurBehind, flags: 2, gradientColor: tint}
 	data := windowsCompositionAttributeData{attribute: wcaAccentPolicy, data: uintptr(unsafe.Pointer(&policy)), size: unsafe.Sizeof(policy)}
 	_, _, _ = setWindowCompositionAttribute.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&data)))
 }
@@ -1114,8 +1132,14 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		win.ReleaseCapture()
 		win.SendMessage(w.hwnd, win.WM_NCLBUTTONDOWN, win.HTCAPTION, 0)
 		return windowCommandResult{}
+	case windowCommandMinimize:
+		win.ShowWindow(w.hwnd, win.SW_MINIMIZE)
+		return windowCommandResult{}
 	case windowCommandSetHideOnBlur:
 		w.options.HideOnBlur = command.hideOnBlur
+		return windowCommandResult{}
+	case windowCommandSetAppearance:
+		applyWindowsBackdrop(w.hwnd, command.darkAppearance)
 		return windowCommandResult{}
 	case windowCommandSetFontFamily:
 		if w.renderer == nil {
@@ -1304,7 +1328,11 @@ func (w *platformWindow) showNative() FocusEpoch {
 		w.focus.restorePreviousOnHide = true
 	}
 
-	win.ShowWindow(w.hwnd, win.SW_SHOW)
+	showCommand := int32(win.SW_SHOW)
+	if win.IsIconic(w.hwnd) {
+		showCommand = win.SW_RESTORE
+	}
+	win.ShowWindow(w.hwnd, showCommand)
 	activateWindow(w.hwnd)
 	if w.isWithinFocusDomain(win.GetForegroundWindow()) {
 		w.confirmActivation()
