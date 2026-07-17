@@ -6,16 +6,15 @@ import (
 	"strings"
 
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 type formFieldsState struct {
-	definitions    []formDefinition
-	values         map[string]string
-	focused        int
-	editor         *woxui.TextEditor
-	scroll         float32
-	viewportHeight float32
-	active         bool
+	definitions []formDefinition
+	values      map[string]string
+	focused     int
+	editor      *woxui.TextEditor
+	active      bool
 }
 
 type formFieldsSnapshot struct {
@@ -23,7 +22,6 @@ type formFieldsSnapshot struct {
 	values      map[string]string
 	focused     int
 	editing     woxui.TextEditingState
-	scroll      float32
 	active      bool
 }
 
@@ -59,7 +57,7 @@ func newFormFieldsState(definitions []formDefinition, initialValues map[string]s
 			focused = index
 		}
 	}
-	fields := formFieldsState{definitions: append([]formDefinition(nil), definitions...), values: values, focused: focused, viewportHeight: 260, active: active}
+	fields := formFieldsState{definitions: append([]formDefinition(nil), definitions...), values: values, focused: focused, active: active}
 	if focused >= 0 && formDefinitionTextEditable(definitions[focused]) {
 		fields.editor = woxui.NewTextEditor(values[definitions[focused].Value.Key])
 	}
@@ -78,13 +76,44 @@ func snapshotFormFieldsLocked(state *formFieldsState) formFieldsSnapshot {
 		definitions: append([]formDefinition(nil), state.definitions...),
 		values:      values,
 		focused:     state.focused,
-		scroll:      state.scroll,
 		active:      state.active,
 	}
 	if state.editor != nil {
 		snapshot.editing = state.editor.State()
 	}
 	return snapshot
+}
+
+// setFormFieldsTextLocked updates committed form data without importing selection or IME state from the widget.
+func setFormFieldsTextLocked(state *formFieldsState, index int, value string) bool {
+	if state == nil || index < 0 || index >= len(state.definitions) || !formDefinitionTextEditable(state.definitions[index]) {
+		return false
+	}
+	key := state.definitions[index].Value.Key
+	if key == "" || state.values[key] == value {
+		return false
+	}
+	state.values[key] = value
+	if state.focused == index {
+		if state.editor == nil {
+			state.editor = woxui.NewTextEditor(value)
+		} else {
+			state.editor.SetText(value, false)
+		}
+	}
+	return true
+}
+
+// formFieldsKeepVisible returns the focused field interval for a retained form scroll view.
+func formFieldsKeepVisible(fields formFieldsSnapshot) *woxwidget.ScrollRange {
+	if fields.focused < 0 || fields.focused >= len(fields.definitions) {
+		return nil
+	}
+	start := float32(0)
+	for index := 0; index < fields.focused; index++ {
+		start += formDefinitionHeight(fields.definitions[index], fields.values)
+	}
+	return &woxwidget.ScrollRange{Start: start, End: start + formDefinitionHeight(fields.definitions[fields.focused], fields.values)}
 }
 
 func snapshotFormLocked(state *formState) *formSnapshot {
@@ -221,26 +250,6 @@ func setFormFieldsFocusLocked(fields *formFieldsState, index int) {
 	} else {
 		fields.editor = nil
 	}
-	ensureFormFieldsFocusVisibleLocked(fields, index)
-}
-
-func ensureFormFieldsFocusVisibleLocked(fields *formFieldsState, index int) {
-	if fields == nil || index < 0 || index >= len(fields.definitions) {
-		return
-	}
-	viewportHeight := max(float32(1), fields.viewportHeight)
-	contentHeight := formDefinitionsContentHeight(fields.definitions, fields.values)
-	rowTop := float32(0)
-	for candidate := 0; candidate < index; candidate++ {
-		rowTop += formDefinitionHeight(fields.definitions[candidate], fields.values)
-	}
-	rowBottom := rowTop + formDefinitionHeight(fields.definitions[index], fields.values)
-	if rowTop < fields.scroll {
-		fields.scroll = rowTop
-	} else if rowBottom > fields.scroll+viewportHeight {
-		fields.scroll = rowBottom - viewportHeight
-	}
-	fields.scroll = min(max(float32(0), fields.scroll), max(float32(0), contentHeight-viewportHeight))
 }
 
 func changeFormFieldsChoiceLocked(fields *formFieldsState, index, delta int) {
@@ -279,7 +288,6 @@ func changeFormFieldsChoiceLocked(fields *formFieldsState, index, delta int) {
 
 func (a *App) openFormAction(result queryResult, action resultAction) {
 	state := &formState{formFieldsState: newFormFieldsState(action.Form, nil, true), resultID: result.ID, queryID: result.QueryID, action: action}
-	state.viewportHeight = float32(formDefinitionsPanelHeight(action.Form, state.values) - 100)
 	a.mu.Lock()
 	a.form = state
 	a.actionPanel = false
@@ -352,6 +360,31 @@ func (a *App) onFormKey(event woxui.KeyEvent) bool {
 		a.submitFormAction()
 		return true
 	}
+	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath"
+	if textEditable {
+		switch event.Key {
+		case woxui.KeyTab:
+			delta := 1
+			if event.Modifiers&woxui.KeyModifierShift != 0 {
+				delta = -1
+			}
+			a.moveFormFocus(delta)
+			return true
+		case woxui.KeyArrowDown:
+			if !multiline {
+				a.moveFormFocus(1)
+				return true
+			}
+		case woxui.KeyArrowUp:
+			if !multiline {
+				a.moveFormFocus(-1)
+				return true
+			}
+		case woxui.KeyEnter:
+			return !multiline
+		}
+		return false
+	}
 	switch event.Key {
 	case woxui.KeyTab, woxui.KeyArrowDown:
 		if event.Key == woxui.KeyArrowDown && multiline {
@@ -395,20 +428,21 @@ func (a *App) onFormKey(event woxui.KeyEvent) bool {
 	return true
 }
 
-func (a *App) onFormTextInput(event woxui.TextInputEvent) bool {
+func (a *App) setFormText(index int, value string) {
 	a.mu.Lock()
-	if a.form == nil {
-		a.mu.Unlock()
-		return false
-	}
-	if a.form.editor != nil && a.form.focused >= 0 && formDefinitionTextEditable(a.form.definitions[a.form.focused]) {
-		if a.form.editor.HandleTextInput(event) {
-			a.syncFormEditorLocked()
-		}
-	}
+	changed := a.form != nil && setFormFieldsTextLocked(&a.form.formFieldsState, index, value)
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
-	return true
+	if changed {
+		_ = a.applyWindowBounds()
+		_ = a.window.Invalidate()
+	}
+}
+
+func (a *App) onFormTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
+	active := a.form != nil
+	a.mu.RUnlock()
+	return active
 }
 
 func (a *App) editFormKey(event woxui.KeyEvent) {
@@ -474,25 +508,6 @@ func (a *App) setFormFocusLocked(index int) {
 	setFormFieldsFocusLocked(&a.form.formFieldsState, index)
 }
 
-func (a *App) ensureFormFocusVisibleLocked(index int) {
-	if a.form != nil {
-		ensureFormFieldsFocusVisibleLocked(&a.form.formFieldsState, index)
-	}
-}
-
-func (a *App) scrollForm(delta float32) {
-	a.mu.Lock()
-	if a.form == nil {
-		a.mu.Unlock()
-		return
-	}
-	viewportHeight := max(float32(1), a.form.viewportHeight)
-	maxOffset := max(float32(0), formDefinitionsContentHeight(a.form.definitions, a.form.values)-viewportHeight)
-	a.form.scroll = min(max(float32(0), a.form.scroll+delta), maxOffset)
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
-}
-
 func (a *App) syncFormEditorLocked() {
 	if a.form != nil {
 		syncFormFieldsEditorLocked(&a.form.formFieldsState)
@@ -516,15 +531,4 @@ func (a *App) restoreQueryTextInput() {
 		state = woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 130, Y: 29, Width: 1, Height: 24}}
 	}
 	_ = a.window.SetTextInputState(state)
-}
-
-func (a *App) setFormCaret(index, offset int) {
-	a.mu.Lock()
-	if a.form == nil || a.form.focused != index || a.form.editor == nil {
-		a.mu.Unlock()
-		return
-	}
-	a.form.editor.SetCaret(offset)
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
 }

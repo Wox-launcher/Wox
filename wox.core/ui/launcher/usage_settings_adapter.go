@@ -44,7 +44,7 @@ func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height fl
 		ShareLabel: a.translate("i18n:ui_usage_share_x"), Periods: periods, Error: snapshot.usageError, Loading: snapshot.usageLoading,
 		ActivityTitle: a.translate("i18n:ui_usage_opened_by_day"), TopAppsTitle: a.translate("i18n:ui_usage_top_apps"),
 		TopPluginsTitle: a.translate("i18n:ui_usage_top_plugins"), EmptyLabel: a.translate("i18n:ui_usage_no_data"),
-		MonthLabels: monthLabels, Scroll: snapshot.pageScroll.offset, OnScroll: a.scrollSettingsPage, OnSetGeometry: a.setSettingsPageGeometry, OnShare: a.shareUsageToX,
+		MonthLabels: monthLabels, OnShare: a.shareUsageToX,
 		KPIs: []launcherview.UsageKPI{
 			{Label: a.translate("i18n:ui_usage_opened"), Value: snapshot.usage.PeriodOpened, Icon: a.imageForTint(usageIconSource("visibility"), &blueAccent, 22), Accent: blueAccent},
 			{Label: a.translate("i18n:ui_usage_app_launches"), Value: snapshot.usage.PeriodAppLaunch, Icon: a.imageForTint(usageIconSource("rocket"), &tealAccent, 22), Accent: tealAccent},

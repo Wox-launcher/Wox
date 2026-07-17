@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"strings"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -26,32 +27,82 @@ type SettingsChoice struct {
 
 // SettingsChoiceProps contains the immutable state and actions rendered by the settings dropdown.
 type SettingsChoiceProps struct {
-	Width         float32
-	Height        float32
-	Anchor        woxui.Rect
-	Filterable    bool
-	Theme         woxcomponent.Theme
-	Window        *woxui.Window
-	Title         string
-	CurrentValue  string
-	Query         woxui.TextEditingState
-	Choices       []SettingsChoice
-	Selected      int
-	Scroll        float32
-	OnCaret       func(int)
-	OnSetQuery    func(string) error
-	OnKey         func(woxui.KeyEvent) bool
-	OnTextInput   func(woxui.TextInputEvent) bool
-	OnSelect      func(int)
-	OnChoose      func(int)
-	OnCancel      func()
-	OnScroll      func(float32)
-	OnSetViewport func(float32)
-	OnTooltip     func(bool, string, woxui.Rect)
+	ID           string
+	Width        float32
+	Height       float32
+	Anchor       woxui.Rect
+	Filterable   bool
+	Theme        woxcomponent.Theme
+	Window       *woxui.Window
+	Title        string
+	CurrentValue string
+	Choices      []SettingsChoice
+	OnChoose     func(int)
+	OnCancel     func()
+	OnTooltip    func(bool, string, woxui.Rect)
 }
 
 // SettingsChoiceView builds a field-anchored dropdown matching the former Flutter settings control.
 func SettingsChoiceView(props SettingsChoiceProps) woxwidget.Widget {
+	id := props.ID
+	if id == "" {
+		id = "setting-choice"
+		props.ID = id
+	}
+	return woxwidget.Stateful{
+		Key: woxwidget.Key(id), Type: (*settingsChoiceState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &settingsChoiceState{} },
+	}
+}
+
+type settingsChoiceState struct {
+	queryController  *woxwidget.TextEditingController
+	queryFocusNode   *woxwidget.FocusNode
+	scrollController *woxwidget.ScrollController
+	selected         int
+}
+
+// InitState creates the dropdown's private query, focus, highlight, and scroll state.
+func (s *settingsChoiceState) InitState(_ woxwidget.StateContext, widget any) {
+	props := widget.(SettingsChoiceProps)
+	s.queryController = woxwidget.NewTextEditingController("")
+	s.queryFocusNode = woxwidget.NewFocusNode()
+	s.selected = settingsChoiceCurrentIndex(props.Choices, props.CurrentValue)
+	s.scrollController = woxwidget.NewScrollController(max(float32(0), float32(s.selected-4)*settingsChoiceRowHeight))
+}
+
+// DidUpdateWidget keeps the highlight aligned when the committed business value changes.
+func (s *settingsChoiceState) DidUpdateWidget(_ woxwidget.StateContext, oldWidget, newWidget any) {
+	oldProps := oldWidget.(SettingsChoiceProps)
+	props := newWidget.(SettingsChoiceProps)
+	if oldProps.CurrentValue != props.CurrentValue {
+		s.selected = settingsChoiceCurrentIndex(props.Choices, props.CurrentValue)
+		s.scrollController.JumpTo(max(float32(0), float32(s.selected-4)*settingsChoiceRowHeight))
+	}
+}
+
+// Build renders the dropdown from retained interaction state and immutable business choices.
+func (s *settingsChoiceState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(SettingsChoiceProps)
+	visible := filteredSettingsChoices(props.Choices, s.queryController.Text())
+	if len(visible) == 0 {
+		s.selected = -1
+	} else {
+		s.selected = min(max(0, s.selected), len(visible)-1)
+	}
+	return buildSettingsChoiceView(context, props, s, visible)
+}
+
+// Dispose releases no external resources; child State objects detach their own controllers.
+func (s *settingsChoiceState) Dispose() {}
+
+type visibleSettingsChoice struct {
+	choice        SettingsChoice
+	originalIndex int
+}
+
+// buildSettingsChoiceView lays out the anchored surface while State owns all transient interaction data.
+func buildSettingsChoiceView(context woxwidget.StateContext, props SettingsChoiceProps, state *settingsChoiceState, visible []visibleSettingsChoice) woxwidget.Widget {
 	anchor := props.Anchor
 	if anchor.Width <= 0 || anchor.Height <= 0 {
 		anchor.Width = min(float32(300), max(float32(190), props.Width-settingsChoiceMenuMargin*2))
@@ -65,17 +116,39 @@ func SettingsChoiceView(props SettingsChoiceProps) woxwidget.Widget {
 	if props.Filterable {
 		searchHeight = settingsChoiceSearchHeight
 	}
-	rowCount := max(1, len(props.Choices))
+	rowCount := max(1, len(visible))
 	maximumMenuHeight := min(settingsChoiceMaxHeight, max(settingsChoiceRowHeight+settingsChoiceMenuPadding*2+searchHeight, props.Height-settingsChoiceMenuMargin*2))
 	maximumListHeight := max(settingsChoiceRowHeight, maximumMenuHeight-settingsChoiceMenuPadding*2-searchHeight)
 	listHeight := min(float32(rowCount)*settingsChoiceRowHeight, maximumListHeight)
 	menuHeight := settingsChoiceMenuPadding*2 + searchHeight + listHeight
 	menuTop := settingsChoiceMenuTop(props, anchor, menuHeight, listHeight)
-	menu := settingsChoiceMenu(props, menuWidth, menuHeight, listHeight)
+	menu := settingsChoiceMenu(context, props, state, visible, menuWidth, menuHeight, listHeight)
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
 		{Child: woxwidget.Gesture{ID: "setting-choice-backdrop", OnTap: props.OnCancel, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
 		{Left: menuLeft, Top: menuTop, Child: menu},
 	}}
+}
+
+// settingsChoiceCurrentIndex resolves the committed value without moving that value into component State.
+func settingsChoiceCurrentIndex(choices []SettingsChoice, value string) int {
+	for index, choice := range choices {
+		if choice.Value == value {
+			return index
+		}
+	}
+	return 0
+}
+
+// filteredSettingsChoices retains original option indexes for business-value callbacks.
+func filteredSettingsChoices(choices []SettingsChoice, query string) []visibleSettingsChoice {
+	query = strings.ToLower(strings.TrimSpace(query))
+	visible := make([]visibleSettingsChoice, 0, len(choices))
+	for index, choice := range choices {
+		if query == "" || strings.Contains(strings.ToLower(choice.Label), query) || strings.Contains(strings.ToLower(choice.Value), query) {
+			visible = append(visible, visibleSettingsChoice{choice: choice, originalIndex: index})
+		}
+	}
+	return visible
 }
 
 func settingsChoiceMenuTop(props SettingsChoiceProps, anchor woxui.Rect, menuHeight, listHeight float32) float32 {
@@ -100,15 +173,13 @@ func settingsChoiceMenuTop(props SettingsChoiceProps, anchor woxui.Rect, menuHei
 	return min(max(settingsChoiceMenuMargin, top), max(settingsChoiceMenuMargin, props.Height-menuHeight-settingsChoiceMenuMargin))
 }
 
-func settingsChoiceMenu(props SettingsChoiceProps, width, height, listHeight float32) woxwidget.Widget {
-	if props.OnSetViewport != nil {
-		props.OnSetViewport(listHeight)
-	}
-	rows := make([]woxwidget.Widget, 0, max(1, len(props.Choices)))
-	for index, choice := range props.Choices {
+func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProps, state *settingsChoiceState, visible []visibleSettingsChoice, width, height, listHeight float32) woxwidget.Widget {
+	rows := make([]woxwidget.Widget, 0, max(1, len(visible)))
+	for index, visibleChoice := range visible {
 		index := index
-		choice := choice
-		selected := index == props.Selected
+		visibleChoice := visibleChoice
+		choice := visibleChoice.choice
+		selected := index == state.selected
 		background := props.Theme.ActionBackground
 		foreground := props.Theme.ActionText
 		if selected {
@@ -135,7 +206,7 @@ func settingsChoiceMenu(props SettingsChoiceProps, width, height, listHeight flo
 		}
 		activate := func() {
 			if props.OnChoose != nil {
-				props.OnChoose(index)
+				props.OnChoose(visibleChoice.originalIndex)
 			}
 		}
 		key := woxwidget.Key(fmt.Sprintf("setting-choice-%d", index))
@@ -154,8 +225,11 @@ func settingsChoiceMenu(props SettingsChoiceProps, width, height, listHeight flo
 		}
 		rowChildren = append(rowChildren, tooltip)
 		row := woxwidget.Gesture{ID: string(key), OnHover: func(inside bool) {
-			if inside && props.OnSelect != nil {
-				props.OnSelect(index)
+			if inside && state.selected != index {
+				context.SetState(func() {
+					state.selected = index
+					state.scrollController.EnsureVisible(float32(index)*settingsChoiceRowHeight, float32(index+1)*settingsChoiceRowHeight)
+				})
 			}
 		}, OnTap: activate, Child: woxwidget.Container{
 			Width: width, Height: settingsChoiceRowHeight, Color: background, Padding: woxwidget.Insets{Left: 16},
@@ -177,21 +251,24 @@ func settingsChoiceMenu(props SettingsChoiceProps, width, height, listHeight flo
 			Value: "No matching choices", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle,
 		}})
 	}
-	list := woxwidget.Gesture{ID: "setting-choice-list", OnScroll: func(delta woxui.Point) {
-		if props.OnScroll != nil {
-			props.OnScroll(-delta.Y)
-		}
-	}, Child: woxwidget.ScrollView{
-		Width: width, Height: listHeight, ContentHeight: max(listHeight, float32(len(rows))*settingsChoiceRowHeight), Offset: props.Scroll,
+	list := woxwidget.ScrollView{
+		Key: woxwidget.Key(props.ID + "-list"), ID: props.ID + "-list", Controller: state.scrollController,
+		Width: width, Height: listHeight, ContentHeight: max(listHeight, float32(len(rows))*settingsChoiceRowHeight),
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-	}}
+	}
 	children := make([]woxwidget.Widget, 0, 2)
 	if props.Filterable {
 		search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 			ID: "setting-choice-search", Label: "Filter choices", Hint: "Filter choices…", Width: width, Height: 40, Radius: 4,
 			Padding: woxwidget.Insets{Left: 10, Top: 9, Right: 10, Bottom: 7}, Background: props.Theme.ToolbarBackground,
-			State: props.Query, Focused: true, Autofocus: true, MaxLines: 1, Window: props.Window, Theme: props.Theme,
-			OnCaret: props.OnCaret, OnSetValue: props.OnSetQuery, OnKey: props.OnKey, OnTextInput: props.OnTextInput,
+			Controller: state.queryController, FocusNode: state.queryFocusNode, Autofocus: true, MaxLines: 1, Window: props.Window, Theme: props.Theme,
+			OnKey: func(event woxui.KeyEvent) bool { return state.handleKey(context, props, visible, event) },
+			OnChanged: func(string) {
+				context.SetState(func() {
+					state.selected = 0
+					state.scrollController.JumpTo(0)
+				})
+			},
 		})
 		children = append(children, woxwidget.Container{Width: width, Height: settingsChoiceSearchHeight, Padding: woxwidget.Insets{Bottom: 8}, Child: search})
 	}
@@ -206,7 +283,44 @@ func settingsChoiceMenu(props SettingsChoiceProps, width, height, listHeight flo
 		Child: woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Child: menuContent}, {Child: menuBorder}}},
 	}
 	if !props.Filterable {
-		surface = woxwidget.Focusable{Key: "setting-choice-menu-focus", Autofocus: true, OnKey: props.OnKey, Child: surface}
+		surface = woxwidget.Focusable{Key: "setting-choice-menu-focus", Autofocus: true, OnKey: func(event woxui.KeyEvent) bool {
+			return state.handleKey(context, props, visible, event)
+		}, Child: surface}
 	}
 	return woxwidget.FocusScope{Key: "setting-choice-scope", Modal: true, Child: surface}
+}
+
+// handleKey owns modal navigation while leaving ordinary editing keys to WoxTextField.
+func (s *settingsChoiceState) handleKey(context woxwidget.StateContext, props SettingsChoiceProps, visible []visibleSettingsChoice, event woxui.KeyEvent) bool {
+	switch event.Key {
+	case woxui.KeyEscape:
+		if props.OnCancel != nil {
+			props.OnCancel()
+		}
+		return true
+	case woxui.KeyArrowUp, woxui.KeyArrowDown:
+		if len(visible) == 0 {
+			return true
+		}
+		delta := -1
+		if event.Key == woxui.KeyArrowDown {
+			delta = 1
+		}
+		context.SetState(func() {
+			s.selected = (s.selected + delta + len(visible)) % len(visible)
+			s.scrollController.EnsureVisible(float32(s.selected)*settingsChoiceRowHeight, float32(s.selected+1)*settingsChoiceRowHeight)
+		})
+		return true
+	case woxui.KeyEnter:
+		if s.selected >= 0 && s.selected < len(visible) && props.OnChoose != nil {
+			props.OnChoose(visible[s.selected].originalIndex)
+		}
+		return true
+	case woxui.KeySpace:
+		if !props.Filterable && s.selected >= 0 && s.selected < len(visible) && props.OnChoose != nil {
+			props.OnChoose(visible[s.selected].originalIndex)
+			return true
+		}
+	}
+	return false
 }

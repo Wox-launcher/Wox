@@ -13,15 +13,35 @@ type GlanceProps struct {
 	Text    string
 	Tooltip string
 	Width   float32
-	Hovered bool
 	Icon    *woxui.Image
 	Theme   woxcomponent.Theme
 	OnTap   func()
 	OnHover func(bool, string, woxui.Rect)
 }
 
-// GlanceView builds the compact query-box glance accessory.
+type glanceViewState struct {
+	hovered bool
+}
+
+// GlanceView builds the retained compact query-box glance accessory.
 func GlanceView(props GlanceProps) woxwidget.Widget {
+	return woxwidget.Stateful{
+		Key: "query-glance-state", Type: (*glanceViewState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &glanceViewState{} },
+	}
+}
+
+// InitState starts the accessory outside its transient hover state.
+func (s *glanceViewState) InitState(_ woxwidget.StateContext, _ any) {
+	s.hovered = false
+}
+
+// DidUpdateWidget preserves hover while immutable glance content is refreshed.
+func (s *glanceViewState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
+
+// Build composes immutable glance content with locally owned hover state.
+func (s *glanceViewState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(GlanceProps)
 	children := make([]woxwidget.Widget, 0, 2)
 	textWidth := props.Width - 16
 	foreground := props.Theme.QueryText
@@ -38,7 +58,7 @@ func GlanceView(props GlanceProps) woxwidget.Widget {
 		Value: compactViewText(text, 22), Style: woxui.TextStyle{Size: 15}, Color: foreground,
 	}})
 	background := woxui.Color{}
-	if props.Hovered {
+	if s.hovered {
 		background = props.Theme.QueryText
 		background.A = uint8(float32(background.A) * 0.1)
 	}
@@ -47,6 +67,9 @@ func GlanceView(props GlanceProps) woxwidget.Widget {
 		tooltip = text
 	}
 	return woxwidget.Gesture{ID: "query-glance", OnTap: props.OnTap, OnHoverAt: func(inside bool, bounds woxui.Rect) {
+		if inside != s.hovered {
+			context.SetState(func() { s.hovered = inside })
+		}
 		if props.OnHover != nil {
 			props.OnHover(inside, tooltip, bounds)
 		}
@@ -55,6 +78,9 @@ func GlanceView(props GlanceProps) woxwidget.Widget {
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, Children: children},
 	}}
 }
+
+// Dispose releases no resources because tooltip ownership remains with the launcher.
+func (s *glanceViewState) Dispose() {}
 
 func compactViewText(value string, maxRunes int) string {
 	value = strings.Join(strings.Fields(value), " ")

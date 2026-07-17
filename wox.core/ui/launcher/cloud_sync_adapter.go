@@ -21,24 +21,21 @@ func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height fl
 		messageColor = snapshot.palette.resultSubtitle
 	}
 	return launcherview.CloudSettingsPage(launcherview.CloudSettingsPageProps{
-		Width:         width,
-		Height:        height,
-		Title:         a.translate("i18n:ui_cloud_sync"),
-		Description:   a.translate("i18n:ui_cloud_sync_description"),
-		Intro:         a.cloudIntroViewProps(snapshot),
-		Account:       a.cloudAccountViewProps(snapshot, contentWidth),
-		Sync:          a.cloudSyncViewProps(snapshot),
-		Devices:       a.cloudDevicesViewProps(snapshot),
-		Plugins:       a.cloudPluginExclusionsViewProps(snapshot),
-		ConfigNotes:   a.cloudConfigNotesViewProps(),
-		Message:       message,
-		MessageColor:  messageColor,
-		Scroll:        snapshot.cloudPageScroll,
-		ActionMenu:    a.cloudActionMenuViewProps(snapshot),
-		Theme:         theme,
-		OnScroll:      a.scrollCloudPage,
-		OnSetGeometry: a.setCloudPageGeometry,
-		OnCloseMenu:   a.closeCloudActionMenu,
+		Width:        width,
+		Height:       height,
+		Title:        a.translate("i18n:ui_cloud_sync"),
+		Description:  a.translate("i18n:ui_cloud_sync_description"),
+		Intro:        a.cloudIntroViewProps(snapshot),
+		Account:      a.cloudAccountViewProps(snapshot, contentWidth),
+		Sync:         a.cloudSyncViewProps(snapshot),
+		Devices:      a.cloudDevicesViewProps(snapshot),
+		Plugins:      a.cloudPluginExclusionsViewProps(snapshot),
+		ConfigNotes:  a.cloudConfigNotesViewProps(),
+		Message:      message,
+		MessageColor: messageColor,
+		ActionMenu:   a.cloudActionMenuViewProps(snapshot),
+		Theme:        theme,
+		OnCloseMenu:  a.closeCloudActionMenu,
 	})
 }
 
@@ -320,13 +317,10 @@ func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot) launcher
 		})
 	}
 	return launcherview.CloudPluginExclusionsProps{
-		SectionLabel:  a.translate("i18n:ui_cloud_sync_plugin_exclusions"),
-		Tips:          a.translate("i18n:ui_cloud_sync_plugin_exclusions_tips"),
-		EmptyLabel:    a.translate("i18n:ui_cloud_sync_plugin_exclusions_empty"),
-		Items:         items,
-		Scroll:        snapshot.cloudPluginScroll,
-		OnScroll:      a.scrollCloudPlugins,
-		OnSetViewport: a.setCloudPluginViewport,
+		SectionLabel: a.translate("i18n:ui_cloud_sync_plugin_exclusions"),
+		Tips:         a.translate("i18n:ui_cloud_sync_plugin_exclusions_tips"),
+		EmptyLabel:   a.translate("i18n:ui_cloud_sync_plugin_exclusions_empty"),
+		Items:        items,
 	}
 }
 
@@ -401,18 +395,27 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalet
 		if !focused {
 			state = woxui.TextEditingState{Text: snapshot.values[definition.Value.Key]}
 		}
+		var controller *woxwidget.TextEditingController
+		if index < len(snapshot.controllers) {
+			controller = snapshot.controllers[index]
+		}
+		var focusNode *woxwidget.FocusNode
+		if index < len(snapshot.focusNodes) {
+			focusNode = snapshot.focusNodes[index]
+		}
 		field := launcherview.CloudFormFieldProps{
-			ID:        fmt.Sprintf("cloud-form-field-%d", index),
-			Kind:      definition.Type,
-			Label:     a.translate(definition.Value.Label),
-			State:     state,
-			Focused:   focused,
-			Protected: definition.Type == "password",
-			Window:    window,
-			OnCaret: func(offset int) {
-				a.focusCloudFormField(index)
-				a.setCloudFormCaret(index, offset)
-			},
+			ID:            fmt.Sprintf("cloud-form-field-%d", index),
+			Kind:          definition.Type,
+			Label:         a.translate(definition.Value.Label),
+			State:         state,
+			Focused:       focused,
+			Autofocus:     focused,
+			Protected:     definition.Type == "password",
+			Window:        window,
+			Controller:    controller,
+			FocusNode:     focusNode,
+			OnChanged:     func(value string) { a.setCloudFormText(index, value) },
+			OnFocusChange: func(focused bool) { a.setCloudFormFieldFocused(index, focused) },
 		}
 		if definition.Type == "checkbox" {
 			field.Checked = snapshot.values[definition.Value.Key] == "true"

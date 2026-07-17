@@ -8,8 +8,6 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const formTableChoicePickerRowHeight = float32(48)
-
 // buildFormTableChoicePicker adapts one table select field to the shared Flutter-style anchored menu.
 func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
 	choices := make([]launcherview.SettingsChoice, len(snapshot.options))
@@ -21,10 +19,8 @@ func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot
 		choices[index] = launcherview.SettingsChoice{Value: option.Value, Label: label}
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
-		Width: width, Height: height, Anchor: snapshot.anchor, Theme: palette.componentTheme(), Window: a.formTableNativeWindow(), Title: a.translate(snapshot.title),
-		CurrentValue: snapshot.currentValue, Choices: choices, Selected: snapshot.selected, Scroll: snapshot.scroll,
-		OnKey: a.onFormTableChoicePickerKeyEvent, OnSelect: a.selectFormTableChoice, OnChoose: a.chooseFormTableChoice, OnCancel: a.closeFormTableChoicePicker,
-		OnScroll: a.scrollFormTableChoicePicker, OnSetViewport: a.setFormTableChoicePickerViewport,
+		ID: "form-table-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Theme: palette.componentTheme(), Window: a.formTableNativeWindow(), Title: a.translate(snapshot.title),
+		CurrentValue: snapshot.currentValue, Choices: choices, OnChoose: a.chooseFormTableChoice, OnCancel: a.closeFormTableChoicePicker,
 	})
 }
 
@@ -59,17 +55,8 @@ func (a *App) openFormTableRowChoice(index int, anchor woxui.Rect) {
 	}
 	syncFormFieldsEditorLocked(state.rowForm)
 	setFormFieldsFocusLocked(state.rowForm, index)
-	selected := 0
-	currentValue := state.rowForm.values[definition.Value.Key]
-	for optionIndex, option := range definition.Value.Options {
-		if option.Value == currentValue {
-			selected = optionIndex
-			break
-		}
-	}
-	scroll := max(float32(0), float32(selected-4)*formTableChoicePickerRowHeight)
 	state.appPicker = nil
-	state.choicePicker = &formTableChoicePickerState{fieldIndex: index, anchor: anchor, selected: selected, scroll: scroll}
+	state.choicePicker = &formTableChoicePickerState{fieldIndex: index, anchor: anchor}
 	state.status = ""
 	a.mu.Unlock()
 	a.updateFormTableTextInput(false)
@@ -119,114 +106,4 @@ func (a *App) chooseFormTableChoice(index int) {
 	a.mu.Unlock()
 	a.updateFormTableTextInput(false)
 	a.invalidateFormTableWindow()
-}
-
-// selectFormTableChoice follows pointer hover without committing the highlighted option.
-func (a *App) selectFormTableChoice(index int) {
-	a.mu.Lock()
-	if state := a.tableEditor; state != nil && state.choicePicker != nil && state.rowForm != nil {
-		fieldIndex := state.choicePicker.fieldIndex
-		if fieldIndex >= 0 && fieldIndex < len(state.rowForm.definitions) && index >= 0 && index < len(state.rowForm.definitions[fieldIndex].Value.Options) {
-			state.choicePicker.selected = index
-			a.ensureFormTableChoiceVisibleLocked()
-		}
-	}
-	a.mu.Unlock()
-	a.invalidateFormTableWindow()
-}
-
-// moveFormTableChoice changes the keyboard highlight and keeps it visible.
-func (a *App) moveFormTableChoice(delta int) {
-	a.mu.Lock()
-	state := a.tableEditor
-	if state != nil && state.choicePicker != nil && state.rowForm != nil {
-		fieldIndex := state.choicePicker.fieldIndex
-		if fieldIndex >= 0 && fieldIndex < len(state.rowForm.definitions) {
-			count := len(state.rowForm.definitions[fieldIndex].Value.Options)
-			if count > 0 {
-				state.choicePicker.selected = (state.choicePicker.selected + delta + count) % count
-				a.ensureFormTableChoiceVisibleLocked()
-			}
-		}
-	}
-	a.mu.Unlock()
-	a.invalidateFormTableWindow()
-}
-
-// setFormTableChoicePickerViewport records the visible list height for scroll clamping.
-func (a *App) setFormTableChoicePickerViewport(height float32) {
-	a.mu.Lock()
-	if state := a.tableEditor; state != nil && state.choicePicker != nil {
-		state.choicePicker.viewport = max(float32(1), height)
-		a.ensureFormTableChoiceVisibleLocked()
-	}
-	a.mu.Unlock()
-}
-
-// scrollFormTableChoicePicker applies pointer scrolling within the option list.
-func (a *App) scrollFormTableChoicePicker(delta float32) {
-	a.mu.Lock()
-	state := a.tableEditor
-	if state != nil && state.choicePicker != nil && state.rowForm != nil {
-		fieldIndex := state.choicePicker.fieldIndex
-		if fieldIndex >= 0 && fieldIndex < len(state.rowForm.definitions) {
-			count := len(state.rowForm.definitions[fieldIndex].Value.Options)
-			maximum := max(float32(0), float32(count)*formTableChoicePickerRowHeight-state.choicePicker.viewport)
-			state.choicePicker.scroll = min(max(float32(0), state.choicePicker.scroll+delta), maximum)
-		}
-	}
-	a.mu.Unlock()
-	a.invalidateFormTableWindow()
-}
-
-// ensureFormTableChoiceVisibleLocked keeps the highlighted option within the current viewport.
-func (a *App) ensureFormTableChoiceVisibleLocked() {
-	state := a.tableEditor
-	if state == nil || state.choicePicker == nil || state.rowForm == nil || state.choicePicker.selected < 0 {
-		return
-	}
-	picker := state.choicePicker
-	fieldIndex := picker.fieldIndex
-	if fieldIndex < 0 || fieldIndex >= len(state.rowForm.definitions) {
-		return
-	}
-	viewport := max(float32(1), picker.viewport)
-	top := float32(picker.selected) * formTableChoicePickerRowHeight
-	bottom := top + formTableChoicePickerRowHeight
-	if top < picker.scroll {
-		picker.scroll = top
-	} else if bottom > picker.scroll+viewport {
-		picker.scroll = bottom - viewport
-	}
-	count := len(state.rowForm.definitions[fieldIndex].Value.Options)
-	maximum := max(float32(0), float32(count)*formTableChoicePickerRowHeight-viewport)
-	picker.scroll = min(max(float32(0), picker.scroll), maximum)
-}
-
-// onFormTableChoicePickerKey handles modal dropdown navigation before the row editor.
-func (a *App) onFormTableChoicePickerKey(event woxui.KeyEvent, selected int) {
-	switch event.Key {
-	case woxui.KeyEscape:
-		a.closeFormTableChoicePicker()
-	case woxui.KeyArrowUp:
-		a.moveFormTableChoice(-1)
-	case woxui.KeyArrowDown:
-		a.moveFormTableChoice(1)
-	case woxui.KeyEnter, woxui.KeySpace:
-		if selected >= 0 {
-			a.chooseFormTableChoice(selected)
-		}
-	}
-}
-
-// onFormTableChoicePickerKeyEvent adapts the focused menu callback to controller state.
-func (a *App) onFormTableChoicePickerKeyEvent(event woxui.KeyEvent) bool {
-	a.mu.RLock()
-	selected := -1
-	if a.tableEditor != nil && a.tableEditor.choicePicker != nil {
-		selected = a.tableEditor.choicePicker.selected
-	}
-	a.mu.RUnlock()
-	a.onFormTableChoicePickerKey(event, selected)
-	return true
 }

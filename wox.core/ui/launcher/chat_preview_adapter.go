@@ -398,7 +398,8 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 		Width: width, Height: height, Key: snapshot.key, Editing: snapshot.editing,
 		Focused: snapshot.active && snapshot.question == nil && snapshot.panel == "", Hint: hint, Window: a.window,
 		Model: model, ModelWidth: modelWidth, Status: status, StatusColor: statusColor, Sending: streaming, Theme: palette.componentTheme(),
-		OnCaret: a.setChatCaret, OnModels: func() { a.toggleChatPanel("models") }, OnSend: action,
+		OnFocus: a.focusChatInput, OnChanged: a.setChatText, OnKey: a.onChatPreviewKey,
+		OnModels: func() { a.toggleChatPanel("models") }, OnSend: action,
 	}
 }
 
@@ -448,7 +449,7 @@ func (a *App) chatQuestionProps(snapshot *chatPreviewSnapshot, palette uiPalette
 	if inputHeight > 0 {
 		props.Input = &previewview.ChatQuestionInputProps{
 			ID: "chat-question-input-" + question.QuestionID, Height: inputHeight, Editing: snapshot.questionEditing,
-			Focused: snapshot.active, Window: a.window, OnCaret: a.setAIQuestionCaret,
+			Focused: snapshot.active, Window: a.window, OnFocus: a.focusAIQuestionInput, OnChanged: a.setAIQuestionText, OnKey: a.onChatPreviewKey,
 		}
 	}
 	return props

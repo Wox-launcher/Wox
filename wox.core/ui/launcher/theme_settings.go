@@ -14,8 +14,6 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const themeSettingsListRowHeight = launcherview.ThemeListRowHeight
-
 type themeSettingsTheme struct {
 	ID            string `json:"ThemeId"`
 	Name          string `json:"ThemeName"`
@@ -53,7 +51,7 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height float32
 	}
 	props := launcherview.ThemeSettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Mode: snapshot.themesMode,
-		Error: snapshot.themesError, Scroll: snapshot.themeListScroll, Operation: snapshot.themeOperation, UninstallArmed: snapshot.themeUninstallArmed, Items: items, Detail: detail,
+		Error: snapshot.themesError, Operation: snapshot.themeOperation, UninstallArmed: snapshot.themeUninstallArmed, Items: items, Detail: detail,
 		Search: snapshot.themeSearch, SearchFocused: snapshot.themeSearchFocused, SearchPlaceholder: fmt.Sprintf(a.translate("i18n:ui_setting_theme_search_placeholder"), len(items)),
 		EmptyLabel: a.translate("i18n:ui_setting_theme_empty_data"), WebsiteLabel: a.translate("i18n:ui_setting_theme_website"), InstallLabel: a.translate("i18n:ui_setting_theme_install"),
 		ApplyLabel: a.translate("i18n:ui_setting_theme_apply"), UninstallLabel: a.translate("i18n:ui_setting_theme_uninstall"), UpdateLabel: a.translate("i18n:ui_update"),
@@ -63,9 +61,10 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height float32
 		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, 20), LocateIcon: a.imageForTint(settingControlIconSource("locate"), &iconTint, 18),
 		ExternalIcon: a.imageForTint(settingControlIconSource("external"), &iconTint, 13), InstalledIcon: a.imageForTint(settingControlIconSource("check-circle"), &installedTint, 20),
 		InstalledSelectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &selectedIconTint, 20),
-		OnSelect:              a.selectTheme, OnScroll: a.scrollThemeList, OnSetViewport: a.setThemeListViewport,
-		OnSearchCaret: a.focusThemeSearch, OnSearchKey: a.onThemeSearchKey, OnSearchTextInput: a.onThemeSearchTextInput, OnSearchFocusChange: a.setThemeSearchFocused,
-		OnSetSearchValue: a.setThemeSearchValue, OnLocateCurrent: a.locateCurrentTheme, OnSelectDetailTab: a.selectThemeDetailTab,
+		OnSelect:              a.selectTheme,
+		OnSearchKey:           a.onThemeSearchKey, OnSearchFocusChange: a.setThemeSearchFocused,
+		OnSearchChanged: func(value string) { _ = a.setThemeSearchValue(value) }, OnSetSearchValue: a.setThemeSearchValue,
+		OnLocateCurrent: a.locateCurrentTheme, OnSelectDetailTab: a.selectThemeDetailTab,
 		OnOpenWebsite: a.openSelectedThemeWebsite, OnOperation: a.runThemeOperation,
 	}
 	if snapshot.themesLoading && len(snapshot.themes) == 0 {
@@ -170,7 +169,6 @@ func (a *App) reloadThemes(mode, preferredID string) error {
 	} else {
 		a.themeSelected = selected
 	}
-	a.ensureThemeSelectionVisibleLocked()
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 	return nil
@@ -223,12 +221,10 @@ func (a *App) switchThemeSettingsMode(mode string) {
 		a.themesLoaded = false
 		a.themesLoading = true
 		a.themeSelected = -1
-		a.themeListScroll = 0
 		a.themeSearchEditor = woxui.NewTextEditor("")
 		a.themeSearchFocused = false
 		a.themeDetailTab = "preview"
 	}
-	a.ensureSettingTabVisibleLocked("theme")
 	loadEditor := mode == "editor" && (a.themeEditor == nil || !strings.HasPrefix(a.themeEditor.key, "settings-theme|"))
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
@@ -393,58 +389,8 @@ func (a *App) selectTheme(index int) {
 	a.themeSelected = index
 	a.themeUninstallArmed = ""
 	a.themesError = ""
-	a.ensureThemeSelectionVisibleLocked()
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
-}
-
-func (a *App) setThemeListViewport(height float32) {
-	a.mu.Lock()
-	a.themeListViewport = max(float32(1), height)
-	a.clampThemeListScrollLocked()
-	a.mu.Unlock()
-}
-
-func (a *App) scrollThemeList(delta float32) {
-	a.mu.Lock()
-	a.themeListScroll += delta
-	a.clampThemeListScrollLocked()
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) clampThemeListScrollLocked() {
-	filtered := filterThemes(a.themes, a.themeSearchQueryLocked())
-	maxOffset := max(float32(0), float32(len(filtered))*themeSettingsListRowHeight-max(float32(1), a.themeListViewport))
-	a.themeListScroll = min(max(float32(0), a.themeListScroll), maxOffset)
-}
-
-// ensureThemeSelectionVisibleLocked follows keyboard selection without taking ownership from manual scrolling.
-func (a *App) ensureThemeSelectionVisibleLocked() {
-	viewport := a.themeListViewport
-	if viewport <= 1 {
-		viewport = 600
-	}
-	filtered := filterThemes(a.themes, a.themeSearchQueryLocked())
-	position := -1
-	for index, entry := range filtered {
-		if entry.index == a.themeSelected {
-			position = index
-			break
-		}
-	}
-	if position < 0 {
-		a.clampThemeListScrollLocked()
-		return
-	}
-	rowTop := float32(position) * themeSettingsListRowHeight
-	rowBottom := rowTop + themeSettingsListRowHeight
-	if rowTop < a.themeListScroll {
-		a.themeListScroll = rowTop
-	} else if rowBottom > a.themeListScroll+viewport {
-		a.themeListScroll = rowBottom - viewport
-	}
-	a.clampThemeListScrollLocked()
 }
 
 func (a *App) themeSearchQueryLocked() string {
@@ -452,22 +398,6 @@ func (a *App) themeSearchQueryLocked() string {
 		return ""
 	}
 	return a.themeSearchEditor.State().Text
-}
-
-func (a *App) focusThemeSearch(caret int) {
-	a.mu.Lock()
-	if a.themeSearchEditor == nil {
-		a.themeSearchEditor = woxui.NewTextEditor("")
-	}
-	if caret >= 0 {
-		a.themeSearchEditor.SetCaret(caret)
-	}
-	a.themeSearchFocused = true
-	a.settingSearchFocused = false
-	a.settingSearchPanel = false
-	a.pluginSearchFocused = false
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
 }
 
 func (a *App) setThemeSearchFocused(focused bool) {
@@ -492,48 +422,29 @@ func (a *App) setThemeSearchValue(value string) error {
 	} else {
 		a.themeSearchEditor.SetText(value, false)
 	}
-	a.themeListScroll = 0
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 	return nil
 }
 
 func (a *App) onThemeSearchKey(event woxui.KeyEvent) bool {
-	a.mu.Lock()
+	a.mu.RLock()
 	if !a.settingsOpen || a.settingTab != "theme" || a.themesMode == "editor" || !a.themeSearchFocused || a.themeSearchEditor == nil {
-		a.mu.Unlock()
+		a.mu.RUnlock()
 		return false
 	}
+	a.mu.RUnlock()
 	if event.Key == woxui.KeyEnter {
-		a.mu.Unlock()
 		return true
 	}
-	handled, changed := a.themeSearchEditor.HandleKey(event)
-	if changed {
-		a.themeListScroll = 0
-	}
-	a.mu.Unlock()
-	if handled || changed {
-		a.invalidateSettingsWindow()
-	}
-	return handled
+	return false
 }
 
-func (a *App) onThemeSearchTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
-	if !a.settingsOpen || a.settingTab != "theme" || a.themesMode == "editor" || !a.themeSearchFocused || a.themeSearchEditor == nil {
-		a.mu.Unlock()
-		return false
-	}
-	changed := a.themeSearchEditor.HandleTextInput(event)
-	if changed {
-		a.themeListScroll = 0
-	}
-	a.mu.Unlock()
-	if changed {
-		a.invalidateSettingsWindow()
-	}
-	return true
+func (a *App) onThemeSearchTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
+	active := a.settingsOpen && a.settingTab == "theme" && a.themesMode != "editor" && a.themeSearchFocused && a.themeSearchEditor != nil
+	a.mu.RUnlock()
+	return active
 }
 
 func (a *App) locateCurrentTheme() {
@@ -550,8 +461,6 @@ func (a *App) locateCurrentTheme() {
 	for index, theme := range a.themes {
 		if theme.ID == a.settings.ThemeID {
 			a.themeSelected = index
-			a.themeListScroll = 0
-			a.ensureThemeSelectionVisibleLocked()
 			break
 		}
 	}

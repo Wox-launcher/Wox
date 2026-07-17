@@ -8,16 +8,14 @@ import (
 
 // HotkeySettingsProps contains prepared form rows for the hotkey settings page.
 type HotkeySettingsProps struct {
-	Width         float32
-	Height        float32
-	Theme         woxcomponent.Theme
-	Available     bool
-	Rows          []woxwidget.Widget
-	RowsHeight    float32
-	Scroll        float32
-	Note          string
-	OnScroll      func(float32)
-	OnSetViewport func(float32)
+	Width       float32
+	Height      float32
+	Theme       woxcomponent.Theme
+	Available   bool
+	Rows        []woxwidget.Widget
+	RowsHeight  float32
+	KeepVisible *woxwidget.ScrollRange
+	Note        string
 }
 
 // HotkeySettingsView builds the hotkey settings page.
@@ -31,17 +29,11 @@ func HotkeySettingsView(props HotkeySettingsProps) woxwidget.Widget {
 	headerHeight := float32(74)
 	noteHeight := float32(34)
 	bodyHeight := max(float32(80), props.Height-60-headerHeight-noteHeight)
-	if props.OnSetViewport != nil {
-		props.OnSetViewport(bodyHeight)
-	}
-	body := woxwidget.Gesture{ID: "hotkey-settings-scroll", OnScroll: func(delta woxui.Point) {
-		if props.OnScroll != nil {
-			props.OnScroll(-delta.Y)
-		}
-	}, Child: woxwidget.ScrollView{
-		Width: innerWidth, Height: bodyHeight, ContentHeight: max(bodyHeight, props.RowsHeight), Offset: props.Scroll,
+	body := woxwidget.ScrollView{
+		Key: "hotkey-settings-scroll", ID: "hotkey-settings-scroll", Width: innerWidth, Height: bodyHeight,
+		ContentHeight: max(bodyHeight, props.RowsHeight), KeepVisible: props.KeepVisible,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
-	}}
+	}
 	note := props.Note
 	if note == "" {
 		note = "Core records raw hotkeys; this page only owns focus and persisted values."

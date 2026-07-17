@@ -10,6 +10,7 @@ import (
 	"time"
 
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 type cloudAccountStatus struct {
@@ -103,6 +104,8 @@ type cloudFormState struct {
 	saving        bool
 	email         string
 	hasRemoteData bool
+	controllers   []*woxwidget.TextEditingController
+	focusNodes    []*woxwidget.FocusNode
 }
 
 type cloudFormSnapshot struct {
@@ -114,6 +117,8 @@ type cloudFormSnapshot struct {
 	saving        bool
 	email         string
 	hasRemoteData bool
+	controllers   []*woxwidget.TextEditingController
+	focusNodes    []*woxwidget.FocusNode
 }
 
 type cloudAccountResult struct {
@@ -143,7 +148,23 @@ func snapshotCloudFormLocked(state *cloudFormState) *cloudFormSnapshot {
 	return &cloudFormSnapshot{
 		formFieldsSnapshot: fields,
 		kind:               state.kind, title: state.title, error: state.error, notice: state.notice, saving: state.saving, email: state.email, hasRemoteData: state.hasRemoteData,
+		controllers: append([]*woxwidget.TextEditingController(nil), state.controllers...),
+		focusNodes:  append([]*woxwidget.FocusNode(nil), state.focusNodes...),
 	}
+}
+
+// newCloudFormState gives every credential field stable editor and focus identities across settings rebuilds.
+func newCloudFormState(fields formFieldsState, kind, title string) *cloudFormState {
+	fields.editor = nil
+	controllers := make([]*woxwidget.TextEditingController, len(fields.definitions))
+	focusNodes := make([]*woxwidget.FocusNode, len(fields.definitions))
+	for index, definition := range fields.definitions {
+		focusNodes[index] = woxwidget.NewFocusNode()
+		if formDefinitionTextEditable(definition) {
+			controllers[index] = woxwidget.NewTextEditingController(fields.values[definition.Value.Key])
+		}
+	}
+	return &cloudFormState{formFieldsState: fields, kind: kind, title: title, controllers: controllers, focusNodes: focusNodes}
 }
 
 // reloadCloudSync refreshes account, sync, and device state as one revisioned settings snapshot.
@@ -219,7 +240,6 @@ func (a *App) reloadCloudSync() {
 	}
 	if account.LoggedIn && pluginsErr == nil {
 		a.cloudPlugins = plugins
-		a.clampCloudPluginScrollLocked()
 	}
 	a.cloudLoaded = accountErr == nil && statusErr == nil
 	a.cloudError = strings.Join(errors, " · ")
@@ -424,7 +444,9 @@ func newCloudBootstrapForm(status cloudBootstrapStatus) *cloudFormState {
 		title = "Restore Cloud Sync"
 	}
 	fields := newFormFieldsState(definitions, nil, true)
-	return &cloudFormState{formFieldsState: fields, kind: "bootstrap", title: title, hasRemoteData: status.HasRemoteData}
+	state := newCloudFormState(fields, "bootstrap", title)
+	state.hasRemoteData = status.HasRemoteData
+	return state
 }
 
 func (a *App) runCloudBootstrap(recoveryCode string) {
@@ -492,7 +514,7 @@ func (a *App) openCloudAccountForm(kind string) {
 	a.mu.Lock()
 	values := map[string]string{"Email": a.cloudAccount.Email}
 	fields := newFormFieldsState(definitions, values, true)
-	a.cloudForm = &cloudFormState{formFieldsState: fields, kind: kind, title: title}
+	a.cloudForm = newCloudFormState(fields, kind, title)
 	a.mu.Unlock()
 	a.updateSettingsTextInput(true)
 	a.invalidateSettingsWindow()
@@ -502,7 +524,8 @@ func (a *App) openCloudVerificationForm(email string) {
 	definitions := []formDefinition{{Type: "textbox", Value: formDefinitionValue{Key: "Code", Label: "Verification code", MaxLines: 1}}}
 	fields := newFormFieldsState(definitions, nil, true)
 	a.mu.Lock()
-	a.cloudForm = &cloudFormState{formFieldsState: fields, kind: "verify", title: "Verify email", email: email}
+	a.cloudForm = newCloudFormState(fields, "verify", "Verify email")
+	a.cloudForm.email = email
 	a.mu.Unlock()
 	a.updateSettingsTextInput(true)
 	a.invalidateSettingsWindow()
@@ -552,30 +575,44 @@ func (a *App) closeCloudForm() {
 }
 
 func (a *App) focusCloudFormField(index int) {
+	var focusNode *woxwidget.FocusNode
 	a.mu.Lock()
 	if a.cloudForm != nil && !a.cloudForm.saving {
-		syncFormFieldsEditorLocked(&a.cloudForm.formFieldsState)
-		setFormFieldsFocusLocked(&a.cloudForm.formFieldsState, index)
+		setCloudFormFocusLocked(a.cloudForm, index)
+		if index >= 0 && index < len(a.cloudForm.focusNodes) {
+			focusNode = a.cloudForm.focusNodes[index]
+		}
 	}
-	active := a.cloudForm != nil && a.cloudForm.editor != nil
 	a.mu.Unlock()
-	a.updateSettingsTextInput(active)
+	if focusNode != nil {
+		focusNode.RequestFocus()
+	}
 	a.invalidateSettingsWindow()
 }
 
-func (a *App) setCloudFormCaret(index, offset int) {
+// setCloudFormText keeps business form values synchronized with retained field controllers.
+func (a *App) setCloudFormText(index int, value string) {
 	a.mu.Lock()
-	if a.cloudForm != nil && !a.cloudForm.saving {
-		if a.cloudForm.focused != index {
-			syncFormFieldsEditorLocked(&a.cloudForm.formFieldsState)
-			setFormFieldsFocusLocked(&a.cloudForm.formFieldsState, index)
-		}
-		if a.cloudForm.editor != nil {
-			a.cloudForm.editor.SetCaret(offset)
+	if a.cloudForm != nil && !a.cloudForm.saving && index >= 0 && index < len(a.cloudForm.definitions) {
+		definition := a.cloudForm.definitions[index]
+		if formDefinitionTextEditable(definition) {
+			a.cloudForm.values[definition.Value.Key] = value
 		}
 	}
 	a.mu.Unlock()
-	a.updateSettingsTextInput(true)
+	a.invalidateSettingsWindow()
+}
+
+// setCloudFormFieldFocused mirrors Host focus into form navigation and scroll state.
+func (a *App) setCloudFormFieldFocused(index int, focused bool) {
+	if !focused {
+		return
+	}
+	a.mu.Lock()
+	if a.cloudForm != nil && !a.cloudForm.saving && index >= 0 && index < len(a.cloudForm.definitions) {
+		setCloudFormFocusLocked(a.cloudForm, index)
+	}
+	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
@@ -589,23 +626,27 @@ func (a *App) changeCloudFormField(index, delta int) {
 }
 
 func (a *App) moveCloudFormFocus(delta int) {
+	var focusNode *woxwidget.FocusNode
 	a.mu.Lock()
 	if a.cloudForm == nil || len(a.cloudForm.definitions) == 0 || a.cloudForm.saving {
 		a.mu.Unlock()
 		return
 	}
-	syncFormFieldsEditorLocked(&a.cloudForm.formFieldsState)
 	index := a.cloudForm.focused
 	for step := 0; step < len(a.cloudForm.definitions); step++ {
 		index = (index + delta + len(a.cloudForm.definitions)) % len(a.cloudForm.definitions)
 		if formDefinitionFocusable(a.cloudForm.definitions[index]) {
-			setFormFieldsFocusLocked(&a.cloudForm.formFieldsState, index)
+			setCloudFormFocusLocked(a.cloudForm, index)
+			if index < len(a.cloudForm.focusNodes) {
+				focusNode = a.cloudForm.focusNodes[index]
+			}
 			break
 		}
 	}
-	active := a.cloudForm.editor != nil
 	a.mu.Unlock()
-	a.updateSettingsTextInput(active)
+	if focusNode != nil {
+		focusNode.RequestFocus()
+	}
 	a.invalidateSettingsWindow()
 }
 
@@ -639,7 +680,7 @@ func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
 		a.moveCloudFormFocus(delta)
 	case woxui.KeyEnter:
 		a.submitCloudForm()
-	case woxui.KeySpace, woxui.KeyArrowLeft, woxui.KeyArrowRight:
+	case woxui.KeySpace:
 		a.mu.RLock()
 		focused := -1
 		fieldType := ""
@@ -653,35 +694,22 @@ func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
 		if fieldType == "checkbox" {
 			a.changeCloudFormField(focused, 1)
 		} else {
-			a.mu.Lock()
-			if a.cloudForm != nil && a.cloudForm.editor != nil && focused >= 0 && focused < len(a.cloudForm.definitions) {
-				handleFormEditorKey(a.cloudForm.editor, a.cloudForm.definitions[focused], event)
-			}
-			a.mu.Unlock()
-			a.invalidateSettingsWindow()
+			return false
 		}
+	case woxui.KeyArrowLeft, woxui.KeyArrowRight:
+		return false
 	default:
-		a.mu.Lock()
-		if a.cloudForm != nil && a.cloudForm.editor != nil && a.cloudForm.focused >= 0 && a.cloudForm.focused < len(a.cloudForm.definitions) {
-			handleFormEditorKey(a.cloudForm.editor, a.cloudForm.definitions[a.cloudForm.focused], event)
-		}
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
+		return false
 	}
 	return true
 }
 
-// onCloudFormTextInput commits native IME input only while a cloud modal owns focus.
-func (a *App) onCloudFormTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
-	if !a.settingsOpen || a.cloudForm == nil || a.cloudForm.saving || a.cloudForm.editor == nil {
-		a.mu.Unlock()
-		return false
-	}
-	a.cloudForm.editor.HandleTextInput(event)
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-	return true
+// onCloudFormTextInput blocks fallback routing while retained text fields own cloud modal input.
+func (a *App) onCloudFormTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
+	active := a.settingsOpen && a.cloudForm != nil
+	a.mu.RUnlock()
+	return active
 }
 
 // submitCloudForm validates local invariants before sending credentials or recovery data to core.
@@ -691,7 +719,7 @@ func (a *App) submitCloudForm() {
 		a.mu.Unlock()
 		return
 	}
-	syncFormFieldsEditorLocked(&a.cloudForm.formFieldsState)
+	syncCloudFormControllersLocked(a.cloudForm)
 	kind := a.cloudForm.kind
 	values := make(map[string]string, len(a.cloudForm.values))
 	for key, value := range a.cloudForm.values {
@@ -717,6 +745,32 @@ func (a *App) submitCloudForm() {
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 	go a.submitCloudFormRequest(kind, values, email)
+}
+
+// syncCloudFormControllersLocked captures authoritative retained text before validation and submission.
+func syncCloudFormControllersLocked(state *cloudFormState) {
+	if state == nil {
+		return
+	}
+	for index, controller := range state.controllers {
+		if controller == nil || index >= len(state.definitions) {
+			continue
+		}
+		definition := state.definitions[index]
+		if formDefinitionTextEditable(definition) {
+			state.values[definition.Value.Key] = controller.Text()
+		}
+	}
+}
+
+// setCloudFormFocusLocked updates navigation metadata without recreating a second text editor.
+func setCloudFormFocusLocked(state *cloudFormState, index int) {
+	if state == nil || index < 0 || index >= len(state.definitions) {
+		return
+	}
+	state.focused = index
+	state.active = true
+	state.editor = nil
 }
 
 func validateCloudForm(kind string, values map[string]string, hasRemoteData bool) string {
@@ -861,27 +915,6 @@ func (a *App) submitCloudFormRequest(kind string, values map[string]string, emai
 	}
 }
 
-func (a *App) setCloudPageGeometry(viewport, content float32) {
-	a.mu.Lock()
-	a.cloudPageViewport = max(float32(1), viewport)
-	a.cloudPageContent = max(content, viewport)
-	a.clampCloudPageScrollLocked()
-	a.mu.Unlock()
-}
-
-func (a *App) scrollCloudPage(delta float32) {
-	a.mu.Lock()
-	a.cloudPageScroll += delta
-	a.clampCloudPageScrollLocked()
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) clampCloudPageScrollLocked() {
-	maximum := max(float32(0), a.cloudPageContent-a.cloudPageViewport)
-	a.cloudPageScroll = min(max(float32(0), a.cloudPageScroll), maximum)
-}
-
 // toggleCloudPluginExclusion persists the exact plugin ID list expected by Wox core.
 func (a *App) toggleCloudPluginExclusion(pluginID string) {
 	pluginID = strings.TrimSpace(pluginID)
@@ -937,27 +970,6 @@ func (a *App) toggleCloudPluginExclusion(pluginID string) {
 		a.mu.Unlock()
 		a.invalidateSettingsWindow()
 	}()
-}
-
-func (a *App) setCloudPluginViewport(height float32) {
-	a.mu.Lock()
-	a.cloudPluginViewport = max(float32(1), height)
-	a.clampCloudPluginScrollLocked()
-	a.mu.Unlock()
-}
-
-func (a *App) scrollCloudPlugins(delta float32) {
-	a.mu.Lock()
-	a.cloudPluginScroll += delta
-	a.clampCloudPluginScrollLocked()
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) clampCloudPluginScrollLocked() {
-	rowCount := len(cloudPluginExclusionRows(a.cloudPlugins, a.settings.CloudSyncDisabledPlugins))
-	maximum := max(float32(0), float32(rowCount)*46-a.cloudPluginViewport)
-	a.cloudPluginScroll = min(max(float32(0), a.cloudPluginScroll), maximum)
 }
 
 func cloudPluginExclusionRows(plugins []pluginSettingsPlugin, excluded []string) []pluginSettingsPlugin {

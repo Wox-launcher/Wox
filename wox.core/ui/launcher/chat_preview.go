@@ -1335,13 +1335,13 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 				a.moveAIQuestionSelection(delta)
 			case woxui.KeyEnter:
 				if freeTextSelected && event.Modifiers&woxui.KeyModifierShift != 0 {
-					a.editAIQuestionKey(event)
+					return false
 				} else {
 					a.submitSelectedAIQuestionAnswer()
 				}
 			default:
 				if freeTextSelected {
-					a.editAIQuestionKey(event)
+					return false
 				}
 			}
 			return true
@@ -1350,8 +1350,7 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 			a.submitSelectedAIQuestionAnswer()
 			return true
 		}
-		a.editAIQuestionKey(event)
-		return true
+		return false
 	}
 	if event.Key == woxui.KeyEscape {
 		a.exitChatMode()
@@ -1369,44 +1368,18 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 		a.scrollChatPreview(delta, float32(math.MaxFloat32))
 		return true
 	}
-	a.editChatKey(event)
-	return true
+	return false
 }
 
 // onChatPreviewTextInput routes committed and composing text to the currently visible chat editor.
-func (a *App) onChatPreviewTextInput(event woxui.TextInputEvent) bool {
-	openSkills := false
-	a.mu.Lock()
+func (a *App) onChatPreviewTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
 	state := a.chatPreview
 	if state == nil || !state.active {
-		a.mu.Unlock()
+		a.mu.RUnlock()
 		return false
 	}
-	if state.panel != "" {
-		a.mu.Unlock()
-		return true
-	}
-	editor := state.editor
-	if state.question != nil {
-		if len(state.question.Options) > 0 && state.questionSelected != len(state.question.Options)-1 {
-			a.mu.Unlock()
-			return true
-		}
-		editor = state.questionEditor
-	}
-	if editor != nil && editor.HandleTextInput(event) {
-		state.error = ""
-		if editor == state.editor && editor.State().Text == "/" && editor.State().Composition == "" {
-			editor.SetText("", false)
-			openSkills = true
-		}
-	}
-	a.mu.Unlock()
-	if openSkills {
-		a.toggleChatPanel("skills")
-		return true
-	}
-	_ = a.window.Invalidate()
+	a.mu.RUnlock()
 	return true
 }
 
@@ -1455,25 +1428,42 @@ func (a *App) focusChatInput() {
 	_ = a.window.Invalidate()
 }
 
-func (a *App) setChatCaret(offset int) {
+func (a *App) focusAIQuestionInput() {
 	a.mu.Lock()
-	if state := a.chatPreview; state != nil && state.editor != nil {
+	if state := a.chatPreview; state != nil && state.question != nil {
 		state.active = true
-		state.editor.SetCaret(offset)
 	}
 	a.mu.Unlock()
 	a.updateChatTextInput(true)
 	_ = a.window.Invalidate()
 }
 
-func (a *App) setAIQuestionCaret(offset int) {
+func (a *App) setChatText(value string) {
+	openSkills := false
 	a.mu.Lock()
-	if state := a.chatPreview; state != nil && state.question != nil && state.questionEditor != nil {
-		state.active = true
-		state.questionEditor.SetCaret(offset)
+	if state := a.chatPreview; state != nil && state.editor != nil && state.question == nil {
+		state.editor.SetText(value, false)
+		state.error = ""
+		if value == "/" {
+			state.editor.SetText("", false)
+			openSkills = true
+		}
 	}
 	a.mu.Unlock()
-	a.updateChatTextInput(true)
+	if openSkills {
+		a.toggleChatPanel("skills")
+		return
+	}
+	_ = a.window.Invalidate()
+}
+
+func (a *App) setAIQuestionText(value string) {
+	a.mu.Lock()
+	if state := a.chatPreview; state != nil && state.question != nil && state.questionEditor != nil {
+		state.questionEditor.SetText(value, false)
+		state.error = ""
+	}
+	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 

@@ -21,7 +21,7 @@ type SearchFieldProps struct {
 	ID            string
 	Label         string
 	Width         float32
-	State         woxui.TextEditingState
+	Value         string
 	Focused       bool
 	Autofocus     bool
 	SearchIcon    *woxui.Image
@@ -30,10 +30,9 @@ type SearchFieldProps struct {
 	Theme         Theme
 	OnFocus       func()
 	OnClear       func()
-	OnCaret       func(int)
 	OnKey         func(woxui.KeyEvent) bool
-	OnTextInput   func(woxui.TextInputEvent) bool
 	OnFocusChange func(bool)
+	OnChanged     func(string)
 	OnSetValue    func(string) error
 }
 
@@ -45,7 +44,7 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		leadingWidth = 36
 	}
 	clearWidth := float32(0)
-	if props.State.Text != "" && props.OnClear != nil {
+	if props.Value != "" && props.OnClear != nil {
 		clearWidth = 34
 	}
 	actionsWidth := float32(0)
@@ -65,8 +64,8 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		ID: props.ID, Label: props.Label, Hint: props.Label, Width: inputWidth, Height: height,
 		Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: 6, Bottom: 11}, Transparent: true,
 		Style: woxui.TextStyle{Size: 13}, TextColor: props.Theme.ResultTitle, TextAlignmentY: 0.5,
-		State: props.State, Focused: props.Focused, Autofocus: props.Autofocus, MaxLines: 1, Window: props.Window, Theme: props.Theme,
-		OnCaret: props.OnCaret, OnKey: props.OnKey, OnTextInput: props.OnTextInput, OnFocusChange: props.OnFocusChange, OnSetValue: props.OnSetValue,
+		Value: props.Value, Focused: props.Focused, Autofocus: props.Autofocus, MaxLines: 1, Window: props.Window, Theme: props.Theme,
+		OnKey: props.OnKey, OnFocusChange: props.OnFocusChange, OnChanged: props.OnChanged, OnSetValue: props.OnSetValue,
 	})
 	children := make([]woxwidget.Widget, 0, len(props.Actions)+3)
 	if props.SearchIcon != nil {

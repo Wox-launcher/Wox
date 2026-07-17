@@ -9,8 +9,6 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const formTableAppPickerRowHeight = float32(58)
-
 // buildFormTableAppPicker resolves controller-owned image resources before delegating to the pure view.
 func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
 	candidates := make([]launcherview.FormAppCandidate, len(snapshot.candidates))
@@ -24,8 +22,8 @@ func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, pale
 		}
 	}
 	return launcherview.FormAppPickerView(launcherview.FormAppPickerProps{
-		Width: width, Height: height, Theme: palette.componentTheme(), Candidates: candidates, Selected: snapshot.selected, Scroll: snapshot.scroll,
-		OnChoose: a.chooseFormTableAppCandidate, OnCancel: a.closeFormTableAppPicker, OnScroll: a.scrollFormTableAppPicker, OnSetViewport: a.setFormTableAppPickerViewport,
+		Width: width, Height: height, Theme: palette.componentTheme(), Candidates: candidates, Selected: snapshot.selected,
+		OnChoose: a.chooseFormTableAppCandidate, OnCancel: a.closeFormTableAppPicker,
 	})
 }
 
@@ -72,8 +70,7 @@ func (a *App) openFormTableAppPicker(index int) {
 	if len(candidates) == 0 {
 		selected = -1
 	}
-	scroll := max(float32(0), float32(selected-4)*formTableAppPickerRowHeight)
-	state.appPicker = &formTableAppPickerState{fieldIndex: index, candidates: candidates, selected: selected, scroll: scroll}
+	state.appPicker = &formTableAppPickerState{fieldIndex: index, candidates: candidates, selected: selected}
 	state.status = ""
 	a.mu.Unlock()
 	a.updateFormTextInput(false)
@@ -126,46 +123,9 @@ func (a *App) moveFormTableAppCandidate(delta int) {
 	a.mu.Lock()
 	if state := a.tableEditor; state != nil && state.appPicker != nil && len(state.appPicker.candidates) > 0 {
 		state.appPicker.selected = (state.appPicker.selected + delta + len(state.appPicker.candidates)) % len(state.appPicker.candidates)
-		a.ensureFormTableAppCandidateVisibleLocked()
 	}
 	a.mu.Unlock()
 	_ = a.window.Invalidate()
-}
-
-func (a *App) setFormTableAppPickerViewport(height float32) {
-	a.mu.Lock()
-	if state := a.tableEditor; state != nil && state.appPicker != nil {
-		state.appPicker.viewport = max(float32(1), height)
-		a.ensureFormTableAppCandidateVisibleLocked()
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) scrollFormTableAppPicker(delta float32) {
-	a.mu.Lock()
-	if state := a.tableEditor; state != nil && state.appPicker != nil {
-		maximum := max(float32(0), float32(len(state.appPicker.candidates))*formTableAppPickerRowHeight-state.appPicker.viewport)
-		state.appPicker.scroll = min(max(float32(0), state.appPicker.scroll+delta), maximum)
-	}
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
-}
-
-func (a *App) ensureFormTableAppCandidateVisibleLocked() {
-	picker := a.tableEditor.appPicker
-	if picker == nil || picker.selected < 0 {
-		return
-	}
-	viewport := max(float32(1), picker.viewport)
-	top := float32(picker.selected) * formTableAppPickerRowHeight
-	bottom := top + formTableAppPickerRowHeight
-	if top < picker.scroll {
-		picker.scroll = top
-	} else if bottom > picker.scroll+viewport {
-		picker.scroll = bottom - viewport
-	}
-	maximum := max(float32(0), float32(len(picker.candidates))*formTableAppPickerRowHeight-viewport)
-	picker.scroll = min(max(float32(0), picker.scroll), maximum)
 }
 
 func (a *App) onFormTableAppPickerKey(event woxui.KeyEvent, selected int) {

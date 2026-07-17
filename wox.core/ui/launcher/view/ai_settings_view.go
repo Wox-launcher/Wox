@@ -42,19 +42,17 @@ type AISettingsTable struct {
 
 // AISettingsProps contains AI settings page presentation data.
 type AISettingsProps struct {
-	Width         float32
-	Height        float32
-	Theme         woxcomponent.Theme
-	Available     bool
-	Title         string
-	Description   string
-	AddLabel      string
-	NoDataLabel   string
-	Note          string
-	Scroll        float32
-	Tables        []AISettingsTable
-	OnScroll      func(float32)
-	OnSetGeometry func(viewport, content, rowsTop float32)
+	Width       float32
+	Height      float32
+	Theme       woxcomponent.Theme
+	Available   bool
+	Title       string
+	Description string
+	AddLabel    string
+	NoDataLabel string
+	Note        string
+	Tables      []AISettingsTable
+	Selected    int
 }
 
 // AISettingsView builds the AI catalog tables and page scroll surface.
@@ -71,8 +69,12 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 	}
 	children := []woxwidget.Widget{header}
 	contentHeight := woxcomponent.PageHeaderHeight
+	var keepVisible *woxwidget.ScrollRange
 	for _, table := range props.Tables {
 		widget, tableHeight := aiSettingsTable(props, table, contentWidth)
+		if table.Index == props.Selected {
+			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + tableHeight}
+		}
 		children = append(children, widget)
 		contentHeight += tableHeight
 	}
@@ -83,12 +85,7 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 		contentHeight += 30
 	}
 	return SettingsPage(SettingsPageProps{
-		ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight, Scroll: props.Scroll,
-		OnScroll: props.OnScroll, OnSetGeometry: func(viewport, content float32) {
-			if props.OnSetGeometry != nil {
-				props.OnSetGeometry(viewport, content, 0)
-			}
-		},
+		ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight, KeepVisible: keepVisible,
 	})
 }
 

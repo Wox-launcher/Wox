@@ -31,10 +31,9 @@ type TerminalPreviewProps struct {
 	OnClampScroll      func(float32)
 	OnScroll           func(float32, float32)
 	OnOpenSearch       func()
-	OnSearchCaret      func(int)
 	OnSetSearch        func(string) error
+	OnSearchChanged    func(string)
 	OnSearchKey        func(woxui.KeyEvent) bool
-	OnSearchTextInput  func(woxui.TextInputEvent) bool
 	OnMoveSearch       func(int)
 	OnToggleSearchCase func()
 	OnCloseSearch      func()
@@ -130,9 +129,9 @@ func terminalSearchBar(props TerminalPreviewProps, height float32) woxwidget.Wid
 	inputWidth := max(float32(90), innerWidth-countWidth-actionWidth*4-gap*5)
 	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "terminal-search-input-" + props.SessionID, Label: "Find in terminal output", Width: inputWidth, Height: 34,
-		Radius: 7, Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 10, Bottom: 5}, State: props.SearchEditing,
+		Radius: 7, Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 10, Bottom: 5}, Value: props.SearchEditing.Text,
 		Focused: true, Autofocus: true, MaxLines: 1, Window: props.Window, Theme: props.Theme,
-		OnCaret: props.OnSearchCaret, OnSetValue: props.OnSetSearch, OnKey: props.OnSearchKey, OnTextInput: props.OnSearchTextInput,
+		OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearch, OnKey: props.OnSearchKey,
 	})
 	count := "0/0"
 	if props.MatchCount > 0 {

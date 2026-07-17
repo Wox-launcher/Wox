@@ -58,7 +58,7 @@ func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPrevi
 	if err != nil {
 		return previewview.TriggerConflictPreviewView(previewview.TriggerConflictPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
 	}
-	callbacks := formFieldCallbacks{idPrefix: "trigger-conflict", focus: a.focusTriggerConflictField, setCaret: a.setTriggerConflictCaret}
+	callbacks := formFieldCallbacks{idPrefix: "trigger-conflict", focus: a.focusTriggerConflictField, setText: a.setTriggerConflictText, onKey: a.onTriggerConflictPreviewKey}
 	rows := make([]woxwidget.Widget, 0, len(state.definitions))
 	for index, definition := range state.definitions {
 		rows = append(rows, a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, width-36, formDefinitionHeight(definition, state.values)))
@@ -73,9 +73,8 @@ func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPrevi
 	return previewview.TriggerConflictPreviewView(previewview.TriggerConflictPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Keyword: state.keyword, Title: state.title, Message: state.message,
 		Error: state.error, SaveLabel: a.translate("i18n:ui_save"), Dirty: dirty, Saving: state.saving,
-		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions, state.values), Scroll: state.scroll,
-		OnScroll:      func(delta float32) { a.scrollTriggerConflictPreview(state.key, delta) },
-		OnSetViewport: func(viewport float32) { a.setTriggerConflictViewport(state.key, viewport) }, OnSubmit: a.submitTriggerConflictPreview,
+		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions, state.values), KeepVisible: formFieldsKeepVisible(state.formFieldsSnapshot),
+		OnSubmit: a.submitTriggerConflictPreview,
 	})
 }
 
@@ -215,28 +214,20 @@ func (a *App) onTriggerConflictPreviewKey(event woxui.KeyEvent) bool {
 		a.moveTriggerConflictFocus(delta)
 	case woxui.KeyArrowUp:
 		a.moveTriggerConflictFocus(-1)
+	case woxui.KeyEnter:
+		return true
 	default:
-		a.editTriggerConflictKey(event)
+		return false
 	}
 	return true
 }
 
-func (a *App) onTriggerConflictPreviewTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
+func (a *App) onTriggerConflictPreviewTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
 	state := a.triggerConflict
-	if state == nil || !state.active {
-		a.mu.Unlock()
-		return false
-	}
-	if state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) {
-		if state.editor.HandleTextInput(event) {
-			syncFormFieldsEditorLocked(&state.formFieldsState)
-			state.error = ""
-		}
-	}
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
-	return true
+	active := state != nil && state.active
+	a.mu.RUnlock()
+	return active
 }
 
 func (a *App) editTriggerConflictKey(event woxui.KeyEvent) {
@@ -290,16 +281,16 @@ func (a *App) focusTriggerConflictField(index int) {
 	_ = a.window.Invalidate()
 }
 
-func (a *App) setTriggerConflictCaret(index, offset int) {
+func (a *App) setTriggerConflictText(index int, value string) {
 	a.mu.Lock()
-	state := a.triggerConflict
-	if state == nil || !state.active || state.focused != index || state.editor == nil {
-		a.mu.Unlock()
-		return
+	changed := a.triggerConflict != nil && !a.triggerConflict.saving && setFormFieldsTextLocked(&a.triggerConflict.formFieldsState, index, value)
+	if changed {
+		a.triggerConflict.error = ""
 	}
-	state.editor.SetCaret(offset)
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	if changed {
+		_ = a.window.Invalidate()
+	}
 }
 
 func (a *App) deactivateTriggerConflictPreview() {
@@ -314,28 +305,6 @@ func (a *App) deactivateTriggerConflictPreview() {
 		return
 	}
 	a.restoreQueryTextInput()
-	_ = a.window.Invalidate()
-}
-
-func (a *App) setTriggerConflictViewport(key string, height float32) {
-	a.mu.Lock()
-	if state := a.triggerConflict; state != nil && state.key == key {
-		state.viewportHeight = max(float32(1), height)
-		state.scroll = min(state.scroll, max(float32(0), formDefinitionsContentHeight(state.definitions, state.values)-state.viewportHeight))
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) scrollTriggerConflictPreview(key string, delta float32) {
-	a.mu.Lock()
-	state := a.triggerConflict
-	if state == nil || state.key != key {
-		a.mu.Unlock()
-		return
-	}
-	maxOffset := max(float32(0), formDefinitionsContentHeight(state.definitions, state.values)-state.viewportHeight)
-	state.scroll = min(max(float32(0), state.scroll+delta), maxOffset)
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 

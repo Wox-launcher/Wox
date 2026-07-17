@@ -14,9 +14,7 @@ type SettingsPageProps struct {
 	Children      []woxwidget.Widget
 	ContentHeight float32
 	Gap           float32
-	Scroll        float32
-	OnScroll      func(float32)
-	OnSetGeometry func(float32, float32)
+	KeepVisible   *woxwidget.ScrollRange
 }
 
 // SettingsPageContentWidth returns the content width inside the shared page insets.
@@ -28,21 +26,15 @@ func SettingsPageContentWidth(width float32) float32 {
 func SettingsPage(props SettingsPageProps) woxwidget.Widget {
 	contentWidth := SettingsPageContentWidth(props.Width)
 	viewportHeight := max(float32(1), props.Height-58)
-	if props.OnSetGeometry != nil {
-		props.OnSetGeometry(viewportHeight, props.ContentHeight)
-	}
 	id := props.ID
 	if id == "" {
 		id = "settings-page-scroll"
 	}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 38, Top: 34, Right: 44, Bottom: 24}, Child: woxwidget.Gesture{ID: id, OnScroll: func(delta woxui.Point) {
-		if props.OnScroll != nil {
-			props.OnScroll(-delta.Y)
-		}
-	}, Child: woxwidget.ScrollView{
-		Width: contentWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, props.ContentHeight), Offset: props.Scroll,
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 38, Top: 34, Right: 44, Bottom: 24}, Child: woxwidget.ScrollView{
+		Key: woxwidget.Key(id), ID: id, KeepVisible: props.KeepVisible,
+		Width: contentWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, props.ContentHeight),
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.Gap, Children: props.Children},
-	}}}
+	}}
 }
 
 // SettingsMessage builds a neutral page-level loading or error message.
@@ -76,8 +68,9 @@ type SettingRowProps struct {
 	Theme         woxcomponent.Theme
 	OnTap         func()
 	OnChoiceTap   func(woxui.Rect)
-	OnScroll      func(float32)
-	OnCaret       func(int)
+	OnFocus       func()
+	OnChanged     func(string)
+	OnKey         func(woxui.KeyEvent) bool
 	OnBrowse      func()
 }
 
@@ -113,8 +106,13 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 			inputWidth = max(float32(120), valueWidth-82)
 		}
 		input := woxcomponent.WoxSettingTextField(woxcomponent.TextFieldProps{
-			ID: "setting-text-" + props.ID, Label: props.Title, Width: inputWidth, State: props.Editing, Focused: props.Focused,
-			Window: props.Window, Theme: props.Theme, Disabled: props.Disabled, OnCaret: props.OnCaret,
+			ID: "setting-text-" + props.ID, Label: props.Title, Width: inputWidth, Value: props.Editing.Text, Focused: props.Focused,
+			Window: props.Window, Theme: props.Theme, Disabled: props.Disabled, OnChanged: props.OnChanged, OnKey: props.OnKey,
+			OnFocusChange: func(focused bool) {
+				if focused && props.OnFocus != nil {
+					props.OnFocus()
+				}
+			},
 		})
 		valueField = input
 		if props.BrowseFile {
@@ -164,13 +162,8 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: valueChildren},
 		}}}
 	}
-	row := woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
+	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Title, Description: props.Description, Width: props.Width, Height: 62, LabelWidth: labelWidth, Gap: 28,
 		Radius: 6, Background: props.Background, Padding: woxwidget.Insets{Left: 2, Top: 5, Right: 2, Bottom: 5}, Child: valueField, Theme: fieldTheme,
 	})
-	return woxwidget.Gesture{ID: "setting-" + props.ID, OnScroll: func(delta woxui.Point) {
-		if props.OnScroll != nil {
-			props.OnScroll(-delta.Y)
-		}
-	}, Child: row}
 }

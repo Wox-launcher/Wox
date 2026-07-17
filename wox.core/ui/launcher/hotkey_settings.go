@@ -34,8 +34,7 @@ func (a *App) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height f
 	}
 	return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: true,
-		Rows: rows, RowsHeight: formDefinitionsContentHeight(snapshot.hotkeyForm.definitions, snapshot.hotkeyForm.values), Scroll: snapshot.hotkeyForm.scroll, Note: snapshot.note,
-		OnScroll: a.scrollHotkeySettings, OnSetViewport: a.setHotkeySettingsViewport,
+		Rows: rows, RowsHeight: formDefinitionsContentHeight(snapshot.hotkeyForm.definitions, snapshot.hotkeyForm.values), KeepVisible: formFieldsKeepVisible(*snapshot.hotkeyForm), Note: snapshot.note,
 	})
 }
 
@@ -286,25 +285,6 @@ func (a *App) openHotkeySettingsTable(index int) {
 	}
 	a.mu.Unlock()
 	a.finishOpeningFormTable()
-}
-
-func (a *App) setHotkeySettingsViewport(height float32) {
-	a.mu.Lock()
-	if a.hotkeySettingsForm != nil {
-		a.hotkeySettingsForm.viewportHeight = max(float32(1), height)
-		ensureFormFieldsFocusVisibleLocked(a.hotkeySettingsForm, a.hotkeySettingsForm.focused)
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) scrollHotkeySettings(delta float32) {
-	a.mu.Lock()
-	if fields := a.hotkeySettingsForm; fields != nil {
-		maxOffset := max(float32(0), formDefinitionsContentHeight(fields.definitions, fields.values)-fields.viewportHeight)
-		fields.scroll = min(max(float32(0), fields.scroll+delta), maxOffset)
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
 }
 
 func hotkeySettingsLabel(key string) string {

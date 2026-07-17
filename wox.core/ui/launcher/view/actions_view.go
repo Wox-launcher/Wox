@@ -44,12 +44,11 @@ type ActionsProps struct {
 	NoMatchesLabel        string
 	Items                 []ActionItem
 	Selected              int
-	Editing               woxui.TextEditingState
-	Scroll                float32
+	Filter                string
 	OnSelect              func(int)
 	OnActivate            func()
-	OnScroll              func(float32)
-	OnCaret               func(int)
+	OnFilterChanged       func(string)
+	OnFilterKey           func(woxui.KeyEvent) bool
 }
 
 // ActionPanelBaseHeight returns the non-list height used by launcher window sizing.
@@ -57,13 +56,49 @@ func ActionPanelBaseHeight(padding woxwidget.Insets) float32 {
 	return ActionHeaderHeight + ActionDividerHeight + ActionSearchHeight + padding.Top + padding.Bottom
 }
 
-// ActionsView builds the floating action picker and returns its geometry.
+type actionsViewState struct {
+	scrollController *woxwidget.ScrollController
+}
+
+// ActionsView creates the retained floating action picker and returns its geometry.
 func ActionsView(props ActionsProps) (woxwidget.Widget, float32, float32) {
-	panelWidth := min(float32(ActionPanelContentWidth)+props.ActionPadding.Left+props.ActionPadding.Right, max(float32(240), props.WindowWidth-28))
-	innerWidth := max(float32(0), panelWidth-props.ActionPadding.Left-props.ActionPadding.Right)
-	visibleRows := max(1, min(len(props.Items), MaxVisibleActions))
-	panelHeight := ActionPanelBaseHeight(props.ActionPadding) + float32(visibleRows*ActionRowHeight)
+	panelWidth, _, panelHeight, _ := actionPanelGeometry(props)
+	view := woxwidget.Stateful{
+		Key: "actions-view", Type: (*actionsViewState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &actionsViewState{} },
+	}
+	return view, panelWidth, panelHeight
+}
+
+// InitState creates the action list controller when the panel enters the Host tree.
+func (s *actionsViewState) InitState(_ woxwidget.StateContext, _ any) {
+	s.scrollController = woxwidget.NewScrollController(0)
+}
+
+// DidUpdateWidget preserves the action list controller across immutable prop updates.
+func (s *actionsViewState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
+
+// Build keeps transient scrolling inside the action panel while selection remains controller-owned.
+func (s *actionsViewState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	return buildActionsView(context, widget.(ActionsProps), s.scrollController)
+}
+
+// Dispose leaves controller detachment to the nested retained ScrollView.
+func (s *actionsViewState) Dispose() {}
+
+// actionPanelGeometry calculates the stable panel and list extents used by both the adapter and retained State.
+func actionPanelGeometry(props ActionsProps) (panelWidth, innerWidth, panelHeight float32, visibleRows int) {
+	panelWidth = min(float32(ActionPanelContentWidth)+props.ActionPadding.Left+props.ActionPadding.Right, max(float32(240), props.WindowWidth-28))
+	innerWidth = max(float32(0), panelWidth-props.ActionPadding.Left-props.ActionPadding.Right)
+	visibleRows = max(1, min(len(props.Items), MaxVisibleActions))
+	panelHeight = ActionPanelBaseHeight(props.ActionPadding) + float32(visibleRows*ActionRowHeight)
 	panelHeight = min(panelHeight, max(float32(100), props.WindowHeight-props.QueryHeight-props.ToolbarHeight-20))
+	return panelWidth, innerWidth, panelHeight, visibleRows
+}
+
+// buildActionsView composes the current immutable action rows around the retained scroll controller.
+func buildActionsView(context woxwidget.StateContext, props ActionsProps, scrollController *woxwidget.ScrollController) woxwidget.Widget {
+	panelWidth, innerWidth, panelHeight, visibleRows := actionPanelGeometry(props)
 	rows := make([]woxwidget.Widget, 0, max(1, len(props.Items)))
 	for _, item := range props.Items {
 		item := item
@@ -123,27 +158,33 @@ func ActionsView(props ActionsProps) (woxwidget.Widget, float32, float32) {
 	}
 	listHeight := float32(visibleRows * ActionRowHeight)
 	listContentHeight := float32(len(rows) * ActionRowHeight)
+	var keepVisible *woxwidget.ScrollRange
+	for position, item := range props.Items {
+		if item.Index == props.Selected {
+			start := float32(position * ActionRowHeight)
+			keepVisible = &woxwidget.ScrollRange{Start: start, End: start + ActionRowHeight}
+			break
+		}
+	}
+	offset := scrollController.Offset()
 	listChildren := []woxwidget.StackChild{{Child: woxwidget.ScrollView{
-		Width: innerWidth, Height: listHeight, ContentHeight: listContentHeight, Offset: props.Scroll,
+		Key: "action-scroll", ID: "action-scroll", Controller: scrollController, KeepVisible: keepVisible,
+		Width: innerWidth, Height: listHeight, ContentHeight: listContentHeight, OnOffsetChanged: func(float32) { context.Invalidate() },
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
 	}}}
 	if len(props.Items) > MaxVisibleActions {
 		thumbHeight := max(float32(24), listHeight*listHeight/listContentHeight)
-		thumbTop := (listHeight - thumbHeight) * props.Scroll / (listContentHeight - listHeight)
+		thumbTop := (listHeight - thumbHeight) * offset / (listContentHeight - listHeight)
 		thumbColor := props.ActionHeader
 		thumbColor.A = min(150, thumbColor.A)
 		listChildren = append(listChildren, woxwidget.StackChild{Left: max(float32(0), innerWidth-5), Top: thumbTop, Child: woxwidget.Container{Width: 3, Height: thumbHeight, Radius: 2, Color: thumbColor}})
 	}
-	actionList := woxwidget.Gesture{ID: "action-scroll", OnScroll: func(delta woxui.Point) {
-		if props.OnScroll != nil {
-			props.OnScroll(-delta.Y)
-		}
-	}, Child: woxwidget.Stack{Width: innerWidth, Height: listHeight, Children: listChildren}}
+	actionList := woxwidget.Stack{Width: innerWidth, Height: listHeight, Children: listChildren}
 	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "action-search", Label: "Filter actions", Width: innerWidth, Height: 40, Radius: props.ActionQueryRadius,
 		Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 8, Bottom: 8}, Background: props.ActionQueryBackground,
-		Style: woxui.TextStyle{Size: 12}, TextColor: props.ActionQueryText, State: props.Editing, Focused: true,
-		MaxLines: 1, Window: props.Window, Theme: props.Theme, ControllerManagedFocus: true, OnCaret: props.OnCaret,
+		Style: woxui.TextStyle{Size: 12}, TextColor: props.ActionQueryText, Value: props.Filter, Focused: true, Autofocus: true,
+		MaxLines: 1, Window: props.Window, Theme: props.Theme, OnChanged: props.OnFilterChanged, OnKey: props.OnFilterKey,
 	})
 	return woxwidget.Container{
 		Width: panelWidth, Height: panelHeight, Radius: props.ActionQueryRadius, Color: props.Theme.ActionBackground,
@@ -154,5 +195,5 @@ func ActionsView(props ActionsProps) (woxwidget.Widget, float32, float32) {
 			actionList,
 			woxwidget.Container{Width: innerWidth, Height: ActionSearchHeight, Padding: woxwidget.Insets{Top: 6}, Child: search},
 		}},
-	}, panelWidth, panelHeight
+	}
 }

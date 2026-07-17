@@ -49,7 +49,9 @@ type RuntimeSettingRow struct {
 	Disabled    bool
 	Window      *woxui.Window
 	OnHover     func()
-	OnCaret     func(int)
+	OnFocus     func()
+	OnChanged   func(string)
+	OnKey       func(woxui.KeyEvent) bool
 	OnBrowse    func()
 	OnClear     func()
 }
@@ -65,15 +67,18 @@ type RuntimeSettingsProps struct {
 	Restarting       bool
 	Error            string
 	Note             string
-	Scroll           float32
+	Selected         int
 	Statuses         []RuntimeStatus
 	Settings         []RuntimeSettingRow
-	OnScroll         func(float32)
-	OnSetGeometry    func(viewport, content, rowsTop float32)
 }
 
 // RuntimeSettingsView mirrors Flutter's full-width runtime summary and executable path form.
 func RuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
+	return buildRuntimeSettingsView(props)
+}
+
+// buildRuntimeSettingsView composes immutable runtime data beneath the retained SettingsPage scroll owner.
+func buildRuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
 	contentWidth := SettingsPageContentWidth(props.Width)
 	settingRowHeight := props.SettingRowHeight
 	if settingRowHeight <= 0 {
@@ -114,13 +119,13 @@ func RuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
 		children = append(children, SettingsNote(props.Note, contentWidth, props.Theme))
 		contentHeight += 34
 	}
+	var keepVisible *woxwidget.ScrollRange
+	if props.Selected >= 0 && props.Selected < len(props.Settings) {
+		top := rowsTop + float32(props.Selected)*settingRowHeight
+		keepVisible = &woxwidget.ScrollRange{Start: top, End: top + settingRowHeight}
+	}
 	return SettingsPage(SettingsPageProps{
-		ID: "runtime-page-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight, Scroll: props.Scroll, OnScroll: props.OnScroll,
-		OnSetGeometry: func(viewport, content float32) {
-			if props.OnSetGeometry != nil {
-				props.OnSetGeometry(viewport, content, rowsTop)
-			}
-		},
+		ID: "runtime-page-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight, KeepVisible: keepVisible,
 	})
 }
 
@@ -263,8 +268,13 @@ func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingR
 	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: row.ID + "-input", Label: row.Title, Hint: row.Placeholder, Width: inputWidth, Height: 38, Radius: 4,
 		Padding: woxwidget.Insets{Left: 12, Top: 8, Right: 12, Bottom: 6}, Background: props.Theme.ToolbarBackground, BorderColor: borderColor, BorderWidth: 1,
-		Style: woxui.TextStyle{Size: 13}, State: row.State, Focused: row.Focused, MaxLines: 1, Window: row.Window,
-		Theme: props.Theme, ControllerManagedFocus: true, Disabled: row.Disabled, OnCaret: row.OnCaret,
+		Style: woxui.TextStyle{Size: 13}, Value: row.State.Text, Focused: row.Focused, MaxLines: 1, Window: row.Window,
+		Theme: props.Theme, Disabled: row.Disabled, OnChanged: row.OnChanged, OnKey: row.OnKey,
+		OnFocusChange: func(focused bool) {
+			if focused && row.OnFocus != nil {
+				row.OnFocus()
+			}
+		},
 	})
 	controls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		input,

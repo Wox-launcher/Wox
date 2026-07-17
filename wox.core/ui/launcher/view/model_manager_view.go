@@ -33,7 +33,6 @@ type ModelManagerProps struct {
 	Loading           bool
 	Busy              bool
 	Error             string
-	Scroll            float32
 	EngineLabel       string
 	EngineButtonLabel string
 	EngineEnabled     bool
@@ -41,8 +40,6 @@ type ModelManagerProps struct {
 	OnEngine          func()
 	OnRefresh         func()
 	OnClose           func()
-	OnScroll          func(float32)
-	OnSetViewport     func(float32)
 }
 
 // ModelManagerView builds the modal engine and model manager.
@@ -59,9 +56,6 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 	footerHeight := float32(58)
 	statusHeight := float32(28)
 	viewportHeight := max(float32(82), height-headerHeight-engineHeight-footerHeight-statusHeight-32)
-	if props.OnSetViewport != nil {
-		props.OnSetViewport(viewportHeight)
-	}
 	header := woxwidget.Container{Width: innerWidth, Height: headerHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
 		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 20, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
 		woxwidget.Text{Value: "Core owns model files and downloads; this portable page owns selection and progress state.", Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ActionHeader},
@@ -116,14 +110,19 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 			Value: "No model options were returned by the plugin.", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ActionHeader,
 		}}
 	} else {
-		list = woxwidget.Gesture{ID: "model-manager-list", OnScroll: func(delta woxui.Point) {
-			if props.OnScroll != nil {
-				props.OnScroll(-delta.Y)
+		var keepVisible *woxwidget.ScrollRange
+		for index, option := range props.Options {
+			if option.SelectedRow {
+				start := float32(index) * ModelManagerRowHeight
+				keepVisible = &woxwidget.ScrollRange{Start: start, End: start + ModelManagerRowHeight}
+				break
 			}
-		}, Child: woxwidget.ScrollView{
-			Width: innerWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, float32(len(rows))*ModelManagerRowHeight), Offset: props.Scroll,
+		}
+		list = woxwidget.ScrollView{
+			Key: "model-manager-list", ID: "model-manager-list", Width: innerWidth, Height: viewportHeight,
+			ContentHeight: max(viewportHeight, float32(len(rows))*ModelManagerRowHeight), KeepVisible: keepVisible,
 			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-		}}
+		}
 	}
 	status := props.Error
 	if status == "" {

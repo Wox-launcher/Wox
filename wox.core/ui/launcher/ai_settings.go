@@ -28,11 +28,14 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float
 	props := launcherview.AISettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: snapshot.aiForm != nil,
 		Title: a.translate("i18n:ui_ai"), Description: a.translate("i18n:ui_ai_description"),
-		AddLabel: a.translate("i18n:ui_add"), NoDataLabel: a.translate("i18n:ui_no_data"), Scroll: snapshot.pageScroll.offset,
-		OnScroll: a.scrollSettingsPage, OnSetGeometry: func(viewport, content, _ float32) { a.setSettingsPageGeometry(viewport, content) },
+		AddLabel: a.translate("i18n:ui_add"), NoDataLabel: a.translate("i18n:ui_no_data"),
 	}
 	if snapshot.aiForm == nil {
 		return launcherview.AISettingsView(props)
+	}
+	props.Selected = -1
+	if snapshot.aiForm.active {
+		props.Selected = snapshot.aiForm.focused
 	}
 	props.Tables = make([]launcherview.AISettingsTable, 0, len(snapshot.aiForm.definitions))
 	for index, definition := range snapshot.aiForm.definitions {
@@ -459,7 +462,6 @@ func (a *App) cloneRemoteAISkills(state *formTableEditorState, url, previousValu
 	value := state.target.values[state.definition.Value.Key]
 	if a.tableEditor == state {
 		state.status = "Saving cloned skills…"
-		a.ensureFormTableSelectionVisibleLocked()
 	}
 	a.mu.Unlock()
 	a.saveSettingsTable(state, "AISkills", value, previousValue)

@@ -101,7 +101,6 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 			Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: a.imageForSize(action.Icon, 22), HotkeyLabels: formatHotkeyLabels(action.Hotkey),
 		})
 	}
-	scroll := a.configureActionScroll(len(items))
 	return launcherview.ActionsView(launcherview.ActionsProps{
 		Window: a.window, WindowWidth: windowWidth, WindowHeight: windowHeight, QueryHeight: queryHeight, ToolbarHeight: toolbarHeight,
 		Theme: snapshot.palette.componentTheme(), ActionHeader: snapshot.palette.actionHeader,
@@ -109,9 +108,9 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 		ResultTail: snapshot.palette.resultTail, SelectedTail: snapshot.palette.selectedTail,
 		ResultItemRadius: snapshot.palette.resultItemRadius, ActionQueryRadius: snapshot.palette.actionQueryRadius,
 		ActionPadding: snapshot.palette.actionPadding, HeaderLabel: a.translate("i18n:ui_actions"), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
-		Items: items, Selected: snapshot.actionSelected, Editing: snapshot.actionEditing, Scroll: scroll,
+		Items: items, Selected: snapshot.actionSelected, Filter: snapshot.actionFilter,
 		OnSelect: a.selectAction, OnActivate: a.activateSelectedAction,
-		OnScroll: func(delta float32) { a.scrollActions(delta, len(items)) }, OnCaret: a.setActionFilterCaret,
+		OnFilterChanged: a.setActionFilterValue, OnFilterKey: a.onActionKey,
 	})
 }
 
@@ -172,19 +171,8 @@ func (a *App) onActionKey(event woxui.KeyEvent) bool {
 			return true
 		}
 	}
-	handled, changed := a.actionFilter.HandleKey(event)
-	if changed {
-		a.actionScroll = 0
-		a.selectFirstFilteredActionLocked()
-	}
 	a.mu.Unlock()
-	if handled {
-		if changed {
-			_ = a.applyWindowBounds()
-		}
-		_ = a.window.Invalidate()
-	}
-	return handled
+	return false
 }
 
 func (a *App) toggleActionPanel() {
@@ -207,7 +195,6 @@ func (a *App) toggleActionPanel() {
 	a.actionSelected = -1
 	a.actionSelectionKey = ""
 	a.actionFilter = woxui.NewTextEditor("")
-	a.actionScroll = 0
 	a.normalizeActionSelectionLocked()
 	a.mu.Unlock()
 	_ = a.applyWindowBounds()
@@ -236,7 +223,6 @@ func (a *App) resetActionPanelLocked() bool {
 	a.actionSelected = 0
 	a.actionSelectionKey = ""
 	a.actionFilter = nil
-	a.actionScroll = 0
 	return true
 }
 
@@ -262,67 +248,28 @@ func (a *App) moveActionSelection(delta int) {
 	position = (position + delta + len(indices)) % len(indices)
 	a.actionSelected = indices[position]
 	a.actionSelectionKey = entries[a.actionSelected].Key
-	a.ensureActionPositionVisibleLocked(position, len(indices))
 	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
-func (a *App) onActionTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
-	if !a.actionPanel || a.actionFilter == nil {
-		a.mu.Unlock()
-		return false
-	}
-	changed := a.actionFilter.HandleTextInput(event)
-	if changed {
-		a.actionScroll = 0
-		a.selectFirstFilteredActionLocked()
-	}
-	a.mu.Unlock()
-	if changed {
-		_ = a.applyWindowBounds()
-	}
-	_ = a.window.Invalidate()
-	return true
+func (a *App) onActionTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
+	open := a.actionPanel
+	a.mu.RUnlock()
+	return open
 }
 
-// ensureActionPositionVisibleLocked follows keyboard navigation inside the eight-row action viewport.
-func (a *App) ensureActionPositionVisibleLocked(position, count int) {
-	viewport := float32(min(count, maxVisibleActions) * actionRowHeight)
-	content := float32(count * actionRowHeight)
-	top := float32(position * actionRowHeight)
-	bottom := top + actionRowHeight
-	if top < a.actionScroll {
-		a.actionScroll = top
-	} else if bottom > a.actionScroll+viewport {
-		a.actionScroll = bottom - viewport
-	}
-	a.actionScroll = min(max(float32(0), a.actionScroll), max(float32(0), content-viewport))
-}
-
-// configureActionScroll clamps stale offsets when filtering changes the action count.
-func (a *App) configureActionScroll(count int) float32 {
-	a.mu.Lock()
-	maximum := float32(max(0, count-maxVisibleActions) * actionRowHeight)
-	a.actionScroll = min(max(float32(0), a.actionScroll), maximum)
-	offset := a.actionScroll
-	a.mu.Unlock()
-	return offset
-}
-
-func (a *App) scrollActions(delta float32, count int) {
-	a.mu.Lock()
-	maximum := float32(max(0, count-maxVisibleActions) * actionRowHeight)
-	a.actionScroll = min(max(float32(0), a.actionScroll+delta), maximum)
-	a.mu.Unlock()
-}
-
-func (a *App) setActionFilterCaret(offset int) {
+func (a *App) setActionFilterValue(value string) {
 	a.mu.Lock()
 	if a.actionPanel && a.actionFilter != nil {
-		a.actionFilter.SetCaret(offset)
+		actionFilterChanged := a.actionFilter.State().Text != value
+		a.actionFilter.SetText(value, false)
+		if actionFilterChanged {
+			a.selectFirstFilteredActionLocked()
+		}
 	}
 	a.mu.Unlock()
+	_ = a.applyWindowBounds()
 	_ = a.window.Invalidate()
 }
 

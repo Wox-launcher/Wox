@@ -61,6 +61,9 @@ type Host struct {
 	caretVisible         bool
 	caretBlinkGeneration uint64
 	animations           animationHost
+	elements             *elementTree
+	postFrame            []func()
+	disposed             bool
 }
 
 // NewHost creates a retained host whose builder runs once per invalidated frame.
@@ -75,6 +78,7 @@ func NewHost(build func(frame woxui.FrameInfo) Widget) *Host {
 		caretVisible: true,
 	}
 	host.snapshot.Store(AutomationSnapshot{})
+	host.elements = newElementTree(host)
 	return host
 }
 
@@ -90,13 +94,15 @@ func (h *Host) AttachServices(services HostServices) {
 
 // Frame reconciles one widget description, publishes semantics, and paints it.
 func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
-	if h.window == nil || h.build == nil {
+	if h.disposed || h.window == nil || h.build == nil {
 		h.updateCaretBlink(false)
 		h.animations.reset()
 		return
 	}
+	h.elements.beginFrame()
 	widget := h.build(frame)
 	if widget == nil {
+		h.elements.endFrame()
 		h.updateCaretBlink(false)
 		h.animations.reset()
 		return
@@ -104,12 +110,12 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 
 	oldNodes := h.nodes
 	animation := h.animations.beginFrame(h.window)
-	root := widget.layout(context{window: h.window, caretVisible: h.caretVisibleForFrame(), animation: animation}, constraints{width: frame.Size.Width, height: frame.Size.Height})
+	root := widget.layout(context{window: h.window, caretVisible: h.caretVisibleForFrame(), animation: animation, elements: h.elements, element: h.elements.root}, constraints{width: frame.Size.Width, height: frame.Size.Height})
 	h.animations.endFrame(animation)
 	h.updateCaretBlink(nodeHasActiveCaret(root))
 	identities := map[string]woxui.AccessibilityNodeID{}
 	nodes := map[woxui.AccessibilityNodeID]*node{}
-	diagnostics := []string{}
+	diagnostics := h.elements.endFrame()
 	h.assignIdentities(root, nil, "root", 0, h.identities, identities, nodes, &diagnostics)
 	h.root = root
 	h.identities = identities
@@ -126,6 +132,33 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 		h.reportDiagnostic(fmt.Sprintf("publish accessibility tree: %v", err))
 	}
 	h.syncTextInput()
+	h.runPostFrameCallbacks()
+}
+
+// runPostFrameCallbacks executes retained lifecycle work after the current node tree is addressable.
+func (h *Host) runPostFrameCallbacks() {
+	callbacks := h.postFrame
+	h.postFrame = nil
+	for _, callback := range callbacks {
+		callback()
+	}
+}
+
+// Dispose releases retained widget state and frame-owned resources for this Host.
+func (h *Host) Dispose() {
+	if h == nil || h.disposed {
+		return
+	}
+	h.disposed = true
+	h.updateCaretBlink(false)
+	h.animations.reset()
+	if h.elements != nil {
+		h.elements.dispose()
+	}
+	h.root = nil
+	h.postFrame = nil
+	h.nodes = map[woxui.AccessibilityNodeID]*node{}
+	h.identities = map[string]woxui.AccessibilityNodeID{}
 }
 
 func (h *Host) assignIdentities(current *node, parent *node, parentPath string, index int, previous, identities map[string]woxui.AccessibilityNodeID, nodes map[woxui.AccessibilityNodeID]*node, diagnostics *[]string) {
@@ -399,6 +432,18 @@ func (h *Host) RequestFocus(key Key) bool {
 // ClearFocus releases the retained focus node and its native text input state.
 func (h *Host) ClearFocus() {
 	h.setFocus(0)
+}
+
+func (h *Host) clearFocusForKey(key Key) {
+	current := h.nodes[h.focused]
+	if current != nil && current.key == key {
+		h.setFocus(0)
+	}
+}
+
+func (h *Host) isFocusedKey(key Key) bool {
+	current := h.nodes[h.focused]
+	return current != nil && current.key == key
 }
 
 // BoundsForKey returns the latest laid-out bounds for a retained widget key.

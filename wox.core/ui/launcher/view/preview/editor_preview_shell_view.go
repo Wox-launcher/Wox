@@ -19,9 +19,7 @@ type editorPreviewShellProps struct {
 	RowsHeight        float32
 	EmptyMessage      string
 	ScrollID          string
-	Scroll            float32
-	OnScroll          func(float32)
-	OnSetViewport     func(float32)
+	KeepVisible       *woxwidget.ScrollRange
 	Error             string
 	ShowError         bool
 	SaveButton        woxcomponent.ButtonProps
@@ -37,23 +35,17 @@ func editorPreviewShell(props editorPreviewShellProps) woxwidget.Widget {
 		errorHeight = 30
 	}
 	bodyHeight := max(props.MinimumBodyHeight, innerHeight-props.BeforeBodyHeight-footerHeight-errorHeight)
-	if props.OnSetViewport != nil {
-		props.OnSetViewport(bodyHeight)
-	}
 	var body woxwidget.Widget
 	if len(props.Rows) == 0 && props.EmptyMessage != "" {
 		body = woxwidget.Container{Width: innerWidth, Height: bodyHeight, Padding: woxwidget.Insets{Top: 12}, Child: woxwidget.Text{
 			Value: props.EmptyMessage, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle,
 		}}
 	} else {
-		body = woxwidget.Gesture{ID: props.ScrollID, OnScroll: func(delta woxui.Point) {
-			if props.OnScroll != nil {
-				props.OnScroll(-delta.Y)
-			}
-		}, Child: woxwidget.ScrollView{
-			Width: innerWidth, Height: bodyHeight, ContentHeight: max(bodyHeight, props.RowsHeight), Offset: props.Scroll,
+		body = woxwidget.ScrollView{
+			Key: woxwidget.Key(props.ScrollID), ID: props.ScrollID, Width: innerWidth, Height: bodyHeight,
+			ContentHeight: max(bodyHeight, props.RowsHeight), KeepVisible: props.KeepVisible,
 			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
-		}}
+		}
 	}
 	button := woxcomponent.WoxButton(props.SaveButton)
 	footer := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{

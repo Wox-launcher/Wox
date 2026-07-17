@@ -15,7 +15,7 @@ type textFieldLine struct {
 	text  string
 }
 
-// TextFieldProps describes a controlled Wox text field.
+// TextFieldProps describes a retained Wox text field and its business-value callbacks.
 type TextFieldProps struct {
 	ID          string
 	Label       string
@@ -32,26 +32,219 @@ type TextFieldProps struct {
 	TextColor   woxui.Color
 	// TextAlignmentY optically positions measured glyph bounds within each line without moving the caret.
 	TextAlignmentY float32
-	State          woxui.TextEditingState
+	Value          string
 	Focused        bool
 	Autofocus      bool
-	// ControllerManagedFocus preserves a surface's existing shared Tab and keyboard routing.
-	ControllerManagedFocus bool
-	Disabled               bool
-	ReadOnly               bool
-	Protected              bool
-	MaxLines               int
-	Window                 *woxui.Window
-	Theme                  Theme
-	OnCaret                func(int)
-	OnKey                  func(woxui.KeyEvent) bool
-	OnTextInput            func(woxui.TextInputEvent) bool
-	OnFocusChange          func(bool)
-	OnSetValue             func(string) error
+	Controller     *woxwidget.TextEditingController
+	FocusNode      *woxwidget.FocusNode
+	Disabled       bool
+	ReadOnly       bool
+	Protected      bool
+	MaxLines       int
+	Window         *woxui.Window
+	Theme          Theme
+	OnKey          func(woxui.KeyEvent) bool
+	OnFocusChange  func(bool)
+	OnChanged      func(string)
+	OnSetValue     func(string) error
+	editingState   woxui.TextEditingState
+	onCaret        func(int)
+	onTextInput    func(woxui.TextInputEvent) bool
 }
 
-// WoxTextField builds a controlled text field with shared IME, selection, and accessibility behavior.
+// WoxTextField builds a retained text field with shared IME, selection, and accessibility behavior.
 func WoxTextField(props TextFieldProps) woxwidget.Widget {
+	return woxwidget.Stateful{
+		Key: woxwidget.Key(props.ID), Type: (*textFieldState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &textFieldState{} },
+	}
+}
+
+type textFieldState struct {
+	controller         *woxwidget.TextEditingController
+	internalController *woxwidget.TextEditingController
+	focusNode          *woxwidget.FocusNode
+	internalFocusNode  *woxwidget.FocusNode
+	focusAttachment    *woxwidget.FocusAttachment
+}
+
+// InitState creates fallback controller and focus objects when the caller does not supply them.
+func (s *textFieldState) InitState(context woxwidget.StateContext, widget any) {
+	props := widget.(TextFieldProps)
+	s.updateBindings(context, props)
+	if props.Focused {
+		context.PostFrame(func() { s.focusNode.RequestFocus() })
+	}
+}
+
+// DidUpdateWidget applies programmatic value and focus changes without replacing local selection or composition.
+func (s *textFieldState) DidUpdateWidget(context woxwidget.StateContext, oldWidget, newWidget any) {
+	oldProps := oldWidget.(TextFieldProps)
+	newProps := newWidget.(TextFieldProps)
+	s.updateBindings(context, newProps)
+	if newProps.Controller == nil && oldProps.Value != newProps.Value && s.controller.Text() != newProps.Value {
+		s.controller.SetText(newProps.Value, false)
+	}
+	if newProps.Focused != oldProps.Focused {
+		if newProps.Focused {
+			context.PostFrame(func() { s.focusNode.RequestFocus() })
+		} else {
+			context.PostFrame(func() { s.focusNode.Unfocus() })
+		}
+	}
+}
+
+// Build connects retained editor state to the Host's single EditableText focus and IME path.
+func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(TextFieldProps)
+	s.updateBindings(context, props)
+	realState := s.controller.State()
+	displayState := realState
+	if props.Protected {
+		displayState.Text = strings.Repeat("•", len([]rune(displayState.Text)))
+		displayState.Composition = strings.Repeat("•", len([]rune(displayState.Composition)))
+	}
+	props.editingState = displayState
+	props.Focused = s.focusNode.HasFocus()
+	props.Controller = nil
+	props.FocusNode = nil
+	props.onCaret = func(offset int) {
+		s.focusNode.RequestFocus()
+		s.controller.SetCaret(offset)
+		context.Invalidate()
+	}
+	props.OnKey = func(event woxui.KeyEvent) bool {
+		original := widget.(TextFieldProps)
+		if original.Disabled || original.ReadOnly {
+			return false
+		}
+		if original.OnKey != nil && original.OnKey(event) {
+			return true
+		}
+		handled, changed := handleTextFieldControllerKey(s.controller, max(1, original.MaxLines), event)
+		if handled {
+			if changed {
+				notifyTextFieldChanged(original, s.controller.Text())
+			}
+			context.Invalidate()
+		}
+		return handled
+	}
+	props.onTextInput = func(event woxui.TextInputEvent) bool {
+		original := widget.(TextFieldProps)
+		if original.Disabled || original.ReadOnly {
+			return false
+		}
+		changed := s.controller.HandleTextInput(event)
+		if changed {
+			notifyTextFieldChanged(original, s.controller.Text())
+		}
+		context.Invalidate()
+		return true
+	}
+	props.OnFocusChange = func(focused bool) {
+		s.focusNode.UpdateFocus(focused)
+		if original := widget.(TextFieldProps).OnFocusChange; original != nil {
+			original(focused)
+		}
+		context.Invalidate()
+	}
+	props.OnSetValue = func(value string) error {
+		original := widget.(TextFieldProps)
+		s.controller.SetText(value, false)
+		notifyTextFieldChanged(original, value)
+		context.Invalidate()
+		if original.OnSetValue != nil {
+			return original.OnSetValue(value)
+		}
+		return nil
+	}
+	return buildWoxTextField(props)
+}
+
+// Dispose detaches the state-owned focus binding from its window Host.
+func (s *textFieldState) Dispose() {
+	if s.focusAttachment != nil {
+		s.focusAttachment.Detach()
+		s.focusAttachment = nil
+	}
+}
+
+// updateBindings keeps externally replaceable controller objects attached to the retained field state.
+func (s *textFieldState) updateBindings(context woxwidget.StateContext, props TextFieldProps) {
+	controller := props.Controller
+	if controller == nil {
+		if s.internalController == nil {
+			s.internalController = woxwidget.NewTextEditingController(props.Value)
+		}
+		controller = s.internalController
+	}
+	s.controller = controller
+	focusNode := props.FocusNode
+	if focusNode == nil {
+		if s.internalFocusNode == nil {
+			s.internalFocusNode = woxwidget.NewFocusNode()
+		}
+		focusNode = s.internalFocusNode
+	}
+	if s.focusNode != focusNode || s.focusAttachment == nil {
+		if s.focusAttachment != nil {
+			s.focusAttachment.Detach()
+		}
+		s.focusNode = focusNode
+		s.focusAttachment = context.BindFocusNode(focusNode, woxwidget.Key(props.ID))
+	}
+}
+
+func notifyTextFieldChanged(props TextFieldProps, value string) {
+	if props.OnChanged != nil {
+		props.OnChanged(value)
+	}
+}
+
+// handleTextFieldControllerKey adds multiline navigation around the shared editor key handling.
+func handleTextFieldControllerKey(controller *woxwidget.TextEditingController, maxLines int, event woxui.KeyEvent) (bool, bool) {
+	if controller == nil || maxLines <= 1 {
+		return controller.HandleKey(event)
+	}
+	state := controller.State()
+	lines := textFieldLines(state.Text)
+	lineIndex := textFieldLineIndex(lines, state.Selection.Focus)
+	line := lines[lineIndex]
+	extend := event.Modifiers&woxui.KeyModifierShift != 0
+	setFocus := func(offset int) {
+		if extend {
+			controller.SetSelection(state.Selection.Anchor, offset)
+		} else {
+			controller.SetCaret(offset)
+		}
+	}
+	switch event.Key {
+	case woxui.KeyEnter:
+		return true, controller.InsertText("\n")
+	case woxui.KeyArrowUp, woxui.KeyArrowDown:
+		target := lineIndex - 1
+		if event.Key == woxui.KeyArrowDown {
+			target = lineIndex + 1
+		}
+		if target < 0 || target >= len(lines) {
+			return true, false
+		}
+		column := state.Selection.Focus - line.start
+		setFocus(lines[target].start + min(column, lines[target].end-lines[target].start))
+		return true, false
+	case woxui.KeyHome:
+		setFocus(line.start)
+		return true, false
+	case woxui.KeyEnd:
+		setFocus(line.end)
+		return true, false
+	default:
+		return controller.HandleKey(event)
+	}
+}
+
+func buildWoxTextField(props TextFieldProps) woxwidget.Widget {
 	height := props.Height
 	if height <= 0 {
 		height = 40
@@ -79,13 +272,13 @@ func WoxTextField(props TextFieldProps) woxwidget.Widget {
 	maxLines := max(1, props.MaxLines)
 	innerWidth := max(float32(0), props.Width-padding.Left-padding.Right)
 	innerHeight := max(float32(0), height-padding.Top-padding.Bottom)
-	state := props.State
+	state := props.editingState
 	content := woxwidget.Gesture{ID: props.ID, OnTapAt: func(position woxui.Point) {
-		if props.Disabled || props.Window == nil || props.OnCaret == nil {
+		if props.Disabled || props.Window == nil || props.onCaret == nil {
 			return
 		}
 		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
-		props.OnCaret(textFieldOffsetAt(state, props.Window, style, maxLines, innerWidth, point))
+		props.onCaret(textFieldOffsetAt(state, props.Window, style, maxLines, innerWidth, point))
 	}, Child: woxwidget.Container{
 		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: props.BorderColor, BorderWidth: props.BorderWidth, Padding: padding,
 		Child: woxwidget.Clip{Width: innerWidth, Height: innerHeight, Child: woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool) {
@@ -94,33 +287,13 @@ func WoxTextField(props TextFieldProps) woxwidget.Widget {
 			}
 			if props.Window != nil {
 				drawTextField(displayList, bounds, state, style, textColor, props.Theme, props.Focused, caretVisible, maxLines, props.TextAlignmentY, props.Window)
-				if props.ControllerManagedFocus && props.Focused {
-					_ = props.Window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: textFieldCursorRect(state, style, maxLines, bounds, props.Window)})
-				}
 			}
 		}},
 		}}}
-	if props.ControllerManagedFocus {
-		actions := []woxui.AccessibilityAction{}
-		if !props.Disabled && !props.ReadOnly && props.OnSetValue != nil {
-			actions = append(actions, woxui.AccessibilityActionSetValue)
-		}
-		return woxwidget.Semantics{
-			Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleTextField, Label: props.Label,
-			Value: state.Text, Actions: actions, Disabled: props.Disabled, ReadOnly: props.ReadOnly, Protected: props.Protected,
-			OnAction: func(action woxui.AccessibilityAction, value string) error {
-				if action == woxui.AccessibilityActionSetValue && props.OnSetValue != nil {
-					return props.OnSetValue(value)
-				}
-				return nil
-			},
-			Child: content,
-		}
-	}
 	key := woxwidget.Key(props.ID)
 	return woxwidget.EditableText{
 		Key: key, AutomationID: props.ID, Label: props.Label, Value: state.Text, ReadOnly: props.ReadOnly, Protected: props.Protected,
-		Autofocus: props.Autofocus, Disabled: props.Disabled, OnKey: props.OnKey, OnTextInput: props.OnTextInput,
+		Autofocus: props.Autofocus, Disabled: props.Disabled, OnKey: props.OnKey, OnTextInput: props.onTextInput,
 		OnFocusChange: props.OnFocusChange, OnSetValue: props.OnSetValue,
 		TextInput: func(bounds woxui.Rect) woxui.TextInputState {
 			if !props.Focused || props.Window == nil {

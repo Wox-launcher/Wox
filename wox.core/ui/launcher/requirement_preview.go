@@ -74,7 +74,7 @@ func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, 
 	}
 	callbacks := formFieldCallbacks{
 		idPrefix: "requirement-form", focus: a.focusRequirementFormField, change: a.changeRequirementFormChoice,
-		setCaret: a.setRequirementFormCaret, openTable: a.openRequirementFormTable,
+		setText: a.setRequirementFormText, onKey: a.onRequirementFormKey, openTable: a.openRequirementFormTable,
 	}
 	rows := make([]woxwidget.Widget, 0, len(form.definitions))
 	for index, definition := range form.definitions {
@@ -83,9 +83,8 @@ func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, 
 	return previewview.RequirementPreviewView(previewview.RequirementPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Title: form.title, Message: form.message, PluginName: form.pluginName,
 		Error: errorMessage, SaveLabel: a.translate("i18n:ui_save"), Saving: form.saving, Rows: rows,
-		RowsHeight: formDefinitionsContentHeight(form.definitions, form.values), Scroll: form.scroll,
-		OnScroll:      func(delta float32) { a.scrollRequirementForm(form.key, delta) },
-		OnSetViewport: func(viewport float32) { a.setRequirementFormViewport(form.key, viewport) }, OnSubmit: a.submitRequirementForm,
+		RowsHeight: formDefinitionsContentHeight(form.definitions, form.values), KeepVisible: formFieldsKeepVisible(form.formFieldsSnapshot),
+		OnSubmit: a.submitRequirementForm,
 	})
 }
 
@@ -302,6 +301,31 @@ func (a *App) onRequirementFormKey(event woxui.KeyEvent) bool {
 		a.submitRequirementForm()
 		return true
 	}
+	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath"
+	if textEditable {
+		switch event.Key {
+		case woxui.KeyTab:
+			delta := 1
+			if event.Modifiers&woxui.KeyModifierShift != 0 {
+				delta = -1
+			}
+			a.moveRequirementFormFocus(delta)
+			return true
+		case woxui.KeyArrowDown:
+			if !multiline {
+				a.moveRequirementFormFocus(1)
+				return true
+			}
+		case woxui.KeyArrowUp:
+			if !multiline {
+				a.moveRequirementFormFocus(-1)
+				return true
+			}
+		case woxui.KeyEnter:
+			return !multiline
+		}
+		return false
+	}
 	switch event.Key {
 	case woxui.KeyTab, woxui.KeyArrowDown:
 		if event.Key == woxui.KeyArrowDown && multiline {
@@ -346,22 +370,12 @@ func (a *App) onRequirementFormKey(event woxui.KeyEvent) bool {
 }
 
 // onRequirementFormTextInput forwards committed and composing input from every native backend.
-func (a *App) onRequirementFormTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
+func (a *App) onRequirementFormTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
 	state := a.requirementForm
-	if state == nil || !state.active {
-		a.mu.Unlock()
-		return false
-	}
-	if state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) && formDefinitionTextEditable(state.definitions[state.focused]) {
-		if state.editor.HandleTextInput(event) {
-			syncFormFieldsEditorLocked(&state.formFieldsState)
-			state.error = ""
-		}
-	}
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
-	return true
+	active := state != nil && state.active
+	a.mu.RUnlock()
+	return active
 }
 
 func (a *App) editRequirementFormKey(event woxui.KeyEvent) {
@@ -429,16 +443,16 @@ func (a *App) changeRequirementFormChoice(index, delta int) {
 	_ = a.window.Invalidate()
 }
 
-func (a *App) setRequirementFormCaret(index, offset int) {
+func (a *App) setRequirementFormText(index int, value string) {
 	a.mu.Lock()
-	state := a.requirementForm
-	if state == nil || !state.active || state.focused != index || state.editor == nil {
-		a.mu.Unlock()
-		return
+	changed := a.requirementForm != nil && !a.requirementForm.saving && setFormFieldsTextLocked(&a.requirementForm.formFieldsState, index, value)
+	if changed {
+		a.requirementForm.error = ""
 	}
-	state.editor.SetCaret(offset)
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	if changed {
+		_ = a.window.Invalidate()
+	}
 }
 
 // deactivateRequirementForm returns IME ownership to the launcher query without losing edits.
@@ -455,28 +469,6 @@ func (a *App) deactivateRequirementForm() {
 	}
 	a.restoreQueryTextInput()
 	_ = a.window.Invalidate()
-}
-
-func (a *App) scrollRequirementForm(key string, delta float32) {
-	a.mu.Lock()
-	state := a.requirementForm
-	if state == nil || state.key != key {
-		a.mu.Unlock()
-		return
-	}
-	maxOffset := max(float32(0), formDefinitionsContentHeight(state.definitions, state.values)-state.viewportHeight)
-	state.scroll = min(max(float32(0), state.scroll+delta), maxOffset)
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
-}
-
-func (a *App) setRequirementFormViewport(key string, height float32) {
-	a.mu.Lock()
-	if state := a.requirementForm; state != nil && state.key == key {
-		state.viewportHeight = max(float32(1), height)
-		state.scroll = min(state.scroll, max(float32(0), formDefinitionsContentHeight(state.definitions, state.values)-state.viewportHeight))
-	}
-	a.mu.Unlock()
 }
 
 // validateFormFields implements the validator subset shared by core query requirements.

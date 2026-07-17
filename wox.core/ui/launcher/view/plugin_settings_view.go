@@ -53,7 +53,6 @@ type PluginListProps struct {
 	Items               []PluginListItem
 	Message             string
 	MessageError        bool
-	Scroll              float32
 	Placeholder         string
 	Search              woxui.TextEditingState
 	Focused             bool
@@ -64,13 +63,10 @@ type PluginListProps struct {
 	Refreshing          bool
 	EmptyLabel          string
 	Theme               woxcomponent.Theme
-	OnViewport          func(float32)
-	OnScroll            func(float32)
-	OnCaret             func(int)
 	OnClear             func()
 	OnSearchKey         func(woxui.KeyEvent) bool
-	OnSearchTextInput   func(woxui.TextInputEvent) bool
 	OnSearchFocusChange func(bool)
+	OnSearchChanged     func(string)
 	OnSetSearchValue    func(string) error
 	OnFilter            func()
 	OnRefresh           func()
@@ -91,9 +87,6 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 	const headerHeight = float32(58)
 	const rowHeight = float32(62)
 	viewportHeight := max(float32(0), props.Height-headerHeight)
-	if props.OnViewport != nil {
-		props.OnViewport(viewportHeight)
-	}
 	rows := make([]woxwidget.Widget, 0, len(props.Items))
 	for _, item := range props.Items {
 		item := item
@@ -133,24 +126,29 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 	if len(rows) == 0 {
 		list = woxwidget.Container{Width: props.Width - 16, Height: viewportHeight, Padding: woxwidget.Insets{Left: 10, Top: 18}, Child: woxwidget.Text{Value: props.EmptyLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}
 	} else {
-		list = woxwidget.Gesture{ID: "plugin-list-scroll", OnScroll: func(delta woxui.Point) {
-			if props.OnScroll != nil {
-				props.OnScroll(-delta.Y)
+		var keepVisible *woxwidget.ScrollRange
+		for index, item := range props.Items {
+			if item.Selected {
+				start := float32(index) * rowHeight
+				keepVisible = &woxwidget.ScrollRange{Start: start, End: start + rowHeight}
+				break
 			}
-		}, Child: woxwidget.ScrollView{
-			Width: props.Width - 16, Height: viewportHeight, ContentHeight: max(viewportHeight, float32(len(rows))*rowHeight), Offset: props.Scroll,
+		}
+		list = woxwidget.ScrollView{
+			Key: "plugin-list-scroll", ID: "plugin-list-scroll", Width: props.Width - 16, Height: viewportHeight,
+			ContentHeight: max(viewportHeight, float32(len(rows))*rowHeight), KeepVisible: keepVisible,
 			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-		}}
+		}
 	}
 	searchFieldWidth := max(float32(80), props.Width-16)
 	searchField := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
-		ID: "plugin-search", Label: props.Placeholder, Width: searchFieldWidth, State: props.Search, Focused: props.Focused, Autofocus: props.Focused,
+		ID: "plugin-search", Label: props.Placeholder, Width: searchFieldWidth, Value: props.Search.Text, Focused: props.Focused, Autofocus: props.Focused,
 		Actions: []woxcomponent.SearchFieldAction{
 			{ID: "plugin-filter", Icon: props.FilterIcon, Active: props.FilterActive, OnTap: props.OnFilter},
 			{ID: "plugin-refresh", Icon: props.RefreshIcon, Disabled: props.Refreshing, OnTap: props.OnRefresh},
 		},
-		Window: props.Window, Theme: props.Theme, OnClear: props.OnClear, OnCaret: props.OnCaret, OnKey: props.OnSearchKey,
-		OnTextInput: props.OnSearchTextInput, OnFocusChange: props.OnSearchFocusChange, OnSetValue: props.OnSetSearchValue,
+		Window: props.Window, Theme: props.Theme, OnClear: props.OnClear, OnKey: props.OnSearchKey,
+		OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,
 	})
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 14, Children: []woxwidget.Widget{searchField, list}}}
 }
@@ -242,9 +240,7 @@ type PluginMetadataProps struct {
 type PluginFormProps struct {
 	Rows          []woxwidget.Widget
 	ContentHeight float32
-	Scroll        float32
-	OnViewport    func(float32)
-	OnScroll      func(float32)
+	KeepVisible   *woxwidget.ScrollRange
 }
 
 // PluginEditorProps contains the selected plugin detail and editable state.
@@ -321,7 +317,7 @@ func pluginEditor(props PluginEditorProps, width, height float32, theme woxcompo
 	tabs := PluginTabs(PluginTabsProps{Width: innerWidth, Height: tabHeight, Active: props.ActiveTab, Tabs: props.Tabs, Theme: theme, OnSelect: props.OnSelectTab})
 	children := []woxwidget.Widget{header, tabs}
 	if props.Metadata != nil {
-		children = append(children, pluginMetadataTab(*props.Metadata, innerWidth, max(float32(0), innerHeight-headerHeight-tabHeight), theme))
+		children = append(children, pluginMetadataTab(*props.Metadata, innerWidth, max(float32(0), innerHeight-headerHeight-tabHeight), "plugin-metadata-"+props.ActiveTab, theme))
 	} else if props.Form != nil {
 		statusHeight := float32(0)
 		if props.Status != "" {
@@ -329,17 +325,11 @@ func pluginEditor(props PluginEditorProps, width, height float32, theme woxcompo
 		}
 		const footerHeight = float32(48)
 		bodyHeight := max(float32(48), innerHeight-headerHeight-tabHeight-footerHeight-statusHeight)
-		if props.Form.OnViewport != nil {
-			props.Form.OnViewport(bodyHeight)
-		}
-		children = append(children, woxwidget.Gesture{ID: "plugin-settings-scroll", OnScroll: func(delta woxui.Point) {
-			if props.Form.OnScroll != nil {
-				props.Form.OnScroll(-delta.Y)
-			}
-		}, Child: woxwidget.ScrollView{
-			Width: innerWidth, Height: bodyHeight, ContentHeight: max(bodyHeight, props.Form.ContentHeight), Offset: props.Form.Scroll,
+		children = append(children, woxwidget.ScrollView{
+			Key: "plugin-settings-scroll", ID: "plugin-settings-scroll", Width: innerWidth, Height: bodyHeight,
+			ContentHeight: max(bodyHeight, props.Form.ContentHeight), KeepVisible: props.Form.KeepVisible,
 			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Form.Rows},
-		}})
+		})
 		if props.Status != "" {
 			color := theme.ResultSubtitle
 			if props.StatusError {
@@ -424,7 +414,7 @@ func PluginTabs(props PluginTabsProps) woxwidget.Widget {
 }
 
 // pluginMetadataTab renders description, empty, or tabular metadata in one scroll surface.
-func pluginMetadataTab(props PluginMetadataProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
+func pluginMetadataTab(props PluginMetadataProps, width, height float32, scrollID string, theme woxcomponent.Theme) woxwidget.Widget {
 	rows := make([]woxwidget.Widget, 0, len(props.Items)+1)
 	contentHeight := float32(0)
 	if props.DescriptionOnly {
@@ -444,7 +434,8 @@ func pluginMetadataTab(props PluginMetadataProps, width, height float32, theme w
 		}
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 18}, Child: woxwidget.ScrollView{
-		Width: width, Height: max(float32(1), height-18), ContentHeight: max(height-24, contentHeight), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
+		Key: woxwidget.Key(scrollID), ID: scrollID, Width: width, Height: max(float32(1), height-18),
+		ContentHeight: max(height-24, contentHeight), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
 	}}
 }
 
@@ -499,7 +490,7 @@ func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, them
 	if props.ActiveTab == "description" {
 		body = pluginStoreDescription(props, innerWidth, bodyHeight, theme)
 	} else {
-		body = pluginMetadataTab(props.Metadata, innerWidth, bodyHeight, theme)
+		body = pluginMetadataTab(props.Metadata, innerWidth, bodyHeight, "plugin-store-metadata-"+props.ActiveTab, theme)
 	}
 	children := []woxwidget.Widget{header, tabs, body}
 	if props.Error != "" {
@@ -528,7 +519,8 @@ func pluginStoreDescription(props PluginStoreDetailProps, width, height float32,
 		contentHeight += props.ScreenshotHeight
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: topPadding}, Child: woxwidget.ScrollView{
-		Width: width, Height: max(float32(1), height-topPadding), ContentHeight: max(height-topPadding, contentHeight), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children},
+		Key: "plugin-store-description-scroll", ID: "plugin-store-description-scroll", Width: width, Height: max(float32(1), height-topPadding),
+		ContentHeight: max(height-topPadding, contentHeight), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children},
 	}}
 }
 

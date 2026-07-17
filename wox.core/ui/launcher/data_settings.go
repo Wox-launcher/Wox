@@ -12,8 +12,6 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const dataBackupRowHeight = float32(46)
-
 type backupInfo struct {
 	ID        string `json:"Id"`
 	Name      string `json:"Name"`
@@ -32,14 +30,10 @@ func (a *App) buildDataSettingsPage(snapshot settingsSnapshot, width, height flo
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Labels: a.dataSettingsLabels(),
 		Location: snapshot.dataLocation, PendingLocation: snapshot.dataPendingLocation, AutoBackup: snapshot.data.EnableAutoBackup,
 		Backups: backups, RestoreArmed: snapshot.dataRestoreArmed, LogLevel: snapshot.data.LogLevel, ClearLogsArmed: snapshot.dataClearLogsArmed,
-		PageScroll: snapshot.pageScroll.offset, Note: snapshot.note, Loading: snapshot.dataLoading, Error: snapshot.dataError,
+		Note: snapshot.note, Loading: snapshot.dataLoading, Error: snapshot.dataError,
 		OnOpenPath: a.openDataPath, OnChooseLocation: a.chooseDataLocation, OnCancelLocation: a.cancelDataLocationChange,
 		OnConfirmLocation: a.confirmDataLocationChange, OnToggleAutoBackup: a.toggleDataAutoBackup, OnCreateBackup: a.createDataBackup,
 		OnRestoreBackup: a.restoreDataBackup, OnCycleLogLevel: a.cycleDataLogLevel, OnClearLogs: a.clearDataLogs, OnOpenLog: a.openDataLog,
-		OnScroll: a.scrollSettingsPage,
-		OnSetPageGeometry: func(viewportHeight, contentHeight float32) {
-			a.setSettingsPageGeometry(viewportHeight, contentHeight)
-		},
 	})
 }
 
@@ -118,7 +112,6 @@ func (a *App) reloadDataSettings() {
 	}
 	if backupsErr == nil {
 		a.dataBackups = backups
-		a.clampDataBackupScrollLocked()
 	}
 	a.dataError = errorText
 	a.mu.Unlock()
@@ -378,24 +371,4 @@ func (a *App) openDataLog() {
 			a.invalidateSettingsWindow()
 		}
 	}()
-}
-
-func (a *App) setDataBackupViewport(height float32) {
-	a.mu.Lock()
-	a.dataListViewport = max(float32(1), height)
-	a.clampDataBackupScrollLocked()
-	a.mu.Unlock()
-}
-
-func (a *App) scrollDataBackups(delta float32) {
-	a.mu.Lock()
-	a.dataListScroll += delta
-	a.clampDataBackupScrollLocked()
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) clampDataBackupScrollLocked() {
-	maxOffset := max(float32(0), float32(len(a.dataBackups))*dataBackupRowHeight-max(float32(1), a.dataListViewport))
-	a.dataListScroll = min(max(float32(0), a.dataListScroll), maxOffset)
 }

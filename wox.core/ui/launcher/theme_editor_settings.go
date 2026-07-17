@@ -320,7 +320,7 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 	}
 	panelWidth := min(float32(420), max(float32(320), width-40))
 	panelHeight := float32(176)
-	callbacks := formFieldCallbacks{idPrefix: "theme-editor-dialog", focus: a.focusThemeEditorField, setCaret: a.setThemeEditorCaret}
+	callbacks := formFieldCallbacks{idPrefix: "theme-editor-dialog", focus: a.focusThemeEditorField, setText: a.setThemeEditorText, onKey: a.onThemeEditorPreviewKey}
 	field := a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, state.definitions[index], panelWidth-32, 56)
 	title := a.translate("i18n:ui_theme_editor_save_as_title")
 	confirmLabel := a.translate("i18n:ui_theme_editor_save_as")

@@ -20,25 +20,19 @@ type FormAppCandidate struct {
 
 // FormAppPickerProps contains the immutable state and actions rendered by the application picker.
 type FormAppPickerProps struct {
-	Width         float32
-	Height        float32
-	Theme         woxcomponent.Theme
-	Candidates    []FormAppCandidate
-	Selected      int
-	Scroll        float32
-	OnChoose      func(int)
-	OnCancel      func()
-	OnScroll      func(float32)
-	OnSetViewport func(float32)
+	Width      float32
+	Height     float32
+	Theme      woxcomponent.Theme
+	Candidates []FormAppCandidate
+	Selected   int
+	OnChoose   func(int)
+	OnCancel   func()
 }
 
 // FormAppPickerView builds the reusable application picker list.
 func FormAppPickerView(props FormAppPickerProps) woxwidget.Widget {
 	footerHeight := float32(54)
 	viewportHeight := max(float32(58), props.Height-footerHeight)
-	if props.OnSetViewport != nil {
-		props.OnSetViewport(viewportHeight)
-	}
 	rows := make([]woxwidget.Widget, 0, len(props.Candidates))
 	for index, candidate := range props.Candidates {
 		index := index
@@ -73,14 +67,16 @@ func FormAppPickerView(props FormAppPickerProps) woxwidget.Widget {
 			Value: "No application candidates are available on this platform.", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle,
 		}}
 	} else {
-		list = woxwidget.Gesture{ID: "form-table-app-scroll", OnScroll: func(delta woxui.Point) {
-			if props.OnScroll != nil {
-				props.OnScroll(-delta.Y)
-			}
-		}, Child: woxwidget.ScrollView{
-			Width: props.Width, Height: viewportHeight, ContentHeight: max(viewportHeight, float32(len(rows))*formAppPickerRowHeight), Offset: props.Scroll,
+		var keepVisible *woxwidget.ScrollRange
+		if props.Selected >= 0 && props.Selected < len(rows) {
+			start := float32(props.Selected) * formAppPickerRowHeight
+			keepVisible = &woxwidget.ScrollRange{Start: start, End: start + formAppPickerRowHeight}
+		}
+		list = woxwidget.ScrollView{
+			Key: "form-table-app-scroll", ID: "form-table-app-scroll", Width: props.Width, Height: viewportHeight,
+			ContentHeight: max(viewportHeight, float32(len(rows))*formAppPickerRowHeight), KeepVisible: keepVisible,
 			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-		}}
+		}
 	}
 	footer := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: max(float32(0), props.Width-112), Height: 42, Padding: woxwidget.Insets{Top: 13}, Child: woxwidget.Text{

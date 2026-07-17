@@ -11,22 +11,20 @@ import (
 
 // RequirementPreviewProps contains the prepared form rows and actions for a requirement preview.
 type RequirementPreviewProps struct {
-	Width         float32
-	Height        float32
-	Theme         woxcomponent.Theme
-	FatalError    string
-	Title         string
-	Message       string
-	PluginName    string
-	Error         string
-	SaveLabel     string
-	Saving        bool
-	Rows          []woxwidget.Widget
-	RowsHeight    float32
-	Scroll        float32
-	OnScroll      func(float32)
-	OnSetViewport func(float32)
-	OnSubmit      func()
+	Width       float32
+	Height      float32
+	Theme       woxcomponent.Theme
+	FatalError  string
+	Title       string
+	Message     string
+	PluginName  string
+	Error       string
+	SaveLabel   string
+	Saving      bool
+	Rows        []woxwidget.Widget
+	RowsHeight  float32
+	KeepVisible *woxwidget.ScrollRange
+	OnSubmit    func()
 }
 
 // RequirementPreviewView builds the compact plugin configuration surface.
@@ -51,7 +49,7 @@ func RequirementPreviewView(props RequirementPreviewProps) woxwidget.Widget {
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 18, Top: 14, Right: 18, Bottom: 14}, Theme: props.Theme,
 		BeforeBody: beforeBody, BeforeBodyHeight: titleHeight + messageHeight, MinimumBodyHeight: 48,
 		Rows: props.Rows, RowsHeight: props.RowsHeight, EmptyMessage: fmt.Sprintf("No editable settings were provided for %s.", props.PluginName),
-		ScrollID: "requirement-form-scroll", Scroll: props.Scroll, OnScroll: props.OnScroll, OnSetViewport: props.OnSetViewport,
+		ScrollID: "requirement-form-scroll", KeepVisible: props.KeepVisible,
 		Error: props.Error, ShowError: strings.TrimSpace(props.Error) != "",
 		SaveButton: woxcomponent.ButtonProps{ID: "requirement-form-save", Label: saveLabel, Width: 104, Variant: variant, OnTap: props.OnSubmit, Theme: props.Theme},
 	})

@@ -12,71 +12,35 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const settingChoicePickerRowHeight = float32(48)
-
 type settingChoicePickerState struct {
-	item     settingItem
-	anchor   woxui.Rect
-	editor   *woxui.TextEditor
-	selected int
-	scroll   float32
-	viewport float32
+	item   settingItem
+	anchor woxui.Rect
 }
 
 type settingChoicePickerSnapshot struct {
-	item     settingItem
-	anchor   woxui.Rect
-	query    woxui.TextEditingState
-	choices  []settingChoice
-	selected int
-	scroll   float32
+	item   settingItem
+	anchor woxui.Rect
 }
 
 // buildSettingChoicePickerOverlay adapts controller state to the package-independent choice picker view.
 func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
-	choices := make([]launcherview.SettingsChoice, len(snapshot.choices))
-	for index, choice := range snapshot.choices {
+	choices := make([]launcherview.SettingsChoice, len(snapshot.item.choices))
+	for index, choice := range snapshot.item.choices {
 		choices[index] = launcherview.SettingsChoice{Value: choice.value, Label: choice.label, Trailing: snapshot.item.trailers[choice.value], Tooltip: a.localizedSettingChoiceTooltip(snapshot.item.key, choice)}
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
-		Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette.componentTheme(), Window: a.settingsNativeWindow(), Title: snapshot.item.title,
-		CurrentValue: snapshot.item.value, Query: snapshot.query, Choices: choices, Selected: snapshot.selected, Scroll: snapshot.scroll,
-		OnCaret: a.setSettingChoicePickerCaret, OnSetQuery: a.setSettingChoicePickerQuery,
-		OnKey: a.onSettingChoicePickerKey, OnTextInput: a.onSettingChoicePickerTextInput,
-		OnSelect: a.selectSettingChoice, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker,
-		OnScroll: a.scrollSettingChoicePicker, OnSetViewport: a.setSettingChoicePickerViewport, OnTooltip: a.setSettingChoiceTooltip,
+		ID: "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette.componentTheme(), Window: a.settingsNativeWindow(), Title: snapshot.item.title,
+		CurrentValue: snapshot.item.value, Choices: choices, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnTooltip: a.setSettingChoiceTooltip,
 	})
 }
 
-func filteredSettingChoices(item settingItem, query string) []settingChoice {
-	query = strings.ToLower(strings.TrimSpace(query))
-	if query == "" {
-		return append([]settingChoice(nil), item.choices...)
-	}
-	choices := make([]settingChoice, 0, len(item.choices))
-	for _, choice := range item.choices {
-		if strings.Contains(strings.ToLower(choice.label), query) || strings.Contains(strings.ToLower(choice.value), query) {
-			choices = append(choices, choice)
-		}
-	}
-	return choices
-}
-
 func snapshotSettingChoicePickerLocked(state *settingChoicePickerState) *settingChoicePickerSnapshot {
-	if state == nil || state.editor == nil {
+	if state == nil {
 		return nil
-	}
-	query := state.editor.State()
-	choices := filteredSettingChoices(state.item, query.Text)
-	selected := state.selected
-	if len(choices) == 0 {
-		selected = -1
-	} else {
-		selected = min(max(0, selected), len(choices)-1)
 	}
 	item := state.item
 	item.choices = append([]settingChoice(nil), state.item.choices...)
-	return &settingChoicePickerSnapshot{item: item, anchor: state.anchor, query: query, choices: choices, selected: selected, scroll: state.scroll}
+	return &settingChoicePickerSnapshot{item: item, anchor: state.anchor}
 }
 
 func (a *App) openOrActivateSetting() {
@@ -118,15 +82,7 @@ func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
 		a.mu.Unlock()
 		return
 	}
-	selected := 0
-	for index, choice := range item.choices {
-		if choice.value == item.value {
-			selected = index
-			break
-		}
-	}
-	scroll := max(float32(0), float32(selected-4)*settingChoicePickerRowHeight)
-	a.settingChoicePicker = &settingChoicePickerState{item: item, anchor: anchor, editor: woxui.NewTextEditor(""), selected: selected, scroll: scroll}
+	a.settingChoicePicker = &settingChoicePickerState{item: item, anchor: anchor}
 	a.settingEditKey = ""
 	a.settingEditor = nil
 	a.settingNote = ""
@@ -134,7 +90,7 @@ func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
 		a.settingNote = "Filter and select " + item.title
 	}
 	a.mu.Unlock()
-	a.updateSettingsTextInput(item.filterable)
+	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
 
@@ -157,17 +113,16 @@ func (a *App) closeSettingChoicePicker() {
 func (a *App) chooseSettingChoice(index int) {
 	a.mu.Lock()
 	state := a.settingChoicePicker
-	if state == nil || state.editor == nil || a.settingSaving {
+	if state == nil || a.settingSaving {
 		a.mu.Unlock()
 		return
 	}
-	choices := filteredSettingChoices(state.item, state.editor.State().Text)
-	if index < 0 || index >= len(choices) {
+	if index < 0 || index >= len(state.item.choices) {
 		a.mu.Unlock()
 		return
 	}
 	item := state.item
-	choice := choices[index]
+	choice := state.item.choices[index]
 	a.settingChoicePicker = nil
 	a.settingSaving = true
 	a.settingNote = "Saving " + item.title + "…"
@@ -176,152 +131,6 @@ func (a *App) chooseSettingChoice(index int) {
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 	go a.saveSetting(item, choice)
-}
-
-func (a *App) selectSettingChoice(index int) {
-	a.mu.Lock()
-	state := a.settingChoicePicker
-	if state != nil && state.editor != nil {
-		choices := filteredSettingChoices(state.item, state.editor.State().Text)
-		if index >= 0 && index < len(choices) {
-			state.selected = index
-			a.ensureSettingChoiceVisibleLocked()
-		}
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) moveSettingChoice(delta int) {
-	a.mu.Lock()
-	state := a.settingChoicePicker
-	if state != nil && state.editor != nil {
-		choices := filteredSettingChoices(state.item, state.editor.State().Text)
-		if len(choices) > 0 {
-			state.selected = (state.selected + delta + len(choices)) % len(choices)
-			a.ensureSettingChoiceVisibleLocked()
-		}
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) setSettingChoicePickerCaret(offset int) {
-	a.mu.Lock()
-	if state := a.settingChoicePicker; state != nil && state.editor != nil {
-		state.editor.SetCaret(offset)
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-// setSettingChoicePickerQuery replaces the filter value for accessibility set-value actions.
-func (a *App) setSettingChoicePickerQuery(value string) error {
-	a.mu.Lock()
-	if state := a.settingChoicePicker; state != nil && state.editor != nil {
-		state.editor.SetText(value, false)
-		state.selected = 0
-		state.scroll = 0
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-	return nil
-}
-
-func (a *App) setSettingChoicePickerViewport(height float32) {
-	a.mu.Lock()
-	if state := a.settingChoicePicker; state != nil {
-		state.viewport = max(float32(1), height)
-		a.ensureSettingChoiceVisibleLocked()
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) scrollSettingChoicePicker(delta float32) {
-	a.mu.Lock()
-	if state := a.settingChoicePicker; state != nil && state.editor != nil {
-		count := len(filteredSettingChoices(state.item, state.editor.State().Text))
-		maximum := max(float32(0), float32(count)*settingChoicePickerRowHeight-state.viewport)
-		state.scroll = min(max(float32(0), state.scroll+delta), maximum)
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) ensureSettingChoiceVisibleLocked() {
-	state := a.settingChoicePicker
-	if state == nil || state.selected < 0 {
-		return
-	}
-	viewport := max(float32(1), state.viewport)
-	top := float32(state.selected) * settingChoicePickerRowHeight
-	bottom := top + settingChoicePickerRowHeight
-	if top < state.scroll {
-		state.scroll = top
-	} else if bottom > state.scroll+viewport {
-		state.scroll = bottom - viewport
-	}
-	count := len(filteredSettingChoices(state.item, state.editor.State().Text))
-	maximum := max(float32(0), float32(count)*settingChoicePickerRowHeight-viewport)
-	state.scroll = min(max(float32(0), state.scroll), maximum)
-}
-
-func (a *App) onSettingChoicePickerKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
-	state := a.settingChoicePicker
-	selected := -1
-	if state != nil {
-		selected = state.selected
-	}
-	a.mu.RUnlock()
-	if state == nil {
-		return false
-	}
-	switch event.Key {
-	case woxui.KeyEscape:
-		a.closeSettingChoicePicker()
-	case woxui.KeyArrowUp:
-		a.moveSettingChoice(-1)
-	case woxui.KeyArrowDown:
-		a.moveSettingChoice(1)
-	case woxui.KeyEnter:
-		a.chooseSettingChoice(selected)
-	default:
-		if !state.item.filterable {
-			return true
-		}
-		a.mu.Lock()
-		if current := a.settingChoicePicker; current != nil && current.editor != nil {
-			_, changed := current.editor.HandleKey(event)
-			if changed {
-				current.selected = 0
-				current.scroll = 0
-			}
-		}
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
-	}
-	return true
-}
-
-func (a *App) onSettingChoicePickerTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
-	state := a.settingChoicePicker
-	if state == nil || state.editor == nil {
-		a.mu.Unlock()
-		return false
-	}
-	if !state.item.filterable {
-		a.mu.Unlock()
-		return true
-	}
-	if state.editor.HandleTextInput(event) {
-		state.selected = 0
-		state.scroll = 0
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-	return true
 }
 
 func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rect) {

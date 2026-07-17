@@ -11,6 +11,7 @@ import (
 	"image/color"
 	"image/draw"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +69,14 @@ func (a *App) imageFor(source woxImage) *woxui.Image {
 // imageForSize resolves display images at a caller-selected resolution while sharing the image cache.
 func (a *App) imageForSize(source woxImage, size int) *woxui.Image {
 	return a.imageForTint(source, nil, size)
+}
+
+// physicalImageSize keeps rasterized vector assets sharp at the window's current backing scale.
+func physicalImageSize(logicalSize int, scale float32) int {
+	if scale <= 0 {
+		scale = 1
+	}
+	return max(1, int(math.Ceil(float64(float32(logicalSize)*scale))))
 }
 
 // imageForTint applies a source-in tint to SVG images and sets the resolution for core-resolved assets.

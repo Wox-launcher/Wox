@@ -95,8 +95,8 @@ func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiP
 			return a.previewTextLayout(key, value, style, textWidth, lineHeight)
 		},
 		OnClampScroll: a.clampTerminalPreviewScroll, OnScroll: a.scrollTerminalPreview, OnOpenSearch: a.openTerminalSearch,
-		OnSearchCaret: a.setTerminalSearchCaret, OnSetSearch: a.setTerminalSearchQuery,
-		OnSearchKey: a.onTerminalPreviewKey, OnSearchTextInput: a.onTerminalPreviewTextInput,
+		OnSetSearch: a.setTerminalSearchQuery, OnSearchChanged: func(value string) { _ = a.setTerminalSearchQuery(value) },
+		OnSearchKey:  a.onTerminalPreviewKey,
 		OnMoveSearch: a.moveTerminalSearch, OnToggleSearchCase: a.toggleTerminalSearchCase, OnCloseSearch: a.closeTerminalSearch,
 	})
 }
@@ -439,16 +439,6 @@ func (a *App) closeTerminalSearch() {
 	_ = a.window.Invalidate()
 }
 
-// setTerminalSearchCaret applies pointer hit testing from the shared editor widget.
-func (a *App) setTerminalSearchCaret(offset int) {
-	a.mu.Lock()
-	if state := a.terminalPreview; state != nil && state.SearchOpen && state.SearchEditor != nil {
-		state.SearchEditor.SetCaret(offset)
-	}
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
-}
-
 // setTerminalSearchQuery replaces the local find value for accessibility set-value actions.
 func (a *App) setTerminalSearchQuery(value string) error {
 	a.mu.Lock()
@@ -524,30 +514,17 @@ func (a *App) onTerminalPreviewKey(event woxui.KeyEvent) bool {
 		a.moveTerminalSearch(delta)
 		return true
 	}
-	a.mu.Lock()
-	if state := a.terminalPreview; state != nil && state.SearchOpen && state.SearchEditor != nil {
-		_, changed := state.SearchEditor.HandleKey(event)
-		if changed {
-			rebuildTerminalMatchesLocked(state, false)
-		}
-	}
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
-	return true
+	return false
 }
 
 // onTerminalPreviewTextInput commits native IME input only while terminal find owns focus.
-func (a *App) onTerminalPreviewTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
+func (a *App) onTerminalPreviewTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
 	state := a.terminalPreview
 	if state == nil || !state.SearchOpen || state.SearchEditor == nil {
-		a.mu.Unlock()
+		a.mu.RUnlock()
 		return false
 	}
-	if state.SearchEditor.HandleTextInput(event) {
-		rebuildTerminalMatchesLocked(state, false)
-	}
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	a.mu.RUnlock()
 	return true
 }

@@ -20,6 +20,7 @@ type DialogProps struct {
 	Padding       woxwidget.Insets
 	BorderColor   woxui.Color
 	BorderWidth   float32
+	InitialFocus  woxwidget.Key
 	OnDismiss     func()
 	Child         woxwidget.Widget
 	Theme         Theme
@@ -27,6 +28,47 @@ type DialogProps struct {
 
 // WoxDialog builds shared modal chrome, focus trapping, and dialog semantics.
 func WoxDialog(props DialogProps) woxwidget.Widget {
+	return woxwidget.Stateful{
+		Key: woxwidget.Key(props.ID), Type: (*dialogState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &dialogState{} },
+	}
+}
+
+type dialogState struct {
+	initialFocusRequested bool
+}
+
+// InitState defers an optional initial focus request until dialog descendants are laid out.
+func (s *dialogState) InitState(_ woxwidget.StateContext, _ any) {}
+
+// DidUpdateWidget allows a changed initial focus target to be requested once.
+func (s *dialogState) DidUpdateWidget(_ woxwidget.StateContext, oldWidget, newWidget any) {
+	oldProps := oldWidget.(DialogProps)
+	props := newWidget.(DialogProps)
+	if oldProps.InitialFocus != props.InitialFocus {
+		s.initialFocusRequested = false
+	}
+}
+
+// Build keeps modal focus initialization inside the retained dialog lifecycle.
+func (s *dialogState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(DialogProps)
+	if props.InitialFocus != "" && !s.initialFocusRequested {
+		s.initialFocusRequested = true
+		context.PostFrame(func() {
+			if context.Mounted() {
+				context.RequestFocus(props.InitialFocus)
+			}
+		})
+	}
+	return buildWoxDialog(props)
+}
+
+// Dispose leaves focus restoration to the Host-owned modal scope stack.
+func (s *dialogState) Dispose() {}
+
+// buildWoxDialog renders stateless modal chrome beneath the retained lifecycle boundary.
+func buildWoxDialog(props DialogProps) woxwidget.Widget {
 	radius := props.Radius
 	if radius <= 0 {
 		radius = 12

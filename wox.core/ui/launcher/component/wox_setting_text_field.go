@@ -21,6 +21,5 @@ func WoxSettingTextField(props TextFieldProps) woxwidget.Widget {
 	}
 	props.TextAlignmentY = 0.5
 	props.MaxLines = 1
-	props.ControllerManagedFocus = true
 	return WoxTextField(props)
 }

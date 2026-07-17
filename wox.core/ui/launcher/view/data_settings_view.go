@@ -66,7 +66,6 @@ type DataSettingsProps struct {
 	RestoreArmed       string
 	LogLevel           string
 	ClearLogsArmed     bool
-	PageScroll         float32
 	Note               string
 	Loading            bool
 	Error              string
@@ -80,8 +79,6 @@ type DataSettingsProps struct {
 	OnCycleLogLevel    func()
 	OnClearLogs        func()
 	OnOpenLog          func()
-	OnScroll           func(float32)
-	OnSetPageGeometry  func(float32, float32)
 }
 
 type dataColumn struct {
@@ -127,7 +124,6 @@ func DataSettingsView(props DataSettingsProps) woxwidget.Widget {
 	}
 	return SettingsPage(SettingsPageProps{
 		ID: "data-settings-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight,
-		Scroll: props.PageScroll, OnScroll: props.OnScroll, OnSetGeometry: props.OnSetPageGeometry,
 	})
 }
 

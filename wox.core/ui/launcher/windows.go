@@ -50,7 +50,10 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 					}
 				}()
 			},
-			OnClosed: a.onSettingsWindowClosed,
+			OnClosed: func() {
+				host.Dispose()
+				a.onSettingsWindowClosed()
+			},
 		})
 		if openErr == nil {
 			host.Attach(managed.Window())
@@ -302,7 +305,6 @@ func (a *App) onSettingsWindowClosed() {
 	wasOpen := a.settingsOpen
 	wasRecording := a.hotkeyRecording != nil
 	a.settingsOpen = false
-	a.settingsTitleBarHover = ""
 	a.settingsView = nil
 	a.settingsHost = nil
 	a.settingSaving = false
@@ -312,7 +314,6 @@ func (a *App) onSettingsWindowClosed() {
 	a.settingSearchFocused = false
 	a.settingSearchPanel = false
 	a.settingSearchSelected = 0
-	a.settingSearchScroll = 0
 	a.pluginSearchEditor = nil
 	a.pluginSearchFocused = false
 	a.pluginDetailTab = "settings"

@@ -25,12 +25,11 @@ type SettingsRailProps struct {
 	Width       float32
 	Height      float32
 	Items       []SettingsNavItem
-	Scroll      float32
+	KeepVisible *woxwidget.ScrollRange
 	SearchBox   woxwidget.Widget
 	SearchPanel woxwidget.Widget
 	ShowSearch  bool
 	Theme       woxcomponent.Theme
-	OnScroll    func(float32)
 }
 
 // SettingsRail builds the settings navigation rail.
@@ -69,14 +68,11 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 	innerWidth := props.Width - 28
 	const searchAreaHeight = float32(58)
 	viewportHeight := max(float32(1), props.Height-searchAreaHeight-28)
-	nav := woxwidget.Gesture{ID: "settings-rail-scroll", OnScroll: func(delta woxui.Point) {
-		if props.OnScroll != nil {
-			props.OnScroll(-delta.Y)
-		}
-	}, Child: woxwidget.ScrollView{
-		Width: innerWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, float32(len(items))*50), Offset: props.Scroll,
+	nav := woxwidget.ScrollView{
+		Key: "settings-rail-scroll", ID: "settings-rail-scroll", KeepVisible: props.KeepVisible,
+		Width: innerWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, float32(len(items))*50),
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: items},
-	}}
+	}
 	stackChildren := []woxwidget.StackChild{{Child: nav}}
 	if props.ShowSearch {
 		stackChildren = append(stackChildren, woxwidget.StackChild{Child: props.SearchPanel})
@@ -100,19 +96,18 @@ type SettingsSearchBoxProps struct {
 	Theme         woxcomponent.Theme
 	OnFocus       func()
 	OnClear       func()
-	OnCaret       func(int)
 	OnKey         func(woxui.KeyEvent) bool
-	OnTextInput   func(woxui.TextInputEvent) bool
 	OnFocusChange func(bool)
+	OnChanged     func(string)
 	OnSetValue    func(string) error
 }
 
 // SettingsSearchBox builds the rail search field.
 func SettingsSearchBox(props SettingsSearchBoxProps) woxwidget.Widget {
 	search := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
-		ID: "settings-search-field", Label: props.Placeholder, Width: props.Width, State: props.State, Focused: props.Focused, Autofocus: props.Focused,
-		SearchIcon: props.SearchIcon, Window: props.Window, Theme: props.Theme, OnFocus: props.OnFocus, OnClear: props.OnClear, OnCaret: props.OnCaret,
-		OnKey: props.OnKey, OnTextInput: props.OnTextInput, OnFocusChange: props.OnFocusChange, OnSetValue: props.OnSetValue,
+		ID: "settings-search-field", Label: props.Placeholder, Width: props.Width, Value: props.State.Text, Focused: props.Focused, Autofocus: props.Focused,
+		SearchIcon: props.SearchIcon, Window: props.Window, Theme: props.Theme, OnFocus: props.OnFocus, OnClear: props.OnClear,
+		OnKey: props.OnKey, OnFocusChange: props.OnFocusChange, OnChanged: props.OnChanged, OnSetValue: props.OnSetValue,
 	})
 	return woxwidget.Container{Width: props.Width, Height: 50, Child: search}
 }
@@ -131,11 +126,8 @@ type SettingsSearchResultsProps struct {
 	AvailableHeight float32
 	Results         []SettingsSearchResult
 	Selected        int
-	Scroll          float32
 	EmptyMessage    string
 	Theme           woxcomponent.Theme
-	OnSetViewport   func(float32)
-	OnScroll        func(float32)
 }
 
 // SettingsSearchResults builds the rail search result overlay.
@@ -152,9 +144,6 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 		panelHeight = min(panelHeight, float32(58))
 	}
 	viewportHeight := max(float32(1), panelHeight-12)
-	if props.OnSetViewport != nil {
-		props.OnSetViewport(viewportHeight)
-	}
 	background := props.Theme.ToolbarBackground
 	background.A = 255
 	if len(props.Results) == 0 {
@@ -178,14 +167,12 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 			woxwidget.Text{Value: result.Subtitle, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultSubtitle},
 		}}}})
 	}
-	return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: 7, Color: background, Padding: woxwidget.UniformInsets(6), Child: woxwidget.Gesture{ID: "settings-search-results", OnScroll: func(delta woxui.Point) {
-		if props.OnScroll != nil {
-			props.OnScroll(-delta.Y)
-		}
-	}, Child: woxwidget.ScrollView{
-		Width: props.Width - 12, Height: viewportHeight, ContentHeight: max(viewportHeight, float32(len(props.Results))*rowHeight), Offset: props.Scroll,
+	start := float32(selected) * rowHeight
+	return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: 7, Color: background, Padding: woxwidget.UniformInsets(6), Child: woxwidget.ScrollView{
+		Key: "settings-search-results", ID: "settings-search-results", Width: props.Width - 12, Height: viewportHeight,
+		ContentHeight: max(viewportHeight, float32(len(props.Results))*rowHeight), KeepVisible: &woxwidget.ScrollRange{Start: start, End: start + rowHeight},
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-	}}}
+	}}
 }
 
 func settingsColorAlpha(color woxui.Color, alpha uint8) woxui.Color {

@@ -44,19 +44,19 @@ type glanceCatalogItem struct {
 }
 
 // buildGlance resolves controller-owned image resources before delegating to the pure view.
-func (a *App) buildGlance(item glanceItem, hovered, hideIcon bool, palette uiPalette, width float32) woxwidget.Widget {
+func (a *App) buildGlance(item glanceItem, hideIcon bool, palette uiPalette, width, scale float32) woxwidget.Widget {
 	var icon *woxui.Image
 	if !hideIcon && item.Icon.ImageData != "" {
 		iconTint := palette.queryText
 		iconTint.A = uint8(float32(iconTint.A) * 0.8 * 0.72)
-		icon = a.imageForTint(item.Icon, &iconTint, 16)
+		icon = a.imageForTint(item.Icon, &iconTint, physicalImageSize(16, scale))
 	}
 	var onTap func()
 	if item.Action != nil {
 		onTap = a.executeGlanceAction
 	}
 	return launcherview.GlanceView(launcherview.GlanceProps{
-		Text: item.Text, Tooltip: item.Tooltip, Width: width, Hovered: hovered, Icon: icon, Theme: palette.componentTheme(),
+		Text: item.Text, Tooltip: item.Tooltip, Width: width, Icon: icon, Theme: palette.componentTheme(),
 		OnTap: onTap, OnHover: a.setGlanceHover,
 	})
 }
@@ -142,7 +142,6 @@ func (a *App) cancelGlanceTimerLocked() {
 func (a *App) stopGlanceLocked(clear bool) {
 	a.glanceRevision++
 	a.glanceLoading = false
-	a.glanceHovered = false
 	a.cancelGlanceTimerLocked()
 	if clear {
 		a.glanceItem = nil
@@ -151,11 +150,9 @@ func (a *App) stopGlanceLocked(clear bool) {
 
 func (a *App) setGlanceHover(inside bool, text string, anchor woxui.Rect) {
 	a.mu.Lock()
-	a.glanceHovered = inside
 	a.glanceTooltipRevision++
 	revision := a.glanceTooltipRevision
 	a.mu.Unlock()
-	_ = a.window.Invalidate()
 
 	go func() {
 		a.tooltipMu.Lock()

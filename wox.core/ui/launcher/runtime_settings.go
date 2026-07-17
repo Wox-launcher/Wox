@@ -74,8 +74,9 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 		rows = append(rows, launcherview.RuntimeSettingRow{
 			ID: "runtime-setting-" + item.key, Title: item.title, Description: item.description, Placeholder: a.runtimeExecutablePlaceholder(item.key),
 			State: state, Focused: focused, Disabled: snapshot.saving || item.disabled, Window: a.settingsNativeWindow(),
-			OnHover:  func() { a.selectSettingRow(index) },
-			OnCaret:  func(offset int) { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, offset) },
+			OnHover:   func() { a.selectSettingRow(index) },
+			OnFocus:   func() { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, -1) },
+			OnChanged: func(value string) { a.setBuiltInSettingEditValue(item, value) }, OnKey: a.onBuiltInSettingsEditorKey,
 			OnBrowse: func() { a.selectSettingRow(index); a.browseRuntimeExecutable(item) },
 			OnClear:  func() { a.selectSettingRow(index); a.saveRuntimeExecutablePath(item, "") },
 		})
@@ -83,8 +84,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 	return launcherview.RuntimeSettingsView(launcherview.RuntimeSettingsProps{
 		Width: width, Height: height, SettingRowHeight: runtimeSettingRowHeight, Theme: snapshot.palette.componentTheme(), Labels: a.runtimeSettingsLabels(), Loading: snapshot.runtimeLoading,
 		Restarting: snapshot.runtimeRestarting != "", Error: snapshot.runtimeError, Note: snapshot.note,
-		Scroll: snapshot.runtimePageScroll, Statuses: statuses, Settings: rows,
-		OnScroll: a.scrollRuntimePage, OnSetGeometry: a.setRuntimePageGeometry,
+		Selected: snapshot.row, Statuses: statuses, Settings: rows,
 	})
 }
 
@@ -337,41 +337,4 @@ func runtimeStatusDetail(status runtimeStatus) string {
 
 func runtimeStatusActionable(status runtimeStatus) bool {
 	return status.StatusCode == "executable_missing" || status.StatusCode == "unsupported_version" || status.StatusCode == "start_failed"
-}
-
-// setRuntimePageGeometry keeps the specialized runtime page scroll range aligned with its responsive status grid.
-func (a *App) setRuntimePageGeometry(viewport, content, rowsTop float32) {
-	a.mu.Lock()
-	a.runtimePageViewport = max(float32(1), viewport)
-	a.runtimePageContent = max(content, viewport)
-	a.runtimeRowsTop = rowsTop
-	a.clampRuntimePageScrollLocked()
-	a.mu.Unlock()
-}
-
-// scrollRuntimePage clamps wheel input against the responsive page height.
-func (a *App) scrollRuntimePage(delta float32) {
-	a.mu.Lock()
-	a.runtimePageScroll += delta
-	a.clampRuntimePageScrollLocked()
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) clampRuntimePageScrollLocked() {
-	maximum := max(float32(0), a.runtimePageContent-a.runtimePageViewport)
-	a.runtimePageScroll = min(max(float32(0), a.runtimePageScroll), maximum)
-}
-
-// ensureRuntimeSettingRowVisibleLocked accounts for status cards above the shared setting rows.
-func (a *App) ensureRuntimeSettingRowVisibleLocked() {
-	viewport := max(float32(1), a.runtimePageViewport)
-	top := a.runtimeRowsTop + float32(a.settingRow)*runtimeSettingRowHeight
-	bottom := top + runtimeSettingRowHeight
-	if top < a.runtimePageScroll {
-		a.runtimePageScroll = top
-	} else if bottom > a.runtimePageScroll+viewport {
-		a.runtimePageScroll = bottom - viewport
-	}
-	a.clampRuntimePageScrollLocked()
 }

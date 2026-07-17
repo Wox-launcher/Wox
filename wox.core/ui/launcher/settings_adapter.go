@@ -75,7 +75,7 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth 
 	}
 	return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
 		Width: width, RailWidth: railWidth, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.imageFor(fromCoreImage(common.WoxIcon)),
-		Hovered: snapshot.titleBarHover, Theme: snapshot.palette.componentTheme(),
+		Theme: snapshot.palette.componentTheme(),
 		OnDrag: func() {
 			if window := a.settingsNativeWindow(); window != nil {
 				_ = window.StartDragging()
@@ -93,18 +93,7 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth 
 				}
 			}()
 		},
-		OnHover: a.setSettingsTitleBarHover,
 	})
-}
-
-func (a *App) setSettingsTitleBarHover(control string, hovered bool) {
-	a.mu.Lock()
-	if hovered {
-		a.settingsTitleBarHover = control
-	} else if a.settingsTitleBarHover == control {
-		a.settingsTitleBarHover = ""
-	}
-	a.mu.Unlock()
 }
 
 // buildSettingsThemePage mounts theme catalogs and the shared live editor under one portable route.
@@ -137,7 +126,8 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height float32
 	specs := settingNavSpecs(snapshot.isDev)
 	activeID := activeSettingNavID(snapshot.tab, snapshot.pluginsStore, snapshot.themesMode)
 	items := make([]launcherview.SettingsNavItem, 0, len(specs))
-	for _, spec := range specs {
+	var keepVisible *woxwidget.ScrollRange
+	for index, spec := range specs {
 		spec := spec
 		foreground := snapshot.palette.toolbarText
 		if spec.id == activeID {
@@ -151,17 +141,17 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height float32
 			ID: spec.id, Label: a.settingNavLabel(spec), FallbackIcon: spec.icon, Icon: icon, Depth: spec.depth, Parent: spec.parent, Selected: spec.id == activeID,
 			OnTap: func() { a.selectSettingsNavItem(spec) },
 		})
+		if spec.id == activeID {
+			keepVisible = &woxwidget.ScrollRange{Start: float32(index * 50), End: float32(index*50 + 46)}
+		}
 	}
 	innerWidth := width - 28
 	searchAreaHeight := float32(58)
 	viewportHeight := max(float32(1), height-searchAreaHeight-28)
-	railScroll := resolveSettingsRailScroll(specs, activeID, snapshot.railScroll, viewportHeight, snapshot.railScroll.viewport != viewportHeight)
-	a.rememberSettingsRailGeometry(snapshot, railScroll)
 	return launcherview.SettingsRail(launcherview.SettingsRailProps{
-		Width: width, Height: height, Items: items, Scroll: railScroll.offset,
+		Width: width, Height: height, Items: items, KeepVisible: keepVisible,
 		SearchBox: a.buildSettingsSearchBox(snapshot, innerWidth), SearchPanel: a.buildSettingsSearchResultPanel(snapshot, innerWidth, viewportHeight),
 		ShowSearch: snapshot.searchPanel && strings.TrimSpace(snapshot.searchQuery.Text) != "", Theme: snapshot.palette.componentTheme(),
-		OnScroll: a.scrollSettingsRail,
 	})
 }
 
@@ -190,8 +180,8 @@ func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width float32) w
 	return launcherview.SettingsSearchBox(launcherview.SettingsSearchBoxProps{
 		Width: width, Placeholder: placeholder, State: snapshot.searchQuery, Focused: snapshot.searchFocused,
 		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, 18), Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
-		OnFocus: func() { a.focusSettingsSearch(false) }, OnClear: a.clearSettingsSearch, OnCaret: a.setSettingsSearchCaret,
-		OnKey: a.onSettingsSearchKey, OnTextInput: a.onSettingsSearchTextInput, OnFocusChange: a.setSettingsSearchFocused, OnSetValue: a.setSettingsSearchValue,
+		OnFocus: func() { a.focusSettingsSearch(false) }, OnClear: a.clearSettingsSearch,
+		OnKey: a.onSettingsSearchKey, OnFocusChange: a.setSettingsSearchFocused, OnChanged: func(value string) { _ = a.setSettingsSearchValue(value) }, OnSetValue: a.setSettingsSearchValue,
 	})
 }
 
@@ -216,9 +206,8 @@ func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, a
 		}
 	}
 	return launcherview.SettingsSearchResults(launcherview.SettingsSearchResultsProps{
-		Width: width, AvailableHeight: availableHeight, Results: items, Selected: snapshot.searchSelected, Scroll: snapshot.searchScroll,
+		Width: width, AvailableHeight: availableHeight, Results: items, Selected: snapshot.searchSelected,
 		EmptyMessage: emptyMessage, Theme: snapshot.palette.componentTheme(),
-		OnSetViewport: func(viewport float32) { a.setSettingsSearchViewport(viewport, len(results)) }, OnScroll: func(delta float32) { a.scrollSettingsSearch(delta, len(results)) },
 	})
 }
 
@@ -245,6 +234,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		snapshot.palette,
 	))
 	contentHeight := woxcomponent.PageHeaderHeight
+	var keepVisible *woxwidget.ScrollRange
 	currentSection := ""
 	for index, item := range items {
 		index := index
@@ -254,6 +244,9 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			currentSection = section
 			children = append(children, a.buildSettingsSectionHeader(section, contentWidth, snapshot.palette))
 			contentHeight += 43
+		}
+		if index == snapshot.row {
+			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + 62}
 		}
 		children = append(children, a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{}))
 		contentHeight += 62
@@ -268,6 +261,9 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		}
 		for index, definition := range hotkeyForm.definitions {
 			rowHeight := formDefinitionHeight(definition, hotkeyForm.values)
+			if hotkeyForm.active && index == hotkeyForm.focused {
+				keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + rowHeight}
+			}
 			children = append(children, a.buildFormField(hotkeyForm, callbacks, snapshot.palette, index, definition, contentWidth, rowHeight))
 			contentHeight += rowHeight
 		}
@@ -277,10 +273,9 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		children = append(children, launcherview.SettingsNote(note, contentWidth, snapshot.palette.componentTheme()))
 		contentHeight += 34
 	}
-	viewportHeight := max(float32(1), height-58)
-	pageScroll := snapshot.pageScroll.withGeometry(viewportHeight, contentHeight)
-	a.rememberSettingsPageGeometry(snapshot, pageScroll)
-	return launcherview.SettingsPage(launcherview.SettingsPageProps{Width: width, Height: height, Children: children, ContentHeight: contentHeight, Scroll: pageScroll.offset, OnScroll: a.scrollSettingsPage})
+	return launcherview.SettingsPage(launcherview.SettingsPageProps{
+		ID: "settings-page-" + snapshot.tab, Width: width, Height: height, Children: children, ContentHeight: contentHeight, KeepVisible: keepVisible,
+	})
 }
 
 // buildSettingsPageHeader keeps built-in pages aligned with Flutter's wide settings form.
@@ -413,8 +408,10 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 	return launcherview.SettingRow(launcherview.SettingRowProps{
 		ID: item.key, Title: item.title, Description: item.description, Value: value, ValueTrailing: item.trailers[item.value], Width: width, Background: background, Disabled: item.disabled,
 		Kind: kind, ControlWidth: item.controlWidth, BrowseFile: item.browseFile, Editing: state, Focused: focused, Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
-		OnTap: func() { a.selectSettingRow(index); a.openOrActivateSetting() }, OnScroll: a.scrollSettingsPage,
+		OnTap:       func() { a.selectSettingRow(index); a.openOrActivateSetting() },
 		OnChoiceTap: func(anchor woxui.Rect) { a.selectSettingRow(index); a.openSettingChoicePickerAt(item, anchor) },
-		OnCaret:     func(offset int) { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, offset) }, OnBrowse: func() { a.selectSettingRow(index); a.browseBuiltInSettingFile(item) },
+		OnFocus:     func() { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, -1) },
+		OnChanged:   func(value string) { a.setBuiltInSettingEditValue(item, value) }, OnKey: a.onBuiltInSettingsEditorKey,
+		OnBrowse: func() { a.selectSettingRow(index); a.browseBuiltInSettingFile(item) },
 	})
 }

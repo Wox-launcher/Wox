@@ -20,6 +20,13 @@ type context struct {
 	window       textMeasurer
 	caretVisible bool
 	animation    animationFrame
+	elements     *elementTree
+	element      *stateElement
+}
+
+func (c context) withElement(element *stateElement) context {
+	c.element = element
+	return c
 }
 
 type constraints struct {
@@ -237,13 +244,26 @@ type Stack struct {
 	Children []StackChild
 }
 
-// ScrollView clips a larger child to a fixed viewport and translates it by Offset.
+// ScrollRange identifies a content interval that a retained ScrollView should keep visible.
+type ScrollRange struct {
+	Start float32
+	End   float32
+}
+
+// ScrollView clips a larger child and optionally retains its own offset when Key is set.
 type ScrollView struct {
-	Width         float32
-	Height        float32
-	ContentHeight float32
-	Offset        float32
-	Child         Widget
+	Key             Key
+	ID              string
+	Width           float32
+	Height          float32
+	ContentHeight   float32
+	Offset          float32
+	InitialOffset   float32
+	Controller      *ScrollController
+	KeepVisible     *ScrollRange
+	OnOffsetChanged func(float32)
+	Child           Widget
+	onGeometry      func(viewport, content float32)
 }
 
 // Clip confines a child to a fixed logical rectangle without applying scrolling.
@@ -264,6 +284,12 @@ func (w Clip) layout(ctx context, available constraints) *node {
 }
 
 func (w ScrollView) layout(ctx context, available constraints) *node {
+	if w.Key != "" {
+		return (Stateful{
+			Key: w.Key, Type: (*scrollViewState)(nil), Widget: w,
+			CreateState: func() State { return &scrollViewState{} },
+		}).layout(ctx, available)
+	}
 	width := available.width
 	if w.Width > 0 {
 		width = min(w.Width, available.width)
@@ -273,10 +299,18 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 		height = min(w.Height, available.height)
 	}
 	contentHeight := max(height, w.ContentHeight)
-	offset := min(max(float32(0), w.Offset), max(float32(0), contentHeight-height))
-	result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
+	var child *node
 	if w.Child != nil {
-		child := w.Child.layout(ctx, constraints{width: width, height: contentHeight})
+		child = w.Child.layout(ctx, constraints{width: width, height: contentHeight})
+		// Flex children can legitimately exceed a caller's estimated extent. The measured height must remain scrollable.
+		contentHeight = max(contentHeight, child.bounds.Height)
+	}
+	offset := min(max(float32(0), w.Offset), max(float32(0), contentHeight-height))
+	if w.onGeometry != nil {
+		w.onGeometry(height, contentHeight)
+	}
+	result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
+	if child != nil {
 		child.place(0, -offset)
 		result.children = []*node{child}
 	}

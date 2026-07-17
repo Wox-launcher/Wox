@@ -11,8 +11,6 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const modelManagerRowHeight = launcherview.ModelManagerRowHeight
-
 type modelEngineStatus struct {
 	Known    bool
 	State    string `json:"State"`
@@ -32,8 +30,6 @@ type modelManagerState struct {
 	loading     bool
 	busy        string
 	error       string
-	scroll      float32
-	viewport    float32
 }
 
 type modelManagerSnapshot struct {
@@ -45,7 +41,6 @@ type modelManagerSnapshot struct {
 	loading     bool
 	busy        string
 	error       string
-	scroll      float32
 }
 
 // buildModelManagerOverlay converts controller state into the pure modal view.
@@ -128,7 +123,7 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 	}
 	return launcherview.ModelManagerView(launcherview.ModelManagerProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Title: title,
-		Loading: snapshot.loading, Busy: snapshot.busy != "", Error: snapshot.error, Scroll: snapshot.scroll,
+		Loading: snapshot.loading, Busy: snapshot.busy != "", Error: snapshot.error,
 		EngineLabel: engineLabel, EngineButtonLabel: engineButtonLabel, EngineEnabled: engineEnabled, Options: options,
 		OnEngine: func() { a.runModelManagerAction("engine", -1) },
 		OnRefresh: func() {
@@ -139,7 +134,7 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 				go a.refreshModelManager(state)
 			}
 		},
-		OnClose: a.closeModelManager, OnScroll: a.scrollModelManager, OnSetViewport: a.setModelManagerViewport,
+		OnClose: a.closeModelManager,
 	})
 }
 
@@ -149,7 +144,7 @@ func snapshotModelManagerLocked(state *modelManagerState) *modelManagerSnapshot 
 	}
 	return &modelManagerSnapshot{
 		kind: state.kind, options: append([]formOption(nil), state.options...), selected: state.selected, selectedRow: state.selectedRow,
-		engine: state.engine, loading: state.loading, busy: state.busy, error: state.error, scroll: state.scroll,
+		engine: state.engine, loading: state.loading, busy: state.busy, error: state.error,
 	}
 }
 
@@ -240,7 +235,7 @@ func (a *App) openPluginModelManager(index int) {
 	}
 	manager := &modelManagerState{
 		kind: definition.Type, target: &state.formFieldsState, fieldIndex: index, options: append([]formOption(nil), definition.Value.Options...),
-		selected: selected, selectedRow: selectedRow, viewport: 400,
+		selected: selected, selectedRow: selectedRow,
 	}
 	a.modelManager = manager
 	a.mu.Unlock()
@@ -359,43 +354,8 @@ func (a *App) selectModelManagerRow(index int) {
 		return
 	}
 	state.selectedRow = index
-	a.ensureModelManagerRowVisibleLocked(state)
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
-}
-
-func (a *App) setModelManagerViewport(height float32) {
-	a.mu.Lock()
-	if state := a.modelManager; state != nil {
-		state.viewport = max(float32(1), height)
-		a.ensureModelManagerRowVisibleLocked(state)
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) scrollModelManager(delta float32) {
-	a.mu.Lock()
-	if state := a.modelManager; state != nil {
-		maximum := max(float32(0), float32(len(state.options))*modelManagerRowHeight-state.viewport)
-		state.scroll = min(max(float32(0), state.scroll+delta), maximum)
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) ensureModelManagerRowVisibleLocked(state *modelManagerState) {
-	if state.selectedRow < 0 || state.selectedRow >= len(state.options) {
-		return
-	}
-	top := float32(state.selectedRow) * modelManagerRowHeight
-	bottom := top + modelManagerRowHeight
-	if top < state.scroll {
-		state.scroll = top
-	} else if bottom > state.scroll+state.viewport {
-		state.scroll = bottom - state.viewport
-	}
-	maximum := max(float32(0), float32(len(state.options))*modelManagerRowHeight-state.viewport)
-	state.scroll = min(max(float32(0), state.scroll), maximum)
 }
 
 func (a *App) chooseManagedModel(index int) {

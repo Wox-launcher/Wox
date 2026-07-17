@@ -367,29 +367,26 @@ func FormTableOverlay(props FormTableOverlayProps) woxwidget.Widget {
 
 // FormTableListProps contains the prepared rows and actions rendered by a table editor.
 type FormTableListProps struct {
-	Width         float32
-	Height        float32
-	Rows          []string
-	Selected      int
-	Scroll        float32
-	Status        string
-	StatusError   bool
-	AddLabel      string
-	DeleteLabel   string
-	CloseLabel    string
-	CanAdd        bool
-	CanEdit       bool
-	CanDelete     bool
-	ShowClone     bool
-	Theme         woxcomponent.Theme
-	OnSetViewport func(float32)
-	OnScroll      func(float32)
-	OnSelect      func(int)
-	OnAdd         func()
-	OnEdit        func()
-	OnDelete      func()
-	OnClone       func()
-	OnClose       func()
+	Width       float32
+	Height      float32
+	Rows        []string
+	Selected    int
+	Status      string
+	StatusError bool
+	AddLabel    string
+	DeleteLabel string
+	CloseLabel  string
+	CanAdd      bool
+	CanEdit     bool
+	CanDelete   bool
+	ShowClone   bool
+	Theme       woxcomponent.Theme
+	OnSelect    func(int)
+	OnAdd       func()
+	OnEdit      func()
+	OnDelete    func()
+	OnClone     func()
+	OnClose     func()
 }
 
 // FormTableList builds the row list and editor actions.
@@ -397,9 +394,6 @@ func FormTableList(props FormTableListProps) woxwidget.Widget {
 	footerHeight := float32(54)
 	statusHeight := float32(28)
 	viewportHeight := max(float32(48), props.Height-footerHeight-statusHeight)
-	if props.OnSetViewport != nil {
-		props.OnSetViewport(viewportHeight)
-	}
 	rows := make([]woxwidget.Widget, 0, len(props.Rows))
 	for index, value := range props.Rows {
 		index := index
@@ -427,14 +421,16 @@ func FormTableList(props FormTableListProps) woxwidget.Widget {
 			Value: "No rows yet. Choose Add row to create one.", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ActionHeader,
 		}}
 	} else {
-		list = woxwidget.Gesture{ID: "form-table-list-scroll", OnScroll: func(delta woxui.Point) {
-			if props.OnScroll != nil {
-				props.OnScroll(-delta.Y)
-			}
-		}, Child: woxwidget.ScrollView{
-			Width: props.Width, Height: viewportHeight, ContentHeight: max(viewportHeight, float32(len(rows))*formTableListRowHeight), Offset: props.Scroll,
+		var keepVisible *woxwidget.ScrollRange
+		if props.Selected >= 0 && props.Selected < len(rows) {
+			start := float32(props.Selected) * formTableListRowHeight
+			keepVisible = &woxwidget.ScrollRange{Start: start, End: start + formTableListRowHeight}
+		}
+		list = woxwidget.ScrollView{
+			Key: "form-table-list-scroll", ID: "form-table-list-scroll", Width: props.Width, Height: viewportHeight,
+			ContentHeight: max(viewportHeight, float32(len(rows))*formTableListRowHeight), KeepVisible: keepVisible,
 			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-		}}
+		}
 	}
 	status := props.Status
 	if status == "" {
@@ -497,7 +493,9 @@ type FormTableRowFieldProps struct {
 	Theme           woxcomponent.Theme
 	OnTap           func()
 	OnChoiceTap     func(woxui.Rect)
-	OnCaret         func(int)
+	OnFocus         func()
+	OnChanged       func(string)
+	OnKey           func(woxui.KeyEvent) bool
 	OnBrowse        func()
 	OnEmoji         func()
 	OnUpload        func()
@@ -620,8 +618,13 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 		ID: props.ID, Label: props.Label, Width: inputWidth, Height: height, Radius: 4,
 		Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 9, Bottom: 6}, Transparent: true,
 		BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1,
-		Style: woxui.TextStyle{Size: 13}, State: props.State, Focused: props.Focused, Protected: props.Protected,
-		MaxLines: max(1, props.MaxLines), Window: props.Window, Theme: props.Theme, ControllerManagedFocus: true, OnCaret: props.OnCaret,
+		Style: woxui.TextStyle{Size: 13}, Value: props.State.Text, Focused: props.Focused, Protected: props.Protected,
+		MaxLines: max(1, props.MaxLines), Window: props.Window, Theme: props.Theme, OnChanged: props.OnChanged, OnKey: props.OnKey,
+		OnFocusChange: func(focused bool) {
+			if focused && props.OnFocus != nil {
+				props.OnFocus()
+			}
+		},
 	})
 	if props.OnBrowse == nil {
 		return input
@@ -654,8 +657,13 @@ func formTableRowImageControl(props FormTableRowFieldProps, height float32) woxw
 			preview = woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 				ID: props.ID + "-emoji-input", Label: props.Label, Width: 78, Height: height - 2, Radius: 7,
 				Padding: woxwidget.Insets{Left: 27, Top: 28, Right: 20, Bottom: 28}, Transparent: true,
-				Style: woxui.TextStyle{Size: 18}, State: props.State, Focused: true, MaxLines: 1,
-				Window: props.Window, Theme: props.Theme, ControllerManagedFocus: true, OnCaret: props.OnCaret,
+				Style: woxui.TextStyle{Size: 18}, Value: props.State.Text, Focused: true, MaxLines: 1,
+				Window: props.Window, Theme: props.Theme, OnChanged: props.OnChanged, OnKey: props.OnKey,
+				OnFocusChange: func(focused bool) {
+					if focused && props.OnFocus != nil {
+						props.OnFocus()
+					}
+				},
 			})
 		} else {
 			preview = woxwidget.Align{Width: 80, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
@@ -736,13 +744,11 @@ type FormTableRowEditorProps struct {
 	Title         string
 	Rows          []woxwidget.Widget
 	ContentHeight float32
-	Scroll        float32
+	KeepVisible   *woxwidget.ScrollRange
 	Status        string
 	CancelLabel   string
 	SaveLabel     string
 	Theme         woxcomponent.Theme
-	OnSetViewport func(float32)
-	OnScroll      func(float32)
 	OnCancel      func()
 	OnSave        func()
 }
@@ -759,17 +765,11 @@ func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 		statusHeight = 28
 	}
 	bodyHeight := max(float32(48), props.Height-titleHeight-footerHeight-statusHeight)
-	if props.OnSetViewport != nil {
-		props.OnSetViewport(bodyHeight)
-	}
-	body := woxwidget.Gesture{ID: "form-table-row-scroll", OnScroll: func(delta woxui.Point) {
-		if props.OnScroll != nil {
-			props.OnScroll(-delta.Y)
-		}
-	}, Child: woxwidget.ScrollView{
-		Width: props.Width, Height: bodyHeight, ContentHeight: max(bodyHeight, props.ContentHeight), Offset: props.Scroll,
+	body := woxwidget.ScrollView{
+		Key: "form-table-row-scroll", ID: "form-table-row-scroll", Width: props.Width, Height: bodyHeight,
+		ContentHeight: max(bodyHeight, props.ContentHeight), KeepVisible: props.KeepVisible,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
-	}}
+	}
 	children := make([]woxwidget.Widget, 0, 4)
 	if titleHeight > 0 {
 		children = append(children, woxwidget.Container{Width: props.Width, Height: titleHeight, Child: woxwidget.Text{

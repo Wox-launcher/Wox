@@ -111,7 +111,6 @@ type settingItem struct {
 
 type settingsSnapshot struct {
 	isDev                 bool
-	titleBarHover         string
 	tab                   string
 	row                   int
 	note                  string
@@ -122,13 +121,10 @@ type settingsSnapshot struct {
 	searchFocused         bool
 	searchPanel           bool
 	searchSelected        int
-	searchScroll          float32
 	searchPlugins         []pluginSettingsPlugin
 	searchLoading         bool
 	searchError           string
 	choicePicker          *settingChoicePickerSnapshot
-	pageScroll            scrollController
-	railScroll            scrollController
 	languages             []settingChoice
 	updateChannelVersions []updateChannelVersion
 	data                  settingsData
@@ -137,7 +133,6 @@ type settingsSnapshot struct {
 	pluginsLoading        bool
 	pluginsError          string
 	pluginSelected        int
-	pluginListScroll      float32
 	pluginSearch          woxui.TextEditingState
 	pluginSearchFocused   bool
 	pluginFilters         pluginFilterState
@@ -161,7 +156,6 @@ type settingsSnapshot struct {
 	themesLoading         bool
 	themesError           string
 	themeSelected         int
-	themeListScroll       float32
 	themeSearch           woxui.TextEditingState
 	themeSearchFocused    bool
 	themeDetailTab        string
@@ -189,12 +183,10 @@ type settingsSnapshot struct {
 	dataRestoreArmed      string
 	dataPendingLocation   string
 	dataClearLogsArmed    bool
-	dataListScroll        float32
 	runtimeStatuses       []runtimeStatus
 	runtimeLoading        bool
 	runtimeError          string
 	runtimeRestarting     string
-	runtimePageScroll     float32
 	cloudAccount          cloudAccountStatus
 	cloudSync             cloudSyncStatus
 	cloudBillingPlan      cloudBillingPlan
@@ -203,11 +195,9 @@ type settingsSnapshot struct {
 	cloudLoading          bool
 	cloudBusy             string
 	cloudError            string
-	cloudPageScroll       float32
 	cloudForm             *cloudFormSnapshot
 	cloudActionMenu       string
 	cloudPlugins          []pluginSettingsPlugin
-	cloudPluginScroll     float32
 }
 
 type settingTab struct {
@@ -356,7 +346,6 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	a.settingSearchFocused = tab != "plugins"
 	a.settingSearchPanel = false
 	a.settingSearchSelected = 0
-	a.settingSearchScroll = 0
 	if tab == "plugins" {
 		if a.pluginSearchEditor == nil {
 			a.pluginSearchEditor = woxui.NewTextEditor("")
@@ -365,12 +354,9 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	} else {
 		a.pluginSearchFocused = false
 	}
-	a.settingPageScroll.reset()
 	a.settingsHotkeyFocus = false
 	a.settingChoicePicker = nil
 	a.modelManager = nil
-	a.runtimePageScroll = 0
-	a.cloudPageScroll = 0
 	a.cloudForm = nil
 	a.cloudActionMenu = ""
 	a.form = nil
@@ -390,7 +376,6 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.themesLoading = false
 		a.themesError = ""
 		a.themeSelected = -1
-		a.themeListScroll = 0
 		a.themeSearchEditor = woxui.NewTextEditor("")
 		a.themeSearchFocused = false
 		a.themeDetailTab = "preview"
@@ -400,7 +385,6 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if a.pluginForm != nil {
 		a.pluginForm.active = false
 	}
-	a.ensureSettingTabVisibleLocked(tab)
 	a.mu.Unlock()
 	a.preloadThemeEditorWallpaper()
 	a.deactivateTerminalPreview()
@@ -564,7 +548,13 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.onCloudSettingsKey(event) {
 		return true
 	}
-	if a.onSettingChoicePickerKey(event) {
+	a.mu.RLock()
+	choicePickerOpen := a.settingChoicePicker != nil
+	a.mu.RUnlock()
+	if choicePickerOpen {
+		if event.Key == woxui.KeyEscape {
+			a.closeSettingChoicePicker()
+		}
 		return true
 	}
 	if a.onSettingsSearchKey(event) {
@@ -652,7 +642,6 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	modelManager := snapshotModelManagerLocked(a.modelManager)
 	return settingsSnapshot{
 		isDev:                 a.isDev,
-		titleBarHover:         a.settingsTitleBarHover,
 		tab:                   a.settingTab,
 		row:                   a.settingRow,
 		note:                  a.settingNote,
@@ -663,13 +652,10 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		searchFocused:         a.settingSearchFocused,
 		searchPanel:           a.settingSearchPanel,
 		searchSelected:        a.settingSearchSelected,
-		searchScroll:          a.settingSearchScroll,
 		searchPlugins:         append([]pluginSettingsPlugin(nil), a.settingSearchPlugins...),
 		searchLoading:         a.settingSearchLoading,
 		searchError:           a.settingSearchError,
 		choicePicker:          choicePicker,
-		pageScroll:            a.settingPageScroll,
-		railScroll:            a.settingRailScroll,
 		languages:             append([]settingChoice(nil), a.settingLanguages...),
 		updateChannelVersions: append([]updateChannelVersion(nil), a.updateChannelVersions...),
 		data:                  a.settings,
@@ -678,7 +664,6 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		pluginsLoading:        a.pluginsLoading,
 		pluginsError:          a.pluginsError,
 		pluginSelected:        a.pluginSelected,
-		pluginListScroll:      a.pluginListScroll,
 		pluginSearch:          pluginSearch,
 		pluginSearchFocused:   a.pluginSearchFocused,
 		pluginFilters:         a.pluginFilters,
@@ -702,7 +687,6 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		themesLoading:         a.themesLoading,
 		themesError:           a.themesError,
 		themeSelected:         a.themeSelected,
-		themeListScroll:       a.themeListScroll,
 		themeSearch:           themeSearch,
 		themeSearchFocused:    a.themeSearchFocused,
 		themeDetailTab:        a.themeDetailTab,
@@ -730,12 +714,10 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		dataRestoreArmed:      a.dataRestoreArmed,
 		dataPendingLocation:   a.dataPendingLocation,
 		dataClearLogsArmed:    a.dataClearLogsArmed,
-		dataListScroll:        a.dataListScroll,
 		runtimeStatuses:       cloneRuntimeStatuses(a.runtimeStatuses),
 		runtimeLoading:        a.runtimeLoading,
 		runtimeError:          a.runtimeError,
 		runtimeRestarting:     a.runtimeRestarting,
-		runtimePageScroll:     a.runtimePageScroll,
 		cloudAccount:          a.cloudAccount,
 		cloudSync:             a.cloudSync,
 		cloudBillingPlan:      a.cloudBillingPlan,
@@ -744,11 +726,9 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		cloudLoading:          a.cloudLoading,
 		cloudBusy:             a.cloudBusy,
 		cloudError:            a.cloudError,
-		cloudPageScroll:       a.cloudPageScroll,
 		cloudForm:             cloudForm,
 		cloudActionMenu:       a.cloudActionMenu,
 		cloudPlugins:          append([]pluginSettingsPlugin(nil), a.cloudPlugins...),
-		cloudPluginScroll:     a.cloudPluginScroll,
 	}
 }
 
@@ -793,10 +773,6 @@ func (a *App) selectSettingTab(tab string) {
 		a.settingNote = ""
 		a.settingEditKey = ""
 		a.settingEditor = nil
-		a.settingPageScroll.reset()
-		a.runtimePageScroll = 0
-		a.cloudPageScroll = 0
-		a.cloudPluginScroll = 0
 		a.cloudForm = nil
 		if tab != "plugins" {
 			a.modelManager = nil
@@ -808,7 +784,6 @@ func (a *App) selectSettingTab(tab string) {
 			a.themeSearchFocused = false
 		}
 	}
-	a.ensureSettingTabVisibleLocked(tab)
 	if a.aiSettingsForm != nil {
 		a.aiSettingsForm.active = tab == "ai"
 		if tab == "ai" {
@@ -924,7 +899,6 @@ func (a *App) selectSettingsNavItem(item settingNavSpec) {
 			a.pluginsLoading = false
 			a.pluginSelected = -1
 			a.pluginForm = nil
-			a.pluginListScroll = 0
 		}
 		a.mu.Unlock()
 		a.selectSettingTab("plugins")
@@ -943,7 +917,6 @@ func (a *App) selectSettingsNavItem(item settingNavSpec) {
 			a.themesLoaded = false
 			a.themesLoading = false
 			a.themeSelected = -1
-			a.themeListScroll = 0
 			a.themeSearchEditor = woxui.NewTextEditor("")
 			a.themeSearchFocused = false
 			a.themeDetailTab = "preview"
@@ -971,56 +944,6 @@ func (a *App) moveSettingTab(delta int) {
 	a.selectSettingTab(tabs[index].id)
 }
 
-func (a *App) scrollSettingsRail(delta float32) {
-	a.mu.Lock()
-	contentHeight := settingsRailContentHeight(len(settingNavSpecs(a.isDev)))
-	a.settingRailScroll.setGeometry(max(float32(1), a.settingRailScroll.viewport), contentHeight)
-	a.settingRailScroll.scrollBy(delta)
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) ensureSettingTabVisibleLocked(tabID string) {
-	items := settingNavSpecs(a.isDev)
-	activeID := activeSettingNavID(tabID, a.pluginsStore, a.themesMode)
-	viewport := max(float32(1), a.settingRailScroll.viewport)
-	a.settingRailScroll = resolveSettingsRailScroll(items, activeID, a.settingRailScroll, viewport, true)
-}
-
-// resolveSettingsRailScroll preserves manual scrolling unless a selection or viewport change must be revealed.
-func resolveSettingsRailScroll(items []settingNavSpec, activeID string, current scrollController, viewport float32, followSelection bool) scrollController {
-	scroll := current.withGeometry(viewport, settingsRailContentHeight(len(items)))
-	if !followSelection {
-		return scroll
-	}
-	for index, item := range items {
-		if item.id != activeID {
-			continue
-		}
-		top := float32(index * 50)
-		bottom := top + 46
-		scroll.ensureVisible(top, bottom)
-		break
-	}
-	return scroll
-}
-
-// rememberSettingsRailGeometry keeps wheel input aligned with the offset rendered for the current settings route.
-func (a *App) rememberSettingsRailGeometry(snapshot settingsSnapshot, scroll scrollController) {
-	if scroll == snapshot.railScroll {
-		return
-	}
-	a.mu.Lock()
-	if a.settingTab == snapshot.tab && a.pluginsStore == snapshot.pluginsStore && a.themesMode == snapshot.themesMode && a.settingRailScroll == snapshot.railScroll {
-		a.settingRailScroll = scroll
-	}
-	a.mu.Unlock()
-}
-
-func settingsRailContentHeight(tabCount int) float32 {
-	return float32(tabCount * 50)
-}
-
 func (a *App) moveSettingRow(delta int) {
 	snapshot := a.settingsSnapshot()
 	items := settingItemsForSnapshot(snapshot)
@@ -1029,7 +952,6 @@ func (a *App) moveSettingRow(delta int) {
 	}
 	a.mu.Lock()
 	a.settingRow = (a.settingRow + delta + len(items)) % len(items)
-	a.ensureSettingRowVisibleLocked(len(items))
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
@@ -1057,47 +979,6 @@ func (a *App) selectSettingRow(index int) {
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
-}
-
-// setSettingsPageGeometry records the measured page without taking scroll ownership from pointer input.
-func (a *App) setSettingsPageGeometry(height, contentHeight float32) {
-	a.mu.Lock()
-	a.settingPageScroll.setGeometry(max(float32(1), height), contentHeight)
-	a.mu.Unlock()
-}
-
-// rememberSettingsPageGeometry adopts render-time measurements only while the page snapshot is current.
-func (a *App) rememberSettingsPageGeometry(snapshot settingsSnapshot, scroll scrollController) {
-	if scroll == snapshot.pageScroll {
-		return
-	}
-	a.mu.Lock()
-	if a.settingTab == snapshot.tab && a.settingRow == snapshot.row && a.settingPageScroll == snapshot.pageScroll {
-		a.settingPageScroll = scroll
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) scrollSettingsPage(delta float32) {
-	a.mu.Lock()
-	a.settingPageScroll.scrollBy(delta)
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) ensureSettingRowVisibleLocked(itemCount int) {
-	if a.settingRow < 0 || a.settingRow >= itemCount {
-		return
-	}
-	if a.settingTab == "runtime" {
-		a.ensureRuntimeSettingRowVisibleLocked()
-		return
-	}
-	viewport := max(float32(1), a.settingPageScroll.viewport)
-	top := float32(74 + a.settingRow*79)
-	bottom := top + 70
-	a.settingPageScroll.setGeometry(viewport, a.settingPageScroll.content)
-	a.settingPageScroll.ensureVisible(top, bottom)
 }
 
 func (a *App) activateSetting(direction int) {
@@ -1216,29 +1097,31 @@ func (a *App) onBuiltInSettingsEditorKey(event woxui.KeyEvent) bool {
 		a.submitBuiltInSettingEdit()
 		return true
 	}
+	return false
+}
+
+// setBuiltInSettingEditValue keeps only the committed business value in launcher state.
+func (a *App) setBuiltInSettingEditValue(item settingItem, value string) {
 	a.mu.Lock()
-	if a.settingEditor != nil {
-		a.settingEditor.HandleKey(event)
+	if a.settingsOpen && a.settingEditKey == item.key && a.settingEditor != nil {
+		a.settingEditor.SetText(value, false)
 	}
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
-	return true
 }
 
 // onBuiltInSettingsTextInput commits native text and IME events into the active settings editor.
-func (a *App) onBuiltInSettingsTextInput(event woxui.TextInputEvent) bool {
-	if a.onSettingChoicePickerTextInput(event) {
+func (a *App) onBuiltInSettingsTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
+	choicePickerOpen := a.settingChoicePicker != nil
+	a.mu.RUnlock()
+	if choicePickerOpen {
 		return true
 	}
-	a.mu.Lock()
-	if !a.settingsOpen || a.settingSaving || a.settingEditKey == "" || a.settingEditor == nil {
-		a.mu.Unlock()
-		return false
-	}
-	a.settingEditor.HandleTextInput(event)
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-	return true
+	a.mu.RLock()
+	active := a.settingsOpen && !a.settingSaving && a.settingEditKey != "" && a.settingEditor != nil
+	a.mu.RUnlock()
+	return active
 }
 
 // browseBuiltInSettingFile uses the common Window picker and leaves persistence on explicit Enter.

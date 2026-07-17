@@ -9,10 +9,7 @@ import (
 	"time"
 
 	woxui "wox/ui/runtime"
-	woxwidget "wox/ui/widget"
 )
-
-const pluginSettingsListRowHeight = float32(62)
 
 type pluginSettingsPlugin struct {
 	ID                 string             `json:"Id"`
@@ -269,7 +266,6 @@ func (a *App) switchPluginList(store bool) {
 	a.pluginsError = ""
 	a.pluginSelected = -1
 	a.pluginForm = nil
-	a.pluginListScroll = 0
 	a.pluginUninstallArmed = ""
 	a.pluginOperationError = ""
 	a.pluginSearchEditor = woxui.NewTextEditor("")
@@ -282,7 +278,6 @@ func (a *App) switchPluginList(store bool) {
 	} else {
 		a.pluginDetailTab = "settings"
 	}
-	a.ensureSettingTabVisibleLocked("plugins")
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
@@ -455,7 +450,6 @@ func (a *App) setPluginSelectionLocked(index int) {
 		a.pluginDetailTab = "description"
 		a.pluginSelected = index
 		a.pluginForm = nil
-		a.ensurePluginSelectionVisibleLocked()
 		return
 	}
 	definitions := []formDefinition{
@@ -486,7 +480,6 @@ func (a *App) setPluginSelectionLocked(index int) {
 	}
 	a.pluginSelected = index
 	a.pluginForm = &pluginSettingsFormState{formFieldsState: fields, pluginID: plugin.ID, initial: initial}
-	a.ensurePluginSelectionVisibleLocked()
 }
 
 // snapshotPluginSettingsFormLocked copies mutable maps before the render lock is released.
@@ -560,97 +553,6 @@ func (a *App) movePluginSelection(delta int) {
 	a.selectPlugin(selected)
 }
 
-func (a *App) ensurePluginSelectionVisibleLocked() {
-	viewport := a.pluginListViewport
-	if viewport <= 1 {
-		viewport = 600
-	}
-	query := ""
-	if a.pluginSearchEditor != nil {
-		query = a.pluginSearchEditor.State().Text
-	}
-	filtered := filterPlugins(a.plugins, query, a.pluginFilters, a.pluginsStore)
-	visibleIndex := -1
-	for index, entry := range filtered {
-		if entry.index == a.pluginSelected {
-			visibleIndex = index
-			break
-		}
-	}
-	if visibleIndex < 0 {
-		a.pluginListScroll = 0
-		return
-	}
-	rowTop := float32(visibleIndex) * pluginSettingsListRowHeight
-	rowBottom := rowTop + pluginSettingsListRowHeight
-	if rowTop < a.pluginListScroll {
-		a.pluginListScroll = rowTop
-	} else if rowBottom > a.pluginListScroll+viewport {
-		a.pluginListScroll = rowBottom - viewport
-	}
-	a.clampPluginListScrollLocked(len(filtered), viewport)
-}
-
-// setPluginListViewport records list geometry without letting ordinary redraws reclaim manual scroll ownership.
-func (a *App) setPluginListViewport(height float32) {
-	a.mu.Lock()
-	initialize := a.pluginListViewport <= 1
-	a.pluginListViewport = max(float32(1), height)
-	if initialize {
-		a.ensurePluginSelectionVisibleLocked()
-	} else {
-		query := ""
-		if a.pluginSearchEditor != nil {
-			query = a.pluginSearchEditor.State().Text
-		}
-		a.clampPluginListScrollLocked(len(filterPlugins(a.plugins, query, a.pluginFilters, a.pluginsStore)), a.pluginListViewport)
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) scrollPluginList(delta float32) {
-	a.mu.Lock()
-	viewport := max(float32(1), a.pluginListViewport)
-	query := ""
-	if a.pluginSearchEditor != nil {
-		query = a.pluginSearchEditor.State().Text
-	}
-	a.pluginListScroll += delta
-	a.clampPluginListScrollLocked(len(filterPlugins(a.plugins, query, a.pluginFilters, a.pluginsStore)), viewport)
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-// clampPluginListScrollLocked keeps the current offset inside the measured filtered list extent.
-func (a *App) clampPluginListScrollLocked(itemCount int, viewport float32) {
-	maxOffset := max(float32(0), float32(itemCount)*pluginSettingsListRowHeight-max(float32(1), viewport))
-	a.pluginListScroll = min(max(float32(0), a.pluginListScroll), maxOffset)
-}
-
-// focusPluginSearch transfers native text input from plugin forms to the catalog filter.
-func (a *App) focusPluginSearch(caret int) {
-	a.blurSettingsSearch()
-	a.mu.Lock()
-	if a.pluginSearchEditor == nil {
-		a.pluginSearchEditor = woxui.NewTextEditor("")
-	}
-	if caret >= 0 {
-		a.pluginSearchEditor.SetCaret(caret)
-	}
-	a.pluginSearchFocused = true
-	a.themeSearchFocused = false
-	if a.pluginForm != nil {
-		syncFormFieldsEditorLocked(&a.pluginForm.formFieldsState)
-		a.pluginForm.active = false
-	}
-	host := a.settingsHost
-	a.mu.Unlock()
-	if host != nil {
-		host.RequestFocus(woxwidget.Key("plugin-search"))
-	}
-	a.invalidateSettingsWindow()
-}
-
 // setPluginSearchFocused keeps plugin input routing aligned with retained focus changes.
 func (a *App) setPluginSearchFocused(focused bool) {
 	a.mu.Lock()
@@ -679,7 +581,6 @@ func (a *App) setPluginSearchValue(value string) error {
 	} else {
 		a.pluginSearchEditor.SetText(value, false)
 	}
-	a.pluginListScroll = 0
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 	return nil
@@ -692,7 +593,6 @@ func (a *App) clearPluginSearch() {
 	} else {
 		a.pluginSearchEditor.SetText("", false)
 	}
-	a.pluginListScroll = 0
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
@@ -757,7 +657,6 @@ func (a *App) togglePluginFilter(id string) {
 	if !selectedVisible && len(filtered) > 0 {
 		a.setPluginSelectionLocked(filtered[0].index)
 	}
-	a.pluginListScroll = 0
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
@@ -849,36 +748,16 @@ func (a *App) onPluginSearchKey(event woxui.KeyEvent) bool {
 	case woxui.KeyEnter, woxui.KeyTab:
 		a.blurPluginSearch()
 	default:
-		// Printable keys stay unhandled so the platform can turn them into committed or composing text.
-		a.mu.Lock()
-		handled := false
-		if a.pluginSearchEditor != nil {
-			var changed bool
-			handled, changed = a.pluginSearchEditor.HandleKey(event)
-			if changed {
-				a.pluginListScroll = 0
-			}
-		}
-		a.mu.Unlock()
-		if handled {
-			a.invalidateSettingsWindow()
-		}
-		return handled
+		return false
 	}
 	return true
 }
 
-func (a *App) onPluginSearchTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
-	if !a.settingsOpen || a.settingTab != "plugins" || !a.pluginSearchFocused || a.pluginSearchEditor == nil {
-		a.mu.Unlock()
-		return false
-	}
-	a.pluginSearchEditor.HandleTextInput(event)
-	a.pluginListScroll = 0
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-	return true
+func (a *App) onPluginSearchTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
+	active := a.settingsOpen && a.settingTab == "plugins" && a.pluginSearchFocused && a.pluginSearchEditor != nil
+	a.mu.RUnlock()
+	return active
 }
 
 // selectPluginDetailTab changes detail content without discarding staged plugin settings.
@@ -897,27 +776,6 @@ func (a *App) selectPluginDetailTab(tab string) {
 	a.pluginSearchFocused = false
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) setPluginFormViewport(height float32) {
-	a.mu.Lock()
-	if a.pluginForm != nil {
-		a.pluginForm.viewportHeight = max(float32(1), height)
-		a.pluginForm.scroll = min(a.pluginForm.scroll, max(float32(0), formDefinitionsContentHeight(a.pluginForm.definitions, a.pluginForm.values)-a.pluginForm.viewportHeight))
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) scrollPluginForm(delta float32) {
-	a.mu.Lock()
-	if a.pluginForm == nil {
-		a.mu.Unlock()
-		return
-	}
-	maxOffset := max(float32(0), formDefinitionsContentHeight(a.pluginForm.definitions, a.pluginForm.values)-a.pluginForm.viewportHeight)
-	a.pluginForm.scroll = min(max(float32(0), a.pluginForm.scroll+delta), maxOffset)
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
@@ -979,6 +837,31 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 	if event.Key == woxui.KeyEscape {
 		a.deactivatePluginForm()
 		return true
+	}
+	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath"
+	if textEditable {
+		switch event.Key {
+		case woxui.KeyTab:
+			delta := 1
+			if event.Modifiers&woxui.KeyModifierShift != 0 {
+				delta = -1
+			}
+			a.movePluginFormFocus(delta)
+			return true
+		case woxui.KeyArrowDown:
+			if !multiline {
+				a.movePluginFormFocus(1)
+				return true
+			}
+		case woxui.KeyArrowUp:
+			if !multiline {
+				a.movePluginFormFocus(-1)
+				return true
+			}
+		case woxui.KeyEnter:
+			return !multiline
+		}
+		return false
 	}
 	switch event.Key {
 	case woxui.KeyTab, woxui.KeyArrowDown:
@@ -1146,34 +1029,24 @@ func (a *App) editPluginFormKey(event woxui.KeyEvent) {
 }
 
 // onPluginSettingsTextInput commits native IME events only while a plugin textbox owns focus.
-func (a *App) onPluginSettingsTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
+func (a *App) onPluginSettingsTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
 	state := a.pluginForm
-	if !a.settingsOpen || a.settingTab != "plugins" || state == nil || !state.active {
-		a.mu.Unlock()
-		return false
-	}
-	if state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) && formDefinitionTextEditable(state.definitions[state.focused]) {
-		if state.editor.HandleTextInput(event) {
-			syncFormFieldsEditorLocked(&state.formFieldsState)
-			state.status = ""
-		}
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-	return true
+	active := a.settingsOpen && a.settingTab == "plugins" && state != nil && state.active
+	a.mu.RUnlock()
+	return active
 }
 
-func (a *App) setPluginFormCaret(index, offset int) {
+func (a *App) setPluginFormText(index int, value string) {
 	a.mu.Lock()
-	state := a.pluginForm
-	if state == nil || !state.active || state.focused != index || state.editor == nil {
-		a.mu.Unlock()
-		return
+	changed := a.pluginForm != nil && setFormFieldsTextLocked(&a.pluginForm.formFieldsState, index, value)
+	if changed {
+		a.pluginForm.status = ""
 	}
-	state.editor.SetCaret(offset)
 	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	if changed {
+		a.invalidateSettingsWindow()
+	}
 }
 
 // submitPluginSettings saves only changed keys, then reloads dynamic definitions from core.

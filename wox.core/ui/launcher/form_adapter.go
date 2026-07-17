@@ -14,7 +14,8 @@ type formFieldCallbacks struct {
 	idPrefix   string
 	focus      func(index int)
 	change     func(index, delta int)
-	setCaret   func(index, offset int)
+	setText    func(index int, value string)
+	onKey      func(woxui.KeyEvent) bool
 	openTable  func(index int)
 	openChoice func(index int, anchor woxui.Rect)
 	pickDir    func(index int)
@@ -35,9 +36,9 @@ func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwid
 	}
 	panel := launcherview.FormPanel(launcherview.FormPanelProps{
 		Width: panelWidth, Height: panelHeight, Title: a.translate(form.action.Name), Rows: rows,
-		ContentHeight: formDefinitionsContentHeight(form.action.Form, form.values), Scroll: form.scroll,
+		ContentHeight: formDefinitionsContentHeight(form.action.Form, form.values), KeepVisible: formFieldsKeepVisible(form.formFieldsSnapshot),
 		CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: a.translate("i18n:ui_save"), Theme: snapshot.palette.componentTheme(),
-		OnScroll: a.scrollForm, OnCancel: a.closeFormAction, OnSave: a.submitFormAction,
+		OnCancel: a.closeFormAction, OnSave: a.submitFormAction,
 	})
 	return panel, panelWidth, panelHeight
 }
@@ -72,7 +73,7 @@ func formDefinitionHeight(definition formDefinition, valueMaps ...map[string]str
 }
 
 func (a *App) buildFormDefinition(snapshot viewSnapshot, index int, definition formDefinition, width, height float32) woxwidget.Widget {
-	callbacks := formFieldCallbacks{idPrefix: "action-form", focus: a.focusFormField, change: a.changeFormChoice, setCaret: a.setFormCaret, openTable: a.openActionFormTable}
+	callbacks := formFieldCallbacks{idPrefix: "action-form", focus: a.focusFormField, change: a.changeFormChoice, setText: a.setFormText, onKey: a.onFormKey, openTable: a.openActionFormTable}
 	return a.buildFormField(snapshot.form.formFieldsSnapshot, callbacks, snapshot.palette, index, definition, width, height)
 }
 
@@ -206,11 +207,6 @@ func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCal
 	if !focused {
 		state = woxui.TextEditingState{Text: fields.values[definition.Value.Key]}
 	}
-	renderState := state
-	if definition.Type == "password" {
-		renderState.Text = strings.Repeat("•", len([]rune(state.Text)))
-		renderState.Composition = strings.Repeat("•", len([]rune(state.Composition)))
-	}
 	maxLines := min(8, max(1, definition.Value.MaxLines))
 	var onBrowse func()
 	if definition.Type == "dirPath" {
@@ -222,11 +218,14 @@ func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCal
 	}
 	return launcherview.FormTextField(launcherview.FormTextFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Width: width, Height: height,
-		State: renderState, Focused: focused, Protected: definition.Type == "password", MaxLines: maxLines,
+		State: state, Focused: focused, Protected: definition.Type == "password", MaxLines: maxLines,
 		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(), OnBrowse: onBrowse,
-		OnCaret: func(offset int) {
-			callbacks.focus(index)
-			callbacks.setCaret(index, offset)
+		OnFocus: func() { callbacks.focus(index) },
+		OnChanged: func(value string) {
+			if callbacks.setText != nil {
+				callbacks.setText(index, value)
+			}
 		},
+		OnKey: callbacks.onKey,
 	})
 }

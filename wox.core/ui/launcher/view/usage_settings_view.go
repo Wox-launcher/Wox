@@ -80,9 +80,6 @@ type UsageSettingsProps struct {
 	HeatmapAccent   woxui.Color
 	AppAccent       woxui.Color
 	PluginAccent    woxui.Color
-	Scroll          float32
-	OnScroll        func(float32)
-	OnSetGeometry   func(float32, float32)
 	OnShare         func()
 }
 
@@ -102,21 +99,14 @@ func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 		contentHeight += 30 + usageSectionGap
 	}
 	children = append(children, kpiGrid, usageActivityPanel(props, contentWidth), rankings)
-	if props.OnSetGeometry != nil {
-		props.OnSetGeometry(viewportHeight, contentHeight)
-	}
-
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height,
 		Padding: woxwidget.Insets{Left: usagePageHorizontalInset, Top: usagePageTopInset, Right: usagePageRightInset, Bottom: usagePageBottomInset},
-		Child: woxwidget.Gesture{ID: "usage-page-scroll", OnScroll: func(delta woxui.Point) {
-			if props.OnScroll != nil {
-				props.OnScroll(-delta.Y)
-			}
-		}, Child: woxwidget.ScrollView{
-			Width: contentWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, contentHeight), Offset: props.Scroll,
+		Child: woxwidget.ScrollView{
+			Key: "usage-page-scroll", ID: "usage-page-scroll",
+			Width: contentWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, contentHeight),
 			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: usageSectionGap, Children: children},
-		}},
+		},
 	}
 }
 

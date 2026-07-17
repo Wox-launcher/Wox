@@ -17,16 +17,14 @@ import (
 const formTableRowIDKey = "wox_table_row_id"
 
 type formTableEditorState struct {
-	target       *formFieldsState
-	fieldIndex   int
-	definition   formDefinition
-	rows         []map[string]any
-	selected     int
-	listScroll   float32
-	listViewport float32
-	rowForm      *formFieldsState
-	rowIndex     int
-	rowBase      map[string]any
+	target     *formFieldsState
+	fieldIndex int
+	definition formDefinition
+	rows       []map[string]any
+	selected   int
+	rowForm    *formFieldsState
+	rowIndex   int
+	rowBase    map[string]any
 	// rowEditorOnly closes the whole overlay when a row opened directly from an inline table exits.
 	rowEditorOnly bool
 	skillClone    bool
@@ -42,7 +40,6 @@ type formTableEditorSnapshot struct {
 	definition   formDefinition
 	rows         []map[string]any
 	selected     int
-	listScroll   float32
 	rowForm      *formFieldsSnapshot
 	rowIndex     int
 	skillClone   bool
@@ -58,23 +55,17 @@ type formTableAppPickerState struct {
 	fieldIndex int
 	candidates []ignoredHotkeyApp
 	selected   int
-	scroll     float32
-	viewport   float32
 }
 
 type formTableAppPickerSnapshot struct {
 	fieldIndex int
 	candidates []ignoredHotkeyApp
 	selected   int
-	scroll     float32
 }
 
 type formTableChoicePickerState struct {
 	fieldIndex int
 	anchor     woxui.Rect
-	selected   int
-	scroll     float32
-	viewport   float32
 }
 
 type formTableChoicePickerSnapshot struct {
@@ -83,8 +74,6 @@ type formTableChoicePickerSnapshot struct {
 	title        string
 	currentValue string
 	options      []formOption
-	selected     int
-	scroll       float32
 }
 
 // decodeFormTableRows preserves JSON numbers and unknown row fields so the shared editor can round-trip future column types safely.
@@ -142,7 +131,6 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 			fieldIndex: state.appPicker.fieldIndex,
 			candidates: append([]ignoredHotkeyApp(nil), state.appPicker.candidates...),
 			selected:   state.appPicker.selected,
-			scroll:     state.appPicker.scroll,
 		}
 	}
 	var choicePicker *formTableChoicePickerSnapshot
@@ -151,14 +139,12 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		choicePicker = &formTableChoicePickerSnapshot{
 			fieldIndex: state.choicePicker.fieldIndex, anchor: state.choicePicker.anchor, title: definition.Value.Label,
 			currentValue: state.rowForm.values[definition.Value.Key], options: append([]formOption(nil), definition.Value.Options...),
-			selected: state.choicePicker.selected, scroll: state.choicePicker.scroll,
 		}
 	}
 	return &formTableEditorSnapshot{
 		definition:   state.definition,
 		rows:         cloneFormTableRows(state.rows),
 		selected:     state.selected,
-		listScroll:   state.listScroll,
 		rowForm:      rowForm,
 		rowIndex:     state.rowIndex,
 		skillClone:   state.skillClone,
@@ -257,7 +243,6 @@ func (a *App) selectFormTableRow(index int) {
 		state.selected = index
 		state.deleteArmed = -1
 		state.status = ""
-		a.ensureFormTableSelectionVisibleLocked()
 	}
 	a.mu.Unlock()
 	a.invalidateFormTableWindow()
@@ -274,47 +259,9 @@ func (a *App) moveFormTableSelection(delta int) {
 		}
 		state.deleteArmed = -1
 		state.status = ""
-		a.ensureFormTableSelectionVisibleLocked()
 	}
 	a.mu.Unlock()
 	a.invalidateFormTableWindow()
-}
-
-func (a *App) setFormTableListViewport(height float32) {
-	a.mu.Lock()
-	if a.tableEditor != nil {
-		a.tableEditor.listViewport = max(float32(1), height)
-		a.ensureFormTableSelectionVisibleLocked()
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) scrollFormTableList(delta float32) {
-	a.mu.Lock()
-	state := a.tableEditor
-	if state != nil && state.rowForm == nil {
-		maxOffset := max(float32(0), float32(len(state.rows))*formTableListRowHeight-state.listViewport)
-		state.listScroll = min(max(float32(0), state.listScroll+delta), maxOffset)
-	}
-	a.mu.Unlock()
-	a.invalidateFormTableWindow()
-}
-
-func (a *App) ensureFormTableSelectionVisibleLocked() {
-	state := a.tableEditor
-	if state == nil || state.selected < 0 {
-		return
-	}
-	viewport := max(float32(1), state.listViewport)
-	rowTop := float32(state.selected) * formTableListRowHeight
-	rowBottom := rowTop + formTableListRowHeight
-	if rowTop < state.listScroll {
-		state.listScroll = rowTop
-	} else if rowBottom > state.listScroll+viewport {
-		state.listScroll = rowBottom - viewport
-	}
-	maxOffset := max(float32(0), float32(len(state.rows))*formTableListRowHeight-viewport)
-	state.listScroll = min(max(float32(0), state.listScroll), maxOffset)
 }
 
 func formTableColumnValue(column formTableColumn, row map[string]any) string {
@@ -744,7 +691,6 @@ func (a *App) saveFormTableRowEdit() {
 		state.status = "Saving…"
 		a.settingSaving = true
 	}
-	a.ensureFormTableSelectionVisibleLocked()
 	a.mu.Unlock()
 	if closeEditor {
 		a.closeFormTableEditor()
@@ -792,7 +738,6 @@ func (a *App) deleteFormTableRow() {
 		}
 	}
 	state.deleteArmed = -1
-	a.ensureFormTableSelectionVisibleLocked()
 	a.mu.Unlock()
 	a.invalidateFormTableWindow()
 	if persist {
@@ -886,14 +831,17 @@ func (a *App) editFormTableRowKey(event woxui.KeyEvent) {
 	a.invalidateFormTableWindow()
 }
 
-func (a *App) setFormTableRowCaret(index, offset int) {
+func (a *App) setFormTableRowText(index int, value string) {
 	a.mu.Lock()
 	state := a.tableEditor
-	if state != nil && state.rowForm != nil && state.rowForm.focused == index && state.rowForm.editor != nil {
-		state.rowForm.editor.SetCaret(offset)
+	changed := state != nil && state.rowForm != nil && !state.saving && setFormFieldsTextLocked(state.rowForm, index, value)
+	if changed {
+		state.status = ""
 	}
 	a.mu.Unlock()
-	a.invalidateFormTableWindow()
+	if changed {
+		a.invalidateFormTableWindow()
+	}
 }
 
 // beginFormTableRowEmojiEdit selects the current icon value so the next emoji input replaces it.
@@ -996,25 +944,6 @@ func (a *App) pickFormTableRowDirectory(index int) {
 	a.invalidateFormTableWindow()
 }
 
-func (a *App) setFormTableRowViewport(height float32) {
-	a.mu.Lock()
-	if state := a.tableEditor; state != nil && state.rowForm != nil {
-		state.rowForm.viewportHeight = max(float32(1), height)
-		state.rowForm.scroll = min(state.rowForm.scroll, max(float32(0), formTableRowContentHeight(state.rowForm.definitions)-state.rowForm.viewportHeight))
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) scrollFormTableRow(delta float32) {
-	a.mu.Lock()
-	if state := a.tableEditor; state != nil && state.rowForm != nil {
-		maxOffset := max(float32(0), formTableRowContentHeight(state.rowForm.definitions)-state.rowForm.viewportHeight)
-		state.rowForm.scroll = min(max(float32(0), state.rowForm.scroll+delta), maxOffset)
-	}
-	a.mu.Unlock()
-	a.invalidateFormTableWindow()
-}
-
 // onFormTableKey gives the modal table editor first refusal before launcher or settings navigation.
 func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 	a.mu.RLock()
@@ -1032,23 +961,23 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 		appSelected = appPicker.selected
 	}
 	choicePicker := state.choicePicker
-	choiceSelected := -1
-	if choicePicker != nil {
-		choiceSelected = choicePicker.selected
-	}
 	fieldType := ""
 	multiline := false
+	textEditable := false
 	focused := -1
 	if rowForm != nil {
 		focused = rowForm.focused
 		if focused >= 0 && focused < len(rowForm.definitions) {
 			fieldType = rowForm.definitions[focused].Type
 			multiline = fieldType == "textbox" && rowForm.definitions[focused].Value.MaxLines > 1
+			textEditable = formDefinitionTextEditable(rowForm.definitions[focused])
 		}
 	}
 	a.mu.RUnlock()
 	if choicePicker != nil {
-		a.onFormTableChoicePickerKey(event, choiceSelected)
+		if event.Key == woxui.KeyEscape {
+			a.closeFormTableChoicePicker()
+		}
 		return true
 	}
 	if appPicker != nil {
@@ -1092,6 +1021,30 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 	if event.Modifiers.HasPrimary() && (event.Key == woxui.KeyEnter || event.Key == woxui.Key("s")) {
 		a.saveFormTableRowEdit()
 		return true
+	}
+	if textEditable {
+		switch event.Key {
+		case woxui.KeyTab:
+			delta := 1
+			if event.Modifiers&woxui.KeyModifierShift != 0 {
+				delta = -1
+			}
+			a.moveFormTableRowFocus(delta)
+			return true
+		case woxui.KeyArrowDown:
+			if !multiline {
+				a.moveFormTableRowFocus(1)
+				return true
+			}
+		case woxui.KeyArrowUp:
+			if !multiline {
+				a.moveFormTableRowFocus(-1)
+				return true
+			}
+		case woxui.KeyEnter:
+			return !multiline
+		}
+		return false
 	}
 	switch event.Key {
 	case woxui.KeyTab, woxui.KeyArrowDown:
@@ -1140,24 +1093,13 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 	return true
 }
 
-func (a *App) onFormTableTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
+func (a *App) onFormTableTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
 	state := a.tableEditor
 	if state == nil || !a.formTableTargetCurrentLocked(state.target) {
-		a.mu.Unlock()
+		a.mu.RUnlock()
 		return false
 	}
-	if state.appPicker != nil || state.choicePicker != nil {
-		a.mu.Unlock()
-		return true
-	}
-	if state.rowForm != nil && state.rowForm.editor != nil && state.rowForm.focused >= 0 && state.rowForm.focused < len(state.rowForm.definitions) && formDefinitionTextEditable(state.rowForm.definitions[state.rowForm.focused]) {
-		if state.rowForm.editor.HandleTextInput(event) {
-			syncFormFieldsEditorLocked(state.rowForm)
-			state.status = ""
-		}
-	}
-	a.mu.Unlock()
-	a.invalidateFormTableWindow()
+	a.mu.RUnlock()
 	return true
 }

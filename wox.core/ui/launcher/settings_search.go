@@ -11,8 +11,6 @@ import (
 	"wox/util/fuzzymatch"
 )
 
-const settingsSearchResultRowHeight = float32(54)
-
 type settingsSearchResultKind uint8
 
 const (
@@ -255,20 +253,6 @@ func (a *App) focusSettingsSearch(selectAll bool) {
 	a.invalidateSettingsWindow()
 }
 
-func (a *App) setSettingsSearchCaret(offset int) {
-	a.mu.Lock()
-	if a.settingSearchEditor == nil {
-		a.settingSearchEditor = woxui.NewTextEditor("")
-	}
-	a.settingSearchEditor.SetCaret(offset)
-	a.settingSearchFocused = true
-	a.pluginSearchFocused = false
-	a.themeSearchFocused = false
-	a.settingSearchPanel = strings.TrimSpace(a.settingSearchEditor.State().Text) != ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
 // setSettingsSearchFocused keeps controller routing aligned with the retained text-field focus.
 func (a *App) setSettingsSearchFocused(focused bool) {
 	a.mu.Lock()
@@ -297,7 +281,6 @@ func (a *App) setSettingsSearchValue(value string) error {
 	}
 	a.settingSearchPanel = strings.TrimSpace(value) != ""
 	a.settingSearchSelected = 0
-	a.settingSearchScroll = 0
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 	return nil
@@ -312,7 +295,6 @@ func (a *App) clearSettingsSearch() {
 	}
 	a.settingSearchPanel = false
 	a.settingSearchSelected = 0
-	a.settingSearchScroll = 0
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
@@ -379,36 +361,14 @@ func (a *App) onSettingsSearchKey(event woxui.KeyEvent) bool {
 		a.blurSettingsSearch()
 		return false
 	}
-
-	a.mu.Lock()
-	handled, changed := a.settingSearchEditor.HandleKey(event)
-	if changed {
-		a.settingSearchPanel = strings.TrimSpace(a.settingSearchEditor.State().Text) != ""
-		a.settingSearchSelected = 0
-		a.settingSearchScroll = 0
-	}
-	a.mu.Unlock()
-	if handled {
-		a.invalidateSettingsWindow()
-	}
-	return handled
+	return false
 }
 
-func (a *App) onSettingsSearchTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
-	if !a.settingSearchFocused || a.settingSearchEditor == nil {
-		a.mu.Unlock()
-		return false
-	}
-	changed := a.settingSearchEditor.HandleTextInput(event)
-	if changed {
-		a.settingSearchPanel = strings.TrimSpace(a.settingSearchEditor.State().Text) != ""
-		a.settingSearchSelected = 0
-		a.settingSearchScroll = 0
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-	return true
+func (a *App) onSettingsSearchTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
+	active := a.settingSearchFocused && a.settingSearchEditor != nil
+	a.mu.RUnlock()
+	return active
 }
 
 func (a *App) moveSettingsSearchSelection(delta int) {
@@ -419,7 +379,6 @@ func (a *App) moveSettingsSearchSelection(delta int) {
 		a.settingSearchSelected = 0
 	} else {
 		a.settingSearchSelected = min(max(0, a.settingSearchSelected+delta), len(results)-1)
-		a.ensureSettingsSearchSelectionVisibleLocked(len(results))
 	}
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
@@ -433,42 +392,8 @@ func (a *App) selectSettingsSearchResult(index int) {
 	}
 	a.mu.Lock()
 	a.settingSearchSelected = index
-	a.ensureSettingsSearchSelectionVisibleLocked(len(results))
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
-}
-
-func (a *App) setSettingsSearchViewport(height float32, resultCount int) {
-	a.mu.Lock()
-	a.settingSearchViewport = max(float32(1), height)
-	a.ensureSettingsSearchSelectionVisibleLocked(resultCount)
-	a.mu.Unlock()
-}
-
-func (a *App) scrollSettingsSearch(delta float32, resultCount int) {
-	a.mu.Lock()
-	maximum := max(float32(0), float32(resultCount)*settingsSearchResultRowHeight-a.settingSearchViewport)
-	a.settingSearchScroll = min(max(float32(0), a.settingSearchScroll+delta), maximum)
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-}
-
-func (a *App) ensureSettingsSearchSelectionVisibleLocked(resultCount int) {
-	if resultCount <= 0 {
-		a.settingSearchScroll = 0
-		return
-	}
-	a.settingSearchSelected = min(max(0, a.settingSearchSelected), resultCount-1)
-	viewport := max(float32(1), a.settingSearchViewport)
-	top := float32(a.settingSearchSelected) * settingsSearchResultRowHeight
-	bottom := top + settingsSearchResultRowHeight
-	if top < a.settingSearchScroll {
-		a.settingSearchScroll = top
-	} else if bottom > a.settingSearchScroll+viewport {
-		a.settingSearchScroll = bottom - viewport
-	}
-	maximum := max(float32(0), float32(resultCount)*settingsSearchResultRowHeight-viewport)
-	a.settingSearchScroll = min(max(float32(0), a.settingSearchScroll), maximum)
 }
 
 func (a *App) activateSelectedSettingsSearchResult() {
@@ -506,7 +431,6 @@ func (a *App) focusBuiltInSettingsSearchTarget(tab, settingKey string) {
 	for index, item := range items {
 		if item.key == settingKey {
 			a.settingRow = index
-			a.ensureSettingRowVisibleLocked(len(items))
 			return
 		}
 	}
@@ -523,7 +447,6 @@ func (a *App) focusBuiltInSettingsSearchTarget(tab, settingKey string) {
 		if definition.Value.Key == settingKey {
 			fields.focused = index
 			a.settingsHotkeyFocus = tab == "general"
-			ensureFormFieldsFocusVisibleLocked(fields, index)
 			return
 		}
 	}
@@ -583,7 +506,6 @@ func (a *App) focusPluginSettingsSearchTarget(pluginID, settingKey string) {
 		for index, definition := range a.pluginForm.definitions {
 			if definition.Value.Key == settingKey {
 				a.pluginForm.focused = index
-				ensureFormFieldsFocusVisibleLocked(&a.pluginForm.formFieldsState, index)
 				break
 			}
 		}

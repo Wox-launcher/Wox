@@ -10,23 +10,21 @@ import (
 
 // TriggerConflictPreviewProps contains the prepared rows and actions for a trigger conflict.
 type TriggerConflictPreviewProps struct {
-	Width         float32
-	Height        float32
-	Theme         woxcomponent.Theme
-	FatalError    string
-	Keyword       string
-	Title         string
-	Message       string
-	Error         string
-	SaveLabel     string
-	Dirty         bool
-	Saving        bool
-	Rows          []woxwidget.Widget
-	RowsHeight    float32
-	Scroll        float32
-	OnScroll      func(float32)
-	OnSetViewport func(float32)
-	OnSubmit      func()
+	Width       float32
+	Height      float32
+	Theme       woxcomponent.Theme
+	FatalError  string
+	Keyword     string
+	Title       string
+	Message     string
+	Error       string
+	SaveLabel   string
+	Dirty       bool
+	Saving      bool
+	Rows        []woxwidget.Widget
+	RowsHeight  float32
+	KeepVisible *woxwidget.ScrollRange
+	OnSubmit    func()
 }
 
 // TriggerConflictPreviewView builds the editable conflict resolver.
@@ -60,7 +58,7 @@ func TriggerConflictPreviewView(props TriggerConflictPreviewProps) woxwidget.Wid
 	return editorPreviewShell(editorPreviewShellProps{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 18, Top: 14, Right: 18, Bottom: 14}, Theme: props.Theme,
 		BeforeBody: beforeBody, BeforeBodyHeight: titleHeight + messageHeight, MinimumBodyHeight: 56,
-		Rows: props.Rows, RowsHeight: props.RowsHeight, ScrollID: "trigger-conflict-scroll", Scroll: props.Scroll, OnScroll: props.OnScroll, OnSetViewport: props.OnSetViewport,
+		Rows: props.Rows, RowsHeight: props.RowsHeight, ScrollID: "trigger-conflict-scroll", KeepVisible: props.KeepVisible,
 		Error: props.Error, ShowError: props.Error != "",
 		SaveButton: woxcomponent.ButtonProps{ID: "trigger-conflict-save", Label: saveLabel, Width: 112, Variant: variant, OnTap: props.OnSubmit, Theme: props.Theme},
 	})

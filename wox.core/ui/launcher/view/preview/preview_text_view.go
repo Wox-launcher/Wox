@@ -8,14 +8,13 @@ import (
 
 // ScrollablePreviewTextProps contains a laid-out text preview and its scroll action.
 type ScrollablePreviewTextProps struct {
-	ID       string
-	Value    string
-	Color    woxui.Color
-	Width    float32
-	Height   float32
-	Layout   woxwidget.TextBlockLayout
-	Offset   float32
-	OnScroll func(float32, float32)
+	ID            string
+	Value         string
+	Color         woxui.Color
+	Width         float32
+	Height        float32
+	Layout        woxwidget.TextBlockLayout
+	InitialOffset float32
 }
 
 // ScrollablePreviewText builds a scrollable generic text preview.
@@ -23,21 +22,12 @@ func ScrollablePreviewText(props ScrollablePreviewTextProps) woxwidget.Widget {
 	innerWidth := max(float32(0), props.Width-48)
 	innerHeight := max(float32(0), props.Height-48)
 	contentHeight := max(innerHeight, props.Layout.Size.Height)
-	maxOffset := max(float32(0), contentHeight-innerHeight)
-	offset := min(max(float32(0), props.Offset), maxOffset)
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(24),
-		Child: woxwidget.Gesture{
-			ID: "preview-scroll-" + props.ID,
-			OnScroll: func(delta woxui.Point) {
-				if props.OnScroll != nil {
-					props.OnScroll(-delta.Y, maxOffset)
-				}
-			},
-			Child: woxwidget.ScrollView{
-				Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight, Offset: offset,
-				Child: woxwidget.TextBlock{Value: props.Value, Width: innerWidth, Height: contentHeight, Style: woxui.TextStyle{Size: 15}, LineHeight: 23, Color: props.Color, Layout: &props.Layout},
-			},
+		Child: woxwidget.ScrollView{
+			Key: woxwidget.Key("preview-scroll-" + props.ID), ID: "preview-scroll-" + props.ID, InitialOffset: props.InitialOffset,
+			Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight,
+			Child: woxwidget.TextBlock{Value: props.Value, Width: innerWidth, Height: contentHeight, Style: woxui.TextStyle{Size: 15}, LineHeight: 23, Color: props.Color, Layout: &props.Layout},
 		},
 	}
 }

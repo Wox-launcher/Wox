@@ -1,8 +1,6 @@
 package view
 
 import (
-	"strings"
-
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -10,24 +8,21 @@ import (
 
 // CloudSettingsPageProps contains cloud settings data and controller callbacks.
 type CloudSettingsPageProps struct {
-	Width         float32
-	Height        float32
-	Title         string
-	Description   string
-	Intro         CloudIntroProps
-	Account       CloudAccountProps
-	Sync          CloudSyncProps
-	Devices       CloudDevicesProps
-	Plugins       CloudPluginExclusionsProps
-	ConfigNotes   CloudConfigNotesProps
-	Message       string
-	MessageColor  woxui.Color
-	Scroll        float32
-	ActionMenu    *CloudActionMenuProps
-	Theme         woxcomponent.Theme
-	OnScroll      func(float32)
-	OnSetGeometry func(float32, float32)
-	OnCloseMenu   func()
+	Width        float32
+	Height       float32
+	Title        string
+	Description  string
+	Intro        CloudIntroProps
+	Account      CloudAccountProps
+	Sync         CloudSyncProps
+	Devices      CloudDevicesProps
+	Plugins      CloudPluginExclusionsProps
+	ConfigNotes  CloudConfigNotesProps
+	Message      string
+	MessageColor woxui.Color
+	ActionMenu   *CloudActionMenuProps
+	Theme        woxcomponent.Theme
+	OnCloseMenu  func()
 }
 
 // CloudIntroProps contains the signed-out product summary and plan comparison.
@@ -119,13 +114,10 @@ type CloudDeviceProps struct {
 
 // CloudPluginExclusionsProps contains plugin exclusion rows and scrolling state.
 type CloudPluginExclusionsProps struct {
-	SectionLabel  string
-	Tips          string
-	EmptyLabel    string
-	Items         []CloudPluginExclusionProps
-	Scroll        float32
-	OnScroll      func(float32)
-	OnSetViewport func(float32)
+	SectionLabel string
+	Tips         string
+	EmptyLabel   string
+	Items        []CloudPluginExclusionProps
 }
 
 // CloudPluginExclusionProps contains one plugin exclusion toggle row.
@@ -214,7 +206,7 @@ func CloudSettingsPage(props CloudSettingsPageProps) woxwidget.Widget {
 
 	page := SettingsPage(SettingsPageProps{
 		ID: "cloud-page-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight,
-		Gap: 4, Scroll: props.Scroll, OnScroll: props.OnScroll, OnSetGeometry: props.OnSetGeometry,
+		Gap: 4,
 	})
 	if props.ActionMenu == nil {
 		return page
@@ -506,9 +498,6 @@ func cloudDeviceCard(props CloudDevicesProps, width, height float32, theme woxco
 // cloudPluginExclusionsCard owns the bounded exclusion list and its scroll surface.
 func cloudPluginExclusionsCard(props CloudPluginExclusionsProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	const bodyHeight = float32(206)
-	if props.OnSetViewport != nil {
-		props.OnSetViewport(bodyHeight)
-	}
 	rows := make([]woxwidget.Widget, 0, len(props.Items))
 	for _, item := range props.Items {
 		labelWidth := max(float32(120), width-148)
@@ -532,14 +521,11 @@ func cloudPluginExclusionsCard(props CloudPluginExclusionsProps, width, height f
 			Value: props.EmptyLabel, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle,
 		}}
 	} else {
-		body = woxwidget.Gesture{ID: "cloud-plugin-scroll", OnScroll: func(delta woxui.Point) {
-			if props.OnScroll != nil {
-				props.OnScroll(-delta.Y)
-			}
-		}, Child: woxwidget.ScrollView{
-			Width: width - 28, Height: bodyHeight, ContentHeight: max(bodyHeight, float32(len(rows))*46), Offset: props.Scroll,
+		body = woxwidget.ScrollView{
+			Key: "cloud-plugin-scroll", ID: "cloud-plugin-scroll",
+			Width: width - 28, Height: bodyHeight, ContentHeight: max(bodyHeight, float32(len(rows))*46),
 			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-		}}
+		}
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: width, Height: 26, Child: woxwidget.Text{Value: props.Tips, Style: woxui.TextStyle{Size: 10}, Color: theme.ResultSubtitle}},
@@ -593,16 +579,20 @@ type CloudFormOverlayProps struct {
 
 // CloudFormFieldProps contains one credential field's render state and controller callback.
 type CloudFormFieldProps struct {
-	ID        string
-	Kind      string
-	Label     string
-	Checked   bool
-	State     woxui.TextEditingState
-	Focused   bool
-	Protected bool
-	Window    *woxui.Window
-	OnCaret   func(int)
-	OnTap     func()
+	ID            string
+	Kind          string
+	Label         string
+	Checked       bool
+	State         woxui.TextEditingState
+	Focused       bool
+	Autofocus     bool
+	Protected     bool
+	Window        *woxui.Window
+	Controller    *woxwidget.TextEditingController
+	FocusNode     *woxwidget.FocusNode
+	OnChanged     func(string)
+	OnFocusChange func(bool)
+	OnTap         func()
 }
 
 // CloudFormLinkProps contains one secondary account or legal action.
@@ -685,7 +675,7 @@ func CloudFormOverlay(props CloudFormOverlayProps) woxwidget.Widget {
 
 	panelHeight := min(contentHeight+48, props.Height-56)
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
-		ID: "cloud-form-dialog", Label: props.Title, Width: props.PanelWidth, Height: panelHeight,
+		ID: "cloud-form-dialog", Label: props.Title, Width: props.PanelWidth, Height: panelHeight, InitialFocus: "cloud-form-field-0",
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "cloud-form-backdrop", BackdropColor: woxui.Color{R: 0, G: 0, B: 0, A: 112},
 		Radius: 20, Padding: woxwidget.Insets{Left: 24, Top: 24, Right: 24, Bottom: 24}, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1, Theme: props.Theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: content},
@@ -694,19 +684,18 @@ func CloudFormOverlay(props CloudFormOverlayProps) woxwidget.Widget {
 
 // cloudFormTextField renders Flutter's label-above-input account field.
 func cloudFormTextField(field CloudFormFieldProps, trailingLink *CloudFormLinkProps, width float32, disabled bool, theme woxcomponent.Theme) woxwidget.Widget {
-	state := field.State
-	if field.Protected {
-		state.Text = strings.Repeat("•", len([]rune(state.Text)))
-		state.Composition = strings.Repeat("•", len([]rune(state.Composition)))
+	focused := field.Focused
+	if field.FocusNode != nil {
+		focused = field.FocusNode.HasFocus()
 	}
 	border := theme.ResultSubtitle
-	if field.Focused {
+	if focused {
 		border = theme.ActionText
 	}
 	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: field.ID, Label: field.Label, Width: width, Height: 34, Radius: 4, Padding: woxwidget.Insets{Left: 8, Top: 7, Right: 8, Bottom: 6}, Transparent: true,
-		BorderColor: border, BorderWidth: 1, Style: woxui.TextStyle{Size: 13}, State: state, Focused: field.Focused, Protected: field.Protected,
-		MaxLines: 1, Window: field.Window, Theme: theme, ControllerManagedFocus: true, OnCaret: field.OnCaret,
+		BorderColor: border, BorderWidth: 1, Style: woxui.TextStyle{Size: 13}, Value: field.State.Text, Focused: focused, Autofocus: field.Autofocus, Protected: field.Protected,
+		MaxLines: 1, Window: field.Window, Theme: theme, Controller: field.Controller, FocusNode: field.FocusNode, OnChanged: field.OnChanged, OnFocusChange: field.OnFocusChange,
 	})
 	var label woxwidget.Widget = woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText}
 	if trailingLink != nil {

@@ -30,7 +30,7 @@ func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height f
 func (a *App) pluginListProps(snapshot settingsSnapshot, width, height float32) launcherview.PluginListProps {
 	iconTint := snapshot.palette.resultSubtitle
 	props := launcherview.PluginListProps{
-		Width: width, Height: height, Scroll: snapshot.pluginListScroll,
+		Width: width, Height: height,
 		Placeholder:  fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(snapshot.plugins)),
 		Search:       snapshot.pluginSearch,
 		Focused:      snapshot.pluginSearchFocused,
@@ -40,8 +40,9 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height float32) 
 		FilterActive: snapshot.pluginFilters.applied(snapshot.pluginsStore),
 		Refreshing:   snapshot.pluginsLoading,
 		EmptyLabel:   a.translate("i18n:ui_setting_plugin_empty_data"), Theme: snapshot.palette.componentTheme(),
-		OnViewport: a.setPluginListViewport, OnScroll: a.scrollPluginList, OnCaret: a.focusPluginSearch, OnClear: a.clearPluginSearch,
-		OnSearchKey: a.onPluginSearchKey, OnSearchTextInput: a.onPluginSearchTextInput, OnSearchFocusChange: a.setPluginSearchFocused, OnSetSearchValue: a.setPluginSearchValue,
+		OnClear:     a.clearPluginSearch,
+		OnSearchKey: a.onPluginSearchKey, OnSearchFocusChange: a.setPluginSearchFocused,
+		OnSearchChanged: func(value string) { _ = a.setPluginSearchValue(value) }, OnSetSearchValue: a.setPluginSearchValue,
 		OnFilter: a.togglePluginFilterPanel, OnRefresh: a.refreshPluginCatalog,
 	}
 	if snapshot.pluginsLoading && len(snapshot.plugins) == 0 {
@@ -120,7 +121,8 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height float32
 		idPrefix:  "plugin-settings",
 		focus:     a.focusPluginFormField,
 		change:    a.changePluginFormChoice,
-		setCaret:  a.setPluginFormCaret,
+		setText:   a.setPluginFormText,
+		onKey:     a.onPluginSettingsKey,
 		openTable: a.openPluginFormTable,
 		openModel: a.openPluginModelManager,
 		recordKey: a.recordPluginFormHotkey,
@@ -130,8 +132,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height float32
 		rows = append(rows, a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, index, definition, innerWidth, formDefinitionHeight(definition, form.values)))
 	}
 	editor.Form = &launcherview.PluginFormProps{
-		Rows: rows, ContentHeight: formDefinitionsContentHeight(form.definitions, form.values), Scroll: form.scroll,
-		OnViewport: a.setPluginFormViewport, OnScroll: a.scrollPluginForm,
+		Rows: rows, ContentHeight: formDefinitionsContentHeight(form.definitions, form.values), KeepVisible: formFieldsKeepVisible(form.formFieldsSnapshot),
 	}
 	editor.Status = form.status
 	editor.StatusError = form.statusError

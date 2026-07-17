@@ -37,7 +37,6 @@ type ThemeSettingsProps struct {
 	Message               string
 	MessageError          bool
 	Error                 string
-	Scroll                float32
 	Operation             string
 	UninstallArmed        string
 	Items                 []ThemeCatalogItem
@@ -67,12 +66,9 @@ type ThemeSettingsProps struct {
 	InstalledIcon         *woxui.Image
 	InstalledSelectedIcon *woxui.Image
 	OnSelect              func(int)
-	OnScroll              func(float32)
-	OnSetViewport         func(float32)
-	OnSearchCaret         func(int)
 	OnSearchKey           func(woxui.KeyEvent) bool
-	OnSearchTextInput     func(woxui.TextInputEvent) bool
 	OnSearchFocusChange   func(bool)
+	OnSearchChanged       func(string)
 	OnSetSearchValue      func(string) error
 	OnLocateCurrent       func()
 	OnSelectDetailTab     func(string)
@@ -96,9 +92,6 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 	const searchHeight = float32(44)
 	const searchGap = float32(20)
 	viewportHeight := max(float32(0), height-searchHeight-searchGap)
-	if props.OnSetViewport != nil {
-		props.OnSetViewport(viewportHeight)
-	}
 
 	rows := make([]woxwidget.Widget, 0, len(props.Items))
 	for _, item := range props.Items {
@@ -146,14 +139,19 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 	} else if len(rows) == 0 {
 		list = woxwidget.Container{Width: width, Height: viewportHeight, Padding: woxwidget.Insets{Top: 18}, Child: woxwidget.Text{Value: props.EmptyLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}
 	} else {
-		list = woxwidget.Gesture{ID: "theme-list-scroll", OnScroll: func(delta woxui.Point) {
-			if props.OnScroll != nil {
-				props.OnScroll(-delta.Y)
+		var keepVisible *woxwidget.ScrollRange
+		for index, item := range props.Items {
+			if item.Selected {
+				start := float32(index) * ThemeListRowHeight
+				keepVisible = &woxwidget.ScrollRange{Start: start, End: start + ThemeListRowHeight}
+				break
 			}
-		}, Child: woxwidget.ScrollView{
-			Width: width, Height: viewportHeight, ContentHeight: max(viewportHeight, float32(len(rows))*ThemeListRowHeight), Offset: props.Scroll,
+		}
+		list = woxwidget.ScrollView{
+			Key: "theme-list-scroll", ID: "theme-list-scroll", Width: width, Height: viewportHeight,
+			ContentHeight: max(viewportHeight, float32(len(rows))*ThemeListRowHeight), KeepVisible: keepVisible,
 			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: rows},
-		}}
+		}
 	}
 
 	actionWidth := float32(42)
@@ -163,9 +161,9 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 	inputWidth := max(float32(40), width-actionWidth)
 	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "theme-search", Label: props.SearchPlaceholder, Hint: props.SearchPlaceholder, Width: inputWidth, Height: searchHeight, Radius: 4,
-		Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 4, Bottom: 8}, Transparent: true, Style: woxui.TextStyle{Size: 13}, State: props.Search,
+		Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 4, Bottom: 8}, Transparent: true, Style: woxui.TextStyle{Size: 13}, Value: props.Search.Text,
 		Focused: props.SearchFocused, Autofocus: true, MaxLines: 1, Window: props.Window, Theme: props.Theme,
-		OnCaret: props.OnSearchCaret, OnKey: props.OnSearchKey, OnTextInput: props.OnSearchTextInput, OnFocusChange: props.OnSearchFocusChange, OnSetValue: props.OnSetSearchValue,
+		OnKey: props.OnSearchKey, OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,
 	})
 	actions := make([]woxwidget.Widget, 0, 2)
 	actions = append(actions, woxwidget.Align{Width: 32, Height: searchHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: props.SearchIcon, Width: 20, Height: 20}})

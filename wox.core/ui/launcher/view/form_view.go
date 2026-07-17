@@ -13,11 +13,10 @@ type FormPanelProps struct {
 	Title         string
 	Rows          []woxwidget.Widget
 	ContentHeight float32
-	Scroll        float32
+	KeepVisible   *woxwidget.ScrollRange
 	CancelLabel   string
 	SaveLabel     string
 	Theme         woxcomponent.Theme
-	OnScroll      func(float32)
 	OnCancel      func()
 	OnSave        func()
 }
@@ -25,17 +24,10 @@ type FormPanelProps struct {
 // FormPanel builds the shared launcher form shell.
 func FormPanel(props FormPanelProps) woxwidget.Widget {
 	bodyHeight := props.Height - 100
-	body := woxwidget.Gesture{
-		ID: "form-scroll",
-		OnScroll: func(delta woxui.Point) {
-			if props.OnScroll != nil {
-				props.OnScroll(-delta.Y)
-			}
-		},
-		Child: woxwidget.ScrollView{
-			Width: props.Width - 28, Height: bodyHeight, ContentHeight: max(bodyHeight, props.ContentHeight), Offset: props.Scroll,
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
-		},
+	body := woxwidget.ScrollView{
+		Key: "form-scroll", ID: "form-scroll", Width: props.Width - 28, Height: bodyHeight,
+		ContentHeight: max(bodyHeight, props.ContentHeight), KeepVisible: props.KeepVisible,
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
 	}
 	buttons := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		woxwidget.Painter{Width: max(float32(0), props.Width-28-210), Height: 36},
@@ -212,7 +204,9 @@ type FormTextFieldProps struct {
 	MaxLines  int
 	Window    *woxui.Window
 	Theme     woxcomponent.Theme
-	OnCaret   func(int)
+	OnFocus   func()
+	OnChanged func(string)
+	OnKey     func(woxui.KeyEvent) bool
 	OnBrowse  func()
 }
 
@@ -227,8 +221,13 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: props.ID, Label: props.Label, Width: inputWidth, Height: fieldHeight, Radius: 8,
 		Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 10, Bottom: 8}, Background: formFieldBackground(props.Focused, props.Theme),
-		Style: woxui.TextStyle{Size: 13}, State: props.State, Focused: props.Focused, Protected: props.Protected,
-		MaxLines: props.MaxLines, Window: props.Window, Theme: props.Theme, ControllerManagedFocus: true, OnCaret: props.OnCaret,
+		Style: woxui.TextStyle{Size: 13}, Value: props.State.Text, Focused: props.Focused, Protected: props.Protected,
+		MaxLines: props.MaxLines, Window: props.Window, Theme: props.Theme, OnChanged: props.OnChanged, OnKey: props.OnKey,
+		OnFocusChange: func(focused bool) {
+			if focused && props.OnFocus != nil {
+				props.OnFocus()
+			}
+		},
 	})
 	var valueField woxwidget.Widget = input
 	if props.OnBrowse != nil {

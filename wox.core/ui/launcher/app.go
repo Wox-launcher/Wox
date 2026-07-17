@@ -100,11 +100,9 @@ type App struct {
 	actionSelected        int
 	actionSelectionKey    string
 	actionFilter          *woxui.TextEditor
-	actionScroll          float32
 	visible               bool
 	show                  showAppParams
 	settingsOpen          bool
-	settingsTitleBarHover string
 	settings              settingsData
 	settingsCtx           settingWindowContext
 	settingTab            string
@@ -117,16 +115,12 @@ type App struct {
 	settingSearchFocused  bool
 	settingSearchPanel    bool
 	settingSearchSelected int
-	settingSearchScroll   float32
-	settingSearchViewport float32
 	settingSearchPlugins  []pluginSettingsPlugin
 	settingSearchLoading  bool
 	settingSearchLoaded   bool
 	settingSearchError    string
 	settingChoicePicker   *settingChoicePickerState
 	choiceTooltipRevision uint64
-	settingPageScroll     scrollController
-	settingRailScroll     scrollController
 	settingLanguages      []settingChoice
 	updateChannelVersions []updateChannelVersion
 	updateChannelsLoading bool
@@ -139,8 +133,6 @@ type App struct {
 	pluginsLoaded         bool
 	pluginsError          string
 	pluginSelected        int
-	pluginListScroll      float32
-	pluginListViewport    float32
 	pluginSearchEditor    *woxui.TextEditor
 	pluginSearchFocused   bool
 	pluginFilters         pluginFilterState
@@ -164,8 +156,6 @@ type App struct {
 	themesLoaded          bool
 	themesError           string
 	themeSelected         int
-	themeListScroll       float32
-	themeListViewport     float32
 	themeSearchEditor     *woxui.TextEditor
 	themeSearchFocused    bool
 	themeDetailTab        string
@@ -204,18 +194,12 @@ type App struct {
 	dataRestoreArmed      string
 	dataPendingLocation   string
 	dataClearLogsArmed    bool
-	dataListScroll        float32
-	dataListViewport      float32
 	runtimeStatuses       []runtimeStatus
 	runtimeLoading        bool
 	runtimeLoaded         bool
 	runtimeError          string
 	runtimeRestarting     string
 	runtimeRevision       uint64
-	runtimePageScroll     float32
-	runtimePageViewport   float32
-	runtimePageContent    float32
-	runtimeRowsTop        float32
 	cloudAccount          cloudAccountStatus
 	cloudSync             cloudSyncStatus
 	cloudBillingPlan      cloudBillingPlan
@@ -226,16 +210,10 @@ type App struct {
 	cloudBusy             string
 	cloudError            string
 	cloudRevision         uint64
-	cloudPageScroll       float32
-	cloudPageViewport     float32
-	cloudPageContent      float32
 	cloudForm             *cloudFormState
 	cloudActionMenu       string
 	cloudPlugins          []pluginSettingsPlugin
-	cloudPluginScroll     float32
-	cloudPluginViewport   float32
 	glanceItem            *glanceItem
-	glanceHovered         bool
 	glanceLoading         bool
 	glanceRevision        uint64
 	glanceTooltipRevision uint64
@@ -255,7 +233,6 @@ type App struct {
 	previewRequests       map[string]bool
 	filePreviews          map[string]filePreviewContent
 	fileRequests          map[string]bool
-	previewScroll         map[string]float32
 	previewLayouts        map[string]woxwidget.TextBlockLayout
 	terminalPreview       *terminalPreviewState
 	aiModels              []aiModel
@@ -314,7 +291,6 @@ func newApp(isDev bool, services contract.Services, clientFactory BackendFactory
 		previewRequests: map[string]bool{},
 		filePreviews:    map[string]filePreviewContent{},
 		fileRequests:    map[string]bool{},
-		previewScroll:   map[string]float32{},
 		previewLayouts:  map[string]woxwidget.TextBlockLayout{},
 		show: showAppParams{
 			WindowWidth:    defaultWidth,
@@ -372,8 +348,11 @@ func (a *App) start() error {
 				a.onTextInput(event)
 			}
 		},
-		OnFocus:  a.onFocus,
-		OnClosed: a.onLauncherWindowClosed,
+		OnFocus: a.onFocus,
+		OnClosed: func() {
+			host.Dispose()
+			a.onLauncherWindowClosed()
+		},
 	})
 	if err != nil {
 		_ = a.client.Close()

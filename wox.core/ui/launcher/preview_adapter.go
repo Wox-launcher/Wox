@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 	"time"
 
@@ -150,21 +151,14 @@ func (a *App) previewBodyTags(preview queryPreview) []previewTag {
 
 func (a *App) buildScrollablePreviewText(scrollKey, value string, color woxui.Color, scrollPosition string, width, height float32) woxwidget.Widget {
 	innerWidth := max(float32(0), width-48)
-	innerHeight := max(float32(0), height-48)
 	style := woxui.TextStyle{Size: 15}
 	layout := a.previewTextLayout(scrollKey, value, style, innerWidth, 23)
-	contentHeight := max(innerHeight, layout.Size.Height)
-	maxOffset := max(float32(0), contentHeight-innerHeight)
-	a.mu.RLock()
-	offset, initialized := a.previewScroll[scrollKey]
-	if !initialized && scrollPosition == "bottom" {
-		offset = maxOffset
+	initialOffset := float32(0)
+	if scrollPosition == "bottom" {
+		initialOffset = float32(math.MaxFloat32)
 	}
-	offset = min(max(float32(0), offset), maxOffset)
-	a.mu.RUnlock()
 	return previewview.ScrollablePreviewText(previewview.ScrollablePreviewTextProps{
-		ID: scrollKey, Value: value, Color: color, Width: width, Height: height, Layout: layout, Offset: offset,
-		OnScroll: func(delta, scrollMax float32) { a.scrollPreviewFrom(scrollKey, offset, delta, scrollMax) },
+		ID: scrollKey, Value: value, Color: color, Width: width, Height: height, Layout: layout, InitialOffset: initialOffset,
 	})
 }
 
@@ -201,24 +195,6 @@ func (a *App) previewTextLayout(scrollKey, value string, style woxui.TextStyle, 
 	a.previewLayouts[key] = layout
 	a.mu.Unlock()
 	return layout
-}
-
-func (a *App) scrollPreviewFrom(key string, offset, delta, maxOffset float32) {
-	if delta == 0 || maxOffset <= 0 {
-		return
-	}
-	a.mu.Lock()
-	current, initialized := a.previewScroll[key]
-	if !initialized {
-		current = offset
-	}
-	a.previewScroll[key] = min(max(float32(0), current+delta), maxOffset)
-	if len(a.previewScroll) > 256 {
-		current := a.previewScroll[key]
-		a.previewScroll = map[string]float32{key: current}
-	}
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
 }
 
 func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, width, height float32) woxwidget.Widget {

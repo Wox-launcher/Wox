@@ -109,7 +109,7 @@ func (a *App) buildThemeEditorPreview(result queryResult, preview queryPreview, 
 // buildThemeEditorSurface adapts controller-owned form fields to the shared theme editor view.
 func (a *App) buildThemeEditorSurface(state *themeEditorPreviewSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
 	innerWidth := max(float32(0), width-32)
-	callbacks := formFieldCallbacks{idPrefix: "theme-editor", focus: a.focusThemeEditorField, setCaret: a.setThemeEditorCaret}
+	callbacks := formFieldCallbacks{idPrefix: "theme-editor", focus: a.focusThemeEditorField, setText: a.setThemeEditorText, onKey: a.onThemeEditorPreviewKey}
 	rows := make([]woxwidget.Widget, 0, len(state.definitions))
 	for index, definition := range state.definitions {
 		rows = append(rows, a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, innerWidth, formDefinitionHeight(definition, state.values)))
@@ -129,9 +129,8 @@ func (a *App) buildThemeEditorSurface(state *themeEditorPreviewSnapshot, palette
 	return previewview.ThemeEditorPreviewView(previewview.ThemeEditorPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), DraftTheme: draftPalette.componentTheme(),
 		Error: state.error, SaveLabel: saveLabel, Dirty: dirty, Saving: state.saving,
-		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions, state.values), Scroll: state.scroll,
-		OnScroll:      func(delta float32) { a.scrollThemeEditorPreview(state.key, delta) },
-		OnSetViewport: func(viewport float32) { a.setThemeEditorViewport(state.key, viewport) }, OnSubmit: a.submitThemeEditorPreview,
+		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions, state.values), KeepVisible: formFieldsKeepVisible(state.formFieldsSnapshot),
+		OnSubmit: a.submitThemeEditorPreview,
 	})
 }
 
@@ -358,28 +357,20 @@ func (a *App) onThemeEditorPreviewKey(event woxui.KeyEvent) bool {
 		a.moveThemeEditorFocus(delta)
 	case woxui.KeyArrowUp:
 		a.moveThemeEditorFocus(-1)
+	case woxui.KeyEnter:
+		return true
 	default:
-		a.editThemeEditorKey(event)
+		return false
 	}
 	return true
 }
 
-func (a *App) onThemeEditorPreviewTextInput(event woxui.TextInputEvent) bool {
-	a.mu.Lock()
+func (a *App) onThemeEditorPreviewTextInput(_ woxui.TextInputEvent) bool {
+	a.mu.RLock()
 	state := a.themeEditor
-	if state == nil || !state.active {
-		a.mu.Unlock()
-		return false
-	}
-	if state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) {
-		if state.editor.HandleTextInput(event) {
-			syncFormFieldsEditorLocked(&state.formFieldsState)
-			state.error = ""
-		}
-	}
-	a.mu.Unlock()
-	a.invalidateThemeEditorWindow()
-	return true
+	active := state != nil && state.active
+	a.mu.RUnlock()
+	return active
 }
 
 func (a *App) editThemeEditorKey(event woxui.KeyEvent) {
@@ -433,16 +424,16 @@ func (a *App) focusThemeEditorField(index int) {
 	a.invalidateThemeEditorWindow()
 }
 
-func (a *App) setThemeEditorCaret(index, offset int) {
+func (a *App) setThemeEditorText(index int, value string) {
 	a.mu.Lock()
-	state := a.themeEditor
-	if state == nil || !state.active || state.focused != index || state.editor == nil {
-		a.mu.Unlock()
-		return
+	changed := a.themeEditor != nil && !a.themeEditor.saving && setFormFieldsTextLocked(&a.themeEditor.formFieldsState, index, value)
+	if changed {
+		a.themeEditor.error = ""
 	}
-	state.editor.SetCaret(offset)
 	a.mu.Unlock()
-	a.invalidateThemeEditorWindow()
+	if changed {
+		a.invalidateThemeEditorWindow()
+	}
 }
 
 func (a *App) deactivateThemeEditorPreview() {
@@ -457,28 +448,6 @@ func (a *App) deactivateThemeEditorPreview() {
 		return
 	}
 	a.restoreThemeEditorTextInput()
-	a.invalidateThemeEditorWindow()
-}
-
-func (a *App) setThemeEditorViewport(key string, height float32) {
-	a.mu.Lock()
-	if state := a.themeEditor; state != nil && state.key == key {
-		state.viewportHeight = max(float32(1), height)
-		state.scroll = min(state.scroll, max(float32(0), formDefinitionsContentHeight(state.definitions, state.values)-state.viewportHeight))
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) scrollThemeEditorPreview(key string, delta float32) {
-	a.mu.Lock()
-	state := a.themeEditor
-	if state == nil || state.key != key {
-		a.mu.Unlock()
-		return
-	}
-	maxOffset := max(float32(0), formDefinitionsContentHeight(state.definitions, state.values)-state.viewportHeight)
-	state.scroll = min(max(float32(0), state.scroll+delta), maxOffset)
-	a.mu.Unlock()
 	a.invalidateThemeEditorWindow()
 }
 

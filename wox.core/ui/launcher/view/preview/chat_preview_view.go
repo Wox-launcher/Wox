@@ -447,7 +447,7 @@ func chatMessageHeight(props ChatMessageProps) float32 {
 	return height + float32(max(0, parts-1))*6 + 20
 }
 
-// ChatInputProps contains the controlled editor and toolbar state.
+// ChatInputProps contains the committed input value and toolbar state.
 type ChatInputProps struct {
 	Width       float32
 	Height      float32
@@ -462,7 +462,9 @@ type ChatInputProps struct {
 	StatusColor woxui.Color
 	Sending     bool
 	Theme       woxcomponent.Theme
-	OnCaret     func(int)
+	OnFocus     func()
+	OnChanged   func(string)
+	OnKey       func(woxui.KeyEvent) bool
 	OnModels    func()
 	OnSend      func()
 }
@@ -475,8 +477,12 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "chat-input-" + props.Key, Label: props.Hint, Hint: props.Hint, Width: props.Width, Height: editorHeight,
 		Padding: woxwidget.Insets{Left: 14, Top: 8, Right: 14, Bottom: 7}, Background: props.Theme.QueryBackground,
-		Style: woxui.TextStyle{Size: 13}, State: props.Editing, Focused: props.Focused, MaxLines: 5, Window: props.Window, Theme: props.Theme,
-		ControllerManagedFocus: true, OnCaret: props.OnCaret,
+		Style: woxui.TextStyle{Size: 13}, Value: props.Editing.Text, Focused: props.Focused, MaxLines: 5, Window: props.Window, Theme: props.Theme,
+		OnChanged: props.OnChanged, OnKey: props.OnKey, OnFocusChange: func(focused bool) {
+			if focused && props.OnFocus != nil {
+				props.OnFocus()
+			}
+		},
 	})
 	divider := props.Theme.ResultSubtitle
 	divider.A = uint8(float32(divider.A) * 0.14)
@@ -512,14 +518,16 @@ type ChatQuestionOptionProps struct {
 	OnSelect func()
 }
 
-// ChatQuestionInputProps contains the optional controlled free-form answer.
+// ChatQuestionInputProps contains the optional committed free-form answer.
 type ChatQuestionInputProps struct {
-	ID      string
-	Height  float32
-	Editing woxui.TextEditingState
-	Focused bool
-	Window  *woxui.Window
-	OnCaret func(int)
+	ID        string
+	Height    float32
+	Editing   woxui.TextEditingState
+	Focused   bool
+	Window    *woxui.Window
+	OnFocus   func()
+	OnChanged func(string)
+	OnKey     func(woxui.KeyEvent) bool
 }
 
 // ChatQuestionProps contains the typed ask-user options and actions.
@@ -551,8 +559,13 @@ func ChatQuestion(props ChatQuestionProps) woxwidget.Widget {
 		children = append(children, woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 			ID: props.Input.ID, Label: "Answer", Hint: "Type an answer…", Width: innerWidth, Height: props.Input.Height,
 			Radius: 7, Padding: woxwidget.Insets{Left: 10, Top: 8, Right: 10, Bottom: 8}, Background: props.Theme.QueryBackground,
-			Style: woxui.TextStyle{Size: 12}, State: props.Input.Editing, Focused: props.Input.Focused, MaxLines: 4,
-			Window: props.Input.Window, Theme: props.Theme, ControllerManagedFocus: true, OnCaret: props.Input.OnCaret,
+			Style: woxui.TextStyle{Size: 12}, Value: props.Input.Editing.Text, Focused: props.Input.Focused, MaxLines: 4,
+			Window: props.Input.Window, Theme: props.Theme, OnChanged: props.Input.OnChanged, OnKey: props.Input.OnKey,
+			OnFocusChange: func(focused bool) {
+				if focused && props.Input.OnFocus != nil {
+					props.Input.OnFocus()
+				}
+			},
 		}))
 	}
 	children = append(children, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{

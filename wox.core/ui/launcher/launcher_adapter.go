@@ -35,7 +35,6 @@ type viewSnapshot struct {
 	completionHint        *queryCompletionHint
 	toolbarMsg            *toolbarMessage
 	glance                *glanceItem
-	glanceHovered         bool
 	hideGlanceIcon        bool
 	form                  *formSnapshot
 	tableEditor           *formTableEditorSnapshot
@@ -43,7 +42,7 @@ type viewSnapshot struct {
 	chatFullscreen        bool
 	actionPanel           bool
 	actionSelected        int
-	actionEditing         woxui.TextEditingState
+	actionFilter          string
 	actionEntries         []actionPanelEntry
 	actionIndices         []int
 	show                  showAppParams
@@ -81,13 +80,13 @@ func (a *App) snapshot() viewSnapshot {
 		}
 		glance = &copy
 	}
-	var actionEditing woxui.TextEditingState
+	actionFilter := ""
 	var actionEntries []actionPanelEntry
 	var actionIndices []int
 	if a.actionPanel && a.actionFilter != nil {
-		actionEditing = a.actionFilter.State()
+		actionFilter = a.actionFilter.State().Text
 		actionEntries = unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-		actionIndices = filteredActionIndices(actionEntries, actionEditing.Text, a.translations, a.settings.UsePinYin)
+		actionIndices = filteredActionIndices(actionEntries, actionFilter, a.translations, a.settings.UsePinYin)
 	}
 	return viewSnapshot{
 		editing:               a.editor.State(),
@@ -105,7 +104,6 @@ func (a *App) snapshot() viewSnapshot {
 		completionHint:        completionHint,
 		toolbarMsg:            toolbarMsg,
 		glance:                glance,
-		glanceHovered:         a.glanceHovered,
 		hideGlanceIcon:        a.settings.HideGlanceIcon,
 		form:                  snapshotFormLocked(a.form),
 		tableEditor:           tableEditor,
@@ -113,7 +111,7 @@ func (a *App) snapshot() viewSnapshot {
 		chatFullscreen:        a.chatFullscreen,
 		actionPanel:           a.actionPanel,
 		actionSelected:        a.actionSelected,
-		actionEditing:         actionEditing,
+		actionFilter:          actionFilter,
 		actionEntries:         actionEntries,
 		actionIndices:         actionIndices,
 		show:                  a.show,
@@ -141,7 +139,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	content := a.buildContent(snapshot, width, contentHeight)
 	var header woxwidget.Widget
 	if queryHeight > 0 {
-		header = a.buildHeader(snapshot, width, queryHeight)
+		header = a.buildHeader(snapshot, width, queryHeight, frame.Scale)
 	}
 	var refinements woxwidget.Widget
 	if refinementHeight > 0 {
@@ -175,7 +173,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	})
 }
 
-func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) woxwidget.Widget {
 	const queryLeftPadding = float32(8)
 	const accessoryGap = float32(12)
 	horizontalPadding := snapshot.palette.appPadding.Left + snapshot.palette.appPadding.Right
@@ -210,7 +208,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height float32) woxwidge
 	}
 	var glance woxwidget.Widget
 	if snapshot.glance != nil {
-		glance = a.buildGlance(*snapshot.glance, snapshot.glanceHovered, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth)
+		glance = a.buildGlance(*snapshot.glance, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth, scale)
 	}
 	return launcherview.LauncherHeaderView(launcherview.LauncherHeaderProps{
 		Width: width, Height: height, QueryBoxHeight: queryBoxHeight, QueryEditorHeight: queryEditorHeight,

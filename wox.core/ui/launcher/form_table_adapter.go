@@ -12,8 +12,6 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const formTableListRowHeight = float32(48)
-
 func formTableTitle(definition formDefinition) string {
 	if definition.Value.Title != "" {
 		return definition.Value.Title
@@ -317,21 +315,28 @@ func (a *App) buildFormTableList(snapshot *formTableEditorSnapshot, palette uiPa
 		addLabel = "Add local"
 	}
 	return launcherview.FormTableList(launcherview.FormTableListProps{
-		Width: width, Height: height, Rows: rows, Selected: snapshot.selected, Scroll: snapshot.listScroll,
+		Width: width, Height: height, Rows: rows, Selected: snapshot.selected,
 		Status: snapshot.status, StatusError: snapshot.invalid, AddLabel: addLabel, DeleteLabel: deleteLabel, CloseLabel: a.translate("i18n:ui_close"),
 		CanAdd: !snapshot.invalid && !snapshot.saving, CanEdit: canEdit, CanDelete: canDelete, ShowClone: showClone, Theme: palette.componentTheme(),
-		OnSetViewport: a.setFormTableListViewport, OnScroll: a.scrollFormTableList, OnSelect: a.selectFormTableRow,
-		OnAdd: a.beginAddFormTableRow, OnEdit: a.beginEditFormTableRow, OnDelete: a.deleteFormTableRow, OnClone: a.beginCloneRemoteAISkill, OnClose: a.closeFormTableEditor,
+		OnSelect: a.selectFormTableRow,
+		OnAdd:    a.beginAddFormTableRow, OnEdit: a.beginEditFormTableRow, OnDelete: a.deleteFormTableRow, OnClone: a.beginCloneRemoteAISkill, OnClose: a.closeFormTableEditor,
 	})
 }
 
 func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
 	rowForm := snapshot.rowForm
-	callbacks := formFieldCallbacks{idPrefix: "form-table-row", focus: a.focusFormTableRowField, change: a.changeFormTableRowChoice, setCaret: a.setFormTableRowCaret, openChoice: a.openFormTableRowChoice, pickDir: a.pickFormTableRowDirectory, pickApp: a.openFormTableAppPicker, recordKey: a.recordFormTableRowHotkey}
+	callbacks := formFieldCallbacks{idPrefix: "form-table-row", focus: a.focusFormTableRowField, change: a.changeFormTableRowChoice, setText: a.setFormTableRowText, onKey: a.onFormTableKey, openChoice: a.openFormTableRowChoice, pickDir: a.pickFormTableRowDirectory, pickApp: a.openFormTableAppPicker, recordKey: a.recordFormTableRowHotkey}
 	labelWidth := a.formTableRowLabelWidth(rowForm.definitions)
 	fieldWidth := max(float32(0), width-20)
 	rows := make([]woxwidget.Widget, 0, len(rowForm.definitions))
+	contentHeight := float32(0)
+	var keepVisible *woxwidget.ScrollRange
 	for index, definition := range rowForm.definitions {
+		fieldHeight := launcherview.FormTableRowFieldHeight(definition.Type, definition.Value.Tooltip, definition.Value.MaxLines)
+		if rowForm.focused == index {
+			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + fieldHeight}
+		}
+		contentHeight += fieldHeight
 		rows = append(rows, a.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth))
 	}
 	title := ""
@@ -343,9 +348,9 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 		saveLabel = "Clone"
 	}
 	return launcherview.FormTableRowEditor(launcherview.FormTableRowEditorProps{
-		Width: width, Height: height, Title: title, Rows: rows, ContentHeight: formTableRowContentHeight(rowForm.definitions), Scroll: rowForm.scroll,
+		Width: width, Height: height, Title: title, Rows: rows, ContentHeight: contentHeight, KeepVisible: keepVisible,
 		Status: snapshot.status, CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: saveLabel, Theme: palette.componentTheme(),
-		OnSetViewport: a.setFormTableRowViewport, OnScroll: a.scrollFormTableRow, OnCancel: a.cancelFormTableRowEdit, OnSave: a.saveFormTableRowEdit,
+		OnCancel: a.cancelFormTableRowEdit, OnSave: a.saveFormTableRowEdit,
 	})
 }
 
@@ -358,20 +363,19 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 	if !focused {
 		state = woxui.TextEditingState{Text: fieldValue}
 	}
-	if definition.Type == "password" {
-		state.Text = strings.Repeat("•", len([]rune(state.Text)))
-		state.Composition = strings.Repeat("•", len([]rune(state.Composition)))
-	}
 	height := launcherview.FormTableRowFieldHeight(definition.Type, a.translate(value.Tooltip), value.MaxLines)
 	props := launcherview.FormTableRowFieldProps{
 		ID: fmt.Sprintf("form-table-row-field-%d", index), Kind: definition.Type, Label: a.translate(value.Label), Description: a.translate(value.Tooltip),
 		Value: fieldValue, Width: width, Height: height, LabelWidth: labelWidth, State: state, Focused: focused, Protected: definition.Type == "password",
 		MaxLines: max(1, value.MaxLines), Window: a.formTableNativeWindow(), Theme: palette.componentTheme(),
 		EmojiLabel: a.translate("i18n:ui_image_editor_emoji"), UploadLabel: a.translate("i18n:ui_image_editor_upload_image"), BrowseLabel: a.translate("i18n:ui_runtime_browse"),
-		OnCaret: func(offset int) {
-			callbacks.focus(index)
-			callbacks.setCaret(index, offset)
+		OnFocus: func() { callbacks.focus(index) },
+		OnChanged: func(value string) {
+			if callbacks.setText != nil {
+				callbacks.setText(index, value)
+			}
 		},
+		OnKey: callbacks.onKey,
 	}
 	switch definition.Type {
 	case "checkbox":
