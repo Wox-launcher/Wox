@@ -11,115 +11,113 @@ type PrivacySettingsProps struct {
 	Width                float32
 	Height               float32
 	Theme                woxcomponent.Theme
-	Selected             int
+	Title                string
+	Description          string
 	TelemetryTitle       string
 	TelemetryDescription string
 	TelemetryEnabled     bool
-	SampleTitle          string
-	SampleDescription    string
-	Sample               string
+	ViewSampleLabel      string
 	Error                string
-	OnSelect             func(int)
 	OnToggleTelemetry    func()
-	OnToggleSample       func()
-	OnCopySample         func()
+	OnViewSample         func()
 }
 
 // PrivacySettingsView builds the privacy page without depending on launcher controller state.
 func PrivacySettingsView(props PrivacySettingsProps) woxwidget.Widget {
-	contentWidth := min(float32(760), max(float32(0), props.Width-72))
-	telemetryBackground := props.Theme.QueryBackground
-	sampleBackground := props.Theme.QueryBackground
-	if props.Selected == 0 {
-		telemetryBackground = props.Theme.SelectedBackground
-	}
-	if props.Selected == 1 {
-		sampleBackground = props.Theme.SelectedBackground
-	}
-	telemetryLabel := "Off"
-	if props.TelemetryEnabled {
-		telemetryLabel = "On"
-	}
-	sampleLabel := "View sample"
-	if props.Sample != "" {
-		sampleLabel = "Hide sample"
-	}
+	contentWidth := min(float32(1120), max(float32(0), props.Width-82))
+	const controlWidth = float32(178)
+	labelWidth := min(float32(550), max(float32(180), contentWidth-controlWidth-32))
+	controlAreaWidth := max(controlWidth, contentWidth-labelWidth-32)
+	controls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: "privacy-view-sample", Label: props.ViewSampleLabel, Width: 126, Height: 30, FontSize: 12,
+			Padding: woxwidget.Insets{Right: 8}, Variant: woxcomponent.ButtonText, OnTap: props.OnViewSample, Theme: props.Theme,
+		}),
+		woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
+			ID: "privacy-telemetry-switch", Label: props.TelemetryTitle, Value: props.TelemetryEnabled,
+			OnChange: func(bool) {
+				if props.OnToggleTelemetry != nil {
+					props.OnToggleTelemetry()
+				}
+			}, Theme: props.Theme,
+		}),
+	}}
 	children := []woxwidget.Widget{
 		woxcomponent.WoxPageHeader(woxcomponent.PageHeaderProps{
-			Title: "Privacy", Description: "Control anonymous product telemetry and inspect what it contains",
-			Width: contentWidth, Height: 62, TitleSize: 24, Gap: 7, Theme: props.Theme,
+			Title: props.Title, Description: props.Description, Width: contentWidth, Theme: props.Theme,
 		}),
-		privacySettingCard("privacy-telemetry", props.TelemetryTitle, props.TelemetryDescription, telemetryLabel, contentWidth, telemetryBackground, props.Theme, func() {
-			selectPrivacyRow(props, 0)
-		}, func() {
-			selectPrivacyRow(props, 0)
-			if props.OnToggleTelemetry != nil {
-				props.OnToggleTelemetry()
-			}
+		woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
+			Label: props.TelemetryTitle, Description: props.TelemetryDescription, Width: contentWidth, Height: 84,
+			LabelWidth: labelWidth, Gap: 32, DescriptionMaxLines: 3, Theme: props.Theme,
+			Child: woxwidget.Align{Width: controlAreaWidth, Height: 84, Horizontal: 1, Vertical: 0.5, Child: controls},
 		}),
-		privacySettingCard("privacy-sample", props.SampleTitle, props.SampleDescription, sampleLabel, contentWidth, sampleBackground, props.Theme, func() {
-			selectPrivacyRow(props, 1)
-		}, func() {
-			selectPrivacyRow(props, 1)
-			if props.OnToggleSample != nil {
-				props.OnToggleSample()
-			}
-		}),
-	}
-	if props.Sample != "" {
-		children = append(children, privacySampleCard(props, contentWidth))
 	}
 	if props.Error != "" {
 		children = append(children, woxwidget.TextBlock{
 			Value: props.Error, Width: contentWidth, Height: 32, MaxLines: 2,
-			Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: props.Theme.ResultSubtitle,
+			Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: props.Theme.ErrorText,
 		})
 	}
 	return woxwidget.Container{
-		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 36, Top: 30, Right: 36, Bottom: 22},
+		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 38, Top: 34, Right: 44, Bottom: 28},
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children},
+	}
+}
+
+// PrivacySampleDialogProps contains the translated copy and actions for the telemetry sample dialog.
+type PrivacySampleDialogProps struct {
+	Width        float32
+	Height       float32
+	Theme        woxcomponent.Theme
+	Title        string
+	Sample       string
+	CopyLabel    string
+	ConfirmLabel string
+	Error        string
+	OnCopy       func()
+	OnClose      func()
+}
+
+// PrivacySampleDialog builds the modal payload preview used by the privacy page.
+func PrivacySampleDialog(props PrivacySampleDialogProps) woxwidget.Widget {
+	dialogWidth := max(float32(0), min(float32(500), props.Width-40))
+	dialogHeight := max(float32(0), min(float32(370), props.Height-40))
+	innerWidth := max(float32(0), dialogWidth-40)
+	innerHeight := max(float32(0), dialogHeight-40)
+	fixedHeight := float32(90)
+	if props.Error != "" {
+		fixedHeight = 122
+	}
+	sampleHeight := max(float32(100), innerHeight-fixedHeight)
+	children := []woxwidget.Widget{
+		woxwidget.Container{Width: innerWidth, Height: 28, Child: woxwidget.Text{
+			Value: props.Title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText,
+		}},
+		woxwidget.Container{Width: innerWidth, Height: sampleHeight, Radius: 8, Color: privacyColorAlpha(props.Theme.ActionText, 13), BorderColor: props.Theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(12), Child: woxwidget.TextBlock{
+			Value: props.Sample, Width: max(float32(0), innerWidth-24), Height: max(float32(0), sampleHeight-24),
+			Style: woxui.TextStyle{Size: 12}, LineHeight: 18, Color: props.Theme.ActionText,
+		}},
+	}
+	if props.Error != "" {
+		children = append(children, woxwidget.TextBlock{
+			Value: props.Error, Width: innerWidth, Height: 20, MaxLines: 1,
+			Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText,
+		})
+	}
+	children = append(children, woxwidget.Container{Width: innerWidth, Height: 38, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		woxwidget.Painter{Width: max(float32(0), innerWidth-190), Height: 38},
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "privacy-sample-copy", Label: props.CopyLabel, Width: 92, OnTap: props.OnCopy, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "privacy-sample-close", Label: props.ConfirmLabel, Width: 88, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnClose, Theme: props.Theme}),
+	}}})
+	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
+		ID: "privacy-sample-dialog", Label: props.Title, Width: dialogWidth, Height: dialogHeight,
+		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "privacy-sample-backdrop", BackdropColor: woxui.Color{R: 0, G: 0, B: 0, A: 112},
+		Padding: woxwidget.UniformInsets(20), OnDismiss: props.OnClose, Theme: props.Theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: children},
-	}
-}
-
-func selectPrivacyRow(props PrivacySettingsProps, row int) {
-	if props.OnSelect != nil {
-		props.OnSelect(row)
-	}
-}
-
-func privacySettingCard(id, title, description, value string, width float32, background woxui.Color, theme woxcomponent.Theme, onHover, onTap func()) woxwidget.Widget {
-	return woxwidget.Gesture{ID: id, OnHover: func(inside bool) {
-		if inside && onHover != nil {
-			onHover()
-		}
-	}, OnTap: onTap, Child: woxcomponent.WoxPanel(woxcomponent.PanelProps{
-		Width: width, Height: 70, Radius: 10, Color: background, Padding: woxwidget.Insets{Left: 18, Top: 9, Right: 16, Bottom: 9}, Theme: theme,
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 14, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: max(float32(180), width-208), Height: 52, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-				woxwidget.Text{Value: description, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle},
-			}}},
-			woxwidget.Container{Width: 160, Height: 38, Radius: 8, Color: theme.ToolbarBackground, Padding: woxwidget.Insets{Left: 14, Top: 10}, Child: woxwidget.Text{
-				Value: value, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.Cursor,
-			}},
-		}},
-	})}
-}
-
-func privacySampleCard(props PrivacySettingsProps, width float32) woxwidget.Widget {
-	innerWidth := max(float32(0), width-28)
-	return woxcomponent.WoxPanel(woxcomponent.PanelProps{
-		Width: width, Height: 282, Radius: 10, Padding: woxwidget.UniformInsets(14), Theme: props.Theme,
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: innerWidth, Height: 34, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-				woxwidget.Container{Width: max(float32(120), innerWidth-100), Height: 30, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{
-					Value: "Anonymous telemetry payload", Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle,
-				}},
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "privacy-copy", Label: "Copy", Width: 90, OnTap: props.OnCopySample, Theme: props.Theme}),
-			}}},
-			woxwidget.Container{Width: innerWidth, Height: 210, Radius: 8, Color: props.Theme.ToolbarBackground, Padding: woxwidget.UniformInsets(14), Child: woxwidget.TextBlock{
-				Value: props.Sample, Width: innerWidth - 28, Height: 182, Style: woxui.TextStyle{Size: 12}, LineHeight: 20, Color: props.Theme.ResultTitle,
-			}},
-		}},
 	})
+}
+
+func privacyColorAlpha(color woxui.Color, alpha uint8) woxui.Color {
+	color.A = alpha
+	return color
 }

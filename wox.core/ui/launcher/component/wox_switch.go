@@ -2,6 +2,7 @@ package component
 
 import (
 	"fmt"
+	"time"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -19,25 +20,25 @@ type SwitchProps struct {
 
 // WoxSwitch builds a compact switch with pointer, keyboard, and accessibility behavior.
 func WoxSwitch(props SwitchProps) woxwidget.Widget {
-	trackColor := withAlpha(props.Theme.ResultSubtitle, 104)
-	knobLeft := float32(2)
-	if props.Value {
-		trackColor = props.Theme.Cursor
-		knobLeft = 22
-	}
-	if props.Disabled {
-		trackColor = withAlpha(trackColor, 88)
-	}
 	toggle := func() {
 		if !props.Disabled && props.OnChange != nil {
 			props.OnChange(!props.Value)
 		}
 	}
 	key := woxwidget.Key(props.ID)
-	content := woxwidget.Gesture{ID: props.ID, OnTap: toggle, Child: woxwidget.Stack{Width: 42, Height: 22, Children: []woxwidget.StackChild{
-		{Child: woxwidget.Container{Width: 42, Height: 22, Radius: 11, Color: trackColor}},
-		{Left: knobLeft, Top: 2, Child: woxwidget.Container{Width: 18, Height: 18, Radius: 9, Color: woxui.Color{R: 248, G: 248, B: 248, A: 255}}},
-	}}}
+	target := float32(0)
+	if props.Value {
+		target = 1
+	}
+	visual := woxwidget.AnimatedFloat{Key: key, Target: target, Duration: 300 * time.Millisecond, Curve: woxwidget.AnimationEaseOutBack, Builder: func(position float32) woxwidget.Widget {
+		colorPosition := min(max(position, float32(0)), float32(1))
+		trackColor := lerpColor(withAlpha(props.Theme.ResultTitle, 77), props.Theme.ActionSelected, colorPosition)
+		return woxwidget.Stack{Width: 42, Height: 22, Children: []woxwidget.StackChild{
+			{Child: woxwidget.Container{Width: 42, Height: 22, Radius: 11, Color: trackColor}},
+			{Left: 2 + 20*position, Top: 2, Child: woxwidget.Container{Width: 18, Height: 18, Radius: 9, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255}}},
+		}}
+	}}
+	content := woxwidget.Gesture{ID: props.ID, OnTap: toggle, Child: visual}
 	if props.ID == "" || props.OnChange == nil {
 		return content.Child
 	}
@@ -65,4 +66,12 @@ func WoxSwitch(props SwitchProps) woxwidget.Widget {
 			return true
 		}, Child: content},
 	}
+}
+
+// lerpColor interpolates each RGBA channel between two colors.
+func lerpColor(from, to woxui.Color, progress float32) woxui.Color {
+	channel := func(start, end uint8) uint8 {
+		return uint8(float32(start) + (float32(end)-float32(start))*progress + 0.5)
+	}
+	return woxui.Color{R: channel(from.R, to.R), G: channel(from.G, to.G), B: channel(from.B, to.B), A: channel(from.A, to.A)}
 }

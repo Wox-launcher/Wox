@@ -389,6 +389,11 @@ func getShowOptions(ctx context.Context, showContext common.ShowContext) contrac
 	if windowWidth <= 0 {
 		windowWidth = woxSetting.AppWidth.Get()
 	}
+	// A zero show-context value means there is no per-session override, so the
+	// launcher must use the global setting just like the Flutter controller did.
+	if maxResultCount <= 0 {
+		maxResultCount = woxSetting.MaxResultCount.Get()
+	}
 
 	// if specific position provided, use it
 	if showContext.WindowPosition != nil {

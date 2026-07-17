@@ -20,20 +20,17 @@ type SettingsNavItem struct {
 	OnTap        func()
 }
 
-// SettingsRailProps contains navigation, search, and back actions.
+// SettingsRailProps contains navigation and search actions.
 type SettingsRailProps struct {
-	Width         float32
-	Height        float32
-	Items         []SettingsNavItem
-	Scroll        float32
-	SearchBox     woxwidget.Widget
-	SearchPanel   woxwidget.Widget
-	ShowSearch    bool
-	BackLabel     string
-	Theme         woxcomponent.Theme
-	OnSetViewport func(float32)
-	OnScroll      func(float32)
-	OnBack        func()
+	Width       float32
+	Height      float32
+	Items       []SettingsNavItem
+	Scroll      float32
+	SearchBox   woxwidget.Widget
+	SearchPanel woxwidget.Widget
+	ShowSearch  bool
+	Theme       woxcomponent.Theme
+	OnScroll    func(float32)
 }
 
 // SettingsRail builds the settings navigation rail.
@@ -60,22 +57,18 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 		}
 		var icon woxwidget.Widget = woxwidget.Text{Value: item.FallbackIcon, Style: woxui.TextStyle{Size: 15}, Color: foreground}
 		if item.Icon != nil {
-			icon = woxwidget.Container{Width: 18, Height: 22, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Image{Source: item.Icon, Width: 18, Height: 18}}
+			icon = woxwidget.Image{Source: item.Icon, Width: 18, Height: 18}
 		}
-		row := woxwidget.Container{Width: props.Width - 28, Height: 46, Radius: 6, Color: color, BorderColor: border, BorderWidth: 1, Padding: woxwidget.Insets{Left: leftPadding, Top: 12, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: 22, Height: 24, Child: icon},
-			woxwidget.Container{Width: max(float32(0), props.Width-leftPadding-98), Height: 24, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}},
-			woxwidget.Container{Width: 18, Height: 24, Child: woxwidget.Text{Value: trailing, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle}},
+		row := woxwidget.Container{Width: props.Width - 28, Height: 46, Radius: 6, Color: color, BorderColor: border, BorderWidth: 1, Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+			woxwidget.Align{Width: 22, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
+			woxwidget.Align{Width: max(float32(0), props.Width-leftPadding-98), Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}},
+			woxwidget.Align{Width: 18, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: trailing, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle}},
 		}}}
 		items = append(items, woxwidget.Gesture{ID: "settings-nav-" + item.ID, OnTap: item.OnTap, Child: row})
 	}
 	innerWidth := props.Width - 28
 	const searchAreaHeight = float32(58)
-	const backHeight = float32(50)
-	viewportHeight := max(float32(1), props.Height-searchAreaHeight-backHeight-28)
-	if props.OnSetViewport != nil {
-		props.OnSetViewport(viewportHeight)
-	}
+	viewportHeight := max(float32(1), props.Height-searchAreaHeight-28)
 	nav := woxwidget.Gesture{ID: "settings-rail-scroll", OnScroll: func(delta woxui.Point) {
 		if props.OnScroll != nil {
 			props.OnScroll(-delta.Y)
@@ -88,55 +81,40 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 	if props.ShowSearch {
 		stackChildren = append(stackChildren, woxwidget.StackChild{Child: props.SearchPanel})
 	}
-	back := woxwidget.Gesture{ID: "settings-nav-back", OnTap: props.OnBack, Child: woxwidget.Container{Width: innerWidth, Height: backHeight, Padding: woxwidget.Insets{Left: 10, Top: 16}, Child: woxwidget.Text{
-		Value: props.BackLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ToolbarText,
-	}}}
 	railColor := settingsColorAlpha(props.Theme.ToolbarText, 9)
 	rail := woxwidget.Container{Width: props.Width, Height: props.Height, Color: railColor, Padding: woxwidget.Insets{Left: 14, Top: 14, Right: 14, Bottom: 14}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		props.SearchBox,
 		woxwidget.Stack{Width: innerWidth, Height: viewportHeight, Children: stackChildren},
-		back,
 	}}}
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: rail}, {Left: props.Width - 1, Child: woxwidget.Container{Width: 1, Height: props.Height, Color: settingsColorAlpha(props.Theme.PreviewSplit, 128)}}}}
 }
 
 // SettingsSearchBoxProps contains the search editing state and actions.
 type SettingsSearchBoxProps struct {
-	Width       float32
-	Placeholder string
-	State       woxui.TextEditingState
-	Focused     bool
-	Window      *woxui.Window
-	Theme       woxcomponent.Theme
-	OnFocus     func()
-	OnClear     func()
-	OnCaret     func(int)
+	Width         float32
+	Placeholder   string
+	State         woxui.TextEditingState
+	Focused       bool
+	SearchIcon    *woxui.Image
+	Window        *woxui.Window
+	Theme         woxcomponent.Theme
+	OnFocus       func()
+	OnClear       func()
+	OnCaret       func(int)
+	OnKey         func(woxui.KeyEvent) bool
+	OnTextInput   func(woxui.TextInputEvent) bool
+	OnFocusChange func(bool)
+	OnSetValue    func(string) error
 }
 
 // SettingsSearchBox builds the rail search field.
 func SettingsSearchBox(props SettingsSearchBoxProps) woxwidget.Widget {
-	clearWidth := float32(0)
-	if props.State.Text != "" {
-		clearWidth = 34
-	}
-	editorWidth := max(float32(40), props.Width-38-clearWidth)
-	editor := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
-		ID: "settings-search-field", Label: props.Placeholder, Hint: props.Placeholder, Width: editorWidth, Height: 38,
-		Padding: woxwidget.Insets{Left: 2, Right: 6}, Transparent: true, Style: woxui.TextStyle{Size: 13}, State: props.State,
-		Focused: props.Focused, MaxLines: 1, Window: props.Window, Theme: props.Theme, ControllerManagedFocus: true, OnCaret: props.OnCaret,
+	search := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
+		ID: "settings-search-field", Label: props.Placeholder, Width: props.Width, State: props.State, Focused: props.Focused, Autofocus: props.Focused,
+		SearchIcon: props.SearchIcon, Window: props.Window, Theme: props.Theme, OnFocus: props.OnFocus, OnClear: props.OnClear, OnCaret: props.OnCaret,
+		OnKey: props.OnKey, OnTextInput: props.OnTextInput, OnFocusChange: props.OnFocusChange, OnSetValue: props.OnSetValue,
 	})
-	children := []woxwidget.Widget{
-		woxwidget.Gesture{ID: "settings-search-icon", OnTap: props.OnFocus, Child: woxwidget.Container{Width: 38, Height: 42, Padding: woxwidget.Insets{Left: 12, Top: 11}, Child: woxwidget.Text{Value: "⌕", Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}}},
-		editor,
-	}
-	if clearWidth > 0 {
-		children = append(children, woxwidget.Gesture{ID: "settings-search-clear", OnTap: props.OnClear, Child: woxwidget.Container{Width: clearWidth, Height: 42, Padding: woxwidget.Insets{Left: 10, Top: 10}, Child: woxwidget.Text{Value: "×", Style: woxui.TextStyle{Size: 17, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}}})
-	}
-	borderColor := props.Theme.ResultSubtitle
-	if props.Focused {
-		borderColor = props.Theme.Cursor
-	}
-	return woxwidget.Container{Width: props.Width, Height: 50, Child: woxwidget.Container{Width: props.Width, Height: 42, Radius: 4, BorderColor: borderColor, BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}}
+	return woxwidget.Container{Width: props.Width, Height: 50, Child: search}
 }
 
 // SettingsSearchResult contains one prepared settings search destination.

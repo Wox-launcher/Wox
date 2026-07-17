@@ -29,6 +29,7 @@ type LauncherQueryProps struct {
 	OnDragStart      func()
 	OnKey            func(woxui.KeyEvent) bool
 	OnTextInput      func(woxui.TextInputEvent) bool
+	OnFocusChange    func(bool)
 	OnSetValue       func(string) error
 	OnTextInputState func(woxui.TextInputState)
 }
@@ -97,7 +98,7 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 				props.OnTapAt(position.X)
 			}
 		},
-		Child: woxwidget.Painter{Width: props.Width, Height: props.Height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		Child: woxwidget.CaretPainter{Width: props.Width, Height: props.Height, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool) {
 			caretY := bounds.Y + (bounds.Height-props.CaretHeight)/2
 			if props.Focused && props.State.Composition == "" && props.CompletionSuffix != "" {
 				hintColor := props.Theme.QueryText
@@ -116,7 +117,9 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 			}
 
 			cursorX := bounds.X + props.CaretWidth
-			displayList.FillRect(woxui.Rect{X: cursorX, Y: caretY, Width: 1, Height: props.CaretHeight}, props.Theme.Cursor)
+			if caretVisible {
+				displayList.FillRect(woxui.Rect{X: cursorX, Y: caretY, Width: 1, Height: props.CaretHeight}, props.Theme.Cursor)
+			}
 			if props.OnTextInputState != nil {
 				props.OnTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: cursorX, Y: caretY, Width: 1, Height: props.CaretHeight}})
 			}
@@ -126,15 +129,16 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 		}},
 	}
 	editor = woxwidget.EditableText{
-		Key:          "launcher-query-input-key",
-		AutomationID: "launcher.query.input",
-		Label:        "Search Wox",
-		Value:        props.State.Text,
-		Autofocus:    true,
-		Disabled:     !props.Focused,
-		OnKey:        props.OnKey,
-		OnTextInput:  props.OnTextInput,
-		OnSetValue:   props.OnSetValue,
+		Key:           "launcher-query-input-key",
+		AutomationID:  "launcher.query.input",
+		Label:         "Search Wox",
+		Value:         props.State.Text,
+		Autofocus:     true,
+		Disabled:      !props.Focused,
+		OnKey:         props.OnKey,
+		OnTextInput:   props.OnTextInput,
+		OnFocusChange: props.OnFocusChange,
+		OnSetValue:    props.OnSetValue,
 		TextInput: func(bounds woxui.Rect) woxui.TextInputState {
 			return woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X + props.FocusWidth, Y: bounds.Y, Width: 1, Height: bounds.Height}}
 		},

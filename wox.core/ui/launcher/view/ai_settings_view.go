@@ -60,16 +60,17 @@ type AISettingsProps struct {
 // AISettingsView builds the AI catalog tables and page scroll surface.
 func AISettingsView(props AISettingsProps) woxwidget.Widget {
 	contentWidth := SettingsPageContentWidth(props.Width)
+	header := woxcomponent.WoxPageHeader(woxcomponent.PageHeaderProps{Title: props.Title, Description: props.Description, Width: contentWidth, Theme: props.Theme})
 	if !props.Available {
 		message := woxwidget.Container{Width: contentWidth, Height: 30, Child: woxwidget.Text{
 			Value: "AI settings are unavailable.", Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle,
 		}}
-		return SettingsPage(SettingsPageProps{ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: []woxwidget.Widget{message}, ContentHeight: 30})
+		return SettingsPage(SettingsPageProps{
+			ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: []woxwidget.Widget{header, message}, ContentHeight: woxcomponent.PageHeaderHeight + 30,
+		})
 	}
-	children := []woxwidget.Widget{
-		woxcomponent.WoxPageHeader(woxcomponent.PageHeaderProps{Title: props.Title, Description: props.Description, Width: contentWidth, Theme: props.Theme}),
-	}
-	contentHeight := float32(72)
+	children := []woxwidget.Widget{header}
+	contentHeight := woxcomponent.PageHeaderHeight
 	for _, table := range props.Tables {
 		widget, tableHeight := aiSettingsTable(props, table, contentWidth)
 		children = append(children, widget)
@@ -96,9 +97,9 @@ func aiSettingsTable(props AISettingsProps, table AISettingsTable, width float32
 	if table.Description != "" {
 		titleHeight = 60
 	}
-	bodyHeight := float32(38 + len(table.Rows)*36)
+	bodyHeight := tableSurfaceHeaderHeight + float32(len(table.Rows))*tableSurfaceRowHeight
 	if len(table.Rows) == 0 {
-		bodyHeight = 116
+		bodyHeight = tableSurfaceHeaderHeight + tableSurfaceEmptyHeight
 	}
 	sectionHeight := titleHeight + bodyHeight + 24
 	titleWidth := max(float32(0), width-86)
@@ -119,22 +120,24 @@ func aiSettingsTable(props AISettingsProps, table AISettingsTable, width float32
 }
 
 func aiSettingsGrid(props AISettingsProps, table AISettingsTable, width, height float32) woxwidget.Widget {
-	children := []woxwidget.Widget{aiSettingsGridRow(props, table, nil, -1, width, 38, true)}
+	style := newTableSurfaceStyle(props.Theme)
+	children := []woxwidget.Widget{aiSettingsGridRow(props, table, nil, -1, width, tableSurfaceHeaderHeight, true)}
 	if len(table.Rows) == 0 {
-		children = append(children, woxwidget.Container{Width: width, Height: height - 38, BorderColor: aiSettingsAlpha(props.Theme.PreviewSplit, 144), BorderWidth: 1,
+		children = append(children, woxwidget.Container{Width: width, Height: height - tableSurfaceHeaderHeight, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
 			Padding: woxwidget.Insets{Left: max(float32(0), width/2-34), Top: 31}, Child: woxwidget.Text{Value: props.NoDataLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}})
 	} else {
 		for rowIndex, row := range table.Rows {
-			children = append(children, aiSettingsGridRow(props, table, row, rowIndex, width, 36, false))
+			children = append(children, aiSettingsGridRow(props, table, row, rowIndex, width, tableSurfaceRowHeight, false))
 		}
 	}
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
 }
 
 func aiSettingsGridRow(props AISettingsProps, table AISettingsTable, row []AISettingsCell, rowIndex int, width, height float32, header bool) woxwidget.Widget {
-	background := aiSettingsAlpha(props.Theme.QueryBackground, 32)
+	style := newTableSurfaceStyle(props.Theme)
+	background := style.bodyBackground
 	if header {
-		background = aiSettingsAlpha(props.Theme.QueryBackground, 92)
+		background = style.headerBackground
 	}
 	cells := make([]woxwidget.Widget, 0, len(table.Columns))
 	remaining := width
@@ -150,14 +153,18 @@ func aiSettingsGridRow(props AISettingsProps, table AISettingsTable, row []AISet
 		}
 		var child woxwidget.Widget = woxwidget.TextBlock{Value: cellData.Text, Width: max(float32(0), cellWidth-14), Height: height - 10, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle}
 		if header {
-			child = woxwidget.Text{Value: cellData.Text, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}
+			child = woxwidget.Text{Value: cellData.Text, Style: woxui.TextStyle{Size: tableSurfaceHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText}
 		} else if cellData.Kind == AISettingsCellStatus {
 			child = woxwidget.Container{Width: 16, Height: 16, Radius: 8, Color: woxui.Color{R: 69, G: 184, B: 88, A: 255}}
 		} else if cellData.Kind == AISettingsCellAction {
 			child = woxwidget.Text{Value: cellData.Text, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}
 		}
-		cell := woxwidget.Container{Width: cellWidth, Height: height, Color: background, BorderColor: aiSettingsAlpha(props.Theme.PreviewSplit, 144), BorderWidth: 0.5,
-			Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 6}, Child: child}
+		paddingTop := float32(10)
+		if header {
+			paddingTop = 9
+		}
+		cell := woxwidget.Container{Width: cellWidth, Height: height, Color: background, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
+			Padding: woxwidget.Insets{Left: 8, Top: paddingTop, Right: 6}, Child: child}
 		if !header {
 			currentRow := rowIndex
 			cell = woxwidget.Container{Width: cellWidth, Height: height, Child: woxwidget.Gesture{ID: fmt.Sprintf("ai-table-%d-row-%d-column-%d", table.Index, rowIndex, columnIndex), OnTap: func() {
@@ -169,9 +176,4 @@ func aiSettingsGridRow(props AISettingsProps, table AISettingsTable, row []AISet
 		cells = append(cells, cell)
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells}
-}
-
-func aiSettingsAlpha(color woxui.Color, alpha uint8) woxui.Color {
-	color.A = alpha
-	return color
 }

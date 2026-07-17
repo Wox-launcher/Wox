@@ -10,9 +10,11 @@ import (
 
 // LauncherResultTail contains one resolved result-tail visual and its measured width.
 type LauncherResultTail struct {
-	Text  string
-	Image *woxui.Image
-	Width float32
+	Text         string
+	TextCategory string
+	Image        *woxui.Image
+	Width        float32
+	Height       float32
 }
 
 // LauncherResultItem contains one visible list result and its controller callbacks.
@@ -27,10 +29,10 @@ type LauncherResultItem struct {
 	TitleHeight float32
 	Tails       []LauncherResultTail
 	TailWidth   float32
+	TailHeight  float32
 	OnHover     func(bool)
 	OnSelect    func()
 	OnActivate  func()
-	OnKey       func(woxui.KeyEvent) bool
 }
 
 // LauncherResultsProps contains the prepared viewport slice and result-list geometry.
@@ -101,7 +103,7 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		}
 		var tail woxwidget.Widget
 		if len(item.Tails) > 0 {
-			tail = launcherResultTails(item.Tails, item.TailWidth, tailColor, props.Theme.ToolbarBackground)
+			tail = launcherResultTails(item.Tails, item.TailWidth, item.TailHeight, tailColor, item.Selected)
 		}
 		labelWidth := max(float32(50), innerRowWidth-28-20-item.TailWidth)
 		labelChildren := []woxwidget.Widget{woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 15}, Color: title}}
@@ -135,7 +137,7 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 				Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 					woxwidget.Container{Width: 28, Height: 50, Padding: woxwidget.Insets{Top: 11}, Child: icon},
 					woxwidget.Container{Width: labelWidth, Height: 50, Padding: woxwidget.Insets{Top: labelTop}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: labelGap, Children: labelChildren}},
-					woxwidget.Container{Width: item.TailWidth, Height: 50, Padding: woxwidget.Insets{Top: 9}, Child: tail},
+					woxwidget.Container{Width: item.TailWidth, Height: 50, Padding: woxwidget.Insets{Top: max(float32(0), (50-item.TailHeight)/2)}, Child: tail},
 				}},
 			},
 		}
@@ -154,16 +156,7 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 				}
 				return nil
 			},
-			Child: woxwidget.Focusable{
-				Key: resultKey,
-				OnFocusChange: func(focused bool) {
-					if focused && item.OnSelect != nil {
-						item.OnSelect()
-					}
-				},
-				OnKey: item.OnKey,
-				Child: resultControl,
-			},
+			Child: resultControl,
 		})
 	}
 	visiblePadding := props.ContainerPadding
@@ -181,23 +174,55 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 	}
 }
 
-// launcherResultTails builds the already measured tail chips for one result row.
-func launcherResultTails(tails []LauncherResultTail, width float32, foreground, background woxui.Color) woxwidget.Widget {
-	const gap = float32(5)
+// launcherResultTails restores Flutter's text-tag and image-tail presentation.
+func launcherResultTails(tails []LauncherResultTail, width, height float32, foreground woxui.Color, selected bool) woxwidget.Widget {
+	const itemLeftPadding = float32(10)
 	children := make([]woxwidget.Widget, 0, len(tails))
 	for _, item := range tails {
 		var content woxwidget.Widget
 		if item.Image != nil {
-			content = woxwidget.Image{Source: item.Image, Width: 20, Height: 20}
+			content = woxwidget.Image{Source: item.Image, Width: item.Width, Height: item.Height}
 		} else {
-			content = woxwidget.Clip{Width: item.Width - 12, Height: 20, Child: woxwidget.Text{Value: item.Text, Style: woxui.TextStyle{Size: 11}, Color: foreground}}
+			textColor, background, border := launcherResultTextTailStyle(item.TextCategory, foreground, selected)
+			textWidth := max(float32(0), item.Width-16)
+			textHeight := max(float32(0), item.Height-6)
+			content = woxwidget.Container{
+				Width: item.Width, Height: item.Height, Radius: item.Height / 2, Color: background, BorderColor: border, BorderWidth: 1,
+				Padding: woxwidget.Insets{Left: 8, Top: 3, Right: 8, Bottom: 3}, Child: woxwidget.TextBlock{
+					Value: item.Text, Width: textWidth, Height: textHeight, MaxLines: 1, LineHeight: textHeight, Style: woxui.TextStyle{Size: 11}, Color: textColor,
+				},
+			}
 		}
 		children = append(children, woxwidget.Container{
-			Width: item.Width, Height: 28, Radius: 6, Color: background,
-			Padding: woxwidget.Insets{Left: 6, Top: 5, Right: 6, Bottom: 3}, Child: content,
+			Width: itemLeftPadding + item.Width, Height: height,
+			Padding: woxwidget.Insets{Left: itemLeftPadding, Top: max(float32(0), (height-item.Height)/2)}, Child: content,
 		})
 	}
-	return woxwidget.Container{Width: width, Height: 32, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: children}}
+	return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}
+}
+
+// launcherResultTextTailStyle maps semantic tail categories to Flutter's stable status colors.
+func launcherResultTextTailStyle(category string, foreground woxui.Color, selected bool) (woxui.Color, woxui.Color, woxui.Color) {
+	semantic := woxui.Color{}
+	switch category {
+	case "danger":
+		semantic = woxui.Color{R: 180, G: 35, B: 24, A: 255}
+	case "warning":
+		semantic = woxui.Color{R: 181, G: 71, B: 8, A: 255}
+	case "success":
+		semantic = woxui.Color{R: 2, G: 122, B: 72, A: 255}
+	}
+	if semantic.A != 0 {
+		border := semantic
+		border.A = 184
+		return woxui.Color{R: 255, G: 255, B: 255, A: 255}, semantic, border
+	}
+	border := foreground
+	border.A = 51
+	if selected {
+		border.A = 87
+	}
+	return foreground, woxui.Color{}, border
 }
 
 type launcherResultScrollProps struct {

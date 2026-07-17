@@ -7,6 +7,7 @@ import (
 	"time"
 
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 	"wox/util/fuzzymatch"
 )
 
@@ -244,9 +245,13 @@ func (a *App) focusSettingsSearch(selectAll bool) {
 	}
 	a.settingSearchFocused = true
 	a.pluginSearchFocused = false
+	a.themeSearchFocused = false
 	a.settingSearchPanel = strings.TrimSpace(a.settingSearchEditor.State().Text) != ""
+	host := a.settingsHost
 	a.mu.Unlock()
-	a.updateSettingsTextInput(true)
+	if host != nil {
+		host.RequestFocus(woxwidget.Key("settings-search-field"))
+	}
 	a.invalidateSettingsWindow()
 }
 
@@ -258,10 +263,44 @@ func (a *App) setSettingsSearchCaret(offset int) {
 	a.settingSearchEditor.SetCaret(offset)
 	a.settingSearchFocused = true
 	a.pluginSearchFocused = false
+	a.themeSearchFocused = false
 	a.settingSearchPanel = strings.TrimSpace(a.settingSearchEditor.State().Text) != ""
 	a.mu.Unlock()
-	a.updateSettingsTextInput(true)
 	a.invalidateSettingsWindow()
+}
+
+// setSettingsSearchFocused keeps controller routing aligned with the retained text-field focus.
+func (a *App) setSettingsSearchFocused(focused bool) {
+	a.mu.Lock()
+	if a.settingSearchEditor == nil {
+		a.settingSearchEditor = woxui.NewTextEditor("")
+	}
+	a.settingSearchFocused = focused
+	if focused {
+		a.pluginSearchFocused = false
+		a.themeSearchFocused = false
+		a.settingSearchPanel = strings.TrimSpace(a.settingSearchEditor.State().Text) != ""
+	} else {
+		a.settingSearchPanel = false
+	}
+	a.mu.Unlock()
+	a.invalidateSettingsWindow()
+}
+
+// setSettingsSearchValue applies accessibility value changes through the same search state.
+func (a *App) setSettingsSearchValue(value string) error {
+	a.mu.Lock()
+	if a.settingSearchEditor == nil {
+		a.settingSearchEditor = woxui.NewTextEditor(value)
+	} else {
+		a.settingSearchEditor.SetText(value, false)
+	}
+	a.settingSearchPanel = strings.TrimSpace(value) != ""
+	a.settingSearchSelected = 0
+	a.settingSearchScroll = 0
+	a.mu.Unlock()
+	a.invalidateSettingsWindow()
+	return nil
 }
 
 func (a *App) clearSettingsSearch() {
@@ -275,7 +314,6 @@ func (a *App) clearSettingsSearch() {
 	a.settingSearchSelected = 0
 	a.settingSearchScroll = 0
 	a.mu.Unlock()
-	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
 
@@ -287,8 +325,12 @@ func (a *App) blurSettingsSearch() {
 	}
 	a.settingSearchFocused = false
 	a.settingSearchPanel = false
+	host := a.settingsHost
 	a.mu.Unlock()
-	a.updateSettingsTextInput(false)
+	if host != nil {
+		host.ClearFocus()
+	}
+	a.invalidateSettingsWindow()
 }
 
 // onSettingsSearchKey gives the floating result palette first ownership of search navigation keys.
@@ -296,6 +338,10 @@ func (a *App) onSettingsSearchKey(event woxui.KeyEvent) bool {
 	if event.Down && !event.Composing && event.Key == woxui.Key("f") && event.Modifiers.HasPrimary() {
 		a.focusSettingsSearch(true)
 		return true
+	}
+	// Key releases must not repeat palette navigation, and composing keys belong to native text input.
+	if !event.Down || event.Composing {
+		return false
 	}
 	a.mu.RLock()
 	focused := a.settingSearchFocused && a.settingSearchEditor != nil

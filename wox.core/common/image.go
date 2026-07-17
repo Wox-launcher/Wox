@@ -18,19 +18,17 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 	"wox/util"
 	"wox/util/fileicon"
 	"wox/util/imagecache"
+	woxsvg "wox/util/svg"
 	"wox/util/timetracking"
 
 	"github.com/disintegration/imaging"
 	"github.com/forPelevin/gomoji"
-	"github.com/srwiley/oksvg"
-	"github.com/srwiley/rasterx"
 )
 
 type WoxImageType = string
@@ -58,8 +56,6 @@ const (
 	resizeImageCachePrefix = "resize_v2_"
 	pngCropLargeDimension  = 1024
 )
-
-var svgRootEmDimensionPattern = regexp.MustCompile(`\s(?:width|height)=["'][^"']*em["']`)
 
 var (
 	pngFileSignature = [8]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
@@ -434,28 +430,7 @@ func isSvgFilePath(filePath string) bool {
 }
 
 func renderSvgImage(svg string) (image.Image, error) {
-	width, height := 32, 32
-	icon, err := oksvg.ReadIconStream(strings.NewReader(normalizeSvgForRasterizer(svg)), oksvg.WarnErrorMode)
-	if err != nil {
-		return nil, err
-	}
-	icon.SetTarget(0, 0, float64(width), float64(height))
-
-	rgba := image.NewRGBA(image.Rect(0, 0, width, height))
-	icon.Draw(rasterx.NewDasher(width, height, rasterx.NewScannerGV(width, height, rgba, rgba.Bounds())), 1)
-	return rgba, nil
-}
-
-// normalizeSvgForRasterizer resolves CSS values that oksvg cannot inherit or parse.
-func normalizeSvgForRasterizer(svg string) string {
-	svg = strings.ReplaceAll(svg, "currentColor", "#000000")
-	rootEnd := strings.Index(svg, ">")
-	if rootEnd < 0 || !strings.Contains(svg[:rootEnd], "<svg") {
-		return svg
-	}
-
-	root := svgRootEmDimensionPattern.ReplaceAllString(svg[:rootEnd], "")
-	return root + svg[rootEnd:]
+	return woxsvg.Render(svg, 32, 32)
 }
 
 func (w *WoxImage) IsValid() bool {

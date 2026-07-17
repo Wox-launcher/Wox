@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +40,7 @@ const (
 // App owns the launcher window, query state, and Wox core protocol client.
 type App struct {
 	mu                     sync.RWMutex
+	previewLifecycleMu     sync.Mutex
 	terminalSubscriptionMu sync.Mutex
 	tooltipMu              sync.Mutex
 	terminalSubscribed     string
@@ -79,10 +79,8 @@ type App struct {
 	pendingResults        bool
 	selected              int
 	hoveredResult         int
-	resultScroll          float32
-	resultViewport        float32
-	resultContent         float32
-	resultWidth           float32
+	resultScroll          scrollController
+	resultScrollDetached  bool
 	layout                queryLayout
 	refinements           []queryRefinement
 	refinementOpen        bool
@@ -100,6 +98,7 @@ type App struct {
 	chatFullscreen        bool
 	actionPanel           bool
 	actionSelected        int
+	actionSelectionKey    string
 	actionFilter          *woxui.TextEditor
 	actionScroll          float32
 	visible               bool
@@ -124,12 +123,12 @@ type App struct {
 	settingSearchLoaded   bool
 	settingSearchError    string
 	settingChoicePicker   *settingChoicePickerState
-	settingPageScroll     float32
-	settingPageViewport   float32
-	settingPageContent    float32
-	settingRailScroll     float32
-	settingRailViewport   float32
+	choiceTooltipRevision uint64
+	settingPageScroll     scrollController
+	settingRailScroll     scrollController
 	settingLanguages      []settingChoice
+	updateChannelVersions []updateChannelVersion
+	updateChannelsLoading bool
 	systemFontFamilies    []string
 	systemFontsLoading    bool
 	systemFontsLoaded     bool
@@ -143,6 +142,8 @@ type App struct {
 	pluginListViewport    float32
 	pluginSearchEditor    *woxui.TextEditor
 	pluginSearchFocused   bool
+	pluginFilters         pluginFilterState
+	pluginFilterOpen      bool
 	pluginDetailTab       string
 	pluginForm            *pluginSettingsFormState
 	pluginsStore          bool
@@ -164,8 +165,16 @@ type App struct {
 	themeSelected         int
 	themeListScroll       float32
 	themeListViewport     float32
+	themeSearchEditor     *woxui.TextEditor
+	themeSearchFocused    bool
+	themeDetailTab        string
 	themeOperation        string
 	themeUninstallArmed   string
+	themeWallpaperPath    string
+	themeWallpaperImage   *woxui.Image
+	themeWallpaperBlurred *woxui.Image
+	themeWallpaperLoading bool
+	themeWallpaperLoadID  uint64
 	aiSettingsForm        *formFieldsState
 	aiProviderCatalog     []aiProviderInfo
 	aiProvidersLoading    bool
@@ -208,6 +217,8 @@ type App struct {
 	runtimeRowsTop        float32
 	cloudAccount          cloudAccountStatus
 	cloudSync             cloudSyncStatus
+	cloudBillingPlan      cloudBillingPlan
+	cloudBillingLoaded    bool
 	cloudDevices          cloudDeviceList
 	cloudLoading          bool
 	cloudLoaded           bool
@@ -436,9 +447,9 @@ func (a *App) showWindow(params showAppParams) error {
 	}
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionSelectionKey = ""
 	a.actionFilter = nil
 	a.form = nil
-	a.requirementForm = nil
 	a.visible = true
 	queryEmpty := a.query.QueryText == ""
 	launcher := a.launcher
@@ -446,6 +457,7 @@ func (a *App) showWindow(params showAppParams) error {
 	if launcher == nil {
 		return errors.New("launcher window is not initialized")
 	}
+	a.reconcileSelectedPreview()
 	a.restoreQueryTextInput()
 
 	if err := a.window.SetHideOnBlur(params.HideOnBlur); err != nil {
@@ -475,11 +487,9 @@ func (a *App) hideWindow(notify bool) error {
 	}
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionSelectionKey = ""
 	a.actionFilter = nil
 	a.form = nil
-	a.requirementForm = nil
-	a.triggerConflict = nil
-	a.themeEditor = nil
 	a.visible = false
 	a.stopGlanceLocked(false)
 	launcher := a.launcher
@@ -487,7 +497,12 @@ func (a *App) hideWindow(notify bool) error {
 	if launcher == nil {
 		return errors.New("launcher window is not initialized")
 	}
-	a.deactivateTerminalPreview()
+	a.reconcileSelectedPreview()
+	a.mu.Lock()
+	a.requirementForm = nil
+	a.triggerConflict = nil
+	a.themeEditor = nil
+	a.mu.Unlock()
 	a.resetChatPreview()
 	if err := launcher.Hide(); err != nil {
 		return err
@@ -512,22 +527,13 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 	if hideOnBlur {
 		a.visible = false
 		a.stopGlanceLocked(false)
-		if a.requirementForm != nil {
-			a.requirementForm.active = false
-		}
-		if a.triggerConflict != nil {
-			a.triggerConflict.active = false
-		}
-		if a.themeEditor != nil {
-			a.themeEditor.active = false
-		}
 	}
 	a.mu.Unlock()
 	if hideOnBlur {
+		a.reconcileSelectedPreview()
 		if launcher != nil {
 			_ = launcher.Hide()
 		}
-		a.deactivateTerminalPreview()
 		a.resetChatPreview()
 	}
 	go func() {
@@ -588,7 +594,8 @@ func (a *App) setQuery(query plainQuery) {
 	a.resultsQueryID = ""
 	a.selected = -1
 	a.hoveredResult = -1
-	a.resultScroll = 0
+	a.resultScroll.reset()
+	a.resultScrollDetached = false
 	a.layout = queryLayout{}
 	a.stopGlanceLocked(true)
 	a.refinements = nil
@@ -597,13 +604,16 @@ func (a *App) setQuery(query plainQuery) {
 	a.completionHint = nil
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionSelectionKey = ""
 	a.actionFilter = nil
 	a.form = nil
+	a.mu.Unlock()
+	a.reconcileSelectedPreview()
+	a.mu.Lock()
 	a.requirementForm = nil
 	a.triggerConflict = nil
 	a.themeEditor = nil
 	a.mu.Unlock()
-	a.deactivateTerminalPreview()
 	a.resetChatPreview()
 	a.restoreQueryTextInput()
 	_ = a.window.Invalidate()
@@ -636,7 +646,8 @@ func (a *App) requestMRU() error {
 	a.resultsQueryID = ""
 	a.selected = -1
 	a.hoveredResult = -1
-	a.resultScroll = 0
+	a.resultScroll.reset()
+	a.resultScrollDetached = false
 	a.layout = queryLayout{}
 	a.stopGlanceLocked(true)
 	a.refinements = nil
@@ -645,13 +656,16 @@ func (a *App) requestMRU() error {
 	a.completionHint = nil
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionSelectionKey = ""
 	a.actionFilter = nil
 	a.form = nil
+	a.mu.Unlock()
+	a.reconcileSelectedPreview()
+	a.mu.Lock()
 	a.requirementForm = nil
 	a.triggerConflict = nil
 	a.themeEditor = nil
 	a.mu.Unlock()
-	a.deactivateTerminalPreview()
 	a.resetChatPreview()
 	go a.loadTypedMRU(queryID)
 	return nil
@@ -703,36 +717,20 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		a.stopGlanceLocked(true)
 	}
 	a.selected = selectableIndex(results, selectedID)
-	a.ensureResultSelectionVisibleLocked()
-	if a.requirementForm != nil {
-		if a.selected < 0 || a.selected >= len(results) || results[a.selected].Preview.PreviewType != "query_requirement_settings" || !strings.HasPrefix(a.requirementForm.key, queryID+"|"+results[a.selected].ID+"|") {
-			a.requirementForm = nil
-		}
+	if selectedID == "" || a.selected < 0 || a.results[a.selected].ID != selectedID {
+		a.resultScrollDetached = false
 	}
-	if a.triggerConflict != nil {
-		if a.selected < 0 || a.selected >= len(results) || results[a.selected].Preview.PreviewType != "trigger_keyword_conflict" || !strings.HasPrefix(a.triggerConflict.key, queryID+"|"+results[a.selected].ID+"|") {
-			a.triggerConflict.active = false
-		}
-	}
-	if a.themeEditor != nil {
-		if a.selected < 0 || a.selected >= len(results) || results[a.selected].Preview.PreviewType != "theme_edit" || !strings.HasPrefix(a.themeEditor.key, queryID+"|"+results[a.selected].ID+"|") {
-			a.themeEditor.active = false
-		}
-	}
-	if a.chatPreview != nil {
-		if a.selected < 0 || a.selected >= len(results) || results[a.selected].Preview.PreviewType != "chat" || !strings.HasPrefix(a.chatPreview.key, queryID+"|"+results[a.selected].ID+"|") {
-			a.chatPreview.active = false
-			a.chatFullscreen = false
-		}
-	}
-	if a.actionPanel && (a.selected < 0 || a.selected >= len(results) || len(results[a.selected].Actions) == 0) {
-		a.actionPanel = false
-		a.actionSelected = 0
-		a.actionFilter = nil
+	closedActionPanel := false
+	if a.actionPanel && len(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)) == 0 {
+		closedActionPanel = a.resetActionPanelLocked()
 	} else if a.actionPanel {
 		a.normalizeActionSelectionLocked()
 	}
 	a.mu.Unlock()
+	a.reconcileSelectedPreview()
+	if closedActionPanel {
+		a.restoreQueryTextInput()
+	}
 	if refreshGlance {
 		go a.refreshGlance("manualRefresh", "", nil)
 	}
@@ -792,12 +790,10 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	previewVisible := false
 	toolbarMessageVisible := a.toolbarMsg != nil
 	chatFullscreen := a.chatFullscreen
+	if actionPanel && a.actionFilter != nil {
+		actionCount = len(filteredActionIndices(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg), a.actionFilter.State().Text, a.translations, a.settings.UsePinYin))
+	}
 	if a.selected >= 0 && a.selected < len(a.results) {
-		if actionPanel && a.actionFilter != nil {
-			actionCount = len(filteredActionIndices(a.results[a.selected].Actions, a.actionFilter.State().Text, a.translations))
-		} else {
-			actionCount = len(a.results[a.selected].Actions)
-		}
 		requirementPreview = a.results[a.selected].Preview.PreviewType == "query_requirement_settings"
 		previewVisible = a.results[a.selected].Preview.PreviewData != ""
 	}
@@ -832,18 +828,18 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	if toolbarVisible {
 		height += footerHeight
 	}
+	maximumResultWindowHeight := resultVerticalPadding + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
+	if !params.HideQueryBox {
+		maximumResultWindowHeight += queryAreaHeight
+	}
+	if refinementVisible {
+		maximumResultWindowHeight += refinementBarHeight
+	}
+	if toolbarVisible {
+		maximumResultWindowHeight += footerHeight
+	}
 	if previewVisible {
-		previewHeight := resultVerticalPadding + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
-		if !params.HideQueryBox {
-			previewHeight += queryAreaHeight
-		}
-		if refinementVisible {
-			previewHeight += refinementBarHeight
-		}
-		if toolbarVisible {
-			previewHeight += footerHeight
-		}
-		height = max(height, previewHeight)
+		height = max(height, maximumResultWindowHeight)
 	}
 	if requirementPreview {
 		minimumHeight := 360
@@ -869,7 +865,8 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		if toolbarVisible {
 			actionHeight += footerHeight
 		}
-		height = max(height, actionHeight)
+		// Opening the action panel restores Flutter's full configured result height while still allowing larger panels to fit.
+		height = max(height, maximumResultWindowHeight, actionHeight)
 	}
 	if formHeight > 0 {
 		formWindowHeight := formHeight + 20
@@ -932,6 +929,9 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if a.onRequirementFormKey(event) {
 		return true
 	}
+	if a.onActionKey(event) {
+		return true
+	}
 	if a.onTriggerConflictPreviewKey(event) {
 		return true
 	}
@@ -947,11 +947,15 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if a.onToolbarKey(event) {
 		return true
 	}
-	if a.onActionKey(event) {
-		return true
-	}
-	if event.Key == woxui.KeyTab && a.acceptQueryCompletionHint() {
-		return true
+	if event.Key == woxui.KeyTab {
+		if event.Modifiers == woxui.KeyModifierShift {
+			a.autoCompleteQueryFromSelectedResult()
+			return true
+		}
+		if event.Modifiers == 0 {
+			a.acceptQueryCompletionHint()
+			return true
+		}
 	}
 	if event.Key == woxui.Key("f") && event.Modifiers.HasPrimary() && a.toggleRefinementBar() {
 		return true
@@ -965,7 +969,7 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if textHandled {
 		_ = a.window.Invalidate()
 		if textChanged {
-			a.deactivateTerminalPreview()
+			a.reconcileSelectedPreview()
 			if err := a.sendCurrentQuery(); err != nil {
 				log.Printf("send query after editing command: %v", err)
 			}
@@ -1049,7 +1053,7 @@ func (a *App) onTextInput(event woxui.TextInputEvent) {
 	a.mu.Unlock()
 	_ = a.window.Invalidate()
 	if committed {
-		a.deactivateTerminalPreview()
+		a.reconcileSelectedPreview()
 		if err := a.sendCurrentQuery(); err != nil {
 			log.Printf("send committed query: %v", err)
 		}
@@ -1071,29 +1075,19 @@ func (a *App) moveSelection(delta int) {
 		}
 		if !a.results[index].IsGroup {
 			a.selected = index
-			a.ensureResultSelectionVisibleLocked()
+			a.resultScrollDetached = false
 			changed = true
 			a.actionPanel = false
 			a.actionSelected = 0
+			a.actionSelectionKey = ""
 			a.actionFilter = nil
-			if a.requirementForm != nil {
-				a.requirementForm.active = false
-			}
-			if a.triggerConflict != nil {
-				a.triggerConflict.active = false
-			}
-			if a.themeEditor != nil {
-				a.themeEditor.active = false
-			}
-			if a.chatPreview != nil {
-				a.chatPreview.active = false
-			}
 			a.chatFullscreen = false
 			break
 		}
 	}
 	a.mu.Unlock()
 	if changed {
+		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
 	}
 	_ = a.window.Invalidate()
@@ -1102,34 +1096,26 @@ func (a *App) moveSelection(delta int) {
 func (a *App) selectResult(index int) {
 	a.mu.Lock()
 	closedPanel := false
+	closedForm := false
+	valid := false
 	if index >= 0 && index < len(a.results) && !a.results[index].IsGroup {
+		valid = true
 		changed := a.selected != index
 		a.selected = index
+		closedPanel = a.resetActionPanelLocked()
+		closedForm = a.form != nil
+		a.form = nil
 		if changed {
-			closedPanel = a.actionPanel
-			a.actionPanel = false
-			a.actionSelected = 0
-			a.actionFilter = nil
-			if a.requirementForm != nil {
-				a.requirementForm.active = false
-			}
-			if a.triggerConflict != nil {
-				a.triggerConflict.active = false
-			}
-			if a.themeEditor != nil {
-				a.themeEditor.active = false
-			}
-			if a.chatPreview != nil {
-				a.chatPreview.active = false
-			}
+			a.resultScrollDetached = false
 			a.chatFullscreen = false
 		}
 	}
 	a.mu.Unlock()
-	if index >= 0 {
+	if valid {
+		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
 	}
-	if closedPanel {
+	if closedPanel || closedForm {
 		_ = a.applyWindowBounds()
 	}
 	_ = a.window.Invalidate()
@@ -1157,13 +1143,24 @@ func (a *App) activateSelected() {
 
 func (a *App) activateResult(index int) {
 	a.mu.RLock()
-	if index < 0 || index >= len(a.results) || a.results[index].IsGroup {
+	if len(a.results) > 0 && (index < 0 || index >= len(a.results) || a.results[index].IsGroup) {
 		a.mu.RUnlock()
 		return
 	}
-	actionIndex := defaultActionIndex(a.results[index].Actions)
+	entries := unifiedActionPanelEntries(a.results, index, a.toolbarMsg)
+	if len(entries) == 0 {
+		a.mu.RUnlock()
+		return
+	}
+	entry := entries[0]
+	for _, candidate := range entries {
+		if candidate.IsDefault {
+			entry = candidate
+			break
+		}
+	}
 	a.mu.RUnlock()
-	a.activateAction(index, actionIndex)
+	a.activateActionPanelEntry(entry)
 }
 
 func selectableIndex(results []queryResult, selectedID string) int {
@@ -1176,26 +1173,6 @@ func selectableIndex(results []queryResult, selectedID string) int {
 		if !result.IsGroup {
 			return index
 		}
-	}
-	return -1
-}
-
-func defaultAction(actions []resultAction) (resultAction, bool) {
-	index := defaultActionIndex(actions)
-	if index >= 0 {
-		return actions[index], true
-	}
-	return resultAction{}, false
-}
-
-func defaultActionIndex(actions []resultAction) int {
-	for index, action := range actions {
-		if action.IsDefault {
-			return index
-		}
-	}
-	if len(actions) > 0 {
-		return 0
 	}
 	return -1
 }
@@ -1328,6 +1305,8 @@ type resultTail struct {
 	Text         string            `json:"Text"`
 	TextCategory string            `json:"TextCategory"`
 	Image        woxImage          `json:"Image"`
+	ImageWidth   *float64          `json:"ImageWidth"`
+	ImageHeight  *float64          `json:"ImageHeight"`
 	Tooltip      string            `json:"Tooltip"`
 	ContextData  map[string]string `json:"ContextData"`
 }
@@ -1382,21 +1361,23 @@ type formDefinition struct {
 }
 
 type formDefinitionValue struct {
-	Key           string            `json:"Key"`
-	Label         string            `json:"Label"`
-	Title         string            `json:"Title"`
-	Suffix        string            `json:"Suffix"`
-	DefaultValue  string            `json:"DefaultValue"`
-	Tooltip       string            `json:"Tooltip"`
-	Content       string            `json:"Content"`
-	MaxLines      int               `json:"MaxLines"`
-	IsMulti       bool              `json:"IsMulti"`
-	Options       []formOption      `json:"Options"`
-	Validators    []formValidator   `json:"Validators"`
-	Columns       []formTableColumn `json:"Columns"`
-	SortColumnKey string            `json:"SortColumnKey"`
-	SortOrder     string            `json:"SortOrder"`
-	MaxHeight     int               `json:"MaxHeight"`
+	Key               string            `json:"Key"`
+	Label             string            `json:"Label"`
+	Title             string            `json:"Title"`
+	Suffix            string            `json:"Suffix"`
+	DefaultValue      string            `json:"DefaultValue"`
+	Tooltip           string            `json:"Tooltip"`
+	Content           string            `json:"Content"`
+	MaxLines          int               `json:"MaxLines"`
+	IsMulti           bool              `json:"IsMulti"`
+	Options           []formOption      `json:"Options"`
+	Validators        []formValidator   `json:"Validators"`
+	Columns           []formTableColumn `json:"Columns"`
+	SortColumnKey     string            `json:"SortColumnKey"`
+	SortOrder         string            `json:"SortOrder"`
+	MaxHeight         int               `json:"MaxHeight"`
+	InlineTable       bool              `json:"InlineTable"`
+	UpdateDialogWidth int               `json:"UpdateDialogWidth"`
 }
 
 type formTableColumn struct {

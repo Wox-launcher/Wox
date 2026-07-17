@@ -71,7 +71,7 @@ func (a *App) acceptQueryCompletionHint() bool {
 	a.applyQueryTextChangeLocked(hint.CompletionText)
 	a.completionHint = nil
 	a.mu.Unlock()
-	a.deactivateTerminalPreview()
+	a.reconcileSelectedPreview()
 	if err := a.services.AcceptQueryCompletionHint(context.Background(), a.sessionID, hint.InputPrefix, hint.CompletionText, hint.Source); err != nil {
 		log.Printf("record accepted query completion hint: %v", err)
 	}
@@ -80,4 +80,26 @@ func (a *App) acceptQueryCompletionHint() bool {
 	}
 	_ = a.window.Invalidate()
 	return true
+}
+
+// autoCompleteQueryFromSelectedResult mirrors Flutter's Shift+Tab title completion.
+func (a *App) autoCompleteQueryFromSelectedResult() {
+	a.mu.Lock()
+	if a.selected < 0 || a.selected >= len(a.results) || a.results[a.selected].IsGroup {
+		a.mu.Unlock()
+		return
+	}
+	title := a.results[a.selected].Title
+	if title == "" {
+		a.mu.Unlock()
+		return
+	}
+	a.editor.SetText(title, false)
+	a.applyQueryTextChangeLocked(title)
+	a.mu.Unlock()
+	a.reconcileSelectedPreview()
+	_ = a.window.Invalidate()
+	if err := a.sendCurrentQuery(); err != nil {
+		log.Printf("send selected result completion: %v", err)
+	}
 }

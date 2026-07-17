@@ -16,15 +16,6 @@ import (
 // buildPreview resolves controller-owned preview state into a pure preview view.
 func (a *App) buildPreview(result queryResult, palette uiPalette, width, height float32) woxwidget.Widget {
 	preview := a.resolvePreview(result.Preview)
-	if preview.PreviewType != "trigger_keyword_conflict" {
-		a.deactivateTriggerConflictPreview()
-	}
-	if preview.PreviewType != "theme_edit" {
-		a.deactivateThemeEditorPreview()
-	}
-	if preview.PreviewType != "chat" {
-		a.deactivateChatPreview()
-	}
 	if preview.PreviewType == "query_requirement_settings" {
 		return a.buildRequirementPreview(result, preview, palette, width, height)
 	}
@@ -54,12 +45,6 @@ func (a *App) buildPreview(result queryResult, palette uiPalette, width, height 
 }
 
 func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
-	if preview.PreviewType != "terminal" {
-		a.deactivateTerminalPreview()
-	}
-	if preview.PreviewType != "webview" {
-		a.deactivateWebViewPreview()
-	}
 	content := func(value string, color woxui.Color) woxwidget.Widget {
 		if strings.TrimSpace(value) == "" {
 			value = "No preview available"
@@ -131,7 +116,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 	case "url":
 		return content("URL preview\n\n"+preview.PreviewData+"\n\nThe embedded browser surface will be attached through the platform preview host.", palette.previewText)
 	case "terminal":
-		return a.buildTerminalPreview(a.terminalPreviewFor(preview), palette, width, height)
+		return a.buildTerminalPreview(a.terminalPreviewSnapshotFor(preview), palette, width, height)
 	case "webview":
 		return a.buildWebViewPreview(preview.PreviewData, palette, width, height)
 	default:
@@ -170,17 +155,16 @@ func (a *App) buildScrollablePreviewText(scrollKey, value string, color woxui.Co
 	layout := a.previewTextLayout(scrollKey, value, style, innerWidth, 23)
 	contentHeight := max(innerHeight, layout.Size.Height)
 	maxOffset := max(float32(0), contentHeight-innerHeight)
-	a.mu.Lock()
+	a.mu.RLock()
 	offset, initialized := a.previewScroll[scrollKey]
 	if !initialized && scrollPosition == "bottom" {
 		offset = maxOffset
-		a.previewScroll[scrollKey] = offset
 	}
 	offset = min(max(float32(0), offset), maxOffset)
-	a.mu.Unlock()
+	a.mu.RUnlock()
 	return previewview.ScrollablePreviewText(previewview.ScrollablePreviewTextProps{
 		ID: scrollKey, Value: value, Color: color, Width: width, Height: height, Layout: layout, Offset: offset,
-		OnScroll: func(delta, scrollMax float32) { a.scrollPreview(scrollKey, delta, scrollMax) },
+		OnScroll: func(delta, scrollMax float32) { a.scrollPreviewFrom(scrollKey, offset, delta, scrollMax) },
 	})
 }
 
@@ -219,12 +203,16 @@ func (a *App) previewTextLayout(scrollKey, value string, style woxui.TextStyle, 
 	return layout
 }
 
-func (a *App) scrollPreview(key string, delta, maxOffset float32) {
+func (a *App) scrollPreviewFrom(key string, offset, delta, maxOffset float32) {
 	if delta == 0 || maxOffset <= 0 {
 		return
 	}
 	a.mu.Lock()
-	a.previewScroll[key] = min(max(float32(0), a.previewScroll[key]+delta), maxOffset)
+	current, initialized := a.previewScroll[key]
+	if !initialized {
+		current = offset
+	}
+	a.previewScroll[key] = min(max(float32(0), current+delta), maxOffset)
 	if len(a.previewScroll) > 256 {
 		current := a.previewScroll[key]
 		a.previewScroll = map[string]float32{key: current}

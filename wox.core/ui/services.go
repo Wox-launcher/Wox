@@ -74,6 +74,12 @@ func (s *CoreServices) FocusLost(ctx context.Context, sessionID string) error {
 	return nil
 }
 
+// QueryBoxFocused applies core-owned input-method behavior whenever launcher query focus returns.
+func (s *CoreServices) QueryBoxFocused(ctx context.Context, sessionID string) error {
+	GetUIManager().PostOnQueryBoxFocus(uiServiceContext(ctx, sessionID))
+	return nil
+}
+
 // SettingViewChanged keeps core management state synchronized with the independent settings window.
 func (s *CoreServices) SettingViewChanged(ctx context.Context, sessionID string, inSettingView bool) error {
 	GetUIManager().PostOnSetting(uiServiceContext(ctx, sessionID), inSettingView)

@@ -51,30 +51,31 @@ func (d webViewPreviewData) content() woxui.WebViewContent {
 
 func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, height float32) woxwidget.Widget {
 	theme := palette.componentTheme()
-	a.mu.Lock()
-	previewChanged := a.webViewPreviewData != previewData
-	if previewChanged {
-		a.webViewPreviewData = previewData
-		a.webViewPreviewError = ""
-	}
-	a.mu.Unlock()
-	if previewChanged {
-		_ = a.window.HideWebView()
-	}
 	data, err := decodeWebViewPreview(previewData)
 	if err != nil {
-		_ = a.window.HideWebView()
 		return previewview.WebViewPreviewMessage(fmt.Sprintf("Invalid WebView preview: %v", err), theme.ErrorText, theme, width, height)
 	}
 	a.mu.RLock()
-	webViewError := a.webViewPreviewError
+	active := a.webViewPreviewData == previewData
+	webViewError := ""
+	if active {
+		webViewError = a.webViewPreviewError
+	}
 	a.mu.RUnlock()
 	if webViewError != "" {
-		_ = a.window.HideWebView()
 		return previewview.WebViewPreviewMessage(webViewError, theme.ErrorText, theme, width, height)
+	}
+	if !active {
+		return previewview.WebViewPreviewMessage("Loading WebView preview…", theme.PreviewText, theme, width, height)
 	}
 	content := data.content()
 	return previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnBounds: func(bounds woxui.Rect) {
+		a.mu.RLock()
+		current := a.webViewPreviewData == previewData && a.webViewPreviewError == ""
+		a.mu.RUnlock()
+		if !current {
+			return
+		}
 		if err := a.window.ShowWebView(content, bounds); err != nil {
 			a.setWebViewPreviewError(err)
 		}
@@ -89,13 +90,38 @@ func (a *App) setWebViewPreviewError(err error) {
 	}
 	a.webViewPreviewError = err.Error()
 	a.mu.Unlock()
+	a.hideWebView()
 	_ = a.window.Invalidate()
 }
 
-func (a *App) deactivateWebViewPreview() {
-	_ = a.window.HideWebView()
+// activateWebViewPreview prepares controller state and reports whether native content is stale.
+func (a *App) activateWebViewPreview(previewData string) bool {
 	a.mu.Lock()
+	changed := a.webViewPreviewData != previewData
+	if changed {
+		a.webViewPreviewData = previewData
+		a.webViewPreviewError = ""
+	}
+	a.mu.Unlock()
+	return changed
+}
+
+// deactivateWebViewPreview clears controller ownership and reports whether native content was attached.
+func (a *App) deactivateWebViewPreview() bool {
+	a.mu.Lock()
+	wasActive := a.webViewPreviewData != "" || a.webViewPreviewError != ""
 	a.webViewPreviewData = ""
 	a.webViewPreviewError = ""
 	a.mu.Unlock()
+	return wasActive
+}
+
+// hideWebView marshals native WebView detachment onto the UI thread.
+func (a *App) hideWebView() {
+	if a.window == nil {
+		return
+	}
+	_ = woxui.Call(func() {
+		_ = a.window.HideWebView()
+	})
 }

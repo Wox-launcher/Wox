@@ -11,37 +11,38 @@ import (
 )
 
 type formFieldCallbacks struct {
-	idPrefix  string
-	focus     func(index int)
-	change    func(index, delta int)
-	setCaret  func(index, offset int)
-	openTable func(index int)
-	pickDir   func(index int)
-	pickApp   func(index int)
-	recordKey func(index int)
-	openModel func(index int)
+	idPrefix   string
+	focus      func(index int)
+	change     func(index, delta int)
+	setCaret   func(index, offset int)
+	openTable  func(index int)
+	openChoice func(index int, anchor woxui.Rect)
+	pickDir    func(index int)
+	pickApp    func(index int)
+	recordKey  func(index int)
+	openModel  func(index int)
 }
 
 // buildFormPanel maps action form state into the shared form view.
 func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwidget.Widget, float32, float32) {
 	form := snapshot.form
 	panelWidth := min(float32(520), max(float32(320), windowWidth-28))
-	panelHeight := float32(formDefinitionsPanelHeight(form.action.Form))
+	panelHeight := float32(formDefinitionsPanelHeight(form.action.Form, form.values))
 	rows := make([]woxwidget.Widget, 0, len(form.action.Form))
 	for index, definition := range form.action.Form {
-		rowHeight := formDefinitionHeight(definition)
+		rowHeight := formDefinitionHeight(definition, form.values)
 		rows = append(rows, a.buildFormDefinition(snapshot, index, definition, panelWidth-28, rowHeight))
 	}
 	panel := launcherview.FormPanel(launcherview.FormPanelProps{
 		Width: panelWidth, Height: panelHeight, Title: a.translate(form.action.Name), Rows: rows,
-		ContentHeight: formDefinitionsContentHeight(form.action.Form), Scroll: form.scroll,
+		ContentHeight: formDefinitionsContentHeight(form.action.Form, form.values), Scroll: form.scroll,
 		CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: a.translate("i18n:ui_save"), Theme: snapshot.palette.componentTheme(),
 		OnScroll: a.scrollForm, OnCancel: a.closeFormAction, OnSave: a.submitFormAction,
 	})
 	return panel, panelWidth, panelHeight
 }
 
-func formDefinitionHeight(definition formDefinition) float32 {
+func formDefinitionHeight(definition formDefinition, valueMaps ...map[string]string) float32 {
 	switch definition.Type {
 	case "head", "label":
 		return 34
@@ -54,7 +55,15 @@ func formDefinitionHeight(definition formDefinition) float32 {
 		}
 		return 56
 	case "table":
-		return 132
+		value := definition.Value.DefaultValue
+		if len(valueMaps) > 0 && valueMaps[0] != nil {
+			value = valueMaps[0][definition.Value.Key]
+		}
+		rows, err := decodeFormTableRows(value)
+		if err != nil {
+			rows = nil
+		}
+		return launcherview.FormTableFieldHeight(definition.Value.InlineTable, definition.Value.Tooltip, len(rows), definition.Value.MaxHeight)
 	case "dictationModel", "ocrModel":
 		return 70
 	default:
@@ -154,17 +163,14 @@ func (a *App) buildFormApp(fields formFieldsSnapshot, callbacks formFieldCallbac
 func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	value := fields.values[definition.Value.Key]
 	recording, status := a.hotkeyRecordingFieldStatus(callbacks.idPrefix, index)
+	placeholder := a.translate("i18n:ui_hotkey_click_to_set")
 	if recording {
-		value = "Recording…"
-		if status != "" {
-			value = status
-		}
-	} else if strings.TrimSpace(value) == "" {
-		value = "Click to record"
+		placeholder = a.translate("i18n:ui_hotkey_recording")
 	}
-	return launcherview.FormValueField(launcherview.FormValueFieldProps{
-		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Value: value,
-		Width: width, Height: height, Focused: fields.active && fields.focused == index, Theme: palette.componentTheme(),
+	return launcherview.FormHotkeyField(launcherview.FormHotkeyFieldProps{
+		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
+		Labels: formatHotkeyLabels(value), Placeholder: placeholder, Status: status, Recording: recording,
+		Width: width, Height: height, Focused: fields.active && fields.focused == index, Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(),
 		OnTap: func() {
 			callbacks.focus(index)
 			if callbacks.recordKey != nil {

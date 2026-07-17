@@ -20,7 +20,7 @@ type filePreviewContent struct {
 	Tags  []previewTag
 }
 
-// filePreviewFor starts file inspection once and returns a stable loading state meanwhile.
+// filePreviewFor returns cached file content without starting I/O from the frame builder.
 func (a *App) filePreviewFor(path string) filePreviewContent {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -33,17 +33,35 @@ func (a *App) filePreviewFor(path string) filePreviewContent {
 	if extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".gif" {
 		return filePreviewContent{Kind: "image", Image: woxImage{ImageType: "absolute", ImageData: path}, Tags: []previewTag{{Label: strings.TrimPrefix(strings.ToUpper(extension), ".")}}}
 	}
-	a.mu.Lock()
+	a.mu.RLock()
 	if content, ok := a.filePreviews[path]; ok {
-		a.mu.Unlock()
+		a.mu.RUnlock()
 		return content
 	}
-	if !a.fileRequests[path] {
+	a.mu.RUnlock()
+	return filePreviewContent{Kind: "info", Text: "Loading file preview…"}
+}
+
+// prepareFilePreview starts local file inspection once before the next render.
+func (a *App) prepareFilePreview(path string) {
+	path = strings.TrimSpace(path)
+	if path == "" || strings.HasPrefix(strings.ToLower(path), "http://") || strings.HasPrefix(strings.ToLower(path), "https://") {
+		return
+	}
+	extension := strings.ToLower(filepath.Ext(path))
+	if extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".gif" {
+		return
+	}
+	a.mu.Lock()
+	_, loaded := a.filePreviews[path]
+	requested := a.fileRequests[path]
+	if !loaded && !requested {
 		a.fileRequests[path] = true
-		go a.loadFilePreview(path, extension)
 	}
 	a.mu.Unlock()
-	return filePreviewContent{Kind: "info", Text: "Loading file preview…"}
+	if !loaded && !requested {
+		go a.loadFilePreview(path, extension)
+	}
 }
 
 func (a *App) loadFilePreview(path, extension string) {

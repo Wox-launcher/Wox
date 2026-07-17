@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -11,10 +12,11 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const settingChoicePickerRowHeight = float32(46)
+const settingChoicePickerRowHeight = float32(48)
 
 type settingChoicePickerState struct {
 	item     settingItem
+	anchor   woxui.Rect
 	editor   *woxui.TextEditor
 	selected int
 	scroll   float32
@@ -23,6 +25,7 @@ type settingChoicePickerState struct {
 
 type settingChoicePickerSnapshot struct {
 	item     settingItem
+	anchor   woxui.Rect
 	query    woxui.TextEditingState
 	choices  []settingChoice
 	selected int
@@ -33,14 +36,15 @@ type settingChoicePickerSnapshot struct {
 func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
 	choices := make([]launcherview.SettingsChoice, len(snapshot.choices))
 	for index, choice := range snapshot.choices {
-		choices[index] = launcherview.SettingsChoice{Value: choice.value, Label: choice.label}
+		choices[index] = launcherview.SettingsChoice{Value: choice.value, Label: choice.label, Trailing: snapshot.item.trailers[choice.value], Tooltip: a.localizedSettingChoiceTooltip(snapshot.item.key, choice)}
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
-		Width: width, Height: height, Theme: palette.componentTheme(), Window: a.settingsNativeWindow(), Title: snapshot.item.title,
+		Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette.componentTheme(), Window: a.settingsNativeWindow(), Title: snapshot.item.title,
 		CurrentValue: snapshot.item.value, Query: snapshot.query, Choices: choices, Selected: snapshot.selected, Scroll: snapshot.scroll,
 		OnCaret: a.setSettingChoicePickerCaret, OnSetQuery: a.setSettingChoicePickerQuery,
 		OnKey: a.onSettingChoicePickerKey, OnTextInput: a.onSettingChoicePickerTextInput,
-		OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnScroll: a.scrollSettingChoicePicker, OnSetViewport: a.setSettingChoicePickerViewport,
+		OnSelect: a.selectSettingChoice, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker,
+		OnScroll: a.scrollSettingChoicePicker, OnSetViewport: a.setSettingChoicePickerViewport, OnTooltip: a.setSettingChoiceTooltip,
 	})
 }
 
@@ -72,7 +76,7 @@ func snapshotSettingChoicePickerLocked(state *settingChoicePickerState) *setting
 	}
 	item := state.item
 	item.choices = append([]settingChoice(nil), state.item.choices...)
-	return &settingChoicePickerSnapshot{item: item, query: query, choices: choices, selected: selected, scroll: state.scroll}
+	return &settingChoicePickerSnapshot{item: item, anchor: state.anchor, query: query, choices: choices, selected: selected, scroll: state.scroll}
 }
 
 func (a *App) openOrActivateSetting() {
@@ -81,7 +85,7 @@ func (a *App) openOrActivateSetting() {
 	if snapshot.saving || snapshot.row < 0 || snapshot.row >= len(items) {
 		return
 	}
-	item := items[snapshot.row]
+	item := a.localizedSettingItem(items[snapshot.row])
 	if item.disabled {
 		return
 	}
@@ -97,6 +101,18 @@ func isBooleanSettingItem(item settingItem) bool {
 }
 
 func (a *App) openSettingChoicePicker(item settingItem) {
+	a.mu.RLock()
+	host := a.settingsHost
+	a.mu.RUnlock()
+	anchor := woxui.Rect{}
+	if host != nil {
+		anchor, _ = host.BoundsForKey(launcherview.SettingChoiceAnchorKey(item.key))
+	}
+	a.openSettingChoicePickerAt(item, anchor)
+}
+
+// openSettingChoicePickerAt anchors pointer-opened menus to the bounds from the exact hit-tested frame.
+func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
 	a.mu.Lock()
 	if a.settingSaving || item.disabled || len(item.choices) == 0 {
 		a.mu.Unlock()
@@ -110,22 +126,30 @@ func (a *App) openSettingChoicePicker(item settingItem) {
 		}
 	}
 	scroll := max(float32(0), float32(selected-4)*settingChoicePickerRowHeight)
-	a.settingChoicePicker = &settingChoicePickerState{item: item, editor: woxui.NewTextEditor(""), selected: selected, scroll: scroll}
+	a.settingChoicePicker = &settingChoicePickerState{item: item, anchor: anchor, editor: woxui.NewTextEditor(""), selected: selected, scroll: scroll}
 	a.settingEditKey = ""
 	a.settingEditor = nil
-	a.settingNote = "Filter and select " + item.title
+	a.settingNote = ""
+	if item.filterable {
+		a.settingNote = "Filter and select " + item.title
+	}
 	a.mu.Unlock()
-	a.updateSettingsTextInput(true)
+	a.updateSettingsTextInput(item.filterable)
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) closeSettingChoicePicker() {
+	closed := false
 	a.mu.Lock()
 	if a.settingChoicePicker != nil {
 		a.settingChoicePicker = nil
 		a.settingNote = ""
+		closed = true
 	}
 	a.mu.Unlock()
+	if closed {
+		a.setSettingChoiceTooltip(false, "", woxui.Rect{})
+	}
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
@@ -148,9 +172,24 @@ func (a *App) chooseSettingChoice(index int) {
 	a.settingSaving = true
 	a.settingNote = "Saving " + item.title + "…"
 	a.mu.Unlock()
+	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 	go a.saveSetting(item, choice)
+}
+
+func (a *App) selectSettingChoice(index int) {
+	a.mu.Lock()
+	state := a.settingChoicePicker
+	if state != nil && state.editor != nil {
+		choices := filteredSettingChoices(state.item, state.editor.State().Text)
+		if index >= 0 && index < len(choices) {
+			state.selected = index
+			a.ensureSettingChoiceVisibleLocked()
+		}
+	}
+	a.mu.Unlock()
+	a.invalidateSettingsWindow()
 }
 
 func (a *App) moveSettingChoice(delta int) {
@@ -248,6 +287,9 @@ func (a *App) onSettingChoicePickerKey(event woxui.KeyEvent) bool {
 	case woxui.KeyEnter:
 		a.chooseSettingChoice(selected)
 	default:
+		if !state.item.filterable {
+			return true
+		}
 		a.mu.Lock()
 		if current := a.settingChoicePicker; current != nil && current.editor != nil {
 			_, changed := current.editor.HandleKey(event)
@@ -269,6 +311,10 @@ func (a *App) onSettingChoicePickerTextInput(event woxui.TextInputEvent) bool {
 		a.mu.Unlock()
 		return false
 	}
+	if !state.item.filterable {
+		a.mu.Unlock()
+		return true
+	}
 	if state.editor.HandleTextInput(event) {
 		state.selected = 0
 		state.scroll = 0
@@ -276,6 +322,49 @@ func (a *App) onSettingChoicePickerTextInput(event woxui.TextInputEvent) bool {
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 	return true
+}
+
+func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rect) {
+	a.mu.Lock()
+	a.choiceTooltipRevision++
+	revision := a.choiceTooltipRevision
+	a.mu.Unlock()
+
+	go func() {
+		a.tooltipMu.Lock()
+		defer a.tooltipMu.Unlock()
+		a.mu.RLock()
+		current := revision == a.choiceTooltipRevision
+		a.mu.RUnlock()
+		if !current {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if !inside {
+			if err := a.client.Post(ctx, "/tooltip/hide", map[string]string{"name": "go-ui-setting-choice"}, nil); err != nil {
+				log.Printf("hide settings choice tooltip: %v", err)
+			}
+			return
+		}
+		window := a.settingsNativeWindow()
+		if window == nil {
+			return
+		}
+		windowBounds, err := window.Bounds()
+		if err != nil {
+			log.Printf("read settings bounds for choice tooltip: %v", err)
+			return
+		}
+		err = a.client.Post(ctx, "/tooltip/show", map[string]any{
+			"name": "go-ui-setting-choice", "text": text, "side": "left",
+			"anchorX": windowBounds.X + anchor.X, "anchorY": windowBounds.Y + anchor.Y,
+			"anchorWidth": anchor.Width, "anchorHeight": anchor.Height,
+		}, nil)
+		if err != nil {
+			log.Printf("show settings choice tooltip: %v", err)
+		}
+	}()
 }
 
 // loadSystemFontFamilies keeps enumeration in core while the framework only consumes portable family names.
@@ -340,5 +429,5 @@ func systemFontSettingItem(snapshot settingsSnapshot) settingItem {
 	} else if snapshot.systemFontsError != "" {
 		description = "Could not load installed fonts: " + snapshot.systemFontsError
 	}
-	return settingItem{key: "AppFontFamily", title: "Application font", description: description, value: snapshot.data.AppFontFamily, choices: choices}
+	return settingItem{key: "AppFontFamily", title: "Application font", description: description, value: snapshot.data.AppFontFamily, choices: choices, filterable: true}
 }

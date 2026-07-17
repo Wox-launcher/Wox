@@ -32,13 +32,13 @@ func (a *App) buildDataSettingsPage(snapshot settingsSnapshot, width, height flo
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Labels: a.dataSettingsLabels(),
 		Location: snapshot.dataLocation, PendingLocation: snapshot.dataPendingLocation, AutoBackup: snapshot.data.EnableAutoBackup,
 		Backups: backups, RestoreArmed: snapshot.dataRestoreArmed, LogLevel: snapshot.data.LogLevel, ClearLogsArmed: snapshot.dataClearLogsArmed,
-		PageScroll: snapshot.pageScroll, Note: snapshot.note, Loading: snapshot.dataLoading, Error: snapshot.dataError,
+		PageScroll: snapshot.pageScroll.offset, Note: snapshot.note, Loading: snapshot.dataLoading, Error: snapshot.dataError,
 		OnOpenPath: a.openDataPath, OnChooseLocation: a.chooseDataLocation, OnCancelLocation: a.cancelDataLocationChange,
 		OnConfirmLocation: a.confirmDataLocationChange, OnToggleAutoBackup: a.toggleDataAutoBackup, OnCreateBackup: a.createDataBackup,
 		OnRestoreBackup: a.restoreDataBackup, OnCycleLogLevel: a.cycleDataLogLevel, OnClearLogs: a.clearDataLogs, OnOpenLog: a.openDataLog,
 		OnScroll: a.scrollSettingsPage,
 		OnSetPageGeometry: func(viewportHeight, contentHeight float32) {
-			a.setSettingsPageGeometry(viewportHeight, contentHeight, 0)
+			a.setSettingsPageGeometry(viewportHeight, contentHeight)
 		},
 	})
 }

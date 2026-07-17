@@ -54,6 +54,8 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildSettingChoicePickerOverlay(snapshot.choicePicker, snapshot.palette, width, height)
 	} else if snapshot.cloudForm != nil {
 		overlay = a.buildCloudFormOverlay(snapshot.cloudForm, snapshot.palette, width, height)
+	} else if snapshot.privacySample != "" {
+		overlay = a.buildPrivacySampleOverlay(snapshot, width, height)
 	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
 		Width: width, Height: height, Radius: appSurfaceRadius(), Theme: snapshot.palette.componentTheme(),
@@ -89,15 +91,8 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width float32) wo
 
 // buildSettingsThemePage mounts theme catalogs and the shared live editor under one portable route.
 func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
-	innerWidth := max(float32(0), width-48)
-	headerHeight := float32(68)
-	modeLabel := "Installed themes"
-	if snapshot.themesMode == "store" {
-		modeLabel = "Browse and install themes from the Wox store"
-	} else if snapshot.themesMode == "editor" {
-		modeLabel = "Edit the active theme and save a portable copy"
-	}
-	bodyHeight := max(float32(0), height-48-headerHeight)
+	innerWidth := max(float32(0), width-40)
+	bodyHeight := max(float32(0), height-40)
 	var body woxwidget.Widget
 	if snapshot.themesMode != "editor" {
 		body = a.buildThemeCatalog(snapshot, innerWidth, bodyHeight)
@@ -112,13 +107,11 @@ func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height fl
 			}
 			body = launcherview.SettingsMessage(message, innerWidth, bodyHeight, snapshot.palette.componentTheme())
 		} else {
-			body = a.buildThemeEditorSurface(theme, snapshot.palette, innerWidth, bodyHeight)
+			body = a.buildThemeEditorSettingsSurface(theme, snapshot.palette, innerWidth, bodyHeight)
 		}
 	}
 	return launcherview.SettingsThemePage(launcherview.SettingsThemePageProps{
-		Width: width, Height: height, ModeLabel: modeLabel, Mode: snapshot.themesMode,
-		Disabled: snapshot.themesLoading || snapshot.themeOperation != "", Body: body, Theme: snapshot.palette.componentTheme(),
-		OnInstalled: func() { a.switchThemeSettingsMode("installed") }, OnStore: func() { a.switchThemeSettingsMode("store") }, OnEditor: func() { a.switchThemeSettingsMode("editor") },
+		Width: width, Height: height, Body: body,
 	})
 }
 
@@ -143,20 +136,14 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height float32
 	}
 	innerWidth := width - 28
 	searchAreaHeight := float32(58)
-	backHeight := float32(50)
-	viewportHeight := max(float32(1), height-searchAreaHeight-backHeight-28)
+	viewportHeight := max(float32(1), height-searchAreaHeight-28)
+	railScroll := resolveSettingsRailScroll(specs, activeID, snapshot.railScroll, viewportHeight, snapshot.railScroll.viewport != viewportHeight)
+	a.rememberSettingsRailGeometry(snapshot, railScroll)
 	return launcherview.SettingsRail(launcherview.SettingsRailProps{
-		Width: width, Height: height, Items: items, Scroll: snapshot.railScroll,
+		Width: width, Height: height, Items: items, Scroll: railScroll.offset,
 		SearchBox: a.buildSettingsSearchBox(snapshot, innerWidth), SearchPanel: a.buildSettingsSearchResultPanel(snapshot, innerWidth, viewportHeight),
-		ShowSearch: snapshot.searchPanel && strings.TrimSpace(snapshot.searchQuery.Text) != "", BackLabel: a.translate("i18n:ui_back"), Theme: snapshot.palette.componentTheme(),
-		OnSetViewport: a.setSettingsRailViewport, OnScroll: a.scrollSettingsRail,
-		OnBack: func() {
-			go func() {
-				if err := a.closeSettings(); err != nil {
-					log.Printf("close settings window: %v", err)
-				}
-			}()
-		},
+		ShowSearch: snapshot.searchPanel && strings.TrimSpace(snapshot.searchQuery.Text) != "", Theme: snapshot.palette.componentTheme(),
+		OnScroll: a.scrollSettingsRail,
 	})
 }
 
@@ -181,9 +168,12 @@ func (a *App) activeSettingsNavLabel(snapshot settingsSnapshot) string {
 // buildSettingsSearchBox owns the settings window's default text-input focus and native IME cursor.
 func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width float32) woxwidget.Widget {
 	placeholder := a.translate("i18n:ui_setting_search_placeholder")
+	iconTint := snapshot.palette.resultSubtitle
 	return launcherview.SettingsSearchBox(launcherview.SettingsSearchBoxProps{
 		Width: width, Placeholder: placeholder, State: snapshot.searchQuery, Focused: snapshot.searchFocused,
-		Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(), OnFocus: func() { a.focusSettingsSearch(false) }, OnClear: a.clearSettingsSearch, OnCaret: a.setSettingsSearchCaret,
+		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, 18), Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
+		OnFocus: func() { a.focusSettingsSearch(false) }, OnClear: a.clearSettingsSearch, OnCaret: a.setSettingsSearchCaret,
+		OnKey: a.onSettingsSearchKey, OnTextInput: a.onSettingsSearchTextInput, OnFocusChange: a.setSettingsSearchFocused, OnSetValue: a.setSettingsSearchValue,
 	})
 }
 
@@ -236,7 +226,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		contentWidth,
 		snapshot.palette,
 	))
-	contentHeight := float32(72)
+	contentHeight := woxcomponent.PageHeaderHeight
 	currentSection := ""
 	for index, item := range items {
 		index := index
@@ -259,7 +249,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			idPrefix: "hotkey-settings", focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
 		}
 		for index, definition := range hotkeyForm.definitions {
-			rowHeight := formDefinitionHeight(definition)
+			rowHeight := formDefinitionHeight(definition, hotkeyForm.values)
 			children = append(children, a.buildFormField(hotkeyForm, callbacks, snapshot.palette, index, definition, contentWidth, rowHeight))
 			contentHeight += rowHeight
 		}
@@ -270,8 +260,9 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		contentHeight += 34
 	}
 	viewportHeight := max(float32(1), height-58)
-	a.setSettingsPageGeometry(viewportHeight, contentHeight, len(items))
-	return launcherview.SettingsPage(launcherview.SettingsPageProps{Width: width, Height: height, Children: children, ContentHeight: contentHeight, Scroll: snapshot.pageScroll, OnScroll: a.scrollSettingsPage})
+	pageScroll := snapshot.pageScroll.withGeometry(viewportHeight, contentHeight)
+	a.rememberSettingsPageGeometry(snapshot, pageScroll)
+	return launcherview.SettingsPage(launcherview.SettingsPageProps{Width: width, Height: height, Children: children, ContentHeight: contentHeight, Scroll: pageScroll.offset, OnScroll: a.scrollSettingsPage})
 }
 
 // buildSettingsPageHeader keeps built-in pages aligned with Flutter's wide settings form.
@@ -287,6 +278,12 @@ func (a *App) settingsPageDescription(tab string) string {
 		return a.translate("i18n:ui_general_description")
 	case "appearance":
 		return a.translate("i18n:ui_ui_description")
+	case "network":
+		return a.translate("i18n:ui_network_description")
+	case "debug":
+		return a.translate("i18n:ui_debug_description")
+	case "updates":
+		return a.translate("i18n:ui_update_description")
 	default:
 		return ""
 	}
@@ -317,6 +314,9 @@ func (a *App) settingsSectionLabel(tab, key string) string {
 			return a.translate("i18n:ui_ui_section_launcher")
 		}
 	}
+	if tab == "updates" {
+		return a.translate("i18n:ui_update_section_updates")
+	}
 	return a.activeSettingsNavLabel(a.settingsSnapshot())
 }
 
@@ -331,7 +331,9 @@ func (a *App) localizedSettingItem(item settingItem) settingItem {
 		"AppFontFamily": {"ui_app_font_family", "ui_app_font_family_tips"}, "EnableQueryCompletionHint": {"ui_query_completion_hint", "ui_query_completion_hint_tips"},
 		"MaxResultCount": {"ui_max_result_count", "ui_max_result_count_tips"}, "EnableGlance": {"ui_glance_enable", "ui_glance_enable_tips"},
 		"HideGlanceIcon": {"ui_glance_hide_icon", "ui_glance_hide_icon_tips"}, "PrimaryGlance": {"ui_glance_primary", "ui_glance_primary_tips"},
-		"HttpProxyEnabled": {"ui_proxy_enabled", ""}, "HttpProxyUrl": {"ui_proxy_url", ""},
+		"HttpProxyEnabled": {"ui_proxy_enabled", ""}, "HttpProxyUrl": {"ui_proxy_url", "ui_proxy_url_tips"},
+		"CustomPythonPath": {"ui_runtime_python_path", "ui_runtime_python_path_tips"}, "CustomNodejsPath": {"ui_runtime_nodejs_path", "ui_runtime_nodejs_path_tips"},
+		"EnableAutoUpdate": {"ui_enable_auto_update", "ui_enable_auto_update_tips"}, "ReleaseChannel": {"ui_release_channel", "ui_release_channel_tips"},
 	}
 	if pair, ok := keys[item.key]; ok {
 		item.title = a.translate("i18n:" + pair[0])
@@ -347,10 +349,11 @@ func (a *App) localizedSettingItem(item settingItem) settingItem {
 
 func (a *App) localizedSettingChoiceLabel(key string, choice settingChoice) string {
 	choiceKeys := map[string]map[string]string{
-		"LaunchMode":   {"fresh": "ui_launch_mode_fresh", "continue": "ui_launch_mode_continue"},
-		"StartPage":    {"blank": "ui_start_page_blank", "mru": "ui_start_page_mru"},
-		"ShowPosition": {"mouse_screen": "ui_show_position_mouse_screen", "active_screen": "ui_show_position_active_screen", "last_location": "ui_show_position_last_location"},
-		"UiDensity":    {"compact": "ui_interface_size_compact", "normal": "ui_interface_size_normal", "comfortable": "ui_interface_size_comfortable"},
+		"LaunchMode":     {"fresh": "ui_launch_mode_fresh", "continue": "ui_launch_mode_continue"},
+		"StartPage":      {"blank": "ui_start_page_blank", "mru": "ui_start_page_mru"},
+		"ShowPosition":   {"mouse_screen": "ui_show_position_mouse_screen", "active_screen": "ui_show_position_active_screen", "last_location": "ui_show_position_last_location"},
+		"UiDensity":      {"compact": "ui_interface_size_compact", "normal": "ui_interface_size_normal", "comfortable": "ui_interface_size_comfortable"},
+		"ReleaseChannel": {"stable": "ui_release_channel_stable", "beta": "ui_release_channel_beta"},
 	}
 	if valueKeys := choiceKeys[key]; valueKeys != nil {
 		if labelKey := valueKeys[choice.value]; labelKey != "" {
@@ -358,6 +361,20 @@ func (a *App) localizedSettingChoiceLabel(key string, choice settingChoice) stri
 		}
 	}
 	return choice.label
+}
+
+func (a *App) localizedSettingChoiceTooltip(key string, choice settingChoice) string {
+	tooltipKeys := map[string]map[string]string{
+		"LaunchMode":     {"fresh": "ui_launch_mode_fresh_tips", "continue": "ui_launch_mode_continue_tips"},
+		"StartPage":      {"blank": "ui_start_page_blank_tips", "mru": "ui_start_page_mru_tips"},
+		"ReleaseChannel": {"stable": "ui_release_channel_stable_tips", "beta": "ui_release_channel_beta_tips"},
+	}
+	if valueKeys := tooltipKeys[key]; valueKeys != nil {
+		if tooltipKey := valueKeys[choice.value]; tooltipKey != "" {
+			return a.translate("i18n:" + tooltipKey)
+		}
+	}
+	return ""
 }
 
 func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index int, width float32, background woxui.Color) woxwidget.Widget {
@@ -376,9 +393,10 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 		value = item.value
 	}
 	return launcherview.SettingRow(launcherview.SettingRowProps{
-		ID: item.key, Title: item.title, Description: item.description, Value: value, Width: width, Background: background, Disabled: item.disabled,
-		Kind: kind, BrowseFile: item.browseFile, Editing: state, Focused: focused, Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
+		ID: item.key, Title: item.title, Description: item.description, Value: value, ValueTrailing: item.trailers[item.value], Width: width, Background: background, Disabled: item.disabled,
+		Kind: kind, ControlWidth: item.controlWidth, BrowseFile: item.browseFile, Editing: state, Focused: focused, Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
 		OnTap: func() { a.selectSettingRow(index); a.openOrActivateSetting() }, OnScroll: a.scrollSettingsPage,
-		OnCaret: func(offset int) { a.startBuiltInSettingEdit(item, offset) }, OnBrowse: func() { a.browseBuiltInSettingFile(item) },
+		OnChoiceTap: func(anchor woxui.Rect) { a.selectSettingRow(index); a.openSettingChoicePickerAt(item, anchor) },
+		OnCaret:     func(offset int) { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, offset) }, OnBrowse: func() { a.selectSettingRow(index); a.browseBuiltInSettingFile(item) },
 	})
 }

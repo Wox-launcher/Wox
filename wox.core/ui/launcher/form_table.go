@@ -2,9 +2,13 @@ package launcher
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
+	"os"
+	"path/filepath"
 	"strings"
 
 	woxui "wox/ui/runtime"
@@ -23,27 +27,31 @@ type formTableEditorState struct {
 	rowForm      *formFieldsState
 	rowIndex     int
 	rowBase      map[string]any
+	// rowEditorOnly closes the whole overlay when a row opened directly from an inline table exits.
+	rowEditorOnly bool
+	skillClone    bool
+	status        string
+	invalid       bool
+	saving        bool
+	deleteArmed   int
+	appPicker     *formTableAppPickerState
+	choicePicker  *formTableChoicePickerState
+}
+
+type formTableEditorSnapshot struct {
+	definition   formDefinition
+	rows         []map[string]any
+	selected     int
+	listScroll   float32
+	rowForm      *formFieldsSnapshot
+	rowIndex     int
 	skillClone   bool
 	status       string
 	invalid      bool
 	saving       bool
 	deleteArmed  int
-	appPicker    *formTableAppPickerState
-}
-
-type formTableEditorSnapshot struct {
-	definition  formDefinition
-	rows        []map[string]any
-	selected    int
-	listScroll  float32
-	rowForm     *formFieldsSnapshot
-	rowIndex    int
-	skillClone  bool
-	status      string
-	invalid     bool
-	saving      bool
-	deleteArmed int
-	appPicker   *formTableAppPickerSnapshot
+	appPicker    *formTableAppPickerSnapshot
+	choicePicker *formTableChoicePickerSnapshot
 }
 
 type formTableAppPickerState struct {
@@ -59,6 +67,24 @@ type formTableAppPickerSnapshot struct {
 	candidates []ignoredHotkeyApp
 	selected   int
 	scroll     float32
+}
+
+type formTableChoicePickerState struct {
+	fieldIndex int
+	anchor     woxui.Rect
+	selected   int
+	scroll     float32
+	viewport   float32
+}
+
+type formTableChoicePickerSnapshot struct {
+	fieldIndex   int
+	anchor       woxui.Rect
+	title        string
+	currentValue string
+	options      []formOption
+	selected     int
+	scroll       float32
 }
 
 // decodeFormTableRows preserves JSON numbers and unknown row fields so the shared editor can round-trip future column types safely.
@@ -119,19 +145,29 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 			scroll:     state.appPicker.scroll,
 		}
 	}
+	var choicePicker *formTableChoicePickerSnapshot
+	if state.choicePicker != nil && state.rowForm != nil && state.choicePicker.fieldIndex >= 0 && state.choicePicker.fieldIndex < len(state.rowForm.definitions) {
+		definition := state.rowForm.definitions[state.choicePicker.fieldIndex]
+		choicePicker = &formTableChoicePickerSnapshot{
+			fieldIndex: state.choicePicker.fieldIndex, anchor: state.choicePicker.anchor, title: definition.Value.Label,
+			currentValue: state.rowForm.values[definition.Value.Key], options: append([]formOption(nil), definition.Value.Options...),
+			selected: state.choicePicker.selected, scroll: state.choicePicker.scroll,
+		}
+	}
 	return &formTableEditorSnapshot{
-		definition:  state.definition,
-		rows:        cloneFormTableRows(state.rows),
-		selected:    state.selected,
-		listScroll:  state.listScroll,
-		rowForm:     rowForm,
-		rowIndex:    state.rowIndex,
-		skillClone:  state.skillClone,
-		status:      state.status,
-		invalid:     state.invalid,
-		saving:      state.saving,
-		deleteArmed: state.deleteArmed,
-		appPicker:   appPicker,
+		definition:   state.definition,
+		rows:         cloneFormTableRows(state.rows),
+		selected:     state.selected,
+		listScroll:   state.listScroll,
+		rowForm:      rowForm,
+		rowIndex:     state.rowIndex,
+		skillClone:   state.skillClone,
+		status:       state.status,
+		invalid:      state.invalid,
+		saving:       state.saving,
+		deleteArmed:  state.deleteArmed,
+		appPicker:    appPicker,
+		choicePicker: choicePicker,
 	}
 }
 
@@ -337,9 +373,8 @@ func formTableColumnDefinition(column formTableColumn, row map[string]any) (form
 	case "hotkey":
 		return formDefinition{Type: "hotkey", Value: value}, true
 	case "woxImage":
-		value.Label += " (emoji or WoxImage JSON)"
 		value.MaxLines = 1
-		return formDefinition{Type: "textbox", Value: value}, true
+		return formDefinition{Type: "woxImage", Value: value}, true
 	case "app":
 		return formDefinition{Type: "app", Value: value}, true
 	default:
@@ -392,10 +427,23 @@ func formTableRowFields(definition formDefinition, row map[string]any) (formFiel
 }
 
 func (a *App) beginAddFormTableRow() {
-	a.beginFormTableRowEdit(-1)
+	a.beginFormTableRowEdit(-1, false)
+}
+
+func (a *App) beginAddFormTableRowDirect() {
+	a.beginFormTableRowEdit(-1, true)
 }
 
 func (a *App) beginEditFormTableRow() {
+	a.beginSelectedFormTableRowEdit(false)
+}
+
+func (a *App) beginEditFormTableRowDirect() {
+	a.beginSelectedFormTableRowEdit(true)
+}
+
+// beginSelectedFormTableRowEdit preserves whether the selected row came from the list or an inline table.
+func (a *App) beginSelectedFormTableRowEdit(rowEditorOnly bool) {
 	a.mu.RLock()
 	index := -1
 	if a.tableEditor != nil {
@@ -403,11 +451,11 @@ func (a *App) beginEditFormTableRow() {
 	}
 	a.mu.RUnlock()
 	if index >= 0 {
-		a.beginFormTableRowEdit(index)
+		a.beginFormTableRowEdit(index, rowEditorOnly)
 	}
 }
 
-func (a *App) beginFormTableRowEdit(index int) {
+func (a *App) beginFormTableRowEdit(index int, rowEditorOnly bool) {
 	requestModels := false
 	a.mu.Lock()
 	state := a.tableEditor
@@ -431,6 +479,7 @@ func (a *App) beginFormTableRowEdit(index int) {
 	state.appPicker = nil
 	state.rowIndex = index
 	state.rowBase = base
+	state.rowEditorOnly = rowEditorOnly
 	state.skillClone = false
 	state.status = ""
 	state.deleteArmed = -1
@@ -449,12 +498,20 @@ func (a *App) beginFormTableRowEdit(index int) {
 }
 
 func (a *App) cancelFormTableRowEdit() {
+	a.mu.RLock()
+	closeEditor := a.tableEditor != nil && a.tableEditor.rowEditorOnly
+	a.mu.RUnlock()
+	if closeEditor {
+		a.closeFormTableEditor()
+		return
+	}
 	a.stopHotkeyRecording()
 	a.mu.Lock()
 	if a.tableEditor != nil {
 		a.tableEditor.rowForm = nil
 		a.tableEditor.rowIndex = -1
 		a.tableEditor.rowBase = nil
+		a.tableEditor.rowEditorOnly = false
 		a.tableEditor.appPicker = nil
 		a.tableEditor.skillClone = false
 		a.tableEditor.status = ""
@@ -674,11 +731,13 @@ func (a *App) saveFormTableRowEdit() {
 		return
 	}
 	persist := state.target == a.aiSettingsForm || state.target == a.hotkeySettingsForm
+	closeEditor := state.rowEditorOnly
 	key := state.definition.Value.Key
 	value := state.target.values[key]
 	state.rowForm = nil
 	state.rowIndex = -1
 	state.rowBase = nil
+	state.rowEditorOnly = false
 	state.status = ""
 	if persist {
 		state.saving = true
@@ -687,8 +746,12 @@ func (a *App) saveFormTableRowEdit() {
 	}
 	a.ensureFormTableSelectionVisibleLocked()
 	a.mu.Unlock()
-	a.updateFormTableTextInput(false)
-	a.invalidateFormTableWindow()
+	if closeEditor {
+		a.closeFormTableEditor()
+	} else {
+		a.updateFormTableTextInput(false)
+		a.invalidateFormTableWindow()
+	}
 	if persist {
 		go a.saveSettingsTable(state, key, value, previousValue)
 	}
@@ -833,6 +896,75 @@ func (a *App) setFormTableRowCaret(index, offset int) {
 	a.invalidateFormTableWindow()
 }
 
+// beginFormTableRowEmojiEdit selects the current icon value so the next emoji input replaces it.
+func (a *App) beginFormTableRowEmojiEdit(index int) {
+	a.mu.Lock()
+	state := a.tableEditor
+	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "woxImage" {
+		a.mu.Unlock()
+		return
+	}
+	setFormFieldsFocusLocked(state.rowForm, index)
+	state.rowForm.editor.SelectAll()
+	state.status = ""
+	a.mu.Unlock()
+	a.updateFormTableTextInput(true)
+	a.invalidateFormTableWindow()
+}
+
+// pickFormTableRowImage stores an uploaded image in the same portable WoxImage shape used by Flutter.
+func (a *App) pickFormTableRowImage(index int) {
+	a.mu.RLock()
+	state := a.tableEditor
+	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "woxImage" {
+		a.mu.RUnlock()
+		return
+	}
+	rowForm := state.rowForm
+	a.mu.RUnlock()
+
+	a.updateFormTableTextInput(false)
+	path, err := a.formTableNativeWindow().PickFile(woxui.FileDialogOptions{})
+	var image woxImage
+	if err == nil && path != "" {
+		var data []byte
+		data, err = os.ReadFile(path)
+		if err == nil {
+			if strings.EqualFold(filepath.Ext(path), ".svg") {
+				image = woxImage{ImageType: "svg", ImageData: string(data)}
+			} else {
+				mediaType := mime.TypeByExtension(filepath.Ext(path))
+				if mediaType == "" {
+					mediaType = "application/octet-stream"
+				}
+				image = woxImage{ImageType: "base64", ImageData: "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data)}
+			}
+		}
+	}
+
+	a.mu.Lock()
+	if a.tableEditor != state || state.rowForm != rowForm {
+		a.mu.Unlock()
+		return
+	}
+	if err != nil {
+		state.status = err.Error()
+	} else if path != "" {
+		encoded, encodeErr := json.Marshal(image)
+		if encodeErr != nil {
+			state.status = encodeErr.Error()
+		} else {
+			setFormFieldsFocusLocked(rowForm, index)
+			rowForm.editor.SetText(string(encoded), false)
+			syncFormFieldsEditorLocked(rowForm)
+			state.status = ""
+		}
+	}
+	a.mu.Unlock()
+	a.updateFormTableTextInput(false)
+	a.invalidateFormTableWindow()
+}
+
 // pickFormTableRowDirectory uses the platform window adapter while keeping the selected path in the shared row form.
 func (a *App) pickFormTableRowDirectory(index int) {
 	a.mu.RLock()
@@ -868,7 +1000,7 @@ func (a *App) setFormTableRowViewport(height float32) {
 	a.mu.Lock()
 	if state := a.tableEditor; state != nil && state.rowForm != nil {
 		state.rowForm.viewportHeight = max(float32(1), height)
-		state.rowForm.scroll = min(state.rowForm.scroll, max(float32(0), formDefinitionsContentHeight(state.rowForm.definitions)-state.rowForm.viewportHeight))
+		state.rowForm.scroll = min(state.rowForm.scroll, max(float32(0), formTableRowContentHeight(state.rowForm.definitions)-state.rowForm.viewportHeight))
 	}
 	a.mu.Unlock()
 }
@@ -876,7 +1008,7 @@ func (a *App) setFormTableRowViewport(height float32) {
 func (a *App) scrollFormTableRow(delta float32) {
 	a.mu.Lock()
 	if state := a.tableEditor; state != nil && state.rowForm != nil {
-		maxOffset := max(float32(0), formDefinitionsContentHeight(state.rowForm.definitions)-state.rowForm.viewportHeight)
+		maxOffset := max(float32(0), formTableRowContentHeight(state.rowForm.definitions)-state.rowForm.viewportHeight)
 		state.rowForm.scroll = min(max(float32(0), state.rowForm.scroll+delta), maxOffset)
 	}
 	a.mu.Unlock()
@@ -899,6 +1031,11 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 	if appPicker != nil {
 		appSelected = appPicker.selected
 	}
+	choicePicker := state.choicePicker
+	choiceSelected := -1
+	if choicePicker != nil {
+		choiceSelected = choicePicker.selected
+	}
 	fieldType := ""
 	multiline := false
 	focused := -1
@@ -910,6 +1047,10 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 		}
 	}
 	a.mu.RUnlock()
+	if choicePicker != nil {
+		a.onFormTableChoicePickerKey(event, choiceSelected)
+		return true
+	}
 	if appPicker != nil {
 		a.onFormTableAppPickerKey(event, appSelected)
 		return true
@@ -988,7 +1129,9 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 			a.recordFormTableRowHotkey(focused)
 		} else if fieldType == "app" {
 			a.openFormTableAppPicker(focused)
-		} else if fieldType == "checkbox" || fieldType == "select" || fieldType == "selectAIModel" {
+		} else if fieldType == "select" || fieldType == "selectAIModel" {
+			a.openFocusedFormTableRowChoice(focused)
+		} else if fieldType == "checkbox" {
 			a.changeFormTableRowChoice(focused, 1)
 		}
 	default:
@@ -1004,7 +1147,7 @@ func (a *App) onFormTableTextInput(event woxui.TextInputEvent) bool {
 		a.mu.Unlock()
 		return false
 	}
-	if state.appPicker != nil {
+	if state.appPicker != nil || state.choicePicker != nil {
 		a.mu.Unlock()
 		return true
 	}

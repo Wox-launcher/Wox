@@ -143,6 +143,7 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	a.query.QueryID = coreclient.NewID()
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
+	a.resultScrollDetached = false
 	a.resetQueryTransitionLocked()
 	if text != "" && a.visible && len(a.results) > 0 {
 		queryID := a.query.QueryID
@@ -159,11 +160,8 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	a.stopGlanceLocked(false)
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionSelectionKey = ""
 	a.actionFilter = nil
-	a.requirementForm = nil
-	a.triggerConflict = nil
-	a.themeEditor = nil
-	a.chatPreview = nil
 	a.chatFullscreen = false
 }
 
@@ -192,10 +190,10 @@ func (a *App) showPendingQueryResults(queryID string) {
 	a.results = nil
 	a.resultsQueryID = ""
 	a.selected = -1
+	a.resultScrollDetached = false
 	a.layout = queryLayout{}
 	a.mu.Unlock()
-	a.deactivateTerminalPreview()
-	a.deactivateWebViewPreview()
+	a.reconcileSelectedPreview()
 	_ = a.window.Invalidate()
 }
 
@@ -248,6 +246,7 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
 	a.completionHint = nil
+	a.resultScrollDetached = false
 	a.resetQueryTransitionLocked()
 	a.results = nil
 	a.resultsQueryID = ""
@@ -256,14 +255,11 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 	a.stopGlanceLocked(true)
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionSelectionKey = ""
 	a.actionFilter = nil
-	a.requirementForm = nil
-	a.triggerConflict = nil
-	a.themeEditor = nil
-	a.chatPreview = nil
 	a.chatFullscreen = false
 	a.mu.Unlock()
-	a.deactivateTerminalPreview()
+	a.reconcileSelectedPreview()
 	if err := a.sendCurrentQuery(); err != nil {
 		log.Printf("send query after refinement change: %v", err)
 	}

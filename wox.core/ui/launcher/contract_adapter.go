@@ -88,10 +88,12 @@ func (a *App) RefreshQuery(_ context.Context, preserveSelectedIndex bool) error 
 	a.stopGlanceLocked(true)
 	if !preserveSelectedIndex {
 		a.selected = -1
+		a.resultScrollDetached = false
 	} else {
 		a.selected = selected
 	}
 	a.mu.Unlock()
+	a.reconcileSelectedPreview()
 	return a.sendCurrentQuery()
 }
 
@@ -457,6 +459,7 @@ func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 	}
 	a.mu.Unlock()
 	if updated {
+		a.reconcileSelectedPreview()
 		_ = a.window.Invalidate()
 	}
 	return updated
@@ -478,7 +481,8 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 		a.results = nil
 		a.selected = -1
 		a.hoveredResult = -1
-		a.resultScroll = 0
+		a.resultScroll.reset()
+		a.resultScrollDetached = false
 		a.layout = queryLayout{}
 	}
 	a.resultsQueryID = queryID
@@ -486,8 +490,8 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 	if a.selected < 0 {
 		a.selected = selectableIndex(a.results, "")
 	}
-	a.ensureResultSelectionVisibleLocked()
 	a.mu.Unlock()
+	a.reconcileSelectedPreview()
 	if err := a.applyWindowBounds(); err != nil {
 		return false, err
 	}
@@ -511,7 +515,7 @@ func fromCoreTails(tails []plugin.QueryResultTail) []resultTail {
 	for index, tail := range tails {
 		converted[index] = resultTail{
 			Type: tail.Type, Text: tail.Text, TextCategory: tail.TextCategory, Image: fromCoreImage(tail.Image),
-			Tooltip: tail.Tooltip, ContextData: cloneStringMap(tail.ContextData),
+			ImageWidth: tail.ImageWidth, ImageHeight: tail.ImageHeight, Tooltip: tail.Tooltip, ContextData: cloneStringMap(tail.ContextData),
 		}
 	}
 	return converted

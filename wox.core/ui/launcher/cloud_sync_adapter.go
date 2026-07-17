@@ -25,6 +25,7 @@ func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height fl
 		Height:        height,
 		Title:         a.translate("i18n:ui_cloud_sync"),
 		Description:   a.translate("i18n:ui_cloud_sync_description"),
+		Intro:         a.cloudIntroViewProps(snapshot),
 		Account:       a.cloudAccountViewProps(snapshot, contentWidth),
 		Sync:          a.cloudSyncViewProps(snapshot),
 		Devices:       a.cloudDevicesViewProps(snapshot),
@@ -41,6 +42,64 @@ func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height fl
 	})
 }
 
+// cloudIntroViewProps prepares the signed-out Flutter-equivalent product and plan summary.
+func (a *App) cloudIntroViewProps(snapshot settingsSnapshot) launcherview.CloudIntroProps {
+	iconTint := snapshot.palette.resultTitle
+	freePrice := cloudBillingPriceText(snapshot.cloudBillingPlan.Free.Price)
+	if freePrice == "" {
+		freePrice = "$0/month"
+	}
+	proPrice := cloudBillingPriceText(snapshot.cloudBillingPlan.Pro.Price)
+	if proPrice == "" {
+		if snapshot.cloudBillingLoaded {
+			proPrice = a.translate("i18n:ui_cloud_sync_plan_price_unavailable")
+		} else {
+			proPrice = a.translate("i18n:ui_cloud_sync_plan_price_loading")
+		}
+	}
+	return launcherview.CloudIntroProps{
+		SectionLabel:     a.translate("i18n:ui_cloud_sync_intro_title"),
+		Headline:         a.translate("i18n:ui_cloud_sync_intro_headline"),
+		Description:      a.translate("i18n:ui_cloud_sync_intro_description"),
+		HeroIcon:         a.imageForTint(settingNavIconSource("data.cloudsync"), &iconTint, 28),
+		HeroFallback:     "☁",
+		FreeLabel:        a.translate("i18n:ui_cloud_sync_plan_free"),
+		ProLabel:         a.translate("i18n:ui_cloud_sync_plan_pro"),
+		RecommendedLabel: a.translate("i18n:ui_cloud_sync_plan_recommended"),
+		Features: []launcherview.CloudIntroFeatureProps{
+			{Title: a.translate("i18n:ui_cloud_sync_intro_settings_title"), Description: a.translate("i18n:ui_cloud_sync_intro_settings_description"), Icon: a.imageForTint(settingNavIconSource("general"), &iconTint, 18), FallbackIcon: "⚙"},
+			{Title: a.translate("i18n:ui_cloud_sync_intro_plugins_title"), Description: a.translate("i18n:ui_cloud_sync_intro_plugins_description"), Icon: a.imageForTint(settingNavIconSource("plugins"), &iconTint, 18), FallbackIcon: "◇"},
+			{Title: a.translate("i18n:ui_cloud_sync_intro_keys_title"), Description: a.translate("i18n:ui_cloud_sync_intro_keys_description"), Icon: a.imageForTint(settingControlIconSource("key"), &iconTint, 18), FallbackIcon: "⌁"},
+		},
+		PlanRows: []launcherview.CloudPlanRowProps{
+			{Label: a.translate("i18n:ui_cloud_sync_plan_row_price"), FreeValue: freePrice, ProValue: proPrice},
+			{Label: a.translate("i18n:ui_cloud_sync_plan_row_devices"), FreeValue: a.translate("i18n:ui_cloud_sync_plan_feature_two_devices"), ProValue: a.translate("i18n:ui_cloud_sync_plan_feature_unlimited_devices")},
+			{Label: a.translate("i18n:ui_cloud_sync_plan_row_sync_mode"), FreeValue: a.translate("i18n:ui_cloud_sync_plan_feature_manual_sync"), ProValue: a.translate("i18n:ui_cloud_sync_plan_feature_auto_sync")},
+			{Label: a.translate("i18n:ui_cloud_sync_plan_row_frequency"), FreeValue: a.translate("i18n:ui_cloud_sync_plan_feature_strict_sync_limit"), ProValue: a.translate("i18n:ui_cloud_sync_plan_feature_relaxed_sync_limit")},
+			{Label: a.translate("i18n:ui_cloud_sync_plan_row_scope"), FreeValue: a.translate("i18n:ui_cloud_sync_plan_scope_free"), ProValue: a.translate("i18n:ui_cloud_sync_plan_feature_everything_free")},
+		},
+	}
+}
+
+// cloudBillingPriceText preserves server formatting and reconstructs a readable fallback when needed.
+func cloudBillingPriceText(price cloudBillingPlanPrice) string {
+	if strings.TrimSpace(price.Formatted) != "" {
+		return price.Formatted
+	}
+	if price.UnitAmount == nil || strings.TrimSpace(price.Currency) == "" {
+		return ""
+	}
+	amount := fmt.Sprintf("%.2f", float64(*price.UnitAmount)/100)
+	if *price.UnitAmount%100 == 0 {
+		amount = fmt.Sprintf("%d", *price.UnitAmount/100)
+	}
+	interval := ""
+	if strings.TrimSpace(price.Interval) != "" {
+		interval = "/" + price.Interval
+	}
+	return strings.ToUpper(price.Currency) + " " + amount + interval
+}
+
 // cloudAccountViewProps prepares translated account state and controller actions.
 func (a *App) cloudAccountViewProps(snapshot settingsSnapshot, contentWidth float32) launcherview.CloudAccountProps {
 	status := a.translate("i18n:ui_cloud_sync_plan_free_status")
@@ -55,7 +114,6 @@ func (a *App) cloudAccountViewProps(snapshot settingsSnapshot, contentWidth floa
 	return launcherview.CloudAccountProps{
 		SectionLabel:           a.translate("i18n:ui_cloud_sync_account"),
 		LoggedIn:               snapshot.cloudAccount.LoggedIn,
-		IntroDescription:       a.translate("i18n:ui_cloud_sync_intro_description"),
 		LoginLabel:             a.translate("i18n:ui_cloud_sync_account_login"),
 		RegisterLabel:          a.translate("i18n:ui_cloud_sync_account_register"),
 		EmailLabel:             a.translate("i18n:ui_cloud_sync_account_email"),
@@ -332,7 +390,7 @@ func (a *App) formatCloudTime(timestamp int64) string {
 
 // buildCloudFormOverlay maps account form state into typed view props.
 func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
-	panelWidth := min(float32(560), max(float32(360), width-48))
+	panelWidth := min(float32(408), max(float32(320), width-64))
 	fields := make([]launcherview.CloudFormFieldProps, 0, len(snapshot.definitions))
 	window := a.formFieldNativeWindow("cloud-form")
 	for index, definition := range snapshot.definitions {
@@ -357,10 +415,7 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalet
 			},
 		}
 		if definition.Type == "checkbox" {
-			field.Value = "Off"
-			if snapshot.values[definition.Value.Key] == "true" {
-				field.Value = "On"
-			}
+			field.Checked = snapshot.values[definition.Value.Key] == "true"
 			field.OnTap = func() {
 				a.focusCloudFormField(index)
 				a.changeCloudFormField(index, 1)
@@ -371,15 +426,16 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalet
 
 	linkPrefix := ""
 	links := []launcherview.CloudFormLinkProps{}
+	var fieldLink *launcherview.CloudFormLinkProps
 	switch snapshot.kind {
 	case "register":
-		linkPrefix = "Read:"
+		linkPrefix = a.translate("i18n:ui_cloud_sync_account_accept_prefix")
 		links = append(links,
-			launcherview.CloudFormLinkProps{ID: "cloud-terms", Label: "Terms ↗", Width: 90, OnTap: func() { a.openCloudLegalPage("/terms") }},
-			launcherview.CloudFormLinkProps{ID: "cloud-privacy", Label: "Privacy ↗", Width: 90, OnTap: func() { a.openCloudLegalPage("/privacy") }},
+			launcherview.CloudFormLinkProps{ID: "cloud-terms", Label: a.translate("i18n:ui_cloud_sync_account_terms"), Width: 112, OnTap: func() { a.openCloudLegalPage("/terms") }},
+			launcherview.CloudFormLinkProps{ID: "cloud-privacy", Label: a.translate("i18n:ui_cloud_sync_account_privacy"), Width: 112, OnTap: func() { a.openCloudLegalPage("/privacy") }},
 		)
 	case "login":
-		links = append(links, launcherview.CloudFormLinkProps{ID: "cloud-forgot-password", Label: "Forgot password", Width: 132, OnTap: func() { a.openCloudAccountForm("reset-request") }})
+		fieldLink = &launcherview.CloudFormLinkProps{ID: "cloud-forgot-password", Label: a.translate("i18n:ui_cloud_sync_account_reset_request"), Width: 96, OnTap: func() { a.openCloudAccountForm("reset-request") }}
 	case "verify":
 		links = append(links, launcherview.CloudFormLinkProps{ID: "cloud-resend-code", Label: "Resend code", Width: 112, OnTap: a.resendCloudVerification})
 	}
@@ -391,9 +447,13 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalet
 		feedback = snapshot.error
 		feedbackColor = theme.ErrorText
 	}
-	submitLabel := "Continue"
+	submitLabel := a.translate("i18n:ui_cloud_sync_confirm")
 	if snapshot.saving {
-		submitLabel = "Working…"
+		submitLabel = a.translate("i18n:ui_cloud_sync_loading")
+	}
+	submitEnabled := !snapshot.saving
+	if snapshot.kind == "register" && snapshot.values["AcceptedLegal"] != "true" {
+		submitEnabled = false
 	}
 	return launcherview.CloudFormOverlay(launcherview.CloudFormOverlayProps{
 		Width:         width,
@@ -404,9 +464,12 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalet
 		Fields:        fields,
 		LinkPrefix:    linkPrefix,
 		Links:         links,
+		FieldLink:     fieldLink,
 		Feedback:      feedback,
 		FeedbackColor: feedbackColor,
+		CancelLabel:   a.translate("i18n:ui_cloud_sync_cancel"),
 		SubmitLabel:   submitLabel,
+		SubmitEnabled: submitEnabled,
 		Saving:        snapshot.saving,
 		Theme:         theme,
 		OnCancel:      a.closeCloudForm,
@@ -416,8 +479,8 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalet
 
 func cloudFormDescription(snapshot *cloudFormSnapshot) string {
 	switch snapshot.kind {
-	case "register":
-		return "Create an account with a 12-character password, then verify the code sent to your email."
+	case "login", "register":
+		return ""
 	case "verify":
 		return "Enter the verification code sent to " + snapshot.email + "."
 	case "reset-request":

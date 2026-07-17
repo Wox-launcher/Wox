@@ -30,9 +30,11 @@ type TextFieldProps struct {
 	BorderWidth float32
 	Style       woxui.TextStyle
 	TextColor   woxui.Color
-	State       woxui.TextEditingState
-	Focused     bool
-	Autofocus   bool
+	// TextAlignmentY optically positions measured glyph bounds within each line without moving the caret.
+	TextAlignmentY float32
+	State          woxui.TextEditingState
+	Focused        bool
+	Autofocus      bool
 	// ControllerManagedFocus preserves a surface's existing shared Tab and keyboard routing.
 	ControllerManagedFocus bool
 	Disabled               bool
@@ -86,12 +88,12 @@ func WoxTextField(props TextFieldProps) woxwidget.Widget {
 		props.OnCaret(textFieldOffsetAt(state, props.Window, style, maxLines, innerWidth, point))
 	}, Child: woxwidget.Container{
 		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: props.BorderColor, BorderWidth: props.BorderWidth, Padding: padding,
-		Child: woxwidget.Clip{Width: innerWidth, Height: innerHeight, Child: woxwidget.Painter{Width: innerWidth, Height: innerHeight, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		Child: woxwidget.Clip{Width: innerWidth, Height: innerHeight, Child: woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool) {
 			if state.Text == "" && state.Composition == "" && props.Hint != "" {
-				displayList.DrawText(props.Hint, bounds, style, props.Theme.ResultSubtitle)
+				displayList.DrawText(props.Hint, textFieldAlignedTextBounds(bounds, props.Hint, style, props.TextAlignmentY, props.Window), style, props.Theme.ResultSubtitle)
 			}
 			if props.Window != nil {
-				drawTextField(displayList, bounds, state, style, textColor, props.Theme, props.Focused, maxLines, props.Window)
+				drawTextField(displayList, bounds, state, style, textColor, props.Theme, props.Focused, caretVisible, maxLines, props.TextAlignmentY, props.Window)
 				if props.ControllerManagedFocus && props.Focused {
 					_ = props.Window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: textFieldCursorRect(state, style, maxLines, bounds, props.Window)})
 				}
@@ -183,7 +185,22 @@ func textFieldHorizontalOffset(runes []rune, focus int, style woxui.TextStyle, w
 	return max(float32(0), metrics.Size.Width-max(float32(0), width-4))
 }
 
-func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxui.TextEditingState, style woxui.TextStyle, textColor woxui.Color, theme Theme, focused bool, maxLines int, window *woxui.Window) {
+// textFieldAlignedTextBounds aligns measured glyphs while preserving the line box used by editing geometry.
+func textFieldAlignedTextBounds(bounds woxui.Rect, value string, style woxui.TextStyle, alignment float32, window *woxui.Window) woxui.Rect {
+	if alignment <= 0 || value == "" || window == nil {
+		return bounds
+	}
+	metrics, err := window.MeasureText(value, style)
+	if err != nil || metrics.Size.Height <= 0 {
+		return bounds
+	}
+	height := min(bounds.Height, metrics.Size.Height)
+	bounds.Y += max(float32(0), bounds.Height-height) * min(alignment, float32(1))
+	bounds.Height = height
+	return bounds
+}
+
+func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxui.TextEditingState, style woxui.TextStyle, textColor woxui.Color, theme Theme, focused, caretVisible bool, maxLines int, textAlignmentY float32, window *woxui.Window) {
 	displayRunes, start, end, focus, compositionStart, compositionEnd := textFieldDisplayState(state)
 	lines := textFieldLines(string(displayRunes))
 	caretLine := textFieldLineIndex(lines, focus)
@@ -197,6 +214,7 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 	for lineIndex := firstLine; lineIndex < lastLine; lineIndex++ {
 		line := lines[lineIndex]
 		y := bounds.Y + float32(lineIndex-firstLine)*textFieldLineHeight
+		textBounds := textFieldAlignedTextBounds(woxui.Rect{X: bounds.X - horizontalOffset, Y: y, Width: bounds.Width + horizontalOffset, Height: textFieldLineHeight}, line.text, style, textAlignmentY, window)
 		selectionStart := max(start, line.start)
 		selectionEnd := min(end, line.end)
 		if focused && selectionStart < selectionEnd {
@@ -204,12 +222,15 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 			selectedMetrics, _ := window.MeasureText(string(displayRunes[selectionStart:selectionEnd]), style)
 			displayList.FillRoundedRect(woxui.Rect{X: bounds.X - horizontalOffset + prefixMetrics.Size.Width, Y: y, Width: selectedMetrics.Size.Width, Height: textFieldLineHeight}, 3, theme.SelectionBackground)
 		}
-		displayList.DrawText(line.text, woxui.Rect{X: bounds.X - horizontalOffset, Y: y, Width: bounds.Width + horizontalOffset, Height: textFieldLineHeight}, style, textColor)
+		displayList.DrawText(line.text, textBounds, style, textColor)
 		if focused && selectionStart < selectionEnd {
 			prefixMetrics, _ := window.MeasureText(string(displayRunes[line.start:selectionStart]), style)
 			selectedText := string(displayRunes[selectionStart:selectionEnd])
 			selectedMetrics, _ := window.MeasureText(selectedText, style)
-			displayList.DrawText(selectedText, woxui.Rect{X: bounds.X - horizontalOffset + prefixMetrics.Size.Width, Y: y, Width: selectedMetrics.Size.Width, Height: textFieldLineHeight}, style, theme.SelectionText)
+			selectedBounds := textBounds
+			selectedBounds.X = bounds.X - horizontalOffset + prefixMetrics.Size.Width
+			selectedBounds.Width = selectedMetrics.Size.Width
+			displayList.DrawText(selectedText, selectedBounds, style, theme.SelectionText)
 		}
 	}
 	if !focused {
@@ -224,7 +245,9 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 		compositionMetrics, _ := window.MeasureText(string(displayRunes[compositionStart:compositionEnd]), style)
 		displayList.FillRect(woxui.Rect{X: bounds.X - horizontalOffset + prefixMetrics.Size.Width, Y: cursorY + 19, Width: compositionMetrics.Size.Width, Height: 1}, theme.Cursor)
 	}
-	displayList.FillRect(woxui.Rect{X: cursorX, Y: cursorY, Width: 1, Height: textFieldLineHeight}, theme.Cursor)
+	if caretVisible {
+		displayList.FillRect(woxui.Rect{X: cursorX, Y: cursorY, Width: 1, Height: textFieldLineHeight}, theme.Cursor)
+	}
 }
 
 func textFieldCursorRect(state woxui.TextEditingState, style woxui.TextStyle, maxLines int, bounds woxui.Rect, window *woxui.Window) woxui.Rect {

@@ -310,6 +310,10 @@ func (a *App) onSettingsWindowClosed() {
 	a.pluginSearchEditor = nil
 	a.pluginSearchFocused = false
 	a.pluginDetailTab = "settings"
+	a.themeSearchEditor = nil
+	a.themeSearchFocused = false
+	a.themeDetailTab = "preview"
+	a.releaseThemeEditorWallpaperLocked()
 	a.settingChoicePicker = nil
 	a.cloudForm = nil
 	a.cloudActionMenu = ""
@@ -326,6 +330,7 @@ func (a *App) onSettingsWindowClosed() {
 	}
 	launcherVisible := a.visible
 	a.mu.Unlock()
+	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 
 	if wasRecording {
 		a.postHotkeyRecordingStopped()

@@ -109,8 +109,8 @@ func decodeTerminalPreviewData(value string) terminalPreviewData {
 	return terminalPreviewData{SessionID: strings.TrimSpace(value)}
 }
 
-// terminalPreviewFor switches the single visible subscription and returns an immutable render snapshot.
-func (a *App) terminalPreviewFor(preview queryPreview) terminalPreviewSnapshot {
+// activateTerminalPreview switches the single visible terminal subscription before rendering.
+func (a *App) activateTerminalPreview(preview queryPreview) {
 	data := decodeTerminalPreviewData(preview.PreviewData)
 	a.mu.Lock()
 	state := a.terminalPreview
@@ -130,13 +130,22 @@ func (a *App) terminalPreviewFor(preview queryPreview) terminalPreviewSnapshot {
 			state.Status = data.Status
 		}
 	}
-	snapshot := snapshotTerminalPreviewLocked(state)
 	newSessionID := state.SessionID
 	a.mu.Unlock()
 	if sessionChanged && (oldSessionID != "" || newSessionID != "") {
 		go a.reconcileTerminalSubscription()
 	}
-	return snapshot
+}
+
+// terminalPreviewSnapshotFor returns the prepared terminal state for rendering.
+func (a *App) terminalPreviewSnapshotFor(preview queryPreview) terminalPreviewSnapshot {
+	data := decodeTerminalPreviewData(preview.PreviewData)
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.terminalPreview == nil || a.terminalPreview.SessionID != data.SessionID {
+		return terminalPreviewSnapshot{SessionID: data.SessionID, Command: data.Command, Status: data.Status}
+	}
+	return snapshotTerminalPreviewLocked(a.terminalPreview)
 }
 
 func snapshotTerminalPreviewLocked(state *terminalPreviewState) terminalPreviewSnapshot {

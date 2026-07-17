@@ -17,7 +17,9 @@ type textMeasurer interface {
 }
 
 type context struct {
-	window textMeasurer
+	window       textMeasurer
+	caretVisible bool
+	animation    animationFrame
 }
 
 type constraints struct {
@@ -36,6 +38,7 @@ type node struct {
 	focus    *focusBehavior
 	scope    *focusScopeBehavior
 	semantic *semanticBehavior
+	caret    bool
 	clip     bool
 	children []*node
 }
@@ -118,6 +121,36 @@ type Container struct {
 	Child       Widget
 }
 
+// Align positions one child inside a fixed box using normalized axis factors.
+type Align struct {
+	Width      float32
+	Height     float32
+	Horizontal float32
+	Vertical   float32
+	Child      Widget
+}
+
+func (w Align) layout(ctx context, available constraints) *node {
+	width := available.width
+	if w.Width > 0 {
+		width = min(w.Width, available.width)
+	}
+	height := available.height
+	if w.Height > 0 {
+		height = min(w.Height, available.height)
+	}
+	result := &node{bounds: woxui.Rect{Width: width, Height: height}}
+	if w.Child == nil {
+		return result
+	}
+	child := w.Child.layout(ctx, constraints{width: width, height: height})
+	horizontal := min(max(float32(0), w.Horizontal), float32(1))
+	vertical := min(max(float32(0), w.Vertical), float32(1))
+	child.place(max(float32(0), width-child.bounds.Width)*horizontal, max(float32(0), height-child.bounds.Height)*vertical)
+	result.children = []*node{child}
+	return result
+}
+
 func (w Container) layout(ctx context, available constraints) *node {
 	contentWidth := available.width
 	if w.Width > 0 {
@@ -173,11 +206,21 @@ const (
 	Vertical
 )
 
+// CrossAxisAlignment positions Flex children perpendicular to its main axis.
+type CrossAxisAlignment uint8
+
+const (
+	CrossAxisStart CrossAxisAlignment = iota
+	CrossAxisCenter
+	CrossAxisEnd
+)
+
 // Flex lays children out sequentially with a fixed gap.
 type Flex struct {
-	Axis     Axis
-	Gap      float32
-	Children []Widget
+	Axis               Axis
+	Gap                float32
+	CrossAxisAlignment CrossAxisAlignment
+	Children           []Widget
 }
 
 // StackChild positions one child relative to its stack's top-left corner.
@@ -281,6 +324,22 @@ func (w Flex) layout(ctx context, available constraints) *node {
 			result.bounds.Width = max(result.bounds.Width, child.bounds.Width)
 		}
 		result.children = append(result.children, child)
+	}
+	crossAxisFactor := float32(0)
+	switch w.CrossAxisAlignment {
+	case CrossAxisCenter:
+		crossAxisFactor = 0.5
+	case CrossAxisEnd:
+		crossAxisFactor = 1
+	}
+	if crossAxisFactor > 0 {
+		for _, child := range result.children {
+			if w.Axis == Horizontal {
+				child.place(0, max(float32(0), result.bounds.Height-child.bounds.Height)*crossAxisFactor)
+			} else {
+				child.place(max(float32(0), result.bounds.Width-child.bounds.Width)*crossAxisFactor, 0)
+			}
+		}
 	}
 	return result
 }
@@ -537,6 +596,7 @@ type gesture struct {
 	onTap       func()
 	onDoubleTap func()
 	onTapAt     func(woxui.Point)
+	onTapBounds func(woxui.Rect)
 	onDragStart func()
 	onScroll    func(woxui.Point)
 }
@@ -550,6 +610,7 @@ type Gesture struct {
 	OnTap       func()
 	OnDoubleTap func()
 	OnTapAt     func(position woxui.Point)
+	OnTapBounds func(bounds woxui.Rect)
 	OnDragStart func()
 	OnScroll    func(delta woxui.Point)
 }
@@ -567,7 +628,7 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 		target.key = Key(w.ID)
 	}
 	target.kind = "gesture"
-	target.gesture = &gesture{id: w.ID, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap, onTapAt: w.OnTapAt, onDragStart: w.OnDragStart, onScroll: w.OnScroll}
+	target.gesture = &gesture{id: w.ID, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap, onTapAt: w.OnTapAt, onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onScroll: w.OnScroll}
 	return target
 }
 
@@ -581,4 +642,27 @@ type Painter struct {
 func (w Painter) layout(ctx context, available constraints) *node {
 	_ = ctx
 	return &node{bounds: woxui.Rect{Width: min(w.Width, available.width), Height: min(w.Height, available.height)}, paint: w.Paint}
+}
+
+// CaretPainter paints editor content with the host-managed caret blink phase.
+type CaretPainter struct {
+	Width  float32
+	Height float32
+	Active bool
+	Paint  func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool)
+}
+
+func (w CaretPainter) layout(ctx context, available constraints) *node {
+	caretVisible := ctx.caretVisible
+	var paint func(*woxui.DisplayList, woxui.Rect)
+	if w.Paint != nil {
+		paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+			w.Paint(displayList, bounds, caretVisible)
+		}
+	}
+	return &node{
+		bounds: woxui.Rect{Width: min(w.Width, available.width), Height: min(w.Height, available.height)},
+		caret:  w.Active,
+		paint:  paint,
+	}
 }

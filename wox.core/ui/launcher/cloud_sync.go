@@ -27,6 +27,22 @@ type cloudSyncLimits struct {
 	DeviceLimit *int `json:"device_limit"`
 }
 
+type cloudBillingPlan struct {
+	Free cloudBillingPlanTier `json:"free"`
+	Pro  cloudBillingPlanTier `json:"pro"`
+}
+
+type cloudBillingPlanTier struct {
+	Price cloudBillingPlanPrice `json:"price"`
+}
+
+type cloudBillingPlanPrice struct {
+	Currency   string `json:"currency"`
+	UnitAmount *int   `json:"unit_amount"`
+	Interval   string `json:"interval"`
+	Formatted  string `json:"formatted"`
+}
+
 type cloudSyncStatus struct {
 	Enabled   bool               `json:"enabled"`
 	DeviceID  string             `json:"device_id"`
@@ -135,10 +151,14 @@ func (a *App) reloadCloudSync() {
 	a.mu.Lock()
 	a.cloudRevision++
 	revision := a.cloudRevision
+	loadBillingPlan := !a.cloudBillingLoaded
 	a.cloudLoading = true
 	a.cloudError = ""
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
+	if loadBillingPlan {
+		go a.reloadCloudBillingPlan()
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -203,6 +223,21 @@ func (a *App) reloadCloudSync() {
 	}
 	a.cloudLoaded = accountErr == nil && statusErr == nil
 	a.cloudError = strings.Join(errors, " · ")
+	a.mu.Unlock()
+	a.invalidateSettingsWindow()
+}
+
+// reloadCloudBillingPlan fetches display pricing independently so it cannot delay local sync status.
+func (a *App) reloadCloudBillingPlan() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var plan cloudBillingPlan
+	err := a.client.Post(ctx, "/account/billing/plan", map[string]any{}, &plan)
+	a.mu.Lock()
+	a.cloudBillingLoaded = true
+	if err == nil {
+		a.cloudBillingPlan = plan
+	}
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
@@ -422,12 +457,12 @@ func (a *App) runCloudBootstrap(recoveryCode string) {
 // openCloudAccountForm creates account lifecycle forms from the shared text-editing engine.
 func (a *App) openCloudAccountForm(kind string) {
 	definitions := []formDefinition{}
-	title := "Log in"
+	title := a.translate("i18n:ui_cloud_sync_account_login")
 	switch kind {
 	case "login", "register":
 		definitions = append(definitions,
-			formDefinition{Type: "textbox", Value: formDefinitionValue{Key: "Email", Label: "Email", MaxLines: 1}},
-			formDefinition{Type: "password", Value: formDefinitionValue{Key: "Password", Label: "Password", MaxLines: 1}},
+			formDefinition{Type: "textbox", Value: formDefinitionValue{Key: "Email", Label: "i18n:ui_cloud_sync_account_email", MaxLines: 1}},
+			formDefinition{Type: "password", Value: formDefinitionValue{Key: "Password", Label: "i18n:ui_cloud_sync_account_password", MaxLines: 1}},
 		)
 	case "reset-request":
 		title = "Reset password"
@@ -448,10 +483,10 @@ func (a *App) openCloudAccountForm(kind string) {
 		)
 	}
 	if kind == "register" {
-		title = "Create account"
+		title = a.translate("i18n:ui_cloud_sync_account_register")
 		definitions = append(definitions,
-			formDefinition{Type: "password", Value: formDefinitionValue{Key: "ConfirmPassword", Label: "Confirm password", MaxLines: 1}},
-			formDefinition{Type: "checkbox", Value: formDefinitionValue{Key: "AcceptedLegal", Label: "Accept Terms & Privacy"}},
+			formDefinition{Type: "password", Value: formDefinitionValue{Key: "ConfirmPassword", Label: "i18n:ui_cloud_sync_account_confirm_password", MaxLines: 1}},
+			formDefinition{Type: "checkbox", Value: formDefinitionValue{Key: "AcceptedLegal", Label: "i18n:ui_cloud_sync_account_accept_prefix"}},
 		)
 	}
 	a.mu.Lock()

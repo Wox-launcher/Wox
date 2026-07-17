@@ -90,6 +90,8 @@ type dataColumn struct {
 	weight float32
 }
 
+const dataBackupTitleHeight = float32(38)
+
 // DataSettingsView builds the storage, backup, and logs page without controller dependencies.
 func DataSettingsView(props DataSettingsProps) woxwidget.Widget {
 	contentWidth := SettingsPageContentWidth(props.Width)
@@ -107,11 +109,8 @@ func DataSettingsView(props DataSettingsProps) woxwidget.Widget {
 		dataLogActionsField(props, contentWidth),
 	}
 	backupRows := min(5, len(props.Backups))
-	backupTableHeight := float32(76 + backupRows*36)
-	if backupRows == 0 {
-		backupTableHeight = 154
-	}
-	contentHeight := float32(72 + 43 + 78 + 43 + 66 + backupTableHeight + 43 + 66 + 66)
+	backupTableHeight := dataBackupTableHeight(backupRows)
+	contentHeight := woxcomponent.PageHeaderHeight + 43 + 78 + 43 + 66 + backupTableHeight + 43 + 66 + 66
 	if props.Note != "" || props.Loading || props.Error != "" {
 		note := props.Note
 		color := props.Theme.ResultSubtitle
@@ -161,7 +160,7 @@ func dataStorageField(props DataSettingsProps, width float32) woxwidget.Widget {
 
 func dataAutoBackupField(props DataSettingsProps, width float32) woxwidget.Widget {
 	label := props.Labels.AutoBackupTitle
-	field := woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
+	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: label, Description: props.Labels.AutoBackupDescription, Width: width, Height: 66,
 		LabelWidth: max(float32(220), width-54), Gap: 12, Padding: woxwidget.Insets{Top: 5}, Theme: props.Theme,
 		Child: woxwidget.Container{Width: 42, Height: 48, Padding: woxwidget.Insets{Top: 4}, Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
@@ -172,17 +171,13 @@ func dataAutoBackupField(props DataSettingsProps, width float32) woxwidget.Widge
 			}, Theme: props.Theme,
 		})},
 	})
-	return woxwidget.Gesture{ID: "data-auto-backup", OnTap: props.OnToggleAutoBackup, Child: field}
 }
 
 func dataBackupTable(props DataSettingsProps, width float32) woxwidget.Widget {
 	visibleRows := min(5, len(props.Backups))
-	height := float32(76 + visibleRows*36)
-	if visibleRows == 0 {
-		height = 154
-	}
-	title := woxwidget.Container{Width: width, Height: 38, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: max(float32(0), width-112), Height: 38, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Text{
+	height := dataBackupTableHeight(visibleRows)
+	title := woxwidget.Container{Width: width, Height: dataBackupTitleHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: max(float32(0), width-112), Height: dataBackupTitleHeight, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Text{
 			Value: props.Labels.BackupListTitle, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle,
 		}},
 		dataButton(props, "data-backup-now", props.Labels.BackupNow, 100, woxcomponent.ButtonOutline, props.OnCreateBackup),
@@ -192,15 +187,16 @@ func dataBackupTable(props DataSettingsProps, width float32) woxwidget.Widget {
 		{key: "type", label: props.Labels.BackupType, weight: 0.23},
 		{key: "operation", label: props.Labels.BackupOperation, weight: 0.35},
 	}
-	rows := []woxwidget.Widget{dataBackupGridRow(props, columns, DataBackup{}, -1, width, 38, true)}
+	style := newTableSurfaceStyle(props.Theme)
+	rows := []woxwidget.Widget{dataBackupGridRow(props, columns, DataBackup{}, -1, width, tableSurfaceHeaderHeight, true)}
 	if visibleRows == 0 {
-		rows = append(rows, woxwidget.Container{Width: width, Height: 78, BorderColor: dataAlpha(props.Theme.PreviewSplit, 144), BorderWidth: 1,
+		rows = append(rows, woxwidget.Container{Width: width, Height: tableSurfaceEmptyHeight, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
 			Padding: woxwidget.Insets{Left: max(float32(0), width/2-48), Top: 30}, Child: woxwidget.Text{
 				Value: props.Labels.BackupEmpty, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle,
 			}})
 	} else {
 		for index := 0; index < visibleRows; index++ {
-			rows = append(rows, dataBackupGridRow(props, columns, props.Backups[index], index, width, 36, false))
+			rows = append(rows, dataBackupGridRow(props, columns, props.Backups[index], index, width, tableSurfaceRowHeight, false))
 		}
 	}
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
@@ -209,10 +205,19 @@ func dataBackupTable(props DataSettingsProps, width float32) woxwidget.Widget {
 	}}}
 }
 
+func dataBackupTableHeight(rowCount int) float32 {
+	bodyHeight := tableSurfaceEmptyHeight
+	if rowCount > 0 {
+		bodyHeight = float32(rowCount) * tableSurfaceRowHeight
+	}
+	return dataBackupTitleHeight + tableSurfaceHeaderHeight + bodyHeight
+}
+
 func dataBackupGridRow(props DataSettingsProps, columns []dataColumn, backup DataBackup, rowIndex int, width, height float32, header bool) woxwidget.Widget {
-	background := dataAlpha(props.Theme.QueryBackground, 32)
+	style := newTableSurfaceStyle(props.Theme)
+	background := style.bodyBackground
 	if header {
-		background = dataAlpha(props.Theme.QueryBackground, 92)
+		background = style.headerBackground
 	}
 	cells := make([]woxwidget.Widget, 0, len(columns))
 	remaining := width
@@ -235,13 +240,19 @@ func dataBackupGridRow(props DataSettingsProps, columns []dataColumn, backup Dat
 			}
 		}
 		weight := woxui.FontWeightRegular
+		fontSize := float32(11)
+		textColor := props.Theme.ResultTitle
+		paddingTop := float32(10)
 		if header {
 			weight = woxui.FontWeightSemibold
+			fontSize = tableSurfaceHeaderFontSize
+			textColor = style.headerText
+			paddingTop = 9
 		}
-		cell := woxwidget.Container{Width: cellWidth, Height: height, Color: background, BorderColor: dataAlpha(props.Theme.PreviewSplit, 144), BorderWidth: 0.5,
-			Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 6}, Child: woxwidget.TextBlock{
+		cell := woxwidget.Container{Width: cellWidth, Height: height, Color: background, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
+			Padding: woxwidget.Insets{Left: 8, Top: paddingTop, Right: 6}, Child: woxwidget.TextBlock{
 				Value: label, Width: max(float32(0), cellWidth-14), Height: height - 10, MaxLines: 1,
-				Style: woxui.TextStyle{Size: 11, Weight: weight}, Color: props.Theme.ResultTitle,
+				Style: woxui.TextStyle{Size: fontSize, Weight: weight}, Color: textColor,
 			}}
 		if !header && column.key == "operation" {
 			current := backup
@@ -250,13 +261,13 @@ func dataBackupGridRow(props DataSettingsProps, columns []dataColumn, backup Dat
 			if props.RestoreArmed == current.ID {
 				restoreLabel = props.Labels.BackupRestoreConfirm
 			}
-			cell = woxwidget.Container{Width: cellWidth, Height: height, Color: background, BorderColor: dataAlpha(props.Theme.PreviewSplit, 144), BorderWidth: 0.5,
+			cell = woxwidget.Container{Width: cellWidth, Height: height, Color: background, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
 				Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 					woxwidget.Gesture{ID: fmt.Sprintf("data-backup-restore-%d", rowIndex), OnTap: func() {
 						if props.OnRestoreBackup != nil {
 							props.OnRestoreBackup(current.ID)
 						}
-					}, Child: woxwidget.Container{Width: buttonWidth, Height: height, BorderColor: dataAlpha(props.Theme.PreviewSplit, 96), BorderWidth: 0.5, Padding: woxwidget.Insets{Left: 8, Top: 10}, Child: woxwidget.TextBlock{
+					}, Child: woxwidget.Container{Width: buttonWidth, Height: height, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth, Padding: woxwidget.Insets{Left: 8, Top: 10}, Child: woxwidget.TextBlock{
 						Value: restoreLabel, Width: max(float32(0), buttonWidth-14), Height: height - 10, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle,
 					}}},
 					woxwidget.Gesture{ID: fmt.Sprintf("data-backup-open-%d", rowIndex), OnTap: func() {
@@ -313,9 +324,4 @@ func dataButton(props DataSettingsProps, id, label string, width float32, varian
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
 		ID: id, Label: label, Width: width, Variant: variant, Size: woxcomponent.ButtonCompact, OnTap: onTap, Theme: props.Theme,
 	})
-}
-
-func dataAlpha(color woxui.Color, alpha uint8) woxui.Color {
-	color.A = alpha
-	return color
 }

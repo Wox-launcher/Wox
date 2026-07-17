@@ -20,7 +20,7 @@ type previewListItem struct {
 	Tails    []resultTail `json:"tails"`
 }
 
-// resolvePreview replaces core's deferred preview reference without blocking the frame builder.
+// resolvePreview returns the cached remote preview without starting work from the frame builder.
 func (a *App) resolvePreview(preview queryPreview) queryPreview {
 	if preview.PreviewType != "remote" {
 		return normalizePreviewMetadata(preview)
@@ -29,17 +29,34 @@ func (a *App) resolvePreview(preview queryPreview) queryPreview {
 	if key == "" {
 		return queryPreview{PreviewType: "text", PreviewData: "Remote preview path is empty"}
 	}
-	a.mu.Lock()
+	a.mu.RLock()
 	if resolved, ok := a.remotePreviews[key]; ok {
-		a.mu.Unlock()
+		a.mu.RUnlock()
 		return normalizePreviewMetadata(resolved)
 	}
-	if !a.previewRequests[key] {
+	a.mu.RUnlock()
+	return queryPreview{PreviewType: "text", PreviewData: "Loading preview…", PreviewTags: preview.PreviewTags}
+}
+
+// prepareRemotePreview starts one deferred preview request before the next render.
+func (a *App) prepareRemotePreview(preview queryPreview) {
+	if preview.PreviewType != "remote" {
+		return
+	}
+	key := strings.TrimSpace(preview.PreviewData)
+	if key == "" {
+		return
+	}
+	a.mu.Lock()
+	_, loaded := a.remotePreviews[key]
+	requested := a.previewRequests[key]
+	if !loaded && !requested {
 		a.previewRequests[key] = true
-		go a.loadRemotePreview(key, preview)
 	}
 	a.mu.Unlock()
-	return queryPreview{PreviewType: "text", PreviewData: "Loading preview…", PreviewTags: preview.PreviewTags}
+	if !loaded && !requested {
+		go a.loadRemotePreview(key, preview)
+	}
 }
 
 func (a *App) loadRemotePreview(path string, fallback queryPreview) {
@@ -62,6 +79,7 @@ func (a *App) loadRemotePreview(path string, fallback queryPreview) {
 	}
 	a.remotePreviews[path] = resolved
 	a.mu.Unlock()
+	a.reconcileSelectedPreview()
 	if a.window != nil {
 		_ = a.window.Invalidate()
 	}

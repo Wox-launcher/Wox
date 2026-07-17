@@ -58,39 +58,14 @@ func SettingsTitleBar(props SettingsTitleBarProps) woxwidget.Widget {
 	return woxwidget.Stack{Width: props.Width, Height: height, Children: children}
 }
 
-// SettingsThemePageProps contains the active theme route and prepared page body.
+// SettingsThemePageProps contains the active theme route's prepared body.
 type SettingsThemePageProps struct {
-	Width       float32
-	Height      float32
-	ModeLabel   string
-	Mode        string
-	Disabled    bool
-	Body        woxwidget.Widget
-	Theme       woxcomponent.Theme
-	OnInstalled func()
-	OnStore     func()
-	OnEditor    func()
+	Width  float32
+	Height float32
+	Body   woxwidget.Widget
 }
 
-// SettingsThemePage builds the theme route header and body.
+// SettingsThemePage lets the navigation rail own the route and matches Flutter's twenty-pixel page inset.
 func SettingsThemePage(props SettingsThemePageProps) woxwidget.Widget {
-	innerWidth := max(float32(0), props.Width-48)
-	const headerHeight = float32(68)
-	button := func(id, label, mode string, width float32, onTap func()) woxwidget.Widget {
-		variant := woxcomponent.ButtonSecondary
-		if props.Mode == mode {
-			variant = woxcomponent.ButtonPrimary
-		}
-		return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, Width: width, Disabled: props.Disabled, Variant: variant, OnTap: onTap, Theme: props.Theme})
-	}
-	header := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: max(float32(0), innerWidth-310), Height: headerHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: "Themes", Style: woxui.TextStyle{Size: 24, Weight: woxui.FontWeightSemibold}, Color: props.Theme.QueryText},
-			woxwidget.Text{Value: props.ModeLabel, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle},
-		}}},
-		button("themes-mode-installed", "Installed", "installed", 98, props.OnInstalled),
-		button("themes-mode-store", "Store", "store", 88, props.OnStore),
-		button("themes-mode-editor", "Editor", "editor", 88, props.OnEditor),
-	}}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 24, Top: 24, Right: 24, Bottom: 24}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, props.Body}}}
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(20), Child: props.Body}
 }

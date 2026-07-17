@@ -15,6 +15,7 @@ const (
 	ButtonMuted
 	ButtonSelected
 	ButtonSurface
+	ButtonText
 )
 
 // ButtonSize selects the standard geometry for a Wox button.
@@ -29,6 +30,9 @@ const (
 type ButtonProps struct {
 	ID       string
 	Label    string
+	Icon     *woxui.Image
+	IconSize float32
+	IconGap  float32
 	Width    float32
 	Height   float32
 	Radius   float32
@@ -45,11 +49,11 @@ type ButtonProps struct {
 func WoxButton(props ButtonProps) woxwidget.Widget {
 	height := float32(38)
 	radius := float32(8)
-	padding := woxwidget.Insets{Left: 16, Top: 11, Right: 12}
+	padding := woxwidget.Insets{Left: 16, Right: 12}
 	if props.Size == ButtonCompact {
 		height = 30
 		radius = 4
-		padding = woxwidget.Insets{Left: 12, Top: 8, Right: 8}
+		padding = woxwidget.Insets{Left: 12, Right: 8}
 	}
 	if props.Height > 0 {
 		height = props.Height
@@ -85,6 +89,9 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	case ButtonSurface:
 		background = props.Theme.ActionBackground
 		foreground = props.Theme.PreviewText
+	case ButtonText:
+		background = woxui.Color{}
+		foreground = props.Theme.ResultTitle
 	}
 
 	onTap := props.OnTap
@@ -98,9 +105,25 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		actions = nil
 	}
 	key := woxwidget.Key(props.ID)
+	var child woxwidget.Widget = woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: woxui.FontWeightSemibold}, Color: foreground}
+	if props.Icon != nil {
+		iconSize := props.IconSize
+		if iconSize <= 0 {
+			iconSize = 16
+		}
+		iconGap := props.IconGap
+		if iconGap <= 0 {
+			iconGap = 6
+		}
+		child = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: iconGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize},
+			woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: woxui.FontWeightSemibold}, Color: foreground},
+		}}
+	}
+	// Center measured text and icon content inside the padded button box instead of relying on font-specific top offsets.
 	content := woxwidget.Gesture{ID: props.ID, OnTap: onTap, Child: woxwidget.Container{
 		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: border, BorderWidth: boolFloat(border.A != 0), Padding: padding,
-		Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: woxui.FontWeightSemibold}, Color: foreground},
+		Child: woxwidget.Align{Vertical: 0.5, Child: child},
 	}}
 	return woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,

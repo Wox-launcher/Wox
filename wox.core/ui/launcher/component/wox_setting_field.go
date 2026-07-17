@@ -32,19 +32,23 @@ func WoxSettingField(props SettingFieldProps) woxwidget.Widget {
 		gap = 20
 	}
 	labelHeight := max(float32(0), height-props.Padding.Top-props.Padding.Bottom)
-	descriptionHeight := float32(18)
-	var description woxwidget.Widget = woxwidget.Text{Value: props.Description, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle}
-	if props.DescriptionMaxLines > 1 {
-		descriptionHeight = float32(props.DescriptionMaxLines * 16)
-		description = woxwidget.TextBlock{
-			Value: props.Description, Width: props.LabelWidth, Height: descriptionHeight, MaxLines: props.DescriptionMaxLines,
-			Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: props.Theme.ResultSubtitle,
+	labelText := woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}
+	var label woxwidget.Widget = woxwidget.Align{Width: props.LabelWidth, Height: labelHeight, Vertical: 0.5, Child: labelText}
+	if props.Description != "" {
+		descriptionHeight := float32(18)
+		var description woxwidget.Widget = woxwidget.Text{Value: props.Description, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle}
+		if props.DescriptionMaxLines > 1 {
+			descriptionHeight = float32(props.DescriptionMaxLines * 16)
+			description = woxwidget.TextBlock{
+				Value: props.Description, Width: props.LabelWidth, Height: descriptionHeight, MaxLines: props.DescriptionMaxLines,
+				Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: props.Theme.ResultSubtitle,
+			}
 		}
+		label = woxwidget.Container{Width: props.LabelWidth, Height: labelHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
+			labelText,
+			description,
+		}}}
 	}
-	label := woxwidget.Container{Width: props.LabelWidth, Height: labelHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
-		description,
-	}}}
 	return woxwidget.Container{Width: props.Width, Height: height, Radius: props.Radius, Color: props.Background, Padding: props.Padding, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{label, props.Child},
 	}}

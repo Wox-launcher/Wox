@@ -293,7 +293,7 @@ func handleResolveImage(w http.ResponseWriter, r *http.Request) {
 	if size <= 0 {
 		size = 128
 	}
-	size = min(max(size, 16), 512)
+	size = min(max(size, 16), 2048)
 	if request.Image.ImageType == common.WoxImageTypeFileIcon {
 		resolved := common.ConvertFileIconToAbsolutePathWithSize(ctx, request.Image, size)
 		if resolved.ImageType == common.WoxImageTypeFileIcon || resolved.IsEmpty() {

@@ -30,11 +30,11 @@ func (a *App) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height f
 	}
 	rows := make([]woxwidget.Widget, 0, len(snapshot.hotkeyForm.definitions))
 	for index, definition := range snapshot.hotkeyForm.definitions {
-		rows = append(rows, a.buildFormField(*snapshot.hotkeyForm, callbacks, snapshot.palette, index, definition, innerWidth, formDefinitionHeight(definition)))
+		rows = append(rows, a.buildFormField(*snapshot.hotkeyForm, callbacks, snapshot.palette, index, definition, innerWidth, formDefinitionHeight(definition, snapshot.hotkeyForm.values)))
 	}
 	return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: true,
-		Rows: rows, RowsHeight: formDefinitionsContentHeight(snapshot.hotkeyForm.definitions), Scroll: snapshot.hotkeyForm.scroll, Note: snapshot.note,
+		Rows: rows, RowsHeight: formDefinitionsContentHeight(snapshot.hotkeyForm.definitions, snapshot.hotkeyForm.values), Scroll: snapshot.hotkeyForm.scroll, Note: snapshot.note,
 		OnScroll: a.scrollHotkeySettings, OnSetViewport: a.setHotkeySettingsViewport,
 	})
 }
@@ -42,55 +42,53 @@ func (a *App) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height f
 // newHotkeySettingsForm maps global bindings and query launchers onto the shared form/table engine.
 func newHotkeySettingsForm(data settingsData) formFieldsState {
 	definitions := []formDefinition{
-		{Type: "head", Value: formDefinitionValue{Content: "Global hotkeys"}},
-		{Type: "hotkey", Value: formDefinitionValue{Key: "MainHotkey", Label: "Open Wox"}},
+		{Type: "hotkey", Value: formDefinitionValue{Key: "MainHotkey", Label: "i18n:ui_hotkey", Tooltip: "i18n:ui_hotkey_tips"}},
 	}
 	if !data.IsLinuxWaylandSession {
 		definitions = append(definitions,
-			formDefinition{Type: "hotkey", Value: formDefinitionValue{Key: "SelectionHotkey", Label: "Search selection"}},
+			formDefinition{Type: "hotkey", Value: formDefinitionValue{Key: "SelectionHotkey", Label: "i18n:ui_selection_hotkey", Tooltip: "i18n:ui_selection_hotkey_tips"}},
 			formDefinition{Type: "table", Value: formDefinitionValue{
-				Key: "IgnoredHotkeyApps", Title: "Ignored hotkey apps",
-				Columns: []formTableColumn{{Key: "App", Label: "Application", Type: "app", Validators: []formValidator{{Type: "not_empty"}}}},
+				Key: "IgnoredHotkeyApps", Title: "i18n:ui_hotkey_ignore_apps", Tooltip: "i18n:ui_hotkey_ignore_apps_tips", MaxHeight: 220, InlineTable: true,
+				Columns: []formTableColumn{{Key: "App", Label: "i18n:ui_hotkey_ignore_apps_app", Tooltip: "i18n:ui_hotkey_ignore_apps_tips", Width: 420, Type: "app", Validators: []formValidator{{Type: "not_empty"}}}},
 			}},
 		)
 	}
 	definitions = append(definitions,
-		formDefinition{Type: "head", Value: formDefinitionValue{Content: "Query automations"}},
 		formDefinition{Type: "table", Value: formDefinitionValue{
-			Key: "QueryHotkeys", Title: "Query hotkeys",
+			Key: "QueryHotkeys", Title: "i18n:ui_query_hotkeys", Tooltip: "i18n:ui_query_hotkeys_tips", SortColumnKey: "Query", InlineTable: true,
 			Columns: []formTableColumn{
-				{Key: "Name", Label: "Name", Type: "text"},
-				{Key: "Hotkey", Label: "Hotkey", Type: "hotkey", Validators: []formValidator{{Type: "not_empty"}}},
-				{Key: "Query", Label: "Query", Type: "queryHotkeyQuery", Validators: []formValidator{{Type: "not_empty"}}},
-				{Key: "Position", Label: "Position", Type: "select", HideInTable: true, SelectOptions: queryHotkeyPositionOptions()},
-				{Key: "HideQueryBox", Label: "Hide query box", Type: "checkbox", HideInTable: true},
-				{Key: "HideToolbar", Label: "Hide toolbar", Type: "checkbox", HideInTable: true},
-				{Key: "Width", Label: "Width", Type: "text", HideInTable: true},
-				{Key: "MaxResultCount", Label: "Maximum results", Type: "text", HideInTable: true},
-				{Key: "IsSilentExecution", Label: "Silent execution", Type: "checkbox", HideInTable: true},
-				{Key: "Disabled", Label: "Disabled", Type: "checkbox"},
+				{Key: "Name", Label: "i18n:ui_query_hotkeys_name", Tooltip: "i18n:ui_query_hotkeys_name_tooltip", Width: 140, Type: "text"},
+				{Key: "Hotkey", Label: "i18n:ui_query_hotkeys_hotkey", Tooltip: "i18n:ui_query_hotkeys_hotkey_tooltip", Width: 120, Type: "hotkey", Validators: []formValidator{{Type: "not_empty"}}},
+				{Key: "Query", Label: "i18n:ui_query_hotkeys_query", Tooltip: "i18n:ui_query_hotkeys_query_tooltip", Type: "queryHotkeyQuery", Validators: []formValidator{{Type: "not_empty"}}},
+				{Key: "Position", Label: "i18n:ui_query_hotkeys_position", Tooltip: "i18n:ui_query_hotkeys_position_tooltip", Width: 120, Type: "select", HideInTable: true, SelectOptions: queryHotkeyPositionOptions()},
+				{Key: "HideQueryBox", Label: "i18n:ui_query_hotkeys_hide_query_box", Tooltip: "i18n:ui_query_hotkeys_hide_query_box_tooltip", Width: 80, Type: "checkbox", HideInTable: true},
+				{Key: "HideToolbar", Label: "i18n:ui_query_hotkeys_hide_toolbar", Tooltip: "i18n:ui_query_hotkeys_hide_toolbar_tooltip", Width: 80, Type: "checkbox", HideInTable: true},
+				{Key: "Width", Label: "i18n:ui_query_hotkeys_width", Tooltip: "i18n:ui_query_hotkeys_width_tooltip", Width: 50, Type: "text", HideInTable: true},
+				{Key: "MaxResultCount", Label: "i18n:ui_query_hotkeys_max_result_count", Tooltip: "i18n:ui_query_hotkeys_max_result_count_tooltip", Width: 90, Type: "text", HideInTable: true},
+				{Key: "IsSilentExecution", Label: "i18n:ui_query_hotkeys_silent", Tooltip: "i18n:ui_query_hotkeys_silent_tooltip", Width: 40, Type: "checkbox", HideInTable: true},
+				{Key: "Disabled", Label: "i18n:ui_disabled", Tooltip: "i18n:ui_disabled_tooltip", Width: 60, Type: "checkbox"},
 			},
 		}},
 		formDefinition{Type: "table", Value: formDefinitionValue{
-			Key: "QueryShortcuts", Title: "Query shortcuts",
+			Key: "QueryShortcuts", Title: "i18n:ui_query_shortcuts", Tooltip: "i18n:ui_query_shortcuts_tips", SortColumnKey: "Query", InlineTable: true,
 			Columns: []formTableColumn{
-				{Key: "Shortcut", Label: "Shortcut", Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
-				{Key: "Query", Label: "Query", Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
-				{Key: "Disabled", Label: "Disabled", Type: "checkbox"},
+				{Key: "Shortcut", Label: "i18n:ui_query_shortcuts_shortcut", Tooltip: "i18n:ui_query_shortcuts_shortcut_tooltip", Width: 120, Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
+				{Key: "Query", Label: "i18n:ui_query_shortcuts_query", Tooltip: "i18n:ui_query_shortcuts_query_tooltip", Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
+				{Key: "Disabled", Label: "i18n:ui_disabled", Tooltip: "i18n:ui_disabled_tooltip", Width: 60, Type: "checkbox"},
 			},
 		}},
 	)
 	if !data.IsLinuxWaylandSession {
 		definitions = append(definitions, formDefinition{Type: "table", Value: formDefinitionValue{
-			Key: "TrayQueries", Title: "Tray queries",
+			Key: "TrayQueries", Title: "i18n:ui_tray_queries", Tooltip: "i18n:ui_tray_queries_tips", InlineTable: true,
 			Columns: []formTableColumn{
-				{Key: "Icon", Label: "Icon", Type: "woxImage"},
-				{Key: "Query", Label: "Query", Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
-				{Key: "HideQueryBox", Label: "Hide query box", Type: "checkbox", HideInTable: true},
-				{Key: "HideToolbar", Label: "Hide toolbar", Type: "checkbox", HideInTable: true},
-				{Key: "Width", Label: "Width", Type: "text", HideInTable: true},
-				{Key: "MaxResultCount", Label: "Maximum results", Type: "text", HideInTable: true},
-				{Key: "Disabled", Label: "Disabled", Type: "checkbox"},
+				{Key: "Icon", Label: "i18n:ui_tray_queries_icon", Tooltip: "i18n:ui_tray_queries_icon_tooltip", Width: 40, Type: "woxImage"},
+				{Key: "Query", Label: "i18n:ui_tray_queries_query", Tooltip: "i18n:ui_tray_queries_query_tooltip", Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
+				{Key: "HideQueryBox", Label: "i18n:ui_tray_queries_hide_query_box", Tooltip: "i18n:ui_tray_queries_hide_query_box_tooltip", Width: 80, Type: "checkbox", HideInTable: true},
+				{Key: "HideToolbar", Label: "i18n:ui_tray_queries_hide_toolbar", Tooltip: "i18n:ui_tray_queries_hide_toolbar_tooltip", Width: 80, Type: "checkbox", HideInTable: true},
+				{Key: "Width", Label: "i18n:ui_tray_queries_width", Tooltip: "i18n:ui_tray_queries_width_tooltip", Width: 40, Type: "text", HideInTable: true},
+				{Key: "MaxResultCount", Label: "i18n:ui_tray_queries_max_result_count", Tooltip: "i18n:ui_tray_queries_max_result_count_tooltip", Width: 90, Type: "text", HideInTable: true},
+				{Key: "Disabled", Label: "i18n:ui_disabled", Tooltip: "i18n:ui_disabled_tooltip", Width: 50, Type: "checkbox"},
 			},
 		}})
 	}
@@ -302,7 +300,7 @@ func (a *App) setHotkeySettingsViewport(height float32) {
 func (a *App) scrollHotkeySettings(delta float32) {
 	a.mu.Lock()
 	if fields := a.hotkeySettingsForm; fields != nil {
-		maxOffset := max(float32(0), formDefinitionsContentHeight(fields.definitions)-fields.viewportHeight)
+		maxOffset := max(float32(0), formDefinitionsContentHeight(fields.definitions, fields.values)-fields.viewportHeight)
 		fields.scroll = min(max(float32(0), fields.scroll+delta), maxOffset)
 	}
 	a.mu.Unlock()

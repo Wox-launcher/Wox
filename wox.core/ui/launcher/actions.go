@@ -2,12 +2,15 @@ package launcher
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 const (
@@ -15,25 +18,85 @@ const (
 	maxVisibleActions = launcherview.MaxVisibleActions
 )
 
+type actionPanelSource uint8
+
+const (
+	actionPanelSourceResult actionPanelSource = iota
+	actionPanelSourceToolbar
+)
+
+// actionPanelEntry keeps the unified picker presentation tied to its original execution target.
+type actionPanelEntry struct {
+	Key                  string
+	ID                   string
+	Name                 string
+	Icon                 woxImage
+	Hotkey               string
+	IsDefault            bool
+	Source               actionPanelSource
+	ResultIndex          int
+	ActionIndex          int
+	ToolbarMessageID     string
+	ToolbarMessageAction toolbarMessageAction
+}
+
 func actionPanelBaseHeightForPalette(palette uiPalette) float32 {
 	return launcherview.ActionPanelBaseHeight(palette.actionPadding)
 }
 
+// unifiedActionPanelEntries mirrors Flutter's toolbar-before-plugin action ordering and hotkey conflict handling.
+func unifiedActionPanelEntries(results []queryResult, selected int, message *toolbarMessage) []actionPanelEntry {
+	toolbarCount := 0
+	if message != nil {
+		toolbarCount = len(message.Actions)
+	}
+	resultCount := 0
+	if selected >= 0 && selected < len(results) && !results[selected].IsGroup {
+		resultCount = len(results[selected].Actions)
+	}
+	entries := make([]actionPanelEntry, 0, toolbarCount+resultCount)
+	reservedHotkeys := make(map[string]struct{}, toolbarCount)
+	if message != nil {
+		for index, action := range message.Actions {
+			entries = append(entries, actionPanelEntry{
+				Key: fmt.Sprintf("toolbar:%s:%s:%d", message.ID, action.ID, index), ID: fmt.Sprintf("toolbar-%s-%d", action.ID, index),
+				Name: action.Name, Icon: action.Icon, Hotkey: action.Hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceToolbar,
+				ToolbarMessageID: message.ID, ToolbarMessageAction: action,
+			})
+			if hotkey := normalizeToolbarHotkey(action.Hotkey); hotkey != "" {
+				reservedHotkeys[hotkey] = struct{}{}
+			}
+		}
+	}
+	if selected < 0 || selected >= len(results) || results[selected].IsGroup {
+		return entries
+	}
+	result := results[selected]
+	for index, action := range result.Actions {
+		hotkey := action.Hotkey
+		if _, conflicted := reservedHotkeys[normalizeToolbarHotkey(hotkey)]; conflicted && strings.TrimSpace(hotkey) != "" {
+			hotkey = ""
+		}
+		entries = append(entries, actionPanelEntry{
+			Key: fmt.Sprintf("result:%s:%s:%d", result.ID, action.ID, index), ID: fmt.Sprintf("result-%s-%d", action.ID, index),
+			Name: action.Name, Icon: action.Icon, Hotkey: hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceResult,
+			ResultIndex: selected, ActionIndex: index,
+		})
+	}
+	return entries
+}
+
 // buildActionPanel resolves action labels and icons before delegating to the pure panel view.
 func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight, queryHeight, toolbarHeight float32) (woxwidget.Widget, float32, float32) {
-	if snapshot.selected < 0 || snapshot.selected >= len(snapshot.results) {
-		return nil, 0, 0
-	}
-	actions := snapshot.results[snapshot.selected].Actions
-	if len(actions) == 0 {
+	if len(snapshot.actionEntries) == 0 {
 		return nil, 0, 0
 	}
 	items := make([]launcherview.ActionItem, 0, len(snapshot.actionIndices))
 	for _, index := range snapshot.actionIndices {
-		if index < 0 || index >= len(actions) {
+		if index < 0 || index >= len(snapshot.actionEntries) {
 			continue
 		}
-		action := actions[index]
+		action := snapshot.actionEntries[index]
 		items = append(items, launcherview.ActionItem{
 			Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: a.imageFor(action.Icon), HotkeyLabels: formatHotkeyLabels(action.Hotkey),
 		})
@@ -53,7 +116,7 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 }
 
 func (a *App) onActionKey(event woxui.KeyEvent) bool {
-	if event.Key == woxui.Key("j") && event.Modifiers.HasPrimary() {
+	if toolbarHotkeyMatches(primaryHotkey("j"), event) {
 		a.toggleActionPanel()
 		return true
 	}
@@ -63,56 +126,86 @@ func (a *App) onActionKey(event woxui.KeyEvent) bool {
 	if !open {
 		return false
 	}
-	switch event.Key {
-	case woxui.KeyEscape:
-		a.toggleActionPanel()
-	case woxui.KeyArrowUp:
-		a.moveActionSelection(-1)
-	case woxui.KeyArrowDown:
-		a.moveActionSelection(1)
-	case woxui.KeyEnter:
-		a.activateSelectedAction()
-	default:
-		a.mu.Lock()
-		if !a.actionPanel || a.actionFilter == nil {
-			a.mu.Unlock()
-			return false
-		}
-		handled, changed := a.actionFilter.HandleKey(event)
-		if changed {
-			a.actionScroll = 0
-			a.normalizeActionSelectionLocked()
-		}
-		a.mu.Unlock()
-		if handled {
-			if changed {
-				_ = a.applyWindowBounds()
-			}
-			_ = a.window.Invalidate()
-		}
-		return handled
+	if event.Key == woxui.KeyTab {
+		return true
 	}
-	return true
+	if event.Modifiers == 0 {
+		switch event.Key {
+		case woxui.KeyEscape:
+			a.hideActionPanel()
+			return true
+		case woxui.KeyArrowUp:
+			a.moveActionSelection(-1)
+			return true
+		case woxui.KeyArrowDown:
+			a.moveActionSelection(1)
+			return true
+		case woxui.KeyEnter:
+			a.activateSelectedAction()
+			return true
+		}
+	}
+	if event.Modifiers == woxui.KeyModifierControl {
+		switch event.Key {
+		case woxui.Key("n"):
+			a.moveActionSelection(1)
+			return true
+		case woxui.Key("p"):
+			a.moveActionSelection(-1)
+			return true
+		}
+	}
+
+	a.mu.Lock()
+	if !a.actionPanel || a.actionFilter == nil {
+		a.mu.Unlock()
+		return false
+	}
+	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.settings.UsePinYin)
+	for _, index := range indices {
+		if toolbarHotkeyMatches(entries[index].Hotkey, event) {
+			a.actionSelected = index
+			a.actionSelectionKey = entries[index].Key
+			a.mu.Unlock()
+			a.activateSelectedAction()
+			return true
+		}
+	}
+	handled, changed := a.actionFilter.HandleKey(event)
+	if changed {
+		a.actionScroll = 0
+		a.selectFirstFilteredActionLocked()
+	}
+	a.mu.Unlock()
+	if handled {
+		if changed {
+			_ = a.applyWindowBounds()
+		}
+		_ = a.window.Invalidate()
+	}
+	return handled
 }
 
 func (a *App) toggleActionPanel() {
+	a.mu.RLock()
+	open := a.actionPanel
+	a.mu.RUnlock()
+	if open {
+		a.hideActionPanel()
+		return
+	}
+
 	a.mu.Lock()
-	if a.actionPanel {
-		a.actionPanel = false
-		a.actionSelected = 0
-		a.actionFilter = nil
-		a.actionScroll = 0
-		a.mu.Unlock()
-		_ = a.applyWindowBounds()
-		a.restoreQueryTextInput()
-		_ = a.window.Invalidate()
-		return
-	}
-	if a.selected < 0 || a.selected >= len(a.results) || a.results[a.selected].IsGroup || len(a.results[a.selected].Actions) == 0 {
+	if len(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)) == 0 {
 		a.mu.Unlock()
 		return
 	}
+	// Flutter dismisses a form action before transferring keyboard ownership to the action filter.
+	a.form = nil
 	a.actionPanel = true
+	a.actionSelected = -1
+	a.actionSelectionKey = ""
 	a.actionFilter = woxui.NewTextEditor("")
 	a.actionScroll = 0
 	a.normalizeActionSelectionLocked()
@@ -121,18 +214,40 @@ func (a *App) toggleActionPanel() {
 	_ = a.window.Invalidate()
 }
 
+// hideActionPanel clears filter state and returns keyboard ownership to the query editor.
+func (a *App) hideActionPanel() bool {
+	a.mu.Lock()
+	changed := a.resetActionPanelLocked()
+	a.mu.Unlock()
+	if !changed {
+		return false
+	}
+	_ = a.applyWindowBounds()
+	a.restoreQueryTextInput()
+	_ = a.window.Invalidate()
+	return true
+}
+
+func (a *App) resetActionPanelLocked() bool {
+	if !a.actionPanel {
+		return false
+	}
+	a.actionPanel = false
+	a.actionSelected = 0
+	a.actionSelectionKey = ""
+	a.actionFilter = nil
+	a.actionScroll = 0
+	return true
+}
+
 func (a *App) moveActionSelection(delta int) {
 	a.mu.Lock()
-	if !a.actionPanel || a.selected < 0 || a.selected >= len(a.results) {
+	if !a.actionPanel || a.actionFilter == nil {
 		a.mu.Unlock()
 		return
 	}
-	actions := a.results[a.selected].Actions
-	if a.actionFilter == nil {
-		a.mu.Unlock()
-		return
-	}
-	indices := filteredActionIndices(actions, a.actionFilter.State().Text, a.translations)
+	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.settings.UsePinYin)
 	if len(indices) == 0 {
 		a.mu.Unlock()
 		return
@@ -146,6 +261,7 @@ func (a *App) moveActionSelection(delta int) {
 	}
 	position = (position + delta + len(indices)) % len(indices)
 	a.actionSelected = indices[position]
+	a.actionSelectionKey = entries[a.actionSelected].Key
 	a.ensureActionPositionVisibleLocked(position, len(indices))
 	a.mu.Unlock()
 	_ = a.window.Invalidate()
@@ -160,7 +276,7 @@ func (a *App) onActionTextInput(event woxui.TextInputEvent) bool {
 	changed := a.actionFilter.HandleTextInput(event)
 	if changed {
 		a.actionScroll = 0
-		a.normalizeActionSelectionLocked()
+		a.selectFirstFilteredActionLocked()
 	}
 	a.mu.Unlock()
 	if changed {
@@ -210,47 +326,79 @@ func (a *App) setActionFilterCaret(offset int) {
 	_ = a.window.Invalidate()
 }
 
-// normalizeActionSelectionLocked keeps the selected source index valid after filtering or result updates.
+// normalizeActionSelectionLocked preserves the same unified action across live result and toolbar refreshes.
 func (a *App) normalizeActionSelectionLocked() {
-	if !a.actionPanel || a.actionFilter == nil || a.selected < 0 || a.selected >= len(a.results) {
+	if !a.actionPanel || a.actionFilter == nil {
 		return
 	}
-	indices := filteredActionIndices(a.results[a.selected].Actions, a.actionFilter.State().Text, a.translations)
+	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.settings.UsePinYin)
 	if len(indices) == 0 {
 		a.actionSelected = -1
+		a.actionSelectionKey = ""
 		return
 	}
+	if a.actionSelectionKey != "" {
+		for _, index := range indices {
+			if entries[index].Key == a.actionSelectionKey {
+				a.actionSelected = index
+				return
+			}
+		}
+	}
 	for _, index := range indices {
-		if index == a.actionSelected {
+		if entries[index].IsDefault {
+			a.actionSelected = index
+			a.actionSelectionKey = entries[index].Key
 			return
 		}
 	}
 	a.actionSelected = indices[0]
+	a.actionSelectionKey = entries[a.actionSelected].Key
 }
 
-// filteredActionIndices preserves source indices so activation still addresses core's original action array.
-func filteredActionIndices(actions []resultAction, query string, translations map[string]string) []int {
-	query = strings.ToLower(strings.TrimSpace(query))
+func (a *App) selectFirstFilteredActionLocked() {
+	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.settings.UsePinYin)
+	if len(indices) == 0 {
+		a.actionSelected = -1
+		a.actionSelectionKey = ""
+		return
+	}
+	a.actionSelected = indices[0]
+	a.actionSelectionKey = entries[a.actionSelected].Key
+}
+
+// filteredActionIndices matches Flutter's fuzzy title filter while retaining unified source positions.
+func filteredActionIndices(actions []actionPanelEntry, query string, translations map[string]string, usePinYin bool) []int {
+	query = strings.TrimSpace(query)
 	indices := make([]int, 0, len(actions))
 	for index, action := range actions {
-		label := action.Name
-		if strings.HasPrefix(label, "i18n:") {
-			key := strings.TrimPrefix(label, "i18n:")
-			if translated := translations[key]; translated != "" {
-				label = translated
-			}
-		}
-		if query == "" || strings.Contains(strings.ToLower(label), query) || strings.Contains(strings.ToLower(action.Hotkey), query) {
+		label := translatedActionLabel(action.Name, translations)
+		if query == "" || util.IsStringMatch(label, query, usePinYin) {
 			indices = append(indices, index)
 		}
 	}
 	return indices
 }
 
+func translatedActionLabel(value string, translations map[string]string) string {
+	if !strings.HasPrefix(value, "i18n:") {
+		return value
+	}
+	key := strings.TrimPrefix(value, "i18n:")
+	if translated := translations[key]; translated != "" {
+		return translated
+	}
+	return strings.ReplaceAll(key, "_", " ")
+}
+
 func (a *App) selectAction(index int) {
 	a.mu.Lock()
-	if a.actionPanel && a.selected >= 0 && a.selected < len(a.results) && index >= 0 && index < len(a.results[a.selected].Actions) {
+	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	if a.actionPanel && index >= 0 && index < len(entries) {
 		a.actionSelected = index
+		a.actionSelectionKey = entries[index].Key
 	}
 	a.mu.Unlock()
 	_ = a.window.Invalidate()
@@ -258,10 +406,23 @@ func (a *App) selectAction(index int) {
 
 func (a *App) activateSelectedAction() {
 	a.mu.RLock()
-	resultIndex := a.selected
-	actionIndex := a.actionSelected
+	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+	selected := a.actionSelected
+	if selected < 0 || selected >= len(entries) {
+		a.mu.RUnlock()
+		return
+	}
+	entry := entries[selected]
 	a.mu.RUnlock()
-	a.activateAction(resultIndex, actionIndex)
+	a.activateActionPanelEntry(entry)
+}
+
+func (a *App) activateActionPanelEntry(entry actionPanelEntry) {
+	if entry.Source == actionPanelSourceToolbar {
+		a.activateToolbarActionForMessage(entry.ToolbarMessageID, entry.ToolbarMessageAction)
+		return
+	}
+	a.activateAction(entry.ResultIndex, entry.ActionIndex)
 }
 
 // activateResultActionByID resolves preview-owned controls against the latest result snapshot.
@@ -298,6 +459,7 @@ func (a *App) activateAction(resultIndex, actionIndex int) {
 	action := result.Actions[actionIndex]
 	a.mu.RUnlock()
 	if action.ID == enterChatModeActionID && result.Preview.PreviewType == "chat" {
+		a.hideActionPanel()
 		a.enterChatMode()
 		return
 	}
@@ -313,14 +475,7 @@ func (a *App) activateAction(resultIndex, actionIndex int) {
 		log.Printf("execute result action: %v", err)
 		return
 	}
-	a.mu.Lock()
-	a.actionPanel = false
-	a.actionSelected = 0
-	a.actionFilter = nil
-	a.actionScroll = 0
-	a.mu.Unlock()
-	_ = a.applyWindowBounds()
-	_ = a.window.Invalidate()
+	a.hideActionPanel()
 	if !action.PreventHideAfterAction {
 		go func() {
 			if err := a.hideWindow(true); err != nil {
@@ -328,4 +483,25 @@ func (a *App) activateAction(resultIndex, actionIndex int) {
 			}
 		}()
 	}
+}
+
+// onQueryFocusChanged mirrors Flutter's query-focus notification after panel focus returns.
+func (a *App) onQueryFocusChanged(focused bool) {
+	if !focused {
+		return
+	}
+	a.mu.RLock()
+	formVisible := a.form != nil
+	a.mu.RUnlock()
+	if formVisible {
+		return
+	}
+	a.hideActionPanel()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := a.services.QueryBoxFocused(ctx, a.sessionID); err != nil {
+			log.Printf("notify query box focus: %v", err)
+		}
+	}()
 }

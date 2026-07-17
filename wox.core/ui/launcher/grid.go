@@ -83,13 +83,14 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height float32) wox
 		results = append(results, item)
 	}
 	contentHeight := float32(gridResultsHeight(snapshot.results, width, snapshot.layout.GridLayout))
-	offset := a.configureResultScroll(snapshot.results, snapshot.layout.GridLayout, snapshot.selected, width, height, contentHeight)
+	scroll := resolveResultScroll(snapshot.results, snapshot.layout.GridLayout, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette)
+	a.rememberResolvedResultScroll(snapshot, scroll)
 	return launcherview.LauncherGridView(launcherview.LauncherGridProps{
-		Width: width, Height: height, ContentHeight: contentHeight, Offset: offset, Columns: layout.Columns,
+		Width: width, Height: height, ContentHeight: contentHeight, Offset: scroll.offset, Columns: layout.Columns,
 		ItemPadding: float32(layout.ItemPadding), ItemMargin: float32(layout.ItemMargin), ShowTitle: layout.ShowTitle,
 		CellWidth: cellWidth, CellHeight: cellHeight, VisualWidth: visualWidth, VisualHeight: visualHeight,
 		GroupHeaderHeight: gridGroupHeaderHeight, TitleHeight: gridTitleHeight, Theme: snapshot.palette.componentTheme(), Results: results,
-		OnScroll: a.scrollResults,
+		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
 }
 

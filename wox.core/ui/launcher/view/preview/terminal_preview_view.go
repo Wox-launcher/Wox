@@ -117,7 +117,7 @@ func terminalHeader(props TerminalPreviewProps) woxwidget.Widget {
 		{Left: contentWidth - searchWidth - statusWidth - 8, Top: 4, Child: woxwidget.Container{Width: statusWidth, Height: 18, Child: woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 10}, Color: statusColor}}},
 		{Left: contentWidth - searchWidth, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: "terminal-search-open-" + props.SessionID, Label: "Find", Width: searchWidth, Height: 22, Radius: 6,
-			Padding: woxwidget.Insets{Left: 9, Top: 6}, FontSize: 9, Variant: woxcomponent.ButtonSurface, OnTap: props.OnOpenSearch, Theme: props.Theme,
+			Padding: woxwidget.Insets{Left: 9}, FontSize: 9, Variant: woxcomponent.ButtonSurface, OnTap: props.OnOpenSearch, Theme: props.Theme,
 		})},
 	}}}
 }
@@ -145,7 +145,7 @@ func terminalSearchBar(props TerminalPreviewProps, height float32) woxwidget.Wid
 		}
 		return woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: id + "-" + props.SessionID, Label: label, Width: actionWidth, Height: 34, Radius: 7,
-			Padding: woxwidget.Insets{Left: 9, Top: 9}, Variant: variant, OnTap: action, Theme: props.Theme,
+			Padding: woxwidget.Insets{Left: 9}, Variant: variant, OnTap: action, Theme: props.Theme,
 		})
 	}
 	return woxwidget.Container{Width: props.Width, Height: height, Radius: 8, Color: props.Theme.ActionBackground, Padding: woxwidget.Insets{Left: 10, Top: 8, Right: 10, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{

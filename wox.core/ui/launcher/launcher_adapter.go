@@ -22,9 +22,12 @@ var resultColors = []woxui.Color{
 type viewSnapshot struct {
 	editing               woxui.TextEditingState
 	results               []queryResult
+	resultsQueryID        string
 	pendingResults        bool
 	selected              int
 	hoveredResult         int
+	resultScroll          scrollController
+	resultScrollDetached  bool
 	layout                queryLayout
 	refinements           []queryRefinement
 	refinementValues      map[string]string
@@ -41,6 +44,7 @@ type viewSnapshot struct {
 	actionPanel           bool
 	actionSelected        int
 	actionEditing         woxui.TextEditingState
+	actionEntries         []actionPanelEntry
 	actionIndices         []int
 	show                  showAppParams
 	palette               uiPalette
@@ -78,19 +82,22 @@ func (a *App) snapshot() viewSnapshot {
 		glance = &copy
 	}
 	var actionEditing woxui.TextEditingState
+	var actionEntries []actionPanelEntry
 	var actionIndices []int
 	if a.actionPanel && a.actionFilter != nil {
 		actionEditing = a.actionFilter.State()
-		if a.selected >= 0 && a.selected < len(a.results) {
-			actionIndices = filteredActionIndices(a.results[a.selected].Actions, actionEditing.Text, a.translations)
-		}
+		actionEntries = unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
+		actionIndices = filteredActionIndices(actionEntries, actionEditing.Text, a.translations, a.settings.UsePinYin)
 	}
 	return viewSnapshot{
 		editing:               a.editor.State(),
 		results:               append([]queryResult(nil), a.results...),
+		resultsQueryID:        a.resultsQueryID,
 		pendingResults:        a.pendingResults,
 		selected:              a.selected,
 		hoveredResult:         a.hoveredResult,
+		resultScroll:          a.resultScroll,
+		resultScrollDetached:  a.resultScrollDetached,
 		layout:                a.layout,
 		refinements:           append([]queryRefinement(nil), a.refinements...),
 		refinementValues:      refinementValues,
@@ -107,6 +114,7 @@ func (a *App) snapshot() viewSnapshot {
 		actionPanel:           a.actionPanel,
 		actionSelected:        a.actionSelected,
 		actionEditing:         actionEditing,
+		actionEntries:         actionEntries,
 		actionIndices:         actionIndices,
 		show:                  a.show,
 		palette:               a.palette,
@@ -250,7 +258,7 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launc
 				log.Printf("start launcher window drag: %v", err)
 			}
 		},
-		OnKey: a.onKey, OnTextInput: func(event woxui.TextInputEvent) bool { a.onTextInput(event); return true }, OnSetValue: a.setQueryText,
+		OnKey: a.onKey, OnTextInput: func(event woxui.TextInputEvent) bool { a.onTextInput(event); return true }, OnFocusChange: a.onQueryFocusChanged, OnSetValue: a.setQueryText,
 		OnTextInputState: func(state woxui.TextInputState) { _ = a.window.SetTextInputState(state) },
 	}
 }
@@ -262,12 +270,13 @@ func (a *App) setQueryText(value string) error {
 	a.editor.SetText(value, false)
 	a.applyQueryTextChangeLocked(value)
 	a.mu.Unlock()
-	a.deactivateTerminalPreview()
+	a.reconcileSelectedPreview()
 	_ = a.window.Invalidate()
 	return a.sendCurrentQuery()
 }
 
 func (a *App) placeQueryCaret(x float32, style woxui.TextStyle) {
+	a.hideActionPanel()
 	a.deactivateRequirementForm()
 	a.mu.RLock()
 	text := a.editor.State().Text
@@ -295,11 +304,6 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidg
 	}
 	previewVisible := snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) && snapshot.results[snapshot.selected].Preview.PreviewData != ""
 	if !previewVisible {
-		a.deactivateTerminalPreview()
-		a.deactivateWebViewPreview()
-		a.deactivateTriggerConflictPreview()
-		a.deactivateThemeEditorPreview()
-		a.deactivateChatPreview()
 		return a.buildResults(snapshot, width, height)
 	}
 	ratio := float32(0.4)
@@ -313,11 +317,6 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidg
 		return a.buildPreview(snapshot.results[snapshot.selected], snapshot.palette, width, height)
 	}
 	if ratio >= 1 {
-		a.deactivateTerminalPreview()
-		a.deactivateWebViewPreview()
-		a.deactivateTriggerConflictPreview()
-		a.deactivateThemeEditorPreview()
-		a.deactivateChatPreview()
 		return a.buildResults(snapshot, width, height)
 	}
 	splitX := width * ratio
@@ -339,8 +338,11 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 	rowPadding := snapshot.palette.resultItemPadding
 	rowPadding.Left += 5
 	rowPadding.Right += 5
+	tailLayoutWidth := max(float32(0), width-containerPadding.Left-containerPadding.Right-snapshot.palette.resultItemPadding.Left-snapshot.palette.resultItemPadding.Right)
 	contentHeight := containerPadding.Top + containerPadding.Bottom + float32(len(snapshot.results))*rowHeight + float32(max(0, len(snapshot.results)-1)*resultRowGap)
-	offset := a.configureResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight)
+	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette)
+	a.rememberResolvedResultScroll(snapshot, scroll)
+	offset := scroll.offset
 	start, end := visibleResultRange(len(snapshot.results), offset, height, containerPadding.Top, rowHeight, resultRowGap)
 	items := make([]launcherview.LauncherResultItem, 0, end-start)
 	for index := start; index < end; index++ {
@@ -352,7 +354,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 			})
 			continue
 		}
-		tails, tailWidth := a.resultTailViewProps(result.Tails, width)
+		tails, tailWidth, tailHeight := a.resultTailViewProps(result.Tails, tailLayoutWidth)
 		titleHeight := float32(0)
 		if result.SubTitle == "" {
 			metrics, _ := a.window.MeasureText(result.Title, woxui.TextStyle{Size: 15})
@@ -360,70 +362,65 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 		}
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
-			Icon: a.imageFor(result.Icon), TitleHeight: titleHeight, Tails: tails, TailWidth: tailWidth,
+			Icon: a.imageFor(result.Icon), TitleHeight: titleHeight, Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnActivate: func() { a.activateResult(index) },
-			OnKey: func(event woxui.KeyEvent) bool {
-				if !event.Down || event.Composing {
-					return false
-				}
-				switch event.Key {
-				case woxui.KeyEnter:
-					a.selectResult(index)
-					a.activateResult(index)
-					return true
-				case woxui.KeyArrowUp:
-					a.moveSelection(-a.resultNavigationColumns())
-					return true
-				case woxui.KeyArrowDown:
-					a.moveSelection(a.resultNavigationColumns())
-					return true
-				case woxui.KeyEscape:
-					return a.onKey(event)
-				default:
-					return false
-				}
-			},
 		})
 	}
 	return launcherview.LauncherResultsView(launcherview.LauncherResultsProps{
 		Width: width, Height: height, ContentHeight: contentHeight, Offset: offset, StartIndex: start, RowHeight: rowHeight, RowGap: resultRowGap,
 		ContainerPadding: containerPadding, ItemPadding: rowPadding, ItemRadius: snapshot.palette.resultItemRadius,
 		TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail, Theme: snapshot.palette.componentTheme(), Items: items,
-		OnScroll: a.scrollResults,
+		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
 }
 
 // resultTailViewProps resolves tail images and bounds their measured widths before rendering.
-func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32) ([]launcherview.LauncherResultTail, float32) {
-	const gap = float32(5)
+func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32) ([]launcherview.LauncherResultTail, float32, float32) {
+	const (
+		tailOuterPadding = float32(15)
+		tailItemPadding  = float32(10)
+		textPadding      = float32(16)
+		textHeight       = float32(22)
+		defaultImageSize = float32(20)
+	)
 	style := woxui.TextStyle{Size: 11}
-	maximum := min(float32(280), max(float32(88), rowWidth*0.4))
+	// Flutter's one-third cap includes the 10 px leading and 5 px trailing tail padding; the row owns those gaps in Go UI, so only the inner tail width is reserved here.
+	maximum := max(float32(0), rowWidth/3-tailOuterPadding)
+	maximumTextWidth := max(float32(0), maximum-tailItemPadding)
 	items := make([]launcherview.LauncherResultTail, 0, len(tails))
 	used := float32(0)
+	height := float32(0)
 	for _, tail := range tails {
-		itemWidth := float32(32)
-		image := a.imageFor(tail.Image)
-		if image == nil {
-			if tail.Text == "" {
+		item := launcherview.LauncherResultTail{Text: tail.Text, TextCategory: tail.TextCategory}
+		switch tail.Type {
+		case "text":
+			if maximumTextWidth <= 0 {
 				continue
 			}
 			metrics, _ := a.window.MeasureText(tail.Text, style)
-			itemWidth = min(float32(88), max(float32(30), metrics.Size.Width+14))
+			item.Width = min(maximumTextWidth, metrics.Size.Width+textPadding)
+			item.Height = textHeight
+		case "image":
+			item.Image = a.imageFor(tail.Image)
+			if item.Image == nil {
+				continue
+			}
+			item.Width = defaultImageSize
+			item.Height = defaultImageSize
+			if tail.ImageWidth != nil && *tail.ImageWidth > 0 {
+				item.Width = float32(*tail.ImageWidth)
+			}
+			if tail.ImageHeight != nil && *tail.ImageHeight > 0 {
+				item.Height = float32(*tail.ImageHeight)
+			}
+		default:
+			continue
 		}
-		nextWidth := itemWidth
-		if len(items) > 0 {
-			nextWidth += gap
-		}
-		if used+nextWidth > maximum {
-			break
-		}
-		if len(items) > 0 {
-			used += gap
-		}
-		used += itemWidth
-		items = append(items, launcherview.LauncherResultTail{Text: tail.Text, Image: image, Width: itemWidth})
+		used += tailItemPadding + item.Width
+		height = max(height, item.Height)
+		items = append(items, item)
 	}
-	return items, used
+	return items, min(maximum, used), height
 }
 
 // visibleResultRange returns the viewport rows plus a small buffer for smooth scrolling.
@@ -440,55 +437,53 @@ func visibleResultRange(count int, offset, viewport, topPadding, rowHeight, gap 
 	return start, end
 }
 
-// configureResultScroll keeps the portable viewport geometry aligned with the current result layout.
-func (a *App) configureResultScroll(results []queryResult, layout *gridLayout, selected int, width, viewport, content float32) float32 {
-	a.mu.Lock()
-	a.resultWidth = width
-	a.resultViewport = viewport
-	a.resultContent = content
-	a.resultScroll = min(max(float32(0), a.resultScroll), max(float32(0), content-viewport))
-	a.ensureResultIndexVisibleLocked(results, layout, selected)
-	offset := a.resultScroll
-	a.mu.Unlock()
-	return offset
-}
-
-// ensureResultSelectionVisibleLocked follows keyboard selection without changing pointer-driven scrolling.
-func (a *App) ensureResultSelectionVisibleLocked() {
-	a.ensureResultIndexVisibleLocked(a.results, a.layout.GridLayout, a.selected)
-}
-
-func (a *App) ensureResultIndexVisibleLocked(results []queryResult, layout *gridLayout, selected int) {
-	if selected < 0 || selected >= len(results) || a.resultViewport <= 0 || a.resultContent <= a.resultViewport {
-		a.resultScroll = min(max(float32(0), a.resultScroll), max(float32(0), a.resultContent-a.resultViewport))
-		return
+// resolveResultScroll follows keyboard selection until pointer scrolling takes ownership of the viewport.
+func resolveResultScroll(results []queryResult, layout *gridLayout, selected int, width, viewport, content float32, current scrollController, detached bool, palette uiPalette) scrollController {
+	scroll := current.withGeometry(viewport, content)
+	if detached || selected < 0 || selected >= len(results) || viewport <= 0 || content <= viewport {
+		return scroll
 	}
-	rowHeight := resultRowHeightForPalette(a.palette)
-	top := a.palette.resultContainerPadding.Top + float32(selected)*(rowHeight+resultRowGap)
+	rowHeight := resultRowHeightForPalette(palette)
+	top := palette.resultContainerPadding.Top + float32(selected)*(rowHeight+resultRowGap)
 	bottom := top + rowHeight
 	if layout != nil {
-		top, bottom = gridResultVerticalBounds(results, selected, a.resultWidth, layout)
+		top, bottom = gridResultVerticalBounds(results, selected, width, layout)
 	} else {
 		for index := selected - 1; index >= 0; index-- {
 			if results[index].IsGroup {
 				if selected-index <= 2 {
-					top = a.palette.resultContainerPadding.Top + float32(index)*(rowHeight+resultRowGap)
+					top = palette.resultContainerPadding.Top + float32(index)*(rowHeight+resultRowGap)
 				}
 				break
 			}
 		}
 	}
-	if top < a.resultScroll {
-		a.resultScroll = top
-	} else if bottom > a.resultScroll+a.resultViewport {
-		a.resultScroll = bottom - a.resultViewport
-	}
-	a.resultScroll = min(max(float32(0), a.resultScroll), max(float32(0), a.resultContent-a.resultViewport))
+	scroll.ensureVisible(top, bottom)
+	return scroll
 }
 
-func (a *App) scrollResults(delta float32) {
+// rememberResolvedResultScroll makes consecutive key moves start from the viewport that was actually rendered.
+func (a *App) rememberResolvedResultScroll(snapshot viewSnapshot, scroll scrollController) {
+	if scroll == snapshot.resultScroll {
+		return
+	}
 	a.mu.Lock()
-	a.resultScroll = min(max(float32(0), a.resultScroll+delta), max(float32(0), a.resultContent-a.resultViewport))
+	if a.resultsQueryID == snapshot.resultsQueryID && a.selected == snapshot.selected && a.resultScroll == snapshot.resultScroll && a.resultScrollDetached == snapshot.resultScrollDetached {
+		a.resultScroll = scroll
+	}
+	a.mu.Unlock()
+}
+
+// scrollResultsFrom detaches pointer scrolling from selection-following until selection changes.
+func (a *App) scrollResultsFrom(snapshotDetached bool, rendered scrollController, delta float32) {
+	a.mu.Lock()
+	base := a.resultScroll
+	if !snapshotDetached && !a.resultScrollDetached {
+		base = rendered
+	}
+	base.scrollBy(delta)
+	a.resultScroll = base
+	a.resultScrollDetached = true
 	a.mu.Unlock()
 }
 
@@ -508,34 +503,28 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidge
 		}
 	}
 	actions := make([]launcherview.LauncherToolbarAction, 0)
-	if snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) {
-		resultIndex := snapshot.selected
-		for actionIndex, action := range snapshot.results[resultIndex].Actions {
-			if strings.TrimSpace(action.Hotkey) == "" {
+	entries := unifiedActionPanelEntries(snapshot.results, snapshot.selected, snapshot.toolbarMsg)
+	for _, source := range []actionPanelSource{actionPanelSourceResult, actionPanelSourceToolbar} {
+		for _, entry := range entries {
+			if entry.Source != source || strings.TrimSpace(entry.Hotkey) == "" {
 				continue
 			}
-			actionIndex := actionIndex
-			action := action
+			entry := entry
 			actions = append(actions, launcherview.LauncherToolbarAction{
-				ID: fmt.Sprintf("result-toolbar-action-%d", actionIndex), Label: a.translate(action.Name), HotkeyLabels: formatHotkeyLabels(action.Hotkey),
-				OnTap: func() { a.activateAction(resultIndex, actionIndex) },
+				ID: "toolbar-action-" + entry.ID, Label: a.translate(entry.Name), HotkeyLabels: formatHotkeyLabels(entry.Hotkey), OnTap: func() {
+					if entry.Source == actionPanelSourceToolbar {
+						a.activateToolbarActionForMessage(entry.ToolbarMessageID, entry.ToolbarMessageAction)
+						return
+					}
+					a.activateAction(entry.ResultIndex, entry.ActionIndex)
+				},
 			})
 		}
-		if len(snapshot.results[resultIndex].Actions) > 0 {
-			actions = append(actions, launcherview.LauncherToolbarAction{
-				ID: "result-toolbar-more", Label: a.translate("i18n:toolbar_more_actions"), HotkeyLabels: formatHotkeyLabels(primaryHotkey("j")), OnTap: a.toggleActionPanel,
-			})
-		}
-	} else if snapshot.toolbarMsg != nil {
-		for _, action := range snapshot.toolbarMsg.Actions {
-			if strings.TrimSpace(action.Hotkey) == "" {
-				continue
-			}
-			action := action
-			actions = append(actions, launcherview.LauncherToolbarAction{
-				ID: "toolbar-action-" + action.ID, Label: a.translate(action.Name), HotkeyLabels: formatHotkeyLabels(action.Hotkey), OnTap: func() { a.activateToolbarAction(action) },
-			})
-		}
+	}
+	if len(entries) > 0 {
+		actions = append(actions, launcherview.LauncherToolbarAction{
+			ID: "result-toolbar-more", Label: a.translate("i18n:toolbar_more_actions"), HotkeyLabels: formatHotkeyLabels(primaryHotkey("j")), OnTap: a.toggleActionPanel,
+		})
 	}
 	return launcherview.LauncherToolbarView(launcherview.LauncherToolbarProps{
 		Width: width, Height: height, Padding: snapshot.palette.toolbarPadding, Theme: snapshot.palette.componentTheme(), Window: a.window,

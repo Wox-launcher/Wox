@@ -251,17 +251,37 @@ func snapshotChatPreviewLocked(state *chatPreviewState) *chatPreviewSnapshot {
 	return snapshot
 }
 
-// ensureChatPreview bootstraps one shared chat state without overwriting newer streamed snapshots on rebuild.
-func (a *App) ensureChatPreview(result queryResult, preview queryPreview) (*chatPreviewSnapshot, error) {
+// chatPreviewDataAndKey validates the payload and derives its stable controller identity.
+func chatPreviewDataAndKey(result queryResult, preview queryPreview) (chatPreviewData, string, error) {
 	var data chatPreviewData
 	if err := json.Unmarshal([]byte(preview.PreviewData), &data); err != nil {
-		return nil, fmt.Errorf("decode chat preview: %w", err)
+		return chatPreviewData{}, "", fmt.Errorf("decode chat preview: %w", err)
 	}
 	if data.ActiveChat.ID == "" {
-		return nil, fmt.Errorf("chat preview has no active chat id")
+		return chatPreviewData{}, "", fmt.Errorf("chat preview has no active chat id")
 	}
 	hash := sha256.Sum256([]byte(preview.PreviewData))
-	key := fmt.Sprintf("%s|%s|%x", result.QueryID, result.ID, hash)
+	return data, fmt.Sprintf("%s|%s|%x", result.QueryID, result.ID, hash), nil
+}
+
+// activateChatPreview bootstraps shared chat state without overwriting newer streamed snapshots.
+func (a *App) activateChatPreview(result queryResult, preview queryPreview) error {
+	data, key, err := chatPreviewDataAndKey(result, preview)
+	if err != nil {
+		return err
+	}
+	a.mu.RLock()
+	changed := a.chatPreview != nil && a.chatPreview.key != key
+	keepFullscreen := a.chatFullscreen
+	a.mu.RUnlock()
+	if changed {
+		a.deactivateChatPreview()
+		if keepFullscreen {
+			a.mu.Lock()
+			a.chatFullscreen = true
+			a.mu.Unlock()
+		}
+	}
 
 	shouldLoad := false
 	loadChatID := ""
@@ -284,8 +304,28 @@ func (a *App) ensureChatPreview(result queryResult, preview queryPreview) (*chat
 			shouldLoad = true
 			loadChatID = data.ActiveChatID
 		}
+		sortChatSummaries(a.chatPreview.chats)
 	}
-	sortChatSummaries(a.chatPreview.chats)
+	revision := a.chatPreview.revision
+	a.mu.Unlock()
+
+	if shouldLoad {
+		go a.loadChatPreview(key, loadChatID, revision)
+	}
+	return nil
+}
+
+// chatPreviewSnapshotFor returns the state prepared by the lifecycle coordinator.
+func (a *App) chatPreviewSnapshotFor(result queryResult, preview queryPreview) (*chatPreviewSnapshot, error) {
+	_, key, err := chatPreviewDataAndKey(result, preview)
+	if err != nil {
+		return nil, err
+	}
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.chatPreview == nil || a.chatPreview.key != key {
+		return nil, fmt.Errorf("chat preview is not ready")
+	}
 	snapshot := snapshotChatPreviewLocked(a.chatPreview)
 	snapshot.models = append([]aiModel(nil), a.aiModels...)
 	snapshot.modelsLoading = a.aiModelsLoading
@@ -293,12 +333,6 @@ func (a *App) ensureChatPreview(result queryResult, preview queryPreview) (*chat
 	snapshot.skills = append([]chatSkill(nil), a.aiSkills...)
 	snapshot.skillsLoading = a.aiSkillsLoading
 	snapshot.skillsError = a.aiSkillsError
-	revision := a.chatPreview.revision
-	a.mu.Unlock()
-
-	if shouldLoad {
-		go a.loadChatPreview(key, loadChatID, revision)
-	}
 	return snapshot, nil
 }
 

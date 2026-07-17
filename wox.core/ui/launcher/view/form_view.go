@@ -134,6 +134,50 @@ func FormAppField(props FormAppFieldProps) woxwidget.Widget {
 	}}}
 }
 
+// FormHotkeyFieldProps contains one Flutter-parity hotkey recorder row.
+type FormHotkeyFieldProps struct {
+	ID          string
+	Label       string
+	Description string
+	Labels      []string
+	Placeholder string
+	Status      string
+	Width       float32
+	Height      float32
+	Focused     bool
+	Recording   bool
+	Window      *woxui.Window
+	Theme       woxcomponent.Theme
+	OnTap       func()
+}
+
+// FormHotkeyField keeps the recorder right-aligned without moving it when a recording hint appears.
+func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
+	labelWidth := float32(132)
+	gap := float32(10)
+	if props.Width >= 842 {
+		labelWidth = min(float32(550), max(float32(132), props.Width-292))
+		gap = 32
+	}
+	controlWidth := max(float32(0), props.Width-labelWidth-gap)
+	recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
+		Labels: props.Labels, Placeholder: props.Placeholder, Focused: props.Focused, Window: props.Window, Theme: props.Theme,
+	})
+	recorder = woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: recorder}
+	recorderLeft := max(float32(0), controlWidth-recorderWidth)
+	controlChildren := []woxwidget.StackChild{{Left: recorderLeft, Top: 8, Child: recorder}}
+	if props.Recording && props.Status != "" && recorderLeft > 8 {
+		controlChildren = append(controlChildren, woxwidget.StackChild{Top: 14, Child: woxwidget.Align{
+			Width: recorderLeft - 8, Height: 18, Horizontal: 1, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+		}})
+	}
+	control := woxwidget.Stack{Width: controlWidth, Height: 46, Children: controlChildren}
+	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
+		Label: props.Label, Description: props.Description, Width: props.Width, Height: props.Height, LabelWidth: labelWidth, Gap: gap,
+		Padding: woxwidget.Insets{Top: 5, Bottom: 5}, Child: control, Theme: props.Theme,
+	})
+}
+
 // FormValueFieldProps contains one compact tappable form value.
 type FormValueFieldProps struct {
 	ID      string
@@ -146,7 +190,7 @@ type FormValueFieldProps struct {
 	OnTap   func()
 }
 
-// FormValueField builds a hotkey, checkbox, or selector row.
+// FormValueField builds a checkbox or selector row.
 func FormValueField(props FormValueFieldProps) woxwidget.Widget {
 	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		formFieldLabel(props.Label, 132, 42, 11, props.Theme),
@@ -195,34 +239,6 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 	}
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		formFieldLabel(props.Label, 132, fieldHeight, 11, props.Theme), valueField,
-	}}}
-}
-
-// FormTableFieldProps contains the summary displayed by a table form field.
-type FormTableFieldProps struct {
-	ID         string
-	Label      string
-	CountLabel string
-	Preview    string
-	Width      float32
-	Height     float32
-	Focused    bool
-	Theme      woxcomponent.Theme
-	OnTap      func()
-}
-
-// FormTableField builds the compact entry point for the shared table editor.
-func FormTableField(props FormTableFieldProps) woxwidget.Widget {
-	fieldWidth := props.Width - 142
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-		formFieldLabel(props.Label, 132, props.Height-14, 11, props.Theme),
-		woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
-			Width: fieldWidth, Height: props.Height - 14, Radius: 8, Color: formFieldBackground(props.Focused, props.Theme), Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 10, Bottom: 8},
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: props.CountLabel, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
-				woxwidget.TextBlock{Value: props.Preview, Width: max(float32(0), fieldWidth-22), Height: max(float32(0), props.Height-52), MaxLines: 2, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ActionHeader},
-			}},
-		}},
 	}}}
 }
 

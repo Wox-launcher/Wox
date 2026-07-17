@@ -59,23 +59,30 @@ func SettingsNote(value string, width float32, theme woxcomponent.Theme) woxwidg
 
 // SettingRowProps contains one built-in setting and its editing actions.
 type SettingRowProps struct {
-	ID          string
-	Title       string
-	Description string
-	Value       string
-	Width       float32
-	Background  woxui.Color
-	Disabled    bool
-	Kind        string
-	BrowseFile  bool
-	Editing     woxui.TextEditingState
-	Focused     bool
-	Window      *woxui.Window
-	Theme       woxcomponent.Theme
-	OnTap       func()
-	OnScroll    func(float32)
-	OnCaret     func(int)
-	OnBrowse    func()
+	ID            string
+	Title         string
+	Description   string
+	Value         string
+	ValueTrailing string
+	Width         float32
+	Background    woxui.Color
+	Disabled      bool
+	Kind          string
+	ControlWidth  float32
+	BrowseFile    bool
+	Editing       woxui.TextEditingState
+	Focused       bool
+	Window        *woxui.Window
+	Theme         woxcomponent.Theme
+	OnTap         func()
+	OnChoiceTap   func(woxui.Rect)
+	OnScroll      func(float32)
+	OnCaret       func(int)
+	OnBrowse      func()
+}
+
+func SettingChoiceAnchorKey(id string) woxwidget.Key {
+	return woxwidget.Key("setting-choice-anchor-" + id)
 }
 
 // SettingRow builds a text, switch, or choice setting row.
@@ -90,6 +97,9 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 	valueWidth := min(float32(280), max(float32(190), props.Width*0.32))
 	if props.Kind == "text" {
 		valueWidth = min(float32(440), max(float32(280), props.Width*0.46))
+		if props.ControlWidth > 0 {
+			valueWidth = props.ControlWidth
+		}
 	}
 	if props.Kind == "bool" {
 		valueWidth = 42
@@ -102,31 +112,62 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 		if props.BrowseFile {
 			inputWidth = max(float32(120), valueWidth-82)
 		}
-		input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
-			ID: "setting-text-" + props.ID, Label: props.Title, Width: inputWidth, Height: 38, Radius: 8,
-			Padding: woxwidget.Insets{Left: 12, Top: 8, Right: 12, Bottom: 6}, Background: props.Theme.ToolbarBackground,
-			Style: woxui.TextStyle{Size: 13}, State: props.Editing, Focused: props.Focused, MaxLines: 1, Window: props.Window,
-			Theme: props.Theme, ControllerManagedFocus: true, OnCaret: props.OnCaret,
+		input := woxcomponent.WoxSettingTextField(woxcomponent.TextFieldProps{
+			ID: "setting-text-" + props.ID, Label: props.Title, Width: inputWidth, State: props.Editing, Focused: props.Focused,
+			Window: props.Window, Theme: props.Theme, Disabled: props.Disabled, OnCaret: props.OnCaret,
 		})
 		valueField = input
 		if props.BrowseFile {
 			valueField = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{input, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "setting-browse-" + props.ID, Label: "Browse", Width: 74, Height: 38, Variant: woxcomponent.ButtonSurface, OnTap: props.OnBrowse, Theme: props.Theme,
+				ID: "setting-browse-" + props.ID, Label: "Browse", Width: 74, Height: 38, Disabled: props.Disabled, Variant: woxcomponent.ButtonSurface, OnTap: props.OnBrowse, Theme: props.Theme,
 			})}}
 		}
 	case "bool":
-		valueField = woxwidget.Container{Width: valueWidth, Height: 44, Padding: woxwidget.Insets{Top: 10}, Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{Value: props.Value == "true", Theme: props.Theme})}
+		valueField = woxwidget.Container{Width: valueWidth, Height: 44, Padding: woxwidget.Insets{Top: 10}, Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
+			ID: "setting-switch-" + props.ID, Label: props.Title, Value: props.Value == "true", Disabled: props.Disabled, Theme: props.Theme,
+			OnChange: func(bool) {
+				if props.OnTap != nil {
+					props.OnTap()
+				}
+			},
+		})}
 	default:
-		valueField = woxwidget.Container{Width: valueWidth, Height: 38, Radius: 4, BorderColor: props.Theme.ResultSubtitle, BorderWidth: 1, Padding: woxwidget.Insets{Left: 14, Top: 10, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: max(float32(0), valueWidth-42), Height: 24, Child: woxwidget.Text{Value: props.Value, Style: woxui.TextStyle{Size: 13}, Color: valueColor}},
-			woxwidget.Container{Width: 16, Height: 24, Child: woxwidget.Text{Value: "▾", Style: woxui.TextStyle{Size: 11}, Color: subtitle}},
+		onTap := props.OnTap
+		onTapBounds := props.OnChoiceTap
+		if onTapBounds != nil {
+			onTap = nil
+		}
+		if props.Disabled {
+			onTap = nil
+			onTapBounds = nil
+		}
+		contentWidth := max(float32(0), valueWidth-42)
+		trailingWidth := float32(0)
+		trailingGap := float32(0)
+		if props.ValueTrailing != "" {
+			trailingWidth = min(float32(68), max(float32(0), contentWidth-60))
+			trailingGap = min(float32(10), max(float32(0), contentWidth-trailingWidth-60))
+		}
+		valueChildren := []woxwidget.Widget{
+			woxwidget.Container{Width: max(float32(0), contentWidth-trailingWidth-trailingGap), Height: 24, Child: woxwidget.Text{Value: props.Value, Style: woxui.TextStyle{Size: 13}, Color: valueColor}},
+		}
+		if trailingGap > 0 {
+			valueChildren = append(valueChildren, woxwidget.Container{Width: trailingGap, Height: 24})
+		}
+		if trailingWidth > 0 {
+			valueChildren = append(valueChildren, woxwidget.Align{Width: trailingWidth, Height: 24, Horizontal: 1, Child: woxwidget.Text{Value: props.ValueTrailing, Style: woxui.TextStyle{Size: 12}, Color: subtitle}})
+		}
+		valueChildren = append(valueChildren, woxwidget.Container{Width: 16, Height: 24, Child: woxwidget.Text{Value: "▾", Style: woxui.TextStyle{Size: 11}, Color: subtitle}})
+		valueField = woxwidget.Gesture{ID: "setting-choice-" + props.ID, OnTap: onTap, OnTapBounds: onTapBounds, Child: woxwidget.Keyed{Key: SettingChoiceAnchorKey(props.ID), Child: woxwidget.Container{
+			Width: valueWidth, Height: 38, Radius: 4, BorderColor: props.Theme.ResultSubtitle, BorderWidth: 1, Padding: woxwidget.Insets{Left: 14, Top: 10, Right: 12},
+			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: valueChildren},
 		}}}
 	}
 	row := woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Title, Description: props.Description, Width: props.Width, Height: 62, LabelWidth: labelWidth, Gap: 28,
 		Radius: 6, Background: props.Background, Padding: woxwidget.Insets{Left: 2, Top: 5, Right: 2, Bottom: 5}, Child: valueField, Theme: fieldTheme,
 	})
-	return woxwidget.Gesture{ID: "setting-" + props.ID, OnTap: props.OnTap, OnScroll: func(delta woxui.Point) {
+	return woxwidget.Gesture{ID: "setting-" + props.ID, OnScroll: func(delta woxui.Point) {
 		if props.OnScroll != nil {
 			props.OnScroll(-delta.Y)
 		}

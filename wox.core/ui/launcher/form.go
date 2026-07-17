@@ -98,13 +98,13 @@ func formPanelHeight(state *formState) int {
 	if state == nil {
 		return 0
 	}
-	return formDefinitionsPanelHeight(state.action.Form)
+	return formDefinitionsPanelHeight(state.action.Form, state.values)
 }
 
-func formDefinitionsPanelHeight(definitions []formDefinition) int {
+func formDefinitionsPanelHeight(definitions []formDefinition, valueMaps ...map[string]string) int {
 	height := 100
 	for _, definition := range definitions {
-		height += int(formDefinitionHeight(definition))
+		height += int(formDefinitionHeight(definition, valueMaps...))
 	}
 	return min(max(height, 160), 520)
 }
@@ -183,10 +183,10 @@ func handleFormEditorKey(editor *woxui.TextEditor, definition formDefinition, ev
 	}
 }
 
-func formDefinitionsContentHeight(definitions []formDefinition) float32 {
+func formDefinitionsContentHeight(definitions []formDefinition, valueMaps ...map[string]string) float32 {
 	height := float32(0)
 	for _, definition := range definitions {
-		height += formDefinitionHeight(definition)
+		height += formDefinitionHeight(definition, valueMaps...)
 	}
 	return height
 }
@@ -196,7 +196,7 @@ func formDefinitionFocusable(definition formDefinition) bool {
 }
 
 func formDefinitionTextEditable(definition formDefinition) bool {
-	return definition.Type == "textbox" || definition.Type == "password" || definition.Type == "dirPath"
+	return definition.Type == "textbox" || definition.Type == "password" || definition.Type == "dirPath" || definition.Type == "woxImage"
 }
 
 func syncFormFieldsEditorLocked(fields *formFieldsState) {
@@ -229,12 +229,12 @@ func ensureFormFieldsFocusVisibleLocked(fields *formFieldsState, index int) {
 		return
 	}
 	viewportHeight := max(float32(1), fields.viewportHeight)
-	contentHeight := formDefinitionsContentHeight(fields.definitions)
+	contentHeight := formDefinitionsContentHeight(fields.definitions, fields.values)
 	rowTop := float32(0)
 	for candidate := 0; candidate < index; candidate++ {
-		rowTop += formDefinitionHeight(fields.definitions[candidate])
+		rowTop += formDefinitionHeight(fields.definitions[candidate], fields.values)
 	}
-	rowBottom := rowTop + formDefinitionHeight(fields.definitions[index])
+	rowBottom := rowTop + formDefinitionHeight(fields.definitions[index], fields.values)
 	if rowTop < fields.scroll {
 		fields.scroll = rowTop
 	} else if rowBottom > fields.scroll+viewportHeight {
@@ -279,11 +279,12 @@ func changeFormFieldsChoiceLocked(fields *formFieldsState, index, delta int) {
 
 func (a *App) openFormAction(result queryResult, action resultAction) {
 	state := &formState{formFieldsState: newFormFieldsState(action.Form, nil, true), resultID: result.ID, queryID: result.QueryID, action: action}
-	state.viewportHeight = float32(formDefinitionsPanelHeight(action.Form) - 100)
+	state.viewportHeight = float32(formDefinitionsPanelHeight(action.Form, state.values) - 100)
 	a.mu.Lock()
 	a.form = state
 	a.actionPanel = false
 	a.actionSelected = 0
+	a.actionSelectionKey = ""
 	a.actionFilter = nil
 	a.mu.Unlock()
 	a.updateFormTextInput(state.editor != nil)
@@ -486,7 +487,7 @@ func (a *App) scrollForm(delta float32) {
 		return
 	}
 	viewportHeight := max(float32(1), a.form.viewportHeight)
-	maxOffset := max(float32(0), formDefinitionsContentHeight(a.form.definitions)-viewportHeight)
+	maxOffset := max(float32(0), formDefinitionsContentHeight(a.form.definitions, a.form.values)-viewportHeight)
 	a.form.scroll = min(max(float32(0), a.form.scroll+delta), maxOffset)
 	a.mu.Unlock()
 	_ = a.window.Invalidate()

@@ -8,21 +8,30 @@ import (
 
 // PluginSettingsPageProps contains the data required by the plugin list and detail views.
 type PluginSettingsPageProps struct {
-	Width  float32
-	Height float32
-	List   PluginListProps
-	Detail PluginDetailProps
-	Theme  woxcomponent.Theme
+	Width       float32
+	Height      float32
+	List        PluginListProps
+	Detail      PluginDetailProps
+	FilterPanel *PluginFilterPanelProps
+	Theme       woxcomponent.Theme
 }
 
 // PluginSettingsPage builds the split plugin management route.
 func PluginSettingsPage(props PluginSettingsPageProps) woxwidget.Widget {
 	innerHeight := max(float32(0), props.Height-24)
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+	content := woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: props.List.Width, Height: innerHeight, Child: PluginList(props.List)},
 		woxwidget.Container{Width: 1, Height: innerHeight, Color: props.Theme.PreviewSplit},
 		woxwidget.Container{Width: props.Detail.Width, Height: innerHeight, Child: PluginDetail(props.Detail)},
 	}}}
+	if props.FilterPanel == nil {
+		return content
+	}
+	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+		{Child: content},
+		{Child: woxwidget.Gesture{ID: "plugin-filter-dismiss", OnTap: props.FilterPanel.OnDismiss, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
+		{Left: 28, Top: 66, Child: PluginFilterPanel(*props.FilterPanel)},
+	}}
 }
 
 // PluginListItem contains one rendered plugin catalog entry.
@@ -39,22 +48,32 @@ type PluginListItem struct {
 
 // PluginListProps contains plugin catalog data and search state.
 type PluginListProps struct {
-	Width        float32
-	Height       float32
-	Items        []PluginListItem
-	Message      string
-	MessageError bool
-	Scroll       float32
-	Placeholder  string
-	Search       woxui.TextEditingState
-	Focused      bool
-	Window       *woxui.Window
-	EmptyLabel   string
-	Theme        woxcomponent.Theme
-	OnViewport   func(float32)
-	OnScroll     func(float32)
-	OnCaret      func(int)
-	OnClear      func()
+	Width               float32
+	Height              float32
+	Items               []PluginListItem
+	Message             string
+	MessageError        bool
+	Scroll              float32
+	Placeholder         string
+	Search              woxui.TextEditingState
+	Focused             bool
+	Window              *woxui.Window
+	FilterIcon          *woxui.Image
+	RefreshIcon         *woxui.Image
+	FilterActive        bool
+	Refreshing          bool
+	EmptyLabel          string
+	Theme               woxcomponent.Theme
+	OnViewport          func(float32)
+	OnScroll            func(float32)
+	OnCaret             func(int)
+	OnClear             func()
+	OnSearchKey         func(woxui.KeyEvent) bool
+	OnSearchTextInput   func(woxui.TextInputEvent) bool
+	OnSearchFocusChange func(bool)
+	OnSetSearchValue    func(string) error
+	OnFilter            func()
+	OnRefresh           func()
 }
 
 // PluginList builds the searchable plugin catalog.
@@ -84,18 +103,18 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 			background = props.Theme.SelectedBackground
 			titleColor = props.Theme.SelectedTitle
 		}
-		var icon woxwidget.Widget = woxwidget.Container{Width: 36, Height: 36, Radius: 8, Color: item.FallbackColor}
+		var icon woxwidget.Widget = woxwidget.Container{Width: 32, Height: 32, Radius: 7, Color: item.FallbackColor}
 		if item.Icon != nil {
-			icon = woxwidget.Image{Source: item.Icon, Width: 36, Height: 36}
+			icon = woxwidget.Image{Source: item.Icon, Width: 32, Height: 32}
 		}
 		textWidth := max(float32(0), props.Width-80)
 		rowChildren := []woxwidget.Widget{icon}
 		if item.Badge != "" {
 			textWidth = max(float32(0), props.Width-134)
 		}
-		rowChildren = append(rowChildren, woxwidget.Container{Width: textWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: titleColor},
-			woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultSubtitle},
+		rowChildren = append(rowChildren, woxwidget.Container{Width: textWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, Color: titleColor},
+			woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
 		}}})
 		if item.Badge != "" {
 			badgeColor := props.Theme.ToolbarBackground
@@ -123,25 +142,65 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
 		}}
 	}
-	clearWidth := float32(0)
-	if props.Search.Text != "" {
-		clearWidth = 24
-	}
-	searchWidth := max(float32(40), props.Width-70)
-	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
-		ID: "plugin-search", Label: props.Placeholder, Hint: props.Placeholder, Width: searchWidth, Height: 40,
-		Padding: woxwidget.Insets{Left: 2, Right: 6}, Transparent: true, Style: woxui.TextStyle{Size: 13}, State: props.Search,
-		Focused: props.Focused, MaxLines: 1, Window: props.Window, Theme: props.Theme, ControllerManagedFocus: true, OnCaret: props.OnCaret,
+	searchFieldWidth := max(float32(80), props.Width-16)
+	searchField := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
+		ID: "plugin-search", Label: props.Placeholder, Width: searchFieldWidth, State: props.Search, Focused: props.Focused, Autofocus: props.Focused,
+		Actions: []woxcomponent.SearchFieldAction{
+			{ID: "plugin-filter", Icon: props.FilterIcon, Active: props.FilterActive, OnTap: props.OnFilter},
+			{ID: "plugin-refresh", Icon: props.RefreshIcon, Disabled: props.Refreshing, OnTap: props.OnRefresh},
+		},
+		Window: props.Window, Theme: props.Theme, OnClear: props.OnClear, OnCaret: props.OnCaret, OnKey: props.OnSearchKey,
+		OnTextInput: props.OnSearchTextInput, OnFocusChange: props.OnSearchFocusChange, OnSetValue: props.OnSetSearchValue,
 	})
-	searchChildren := []woxwidget.Widget{
-		woxwidget.Container{Width: 30, Height: 42, Padding: woxwidget.Insets{Left: 9, Top: 11}, Child: woxwidget.Text{Value: "⌕", Style: woxui.TextStyle{Size: 17}, Color: props.Theme.ResultSubtitle}},
-		search,
-	}
-	if clearWidth > 0 {
-		searchChildren = append(searchChildren, woxwidget.Gesture{ID: "plugin-search-clear", OnTap: props.OnClear, Child: woxwidget.Container{Width: clearWidth, Height: 42, Padding: woxwidget.Insets{Left: 5, Top: 10}, Child: woxwidget.Text{Value: "×", Style: woxui.TextStyle{Size: 16}, Color: props.Theme.ResultSubtitle}}})
-	}
-	searchField := woxwidget.Container{Width: props.Width - 16, Height: 44, Radius: 6, Color: props.Theme.QueryBackground, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: searchChildren}}
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 14, Children: []woxwidget.Widget{searchField, list}}}
+}
+
+// PluginFilterOption describes one advanced catalog filter.
+type PluginFilterOption struct {
+	ID    string
+	Label string
+	Value bool
+}
+
+// PluginFilterPanelProps contains the anchored advanced-filter surface.
+type PluginFilterPanelProps struct {
+	Width        float32
+	Title        string
+	RuntimeTitle string
+	Options      []PluginFilterOption
+	Runtimes     []PluginFilterOption
+	Theme        woxcomponent.Theme
+	OnToggle     func(string)
+	OnDismiss    func()
+}
+
+// PluginFilterPanel builds the catalog filter popover above the split view.
+func PluginFilterPanel(props PluginFilterPanelProps) woxwidget.Widget {
+	const rowHeight = float32(34)
+	innerWidth := max(float32(0), props.Width-28)
+	rows := make([]woxwidget.Widget, 0, len(props.Options)+len(props.Runtimes)+2)
+	rows = append(rows, woxwidget.Container{Width: innerWidth, Height: 30, Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}})
+	for _, option := range props.Options {
+		option := option
+		rows = append(rows, pluginFilterRow(option, innerWidth, rowHeight, props))
+	}
+	rows = append(rows, woxwidget.Container{Width: innerWidth, Height: 30, Padding: woxwidget.Insets{Top: 9}, Child: woxwidget.Text{Value: props.RuntimeTitle, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}})
+	for _, option := range props.Runtimes {
+		option := option
+		rows = append(rows, pluginFilterRow(option, innerWidth, rowHeight, props))
+	}
+	height := float32(28) + float32(len(rows))*rowHeight
+	return woxwidget.FocusScope{Key: "plugin-filter-panel", Modal: true, Child: woxwidget.Container{
+		Width: props.Width, Height: height, Radius: 8, Color: props.Theme.Background, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1,
+		Padding: woxwidget.Insets{Left: 14, Top: 12, Right: 14, Bottom: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
+	}}
+}
+
+func pluginFilterRow(option PluginFilterOption, width, height float32, props PluginFilterPanelProps) woxwidget.Widget {
+	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: max(float32(0), width-54), Height: height, Padding: woxwidget.Insets{Top: 9}, Child: woxwidget.Text{Value: option.Label, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultTitle}},
+		woxwidget.Container{Width: 54, Height: height, Padding: woxwidget.Insets{Top: 6}, Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{ID: "plugin-filter-" + option.ID, Label: option.Label, Value: option.Value, OnChange: func(bool) { props.OnToggle(option.ID) }, Theme: props.Theme})},
+	}}}
 }
 
 // PluginAction describes one plugin management or metadata action.
@@ -203,16 +262,30 @@ type PluginEditorProps struct {
 	OnSave        func()
 }
 
-// PluginStoreDetailProps contains the store-only plugin detail card.
+// PluginStoreDetailProps contains the store-only plugin detail page.
 type PluginStoreDetailProps struct {
-	Name            string
-	Subtitle        string
-	Description     string
-	Icon            *woxui.Image
-	FallbackColor   woxui.Color
-	MetadataActions []PluginAction
-	Management      []PluginAction
-	Error           string
+	Name             string
+	Version          string
+	Author           string
+	Description      string
+	Runtime          string
+	WebsiteLabel     string
+	WebsiteChipLabel string
+	Icon             *woxui.Image
+	ExternalIcon     *woxui.Image
+	RuntimeIcon      *woxui.Image
+	WebsiteIcon      *woxui.Image
+	FallbackColor    woxui.Color
+	Management       []PluginAction
+	ActiveTab        string
+	Tabs             []PluginTab
+	Metadata         PluginMetadataProps
+	Screenshot       *woxui.Image
+	ScreenshotHeight float32
+	Error            string
+	OnWebsite        func()
+	OnScreenshot     func()
+	OnSelectTab      func(string)
 }
 
 // PluginDetailProps selects the empty, store, or editable detail view.
@@ -243,7 +316,7 @@ func pluginEditor(props PluginEditorProps, width, height float32, theme woxcompo
 	innerWidth := max(float32(0), width-48)
 	innerHeight := max(float32(0), height-24)
 	const headerHeight = float32(104)
-	const tabHeight = float32(46)
+	const tabHeight = float32(48)
 	header := pluginDetailHeader(props.Header, innerWidth, headerHeight, theme)
 	tabs := PluginTabs(PluginTabsProps{Width: innerWidth, Height: tabHeight, Active: props.ActiveTab, Tabs: props.Tabs, Theme: theme, OnSelect: props.OnSelectTab})
 	children := []woxwidget.Widget{header, tabs}
@@ -329,18 +402,19 @@ func PluginTabs(props PluginTabsProps) woxwidget.Widget {
 	for _, tab := range props.Tabs {
 		tab := tab
 		underline := woxui.Color{}
-		color := props.Theme.ResultSubtitle
+		color := props.Theme.ResultTitle
 		if tab.ID == props.Active {
 			underline = props.Theme.Cursor
 			color = props.Theme.QueryText
 		}
+		indicatorWidth := max(float32(32), tab.Width-24)
 		children = append(children, woxwidget.Gesture{ID: "plugin-detail-tab-" + tab.ID, OnTap: func() {
 			if props.OnSelect != nil {
 				props.OnSelect(tab.ID)
 			}
 		}, Child: woxwidget.Container{Width: tab.Width, Height: props.Height - 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: tab.Width, Height: props.Height - 3, Padding: woxwidget.Insets{Top: 13}, Child: woxwidget.Text{Value: tab.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: color}},
-			woxwidget.Container{Width: tab.Width, Height: 2, Color: underline},
+			woxwidget.Align{Width: tab.Width, Height: props.Height - 3, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: tab.Label, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: color}},
+			woxwidget.Align{Width: tab.Width, Height: 2, Horizontal: 0.5, Child: woxwidget.Container{Width: indicatorWidth, Height: 2, Color: underline}},
 		}}}})
 	}
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
@@ -384,28 +458,107 @@ func pluginMetadataRow(item PluginMetadataItem, width float32, theme woxcomponen
 	}}}
 }
 
-// pluginStoreDetail renders metadata and management actions before a plugin has settings.
+// pluginStoreDetail mirrors the identity, actions, tabs, and content hierarchy of the Flutter store route.
 func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
-	innerWidth := max(float32(0), width-36)
-	var icon woxwidget.Widget = woxwidget.Container{Width: 54, Height: 54, Radius: 12, Color: props.FallbackColor}
+	innerWidth := max(float32(0), width-48)
+	innerHeight := max(float32(0), height-24)
+	var icon woxwidget.Widget = woxwidget.Container{Width: 32, Height: 32, Radius: 7, Color: props.FallbackColor}
 	if props.Icon != nil {
-		icon = woxwidget.Image{Source: props.Icon, Width: 54, Height: 54}
+		icon = woxwidget.Image{Source: props.Icon, Width: 32, Height: 32}
 	}
-	return woxwidget.Container{Width: width, Height: height, Radius: 10, Color: theme.ActionBackground, Padding: woxwidget.UniformInsets(18), Child: woxwidget.Flex{
-		Axis: woxwidget.Vertical, Gap: 16, Children: []woxwidget.Widget{
-			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 14, Children: []woxwidget.Widget{
-				icon,
-				woxwidget.Container{Width: max(float32(0), innerWidth-68), Height: 60, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-					woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 20, Weight: woxui.FontWeightSemibold}, Color: theme.QueryText},
-					woxwidget.Text{Value: props.Subtitle, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle},
-				}}},
-			}},
-			woxwidget.TextBlock{Value: props.Description, Width: innerWidth, Height: 120, MaxLines: 6, Style: woxui.TextStyle{Size: 12}, LineHeight: 19, Color: theme.ResultSubtitle},
-			pluginActions(props.MetadataActions, theme),
-			pluginActions(props.Management, theme),
-			woxwidget.TextBlock{Value: props.Error, Width: innerWidth, Height: 60, MaxLines: 3, Style: woxui.TextStyle{Size: 11}, Color: theme.ErrorText},
-		},
+	const headerHeight = float32(120)
+	const tabHeight = float32(48)
+	titleWidth := max(float32(100), innerWidth-52)
+	identity := woxwidget.Container{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		icon,
+		woxwidget.Container{Width: titleWidth, Height: 38, Padding: woxwidget.Insets{Top: 3}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 20}, Color: theme.QueryText},
+			woxwidget.Container{Height: 25, Padding: woxwidget.Insets{Top: 5}, Child: woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle}},
+		}}},
+	}}}
+	websiteWidth := float32(104)
+	authorWidth := max(float32(0), innerWidth-websiteWidth)
+	var website woxwidget.Widget = woxwidget.Container{Width: websiteWidth, Height: 28}
+	if props.WebsiteLabel != "" && props.OnWebsite != nil {
+		website = woxwidget.Gesture{ID: "plugin-website", OnTap: props.OnWebsite, Child: woxwidget.Align{Width: websiteWidth, Height: 28, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 7, Children: []woxwidget.Widget{
+			woxwidget.Image{Source: props.ExternalIcon, Width: 13, Height: 13},
+			woxwidget.Text{Value: props.WebsiteLabel, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultTitle},
+		}}}}
+	}
+	header := woxwidget.Container{Width: innerWidth, Height: headerHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+		identity,
+		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+			woxwidget.Container{Width: authorWidth, Height: 28, Padding: woxwidget.Insets{Left: 6, Top: 6}, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle}},
+			website,
+		}},
+		woxwidget.Container{Width: innerWidth, Height: 52, Padding: woxwidget.Insets{Left: 6, Top: 6}, Child: pluginOutlineActions(props.Management, theme)},
+	}}}
+	tabs := PluginTabs(PluginTabsProps{Width: innerWidth, Height: tabHeight, Active: props.ActiveTab, Tabs: props.Tabs, Theme: theme, OnSelect: props.OnSelectTab})
+	bodyHeight := max(float32(1), innerHeight-headerHeight-tabHeight)
+	var body woxwidget.Widget
+	if props.ActiveTab == "description" {
+		body = pluginStoreDescription(props, innerWidth, bodyHeight, theme)
+	} else {
+		body = pluginMetadataTab(props.Metadata, innerWidth, bodyHeight, theme)
+	}
+	children := []woxwidget.Widget{header, tabs, body}
+	if props.Error != "" {
+		children = append(children, woxwidget.TextBlock{Value: props.Error, Width: innerWidth, Height: 44, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, Color: theme.ErrorText})
+	}
+	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 24, Right: 24, Bottom: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
+}
+
+// pluginStoreDescription renders the description metadata and the first manifest screenshot.
+func pluginStoreDescription(props PluginStoreDetailProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
+	const topPadding = float32(22)
+	children := []woxwidget.Widget{
+		woxwidget.Container{Width: width, Height: 30, Child: woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
+		woxwidget.TextBlock{Value: props.Description + " · " + props.Author, Width: width, Height: 38, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: theme.ResultTitle},
+		woxwidget.Container{Width: width, Height: 42, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
+			pluginStoreChip("v"+props.Version, nil, nil, theme),
+			pluginStoreChip(props.Runtime, props.RuntimeIcon, nil, theme),
+			pluginStoreChip(props.WebsiteChipLabel, props.WebsiteIcon, props.OnWebsite, theme),
+		}}},
+	}
+	contentHeight := float32(110)
+	if props.Screenshot != nil && props.ScreenshotHeight > 0 {
+		children = append(children, woxwidget.Gesture{ID: "plugin-store-screenshot", OnTap: props.OnScreenshot, Child: woxwidget.Container{
+			Width: width, Height: props.ScreenshotHeight, Radius: 8, Child: woxwidget.Image{Source: props.Screenshot, Width: width, Height: props.ScreenshotHeight},
+		}})
+		contentHeight += props.ScreenshotHeight
+	}
+	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: topPadding}, Child: woxwidget.ScrollView{
+		Width: width, Height: max(float32(1), height-topPadding), ContentHeight: max(height-topPadding, contentHeight), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children},
 	}}
+}
+
+// pluginStoreChip keeps version, runtime, and source metadata visually consistent.
+func pluginStoreChip(label string, icon *woxui.Image, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {
+	if label == "" {
+		return nil
+	}
+	width := max(float32(58), float32(len([]rune(label)))*7+24)
+	children := make([]woxwidget.Widget, 0, 2)
+	if icon != nil {
+		children = append(children, woxwidget.Image{Source: icon, Width: 14, Height: 14})
+		width += 18
+	}
+	children = append(children, woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultTitle})
+	return woxwidget.Gesture{ID: "plugin-store-chip-" + label, OnTap: onTap, Child: woxwidget.Container{
+		Width: width, Height: 28, Radius: 7, Color: theme.ActionBackground, BorderColor: theme.ResultSubtitle, BorderWidth: 1,
+		Padding: woxwidget.Insets{Left: 10, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children},
+	}}
+}
+
+// pluginOutlineActions matches the compact store management controls used by the Flutter route.
+func pluginOutlineActions(actions []PluginAction, theme woxcomponent.Theme) woxwidget.Widget {
+	buttons := make([]woxwidget.Widget, 0, len(actions))
+	for _, action := range actions {
+		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: action.ID, Label: action.Label, Width: action.Width, Height: 36, Radius: 4, FontSize: 13, Disabled: !action.Enabled, Variant: woxcomponent.ButtonOutline, OnTap: action.OnTap, Theme: theme,
+		}))
+	}
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttons}
 }
 
 func pluginActions(actions []PluginAction, theme woxcomponent.Theme) woxwidget.Widget {

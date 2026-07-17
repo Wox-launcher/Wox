@@ -12,6 +12,8 @@ import (
 	woxui "wox/ui/runtime"
 )
 
+const caretBlinkInterval = 500 * time.Millisecond
+
 // AutomationSnapshot is the immutable retained tree exposed to test drivers.
 type AutomationSnapshot struct {
 	Tree        woxui.AccessibilityTree
@@ -52,6 +54,13 @@ type Host struct {
 	changeMu   sync.Mutex
 	change     chan struct{}
 	reported   map[string]bool
+
+	caretBlinkMu         sync.Mutex
+	caretBlinkTimer      *time.Timer
+	caretBlinkActive     bool
+	caretVisible         bool
+	caretBlinkGeneration uint64
+	animations           animationHost
 }
 
 // NewHost creates a retained host whose builder runs once per invalidated frame.
@@ -63,6 +72,7 @@ func NewHost(build func(frame woxui.FrameInfo) Widget) *Host {
 		scopeRestore: map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID{},
 		change:       make(chan struct{}),
 		reported:     map[string]bool{},
+		caretVisible: true,
 	}
 	host.snapshot.Store(AutomationSnapshot{})
 	return host
@@ -81,15 +91,22 @@ func (h *Host) AttachServices(services HostServices) {
 // Frame reconciles one widget description, publishes semantics, and paints it.
 func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	if h.window == nil || h.build == nil {
+		h.updateCaretBlink(false)
+		h.animations.reset()
 		return
 	}
 	widget := h.build(frame)
 	if widget == nil {
+		h.updateCaretBlink(false)
+		h.animations.reset()
 		return
 	}
 
 	oldNodes := h.nodes
-	root := widget.layout(context{window: h.window}, constraints{width: frame.Size.Width, height: frame.Size.Height})
+	animation := h.animations.beginFrame(h.window)
+	root := widget.layout(context{window: h.window, caretVisible: h.caretVisibleForFrame(), animation: animation}, constraints{width: frame.Size.Width, height: frame.Size.Height})
+	h.animations.endFrame(animation)
+	h.updateCaretBlink(nodeHasActiveCaret(root))
 	identities := map[string]woxui.AccessibilityNodeID{}
 	nodes := map[woxui.AccessibilityNodeID]*node{}
 	diagnostics := []string{}
@@ -363,6 +380,7 @@ func (h *Host) setFocus(id woxui.AccessibilityNodeID) {
 	if current != nil && current.focus != nil && current.focus.onFocusChange != nil {
 		current.focus.onFocusChange(true)
 	}
+	h.resetCaretBlink()
 	h.syncTextInput()
 	h.invalidate()
 }
@@ -376,6 +394,21 @@ func (h *Host) RequestFocus(key Key) bool {
 		}
 	}
 	return false
+}
+
+// ClearFocus releases the retained focus node and its native text input state.
+func (h *Host) ClearFocus() {
+	h.setFocus(0)
+}
+
+// BoundsForKey returns the latest laid-out bounds for a retained widget key.
+func (h *Host) BoundsForKey(key Key) (woxui.Rect, bool) {
+	for _, current := range h.nodes {
+		if current.key == key {
+			return current.bounds, true
+		}
+	}
+	return woxui.Rect{}, false
 }
 
 // FocusAutomationID focuses the accessible element with a stable automation identifier.
@@ -410,11 +443,15 @@ func (h *Host) PerformAutomationAction(automationID string, action woxui.Accessi
 
 // Key routes one semantic key event through capture, target, and bubble phases.
 func (h *Host) Key(event woxui.KeyEvent) bool {
-	if event.Down && event.Key == woxui.KeyTab && !event.Composing {
-		return h.moveFocus(event.Modifiers&woxui.KeyModifierShift != 0)
+	if event.Down {
+		h.resetCaretBlink()
 	}
+	tabTraversal := event.Down && event.Key == woxui.KeyTab && !event.Composing
 	target := h.nodes[h.focused]
 	if target == nil {
+		if tabTraversal {
+			return h.moveFocus(event.Modifiers&woxui.KeyModifierShift != 0)
+		}
 		return false
 	}
 	path := []*node{}
@@ -431,11 +468,15 @@ func (h *Host) Key(event woxui.KeyEvent) bool {
 			return true
 		}
 	}
+	if tabTraversal {
+		return h.moveFocus(event.Modifiers&woxui.KeyModifierShift != 0)
+	}
 	return false
 }
 
 // TextInput routes IME composition and commits only to the focused element.
 func (h *Host) TextInput(event woxui.TextInputEvent) bool {
+	h.resetCaretBlink()
 	current := h.nodes[h.focused]
 	return current != nil && current.focus != nil && current.focus.onTextInput != nil && current.focus.onTextInput(event)
 }
@@ -479,6 +520,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		}
 	}
 	if event.Kind == woxui.PointerDown && event.Button == woxui.PointerButtonPrimary {
+		h.resetCaretBlink()
 		h.pressed = nodeID(target)
 		h.pressedAt = event.Position
 		h.dragging = false
@@ -509,6 +551,87 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 			h.activatePointerTarget(target, event.Position)
 		}
 		h.pressed = 0
+	}
+}
+
+// nodeHasActiveCaret reports whether the current retained tree contains an active editor caret.
+func nodeHasActiveCaret(current *node) bool {
+	if current == nil {
+		return false
+	}
+	if current.caret {
+		return true
+	}
+	for _, child := range current.children {
+		if nodeHasActiveCaret(child) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Host) caretVisibleForFrame() bool {
+	h.caretBlinkMu.Lock()
+	defer h.caretBlinkMu.Unlock()
+	return h.caretVisible
+}
+
+// updateCaretBlink starts or stops the one-shot blink cycle based on the current widget tree.
+func (h *Host) updateCaretBlink(active bool) {
+	h.caretBlinkMu.Lock()
+	defer h.caretBlinkMu.Unlock()
+	if h.caretBlinkActive != active {
+		h.caretBlinkGeneration++
+		if h.caretBlinkTimer != nil {
+			h.caretBlinkTimer.Stop()
+			h.caretBlinkTimer = nil
+		}
+		h.caretBlinkActive = active
+		h.caretVisible = true
+	}
+	if active && h.caretBlinkTimer == nil {
+		h.scheduleCaretBlinkLocked()
+	}
+}
+
+// scheduleCaretBlinkLocked schedules one phase change; the resulting frame schedules the next one.
+func (h *Host) scheduleCaretBlinkLocked() {
+	generation := h.caretBlinkGeneration
+	h.caretBlinkTimer = time.AfterFunc(caretBlinkInterval, func() {
+		h.caretBlinkMu.Lock()
+		if !h.caretBlinkActive || h.caretBlinkGeneration != generation {
+			h.caretBlinkMu.Unlock()
+			return
+		}
+		h.caretVisible = !h.caretVisible
+		h.caretBlinkTimer = nil
+		window := h.window
+		h.caretBlinkMu.Unlock()
+		if window != nil {
+			_ = window.Invalidate()
+		}
+	})
+}
+
+// resetCaretBlink makes the caret visible immediately after editing or caret movement.
+func (h *Host) resetCaretBlink() {
+	h.caretBlinkMu.Lock()
+	if !h.caretBlinkActive {
+		h.caretBlinkMu.Unlock()
+		return
+	}
+	wasHidden := !h.caretVisible
+	h.caretVisible = true
+	h.caretBlinkGeneration++
+	if h.caretBlinkTimer != nil {
+		h.caretBlinkTimer.Stop()
+		h.caretBlinkTimer = nil
+	}
+	h.scheduleCaretBlinkLocked()
+	window := h.window
+	h.caretBlinkMu.Unlock()
+	if wasHidden && window != nil {
+		_ = window.Invalidate()
 	}
 }
 
@@ -553,6 +676,9 @@ func (h *Host) activatePointerTarget(target *node, position woxui.Point) {
 	}
 	if target.gesture.onTapAt != nil {
 		target.gesture.onTapAt(woxui.Point{X: position.X - target.bounds.X, Y: position.Y - target.bounds.Y})
+	}
+	if target.gesture.onTapBounds != nil {
+		target.gesture.onTapBounds(target.bounds)
 	}
 	h.invalidate()
 }

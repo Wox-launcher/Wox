@@ -689,6 +689,12 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 		if util.GetSystemTimestamp()-startTimestamp > 100 {
 			logger.Warn(ctx, fmt.Sprintf("load system plugin[%s] setting too slow, cost %d ms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
 		}
+		if pluginSetting.Disabled.Get() {
+			logger.Info(ctx, fmt.Sprintf("system plugin is disabled by user, skip init: %s", metadata.GetName(ctx)))
+			// Keep the instance discoverable so EnablePlugin can initialize it later.
+			m.instances = append(m.instances, instance)
+			continue
+		}
 
 		// Init plugin BEFORE adding to instances list
 		// This ensures the plugin is fully initialized before it can be queried

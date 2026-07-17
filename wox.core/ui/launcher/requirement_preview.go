@@ -64,7 +64,7 @@ type aiModel struct {
 
 // buildRequirementPreview adapts requirement state and form rows to the pure preview view.
 func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
-	form, err := a.ensureRequirementForm(result, preview)
+	form, err := a.requirementFormSnapshotFor(result, preview)
 	if err != nil {
 		return previewview.RequirementPreviewView(previewview.RequirementPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
 	}
@@ -78,28 +78,42 @@ func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, 
 	}
 	rows := make([]woxwidget.Widget, 0, len(form.definitions))
 	for index, definition := range form.definitions {
-		rows = append(rows, a.buildFormField(form.formFieldsSnapshot, callbacks, palette, index, definition, width-36, formDefinitionHeight(definition)))
+		rows = append(rows, a.buildFormField(form.formFieldsSnapshot, callbacks, palette, index, definition, width-36, formDefinitionHeight(definition, form.values)))
 	}
 	return previewview.RequirementPreviewView(previewview.RequirementPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Title: form.title, Message: form.message, PluginName: form.pluginName,
 		Error: errorMessage, SaveLabel: a.translate("i18n:ui_save"), Saving: form.saving, Rows: rows,
-		RowsHeight: formDefinitionsContentHeight(form.definitions), Scroll: form.scroll,
+		RowsHeight: formDefinitionsContentHeight(form.definitions, form.values), Scroll: form.scroll,
 		OnScroll:      func(delta float32) { a.scrollRequirementForm(form.key, delta) },
 		OnSetViewport: func(viewport float32) { a.setRequirementFormViewport(form.key, viewport) }, OnSubmit: a.submitRequirementForm,
 	})
 }
 
-// ensureRequirementForm creates one portable field state for the currently selected requirement result.
-func (a *App) ensureRequirementForm(result queryResult, preview queryPreview) (*requirementFormSnapshot, error) {
+// requirementPreviewDataAndKey validates the payload and derives its stable controller identity.
+func requirementPreviewDataAndKey(result queryResult, preview queryPreview) (queryRequirementPreviewData, string, error) {
 	var data queryRequirementPreviewData
 	if err := json.Unmarshal([]byte(preview.PreviewData), &data); err != nil {
-		return nil, fmt.Errorf("decode requirement settings: %w", err)
+		return queryRequirementPreviewData{}, "", fmt.Errorf("decode requirement settings: %w", err)
 	}
 	if data.PluginID == "" {
-		return nil, fmt.Errorf("requirement settings are missing PluginId")
+		return queryRequirementPreviewData{}, "", fmt.Errorf("requirement settings are missing PluginId")
 	}
 	hash := sha256.Sum256([]byte(preview.PreviewData))
-	key := fmt.Sprintf("%s|%s|%x", result.QueryID, result.ID, hash)
+	return data, fmt.Sprintf("%s|%s|%x", result.QueryID, result.ID, hash), nil
+}
+
+// activateRequirementPreview prepares form state and optional model data before rendering.
+func (a *App) activateRequirementPreview(result queryResult, preview queryPreview) error {
+	data, key, err := requirementPreviewDataAndKey(result, preview)
+	if err != nil {
+		return err
+	}
+	a.mu.RLock()
+	changed := a.requirementForm != nil && a.requirementForm.key != key
+	a.mu.RUnlock()
+	if changed {
+		a.deactivateRequirementForm()
+	}
 
 	a.mu.Lock()
 	if a.requirementForm == nil || a.requirementForm.key != key {
@@ -120,13 +134,26 @@ func (a *App) ensureRequirementForm(result queryResult, preview queryPreview) (*
 	if requestModels {
 		a.aiModelsLoading = true
 	}
-	snapshot := snapshotRequirementFormLocked(a.requirementForm, a.aiModelsError)
 	a.mu.Unlock()
 
 	if requestModels {
 		go a.loadAIModels()
 	}
-	return snapshot, nil
+	return nil
+}
+
+// requirementFormSnapshotFor returns only the state prepared by the lifecycle coordinator.
+func (a *App) requirementFormSnapshotFor(result queryResult, preview queryPreview) (*requirementFormSnapshot, error) {
+	_, key, err := requirementPreviewDataAndKey(result, preview)
+	if err != nil {
+		return nil, err
+	}
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.requirementForm == nil || a.requirementForm.key != key {
+		return nil, fmt.Errorf("requirement settings are not ready")
+	}
+	return snapshotRequirementFormLocked(a.requirementForm, a.aiModelsError), nil
 }
 
 func snapshotRequirementFormLocked(state *requirementFormState, modelsError string) *requirementFormSnapshot {
@@ -417,11 +444,15 @@ func (a *App) setRequirementFormCaret(index, offset int) {
 // deactivateRequirementForm returns IME ownership to the launcher query without losing edits.
 func (a *App) deactivateRequirementForm() {
 	a.mu.Lock()
-	if a.requirementForm != nil {
+	wasActive := a.requirementForm != nil && a.requirementForm.active
+	if wasActive {
 		syncFormFieldsEditorLocked(&a.requirementForm.formFieldsState)
 		a.requirementForm.active = false
 	}
 	a.mu.Unlock()
+	if !wasActive {
+		return
+	}
 	a.restoreQueryTextInput()
 	_ = a.window.Invalidate()
 }
@@ -433,7 +464,7 @@ func (a *App) scrollRequirementForm(key string, delta float32) {
 		a.mu.Unlock()
 		return
 	}
-	maxOffset := max(float32(0), formDefinitionsContentHeight(state.definitions)-state.viewportHeight)
+	maxOffset := max(float32(0), formDefinitionsContentHeight(state.definitions, state.values)-state.viewportHeight)
 	state.scroll = min(max(float32(0), state.scroll+delta), maxOffset)
 	a.mu.Unlock()
 	_ = a.window.Invalidate()
@@ -443,7 +474,7 @@ func (a *App) setRequirementFormViewport(key string, height float32) {
 	a.mu.Lock()
 	if state := a.requirementForm; state != nil && state.key == key {
 		state.viewportHeight = max(float32(1), height)
-		state.scroll = min(state.scroll, max(float32(0), formDefinitionsContentHeight(state.definitions)-state.viewportHeight))
+		state.scroll = min(state.scroll, max(float32(0), formDefinitionsContentHeight(state.definitions, state.values)-state.viewportHeight))
 	}
 	a.mu.Unlock()
 }

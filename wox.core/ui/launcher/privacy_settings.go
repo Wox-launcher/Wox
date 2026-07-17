@@ -7,6 +7,7 @@ import (
 	"time"
 
 	launcherview "wox/ui/launcher/view"
+	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
@@ -20,18 +21,41 @@ type privacySamplePayload struct {
 
 // buildPrivacySettingsPage adapts controller state to the package-independent privacy view.
 func (a *App) buildPrivacySettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
-	items := settingItemsForSnapshot(snapshot)
 	return launcherview.PrivacySettingsView(launcherview.PrivacySettingsProps{
-		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Selected: snapshot.row,
-		TelemetryTitle: items[0].title, TelemetryDescription: items[0].description, TelemetryEnabled: snapshot.data.EnableAnonymousUsageStats,
-		SampleTitle: items[1].title, SampleDescription: items[1].description, Sample: snapshot.privacySample, Error: snapshot.privacyError,
-		OnSelect: a.selectSettingRow,
+		Width: width, Height: height, Theme: snapshot.palette.componentTheme(),
+		Title: a.translate("i18n:ui_privacy"), Description: a.translate("i18n:ui_privacy_description"),
+		TelemetryTitle: a.translate("i18n:ui_privacy_anonymous_stats_title"), TelemetryDescription: a.translate("i18n:ui_privacy_anonymous_stats_description"),
+		TelemetryEnabled: snapshot.data.EnableAnonymousUsageStats, ViewSampleLabel: a.translate("i18n:ui_privacy_view_sample"), Error: snapshot.privacyError,
 		OnToggleTelemetry: func() {
+			a.selectSettingRow(0)
 			a.activateSetting(1)
 		},
-		OnToggleSample: a.togglePrivacySample,
-		OnCopySample:   a.copyPrivacySample,
+		OnViewSample: a.togglePrivacySample,
 	})
+}
+
+// buildPrivacySampleOverlay adapts the Flutter-compatible payload dialog to the settings window overlay.
+func (a *App) buildPrivacySampleOverlay(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+	return launcherview.PrivacySampleDialog(launcherview.PrivacySampleDialogProps{
+		Width: width, Height: height, Theme: snapshot.palette.componentTheme(),
+		Title: a.translate("i18n:ui_privacy_sample_title"), Sample: snapshot.privacySample,
+		CopyLabel: a.translate("i18n:toolbar_copy"), ConfirmLabel: a.translate("i18n:ui_ok"), Error: snapshot.privacyError,
+		OnCopy: a.copyPrivacySample, OnClose: a.togglePrivacySample,
+	})
+}
+
+// onPrivacySettingsKey keeps the modal sample dialog from driving settings behind it.
+func (a *App) onPrivacySettingsKey(event woxui.KeyEvent) bool {
+	a.mu.RLock()
+	active := a.settingsOpen && a.settingTab == "privacy" && a.privacySample != ""
+	a.mu.RUnlock()
+	if !active {
+		return false
+	}
+	if event.Key == woxui.KeyEscape {
+		a.togglePrivacySample()
+	}
+	return true
 }
 
 // togglePrivacySample snapshots one representative telemetry payload so its timestamp stays stable while visible.
@@ -79,7 +103,7 @@ func (a *App) copyPrivacySample() {
 	if err != nil {
 		a.privacyError = fmt.Sprintf("Could not copy sample: %v", err)
 	} else {
-		a.privacyError = "Sample copied to clipboard."
+		a.privacyError = ""
 	}
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()

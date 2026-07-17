@@ -17,57 +17,8 @@ func primaryHotkey(key string) string {
 	return "control+" + key
 }
 
-// formatHotkeyLabels applies platform labels while keeping each physical key separate.
-func formatHotkeyLabels(hotkey string) []string {
-	parts := strings.Split(strings.TrimSpace(hotkey), "+")
-	labels := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		switch strings.ToLower(part) {
-		case "cmd", "command", "meta":
-			if runtime.GOOS == "darwin" {
-				part = "Cmd"
-			} else if runtime.GOOS == "windows" {
-				part = "Win"
-			} else {
-				part = "Super"
-			}
-		case "ctrl", "control":
-			part = "Ctrl"
-		case "alt", "option":
-			if runtime.GOOS == "darwin" {
-				part = "Option"
-			} else {
-				part = "Alt"
-			}
-		case "shift":
-			part = "Shift"
-		case "enter", "return":
-			part = "Enter"
-		case "space":
-			part = "Space"
-		case "escape", "esc":
-			part = "Esc"
-		case "backquote", "tilde":
-			part = "~"
-		case "arrowup", "up":
-			part = "↑"
-		case "arrowdown", "down":
-			part = "↓"
-		case "arrowleft", "left":
-			part = "←"
-		case "arrowright", "right":
-			part = "→"
-		default:
-			if len([]rune(part)) == 1 {
-				part = strings.ToUpper(part)
-			}
-		}
-		if part != "" {
-			labels = append(labels, part)
-		}
-	}
-	return labels
+func normalizeToolbarHotkey(hotkey string) string {
+	return strings.ToLower(strings.ReplaceAll(hotkey, " ", ""))
 }
 
 type toolbarMessage struct {
@@ -111,7 +62,22 @@ func (a *App) applyToolbarMessage(message toolbarMessage) {
 	a.toolbarRevision++
 	revision := a.toolbarRevision
 	a.toolbarMsg = &message
+	panelVisible := a.actionPanel
+	panelClosed := false
+	if panelVisible {
+		if len(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)) == 0 {
+			panelClosed = a.resetActionPanelLocked()
+		} else {
+			a.normalizeActionSelectionLocked()
+		}
+	}
 	a.mu.Unlock()
+	if panelVisible {
+		_ = a.applyWindowBounds()
+	}
+	if panelClosed {
+		a.restoreQueryTextInput()
+	}
 	_ = a.window.Invalidate()
 	if !message.persistent() && message.DisplaySeconds > 0 {
 		go func() {
@@ -131,39 +97,40 @@ func (a *App) applyToolbarMessage(message toolbarMessage) {
 
 func (a *App) clearToolbarMessageByID(toolbarMessageID string) {
 	a.mu.Lock()
+	changed := false
+	panelClosed := false
 	if a.toolbarMsg != nil && a.toolbarMsg.ID == toolbarMessageID {
 		a.toolbarMsg = nil
 		a.toolbarRevision++
-	}
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
-}
-
-func defaultToolbarAction(actions []toolbarMessageAction) (toolbarMessageAction, bool) {
-	for _, action := range actions {
-		if action.IsDefault {
-			return action, true
+		changed = true
+		if a.actionPanel {
+			if len(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)) == 0 {
+				panelClosed = a.resetActionPanelLocked()
+			} else {
+				a.normalizeActionSelectionLocked()
+			}
 		}
 	}
-	if len(actions) > 0 {
-		return actions[0], true
+	a.mu.Unlock()
+	if changed {
+		_ = a.applyWindowBounds()
 	}
-	return toolbarMessageAction{}, false
+	if panelClosed {
+		a.restoreQueryTextInput()
+	}
+	_ = a.window.Invalidate()
 }
 
 func (a *App) onToolbarKey(event woxui.KeyEvent) bool {
 	a.mu.RLock()
 	message := a.toolbarMsg
-	resultSelected := a.selected >= 0 && a.selected < len(a.results)
+	panelVisible := a.actionPanel
 	a.mu.RUnlock()
-	if message == nil {
+	if message == nil || panelVisible {
 		return false
 	}
-	if event.Key == woxui.KeyEnter && !resultSelected {
-		if action, ok := defaultToolbarAction(message.Actions); ok {
-			a.activateToolbarAction(action)
-			return true
-		}
+	if event.Key == woxui.KeyEnter && event.Modifiers == 0 {
+		return false
 	}
 	for _, action := range message.Actions {
 		if toolbarHotkeyMatches(action.Hotkey, event) {
@@ -206,16 +173,28 @@ func (a *App) activateToolbarAction(action toolbarMessageAction) {
 	a.mu.RLock()
 	message := a.toolbarMsg
 	a.mu.RUnlock()
-	if message == nil || message.ID == "" || action.ID == "" {
+	if message == nil {
+		return
+	}
+	a.activateToolbarActionForMessage(message.ID, action)
+}
+
+// activateToolbarActionForMessage prevents a refreshed toolbar from executing an action from an older panel snapshot.
+func (a *App) activateToolbarActionForMessage(messageID string, action toolbarMessageAction) {
+	a.mu.RLock()
+	message := a.toolbarMsg
+	a.mu.RUnlock()
+	if message == nil || message.ID != messageID || messageID == "" || action.ID == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	err := a.services.ExecuteToolbarMessageAction(ctx, a.sessionID, message.ID, action.ID)
+	err := a.services.ExecuteToolbarMessageAction(ctx, a.sessionID, messageID, action.ID)
 	cancel()
 	if err != nil {
 		log.Printf("execute toolbar message action: %v", err)
 		return
 	}
+	a.hideActionPanel()
 	if !action.PreventHideAfterAction {
 		go func() {
 			if err := a.hideWindow(true); err != nil {

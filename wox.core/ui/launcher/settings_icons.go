@@ -3,8 +3,10 @@ package launcher
 import "sync"
 
 var (
-	settingNavIconPaths     map[string]string
-	settingNavIconPathsOnce sync.Once
+	settingNavIconPaths         map[string]string
+	settingNavIconPathsOnce     sync.Once
+	settingControlIconPaths     map[string]string
+	settingControlIconPathsOnce sync.Once
 )
 
 // settingNavIconSource maps the Flutter rail's line-icon semantics onto portable monochrome SVGs.
@@ -36,6 +38,42 @@ func settingNavIconSource(id string) woxImage {
 		}
 	})
 	path := settingNavIconPaths[id]
+	if path == "" {
+		return woxImage{}
+	}
+	return woxImage{ImageType: "svg", ImageData: start + path + end}
+}
+
+// settingControlIconSource returns Tabler line icons used by settings controls.
+func settingControlIconSource(id string) woxImage {
+	const start = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">`
+	const end = `</svg>`
+	settingControlIconPathsOnce.Do(func() {
+		settingControlIconPaths = map[string]string{
+			"add":                `<path d="M12 5v14M5 12h14"/>`,
+			"undo":               `<path d="M9 7 5 11l4 4"/><path d="M5 11h8a6 6 0 0 1 6 6v1"/>`,
+			"save":               `<path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/>`,
+			"save-edit":          `<path d="M5 4h12l2 2v6M8 4v6h8V4"/><path d="m13 19 6-6 2 2-6 6h-2z"/>`,
+			"search":             `<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>`,
+			"locate":             `<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>`,
+			"check-circle":       `<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>`,
+			"external":           `<path d="M14 5h5v5M19 5l-9 9"/><path d="M13 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-7"/>`,
+			"filter":             `<path d="M4 5h16l-6 7v6l-4 2v-8z"/>`,
+			"inbox":              `<path d="M4 4h16v13a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V4z"/><path d="M4 13h3l3 3h4l3-3h3"/>`,
+			"edit":               `<path d="M13.5 6.5l4 4M4 20h4l10.5-10.5a2.83 2.83 0 1 0-4-4L4 16v4z"/>`,
+			"delete":             `<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`,
+			"emoji":              `<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>`,
+			"upload":             `<path d="M12 16V4M8 8l4-4 4 4M5 14v5h14v-5"/>`,
+			"refresh":            `<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`,
+			"key":                `<circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M15 8l3 3M17 6l3 3"/>`,
+			"onboarding":         `<path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v18H7.5A3.5 3.5 0 0 0 4 23zM20 5.5A3.5 3.5 0 0 0 16.5 2H13v18h3.5a3.5 3.5 0 0 1 3.5 3z"/>`,
+			"document":           `<path d="M6 2h8l4 4v16H6zM14 2v5h5M9 12h6M9 16h6"/>`,
+			"code":               `<path d="m8 9-3 3 3 3M16 9l3 3-3 3"/>`,
+			"checkbox.checked":   `<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8 12 3 3 5-6"/>`,
+			"checkbox.unchecked": `<rect x="3" y="3" width="18" height="18" rx="2"/>`,
+		}
+	})
+	path := settingControlIconPaths[id]
 	if path == "" {
 		return woxImage{}
 	}

@@ -6,11 +6,24 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// RuntimeSettingsLabels contains final user-facing copy for the runtime page.
+type RuntimeSettingsLabels struct {
+	Title             string
+	Description       string
+	StatusSection     string
+	ExecutableSection string
+	Browse            string
+	Clear             string
+	Loading           string
+	Empty             string
+}
+
 // RuntimeStatus contains prepared runtime host presentation data.
 type RuntimeStatus struct {
 	Runtime      string
 	DisplayName  string
 	Mark         string
+	Icon         *woxui.Image
 	Version      string
 	StatusCode   string
 	StatusLabel  string
@@ -18,100 +31,111 @@ type RuntimeStatus struct {
 	PluginLabel  string
 	Actionable   bool
 	InstallLabel string
+	InstallIcon  *woxui.Image
 	RestartLabel string
+	RestartIcon  *woxui.Image
 	OnInstall    func()
 	OnRestart    func()
 }
 
-// RuntimeSettingRow contains one prepared executable setting row.
+// RuntimeSettingRow contains one executable path editor and its actions.
 type RuntimeSettingRow struct {
-	ID      string
-	Child   woxwidget.Widget
-	OnHover func()
-	OnTap   func()
+	ID          string
+	Title       string
+	Description string
+	Placeholder string
+	State       woxui.TextEditingState
+	Focused     bool
+	Disabled    bool
+	Window      *woxui.Window
+	OnHover     func()
+	OnCaret     func(int)
+	OnBrowse    func()
+	OnClear     func()
 }
 
 // RuntimeSettingsProps contains runtime inventory and executable settings.
 type RuntimeSettingsProps struct {
-	Width         float32
-	Height        float32
-	Theme         woxcomponent.Theme
-	Loading       bool
-	Restarting    bool
-	Error         string
-	Note          string
-	Scroll        float32
-	Statuses      []RuntimeStatus
-	Settings      []RuntimeSettingRow
-	OnRefresh     func()
-	OnScroll      func(float32)
-	OnSetGeometry func(viewport, content, rowsTop float32)
+	Width            float32
+	Height           float32
+	SettingRowHeight float32
+	Theme            woxcomponent.Theme
+	Labels           RuntimeSettingsLabels
+	Loading          bool
+	Restarting       bool
+	Error            string
+	Note             string
+	Scroll           float32
+	Statuses         []RuntimeStatus
+	Settings         []RuntimeSettingRow
+	OnScroll         func(float32)
+	OnSetGeometry    func(viewport, content, rowsTop float32)
 }
 
-// RuntimeSettingsView builds runtime status cards and executable settings.
+// RuntimeSettingsView mirrors Flutter's full-width runtime summary and executable path form.
 func RuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
-	contentWidth := max(float32(0), props.Width-72)
-	refreshLabel := "Refresh status"
-	if props.Loading {
-		refreshLabel = "Refreshing…"
+	contentWidth := SettingsPageContentWidth(props.Width)
+	settingRowHeight := props.SettingRowHeight
+	if settingRowHeight <= 0 {
+		settingRowHeight = 72
 	}
 	children := []woxwidget.Widget{
-		woxwidget.Container{Width: contentWidth, Height: 62, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxcomponent.WoxPageHeader(woxcomponent.PageHeaderProps{Title: "Runtime", Description: "Review plugin host status and configure executable paths", Width: max(float32(0), contentWidth-126), Height: 62, TitleSize: 24, Gap: 7, Theme: props.Theme}),
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "runtime-refresh", Label: refreshLabel, Width: 118, Disabled: props.Loading || props.Restarting, OnTap: props.OnRefresh, Theme: props.Theme}),
-		}}},
+		woxcomponent.WoxPageHeader(woxcomponent.PageHeaderProps{Title: props.Labels.Title, Description: props.Labels.Description, Width: contentWidth, Theme: props.Theme}),
+		woxwidget.Container{Width: contentWidth, Height: 32, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Text{
+			Value: props.Labels.StatusSection, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle,
+		}},
+	}
+	messageHeight := float32(0)
+	if props.Loading || props.Error != "" {
+		messageHeight = 24
+		message := props.Labels.Loading
+		color := props.Theme.ResultSubtitle
+		if props.Error != "" {
+			message = props.Error
+			color = props.Theme.ErrorText
+		}
+		children = append(children, woxwidget.Container{Width: contentWidth, Height: messageHeight, Padding: woxwidget.Insets{Bottom: 6}, Child: woxwidget.Text{
+			Value: message, Style: woxui.TextStyle{Size: 11}, Color: color,
+		}})
 	}
 	statusHeight := runtimeStatusGridHeight(props.Statuses, contentWidth)
-	children = append(children, runtimeStatusGrid(props, contentWidth, statusHeight))
-	children = append(children, woxwidget.Container{Width: contentWidth, Height: 34, Padding: woxwidget.Insets{Top: 9}, Child: woxwidget.Text{
-		Value: "Executable paths", Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle,
-	}})
+	children = append(children,
+		runtimeStatusGrid(props, contentWidth, statusHeight),
+		woxwidget.Container{Width: contentWidth, Height: 20},
+		woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Labels.ExecutableSection, Width: contentWidth, Theme: props.Theme}),
+	)
+	rowsTop := woxcomponent.PageHeaderHeight + 32 + messageHeight + statusHeight + 20 + 43
 	for _, row := range props.Settings {
-		row := row
-		children = append(children, woxwidget.Gesture{ID: row.ID, OnHover: func(inside bool) {
-			if inside && row.OnHover != nil {
-				row.OnHover()
+		children = append(children, runtimeExecutableSettingRow(props, row, contentWidth, settingRowHeight))
+	}
+	children = append(children, woxwidget.Container{Width: contentWidth, Height: 16})
+	contentHeight := rowsTop + float32(len(props.Settings))*settingRowHeight + 16
+	if props.Note != "" {
+		children = append(children, SettingsNote(props.Note, contentWidth, props.Theme))
+		contentHeight += 34
+	}
+	return SettingsPage(SettingsPageProps{
+		ID: "runtime-page-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight, Scroll: props.Scroll, OnScroll: props.OnScroll,
+		OnSetGeometry: func(viewport, content float32) {
+			if props.OnSetGeometry != nil {
+				props.OnSetGeometry(viewport, content, rowsTop)
 			}
-		}, OnTap: row.OnTap, Child: row.Child})
-	}
-	message := props.Note
-	messageColor := props.Theme.ResultSubtitle
-	if props.Error != "" {
-		message = props.Error
-		messageColor = props.Theme.ErrorText
-	}
-	children = append(children, woxwidget.Container{Width: contentWidth, Height: 34, Padding: woxwidget.Insets{Top: 10}, Child: woxwidget.Text{
-		Value: message, Style: woxui.TextStyle{Size: 12}, Color: messageColor,
-	}})
-	contentHeight := float32(166) + statusHeight + float32(len(props.Settings))*82
-	viewportHeight := max(float32(1), props.Height-52)
-	rowsTop := float32(132) + statusHeight
-	if props.OnSetGeometry != nil {
-		props.OnSetGeometry(viewportHeight, contentHeight, rowsTop)
-	}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 36, Top: 30, Right: 36, Bottom: 22}, Child: woxwidget.Gesture{
-		ID: "runtime-page-scroll", OnScroll: func(delta woxui.Point) {
-			if props.OnScroll != nil {
-				props.OnScroll(-delta.Y)
-			}
-		}, Child: woxwidget.ScrollView{
-			Width: contentWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, contentHeight), Offset: props.Scroll,
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: children},
 		},
-	}}
+	})
 }
 
+// runtimeStatusGridHeight keeps every card in one responsive row aligned to the tallest status.
 func runtimeStatusGridHeight(statuses []RuntimeStatus, width float32) float32 {
 	if len(statuses) == 0 {
-		return 86
+		return 36
 	}
 	columns := runtimeStatusColumns(width)
 	height := float32(0)
 	for start := 0; start < len(statuses); start += columns {
-		rowHeight := float32(160)
+		rowHeight := float32(168)
 		for index := start; index < min(start+columns, len(statuses)); index++ {
 			if statuses[index].Actionable {
-				rowHeight = 206
+				rowHeight = 224
 			}
 		}
 		height += rowHeight
@@ -122,6 +146,7 @@ func runtimeStatusGridHeight(statuses []RuntimeStatus, width float32) float32 {
 	return height
 }
 
+// runtimeStatusColumns matches Flutter's one, two, and three-column breakpoints.
 func runtimeStatusColumns(width float32) int {
 	if width >= 860 {
 		return 3
@@ -132,14 +157,15 @@ func runtimeStatusColumns(width float32) int {
 	return 1
 }
 
+// runtimeStatusGrid builds the full-width status summary or its empty state.
 func runtimeStatusGrid(props RuntimeSettingsProps, width, height float32) woxwidget.Widget {
 	if len(props.Statuses) == 0 {
-		message := "No runtime hosts reported by Wox core"
+		message := props.Labels.Empty
 		if props.Loading {
-			message = "Loading runtime status…"
+			message = ""
 		}
-		return woxwidget.Container{Width: width, Height: height, Radius: 10, Color: props.Theme.QueryBackground, Padding: woxwidget.Insets{Left: 18, Top: 28}, Child: woxwidget.Text{
-			Value: message, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle,
+		return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Text{
+			Value: message, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle,
 		}}
 	}
 	columns := runtimeStatusColumns(width)
@@ -147,10 +173,10 @@ func runtimeStatusGrid(props RuntimeSettingsProps, width, height float32) woxwid
 	rows := make([]woxwidget.Widget, 0, (len(props.Statuses)+columns-1)/columns)
 	for start := 0; start < len(props.Statuses); start += columns {
 		end := min(start+columns, len(props.Statuses))
-		rowHeight := float32(160)
+		rowHeight := float32(168)
 		for _, status := range props.Statuses[start:end] {
 			if status.Actionable {
-				rowHeight = 206
+				rowHeight = 224
 			}
 		}
 		cards := make([]woxwidget.Widget, 0, end-start)
@@ -162,44 +188,114 @@ func runtimeStatusGrid(props RuntimeSettingsProps, width, height float32) woxwid
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: rows}}
 }
 
+// runtimeStatusCard preserves Flutter's reserved detail and plugin-count alignment.
 func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, height float32) woxwidget.Widget {
 	theme := props.Theme
 	statusColor := runtimeStatusColor(status.StatusCode, theme)
-	titleWidth := max(float32(60), width-86)
-	header := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: 38, Height: 38, Radius: 8, Color: theme.ToolbarBackground, Padding: woxwidget.Insets{Left: 9, Top: 10}, Child: woxwidget.Text{
-			Value: status.Mark, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.Cursor,
+	innerWidth := max(float32(0), width-28)
+	titleWidth := max(float32(60), innerWidth-46)
+	var icon woxwidget.Widget = woxwidget.Text{Value: status.Mark, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}
+	if status.Icon != nil {
+		icon = woxwidget.Image{Source: status.Icon, Width: 22, Height: 22}
+	}
+	pillWidth := runtimeLabelWidth(status.StatusLabel, 40, 150)
+	header := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: 34, Height: 34, Radius: 8, Color: runtimeWithAlpha(theme.ResultTitle, 26), Child: woxwidget.Align{
+			Width: 34, Height: 34, Horizontal: 0.5, Vertical: 0.5, Child: icon,
 		}},
-		woxwidget.Container{Width: titleWidth, Height: 48, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: titleWidth, Height: 48, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-				woxwidget.Container{Width: max(float32(20), titleWidth-52), Height: 20, Child: woxwidget.Text{Value: status.DisplayName, Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
-				woxwidget.Text{Value: status.Version, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle},
+				woxwidget.Container{Width: max(float32(20), titleWidth-62), Height: 20, Child: woxwidget.Text{Value: status.DisplayName, Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
+				woxwidget.Container{Width: 62, Height: 20, Child: woxwidget.Text{Value: status.Version, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle}},
 			}},
-			woxwidget.Container{Width: min(float32(116), titleWidth), Height: 21, Radius: 10, Color: runtimeStatusBackground(status.StatusCode, theme), Padding: woxwidget.Insets{Left: 8, Top: 4}, Child: woxwidget.Text{
-				Value: status.StatusLabel, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: statusColor,
+			woxwidget.Container{Width: pillWidth, Height: 22, Radius: 11, Color: runtimeStatusBackground(status.StatusCode, theme), Padding: woxwidget.Insets{Left: 8, Top: 4}, Child: woxwidget.Text{
+				Value: status.StatusLabel, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: statusColor,
 			}},
 		}}},
 	}}
 	children := []woxwidget.Widget{
 		header,
-		woxwidget.TextBlock{Value: status.Detail, Width: max(float32(0), width-28), Height: 38, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: theme.ResultSubtitle},
-		woxwidget.Text{Value: status.PluginLabel, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle},
+		woxwidget.Container{Width: innerWidth, Height: 12},
+		woxwidget.Container{Width: innerWidth, Height: 40, Padding: woxwidget.Insets{Left: 46}, Child: woxwidget.TextBlock{
+			Value: status.Detail, Width: max(float32(0), innerWidth-46), Height: 40, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, LineHeight: 17, Color: theme.ResultSubtitle,
+		}},
+		woxwidget.Container{Width: innerWidth, Height: 14},
+		woxwidget.Container{Width: innerWidth, Height: 18, Padding: woxwidget.Insets{Left: 46}, Child: woxwidget.Text{
+			Value: status.PluginLabel, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle,
+		}},
 	}
 	if status.Actionable {
 		buttons := make([]woxwidget.Widget, 0, 2)
 		if status.OnInstall != nil {
-			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "runtime-install-" + status.Runtime, Label: status.InstallLabel, Width: 82, Disabled: props.Restarting, OnTap: status.OnInstall, Theme: theme}))
+			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: "runtime-install-" + status.Runtime, Label: status.InstallLabel, Icon: status.InstallIcon, IconSize: 14,
+				Width: runtimeLabelWidth(status.InstallLabel, 82, 132), Height: 38, Radius: 4, Disabled: props.Restarting, Variant: woxcomponent.ButtonOutline, OnTap: status.OnInstall, Theme: theme,
+			}))
 		}
 		if status.OnRestart != nil {
-			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "runtime-restart-" + status.Runtime, Label: status.RestartLabel, Width: 104, Disabled: props.Restarting, Variant: woxcomponent.ButtonPrimary, OnTap: status.OnRestart, Theme: theme}))
+			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: "runtime-restart-" + status.Runtime, Label: status.RestartLabel, Icon: status.RestartIcon, IconSize: 14,
+				Width: runtimeLabelWidth(status.RestartLabel, 92, 132), Height: 38, Radius: 4, Disabled: props.Restarting, Variant: woxcomponent.ButtonOutline, OnTap: status.OnRestart, Theme: theme,
+			}))
 		}
-		children = append(children, woxwidget.Container{Width: max(float32(0), width-28), Height: 38, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttons}})
+		children = append(children,
+			woxwidget.Container{Width: innerWidth, Height: 10},
+			woxwidget.Container{Width: innerWidth, Height: 38, Padding: woxwidget.Insets{Left: 46}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttons}},
+		)
 	}
-	return woxwidget.Container{Width: width, Height: height, Radius: 10, Color: theme.QueryBackground, Padding: woxwidget.UniformInsets(14), Child: woxwidget.Flex{
-		Axis: woxwidget.Vertical, Gap: 8, Children: children,
-	}}
+	return woxcomponent.WoxPanel(woxcomponent.PanelProps{
+		Width: width, Height: height, Padding: woxwidget.UniformInsets(14), BorderColor: runtimeOutlineColor(theme), Theme: theme,
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children},
+	})
 }
 
+// runtimeExecutableSettingRow renders one label, path input, browse action, and clear action.
+func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingRow, width, height float32) woxwidget.Widget {
+	labelWidth := min(float32(400), max(float32(220), width*0.48))
+	controlWidth := max(float32(220), width-labelWidth-32)
+	browseWidth := runtimeLabelWidth(props.Labels.Browse, 62, 96)
+	clearWidth := runtimeLabelWidth(props.Labels.Clear, 62, 96)
+	inputWidth := max(float32(80), controlWidth-browseWidth-clearWidth-20)
+	borderColor := runtimeWithAlpha(props.Theme.ResultSubtitle, 164)
+	if row.Focused {
+		borderColor = props.Theme.Cursor
+	}
+	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
+		ID: row.ID + "-input", Label: row.Title, Hint: row.Placeholder, Width: inputWidth, Height: 38, Radius: 4,
+		Padding: woxwidget.Insets{Left: 12, Top: 8, Right: 12, Bottom: 6}, Background: props.Theme.ToolbarBackground, BorderColor: borderColor, BorderWidth: 1,
+		Style: woxui.TextStyle{Size: 13}, State: row.State, Focused: row.Focused, MaxLines: 1, Window: row.Window,
+		Theme: props.Theme, ControllerManagedFocus: true, Disabled: row.Disabled, OnCaret: row.OnCaret,
+	})
+	controls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		input,
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-browse", Label: props.Labels.Browse, Width: browseWidth, Height: 38, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonPrimary, OnTap: row.OnBrowse, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-clear", Label: props.Labels.Clear, Width: clearWidth, Height: 38, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonOutline, OnTap: row.OnClear, Theme: props.Theme}),
+	}}
+	field := woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
+		Label: row.Title, Description: row.Description, Width: width, Height: height, LabelWidth: labelWidth, Gap: 32,
+		Padding: woxwidget.Insets{Top: 4, Bottom: 4}, DescriptionMaxLines: 2, Child: controls, Theme: props.Theme,
+	})
+	return woxwidget.Gesture{ID: row.ID, OnHover: func(inside bool) {
+		if inside && row.OnHover != nil {
+			row.OnHover()
+		}
+	}, Child: field}
+}
+
+// runtimeLabelWidth approximates intrinsic button and pill widths across Latin and CJK labels.
+func runtimeLabelWidth(label string, minimum, maximum float32) float32 {
+	width := float32(28)
+	for _, character := range label {
+		if character > 127 {
+			width += 12
+		} else {
+			width += 6.5
+		}
+	}
+	return min(maximum, max(minimum, width))
+}
+
+// runtimeStatusColor maps runtime health to the shared success, warning, and error colors.
 func runtimeStatusColor(statusCode string, theme woxcomponent.Theme) woxui.Color {
 	switch statusCode {
 	case "running":
@@ -212,7 +308,18 @@ func runtimeStatusColor(statusCode string, theme woxcomponent.Theme) woxui.Color
 }
 
 func runtimeStatusBackground(statusCode string, theme woxcomponent.Theme) woxui.Color {
-	color := runtimeStatusColor(statusCode, theme)
-	color.A = 42
+	return runtimeWithAlpha(runtimeStatusColor(statusCode, theme), 42)
+}
+
+func runtimeOutlineColor(theme woxcomponent.Theme) woxui.Color {
+	color := theme.PreviewSplit
+	if color.A == 0 {
+		color = theme.ResultSubtitle
+	}
+	return runtimeWithAlpha(color, 34)
+}
+
+func runtimeWithAlpha(color woxui.Color, alpha uint8) woxui.Color {
+	color.A = alpha
 	return color
 }

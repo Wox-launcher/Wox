@@ -54,14 +54,14 @@ type triggerConflictPreviewSnapshot struct {
 
 // buildTriggerConflictPreview adapts conflict state and form rows to the pure preview view.
 func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
-	state, err := a.ensureTriggerConflictPreview(result, preview)
+	state, err := a.triggerConflictPreviewSnapshotFor(result, preview)
 	if err != nil {
 		return previewview.TriggerConflictPreviewView(previewview.TriggerConflictPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
 	}
 	callbacks := formFieldCallbacks{idPrefix: "trigger-conflict", focus: a.focusTriggerConflictField, setCaret: a.setTriggerConflictCaret}
 	rows := make([]woxwidget.Widget, 0, len(state.definitions))
 	for index, definition := range state.definitions {
-		rows = append(rows, a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, width-36, formDefinitionHeight(definition)))
+		rows = append(rows, a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, width-36, formDefinitionHeight(definition, state.values)))
 	}
 	dirty := false
 	for key, value := range state.values {
@@ -73,23 +73,37 @@ func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPrevi
 	return previewview.TriggerConflictPreviewView(previewview.TriggerConflictPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Keyword: state.keyword, Title: state.title, Message: state.message,
 		Error: state.error, SaveLabel: a.translate("i18n:ui_save"), Dirty: dirty, Saving: state.saving,
-		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions), Scroll: state.scroll,
+		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions, state.values), Scroll: state.scroll,
 		OnScroll:      func(delta float32) { a.scrollTriggerConflictPreview(state.key, delta) },
 		OnSetViewport: func(viewport float32) { a.setTriggerConflictViewport(state.key, viewport) }, OnSubmit: a.submitTriggerConflictPreview,
 	})
 }
 
-// ensureTriggerConflictPreview reuses the shared form engine for the current conflict payload.
-func (a *App) ensureTriggerConflictPreview(result queryResult, preview queryPreview) (*triggerConflictPreviewSnapshot, error) {
+// triggerConflictPreviewDataAndKey validates the payload and derives its stable controller identity.
+func triggerConflictPreviewDataAndKey(result queryResult, preview queryPreview) (triggerConflictPreviewData, string, error) {
 	var data triggerConflictPreviewData
 	if err := json.Unmarshal([]byte(preview.PreviewData), &data); err != nil {
-		return nil, fmt.Errorf("decode trigger keyword conflict: %w", err)
+		return triggerConflictPreviewData{}, "", fmt.Errorf("decode trigger keyword conflict: %w", err)
 	}
 	if len(data.Plugins) == 0 {
-		return nil, fmt.Errorf("trigger keyword conflict has no plugins")
+		return triggerConflictPreviewData{}, "", fmt.Errorf("trigger keyword conflict has no plugins")
 	}
 	hash := sha256.Sum256([]byte(preview.PreviewData))
-	key := fmt.Sprintf("%s|%s|%x", result.QueryID, result.ID, hash)
+	return data, fmt.Sprintf("%s|%s|%x", result.QueryID, result.ID, hash), nil
+}
+
+// activateTriggerConflictPreview prepares the conflict form before rendering.
+func (a *App) activateTriggerConflictPreview(result queryResult, preview queryPreview) error {
+	data, key, err := triggerConflictPreviewDataAndKey(result, preview)
+	if err != nil {
+		return err
+	}
+	a.mu.RLock()
+	changed := a.triggerConflict != nil && a.triggerConflict.key != key
+	a.mu.RUnlock()
+	if changed {
+		a.deactivateTriggerConflictPreview()
+	}
 
 	a.mu.Lock()
 	if a.triggerConflict == nil || a.triggerConflict.key != key {
@@ -113,7 +127,7 @@ func (a *App) ensureTriggerConflictPreview(result queryResult, preview queryPrev
 		}
 		if len(definitions) == 0 {
 			a.mu.Unlock()
-			return nil, fmt.Errorf("trigger keyword conflict has no valid plugin ids")
+			return fmt.Errorf("trigger keyword conflict has no valid plugin ids")
 		}
 		fields := newFormFieldsState(definitions, values, false)
 		a.triggerConflict = &triggerConflictPreviewState{
@@ -126,9 +140,22 @@ func (a *App) ensureTriggerConflictPreview(result queryResult, preview queryPrev
 			initial:         initial,
 		}
 	}
-	snapshot := snapshotTriggerConflictPreviewLocked(a.triggerConflict)
 	a.mu.Unlock()
-	return snapshot, nil
+	return nil
+}
+
+// triggerConflictPreviewSnapshotFor returns prepared conflict form state.
+func (a *App) triggerConflictPreviewSnapshotFor(result queryResult, preview queryPreview) (*triggerConflictPreviewSnapshot, error) {
+	_, key, err := triggerConflictPreviewDataAndKey(result, preview)
+	if err != nil {
+		return nil, err
+	}
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.triggerConflict == nil || a.triggerConflict.key != key {
+		return nil, fmt.Errorf("trigger keyword conflict is not ready")
+	}
+	return snapshotTriggerConflictPreviewLocked(a.triggerConflict), nil
 }
 
 func snapshotTriggerConflictPreviewLocked(state *triggerConflictPreviewState) *triggerConflictPreviewSnapshot {
@@ -294,7 +321,7 @@ func (a *App) setTriggerConflictViewport(key string, height float32) {
 	a.mu.Lock()
 	if state := a.triggerConflict; state != nil && state.key == key {
 		state.viewportHeight = max(float32(1), height)
-		state.scroll = min(state.scroll, max(float32(0), formDefinitionsContentHeight(state.definitions)-state.viewportHeight))
+		state.scroll = min(state.scroll, max(float32(0), formDefinitionsContentHeight(state.definitions, state.values)-state.viewportHeight))
 	}
 	a.mu.Unlock()
 }
@@ -306,7 +333,7 @@ func (a *App) scrollTriggerConflictPreview(key string, delta float32) {
 		a.mu.Unlock()
 		return
 	}
-	maxOffset := max(float32(0), formDefinitionsContentHeight(state.definitions)-state.viewportHeight)
+	maxOffset := max(float32(0), formDefinitionsContentHeight(state.definitions, state.values)-state.viewportHeight)
 	state.scroll = min(max(float32(0), state.scroll+delta), maxOffset)
 	a.mu.Unlock()
 	_ = a.window.Invalidate()

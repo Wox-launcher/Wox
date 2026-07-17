@@ -15,7 +15,7 @@ import (
 
 // buildChatPreview prepares chat view props while retaining lifecycle and actions in the controller.
 func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
-	snapshot, err := a.ensureChatPreview(result, preview)
+	snapshot, err := a.chatPreviewSnapshotFor(result, preview)
 	if err != nil {
 		return previewview.PreviewError(fmt.Sprintf("Invalid chat preview: %v", err), width, height, palette.componentTheme())
 	}

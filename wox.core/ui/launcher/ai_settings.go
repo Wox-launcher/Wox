@@ -28,8 +28,8 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float
 	props := launcherview.AISettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: snapshot.aiForm != nil,
 		Title: a.translate("i18n:ui_ai"), Description: a.translate("i18n:ui_ai_description"),
-		AddLabel: a.translate("i18n:ui_add"), NoDataLabel: a.translate("i18n:ui_no_data"), Scroll: snapshot.pageScroll,
-		OnScroll: a.scrollSettingsPage, OnSetGeometry: func(viewport, content, _ float32) { a.setSettingsPageGeometry(viewport, content, 0) },
+		AddLabel: a.translate("i18n:ui_add"), NoDataLabel: a.translate("i18n:ui_no_data"), Scroll: snapshot.pageScroll.offset,
+		OnScroll: a.scrollSettingsPage, OnSetGeometry: func(viewport, content, _ float32) { a.setSettingsPageGeometry(viewport, content) },
 	}
 	if snapshot.aiForm == nil {
 		return launcherview.AISettingsView(props)
@@ -373,7 +373,7 @@ func (a *App) openAISettingsTable(index int) {
 func (a *App) addAISettingsTableRow(index int) {
 	a.openAISettingsTable(index)
 	if index < 2 {
-		a.beginAddFormTableRow()
+		a.beginAddFormTableRowDirect()
 	}
 }
 
@@ -390,7 +390,7 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 	a.mu.Unlock()
 	a.finishOpeningFormTable()
 	if tableIndex < 2 {
-		a.beginEditFormTableRow()
+		a.beginEditFormTableRowDirect()
 	}
 }
 

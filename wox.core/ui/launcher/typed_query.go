@@ -130,6 +130,8 @@ func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {
 			Text:         result.Tails[index].Text,
 			TextCategory: result.Tails[index].TextCategory,
 			Image:        fromCoreImage(result.Tails[index].Image),
+			ImageWidth:   result.Tails[index].ImageWidth,
+			ImageHeight:  result.Tails[index].ImageHeight,
 			Tooltip:      result.Tails[index].Tooltip,
 			ContextData:  cloneStringMap(result.Tails[index].ContextData),
 		}

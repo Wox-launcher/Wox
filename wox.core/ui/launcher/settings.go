@@ -96,106 +96,117 @@ type settingChoice struct {
 }
 
 type settingItem struct {
-	key         string
-	title       string
-	description string
-	value       string
-	choices     []settingChoice
-	text        bool
-	browseFile  bool
-	disabled    bool
+	key          string
+	title        string
+	description  string
+	value        string
+	choices      []settingChoice
+	trailers     map[string]string
+	filterable   bool
+	text         bool
+	controlWidth float32
+	browseFile   bool
+	disabled     bool
 }
 
 type settingsSnapshot struct {
-	isDev                bool
-	tab                  string
-	row                  int
-	note                 string
-	saving               bool
-	editKey              string
-	editing              woxui.TextEditingState
-	searchQuery          woxui.TextEditingState
-	searchFocused        bool
-	searchPanel          bool
-	searchSelected       int
-	searchScroll         float32
-	searchPlugins        []pluginSettingsPlugin
-	searchLoading        bool
-	searchError          string
-	choicePicker         *settingChoicePickerSnapshot
-	pageScroll           float32
-	railScroll           float32
-	languages            []settingChoice
-	data                 settingsData
-	palette              uiPalette
-	plugins              []pluginSettingsPlugin
-	pluginsLoading       bool
-	pluginsError         string
-	pluginSelected       int
-	pluginListScroll     float32
-	pluginSearch         woxui.TextEditingState
-	pluginSearchFocused  bool
-	pluginDetailTab      string
-	pluginForm           *pluginSettingsFormSnapshot
-	pluginsStore         bool
-	pluginOperation      string
-	pluginOperationError string
-	pluginUninstallArmed string
-	hotkeyForm           *formFieldsSnapshot
-	hotkeyFocused        bool
-	glanceCatalog        []glanceCatalogItem
-	glanceCatalogLoading bool
-	glanceCatalogError   string
-	systemFontFamilies   []string
-	systemFontsLoading   bool
-	systemFontsError     string
-	themes               []themeSettingsTheme
-	themesMode           string
-	themesLoading        bool
-	themesError          string
-	themeSelected        int
-	themeListScroll      float32
-	themeOperation       string
-	themeUninstallArmed  string
-	aiForm               *formFieldsSnapshot
-	aiProvidersLoading   bool
-	aiProvidersError     string
-	tableEditor          *formTableEditorSnapshot
-	modelManager         *modelManagerSnapshot
-	usage                usageStatsData
-	usagePeriod          string
-	usageLoading         bool
-	usageError           string
-	aboutVersion         string
-	aboutLoading         bool
-	aboutError           string
-	privacySample        string
-	privacyError         string
-	dataBackups          []backupInfo
-	dataLocation         string
-	dataLoading          bool
-	dataBusy             string
-	dataError            string
-	dataRestoreArmed     string
-	dataPendingLocation  string
-	dataClearLogsArmed   bool
-	dataListScroll       float32
-	runtimeStatuses      []runtimeStatus
-	runtimeLoading       bool
-	runtimeError         string
-	runtimeRestarting    string
-	runtimePageScroll    float32
-	cloudAccount         cloudAccountStatus
-	cloudSync            cloudSyncStatus
-	cloudDevices         cloudDeviceList
-	cloudLoading         bool
-	cloudBusy            string
-	cloudError           string
-	cloudPageScroll      float32
-	cloudForm            *cloudFormSnapshot
-	cloudActionMenu      string
-	cloudPlugins         []pluginSettingsPlugin
-	cloudPluginScroll    float32
+	isDev                 bool
+	tab                   string
+	row                   int
+	note                  string
+	saving                bool
+	editKey               string
+	editing               woxui.TextEditingState
+	searchQuery           woxui.TextEditingState
+	searchFocused         bool
+	searchPanel           bool
+	searchSelected        int
+	searchScroll          float32
+	searchPlugins         []pluginSettingsPlugin
+	searchLoading         bool
+	searchError           string
+	choicePicker          *settingChoicePickerSnapshot
+	pageScroll            scrollController
+	railScroll            scrollController
+	languages             []settingChoice
+	updateChannelVersions []updateChannelVersion
+	data                  settingsData
+	palette               uiPalette
+	plugins               []pluginSettingsPlugin
+	pluginsLoading        bool
+	pluginsError          string
+	pluginSelected        int
+	pluginListScroll      float32
+	pluginSearch          woxui.TextEditingState
+	pluginSearchFocused   bool
+	pluginFilters         pluginFilterState
+	pluginFilterOpen      bool
+	pluginDetailTab       string
+	pluginForm            *pluginSettingsFormSnapshot
+	pluginsStore          bool
+	pluginOperation       string
+	pluginOperationError  string
+	pluginUninstallArmed  string
+	hotkeyForm            *formFieldsSnapshot
+	hotkeyFocused         bool
+	glanceCatalog         []glanceCatalogItem
+	glanceCatalogLoading  bool
+	glanceCatalogError    string
+	systemFontFamilies    []string
+	systemFontsLoading    bool
+	systemFontsError      string
+	themes                []themeSettingsTheme
+	themesMode            string
+	themesLoading         bool
+	themesError           string
+	themeSelected         int
+	themeListScroll       float32
+	themeSearch           woxui.TextEditingState
+	themeSearchFocused    bool
+	themeDetailTab        string
+	themeOperation        string
+	themeUninstallArmed   string
+	aiForm                *formFieldsSnapshot
+	aiProvidersLoading    bool
+	aiProvidersError      string
+	tableEditor           *formTableEditorSnapshot
+	modelManager          *modelManagerSnapshot
+	usage                 usageStatsData
+	usagePeriod           string
+	usageLoading          bool
+	usageError            string
+	aboutVersion          string
+	aboutLoading          bool
+	aboutError            string
+	privacySample         string
+	privacyError          string
+	dataBackups           []backupInfo
+	dataLocation          string
+	dataLoading           bool
+	dataBusy              string
+	dataError             string
+	dataRestoreArmed      string
+	dataPendingLocation   string
+	dataClearLogsArmed    bool
+	dataListScroll        float32
+	runtimeStatuses       []runtimeStatus
+	runtimeLoading        bool
+	runtimeError          string
+	runtimeRestarting     string
+	runtimePageScroll     float32
+	cloudAccount          cloudAccountStatus
+	cloudSync             cloudSyncStatus
+	cloudBillingPlan      cloudBillingPlan
+	cloudBillingLoaded    bool
+	cloudDevices          cloudDeviceList
+	cloudLoading          bool
+	cloudBusy             string
+	cloudError            string
+	cloudPageScroll       float32
+	cloudForm             *cloudFormSnapshot
+	cloudActionMenu       string
+	cloudPlugins          []pluginSettingsPlugin
+	cloudPluginScroll     float32
 }
 
 type settingTab struct {
@@ -341,10 +352,19 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	a.settingEditKey = ""
 	a.settingEditor = nil
 	a.settingSearchEditor = woxui.NewTextEditor("")
-	a.settingSearchFocused = true
+	a.settingSearchFocused = tab != "plugins"
 	a.settingSearchPanel = false
 	a.settingSearchSelected = 0
 	a.settingSearchScroll = 0
+	if tab == "plugins" {
+		if a.pluginSearchEditor == nil {
+			a.pluginSearchEditor = woxui.NewTextEditor("")
+		}
+		a.pluginSearchFocused = true
+	} else {
+		a.pluginSearchFocused = false
+	}
+	a.settingPageScroll.reset()
 	a.settingsHotkeyFocus = false
 	a.settingChoicePicker = nil
 	a.modelManager = nil
@@ -370,13 +390,18 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.themesError = ""
 		a.themeSelected = -1
 		a.themeListScroll = 0
+		a.themeSearchEditor = woxui.NewTextEditor("")
+		a.themeSearchFocused = false
+		a.themeDetailTab = "preview"
 		a.themeOperation = ""
 		a.themeUninstallArmed = ""
 	}
 	if a.pluginForm != nil {
 		a.pluginForm.active = false
 	}
+	a.ensureSettingTabVisibleLocked(tab)
 	a.mu.Unlock()
+	a.preloadThemeEditorWallpaper()
 	a.deactivateTerminalPreview()
 	a.resetChatPreview()
 	if tab == "theme" && themeMode == "editor" {
@@ -421,11 +446,13 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if tab == "privacy" {
 		go a.reloadAboutVersion()
 	}
+	go a.reloadUpdateChannelVersions()
 
 	settingsView, err := a.ensureSettingsWindow()
 	if err != nil {
 		a.mu.Lock()
 		a.settingsOpen = false
+		a.releaseThemeEditorWallpaperLocked()
 		a.mu.Unlock()
 		return err
 	}
@@ -527,6 +554,9 @@ func (a *App) closeSettings() error {
 }
 
 func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
+	if a.onPrivacySettingsKey(event) {
+		return true
+	}
 	if a.onModelManagerKey(event) {
 		return true
 	}
@@ -561,12 +591,6 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 		return true
 	}
 	switch event.Key {
-	case woxui.KeyEscape:
-		go func() {
-			if err := a.closeSettings(); err != nil {
-				log.Printf("close settings: %v", err)
-			}
-		}()
 	case woxui.KeyTab:
 		direction := 1
 		if event.Modifiers&woxui.KeyModifierShift != 0 {
@@ -608,6 +632,10 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	if a.pluginSearchEditor != nil {
 		pluginSearch = a.pluginSearchEditor.State()
 	}
+	var themeSearch woxui.TextEditingState
+	if a.themeSearchEditor != nil {
+		themeSearch = a.themeSearchEditor.State()
+	}
 	var aiForm *formFieldsSnapshot
 	if a.aiSettingsForm != nil {
 		snapshot := snapshotFormFieldsLocked(a.aiSettingsForm)
@@ -622,95 +650,103 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	cloudForm := snapshotCloudFormLocked(a.cloudForm)
 	modelManager := snapshotModelManagerLocked(a.modelManager)
 	return settingsSnapshot{
-		isDev:                a.isDev,
-		tab:                  a.settingTab,
-		row:                  a.settingRow,
-		note:                 a.settingNote,
-		saving:               a.settingSaving,
-		editKey:              a.settingEditKey,
-		editing:              editing,
-		searchQuery:          searchQuery,
-		searchFocused:        a.settingSearchFocused,
-		searchPanel:          a.settingSearchPanel,
-		searchSelected:       a.settingSearchSelected,
-		searchScroll:         a.settingSearchScroll,
-		searchPlugins:        append([]pluginSettingsPlugin(nil), a.settingSearchPlugins...),
-		searchLoading:        a.settingSearchLoading,
-		searchError:          a.settingSearchError,
-		choicePicker:         choicePicker,
-		pageScroll:           a.settingPageScroll,
-		railScroll:           a.settingRailScroll,
-		languages:            append([]settingChoice(nil), a.settingLanguages...),
-		data:                 a.settings,
-		palette:              a.palette,
-		plugins:              append([]pluginSettingsPlugin(nil), a.plugins...),
-		pluginsLoading:       a.pluginsLoading,
-		pluginsError:         a.pluginsError,
-		pluginSelected:       a.pluginSelected,
-		pluginListScroll:     a.pluginListScroll,
-		pluginSearch:         pluginSearch,
-		pluginSearchFocused:  a.pluginSearchFocused,
-		pluginDetailTab:      a.pluginDetailTab,
-		pluginForm:           snapshotPluginSettingsFormLocked(a.pluginForm),
-		pluginsStore:         a.pluginsStore,
-		pluginOperation:      a.pluginOperation,
-		pluginOperationError: a.pluginOperationError,
-		pluginUninstallArmed: a.pluginUninstallArmed,
-		hotkeyForm:           hotkeyForm,
-		hotkeyFocused:        a.settingsHotkeyFocus,
-		glanceCatalog:        append([]glanceCatalogItem(nil), a.glanceCatalog...),
-		glanceCatalogLoading: a.glanceCatalogLoading,
-		glanceCatalogError:   a.glanceCatalogError,
-		systemFontFamilies:   append([]string(nil), a.systemFontFamilies...),
-		systemFontsLoading:   a.systemFontsLoading,
-		systemFontsError:     a.systemFontsError,
-		themes:               append([]themeSettingsTheme(nil), a.themes...),
-		themesMode:           a.themesMode,
-		themesLoading:        a.themesLoading,
-		themesError:          a.themesError,
-		themeSelected:        a.themeSelected,
-		themeListScroll:      a.themeListScroll,
-		themeOperation:       a.themeOperation,
-		themeUninstallArmed:  a.themeUninstallArmed,
-		aiForm:               aiForm,
-		aiProvidersLoading:   a.aiProvidersLoading,
-		aiProvidersError:     a.aiProvidersError,
-		tableEditor:          tableEditor,
-		modelManager:         modelManager,
-		usage:                cloneUsageStats(a.usageStats),
-		usagePeriod:          a.usagePeriod,
-		usageLoading:         a.usageLoading,
-		usageError:           a.usageError,
-		aboutVersion:         a.aboutVersion,
-		aboutLoading:         a.aboutLoading,
-		aboutError:           a.aboutError,
-		privacySample:        a.privacySample,
-		privacyError:         a.privacyError,
-		dataBackups:          append([]backupInfo(nil), a.dataBackups...),
-		dataLocation:         a.dataLocation,
-		dataLoading:          a.dataLoading,
-		dataBusy:             a.dataBusy,
-		dataError:            a.dataError,
-		dataRestoreArmed:     a.dataRestoreArmed,
-		dataPendingLocation:  a.dataPendingLocation,
-		dataClearLogsArmed:   a.dataClearLogsArmed,
-		dataListScroll:       a.dataListScroll,
-		runtimeStatuses:      cloneRuntimeStatuses(a.runtimeStatuses),
-		runtimeLoading:       a.runtimeLoading,
-		runtimeError:         a.runtimeError,
-		runtimeRestarting:    a.runtimeRestarting,
-		runtimePageScroll:    a.runtimePageScroll,
-		cloudAccount:         a.cloudAccount,
-		cloudSync:            a.cloudSync,
-		cloudDevices:         cloneCloudDeviceList(a.cloudDevices),
-		cloudLoading:         a.cloudLoading,
-		cloudBusy:            a.cloudBusy,
-		cloudError:           a.cloudError,
-		cloudPageScroll:      a.cloudPageScroll,
-		cloudForm:            cloudForm,
-		cloudActionMenu:      a.cloudActionMenu,
-		cloudPlugins:         append([]pluginSettingsPlugin(nil), a.cloudPlugins...),
-		cloudPluginScroll:    a.cloudPluginScroll,
+		isDev:                 a.isDev,
+		tab:                   a.settingTab,
+		row:                   a.settingRow,
+		note:                  a.settingNote,
+		saving:                a.settingSaving,
+		editKey:               a.settingEditKey,
+		editing:               editing,
+		searchQuery:           searchQuery,
+		searchFocused:         a.settingSearchFocused,
+		searchPanel:           a.settingSearchPanel,
+		searchSelected:        a.settingSearchSelected,
+		searchScroll:          a.settingSearchScroll,
+		searchPlugins:         append([]pluginSettingsPlugin(nil), a.settingSearchPlugins...),
+		searchLoading:         a.settingSearchLoading,
+		searchError:           a.settingSearchError,
+		choicePicker:          choicePicker,
+		pageScroll:            a.settingPageScroll,
+		railScroll:            a.settingRailScroll,
+		languages:             append([]settingChoice(nil), a.settingLanguages...),
+		updateChannelVersions: append([]updateChannelVersion(nil), a.updateChannelVersions...),
+		data:                  a.settings,
+		palette:               a.palette,
+		plugins:               append([]pluginSettingsPlugin(nil), a.plugins...),
+		pluginsLoading:        a.pluginsLoading,
+		pluginsError:          a.pluginsError,
+		pluginSelected:        a.pluginSelected,
+		pluginListScroll:      a.pluginListScroll,
+		pluginSearch:          pluginSearch,
+		pluginSearchFocused:   a.pluginSearchFocused,
+		pluginFilters:         a.pluginFilters,
+		pluginFilterOpen:      a.pluginFilterOpen,
+		pluginDetailTab:       a.pluginDetailTab,
+		pluginForm:            snapshotPluginSettingsFormLocked(a.pluginForm),
+		pluginsStore:          a.pluginsStore,
+		pluginOperation:       a.pluginOperation,
+		pluginOperationError:  a.pluginOperationError,
+		pluginUninstallArmed:  a.pluginUninstallArmed,
+		hotkeyForm:            hotkeyForm,
+		hotkeyFocused:         a.settingsHotkeyFocus,
+		glanceCatalog:         append([]glanceCatalogItem(nil), a.glanceCatalog...),
+		glanceCatalogLoading:  a.glanceCatalogLoading,
+		glanceCatalogError:    a.glanceCatalogError,
+		systemFontFamilies:    append([]string(nil), a.systemFontFamilies...),
+		systemFontsLoading:    a.systemFontsLoading,
+		systemFontsError:      a.systemFontsError,
+		themes:                append([]themeSettingsTheme(nil), a.themes...),
+		themesMode:            a.themesMode,
+		themesLoading:         a.themesLoading,
+		themesError:           a.themesError,
+		themeSelected:         a.themeSelected,
+		themeListScroll:       a.themeListScroll,
+		themeSearch:           themeSearch,
+		themeSearchFocused:    a.themeSearchFocused,
+		themeDetailTab:        a.themeDetailTab,
+		themeOperation:        a.themeOperation,
+		themeUninstallArmed:   a.themeUninstallArmed,
+		aiForm:                aiForm,
+		aiProvidersLoading:    a.aiProvidersLoading,
+		aiProvidersError:      a.aiProvidersError,
+		tableEditor:           tableEditor,
+		modelManager:          modelManager,
+		usage:                 cloneUsageStats(a.usageStats),
+		usagePeriod:           a.usagePeriod,
+		usageLoading:          a.usageLoading,
+		usageError:            a.usageError,
+		aboutVersion:          a.aboutVersion,
+		aboutLoading:          a.aboutLoading,
+		aboutError:            a.aboutError,
+		privacySample:         a.privacySample,
+		privacyError:          a.privacyError,
+		dataBackups:           append([]backupInfo(nil), a.dataBackups...),
+		dataLocation:          a.dataLocation,
+		dataLoading:           a.dataLoading,
+		dataBusy:              a.dataBusy,
+		dataError:             a.dataError,
+		dataRestoreArmed:      a.dataRestoreArmed,
+		dataPendingLocation:   a.dataPendingLocation,
+		dataClearLogsArmed:    a.dataClearLogsArmed,
+		dataListScroll:        a.dataListScroll,
+		runtimeStatuses:       cloneRuntimeStatuses(a.runtimeStatuses),
+		runtimeLoading:        a.runtimeLoading,
+		runtimeError:          a.runtimeError,
+		runtimeRestarting:     a.runtimeRestarting,
+		runtimePageScroll:     a.runtimePageScroll,
+		cloudAccount:          a.cloudAccount,
+		cloudSync:             a.cloudSync,
+		cloudBillingPlan:      a.cloudBillingPlan,
+		cloudBillingLoaded:    a.cloudBillingLoaded,
+		cloudDevices:          cloneCloudDeviceList(a.cloudDevices),
+		cloudLoading:          a.cloudLoading,
+		cloudBusy:             a.cloudBusy,
+		cloudError:            a.cloudError,
+		cloudPageScroll:       a.cloudPageScroll,
+		cloudForm:             cloudForm,
+		cloudActionMenu:       a.cloudActionMenu,
+		cloudPlugins:          append([]pluginSettingsPlugin(nil), a.cloudPlugins...),
+		cloudPluginScroll:     a.cloudPluginScroll,
 	}
 }
 
@@ -732,8 +768,19 @@ func (a *App) selectSettingTab(tab string) {
 	loadData := false
 	loadRuntime := false
 	loadCloud := false
+	loadUpdateChannels := false
 	a.mu.Lock()
 	a.settingChoicePicker = nil
+	if tab == "plugins" {
+		if a.pluginSearchEditor == nil {
+			a.pluginSearchEditor = woxui.NewTextEditor("")
+		}
+		a.pluginSearchFocused = true
+		a.settingSearchFocused = false
+		a.settingSearchPanel = false
+	} else {
+		a.pluginSearchFocused = false
+	}
 	if a.settingTab != tab {
 		if a.pluginForm != nil {
 			syncFormFieldsEditorLocked(&a.pluginForm.formFieldsState)
@@ -744,7 +791,7 @@ func (a *App) selectSettingTab(tab string) {
 		a.settingNote = ""
 		a.settingEditKey = ""
 		a.settingEditor = nil
-		a.settingPageScroll = 0
+		a.settingPageScroll.reset()
 		a.runtimePageScroll = 0
 		a.cloudPageScroll = 0
 		a.cloudPluginScroll = 0
@@ -754,6 +801,9 @@ func (a *App) selectSettingTab(tab string) {
 		}
 		if a.themeEditor != nil {
 			a.themeEditor.active = false
+		}
+		if tab != "theme" {
+			a.themeSearchFocused = false
 		}
 	}
 	a.ensureSettingTabVisibleLocked(tab)
@@ -784,6 +834,7 @@ func (a *App) selectSettingTab(tab string) {
 	loadData = tab == "data" && !a.dataLoaded && !a.dataLoading
 	loadRuntime = tab == "runtime" && !a.runtimeLoaded && !a.runtimeLoading
 	loadCloud = tab == "cloud" && !a.cloudLoaded && !a.cloudLoading
+	loadUpdateChannels = tab == "updates" && len(a.updateChannelVersions) == 0 && !a.updateChannelsLoading
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	if loadPlugins {
@@ -843,6 +894,9 @@ func (a *App) selectSettingTab(tab string) {
 	if loadCloud {
 		go a.reloadCloudSync()
 	}
+	if loadUpdateChannels {
+		go a.reloadUpdateChannelVersions()
+	}
 	a.invalidateSettingsWindow()
 }
 
@@ -888,6 +942,9 @@ func (a *App) selectSettingsNavItem(item settingNavSpec) {
 			a.themesLoading = false
 			a.themeSelected = -1
 			a.themeListScroll = 0
+			a.themeSearchEditor = woxui.NewTextEditor("")
+			a.themeSearchFocused = false
+			a.themeDetailTab = "preview"
 		}
 		a.mu.Unlock()
 		a.selectSettingTab("theme")
@@ -912,18 +969,11 @@ func (a *App) moveSettingTab(delta int) {
 	a.selectSettingTab(tabs[index].id)
 }
 
-func (a *App) setSettingsRailViewport(height float32) {
-	a.mu.Lock()
-	a.settingRailViewport = max(float32(1), height)
-	a.ensureSettingTabVisibleLocked(a.settingTab)
-	a.mu.Unlock()
-}
-
 func (a *App) scrollSettingsRail(delta float32) {
 	a.mu.Lock()
 	contentHeight := settingsRailContentHeight(len(settingNavSpecs(a.isDev)))
-	maximum := max(float32(0), contentHeight-a.settingRailViewport)
-	a.settingRailScroll = min(max(float32(0), a.settingRailScroll+delta), maximum)
+	a.settingRailScroll.setGeometry(max(float32(1), a.settingRailScroll.viewport), contentHeight)
+	a.settingRailScroll.scrollBy(delta)
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
@@ -931,26 +981,38 @@ func (a *App) scrollSettingsRail(delta float32) {
 func (a *App) ensureSettingTabVisibleLocked(tabID string) {
 	items := settingNavSpecs(a.isDev)
 	activeID := activeSettingNavID(tabID, a.pluginsStore, a.themesMode)
-	index := -1
-	for candidate, item := range items {
-		if item.id == activeID {
-			index = candidate
-			break
-		}
+	viewport := max(float32(1), a.settingRailScroll.viewport)
+	a.settingRailScroll = resolveSettingsRailScroll(items, activeID, a.settingRailScroll, viewport, true)
+}
+
+// resolveSettingsRailScroll preserves manual scrolling unless a selection or viewport change must be revealed.
+func resolveSettingsRailScroll(items []settingNavSpec, activeID string, current scrollController, viewport float32, followSelection bool) scrollController {
+	scroll := current.withGeometry(viewport, settingsRailContentHeight(len(items)))
+	if !followSelection {
+		return scroll
 	}
-	if index < 0 {
+	for index, item := range items {
+		if item.id != activeID {
+			continue
+		}
+		top := float32(index * 50)
+		bottom := top + 46
+		scroll.ensureVisible(top, bottom)
+		break
+	}
+	return scroll
+}
+
+// rememberSettingsRailGeometry keeps wheel input aligned with the offset rendered for the current settings route.
+func (a *App) rememberSettingsRailGeometry(snapshot settingsSnapshot, scroll scrollController) {
+	if scroll == snapshot.railScroll {
 		return
 	}
-	viewport := max(float32(1), a.settingRailViewport)
-	top := float32(index * 50)
-	bottom := top + 46
-	if top < a.settingRailScroll {
-		a.settingRailScroll = top
-	} else if bottom > a.settingRailScroll+viewport {
-		a.settingRailScroll = bottom - viewport
+	a.mu.Lock()
+	if a.settingTab == snapshot.tab && a.pluginsStore == snapshot.pluginsStore && a.themesMode == snapshot.themesMode && a.settingRailScroll == snapshot.railScroll {
+		a.settingRailScroll = scroll
 	}
-	maximum := max(float32(0), settingsRailContentHeight(len(items))-viewport)
-	a.settingRailScroll = min(max(float32(0), a.settingRailScroll), maximum)
+	a.mu.Unlock()
 }
 
 func settingsRailContentHeight(tabCount int) float32 {
@@ -989,25 +1051,34 @@ func (a *App) selectSettingRow(index int) {
 	}
 	a.settingRow = index
 	a.settingsHotkeyFocus = false
-	a.ensureSettingRowVisibleLocked(len(items))
+	// Pointer-selected rows are already visible; moving the viewport here would invalidate popup anchors captured by the same click.
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
 
-// setSettingsPageGeometry keeps scrolling bounded to the measured flat settings form.
-func (a *App) setSettingsPageGeometry(height, contentHeight float32, itemCount int) {
+// setSettingsPageGeometry records the measured page without taking scroll ownership from pointer input.
+func (a *App) setSettingsPageGeometry(height, contentHeight float32) {
 	a.mu.Lock()
-	a.settingPageViewport = max(float32(1), height)
-	a.settingPageContent = max(float32(0), contentHeight)
-	a.ensureSettingRowVisibleLocked(itemCount)
+	a.settingPageScroll.setGeometry(max(float32(1), height), contentHeight)
+	a.mu.Unlock()
+}
+
+// rememberSettingsPageGeometry adopts render-time measurements only while the page snapshot is current.
+func (a *App) rememberSettingsPageGeometry(snapshot settingsSnapshot, scroll scrollController) {
+	if scroll == snapshot.pageScroll {
+		return
+	}
+	a.mu.Lock()
+	if a.settingTab == snapshot.tab && a.settingRow == snapshot.row && a.settingPageScroll == snapshot.pageScroll {
+		a.settingPageScroll = scroll
+	}
 	a.mu.Unlock()
 }
 
 func (a *App) scrollSettingsPage(delta float32) {
 	a.mu.Lock()
-	maximum := max(float32(0), a.settingPageContent-a.settingPageViewport)
-	a.settingPageScroll = min(max(float32(0), a.settingPageScroll+delta), maximum)
+	a.settingPageScroll.scrollBy(delta)
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
@@ -1020,16 +1091,11 @@ func (a *App) ensureSettingRowVisibleLocked(itemCount int) {
 		a.ensureRuntimeSettingRowVisibleLocked()
 		return
 	}
-	viewport := max(float32(1), a.settingPageViewport)
+	viewport := max(float32(1), a.settingPageScroll.viewport)
 	top := float32(74 + a.settingRow*79)
 	bottom := top + 70
-	if top < a.settingPageScroll {
-		a.settingPageScroll = top
-	} else if bottom > a.settingPageScroll+viewport {
-		a.settingPageScroll = bottom - viewport
-	}
-	maximum := max(float32(0), a.settingPageContent-viewport)
-	a.settingPageScroll = min(max(float32(0), a.settingPageScroll), maximum)
+	a.settingPageScroll.setGeometry(viewport, a.settingPageScroll.content)
+	a.settingPageScroll.ensureVisible(top, bottom)
 }
 
 func (a *App) activateSetting(direction int) {
@@ -1040,10 +1106,6 @@ func (a *App) activateSetting(direction int) {
 	}
 	item := items[snapshot.row]
 	if item.disabled {
-		return
-	}
-	if item.key == "PrivacySample" {
-		a.togglePrivacySample()
 		return
 	}
 	if item.key == "UsagePeriod" {
@@ -1234,7 +1296,7 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 	if err != nil {
 		a.settingNote = "Could not save " + item.title + ": " + err.Error()
 	} else {
-		a.settingNote = item.title + " · " + choice.label
+		a.settingNote = ""
 	}
 	a.mu.Unlock()
 	refreshGlance := false
@@ -1309,6 +1371,14 @@ func settingItemsForSnapshot(snapshot settingsSnapshot) []settingItem {
 		return nil
 	}
 	items := settingItems(snapshot.tab, snapshot.data)
+	if snapshot.tab == "updates" {
+		for index := range items {
+			if items[index].key == "ReleaseChannel" {
+				items[index].trailers = updateChannelVersionTrailers(snapshot.updateChannelVersions)
+				break
+			}
+		}
+	}
 	if snapshot.tab == "general" && len(snapshot.languages) > 0 {
 		for index := range items {
 			if items[index].key == "LangCode" {
@@ -1391,12 +1461,11 @@ func settingItems(tab string, data settingsData) []settingItem {
 		}
 	case "network":
 		return []settingItem{
-			{key: "HttpProxyEnabled", title: "HTTP proxy", description: "Use a proxy for Wox network requests", value: boolValue(data.HttpProxyEnabled), choices: boolChoices},
-			{key: "HttpProxyUrl", title: "Proxy URL", description: "HTTP, HTTPS, or SOCKS proxy address", value: data.HttpProxyURL, text: true},
+			{key: "HttpProxyEnabled", title: "HTTP proxy", value: boolValue(data.HttpProxyEnabled), choices: boolChoices},
+			{key: "HttpProxyUrl", title: "Proxy URL", value: data.HttpProxyURL, text: true, controlWidth: 300, disabled: !data.HttpProxyEnabled},
 		}
 	case "runtime":
 		return []settingItem{
-			{key: "LogLevel", title: "Log level", description: "Diagnostic detail written by Wox core", value: strings.ToUpper(data.LogLevel), choices: []settingChoice{{"INFO", "Info"}, {"DEBUG", "Debug"}}},
 			{key: "CustomPythonPath", title: "Python executable", description: "Optional Python 3.10 or newer executable", value: data.CustomPythonPath, text: true, browseFile: true},
 			{key: "CustomNodejsPath", title: "Node.js executable", description: "Optional Node.js 20 or newer executable", value: data.CustomNodejsPath, text: true, browseFile: true},
 		}
@@ -1413,13 +1482,12 @@ func settingItems(tab string, data settingsData) []settingItem {
 		}
 	case "updates":
 		return []settingItem{
-			{key: "EnableAutoUpdate", title: "Automatic updates", description: "Check for and install Wox updates", value: boolValue(data.EnableAutoUpdate), choices: boolChoices},
-			{key: "ReleaseChannel", title: "Release channel", description: "Choose stable or beta releases", value: data.ReleaseChannel, choices: []settingChoice{{"stable", "Stable"}, {"beta", "Beta"}}},
+			{key: "EnableAutoUpdate", title: "Enable auto update", description: "Download updates in the background and wait for confirmation before installing", value: boolValue(data.EnableAutoUpdate), choices: boolChoices},
+			{key: "ReleaseChannel", title: "Update channel", description: "Choose whether Wox checks the stable update channel or the beta update channel", value: data.ReleaseChannel, choices: []settingChoice{{"stable", "Stable channel"}, {"beta", "Beta channel"}}},
 		}
 	case "privacy":
 		return []settingItem{
 			{key: "EnableAnonymousUsageStats", title: "Anonymous usage stats", description: "Help improve Wox with anonymous telemetry", value: boolValue(data.EnableAnonymousUsageStats), choices: boolChoices},
-			{key: "PrivacySample", title: "Telemetry sample", description: "Inspect the exact payload shape without sending data", value: "View"},
 		}
 	default:
 		return []settingItem{

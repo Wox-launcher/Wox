@@ -13,16 +13,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
-	"github.com/srwiley/oksvg"
-	"github.com/srwiley/rasterx"
 	woxui "wox/ui/runtime"
+	woxsvg "wox/util/svg"
 )
-
-var svgRootEmDimensionPattern = regexp.MustCompile(`\s(?:width|height)=["'][^"']*em["']`)
 
 type woxImage struct {
 	ImageType string `json:"ImageType"`
@@ -66,7 +62,12 @@ func (a *App) imageFor(source woxImage) *woxui.Image {
 	return a.imageForTint(source, nil, 256)
 }
 
-// imageForTint applies a source-in tint to SVG images without changing raster assets.
+// imageForSize resolves display images at a caller-selected resolution while sharing the image cache.
+func (a *App) imageForSize(source woxImage, size int) *woxui.Image {
+	return a.imageForTint(source, nil, size)
+}
+
+// imageForTint applies a source-in tint to SVG images and sets the resolution for core-resolved assets.
 func (a *App) imageForTint(source woxImage, tint *woxui.Color, svgSize int) *woxui.Image {
 	if source.ImageType == "" || source.ImageData == "" {
 		return nil
@@ -123,7 +124,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgSize 
 	if source.ImageType == "url" || source.ImageType == "emoji" || source.ImageType == "fileicon" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		var resolved woxImage
-		err := a.client.Post(ctx, "/image/resolve", map[string]any{"Image": source, "Size": 256}, &resolved)
+		err := a.client.Post(ctx, "/image/resolve", map[string]any{"Image": source, "Size": svgSize}, &resolved)
 		cancel()
 		if err != nil {
 			log.Printf("resolve %s result image %q: %v", source.ImageType, source.ImageData, err)
@@ -223,18 +224,10 @@ func decodeWoxImageWithTint(source woxImage, tint *woxui.Color, svgSize int) (*w
 }
 
 func decodeSVGImage(data string, size int, tint *woxui.Color) (*woxui.Image, error) {
-	data = strings.ReplaceAll(data, "currentColor", "#000000")
-	rootEnd := strings.IndexByte(data, '>')
-	if rootEnd >= 0 && strings.Contains(data[:rootEnd], "<svg") {
-		data = svgRootEmDimensionPattern.ReplaceAllString(data[:rootEnd], "") + data[rootEnd:]
-	}
-	icon, err := oksvg.ReadIconStream(strings.NewReader(data), oksvg.WarnErrorMode)
+	rgba, err := woxsvg.Render(data, size, size)
 	if err != nil {
 		return nil, err
 	}
-	icon.SetTarget(0, 0, float64(size), float64(size))
-	rgba := image.NewRGBA(image.Rect(0, 0, size, size))
-	icon.Draw(rasterx.NewDasher(size, size, rasterx.NewScannerGV(size, size, rgba, rgba.Bounds())), 1)
 	if tint != nil {
 		for index := 0; index < len(rgba.Pix); index += 4 {
 			alpha := uint8((uint16(rgba.Pix[index+3])*uint16(tint.A) + 127) / 255)

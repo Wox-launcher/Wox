@@ -9,6 +9,7 @@ import (
 	"time"
 
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 const pluginSettingsListRowHeight = float32(62)
@@ -21,8 +22,10 @@ type pluginSettingsPlugin struct {
 	Website            string             `json:"Website"`
 	Version            string             `json:"Version"`
 	Runtime            string             `json:"Runtime"`
+	Entry              string             `json:"Entry"`
 	PluginDirectory    string             `json:"PluginDirectory"`
 	Icon               woxImage           `json:"Icon"`
+	ScreenshotURLs     []string           `json:"ScreenshotUrls"`
 	TriggerKeywords    []string           `json:"TriggerKeywords"`
 	Commands           []pluginCommand    `json:"Commands"`
 	SupportedOS        []string           `json:"SupportedOS"`
@@ -52,16 +55,72 @@ type filteredPlugin struct {
 	plugin pluginSettingsPlugin
 }
 
-func filterPlugins(plugins []pluginSettingsPlugin, query string) []filteredPlugin {
+type pluginFilterState struct {
+	enabledOnly             bool
+	disabledOnly            bool
+	upgradableOnly          bool
+	uninstalledOnly         bool
+	thirdPartyOnly          bool
+	runtimeNodeJSOnly       bool
+	runtimePythonOnly       bool
+	runtimeScriptOnly       bool
+	runtimeScriptNodeJSOnly bool
+	runtimeScriptPythonOnly bool
+}
+
+func (filters pluginFilterState) applied(store bool) bool {
+	if store {
+		return filters.uninstalledOnly || filters.thirdPartyOnly || filters.runtimeNodeJSOnly || filters.runtimePythonOnly || filters.runtimeScriptOnly
+	}
+	return filters.enabledOnly || filters.disabledOnly || filters.upgradableOnly || filters.thirdPartyOnly || filters.runtimeNodeJSOnly || filters.runtimePythonOnly || filters.runtimeScriptNodeJSOnly || filters.runtimeScriptPythonOnly
+}
+
+// filterPlugins applies the same keyword and advanced-filter contract as the retired Flutter catalog.
+func filterPlugins(plugins []pluginSettingsPlugin, query string, filters pluginFilterState, store bool) []filteredPlugin {
 	query = strings.ToLower(strings.TrimSpace(query))
 	filtered := make([]filteredPlugin, 0, len(plugins))
 	for index, plugin := range plugins {
 		searchText := strings.ToLower(strings.Join(append([]string{plugin.Name, plugin.ID, plugin.Author, plugin.Description, plugin.Runtime}, plugin.TriggerKeywords...), " "))
-		if query == "" || strings.Contains(searchText, query) {
+		if (query == "" || strings.Contains(searchText, query)) && pluginMatchesFilters(plugin, filters, store) {
 			filtered = append(filtered, filteredPlugin{index: index, plugin: plugin})
 		}
 	}
 	return filtered
+}
+
+// pluginMatchesFilters keeps store and installed-only predicates from leaking into each other.
+func pluginMatchesFilters(plugin pluginSettingsPlugin, filters pluginFilterState, store bool) bool {
+	if store {
+		if filters.uninstalledOnly && plugin.IsInstalled {
+			return false
+		}
+	} else {
+		if filters.enabledOnly && plugin.IsDisable {
+			return false
+		}
+		if filters.disabledOnly && !plugin.IsDisable {
+			return false
+		}
+		if filters.upgradableOnly && !plugin.IsUpgradable {
+			return false
+		}
+	}
+	if filters.thirdPartyOnly && plugin.IsSystem {
+		return false
+	}
+
+	runtimeNodeJS := filters.runtimeNodeJSOnly && strings.EqualFold(plugin.Runtime, "nodejs")
+	runtimePython := filters.runtimePythonOnly && strings.EqualFold(plugin.Runtime, "python")
+	runtimeScript := store && filters.runtimeScriptOnly && strings.EqualFold(plugin.Runtime, "script")
+	runtimeScriptNodeJS := !store && filters.runtimeScriptNodeJSOnly && strings.EqualFold(plugin.Runtime, "script") && strings.HasSuffix(strings.ToLower(plugin.Entry), ".js")
+	runtimeScriptPython := !store && filters.runtimeScriptPythonOnly && strings.EqualFold(plugin.Runtime, "script") && strings.HasSuffix(strings.ToLower(plugin.Entry), ".py")
+	runtimeFilterApplied := filters.runtimeNodeJSOnly || filters.runtimePythonOnly
+	if store {
+		runtimeFilterApplied = runtimeFilterApplied || filters.runtimeScriptOnly
+	} else {
+		runtimeFilterApplied = runtimeFilterApplied || filters.runtimeScriptNodeJSOnly || filters.runtimeScriptPythonOnly
+	}
+	return !runtimeFilterApplied || runtimeNodeJS || runtimePython || runtimeScript || runtimeScriptNodeJS || runtimeScriptPython
 }
 
 type pluginGlance struct {
@@ -214,8 +273,16 @@ func (a *App) switchPluginList(store bool) {
 	a.pluginUninstallArmed = ""
 	a.pluginOperationError = ""
 	a.pluginSearchEditor = woxui.NewTextEditor("")
-	a.pluginSearchFocused = false
-	a.pluginDetailTab = "settings"
+	a.pluginSearchFocused = true
+	a.settingSearchFocused = false
+	a.settingSearchPanel = false
+	a.pluginFilterOpen = false
+	if store {
+		a.pluginDetailTab = "description"
+	} else {
+		a.pluginDetailTab = "settings"
+	}
+	a.ensureSettingTabVisibleLocked("plugins")
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
@@ -384,7 +451,8 @@ func (a *App) setPluginSelectionLocked(index int) {
 	a.modelManager = nil
 	a.pluginDetailTab = "settings"
 	plugin := a.plugins[index]
-	if a.pluginsStore && !plugin.IsInstalled {
+	if a.pluginsStore {
+		a.pluginDetailTab = "description"
 		a.pluginSelected = index
 		a.pluginForm = nil
 		a.ensurePluginSelectionVisibleLocked()
@@ -501,7 +569,7 @@ func (a *App) ensurePluginSelectionVisibleLocked() {
 	if a.pluginSearchEditor != nil {
 		query = a.pluginSearchEditor.State().Text
 	}
-	filtered := filterPlugins(a.plugins, query)
+	filtered := filterPlugins(a.plugins, query, a.pluginFilters, a.pluginsStore)
 	visibleIndex := -1
 	for index, entry := range filtered {
 		if entry.index == a.pluginSelected {
@@ -520,14 +588,23 @@ func (a *App) ensurePluginSelectionVisibleLocked() {
 	} else if rowBottom > a.pluginListScroll+viewport {
 		a.pluginListScroll = rowBottom - viewport
 	}
-	maxOffset := max(float32(0), float32(len(filtered))*pluginSettingsListRowHeight-viewport)
-	a.pluginListScroll = min(max(float32(0), a.pluginListScroll), maxOffset)
+	a.clampPluginListScrollLocked(len(filtered), viewport)
 }
 
+// setPluginListViewport records list geometry without letting ordinary redraws reclaim manual scroll ownership.
 func (a *App) setPluginListViewport(height float32) {
 	a.mu.Lock()
+	initialize := a.pluginListViewport <= 1
 	a.pluginListViewport = max(float32(1), height)
-	a.ensurePluginSelectionVisibleLocked()
+	if initialize {
+		a.ensurePluginSelectionVisibleLocked()
+	} else {
+		query := ""
+		if a.pluginSearchEditor != nil {
+			query = a.pluginSearchEditor.State().Text
+		}
+		a.clampPluginListScrollLocked(len(filterPlugins(a.plugins, query, a.pluginFilters, a.pluginsStore)), a.pluginListViewport)
+	}
 	a.mu.Unlock()
 }
 
@@ -538,10 +615,16 @@ func (a *App) scrollPluginList(delta float32) {
 	if a.pluginSearchEditor != nil {
 		query = a.pluginSearchEditor.State().Text
 	}
-	maxOffset := max(float32(0), float32(len(filterPlugins(a.plugins, query)))*pluginSettingsListRowHeight-viewport)
-	a.pluginListScroll = min(max(float32(0), a.pluginListScroll+delta), maxOffset)
+	a.pluginListScroll += delta
+	a.clampPluginListScrollLocked(len(filterPlugins(a.plugins, query, a.pluginFilters, a.pluginsStore)), viewport)
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
+}
+
+// clampPluginListScrollLocked keeps the current offset inside the measured filtered list extent.
+func (a *App) clampPluginListScrollLocked(itemCount int, viewport float32) {
+	maxOffset := max(float32(0), float32(itemCount)*pluginSettingsListRowHeight-max(float32(1), viewport))
+	a.pluginListScroll = min(max(float32(0), a.pluginListScroll), maxOffset)
 }
 
 // focusPluginSearch transfers native text input from plugin forms to the catalog filter.
@@ -555,13 +638,51 @@ func (a *App) focusPluginSearch(caret int) {
 		a.pluginSearchEditor.SetCaret(caret)
 	}
 	a.pluginSearchFocused = true
+	a.themeSearchFocused = false
 	if a.pluginForm != nil {
 		syncFormFieldsEditorLocked(&a.pluginForm.formFieldsState)
 		a.pluginForm.active = false
 	}
+	host := a.settingsHost
 	a.mu.Unlock()
-	a.updateSettingsTextInput(true)
+	if host != nil {
+		host.RequestFocus(woxwidget.Key("plugin-search"))
+	}
 	a.invalidateSettingsWindow()
+}
+
+// setPluginSearchFocused keeps plugin input routing aligned with retained focus changes.
+func (a *App) setPluginSearchFocused(focused bool) {
+	a.mu.Lock()
+	if a.pluginSearchEditor == nil {
+		a.pluginSearchEditor = woxui.NewTextEditor("")
+	}
+	a.pluginSearchFocused = focused
+	if focused {
+		a.settingSearchFocused = false
+		a.settingSearchPanel = false
+		a.themeSearchFocused = false
+		if a.pluginForm != nil {
+			syncFormFieldsEditorLocked(&a.pluginForm.formFieldsState)
+			a.pluginForm.active = false
+		}
+	}
+	a.mu.Unlock()
+	a.invalidateSettingsWindow()
+}
+
+// setPluginSearchValue applies accessibility value changes and resets the filtered viewport.
+func (a *App) setPluginSearchValue(value string) error {
+	a.mu.Lock()
+	if a.pluginSearchEditor == nil {
+		a.pluginSearchEditor = woxui.NewTextEditor(value)
+	} else {
+		a.pluginSearchEditor.SetText(value, false)
+	}
+	a.pluginListScroll = 0
+	a.mu.Unlock()
+	a.invalidateSettingsWindow()
+	return nil
 }
 
 func (a *App) clearPluginSearch() {
@@ -576,11 +697,100 @@ func (a *App) clearPluginSearch() {
 	a.invalidateSettingsWindow()
 }
 
-func (a *App) blurPluginSearch() {
+// togglePluginFilterPanel shows or hides the catalog's anchored advanced filters.
+func (a *App) togglePluginFilterPanel() {
 	a.mu.Lock()
+	a.pluginFilterOpen = !a.pluginFilterOpen
 	a.pluginSearchFocused = false
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
+}
+
+func (a *App) closePluginFilterPanel() {
+	a.mu.Lock()
+	a.pluginFilterOpen = false
+	a.mu.Unlock()
+	a.invalidateSettingsWindow()
+}
+
+// togglePluginFilter updates one filter while keeping the current detail selected whenever possible.
+func (a *App) togglePluginFilter(id string) {
+	a.mu.Lock()
+	switch id {
+	case "enabled":
+		a.pluginFilters.enabledOnly = !a.pluginFilters.enabledOnly
+	case "disabled":
+		a.pluginFilters.disabledOnly = !a.pluginFilters.disabledOnly
+	case "upgradable":
+		a.pluginFilters.upgradableOnly = !a.pluginFilters.upgradableOnly
+	case "uninstalled":
+		a.pluginFilters.uninstalledOnly = !a.pluginFilters.uninstalledOnly
+	case "third-party":
+		a.pluginFilters.thirdPartyOnly = !a.pluginFilters.thirdPartyOnly
+	case "runtime-nodejs":
+		a.pluginFilters.runtimeNodeJSOnly = !a.pluginFilters.runtimeNodeJSOnly
+	case "runtime-python":
+		a.pluginFilters.runtimePythonOnly = !a.pluginFilters.runtimePythonOnly
+	case "runtime-script":
+		a.pluginFilters.runtimeScriptOnly = !a.pluginFilters.runtimeScriptOnly
+	case "runtime-script-nodejs":
+		a.pluginFilters.runtimeScriptNodeJSOnly = !a.pluginFilters.runtimeScriptNodeJSOnly
+	case "runtime-script-python":
+		a.pluginFilters.runtimeScriptPythonOnly = !a.pluginFilters.runtimeScriptPythonOnly
+	default:
+		a.mu.Unlock()
+		return
+	}
+	query := ""
+	if a.pluginSearchEditor != nil {
+		query = a.pluginSearchEditor.State().Text
+	}
+	filtered := filterPlugins(a.plugins, query, a.pluginFilters, a.pluginsStore)
+	selectedVisible := false
+	for _, entry := range filtered {
+		if entry.index == a.pluginSelected {
+			selectedVisible = true
+			break
+		}
+	}
+	if !selectedVisible && len(filtered) > 0 {
+		a.setPluginSelectionLocked(filtered[0].index)
+	}
+	a.pluginListScroll = 0
+	a.mu.Unlock()
+	a.invalidateSettingsWindow()
+}
+
+// refreshPluginCatalog preserves the search and selection while reloading the current catalog.
+func (a *App) refreshPluginCatalog() {
+	a.mu.Lock()
+	if a.pluginsLoading || a.pluginOperation != "" {
+		a.mu.Unlock()
+		return
+	}
+	store := a.pluginsStore
+	preferredID := ""
+	if a.pluginSelected >= 0 && a.pluginSelected < len(a.plugins) {
+		preferredID = a.plugins[a.pluginSelected].ID
+	}
+	a.pluginFilterOpen = false
+	a.mu.Unlock()
+	go func() {
+		if err := a.reloadPlugins(store, preferredID); err != nil {
+			log.Printf("refresh plugin catalog: %v", err)
+		}
+	}()
+}
+
+func (a *App) blurPluginSearch() {
+	a.mu.Lock()
+	a.pluginSearchFocused = false
+	host := a.settingsHost
+	a.mu.Unlock()
+	if host != nil {
+		host.ClearFocus()
+	}
 	a.invalidateSettingsWindow()
 }
 
@@ -592,8 +802,10 @@ func (a *App) moveFilteredPluginSelection(delta int) {
 	}
 	plugins := append([]pluginSettingsPlugin(nil), a.plugins...)
 	selected := a.pluginSelected
+	filters := a.pluginFilters
+	store := a.pluginsStore
 	a.mu.RUnlock()
-	filtered := filterPlugins(plugins, query)
+	filtered := filterPlugins(plugins, query, filters, store)
 	if len(filtered) == 0 {
 		return
 	}
@@ -617,6 +829,10 @@ func (a *App) moveFilteredPluginSelection(delta int) {
 }
 
 func (a *App) onPluginSearchKey(event woxui.KeyEvent) bool {
+	// Key releases must not repeat list navigation, and composing keys belong to native text input.
+	if !event.Down || event.Composing {
+		return false
+	}
 	a.mu.RLock()
 	active := a.settingsOpen && a.settingTab == "plugins" && a.pluginSearchFocused && a.pluginSearchEditor != nil
 	a.mu.RUnlock()
@@ -633,13 +849,21 @@ func (a *App) onPluginSearchKey(event woxui.KeyEvent) bool {
 	case woxui.KeyEnter, woxui.KeyTab:
 		a.blurPluginSearch()
 	default:
+		// Printable keys stay unhandled so the platform can turn them into committed or composing text.
 		a.mu.Lock()
+		handled := false
 		if a.pluginSearchEditor != nil {
-			a.pluginSearchEditor.HandleKey(event)
-			a.pluginListScroll = 0
+			var changed bool
+			handled, changed = a.pluginSearchEditor.HandleKey(event)
+			if changed {
+				a.pluginListScroll = 0
+			}
 		}
 		a.mu.Unlock()
-		a.invalidateSettingsWindow()
+		if handled {
+			a.invalidateSettingsWindow()
+		}
+		return handled
 	}
 	return true
 }
@@ -680,7 +904,7 @@ func (a *App) setPluginFormViewport(height float32) {
 	a.mu.Lock()
 	if a.pluginForm != nil {
 		a.pluginForm.viewportHeight = max(float32(1), height)
-		a.pluginForm.scroll = min(a.pluginForm.scroll, max(float32(0), formDefinitionsContentHeight(a.pluginForm.definitions)-a.pluginForm.viewportHeight))
+		a.pluginForm.scroll = min(a.pluginForm.scroll, max(float32(0), formDefinitionsContentHeight(a.pluginForm.definitions, a.pluginForm.values)-a.pluginForm.viewportHeight))
 	}
 	a.mu.Unlock()
 }
@@ -691,7 +915,7 @@ func (a *App) scrollPluginForm(delta float32) {
 		a.mu.Unlock()
 		return
 	}
-	maxOffset := max(float32(0), formDefinitionsContentHeight(a.pluginForm.definitions)-a.pluginForm.viewportHeight)
+	maxOffset := max(float32(0), formDefinitionsContentHeight(a.pluginForm.definitions, a.pluginForm.values)-a.pluginForm.viewportHeight)
 	a.pluginForm.scroll = min(max(float32(0), a.pluginForm.scroll+delta), maxOffset)
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
