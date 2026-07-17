@@ -1,7 +1,6 @@
 param(
     [int]$Samples = 1,
     [int]$IntervalSeconds = 10,
-    [double]$BudgetMB = 200,
     [string[]]$ProcessNames = @("wox", "wox-windows-amd64", "wox-windows-arm64"),
     [int[]]$Pids = @(),
     [switch]$Json
@@ -20,15 +19,20 @@ function Convert-ToMB {
 }
 
 function Get-WoxProcessRows {
-    $processRows = Get-CimInstance Win32_Process | Where-Object {
-        $name = [IO.Path]::GetFileNameWithoutExtension($_.Name)
-        $path = [string]$_.ExecutablePath
-        $commandLine = [string]$_.CommandLine
+    $allProcesses = Get-CimInstance Win32_Process
+    if ($Pids.Count -gt 0) {
+        $processRows = $allProcesses | Where-Object { $Pids -contains [int]$_.ProcessId }
+    }
+    else {
+        $processRows = $allProcesses | Where-Object {
+            $name = [IO.Path]::GetFileNameWithoutExtension($_.Name)
+            $path = [string]$_.ExecutablePath
+            $commandLine = [string]$_.CommandLine
 
-        ($Pids -contains [int]$_.ProcessId) -or
-        ($ProcessNames -contains $name) -or
-        ($path -match "\\Wox\\wox\.core\\") -or
-        ($commandLine -match "\\Wox\\wox\.core\\")
+            ($ProcessNames -contains $name) -or
+            ($path -match "\\Wox\\wox\.core\\") -or
+            ($commandLine -match "\\Wox\\wox\.core\\")
+        }
     }
 
     if (-not $processRows) {
@@ -72,15 +76,13 @@ for ($i = 1; $i -le $Samples; $i++) {
     $sample = [pscustomobject]@{
         Sample = $i
         TotalMB = $total
-        BudgetMB = $BudgetMB
-        OverBudget = $total -gt $BudgetMB
         ProcessCount = $rows.Count
         Processes = $rows
     }
     $allSamples += $sample
 
     if (-not $Json) {
-        Write-Host ("Sample {0}: TotalMB={1} BudgetMB={2} OverBudget={3}" -f $i, $total, $BudgetMB, ($total -gt $BudgetMB))
+        Write-Host ("Sample {0}: TotalMB={1}" -f $i, $total)
         if ($rows.Count -ne 1) {
             Write-Warning ("Expected one Wox app process, found {0}. Pass -Pids to select the intended process." -f $rows.Count)
         }
