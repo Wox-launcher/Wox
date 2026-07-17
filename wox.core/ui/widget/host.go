@@ -42,6 +42,9 @@ type Host struct {
 	pressed   woxui.AccessibilityNodeID
 	pressedAt woxui.Point
 	dragging  bool
+	// selecting tracks the gesture node that started a drag-based selection, so subsequent
+	// pointer-move events extend its selection until the pointer is released.
+	selecting woxui.AccessibilityNodeID
 	lastTapID woxui.AccessibilityNodeID
 	lastTapAt time.Time
 
@@ -233,6 +236,12 @@ func (h *Host) reconcileTransientState(oldNodes map[woxui.AccessibilityNodeID]*n
 	}
 	if h.pressed != 0 && h.nodes[h.pressed] == nil {
 		h.pressed = 0
+		h.dragging = false
+	}
+	// A widget rebuild can drop the node that started a drag selection; clear the state so a
+	// later PointerUp does not dispatch a tap onto a stale selector.
+	if h.selecting != 0 && h.nodes[h.selecting] == nil {
+		h.selecting = 0
 		h.dragging = false
 	}
 	if h.lastTapID != 0 && h.nodes[h.lastTapID] == nil {
@@ -575,9 +584,16 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 				break
 			}
 		}
+		// A selection gesture captures the press to begin a drag-based selection. Tap dispatch is
+		// deferred to PointerUp; if the pointer moves meaningfully we keep the selection and skip tap.
+		if target != nil && target.gesture != nil && target.gesture.onSelectionStart != nil {
+			h.selecting = h.pressed
+			target.gesture.onSelectionStart(woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y})
+			h.invalidate()
+		}
 	}
 	pressed := h.nodes[h.pressed]
-	if event.Kind == woxui.PointerMove && pressed != nil && pressed.gesture != nil && pressed.gesture.onDragStart != nil && !h.dragging {
+	if event.Kind == woxui.PointerMove && pressed != nil && pressed.gesture != nil && pressed.gesture.onDragStart != nil && !h.dragging && h.selecting == 0 {
 		deltaX := event.Position.X - h.pressedAt.X
 		deltaY := event.Position.Y - h.pressedAt.Y
 		if deltaX*deltaX+deltaY*deltaY >= 9 {
@@ -586,7 +602,32 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 			pressed.gesture.onDragStart()
 		}
 	}
+	// Extend an active drag selection by mapping the current position into the selecting node's local coords.
+	if event.Kind == woxui.PointerMove && h.selecting != 0 {
+		if selector := h.nodes[h.selecting]; selector != nil && selector.gesture != nil && selector.gesture.onSelectionExtend != nil {
+			deltaX := event.Position.X - h.pressedAt.X
+			deltaY := event.Position.Y - h.pressedAt.Y
+			// Any movement counts as a drag so a click without movement still collapses to a caret via tap.
+			if !h.dragging && deltaX*deltaX+deltaY*deltaY >= 1 {
+				h.dragging = true
+			}
+			selector.gesture.onSelectionExtend(woxui.Point{X: event.Position.X - selector.bounds.X, Y: event.Position.Y - selector.bounds.Y})
+			h.invalidate()
+		}
+	}
 	if event.Kind == woxui.PointerUp && event.Button == woxui.PointerButtonPrimary {
+		// Finalize a drag selection: if movement occurred keep the selection and skip tap dispatch;
+		// otherwise fall through so a plain click still triggers tap (e.g. place caret).
+		if h.selecting != 0 {
+			selectingMoved := h.dragging
+			h.selecting = 0
+			h.dragging = false
+			if selectingMoved {
+				h.pressed = 0
+				h.invalidate()
+				return
+			}
+		}
 		if h.dragging {
 			h.dragging = false
 			h.pressed = 0

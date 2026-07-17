@@ -256,6 +256,29 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launc
 				log.Printf("start launcher window drag: %v", err)
 			}
 		},
+		OnSelectionStart: func(x float32) {
+			a.hideActionPanel()
+			a.deactivateRequirementForm()
+			a.mu.RLock()
+			text := a.editor.State().Text
+			a.mu.RUnlock()
+			anchor := a.queryOffsetAt(text, x, style)
+			a.mu.Lock()
+			a.selectionAnchor = anchor
+			a.editor.SetCaret(anchor)
+			a.mu.Unlock()
+			_ = a.window.Invalidate()
+		},
+		OnSelectionExtend: func(x float32) {
+			a.mu.RLock()
+			text := a.editor.State().Text
+			a.mu.RUnlock()
+			focus := a.queryOffsetAt(text, x, style)
+			a.mu.Lock()
+			a.editor.SetSelection(a.selectionAnchor, focus)
+			a.mu.Unlock()
+			_ = a.window.Invalidate()
+		},
 		OnKey: a.onKey, OnTextInput: func(event woxui.TextInputEvent) bool { a.onTextInput(event); return true }, OnFocusChange: a.onQueryFocusChanged, OnSetValue: a.setQueryText,
 		OnTextInputState: func(state woxui.TextInputState) { _ = a.window.SetTextInputState(state) },
 	}
@@ -279,6 +302,15 @@ func (a *App) placeQueryCaret(x float32, style woxui.TextStyle) {
 	a.mu.RLock()
 	text := a.editor.State().Text
 	a.mu.RUnlock()
+	offset := a.queryOffsetAt(text, x, style)
+	a.mu.Lock()
+	a.editor.SetCaret(offset)
+	a.mu.Unlock()
+	_ = a.window.Invalidate()
+}
+
+// queryOffsetAt maps an x position (relative to the editor) to a rune offset using per-rune midpoints.
+func (a *App) queryOffsetAt(text string, x float32, style woxui.TextStyle) int {
 	runes := []rune(text)
 	offset := len(runes)
 	previousWidth := float32(0)
@@ -290,10 +322,7 @@ func (a *App) placeQueryCaret(x float32, style woxui.TextStyle) {
 		}
 		previousWidth = metrics.Size.Width
 	}
-	a.mu.Lock()
-	a.editor.SetCaret(offset)
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
+	return offset
 }
 
 func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidget.Widget {

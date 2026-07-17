@@ -180,3 +180,51 @@ func TestHostWaitForChangeUsesFrameGeneration(t *testing.T) {
 		t.Fatal("WaitForChange did not observe the rendered frame")
 	}
 }
+
+// TestHostDragSelectionExtendsAndClickCollapses verifies that a press+drag on a selection
+// gesture extends the selection, while a press+release without movement falls through to tap.
+func TestHostDragSelectionExtendsAndClickCollapses(t *testing.T) {
+	var startCalls, extendCalls int
+	var lastExtend woxui.Point
+	var tapCalls int
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Gesture{
+			ID: "select",
+			OnTap: func() { tapCalls++ },
+			OnSelectionStart: func(p woxui.Point) { startCalls++ },
+			OnSelectionExtend: func(p woxui.Point) { extendCalls++; lastExtend = p },
+			Child: Container{Width: 100, Height: 20},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	// Press inside the gesture, drag to the right, release: selection should extend, tap should be skipped.
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	if startCalls != 1 {
+		t.Fatalf("expected OnSelectionStart once, got %d", startCalls)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 30, Y: 5}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 60, Y: 5}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 60, Y: 5}})
+	if extendCalls == 0 {
+		t.Fatal("drag did not extend the selection")
+	}
+	if tapCalls != 0 {
+		t.Fatalf("tap should be skipped after drag selection, got %d taps", tapCalls)
+	}
+	if lastExtend.X != 60 {
+		t.Fatalf("last extend local X = %v, want 60", lastExtend.X)
+	}
+
+	// Press and release without movement: OnSelectionStart fires on press, but tap still dispatches on release.
+	startCalls = 0
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	if startCalls != 1 {
+		t.Fatalf("expected OnSelectionStart on click press, got %d", startCalls)
+	}
+	if tapCalls != 1 {
+		t.Fatalf("click without drag should dispatch tap, got %d taps", tapCalls)
+	}
+}

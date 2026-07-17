@@ -27,11 +27,15 @@ type LauncherQueryProps struct {
 	OnTapAt          func(float32)
 	OnTapEnd         func()
 	OnDragStart      func()
-	OnKey            func(woxui.KeyEvent) bool
-	OnTextInput      func(woxui.TextInputEvent) bool
-	OnFocusChange    func(bool)
-	OnSetValue       func(string) error
-	OnTextInputState func(woxui.TextInputState)
+	// OnSelectionStart begins a drag selection at the given x (relative to the editor).
+	OnSelectionStart func(x float32)
+	// OnSelectionExtend updates the active drag selection focus to the given x.
+	OnSelectionExtend func(x float32)
+	OnKey             func(woxui.KeyEvent) bool
+	OnTextInput       func(woxui.TextInputEvent) bool
+	OnFocusChange     func(bool)
+	OnSetValue        func(string) error
+	OnTextInputState  func(woxui.TextInputState)
 }
 
 // LauncherHeaderProps contains the query box and its optional accessories.
@@ -96,6 +100,16 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 		OnTapAt: func(position woxui.Point) {
 			if props.OnTapAt != nil {
 				props.OnTapAt(position.X)
+			}
+		},
+		OnSelectionStart: func(position woxui.Point) {
+			if props.OnSelectionStart != nil {
+				props.OnSelectionStart(position.X)
+			}
+		},
+		OnSelectionExtend: func(position woxui.Point) {
+			if props.OnSelectionExtend != nil {
+				props.OnSelectionExtend(position.X)
 			}
 		},
 		Child: woxwidget.CaretPainter{Width: props.Width, Height: props.Height, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool) {

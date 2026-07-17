@@ -633,6 +633,10 @@ type gesture struct {
 	onTapBounds func(woxui.Rect)
 	onDragStart func()
 	onScroll    func(woxui.Point)
+	// onSelectionStart begins a drag-based text selection anchored at the given local point.
+	onSelectionStart func(woxui.Point)
+	// onSelectionExtend updates the selection focus to the given local point while dragging.
+	onSelectionExtend func(woxui.Point)
 }
 
 // Gesture adds pointer behavior without changing its child's layout or paint.
@@ -647,6 +651,12 @@ type Gesture struct {
 	OnTapBounds func(bounds woxui.Rect)
 	OnDragStart func()
 	OnScroll    func(delta woxui.Point)
+	// OnSelectionStart begins a drag-based selection (e.g. text drag-select) anchored at the local point.
+	// When set, pointer-down on this gesture starts a selection drag instead of a tap, so OnTap/OnTapAt
+	// are skipped until the pointer is released without significant movement.
+	OnSelectionStart func(position woxui.Point)
+	// OnSelectionExtend updates the active selection drag to the given local point.
+	OnSelectionExtend func(position woxui.Point)
 }
 
 func (w Gesture) layout(ctx context, available constraints) *node {
@@ -662,7 +672,7 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 		target.key = Key(w.ID)
 	}
 	target.kind = "gesture"
-	target.gesture = &gesture{id: w.ID, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap, onTapAt: w.OnTapAt, onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onScroll: w.OnScroll}
+	target.gesture = &gesture{id: w.ID, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap, onTapAt: w.OnTapAt, onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onScroll: w.OnScroll, onSelectionStart: w.OnSelectionStart, onSelectionExtend: w.OnSelectionExtend}
 	return target
 }
 

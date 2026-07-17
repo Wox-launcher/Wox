@@ -95,6 +95,35 @@ func (e *TextEditor) InsertText(text string) bool {
 	return true
 }
 
+// DeleteSelection removes the active selection range, collapsing the caret to its start.
+// Returns false when the selection is collapsed or the editor is nil.
+func (e *TextEditor) DeleteSelection() bool {
+	if e == nil {
+		return false
+	}
+	runes := []rune(e.state.Text)
+	start, end := e.selectionBounds(len(runes))
+	if start >= end {
+		return false
+	}
+	next := append(append(make([]rune, 0, len(runes)-(end-start)), runes[:start]...), runes[end:]...)
+	e.state = TextEditingState{Text: string(next), Selection: TextSelection{Anchor: start, Focus: start}}
+	return true
+}
+
+// SelectedText returns the currently selected substring, or empty when collapsed.
+func (e *TextEditor) SelectedText() string {
+	if e == nil {
+		return ""
+	}
+	runes := []rune(e.state.Text)
+	start, end := e.selectionBounds(len(runes))
+	if start >= end {
+		return ""
+	}
+	return string(runes[start:end])
+}
+
 // HandleKey applies editing commands and reports whether the event was handled and changed text.
 func (e *TextEditor) HandleKey(event KeyEvent) (handled bool, textChanged bool) {
 	if e == nil || !event.Down || event.Composing {

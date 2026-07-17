@@ -49,7 +49,11 @@ type TextFieldProps struct {
 	OnSetValue     func(string) error
 	editingState   woxui.TextEditingState
 	onCaret        func(int)
-	onTextInput    func(woxui.TextInputEvent) bool
+	// onSelectionStart begins a drag selection anchored at the given rune offset.
+	onSelectionStart func(int)
+	// onSelectionExtend updates the selection focus to the given rune offset while dragging.
+	onSelectionExtend func(int)
+	onTextInput       func(woxui.TextInputEvent) bool
 }
 
 // WoxTextField builds a retained text field with shared IME, selection, and accessibility behavior.
@@ -66,6 +70,8 @@ type textFieldState struct {
 	focusNode          *woxwidget.FocusNode
 	internalFocusNode  *woxwidget.FocusNode
 	focusAttachment    *woxwidget.FocusAttachment
+	// selectionAnchor holds the rune offset captured at drag-selection start so extend updates only the focus.
+	selectionAnchor int
 }
 
 // InitState creates fallback controller and focus objects when the caller does not supply them.
@@ -113,6 +119,18 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		s.controller.SetCaret(offset)
 		context.Invalidate()
 	}
+	// Capture the anchor at drag start so subsequent extends update only the focus.
+	props.onSelectionStart = func(offset int) {
+		s.focusNode.RequestFocus()
+		s.selectionAnchor = offset
+		s.controller.SetCaret(offset)
+		context.Invalidate()
+	}
+	props.onSelectionExtend = func(offset int) {
+		s.focusNode.RequestFocus()
+		s.controller.SetSelection(s.selectionAnchor, offset)
+		context.Invalidate()
+	}
 	props.OnKey = func(event woxui.KeyEvent) bool {
 		original := widget.(TextFieldProps)
 		if original.Disabled || original.ReadOnly {
@@ -120,6 +138,44 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		}
 		if original.OnKey != nil && original.OnKey(event) {
 			return true
+		}
+		// Copy/cut/paste use the primary modifier (Cmd on macOS, Ctrl elsewhere) and require a
+		// registered clipboard provider; without one the keys fall through to normal editing.
+		if event.Down && !event.Composing && event.Modifiers.HasPrimary() && (event.Key == woxui.Key("c") || event.Key == woxui.Key("x") || event.Key == woxui.Key("v")) {
+			provider := currentClipboard()
+			if provider == nil {
+				return false
+			}
+			switch event.Key {
+			case woxui.Key("c"):
+				if selected := s.controller.SelectedText(); selected != "" {
+					if err := provider.WriteText(selected); err != nil {
+						return false
+					}
+				}
+				return true
+			case woxui.Key("x"):
+				if selected := s.controller.SelectedText(); selected != "" {
+					if err := provider.WriteText(selected); err != nil {
+						return false
+					}
+					if s.controller.DeleteSelection() {
+						notifyTextFieldChanged(original, s.controller.Text())
+					}
+				}
+				context.Invalidate()
+				return true
+			case woxui.Key("v"):
+				text, err := provider.ReadText()
+				if err != nil || text == "" {
+					return true
+				}
+				if s.controller.InsertText(text) {
+					notifyTextFieldChanged(original, s.controller.Text())
+				}
+				context.Invalidate()
+				return true
+			}
 		}
 		handled, changed := handleTextFieldControllerKey(s.controller, max(1, original.MaxLines), event)
 		if handled {
@@ -279,6 +335,18 @@ func buildWoxTextField(props TextFieldProps) woxwidget.Widget {
 		}
 		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
 		props.onCaret(textFieldOffsetAt(state, props.Window, style, maxLines, innerWidth, point))
+	}, OnSelectionStart: func(position woxui.Point) {
+		if props.Disabled || props.Window == nil || props.onSelectionStart == nil {
+			return
+		}
+		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
+		props.onSelectionStart(textFieldOffsetAt(state, props.Window, style, maxLines, innerWidth, point))
+	}, OnSelectionExtend: func(position woxui.Point) {
+		if props.Disabled || props.Window == nil || props.onSelectionExtend == nil {
+			return
+		}
+		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
+		props.onSelectionExtend(textFieldOffsetAt(state, props.Window, style, maxLines, innerWidth, point))
 	}, Child: woxwidget.Container{
 		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: props.BorderColor, BorderWidth: props.BorderWidth, Padding: padding,
 		Child: woxwidget.Clip{Width: innerWidth, Height: innerHeight, Child: woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool) {

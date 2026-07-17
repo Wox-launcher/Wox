@@ -12,6 +12,7 @@ import (
 	"wox/ui/coreclient"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util/clipboard"
 )
 
 const (
@@ -67,10 +68,12 @@ type App struct {
 	host          *woxwidget.Host
 	settingsHost  *woxwidget.Host
 
-	query                 plainQuery
-	queryContext          queryContext
-	queryContextKnown     bool
-	editor                *woxui.TextEditor
+	query             plainQuery
+	queryContext      queryContext
+	queryContextKnown bool
+	editor            *woxui.TextEditor
+	// selectionAnchor holds the rune offset captured at query drag-selection start so extend updates only the focus.
+	selectionAnchor       int
 	results               []queryResult
 	resultsQueryID        string
 	queryTransitionTimer  *time.Timer
@@ -945,6 +948,48 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	}
 	if event.Key == woxui.Key("f") && event.Modifiers.HasPrimary() && a.toggleRefinementBar() {
 		return true
+	}
+	// Copy/cut/paste on the query editor use the primary modifier and the cross-platform clipboard.
+	if event.Down && !event.Composing && event.Modifiers.HasPrimary() && (event.Key == woxui.Key("c") || event.Key == woxui.Key("x") || event.Key == woxui.Key("v")) {
+		switch event.Key {
+		case woxui.Key("c"):
+			if selected := a.editor.SelectedText(); selected != "" {
+				_ = clipboard.WriteText(selected)
+			}
+			return true
+		case woxui.Key("x"):
+			a.mu.Lock()
+			selected := a.editor.SelectedText()
+			if selected != "" {
+				_ = clipboard.WriteText(selected)
+				if a.editor.DeleteSelection() {
+					a.applyQueryTextChangeLocked(a.editor.State().Text)
+				}
+			}
+			a.mu.Unlock()
+			_ = a.window.Invalidate()
+			a.reconcileSelectedPreview()
+			if err := a.sendCurrentQuery(); err != nil {
+				log.Printf("send query after cut: %v", err)
+			}
+			return true
+		case woxui.Key("v"):
+			text, err := clipboard.ReadText()
+			if err != nil || text == "" {
+				return true
+			}
+			a.mu.Lock()
+			if a.editor.InsertText(text) {
+				a.applyQueryTextChangeLocked(a.editor.State().Text)
+			}
+			a.mu.Unlock()
+			_ = a.window.Invalidate()
+			a.reconcileSelectedPreview()
+			if err := a.sendCurrentQuery(); err != nil {
+				log.Printf("send query after paste: %v", err)
+			}
+			return true
+		}
 	}
 	a.mu.Lock()
 	textHandled, textChanged := a.editor.HandleKey(event)

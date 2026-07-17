@@ -72,6 +72,26 @@ func (c *TextEditingController) InsertText(text string) bool {
 	return c.editor.InsertText(text)
 }
 
+// DeleteSelection removes the active selection range and collapses the caret to its start.
+func (c *TextEditingController) DeleteSelection() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.editor.DeleteSelection()
+}
+
+// SelectedText returns the currently selected substring, or empty when collapsed.
+func (c *TextEditingController) SelectedText() string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.editor.SelectedText()
+}
+
 // HandleKey applies one portable editing command.
 func (c *TextEditingController) HandleKey(event woxui.KeyEvent) (bool, bool) {
 	if c == nil {

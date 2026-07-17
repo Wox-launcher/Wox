@@ -368,6 +368,8 @@ func run() {
 	coreServices := ui.NewCoreServices()
 	embeddedGoUIApp = golauncher.New(util.IsDev(), coreServices, ui.LocalBackendFactory)
 	coreServices.AttachView(embeddedGoUIApp)
+	// Wire text-field copy/cut/paste to the cross-platform clipboard backend.
+	golauncher.SetClipboardProvider(golauncher.NewUtilClipboardProvider())
 	if err := embeddedGoUIApp.Start(); err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to start embedded Go UI: %s", err.Error()))
 		coreServices.AttachView(nil)
