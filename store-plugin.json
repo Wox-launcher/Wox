@@ -912,5 +912,24 @@
     ],
     "DateCreated": "2026-06-26 00:00:00",
     "DateUpdated": "2026-06-26 00:00:00"
+  },
+  {
+    "Id": "44f8e41d-afb9-4a66-8fee-30520957790d",
+    "Name": "Project Explorer",
+    "Author": "Sduby22",
+    "Version": "0.0.6",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "nodejs",
+    "Description": "Search and open recently opened projects from VS Code and Zed",
+    "IconUrl": "https://raw.githubusercontent.com/Sduby22/wox-project-explorer/main/images/app.svg",
+    "Website": "https://github.com/Sduby22/wox-project-explorer",
+    "DownloadUrl": "https://github.com/Sduby22/wox-project-explorer/releases/latest/download/wox.plugin.ProjectExplorer.wox",
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-07-25 02:10:59",
+    "DateUpdated": "2026-07-25 02:10:59"
   }
 ]
