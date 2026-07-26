@@ -917,7 +917,7 @@
     "Id": "44f8e41d-afb9-4a66-8fee-30520957790d",
     "Name": "Project Explorer",
     "Author": "Sduby22",
-    "Version": "0.0.6",
+    "Version": "0.0.7",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Search and open recently opened projects from VS Code and Zed",
@@ -930,6 +930,6 @@
       "Linux"
     ],
     "DateCreated": "2026-07-25 02:10:59",
-    "DateUpdated": "2026-07-25 02:10:59"
+    "DateUpdated": "2026-07-25 21:17:02"
   }
 ]
