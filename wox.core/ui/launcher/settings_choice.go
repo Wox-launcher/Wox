@@ -13,8 +13,9 @@ import (
 )
 
 type settingChoicePickerState struct {
-	item   settingItem
-	anchor woxui.Rect
+	item     settingItem
+	anchor   woxui.Rect
+	onChoose func(settingChoice)
 }
 
 type settingChoicePickerSnapshot struct {
@@ -113,6 +114,14 @@ func (a *App) chooseSettingChoice(index int) {
 	item := state.item
 	choice := state.item.choices[index]
 	a.generalSettings.SetChoicePicker(nil)
+	if state.onChoose != nil {
+		a.settingNote = ""
+		a.setSettingChoiceTooltip(false, "", woxui.Rect{})
+		a.updateSettingsTextInput(false)
+		state.onChoose(choice)
+		a.invalidateSettingsWindow()
+		return
+	}
 	a.settingSaving = true
 	a.settingNote = "Saving " + item.title + "…"
 	a.setSettingChoiceTooltip(false, "", woxui.Rect{})

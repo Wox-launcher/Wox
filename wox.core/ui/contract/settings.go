@@ -230,6 +230,25 @@ type AIModel struct {
 	ProviderAlias string
 }
 
+// AICommandTemplate contains the editable command fields exposed by the shared template store.
+type AICommandTemplate struct {
+	ID            string
+	Category      string
+	Name          string
+	Description   string
+	Command       string
+	Prompt        string
+	ThinkingMode  string
+	DefaultAction string
+	Vision        bool
+}
+
+// AICommandTemplateServices exposes the optional command-template catalog used by plugin settings.
+type AICommandTemplateServices interface {
+	AICommandTemplates(ctx context.Context, sessionID string) ([]AICommandTemplate, error)
+	DefaultAIModel(ctx context.Context, sessionID string) (AIModel, error)
+}
+
 // AISkill describes one discovered AI skill consumed by launcher selection surfaces.
 type AISkill struct {
 	ID           string

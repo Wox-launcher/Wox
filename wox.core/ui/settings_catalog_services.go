@@ -96,6 +96,31 @@ func (s *CoreServices) AIModels(ctx context.Context, sessionID string) ([]contra
 	return converted, nil
 }
 
+// AICommandTemplates returns the translated template catalog owned by core.
+func (s *CoreServices) AICommandTemplates(ctx context.Context, sessionID string) ([]contract.AICommandTemplate, error) {
+	ctx = uiServiceContext(ctx, sessionID)
+	templates := ai.GetStoreManager().GetCommands(ctx)
+	converted := make([]contract.AICommandTemplate, len(templates))
+	for index, template := range templates {
+		converted[index] = contract.AICommandTemplate{
+			ID: template.Id, Category: template.Category, Name: template.Name, Description: template.Description,
+			Command: template.Command, Prompt: template.Prompt, ThinkingMode: template.ThinkingMode, DefaultAction: template.DefaultAction, Vision: template.Vision,
+		}
+	}
+	return converted, nil
+}
+
+// DefaultAIModel returns the chat plugin's configured template-install model.
+func (s *CoreServices) DefaultAIModel(ctx context.Context, sessionID string) (contract.AIModel, error) {
+	ctx = uiServiceContext(ctx, sessionID)
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		return contract.AIModel{}, errors.New("ai chat plugin not found")
+	}
+	model := chater.GetDefaultModel(ctx)
+	return contract.AIModel{Name: model.Name, Provider: string(model.Provider), ProviderAlias: model.ProviderAlias}, nil
+}
+
 // AISkills returns the discovered skill catalog from the active AI chat plugin.
 func (s *CoreServices) AISkills(ctx context.Context, sessionID string) ([]contract.AISkill, error) {
 	ctx = uiServiceContext(ctx, sessionID)

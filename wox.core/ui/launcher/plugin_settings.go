@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -271,18 +270,18 @@ func (a *App) runPluginOperation(kind string) {
 		if !plugin.IsInstalled || plugin.IsSystem {
 			return
 		}
+		if a.pluginSettings.UninstallArmed() != plugin.ID {
+			a.pluginSettings.SetUninstallArmed(plugin.ID)
+			a.settingNote = "Press Confirm uninstall to remove " + plugin.Name + "."
+			a.invalidateSettingsWindow()
+			return
+		}
 	case "enable":
 		if !plugin.IsInstalled || !plugin.IsDisable {
 			return
 		}
 	case "disable":
 		if !plugin.IsInstalled || plugin.IsDisable {
-			return
-		}
-		if a.pluginSettings.UninstallArmed() != plugin.ID {
-			a.pluginSettings.SetUninstallArmed(plugin.ID)
-			a.settingNote = "Press Confirm uninstall to remove " + plugin.Name + "."
-			a.invalidateSettingsWindow()
 			return
 		}
 	default:
@@ -394,15 +393,8 @@ func (a *App) setPluginSelectionLocked(index int) {
 		a.pluginSettings.SetForm(nil)
 		return
 	}
-	definitions := []formDefinition{
-		{Type: "head", Value: formDefinitionValue{Content: "Plugin controls"}},
-		{Type: "checkbox", Value: formDefinitionValue{Key: "Disabled", Label: "Disabled", Tooltip: "Prevent this plugin from answering queries"}},
-		{Type: "textbox", Value: formDefinitionValue{Key: "TriggerKeywords", Label: "Trigger keywords", Tooltip: "Comma-separated keywords that invoke this plugin"}},
-		{Type: "newline"},
-	}
-	definitions = append(definitions, plugin.SettingDefinitions...)
+	definitions := pluginSettingsFormDefinitions(plugin)
 	values := make(map[string]string, len(plugin.Setting.Settings)+2)
-	values["Disabled"] = fmt.Sprintf("%t", plugin.Setting.Disabled || plugin.IsDisable)
 	values["TriggerKeywords"] = strings.Join(plugin.Setting.TriggerKeywords, ",")
 	if values["TriggerKeywords"] == "" {
 		values["TriggerKeywords"] = strings.Join(plugin.TriggerKeywords, ",")
@@ -422,6 +414,31 @@ func (a *App) setPluginSelectionLocked(index int) {
 	}
 	a.pluginSettings.SetSelected(index)
 	a.pluginSettings.SetForm(&pluginSettingsFormState{formFieldsState: fields, pluginID: plugin.ID, initial: initial})
+}
+
+// pluginSettingsFormDefinitions separates plugin metadata controls from the
+// manifest-defined Settings tab while retaining one shared save transaction.
+func pluginSettingsFormDefinitions(plugin pluginSettingsPlugin) []formDefinition {
+	// Plugin lifecycle actions belong to the detail header, while trigger keywords have
+	// their own tab. Keeping only the keyword editor ahead of manifest definitions
+	// preserves its save flow without duplicating either control in the Settings tab.
+	definitions := []formDefinition{
+		{Type: "textbox", Value: formDefinitionValue{Key: "TriggerKeywords", Label: "i18n:ui_plugin_tab_trigger_keywords", Tooltip: "i18n:ui_plugin_trigger_keywords_tip"}},
+	}
+	definitions = append(definitions, plugin.SettingDefinitions...)
+	allSettingsAreTables := len(plugin.SettingDefinitions) > 0
+	for _, definition := range plugin.SettingDefinitions {
+		if definition.Type != "table" {
+			allSettingsAreTables = false
+			break
+		}
+	}
+	if allSettingsAreTables {
+		for index := 1; index < len(definitions); index++ {
+			definitions[index].Value.InlineTable = true
+		}
+	}
+	return definitions
 }
 
 // snapshotPluginSettingsFormLocked copies mutable maps before the render lock is released.

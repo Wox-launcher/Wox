@@ -12,10 +12,10 @@ import (
 
 // buildPluginSettingsPage maps plugin state into the shared catalog and detail views.
 func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
-	innerWidth := max(float32(0), width-32)
-	innerHeight := max(float32(0), height-24)
-	listWidth := min(float32(300), max(float32(250), innerWidth*0.31))
-	detailWidth := max(float32(0), innerWidth-listWidth-1)
+	innerWidth := max(float32(0), width-40)
+	innerHeight := max(float32(0), height-40)
+	listWidth := min(float32(260), max(float32(220), innerWidth*0.31))
+	detailWidth := max(float32(0), innerWidth-listWidth-21)
 	return launcherview.PluginSettingsPage(launcherview.PluginSettingsPageProps{
 		Width:       width,
 		Height:      height,
@@ -111,14 +111,6 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height float32
 		Tabs:        a.pluginDetailTabs(),
 		OnSelectTab: a.selectPluginDetailTab,
 	}
-	if detailTab != "settings" {
-		metadata := a.pluginMetadataProps(plugin, detailTab)
-		editor.Metadata = &metadata
-		props.Editor = editor
-		return props
-	}
-
-	innerWidth := max(float32(0), width-48)
 	callbacks := formFieldCallbacks{
 		idPrefix:  "plugin-settings",
 		focus:     a.focusPluginFormField,
@@ -129,34 +121,83 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height float32
 		openModel: a.openPluginModelManager,
 		recordKey: a.recordPluginFormHotkey,
 	}
-	rows := make([]woxwidget.Widget, 0, len(form.definitions))
-	for index, definition := range form.definitions {
-		rows = append(rows, a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, index, definition, innerWidth, formDefinitionHeight(definition, form.values)))
+	if detailTab == "keywords" {
+		keywordDefinition := form.definitions[0]
+		innerWidth := max(float32(0), width-32)
+		editor.Form = &launcherview.PluginFormProps{
+			Rows: []woxwidget.Widget{
+				a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, 0, keywordDefinition, innerWidth, formDefinitionHeight(keywordDefinition, form.values)),
+			},
+			ContentHeight: formDefinitionHeight(keywordDefinition, form.values),
+			Intro:         a.translate("i18n:ui_plugin_trigger_keywords_tip"),
+		}
+		a.applyPluginFormState(editor, snapshot)
+		props.Editor = editor
+		return props
+	}
+	if detailTab != "settings" {
+		metadata := a.pluginMetadataProps(plugin, detailTab)
+		editor.Metadata = &metadata
+		props.Editor = editor
+		return props
+	}
+
+	innerWidth := max(float32(0), width-32)
+	settingDefinitions := form.definitions[1:]
+	rows := make([]woxwidget.Widget, 0, len(settingDefinitions))
+	for index, definition := range settingDefinitions {
+		formIndex := index + 1
+		rows = append(rows, a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, formIndex, definition, innerWidth, formDefinitionHeight(definition, form.values)))
 	}
 	editor.Form = &launcherview.PluginFormProps{
-		Rows: rows, ContentHeight: formDefinitionsContentHeight(form.definitions, form.values), KeepVisible: formFieldsKeepVisible(form.formFieldsSnapshot),
+		Rows: rows, ContentHeight: formDefinitionsContentHeight(settingDefinitions, form.values), KeepVisible: pluginSettingsKeepVisible(form.formFieldsSnapshot),
+		EmptyTitle: a.translate("i18n:ui_plugin_no_settings"), EmptyDescription: a.translate("i18n:ui_plugin_no_settings_subtitle"),
+	}
+	a.applyPluginFormState(editor, snapshot)
+	props.Editor = editor
+	return props
+}
+
+// applyPluginFormState keeps the shared save and operation state identical across
+// the Settings and Trigger Keywords tabs.
+func (a *App) applyPluginFormState(editor *launcherview.PluginEditorProps, snapshot settingsSnapshot) {
+	form := snapshot.plugins.PluginForm
+	if form == nil {
+		return
 	}
 	editor.Status = form.status
 	editor.StatusError = form.statusError
-	if plugins.PluginOperationError != "" {
-		editor.Status = plugins.PluginOperationError
+	if snapshot.plugins.PluginOperationError != "" {
+		editor.Status = snapshot.plugins.PluginOperationError
 		editor.StatusError = true
 	}
 	editor.SaveLabel = a.translate("i18n:ui_save")
 	if form.saving {
 		editor.SaveLabel += "…"
 	}
+	editor.ShowSave = form.dirty || form.saving
 	editor.SaveHighlight = form.dirty && !form.saving
 	editor.OnSave = a.submitPluginSettings
-	props.Editor = editor
-	return props
+}
+
+// pluginSettingsKeepVisible translates the retained form index past the hidden
+// trigger-keyword editor into the Settings tab's visible scroll coordinates.
+func pluginSettingsKeepVisible(fields formFieldsSnapshot) *woxwidget.ScrollRange {
+	if fields.focused <= 0 || fields.focused >= len(fields.definitions) {
+		return nil
+	}
+	start := float32(0)
+	for index := 1; index < fields.focused; index++ {
+		start += formDefinitionHeight(fields.definitions[index], fields.values)
+	}
+	return &woxwidget.ScrollRange{Start: start, End: start + formDefinitionHeight(fields.definitions[fields.focused], fields.values)}
 }
 
 func (a *App) pluginHeaderProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin) launcherview.PluginHeaderProps {
 	return launcherview.PluginHeaderProps{
-		Title: strings.TrimSpace(plugin.Name + "  " + plugin.Version), Author: plugin.Author,
+		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author,
 		Icon: a.imageFor(plugin.Icon), FallbackColor: resultColors[snapshot.plugins.PluginSelected%len(resultColors)],
-		MetadataActions: a.pluginMetadataActions(plugin), Management: a.pluginManagementActions(snapshot, plugin),
+		MetadataActions: a.pluginMetadataActions(snapshot, plugin), Management: a.pluginManagementActions(snapshot, plugin),
 	}
 }
 
@@ -434,11 +475,6 @@ func (a *App) pluginManagementActions(snapshot settingsSnapshot, plugin pluginSe
 	if plugin.IsUpgradable {
 		actions = append(actions, launcherview.PluginAction{ID: "plugin-upgrade", Label: pluginOperationButtonLabel(plugins, "upgrade", plugin.ID, a.translate("i18n:ui_update")), Width: 104, Enabled: !busy, Primary: true, OnTap: func() { a.runPluginOperation("upgrade") }})
 	}
-	if plugin.IsDisable {
-		actions = append(actions, launcherview.PluginAction{ID: "plugin-enable", Label: pluginOperationButtonLabel(plugins, "enable", plugin.ID, a.translate("i18n:ui_plugin_enable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("enable") }})
-	} else {
-		actions = append(actions, launcherview.PluginAction{ID: "plugin-disable", Label: pluginOperationButtonLabel(plugins, "disable", plugin.ID, a.translate("i18n:ui_plugin_disable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("disable") }})
-	}
 	if !plugin.IsSystem {
 		label := a.translate("i18n:ui_plugin_uninstall")
 		if plugins.PluginUninstallArmed == plugin.ID {
@@ -446,17 +482,28 @@ func (a *App) pluginManagementActions(snapshot settingsSnapshot, plugin pluginSe
 		}
 		actions = append(actions, launcherview.PluginAction{ID: "plugin-uninstall", Label: pluginOperationButtonLabel(plugins, "uninstall", plugin.ID, label), Width: 124, Enabled: !busy, OnTap: func() { a.runPluginOperation("uninstall") }})
 	}
+	if plugin.IsDisable {
+		actions = append(actions, launcherview.PluginAction{ID: "plugin-enable", Label: pluginOperationButtonLabel(plugins, "enable", plugin.ID, a.translate("i18n:ui_plugin_enable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("enable") }})
+	} else {
+		actions = append(actions, launcherview.PluginAction{ID: "plugin-disable", Label: pluginOperationButtonLabel(plugins, "disable", plugin.ID, a.translate("i18n:ui_plugin_disable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("disable") }})
+	}
+	if !plugin.IsSystem && strings.TrimSpace(plugin.PluginDirectory) != "" {
+		actions = append(actions, launcherview.PluginAction{
+			ID: "plugin-directory", Label: a.translate("i18n:ui_plugin_open_directory"), Width: 132, Enabled: !busy, OnTap: a.openSelectedPluginDirectory,
+		})
+	}
 	return actions
 }
 
-// pluginMetadataActions exposes browser and folder actions without platform-specific widgets.
-func (a *App) pluginMetadataActions(plugin pluginSettingsPlugin) []launcherview.PluginAction {
-	actions := make([]launcherview.PluginAction, 0, 2)
+// pluginMetadataActions exposes the browser action without platform-specific widgets.
+func (a *App) pluginMetadataActions(snapshot settingsSnapshot, plugin pluginSettingsPlugin) []launcherview.PluginAction {
+	actions := make([]launcherview.PluginAction, 0, 1)
 	if strings.TrimSpace(plugin.Website) != "" {
-		actions = append(actions, launcherview.PluginAction{ID: "plugin-website", Label: a.translate("i18n:ui_plugin_website"), Width: 104, Enabled: true, OnTap: a.openSelectedPluginWebsite})
-	}
-	if plugin.IsInstalled && strings.TrimSpace(plugin.PluginDirectory) != "" {
-		actions = append(actions, launcherview.PluginAction{ID: "plugin-directory", Label: a.translate("i18n:ui_plugin_open_directory"), Width: 112, Enabled: true, OnTap: a.openSelectedPluginDirectory})
+		iconTint := snapshot.palette.resultTitle
+		actions = append(actions, launcherview.PluginAction{
+			ID: "plugin-website", Label: a.translate("i18n:ui_plugin_website"), Icon: a.imageForTint(settingControlIconSource("external"), &iconTint, 14),
+			Width: 88, Enabled: true, OnTap: a.openSelectedPluginWebsite,
+		})
 	}
 	return actions
 }

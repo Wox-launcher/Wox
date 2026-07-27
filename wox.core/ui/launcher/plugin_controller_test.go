@@ -79,6 +79,55 @@ func TestPluginControllerForm(t *testing.T) {
 	}
 }
 
+func TestPluginSettingsFormDefinitionsKeepMetadataControlsOutOfSettings(t *testing.T) {
+	definitions := pluginSettingsFormDefinitions(pluginSettingsPlugin{
+		SettingDefinitions: []formDefinition{{Type: "checkbox", Value: formDefinitionValue{Key: "FeatureEnabled"}}},
+	})
+
+	if len(definitions) != 2 {
+		t.Fatalf("definitions len = %d, want trigger keywords plus one plugin setting", len(definitions))
+	}
+	if definitions[0].Value.Key != "TriggerKeywords" {
+		t.Fatalf("first definition key = %q, want TriggerKeywords", definitions[0].Value.Key)
+	}
+	for _, definition := range definitions {
+		if definition.Value.Key == "Disabled" {
+			t.Fatalf("Disabled should be rendered as a header action, not a Settings field")
+		}
+		if definition.Type == "head" && definition.Value.Content == "Plugin controls" {
+			t.Fatalf("Plugin controls heading should not be part of the Settings form")
+		}
+	}
+}
+
+func TestPluginSettingsFormDefinitionsUseInlineLayoutForTableOnlyPlugins(t *testing.T) {
+	definitions := pluginSettingsFormDefinitions(pluginSettingsPlugin{
+		SettingDefinitions: []formDefinition{
+			{Type: "table", Value: formDefinitionValue{Key: "commands"}},
+			{Type: "table", Value: formDefinitionValue{Key: "aliases"}},
+		},
+	})
+
+	for index, definition := range definitions[1:] {
+		if !definition.Value.InlineTable {
+			t.Fatalf("plugin table definition %d should use the full-width inline layout", index)
+		}
+	}
+}
+
+func TestPluginSettingsFormDefinitionsKeepMixedFormsInLabelLayout(t *testing.T) {
+	definitions := pluginSettingsFormDefinitions(pluginSettingsPlugin{
+		SettingDefinitions: []formDefinition{
+			{Type: "table", Value: formDefinitionValue{Key: "commands"}},
+			{Type: "checkbox", Value: formDefinitionValue{Key: "enabled"}},
+		},
+	})
+
+	if definitions[1].Value.InlineTable {
+		t.Fatalf("table in a mixed plugin form should keep the label-and-control layout")
+	}
+}
+
 func TestPluginControllerReloadPluginsSuccess(t *testing.T) {
 	deps, invalidateCalled := newPluginControllerDeps()
 	c := newPluginSettingsController(deps)

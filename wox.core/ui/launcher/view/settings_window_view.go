@@ -99,9 +99,7 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered string, onHover 
 	children = append(children, woxwidget.StackChild{Child: dragArea})
 	switch props.Platform {
 	case "darwin":
-		contentWidth := max(float32(0), props.Width-props.RailWidth)
 		children = append(children,
-			woxwidget.StackChild{Left: props.RailWidth + max(float32(0), (contentWidth-props.TitleWidth)/2), Top: 9, Child: woxwidget.Container{Width: props.TitleWidth, Height: 24, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
 			woxwidget.StackChild{Left: max(float32(0), props.RailWidth-1), Child: woxwidget.Container{Width: 1, Height: height, Color: settingsTitleBarAlpha(props.Theme.PreviewSplit, 128)}},
 			woxwidget.StackChild{Left: 13, Child: settingsMacTrafficLight("settings-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", props.OnClose, onHover)},
 			woxwidget.StackChild{Left: 36, Child: settingsMacTrafficLight("settings-window-minimize", woxui.Color{R: 250, G: 200, B: 0, A: 255}, "−", woxui.Color{R: 126, G: 100, B: 11, A: 255}, hovered == "mac-controls", props.OnMinimize, onHover)},

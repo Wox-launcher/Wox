@@ -58,6 +58,7 @@ func settingControlIconSource(id string) woxImage {
 			"locate":             `<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>`,
 			"check-circle":       `<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>`,
 			"external":           `<path d="M14 5h5v5M19 5l-9 9"/><path d="M13 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-7"/>`,
+			"store":              `<path d="M4 9h16M5 9l1-5h12l1 5M6 9v11h12V9"/><path d="M9 20v-6h6v6"/>`,
 			"filter":             `<path d="M4 5h16l-6 7v6l-4 2v-8z"/>`,
 			"inbox":              `<path d="M4 4h16v13a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V4z"/><path d="M4 13h3l3 3h4l3-3h3"/>`,
 			"edit":               `<path d="M13.5 6.5l4 4M4 20h4l10.5-10.5a2.83 2.83 0 1 0-4-4L4 16v4z"/>`,

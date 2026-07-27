@@ -120,14 +120,22 @@ func (a *App) buildFormTableField(fields formFieldsSnapshot, callbacks formField
 			callbacks.openTable(index)
 		}
 	}
+	secondaryLabel := ""
+	var secondaryIcon *woxui.Image
+	var onSecondary func()
+	if callbacks.idPrefix == "plugin-settings" && definition.Value.Key == "commands" && a.selectedPluginID() == aiCommandPluginID {
+		secondaryLabel = a.translate("i18n:ui_ai_command_template_add_from_store")
+		secondaryIcon = a.imageForTint(settingControlIconSource("store"), &foreground, 16)
+		onSecondary = func() { a.openAICommandTemplatePicker(index) }
+	}
 	return launcherview.FormTableField(launcherview.FormTableFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Title: a.translate(formTableTitle(definition)), Description: a.translate(definition.Value.Tooltip),
 		Width: width, Height: height, MaxHeight: definition.Value.MaxHeight, InlineTitle: definition.Value.InlineTable, Invalid: err != nil,
-		Columns: columns, Rows: viewRows, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), DeleteLabel: a.translate("i18n:ui_delete"),
+		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), DeleteLabel: a.translate("i18n:ui_delete"),
 		OperationLabel: a.translate("i18n:ui_operation"), EmptyLabel: a.translate("i18n:ui_no_data"),
-		InfoIcon: a.imageForTint(settingNavIconSource("about"), &foreground, 16), AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, 16),
+		InfoIcon: a.imageForTint(settingNavIconSource("about"), &foreground, 16), SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, 16),
 		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, 16), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, 16), EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, 24),
-		Theme: theme, OnTooltip: onTooltip,
+		Theme: theme, OnTooltip: onTooltip, OnSecondary: onSecondary,
 		OnAdd: func() {
 			openTable()
 			a.beginAddFormTableRowDirect()

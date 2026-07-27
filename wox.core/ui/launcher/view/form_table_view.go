@@ -46,17 +46,20 @@ type FormTableFieldProps struct {
 	Invalid        bool
 	Columns        []FormTableColumn
 	Rows           []FormTableRow
+	SecondaryLabel string
 	AddLabel       string
 	EditLabel      string
 	DeleteLabel    string
 	OperationLabel string
 	EmptyLabel     string
 	InfoIcon       *woxui.Image
+	SecondaryIcon  *woxui.Image
 	AddIcon        *woxui.Image
 	EditIcon       *woxui.Image
 	DeleteIcon     *woxui.Image
 	EmptyIcon      *woxui.Image
 	Theme          woxcomponent.Theme
+	OnSecondary    func()
 	OnAdd          func()
 	OnOpenRow      func(int)
 	OnDeleteRow    func(int)
@@ -118,10 +121,14 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 }
 
 func formTableInlineHeader(props FormTableFieldProps, width, height float32) woxwidget.Widget {
-	titleWidth := max(float32(0), width-90)
+	actionsWidth := float32(74)
+	if props.SecondaryLabel != "" {
+		actionsWidth += 130
+	}
+	titleWidth := max(float32(0), width-actionsWidth-16)
 	children := []woxwidget.StackChild{
 		{Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}},
-		{Left: max(float32(0), width-74), Top: max(float32(0), height-30), Child: formTableAddButton(props)},
+		{Left: max(float32(0), width-actionsWidth), Top: max(float32(0), height-30), Child: formTableHeaderActions(props)},
 	}
 	if props.Description != "" {
 		children = append(children, woxwidget.StackChild{Top: 22, Child: woxwidget.TextBlock{
@@ -130,6 +137,21 @@ func formTableInlineHeader(props FormTableFieldProps, width, height float32) wox
 		}})
 	}
 	return woxwidget.Stack{Width: width, Height: height, Children: children}
+}
+
+// formTableHeaderActions keeps specialized secondary actions aligned with the
+// table's standard Add control.
+func formTableHeaderActions(props FormTableFieldProps) woxwidget.Widget {
+	actions := make([]woxwidget.Widget, 0, 2)
+	if props.SecondaryLabel != "" {
+		actions = append(actions, woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: props.ID + "-secondary", Label: props.SecondaryLabel, Icon: props.SecondaryIcon, IconSize: 15, IconGap: 5, Width: 122,
+			Size: woxcomponent.ButtonCompact, Variant: woxcomponent.ButtonOutline, Padding: woxwidget.Insets{Left: 9, Right: 7},
+			Disabled: props.Invalid, OnTap: props.OnSecondary, Theme: props.Theme,
+		}))
+	}
+	actions = append(actions, formTableAddButton(props))
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: actions}
 }
 
 func formTableAddButton(props FormTableFieldProps) woxwidget.Widget {
