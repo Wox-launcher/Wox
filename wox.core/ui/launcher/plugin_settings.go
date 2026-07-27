@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
 	"time"
 
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
 
@@ -154,80 +154,25 @@ type pluginSettingsFormSnapshot struct {
 	dirty       bool
 }
 
-// reloadPlugins fetches either store or installed entries through the same core DTO.
+// reloadPlugins fetches either the store or installed catalog through the controller.
 // The controller owns loading/error state; the App keeps the post-load side effects that
 // touch cross-domain state (settingSearchPlugins mirror, AI model loading, form rebuild
 // via setPluginSelectionLocked) since those need a.mu coordination the controller cannot do.
 func (a *App) reloadPlugins(store bool, preferredID string) error {
-	a.mu.Lock()
-	a.pluginSettings.SetPluginsLoading(true)
-	a.pluginSettings.SetPluginsError("")
-	a.mu.Unlock()
-	if a.window != nil {
-		a.invalidateSettingsWindow()
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	var plugins []pluginSettingsPlugin
-	path := "/plugin/installed"
-	if store {
-		path = "/plugin/store"
-	}
-	if err := a.client.Post(ctx, path, map[string]any{}, &plugins); err != nil {
-		a.mu.Lock()
-		a.pluginSettings.SetPluginsLoading(false)
-		a.pluginSettings.SetPluginsLoaded(false)
-		a.pluginSettings.SetPluginsError(err.Error())
-		a.mu.Unlock()
-		if a.window != nil {
-			a.invalidateSettingsWindow()
-		}
+	if err := a.pluginSettings.ReloadPlugins(context.Background(), a.services, a.sessionID, store, preferredID); err != nil {
 		return err
 	}
-	sort.SliceStable(plugins, func(i, j int) bool {
-		if !store && plugins[i].IsSystem != plugins[j].IsSystem {
-			return plugins[i].IsSystem
-		}
-		return strings.ToLower(plugins[i].Name) < strings.ToLower(plugins[j].Name)
-	})
 
+	plugins := a.pluginSettings.Plugins()
 	a.mu.Lock()
-	if preferredID == "" {
-		selected := a.pluginSettings.Selected()
-		current := a.pluginSettings.Plugins()
-		if selected >= 0 && selected < len(current) {
-			preferredID = current[selected].ID
-		}
-	}
-	a.pluginSettings.SetPlugins(plugins)
-	a.pluginSettings.SetPluginsLoading(false)
-	a.pluginSettings.SetPluginsLoaded(true)
-	a.pluginSettings.SetPluginsError("")
 	if !store {
 		a.settingsSearch.SetPlugins(plugins)
 		a.settingsSearch.SetLoading(false)
 		a.settingsSearch.SetLoaded(true)
 		a.settingsSearch.SetError("")
 	}
-	a.pluginSettings.SetOperationError("")
-	if a.pluginSettings.SearchEditor() == nil {
-		a.pluginSettings.SetSearchEditor(woxui.NewTextEditor(""))
-	}
-	if a.pluginSettings.DetailTab() == "" {
-		a.pluginSettings.SetDetailTab("settings")
-	}
-	selected := 0
-	for index, plugin := range plugins {
-		if plugin.ID == preferredID {
-			selected = index
-			break
-		}
-	}
-	if len(plugins) == 0 {
-		a.pluginSettings.SetSelected(-1)
-		a.pluginSettings.SetForm(nil)
-	} else {
+	selected := a.pluginSettings.Selected()
+	if selected >= 0 && selected < len(plugins) {
 		a.setPluginSelectionLocked(selected)
 	}
 	form := a.pluginSettings.Form()
@@ -239,9 +184,7 @@ func (a *App) reloadPlugins(store bool, preferredID string) error {
 	if requestModels {
 		go a.loadAIModels()
 	}
-	if a.window != nil {
-		a.invalidateSettingsWindow()
-	}
+	a.invalidateSettingsWindow()
 	return nil
 }
 
@@ -297,7 +240,7 @@ func (a *App) switchPluginList(store bool) {
 	}()
 }
 
-// runPluginOperation uses core's install endpoint for both fresh installs and upgrades.
+// runPluginOperation uses the same core install operation for fresh installs and upgrades.
 func (a *App) runPluginOperation(kind string) {
 	a.mu.Lock()
 	plugins := a.pluginSettings.Plugins()
@@ -363,12 +306,12 @@ func (a *App) runPluginOperation(kind string) {
 	a.invalidateSettingsWindow()
 
 	go func() {
-		path := "/plugin/" + kind
+		operation := contract.PluginOperation(kind)
 		if kind == "upgrade" {
-			path = "/plugin/install"
+			operation = contract.PluginOperationInstall
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		err := a.client.Post(ctx, path, map[string]string{"id": plugin.ID}, nil)
+		err := a.services.OperatePlugin(ctx, a.sessionID, plugin.ID, operation)
 		cancel()
 		if err == nil {
 			err = a.reloadPlugins(store, plugin.ID)
@@ -421,7 +364,7 @@ func (a *App) openSelectedPluginDirectory() {
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		err := a.client.Post(ctx, "/open", map[string]string{"path": directory}, nil)
+		err := a.services.OpenPath(ctx, a.sessionID, directory)
 		cancel()
 		if err != nil {
 			a.mu.Lock()
@@ -1129,18 +1072,7 @@ func (a *App) submitPluginSettings() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		keys := make([]string, 0, len(values))
-		for key := range values {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		var saveErr error
-		for _, key := range keys {
-			if err := a.client.Post(ctx, "/setting/plugin/update", map[string]string{"PluginId": pluginID, "Key": key, "Value": values[key]}, nil); err != nil {
-				saveErr = fmt.Errorf("save %s: %w", key, err)
-				break
-			}
-		}
+		saveErr := a.services.UpdatePluginSettings(ctx, a.sessionID, pluginID, values)
 		if saveErr == nil {
 			saveErr = a.reloadPlugins(store, pluginID)
 		}

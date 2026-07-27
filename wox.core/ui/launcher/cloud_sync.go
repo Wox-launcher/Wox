@@ -9,8 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"wox/account"
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type cloudAccountStatus struct {
@@ -121,18 +124,6 @@ type cloudFormSnapshot struct {
 	focusNodes    []*woxwidget.FocusNode
 }
 
-type cloudAccountResult struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	Email     string `json:"email"`
-	ExpiresAt int64  `json:"expires_at"`
-}
-
-type cloudBootstrapStatus struct {
-	HasRemoteData bool `json:"has_remote_data"`
-	HasRemoteKey  bool `json:"has_remote_key"`
-}
-
 func cloneCloudDeviceList(source cloudDeviceList) cloudDeviceList {
 	cloned := source
 	cloned.Devices = append([]cloudDevice(nil), source.Devices...)
@@ -171,16 +162,18 @@ func newCloudFormState(fields formFieldsState, kind, title string) *cloudFormSta
 // Delegates to the controller; the onNeedBilling callback triggers the independent billing
 // plan fetch when the billing plan has not been loaded yet.
 func (a *App) reloadCloudSync() {
-	a.cloudSettings.ReloadCloudSync(context.Background(), a.client, func() { go a.reloadCloudBillingPlan() })
+	a.cloudSettings.ReloadCloudSync(context.Background(), a.services, a.sessionID, func() {
+		util.Go(a.lifecycleCtx, "reload cloud billing plan", a.reloadCloudBillingPlan)
+	})
 }
 
 // reloadCloudBillingPlan fetches display pricing independently so it cannot delay local sync status.
 func (a *App) reloadCloudBillingPlan() {
-	a.cloudSettings.ReloadBillingPlan(context.Background(), a.client)
+	a.cloudSettings.ReloadBillingPlan(context.Background(), a.services, a.sessionID)
 }
 
 // runCloudAction serializes account and sync mutations before reloading their shared status.
-func (a *App) runCloudAction(name, route string, payload any) {
+func (a *App) runCloudAction(name string, action func(context.Context) error) {
 	if a.cloudSettings.Busy() != "" {
 		return
 	}
@@ -189,10 +182,7 @@ func (a *App) runCloudAction(name, route string, payload any) {
 	a.invalidateSettingsWindow()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err := a.client.Post(ctx, route, payload, nil)
-		if err == nil && name == "sync" {
-			err = a.client.Post(ctx, "/sync/pull", map[string]any{}, nil)
-		}
+		err := action(ctx)
 		cancel()
 		if err != nil {
 			a.cloudSettings.SetError(fmt.Sprintf("%s failed: %v", cloudActionLabel(name), err))
@@ -224,9 +214,9 @@ func cloudActionLabel(name string) string {
 // openCloudBilling starts checkout or subscription management in the platform browser.
 func (a *App) openCloudBilling() {
 	isPro := strings.EqualFold(a.cloudSettings.Account().Plan, "pro")
-	route := "/account/billing/checkout"
+	kind := contract.BillingSessionCheckout
 	if isPro {
-		route = "/account/billing/portal"
+		kind = contract.BillingSessionPortal
 	}
 	if a.cloudSettings.Busy() != "" {
 		return
@@ -236,10 +226,7 @@ func (a *App) openCloudBilling() {
 	a.invalidateSettingsWindow()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		var session struct {
-			URL string `json:"url"`
-		}
-		err := a.client.Post(ctx, route, map[string]any{}, &session)
+		session, err := a.services.BillingSession(ctx, a.sessionID, kind)
 		cancel()
 		if err == nil && session.URL != "" {
 			err = a.settingsNativeWindow().OpenExternalURL(session.URL)
@@ -284,7 +271,9 @@ func (a *App) runCloudMenuAction(action string) {
 	case "change-password":
 		a.openCloudAccountForm("change-password")
 	case "logout":
-		a.runCloudAction("logout", "/account/logout", map[string]any{})
+		a.runCloudAction("logout", func(ctx context.Context) error {
+			return a.services.LogoutAccount(ctx, a.sessionID)
+		})
 	case "refresh":
 		go a.reloadCloudSync()
 	case "billing":
@@ -307,8 +296,7 @@ func (a *App) beginCloudBootstrap() {
 	a.invalidateSettingsWindow()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		var status cloudBootstrapStatus
-		err := a.client.Post(ctx, "/sync/bootstrap/status", map[string]any{}, &status)
+		status, err := a.services.CloudBootstrapStatus(ctx, a.sessionID)
 		cancel()
 		if err != nil {
 			a.cloudSettings.SetError("Could not prepare cloud sync: " + err.Error())
@@ -323,7 +311,7 @@ func (a *App) beginCloudBootstrap() {
 	}()
 }
 
-func newCloudBootstrapForm(status cloudBootstrapStatus) *cloudFormState {
+func newCloudBootstrapForm(status contract.CloudBootstrapStatus) *cloudFormState {
 	definitions := []formDefinition{{Type: "password", Value: formDefinitionValue{Key: "RecoveryCode", Label: "Encryption password", MaxLines: 1}}}
 	if !status.HasRemoteData {
 		definitions = append(definitions, formDefinition{Type: "password", Value: formDefinitionValue{Key: "ConfirmRecoveryCode", Label: "Confirm password", MaxLines: 1}})
@@ -347,7 +335,7 @@ func (a *App) runCloudBootstrap(recoveryCode string) {
 	a.invalidateSettingsWindow()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err := a.client.Post(ctx, "/sync/bootstrap/start", map[string]string{"recovery_code": recoveryCode}, nil)
+		err := a.services.StartCloudBootstrap(ctx, a.sessionID, recoveryCode)
 		cancel()
 		if err != nil {
 			a.cloudSettings.SetError("Could not start cloud sync: " + err.Error())
@@ -434,7 +422,7 @@ func (a *App) resendCloudVerification() {
 	a.invalidateSettingsWindow()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		err := a.client.Post(ctx, "/account/resend_verification", map[string]string{"email": email, "lang": lang}, nil)
+		err := a.services.ResendAccountVerification(ctx, a.sessionID, email, lang)
 		cancel()
 		a.mu.Lock()
 		form := a.cloudSettings.Form()
@@ -725,40 +713,40 @@ func validateCloudForm(kind string, values map[string]string, hasRemoteData bool
 func (a *App) submitCloudFormRequest(kind string, values map[string]string, email string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	var result cloudAccountResult
+	var result account.ActionResult
 	var err error
 	switch kind {
 	case "login", "register":
-		route := "/account/login"
-		if kind == "register" {
-			route = "/account/register"
-		}
 		a.mu.RLock()
 		lang := a.generalSettings.Data().LangCode
 		a.mu.RUnlock()
-		err = a.client.Post(ctx, route, map[string]string{"email": values["Email"], "password": values["Password"], "lang": lang}, &result)
+		if kind == "register" {
+			result, err = a.services.RegisterAccount(ctx, a.sessionID, values["Email"], values["Password"], lang)
+		} else {
+			result, err = a.services.LoginAccount(ctx, a.sessionID, values["Email"], values["Password"], lang)
+		}
 	case "verify":
 		a.mu.RLock()
 		lang := a.generalSettings.Data().LangCode
 		a.mu.RUnlock()
-		err = a.client.Post(ctx, "/account/verify_email", map[string]string{"email": email, "code": values["Code"], "lang": lang}, &result)
+		result, err = a.services.VerifyAccountEmail(ctx, a.sessionID, email, values["Code"], lang)
 	case "reset-request":
 		a.mu.RLock()
 		lang := a.generalSettings.Data().LangCode
 		a.mu.RUnlock()
-		err = a.client.Post(ctx, "/account/password_reset/request", map[string]string{"email": values["Email"], "lang": lang}, nil)
+		err = a.services.RequestAccountPasswordReset(ctx, a.sessionID, values["Email"], lang)
 	case "reset-confirm":
 		a.mu.RLock()
 		lang := a.generalSettings.Data().LangCode
 		a.mu.RUnlock()
-		err = a.client.Post(ctx, "/account/password_reset/confirm", map[string]string{"token": values["Token"], "password": values["Password"], "lang": lang}, nil)
+		err = a.services.ConfirmAccountPasswordReset(ctx, a.sessionID, values["Token"], values["Password"], lang)
 	case "change-password":
 		a.mu.RLock()
 		lang := a.generalSettings.Data().LangCode
 		a.mu.RUnlock()
-		err = a.client.Post(ctx, "/account/change_password", map[string]string{"current_password": values["CurrentPassword"], "new_password": values["Password"], "lang": lang}, nil)
+		err = a.services.ChangeAccountPassword(ctx, a.sessionID, values["CurrentPassword"], values["Password"], lang)
 	case "bootstrap":
-		err = a.client.Post(ctx, "/sync/bootstrap/start", map[string]string{"recovery_code": values["RecoveryCode"]}, nil)
+		err = a.services.StartCloudBootstrap(ctx, a.sessionID, values["RecoveryCode"])
 	}
 	if err == nil && (kind == "login" || kind == "register") && result.Code == "need_verify_email" {
 		verificationEmail := result.Email
@@ -849,7 +837,7 @@ func (a *App) toggleCloudPluginExclusion(pluginID string) {
 	a.invalidateSettingsWindow()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		err := a.client.Post(ctx, "/setting/wox/update", map[string]string{"Key": "CloudSyncDisabledPlugins", "Value": string(encoded)}, nil)
+		err := a.services.UpdateGeneralSetting(ctx, a.sessionID, "CloudSyncDisabledPlugins", string(encoded))
 		cancel()
 		if err == nil {
 			err = a.reloadSettings()

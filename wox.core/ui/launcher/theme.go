@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"runtime"
@@ -182,9 +183,17 @@ func defaultPalette() uiPalette {
 func (a *App) reloadTheme() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	var theme themeData
-	if err := a.client.Post(ctx, "/theme", map[string]any{}, &theme); err != nil {
+	loaded, err := a.services.CurrentTheme(ctx, a.sessionID)
+	if err != nil {
 		return fmt.Errorf("load current theme: %w", err)
+	}
+	encoded, err := json.Marshal(loaded)
+	if err != nil {
+		return fmt.Errorf("encode current theme: %w", err)
+	}
+	var theme themeData
+	if err := json.Unmarshal(encoded, &theme); err != nil {
+		return fmt.Errorf("decode current theme: %w", err)
 	}
 	a.applyTheme(theme)
 	return nil

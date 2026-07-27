@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
 
@@ -159,7 +160,7 @@ func (c *settingsSearchController) SetError(msg string) {
 // Plugins holds the sorted catalog; on failure Loading false, Loaded false, Error records the
 // message. The caller is responsible for any post-load invalidation; this method only invalidates
 // around the loading-state transitions.
-func (c *settingsSearchController) ReloadPlugins(ctx context.Context, client backendClient) error {
+func (c *settingsSearchController) ReloadPlugins(ctx context.Context, service contract.PluginCatalogSettingsServices, sessionID string) error {
 	c.mu.Lock()
 	if c.loading || c.loaded {
 		c.mu.Unlock()
@@ -172,8 +173,11 @@ func (c *settingsSearchController) ReloadPlugins(ctx context.Context, client bac
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
+	loaded, err := service.Plugins(timeoutCtx, sessionID, contract.PluginCatalogInstalled)
 	var plugins []pluginSettingsPlugin
-	err := client.Post(timeoutCtx, "/plugin/installed", map[string]any{}, &plugins)
+	if err == nil {
+		plugins, err = pluginSettingsPluginsFromContract(loaded)
+	}
 	if err == nil {
 		sort.SliceStable(plugins, func(i, j int) bool {
 			if plugins[i].IsSystem != plugins[j].IsSystem {

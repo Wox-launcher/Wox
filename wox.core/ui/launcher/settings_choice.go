@@ -5,9 +5,11 @@ import (
 	"log"
 	"time"
 
+	"wox/ui/contract"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type settingChoicePickerState struct {
@@ -127,7 +129,9 @@ func (a *App) chooseSettingChoice(index int) {
 	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
-	go a.saveSetting(item, choice)
+	util.Go(a.lifecycleCtx, "save setting choice", func() {
+		a.saveSetting(item, choice)
+	})
 }
 
 func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rect) {
@@ -136,7 +140,7 @@ func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rec
 	revision := a.choiceTooltipRevision
 	a.mu.Unlock()
 
-	go func() {
+	util.Go(a.lifecycleCtx, "update setting choice tooltip", func() {
 		a.tooltipMu.Lock()
 		defer a.tooltipMu.Unlock()
 		a.mu.RLock()
@@ -148,7 +152,7 @@ func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rec
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if !inside {
-			if err := a.client.Post(ctx, "/tooltip/hide", map[string]string{"name": "go-ui-setting-choice"}, nil); err != nil {
+			if err := a.services.HideTooltip(ctx, a.sessionID, "go-ui-setting-choice"); err != nil {
 				log.Printf("hide settings choice tooltip: %v", err)
 			}
 			return
@@ -162,20 +166,20 @@ func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rec
 			log.Printf("read settings bounds for choice tooltip: %v", err)
 			return
 		}
-		err = a.client.Post(ctx, "/tooltip/show", map[string]any{
-			"name": "go-ui-setting-choice", "text": text, "side": "left",
-			"anchorX": windowBounds.X + anchor.X, "anchorY": windowBounds.Y + anchor.Y,
-			"anchorWidth": anchor.Width, "anchorHeight": anchor.Height,
-		}, nil)
+		err = a.services.ShowTooltip(ctx, a.sessionID, contract.TooltipOptions{
+			Name: "go-ui-setting-choice", Text: text, Side: "left",
+			AnchorX: float64(windowBounds.X + anchor.X), AnchorY: float64(windowBounds.Y + anchor.Y),
+			AnchorWidth: float64(anchor.Width), AnchorHeight: float64(anchor.Height),
+		})
 		if err != nil {
 			log.Printf("show settings choice tooltip: %v", err)
 		}
-	}()
+	})
 }
 
 // loadSystemFontFamilies keeps enumeration in core while the framework only consumes portable family names.
 func (a *App) loadSystemFontFamilies() {
-	a.appearanceSettings.ReloadFonts(context.Background(), a.client)
+	a.appearanceSettings.ReloadFonts(context.Background(), a.services, a.sessionID)
 }
 
 func systemFontSettingItem(snapshot settingsSnapshot) settingItem {

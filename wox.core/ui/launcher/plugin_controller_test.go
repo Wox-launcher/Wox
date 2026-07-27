@@ -2,42 +2,30 @@ package launcher
 
 import (
 	"context"
-	"sync"
 	"testing"
 
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
 
-// pluginFakeBackend serves /plugin/store and /plugin/installed from pre-populated
-// payloads, with optional per-route errors. Matches the core endpoint signature
-// which decodes directly into []pluginSettingsPlugin (not json.RawMessage).
-type pluginFakeBackend struct {
-	mu       sync.Mutex
-	plugins  map[string][]pluginSettingsPlugin
+type pluginFakeService struct {
+	plugins  map[contract.PluginCatalog][]contract.PluginCatalogItem
 	storeErr error
 	instErr  error
 }
 
-func (f *pluginFakeBackend) Post(_ context.Context, path string, _ any, out any) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	switch path {
-	case "/plugin/store":
+func (f *pluginFakeService) Plugins(_ context.Context, _ string, catalog contract.PluginCatalog) ([]contract.PluginCatalogItem, error) {
+	switch catalog {
+	case contract.PluginCatalogStore:
 		if f.storeErr != nil {
-			return f.storeErr
+			return nil, f.storeErr
 		}
-		if ptr, ok := out.(*[]pluginSettingsPlugin); ok {
-			*ptr = append([]pluginSettingsPlugin(nil), f.plugins["store"]...)
-		}
-	case "/plugin/installed":
+	case contract.PluginCatalogInstalled:
 		if f.instErr != nil {
-			return f.instErr
-		}
-		if ptr, ok := out.(*[]pluginSettingsPlugin); ok {
-			*ptr = append([]pluginSettingsPlugin(nil), f.plugins["installed"]...)
+			return nil, f.instErr
 		}
 	}
-	return nil
+	return append([]contract.PluginCatalogItem(nil), f.plugins[catalog]...), nil
 }
 
 func newPluginControllerDeps() (CommonDeps, *int) {
@@ -94,9 +82,9 @@ func TestPluginControllerForm(t *testing.T) {
 func TestPluginControllerReloadPluginsSuccess(t *testing.T) {
 	deps, invalidateCalled := newPluginControllerDeps()
 	c := newPluginSettingsController(deps)
-	plugins := []pluginSettingsPlugin{{ID: "t1", Name: "Plugin One"}, {ID: "t2", Name: "Plugin Two"}}
-	client := &pluginFakeBackend{plugins: map[string][]pluginSettingsPlugin{"installed": plugins}}
-	if err := c.ReloadPlugins(context.Background(), client, false, ""); err != nil {
+	plugins := []contract.PluginCatalogItem{{ID: "t1", Name: "Plugin One"}, {ID: "t2", Name: "Plugin Two"}}
+	service := &pluginFakeService{plugins: map[contract.PluginCatalog][]contract.PluginCatalogItem{contract.PluginCatalogInstalled: plugins}}
+	if err := c.ReloadPlugins(context.Background(), service, "session", false, ""); err != nil {
 		t.Fatalf("ReloadPlugins error: %v", err)
 	}
 	if !c.PluginsLoaded() {

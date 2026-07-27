@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"wox/ui/contract"
 )
 
 // aiSettingsSnapshot is the immutable AI tab state consumed by the view layer.
@@ -105,7 +107,7 @@ func (c *aiSettingsController) ProviderCatalog() []aiProviderInfo {
 // already completed or is in flight. onLoaded is invoked on a successful load so the
 // caller (App) can refresh the AI settings form dropdown and any open row editor without
 // the controller needing a back-reference to *App. onLoaded runs outside c.mu.
-func (c *aiSettingsController) ReloadProviders(ctx context.Context, client backendClient, onLoaded func(providers []aiProviderInfo)) {
+func (c *aiSettingsController) ReloadProviders(ctx context.Context, service contract.AICatalogSettingsServices, sessionID string, onLoaded func(providers []aiProviderInfo)) {
 	c.mu.Lock()
 	if c.providersLoading || c.providersLoaded {
 		c.mu.Unlock()
@@ -117,9 +119,12 @@ func (c *aiSettingsController) ReloadProviders(ctx context.Context, client backe
 	c.deps.Invalidate()
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	var providers []aiProviderInfo
-	err := client.Post(timeoutCtx, "/ai/providers", map[string]any{}, &providers)
+	loaded, err := service.AIProviders(timeoutCtx, sessionID)
 	cancel()
+	providers := make([]aiProviderInfo, len(loaded))
+	for index, provider := range loaded {
+		providers[index] = aiProviderInfo{Name: provider.Name, DefaultHost: provider.DefaultHost}
+	}
 
 	c.mu.Lock()
 	c.providersLoading = false
@@ -323,11 +328,14 @@ func (c *aiSettingsController) SetSkillsError(msg string) {
 // onLoaded is invoked on success so the App can refresh the requirement/plugin/table
 // row forms that consume selectAIModel options and reset the chat-preview panel selection.
 // onLoaded runs outside c.mu and receives the freshly loaded models.
-func (c *aiSettingsController) LoadAIModels(ctx context.Context, client backendClient, onLoaded func(models []aiModel)) {
+func (c *aiSettingsController) LoadAIModels(ctx context.Context, service contract.AICatalogSettingsServices, sessionID string, onLoaded func(models []aiModel)) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	var models []aiModel
-	err := client.Post(timeoutCtx, "/ai/models", map[string]any{}, &models)
+	loaded, err := service.AIModels(timeoutCtx, sessionID)
 	cancel()
+	models := make([]aiModel, len(loaded))
+	for index, model := range loaded {
+		models[index] = aiModel{Name: model.Name, Provider: model.Provider, ProviderAlias: model.ProviderAlias}
+	}
 	if err == nil {
 		sort.Slice(models, func(i, j int) bool {
 			left := models[i].Provider + "\x00" + models[i].ProviderAlias + "\x00" + models[i].Name
@@ -350,11 +358,17 @@ func (c *aiSettingsController) LoadAIModels(ctx context.Context, client backendC
 // LoadAISkills fetches the enabled skill catalog from core, filters out disabled/empty
 // skills, sorts by source/name, and stores it through SetSkills. onLoaded is invoked on
 // success so the App can reset the chat-preview skill panel selection.
-func (c *aiSettingsController) LoadAISkills(ctx context.Context, client backendClient, onLoaded func(skills []chatSkill)) {
+func (c *aiSettingsController) LoadAISkills(ctx context.Context, service contract.AICatalogSettingsServices, sessionID string, onLoaded func(skills []chatSkill)) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	var skills []chatSkill
-	err := client.Post(timeoutCtx, "/ai/skills", map[string]any{}, &skills)
+	loaded, err := service.AISkills(timeoutCtx, sessionID)
 	cancel()
+	skills := make([]chatSkill, len(loaded))
+	for index, skill := range loaded {
+		skills[index] = chatSkill{
+			ID: skill.ID, Name: skill.Name, Description: skill.Description, Path: skill.Path, ManifestPath: skill.ManifestPath,
+			Source: skill.Source, SourceName: skill.SourceName, Error: skill.Error, Enabled: skill.Enabled,
+		}
+	}
 	if err == nil {
 		filtered := make([]chatSkill, 0, len(skills))
 		for _, skill := range skills {

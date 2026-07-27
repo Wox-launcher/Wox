@@ -159,11 +159,16 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 
 func (a *App) formTableTargetCurrentLocked(target *formFieldsState) bool {
 	pluginForm := a.pluginSettings.Form()
+	return a.formTableTargetCurrentWithFormsLocked(target, pluginForm, a.aiSettings.Form(), a.hotkeySettings.Form())
+}
+
+// formTableTargetCurrentWithFormsLocked compares one table target using controller pointers captured before App.mu was acquired.
+func (a *App) formTableTargetCurrentWithFormsLocked(target *formFieldsState, pluginForm *pluginSettingsFormState, aiForm *formFieldsState, hotkeyForm *formFieldsState) bool {
 	return target != nil && ((a.form != nil && target == &a.form.formFieldsState) ||
 		(a.requirementForm != nil && target == &a.requirementForm.formFieldsState) ||
 		(pluginForm != nil && target == &pluginForm.formFieldsState) ||
-		(a.settingsOpen && a.settingTab == "ai" && target == a.aiSettings.Form()) ||
-		(a.settingsOpen && a.settingTab == "general" && target == a.hotkeySettings.Form()))
+		(a.settingsOpen && a.settingTab == "ai" && target == aiForm) ||
+		(a.settingsOpen && a.settingTab == "general" && target == hotkeyForm))
 }
 
 func (a *App) openActionFormTable(index int) {

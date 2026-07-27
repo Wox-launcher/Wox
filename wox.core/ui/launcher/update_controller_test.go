@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync"
 	"testing"
+
+	"wox/ui/contract"
 )
 
 func TestUpdateControllerReloadSuccess(t *testing.T) {
@@ -14,7 +16,7 @@ func TestUpdateControllerReloadSuccess(t *testing.T) {
 		Translate:  func(s string) string { return s },
 	}
 	c := newUpdateSettingsController(deps)
-	client := &fakeBackendClient{channelVersions: []updateChannelVersion{
+	service := &fakeUpdateSettingsService{versions: []contract.UpdateChannelVersion{
 		{Channel: "stable", LatestVersion: "1.2.3"},
 		{Channel: "beta", LatestVersion: "1.3.0"},
 	}}
@@ -24,7 +26,7 @@ func TestUpdateControllerReloadSuccess(t *testing.T) {
 		called++
 		trailersArg = versions
 	}
-	c.Reload(context.Background(), client, applyTrailers)
+	c.Reload(context.Background(), service, "session", applyTrailers)
 	snap := c.Snapshot()
 	if len(snap.ChannelVersions) != 2 {
 		t.Fatalf("ChannelVersions len = %d, want 2", len(snap.ChannelVersions))
@@ -57,25 +59,25 @@ func TestUpdateControllerReloadSkipsWhenAlreadyLoading(t *testing.T) {
 	var firstCallReturned sync.WaitGroup
 	firstCallReturned.Add(1)
 
-	blockingClient := &updateBlockingBackendClient{
+	blockingService := &updateBlockingSettingsService{
 		entered: enteredPost,
 		release: releaseFirst,
-		response: []updateChannelVersion{
+		response: []contract.UpdateChannelVersion{
 			{Channel: "stable", LatestVersion: "1.2.3"},
 		},
 	}
 	go func() {
 		defer firstCallReturned.Done()
-		c.Reload(context.Background(), blockingClient, nil)
+		c.Reload(context.Background(), blockingService, "session", nil)
 	}()
 
 	<-enteredPost
 	// Second reload runs while the first is still inside Post; the loading guard must no-op it.
-	secondClient := &fakeBackendClient{channelVersions: []updateChannelVersion{
+	secondService := &fakeUpdateSettingsService{versions: []contract.UpdateChannelVersion{
 		{Channel: "beta", LatestVersion: "9.9.9"},
 	}}
 	called := 0
-	c.Reload(context.Background(), secondClient, func([]updateChannelVersion) { called++ })
+	c.Reload(context.Background(), secondService, "session", func([]updateChannelVersion) { called++ })
 
 	close(releaseFirst)
 	firstCallReturned.Wait()
@@ -95,17 +97,17 @@ func TestUpdateControllerReloadSkipsWhenAlreadyLoading(t *testing.T) {
 func TestUpdateControllerReloadSkipsWhenAlreadyLoaded(t *testing.T) {
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
 	c := newUpdateSettingsController(deps)
-	client := &fakeBackendClient{channelVersions: []updateChannelVersion{
+	service := &fakeUpdateSettingsService{versions: []contract.UpdateChannelVersion{
 		{Channel: "stable", LatestVersion: "1.2.3"},
 	}}
-	c.Reload(context.Background(), client, nil)
+	c.Reload(context.Background(), service, "session", nil)
 
 	// Second reload must no-op because versions are already loaded (len > 0 guard).
-	secondClient := &fakeBackendClient{channelVersions: []updateChannelVersion{
+	secondService := &fakeUpdateSettingsService{versions: []contract.UpdateChannelVersion{
 		{Channel: "beta", LatestVersion: "9.9.9"},
 	}}
 	called := 0
-	c.Reload(context.Background(), secondClient, func([]updateChannelVersion) { called++ })
+	c.Reload(context.Background(), secondService, "session", func([]updateChannelVersion) { called++ })
 
 	snap := c.Snapshot()
 	if len(snap.ChannelVersions) != 1 {
@@ -122,9 +124,9 @@ func TestUpdateControllerReloadSkipsWhenAlreadyLoaded(t *testing.T) {
 func TestUpdateControllerReloadErrorDoesNotStoreVersions(t *testing.T) {
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
 	c := newUpdateSettingsController(deps)
-	client := &fakeBackendClient{err: errors.New("network down")}
+	service := &fakeUpdateSettingsService{err: errors.New("network down")}
 	called := 0
-	c.Reload(context.Background(), client, func([]updateChannelVersion) { called++ })
+	c.Reload(context.Background(), service, "session", func([]updateChannelVersion) { called++ })
 	snap := c.Snapshot()
 	if len(snap.ChannelVersions) != 0 {
 		t.Fatalf("ChannelVersions should be empty on error, got len %d", len(snap.ChannelVersions))
@@ -137,19 +139,24 @@ func TestUpdateControllerReloadErrorDoesNotStoreVersions(t *testing.T) {
 	}
 }
 
-// updateBlockingBackendClient closes entered inside Post before blocking on release,
-// so callers can prove the controller has already set channelsLoading=true and entered Post.
-type updateBlockingBackendClient struct {
-	entered  chan<- struct{}
-	release  <-chan struct{}
-	response []updateChannelVersion
+type fakeUpdateSettingsService struct {
+	versions []contract.UpdateChannelVersion
+	err      error
 }
 
-func (b *updateBlockingBackendClient) Post(_ context.Context, _ string, _ any, out any) error {
+func (f *fakeUpdateSettingsService) UpdateChannelVersions(_ context.Context, _ string) ([]contract.UpdateChannelVersion, error) {
+	return append([]contract.UpdateChannelVersion(nil), f.versions...), f.err
+}
+
+// updateBlockingSettingsService closes entered inside UpdateChannelVersions before blocking on release.
+type updateBlockingSettingsService struct {
+	entered  chan<- struct{}
+	release  <-chan struct{}
+	response []contract.UpdateChannelVersion
+}
+
+func (b *updateBlockingSettingsService) UpdateChannelVersions(_ context.Context, _ string) ([]contract.UpdateChannelVersion, error) {
 	close(b.entered)
 	<-b.release
-	if ptr, ok := out.(*[]updateChannelVersion); ok {
-		*ptr = append([]updateChannelVersion(nil), b.response...)
-	}
-	return nil
+	return append([]contract.UpdateChannelVersion(nil), b.response...), nil
 }

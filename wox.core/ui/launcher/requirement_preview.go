@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"wox/ui/coreclient"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -186,7 +185,7 @@ func hasFormDefinitionType(definitions []formDefinition, definitionType string) 
 // and resetting the chat-preview model panel selection) through the onLoaded callback so the
 // controller stays free of *App references.
 func (a *App) loadAIModels() {
-	a.aiSettings.LoadAIModels(context.Background(), a.client, func(models []aiModel) {
+	a.aiSettings.LoadAIModels(context.Background(), a.services, a.sessionID, func(models []aiModel) {
 		if models == nil {
 			log.Printf("load AI models for requirement form: see controller error")
 			_ = a.window.Invalidate()
@@ -549,13 +548,11 @@ func (a *App) submitRequirementForm() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		var saveErr error
+		updates := make(map[string]string, len(keys))
 		for _, key := range keys {
-			if err := a.client.Post(ctx, "/setting/plugin/update", map[string]string{"PluginId": pluginID, "Key": key, "Value": values[key]}, nil); err != nil {
-				saveErr = fmt.Errorf("save %s: %w", key, err)
-				break
-			}
+			updates[key] = values[key]
 		}
+		saveErr := a.services.UpdatePluginSettings(ctx, a.sessionID, pluginID, updates)
 		a.mu.Lock()
 		current := a.requirementForm != nil && a.requirementForm.key == formKey && a.requirementForm.revision == revision
 		if current {
@@ -574,7 +571,7 @@ func (a *App) submitRequirementForm() {
 		a.mu.RLock()
 		query := a.query
 		a.mu.RUnlock()
-		query.QueryID = coreclient.NewID()
+		query.QueryID = newID()
 		a.setQuery(query)
 		if err := a.sendCurrentQuery(); err != nil {
 			log.Printf("refresh query after requirement settings: %v", err)

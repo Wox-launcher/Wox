@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"wox/ui/contract"
 )
 
 // appearanceSettingsSnapshot is the immutable Appearance tab state consumed by the view layer.
@@ -43,7 +45,7 @@ func newAppearanceSettingsController(deps CommonDeps) *appearanceSettingsControl
 // ReloadFonts loads the system font family list from core. It is a no-op if a load has
 // already completed or is in flight. Mirrors the original loadSystemFontFamilies behavior:
 // core enumerates fonts, the controller trims/dedups/sorts the portable family names.
-func (c *appearanceSettingsController) ReloadFonts(ctx context.Context, client backendClient) {
+func (c *appearanceSettingsController) ReloadFonts(ctx context.Context, service contract.AppearanceSettingsServices, sessionID string) {
 	c.mu.Lock()
 	if c.fontsLoaded || c.fontsLoading {
 		c.mu.Unlock()
@@ -55,8 +57,7 @@ func (c *appearanceSettingsController) ReloadFonts(ctx context.Context, client b
 	c.deps.Invalidate()
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	var families []string
-	err := client.Post(timeoutCtx, "/setting/ui/fonts", map[string]any{}, &families)
+	families, err := service.SystemFontFamilies(timeoutCtx, sessionID)
 	cancel()
 	if err == nil {
 		seen := make(map[string]bool, len(families))
@@ -91,7 +92,7 @@ func (c *appearanceSettingsController) ReloadFonts(ctx context.Context, client b
 // load has already completed or is in flight. onLoaded is invoked on a successful load so
 // the caller (App) can reschedule the active glance refresh against the new catalog without
 // the controller needing a back-reference to *App.
-func (c *appearanceSettingsController) ReloadGlanceCatalog(ctx context.Context, client backendClient, onLoaded func()) {
+func (c *appearanceSettingsController) ReloadGlanceCatalog(ctx context.Context, service contract.AppearanceSettingsServices, sessionID string, onLoaded func()) {
 	c.mu.Lock()
 	if c.glanceCatalogLoaded || c.glanceCatalogLoading {
 		c.mu.Unlock()
@@ -102,26 +103,19 @@ func (c *appearanceSettingsController) ReloadGlanceCatalog(ctx context.Context, 
 	c.mu.Unlock()
 	c.deps.Invalidate()
 
-	var plugins []struct {
-		ID      string         `json:"Id"`
-		Name    string         `json:"Name"`
-		Glances []pluginGlance `json:"Glances"`
-	}
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	err := client.Post(timeoutCtx, "/plugin/installed", map[string]any{}, &plugins)
+	loaded, err := service.GlanceCatalog(timeoutCtx, sessionID)
 	cancel()
 	catalog := make([]glanceCatalogItem, 0)
 	if err == nil {
-		for _, plugin := range plugins {
-			for _, glance := range plugin.Glances {
-				if strings.TrimSpace(plugin.ID) == "" || strings.TrimSpace(glance.ID) == "" {
-					continue
-				}
-				catalog = append(catalog, glanceCatalogItem{
-					Ref: glanceRef{PluginID: plugin.ID, GlanceID: glance.ID}, PluginName: plugin.Name, Name: glance.Name,
-					Description: glance.Description, RefreshIntervalMs: glance.RefreshIntervalMs,
-				})
+		for _, item := range loaded {
+			if strings.TrimSpace(item.PluginID) == "" || strings.TrimSpace(item.GlanceID) == "" {
+				continue
 			}
+			catalog = append(catalog, glanceCatalogItem{
+				Ref: glanceRef{PluginID: item.PluginID, GlanceID: item.GlanceID}, PluginName: item.PluginName, Name: item.Name,
+				Description: item.Description, RefreshIntervalMs: item.RefreshIntervalMs,
+			})
 		}
 		sort.SliceStable(catalog, func(i, j int) bool {
 			return strings.ToLower(catalog[i].Name+catalog[i].PluginName) < strings.ToLower(catalog[j].Name+catalog[j].PluginName)

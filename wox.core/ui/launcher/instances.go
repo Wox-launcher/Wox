@@ -63,7 +63,7 @@ func (r *appInstanceRegistry) open(ctx context.Context, options contract.OpenIns
 		r.mu.Unlock()
 		return errors.New("primary launcher instance is unavailable")
 	}
-	secondary := newApp(primary.isDev, primary.services, primary.clientFactory, primary.windows, r, primary, false, options.InstanceName, "")
+	secondary := newApp(primary.isDev, primary.services, primary.windows, r, primary, false, options.InstanceName, "")
 	if options.Show.WindowWidth > 0 {
 		secondary.show.WindowWidth = options.Show.WindowWidth
 	}
@@ -173,11 +173,6 @@ func (a *App) destroySecondary() {
 		if a.instances != nil {
 			a.instances.remove(a)
 		}
-		if a.client != nil {
-			if err := a.client.Close(); err != nil {
-				log.Printf("close secondary Wox instance %s backend: %v", a.sessionID, err)
-			}
-		}
 	})
 }
 
@@ -210,9 +205,6 @@ func (a *App) unsubscribeAll() {
 
 func (a *App) onSharedSettingsChanged(message woxui.WindowMessage) {
 	go func() {
-		if a.client == nil {
-			return
-		}
 		if err := a.reloadSettings(); err != nil {
 			log.Printf("reload shared settings for %s: %v", a.sessionID, err)
 		}

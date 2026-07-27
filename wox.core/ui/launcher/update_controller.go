@@ -5,6 +5,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"wox/ui/contract"
 )
 
 // updateSettingsSnapshot is the immutable Update tab state consumed by the view layer.
@@ -37,7 +39,7 @@ func newUpdateSettingsController(deps CommonDeps) *updateSettingsController {
 // The reload is a no-op when a reload is already in flight or when versions have already been
 // loaded. This guard preserves the old App-level behavior where the updates tab only fetched
 // once per settings window session.
-func (c *updateSettingsController) Reload(ctx context.Context, client backendClient, applyTrailers func([]updateChannelVersion)) {
+func (c *updateSettingsController) Reload(ctx context.Context, service contract.UpdateSettingsServices, sessionID string, applyTrailers func([]updateChannelVersion)) {
 	c.mu.Lock()
 	if c.channelsLoading || len(c.channelVersions) > 0 {
 		c.mu.Unlock()
@@ -49,8 +51,15 @@ func (c *updateSettingsController) Reload(ctx context.Context, client backendCli
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	var versions []updateChannelVersion
-	err := client.Post(timeoutCtx, "/updater/channel/versions", map[string]any{}, &versions)
+	loaded, err := service.UpdateChannelVersions(timeoutCtx, sessionID)
+	versions := make([]updateChannelVersion, len(loaded))
+	for index, version := range loaded {
+		versions[index] = updateChannelVersion{
+			Channel:       version.Channel,
+			LatestVersion: version.LatestVersion,
+			Error:         version.Error,
+		}
+	}
 
 	c.mu.Lock()
 	c.channelsLoading = false

@@ -6,6 +6,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"wox/ui/contract"
+	"wox/util"
 )
 
 // runtimeSettingsSnapshot is the immutable Runtime tab state consumed by the view layer.
@@ -36,7 +39,7 @@ func newRuntimeSettingsController(deps CommonDeps) *runtimeSettingsController {
 }
 
 // Reload fetches runtime statuses; ignores responses superseded by a newer refresh.
-func (c *runtimeSettingsController) Reload(ctx context.Context, client backendClient) {
+func (c *runtimeSettingsController) Reload(ctx context.Context, service contract.RuntimeSettingsServices, sessionID string) {
 	c.mu.Lock()
 	c.revision++
 	revision := c.revision
@@ -47,8 +50,11 @@ func (c *runtimeSettingsController) Reload(ctx context.Context, client backendCl
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	var statuses []runtimeStatus
-	err := client.Post(timeoutCtx, "/runtime/status", map[string]any{}, &statuses)
+	loaded, err := service.RuntimeStatuses(timeoutCtx, sessionID)
+	statuses := make([]runtimeStatus, len(loaded))
+	for index, status := range loaded {
+		statuses[index] = runtimeStatusFromContract(status)
+	}
 
 	c.mu.Lock()
 	if revision != c.revision {
@@ -70,7 +76,7 @@ func (c *runtimeSettingsController) Reload(ctx context.Context, client backendCl
 // reloadAfter runs after restarting is cleared so the view reflects the in-flight
 // restart correctly; canRestart is checked under c.mu so the controller does not
 // need to hold a.mu to read runtime statuses.
-func (c *runtimeSettingsController) Restart(ctx context.Context, client backendClient, runtime string, reloadAfter func()) {
+func (c *runtimeSettingsController) Restart(ctx context.Context, service contract.RuntimeSettingsServices, sessionID string, runtime string, reloadAfter func()) {
 	runtime = strings.ToUpper(strings.TrimSpace(runtime))
 	c.mu.Lock()
 	if runtime == "" || c.restarting != "" {
@@ -93,9 +99,9 @@ func (c *runtimeSettingsController) Restart(ctx context.Context, client backendC
 	c.mu.Unlock()
 	c.deps.Invalidate()
 
-	go func() {
+	util.Go(ctx, "restart plugin runtime", func() {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		err := client.Post(timeoutCtx, "/runtime/restart", map[string]string{"Runtime": runtime}, nil)
+		err := service.RestartRuntime(timeoutCtx, sessionID, runtime)
 		cancel()
 		c.mu.Lock()
 		c.restarting = ""
@@ -109,7 +115,24 @@ func (c *runtimeSettingsController) Restart(ctx context.Context, client backendC
 			c.mu.Unlock()
 			c.deps.Invalidate()
 		}
-	}()
+	})
+}
+
+// runtimeStatusFromContract isolates controller state from core-owned runtime slices.
+func runtimeStatusFromContract(status contract.RuntimeStatus) runtimeStatus {
+	return runtimeStatus{
+		Runtime:           status.Runtime,
+		IsStarted:         status.IsStarted,
+		HostVersion:       status.HostVersion,
+		StatusCode:        status.StatusCode,
+		StatusMessage:     status.StatusMessage,
+		ExecutablePath:    status.ExecutablePath,
+		LastStartError:    status.LastStartError,
+		CanRestart:        status.CanRestart,
+		InstallURL:        status.InstallURL,
+		LoadedPluginCount: status.LoadedPluginCount,
+		LoadedPluginNames: append([]string(nil), status.LoadedPluginNames...),
+	}
 }
 
 // SetError records an error from outside the reload/restart paths (e.g. install URL open failure).

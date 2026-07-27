@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"wox/ui/contract"
-	"wox/ui/coreclient"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util/clipboard"
@@ -26,9 +25,6 @@ const (
 	queryResizeSettleDuration = 80 * time.Millisecond
 )
 
-// BackendFactory binds one launcher session to the embedding core backend.
-type BackendFactory func(sessionID string) coreclient.Backend
-
 func resultRowHeightForPalette(palette uiPalette) float32 {
 	return resultRowBaseHeight + palette.resultItemPadding.Top + palette.resultItemPadding.Bottom
 }
@@ -38,7 +34,7 @@ const (
 	settingsWindowID woxui.WindowID = "wox.settings"
 )
 
-// App owns the launcher window, query state, and Wox core protocol client.
+// App owns one launcher window and its typed core service boundary.
 type App struct {
 	mu                     sync.RWMutex
 	previewLifecycleMu     sync.Mutex
@@ -52,8 +48,6 @@ type App struct {
 	sessionID     string
 	windowID      woxui.WindowID
 	services      contract.Services
-	clientFactory BackendFactory
-	client        coreclient.Backend
 	windows       *woxui.WindowManager
 	instances     *appInstanceRegistry
 	primary       *App
@@ -149,19 +143,19 @@ type App struct {
 	terminalPreview    *terminalPreviewState
 }
 
-// New creates a launcher whose core services and transitional backend are supplied by the process composition root.
-func New(isDev bool, services contract.Services, clientFactory BackendFactory) *App {
+// New creates a launcher whose typed core services are supplied by the process composition root.
+func New(isDev bool, services contract.Services) *App {
 	windows := woxui.NewWindowManager()
 	instances := newAppInstanceRegistry()
-	app := newApp(isDev, services, clientFactory, windows, instances, nil, true, "", launcherWindowID)
+	app := newApp(isDev, services, windows, instances, nil, true, "", launcherWindowID)
 	app.primary = app
 	instances.registerPrimary(app)
 	return app
 }
 
 // newApp builds isolated launcher state while sharing only process-wide window and message infrastructure.
-func newApp(isDev bool, services contract.Services, clientFactory BackendFactory, windows *woxui.WindowManager, instances *appInstanceRegistry, primary *App, isPrimary bool, instanceName string, windowID woxui.WindowID) *App {
-	sessionID := coreclient.NewID()
+func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager, instances *appInstanceRegistry, primary *App, isPrimary bool, instanceName string, windowID woxui.WindowID) *App {
+	sessionID := newID()
 	lifecycleCtx, cancel := context.WithCancel(context.Background())
 	if windowID == "" {
 		windowID = woxui.WindowID("wox.instance." + sessionID)
@@ -173,7 +167,6 @@ func newApp(isDev bool, services contract.Services, clientFactory BackendFactory
 		sessionID:       sessionID,
 		windowID:        windowID,
 		services:        services,
-		clientFactory:   clientFactory,
 		windows:         windows,
 		instances:       instances,
 		primary:         primary,
@@ -256,15 +249,6 @@ func (a *App) start() error {
 	if a.services == nil {
 		return errors.New("core lifecycle services are required")
 	}
-	if a.clientFactory == nil {
-		return errors.New("core backend factory is required")
-	}
-	a.client = a.clientFactory(a.sessionID)
-	connectContext, cancelConnect := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancelConnect()
-	if err := a.client.Connect(connectContext); err != nil {
-		return err
-	}
 	if err := a.reloadTheme(); err != nil {
 		log.Printf("load Wox theme, using fallback palette: %v", err)
 	}
@@ -299,7 +283,6 @@ func (a *App) start() error {
 		},
 	})
 	if err != nil {
-		_ = a.client.Close()
 		return err
 	}
 	a.launcher = launcher
@@ -353,14 +336,7 @@ func (a *App) Close() error {
 		closeErr = a.windows.CloseAll()
 	}
 	a.unsubscribeAll()
-	if a.client == nil {
-		return closeErr
-	}
-	clientErr := a.client.Close()
-	if closeErr != nil {
-		return closeErr
-	}
-	return clientErr
+	return closeErr
 }
 
 func (a *App) showWindow(params showAppParams) error {
@@ -509,7 +485,7 @@ func (a *App) notifySettingViewChanged(inSettingView bool) error {
 
 func (a *App) setQuery(query plainQuery) {
 	if query.QueryID == "" {
-		query.QueryID = coreclient.NewID()
+		query.QueryID = newID()
 	}
 	if query.QueryType == "" {
 		query.QueryType = "input"
@@ -1172,7 +1148,7 @@ type selection struct {
 
 func newInputQuery(text string) plainQuery {
 	return plainQuery{
-		QueryID:          coreclient.NewID(),
+		QueryID:          newID(),
 		QueryType:        "input",
 		QueryText:        text,
 		QuerySelection:   selection{FilePaths: []string{}},

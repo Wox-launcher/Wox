@@ -205,7 +205,7 @@ func settingsJSONArray(value json.RawMessage) string {
 // (refreshing the AI settings form dropdown and any open AIProviders row editor) through the
 // onLoaded callback so the controller stays free of *App references.
 func (a *App) loadAIProviderCatalog() {
-	a.aiSettings.ReloadProviders(context.Background(), a.client, func(providers []aiProviderInfo) {
+	a.aiSettings.ReloadProviders(context.Background(), a.services, a.sessionID, func(providers []aiProviderInfo) {
 		a.mu.Lock()
 		if form := a.aiSettings.Form(); form != nil {
 			applyAIProviderCatalogLocked(form, providers)
@@ -381,7 +381,7 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 	}
 }
 
-// beginCloneRemoteAISkill reuses the row form surface for the one URL needed by core's clone endpoint.
+// beginCloneRemoteAISkill reuses the row form surface for the one URL needed by core's clone operation.
 func (a *App) beginCloneRemoteAISkill() {
 	a.mu.Lock()
 	state := a.tableEditor
@@ -410,9 +410,15 @@ func (a *App) beginCloneRemoteAISkill() {
 // cloneRemoteAISkills discovers repository skills, appends them atomically, then saves the combined setting.
 func (a *App) cloneRemoteAISkills(state *formTableEditorState, url, previousValue string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	var skills []map[string]any
-	err := a.client.Post(ctx, "/ai/skills/clone", map[string]string{"url": url}, &skills)
+	loaded, err := a.services.CloneAISkills(ctx, a.sessionID, url)
 	cancel()
+	skills := make([]map[string]any, len(loaded))
+	for index, skill := range loaded {
+		skills[index] = map[string]any{
+			"Path": skill.Path, "ManifestPath": skill.ManifestPath, "Name": skill.Name, "Description": skill.Description,
+			"Error": skill.Error, "Source": skill.Source, "SourceName": skill.SourceName, "SourceUrl": skill.SourceURL, "Enabled": skill.Enabled,
+		}
+	}
 	if err == nil && len(skills) == 0 {
 		err = fmt.Errorf("the repository did not contain any skills")
 	}
@@ -507,7 +513,7 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	err := a.client.Post(ctx, "/setting/wox/update", map[string]string{"Key": key, "Value": coreValue}, nil)
+	err := a.services.UpdateGeneralSetting(ctx, a.sessionID, key, coreValue)
 	cancel()
 
 	a.mu.Lock()

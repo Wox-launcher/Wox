@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
+	"wox/util"
 )
 
 const (
@@ -336,34 +338,36 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		}
 	}
 	if tab == "usage" {
-		go a.reloadUsageStats(a.currentUsagePeriod())
+		util.Go(a.lifecycleCtx, "reload usage stats", func() {
+			a.reloadUsageStats(a.currentUsagePeriod())
+		})
 	}
 	if tab == "ai" {
-		go a.loadAIProviderCatalog()
+		util.Go(a.lifecycleCtx, "load AI provider catalog", a.loadAIProviderCatalog)
 	}
 	if tab == "general" {
-		go a.loadHotkeyAppCandidates()
+		util.Go(a.lifecycleCtx, "load hotkey app candidates", a.loadHotkeyAppCandidates)
 	}
 	if tab == "appearance" {
-		go a.loadGlanceCatalog()
-		go a.loadSystemFontFamilies()
+		util.Go(a.lifecycleCtx, "load glance catalog", a.loadGlanceCatalog)
+		util.Go(a.lifecycleCtx, "load system font families", a.loadSystemFontFamilies)
 	}
 	if tab == "data" {
-		go a.reloadDataSettings()
+		util.Go(a.lifecycleCtx, "reload data settings", a.reloadDataSettings)
 	}
 	if tab == "cloud" {
-		go a.reloadCloudSync()
+		util.Go(a.lifecycleCtx, "reload cloud sync", a.reloadCloudSync)
 	}
 	if tab == "runtime" {
-		go a.reloadRuntimeStatuses()
+		util.Go(a.lifecycleCtx, "reload runtime statuses", a.reloadRuntimeStatuses)
 	}
 	if tab == "about" {
-		go a.reloadAboutVersion()
+		util.Go(a.lifecycleCtx, "reload about version", a.reloadAboutVersion)
 	}
 	if tab == "privacy" {
-		go a.reloadAboutVersion()
+		util.Go(a.lifecycleCtx, "reload privacy version", a.reloadAboutVersion)
 	}
-	go a.reloadUpdateChannelVersions()
+	util.Go(a.lifecycleCtx, "reload update channel versions", a.reloadUpdateChannelVersions)
 
 	settingsView, err := a.ensureSettingsWindow()
 	if err != nil {
@@ -393,27 +397,28 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		return err
 	}
 	a.updateSettingsTextInput(false)
-	go a.loadSettingsSearchPlugins()
+	util.Go(a.lifecycleCtx, "load settings search plugins", a.loadSettingsSearchPlugins)
 	return settingsWindow.Invalidate()
 }
 
-// reloadSettings refreshes the shared DTO without coupling the widget layer to Wox core packages.
+// reloadSettings refreshes the shared settings snapshot and language catalog.
 func (a *App) reloadSettings() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	var data settingsData
-	if err := a.client.Post(ctx, "/setting/wox", map[string]any{}, &data); err != nil {
+	loaded, err := a.services.GeneralSettings(ctx, a.sessionID)
+	if err != nil {
 		return fmt.Errorf("load Wox settings: %w", err)
 	}
-	var languages []struct {
-		Code string `json:"Code"`
-		Name string `json:"Name"`
+	data, err := settingsDataFromContract(loaded)
+	if err != nil {
+		return err
 	}
-	_ = a.client.Post(ctx, "/lang/available", map[string]any{}, &languages)
+	languages, _ := a.services.AvailableLanguages(ctx, a.sessionID)
 	languageChoices := make([]settingChoice, 0, len(languages))
 	for _, language := range languages {
-		if strings.TrimSpace(language.Code) != "" {
-			languageChoices = append(languageChoices, settingChoice{value: language.Code, label: firstNonEmpty(language.Name, language.Code)})
+		code := string(language.Code)
+		if strings.TrimSpace(code) != "" {
+			languageChoices = append(languageChoices, settingChoice{value: code, label: firstNonEmpty(language.Name, code)})
 		}
 	}
 	if data.LaunchMode == "" {
@@ -461,6 +466,91 @@ func (a *App) reloadSettings() error {
 		}
 	}
 	return nil
+}
+
+// settingsDataFromContract adapts core domain types to launcher-owned form state.
+func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, error) {
+	ignoredHotkeyApps, err := json.Marshal(loaded.IgnoredHotkeyApps)
+	if err != nil {
+		return settingsData{}, fmt.Errorf("encode ignored hotkey apps: %w", err)
+	}
+	trayQueries, err := json.Marshal(loaded.TrayQueries)
+	if err != nil {
+		return settingsData{}, fmt.Errorf("encode tray queries: %w", err)
+	}
+	aiProviders, err := json.Marshal(loaded.AIProviders)
+	if err != nil {
+		return settingsData{}, fmt.Errorf("encode AI providers: %w", err)
+	}
+	mcpServers, err := json.Marshal(loaded.AIMCPServers)
+	if err != nil {
+		return settingsData{}, fmt.Errorf("encode AI MCP servers: %w", err)
+	}
+	aiSkills, err := json.Marshal(loaded.AISkills)
+	if err != nil {
+		return settingsData{}, fmt.Errorf("encode AI skills: %w", err)
+	}
+
+	queryHotkeys := make([]queryHotkeySetting, len(loaded.QueryHotkeys))
+	for index, item := range loaded.QueryHotkeys {
+		queryHotkeys[index] = queryHotkeySetting{
+			Name: item.Name, Hotkey: item.Hotkey, Query: item.Query, IsSilentExecution: item.IsSilentExecution,
+			HideQueryBox: item.HideQueryBox, HideToolbar: item.HideToolbar, Width: item.Width,
+			MaxResultCount: item.MaxResultCount, Position: string(item.Position), Disabled: item.Disabled,
+		}
+	}
+	queryShortcuts := make([]queryShortcutSetting, len(loaded.QueryShortcuts))
+	for index, item := range loaded.QueryShortcuts {
+		queryShortcuts[index] = queryShortcutSetting{Shortcut: item.Shortcut, Query: item.Query, Disabled: item.Disabled}
+	}
+	return settingsData{
+		EnableAutostart:                    loaded.EnableAutostart,
+		LogLevel:                           loaded.LogLevel,
+		MainHotkey:                         loaded.MainHotkey,
+		SelectionHotkey:                    loaded.SelectionHotkey,
+		IgnoredHotkeyApps:                  ignoredHotkeyApps,
+		QueryHotkeys:                       queryHotkeys,
+		QueryShortcuts:                     queryShortcuts,
+		TrayQueries:                        trayQueries,
+		IsLinuxWaylandSession:              loaded.IsLinuxWaylandSession,
+		UsePinYin:                          loaded.UsePinYin,
+		SwitchInputMethodABC:               loaded.SwitchInputMethodABC,
+		HideOnStart:                        loaded.HideOnStart,
+		HideOnLostFocus:                    loaded.HideOnLostFocus,
+		ShowTray:                           loaded.ShowTray,
+		LangCode:                           string(loaded.LangCode),
+		LaunchMode:                         string(loaded.LaunchMode),
+		StartPage:                          string(loaded.StartPage),
+		HttpProxyEnabled:                   loaded.HTTPProxyEnabled,
+		HttpProxyURL:                       loaded.HTTPProxyURL,
+		ShowPosition:                       string(loaded.ShowPosition),
+		EnableAutoBackup:                   loaded.EnableAutoBackup,
+		EnableAutoUpdate:                   loaded.EnableAutoUpdate,
+		ReleaseChannel:                     string(loaded.ReleaseChannel),
+		EnableAnonymousUsageStats:          loaded.EnableAnonymousUsageStats,
+		CustomPythonPath:                   loaded.CustomPythonPath,
+		CustomNodejsPath:                   loaded.CustomNodejsPath,
+		CloudSyncServerURL:                 loaded.CloudSyncServerURL,
+		AppWidth:                           loaded.AppWidth,
+		MaxResultCount:                     loaded.MaxResultCount,
+		UIDensity:                          string(loaded.UIDensity),
+		ThemeID:                            loaded.ThemeID,
+		AppFontFamily:                      loaded.AppFontFamily,
+		EnableQueryCompletionHint:          loaded.EnableQueryCompletionHint,
+		EnableGlance:                       loaded.EnableGlance,
+		PrimaryGlance:                      glanceRef{PluginID: loaded.PrimaryGlance.PluginId, GlanceID: loaded.PrimaryGlance.GlanceId},
+		HideGlanceIcon:                     loaded.HideGlanceIcon,
+		AIProviders:                        aiProviders,
+		AIMCPServers:                       mcpServers,
+		AISkills:                           aiSkills,
+		CloudSyncDisabledPlugins:           append([]string(nil), loaded.CloudSyncDisabledPlugins...),
+		ShowScoreTail:                      loaded.ShowScoreTail,
+		ShowPerformanceTail:                loaded.ShowPerformanceTail,
+		ShowPerformanceTailBatch:           loaded.ShowPerformanceTailBatch,
+		ShowPerformanceTailPluginQuery:     loaded.ShowPerformanceTailPluginQuery,
+		ShowPerformanceTailBackendPrepared: loaded.ShowPerformanceTailBackendPrepared,
+		ShowPerformanceTailUIReceived:      loaded.ShowPerformanceTailUIReceived,
+	}, nil
 }
 
 func (a *App) closeSettings() error {
@@ -541,38 +631,58 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) settingsSnapshot() settingsSnapshot {
+	search := a.settingsSearch.Snapshot()
+	update := a.updateSettings.Snapshot()
+	plugins := a.pluginSettings.Snapshot()
+	hotkey := a.hotkeySettings.Snapshot()
+	appearance := a.appearanceSettings.Snapshot()
+	theme := a.themeSettings.Snapshot()
+	ai := a.aiSettings.Snapshot()
+	usage := a.usageSettings.Snapshot()
+	about := a.aboutSettings.Snapshot()
+	privacy := a.privacySettings.Snapshot()
+	dataState := a.dataSettings.Snapshot()
+	network := a.networkSettings.Snapshot()
+	runtime := a.runtimeSettings.Snapshot()
+	cloud := a.cloudSettings.Snapshot()
+	general := a.generalSettings.Snapshot()
+
+	// Resolve controller-owned form pointers before taking App.mu. Settings state is
+	// independently synchronized, so the aggregate is intentionally a best-effort view
+	// rather than an atomic cross-domain transaction.
+	pluginForm := a.pluginSettings.Form()
+	aiForm := a.aiSettings.Form()
+	hotkeyForm := a.hotkeySettings.Form()
+
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	var tableEditor *formTableEditorSnapshot
-	if a.tableEditor != nil && a.formTableTargetCurrentLocked(a.tableEditor.target) {
+	if a.tableEditor != nil && a.formTableTargetCurrentWithFormsLocked(a.tableEditor.target, pluginForm, aiForm, hotkeyForm) {
 		tableEditor = snapshotFormTableEditorLocked(a.tableEditor)
 	}
-	aiSnap := a.aiSettings.Snapshot()
-	hotkeySnap := a.hotkeySettings.Snapshot()
-	pluginSnap := a.pluginSettings.Snapshot()
 	return settingsSnapshot{
 		isDev:       a.isDev,
 		tab:         a.settingTab,
 		row:         a.settingRow,
 		note:        a.settingNote,
 		saving:      a.settingSaving,
-		search:      a.settingsSearch.Snapshot(),
-		update:      a.updateSettings.Snapshot(),
+		search:      search,
+		update:      update,
 		palette:     a.palette,
-		plugins:     pluginSnap,
-		hotkey:      hotkeySnap,
-		appearance:  a.appearanceSettings.Snapshot(),
-		theme:       a.themeSettings.Snapshot(),
-		ai:          aiSnap,
+		plugins:     plugins,
+		hotkey:      hotkey,
+		appearance:  appearance,
+		theme:       theme,
+		ai:          ai,
 		tableEditor: tableEditor,
-		usage:       a.usageSettings.Snapshot(),
-		about:       a.aboutSettings.Snapshot(),
-		privacy:     a.privacySettings.Snapshot(),
-		dataState:   a.dataSettings.Snapshot(),
-		network:     a.networkSettings.Snapshot(),
-		runtime:     a.runtimeSettings.Snapshot(),
-		cloud:       a.cloudSettings.Snapshot(),
-		general:     a.generalSettings.Snapshot(),
+		usage:       usage,
+		about:       about,
+		privacy:     privacy,
+		dataState:   dataState,
+		network:     network,
+		runtime:     runtime,
+		cloud:       cloud,
+		general:     general,
 	}
 }
 
@@ -669,59 +779,61 @@ func (a *App) selectSettingTab(tab string) {
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	if loadPlugins {
-		go func() {
+		util.Go(a.lifecycleCtx, "reload settings plugins", func() {
 			if err := a.reloadPlugins(pluginStore, ""); err != nil {
 				log.Printf("load plugins: %v", err)
 			}
-		}()
+		})
 	}
 	if loadTheme {
-		go func() {
+		util.Go(a.lifecycleCtx, "load settings theme editor", func() {
 			if err := a.loadSettingsThemeEditor(); err != nil {
 				a.mu.Lock()
 				a.settingNote = "Could not load theme editor: " + err.Error()
 				a.mu.Unlock()
 				a.invalidateSettingsWindow()
 			}
-		}()
+		})
 	}
 	if loadThemes {
 		mode := a.themeSettings.ThemesMode()
-		go func() {
+		util.Go(a.lifecycleCtx, "reload settings themes", func() {
 			if err := a.reloadThemes(mode, ""); err != nil {
 				log.Printf("load themes: %v", err)
 			}
-		}()
+		})
 	}
 	if loadUsage {
-		go a.reloadUsageStats(a.currentUsagePeriod())
+		util.Go(a.lifecycleCtx, "reload usage stats", func() {
+			a.reloadUsageStats(a.currentUsagePeriod())
+		})
 	}
 	if loadAbout {
-		go a.reloadAboutVersion()
+		util.Go(a.lifecycleCtx, "reload about version", a.reloadAboutVersion)
 	}
 	if loadAIProviders {
-		go a.loadAIProviderCatalog()
+		util.Go(a.lifecycleCtx, "load AI provider catalog", a.loadAIProviderCatalog)
 	}
 	if loadHotkeyApps {
-		go a.loadHotkeyAppCandidates()
+		util.Go(a.lifecycleCtx, "load hotkey app candidates", a.loadHotkeyAppCandidates)
 	}
 	if loadGlanceCatalog {
-		go a.loadGlanceCatalog()
+		util.Go(a.lifecycleCtx, "load glance catalog", a.loadGlanceCatalog)
 	}
 	if loadSystemFonts {
-		go a.loadSystemFontFamilies()
+		util.Go(a.lifecycleCtx, "load system font families", a.loadSystemFontFamilies)
 	}
 	if loadData {
-		go a.reloadDataSettings()
+		util.Go(a.lifecycleCtx, "reload data settings", a.reloadDataSettings)
 	}
 	if loadRuntime {
-		go a.reloadRuntimeStatuses()
+		util.Go(a.lifecycleCtx, "reload runtime statuses", a.reloadRuntimeStatuses)
 	}
 	if loadCloud {
-		go a.reloadCloudSync()
+		util.Go(a.lifecycleCtx, "reload cloud sync", a.reloadCloudSync)
 	}
 	if loadUpdateChannels {
-		go a.reloadUpdateChannelVersions()
+		util.Go(a.lifecycleCtx, "reload update channel versions", a.reloadUpdateChannelVersions)
 	}
 	a.invalidateSettingsWindow()
 }
@@ -841,7 +953,9 @@ func (a *App) activateSetting(direction int) {
 	if item.key == "UsagePeriod" {
 		next, ok := nextSettingChoice(item, direction)
 		if ok {
-			go a.reloadUsageStats(next.value)
+			util.Go(a.lifecycleCtx, "reload usage stats", func() {
+				a.reloadUsageStats(next.value)
+			})
 		}
 		return
 	}
@@ -858,7 +972,9 @@ func (a *App) activateSetting(direction int) {
 	a.settingNote = ""
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
-	go a.saveSetting(item, next)
+	util.Go(a.lifecycleCtx, "save setting choice", func() {
+		a.saveSetting(item, next)
+	})
 }
 
 // startBuiltInSettingEdit gives a core-backed text value shared editor and native IME ownership.
@@ -885,7 +1001,7 @@ func (a *App) startBuiltInSettingEdit(item settingItem, caret int) {
 	a.invalidateSettingsWindow()
 }
 
-// cancelBuiltInSettingEdit discards an unsaved text value without mutating the loaded settings DTO.
+// cancelBuiltInSettingEdit discards an unsaved text value without mutating the loaded settings snapshot.
 func (a *App) cancelBuiltInSettingEdit() {
 	a.mu.Lock()
 	a.generalSettings.EndEdit()
@@ -895,7 +1011,7 @@ func (a *App) cancelBuiltInSettingEdit() {
 	a.invalidateSettingsWindow()
 }
 
-// submitBuiltInSettingEdit persists the active text row through the same key-value route as choice settings.
+// submitBuiltInSettingEdit persists the active text row through the shared general settings service.
 func (a *App) submitBuiltInSettingEdit() {
 	snapshot := a.settingsSnapshot()
 	if snapshot.general.EditKey == "" || snapshot.saving {
@@ -921,7 +1037,9 @@ func (a *App) submitBuiltInSettingEdit() {
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
-	go a.saveSetting(item, settingChoice{value: value, label: value})
+	util.Go(a.lifecycleCtx, "save setting text value", func() {
+		a.saveSetting(item, settingChoice{value: value, label: value})
+	})
 }
 
 // onBuiltInSettingsEditorKey keeps text editing separate from rail and choice navigation.
@@ -1000,9 +1118,9 @@ func (a *App) browseBuiltInSettingFile(item settingItem) {
 
 func (a *App) saveSetting(item settingItem, choice settingChoice) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	err := a.client.Post(ctx, "/setting/wox/update", map[string]string{"Key": item.key, "Value": choice.value}, nil)
+	err := a.services.UpdateGeneralSetting(ctx, a.sessionID, item.key, choice.value)
 	if err == nil && item.key == "CloudSyncServerUrl" {
-		err = a.client.Post(ctx, "/account/logout", map[string]any{}, nil)
+		err = a.services.LogoutAccount(ctx, a.sessionID)
 	}
 	cancel()
 	if err == nil {
@@ -1041,10 +1159,12 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 		a.updateSettingsTextInput(false)
 	}
 	if refreshGlance {
-		go a.refreshGlance("settingsChanged", "", nil)
+		util.Go(a.lifecycleCtx, "refresh glance after settings change", func() {
+			a.refreshGlance("settingsChanged", "", nil)
+		})
 	}
 	if err == nil && (item.key == "CustomPythonPath" || item.key == "CustomNodejsPath") {
-		go a.reloadRuntimeStatuses()
+		util.Go(a.lifecycleCtx, "reload runtime statuses", a.reloadRuntimeStatuses)
 	}
 	a.publishSettingsChanged(item.key)
 }
@@ -1088,7 +1208,7 @@ func settingTabForPath(path string) (string, string) {
 	}
 }
 
-// settingItemsForSnapshot adds page-local controls without storing them in the core settings DTO.
+// settingItemsForSnapshot adds page-local controls without storing them in the core settings snapshot.
 func settingItemsForSnapshot(snapshot settingsSnapshot) []settingItem {
 	if snapshot.tab == "usage" {
 		return []settingItem{{

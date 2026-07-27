@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"wox/ui/contract"
 )
 
 // hotkeySettingsSnapshot is the immutable Hotkey tab state consumed by the view layer.
@@ -182,7 +184,7 @@ func (c *hotkeySettingsController) SetAppsError(msg string) {
 // ReloadAppCandidates fetches the platform-specific ignored-app identities from core and
 // caches them. It is a no-op if a reload has already completed or is in flight. Mirrors the
 // old App.loadHotkeyAppCandidates behavior: dedupes by lowercased identity before storing.
-func (c *hotkeySettingsController) ReloadAppCandidates(ctx context.Context, client backendClient) {
+func (c *hotkeySettingsController) ReloadAppCandidates(ctx context.Context, service contract.HotkeySettingsServices, sessionID string) {
 	c.mu.Lock()
 	if c.appsLoading || c.appsLoaded {
 		c.mu.Unlock()
@@ -194,9 +196,15 @@ func (c *hotkeySettingsController) ReloadAppCandidates(ctx context.Context, clie
 	c.deps.Invalidate()
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	var apps []ignoredHotkeyApp
-	err := client.Post(timeoutCtx, "/setting/hotkey/apps", map[string]any{}, &apps)
+	loaded, err := service.HotkeyAppCandidates(timeoutCtx, sessionID)
 	cancel()
+	apps := make([]ignoredHotkeyApp, len(loaded))
+	for index, app := range loaded {
+		apps[index] = ignoredHotkeyApp{
+			Name: app.Name, Identity: app.Identity, Path: app.Path,
+			Icon: woxImage{ImageType: app.Icon.ImageType, ImageData: app.Icon.ImageData},
+		}
+	}
 
 	c.mu.Lock()
 	c.appsLoading = false

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/common"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -187,7 +188,7 @@ func copyThemeMap(source map[string]any) map[string]any {
 	return copy
 }
 
-// newThemeEditorState builds one portable draft from either a query preview or the settings route.
+// newThemeEditorState builds one portable draft from either a query preview or settings.
 func newThemeEditorState(key string, raw map[string]any) *themeEditorPreviewState {
 	definitions, values := themeEditorForm(raw)
 	fields := newFormFieldsState(definitions, values, false)
@@ -209,14 +210,22 @@ func newThemeEditorState(key string, raw map[string]any) *themeEditorPreviewStat
 func (a *App) loadSettingsThemeEditor() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	var raw map[string]any
-	if err := a.client.Post(ctx, "/theme", nil, &raw); err != nil {
+	theme, err := a.services.CurrentTheme(ctx, a.sessionID)
+	if err != nil {
 		return fmt.Errorf("load active theme: %w", err)
+	}
+	encoded, err := json.Marshal(theme)
+	if err != nil {
+		return fmt.Errorf("encode active theme: %w", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		return fmt.Errorf("decode active theme: %w", err)
 	}
 	if strings.TrimSpace(themeMapString(raw, "AppBackgroundColor")) == "" {
 		return fmt.Errorf("active theme has no color data")
 	}
-	encoded, _ := json.Marshal(raw)
+	encoded, _ = json.Marshal(raw)
 	hash := sha256.Sum256(encoded)
 	a.mu.Lock()
 	a.themeSettings.SetThemeEditor(newThemeEditorState(fmt.Sprintf("settings-theme|%x", hash[:8]), raw))
@@ -481,7 +490,7 @@ func (a *App) submitThemeEditorPreview() {
 	a.saveThemeEditorDraft(name, overwrite)
 }
 
-// saveThemeEditorDraft preserves non-color theme fields while saving through the shared core route.
+// saveThemeEditorDraft preserves non-color theme fields while saving through the shared theme service.
 func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
@@ -526,8 +535,23 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
+		encodedDraft, err := json.Marshal(draft)
+		var theme common.Theme
+		if err == nil {
+			err = json.Unmarshal(encodedDraft, &theme)
+		}
 		var saved map[string]any
-		err := a.client.Post(ctx, "/theme/save", map[string]any{"Name": name, "Theme": draft, "Overwrite": overwrite}, &saved)
+		if err == nil {
+			var savedTheme common.Theme
+			savedTheme, err = a.services.SaveTheme(ctx, a.sessionID, name, theme, overwrite)
+			if err == nil {
+				var encodedSaved []byte
+				encodedSaved, err = json.Marshal(savedTheme)
+				if err == nil {
+					err = json.Unmarshal(encodedSaved, &saved)
+				}
+			}
+		}
 		if err == nil {
 			encoded, marshalErr := json.Marshal(saved)
 			if marshalErr != nil {

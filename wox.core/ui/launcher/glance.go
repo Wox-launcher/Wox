@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"wox/plugin"
+	"wox/ui/contract"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -101,9 +103,23 @@ func (a *App) refreshGlance(reason, pluginID string, ids []string) {
 
 	go a.loadGlanceCatalog()
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	var items []glanceItem
-	err := a.client.Post(ctx, "/glance", map[string]any{"Glances": []glanceRef{ref}, "Reason": reason}, &items)
+	loaded, err := a.services.GlanceItems(ctx, a.sessionID, []plugin.GlanceKey{{PluginId: ref.PluginID, GlanceId: ref.GlanceID}}, plugin.GlanceRefreshReason(reason))
 	cancel()
+	items := make([]glanceItem, len(loaded))
+	for index, item := range loaded {
+		var action *glanceAction
+		if item.Action != nil {
+			action = &glanceAction{
+				ID: item.Action.Id, Name: item.Action.Name,
+				Icon:                   woxImage{ImageType: item.Action.Icon.ImageType, ImageData: item.Action.Icon.ImageData},
+				PreventHideAfterAction: item.Action.PreventHideAfterAction, ContextData: map[string]string(item.Action.ContextData),
+			}
+		}
+		items[index] = glanceItem{
+			PluginID: item.PluginId, ID: item.Id, Text: item.Text,
+			Icon: woxImage{ImageType: item.Icon.ImageType, ImageData: item.Icon.ImageData}, Tooltip: item.Tooltip, Action: action,
+		}
+	}
 
 	var selected *glanceItem
 	if err == nil {
@@ -166,7 +182,7 @@ func (a *App) setGlanceHover(inside bool, text string, anchor woxui.Rect) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if !inside {
-			if err := a.client.Post(ctx, "/tooltip/hide", map[string]string{"name": "go-ui-glance"}, nil); err != nil {
+			if err := a.services.HideTooltip(ctx, a.sessionID, "go-ui-glance"); err != nil {
 				log.Printf("hide glance tooltip: %v", err)
 			}
 			return
@@ -176,11 +192,11 @@ func (a *App) setGlanceHover(inside bool, text string, anchor woxui.Rect) {
 			log.Printf("read launcher bounds for glance tooltip: %v", err)
 			return
 		}
-		err = a.client.Post(ctx, "/tooltip/show", map[string]any{
-			"name": "go-ui-glance", "text": text, "side": "top",
-			"anchorX": windowBounds.X + anchor.X, "anchorY": windowBounds.Y + anchor.Y,
-			"anchorWidth": anchor.Width, "anchorHeight": anchor.Height,
-		}, nil)
+		err = a.services.ShowTooltip(ctx, a.sessionID, contract.TooltipOptions{
+			Name: "go-ui-glance", Text: text, Side: "top",
+			AnchorX: float64(windowBounds.X + anchor.X), AnchorY: float64(windowBounds.Y + anchor.Y),
+			AnchorWidth: float64(anchor.Width), AnchorHeight: float64(anchor.Height),
+		})
 		if err != nil {
 			log.Printf("show glance tooltip: %v", err)
 		}
@@ -208,7 +224,7 @@ func (a *App) scheduleGlanceRefreshLocked(ref glanceRef) {
 // State lives on appearanceSettings; this wrapper supplies the onLoaded callback that reschedules the active
 // glance refresh against the newly cached catalog without giving the controller a back-reference to *App.
 func (a *App) loadGlanceCatalog() {
-	a.appearanceSettings.ReloadGlanceCatalog(context.Background(), a.client, func() {
+	a.appearanceSettings.ReloadGlanceCatalog(context.Background(), a.services, a.sessionID, func() {
 		a.mu.Lock()
 		if a.glanceItem != nil {
 			a.scheduleGlanceRefreshLocked(a.generalSettings.Data().PrimaryGlance)
@@ -231,7 +247,7 @@ func (a *App) executeGlanceAction() {
 	a.mu.RUnlock()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		err := a.client.Post(ctx, "/glance/action", map[string]string{"PluginId": pluginID, "GlanceId": glanceID, "ActionId": action.ID}, nil)
+		err := a.services.ExecuteGlanceAction(ctx, a.sessionID, pluginID, glanceID, action.ID)
 		cancel()
 		if err != nil {
 			log.Printf("execute glance action: %v", err)

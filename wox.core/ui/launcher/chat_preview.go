@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"wox/ui/coreclient"
+	"wox/common"
 	woxui "wox/ui/runtime"
 )
 
@@ -79,6 +79,30 @@ type chatToolCallInfo struct {
 	Response       string         `json:"Response"`
 	StartTimestamp int64          `json:"StartTimestamp"`
 	EndTimestamp   int64          `json:"EndTimestamp"`
+}
+
+func chatDataFromContract(source common.AIChatData) (chatData, error) {
+	encoded, err := json.Marshal(source)
+	if err != nil {
+		return chatData{}, err
+	}
+	var chat chatData
+	if err := json.Unmarshal(encoded, &chat); err != nil {
+		return chatData{}, err
+	}
+	return chat, nil
+}
+
+func chatDataToContract(source chatData) (common.AIChatData, error) {
+	encoded, err := json.Marshal(source)
+	if err != nil {
+		return common.AIChatData{}, err
+	}
+	var chat common.AIChatData
+	if err := json.Unmarshal(encoded, &chat); err != nil {
+		return common.AIChatData{}, err
+	}
+	return chat, nil
 }
 
 type aiQuestionOption struct {
@@ -336,12 +360,15 @@ func (a *App) chatPreviewSnapshotFor(result queryResult, preview queryPreview) (
 	return snapshot, nil
 }
 
-// loadChatPreview resolves lightweight history entries through the existing core endpoint.
+// loadChatPreview resolves one lightweight history entry through the chat service.
 func (a *App) loadChatPreview(key, chatID string, revision uint64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	var chat chatData
-	err := a.client.Post(ctx, "/ai/chat/get", map[string]any{"chatId": chatID}, &chat)
+	loaded, err := a.services.ChatByID(ctx, a.sessionID, chatID)
+	chat := chatData{}
+	if err == nil {
+		chat, err = chatDataFromContract(loaded)
+	}
 	a.mu.Lock()
 	if state := a.chatPreview; state != nil && state.key == key && state.revision == revision {
 		state.loading = false
@@ -486,7 +513,7 @@ func (a *App) reloadChatResourceName(resource string) {
 
 // loadAISkills shares the enabled skill catalog with chat composition.
 func (a *App) loadAISkills() {
-	a.aiSettings.LoadAISkills(context.Background(), a.client, func(skills []chatSkill) {
+	a.aiSettings.LoadAISkills(context.Background(), a.services, a.sessionID, func(skills []chatSkill) {
 		if skills == nil {
 			log.Printf("load AI skills: see controller error")
 			_ = a.window.Invalidate()
@@ -524,7 +551,7 @@ func (a *App) startNewChat() {
 	}
 	now := time.Now().UnixMilli()
 	model := state.chat.Model
-	state.chat = chatData{ID: coreclient.NewID(), Model: model, CreatedAt: now, UpdatedAt: now}
+	state.chat = chatData{ID: newID(), Model: model, CreatedAt: now, UpdatedAt: now}
 	state.editor.SetText("", false)
 	state.loading = false
 	state.sending = false
@@ -554,8 +581,8 @@ func (a *App) startNewChat() {
 func (a *App) loadDefaultChatModel(key string, revision uint64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	var model aiModel
-	err := a.client.Post(ctx, "/ai/model/default", map[string]any{}, &model)
+	loaded, err := a.services.DefaultChatModel(ctx, a.sessionID)
+	model := aiModel{Name: loaded.Name, Provider: string(loaded.Provider), ProviderAlias: loaded.ProviderAlias}
 	a.mu.Lock()
 	if state := a.chatPreview; state != nil && state.key == key && state.revision == revision && state.chat.Model.Name == "" {
 		if err != nil {
@@ -651,7 +678,7 @@ func (a *App) deleteChatHistory(chatID string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		err := a.client.Post(ctx, "/ai/chat/delete", map[string]any{"chatId": chatID}, nil)
+		err := a.services.DeleteChat(ctx, a.sessionID, chatID)
 		activeDeleted := false
 		a.mu.Lock()
 		if state := a.chatPreview; state != nil {
@@ -967,7 +994,7 @@ func (a *App) answerAIQuestion(questionID, answer string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := a.client.Post(ctx, "/ai/question/answer", map[string]any{"questionId": questionID, "answer": answer}, nil); err != nil {
+	if err := a.services.AnswerAIQuestion(ctx, a.sessionID, questionID, answer); err != nil {
 		log.Printf("answer AI question: %v", err)
 	}
 }
@@ -1041,14 +1068,17 @@ func beginChatRequestLocked(state *chatPreviewState) (string, uint64, chatData) 
 	return state.key, state.revision, cloneChatData(state.chat)
 }
 
-// postChatRequest sends one immutable chat snapshot and reconciles transport failure with the current revision.
+// postChatRequest sends one immutable chat snapshot and reconciles service failure with the current revision.
 func (a *App) postChatRequest(key string, revision uint64, chat chatData) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		// DebugTrace is an incoming development snapshot and must not be echoed into the next model request.
 		chat.DebugTrace = nil
-		err := a.client.Post(ctx, "/ai/chat", map[string]any{"chatData": chat}, nil)
+		payload, err := chatDataToContract(chat)
+		if err == nil {
+			err = a.services.Chat(ctx, a.sessionID, payload)
+		}
 		a.mu.Lock()
 		if current := a.chatPreview; current != nil && current.key == key && current.revision == revision {
 			current.sending = false
@@ -1109,7 +1139,7 @@ func (a *App) sendChatMessage() {
 		_ = a.window.Invalidate()
 		return
 	}
-	state.chat.Conversations = append(state.chat.Conversations, chatConversation{ID: coreclient.NewID(), Role: "user", Text: text, SkillRefs: skillRefs, Timestamp: now})
+	state.chat.Conversations = append(state.chat.Conversations, chatConversation{ID: newID(), Role: "user", Text: text, SkillRefs: skillRefs, Timestamp: now})
 	state.chat.UpdatedAt = now
 	state.editor.SetText("", false)
 	key, revision, chat := beginChatRequestLocked(state)
@@ -1131,8 +1161,7 @@ func (a *App) stopChatMessage() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		var stopped bool
-		err := a.client.Post(ctx, "/ai/chat/stop", map[string]any{"chatId": chatID}, &stopped)
+		stopped, err := a.services.StopChat(ctx, a.sessionID, chatID)
 		a.mu.Lock()
 		if state := a.chatPreview; state != nil && state.chat.ID == chatID {
 			if err != nil {

@@ -11,7 +11,6 @@ import (
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/ui/contract"
-	"wox/ui/coreclient"
 	utilselection "wox/util/selection"
 )
 
@@ -24,7 +23,7 @@ func (a *App) startTypedQuery(query plainQuery, skipCompletionHint bool) error {
 	ctx := a.lifecycleCtx
 	a.mu.RUnlock()
 	return a.services.StartQuery(ctx, contract.QueryRequest{
-		RequestID:          coreclient.NewID(),
+		RequestID:          newID(),
 		SessionID:          a.sessionID,
 		Query:              toCorePlainQuery(query),
 		SkipCompletionHint: skipCompletionHint,

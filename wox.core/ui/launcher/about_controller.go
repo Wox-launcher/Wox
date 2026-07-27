@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"wox/ui/contract"
 )
 
 // aboutSettingsSnapshot is the immutable About tab state consumed by the view layer.
@@ -24,20 +26,14 @@ type aboutSettingsController struct {
 	errMsg  string
 }
 
-// backendClient is the narrow interface about (and later controllers) need from a.client.
-// a.client is coreclient.Backend whose Post takes `data any`, so we match that signature here.
-type backendClient interface {
-	Post(ctx context.Context, path string, data any, target any) error
-}
-
 func newAboutSettingsController(deps CommonDeps) *aboutSettingsController {
 	return &aboutSettingsController{deps: deps}
 }
 
 // Reload fetches the running core version. Mirrors the old reloadAboutVersion behavior:
 // it is a no-op if a reload is already in flight, clears any prior error, and invalidates
-// the view before and after the network call.
-func (c *aboutSettingsController) Reload(ctx context.Context, client backendClient) {
+// the view before and after the service call.
+func (c *aboutSettingsController) Reload(ctx context.Context, service contract.AboutSettingsServices, sessionID string) {
 	c.mu.Lock()
 	if c.loading {
 		c.mu.Unlock()
@@ -50,8 +46,7 @@ func (c *aboutSettingsController) Reload(ctx context.Context, client backendClie
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	var version string
-	err := client.Post(timeoutCtx, "/version", map[string]any{}, &version)
+	version, err := service.Version(timeoutCtx, sessionID)
 
 	c.mu.Lock()
 	c.loading = false

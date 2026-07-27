@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
 
@@ -270,7 +271,7 @@ func (c *themeSettingsController) SetThemeEditor(editor *themeEditorPreviewState
 
 // ReloadThemes fetches one catalog while retaining the full resolved palette for local preview.
 // preferredID, when non-empty, selects which theme becomes ThemeSelected after the load.
-func (c *themeSettingsController) ReloadThemes(ctx context.Context, client backendClient, mode, preferredID, fallbackID string) error {
+func (c *themeSettingsController) ReloadThemes(ctx context.Context, service contract.ThemeCatalogSettingsServices, sessionID string, mode, preferredID, fallbackID string) error {
 	if mode != "store" && mode != "installed" {
 		return fmt.Errorf("unsupported theme catalog %q", mode)
 	}
@@ -282,16 +283,21 @@ func (c *themeSettingsController) ReloadThemes(ctx context.Context, client backe
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	var payloads []json.RawMessage
-	if err := client.Post(timeoutCtx, "/theme/"+mode, map[string]any{}, &payloads); err != nil {
+	items, err := service.Themes(timeoutCtx, sessionID, contract.ThemeCatalog(mode))
+	if err != nil {
 		return c.finishThemeLoadError(err)
 	}
 
-	themes := make([]themeSettingsTheme, 0, len(payloads))
-	for _, payload := range payloads {
-		var theme themeSettingsTheme
-		if err := json.Unmarshal(payload, &theme); err != nil {
-			return c.finishThemeLoadError(fmt.Errorf("decode theme catalog: %w", err))
+	themes := make([]themeSettingsTheme, 0, len(items))
+	for _, item := range items {
+		source := item.Theme
+		theme := themeSettingsTheme{
+			ID: source.ThemeId, Name: source.ThemeName, Author: source.ThemeAuthor, URL: source.ThemeUrl, Version: source.Version, Description: source.Description,
+			IsSystem: source.IsSystem, IsInstalled: source.IsInstalled, IsUpgradable: item.IsUpgradable, IsAuto: source.IsAutoAppearance,
+		}
+		payload, err := json.Marshal(source)
+		if err != nil {
+			return c.finishThemeLoadError(fmt.Errorf("encode theme values: %w", err))
 		}
 		var raw map[string]any
 		if err := json.Unmarshal(payload, &raw); err != nil {

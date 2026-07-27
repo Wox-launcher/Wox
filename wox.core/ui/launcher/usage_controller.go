@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"wox/ui/contract"
 )
 
 // usageSettingsSnapshot is the immutable Usage tab state consumed by the view layer.
@@ -43,7 +45,7 @@ func (c *usageSettingsController) CurrentPeriod() string {
 }
 
 // Reload fetches one report period; ignores responses superseded by a later selection.
-func (c *usageSettingsController) Reload(ctx context.Context, client backendClient, period string) {
+func (c *usageSettingsController) Reload(ctx context.Context, service contract.UsageSettingsServices, sessionID string, period string) {
 	period = normalizeUsagePeriod(period)
 	c.mu.Lock()
 	c.revision++
@@ -56,8 +58,8 @@ func (c *usageSettingsController) Reload(ctx context.Context, client backendClie
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	var data usageStatsData
-	err := client.Post(timeoutCtx, "/usage/stats", map[string]string{"Period": period}, &data)
+	loaded, err := service.UsageStats(timeoutCtx, sessionID, period)
+	data := usageStatsFromContract(loaded)
 
 	c.mu.Lock()
 	if revision != c.revision {
@@ -75,6 +77,33 @@ func (c *usageSettingsController) Reload(ctx context.Context, client backendClie
 	}
 	c.mu.Unlock()
 	c.deps.Invalidate()
+}
+
+// usageStatsFromContract isolates controller report state from core-owned slices.
+func usageStatsFromContract(source contract.UsageStats) usageStatsData {
+	result := usageStatsData{
+		Period:          source.Period,
+		PeriodOpened:    source.PeriodOpened,
+		PeriodAppLaunch: source.PeriodAppLaunch,
+		PeriodAppsUsed:  source.PeriodAppsUsed,
+		PeriodActions:   source.PeriodActions,
+		UsageDays:       source.UsageDays,
+		MostActiveHour:  source.MostActiveHour,
+		MostActiveDay:   source.MostActiveDay,
+		OpenedByDay:     make([]usageStatsDay, len(source.OpenedByDay)),
+		TopApps:         make([]usageStatsItem, len(source.TopApps)),
+		TopPlugins:      make([]usageStatsItem, len(source.TopPlugins)),
+	}
+	for index, day := range source.OpenedByDay {
+		result.OpenedByDay[index] = usageStatsDay{Date: day.Date, Count: day.Count}
+	}
+	for index, item := range source.TopApps {
+		result.TopApps[index] = usageStatsItem{ID: item.ID, Name: item.Name, Count: item.Count, Icon: woxImage{ImageType: item.Icon.ImageType, ImageData: item.Icon.ImageData}}
+	}
+	for index, item := range source.TopPlugins {
+		result.TopPlugins[index] = usageStatsItem{ID: item.ID, Name: item.Name, Count: item.Count, Icon: woxImage{ImageType: item.Icon.ImageType, ImageData: item.Icon.ImageData}}
+	}
+	return result
 }
 
 // SetShareError records a share-to-X failure message.

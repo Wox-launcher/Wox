@@ -6,23 +6,24 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"wox/i18n"
 )
 
 // reloadTranslations loads the flat language bundle embedded by core.
 func (a *App) reloadTranslations() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	var languageSetting struct {
-		LangCode string `json:"LangCode"`
-	}
-	if err := a.client.Post(ctx, "/setting/wox", map[string]any{}, &languageSetting); err != nil {
+	settings, err := a.services.GeneralSettings(ctx, a.sessionID)
+	if err != nil {
 		return fmt.Errorf("load language setting: %w", err)
 	}
-	if languageSetting.LangCode == "" {
-		languageSetting.LangCode = "en_US"
+	langCode := settings.LangCode
+	if langCode == "" {
+		langCode = i18n.LangCodeEnUs
 	}
-	var encoded string
-	if err := a.client.Post(ctx, "/lang/json", map[string]string{"langCode": languageSetting.LangCode}, &encoded); err != nil {
+	encoded, err := a.services.LanguageJSON(ctx, a.sessionID, langCode)
+	if err != nil {
 		return fmt.Errorf("load language bundle: %w", err)
 	}
 	translations := map[string]string{}

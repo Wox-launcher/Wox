@@ -3,30 +3,28 @@ package launcher
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
+
+	"wox/ui/contract"
 )
 
-// aiFakeBackend is a minimal backend client for AI controller tests. It serves the
-// provider-catalog route and records calls so tests can assert on them.
-type aiFakeBackend struct {
-	mu        sync.Mutex
-	providers []aiProviderInfo
+type aiFakeService struct {
+	providers []contract.AIProvider
+	models    []contract.AIModel
+	skills    []contract.AISkill
 	err       error
-	posts     []string
 }
 
-func (f *aiFakeBackend) Post(_ context.Context, path string, _ any, out any) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.posts = append(f.posts, path)
-	if f.err != nil {
-		return f.err
-	}
-	if ptr, ok := out.(*[]aiProviderInfo); ok {
-		*ptr = append([]aiProviderInfo(nil), f.providers...)
-	}
-	return nil
+func (f *aiFakeService) AIProviders(_ context.Context, _ string) ([]contract.AIProvider, error) {
+	return append([]contract.AIProvider(nil), f.providers...), f.err
+}
+
+func (f *aiFakeService) AIModels(_ context.Context, _ string) ([]contract.AIModel, error) {
+	return append([]contract.AIModel(nil), f.models...), f.err
+}
+
+func (f *aiFakeService) AISkills(_ context.Context, _ string) ([]contract.AISkill, error) {
+	return append([]contract.AISkill(nil), f.skills...), f.err
 }
 
 func newAIDeps() (CommonDeps, *int) {
@@ -41,9 +39,9 @@ func newAIDeps() (CommonDeps, *int) {
 func TestAIControllerReloadProvidersSuccess(t *testing.T) {
 	deps, invalidateCalls := newAIDeps()
 	c := newAISettingsController(deps)
-	client := &aiFakeBackend{providers: []aiProviderInfo{{Name: "OpenAI", DefaultHost: "api.openai.com"}}}
+	service := &aiFakeService{providers: []contract.AIProvider{{Name: "OpenAI", DefaultHost: "api.openai.com"}}}
 	loaded := false
-	c.ReloadProviders(context.Background(), client, func(providers []aiProviderInfo) {
+	c.ReloadProviders(context.Background(), service, "session", func(providers []aiProviderInfo) {
 		if len(providers) != 1 || providers[0].Name != "OpenAI" {
 			t.Fatalf("unexpected providers in onLoaded: %+v", providers)
 		}
@@ -64,11 +62,40 @@ func TestAIControllerReloadProvidersSuccess(t *testing.T) {
 func TestAIControllerReloadProvidersError(t *testing.T) {
 	deps, _ := newAIDeps()
 	c := newAISettingsController(deps)
-	client := &aiFakeBackend{err: errors.New("network down")}
-	c.ReloadProviders(context.Background(), client, nil)
+	service := &aiFakeService{err: errors.New("network down")}
+	c.ReloadProviders(context.Background(), service, "session", nil)
 	snap := c.Snapshot()
 	if snap.ProvidersLoaded || snap.ProvidersError == "" {
 		t.Fatalf("error should be recorded: %+v", snap)
+	}
+}
+
+func TestAIControllerLoadModelsSortsTypedCatalog(t *testing.T) {
+	deps, _ := newAIDeps()
+	c := newAISettingsController(deps)
+	service := &aiFakeService{models: []contract.AIModel{
+		{Name: "z-model", Provider: "OpenAI"},
+		{Name: "a-model", Provider: "Anthropic"},
+	}}
+	c.LoadAIModels(context.Background(), service, "session", nil)
+	models := c.Models()
+	if len(models) != 2 || models[0].Provider != "Anthropic" || models[1].Provider != "OpenAI" {
+		t.Fatalf("models should be sorted by provider and name: %+v", models)
+	}
+}
+
+func TestAIControllerLoadSkillsFiltersAndSortsTypedCatalog(t *testing.T) {
+	deps, _ := newAIDeps()
+	c := newAISettingsController(deps)
+	service := &aiFakeService{skills: []contract.AISkill{
+		{ID: "disabled", Name: "Disabled", Source: "user", Enabled: false},
+		{ID: "b", Name: "Beta", Source: "user", SourceName: "User", Enabled: true},
+		{ID: "a", Name: "Alpha", Source: "builtin", SourceName: "Built-in", Enabled: true},
+	}}
+	c.LoadAISkills(context.Background(), service, "session", nil)
+	skills := c.Skills()
+	if len(skills) != 2 || skills[0].ID != "a" || skills[1].ID != "b" {
+		t.Fatalf("skills should filter disabled entries and sort by source/name: %+v", skills)
 	}
 }
 

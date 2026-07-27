@@ -7,13 +7,12 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"wox/ui/contract"
 )
 
-// dataFakeBackend is a path-aware fake that can serve multiple routes from
-// pre-populated values, return per-path errors, or block on a path for
-// handshake-driven tests. It is separate from the simple fakeBackendClient so
-// existing tests keep their terse construction.
-type dataFakeBackend struct {
+// dataFakeService can return or block individual typed data operations.
+type dataFakeService struct {
 	mu sync.Mutex
 
 	location string
@@ -25,14 +24,13 @@ type dataFakeBackend struct {
 	// Per-path optional error, overrides the typed errors above.
 	pathErrors map[string]error
 
-	// Optional blocking handshake: when pathSel is set, Post closes entered and
-	// waits on release before returning. Used to assert mid-flight state.
+	// Optional blocking handshake keyed by the former route name for compact tests.
 	entered chan<- struct{}
 	release <-chan struct{}
 	pathSel string
 }
 
-func (f *dataFakeBackend) Post(_ context.Context, path string, _ any, out any) error {
+func (f *dataFakeService) operation(path string) error {
 	if f.pathSel != "" && path == f.pathSel && f.entered != nil {
 		close(f.entered)
 		<-f.release
@@ -46,26 +44,59 @@ func (f *dataFakeBackend) Post(_ context.Context, path string, _ any, out any) e
 		}
 	}
 	f.mu.Unlock()
-
-	switch path {
-	case "/setting/userdata/location":
-		if f.locationErr != nil {
-			return f.locationErr
-		}
-		if ptr, ok := out.(*string); ok {
-			*ptr = f.location
-		}
-	case "/backup/all":
-		if f.backupsErr != nil {
-			return f.backupsErr
-		}
-		if ptr, ok := out.(*[]backupInfo); ok {
-			*ptr = append([]backupInfo(nil), f.backups...)
-		}
-	default:
-		// Other paths (e.g. /backup/now, /log/clear) succeed by default.
-	}
 	return nil
+}
+
+func (f *dataFakeService) DataLocation(_ context.Context, _ string) (string, error) {
+	if err := f.operation("/setting/userdata/location"); err != nil {
+		return "", err
+	}
+	return f.location, f.locationErr
+}
+
+func (f *dataFakeService) DataBackups(_ context.Context, _ string) ([]contract.DataBackup, error) {
+	if err := f.operation("/backup/all"); err != nil {
+		return nil, err
+	}
+	if f.backupsErr != nil {
+		return nil, f.backupsErr
+	}
+	backups := make([]contract.DataBackup, len(f.backups))
+	for index, backup := range f.backups {
+		backups[index] = contract.DataBackup{ID: backup.ID, Name: backup.Name, Timestamp: backup.Timestamp, Type: backup.Type, Path: backup.Path}
+	}
+	return backups, nil
+}
+
+func (f *dataFakeService) CreateDataBackup(_ context.Context, _ string) error {
+	return f.operation("/backup/now")
+}
+
+func (f *dataFakeService) RestoreDataBackup(_ context.Context, _ string, _ string) error {
+	return f.operation("/backup/restore")
+}
+
+func (f *dataFakeService) ChangeDataLocation(_ context.Context, _ string, _ string) error {
+	return f.operation("/setting/userdata/location/update")
+}
+
+func (f *dataFakeService) ClearLogs(_ context.Context, _ string) error {
+	return f.operation("/log/clear")
+}
+
+func (f *dataFakeService) OpenPath(_ context.Context, _ string, _ string) error {
+	return f.operation("/open")
+}
+
+func (f *dataFakeService) BackupFolder(_ context.Context, _ string) (string, error) {
+	if err := f.operation("/backup/folder"); err != nil {
+		return "", err
+	}
+	return "/backup", nil
+}
+
+func (f *dataFakeService) OpenLog(_ context.Context, _ string) error {
+	return f.operation("/log/open")
 }
 
 func newDataController(deps CommonDeps) *dataSettingsController {
@@ -85,14 +116,14 @@ func TestDataControllerReloadSuccess(t *testing.T) {
 		Translate:  func(s string) string { return s },
 	}
 	c := newDataController(deps)
-	client := &dataFakeBackend{
+	service := &dataFakeService{
 		location: "/data/dir",
 		backups: []backupInfo{
 			{ID: "b1", Timestamp: 100, Type: "manual"},
 			{ID: "b2", Timestamp: 200, Type: "auto"},
 		},
 	}
-	c.Reload(context.Background(), client)
+	c.Reload(context.Background(), service, "session")
 	snap := c.Snapshot()
 
 	if snap.Location != "/data/dir" {
@@ -122,11 +153,11 @@ func TestDataControllerReloadSuccess(t *testing.T) {
 func TestDataControllerReloadAggregatesErrors(t *testing.T) {
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
 	c := newDataController(deps)
-	client := &dataFakeBackend{
+	service := &dataFakeService{
 		locationErr: errors.New("location down"),
 		backupsErr:  errors.New("backups down"),
 	}
-	c.Reload(context.Background(), client)
+	c.Reload(context.Background(), service, "session")
 	snap := c.Snapshot()
 
 	if snap.Loaded {
@@ -156,13 +187,13 @@ func TestDataControllerCreateBackupSetsBusyThenClears(t *testing.T) {
 
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	blockingClient := &dataFakeBackend{
+	blockingService := &dataFakeService{
 		pathSel: "/backup/now",
 		entered: entered,
 		release: release,
 	}
 
-	c.CreateBackup(context.Background(), blockingClient)
+	c.CreateBackup(context.Background(), blockingService, "session")
 
 	// Busy must be set immediately after CreateBackup returns.
 	if got := c.Snapshot().Busy; got != "backup" {
@@ -210,14 +241,14 @@ func TestDataControllerRestoreBackupTwoStepArming(t *testing.T) {
 
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	blockingClient := &dataFakeBackend{
+	blockingService := &dataFakeService{
 		pathSel: "/backup/restore",
 		entered: entered,
 		release: release,
 	}
 
 	// First activation: arms confirmation, no Post.
-	c.RestoreBackup(context.Background(), blockingClient, "backup-1")
+	c.RestoreBackup(context.Background(), blockingService, "session", "backup-1")
 	snap := c.Snapshot()
 	if snap.RestoreArmed != "backup-1" {
 		t.Fatalf("RestoreArmed = %q after first activation, want \"backup-1\"", snap.RestoreArmed)
@@ -227,7 +258,7 @@ func TestDataControllerRestoreBackupTwoStepArming(t *testing.T) {
 	}
 
 	// Second activation: clears RestoreArmed, sets Busy, fires Post.
-	c.RestoreBackup(context.Background(), blockingClient, "backup-1")
+	c.RestoreBackup(context.Background(), blockingService, "session", "backup-1")
 	snap = c.Snapshot()
 	if snap.RestoreArmed != "" {
 		t.Fatalf("RestoreArmed = %q after second activation, want empty", snap.RestoreArmed)
@@ -289,14 +320,14 @@ func TestDataControllerClearLogsTwoStepArming(t *testing.T) {
 
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	blockingClient := &dataFakeBackend{
+	blockingService := &dataFakeService{
 		pathSel: "/log/clear",
 		entered: entered,
 		release: release,
 	}
 
 	// First activation: arms confirmation, no Post.
-	c.ClearLogs(context.Background(), blockingClient)
+	c.ClearLogs(context.Background(), blockingService, "session")
 	snap := c.Snapshot()
 	if !snap.ClearLogsArmed {
 		t.Fatalf("ClearLogsArmed should be true after first activation")
@@ -306,7 +337,7 @@ func TestDataControllerClearLogsTwoStepArming(t *testing.T) {
 	}
 
 	// Second activation: clears armed flag, sets Busy, fires Post.
-	c.ClearLogs(context.Background(), blockingClient)
+	c.ClearLogs(context.Background(), blockingService, "session")
 	snap = c.Snapshot()
 	if snap.ClearLogsArmed {
 		t.Fatalf("ClearLogsArmed should be false after second activation")

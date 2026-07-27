@@ -3,35 +3,11 @@ package launcher
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
-
-// searchFakeBackend serves /plugin/installed from a pre-populated payload, with an
-// optional error. Matches the core endpoint signature that decodes directly into
-// []pluginSettingsPlugin (not json.RawMessage).
-type searchFakeBackend struct {
-	mu           sync.Mutex
-	plugins      []pluginSettingsPlugin
-	installedErr error
-}
-
-func (f *searchFakeBackend) Post(_ context.Context, path string, _ any, out any) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	switch path {
-	case "/plugin/installed":
-		if f.installedErr != nil {
-			return f.installedErr
-		}
-		if ptr, ok := out.(*[]pluginSettingsPlugin); ok {
-			*ptr = append([]pluginSettingsPlugin(nil), f.plugins...)
-		}
-	}
-	return nil
-}
 
 // mockSearchable is a minimal Searchable source for Run-aggregation tests.
 type mockSearchable struct {
@@ -111,12 +87,12 @@ func TestSettingsSearchEnterExit(t *testing.T) {
 func TestSettingsSearchReloadPluginsSuccess(t *testing.T) {
 	deps, invalidateCalled := newSearchControllerDeps()
 	c := newSettingsSearchController(deps)
-	plugins := []pluginSettingsPlugin{
+	plugins := []contract.PluginCatalogItem{
 		{ID: "p1", Name: "Plugin One"},
 		{ID: "p2", Name: "Plugin Two"},
 	}
-	client := &searchFakeBackend{plugins: plugins}
-	if err := c.ReloadPlugins(context.Background(), client); err != nil {
+	service := &pluginFakeService{plugins: map[contract.PluginCatalog][]contract.PluginCatalogItem{contract.PluginCatalogInstalled: plugins}}
+	if err := c.ReloadPlugins(context.Background(), service, "session"); err != nil {
 		t.Fatalf("ReloadPlugins error: %v", err)
 	}
 	if !c.Loaded() {
@@ -143,8 +119,8 @@ func TestSettingsSearchReloadPluginsSuccess(t *testing.T) {
 func TestSettingsSearchReloadPluginsError(t *testing.T) {
 	deps, _ := newSearchControllerDeps()
 	c := newSettingsSearchController(deps)
-	client := &searchFakeBackend{installedErr: errors.New("network failed")}
-	if err := c.ReloadPlugins(context.Background(), client); err == nil {
+	service := &pluginFakeService{instErr: errors.New("network failed")}
+	if err := c.ReloadPlugins(context.Background(), service, "session"); err == nil {
 		t.Fatal("ReloadPlugins should return error on network failure")
 	}
 	if c.Loaded() {
@@ -164,8 +140,8 @@ func TestSettingsSearchReloadPluginsSkipsWhenLoaded(t *testing.T) {
 	c.SetLoaded(true)
 	c.SetPlugins([]pluginSettingsPlugin{{ID: "existing"}})
 	before := *invalidateCalled
-	client := &searchFakeBackend{plugins: []pluginSettingsPlugin{{ID: "new"}}}
-	if err := c.ReloadPlugins(context.Background(), client); err != nil {
+	service := &pluginFakeService{plugins: map[contract.PluginCatalog][]contract.PluginCatalogItem{contract.PluginCatalogInstalled: {{ID: "new"}}}}
+	if err := c.ReloadPlugins(context.Background(), service, "session"); err != nil {
 		t.Fatalf("ReloadPlugins error: %v", err)
 	}
 	if c.Plugins()[0].ID != "existing" {

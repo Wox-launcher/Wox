@@ -73,17 +73,17 @@ func (a *App) dataSettingsLabels() launcherview.DataSettingsLabels {
 
 // reloadDataSettings delegates to dataSettingsController so App no longer holds data state directly.
 func (a *App) reloadDataSettings() {
-	a.dataSettings.Reload(context.Background(), a.client)
+	a.dataSettings.Reload(context.Background(), a.services, a.sessionID)
 }
 
 // createDataBackup delegates to dataSettingsController.
 func (a *App) createDataBackup() {
-	a.dataSettings.CreateBackup(context.Background(), a.client)
+	a.dataSettings.CreateBackup(context.Background(), a.services, a.sessionID)
 }
 
 // restoreDataBackup delegates to dataSettingsController.
 func (a *App) restoreDataBackup(id string) {
-	a.dataSettings.RestoreBackup(context.Background(), a.client, id)
+	a.dataSettings.RestoreBackup(context.Background(), a.services, a.sessionID, id)
 }
 
 // chooseDataLocation delegates to dataSettingsController, which uses the injected
@@ -98,7 +98,7 @@ func (a *App) cancelDataLocationChange() {
 
 // confirmDataLocationChange delegates to dataSettingsController.
 func (a *App) confirmDataLocationChange() {
-	a.dataSettings.ConfirmLocationChange(context.Background(), a.client)
+	a.dataSettings.ConfirmLocationChange(context.Background(), a.services, a.sessionID)
 }
 
 // toggleDataAutoBackup reuses the regular key-value settings save and rollback behavior.
@@ -151,20 +151,20 @@ func (a *App) cycleDataLogLevel() {
 
 // clearDataLogs delegates to dataSettingsController.
 func (a *App) clearDataLogs() {
-	a.dataSettings.ClearLogs(context.Background(), a.client)
+	a.dataSettings.ClearLogs(context.Background(), a.services, a.sessionID)
 }
 
 // openDataPath delegates to dataSettingsController.
 func (a *App) openDataPath(path string) {
-	a.dataSettings.OpenPath(context.Background(), a.client, path)
+	a.dataSettings.OpenPath(context.Background(), a.services, a.sessionID, path)
 }
 
 // openDataBackupFolder delegates to dataSettingsController.
 func (a *App) openDataBackupFolder() {
-	a.dataSettings.OpenBackupFolder(context.Background(), a.client)
+	a.dataSettings.OpenBackupFolder(context.Background(), a.services, a.sessionID)
 }
 
 // openDataLog delegates to dataSettingsController.
 func (a *App) openDataLog() {
-	a.dataSettings.OpenLog(context.Background(), a.client)
+	a.dataSettings.OpenLog(context.Background(), a.services, a.sessionID)
 }

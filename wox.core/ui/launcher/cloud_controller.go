@@ -6,6 +6,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"wox/account"
+	"wox/cloudsync"
+	"wox/ui/contract"
 )
 
 // cloudSettingsSnapshot is the immutable Cloud tab state consumed by the view layer.
@@ -53,6 +57,11 @@ type cloudSettingsController struct {
 	form          *cloudFormState
 	actionMenu    string
 	plugins       []pluginSettingsPlugin
+}
+
+type cloudReloadServices interface {
+	contract.CloudSettingsServices
+	contract.PluginCatalogSettingsServices
 }
 
 func newCloudSettingsController(deps CommonDeps) *cloudSettingsController {
@@ -227,7 +236,7 @@ func (c *cloudSettingsController) SetPlugins(plugins []pluginSettingsPlugin) {
 // billing plan has not been loaded yet, so the App can kick off a billing reload
 // without coupling the controller to the billing reload path. Responses from
 // superseded refreshes are discarded via the revision guard.
-func (c *cloudSettingsController) ReloadCloudSync(ctx context.Context, client backendClient, onNeedBilling func()) {
+func (c *cloudSettingsController) ReloadCloudSync(ctx context.Context, service cloudReloadServices, sessionID string, onNeedBilling func()) {
 	c.mu.Lock()
 	c.revision++
 	revision := c.revision
@@ -242,19 +251,34 @@ func (c *cloudSettingsController) ReloadCloudSync(ctx context.Context, client ba
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	var account cloudAccountStatus
-	var status cloudSyncStatus
-	var devices cloudDeviceList
+	var accountStatus cloudAccountStatus
+	var syncStatus cloudSyncStatus
+	var deviceList cloudDeviceList
 	var plugins []pluginSettingsPlugin
-	accountErr := client.Post(timeoutCtx, "/account/status", map[string]any{}, &account)
+	loadedAccount, accountErr := service.AccountStatus(timeoutCtx, sessionID)
+	if accountErr == nil {
+		accountStatus = cloudAccountStatusFromContract(loadedAccount)
+	}
 	var statusErr error
 	var devicesErr error
 	var pluginsErr error
 	if accountErr == nil {
-		statusErr = client.Post(timeoutCtx, "/sync/status", map[string]any{}, &status)
-		if account.LoggedIn {
-			devicesErr = client.Post(timeoutCtx, "/sync/devices/list", map[string]any{}, &devices)
-			pluginsErr = client.Post(timeoutCtx, "/plugin/installed", map[string]any{}, &plugins)
+		loadedStatus, err := service.CloudSyncStatus(timeoutCtx, sessionID)
+		statusErr = err
+		if err == nil {
+			syncStatus = cloudSyncStatusFromContract(loadedStatus)
+		}
+		if accountStatus.LoggedIn {
+			loadedDevices, err := service.CloudDevices(timeoutCtx, sessionID)
+			devicesErr = err
+			if err == nil {
+				deviceList = cloudDeviceListFromContract(loadedDevices)
+			}
+			loadedPlugins, err := service.Plugins(timeoutCtx, sessionID, contract.PluginCatalogInstalled)
+			pluginsErr = err
+			if err == nil {
+				plugins, pluginsErr = pluginSettingsPluginsFromContract(loadedPlugins)
+			}
 		}
 	}
 	sort.SliceStable(plugins, func(i, j int) bool {
@@ -286,18 +310,18 @@ func (c *cloudSettingsController) ReloadCloudSync(ctx context.Context, client ba
 	}
 	c.loading = false
 	if accountErr == nil {
-		c.account = account
+		c.account = accountStatus
 	}
 	if statusErr == nil {
-		c.sync = status
+		c.sync = syncStatus
 	}
-	if !account.LoggedIn {
+	if !accountStatus.LoggedIn {
 		c.devices = cloudDeviceList{}
 		c.plugins = nil
 	} else if devicesErr == nil {
-		c.devices = devices
+		c.devices = deviceList
 	}
-	if account.LoggedIn && pluginsErr == nil {
+	if accountStatus.LoggedIn && pluginsErr == nil {
 		c.plugins = plugins
 	}
 	c.loaded = accountErr == nil && statusErr == nil
@@ -308,11 +332,11 @@ func (c *cloudSettingsController) ReloadCloudSync(ctx context.Context, client ba
 
 // ReloadBillingPlan fetches display pricing independently so it cannot delay local
 // sync status. On success BillingLoaded becomes true and BillingPlan is stored.
-func (c *cloudSettingsController) ReloadBillingPlan(ctx context.Context, client backendClient) {
+func (c *cloudSettingsController) ReloadBillingPlan(ctx context.Context, service contract.CloudSettingsServices, sessionID string) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	var plan cloudBillingPlan
-	err := client.Post(timeoutCtx, "/account/billing/plan", map[string]any{}, &plan)
+	loaded, err := service.BillingPlan(timeoutCtx, sessionID)
+	plan := cloudBillingPlanFromContract(loaded)
 	c.mu.Lock()
 	c.billingLoaded = true
 	if err == nil {
@@ -320,6 +344,64 @@ func (c *cloudSettingsController) ReloadBillingPlan(ctx context.Context, client 
 	}
 	c.mu.Unlock()
 	c.deps.Invalidate()
+}
+
+// cloudAccountStatusFromContract adapts core account state to launcher-owned view state.
+func cloudAccountStatusFromContract(status account.Status) cloudAccountStatus {
+	return cloudAccountStatus{
+		LoggedIn: status.LoggedIn, Email: status.Email, SyncEligible: status.SyncEligible, Plan: status.Plan,
+		SyncLimits: cloudSyncLimits{DeviceLimit: status.SyncLimits.DeviceLimit}, DeviceCount: status.DeviceCount,
+		SyncEnabled: status.SyncEnabled, SessionExpired: status.SessionExpired,
+	}
+}
+
+// cloudSyncStatusFromContract deep-copies optional sync state and progress.
+func cloudSyncStatusFromContract(status cloudsync.ServiceStatus) cloudSyncStatus {
+	result := cloudSyncStatus{
+		Enabled: status.Enabled, DeviceID: status.DeviceID,
+		KeyStatus: cloudSyncKeyStatus{Available: status.KeyStatus.Available, Version: status.KeyStatus.Version},
+	}
+	if status.State != nil {
+		result.State = &cloudSyncState{
+			Cursor: status.State.Cursor, LastPullTS: status.State.LastPullTs, LastPushTS: status.State.LastPushTs,
+			BackoffUntil: status.State.BackoffUntil, RetryCount: status.State.RetryCount, LastError: status.State.LastError, Bootstrapped: status.State.Bootstrapped,
+		}
+	}
+	if status.Progress != nil {
+		result.Progress = &cloudSyncProgress{
+			Active: status.Progress.Active, Operation: status.Progress.Operation, EntityType: status.Progress.EntityType,
+			PluginID: status.Progress.PluginID, Key: status.Progress.Key, Current: status.Progress.Current, Total: status.Progress.Total,
+		}
+	}
+	return result
+}
+
+// cloudDeviceListFromContract isolates launcher device state from core response slices.
+func cloudDeviceListFromContract(source cloudsync.CloudSyncDeviceListResponse) cloudDeviceList {
+	result := cloudDeviceList{
+		Devices: make([]cloudDevice, len(source.Devices)), CurrentDeviceID: source.CurrentDeviceID,
+		DeviceLimit: source.DeviceLimit, DeviceCount: source.DeviceCount,
+	}
+	for index, device := range source.Devices {
+		result.Devices[index] = cloudDevice{
+			DeviceID: device.DeviceID, DeviceName: device.DeviceName, Platform: device.Platform,
+			CreatedAt: device.CreatedAt, UpdatedAt: device.UpdatedAt, LastSeenAt: device.LastSeenAt,
+			RevokedAt: device.RevokedAt, Current: device.Current,
+		}
+	}
+	return result
+}
+
+// cloudBillingPlanFromContract adapts display pricing to launcher-owned state.
+func cloudBillingPlanFromContract(plan account.BillingPlan) cloudBillingPlan {
+	return cloudBillingPlan{
+		Free: cloudBillingPlanTier{Price: cloudBillingPlanPrice{
+			Currency: plan.Free.Price.Currency, UnitAmount: plan.Free.Price.UnitAmount, Interval: plan.Free.Price.Interval, Formatted: plan.Free.Price.Formatted,
+		}},
+		Pro: cloudBillingPlanTier{Price: cloudBillingPlanPrice{
+			Currency: plan.Pro.Price.Currency, UnitAmount: plan.Pro.Price.UnitAmount, Interval: plan.Pro.Price.Interval, Formatted: plan.Pro.Price.Formatted,
+		}},
+	}
 }
 
 // Snapshot returns a copy of the Cloud state for the view layer. Form is deep-copied

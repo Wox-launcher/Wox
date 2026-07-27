@@ -12,6 +12,7 @@ type Services interface {
 	LifecycleServices
 	QueryServices
 	InteractionServices
+	SettingsServices
 }
 
 // QueryRequest contains one already-decoded query from the launcher.

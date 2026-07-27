@@ -3,30 +3,18 @@ package launcher
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
+
+	"wox/ui/contract"
 )
 
-// hotkeyFakeBackend serves the /setting/hotkey/apps route used by ReloadAppCandidates.
-type hotkeyFakeBackend struct {
-	mu   sync.Mutex
-	apps []ignoredHotkeyApp
+type hotkeyFakeService struct {
+	apps []contract.HotkeyApp
 	err  error
 }
 
-func (f *hotkeyFakeBackend) Post(_ context.Context, path string, _ any, out any) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.err != nil {
-		return f.err
-	}
-	if path != "/setting/hotkey/apps" {
-		return nil
-	}
-	if ptr, ok := out.(*[]ignoredHotkeyApp); ok {
-		*ptr = append([]ignoredHotkeyApp(nil), f.apps...)
-	}
-	return nil
+func (f *hotkeyFakeService) HotkeyAppCandidates(_ context.Context, _ string) ([]contract.HotkeyApp, error) {
+	return append([]contract.HotkeyApp(nil), f.apps...), f.err
 }
 
 func newHotkeyDeps() (CommonDeps, *int) {
@@ -114,11 +102,11 @@ func TestHotkeyControllerAppCandidates(t *testing.T) {
 func TestHotkeyControllerReloadAppCandidatesSuccess(t *testing.T) {
 	deps, invalidateCalls := newHotkeyDeps()
 	c := newHotkeySettingsController(deps)
-	client := &hotkeyFakeBackend{apps: []ignoredHotkeyApp{
+	service := &hotkeyFakeService{apps: []contract.HotkeyApp{
 		{Name: "Finder", Identity: "com.apple.finder"},
 		{Name: "Safari", Identity: "com.apple.Safari"},
 	}}
-	c.ReloadAppCandidates(context.Background(), client)
+	c.ReloadAppCandidates(context.Background(), service, "session")
 	snap := c.Snapshot()
 	if !snap.AppsLoaded || snap.AppsError != "" || len(snap.AppCandidates) != 2 {
 		t.Fatalf("after reload: %+v", snap)
@@ -134,8 +122,8 @@ func TestHotkeyControllerReloadAppCandidatesSuccess(t *testing.T) {
 func TestHotkeyControllerReloadAppCandidatesError(t *testing.T) {
 	deps, _ := newHotkeyDeps()
 	c := newHotkeySettingsController(deps)
-	client := &hotkeyFakeBackend{err: errors.New("network down")}
-	c.ReloadAppCandidates(context.Background(), client)
+	service := &hotkeyFakeService{err: errors.New("network down")}
+	c.ReloadAppCandidates(context.Background(), service, "session")
 	snap := c.Snapshot()
 	if snap.AppsLoaded || snap.AppsError == "" {
 		t.Fatalf("error should be recorded: %+v", snap)

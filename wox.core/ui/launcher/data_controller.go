@@ -6,6 +6,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"wox/ui/contract"
+	"wox/util"
 )
 
 // dataSettingsSnapshot is the immutable Data tab state consumed by the view layer.
@@ -61,7 +64,7 @@ func (c *dataSettingsController) BindCrossDomain(setNote func(string), reloadSet
 
 // Reload fetches the storage location and backup catalog. It is a no-op if a reload
 // is already in flight and aggregates location/backups errors into a single message.
-func (c *dataSettingsController) Reload(ctx context.Context, client backendClient) {
+func (c *dataSettingsController) Reload(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
 	c.mu.Lock()
 	if c.loading {
 		c.mu.Unlock()
@@ -76,8 +79,12 @@ func (c *dataSettingsController) Reload(ctx context.Context, client backendClien
 	defer cancel()
 	var location string
 	var backups []backupInfo
-	locationErr := client.Post(timeoutCtx, "/setting/userdata/location", map[string]any{}, &location)
-	backupsErr := client.Post(timeoutCtx, "/backup/all", map[string]any{}, &backups)
+	location, locationErr := service.DataLocation(timeoutCtx, sessionID)
+	loadedBackups, backupsErr := service.DataBackups(timeoutCtx, sessionID)
+	backups = make([]backupInfo, len(loadedBackups))
+	for index, backup := range loadedBackups {
+		backups[index] = backupInfo{ID: backup.ID, Name: backup.Name, Timestamp: backup.Timestamp, Type: backup.Type, Path: backup.Path}
+	}
 	sort.SliceStable(backups, func(i, j int) bool { return backups[i].Timestamp > backups[j].Timestamp })
 
 	errorText := ""
@@ -107,7 +114,7 @@ func (c *dataSettingsController) Reload(ctx context.Context, client backendClien
 
 // CreateBackup starts a manual backup. While the async Post is in flight Busy is set
 // to "backup"; on success the shared note is updated and the catalog is refreshed.
-func (c *dataSettingsController) CreateBackup(ctx context.Context, client backendClient) {
+func (c *dataSettingsController) CreateBackup(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
 	c.mu.Lock()
 	if c.busy != "" {
 		c.mu.Unlock()
@@ -118,9 +125,9 @@ func (c *dataSettingsController) CreateBackup(ctx context.Context, client backen
 	c.mu.Unlock()
 	c.deps.Invalidate()
 
-	go func() {
+	util.Go(ctx, "create data backup", func() {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-		err := client.Post(timeoutCtx, "/backup/now", map[string]any{}, nil)
+		err := service.CreateDataBackup(timeoutCtx, sessionID)
 		cancel()
 
 		c.mu.Lock()
@@ -135,17 +142,17 @@ func (c *dataSettingsController) CreateBackup(ctx context.Context, client backen
 				c.setNote("Manual backup created")
 			}
 			c.deps.Invalidate()
-			c.Reload(ctx, client)
+			c.Reload(ctx, service, sessionID)
 		} else {
 			c.deps.Invalidate()
 		}
-	}()
+	})
 }
 
 // RestoreBackup requires two explicit activations before core replaces current
 // settings. The first call arms confirmation for the given backup id; the second
 // fires the async restore and reloads all settings on success.
-func (c *dataSettingsController) RestoreBackup(ctx context.Context, client backendClient, id string) {
+func (c *dataSettingsController) RestoreBackup(ctx context.Context, service contract.DataSettingsServices, sessionID string, id string) {
 	c.mu.Lock()
 	if c.busy != "" || strings.TrimSpace(id) == "" {
 		c.mu.Unlock()
@@ -166,9 +173,9 @@ func (c *dataSettingsController) RestoreBackup(ctx context.Context, client backe
 	c.mu.Unlock()
 	c.deps.Invalidate()
 
-	go func() {
+	util.Go(ctx, "restore data backup", func() {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-		err := client.Post(timeoutCtx, "/backup/restore", map[string]string{"id": id}, nil)
+		err := service.RestoreDataBackup(timeoutCtx, sessionID, id)
 		cancel()
 		if err == nil && c.reloadSettings != nil {
 			err = c.reloadSettings()
@@ -187,7 +194,7 @@ func (c *dataSettingsController) RestoreBackup(ctx context.Context, client backe
 			}
 		}
 		c.deps.Invalidate()
-	}()
+	})
 }
 
 // ChooseLocation opens the native directory picker and stages the selected path
@@ -229,7 +236,7 @@ func (c *dataSettingsController) CancelLocationChange() {
 // ConfirmLocationChange delegates the actual data migration to core after the
 // visible confirmation step. On failure the staged path is restored so the user
 // can retry without re-picking the directory.
-func (c *dataSettingsController) ConfirmLocationChange(ctx context.Context, client backendClient) {
+func (c *dataSettingsController) ConfirmLocationChange(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
 	c.mu.Lock()
 	location := c.pendingLocation
 	if c.busy != "" || strings.TrimSpace(location) == "" {
@@ -242,9 +249,9 @@ func (c *dataSettingsController) ConfirmLocationChange(ctx context.Context, clie
 	c.mu.Unlock()
 	c.deps.Invalidate()
 
-	go func() {
+	util.Go(ctx, "change data location", func() {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		err := client.Post(timeoutCtx, "/setting/userdata/location/update", map[string]string{"location": location}, nil)
+		err := service.ChangeDataLocation(timeoutCtx, sessionID, location)
 		cancel()
 
 		c.mu.Lock()
@@ -263,12 +270,12 @@ func (c *dataSettingsController) ConfirmLocationChange(ctx context.Context, clie
 			}
 		}
 		c.deps.Invalidate()
-	}()
+	})
 }
 
 // ClearLogs uses the same two-step confirmation as backup restore to avoid
 // accidental data loss.
-func (c *dataSettingsController) ClearLogs(ctx context.Context, client backendClient) {
+func (c *dataSettingsController) ClearLogs(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
 	c.mu.Lock()
 	if c.busy != "" {
 		c.mu.Unlock()
@@ -289,9 +296,9 @@ func (c *dataSettingsController) ClearLogs(ctx context.Context, client backendCl
 	c.mu.Unlock()
 	c.deps.Invalidate()
 
-	go func() {
+	util.Go(ctx, "clear logs", func() {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		err := client.Post(timeoutCtx, "/log/clear", map[string]any{}, nil)
+		err := service.ClearLogs(timeoutCtx, sessionID)
 		cancel()
 
 		c.mu.Lock()
@@ -307,17 +314,17 @@ func (c *dataSettingsController) ClearLogs(ctx context.Context, client backendCl
 			}
 		}
 		c.deps.Invalidate()
-	}()
+	})
 }
 
-// OpenPath delegates platform shell behavior to core's existing cross-platform route.
-func (c *dataSettingsController) OpenPath(ctx context.Context, client backendClient, path string) {
+// OpenPath delegates platform shell behavior to the core data service.
+func (c *dataSettingsController) OpenPath(ctx context.Context, service contract.DataSettingsServices, sessionID string, path string) {
 	if strings.TrimSpace(path) == "" {
 		return
 	}
-	go func() {
+	util.Go(ctx, "open data path", func() {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-		err := client.Post(timeoutCtx, "/open", map[string]string{"path": path}, nil)
+		err := service.OpenPath(timeoutCtx, sessionID, path)
 		cancel()
 		if err != nil {
 			c.mu.Lock()
@@ -325,16 +332,15 @@ func (c *dataSettingsController) OpenPath(ctx context.Context, client backendCli
 			c.mu.Unlock()
 			c.deps.Invalidate()
 		}
-	}()
+	})
 }
 
 // OpenBackupFolder resolves the configured folder in core before asking the desktop
 // to open it.
-func (c *dataSettingsController) OpenBackupFolder(ctx context.Context, client backendClient) {
-	go func() {
+func (c *dataSettingsController) OpenBackupFolder(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
+	util.Go(ctx, "open backup folder", func() {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-		var path string
-		err := client.Post(timeoutCtx, "/backup/folder", map[string]any{}, &path)
+		path, err := service.BackupFolder(timeoutCtx, sessionID)
 		cancel()
 		if err != nil {
 			c.mu.Lock()
@@ -343,15 +349,15 @@ func (c *dataSettingsController) OpenBackupFolder(ctx context.Context, client ba
 			c.deps.Invalidate()
 			return
 		}
-		c.OpenPath(ctx, client, path)
-	}()
+		c.OpenPath(ctx, service, sessionID, path)
+	})
 }
 
 // OpenLog lets core create and reveal the current log file with its platform shell adapter.
-func (c *dataSettingsController) OpenLog(ctx context.Context, client backendClient) {
-	go func() {
+func (c *dataSettingsController) OpenLog(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
+	util.Go(ctx, "open log file", func() {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-		err := client.Post(timeoutCtx, "/log/open", map[string]any{}, nil)
+		err := service.OpenLog(timeoutCtx, sessionID)
 		cancel()
 		if err != nil {
 			c.mu.Lock()
@@ -359,7 +365,7 @@ func (c *dataSettingsController) OpenLog(ctx context.Context, client backendClie
 			c.mu.Unlock()
 			c.deps.Invalidate()
 		}
-	}()
+	})
 }
 
 // Snapshot returns a copy of the Data state for the view layer.

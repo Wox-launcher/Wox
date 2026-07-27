@@ -32,7 +32,7 @@ func updateChannelVersionTrailers(versions []updateChannelVersion) map[string]st
 // The network reload and the len/loading guard now live in updateSettingsController; this wrapper supplies the
 // active ReleaseChannel choice picker callback so the controller stays free of any *App back-dependency.
 func (a *App) reloadUpdateChannelVersions() {
-	a.updateSettings.Reload(context.Background(), a.client, a.applyUpdateChannelTrailers)
+	a.updateSettings.Reload(context.Background(), a.services, a.sessionID, a.applyUpdateChannelTrailers)
 }
 
 // applyUpdateChannelTrailers updates the active ReleaseChannel choice picker with the latest channel versions.

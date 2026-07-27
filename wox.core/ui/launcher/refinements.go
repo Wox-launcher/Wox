@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"wox/ui/coreclient"
 	launcherview "wox/ui/launcher/view"
 	woxwidget "wox/ui/widget"
 )
@@ -140,7 +139,7 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 		a.query.QueryRefinements = map[string]string{}
 	}
 	a.query.QueryText = text
-	a.query.QueryID = coreclient.NewID()
+	a.query.QueryID = newID()
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
 	a.resultScrollDetached = false
@@ -242,7 +241,7 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 	} else {
 		a.query.QueryRefinements[refinementID] = strings.Join(selected, ",")
 	}
-	a.query.QueryID = coreclient.NewID()
+	a.query.QueryID = newID()
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
 	a.completionHint = nil

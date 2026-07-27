@@ -6,19 +6,21 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"wox/account"
+	"wox/cloudsync"
+	"wox/ui/contract"
 )
 
-// cloudFakeBackend serves the cloud routes from pre-populated payloads, with
-// optional per-route errors. pathSel/release/entered enable blocking behavior
-// for the revision-guard test.
-type cloudFakeBackend struct {
+// cloudFakeService serves typed cloud operations with optional blocking.
+type cloudFakeService struct {
 	mu sync.Mutex
 
-	account cloudAccountStatus
-	sync    cloudSyncStatus
-	devices cloudDeviceList
-	plugins []pluginSettingsPlugin
-	plan    cloudBillingPlan
+	account account.Status
+	sync    cloudsync.ServiceStatus
+	devices cloudsync.CloudSyncDeviceListResponse
+	plugins []contract.PluginCatalogItem
+	plan    account.BillingPlan
 
 	accountErr error
 	syncErr    error
@@ -32,51 +34,38 @@ type cloudFakeBackend struct {
 	pathSel string
 }
 
-func (f *cloudFakeBackend) Post(_ context.Context, path string, _ any, out any) error {
+func (f *cloudFakeService) operation(path string) {
 	if path == f.pathSel && f.entered != nil && f.release != nil {
 		close(f.entered)
 		<-f.release
 	}
+}
+
+func (f *cloudFakeService) AccountStatus(_ context.Context, _ string) (account.Status, error) {
+	f.operation("/account/status")
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	switch path {
-	case "/account/status":
-		if f.accountErr != nil {
-			return f.accountErr
-		}
-		if ptr, ok := out.(*cloudAccountStatus); ok {
-			*ptr = f.account
-		}
-	case "/sync/status":
-		if f.syncErr != nil {
-			return f.syncErr
-		}
-		if ptr, ok := out.(*cloudSyncStatus); ok {
-			*ptr = f.sync
-		}
-	case "/sync/devices/list":
-		if f.devicesErr != nil {
-			return f.devicesErr
-		}
-		if ptr, ok := out.(*cloudDeviceList); ok {
-			*ptr = f.devices
-		}
-	case "/plugin/installed":
-		if f.pluginsErr != nil {
-			return f.pluginsErr
-		}
-		if ptr, ok := out.(*[]pluginSettingsPlugin); ok {
-			*ptr = append([]pluginSettingsPlugin(nil), f.plugins...)
-		}
-	case "/account/billing/plan":
-		if f.planErr != nil {
-			return f.planErr
-		}
-		if ptr, ok := out.(*cloudBillingPlan); ok {
-			*ptr = f.plan
-		}
-	}
-	return nil
+	return f.account, f.accountErr
+}
+
+func (f *cloudFakeService) CloudSyncStatus(_ context.Context, _ string) (cloudsync.ServiceStatus, error) {
+	f.operation("/sync/status")
+	return f.sync, f.syncErr
+}
+
+func (f *cloudFakeService) CloudDevices(_ context.Context, _ string) (cloudsync.CloudSyncDeviceListResponse, error) {
+	f.operation("/sync/devices/list")
+	return f.devices, f.devicesErr
+}
+
+func (f *cloudFakeService) BillingPlan(_ context.Context, _ string) (account.BillingPlan, error) {
+	f.operation("/account/billing/plan")
+	return f.plan, f.planErr
+}
+
+func (f *cloudFakeService) Plugins(_ context.Context, _ string, _ contract.PluginCatalog) ([]contract.PluginCatalogItem, error) {
+	f.operation("/plugin/installed")
+	return append([]contract.PluginCatalogItem(nil), f.plugins...), f.pluginsErr
 }
 
 func newCloudControllerDeps() (CommonDeps, *int) {
@@ -126,13 +115,13 @@ func TestCloudControllerForm(t *testing.T) {
 func TestCloudControllerReloadSuccess(t *testing.T) {
 	deps, invalidateCalled := newCloudControllerDeps()
 	c := newCloudSettingsController(deps)
-	client := &cloudFakeBackend{
-		account: cloudAccountStatus{LoggedIn: true, Email: "u@x.com", SyncEnabled: true},
-		sync:    cloudSyncStatus{Enabled: true},
-		devices: cloudDeviceList{Devices: []cloudDevice{{DeviceID: "d1"}}},
-		plugins: []pluginSettingsPlugin{{ID: "p1", Name: "Plugin One"}},
+	service := &cloudFakeService{
+		account: account.Status{LoggedIn: true, Email: "u@x.com", SyncEnabled: true},
+		sync:    cloudsync.ServiceStatus{Enabled: true},
+		devices: cloudsync.CloudSyncDeviceListResponse{Devices: []cloudsync.CloudSyncDevice{{DeviceID: "d1"}}},
+		plugins: []contract.PluginCatalogItem{{ID: "p1", Name: "Plugin One"}},
 	}
-	c.ReloadCloudSync(context.Background(), client, nil)
+	c.ReloadCloudSync(context.Background(), service, "session", nil)
 	snap := c.Snapshot()
 	if !c.Loaded() {
 		t.Fatalf("Loaded should be true after successful reload")
@@ -163,8 +152,8 @@ func TestCloudControllerReloadSuccess(t *testing.T) {
 func TestCloudControllerReloadError(t *testing.T) {
 	deps, _ := newCloudControllerDeps()
 	c := newCloudSettingsController(deps)
-	client := &cloudFakeBackend{accountErr: errors.New("network down")}
-	c.ReloadCloudSync(context.Background(), client, nil)
+	service := &cloudFakeService{accountErr: errors.New("network down")}
+	c.ReloadCloudSync(context.Background(), service, "session", nil)
 	snap := c.Snapshot()
 	if c.Loaded() {
 		t.Fatalf("Loaded should be false after error")
@@ -187,16 +176,16 @@ func TestCloudControllerRevisionGuard(t *testing.T) {
 
 	enteredAccount := make(chan struct{})
 	releaseAccount := make(chan struct{})
-	blockingClient := &cloudFakeBackend{
-		account: cloudAccountStatus{LoggedIn: true, Email: "stale@x.com"},
-		sync:    cloudSyncStatus{Enabled: true},
+	blockingService := &cloudFakeService{
+		account: account.Status{LoggedIn: true, Email: "stale@x.com"},
+		sync:    cloudsync.ServiceStatus{Enabled: true},
 		entered: enteredAccount,
 		release: releaseAccount,
 		pathSel: "/account/status",
 	}
 
-	// First reload blocks inside Post("/account/status").
-	go c.ReloadCloudSync(context.Background(), blockingClient, nil)
+	// First reload blocks inside AccountStatus.
+	go c.ReloadCloudSync(context.Background(), blockingService, "session", nil)
 
 	// Wait until the first reload has entered Post and is blocked.
 	select {
@@ -207,11 +196,11 @@ func TestCloudControllerRevisionGuard(t *testing.T) {
 
 	// Second reload runs on a non-blocking client and completes immediately,
 	// bumping the revision past the first reload's.
-	secondClient := &cloudFakeBackend{
-		account: cloudAccountStatus{LoggedIn: false, Email: "fresh@x.com"},
-		sync:    cloudSyncStatus{Enabled: false},
+	secondService := &cloudFakeService{
+		account: account.Status{LoggedIn: false, Email: "fresh@x.com"},
+		sync:    cloudsync.ServiceStatus{Enabled: false},
 	}
-	c.ReloadCloudSync(context.Background(), secondClient, nil)
+	c.ReloadCloudSync(context.Background(), secondService, "session", nil)
 
 	// After the second reload, Loaded must be true (both account and sync succeeded),
 	// and the account must be the second client's (fresh), not the first's (stale).

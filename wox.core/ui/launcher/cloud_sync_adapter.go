@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -154,11 +155,15 @@ func (a *App) cloudSyncViewProps(snapshot settingsSnapshot) launcherview.CloudSy
 			a.beginCloudBootstrap()
 			return
 		}
-		a.runCloudAction("sync", "/sync/push", map[string]any{})
+		a.runCloudAction("sync", func(ctx context.Context) error { return a.services.SyncCloud(ctx, a.sessionID) })
 	}
 	if cloudCurrentDeviceRevoked(snapshot.cloud.Devices) {
 		buttonLabel = a.translate("i18n:ui_cloud_sync_join")
-		buttonAction = func() { a.runCloudAction("join", "/sync/devices/join", map[string]any{}) }
+		buttonAction = func() {
+			a.runCloudAction("join", func(ctx context.Context) error {
+				return a.services.JoinCloudDevice(ctx, a.sessionID)
+			})
+		}
 	}
 	return launcherview.CloudSyncProps{
 		SectionLabel:  a.translate("i18n:ui_cloud_sync_sync_status"),
@@ -262,7 +267,10 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot) launcherview.Clou
 			ShowRevoke:    !device.Current && device.RevokedAt == 0,
 			RevokeEnabled: snapshot.cloud.Busy == "",
 			OnRevoke: func() {
-				a.runCloudAction("revoke", "/sync/devices/revoke", map[string]string{"target_device_id": device.DeviceID})
+				a.runCloudAction("revoke", func(ctx context.Context) error {
+					_, err := a.services.RevokeCloudDevice(ctx, a.sessionID, device.DeviceID)
+					return err
+				})
 			},
 		})
 	}

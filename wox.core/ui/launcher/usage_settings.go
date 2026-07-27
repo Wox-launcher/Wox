@@ -53,7 +53,7 @@ func (a *App) currentUsagePeriod() string {
 
 // reloadUsageStats refreshes one report period and ignores responses superseded by a later selection.
 func (a *App) reloadUsageStats(period string) {
-	a.usageSettings.Reload(context.Background(), a.client, period)
+	a.usageSettings.Reload(context.Background(), a.services, a.sessionID, period)
 }
 
 func normalizeUsagePeriod(period string) string {

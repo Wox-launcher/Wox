@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,28 +21,19 @@ import (
 	"wox/cloudsync"
 	"wox/common"
 	"wox/diagnostic"
-	corehotkey "wox/hotkey"
 	"wox/i18n"
 	"wox/plugin"
-	pluginhost "wox/plugin/host"
 	appplugin "wox/plugin/system/app"
-	dictationplugin "wox/plugin/system/dictation"
 	"wox/setting"
-	"wox/telemetry"
+	"wox/ui/contract"
 	"wox/ui/dto"
 	"wox/updater"
 	"wox/util"
 	"wox/util/font"
 	"wox/util/keyboard"
-	"wox/util/ocr"
-	"wox/util/overlay"
-	"wox/util/overlay/imageoverlay"
 	"wox/util/permission"
-	"wox/util/shell"
 	utilwindow "wox/util/window"
 
-	"github.com/disintegration/imaging"
-	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
@@ -188,8 +178,6 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/version":                     handleVersion,
 }
 
-var updateChannelVersionsProvider = updater.GetUpdateChannelVersions
-
 const traceIdHeader = "TraceId"
 const sessionIdHeader = "SessionId"
 
@@ -279,43 +267,12 @@ type resolveImageRequest struct {
 
 // handleResolveImage converts image types whose cache and network policy belong to core into a raster payload.
 func handleResolveImage(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
 	var request resolveImageRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeErrorResponse(w, fmt.Sprintf("invalid image resolve request: %s", err.Error()))
 		return
 	}
-	if request.Image.IsEmpty() {
-		writeErrorResponse(w, "image is empty")
-		return
-	}
-	size := request.Size
-	if size <= 0 {
-		size = 128
-	}
-	size = min(max(size, 16), 2048)
-	if request.Image.ImageType == common.WoxImageTypeFileIcon {
-		resolved := common.ConvertFileIconToAbsolutePathWithSize(ctx, request.Image, size)
-		if resolved.ImageType == common.WoxImageTypeFileIcon || resolved.IsEmpty() {
-			writeErrorResponse(w, "failed to resolve file icon")
-			return
-		}
-		writeSuccessResponse(w, resolved)
-		return
-	}
-	if request.Image.ImageType != common.WoxImageTypeUrl && request.Image.ImageType != common.WoxImageTypeEmoji {
-		writeErrorResponse(w, fmt.Sprintf("image type %s does not require core resolution", request.Image.ImageType))
-		return
-	}
-	decoded, err := request.Image.ToImageWithContext(ctx)
-	if err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-	if decoded.Bounds().Dx() > size || decoded.Bounds().Dy() > size {
-		decoded = imaging.Fit(decoded, size, size, imaging.Lanczos)
-	}
-	resolved, err := common.NewWoxImage(decoded)
+	resolved, err := NewCoreServices().ResolveImage(getTraceContext(r), getSessionIdFromHeader(r), request.Image, request.Size)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -412,7 +369,6 @@ func handleLazyImageLoad(w http.ResponseWriter, r *http.Request) {
 	// Result icon lazy loading is intentionally an internal UI/core endpoint.
 	// Plugins still return ordinary WoxImage values, while UI exchanges the
 	// manager-issued token for a resized cache image only after the widget exists.
-	ctx := getTraceContext(r)
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	if token == "" && r.Body != nil {
 		var request struct {
@@ -427,7 +383,7 @@ func handleLazyImageLoad(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	icon, err := plugin.GetPluginManager().LoadLazyResultIcon(ctx, token)
+	icon, err := NewCoreServices().LoadLazyResultImage(getTraceContext(r), getSessionIdFromHeader(r), token)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -452,7 +408,7 @@ func handlePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	preview, err := plugin.GetPluginManager().GetResultPreview(getTraceContext(r), sessionId, queryId, id)
+	preview, err := NewCoreServices().ResultPreview(getTraceContext(r), getSessionIdFromHeader(r), sessionId, queryId, id)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -466,8 +422,6 @@ type previewImageOverlayRequest struct {
 }
 
 func handlePreviewImageOverlay(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeErrorResponse(w, fmt.Sprintf("failed to read preview image overlay request: %s", err.Error()))
@@ -479,22 +433,7 @@ func handlePreviewImageOverlay(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, fmt.Sprintf("failed to parse preview image overlay request: %s", err.Error()))
 		return
 	}
-	if request.Image.IsEmpty() {
-		writeErrorResponse(w, "preview image is empty")
-		return
-	}
-
-	// Refactor: image preview routing now calls the single shared overlay entry directly. The
-	// overlay utility decides whether URL sources need loading/cache behavior, while non-URL sources
-	// are displayed immediately through the same API.
-	if err := imageoverlay.Show(ctx, imageoverlay.Options{
-		Image:         request.Image,
-		FitToScreen:   true,
-		Topmost:       true,
-		Movable:       true,
-		CloseOnEscape: true,
-		Anchor:        overlay.AnchorCenter,
-	}); err != nil {
+	if err := NewCoreServices().ShowPreviewImage(getTraceContext(r), getSessionIdFromHeader(r), request.Image); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -503,61 +442,31 @@ func handlePreviewImageOverlay(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTheme(w http.ResponseWriter, r *http.Request) {
-	theme := GetUIManager().GetCurrentTheme(getTraceContext(r))
+	theme, err := NewCoreServices().CurrentTheme(getTraceContext(r), getSessionIdFromHeader(r))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
 	writeSuccessResponse(w, theme)
 }
 
 func handlePluginStore(w http.ResponseWriter, r *http.Request) {
-	getCtx := getTraceContext(r)
-	manifests := plugin.GetStoreManager().GetStorePluginManifests(getTraceContext(r))
-	var plugins = make([]dto.PluginDto, len(manifests))
-	copyErr := copier.Copy(&plugins, &manifests)
-	if copyErr != nil {
-		writeErrorResponse(w, copyErr.Error())
+	plugins, err := getStorePluginDTOs(getTraceContext(r))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	for i, storePlugin := range plugins {
-		pluginInstance, isInstalled := lo.Find(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
-			return item.Metadata.Id == storePlugin.Id
-		})
-		// Support both IconUrl and IconEmoji, prefer IconEmoji if both are present
-		if manifests[i].IconEmoji != "" {
-			plugins[i].Icon = common.NewWoxImageEmoji(manifests[i].IconEmoji)
-		} else if manifests[i].IconUrl != "" {
-			plugins[i].Icon = common.NewWoxImageUrl(manifests[i].IconUrl)
-		}
-		plugins[i].IsInstalled = isInstalled
-		plugins[i].IsUpgradable = false
-		if isInstalled {
-			plugins[i].IsUpgradable = plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, manifests[i].Version)
-		}
-		plugins[i].Name = manifests[i].GetName(getCtx)
-		plugins[i].NameEn = manifests[i].GetNameEn(getCtx)
-		plugins[i].Description = manifests[i].GetDescription(getCtx)
-		plugins[i].DescriptionEn = manifests[i].GetDescriptionEn(getCtx)
-
-		plugins[i] = convertPluginDto(getCtx, plugins[i], pluginInstance)
-	}
-
 	writeSuccessResponse(w, plugins)
 }
 
 func handlePluginInstalled(w http.ResponseWriter, r *http.Request) {
 	defer util.GoRecover(getTraceContext(r), "get installed plugins")
 
-	getCtx := getTraceContext(r)
-	instances := plugin.GetPluginManager().GetPluginInstances()
-	var plugins []dto.PluginDto
-	for _, pluginInstance := range instances {
-		installedPlugin, err := convertPluginInstanceToDto(getCtx, pluginInstance)
-		if err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-		plugins = append(plugins, installedPlugin)
+	plugins, err := getInstalledPluginDTOs(getTraceContext(r))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
 	}
-
 	writeSuccessResponse(w, plugins)
 }
 
@@ -616,8 +525,6 @@ func translatePluginGlances(ctx context.Context, pluginInstance *plugin.Instance
 }
 
 func handlePluginInstall(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -625,34 +532,14 @@ func handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pluginId := idResult.String()
-
-	plugins := plugin.GetStoreManager().GetStorePluginManifests(ctx)
-	findPlugin, exist := lo.Find(plugins, func(item plugin.StorePluginManifest) bool {
-		return item.Id == pluginId
-	})
-	if !exist {
-		writeErrorResponse(w, fmt.Sprintf("Plugin '%s' not found in the store", pluginId))
+	if err := NewCoreServices().OperatePlugin(getTraceContext(r), getSessionIdFromHeader(r), idResult.String(), contract.PluginOperationInstall); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	pluginName := findPlugin.GetName(ctx)
-	logger.Info(ctx, fmt.Sprintf("Installing plugin '%s' (%s)", pluginName, pluginId))
-	installErr := plugin.GetStoreManager().Install(ctx, findPlugin)
-	if installErr != nil {
-		errMsg := fmt.Sprintf("Failed to install plugin '%s': %s", pluginName, installErr.Error())
-		logger.Error(ctx, errMsg)
-		writeErrorResponse(w, errMsg)
-		return
-	}
-
-	logger.Info(ctx, fmt.Sprintf("Successfully installed plugin '%s' (%s)", pluginName, pluginId))
 	writeSuccessResponse(w, "")
 }
 
 func handlePluginUninstall(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -660,31 +547,14 @@ func handlePluginUninstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pluginId := idResult.String()
-
-	plugins := plugin.GetPluginManager().GetPluginInstances()
-	findPlugin, exist := lo.Find(plugins, func(item *plugin.Instance) bool {
-		if item.Metadata.Id == pluginId {
-			return true
-		}
-		return false
-	})
-	if !exist {
-		writeErrorResponse(w, "can't find plugin")
+	if err := NewCoreServices().OperatePlugin(getTraceContext(r), getSessionIdFromHeader(r), idResult.String(), contract.PluginOperationUninstall); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	uninstallErr := plugin.GetStoreManager().Uninstall(ctx, findPlugin, false)
-	if uninstallErr != nil {
-		writeErrorResponse(w, "can't uninstall plugin: "+uninstallErr.Error())
-		return
-	}
-
 	writeSuccessResponse(w, "")
 }
 
 func handlePluginDisable(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -692,9 +562,7 @@ func handlePluginDisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pluginId := idResult.String()
-
-	if err := plugin.GetPluginManager().DisablePlugin(ctx, pluginId); err != nil {
+	if err := NewCoreServices().OperatePlugin(getTraceContext(r), getSessionIdFromHeader(r), idResult.String(), contract.PluginOperationDisable); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -703,7 +571,6 @@ func handlePluginDisable(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePluginEnable(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -711,9 +578,7 @@ func handlePluginEnable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pluginId := idResult.String()
-
-	if err := plugin.GetPluginManager().EnablePlugin(ctx, pluginId); err != nil {
+	if err := NewCoreServices().OperatePlugin(getTraceContext(r), getSessionIdFromHeader(r), idResult.String(), contract.PluginOperationEnable); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -772,7 +637,6 @@ func handleThemeInstalled(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleThemeInstall(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -780,32 +644,14 @@ func handleThemeInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	themeId := idResult.String()
-
-	storeThemes := GetStoreManager().GetThemes()
-	findTheme, exist := lo.Find(storeThemes, func(item common.Theme) bool {
-		if item.ThemeId == themeId {
-			return true
-		}
-		return false
-	})
-	if !exist {
-		writeErrorResponse(w, "can't find theme in theme store")
+	if err := NewCoreServices().OperateTheme(getTraceContext(r), getSessionIdFromHeader(r), idResult.String(), contract.ThemeOperationInstall); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	installErr := GetStoreManager().Install(ctx, findTheme)
-	if installErr != nil {
-		writeErrorResponse(w, "can't install theme: "+installErr.Error())
-		return
-	}
-
 	writeSuccessResponse(w, "")
 }
 
 func handleThemeUninstall(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -813,34 +659,14 @@ func handleThemeUninstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	themeId := idResult.String()
-
-	storeThemes := GetUIManager().GetAllThemes(ctx)
-	findTheme, exist := lo.Find(storeThemes, func(item common.Theme) bool {
-		if item.ThemeId == themeId {
-			return true
-		}
-		return false
-	})
-	if !exist {
-		writeErrorResponse(w, "can't find theme")
+	if err := NewCoreServices().OperateTheme(getTraceContext(r), getSessionIdFromHeader(r), idResult.String(), contract.ThemeOperationUninstall); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	uninstallErr := GetStoreManager().Uninstall(ctx, findTheme)
-	if uninstallErr != nil {
-		writeErrorResponse(w, "can't uninstall theme: "+uninstallErr.Error())
-		return
-	} else {
-		GetUIManager().ChangeToDefaultTheme(ctx)
-	}
-
 	writeSuccessResponse(w, "")
 }
 
 func handleThemeApply(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -848,19 +674,10 @@ func handleThemeApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	themeId := idResult.String()
-
-	// Find theme in installed themes
-	storeThemes := GetUIManager().GetAllThemes(ctx)
-	findTheme, exist := lo.Find(storeThemes, func(item common.Theme) bool {
-		return item.ThemeId == themeId
-	})
-	if !exist {
-		writeErrorResponse(w, "can't find theme")
+	if err := NewCoreServices().OperateTheme(getTraceContext(r), getSessionIdFromHeader(r), idResult.String(), contract.ThemeOperationApply); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	GetUIManager().ChangeTheme(ctx, findTheme)
 	writeSuccessResponse(w, "")
 }
 
@@ -872,8 +689,6 @@ type saveThemeRequest struct {
 
 // handleThemeSave persists an edited draft as either a new user theme or an overwrite of the current user theme.
 func handleThemeSave(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeErrorResponse(w, "failed to read theme save request: "+err.Error())
@@ -886,51 +701,9 @@ func handleThemeSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	themeName := strings.TrimSpace(request.Name)
-	if themeName == "" {
-		writeErrorResponse(w, "theme name is empty")
-		return
-	}
-
-	theme := request.Theme
-	if theme.AppBackgroundColor == "" {
-		writeErrorResponse(w, "theme data is empty")
-		return
-	}
-
-	if request.Overwrite {
-		if strings.TrimSpace(theme.ThemeId) == "" {
-			writeErrorResponse(w, "theme id is empty")
-			return
-		}
-		if GetUIManager().IsSystemTheme(theme.ThemeId) {
-			writeErrorResponse(w, "can't overwrite system theme")
-			return
-		}
-	} else {
-		theme.ThemeId = uuid.NewString()
-	}
-	theme.ThemeName = themeName
-	if strings.TrimSpace(theme.ThemeAuthor) == "" {
-		theme.ThemeAuthor = "Wox Launcher"
-	}
-	if strings.TrimSpace(theme.ThemeUrl) == "" {
-		theme.ThemeUrl = "https://github.com/Wox-launcher/Wox"
-	}
-	if strings.TrimSpace(theme.Version) == "" {
-		theme.Version = "1.0.0"
-	}
-	theme.IsSystem = false
-	theme.IsInstalled = true
-	theme.IsAutoAppearance = false
-	theme.DarkThemeId = ""
-	theme.LightThemeId = ""
-	theme.Windows = nil
-	theme.MacOS = nil
-	theme.Linux = nil
-
-	if installErr := GetStoreManager().Install(ctx, theme); installErr != nil {
-		writeErrorResponse(w, "can't save theme: "+installErr.Error())
+	theme, err := NewCoreServices().SaveTheme(getTraceContext(r), getSessionIdFromHeader(r), request.Name, request.Theme, request.Overwrite)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
 
@@ -938,64 +711,31 @@ func handleThemeSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSettingWox(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-
-	var settingDto dto.WoxSettingDto
-	settingDto.EnableAutostart = woxSetting.EnableAutostart.Get()
-	settingDto.MainHotkey = woxSetting.MainHotkey.Get()
-	settingDto.SelectionHotkey = woxSetting.SelectionHotkey.Get()
-	settingDto.IgnoredHotkeyApps = woxSetting.IgnoredHotkeyApps.Get()
-	settingDto.LogLevel = util.NormalizeLogLevel(woxSetting.LogLevel.Get())
-	settingDto.UsePinYin = woxSetting.UsePinYin.Get()
-	settingDto.SwitchInputMethodABC = woxSetting.SwitchInputMethodABC.Get()
-	settingDto.HideOnStart = woxSetting.HideOnStart.Get()
-	settingDto.OnboardingFinished = woxSetting.OnboardingFinished.Get()
-	settingDto.HideOnLostFocus = woxSetting.HideOnLostFocus.Get()
-	settingDto.ShowTray = woxSetting.ShowTray.Get()
-	settingDto.LangCode = woxSetting.LangCode.Get()
-	settingDto.QueryHotkeys = woxSetting.QueryHotkeys.Get()
-	settingDto.QueryShortcuts = woxSetting.QueryShortcuts.Get()
-	settingDto.TrayQueries = woxSetting.TrayQueries.Get()
-	settingDto.LaunchMode = woxSetting.LaunchMode.Get()
-	settingDto.StartPage = woxSetting.StartPage.Get()
-	settingDto.AIProviders = woxSetting.AIProviders.Get()
-	settingDto.AIMCPServers = woxSetting.AIMCPServers.Get()
-	settingDto.AISkills = woxSetting.AISkills.Get()
-	if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
-		settingDto.AISkills = chater.GetAllSkills(ctx)
+	loaded, err := NewCoreServices().GeneralSettings(getTraceContext(r), getSessionIdFromHeader(r))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
 	}
-	settingDto.HttpProxyEnabled = woxSetting.HttpProxyEnabled.Get()
-	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
-	settingDto.ShowPosition = woxSetting.ShowPosition.Get()
-	settingDto.IsLinuxWaylandSession = util.IsLinuxWaylandSession()
-	settingDto.IsEvdevReadAvailable = keyboard.IsEvdevReadAvailable()
-	settingDto.EnableAutoBackup = woxSetting.EnableAutoBackup.Get()
-	settingDto.EnableAutoUpdate = woxSetting.EnableAutoUpdate.Get()
-	settingDto.ReleaseChannel = woxSetting.ReleaseChannel.Get()
-	settingDto.EnableAnonymousUsageStats = woxSetting.EnableAnonymousUsageStats.Get()
-	settingDto.CustomPythonPath = woxSetting.CustomPythonPath.Get()
-	settingDto.CustomNodejsPath = woxSetting.CustomNodejsPath.Get()
-	settingDto.CloudSyncServerUrl = woxSetting.CloudSyncServerUrl.Get()
-	settingDto.CloudSyncDisabledPlugins = woxSetting.CloudSyncDisabledPlugins.Get()
-
-	settingDto.AppWidth = woxSetting.AppWidth.Get()
-	settingDto.MaxResultCount = woxSetting.MaxResultCount.Get()
-	settingDto.UiDensity = woxSetting.UiDensity.Get()
-	settingDto.ThemeId = woxSetting.ThemeId.Get()
-	settingDto.AppFontFamily = woxSetting.AppFontFamily.Get()
-	settingDto.EnableQueryCompletionHint = woxSetting.EnableQueryCompletionHint.Get()
-	settingDto.EnableGlance = woxSetting.EnableGlance.Get()
-	settingDto.PrimaryGlance = woxSetting.PrimaryGlance.Get()
-	settingDto.HideGlanceIcon = woxSetting.HideGlanceIcon.Get()
-	settingDto.ShowScoreTail = woxSetting.ShowScoreTail.Get()
-	settingDto.ShowPerformanceTail = woxSetting.ShowPerformanceTail.Get()
-	settingDto.ShowPerformanceTailBatch = woxSetting.ShowPerformanceTailBatch.Get()
-	settingDto.ShowPerformanceTailPluginQuery = woxSetting.ShowPerformanceTailPluginQuery.Get()
-	settingDto.ShowPerformanceTailBackendPrepared = woxSetting.ShowPerformanceTailBackendPrepared.Get()
-	settingDto.ShowPerformanceTailUiReceived = woxSetting.ShowPerformanceTailUiReceived.Get()
-
-	writeSuccessResponse(w, settingDto)
+	writeSuccessResponse(w, dto.WoxSettingDto{
+		EnableAutostart: loaded.EnableAutostart, MainHotkey: loaded.MainHotkey, SelectionHotkey: loaded.SelectionHotkey,
+		IgnoredHotkeyApps: loaded.IgnoredHotkeyApps, LogLevel: loaded.LogLevel, UsePinYin: loaded.UsePinYin,
+		SwitchInputMethodABC: loaded.SwitchInputMethodABC, HideOnStart: loaded.HideOnStart, OnboardingFinished: loaded.OnboardingFinished,
+		HideOnLostFocus: loaded.HideOnLostFocus, ShowTray: loaded.ShowTray, LangCode: loaded.LangCode,
+		QueryHotkeys: loaded.QueryHotkeys, QueryShortcuts: loaded.QueryShortcuts, TrayQueries: loaded.TrayQueries,
+		LaunchMode: loaded.LaunchMode, StartPage: loaded.StartPage, AIProviders: loaded.AIProviders,
+		AIMCPServers: loaded.AIMCPServers, AISkills: loaded.AISkills, HttpProxyEnabled: loaded.HTTPProxyEnabled,
+		HttpProxyUrl: loaded.HTTPProxyURL, ShowPosition: loaded.ShowPosition, IsLinuxWaylandSession: loaded.IsLinuxWaylandSession,
+		IsEvdevReadAvailable: loaded.IsEvdevReadAvailable, EnableAutoBackup: loaded.EnableAutoBackup, EnableAutoUpdate: loaded.EnableAutoUpdate,
+		ReleaseChannel: loaded.ReleaseChannel, EnableAnonymousUsageStats: loaded.EnableAnonymousUsageStats,
+		CustomPythonPath: loaded.CustomPythonPath, CustomNodejsPath: loaded.CustomNodejsPath,
+		CloudSyncServerUrl: loaded.CloudSyncServerURL, CloudSyncDisabledPlugins: loaded.CloudSyncDisabledPlugins,
+		AppWidth: loaded.AppWidth, MaxResultCount: loaded.MaxResultCount, UiDensity: loaded.UIDensity, ThemeId: loaded.ThemeID,
+		AppFontFamily: loaded.AppFontFamily, EnableQueryCompletionHint: loaded.EnableQueryCompletionHint,
+		EnableGlance: loaded.EnableGlance, PrimaryGlance: loaded.PrimaryGlance, HideGlanceIcon: loaded.HideGlanceIcon,
+		ShowScoreTail: loaded.ShowScoreTail, ShowPerformanceTail: loaded.ShowPerformanceTail,
+		ShowPerformanceTailBatch: loaded.ShowPerformanceTailBatch, ShowPerformanceTailPluginQuery: loaded.ShowPerformanceTailPluginQuery,
+		ShowPerformanceTailBackendPrepared: loaded.ShowPerformanceTailBackendPrepared, ShowPerformanceTailUiReceived: loaded.ShowPerformanceTailUIReceived,
+	})
 }
 
 func handleHotkeyAppCandidates(w http.ResponseWriter, r *http.Request) {
@@ -1044,318 +784,15 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		Value string
 	}
 
-	decoder := json.NewDecoder(r.Body)
-	var kv keyValuePair
-	err := decoder.Decode(&kv)
-	if err != nil {
+	var payload keyValuePair
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	ctx := getTraceContext(r)
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if kv.Key == "ReleaseChannel" {
-		updatedValue, updateErr := updateWoxSettingValue(ctx, woxSetting, kv.Key, kv.Value)
-		if updateErr != nil {
-			writeErrorResponse(w, updateErr.Error())
-			return
-		}
-
-		GetUIManager().PostSettingUpdate(ctx, kv.Key, updatedValue)
-		writeSuccessResponse(w, "")
+	if err := NewCoreServices().UpdateGeneralSetting(getTraceContext(r), getSessionIdFromHeader(r), payload.Key, payload.Value); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	var vb bool
-	var vf float64
-	var vs = kv.Value
-	updatedValue := kv.Value
-	if vb1, err := strconv.ParseBool(vs); err == nil {
-		vb = vb1
-	}
-	if vf1, err := strconv.ParseFloat(vs, 64); err == nil {
-		vf = vf1
-	}
-
-	// Hotkeys are registered before persisting settings so a denied or failed
-	// system bind does not leave stored settings ahead of the actual OS
-	// registration. These branches return early, so the normal PostSettingUpdate
-	// path does not register the same change again.
-	if kv.Key == "MainHotkey" {
-		if vs != woxSetting.MainHotkey.Get() {
-			if err := GetUIManager().RegisterMainHotkey(ctx, vs); err != nil {
-				writeErrorResponse(w, err.Error())
-				return
-			}
-		}
-		woxSetting.MainHotkey.Set(vs)
-		writeSuccessResponse(w, "")
-		return
-	}
-
-	if kv.Key == "SelectionHotkey" {
-		if vs != woxSetting.SelectionHotkey.Get() {
-			if err := GetUIManager().RegisterSelectionHotkey(ctx, vs); err != nil {
-				writeErrorResponse(w, err.Error())
-				return
-			}
-		}
-		woxSetting.SelectionHotkey.Set(vs)
-		writeSuccessResponse(w, "")
-		return
-	}
-
-	if kv.Key == "QueryHotkeys" {
-		queryHotkeys, parseErr := parseQueryHotkeysSettingValue(vs)
-		if parseErr != nil {
-			writeErrorResponse(w, parseErr.Error())
-			return
-		}
-
-		uiManager := GetUIManager()
-		config := corehotkey.WoxConfigFromSetting(woxSetting)
-		config.QueryHotkeys = queryHotkeys
-		if err := uiManager.registerWoxHotkeys(ctx, config, true); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-
-		woxSetting.QueryHotkeys.Set(queryHotkeys)
-		writeSuccessResponse(w, "")
-		return
-	}
-
-	switch kv.Key {
-	case "EnableAutostart":
-		woxSetting.EnableAutostart.Set(vb)
-	case "IgnoredHotkeyApps":
-		var ignoredApps []setting.IgnoredHotkeyApp
-		if err := json.Unmarshal([]byte(vs), &ignoredApps); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-		woxSetting.IgnoredHotkeyApps.Set(normalizeIgnoredHotkeyApps(ignoredApps))
-	case "LogLevel":
-		updatedValue = util.NormalizeLogLevel(vs)
-		if err := woxSetting.LogLevel.Set(updatedValue); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-	case "UsePinYin":
-		woxSetting.UsePinYin.Set(vb)
-	case "SwitchInputMethodABC":
-		woxSetting.SwitchInputMethodABC.Set(vb)
-	case "HideOnStart":
-		woxSetting.HideOnStart.Set(vb)
-	case "OnboardingFinished":
-		// The guide writes completion through the existing settings endpoint so
-		// skip and finish share one durable state transition with no extra API.
-		woxSetting.OnboardingFinished.Set(vb)
-	case "HideOnLostFocus":
-		woxSetting.HideOnLostFocus.Set(vb)
-	case "ShowTray":
-		woxSetting.ShowTray.Set(vb)
-	case "LangCode":
-		woxSetting.LangCode.Set(i18n.LangCode(vs))
-	case "QueryShortcuts":
-		var queryShortcuts []setting.QueryShortcut
-		if err := json.Unmarshal([]byte(vs), &queryShortcuts); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-		woxSetting.QueryShortcuts.Set(queryShortcuts)
-	case "CloudSyncServerUrl":
-		cloudSyncServerURL := strings.TrimSpace(vs)
-		woxSetting.CloudSyncServerUrl.Set(cloudSyncServerURL)
-		if err := applyCloudSyncServerURL(ctx, cloudSyncServerURL); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-	case "CloudSyncDisabledPlugins":
-		var disabledPlugins []string
-		if err := json.Unmarshal([]byte(vs), &disabledPlugins); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-		woxSetting.CloudSyncDisabledPlugins.Set(disabledPlugins)
-	case "TrayQueries":
-		var rawTrayQueries []map[string]any
-		if err := json.Unmarshal([]byte(vs), &rawTrayQueries); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-
-		var trayQueries []setting.TrayQuery
-		for _, rawTrayQuery := range rawTrayQueries {
-			query, _ := rawTrayQuery["Query"].(string)
-			trayQuery := setting.TrayQuery{
-				Query: query,
-			}
-
-			if rawHideQueryBox, ok := rawTrayQuery["HideQueryBox"]; ok {
-				trayQuery.HideQueryBox = parseBool(rawHideQueryBox)
-			}
-
-			if rawHideToolbar, ok := rawTrayQuery["HideToolbar"]; ok {
-				trayQuery.HideToolbar = parseBool(rawHideToolbar)
-			}
-
-			if rawDisabled, ok := rawTrayQuery["Disabled"]; ok {
-				trayQuery.Disabled = parseBool(rawDisabled)
-			}
-
-			if rawWidth, ok := rawTrayQuery["Width"]; ok {
-				trayQuery.Width = maxInt(parseInt(rawWidth), 0)
-			}
-
-			if rawMaxResultCount, ok := rawTrayQuery["MaxResultCount"]; ok {
-				trayQuery.MaxResultCount = normalizeOptionalMaxResultCount(parseInt(rawMaxResultCount))
-			}
-
-			if rawIcon, ok := rawTrayQuery["Icon"]; ok {
-				switch icon := rawIcon.(type) {
-				case map[string]any:
-					iconData, marshalErr := json.Marshal(icon)
-					if marshalErr == nil {
-						_ = json.Unmarshal(iconData, &trayQuery.Icon)
-					}
-				case string:
-					if parsed, parseErr := common.ParseWoxImage(icon); parseErr == nil {
-						trayQuery.Icon = parsed
-					}
-				}
-			}
-
-			trayQueries = append(trayQueries, trayQuery)
-		}
-		woxSetting.TrayQueries.Set(trayQueries)
-	case "LaunchMode":
-		woxSetting.LaunchMode.Set(setting.LaunchMode(vs))
-	case "StartPage":
-		woxSetting.StartPage.Set(setting.StartPage(vs))
-	case "ShowPosition":
-		woxSetting.ShowPosition.Set(setting.PositionType(vs))
-	case "AIProviders":
-		var aiProviders []setting.AIProvider
-		if err := json.Unmarshal([]byte(vs), &aiProviders); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-		woxSetting.AIProviders.Set(aiProviders)
-	case "AIMCPServers":
-		var mcpServers []common.AIChatMCPServerConfig
-		if err := json.Unmarshal([]byte(vs), &mcpServers); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-		woxSetting.AIMCPServers.Set(mcpServers)
-	case "AISkills":
-		var skills []common.Skill
-		if err := json.Unmarshal([]byte(vs), &skills); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-		woxSetting.AISkills.Set(skills)
-	case "EnableAutoBackup":
-		woxSetting.EnableAutoBackup.Set(vb)
-	case "EnableAutoUpdate":
-		woxSetting.EnableAutoUpdate.Set(vb)
-	case "CustomPythonPath":
-		if strings.TrimSpace(vs) != "" {
-			// Bug fix: reject unsupported custom Python paths at save time. The
-			// old flow persisted any path and only failed later when the host
-			// tried to start, so this backend guard keeps API callers and the UI
-			// on the same minimum-version contract.
-			if _, validateErr := pluginhost.ValidatePythonExecutable(ctx, vs); validateErr != nil {
-				writeErrorResponse(w, validateErr.Error())
-				return
-			}
-		}
-		woxSetting.CustomPythonPath.Set(vs)
-	case "CustomNodejsPath":
-		if strings.TrimSpace(vs) != "" {
-			// Feature: Node.js custom paths use the same save-time validation as
-			// Python. Checking the version here prevents non-UI API callers from
-			// persisting a Node.js executable that the host will immediately reject.
-			if _, validateErr := pluginhost.ValidateNodejsExecutable(ctx, vs); validateErr != nil {
-				writeErrorResponse(w, validateErr.Error())
-				return
-			}
-		}
-		woxSetting.CustomNodejsPath.Set(vs)
-
-	case "HttpProxyEnabled":
-		woxSetting.HttpProxyEnabled.Set(vb)
-	case "HttpProxyUrl":
-		woxSetting.HttpProxyUrl.Set(vs)
-
-	case "AppWidth":
-		woxSetting.AppWidth.Set(int(vf))
-	case "MaxResultCount":
-		woxSetting.MaxResultCount.Set(int(vf))
-	case "UiDensity":
-		// New launcher presentation setting: store only the normalized density
-		// enum. The old fixed-size behavior maps to normal, while unsupported
-		// values fall back here before they can desync Go height estimates from
-		// UI's rendered metrics.
-		normalizedDensity := setting.NormalizeUiDensity(vs)
-		updatedValue = string(normalizedDensity)
-		if err := woxSetting.UiDensity.Set(normalizedDensity); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-	case "ThemeId":
-		woxSetting.ThemeId.Set(vs)
-	case "AppFontFamily":
-		vs = font.NormalizeConfiguredFontFamily(vs, font.GetSystemFontFamilies(ctx))
-		woxSetting.AppFontFamily.Set(vs)
-	case "EnableQueryCompletionHint":
-		woxSetting.EnableQueryCompletionHint.Set(vb)
-	case "EnableGlance":
-		woxSetting.EnableGlance.Set(vb)
-	case "PrimaryGlance":
-		var glance setting.GlanceRef
-		if err := json.Unmarshal([]byte(vs), &glance); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-		woxSetting.PrimaryGlance.Set(glance)
-	case "HideGlanceIcon":
-		// This setting only changes the launcher presentation. Persisting it in
-		// the shared settings API keeps the behavior consistent after reloads
-		// without asking Glance providers to omit useful icon metadata.
-		woxSetting.HideGlanceIcon.Set(vb)
-	case "ShowScoreTail":
-		// New dev setting: score tails used to be compiled into a helper but
-		// effectively disabled by commented call sites. Persisting this switch
-		// lets developers opt in without editing code for each debug session.
-		woxSetting.ShowScoreTail.Set(vb)
-	case "ShowPerformanceTail":
-		// New dev setting: performance tags were previously always appended in
-		// dev builds. Keeping the check in the backend prevents hidden UI tabs
-		// from being the only guard for noisy query-result tags.
-		woxSetting.ShowPerformanceTail.Set(vb)
-	case "ShowPerformanceTailBatch":
-		woxSetting.ShowPerformanceTailBatch.Set(vb)
-	case "ShowPerformanceTailPluginQuery":
-		woxSetting.ShowPerformanceTailPluginQuery.Set(vb)
-	case "ShowPerformanceTailBackendPrepared":
-		woxSetting.ShowPerformanceTailBackendPrepared.Set(vb)
-	case "ShowPerformanceTailUiReceived":
-		woxSetting.ShowPerformanceTailUiReceived.Set(vb)
-	case "EnableAnonymousUsageStats":
-		woxSetting.EnableAnonymousUsageStats.Set(vb)
-		// When disabled, delete telemetry state to stop tracking
-		if !vb {
-			telemetry.DeleteTelemetryState(ctx)
-		}
-	default:
-		writeErrorResponse(w, "unknown setting key: "+kv.Key)
-		return
-	}
-
-	GetUIManager().PostSettingUpdate(getTraceContext(r), kv.Key, updatedValue)
-
 	writeSuccessResponse(w, "")
 }
 
@@ -1446,9 +883,11 @@ func handleGlance(w http.ResponseWriter, r *http.Request) {
 		keys = append(keys, plugin.GlanceKey{PluginId: glance.PluginId, GlanceId: glance.GlanceId})
 	}
 
-	// Glance data is requested by the UI only for user-selected slots. Keeping
-	// this pull path in HTTP avoids giving plugins a persistent UI push channel.
-	items := plugin.GetPluginManager().GetGlanceItems(getTraceContext(r), keys, request.Reason)
+	items, err := NewCoreServices().GlanceItems(getTraceContext(r), getSessionIdFromHeader(r), keys, request.Reason)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
 	writeSuccessResponse(w, items)
 }
 
@@ -1469,7 +908,7 @@ func handleGlanceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := plugin.GetPluginManager().ExecuteGlanceAction(getTraceContext(r), request.PluginId, request.GlanceId, request.ActionId); err != nil {
+	if err := NewCoreServices().ExecuteGlanceAction(getTraceContext(r), getSessionIdFromHeader(r), request.PluginId, request.GlanceId, request.ActionId); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -1478,13 +917,12 @@ func handleGlanceAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAccountStatus(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	service := account.GetService()
-	if service == nil {
-		writeSuccessResponse(w, account.Status{})
+	status, err := NewCoreServices().AccountStatus(getTraceContext(r), getSessionIdFromHeader(r))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-	writeSuccessResponse(w, service.Status(ctx))
+	writeSuccessResponse(w, status)
 }
 
 // Refreshes account data from the server before returning the latest local status.
@@ -1513,12 +951,7 @@ func handleAccountRegister(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	service := account.GetService()
-	if service == nil {
-		writeErrorResponse(w, "account service is not configured")
-		return
-	}
-	result, err := service.Register(getTraceContext(r), payload.Email, payload.Password, accountRequestLang(payload.Lang))
+	result, err := NewCoreServices().RegisterAccount(getTraceContext(r), getSessionIdFromHeader(r), payload.Email, payload.Password, payload.Lang)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -1537,12 +970,7 @@ func handleAccountVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	service := account.GetService()
-	if service == nil {
-		writeErrorResponse(w, "account service is not configured")
-		return
-	}
-	result, err := service.VerifyEmail(getTraceContext(r), payload.Email, payload.Code, accountRequestLang(payload.Lang))
+	result, err := NewCoreServices().VerifyAccountEmail(getTraceContext(r), getSessionIdFromHeader(r), payload.Email, payload.Code, payload.Lang)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -1561,12 +989,7 @@ func handleAccountLogin(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	service := account.GetService()
-	if service == nil {
-		writeErrorResponse(w, "account service is not configured")
-		return
-	}
-	result, err := service.Login(getTraceContext(r), payload.Email, payload.Password, accountRequestLang(payload.Lang))
+	result, err := NewCoreServices().LoginAccount(getTraceContext(r), getSessionIdFromHeader(r), payload.Email, payload.Password, payload.Lang)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -1575,20 +998,9 @@ func handleAccountLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAccountLogout(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	service := account.GetService()
-	if service == nil {
-		writeSuccessResponse(w, "")
-		return
-	}
-	if err := service.Logout(ctx); err != nil {
+	if err := NewCoreServices().LogoutAccount(getTraceContext(r), getSessionIdFromHeader(r)); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
-	}
-	if cloudService := cloudsync.GetService(); cloudService != nil {
-		if err := cloudService.ResetLocalState(ctx); err != nil {
-			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to reset cloud sync state during logout: %v", err))
-		}
 	}
 	writeSuccessResponse(w, "")
 }
@@ -1603,12 +1015,7 @@ func handleAccountResendVerification(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	service := account.GetService()
-	if service == nil {
-		writeErrorResponse(w, "account service is not configured")
-		return
-	}
-	if err := service.ResendVerification(getTraceContext(r), payload.Email, accountRequestLang(payload.Lang)); err != nil {
+	if err := NewCoreServices().ResendAccountVerification(getTraceContext(r), getSessionIdFromHeader(r), payload.Email, payload.Lang); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -1625,12 +1032,7 @@ func handleAccountPasswordResetRequest(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	service := account.GetService()
-	if service == nil {
-		writeErrorResponse(w, "account service is not configured")
-		return
-	}
-	if err := service.RequestPasswordReset(getTraceContext(r), payload.Email, accountRequestLang(payload.Lang)); err != nil {
+	if err := NewCoreServices().RequestAccountPasswordReset(getTraceContext(r), getSessionIdFromHeader(r), payload.Email, payload.Lang); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -1648,12 +1050,7 @@ func handleAccountPasswordResetConfirm(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	service := account.GetService()
-	if service == nil {
-		writeErrorResponse(w, "account service is not configured")
-		return
-	}
-	if err := service.ConfirmPasswordReset(getTraceContext(r), payload.Token, payload.Password, accountRequestLang(payload.Lang)); err != nil {
+	if err := NewCoreServices().ConfirmAccountPasswordReset(getTraceContext(r), getSessionIdFromHeader(r), payload.Token, payload.Password, payload.Lang); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -1671,12 +1068,7 @@ func handleAccountChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	service := account.GetService()
-	if service == nil {
-		writeErrorResponse(w, "account service is not configured")
-		return
-	}
-	if err := service.ChangePassword(getTraceContext(r), payload.CurrentPassword, payload.NewPassword, accountRequestLang(payload.Lang)); err != nil {
+	if err := NewCoreServices().ChangeAccountPassword(getTraceContext(r), getSessionIdFromHeader(r), payload.CurrentPassword, payload.NewPassword, payload.Lang); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -1684,13 +1076,7 @@ func handleAccountChangePassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAccountBillingCheckout(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	service := account.GetService()
-	if service == nil {
-		writeErrorResponse(w, "account service is not configured")
-		return
-	}
-	session, err := service.CreateCheckoutSession(ctx)
+	session, err := NewCoreServices().BillingSession(getTraceContext(r), getSessionIdFromHeader(r), contract.BillingSessionCheckout)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -1699,13 +1085,7 @@ func handleAccountBillingCheckout(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAccountBillingPlan(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	service := account.GetService()
-	if service == nil {
-		writeErrorResponse(w, "account service is not configured")
-		return
-	}
-	plan, err := service.GetBillingPlan(ctx)
+	plan, err := NewCoreServices().BillingPlan(getTraceContext(r), getSessionIdFromHeader(r))
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -1714,13 +1094,7 @@ func handleAccountBillingPlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAccountBillingPortal(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	service := account.GetService()
-	if service == nil {
-		writeErrorResponse(w, "account service is not configured")
-		return
-	}
-	session, err := service.CreatePortalSession(ctx)
+	session, err := NewCoreServices().BillingSession(getTraceContext(r), getSessionIdFromHeader(r), contract.BillingSessionPortal)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -1781,19 +1155,12 @@ func resolveCloudSyncServerURL(url string) string {
 }
 
 func handleSyncStatus(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	accountService := account.GetService()
-	if accountService == nil || !accountService.Status(ctx).LoggedIn {
-		writeSuccessResponse(w, cloudsync.ServiceStatus{Enabled: false})
+	status, err := NewCoreServices().CloudSyncStatus(getTraceContext(r), getSessionIdFromHeader(r))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-	service := cloudsync.GetService()
-	if service == nil {
-		writeSuccessResponse(w, cloudsync.ServiceStatus{Enabled: false})
-		return
-	}
-
-	writeSuccessResponse(w, service.Status(ctx))
+	writeSuccessResponse(w, status)
 }
 
 type syncBootstrapStatusResponse struct {
@@ -1802,12 +1169,12 @@ type syncBootstrapStatusResponse struct {
 }
 
 func handleSyncBootstrapStatus(w http.ResponseWriter, r *http.Request) {
-	status, err := resolveSyncBootstrapStatus(getTraceContext(r))
+	status, err := NewCoreServices().CloudBootstrapStatus(getTraceContext(r), getSessionIdFromHeader(r))
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	writeSuccessResponse(w, status)
+	writeSuccessResponse(w, syncBootstrapStatusResponse{HasRemoteData: status.HasRemoteData, HasRemoteKey: status.HasRemoteKey})
 }
 
 func handleSyncBootstrapStart(w http.ResponseWriter, r *http.Request) {
@@ -1820,7 +1187,7 @@ func handleSyncBootstrapStart(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	if err := startSyncBootstrap(getTraceContext(r), payload.RecoveryCode); err != nil {
+	if err := NewCoreServices().StartCloudBootstrap(getTraceContext(r), getSessionIdFromHeader(r), payload.RecoveryCode); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -1989,57 +1356,26 @@ func handleSyncDisable(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSyncDeviceJoin(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	accountService := account.GetService()
-	accountStatus := account.Status{}
-	if accountService != nil {
-		accountStatus = accountService.Status(ctx)
-	}
-	if accountService == nil || !accountStatus.LoggedIn {
-		writeErrorResponse(w, "account is not logged in")
-		return
-	}
-	if !accountStatus.SyncEligible {
-		writeErrorResponse(w, "subscription_required")
-		return
-	}
-
-	service := cloudsync.GetService()
-	if service == nil {
-		writeErrorResponse(w, "cloud sync is not configured")
-		return
-	}
-	if err := service.JoinCurrentDevice(ctx); err != nil {
+	if err := NewCoreServices().JoinCloudDevice(getTraceContext(r), getSessionIdFromHeader(r)); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	startCloudSyncManagerIfSyncEnabled(ctx, service)
 	writeSuccessResponse(w, "")
 }
 
 func handleSyncPush(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	service := cloudsync.GetService()
-	if service == nil || service.Manager == nil {
-		writeErrorResponse(w, "cloud sync is not configured")
+	if err := NewCoreServices().PushCloudChanges(getTraceContext(r), getSessionIdFromHeader(r)); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	startCloudSyncManagerIfSyncEnabled(ctx, service)
-	service.Manager.PushPending(ctx, "manual")
 	writeSuccessResponse(w, "")
 }
 
 func handleSyncPull(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	service := cloudsync.GetService()
-	if service == nil || service.Manager == nil {
-		writeErrorResponse(w, "cloud sync is not configured")
+	if err := NewCoreServices().PullCloudChanges(getTraceContext(r), getSessionIdFromHeader(r)); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	startCloudSyncManagerIfSyncEnabled(ctx, service)
-	service.Manager.Pull(ctx, "manual")
 	writeSuccessResponse(w, "")
 }
 
@@ -2178,29 +1514,7 @@ func handleSyncKeyReset(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSyncDevicesList(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	service := cloudsync.GetService()
-	if service == nil || service.DeviceProvider == nil {
-		writeErrorResponse(w, "cloud sync is not configured")
-		return
-	}
-	deviceID, err := service.DeviceProvider.DeviceID(ctx)
-	if err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-	deviceClient := service.DeviceClient
-	if deviceClient == nil {
-		deviceClient = service.Client
-	}
-	if deviceClient == nil {
-		writeErrorResponse(w, "cloud sync is not configured")
-		return
-	}
-	if err := service.UpdateCurrentDevice(ctx); err != nil {
-		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to update current cloud sync device before listing devices: %v", err))
-	}
-	resp, err := deviceClient.ListDevices(ctx, cloudsync.CloudSyncDeviceListRequest{DeviceID: deviceID})
+	resp, err := NewCoreServices().CloudDevices(getTraceContext(r), getSessionIdFromHeader(r))
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -2219,31 +1533,12 @@ func handleSyncDeviceRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := getTraceContext(r)
-	service := cloudsync.GetService()
-	if service == nil || service.DeviceProvider == nil {
-		writeErrorResponse(w, "cloud sync is not configured")
-		return
-	}
-	deviceID, err := service.DeviceProvider.DeviceID(ctx)
+	response, err := NewCoreServices().RevokeCloudDevice(getTraceContext(r), getSessionIdFromHeader(r), payload.TargetDeviceID)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	deviceClient := service.DeviceClient
-	if deviceClient == nil {
-		deviceClient = service.Client
-	}
-	if deviceClient == nil {
-		writeErrorResponse(w, "cloud sync is not configured")
-		return
-	}
-	resp, err := deviceClient.RevokeDevice(ctx, cloudsync.CloudSyncDeviceRevokeRequest{DeviceID: deviceID, TargetDeviceID: payload.TargetDeviceID})
-	if err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-	writeSuccessResponse(w, resp)
+	writeSuccessResponse(w, response)
 }
 
 func normalizeIgnoredHotkeyApps(apps []setting.IgnoredHotkeyApp) []setting.IgnoredHotkeyApp {
@@ -2271,117 +1566,27 @@ func normalizeIgnoredHotkeyApps(apps []setting.IgnoredHotkeyApp) []setting.Ignor
 }
 
 func handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	instances := plugin.GetPluginManager().GetPluginInstances()
-
-	statuses := make([]dto.RuntimeStatusDto, 0, len(plugin.AllHosts))
-	for _, runtimeHost := range plugin.AllHosts {
-		runtime := string(runtimeHost.GetRuntime(ctx))
-
-		var pluginNames []string
-		for _, instance := range instances {
-			if strings.EqualFold(instance.Metadata.Runtime, runtime) {
-				pluginNames = append(pluginNames, instance.GetName(ctx))
-			}
+	statuses := getRuntimeStatuses(getTraceContext(r))
+	converted := make([]dto.RuntimeStatusDto, len(statuses))
+	for index, status := range statuses {
+		converted[index] = dto.RuntimeStatusDto{
+			Runtime:           status.Runtime,
+			IsStarted:         status.IsStarted,
+			HostVersion:       status.HostVersion,
+			StatusCode:        status.StatusCode,
+			StatusMessage:     status.StatusMessage,
+			ExecutablePath:    status.ExecutablePath,
+			LastStartError:    status.LastStartError,
+			CanRestart:        status.CanRestart,
+			InstallUrl:        status.InstallURL,
+			LoadedPluginCount: status.LoadedPluginCount,
+			LoadedPluginNames: append([]string(nil), status.LoadedPluginNames...),
 		}
-		sort.Strings(pluginNames)
-		runtimeStatus := runtimeHost.RuntimeStatus(ctx)
-
-		statuses = append(statuses, dto.RuntimeStatusDto{
-			Runtime:           runtime,
-			IsStarted:         runtimeHost.IsStarted(ctx),
-			HostVersion:       getRuntimeHostVersion(ctx, runtime, runtimeStatus.ExecutablePath),
-			StatusCode:        string(runtimeStatus.StatusCode),
-			StatusMessage:     localizeRuntimeStatusMessage(ctx, runtime, runtimeStatus),
-			ExecutablePath:    runtimeStatus.ExecutablePath,
-			LastStartError:    runtimeStatus.LastStartError,
-			CanRestart:        runtimeStatus.CanRestart,
-			InstallUrl:        runtimeStatus.InstallUrl,
-			LoadedPluginCount: len(pluginNames),
-			LoadedPluginNames: pluginNames,
-		})
 	}
-
-	sort.SliceStable(statuses, func(i, j int) bool {
-		return statuses[i].Runtime < statuses[j].Runtime
-	})
-
-	writeSuccessResponse(w, statuses)
-}
-
-func localizeRuntimeStatusMessage(ctx context.Context, runtime string, status plugin.RuntimeHostStatus) string {
-	runtimeName := runtime
-	switch strings.ToUpper(runtime) {
-	case string(plugin.PLUGIN_RUNTIME_NODEJS):
-		runtimeName = "Node.js"
-	case string(plugin.PLUGIN_RUNTIME_PYTHON):
-		runtimeName = "Python"
-	}
-
-	// Feature: /runtime/status returns localized user-facing status text, while
-	// LastStartError keeps raw technical details only for true host startup
-	// failures. This prevents English executable resolver messages from leaking
-	// into localized settings UI.
-	switch status.StatusCode {
-	case plugin.RuntimeHostStatusRunning:
-		return i18n.GetI18nManager().TranslateWox(ctx, "ui_runtime_status_running")
-	case plugin.RuntimeHostStatusExecutableMissing:
-		return strings.ReplaceAll(i18n.GetI18nManager().TranslateWox(ctx, "ui_runtime_status_executable_missing_detail"), "{runtime}", runtimeName)
-	case plugin.RuntimeHostStatusUnsupportedVersion:
-		return strings.ReplaceAll(i18n.GetI18nManager().TranslateWox(ctx, "ui_runtime_status_unsupported_version_detail"), "{runtime}", runtimeName)
-	case plugin.RuntimeHostStatusStartFailed:
-		return i18n.GetI18nManager().TranslateWox(ctx, "ui_runtime_status_start_failed_detail")
-	case plugin.RuntimeHostStatusStopped:
-		return i18n.GetI18nManager().TranslateWox(ctx, "ui_runtime_status_stopped")
-	default:
-		return status.StatusMessage
-	}
-}
-
-func getRuntimeHostVersion(ctx context.Context, runtime string, executablePath string) string {
-	if executablePath == "" {
-		return ""
-	}
-
-	runtimeUpper := strings.ToUpper(runtime)
-	switch runtimeUpper {
-	case string(plugin.PLUGIN_RUNTIME_NODEJS):
-		return getNodejsHostVersion(ctx, executablePath)
-	case string(plugin.PLUGIN_RUNTIME_PYTHON):
-		return getPythonHostVersion(ctx, executablePath)
-	default:
-		return ""
-	}
-}
-
-func getNodejsHostVersion(ctx context.Context, nodePath string) string {
-	versionOutput, err := shell.RunOutput(nodePath, "-v")
-	if err != nil {
-		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to get nodejs host version: %s", err))
-		return ""
-	}
-
-	return strings.TrimSpace(string(versionOutput))
-}
-
-func getPythonHostVersion(ctx context.Context, pythonPath string) string {
-	versionOutput, err := shell.RunOutput(pythonPath, "--version")
-	version := strings.TrimSpace(string(versionOutput))
-	if err != nil || version == "" {
-		versionOutput, err = shell.RunOutput(pythonPath, "-c", "import sys;print(sys.version.split()[0])")
-		if err != nil {
-			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to get python host version: %s", err))
-			return ""
-		}
-		version = strings.TrimSpace(string(versionOutput))
-	}
-
-	return strings.TrimPrefix(version, "Python ")
+	writeSuccessResponse(w, converted)
 }
 
 func handleRuntimeRestart(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
 	body, _ := io.ReadAll(r.Body)
 	runtimeResult := gjson.GetBytes(body, "Runtime")
 	if !runtimeResult.Exists() {
@@ -2389,16 +1594,7 @@ func handleRuntimeRestart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runtime := plugin.ConvertToRuntime(runtimeResult.String())
-	if runtime != plugin.PLUGIN_RUNTIME_NODEJS && runtime != plugin.PLUGIN_RUNTIME_PYTHON {
-		writeErrorResponse(w, fmt.Sprintf("runtime %s does not support restart from settings", runtime))
-		return
-	}
-
-	// Feature: expose a small restart endpoint so users can recover after fixing
-	// Node.js/Python paths without restarting Wox. Reusing the plugin manager
-	// keeps loaded plugin restoration in one place.
-	if err := plugin.GetPluginManager().RestartHostForRuntime(ctx, runtime, nil, nil); err != nil {
+	if err := NewCoreServices().RestartRuntime(getTraceContext(r), getSessionIdFromHeader(r), runtimeResult.String()); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -2421,39 +1617,9 @@ func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pluginInstance, exist := lo.Find(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
-		if item.Metadata.Id == kv.PluginId {
-			return true
-		}
-		return false
-	})
-	if !exist {
-		writeErrorResponse(w, "can't find plugin")
+	if err := NewCoreServices().UpdatePluginSettings(getTraceContext(r), getSessionIdFromHeader(r), kv.PluginId, map[string]string{kv.Key: kv.Value}); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
-	}
-
-	if kv.Key == "Disabled" {
-		var updateErr error
-		if kv.Value == "true" {
-			updateErr = plugin.GetPluginManager().DisablePlugin(getTraceContext(r), kv.PluginId)
-		} else {
-			updateErr = plugin.GetPluginManager().EnablePlugin(getTraceContext(r), kv.PluginId)
-		}
-		if updateErr != nil {
-			writeErrorResponse(w, updateErr.Error())
-			return
-		}
-	} else if kv.Key == "TriggerKeywords" {
-		pluginInstance.Setting.TriggerKeywords.Set(strings.Split(kv.Value, ","))
-	} else {
-		var isPlatformSpecific = false
-		for _, settingDefinition := range pluginInstance.Metadata.SettingDefinitions {
-			if settingDefinition.Value != nil && settingDefinition.Value.GetKey() == kv.Key {
-				isPlatformSpecific = settingDefinition.IsPlatformSpecific
-				break
-			}
-		}
-		pluginInstance.API.SaveSetting(getTraceContext(r), kv.Key, kv.Value, isPlatformSpecific)
 	}
 
 	writeSuccessResponse(w, "")
@@ -2467,8 +1633,10 @@ func handleOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shell.Open(pathResult.String())
-
+	if err := NewCoreServices().OpenPath(getTraceContext(r), getSessionIdFromHeader(r), pathResult.String()); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
 	writeSuccessResponse(w, "")
 }
 
@@ -2498,12 +1666,10 @@ func handleSaveWindowPosition(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleBackupNow(w http.ResponseWriter, r *http.Request) {
-	backupErr := setting.GetSettingManager().Backup(getTraceContext(r), setting.BackupTypeManual)
-	if backupErr != nil {
-		writeErrorResponse(w, backupErr.Error())
+	if err := NewCoreServices().CreateDataBackup(getTraceContext(r), getSessionIdFromHeader(r)); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
 	writeSuccessResponse(w, "")
 }
 
@@ -2515,75 +1681,49 @@ func handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	backupId := idResult.String()
-	restoreErr := setting.GetSettingManager().Restore(getTraceContext(r), backupId)
-	if restoreErr != nil {
-		writeErrorResponse(w, restoreErr.Error())
+	if err := NewCoreServices().RestoreDataBackup(getTraceContext(r), getSessionIdFromHeader(r), idResult.String()); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
 	writeSuccessResponse(w, "")
 }
 
 func handleBackupAll(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
-	backups, err := setting.GetSettingManager().FindAllBackups(ctx)
+	backups, err := NewCoreServices().DataBackups(getTraceContext(r), getSessionIdFromHeader(r))
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	writeSuccessResponse(w, backups)
+	legacy := make([]setting.Backup, len(backups))
+	for index, backup := range backups {
+		legacy[index] = setting.Backup{Id: backup.ID, Name: backup.Name, Timestamp: backup.Timestamp, Type: setting.BackupType(backup.Type), Path: backup.Path}
+	}
+	writeSuccessResponse(w, legacy)
 }
 
 func handleBackupFolder(w http.ResponseWriter, r *http.Request) {
-	backupDir := util.GetLocation().GetBackupDirectory()
-
-	// Ensure backup directory exists
-	if err := util.GetLocation().EnsureDirectoryExist(backupDir); err != nil {
-		writeErrorResponse(w, fmt.Sprintf("Failed to create backup directory: %s", err.Error()))
+	backupDir, err := NewCoreServices().BackupFolder(getTraceContext(r), getSessionIdFromHeader(r))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
 	writeSuccessResponse(w, backupDir)
 }
 
 func handleLogClear(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
-	err := util.GetLogger().ClearHistory()
-	if err != nil {
-		GetUIManager().GetUI(ctx).Notify(ctx, common.NotifyMsg{
-			Icon:           common.WoxIcon.String(),
-			Text:           fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "ui_data_log_clear_notify_failed"), err.Error()),
-			DisplaySeconds: 6,
-		})
+	if err := NewCoreServices().ClearLogs(ctx, getSessionIdFromHeader(r)); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	GetUIManager().GetUI(ctx).Notify(ctx, common.NotifyMsg{
-		Icon:           common.WoxIcon.String(),
-		Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_data_log_clear_notify_success"),
-		DisplaySeconds: 4,
-	})
 	writeSuccessResponse(w, "")
 }
 
 func handleLogOpen(w http.ResponseWriter, r *http.Request) {
-	logFile := util.GetLogger().CurrentLogPath()
-	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
+	if err := NewCoreServices().OpenLog(getTraceContext(r), getSessionIdFromHeader(r)); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	_ = file.Close()
-
-	if err := shell.OpenFileInFolder(logFile); err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-
 	writeSuccessResponse(w, "")
 }
 
@@ -2688,8 +1828,6 @@ func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleHotkeyAvailability(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
 	body, _ := io.ReadAll(r.Body)
 	hotkeyResult := gjson.GetBytes(body, "hotkey")
 	if !hotkeyResult.Exists() {
@@ -2697,7 +1835,11 @@ func handleHotkeyAvailability(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	availability := GetUIManager().CheckHotkeyAvailability(ctx, hotkeyResult.String())
+	availability, err := NewCoreServices().CheckHotkeyAvailability(getTraceContext(r), getSessionIdFromHeader(r), hotkeyResult.String())
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
 	writeSuccessResponse(w, availability)
 }
 
@@ -2734,12 +1876,15 @@ func startCloudSyncManagerIfSyncEnabled(ctx context.Context, service *cloudsync.
 }
 
 func handleLangAvailable(w http.ResponseWriter, r *http.Request) {
-	writeSuccessResponse(w, i18n.GetSupportedLanguages())
+	languages, err := NewCoreServices().AvailableLanguages(getTraceContext(r), getSessionIdFromHeader(r))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, languages)
 }
 
 func handleLangJson(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
 	body, _ := io.ReadAll(r.Body)
 	langCodeResult := gjson.GetBytes(body, "langCode")
 	if !langCodeResult.Exists() {
@@ -2748,15 +1893,8 @@ func handleLangJson(w http.ResponseWriter, r *http.Request) {
 	}
 	langCode := langCodeResult.String()
 
-	if !i18n.IsSupportedLangCode(langCode) {
-		logger.Error(ctx, fmt.Sprintf("unsupported lang code: %s", langCode))
-		writeErrorResponse(w, fmt.Sprintf("unsupported lang code: %s", langCode))
-		return
-	}
-
-	langJson, err := i18n.GetI18nManager().GetLangJson(ctx, i18n.LangCode(langCode))
+	langJson, err := NewCoreServices().LanguageJSON(getTraceContext(r), getSessionIdFromHeader(r), i18n.LangCode(langCode))
 	if err != nil {
-		logger.Error(ctx, err.Error())
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -2771,7 +1909,6 @@ func handleOnQueryBoxFocus(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleOnHotkeyRecording(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	isRecordingResult := gjson.GetBytes(body, "isRecording")
 	if !isRecordingResult.Exists() {
@@ -2798,8 +1935,15 @@ func handleOnHotkeyRecording(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	logger.Info(ctx, fmt.Sprintf("received hotkey recording state from UI: isRecording=%t purpose=%s allowedKinds=%v", isRecordingResult.Bool(), purpose, allowedKinds))
-	capability, err := GetUIManager().PostOnHotkeyRecording(ctx, isRecordingResult.Bool(), purpose, allowedKinds)
+	var (
+		capability contract.HotkeyRecordingCapability
+		err        error
+	)
+	if isRecordingResult.Bool() {
+		capability, err = NewCoreServices().StartHotkeyRecording(getTraceContext(r), getSessionIdFromHeader(r), purpose, allowedKinds)
+	} else {
+		err = NewCoreServices().StopHotkeyRecording(getTraceContext(r), getSessionIdFromHeader(r))
+	}
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -2808,7 +1952,6 @@ func handleOnHotkeyRecording(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleOnHotkeyRecordingCandidate(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	hotkeyResult := gjson.GetBytes(body, "hotkey")
 	if !hotkeyResult.Exists() || strings.TrimSpace(hotkeyResult.String()) == "" {
@@ -2816,7 +1959,7 @@ func handleOnHotkeyRecordingCandidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := GetUIManager().PostHotkeyRecordingCandidate(ctx, strings.TrimSpace(hotkeyResult.String())); err != nil {
+	if err := NewCoreServices().SubmitHotkeyRecordingCandidate(getTraceContext(r), getSessionIdFromHeader(r), hotkeyResult.String()); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -2863,27 +2006,8 @@ func handleAICommandStore(w http.ResponseWriter, r *http.Request) {
 
 func handleAIModels(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
-
-	var results = []common.Model{}
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	for _, providerSetting := range woxSetting.AIProviders.Get() {
-		provider, err := ai.NewProvider(ctx, providerSetting)
-		if err != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to new ai provider: %s", err.Error()))
-			continue
-		}
-
-		models, modelsErr := provider.Models(ctx)
-		if modelsErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to get models for provider %s: %s", providerSetting.Name, modelsErr.Error()))
-			continue
-		}
-
-		results = append(results, models...)
-	}
-
+	results := getAIModels(ctx)
 	logger.Info(ctx, fmt.Sprintf("found %d ai models", len(results)))
-
 	writeSuccessResponse(w, results)
 }
 
@@ -3088,34 +2212,27 @@ func handleAISkills(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAISkillsClone(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
 	body, _ := io.ReadAll(r.Body)
 	parsed := gjson.ParseBytes(body)
 	url := parsed.Get("url").String()
-	if strings.TrimSpace(url) == "" {
-		writeErrorResponse(w, "url is required")
-		return
-	}
-
-	stubs, err := ai.DiscoverRemoteSkills(ctx, url)
+	skills, err := NewCoreServices().CloneAISkills(getTraceContext(r), getSessionIdFromHeader(r), url)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
 
-	results := make([]map[string]interface{}, 0, len(stubs))
-	for _, stub := range stubs {
+	results := make([]map[string]interface{}, 0, len(skills))
+	for _, skill := range skills {
 		results = append(results, map[string]interface{}{
-			"Path":         stub.Path,
-			"ManifestPath": stub.ManifestPath,
-			"Name":         stub.Name,
-			"Description":  stub.Description,
-			"Error":        stub.Error,
-			"Source":       "remote",
-			"SourceName":   "Remote",
-			"SourceUrl":    stub.SourceUrl,
-			"Enabled":      true,
+			"Path":         skill.Path,
+			"ManifestPath": skill.ManifestPath,
+			"Name":         skill.Name,
+			"Description":  skill.Description,
+			"Error":        skill.Error,
+			"Source":       skill.Source,
+			"SourceName":   skill.SourceName,
+			"SourceUrl":    skill.SourceURL,
+			"Enabled":      skill.Enabled,
 		})
 	}
 	writeSuccessResponse(w, results)
@@ -3277,8 +2394,12 @@ func handleMacOSPermissionOpen(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleUserDataLocation(w http.ResponseWriter, r *http.Request) {
-	location := util.GetLocation()
-	writeSuccessResponse(w, location.GetUserDataDirectory())
+	location, err := NewCoreServices().DataLocation(getTraceContext(r), getSessionIdFromHeader(r))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, location)
 }
 
 func handleUserDataLocationUpdate(w http.ResponseWriter, r *http.Request) {
@@ -3298,8 +2419,7 @@ func handleUserDataLocationUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use the manager method to handle directory change
-	err := GetUIManager().ChangeUserDataDirectory(ctx, newLocation)
+	err := NewCoreServices().ChangeDataLocation(ctx, getSessionIdFromHeader(r), newLocation)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("Failed to change user data directory: %s", err.Error()))
 		writeErrorResponse(w, fmt.Sprintf("Failed to change user data directory: %s", err.Error()))
@@ -3416,26 +2536,9 @@ func handleVersion(w http.ResponseWriter, r *http.Request) {
 // recommended model IDs. The download runs asynchronously and progress is
 // reported via the model status endpoint.
 func handleDictationModelDownload(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	modelID := gjson.GetBytes(body, "modelId").String()
-	if modelID == "" {
-		writeErrorResponse(w, "modelId is required")
-		return
-	}
-
-	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
-	if sp == nil {
-		writeErrorResponse(w, "dictation plugin not found")
-		return
-	}
-	dp, ok := sp.(*dictationplugin.DictationPlugin)
-	if !ok {
-		writeErrorResponse(w, "dictation plugin type assertion failed")
-		return
-	}
-
-	if err := dp.StartModelDownload(ctx, modelID); err != nil {
+	if err := NewCoreServices().OperateManagedModel(getTraceContext(r), getSessionIdFromHeader(r), contract.ManagedModelDictation, contract.ManagedModelOperationDownload, modelID); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -3444,26 +2547,9 @@ func handleDictationModelDownload(w http.ResponseWriter, r *http.Request) {
 
 // handleDictationModelDelete deletes a downloaded model from disk.
 func handleDictationModelDelete(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	modelID := gjson.GetBytes(body, "modelId").String()
-	if modelID == "" {
-		writeErrorResponse(w, "modelId is required")
-		return
-	}
-
-	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
-	if sp == nil {
-		writeErrorResponse(w, "dictation plugin not found")
-		return
-	}
-	dp, ok := sp.(*dictationplugin.DictationPlugin)
-	if !ok {
-		writeErrorResponse(w, "dictation plugin type assertion failed")
-		return
-	}
-
-	if err := dp.DeleteModel(ctx, modelID); err != nil {
+	if err := NewCoreServices().OperateManagedModel(getTraceContext(r), getSessionIdFromHeader(r), contract.ManagedModelDictation, contract.ManagedModelOperationDelete, modelID); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -3473,55 +2559,27 @@ func handleDictationModelDelete(w http.ResponseWriter, r *http.Request) {
 // handleDictationModelStatus returns the download status for all known models.
 // The UI side polls this to update the model dropdown with live progress.
 func handleDictationModelStatus(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
-	if sp == nil {
-		writeErrorResponse(w, "dictation plugin not found")
+	status, err := NewCoreServices().ManagedModelStatuses(getTraceContext(r), getSessionIdFromHeader(r), contract.ManagedModelDictation)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-	dp, ok := sp.(*dictationplugin.DictationPlugin)
-	if !ok {
-		writeErrorResponse(w, "dictation plugin type assertion failed")
-		return
-	}
-
-	status := dp.GetModelStatuses(ctx)
 	writeSuccessResponse(w, status)
 }
 
 // handleDictationNativeLibStatus returns the native library download status.
 func handleDictationNativeLibStatus(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
-	if sp == nil {
-		writeErrorResponse(w, "dictation plugin not found")
+	status, err := NewCoreServices().ManagedModelEngineStatus(getTraceContext(r), getSessionIdFromHeader(r), contract.ManagedModelDictation)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-	dp, ok := sp.(*dictationplugin.DictationPlugin)
-	if !ok {
-		writeErrorResponse(w, "dictation plugin type assertion failed")
-		return
-	}
-
-	status := dp.GetNativeLibStatus(ctx)
 	writeSuccessResponse(w, status)
 }
 
 // handleDictationNativeLibDownload triggers a native library download.
 func handleDictationNativeLibDownload(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
-	if sp == nil {
-		writeErrorResponse(w, "dictation plugin not found")
-		return
-	}
-	dp, ok := sp.(*dictationplugin.DictationPlugin)
-	if !ok {
-		writeErrorResponse(w, "dictation plugin type assertion failed")
-		return
-	}
-
-	if err := dp.StartNativeLibDownload(ctx); err != nil {
+	if err := NewCoreServices().OperateManagedModel(getTraceContext(r), getSessionIdFromHeader(r), contract.ManagedModelDictation, contract.ManagedModelOperationDownloadEngine, ""); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
@@ -3530,36 +2588,29 @@ func handleDictationNativeLibDownload(w http.ResponseWriter, r *http.Request) {
 
 // handleOCRModelStatus returns the shared downloadable OCR model status.
 func handleOCRModelStatus(w http.ResponseWriter, r *http.Request) {
-	status, err := ocr.GetPaddleModelStatus()
+	status, err := NewCoreServices().ManagedModelStatuses(getTraceContext(r), getSessionIdFromHeader(r), contract.ManagedModelOCR)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
 	}
-	writeSuccessResponse(w, []ocr.PaddleModelStatus{status})
+	writeSuccessResponse(w, status)
 }
 
 // handleOCRModelDownload starts a PP-OCRv6 small download without blocking
 // the settings request. The picker polls the status endpoint for progress.
 func handleOCRModelDownload(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	modelID := gjson.GetBytes(body, "modelId").String()
-	if modelID != ocr.ModelPaddlePPOCRv6Small {
-		writeErrorResponse(w, "unsupported OCR model")
+	if err := NewCoreServices().OperateManagedModel(getTraceContext(r), getSessionIdFromHeader(r), contract.ManagedModelOCR, contract.ManagedModelOperationDownload, modelID); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	util.Go(ctx, "download OCR model", func() {
-		if err := ocr.DownloadPaddleModel(ctx); err != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to download OCR model: %s", err.Error()))
-		}
-	})
 	writeSuccessResponse(w, "")
 }
 
 // handleOCREngineStatus returns the shared ONNX Runtime state for PaddleOCR.
 func handleOCREngineStatus(w http.ResponseWriter, r *http.Request) {
-	status, err := ocr.GetPaddleEngineStatus()
+	status, err := NewCoreServices().ManagedModelEngineStatus(getTraceContext(r), getSessionIdFromHeader(r), contract.ManagedModelOCR)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -3569,11 +2620,9 @@ func handleOCREngineStatus(w http.ResponseWriter, r *http.Request) {
 
 // handleOCREngineDownload starts the OCR runtime download without blocking settings.
 func handleOCREngineDownload(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-	util.Go(ctx, "download OCR engine", func() {
-		if err := ocr.DownloadPaddleEngine(ctx); err != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to download OCR engine: %s", err.Error()))
-		}
-	})
+	if err := NewCoreServices().OperateManagedModel(getTraceContext(r), getSessionIdFromHeader(r), contract.ManagedModelOCR, contract.ManagedModelOperationDownloadEngine, ""); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
 	writeSuccessResponse(w, "")
 }

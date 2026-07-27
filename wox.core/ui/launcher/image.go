@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/common"
 	woxui "wox/ui/runtime"
 	woxsvg "wox/util/svg"
 )
@@ -120,14 +121,14 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgSize 
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		var resolved woxImage
-		err := a.client.Post(ctx, "/image/lazy/load", map[string]string{"token": payload.Token}, &resolved)
+		loaded, err := a.services.LoadLazyResultImage(ctx, a.sessionID, payload.Token)
 		cancel()
 		if err != nil {
 			log.Printf("load lazy result image: %v", err)
 			a.storeImageError(key, err)
 			return
 		}
+		resolved := woxImage{ImageType: loaded.ImageType, ImageData: loaded.ImageData}
 		image, err := decodeWoxImageWithTint(resolved, tint, svgSize)
 		if err != nil {
 			log.Printf("decode resolved lazy result image: %v", err)
@@ -139,14 +140,14 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgSize 
 	}
 	if source.ImageType == "url" || source.ImageType == "emoji" || source.ImageType == "fileicon" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		var resolved woxImage
-		err := a.client.Post(ctx, "/image/resolve", map[string]any{"Image": source, "Size": svgSize}, &resolved)
+		loaded, err := a.services.ResolveImage(ctx, a.sessionID, common.WoxImage{ImageType: source.ImageType, ImageData: source.ImageData}, svgSize)
 		cancel()
 		if err != nil {
 			log.Printf("resolve %s result image %q: %v", source.ImageType, source.ImageData, err)
 			a.storeImageError(key, err)
 			return
 		}
+		resolved := woxImage{ImageType: loaded.ImageType, ImageData: loaded.ImageData}
 		image, err := decodeWoxImageWithTint(resolved, tint, svgSize)
 		if err != nil {
 			log.Printf("decode resolved %s result image: %v", source.ImageType, err)

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/ui/contract"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -262,17 +263,23 @@ func (a *App) refreshModelManager(state *modelManagerState) {
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 
-	statusRoute := "/dictation/model/status"
-	engineRoute := "/dictation/native-lib/status"
+	modelKind := contract.ManagedModelDictation
 	if kind == "ocrModel" {
-		statusRoute = "/ocr/model/status"
-		engineRoute = "/ocr/engine/status"
+		modelKind = contract.ManagedModelOCR
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-	var statuses []formOption
-	statusErr := a.client.Post(ctx, statusRoute, nil, &statuses)
-	var engine modelEngineStatus
-	engineErr := a.client.Post(ctx, engineRoute, nil, &engine)
+	loadedStatuses, statusErr := a.services.ManagedModelStatuses(ctx, a.sessionID, modelKind)
+	statuses := make([]formOption, len(loadedStatuses))
+	for index, status := range loadedStatuses {
+		statuses[index] = formOption{
+			ID: status.ID, DisplayName: status.DisplayName, Description: status.Description, Languages: status.Languages,
+			Recommended: status.Recommended, Status: status.Status, DownloadProgress: status.DownloadProgress, SizeMB: status.SizeMB, Error: status.Error,
+		}
+	}
+	loadedEngine, engineErr := a.services.ManagedModelEngineStatus(ctx, a.sessionID, modelKind)
+	engine := modelEngineStatus{
+		State: loadedEngine.State, Progress: loadedEngine.Progress, Error: loadedEngine.Error, Ready: loadedEngine.Ready,
+	}
 	cancel()
 	engine.Known = engineErr == nil
 
@@ -398,22 +405,18 @@ func (a *App) runModelManagerAction(action string, index int) {
 	a.invalidateSettingsWindow()
 
 	go func() {
-		route := "/dictation/model/download"
-		payload := any(map[string]string{"modelId": modelID})
+		modelKind := contract.ManagedModelDictation
 		if kind == "ocrModel" {
-			route = "/ocr/model/download"
+			modelKind = contract.ManagedModelOCR
 		}
+		operation := contract.ManagedModelOperationDownload
 		if action == "delete" {
-			route = "/dictation/model/delete"
+			operation = contract.ManagedModelOperationDelete
 		} else if action == "engine" {
-			payload = nil
-			route = "/dictation/native-lib/download"
-			if kind == "ocrModel" {
-				route = "/ocr/engine/download"
-			}
+			operation = contract.ManagedModelOperationDownloadEngine
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		err := a.client.Post(ctx, route, payload, nil)
+		err := a.services.OperateManagedModel(ctx, a.sessionID, modelKind, operation, modelID)
 		cancel()
 		a.mu.Lock()
 		if !a.modelManagerCurrentLocked(state) {

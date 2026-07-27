@@ -135,7 +135,7 @@ func settingsIgnoredHotkeyAppsCoreJSON(value string) (string, error) {
 // loadHotkeyAppCandidates asks core for platform-specific identities and keeps the picker itself platform-neutral.
 // Delegates to the hotkey controller which owns the candidate cache and load status.
 func (a *App) loadHotkeyAppCandidates() {
-	a.hotkeySettings.ReloadAppCandidates(context.Background(), a.client)
+	a.hotkeySettings.ReloadAppCandidates(context.Background(), a.services, a.sessionID)
 }
 
 func settingsRowsJSON(value any) string {

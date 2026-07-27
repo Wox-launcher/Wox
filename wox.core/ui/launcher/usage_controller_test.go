@@ -5,7 +5,18 @@ import (
 	"errors"
 	"sync"
 	"testing"
+
+	"wox/ui/contract"
 )
+
+type fakeUsageSettingsService struct {
+	stats contract.UsageStats
+	err   error
+}
+
+func (f *fakeUsageSettingsService) UsageStats(_ context.Context, _ string, _ string) (contract.UsageStats, error) {
+	return f.stats, f.err
+}
 
 func TestUsageControllerReloadSuccess(t *testing.T) {
 	invalidateCalled := 0
@@ -14,8 +25,8 @@ func TestUsageControllerReloadSuccess(t *testing.T) {
 		Translate:  func(s string) string { return s },
 	}
 	c := newUsageSettingsController(deps)
-	client := &fakeBackendClient{stats: usageStatsData{PeriodOpened: 42, Period: "7d"}}
-	c.Reload(context.Background(), client, "7d")
+	service := &fakeUsageSettingsService{stats: contract.UsageStats{PeriodOpened: 42, Period: "7d"}}
+	c.Reload(context.Background(), service, "session", "7d")
 	snap := c.Snapshot()
 	if snap.Stats.PeriodOpened != 42 {
 		t.Fatalf("Stats.PeriodOpened = %d, want 42", snap.Stats.PeriodOpened)
@@ -40,8 +51,8 @@ func TestUsageControllerReloadSuccess(t *testing.T) {
 func TestUsageControllerReloadError(t *testing.T) {
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
 	c := newUsageSettingsController(deps)
-	client := &fakeBackendClient{err: errors.New("network down")}
-	c.Reload(context.Background(), client, "7d")
+	service := &fakeUsageSettingsService{err: errors.New("network down")}
+	c.Reload(context.Background(), service, "session", "7d")
 	snap := c.Snapshot()
 	if snap.Error == "" {
 		t.Fatalf("Error should be recorded, got empty")
@@ -65,21 +76,21 @@ func TestUsageControllerReloadStaleResponseIgnored(t *testing.T) {
 	var firstCallReturned sync.WaitGroup
 	firstCallReturned.Add(1)
 
-	blockingClient := &signalBlockingBackendClient{
+	blockingService := &signalBlockingUsageService{
 		entered:  enteredPost,
 		release:  releaseFirst,
-		response: usageStatsData{PeriodOpened: 1, Period: "7d"},
+		response: contract.UsageStats{PeriodOpened: 1, Period: "7d"},
 	}
 	go func() {
 		defer firstCallReturned.Done()
-		c.Reload(context.Background(), blockingClient, "7d")
+		c.Reload(context.Background(), blockingService, "session", "7d")
 	}()
 
 	<-enteredPost
 	// B is guaranteed to start after A has already bumped revision to 1,
 	// so B bumps to 2 and returns immediately with the fresh stats.
-	freshClient := &fakeBackendClient{stats: usageStatsData{PeriodOpened: 99, Period: "30d"}}
-	c.Reload(context.Background(), freshClient, "30d")
+	freshService := &fakeUsageSettingsService{stats: contract.UsageStats{PeriodOpened: 99, Period: "30d"}}
+	c.Reload(context.Background(), freshService, "session", "30d")
 
 	// Release A's Post; A checks 1 != 2 and returns without writing.
 	close(releaseFirst)
@@ -119,19 +130,15 @@ func TestUsageControllerSetShareError(t *testing.T) {
 	}
 }
 
-// signalBlockingBackendClient closes entered inside Post before blocking on release,
-// so callers can prove the controller has already locked, bumped revision, and entered Post.
-type signalBlockingBackendClient struct {
+// signalBlockingUsageService closes entered before blocking on release.
+type signalBlockingUsageService struct {
 	entered  chan<- struct{}
 	release  <-chan struct{}
-	response usageStatsData
+	response contract.UsageStats
 }
 
-func (b *signalBlockingBackendClient) Post(_ context.Context, _ string, _ any, out any) error {
+func (b *signalBlockingUsageService) UsageStats(_ context.Context, _ string, _ string) (contract.UsageStats, error) {
 	close(b.entered)
 	<-b.release
-	if ptr, ok := out.(*usageStatsData); ok {
-		*ptr = b.response
-	}
-	return nil
+	return b.response, nil
 }

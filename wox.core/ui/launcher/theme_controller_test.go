@@ -2,43 +2,32 @@ package launcher
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"sync"
 	"testing"
 
+	"wox/common"
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
 
-// themeFakeBackend serves the /theme/store and /theme/installed routes from
-// pre-populated payloads, with optional per-route errors.
-type themeFakeBackend struct {
-	mu       sync.Mutex
-	themes   map[string][]json.RawMessage
+type themeFakeService struct {
+	themes   map[contract.ThemeCatalog][]contract.ThemeCatalogItem
 	storeErr error
 	instErr  error
 }
 
-func (f *themeFakeBackend) Post(_ context.Context, path string, _ any, out any) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	switch path {
-	case "/theme/store":
+func (f *themeFakeService) Themes(_ context.Context, _ string, catalog contract.ThemeCatalog) ([]contract.ThemeCatalogItem, error) {
+	switch catalog {
+	case contract.ThemeCatalogStore:
 		if f.storeErr != nil {
-			return f.storeErr
+			return nil, f.storeErr
 		}
-		if ptr, ok := out.(*[]json.RawMessage); ok {
-			*ptr = append([]json.RawMessage(nil), f.themes["store"]...)
-		}
-	case "/theme/installed":
+	case contract.ThemeCatalogInstalled:
 		if f.instErr != nil {
-			return f.instErr
-		}
-		if ptr, ok := out.(*[]json.RawMessage); ok {
-			*ptr = append([]json.RawMessage(nil), f.themes["installed"]...)
+			return nil, f.instErr
 		}
 	}
-	return nil
+	return append([]contract.ThemeCatalogItem(nil), f.themes[catalog]...), nil
 }
 
 func newThemeControllerDeps() (CommonDeps, *int) {
@@ -94,12 +83,12 @@ func TestThemeControllerWallpaper(t *testing.T) {
 func TestThemeControllerReloadThemesSuccess(t *testing.T) {
 	deps, invalidateCalled := newThemeControllerDeps()
 	c := newThemeSettingsController(deps)
-	payloads := []json.RawMessage{
-		json.RawMessage(`{"ThemeId":"t1","ThemeName":"Theme One","AppBackgroundColor":"#000000"}`),
-		json.RawMessage(`{"ThemeId":"t2","ThemeName":"Theme Two","AppBackgroundColor":"#111111"}`),
+	items := []contract.ThemeCatalogItem{
+		{Theme: common.Theme{ThemeId: "t1", ThemeName: "Theme One", AppBackgroundColor: "#000000"}},
+		{Theme: common.Theme{ThemeId: "t2", ThemeName: "Theme Two", AppBackgroundColor: "#111111"}},
 	}
-	client := &themeFakeBackend{themes: map[string][]json.RawMessage{"store": payloads}}
-	err := c.ReloadThemes(context.Background(), client, "store", "", "")
+	service := &themeFakeService{themes: map[contract.ThemeCatalog][]contract.ThemeCatalogItem{contract.ThemeCatalogStore: items}}
+	err := c.ReloadThemes(context.Background(), service, "session", "store", "", "")
 	if err != nil {
 		t.Fatalf("ReloadThemes error: %v", err)
 	}
@@ -124,8 +113,8 @@ func TestThemeControllerReloadThemesSuccess(t *testing.T) {
 func TestThemeControllerReloadThemesError(t *testing.T) {
 	deps, _ := newThemeControllerDeps()
 	c := newThemeSettingsController(deps)
-	client := &themeFakeBackend{storeErr: errors.New("network failed")}
-	err := c.ReloadThemes(context.Background(), client, "store", "", "")
+	service := &themeFakeService{storeErr: errors.New("network failed")}
+	err := c.ReloadThemes(context.Background(), service, "session", "store", "", "")
 	if err == nil {
 		t.Fatalf("ReloadThemes should return error on network failure")
 	}

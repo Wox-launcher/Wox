@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/common"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -217,7 +218,7 @@ func (a *App) openPreviewImageOverlay(image woxImage) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := a.client.Post(ctx, "/preview/image/overlay", map[string]any{"Image": image}, nil); err != nil {
+		if err := a.services.ShowPreviewImage(ctx, a.sessionID, common.WoxImage{ImageType: image.ImageType, ImageData: image.ImageData}); err != nil {
 			log.Printf("open preview image overlay: %v", err)
 		}
 	}()

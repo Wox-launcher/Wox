@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -65,7 +66,25 @@ func (a *App) loadRemotePreview(path string, fallback queryPreview) {
 		resolved.PreviewData = "Core returned an invalid remote preview path"
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		err := a.client.Get(ctx, path, &resolved)
+		parsed, parseErr := url.Parse(path)
+		var err error
+		if parseErr != nil || parsed.Path != "/preview" {
+			err = fmt.Errorf("invalid remote preview path")
+		} else {
+			query := parsed.Query()
+			loaded, loadErr := a.services.ResultPreview(ctx, a.sessionID, query.Get("sessionId"), query.Get("queryId"), query.Get("id"))
+			err = loadErr
+			if err == nil {
+				tags := make([]previewTag, len(loaded.PreviewTags))
+				for index, tag := range loaded.PreviewTags {
+					tags[index] = previewTag{Label: tag.Label, Tooltip: tag.Tooltip}
+				}
+				resolved = queryPreview{
+					PreviewType: loaded.PreviewType, PreviewData: loaded.PreviewData, PreviewOverlayData: loaded.PreviewOverlayData,
+					PreviewTags: tags, PreviewProperties: loaded.PreviewProperties, ScrollPosition: loaded.ScrollPosition,
+				}
+			}
+		}
 		cancel()
 		if err != nil {
 			resolved = queryPreview{PreviewType: "text", PreviewData: fmt.Sprintf("Unable to load preview: %v", err), PreviewTags: fallback.PreviewTags}

@@ -12,12 +12,6 @@ import (
 var defaultHotkeyRecordingKinds = []string{"normalCombo", "doubleModifier", "capsLockCombo"}
 var dictationHotkeyRecordingKinds = []string{"normalCombo", "doubleModifier", "capsLockCombo", "pressModifier", "holdModifier"}
 
-type hotkeyRecordingCapability struct {
-	RawRecorderAvailable bool
-	FallbackAllowedKinds []string
-	UnavailableReason    string
-}
-
 type hotkeyRecordingState struct {
 	target     *formFieldsState
 	fieldIndex int
@@ -68,8 +62,7 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		var capability hotkeyRecordingCapability
-		err := a.client.Post(ctx, "/on/hotkey/recording", map[string]any{"isRecording": true, "purpose": purpose, "allowedKinds": allowedKinds}, &capability)
+		capability, err := a.services.StartHotkeyRecording(ctx, a.sessionID, purpose, allowedKinds)
 		cancel()
 		a.mu.Lock()
 		if a.hotkeySettings.Recording() == state {
@@ -147,7 +140,7 @@ func (a *App) stopHotkeyRecording() {
 func (a *App) postHotkeyRecordingStopped() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_ = a.client.Post(ctx, "/on/hotkey/recording", map[string]any{"isRecording": false}, nil)
+		_ = a.services.StopHotkeyRecording(ctx, a.sessionID)
 		cancel()
 	}()
 }
@@ -185,12 +178,7 @@ func (a *App) applyRecordedHotkey(payload recordedHotkeyPayload) error {
 
 func (a *App) checkRecordedHotkey(state *hotkeyRecordingState, hotkey string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	var availability struct {
-		Available     bool
-		ConflictType  string
-		ConflictValue string
-	}
-	err := a.client.Post(ctx, "/hotkey/availability", map[string]string{"hotkey": hotkey}, &availability)
+	availability, err := a.services.CheckHotkeyAvailability(ctx, a.sessionID, hotkey)
 	cancel()
 	a.mu.Lock()
 	if a.hotkeySettings.Recording() != state || !a.hotkeyRecordingTargetCurrentLocked(state.target) {
@@ -252,7 +240,7 @@ func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 
 func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value, previous string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	err := a.client.Post(ctx, "/setting/wox/update", map[string]string{"Key": state.persistKey, "Value": value}, nil)
+	err := a.services.UpdateGeneralSetting(ctx, a.sessionID, state.persistKey, value)
 	cancel()
 	a.mu.Lock()
 	if err != nil {
@@ -307,7 +295,7 @@ func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
 	a.mu.Unlock()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		err := a.client.Post(ctx, "/on/hotkey/recording/candidate", map[string]string{"hotkey": hotkey}, nil)
+		err := a.services.SubmitHotkeyRecordingCandidate(ctx, a.sessionID, hotkey)
 		cancel()
 		if err != nil {
 			a.mu.Lock()

@@ -3,9 +3,8 @@ package ui
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
-	"wox/util/tooltip"
+	"wox/ui/contract"
 )
 
 type tooltipOverlayRequest struct {
@@ -25,14 +24,7 @@ func handleTooltipOverlayShow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	request.Name = strings.TrimSpace(request.Name)
-	request.Text = strings.TrimSpace(request.Text)
-	if request.Name == "" || request.Text == "" {
-		writeErrorResponse(w, "tooltip name and text are required")
-		return
-	}
-
-	tooltip.Show(ctx, tooltip.Options{
+	if err := NewCoreServices().ShowTooltip(ctx, getSessionIdFromHeader(r), contract.TooltipOptions{
 		Name:         request.Name,
 		Text:         request.Text,
 		Side:         request.Side,
@@ -40,7 +32,10 @@ func handleTooltipOverlayShow(w http.ResponseWriter, r *http.Request) {
 		AnchorY:      request.AnchorY,
 		AnchorWidth:  request.AnchorWidth,
 		AnchorHeight: request.AnchorHeight,
-	})
+	}); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
 
 	writeSuccessResponse(w, "")
 }
@@ -51,13 +46,10 @@ func handleTooltipOverlayHide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	request.Name = strings.TrimSpace(request.Name)
-	if request.Name == "" {
-		writeErrorResponse(w, "tooltip name is required")
+	if err := NewCoreServices().HideTooltip(getTraceContext(r), getSessionIdFromHeader(r), request.Name); err != nil {
+		writeErrorResponse(w, err.Error())
 		return
 	}
-
-	tooltip.Close(request.Name)
 	writeSuccessResponse(w, "")
 }
 

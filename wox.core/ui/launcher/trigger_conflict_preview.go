@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"wox/ui/coreclient"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -359,7 +358,7 @@ func (a *App) submitTriggerConflictPreview() {
 			if !changed {
 				continue
 			}
-			if err := a.client.Post(ctx, "/setting/plugin/update", map[string]string{"PluginId": pluginID, "Key": "TriggerKeywords", "Value": value}, nil); err != nil {
+			if err := a.services.UpdatePluginSettings(ctx, a.sessionID, pluginID, map[string]string{"TriggerKeywords": value}); err != nil {
 				saveErr = fmt.Errorf("save %s: %w", pluginID, err)
 				break
 			}
@@ -382,7 +381,7 @@ func (a *App) submitTriggerConflictPreview() {
 		a.mu.RLock()
 		query := a.query
 		a.mu.RUnlock()
-		query.QueryID = coreclient.NewID()
+		query.QueryID = newID()
 		a.setQuery(query)
 		if err := a.sendCurrentQuery(); err != nil {
 			log.Printf("refresh query after trigger keyword conflict: %v", err)

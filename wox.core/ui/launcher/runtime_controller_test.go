@@ -6,27 +6,46 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"wox/ui/contract"
 )
 
-// runtimeBlockingBackendClient closes entered inside Post before blocking on release,
-// so callers can prove the controller has already locked and entered Post.
-// pathSel lets the test pick which path to block on ("/runtime/status" or "/runtime/restart").
-type runtimeBlockingBackendClient struct {
-	entered  chan<- struct{}
-	release  <-chan struct{}
-	pathSel  string
-	statuses []runtimeStatus
+// runtimeBlockingSettingsService blocks one selected operation after notifying the test.
+type runtimeBlockingSettingsService struct {
+	entered   chan<- struct{}
+	release   <-chan struct{}
+	operation string
+	statuses  []contract.RuntimeStatus
 }
 
-func (b *runtimeBlockingBackendClient) Post(_ context.Context, path string, _ any, out any) error {
-	if path == b.pathSel {
+func (b *runtimeBlockingSettingsService) RuntimeStatuses(_ context.Context, _ string) ([]contract.RuntimeStatus, error) {
+	if b.operation == "status" {
 		close(b.entered)
 		<-b.release
 	}
-	if ptr, ok := out.(*[]runtimeStatus); ok {
-		*ptr = append([]runtimeStatus(nil), b.statuses...)
+	return append([]contract.RuntimeStatus(nil), b.statuses...), nil
+}
+
+func (b *runtimeBlockingSettingsService) RestartRuntime(_ context.Context, _ string, _ string) error {
+	if b.operation == "restart" {
+		close(b.entered)
+		<-b.release
 	}
 	return nil
+}
+
+type fakeRuntimeSettingsService struct {
+	statuses   []contract.RuntimeStatus
+	statusErr  error
+	restartErr error
+}
+
+func (f *fakeRuntimeSettingsService) RuntimeStatuses(_ context.Context, _ string) ([]contract.RuntimeStatus, error) {
+	return append([]contract.RuntimeStatus(nil), f.statuses...), f.statusErr
+}
+
+func (f *fakeRuntimeSettingsService) RestartRuntime(_ context.Context, _ string, _ string) error {
+	return f.restartErr
 }
 
 func TestRuntimeControllerReloadSuccess(t *testing.T) {
@@ -36,11 +55,13 @@ func TestRuntimeControllerReloadSuccess(t *testing.T) {
 		Translate:  func(s string) string { return s },
 	}
 	c := newRuntimeSettingsController(deps)
-	client := &fakeBackendClient{runtimeStatuses: []runtimeStatus{
-		{Runtime: "NODEJS", CanRestart: true},
+	pluginNames := []string{"Plugin A"}
+	service := &fakeRuntimeSettingsService{statuses: []contract.RuntimeStatus{
+		{Runtime: "NODEJS", CanRestart: true, LoadedPluginNames: pluginNames},
 		{Runtime: "PYTHON", CanRestart: false},
 	}}
-	c.Reload(context.Background(), client)
+	c.Reload(context.Background(), service, "session")
+	pluginNames[0] = "Changed"
 	snap := c.Snapshot()
 	if len(snap.Statuses) != 2 {
 		t.Fatalf("Statuses len = %d, want 2", len(snap.Statuses))
@@ -54,6 +75,9 @@ func TestRuntimeControllerReloadSuccess(t *testing.T) {
 	if snap.Loading {
 		t.Fatalf("Loading should be false after reload completes")
 	}
+	if len(snap.Statuses[0].LoadedPluginNames) != 1 || snap.Statuses[0].LoadedPluginNames[0] != "Plugin A" {
+		t.Fatalf("LoadedPluginNames should be isolated from service-owned slices: %+v", snap.Statuses[0].LoadedPluginNames)
+	}
 	if invalidateCalled < 2 {
 		t.Fatalf("Invalidate should be called at least twice, got %d", invalidateCalled)
 	}
@@ -62,8 +86,8 @@ func TestRuntimeControllerReloadSuccess(t *testing.T) {
 func TestRuntimeControllerReloadError(t *testing.T) {
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
 	c := newRuntimeSettingsController(deps)
-	client := &fakeBackendClient{err: errors.New("network down")}
-	c.Reload(context.Background(), client)
+	service := &fakeRuntimeSettingsService{statusErr: errors.New("network down")}
+	c.Reload(context.Background(), service, "session")
 	snap := c.Snapshot()
 	if snap.Error == "" {
 		t.Fatalf("Error should be recorded, got empty")
@@ -83,13 +107,13 @@ func TestRuntimeControllerRestartSetsRestartingThenClears(t *testing.T) {
 	// Seed statuses with a restartable Node.js host.
 	enteredPost := make(chan struct{})
 	releasePost := make(chan struct{})
-	blockingClient := &runtimeBlockingBackendClient{
-		entered:  enteredPost,
-		release:  releasePost,
-		pathSel:  "/runtime/restart",
-		statuses: []runtimeStatus{{Runtime: "NODEJS", CanRestart: true}},
+	blockingService := &runtimeBlockingSettingsService{
+		entered:   enteredPost,
+		release:   releasePost,
+		operation: "restart",
+		statuses:  []contract.RuntimeStatus{{Runtime: "NODEJS", CanRestart: true}},
 	}
-	c.Reload(context.Background(), blockingClient)
+	c.Reload(context.Background(), blockingService, "session")
 
 	reloadCalled := make(chan struct{})
 	var reloadOnce sync.Once
@@ -97,7 +121,7 @@ func TestRuntimeControllerRestartSetsRestartingThenClears(t *testing.T) {
 		reloadOnce.Do(func() { close(reloadCalled) })
 	}
 
-	c.Restart(context.Background(), blockingClient, "nodejs", reloadAfter)
+	c.Restart(context.Background(), blockingService, "session", "nodejs", reloadAfter)
 
 	// Restarting must be set immediately after Restart returns.
 	if got := c.Snapshot().Restarting; got != "NODEJS" {
@@ -138,15 +162,15 @@ func TestRuntimeControllerRestartRejectsWhenAlreadyRestarting(t *testing.T) {
 
 	enteredPost := make(chan struct{})
 	releasePost := make(chan struct{})
-	blockingClient := &runtimeBlockingBackendClient{
-		entered:  enteredPost,
-		release:  releasePost,
-		pathSel:  "/runtime/restart",
-		statuses: []runtimeStatus{{Runtime: "NODEJS", CanRestart: true}},
+	blockingService := &runtimeBlockingSettingsService{
+		entered:   enteredPost,
+		release:   releasePost,
+		operation: "restart",
+		statuses:  []contract.RuntimeStatus{{Runtime: "NODEJS", CanRestart: true}},
 	}
-	c.Reload(context.Background(), blockingClient)
+	c.Reload(context.Background(), blockingService, "session")
 
-	c.Restart(context.Background(), blockingClient, "nodejs", nil)
+	c.Restart(context.Background(), blockingService, "session", "nodejs", nil)
 	if got := c.Snapshot().Restarting; got != "NODEJS" {
 		t.Fatalf("first Restart should set Restarting = NODEJS, got %q", got)
 	}
@@ -168,7 +192,7 @@ func TestRuntimeControllerRestartRejectsWhenAlreadyRestarting(t *testing.T) {
 		default:
 		}
 	}
-	c.Restart(context.Background(), blockingClient, "nodejs", secondReloadAfter)
+	c.Restart(context.Background(), blockingService, "session", "nodejs", secondReloadAfter)
 
 	// Second Restart should leave Restarting unchanged (still NODEJS from first call)
 	// and not invoke secondReloadAfter. Give it a brief moment in case of scheduling.

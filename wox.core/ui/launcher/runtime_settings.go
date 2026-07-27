@@ -223,12 +223,12 @@ func cloneRuntimeStatuses(statuses []runtimeStatus) []runtimeStatus {
 
 // reloadRuntimeStatuses refreshes the runtime inventory via the runtime controller.
 func (a *App) reloadRuntimeStatuses() {
-	a.runtimeSettings.Reload(context.Background(), a.client)
+	a.runtimeSettings.Reload(context.Background(), a.services, a.sessionID)
 }
 
 // restartRuntimeHost restarts a recoverable Node.js or Python host and then reloads the authoritative status.
 func (a *App) restartRuntimeHost(runtime string) {
-	a.runtimeSettings.Restart(context.Background(), a.client, runtime, a.reloadRuntimeStatuses)
+	a.runtimeSettings.Restart(context.Background(), a.services, a.sessionID, runtime, a.reloadRuntimeStatuses)
 }
 
 // openRuntimeInstallURL delegates installation guidance to the platform browser without owning platform code in the page.

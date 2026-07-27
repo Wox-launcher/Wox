@@ -9,15 +9,54 @@ import (
 	"wox/plugin/system/shell/terminal"
 	"wox/setting"
 	"wox/ui/contract"
+	"wox/updater"
 	"wox/util"
 )
 
 // CoreServices implements the typed services consumed by the embedded UI.
 type CoreServices struct{}
 
+var _ contract.Services = (*CoreServices)(nil)
+var updateChannelVersionsProvider = updater.GetUpdateChannelVersions
+
 // NewCoreServices creates the process-local UI service facade.
 func NewCoreServices() *CoreServices {
 	return &CoreServices{}
+}
+
+// Version returns the running core version without crossing the HTTP compatibility layer.
+func (s *CoreServices) Version(_ context.Context, _ string) (string, error) {
+	return updater.CURRENT_VERSION, nil
+}
+
+// UpdateChannelVersions returns typed update metadata for the settings UI.
+func (s *CoreServices) UpdateChannelVersions(ctx context.Context, sessionID string) ([]contract.UpdateChannelVersion, error) {
+	versions := updateChannelVersionsProvider(uiServiceContext(ctx, sessionID))
+	converted := make([]contract.UpdateChannelVersion, len(versions))
+	for index, version := range versions {
+		converted[index] = contract.UpdateChannelVersion{
+			Channel:       version.Channel,
+			LatestVersion: version.LatestVersion,
+			Error:         version.Error,
+		}
+	}
+	return converted, nil
+}
+
+// RuntimeStatuses returns typed plugin host state for the settings UI.
+func (s *CoreServices) RuntimeStatuses(ctx context.Context, sessionID string) ([]contract.RuntimeStatus, error) {
+	statuses := getRuntimeStatuses(uiServiceContext(ctx, sessionID))
+	converted := make([]contract.RuntimeStatus, len(statuses))
+	for index, status := range statuses {
+		converted[index] = status
+		converted[index].LoadedPluginNames = append([]string(nil), status.LoadedPluginNames...)
+	}
+	return converted, nil
+}
+
+// RestartRuntime restarts one recoverable plugin host through the core plugin manager.
+func (s *CoreServices) RestartRuntime(ctx context.Context, sessionID string, runtime string) error {
+	return restartRuntimeHost(uiServiceContext(ctx, sessionID), runtime)
 }
 
 // AttachView binds the embedded launcher to the core-owned UI manager.

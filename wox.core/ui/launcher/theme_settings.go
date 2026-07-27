@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/ui/contract"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -104,7 +105,7 @@ func themeCatalogItem(theme themeSettingsTheme, sourceIndex int, snapshot settin
 // Delegates state management to themeSettings; passes the active ThemeID as fallback selection.
 func (a *App) reloadThemes(mode, preferredID string) error {
 	fallbackID := a.currentThemeID()
-	return a.themeSettings.ReloadThemes(context.Background(), a.client, mode, preferredID, fallbackID)
+	return a.themeSettings.ReloadThemes(context.Background(), a.services, a.sessionID, mode, preferredID, fallbackID)
 }
 
 func themeSettingsModeForPath(path string) string {
@@ -234,12 +235,12 @@ func (a *App) runThemeOperation(kind string) {
 	a.invalidateSettingsWindow()
 
 	go func() {
-		path := "/theme/" + kind
+		operation := contract.ThemeOperation(kind)
 		if kind == "upgrade" {
-			path = "/theme/install"
+			operation = contract.ThemeOperationInstall
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err := a.client.Post(ctx, path, map[string]string{"id": theme.ID}, nil)
+		err := a.services.OperateTheme(ctx, a.sessionID, theme.ID, operation)
 		cancel()
 		if err == nil && kind == "apply" {
 			err = a.reloadTheme()

@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"wox/ui/coreclient"
 )
 
 const (
@@ -79,7 +77,7 @@ func normalizeDictationCustomAction(action map[string]any) map[string]any {
 		}
 	}
 	if dictationString(normalized["id"]) == "" {
-		normalized["id"] = coreclient.NewID()
+		normalized["id"] = newID()
 	} else {
 		normalized["id"] = dictationString(normalized["id"])
 	}

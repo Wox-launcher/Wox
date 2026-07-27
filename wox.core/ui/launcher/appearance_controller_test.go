@@ -3,59 +3,25 @@ package launcher
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
+
+	"wox/ui/contract"
 )
 
-// appearanceFakeBackend serves the two appearance routes (/setting/ui/fonts and
-// /plugin/installed) from pre-populated values, with optional per-route errors and a
-// blocking handshake for mid-flight assertions.
-type appearanceFakeBackend struct {
-	mu      sync.Mutex
+type appearanceFakeService struct {
 	fonts   []string
-	plugins []struct {
-		ID      string         `json:"Id"`
-		Name    string         `json:"Name"`
-		Glances []pluginGlance `json:"Glances"`
-	}
-	fontsErr   error
-	pluginsErr error
+	catalog []contract.GlanceCatalogItem
 
-	pathSel string
-	entered chan<- struct{}
-	release <-chan struct{}
+	fontsErr   error
+	catalogErr error
 }
 
-func (f *appearanceFakeBackend) Post(_ context.Context, path string, _ any, out any) error {
-	if f.pathSel != "" && path == f.pathSel && f.entered != nil {
-		close(f.entered)
-		<-f.release
-	}
-	switch path {
-	case "/setting/ui/fonts":
-		if f.fontsErr != nil {
-			return f.fontsErr
-		}
-		if ptr, ok := out.(*[]string); ok {
-			*ptr = append([]string(nil), f.fonts...)
-		}
-	case "/plugin/installed":
-		if f.pluginsErr != nil {
-			return f.pluginsErr
-		}
-		if ptr, ok := out.(*[]struct {
-			ID      string         `json:"Id"`
-			Name    string         `json:"Name"`
-			Glances []pluginGlance `json:"Glances"`
-		}); ok {
-			*ptr = append([]struct {
-				ID      string         `json:"Id"`
-				Name    string         `json:"Name"`
-				Glances []pluginGlance `json:"Glances"`
-			}(nil), f.plugins...)
-		}
-	}
-	return nil
+func (f *appearanceFakeService) SystemFontFamilies(_ context.Context, _ string) ([]string, error) {
+	return append([]string(nil), f.fonts...), f.fontsErr
+}
+
+func (f *appearanceFakeService) GlanceCatalog(_ context.Context, _ string) ([]contract.GlanceCatalogItem, error) {
+	return append([]contract.GlanceCatalogItem(nil), f.catalog...), f.catalogErr
 }
 
 func TestAppearanceControllerReloadFontsSuccess(t *testing.T) {
@@ -65,8 +31,8 @@ func TestAppearanceControllerReloadFontsSuccess(t *testing.T) {
 		Translate:  func(s string) string { return s },
 	}
 	c := newAppearanceSettingsController(deps)
-	client := &appearanceFakeBackend{fonts: []string{"Helvetica", "Arial"}}
-	c.ReloadFonts(context.Background(), client)
+	service := &appearanceFakeService{fonts: []string{"Helvetica", "Arial"}}
+	c.ReloadFonts(context.Background(), service, "session")
 
 	snap := c.Snapshot()
 	if len(snap.FontFamilies) != 2 {
@@ -89,8 +55,8 @@ func TestAppearanceControllerReloadFontsSuccess(t *testing.T) {
 func TestAppearanceControllerReloadFontsError(t *testing.T) {
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
 	c := newAppearanceSettingsController(deps)
-	client := &appearanceFakeBackend{fontsErr: errors.New("font enumeration failed")}
-	c.ReloadFonts(context.Background(), client)
+	service := &appearanceFakeService{fontsErr: errors.New("font enumeration failed")}
+	c.ReloadFonts(context.Background(), service, "session")
 
 	snap := c.Snapshot()
 	if snap.FontsError == "" {
@@ -107,8 +73,8 @@ func TestAppearanceControllerReloadFontsError(t *testing.T) {
 func TestAppearanceControllerReloadFontsSkipsWhenLoaded(t *testing.T) {
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
 	c := newAppearanceSettingsController(deps)
-	client := &appearanceFakeBackend{fonts: []string{"Helvetica"}}
-	c.ReloadFonts(context.Background(), client)
+	service := &appearanceFakeService{fonts: []string{"Helvetica"}}
+	c.ReloadFonts(context.Background(), service, "session")
 
 	first := c.Snapshot()
 	if !first.FontsLoaded || len(first.FontFamilies) != 1 {
@@ -116,8 +82,8 @@ func TestAppearanceControllerReloadFontsSkipsWhenLoaded(t *testing.T) {
 	}
 	// Second call should be a no-op; even if the fake returns different data, the
 	// cached state must remain unchanged.
-	client.fonts = []string{"Changed"}
-	c.ReloadFonts(context.Background(), client)
+	service.fonts = []string{"Changed"}
+	c.ReloadFonts(context.Background(), service, "session")
 	second := c.Snapshot()
 	if !second.FontsLoaded {
 		t.Fatalf("FontsLoaded should remain true")
@@ -130,14 +96,10 @@ func TestAppearanceControllerReloadFontsSkipsWhenLoaded(t *testing.T) {
 func TestAppearanceControllerResetGlanceCatalog(t *testing.T) {
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
 	c := newAppearanceSettingsController(deps)
-	client := &appearanceFakeBackend{plugins: []struct {
-		ID      string         `json:"Id"`
-		Name    string         `json:"Name"`
-		Glances []pluginGlance `json:"Glances"`
-	}{
-		{ID: "p1", Name: "Plugin One", Glances: []pluginGlance{{ID: "g1", Name: "Glance One"}}},
+	service := &appearanceFakeService{catalog: []contract.GlanceCatalogItem{
+		{PluginID: "p1", PluginName: "Plugin One", GlanceID: "g1", Name: "Glance One"},
 	}}
-	c.ReloadGlanceCatalog(context.Background(), client, nil)
+	c.ReloadGlanceCatalog(context.Background(), service, "session", nil)
 
 	loaded := c.Snapshot()
 	if !loaded.GlanceCatalogLoaded || len(loaded.GlanceCatalog) != 1 {

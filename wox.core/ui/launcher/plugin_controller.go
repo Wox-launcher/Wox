@@ -2,11 +2,14 @@ package launcher
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
 
@@ -258,13 +261,13 @@ func (c *pluginSettingsController) SetUninstallArmed(id string) {
 	c.mu.Unlock()
 }
 
-// ReloadPlugins fetches either store or installed entries through the same core DTO as
-// the retired Flutter catalog. store selects /plugin/store vs /plugin/installed.
+// ReloadPlugins fetches either the store or installed catalog from the shared core service.
+// store selects which catalog is loaded.
 // preferredID, when non-empty, selects which plugin becomes Selected after the load;
 // when empty and the current selection is valid, the previously selected plugin's ID
 // is retained. On success PluginsLoaded becomes true and PluginsError is cleared; on
 // failure PluginsLoaded becomes false and PluginsError records the message.
-func (c *pluginSettingsController) ReloadPlugins(ctx context.Context, client backendClient, store bool, preferredID string) error {
+func (c *pluginSettingsController) ReloadPlugins(ctx context.Context, service contract.PluginCatalogSettingsServices, sessionID string, store bool, preferredID string) error {
 	c.mu.Lock()
 	c.pluginsLoading = true
 	c.pluginsError = ""
@@ -273,18 +276,23 @@ func (c *pluginSettingsController) ReloadPlugins(ctx context.Context, client bac
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	var plugins []pluginSettingsPlugin
-	path := "/plugin/installed"
+	catalog := contract.PluginCatalogInstalled
 	if store {
-		path = "/plugin/store"
+		catalog = contract.PluginCatalogStore
 	}
-	if err := client.Post(timeoutCtx, path, map[string]any{}, &plugins); err != nil {
+	loaded, err := service.Plugins(timeoutCtx, sessionID, catalog)
+	if err != nil {
 		c.mu.Lock()
 		c.pluginsLoading = false
 		c.pluginsLoaded = false
 		c.pluginsError = err.Error()
 		c.mu.Unlock()
 		c.deps.Invalidate()
+		return err
+	}
+	plugins, err := pluginSettingsPluginsFromContract(loaded)
+	if err != nil {
+		c.finishPluginLoadError(err)
 		return err
 	}
 	sort.SliceStable(plugins, func(i, j int) bool {
@@ -325,6 +333,53 @@ func (c *pluginSettingsController) ReloadPlugins(ctx context.Context, client bac
 	c.mu.Unlock()
 	c.deps.Invalidate()
 	return nil
+}
+
+// pluginSettingsPluginsFromContract adapts canonical plugin metadata to launcher-owned form models.
+func pluginSettingsPluginsFromContract(items []contract.PluginCatalogItem) ([]pluginSettingsPlugin, error) {
+	plugins := make([]pluginSettingsPlugin, len(items))
+	for index, item := range items {
+		definitionPayload, err := json.Marshal(item.SettingDefinitions)
+		if err != nil {
+			return nil, fmt.Errorf("encode plugin setting definitions: %w", err)
+		}
+		var definitions []formDefinition
+		if err := json.Unmarshal(definitionPayload, &definitions); err != nil {
+			return nil, fmt.Errorf("decode plugin setting definitions: %w", err)
+		}
+
+		commands := make([]pluginCommand, len(item.Commands))
+		for commandIndex, command := range item.Commands {
+			commands[commandIndex] = pluginCommand{Command: command.Command, Description: string(command.Description)}
+		}
+		features := make([]pluginFeature, len(item.Features))
+		for featureIndex, feature := range item.Features {
+			params := make(map[string]any, len(feature.Params))
+			for key, value := range feature.Params {
+				params[key] = value
+			}
+			features[featureIndex] = pluginFeature{Name: feature.Name, Params: params}
+		}
+		glances := make([]pluginGlance, len(item.Glances))
+		for glanceIndex, glance := range item.Glances {
+			glances[glanceIndex] = pluginGlance{
+				ID: glance.Id, Name: string(glance.Name), Description: string(glance.Description), Icon: glance.Icon, RefreshIntervalMs: glance.RefreshIntervalMs,
+			}
+		}
+		plugins[index] = pluginSettingsPlugin{
+			ID: item.ID, Name: item.Name, Description: item.Description, Author: item.Author, Website: item.Website, Version: item.Version,
+			Runtime: item.Runtime, Entry: item.Entry, PluginDirectory: item.PluginDirectory,
+			Icon:           woxImage{ImageType: item.Icon.ImageType, ImageData: item.Icon.ImageData},
+			ScreenshotURLs: append([]string(nil), item.ScreenshotURLs...), TriggerKeywords: append([]string(nil), item.TriggerKeywords...),
+			Commands: commands, SupportedOS: append([]string(nil), item.SupportedOS...), Features: features, Glances: glances,
+			IsSystem: item.IsSystem, IsDev: item.IsDev, IsInstalled: item.IsInstalled, IsDisable: item.IsDisable, IsUpgradable: item.IsUpgradable,
+			SettingDefinitions: definitions,
+			Setting: pluginSettingsData{
+				Disabled: item.Setting.Disabled, TriggerKeywords: append([]string(nil), item.Setting.TriggerKeywords...), Settings: cloneStringMap(item.Setting.Settings),
+			},
+		}
+	}
+	return plugins, nil
 }
 
 // finishPluginLoadError is the shared error path when the App needs to mark a

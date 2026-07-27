@@ -1,12 +1,12 @@
 package launcher
 
 import (
-	"context"
 	"sort"
 	"strings"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 	"wox/util/fuzzymatch"
 )
 
@@ -59,9 +59,7 @@ func (a *App) loadSettingsSearchPlugins() {
 		return
 	}
 	a.invalidateSettingsWindow()
-	go func() {
-		_ = a.settingsSearch.ReloadPlugins(context.Background(), a.client)
-	}()
+	_ = a.settingsSearch.ReloadPlugins(a.lifecycleCtx, a.services, a.sessionID)
 }
 
 // settingsSearchResults builds one ranked index across built-in controls, sections, plugins, and plugin settings.
@@ -479,11 +477,11 @@ func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
 	a.pluginSettings.SetForm(nil)
 	a.mu.Unlock()
 	a.selectSettingTab("plugins")
-	go func() {
+	util.Go(a.lifecycleCtx, "open plugin setting search result", func() {
 		if err := a.reloadPlugins(false, result.pluginID); err == nil {
 			a.focusPluginSettingsSearchTarget(result.pluginID, result.settingKey)
 		}
-	}()
+	})
 }
 
 func (a *App) focusPluginSettingsSearchTarget(pluginID, settingKey string) {
