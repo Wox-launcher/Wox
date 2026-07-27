@@ -18,6 +18,7 @@ type fakeController struct {
 	actionID     string
 	action       woxui.AccessibilityAction
 	actionValue  string
+	pointer      woxui.PointerEvent
 	settingsPath string
 }
 
@@ -39,6 +40,11 @@ func (f *fakeController) PerformAutomationAction(automationID string, action wox
 	f.actionID = automationID
 	f.action = action
 	f.actionValue = value
+	return nil
+}
+
+func (f *fakeController) DispatchAutomationPointer(event woxui.PointerEvent) error {
+	f.pointer = event
 	return nil
 }
 
@@ -90,6 +96,14 @@ func TestHandlerDispatchesSemanticActionAndRejectsUnknownMethod(t *testing.T) {
 	}
 	if controller.actionID != "launcher.query" || controller.action != woxui.AccessibilityActionSetValue || controller.actionValue != "hello" {
 		t.Fatalf("unexpected action call: id=%q action=%q value=%q", controller.actionID, controller.action, controller.actionValue)
+	}
+
+	pointerResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"pointer","method":"input.pointer","params":{"Kind":0,"Position":{"X":120.5,"Y":48.25}}}`)
+	if pointerResponse.Code != http.StatusOK {
+		t.Fatalf("expected pointer status 200, got %d", pointerResponse.Code)
+	}
+	if controller.pointer.Kind != woxui.PointerMove || controller.pointer.Position != (woxui.Point{X: 120.5, Y: 48.25}) {
+		t.Fatalf("unexpected pointer call: %+v", controller.pointer)
 	}
 
 	settingsResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"settings","method":"window.open_settings","params":{"path":"/appearance"}}`)

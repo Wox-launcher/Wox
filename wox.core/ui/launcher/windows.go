@@ -324,6 +324,7 @@ func (a *App) onSettingsWindowClosed() {
 	a.aiSettings.SetModelManager(nil)
 	a.hotkeySettings.ClearRecording()
 	a.hotkeySettings.SetFocused(false)
+	a.cloudPlanTooltip = nil
 	if form := a.pluginSettings.Form(); form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		form.active = false

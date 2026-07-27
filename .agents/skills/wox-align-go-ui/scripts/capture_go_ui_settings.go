@@ -45,6 +45,11 @@ func run() error {
 	height := flag.Float64("height", 768, "logical settings window height")
 	activate := flag.String("activate", "", "automation ID to activate after the initial capture")
 	activateCapture := flag.String("activate-capture", "", "PNG captured after activation")
+	hover := flag.String("hover", "", "automation ID whose logical center receives a pointer move")
+	hoverWaitID := flag.String("hover-wait-id", "", "automation ID required while hover is active")
+	hoverCapture := flag.String("hover-capture", "", "PNG captured while hover is active")
+	hoverExitCapture := flag.String("hover-exit-capture", "", "PNG captured after pointer leave")
+	hoverStable := flag.Duration("hover-stable", 0, "duration that -hover-wait-id must remain present")
 	dataDir := flag.String("data-dir", "", "optional isolated WOX_TEST_DATA_DIR")
 	userDir := flag.String("user-dir", "", "optional isolated WOX_TEST_USER_DIR")
 	settle := flag.Duration("settle", 500*time.Millisecond, "delay after state-changing actions")
@@ -63,6 +68,12 @@ func run() error {
 	if strings.TrimSpace(*activateCapture) != "" && strings.TrimSpace(*activate) == "" {
 		return fmt.Errorf("-activate-capture requires -activate")
 	}
+	if (strings.TrimSpace(*hoverWaitID) != "" || strings.TrimSpace(*hoverCapture) != "" || strings.TrimSpace(*hoverExitCapture) != "" || *hoverStable > 0) && strings.TrimSpace(*hover) == "" {
+		return fmt.Errorf("hover options require -hover")
+	}
+	if *hoverStable > 0 && strings.TrimSpace(*hoverWaitID) == "" {
+		return fmt.Errorf("-hover-stable requires -hover-wait-id")
+	}
 
 	binaryPath, err := absolutePath(*binary)
 	if err != nil {
@@ -75,6 +86,20 @@ func run() error {
 	activationCapturePath := ""
 	if strings.TrimSpace(*activateCapture) != "" {
 		activationCapturePath, err = prepareCapturePath(*activateCapture)
+		if err != nil {
+			return err
+		}
+	}
+	hoverCapturePath := ""
+	if strings.TrimSpace(*hoverCapture) != "" {
+		hoverCapturePath, err = prepareCapturePath(*hoverCapture)
+		if err != nil {
+			return err
+		}
+	}
+	hoverExitCapturePath := ""
+	if strings.TrimSpace(*hoverExitCapture) != "" {
+		hoverExitCapturePath, err = prepareCapturePath(*hoverExitCapture)
 		if err != nil {
 			return err
 		}
@@ -177,6 +202,80 @@ func run() error {
 				return fmt.Errorf("capture activated state %s: %w", activationCapturePath, err)
 			}
 			fmt.Printf("captured %s\n", activationCapturePath)
+		}
+	}
+	if strings.TrimSpace(*hover) != "" {
+		node, err := process.Client.MovePointerTo(ctx, *hover)
+		if err != nil {
+			return fmt.Errorf("hover %s: %w", *hover, err)
+		}
+		fmt.Printf("hovered %s at %+v\n", *hover, node.Bounds)
+		if strings.TrimSpace(*hoverWaitID) != "" {
+			if err := waitForAutomationID(ctx, process.Client, *hoverWaitID, true); err != nil {
+				return err
+			}
+		}
+		time.Sleep(*settle)
+		if *hoverStable > 0 {
+			if err := assertAutomationIDStable(ctx, process.Client, *hoverWaitID, *hoverStable); err != nil {
+				return err
+			}
+		}
+		if hoverCapturePath != "" {
+			if err := process.Client.Capture(ctx, hoverCapturePath); err != nil {
+				return fmt.Errorf("capture hover state %s: %w", hoverCapturePath, err)
+			}
+			fmt.Printf("captured %s\n", hoverCapturePath)
+		}
+		if err := process.Client.LeavePointer(ctx); err != nil {
+			return fmt.Errorf("leave pointer: %w", err)
+		}
+		if strings.TrimSpace(*hoverWaitID) != "" {
+			if err := waitForAutomationID(ctx, process.Client, *hoverWaitID, false); err != nil {
+				return err
+			}
+		} else {
+			time.Sleep(*settle)
+		}
+		if hoverExitCapturePath != "" {
+			if err := process.Client.Capture(ctx, hoverExitCapturePath); err != nil {
+				return fmt.Errorf("capture hover exit state %s: %w", hoverExitCapturePath, err)
+			}
+			fmt.Printf("captured %s\n", hoverExitCapturePath)
+		}
+	}
+	return nil
+}
+
+// waitForAutomationID waits until one semantic node reaches the expected presence state.
+func waitForAutomationID(ctx context.Context, client *automationdriver.Client, automationID string, present bool) error {
+	_, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, found := automationdriver.Find(snapshot, automationID)
+		return found == present
+	})
+	if err != nil {
+		return fmt.Errorf("wait for %s present=%t: %w", automationID, present, err)
+	}
+	return nil
+}
+
+// assertAutomationIDStable samples semantics while the pointer remains stationary.
+func assertAutomationIDStable(ctx context.Context, client *automationdriver.Client, automationID string, duration time.Duration) error {
+	deadline := time.Now().Add(duration)
+	for time.Now().Before(deadline) {
+		snapshot, err := client.Snapshot(ctx)
+		if err != nil {
+			return fmt.Errorf("read stable hover semantics: %w", err)
+		}
+		if _, found := automationdriver.Find(snapshot, automationID); !found {
+			return fmt.Errorf("automation node %q disappeared during %s stable hover", automationID, duration)
+		}
+		timer := time.NewTimer(min(50*time.Millisecond, time.Until(deadline)))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
 		}
 	}
 	return nil

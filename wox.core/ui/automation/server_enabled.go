@@ -160,6 +160,18 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 			return nil, invalidParams(errors.New("key is required"))
 		}
 		return resultOrError(true, controller.PressAutomationKey(params.Key, params.Modifiers))
+	case "input.pointer":
+		var event woxui.PointerEvent
+		if err := decodeParams(rawParams, &event); err != nil {
+			return nil, invalidParams(err)
+		}
+		if event.Kind > woxui.PointerScroll {
+			return nil, invalidParams(errors.New("unsupported pointer event kind"))
+		}
+		if event.Button > woxui.PointerButtonMiddle {
+			return nil, invalidParams(errors.New("unsupported pointer button"))
+		}
+		return resultOrError(true, controller.DispatchAutomationPointer(event))
 	case "input.text":
 		var params struct {
 			Text string `json:"text"`

@@ -140,6 +140,16 @@ Use `-activate <automation-id>` with `-activate-capture <path.png>` to capture a
   -activate-capture /tmp/wox-ui-parity/go/plugin-settings-dropdown.png
 ```
 
+Use `-hover <automation-id>` to move the logical pointer to a semantic node without depending on desktop coordinates. `-hover-wait-id` waits for the resulting hover surface, `-hover-stable` asserts that it remains present while the pointer is stationary, and the two hover captures record entry and exit:
+
+```bash
+  -hover cloud-plan-tooltip \
+  -hover-wait-id cloud-plan-tooltip-overlay \
+  -hover-stable 2s \
+  -hover-capture /tmp/wox-ui-parity/go/cloud-plan-tooltip.png \
+  -hover-exit-capture /tmp/wox-ui-parity/go/cloud-plan-tooltip-exit.png
+```
+
 Driver rules:
 
 - Run it only after the Flutter process is confirmed stopped.

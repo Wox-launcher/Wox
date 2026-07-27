@@ -293,6 +293,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.hotkeySettings.SetFocused(false)
 		a.aiSettings.SetModelManager(nil)
 		a.cloudSettings.SetForm(nil)
+		a.cloudPlanTooltip = nil
 		a.cloudSettings.SetActionMenu("")
 		a.form = nil
 		a.requirementForm = nil
@@ -730,6 +731,7 @@ func (a *App) selectSettingTab(tab string) {
 		a.settingNote = ""
 		a.generalSettings.EndEdit()
 		a.cloudSettings.SetForm(nil)
+		a.cloudPlanTooltip = nil
 		if tab != "plugins" {
 			a.aiSettings.SetModelManager(nil)
 		}

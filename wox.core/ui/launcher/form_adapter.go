@@ -13,6 +13,7 @@ import (
 type formFieldCallbacks struct {
 	idPrefix   string
 	labelWidth float32
+	imageScale float32
 	focus      func(index int)
 	change     func(index, delta int)
 	setText    func(index int, value string)

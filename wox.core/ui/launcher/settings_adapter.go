@@ -31,15 +31,15 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	railWidth := min(float32(240), max(float32(210), width*0.22))
 	var page woxwidget.Widget
 	if snapshot.tab == "plugins" {
-		page = a.buildPluginSettingsPage(snapshot, width-railWidth, pageHeight)
+		page = a.buildPluginSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "theme" {
 		page = a.buildSettingsThemePage(snapshot, width-railWidth, pageHeight)
 	} else if snapshot.tab == "ai" {
-		page = a.buildAISettingsPage(snapshot, width-railWidth, pageHeight)
+		page = a.buildAISettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "data" {
 		page = a.buildDataSettingsPage(snapshot, width-railWidth, pageHeight)
 	} else if snapshot.tab == "cloud" {
-		page = a.buildCloudSettingsPage(snapshot, width-railWidth, pageHeight)
+		page = a.buildCloudSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "runtime" {
 		page = a.buildRuntimeSettingsPage(snapshot, items, width-railWidth, pageHeight)
 	} else if snapshot.tab == "usage" {
@@ -49,9 +49,11 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	} else if snapshot.tab == "privacy" {
 		page = a.buildPrivacySettingsPage(snapshot, width-railWidth, pageHeight)
 	} else {
-		page = a.buildSettingsPage(snapshot, items, width-railWidth, pageHeight)
+		page = a.buildSettingsPage(snapshot, items, width-railWidth, pageHeight, frame.Scale)
 	}
 	var overlay woxwidget.Widget
+	var overlayLeft float32
+	var overlayTop float32
 	if snapshot.tableEditor != nil {
 		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height)
 	} else if snapshot.ai.ModelManager != nil {
@@ -62,10 +64,13 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildCloudFormOverlay(snapshot.cloud.Form, snapshot.palette, width, height)
 	} else if snapshot.privacy.Sample != "" {
 		overlay = a.buildPrivacySampleOverlay(snapshot, width, height)
+	} else if snapshot.tab == "cloud" && a.cloudPlanTooltip != nil {
+		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudIntroViewProps(snapshot), a.cloudPlanTooltip.anchor, width, height, snapshot.palette.componentTheme())
 	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
 		Width: width, Height: height, PageID: snapshot.tab, Platform: runtime.GOOS, RailWidth: railWidth, Theme: snapshot.palette.componentTheme(),
-		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight), Page: page, Overlay: overlay,
+		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight), Page: page,
+		Overlay: overlay, OverlayLeft: overlayLeft, OverlayTop: overlayTop,
 	})
 }
 
@@ -227,7 +232,7 @@ func (a *App) settingsSearchResultTypeLabel(kind settingsSearchResultKind) strin
 	}
 }
 
-func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, width, height float32) woxwidget.Widget {
+func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, width, height, imageScale float32) woxwidget.Widget {
 	contentWidth := max(float32(0), width-82)
 	children := make([]woxwidget.Widget, 0, len(items)+9)
 	children = append(children, a.buildSettingsPageHeader(
@@ -260,7 +265,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		hotkeyForm := *snapshot.hotkey.Form
 		hotkeyForm.active = snapshot.hotkey.Focused
 		callbacks := formFieldCallbacks{
-			idPrefix: "hotkey-settings", focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
+			idPrefix: "hotkey-settings", imageScale: imageScale, focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
 		}
 		for index, definition := range hotkeyForm.definitions {
 			rowHeight := formDefinitionHeight(definition, hotkeyForm.values)

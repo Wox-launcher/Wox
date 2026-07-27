@@ -11,7 +11,7 @@ import (
 )
 
 // buildPluginSettingsPage maps plugin state into the shared catalog and detail views.
-func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	innerWidth := max(float32(0), width-40)
 	innerHeight := max(float32(0), height-40)
 	listWidth := min(float32(250), max(float32(220), innerWidth*0.30))
@@ -20,7 +20,7 @@ func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height f
 		Width:       width,
 		Height:      height,
 		List:        a.pluginListProps(snapshot, listWidth, innerHeight),
-		Detail:      a.pluginDetailProps(snapshot, detailWidth, innerHeight),
+		Detail:      a.pluginDetailProps(snapshot, detailWidth, innerHeight, imageScale),
 		FilterPanel: a.pluginFilterPanelProps(snapshot),
 		Theme:       snapshot.palette.componentTheme(),
 	})
@@ -86,7 +86,7 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height float32) 
 }
 
 // pluginDetailProps maps the selected plugin into an empty, store, or editable detail view.
-func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height float32) launcherview.PluginDetailProps {
+func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageScale float32) launcherview.PluginDetailProps {
 	plugins := snapshot.plugins
 	props := launcherview.PluginDetailProps{
 		Width: width, Height: height, EmptyLabel: a.translate("i18n:ui_setting_plugin_empty_data"), Theme: snapshot.palette.componentTheme(),
@@ -114,6 +114,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height float32
 	callbacks := formFieldCallbacks{
 		idPrefix:   "plugin-settings",
 		labelWidth: a.pluginFormLabelWidth(form.definitions[1:]),
+		imageScale: imageScale,
 		focus:      a.focusPluginFormField,
 		change:     a.changePluginFormChoice,
 		setText:    a.setPluginFormText,

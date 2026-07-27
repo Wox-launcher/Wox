@@ -18,6 +18,7 @@ type Controller interface {
 	AutomationSnapshot() woxwidget.AutomationSnapshot
 	WaitForAutomationChange(ctx context.Context, afterGeneration uint64) (woxwidget.AutomationSnapshot, error)
 	PerformAutomationAction(automationID string, action woxui.AccessibilityAction, value string) error
+	DispatchAutomationPointer(event woxui.PointerEvent) error
 	PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) error
 	EnterAutomationText(text string) error
 	ShowAutomationWindow() error

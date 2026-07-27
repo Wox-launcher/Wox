@@ -8,17 +8,19 @@ import (
 
 // SettingsWindowProps contains the prepared rail, page, and optional modal overlay.
 type SettingsWindowProps struct {
-	Width     float32
-	Height    float32
-	Radius    float32
-	PageID    string
-	Platform  string
-	RailWidth float32
-	TitleBar  woxwidget.Widget
-	Rail      woxwidget.Widget
-	Page      woxwidget.Widget
-	Overlay   woxwidget.Widget
-	Theme     woxcomponent.Theme
+	Width       float32
+	Height      float32
+	Radius      float32
+	PageID      string
+	Platform    string
+	RailWidth   float32
+	TitleBar    woxwidget.Widget
+	Rail        woxwidget.Widget
+	Page        woxwidget.Widget
+	Overlay     woxwidget.Widget
+	OverlayLeft float32
+	OverlayTop  float32
+	Theme       woxcomponent.Theme
 }
 
 const SettingsTitleBarHeight = float32(40)
@@ -43,10 +45,12 @@ func SettingsWindow(props SettingsWindowProps) woxwidget.Widget {
 		bodyChild = woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{props.TitleBar, content}}
 	}
 	body := woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Radius: props.Radius, Child: bodyChild}
-	var window woxwidget.Widget = body
+	layers := []woxwidget.StackChild{{Child: body}}
 	if props.Overlay != nil {
-		window = woxwidget.Container{Width: props.Width, Height: props.Height, Radius: props.Radius, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: body}, {Child: props.Overlay}}}}
+		layers = append(layers, woxwidget.StackChild{Left: props.OverlayLeft, Top: props.OverlayTop, Child: props.Overlay})
 	}
+	// Keep the root shape stable while transient overlays appear so retained hover identities stay mounted.
+	window := woxwidget.Container{Width: props.Width, Height: props.Height, Radius: props.Radius, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: layers}}
 	return woxwidget.Semantics{Key: "settings-window-key", AutomationID: "settings.window", Role: woxui.AccessibilityRoleWindow, Label: "Wox Settings", Child: window}
 }
 

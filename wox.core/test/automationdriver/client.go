@@ -133,6 +133,36 @@ func (c *Client) Perform(ctx context.Context, automationID string, action woxui.
 	return err
 }
 
+// Pointer sends one logical pointer event to the active widget host.
+func (c *Client) Pointer(ctx context.Context, event woxui.PointerEvent) error {
+	_, err := call[bool](ctx, c, "input.pointer", event)
+	return err
+}
+
+// MovePointer moves the logical pointer without changing button state.
+func (c *Client) MovePointer(ctx context.Context, position woxui.Point) error {
+	return c.Pointer(ctx, woxui.PointerEvent{Kind: woxui.PointerMove, Position: position})
+}
+
+// MovePointerTo centers the logical pointer on a semantics node.
+func (c *Client) MovePointerTo(ctx context.Context, automationID string) (woxui.AccessibilityNode, error) {
+	snapshot, err := c.Snapshot(ctx)
+	if err != nil {
+		return woxui.AccessibilityNode{}, err
+	}
+	node, found := Find(snapshot, automationID)
+	if !found {
+		return woxui.AccessibilityNode{}, fmt.Errorf("automation node %q was not found", automationID)
+	}
+	position := woxui.Point{X: node.Bounds.X + node.Bounds.Width/2, Y: node.Bounds.Y + node.Bounds.Height/2}
+	return node, c.MovePointer(ctx, position)
+}
+
+// LeavePointer clears hover through the same pointer-leave path as a native window.
+func (c *Client) LeavePointer(ctx context.Context) error {
+	return c.Pointer(ctx, woxui.PointerEvent{Kind: woxui.PointerLeave})
+}
+
 // PressKey sends one complete semantic key press.
 func (c *Client) PressKey(ctx context.Context, key woxui.Key, modifiers woxui.KeyModifiers) error {
 	_, err := call[bool](ctx, c, "input.key", map[string]any{"key": key, "modifiers": modifiers})

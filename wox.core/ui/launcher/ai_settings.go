@@ -19,7 +19,7 @@ type aiProviderInfo struct {
 }
 
 // buildAISettingsPage converts core-backed table values into the pure settings view.
-func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	aiForm := snapshot.ai.Form
 	props := launcherview.AISettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: aiForm != nil,
@@ -32,7 +32,7 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float
 	if aiForm.active {
 		props.Selected = aiForm.focused
 	}
-	callbacks := formFieldCallbacks{idPrefix: "ai-settings", focus: a.selectAISettingsTable, openTable: a.openAISettingsTable}
+	callbacks := formFieldCallbacks{idPrefix: "ai-settings", imageScale: imageScale, focus: a.selectAISettingsTable, openTable: a.openAISettingsTable}
 	contentWidth := launcherview.SettingsPageContentWidth(width)
 	props.Tables = make([]launcherview.AISettingsTable, 0, len(aiForm.definitions))
 	for index, definition := range aiForm.definitions {
@@ -43,7 +43,7 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float
 		if definition.Value.Key == "AISkills" {
 			field.HideEditAction = true
 			field.HideCloneAction = true
-			a.addAISkillTableActions(&field, aiForm.values[definition.Value.Key])
+			a.addAISkillTableActions(&field, aiForm.values[definition.Value.Key], imageScale)
 		}
 		props.Tables = append(props.Tables, launcherview.AISettingsTable{
 			Index: index,
@@ -60,13 +60,13 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float
 }
 
 // addAISkillTableActions adds Flutter's folder action after the standard delete action.
-func (a *App) addAISkillTableActions(field *launcherview.FormTableFieldProps, value string) {
+func (a *App) addAISkillTableActions(field *launcherview.FormTableFieldProps, value string, imageScale float32) {
 	rows, err := decodeFormTableRows(value)
 	if err != nil {
 		return
 	}
 	iconTint := field.Theme.ResultSubtitle
-	folderIcon := a.imageForTint(settingControlIconSource("folder-open"), &iconTint, 16)
+	folderIcon := a.imageForTint(settingControlIconSource("folder-open"), &iconTint, physicalImageSize(16, imageScale))
 	for viewIndex := range field.Rows {
 		sourceIndex := field.Rows[viewIndex].Index
 		if sourceIndex < 0 || sourceIndex >= len(rows) {

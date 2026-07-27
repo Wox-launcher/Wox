@@ -52,6 +52,17 @@ func (a *App) PerformAutomationAction(automationID string, action woxui.Accessib
 	return host.PerformAutomationAction(automationID, action, value)
 }
 
+// DispatchAutomationPointer sends a logical pointer event through the active retained host.
+func (a *App) DispatchAutomationPointer(event woxui.PointerEvent) error {
+	host, _, _ := a.automationSurface()
+	if host == nil {
+		return errors.New("active widget host is not initialized")
+	}
+	return woxui.Call(func() {
+		host.Pointer(event)
+	})
+}
+
 // PressAutomationKey sends a complete key press through the normal widget and launcher handlers.
 func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) error {
 	host, _, settings := a.automationSurface()

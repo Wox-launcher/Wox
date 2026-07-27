@@ -116,6 +116,10 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	}
 	theme := palette.componentTheme()
 	foreground := theme.ResultSubtitle
+	infoIconRasterSize := physicalImageSize(14, callbacks.imageScale)
+	headerIconRasterSize := physicalImageSize(15, callbacks.imageScale)
+	rowIconRasterSize := physicalImageSize(16, callbacks.imageScale)
+	emptyIconRasterSize := physicalImageSize(24, callbacks.imageScale)
 	visibleColumns := make([]formTableColumn, 0, len(definition.Value.Columns))
 	for _, column := range definition.Value.Columns {
 		if !column.HideInTable {
@@ -144,7 +148,7 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	var onSecondary func()
 	if callbacks.idPrefix == "plugin-settings" && definition.Value.Key == "commands" && a.selectedPluginID() == aiCommandPluginID {
 		secondaryLabel = a.translate("i18n:ui_ai_command_template_add_from_store")
-		secondaryIcon = a.imageForTint(settingControlIconSource("store"), &foreground, 16)
+		secondaryIcon = a.imageForTint(settingControlIconSource("store"), &foreground, headerIconRasterSize)
 		onSecondary = func() { a.openAICommandTemplatePicker(index) }
 	}
 	return launcherview.FormTableFieldProps{
@@ -152,8 +156,8 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, MaxHeight: definition.Value.MaxHeight, InlineTitle: definition.Value.InlineTable, Invalid: err != nil,
 		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"),
 		OperationLabel: a.translate("i18n:ui_operation"), EmptyLabel: a.translate("i18n:ui_no_data"),
-		InfoIcon: a.imageForTint(settingNavIconSource("about"), &foreground, 16), SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, 16),
-		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, 16), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, 16), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, 16), EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, 24),
+		InfoIcon: a.imageForTint(settingNavIconSource("about"), &foreground, infoIconRasterSize), SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, headerIconRasterSize),
+		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, rowIconRasterSize), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, rowIconRasterSize), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, rowIconRasterSize), EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, emptyIconRasterSize),
 		Theme: theme, OnTooltip: onTooltip, OnSecondary: onSecondary,
 		OnAdd: func() {
 			openTable()

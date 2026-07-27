@@ -119,6 +119,67 @@ func TestClientOpensSettingsRoute(t *testing.T) {
 	}
 }
 
+func TestClientMovesPointerToSemanticsNodeCenter(t *testing.T) {
+	t.Parallel()
+
+	var methods []string
+	var pointer woxui.PointerEvent
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var requestPayload struct {
+			ID     uint64          `json:"id"`
+			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		methods = append(methods, requestPayload.Method)
+		result := any(true)
+		if requestPayload.Method == "semantics.snapshot" {
+			result = map[string]any{"Tree": map[string]any{
+				"Generation": 1,
+				"Nodes": []map[string]any{{
+					"ID": 1, "AutomationID": "plan-info", "Role": "image",
+					"Bounds": map[string]any{"X": 100, "Y": 40, "Width": 14, "Height": 14},
+				}},
+			}}
+		} else if requestPayload.Method == "input.pointer" {
+			if err := json.Unmarshal(requestPayload.Params, &pointer); err != nil {
+				t.Fatalf("decode pointer: %v", err)
+			}
+		}
+		body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": requestPayload.ID, "result": result})
+		if err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Body:       io.NopCloser(strings.NewReader(string(body))),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	node, err := client.MovePointerTo(context.Background(), "plan-info")
+	if err != nil {
+		t.Fatalf("move pointer: %v", err)
+	}
+	if node.AutomationID != "plan-info" {
+		t.Fatalf("unexpected node: %+v", node)
+	}
+	if len(methods) != 2 || methods[0] != "semantics.snapshot" || methods[1] != "input.pointer" {
+		t.Fatalf("unexpected methods: %v", methods)
+	}
+	if pointer.Kind != woxui.PointerMove || pointer.Position != (woxui.Point{X: 107, Y: 47}) {
+		t.Fatalf("unexpected pointer event: %+v", pointer)
+	}
+}
+
 type roundTripFunc func(request *http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
