@@ -10,13 +10,8 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
-
-type settingsInlineColumn struct {
-	key    string
-	label  string
-	weight float32
-}
 
 type aiProviderInfo struct {
 	Name        string
@@ -29,7 +24,6 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float
 	props := launcherview.AISettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: aiForm != nil,
 		Title: a.translate("i18n:ui_ai"), Description: a.translate("i18n:ui_ai_description"),
-		AddLabel: a.translate("i18n:ui_add"), NoDataLabel: a.translate("i18n:ui_no_data"),
 	}
 	if aiForm == nil {
 		return launcherview.AISettingsView(props)
@@ -38,39 +32,22 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float
 	if aiForm.active {
 		props.Selected = aiForm.focused
 	}
+	callbacks := formFieldCallbacks{idPrefix: "ai-settings", focus: a.selectAISettingsTable, openTable: a.openAISettingsTable}
+	contentWidth := launcherview.SettingsPageContentWidth(width)
 	props.Tables = make([]launcherview.AISettingsTable, 0, len(aiForm.definitions))
 	for index, definition := range aiForm.definitions {
 		index := index
-		definition := definition
-		rows, err := decodeFormTableRows(aiForm.values[definition.Value.Key])
-		if err != nil {
-			rows = nil
-		}
-		columns, description, maxRows := a.aiInlineTableColumns(definition.Value.Key)
-		visibleRows := min(len(rows), maxRows)
-		convertedColumns := make([]launcherview.AISettingsColumn, len(columns))
-		for columnIndex, column := range columns {
-			convertedColumns[columnIndex] = launcherview.AISettingsColumn{Label: a.translate(column.label), Weight: column.weight}
-		}
-		convertedRows := make([][]launcherview.AISettingsCell, 0, visibleRows)
-		for _, row := range rows[:visibleRows] {
-			cells := make([]launcherview.AISettingsCell, len(columns))
-			for columnIndex, column := range columns {
-				kind := launcherview.AISettingsCellText
-				if column.key == "Status" {
-					kind = launcherview.AISettingsCellStatus
-				} else if column.key == "_action" {
-					kind = launcherview.AISettingsCellAction
-				}
-				cells[columnIndex] = launcherview.AISettingsCell{Text: a.inlineTableCellValue(definition, column.key, row), Kind: kind}
-			}
-			convertedRows = append(convertedRows, cells)
+		tableHeight := formDefinitionHeight(definition, aiForm.values)
+		field := a.formTableFieldProps(*aiForm, callbacks, snapshot.palette, index, definition, contentWidth, tableHeight)
+		field.OnAdd = func() { a.addAISettingsTableRow(index) }
+		if definition.Value.Key == "AISkills" {
+			field.HideEditAction = true
+			field.HideCloneAction = true
+			a.addAISkillTableActions(&field, aiForm.values[definition.Value.Key])
 		}
 		props.Tables = append(props.Tables, launcherview.AISettingsTable{
-			Index: index, Title: a.translate(formTableTitle(definition)), Description: description,
-			Columns: convertedColumns, Rows: convertedRows,
-			OnAdd:     func() { a.addAISettingsTableRow(index) },
-			OnOpenRow: func(row int) { a.openAISettingsTableRow(index, row) },
+			Index: index,
+			Field: field,
 		})
 	}
 	props.Note = snapshot.note
@@ -82,53 +59,47 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float
 	return launcherview.AISettingsView(props)
 }
 
-func (a *App) aiInlineTableColumns(key string) ([]settingsInlineColumn, string, int) {
-	switch key {
-	case "AIProviders":
-		return []settingsInlineColumn{
-			{key: "Status", label: "i18n:ui_ai_providers_status", weight: 0.06},
-			{key: "Name", label: "i18n:ui_ai_providers_name", weight: 0.15},
-			{key: "Alias", label: "i18n:ui_ai_providers_alias", weight: 0.17},
-			{key: "Host", label: "i18n:ui_ai_providers_host", weight: 0.23},
-			{key: "ApiKey", label: "i18n:ui_ai_providers_api_key", weight: 0.27},
-			{key: "_action", label: "i18n:ui_operation", weight: 0.12},
-		}, "", 4
-	case "AIMCPServers":
-		return []settingsInlineColumn{
-			{key: "Name", label: "i18n:plugin_ai_chat_mcp_server_name", weight: 0.15},
-			{key: "Tools", label: "i18n:plugin_ai_chat_mcp_server_tools", weight: 0.09},
-			{key: "Disabled", label: "i18n:plugin_ai_chat_mcp_server_disabled", weight: 0.10},
-			{key: "Type", label: "i18n:plugin_ai_chat_mcp_server_type", weight: 0.13},
-			{key: "Command", label: "i18n:plugin_ai_chat_mcp_server_command", weight: 0.15},
-			{key: "EnvironmentVariables", label: "i18n:plugin_ai_chat_mcp_server_environment_variables", weight: 0.19},
-			{key: "Url", label: "i18n:plugin_ai_chat_mcp_server_url", weight: 0.19},
-		}, a.translate("i18n:ui_ai_mcp_servers_tooltip"), 3
-	default:
-		return []settingsInlineColumn{
-			{key: "Name", label: "i18n:plugin_ai_chat_skill_name", weight: 0.26},
-			{key: "Source", label: "i18n:plugin_ai_chat_skill_type", weight: 0.14},
-			{key: "Description", label: "i18n:plugin_ai_chat_skill_description", weight: 0.48},
-			{key: "_action", label: "i18n:ui_operation", weight: 0.12},
-		}, a.translate("i18n:ui_ai_skills_tooltip"), 6
+// addAISkillTableActions adds Flutter's folder action after the standard delete action.
+func (a *App) addAISkillTableActions(field *launcherview.FormTableFieldProps, value string) {
+	rows, err := decodeFormTableRows(value)
+	if err != nil {
+		return
+	}
+	iconTint := field.Theme.ResultSubtitle
+	folderIcon := a.imageForTint(settingControlIconSource("folder-open"), &iconTint, 16)
+	for viewIndex := range field.Rows {
+		sourceIndex := field.Rows[viewIndex].Index
+		if sourceIndex < 0 || sourceIndex >= len(rows) {
+			continue
+		}
+		skillPath := strings.TrimSpace(fmt.Sprint(rows[sourceIndex]["Path"]))
+		if skillPath == "" {
+			continue
+		}
+		field.Rows[viewIndex].TrailingActions = append(field.Rows[viewIndex].TrailingActions, launcherview.FormTableRowAction{
+			ID: "open-folder", Label: a.translate("i18n:plugin_file_open"), Icon: folderIcon,
+			OnTap: func() { a.openAISkillPath(skillPath) },
+		})
 	}
 }
 
-func (a *App) inlineTableCellValue(definition formDefinition, key string, row map[string]any) string {
-	if key == "_action" {
-		return a.translate("i18n:ui_setting_theme_edit")
+// openAISkillPath delegates folder opening to the same cross-platform service used by Flutter.
+func (a *App) openAISkillPath(path string) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return
 	}
-	if key == "Source" {
-		if strings.EqualFold(fmt.Sprint(row[key]), "remote") {
-			return a.translate("i18n:ui_ai_skill_type_remote")
+	util.Go(a.lifecycleCtx, "open AI skill path", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		err := a.services.OpenPath(ctx, a.sessionID, path)
+		cancel()
+		if err != nil {
+			_ = a.runOnUI("apply AI skill path error", func() {
+				a.settingNote = "Could not open skill path: " + err.Error()
+				a.invalidateSettingsWindow()
+			})
 		}
-		return a.translate("i18n:ui_ai_skill_type_local")
-	}
-	for _, column := range definition.Value.Columns {
-		if column.Key == key {
-			return compactFormTableText(a.formTableDisplayValue(column, row), 34)
-		}
-	}
-	return compactFormTableText(fmt.Sprint(row[key]), 34)
+	})
 }
 
 // newAISettingsForm maps the core settings arrays onto the shared portable table editor.
@@ -137,49 +108,45 @@ func newAISettingsForm(data settingsData) formFieldsState {
 		{
 			Type: "table",
 			Value: formDefinitionValue{
-				Key:   "AIProviders",
-				Title: "i18n:ui_ai_model",
+				Key: "AIProviders", Title: "i18n:ui_ai_model", SortColumnKey: "Name", InlineTable: true,
 				Columns: []formTableColumn{
-					{Key: "Name", Label: "i18n:ui_ai_providers_name", Type: "select", Validators: []formValidator{{Type: "not_empty"}}},
-					{Key: "Alias", Label: "i18n:ui_ai_providers_alias", Type: "text"},
-					{Key: "Host", Label: "i18n:ui_ai_providers_host", Type: "text"},
-					{Key: "ApiKey", Label: "i18n:ui_ai_providers_api_key", Type: "text", HideInTable: true},
+					{Key: "Status", Label: "i18n:ui_ai_providers_status", Width: 40, Type: "aiModelStatus", HideInUpdate: true},
+					{Key: "Name", Label: "i18n:ui_ai_providers_name", Tooltip: "i18n:ui_ai_providers_name_tooltip", Width: 100, Type: "select", Validators: []formValidator{{Type: "not_empty"}}},
+					{Key: "Alias", Label: "i18n:ui_ai_providers_alias", Tooltip: "i18n:ui_ai_providers_alias_tooltip", Width: 120, Type: "text"},
+					{Key: "Host", Label: "i18n:ui_ai_providers_host", Tooltip: "i18n:ui_ai_providers_host_tooltip", Width: 160, Type: "text"},
+					{Key: "ApiKey", Label: "i18n:ui_ai_providers_api_key", Tooltip: "i18n:ui_ai_providers_api_key_tooltip", Type: "text"},
 				},
 			},
 		},
 		{
 			Type: "table",
 			Value: formDefinitionValue{
-				Key:     "AIMCPServers",
-				Title:   "i18n:ui_ai_mcp_servers",
-				Tooltip: "i18n:ui_ai_mcp_servers_tooltip",
+				Key: "AIMCPServers", Title: "i18n:ui_ai_mcp_servers", Tooltip: "i18n:ui_ai_mcp_servers_tooltip", SortColumnKey: "Name", InlineTable: true,
 				Columns: []formTableColumn{
-					{Key: "Name", Label: "i18n:plugin_ai_chat_mcp_server_name", Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
-					{Key: "Tools", Label: "i18n:plugin_ai_chat_mcp_server_tools", Type: "text", HideInUpdate: true},
-					{Key: "Disabled", Label: "i18n:plugin_ai_chat_mcp_server_disabled", Type: "checkbox"},
-					{Key: "Type", Label: "i18n:plugin_ai_chat_mcp_server_type", Type: "select", SelectOptions: []formOption{{Label: "STDIO", Value: "stdio"}, {Label: "Streamable HTTP", Value: "streamable-http"}}, Validators: []formValidator{{Type: "not_empty"}}},
-					{Key: "Command", Label: "i18n:plugin_ai_chat_mcp_server_command", Type: "text"},
-					{Key: "EnvironmentVariables", Label: "i18n:plugin_ai_chat_mcp_server_environment_variables", Type: "textList", TextMaxLines: 6},
-					{Key: "Url", Label: "i18n:plugin_ai_chat_mcp_server_url", Type: "text", TextMaxLines: 4},
+					{Key: "Name", Label: "i18n:plugin_ai_chat_mcp_server_name", Tooltip: "i18n:plugin_ai_chat_mcp_server_name_tooltip", Width: 100, Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
+					{Key: "Tools", Label: "i18n:plugin_ai_chat_mcp_server_tools", Tooltip: "i18n:plugin_ai_chat_mcp_server_tools_tooltip", Width: 50, Type: "aiMCPServerTools", HideInUpdate: true},
+					{Key: "Disabled", Label: "i18n:plugin_ai_chat_mcp_server_disabled", Width: 80, Type: "checkbox"},
+					{Key: "Type", Label: "i18n:plugin_ai_chat_mcp_server_type", Tooltip: "i18n:plugin_ai_chat_mcp_server_type_tooltip", Width: 80, Type: "select", SelectOptions: []formOption{{Label: "STDIO", Value: "stdio"}, {Label: "Streamable HTTP", Value: "streamable-http"}}, Validators: []formValidator{{Type: "not_empty"}}},
+					{Key: "Command", Label: "i18n:plugin_ai_chat_mcp_server_command", Tooltip: "i18n:plugin_ai_chat_mcp_server_command_tooltip", Width: 100, Type: "text"},
+					{Key: "EnvironmentVariables", Label: "i18n:plugin_ai_chat_mcp_server_environment_variables", Tooltip: "i18n:plugin_ai_chat_mcp_server_environment_variables_tooltip", Width: 160, Type: "textList", TextMaxLines: 6},
+					{Key: "Url", Label: "i18n:plugin_ai_chat_mcp_server_url", Tooltip: "i18n:plugin_ai_chat_mcp_server_url_tooltip", Width: 120, Type: "text", TextMaxLines: 10},
 				},
 			},
 		},
 		{
 			Type: "table",
 			Value: formDefinitionValue{
-				Key:     "AISkills",
-				Title:   "i18n:ui_ai_skills",
-				Tooltip: "i18n:ui_ai_skills_tooltip",
+				Key: "AISkills", Title: "i18n:ui_ai_skills", Tooltip: "i18n:ui_ai_skills_tooltip", SortColumnKey: "Name", MaxHeight: 360, InlineTable: true,
 				Columns: []formTableColumn{
-					{Key: "Name", Label: "i18n:plugin_ai_chat_skill_name", Type: "text", HideInUpdate: true},
-					{Key: "Source", Label: "i18n:plugin_ai_chat_skill_type", Type: "text", HideInUpdate: true},
-					{Key: "Description", Label: "i18n:plugin_ai_chat_skill_description", Type: "text", HideInUpdate: true},
-					{Key: "SourceUrl", Label: "i18n:plugin_ai_chat_skill_source_url", Type: "text", HideInUpdate: true, HideInTable: true},
+					{Key: "Name", Label: "i18n:plugin_ai_chat_skill_name", Width: 200, Type: "text", HideInUpdate: true},
+					{Key: "Source", Label: "i18n:plugin_ai_chat_skill_type", Width: 100, Type: "aiSkillSource", HideInUpdate: true},
+					{Key: "Description", Label: "i18n:plugin_ai_chat_skill_description", Width: 400, Type: "text", HideInUpdate: true},
+					{Key: "SourceUrl", Label: "i18n:plugin_ai_chat_skill_source_url", Width: 200, Type: "text", HideInUpdate: true, HideInTable: true},
 					{Key: "SourceName", Type: "text", HideInUpdate: true, HideInTable: true},
 					{Key: "ManifestPath", Type: "text", HideInUpdate: true, HideInTable: true},
 					{Key: "Enabled", Type: "checkbox", HideInUpdate: true, HideInTable: true},
 					{Key: "Error", Type: "text", HideInUpdate: true, HideInTable: true},
-					{Key: "Path", Label: "i18n:ui_ai_skill_add_path", Type: "dirPath", Validators: []formValidator{{Type: "not_empty"}}},
+					{Key: "Path", Label: "i18n:ui_ai_skill_add_path", Width: 400, Type: "dirPath", HideInTable: true, Validators: []formValidator{{Type: "not_empty"}}},
 				},
 			},
 		},
@@ -385,7 +352,8 @@ func (a *App) beginCloneRemoteAISkill() {
 	state.rowBase = nil
 	state.skillClone = true
 	state.status = ""
-	state.deleteArmed = -1
+	state.deletePending = -1
+	state.deleteDirect = false
 	a.updateSettingsTextInput(true)
 	a.invalidateSettingsWindow()
 }

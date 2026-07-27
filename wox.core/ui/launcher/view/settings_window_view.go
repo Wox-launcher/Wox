@@ -8,15 +8,17 @@ import (
 
 // SettingsWindowProps contains the prepared rail, page, and optional modal overlay.
 type SettingsWindowProps struct {
-	Width    float32
-	Height   float32
-	Radius   float32
-	PageID   string
-	TitleBar woxwidget.Widget
-	Rail     woxwidget.Widget
-	Page     woxwidget.Widget
-	Overlay  woxwidget.Widget
-	Theme    woxcomponent.Theme
+	Width     float32
+	Height    float32
+	Radius    float32
+	PageID    string
+	Platform  string
+	RailWidth float32
+	TitleBar  woxwidget.Widget
+	Rail      woxwidget.Widget
+	Page      woxwidget.Widget
+	Overlay   woxwidget.Widget
+	Theme     woxcomponent.Theme
 }
 
 const SettingsTitleBarHeight = float32(40)
@@ -28,8 +30,19 @@ func SettingsWindow(props SettingsWindowProps) woxwidget.Widget {
 		Key: "settings-page-key", AutomationID: "settings.page." + props.PageID, Role: woxui.AccessibilityRoleGroup, Label: props.PageID + " settings",
 		Child: props.Page,
 	}
-	content := woxwidget.Container{Width: props.Width, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{props.Rail, page}}}
-	body := woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Radius: props.Radius, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{props.TitleBar, content}}}
+	var bodyChild woxwidget.Widget
+	if props.Platform == "darwin" {
+		// macOS window controls belong to the rail, so the page should not reserve the rail's title-bar height.
+		bodyChild = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+			{Left: props.RailWidth, Child: page},
+			{Top: SettingsTitleBarHeight, Child: props.Rail},
+			{Child: props.TitleBar},
+		}}
+	} else {
+		content := woxwidget.Container{Width: props.Width, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{props.Rail, page}}}
+		bodyChild = woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{props.TitleBar, content}}
+	}
+	body := woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Radius: props.Radius, Child: bodyChild}
 	var window woxwidget.Widget = body
 	if props.Overlay != nil {
 		window = woxwidget.Container{Width: props.Width, Height: props.Height, Radius: props.Radius, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: body}, {Child: props.Overlay}}}}
@@ -91,7 +104,11 @@ func (s *settingsTitleBarState) Dispose() {}
 func buildSettingsTitleBar(props SettingsTitleBarProps, hovered string, onHover func(string, bool)) woxwidget.Widget {
 	height := SettingsTitleBarHeight
 	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
-	dragArea := woxwidget.Gesture{ID: "settings-title-drag", OnDragStart: props.OnDrag, Child: woxwidget.Container{Width: props.Width, Height: height}}
+	dragWidth := props.Width
+	if props.Platform == "darwin" {
+		dragWidth = props.RailWidth
+	}
+	dragArea := woxwidget.Gesture{ID: "settings-title-drag", OnDragStart: props.OnDrag, Child: woxwidget.Container{Width: dragWidth, Height: height}}
 	children := make([]woxwidget.StackChild, 0, 7)
 	if props.Platform == "darwin" {
 		children = append(children, woxwidget.StackChild{Child: woxwidget.Container{Width: props.RailWidth, Height: height, Color: settingsTitleBarAlpha(props.Theme.ToolbarText, 9)}})

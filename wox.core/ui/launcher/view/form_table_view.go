@@ -11,8 +11,12 @@ import (
 const formTableListRowHeight = float32(48)
 
 const (
-	formTableDefaultMaxHeight = float32(300)
-	formTableOperationWidth   = float32(120)
+	formTableDefaultMaxHeight    = float32(300)
+	formTableOperationWidth      = float32(120)
+	formTableColumnSpacing       = float32(10)
+	formTableColumnTooltipWidth  = float32(20)
+	formTableHorizontalMargin    = float32(5)
+	formTableFlexibleColumnWidth = float32(100)
 )
 
 // FormTableColumn describes one visible inline table column.
@@ -24,46 +28,62 @@ type FormTableColumn struct {
 
 // FormTableCell contains one prepared inline table value.
 type FormTableCell struct {
-	Text string
-	Icon *woxui.Image
+	Text           string
+	Icon           *woxui.Image
+	IndicatorColor *woxui.Color
+}
+
+// FormTableRowAction describes a table-specific icon action appended after the standard actions.
+type FormTableRowAction struct {
+	ID    string
+	Label string
+	Icon  *woxui.Image
+	OnTap func()
 }
 
 // FormTableRow keeps display ordering tied to the source row used by the editor.
 type FormTableRow struct {
-	Index int
-	Cells []FormTableCell
+	Index           int
+	Cells           []FormTableCell
+	TrailingActions []FormTableRowAction
 }
 
 // FormTableFieldProps contains the full inline table presentation and actions.
 type FormTableFieldProps struct {
-	ID             string
-	Title          string
-	Description    string
-	Width          float32
-	Height         float32
-	MaxHeight      int
-	InlineTitle    bool
-	Invalid        bool
-	Columns        []FormTableColumn
-	Rows           []FormTableRow
-	SecondaryLabel string
-	AddLabel       string
-	EditLabel      string
-	DeleteLabel    string
-	OperationLabel string
-	EmptyLabel     string
-	InfoIcon       *woxui.Image
-	SecondaryIcon  *woxui.Image
-	AddIcon        *woxui.Image
-	EditIcon       *woxui.Image
-	DeleteIcon     *woxui.Image
-	EmptyIcon      *woxui.Image
-	Theme          woxcomponent.Theme
-	OnSecondary    func()
-	OnAdd          func()
-	OnOpenRow      func(int)
-	OnDeleteRow    func(int)
-	OnTooltip      func(bool, string, woxui.Rect)
+	ID              string
+	Title           string
+	Description     string
+	Width           float32
+	Height          float32
+	LabelWidth      float32
+	MaxHeight       int
+	InlineTitle     bool
+	Invalid         bool
+	Columns         []FormTableColumn
+	Rows            []FormTableRow
+	SecondaryLabel  string
+	HideEditAction  bool
+	HideCloneAction bool
+	AddLabel        string
+	EditLabel       string
+	CloneLabel      string
+	DeleteLabel     string
+	OperationLabel  string
+	EmptyLabel      string
+	InfoIcon        *woxui.Image
+	SecondaryIcon   *woxui.Image
+	AddIcon         *woxui.Image
+	EditIcon        *woxui.Image
+	CloneIcon       *woxui.Image
+	DeleteIcon      *woxui.Image
+	EmptyIcon       *woxui.Image
+	Theme           woxcomponent.Theme
+	OnSecondary     func()
+	OnAdd           func()
+	OnOpenRow       func(int)
+	OnCloneRow      func(int)
+	OnDeleteRow     func(int)
+	OnTooltip       func(bool, string, woxui.Rect)
 }
 
 // FormTableFieldHeight returns the content height used by form scrolling and rendering.
@@ -76,7 +96,11 @@ func FormTableFieldHeight(inlineTitle bool, description string, rowCount, maximu
 		}
 		return 6 + headerHeight + 8 + gridHeight + 34
 	}
-	return 6 + 36 + 6 + gridHeight + 10
+	descriptionHeight := float32(0)
+	if description != "" {
+		descriptionHeight = 4 + 48
+	}
+	return 6 + 36 + 6 + gridHeight + descriptionHeight + 10
 }
 
 func formTableGridHeight(rowCount, maximumHeight int) float32 {
@@ -106,18 +130,27 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 		}}
 	}
 
-	labelWidth := float32(132)
-	fieldWidth := max(float32(0), props.Width-labelWidth-10)
+	labelWidth := props.LabelWidth
+	if labelWidth <= 0 {
+		labelWidth = 132
+	}
+	const labelGap = float32(12)
+	fieldWidth := max(float32(0), props.Width-labelWidth-labelGap)
 	labelChildren := []woxwidget.Widget{
 		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
 	}
+	tableChildren := []woxwidget.Widget{formTableGrid(props, fieldWidth, gridHeight)}
 	if props.Description != "" {
-		labelChildren = append(labelChildren, woxwidget.TextBlock{Value: props.Description, Width: labelWidth, Height: 48, MaxLines: 3, LineHeight: 16, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ActionHeader})
+		tableChildren = append(tableChildren, woxwidget.TextBlock{
+			Value: props.Description, Width: min(fieldWidth, float32(620)), Height: 48, MaxLines: 3, LineHeight: 16,
+			Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle,
+		})
 	}
 	label := woxwidget.Container{Width: labelWidth, Height: max(float32(0), props.Height-16), Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: labelChildren}}
 	actions := woxwidget.Container{Width: fieldWidth, Height: 36, Padding: woxwidget.Insets{Left: max(float32(0), fieldWidth-74)}, Child: formTableAddButton(props)}
-	field := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{actions, formTableGrid(props, fieldWidth, gridHeight)}}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{label, field}}}
+	table := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: tableChildren}
+	field := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{actions, table}}
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{label, field}}}
 }
 
 func formTableInlineHeader(props FormTableFieldProps, width, height float32) woxwidget.Widget {
@@ -162,66 +195,154 @@ func formTableAddButton(props FormTableFieldProps) woxwidget.Widget {
 	})
 }
 
+type formTableGridProps struct {
+	field  FormTableFieldProps
+	width  float32
+	height float32
+}
+
+type formTableGridState struct {
+	horizontalHeader *woxwidget.ScrollController
+	horizontalBody   *woxwidget.ScrollController
+	verticalBody     *woxwidget.ScrollController
+}
+
+func newFormTableGridState() *formTableGridState {
+	return &formTableGridState{
+		horizontalHeader: woxwidget.NewScrollController(0),
+		horizontalBody:   woxwidget.NewScrollController(0),
+		verticalBody:     woxwidget.NewScrollController(0),
+	}
+}
+
+// InitState creates the synchronized header, body, and vertical scroll positions.
+func (s *formTableGridState) InitState(_ woxwidget.StateContext, _ any) {
+	*s = *newFormTableGridState()
+}
+
+// DidUpdateWidget preserves table scroll positions while its rows and geometry update.
+func (s *formTableGridState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
+
+// Build renders the table using retained scroll controllers.
+func (s *formTableGridState) Build(_ woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(formTableGridProps)
+	return buildFormTableGrid(props.field, props.width, props.height, s)
+}
+
+// Dispose releases no external resources; child scroll views detach themselves.
+func (s *formTableGridState) Dispose() {}
+
 func formTableGrid(props FormTableFieldProps, width, height float32) woxwidget.Widget {
+	return woxwidget.Stateful{
+		Key: woxwidget.Key(props.ID + "-grid"), Type: (*formTableGridState)(nil),
+		Widget: formTableGridProps{field: props, width: width, height: height},
+		CreateState: func() woxwidget.State {
+			return newFormTableGridState()
+		},
+	}
+}
+
+func buildFormTableGrid(props FormTableFieldProps, width, height float32, state *formTableGridState) woxwidget.Widget {
 	widths := formTableColumnWidths(props.Columns, width)
-	headerCells := make([]woxwidget.Widget, 0, len(props.Columns)+1)
+	operationWidth := min(width, widths[len(widths)-1])
+	leftViewportWidth := max(float32(0), width-operationWidth)
+	leftContentWidth := float32(0)
+	for index := range props.Columns {
+		leftContentWidth += widths[index]
+	}
+	// Flutter expands the last data column when the declared columns are narrower
+	// than the viewport, keeping the pinned operation column directly adjacent.
+	if len(props.Columns) > 0 && leftContentWidth < leftViewportWidth {
+		widths[len(props.Columns)-1] += leftViewportWidth - leftContentWidth
+		leftContentWidth = leftViewportWidth
+	}
+	headerCells := make([]woxwidget.Widget, 0, len(props.Columns))
 	for index, column := range props.Columns {
 		headerCells = append(headerCells, formTableHeaderCell(props, column, widths[index], index))
 	}
-	headerCells = append(headerCells, formTableHeaderCell(props, FormTableColumn{Label: props.OperationLabel}, widths[len(widths)-1], len(props.Columns)))
-	header := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: headerCells}
+	leftContentWidth = max(leftViewportWidth, leftContentWidth)
+	leftHeader := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: headerCells}
+	operationHeader := formTableHeaderCell(props, FormTableColumn{Label: props.OperationLabel}, operationWidth, len(props.Columns))
 	bodyHeight := max(float32(0), height-tableSurfaceHeaderHeight)
-	var body woxwidget.Widget
 	if len(props.Rows) == 0 {
-		body = formTableEmptyState(props, width, bodyHeight)
-	} else {
-		visibleRows := min(len(props.Rows), max(1, int(bodyHeight/tableSurfaceRowHeight)))
-		rows := make([]woxwidget.Widget, 0, visibleRows)
-		for rowIndex := 0; rowIndex < visibleRows; rowIndex++ {
-			rows = append(rows, formTableDataRow(props, props.Rows[rowIndex], widths, width))
-		}
-		body = woxwidget.Clip{Width: width, Height: bodyHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}}
+		header := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+			woxwidget.ScrollView{
+				Key: woxwidget.Key(props.ID + "-columns"), ID: props.ID + "-columns", Width: leftViewportWidth, Height: tableSurfaceHeaderHeight,
+				ContentWidth: leftContentWidth, Horizontal: true, Controller: state.horizontalHeader, Child: leftHeader,
+			},
+			operationHeader,
+		}}
+		return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{
+			Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, formTableEmptyState(props, width, bodyHeight)},
+		}}
+	}
+
+	contentHeight := float32(len(props.Rows)) * tableSurfaceRowHeight
+	leftRows := make([]woxwidget.Widget, 0, len(props.Rows))
+	operationRows := make([]woxwidget.Widget, 0, len(props.Rows))
+	for _, row := range props.Rows {
+		leftRows = append(leftRows, formTableDataRowCells(props, row, widths[:len(props.Columns)], leftContentWidth))
+		operationRows = append(operationRows, formTableOperationCell(props, row, operationWidth))
+	}
+	header := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+		woxwidget.ScrollView{
+			Key: woxwidget.Key(props.ID + "-columns-header"), ID: props.ID + "-columns-header", Width: leftViewportWidth, Height: tableSurfaceHeaderHeight,
+			ContentWidth: leftContentWidth, Horizontal: true, Controller: state.horizontalHeader, OnOffsetChanged: func(offset float32) {
+				state.horizontalBody.JumpTo(offset)
+			}, Child: leftHeader,
+		},
+		operationHeader,
+	}}
+	bodyContent := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+		woxwidget.ScrollView{
+			Key: woxwidget.Key(props.ID + "-columns-body"), ID: props.ID + "-columns-body", Width: leftViewportWidth, Height: contentHeight,
+			ContentWidth: leftContentWidth, Horizontal: true, Controller: state.horizontalBody, OnOffsetChanged: func(offset float32) {
+				state.horizontalHeader.JumpTo(offset)
+			}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: leftRows},
+		},
+		woxwidget.Flex{Axis: woxwidget.Vertical, Children: operationRows},
+	}}
+	body := woxwidget.ScrollView{
+		Key: woxwidget.Key(props.ID + "-rows"), ID: props.ID + "-rows", Width: width, Height: bodyHeight,
+		ContentHeight: contentHeight, Controller: state.verticalBody, Child: bodyContent,
 	}
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, body}}}
 }
 
-func formTableColumnWidths(columns []FormTableColumn, width float32) []float32 {
+// formTableColumnWidths preserves Flutter's declared widths and leaves overflow
+// to the horizontally scrolling content area instead of shrinking every column.
+func formTableColumnWidths(columns []FormTableColumn, tableWidth float32) []float32 {
 	widths := make([]float32, len(columns)+1)
-	widths[len(widths)-1] = min(formTableOperationWidth, max(float32(72), width*0.22))
-	remaining := max(float32(0), width-widths[len(widths)-1])
-	flexible := 0
-	fixed := float32(0)
+	widths[len(widths)-1] = formTableOperationWidth + formTableHorizontalMargin*2
+	zeroWidthColumns := 0
+	totalDeclaredWidth := float32(0)
+	totalTooltipWidth := float32(0)
+	for _, column := range columns {
+		totalDeclaredWidth += column.Width + formTableColumnSpacing
+		if column.Width == 0 {
+			zeroWidthColumns++
+		}
+		if column.Tooltip != "" {
+			totalTooltipWidth += formTableColumnTooltipWidth
+		}
+	}
+	flexibleWidth := formTableFlexibleColumnWidth
+	if zeroWidthColumns == 1 {
+		availableWidth := tableWidth - totalDeclaredWidth - (formTableOperationWidth + formTableColumnSpacing) - totalTooltipWidth
+		if availableWidth > 0 {
+			flexibleWidth = availableWidth
+		}
+	}
+
 	for index, column := range columns {
-		if column.Width > 0 {
-			widths[index] = column.Width
-			if column.Tooltip != "" {
-				widths[index] += 20
-			}
-			fixed += widths[index]
-		} else {
-			flexible++
+		columnWidth := column.Width
+		if columnWidth == 0 {
+			columnWidth = flexibleWidth
 		}
-	}
-	if flexible > 0 {
-		flexWidth := max(float32(72), (remaining-fixed)/float32(flexible))
-		for index := range columns {
-			if widths[index] == 0 {
-				widths[index] = flexWidth
-			}
+		if column.Tooltip != "" {
+			columnWidth += formTableColumnTooltipWidth
 		}
-	}
-	total := widths[len(widths)-1]
-	for index := range columns {
-		total += widths[index]
-	}
-	if total <= 0 {
-		return widths
-	}
-	if total != width {
-		scale := width / total
-		for index := range widths {
-			widths[index] *= scale
-		}
+		widths[index] = columnWidth + formTableColumnSpacing
 	}
 	return widths
 }
@@ -268,32 +389,55 @@ func formTableEmptyState(props FormTableFieldProps, width, height float32) woxwi
 		Padding: woxwidget.Insets{Left: max(float32(0), (width-contentWidth)/2), Top: max(float32(0), (height-46)/2)}, Child: content}
 }
 
-func formTableDataRow(props FormTableFieldProps, row FormTableRow, widths []float32, width float32) woxwidget.Widget {
-	style := newTableSurfaceStyle(props.Theme)
+// formTableDataRowCells builds the horizontally scrolling portion of one row.
+func formTableDataRowCells(props FormTableFieldProps, row FormTableRow, widths []float32, width float32) woxwidget.Widget {
 	cells := make([]woxwidget.Widget, 0, len(widths))
 	for index := range props.Columns {
 		cell := FormTableCell{}
 		if index < len(row.Cells) {
 			cell = row.Cells[index]
 		}
-		cells = append(cells, formTableDataCell(props, row.Index, cell, widths[index], index))
+		cells = append(cells, formTableDataCell(props, cell, widths[index]))
 	}
-	operationWidth := widths[len(widths)-1]
-	operation := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, Children: []woxwidget.Widget{
-		formTableIconButton(props, fmt.Sprintf("%s-row-%d-edit", props.ID, row.Index), props.EditLabel, props.EditIcon, func() {
+	return woxwidget.Container{Width: width, Height: tableSurfaceRowHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells}}
+}
+
+// formTableOperationCell builds the pinned action portion of one row.
+func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width float32) woxwidget.Widget {
+	style := newTableSurfaceStyle(props.Theme)
+	actions := make([]woxwidget.Widget, 0, 3+len(row.TrailingActions))
+	if !props.HideEditAction {
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-edit", props.ID, row.Index), props.EditLabel, props.EditIcon, func() {
 			if props.OnOpenRow != nil {
 				props.OnOpenRow(row.Index)
 			}
-		}),
+		}))
+	}
+	if !props.HideCloneAction {
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-clone", props.ID, row.Index), props.CloneLabel, props.CloneIcon, func() {
+			if props.OnCloneRow != nil {
+				props.OnCloneRow(row.Index)
+			}
+		}))
+	}
+	actions = append(actions,
 		formTableIconButton(props, fmt.Sprintf("%s-row-%d-delete", props.ID, row.Index), props.DeleteLabel, props.DeleteIcon, func() {
 			if props.OnDeleteRow != nil {
 				props.OnDeleteRow(row.Index)
 			}
 		}),
-	}}
-	cells = append(cells, woxwidget.Container{Width: operationWidth, Height: tableSurfaceRowHeight, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-		Padding: woxwidget.Insets{Left: 4, Top: 6, Right: 4}, Child: operation})
-	return woxwidget.Container{Width: width, Height: tableSurfaceRowHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells}}
+	)
+	for index, action := range row.TrailingActions {
+		action := action
+		actionID := action.ID
+		if actionID == "" {
+			actionID = fmt.Sprintf("trailing-%d", index)
+		}
+		actions = append(actions, formTableIconButton(props, fmt.Sprintf("%s-row-%d-%s", props.ID, row.Index, actionID), action.Label, action.Icon, action.OnTap))
+	}
+	operation := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, Children: actions}
+	return woxwidget.Container{Width: width, Height: tableSurfaceRowHeight, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
+		Padding: woxwidget.Insets{Left: 4, Top: 6, Right: 4}, Child: operation}
 }
 
 func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxui.Image, onTap func()) woxwidget.Widget {
@@ -313,23 +457,21 @@ func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxu
 	}, Child: woxwidget.Gesture{ID: id, OnTap: onTap, Child: woxwidget.Align{Width: 26, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: content}}}}
 }
 
-func formTableDataCell(props FormTableFieldProps, rowIndex int, cell FormTableCell, width float32, columnIndex int) woxwidget.Widget {
+func formTableDataCell(props FormTableFieldProps, cell FormTableCell, width float32) woxwidget.Widget {
 	style := newTableSurfaceStyle(props.Theme)
 	contentWidth := max(float32(0), width-14)
 	var content woxwidget.Widget = woxwidget.TextBlock{Value: cell.Text, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle}
-	if cell.Icon != nil {
+	if cell.IndicatorColor != nil {
+		content = woxwidget.Container{Width: 16, Height: 16, Radius: 8, Color: *cell.IndicatorColor}
+	} else if cell.Icon != nil {
 		children := []woxwidget.Widget{woxwidget.Image{Source: cell.Icon, Width: 16, Height: 16}}
 		if cell.Text != "" {
 			children = append(children, woxwidget.TextBlock{Value: cell.Text, Width: max(float32(0), contentWidth-22), Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle})
 		}
 		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: children}
 	}
-	return woxwidget.Gesture{ID: fmt.Sprintf("%s-row-%d-column-%d", props.ID, rowIndex, columnIndex), OnTap: func() {
-		if props.OnOpenRow != nil {
-			props.OnOpenRow(rowIndex)
-		}
-	}, Child: woxwidget.Container{Width: width, Height: tableSurfaceRowHeight, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-		Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 6}, Child: content}}
+	return woxwidget.Container{Width: width, Height: tableSurfaceRowHeight, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
+		Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 6}, Child: content}
 }
 
 func formTableAlpha(color woxui.Color, alpha uint8) woxui.Color {
@@ -384,6 +526,52 @@ func FormTableOverlay(props FormTableOverlayProps) woxwidget.Widget {
 		ID: "form-table-dialog", Label: props.Title, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "form-table-modal-shade", BackdropAlpha: 205,
 		Padding: padding, Radius: radius, BorderColor: borderColor, BorderWidth: borderWidth, Theme: props.Theme, Child: child,
+	})
+}
+
+// FormTableDeleteDialogProps contains the Flutter-aligned row deletion confirmation.
+type FormTableDeleteDialogProps struct {
+	Width       float32
+	Height      float32
+	Message     string
+	CancelLabel string
+	DeleteLabel string
+	Theme       woxcomponent.Theme
+	OnCancel    func()
+	OnDelete    func()
+}
+
+// FormTableDeleteDialog builds the compact confirmation shown before deleting one row.
+func FormTableDeleteDialog(props FormTableDeleteDialogProps) woxwidget.Widget {
+	panelWidth := min(float32(270), max(float32(0), props.Width-56))
+	panelHeight := min(float32(110), max(float32(0), props.Height-56))
+	innerWidth := max(float32(0), panelWidth-48)
+	const buttonWidth = float32(64)
+	const buttonGap = float32(16)
+	actionsWidth := buttonWidth*2 + buttonGap
+	actions := woxwidget.Container{
+		Width: innerWidth, Height: 34, Padding: woxwidget.Insets{Left: max(float32(0), innerWidth-actionsWidth)},
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: buttonGap, Children: []woxwidget.Widget{
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: "form-table-delete-cancel", Label: props.CancelLabel, Width: buttonWidth, Height: 34,
+				Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme,
+			}),
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: "form-table-delete-confirm", Label: props.DeleteLabel, Width: buttonWidth, Height: 34,
+				Variant: woxcomponent.ButtonPrimary, OnTap: props.OnDelete, Theme: props.Theme,
+			}),
+		}},
+	}
+	border := formTableAlpha(props.Theme.ResultSubtitle, 104)
+	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
+		ID: "form-table-delete-dialog", Label: props.Message, Width: panelWidth, Height: panelHeight,
+		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "form-table-delete-backdrop", BackdropAlpha: 210,
+		Radius: 20, Padding: woxwidget.Insets{Left: 24, Top: 20, Right: 24, Bottom: 22}, BorderColor: border, BorderWidth: 0.75,
+		InitialFocus: "form-table-delete-cancel", OnDismiss: props.OnCancel, Theme: props.Theme,
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{
+			woxwidget.TextBlock{Value: props.Message, Width: innerWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ActionText},
+			actions,
+		}},
 	})
 }
 

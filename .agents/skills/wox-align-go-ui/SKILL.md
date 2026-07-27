@@ -10,9 +10,10 @@ Align one named screen, component, or user flow at a time. Treat the running Flu
 ## Non-negotiable constraints
 
 - Never run Flutter Wox and Go UI Wox at the same time. Wox is single-instance.
-- Enforce the runtime sequence `stopped -> Flutter -> stopped -> Go UI -> stopped`.
-- Verify the process is gone at each `stopped` boundary. Inspect full command paths with `ps -Ao pid=,command=` and include installed/nested Flutter apps, `go run` children, `__debug_bin*`/Delve sessions, automation binaries, and plugin hosts. Do not assume closing a window ended Wox.
-- Prefer graceful quit. Force-terminate only the exact verified Wox PID when graceful quit fails and the action is authorized.
+- Before every Flutter or Go UI launch, terminate all existing Wox instances and verify a clean `stopped` boundary. A request that invokes this skill and requires launching Wox authorizes terminating exact verified Wox processes for runtime isolation, including installed/nested Flutter apps, `go run` children, `__debug_bin*`/Delve sessions, automation binaries, plugin hosts, and their Wox-owned debugger process.
+- Enforce the runtime sequence `clean -> stopped -> Flutter -> clean -> stopped -> Go UI -> clean -> stopped`. Repeat the cleanup even when the previous launch appeared to exit normally.
+- Inspect full command paths with `ps -Ao pid=,command=` before and after cleanup. Never kill by process name, a broad pattern, or an unresolved variable; collect exact PIDs first and exclude the process-check command itself. Do not assume closing a window ended Wox.
+- Prefer graceful quit when a responsive Wox window is available. Otherwise terminate only the exact verified Wox-related PIDs, then repeat the process check until it is empty.
 - Never switch branches in a dirty checkout, stash user changes, discard changes, or overwrite unrelated work.
 - Do not edit Flutter code unless the user explicitly requests it. The normal deliverable changes Go UI only.
 - Do not claim parity from compilation or tests alone. Complete a serial runtime comparison after the change.
@@ -51,7 +52,7 @@ Create a temporary capture directory such as `/tmp/wox-ui-parity/<timestamp>/` w
 
 ## Capture the Flutter reference
 
-1. Confirm no Wox process is running.
+1. Find and terminate every existing Wox-related process, including IDE/Delve sessions and plugin hosts, then confirm the process check is empty.
 2. Confirm the installed reference exists at `/Applications/Wox.app`. If only `/Application/Wox.app` was supplied, correct the path rather than creating a second assumption.
 3. Load and follow the available Computer Use skill before any GUI operation. If GUI control is unavailable, ask for user-provided captures instead of claiming runtime comparison.
 4. Launch `/Applications/Wox.app` with `/usr/bin/open /Applications/Wox.app`, then wait for the exact bundle process and window to become ready.
@@ -90,7 +91,7 @@ Keep a mapping from Flutter source and observed behavior to the corresponding Go
 
 ## Capture and compare Go UI
 
-1. Reconfirm the Flutter process is gone.
+1. Repeat the full Wox process cleanup and confirm the process check is empty, even if Flutter appeared to quit cleanly.
 2. Choose the appropriate launch path:
 
    - Use the ordinary development entry for exploratory manual inspection:
@@ -193,15 +194,15 @@ Use this validation ladder:
 
 4. Build the automation binary and run the bundled driver against the exact target route and state. Capture the initial state and each relevant interaction state. Confirm expected semantic roles and logical bounds in the driver's output.
 5. Run `make test-go-ui-smoke` when the change affects an existing smoke contract or broader launcher/settings lifecycle. Treat a smoke assertion only as evidence for that exact contract. If an unrelated existing assertion fails before reaching the target, report it separately and continue with a focused automation case.
-6. Repeat the same serial Flutter and Go UI capture case after implementation.
+6. Repeat the same serial Flutter and Go UI capture case after implementation. Run the full cleanup and empty-process verification before each launch, including repeated launches of the same implementation.
 7. Verify window geometry, rapid input where relevant, focus semantics, pointer and keyboard activation, scrolling, and visual output. A successful build is not runtime acceptance.
-8. Re-run:
+8. Re-run the process check before each launch and after each shutdown:
 
    ```bash
    ps -Ao pid=,command= | rg '(/Applications/[W]ox\.app|/\.wox[^/]*/ui/flutter/[w]ox-ui\.app|[w]ox-go-ui-smoke|/go-build.*/exe/[w]ox\.core|/wox\.core/(wox\.core|__debug_bin)|/\.wox[^/]*/hosts/(python-host|node-host)|[w]ox\.plugin\.host)'
    ```
 
-   An empty result is the final `stopped` boundary. The character-class patterns avoid matching the process-check command itself. Treat a matching user-owned IDE/Delve Wox session as an active instance; do not terminate it without authorization.
+   An empty result is the required `stopped` boundary. The character-class patterns avoid matching the process-check command itself. Because launching through this skill requires an isolated single instance, terminate exact matching IDE/Delve Wox sessions as part of cleanup.
 9. Leave at most one Wox implementation running. Prefer restoring the initial runtime state; otherwise leave both stopped and report it.
 
 ## Completion report

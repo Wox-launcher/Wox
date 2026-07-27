@@ -181,6 +181,86 @@ func TestHostWaitForChangeUsesFrameGeneration(t *testing.T) {
 	}
 }
 
+func TestHorizontalScrollViewUsesHorizontalExtentAndPointerDelta(t *testing.T) {
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "horizontal-scroll", Width: 100, Height: 20, ContentWidth: 200, Horizontal: true,
+			Child: Stack{Width: 200, Height: 20, Children: []StackChild{{
+				Left: 150,
+				Child: Semantics{
+					Key: "target", AutomationID: "target", Role: woxui.AccessibilityRoleText,
+					Child: Container{Width: 10, Height: 10},
+				},
+			}}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	before := findAutomationNode(t, host.Snapshot().Tree, "target")
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 5, Y: 5}, Scroll: woxui.Point{X: -40}})
+	renderTestFrame(host)
+	after := findAutomationNode(t, host.Snapshot().Tree, "target")
+	if after.Bounds.X != before.Bounds.X-40 {
+		t.Fatalf("target x after horizontal scroll = %v, want %v", after.Bounds.X, before.Bounds.X-40)
+	}
+}
+
+func TestVerticalWheelOverHorizontalScrollBubblesToOuterScrollView(t *testing.T) {
+	outer := NewScrollController(0)
+	inner := NewScrollController(0)
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "outer", Width: 100, Height: 100, ContentHeight: 200, Controller: outer,
+			Child: Stack{Width: 100, Height: 200, Children: []StackChild{{
+				Child: ScrollView{
+					Key: "inner", Width: 100, Height: 20, ContentWidth: 200, Horizontal: true, Controller: inner,
+					Child: Container{Width: 200, Height: 20},
+				},
+			}}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 5, Y: 5}, Scroll: woxui.Point{Y: -30}})
+	if inner.Offset() != 0 {
+		t.Fatalf("horizontal inner offset = %v, want 0 for a vertical wheel event", inner.Offset())
+	}
+	if outer.Offset() != 30 {
+		t.Fatalf("outer offset = %v, want 30 after bubbled vertical wheel event", outer.Offset())
+	}
+}
+
+func TestNestedVerticalScrollBubblesAtInnerBoundary(t *testing.T) {
+	outer := NewScrollController(0)
+	inner := NewScrollController(0)
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "outer", Width: 100, Height: 100, ContentHeight: 200, Controller: outer,
+			Child: Stack{Width: 100, Height: 200, Children: []StackChild{{
+				Child: ScrollView{
+					Key: "inner", Width: 100, Height: 20, ContentHeight: 40, Controller: inner,
+					Child: Container{Width: 100, Height: 40},
+				},
+			}}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	if !inner.JumpTo(20) {
+		t.Fatal("failed to move inner scroll view to its lower boundary")
+	}
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 5, Y: 5}, Scroll: woxui.Point{Y: -10}})
+	if inner.Offset() != 20 {
+		t.Fatalf("inner offset = %v, want to remain at boundary 20", inner.Offset())
+	}
+	if outer.Offset() != 10 {
+		t.Fatalf("outer offset = %v, want 10 after inner boundary propagation", outer.Offset())
+	}
+}
+
 // TestHostDragSelectionExtendsAndClickCollapses verifies that a press+drag on a selection
 // gesture extends the selection, while a press+release without movement falls through to tap.
 func TestHostDragSelectionExtendsAndClickCollapses(t *testing.T) {
@@ -189,11 +269,11 @@ func TestHostDragSelectionExtendsAndClickCollapses(t *testing.T) {
 	var tapCalls int
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
 		return Gesture{
-			ID: "select",
-			OnTap: func() { tapCalls++ },
-			OnSelectionStart: func(p woxui.Point) { startCalls++ },
+			ID:                "select",
+			OnTap:             func() { tapCalls++ },
+			OnSelectionStart:  func(p woxui.Point) { startCalls++ },
 			OnSelectionExtend: func(p woxui.Point) { extendCalls++; lastExtend = p },
-			Child: Container{Width: 100, Height: 20},
+			Child:             Container{Width: 100, Height: 20},
 		}
 	})
 	host.AttachServices(&fakeHostServices{})

@@ -169,7 +169,11 @@ func (a *App) pluginFormLabelWidth(definitions []formDefinition) float32 {
 	}
 	style := woxui.TextStyle{Size: 13}
 	for _, definition := range definitions {
-		label := strings.TrimSpace(a.translate(definition.Value.Label))
+		labelKey := definition.Value.Label
+		if definition.Type == "table" {
+			labelKey = formTableTitle(definition)
+		}
+		label := strings.TrimSpace(a.translate(labelKey))
 		if label == "" {
 			continue
 		}

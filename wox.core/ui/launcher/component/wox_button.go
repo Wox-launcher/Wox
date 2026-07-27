@@ -49,11 +49,11 @@ type ButtonProps struct {
 func WoxButton(props ButtonProps) woxwidget.Widget {
 	height := float32(38)
 	radius := float32(8)
-	padding := woxwidget.Insets{Left: 16, Right: 12}
+	padding := woxwidget.Insets{Left: 16, Right: 16}
 	if props.Size == ButtonCompact {
 		height = 30
 		radius = 4
-		padding = woxwidget.Insets{Left: 12, Right: 8}
+		padding = woxwidget.Insets{Left: 12, Right: 12}
 	}
 	if props.Height > 0 {
 		height = props.Height
@@ -120,10 +120,10 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 			woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: woxui.FontWeightSemibold}, Color: foreground},
 		}}
 	}
-	// Center measured text and icon content inside the padded button box instead of relying on font-specific top offsets.
+	// Center measured text and icon content inside symmetric padding instead of relying on font-specific offsets.
 	content := woxwidget.Gesture{ID: props.ID, OnTap: onTap, Child: woxwidget.Container{
 		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: border, BorderWidth: boolFloat(border.A != 0), Padding: padding,
-		Child: woxwidget.Align{Vertical: 0.5, Child: child},
+		Child: woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: child},
 	}}
 	return woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,

@@ -557,9 +557,22 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 	}
 	if event.Kind == woxui.PointerScroll {
 		target := h.root.hitTestScroll(event.Position)
-		if target != nil {
-			target.gesture.onScroll(event.Scroll)
-			h.invalidate()
+		for current := target; current != nil; current = current.parent {
+			if current.gesture == nil {
+				continue
+			}
+			if current.gesture.onScrollHandled != nil {
+				if !current.gesture.onScrollHandled(event.Scroll) {
+					continue
+				}
+				h.invalidate()
+				return
+			}
+			if current.gesture.onScroll != nil {
+				current.gesture.onScroll(event.Scroll)
+				h.invalidate()
+				return
+			}
 		}
 		return
 	}

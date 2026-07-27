@@ -24,28 +24,32 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	width := frame.Size.Width
 	height := frame.Size.Height
 	contentHeight := max(float32(0), height-settingsTitleBarHeight)
+	pageHeight := contentHeight
+	if runtime.GOOS == "darwin" {
+		pageHeight = height
+	}
 	railWidth := min(float32(240), max(float32(210), width*0.22))
 	var page woxwidget.Widget
 	if snapshot.tab == "plugins" {
-		page = a.buildPluginSettingsPage(snapshot, width-railWidth, contentHeight)
+		page = a.buildPluginSettingsPage(snapshot, width-railWidth, pageHeight)
 	} else if snapshot.tab == "theme" {
-		page = a.buildSettingsThemePage(snapshot, width-railWidth, contentHeight)
+		page = a.buildSettingsThemePage(snapshot, width-railWidth, pageHeight)
 	} else if snapshot.tab == "ai" {
-		page = a.buildAISettingsPage(snapshot, width-railWidth, contentHeight)
+		page = a.buildAISettingsPage(snapshot, width-railWidth, pageHeight)
 	} else if snapshot.tab == "data" {
-		page = a.buildDataSettingsPage(snapshot, width-railWidth, contentHeight)
+		page = a.buildDataSettingsPage(snapshot, width-railWidth, pageHeight)
 	} else if snapshot.tab == "cloud" {
-		page = a.buildCloudSettingsPage(snapshot, width-railWidth, contentHeight)
+		page = a.buildCloudSettingsPage(snapshot, width-railWidth, pageHeight)
 	} else if snapshot.tab == "runtime" {
-		page = a.buildRuntimeSettingsPage(snapshot, items, width-railWidth, contentHeight)
+		page = a.buildRuntimeSettingsPage(snapshot, items, width-railWidth, pageHeight)
 	} else if snapshot.tab == "usage" {
-		page = a.buildUsageSettingsPage(snapshot, width-railWidth, contentHeight)
+		page = a.buildUsageSettingsPage(snapshot, width-railWidth, pageHeight)
 	} else if snapshot.tab == "about" {
-		page = a.buildAboutSettingsPage(snapshot, width-railWidth, contentHeight)
+		page = a.buildAboutSettingsPage(snapshot, width-railWidth, pageHeight)
 	} else if snapshot.tab == "privacy" {
-		page = a.buildPrivacySettingsPage(snapshot, width-railWidth, contentHeight)
+		page = a.buildPrivacySettingsPage(snapshot, width-railWidth, pageHeight)
 	} else {
-		page = a.buildSettingsPage(snapshot, items, width-railWidth, contentHeight)
+		page = a.buildSettingsPage(snapshot, items, width-railWidth, pageHeight)
 	}
 	var overlay woxwidget.Widget
 	if snapshot.tableEditor != nil {
@@ -60,7 +64,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildPrivacySampleOverlay(snapshot, width, height)
 	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
-		Width: width, Height: height, PageID: snapshot.tab, Theme: snapshot.palette.componentTheme(),
+		Width: width, Height: height, PageID: snapshot.tab, Platform: runtime.GOOS, RailWidth: railWidth, Theme: snapshot.palette.componentTheme(),
 		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight), Page: page, Overlay: overlay,
 	})
 }

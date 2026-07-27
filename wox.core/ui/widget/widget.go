@@ -97,7 +97,7 @@ func (n *node) hitTestScroll(point woxui.Point) *node {
 			return hit
 		}
 	}
-	if n.gesture != nil && n.gesture.onScroll != nil {
+	if n.gesture != nil && (n.gesture.onScroll != nil || n.gesture.onScrollHandled != nil) {
 		return n
 	}
 	return nil
@@ -256,7 +256,9 @@ type ScrollView struct {
 	ID              string
 	Width           float32
 	Height          float32
+	ContentWidth    float32
 	ContentHeight   float32
+	Horizontal      bool
 	Offset          float32
 	InitialOffset   float32
 	Controller      *ScrollController
@@ -297,6 +299,24 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 	height := available.height
 	if w.Height > 0 {
 		height = min(w.Height, available.height)
+	}
+	if w.Horizontal {
+		contentWidth := max(width, w.ContentWidth)
+		var child *node
+		if w.Child != nil {
+			child = w.Child.layout(ctx, constraints{width: contentWidth, height: height})
+			contentWidth = max(contentWidth, child.bounds.Width)
+		}
+		offset := min(max(float32(0), w.Offset), max(float32(0), contentWidth-width))
+		if w.onGeometry != nil {
+			w.onGeometry(width, contentWidth)
+		}
+		result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
+		if child != nil {
+			child.place(-offset, 0)
+			result.children = []*node{child}
+		}
+		return result
 	}
 	contentHeight := max(height, w.ContentHeight)
 	var child *node
@@ -633,6 +653,9 @@ type gesture struct {
 	onTapBounds func(woxui.Rect)
 	onDragStart func()
 	onScroll    func(woxui.Point)
+	// onScrollHandled reports whether this gesture consumed the delta so an
+	// ancestor scroll view can continue at nested-scroll boundaries.
+	onScrollHandled func(woxui.Point) bool
 	// onSelectionStart begins a drag-based text selection anchored at the given local point.
 	onSelectionStart func(woxui.Point)
 	// onSelectionExtend updates the selection focus to the given local point while dragging.
@@ -651,6 +674,9 @@ type Gesture struct {
 	OnTapBounds func(bounds woxui.Rect)
 	OnDragStart func()
 	OnScroll    func(delta woxui.Point)
+	// OnScrollHandled returns false to pass an unconsumed delta to the nearest
+	// ancestor scroll gesture.
+	OnScrollHandled func(delta woxui.Point) bool
 	// OnSelectionStart begins a drag-based selection (e.g. text drag-select) anchored at the local point.
 	// When set, pointer-down on this gesture starts a selection drag instead of a tap, so OnTap/OnTapAt
 	// are skipped until the pointer is released without significant movement.
@@ -672,7 +698,11 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 		target.key = Key(w.ID)
 	}
 	target.kind = "gesture"
-	target.gesture = &gesture{id: w.ID, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap, onTapAt: w.OnTapAt, onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onScroll: w.OnScroll, onSelectionStart: w.OnSelectionStart, onSelectionExtend: w.OnSelectionExtend}
+	target.gesture = &gesture{
+		id: w.ID, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap, onTapAt: w.OnTapAt,
+		onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled,
+		onSelectionStart: w.OnSelectionStart, onSelectionExtend: w.OnSelectionExtend,
+	}
 	return target
 }
 

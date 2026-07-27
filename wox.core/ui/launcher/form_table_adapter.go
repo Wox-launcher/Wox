@@ -33,6 +33,20 @@ func compactFormTableText(value string, maxRunes int) string {
 
 func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) string {
 	value := formTableColumnValue(column, row)
+	if column.Type == "aiMCPServerTools" {
+		switch tools := row[column.Key].(type) {
+		case []any:
+			return fmt.Sprintf("%d tools", len(tools))
+		case []string:
+			return fmt.Sprintf("%d tools", len(tools))
+		}
+	}
+	if column.Type == "aiSkillSource" {
+		if strings.EqualFold(value, "remote") {
+			return a.translate("i18n:ui_ai_skill_type_remote")
+		}
+		return a.translate("i18n:ui_ai_skill_type_local")
+	}
 	if column.Type == "checkbox" {
 		if value == "true" {
 			return "On"
@@ -91,6 +105,11 @@ func (a *App) formTableRowSummary(definition formDefinition, row map[string]any)
 }
 
 func (a *App) buildFormTableField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
+	return launcherview.FormTableField(a.formTableFieldProps(fields, callbacks, palette, index, definition, width, height))
+}
+
+// formTableFieldProps maps one portable table definition into the shared Flutter-style table surface.
+func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) launcherview.FormTableFieldProps {
 	rows, err := decodeFormTableRows(fields.values[definition.Value.Key])
 	if err != nil {
 		rows = nil
@@ -109,7 +128,7 @@ func (a *App) buildFormTableField(fields formFieldsSnapshot, callbacks formField
 	}
 	viewRows := a.formTableViewRows(definition, visibleColumns, rows, theme)
 	onTooltip := (func(bool, string, woxui.Rect))(nil)
-	if callbacks.idPrefix == "hotkey-settings" || callbacks.idPrefix == "plugin-settings" {
+	if callbacks.idPrefix == "hotkey-settings" || callbacks.idPrefix == "plugin-settings" || callbacks.idPrefix == "ai-settings" {
 		onTooltip = a.setSettingChoiceTooltip
 	}
 	openTable := func() {
@@ -128,13 +147,13 @@ func (a *App) buildFormTableField(fields formFieldsSnapshot, callbacks formField
 		secondaryIcon = a.imageForTint(settingControlIconSource("store"), &foreground, 16)
 		onSecondary = func() { a.openAICommandTemplatePicker(index) }
 	}
-	return launcherview.FormTableField(launcherview.FormTableFieldProps{
+	return launcherview.FormTableFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Title: a.translate(formTableTitle(definition)), Description: a.translate(definition.Value.Tooltip),
-		Width: width, Height: height, MaxHeight: definition.Value.MaxHeight, InlineTitle: definition.Value.InlineTable, Invalid: err != nil,
-		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), DeleteLabel: a.translate("i18n:ui_delete"),
+		Width: width, Height: height, LabelWidth: callbacks.labelWidth, MaxHeight: definition.Value.MaxHeight, InlineTitle: definition.Value.InlineTable, Invalid: err != nil,
+		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"),
 		OperationLabel: a.translate("i18n:ui_operation"), EmptyLabel: a.translate("i18n:ui_no_data"),
 		InfoIcon: a.imageForTint(settingNavIconSource("about"), &foreground, 16), SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, 16),
-		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, 16), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, 16), EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, 24),
+		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, 16), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, 16), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, 16), EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, 24),
 		Theme: theme, OnTooltip: onTooltip, OnSecondary: onSecondary,
 		OnAdd: func() {
 			openTable()
@@ -145,12 +164,17 @@ func (a *App) buildFormTableField(fields formFieldsSnapshot, callbacks formField
 			a.selectFormTableRow(rowIndex)
 			a.beginEditFormTableRowDirect()
 		},
+		OnCloneRow: func(rowIndex int) {
+			openTable()
+			a.selectFormTableRow(rowIndex)
+			a.beginCloneFormTableRowDirect()
+		},
 		OnDeleteRow: func(rowIndex int) {
 			openTable()
 			a.selectFormTableRow(rowIndex)
-			a.deleteFormTableRow()
+			a.beginDeleteFormTableRowDirect()
 		},
-	})
+	}
 }
 
 func (a *App) formTableViewRows(definition formDefinition, columns []formTableColumn, rows []map[string]any, theme woxcomponent.Theme) []launcherview.FormTableRow {
@@ -186,6 +210,12 @@ func (a *App) formTableViewRows(definition formDefinition, columns []formTableCo
 func (a *App) formTableViewCell(column formTableColumn, row map[string]any, theme woxcomponent.Theme) launcherview.FormTableCell {
 	cell := launcherview.FormTableCell{Text: compactFormTableText(a.formTableDisplayValue(column, row), 80)}
 	iconTint := theme.ResultTitle
+	if column.Type == "aiModelStatus" {
+		statusColor := woxui.Color{R: 69, G: 184, B: 88, A: 255}
+		cell.Text = ""
+		cell.IndicatorColor = &statusColor
+		return cell
+	}
 	if column.Type == "checkbox" {
 		iconName := "checkbox.unchecked"
 		if formTableColumnValue(column, row) == "true" {
@@ -222,6 +252,9 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 
 // buildFormTableOverlay maps table editor state into the shared modal view.
 func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+	if snapshot.deletePending >= 0 && snapshot.deleteDirect {
+		return a.buildFormTableDeleteDialog(palette, width, height)
+	}
 	panelWidth := max(float32(0), min(float32(760), width-28))
 	panelHeight := max(float32(0), min(float32(640), height-28))
 	innerWidth := max(float32(0), panelWidth-32)
@@ -256,6 +289,12 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 		Width: width, Height: height, PanelWidth: panelWidth, PanelHeight: panelHeight, Title: a.translate(formTableTitle(snapshot.definition)), RowEditor: rowEditor,
 		Subtitle: fmt.Sprintf("%d rows · shared Go table editor", len(snapshot.rows)), Body: body, Theme: palette.componentTheme(),
 	})
+	if snapshot.deletePending >= 0 {
+		return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+			{Child: overlay},
+			{Child: a.buildFormTableDeleteDialog(palette, width, height)},
+		}}
+	}
 	if snapshot.choicePicker == nil {
 		return overlay
 	}
@@ -263,6 +302,14 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 		{Child: overlay},
 		{Child: a.buildFormTableChoicePicker(snapshot.choicePicker, palette, width, height)},
 	}}
+}
+
+func (a *App) buildFormTableDeleteDialog(palette uiPalette, width, height float32) woxwidget.Widget {
+	return launcherview.FormTableDeleteDialog(launcherview.FormTableDeleteDialogProps{
+		Width: width, Height: height, Message: a.translate("i18n:ui_delete_row_confirm"),
+		CancelLabel: a.translate("i18n:ui_cancel"), DeleteLabel: a.translate("i18n:ui_delete"),
+		Theme: palette.componentTheme(), OnCancel: a.cancelFormTableRowDelete, OnDelete: a.confirmFormTableRowDelete,
+	})
 }
 
 // formTableRowLabelWidth mirrors Flutter's measured and bounded label column.
@@ -310,10 +357,6 @@ func (a *App) buildFormTableList(snapshot *formTableEditorSnapshot, palette uiPa
 	for _, row := range snapshot.rows {
 		rows = append(rows, a.formTableRowSummary(snapshot.definition, row))
 	}
-	deleteLabel := "Delete"
-	if snapshot.deleteArmed == snapshot.selected && snapshot.selected >= 0 {
-		deleteLabel = "Confirm"
-	}
 	selectedReadOnly := snapshot.selected >= 0 && snapshot.selected < len(snapshot.rows) && formTableSkillRowReadOnly(snapshot.definition, snapshot.rows[snapshot.selected])
 	canEdit := !snapshot.invalid && !snapshot.saving && snapshot.selected >= 0 && snapshot.definition.Value.Key != "AISkills" && !selectedReadOnly
 	canDelete := !snapshot.invalid && !snapshot.saving && snapshot.selected >= 0 && !selectedReadOnly
@@ -324,7 +367,7 @@ func (a *App) buildFormTableList(snapshot *formTableEditorSnapshot, palette uiPa
 	}
 	return launcherview.FormTableList(launcherview.FormTableListProps{
 		Width: width, Height: height, Rows: rows, Selected: snapshot.selected,
-		Status: snapshot.status, StatusError: snapshot.invalid, AddLabel: addLabel, DeleteLabel: deleteLabel, CloseLabel: a.translate("i18n:ui_close"),
+		Status: snapshot.status, StatusError: snapshot.invalid, AddLabel: addLabel, DeleteLabel: a.translate("i18n:ui_delete"), CloseLabel: a.translate("i18n:ui_close"),
 		CanAdd: !snapshot.invalid && !snapshot.saving, CanEdit: canEdit, CanDelete: canDelete, ShowClone: showClone, Theme: palette.componentTheme(),
 		OnSelect: a.selectFormTableRow,
 		OnAdd:    a.beginAddFormTableRow, OnEdit: a.beginEditFormTableRow, OnDelete: a.deleteFormTableRow, OnClone: a.beginCloneRemoteAISkill, OnClose: a.closeFormTableEditor,

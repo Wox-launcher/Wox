@@ -219,8 +219,15 @@ func (s *scrollViewState) Build(context StateContext, widget any) Widget {
 	if id == "" {
 		id = string(props.Key)
 	}
-	return Gesture{ID: id, OnScroll: func(delta woxui.Point) {
-		s.controller.ScrollBy(-delta.Y)
+	return Gesture{ID: id, OnScrollHandled: func(delta woxui.Point) bool {
+		scrollDelta := delta.Y
+		if props.Horizontal {
+			scrollDelta = delta.X
+			if scrollDelta == 0 {
+				return false
+			}
+		}
+		return s.controller.ScrollBy(-scrollDelta)
 	}, Child: primitive}
 }
 

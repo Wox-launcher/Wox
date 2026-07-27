@@ -32,24 +32,26 @@ type formTableEditorState struct {
 	status        string
 	invalid       bool
 	saving        bool
-	deleteArmed   int
+	deletePending int
+	deleteDirect  bool
 	appPicker     *formTableAppPickerState
 	choicePicker  *formTableChoicePickerState
 }
 
 type formTableEditorSnapshot struct {
-	definition   formDefinition
-	rows         []map[string]any
-	selected     int
-	rowForm      *formFieldsSnapshot
-	rowIndex     int
-	skillClone   bool
-	status       string
-	invalid      bool
-	saving       bool
-	deleteArmed  int
-	appPicker    *formTableAppPickerSnapshot
-	choicePicker *formTableChoicePickerSnapshot
+	definition    formDefinition
+	rows          []map[string]any
+	selected      int
+	rowForm       *formFieldsSnapshot
+	rowIndex      int
+	skillClone    bool
+	status        string
+	invalid       bool
+	saving        bool
+	deletePending int
+	deleteDirect  bool
+	appPicker     *formTableAppPickerSnapshot
+	choicePicker  *formTableChoicePickerSnapshot
 }
 
 type formTableAppPickerState struct {
@@ -143,18 +145,19 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		}
 	}
 	return &formTableEditorSnapshot{
-		definition:   state.definition,
-		rows:         cloneFormTableRows(state.rows),
-		selected:     state.selected,
-		rowForm:      rowForm,
-		rowIndex:     state.rowIndex,
-		skillClone:   state.skillClone,
-		status:       state.status,
-		invalid:      state.invalid,
-		saving:       state.saving,
-		deleteArmed:  state.deleteArmed,
-		appPicker:    appPicker,
-		choicePicker: choicePicker,
+		definition:    state.definition,
+		rows:          cloneFormTableRows(state.rows),
+		selected:      state.selected,
+		rowForm:       rowForm,
+		rowIndex:      state.rowIndex,
+		skillClone:    state.skillClone,
+		status:        state.status,
+		invalid:       state.invalid,
+		saving:        state.saving,
+		deletePending: state.deletePending,
+		deleteDirect:  state.deleteDirect,
+		appPicker:     appPicker,
+		choicePicker:  choicePicker,
 	}
 }
 
@@ -211,7 +214,7 @@ func (a *App) openFormTableLocked(target *formFieldsState, index int) {
 	if len(rows) > 0 {
 		selected = 0
 	}
-	state := &formTableEditorState{target: target, fieldIndex: index, definition: definition, rows: rows, selected: selected, rowIndex: -1, deleteArmed: -1}
+	state := &formTableEditorState{target: target, fieldIndex: index, definition: definition, rows: rows, selected: selected, rowIndex: -1, deletePending: -1}
 	if err != nil {
 		state.rows = []map[string]any{}
 		state.invalid = true
@@ -240,7 +243,8 @@ func (a *App) selectFormTableRow(index int) {
 	state := a.tableEditor
 	if state != nil && state.rowForm == nil && index >= 0 && index < len(state.rows) {
 		state.selected = index
-		state.deleteArmed = -1
+		state.deletePending = -1
+		state.deleteDirect = false
 		state.status = ""
 	}
 	a.invalidateFormTableWindow()
@@ -254,7 +258,8 @@ func (a *App) moveFormTableSelection(delta int) {
 		} else {
 			state.selected = (state.selected + delta + len(state.rows)) % len(state.rows)
 		}
-		state.deleteArmed = -1
+		state.deletePending = -1
+		state.deleteDirect = false
 		state.status = ""
 	}
 	a.invalidateFormTableWindow()
@@ -370,11 +375,11 @@ func formTableRowFields(definition formDefinition, row map[string]any) (formFiel
 }
 
 func (a *App) beginAddFormTableRow() {
-	a.beginFormTableRowEdit(-1, false)
+	a.beginFormTableRowEdit(-1, false, false)
 }
 
 func (a *App) beginAddFormTableRowDirect() {
-	a.beginFormTableRowEdit(-1, true)
+	a.beginFormTableRowEdit(-1, true, false)
 }
 
 func (a *App) beginEditFormTableRow() {
@@ -392,11 +397,22 @@ func (a *App) beginSelectedFormTableRowEdit(rowEditorOnly bool) {
 		index = a.tableEditor.selected
 	}
 	if index >= 0 {
-		a.beginFormTableRowEdit(index, rowEditorOnly)
+		a.beginFormTableRowEdit(index, rowEditorOnly, false)
 	}
 }
 
-func (a *App) beginFormTableRowEdit(index int, rowEditorOnly bool) {
+// beginCloneFormTableRowDirect opens a new-row editor prefilled from the selected row.
+func (a *App) beginCloneFormTableRowDirect() {
+	index := -1
+	if a.tableEditor != nil {
+		index = a.tableEditor.selected
+	}
+	if index >= 0 {
+		a.beginFormTableRowEdit(index, true, true)
+	}
+}
+
+func (a *App) beginFormTableRowEdit(index int, rowEditorOnly, cloneRow bool) {
 	requestModels := false
 	state := a.tableEditor
 	if state == nil || state.invalid || state.saving || state.rowForm != nil || index >= len(state.rows) {
@@ -409,6 +425,9 @@ func (a *App) beginFormTableRowEdit(index int, rowEditorOnly bool) {
 	if index >= 0 {
 		base = cloneFormTableRow(state.rows[index])
 	}
+	if cloneRow {
+		index = -1
+	}
 	fields, _ := formTableRowFields(state.definition, base)
 	if models := a.aiSettings.Models(); len(models) > 0 {
 		applyAIModelOptionsLocked(&fields, models)
@@ -420,7 +439,8 @@ func (a *App) beginFormTableRowEdit(index int, rowEditorOnly bool) {
 	state.rowEditorOnly = rowEditorOnly
 	state.skillClone = false
 	state.status = ""
-	state.deleteArmed = -1
+	state.deletePending = -1
+	state.deleteDirect = false
 	applyAIProviderDefaultHostLocked(state, false, a.aiSettings.ProviderCatalog())
 	requestModels = hasFormDefinitionType(fields.definitions, "selectAIModel") && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
 	if requestModels {
@@ -682,20 +702,72 @@ func (a *App) saveFormTableRowEdit() {
 }
 
 func (a *App) deleteFormTableRow() {
+	a.beginFormTableRowDelete(false)
+}
+
+// beginDeleteFormTableRowDirect opens Flutter's confirmation dialog directly over the settings page.
+func (a *App) beginDeleteFormTableRowDirect() {
+	a.beginFormTableRowDelete(true)
+}
+
+func (a *App) beginFormTableRowDelete(direct bool) {
 	state := a.tableEditor
 	if state == nil || state.invalid || state.saving || state.rowForm != nil || state.selected < 0 || state.selected >= len(state.rows) || !a.formTableTargetCurrentLocked(state.target) || formTableSkillRowReadOnly(state.definition, state.rows[state.selected]) {
 		return
 	}
-	if state.deleteArmed != state.selected {
-		state.deleteArmed = state.selected
-		state.status = "Press Delete again to confirm removing the selected row."
+	state.deletePending = state.selected
+	state.deleteDirect = direct
+	state.status = ""
+	a.updateFormTableTextInput(false)
+	a.invalidateFormTableWindow()
+}
+
+// cancelFormTableRowDelete dismisses the confirmation without mutating the table.
+func (a *App) cancelFormTableRowDelete() {
+	state := a.tableEditor
+	if state == nil || state.deletePending < 0 {
+		return
+	}
+	direct := state.deleteDirect
+	state.deletePending = -1
+	state.deleteDirect = false
+	if direct {
+		a.closeFormTableEditor()
+		return
+	}
+	a.invalidateFormTableWindow()
+}
+
+// confirmFormTableRowDelete re-matches the captured row against the latest table value before removal.
+func (a *App) confirmFormTableRowDelete() {
+	state := a.tableEditor
+	if state == nil || state.invalid || state.saving || state.rowForm != nil || state.deletePending < 0 || state.deletePending >= len(state.rows) || !a.formTableTargetCurrentLocked(state.target) {
+		return
+	}
+	originalRow := cloneFormTableRow(state.rows[state.deletePending])
+	direct := state.deleteDirect
+	state.deletePending = -1
+	state.deleteDirect = false
+	previousValue := state.target.values[state.definition.Value.Key]
+	freshRows, err := decodeFormTableRows(previousValue)
+	if err != nil {
+		state.status = err.Error()
 		a.invalidateFormTableWindow()
 		return
 	}
-	previousValue := state.target.values[state.definition.Value.Key]
-	state.rows = append(state.rows[:state.selected], state.rows[state.selected+1:]...)
-	if state.selected >= len(state.rows) {
-		state.selected = len(state.rows) - 1
+	deleteIndex := findFormTableRow(freshRows, originalRow)
+	if deleteIndex < 0 {
+		if direct {
+			a.closeFormTableEditor()
+		} else {
+			a.invalidateFormTableWindow()
+		}
+		return
+	}
+	state.rows = append(freshRows[:deleteIndex], freshRows[deleteIndex+1:]...)
+	state.selected = min(deleteIndex, len(state.rows)-1)
+	if len(state.rows) == 0 {
+		state.selected = -1
 	}
 	persist := false
 	key := state.definition.Value.Key
@@ -712,13 +784,35 @@ func (a *App) deleteFormTableRow() {
 			a.settingSaving = true
 		}
 	}
-	state.deleteArmed = -1
-	a.invalidateFormTableWindow()
+	if direct {
+		a.closeFormTableEditor()
+	} else {
+		a.invalidateFormTableWindow()
+	}
 	if persist {
 		util.Go(a.lifecycleCtx, "save settings table after delete", func() {
 			a.saveSettingsTable(state, key, value, previousValue)
 		})
 	}
+}
+
+func findFormTableRow(rows []map[string]any, original map[string]any) int {
+	for index, candidate := range rows {
+		matches := true
+		for key, value := range original {
+			if key == formTableRowIDKey {
+				continue
+			}
+			if fmt.Sprint(candidate[key]) != fmt.Sprint(value) {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return index
+		}
+	}
+	return -1
 }
 
 func (a *App) commitFormTableRowsLocked(state *formTableEditorState) error {
@@ -917,6 +1011,17 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 			multiline = fieldType == "textbox" && rowForm.definitions[focused].Value.MaxLines > 1
 			textEditable = formDefinitionTextEditable(rowForm.definitions[focused])
 		}
+	}
+	if state.deletePending >= 0 {
+		if event.Down {
+			switch event.Key {
+			case woxui.KeyEscape:
+				a.cancelFormTableRowDelete()
+			case woxui.KeyEnter:
+				a.confirmFormTableRowDelete()
+			}
+		}
+		return true
 	}
 	if choicePicker != nil {
 		if event.Key == woxui.KeyEscape {

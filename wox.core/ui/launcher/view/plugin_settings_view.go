@@ -112,9 +112,10 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 			woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
 		}}})
 		if item.Badge != "" {
-			rowChildren = append(rowChildren, woxwidget.Container{Width: 44, Height: 20, Radius: 3, BorderColor: props.Theme.ResultSubtitle, BorderWidth: 1, Padding: woxwidget.Insets{Left: 4, Top: 3}, Child: woxwidget.Text{
-				Value: item.Badge, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultSubtitle,
-			}})
+			badge := woxwidget.Container{Radius: 3, BorderColor: props.Theme.ResultSubtitle, BorderWidth: 0.5, Padding: woxwidget.Insets{Left: 4, Top: 1, Right: 4, Bottom: 1}, Child: woxwidget.Text{
+				Value: item.Badge, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle,
+			}}
+			rowChildren = append(rowChildren, woxwidget.Align{Width: 44, Height: 44, Horizontal: 1, Vertical: 0.5, Child: badge})
 		}
 		rows = append(rows, woxwidget.Gesture{ID: "plugin-list-" + item.ID, OnTap: item.OnSelect, Child: woxwidget.Container{
 			Width: props.Width, Height: rowHeight, Radius: 4, Color: background, Padding: woxwidget.Insets{Left: 6, Top: 9, Right: 6, Bottom: 8},
@@ -317,7 +318,7 @@ func PluginDetail(props PluginDetailProps) woxwidget.Widget {
 func pluginEditor(props PluginEditorProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	innerWidth := max(float32(0), width-32)
 	innerHeight := height
-	const headerHeight = float32(104)
+	const headerHeight = float32(112)
 	const tabHeight = float32(44)
 	header := pluginDetailHeader(props.Header, innerWidth, headerHeight, theme)
 	tabs := PluginTabs(PluginTabsProps{Width: innerWidth, Height: tabHeight, Active: props.ActiveTab, Tabs: props.Tabs, Theme: theme, OnSelect: props.OnSelectTab})
