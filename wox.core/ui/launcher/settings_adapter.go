@@ -24,7 +24,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	width := frame.Size.Width
 	height := frame.Size.Height
 	contentHeight := max(float32(0), height-settingsTitleBarHeight)
-	railWidth := min(float32(250), max(float32(210), width*0.22))
+	railWidth := min(float32(240), max(float32(210), width*0.22))
 	var page woxwidget.Widget
 	if snapshot.tab == "plugins" {
 		page = a.buildPluginSettingsPage(snapshot, width-railWidth, contentHeight)

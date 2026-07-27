@@ -14,7 +14,7 @@ import (
 func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	innerWidth := max(float32(0), width-40)
 	innerHeight := max(float32(0), height-40)
-	listWidth := min(float32(260), max(float32(220), innerWidth*0.31))
+	listWidth := min(float32(250), max(float32(220), innerWidth*0.30))
 	detailWidth := max(float32(0), innerWidth-listWidth-21)
 	return launcherview.PluginSettingsPage(launcherview.PluginSettingsPageProps{
 		Width:       width,
@@ -112,14 +112,16 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height float32
 		OnSelectTab: a.selectPluginDetailTab,
 	}
 	callbacks := formFieldCallbacks{
-		idPrefix:  "plugin-settings",
-		focus:     a.focusPluginFormField,
-		change:    a.changePluginFormChoice,
-		setText:   a.setPluginFormText,
-		onKey:     a.onPluginSettingsKey,
-		openTable: a.openPluginFormTable,
-		openModel: a.openPluginModelManager,
-		recordKey: a.recordPluginFormHotkey,
+		idPrefix:   "plugin-settings",
+		labelWidth: a.pluginFormLabelWidth(form.definitions[1:]),
+		focus:      a.focusPluginFormField,
+		change:     a.changePluginFormChoice,
+		setText:    a.setPluginFormText,
+		onKey:      a.onPluginSettingsKey,
+		openTable:  a.openPluginFormTable,
+		openChoice: a.openPluginFormChoice,
+		openModel:  a.openPluginModelManager,
+		recordKey:  a.recordPluginFormHotkey,
 	}
 	if detailTab == "keywords" {
 		keywordDefinition := form.definitions[0]
@@ -156,6 +158,26 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height float32
 	a.applyPluginFormState(editor, snapshot)
 	props.Editor = editor
 	return props
+}
+
+// pluginFormLabelWidth mirrors Flutter's shared measured label column for each plugin.
+func (a *App) pluginFormLabelWidth(definitions []formDefinition) float32 {
+	width := float32(0)
+	window := a.settingsNativeWindow()
+	if window == nil {
+		return 120
+	}
+	style := woxui.TextStyle{Size: 13}
+	for _, definition := range definitions {
+		label := strings.TrimSpace(a.translate(definition.Value.Label))
+		if label == "" {
+			continue
+		}
+		if metrics, err := window.MeasureText(label, style); err == nil {
+			width = max(width, metrics.Size.Width+8)
+		}
+	}
+	return min(width, float32(200))
 }
 
 // applyPluginFormState keeps the shared save and operation state identical across
@@ -222,10 +244,10 @@ func (a *App) pluginStoreDetailTabs() []launcherview.PluginTab {
 
 // resolvedPluginTab sizes localized labels like Flutter's scrollable content-width tabs.
 func (a *App) resolvedPluginTab(id, label string) launcherview.PluginTab {
-	width := float32(72)
+	width := float32(56)
 	if window := a.settingsNativeWindow(); window != nil {
-		if metrics, err := window.MeasureText(label, woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}); err == nil {
-			width = max(width, metrics.Size.Width+32)
+		if metrics, err := window.MeasureText(label, woxui.TextStyle{Size: 13}); err == nil {
+			width = max(width, metrics.Size.Width+24)
 		}
 	}
 	return launcherview.PluginTab{ID: id, Label: label, Width: width}

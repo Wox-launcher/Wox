@@ -12,6 +12,7 @@ import (
 
 type formFieldCallbacks struct {
 	idPrefix   string
+	labelWidth float32
 	focus      func(index int)
 	change     func(index, delta int)
 	setText    func(index int, value string)
@@ -44,6 +45,10 @@ func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwid
 }
 
 func formDefinitionHeight(definition formDefinition, valueMaps ...map[string]string) float32 {
+	tooltipHeight := float32(0)
+	if strings.TrimSpace(definition.Value.Tooltip) != "" {
+		tooltipHeight = 20
+	}
 	switch definition.Type {
 	case "head", "label":
 		return 34
@@ -52,9 +57,13 @@ func formDefinitionHeight(definition formDefinition, valueMaps ...map[string]str
 	case "textbox":
 		if definition.Value.MaxLines > 1 {
 			// ponytail: Eight visible lines keep compact launcher forms bounded; scrolling handles longer values.
-			return 32 + float32(min(definition.Value.MaxLines, 8))*20
+			return 30 + float32(min(definition.Value.MaxLines, 8))*20 + tooltipHeight
 		}
-		return 56
+		return 44 + tooltipHeight
+	case "password", "dirPath", "select", "selectAIModel":
+		return 44 + tooltipHeight
+	case "checkbox":
+		return 40 + tooltipHeight
 	case "table":
 		value := definition.Value.DefaultValue
 		if len(valueMaps) > 0 && valueMaps[0] != nil {
@@ -66,7 +75,7 @@ func formDefinitionHeight(definition formDefinition, valueMaps ...map[string]str
 		}
 		return launcherview.FormTableFieldHeight(definition.Value.InlineTable, definition.Value.Tooltip, len(rows), definition.Value.MaxHeight)
 	case "dictationModel", "ocrModel":
-		return 70
+		return 70 + tooltipHeight
 	default:
 		return 56
 	}
@@ -127,8 +136,8 @@ func (a *App) buildFormModelField(fields formFieldsSnapshot, callbacks formField
 		selectedLabel = "No model selected"
 	}
 	return launcherview.FormModelField(launcherview.FormModelFieldProps{
-		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Value: selectedLabel, Status: status,
-		Width: width, Height: height, Focused: fields.active && fields.focused == index, Theme: palette.componentTheme(),
+		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Value: selectedLabel, Status: status,
+		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index, Theme: palette.componentTheme(),
 		OnTap: func() {
 			callbacks.focus(index)
 			if callbacks.openModel != nil {
@@ -182,23 +191,29 @@ func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCall
 }
 
 func (a *App) buildFormChoice(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32, checked bool, selectedLabel string) woxwidget.Widget {
-	valueText := selectedLabel
 	if definition.Type == "checkbox" {
-		valueText = "Off"
-		if checked {
-			valueText = "On"
-		}
-	} else {
-		valueText = "‹  " + valueText + "  ›"
+		return launcherview.FormSwitchField(launcherview.FormSwitchFieldProps{
+			ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
+			Width: width, Height: height, LabelWidth: callbacks.labelWidth, Checked: checked, Theme: palette.componentTheme(),
+			OnChange: func(bool) {
+				callbacks.focus(index)
+				callbacks.change(index, 1)
+			},
+		})
 	}
-	return launcherview.FormValueField(launcherview.FormValueFieldProps{
-		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Value: valueText,
-		Width: width, Height: height, Focused: fields.active && fields.focused == index, Theme: palette.componentTheme(),
+	props := launcherview.FormSelectFieldProps{
+		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Value: selectedLabel,
+		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index, Theme: palette.componentTheme(),
 		OnTap: func() {
 			callbacks.focus(index)
 			callbacks.change(index, 1)
 		},
-	})
+	}
+	if callbacks.openChoice != nil {
+		props.OnTap = nil
+		props.OnChoiceTap = func(anchor woxui.Rect) { callbacks.openChoice(index, anchor) }
+	}
+	return launcherview.FormSelectField(props)
 }
 
 func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
@@ -217,7 +232,8 @@ func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCal
 		}
 	}
 	return launcherview.FormTextField(launcherview.FormTextFieldProps{
-		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Width: width, Height: height,
+		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Suffix: a.translate(definition.Value.Suffix),
+		Width: width, Height: height, LabelWidth: callbacks.labelWidth,
 		State: state, Focused: focused, Protected: definition.Type == "password", MaxLines: maxLines,
 		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(), OnBrowse: onBrowse,
 		OnFocus: func() { callbacks.focus(index) },

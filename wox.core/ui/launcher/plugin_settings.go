@@ -2,12 +2,14 @@ package launcher
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"time"
 
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 	"wox/util"
 )
 
@@ -837,7 +839,9 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 			a.openPluginModelManager(focused)
 		} else if fieldType == "dictationHotkey" {
 			a.recordPluginFormHotkey(focused)
-		} else if fieldType == "checkbox" || fieldType == "select" || fieldType == "selectAIModel" {
+		} else if fieldType == "select" || fieldType == "selectAIModel" {
+			a.openFocusedPluginFormChoice(focused)
+		} else if fieldType == "checkbox" {
 			a.changePluginFormChoice(focused, 1)
 		}
 	default:
@@ -928,6 +932,77 @@ func (a *App) changePluginFormChoice(index, delta int) {
 		return
 	}
 	changeFormFieldsChoiceLocked(&state.formFieldsState, index, delta)
+	state.status = ""
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
+}
+
+// openFocusedPluginFormChoice resolves the retained field bounds for keyboard-opened menus.
+func (a *App) openFocusedPluginFormChoice(index int) {
+	anchor := woxui.Rect{}
+	if host := a.settingsHost; host != nil {
+		anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", index)))
+	}
+	a.openPluginFormChoice(index, anchor)
+}
+
+// openPluginFormChoice presents the shared anchored dropdown for a plugin select field.
+func (a *App) openPluginFormChoice(index int, anchor woxui.Rect) {
+	state := a.pluginSettings.Form()
+	if state == nil || state.saving || index < 0 || index >= len(state.definitions) {
+		return
+	}
+	definition := state.definitions[index]
+	if (definition.Type != "select" && definition.Type != "selectAIModel") || len(definition.Value.Options) == 0 {
+		return
+	}
+	if anchor.Width <= 0 || anchor.Height <= 0 {
+		if host := a.settingsHost; host != nil {
+			anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", index)))
+		}
+	}
+	syncFormFieldsEditorLocked(&state.formFieldsState)
+	setFormFieldsFocusLocked(&state.formFieldsState, index)
+	choices := make([]settingChoice, len(definition.Value.Options))
+	for optionIndex, option := range definition.Value.Options {
+		label := a.translate(option.Label)
+		if strings.TrimSpace(label) == "" {
+			label = option.Value
+		}
+		choices[optionIndex] = settingChoice{value: option.Value, label: label}
+	}
+	item := settingItem{
+		key: "plugin:" + state.pluginID + ":" + definition.Value.Key, title: a.translate(definition.Value.Label),
+		value: state.values[definition.Value.Key], choices: choices,
+	}
+	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
+		item: item, anchor: anchor,
+		onChoose: func(choice settingChoice) { a.setPluginFormChoice(index, choice.value) },
+	})
+	state.status = ""
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
+}
+
+// setPluginFormChoice stages one exact dropdown value without depending on option ordering.
+func (a *App) setPluginFormChoice(index int, value string) {
+	state := a.pluginSettings.Form()
+	if state == nil || state.saving || index < 0 || index >= len(state.definitions) {
+		return
+	}
+	definition := state.definitions[index]
+	found := false
+	for _, option := range definition.Value.Options {
+		if option.Value == value {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return
+	}
+	setFormFieldsFocusLocked(&state.formFieldsState, index)
+	state.values[definition.Value.Key] = value
 	state.status = ""
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()

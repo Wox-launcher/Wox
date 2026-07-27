@@ -317,8 +317,8 @@ func PluginDetail(props PluginDetailProps) woxwidget.Widget {
 func pluginEditor(props PluginEditorProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	innerWidth := max(float32(0), width-32)
 	innerHeight := height
-	const headerHeight = float32(112)
-	const tabHeight = float32(48)
+	const headerHeight = float32(104)
+	const tabHeight = float32(44)
 	header := pluginDetailHeader(props.Header, innerWidth, headerHeight, theme)
 	tabs := PluginTabs(PluginTabsProps{Width: innerWidth, Height: tabHeight, Active: props.ActiveTab, Tabs: props.Tabs, Theme: theme, OnSelect: props.OnSelectTab})
 	children := []woxwidget.Widget{header, tabs}
@@ -346,11 +346,11 @@ func pluginEditor(props PluginEditorProps, width, height float32, theme woxcompo
 				formRows = append([]woxwidget.Widget{intro}, formRows...)
 				contentHeight += 74
 			}
-			scrollContentHeight := max(bodyHeight, contentHeight+16)
+			scrollContentHeight := max(bodyHeight, contentHeight+12)
 			children = append(children, woxwidget.ScrollView{
 				Key: "plugin-settings-scroll", ID: "plugin-settings-scroll", Width: innerWidth, Height: bodyHeight,
 				ContentHeight: scrollContentHeight, KeepVisible: props.Form.KeepVisible,
-				Child: woxwidget.Container{Width: innerWidth, Height: scrollContentHeight, Padding: woxwidget.Insets{Top: 16}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: formRows}},
+				Child: woxwidget.Container{Width: innerWidth, Height: scrollContentHeight, Padding: woxwidget.Insets{Top: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: formRows}},
 			})
 		}
 		if props.Status != "" {
