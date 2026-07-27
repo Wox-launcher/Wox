@@ -12,6 +12,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type glanceRef struct {
@@ -26,6 +27,13 @@ type glanceItem struct {
 	Icon     woxImage      `json:"Icon"`
 	Tooltip  string        `json:"Tooltip"`
 	Action   *glanceAction `json:"Action"`
+}
+
+type glanceRefreshRequest struct {
+	ref      glanceRef
+	reason   string
+	revision uint64
+	queryID  string
 }
 
 type glanceAction struct {
@@ -78,32 +86,35 @@ func (a *App) glanceEligibleLocked() bool {
 
 // refreshGlance loads the selected global accessory and rejects replies for superseded query sessions.
 func (a *App) refreshGlance(reason, pluginID string, ids []string) {
-	a.mu.Lock()
-	ref := a.generalSettings.Data().PrimaryGlance
-	if pluginID != "" && (ref.PluginID != pluginID || (len(ids) > 0 && !slices.Contains(ids, ref.GlanceID))) {
-		a.mu.Unlock()
+	var request *glanceRefreshRequest
+	if err := a.runOnUI("prepare glance refresh", func() {
+		ref := a.generalSettings.Data().PrimaryGlance
+		if pluginID != "" && (ref.PluginID != pluginID || (len(ids) > 0 && !slices.Contains(ids, ref.GlanceID))) {
+			return
+		}
+		if !a.glanceEligibleLocked() {
+			a.stopGlanceLocked(true)
+			_ = a.window.Invalidate()
+			return
+		}
+		if a.glanceLoading && pluginID == "" && reason != "settingsChanged" {
+			return
+		}
+		a.cancelGlanceTimerLocked()
+		a.glanceRevision++
+		a.glanceLoading = true
+		request = &glanceRefreshRequest{ref: ref, reason: reason, revision: a.glanceRevision, queryID: a.query.QueryID}
+	}); err != nil {
+		log.Printf("dispatch glance refresh preparation: %v", err)
 		return
 	}
-	if !a.glanceEligibleLocked() {
-		a.stopGlanceLocked(true)
-		a.mu.Unlock()
-		_ = a.window.Invalidate()
+	if request == nil {
 		return
 	}
-	if a.glanceLoading && pluginID == "" && reason != "settingsChanged" {
-		a.mu.Unlock()
-		return
-	}
-	a.cancelGlanceTimerLocked()
-	a.glanceRevision++
-	a.glanceLoading = true
-	revision := a.glanceRevision
-	queryID := a.query.QueryID
-	a.mu.Unlock()
 
-	go a.loadGlanceCatalog()
+	util.Go(a.lifecycleCtx, "load glance catalog", a.loadGlanceCatalog)
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	loaded, err := a.services.GlanceItems(ctx, a.sessionID, []plugin.GlanceKey{{PluginId: ref.PluginID, GlanceId: ref.GlanceID}}, plugin.GlanceRefreshReason(reason))
+	loaded, err := a.services.GlanceItems(ctx, a.sessionID, []plugin.GlanceKey{{PluginId: request.ref.PluginID, GlanceId: request.ref.GlanceID}}, plugin.GlanceRefreshReason(request.reason))
 	cancel()
 	items := make([]glanceItem, len(loaded))
 	for index, item := range loaded {
@@ -124,28 +135,29 @@ func (a *App) refreshGlance(reason, pluginID string, ids []string) {
 	var selected *glanceItem
 	if err == nil {
 		for index := range items {
-			if items[index].PluginID == ref.PluginID && items[index].ID == ref.GlanceID && strings.TrimSpace(items[index].Text) != "" {
+			if items[index].PluginID == request.ref.PluginID && items[index].ID == request.ref.GlanceID && strings.TrimSpace(items[index].Text) != "" {
 				copy := items[index]
 				selected = &copy
 				break
 			}
 		}
 	}
-	a.mu.Lock()
-	if revision != a.glanceRevision || queryID != a.query.QueryID || ref != a.generalSettings.Data().PrimaryGlance || !a.glanceEligibleLocked() {
-		a.mu.Unlock()
-		return
+	if dispatchErr := a.runOnUI("apply glance refresh", func() {
+		if request.revision != a.glanceRevision || request.queryID != a.query.QueryID || request.ref != a.generalSettings.Data().PrimaryGlance || !a.glanceEligibleLocked() {
+			return
+		}
+		a.glanceLoading = false
+		if err != nil {
+			log.Printf("refresh glance: %v", err)
+			a.glanceItem = nil
+		} else {
+			a.glanceItem = selected
+			a.scheduleGlanceRefreshLocked(request.ref)
+		}
+		_ = a.window.Invalidate()
+	}); dispatchErr != nil {
+		log.Printf("dispatch glance refresh result: %v", dispatchErr)
 	}
-	a.glanceLoading = false
-	if err != nil {
-		log.Printf("refresh glance: %v", err)
-		a.glanceItem = nil
-	} else {
-		a.glanceItem = selected
-		a.scheduleGlanceRefreshLocked(ref)
-	}
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
 }
 
 func (a *App) cancelGlanceTimerLocked() {
@@ -165,17 +177,12 @@ func (a *App) stopGlanceLocked(clear bool) {
 }
 
 func (a *App) setGlanceHover(inside bool, text string, anchor woxui.Rect) {
-	a.mu.Lock()
-	a.glanceTooltipRevision++
-	revision := a.glanceTooltipRevision
-	a.mu.Unlock()
+	revision := a.glanceTooltipRevision.Add(1)
 
-	go func() {
+	util.Go(a.lifecycleCtx, "update glance tooltip", func() {
 		a.tooltipMu.Lock()
 		defer a.tooltipMu.Unlock()
-		a.mu.RLock()
-		current := revision == a.glanceTooltipRevision
-		a.mu.RUnlock()
+		current := revision == a.glanceTooltipRevision.Load()
 		if !current {
 			return
 		}
@@ -200,7 +207,7 @@ func (a *App) setGlanceHover(inside bool, text string, anchor woxui.Rect) {
 		if err != nil {
 			log.Printf("show glance tooltip: %v", err)
 		}
-	}()
+	})
 }
 
 func (a *App) scheduleGlanceRefreshLocked(ref glanceRef) {
@@ -225,27 +232,22 @@ func (a *App) scheduleGlanceRefreshLocked(ref glanceRef) {
 // glance refresh against the newly cached catalog without giving the controller a back-reference to *App.
 func (a *App) loadGlanceCatalog() {
 	a.appearanceSettings.ReloadGlanceCatalog(context.Background(), a.services, a.sessionID, func() {
-		a.mu.Lock()
 		if a.glanceItem != nil {
 			a.scheduleGlanceRefreshLocked(a.generalSettings.Data().PrimaryGlance)
 		}
-		a.mu.Unlock()
 		_ = a.window.Invalidate()
 	})
 }
 
 func (a *App) executeGlanceAction() {
-	a.mu.RLock()
 	item := a.glanceItem
 	if item == nil || item.Action == nil {
-		a.mu.RUnlock()
 		return
 	}
 	pluginID := item.PluginID
 	glanceID := item.ID
 	action := *item.Action
-	a.mu.RUnlock()
-	go func() {
+	util.Go(a.lifecycleCtx, "execute glance action", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		err := a.services.ExecuteGlanceAction(ctx, a.sessionID, pluginID, glanceID, action.ID)
 		cancel()
@@ -258,16 +260,11 @@ func (a *App) executeGlanceAction() {
 				log.Printf("hide after glance action: %v", err)
 			}
 		}
-	}()
+	})
 }
 
 func (a *App) reloadGlanceCatalogFromCore() {
 	a.appearanceSettings.ResetGlanceCatalog()
 	a.loadGlanceCatalog()
-	a.mu.RLock()
-	refresh := a.glanceEligibleLocked()
-	a.mu.RUnlock()
-	if refresh {
-		a.refreshGlance("settingsChanged", "", nil)
-	}
+	a.refreshGlance("settingsChanged", "", nil)
 }

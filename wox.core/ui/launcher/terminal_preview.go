@@ -11,6 +11,7 @@ import (
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 const (
@@ -112,7 +113,6 @@ func decodeTerminalPreviewData(value string) terminalPreviewData {
 // activateTerminalPreview switches the single visible terminal subscription before rendering.
 func (a *App) activateTerminalPreview(preview queryPreview) {
 	data := decodeTerminalPreviewData(preview.PreviewData)
-	a.mu.Lock()
 	state := a.terminalPreview
 	oldSessionID := ""
 	sessionChanged := state == nil || state.SessionID != data.SessionID
@@ -131,24 +131,21 @@ func (a *App) activateTerminalPreview(preview queryPreview) {
 		}
 	}
 	newSessionID := state.SessionID
-	a.mu.Unlock()
 	if sessionChanged && (oldSessionID != "" || newSessionID != "") {
-		go a.reconcileTerminalSubscription()
+		a.scheduleTerminalSubscription(newSessionID)
 	}
 }
 
 // terminalPreviewSnapshotFor returns the prepared terminal state for rendering.
 func (a *App) terminalPreviewSnapshotFor(preview queryPreview) terminalPreviewSnapshot {
 	data := decodeTerminalPreviewData(preview.PreviewData)
-	a.mu.RLock()
-	defer a.mu.RUnlock()
 	if a.terminalPreview == nil || a.terminalPreview.SessionID != data.SessionID {
 		return terminalPreviewSnapshot{SessionID: data.SessionID, Command: data.Command, Status: data.Status}
 	}
-	return snapshotTerminalPreviewLocked(a.terminalPreview)
+	return snapshotTerminalPreview(a.terminalPreview)
 }
 
-func snapshotTerminalPreviewLocked(state *terminalPreviewState) terminalPreviewSnapshot {
+func snapshotTerminalPreview(state *terminalPreviewState) terminalPreviewSnapshot {
 	if state == nil {
 		return terminalPreviewSnapshot{}
 	}
@@ -167,12 +164,7 @@ func (a *App) reconcileTerminalSubscription() {
 	a.terminalSubscriptionMu.Lock()
 	defer a.terminalSubscriptionMu.Unlock()
 
-	a.mu.RLock()
-	desiredSessionID := ""
-	if a.terminalPreview != nil {
-		desiredSessionID = a.terminalPreview.SessionID
-	}
-	a.mu.RUnlock()
+	desiredSessionID, _ := a.terminalDesired.Load().(string)
 	if a.terminalSubscribed == desiredSessionID {
 		return
 	}
@@ -184,12 +176,7 @@ func (a *App) reconcileTerminalSubscription() {
 		a.terminalSubscribed = ""
 	}
 	// The desired session may change while the unsubscribe write is in flight.
-	a.mu.RLock()
-	desiredSessionID = ""
-	if a.terminalPreview != nil {
-		desiredSessionID = a.terminalPreview.SessionID
-	}
-	a.mu.RUnlock()
+	desiredSessionID, _ = a.terminalDesired.Load().(string)
 	if desiredSessionID == "" {
 		return
 	}
@@ -200,9 +187,14 @@ func (a *App) reconcileTerminalSubscription() {
 	a.terminalSubscribed = desiredSessionID
 }
 
+// scheduleTerminalSubscription publishes the latest desired session without blocking the UI thread on transport I/O.
+func (a *App) scheduleTerminalSubscription(sessionID string) {
+	a.terminalDesired.Store(sessionID)
+	util.Go(a.lifecycleCtx, "reconcile terminal subscription", a.reconcileTerminalSubscription)
+}
+
 // deactivateTerminalPreview releases core output when the selected preview no longer uses it.
 func (a *App) deactivateTerminalPreview() {
-	a.mu.Lock()
 	oldSessionID := ""
 	searchWasOpen := false
 	if a.terminalPreview != nil {
@@ -210,9 +202,8 @@ func (a *App) deactivateTerminalPreview() {
 		searchWasOpen = a.terminalPreview.SearchOpen
 		a.terminalPreview = nil
 	}
-	a.mu.Unlock()
 	if oldSessionID != "" {
-		go a.reconcileTerminalSubscription()
+		a.scheduleTerminalSubscription("")
 	}
 	if searchWasOpen {
 		a.restoreQueryTextInput()
@@ -224,10 +215,8 @@ func (a *App) applyTerminalChunk(chunk terminalChunk) {
 	if chunk.SessionID == "" || chunk.Content == "" {
 		return
 	}
-	a.mu.Lock()
 	state := a.terminalPreview
 	if state == nil || state.SessionID != chunk.SessionID {
-		a.mu.Unlock()
 		return
 	}
 	if state.Text == "" || chunk.Truncated || chunk.CursorStart < state.BaseCursor {
@@ -265,12 +254,11 @@ func (a *App) applyTerminalChunk(chunk terminalChunk) {
 		}
 	}
 	if state.SearchOpen {
-		rebuildTerminalMatchesLocked(state, true)
+		rebuildTerminalMatches(state, true)
 	}
 	if state.AutoFollow {
 		state.Scroll = float32(math.MaxFloat32)
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
@@ -278,7 +266,6 @@ func (a *App) applyTerminalState(update terminalSessionState) {
 	if update.SessionID == "" {
 		return
 	}
-	a.mu.Lock()
 	if state := a.terminalPreview; state != nil && state.SessionID == update.SessionID {
 		if update.Command != "" {
 			state.Command = update.Command
@@ -286,18 +273,15 @@ func (a *App) applyTerminalState(update terminalSessionState) {
 		state.Status = update.Status
 		state.Error = update.Error
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
 func (a *App) clampTerminalPreviewScroll(maxOffset float32) {
-	a.mu.Lock()
 	if state := a.terminalPreview; state != nil {
 		state.MaxScroll = max(float32(0), maxOffset)
 		state.Scroll = min(max(float32(0), state.Scroll), maxOffset)
 		state.AutoFollow = maxOffset-state.Scroll <= 24
 	}
-	a.mu.Unlock()
 }
 
 func (a *App) scrollTerminalPreview(delta, maxOffset float32) {
@@ -306,7 +290,6 @@ func (a *App) scrollTerminalPreview(delta, maxOffset float32) {
 	}
 	requestSession := ""
 	requestCursor := int64(-1)
-	a.mu.Lock()
 	if state := a.terminalPreview; state != nil {
 		state.MaxScroll = max(float32(0), maxOffset)
 		state.Scroll = min(max(float32(0), state.Scroll+delta), maxOffset)
@@ -323,45 +306,45 @@ func (a *App) scrollTerminalPreview(delta, maxOffset float32) {
 			}
 		}
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 	if requestSession != "" {
-		go a.requestTerminalHistory(requestSession, requestCursor)
+		util.Go(a.lifecycleCtx, "request terminal history", func() {
+			a.requestTerminalHistory(requestSession, requestCursor)
+		})
 	}
 }
 
 // requestTerminalHistory resets the existing core subscription to an earlier byte cursor without racing selection changes.
 func (a *App) requestTerminalHistory(sessionID string, cursor int64) {
 	a.terminalSubscriptionMu.Lock()
-	a.mu.RLock()
-	current := a.terminalPreview != nil && a.terminalPreview.SessionID == sessionID
-	a.mu.RUnlock()
 	var err error
 	sent := false
-	if current && a.terminalSubscribed == sessionID {
+	if a.terminalSubscribed == sessionID {
 		sent = true
 		_, err = a.services.SubscribeTerminal(context.Background(), a.sessionID, sessionID, cursor)
 	}
 	a.terminalSubscriptionMu.Unlock()
-	a.mu.Lock()
-	if state := a.terminalPreview; state != nil && state.SessionID == sessionID && state.LastHistoryCursor == cursor {
-		state.LoadingHistory = false
-		if !sent || err != nil {
-			if err != nil {
-				state.Error = err.Error()
+	if dispatchErr := a.runOnUI("apply terminal history request", func() {
+		if state := a.terminalPreview; state != nil && state.SessionID == sessionID && state.LastHistoryCursor == cursor {
+			state.LoadingHistory = false
+			if !sent || err != nil {
+				if err != nil {
+					state.Error = err.Error()
+				}
+				state.HistoryAnchorBase = 0
 			}
-			state.HistoryAnchorBase = 0
 		}
+		_ = a.window.Invalidate()
+	}); dispatchErr != nil {
+		log.Printf("dispatch terminal history result: %v", dispatchErr)
 	}
-	a.mu.Unlock()
 	if err != nil {
 		log.Printf("load terminal history: %v", err)
 	}
-	_ = a.window.Invalidate()
 }
 
-// rebuildTerminalMatchesLocked indexes the loaded UTF-8 window and optionally preserves the absolute current hit.
-func rebuildTerminalMatchesLocked(state *terminalPreviewState, preserveCurrent bool) {
+// rebuildTerminalMatches indexes the loaded UTF-8 window and optionally preserves the absolute current hit.
+func rebuildTerminalMatches(state *terminalPreviewState, preserveCurrent bool) {
 	if state == nil || state.SearchEditor == nil {
 		return
 	}
@@ -410,56 +393,47 @@ func rebuildTerminalMatchesLocked(state *terminalPreviewState, preserveCurrent b
 
 // openTerminalSearch transfers keyboard and IME ownership from the query box to the preview-local editor.
 func (a *App) openTerminalSearch() {
-	a.mu.Lock()
 	state := a.terminalPreview
 	if state == nil {
-		a.mu.Unlock()
 		return
 	}
 	state.SearchOpen = true
 	if state.SearchEditor == nil {
 		state.SearchEditor = woxui.NewTextEditor("")
 	}
-	rebuildTerminalMatchesLocked(state, false)
-	a.mu.Unlock()
+	rebuildTerminalMatches(state, false)
 	a.updateFormTextInput(true)
 	_ = a.window.Invalidate()
 }
 
 // closeTerminalSearch returns text input ownership to the launcher query.
 func (a *App) closeTerminalSearch() {
-	a.mu.Lock()
 	if state := a.terminalPreview; state != nil {
 		state.SearchOpen = false
 		state.Matches = nil
 		state.MatchIndex = -1
 	}
-	a.mu.Unlock()
 	a.restoreQueryTextInput()
 	_ = a.window.Invalidate()
 }
 
 // setTerminalSearchQuery replaces the local find value for accessibility set-value actions.
 func (a *App) setTerminalSearchQuery(value string) error {
-	a.mu.Lock()
 	if state := a.terminalPreview; state != nil && state.SearchOpen && state.SearchEditor != nil {
 		state.SearchEditor.SetText(value, false)
-		rebuildTerminalMatchesLocked(state, false)
+		rebuildTerminalMatches(state, false)
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 	return nil
 }
 
 // moveTerminalSearch advances through loaded matches and scrolls to an approximate text-layout position.
 func (a *App) moveTerminalSearch(delta int) {
-	a.mu.Lock()
 	state := a.terminalPreview
 	if state == nil || !state.SearchOpen || state.SearchEditor == nil {
-		a.mu.Unlock()
 		return
 	}
-	rebuildTerminalMatchesLocked(state, true)
+	rebuildTerminalMatches(state, true)
 	if len(state.Matches) > 0 {
 		if state.MatchIndex < 0 || state.MatchIndex >= len(state.Matches) {
 			state.MatchIndex = 0
@@ -474,27 +448,22 @@ func (a *App) moveTerminalSearch(delta int) {
 		state.Scroll = min(max(float32(0), ratio*state.MaxScroll), state.MaxScroll)
 		state.AutoFollow = false
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
 // toggleTerminalSearchCase rebuilds the loaded-window index without a core round trip.
 func (a *App) toggleTerminalSearchCase() {
-	a.mu.Lock()
 	if state := a.terminalPreview; state != nil && state.SearchOpen {
 		state.CaseSensitive = !state.CaseSensitive
-		rebuildTerminalMatchesLocked(state, false)
+		rebuildTerminalMatches(state, false)
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
 // onTerminalPreviewKey handles preview-local find before launcher navigation sees the keystroke.
 func (a *App) onTerminalPreviewKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	state := a.terminalPreview
 	searchOpen := state != nil && state.SearchOpen
-	a.mu.RUnlock()
 	if event.Modifiers.HasPrimary() && event.Key == woxui.Key("f") {
 		a.openTerminalSearch()
 		return state != nil
@@ -519,12 +488,9 @@ func (a *App) onTerminalPreviewKey(event woxui.KeyEvent) bool {
 
 // onTerminalPreviewTextInput commits native IME input only while terminal find owns focus.
 func (a *App) onTerminalPreviewTextInput(_ woxui.TextInputEvent) bool {
-	a.mu.RLock()
 	state := a.terminalPreview
 	if state == nil || !state.SearchOpen || state.SearchEditor == nil {
-		a.mu.RUnlock()
 		return false
 	}
-	a.mu.RUnlock()
 	return true
 }

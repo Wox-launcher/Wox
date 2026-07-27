@@ -161,9 +161,7 @@ func queryHotkeyPositionOptions() []formOption {
 
 // onHotkeySettingsKey moves between shared fields without stealing keys from an active recorder.
 func (a *App) onHotkeySettingsKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	active := a.settingsOpen && a.settingTab == "general" && a.hotkeySettings.Focused() && a.hotkeySettings.Form() != nil && a.tableEditor == nil
-	a.mu.RUnlock()
 	if !active {
 		return false
 	}
@@ -181,10 +179,8 @@ func (a *App) onHotkeySettingsKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) moveHotkeySettingsFocus(delta int) {
-	a.mu.Lock()
 	fields := a.hotkeySettings.Form()
 	if fields == nil || len(fields.definitions) == 0 {
-		a.mu.Unlock()
 		return
 	}
 	index := fields.focused
@@ -196,32 +192,26 @@ func (a *App) moveHotkeySettingsFocus(delta int) {
 			break
 		}
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) focusHotkeySettingsField(index int) {
 	a.stopHotkeyRecordingForDifferentField(a.hotkeySettings.Form(), index)
-	a.mu.Lock()
 	if fields := a.hotkeySettings.Form(); fields != nil && index >= 0 && index < len(fields.definitions) && formDefinitionFocusable(fields.definitions[index]) {
 		setFormFieldsFocusLocked(fields, index)
 		a.settingRow = index
 		a.hotkeySettings.SetFocused(true)
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) activateHotkeySettingsField() {
-	a.mu.RLock()
 	fields := a.hotkeySettings.Form()
 	if fields == nil || fields.focused < 0 || fields.focused >= len(fields.definitions) {
-		a.mu.RUnlock()
 		return
 	}
 	index := fields.focused
 	typeName := fields.definitions[index].Type
-	a.mu.RUnlock()
 	if typeName == "hotkey" {
 		a.recordHotkeySettingsField(index)
 	} else if typeName == "table" {
@@ -230,24 +220,19 @@ func (a *App) activateHotkeySettingsField() {
 }
 
 func (a *App) recordHotkeySettingsField(index int) {
-	a.mu.RLock()
 	fields := a.hotkeySettings.Form()
 	if fields == nil || index < 0 || index >= len(fields.definitions) {
-		a.mu.RUnlock()
 		return
 	}
 	key := fields.definitions[index].Value.Key
-	a.mu.RUnlock()
 	a.startHotkeyRecording("hotkey-settings", fields, index, key, nil)
 }
 
 func (a *App) openHotkeySettingsTable(index int) {
-	a.mu.Lock()
 	if form := a.hotkeySettings.Form(); a.settingsOpen && a.settingTab == "general" && form != nil {
 		a.settingRow = index
 		a.openFormTableLocked(form, index)
 	}
-	a.mu.Unlock()
 	a.finishOpeningFormTable()
 }
 

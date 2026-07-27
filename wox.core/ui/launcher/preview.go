@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/url"
 	"sort"
 	"strings"
 	"time"
+
+	"wox/util"
 )
 
 type previewListData struct {
@@ -30,12 +33,9 @@ func (a *App) resolvePreview(preview queryPreview) queryPreview {
 	if key == "" {
 		return queryPreview{PreviewType: "text", PreviewData: "Remote preview path is empty"}
 	}
-	a.mu.RLock()
 	if resolved, ok := a.remotePreviews[key]; ok {
-		a.mu.RUnlock()
 		return normalizePreviewMetadata(resolved)
 	}
-	a.mu.RUnlock()
 	return queryPreview{PreviewType: "text", PreviewData: "Loading preview…", PreviewTags: preview.PreviewTags}
 }
 
@@ -48,15 +48,15 @@ func (a *App) prepareRemotePreview(preview queryPreview) {
 	if key == "" {
 		return
 	}
-	a.mu.Lock()
 	_, loaded := a.remotePreviews[key]
 	requested := a.previewRequests[key]
 	if !loaded && !requested {
 		a.previewRequests[key] = true
 	}
-	a.mu.Unlock()
 	if !loaded && !requested {
-		go a.loadRemotePreview(key, preview)
+		util.Go(a.lifecycleCtx, "load remote preview", func() {
+			a.loadRemotePreview(key, preview)
+		})
 	}
 }
 
@@ -90,17 +90,19 @@ func (a *App) loadRemotePreview(path string, fallback queryPreview) {
 			resolved = queryPreview{PreviewType: "text", PreviewData: fmt.Sprintf("Unable to load preview: %v", err), PreviewTags: fallback.PreviewTags}
 		}
 	}
-	a.mu.Lock()
-	if len(a.remotePreviews) >= 256 {
-		// ponytail: Query IDs make these entries short-lived; a bounded reset avoids an LRU on the frame path.
-		a.remotePreviews = map[string]queryPreview{}
-		a.previewRequests = map[string]bool{path: true}
-	}
-	a.remotePreviews[path] = resolved
-	a.mu.Unlock()
-	a.reconcileSelectedPreview()
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if err := a.runOnUI("apply remote preview", func() {
+		if len(a.remotePreviews) >= 256 {
+			// Query IDs make these entries short-lived; a bounded reset avoids an LRU on the frame path.
+			a.remotePreviews = map[string]queryPreview{}
+			a.previewRequests = map[string]bool{path: true}
+		}
+		a.remotePreviews[path] = resolved
+		a.reconcileSelectedPreview()
+		if a.window != nil {
+			_ = a.window.Invalidate()
+		}
+	}); err != nil {
+		log.Printf("dispatch remote preview result: %v", err)
 	}
 }
 

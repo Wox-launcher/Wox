@@ -9,6 +9,7 @@ import (
 
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
+	"wox/util"
 )
 
 type appInstanceRegistry struct {
@@ -104,9 +105,9 @@ func (a *App) prepareInstanceShow(options contract.ShowOptions) {
 	if params.MaxResultCount <= 0 {
 		params.MaxResultCount = defaultMaxResult
 	}
-	a.mu.Lock()
-	a.show = params
-	a.mu.Unlock()
+	_ = a.runOnUI("prepare launcher instance show", func() {
+		a.show = params
+	})
 }
 
 func (r *appInstanceRegistry) remove(app *App) {
@@ -124,11 +125,13 @@ func (r *appInstanceRegistry) remove(app *App) {
 }
 
 func (a *App) isLive() bool {
-	a.mu.RLock()
-	launcher := a.launcher
-	destroyed := a.destroyed
-	a.mu.RUnlock()
-	if launcher == nil || destroyed {
+	var launcher *woxui.ManagedWindow
+	if err := a.runOnUI("inspect launcher lifecycle", func() {
+		launcher = a.launcher
+	}); err != nil {
+		return false
+	}
+	if launcher == nil || a.destroyed.Load() {
 		return false
 	}
 	lifecycle := launcher.Lifecycle()
@@ -136,10 +139,7 @@ func (a *App) isLive() bool {
 }
 
 func (a *App) isDestroyed() bool {
-	a.mu.RLock()
-	destroyed := a.destroyed
-	a.mu.RUnlock()
-	return destroyed
+	return a.destroyed.Load()
 }
 
 // OpenInstance implements primary handoff and named secondary launcher reuse.
@@ -156,10 +156,8 @@ func (a *App) destroySecondary() {
 		return
 	}
 	a.destroyOnce.Do(func() {
-		a.mu.Lock()
-		a.destroyed = true
+		a.destroyed.Store(true)
 		cancel := a.cancel
-		a.mu.Unlock()
 		if cancel != nil {
 			cancel()
 		}
@@ -177,9 +175,12 @@ func (a *App) destroySecondary() {
 }
 
 func (a *App) releaseTerminalSubscription() {
-	a.mu.Lock()
-	a.terminalPreview = nil
-	a.mu.Unlock()
+	if err := a.runOnUI("release terminal preview", func() {
+		a.terminalPreview = nil
+	}); err != nil {
+		log.Printf("dispatch terminal preview release: %v", err)
+	}
+	a.terminalDesired.Store("")
 	a.terminalSubscriptionMu.Lock()
 	defer a.terminalSubscriptionMu.Unlock()
 	if a.terminalSubscribed == "" {
@@ -192,10 +193,10 @@ func (a *App) releaseTerminalSubscription() {
 }
 
 func (a *App) unsubscribeAll() {
-	a.mu.Lock()
+	a.unsubscribersMu.Lock()
 	unsubscribers := a.unsubscribers
 	a.unsubscribers = nil
-	a.mu.Unlock()
+	a.unsubscribersMu.Unlock()
 	for _, unsubscribe := range unsubscribers {
 		if unsubscribe != nil {
 			unsubscribe()
@@ -204,7 +205,7 @@ func (a *App) unsubscribeAll() {
 }
 
 func (a *App) onSharedSettingsChanged(message woxui.WindowMessage) {
-	go func() {
+	util.Go(a.lifecycleCtx, "reload shared settings", func() {
 		if err := a.reloadSettings(); err != nil {
 			log.Printf("reload shared settings for %s: %v", a.sessionID, err)
 		}
@@ -217,18 +218,20 @@ func (a *App) onSharedSettingsChanged(message woxui.WindowMessage) {
 		if kind, ok := message.Payload.(string); ok && kind == "plugins" {
 			a.reloadGlanceCatalogFromCore()
 		}
-		a.mu.RLock()
-		window := a.window
-		fontFamily := a.generalSettings.Data().AppFontFamily
-		a.mu.RUnlock()
-		if window != nil {
-			if err := window.SetFontFamily(fontFamily); err != nil {
-				log.Printf("apply shared font for %s: %v", a.sessionID, err)
+		if err := a.runOnUI("apply shared window settings", func() {
+			window := a.window
+			fontFamily := a.generalSettings.Data().AppFontFamily
+			if window != nil {
+				if err := window.SetFontFamily(fontFamily); err != nil {
+					log.Printf("apply shared font for %s: %v", a.sessionID, err)
+				}
+				_ = window.Invalidate()
 			}
-			_ = window.Invalidate()
+			a.invalidateSettingsWindow()
+		}); err != nil {
+			log.Printf("dispatch shared window settings for %s: %v", a.sessionID, err)
 		}
-		a.invalidateSettingsWindow()
-	}()
+	})
 }
 
 type woxInstanceRole string

@@ -147,7 +147,11 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	if text != "" && a.visible && len(a.results) > 0 {
 		queryID := a.query.QueryID
 		a.queryTransitionTimer = time.AfterFunc(staleQueryResultsDuration, func() {
-			a.showPendingQueryResults(queryID)
+			if err := a.runOnUI("show pending query results", func() {
+				a.showPendingQueryResults(queryID)
+			}); err != nil {
+				log.Printf("dispatch pending query results: %v", err)
+			}
 		})
 	} else {
 		a.results = nil
@@ -179,9 +183,7 @@ func (a *App) resetQueryTransitionLocked() {
 
 // showPendingQueryResults clears stale content without shrinking the window while the current query is still waiting.
 func (a *App) showPendingQueryResults(queryID string) {
-	a.mu.Lock()
 	if a.query.QueryID != queryID || a.resultsQueryID == queryID {
-		a.mu.Unlock()
 		return
 	}
 	a.queryTransitionTimer = nil
@@ -191,19 +193,15 @@ func (a *App) showPendingQueryResults(queryID string) {
 	a.selected = -1
 	a.resultScrollDetached = false
 	a.layout = queryLayout{}
-	a.mu.Unlock()
 	a.reconcileSelectedPreview()
 	_ = a.window.Invalidate()
 }
 
 func (a *App) toggleRefinementBar() bool {
-	a.mu.Lock()
 	if len(a.refinements) == 0 || a.show.HideQueryBox {
-		a.mu.Unlock()
 		return false
 	}
 	a.refinementOpen = !a.refinementOpen
-	a.mu.Unlock()
 	if err := a.applyWindowBounds(); err != nil {
 		log.Printf("resize launcher for query refinements: %v", err)
 	}
@@ -212,7 +210,6 @@ func (a *App) toggleRefinementBar() bool {
 }
 
 func (a *App) selectRefinementOption(refinementID, value string) {
-	a.mu.Lock()
 	var refinement *queryRefinement
 	for index := range a.refinements {
 		if a.refinements[index].ID == refinementID {
@@ -221,7 +218,6 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 		}
 	}
 	if refinement == nil || value == "" {
-		a.mu.Unlock()
 		return
 	}
 	selected := splitRefinementValues(a.query.QueryRefinements[refinementID])
@@ -257,7 +253,6 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 	a.actionSelectionKey = ""
 	a.actionFilter = nil
 	a.chatFullscreen = false
-	a.mu.Unlock()
 	a.reconcileSelectedPreview()
 	if err := a.sendCurrentQuery(); err != nil {
 		log.Printf("send query after refinement change: %v", err)

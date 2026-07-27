@@ -19,6 +19,7 @@ import (
 
 	"wox/common"
 	woxui "wox/ui/runtime"
+	"wox/util"
 	woxsvg "wox/util/svg"
 )
 
@@ -90,19 +91,18 @@ func (a *App) imageForTint(source woxImage, tint *woxui.Color, svgSize int) *wox
 	if tint != nil {
 		key += fmt.Sprintf("-tint-%02x%02x%02x%02x", tint.R, tint.G, tint.B, tint.A)
 	}
-	a.mu.Lock()
 	a.imageUseSequence++
 	a.imageLastUsed[key] = a.imageUseSequence
 	image := a.images[key]
 	requestedSource, requested := a.imageRequested[key]
 	if image != nil || requested && requestedSource == source.ImageData {
-		a.mu.Unlock()
 		return image
 	}
 	a.imageRequested[key] = source.ImageData
 	delete(a.imageErrors, key)
-	a.mu.Unlock()
-	go a.loadImage(key, source, tint, svgSize)
+	util.Go(a.lifecycleCtx, "load launcher image", func() {
+		a.loadImage(key, source, tint, svgSize)
+	})
 	return nil
 }
 
@@ -171,25 +171,29 @@ func (a *App) storeImage(key string, image *woxui.Image) {
 	if image == nil {
 		return
 	}
-	a.mu.Lock()
-	if _, exists := a.images[key]; !exists && len(a.images) >= launcherImageCacheLimit {
-		a.evictOldestImageLocked(key)
+	if err := a.runOnUI("store launcher image", func() {
+		if _, exists := a.images[key]; !exists && len(a.images) >= launcherImageCacheLimit {
+			a.evictOldestImage(key)
+		}
+		a.images[key] = image
+		delete(a.imageErrors, key)
+		a.invalidateAllWindows()
+	}); err != nil {
+		log.Printf("dispatch launcher image: %v", err)
 	}
-	a.images[key] = image
-	delete(a.imageErrors, key)
-	a.mu.Unlock()
-	a.invalidateAllWindows()
 }
 
 func (a *App) storeImageError(key string, err error) {
-	a.mu.Lock()
-	a.imageErrors[key] = err.Error()
-	a.mu.Unlock()
-	a.invalidateAllWindows()
+	if dispatchErr := a.runOnUI("store launcher image error", func() {
+		a.imageErrors[key] = err.Error()
+		a.invalidateAllWindows()
+	}); dispatchErr != nil {
+		log.Printf("dispatch launcher image error: %v", dispatchErr)
+	}
 }
 
-// evictOldestImageLocked removes one cold image without invalidating the rest of the decoded cache.
-func (a *App) evictOldestImageLocked(keepKey string) {
+// evictOldestImage removes one cold image without invalidating the rest of the decoded cache.
+func (a *App) evictOldestImage(keepKey string) {
 	oldestKey := ""
 	oldestUse := ^uint64(0)
 	for key := range a.images {
@@ -213,8 +217,6 @@ func (a *App) evictOldestImageLocked(keepKey string) {
 
 func (a *App) imageErrorFor(source woxImage) string {
 	key := imageKey(source)
-	a.mu.RLock()
-	defer a.mu.RUnlock()
 	return a.imageErrors[key]
 }
 

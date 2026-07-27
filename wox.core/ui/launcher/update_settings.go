@@ -39,8 +39,6 @@ func (a *App) reloadUpdateChannelVersions() {
 // The picker is owned by the general settings domain; updating it here keeps this cross-domain write
 // out of updateSettingsController.
 func (a *App) applyUpdateChannelTrailers(versions []updateChannelVersion) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	picker := a.generalSettings.ChoicePicker()
 	if picker != nil && picker.item.key == "ReleaseChannel" {
 		picker.item.trailers = updateChannelVersionTrailers(versions)

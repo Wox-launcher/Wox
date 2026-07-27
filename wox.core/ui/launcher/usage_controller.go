@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"wox/ui/contract"
@@ -21,7 +20,6 @@ type usageSettingsSnapshot struct {
 // usageSettingsController owns the Usage tab state (stats, period, loading, error).
 type usageSettingsController struct {
 	deps     CommonDeps
-	mu       sync.RWMutex
 	stats    usageStatsData
 	period   string
 	loading  bool
@@ -36,8 +34,6 @@ func newUsageSettingsController(deps CommonDeps) *usageSettingsController {
 
 // CurrentPeriod returns the active reporting period, defaulting to "30d".
 func (c *usageSettingsController) CurrentPeriod() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	if c.period == "" {
 		return "30d"
 	}
@@ -47,36 +43,38 @@ func (c *usageSettingsController) CurrentPeriod() string {
 // Reload fetches one report period; ignores responses superseded by a later selection.
 func (c *usageSettingsController) Reload(ctx context.Context, service contract.UsageSettingsServices, sessionID string, period string) {
 	period = normalizeUsagePeriod(period)
-	c.mu.Lock()
-	c.revision++
-	revision := c.revision
-	c.period = period
-	c.loading = true
-	c.errMsg = ""
-	c.mu.Unlock()
-	c.deps.Invalidate()
+	revision := uint64(0)
+	if !c.deps.OnUI("start usage settings reload", func() {
+		c.revision++
+		revision = c.revision
+		c.period = period
+		c.loading = true
+		c.errMsg = ""
+		c.deps.Invalidate()
+	}) {
+		return
+	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	loaded, err := service.UsageStats(timeoutCtx, sessionID, period)
 	data := usageStatsFromContract(loaded)
 
-	c.mu.Lock()
-	if revision != c.revision {
-		c.mu.Unlock()
-		return
-	}
-	c.loading = false
-	if err != nil {
-		c.errMsg = err.Error()
-	} else {
-		data.Period = normalizeUsagePeriod(data.Period)
-		c.stats = data
-		c.period = data.Period
-		c.loaded = true
-	}
-	c.mu.Unlock()
-	c.deps.Invalidate()
+	c.deps.OnUI("finish usage settings reload", func() {
+		if revision != c.revision {
+			return
+		}
+		c.loading = false
+		if err != nil {
+			c.errMsg = err.Error()
+		} else {
+			data.Period = normalizeUsagePeriod(data.Period)
+			c.stats = data
+			c.period = data.Period
+			c.loaded = true
+		}
+		c.deps.Invalidate()
+	})
 }
 
 // usageStatsFromContract isolates controller report state from core-owned slices.
@@ -108,16 +106,12 @@ func usageStatsFromContract(source contract.UsageStats) usageStatsData {
 
 // SetShareError records a share-to-X failure message.
 func (c *usageSettingsController) SetShareError(msg string) {
-	c.mu.Lock()
 	c.errMsg = msg
-	c.mu.Unlock()
 	c.deps.Invalidate()
 }
 
 // Snapshot returns a copy of the Usage state for the view layer.
 func (c *usageSettingsController) Snapshot() usageSettingsSnapshot {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return usageSettingsSnapshot{
 		Stats:    cloneUsageStats(c.stats),
 		Period:   c.period,

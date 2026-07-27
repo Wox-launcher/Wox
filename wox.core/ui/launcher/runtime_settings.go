@@ -8,6 +8,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type runtimeStatus struct {
@@ -151,9 +152,7 @@ func (a *App) browseRuntimeExecutable(item settingItem) {
 	}
 	path, err := window.PickFile(woxui.FileDialogOptions{})
 	if err != nil {
-		a.mu.Lock()
 		a.settingNote = "Could not select " + item.title + ": " + err.Error()
-		a.mu.Unlock()
 		a.invalidateSettingsWindow()
 		return
 	}
@@ -164,22 +163,21 @@ func (a *App) browseRuntimeExecutable(item settingItem) {
 
 // saveRuntimeExecutablePath uses the backend validator as the final authority for picker and clear actions.
 func (a *App) saveRuntimeExecutablePath(item settingItem, value string) {
-	a.mu.Lock()
 	if a.settingSaving {
-		a.mu.Unlock()
 		return
 	}
 	a.settingSaving = true
 	a.generalSettings.EndEdit()
 	a.settingNote = "Saving " + item.title + "…"
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 	label := value
 	if label == "" {
 		label = a.translate("i18n:ui_runtime_clear")
 	}
-	go a.saveSetting(item, settingChoice{value: value, label: label})
+	util.Go(a.lifecycleCtx, "save runtime executable path", func() {
+		a.saveSetting(item, settingChoice{value: value, label: label})
+	})
 }
 
 // runtimeIconSource reuses the colored runtime marks from the Flutter settings implementation.

@@ -4,7 +4,6 @@ import (
 	"context"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"wox/ui/contract"
@@ -30,7 +29,6 @@ type dataSettingsSnapshot struct {
 // controller never depends on *App directly.
 type dataSettingsController struct {
 	deps CommonDeps
-	mu   sync.RWMutex
 
 	backups         []backupInfo
 	location        string
@@ -42,9 +40,7 @@ type dataSettingsController struct {
 	pendingLocation string
 	clearLogsArmed  bool
 
-	// Cross-domain callbacks wired by App after construction. They touch App-owned
-	// state (a.settingNote, a.settings, native windows), so the controller must NOT
-	// hold c.mu while invoking them.
+	// Cross-domain callbacks wired by App after construction.
 	setNote        func(string)
 	reloadSettings func() error
 	pickDirectory  func() (string, error)
@@ -65,15 +61,18 @@ func (c *dataSettingsController) BindCrossDomain(setNote func(string), reloadSet
 // Reload fetches the storage location and backup catalog. It is a no-op if a reload
 // is already in flight and aggregates location/backups errors into a single message.
 func (c *dataSettingsController) Reload(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
-	c.mu.Lock()
-	if c.loading {
-		c.mu.Unlock()
+	shouldLoad := false
+	if !c.deps.OnUI("start loading data settings", func() {
+		if c.loading {
+			return
+		}
+		c.loading = true
+		c.errMsg = ""
+		shouldLoad = true
+		c.deps.Invalidate()
+	}) || !shouldLoad {
 		return
 	}
-	c.loading = true
-	c.errMsg = ""
-	c.mu.Unlock()
-	c.deps.Invalidate()
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -98,31 +97,28 @@ func (c *dataSettingsController) Reload(ctx context.Context, service contract.Da
 		errorText += "load backups: " + backupsErr.Error()
 	}
 
-	c.mu.Lock()
-	c.loading = false
-	c.loaded = errorText == ""
-	if locationErr == nil {
-		c.location = location
-	}
-	if backupsErr == nil {
-		c.backups = backups
-	}
-	c.errMsg = errorText
-	c.mu.Unlock()
-	c.deps.Invalidate()
+	c.deps.OnUI("apply data settings", func() {
+		c.loading = false
+		c.loaded = errorText == ""
+		if locationErr == nil {
+			c.location = location
+		}
+		if backupsErr == nil {
+			c.backups = backups
+		}
+		c.errMsg = errorText
+		c.deps.Invalidate()
+	})
 }
 
 // CreateBackup starts a manual backup. While the async Post is in flight Busy is set
 // to "backup"; on success the shared note is updated and the catalog is refreshed.
 func (c *dataSettingsController) CreateBackup(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
-	c.mu.Lock()
 	if c.busy != "" {
-		c.mu.Unlock()
 		return
 	}
 	c.busy = "backup"
 	c.errMsg = ""
-	c.mu.Unlock()
 	c.deps.Invalidate()
 
 	util.Go(ctx, "create data backup", func() {
@@ -130,21 +126,17 @@ func (c *dataSettingsController) CreateBackup(ctx context.Context, service contr
 		err := service.CreateDataBackup(timeoutCtx, sessionID)
 		cancel()
 
-		c.mu.Lock()
-		c.busy = ""
-		if err != nil {
-			c.errMsg = "Could not create backup: " + err.Error()
-		}
-		c.mu.Unlock()
-
-		if err == nil {
-			if c.setNote != nil {
+		c.deps.OnUI("apply data backup creation", func() {
+			c.busy = ""
+			if err != nil {
+				c.errMsg = "Could not create backup: " + err.Error()
+			} else if c.setNote != nil {
 				c.setNote("Manual backup created")
 			}
 			c.deps.Invalidate()
+		})
+		if err == nil {
 			c.Reload(ctx, service, sessionID)
-		} else {
-			c.deps.Invalidate()
 		}
 	})
 }
@@ -153,14 +145,11 @@ func (c *dataSettingsController) CreateBackup(ctx context.Context, service contr
 // settings. The first call arms confirmation for the given backup id; the second
 // fires the async restore and reloads all settings on success.
 func (c *dataSettingsController) RestoreBackup(ctx context.Context, service contract.DataSettingsServices, sessionID string, id string) {
-	c.mu.Lock()
 	if c.busy != "" || strings.TrimSpace(id) == "" {
-		c.mu.Unlock()
 		return
 	}
 	if c.restoreArmed != id {
 		c.restoreArmed = id
-		c.mu.Unlock()
 		if c.setNote != nil {
 			c.setNote("Press Confirm restore to replace current settings with this backup.")
 		}
@@ -170,7 +159,6 @@ func (c *dataSettingsController) RestoreBackup(ctx context.Context, service cont
 	c.restoreArmed = ""
 	c.busy = "restore"
 	c.errMsg = ""
-	c.mu.Unlock()
 	c.deps.Invalidate()
 
 	util.Go(ctx, "restore data backup", func() {
@@ -181,19 +169,15 @@ func (c *dataSettingsController) RestoreBackup(ctx context.Context, service cont
 			err = c.reloadSettings()
 		}
 
-		c.mu.Lock()
-		c.busy = ""
-		if err != nil {
-			c.errMsg = "Could not restore backup: " + err.Error()
-		}
-		c.mu.Unlock()
-
-		if err == nil {
-			if c.setNote != nil {
+		c.deps.OnUI("apply data backup restore", func() {
+			c.busy = ""
+			if err != nil {
+				c.errMsg = "Could not restore backup: " + err.Error()
+			} else if c.setNote != nil {
 				c.setNote("Backup restored")
 			}
-		}
-		c.deps.Invalidate()
+			c.deps.Invalidate()
+		})
 	})
 }
 
@@ -204,18 +188,13 @@ func (c *dataSettingsController) ChooseLocation() {
 		return
 	}
 	path, err := c.pickDirectory()
-	// Decide whether to set the confirmation note under the lock, but defer the
-	// setNote call itself until after unlock so we never hold c.mu while touching
-	// App-owned state (a.settingNote).
 	var note string
-	c.mu.Lock()
 	if err != nil {
 		c.errMsg = "Could not select data directory: " + err.Error()
 	} else if strings.TrimSpace(path) != "" && path != c.location {
 		c.pendingLocation = path
 		note = "Confirm the new data directory before Wox moves its files."
 	}
-	c.mu.Unlock()
 	if note != "" && c.setNote != nil {
 		c.setNote(note)
 	}
@@ -224,9 +203,7 @@ func (c *dataSettingsController) ChooseLocation() {
 
 // CancelLocationChange clears any staged directory and the shared note.
 func (c *dataSettingsController) CancelLocationChange() {
-	c.mu.Lock()
 	c.pendingLocation = ""
-	c.mu.Unlock()
 	if c.setNote != nil {
 		c.setNote("")
 	}
@@ -237,16 +214,13 @@ func (c *dataSettingsController) CancelLocationChange() {
 // visible confirmation step. On failure the staged path is restored so the user
 // can retry without re-picking the directory.
 func (c *dataSettingsController) ConfirmLocationChange(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
-	c.mu.Lock()
 	location := c.pendingLocation
 	if c.busy != "" || strings.TrimSpace(location) == "" {
-		c.mu.Unlock()
 		return
 	}
 	c.pendingLocation = ""
 	c.busy = "location"
 	c.errMsg = ""
-	c.mu.Unlock()
 	c.deps.Invalidate()
 
 	util.Go(ctx, "change data location", func() {
@@ -254,36 +228,30 @@ func (c *dataSettingsController) ConfirmLocationChange(ctx context.Context, serv
 		err := service.ChangeDataLocation(timeoutCtx, sessionID, location)
 		cancel()
 
-		c.mu.Lock()
-		c.busy = ""
-		if err != nil {
-			c.pendingLocation = location
-			c.errMsg = "Could not move data directory: " + err.Error()
-		} else {
-			c.location = location
-		}
-		c.mu.Unlock()
-
-		if err == nil {
-			if c.setNote != nil {
+		c.deps.OnUI("apply data location change", func() {
+			c.busy = ""
+			if err != nil {
+				c.pendingLocation = location
+				c.errMsg = "Could not move data directory: " + err.Error()
+			} else {
+				c.location = location
+			}
+			if err == nil && c.setNote != nil {
 				c.setNote("Data directory updated")
 			}
-		}
-		c.deps.Invalidate()
+			c.deps.Invalidate()
+		})
 	})
 }
 
 // ClearLogs uses the same two-step confirmation as backup restore to avoid
 // accidental data loss.
 func (c *dataSettingsController) ClearLogs(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
-	c.mu.Lock()
 	if c.busy != "" {
-		c.mu.Unlock()
 		return
 	}
 	if !c.clearLogsArmed {
 		c.clearLogsArmed = true
-		c.mu.Unlock()
 		if c.setNote != nil {
 			c.setNote("Press Confirm clear to delete historical logs.")
 		}
@@ -293,7 +261,6 @@ func (c *dataSettingsController) ClearLogs(ctx context.Context, service contract
 	c.clearLogsArmed = false
 	c.busy = "logs"
 	c.errMsg = ""
-	c.mu.Unlock()
 	c.deps.Invalidate()
 
 	util.Go(ctx, "clear logs", func() {
@@ -301,19 +268,15 @@ func (c *dataSettingsController) ClearLogs(ctx context.Context, service contract
 		err := service.ClearLogs(timeoutCtx, sessionID)
 		cancel()
 
-		c.mu.Lock()
-		c.busy = ""
-		if err != nil {
-			c.errMsg = "Could not clear logs: " + err.Error()
-		}
-		c.mu.Unlock()
-
-		if err == nil {
-			if c.setNote != nil {
+		c.deps.OnUI("apply clear logs result", func() {
+			c.busy = ""
+			if err != nil {
+				c.errMsg = "Could not clear logs: " + err.Error()
+			} else if c.setNote != nil {
 				c.setNote("Logs cleared")
 			}
-		}
-		c.deps.Invalidate()
+			c.deps.Invalidate()
+		})
 	})
 }
 
@@ -327,10 +290,10 @@ func (c *dataSettingsController) OpenPath(ctx context.Context, service contract.
 		err := service.OpenPath(timeoutCtx, sessionID, path)
 		cancel()
 		if err != nil {
-			c.mu.Lock()
-			c.errMsg = "Could not open path: " + err.Error()
-			c.mu.Unlock()
-			c.deps.Invalidate()
+			c.deps.OnUI("apply open data path error", func() {
+				c.errMsg = "Could not open path: " + err.Error()
+				c.deps.Invalidate()
+			})
 		}
 	})
 }
@@ -343,10 +306,10 @@ func (c *dataSettingsController) OpenBackupFolder(ctx context.Context, service c
 		path, err := service.BackupFolder(timeoutCtx, sessionID)
 		cancel()
 		if err != nil {
-			c.mu.Lock()
-			c.errMsg = "Could not open backup folder: " + err.Error()
-			c.mu.Unlock()
-			c.deps.Invalidate()
+			c.deps.OnUI("apply open backup folder error", func() {
+				c.errMsg = "Could not open backup folder: " + err.Error()
+				c.deps.Invalidate()
+			})
 			return
 		}
 		c.OpenPath(ctx, service, sessionID, path)
@@ -360,18 +323,16 @@ func (c *dataSettingsController) OpenLog(ctx context.Context, service contract.D
 		err := service.OpenLog(timeoutCtx, sessionID)
 		cancel()
 		if err != nil {
-			c.mu.Lock()
-			c.errMsg = "Could not open log: " + err.Error()
-			c.mu.Unlock()
-			c.deps.Invalidate()
+			c.deps.OnUI("apply open log error", func() {
+				c.errMsg = "Could not open log: " + err.Error()
+				c.deps.Invalidate()
+			})
 		}
 	})
 }
 
 // Snapshot returns a copy of the Data state for the view layer.
 func (c *dataSettingsController) Snapshot() dataSettingsSnapshot {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return dataSettingsSnapshot{
 		Backups:         append([]backupInfo(nil), c.backups...),
 		Location:        c.location,

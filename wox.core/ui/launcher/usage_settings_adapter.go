@@ -7,6 +7,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 // buildUsageSettingsPage maps the local analytics snapshot into its portable view.
@@ -17,7 +18,11 @@ func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height fl
 		id := id
 		periods = append(periods, launcherview.UsagePeriod{
 			ID: id, Label: a.translate("i18n:" + usagePeriodLabelKey(id)), Selected: id == snapshot.usage.Period,
-			OnSelect: func() { go a.reloadUsageStats(id) },
+			OnSelect: func() {
+				util.Go(a.lifecycleCtx, "reload usage stats", func() {
+					a.reloadUsageStats(id)
+				})
+			},
 		})
 	}
 	days := make([]launcherview.UsageDay, 0, len(snapshot.usage.Stats.OpenedByDay))

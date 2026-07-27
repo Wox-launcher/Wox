@@ -1,28 +1,22 @@
 package launcher
 
 import (
+	"log"
 	"strings"
-
-	woxui "wox/ui/runtime"
 )
 
 // reconcileSelectedPreview keeps stateful preview resources aligned with the selected render target.
 func (a *App) reconcileSelectedPreview() {
-	if err := woxui.Call(a.reconcileSelectedPreviewOnUI); err == nil {
-		return
+	if err := a.runOnUI("reconcile selected preview", a.reconcileSelectedPreviewOnUI); err != nil {
+		log.Printf("dispatch selected preview reconciliation: %v", err)
 	}
-	// Tests and startup paths without an active native loop still need deterministic state reconciliation.
-	a.reconcileSelectedPreviewOnUI()
 }
 
 // reconcileSelectedPreviewOnUI serializes resource transitions after native thread ownership is established.
 func (a *App) reconcileSelectedPreviewOnUI() {
-	a.previewLifecycleMu.Lock()
-
 	result, preview, visible := a.selectedPreviewForLifecycle()
 	if !visible {
 		hideWebView := a.deactivatePreviewTypes("")
-		a.previewLifecycleMu.Unlock()
 		if hideWebView {
 			a.hideWebView()
 		}
@@ -57,7 +51,6 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	case "webview":
 		hideWebView = a.activateWebViewPreview(preview.PreviewData) || hideWebView
 	}
-	a.previewLifecycleMu.Unlock()
 	if hideWebView {
 		a.hideWebView()
 	}
@@ -65,9 +58,7 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 
 // selectedPreviewForLifecycle excludes stale query results and layouts that do not render a preview.
 func (a *App) selectedPreviewForLifecycle() (queryResult, queryPreview, bool) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.destroyed || !a.visible || a.resultsQueryID == "" || a.resultsQueryID != a.query.QueryID || a.selected < 0 || a.selected >= len(a.results) {
+	if a.destroyed.Load() || !a.visible || a.resultsQueryID == "" || a.resultsQueryID != a.query.QueryID || a.selected < 0 || a.selected >= len(a.results) {
 		return queryResult{}, queryPreview{}, false
 	}
 	result := a.results[a.selected]

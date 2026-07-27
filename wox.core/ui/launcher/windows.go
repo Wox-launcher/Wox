@@ -6,6 +6,7 @@ import (
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 const settingsChangedTopic = "settings.changed"
@@ -15,17 +16,18 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 	if !a.isPrimary && a.primary != nil {
 		return a.primary.ensureSettingsWindow()
 	}
-	a.mu.RLock()
-	existing := a.settingsView
-	a.mu.RUnlock()
-	if existing != nil && existing.Lifecycle() != woxui.WindowLifecycleClosed {
-		return existing, nil
-	}
 
-	host := woxwidget.NewHost(a.buildSettings)
 	var managed *woxui.ManagedWindow
 	var openErr error
+	var fontFamily string
+	var isDark bool
+	created := false
 	if err := woxui.Call(func() {
+		if existing := a.settingsView; existing != nil && existing.Lifecycle() != woxui.WindowLifecycleClosed {
+			managed = existing
+			return
+		}
+		host := woxwidget.NewHost(a.buildSettings)
 		managed, _, openErr = a.windows.Open(settingsWindowID, woxui.WindowOptions{
 			Title:     a.translate("i18n:ui_tray_open_setting_window"),
 			Size:      woxui.Size{Width: settingsWindowWidth, Height: settingsWindowHeight},
@@ -44,11 +46,11 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 				}
 			},
 			OnCloseRequested: func() {
-				go func() {
+				util.Go(a.lifecycleCtx, "close requested settings window", func() {
 					if err := a.closeSettings(); err != nil {
 						log.Printf("close requested settings window: %v", err)
 					}
-				}()
+				})
 			},
 			OnClosed: func() {
 				host.Dispose()
@@ -57,6 +59,12 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 		})
 		if openErr == nil {
 			host.Attach(managed.Window())
+			a.settingsView = managed
+			a.settingsHost = host
+			a.settingsOpen = true
+			fontFamily = a.generalSettings.Data().AppFontFamily
+			isDark = themeColorIsDark(a.palette.background)
+			created = true
 		}
 	}); err != nil {
 		return nil, err
@@ -64,14 +72,9 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 	if openErr != nil {
 		return nil, openErr
 	}
-
-	a.mu.Lock()
-	a.settingsView = managed
-	a.settingsHost = host
-	a.settingsOpen = true
-	fontFamily := a.generalSettings.Data().AppFontFamily
-	isDark := themeColorIsDark(a.palette.background)
-	a.mu.Unlock()
+	if !created {
+		return managed, nil
+	}
 	if err := managed.Window().SetAppearance(isDark); err != nil {
 		_ = managed.Close()
 		return nil, err
@@ -84,12 +87,15 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 }
 
 func (a *App) settingsNativeWindow() *woxui.Window {
-	a.mu.RLock()
-	managed := a.settingsView
-	launcherWindow := a.window
-	a.mu.RUnlock()
+	var managed *woxui.ManagedWindow
+	if err := a.runOnUI("resolve settings native window", func() {
+		managed = a.settingsView
+	}); err != nil {
+		log.Printf("resolve settings native window: %v", err)
+		return a.window
+	}
 	if managed == nil {
-		return launcherWindow
+		return a.window
 	}
 	return managed.Window()
 }
@@ -115,9 +121,7 @@ func (a *App) updateSettingsTextInput(enabled bool) {
 		return
 	}
 	state := woxui.TextInputState{}
-	a.mu.RLock()
 	searchFocused := a.settingsSearch.Focused() || a.pluginSettings.SearchFocused()
-	a.mu.RUnlock()
 	if enabled || searchFocused {
 		state = woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 240, Y: 180, Width: 1, Height: 24}}
 	}
@@ -159,10 +163,8 @@ func (a *App) restoreThemeEditorTextInput() {
 }
 
 func (a *App) formTableUsesSettingsWindow() bool {
-	a.mu.RLock()
 	state := a.tableEditor
 	usesSettings := state != nil && a.formTableTargetUsesSettingsLocked(state.target)
-	a.mu.RUnlock()
 	return usesSettings
 }
 
@@ -193,7 +195,6 @@ func (a *App) updateFormTableTextInput(enabled bool) {
 }
 
 func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
-	a.mu.RLock()
 	state := a.hotkeySettings.Recording()
 	usesSettings := false
 	if state != nil {
@@ -203,7 +204,6 @@ func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
 			usesSettings = a.formTableTargetUsesSettingsLocked(a.tableEditor.target)
 		}
 	}
-	a.mu.RUnlock()
 	return usesSettings
 }
 
@@ -277,31 +277,28 @@ func (a *App) onSettingsWindowTextInput(event woxui.TextInputEvent) {
 }
 
 func (a *App) onLauncherWindowClosed() {
-	a.mu.Lock()
 	wasVisible := a.visible
 	a.launcher = nil
 	a.host = nil
 	a.visible = false
 	isPrimary := a.isPrimary
 	if !isPrimary {
-		a.destroyed = true
+		a.destroyed.Store(true)
 	}
-	a.mu.Unlock()
 	if !isPrimary {
-		go func() {
+		util.Go(a.lifecycleCtx, "destroy secondary launcher after close", func() {
 			if wasVisible {
 				if err := a.notifyHidden(); err != nil {
 					log.Printf("notify Wox core after secondary close: %v", err)
 				}
 			}
 			a.destroySecondary()
-		}()
+		})
 	}
 }
 
 // onSettingsWindowClosed releases window-owned interaction state before notifying core.
 func (a *App) onSettingsWindowClosed() {
-	a.mu.Lock()
 	wasOpen := a.settingsOpen
 	wasRecording := a.hotkeySettings.Recording() != nil
 	a.settingsOpen = false
@@ -335,7 +332,6 @@ func (a *App) onSettingsWindowClosed() {
 		themeEditor.active = false
 	}
 	launcherVisible := a.visible
-	a.mu.Unlock()
 	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 
 	if wasRecording {
@@ -351,5 +347,7 @@ func (a *App) onSettingsWindowClosed() {
 			}
 		}
 	}
-	go a.refreshGlance("settingsChanged", "", nil)
+	util.Go(a.lifecycleCtx, "refresh glance after settings close", func() {
+		a.refreshGlance("settingsChanged", "", nil)
+	})
 }

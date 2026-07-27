@@ -66,7 +66,8 @@ func TestUsageControllerReloadError(t *testing.T) {
 }
 
 func TestUsageControllerReloadStaleResponseIgnored(t *testing.T) {
-	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newUsageSettingsController(deps)
 
 	// Handshake channels: enteredPost is closed once the first Reload is inside Post

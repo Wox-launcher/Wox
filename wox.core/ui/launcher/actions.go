@@ -119,9 +119,7 @@ func (a *App) onActionKey(event woxui.KeyEvent) bool {
 		a.toggleActionPanel()
 		return true
 	}
-	a.mu.RLock()
 	open := a.actionPanel
-	a.mu.RUnlock()
 	if !open {
 		return false
 	}
@@ -155,38 +153,30 @@ func (a *App) onActionKey(event woxui.KeyEvent) bool {
 		}
 	}
 
-	a.mu.Lock()
 	if !a.actionPanel || a.actionFilter == nil {
-		a.mu.Unlock()
 		return false
 	}
 	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.usePinYin())
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
 	for _, index := range indices {
 		if toolbarHotkeyMatches(entries[index].Hotkey, event) {
 			a.actionSelected = index
 			a.actionSelectionKey = entries[index].Key
-			a.mu.Unlock()
 			a.activateSelectedAction()
 			return true
 		}
 	}
-	a.mu.Unlock()
 	return false
 }
 
 func (a *App) toggleActionPanel() {
-	a.mu.RLock()
 	open := a.actionPanel
-	a.mu.RUnlock()
 	if open {
 		a.hideActionPanel()
 		return
 	}
 
-	a.mu.Lock()
 	if len(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)) == 0 {
-		a.mu.Unlock()
 		return
 	}
 	// Flutter dismisses a form action before transferring keyboard ownership to the action filter.
@@ -196,16 +186,13 @@ func (a *App) toggleActionPanel() {
 	a.actionSelectionKey = ""
 	a.actionFilter = woxui.NewTextEditor("")
 	a.normalizeActionSelectionLocked()
-	a.mu.Unlock()
 	_ = a.applyWindowBounds()
 	_ = a.window.Invalidate()
 }
 
 // hideActionPanel clears filter state and returns keyboard ownership to the query editor.
 func (a *App) hideActionPanel() bool {
-	a.mu.Lock()
 	changed := a.resetActionPanelLocked()
-	a.mu.Unlock()
 	if !changed {
 		return false
 	}
@@ -227,15 +214,12 @@ func (a *App) resetActionPanelLocked() bool {
 }
 
 func (a *App) moveActionSelection(delta int) {
-	a.mu.Lock()
 	if !a.actionPanel || a.actionFilter == nil {
-		a.mu.Unlock()
 		return
 	}
 	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.usePinYin())
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
 	if len(indices) == 0 {
-		a.mu.Unlock()
 		return
 	}
 	position := 0
@@ -248,19 +232,15 @@ func (a *App) moveActionSelection(delta int) {
 	position = (position + delta + len(indices)) % len(indices)
 	a.actionSelected = indices[position]
 	a.actionSelectionKey = entries[a.actionSelected].Key
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
 func (a *App) onActionTextInput(_ woxui.TextInputEvent) bool {
-	a.mu.RLock()
 	open := a.actionPanel
-	a.mu.RUnlock()
 	return open
 }
 
 func (a *App) setActionFilterValue(value string) {
-	a.mu.Lock()
 	if a.actionPanel && a.actionFilter != nil {
 		actionFilterChanged := a.actionFilter.State().Text != value
 		a.actionFilter.SetText(value, false)
@@ -268,7 +248,6 @@ func (a *App) setActionFilterValue(value string) {
 			a.selectFirstFilteredActionLocked()
 		}
 	}
-	a.mu.Unlock()
 	_ = a.applyWindowBounds()
 	_ = a.window.Invalidate()
 }
@@ -279,7 +258,7 @@ func (a *App) normalizeActionSelectionLocked() {
 		return
 	}
 	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.usePinYin())
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
 	if len(indices) == 0 {
 		a.actionSelected = -1
 		a.actionSelectionKey = ""
@@ -306,7 +285,7 @@ func (a *App) normalizeActionSelectionLocked() {
 
 func (a *App) selectFirstFilteredActionLocked() {
 	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.usePinYin())
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
 	if len(indices) == 0 {
 		a.actionSelected = -1
 		a.actionSelectionKey = ""
@@ -341,26 +320,21 @@ func translatedActionLabel(value string, translations map[string]string) string 
 }
 
 func (a *App) selectAction(index int) {
-	a.mu.Lock()
 	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
 	if a.actionPanel && index >= 0 && index < len(entries) {
 		a.actionSelected = index
 		a.actionSelectionKey = entries[index].Key
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
 func (a *App) activateSelectedAction() {
-	a.mu.RLock()
 	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
 	selected := a.actionSelected
 	if selected < 0 || selected >= len(entries) {
-		a.mu.RUnlock()
 		return
 	}
 	entry := entries[selected]
-	a.mu.RUnlock()
 	a.activateActionPanelEntry(entry)
 }
 
@@ -374,7 +348,6 @@ func (a *App) activateActionPanelEntry(entry actionPanelEntry) {
 
 // activateResultActionByID resolves preview-owned controls against the latest result snapshot.
 func (a *App) activateResultActionByID(queryID, resultID, actionID string) {
-	a.mu.RLock()
 	resultIndex := -1
 	actionIndex := -1
 	for index, result := range a.results {
@@ -390,21 +363,17 @@ func (a *App) activateResultActionByID(queryID, resultID, actionID string) {
 		}
 		break
 	}
-	a.mu.RUnlock()
 	if resultIndex >= 0 && actionIndex >= 0 {
 		a.activateAction(resultIndex, actionIndex)
 	}
 }
 
 func (a *App) activateAction(resultIndex, actionIndex int) {
-	a.mu.RLock()
 	if resultIndex < 0 || resultIndex >= len(a.results) || actionIndex < 0 || actionIndex >= len(a.results[resultIndex].Actions) || a.results[resultIndex].IsGroup {
-		a.mu.RUnlock()
 		return
 	}
 	result := a.results[resultIndex]
 	action := result.Actions[actionIndex]
-	a.mu.RUnlock()
 	if action.ID == enterChatModeActionID && result.Preview.PreviewType == "chat" {
 		a.hideActionPanel()
 		a.enterChatMode()
@@ -418,18 +387,22 @@ func (a *App) activateAction(resultIndex, actionIndex int) {
 		log.Printf("Go UI local action %q is not implemented yet", action.ID)
 		return
 	}
-	if err := a.services.ExecuteAction(context.Background(), a.sessionID, result.QueryID, result.ID, action.ID); err != nil {
-		log.Printf("execute result action: %v", err)
-		return
-	}
-	a.hideActionPanel()
-	if !action.PreventHideAfterAction {
-		go func() {
-			if err := a.hideWindow(true); err != nil {
-				log.Printf("hide launcher after action: %v", err)
+	util.Go(a.lifecycleCtx, "execute result action", func() {
+		if err := a.services.ExecuteAction(context.Background(), a.sessionID, result.QueryID, result.ID, action.ID); err != nil {
+			log.Printf("execute result action: %v", err)
+			return
+		}
+		if err := a.runOnUI("finish result action", func() {
+			a.hideActionPanel()
+			if !action.PreventHideAfterAction {
+				if err := a.hideWindow(true); err != nil {
+					log.Printf("hide launcher after action: %v", err)
+				}
 			}
-		}()
-	}
+		}); err != nil {
+			log.Printf("dispatch result action completion: %v", err)
+		}
+	})
 }
 
 // onQueryFocusChanged mirrors Flutter's query-focus notification after panel focus returns.
@@ -437,18 +410,16 @@ func (a *App) onQueryFocusChanged(focused bool) {
 	if !focused {
 		return
 	}
-	a.mu.RLock()
 	formVisible := a.form != nil
-	a.mu.RUnlock()
 	if formVisible {
 		return
 	}
 	a.hideActionPanel()
-	go func() {
+	util.Go(a.lifecycleCtx, "notify query box focus", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := a.services.QueryBoxFocused(ctx, a.sessionID); err != nil {
 			log.Printf("notify query box focus: %v", err)
 		}
-	}()
+	})
 }

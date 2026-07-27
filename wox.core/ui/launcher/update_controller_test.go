@@ -49,7 +49,8 @@ func TestUpdateControllerReloadSuccess(t *testing.T) {
 }
 
 func TestUpdateControllerReloadSkipsWhenAlreadyLoading(t *testing.T) {
-	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newUpdateSettingsController(deps)
 
 	// Handshake channels: enteredPost is closed once the first Reload is inside Post

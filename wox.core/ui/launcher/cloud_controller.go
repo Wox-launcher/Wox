@@ -4,7 +4,6 @@ import (
 	"context"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"wox/account"
@@ -33,16 +32,9 @@ type cloudSettingsSnapshot struct {
 // cloudSettingsController owns the Cloud tab state (account, sync, billing plan,
 // devices, plugins, loading flags, busy/error, form, action menu). All 13 fields
 // that used to live on App are held here; App methods became thin wrappers that call
-// the controller's getters/setters while still coordinating cross-domain state
-// (form mutation, shared setting note, native window URLs) under a.mu before delegating.
-//
-// The controller's mu only guards pointer swaps and scalar stores. Form mutation by
-// cross-domain code happens under a.mu — same convention as pluginSettings.Form()
-// and aiSettings.Form(). The Form() getter returns the live *cloudFormState pointer
-// for that purpose.
+// the controller's getters/setters while coordinating cross-domain state on the UI thread.
 type cloudSettingsController struct {
 	deps CommonDeps
-	mu   sync.RWMutex
 
 	account       cloudAccountStatus
 	sync          cloudSyncStatus
@@ -69,166 +61,138 @@ func newCloudSettingsController(deps CommonDeps) *cloudSettingsController {
 }
 
 func (c *cloudSettingsController) Account() cloudAccountStatus {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.account
 }
 
 func (c *cloudSettingsController) SetAccount(account cloudAccountStatus) {
-	c.mu.Lock()
-	c.account = account
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud account", func() {
+		c.account = account
+	})
 }
 
 func (c *cloudSettingsController) Sync() cloudSyncStatus {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.sync
 }
 
 func (c *cloudSettingsController) SetSync(sync cloudSyncStatus) {
-	c.mu.Lock()
-	c.sync = sync
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud sync status", func() {
+		c.sync = sync
+	})
 }
 
 // SetSyncProgress updates only the Progress field on the sync status. Used by the
 // contract adapter to apply transient sync progress pushed by core.
 func (c *cloudSettingsController) SetSyncProgress(progress *cloudSyncProgress) {
-	c.mu.Lock()
-	c.sync.Progress = progress
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud sync progress", func() {
+		c.sync.Progress = progress
+	})
 }
 
 func (c *cloudSettingsController) BillingPlan() cloudBillingPlan {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.billingPlan
 }
 
 func (c *cloudSettingsController) SetBillingPlan(plan cloudBillingPlan) {
-	c.mu.Lock()
-	c.billingPlan = plan
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud billing plan", func() {
+		c.billingPlan = plan
+	})
 }
 
 func (c *cloudSettingsController) BillingLoaded() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.billingLoaded
 }
 
 func (c *cloudSettingsController) SetBillingLoaded(loaded bool) {
-	c.mu.Lock()
-	c.billingLoaded = loaded
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud billing loaded", func() {
+		c.billingLoaded = loaded
+	})
 }
 
 func (c *cloudSettingsController) Devices() cloudDeviceList {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return cloneCloudDeviceList(c.devices)
 }
 
 func (c *cloudSettingsController) SetDevices(devices cloudDeviceList) {
-	c.mu.Lock()
-	c.devices = devices
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud devices", func() {
+		c.devices = devices
+	})
 }
 
 func (c *cloudSettingsController) Loading() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.loading
 }
 
 func (c *cloudSettingsController) SetLoading(loading bool) {
-	c.mu.Lock()
-	c.loading = loading
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud loading", func() {
+		c.loading = loading
+	})
 }
 
 func (c *cloudSettingsController) Loaded() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.loaded
 }
 
 func (c *cloudSettingsController) SetLoaded(loaded bool) {
-	c.mu.Lock()
-	c.loaded = loaded
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud loaded", func() {
+		c.loaded = loaded
+	})
 }
 
 func (c *cloudSettingsController) Busy() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.busy
 }
 
 func (c *cloudSettingsController) SetBusy(busy string) {
-	c.mu.Lock()
-	c.busy = busy
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud busy", func() {
+		c.busy = busy
+	})
 }
 
 func (c *cloudSettingsController) Error() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.errMsg
 }
 
 func (c *cloudSettingsController) SetError(msg string) {
-	c.mu.Lock()
-	c.errMsg = msg
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud error", func() {
+		c.errMsg = msg
+	})
 }
 
 // Revision returns the current reload revision. Used by tests to verify the
 // revision guard discards stale responses.
 func (c *cloudSettingsController) Revision() uint64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.revision
 }
 
-// Form returns the live cloud form pointer. Cross-domain callers mutate the form
-// in place under a.mu. The controller's mu only guards the pointer swap, not the
-// form's fields — same convention as pluginSettings.Form() and aiSettings.Form().
+// Form returns the live cloud form pointer for UI-thread mutation.
 func (c *cloudSettingsController) Form() *cloudFormState {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.form
 }
 
 func (c *cloudSettingsController) SetForm(form *cloudFormState) {
-	c.mu.Lock()
-	c.form = form
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud form", func() {
+		c.form = form
+	})
 }
 
 func (c *cloudSettingsController) ActionMenu() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.actionMenu
 }
 
 func (c *cloudSettingsController) SetActionMenu(menu string) {
-	c.mu.Lock()
-	c.actionMenu = menu
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud action menu", func() {
+		c.actionMenu = menu
+	})
 }
 
 func (c *cloudSettingsController) Plugins() []pluginSettingsPlugin {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return append([]pluginSettingsPlugin(nil), c.plugins...)
 }
 
 func (c *cloudSettingsController) SetPlugins(plugins []pluginSettingsPlugin) {
-	c.mu.Lock()
-	c.plugins = append([]pluginSettingsPlugin(nil), plugins...)
-	c.mu.Unlock()
+	c.deps.OnUI("set cloud plugins", func() {
+		c.plugins = append([]pluginSettingsPlugin(nil), plugins...)
+	})
 }
 
 // ReloadCloudSync refreshes account, sync, devices, and plugins as one revisioned
@@ -237,16 +201,19 @@ func (c *cloudSettingsController) SetPlugins(plugins []pluginSettingsPlugin) {
 // without coupling the controller to the billing reload path. Responses from
 // superseded refreshes are discarded via the revision guard.
 func (c *cloudSettingsController) ReloadCloudSync(ctx context.Context, service cloudReloadServices, sessionID string, onNeedBilling func()) {
-	c.mu.Lock()
-	c.revision++
-	revision := c.revision
-	needBilling := !c.billingLoaded
-	c.loading = true
-	c.errMsg = ""
-	c.mu.Unlock()
-	c.deps.Invalidate()
-	if needBilling && onNeedBilling != nil {
-		onNeedBilling()
+	var revision uint64
+	if !c.deps.OnUI("start loading cloud sync", func() {
+		c.revision++
+		revision = c.revision
+		needBilling := !c.billingLoaded
+		c.loading = true
+		c.errMsg = ""
+		c.deps.Invalidate()
+		if needBilling && onNeedBilling != nil {
+			onNeedBilling()
+		}
+	}) {
+		return
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -303,31 +270,30 @@ func (c *cloudSettingsController) ReloadCloudSync(ctx context.Context, service c
 	if pluginsErr != nil {
 		errors = append(errors, "plugins: "+pluginsErr.Error())
 	}
-	c.mu.Lock()
-	if revision != c.revision {
-		c.mu.Unlock()
-		return
-	}
-	c.loading = false
-	if accountErr == nil {
-		c.account = accountStatus
-	}
-	if statusErr == nil {
-		c.sync = syncStatus
-	}
-	if !accountStatus.LoggedIn {
-		c.devices = cloudDeviceList{}
-		c.plugins = nil
-	} else if devicesErr == nil {
-		c.devices = deviceList
-	}
-	if accountStatus.LoggedIn && pluginsErr == nil {
-		c.plugins = plugins
-	}
-	c.loaded = accountErr == nil && statusErr == nil
-	c.errMsg = strings.Join(errors, " · ")
-	c.mu.Unlock()
-	c.deps.Invalidate()
+	c.deps.OnUI("apply cloud sync", func() {
+		if revision != c.revision {
+			return
+		}
+		c.loading = false
+		if accountErr == nil {
+			c.account = accountStatus
+		}
+		if statusErr == nil {
+			c.sync = syncStatus
+		}
+		if !accountStatus.LoggedIn {
+			c.devices = cloudDeviceList{}
+			c.plugins = nil
+		} else if devicesErr == nil {
+			c.devices = deviceList
+		}
+		if accountStatus.LoggedIn && pluginsErr == nil {
+			c.plugins = plugins
+		}
+		c.loaded = accountErr == nil && statusErr == nil
+		c.errMsg = strings.Join(errors, " · ")
+		c.deps.Invalidate()
+	})
 }
 
 // ReloadBillingPlan fetches display pricing independently so it cannot delay local
@@ -337,13 +303,13 @@ func (c *cloudSettingsController) ReloadBillingPlan(ctx context.Context, service
 	defer cancel()
 	loaded, err := service.BillingPlan(timeoutCtx, sessionID)
 	plan := cloudBillingPlanFromContract(loaded)
-	c.mu.Lock()
-	c.billingLoaded = true
-	if err == nil {
-		c.billingPlan = plan
-	}
-	c.mu.Unlock()
-	c.deps.Invalidate()
+	c.deps.OnUI("apply cloud billing plan", func() {
+		c.billingLoaded = true
+		if err == nil {
+			c.billingPlan = plan
+		}
+		c.deps.Invalidate()
+	})
 }
 
 // cloudAccountStatusFromContract adapts core account state to launcher-owned view state.
@@ -408,8 +374,6 @@ func cloudBillingPlanFromContract(plan account.BillingPlan) cloudBillingPlan {
 // via snapshotCloudFormLocked so the snapshot is safe to read outside the lock;
 // all other fields are value types or copied slices.
 func (c *cloudSettingsController) Snapshot() cloudSettingsSnapshot {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return cloudSettingsSnapshot{
 		Account:       c.account,
 		Sync:          c.sync,

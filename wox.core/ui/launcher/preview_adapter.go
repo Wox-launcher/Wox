@@ -13,6 +13,7 @@ import (
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 // buildPreview resolves controller-owned preview state into a pure preview view.
@@ -182,19 +183,14 @@ func (a *App) buildTextPreview(scrollKey, value, scrollPosition string, palette 
 func (a *App) previewTextLayout(scrollKey, value string, style woxui.TextStyle, width, lineHeight float32) woxwidget.TextBlockLayout {
 	hash := sha256.Sum256([]byte(value))
 	key := fmt.Sprintf("%s|%.2f|%.2f|%d|%x", scrollKey, width, style.Size, style.Weight, hash)
-	a.mu.RLock()
 	if layout, ok := a.previewLayouts[key]; ok {
-		a.mu.RUnlock()
 		return layout
 	}
-	a.mu.RUnlock()
 	layout := woxwidget.LayoutTextBlock(a.window, value, style, width, 0, lineHeight)
-	a.mu.Lock()
 	if len(a.previewLayouts) >= 128 {
 		a.previewLayouts = map[string]woxwidget.TextBlockLayout{}
 	}
 	a.previewLayouts[key] = layout
-	a.mu.Unlock()
 	return layout
 }
 
@@ -215,13 +211,13 @@ func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, wid
 }
 
 func (a *App) openPreviewImageOverlay(image woxImage) {
-	go func() {
+	util.Go(a.lifecycleCtx, "open preview image overlay", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := a.services.ShowPreviewImage(ctx, a.sessionID, common.WoxImage{ImageType: image.ImageType, ImageData: image.ImageData}); err != nil {
 			log.Printf("open preview image overlay: %v", err)
 		}
-	}()
+	})
 }
 
 func (a *App) buildListPreview(data previewListData, palette uiPalette, width, height float32) woxwidget.Widget {

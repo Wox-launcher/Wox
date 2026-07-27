@@ -12,6 +12,7 @@ import (
 	"wox/plugin/system/shell/terminal"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
+	"wox/util"
 )
 
 // SessionID identifies the launcher instance receiving core push updates.
@@ -31,9 +32,12 @@ func (a *App) Hide(_ context.Context) error {
 
 // Toggle changes launcher visibility using core-owned placement policy.
 func (a *App) Toggle(_ context.Context, options contract.ShowOptions) error {
-	a.mu.RLock()
-	visible := a.visible
-	a.mu.RUnlock()
+	visible := false
+	if err := a.runOnUI("read launcher visibility", func() {
+		visible = a.visible
+	}); err != nil {
+		return err
+	}
 	if visible {
 		return a.hideWindow(true)
 	}
@@ -58,7 +62,12 @@ func fromCoreShowOptions(options contract.ShowOptions) showAppParams {
 
 // ChangeQuery replaces the launcher query and enters the normal typed query pipeline.
 func (a *App) ChangeQuery(_ context.Context, query common.PlainQuery) error {
-	a.setQuery(fromCorePlainQuery(query))
+	converted := fromCorePlainQuery(query)
+	if err := a.runOnUI("change query", func() {
+		a.setQuery(converted)
+	}); err != nil {
+		return err
+	}
 	return a.sendCurrentQuery()
 }
 
@@ -79,27 +88,31 @@ func fromCorePlainQuery(query common.PlainQuery) plainQuery {
 
 // RefreshQuery starts a new query identity while optionally retaining the visible selection.
 func (a *App) RefreshQuery(_ context.Context, preserveSelectedIndex bool) error {
-	a.mu.Lock()
-	selected := a.selected
-	a.query.QueryID = newInputQuery("").QueryID
-	a.queryContext = queryContext{}
-	a.queryContextKnown = false
-	a.completionHint = nil
-	a.stopGlanceLocked(true)
-	if !preserveSelectedIndex {
-		a.selected = -1
-		a.resultScrollDetached = false
-	} else {
-		a.selected = selected
+	if err := a.runOnUI("refresh query", func() {
+		selected := a.selected
+		a.query.QueryID = newInputQuery("").QueryID
+		a.queryContext = queryContext{}
+		a.queryContextKnown = false
+		a.completionHint = nil
+		a.stopGlanceLocked(true)
+		if !preserveSelectedIndex {
+			a.selected = -1
+			a.resultScrollDetached = false
+		} else {
+			a.selected = selected
+		}
+		a.reconcileSelectedPreview()
+	}); err != nil {
+		return err
 	}
-	a.mu.Unlock()
-	a.reconcileSelectedPreview()
 	return a.sendCurrentQuery()
 }
 
 // RefreshGlance schedules a stale-query-guarded accessory refresh.
 func (a *App) RefreshGlance(_ context.Context, pluginID string, ids []string) error {
-	go a.refreshGlance("manualRefresh", pluginID, append([]string(nil), ids...))
+	util.Go(a.lifecycleCtx, "refresh glance manually", func() {
+		a.refreshGlance("manualRefresh", pluginID, append([]string(nil), ids...))
+	})
 	return nil
 }
 
@@ -110,12 +123,23 @@ func (a *App) UpdateDiagnosticStatus(_ context.Context, _ bool) error {
 
 // RecordHotkey applies a raw core recorder result to the active settings field.
 func (a *App) RecordHotkey(_ context.Context, hotkey string, kind string) error {
-	return a.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: hotkey, Kind: kind})
+	var applyErr error
+	if err := a.runOnUI("record hotkey", func() {
+		applyErr = a.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: hotkey, Kind: kind})
+	}); err != nil {
+		return err
+	}
+	return applyErr
 }
 
 // ChangeTheme applies a platform-resolved core theme without transport serialization.
 func (a *App) ChangeTheme(_ context.Context, theme common.Theme) error {
-	a.applyTheme(fromCoreTheme(theme))
+	converted := fromCoreTheme(theme)
+	if err := a.runOnUI("change launcher theme", func() {
+		a.applyTheme(converted)
+	}); err != nil {
+		return err
+	}
 	a.publishSettingsChanged("theme")
 	return nil
 }
@@ -133,9 +157,12 @@ func (a *App) FocusSetting(_ context.Context) error {
 	if !a.isPrimary && a.primary != nil {
 		return a.primary.FocusSetting(context.Background())
 	}
-	a.mu.RLock()
-	settingsView := a.settingsView
-	a.mu.RUnlock()
+	var settingsView *woxui.ManagedWindow
+	if err := a.runOnUI("resolve settings window for focus", func() {
+		settingsView = a.settingsView
+	}); err != nil {
+		return err
+	}
 	if settingsView == nil {
 		return nil
 	}
@@ -155,20 +182,25 @@ func (a *App) OpenMacOSPermissionFlow(_ context.Context, _ string) error {
 
 // ShowToolbarMessage displays a plugin-owned persistent toolbar snapshot.
 func (a *App) ShowToolbarMessage(_ context.Context, message plugin.ToolbarMsgUI) error {
-	a.applyToolbarMessage(fromCoreToolbarMessage(message))
-	return nil
+	converted := fromCoreToolbarMessage(message)
+	return a.runOnUI("show toolbar message", func() {
+		a.applyToolbarMessage(converted)
+	})
 }
 
 // ShowNotificationMessage displays one transient notification in the launcher toolbar.
 func (a *App) ShowNotificationMessage(_ context.Context, message common.NotifyMsg) error {
-	a.applyToolbarMessage(toolbarMessage{Text: message.Text, Icon: imageFromString(message.Icon), DisplaySeconds: message.DisplaySeconds})
-	return nil
+	converted := toolbarMessage{Text: message.Text, Icon: imageFromString(message.Icon), DisplaySeconds: message.DisplaySeconds}
+	return a.runOnUI("show notification message", func() {
+		a.applyToolbarMessage(converted)
+	})
 }
 
 // ClearToolbarMessage removes the matching plugin-owned toolbar snapshot.
 func (a *App) ClearToolbarMessage(_ context.Context, toolbarMessageID string) error {
-	a.clearToolbarMessageByID(toolbarMessageID)
-	return nil
+	return a.runOnUI("clear toolbar message", func() {
+		a.clearToolbarMessageByID(toolbarMessageID)
+	})
 }
 
 // UpdateAttentionUnreadCount is reserved for the launcher-wide attention decoration.
@@ -178,14 +210,17 @@ func (a *App) UpdateAttentionUnreadCount(_ context.Context, _ int) error {
 
 // SendChatResponse reconciles a core chat snapshot with the active preview.
 func (a *App) SendChatResponse(_ context.Context, chat common.AIChatData) error {
-	a.applyChatResponse(fromCoreChatData(chat))
-	return nil
+	converted := fromCoreChatData(chat)
+	return a.runOnUI("apply chat response", func() {
+		a.applyChatResponse(converted)
+	})
 }
 
 // ReloadChatResources invalidates the requested AI catalogs.
 func (a *App) ReloadChatResources(_ context.Context, resourceName string) error {
-	a.reloadChatResourceName(resourceName)
-	return nil
+	return a.runOnUI("reload chat resources", func() {
+		a.reloadChatResourceName(resourceName)
+	})
 }
 
 // SendAIQuestion opens the typed ask-user overlay for the active chat preview.
@@ -194,12 +229,18 @@ func (a *App) SendAIQuestion(_ context.Context, questionID string, question stri
 	for index, option := range options {
 		converted[index] = aiQuestionOption{Value: option.Value, Title: option.Title, SubTitle: option.SubTitle, Recommended: option.Recommended, Extra: cloneStringMap(option.Extra)}
 	}
-	return a.applyTypedAIQuestion(aiQuestion{QuestionID: questionID, Question: question, Options: converted})
+	var applyErr error
+	if err := a.runOnUI("apply AI question", func() {
+		applyErr = a.applyTypedAIQuestion(aiQuestion{QuestionID: questionID, Question: question, Options: converted})
+	}); err != nil {
+		return err
+	}
+	return applyErr
 }
 
 // ReloadSettingPlugins refreshes plugin-backed settings and glance catalogs.
 func (a *App) ReloadSettingPlugins(_ context.Context) error {
-	go a.reloadGlanceCatalogFromCore()
+	util.Go(a.lifecycleCtx, "reload settings plugins", a.reloadGlanceCatalogFromCore)
 	a.publishSettingsChanged("plugins")
 	return nil
 }
@@ -212,12 +253,12 @@ func (a *App) ReloadSetting(_ context.Context) error {
 	if err := a.reloadTranslations(); err != nil {
 		return err
 	}
-	a.mu.Lock()
 	a.stopGlanceLocked(true)
 	refreshGlance := a.glanceEligibleLocked()
-	a.mu.Unlock()
 	if refreshGlance {
-		go a.refreshGlance("settingsChanged", "", nil)
+		util.Go(a.lifecycleCtx, "refresh glance after settings change", func() {
+			a.refreshGlance("settingsChanged", "", nil)
+		})
 	}
 	a.publishSettingsChanged("settings")
 	return nil
@@ -230,19 +271,24 @@ func (a *App) ReloadSettingThemes(_ context.Context) error {
 
 // CloudSyncProgressChanged applies transient sync progress immediately.
 func (a *App) CloudSyncProgressChanged(_ context.Context, progress cloudsync.CloudSyncProgress) error {
-	a.applyTypedCloudSyncProgress(progress)
-	return nil
+	return a.runOnUI("apply cloud sync progress", func() {
+		a.applyTypedCloudSyncProgress(progress)
+	})
 }
 
 // RefreshAccountStatus reloads the authoritative account and sync snapshot.
 func (a *App) RefreshAccountStatus(_ context.Context) error {
-	go a.reloadCloudSync()
+	util.Go(a.lifecycleCtx, "refresh account status", a.reloadCloudSync)
 	return nil
 }
 
 // UpdateResult patches the visible result with one already-polished core snapshot.
 func (a *App) UpdateResult(_ context.Context, result plugin.UpdatableResult) (bool, error) {
-	return a.applyTypedResultUpdate(result), nil
+	updated := false
+	err := a.runOnUI("apply result update", func() {
+		updated = a.applyTypedResultUpdate(result)
+	})
+	return updated, err
 }
 
 // PushResults appends a typed result batch only when its query is still visible.
@@ -251,7 +297,14 @@ func (a *App) PushResults(_ context.Context, payload plugin.PushResultsPayload) 
 	for index := range payload.Results {
 		results[index] = fromCoreQueryResult(payload.Results[index])
 	}
-	return a.appendTypedResults(payload.QueryId, results)
+	appended := false
+	var appendErr error
+	if err := a.runOnUI("append pushed results", func() {
+		appended, appendErr = a.appendTypedResults(payload.QueryId, results)
+	}); err != nil {
+		return false, err
+	}
+	return appended, appendErr
 }
 
 // ToggleRecordingMode reports the missing native window-level implementation.
@@ -303,8 +356,10 @@ func (a *App) ApplyTerminalChunk(_ context.Context, sessionID string, chunk term
 	if sessionID != "" && sessionID != a.sessionID {
 		return nil
 	}
-	a.applyTerminalChunk(terminalChunk{SessionID: chunk.SessionID, CursorStart: chunk.CursorStart, CursorEnd: chunk.CursorEnd, Content: chunk.Content, Truncated: chunk.Truncated})
-	return nil
+	converted := terminalChunk{SessionID: chunk.SessionID, CursorStart: chunk.CursorStart, CursorEnd: chunk.CursorEnd, Content: chunk.Content, Truncated: chunk.Truncated}
+	return a.runOnUI("apply terminal chunk", func() {
+		a.applyTerminalChunk(converted)
+	})
 }
 
 // ApplyTerminalState updates one visible terminal preview state.
@@ -312,11 +367,13 @@ func (a *App) ApplyTerminalState(_ context.Context, sessionID string, state term
 	if sessionID != "" && sessionID != a.sessionID {
 		return nil
 	}
-	a.applyTerminalState(terminalSessionState{
+	converted := terminalSessionState{
 		SessionID: state.SessionID, Command: state.Command, Interpreter: state.Interpreter,
 		WorkingDirectory: state.WorkingDirectory, Status: string(state.Status), ExitCode: state.ExitCode, Error: state.Error,
+	}
+	return a.runOnUI("apply terminal state", func() {
+		a.applyTerminalState(converted)
 	})
-	return nil
 }
 
 func fromCoreTheme(theme common.Theme) themeData {
@@ -417,12 +474,11 @@ func (a *App) applyTypedCloudSyncProgress(progress cloudsync.CloudSyncProgress) 
 	}
 	_ = a.window.Invalidate()
 	if !progress.Active {
-		go a.reloadCloudSync()
+		util.Go(a.lifecycleCtx, "reload cloud sync after progress", a.reloadCloudSync)
 	}
 }
 
 func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
-	a.mu.Lock()
 	updated := false
 	for index := range a.results {
 		if a.results[index].ID != result.Id {
@@ -455,7 +511,6 @@ func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 		updated = true
 		break
 	}
-	a.mu.Unlock()
 	if updated {
 		a.reconcileSelectedPreview()
 		_ = a.window.Invalidate()
@@ -464,9 +519,7 @@ func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 }
 
 func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, error) {
-	a.mu.Lock()
 	if queryID != a.query.QueryID {
-		a.mu.Unlock()
 		return false, nil
 	}
 	for index := range results {
@@ -488,7 +541,6 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 	if a.selected < 0 {
 		a.selected = selectableIndex(a.results, "")
 	}
-	a.mu.Unlock()
 	a.reconcileSelectedPreview()
 	if err := a.applyWindowBounds(); err != nil {
 		return false, err

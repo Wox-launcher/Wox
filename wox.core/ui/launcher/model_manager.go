@@ -10,6 +10,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type modelEngineStatus struct {
@@ -128,11 +129,11 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 		EngineLabel: engineLabel, EngineButtonLabel: engineButtonLabel, EngineEnabled: engineEnabled, Options: options,
 		OnEngine: func() { a.runModelManagerAction("engine", -1) },
 		OnRefresh: func() {
-			a.mu.RLock()
 			state := a.aiSettings.ModelManager()
-			a.mu.RUnlock()
 			if state != nil {
-				go a.refreshModelManager(state)
+				util.Go(a.lifecycleCtx, "refresh model manager", func() {
+					a.refreshModelManager(state)
+				})
 			}
 		},
 		OnClose: a.closeModelManager,
@@ -214,15 +215,12 @@ func modelManagerNeedsPoll(state *modelManagerState) bool {
 // openPluginModelManager binds the overlay to the current plugin form without exposing model routes to widgets.
 func (a *App) openPluginModelManager(index int) {
 	a.stopHotkeyRecording()
-	a.mu.Lock()
 	state := a.pluginSettings.Form()
 	if state == nil || state.saving || index < 0 || index >= len(state.definitions) {
-		a.mu.Unlock()
 		return
 	}
 	definition := state.definitions[index]
 	if definition.Type != "dictationModel" && definition.Type != "ocrModel" {
-		a.mu.Unlock()
 		return
 	}
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
@@ -239,10 +237,11 @@ func (a *App) openPluginModelManager(index int) {
 		selected: selected, selectedRow: selectedRow,
 	}
 	a.aiSettings.SetModelManager(manager)
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
-	go a.refreshModelManager(manager)
+	util.Go(a.lifecycleCtx, "open model manager", func() {
+		a.refreshModelManager(manager)
+	})
 }
 
 func (a *App) modelManagerCurrentLocked(state *modelManagerState) bool {
@@ -252,16 +251,20 @@ func (a *App) modelManagerCurrentLocked(state *modelManagerState) bool {
 
 // refreshModelManager merges runtime-only progress into translated definition metadata.
 func (a *App) refreshModelManager(state *modelManagerState) {
-	a.mu.Lock()
-	if !a.modelManagerCurrentLocked(state) || state.loading {
-		a.mu.Unlock()
+	shouldLoad := false
+	kind := ""
+	if err := a.runOnUI("start refreshing model manager", func() {
+		if !a.modelManagerCurrentLocked(state) || state.loading {
+			return
+		}
+		state.loading = true
+		state.error = ""
+		kind = state.kind
+		shouldLoad = true
+		a.invalidateSettingsWindow()
+	}); err != nil || !shouldLoad {
 		return
 	}
-	state.loading = true
-	state.error = ""
-	kind := state.kind
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
 
 	modelKind := contract.ManagedModelDictation
 	if kind == "ocrModel" {
@@ -283,43 +286,46 @@ func (a *App) refreshModelManager(state *modelManagerState) {
 	cancel()
 	engine.Known = engineErr == nil
 
-	a.mu.Lock()
-	if !a.modelManagerCurrentLocked(state) {
-		a.mu.Unlock()
-		return
-	}
-	state.loading = false
-	if statusErr == nil {
-		mergeModelStatuses(state.options, statuses)
-		if state.selected == "" {
-			for _, option := range state.options {
-				if modelOptionUsable(state.kind, option) {
-					state.selected = modelOptionID(option)
-					key := state.target.definitions[state.fieldIndex].Value.Key
-					state.target.values[key] = state.selected
-					break
+	_ = a.runOnUI("apply model manager refresh", func() {
+		if !a.modelManagerCurrentLocked(state) {
+			return
+		}
+		state.loading = false
+		if statusErr == nil {
+			mergeModelStatuses(state.options, statuses)
+			if state.selected == "" {
+				for _, option := range state.options {
+					if modelOptionUsable(state.kind, option) {
+						state.selected = modelOptionID(option)
+						key := state.target.definitions[state.fieldIndex].Value.Key
+						state.target.values[key] = state.selected
+						break
+					}
 				}
 			}
 		}
-	}
-	if engineErr == nil {
-		state.engine = engine
-	}
-	errors := make([]string, 0, 2)
-	if statusErr != nil {
-		errors = append(errors, "models: "+statusErr.Error())
-	}
-	if engineErr != nil {
-		errors = append(errors, "engine: "+engineErr.Error())
-	}
-	state.error = strings.Join(errors, " · ")
-	state.target.definitions[state.fieldIndex].Value.Options = append([]formOption(nil), state.options...)
-	poll := modelManagerNeedsPoll(state)
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-	if poll {
-		time.AfterFunc(time.Second, func() { a.refreshModelManager(state) })
-	}
+		if engineErr == nil {
+			state.engine = engine
+		}
+		errors := make([]string, 0, 2)
+		if statusErr != nil {
+			errors = append(errors, "models: "+statusErr.Error())
+		}
+		if engineErr != nil {
+			errors = append(errors, "engine: "+engineErr.Error())
+		}
+		state.error = strings.Join(errors, " · ")
+		state.target.definitions[state.fieldIndex].Value.Options = append([]formOption(nil), state.options...)
+		poll := modelManagerNeedsPoll(state)
+		a.invalidateSettingsWindow()
+		if poll {
+			time.AfterFunc(time.Second, func() {
+				util.Go(a.lifecycleCtx, "poll model manager", func() {
+					a.refreshModelManager(state)
+				})
+			})
+		}
+	})
 }
 
 func mergeModelStatuses(options []formOption, statuses []formOption) {
@@ -339,10 +345,8 @@ func mergeModelStatuses(options []formOption, statuses []formOption) {
 }
 
 func (a *App) closeModelManager() {
-	a.mu.Lock()
 	state := a.aiSettings.ModelManager()
 	if state == nil {
-		a.mu.Unlock()
 		return
 	}
 	pluginForm := a.pluginSettings.Form()
@@ -351,49 +355,39 @@ func (a *App) closeModelManager() {
 		setFormFieldsFocusLocked(&pluginForm.formFieldsState, state.fieldIndex)
 	}
 	a.aiSettings.SetModelManager(nil)
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) selectModelManagerRow(index int) {
-	a.mu.Lock()
 	state := a.aiSettings.ModelManager()
 	if state == nil || index < 0 || index >= len(state.options) {
-		a.mu.Unlock()
 		return
 	}
 	state.selectedRow = index
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) chooseManagedModel(index int) {
-	a.mu.Lock()
 	state := a.aiSettings.ModelManager()
 	if state == nil || state.busy != "" || index < 0 || index >= len(state.options) || !modelOptionUsable(state.kind, state.options[index]) {
-		a.mu.Unlock()
 		return
 	}
 	option := state.options[index]
 	key := state.target.definitions[state.fieldIndex].Value.Key
 	state.target.values[key] = modelOptionID(option)
 	state.selected = modelOptionID(option)
-	a.mu.Unlock()
 	a.closeModelManager()
 }
 
 // runModelManagerAction starts core-owned downloads or deletion and leaves progress polling in the shared overlay.
 func (a *App) runModelManagerAction(action string, index int) {
-	a.mu.Lock()
 	state := a.aiSettings.ModelManager()
 	if state == nil || state.busy != "" {
-		a.mu.Unlock()
 		return
 	}
 	modelID := ""
 	if action != "engine" {
 		if index < 0 || index >= len(state.options) {
-			a.mu.Unlock()
 			return
 		}
 		modelID = modelOptionID(state.options[index])
@@ -401,10 +395,9 @@ func (a *App) runModelManagerAction(action string, index int) {
 	state.busy = action + ":" + modelID
 	state.error = ""
 	kind := state.kind
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 
-	go func() {
+	util.Go(a.lifecycleCtx, "run model manager action", func() {
 		modelKind := contract.ManagedModelDictation
 		if kind == "ocrModel" {
 			modelKind = contract.ManagedModelOCR
@@ -418,29 +411,29 @@ func (a *App) runModelManagerAction(action string, index int) {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		err := a.services.OperateManagedModel(ctx, a.sessionID, modelKind, operation, modelID)
 		cancel()
-		a.mu.Lock()
-		if !a.modelManagerCurrentLocked(state) {
-			a.mu.Unlock()
-			return
-		}
-		state.busy = ""
-		if err != nil {
-			state.error = err.Error()
-		} else if action == "delete" && state.selected == modelID {
-			state.selected = ""
-			key := state.target.definitions[state.fieldIndex].Value.Key
-			state.target.values[key] = ""
-		}
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
-		if err == nil {
-			go a.refreshModelManager(state)
-		}
-	}()
+		_ = a.runOnUI("apply model manager action", func() {
+			if !a.modelManagerCurrentLocked(state) {
+				return
+			}
+			state.busy = ""
+			if err != nil {
+				state.error = err.Error()
+			} else if action == "delete" && state.selected == modelID {
+				state.selected = ""
+				key := state.target.definitions[state.fieldIndex].Value.Key
+				state.target.values[key] = ""
+			}
+			a.invalidateSettingsWindow()
+			if err == nil {
+				util.Go(a.lifecycleCtx, "refresh model manager after action", func() {
+					a.refreshModelManager(state)
+				})
+			}
+		})
+	})
 }
 
 func (a *App) onModelManagerKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	state := a.aiSettings.ModelManager()
 	selected := -1
 	count := 0
@@ -448,7 +441,6 @@ func (a *App) onModelManagerKey(event woxui.KeyEvent) bool {
 		selected = state.selectedRow
 		count = len(state.options)
 	}
-	a.mu.RUnlock()
 	if state == nil {
 		return false
 	}
@@ -464,30 +456,26 @@ func (a *App) onModelManagerKey(event woxui.KeyEvent) bool {
 			a.selectModelManagerRow((selected + delta + count) % count)
 		}
 	case woxui.KeyEnter, woxui.KeySpace:
-		a.mu.RLock()
 		if a.aiSettings.ModelManager() == state && selected >= 0 && selected < len(state.options) {
 			option := state.options[selected]
 			usable := modelOptionUsable(state.kind, option)
 			status := option.Status
-			a.mu.RUnlock()
 			if usable {
 				a.chooseManagedModel(selected)
 			} else if status == "not_downloaded" || status == "failed" || status == "" {
 				a.runModelManagerAction("download", selected)
 			}
-		} else {
-			a.mu.RUnlock()
 		}
 	case woxui.KeyDelete:
-		a.mu.RLock()
 		canDelete := a.aiSettings.ModelManager() == state && state.kind == "dictationModel" && selected >= 0 && selected < len(state.options) && state.options[selected].Status == "downloaded"
-		a.mu.RUnlock()
 		if canDelete {
 			a.runModelManagerAction("delete", selected)
 		}
 	default:
 		if event.Modifiers.HasPrimary() && event.Key == woxui.Key("r") {
-			go a.refreshModelManager(state)
+			util.Go(a.lifecycleCtx, "refresh model manager from keyboard", func() {
+				a.refreshModelManager(state)
+			})
 			return true
 		}
 		return true

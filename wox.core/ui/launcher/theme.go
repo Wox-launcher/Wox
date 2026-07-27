@@ -195,17 +195,16 @@ func (a *App) reloadTheme() error {
 	if err := json.Unmarshal(encoded, &theme); err != nil {
 		return fmt.Errorf("decode current theme: %w", err)
 	}
-	a.applyTheme(theme)
-	return nil
+	return a.runOnUI("apply current theme", func() {
+		a.applyTheme(theme)
+	})
 }
 
 func (a *App) applyTheme(theme themeData) {
 	palette := paletteForTheme(theme)
 	isDark := themeColorIsDark(palette.background)
-	a.mu.Lock()
 	a.palette = palette
 	settingsView := a.settingsView
-	a.mu.Unlock()
 	if a.window != nil {
 		_ = a.window.SetAppearance(isDark)
 		_ = a.applyWindowBounds()

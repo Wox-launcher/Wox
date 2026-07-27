@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 	"wox/util/clipboard"
 )
 
@@ -36,11 +38,13 @@ const (
 
 // App owns one launcher window and its typed core service boundary.
 type App struct {
-	mu                     sync.RWMutex
-	previewLifecycleMu     sync.Mutex
+	// These narrow locks protect the few resources intentionally accessed outside the UI thread.
+	translationsMu         sync.RWMutex
 	terminalSubscriptionMu sync.Mutex
+	unsubscribersMu        sync.Mutex
 	tooltipMu              sync.Mutex
 	terminalSubscribed     string
+	terminalDesired        atomic.Value
 
 	isDev         bool
 	isPrimary     bool
@@ -48,6 +52,7 @@ type App struct {
 	sessionID     string
 	windowID      woxui.WindowID
 	services      contract.Services
+	uiCall        func(func()) error
 	windows       *woxui.WindowManager
 	instances     *appInstanceRegistry
 	primary       *App
@@ -55,7 +60,7 @@ type App struct {
 	unsubscribers []func()
 	lifecycleCtx  context.Context
 	cancel        context.CancelFunc
-	destroyed     bool
+	destroyed     atomic.Bool
 	launcher      *woxui.ManagedWindow
 	settingsView  *woxui.ManagedWindow
 	window        *woxui.Window
@@ -104,12 +109,12 @@ type App struct {
 	settingRow            int
 	settingNote           string
 	settingSaving         bool
-	choiceTooltipRevision uint64
+	choiceTooltipRevision atomic.Uint64
 	tableEditor           *formTableEditorState
 	glanceItem            *glanceItem
 	glanceLoading         bool
 	glanceRevision        uint64
-	glanceTooltipRevision uint64
+	glanceTooltipRevision atomic.Uint64
 	glanceTimer           *time.Timer
 	// Settings controllers (zero App back-dependency; populated by newApp).
 	generalSettings    *generalSettingsController
@@ -167,6 +172,7 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 		sessionID:       sessionID,
 		windowID:        windowID,
 		services:        services,
+		uiCall:          woxui.Call,
 		windows:         windows,
 		instances:       instances,
 		primary:         primary,
@@ -194,12 +200,16 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 			StartPage:      "mru",
 		},
 	}
+	app.terminalDesired.Store("")
+	app.unsubscribersMu.Lock()
 	app.unsubscribers = append(app.unsubscribers, app.windows.SubscribeMessages(app.windowID, settingsChangedTopic, app.onSharedSettingsChanged))
+	app.unsubscribersMu.Unlock()
 	deps := CommonDeps{
 		Invalidate: app.invalidateSettingsWindow,
 		Translate:  app.translate,
 		IsDev:      isDev,
 		Palette:    func() uiPalette { return app.palette },
+		RunOnUI:    app.runOnUI,
 	}
 	app.sharedEdit = newSharedEditState()
 	app.generalSettings = newGeneralSettingsController(deps, app.sharedEdit)
@@ -211,10 +221,10 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	// settings after a restore; pickDirectory opens the native directory picker.
 	app.dataSettings.BindCrossDomain(
 		func(note string) {
-			app.mu.Lock()
-			app.settingNote = note
-			app.mu.Unlock()
-			app.invalidateSettingsWindow()
+			_ = app.runOnUI("apply data settings note", func() {
+				app.settingNote = note
+				app.invalidateSettingsWindow()
+			})
 		},
 		app.reloadSettings,
 		func() (string, error) {
@@ -314,9 +324,12 @@ func (a *App) start() error {
 // Close releases the protocol connection after the final native window closes.
 func (a *App) Close() error {
 	if !a.isPrimary {
-		a.mu.RLock()
-		launcher := a.launcher
-		a.mu.RUnlock()
+		var launcher *woxui.ManagedWindow
+		if err := a.runOnUI("resolve secondary launcher for close", func() {
+			launcher = a.launcher
+		}); err != nil {
+			return err
+		}
 		if launcher != nil {
 			return launcher.Close()
 		}
@@ -324,10 +337,8 @@ func (a *App) Close() error {
 		return nil
 	}
 
-	a.mu.Lock()
-	a.destroyed = true
+	a.destroyed.Store(true)
 	cancel := a.cancel
-	a.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
@@ -340,31 +351,35 @@ func (a *App) Close() error {
 }
 
 func (a *App) showWindow(params showAppParams) error {
-	a.mu.Lock()
-	if params.WindowWidth <= 0 {
-		params.WindowWidth = defaultWidth
+	var launcher *woxui.ManagedWindow
+	queryEmpty := false
+	if err := a.runOnUI("prepare launcher show", func() {
+		if params.WindowWidth <= 0 {
+			params.WindowWidth = defaultWidth
+		}
+		if params.MaxResultCount <= 0 {
+			params.MaxResultCount = defaultMaxResult
+		}
+		a.show = params
+		if params.SelectAll {
+			a.editor.SelectAll()
+		}
+		a.actionPanel = false
+		a.actionSelected = 0
+		a.actionSelectionKey = ""
+		a.actionFilter = nil
+		a.form = nil
+		a.visible = true
+		queryEmpty = a.query.QueryText == ""
+		launcher = a.launcher
+		a.reconcileSelectedPreview()
+		a.restoreQueryTextInput()
+	}); err != nil {
+		return err
 	}
-	if params.MaxResultCount <= 0 {
-		params.MaxResultCount = defaultMaxResult
-	}
-	a.show = params
-	if params.SelectAll {
-		a.editor.SelectAll()
-	}
-	a.actionPanel = false
-	a.actionSelected = 0
-	a.actionSelectionKey = ""
-	a.actionFilter = nil
-	a.form = nil
-	a.visible = true
-	queryEmpty := a.query.QueryText == ""
-	launcher := a.launcher
-	a.mu.Unlock()
 	if launcher == nil {
 		return errors.New("launcher window is not initialized")
 	}
-	a.reconcileSelectedPreview()
-	a.restoreQueryTextInput()
 
 	if err := a.window.SetHideOnBlur(params.HideOnBlur); err != nil {
 		return err
@@ -381,35 +396,42 @@ func (a *App) showWindow(params showAppParams) error {
 	if queryEmpty && params.StartPage == "mru" {
 		return a.requestMRU()
 	}
-	go a.refreshGlance("windowShown", "", nil)
+	util.Go(a.lifecycleCtx, "refresh glance after window shown", func() {
+		a.refreshGlance("windowShown", "", nil)
+	})
 	return nil
 }
 
 func (a *App) hideWindow(notify bool) error {
-	a.mu.Lock()
-	if !a.visible {
-		a.mu.Unlock()
+	var launcher *woxui.ManagedWindow
+	alreadyHidden := false
+	if err := a.runOnUI("prepare launcher hide", func() {
+		if !a.visible {
+			alreadyHidden = true
+			return
+		}
+		a.actionPanel = false
+		a.actionSelected = 0
+		a.actionSelectionKey = ""
+		a.actionFilter = nil
+		a.form = nil
+		a.visible = false
+		a.stopGlanceLocked(false)
+		launcher = a.launcher
+		a.reconcileSelectedPreview()
+		a.requirementForm = nil
+		a.triggerConflict = nil
+		a.themeSettings.SetThemeEditor(nil)
+		a.resetChatPreview()
+	}); err != nil {
+		return err
+	}
+	if alreadyHidden {
 		return nil
 	}
-	a.actionPanel = false
-	a.actionSelected = 0
-	a.actionSelectionKey = ""
-	a.actionFilter = nil
-	a.form = nil
-	a.visible = false
-	a.stopGlanceLocked(false)
-	launcher := a.launcher
-	a.mu.Unlock()
 	if launcher == nil {
 		return errors.New("launcher window is not initialized")
 	}
-	a.reconcileSelectedPreview()
-	a.mu.Lock()
-	a.requirementForm = nil
-	a.triggerConflict = nil
-	a.themeSettings.SetThemeEditor(nil)
-	a.mu.Unlock()
-	a.resetChatPreview()
 	if err := launcher.Hide(); err != nil {
 		return err
 	}
@@ -423,9 +445,7 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 	if event.Active {
 		return
 	}
-	a.mu.Lock()
 	if !a.visible {
-		a.mu.Unlock()
 		return
 	}
 	hideOnBlur := a.show.HideOnBlur
@@ -434,7 +454,6 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 		a.visible = false
 		a.stopGlanceLocked(false)
 	}
-	a.mu.Unlock()
 	if hideOnBlur {
 		a.reconcileSelectedPreview()
 		if launcher != nil {
@@ -442,7 +461,7 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 		}
 		a.resetChatPreview()
 	}
-	go func() {
+	util.Go(a.lifecycleCtx, "notify launcher focus change", func() {
 		if hideOnBlur {
 			if err := a.notifyHidden(); err != nil {
 				log.Printf("notify Wox core after blur hide: %v", err)
@@ -452,7 +471,7 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 		if err := a.notifyFocusLost(); err != nil {
 			log.Printf("notify Wox core after focus loss: %v", err)
 		}
-	}()
+	})
 }
 
 func (a *App) lifecycleContext() (context.Context, context.CancelFunc) {
@@ -490,7 +509,6 @@ func (a *App) setQuery(query plainQuery) {
 	if query.QueryType == "" {
 		query.QueryType = "input"
 	}
-	a.mu.Lock()
 	a.query = query
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
@@ -513,24 +531,26 @@ func (a *App) setQuery(query plainQuery) {
 	a.actionSelectionKey = ""
 	a.actionFilter = nil
 	a.form = nil
-	a.mu.Unlock()
 	a.reconcileSelectedPreview()
-	a.mu.Lock()
 	a.requirementForm = nil
 	a.triggerConflict = nil
 	a.themeSettings.SetThemeEditor(nil)
-	a.mu.Unlock()
 	a.resetChatPreview()
 	a.restoreQueryTextInput()
 	_ = a.window.Invalidate()
 }
 
 func (a *App) sendCurrentQuery() error {
-	a.mu.RLock()
-	query := a.query
-	startPage := a.show.StartPage
-	skipCompletionHint := !a.generalSettings.Data().EnableQueryCompletionHint
-	a.mu.RUnlock()
+	var query plainQuery
+	var startPage string
+	var skipCompletionHint bool
+	if err := a.runOnUI("prepare current query", func() {
+		query = a.query
+		startPage = a.show.StartPage
+		skipCompletionHint = !a.generalSettings.Data().EnableQueryCompletionHint
+	}); err != nil {
+		return err
+	}
 	if err := a.startTypedQuery(query, skipCompletionHint); err != nil {
 		return err
 	}
@@ -547,46 +567,47 @@ func (a *App) usePinYin() bool {
 }
 
 func (a *App) requestMRU() error {
-	a.mu.Lock()
-	a.query = newInputQuery("")
-	a.queryContext = queryContext{IsGlobalQuery: true}
-	a.queryContextKnown = true
-	a.editor.SetText("", false)
-	queryID := a.query.QueryID
-	a.resetQueryTransitionLocked()
-	a.results = nil
-	a.resultsQueryID = ""
-	a.selected = -1
-	a.hoveredResult = -1
-	a.resultScroll.reset()
-	a.resultScrollDetached = false
-	a.layout = queryLayout{}
-	a.stopGlanceLocked(true)
-	a.refinements = nil
-	a.refinementOpen = false
-	a.refinementScope = ""
-	a.completionHint = nil
-	a.actionPanel = false
-	a.actionSelected = 0
-	a.actionSelectionKey = ""
-	a.actionFilter = nil
-	a.form = nil
-	a.mu.Unlock()
-	a.reconcileSelectedPreview()
-	a.mu.Lock()
-	a.requirementForm = nil
-	a.triggerConflict = nil
-	a.themeSettings.SetThemeEditor(nil)
-	a.mu.Unlock()
-	a.resetChatPreview()
-	go a.loadTypedMRU(queryID)
+	queryID := ""
+	if err := a.runOnUI("prepare MRU query", func() {
+		a.query = newInputQuery("")
+		a.queryContext = queryContext{IsGlobalQuery: true}
+		a.queryContextKnown = true
+		a.editor.SetText("", false)
+		queryID = a.query.QueryID
+		a.resetQueryTransitionLocked()
+		a.results = nil
+		a.resultsQueryID = ""
+		a.selected = -1
+		a.hoveredResult = -1
+		a.resultScroll.reset()
+		a.resultScrollDetached = false
+		a.layout = queryLayout{}
+		a.stopGlanceLocked(true)
+		a.refinements = nil
+		a.refinementOpen = false
+		a.refinementScope = ""
+		a.completionHint = nil
+		a.actionPanel = false
+		a.actionSelected = 0
+		a.actionSelectionKey = ""
+		a.actionFilter = nil
+		a.form = nil
+		a.reconcileSelectedPreview()
+		a.requirementForm = nil
+		a.triggerConflict = nil
+		a.themeSettings.SetThemeEditor(nil)
+		a.resetChatPreview()
+	}); err != nil {
+		return err
+	}
+	util.Go(a.lifecycleCtx, "load MRU results", func() {
+		a.loadTypedMRU(queryID)
+	})
 	return nil
 }
 
 func (a *App) applyResults(queryID string, results []queryResult, layout *queryLayout, refinements *[]queryRefinement, context *queryContext, queryStartTimestamp int64) {
-	a.mu.Lock()
-	if a.destroyed || queryID == "" || queryID != a.query.QueryID {
-		a.mu.Unlock()
+	if a.destroyed.Load() || queryID == "" || queryID != a.query.QueryID {
 		return
 	}
 	if a.isDev && a.generalSettings.Data().ShowPerformanceTail && a.generalSettings.Data().ShowPerformanceTailUIReceived && queryStartTimestamp > 0 {
@@ -638,13 +659,14 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	} else if a.actionPanel {
 		a.normalizeActionSelectionLocked()
 	}
-	a.mu.Unlock()
 	a.reconcileSelectedPreview()
 	if closedActionPanel {
 		a.restoreQueryTextInput()
 	}
 	if refreshGlance {
-		go a.refreshGlance("manualRefresh", "", nil)
+		util.Go(a.lifecycleCtx, "refresh glance after query results", func() {
+			a.refreshGlance("manualRefresh", "", nil)
+		})
 	}
 	a.scheduleQueryWindowBounds(queryID)
 	_ = a.window.Invalidate()
@@ -652,9 +674,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 
 // scheduleQueryWindowBounds coalesces streaming query snapshots into one resize after input settles.
 func (a *App) scheduleQueryWindowBounds(queryID string) {
-	a.mu.Lock()
-	if a.destroyed || queryID == "" || queryID != a.query.QueryID {
-		a.mu.Unlock()
+	if a.destroyed.Load() || queryID == "" || queryID != a.query.QueryID {
 		return
 	}
 	a.queryResizeRevision++
@@ -663,20 +683,16 @@ func (a *App) scheduleQueryWindowBounds(queryID string) {
 		a.queryResizeTimer.Stop()
 	}
 	a.queryResizeTimer = time.AfterFunc(queryResizeSettleDuration, func() {
-		_ = woxui.Call(func() {
-			a.mu.Lock()
-			if a.destroyed || revision != a.queryResizeRevision || queryID != a.query.QueryID {
-				a.mu.Unlock()
+		_ = a.runOnUI("apply settled query window bounds", func() {
+			if a.destroyed.Load() || revision != a.queryResizeRevision || queryID != a.query.QueryID {
 				return
 			}
 			a.queryResizeTimer = nil
-			a.mu.Unlock()
 			if err := a.applyWindowBounds(); err != nil {
 				log.Printf("resize launcher for query results: %v", err)
 			}
 		})
 	})
-	a.mu.Unlock()
 }
 
 func (a *App) applyWindowBounds() error {
@@ -688,28 +704,40 @@ func (a *App) applyWindowBoundsAtShowPosition() error {
 }
 
 func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
-	a.mu.RLock()
-	params := a.show
-	results := append([]queryResult(nil), a.results...)
-	resultCount := len(results)
-	layout := a.layout
-	refinementVisible := len(a.refinements) > 0 && a.refinementOpen && !params.HideQueryBox
-	actionPanel := a.actionPanel
-	palette := a.palette
-	formHeight := formPanelHeight(a.form)
-	actionCount := 0
-	requirementPreview := false
-	previewVisible := false
-	toolbarMessageVisible := a.toolbarMsg != nil
-	chatFullscreen := a.chatFullscreen
-	if actionPanel && a.actionFilter != nil {
-		actionCount = len(filteredActionIndices(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg), a.actionFilter.State().Text, a.translations, a.usePinYin()))
+	var params showAppParams
+	var results []queryResult
+	var layout queryLayout
+	var palette uiPalette
+	var resultCount int
+	var actionCount int
+	var formHeight int
+	var refinementVisible bool
+	var actionPanel bool
+	var requirementPreview bool
+	var previewVisible bool
+	var toolbarMessageVisible bool
+	var chatFullscreen bool
+	if err := a.runOnUI("snapshot launcher window bounds", func() {
+		params = a.show
+		results = append([]queryResult(nil), a.results...)
+		resultCount = len(results)
+		layout = a.layout
+		refinementVisible = len(a.refinements) > 0 && a.refinementOpen && !params.HideQueryBox
+		actionPanel = a.actionPanel
+		palette = a.palette
+		formHeight = formPanelHeight(a.form)
+		toolbarMessageVisible = a.toolbarMsg != nil
+		chatFullscreen = a.chatFullscreen
+		if actionPanel && a.actionFilter != nil {
+			actionCount = len(filteredActionIndices(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg), a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin()))
+		}
+		if a.selected >= 0 && a.selected < len(a.results) {
+			requirementPreview = a.results[a.selected].Preview.PreviewType == "query_requirement_settings"
+			previewVisible = a.results[a.selected].Preview.PreviewData != ""
+		}
+	}); err != nil {
+		return err
 	}
-	if a.selected >= 0 && a.selected < len(a.results) {
-		requirementPreview = a.results[a.selected].Preview.PreviewType == "query_requirement_settings"
-		previewVisible = a.results[a.selected].Preview.PreviewData != ""
-	}
-	a.mu.RUnlock()
 	width := params.WindowWidth
 	if width <= 0 {
 		width = defaultWidth
@@ -881,7 +909,6 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			}
 			return true
 		case woxui.Key("x"):
-			a.mu.Lock()
 			selected := a.editor.SelectedText()
 			if selected != "" {
 				_ = clipboard.WriteText(selected)
@@ -889,7 +916,6 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 					a.applyQueryTextChangeLocked(a.editor.State().Text)
 				}
 			}
-			a.mu.Unlock()
 			_ = a.window.Invalidate()
 			a.reconcileSelectedPreview()
 			if err := a.sendCurrentQuery(); err != nil {
@@ -901,11 +927,9 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			if err != nil || text == "" {
 				return true
 			}
-			a.mu.Lock()
 			if a.editor.InsertText(text) {
 				a.applyQueryTextChangeLocked(a.editor.State().Text)
 			}
-			a.mu.Unlock()
 			_ = a.window.Invalidate()
 			a.reconcileSelectedPreview()
 			if err := a.sendCurrentQuery(); err != nil {
@@ -914,12 +938,10 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			return true
 		}
 	}
-	a.mu.Lock()
 	textHandled, textChanged := a.editor.HandleKey(event)
 	if textChanged {
 		a.applyQueryTextChangeLocked(a.editor.State().Text)
 	}
-	a.mu.Unlock()
 	if textHandled {
 		_ = a.window.Invalidate()
 		if textChanged {
@@ -952,11 +974,11 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 		a.activateSelected()
 		return true
 	case woxui.KeyEscape:
-		go func() {
+		util.Go(a.lifecycleCtx, "hide launcher from escape", func() {
 			if err := a.hideWindow(true); err != nil {
 				log.Printf("hide launcher: %v", err)
 			}
-		}()
+		})
 		return true
 	default:
 		return false
@@ -965,9 +987,7 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) resultNavigationColumns() int {
-	a.mu.RLock()
 	layout := a.layout.GridLayout
-	a.mu.RUnlock()
 	if layout == nil {
 		return 1
 	}
@@ -999,12 +1019,10 @@ func (a *App) onTextInput(event woxui.TextInputEvent) {
 	if a.onTerminalPreviewTextInput(event) {
 		return
 	}
-	a.mu.Lock()
 	committed := a.editor.HandleTextInput(event)
 	if committed {
 		a.applyQueryTextChangeLocked(a.editor.State().Text)
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 	if committed {
 		a.reconcileSelectedPreview()
@@ -1015,9 +1033,7 @@ func (a *App) onTextInput(event woxui.TextInputEvent) {
 }
 
 func (a *App) moveSelection(delta int) {
-	a.mu.Lock()
 	if len(a.results) == 0 {
-		a.mu.Unlock()
 		return
 	}
 	index := a.selected
@@ -1039,7 +1055,6 @@ func (a *App) moveSelection(delta int) {
 			break
 		}
 	}
-	a.mu.Unlock()
 	if changed {
 		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
@@ -1048,7 +1063,6 @@ func (a *App) moveSelection(delta int) {
 }
 
 func (a *App) selectResult(index int) {
-	a.mu.Lock()
 	closedPanel := false
 	closedForm := false
 	valid := false
@@ -1064,7 +1078,6 @@ func (a *App) selectResult(index int) {
 			a.chatFullscreen = false
 		}
 	}
-	a.mu.Unlock()
 	if valid {
 		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
@@ -1076,7 +1089,6 @@ func (a *App) selectResult(index int) {
 }
 
 func (a *App) hoverResult(index int, inside bool) {
-	a.mu.Lock()
 	if inside {
 		if index >= 0 && index < len(a.results) && !a.results[index].IsGroup {
 			a.hoveredResult = index
@@ -1084,26 +1096,20 @@ func (a *App) hoverResult(index int, inside bool) {
 	} else if a.hoveredResult == index {
 		a.hoveredResult = -1
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
 func (a *App) activateSelected() {
-	a.mu.RLock()
 	selected := a.selected
-	a.mu.RUnlock()
 	a.activateResult(selected)
 }
 
 func (a *App) activateResult(index int) {
-	a.mu.RLock()
 	if len(a.results) > 0 && (index < 0 || index >= len(a.results) || a.results[index].IsGroup) {
-		a.mu.RUnlock()
 		return
 	}
 	entries := unifiedActionPanelEntries(a.results, index, a.toolbarMsg)
 	if len(entries) == 0 {
-		a.mu.RUnlock()
 		return
 	}
 	entry := entries[0]
@@ -1113,7 +1119,6 @@ func (a *App) activateResult(index int) {
 			break
 		}
 	}
-	a.mu.RUnlock()
 	a.activateActionPanelEntry(entry)
 }
 

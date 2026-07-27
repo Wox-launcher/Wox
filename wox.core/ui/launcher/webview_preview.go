@@ -55,13 +55,11 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 	if err != nil {
 		return previewview.WebViewPreviewMessage(fmt.Sprintf("Invalid WebView preview: %v", err), theme.ErrorText, theme, width, height)
 	}
-	a.mu.RLock()
 	active := a.webViewPreviewData == previewData
 	webViewError := ""
 	if active {
 		webViewError = a.webViewPreviewError
 	}
-	a.mu.RUnlock()
 	if webViewError != "" {
 		return previewview.WebViewPreviewMessage(webViewError, theme.ErrorText, theme, width, height)
 	}
@@ -70,9 +68,7 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 	}
 	content := data.content()
 	return previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnBounds: func(bounds woxui.Rect) {
-		a.mu.RLock()
 		current := a.webViewPreviewData == previewData && a.webViewPreviewError == ""
-		a.mu.RUnlock()
 		if !current {
 			return
 		}
@@ -83,36 +79,29 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 }
 
 func (a *App) setWebViewPreviewError(err error) {
-	a.mu.Lock()
 	if a.webViewPreviewError == err.Error() {
-		a.mu.Unlock()
 		return
 	}
 	a.webViewPreviewError = err.Error()
-	a.mu.Unlock()
 	a.hideWebView()
 	_ = a.window.Invalidate()
 }
 
 // activateWebViewPreview prepares controller state and reports whether native content is stale.
 func (a *App) activateWebViewPreview(previewData string) bool {
-	a.mu.Lock()
 	changed := a.webViewPreviewData != previewData
 	if changed {
 		a.webViewPreviewData = previewData
 		a.webViewPreviewError = ""
 	}
-	a.mu.Unlock()
 	return changed
 }
 
 // deactivateWebViewPreview clears controller ownership and reports whether native content was attached.
 func (a *App) deactivateWebViewPreview() bool {
-	a.mu.Lock()
 	wasActive := a.webViewPreviewData != "" || a.webViewPreviewError != ""
 	a.webViewPreviewData = ""
 	a.webViewPreviewError = ""
-	a.mu.Unlock()
 	return wasActive
 }
 

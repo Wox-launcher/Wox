@@ -9,6 +9,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 // buildCloudSettingsPage maps cloud state into the portable cloud settings view.
@@ -280,7 +281,7 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot) launcherview.Clou
 		RefreshEnabled: !snapshot.cloud.Loading && snapshot.cloud.Busy == "",
 		EmptyLabel:     a.translate("i18n:ui_cloud_sync_devices_empty"),
 		Items:          items,
-		OnRefresh:      func() { go a.reloadCloudSync() },
+		OnRefresh:      func() { util.Go(a.lifecycleCtx, "reload cloud sync devices", a.reloadCloudSync) },
 	}
 }
 

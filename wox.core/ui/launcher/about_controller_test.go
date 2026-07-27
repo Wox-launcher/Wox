@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 )
 
@@ -45,11 +46,20 @@ func TestAboutControllerReloadError(t *testing.T) {
 }
 
 func TestAboutControllerReloadConcurrent(t *testing.T) {
-	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newAboutSettingsController(deps)
 	service := &fakeVersionSettingsService{version: "v"}
 	// First call claims loading; second should no-op.
-	go c.Reload(context.Background(), service, "session")
+	var reloads sync.WaitGroup
+	reloads.Add(1)
+	go func() {
+		defer reloads.Done()
+		c.Reload(context.Background(), service, "session")
+	}()
 	c.Reload(context.Background(), service, "session")
-	// No deadlock/panic; version eventually set.
+	reloads.Wait()
+	if snap := c.Snapshot(); snap.Version != "v" {
+		t.Fatalf("Version = %q, want v", snap.Version)
+	}
 }

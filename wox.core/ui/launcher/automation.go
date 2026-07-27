@@ -9,17 +9,20 @@ import (
 )
 
 func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, bool) {
-	a.mu.RLock()
-	if a.settingsOpen && a.settingsHost != nil && a.settingsView != nil {
-		host := a.settingsHost
-		window := a.settingsView.Window()
-		a.mu.RUnlock()
-		return host, window, true
-	}
-	host := a.host
-	window := a.window
-	a.mu.RUnlock()
-	return host, window, false
+	var host *woxwidget.Host
+	var window *woxui.Window
+	settings := false
+	_ = a.runOnUI("resolve automation surface", func() {
+		if a.settingsOpen && a.settingsHost != nil && a.settingsView != nil {
+			host = a.settingsHost
+			window = a.settingsView.Window()
+			settings = true
+			return
+		}
+		host = a.host
+		window = a.window
+	})
+	return host, window, settings
 }
 
 // AutomationSnapshot returns the latest immutable semantics tree.
@@ -100,9 +103,7 @@ func (a *App) ShowAutomationWindow() error {
 	}
 	var actionErr error
 	err := woxui.Call(func() {
-		a.mu.RLock()
 		params := a.show
-		a.mu.RUnlock()
 		actionErr = a.showWindow(params)
 	})
 	if err != nil {

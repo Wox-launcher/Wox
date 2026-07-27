@@ -11,6 +11,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type themeSettingsTheme struct {
@@ -124,15 +125,12 @@ func (a *App) switchThemeSettingsMode(mode string) {
 	if mode != "installed" && mode != "store" && mode != "editor" {
 		return
 	}
-	a.mu.Lock()
 	if a.themeSettings.ThemeOperation() != "" || a.themeSettings.ThemesLoading() || a.themeSettings.ThemesMode() == mode {
-		a.mu.Unlock()
 		return
 	}
 	themeEditor := a.themeSettings.ThemeEditor()
 	if a.themeSettings.ThemesMode() == "editor" && themeEditorDirtyLocked(themeEditor) {
 		themeEditor.error = "Save the current theme changes before switching views."
-		a.mu.Unlock()
 		a.invalidateSettingsWindow()
 		return
 	}
@@ -150,25 +148,26 @@ func (a *App) switchThemeSettingsMode(mode string) {
 		a.themeSettings.SetThemeDetailTab("preview")
 	}
 	loadEditor := mode == "editor" && (themeEditor == nil || !strings.HasPrefix(themeEditor.key, "settings-theme|"))
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 
 	if loadEditor {
-		go func() {
+		util.Go(a.lifecycleCtx, "load settings theme editor", func() {
 			if err := a.loadSettingsThemeEditor(); err != nil {
-				a.themeSettings.SetThemesError(err.Error())
-				a.invalidateSettingsWindow()
+				_ = a.runOnUI("apply settings theme editor error", func() {
+					a.themeSettings.SetThemesError(err.Error())
+					a.invalidateSettingsWindow()
+				})
 			}
-		}()
+		})
 		return
 	}
 	if mode != "editor" {
-		go func() {
+		util.Go(a.lifecycleCtx, "load theme catalog", func() {
 			if err := a.reloadThemes(mode, ""); err != nil {
 				log.Printf("load %s themes: %v", mode, err)
 			}
-		}()
+		})
 	}
 }
 
@@ -187,54 +186,45 @@ func themeEditorDirtyLocked(state *themeEditorPreviewState) bool {
 
 // runThemeOperation keeps install/apply lifecycle in core and mirrors only the active palette locally.
 func (a *App) runThemeOperation(kind string) {
-	a.mu.Lock()
 	themes := a.themeSettings.Themes()
 	selected := a.themeSettings.ThemeSelected()
 	if a.themeSettings.ThemeOperation() != "" || selected < 0 || selected >= len(themes) {
-		a.mu.Unlock()
 		return
 	}
 	theme := themes[selected]
 	switch kind {
 	case "install":
 		if theme.IsInstalled {
-			a.mu.Unlock()
 			return
 		}
 	case "upgrade":
 		if !theme.IsInstalled || !theme.IsUpgradable {
-			a.mu.Unlock()
 			return
 		}
 	case "apply":
 		if !theme.IsInstalled || a.generalSettings.Data().ThemeID == theme.ID {
-			a.mu.Unlock()
 			return
 		}
 	case "uninstall":
 		if !theme.IsInstalled || theme.IsSystem {
-			a.mu.Unlock()
 			return
 		}
 		if a.themeSettings.ThemeUninstallArmed() != theme.ID {
 			a.themeSettings.SetThemeUninstallArmed(theme.ID)
 			a.settingNote = "Press Confirm uninstall to remove " + theme.Name + "."
-			a.mu.Unlock()
 			a.invalidateSettingsWindow()
 			return
 		}
 	default:
-		a.mu.Unlock()
 		return
 	}
 	a.themeSettings.SetThemeUninstallArmed("")
 	a.themeSettings.SetThemesError("")
 	a.themeSettings.SetThemeOperation(kind + ":" + theme.ID)
 	mode := a.themeSettings.ThemesMode()
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 
-	go func() {
+	util.Go(a.lifecycleCtx, kind+" theme", func() {
 		operation := contract.ThemeOperation(kind)
 		if kind == "upgrade" {
 			operation = contract.ThemeOperationInstall
@@ -261,25 +251,23 @@ func (a *App) runThemeOperation(kind string) {
 		if err == nil {
 			err = a.reloadThemes(mode, theme.ID)
 		}
-		a.mu.Lock()
-		a.themeSettings.SetThemeOperation("")
-		if err != nil {
-			a.themeSettings.SetThemesError(err.Error())
-		} else {
-			a.themeSettings.SetThemesError("")
-			a.settingNote = kind + " completed for " + theme.Name
-		}
-		a.mu.Unlock()
+		_ = a.runOnUI("apply theme operation result", func() {
+			a.themeSettings.SetThemeOperation("")
+			if err != nil {
+				a.themeSettings.SetThemesError(err.Error())
+			} else {
+				a.themeSettings.SetThemesError("")
+				a.settingNote = kind + " completed for " + theme.Name
+			}
+			a.invalidateSettingsWindow()
+		})
 		if err != nil {
 			log.Printf("%s theme %s: %v", kind, theme.ID, err)
 		}
-		a.invalidateSettingsWindow()
-	}()
+	})
 }
 
 func (a *App) currentThemeID() string {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
 	return a.generalSettings.Data().ThemeID
 }
 
@@ -319,7 +307,6 @@ func (a *App) themeSearchQueryLocked() string {
 }
 
 func (a *App) setThemeSearchFocused(focused bool) {
-	a.mu.Lock()
 	if a.themeSettings.ThemeSearchEditor() == nil {
 		a.themeSettings.SetThemeSearchEditor(woxui.NewTextEditor(""))
 	}
@@ -329,7 +316,6 @@ func (a *App) setThemeSearchFocused(focused bool) {
 		a.settingsSearch.SetPanel(false)
 		a.pluginSettings.SetSearchFocused(false)
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
@@ -345,9 +331,7 @@ func (a *App) setThemeSearchValue(value string) error {
 }
 
 func (a *App) onThemeSearchKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	active := a.settingsOpen && a.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && a.themeSettings.ThemeSearchFocused() && a.themeSettings.ThemeSearchEditor() != nil
-	a.mu.RUnlock()
 	if !active {
 		return false
 	}
@@ -358,16 +342,12 @@ func (a *App) onThemeSearchKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) onThemeSearchTextInput(_ woxui.TextInputEvent) bool {
-	a.mu.RLock()
 	active := a.settingsOpen && a.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && a.themeSettings.ThemeSearchFocused() && a.themeSettings.ThemeSearchEditor() != nil
-	a.mu.RUnlock()
 	return active
 }
 
 func (a *App) locateCurrentTheme() {
-	a.mu.Lock()
 	if a.themeSettings.ThemesMode() != "installed" || a.generalSettings.Data().ThemeID == "" {
-		a.mu.Unlock()
 		return
 	}
 	editor := a.themeSettings.ThemeSearchEditor()
@@ -383,7 +363,6 @@ func (a *App) locateCurrentTheme() {
 			break
 		}
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
@@ -419,10 +398,8 @@ func (a *App) moveFilteredThemeSelection(delta int) {
 
 // onThemeSettingsKey gives catalog selection the same basic keyboard access as plugin settings.
 func (a *App) onThemeSettingsKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	active := a.settingsOpen && a.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && !a.themeSettings.ThemeSearchFocused()
 	themes := a.themeSettings.Themes()
-	a.mu.RUnlock()
 	filtered := filterThemes(themes, a.themeSearchQueryLocked())
 	if !active || len(filtered) == 0 {
 		return false

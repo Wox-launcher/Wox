@@ -10,6 +10,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 const settingsTitleBarHeight = launcherview.SettingsTitleBarHeight
@@ -87,11 +88,11 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth 
 			}
 		},
 		OnClose: func() {
-			go func() {
+			util.Go(a.lifecycleCtx, "close settings window", func() {
 				if err := a.closeSettings(); err != nil {
 					log.Printf("close settings window: %v", err)
 				}
-			}()
+			})
 		},
 	})
 }

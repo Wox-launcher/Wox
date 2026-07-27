@@ -1,7 +1,7 @@
 package launcher
 
 import (
-	"sync"
+	"log"
 
 	woxui "wox/ui/runtime"
 )
@@ -13,12 +13,28 @@ type CommonDeps struct {
 	Translate  func(string) string
 	IsDev      bool
 	Palette    func() uiPalette
+	RunOnUI    func(string, func()) error
+}
+
+// OnUI applies one controller state transition through the shared UI single-writer boundary.
+func (d CommonDeps) OnUI(operation string, fn func()) bool {
+	if fn == nil {
+		return true
+	}
+	if d.RunOnUI == nil {
+		fn()
+		return true
+	}
+	if err := d.RunOnUI(operation, fn); err != nil {
+		log.Printf("dispatch settings controller operation %q: %v", operation, err)
+		return false
+	}
+	return true
 }
 
 // sharedEditState holds the single active built-in setting editor session.
 // Only one settings domain edits at a time; Begin/End enforce mutual exclusion.
 type sharedEditState struct {
-	mu           sync.Mutex
 	editKey      string
 	editor       *woxui.TextEditor
 	choicePicker *settingChoicePickerState
@@ -31,8 +47,6 @@ func newSharedEditState() *sharedEditState {
 
 // Begin claims the editor for one owner/key. Returns whether the claim succeeded.
 func (s *sharedEditState) Begin(owner, key string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.owner != "" && s.owner != owner {
 		return false
 	}
@@ -43,8 +57,6 @@ func (s *sharedEditState) Begin(owner, key string) bool {
 
 // End releases the editor back to idle.
 func (s *sharedEditState) End() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.owner = ""
 	s.editKey = ""
 	if s.editor != nil {
@@ -55,8 +67,6 @@ func (s *sharedEditState) End() {
 
 // State returns a snapshot of the current edit session (zero-valued when idle).
 func (s *sharedEditState) State() (editKey string, editing woxui.TextEditingState, choicePicker *settingChoicePickerSnapshot) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	editing = woxui.TextEditingState{}
 	if s.editor != nil {
 		editing = s.editor.State()

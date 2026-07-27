@@ -30,9 +30,9 @@ func (a *App) reloadTranslations() error {
 	if err := json.Unmarshal([]byte(encoded), &translations); err != nil {
 		return fmt.Errorf("decode language bundle: %w", err)
 	}
-	a.mu.Lock()
+	a.translationsMu.Lock()
 	a.translations = translations
-	a.mu.Unlock()
+	a.translationsMu.Unlock()
 	a.invalidateAllWindows()
 	return nil
 }
@@ -42,11 +42,22 @@ func (a *App) translate(value string) string {
 		return value
 	}
 	key := strings.TrimPrefix(value, "i18n:")
-	a.mu.RLock()
+	a.translationsMu.RLock()
 	translated := a.translations[key]
-	a.mu.RUnlock()
+	a.translationsMu.RUnlock()
 	if translated != "" {
 		return translated
 	}
 	return strings.ReplaceAll(key, "_", " ")
+}
+
+// translationSnapshot isolates matching and rendering from concurrent language reloads.
+func (a *App) translationSnapshot() map[string]string {
+	a.translationsMu.RLock()
+	defer a.translationsMu.RUnlock()
+	snapshot := make(map[string]string, len(a.translations))
+	for key, value := range a.translations {
+		snapshot[key] = value
+	}
+	return snapshot
 }

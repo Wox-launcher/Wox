@@ -50,8 +50,6 @@ type viewSnapshot struct {
 }
 
 func (a *App) snapshot() viewSnapshot {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
 	var tableEditor *formTableEditorSnapshot
 	if a.tableEditor != nil && a.formTableTargetCurrentLocked(a.tableEditor.target) {
 		tableEditor = snapshotFormTableEditorLocked(a.tableEditor)
@@ -86,7 +84,7 @@ func (a *App) snapshot() viewSnapshot {
 	if a.actionPanel && a.actionFilter != nil {
 		actionFilter = a.actionFilter.State().Text
 		actionEntries = unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-		actionIndices = filteredActionIndices(actionEntries, actionFilter, a.translations, a.usePinYin())
+		actionIndices = filteredActionIndices(actionEntries, actionFilter, a.translationSnapshot(), a.usePinYin())
 	}
 	return viewSnapshot{
 		editing:               a.editor.State(),
@@ -259,24 +257,16 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launc
 		OnSelectionStart: func(x float32) {
 			a.hideActionPanel()
 			a.deactivateRequirementForm()
-			a.mu.RLock()
 			text := a.editor.State().Text
-			a.mu.RUnlock()
 			anchor := a.queryOffsetAt(text, x, style)
-			a.mu.Lock()
 			a.selectionAnchor = anchor
 			a.editor.SetCaret(anchor)
-			a.mu.Unlock()
 			_ = a.window.Invalidate()
 		},
 		OnSelectionExtend: func(x float32) {
-			a.mu.RLock()
 			text := a.editor.State().Text
-			a.mu.RUnlock()
 			focus := a.queryOffsetAt(text, x, style)
-			a.mu.Lock()
 			a.editor.SetSelection(a.selectionAnchor, focus)
-			a.mu.Unlock()
 			_ = a.window.Invalidate()
 		},
 		OnKey: a.onKey, OnTextInput: func(event woxui.TextInputEvent) bool { a.onTextInput(event); return true }, OnFocusChange: a.onQueryFocusChanged, OnSetValue: a.setQueryText,
@@ -287,10 +277,8 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launc
 // setQueryText applies an accessibility or automation value through the normal query pipeline.
 func (a *App) setQueryText(value string) error {
 	a.deactivateRequirementForm()
-	a.mu.Lock()
 	a.editor.SetText(value, false)
 	a.applyQueryTextChangeLocked(value)
-	a.mu.Unlock()
 	a.reconcileSelectedPreview()
 	_ = a.window.Invalidate()
 	return a.sendCurrentQuery()
@@ -299,13 +287,9 @@ func (a *App) setQueryText(value string) error {
 func (a *App) placeQueryCaret(x float32, style woxui.TextStyle) {
 	a.hideActionPanel()
 	a.deactivateRequirementForm()
-	a.mu.RLock()
 	text := a.editor.State().Text
-	a.mu.RUnlock()
 	offset := a.queryOffsetAt(text, x, style)
-	a.mu.Lock()
 	a.editor.SetCaret(offset)
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
@@ -494,16 +478,13 @@ func (a *App) rememberResolvedResultScroll(snapshot viewSnapshot, scroll scrollC
 	if scroll == snapshot.resultScroll {
 		return
 	}
-	a.mu.Lock()
 	if a.resultsQueryID == snapshot.resultsQueryID && a.selected == snapshot.selected && a.resultScroll == snapshot.resultScroll && a.resultScrollDetached == snapshot.resultScrollDetached {
 		a.resultScroll = scroll
 	}
-	a.mu.Unlock()
 }
 
 // scrollResultsFrom detaches pointer scrolling from selection-following until selection changes.
 func (a *App) scrollResultsFrom(snapshotDetached bool, rendered scrollController, delta float32) {
-	a.mu.Lock()
 	base := a.resultScroll
 	if !snapshotDetached && !a.resultScrollDetached {
 		base = rendered
@@ -511,7 +492,6 @@ func (a *App) scrollResultsFrom(snapshotDetached bool, rendered scrollController
 	base.scrollBy(delta)
 	a.resultScroll = base
 	a.resultScrollDetached = true
-	a.mu.Unlock()
 }
 
 func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidget.Widget {

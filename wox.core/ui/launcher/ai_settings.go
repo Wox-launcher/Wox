@@ -206,7 +206,6 @@ func settingsJSONArray(value json.RawMessage) string {
 // onLoaded callback so the controller stays free of *App references.
 func (a *App) loadAIProviderCatalog() {
 	a.aiSettings.ReloadProviders(context.Background(), a.services, a.sessionID, func(providers []aiProviderInfo) {
-		a.mu.Lock()
 		if form := a.aiSettings.Form(); form != nil {
 			applyAIProviderCatalogLocked(form, providers)
 		}
@@ -215,7 +214,6 @@ func (a *App) loadAIProviderCatalog() {
 			applyAIProviderOptionsToRowFormLocked(state.rowForm, state.definition)
 			applyAIProviderDefaultHostLocked(state, false, providers)
 		}
-		a.mu.Unlock()
 	})
 }
 
@@ -295,9 +293,7 @@ func applyAIProviderDefaultHostLocked(state *formTableEditorState, overwrite boo
 
 // onAISettingsKey keeps table selection portable while the modal editor owns row-level input.
 func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	active := a.settingsOpen && a.settingTab == "ai" && a.aiSettings.Form() != nil && a.tableEditor == nil
-	a.mu.RUnlock()
 	if !active {
 		return false
 	}
@@ -316,42 +312,34 @@ func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
 
 // selectAISettingsTable moves keyboard focus between the three table cards.
 func (a *App) selectAISettingsTable(index int) {
-	a.mu.Lock()
 	if form := a.aiSettings.Form(); form != nil && index >= 0 && index < len(form.definitions) {
 		a.settingRow = index
 		setFormFieldsFocusLocked(form, index)
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 // moveAISettingsTable wraps table-card selection without entering the modal editor.
 func (a *App) moveAISettingsTable(delta int) {
-	a.mu.Lock()
 	if form := a.aiSettings.Form(); form != nil && len(form.definitions) > 0 {
 		a.settingRow = (a.settingRow + delta + len(form.definitions)) % len(form.definitions)
 		setFormFieldsFocusLocked(form, a.settingRow)
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) openSelectedAISettingsTable() {
-	a.mu.RLock()
 	index := a.settingRow
-	a.mu.RUnlock()
 	a.openAISettingsTable(index)
 }
 
 // openAISettingsTable opens a settings-owned target in the same modal table editor used by plugin forms.
 func (a *App) openAISettingsTable(index int) {
-	a.mu.Lock()
 	form := a.aiSettings.Form()
 	if a.settingsOpen && a.settingTab == "ai" && form != nil {
 		a.settingRow = index
 		a.openFormTableLocked(form, index)
 	}
-	a.mu.Unlock()
 	a.finishOpeningFormTable()
 }
 
@@ -365,7 +353,6 @@ func (a *App) addAISettingsTableRow(index int) {
 
 // openAISettingsTableRow carries the inline row selection into the shared table editor.
 func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
-	a.mu.Lock()
 	form := a.aiSettings.Form()
 	if a.settingsOpen && a.settingTab == "ai" && form != nil {
 		a.settingRow = tableIndex
@@ -374,7 +361,6 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 			a.tableEditor.selected = rowIndex
 		}
 	}
-	a.mu.Unlock()
 	a.finishOpeningFormTable()
 	if tableIndex < 2 {
 		a.beginEditFormTableRowDirect()
@@ -383,10 +369,8 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 
 // beginCloneRemoteAISkill reuses the row form surface for the one URL needed by core's clone operation.
 func (a *App) beginCloneRemoteAISkill() {
-	a.mu.Lock()
 	state := a.tableEditor
 	if state == nil || state.definition.Value.Key != "AISkills" || state.invalid || state.saving || state.rowForm != nil || state.target != a.aiSettings.Form() {
-		a.mu.Unlock()
 		return
 	}
 	fields := newFormFieldsState([]formDefinition{{
@@ -402,7 +386,6 @@ func (a *App) beginCloneRemoteAISkill() {
 	state.skillClone = true
 	state.status = ""
 	state.deleteArmed = -1
-	a.mu.Unlock()
 	a.updateSettingsTextInput(true)
 	a.invalidateSettingsWindow()
 }
@@ -423,38 +406,41 @@ func (a *App) cloneRemoteAISkills(state *formTableEditorState, url, previousValu
 		err = fmt.Errorf("the repository did not contain any skills")
 	}
 
-	a.mu.Lock()
-	if err != nil {
-		a.settingSaving = false
-		if a.tableEditor == state {
-			state.saving = false
-			state.status = "Could not clone: " + err.Error()
+	var value string
+	save := false
+	_ = a.runOnUI("apply cloned AI skills", func() {
+		if err != nil {
+			a.settingSaving = false
+			if a.tableEditor == state {
+				state.saving = false
+				state.status = "Could not clone: " + err.Error()
+			}
+			a.settingNote = "Could not clone remote skills: " + err.Error()
+			a.invalidateSettingsWindow()
+			return
 		}
-		a.settingNote = "Could not clone remote skills: " + err.Error()
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
-		return
-	}
-	state.rows = append(state.rows, cloneFormTableRows(skills)...)
-	state.selected = len(state.rows) - 1
-	if commitErr := a.commitFormTableRowsLocked(state); commitErr != nil {
-		a.settingSaving = false
-		state.rows, _ = decodeFormTableRows(previousValue)
-		state.target.values[state.definition.Value.Key] = previousValue
-		if a.tableEditor == state {
-			state.saving = false
-			state.status = commitErr.Error()
+		state.rows = append(state.rows, cloneFormTableRows(skills)...)
+		state.selected = len(state.rows) - 1
+		if commitErr := a.commitFormTableRowsLocked(state); commitErr != nil {
+			a.settingSaving = false
+			state.rows, _ = decodeFormTableRows(previousValue)
+			state.target.values[state.definition.Value.Key] = previousValue
+			if a.tableEditor == state {
+				state.saving = false
+				state.status = commitErr.Error()
+			}
+			a.invalidateSettingsWindow()
+			return
 		}
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
-		return
+		value = state.target.values[state.definition.Value.Key]
+		if a.tableEditor == state {
+			state.status = "Saving cloned skills…"
+		}
+		save = true
+	})
+	if save {
+		a.saveSettingsTable(state, "AISkills", value, previousValue)
 	}
-	value := state.target.values[state.definition.Value.Key]
-	if a.tableEditor == state {
-		state.status = "Saving cloned skills…"
-	}
-	a.mu.Unlock()
-	a.saveSettingsTable(state, "AISkills", value, previousValue)
 }
 
 // validateAISettingsTableRow enforces the transport-specific requirements that the generic schema cannot express.
@@ -499,16 +485,16 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 		var err error
 		coreValue, err = settingsIgnoredHotkeyAppsCoreJSON(value)
 		if err != nil {
-			a.mu.Lock()
-			a.settingSaving = false
-			state.target.values[key] = previousValue
-			if a.tableEditor == state {
-				state.saving = false
-				state.status = "Could not save: " + err.Error()
-			}
-			a.settingNote = "Could not save " + settingsTableLabel(key) + ": " + err.Error()
-			a.mu.Unlock()
-			a.invalidateSettingsWindow()
+			_ = a.runOnUI("apply invalid settings table value", func() {
+				a.settingSaving = false
+				state.target.values[key] = previousValue
+				if a.tableEditor == state {
+					state.saving = false
+					state.status = "Could not save: " + err.Error()
+				}
+				a.settingNote = "Could not save " + settingsTableLabel(key) + ": " + err.Error()
+				a.invalidateSettingsWindow()
+			})
 			return
 		}
 	}
@@ -516,33 +502,33 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 	err := a.services.UpdateGeneralSetting(ctx, a.sessionID, key, coreValue)
 	cancel()
 
-	a.mu.Lock()
-	a.settingSaving = false
-	if err != nil {
-		state.target.values[key] = previousValue
-		if a.tableEditor == state {
-			if rows, decodeErr := decodeFormTableRows(previousValue); decodeErr == nil {
-				state.rows = rows
-				state.selected = min(state.selected, len(rows)-1)
+	_ = a.runOnUI("apply settings table save", func() {
+		a.settingSaving = false
+		if err != nil {
+			state.target.values[key] = previousValue
+			if a.tableEditor == state {
+				if rows, decodeErr := decodeFormTableRows(previousValue); decodeErr == nil {
+					state.rows = rows
+					state.selected = min(state.selected, len(rows)-1)
+				}
+				state.saving = false
+				state.status = "Could not save: " + err.Error()
 			}
-			state.saving = false
-			state.status = "Could not save: " + err.Error()
+			a.settingNote = "Could not save " + settingsTableLabel(key) + ": " + err.Error()
+		} else {
+			if state.target == a.aiSettings.Form() {
+				a.applyAISettingsRawLocked(key, value)
+			} else if state.target == a.hotkeySettings.Form() {
+				a.applyHotkeySettingsRawLocked(key, coreValue)
+			}
+			if a.tableEditor == state {
+				state.saving = false
+				state.status = "Saved"
+			}
+			a.settingNote = settingsTableLabel(key) + " saved"
 		}
-		a.settingNote = "Could not save " + settingsTableLabel(key) + ": " + err.Error()
-	} else {
-		if state.target == a.aiSettings.Form() {
-			a.applyAISettingsRawLocked(key, value)
-		} else if state.target == a.hotkeySettings.Form() {
-			a.applyHotkeySettingsRawLocked(key, coreValue)
-		}
-		if a.tableEditor == state {
-			state.saving = false
-			state.status = "Saved"
-		}
-		a.settingNote = settingsTableLabel(key) + " saved"
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+		a.invalidateSettingsWindow()
+	})
 }
 
 func settingsTableLabel(key string) string {

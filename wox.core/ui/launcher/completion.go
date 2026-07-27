@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"strings"
 )
@@ -13,29 +12,6 @@ type queryCompletionHint struct {
 	Suffix         string `json:"Suffix"`
 	Source         string `json:"Source"`
 	Score          int    `json:"Score"`
-}
-
-func (a *App) applyQueryCompletionHint(raw json.RawMessage) {
-	var payload struct {
-		QueryID        string               `json:"QueryId"`
-		CompletionHint *queryCompletionHint `json:"CompletionHint"`
-	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		log.Printf("decode query completion hint: %v", err)
-		return
-	}
-	a.mu.Lock()
-	if payload.QueryID != a.query.QueryID || !a.completionHintValidLocked(payload.CompletionHint) {
-		if payload.QueryID == a.query.QueryID {
-			a.completionHint = nil
-		}
-		a.mu.Unlock()
-		return
-	}
-	copy := *payload.CompletionHint
-	a.completionHint = &copy
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
 }
 
 func (a *App) completionHintValidLocked(hint *queryCompletionHint) bool {
@@ -61,16 +37,13 @@ func (a *App) reuseCompletionHintLocked(text string) {
 }
 
 func (a *App) acceptQueryCompletionHint() bool {
-	a.mu.Lock()
 	if !a.completionHintValidLocked(a.completionHint) {
-		a.mu.Unlock()
 		return false
 	}
 	hint := *a.completionHint
 	a.editor.SetText(hint.CompletionText, false)
 	a.applyQueryTextChangeLocked(hint.CompletionText)
 	a.completionHint = nil
-	a.mu.Unlock()
 	a.reconcileSelectedPreview()
 	if err := a.services.AcceptQueryCompletionHint(context.Background(), a.sessionID, hint.InputPrefix, hint.CompletionText, hint.Source); err != nil {
 		log.Printf("record accepted query completion hint: %v", err)
@@ -84,19 +57,15 @@ func (a *App) acceptQueryCompletionHint() bool {
 
 // autoCompleteQueryFromSelectedResult mirrors Flutter's Shift+Tab title completion.
 func (a *App) autoCompleteQueryFromSelectedResult() {
-	a.mu.Lock()
 	if a.selected < 0 || a.selected >= len(a.results) || a.results[a.selected].IsGroup {
-		a.mu.Unlock()
 		return
 	}
 	title := a.results[a.selected].Title
 	if title == "" {
-		a.mu.Unlock()
 		return
 	}
 	a.editor.SetText(title, false)
 	a.applyQueryTextChangeLocked(title)
-	a.mu.Unlock()
 	a.reconcileSelectedPreview()
 	_ = a.window.Invalidate()
 	if err := a.sendCurrentQuery(); err != nil {

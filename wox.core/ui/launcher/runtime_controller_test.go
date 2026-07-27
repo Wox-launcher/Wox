@@ -40,6 +40,14 @@ type fakeRuntimeSettingsService struct {
 	restartErr error
 }
 
+func runtimeSnapshotOnUI(ui *testUIRunner, c *runtimeSettingsController) runtimeSettingsSnapshot {
+	var snapshot runtimeSettingsSnapshot
+	ui.Do(func() {
+		snapshot = c.Snapshot()
+	})
+	return snapshot
+}
+
 func (f *fakeRuntimeSettingsService) RuntimeStatuses(_ context.Context, _ string) ([]contract.RuntimeStatus, error) {
 	return append([]contract.RuntimeStatus(nil), f.statuses...), f.statusErr
 }
@@ -101,7 +109,8 @@ func TestRuntimeControllerReloadError(t *testing.T) {
 }
 
 func TestRuntimeControllerRestartSetsRestartingThenClears(t *testing.T) {
-	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newRuntimeSettingsController(deps)
 
 	// Seed statuses with a restartable Node.js host.
@@ -124,7 +133,7 @@ func TestRuntimeControllerRestartSetsRestartingThenClears(t *testing.T) {
 	c.Restart(context.Background(), blockingService, "session", "nodejs", reloadAfter)
 
 	// Restarting must be set immediately after Restart returns.
-	if got := c.Snapshot().Restarting; got != "NODEJS" {
+	if got := runtimeSnapshotOnUI(ui, c).Restarting; got != "NODEJS" {
 		t.Fatalf("Restarting = %q, want NODEJS", got)
 	}
 
@@ -146,18 +155,19 @@ func TestRuntimeControllerRestartSetsRestartingThenClears(t *testing.T) {
 	// Give the goroutine a moment to finish clearing restarting after reloadAfter.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if c.Snapshot().Restarting == "" {
+		if runtimeSnapshotOnUI(ui, c).Restarting == "" {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if got := c.Snapshot().Restarting; got != "" {
+	if got := runtimeSnapshotOnUI(ui, c).Restarting; got != "" {
 		t.Fatalf("Restarting = %q after goroutine completed, want empty", got)
 	}
 }
 
 func TestRuntimeControllerRestartRejectsWhenAlreadyRestarting(t *testing.T) {
-	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newRuntimeSettingsController(deps)
 
 	enteredPost := make(chan struct{})
@@ -171,7 +181,7 @@ func TestRuntimeControllerRestartRejectsWhenAlreadyRestarting(t *testing.T) {
 	c.Reload(context.Background(), blockingService, "session")
 
 	c.Restart(context.Background(), blockingService, "session", "nodejs", nil)
-	if got := c.Snapshot().Restarting; got != "NODEJS" {
+	if got := runtimeSnapshotOnUI(ui, c).Restarting; got != "NODEJS" {
 		t.Fatalf("first Restart should set Restarting = NODEJS, got %q", got)
 	}
 
@@ -204,13 +214,13 @@ func TestRuntimeControllerRestartRejectsWhenAlreadyRestarting(t *testing.T) {
 
 	// Release the first restart so the goroutine cleans up.
 	close(releasePost)
-	if got := c.Snapshot().Restarting; got != "" {
+	if got := runtimeSnapshotOnUI(ui, c).Restarting; got != "" {
 		// Spin briefly because the goroutine may need a moment to clear.
 		deadline := time.Now().Add(2 * time.Second)
-		for time.Now().Before(deadline) && c.Snapshot().Restarting != "" {
+		for time.Now().Before(deadline) && runtimeSnapshotOnUI(ui, c).Restarting != "" {
 			time.Sleep(5 * time.Millisecond)
 		}
-		if got = c.Snapshot().Restarting; got != "" {
+		if got = runtimeSnapshotOnUI(ui, c).Restarting; got != "" {
 			t.Fatalf("Restarting = %q after release, want empty", got)
 		}
 	}

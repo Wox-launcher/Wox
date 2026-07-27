@@ -13,6 +13,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 	"wox/util/wallpaper"
 )
 
@@ -67,17 +68,16 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 
 // preloadThemeEditorWallpaper starts one settings-owned wallpaper load before the editor needs it.
 func (a *App) preloadThemeEditorWallpaper() {
-	a.mu.Lock()
 	if a.themeSettings.ThemeWallpaperImage() != nil || a.themeSettings.ThemeWallpaperLoading() {
-		a.mu.Unlock()
 		return
 	}
 	a.themeSettings.SetThemeWallpaperLoading(true)
 	a.themeSettings.SetThemeWallpaperLoadID(a.themeSettings.ThemeWallpaperLoadID() + 1)
 	loadID := a.themeSettings.ThemeWallpaperLoadID()
 	path := a.themeSettings.ThemeWallpaperPath()
-	a.mu.Unlock()
-	go a.loadThemeEditorWallpaper(loadID, path)
+	util.Go(a.lifecycleCtx, "load theme editor wallpaper", func() {
+		a.loadThemeEditorWallpaper(loadID, path)
+	})
 }
 
 // loadThemeEditorWallpaper resolves and decodes the desktop image without blocking settings rendering.
@@ -96,27 +96,26 @@ func (a *App) loadThemeEditorWallpaper(loadID uint64, path string) {
 	if err == nil {
 		wallpaperImage, wallpaperBlurred, err = decodeThemeEditorWallpaper(path)
 	}
-	a.mu.Lock()
-	if a.themeSettings.ThemeWallpaperLoadID() != loadID {
-		a.mu.Unlock()
-		return
-	}
-	a.themeSettings.SetThemeWallpaperLoading(false)
-	settingsOpen := a.settingsOpen
-	if err == nil && settingsOpen {
-		a.themeSettings.SetThemeWallpaperPath(path)
-		a.themeSettings.SetThemeWallpaperImage(wallpaperImage)
-		a.themeSettings.SetThemeWallpaperBlurred(wallpaperBlurred)
-	}
-	a.mu.Unlock()
+	settingsOpen := false
+	_ = a.runOnUI("apply theme editor wallpaper", func() {
+		if a.themeSettings.ThemeWallpaperLoadID() != loadID {
+			return
+		}
+		a.themeSettings.SetThemeWallpaperLoading(false)
+		settingsOpen = a.settingsOpen
+		if err == nil && settingsOpen {
+			a.themeSettings.SetThemeWallpaperPath(path)
+			a.themeSettings.SetThemeWallpaperImage(wallpaperImage)
+			a.themeSettings.SetThemeWallpaperBlurred(wallpaperBlurred)
+		}
+		if err == nil && settingsOpen {
+			a.invalidateSettingsWindow()
+		}
+	})
 	if err != nil {
 		log.Printf("load theme editor wallpaper: %v", err)
 		return
 	}
-	if !settingsOpen {
-		return
-	}
-	a.invalidateSettingsWindow()
 }
 
 // releaseThemeEditorWallpaperLocked prevents an in-flight load from restoring settings-owned image memory after close.
@@ -216,21 +215,17 @@ func themeEditorGroupForToken(key string) int {
 }
 
 func (a *App) selectThemeEditorGroup(index int) {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state != nil && index >= 0 && index < len(themeEditorColorGroups) {
 		state.activeGroup = index
 		state.error = ""
 	}
-	a.mu.Unlock()
 	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) locateThemeEditorToken(key string) {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state == nil {
-		a.mu.Unlock()
 		return
 	}
 	state.activeGroup = themeEditorGroupForToken(key)
@@ -239,29 +234,32 @@ func (a *App) locateThemeEditorToken(key string) {
 	revision := state.flashRevision
 	stateKey := state.key
 	state.error = ""
-	a.mu.Unlock()
 	a.invalidateThemeEditorWindow()
-	time.AfterFunc(780*time.Millisecond, func() {
-		a.mu.Lock()
-		current := a.themeSettings.ThemeEditor()
-		if current != nil && current.key == stateKey && current.flashRevision == revision {
-			current.flashToken = ""
+	util.Go(a.lifecycleCtx, "clear theme editor token flash", func() {
+		timer := time.NewTimer(780 * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-a.lifecycleCtx.Done():
+			return
+		case <-timer.C:
 		}
-		a.mu.Unlock()
-		a.invalidateThemeEditorWindow()
+		_ = a.runOnUI("clear theme editor token flash", func() {
+			current := a.themeSettings.ThemeEditor()
+			if current != nil && current.key == stateKey && current.flashRevision == revision {
+				current.flashToken = ""
+			}
+			a.invalidateThemeEditorWindow()
+		})
 	})
 }
 
 func (a *App) openThemeEditorTokenDialog(key string) {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.saving {
-		a.mu.Unlock()
 		return
 	}
 	index := themeEditorDefinitionIndex(state.definitions, key)
 	if index < 0 {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
@@ -272,22 +270,18 @@ func (a *App) openThemeEditorTokenDialog(key string) {
 	state.error = ""
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	textInput := state.editor != nil
-	a.mu.Unlock()
 	a.updateThemeEditorTextInput(textInput)
 	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) openThemeEditorSaveAsDialog() {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.saving {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	index := themeEditorDefinitionIndex(state.definitions, "ThemeName")
 	if index < 0 {
-		a.mu.Unlock()
 		return
 	}
 	state.dialogMode = "save-as"
@@ -305,7 +299,6 @@ func (a *App) openThemeEditorSaveAsDialog() {
 	}
 	state.error = ""
 	textInput := state.editor != nil
-	a.mu.Unlock()
 	a.updateThemeEditorTextInput(textInput)
 	a.invalidateThemeEditorWindow()
 }
@@ -350,10 +343,8 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 }
 
 func (a *App) cancelThemeEditorDialog() {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.dialogMode == "" {
-		a.mu.Unlock()
 		return
 	}
 	state.values[state.dialogToken] = state.dialogOriginal
@@ -365,16 +356,13 @@ func (a *App) cancelThemeEditorDialog() {
 	state.dialogOriginal = ""
 	state.active = false
 	state.error = ""
-	a.mu.Unlock()
 	a.restoreThemeEditorTextInput()
 	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) confirmThemeEditorDialog() {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.dialogMode == "" {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
@@ -383,13 +371,11 @@ func (a *App) confirmThemeEditorDialog() {
 	if mode == "token" {
 		if _, ok := decodeThemeColor(value); !ok {
 			state.error = a.translate("i18n:ui_theme_editor_invalid_color")
-			a.mu.Unlock()
 			a.invalidateThemeEditorWindow()
 			return
 		}
 	} else if value == "" {
 		state.error = a.translate("i18n:ui_theme_editor_name_required")
-		a.mu.Unlock()
 		a.invalidateThemeEditorWindow()
 		return
 	}
@@ -399,7 +385,6 @@ func (a *App) confirmThemeEditorDialog() {
 	state.dialogOriginal = ""
 	state.active = false
 	state.error = ""
-	a.mu.Unlock()
 	a.restoreThemeEditorTextInput()
 	a.invalidateThemeEditorWindow()
 	if mode == "save-as" {
@@ -408,10 +393,8 @@ func (a *App) confirmThemeEditorDialog() {
 }
 
 func (a *App) discardThemeEditorDraft() {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.saving {
-		a.mu.Unlock()
 		return
 	}
 	definitions := append([]formDefinition(nil), state.definitions...)
@@ -420,19 +403,15 @@ func (a *App) discardThemeEditorDraft() {
 	state.dialogToken = ""
 	state.dialogOriginal = ""
 	state.error = ""
-	a.mu.Unlock()
 	a.restoreThemeEditorTextInput()
 	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) overwriteThemeEditorDraft() {
-	a.mu.RLock()
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.saving || state.isSystem || state.isAuto {
-		a.mu.RUnlock()
 		return
 	}
 	name := state.sourceName
-	a.mu.RUnlock()
 	a.saveThemeEditorDraft(name, true)
 }

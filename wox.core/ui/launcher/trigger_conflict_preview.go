@@ -12,6 +12,7 @@ import (
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type triggerConflictPreviewPlugin struct {
@@ -96,14 +97,11 @@ func (a *App) activateTriggerConflictPreview(result queryResult, preview queryPr
 	if err != nil {
 		return err
 	}
-	a.mu.RLock()
 	changed := a.triggerConflict != nil && a.triggerConflict.key != key
-	a.mu.RUnlock()
 	if changed {
 		a.deactivateTriggerConflictPreview()
 	}
 
-	a.mu.Lock()
 	if a.triggerConflict == nil || a.triggerConflict.key != key {
 		definitions := make([]formDefinition, 0, len(data.Plugins))
 		values := make(map[string]string, len(data.Plugins))
@@ -124,7 +122,6 @@ func (a *App) activateTriggerConflictPreview(result queryResult, preview queryPr
 			initial[plugin.PluginID] = value
 		}
 		if len(definitions) == 0 {
-			a.mu.Unlock()
 			return fmt.Errorf("trigger keyword conflict has no valid plugin ids")
 		}
 		fields := newFormFieldsState(definitions, values, false)
@@ -138,7 +135,6 @@ func (a *App) activateTriggerConflictPreview(result queryResult, preview queryPr
 			initial:         initial,
 		}
 	}
-	a.mu.Unlock()
 	return nil
 }
 
@@ -148,8 +144,6 @@ func (a *App) triggerConflictPreviewSnapshotFor(result queryResult, preview quer
 	if err != nil {
 		return nil, err
 	}
-	a.mu.RLock()
-	defer a.mu.RUnlock()
 	if a.triggerConflict == nil || a.triggerConflict.key != key {
 		return nil, fmt.Errorf("trigger keyword conflict is not ready")
 	}
@@ -189,10 +183,8 @@ func parseTriggerKeywords(value string) []string {
 
 // onTriggerConflictPreviewKey keeps editing portable and leaves query focus on Escape.
 func (a *App) onTriggerConflictPreviewKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	state := a.triggerConflict
 	active := state != nil && state.active
-	a.mu.RUnlock()
 	if !active {
 		return false
 	}
@@ -222,15 +214,12 @@ func (a *App) onTriggerConflictPreviewKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) onTriggerConflictPreviewTextInput(_ woxui.TextInputEvent) bool {
-	a.mu.RLock()
 	state := a.triggerConflict
 	active := state != nil && state.active
-	a.mu.RUnlock()
 	return active
 }
 
 func (a *App) editTriggerConflictKey(event woxui.KeyEvent) {
-	a.mu.Lock()
 	if state := a.triggerConflict; state != nil && state.active && state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) {
 		_, changed := handleFormEditorKey(state.editor, state.definitions[state.focused], event)
 		if changed {
@@ -238,15 +227,12 @@ func (a *App) editTriggerConflictKey(event woxui.KeyEvent) {
 			state.error = ""
 		}
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
 func (a *App) moveTriggerConflictFocus(delta int) {
-	a.mu.Lock()
 	state := a.triggerConflict
 	if state == nil || len(state.definitions) == 0 {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
@@ -259,47 +245,39 @@ func (a *App) moveTriggerConflictFocus(delta int) {
 		}
 	}
 	textInput := state.editor != nil
-	a.mu.Unlock()
 	a.updateFormTextInput(textInput)
 	_ = a.window.Invalidate()
 }
 
 func (a *App) focusTriggerConflictField(index int) {
-	a.mu.Lock()
 	state := a.triggerConflict
 	if state == nil || state.saving || index < 0 || index >= len(state.definitions) {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.error = ""
 	textInput := state.editor != nil
-	a.mu.Unlock()
 	a.updateFormTextInput(textInput)
 	_ = a.window.Invalidate()
 }
 
 func (a *App) setTriggerConflictText(index int, value string) {
-	a.mu.Lock()
 	changed := a.triggerConflict != nil && !a.triggerConflict.saving && setFormFieldsTextLocked(&a.triggerConflict.formFieldsState, index, value)
 	if changed {
 		a.triggerConflict.error = ""
 	}
-	a.mu.Unlock()
 	if changed {
 		_ = a.window.Invalidate()
 	}
 }
 
 func (a *App) deactivateTriggerConflictPreview() {
-	a.mu.Lock()
 	wasActive := a.triggerConflict != nil && a.triggerConflict.active
 	if wasActive {
 		syncFormFieldsEditorLocked(&a.triggerConflict.formFieldsState)
 		a.triggerConflict.active = false
 	}
-	a.mu.Unlock()
 	if !wasActive {
 		return
 	}
@@ -309,10 +287,8 @@ func (a *App) deactivateTriggerConflictPreview() {
 
 // submitTriggerConflictPreview persists only changed plugins through the existing settings endpoint.
 func (a *App) submitTriggerConflictPreview() {
-	a.mu.Lock()
 	state := a.triggerConflict
 	if state == nil || state.saving {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
@@ -322,7 +298,6 @@ func (a *App) submitTriggerConflictPreview() {
 		keywords := parseTriggerKeywords(value)
 		if len(keywords) == 0 {
 			state.error = "Trigger keywords cannot be empty."
-			a.mu.Unlock()
 			_ = a.window.Invalidate()
 			return
 		}
@@ -333,7 +308,6 @@ func (a *App) submitTriggerConflictPreview() {
 	}
 	if len(changes) == 0 {
 		state.active = false
-		a.mu.Unlock()
 		a.restoreQueryTextInput()
 		_ = a.window.Invalidate()
 		return
@@ -345,11 +319,10 @@ func (a *App) submitTriggerConflictPreview() {
 	revision := state.revision
 	key := state.key
 	pluginIDs := append([]string(nil), state.pluginIDs...)
-	a.mu.Unlock()
 	a.restoreQueryTextInput()
 	_ = a.window.Invalidate()
 
-	go func() {
+	util.Go(a.lifecycleCtx, "save trigger keyword conflict", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		var saveErr error
@@ -363,31 +336,38 @@ func (a *App) submitTriggerConflictPreview() {
 				break
 			}
 		}
-		a.mu.Lock()
-		current := a.triggerConflict != nil && a.triggerConflict.key == key && a.triggerConflict.revision == revision
-		if current {
-			a.triggerConflict.saving = false
-			if saveErr != nil {
-				a.triggerConflict.error = saveErr.Error()
+		refreshQuery := false
+		if dispatchErr := a.runOnUI("apply trigger keyword conflict", func() {
+			current := a.triggerConflict != nil && a.triggerConflict.key == key && a.triggerConflict.revision == revision
+			if current {
+				a.triggerConflict.saving = false
+				if saveErr != nil {
+					a.triggerConflict.error = saveErr.Error()
+				}
 			}
-		}
-		a.mu.Unlock()
-		if saveErr != nil {
-			log.Printf("save trigger keyword conflict: %v", saveErr)
+			if saveErr == nil {
+				query := a.query
+				query.QueryID = newID()
+				a.setQuery(query)
+				if err := a.applyWindowBounds(); err != nil {
+					log.Printf("resize launcher after trigger keyword conflict: %v", err)
+				}
+				refreshQuery = true
+				return
+			}
 			_ = a.window.Invalidate()
+		}); dispatchErr != nil {
+			log.Printf("dispatch trigger keyword conflict: %v", dispatchErr)
 			return
 		}
-
-		a.mu.RLock()
-		query := a.query
-		a.mu.RUnlock()
-		query.QueryID = newID()
-		a.setQuery(query)
-		if err := a.sendCurrentQuery(); err != nil {
-			log.Printf("refresh query after trigger keyword conflict: %v", err)
+		if saveErr != nil {
+			log.Printf("save trigger keyword conflict: %v", saveErr)
+			return
 		}
-		if err := a.applyWindowBounds(); err != nil {
-			log.Printf("resize launcher after trigger keyword conflict: %v", err)
+		if refreshQuery {
+			if err := a.sendCurrentQuery(); err != nil {
+				log.Printf("refresh query after trigger keyword conflict: %v", err)
+			}
 		}
-	}()
+	})
 }

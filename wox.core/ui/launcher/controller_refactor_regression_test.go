@@ -2,31 +2,17 @@ package launcher
 
 import (
 	"testing"
-	"time"
 
 	woxui "wox/ui/runtime"
 )
 
-func TestUsePinYinDoesNotReenterAppLock(t *testing.T) {
+func TestUsePinYinReadsGeneralController(t *testing.T) {
 	controller := newGeneralControllerForTest()
 	controller.ApplyData(settingsData{UsePinYin: true})
 	app := &App{generalSettings: controller}
 
-	app.mu.Lock()
-	done := make(chan bool, 1)
-	go func() {
-		done <- app.usePinYin()
-	}()
-
-	select {
-	case got := <-done:
-		app.mu.Unlock()
-		if !got {
-			t.Fatal("usePinYin() = false, want true")
-		}
-	case <-time.After(time.Second):
-		app.mu.Unlock()
-		t.Fatal("usePinYin blocked while the caller held App.mu")
+	if !app.usePinYin() {
+		t.Fatal("usePinYin() = false, want true")
 	}
 }
 
@@ -57,7 +43,7 @@ func TestOpenSettingChoicePickerEndsEditBeforeOpeningPicker(t *testing.T) {
 	}
 }
 
-func TestThemeEditorPreviewSnapshotWaitsForAppLock(t *testing.T) {
+func TestThemeEditorPreviewSnapshotReadsUIOwnedState(t *testing.T) {
 	result := queryResult{QueryID: "query", ID: "result"}
 	preview := queryPreview{PreviewData: `{"ThemeName":"Test","AppBackgroundColor":"#000000"}`}
 	raw, key, err := themeEditorPreviewDataAndKey(result, preview)
@@ -68,30 +54,11 @@ func TestThemeEditorPreviewSnapshotWaitsForAppLock(t *testing.T) {
 	controller.SetThemeEditor(newThemeEditorState(key, raw))
 	app := &App{themeSettings: controller}
 
-	started := make(chan struct{})
-	done := make(chan error, 1)
-	app.mu.Lock()
-	go func() {
-		close(started)
-		_, snapshotErr := app.themeEditorPreviewSnapshotFor(result, preview)
-		done <- snapshotErr
-	}()
-	<-started
-
-	select {
-	case snapshotErr := <-done:
-		app.mu.Unlock()
-		t.Fatalf("snapshot read mutable theme state without App.mu: %v", snapshotErr)
-	case <-time.After(50 * time.Millisecond):
+	snapshot, snapshotErr := app.themeEditorPreviewSnapshotFor(result, preview)
+	if snapshotErr != nil {
+		t.Fatalf("snapshot theme editor preview: %v", snapshotErr)
 	}
-	app.mu.Unlock()
-
-	select {
-	case snapshotErr := <-done:
-		if snapshotErr != nil {
-			t.Fatalf("snapshot theme editor preview: %v", snapshotErr)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("theme editor snapshot did not resume after App.mu was released")
+	if snapshot == nil || snapshot.values["ThemeName"] != "Test" {
+		t.Fatalf("unexpected theme editor snapshot: %#v", snapshot)
 	}
 }

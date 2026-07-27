@@ -7,6 +7,7 @@ import (
 
 	launcherview "wox/ui/launcher/view"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type backupInfo struct {
@@ -105,9 +106,7 @@ func (a *App) confirmDataLocationChange() {
 // Stays on App because it operates on the general-domain EnableAutoBackup setting and
 // the shared settingSaving/settingNote/saveSetting machinery.
 func (a *App) toggleDataAutoBackup() {
-	a.mu.Lock()
 	if a.settingSaving {
-		a.mu.Unlock()
 		return
 	}
 	next := !a.generalSettings.Data().EnableAutoBackup
@@ -117,21 +116,20 @@ func (a *App) toggleDataAutoBackup() {
 	}
 	a.settingSaving = true
 	a.settingNote = "Saving Automatic backup…"
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
-	go a.saveSetting(
-		settingItem{key: "EnableAutoBackup", title: "Automatic backup", value: fmt.Sprintf("%t", !next), choices: boolChoices},
-		settingChoice{value: fmt.Sprintf("%t", next), label: label},
-	)
+	util.Go(a.lifecycleCtx, "save automatic backup setting", func() {
+		a.saveSetting(
+			settingItem{key: "EnableAutoBackup", title: "Automatic backup", value: fmt.Sprintf("%t", !next), choices: boolChoices},
+			settingChoice{value: fmt.Sprintf("%t", next), label: label},
+		)
+	})
 }
 
 // cycleDataLogLevel keeps the compact page to the two log levels accepted by core.
 // Stays on App for the same reason as toggleDataAutoBackup: it edits the general-domain
 // LogLevel setting through the shared save flow.
 func (a *App) cycleDataLogLevel() {
-	a.mu.Lock()
 	if a.settingSaving {
-		a.mu.Unlock()
 		return
 	}
 	current := a.generalSettings.Data().LogLevel
@@ -141,12 +139,13 @@ func (a *App) cycleDataLogLevel() {
 	}
 	a.settingSaving = true
 	a.settingNote = "Saving Log level…"
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
-	go a.saveSetting(
-		settingItem{key: "LogLevel", title: "Log level", value: current, choices: []settingChoice{{"INFO", "Info"}, {"DEBUG", "Debug"}}},
-		settingChoice{value: next, label: strings.ToLower(next)},
-	)
+	util.Go(a.lifecycleCtx, "save log level setting", func() {
+		a.saveSetting(
+			settingItem{key: "LogLevel", title: "Log level", value: current, choices: []settingChoice{{"INFO", "Info"}, {"DEBUG", "Debug"}}},
+			settingChoice{value: next, label: strings.ToLower(next)},
+		)
+	})
 }
 
 // clearDataLogs delegates to dataSettingsController.

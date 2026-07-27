@@ -15,13 +15,10 @@ import (
 )
 
 func (a *App) startTypedQuery(query plainQuery, skipCompletionHint bool) error {
-	a.mu.RLock()
-	if a.destroyed {
-		a.mu.RUnlock()
+	if a.destroyed.Load() {
 		return context.Canceled
 	}
 	ctx := a.lifecycleCtx
-	a.mu.RUnlock()
 	return a.services.StartQuery(ctx, contract.QueryRequest{
 		RequestID:          newID(),
 		SessionID:          a.sessionID,
@@ -48,9 +45,6 @@ func toCorePlainQuery(query plainQuery) common.PlainQuery {
 
 // ApplyQueryResponse updates launcher rendering from one typed core snapshot.
 func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryResponse) {
-	if a.isDestroyed() {
-		return
-	}
 	results := make([]queryResult, len(response.Response.Results))
 	for index := range response.Response.Results {
 		results[index] = fromCoreQueryResult(response.Response.Results[index])
@@ -58,14 +52,17 @@ func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryRespo
 	layout := fromCoreQueryLayout(response.Response.Layout)
 	refinements := fromCoreQueryRefinements(response.Response.Refinements)
 	queryContext := queryContext{IsGlobalQuery: response.Response.Context.IsGlobalQuery, PluginID: response.Response.Context.PluginId}
-	a.applyResults(response.QueryID, results, &layout, &refinements, &queryContext, response.Response.QueryStartTimestamp)
+	if err := a.runOnUI("apply query response", func() {
+		if !a.isDestroyed() {
+			a.applyResults(response.QueryID, results, &layout, &refinements, &queryContext, response.Response.QueryStartTimestamp)
+		}
+	}); err != nil {
+		log.Printf("dispatch query response: %v", err)
+	}
 }
 
 // ApplyQueryCompletionHint applies a typed inline-completion candidate.
 func (a *App) ApplyQueryCompletionHint(_ context.Context, queryID string, hint *plugin.QueryCompletionHint) {
-	if a.isDestroyed() {
-		return
-	}
 	var converted *queryCompletionHint
 	if hint != nil {
 		converted = &queryCompletionHint{
@@ -76,30 +73,39 @@ func (a *App) ApplyQueryCompletionHint(_ context.Context, queryID string, hint *
 			Score:          hint.Score,
 		}
 	}
-	a.mu.Lock()
-	if queryID != a.query.QueryID || !a.completionHintValidLocked(converted) {
-		if queryID == a.query.QueryID {
-			a.completionHint = nil
+	if err := a.runOnUI("apply query completion hint", func() {
+		if a.isDestroyed() {
+			return
 		}
-		a.mu.Unlock()
-		return
+		if queryID != a.query.QueryID || !a.completionHintValidLocked(converted) {
+			if queryID == a.query.QueryID {
+				a.completionHint = nil
+			}
+			return
+		}
+		copy := *converted
+		a.completionHint = &copy
+		_ = a.window.Invalidate()
+	}); err != nil {
+		log.Printf("dispatch query completion hint: %v", err)
 	}
-	copy := *converted
-	a.completionHint = &copy
-	a.mu.Unlock()
-	_ = a.window.Invalidate()
 }
 
 // ApplyQueryError reports typed query failures without disturbing a newer query.
 func (a *App) ApplyQueryError(_ context.Context, queryID string, err error) {
-	if err == nil || a.isDestroyed() {
+	if err == nil {
 		return
 	}
-	a.mu.RLock()
-	current := a.query.QueryID == queryID
-	a.mu.RUnlock()
-	if current {
-		log.Printf("query %s failed: %v", queryID, err)
+	if dispatchErr := a.runOnUI("apply query error", func() {
+		if a.isDestroyed() {
+			return
+		}
+		current := a.query.QueryID == queryID
+		if current {
+			log.Printf("query %s failed: %v", queryID, err)
+		}
+	}); dispatchErr != nil {
+		log.Printf("dispatch query error: %v", dispatchErr)
 	}
 }
 
@@ -114,7 +120,11 @@ func (a *App) loadTypedMRU(queryID string) {
 		converted[index] = fromCoreQueryResult(results[index])
 		converted[index].QueryID = queryID
 	}
-	a.applyResults(queryID, converted, nil, nil, nil, 0)
+	if err := a.runOnUI("apply MRU results", func() {
+		a.applyResults(queryID, converted, nil, nil, nil, 0)
+	}); err != nil {
+		log.Printf("dispatch MRU results: %v", err)
+	}
 }
 
 func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {

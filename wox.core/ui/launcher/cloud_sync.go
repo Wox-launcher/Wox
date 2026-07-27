@@ -180,7 +180,7 @@ func (a *App) runCloudAction(name string, action func(context.Context) error) {
 	a.cloudSettings.SetBusy(name)
 	a.cloudSettings.SetError("")
 	a.invalidateSettingsWindow()
-	go func() {
+	util.Go(a.lifecycleCtx, "run cloud action", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		err := action(ctx)
 		cancel()
@@ -193,7 +193,7 @@ func (a *App) runCloudAction(name string, action func(context.Context) error) {
 			a.cloudSettings.SetError(fmt.Sprintf("%s failed: %v", cloudActionLabel(name), err))
 			a.invalidateSettingsWindow()
 		}
-	}()
+	})
 }
 
 func cloudActionLabel(name string) string {
@@ -224,7 +224,7 @@ func (a *App) openCloudBilling() {
 	a.cloudSettings.SetBusy("billing")
 	a.cloudSettings.SetError("")
 	a.invalidateSettingsWindow()
-	go func() {
+	util.Go(a.lifecycleCtx, "open cloud billing", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		session, err := a.services.BillingSession(ctx, a.sessionID, kind)
 		cancel()
@@ -236,7 +236,7 @@ func (a *App) openCloudBilling() {
 		}
 		a.cloudSettings.SetBusy("")
 		a.invalidateSettingsWindow()
-	}()
+	})
 }
 
 // openCloudSupportEmail opens the localized billing-support draft in the default mail application.
@@ -275,7 +275,7 @@ func (a *App) runCloudMenuAction(action string) {
 			return a.services.LogoutAccount(ctx, a.sessionID)
 		})
 	case "refresh":
-		go a.reloadCloudSync()
+		util.Go(a.lifecycleCtx, "reload cloud sync", a.reloadCloudSync)
 	case "billing":
 		a.openCloudBilling()
 	}
@@ -294,7 +294,7 @@ func (a *App) beginCloudBootstrap() {
 	a.cloudSettings.SetBusy("bootstrap-status")
 	a.cloudSettings.SetError("")
 	a.invalidateSettingsWindow()
-	go func() {
+	util.Go(a.lifecycleCtx, "prepare cloud bootstrap", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		status, err := a.services.CloudBootstrapStatus(ctx, a.sessionID)
 		cancel()
@@ -308,7 +308,7 @@ func (a *App) beginCloudBootstrap() {
 		a.cloudSettings.SetForm(newCloudBootstrapForm(status))
 		a.updateSettingsTextInput(true)
 		a.invalidateSettingsWindow()
-	}()
+	})
 }
 
 func newCloudBootstrapForm(status contract.CloudBootstrapStatus) *cloudFormState {
@@ -333,7 +333,7 @@ func (a *App) runCloudBootstrap(recoveryCode string) {
 	a.cloudSettings.SetBusy("bootstrap")
 	a.cloudSettings.SetError("")
 	a.invalidateSettingsWindow()
-	go func() {
+	util.Go(a.lifecycleCtx, "start cloud bootstrap", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		err := a.services.StartCloudBootstrap(ctx, a.sessionID, recoveryCode)
 		cancel()
@@ -343,9 +343,11 @@ func (a *App) runCloudBootstrap(recoveryCode string) {
 		a.cloudSettings.SetBusy("")
 		a.reloadCloudSync()
 		if err == nil {
-			time.AfterFunc(2*time.Second, a.reloadCloudSync)
+			time.AfterFunc(2*time.Second, func() {
+				util.Go(a.lifecycleCtx, "reload cloud sync after bootstrap", a.reloadCloudSync)
+			})
 		}
-	}()
+	})
 }
 
 // openCloudAccountForm creates account lifecycle forms from the shared text-editing engine.
@@ -383,11 +385,9 @@ func (a *App) openCloudAccountForm(kind string) {
 			formDefinition{Type: "checkbox", Value: formDefinitionValue{Key: "AcceptedLegal", Label: "i18n:ui_cloud_sync_account_accept_prefix"}},
 		)
 	}
-	a.mu.Lock()
 	values := map[string]string{"Email": a.cloudSettings.Account().Email}
 	fields := newFormFieldsState(definitions, values, true)
 	a.cloudSettings.SetForm(newCloudFormState(fields, kind, title))
-	a.mu.Unlock()
 	a.updateSettingsTextInput(true)
 	a.invalidateSettingsWindow()
 }
@@ -395,21 +395,17 @@ func (a *App) openCloudAccountForm(kind string) {
 func (a *App) openCloudVerificationForm(email string) {
 	definitions := []formDefinition{{Type: "textbox", Value: formDefinitionValue{Key: "Code", Label: "Verification code", MaxLines: 1}}}
 	fields := newFormFieldsState(definitions, nil, true)
-	a.mu.Lock()
 	form := newCloudFormState(fields, "verify", "Verify email")
 	form.email = email
 	a.cloudSettings.SetForm(form)
-	a.mu.Unlock()
 	a.updateSettingsTextInput(true)
 	a.invalidateSettingsWindow()
 }
 
 // resendCloudVerification keeps the current verification editor open while requesting a fresh code.
 func (a *App) resendCloudVerification() {
-	a.mu.Lock()
 	form := a.cloudSettings.Form()
 	if form == nil || form.kind != "verify" || form.saving {
-		a.mu.Unlock()
 		return
 	}
 	email := form.email
@@ -417,27 +413,26 @@ func (a *App) resendCloudVerification() {
 	form.saving = true
 	form.error = ""
 	form.notice = ""
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
-	go func() {
+	util.Go(a.lifecycleCtx, "resend cloud verification", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		err := a.services.ResendAccountVerification(ctx, a.sessionID, email, lang)
 		cancel()
-		a.mu.Lock()
-		form := a.cloudSettings.Form()
-		if form != nil && form.kind == "verify" {
-			form.saving = false
-			if err != nil {
-				form.error = err.Error()
-			} else {
-				form.notice = "A new verification code was sent."
+		_ = a.runOnUI("apply resent cloud verification", func() {
+			form := a.cloudSettings.Form()
+			if form != nil && form.kind == "verify" {
+				form.saving = false
+				if err != nil {
+					form.error = err.Error()
+				} else {
+					form.notice = "A new verification code was sent."
+				}
 			}
-		}
-		a.mu.Unlock()
-		a.updateSettingsTextInput(true)
-		a.invalidateSettingsWindow()
-	}()
+			a.updateSettingsTextInput(true)
+			a.invalidateSettingsWindow()
+		})
+	})
 }
 
 func (a *App) closeCloudForm() {
@@ -448,7 +443,6 @@ func (a *App) closeCloudForm() {
 
 func (a *App) focusCloudFormField(index int) {
 	var focusNode *woxwidget.FocusNode
-	a.mu.Lock()
 	form := a.cloudSettings.Form()
 	if form != nil && !form.saving {
 		setCloudFormFocusLocked(form, index)
@@ -456,7 +450,6 @@ func (a *App) focusCloudFormField(index int) {
 			focusNode = form.focusNodes[index]
 		}
 	}
-	a.mu.Unlock()
 	if focusNode != nil {
 		focusNode.RequestFocus()
 	}
@@ -465,7 +458,6 @@ func (a *App) focusCloudFormField(index int) {
 
 // setCloudFormText keeps business form values synchronized with retained field controllers.
 func (a *App) setCloudFormText(index int, value string) {
-	a.mu.Lock()
 	form := a.cloudSettings.Form()
 	if form != nil && !form.saving && index >= 0 && index < len(form.definitions) {
 		definition := form.definitions[index]
@@ -473,7 +465,6 @@ func (a *App) setCloudFormText(index int, value string) {
 			form.values[definition.Value.Key] = value
 		}
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
@@ -482,31 +473,25 @@ func (a *App) setCloudFormFieldFocused(index int, focused bool) {
 	if !focused {
 		return
 	}
-	a.mu.Lock()
 	form := a.cloudSettings.Form()
 	if form != nil && !form.saving && index >= 0 && index < len(form.definitions) {
 		setCloudFormFocusLocked(form, index)
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) changeCloudFormField(index, delta int) {
-	a.mu.Lock()
 	form := a.cloudSettings.Form()
 	if form != nil && !form.saving {
 		changeFormFieldsChoiceLocked(&form.formFieldsState, index, delta)
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) moveCloudFormFocus(delta int) {
 	var focusNode *woxwidget.FocusNode
-	a.mu.Lock()
 	form := a.cloudSettings.Form()
 	if form == nil || len(form.definitions) == 0 || form.saving {
-		a.mu.Unlock()
 		return
 	}
 	index := form.focused
@@ -520,7 +505,6 @@ func (a *App) moveCloudFormFocus(delta int) {
 			break
 		}
 	}
-	a.mu.Unlock()
 	if focusNode != nil {
 		focusNode.RequestFocus()
 	}
@@ -529,12 +513,10 @@ func (a *App) moveCloudFormFocus(delta int) {
 
 // onCloudSettingsKey gives the active account/bootstrap modal exclusive keyboard ownership.
 func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	menuActive := a.settingsOpen && a.cloudSettings.ActionMenu() != ""
 	form := a.cloudSettings.Form()
 	active := a.settingsOpen && form != nil
 	saving := active && form.saving
-	a.mu.RUnlock()
 	if menuActive && !active {
 		if event.Key == woxui.KeyEscape {
 			a.closeCloudActionMenu()
@@ -559,7 +541,6 @@ func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
 	case woxui.KeyEnter:
 		a.submitCloudForm()
 	case woxui.KeySpace:
-		a.mu.RLock()
 		focused := -1
 		fieldType := ""
 		form := a.cloudSettings.Form()
@@ -569,7 +550,6 @@ func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
 				fieldType = form.definitions[focused].Type
 			}
 		}
-		a.mu.RUnlock()
 		if fieldType == "checkbox" {
 			a.changeCloudFormField(focused, 1)
 		} else {
@@ -585,18 +565,13 @@ func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
 
 // onCloudFormTextInput blocks fallback routing while retained text fields own cloud modal input.
 func (a *App) onCloudFormTextInput(_ woxui.TextInputEvent) bool {
-	a.mu.RLock()
-	active := a.settingsOpen && a.cloudSettings.Form() != nil
-	a.mu.RUnlock()
-	return active
+	return a.settingsOpen && a.cloudSettings.Form() != nil
 }
 
 // submitCloudForm validates local invariants before sending credentials or recovery data to core.
 func (a *App) submitCloudForm() {
-	a.mu.Lock()
 	form := a.cloudSettings.Form()
 	if form == nil || form.saving {
-		a.mu.Unlock()
 		return
 	}
 	syncCloudFormControllersLocked(form)
@@ -615,16 +590,16 @@ func (a *App) submitCloudForm() {
 	validationError := validateCloudForm(kind, values, hasRemoteData)
 	if validationError != "" {
 		form.error = validationError
-		a.mu.Unlock()
 		a.invalidateSettingsWindow()
 		return
 	}
 	form.saving = true
 	form.error = ""
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
-	go a.submitCloudFormRequest(kind, values, email)
+	util.Go(a.lifecycleCtx, "submit cloud form", func() {
+		a.submitCloudFormRequest(kind, values, email)
+	})
 }
 
 // syncCloudFormControllersLocked captures authoritative retained text before validation and submission.
@@ -715,35 +690,21 @@ func (a *App) submitCloudFormRequest(kind string, values map[string]string, emai
 	defer cancel()
 	var result account.ActionResult
 	var err error
+	lang := a.generalSettings.Data().LangCode
 	switch kind {
 	case "login", "register":
-		a.mu.RLock()
-		lang := a.generalSettings.Data().LangCode
-		a.mu.RUnlock()
 		if kind == "register" {
 			result, err = a.services.RegisterAccount(ctx, a.sessionID, values["Email"], values["Password"], lang)
 		} else {
 			result, err = a.services.LoginAccount(ctx, a.sessionID, values["Email"], values["Password"], lang)
 		}
 	case "verify":
-		a.mu.RLock()
-		lang := a.generalSettings.Data().LangCode
-		a.mu.RUnlock()
 		result, err = a.services.VerifyAccountEmail(ctx, a.sessionID, email, values["Code"], lang)
 	case "reset-request":
-		a.mu.RLock()
-		lang := a.generalSettings.Data().LangCode
-		a.mu.RUnlock()
 		err = a.services.RequestAccountPasswordReset(ctx, a.sessionID, values["Email"], lang)
 	case "reset-confirm":
-		a.mu.RLock()
-		lang := a.generalSettings.Data().LangCode
-		a.mu.RUnlock()
 		err = a.services.ConfirmAccountPasswordReset(ctx, a.sessionID, values["Token"], values["Password"], lang)
 	case "change-password":
-		a.mu.RLock()
-		lang := a.generalSettings.Data().LangCode
-		a.mu.RUnlock()
 		err = a.services.ChangeAccountPassword(ctx, a.sessionID, values["CurrentPassword"], values["Password"], lang)
 	case "bootstrap":
 		err = a.services.StartCloudBootstrap(ctx, a.sessionID, values["RecoveryCode"])
@@ -753,7 +714,9 @@ func (a *App) submitCloudFormRequest(kind string, values map[string]string, emai
 		if verificationEmail == "" {
 			verificationEmail = values["Email"]
 		}
-		a.openCloudVerificationForm(verificationEmail)
+		_ = a.runOnUI("open cloud verification form", func() {
+			a.openCloudVerificationForm(verificationEmail)
+		})
 		return
 	}
 	if err == nil && kind != "bootstrap" && result.Code != "" && result.Code != "ok" {
@@ -764,35 +727,46 @@ func (a *App) submitCloudFormRequest(kind string, values map[string]string, emai
 		err = fmt.Errorf("%s", message)
 	}
 	if err != nil {
-		a.mu.Lock()
-		form := a.cloudSettings.Form()
-		if form != nil && form.kind == kind {
-			form.saving = false
-			form.error = err.Error()
+		_ = a.runOnUI("apply cloud form error", func() {
+			form := a.cloudSettings.Form()
+			if form != nil && form.kind == kind {
+				form.saving = false
+				form.error = err.Error()
+			}
+			a.updateSettingsTextInput(form != nil && form.editor != nil)
+			a.invalidateSettingsWindow()
+		})
+		return
+	}
+	reload := false
+	_ = a.runOnUI("apply cloud form success", func() {
+		switch kind {
+		case "reset-request":
+			a.openCloudAccountForm("reset-confirm")
+			return
+		case "reset-confirm":
+			a.openCloudAccountForm("login")
+			return
+		case "change-password":
+			a.settingNote = "Account password changed."
 		}
-		textInputActive := form != nil && form.editor != nil
-		a.mu.Unlock()
-		a.updateSettingsTextInput(textInputActive)
-		a.invalidateSettingsWindow()
+		a.closeCloudForm()
+		reload = true
+	})
+	if !reload {
 		return
 	}
-	if kind == "reset-request" {
-		a.openCloudAccountForm("reset-confirm")
-		return
-	}
-	if kind == "reset-confirm" {
-		a.openCloudAccountForm("login")
-		return
-	}
-	if kind == "change-password" {
-		a.mu.Lock()
-		a.settingNote = "Account password changed."
-		a.mu.Unlock()
-	}
-	a.closeCloudForm()
 	a.reloadCloudSync()
 	if kind == "bootstrap" {
-		time.AfterFunc(2*time.Second, a.reloadCloudSync)
+		util.Go(a.lifecycleCtx, "reload cloud sync after form bootstrap", func() {
+			timer := time.NewTimer(2 * time.Second)
+			defer timer.Stop()
+			select {
+			case <-a.lifecycleCtx.Done():
+			case <-timer.C:
+				a.reloadCloudSync()
+			}
+		})
 	}
 }
 
@@ -805,7 +779,6 @@ func (a *App) toggleCloudPluginExclusion(pluginID string) {
 	if a.cloudSettings.Busy() != "" {
 		return
 	}
-	a.mu.Lock()
 	excluded := append([]string(nil), a.generalSettings.Data().CloudSyncDisabledPlugins...)
 	found := false
 	next := make([]string, 0, len(excluded)+1)
@@ -826,16 +799,14 @@ func (a *App) toggleCloudPluginExclusion(pluginID string) {
 	sort.Strings(next)
 	encoded, err := json.Marshal(next)
 	if err != nil {
-		a.mu.Unlock()
 		a.cloudSettings.SetError("Could not encode plugin exclusions: " + err.Error())
 		a.invalidateSettingsWindow()
 		return
 	}
-	a.mu.Unlock()
 	a.cloudSettings.SetBusy("exclusion-" + pluginID)
 	a.cloudSettings.SetError("")
 	a.invalidateSettingsWindow()
-	go func() {
+	util.Go(a.lifecycleCtx, "save cloud plugin exclusions", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		err := a.services.UpdateGeneralSetting(ctx, a.sessionID, "CloudSyncDisabledPlugins", string(encoded))
 		cancel()
@@ -847,7 +818,7 @@ func (a *App) toggleCloudPluginExclusion(pluginID string) {
 		}
 		a.cloudSettings.SetBusy("")
 		a.invalidateSettingsWindow()
-	}()
+	})
 }
 
 func cloudPluginExclusionRows(plugins []pluginSettingsPlugin, excluded []string) []pluginSettingsPlugin {
@@ -868,20 +839,16 @@ func cloudPluginExclusionRows(plugins []pluginSettingsPlugin, excluded []string)
 
 // openCloudLegalPage uses the current Wox language while leaving browser integration in the window abstraction.
 func (a *App) openCloudLegalPage(path string) {
-	a.mu.RLock()
 	lang := strings.ToLower(a.generalSettings.Data().LangCode)
-	a.mu.RUnlock()
 	prefix := ""
 	if strings.HasPrefix(lang, "zh") {
 		prefix = "/zh"
 	}
 	if err := a.settingsNativeWindow().OpenExternalURL("https://sync.woxlauncher.com" + prefix + path); err != nil {
-		a.mu.Lock()
 		form := a.cloudSettings.Form()
 		if form != nil {
 			form.error = "Could not open legal page: " + err.Error()
 		}
-		a.mu.Unlock()
 		a.invalidateSettingsWindow()
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"wox/ui/contract"
@@ -27,7 +26,6 @@ type appearanceSettingsSnapshot struct {
 // primary-glance choice picker. Both are loaded once from core and cached until reset.
 type appearanceSettingsController struct {
 	deps                 CommonDeps
-	mu                   sync.RWMutex
 	fontFamilies         []string
 	fontsLoading         bool
 	fontsLoaded          bool
@@ -46,15 +44,18 @@ func newAppearanceSettingsController(deps CommonDeps) *appearanceSettingsControl
 // already completed or is in flight. Mirrors the original loadSystemFontFamilies behavior:
 // core enumerates fonts, the controller trims/dedups/sorts the portable family names.
 func (c *appearanceSettingsController) ReloadFonts(ctx context.Context, service contract.AppearanceSettingsServices, sessionID string) {
-	c.mu.Lock()
-	if c.fontsLoaded || c.fontsLoading {
-		c.mu.Unlock()
+	shouldLoad := false
+	if !c.deps.OnUI("start loading system font families", func() {
+		if c.fontsLoaded || c.fontsLoading {
+			return
+		}
+		c.fontsLoading = true
+		c.fontsError = ""
+		shouldLoad = true
+		c.deps.Invalidate()
+	}) || !shouldLoad {
 		return
 	}
-	c.fontsLoading = true
-	c.fontsError = ""
-	c.mu.Unlock()
-	c.deps.Invalidate()
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	families, err := service.SystemFontFamilies(timeoutCtx, sessionID)
@@ -75,17 +76,17 @@ func (c *appearanceSettingsController) ReloadFonts(ctx context.Context, service 
 		families = filtered
 	}
 
-	c.mu.Lock()
-	c.fontsLoading = false
-	if err != nil {
-		c.fontsError = err.Error()
-	} else {
-		c.fontFamilies = families
-		c.fontsLoaded = true
-		c.fontsError = ""
-	}
-	c.mu.Unlock()
-	c.deps.Invalidate()
+	c.deps.OnUI("apply system font families", func() {
+		c.fontsLoading = false
+		if err != nil {
+			c.fontsError = err.Error()
+		} else {
+			c.fontFamilies = families
+			c.fontsLoaded = true
+			c.fontsError = ""
+		}
+		c.deps.Invalidate()
+	})
 }
 
 // ReloadGlanceCatalog loads the available glance providers from core. It is a no-op if a
@@ -93,15 +94,18 @@ func (c *appearanceSettingsController) ReloadFonts(ctx context.Context, service 
 // the caller (App) can reschedule the active glance refresh against the new catalog without
 // the controller needing a back-reference to *App.
 func (c *appearanceSettingsController) ReloadGlanceCatalog(ctx context.Context, service contract.AppearanceSettingsServices, sessionID string, onLoaded func()) {
-	c.mu.Lock()
-	if c.glanceCatalogLoaded || c.glanceCatalogLoading {
-		c.mu.Unlock()
+	shouldLoad := false
+	if !c.deps.OnUI("start loading glance catalog", func() {
+		if c.glanceCatalogLoaded || c.glanceCatalogLoading {
+			return
+		}
+		c.glanceCatalogLoading = true
+		c.glanceCatalogError = ""
+		shouldLoad = true
+		c.deps.Invalidate()
+	}) || !shouldLoad {
 		return
 	}
-	c.glanceCatalogLoading = true
-	c.glanceCatalogError = ""
-	c.mu.Unlock()
-	c.deps.Invalidate()
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	loaded, err := service.GlanceCatalog(timeoutCtx, sessionID)
@@ -122,37 +126,35 @@ func (c *appearanceSettingsController) ReloadGlanceCatalog(ctx context.Context, 
 		})
 	}
 
-	c.mu.Lock()
-	c.glanceCatalogLoading = false
-	if err != nil {
-		c.glanceCatalogError = err.Error()
-	} else {
-		c.glanceCatalog = catalog
-		c.glanceCatalogLoaded = true
-		c.glanceCatalogError = ""
-	}
-	c.mu.Unlock()
-	c.deps.Invalidate()
-	if err == nil && onLoaded != nil {
-		onLoaded()
-	}
+	c.deps.OnUI("apply glance catalog", func() {
+		c.glanceCatalogLoading = false
+		if err != nil {
+			c.glanceCatalogError = err.Error()
+		} else {
+			c.glanceCatalog = catalog
+			c.glanceCatalogLoaded = true
+			c.glanceCatalogError = ""
+		}
+		c.deps.Invalidate()
+		if err == nil && onLoaded != nil {
+			onLoaded()
+		}
+	})
 }
 
 // ResetGlanceCatalog clears the cached catalog so the next ReloadGlanceCatalog refetches
 // from core. Called when installed plugins change.
 func (c *appearanceSettingsController) ResetGlanceCatalog() {
-	c.mu.Lock()
-	c.glanceCatalog = nil
-	c.glanceCatalogLoaded = false
-	c.glanceCatalogError = ""
-	c.mu.Unlock()
-	c.deps.Invalidate()
+	c.deps.OnUI("reset glance catalog", func() {
+		c.glanceCatalog = nil
+		c.glanceCatalogLoaded = false
+		c.glanceCatalogError = ""
+		c.deps.Invalidate()
+	})
 }
 
 // Snapshot returns a copy of the Appearance state for the view layer.
 func (c *appearanceSettingsController) Snapshot() appearanceSettingsSnapshot {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return appearanceSettingsSnapshot{
 		FontFamilies:         append([]string(nil), c.fontFamilies...),
 		FontsLoading:         c.fontsLoading,

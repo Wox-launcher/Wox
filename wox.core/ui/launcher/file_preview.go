@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"wox/util"
 )
 
 const maxPreviewFileBytes = 512 * 1024
@@ -33,12 +36,9 @@ func (a *App) filePreviewFor(path string) filePreviewContent {
 	if extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".gif" {
 		return filePreviewContent{Kind: "image", Image: woxImage{ImageType: "absolute", ImageData: path}, Tags: []previewTag{{Label: strings.TrimPrefix(strings.ToUpper(extension), ".")}}}
 	}
-	a.mu.RLock()
 	if content, ok := a.filePreviews[path]; ok {
-		a.mu.RUnlock()
 		return content
 	}
-	a.mu.RUnlock()
 	return filePreviewContent{Kind: "info", Text: "Loading file preview…"}
 }
 
@@ -52,30 +52,32 @@ func (a *App) prepareFilePreview(path string) {
 	if extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".gif" {
 		return
 	}
-	a.mu.Lock()
 	_, loaded := a.filePreviews[path]
 	requested := a.fileRequests[path]
 	if !loaded && !requested {
 		a.fileRequests[path] = true
 	}
-	a.mu.Unlock()
 	if !loaded && !requested {
-		go a.loadFilePreview(path, extension)
+		util.Go(a.lifecycleCtx, "load file preview", func() {
+			a.loadFilePreview(path, extension)
+		})
 	}
 }
 
 func (a *App) loadFilePreview(path, extension string) {
 	content := inspectPreviewFile(path, extension)
-	a.mu.Lock()
-	if len(a.filePreviews) >= 128 {
-		// ponytail: File previews are immutable during one query session; reset keeps ownership obvious.
-		a.filePreviews = map[string]filePreviewContent{}
-		a.fileRequests = map[string]bool{path: true}
-	}
-	a.filePreviews[path] = content
-	a.mu.Unlock()
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if err := a.runOnUI("apply file preview", func() {
+		if len(a.filePreviews) >= 128 {
+			// File previews are immutable during one query session; reset keeps ownership obvious.
+			a.filePreviews = map[string]filePreviewContent{}
+			a.fileRequests = map[string]bool{path: true}
+		}
+		a.filePreviews[path] = content
+		if a.window != nil {
+			_ = a.window.Invalidate()
+		}
+	}); err != nil {
+		log.Printf("dispatch file preview result: %v", err)
 	}
 }
 

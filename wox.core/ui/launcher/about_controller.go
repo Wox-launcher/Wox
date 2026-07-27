@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"wox/ui/contract"
@@ -19,7 +18,6 @@ type aboutSettingsSnapshot struct {
 // aboutSettingsController owns the About tab state (version, loading, error).
 type aboutSettingsController struct {
 	deps    CommonDeps
-	mu      sync.RWMutex
 	version string
 	loading bool
 	loaded  bool
@@ -34,44 +32,46 @@ func newAboutSettingsController(deps CommonDeps) *aboutSettingsController {
 // it is a no-op if a reload is already in flight, clears any prior error, and invalidates
 // the view before and after the service call.
 func (c *aboutSettingsController) Reload(ctx context.Context, service contract.AboutSettingsServices, sessionID string) {
-	c.mu.Lock()
-	if c.loading {
-		c.mu.Unlock()
+	shouldLoad := false
+	c.deps.OnUI("start about settings reload", func() {
+		if c.loading {
+			return
+		}
+		c.loading = true
+		c.errMsg = ""
+		shouldLoad = true
+		c.deps.Invalidate()
+	})
+	if !shouldLoad {
 		return
 	}
-	c.loading = true
-	c.errMsg = ""
-	c.mu.Unlock()
-	c.deps.Invalidate()
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	version, err := service.Version(timeoutCtx, sessionID)
 
-	c.mu.Lock()
-	c.loading = false
-	if err != nil {
-		c.errMsg = err.Error()
-	} else {
-		c.version = version
-		c.loaded = true
-	}
-	c.mu.Unlock()
-	c.deps.Invalidate()
+	c.deps.OnUI("finish about settings reload", func() {
+		c.loading = false
+		if err != nil {
+			c.errMsg = err.Error()
+		} else {
+			c.version = version
+			c.loaded = true
+		}
+		c.deps.Invalidate()
+	})
 }
 
 // SetError records an error from outside the reload path (e.g. onboarding/open link failures).
 func (c *aboutSettingsController) SetError(msg string) {
-	c.mu.Lock()
-	c.errMsg = msg
-	c.mu.Unlock()
-	c.deps.Invalidate()
+	c.deps.OnUI("set about settings error", func() {
+		c.errMsg = msg
+		c.deps.Invalidate()
+	})
 }
 
 // Snapshot returns a copy of the About state for the view layer.
 func (c *aboutSettingsController) Snapshot() aboutSettingsSnapshot {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return aboutSettingsSnapshot{
 		Version: c.version,
 		Loading: c.loading,

@@ -262,79 +262,85 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	}
 	if tab == "plugins" {
 		store := pluginSettingsPathIsStore(windowContext.Path)
-		a.pluginSettings.SetPluginsStore(store)
+		if err := a.runOnUI("prepare plugin settings route", func() {
+			a.pluginSettings.SetPluginsStore(store)
+		}); err != nil {
+			return err
+		}
 		if err := a.reloadPlugins(store, windowContext.Param); err != nil {
 			note = "Could not load plugins: " + err.Error()
 		}
 	}
-	a.mu.Lock()
-	a.settingsOpen = true
-	a.settingsCtx = windowContext
-	a.settingTab = tab
-	a.settingRow = 0
-	a.settingNote = note
-	a.settingSaving = false
-	a.settingsSearch.SetEditor(woxui.NewTextEditor(""))
-	a.settingsSearch.SetFocused(tab != "plugins")
-	a.settingsSearch.SetPanel(false)
-	a.settingsSearch.SetSelected(0)
-	if tab == "plugins" {
-		if a.pluginSettings.SearchEditor() == nil {
-			a.pluginSettings.SetSearchEditor(woxui.NewTextEditor(""))
+	if err := a.runOnUI("open settings state", func() {
+		a.settingsOpen = true
+		a.settingsCtx = windowContext
+		a.settingTab = tab
+		a.settingRow = 0
+		a.settingNote = note
+		a.settingSaving = false
+		a.settingsSearch.SetEditor(woxui.NewTextEditor(""))
+		a.settingsSearch.SetFocused(tab != "plugins")
+		a.settingsSearch.SetPanel(false)
+		a.settingsSearch.SetSelected(0)
+		if tab == "plugins" {
+			if a.pluginSettings.SearchEditor() == nil {
+				a.pluginSettings.SetSearchEditor(woxui.NewTextEditor(""))
+			}
+			a.pluginSettings.SetSearchFocused(true)
+		} else {
+			a.pluginSettings.SetSearchFocused(false)
 		}
-		a.pluginSettings.SetSearchFocused(true)
-	} else {
-		a.pluginSettings.SetSearchFocused(false)
+		a.hotkeySettings.SetFocused(false)
+		a.aiSettings.SetModelManager(nil)
+		a.cloudSettings.SetForm(nil)
+		a.cloudSettings.SetActionMenu("")
+		a.form = nil
+		a.requirementForm = nil
+		a.triggerConflict = nil
+		a.themeSettings.SetThemeEditor(nil)
+		if form := a.hotkeySettings.Form(); form != nil {
+			form.active = tab == "general"
+		}
+		if form := a.aiSettings.Form(); form != nil {
+			form.active = tab == "ai"
+		}
+		if tab == "theme" {
+			a.themeSettings.SetThemesMode(themeMode)
+			a.themeSettings.SetThemes(nil)
+			a.themeSettings.SetThemesLoaded(false)
+			a.themeSettings.SetThemesLoading(false)
+			a.themeSettings.SetThemesError("")
+			a.themeSettings.SetThemeSelected(-1)
+			a.themeSettings.SetThemeSearchEditor(woxui.NewTextEditor(""))
+			a.themeSettings.SetThemeSearchFocused(false)
+			a.themeSettings.SetThemeDetailTab("preview")
+			a.themeSettings.SetThemeOperation("")
+			a.themeSettings.SetThemeUninstallArmed("")
+		}
+		if form := a.pluginSettings.Form(); form != nil {
+			form.active = false
+		}
+		// Reset the shared built-in editor and any open choice picker on settings open.
+		a.generalSettings.EndEdit()
+		a.generalSettings.SetChoicePicker(nil)
+		a.preloadThemeEditorWallpaper()
+		a.deactivateTerminalPreview()
+		a.resetChatPreview()
+	}); err != nil {
+		return err
 	}
-	a.hotkeySettings.SetFocused(false)
-	a.aiSettings.SetModelManager(nil)
-	a.cloudSettings.SetForm(nil)
-	a.cloudSettings.SetActionMenu("")
-	a.form = nil
-	a.requirementForm = nil
-	a.triggerConflict = nil
-	a.themeSettings.SetThemeEditor(nil)
-	if form := a.hotkeySettings.Form(); form != nil {
-		form.active = tab == "general"
-	}
-	if form := a.aiSettings.Form(); form != nil {
-		form.active = tab == "ai"
-	}
-	if tab == "theme" {
-		a.themeSettings.SetThemesMode(themeMode)
-		a.themeSettings.SetThemes(nil)
-		a.themeSettings.SetThemesLoaded(false)
-		a.themeSettings.SetThemesLoading(false)
-		a.themeSettings.SetThemesError("")
-		a.themeSettings.SetThemeSelected(-1)
-		a.themeSettings.SetThemeSearchEditor(woxui.NewTextEditor(""))
-		a.themeSettings.SetThemeSearchFocused(false)
-		a.themeSettings.SetThemeDetailTab("preview")
-		a.themeSettings.SetThemeOperation("")
-		a.themeSettings.SetThemeUninstallArmed("")
-	}
-	if form := a.pluginSettings.Form(); form != nil {
-		form.active = false
-	}
-	a.mu.Unlock()
-	// Reset the shared built-in editor and any open choice picker on settings open.
-	a.generalSettings.EndEdit()
-	a.generalSettings.SetChoicePicker(nil)
-	a.preloadThemeEditorWallpaper()
-	a.deactivateTerminalPreview()
-	a.resetChatPreview()
 	if tab == "theme" && themeMode == "editor" {
 		if err := a.loadSettingsThemeEditor(); err != nil {
-			a.mu.Lock()
-			a.settingNote = "Could not load theme editor: " + err.Error()
-			a.mu.Unlock()
+			_ = a.runOnUI("apply theme editor load error", func() {
+				a.settingNote = "Could not load theme editor: " + err.Error()
+			})
 		}
 	}
 	if tab == "theme" && themeMode != "editor" {
 		if err := a.reloadThemes(themeMode, ""); err != nil {
-			a.mu.Lock()
-			a.settingNote = "Could not load themes: " + err.Error()
-			a.mu.Unlock()
+			_ = a.runOnUI("apply theme catalog load error", func() {
+				a.settingNote = "Could not load themes: " + err.Error()
+			})
 		}
 	}
 	if tab == "usage" {
@@ -371,10 +377,10 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 
 	settingsView, err := a.ensureSettingsWindow()
 	if err != nil {
-		a.mu.Lock()
-		a.settingsOpen = false
-		a.releaseThemeEditorWallpaperLocked()
-		a.mu.Unlock()
+		_ = a.runOnUI("rollback settings open", func() {
+			a.settingsOpen = false
+			a.releaseThemeEditorWallpaperLocked()
+		})
 		return err
 	}
 	settingsWindow := settingsView.Window()
@@ -439,33 +445,36 @@ func (a *App) reloadSettings() error {
 	if data.LogLevel == "" {
 		data.LogLevel = "INFO"
 	}
-	aiForm := newAISettingsForm(data)
-	hotkeyForm := newHotkeySettingsForm(data)
-	a.mu.Lock()
-	applyAIProviderCatalogLocked(&aiForm, a.aiSettings.ProviderCatalog())
-	aiForm.active = a.settingsOpen && a.settingTab == "ai"
-	hotkeyForm.active = a.settingsOpen && a.settingTab == "general"
-	a.aiSettings.SetForm(&aiForm)
-	a.hotkeySettings.SetForm(&hotkeyForm)
-	a.mu.Unlock()
-	// generalSettingsController owns the full settingsData struct; networkSettings
-	// keeps a narrow mirror of its two fields so its snapshot stays in sync after
-	// every reload/save round-trip.
-	a.generalSettings.ApplyData(data)
-	a.generalSettings.SetLanguages(languageChoices)
-	a.networkSettings.ApplyData(data.HttpProxyEnabled, data.HttpProxyURL)
-	if a.window != nil {
-		if err := a.window.SetFontFamily(data.AppFontFamily); err != nil {
-			return fmt.Errorf("apply Wox UI font: %w", err)
+	var applyErr error
+	if err := a.runOnUI("apply general settings snapshot", func() {
+		aiForm := newAISettingsForm(data)
+		hotkeyForm := newHotkeySettingsForm(data)
+		applyAIProviderCatalogLocked(&aiForm, a.aiSettings.ProviderCatalog())
+		aiForm.active = a.settingsOpen && a.settingTab == "ai"
+		hotkeyForm.active = a.settingsOpen && a.settingTab == "general"
+		a.aiSettings.SetForm(&aiForm)
+		a.hotkeySettings.SetForm(&hotkeyForm)
+
+		// Domain controllers receive the same authoritative payload in one UI transaction.
+		a.generalSettings.ApplyData(data)
+		a.generalSettings.SetLanguages(languageChoices)
+		a.networkSettings.ApplyData(data.HttpProxyEnabled, data.HttpProxyURL)
+		if a.window != nil {
+			if err := a.window.SetFontFamily(data.AppFontFamily); err != nil {
+				applyErr = fmt.Errorf("apply Wox UI font: %w", err)
+				return
+			}
+			_ = a.window.Invalidate()
 		}
-		_ = a.window.Invalidate()
-	}
-	if settingsWindow := a.settingsNativeWindow(); settingsWindow != nil {
-		if err := settingsWindow.SetFontFamily(data.AppFontFamily); err != nil {
-			return fmt.Errorf("apply Wox settings UI font: %w", err)
+		if a.settingsView != nil {
+			if err := a.settingsView.Window().SetFontFamily(data.AppFontFamily); err != nil {
+				applyErr = fmt.Errorf("apply Wox settings UI font: %w", err)
+			}
 		}
+	}); err != nil {
+		return err
 	}
-	return nil
+	return applyErr
 }
 
 // settingsDataFromContract adapts core domain types to launcher-owned form state.
@@ -554,10 +563,13 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 }
 
 func (a *App) closeSettings() error {
-	a.stopHotkeyRecording()
-	a.mu.RLock()
-	settingsView := a.settingsView
-	a.mu.RUnlock()
+	var settingsView *woxui.ManagedWindow
+	if err := a.runOnUI("prepare settings close", func() {
+		a.stopHotkeyRecording()
+		settingsView = a.settingsView
+	}); err != nil {
+		return err
+	}
 	if settingsView == nil {
 		return nil
 	}
@@ -574,9 +586,7 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.onCloudSettingsKey(event) {
 		return true
 	}
-	a.mu.RLock()
 	choicePickerOpen := a.generalSettings.ChoicePicker() != nil
-	a.mu.RUnlock()
 	if choicePickerOpen {
 		if event.Key == woxui.KeyEscape {
 			a.closeSettingChoicePicker()
@@ -595,9 +605,7 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.onThemeSettingsKey(event) {
 		return true
 	}
-	a.mu.RLock()
 	themeTab := a.settingTab == "theme"
-	a.mu.RUnlock()
 	if themeTab && a.onThemeEditorPreviewKey(event) {
 		return true
 	}
@@ -647,15 +655,11 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	cloud := a.cloudSettings.Snapshot()
 	general := a.generalSettings.Snapshot()
 
-	// Resolve controller-owned form pointers before taking App.mu. Settings state is
-	// independently synchronized, so the aggregate is intentionally a best-effort view
-	// rather than an atomic cross-domain transaction.
+	// Resolve controller-owned form pointers in the same UI-thread snapshot transaction.
 	pluginForm := a.pluginSettings.Form()
 	aiForm := a.aiSettings.Form()
 	hotkeyForm := a.hotkeySettings.Form()
 
-	a.mu.RLock()
-	defer a.mu.RUnlock()
 	var tableEditor *formTableEditorSnapshot
 	if a.tableEditor != nil && a.formTableTargetCurrentWithFormsLocked(a.tableEditor.target, pluginForm, aiForm, hotkeyForm) {
 		tableEditor = snapshotFormTableEditorLocked(a.tableEditor)
@@ -705,7 +709,6 @@ func (a *App) selectSettingTab(tab string) {
 	loadRuntime := false
 	loadCloud := false
 	loadUpdateChannels := false
-	a.mu.Lock()
 	a.generalSettings.SetChoicePicker(nil)
 	if tab == "plugins" {
 		if a.pluginSettings.SearchEditor() == nil {
@@ -776,7 +779,6 @@ func (a *App) selectSettingTab(tab string) {
 	updateSnap := a.updateSettings.Snapshot()
 	loadUpdateChannels = tab == "updates" && len(updateSnap.ChannelVersions) == 0 && !updateSnap.ChannelsLoading
 	pluginStore := a.pluginSettings.PluginsStore()
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	if loadPlugins {
 		util.Go(a.lifecycleCtx, "reload settings plugins", func() {
@@ -788,10 +790,10 @@ func (a *App) selectSettingTab(tab string) {
 	if loadTheme {
 		util.Go(a.lifecycleCtx, "load settings theme editor", func() {
 			if err := a.loadSettingsThemeEditor(); err != nil {
-				a.mu.Lock()
-				a.settingNote = "Could not load theme editor: " + err.Error()
-				a.mu.Unlock()
-				a.invalidateSettingsWindow()
+				_ = a.runOnUI("apply theme editor load error", func() {
+					a.settingNote = "Could not load theme editor: " + err.Error()
+					a.invalidateSettingsWindow()
+				})
 			}
 		})
 	}
@@ -843,9 +845,7 @@ func (a *App) selectSettingsNavItem(item settingNavSpec) {
 	if item.parent || item.tab == "" {
 		return
 	}
-	a.mu.RLock()
 	currentTab := a.settingTab
-	a.mu.RUnlock()
 	if item.tab == "plugins" {
 		store := item.mode == "store"
 		if currentTab == "plugins" {
@@ -869,7 +869,6 @@ func (a *App) selectSettingsNavItem(item settingNavSpec) {
 			a.switchThemeSettingsMode(mode)
 			return
 		}
-		a.mu.Lock()
 		if a.themeSettings.ThemesMode() != mode {
 			a.themeSettings.SetThemesMode(mode)
 			a.themeSettings.SetThemes(nil)
@@ -880,7 +879,6 @@ func (a *App) selectSettingsNavItem(item settingNavSpec) {
 			a.themeSettings.SetThemeSearchFocused(false)
 			a.themeSettings.SetThemeDetailTab("preview")
 		}
-		a.mu.Unlock()
 		a.selectSettingTab("theme")
 		return
 	}
@@ -888,9 +886,7 @@ func (a *App) selectSettingsNavItem(item settingNavSpec) {
 }
 
 func (a *App) moveSettingTab(delta int) {
-	a.mu.RLock()
 	current := a.settingTab
-	a.mu.RUnlock()
 	index := 0
 	tabs := settingTabs(a.isDev)
 	for candidate, tab := range tabs {
@@ -909,9 +905,7 @@ func (a *App) moveSettingRow(delta int) {
 	if len(items) == 0 {
 		return
 	}
-	a.mu.Lock()
 	a.settingRow = (a.settingRow + delta + len(items)) % len(items)
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
@@ -922,20 +916,16 @@ func (a *App) selectSettingRow(index int) {
 	if index < 0 || index >= len(items) {
 		return
 	}
-	a.mu.Lock()
 	if a.generalSettings.EditKey() != "" {
 		if a.settingRow != index {
-			a.mu.Unlock()
 			return
 		}
-		a.mu.Unlock()
 		a.invalidateSettingsWindow()
 		return
 	}
 	a.settingRow = index
 	a.hotkeySettings.SetFocused(false)
 	// Pointer-selected rows are already visible; moving the viewport here would invalidate popup anchors captured by the same click.
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
@@ -967,10 +957,8 @@ func (a *App) activateSetting(direction int) {
 	if !ok {
 		return
 	}
-	a.mu.Lock()
 	a.settingSaving = true
 	a.settingNote = ""
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "save setting choice", func() {
 		a.saveSetting(item, next)
@@ -982,31 +970,25 @@ func (a *App) startBuiltInSettingEdit(item settingItem, caret int) {
 	if !item.text {
 		return
 	}
-	a.mu.Lock()
 	if a.settingSaving {
-		a.mu.Unlock()
 		return
 	}
 	if a.generalSettings.EditKey() != item.key || a.generalSettings.Editor() == nil {
 		if !a.generalSettings.StartEdit(item.key, item.value, caret) {
-			a.mu.Unlock()
 			return
 		}
 	} else if caret >= 0 {
 		a.generalSettings.Editor().SetCaret(caret)
 	}
 	a.settingNote = "Editing " + item.title + " · Enter saves · Esc cancels"
-	a.mu.Unlock()
 	a.updateSettingsTextInput(true)
 	a.invalidateSettingsWindow()
 }
 
 // cancelBuiltInSettingEdit discards an unsaved text value without mutating the loaded settings snapshot.
 func (a *App) cancelBuiltInSettingEdit() {
-	a.mu.Lock()
 	a.generalSettings.EndEdit()
 	a.settingNote = ""
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
@@ -1031,10 +1013,8 @@ func (a *App) submitBuiltInSettingEdit() {
 	}
 	item := items[index]
 	value := snapshot.general.Editing.Text
-	a.mu.Lock()
 	a.settingSaving = true
 	a.settingNote = "Saving " + item.title + "…"
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "save setting text value", func() {
@@ -1044,10 +1024,8 @@ func (a *App) submitBuiltInSettingEdit() {
 
 // onBuiltInSettingsEditorKey keeps text editing separate from rail and choice navigation.
 func (a *App) onBuiltInSettingsEditorKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	active := a.settingsOpen && a.generalSettings.EditKey() != "" && a.generalSettings.Editor() != nil
 	saving := a.settingSaving
-	a.mu.RUnlock()
 	if !active {
 		return false
 	}
@@ -1067,25 +1045,19 @@ func (a *App) onBuiltInSettingsEditorKey(event woxui.KeyEvent) bool {
 
 // setBuiltInSettingEditValue keeps only the committed business value in launcher state.
 func (a *App) setBuiltInSettingEditValue(item settingItem, value string) {
-	a.mu.Lock()
 	if a.settingsOpen && a.generalSettings.EditKey() == item.key {
 		a.generalSettings.SetEditText(item.key, value)
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 // onBuiltInSettingsTextInput commits native text and IME events into the active settings editor.
 func (a *App) onBuiltInSettingsTextInput(_ woxui.TextInputEvent) bool {
-	a.mu.RLock()
 	choicePickerOpen := a.generalSettings.ChoicePicker() != nil
-	a.mu.RUnlock()
 	if choicePickerOpen {
 		return true
 	}
-	a.mu.RLock()
 	active := a.settingsOpen && !a.settingSaving && a.generalSettings.EditKey() != "" && a.generalSettings.Editor() != nil
-	a.mu.RUnlock()
 	return active
 }
 
@@ -1100,9 +1072,7 @@ func (a *App) browseBuiltInSettingFile(item settingItem) {
 	}
 	path, err := settingsWindow.PickFile(woxui.FileDialogOptions{})
 	if err != nil {
-		a.mu.Lock()
 		a.settingNote = "Could not select " + item.title + ": " + err.Error()
-		a.mu.Unlock()
 		a.invalidateSettingsWindow()
 		return
 	}
@@ -1110,9 +1080,7 @@ func (a *App) browseBuiltInSettingFile(item settingItem) {
 		return
 	}
 	a.startBuiltInSettingEdit(item, -1)
-	a.mu.Lock()
 	a.generalSettings.SetEditText(item.key, path)
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
@@ -1130,34 +1098,29 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 		err = a.reloadTranslations()
 	}
 	restoreTextInput := false
-	a.mu.Lock()
-	a.settingSaving = false
-	if a.generalSettings.EditKey() == item.key {
-		if err == nil {
-			a.generalSettings.EndEdit()
-		} else if item.text {
-			a.generalSettings.Editor().SetText(choice.value, false)
-			restoreTextInput = true
-		}
-	}
-	if err != nil {
-		a.settingNote = "Could not save " + item.title + ": " + err.Error()
-	} else {
-		a.settingNote = ""
-	}
-	a.mu.Unlock()
 	refreshGlance := false
-	if err == nil && (item.key == "EnableGlance" || item.key == "PrimaryGlance") {
-		a.mu.Lock()
-		a.stopGlanceLocked(true)
-		refreshGlance = a.glanceEligibleLocked()
-		a.mu.Unlock()
-	}
-	if restoreTextInput {
-		a.updateSettingsTextInput(true)
-	} else {
-		a.updateSettingsTextInput(false)
-	}
+	_ = a.runOnUI("apply general setting save", func() {
+		a.settingSaving = false
+		if a.generalSettings.EditKey() == item.key {
+			if err == nil {
+				a.generalSettings.EndEdit()
+			} else if item.text {
+				a.generalSettings.Editor().SetText(choice.value, false)
+				restoreTextInput = true
+			}
+		}
+		if err != nil {
+			a.settingNote = "Could not save " + item.title + ": " + err.Error()
+		} else {
+			a.settingNote = ""
+		}
+		if err == nil && (item.key == "EnableGlance" || item.key == "PrimaryGlance") {
+			a.stopGlanceLocked(true)
+			refreshGlance = a.glanceEligibleLocked()
+		}
+		a.updateSettingsTextInput(restoreTextInput)
+		a.invalidateSettingsWindow()
+	})
 	if refreshGlance {
 		util.Go(a.lifecycleCtx, "refresh glance after settings change", func() {
 			a.refreshGlance("settingsChanged", "", nil)

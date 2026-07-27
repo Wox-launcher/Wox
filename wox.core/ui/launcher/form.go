@@ -288,35 +288,28 @@ func changeFormFieldsChoiceLocked(fields *formFieldsState, index, delta int) {
 
 func (a *App) openFormAction(result queryResult, action resultAction) {
 	state := &formState{formFieldsState: newFormFieldsState(action.Form, nil, true), resultID: result.ID, queryID: result.QueryID, action: action}
-	a.mu.Lock()
 	a.form = state
 	a.actionPanel = false
 	a.actionSelected = 0
 	a.actionSelectionKey = ""
 	a.actionFilter = nil
-	a.mu.Unlock()
 	a.updateFormTextInput(state.editor != nil)
 	_ = a.applyWindowBounds()
 	_ = a.window.Invalidate()
 }
 
 func (a *App) closeFormAction() {
-	a.mu.Lock()
 	if a.form == nil {
-		a.mu.Unlock()
 		return
 	}
 	a.form = nil
-	a.mu.Unlock()
 	a.restoreQueryTextInput()
 	_ = a.applyWindowBounds()
 	_ = a.window.Invalidate()
 }
 
 func (a *App) submitFormAction() {
-	a.mu.Lock()
 	if a.form == nil {
-		a.mu.Unlock()
 		return
 	}
 	a.syncFormEditorLocked()
@@ -326,7 +319,6 @@ func (a *App) submitFormAction() {
 		values[key] = value
 	}
 	a.form = nil
-	a.mu.Unlock()
 	if err := a.services.SubmitFormAction(context.Background(), a.sessionID, state.queryID, state.resultID, state.action.ID, values); err != nil {
 		log.Printf("submit form action: %v", err)
 	}
@@ -336,7 +328,6 @@ func (a *App) submitFormAction() {
 }
 
 func (a *App) onFormKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	active := a.form != nil
 	focused := -1
 	fieldType := ""
@@ -348,7 +339,6 @@ func (a *App) onFormKey(event woxui.KeyEvent) bool {
 			multiline = fieldType == "textbox" && a.form.definitions[focused].Value.MaxLines > 1
 		}
 	}
-	a.mu.RUnlock()
 	if !active {
 		return false
 	}
@@ -429,9 +419,7 @@ func (a *App) onFormKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) setFormText(index int, value string) {
-	a.mu.Lock()
 	changed := a.form != nil && setFormFieldsTextLocked(&a.form.formFieldsState, index, value)
-	a.mu.Unlock()
 	if changed {
 		_ = a.applyWindowBounds()
 		_ = a.window.Invalidate()
@@ -439,28 +427,21 @@ func (a *App) setFormText(index int, value string) {
 }
 
 func (a *App) onFormTextInput(_ woxui.TextInputEvent) bool {
-	a.mu.RLock()
-	active := a.form != nil
-	a.mu.RUnlock()
-	return active
+	return a.form != nil
 }
 
 func (a *App) editFormKey(event woxui.KeyEvent) {
-	a.mu.Lock()
 	if a.form != nil && a.form.editor != nil && a.form.focused >= 0 && a.form.focused < len(a.form.definitions) {
 		_, changed := handleFormEditorKey(a.form.editor, a.form.definitions[a.form.focused], event)
 		if changed {
 			a.syncFormEditorLocked()
 		}
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
 func (a *App) moveFormFocus(delta int) {
-	a.mu.Lock()
 	if a.form == nil || len(a.form.definitions) == 0 {
-		a.mu.Unlock()
 		return
 	}
 	a.syncFormEditorLocked()
@@ -473,33 +454,26 @@ func (a *App) moveFormFocus(delta int) {
 		}
 	}
 	textInput := a.form.editor != nil
-	a.mu.Unlock()
 	a.updateFormTextInput(textInput)
 	_ = a.window.Invalidate()
 }
 
 func (a *App) focusFormField(index int) {
-	a.mu.Lock()
 	if a.form == nil || index < 0 || index >= len(a.form.definitions) || !formDefinitionFocusable(a.form.definitions[index]) {
-		a.mu.Unlock()
 		return
 	}
 	a.syncFormEditorLocked()
 	a.setFormFocusLocked(index)
 	textInput := a.form.editor != nil
-	a.mu.Unlock()
 	a.updateFormTextInput(textInput)
 	_ = a.window.Invalidate()
 }
 
 func (a *App) changeFormChoice(index, delta int) {
-	a.mu.Lock()
 	if a.form == nil || index < 0 || index >= len(a.form.definitions) {
-		a.mu.Unlock()
 		return
 	}
 	changeFormFieldsChoiceLocked(&a.form.formFieldsState, index, delta)
-	a.mu.Unlock()
 	a.updateFormTextInput(false)
 	_ = a.window.Invalidate()
 }
@@ -523,10 +497,8 @@ func (a *App) updateFormTextInput(enabled bool) {
 }
 
 func (a *App) restoreQueryTextInput() {
-	a.mu.RLock()
 	themeEditor := a.themeSettings.ThemeEditor()
 	enabled := !a.show.HideQueryBox && !a.chatFullscreen && a.form == nil && (a.requirementForm == nil || !a.requirementForm.active) && (a.triggerConflict == nil || !a.triggerConflict.active) && (themeEditor == nil || !themeEditor.active) && (a.chatPreview == nil || !a.chatPreview.active) && (a.terminalPreview == nil || !a.terminalPreview.SearchOpen)
-	a.mu.RUnlock()
 	state := woxui.TextInputState{}
 	if enabled {
 		state = woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 130, Y: 29, Width: 1, Height: 24}}

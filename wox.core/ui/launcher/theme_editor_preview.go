@@ -13,6 +13,7 @@ import (
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type themeColorToken struct {
@@ -227,14 +228,13 @@ func (a *App) loadSettingsThemeEditor() error {
 	}
 	encoded, _ = json.Marshal(raw)
 	hash := sha256.Sum256(encoded)
-	a.mu.Lock()
-	a.themeSettings.SetThemeEditor(newThemeEditorState(fmt.Sprintf("settings-theme|%x", hash[:8]), raw))
-	a.mu.Unlock()
-	a.preloadThemeEditorWallpaper()
-	if a.window != nil {
-		a.invalidateThemeEditorWindow()
-	}
-	return nil
+	return a.runOnUI("apply settings theme editor", func() {
+		a.themeSettings.SetThemeEditor(newThemeEditorState(fmt.Sprintf("settings-theme|%x", hash[:8]), raw))
+		a.preloadThemeEditorWallpaper()
+		if a.window != nil {
+			a.invalidateThemeEditorWindow()
+		}
+	})
 }
 
 // themeEditorPreviewDataAndKey validates the draft and derives its stable controller identity.
@@ -261,12 +261,10 @@ func (a *App) activateThemeEditorPreview(result queryResult, preview queryPrevie
 		a.deactivateThemeEditorPreview()
 	}
 
-	a.mu.Lock()
 	current := a.themeSettings.ThemeEditor()
 	if current == nil || current.key != key {
 		a.themeSettings.SetThemeEditor(newThemeEditorState(key, raw))
 	}
-	a.mu.Unlock()
 	return nil
 }
 
@@ -276,8 +274,6 @@ func (a *App) themeEditorPreviewSnapshotFor(result queryResult, preview queryPre
 	if err != nil {
 		return nil, err
 	}
-	a.mu.RLock()
-	defer a.mu.RUnlock()
 	editor := a.themeSettings.ThemeEditor()
 	if editor == nil || editor.key != key {
 		return nil, fmt.Errorf("theme editor preview is not ready")
@@ -333,11 +329,9 @@ func themeEditorDraftPalette(raw map[string]any, values map[string]string) uiPal
 
 // onThemeEditorPreviewKey gives the draft form keyboard ownership only after a field is focused.
 func (a *App) onThemeEditorPreviewKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	state := a.themeSettings.ThemeEditor()
 	active := state != nil && state.active
 	dialogOpen := state != nil && state.dialogMode != ""
-	a.mu.RUnlock()
 	if !active {
 		return false
 	}
@@ -375,15 +369,12 @@ func (a *App) onThemeEditorPreviewKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) onThemeEditorPreviewTextInput(_ woxui.TextInputEvent) bool {
-	a.mu.RLock()
 	state := a.themeSettings.ThemeEditor()
 	active := state != nil && state.active
-	a.mu.RUnlock()
 	return active
 }
 
 func (a *App) editThemeEditorKey(event woxui.KeyEvent) {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state != nil && state.active && state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) {
 		_, changed := handleFormEditorKey(state.editor, state.definitions[state.focused], event)
@@ -392,15 +383,12 @@ func (a *App) editThemeEditorKey(event woxui.KeyEvent) {
 			state.error = ""
 		}
 	}
-	a.mu.Unlock()
 	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) moveThemeEditorFocus(delta int) {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || len(state.definitions) == 0 {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
@@ -413,49 +401,41 @@ func (a *App) moveThemeEditorFocus(delta int) {
 		}
 	}
 	textInput := state.editor != nil
-	a.mu.Unlock()
 	a.updateThemeEditorTextInput(textInput)
 	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) focusThemeEditorField(index int) {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.saving || index < 0 || index >= len(state.definitions) || !formDefinitionFocusable(state.definitions[index]) {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.error = ""
 	textInput := state.editor != nil
-	a.mu.Unlock()
 	a.updateThemeEditorTextInput(textInput)
 	a.invalidateThemeEditorWindow()
 }
 
 func (a *App) setThemeEditorText(index int, value string) {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	changed := state != nil && !state.saving && setFormFieldsTextLocked(&state.formFieldsState, index, value)
 	if changed {
 		state.error = ""
 	}
-	a.mu.Unlock()
 	if changed {
 		a.invalidateThemeEditorWindow()
 	}
 }
 
 func (a *App) deactivateThemeEditorPreview() {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	wasActive := state != nil && state.active
 	if wasActive {
 		syncFormFieldsEditorLocked(&state.formFieldsState)
 		state.active = false
 	}
-	a.mu.Unlock()
 	if !wasActive {
 		return
 	}
@@ -477,31 +457,25 @@ func validateThemeEditorValues(values map[string]string) string {
 
 // submitThemeEditorPreview keeps the launcher preview's original save-or-copy behavior.
 func (a *App) submitThemeEditorPreview() {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.saving {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	name := strings.TrimSpace(state.values["ThemeName"])
 	overwrite := !state.isSystem && !state.isAuto && state.sourceID != "" && name == state.sourceName
-	a.mu.Unlock()
 	a.saveThemeEditorDraft(name, overwrite)
 }
 
 // saveThemeEditorDraft preserves non-color theme fields while saving through the shared theme service.
 func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
-	a.mu.Lock()
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.saving {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	if validationError := validateThemeEditorValues(state.values); validationError != "" {
 		state.error = validationError
-		a.mu.Unlock()
 		a.invalidateThemeEditorWindow()
 		return
 	}
@@ -515,7 +489,6 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 	}
 	if overwrite && (state.isSystem || state.isAuto || state.sourceID == "") {
 		state.error = "This theme cannot be overwritten."
-		a.mu.Unlock()
 		a.invalidateThemeEditorWindow()
 		return
 	}
@@ -528,11 +501,10 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 	state.revision++
 	revision := state.revision
 	key := state.key
-	a.mu.Unlock()
 	a.restoreThemeEditorTextInput()
 	a.invalidateThemeEditorWindow()
 
-	go func() {
+	util.Go(a.lifecycleCtx, "save theme editor draft", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		encodedDraft, err := json.Marshal(draft)
@@ -552,43 +524,44 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 				}
 			}
 		}
+		var applied themeData
 		if err == nil {
 			encoded, marshalErr := json.Marshal(saved)
 			if marshalErr != nil {
 				err = marshalErr
 			} else {
-				var applied themeData
 				if unmarshalErr := json.Unmarshal(encoded, &applied); unmarshalErr != nil {
 					err = unmarshalErr
-				} else {
-					a.applyTheme(applied)
-					a.generalSettings.Update(func(d *settingsData) { d.ThemeID = themeMapString(saved, "ThemeId") })
 				}
 			}
 		}
 
-		a.mu.Lock()
-		current := a.themeSettings.ThemeEditor()
-		if current != nil && current.key == key && current.revision == revision {
-			current.saving = false
-			if err != nil {
-				current.error = err.Error()
-			} else {
-				definitions, savedValues := themeEditorForm(saved)
-				current.formFieldsState = newFormFieldsState(definitions, savedValues, false)
-				current.raw = saved
-				current.initial = copyStringMap(savedValues)
-				current.sourceID = themeMapString(saved, "ThemeId")
-				current.sourceName = themeMapString(saved, "ThemeName")
-				current.isSystem = false
-				current.isAuto = false
-				current.error = ""
+		_ = a.runOnUI("apply saved theme editor draft", func() {
+			if err == nil {
+				a.applyTheme(applied)
+				a.generalSettings.Update(func(d *settingsData) { d.ThemeID = themeMapString(saved, "ThemeId") })
 			}
-		}
-		a.mu.Unlock()
+			current := a.themeSettings.ThemeEditor()
+			if current != nil && current.key == key && current.revision == revision {
+				current.saving = false
+				if err != nil {
+					current.error = err.Error()
+				} else {
+					definitions, savedValues := themeEditorForm(saved)
+					current.formFieldsState = newFormFieldsState(definitions, savedValues, false)
+					current.raw = saved
+					current.initial = copyStringMap(savedValues)
+					current.sourceID = themeMapString(saved, "ThemeId")
+					current.sourceName = themeMapString(saved, "ThemeName")
+					current.isSystem = false
+					current.isAuto = false
+					current.error = ""
+				}
+			}
+			a.invalidateThemeEditorWindow()
+		})
 		if err != nil {
 			log.Printf("save theme editor preview: %v", err)
 		}
-		a.invalidateThemeEditorWindow()
-	}()
+	})
 }

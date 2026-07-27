@@ -3,7 +3,6 @@ package launcher
 import (
 	"context"
 	"log"
-	"sync"
 	"time"
 
 	"wox/ui/contract"
@@ -20,7 +19,6 @@ type updateSettingsSnapshot struct {
 // guarded so it runs at most once per session, and failures are logged only (no error field).
 type updateSettingsController struct {
 	deps            CommonDeps
-	mu              sync.RWMutex
 	channelVersions []updateChannelVersion
 	channelsLoading bool
 }
@@ -40,14 +38,17 @@ func newUpdateSettingsController(deps CommonDeps) *updateSettingsController {
 // loaded. This guard preserves the old App-level behavior where the updates tab only fetched
 // once per settings window session.
 func (c *updateSettingsController) Reload(ctx context.Context, service contract.UpdateSettingsServices, sessionID string, applyTrailers func([]updateChannelVersion)) {
-	c.mu.Lock()
-	if c.channelsLoading || len(c.channelVersions) > 0 {
-		c.mu.Unlock()
+	shouldLoad := false
+	if !c.deps.OnUI("start update settings reload", func() {
+		if c.channelsLoading || len(c.channelVersions) > 0 {
+			return
+		}
+		c.channelsLoading = true
+		shouldLoad = true
+		c.deps.Invalidate()
+	}) || !shouldLoad {
 		return
 	}
-	c.channelsLoading = true
-	c.mu.Unlock()
-	c.deps.Invalidate()
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -61,26 +62,24 @@ func (c *updateSettingsController) Reload(ctx context.Context, service contract.
 		}
 	}
 
-	c.mu.Lock()
-	c.channelsLoading = false
-	if err == nil {
-		c.channelVersions = versions
-	}
-	c.mu.Unlock()
-	if err == nil && applyTrailers != nil {
-		applyTrailers(versions)
-	}
+	c.deps.OnUI("finish update settings reload", func() {
+		c.channelsLoading = false
+		if err == nil {
+			c.channelVersions = versions
+			if applyTrailers != nil {
+				applyTrailers(versions)
+			}
+		}
+		c.deps.Invalidate()
+	})
 	if err != nil {
 		// Preserve existing behavior: failures are logged only, no error field is stored.
 		log.Printf("load update channel versions: %v", err)
 	}
-	c.deps.Invalidate()
 }
 
 // Snapshot returns a copy of the Update state for the view layer.
 func (c *updateSettingsController) Snapshot() updateSettingsSnapshot {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return updateSettingsSnapshot{
 		ChannelVersions: append([]updateChannelVersion(nil), c.channelVersions...),
 		ChannelsLoading: c.channelsLoading,

@@ -109,6 +109,14 @@ func newDataController(deps CommonDeps) *dataSettingsController {
 	return c
 }
 
+func dataSnapshotOnUI(ui *testUIRunner, c *dataSettingsController) dataSettingsSnapshot {
+	var snapshot dataSettingsSnapshot
+	ui.Do(func() {
+		snapshot = c.Snapshot()
+	})
+	return snapshot
+}
+
 func TestDataControllerReloadSuccess(t *testing.T) {
 	invalidateCalled := 0
 	deps := CommonDeps{
@@ -177,7 +185,8 @@ func TestDataControllerReloadAggregatesErrors(t *testing.T) {
 func TestDataControllerCreateBackupSetsBusyThenClears(t *testing.T) {
 	var noteMu sync.Mutex
 	var lastNote string
-	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newDataSettingsController(deps)
 	c.BindCrossDomain(
 		func(note string) { noteMu.Lock(); lastNote = note; noteMu.Unlock() },
@@ -196,7 +205,7 @@ func TestDataControllerCreateBackupSetsBusyThenClears(t *testing.T) {
 	c.CreateBackup(context.Background(), blockingService, "session")
 
 	// Busy must be set immediately after CreateBackup returns.
-	if got := c.Snapshot().Busy; got != "backup" {
+	if got := dataSnapshotOnUI(ui, c).Busy; got != "backup" {
 		t.Fatalf("Busy = %q during backup, want \"backup\"", got)
 	}
 
@@ -211,12 +220,12 @@ func TestDataControllerCreateBackupSetsBusyThenClears(t *testing.T) {
 	// Wait for Busy to clear and the note to be set.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if c.Snapshot().Busy == "" {
+		if dataSnapshotOnUI(ui, c).Busy == "" {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if got := c.Snapshot().Busy; got != "" {
+	if got := dataSnapshotOnUI(ui, c).Busy; got != "" {
 		t.Fatalf("Busy = %q after goroutine completed, want empty", got)
 	}
 
@@ -231,7 +240,8 @@ func TestDataControllerCreateBackupSetsBusyThenClears(t *testing.T) {
 func TestDataControllerRestoreBackupTwoStepArming(t *testing.T) {
 	var noteMu sync.Mutex
 	var notes []string
-	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newDataSettingsController(deps)
 	c.BindCrossDomain(
 		func(note string) { noteMu.Lock(); notes = append(notes, note); noteMu.Unlock() },
@@ -249,7 +259,7 @@ func TestDataControllerRestoreBackupTwoStepArming(t *testing.T) {
 
 	// First activation: arms confirmation, no Post.
 	c.RestoreBackup(context.Background(), blockingService, "session", "backup-1")
-	snap := c.Snapshot()
+	snap := dataSnapshotOnUI(ui, c)
 	if snap.RestoreArmed != "backup-1" {
 		t.Fatalf("RestoreArmed = %q after first activation, want \"backup-1\"", snap.RestoreArmed)
 	}
@@ -259,7 +269,7 @@ func TestDataControllerRestoreBackupTwoStepArming(t *testing.T) {
 
 	// Second activation: clears RestoreArmed, sets Busy, fires Post.
 	c.RestoreBackup(context.Background(), blockingService, "session", "backup-1")
-	snap = c.Snapshot()
+	snap = dataSnapshotOnUI(ui, c)
 	if snap.RestoreArmed != "" {
 		t.Fatalf("RestoreArmed = %q after second activation, want empty", snap.RestoreArmed)
 	}
@@ -277,12 +287,12 @@ func TestDataControllerRestoreBackupTwoStepArming(t *testing.T) {
 	// Wait for Busy to clear.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if c.Snapshot().Busy == "" {
+		if dataSnapshotOnUI(ui, c).Busy == "" {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if got := c.Snapshot().Busy; got != "" {
+	if got := dataSnapshotOnUI(ui, c).Busy; got != "" {
 		t.Fatalf("Busy = %q after restore completed, want empty", got)
 	}
 
@@ -310,7 +320,8 @@ func TestDataControllerRestoreBackupTwoStepArming(t *testing.T) {
 func TestDataControllerClearLogsTwoStepArming(t *testing.T) {
 	var noteMu sync.Mutex
 	var notes []string
-	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newDataSettingsController(deps)
 	c.BindCrossDomain(
 		func(note string) { noteMu.Lock(); notes = append(notes, note); noteMu.Unlock() },
@@ -328,7 +339,7 @@ func TestDataControllerClearLogsTwoStepArming(t *testing.T) {
 
 	// First activation: arms confirmation, no Post.
 	c.ClearLogs(context.Background(), blockingService, "session")
-	snap := c.Snapshot()
+	snap := dataSnapshotOnUI(ui, c)
 	if !snap.ClearLogsArmed {
 		t.Fatalf("ClearLogsArmed should be true after first activation")
 	}
@@ -338,7 +349,7 @@ func TestDataControllerClearLogsTwoStepArming(t *testing.T) {
 
 	// Second activation: clears armed flag, sets Busy, fires Post.
 	c.ClearLogs(context.Background(), blockingService, "session")
-	snap = c.Snapshot()
+	snap = dataSnapshotOnUI(ui, c)
 	if snap.ClearLogsArmed {
 		t.Fatalf("ClearLogsArmed should be false after second activation")
 	}
@@ -355,12 +366,12 @@ func TestDataControllerClearLogsTwoStepArming(t *testing.T) {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if c.Snapshot().Busy == "" {
+		if dataSnapshotOnUI(ui, c).Busy == "" {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if got := c.Snapshot().Busy; got != "" {
+	if got := dataSnapshotOnUI(ui, c).Busy; got != "" {
 		t.Fatalf("Busy = %q after clear completed, want empty", got)
 	}
 

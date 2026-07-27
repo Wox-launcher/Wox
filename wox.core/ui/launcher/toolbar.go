@@ -8,6 +8,7 @@ import (
 	"time"
 
 	woxui "wox/ui/runtime"
+	"wox/util"
 )
 
 func primaryHotkey(key string) string {
@@ -54,9 +55,7 @@ func (m toolbarMessage) displayText() string {
 }
 
 func (a *App) applyToolbarMessage(message toolbarMessage) {
-	a.mu.Lock()
 	if !message.persistent() && a.toolbarMsg != nil && a.toolbarMsg.persistent() {
-		a.mu.Unlock()
 		return
 	}
 	a.toolbarRevision++
@@ -71,7 +70,6 @@ func (a *App) applyToolbarMessage(message toolbarMessage) {
 			a.normalizeActionSelectionLocked()
 		}
 	}
-	a.mu.Unlock()
 	if panelVisible {
 		_ = a.applyWindowBounds()
 	}
@@ -80,23 +78,24 @@ func (a *App) applyToolbarMessage(message toolbarMessage) {
 	}
 	_ = a.window.Invalidate()
 	if !message.persistent() && message.DisplaySeconds > 0 {
-		go func() {
+		util.Go(a.lifecycleCtx, "expire transient toolbar message", func() {
 			timer := time.NewTimer(time.Duration(message.DisplaySeconds) * time.Second)
 			defer timer.Stop()
 			<-timer.C
-			a.mu.Lock()
-			if a.toolbarRevision == revision && a.toolbarMsg != nil && a.toolbarMsg.Text == message.Text {
-				a.toolbarMsg = nil
-				a.toolbarRevision++
+			if err := a.runOnUI("expire transient toolbar message", func() {
+				if a.toolbarRevision == revision && a.toolbarMsg != nil && a.toolbarMsg.Text == message.Text {
+					a.toolbarMsg = nil
+					a.toolbarRevision++
+				}
+				_ = a.window.Invalidate()
+			}); err != nil {
+				log.Printf("dispatch toolbar message expiry: %v", err)
 			}
-			a.mu.Unlock()
-			_ = a.window.Invalidate()
-		}()
+		})
 	}
 }
 
 func (a *App) clearToolbarMessageByID(toolbarMessageID string) {
-	a.mu.Lock()
 	changed := false
 	panelClosed := false
 	if a.toolbarMsg != nil && a.toolbarMsg.ID == toolbarMessageID {
@@ -111,7 +110,6 @@ func (a *App) clearToolbarMessageByID(toolbarMessageID string) {
 			}
 		}
 	}
-	a.mu.Unlock()
 	if changed {
 		_ = a.applyWindowBounds()
 	}
@@ -122,10 +120,8 @@ func (a *App) clearToolbarMessageByID(toolbarMessageID string) {
 }
 
 func (a *App) onToolbarKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	message := a.toolbarMsg
 	panelVisible := a.actionPanel
-	a.mu.RUnlock()
 	if message == nil || panelVisible {
 		return false
 	}
@@ -170,9 +166,7 @@ func toolbarHotkeyMatches(hotkey string, event woxui.KeyEvent) bool {
 }
 
 func (a *App) activateToolbarAction(action toolbarMessageAction) {
-	a.mu.RLock()
 	message := a.toolbarMsg
-	a.mu.RUnlock()
 	if message == nil {
 		return
 	}
@@ -181,9 +175,7 @@ func (a *App) activateToolbarAction(action toolbarMessageAction) {
 
 // activateToolbarActionForMessage prevents a refreshed toolbar from executing an action from an older panel snapshot.
 func (a *App) activateToolbarActionForMessage(messageID string, action toolbarMessageAction) {
-	a.mu.RLock()
 	message := a.toolbarMsg
-	a.mu.RUnlock()
 	if message == nil || message.ID != messageID || messageID == "" || action.ID == "" {
 		return
 	}
@@ -196,10 +188,14 @@ func (a *App) activateToolbarActionForMessage(messageID string, action toolbarMe
 	}
 	a.hideActionPanel()
 	if !action.PreventHideAfterAction {
-		go func() {
-			if err := a.hideWindow(true); err != nil {
-				log.Printf("hide launcher after toolbar action: %v", err)
+		util.Go(a.lifecycleCtx, "hide launcher after toolbar action", func() {
+			if err := a.runOnUI("hide launcher after toolbar action", func() {
+				if err := a.hideWindow(true); err != nil {
+					log.Printf("hide launcher after toolbar action: %v", err)
+				}
+			}); err != nil {
+				log.Printf("dispatch launcher hide after toolbar action: %v", err)
 			}
-		}()
+		})
 	}
 }

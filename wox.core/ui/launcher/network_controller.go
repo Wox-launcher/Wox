@@ -1,9 +1,5 @@
 package launcher
 
-import (
-	"sync"
-)
-
 // networkSettingsSnapshot is the immutable Network tab state consumed by the view layer.
 type networkSettingsSnapshot struct {
 	ProxyEnabled bool
@@ -17,7 +13,6 @@ type networkSettingsSnapshot struct {
 // settingItems to read from the snapshot without touching saveSetting.
 type networkSettingsController struct {
 	deps CommonDeps
-	mu   sync.RWMutex
 
 	proxyEnabled bool
 	proxyURL     string
@@ -32,10 +27,8 @@ func newNetworkSettingsController(deps CommonDeps) *networkSettingsController {
 // is fetched, so the controller stays in sync on initial load and after every
 // saveSetting round-trip (which calls reloadSettings).
 func (c *networkSettingsController) ApplyData(enabled bool, url string) {
-	c.mu.Lock()
 	c.proxyEnabled = enabled
 	c.proxyURL = url
-	c.mu.Unlock()
 }
 
 // Set updates one network setting by key. Used by App.saveSetting dispatch in
@@ -43,8 +36,6 @@ func (c *networkSettingsController) ApplyData(enabled bool, url string) {
 // HttpProxyUrl (string). Unknown keys are ignored so callers can blindly
 // forward every network-tab key.
 func (c *networkSettingsController) Set(key, value string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	switch key {
 	case "HttpProxyEnabled":
 		c.proxyEnabled = value == "true"
@@ -56,8 +47,6 @@ func (c *networkSettingsController) Set(key, value string) error {
 
 // Snapshot returns a copy of the network state for the view layer.
 func (c *networkSettingsController) Snapshot() networkSettingsSnapshot {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return networkSettingsSnapshot{
 		ProxyEnabled: c.proxyEnabled,
 		ProxyURL:     c.proxyURL,

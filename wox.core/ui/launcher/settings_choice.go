@@ -65,9 +65,7 @@ func isBooleanSettingItem(item settingItem) bool {
 }
 
 func (a *App) openSettingChoicePicker(item settingItem) {
-	a.mu.RLock()
 	host := a.settingsHost
-	a.mu.RUnlock()
 	anchor := woxui.Rect{}
 	if host != nil {
 		anchor, _ = host.BoundsForKey(launcherview.SettingChoiceAnchorKey(item.key))
@@ -77,9 +75,7 @@ func (a *App) openSettingChoicePicker(item settingItem) {
 
 // openSettingChoicePickerAt anchors pointer-opened menus to the bounds from the exact hit-tested frame.
 func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
-	a.mu.Lock()
 	if a.settingSaving || item.disabled || len(item.choices) == 0 {
-		a.mu.Unlock()
 		return
 	}
 	a.generalSettings.EndEdit()
@@ -88,20 +84,17 @@ func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
 	if item.filterable {
 		a.settingNote = "Filter and select " + item.title
 	}
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) closeSettingChoicePicker() {
 	closed := false
-	a.mu.Lock()
 	if a.generalSettings.ChoicePicker() != nil {
 		a.generalSettings.SetChoicePicker(nil)
 		a.settingNote = ""
 		closed = true
 	}
-	a.mu.Unlock()
 	if closed {
 		a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	}
@@ -110,14 +103,11 @@ func (a *App) closeSettingChoicePicker() {
 }
 
 func (a *App) chooseSettingChoice(index int) {
-	a.mu.Lock()
 	state := a.generalSettings.ChoicePicker()
 	if state == nil || a.settingSaving {
-		a.mu.Unlock()
 		return
 	}
 	if index < 0 || index >= len(state.item.choices) {
-		a.mu.Unlock()
 		return
 	}
 	item := state.item
@@ -125,7 +115,6 @@ func (a *App) chooseSettingChoice(index int) {
 	a.generalSettings.SetChoicePicker(nil)
 	a.settingSaving = true
 	a.settingNote = "Saving " + item.title + "…"
-	a.mu.Unlock()
 	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
@@ -135,17 +124,12 @@ func (a *App) chooseSettingChoice(index int) {
 }
 
 func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rect) {
-	a.mu.Lock()
-	a.choiceTooltipRevision++
-	revision := a.choiceTooltipRevision
-	a.mu.Unlock()
+	revision := a.choiceTooltipRevision.Add(1)
 
 	util.Go(a.lifecycleCtx, "update setting choice tooltip", func() {
 		a.tooltipMu.Lock()
 		defer a.tooltipMu.Unlock()
-		a.mu.RLock()
-		current := revision == a.choiceTooltipRevision
-		a.mu.RUnlock()
+		current := revision == a.choiceTooltipRevision.Load()
 		if !current {
 			return
 		}

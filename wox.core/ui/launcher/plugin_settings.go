@@ -9,6 +9,7 @@ import (
 
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
+	"wox/util"
 )
 
 type pluginSettingsPlugin struct {
@@ -157,34 +158,37 @@ type pluginSettingsFormSnapshot struct {
 // reloadPlugins fetches either the store or installed catalog through the controller.
 // The controller owns loading/error state; the App keeps the post-load side effects that
 // touch cross-domain state (settingSearchPlugins mirror, AI model loading, form rebuild
-// via setPluginSelectionLocked) since those need a.mu coordination the controller cannot do.
+// via setPluginSelectionLocked) in one UI-thread transaction.
 func (a *App) reloadPlugins(store bool, preferredID string) error {
 	if err := a.pluginSettings.ReloadPlugins(context.Background(), a.services, a.sessionID, store, preferredID); err != nil {
 		return err
 	}
 
-	plugins := a.pluginSettings.Plugins()
-	a.mu.Lock()
-	if !store {
-		a.settingsSearch.SetPlugins(plugins)
-		a.settingsSearch.SetLoading(false)
-		a.settingsSearch.SetLoaded(true)
-		a.settingsSearch.SetError("")
+	requestModels := false
+	if err := a.runOnUI("apply loaded plugin catalog", func() {
+		plugins := a.pluginSettings.Plugins()
+		if !store {
+			a.settingsSearch.SetPlugins(plugins)
+			a.settingsSearch.SetLoading(false)
+			a.settingsSearch.SetLoaded(true)
+			a.settingsSearch.SetError("")
+		}
+		selected := a.pluginSettings.Selected()
+		if selected >= 0 && selected < len(plugins) {
+			a.setPluginSelectionLocked(selected)
+		}
+		form := a.pluginSettings.Form()
+		requestModels = form != nil && hasFormDefinitionType(form.definitions, "selectAIModel") && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
+		if requestModels {
+			a.aiSettings.SetModelsLoading(true)
+		}
+		a.invalidateSettingsWindow()
+	}); err != nil {
+		return err
 	}
-	selected := a.pluginSettings.Selected()
-	if selected >= 0 && selected < len(plugins) {
-		a.setPluginSelectionLocked(selected)
-	}
-	form := a.pluginSettings.Form()
-	requestModels := form != nil && hasFormDefinitionType(form.definitions, "selectAIModel") && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
 	if requestModels {
-		a.aiSettings.SetModelsLoading(true)
+		util.Go(a.lifecycleCtx, "load AI models for plugin settings", a.loadAIModels)
 	}
-	a.mu.Unlock()
-	if requestModels {
-		go a.loadAIModels()
-	}
-	a.invalidateSettingsWindow()
 	return nil
 }
 
@@ -195,10 +199,8 @@ func pluginSettingsPathIsStore(path string) bool {
 
 // switchPluginList swaps the shared list between installed and store data without duplicating its UI state.
 func (a *App) switchPluginList(store bool) {
-	a.mu.Lock()
 	form := a.pluginSettings.Form()
 	if a.pluginSettings.Operation() != "" || a.pluginSettings.PluginsLoading() || (a.pluginSettings.PluginsStore() == store && a.pluginSettings.PluginsLoaded()) {
-		a.mu.Unlock()
 		return
 	}
 	if form != nil {
@@ -206,7 +208,6 @@ func (a *App) switchPluginList(store bool) {
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
 			form.status = "Save the current plugin changes before switching lists."
 			form.statusError = true
-			a.mu.Unlock()
 			a.invalidateSettingsWindow()
 			return
 		}
@@ -230,24 +231,21 @@ func (a *App) switchPluginList(store bool) {
 	} else {
 		a.pluginSettings.SetDetailTab("settings")
 	}
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
-	go func() {
+	util.Go(a.lifecycleCtx, "switch plugin list", func() {
 		if err := a.reloadPlugins(store, ""); err != nil {
 			log.Printf("switch plugin list: %v", err)
 		}
-	}()
+	})
 }
 
 // runPluginOperation uses the same core install operation for fresh installs and upgrades.
 func (a *App) runPluginOperation(kind string) {
-	a.mu.Lock()
 	plugins := a.pluginSettings.Plugins()
 	selected := a.pluginSettings.Selected()
 	form := a.pluginSettings.Form()
 	if a.pluginSettings.Operation() != "" || selected < 0 || selected >= len(plugins) {
-		a.mu.Unlock()
 		return
 	}
 	plugin := plugins[selected]
@@ -256,7 +254,6 @@ func (a *App) runPluginOperation(kind string) {
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
 			form.status = "Save the current plugin changes before managing this plugin."
 			form.statusError = true
-			a.mu.Unlock()
 			a.invalidateSettingsWindow()
 			return
 		}
@@ -264,48 +261,40 @@ func (a *App) runPluginOperation(kind string) {
 	switch kind {
 	case "install":
 		if plugin.IsInstalled {
-			a.mu.Unlock()
 			return
 		}
 	case "upgrade":
 		if !plugin.IsInstalled || !plugin.IsUpgradable {
-			a.mu.Unlock()
 			return
 		}
 	case "uninstall":
 		if !plugin.IsInstalled || plugin.IsSystem {
-			a.mu.Unlock()
 			return
 		}
 	case "enable":
 		if !plugin.IsInstalled || !plugin.IsDisable {
-			a.mu.Unlock()
 			return
 		}
 	case "disable":
 		if !plugin.IsInstalled || plugin.IsDisable {
-			a.mu.Unlock()
 			return
 		}
 		if a.pluginSettings.UninstallArmed() != plugin.ID {
 			a.pluginSettings.SetUninstallArmed(plugin.ID)
 			a.settingNote = "Press Confirm uninstall to remove " + plugin.Name + "."
-			a.mu.Unlock()
 			a.invalidateSettingsWindow()
 			return
 		}
 	default:
-		a.mu.Unlock()
 		return
 	}
 	a.pluginSettings.SetUninstallArmed("")
 	a.pluginSettings.SetOperationError("")
 	a.pluginSettings.SetOperation(kind + ":" + plugin.ID)
 	store := a.pluginSettings.PluginsStore()
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 
-	go func() {
+	util.Go(a.lifecycleCtx, kind+" plugin", func() {
 		operation := contract.PluginOperation(kind)
 		if kind == "upgrade" {
 			operation = contract.PluginOperationInstall
@@ -316,20 +305,20 @@ func (a *App) runPluginOperation(kind string) {
 		if err == nil {
 			err = a.reloadPlugins(store, plugin.ID)
 		}
-		a.mu.Lock()
-		a.pluginSettings.SetOperation("")
-		if err != nil {
-			a.pluginSettings.SetOperationError(err.Error())
-		} else {
-			a.pluginSettings.SetOperationError("")
-			a.settingNote = kind + " completed for " + plugin.Name
-		}
-		a.mu.Unlock()
+		_ = a.runOnUI("apply plugin operation", func() {
+			a.pluginSettings.SetOperation("")
+			if err != nil {
+				a.pluginSettings.SetOperationError(err.Error())
+			} else {
+				a.pluginSettings.SetOperationError("")
+				a.settingNote = kind + " completed for " + plugin.Name
+			}
+			a.invalidateSettingsWindow()
+		})
 		if err != nil {
 			log.Printf("%s plugin %s: %v", kind, plugin.ID, err)
 		}
-		a.invalidateSettingsWindow()
-	}()
+	})
 }
 
 // openSelectedPluginWebsite keeps browser dispatch behind the portable Window capability.
@@ -344,9 +333,7 @@ func (a *App) openSelectedPluginWebsite() {
 		return
 	}
 	if err := a.settingsNativeWindow().OpenExternalURL(target); err != nil {
-		a.mu.Lock()
 		a.pluginSettings.SetOperationError(err.Error())
-		a.mu.Unlock()
 		a.invalidateSettingsWindow()
 	}
 }
@@ -362,17 +349,17 @@ func (a *App) openSelectedPluginDirectory() {
 	if directory == "" {
 		return
 	}
-	go func() {
+	util.Go(a.lifecycleCtx, "open selected plugin directory", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		err := a.services.OpenPath(ctx, a.sessionID, directory)
 		cancel()
 		if err != nil {
-			a.mu.Lock()
-			a.pluginSettings.SetOperationError(err.Error())
-			a.mu.Unlock()
-			a.invalidateSettingsWindow()
+			_ = a.runOnUI("apply plugin directory error", func() {
+				a.pluginSettings.SetOperationError(err.Error())
+				a.invalidateSettingsWindow()
+			})
 		}
-	}()
+	})
 }
 
 // runSelectedPluginPrimaryOperation gives keyboard users the same install or upgrade action as the detail button.
@@ -391,8 +378,8 @@ func (a *App) runSelectedPluginPrimaryOperation() {
 }
 
 // setPluginSelectionLocked replaces the editor state with one plugin's current persisted values.
-// Caller must hold a.mu; the controller's Form/Selected are swapped atomically under a.mu so
-// cross-domain readers (model_manager, form_table) observing the same form pointer stay in sync.
+// The controller's Form/Selected are swapped together on the UI thread so cross-domain readers
+// (model_manager, form_table) observing the same form pointer stay in sync.
 func (a *App) setPluginSelectionLocked(index int) {
 	plugins := a.pluginSettings.Plugins()
 	if index < 0 || index >= len(plugins) {
@@ -468,11 +455,9 @@ func pluginFormDirty(definitions []formDefinition, values, initial map[string]st
 
 // selectPlugin changes the detail editor without coupling selection to a platform list control.
 func (a *App) selectPlugin(index int) {
-	a.mu.Lock()
 	plugins := a.pluginSettings.Plugins()
 	current := a.pluginSettings.Selected()
 	if index < 0 || index >= len(plugins) || index == current {
-		a.mu.Unlock()
 		return
 	}
 	form := a.pluginSettings.Form()
@@ -481,7 +466,6 @@ func (a *App) selectPlugin(index int) {
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
 			form.status = "Save the current plugin changes before selecting another plugin."
 			form.statusError = true
-			a.mu.Unlock()
 			a.invalidateSettingsWindow()
 			return
 		}
@@ -492,10 +476,9 @@ func (a *App) selectPlugin(index int) {
 	if requestModels {
 		a.aiSettings.SetModelsLoading(true)
 	}
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	if requestModels {
-		go a.loadAIModels()
+		util.Go(a.lifecycleCtx, "load AI models for selected plugin", a.loadAIModels)
 	}
 	a.invalidateSettingsWindow()
 }
@@ -512,7 +495,6 @@ func (a *App) movePluginSelection(delta int) {
 
 // setPluginSearchFocused keeps plugin input routing aligned with retained focus changes.
 func (a *App) setPluginSearchFocused(focused bool) {
-	a.mu.Lock()
 	if a.pluginSettings.SearchEditor() == nil {
 		a.pluginSettings.SetSearchEditor(woxui.NewTextEditor(""))
 	}
@@ -526,56 +508,46 @@ func (a *App) setPluginSearchFocused(focused bool) {
 			form.active = false
 		}
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 // setPluginSearchValue applies accessibility value changes and resets the filtered viewport.
 func (a *App) setPluginSearchValue(value string) error {
-	a.mu.Lock()
 	editor := a.pluginSettings.SearchEditor()
 	if editor == nil {
 		a.pluginSettings.SetSearchEditor(woxui.NewTextEditor(value))
 	} else {
 		editor.SetText(value, false)
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 	return nil
 }
 
 func (a *App) clearPluginSearch() {
-	a.mu.Lock()
 	editor := a.pluginSettings.SearchEditor()
 	if editor == nil {
 		a.pluginSettings.SetSearchEditor(woxui.NewTextEditor(""))
 	} else {
 		editor.SetText("", false)
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 // togglePluginFilterPanel shows or hides the catalog's anchored advanced filters.
 func (a *App) togglePluginFilterPanel() {
-	a.mu.Lock()
 	a.pluginSettings.SetFilterOpen(!a.pluginSettings.FilterOpen())
 	a.pluginSettings.SetSearchFocused(false)
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) closePluginFilterPanel() {
-	a.mu.Lock()
 	a.pluginSettings.SetFilterOpen(false)
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 // togglePluginFilter updates one filter while keeping the current detail selected whenever possible.
 func (a *App) togglePluginFilter(id string) {
-	a.mu.Lock()
 	filters := a.pluginSettings.Filters()
 	switch id {
 	case "enabled":
@@ -599,7 +571,6 @@ func (a *App) togglePluginFilter(id string) {
 	case "runtime-script-python":
 		filters.runtimeScriptPythonOnly = !filters.runtimeScriptPythonOnly
 	default:
-		a.mu.Unlock()
 		return
 	}
 	a.pluginSettings.SetFilters(filters)
@@ -621,15 +592,12 @@ func (a *App) togglePluginFilter(id string) {
 	if !selectedVisible && len(filtered) > 0 {
 		a.setPluginSelectionLocked(filtered[0].index)
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 // refreshPluginCatalog preserves the search and selection while reloading the current catalog.
 func (a *App) refreshPluginCatalog() {
-	a.mu.Lock()
 	if a.pluginSettings.PluginsLoading() || a.pluginSettings.Operation() != "" {
-		a.mu.Unlock()
 		return
 	}
 	store := a.pluginSettings.PluginsStore()
@@ -640,19 +608,16 @@ func (a *App) refreshPluginCatalog() {
 		preferredID = plugins[selected].ID
 	}
 	a.pluginSettings.SetFilterOpen(false)
-	a.mu.Unlock()
-	go func() {
+	util.Go(a.lifecycleCtx, "refresh plugin catalog", func() {
 		if err := a.reloadPlugins(store, preferredID); err != nil {
 			log.Printf("refresh plugin catalog: %v", err)
 		}
-	}()
+	})
 }
 
 func (a *App) blurPluginSearch() {
-	a.mu.Lock()
 	a.pluginSettings.SetSearchFocused(false)
 	host := a.settingsHost
-	a.mu.Unlock()
 	if host != nil {
 		host.ClearFocus()
 	}
@@ -696,9 +661,7 @@ func (a *App) onPluginSearchKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
-	a.mu.RLock()
 	active := a.settingsOpen && a.settingTab == "plugins" && a.pluginSettings.SearchFocused() && a.pluginSettings.SearchEditor() != nil
-	a.mu.RUnlock()
 	if !active {
 		return false
 	}
@@ -718,10 +681,7 @@ func (a *App) onPluginSearchKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) onPluginSearchTextInput(_ woxui.TextInputEvent) bool {
-	a.mu.RLock()
-	active := a.settingsOpen && a.settingTab == "plugins" && a.pluginSettings.SearchFocused() && a.pluginSettings.SearchEditor() != nil
-	a.mu.RUnlock()
-	return active
+	return a.settingsOpen && a.settingTab == "plugins" && a.pluginSettings.SearchFocused() && a.pluginSettings.SearchEditor() != nil
 }
 
 // selectPluginDetailTab changes detail content without discarding staged plugin settings.
@@ -731,14 +691,12 @@ func (a *App) selectPluginDetailTab(tab string) {
 	default:
 		return
 	}
-	a.mu.Lock()
 	a.pluginSettings.SetDetailTab(tab)
 	if form := a.pluginSettings.Form(); form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		form.active = false
 	}
 	a.pluginSettings.SetSearchFocused(false)
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
@@ -748,9 +706,7 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 	if a.onPluginSearchKey(event) {
 		return true
 	}
-	a.mu.RLock()
 	if a.settingTab != "plugins" {
-		a.mu.RUnlock()
 		return false
 	}
 	state := a.pluginSettings.Form()
@@ -766,7 +722,6 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 			multiline = fieldType == "textbox" && state.definitions[focused].Value.MaxLines > 1
 		}
 	}
-	a.mu.RUnlock()
 	if event.Modifiers.HasPrimary() && (event.Key == woxui.Key("s") || event.Key == woxui.KeyEnter) {
 		a.submitPluginSettings()
 		return true
@@ -876,23 +831,18 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 
 // recordPluginFormHotkey reuses core's dictation-aware recorder while keeping the value staged with other plugin changes.
 func (a *App) recordPluginFormHotkey(index int) {
-	a.mu.RLock()
 	state := a.pluginSettings.Form()
 	if state == nil || index < 0 || index >= len(state.definitions) || state.definitions[index].Type != "dictationHotkey" {
-		a.mu.RUnlock()
 		return
 	}
 	target := &state.formFieldsState
-	a.mu.RUnlock()
 	a.startHotkeyRecording("plugin-settings", target, index, "", dictationHotkeyRecordingKinds)
 }
 
 // activatePluginForm transfers keyboard and IME ownership from the plugin list to its first field.
 func (a *App) activatePluginForm() {
-	a.mu.Lock()
 	state := a.pluginSettings.Form()
 	if state == nil || state.saving || len(state.definitions) == 0 {
-		a.mu.Unlock()
 		return
 	}
 	index := state.focused
@@ -905,49 +855,40 @@ func (a *App) activatePluginForm() {
 		}
 	}
 	if index < 0 || index >= len(state.definitions) {
-		a.mu.Unlock()
 		return
 	}
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	textInput := state.editor != nil
-	a.mu.Unlock()
 	a.updateSettingsTextInput(textInput)
 	a.invalidateSettingsWindow()
 }
 
 // deactivatePluginForm returns keyboard ownership to the settings page while preserving edits.
 func (a *App) deactivatePluginForm() {
-	a.mu.Lock()
 	if form := a.pluginSettings.Form(); form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		form.active = false
 	}
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) focusPluginFormField(index int) {
-	a.mu.Lock()
 	state := a.pluginSettings.Form()
 	if state == nil || state.saving || index < 0 || index >= len(state.definitions) || !formDefinitionFocusable(state.definitions[index]) {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.status = ""
 	textInput := state.editor != nil
-	a.mu.Unlock()
 	a.updateSettingsTextInput(textInput)
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) movePluginFormFocus(delta int) {
-	a.mu.Lock()
 	state := a.pluginSettings.Form()
 	if state == nil || len(state.definitions) == 0 {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
@@ -960,27 +901,22 @@ func (a *App) movePluginFormFocus(delta int) {
 		}
 	}
 	textInput := state.editor != nil
-	a.mu.Unlock()
 	a.updateSettingsTextInput(textInput)
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) changePluginFormChoice(index, delta int) {
-	a.mu.Lock()
 	state := a.pluginSettings.Form()
 	if state == nil || !state.active || state.saving {
-		a.mu.Unlock()
 		return
 	}
 	changeFormFieldsChoiceLocked(&state.formFieldsState, index, delta)
 	state.status = ""
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) editPluginFormKey(event woxui.KeyEvent) {
-	a.mu.Lock()
 	state := a.pluginSettings.Form()
 	if state != nil && state.active && state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) {
 		_, changed := handleFormEditorKey(state.editor, state.definitions[state.focused], event)
@@ -989,27 +925,22 @@ func (a *App) editPluginFormKey(event woxui.KeyEvent) {
 			state.status = ""
 		}
 	}
-	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 // onPluginSettingsTextInput commits native IME events only while a plugin textbox owns focus.
 func (a *App) onPluginSettingsTextInput(_ woxui.TextInputEvent) bool {
-	a.mu.RLock()
 	state := a.pluginSettings.Form()
 	active := a.settingsOpen && a.settingTab == "plugins" && state != nil && state.active
-	a.mu.RUnlock()
 	return active
 }
 
 func (a *App) setPluginFormText(index int, value string) {
-	a.mu.Lock()
 	form := a.pluginSettings.Form()
 	changed := form != nil && setFormFieldsTextLocked(&form.formFieldsState, index, value)
 	if changed {
 		form.status = ""
 	}
-	a.mu.Unlock()
 	if changed {
 		a.invalidateSettingsWindow()
 	}
@@ -1017,23 +948,18 @@ func (a *App) setPluginFormText(index int, value string) {
 
 // submitPluginSettings saves only changed keys, then reloads dynamic definitions from core.
 func (a *App) submitPluginSettings() {
-	a.mu.Lock()
 	state := a.pluginSettings.Form()
 	if state == nil || state.saving || a.pluginSettings.Operation() != "" {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	if validationKey := validateFormFields(state.definitions, state.values); validationKey != "" {
 		pluginID := state.pluginID
-		a.mu.Unlock()
 		message := a.translate(validationKey)
-		a.mu.Lock()
 		if form := a.pluginSettings.Form(); form != nil && form.pluginID == pluginID {
 			form.status = message
 			form.statusError = true
 		}
-		a.mu.Unlock()
 		a.invalidateSettingsWindow()
 		return
 	}
@@ -1046,14 +972,12 @@ func (a *App) submitPluginSettings() {
 	if err := rewriteDictationSaveValues(state.pluginID, state.values, state.initial, values); err != nil {
 		state.status = "Could not prepare dictation actions: " + err.Error()
 		state.statusError = true
-		a.mu.Unlock()
 		a.invalidateSettingsWindow()
 		return
 	}
 	if len(values) == 0 {
 		state.status = "No changes to save."
 		state.statusError = false
-		a.mu.Unlock()
 		a.invalidateSettingsWindow()
 		return
 	}
@@ -1065,35 +989,34 @@ func (a *App) submitPluginSettings() {
 	revision := state.revision
 	pluginID := state.pluginID
 	store := a.pluginSettings.PluginsStore()
-	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 
-	go func() {
+	util.Go(a.lifecycleCtx, "save plugin settings", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		saveErr := a.services.UpdatePluginSettings(ctx, a.sessionID, pluginID, values)
 		if saveErr == nil {
 			saveErr = a.reloadPlugins(store, pluginID)
 		}
-		a.mu.Lock()
-		form := a.pluginSettings.Form()
-		if form != nil && form.pluginID == pluginID {
-			if form.revision == revision || saveErr == nil {
-				form.saving = false
+		_ = a.runOnUI("apply plugin settings save", func() {
+			form := a.pluginSettings.Form()
+			if form != nil && form.pluginID == pluginID {
+				if form.revision == revision || saveErr == nil {
+					form.saving = false
+				}
+				if saveErr != nil {
+					form.status = saveErr.Error()
+					form.statusError = true
+				} else {
+					form.status = "Saved"
+					form.statusError = false
+				}
 			}
-			if saveErr != nil {
-				form.status = saveErr.Error()
-				form.statusError = true
-			} else {
-				form.status = "Saved"
-				form.statusError = false
-			}
-		}
-		a.mu.Unlock()
+			a.invalidateSettingsWindow()
+		})
 		if saveErr != nil {
 			log.Printf("save plugin settings: %v", saveErr)
 		}
-		a.invalidateSettingsWindow()
-	}()
+	})
 }

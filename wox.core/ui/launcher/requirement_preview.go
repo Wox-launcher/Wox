@@ -13,6 +13,7 @@ import (
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type queryRequirementPreviewRequirement struct {
@@ -105,14 +106,11 @@ func (a *App) activateRequirementPreview(result queryResult, preview queryPrevie
 	if err != nil {
 		return err
 	}
-	a.mu.RLock()
 	changed := a.requirementForm != nil && a.requirementForm.key != key
-	a.mu.RUnlock()
 	if changed {
 		a.deactivateRequirementForm()
 	}
 
-	a.mu.Lock()
 	if a.requirementForm == nil || a.requirementForm.key != key {
 		fields := newFormFieldsState(data.SettingDefinitions, data.Values, false)
 		a.requirementForm = &requirementFormState{
@@ -131,10 +129,9 @@ func (a *App) activateRequirementPreview(result queryResult, preview queryPrevie
 	if requestModels {
 		a.aiSettings.SetModelsLoading(true)
 	}
-	a.mu.Unlock()
 
 	if requestModels {
-		go a.loadAIModels()
+		util.Go(a.lifecycleCtx, "load AI models for requirement preview", a.loadAIModels)
 	}
 	return nil
 }
@@ -145,8 +142,6 @@ func (a *App) requirementFormSnapshotFor(result queryResult, preview queryPrevie
 	if err != nil {
 		return nil, err
 	}
-	a.mu.RLock()
-	defer a.mu.RUnlock()
 	if a.requirementForm == nil || a.requirementForm.key != key {
 		return nil, fmt.Errorf("requirement settings are not ready")
 	}
@@ -191,7 +186,6 @@ func (a *App) loadAIModels() {
 			_ = a.window.Invalidate()
 			return
 		}
-		a.mu.Lock()
 		if a.requirementForm != nil {
 			applyAIModelOptionsLocked(&a.requirementForm.formFieldsState, models)
 		}
@@ -212,7 +206,6 @@ func (a *App) loadAIModels() {
 			a.chatPreview.panelScroll = 0
 			a.chatPreview.panelViewport = 0
 		}
-		a.mu.Unlock()
 		_ = a.window.Invalidate()
 	})
 }
@@ -263,7 +256,6 @@ func aiModelLabel(model aiModel) string {
 
 // onRequirementFormKey keeps navigation and editing inside the inline form while it owns focus.
 func (a *App) onRequirementFormKey(event woxui.KeyEvent) bool {
-	a.mu.RLock()
 	state := a.requirementForm
 	active := state != nil && state.active
 	focused := -1
@@ -276,7 +268,6 @@ func (a *App) onRequirementFormKey(event woxui.KeyEvent) bool {
 			multiline = fieldType == "textbox" && state.definitions[focused].Value.MaxLines > 1
 		}
 	}
-	a.mu.RUnlock()
 	if !active {
 		return false
 	}
@@ -358,15 +349,12 @@ func (a *App) onRequirementFormKey(event woxui.KeyEvent) bool {
 
 // onRequirementFormTextInput forwards committed and composing input from every native backend.
 func (a *App) onRequirementFormTextInput(_ woxui.TextInputEvent) bool {
-	a.mu.RLock()
 	state := a.requirementForm
 	active := state != nil && state.active
-	a.mu.RUnlock()
 	return active
 }
 
 func (a *App) editRequirementFormKey(event woxui.KeyEvent) {
-	a.mu.Lock()
 	if state := a.requirementForm; state != nil && state.active && state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) {
 		_, changed := handleFormEditorKey(state.editor, state.definitions[state.focused], event)
 		if changed {
@@ -374,15 +362,12 @@ func (a *App) editRequirementFormKey(event woxui.KeyEvent) {
 			state.error = ""
 		}
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 }
 
 func (a *App) moveRequirementFormFocus(delta int) {
-	a.mu.Lock()
 	state := a.requirementForm
 	if state == nil || len(state.definitions) == 0 {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
@@ -395,48 +380,39 @@ func (a *App) moveRequirementFormFocus(delta int) {
 		}
 	}
 	textInput := state.editor != nil
-	a.mu.Unlock()
 	a.updateFormTextInput(textInput)
 	_ = a.window.Invalidate()
 }
 
 func (a *App) focusRequirementFormField(index int) {
-	a.mu.Lock()
 	state := a.requirementForm
 	if state == nil || index < 0 || index >= len(state.definitions) || !formDefinitionFocusable(state.definitions[index]) || state.saving {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.error = ""
 	textInput := state.editor != nil
-	a.mu.Unlock()
 	a.updateFormTextInput(textInput)
 	_ = a.window.Invalidate()
 }
 
 func (a *App) changeRequirementFormChoice(index, delta int) {
-	a.mu.Lock()
 	state := a.requirementForm
 	if state == nil || !state.active || state.saving {
-		a.mu.Unlock()
 		return
 	}
 	changeFormFieldsChoiceLocked(&state.formFieldsState, index, delta)
 	state.error = ""
-	a.mu.Unlock()
 	a.updateFormTextInput(false)
 	_ = a.window.Invalidate()
 }
 
 func (a *App) setRequirementFormText(index int, value string) {
-	a.mu.Lock()
 	changed := a.requirementForm != nil && !a.requirementForm.saving && setFormFieldsTextLocked(&a.requirementForm.formFieldsState, index, value)
 	if changed {
 		a.requirementForm.error = ""
 	}
-	a.mu.Unlock()
 	if changed {
 		_ = a.window.Invalidate()
 	}
@@ -444,13 +420,11 @@ func (a *App) setRequirementFormText(index int, value string) {
 
 // deactivateRequirementForm returns IME ownership to the launcher query without losing edits.
 func (a *App) deactivateRequirementForm() {
-	a.mu.Lock()
 	wasActive := a.requirementForm != nil && a.requirementForm.active
 	if wasActive {
 		syncFormFieldsEditorLocked(&a.requirementForm.formFieldsState)
 		a.requirementForm.active = false
 	}
-	a.mu.Unlock()
 	if !wasActive {
 		return
 	}
@@ -510,22 +484,17 @@ func editableFormKeys(definitions []formDefinition) []string {
 
 // submitRequirementForm validates and persists the compact form before issuing a fresh query ID.
 func (a *App) submitRequirementForm() {
-	a.mu.Lock()
 	state := a.requirementForm
 	if state == nil || state.saving {
-		a.mu.Unlock()
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	if validationKey := validateFormFields(state.definitions, state.values); validationKey != "" {
 		formKey := state.key
-		a.mu.Unlock()
 		validationMessage := a.translate(validationKey)
-		a.mu.Lock()
 		if a.requirementForm != nil && a.requirementForm.key == formKey {
 			a.requirementForm.error = validationMessage
 		}
-		a.mu.Unlock()
 		_ = a.window.Invalidate()
 		return
 	}
@@ -541,11 +510,10 @@ func (a *App) submitRequirementForm() {
 	revision := state.revision
 	formKey := state.key
 	pluginID := state.pluginID
-	a.mu.Unlock()
 	a.restoreQueryTextInput()
 	_ = a.window.Invalidate()
 
-	go func() {
+	util.Go(a.lifecycleCtx, "save query requirement settings", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		updates := make(map[string]string, len(keys))
@@ -553,31 +521,38 @@ func (a *App) submitRequirementForm() {
 			updates[key] = values[key]
 		}
 		saveErr := a.services.UpdatePluginSettings(ctx, a.sessionID, pluginID, updates)
-		a.mu.Lock()
-		current := a.requirementForm != nil && a.requirementForm.key == formKey && a.requirementForm.revision == revision
-		if current {
-			a.requirementForm.saving = false
-			if saveErr != nil {
-				a.requirementForm.error = saveErr.Error()
+		refreshQuery := false
+		if dispatchErr := a.runOnUI("apply query requirement settings", func() {
+			current := a.requirementForm != nil && a.requirementForm.key == formKey && a.requirementForm.revision == revision
+			if current {
+				a.requirementForm.saving = false
+				if saveErr != nil {
+					a.requirementForm.error = saveErr.Error()
+				}
 			}
-		}
-		a.mu.Unlock()
-		if saveErr != nil {
-			log.Printf("save query requirement settings: %v", saveErr)
+			if saveErr == nil {
+				query := a.query
+				query.QueryID = newID()
+				a.setQuery(query)
+				if err := a.applyWindowBounds(); err != nil {
+					log.Printf("resize launcher after requirement settings: %v", err)
+				}
+				refreshQuery = true
+				return
+			}
 			_ = a.window.Invalidate()
+		}); dispatchErr != nil {
+			log.Printf("dispatch query requirement settings: %v", dispatchErr)
 			return
 		}
-
-		a.mu.RLock()
-		query := a.query
-		a.mu.RUnlock()
-		query.QueryID = newID()
-		a.setQuery(query)
-		if err := a.sendCurrentQuery(); err != nil {
-			log.Printf("refresh query after requirement settings: %v", err)
+		if saveErr != nil {
+			log.Printf("save query requirement settings: %v", saveErr)
+			return
 		}
-		if err := a.applyWindowBounds(); err != nil {
-			log.Printf("resize launcher after requirement settings: %v", err)
+		if refreshQuery {
+			if err := a.sendCurrentQuery(); err != nil {
+				log.Printf("refresh query after requirement settings: %v", err)
+			}
 		}
-	}()
+	})
 }
