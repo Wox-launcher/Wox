@@ -170,6 +170,14 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 		return resultOrError(true, controller.EnterAutomationText(params.Text))
 	case "window.show":
 		return resultOrError(true, controller.ShowAutomationWindow())
+	case "window.open_settings":
+		var params struct {
+			Path string `json:"path"`
+		}
+		if err := decodeParams(rawParams, &params); err != nil {
+			return nil, invalidParams(err)
+		}
+		return resultOrError(true, controller.OpenAutomationSettings(params.Path))
 	case "window.hide":
 		return resultOrError(true, controller.HideAutomationWindow())
 	case "window.bounds":

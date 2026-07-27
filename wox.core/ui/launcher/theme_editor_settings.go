@@ -37,10 +37,8 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 	discardIcon := a.imageForTint(settingControlIconSource("undo"), &foreground, 18)
 	overwriteIcon := a.imageForTint(settingControlIconSource("save-edit"), &foreground, 18)
 	saveAsIcon := a.imageForTint(settingControlIconSource("save"), &primaryForeground, 18)
-	a.mu.RLock()
-	wallpaperImage := a.themeWallpaperImage
-	wallpaperBlurred := a.themeWallpaperBlurred
-	a.mu.RUnlock()
+	wallpaperImage := a.themeSettings.ThemeWallpaperImage()
+	wallpaperBlurred := a.themeSettings.ThemeWallpaperBlurred()
 	draftPalette := themeEditorDraftPalette(state.raw, state.values)
 	previewItemPadding := draftPalette.resultItemPadding
 	previewItemPadding.Left += 5
@@ -70,14 +68,14 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 // preloadThemeEditorWallpaper starts one settings-owned wallpaper load before the editor needs it.
 func (a *App) preloadThemeEditorWallpaper() {
 	a.mu.Lock()
-	if a.themeWallpaperImage != nil || a.themeWallpaperLoading {
+	if a.themeSettings.ThemeWallpaperImage() != nil || a.themeSettings.ThemeWallpaperLoading() {
 		a.mu.Unlock()
 		return
 	}
-	a.themeWallpaperLoading = true
-	a.themeWallpaperLoadID++
-	loadID := a.themeWallpaperLoadID
-	path := a.themeWallpaperPath
+	a.themeSettings.SetThemeWallpaperLoading(true)
+	a.themeSettings.SetThemeWallpaperLoadID(a.themeSettings.ThemeWallpaperLoadID() + 1)
+	loadID := a.themeSettings.ThemeWallpaperLoadID()
+	path := a.themeSettings.ThemeWallpaperPath()
 	a.mu.Unlock()
 	go a.loadThemeEditorWallpaper(loadID, path)
 }
@@ -99,16 +97,16 @@ func (a *App) loadThemeEditorWallpaper(loadID uint64, path string) {
 		wallpaperImage, wallpaperBlurred, err = decodeThemeEditorWallpaper(path)
 	}
 	a.mu.Lock()
-	if a.themeWallpaperLoadID != loadID {
+	if a.themeSettings.ThemeWallpaperLoadID() != loadID {
 		a.mu.Unlock()
 		return
 	}
-	a.themeWallpaperLoading = false
+	a.themeSettings.SetThemeWallpaperLoading(false)
 	settingsOpen := a.settingsOpen
 	if err == nil && settingsOpen {
-		a.themeWallpaperPath = path
-		a.themeWallpaperImage = wallpaperImage
-		a.themeWallpaperBlurred = wallpaperBlurred
+		a.themeSettings.SetThemeWallpaperPath(path)
+		a.themeSettings.SetThemeWallpaperImage(wallpaperImage)
+		a.themeSettings.SetThemeWallpaperBlurred(wallpaperBlurred)
 	}
 	a.mu.Unlock()
 	if err != nil {
@@ -123,11 +121,11 @@ func (a *App) loadThemeEditorWallpaper(loadID uint64, path string) {
 
 // releaseThemeEditorWallpaperLocked prevents an in-flight load from restoring settings-owned image memory after close.
 func (a *App) releaseThemeEditorWallpaperLocked() {
-	a.themeWallpaperLoadID++
-	a.themeWallpaperPath = ""
-	a.themeWallpaperImage = nil
-	a.themeWallpaperBlurred = nil
-	a.themeWallpaperLoading = false
+	a.themeSettings.SetThemeWallpaperLoadID(a.themeSettings.ThemeWallpaperLoadID() + 1)
+	a.themeSettings.SetThemeWallpaperPath("")
+	a.themeSettings.SetThemeWallpaperImage(nil)
+	a.themeSettings.SetThemeWallpaperBlurred(nil)
+	a.themeSettings.SetThemeWallpaperLoading(false)
 }
 
 // decodeThemeEditorWallpaper prepares a cover-fitted desktop image and the matching blurred center crop used by the simulated window.
@@ -219,9 +217,10 @@ func themeEditorGroupForToken(key string) int {
 
 func (a *App) selectThemeEditorGroup(index int) {
 	a.mu.Lock()
-	if a.themeEditor != nil && index >= 0 && index < len(themeEditorColorGroups) {
-		a.themeEditor.activeGroup = index
-		a.themeEditor.error = ""
+	state := a.themeSettings.ThemeEditor()
+	if state != nil && index >= 0 && index < len(themeEditorColorGroups) {
+		state.activeGroup = index
+		state.error = ""
 	}
 	a.mu.Unlock()
 	a.invalidateThemeEditorWindow()
@@ -229,7 +228,7 @@ func (a *App) selectThemeEditorGroup(index int) {
 
 func (a *App) locateThemeEditorToken(key string) {
 	a.mu.Lock()
-	state := a.themeEditor
+	state := a.themeSettings.ThemeEditor()
 	if state == nil {
 		a.mu.Unlock()
 		return
@@ -244,8 +243,9 @@ func (a *App) locateThemeEditorToken(key string) {
 	a.invalidateThemeEditorWindow()
 	time.AfterFunc(780*time.Millisecond, func() {
 		a.mu.Lock()
-		if a.themeEditor != nil && a.themeEditor.key == stateKey && a.themeEditor.flashRevision == revision {
-			a.themeEditor.flashToken = ""
+		current := a.themeSettings.ThemeEditor()
+		if current != nil && current.key == stateKey && current.flashRevision == revision {
+			current.flashToken = ""
 		}
 		a.mu.Unlock()
 		a.invalidateThemeEditorWindow()
@@ -254,7 +254,7 @@ func (a *App) locateThemeEditorToken(key string) {
 
 func (a *App) openThemeEditorTokenDialog(key string) {
 	a.mu.Lock()
-	state := a.themeEditor
+	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.saving {
 		a.mu.Unlock()
 		return
@@ -279,7 +279,7 @@ func (a *App) openThemeEditorTokenDialog(key string) {
 
 func (a *App) openThemeEditorSaveAsDialog() {
 	a.mu.Lock()
-	state := a.themeEditor
+	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.saving {
 		a.mu.Unlock()
 		return
@@ -351,7 +351,7 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 
 func (a *App) cancelThemeEditorDialog() {
 	a.mu.Lock()
-	state := a.themeEditor
+	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.dialogMode == "" {
 		a.mu.Unlock()
 		return
@@ -372,7 +372,7 @@ func (a *App) cancelThemeEditorDialog() {
 
 func (a *App) confirmThemeEditorDialog() {
 	a.mu.Lock()
-	state := a.themeEditor
+	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.dialogMode == "" {
 		a.mu.Unlock()
 		return
@@ -409,7 +409,7 @@ func (a *App) confirmThemeEditorDialog() {
 
 func (a *App) discardThemeEditorDraft() {
 	a.mu.Lock()
-	state := a.themeEditor
+	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.saving {
 		a.mu.Unlock()
 		return
@@ -427,7 +427,7 @@ func (a *App) discardThemeEditorDraft() {
 
 func (a *App) overwriteThemeEditorDraft() {
 	a.mu.RLock()
-	state := a.themeEditor
+	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.saving || state.isSystem || state.isAuto {
 		a.mu.RUnlock()
 		return

@@ -15,9 +15,10 @@ import (
 )
 
 type fakeController struct {
-	actionID    string
-	action      woxui.AccessibilityAction
-	actionValue string
+	actionID     string
+	action       woxui.AccessibilityAction
+	actionValue  string
+	settingsPath string
 }
 
 func (f *fakeController) AutomationSnapshot() woxwidget.AutomationSnapshot {
@@ -44,7 +45,11 @@ func (f *fakeController) PerformAutomationAction(automationID string, action wox
 func (*fakeController) PressAutomationKey(woxui.Key, woxui.KeyModifiers) error { return nil }
 func (*fakeController) EnterAutomationText(string) error                       { return nil }
 func (*fakeController) ShowAutomationWindow() error                            { return nil }
-func (*fakeController) HideAutomationWindow() error                            { return nil }
+func (f *fakeController) OpenAutomationSettings(path string) error {
+	f.settingsPath = path
+	return nil
+}
+func (*fakeController) HideAutomationWindow() error { return nil }
 func (*fakeController) AutomationWindowBounds() (woxui.Rect, error) {
 	return woxui.Rect{X: 10, Y: 20, Width: 760, Height: 480}, nil
 }
@@ -85,6 +90,14 @@ func TestHandlerDispatchesSemanticActionAndRejectsUnknownMethod(t *testing.T) {
 	}
 	if controller.actionID != "launcher.query" || controller.action != woxui.AccessibilityActionSetValue || controller.actionValue != "hello" {
 		t.Fatalf("unexpected action call: id=%q action=%q value=%q", controller.actionID, controller.action, controller.actionValue)
+	}
+
+	settingsResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"settings","method":"window.open_settings","params":{"path":"/appearance"}}`)
+	if settingsResponse.Code != http.StatusOK {
+		t.Fatalf("expected settings status 200, got %d", settingsResponse.Code)
+	}
+	if controller.settingsPath != "/appearance" {
+		t.Fatalf("unexpected settings path %q", controller.settingsPath)
 	}
 
 	unknownResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":2,"method":"core.business-route"}`)

@@ -113,10 +113,8 @@ func (a *App) deactivatePreviewTypes(keep string) bool {
 
 // deactivateLauncherThemeEditorPreview leaves the independent Settings editor untouched.
 func (a *App) deactivateLauncherThemeEditorPreview() {
-	a.mu.RLock()
-	isSettingsEditor := a.themeEditor != nil && strings.HasPrefix(a.themeEditor.key, "settings-theme|")
-	a.mu.RUnlock()
-	if !isSettingsEditor {
+	editor := a.themeSettings.ThemeEditor()
+	if editor == nil || !strings.HasPrefix(editor.key, "settings-theme|") {
 		a.deactivateThemeEditorPreview()
 	}
 }

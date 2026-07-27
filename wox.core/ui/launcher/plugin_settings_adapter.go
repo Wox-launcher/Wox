@@ -28,34 +28,35 @@ func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height f
 
 // pluginListProps resolves localized catalog labels, images, selection, and callbacks.
 func (a *App) pluginListProps(snapshot settingsSnapshot, width, height float32) launcherview.PluginListProps {
+	plugins := snapshot.plugins
 	iconTint := snapshot.palette.resultSubtitle
 	props := launcherview.PluginListProps{
 		Width: width, Height: height,
-		Placeholder:  fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(snapshot.plugins)),
-		Search:       snapshot.pluginSearch,
-		Focused:      snapshot.pluginSearchFocused,
+		Placeholder:  fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(plugins.Plugins)),
+		Search:       plugins.PluginSearch,
+		Focused:      plugins.PluginSearchFocused,
 		Window:       a.settingsNativeWindow(),
 		FilterIcon:   a.imageForTint(settingControlIconSource("filter"), &iconTint, 18),
 		RefreshIcon:  a.imageForTint(settingControlIconSource("refresh"), &iconTint, 18),
-		FilterActive: snapshot.pluginFilters.applied(snapshot.pluginsStore),
-		Refreshing:   snapshot.pluginsLoading,
+		FilterActive: plugins.PluginFilters.applied(plugins.PluginsStore),
+		Refreshing:   plugins.PluginsLoading,
 		EmptyLabel:   a.translate("i18n:ui_setting_plugin_empty_data"), Theme: snapshot.palette.componentTheme(),
 		OnClear:     a.clearPluginSearch,
 		OnSearchKey: a.onPluginSearchKey, OnSearchFocusChange: a.setPluginSearchFocused,
 		OnSearchChanged: func(value string) { _ = a.setPluginSearchValue(value) }, OnSetSearchValue: a.setPluginSearchValue,
 		OnFilter: a.togglePluginFilterPanel, OnRefresh: a.refreshPluginCatalog,
 	}
-	if snapshot.pluginsLoading && len(snapshot.plugins) == 0 {
+	if plugins.PluginsLoading && len(plugins.Plugins) == 0 {
 		props.Message = a.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
 		return props
 	}
-	if snapshot.pluginsError != "" && len(snapshot.plugins) == 0 {
-		props.Message = snapshot.pluginsError
+	if plugins.PluginsError != "" && len(plugins.Plugins) == 0 {
+		props.Message = plugins.PluginsError
 		props.MessageError = true
 		return props
 	}
 
-	filtered := filterPlugins(snapshot.plugins, snapshot.pluginSearch.Text, snapshot.pluginFilters, snapshot.pluginsStore)
+	filtered := filterPlugins(plugins.Plugins, plugins.PluginSearch.Text, plugins.PluginFilters, plugins.PluginsStore)
 	props.Placeholder = fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(filtered))
 	props.Items = make([]launcherview.PluginListItem, 0, len(filtered))
 	for visibleIndex, entry := range filtered {
@@ -77,7 +78,7 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height float32) 
 		}
 		props.Items = append(props.Items, launcherview.PluginListItem{
 			ID: plugin.ID, Name: plugin.Name, Status: status, Badge: badge,
-			Icon: a.imageFor(plugin.Icon), FallbackColor: resultColors[visibleIndex%len(resultColors)], Selected: index == snapshot.pluginSelected,
+			Icon: a.imageFor(plugin.Icon), FallbackColor: resultColors[visibleIndex%len(resultColors)], Selected: index == plugins.PluginSelected,
 			OnSelect: func() { a.selectPlugin(index) },
 		})
 	}
@@ -86,20 +87,21 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height float32) 
 
 // pluginDetailProps maps the selected plugin into an empty, store, or editable detail view.
 func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height float32) launcherview.PluginDetailProps {
+	plugins := snapshot.plugins
 	props := launcherview.PluginDetailProps{
 		Width: width, Height: height, EmptyLabel: a.translate("i18n:ui_setting_plugin_empty_data"), Theme: snapshot.palette.componentTheme(),
 	}
-	if snapshot.pluginSelected < 0 || snapshot.pluginSelected >= len(snapshot.plugins) {
+	if plugins.PluginSelected < 0 || plugins.PluginSelected >= len(plugins.Plugins) {
 		return props
 	}
-	plugin := snapshot.plugins[snapshot.pluginSelected]
-	if snapshot.pluginForm == nil {
+	plugin := plugins.Plugins[plugins.PluginSelected]
+	if plugins.PluginForm == nil {
 		props.Store = a.pluginStoreDetailProps(snapshot, plugin, width)
 		return props
 	}
 
-	form := snapshot.pluginForm
-	detailTab := snapshot.pluginDetailTab
+	form := plugins.PluginForm
+	detailTab := plugins.PluginDetailTab
 	if detailTab == "" {
 		detailTab = "settings"
 	}
@@ -136,8 +138,8 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height float32
 	}
 	editor.Status = form.status
 	editor.StatusError = form.statusError
-	if snapshot.pluginOperationError != "" {
-		editor.Status = snapshot.pluginOperationError
+	if plugins.PluginOperationError != "" {
+		editor.Status = plugins.PluginOperationError
 		editor.StatusError = true
 	}
 	editor.SaveLabel = a.translate("i18n:ui_save")
@@ -153,7 +155,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height float32
 func (a *App) pluginHeaderProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin) launcherview.PluginHeaderProps {
 	return launcherview.PluginHeaderProps{
 		Title: strings.TrimSpace(plugin.Name + "  " + plugin.Version), Author: plugin.Author,
-		Icon: a.imageFor(plugin.Icon), FallbackColor: resultColors[snapshot.pluginSelected%len(resultColors)],
+		Icon: a.imageFor(plugin.Icon), FallbackColor: resultColors[snapshot.plugins.PluginSelected%len(resultColors)],
 		MetadataActions: a.pluginMetadataActions(plugin), Management: a.pluginManagementActions(snapshot, plugin),
 	}
 }
@@ -304,7 +306,8 @@ func pluginPrivacyTitle(a *App, access string) string {
 }
 
 func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin, width float32) *launcherview.PluginStoreDetailProps {
-	activeTab := snapshot.pluginDetailTab
+	plugins := snapshot.plugins
+	activeTab := plugins.PluginDetailTab
 	if activeTab == "" || activeTab == "settings" {
 		activeTab = "description"
 	}
@@ -346,19 +349,20 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author, Description: plugin.Description, Runtime: runtimeLabel,
 		WebsiteLabel: websiteLabel, WebsiteChipLabel: websiteChipLabel,
 		Icon: a.imageFor(plugin.Icon), ExternalIcon: externalIcon, RuntimeIcon: runtimeIcon, WebsiteIcon: websiteIcon,
-		FallbackColor: resultColors[snapshot.pluginSelected%len(resultColors)], Management: a.pluginManagementActions(snapshot, plugin),
+		FallbackColor: resultColors[plugins.PluginSelected%len(resultColors)], Management: a.pluginManagementActions(snapshot, plugin),
 		ActiveTab: activeTab, Tabs: a.pluginStoreDetailTabs(), Metadata: a.pluginMetadataProps(plugin, activeTab),
-		Screenshot: screenshot, ScreenshotHeight: screenshotHeight, Error: snapshot.pluginOperationError, OnWebsite: onWebsite, OnScreenshot: onScreenshot, OnSelectTab: a.selectPluginDetailTab,
+		Screenshot: screenshot, ScreenshotHeight: screenshotHeight, Error: plugins.PluginOperationError, OnWebsite: onWebsite, OnScreenshot: onScreenshot, OnSelectTab: a.selectPluginDetailTab,
 	}
 }
 
 func (a *App) pluginFilterPanelProps(snapshot settingsSnapshot) *launcherview.PluginFilterPanelProps {
-	if !snapshot.pluginFilterOpen {
+	plugins := snapshot.plugins
+	if !plugins.PluginFilterOpen {
 		return nil
 	}
-	filters := snapshot.pluginFilters
+	filters := plugins.PluginFilters
 	options := make([]launcherview.PluginFilterOption, 0, 4)
-	if snapshot.pluginsStore {
+	if plugins.PluginsStore {
 		options = append(options, launcherview.PluginFilterOption{ID: "uninstalled", Label: a.translate("i18n:ui_not_installed"), Value: filters.uninstalledOnly})
 	} else {
 		options = append(options,
@@ -372,7 +376,7 @@ func (a *App) pluginFilterPanelProps(snapshot settingsSnapshot) *launcherview.Pl
 		{ID: "runtime-nodejs", Label: a.translate("i18n:ui_runtime_name_nodejs"), Value: filters.runtimeNodeJSOnly},
 		{ID: "runtime-python", Label: a.translate("i18n:ui_runtime_name_python"), Value: filters.runtimePythonOnly},
 	}
-	if snapshot.pluginsStore {
+	if plugins.PluginsStore {
 		runtimes = append(runtimes, launcherview.PluginFilterOption{ID: "runtime-script", Label: a.translate("i18n:ui_runtime_name_script"), Value: filters.runtimeScriptOnly})
 	} else {
 		runtimes = append(runtimes,
@@ -418,28 +422,29 @@ func pluginMetadataIconSource(kind string) woxImage {
 
 // pluginManagementActions shares install, upgrade, and uninstall actions between plugin details.
 func (a *App) pluginManagementActions(snapshot settingsSnapshot, plugin pluginSettingsPlugin) []launcherview.PluginAction {
-	busy := snapshot.pluginOperation != ""
+	plugins := snapshot.plugins
+	busy := plugins.PluginOperation != ""
 	if !plugin.IsInstalled {
 		return []launcherview.PluginAction{{
-			ID: "plugin-install", Label: pluginOperationButtonLabel(snapshot, "install", plugin.ID, a.translate("i18n:ui_plugin_install")), Width: 104,
+			ID: "plugin-install", Label: pluginOperationButtonLabel(plugins, "install", plugin.ID, a.translate("i18n:ui_plugin_install")), Width: 104,
 			Enabled: !busy, Primary: true, OnTap: func() { a.runPluginOperation("install") },
 		}}
 	}
 	actions := make([]launcherview.PluginAction, 0, 3)
 	if plugin.IsUpgradable {
-		actions = append(actions, launcherview.PluginAction{ID: "plugin-upgrade", Label: pluginOperationButtonLabel(snapshot, "upgrade", plugin.ID, a.translate("i18n:ui_update")), Width: 104, Enabled: !busy, Primary: true, OnTap: func() { a.runPluginOperation("upgrade") }})
+		actions = append(actions, launcherview.PluginAction{ID: "plugin-upgrade", Label: pluginOperationButtonLabel(plugins, "upgrade", plugin.ID, a.translate("i18n:ui_update")), Width: 104, Enabled: !busy, Primary: true, OnTap: func() { a.runPluginOperation("upgrade") }})
 	}
 	if plugin.IsDisable {
-		actions = append(actions, launcherview.PluginAction{ID: "plugin-enable", Label: pluginOperationButtonLabel(snapshot, "enable", plugin.ID, a.translate("i18n:ui_plugin_enable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("enable") }})
+		actions = append(actions, launcherview.PluginAction{ID: "plugin-enable", Label: pluginOperationButtonLabel(plugins, "enable", plugin.ID, a.translate("i18n:ui_plugin_enable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("enable") }})
 	} else {
-		actions = append(actions, launcherview.PluginAction{ID: "plugin-disable", Label: pluginOperationButtonLabel(snapshot, "disable", plugin.ID, a.translate("i18n:ui_plugin_disable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("disable") }})
+		actions = append(actions, launcherview.PluginAction{ID: "plugin-disable", Label: pluginOperationButtonLabel(plugins, "disable", plugin.ID, a.translate("i18n:ui_plugin_disable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("disable") }})
 	}
 	if !plugin.IsSystem {
 		label := a.translate("i18n:ui_plugin_uninstall")
-		if snapshot.pluginUninstallArmed == plugin.ID {
+		if plugins.PluginUninstallArmed == plugin.ID {
 			label = a.translate("i18n:ui_cloud_sync_confirm") + " " + label
 		}
-		actions = append(actions, launcherview.PluginAction{ID: "plugin-uninstall", Label: pluginOperationButtonLabel(snapshot, "uninstall", plugin.ID, label), Width: 124, Enabled: !busy, OnTap: func() { a.runPluginOperation("uninstall") }})
+		actions = append(actions, launcherview.PluginAction{ID: "plugin-uninstall", Label: pluginOperationButtonLabel(plugins, "uninstall", plugin.ID, label), Width: 124, Enabled: !busy, OnTap: func() { a.runPluginOperation("uninstall") }})
 	}
 	return actions
 }
@@ -456,8 +461,8 @@ func (a *App) pluginMetadataActions(plugin pluginSettingsPlugin) []launcherview.
 	return actions
 }
 
-func pluginOperationButtonLabel(snapshot settingsSnapshot, kind, pluginID, idle string) string {
-	if snapshot.pluginOperation == kind+":"+pluginID {
+func pluginOperationButtonLabel(plugins pluginSettingsSnapshot, kind, pluginID, idle string) string {
+	if plugins.PluginOperation == kind+":"+pluginID {
 		return idle + "…"
 	}
 	return idle

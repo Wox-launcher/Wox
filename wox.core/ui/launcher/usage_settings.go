@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 type usageStatsData struct {
@@ -49,47 +48,12 @@ func cloneUsageStats(source usageStatsData) usageStatsData {
 }
 
 func (a *App) currentUsagePeriod() string {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.usagePeriod == "" {
-		return "30d"
-	}
-	return a.usagePeriod
+	return a.usageSettings.CurrentPeriod()
 }
 
 // reloadUsageStats refreshes one report period and ignores responses superseded by a later selection.
 func (a *App) reloadUsageStats(period string) {
-	period = normalizeUsagePeriod(period)
-	a.mu.Lock()
-	a.usageRevision++
-	revision := a.usageRevision
-	a.usagePeriod = period
-	a.usageLoading = true
-	a.usageError = ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-	var data usageStatsData
-	err := a.client.Post(ctx, "/usage/stats", map[string]string{"Period": period}, &data)
-
-	a.mu.Lock()
-	if revision != a.usageRevision {
-		a.mu.Unlock()
-		return
-	}
-	a.usageLoading = false
-	if err != nil {
-		a.usageError = err.Error()
-	} else {
-		data.Period = normalizeUsagePeriod(data.Period)
-		a.usageStats = data
-		a.usagePeriod = data.Period
-		a.usageLoaded = true
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	a.usageSettings.Reload(context.Background(), a.client, period)
 }
 
 func normalizeUsagePeriod(period string) string {
@@ -189,8 +153,5 @@ func cropUsageShareImage(sourcePath, targetPath string, logicalWidth, logicalHei
 }
 
 func (a *App) setUsageShareError(message string) {
-	a.mu.Lock()
-	a.usageError = message
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	a.usageSettings.SetShareError(message)
 }

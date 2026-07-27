@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
-	"time"
 
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -21,20 +19,20 @@ type ignoredHotkeyApp struct {
 
 // buildHotkeySettingsPage prepares shared form fields for the pure settings page.
 func (a *App) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
-	if snapshot.hotkeyForm == nil {
+	if snapshot.hotkey.Form == nil {
 		return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{Width: width, Height: height, Theme: snapshot.palette.componentTheme()})
 	}
 	innerWidth := max(float32(0), width-72)
 	callbacks := formFieldCallbacks{
 		idPrefix: "hotkey-settings", focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
 	}
-	rows := make([]woxwidget.Widget, 0, len(snapshot.hotkeyForm.definitions))
-	for index, definition := range snapshot.hotkeyForm.definitions {
-		rows = append(rows, a.buildFormField(*snapshot.hotkeyForm, callbacks, snapshot.palette, index, definition, innerWidth, formDefinitionHeight(definition, snapshot.hotkeyForm.values)))
+	rows := make([]woxwidget.Widget, 0, len(snapshot.hotkey.Form.definitions))
+	for index, definition := range snapshot.hotkey.Form.definitions {
+		rows = append(rows, a.buildFormField(*snapshot.hotkey.Form, callbacks, snapshot.palette, index, definition, innerWidth, formDefinitionHeight(definition, snapshot.hotkey.Form.values)))
 	}
 	return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: true,
-		Rows: rows, RowsHeight: formDefinitionsContentHeight(snapshot.hotkeyForm.definitions, snapshot.hotkeyForm.values), KeepVisible: formFieldsKeepVisible(*snapshot.hotkeyForm), Note: snapshot.note,
+		Rows: rows, RowsHeight: formDefinitionsContentHeight(snapshot.hotkey.Form.definitions, snapshot.hotkey.Form.values), KeepVisible: formFieldsKeepVisible(*snapshot.hotkey.Form), Note: snapshot.note,
 	})
 }
 
@@ -135,43 +133,9 @@ func settingsIgnoredHotkeyAppsCoreJSON(value string) (string, error) {
 }
 
 // loadHotkeyAppCandidates asks core for platform-specific identities and keeps the picker itself platform-neutral.
+// Delegates to the hotkey controller which owns the candidate cache and load status.
 func (a *App) loadHotkeyAppCandidates() {
-	a.mu.Lock()
-	if a.hotkeyAppsLoaded || a.hotkeyAppsLoading {
-		a.mu.Unlock()
-		return
-	}
-	a.hotkeyAppsLoading = true
-	a.hotkeyAppsError = ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var apps []ignoredHotkeyApp
-	err := a.client.Post(ctx, "/setting/hotkey/apps", map[string]any{}, &apps)
-	cancel()
-
-	a.mu.Lock()
-	a.hotkeyAppsLoading = false
-	if err != nil {
-		a.hotkeyAppsError = err.Error()
-	} else {
-		seen := make(map[string]bool, len(apps))
-		filtered := make([]ignoredHotkeyApp, 0, len(apps))
-		for _, app := range apps {
-			identity := strings.ToLower(strings.TrimSpace(app.Identity))
-			if identity == "" || seen[identity] {
-				continue
-			}
-			seen[identity] = true
-			filtered = append(filtered, app)
-		}
-		a.hotkeyAppCandidates = filtered
-		a.hotkeyAppsLoaded = true
-		a.hotkeyAppsError = ""
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	a.hotkeySettings.ReloadAppCandidates(context.Background(), a.client)
 }
 
 func settingsRowsJSON(value any) string {
@@ -198,7 +162,7 @@ func queryHotkeyPositionOptions() []formOption {
 // onHotkeySettingsKey moves between shared fields without stealing keys from an active recorder.
 func (a *App) onHotkeySettingsKey(event woxui.KeyEvent) bool {
 	a.mu.RLock()
-	active := a.settingsOpen && a.settingTab == "general" && a.settingsHotkeyFocus && a.hotkeySettingsForm != nil && a.tableEditor == nil
+	active := a.settingsOpen && a.settingTab == "general" && a.hotkeySettings.Focused() && a.hotkeySettings.Form() != nil && a.tableEditor == nil
 	a.mu.RUnlock()
 	if !active {
 		return false
@@ -218,7 +182,7 @@ func (a *App) onHotkeySettingsKey(event woxui.KeyEvent) bool {
 
 func (a *App) moveHotkeySettingsFocus(delta int) {
 	a.mu.Lock()
-	fields := a.hotkeySettingsForm
+	fields := a.hotkeySettings.Form()
 	if fields == nil || len(fields.definitions) == 0 {
 		a.mu.Unlock()
 		return
@@ -237,12 +201,12 @@ func (a *App) moveHotkeySettingsFocus(delta int) {
 }
 
 func (a *App) focusHotkeySettingsField(index int) {
-	a.stopHotkeyRecordingForDifferentField(a.hotkeySettingsForm, index)
+	a.stopHotkeyRecordingForDifferentField(a.hotkeySettings.Form(), index)
 	a.mu.Lock()
-	if fields := a.hotkeySettingsForm; fields != nil && index >= 0 && index < len(fields.definitions) && formDefinitionFocusable(fields.definitions[index]) {
+	if fields := a.hotkeySettings.Form(); fields != nil && index >= 0 && index < len(fields.definitions) && formDefinitionFocusable(fields.definitions[index]) {
 		setFormFieldsFocusLocked(fields, index)
 		a.settingRow = index
-		a.settingsHotkeyFocus = true
+		a.hotkeySettings.SetFocused(true)
 	}
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
@@ -250,7 +214,7 @@ func (a *App) focusHotkeySettingsField(index int) {
 
 func (a *App) activateHotkeySettingsField() {
 	a.mu.RLock()
-	fields := a.hotkeySettingsForm
+	fields := a.hotkeySettings.Form()
 	if fields == nil || fields.focused < 0 || fields.focused >= len(fields.definitions) {
 		a.mu.RUnlock()
 		return
@@ -267,7 +231,7 @@ func (a *App) activateHotkeySettingsField() {
 
 func (a *App) recordHotkeySettingsField(index int) {
 	a.mu.RLock()
-	fields := a.hotkeySettingsForm
+	fields := a.hotkeySettings.Form()
 	if fields == nil || index < 0 || index >= len(fields.definitions) {
 		a.mu.RUnlock()
 		return
@@ -279,9 +243,9 @@ func (a *App) recordHotkeySettingsField(index int) {
 
 func (a *App) openHotkeySettingsTable(index int) {
 	a.mu.Lock()
-	if a.settingsOpen && a.settingTab == "general" && a.hotkeySettingsForm != nil {
+	if form := a.hotkeySettings.Form(); a.settingsOpen && a.settingTab == "general" && form != nil {
 		a.settingRow = index
-		a.openFormTableLocked(a.hotkeySettingsForm, index)
+		a.openFormTableLocked(form, index)
 	}
 	a.mu.Unlock()
 	a.finishOpeningFormTable()
@@ -306,12 +270,12 @@ func (a *App) applyHotkeySettingsRawLocked(key, value string) {
 	raw := json.RawMessage(append([]byte(nil), value...))
 	switch key {
 	case "QueryHotkeys":
-		_ = json.Unmarshal(raw, &a.settings.QueryHotkeys)
+		a.generalSettings.Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.QueryHotkeys) })
 	case "IgnoredHotkeyApps":
-		a.settings.IgnoredHotkeyApps = raw
+		a.generalSettings.Update(func(d *settingsData) { d.IgnoredHotkeyApps = raw })
 	case "QueryShortcuts":
-		_ = json.Unmarshal(raw, &a.settings.QueryShortcuts)
+		a.generalSettings.Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.QueryShortcuts) })
 	case "TrayQueries":
-		a.settings.TrayQueries = raw
+		a.generalSettings.Update(func(d *settingsData) { d.TrayQueries = raw })
 	}
 }

@@ -111,6 +111,21 @@ func (a *App) ShowAutomationWindow() error {
 	return actionErr
 }
 
+// OpenAutomationSettings opens a settings route through the normal independent-window lifecycle.
+func (a *App) OpenAutomationSettings(path string) error {
+	if a.window == nil {
+		return errors.New("launcher window is not initialized")
+	}
+	var actionErr error
+	err := woxui.Call(func() {
+		actionErr = a.openSettings(settingWindowContext{Path: path, Source: "automation"})
+	})
+	if err != nil {
+		return err
+	}
+	return actionErr
+}
+
 // HideAutomationWindow closes the launcher through its normal product path.
 func (a *App) HideAutomationWindow() error {
 	_, window, settings := a.automationSurface()

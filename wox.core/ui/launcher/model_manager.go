@@ -128,7 +128,7 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 		OnEngine: func() { a.runModelManagerAction("engine", -1) },
 		OnRefresh: func() {
 			a.mu.RLock()
-			state := a.modelManager
+			state := a.aiSettings.ModelManager()
 			a.mu.RUnlock()
 			if state != nil {
 				go a.refreshModelManager(state)
@@ -214,7 +214,7 @@ func modelManagerNeedsPoll(state *modelManagerState) bool {
 func (a *App) openPluginModelManager(index int) {
 	a.stopHotkeyRecording()
 	a.mu.Lock()
-	state := a.pluginForm
+	state := a.pluginSettings.Form()
 	if state == nil || state.saving || index < 0 || index >= len(state.definitions) {
 		a.mu.Unlock()
 		return
@@ -237,7 +237,7 @@ func (a *App) openPluginModelManager(index int) {
 		kind: definition.Type, target: &state.formFieldsState, fieldIndex: index, options: append([]formOption(nil), definition.Value.Options...),
 		selected: selected, selectedRow: selectedRow,
 	}
-	a.modelManager = manager
+	a.aiSettings.SetModelManager(manager)
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
@@ -245,7 +245,8 @@ func (a *App) openPluginModelManager(index int) {
 }
 
 func (a *App) modelManagerCurrentLocked(state *modelManagerState) bool {
-	return state != nil && a.modelManager == state && a.settingTab == "plugins" && a.pluginForm != nil && state.target == &a.pluginForm.formFieldsState
+	pluginForm := a.pluginSettings.Form()
+	return state != nil && a.aiSettings.ModelManager() == state && a.settingTab == "plugins" && pluginForm != nil && state.target == &pluginForm.formFieldsState
 }
 
 // refreshModelManager merges runtime-only progress into translated definition metadata.
@@ -332,23 +333,24 @@ func mergeModelStatuses(options []formOption, statuses []formOption) {
 
 func (a *App) closeModelManager() {
 	a.mu.Lock()
-	state := a.modelManager
+	state := a.aiSettings.ModelManager()
 	if state == nil {
 		a.mu.Unlock()
 		return
 	}
-	if a.pluginForm != nil && state.target == &a.pluginForm.formFieldsState {
-		a.pluginForm.active = true
-		setFormFieldsFocusLocked(&a.pluginForm.formFieldsState, state.fieldIndex)
+	pluginForm := a.pluginSettings.Form()
+	if pluginForm != nil && state.target == &pluginForm.formFieldsState {
+		pluginForm.active = true
+		setFormFieldsFocusLocked(&pluginForm.formFieldsState, state.fieldIndex)
 	}
-	a.modelManager = nil
+	a.aiSettings.SetModelManager(nil)
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
 }
 
 func (a *App) selectModelManagerRow(index int) {
 	a.mu.Lock()
-	state := a.modelManager
+	state := a.aiSettings.ModelManager()
 	if state == nil || index < 0 || index >= len(state.options) {
 		a.mu.Unlock()
 		return
@@ -360,7 +362,7 @@ func (a *App) selectModelManagerRow(index int) {
 
 func (a *App) chooseManagedModel(index int) {
 	a.mu.Lock()
-	state := a.modelManager
+	state := a.aiSettings.ModelManager()
 	if state == nil || state.busy != "" || index < 0 || index >= len(state.options) || !modelOptionUsable(state.kind, state.options[index]) {
 		a.mu.Unlock()
 		return
@@ -376,7 +378,7 @@ func (a *App) chooseManagedModel(index int) {
 // runModelManagerAction starts core-owned downloads or deletion and leaves progress polling in the shared overlay.
 func (a *App) runModelManagerAction(action string, index int) {
 	a.mu.Lock()
-	state := a.modelManager
+	state := a.aiSettings.ModelManager()
 	if state == nil || state.busy != "" {
 		a.mu.Unlock()
 		return
@@ -436,7 +438,7 @@ func (a *App) runModelManagerAction(action string, index int) {
 
 func (a *App) onModelManagerKey(event woxui.KeyEvent) bool {
 	a.mu.RLock()
-	state := a.modelManager
+	state := a.aiSettings.ModelManager()
 	selected := -1
 	count := 0
 	if state != nil {
@@ -460,7 +462,7 @@ func (a *App) onModelManagerKey(event woxui.KeyEvent) bool {
 		}
 	case woxui.KeyEnter, woxui.KeySpace:
 		a.mu.RLock()
-		if a.modelManager == state && selected >= 0 && selected < len(state.options) {
+		if a.aiSettings.ModelManager() == state && selected >= 0 && selected < len(state.options) {
 			option := state.options[selected]
 			usable := modelOptionUsable(state.kind, option)
 			status := option.Status
@@ -475,7 +477,7 @@ func (a *App) onModelManagerKey(event woxui.KeyEvent) bool {
 		}
 	case woxui.KeyDelete:
 		a.mu.RLock()
-		canDelete := a.modelManager == state && state.kind == "dictationModel" && selected >= 0 && selected < len(state.options) && state.options[selected].Status == "downloaded"
+		canDelete := a.aiSettings.ModelManager() == state && state.kind == "dictationModel" && selected >= 0 && selected < len(state.options) && state.options[selected].Status == "downloaded"
 		a.mu.RUnlock()
 		if canDelete {
 			a.runModelManagerAction("delete", selected)

@@ -49,17 +49,17 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	var overlay woxwidget.Widget
 	if snapshot.tableEditor != nil {
 		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height)
-	} else if snapshot.modelManager != nil {
-		overlay = a.buildModelManagerOverlay(snapshot.modelManager, snapshot.palette, width, height)
-	} else if snapshot.choicePicker != nil {
-		overlay = a.buildSettingChoicePickerOverlay(snapshot.choicePicker, snapshot.palette, width, height)
-	} else if snapshot.cloudForm != nil {
-		overlay = a.buildCloudFormOverlay(snapshot.cloudForm, snapshot.palette, width, height)
-	} else if snapshot.privacySample != "" {
+	} else if snapshot.ai.ModelManager != nil {
+		overlay = a.buildModelManagerOverlay(snapshot.ai.ModelManager, snapshot.palette, width, height)
+	} else if snapshot.general.ChoicePicker != nil {
+		overlay = a.buildSettingChoicePickerOverlay(snapshot.general.ChoicePicker, snapshot.palette, width, height)
+	} else if snapshot.cloud.Form != nil {
+		overlay = a.buildCloudFormOverlay(snapshot.cloud.Form, snapshot.palette, width, height)
+	} else if snapshot.privacy.Sample != "" {
 		overlay = a.buildPrivacySampleOverlay(snapshot, width, height)
 	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
-		Width: width, Height: height, Theme: snapshot.palette.componentTheme(),
+		Width: width, Height: height, PageID: snapshot.tab, Theme: snapshot.palette.componentTheme(),
 		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight), Page: page, Overlay: overlay,
 	})
 }
@@ -101,16 +101,14 @@ func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height fl
 	innerWidth := max(float32(0), width-40)
 	bodyHeight := max(float32(0), height-40)
 	var body woxwidget.Widget
-	if snapshot.themesMode != "editor" {
+	if snapshot.theme.ThemesMode != "editor" {
 		body = a.buildThemeCatalog(snapshot, innerWidth, bodyHeight)
 	} else {
-		a.mu.RLock()
-		theme := snapshotThemeEditorPreviewLocked(a.themeEditor)
-		a.mu.RUnlock()
+		theme := snapshot.theme.ThemeEditor
 		if theme == nil {
 			message := "Loading active theme…"
-			if snapshot.themesError != "" {
-				message = snapshot.themesError
+			if snapshot.theme.ThemesError != "" {
+				message = snapshot.theme.ThemesError
 			}
 			body = launcherview.SettingsMessage(message, innerWidth, bodyHeight, snapshot.palette.componentTheme())
 		} else {
@@ -124,7 +122,7 @@ func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height fl
 
 func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	specs := settingNavSpecs(snapshot.isDev)
-	activeID := activeSettingNavID(snapshot.tab, snapshot.pluginsStore, snapshot.themesMode)
+	activeID := activeSettingNavID(snapshot.tab, snapshot.plugins.PluginsStore, snapshot.theme.ThemesMode)
 	items := make([]launcherview.SettingsNavItem, 0, len(specs))
 	var keepVisible *woxwidget.ScrollRange
 	for index, spec := range specs {
@@ -151,7 +149,7 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height float32
 	return launcherview.SettingsRail(launcherview.SettingsRailProps{
 		Width: width, Height: height, Items: items, KeepVisible: keepVisible,
 		SearchBox: a.buildSettingsSearchBox(snapshot, innerWidth), SearchPanel: a.buildSettingsSearchResultPanel(snapshot, innerWidth, viewportHeight),
-		ShowSearch: snapshot.searchPanel && strings.TrimSpace(snapshot.searchQuery.Text) != "", Theme: snapshot.palette.componentTheme(),
+		ShowSearch: snapshot.search.Panel && strings.TrimSpace(snapshot.search.Query.Text) != "", Theme: snapshot.palette.componentTheme(),
 	})
 }
 
@@ -164,7 +162,7 @@ func (a *App) settingNavLabel(spec settingNavSpec) string {
 }
 
 func (a *App) activeSettingsNavLabel(snapshot settingsSnapshot) string {
-	activeID := activeSettingNavID(snapshot.tab, snapshot.pluginsStore, snapshot.themesMode)
+	activeID := activeSettingNavID(snapshot.tab, snapshot.plugins.PluginsStore, snapshot.theme.ThemesMode)
 	for _, spec := range settingNavSpecs(snapshot.isDev) {
 		if spec.id == activeID {
 			return a.settingNavLabel(spec)
@@ -178,7 +176,7 @@ func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width float32) w
 	placeholder := a.translate("i18n:ui_setting_search_placeholder")
 	iconTint := snapshot.palette.resultSubtitle
 	return launcherview.SettingsSearchBox(launcherview.SettingsSearchBoxProps{
-		Width: width, Placeholder: placeholder, State: snapshot.searchQuery, Focused: snapshot.searchFocused,
+		Width: width, Placeholder: placeholder, State: snapshot.search.Query, Focused: snapshot.search.Focused,
 		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, 18), Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
 		OnFocus: func() { a.focusSettingsSearch(false) }, OnClear: a.clearSettingsSearch,
 		OnKey: a.onSettingsSearchKey, OnFocusChange: a.setSettingsSearchFocused, OnChanged: func(value string) { _ = a.setSettingsSearchValue(value) }, OnSetValue: a.setSettingsSearchValue,
@@ -199,14 +197,14 @@ func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, a
 	}
 	emptyMessage := a.translate("i18n:ui_setting_search_empty")
 	if len(results) == 0 {
-		if snapshot.searchLoading {
+		if snapshot.search.Loading {
 			emptyMessage = a.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
-		} else if snapshot.searchError != "" {
-			emptyMessage = snapshot.searchError
+		} else if snapshot.search.Error != "" {
+			emptyMessage = snapshot.search.Error
 		}
 	}
 	return launcherview.SettingsSearchResults(launcherview.SettingsSearchResultsProps{
-		Width: width, AvailableHeight: availableHeight, Results: items, Selected: snapshot.searchSelected,
+		Width: width, AvailableHeight: availableHeight, Results: items, Selected: snapshot.search.Selected,
 		EmptyMessage: emptyMessage, Theme: snapshot.palette.componentTheme(),
 	})
 }
@@ -251,11 +249,11 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		children = append(children, a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{}))
 		contentHeight += 62
 	}
-	if snapshot.tab == "general" && snapshot.hotkeyForm != nil {
+	if snapshot.tab == "general" && snapshot.hotkey.Form != nil {
 		children = append(children, a.buildSettingsSectionHeader(a.translate("i18n:ui_general_section_hotkeys"), contentWidth, snapshot.palette))
 		contentHeight += 43
-		hotkeyForm := *snapshot.hotkeyForm
-		hotkeyForm.active = snapshot.hotkeyFocused
+		hotkeyForm := *snapshot.hotkey.Form
+		hotkeyForm.active = snapshot.hotkey.Focused
 		callbacks := formFieldCallbacks{
 			idPrefix: "hotkey-settings", focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
 		}
@@ -394,11 +392,11 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 	kind := "choice"
 	value := settingValueLabel(item)
 	state := woxui.TextEditingState{Text: item.value}
-	focused := snapshot.editKey == item.key
+	focused := snapshot.general.EditKey == item.key
 	if item.text {
 		kind = "text"
 		if focused {
-			state = snapshot.editing
+			state = snapshot.general.Editing
 		}
 		value = item.value
 	} else if isBooleanSettingItem(item) {

@@ -227,7 +227,7 @@ func (a *App) onSharedSettingsChanged(message woxui.WindowMessage) {
 		}
 		a.mu.RLock()
 		window := a.window
-		fontFamily := a.settings.AppFontFamily
+		fontFamily := a.generalSettings.Data().AppFontFamily
 		a.mu.RUnlock()
 		if window != nil {
 			if err := window.SetFontFamily(fontFamily); err != nil {

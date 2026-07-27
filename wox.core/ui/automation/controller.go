@@ -21,6 +21,7 @@ type Controller interface {
 	PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) error
 	EnterAutomationText(text string) error
 	ShowAutomationWindow() error
+	OpenAutomationSettings(path string) error
 	HideAutomationWindow() error
 	AutomationWindowBounds() (woxui.Rect, error)
 	SetAutomationWindowBounds(bounds woxui.Rect) error

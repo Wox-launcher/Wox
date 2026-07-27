@@ -36,13 +36,13 @@ func (a *App) openFormTableAppPicker(index int) {
 		a.mu.Unlock()
 		return
 	}
-	if !a.hotkeyAppsLoaded {
-		if a.hotkeyAppsError != "" {
-			state.status = "Could not load applications: " + a.hotkeyAppsError
+	if !a.hotkeySettings.AppsLoaded() {
+		if err := a.hotkeySettings.AppsError(); err != "" {
+			state.status = "Could not load applications: " + err
 		} else {
 			state.status = "Loading applications…"
 		}
-		startLoading = !a.hotkeyAppsLoading
+		startLoading = !a.hotkeySettings.AppsLoading()
 		a.mu.Unlock()
 		if startLoading {
 			go a.loadHotkeyAppCandidates()
@@ -51,7 +51,7 @@ func (a *App) openFormTableAppPicker(index int) {
 		return
 	}
 
-	candidates := append([]ignoredHotkeyApp(nil), a.hotkeyAppCandidates...)
+	candidates := a.hotkeySettings.AppCandidates()
 	var current ignoredHotkeyApp
 	_ = json.Unmarshal([]byte(state.rowForm.values[state.rowForm.definitions[index].Value.Key]), &current)
 	selected := 0

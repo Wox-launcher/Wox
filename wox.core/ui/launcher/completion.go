@@ -39,7 +39,7 @@ func (a *App) applyQueryCompletionHint(raw json.RawMessage) {
 }
 
 func (a *App) completionHintValidLocked(hint *queryCompletionHint) bool {
-	if hint == nil || !a.settings.EnableQueryCompletionHint || a.query.QueryType != "input" || hint.InputPrefix != a.editor.State().Text || hint.Suffix == "" {
+	if hint == nil || !a.generalSettings.Data().EnableQueryCompletionHint || a.query.QueryType != "input" || hint.InputPrefix != a.editor.State().Text || hint.Suffix == "" {
 		return false
 	}
 	state := a.editor.State()

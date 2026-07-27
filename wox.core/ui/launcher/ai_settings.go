@@ -25,23 +25,24 @@ type aiProviderInfo struct {
 
 // buildAISettingsPage converts core-backed table values into the pure settings view.
 func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+	aiForm := snapshot.ai.Form
 	props := launcherview.AISettingsProps{
-		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: snapshot.aiForm != nil,
+		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: aiForm != nil,
 		Title: a.translate("i18n:ui_ai"), Description: a.translate("i18n:ui_ai_description"),
 		AddLabel: a.translate("i18n:ui_add"), NoDataLabel: a.translate("i18n:ui_no_data"),
 	}
-	if snapshot.aiForm == nil {
+	if aiForm == nil {
 		return launcherview.AISettingsView(props)
 	}
 	props.Selected = -1
-	if snapshot.aiForm.active {
-		props.Selected = snapshot.aiForm.focused
+	if aiForm.active {
+		props.Selected = aiForm.focused
 	}
-	props.Tables = make([]launcherview.AISettingsTable, 0, len(snapshot.aiForm.definitions))
-	for index, definition := range snapshot.aiForm.definitions {
+	props.Tables = make([]launcherview.AISettingsTable, 0, len(aiForm.definitions))
+	for index, definition := range aiForm.definitions {
 		index := index
 		definition := definition
-		rows, err := decodeFormTableRows(snapshot.aiForm.values[definition.Value.Key])
+		rows, err := decodeFormTableRows(aiForm.values[definition.Value.Key])
 		if err != nil {
 			rows = nil
 		}
@@ -73,10 +74,10 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height float
 		})
 	}
 	props.Note = snapshot.note
-	if snapshot.aiProvidersLoading {
+	if snapshot.ai.ProvidersLoading {
 		props.Note = "Loading the provider catalog…"
-	} else if snapshot.aiProvidersError != "" {
-		props.Note = snapshot.aiProvidersError
+	} else if snapshot.ai.ProvidersError != "" {
+		props.Note = snapshot.ai.ProvidersError
 	}
 	return launcherview.AISettingsView(props)
 }
@@ -200,41 +201,22 @@ func settingsJSONArray(value json.RawMessage) string {
 }
 
 // loadAIProviderCatalog hydrates provider choices without coupling the widget package to core types.
+// Delegates the fetch+cache to the AI settings controller and applies the App-side side effects
+// (refreshing the AI settings form dropdown and any open AIProviders row editor) through the
+// onLoaded callback so the controller stays free of *App references.
 func (a *App) loadAIProviderCatalog() {
-	a.mu.Lock()
-	if a.aiProvidersLoading || a.aiProvidersLoaded {
-		a.mu.Unlock()
-		return
-	}
-	a.aiProvidersLoading = true
-	a.aiProvidersError = ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	var providers []aiProviderInfo
-	err := a.client.Post(ctx, "/ai/providers", map[string]any{}, &providers)
-
-	a.mu.Lock()
-	a.aiProvidersLoading = false
-	a.aiProvidersLoaded = err == nil
-	if err != nil {
-		a.aiProvidersError = err.Error()
-	} else {
-		a.aiProviderCatalog = providers
-		a.aiProvidersError = ""
-		if a.aiSettingsForm != nil {
-			applyAIProviderCatalogLocked(a.aiSettingsForm, providers)
+	a.aiSettings.ReloadProviders(context.Background(), a.client, func(providers []aiProviderInfo) {
+		a.mu.Lock()
+		if form := a.aiSettings.Form(); form != nil {
+			applyAIProviderCatalogLocked(form, providers)
 		}
-		if state := a.tableEditor; state != nil && state.target == a.aiSettingsForm && state.definition.Value.Key == "AIProviders" {
+		if state := a.tableEditor; state != nil && state.target == a.aiSettings.Form() && state.definition.Value.Key == "AIProviders" {
 			state.definition = state.target.definitions[state.fieldIndex]
 			applyAIProviderOptionsToRowFormLocked(state.rowForm, state.definition)
 			applyAIProviderDefaultHostLocked(state, false, providers)
 		}
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+		a.mu.Unlock()
+	})
 }
 
 // applyAIProviderCatalogLocked merges live provider names with configured names that core may no longer advertise.
@@ -314,7 +296,7 @@ func applyAIProviderDefaultHostLocked(state *formTableEditorState, overwrite boo
 // onAISettingsKey keeps table selection portable while the modal editor owns row-level input.
 func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
 	a.mu.RLock()
-	active := a.settingsOpen && a.settingTab == "ai" && a.aiSettingsForm != nil && a.tableEditor == nil
+	active := a.settingsOpen && a.settingTab == "ai" && a.aiSettings.Form() != nil && a.tableEditor == nil
 	a.mu.RUnlock()
 	if !active {
 		return false
@@ -335,9 +317,9 @@ func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
 // selectAISettingsTable moves keyboard focus between the three table cards.
 func (a *App) selectAISettingsTable(index int) {
 	a.mu.Lock()
-	if a.aiSettingsForm != nil && index >= 0 && index < len(a.aiSettingsForm.definitions) {
+	if form := a.aiSettings.Form(); form != nil && index >= 0 && index < len(form.definitions) {
 		a.settingRow = index
-		setFormFieldsFocusLocked(a.aiSettingsForm, index)
+		setFormFieldsFocusLocked(form, index)
 	}
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
@@ -346,9 +328,9 @@ func (a *App) selectAISettingsTable(index int) {
 // moveAISettingsTable wraps table-card selection without entering the modal editor.
 func (a *App) moveAISettingsTable(delta int) {
 	a.mu.Lock()
-	if a.aiSettingsForm != nil && len(a.aiSettingsForm.definitions) > 0 {
-		a.settingRow = (a.settingRow + delta + len(a.aiSettingsForm.definitions)) % len(a.aiSettingsForm.definitions)
-		setFormFieldsFocusLocked(a.aiSettingsForm, a.settingRow)
+	if form := a.aiSettings.Form(); form != nil && len(form.definitions) > 0 {
+		a.settingRow = (a.settingRow + delta + len(form.definitions)) % len(form.definitions)
+		setFormFieldsFocusLocked(form, a.settingRow)
 	}
 	a.mu.Unlock()
 	a.invalidateSettingsWindow()
@@ -364,9 +346,10 @@ func (a *App) openSelectedAISettingsTable() {
 // openAISettingsTable opens a settings-owned target in the same modal table editor used by plugin forms.
 func (a *App) openAISettingsTable(index int) {
 	a.mu.Lock()
-	if a.settingsOpen && a.settingTab == "ai" && a.aiSettingsForm != nil {
+	form := a.aiSettings.Form()
+	if a.settingsOpen && a.settingTab == "ai" && form != nil {
 		a.settingRow = index
-		a.openFormTableLocked(a.aiSettingsForm, index)
+		a.openFormTableLocked(form, index)
 	}
 	a.mu.Unlock()
 	a.finishOpeningFormTable()
@@ -383,9 +366,10 @@ func (a *App) addAISettingsTableRow(index int) {
 // openAISettingsTableRow carries the inline row selection into the shared table editor.
 func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 	a.mu.Lock()
-	if a.settingsOpen && a.settingTab == "ai" && a.aiSettingsForm != nil {
+	form := a.aiSettings.Form()
+	if a.settingsOpen && a.settingTab == "ai" && form != nil {
 		a.settingRow = tableIndex
-		a.openFormTableLocked(a.aiSettingsForm, tableIndex)
+		a.openFormTableLocked(form, tableIndex)
 		if a.tableEditor != nil && rowIndex >= 0 && rowIndex < len(a.tableEditor.rows) {
 			a.tableEditor.selected = rowIndex
 		}
@@ -401,7 +385,7 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 func (a *App) beginCloneRemoteAISkill() {
 	a.mu.Lock()
 	state := a.tableEditor
-	if state == nil || state.definition.Value.Key != "AISkills" || state.invalid || state.saving || state.rowForm != nil || state.target != a.aiSettingsForm {
+	if state == nil || state.definition.Value.Key != "AISkills" || state.invalid || state.saving || state.rowForm != nil || state.target != a.aiSettings.Form() {
 		a.mu.Unlock()
 		return
 	}
@@ -540,9 +524,9 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 		}
 		a.settingNote = "Could not save " + settingsTableLabel(key) + ": " + err.Error()
 	} else {
-		if state.target == a.aiSettingsForm {
+		if state.target == a.aiSettings.Form() {
 			a.applyAISettingsRawLocked(key, value)
-		} else if state.target == a.hotkeySettingsForm {
+		} else if state.target == a.hotkeySettings.Form() {
 			a.applyHotkeySettingsRawLocked(key, coreValue)
 		}
 		if a.tableEditor == state {
@@ -567,15 +551,13 @@ func (a *App) applyAISettingsRawLocked(key, value string) {
 	raw := json.RawMessage(append([]byte(nil), value...))
 	switch key {
 	case "AIProviders":
-		a.settings.AIProviders = raw
-		a.aiModelsLoaded = false
-		a.aiModelsError = ""
+		a.generalSettings.Update(func(d *settingsData) { d.AIProviders = raw })
+		a.aiSettings.ResetModels()
 	case "AIMCPServers":
-		a.settings.AIMCPServers = raw
+		a.generalSettings.Update(func(d *settingsData) { d.AIMCPServers = raw })
 	case "AISkills":
-		a.settings.AISkills = raw
-		a.aiSkillsLoaded = false
-		a.aiSkillsError = ""
+		a.generalSettings.Update(func(d *settingsData) { d.AISkills = raw })
+		a.aiSettings.ResetSkills()
 	}
 }
 

@@ -11,6 +11,7 @@ type SettingsWindowProps struct {
 	Width    float32
 	Height   float32
 	Radius   float32
+	PageID   string
 	TitleBar woxwidget.Widget
 	Rail     woxwidget.Widget
 	Page     woxwidget.Widget
@@ -23,12 +24,17 @@ const SettingsTitleBarHeight = float32(40)
 // SettingsWindow builds the shared settings window frame.
 func SettingsWindow(props SettingsWindowProps) woxwidget.Widget {
 	contentHeight := max(float32(0), props.Height-SettingsTitleBarHeight)
-	content := woxwidget.Container{Width: props.Width, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{props.Rail, props.Page}}}
-	body := woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Radius: props.Radius, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{props.TitleBar, content}}}
-	if props.Overlay == nil {
-		return body
+	page := woxwidget.Semantics{
+		Key: "settings-page-key", AutomationID: "settings.page." + props.PageID, Role: woxui.AccessibilityRoleGroup, Label: props.PageID + " settings",
+		Child: props.Page,
 	}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: props.Radius, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: body}, {Child: props.Overlay}}}}
+	content := woxwidget.Container{Width: props.Width, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{props.Rail, page}}}
+	body := woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Radius: props.Radius, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{props.TitleBar, content}}}
+	var window woxwidget.Widget = body
+	if props.Overlay != nil {
+		window = woxwidget.Container{Width: props.Width, Height: props.Height, Radius: props.Radius, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: body}, {Child: props.Overlay}}}}
+	}
+	return woxwidget.Semantics{Key: "settings-window-key", AutomationID: "settings.window", Role: woxui.AccessibilityRoleWindow, Label: "Wox Settings", Child: window}
 }
 
 // SettingsTitleBarProps contains the title and native window actions.

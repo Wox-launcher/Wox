@@ -46,7 +46,7 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 		allowed[kind] = true
 	}
 	a.mu.Lock()
-	if a.hotkeyRecording != nil && a.hotkeyRecording.target == target && a.hotkeyRecording.fieldIndex == index {
+	if rec := a.hotkeySettings.Recording(); rec != nil && rec.target == target && rec.fieldIndex == index {
 		a.mu.Unlock()
 		a.stopHotkeyRecording()
 		return
@@ -57,7 +57,7 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 	}
 	setFormFieldsFocusLocked(target, index)
 	state := &hotkeyRecordingState{target: target, fieldIndex: index, idPrefix: idPrefix, persistKey: persistKey, allowed: allowed, status: "Starting recorder…"}
-	a.hotkeyRecording = state
+	a.hotkeySettings.SetRecording(state)
 	a.mu.Unlock()
 	_ = a.hotkeyRecordingNativeWindow().SetTextInputState(woxui.TextInputState{})
 	a.invalidateHotkeyWindows()
@@ -72,7 +72,7 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 		err := a.client.Post(ctx, "/on/hotkey/recording", map[string]any{"isRecording": true, "purpose": purpose, "allowedKinds": allowedKinds}, &capability)
 		cancel()
 		a.mu.Lock()
-		if a.hotkeyRecording == state {
+		if a.hotkeySettings.Recording() == state {
 			if err != nil {
 				state.status = "Recorder unavailable: " + err.Error()
 			} else {
@@ -103,17 +103,18 @@ func containsString(values []string, target string) bool {
 }
 
 func (a *App) hotkeyRecordingTargetCurrentLocked(target *formFieldsState) bool {
-	return target != nil && ((a.settingsOpen && a.settingTab == "general" && target == a.hotkeySettingsForm) ||
+	pluginForm := a.pluginSettings.Form()
+	return target != nil && ((a.settingsOpen && a.settingTab == "general" && target == a.hotkeySettings.Form()) ||
 		(a.tableEditor != nil && a.tableEditor.rowForm == target) ||
 		(a.form != nil && target == &a.form.formFieldsState) ||
 		(a.requirementForm != nil && target == &a.requirementForm.formFieldsState) ||
-		(a.pluginForm != nil && target == &a.pluginForm.formFieldsState))
+		(pluginForm != nil && target == &pluginForm.formFieldsState))
 }
 
 func (a *App) hotkeyRecordingFieldStatus(idPrefix string, index int) (bool, string) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	state := a.hotkeyRecording
+	state := a.hotkeySettings.Recording()
 	if state == nil || state.idPrefix != idPrefix || state.fieldIndex != index {
 		return false, ""
 	}
@@ -122,7 +123,7 @@ func (a *App) hotkeyRecordingFieldStatus(idPrefix string, index int) (bool, stri
 
 func (a *App) stopHotkeyRecordingForDifferentField(target *formFieldsState, index int) {
 	a.mu.RLock()
-	state := a.hotkeyRecording
+	state := a.hotkeySettings.Recording()
 	stop := state != nil && (state.target != target || state.fieldIndex != index)
 	a.mu.RUnlock()
 	if stop {
@@ -133,8 +134,8 @@ func (a *App) stopHotkeyRecordingForDifferentField(target *formFieldsState, inde
 // stopHotkeyRecording releases both the local field and core's process-wide raw recorder.
 func (a *App) stopHotkeyRecording() {
 	a.mu.Lock()
-	active := a.hotkeyRecording != nil
-	a.hotkeyRecording = nil
+	active := a.hotkeySettings.Recording() != nil
+	a.hotkeySettings.ClearRecording()
 	a.mu.Unlock()
 	if !active {
 		return
@@ -157,7 +158,7 @@ func (a *App) applyRecordedHotkey(payload recordedHotkeyPayload) error {
 		return nil
 	}
 	a.mu.Lock()
-	state := a.hotkeyRecording
+	state := a.hotkeySettings.Recording()
 	if state == nil || state.checking || !state.ready || (payload.Kind != "" && !state.allowed[payload.Kind]) || !a.hotkeyRecordingTargetCurrentLocked(state.target) {
 		a.mu.Unlock()
 		return nil
@@ -168,7 +169,7 @@ func (a *App) applyRecordedHotkey(payload recordedHotkeyPayload) error {
 	}
 	current := state.target.values[state.target.definitions[state.fieldIndex].Value.Key]
 	if canonical == current {
-		a.hotkeyRecording = nil
+		a.hotkeySettings.ClearRecording()
 		a.mu.Unlock()
 		a.postHotkeyRecordingStopped()
 		a.invalidateHotkeyWindows()
@@ -192,7 +193,7 @@ func (a *App) checkRecordedHotkey(state *hotkeyRecordingState, hotkey string) {
 	err := a.client.Post(ctx, "/hotkey/availability", map[string]string{"hotkey": hotkey}, &availability)
 	cancel()
 	a.mu.Lock()
-	if a.hotkeyRecording != state || !a.hotkeyRecordingTargetCurrentLocked(state.target) {
+	if a.hotkeySettings.Recording() != state || !a.hotkeyRecordingTargetCurrentLocked(state.target) {
 		a.mu.Unlock()
 		return
 	}
@@ -230,14 +231,14 @@ func hotkeyConflictMessage(kind, value string) string {
 
 func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 	a.mu.Lock()
-	if a.hotkeyRecording != state || !a.hotkeyRecordingTargetCurrentLocked(state.target) {
+	if a.hotkeySettings.Recording() != state || !a.hotkeyRecordingTargetCurrentLocked(state.target) {
 		a.mu.Unlock()
 		return
 	}
 	key := state.target.definitions[state.fieldIndex].Value.Key
 	previous := state.target.values[key]
 	state.target.values[key] = value
-	a.hotkeyRecording = nil
+	a.hotkeySettings.ClearRecording()
 	if a.tableEditor != nil && a.tableEditor.rowForm == state.target {
 		a.tableEditor.status = ""
 	}
@@ -262,9 +263,9 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 	} else {
 		switch state.persistKey {
 		case "MainHotkey":
-			a.settings.MainHotkey = value
+			a.generalSettings.Update(func(d *settingsData) { d.MainHotkey = value })
 		case "SelectionHotkey":
-			a.settings.SelectionHotkey = value
+			a.generalSettings.Update(func(d *settingsData) { d.SelectionHotkey = value })
 		}
 		a.settingNote = state.persistKey + " saved"
 	}
@@ -275,7 +276,7 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 // onHotkeyRecordingKey provides the normal-combo fallback when a raw recorder is unavailable.
 func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
 	a.mu.RLock()
-	state := a.hotkeyRecording
+	state := a.hotkeySettings.Recording()
 	a.mu.RUnlock()
 	if state == nil {
 		return false
@@ -300,7 +301,7 @@ func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
 		return true
 	}
 	a.mu.Lock()
-	if a.hotkeyRecording == state {
+	if a.hotkeySettings.Recording() == state {
 		state.status = "Recording…"
 	}
 	a.mu.Unlock()
@@ -310,7 +311,7 @@ func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
 		cancel()
 		if err != nil {
 			a.mu.Lock()
-			if a.hotkeyRecording == state {
+			if a.hotkeySettings.Recording() == state {
 				state.status = "Could not record: " + err.Error()
 			}
 			a.mu.Unlock()

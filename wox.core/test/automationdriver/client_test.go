@@ -73,6 +73,52 @@ func TestClientAuthenticatesAndDecodesSnapshot(t *testing.T) {
 	}
 }
 
+func TestClientOpensSettingsRoute(t *testing.T) {
+	t.Parallel()
+
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var requestPayload struct {
+			ID     uint64 `json:"id"`
+			Method string `json:"method"`
+			Params struct {
+				Path string `json:"path"`
+			} `json:"params"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if requestPayload.Method != "window.open_settings" {
+			t.Fatalf("unexpected method %q", requestPayload.Method)
+		}
+		if requestPayload.Params.Path != "/appearance" {
+			t.Fatalf("unexpected settings path %q", requestPayload.Params.Path)
+		}
+		body, err := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      requestPayload.ID,
+			"result":  true,
+		})
+		if err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Body:       io.NopCloser(strings.NewReader(string(body))),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	if err := client.OpenSettings(context.Background(), "/appearance"); err != nil {
+		t.Fatalf("open settings route: %v", err)
+	}
+}
+
 type roundTripFunc func(request *http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {

@@ -409,14 +409,12 @@ func cloneAnyMap(values map[string]any) map[string]any {
 }
 
 func (a *App) applyTypedCloudSyncProgress(progress cloudsync.CloudSyncProgress) {
-	a.mu.Lock()
 	if progress.Active {
 		copy := cloudSyncProgress{Active: true, Operation: progress.Operation, EntityType: progress.EntityType, PluginID: progress.PluginID, Key: progress.Key, Current: progress.Current, Total: progress.Total}
-		a.cloudSync.Progress = &copy
+		a.cloudSettings.SetSyncProgress(&copy)
 	} else {
-		a.cloudSync.Progress = nil
+		a.cloudSettings.SetSyncProgress(nil)
 	}
-	a.mu.Unlock()
 	_ = a.window.Invalidate()
 	if !progress.Active {
 		go a.reloadCloudSync()

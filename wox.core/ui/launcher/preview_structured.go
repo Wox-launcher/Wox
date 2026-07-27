@@ -196,7 +196,7 @@ func hotkeyOverviewEntryMatches(entry hotkeyOverviewEntry, search string) bool {
 // formatHotkeyOverview renders current settings and portable launcher commands instead of treating the preview's search-only payload as content.
 func (a *App) formatHotkeyOverview(data hotkeyOverviewPreviewData) string {
 	a.mu.RLock()
-	settings := a.settings
+	settings := a.generalSettings.Data()
 	a.mu.RUnlock()
 	type section struct {
 		title   string

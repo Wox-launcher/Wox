@@ -158,11 +158,12 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 }
 
 func (a *App) formTableTargetCurrentLocked(target *formFieldsState) bool {
+	pluginForm := a.pluginSettings.Form()
 	return target != nil && ((a.form != nil && target == &a.form.formFieldsState) ||
 		(a.requirementForm != nil && target == &a.requirementForm.formFieldsState) ||
-		(a.pluginForm != nil && target == &a.pluginForm.formFieldsState) ||
-		(a.settingsOpen && a.settingTab == "ai" && target == a.aiSettingsForm) ||
-		(a.settingsOpen && a.settingTab == "general" && target == a.hotkeySettingsForm))
+		(pluginForm != nil && target == &pluginForm.formFieldsState) ||
+		(a.settingsOpen && a.settingTab == "ai" && target == a.aiSettings.Form()) ||
+		(a.settingsOpen && a.settingTab == "general" && target == a.hotkeySettings.Form()))
 }
 
 func (a *App) openActionFormTable(index int) {
@@ -185,8 +186,9 @@ func (a *App) openRequirementFormTable(index int) {
 
 func (a *App) openPluginFormTable(index int) {
 	a.mu.Lock()
-	if a.pluginForm != nil {
-		a.openFormTableLocked(&a.pluginForm.formFieldsState, index)
+	pluginForm := a.pluginSettings.Form()
+	if pluginForm != nil {
+		a.openFormTableLocked(&pluginForm.formFieldsState, index)
 	}
 	a.mu.Unlock()
 	a.finishOpeningFormTable()
@@ -419,8 +421,8 @@ func (a *App) beginFormTableRowEdit(index int, rowEditorOnly bool) {
 		base = cloneFormTableRow(state.rows[index])
 	}
 	fields, _ := formTableRowFields(state.definition, base)
-	if len(a.aiModels) > 0 {
-		applyAIModelOptionsLocked(&fields, a.aiModels)
+	if models := a.aiSettings.Models(); len(models) > 0 {
+		applyAIModelOptionsLocked(&fields, models)
 	}
 	state.rowForm = &fields
 	state.appPicker = nil
@@ -430,10 +432,10 @@ func (a *App) beginFormTableRowEdit(index int, rowEditorOnly bool) {
 	state.skillClone = false
 	state.status = ""
 	state.deleteArmed = -1
-	applyAIProviderDefaultHostLocked(state, false, a.aiProviderCatalog)
-	requestModels = hasFormDefinitionType(fields.definitions, "selectAIModel") && !a.aiModelsLoaded && !a.aiModelsLoading
+	applyAIProviderDefaultHostLocked(state, false, a.aiSettings.ProviderCatalog())
+	requestModels = hasFormDefinitionType(fields.definitions, "selectAIModel") && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
 	if requestModels {
-		a.aiModelsLoading = true
+		a.aiSettings.SetModelsLoading(true)
 	}
 	textInput := fields.editor != nil
 	a.mu.Unlock()
@@ -677,7 +679,7 @@ func (a *App) saveFormTableRowEdit() {
 		a.invalidateFormTableWindow()
 		return
 	}
-	persist := state.target == a.aiSettingsForm || state.target == a.hotkeySettingsForm
+	persist := state.target == a.aiSettings.Form() || state.target == a.hotkeySettings.Form()
 	closeEditor := state.rowEditorOnly
 	key := state.definition.Value.Key
 	value := state.target.values[key]
@@ -729,7 +731,7 @@ func (a *App) deleteFormTableRow() {
 		state.status = err.Error()
 	} else {
 		state.status = ""
-		persist = state.target == a.aiSettingsForm || state.target == a.hotkeySettingsForm
+		persist = state.target == a.aiSettings.Form() || state.target == a.hotkeySettings.Form()
 		value = state.target.values[key]
 		if persist {
 			state.saving = true
@@ -808,7 +810,7 @@ func (a *App) changeFormTableRowChoice(index, delta int) {
 	if state := a.tableEditor; state != nil && state.rowForm != nil {
 		changeFormFieldsChoiceLocked(state.rowForm, index, delta)
 		if index >= 0 && index < len(state.rowForm.definitions) && state.rowForm.definitions[index].Value.Key == "Name" {
-			applyAIProviderDefaultHostLocked(state, true, a.aiProviderCatalog)
+			applyAIProviderDefaultHostLocked(state, true, a.aiSettings.ProviderCatalog())
 		}
 		state.status = ""
 	}

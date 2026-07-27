@@ -69,7 +69,7 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 	a.settingsView = managed
 	a.settingsHost = host
 	a.settingsOpen = true
-	fontFamily := a.settings.AppFontFamily
+	fontFamily := a.generalSettings.Data().AppFontFamily
 	isDark := themeColorIsDark(a.palette.background)
 	a.mu.Unlock()
 	if err := managed.Window().SetAppearance(isDark); err != nil {
@@ -116,7 +116,7 @@ func (a *App) updateSettingsTextInput(enabled bool) {
 	}
 	state := woxui.TextInputState{}
 	a.mu.RLock()
-	searchFocused := a.settingSearchFocused || a.pluginSearchFocused
+	searchFocused := a.settingsSearch.Focused() || a.pluginSettings.SearchFocused()
 	a.mu.RUnlock()
 	if enabled || searchFocused {
 		state = woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 240, Y: 180, Width: 1, Height: 24}}
@@ -125,10 +125,8 @@ func (a *App) updateSettingsTextInput(enabled bool) {
 }
 
 func (a *App) themeEditorUsesSettingsWindow() bool {
-	a.mu.RLock()
-	usesSettings := a.themeEditor != nil && strings.HasPrefix(a.themeEditor.key, "settings-theme|")
-	a.mu.RUnlock()
-	return usesSettings
+	editor := a.themeSettings.ThemeEditor()
+	return editor != nil && strings.HasPrefix(editor.key, "settings-theme|")
 }
 
 func (a *App) themeEditorNativeWindow() *woxui.Window {
@@ -169,7 +167,8 @@ func (a *App) formTableUsesSettingsWindow() bool {
 }
 
 func (a *App) formTableTargetUsesSettingsLocked(target *formFieldsState) bool {
-	return target != nil && ((a.pluginForm != nil && target == &a.pluginForm.formFieldsState) || target == a.aiSettingsForm || target == a.hotkeySettingsForm)
+	pluginForm := a.pluginSettings.Form()
+	return target != nil && ((pluginForm != nil && target == &pluginForm.formFieldsState) || target == a.aiSettings.Form() || target == a.hotkeySettings.Form())
 }
 
 func (a *App) formTableNativeWindow() *woxui.Window {
@@ -195,10 +194,11 @@ func (a *App) updateFormTableTextInput(enabled bool) {
 
 func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
 	a.mu.RLock()
-	state := a.hotkeyRecording
+	state := a.hotkeySettings.Recording()
 	usesSettings := false
 	if state != nil {
-		usesSettings = state.target == a.hotkeySettingsForm || (a.pluginForm != nil && state.target == &a.pluginForm.formFieldsState)
+		pluginForm := a.pluginSettings.Form()
+		usesSettings = state.target == a.hotkeySettings.Form() || (pluginForm != nil && state.target == &pluginForm.formFieldsState)
 		if !usesSettings && a.tableEditor != nil && a.tableEditor.rowForm == state.target {
 			usesSettings = a.formTableTargetUsesSettingsLocked(a.tableEditor.target)
 		}
@@ -303,37 +303,36 @@ func (a *App) onLauncherWindowClosed() {
 func (a *App) onSettingsWindowClosed() {
 	a.mu.Lock()
 	wasOpen := a.settingsOpen
-	wasRecording := a.hotkeyRecording != nil
+	wasRecording := a.hotkeySettings.Recording() != nil
 	a.settingsOpen = false
 	a.settingsView = nil
 	a.settingsHost = nil
 	a.settingSaving = false
-	a.settingEditKey = ""
-	a.settingEditor = nil
-	a.settingSearchEditor = nil
-	a.settingSearchFocused = false
-	a.settingSearchPanel = false
-	a.settingSearchSelected = 0
-	a.pluginSearchEditor = nil
-	a.pluginSearchFocused = false
-	a.pluginDetailTab = "settings"
-	a.themeSearchEditor = nil
-	a.themeSearchFocused = false
-	a.themeDetailTab = "preview"
+	a.generalSettings.EndEdit()
+	a.settingsSearch.SetEditor(nil)
+	a.settingsSearch.SetFocused(false)
+	a.settingsSearch.SetPanel(false)
+	a.settingsSearch.SetSelected(0)
+	a.pluginSettings.SetSearchEditor(nil)
+	a.pluginSettings.SetSearchFocused(false)
+	a.pluginSettings.SetDetailTab("settings")
+	a.themeSettings.SetThemeSearchEditor(nil)
+	a.themeSettings.SetThemeSearchFocused(false)
+	a.themeSettings.SetThemeDetailTab("preview")
 	a.releaseThemeEditorWallpaperLocked()
-	a.settingChoicePicker = nil
-	a.cloudForm = nil
-	a.cloudActionMenu = ""
+	a.generalSettings.SetChoicePicker(nil)
+	a.cloudSettings.SetForm(nil)
+	a.cloudSettings.SetActionMenu("")
 	a.tableEditor = nil
-	a.modelManager = nil
-	a.hotkeyRecording = nil
-	a.settingsHotkeyFocus = false
-	if a.pluginForm != nil {
-		syncFormFieldsEditorLocked(&a.pluginForm.formFieldsState)
-		a.pluginForm.active = false
+	a.aiSettings.SetModelManager(nil)
+	a.hotkeySettings.ClearRecording()
+	a.hotkeySettings.SetFocused(false)
+	if form := a.pluginSettings.Form(); form != nil {
+		syncFormFieldsEditorLocked(&form.formFieldsState)
+		form.active = false
 	}
-	if a.themeEditor != nil {
-		a.themeEditor.active = false
+	if themeEditor := a.themeSettings.ThemeEditor(); themeEditor != nil {
+		themeEditor.active = false
 	}
 	launcherVisible := a.visible
 	a.mu.Unlock()

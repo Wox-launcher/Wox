@@ -327,12 +327,12 @@ func (a *App) chatPreviewSnapshotFor(result queryResult, preview queryPreview) (
 		return nil, fmt.Errorf("chat preview is not ready")
 	}
 	snapshot := snapshotChatPreviewLocked(a.chatPreview)
-	snapshot.models = append([]aiModel(nil), a.aiModels...)
-	snapshot.modelsLoading = a.aiModelsLoading
-	snapshot.modelsError = a.aiModelsError
-	snapshot.skills = append([]chatSkill(nil), a.aiSkills...)
-	snapshot.skillsLoading = a.aiSkillsLoading
-	snapshot.skillsError = a.aiSkillsError
+	snapshot.models = a.aiSettings.Models()
+	snapshot.modelsLoading = a.aiSettings.ModelsLoading()
+	snapshot.modelsError = a.aiSettings.ModelsError()
+	snapshot.skills = a.aiSettings.Skills()
+	snapshot.skillsLoading = a.aiSettings.SkillsLoading()
+	snapshot.skillsError = a.aiSettings.SkillsError()
 	return snapshot, nil
 }
 
@@ -422,21 +422,21 @@ func (a *App) toggleChatPanel(panel string) {
 			}
 		}
 		if panel == "models" {
-			for index, model := range a.aiModels {
+			for index, model := range a.aiSettings.Models() {
 				if model == state.chat.Model {
 					state.panelSelected = index
 					break
 				}
 			}
-			requestModels = !a.aiModelsLoaded && !a.aiModelsLoading
+			requestModels = !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
 			if requestModels {
-				a.aiModelsLoading = true
+				a.aiSettings.SetModelsLoading(true)
 			}
 		}
 		if panel == "skills" {
-			requestSkills = !a.aiSkillsLoaded && !a.aiSkillsLoading
+			requestSkills = !a.aiSettings.SkillsLoaded() && !a.aiSettings.SkillsLoading()
 			if requestSkills {
-				a.aiSkillsLoading = true
+				a.aiSettings.SetSkillsLoading(true)
 			}
 		}
 	}
@@ -462,18 +462,16 @@ func (a *App) reloadChatResourceName(resource string) {
 	requestSkills := false
 	a.mu.Lock()
 	if resource == "models" || resource == "all" {
-		a.aiModelsLoaded = false
-		a.aiModelsError = ""
-		if state := a.chatPreview; state != nil && state.panel == "models" && !a.aiModelsLoading {
-			a.aiModelsLoading = true
+		a.aiSettings.ResetModels()
+		if state := a.chatPreview; state != nil && state.panel == "models" && !a.aiSettings.ModelsLoading() {
+			a.aiSettings.SetModelsLoading(true)
 			requestModels = true
 		}
 	}
 	if resource == "skills" || resource == "all" {
-		a.aiSkillsLoaded = false
-		a.aiSkillsError = ""
-		if state := a.chatPreview; state != nil && state.panel == "skills" && !a.aiSkillsLoading {
-			a.aiSkillsLoading = true
+		a.aiSettings.ResetSkills()
+		if state := a.chatPreview; state != nil && state.panel == "skills" && !a.aiSettings.SkillsLoading() {
+			a.aiSettings.SetSkillsLoading(true)
 			requestSkills = true
 		}
 	}
@@ -488,37 +486,21 @@ func (a *App) reloadChatResourceName(resource string) {
 
 // loadAISkills shares the enabled skill catalog with chat composition.
 func (a *App) loadAISkills() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	var skills []chatSkill
-	err := a.client.Post(ctx, "/ai/skills", map[string]any{}, &skills)
-	if err == nil {
-		skills = slices.DeleteFunc(skills, func(skill chatSkill) bool { return !skill.Enabled || strings.TrimSpace(skill.Name) == "" })
-		sort.SliceStable(skills, func(i, j int) bool {
-			left := skills[i].SourceName + "\x00" + skills[i].Source + "\x00" + skills[i].Name
-			right := skills[j].SourceName + "\x00" + skills[j].Source + "\x00" + skills[j].Name
-			return left < right
-		})
-	}
-	a.mu.Lock()
-	a.aiSkillsLoading = false
-	a.aiSkillsLoaded = true
-	if err != nil {
-		a.aiSkillsError = err.Error()
-	} else {
-		a.aiSkills = skills
-		a.aiSkillsError = ""
+	a.aiSettings.LoadAISkills(context.Background(), a.client, func(skills []chatSkill) {
+		if skills == nil {
+			log.Printf("load AI skills: see controller error")
+			_ = a.window.Invalidate()
+			return
+		}
+		a.mu.Lock()
 		if a.chatPreview != nil && a.chatPreview.panel == "skills" {
 			a.chatPreview.panelSelected = 0
 			a.chatPreview.panelScroll = 0
 			a.chatPreview.panelViewport = 0
 		}
-	}
-	a.mu.Unlock()
-	if err != nil {
-		log.Printf("load AI skills: %v", err)
-	}
-	_ = a.window.Invalidate()
+		a.mu.Unlock()
+		_ = a.window.Invalidate()
+	})
 }
 
 // startNewChat resets the active draft while retaining the user's current model choice.
@@ -695,7 +677,12 @@ func (a *App) deleteChatHistory(chatID string) {
 func (a *App) selectChatModel(index int) {
 	a.mu.Lock()
 	state := a.chatPreview
-	if state == nil || index < 0 || index >= len(a.aiModels) {
+	if state == nil {
+		a.mu.Unlock()
+		return
+	}
+	model, ok := a.aiSettings.ModelAt(index)
+	if !ok {
 		a.mu.Unlock()
 		return
 	}
@@ -708,7 +695,7 @@ func (a *App) selectChatModel(index int) {
 		_ = a.window.Invalidate()
 		return
 	}
-	state.chat.Model = a.aiModels[index]
+	state.chat.Model = model
 	state.panelSelected = index
 	state.panel = ""
 	state.error = ""
@@ -722,11 +709,15 @@ func (a *App) selectChatModel(index int) {
 func (a *App) insertChatSkill(index int) {
 	a.mu.Lock()
 	state := a.chatPreview
-	if state == nil || state.editor == nil || index < 0 || index >= len(a.aiSkills) {
+	if state == nil || state.editor == nil {
 		a.mu.Unlock()
 		return
 	}
-	skill := a.aiSkills[index]
+	skill, ok := a.aiSettings.SkillAt(index)
+	if !ok {
+		a.mu.Unlock()
+		return
+	}
 	state.editor.InsertText("{skill:" + skill.Name + "} ")
 	state.panelSelected = index
 	state.panel = ""
@@ -802,9 +793,9 @@ func (a *App) moveChatPanelSelection(delta int) {
 	}
 	count := len(state.chats)
 	if state.panel == "models" {
-		count = len(a.aiModels)
+		count = a.aiSettings.ModelsCount()
 	} else if state.panel == "skills" {
-		count = len(a.aiSkills)
+		count = a.aiSettings.SkillsCount()
 	}
 	if count > 0 {
 		state.panelSelected = (state.panelSelected + delta + count) % count
@@ -846,9 +837,9 @@ func (a *App) setChatPanelViewport(height float32) {
 		state.panelViewport = max(float32(1), height)
 		count := len(state.chats)
 		if state.panel == "models" {
-			count = len(a.aiModels)
+			count = a.aiSettings.ModelsCount()
 		} else if state.panel == "skills" {
-			count = len(a.aiSkills)
+			count = a.aiSettings.SkillsCount()
 		}
 		if initialize {
 			ensureChatPanelSelectionVisibleLocked(state, count)
@@ -887,9 +878,9 @@ func (a *App) scrollChatPanel(delta float32) {
 	}
 	count := len(state.chats)
 	if state.panel == "models" {
-		count = len(a.aiModels)
+		count = a.aiSettings.ModelsCount()
 	} else if state.panel == "skills" {
-		count = len(a.aiSkills)
+		count = a.aiSettings.SkillsCount()
 	}
 	maxOffset := max(float32(0), float32(count)*44-state.panelViewport)
 	state.panelScroll = min(max(float32(0), state.panelScroll+delta), maxOffset)
@@ -1096,10 +1087,10 @@ func (a *App) sendChatMessage() {
 		return
 	}
 	hasSkillTags := chatSkillTagPattern.MatchString(text)
-	if hasSkillTags && !a.aiSkillsLoaded {
-		requestSkills := !a.aiSkillsLoading
+	if hasSkillTags && !a.aiSettings.SkillsLoaded() {
+		requestSkills := !a.aiSettings.SkillsLoading()
 		if requestSkills {
-			a.aiSkillsLoading = true
+			a.aiSettings.SetSkillsLoading(true)
 		}
 		state.error = "Loading skills; send again when the catalog is ready."
 		a.mu.Unlock()
@@ -1110,8 +1101,9 @@ func (a *App) sendChatMessage() {
 		return
 	}
 	now := time.Now().UnixMilli()
-	skillRefs := chatSkillRefsFromText(text, a.aiSkills)
-	if unresolved := unresolvedChatSkillTag(text, a.aiSkills); unresolved != "" {
+	skills := a.aiSettings.Skills()
+	skillRefs := chatSkillRefsFromText(text, skills)
+	if unresolved := unresolvedChatSkillTag(text, skills); unresolved != "" {
 		state.error = fmt.Sprintf("Unknown or disabled skill: %s", unresolved)
 		a.mu.Unlock()
 		_ = a.window.Invalidate()

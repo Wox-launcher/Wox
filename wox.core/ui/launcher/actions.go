@@ -161,7 +161,7 @@ func (a *App) onActionKey(event woxui.KeyEvent) bool {
 		return false
 	}
 	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.settings.UsePinYin)
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.usePinYin())
 	for _, index := range indices {
 		if toolbarHotkeyMatches(entries[index].Hotkey, event) {
 			a.actionSelected = index
@@ -233,7 +233,7 @@ func (a *App) moveActionSelection(delta int) {
 		return
 	}
 	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.settings.UsePinYin)
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.usePinYin())
 	if len(indices) == 0 {
 		a.mu.Unlock()
 		return
@@ -279,7 +279,7 @@ func (a *App) normalizeActionSelectionLocked() {
 		return
 	}
 	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.settings.UsePinYin)
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.usePinYin())
 	if len(indices) == 0 {
 		a.actionSelected = -1
 		a.actionSelectionKey = ""
@@ -306,7 +306,7 @@ func (a *App) normalizeActionSelectionLocked() {
 
 func (a *App) selectFirstFilteredActionLocked() {
 	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.settings.UsePinYin)
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translations, a.usePinYin())
 	if len(indices) == 0 {
 		a.actionSelected = -1
 		a.actionSelectionKey = ""

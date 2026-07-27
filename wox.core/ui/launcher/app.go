@@ -94,7 +94,6 @@ type App struct {
 	form                  *formState
 	requirementForm       *requirementFormState
 	triggerConflict       *triggerConflictPreviewState
-	themeEditor           *themeEditorPreviewState
 	chatPreview           *chatPreviewState
 	webViewPreviewData    string
 	webViewPreviewError   string
@@ -106,146 +105,48 @@ type App struct {
 	visible               bool
 	show                  showAppParams
 	settingsOpen          bool
-	settings              settingsData
 	settingsCtx           settingWindowContext
 	settingTab            string
 	settingRow            int
 	settingNote           string
 	settingSaving         bool
-	settingEditKey        string
-	settingEditor         *woxui.TextEditor
-	settingSearchEditor   *woxui.TextEditor
-	settingSearchFocused  bool
-	settingSearchPanel    bool
-	settingSearchSelected int
-	settingSearchPlugins  []pluginSettingsPlugin
-	settingSearchLoading  bool
-	settingSearchLoaded   bool
-	settingSearchError    string
-	settingChoicePicker   *settingChoicePickerState
 	choiceTooltipRevision uint64
-	settingLanguages      []settingChoice
-	updateChannelVersions []updateChannelVersion
-	updateChannelsLoading bool
-	systemFontFamilies    []string
-	systemFontsLoading    bool
-	systemFontsLoaded     bool
-	systemFontsError      string
-	plugins               []pluginSettingsPlugin
-	pluginsLoading        bool
-	pluginsLoaded         bool
-	pluginsError          string
-	pluginSelected        int
-	pluginSearchEditor    *woxui.TextEditor
-	pluginSearchFocused   bool
-	pluginFilters         pluginFilterState
-	pluginFilterOpen      bool
-	pluginDetailTab       string
-	pluginForm            *pluginSettingsFormState
-	pluginsStore          bool
-	pluginOperation       string
-	pluginOperationError  string
-	pluginUninstallArmed  string
-	hotkeySettingsForm    *formFieldsState
-	settingsHotkeyFocus   bool
-	hotkeyRecording       *hotkeyRecordingState
-	hotkeyAppCandidates   []ignoredHotkeyApp
-	hotkeyAppsLoading     bool
-	hotkeyAppsLoaded      bool
-	hotkeyAppsError       string
-	themes                []themeSettingsTheme
-	themesMode            string
-	themesLoading         bool
-	themesLoaded          bool
-	themesError           string
-	themeSelected         int
-	themeSearchEditor     *woxui.TextEditor
-	themeSearchFocused    bool
-	themeDetailTab        string
-	themeOperation        string
-	themeUninstallArmed   string
-	themeWallpaperPath    string
-	themeWallpaperImage   *woxui.Image
-	themeWallpaperBlurred *woxui.Image
-	themeWallpaperLoading bool
-	themeWallpaperLoadID  uint64
-	aiSettingsForm        *formFieldsState
-	aiProviderCatalog     []aiProviderInfo
-	aiProvidersLoading    bool
-	aiProvidersLoaded     bool
-	aiProvidersError      string
 	tableEditor           *formTableEditorState
-	modelManager          *modelManagerState
-	usageStats            usageStatsData
-	usagePeriod           string
-	usageLoading          bool
-	usageLoaded           bool
-	usageError            string
-	usageRevision         uint64
-	aboutVersion          string
-	aboutLoading          bool
-	aboutLoaded           bool
-	aboutError            string
-	privacySample         string
-	privacyError          string
-	dataBackups           []backupInfo
-	dataLocation          string
-	dataLoading           bool
-	dataLoaded            bool
-	dataBusy              string
-	dataError             string
-	dataRestoreArmed      string
-	dataPendingLocation   string
-	dataClearLogsArmed    bool
-	runtimeStatuses       []runtimeStatus
-	runtimeLoading        bool
-	runtimeLoaded         bool
-	runtimeError          string
-	runtimeRestarting     string
-	runtimeRevision       uint64
-	cloudAccount          cloudAccountStatus
-	cloudSync             cloudSyncStatus
-	cloudBillingPlan      cloudBillingPlan
-	cloudBillingLoaded    bool
-	cloudDevices          cloudDeviceList
-	cloudLoading          bool
-	cloudLoaded           bool
-	cloudBusy             string
-	cloudError            string
-	cloudRevision         uint64
-	cloudForm             *cloudFormState
-	cloudActionMenu       string
-	cloudPlugins          []pluginSettingsPlugin
 	glanceItem            *glanceItem
 	glanceLoading         bool
 	glanceRevision        uint64
 	glanceTooltipRevision uint64
 	glanceTimer           *time.Timer
-	glanceCatalog         []glanceCatalogItem
-	glanceCatalogLoading  bool
-	glanceCatalogLoaded   bool
-	glanceCatalogError    string
-	palette               uiPalette
-	translations          map[string]string
-	images                map[string]*woxui.Image
-	imageRequested        map[string]string
-	imageLastUsed         map[string]uint64
-	imageUseSequence      uint64
-	imageErrors           map[string]string
-	remotePreviews        map[string]queryPreview
-	previewRequests       map[string]bool
-	filePreviews          map[string]filePreviewContent
-	fileRequests          map[string]bool
-	previewLayouts        map[string]woxwidget.TextBlockLayout
-	terminalPreview       *terminalPreviewState
-	aiModels              []aiModel
-	aiModelsLoading       bool
-	aiModelsLoaded        bool
-	aiModelsError         string
-	aiSkills              []chatSkill
-	aiSkillsLoading       bool
-	aiSkillsLoaded        bool
-	aiSkillsError         string
+	// Settings controllers (zero App back-dependency; populated by newApp).
+	generalSettings    *generalSettingsController
+	appearanceSettings *appearanceSettingsController
+	networkSettings    *networkSettingsController
+	dataSettings       *dataSettingsController
+	cloudSettings      *cloudSettingsController
+	runtimeSettings    *runtimeSettingsController
+	themeSettings      *themeSettingsController
+	pluginSettings     *pluginSettingsController
+	aiSettings         *aiSettingsController
+	usageSettings      *usageSettingsController
+	updateSettings     *updateSettingsController
+	privacySettings    *privacySettingsController
+	aboutSettings      *aboutSettingsController
+	hotkeySettings     *hotkeySettingsController
+	settingsSearch     *settingsSearchController
+	sharedEdit         *sharedEditState
+	palette            uiPalette
+	translations       map[string]string
+	images             map[string]*woxui.Image
+	imageRequested     map[string]string
+	imageLastUsed      map[string]uint64
+	imageUseSequence   uint64
+	imageErrors        map[string]string
+	remotePreviews     map[string]queryPreview
+	previewRequests    map[string]bool
+	filePreviews       map[string]filePreviewContent
+	fileRequests       map[string]bool
+	previewLayouts     map[string]woxwidget.TextBlockLayout
+	terminalPreview    *terminalPreviewState
 }
 
 // New creates a launcher whose core services and transitional backend are supplied by the process composition root.
@@ -283,7 +184,6 @@ func newApp(isDev bool, services contract.Services, clientFactory BackendFactory
 		selected:        -1,
 		hoveredResult:   -1,
 		settingTab:      "general",
-		usagePeriod:     "30d",
 		palette:         defaultPalette(),
 		translations:    map[string]string{},
 		images:          map[string]*woxui.Image{},
@@ -302,6 +202,47 @@ func newApp(isDev bool, services contract.Services, clientFactory BackendFactory
 		},
 	}
 	app.unsubscribers = append(app.unsubscribers, app.windows.SubscribeMessages(app.windowID, settingsChangedTopic, app.onSharedSettingsChanged))
+	deps := CommonDeps{
+		Invalidate: app.invalidateSettingsWindow,
+		Translate:  app.translate,
+		IsDev:      isDev,
+		Palette:    func() uiPalette { return app.palette },
+	}
+	app.sharedEdit = newSharedEditState()
+	app.generalSettings = newGeneralSettingsController(deps, app.sharedEdit)
+	app.appearanceSettings = newAppearanceSettingsController(deps)
+	app.networkSettings = newNetworkSettingsController(deps)
+	app.dataSettings = newDataSettingsController(deps)
+	// Wire cross-domain helpers the controller needs without giving it a back-reference to *App.
+	// setNote writes the shared settings note and invalidates; reloadSettings refreshes all
+	// settings after a restore; pickDirectory opens the native directory picker.
+	app.dataSettings.BindCrossDomain(
+		func(note string) {
+			app.mu.Lock()
+			app.settingNote = note
+			app.mu.Unlock()
+			app.invalidateSettingsWindow()
+		},
+		app.reloadSettings,
+		func() (string, error) {
+			window := app.settingsNativeWindow()
+			if window == nil {
+				return "", fmt.Errorf("settings window not ready")
+			}
+			return window.PickFile(woxui.FileDialogOptions{Directory: true})
+		},
+	)
+	app.cloudSettings = newCloudSettingsController(deps)
+	app.runtimeSettings = newRuntimeSettingsController(deps)
+	app.themeSettings = newThemeSettingsController(deps)
+	app.pluginSettings = newPluginSettingsController(deps)
+	app.aiSettings = newAISettingsController(deps)
+	app.usageSettings = newUsageSettingsController(deps)
+	app.updateSettings = newUpdateSettingsController(deps)
+	app.privacySettings = newPrivacySettingsController(deps)
+	app.aboutSettings = newAboutSettingsController(deps)
+	app.hotkeySettings = newHotkeySettingsController(deps)
+	app.settingsSearch = newSettingsSearchController(deps)
 	return app
 }
 
@@ -368,7 +309,7 @@ func (a *App) start() error {
 	if err := a.window.SetAppearance(themeColorIsDark(a.palette.background)); err != nil {
 		return fmt.Errorf("apply Wox UI appearance: %w", err)
 	}
-	if err := a.window.SetFontFamily(a.settings.AppFontFamily); err != nil {
+	if err := a.window.SetFontFamily(a.generalSettings.Data().AppFontFamily); err != nil {
 		return fmt.Errorf("apply Wox UI font: %w", err)
 	}
 	if err := a.window.SetTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 130, Y: 29, Width: 1, Height: 24}}); err != nil {
@@ -490,7 +431,7 @@ func (a *App) hideWindow(notify bool) error {
 	a.mu.Lock()
 	a.requirementForm = nil
 	a.triggerConflict = nil
-	a.themeEditor = nil
+	a.themeSettings.SetThemeEditor(nil)
 	a.mu.Unlock()
 	a.resetChatPreview()
 	if err := launcher.Hide(); err != nil {
@@ -601,7 +542,7 @@ func (a *App) setQuery(query plainQuery) {
 	a.mu.Lock()
 	a.requirementForm = nil
 	a.triggerConflict = nil
-	a.themeEditor = nil
+	a.themeSettings.SetThemeEditor(nil)
 	a.mu.Unlock()
 	a.resetChatPreview()
 	a.restoreQueryTextInput()
@@ -612,7 +553,7 @@ func (a *App) sendCurrentQuery() error {
 	a.mu.RLock()
 	query := a.query
 	startPage := a.show.StartPage
-	skipCompletionHint := !a.settings.EnableQueryCompletionHint
+	skipCompletionHint := !a.generalSettings.Data().EnableQueryCompletionHint
 	a.mu.RUnlock()
 	if err := a.startTypedQuery(query, skipCompletionHint); err != nil {
 		return err
@@ -621,6 +562,12 @@ func (a *App) sendCurrentQuery() error {
 		return a.requestMRU()
 	}
 	return nil
+}
+
+// usePinYin is a cross-domain reader for the general-domain UsePinYin setting.
+// Query, action filter, and settings search all use pinyin matching when this is on.
+func (a *App) usePinYin() bool {
+	return a.generalSettings.Data().UsePinYin
 }
 
 func (a *App) requestMRU() error {
@@ -653,7 +600,7 @@ func (a *App) requestMRU() error {
 	a.mu.Lock()
 	a.requirementForm = nil
 	a.triggerConflict = nil
-	a.themeEditor = nil
+	a.themeSettings.SetThemeEditor(nil)
 	a.mu.Unlock()
 	a.resetChatPreview()
 	go a.loadTypedMRU(queryID)
@@ -666,7 +613,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		a.mu.Unlock()
 		return
 	}
-	if a.isDev && a.settings.ShowPerformanceTail && a.settings.ShowPerformanceTailUIReceived && queryStartTimestamp > 0 {
+	if a.isDev && a.generalSettings.Data().ShowPerformanceTail && a.generalSettings.Data().ShowPerformanceTailUIReceived && queryStartTimestamp > 0 {
 		appendUIReceivedTails(results, max(int64(0), time.Now().UnixMilli()-queryStartTimestamp))
 	}
 	selectedID := ""
@@ -701,7 +648,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	glanceEligible := a.glanceEligibleLocked()
 	refreshGlance := glanceEligible && a.glanceItem == nil && !a.glanceLoading
 	if glanceEligible && a.glanceItem != nil && !a.glanceLoading && a.glanceTimer == nil {
-		a.scheduleGlanceRefreshLocked(a.settings.PrimaryGlance)
+		a.scheduleGlanceRefreshLocked(a.generalSettings.Data().PrimaryGlance)
 	} else if !glanceEligible {
 		a.stopGlanceLocked(true)
 	}
@@ -780,7 +727,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	toolbarMessageVisible := a.toolbarMsg != nil
 	chatFullscreen := a.chatFullscreen
 	if actionPanel && a.actionFilter != nil {
-		actionCount = len(filteredActionIndices(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg), a.actionFilter.State().Text, a.translations, a.settings.UsePinYin))
+		actionCount = len(filteredActionIndices(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg), a.actionFilter.State().Text, a.translations, a.usePinYin()))
 	}
 	if a.selected >= 0 && a.selected < len(a.results) {
 		requirementPreview = a.results[a.selected].Preview.PreviewType == "query_requirement_settings"

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -126,12 +125,12 @@ func (a *App) activateRequirementPreview(result queryResult, preview queryPrevie
 			message:         data.Message,
 		}
 	}
-	if len(a.aiModels) > 0 {
-		applyAIModelOptionsLocked(&a.requirementForm.formFieldsState, a.aiModels)
+	if models := a.aiSettings.Models(); len(models) > 0 {
+		applyAIModelOptionsLocked(&a.requirementForm.formFieldsState, models)
 	}
-	requestModels := hasFormDefinitionType(a.requirementForm.definitions, "selectAIModel") && !a.aiModelsLoaded && !a.aiModelsLoading
+	requestModels := hasFormDefinitionType(a.requirementForm.definitions, "selectAIModel") && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
 	if requestModels {
-		a.aiModelsLoading = true
+		a.aiSettings.SetModelsLoading(true)
 	}
 	a.mu.Unlock()
 
@@ -152,7 +151,7 @@ func (a *App) requirementFormSnapshotFor(result queryResult, preview queryPrevie
 	if a.requirementForm == nil || a.requirementForm.key != key {
 		return nil, fmt.Errorf("requirement settings are not ready")
 	}
-	return snapshotRequirementFormLocked(a.requirementForm, a.aiModelsError), nil
+	return snapshotRequirementFormLocked(a.requirementForm, a.aiSettings.ModelsError()), nil
 }
 
 func snapshotRequirementFormLocked(state *requirementFormState, modelsError string) *requirementFormSnapshot {
@@ -182,31 +181,23 @@ func hasFormDefinitionType(definitions []formDefinition, definitionType string) 
 }
 
 // loadAIModels shares the core model catalog between requirement and plugin setting forms.
+// Delegates the fetch+sort+cache to the AI settings controller and applies the App-side side
+// effects (refreshing requirement/plugin/table row forms that consume selectAIModel options,
+// and resetting the chat-preview model panel selection) through the onLoaded callback so the
+// controller stays free of *App references.
 func (a *App) loadAIModels() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	var models []aiModel
-	err := a.client.Post(ctx, "/ai/models", map[string]any{}, &models)
-	if err == nil {
-		sort.Slice(models, func(i, j int) bool {
-			left := models[i].Provider + "\x00" + models[i].ProviderAlias + "\x00" + models[i].Name
-			right := models[j].Provider + "\x00" + models[j].ProviderAlias + "\x00" + models[j].Name
-			return left < right
-		})
-	}
-	a.mu.Lock()
-	a.aiModelsLoading = false
-	a.aiModelsLoaded = true
-	if err != nil {
-		a.aiModelsError = err.Error()
-	} else {
-		a.aiModels = models
-		a.aiModelsError = ""
+	a.aiSettings.LoadAIModels(context.Background(), a.client, func(models []aiModel) {
+		if models == nil {
+			log.Printf("load AI models for requirement form: see controller error")
+			_ = a.window.Invalidate()
+			return
+		}
+		a.mu.Lock()
 		if a.requirementForm != nil {
 			applyAIModelOptionsLocked(&a.requirementForm.formFieldsState, models)
 		}
-		if a.pluginForm != nil {
-			applyAIModelOptionsLocked(&a.pluginForm.formFieldsState, models)
+		if pluginForm := a.pluginSettings.Form(); pluginForm != nil {
+			applyAIModelOptionsLocked(&pluginForm.formFieldsState, models)
 		}
 		if a.tableEditor != nil && a.tableEditor.rowForm != nil {
 			applyAIModelOptionsLocked(a.tableEditor.rowForm, models)
@@ -222,12 +213,9 @@ func (a *App) loadAIModels() {
 			a.chatPreview.panelScroll = 0
 			a.chatPreview.panelViewport = 0
 		}
-	}
-	a.mu.Unlock()
-	if err != nil {
-		log.Printf("load AI models for requirement form: %v", err)
-	}
-	_ = a.window.Invalidate()
+		a.mu.Unlock()
+		_ = a.window.Invalidate()
+	})
 }
 
 // applyAIModelOptionsLocked materializes model structs as the JSON strings expected by plugin settings.

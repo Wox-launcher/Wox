@@ -11,16 +11,16 @@ import (
 
 // buildAboutSettingsPage maps core version state and external actions into the About view.
 func (a *App) buildAboutSettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
-	version := snapshot.aboutVersion
-	if version == "" && snapshot.aboutLoading {
+	version := snapshot.about.Version
+	if version == "" && snapshot.about.Loading {
 		version = a.translate("i18n:ui_about_version") + "…"
 	}
 	if version == "" {
 		version = a.translate("i18n:ui_about_version")
 	}
 	status := ""
-	if snapshot.aboutError != "" {
-		status = snapshot.aboutError
+	if snapshot.about.Error != "" {
+		status = snapshot.about.Error
 	}
 	theme := snapshot.palette.componentTheme()
 	iconTint := theme.ResultTitle
@@ -39,10 +39,7 @@ func (a *App) buildAboutSettingsPage(snapshot settingsSnapshot, width, height fl
 func (a *App) openAboutOnboarding() {
 	if err := a.OpenOnboarding(context.Background()); err != nil {
 		log.Printf("open About onboarding: %v", err)
-		a.mu.Lock()
-		a.aboutError = err.Error()
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
+		a.aboutSettings.SetError(err.Error())
 	}
 }
 
@@ -50,9 +47,6 @@ func (a *App) openAboutOnboarding() {
 func (a *App) openAboutLink(target string) {
 	if err := a.settingsNativeWindow().OpenExternalURL(target); err != nil {
 		log.Printf("open About link: %v", err)
-		a.mu.Lock()
-		a.aboutError = err.Error()
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
+		a.aboutSettings.SetError(err.Error())
 	}
 }

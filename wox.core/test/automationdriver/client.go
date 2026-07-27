@@ -151,6 +151,12 @@ func (c *Client) Show(ctx context.Context) error {
 	return err
 }
 
+// OpenSettings opens one settings route through the product window lifecycle.
+func (c *Client) OpenSettings(ctx context.Context, path string) error {
+	_, err := call[bool](ctx, c, "window.open_settings", map[string]string{"path": path})
+	return err
+}
+
 // Hide closes the launcher through its product lifecycle.
 func (c *Client) Hide(ctx context.Context) error {
 	_, err := call[bool](ctx, c, "window.hide", nil)

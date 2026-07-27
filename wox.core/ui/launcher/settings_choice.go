@@ -3,8 +3,6 @@ package launcher
 import (
 	"context"
 	"log"
-	"sort"
-	"strings"
 	"time"
 
 	launcherview "wox/ui/launcher/view"
@@ -82,9 +80,8 @@ func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
 		a.mu.Unlock()
 		return
 	}
-	a.settingChoicePicker = &settingChoicePickerState{item: item, anchor: anchor}
-	a.settingEditKey = ""
-	a.settingEditor = nil
+	a.generalSettings.EndEdit()
+	a.generalSettings.SetChoicePicker(&settingChoicePickerState{item: item, anchor: anchor})
 	a.settingNote = ""
 	if item.filterable {
 		a.settingNote = "Filter and select " + item.title
@@ -97,8 +94,8 @@ func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
 func (a *App) closeSettingChoicePicker() {
 	closed := false
 	a.mu.Lock()
-	if a.settingChoicePicker != nil {
-		a.settingChoicePicker = nil
+	if a.generalSettings.ChoicePicker() != nil {
+		a.generalSettings.SetChoicePicker(nil)
 		a.settingNote = ""
 		closed = true
 	}
@@ -112,7 +109,7 @@ func (a *App) closeSettingChoicePicker() {
 
 func (a *App) chooseSettingChoice(index int) {
 	a.mu.Lock()
-	state := a.settingChoicePicker
+	state := a.generalSettings.ChoicePicker()
 	if state == nil || a.settingSaving {
 		a.mu.Unlock()
 		return
@@ -123,7 +120,7 @@ func (a *App) chooseSettingChoice(index int) {
 	}
 	item := state.item
 	choice := state.item.choices[index]
-	a.settingChoicePicker = nil
+	a.generalSettings.SetChoicePicker(nil)
 	a.settingSaving = true
 	a.settingNote = "Saving " + item.title + "…"
 	a.mu.Unlock()
@@ -178,65 +175,28 @@ func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rec
 
 // loadSystemFontFamilies keeps enumeration in core while the framework only consumes portable family names.
 func (a *App) loadSystemFontFamilies() {
-	a.mu.Lock()
-	if a.systemFontsLoaded || a.systemFontsLoading {
-		a.mu.Unlock()
-		return
-	}
-	a.systemFontsLoading = true
-	a.systemFontsError = ""
-	a.mu.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var families []string
-	err := a.client.Post(ctx, "/setting/ui/fonts", map[string]any{}, &families)
-	cancel()
-	if err == nil {
-		seen := make(map[string]bool, len(families))
-		filtered := make([]string, 0, len(families))
-		for _, family := range families {
-			family = strings.TrimSpace(family)
-			key := strings.ToLower(family)
-			if family == "" || seen[key] {
-				continue
-			}
-			seen[key] = true
-			filtered = append(filtered, family)
-		}
-		sort.SliceStable(filtered, func(i, j int) bool { return strings.ToLower(filtered[i]) < strings.ToLower(filtered[j]) })
-		families = filtered
-	}
-	a.mu.Lock()
-	a.systemFontsLoading = false
-	if err != nil {
-		a.systemFontsError = err.Error()
-	} else {
-		a.systemFontFamilies = families
-		a.systemFontsLoaded = true
-		a.systemFontsError = ""
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	a.appearanceSettings.ReloadFonts(context.Background(), a.client)
 }
 
 func systemFontSettingItem(snapshot settingsSnapshot) settingItem {
-	choices := make([]settingChoice, 0, len(snapshot.systemFontFamilies)+2)
+	appearance := snapshot.appearance
+	choices := make([]settingChoice, 0, len(appearance.FontFamilies)+2)
 	choices = append(choices, settingChoice{value: "", label: "System default"})
-	found := snapshot.data.AppFontFamily == ""
-	for _, family := range snapshot.systemFontFamilies {
+	found := snapshot.general.Data.AppFontFamily == ""
+	for _, family := range appearance.FontFamilies {
 		choices = append(choices, settingChoice{value: family, label: family})
-		if family == snapshot.data.AppFontFamily {
+		if family == snapshot.general.Data.AppFontFamily {
 			found = true
 		}
 	}
 	if !found {
-		choices = append([]settingChoice{{value: snapshot.data.AppFontFamily, label: snapshot.data.AppFontFamily}}, choices...)
+		choices = append([]settingChoice{{value: snapshot.general.Data.AppFontFamily, label: snapshot.general.Data.AppFontFamily}}, choices...)
 	}
 	description := "Font family used by Query and Settings windows"
-	if snapshot.systemFontsLoading {
+	if appearance.FontsLoading {
 		description = "Loading installed font families…"
-	} else if snapshot.systemFontsError != "" {
-		description = "Could not load installed fonts: " + snapshot.systemFontsError
+	} else if appearance.FontsError != "" {
+		description = "Could not load installed fonts: " + appearance.FontsError
 	}
-	return settingItem{key: "AppFontFamily", title: "Application font", description: description, value: snapshot.data.AppFontFamily, choices: choices, filterable: true}
+	return settingItem{key: "AppFontFamily", title: "Application font", description: description, value: snapshot.general.Data.AppFontFamily, choices: choices, filterable: true}
 }

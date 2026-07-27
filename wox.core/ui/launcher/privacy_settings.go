@@ -1,11 +1,6 @@
 package launcher
 
 import (
-	"encoding/json"
-	"fmt"
-	"runtime"
-	"time"
-
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -25,7 +20,7 @@ func (a *App) buildPrivacySettingsPage(snapshot settingsSnapshot, width, height 
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(),
 		Title: a.translate("i18n:ui_privacy"), Description: a.translate("i18n:ui_privacy_description"),
 		TelemetryTitle: a.translate("i18n:ui_privacy_anonymous_stats_title"), TelemetryDescription: a.translate("i18n:ui_privacy_anonymous_stats_description"),
-		TelemetryEnabled: snapshot.data.EnableAnonymousUsageStats, ViewSampleLabel: a.translate("i18n:ui_privacy_view_sample"), Error: snapshot.privacyError,
+		TelemetryEnabled: snapshot.general.Data.EnableAnonymousUsageStats, ViewSampleLabel: a.translate("i18n:ui_privacy_view_sample"), Error: snapshot.privacy.Error,
 		OnToggleTelemetry: func() {
 			a.selectSettingRow(0)
 			a.activateSetting(1)
@@ -38,8 +33,8 @@ func (a *App) buildPrivacySettingsPage(snapshot settingsSnapshot, width, height 
 func (a *App) buildPrivacySampleOverlay(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	return launcherview.PrivacySampleDialog(launcherview.PrivacySampleDialogProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(),
-		Title: a.translate("i18n:ui_privacy_sample_title"), Sample: snapshot.privacySample,
-		CopyLabel: a.translate("i18n:toolbar_copy"), ConfirmLabel: a.translate("i18n:ui_ok"), Error: snapshot.privacyError,
+		Title: a.translate("i18n:ui_privacy_sample_title"), Sample: snapshot.privacy.Sample,
+		CopyLabel: a.translate("i18n:toolbar_copy"), ConfirmLabel: a.translate("i18n:ui_ok"), Error: snapshot.privacy.Error,
 		OnCopy: a.copyPrivacySample, OnClose: a.togglePrivacySample,
 	})
 }
@@ -47,9 +42,10 @@ func (a *App) buildPrivacySampleOverlay(snapshot settingsSnapshot, width, height
 // onPrivacySettingsKey keeps the modal sample dialog from driving settings behind it.
 func (a *App) onPrivacySettingsKey(event woxui.KeyEvent) bool {
 	a.mu.RLock()
-	active := a.settingsOpen && a.settingTab == "privacy" && a.privacySample != ""
+	settingsOpen := a.settingsOpen
+	tab := a.settingTab
 	a.mu.RUnlock()
-	if !active {
+	if !settingsOpen || tab != "privacy" || !a.privacySettings.SampleVisible() {
 		return false
 	}
 	if event.Key == woxui.KeyEscape {
@@ -60,51 +56,10 @@ func (a *App) onPrivacySettingsKey(event woxui.KeyEvent) bool {
 
 // togglePrivacySample snapshots one representative telemetry payload so its timestamp stays stable while visible.
 func (a *App) togglePrivacySample() {
-	a.mu.Lock()
-	if a.privacySample != "" {
-		a.privacySample = ""
-		a.privacyError = ""
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
-		return
-	}
-	version := a.aboutVersion
-	if version == "" {
-		version = "current Wox version"
-	}
-	payload := privacySamplePayload{
-		SchemaVersion: 1,
-		InstallHash:   "sha256(install_id) - a 64-character hexadecimal string",
-		OSFamily:      runtime.GOOS,
-		WoxVersion:    version,
-		SentAt:        time.Now().UnixMilli(),
-	}
-	encoded, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		a.privacyError = err.Error()
-	} else {
-		a.privacySample = string(encoded)
-		a.privacyError = ""
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	a.privacySettings.ToggleSample(func() string { return a.aboutSettings.Snapshot().Version })
 }
 
 // copyPrivacySample publishes the visible sample through the portable clipboard boundary.
 func (a *App) copyPrivacySample() {
-	a.mu.RLock()
-	value := a.privacySample
-	a.mu.RUnlock()
-	if value == "" {
-		return
-	}
-	err := a.settingsNativeWindow().WriteClipboardText(value)
-	a.mu.Lock()
-	if err != nil {
-		a.privacyError = fmt.Sprintf("Could not copy sample: %v", err)
-	} else {
-		a.privacyError = ""
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	a.privacySettings.CopySample(a.settingsNativeWindow().WriteClipboardText)
 }

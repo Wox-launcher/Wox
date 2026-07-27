@@ -14,7 +14,7 @@ import (
 func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	contentWidth := max(float32(0), width-82)
 	theme := snapshot.palette.componentTheme()
-	message := snapshot.cloudError
+	message := snapshot.cloud.Error
 	messageColor := theme.ErrorText
 	if message == "" {
 		message = snapshot.note
@@ -42,13 +42,13 @@ func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height fl
 // cloudIntroViewProps prepares the signed-out Flutter-equivalent product and plan summary.
 func (a *App) cloudIntroViewProps(snapshot settingsSnapshot) launcherview.CloudIntroProps {
 	iconTint := snapshot.palette.resultTitle
-	freePrice := cloudBillingPriceText(snapshot.cloudBillingPlan.Free.Price)
+	freePrice := cloudBillingPriceText(snapshot.cloud.BillingPlan.Free.Price)
 	if freePrice == "" {
 		freePrice = "$0/month"
 	}
-	proPrice := cloudBillingPriceText(snapshot.cloudBillingPlan.Pro.Price)
+	proPrice := cloudBillingPriceText(snapshot.cloud.BillingPlan.Pro.Price)
 	if proPrice == "" {
-		if snapshot.cloudBillingLoaded {
+		if snapshot.cloud.BillingLoaded {
 			proPrice = a.translate("i18n:ui_cloud_sync_plan_price_unavailable")
 		} else {
 			proPrice = a.translate("i18n:ui_cloud_sync_plan_price_loading")
@@ -100,22 +100,22 @@ func cloudBillingPriceText(price cloudBillingPlanPrice) string {
 // cloudAccountViewProps prepares translated account state and controller actions.
 func (a *App) cloudAccountViewProps(snapshot settingsSnapshot, contentWidth float32) launcherview.CloudAccountProps {
 	status := a.translate("i18n:ui_cloud_sync_plan_free_status")
-	if strings.EqualFold(snapshot.cloudAccount.Plan, "pro") {
+	if strings.EqualFold(snapshot.cloud.Account.Plan, "pro") {
 		status = a.translate("i18n:ui_cloud_sync_plan_pro_status")
 	}
-	if snapshot.cloudAccount.SessionExpired {
+	if snapshot.cloud.Account.SessionExpired {
 		status = a.translate("i18n:ui_cloud_sync_account_session_expired")
 	}
 	labelWidth := max(float32(220), contentWidth-390)
 	valueWidth := max(float32(220), contentWidth-labelWidth)
 	return launcherview.CloudAccountProps{
 		SectionLabel:           a.translate("i18n:ui_cloud_sync_account"),
-		LoggedIn:               snapshot.cloudAccount.LoggedIn,
+		LoggedIn:               snapshot.cloud.Account.LoggedIn,
 		LoginLabel:             a.translate("i18n:ui_cloud_sync_account_login"),
 		RegisterLabel:          a.translate("i18n:ui_cloud_sync_account_register"),
 		EmailLabel:             a.translate("i18n:ui_cloud_sync_account_email"),
-		Email:                  snapshot.cloudAccount.Email,
-		EmailTextWidth:         a.measureCloudValueText(snapshot.cloudAccount.Email, valueWidth),
+		Email:                  snapshot.cloud.Account.Email,
+		EmailTextWidth:         a.measureCloudValueText(snapshot.cloud.Account.Email, valueWidth),
 		PlanLabel:              a.translate("i18n:ui_cloud_sync_plan_status"),
 		PlanTips:               a.translate("i18n:ui_cloud_sync_plan_status_tips"),
 		PlanStatus:             status,
@@ -123,7 +123,7 @@ func (a *App) cloudAccountViewProps(snapshot settingsSnapshot, contentWidth floa
 		BillingLabel:           a.translate("i18n:ui_cloud_sync_billing_help"),
 		BillingTips:            a.translate("i18n:ui_cloud_sync_billing_help_tips"),
 		SupportLabel:           a.translate("i18n:ui_cloud_sync_contact_support"),
-		ActionsEnabled:         snapshot.cloudBusy == "",
+		ActionsEnabled:         snapshot.cloud.Busy == "",
 		OnLogin:                func() { a.openCloudAccountForm("login") },
 		OnRegister:             func() { a.openCloudAccountForm("register") },
 		OnOpenAccountMenu:      func() { a.toggleCloudActionMenu("account") },
@@ -150,13 +150,13 @@ func (a *App) cloudSyncViewProps(snapshot settingsSnapshot) launcherview.CloudSy
 	ready := cloudSyncReady(snapshot)
 	buttonLabel := a.translate("i18n:ui_cloud_sync_sync")
 	buttonAction := func() {
-		if !ready || !snapshot.cloudAccount.SyncEnabled || !snapshot.cloudSync.Enabled {
+		if !ready || !snapshot.cloud.Account.SyncEnabled || !snapshot.cloud.Sync.Enabled {
 			a.beginCloudBootstrap()
 			return
 		}
 		a.runCloudAction("sync", "/sync/push", map[string]any{})
 	}
-	if cloudCurrentDeviceRevoked(snapshot.cloudDevices) {
+	if cloudCurrentDeviceRevoked(snapshot.cloud.Devices) {
 		buttonLabel = a.translate("i18n:ui_cloud_sync_join")
 		buttonAction = func() { a.runCloudAction("join", "/sync/devices/join", map[string]any{}) }
 	}
@@ -167,7 +167,7 @@ func (a *App) cloudSyncViewProps(snapshot settingsSnapshot) launcherview.CloudSy
 		Detail:        detail,
 		Color:         color,
 		ButtonLabel:   cloudBusyLabel(snapshot, "sync", buttonLabel),
-		ButtonEnabled: snapshot.cloudBusy == "" && !snapshot.cloudLoading && !snapshot.cloudAccount.SessionExpired && snapshot.cloudAccount.SyncEligible,
+		ButtonEnabled: snapshot.cloud.Busy == "" && !snapshot.cloud.Loading && !snapshot.cloud.Account.SessionExpired && snapshot.cloud.Account.SyncEligible,
 		OnSync:        buttonAction,
 	}
 }
@@ -175,40 +175,40 @@ func (a *App) cloudSyncViewProps(snapshot settingsSnapshot) launcherview.CloudSy
 func (a *App) cloudSyncPresentation(snapshot settingsSnapshot) (string, string, woxui.Color) {
 	muted := snapshot.palette.resultSubtitle
 	errorColor := snapshot.palette.componentTheme().ErrorText
-	if snapshot.cloudLoading {
+	if snapshot.cloud.Loading {
 		return a.translate("i18n:ui_cloud_sync_loading"), "", muted
 	}
-	if snapshot.cloudAccount.SessionExpired {
+	if snapshot.cloud.Account.SessionExpired {
 		return a.translate("i18n:ui_cloud_sync_sync_error"), a.translate("i18n:ui_cloud_sync_account_session_expired"), errorColor
 	}
-	if snapshot.cloudError != "" {
-		return a.translate("i18n:ui_cloud_sync_sync_error"), snapshot.cloudError, errorColor
+	if snapshot.cloud.Error != "" {
+		return a.translate("i18n:ui_cloud_sync_sync_error"), snapshot.cloud.Error, errorColor
 	}
-	if progress := snapshot.cloudSync.Progress; progress != nil && progress.Active {
+	if progress := snapshot.cloud.Sync.Progress; progress != nil && progress.Active {
 		detail := strings.Title(progress.Operation)
 		if progress.Total > 0 {
 			detail = fmt.Sprintf("%s · %d / %d", detail, progress.Current, progress.Total)
 		}
 		return a.translate("i18n:ui_cloud_sync_syncing"), detail, muted
 	}
-	if state := snapshot.cloudSync.State; state != nil && state.LastError != "" {
+	if state := snapshot.cloud.Sync.State; state != nil && state.LastError != "" {
 		return a.translate("i18n:ui_cloud_sync_sync_error"), state.LastError, errorColor
 	}
-	if !snapshot.cloudAccount.SyncEligible {
+	if !snapshot.cloud.Account.SyncEligible {
 		return a.translate("i18n:ui_cloud_sync_unsynced"), a.translate("i18n:ui_cloud_sync_subscription_required"), muted
 	}
 	if !cloudSyncReady(snapshot) {
 		return a.translate("i18n:ui_cloud_sync_unsynced"), "", muted
 	}
-	if !snapshot.cloudAccount.SyncEnabled || !snapshot.cloudSync.Enabled {
+	if !snapshot.cloud.Account.SyncEnabled || !snapshot.cloud.Sync.Enabled {
 		return a.translate("i18n:ui_cloud_sync_disabled"), "", muted
 	}
-	lastSync := max(cloudStateTimestamp(snapshot.cloudSync.State, true), cloudStateTimestamp(snapshot.cloudSync.State, false))
+	lastSync := max(cloudStateTimestamp(snapshot.cloud.Sync.State, true), cloudStateTimestamp(snapshot.cloud.Sync.State, false))
 	return a.translate("i18n:ui_cloud_sync_synced"), a.translate("i18n:ui_cloud_sync_last_sync_time") + ": " + a.formatCloudTime(lastSync), woxui.Color{R: 72, G: 190, B: 112, A: 255}
 }
 
 func cloudSyncReady(snapshot settingsSnapshot) bool {
-	return snapshot.cloudSync.KeyStatus.Available && snapshot.cloudSync.State != nil && snapshot.cloudSync.State.Bootstrapped
+	return snapshot.cloud.Sync.KeyStatus.Available && snapshot.cloud.Sync.State != nil && snapshot.cloud.Sync.State.Bootstrapped
 }
 
 func cloudStateTimestamp(state *cloudSyncState, pull bool) int64 {
@@ -231,7 +231,7 @@ func cloudCurrentDeviceRevoked(devices cloudDeviceList) bool {
 }
 
 func cloudBusyLabel(snapshot settingsSnapshot, operation, label string) string {
-	if snapshot.cloudBusy == operation || (operation == "bootstrap" && snapshot.cloudBusy == "bootstrap-status") {
+	if snapshot.cloud.Busy == operation || (operation == "bootstrap" && snapshot.cloud.Busy == "bootstrap-status") {
 		return label + "…"
 	}
 	return label
@@ -239,8 +239,8 @@ func cloudBusyLabel(snapshot settingsSnapshot, operation, label string) string {
 
 // cloudDevicesViewProps prepares device labels and revoke callbacks.
 func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot) launcherview.CloudDevicesProps {
-	items := make([]launcherview.CloudDeviceProps, 0, len(snapshot.cloudDevices.Devices))
-	for index, device := range snapshot.cloudDevices.Devices {
+	items := make([]launcherview.CloudDeviceProps, 0, len(snapshot.cloud.Devices.Devices))
+	for index, device := range snapshot.cloud.Devices.Devices {
 		index := index
 		device := device
 		name := device.DeviceName
@@ -260,7 +260,7 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot) launcherview.Clou
 			LastSeen:      a.formatCloudTime(device.LastSeenAt),
 			RevokeLabel:   a.translate("i18n:ui_cloud_sync_devices_revoke"),
 			ShowRevoke:    !device.Current && device.RevokedAt == 0,
-			RevokeEnabled: snapshot.cloudBusy == "",
+			RevokeEnabled: snapshot.cloud.Busy == "",
 			OnRevoke: func() {
 				a.runCloudAction("revoke", "/sync/devices/revoke", map[string]string{"target_device_id": device.DeviceID})
 			},
@@ -269,7 +269,7 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot) launcherview.Clou
 	return launcherview.CloudDevicesProps{
 		SectionLabel:   a.translate("i18n:ui_cloud_sync_devices"),
 		RefreshLabel:   cloudRefreshLabel(a, snapshot),
-		RefreshEnabled: !snapshot.cloudLoading && snapshot.cloudBusy == "",
+		RefreshEnabled: !snapshot.cloud.Loading && snapshot.cloud.Busy == "",
 		EmptyLabel:     a.translate("i18n:ui_cloud_sync_devices_empty"),
 		Items:          items,
 		OnRefresh:      func() { go a.reloadCloudSync() },
@@ -277,7 +277,7 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot) launcherview.Clou
 }
 
 func cloudRefreshLabel(a *App, snapshot settingsSnapshot) string {
-	if snapshot.cloudLoading {
+	if snapshot.cloud.Loading {
 		return a.translate("i18n:ui_cloud_sync_loading")
 	}
 	return a.translate("i18n:ui_cloud_sync_refresh_status")
@@ -285,9 +285,9 @@ func cloudRefreshLabel(a *App, snapshot settingsSnapshot) string {
 
 // cloudPluginExclusionsViewProps prepares the visible plugin boundary and toggle actions.
 func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot) launcherview.CloudPluginExclusionsProps {
-	rows := cloudPluginExclusionRows(snapshot.cloudPlugins, snapshot.data.CloudSyncDisabledPlugins)
-	excluded := make(map[string]bool, len(snapshot.data.CloudSyncDisabledPlugins))
-	for _, pluginID := range snapshot.data.CloudSyncDisabledPlugins {
+	rows := cloudPluginExclusionRows(snapshot.cloud.Plugins, snapshot.general.Data.CloudSyncDisabledPlugins)
+	excluded := make(map[string]bool, len(snapshot.general.Data.CloudSyncDisabledPlugins))
+	for _, pluginID := range snapshot.general.Data.CloudSyncDisabledPlugins {
 		excluded[strings.TrimSpace(pluginID)] = true
 	}
 	items := make([]launcherview.CloudPluginExclusionProps, 0, len(rows))
@@ -303,7 +303,7 @@ func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot) launcher
 		if isExcluded {
 			buttonLabel = a.translate("i18n:ui_cloud_sync_disabled")
 		}
-		if snapshot.cloudBusy == "exclusion-"+plugin.ID {
+		if snapshot.cloud.Busy == "exclusion-"+plugin.ID {
 			buttonLabel += "…"
 		}
 		items = append(items, launcherview.CloudPluginExclusionProps{
@@ -311,7 +311,7 @@ func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot) launcher
 			Name:          name,
 			PluginID:      plugin.ID,
 			ButtonLabel:   buttonLabel,
-			ButtonEnabled: snapshot.cloudBusy == "",
+			ButtonEnabled: snapshot.cloud.Busy == "",
 			Excluded:      isExcluded,
 			OnToggle:      func() { a.toggleCloudPluginExclusion(plugin.ID) },
 		})
@@ -341,7 +341,7 @@ func (a *App) cloudConfigNotesViewProps() launcherview.CloudConfigNotesProps {
 
 // cloudActionMenuViewProps prepares the active account or subscription menu.
 func (a *App) cloudActionMenuViewProps(snapshot settingsSnapshot) *launcherview.CloudActionMenuProps {
-	if snapshot.cloudActionMenu == "" {
+	if snapshot.cloud.ActionMenu == "" {
 		return nil
 	}
 	type menuAction struct {
@@ -354,9 +354,9 @@ func (a *App) cloudActionMenuViewProps(snapshot settingsSnapshot) *launcherview.
 		{id: "logout", label: a.translate("i18n:ui_cloud_sync_account_logout"), action: "logout"},
 	}
 	top := float32(145)
-	if snapshot.cloudActionMenu == "subscription" {
+	if snapshot.cloud.ActionMenu == "subscription" {
 		billingLabel := a.translate("i18n:ui_cloud_sync_subscribe")
-		if strings.EqualFold(snapshot.cloudAccount.Plan, "pro") {
+		if strings.EqualFold(snapshot.cloud.Account.Plan, "pro") {
 			billingLabel = a.translate("i18n:ui_cloud_sync_manage_subscription")
 		}
 		actions = []menuAction{

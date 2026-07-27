@@ -3,12 +3,9 @@ package launcher
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
-	"time"
 
 	launcherview "wox/ui/launcher/view"
-	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
@@ -22,15 +19,15 @@ type backupInfo struct {
 
 // buildDataSettingsPage adapts controller state to the package-independent data settings view.
 func (a *App) buildDataSettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
-	backups := make([]launcherview.DataBackup, len(snapshot.dataBackups))
-	for index, backup := range snapshot.dataBackups {
+	backups := make([]launcherview.DataBackup, len(snapshot.dataState.Backups))
+	for index, backup := range snapshot.dataState.Backups {
 		backups[index] = launcherview.DataBackup{ID: backup.ID, Timestamp: backup.Timestamp, Type: backup.Type, Path: backup.Path}
 	}
 	return launcherview.DataSettingsView(launcherview.DataSettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Labels: a.dataSettingsLabels(),
-		Location: snapshot.dataLocation, PendingLocation: snapshot.dataPendingLocation, AutoBackup: snapshot.data.EnableAutoBackup,
-		Backups: backups, RestoreArmed: snapshot.dataRestoreArmed, LogLevel: snapshot.data.LogLevel, ClearLogsArmed: snapshot.dataClearLogsArmed,
-		Note: snapshot.note, Loading: snapshot.dataLoading, Error: snapshot.dataError,
+		Location: snapshot.dataState.Location, PendingLocation: snapshot.dataState.PendingLocation, AutoBackup: snapshot.general.Data.EnableAutoBackup,
+		Backups: backups, RestoreArmed: snapshot.dataState.RestoreArmed, LogLevel: snapshot.general.Data.LogLevel, ClearLogsArmed: snapshot.dataState.ClearLogsArmed,
+		Note: snapshot.note, Loading: snapshot.dataState.Loading, Error: snapshot.dataState.Error,
 		OnOpenPath: a.openDataPath, OnChooseLocation: a.chooseDataLocation, OnCancelLocation: a.cancelDataLocationChange,
 		OnConfirmLocation: a.confirmDataLocationChange, OnToggleAutoBackup: a.toggleDataAutoBackup, OnCreateBackup: a.createDataBackup,
 		OnRestoreBackup: a.restoreDataBackup, OnCycleLogLevel: a.cycleDataLogLevel, OnClearLogs: a.clearDataLogs, OnOpenLog: a.openDataLog,
@@ -74,182 +71,46 @@ func (a *App) dataSettingsLabels() launcherview.DataSettingsLabels {
 	}
 }
 
-// reloadDataSettings refreshes the storage location and backup catalog through existing core routes.
+// reloadDataSettings delegates to dataSettingsController so App no longer holds data state directly.
 func (a *App) reloadDataSettings() {
-	a.mu.Lock()
-	if a.dataLoading {
-		a.mu.Unlock()
-		return
-	}
-	a.dataLoading = true
-	a.dataError = ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	var location string
-	var backups []backupInfo
-	locationErr := a.client.Post(ctx, "/setting/userdata/location", map[string]any{}, &location)
-	backupsErr := a.client.Post(ctx, "/backup/all", map[string]any{}, &backups)
-	sort.SliceStable(backups, func(i, j int) bool { return backups[i].Timestamp > backups[j].Timestamp })
-
-	errorText := ""
-	if locationErr != nil {
-		errorText = "load data location: " + locationErr.Error()
-	}
-	if backupsErr != nil {
-		if errorText != "" {
-			errorText += " · "
-		}
-		errorText += "load backups: " + backupsErr.Error()
-	}
-	a.mu.Lock()
-	a.dataLoading = false
-	a.dataLoaded = errorText == ""
-	if locationErr == nil {
-		a.dataLocation = location
-	}
-	if backupsErr == nil {
-		a.dataBackups = backups
-	}
-	a.dataError = errorText
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	a.dataSettings.Reload(context.Background(), a.client)
 }
 
-// createDataBackup runs the potentially slow archive operation away from the UI event loop.
+// createDataBackup delegates to dataSettingsController.
 func (a *App) createDataBackup() {
-	a.mu.Lock()
-	if a.dataBusy != "" {
-		a.mu.Unlock()
-		return
-	}
-	a.dataBusy = "backup"
-	a.dataError = ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		err := a.client.Post(ctx, "/backup/now", map[string]any{}, nil)
-		cancel()
-		a.mu.Lock()
-		a.dataBusy = ""
-		if err != nil {
-			a.dataError = "Could not create backup: " + err.Error()
-		} else {
-			a.settingNote = "Manual backup created"
-		}
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
-		if err == nil {
-			a.reloadDataSettings()
-		}
-	}()
+	a.dataSettings.CreateBackup(context.Background(), a.client)
 }
 
-// restoreDataBackup requires two explicit activations before core replaces current settings.
+// restoreDataBackup delegates to dataSettingsController.
 func (a *App) restoreDataBackup(id string) {
-	a.mu.Lock()
-	if a.dataBusy != "" || strings.TrimSpace(id) == "" {
-		a.mu.Unlock()
-		return
-	}
-	if a.dataRestoreArmed != id {
-		a.dataRestoreArmed = id
-		a.settingNote = "Press Confirm restore to replace current settings with this backup."
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
-		return
-	}
-	a.dataRestoreArmed = ""
-	a.dataBusy = "restore"
-	a.dataError = ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		err := a.client.Post(ctx, "/backup/restore", map[string]string{"id": id}, nil)
-		cancel()
-		if err == nil {
-			err = a.reloadSettings()
-		}
-		a.mu.Lock()
-		a.dataBusy = ""
-		if err != nil {
-			a.dataError = "Could not restore backup: " + err.Error()
-		} else {
-			a.settingNote = "Backup restored"
-		}
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
-	}()
+	a.dataSettings.RestoreBackup(context.Background(), a.client, id)
 }
 
-// chooseDataLocation separates native directory selection from the destructive move confirmation.
+// chooseDataLocation delegates to dataSettingsController, which uses the injected
+// native directory picker.
 func (a *App) chooseDataLocation() {
-	path, err := a.settingsNativeWindow().PickFile(woxui.FileDialogOptions{Directory: true})
-	a.mu.Lock()
-	if err != nil {
-		a.dataError = "Could not select data directory: " + err.Error()
-	} else if strings.TrimSpace(path) != "" && path != a.dataLocation {
-		a.dataPendingLocation = path
-		a.settingNote = "Confirm the new data directory before Wox moves its files."
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	a.dataSettings.ChooseLocation()
 }
 
 func (a *App) cancelDataLocationChange() {
-	a.mu.Lock()
-	a.dataPendingLocation = ""
-	a.settingNote = ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	a.dataSettings.CancelLocationChange()
 }
 
-// confirmDataLocationChange delegates the actual migration to core after the visible confirmation step.
+// confirmDataLocationChange delegates to dataSettingsController.
 func (a *App) confirmDataLocationChange() {
-	a.mu.Lock()
-	location := a.dataPendingLocation
-	if a.dataBusy != "" || strings.TrimSpace(location) == "" {
-		a.mu.Unlock()
-		return
-	}
-	a.dataPendingLocation = ""
-	a.dataBusy = "location"
-	a.dataError = ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		err := a.client.Post(ctx, "/setting/userdata/location/update", map[string]string{"location": location}, nil)
-		cancel()
-		a.mu.Lock()
-		a.dataBusy = ""
-		if err != nil {
-			a.dataPendingLocation = location
-			a.dataError = "Could not move data directory: " + err.Error()
-		} else {
-			a.dataLocation = location
-			a.settingNote = "Data directory updated"
-		}
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
-	}()
+	a.dataSettings.ConfirmLocationChange(context.Background(), a.client)
 }
 
 // toggleDataAutoBackup reuses the regular key-value settings save and rollback behavior.
+// Stays on App because it operates on the general-domain EnableAutoBackup setting and
+// the shared settingSaving/settingNote/saveSetting machinery.
 func (a *App) toggleDataAutoBackup() {
 	a.mu.Lock()
 	if a.settingSaving {
 		a.mu.Unlock()
 		return
 	}
-	next := !a.settings.EnableAutoBackup
+	next := !a.generalSettings.Data().EnableAutoBackup
 	label := "Off"
 	if next {
 		label = "On"
@@ -265,13 +126,15 @@ func (a *App) toggleDataAutoBackup() {
 }
 
 // cycleDataLogLevel keeps the compact page to the two log levels accepted by core.
+// Stays on App for the same reason as toggleDataAutoBackup: it edits the general-domain
+// LogLevel setting through the shared save flow.
 func (a *App) cycleDataLogLevel() {
 	a.mu.Lock()
 	if a.settingSaving {
 		a.mu.Unlock()
 		return
 	}
-	current := a.settings.LogLevel
+	current := a.generalSettings.Data().LogLevel
 	next := "DEBUG"
 	if strings.EqualFold(current, "DEBUG") {
 		next = "INFO"
@@ -286,89 +149,22 @@ func (a *App) cycleDataLogLevel() {
 	)
 }
 
-// clearDataLogs uses the same two-step confirmation as backup restore to avoid accidental data loss.
+// clearDataLogs delegates to dataSettingsController.
 func (a *App) clearDataLogs() {
-	a.mu.Lock()
-	if a.dataBusy != "" {
-		a.mu.Unlock()
-		return
-	}
-	if !a.dataClearLogsArmed {
-		a.dataClearLogsArmed = true
-		a.settingNote = "Press Confirm clear to delete historical logs."
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
-		return
-	}
-	a.dataClearLogsArmed = false
-	a.dataBusy = "logs"
-	a.dataError = ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		err := a.client.Post(ctx, "/log/clear", map[string]any{}, nil)
-		cancel()
-		a.mu.Lock()
-		a.dataBusy = ""
-		if err != nil {
-			a.dataError = "Could not clear logs: " + err.Error()
-		} else {
-			a.settingNote = "Logs cleared"
-		}
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
-	}()
+	a.dataSettings.ClearLogs(context.Background(), a.client)
 }
 
-// openDataPath delegates platform shell behavior to core's existing cross-platform route.
+// openDataPath delegates to dataSettingsController.
 func (a *App) openDataPath(path string) {
-	if strings.TrimSpace(path) == "" {
-		return
-	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		err := a.client.Post(ctx, "/open", map[string]string{"path": path}, nil)
-		cancel()
-		if err != nil {
-			a.mu.Lock()
-			a.dataError = "Could not open path: " + err.Error()
-			a.mu.Unlock()
-			a.invalidateSettingsWindow()
-		}
-	}()
+	a.dataSettings.OpenPath(context.Background(), a.client, path)
 }
 
-// openDataBackupFolder resolves the configured folder in core before asking the desktop to open it.
+// openDataBackupFolder delegates to dataSettingsController.
 func (a *App) openDataBackupFolder() {
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		var path string
-		err := a.client.Post(ctx, "/backup/folder", map[string]any{}, &path)
-		cancel()
-		if err != nil {
-			a.mu.Lock()
-			a.dataError = "Could not open backup folder: " + err.Error()
-			a.mu.Unlock()
-			a.invalidateSettingsWindow()
-			return
-		}
-		a.openDataPath(path)
-	}()
+	a.dataSettings.OpenBackupFolder(context.Background(), a.client)
 }
 
-// openDataLog lets core create and reveal the current log file with its platform shell adapter.
+// openDataLog delegates to dataSettingsController.
 func (a *App) openDataLog() {
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		err := a.client.Post(ctx, "/log/open", map[string]any{}, nil)
-		cancel()
-		if err != nil {
-			a.mu.Lock()
-			a.dataError = "Could not open log: " + err.Error()
-			a.mu.Unlock()
-			a.invalidateSettingsWindow()
-		}
-	}()
+	a.dataSettings.OpenLog(context.Background(), a.client)
 }

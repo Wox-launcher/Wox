@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -29,8 +28,8 @@ const runtimeSettingRowHeight = float32(72)
 
 // buildRuntimeSettingsPage prepares runtime status and setting rows for the pure page view.
 func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settingItem, width, height float32) woxwidget.Widget {
-	statuses := make([]launcherview.RuntimeStatus, 0, len(snapshot.runtimeStatuses))
-	for _, status := range snapshot.runtimeStatuses {
+	statuses := make([]launcherview.RuntimeStatus, 0, len(snapshot.runtime.Statuses))
+	for _, status := range snapshot.runtime.Statuses {
 		status := status
 		version := strings.TrimSpace(status.HostVersion)
 		if version != "" && !strings.HasPrefix(strings.ToLower(version), "v") {
@@ -54,7 +53,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 		}
 		if status.CanRestart {
 			converted.RestartLabel = a.translate("i18n:ui_runtime_restart_host")
-			if strings.EqualFold(snapshot.runtimeRestarting, status.Runtime) {
+			if strings.EqualFold(snapshot.runtime.Restarting, status.Runtime) {
 				converted.RestartLabel = a.translate("i18n:ui_runtime_restarting_host")
 			}
 			converted.RestartIcon = a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.resultTitle, 32)
@@ -67,9 +66,9 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 		index := index
 		item := a.localizedSettingItem(item)
 		state := woxui.TextEditingState{Text: item.value}
-		focused := snapshot.editKey == item.key
+		focused := snapshot.general.EditKey == item.key
 		if focused {
-			state = snapshot.editing
+			state = snapshot.general.Editing
 		}
 		rows = append(rows, launcherview.RuntimeSettingRow{
 			ID: "runtime-setting-" + item.key, Title: item.title, Description: item.description, Placeholder: a.runtimeExecutablePlaceholder(item.key),
@@ -82,8 +81,8 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 		})
 	}
 	return launcherview.RuntimeSettingsView(launcherview.RuntimeSettingsProps{
-		Width: width, Height: height, SettingRowHeight: runtimeSettingRowHeight, Theme: snapshot.palette.componentTheme(), Labels: a.runtimeSettingsLabels(), Loading: snapshot.runtimeLoading,
-		Restarting: snapshot.runtimeRestarting != "", Error: snapshot.runtimeError, Note: snapshot.note,
+		Width: width, Height: height, SettingRowHeight: runtimeSettingRowHeight, Theme: snapshot.palette.componentTheme(), Labels: a.runtimeSettingsLabels(), Loading: snapshot.runtime.Loading,
+		Restarting: snapshot.runtime.Restarting != "", Error: snapshot.runtime.Error, Note: snapshot.note,
 		Selected: snapshot.row, Statuses: statuses, Settings: rows,
 	})
 }
@@ -171,8 +170,7 @@ func (a *App) saveRuntimeExecutablePath(item settingItem, value string) {
 		return
 	}
 	a.settingSaving = true
-	a.settingEditKey = ""
-	a.settingEditor = nil
+	a.generalSettings.EndEdit()
 	a.settingNote = "Saving " + item.title + "…"
 	a.mu.Unlock()
 	a.updateSettingsTextInput(false)
@@ -223,76 +221,14 @@ func cloneRuntimeStatuses(statuses []runtimeStatus) []runtimeStatus {
 	return cloned
 }
 
-// reloadRuntimeStatuses refreshes the runtime inventory while discarding responses superseded by a newer refresh.
+// reloadRuntimeStatuses refreshes the runtime inventory via the runtime controller.
 func (a *App) reloadRuntimeStatuses() {
-	a.mu.Lock()
-	a.runtimeRevision++
-	revision := a.runtimeRevision
-	a.runtimeLoading = true
-	a.runtimeError = ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	var statuses []runtimeStatus
-	err := a.client.Post(ctx, "/runtime/status", map[string]any{}, &statuses)
-
-	a.mu.Lock()
-	if revision != a.runtimeRevision {
-		a.mu.Unlock()
-		return
-	}
-	a.runtimeLoading = false
-	if err != nil {
-		a.runtimeError = err.Error()
-	} else {
-		a.runtimeStatuses = statuses
-		a.runtimeLoaded = true
-	}
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	a.runtimeSettings.Reload(context.Background(), a.client)
 }
 
 // restartRuntimeHost restarts a recoverable Node.js or Python host and then reloads the authoritative status.
 func (a *App) restartRuntimeHost(runtime string) {
-	runtime = strings.ToUpper(strings.TrimSpace(runtime))
-	a.mu.Lock()
-	if runtime == "" || a.runtimeRestarting != "" {
-		a.mu.Unlock()
-		return
-	}
-	canRestart := false
-	for _, status := range a.runtimeStatuses {
-		if strings.EqualFold(status.Runtime, runtime) {
-			canRestart = status.CanRestart
-			break
-		}
-	}
-	if !canRestart {
-		a.mu.Unlock()
-		return
-	}
-	a.runtimeRestarting = runtime
-	a.runtimeError = ""
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		err := a.client.Post(ctx, "/runtime/restart", map[string]string{"Runtime": runtime}, nil)
-		cancel()
-		a.mu.Lock()
-		a.runtimeRestarting = ""
-		a.mu.Unlock()
-		a.reloadRuntimeStatuses()
-		if err != nil {
-			a.mu.Lock()
-			a.runtimeError = fmt.Sprintf("Could not restart %s: %v", runtimeDisplayName(runtime), err)
-			a.mu.Unlock()
-			a.invalidateSettingsWindow()
-		}
-	}()
+	a.runtimeSettings.Restart(context.Background(), a.client, runtime, a.reloadRuntimeStatuses)
 }
 
 // openRuntimeInstallURL delegates installation guidance to the platform browser without owning platform code in the page.
@@ -301,10 +237,7 @@ func (a *App) openRuntimeInstallURL(status runtimeStatus) {
 		return
 	}
 	if err := a.settingsNativeWindow().OpenExternalURL(status.InstallURL); err != nil {
-		a.mu.Lock()
-		a.runtimeError = "Could not open runtime website: " + err.Error()
-		a.mu.Unlock()
-		a.invalidateSettingsWindow()
+		a.runtimeSettings.SetError("Could not open runtime website: " + err.Error())
 	}
 }
 

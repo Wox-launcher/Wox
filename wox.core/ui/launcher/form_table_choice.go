@@ -99,7 +99,7 @@ func (a *App) chooseFormTableChoice(index int) {
 	state.rowForm.values[definition.Value.Key] = definition.Value.Options[index].Value
 	setFormFieldsFocusLocked(state.rowForm, fieldIndex)
 	if definition.Value.Key == "Name" {
-		applyAIProviderDefaultHostLocked(state, true, a.aiProviderCatalog)
+		applyAIProviderDefaultHostLocked(state, true, a.aiSettings.ProviderCatalog())
 	}
 	state.choicePicker = nil
 	state.status = ""

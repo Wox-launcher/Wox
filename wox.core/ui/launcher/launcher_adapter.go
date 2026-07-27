@@ -86,7 +86,7 @@ func (a *App) snapshot() viewSnapshot {
 	if a.actionPanel && a.actionFilter != nil {
 		actionFilter = a.actionFilter.State().Text
 		actionEntries = unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
-		actionIndices = filteredActionIndices(actionEntries, actionFilter, a.translations, a.settings.UsePinYin)
+		actionIndices = filteredActionIndices(actionEntries, actionFilter, a.translations, a.usePinYin())
 	}
 	return viewSnapshot{
 		editing:               a.editor.State(),
@@ -104,7 +104,7 @@ func (a *App) snapshot() viewSnapshot {
 		completionHint:        completionHint,
 		toolbarMsg:            toolbarMsg,
 		glance:                glance,
-		hideGlanceIcon:        a.settings.HideGlanceIcon,
+		hideGlanceIcon:        a.generalSettings.Data().HideGlanceIcon,
 		form:                  snapshotFormLocked(a.form),
 		tableEditor:           tableEditor,
 		requirementFormActive: a.requirementForm != nil && a.requirementForm.active,

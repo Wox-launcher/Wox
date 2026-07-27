@@ -2,9 +2,7 @@ package launcher
 
 import (
 	"context"
-	"log"
 	"strings"
-	"time"
 )
 
 type updateChannelVersion struct {
@@ -31,32 +29,20 @@ func updateChannelVersionTrailers(versions []updateChannelVersion) map[string]st
 }
 
 // reloadUpdateChannelVersions keeps the update channel picker backed by the same manifest metadata as Flutter.
+// The network reload and the len/loading guard now live in updateSettingsController; this wrapper supplies the
+// active ReleaseChannel choice picker callback so the controller stays free of any *App back-dependency.
 func (a *App) reloadUpdateChannelVersions() {
-	a.mu.Lock()
-	if a.updateChannelsLoading || len(a.updateChannelVersions) > 0 {
-		a.mu.Unlock()
-		return
-	}
-	a.updateChannelsLoading = true
-	a.mu.Unlock()
-	a.invalidateSettingsWindow()
+	a.updateSettings.Reload(context.Background(), a.client, a.applyUpdateChannelTrailers)
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	var versions []updateChannelVersion
-	err := a.client.Post(ctx, "/updater/channel/versions", map[string]any{}, &versions)
-
+// applyUpdateChannelTrailers updates the active ReleaseChannel choice picker with the latest channel versions.
+// The picker is owned by the general settings domain; updating it here keeps this cross-domain write
+// out of updateSettingsController.
+func (a *App) applyUpdateChannelTrailers(versions []updateChannelVersion) {
 	a.mu.Lock()
-	a.updateChannelsLoading = false
-	if err == nil {
-		a.updateChannelVersions = versions
-		if a.settingChoicePicker != nil && a.settingChoicePicker.item.key == "ReleaseChannel" {
-			a.settingChoicePicker.item.trailers = updateChannelVersionTrailers(versions)
-		}
+	defer a.mu.Unlock()
+	picker := a.generalSettings.ChoicePicker()
+	if picker != nil && picker.item.key == "ReleaseChannel" {
+		picker.item.trailers = updateChannelVersionTrailers(versions)
 	}
-	a.mu.Unlock()
-	if err != nil {
-		log.Printf("load update channel versions: %v", err)
-	}
-	a.invalidateSettingsWindow()
 }
