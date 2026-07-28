@@ -971,9 +971,14 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   if (_owner == NULL || _owner->closed || self.window == nil) {
     return;
   }
+  CAMetalLayer *layer = (CAMetalLayer *)self.layer;
+  if (!_owner->visible) {
+    // A zero drawable size lets CAMetalLayer discard its IOSurface pool while the window is hidden.
+    layer.drawableSize = CGSizeZero;
+    return;
+  }
   CGFloat scale = self.window.backingScaleFactor;
   NSSize size = self.bounds.size;
-  CAMetalLayer *layer = (CAMetalLayer *)self.layer;
   layer.contentsScale = scale;
   layer.drawableSize = CGSizeMake(ceil(size.width * scale), ceil(size.height * scale));
 }
@@ -1198,6 +1203,7 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
     window->epoch++;
     epoch = window->epoch;
     window->visible = true;
+    [window->view updateDrawableSize];
     [NSApp activateIgnoringOtherApps:YES];
     if (window->window.isMiniaturized) {
       [window->window deminiaturize:nil];
@@ -1230,6 +1236,7 @@ int32_t wox_darwin_window_hide(WoxDarwinWindow *window) {
       window->visible = false;
       [window->window orderOut:nil];
       clear_renderer_texture_caches(window->renderer);
+      [window->view updateDrawableSize];
     }
   });
   return result;
