@@ -1,6 +1,6 @@
 # 用于插件开发的 AI Skills
 
-如果你使用 Codex 或其他兼容的 agent，建议安装 [`wox.core/resource/ai/skills`](https://github.com/Wox-launcher/Wox/tree/master/wox.core/resource/ai/skills) 目录下发布的 Wox skills 来加速插件开发。
+如果你使用 Codex 或其他兼容的 agent，建议安装 [`wox-plugin-creator`](https://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-creator) 来加速插件开发。
 
 ## 为什么推荐使用
 

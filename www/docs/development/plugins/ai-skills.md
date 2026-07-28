@@ -1,6 +1,6 @@
 # AI Skills For Plugin Development
 
-If you use Codex or another compatible agent, install the Wox skills published in [`wox.core/resource/ai/skills`](https://github.com/Wox-launcher/Wox/tree/master/wox.core/resource/ai/skills) to speed up plugin development.
+If you use Codex or another compatible agent, install [`wox-plugin-creator`](https://github.com/Wox-launcher/Wox/tree/master/.agents/skills/wox-plugin-creator) to speed up plugin development.
 
 ## Why Use Them
 
