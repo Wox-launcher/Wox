@@ -114,7 +114,6 @@ func (a *App) cloudAccountViewProps(snapshot settingsSnapshot, contentWidth, ima
 		status = a.translate("i18n:ui_cloud_sync_account_session_expired")
 	}
 	labelWidth := cloudSettingsLabelWidth(contentWidth, 220)
-	valueWidth := max(float32(220), contentWidth-labelWidth)
 	return launcherview.CloudAccountProps{
 		SectionLabel:           a.translate("i18n:ui_cloud_sync_account"),
 		LoggedIn:               snapshot.cloud.Account.LoggedIn,
@@ -123,11 +122,9 @@ func (a *App) cloudAccountViewProps(snapshot settingsSnapshot, contentWidth, ima
 		RegisterLabel:          a.translate("i18n:ui_cloud_sync_account_register"),
 		EmailLabel:             a.translate("i18n:ui_cloud_sync_account_email"),
 		Email:                  snapshot.cloud.Account.Email,
-		EmailTextWidth:         a.measureCloudValueText(snapshot.cloud.Account.Email, valueWidth),
 		PlanLabel:              a.translate("i18n:ui_cloud_sync_plan_status"),
 		PlanTips:               a.translate("i18n:ui_cloud_sync_plan_status_tips"),
 		PlanStatus:             status,
-		PlanStatusTextWidth:    a.measureCloudValueText(status, valueWidth),
 		BillingLabel:           a.translate("i18n:ui_cloud_sync_billing_help"),
 		BillingTips:            a.translate("i18n:ui_cloud_sync_billing_help_tips"),
 		SupportLabel:           a.translate("i18n:ui_cloud_sync_contact_support"),
@@ -163,18 +160,6 @@ func (a *App) setCloudPlanTooltip(inside bool, anchor woxui.Rect) {
 // cloudSettingsLabelWidth keeps login-state fields on Flutter's wide-form grid while preserving room for their controls in narrow settings windows.
 func cloudSettingsLabelWidth(contentWidth, reservedWidth float32) float32 {
 	return min(float32(520), max(float32(220), contentWidth-reservedWidth))
-}
-
-// measureCloudValueText preserves native text sizing while the view owns placement.
-func (a *App) measureCloudValueText(value string, width float32) float32 {
-	style := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
-	textWidth := min(max(float32(0), width-24), float32(len([]rune(value)))*8+8)
-	if window := a.settingsNativeWindow(); window != nil {
-		if metrics, err := window.MeasureText(value, style); err == nil {
-			textWidth = min(max(float32(0), width-24), metrics.Size.Width+6)
-		}
-	}
-	return textWidth
 }
 
 // cloudSyncViewProps prepares status text and the sync or join action.

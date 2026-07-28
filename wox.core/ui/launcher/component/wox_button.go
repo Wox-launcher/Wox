@@ -48,12 +48,16 @@ type ButtonProps struct {
 // WoxButton builds a button with shared visuals, keyboard activation, and accessibility semantics.
 func WoxButton(props ButtonProps) woxwidget.Widget {
 	height := float32(38)
-	radius := float32(8)
-	padding := woxwidget.Insets{Left: 16, Right: 16}
+	radius := float32(4)
+	padding := woxwidget.Insets{Left: 20, Right: 20}
+	fontSize := float32(13)
+	fontWeight := woxui.FontWeightRegular
 	if props.Size == ButtonCompact {
 		height = 30
 		radius = 4
 		padding = woxwidget.Insets{Left: 12, Right: 12}
+		fontSize = 11
+		fontWeight = woxui.FontWeightSemibold
 	}
 	if props.Height > 0 {
 		height = props.Height
@@ -64,9 +68,8 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	if props.Padding != (woxwidget.Insets{}) {
 		padding = props.Padding
 	}
-	fontSize := props.FontSize
-	if fontSize <= 0 {
-		fontSize = 11
+	if props.FontSize > 0 {
+		fontSize = props.FontSize
 	}
 
 	background := props.Theme.QueryBackground
@@ -105,7 +108,7 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		actions = nil
 	}
 	key := woxwidget.Key(props.ID)
-	var child woxwidget.Widget = woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: woxui.FontWeightSemibold}, Color: foreground}
+	var child woxwidget.Widget = woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: fontWeight}, Color: foreground}
 	if props.Icon != nil {
 		iconSize := props.IconSize
 		if iconSize <= 0 {
@@ -113,11 +116,11 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		}
 		iconGap := props.IconGap
 		if iconGap <= 0 {
-			iconGap = 6
+			iconGap = 8
 		}
 		child = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: iconGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize},
-			woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: woxui.FontWeightSemibold}, Color: foreground},
+			woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: fontWeight}, Color: foreground},
 		}}
 	}
 	// Center measured text and icon content inside symmetric padding instead of relying on font-specific offsets.

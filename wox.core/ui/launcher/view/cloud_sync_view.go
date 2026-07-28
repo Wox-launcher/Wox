@@ -63,11 +63,9 @@ type CloudAccountProps struct {
 	RegisterLabel          string
 	EmailLabel             string
 	Email                  string
-	EmailTextWidth         float32
 	PlanLabel              string
 	PlanTips               string
 	PlanStatus             string
-	PlanStatusTextWidth    float32
 	BillingLabel           string
 	BillingTips            string
 	SupportLabel           string
@@ -455,7 +453,7 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: availableWidth, Height: 34, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 34, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Text{Value: props.EmailLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
-			cloudValueAction("cloud-account-action", props.Email, valueWidth, props.EmailTextWidth, props.OnOpenAccountMenu, theme),
+			cloudValueAction("cloud-account-action", props.Email, valueWidth, props.OnOpenAccountMenu, theme),
 		}}},
 		woxwidget.Container{Width: availableWidth, Height: 61, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 61, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
@@ -472,7 +470,7 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 				}},
 				woxwidget.Text{Value: props.PlanTips, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle},
 			}}},
-			cloudValueAction("cloud-plan-action", props.PlanStatus, valueWidth, props.PlanStatusTextWidth, props.OnOpenSubscriptionMenu, theme),
+			cloudValueAction("cloud-plan-action", props.PlanStatus, valueWidth, props.OnOpenSubscriptionMenu, theme),
 		}}},
 		woxwidget.Container{Width: availableWidth, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
@@ -481,7 +479,7 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 			}}},
 			woxwidget.Container{Width: valueWidth, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 				woxwidget.Painter{Width: max(float32(0), valueWidth-112), Height: 38},
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-support", Label: props.SupportLabel, Icon: props.SupportIcon, IconSize: 16, IconGap: 7, Width: 112, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnSupport, Theme: theme}),
+				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-support", Label: props.SupportLabel, Icon: props.SupportIcon, IconSize: 16, Width: 112, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnSupport, Theme: theme}),
 			}}},
 		}}},
 	}}}
@@ -511,13 +509,14 @@ func CloudPlanTooltipOverlay(props CloudIntroProps, anchor woxui.Rect, windowWid
 	return panel, left, top
 }
 
-// cloudValueAction right-aligns an account value beside its menu affordance.
-func cloudValueAction(id, value string, width, textWidth float32, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {
-	return woxwidget.Container{Width: width, Height: 34, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-		woxwidget.Painter{Width: max(float32(0), width-textWidth-24), Height: 28},
-		woxwidget.Container{Width: textWidth, Height: 28, Child: woxwidget.Text{Value: value, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
-		woxwidget.Gesture{ID: id, OnTap: onTap, Child: woxwidget.Container{Width: 24, Height: 28, Padding: woxwidget.Insets{Left: 8, Top: 2}, Child: woxwidget.Text{Value: "⌄", Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle}}},
-	}}}
+// cloudValueAction right-aligns an account value and the shared dropdown indicator on one center line.
+func cloudValueAction(id, value string, width float32, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {
+	return woxwidget.Align{Width: width, Height: 34, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: value, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
+			woxwidget.Gesture{ID: id, OnTap: onTap, Child: dropdownIndicator(28, 28, cloudAlpha(theme.ResultTitle, 194))},
+		},
+	}}
 }
 
 // cloudSyncCard renders current sync state and its primary action.
@@ -554,7 +553,7 @@ func cloudDeviceHeader(props CloudDevicesProps, width float32, theme woxcomponen
 	labelWidth := min(props.LabelWidth, max(float32(220), availableWidth-labelGap-buttonWidth))
 	valueWidth := max(buttonWidth, availableWidth-labelWidth-labelGap)
 	refresh := woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: "cloud-refresh", Label: props.RefreshLabel, Icon: props.RefreshIcon, IconSize: 16, IconGap: 6, Width: buttonWidth,
+		ID: "cloud-refresh", Label: props.RefreshLabel, Icon: props.RefreshIcon, IconSize: 16, Width: buttonWidth,
 		Disabled: !props.RefreshEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnRefresh, Theme: theme,
 	})
 	return woxwidget.Container{Width: width, Height: 50, Child: woxwidget.Flex{

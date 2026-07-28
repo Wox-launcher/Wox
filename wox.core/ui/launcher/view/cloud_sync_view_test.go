@@ -75,6 +75,22 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	}
 }
 
+func TestCloudAccountActionsUseCenteredSharedDropdownIndicator(t *testing.T) {
+	action := cloudValueAction("cloud-account-action", "account@example.com", 260, func() {}, woxcomponent.Theme{}).(woxwidget.Align)
+	if action.Horizontal != 1 || action.Vertical != 0.5 {
+		t.Fatalf("account action alignment = (%v, %v), want (1, 0.5)", action.Horizontal, action.Vertical)
+	}
+	content := action.Child.(woxwidget.Flex)
+	if content.Gap != 6 || content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+		t.Fatalf("account action content = gap %v alignment %v, want gap 6 and centered", content.Gap, content.CrossAxisAlignment)
+	}
+	indicatorGesture := content.Children[1].(woxwidget.Gesture)
+	indicator := indicatorGesture.Child.(woxwidget.Painter)
+	if indicator.Width != 28 || indicator.Height != 28 {
+		t.Fatalf("account dropdown indicator = %vx%v, want 28x28", indicator.Width, indicator.Height)
+	}
+}
+
 func TestCloudPlanTooltipOverlayOccupiesOnlyItsVisiblePanel(t *testing.T) {
 	overlay, left, top := CloudPlanTooltipOverlay(
 		CloudIntroProps{FreeLabel: "Free", ProLabel: "Pro"},
