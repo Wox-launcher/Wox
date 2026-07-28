@@ -405,6 +405,18 @@ static WoxDarwinRenderer *create_renderer(CAMetalLayer *layer) {
   return renderer;
 }
 
+// clear_renderer_texture_caches releases content-derived GPU textures once a window no longer needs its rendered history.
+static void clear_renderer_texture_caches(WoxDarwinRenderer *renderer) {
+  [renderer->image_texture_uses removeAllObjects];
+  [renderer->image_texture_costs removeAllObjects];
+  [renderer->image_texture_cache removeAllObjects];
+  renderer->image_texture_total_cost = 0;
+  [renderer->text_texture_uses removeAllObjects];
+  [renderer->text_texture_costs removeAllObjects];
+  [renderer->text_texture_cache removeAllObjects];
+  renderer->text_texture_total_cost = 0;
+}
+
 static void destroy_renderer(WoxDarwinRenderer *renderer) {
   if (renderer == NULL) {
     return;
@@ -415,17 +427,12 @@ static void destroy_renderer(WoxDarwinRenderer *renderer) {
   [renderer->encoder release];
   [renderer->command_buffer release];
   [renderer->drawable release];
-  [renderer->image_texture_uses removeAllObjects];
+  clear_renderer_texture_caches(renderer);
   [renderer->image_texture_uses release];
-  [renderer->image_texture_costs removeAllObjects];
   [renderer->image_texture_costs release];
-  [renderer->image_texture_cache removeAllObjects];
   [renderer->image_texture_cache release];
-  [renderer->text_texture_uses removeAllObjects];
   [renderer->text_texture_uses release];
-  [renderer->text_texture_costs removeAllObjects];
   [renderer->text_texture_costs release];
-  [renderer->text_texture_cache removeAllObjects];
   [renderer->text_texture_cache release];
   [renderer->texture_pipeline release];
   [renderer->rect_pipeline release];
@@ -1222,6 +1229,7 @@ int32_t wox_darwin_window_hide(WoxDarwinWindow *window) {
     if (!window->closed) {
       window->visible = false;
       [window->window orderOut:nil];
+      clear_renderer_texture_caches(window->renderer);
     }
   });
   return result;

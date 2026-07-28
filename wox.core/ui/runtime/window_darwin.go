@@ -164,6 +164,8 @@ func (w *platformWindow) show() (FocusEpoch, error) {
 }
 
 func (w *platformWindow) hide() error {
+	w.renderMu.Lock()
+	defer w.renderMu.Unlock()
 	native, err := w.openNative()
 	if err != nil {
 		return err
@@ -171,6 +173,9 @@ func (w *platformWindow) hide() error {
 	if C.wox_darwin_window_hide(native) != 0 {
 		return errors.New("woxui: failed to hide macOS window")
 	}
+	w.mu.Lock()
+	w.pendingFrame = nil
+	w.mu.Unlock()
 	return nil
 }
 
