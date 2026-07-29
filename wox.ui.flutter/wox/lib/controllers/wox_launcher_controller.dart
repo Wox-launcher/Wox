@@ -294,6 +294,8 @@ class WoxLauncherController extends GetxController {
     return setting.enableGlance && isGlobalInputQuery(currentQuery.value) && queryIcon.value.icon.imageData.isEmpty && glanceItems.isNotEmpty && !isLoading.value;
   }
 
+  bool get isPrivacyModeEnabled => WoxSettingUtil.instance.currentSetting.enablePrivacyMode;
+
   bool get shouldShowAttentionBadge {
     return attentionUnreadCount.value > 0 && isGlobalInputQuery(currentQuery.value) && !isLoading.value;
   }
@@ -4527,6 +4529,8 @@ class WoxLauncherController extends GetxController {
         // The onboarding entry lives on About, so tests and future deep links need
         // the same openSetting path support that plugin/data pages already have.
         settingController.activeNavPath.value = 'about';
+      } else if (context.path == "/privacy") {
+        settingController.activeNavPath.value = 'privacy';
       }
 
       const settingWindowPreferredSize = Size(1200, 800);

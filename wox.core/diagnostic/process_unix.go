@@ -7,7 +7,8 @@ import (
 	"syscall"
 )
 
-func isProcessRunning(pid int) bool {
+// IsProcessRunning reports whether a process is still executing.
+func IsProcessRunning(pid int) bool {
 	if pid <= 0 {
 		return false
 	}

@@ -45,6 +45,7 @@ class WoxSetting {
   late bool enableAutoUpdate;
   late String releaseChannel;
   late bool enableAnonymousUsageStats;
+  late bool enablePrivacyMode;
   late String customPythonPath;
   late String customNodejsPath;
   late String cloudSyncServerUrl;
@@ -95,6 +96,7 @@ class WoxSetting {
     required this.enableAutoUpdate,
     required this.releaseChannel,
     required this.enableAnonymousUsageStats,
+    required this.enablePrivacyMode,
     required this.customPythonPath,
     required this.customNodejsPath,
     this.cloudSyncServerUrl = '',
@@ -202,6 +204,7 @@ class WoxSetting {
     enableAutoUpdate = json['EnableAutoUpdate'] ?? true;
     releaseChannel = json['ReleaseChannel'] ?? 'stable';
     enableAnonymousUsageStats = json['EnableAnonymousUsageStats'] ?? true;
+    enablePrivacyMode = json['EnablePrivacyMode'] ?? false;
     customPythonPath = json['CustomPythonPath'] ?? '';
     customNodejsPath = json['CustomNodejsPath'] ?? '';
     cloudSyncServerUrl = json['CloudSyncServerUrl'] ?? '';
@@ -258,6 +261,7 @@ class WoxSetting {
     data['EnableAutoUpdate'] = enableAutoUpdate;
     data['ReleaseChannel'] = releaseChannel;
     data['EnableAnonymousUsageStats'] = enableAnonymousUsageStats;
+    data['EnablePrivacyMode'] = enablePrivacyMode;
     data['CustomPythonPath'] = customPythonPath;
     data['CustomNodejsPath'] = customNodejsPath;
     data['CloudSyncServerUrl'] = cloudSyncServerUrl;

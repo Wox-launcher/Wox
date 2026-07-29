@@ -27,6 +27,7 @@ import (
 	"wox/plugin"
 	dictationplugin "wox/plugin/system/dictation"
 	"wox/plugin/system/shell/terminal"
+	"wox/privacy"
 	"wox/resource"
 	"wox/setting"
 	"wox/updater"
@@ -1951,6 +1952,9 @@ func (m *Manager) ExitApp(ctx context.Context) {
 		m.Stop(ctx)
 		diagnostic.GetManager().MarkCleanExit(ctx)
 		util.GetLogger().Info(ctx, "bye~")
+		if err := privacy.StartExitCleanup(setting.GetSettingManager().GetWoxSetting(ctx)); err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start private mode cleanup: %s", err.Error()))
+		}
 		os.Exit(0)
 	})
 }
@@ -2261,6 +2265,12 @@ func (m *Manager) ChangeUserDataDirectory(ctx context.Context, newDirectory stri
 		return fmt.Errorf("failed to expand directory path: %w", expandErr)
 	}
 	newDirectory = expandedDir
+
+	if privacy.IsEnabled() {
+		if err := privacy.ValidateUserDataDirectory(newDirectory); err != nil {
+			return err
+		}
+	}
 
 	logger.Info(ctx, fmt.Sprintf("Changing user data directory from %s to %s", oldDirectory, newDirectory))
 

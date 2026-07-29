@@ -96,6 +96,20 @@ class WoxSettingPrivacyView extends WoxSettingBaseView {
       description: controller.tr("ui_privacy_description"),
       children: [
         formField(
+          settingKey: "EnablePrivacyMode",
+          label: controller.tr("ui_privacy_mode_title"),
+          labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+          child: Obx(() {
+            return WoxSwitch(
+              value: controller.woxSetting.value.enablePrivacyMode,
+              onChanged: (value) {
+                controller.updateConfig("EnablePrivacyMode", value.toString());
+              },
+            );
+          }),
+          tips: controller.tr("ui_privacy_mode_description"),
+        ),
+        formField(
           settingKey: "EnableAnonymousUsageStats",
           label: controller.tr("ui_privacy_anonymous_stats_title"),
           labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,

@@ -104,7 +104,7 @@ func (m *Manager) waitForParentExit(logFile io.Writer, parentPid int) {
 	_, _ = fmt.Fprintf(logFile, "[%s] waiting for parent exit: pid=%d\n", waitStartedAt.Format(time.RFC3339), parentPid)
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if !isProcessRunning(parentPid) {
+		if !IsProcessRunning(parentPid) {
 			_, _ = fmt.Fprintf(logFile, "[%s] parent exited: pid=%d durationMs=%d\n", time.Now().Format(time.RFC3339), parentPid, time.Since(waitStartedAt).Milliseconds())
 			return
 		}

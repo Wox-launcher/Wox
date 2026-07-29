@@ -3174,6 +3174,13 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
     searchKeywords: ['performance', 'ui', 'received'],
   ),
   _BuiltInSettingSearchDefinition(
+    settingKey: 'EnablePrivacyMode',
+    navPath: 'privacy',
+    titleKey: 'ui_privacy_mode_title',
+    subtitleKey: 'ui_privacy_mode_description',
+    searchKeywords: ['privacy', 'private mode', 'public computer', 'clear data'],
+  ),
+  _BuiltInSettingSearchDefinition(
     settingKey: 'EnableAnonymousUsageStats',
     navPath: 'privacy',
     titleKey: 'ui_privacy_anonymous_stats_title',

@@ -28,6 +28,7 @@ import (
 	pluginhost "wox/plugin/host"
 	appplugin "wox/plugin/system/app"
 	dictationplugin "wox/plugin/system/dictation"
+	"wox/privacy"
 	"wox/setting"
 	"wox/telemetry"
 	"wox/ui/dto"
@@ -944,6 +945,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.EnableAutoUpdate = woxSetting.EnableAutoUpdate.Get()
 	settingDto.ReleaseChannel = woxSetting.ReleaseChannel.Get()
 	settingDto.EnableAnonymousUsageStats = woxSetting.EnableAnonymousUsageStats.Get()
+	settingDto.EnablePrivacyMode = privacy.IsEnabled()
 	settingDto.CustomPythonPath = woxSetting.CustomPythonPath.Get()
 	settingDto.CustomNodejsPath = woxSetting.CustomNodejsPath.Get()
 	settingDto.CloudSyncServerUrl = woxSetting.CloudSyncServerUrl.Get()
@@ -1059,6 +1061,10 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		woxSetting.MainHotkey.Set(vs)
+		if err := privacy.RefreshPreservedSettings(woxSetting); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
 		writeSuccessResponse(w, "")
 		return
 	}
@@ -1071,6 +1077,10 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		woxSetting.SelectionHotkey.Set(vs)
+		if err := privacy.RefreshPreservedSettings(woxSetting); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
 		writeSuccessResponse(w, "")
 		return
 	}
@@ -1319,11 +1329,22 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		if !vb {
 			telemetry.DeleteTelemetryState(ctx)
 		}
+	case "EnablePrivacyMode":
+		if err := privacy.SetEnabled(vb, woxSetting); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
 	default:
 		writeErrorResponse(w, "unknown setting key: "+kv.Key)
 		return
 	}
 
+	if kv.Key != "EnablePrivacyMode" {
+		if err := privacy.RefreshPreservedSettings(woxSetting); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+	}
 	GetUIManager().PostSettingUpdate(getTraceContext(r), kv.Key, updatedValue)
 
 	writeSuccessResponse(w, "")

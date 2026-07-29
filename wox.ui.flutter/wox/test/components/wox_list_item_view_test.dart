@@ -101,6 +101,7 @@ WoxSetting _setting({required int appWidth}) {
     enableAutoBackup: false,
     enableAutoUpdate: false,
     enableAnonymousUsageStats: false,
+    enablePrivacyMode: false,
     customPythonPath: '',
     customNodejsPath: '',
     cloudSyncDisabledPlugins: [],

@@ -16,6 +16,7 @@ import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_glance.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/modules/launcher/views/wox_glance_item_view.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/consts.dart';
@@ -158,9 +159,12 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
 
   double _getQueryBoxRightAccessoryWidth(BuildContext context, dynamic currentTheme) {
     final metrics = WoxInterfaceSizeUtil.instance.current;
+    if (controller.isLoading.value) {
+      return metrics.queryBoxRightAccessoryWidth + (controller.isPrivacyModeEnabled ? metrics.scaledSpacing(40) : 0);
+    }
     final refinementWidth = _getRefinementAccessoryWidth(context, currentTheme);
     final attentionWidth = _getAttentionBadgeWidth(context, currentTheme);
-    final widths = <double>[if (refinementWidth > 0) refinementWidth, if (attentionWidth > 0) attentionWidth];
+    final widths = <double>[if (refinementWidth > 0) refinementWidth, if (controller.isPrivacyModeEnabled) metrics.scaledSpacing(28), if (attentionWidth > 0) attentionWidth];
 
     if (controller.shouldShowGlance) {
       final visibleItems = controller.glanceItems.take(1).toList();
@@ -591,6 +595,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
       return Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          if (controller.isPrivacyModeEnabled) ...[_buildPrivacyModeIndicator(currentTheme), SizedBox(width: metrics.scaledSpacing(12))],
           SizedBox(
             // Bug fix: loading previously centered itself in the full accessory
             // width. Query refinements can make that width much wider than the
@@ -605,6 +610,12 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     final accessoryChildren = <Widget>[];
     if (controller.shouldShowQueryRefinementAffordance) {
       accessoryChildren.add(_buildRefinementAccessory(currentTheme));
+    }
+    if (controller.isPrivacyModeEnabled) {
+      if (accessoryChildren.isNotEmpty) {
+        accessoryChildren.add(SizedBox(width: WoxInterfaceSizeUtil.instance.current.scaledSpacing(12)));
+      }
+      accessoryChildren.add(_buildPrivacyModeIndicator(currentTheme));
     }
 
     if (controller.shouldShowGlance) {
@@ -710,6 +721,26 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrivacyModeIndicator(dynamic currentTheme) {
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final color = safeFromCssColor(currentTheme.queryBoxFontColor).withValues(alpha: 0.8);
+    return WoxTooltip(
+      message: controller.tr("ui_privacy_mode_enabled_tooltip"),
+      preferSide: WoxTooltipSide.top,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => controller.openSetting(const UuidV4().generate(), SettingWindowContext(path: "/privacy", param: "")),
+          child: SizedBox(
+            width: metrics.scaledSpacing(28),
+            height: metrics.scaledSpacing(28),
+            child: Opacity(opacity: 0.8 * 0.9, child: Icon(Icons.privacy_tip_outlined, size: metrics.scaledSpacing(18), color: color)),
           ),
         ),
       ),
