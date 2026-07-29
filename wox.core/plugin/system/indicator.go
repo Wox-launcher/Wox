@@ -102,6 +102,10 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 
 	var results []plugin.QueryResult
 	for _, entry := range searchIndex {
+		if entry.pluginInstance.Setting.Disabled.Get() {
+			continue
+		}
+
 		var matchedTriggerKeyword string
 		var triggerKeywordScore int64
 		for _, triggerKeyword := range entry.triggerKeywords {
@@ -405,6 +409,9 @@ func (i *IndicatorPlugin) handleMRURestore(ctx context.Context, mruData plugin.M
 
 	if pluginInstance == nil {
 		return nil, fmt.Errorf("plugin no longer exists: %s", pluginId)
+	}
+	if pluginInstance.Setting.Disabled.Get() {
+		return nil, fmt.Errorf("plugin is disabled: %s", pluginId)
 	}
 
 	// Check if trigger keyword still exists

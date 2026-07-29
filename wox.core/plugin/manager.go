@@ -697,6 +697,12 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 				logger.Warn(ctx, fmt.Sprintf("load system plugin[%s] setting too slow, cost %d ms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
 			}
 
+			if pluginSetting.Disabled.Get() {
+				logger.Info(ctx, fmt.Sprintf("system plugin is disabled by user, skip init: %s", metadata.GetName(ctx)))
+				loadedInstances[index] = instance
+				return
+			}
+
 			// Init plugin BEFORE adding to instances list
 			// This ensures the plugin is fully initialized before it can be queried
 			m.initPlugin(util.NewTraceContext(), instance)
