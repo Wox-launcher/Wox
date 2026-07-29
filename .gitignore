@@ -44,3 +44,4 @@ docs
 !www/docs/**
 www/docs/.vitepress/cache
 www/docs/.vitepress/dist
+superpowers
