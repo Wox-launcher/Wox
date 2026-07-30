@@ -76,7 +76,7 @@ type appCacheFile struct {
 }
 
 // Bump this when cached appInfo fields or preprocessed icon semantics change.
-const appCacheVersion = 12
+const appCacheVersion = 13
 
 const (
 	appCommandReindex   = "reindex"
@@ -387,9 +387,17 @@ func (a *ApplicationPlugin) populateAppMetadata(ctx context.Context, appPath str
 		}
 	}
 
-	info.LastModifiedUnix = fileInfo.ModTime().UnixNano()
+	info.LastModifiedUnix = a.getAppModifiedUnix(appPath, fileInfo)
 	info.Pid = 0
 	a.populateIconSourceMetadata(ctx, info)
+}
+
+// getAppModifiedUnix includes metadata files that do not update the app directory mtime.
+func (a *ApplicationPlugin) getAppModifiedUnix(appPath string, fileInfo os.FileInfo) int64 {
+	if retriever, ok := a.retriever.(appModifiedUnixRetriever); ok {
+		return retriever.GetAppModifiedUnix(appPath, fileInfo)
+	}
+	return fileInfo.ModTime().UnixNano()
 }
 
 func (a *ApplicationPlugin) populateIconSourceMetadata(ctx context.Context, info *appInfo) {
@@ -426,7 +434,7 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 		return appInfo{}, false
 	}
 
-	if cached.LastModifiedUnix != fileInfo.ModTime().UnixNano() {
+	if cached.LastModifiedUnix != a.getAppModifiedUnix(appPath, fileInfo) {
 		return appInfo{}, false
 	}
 
@@ -1445,7 +1453,17 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	startTimestamp := util.GetSystemTimestamp()
 	a.api.Log(ctx, plugin.LogLevelInfo, "start to get apps")
 
-	appInfos := a.indexAppsByDirectory(ctx)
+	var extraAppPaths []string
+	if retriever, ok := a.retriever.(extraAppPathRetriever); ok {
+		paths, err := retriever.GetExtraAppPaths(ctx)
+		if err != nil {
+			a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting extra app paths: %s", err.Error()))
+		} else {
+			extraAppPaths = paths
+		}
+	}
+
+	appInfos := a.indexAppsByDirectory(ctx, extraAppPaths)
 	extraApps := a.indexExtraApps(ctx)
 
 	//merge extra apps
@@ -1502,7 +1520,7 @@ func (a *ApplicationPlugin) getAppDirectories(ctx context.Context) []appDirector
 	return append(a.getUserAddedPaths(ctx), a.getRetriever(ctx).GetAppDirectories(ctx)...)
 }
 
-func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context) []appInfo {
+func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context, extraAppPaths []string) []appInfo {
 	cacheByPath := make(map[string]appInfo, len(a.apps))
 	for _, cached := range a.apps {
 		cacheByPath[a.pathCacheKey(cached.Path)] = cached
@@ -1510,6 +1528,7 @@ func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context) []appInfo 
 
 	appDirectories := a.getAppDirectories(ctx)
 	appPaths := a.getAppPaths(ctx, appDirectories)
+	appPaths = a.deduplicateAppPaths(append(appPaths, extraAppPaths...))
 
 	// split into groups, so we can index apps in parallel
 	var appPathGroups [][]string
@@ -1588,6 +1607,21 @@ func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context) []appInfo 
 		cacheRatio,
 	))
 	return appInfos
+}
+
+// deduplicateAppPaths prevents overlapping discovery sources from parsing the same app twice.
+func (a *ApplicationPlugin) deduplicateAppPaths(appPaths []string) []string {
+	seen := make(map[string]struct{}, len(appPaths))
+	uniquePaths := make([]string, 0, len(appPaths))
+	for _, appPath := range appPaths {
+		key := a.pathCacheKey(appPath)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		uniquePaths = append(uniquePaths, appPath)
+	}
+	return uniquePaths
 }
 
 func (a *ApplicationPlugin) indexExtraApps(ctx context.Context) []appInfo {

@@ -8,7 +8,8 @@ package app
 
 const unsigned char *GetPrefPaneIcon(const char *prefPanePath, size_t *length);
 const unsigned char *GenerateSFSymbolIcon(const char *symbolName, const char *colorName, const char *iconStyle, size_t *length);
-char* GetLocalizedAppNames(const char *appPath);
+char* GetLocalizedAppDisplayName(const char *appPath);
+char* GetPreferredLanguages(void);
 int get_process_list(struct kinfo_proc **procList, size_t *procCount);
 char* get_process_path(pid_t pid);
 */
@@ -17,10 +18,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"unsafe"
@@ -40,6 +43,15 @@ import (
 var appRetriever = &MacRetriever{}
 
 var defaultAppIcon = "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns"
+
+var macPreferredLanguages = sync.OnceValue(func() string {
+	cLanguages := C.GetPreferredLanguages()
+	if cLanguages == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(cLanguages))
+	return C.GoString(cLanguages)
+})
 
 type processInfo struct {
 	Pid  int
@@ -82,6 +94,47 @@ func (a *MacRetriever) GetAppExtensions(ctx context.Context) []string {
 	return []string{"app"}
 }
 
+// GetAppModifiedUnix fingerprints bundle metadata that can change without touching the .app directory.
+func (a *MacRetriever) GetAppModifiedUnix(appPath string, fileInfo os.FileInfo) int64 {
+	sources := make(map[string]os.FileInfo)
+	if fileInfo != nil {
+		sources[appPath] = fileInfo
+	}
+	addSource := func(sourcePath string) {
+		if info, err := os.Stat(sourcePath); err == nil {
+			sources[sourcePath] = info
+		}
+	}
+	for _, contentsDir := range macAppContentsDirectories(appPath) {
+		addSource(filepath.Join(contentsDir, "Info.plist"))
+		resourcesDir := filepath.Join(contentsDir, "Resources")
+		addSource(filepath.Join(resourcesDir, "InfoPlist.loctable"))
+		for _, localizedFile := range macAppLocalizedStringsFiles(resourcesDir) {
+			addSource(localizedFile)
+		}
+	}
+	if iconPath, err := fileicon.ResolveMacAppBundleIconPath(appPath); err == nil {
+		addSource(iconPath)
+	}
+
+	sourcePaths := make([]string, 0, len(sources))
+	for sourcePath := range sources {
+		sourcePaths = append(sourcePaths, sourcePath)
+	}
+	sort.Strings(sourcePaths)
+	fingerprint := fnv.New64a()
+	_, _ = fmt.Fprintf(fingerprint, "languages\x00%s\x00", macPreferredLanguages())
+	for _, sourcePath := range sourcePaths {
+		info := sources[sourcePath]
+		_, _ = fmt.Fprintf(fingerprint, "%s\x00%d\x00%d\x00", sourcePath, info.ModTime().UnixNano(), info.Size())
+	}
+	value := int64(fingerprint.Sum64())
+	if value == 0 {
+		return 1
+	}
+	return value
+}
+
 func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, error) {
 	appName, err := a.getAppNameFromMdls(path)
 	if err != nil || appName == "(null)" || strings.TrimSpace(appName) == "" {
@@ -119,11 +172,35 @@ func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, 
 		a.api.Log(ctx, plugin.LogLevelError, iconErr.Error())
 	}
 	info.Icon = icon
-	if info.Icon.ImageData == defaultAppIcon || !a.hasDedicatedMacAppIcon(ctx, path) {
+	if iconSourcePath, iconSourceErr := fileicon.ResolveMacAppBundleIconPath(path); iconSourceErr == nil {
+		info.IconSourcePath = iconSourcePath
+	} else {
+		info.IsDefaultIcon = true
+		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("app %s has no dedicated bundle icon: %s", path, iconSourceErr.Error()))
+	}
+	if info.Icon.ImageData == defaultAppIcon {
 		info.IsDefaultIcon = true
 	}
 
 	return info, nil
+}
+
+func macAppContentsDirectories(appPath string) []string {
+	return []string{
+		filepath.Join(appPath, "Contents"),
+		filepath.Join(appPath, "WrappedBundle"),
+	}
+}
+
+func macAppLocalizedStringsFiles(resourcesDir string) []string {
+	localizedFiles := []string{filepath.Join(resourcesDir, "InfoPlist.strings")}
+	entries, _ := os.ReadDir(resourcesDir)
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".lproj") {
+			localizedFiles = append(localizedFiles, filepath.Join(resourcesDir, entry.Name(), "InfoPlist.strings"))
+		}
+	}
+	return localizedFiles
 }
 
 func resolveAppIdentityForPlatform(ctx context.Context, info appInfo) string {
@@ -182,6 +259,15 @@ func (a *MacRetriever) getAppNameFromMdls(path string) (string, error) {
 }
 
 func (a *MacRetriever) getLocalizedAppName(appPath string) string {
+	cPath := C.CString(appPath)
+	defer C.free(unsafe.Pointer(cPath))
+	cName := C.GetLocalizedAppDisplayName(cPath)
+	if cName != nil {
+		defer C.free(unsafe.Pointer(cName))
+		if name := strings.TrimSpace(C.GoString(cName)); name != "" {
+			return name
+		}
+	}
 	names := a.getLocalizedAppNames(appPath)
 	if len(names) == 0 {
 		return ""
@@ -190,25 +276,63 @@ func (a *MacRetriever) getLocalizedAppName(appPath string) string {
 }
 
 func (a *MacRetriever) getLocalizedAppNames(appPath string) []string {
-	cPath := C.CString(appPath)
-	defer C.free(unsafe.Pointer(cPath))
+	var names []string
+	for _, contentsDir := range macAppContentsDirectories(appPath) {
+		names = append(names, readBundleDisplayNames(filepath.Join(contentsDir, "Info.plist"), false)...)
+		resourcesDir := filepath.Join(contentsDir, "Resources")
+		names = append(names, readBundleDisplayNames(filepath.Join(resourcesDir, "InfoPlist.loctable"), true)...)
+		for _, localizedFile := range macAppLocalizedStringsFiles(resourcesDir) {
+			names = append(names, readBundleDisplayNames(localizedFile, false)...)
+		}
+	}
+	return util.UniqueStrings(names)
+}
 
-	cNames := C.GetLocalizedAppNames(cPath)
-	if cNames == nil {
+// readBundleDisplayNames parses XML, binary, or OpenStep plist dictionaries without creating NSBundle caches.
+func readBundleDisplayNames(plistPath string, nested bool) []string {
+	plistFile, err := os.Open(plistPath)
+	if err != nil {
 		return nil
 	}
-	defer C.free(unsafe.Pointer(cNames))
+	defer plistFile.Close()
 
-	var names []string
-	for _, name := range strings.Split(C.GoString(cNames), "\n") {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		names = append(names, name)
+	var values map[string]any
+	if err := plist.NewDecoder(plistFile).Decode(&values); err != nil {
+		return nil
 	}
-
+	var names []string
+	names = append(names, bundleDisplayNames(values)...)
+	if nested {
+		keys := make([]string, 0, len(values))
+		for key := range values {
+			if key != "LocProvenance" {
+				keys = append(keys, key)
+			}
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			switch localizedValues := values[key].(type) {
+			case map[string]any:
+				names = append(names, bundleDisplayNames(localizedValues)...)
+			case map[string]string:
+				for _, nameKey := range []string{"CFBundleDisplayName", "CFBundleName"} {
+					names = append(names, localizedValues[nameKey])
+				}
+			}
+		}
+	}
 	return util.UniqueStrings(names)
+}
+
+// bundleDisplayNames returns the two plist keys Finder uses for localized app names.
+func bundleDisplayNames(values map[string]any) []string {
+	var names []string
+	for _, key := range []string{"CFBundleDisplayName", "CFBundleName"} {
+		if name, ok := values[key].(string); ok && strings.TrimSpace(name) != "" {
+			names = append(names, strings.TrimSpace(name))
+		}
+	}
+	return names
 }
 
 func (a *MacRetriever) getAppSearchableNames(ctx context.Context, appPath string, primaryName string) []string {
@@ -286,18 +410,6 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (commo
 	}, nil
 }
 
-func (a *MacRetriever) hasDedicatedMacAppIcon(ctx context.Context, appPath string) bool {
-	// NSWorkspace can synthesize a generic app icon even when the bundle does not
-	// declare one. Launchpad should hide those entries, so use the same bundle
-	// icon resolver as fileicon's preferred extraction path instead of treating
-	// every cached absolute PNG as a real app icon.
-	if _, err := fileicon.ResolveMacAppBundleIconPath(appPath); err != nil {
-		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("app %s has no dedicated bundle icon: %s", appPath, err.Error()))
-		return false
-	}
-	return true
-}
-
 func (a *MacRetriever) generateSFSymbolIconBytes(symbolName, colorName, iconStyle string) (*C.uchar, C.size_t) {
 	csymbol := C.CString(symbolName)
 	defer C.free(unsafe.Pointer(csymbol))
@@ -358,14 +470,13 @@ func (a *MacRetriever) savePrefPaneIconToCache(ctx context.Context, prefPanePath
 	return cachePath, nil
 }
 
-func (a *MacRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
-	//use `system_profiler SPApplicationsDataType -json` to get all apps
+// GetExtraAppPaths discovers apps outside the normal directories without parsing their bundles.
+func (a *MacRetriever) GetExtraAppPaths(ctx context.Context) ([]string, error) {
 	out, err := shell.RunOutput("system_profiler", "SPApplicationsDataType", "-json")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get extra apps: %s", err.Error())
 	}
 
-	//parse json
 	results := gjson.Get(string(out), "SPApplicationsDataType")
 	if !results.Exists() {
 		return nil, errors.New("failed to parse extra apps")
@@ -392,47 +503,12 @@ func (a *MacRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
 		appPaths = append(appPaths, appPath)
 	}
 
-	// split into groups, so we can index apps in parallel
-	var appPathGroups [][]string
-	var groupSize = 25
-	for i := 0; i < len(appPaths); i += groupSize {
-		var end = i + groupSize
-		if end > len(appPaths) {
-			end = len(appPaths)
-		}
-		appPathGroups = append(appPathGroups, appPaths[i:end])
-	}
-	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("found extra %d apps in %d groups", len(appPaths), len(appPathGroups)))
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("found %d extra app paths", len(appPaths)))
+	return appPaths, nil
+}
 
-	// index apps in parallel
-	var appInfos []appInfo
-	var waitGroup sync.WaitGroup
-	var lock sync.Mutex
-	waitGroup.Add(len(appPathGroups))
-	for groupIndex := range appPathGroups {
-		var appPathGroup = appPathGroups[groupIndex]
-		util.Go(ctx, fmt.Sprintf("index extra app group: %d", groupIndex), func() {
-			for _, appPath := range appPathGroup {
-				info, getErr := a.ParseAppInfo(ctx, appPath)
-				if getErr != nil {
-					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting extra app info for %s: %s", appPath, getErr.Error()))
-					continue
-				}
-
-				lock.Lock()
-				appInfos = append(appInfos, info)
-				lock.Unlock()
-			}
-			waitGroup.Done()
-		}, func() {
-			waitGroup.Done()
-		})
-	}
-
-	waitGroup.Wait()
-
-	appInfos = append(appInfos, a.getSystemSettingsApps(ctx)...)
-	return appInfos, nil
+func (a *MacRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
+	return a.getSystemSettingsApps(ctx), nil
 }
 
 func (a *MacRetriever) getSystemSettingsApps(ctx context.Context) []appInfo {

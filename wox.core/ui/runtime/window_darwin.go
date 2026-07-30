@@ -551,6 +551,24 @@ func (w *platformWindow) renderLoop() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	defer close(w.renderDone)
+	trimTimer := time.NewTimer(time.Hour)
+	if !trimTimer.Stop() {
+		<-trimTimer.C
+	}
+	defer trimTimer.Stop()
+	var trimTimerC <-chan time.Time
+	trimRetryDelay := 100 * time.Millisecond
+	trimRetryCount := 0
+	resetTrimTimer := func(delay time.Duration) {
+		if !trimTimer.Stop() {
+			select {
+			case <-trimTimer.C:
+			default:
+			}
+		}
+		trimTimer.Reset(delay)
+		trimTimerC = trimTimer.C
+	}
 	for {
 		select {
 		case <-w.renderStop:
@@ -570,6 +588,17 @@ func (w *platformWindow) renderLoop() {
 				}
 				w.encodeFrame(frame, false)
 			}
+			// Tracked result refreshes can produce a frame every second, so trim before that cadence.
+			trimRetryDelay = 100 * time.Millisecond
+			trimRetryCount = 0
+			resetTrimTimer(250 * time.Millisecond)
+		case <-trimTimerC:
+			trimTimerC = nil
+			if w.trimRenderSurfaces() > 2 && trimRetryCount < 4 {
+				resetTrimTimer(trimRetryDelay)
+				trimRetryDelay = min(trimRetryDelay*2, time.Second)
+				trimRetryCount++
+			}
 		}
 	}
 }
@@ -584,6 +613,11 @@ func (w *platformWindow) queueFrame(frame *darwinRenderFrame) {
 	w.pendingFrame = frame
 	wake := w.renderWake
 	w.mu.Unlock()
+	signalRenderWake(wake)
+}
+
+// signalRenderWake coalesces renderer activity notifications.
+func signalRenderWake(wake chan struct{}) {
 	select {
 	case wake <- struct{}{}:
 	default:
@@ -615,8 +649,10 @@ func (w *platformWindow) drawFrameSync(frame FrameInfo, transactional bool) {
 	fontFamily := w.fontFamily
 	// The synchronous frame is newer than every ordinary frame still waiting to encode.
 	w.pendingFrame = nil
+	wake := w.renderWake
 	w.mu.Unlock()
 	w.encodeFrameLocked(&darwinRenderFrame{frame: frame, displayList: displayList, fontFamily: fontFamily, buildCost: buildCost}, transactional)
+	signalRenderWake(wake)
 }
 
 // encodeFrame records and submits one display list while holding exclusive renderer ownership.
@@ -767,6 +803,19 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 		log.Printf("darwin frame timing: totalUs=%d buildUs=%d beginUs=%d encodeUs=%d textUs=%d imageUs=%d endUs=%d commands=%d text=%d image=%d size=%.0fx%.0f scale=%.2f transactional=%t",
 			totalCost.Microseconds(), renderFrame.buildCost.Microseconds(), beginCost.Microseconds(), encodeCost.Microseconds(), textCost.Microseconds(), imageCost.Microseconds(), endCost.Microseconds(), len(displayList.commands), textCount, imageCount, frame.Size.Width, frame.Size.Height, frame.Scale, transactional)
 	}
+}
+
+// trimRenderSurfaces releases idle back buffers without changing active triple-buffer behavior.
+func (w *platformWindow) trimRenderSurfaces() int {
+	w.renderMu.Lock()
+	defer w.renderMu.Unlock()
+	native, err := w.openNative()
+	if err != nil {
+		return 0
+	}
+	pool := C.wox_darwin_autorelease_pool_push()
+	defer C.wox_darwin_autorelease_pool_pop(pool)
+	return int(C.wox_darwin_window_trim_render_surfaces(native, 2))
 }
 
 //export woxGoDarwinStart

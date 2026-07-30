@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"os"
 	"wox/plugin"
 )
 
@@ -20,4 +21,14 @@ type Retriever interface {
 	GetPid(ctx context.Context, app appInfo) int
 	GetProcessStat(ctx context.Context, app appInfo) (*ProcessStat, error)
 	OpenAppFolder(ctx context.Context, app appInfo) error
+}
+
+// extraAppPathRetriever lets platforms route discovered app paths through the shared app cache.
+type extraAppPathRetriever interface {
+	GetExtraAppPaths(ctx context.Context) ([]string, error)
+}
+
+// appModifiedUnixRetriever includes platform-specific metadata sources in cache freshness.
+type appModifiedUnixRetriever interface {
+	GetAppModifiedUnix(appPath string, fileInfo os.FileInfo) int64
 }

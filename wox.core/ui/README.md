@@ -27,3 +27,27 @@ The Go process currently supports the Wox query protocol, list and grid results,
 The settings domain state has been split into 13 per-domain settings controllers (about, privacy, usage, update, runtime, data, network, appearance, ai, hotkey, theme, plugin, cloud) plus a `settingsSearchController`, all with zero back-dependency on `App`. Each controller owns its slice of settings state and exposes a `Snapshot()` for the view layer; `settingsSnapshot` is now a nested struct of per-domain snapshots rather than a flat 90-field mirror. `App` retains only window-level settings state (tab, row, note, saving) and delegates the `settingsData` payload to `generalSettingsController`'s `sharedEditState`. Cross-domain reads (e.g. query domain reading `UsePinYin`) still go through `App` getters, and the settings search controller aggregates matches from each controller via a `Searchable` interface.
 
 Windows builds embed the checked-in `WebView2Loader.dll`, extract it under the Wox data directory, and set `WOX_WEBVIEW2_LOADER_PATH` before the first WebView opens. Linux builds do not require WebKitGTK headers, but WebView previews need a WebKitGTK 4.1 or 4.0 runtime installed.
+
+## macOS memory baseline and renderer invariants
+
+The July 2026 M3 Max investigation established a release-build reference for the complete Wox process, not an isolated renderer demo. The original approximately 300 MB report motivated replacing the `CAMetalLayer` renderer with CoreGraphics drawing into a bounded IOSurface pool. After that renderer replacement, a controlled follow-up used the same real Wox data and process lifecycle for both sides:
+
+| Release checkpoint | Before the follow-up | After the follow-up |
+| --- | ---: | ---: |
+| Hidden physical footprint | 102.9 MB | 80-84 MB |
+| Settled visible query | 123.1-130 MB | 90.9 MB |
+| Visible peak during the final run | Not recorded | 94 MB |
+| Visible IOSurface memory | Approximately 21 MB | 14 MB |
+
+These numbers are comparison points rather than a CI budget because macOS, display scale, installed applications, and user data affect the absolute footprint.
+
+The memory reduction depends on four decisions:
+
+- The [native renderer](runtime/native_darwin.m) uses AppKit, CoreGraphics, CoreText, and IOSurface without creating a Metal device, command queue, shader library, drawable pool, or texture caches for the launcher.
+- [Rendering](runtime/window_darwin.go) keeps active triple-buffer behavior, then trims only unused surfaces after 250 ms of inactivity. The idle pool retains the presented surface and one reusable current-size back buffer. A surface is removable only when its presentation reference count is zero and `IOSurfaceIsInUse` is false; stale-size surfaces are removed first, and retries are bounded.
+- [`system_profiler` discovery](../plugin/system/app/app_darwin.go) contributes application paths to the shared application cache instead of reparsing every returned bundle. Localized names are read from `Info.plist`, `InfoPlist.loctable`, root `InfoPlist.strings`, and `.lproj` strings without constructing one `NSBundle` per application. Cache freshness includes those files, the resolved icon source, and the preferred macOS languages. On the reference machine this reduced the post-index native heap from approximately 256 `NSBundle` and 258 `CFBundle` instances to 8 and 12.
+- [Process startup](../main.go) uses `GOGC=50` when the environment does not provide `GOGC`; this heap-growth policy is shared across platforms, while the reference measurements in this section are macOS-only. The override remains available for diagnosis. In the final interleaved macOS release comparison, the default settled at 90.9 MB versus 96.8 MB with `GOGC=100`; query p95 was 6 ms versus 7 ms, and GC pause p95 remained approximately 0.5 ms.
+
+Do not replace the idle trim with a hard two-surface allocation cap. Both existing surfaces can still be owned by Core Animation while the next frame is encoded; refusing a third surface can drop the final frame. Trimming to one visible surface also saves only about 7 MB at the cost of allocating another full-size surface on the next refresh, which turns a stable footprint into allocation churn and input-visible stalls.
+
+For later comparisons, stop every other Wox instance and sample the same release-process PID throughout the run. Use real Wox data, warm up application and image caches, replay deterministic query blocks, wait for the same visible or hidden lifecycle checkpoint, and record at least three samples. `PhysicalFootprintMB` or `footprint --pid <PID> --noCategories` is the primary macOS process metric; pair it with `vmmap <PID> -summary`, `heap -s -H <PID>`, and Go heap profiles when attribution is needed. The retained [workload and sampler](../../.agents/skills/wox-memory-debug/scripts/) should be reused. Do not compare an Activity Monitor spike, a debug build, an isolated layer demo, or a different PID directly with this release baseline.

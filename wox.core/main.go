@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"wox/ai"
 	"wox/analytics"
@@ -94,6 +95,11 @@ func main() {
 			os.Exit(1)
 		}
 		os.Exit(diagnostic.GetManager().RunSupervisor(ctx, os.Args))
+	}
+	// Query workloads have a small live Go heap but high allocation churn.
+	// Keep the default heap growth bounded while preserving GOGC as a diagnostic override.
+	if os.Getenv("GOGC") == "" {
+		debug.SetGCPercent(50)
 	}
 	mainthread.SetDispatcher(func(fn func()) {
 		if err := woxui.Call(fn); err != nil {

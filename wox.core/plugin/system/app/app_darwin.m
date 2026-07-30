@@ -238,87 +238,23 @@ const unsigned char *GetPrefPaneIcon(const char *prefPanePath, size_t *length) {
         }
 
         return bytes;
-    }
+  }
 }
 
-static void AddLocalizedAppName(NSMutableOrderedSet *names, NSString *name) {
-    if (names == nil || name == nil || ![name isKindOfClass:[NSString class]]) {
-        return;
-    }
-
-    NSString *trimmed = [name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    if ([trimmed length] == 0) {
-        return;
-    }
-
-    [names addObject:trimmed];
+char* GetLocalizedAppDisplayName(const char *appPath) {
+  @autoreleasepool {
+    NSString *path = [NSString stringWithUTF8String:appPath];
+    NSString *name = path == nil ? nil : [[NSFileManager defaultManager] displayNameAtPath:path];
+    name = [name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    return name.length == 0 ? NULL : strdup(name.UTF8String);
+  }
 }
 
-char* GetLocalizedAppNames(const char *appPath) {
-    @autoreleasepool {
-        NSString *path = [NSString stringWithUTF8String:appPath];
-        if (!path) {
-            return NULL;
-        }
-
-        NSBundle *bundle = [NSBundle bundleWithPath:path];
-        if (!bundle) {
-            return NULL;
-        }
-
-        NSMutableOrderedSet *names = [NSMutableOrderedSet orderedSet];
-
-        // Bug fix: objectForInfoDictionaryKey only returns one locale-dependent
-        // value. Users can search localized names from other macOS languages
-        // when Spotlight is disabled, so collect Finder's current display name
-        // plus every InfoPlist.loctable/InfoPlist.strings display alias.
-        AddLocalizedAppName(names, [[NSFileManager defaultManager] displayNameAtPath:path]);
-        AddLocalizedAppName(names, [bundle objectForInfoDictionaryKey:@"CFBundleDisplayName"]);
-        AddLocalizedAppName(names, [bundle objectForInfoDictionaryKey:@"CFBundleName"]);
-
-        NSString *loctablePath = [bundle pathForResource:@"InfoPlist" ofType:@"loctable"];
-        NSDictionary *loctable = loctablePath ? [NSDictionary dictionaryWithContentsOfFile:loctablePath] : nil;
-        for (id localization in loctable) {
-            if ([localization isEqual:@"LocProvenance"]) {
-                continue;
-            }
-
-            NSDictionary *localizedValues = loctable[localization];
-            if (![localizedValues isKindOfClass:[NSDictionary class]]) {
-                continue;
-            }
-
-            AddLocalizedAppName(names, localizedValues[@"CFBundleDisplayName"]);
-            AddLocalizedAppName(names, localizedValues[@"CFBundleName"]);
-        }
-
-        for (NSString *localization in [bundle localizations]) {
-            NSString *stringsPath = [bundle pathForResource:@"InfoPlist" ofType:@"strings" inDirectory:nil forLocalization:localization];
-            if (!stringsPath || [stringsPath length] == 0) {
-                continue;
-            }
-
-            NSDictionary *strings = [NSDictionary dictionaryWithContentsOfFile:stringsPath];
-            if (!strings) {
-                continue;
-            }
-
-            AddLocalizedAppName(names, strings[@"CFBundleDisplayName"]);
-            AddLocalizedAppName(names, strings[@"CFBundleName"]);
-        }
-
-        if ([names count] == 0) {
-            return NULL;
-        }
-
-        NSString *joined = [[names array] componentsJoinedByString:@"\n"];
-        const char *utf8 = [joined UTF8String];
-        if (!utf8) {
-            return NULL;
-        }
-
-        return strdup(utf8);
-    }
+char* GetPreferredLanguages(void) {
+  @autoreleasepool {
+    NSString *languages = [[NSLocale preferredLanguages] componentsJoinedByString:@"\x1f"];
+    return languages.length == 0 ? NULL : strdup(languages.UTF8String);
+  }
 }
 
 int get_process_list(struct kinfo_proc **procList, size_t *procCount) {

@@ -1884,6 +1884,45 @@ int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_wid
   return 0;
 }
 
+// wox_darwin_window_trim_render_surfaces keeps the front buffer and one reusable current-size back buffer.
+int32_t wox_darwin_window_trim_render_surfaces(WoxDarwinWindow *window, int32_t max_surfaces) {
+  if (window == NULL || window->closed || window->renderer == NULL || max_surfaces < 1) {
+    return -1;
+  }
+  WoxDarwinRenderer *renderer = window->renderer;
+  if (renderer->frame_open || renderer->render_surfaces.count <= (NSUInteger)max_surfaces) {
+    return (int32_t)renderer->render_surfaces.count;
+  }
+
+  NSMutableArray *stale_surfaces = [NSMutableArray array];
+  NSMutableArray *matching_surfaces = [NSMutableArray array];
+  NSUInteger current_width = (NSUInteger)ceilf(renderer->viewport_size.width * renderer->scale);
+  NSUInteger current_height = (NSUInteger)ceilf(renderer->viewport_size.height * renderer->scale);
+  for (WoxDarwinSurface *surface in renderer->render_surfaces) {
+    if (atomic_load_explicit(&surface->presentation_references, memory_order_relaxed) != 0 ||
+        IOSurfaceIsInUse(surface->io_surface)) {
+      continue;
+    }
+    if (surface->width == current_width && surface->height == current_height) {
+      [matching_surfaces addObject:surface];
+    } else {
+      [stale_surfaces addObject:surface];
+    }
+  }
+
+  for (WoxDarwinSurface *surface in stale_surfaces) {
+    if (renderer->render_surfaces.count <= (NSUInteger)max_surfaces) {
+      break;
+    }
+    [renderer->render_surfaces removeObjectIdenticalTo:surface];
+  }
+  NSUInteger removable_matching_count = matching_surfaces.count > 1 ? matching_surfaces.count - 1 : 0;
+  for (NSUInteger index = 0; index < removable_matching_count && renderer->render_surfaces.count > (NSUInteger)max_surfaces; index++) {
+    [renderer->render_surfaces removeObjectIdenticalTo:matching_surfaces[index]];
+  }
+  return (int32_t)renderer->render_surfaces.count;
+}
+
 int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
     return -1;

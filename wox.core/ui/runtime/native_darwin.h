@@ -35,6 +35,7 @@ void *wox_darwin_autorelease_pool_push(void);
 void wox_darwin_autorelease_pool_pop(void *pool);
 
 int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_width, float logical_height, float scale, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+int32_t wox_darwin_window_trim_render_surfaces(WoxDarwinWindow *window, int32_t max_surfaces);
 int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_darwin_window_fill_convex_polygon(WoxDarwinWindow *window, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, float stroke_width, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
