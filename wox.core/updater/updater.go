@@ -323,7 +323,9 @@ func GetUpdateChannelVersions(ctx context.Context) []UpdateChannelVersion {
 }
 
 func getLatestVersion(ctx context.Context, releaseChannel setting.ReleaseChannel) (VersionManifest, error) {
-	body, err := util.HttpGet(ctx, manifestURLForReleaseChannel(releaseChannel))
+	manifestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	body, err := util.HttpGet(manifestCtx, manifestURLForReleaseChannel(releaseChannel))
 	if err != nil {
 		return VersionManifest{}, fmt.Errorf("failed to download version manifest file: %w", err)
 	}

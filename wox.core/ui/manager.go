@@ -1445,7 +1445,10 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 			logger.Error(ctx, fmt.Sprintf("failed to set autostart: %s", err.Error()))
 		}
 	case "EnableAutoUpdate":
-		updater.CheckForUpdatesWithCallback(ctx, nil)
+		// Update checks are network-bound and must not block settings applied by cloud restore.
+		util.Go(ctx, "check for updates after setting change", func() {
+			updater.CheckForUpdatesWithCallback(ctx, nil)
+		})
 	case "AIProviders":
 		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "models")
 	case "AIMCPServers":
