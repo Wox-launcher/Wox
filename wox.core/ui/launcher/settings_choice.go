@@ -27,7 +27,14 @@ type settingChoicePickerSnapshot struct {
 func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
 	choices := make([]launcherview.SettingsChoice, len(snapshot.item.choices))
 	for index, choice := range snapshot.item.choices {
-		choices[index] = launcherview.SettingsChoice{Value: choice.value, Label: choice.label, Trailing: snapshot.item.trailers[choice.value], Tooltip: a.localizedSettingChoiceTooltip(snapshot.item.key, choice)}
+		var leading *woxui.Image
+		if source := snapshot.item.icons[choice.value]; source.ImageData != "" {
+			leading = a.imageForTint(source, &palette.resultTitle, 18)
+		}
+		choices[index] = launcherview.SettingsChoice{
+			Value: choice.value, Label: choice.label, Leading: leading, Trailing: snapshot.item.trailers[choice.value],
+			Tooltip: a.localizedSettingChoiceTooltip(snapshot.item.key, choice),
+		}
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
 		ID: "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette.componentTheme(), Window: a.settingsNativeWindow(), Title: snapshot.item.title,

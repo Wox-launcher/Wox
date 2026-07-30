@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,12 @@ import (
 func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
 	groups := make([]launcherview.ThemeEditorColorGroup, 0, len(themeEditorColorGroups))
 	for _, group := range themeEditorColorGroups {
+		label := a.translate(group.label)
+		labelWidth := float32(0)
+		if a.window != nil {
+			metrics, _ := a.window.MeasureText(label, woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold})
+			labelWidth = metrics.Size.Width
+		}
 		tokens := make([]launcherview.ThemeEditorColorToken, 0, len(group.tokens))
 		for _, token := range group.tokens {
 			color, ok := decodeThemeColor(state.values[token.key])
@@ -29,7 +36,7 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 			}
 			tokens = append(tokens, launcherview.ThemeEditorColorToken{Key: token.key, Label: a.translate(token.label), Color: color})
 		}
-		groups = append(groups, launcherview.ThemeEditorColorGroup{Label: a.translate(group.label), Tokens: tokens})
+		groups = append(groups, launcherview.ThemeEditorColorGroup{Label: label, LabelWidth: labelWidth, Tokens: tokens})
 	}
 
 	foreground := palette.resultTitle
@@ -44,10 +51,15 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 	previewItemPadding := draftPalette.resultItemPadding
 	previewItemPadding.Left += 5
 	previewItemPadding.Right += 5
+	measureTail := func(value string) float32 {
+		metrics, _ := a.window.MeasureText(value, woxui.TextStyle{Size: 11})
+		return metrics.Size.Width + 16
+	}
 
 	dirty := themeEditorSnapshotDirty(state)
 	return launcherview.ThemeEditorSettingsView(launcherview.ThemeEditorSettingsProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), DraftTheme: draftPalette.componentTheme(),
+		ResultTail: draftPalette.resultTail, SelectedTail: draftPalette.selectedTail,
 		Groups: groups, ActiveGroup: state.activeGroup, Dirty: dirty, Saving: state.saving, CanOverwrite: !state.isSystem && !state.isAuto && state.sourceID != "", Error: state.error,
 		Wallpaper: wallpaperImage, WallpaperBlurred: wallpaperBlurred,
 		PreviewGeometry: launcherview.ThemeEditorPreviewGeometry{
@@ -58,6 +70,8 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 		LocateIcon: locateIcon, DiscardIcon: discardIcon, OverwriteIcon: overwriteIcon, SaveAsIcon: saveAsIcon,
 		DiscardLabel: a.translate("i18n:ui_theme_editor_discard"), OverwriteLabel: a.translate("i18n:ui_theme_editor_overwrite"), SaveAsLabel: a.translate("i18n:ui_theme_editor_save_as"), SavingLabel: a.translate("i18n:ui_theme_editor_saving"),
 		PreviewResultTitle: a.translate("i18n:ui_theme_editor_preview_result_theme"), PreviewResultState: a.translate("i18n:ui_theme_editor_preview_result_current"),
+		PreviewTailP1Width: measureTail("P1"), PreviewTail4msWidth: measureTail("4ms"), PreviewTail13msWidth: measureTail("13ms"),
+		Window:        a.window,
 		QueryBoxLabel: a.translate("i18n:ui_theme_editor_preview_result_query"), ResultsLabel: a.translate("i18n:ui_theme_editor_group_results"),
 		ToolbarCopyLabel: a.translate("i18n:ui_theme_editor_toolbar_copy"), ToolbarMoreLabel: a.translate("i18n:ui_theme_editor_toolbar_more"),
 		Dialog:        a.buildThemeEditorSettingsDialog(state, palette, width, height),
@@ -66,9 +80,9 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 	})
 }
 
-// preloadThemeEditorWallpaper starts one settings-owned wallpaper load before the editor needs it.
-func (a *App) preloadThemeEditorWallpaper() {
-	if a.themeSettings.ThemeWallpaperImage() != nil || a.themeSettings.ThemeWallpaperLoading() {
+// preloadDemoWallpaper loads the shared desktop image only while a preview-owning window is open.
+func (a *App) preloadDemoWallpaper(includeBlurred bool) {
+	if (a.themeSettings.ThemeWallpaperImage() != nil && (!includeBlurred || a.themeSettings.ThemeWallpaperBlurred() != nil)) || a.themeSettings.ThemeWallpaperLoading() {
 		return
 	}
 	a.themeSettings.SetThemeWallpaperLoading(true)
@@ -76,12 +90,12 @@ func (a *App) preloadThemeEditorWallpaper() {
 	loadID := a.themeSettings.ThemeWallpaperLoadID()
 	path := a.themeSettings.ThemeWallpaperPath()
 	util.Go(a.lifecycleCtx, "load theme editor wallpaper", func() {
-		a.loadThemeEditorWallpaper(loadID, path)
+		a.loadDemoWallpaper(loadID, path, includeBlurred)
 	})
 }
 
-// loadThemeEditorWallpaper resolves and decodes the desktop image without blocking settings rendering.
-func (a *App) loadThemeEditorWallpaper(loadID uint64, path string) {
+// loadDemoWallpaper resolves and decodes the desktop image without blocking UI rendering.
+func (a *App) loadDemoWallpaper(loadID uint64, path string, includeBlurred bool) {
 	var err error
 	if path == "" {
 		path, err = wallpaper.GetSystemWallpaperPath()
@@ -94,22 +108,27 @@ func (a *App) loadThemeEditorWallpaper(loadID uint64, path string) {
 	var wallpaperImage *woxui.Image
 	var wallpaperBlurred *woxui.Image
 	if err == nil {
-		wallpaperImage, wallpaperBlurred, err = decodeThemeEditorWallpaper(path)
+		wallpaperImage, wallpaperBlurred, err = decodeDemoWallpaper(path, includeBlurred)
 	}
 	settingsOpen := false
-	_ = a.runOnUI("apply theme editor wallpaper", func() {
+	onboardingOpen := false
+	_ = a.runOnUI("apply demo wallpaper", func() {
 		if a.themeSettings.ThemeWallpaperLoadID() != loadID {
 			return
 		}
 		a.themeSettings.SetThemeWallpaperLoading(false)
 		settingsOpen = a.settingsOpen
-		if err == nil && settingsOpen {
+		onboardingOpen = a.onboardingOpen
+		if err == nil && (settingsOpen || onboardingOpen) {
 			a.themeSettings.SetThemeWallpaperPath(path)
 			a.themeSettings.SetThemeWallpaperImage(wallpaperImage)
 			a.themeSettings.SetThemeWallpaperBlurred(wallpaperBlurred)
 		}
 		if err == nil && settingsOpen {
 			a.invalidateSettingsWindow()
+		}
+		if err == nil && onboardingOpen {
+			a.invalidateOnboardingWindow()
 		}
 	})
 	if err != nil {
@@ -118,8 +137,8 @@ func (a *App) loadThemeEditorWallpaper(loadID uint64, path string) {
 	}
 }
 
-// releaseThemeEditorWallpaperLocked prevents an in-flight load from restoring settings-owned image memory after close.
-func (a *App) releaseThemeEditorWallpaperLocked() {
+// releaseDemoWallpaperLocked prevents an in-flight load from restoring image memory after its window closes.
+func (a *App) releaseDemoWallpaperLocked() {
 	a.themeSettings.SetThemeWallpaperLoadID(a.themeSettings.ThemeWallpaperLoadID() + 1)
 	a.themeSettings.SetThemeWallpaperPath("")
 	a.themeSettings.SetThemeWallpaperImage(nil)
@@ -127,8 +146,8 @@ func (a *App) releaseThemeEditorWallpaperLocked() {
 	a.themeSettings.SetThemeWallpaperLoading(false)
 }
 
-// decodeThemeEditorWallpaper prepares a cover-fitted desktop image and the matching blurred center crop used by the simulated window.
-func decodeThemeEditorWallpaper(path string) (*woxui.Image, *woxui.Image, error) {
+// decodeDemoWallpaper prepares the desktop image and optionally the blurred theme-editor crop.
+func decodeDemoWallpaper(path string, includeBlurred bool) (*woxui.Image, *woxui.Image, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, nil, err
@@ -143,15 +162,18 @@ func decodeThemeEditorWallpaper(path string) (*woxui.Image, *woxui.Image, error)
 		source = imaging.Resize(source, 2048, 0, imaging.CatmullRom)
 	}
 	stage := imaging.Fill(source, 1800, 840, imaging.Center, imaging.Lanczos)
-	logicalStage := imaging.Resize(stage, 900, 420, imaging.Lanczos)
-	blurredStage := imaging.Blur(logicalStage, 24)
-	blurredWindow := imaging.CropCenter(blurredStage, 702, 344)
-	maskThemeEditorRoundedCorners(stage, 36)
-	maskThemeEditorRoundedCorners(blurredWindow, 12)
+	maskDemoWallpaperRoundedCorners(stage, 36)
 	wallpaperImage, err := woxui.NewImage(stage)
 	if err != nil {
 		return nil, nil, err
 	}
+	if !includeBlurred {
+		return wallpaperImage, nil, nil
+	}
+	logicalStage := imaging.Resize(stage, 900, 420, imaging.Lanczos)
+	blurredStage := imaging.Blur(logicalStage, 24)
+	blurredWindow := imaging.CropCenter(blurredStage, 702, 344)
+	maskDemoWallpaperRoundedCorners(blurredWindow, 12)
 	wallpaperBlurred, err := woxui.NewImage(blurredWindow)
 	if err != nil {
 		return nil, nil, err
@@ -159,8 +181,8 @@ func decodeThemeEditorWallpaper(path string) (*woxui.Image, *woxui.Image, error)
 	return wallpaperImage, wallpaperBlurred, nil
 }
 
-// maskThemeEditorRoundedCorners keeps preprocessed wallpaper layers inside the same rounded bounds as Flutter's clips.
-func maskThemeEditorRoundedCorners(source *image.NRGBA, radius int) {
+// maskDemoWallpaperRoundedCorners keeps preprocessed wallpaper layers inside the same rounded bounds as Flutter's clips.
+func maskDemoWallpaperRoundedCorners(source *image.NRGBA, radius int) {
 	if source == nil || radius <= 0 {
 		return
 	}
@@ -267,6 +289,9 @@ func (a *App) openThemeEditorTokenDialog(key string) {
 	state.dialogMode = "token"
 	state.dialogToken = key
 	state.dialogOriginal = state.values[key]
+	if color, ok := decodeThemeColor(state.dialogOriginal); ok {
+		setFormFieldsTextLocked(&state.formFieldsState, index, encodeThemeColor(color))
+	}
 	state.error = ""
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	textInput := state.editor != nil
@@ -318,6 +343,7 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 	title := a.translate("i18n:ui_theme_editor_save_as_title")
 	confirmLabel := a.translate("i18n:ui_theme_editor_save_as")
 	if state.dialogMode == "token" {
+		panelHeight = 456
 		for _, token := range themeEditorTokens() {
 			if token.key == state.dialogToken {
 				title = a.translate(token.label)
@@ -325,6 +351,31 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 			}
 		}
 		confirmLabel = a.translate("i18n:ui_ok")
+		selectedColor, ok := decodeThemeColor(state.values[state.dialogToken])
+		if !ok {
+			selectedColor = woxui.Color{A: 255}
+		}
+		selectedHSV := themeColorToHSV(selectedColor)
+		field = woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
+			ID: "theme-editor-dialog-field-" + strconv.Itoa(index), Label: title, Width: 132, Height: 36, Radius: 4,
+			Padding: woxwidget.Insets{Left: 8, Top: 8, Right: 8, Bottom: 7}, Transparent: true,
+			BorderColor: palette.actionText, BorderWidth: 1, Style: woxui.TextStyle{Size: 13},
+			Value: state.values[state.dialogToken], Focused: state.active && state.focused == index,
+			Window: a.formFieldNativeWindow("theme-editor-dialog"), Theme: palette.componentTheme(),
+			OnFocusChange: func(focused bool) {
+				if focused {
+					a.focusThemeEditorField(index)
+				}
+			},
+			OnChanged: func(value string) { a.setThemeEditorText(index, value) },
+			OnKey:     a.onThemeEditorPreviewKey,
+		})
+		field = launcherview.ThemeEditorColorPicker(launcherview.ThemeEditorColorPickerProps{
+			Color: selectedColor, Hue: selectedHSV.hue, Saturation: selectedHSV.saturation, Brightness: selectedHSV.value, Opacity: selectedHSV.alpha,
+			BrightnessLabel: a.translate("i18n:ui_theme_editor_brightness"), OpacityLabel: a.translate("i18n:ui_theme_editor_opacity"),
+			ColorField: field, Theme: palette.componentTheme(),
+			OnHueSaturation: a.setThemeEditorDialogHueSaturation, OnBrightnessChange: a.setThemeEditorDialogBrightness, OnOpacityChange: a.setThemeEditorDialogOpacity,
+		})
 	}
 	footer := woxwidget.Container{Width: panelWidth - 32, Height: 46, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: max(float32(0), panelWidth-32-210), Height: 38},
@@ -342,6 +393,47 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 	})
 }
 
+// updateThemeEditorDialogColor applies every picker path through the same CSS value and live preview update.
+func (a *App) updateThemeEditorDialogColor(update func(themeColorHSV) themeColorHSV) {
+	state := a.themeSettings.ThemeEditor()
+	if state == nil || state.dialogMode != "token" {
+		return
+	}
+	color, ok := decodeThemeColor(state.values[state.dialogToken])
+	if !ok {
+		return
+	}
+	next := encodeThemeColor(themeColorFromHSV(update(themeColorToHSV(color))))
+	index := themeEditorDefinitionIndex(state.definitions, state.dialogToken)
+	if setFormFieldsTextLocked(&state.formFieldsState, index, next) {
+		state.error = ""
+		a.applySettingsThemeEditorDraft()
+		a.invalidateThemeEditorWindow()
+	}
+}
+
+func (a *App) setThemeEditorDialogHueSaturation(hue, saturation float64) {
+	a.updateThemeEditorDialogColor(func(color themeColorHSV) themeColorHSV {
+		color.hue = hue
+		color.saturation = saturation
+		return color
+	})
+}
+
+func (a *App) setThemeEditorDialogBrightness(value float64) {
+	a.updateThemeEditorDialogColor(func(color themeColorHSV) themeColorHSV {
+		color.value = value
+		return color
+	})
+}
+
+func (a *App) setThemeEditorDialogOpacity(value float64) {
+	a.updateThemeEditorDialogColor(func(color themeColorHSV) themeColorHSV {
+		color.alpha = value
+		return color
+	})
+}
+
 func (a *App) cancelThemeEditorDialog() {
 	state := a.themeSettings.ThemeEditor()
 	if state == nil || state.dialogMode == "" {
@@ -356,6 +448,7 @@ func (a *App) cancelThemeEditorDialog() {
 	state.dialogOriginal = ""
 	state.active = false
 	state.error = ""
+	a.applySettingsThemeEditorDraft()
 	a.restoreThemeEditorTextInput()
 	a.invalidateThemeEditorWindow()
 }
@@ -403,6 +496,7 @@ func (a *App) discardThemeEditorDraft() {
 	state.dialogToken = ""
 	state.dialogOriginal = ""
 	state.error = ""
+	a.applySettingsThemeEditorDraft()
 	a.restoreThemeEditorTextInput()
 	a.invalidateThemeEditorWindow()
 }

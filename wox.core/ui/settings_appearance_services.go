@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 
+	"wox/common"
 	"wox/plugin"
 	"wox/ui/contract"
 	"wox/util/font"
@@ -21,12 +22,14 @@ func (s *CoreServices) GlanceCatalog(ctx context.Context, sessionID string) ([]c
 	catalog := make([]contract.GlanceCatalogItem, 0)
 	for _, instance := range instances {
 		for _, glance := range instance.Metadata.Glances {
+			icon, _ := common.ParseWoxImage(glance.Icon)
 			catalog = append(catalog, contract.GlanceCatalogItem{
 				PluginID:          instance.Metadata.Id,
 				GlanceID:          glance.Id,
 				PluginName:        instance.GetName(ctx),
 				Name:              instance.TranslateMetadataText(ctx, glance.Name),
 				Description:       instance.TranslateMetadataText(ctx, glance.Description),
+				Icon:              icon,
 				RefreshIntervalMs: glance.RefreshIntervalMs,
 			})
 		}

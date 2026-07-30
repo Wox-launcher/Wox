@@ -230,7 +230,7 @@ func (a *App) loadSettingsThemeEditor() error {
 	hash := sha256.Sum256(encoded)
 	return a.runOnUI("apply settings theme editor", func() {
 		a.themeSettings.SetThemeEditor(newThemeEditorState(fmt.Sprintf("settings-theme|%x", hash[:8]), raw))
-		a.preloadThemeEditorWallpaper()
+		a.preloadDemoWallpaper(true)
 		if a.window != nil {
 			a.invalidateThemeEditorWindow()
 		}
@@ -312,6 +312,20 @@ func themeEditorPalette(values map[string]string) uiPalette {
 
 // themeEditorDraftPalette preserves non-editable theme geometry while applying the live color draft.
 func themeEditorDraftPalette(raw map[string]any, values map[string]string) uiPalette {
+	theme, err := themeEditorDraftTheme(raw, values)
+	if err != nil {
+		return themeEditorPalette(values)
+	}
+	return paletteForTheme(theme)
+}
+
+// themeEditorDraftTheme merges editable values into the complete source theme.
+func themeEditorDraftTheme(raw map[string]any, values map[string]string) (themeData, error) {
+	for _, token := range themeEditorTokens() {
+		if _, ok := decodeThemeColor(values[token.key]); !ok {
+			return themeData{}, fmt.Errorf("%s is not a valid CSS color", token.key)
+		}
+	}
 	draft := copyThemeMap(raw)
 	for key, value := range values {
 		draft[key] = value
@@ -322,9 +336,21 @@ func themeEditorDraftPalette(raw map[string]any, values map[string]string) uiPal
 		err = json.Unmarshal(encoded, &theme)
 	}
 	if err != nil {
-		return themeEditorPalette(values)
+		return themeData{}, err
 	}
-	return paletteForTheme(theme)
+	return theme, nil
+}
+
+// applySettingsThemeEditorDraft previews a valid settings draft across every Wox window.
+func (a *App) applySettingsThemeEditorDraft() {
+	state := a.themeSettings.ThemeEditor()
+	if state == nil || !strings.HasPrefix(state.key, "settings-theme|") {
+		return
+	}
+	theme, err := themeEditorDraftTheme(state.raw, state.values)
+	if err == nil {
+		a.applyTheme(theme)
+	}
 }
 
 // onThemeEditorPreviewKey gives the draft form keyboard ownership only after a field is focused.
@@ -381,6 +407,7 @@ func (a *App) editThemeEditorKey(event woxui.KeyEvent) {
 		if changed {
 			syncFormFieldsEditorLocked(&state.formFieldsState)
 			state.error = ""
+			a.applySettingsThemeEditorDraft()
 		}
 	}
 	a.invalidateThemeEditorWindow()
@@ -423,8 +450,7 @@ func (a *App) setThemeEditorText(index int, value string) {
 	changed := state != nil && !state.saving && setFormFieldsTextLocked(&state.formFieldsState, index, value)
 	if changed {
 		state.error = ""
-	}
-	if changed {
+		a.applySettingsThemeEditorDraft()
 		a.invalidateThemeEditorWindow()
 	}
 }

@@ -170,14 +170,17 @@ func (a *App) FocusSetting(_ context.Context) error {
 	return err
 }
 
-// OpenOnboarding reports the still-unimplemented management surface explicitly.
+// OpenOnboarding opens the first-run guide in its dedicated window.
 func (a *App) OpenOnboarding(_ context.Context) error {
-	return errors.New("Go UI onboarding is not implemented")
+	if !a.isPrimary && a.primary != nil {
+		return a.primary.OpenOnboarding(context.Background())
+	}
+	return a.openOnboarding()
 }
 
-// OpenMacOSPermissionFlow reports the still-unimplemented native guide explicitly.
-func (a *App) OpenMacOSPermissionFlow(_ context.Context, _ string) error {
-	return errors.New("Go UI macOS permission flow is not implemented")
+// OpenMacOSPermissionFlow opens the native privacy surface after a user action.
+func (a *App) OpenMacOSPermissionFlow(ctx context.Context, permissionType string) error {
+	return a.services.OpenMacOSPermission(ctx, a.sessionID, permissionType)
 }
 
 // ShowToolbarMessage displays a plugin-owned persistent toolbar snapshot.

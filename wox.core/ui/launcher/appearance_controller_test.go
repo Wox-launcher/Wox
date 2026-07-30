@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"wox/common"
+	"wox/plugin"
 	"wox/ui/contract"
 )
 
@@ -22,6 +24,14 @@ func (f *appearanceFakeService) SystemFontFamilies(_ context.Context, _ string) 
 
 func (f *appearanceFakeService) GlanceCatalog(_ context.Context, _ string) ([]contract.GlanceCatalogItem, error) {
 	return append([]contract.GlanceCatalogItem(nil), f.catalog...), f.catalogErr
+}
+
+type glancePreviewFakeService struct {
+	items []plugin.GlanceItemUI
+}
+
+func (f *glancePreviewFakeService) GlanceItems(_ context.Context, _ string, _ []plugin.GlanceKey, _ plugin.GlanceRefreshReason) ([]plugin.GlanceItemUI, error) {
+	return append([]plugin.GlanceItemUI(nil), f.items...), nil
 }
 
 func TestAppearanceControllerReloadFontsSuccess(t *testing.T) {
@@ -116,5 +126,21 @@ func TestAppearanceControllerResetGlanceCatalog(t *testing.T) {
 	}
 	if reset.GlanceCatalogError != "" {
 		t.Fatalf("GlanceCatalogError should be cleared, got %q", reset.GlanceCatalogError)
+	}
+}
+
+func TestAppearanceControllerLoadsGlancePickerPreview(t *testing.T) {
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }}
+	c := newAppearanceSettingsController(deps)
+	c.ReloadGlanceCatalog(context.Background(), &appearanceFakeService{catalog: []contract.GlanceCatalogItem{
+		{PluginID: "p1", GlanceID: "cpu", Name: "CPU", Icon: common.NewWoxImageEmoji("◉")},
+	}}, "session", nil)
+	c.ReloadGlancePreviews(context.Background(), &glancePreviewFakeService{items: []plugin.GlanceItemUI{
+		{PluginId: "p1", Id: "cpu", Text: "62%", Icon: common.NewWoxImageEmoji("⚙")},
+	}}, "session")
+
+	item := c.Snapshot().GlanceCatalog[0]
+	if item.Preview == nil || item.Preview.Text != "62%" || item.Preview.Icon.ImageData == "" {
+		t.Fatalf("glance preview = %#v, want live value and icon", item.Preview)
 	}
 }

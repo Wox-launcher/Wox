@@ -43,16 +43,7 @@ func TestSettingsSmoke(t *testing.T) {
 	}
 	defer process.Close()
 
-	if err := process.Client.Show(ctx); err != nil {
-		t.Fatalf("show launcher: %v", err)
-	}
-	_, err = process.Client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, found := automationdriver.Find(snapshot, "launcher.query.input")
-		return found
-	})
-	if err != nil {
-		t.Fatalf("wait for query input: %v", err)
-	}
+	showLauncher(t, ctx, process.Client)
 
 	if err := process.Client.OpenSettings(ctx, "/general"); err != nil {
 		t.Fatalf("open General settings: %v", err)

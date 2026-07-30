@@ -43,7 +43,7 @@ func PreviewView(props PreviewProps) woxwidget.Widget {
 	surfaceHeight := layout.BodyHeight + 2
 	children := []woxwidget.StackChild{{Child: previewSurface(props.Body, props.Theme, layout.InnerWidth, surfaceHeight)}}
 	if len(props.Tags) > 0 {
-		children = append(children, woxwidget.StackChild{Top: surfaceHeight + 10, Child: previewTags(props.Tags, props.Theme, props.Window, layout.InnerWidth)})
+		children = append(children, woxwidget.StackChild{Top: surfaceHeight + 10, Child: PreviewTags(props.Tags, props.Theme, props.Window, layout.InnerWidth)})
 	}
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 14, Top: 12, Right: 12, Bottom: 10},
@@ -63,9 +63,10 @@ func previewSurface(body woxwidget.Widget, theme woxcomponent.Theme, width, heig
 	}
 }
 
-func previewTags(tags []string, theme woxcomponent.Theme, window *woxui.Window, width float32) woxwidget.Widget {
+// PreviewTags builds the metadata pills shared by real and theme-editor previews.
+func PreviewTags(tags []string, theme woxcomponent.Theme, window *woxui.Window, width float32) woxwidget.Widget {
 	children := make([]woxwidget.Widget, 0, len(tags))
-	used := float32(0)
+	contentWidth := float32(0)
 	for _, label := range tags {
 		if strings.TrimSpace(label) == "" {
 			continue
@@ -73,8 +74,8 @@ func previewTags(tags []string, theme woxcomponent.Theme, window *woxui.Window, 
 		style := woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}
 		metrics, _ := window.MeasureText(label, style)
 		chipWidth := min(max(float32(36), metrics.Size.Width+18), min(float32(220), max(float32(36), width)))
-		if used > 0 && used+8+chipWidth > width {
-			break
+		if len(children) > 0 {
+			contentWidth += 8
 		}
 		children = append(children, woxwidget.Container{
 			Width: chipWidth, Height: 26, Radius: 8, Color: previewColorWithOpacity(theme.PreviewPropertyTitle, 0.48), Padding: woxwidget.UniformInsets(1),
@@ -84,9 +85,12 @@ func previewTags(tags []string, theme woxcomponent.Theme, window *woxui.Window, 
 				Child:   woxwidget.Text{Value: label, Style: style, Color: previewColorWithOpacity(theme.PreviewPropertyContent, 0.9)},
 			},
 		})
-		used += chipWidth + 8
+		contentWidth += chipWidth
 	}
-	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: children}
+	return woxwidget.ScrollView{
+		Width: width, Height: 26, ContentWidth: max(width, contentWidth), Horizontal: true,
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: children},
+	}
 }
 
 func previewColorWithOpacity(color woxui.Color, opacity float32) woxui.Color {

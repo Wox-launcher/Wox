@@ -19,6 +19,7 @@ import (
 	"wox/util"
 	"wox/util/font"
 	"wox/util/keyboard"
+	"wox/util/permission"
 )
 
 // GeneralSettings returns the core-owned settings snapshot used across embedded settings pages.
@@ -86,6 +87,28 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 func (s *CoreServices) AvailableLanguages(ctx context.Context, sessionID string) ([]i18n.Lang, error) {
 	_ = uiServiceContext(ctx, sessionID)
 	return append([]i18n.Lang(nil), i18n.GetSupportedLanguages()...), nil
+}
+
+// MacOSPermissionStatus checks current permission state without prompting.
+func (s *CoreServices) MacOSPermissionStatus(ctx context.Context, sessionID string) (contract.MacOSPermissionStatus, error) {
+	ctx = uiServiceContext(ctx, sessionID)
+	status, err := permission.ProbeMacOSPermissionStatus(ctx)
+	if err != nil {
+		status = permission.GetMacOSPermissionStatusDirect(ctx)
+	}
+	return contract.MacOSPermissionStatus{
+		Accessibility:  string(status.Accessibility),
+		FullDiskAccess: string(status.FullDiskAccess),
+	}, nil
+}
+
+// OpenMacOSPermission opens the system privacy surface only after an explicit user action.
+func (s *CoreServices) OpenMacOSPermission(ctx context.Context, sessionID string, permissionType string) error {
+	if !permission.IsValidMacOSPermissionType(permission.MacOSPermissionType(permissionType)) {
+		return fmt.Errorf("invalid macOS permission type: %s", permissionType)
+	}
+	permission.OpenPrivacySecuritySettings(uiServiceContext(ctx, sessionID))
+	return nil
 }
 
 // LanguageJSON returns one validated translation bundle.

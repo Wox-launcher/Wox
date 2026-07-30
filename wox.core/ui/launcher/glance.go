@@ -49,6 +49,8 @@ type glanceCatalogItem struct {
 	PluginName        string
 	Name              string
 	Description       string
+	Icon              woxImage
+	Preview           *glanceItem
 	RefreshIntervalMs int
 }
 
@@ -118,18 +120,7 @@ func (a *App) refreshGlance(reason, pluginID string, ids []string) {
 	cancel()
 	items := make([]glanceItem, len(loaded))
 	for index, item := range loaded {
-		var action *glanceAction
-		if item.Action != nil {
-			action = &glanceAction{
-				ID: item.Action.Id, Name: item.Action.Name,
-				Icon:                   woxImage{ImageType: item.Action.Icon.ImageType, ImageData: item.Action.Icon.ImageData},
-				PreventHideAfterAction: item.Action.PreventHideAfterAction, ContextData: map[string]string(item.Action.ContextData),
-			}
-		}
-		items[index] = glanceItem{
-			PluginID: item.PluginId, ID: item.Id, Text: item.Text,
-			Icon: woxImage{ImageType: item.Icon.ImageType, ImageData: item.Icon.ImageData}, Tooltip: item.Tooltip, Action: action,
-		}
+		items[index] = glanceItemFromUI(item)
 	}
 
 	var selected *glanceItem
@@ -157,6 +148,22 @@ func (a *App) refreshGlance(reason, pluginID string, ids []string) {
 		_ = a.window.Invalidate()
 	}); dispatchErr != nil {
 		log.Printf("dispatch glance refresh result: %v", dispatchErr)
+	}
+}
+
+// glanceItemFromUI converts the shared core response for launcher and picker previews.
+func glanceItemFromUI(item plugin.GlanceItemUI) glanceItem {
+	var action *glanceAction
+	if item.Action != nil {
+		action = &glanceAction{
+			ID: item.Action.Id, Name: item.Action.Name,
+			Icon:                   woxImage{ImageType: item.Action.Icon.ImageType, ImageData: item.Action.Icon.ImageData},
+			PreventHideAfterAction: item.Action.PreventHideAfterAction, ContextData: map[string]string(item.Action.ContextData),
+		}
+	}
+	return glanceItem{
+		PluginID: item.PluginId, ID: item.Id, Text: item.Text,
+		Icon: woxImage{ImageType: item.Icon.ImageType, ImageData: item.Icon.ImageData}, Tooltip: item.Tooltip, Action: action,
 	}
 }
 
@@ -235,8 +242,15 @@ func (a *App) loadGlanceCatalog() {
 		if a.glanceItem != nil {
 			a.scheduleGlanceRefreshLocked(a.generalSettings.Data().PrimaryGlance)
 		}
+		if a.settingsOpen || a.onboardingOpen {
+			util.Go(a.lifecycleCtx, "load glance picker previews", a.loadGlancePickerPreviews)
+		}
 		_ = a.window.Invalidate()
 	})
+}
+
+func (a *App) loadGlancePickerPreviews() {
+	a.appearanceSettings.ReloadGlancePreviews(context.Background(), a.services, a.sessionID)
 }
 
 func (a *App) executeGlanceAction() {

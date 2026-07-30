@@ -21,6 +21,7 @@ const (
 type SettingsChoice struct {
 	Value    string
 	Label    string
+	Leading  *woxui.Image
 	Trailing string
 	Tooltip  string
 }
@@ -188,6 +189,11 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			foreground = props.Theme.SelectedTitle
 		}
 		contentWidth := max(float32(0), width-32)
+		leadingWidth := float32(0)
+		if choice.Leading != nil {
+			leadingWidth = 26
+			contentWidth = max(float32(0), contentWidth-leadingWidth)
+		}
 		trailingWidth := float32(0)
 		if choice.Trailing != "" {
 			trailingWidth = min(float32(80), max(float32(0), contentWidth-80))
@@ -210,11 +216,16 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			}
 		}
 		key := woxwidget.Key(fmt.Sprintf("setting-choice-%d", index))
-		rowChildren := []woxwidget.Widget{
-			woxwidget.Container{Width: contentWidth, Height: settingsChoiceRowHeight, Padding: woxwidget.Insets{Top: 15}, Child: woxwidget.Text{
-				Value: choice.Label, Style: woxui.TextStyle{Size: 13}, Color: foreground,
-			}},
+		rowChildren := make([]woxwidget.Widget, 0, 6)
+		if choice.Leading != nil {
+			rowChildren = append(rowChildren,
+				woxwidget.Align{Width: 18, Height: settingsChoiceRowHeight, Vertical: 0.5, Child: woxwidget.Image{Source: choice.Leading, Width: 18, Height: 18}},
+				woxwidget.Container{Width: 8, Height: settingsChoiceRowHeight},
+			)
 		}
+		rowChildren = append(rowChildren, woxwidget.Align{Width: contentWidth, Height: settingsChoiceRowHeight, Vertical: 0.5, Child: woxwidget.Text{
+			Value: choice.Label, Style: woxui.TextStyle{Size: 13}, Color: foreground,
+		}})
 		if trailingWidth > 0 {
 			rowChildren = append(rowChildren,
 				woxwidget.Container{Width: 12, Height: settingsChoiceRowHeight},

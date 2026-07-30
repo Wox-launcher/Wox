@@ -39,6 +39,28 @@ func (w AnimatedFloat) layout(ctx context, available constraints) *node {
 	return child.layout(ctx, available)
 }
 
+// LoopAnimation rebuilds its child with a repeating normalized progress value.
+type LoopAnimation struct {
+	Key      Key
+	Duration time.Duration
+	Builder  func(float32) Widget
+}
+
+func (w LoopAnimation) layout(ctx context, available constraints) *node {
+	progress := float32(0)
+	if w.Key != "" && w.Duration > 0 {
+		progress = ctx.animation.loopValue(w.Key, w.Duration)
+	}
+	if w.Builder == nil {
+		return &node{}
+	}
+	child := w.Builder(progress)
+	if child == nil {
+		return &node{}
+	}
+	return child.layout(ctx, available)
+}
+
 type animationFrame struct {
 	host       *animationHost
 	generation uint64
@@ -52,12 +74,25 @@ func (f animationFrame) value(key Key, target float32, duration time.Duration, c
 	return f.host.value(f, key, target, duration, curve)
 }
 
+func (f animationFrame) loopValue(key Key, duration time.Duration) float32 {
+	if f.host == nil {
+		return 0
+	}
+	return f.host.loopValue(f, key, duration)
+}
+
 type floatAnimation struct {
 	start      float32
 	target     float32
 	startedAt  time.Time
 	duration   time.Duration
 	curve      AnimationCurve
+	lastSeenAt uint64
+}
+
+type loopAnimation struct {
+	startedAt  time.Time
+	duration   time.Duration
 	lastSeenAt uint64
 }
 
@@ -90,6 +125,7 @@ func transformAnimationProgress(progress float32, curve AnimationCurve) float32 
 type animationHost struct {
 	mu         sync.Mutex
 	values     map[Key]*floatAnimation
+	loops      map[Key]*loopAnimation
 	generation uint64
 	active     bool
 	timer      *time.Timer
@@ -134,6 +170,22 @@ func (h *animationHost) value(frame animationFrame, key Key, target float32, dur
 	return animation.valueAt(frame.now)
 }
 
+func (h *animationHost) loopValue(frame animationFrame, key Key, duration time.Duration) float32 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.loops == nil {
+		h.loops = map[Key]*loopAnimation{}
+	}
+	animation := h.loops[key]
+	if animation == nil || animation.duration != duration {
+		animation = &loopAnimation{startedAt: frame.now, duration: duration}
+		h.loops[key] = animation
+	}
+	animation.lastSeenAt = frame.generation
+	h.active = true
+	return float32(frame.now.Sub(animation.startedAt)%duration) / float32(duration)
+}
+
 // endFrame drops absent animations and requests the next frame only while a value is moving.
 func (h *animationHost) endFrame(frame animationFrame) {
 	h.mu.Lock()
@@ -141,6 +193,11 @@ func (h *animationHost) endFrame(frame animationFrame) {
 	for key, animation := range h.values {
 		if animation.lastSeenAt != frame.generation {
 			delete(h.values, key)
+		}
+	}
+	for key, animation := range h.loops {
+		if animation.lastSeenAt != frame.generation {
+			delete(h.loops, key)
 		}
 	}
 	if !h.active {
@@ -179,5 +236,6 @@ func (h *animationHost) reset() {
 		h.timer = nil
 	}
 	h.values = nil
+	h.loops = nil
 	h.active = false
 }

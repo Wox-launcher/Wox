@@ -37,6 +37,7 @@ type settingsData struct {
 	UsePinYin                          bool
 	SwitchInputMethodABC               bool
 	HideOnStart                        bool
+	OnboardingFinished                 bool
 	HideOnLostFocus                    bool
 	ShowTray                           bool
 	LangCode                           string
@@ -105,6 +106,7 @@ type settingItem struct {
 	value        string
 	choices      []settingChoice
 	trailers     map[string]string
+	icons        map[string]woxImage
 	filterable   bool
 	text         bool
 	controlWidth float32
@@ -246,6 +248,28 @@ func activeSettingNavID(tab string, pluginsStore bool, themesMode string) string
 
 // openSettings creates or focuses the independent settings window at one platform-neutral route.
 func (a *App) openSettings(windowContext settingWindowContext) error {
+	wasOnboarding := false
+	var onboardingView *woxui.ManagedWindow
+	if err := a.runOnUI("leave onboarding for settings", func() {
+		wasOnboarding = a.onboardingOpen
+		a.onboardingOpen = false
+		a.onboardingChoice = ""
+		a.onboardingChoiceAnchor = woxui.Rect{}
+		if wasOnboarding {
+			a.releaseDemoWallpaperLocked()
+		}
+		onboardingView = a.onboardingView
+	}); err != nil {
+		return err
+	}
+	if wasOnboarding {
+		if onboardingView != nil {
+			_ = onboardingView.Hide()
+		}
+		if err := a.notifyOnboardingViewChanged(false); err != nil {
+			return err
+		}
+	}
 	if err := a.reloadSettings(); err != nil {
 		return err
 	}
@@ -325,7 +349,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		// Reset the shared built-in editor and any open choice picker on settings open.
 		a.generalSettings.EndEdit()
 		a.generalSettings.SetChoicePicker(nil)
-		a.preloadThemeEditorWallpaper()
+		a.preloadDemoWallpaper(true)
 		a.deactivateTerminalPreview()
 		a.resetChatPreview()
 	}); err != nil {
@@ -381,7 +405,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if err != nil {
 		_ = a.runOnUI("rollback settings open", func() {
 			a.settingsOpen = false
-			a.releaseThemeEditorWallpaperLocked()
+			a.releaseDemoWallpaperLocked()
 		})
 		return err
 	}
@@ -392,10 +416,8 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if err := settingsWindow.SetTextInputState(woxui.TextInputState{}); err != nil {
 		return err
 	}
-	if settingsView.Lifecycle() == woxui.WindowLifecycleCreated {
-		if err := settingsWindow.Center(woxui.Size{Width: settingsWindowWidth, Height: settingsWindowHeight}); err != nil {
-			return err
-		}
+	if err := settingsWindow.Center(woxui.Size{Width: settingsWindowWidth, Height: settingsWindowHeight}); err != nil {
+		return err
 	}
 	if err := a.notifySettingViewChanged(true); err != nil {
 		return err
@@ -473,6 +495,11 @@ func (a *App) reloadSettings() error {
 				applyErr = fmt.Errorf("apply Wox settings UI font: %w", err)
 			}
 		}
+		if a.onboardingView != nil {
+			if err := a.onboardingView.Window().SetFontFamily(data.AppFontFamily); err != nil {
+				applyErr = fmt.Errorf("apply Wox onboarding UI font: %w", err)
+			}
+		}
 	}); err != nil {
 		return err
 	}
@@ -527,6 +554,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		UsePinYin:                          loaded.UsePinYin,
 		SwitchInputMethodABC:               loaded.SwitchInputMethodABC,
 		HideOnStart:                        loaded.HideOnStart,
+		OnboardingFinished:                 loaded.OnboardingFinished,
 		HideOnLostFocus:                    loaded.HideOnLostFocus,
 		ShowTray:                           loaded.ShowTray,
 		LangCode:                           string(loaded.LangCode),
@@ -1217,6 +1245,8 @@ func primaryGlanceSettingItem(snapshot settingsSnapshot) settingItem {
 	current := snapshot.general.Data.PrimaryGlance
 	currentValue := glanceRefJSON(current)
 	choices := make([]settingChoice, 0, len(appearance.GlanceCatalog)+1)
+	trailers := make(map[string]string, len(appearance.GlanceCatalog))
+	icons := make(map[string]woxImage, len(appearance.GlanceCatalog))
 	found := false
 	for _, glance := range appearance.GlanceCatalog {
 		value := glanceRefJSON(glance.Ref)
@@ -1224,10 +1254,14 @@ func primaryGlanceSettingItem(snapshot settingsSnapshot) settingItem {
 		if strings.TrimSpace(label) == "" {
 			label = glance.Ref.GlanceID
 		}
-		if strings.TrimSpace(glance.PluginName) != "" {
-			label += " · " + glance.PluginName
-		}
 		choices = append(choices, settingChoice{value: value, label: label})
+		icons[value] = glance.Icon
+		if glance.Preview != nil {
+			trailers[value] = glance.Preview.Text
+			if glance.Preview.Icon.ImageData != "" {
+				icons[value] = glance.Preview.Icon
+			}
+		}
 		if glance.Ref == current {
 			found = true
 		}
@@ -1241,7 +1275,7 @@ func primaryGlanceSettingItem(snapshot settingsSnapshot) settingItem {
 	} else if appearance.GlanceCatalogError != "" {
 		description = "Could not load Glance providers: " + appearance.GlanceCatalogError
 	}
-	return settingItem{key: "PrimaryGlance", title: "Primary glance", description: description, value: currentValue, choices: choices}
+	return settingItem{key: "PrimaryGlance", title: "Primary glance", description: description, value: currentValue, choices: choices, trailers: trailers, icons: icons}
 }
 
 func glanceRefJSON(ref glanceRef) string {

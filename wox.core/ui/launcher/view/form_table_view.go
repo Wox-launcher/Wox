@@ -914,23 +914,13 @@ func formTableRowAppControl(props FormTableRowFieldProps, width, height float32)
 // formTableRowSelectControl keeps the selected value and dropdown indicator in separate aligned slots, matching Flutter's expanded dropdown button.
 func formTableRowSelectControl(props FormTableRowFieldProps, width, height float32) woxwidget.Widget {
 	foreground := props.Theme.ActionText
-	indicator := props.Theme.ActionText
 	if props.OnChoiceTap == nil {
 		foreground = formTableAlpha(foreground, 128)
-		indicator = formTableAlpha(indicator, 128)
 	}
-	contentWidth := max(float32(0), width-16)
-	indicatorWidth := min(float32(24), contentWidth)
-	valueWidth := max(float32(0), contentWidth-indicatorWidth)
-	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap, Child: woxwidget.Container{
-		Width: width, Height: height, Radius: 4, BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1, Padding: woxwidget.Insets{Left: 8, Right: 8},
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Align{Width: valueWidth, Height: height, Vertical: 0.5, Child: woxwidget.TextBlock{
-				Value: props.Value, Width: valueWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: foreground,
-			}},
-			dropdownIndicator(indicatorWidth, height, indicator),
-		}},
-	}}
+	return woxDropdownTrigger(dropdownTriggerProps{
+		ID: props.ID, Value: props.Value, Width: width, Height: height, Outline: formTableRowOutline(props.Theme, props.Focused),
+		Foreground: foreground, Secondary: props.Theme.ActionHeader, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
+	})
 }
 
 func formTableRowValueControl(props FormTableRowFieldProps, width, height float32) woxwidget.Widget {

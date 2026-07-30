@@ -205,6 +205,7 @@ func (a *App) applyTheme(theme themeData) {
 	isDark := themeColorIsDark(palette.background)
 	a.palette = palette
 	settingsView := a.settingsView
+	onboardingView := a.onboardingView
 	if a.window != nil {
 		_ = a.window.SetAppearance(isDark)
 		_ = a.applyWindowBounds()
@@ -213,7 +214,11 @@ func (a *App) applyTheme(theme themeData) {
 	if settingsView != nil {
 		_ = settingsView.Window().SetAppearance(isDark)
 	}
+	if onboardingView != nil {
+		_ = onboardingView.Window().SetAppearance(isDark)
+	}
 	a.invalidateSettingsWindow()
+	a.invalidateOnboardingWindow()
 }
 
 func themeColorIsDark(color woxui.Color) bool {
@@ -315,13 +320,88 @@ func decodeThemeColor(value string) (woxui.Color, bool) {
 			if len(channels) == 4 {
 				alpha = channels[3]
 				if alpha <= 1 {
-					alpha *= 255
+					// from_css_color quantizes fractional CSS alpha before Flutter exposes the channel.
+					alpha = math.Floor(alpha * 255)
 				}
 			}
 			return woxui.Color{R: colorByte(channels[0]), G: colorByte(channels[1]), B: colorByte(channels[2]), A: colorByte(alpha)}, true
 		}
 	}
 	return woxui.Color{}, false
+}
+
+type themeColorHSV struct {
+	hue        float64
+	saturation float64
+	value      float64
+	alpha      float64
+}
+
+// themeColorToHSV preserves Flutter's HSV controls while theme values remain CSS colors.
+func themeColorToHSV(color woxui.Color) themeColorHSV {
+	red := float64(color.R) / 255
+	green := float64(color.G) / 255
+	blue := float64(color.B) / 255
+	high := max(red, green, blue)
+	low := min(red, green, blue)
+	delta := high - low
+	hue := float64(0)
+	switch {
+	case delta == 0:
+	case high == red:
+		hue = 60 * math.Mod((green-blue)/delta, 6)
+	case high == green:
+		hue = 60 * ((blue-red)/delta + 2)
+	default:
+		hue = 60 * ((red-green)/delta + 4)
+	}
+	if hue < 0 {
+		hue += 360
+	}
+	saturation := float64(0)
+	if high > 0 {
+		saturation = delta / high
+	}
+	return themeColorHSV{hue: hue, saturation: saturation, value: high, alpha: float64(color.A) / 255}
+}
+
+// themeColorFromHSV converts normalized picker state back to the renderer's byte color.
+func themeColorFromHSV(color themeColorHSV) woxui.Color {
+	hue := math.Mod(max(float64(0), color.hue), 360)
+	saturation := min(float64(1), max(float64(0), color.saturation))
+	value := min(float64(1), max(float64(0), color.value))
+	chroma := value * saturation
+	section := hue / 60
+	offset := chroma * (1 - math.Abs(math.Mod(section, 2)-1))
+	var red, green, blue float64
+	switch int(section) {
+	case 0:
+		red, green = chroma, offset
+	case 1:
+		red, green = offset, chroma
+	case 2:
+		green, blue = chroma, offset
+	case 3:
+		green, blue = offset, chroma
+	case 4:
+		red, blue = offset, chroma
+	default:
+		red, blue = chroma, offset
+	}
+	match := value - chroma
+	return woxui.Color{
+		R: colorByte((red + match) * 255),
+		G: colorByte((green + match) * 255),
+		B: colorByte((blue + match) * 255),
+		A: colorByte(min(float64(1), max(float64(0), color.alpha)) * 255),
+	}
+}
+
+func encodeThemeColor(color woxui.Color) string {
+	if float64(color.A)/255 >= 0.995 {
+		return fmt.Sprintf("#%02X%02X%02X", color.R, color.G, color.B)
+	}
+	return fmt.Sprintf("#%02X%02X%02X%02X", color.R, color.G, color.B, color.A)
 }
 
 func colorByte(value float64) uint8 {

@@ -70,6 +70,23 @@ func findAutomationNode(t *testing.T, tree woxui.AccessibilityTree, automationID
 	return woxui.AccessibilityNode{}
 }
 
+func TestLoopAnimationAdvancesAndWraps(t *testing.T) {
+	host := &animationHost{}
+	start := time.Now()
+	frame := animationFrame{host: host, generation: 1, now: start}
+	if progress := host.loopValue(frame, "demo", time.Second); progress != 0 {
+		t.Fatalf("initial loop progress = %v, want 0", progress)
+	}
+	if !host.active {
+		t.Fatal("loop animation did not request another frame")
+	}
+	frame.generation++
+	frame.now = start.Add(1250 * time.Millisecond)
+	if progress := host.loopValue(frame, "demo", time.Second); progress != .25 {
+		t.Fatalf("wrapped loop progress = %v, want 0.25", progress)
+	}
+}
+
 func TestHostKeepsPressedIdentityAcrossKeyedReorder(t *testing.T) {
 	order := []string{"a", "b"}
 	taps := map[string]int{}
@@ -306,5 +323,27 @@ func TestHostDragSelectionExtendsAndClickCollapses(t *testing.T) {
 	}
 	if tapCalls != 1 {
 		t.Fatalf("click without drag should dispatch tap, got %d taps", tapCalls)
+	}
+}
+
+func TestHostPanTracksPointerOutsideBounds(t *testing.T) {
+	var points []woxui.Point
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Gesture{
+			ID:          "pan",
+			OnPanStart:  func(point woxui.Point) { points = append(points, point) },
+			OnPanUpdate: func(point woxui.Point) { points = append(points, point) },
+			Child:       Container{Width: 100, Height: 20},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 120, Y: 5}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 120, Y: 5}})
+
+	if len(points) != 2 || points[0].X != 5 || points[1].X != 120 {
+		t.Fatalf("pan points = %#v, want local X positions 5 and 120", points)
 	}
 }

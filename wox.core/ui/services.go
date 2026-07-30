@@ -125,6 +125,12 @@ func (s *CoreServices) SettingViewChanged(ctx context.Context, sessionID string,
 	return nil
 }
 
+// OnboardingViewChanged keeps core hotkey and tray gates synchronized with the guide.
+func (s *CoreServices) OnboardingViewChanged(ctx context.Context, sessionID string, inOnboardingView bool) error {
+	GetUIManager().PostOnOnboarding(uiServiceContext(ctx, sessionID), inOnboardingView)
+	return nil
+}
+
 // StartQuery schedules the core query pipeline and streams typed snapshots to the view.
 func (s *CoreServices) StartQuery(ctx context.Context, request contract.QueryRequest, view contract.QueryView) error {
 	if view == nil {

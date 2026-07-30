@@ -32,8 +32,9 @@ func resultRowHeightForPalette(palette uiPalette) float32 {
 }
 
 const (
-	launcherWindowID woxui.WindowID = "wox.launcher"
-	settingsWindowID woxui.WindowID = "wox.settings"
+	launcherWindowID   woxui.WindowID = "wox.launcher"
+	settingsWindowID   woxui.WindowID = "wox.settings"
+	onboardingWindowID woxui.WindowID = "wox.onboarding"
 )
 
 // App owns one launcher window and its typed core service boundary.
@@ -46,77 +47,86 @@ type App struct {
 	terminalSubscribed     string
 	terminalDesired        atomic.Value
 
-	isDev         bool
-	isPrimary     bool
-	instanceName  string
-	sessionID     string
-	windowID      woxui.WindowID
-	services      contract.Services
-	uiCall        func(func()) error
-	windows       *woxui.WindowManager
-	instances     *appInstanceRegistry
-	primary       *App
-	destroyOnce   sync.Once
-	unsubscribers []func()
-	lifecycleCtx  context.Context
-	cancel        context.CancelFunc
-	destroyed     atomic.Bool
-	launcher      *woxui.ManagedWindow
-	settingsView  *woxui.ManagedWindow
-	window        *woxui.Window
-	host          *woxwidget.Host
-	settingsHost  *woxwidget.Host
+	isDev          bool
+	isPrimary      bool
+	instanceName   string
+	sessionID      string
+	windowID       woxui.WindowID
+	services       contract.Services
+	uiCall         func(func()) error
+	windows        *woxui.WindowManager
+	instances      *appInstanceRegistry
+	primary        *App
+	destroyOnce    sync.Once
+	unsubscribers  []func()
+	lifecycleCtx   context.Context
+	cancel         context.CancelFunc
+	destroyed      atomic.Bool
+	launcher       *woxui.ManagedWindow
+	settingsView   *woxui.ManagedWindow
+	onboardingView *woxui.ManagedWindow
+	window         *woxui.Window
+	host           *woxwidget.Host
+	settingsHost   *woxwidget.Host
+	onboardingHost *woxwidget.Host
 
 	query             plainQuery
 	queryContext      queryContext
 	queryContextKnown bool
 	editor            *woxui.TextEditor
 	// selectionAnchor holds the rune offset captured at query drag-selection start so extend updates only the focus.
-	selectionAnchor       int
-	results               []queryResult
-	resultsQueryID        string
-	queryTransitionTimer  *time.Timer
-	queryResizeTimer      *time.Timer
-	queryResizeRevision   uint64
-	pendingResults        bool
-	selected              int
-	hoveredResult         int
-	resultScroll          scrollController
-	resultScrollDetached  bool
-	layout                queryLayout
-	refinements           []queryRefinement
-	refinementOpen        bool
-	refinementScope       string
-	completionHint        *queryCompletionHint
-	toolbarMsg            *toolbarMessage
-	toolbarRevision       uint64
-	form                  *formState
-	requirementForm       *requirementFormState
-	triggerConflict       *triggerConflictPreviewState
-	chatPreview           *chatPreviewState
-	webViewPreviewData    string
-	webViewPreviewError   string
-	chatFullscreen        bool
-	actionPanel           bool
-	actionSelected        int
-	actionSelectionKey    string
-	actionFilter          *woxui.TextEditor
-	visible               bool
-	show                  showAppParams
-	settingsOpen          bool
-	settingsCtx           settingWindowContext
-	settingTab            string
-	settingRow            int
-	settingNote           string
-	settingSaving         bool
-	cloudPlanTooltip      *cloudPlanTooltipState
-	choiceTooltipRevision atomic.Uint64
-	tableEditor           *formTableEditorState
-	glanceItem            *glanceItem
-	glanceLoading         bool
-	glanceRevision        uint64
-	glanceTooltipRevision atomic.Uint64
-	glanceTimer           *time.Timer
+	selectionAnchor        int
+	results                []queryResult
+	resultsQueryID         string
+	queryTransitionTimer   *time.Timer
+	queryResizeTimer       *time.Timer
+	queryResizeRevision    uint64
+	pendingResults         bool
+	selected               int
+	hoveredResult          int
+	resultScroll           scrollController
+	resultScrollDetached   bool
+	layout                 queryLayout
+	refinements            []queryRefinement
+	refinementOpen         bool
+	refinementScope        string
+	completionHint         *queryCompletionHint
+	toolbarMsg             *toolbarMessage
+	toolbarRevision        uint64
+	form                   *formState
+	requirementForm        *requirementFormState
+	triggerConflict        *triggerConflictPreviewState
+	chatPreview            *chatPreviewState
+	webViewPreviewData     string
+	webViewPreviewError    string
+	chatFullscreen         bool
+	actionPanel            bool
+	actionSelected         int
+	actionSelectionKey     string
+	actionFilter           *woxui.TextEditor
+	visible                bool
+	show                   showAppParams
+	settingsOpen           bool
+	onboardingOpen         bool
+	onboardingStep         int
+	onboardingChoice       string
+	onboardingChoiceAnchor woxui.Rect
+	onboardingPermission   contract.MacOSPermissionStatus
+	onboardingLoading      bool
+	onboardingError        string
+	settingsCtx            settingWindowContext
+	settingTab             string
+	settingRow             int
+	settingNote            string
+	settingSaving          bool
+	cloudPlanTooltip       *cloudPlanTooltipState
+	choiceTooltipRevision  atomic.Uint64
+	tableEditor            *formTableEditorState
+	glanceItem             *glanceItem
+	glanceLoading          bool
+	glanceRevision         uint64
+	glanceTooltipRevision  atomic.Uint64
+	glanceTimer            *time.Timer
 	// Settings controllers (zero App back-dependency; populated by newApp).
 	generalSettings    *generalSettingsController
 	appearanceSettings *appearanceSettingsController
@@ -422,7 +432,7 @@ func (a *App) hideWindow(notify bool) error {
 		a.reconcileSelectedPreview()
 		a.requirementForm = nil
 		a.triggerConflict = nil
-		a.themeSettings.SetThemeEditor(nil)
+		a.clearLauncherThemeEditorPreview()
 		a.resetChatPreview()
 	}); err != nil {
 		return err
@@ -535,7 +545,7 @@ func (a *App) setQuery(query plainQuery) {
 	a.reconcileSelectedPreview()
 	a.requirementForm = nil
 	a.triggerConflict = nil
-	a.themeSettings.SetThemeEditor(nil)
+	a.clearLauncherThemeEditorPreview()
 	a.resetChatPreview()
 	a.restoreQueryTextInput()
 	_ = a.window.Invalidate()
@@ -596,7 +606,7 @@ func (a *App) requestMRU() error {
 		a.reconcileSelectedPreview()
 		a.requirementForm = nil
 		a.triggerConflict = nil
-		a.themeSettings.SetThemeEditor(nil)
+		a.clearLauncherThemeEditorPreview()
 		a.resetChatPreview()
 	}); err != nil {
 		return err

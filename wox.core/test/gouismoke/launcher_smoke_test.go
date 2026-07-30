@@ -47,16 +47,7 @@ func TestLauncherQuerySmoke(t *testing.T) {
 	}
 	defer process.Close()
 
-	if err := process.Client.Show(ctx); err != nil {
-		t.Fatalf("show launcher: %v", err)
-	}
-	_, err = process.Client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, found := automationdriver.Find(snapshot, "launcher.query.input")
-		return found
-	})
-	if err != nil {
-		t.Fatalf("wait for query input: %v", err)
-	}
+	showLauncher(t, ctx, process.Client)
 	initialBounds, err := process.Client.Bounds(ctx)
 	if err != nil {
 		t.Fatalf("read initial launcher bounds: %v", err)
@@ -174,4 +165,28 @@ func availablePort(t *testing.T) int {
 		t.Fatalf("release control port: %v", err)
 	}
 	return port
+}
+
+// showLauncher completes first-run onboarding before exercising launcher-only smoke paths.
+func showLauncher(t *testing.T, ctx context.Context, client *automationdriver.Client) {
+	t.Helper()
+	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, launcherFound := automationdriver.Find(snapshot, "launcher.query.input")
+		_, onboardingFound := automationdriver.Find(snapshot, "onboarding.window")
+		return launcherFound || onboardingFound
+	})
+	if err != nil {
+		t.Fatalf("wait for launcher or onboarding: %v", err)
+	}
+	if _, found := automationdriver.Find(snapshot, "onboarding.window"); found {
+		if err := client.Perform(ctx, "onboarding-skip", woxui.AccessibilityActionActivate, ""); err != nil {
+			t.Fatalf("skip onboarding: %v", err)
+		}
+	}
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, found := automationdriver.Find(snapshot, "launcher.query.input")
+		return found
+	}); err != nil {
+		t.Fatalf("wait for query input: %v", err)
+	}
 }

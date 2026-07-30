@@ -94,7 +94,7 @@ func containsString(values []string, target string) bool {
 
 func (a *App) hotkeyRecordingTargetCurrentLocked(target *formFieldsState) bool {
 	pluginForm := a.pluginSettings.Form()
-	return target != nil && ((a.settingsOpen && a.settingTab == "general" && target == a.hotkeySettings.Form()) ||
+	return target != nil && (((a.onboardingOpen || (a.settingsOpen && a.settingTab == "general")) && target == a.hotkeySettings.Form()) ||
 		(a.tableEditor != nil && a.tableEditor.rowForm == target) ||
 		(a.form != nil && target == &a.form.formFieldsState) ||
 		(a.requirementForm != nil && target == &a.requirementForm.formFieldsState) ||

@@ -413,8 +413,13 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 		kind = "bool"
 		value = item.value
 	}
+	var valueLeading *woxui.Image
+	if source := item.icons[item.value]; source.ImageData != "" {
+		valueLeading = a.imageForTint(source, &snapshot.palette.resultTitle, 18)
+	}
 	return launcherview.SettingRow(launcherview.SettingRowProps{
-		ID: item.key, Title: item.title, Description: item.description, Value: value, ValueTrailing: item.trailers[item.value], Width: width, Background: background, Disabled: item.disabled,
+		ID: item.key, Title: item.title, Description: item.description, Value: value, ValueTrailing: item.trailers[item.value], ValueLeading: valueLeading,
+		Width: width, Background: background, Disabled: item.disabled,
 		Kind: kind, ControlWidth: item.controlWidth, BrowseFile: item.browseFile, Editing: state, Focused: focused, Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
 		OnTap:       func() { a.selectSettingRow(index); a.openOrActivateSetting() },
 		OnChoiceTap: func(anchor woxui.Rect) { a.selectSettingRow(index); a.openSettingChoicePickerAt(item, anchor) },

@@ -56,6 +56,7 @@ type SettingRowProps struct {
 	Description   string
 	Value         string
 	ValueTrailing string
+	ValueLeading  *woxui.Image
 	Width         float32
 	Background    woxui.Color
 	Disabled      bool
@@ -139,28 +140,11 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 			onTap = nil
 			onTapBounds = nil
 		}
-		const indicatorWidth = float32(24)
-		contentWidth := max(float32(0), valueWidth-16-indicatorWidth)
-		trailingWidth := float32(0)
-		trailingGap := float32(0)
-		if props.ValueTrailing != "" {
-			trailingWidth = min(float32(68), max(float32(0), contentWidth-60))
-			trailingGap = min(float32(10), max(float32(0), contentWidth-trailingWidth-60))
-		}
-		valueChildren := []woxwidget.Widget{
-			woxwidget.Align{Width: max(float32(0), contentWidth-trailingWidth-trailingGap), Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: props.Value, Style: woxui.TextStyle{Size: 13}, Color: valueColor}},
-		}
-		if trailingGap > 0 {
-			valueChildren = append(valueChildren, woxwidget.Container{Width: trailingGap, Height: 24})
-		}
-		if trailingWidth > 0 {
-			valueChildren = append(valueChildren, woxwidget.Align{Width: trailingWidth, Height: 24, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{Value: props.ValueTrailing, Style: woxui.TextStyle{Size: 12}, Color: subtitle}})
-		}
-		valueChildren = append(valueChildren, dropdownIndicator(indicatorWidth, 24, valueColor))
-		valueField = woxwidget.Gesture{ID: "setting-choice-" + props.ID, OnTap: onTap, OnTapBounds: onTapBounds, Child: woxwidget.Keyed{Key: SettingChoiceAnchorKey(props.ID), Child: woxwidget.Container{
-			Width: valueWidth, Height: 34, Radius: 4, BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 140), BorderWidth: 1, Padding: woxwidget.Insets{Left: 8, Top: 5, Right: 8, Bottom: 5},
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: valueChildren},
-		}}}
+		valueField = woxwidget.Keyed{Key: SettingChoiceAnchorKey(props.ID), Child: woxDropdownTrigger(dropdownTriggerProps{
+			ID: "setting-choice-" + props.ID, Value: props.Value, Trailing: props.ValueTrailing, Leading: props.ValueLeading,
+			Width: valueWidth, Height: 34, Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140),
+			Foreground: valueColor, Secondary: subtitle, OnTap: onTap, OnTapBounds: onTapBounds,
+		})}
 	}
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Title, Description: props.Description, Width: props.Width, Height: 62, LabelWidth: labelWidth, Gap: 28,

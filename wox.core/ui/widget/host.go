@@ -45,6 +45,7 @@ type Host struct {
 	// selecting tracks the gesture node that started a drag-based selection, so subsequent
 	// pointer-move events extend its selection until the pointer is released.
 	selecting woxui.AccessibilityNodeID
+	panning   woxui.AccessibilityNodeID
 	lastTapID woxui.AccessibilityNodeID
 	lastTapAt time.Time
 
@@ -603,6 +604,10 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 			h.selecting = h.pressed
 			target.gesture.onSelectionStart(woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y})
 			h.invalidate()
+		} else if target != nil && target.gesture != nil && target.gesture.onPanStart != nil {
+			h.panning = h.pressed
+			target.gesture.onPanStart(woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y})
+			h.invalidate()
 		}
 	}
 	pressed := h.nodes[h.pressed]
@@ -628,7 +633,21 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 			h.invalidate()
 		}
 	}
+	if event.Kind == woxui.PointerMove && h.panning != 0 {
+		if panner := h.nodes[h.panning]; panner != nil && panner.gesture != nil && panner.gesture.onPanUpdate != nil {
+			h.dragging = true
+			panner.gesture.onPanUpdate(woxui.Point{X: event.Position.X - panner.bounds.X, Y: event.Position.Y - panner.bounds.Y})
+			h.invalidate()
+		}
+	}
 	if event.Kind == woxui.PointerUp && event.Button == woxui.PointerButtonPrimary {
+		if h.panning != 0 {
+			h.panning = 0
+			h.dragging = false
+			h.pressed = 0
+			h.invalidate()
+			return
+		}
 		// Finalize a drag selection: if movement occurred keep the selection and skip tap dispatch;
 		// otherwise fall through so a plain click still triggers tap (e.g. place caret).
 		if h.selecting != 0 {

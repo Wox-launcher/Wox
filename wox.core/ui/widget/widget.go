@@ -652,6 +652,8 @@ type gesture struct {
 	onTapAt     func(woxui.Point)
 	onTapBounds func(woxui.Rect)
 	onDragStart func()
+	onPanStart  func(woxui.Point)
+	onPanUpdate func(woxui.Point)
 	onScroll    func(woxui.Point)
 	// onScrollHandled reports whether this gesture consumed the delta so an
 	// ancestor scroll view can continue at nested-scroll boundaries.
@@ -673,6 +675,8 @@ type Gesture struct {
 	OnTapAt     func(position woxui.Point)
 	OnTapBounds func(bounds woxui.Rect)
 	OnDragStart func()
+	OnPanStart  func(position woxui.Point)
+	OnPanUpdate func(position woxui.Point)
 	OnScroll    func(delta woxui.Point)
 	// OnScrollHandled returns false to pass an unconsumed delta to the nearest
 	// ancestor scroll gesture.
@@ -700,7 +704,8 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 	target.kind = "gesture"
 	target.gesture = &gesture{
 		id: w.ID, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap, onTapAt: w.OnTapAt,
-		onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled,
+		onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onPanStart: w.OnPanStart, onPanUpdate: w.OnPanUpdate,
+		onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled,
 		onSelectionStart: w.OnSelectionStart, onSelectionExtend: w.OnSelectionExtend,
 	}
 	return target

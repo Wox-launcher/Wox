@@ -38,13 +38,14 @@ func run() error {
 	var waitIDs repeatedFlag
 	var setValues repeatedFlag
 	var keys repeatedFlag
+	var activates repeatedFlag
 	binary := flag.String("binary", "./.tmp/wox-go-ui-smoke", "automation-enabled Wox binary")
 	route := flag.String("route", "/general", "settings route passed to window.open_settings")
+	onboarding := flag.Bool("onboarding", false, "capture startup onboarding instead of opening a settings route")
 	capture := flag.String("capture", "", "absolute or working-directory-relative PNG output path")
 	width := flag.Float64("width", 1152, "logical settings window width")
 	height := flag.Float64("height", 768, "logical settings window height")
-	activate := flag.String("activate", "", "automation ID to activate after the initial capture")
-	activateCapture := flag.String("activate-capture", "", "PNG captured after activation")
+	activateCapture := flag.String("activate-capture", "", "PNG captured after all activations")
 	hover := flag.String("hover", "", "automation ID whose logical center receives a pointer move")
 	hoverWaitID := flag.String("hover-wait-id", "", "automation ID required while hover is active")
 	hoverCapture := flag.String("hover-capture", "", "PNG captured while hover is active")
@@ -57,6 +58,7 @@ func run() error {
 	flag.Var(&waitIDs, "wait-id", "automation ID required before actions; repeat as needed")
 	flag.Var(&setValues, "set-value", "set text as automationID=value; repeat as needed")
 	flag.Var(&keys, "key", "portable key name such as arrow-down or enter; repeat as needed")
+	flag.Var(&activates, "activate", "automation ID to activate after the initial capture; repeat as needed")
 	flag.Parse()
 
 	if strings.TrimSpace(*capture) == "" {
@@ -65,7 +67,7 @@ func run() error {
 	if *width <= 0 || *height <= 0 {
 		return fmt.Errorf("-width and -height must be positive")
 	}
-	if strings.TrimSpace(*activateCapture) != "" && strings.TrimSpace(*activate) == "" {
+	if strings.TrimSpace(*activateCapture) != "" && len(activates) == 0 {
 		return fmt.Errorf("-activate-capture requires -activate")
 	}
 	if (strings.TrimSpace(*hoverWaitID) != "" || strings.TrimSpace(*hoverCapture) != "" || strings.TrimSpace(*hoverExitCapture) != "" || *hoverStable > 0) && strings.TrimSpace(*hover) == "" {
@@ -145,10 +147,13 @@ func run() error {
 		}
 	}()
 
-	if err := process.Client.OpenSettings(ctx, *route); err != nil {
+	rootID := "settings.window"
+	if *onboarding {
+		rootID = "onboarding.window"
+	} else if err := process.Client.OpenSettings(ctx, *route); err != nil {
 		return fmt.Errorf("open settings %q: %w", *route, err)
 	}
-	requiredIDs := append([]string{"settings.window"}, waitIDs...)
+	requiredIDs := append([]string{rootID}, waitIDs...)
 	if _, err := process.Client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 		for _, id := range requiredIDs {
 			if _, found := automationdriver.Find(snapshot, id); !found {
@@ -192,17 +197,17 @@ func run() error {
 	}
 	fmt.Printf("captured %s\n", capturePath)
 
-	if strings.TrimSpace(*activate) != "" {
-		if err := process.Client.Perform(ctx, *activate, woxui.AccessibilityActionActivate, ""); err != nil {
-			return fmt.Errorf("activate %s: %w", *activate, err)
+	for _, activate := range activates {
+		if err := process.Client.Perform(ctx, activate, woxui.AccessibilityActionActivate, ""); err != nil {
+			return fmt.Errorf("activate %s: %w", activate, err)
 		}
 		time.Sleep(*settle)
-		if activationCapturePath != "" {
-			if err := process.Client.Capture(ctx, activationCapturePath); err != nil {
-				return fmt.Errorf("capture activated state %s: %w", activationCapturePath, err)
-			}
-			fmt.Printf("captured %s\n", activationCapturePath)
+	}
+	if activationCapturePath != "" {
+		if err := process.Client.Capture(ctx, activationCapturePath); err != nil {
+			return fmt.Errorf("capture activated state %s: %w", activationCapturePath, err)
 		}
+		fmt.Printf("captured %s\n", activationCapturePath)
 	}
 	if strings.TrimSpace(*hover) != "" {
 		node, err := process.Client.MovePointerTo(ctx, *hover)

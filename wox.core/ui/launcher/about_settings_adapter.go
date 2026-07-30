@@ -35,7 +35,7 @@ func (a *App) buildAboutSettingsPage(snapshot settingsSnapshot, width, height fl
 	})
 }
 
-// openAboutOnboarding reuses the management-surface entry point used during startup.
+// openAboutOnboarding uses the same dedicated-window entry point as startup.
 func (a *App) openAboutOnboarding() {
 	if err := a.OpenOnboarding(context.Background()); err != nil {
 		log.Printf("open About onboarding: %v", err)

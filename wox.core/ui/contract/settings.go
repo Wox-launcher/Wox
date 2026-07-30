@@ -113,6 +113,7 @@ type GlanceCatalogItem struct {
 	PluginName        string
 	Name              string
 	Description       string
+	Icon              common.WoxImage
 	RefreshIntervalMs int
 }
 
@@ -181,6 +182,18 @@ type GeneralSettingsServices interface {
 	AvailableLanguages(ctx context.Context, sessionID string) ([]i18n.Lang, error)
 	LanguageJSON(ctx context.Context, sessionID string, langCode i18n.LangCode) (string, error)
 	UpdateGeneralSetting(ctx context.Context, sessionID string, key string, value string) error
+}
+
+// MacOSPermissionStatus contains passive onboarding permission checks.
+type MacOSPermissionStatus struct {
+	Accessibility  string
+	FullDiskAccess string
+}
+
+// OnboardingSettingsServices exposes first-run permission state and actions.
+type OnboardingSettingsServices interface {
+	MacOSPermissionStatus(ctx context.Context, sessionID string) (MacOSPermissionStatus, error)
+	OpenMacOSPermission(ctx context.Context, sessionID string, permissionType string) error
 }
 
 // HotkeyApp describes one application that can be excluded from launcher hotkeys.
@@ -478,6 +491,7 @@ type SettingsServices interface {
 	DataSettingsServices
 	AppearanceSettingsServices
 	GeneralSettingsServices
+	OnboardingSettingsServices
 	HotkeySettingsServices
 	HotkeyInteractionSettingsServices
 	AICatalogSettingsServices

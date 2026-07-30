@@ -8,21 +8,35 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, bool) {
+type automationSurfaceKind uint8
+
+const (
+	automationSurfaceLauncher automationSurfaceKind = iota
+	automationSurfaceSettings
+	automationSurfaceOnboarding
+)
+
+func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, automationSurfaceKind) {
 	var host *woxwidget.Host
 	var window *woxui.Window
-	settings := false
+	kind := automationSurfaceLauncher
 	_ = a.runOnUI("resolve automation surface", func() {
+		if a.onboardingOpen && a.onboardingHost != nil && a.onboardingView != nil {
+			host = a.onboardingHost
+			window = a.onboardingView.Window()
+			kind = automationSurfaceOnboarding
+			return
+		}
 		if a.settingsOpen && a.settingsHost != nil && a.settingsView != nil {
 			host = a.settingsHost
 			window = a.settingsView.Window()
-			settings = true
+			kind = automationSurfaceSettings
 			return
 		}
 		host = a.host
 		window = a.window
 	})
-	return host, window, settings
+	return host, window, kind
 }
 
 // AutomationSnapshot returns the latest immutable semantics tree.
@@ -65,24 +79,30 @@ func (a *App) DispatchAutomationPointer(event woxui.PointerEvent) error {
 
 // PressAutomationKey sends a complete key press through the normal widget and launcher handlers.
 func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) error {
-	host, _, settings := a.automationSurface()
+	host, _, kind := a.automationSurface()
 	if host == nil {
 		return errors.New("active widget host is not initialized")
 	}
 	return woxui.Call(func() {
 		down := woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true}
 		if !host.Key(down) {
-			if settings {
+			switch kind {
+			case automationSurfaceOnboarding:
+				a.onOnboardingWindowKey(down)
+			case automationSurfaceSettings:
 				a.onSettingsWindowKey(down)
-			} else {
+			default:
 				a.onKey(down)
 			}
 		}
 		up := woxui.KeyEvent{Key: key, Modifiers: modifiers}
 		if !host.Key(up) {
-			if settings {
+			switch kind {
+			case automationSurfaceOnboarding:
+				a.onOnboardingWindowKey(up)
+			case automationSurfaceSettings:
 				a.onSettingsWindowKey(up)
-			} else {
+			default:
 				a.onKey(up)
 			}
 		}
@@ -91,16 +111,16 @@ func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) er
 
 // EnterAutomationText commits UTF-8 text through the active text-input owner.
 func (a *App) EnterAutomationText(text string) error {
-	host, _, settings := a.automationSurface()
+	host, _, kind := a.automationSurface()
 	if host == nil {
 		return errors.New("active widget host is not initialized")
 	}
 	return woxui.Call(func() {
 		event := woxui.TextInputEvent{Kind: woxui.TextInputCommit, Text: text}
 		if !host.TextInput(event) {
-			if settings {
+			if kind == automationSurfaceSettings {
 				a.onSettingsWindowTextInput(event)
-			} else {
+			} else if kind == automationSurfaceLauncher {
 				a.onTextInput(event)
 			}
 		}
@@ -140,15 +160,18 @@ func (a *App) OpenAutomationSettings(path string) error {
 
 // HideAutomationWindow closes the launcher through its normal product path.
 func (a *App) HideAutomationWindow() error {
-	_, window, settings := a.automationSurface()
+	_, window, kind := a.automationSurface()
 	if window == nil {
 		return errors.New("active window is not initialized")
 	}
 	var actionErr error
 	err := woxui.Call(func() {
-		if settings {
+		switch kind {
+		case automationSurfaceOnboarding:
+			a.finishOnboarding()
+		case automationSurfaceSettings:
 			actionErr = a.closeSettings()
-		} else {
+		default:
 			actionErr = a.hideWindow(true)
 		}
 	})

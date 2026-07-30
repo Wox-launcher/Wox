@@ -158,7 +158,17 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 	recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
 		Labels: props.Labels, Placeholder: props.Placeholder, Focused: props.Focused, Window: props.Window, Theme: props.Theme,
 	})
-	recorder = woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: recorder}
+	recorder = woxwidget.Semantics{
+		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,
+		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+		OnAction: func(action woxui.AccessibilityAction, _ string) error {
+			if action == woxui.AccessibilityActionActivate && props.OnTap != nil {
+				props.OnTap()
+			}
+			return nil
+		},
+		Child: woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: recorder},
+	}
 	recorderLeft := max(float32(0), controlWidth-recorderWidth)
 	controlChildren := []woxwidget.StackChild{{Left: recorderLeft, Top: 8, Child: recorder}}
 	if props.Recording && props.Status != "" && recorderLeft > 8 {
@@ -210,17 +220,10 @@ type FormSelectFieldProps struct {
 // FormSelectField builds an expanded dropdown with the same value and indicator split as Flutter.
 func FormSelectField(props FormSelectFieldProps) woxwidget.Widget {
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
-	const indicatorWidth = float32(24)
-	valueWidth := max(float32(0), controlWidth-16-indicatorWidth)
-	control := woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap, Child: woxwidget.Container{
-		Width: controlWidth, Height: 34, Radius: 4, BorderColor: formFieldOutline(props.Focused, props.Theme), BorderWidth: 1,
-		Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Align{Width: valueWidth, Height: 34, Vertical: 0.5, Child: woxwidget.TextBlock{
-				Value: props.Value, Width: valueWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ActionText,
-			}},
-			dropdownIndicator(indicatorWidth, 34, props.Theme.ActionText),
-		}},
-	}}
+	control := woxDropdownTrigger(dropdownTriggerProps{
+		ID: props.ID, Value: props.Value, Width: controlWidth, Height: 34, Outline: formFieldOutline(props.Focused, props.Theme),
+		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
+	})
 	semanticControl := woxwidget.Semantics{
 		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label, Value: props.Value,
 		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},

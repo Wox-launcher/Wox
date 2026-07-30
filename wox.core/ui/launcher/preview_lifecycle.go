@@ -109,3 +109,11 @@ func (a *App) deactivateLauncherThemeEditorPreview() {
 		a.deactivateThemeEditorPreview()
 	}
 }
+
+// clearLauncherThemeEditorPreview preserves the independent Settings draft during launcher resets.
+func (a *App) clearLauncherThemeEditorPreview() {
+	editor := a.themeSettings.ThemeEditor()
+	if editor == nil || !strings.HasPrefix(editor.key, "settings-theme|") {
+		a.themeSettings.SetThemeEditor(nil)
+	}
+}

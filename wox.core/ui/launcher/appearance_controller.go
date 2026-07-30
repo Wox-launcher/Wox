@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/plugin"
 	"wox/ui/contract"
 )
 
@@ -19,6 +20,8 @@ type appearanceSettingsSnapshot struct {
 	GlanceCatalogLoading bool
 	GlanceCatalogLoaded  bool
 	GlanceCatalogError   string
+	GlancePreviewLoading bool
+	GlancePreviewLoaded  bool
 }
 
 // appearanceSettingsController owns the Appearance tab state: the system font family list
@@ -34,6 +37,12 @@ type appearanceSettingsController struct {
 	glanceCatalogLoading bool
 	glanceCatalogLoaded  bool
 	glanceCatalogError   string
+	glancePreviewLoading bool
+	glancePreviewLoaded  bool
+}
+
+type glancePreviewService interface {
+	GlanceItems(ctx context.Context, sessionID string, keys []plugin.GlanceKey, reason plugin.GlanceRefreshReason) ([]plugin.GlanceItemUI, error)
 }
 
 func newAppearanceSettingsController(deps CommonDeps) *appearanceSettingsController {
@@ -96,7 +105,13 @@ func (c *appearanceSettingsController) ReloadFonts(ctx context.Context, service 
 func (c *appearanceSettingsController) ReloadGlanceCatalog(ctx context.Context, service contract.AppearanceSettingsServices, sessionID string, onLoaded func()) {
 	shouldLoad := false
 	if !c.deps.OnUI("start loading glance catalog", func() {
-		if c.glanceCatalogLoaded || c.glanceCatalogLoading {
+		if c.glanceCatalogLoaded {
+			if onLoaded != nil {
+				onLoaded()
+			}
+			return
+		}
+		if c.glanceCatalogLoading {
 			return
 		}
 		c.glanceCatalogLoading = true
@@ -118,7 +133,7 @@ func (c *appearanceSettingsController) ReloadGlanceCatalog(ctx context.Context, 
 			}
 			catalog = append(catalog, glanceCatalogItem{
 				Ref: glanceRef{PluginID: item.PluginID, GlanceID: item.GlanceID}, PluginName: item.PluginName, Name: item.Name,
-				Description: item.Description, RefreshIntervalMs: item.RefreshIntervalMs,
+				Description: item.Description, Icon: woxImage{ImageType: item.Icon.ImageType, ImageData: item.Icon.ImageData}, RefreshIntervalMs: item.RefreshIntervalMs,
 			})
 		}
 		sort.SliceStable(catalog, func(i, j int) bool {
@@ -142,6 +157,58 @@ func (c *appearanceSettingsController) ReloadGlanceCatalog(ctx context.Context, 
 	})
 }
 
+// ReloadGlancePreviews loads one live value per catalog item for the shared Glance picker.
+func (c *appearanceSettingsController) ReloadGlancePreviews(ctx context.Context, service glancePreviewService, sessionID string) {
+	var keys []plugin.GlanceKey
+	shouldLoad := false
+	if !c.deps.OnUI("start loading glance previews", func() {
+		if !c.glanceCatalogLoaded || c.glancePreviewLoading || c.glancePreviewLoaded {
+			return
+		}
+		c.glancePreviewLoading = true
+		keys = make([]plugin.GlanceKey, len(c.glanceCatalog))
+		for index, item := range c.glanceCatalog {
+			keys[index] = plugin.GlanceKey{PluginId: item.Ref.PluginID, GlanceId: item.Ref.GlanceID}
+		}
+		shouldLoad = true
+		c.deps.Invalidate()
+	}) || !shouldLoad {
+		return
+	}
+
+	loaded := make(map[glanceRef]glanceItem, len(keys))
+	var err error
+	if len(keys) > 0 {
+		timeoutCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		var items []plugin.GlanceItemUI
+		items, err = service.GlanceItems(timeoutCtx, sessionID, keys, plugin.GlanceRefreshReasonManualRefresh)
+		cancel()
+		if err == nil {
+			for _, item := range items {
+				converted := glanceItemFromUI(item)
+				if strings.TrimSpace(converted.Text) != "" {
+					loaded[glanceRef{PluginID: converted.PluginID, GlanceID: converted.ID}] = converted
+				}
+			}
+		}
+	}
+
+	c.deps.OnUI("apply glance previews", func() {
+		c.glancePreviewLoading = false
+		if err == nil {
+			for index := range c.glanceCatalog {
+				c.glanceCatalog[index].Preview = nil
+				if preview, ok := loaded[c.glanceCatalog[index].Ref]; ok {
+					copy := preview
+					c.glanceCatalog[index].Preview = &copy
+				}
+			}
+			c.glancePreviewLoaded = true
+		}
+		c.deps.Invalidate()
+	})
+}
+
 // ResetGlanceCatalog clears the cached catalog so the next ReloadGlanceCatalog refetches
 // from core. Called when installed plugins change.
 func (c *appearanceSettingsController) ResetGlanceCatalog() {
@@ -149,20 +216,31 @@ func (c *appearanceSettingsController) ResetGlanceCatalog() {
 		c.glanceCatalog = nil
 		c.glanceCatalogLoaded = false
 		c.glanceCatalogError = ""
+		c.glancePreviewLoading = false
+		c.glancePreviewLoaded = false
 		c.deps.Invalidate()
 	})
 }
 
 // Snapshot returns a copy of the Appearance state for the view layer.
 func (c *appearanceSettingsController) Snapshot() appearanceSettingsSnapshot {
+	catalog := append([]glanceCatalogItem(nil), c.glanceCatalog...)
+	for index := range catalog {
+		if catalog[index].Preview != nil {
+			copy := *catalog[index].Preview
+			catalog[index].Preview = &copy
+		}
+	}
 	return appearanceSettingsSnapshot{
 		FontFamilies:         append([]string(nil), c.fontFamilies...),
 		FontsLoading:         c.fontsLoading,
 		FontsLoaded:          c.fontsLoaded,
 		FontsError:           c.fontsError,
-		GlanceCatalog:        append([]glanceCatalogItem(nil), c.glanceCatalog...),
+		GlanceCatalog:        catalog,
 		GlanceCatalogLoading: c.glanceCatalogLoading,
 		GlanceCatalogLoaded:  c.glanceCatalogLoaded,
 		GlanceCatalogError:   c.glanceCatalogError,
+		GlancePreviewLoading: c.glancePreviewLoading,
+		GlancePreviewLoaded:  c.glancePreviewLoaded,
 	}
 }

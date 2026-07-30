@@ -1,0 +1,204 @@
+package view
+
+import (
+	"runtime"
+	"testing"
+	"time"
+
+	woxcomponent "wox/ui/launcher/component"
+	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
+)
+
+func TestOnboardingViewExposesWindowAndChoiceOverlay(t *testing.T) {
+	view := OnboardingView(OnboardingProps{
+		Width: 1040, Height: 800, ActiveStep: 0, ChoiceKind: "language",
+		Steps:   []OnboardingStep{{ID: "welcome", Title: "Welcome", Accent: woxui.Color{G: 200, A: 255}}},
+		Labels:  map[string]string{"title": "Set up Wox", "subtitle": "Quick setup", "skip": "Skip", "back": "Back", "next": "Next"},
+		Choices: []OnboardingChoice{{Value: "en_US", Label: "English"}},
+		Theme:   woxcomponent.Theme{},
+	})
+	root, ok := view.(woxwidget.Semantics)
+	if !ok || root.AutomationID != "onboarding.window" {
+		t.Fatalf("root = %#v, want onboarding window semantics", view)
+	}
+	stack, ok := root.Child.(woxwidget.Stack)
+	if !ok || len(stack.Children) != 2 {
+		t.Fatalf("root child = %#v, want body plus choice overlay", root.Child)
+	}
+	dropdown, ok := stack.Children[1].Child.(woxwidget.Stateful)
+	if !ok {
+		t.Fatalf("choice overlay = %#v, want shared SettingsChoiceView", stack.Children[1].Child)
+	}
+	dropdownProps, ok := dropdown.Widget.(SettingsChoiceProps)
+	if !ok || dropdownProps.ID != "onboarding-choice-picker" {
+		t.Fatalf("choice props = %#v, want onboarding shared dropdown", dropdown.Widget)
+	}
+}
+
+func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
+	props := OnboardingProps{
+		Width: 1040, Height: 800, ActiveStep: 0,
+		Steps:  []OnboardingStep{{ID: "welcome", Title: "Welcome"}},
+		Labels: map[string]string{"title": "Set up Wox", "subtitle": "Quick setup", "skip": "跳过", "back": "Back", "next": "Next"},
+		Theme:  woxcomponent.Theme{},
+	}
+	rail, ok := onboardingRail(props, 0, 728).(woxwidget.Stack)
+	if !ok || len(rail.Children) != 2 || rail.Children[1].Left != OnboardingSidebarWidth-1 {
+		t.Fatalf("rail = %#v, want content plus right divider", rail)
+	}
+	footer, ok := onboardingFooter(props, 0).(woxwidget.Stack)
+	if !ok || len(footer.Children) != 2 {
+		t.Fatalf("footer = %#v, want content plus top divider", footer)
+	}
+	content := footer.Children[0].Child.(woxwidget.Container)
+	buttons := content.Child.(woxwidget.Flex)
+	skip := buttons.Children[0].(woxwidget.Semantics)
+	focusable := skip.Child.(woxwidget.Focusable)
+	gesture := focusable.Child.(woxwidget.Gesture)
+	button := gesture.Child.(woxwidget.Container)
+	if button.Padding.Left != 8 || button.Padding.Right != 8 {
+		t.Fatalf("skip padding = %#v, want room for two CJK glyphs", button.Padding)
+	}
+}
+
+func TestOnboardingDemoTimelinesMatchFlutterPhases(t *testing.T) {
+	if got := demoTypedText("wpm", .50, .42, .57); got != "w" {
+		t.Fatalf("welcome midpoint query = %q, want one typed character", got)
+	}
+	if got := onboardingDemoDuration("queryHotkeys"); got != 9200*time.Millisecond {
+		t.Fatalf("query hotkey duration = %v, want 9.2s Flutter showcase", got)
+	}
+	if got := demoEnterHoldExit(.94, .56, .74, .92, 1); got >= 1 || got <= 0 {
+		t.Fatalf("selection window exit progress = %v, want in-flight exit", got)
+	}
+}
+
+func TestOnboardingDemoDesktopUsesLoadedWallpaper(t *testing.T) {
+	wallpaper := &woxui.Image{Width: 1800, Height: 840}
+	desktop := onboardingDemoDesktop(OnboardingProps{Wallpaper: wallpaper}, OnboardingStep{}, 640, 360, false, nil)
+	clip := desktop.(woxwidget.Clip)
+	stack := clip.Child.(woxwidget.Stack)
+	image, ok := stack.Children[1].Child.(woxwidget.Image)
+	if !ok || image.Source != wallpaper {
+		t.Fatalf("desktop wallpaper = %#v, want loaded image", stack.Children[1].Child)
+	}
+}
+
+func TestOnboardingDemoPreservesThemeTransparency(t *testing.T) {
+	transparent := woxui.Color{R: 255, G: 255, B: 255, A: 0}
+	if got := demoColorOpacity(transparent, 1); got.A != 0 {
+		t.Fatalf("transparent query alpha = %d, want 0", got.A)
+	}
+	mica := onboardingDemoMicaColor(woxui.Color{R: 22, G: 22, B: 26, A: 133})
+	if mica.A < 163 || mica.A > 219 {
+		t.Fatalf("mica alpha = %d, want Flutter's 0.64-0.86 range", mica.A)
+	}
+	backdrop := &woxui.Image{Width: 702, Height: 344}
+	window := onboardingDemoWindow(onboardingDemoWindowProps{
+		Width: 400, Height: 260, Backdrop: backdrop, Opacity: 1, ShowQuery: true,
+		Theme:   woxcomponent.Theme{Background: woxui.Color{R: 22, G: 22, B: 26, A: 133}, QueryBackground: transparent, SelectedBackground: woxui.Color{R: 255, G: 255, B: 255, A: 36}},
+		Results: []onboardingDemoResult{{Title: "Everything", Selected: true}},
+	})
+	stack := window.(woxwidget.Clip).Child.(woxwidget.Stack)
+	if image := stack.Children[0].Child.(woxwidget.Image); image.Source != backdrop {
+		t.Fatal("demo window did not use the blurred wallpaper")
+	}
+	if query := stack.Children[2].Child.(woxwidget.Container); query.Color.A != 0 {
+		t.Fatalf("rendered query alpha = %d, want theme alpha 0", query.Color.A)
+	}
+	if result := stack.Children[3].Child.(woxwidget.Container); result.Color.A != 36 {
+		t.Fatalf("rendered selected result alpha = %d, want theme alpha 36", result.Color.A)
+	}
+}
+
+func TestOnboardingDemoResultTextIsVerticallyCentered(t *testing.T) {
+	row := onboardingDemoResultRow(onboardingDemoWindowProps{
+		Width: 400,
+		Theme: woxcomponent.Theme{},
+	}, onboardingDemoResult{Title: "Everything", Subtitle: "Search Everything files", Tail: "Current time"}, 51, 255).(woxwidget.Container)
+	content := row.Child.(woxwidget.Flex)
+	text := content.Children[1].(woxwidget.Align)
+	column := text.Child.(woxwidget.Flex)
+	title := column.Children[0].(woxwidget.TextBlock)
+	icon := content.Children[0].(woxwidget.Container)
+	tail := content.Children[2].(woxwidget.Container)
+	usedWidth := icon.Width + text.Width + tail.Width + content.Gap*2
+	availableWidth := row.Width - row.Padding.Left - row.Padding.Right
+
+	if text.Vertical != .5 || title.Height < title.LineHeight || usedWidth > availableWidth {
+		t.Fatalf("result text = %#v, title = %#v, used width = %v, available width = %v", text, title, usedWidth, availableWidth)
+	}
+}
+
+func TestOnboardingPluginStoreUsesSharedWindowMetrics(t *testing.T) {
+	window := onboardingPluginStoreWindow(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 700, 320, "wpm install", "Install", 1).(woxwidget.Clip)
+	children := window.Child.(woxwidget.Stack).Children
+	query := children[1].Child.(woxwidget.Container)
+	result := children[2].Child.(woxwidget.Container)
+	toolbar := children[len(children)-1].Child.(woxwidget.Container)
+
+	if query.Height != 50 || result.Height != 51 || toolbar.Height != 36 {
+		t.Fatalf("plugin store metrics = query %v, result %v, toolbar %v", query.Height, result.Height, toolbar.Height)
+	}
+}
+
+func TestOnboardingMacDesktopUsesNativeMenuAndCursorGeometry(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS menu bar only")
+	}
+	desktop := onboardingDemoDesktop(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 640, 360, false, nil).(woxwidget.Clip)
+	menu := desktop.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Container).Child.(woxwidget.Stack)
+	search := menu.Children[1].Child.(woxwidget.Painter)
+	timeSlot := menu.Children[2]
+	cursor := onboardingDemoCursor(1).(woxwidget.Painter)
+
+	if search.Width != 16 || timeSlot.Left-(menu.Children[1].Left+search.Width) != 12 || cursor.Width != 22 || cursor.Height != 30 {
+		t.Fatalf("mac desktop geometry = search %#v, time left %v, cursor %#v", search, timeSlot.Left, cursor)
+	}
+}
+
+func TestOnboardingGlanceRendersQueryAccessoryWhenEnabled(t *testing.T) {
+	demo := onboardingGlanceDemo(OnboardingProps{
+		GlanceEnabled: true,
+		GlanceLabel:   "CPU",
+		Labels:        map[string]string{"demo.glance.value": "当前时间", "glance.body": "Status", "demo.glance.provider": "Provider", "glance.enable.body": "Body", "glance.primary": "Primary"},
+		Theme:         woxcomponent.Theme{},
+	}, OnboardingStep{}, 640, 360).(woxwidget.Clip)
+	desktop := demo.Child.(woxwidget.Stack)
+	window := desktop.Children[len(desktop.Children)-1].Child.(woxwidget.Clip).Child.(woxwidget.Stack)
+	query := window.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Stack)
+
+	if len(query.Children) != 2 {
+		t.Fatalf("glance query children = %d, want query text plus accessory", len(query.Children))
+	}
+	accessory := query.Children[1].Child.(woxwidget.Align)
+	if accessory.Horizontal != .5 || accessory.Vertical != .5 {
+		t.Fatalf("glance accessory alignment = (%v, %v), want centered", accessory.Horizontal, accessory.Vertical)
+	}
+}
+
+func TestOnboardingGlanceUsesSharedRichDropdown(t *testing.T) {
+	icon := &woxui.Image{Width: 18, Height: 18}
+	panel := onboardingGlance(OnboardingProps{
+		GlanceEnabled: true, GlanceLabel: "CPU", GlanceValue: "62%", GlanceIcon: icon,
+		Labels: map[string]string{"glance.enable": "Glance", "glance.enable.body": "Status", "glance.primary": "Primary"},
+		Theme:  woxcomponent.Theme{},
+	}, 720, 150).(woxwidget.Container)
+	rows := panel.Child.(woxwidget.Flex)
+	selectorRow := rows.Children[1].(woxwidget.Stack)
+	selectorSlot := selectorRow.Children[1]
+	semantics := selectorSlot.Child.(woxwidget.Semantics)
+	trigger := semantics.Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	content := trigger.Child.(woxwidget.Flex)
+
+	if trigger.Width != 300 || selectorSlot.Left+trigger.Width > selectorRow.Width || len(content.Children) != 6 {
+		t.Fatalf("glance dropdown = left %v, width %v, row width %v, children %d", selectorSlot.Left, trigger.Width, selectorRow.Width, len(content.Children))
+	}
+	leading := content.Children[0].(woxwidget.Align).Child.(woxwidget.Image)
+	trailingSlot := content.Children[4].(woxwidget.Align)
+	trailing := trailingSlot.Child.(woxwidget.Text)
+	if leading.Source != icon || trailing.Value != "62%" || trailingSlot.Horizontal != 1 {
+		t.Fatalf("glance dropdown content = icon %#v, trailing %q", leading.Source, trailing.Value)
+	}
+}
