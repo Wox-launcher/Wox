@@ -4,16 +4,17 @@
 
 #import <Cocoa/Cocoa.h>
 #import <CoreText/CoreText.h>
-#import <Metal/Metal.h>
-#import <QuartzCore/CAMetalLayer.h>
+#import <CoreVideo/CoreVideo.h>
+#import <IOSurface/IOSurface.h>
+#import <QuartzCore/CALayer.h>
 #import <QuartzCore/CATransaction.h>
 #import <WebKit/WebKit.h>
 #import <dispatch/dispatch.h>
-#import <simd/simd.h>
 
+#include <dlfcn.h>
 #include <math.h>
 #include <stdbool.h>
-#include <dlfcn.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -61,12 +62,13 @@ enum {
 };
 
 typedef struct WoxDarwinRenderer WoxDarwinRenderer;
-@class WoxMetalView;
+@class WoxDarwinSurface;
+@class WoxRenderView;
 @class WoxWindowDelegate;
 
 struct WoxDarwinWindow {
   NSWindow *window;
-  WoxMetalView *view;
+  WoxRenderView *view;
   WoxWindowDelegate *delegate;
   WoxDarwinRenderer *renderer;
   NSMutableDictionary *web_view_cache;
@@ -89,6 +91,7 @@ struct WoxDarwinWindow {
   bool render_scheduled;
   bool suppress_resize_render;
   bool synchronous_frame;
+  atomic_uint_fast64_t presentation_generation;
   NSRect input_cursor_rect;
   NSMutableDictionary *accessibility_elements;
   NSMutableDictionary *accessibility_child_ids;
@@ -97,129 +100,23 @@ struct WoxDarwinWindow {
 };
 
 struct WoxDarwinRenderer {
-  id<MTLDevice> device;
-  id<MTLCommandQueue> queue;
-  id<MTLRenderPipelineState> rect_pipeline;
-  id<MTLRenderPipelineState> texture_pipeline;
-  NSMutableDictionary *text_texture_cache;
-  NSMutableDictionary *text_texture_costs;
-  NSMutableDictionary *text_texture_uses;
-  NSUInteger text_texture_total_cost;
-  uint64_t text_texture_use_sequence;
-  NSMutableDictionary *image_texture_cache;
-  NSMutableDictionary *image_texture_costs;
-  NSMutableDictionary *image_texture_uses;
-  NSUInteger image_texture_total_cost;
-  uint64_t image_texture_use_sequence;
-  CAMetalLayer *layer;
-  id<CAMetalDrawable> drawable;
-  id<MTLCommandBuffer> command_buffer;
-  id<MTLRenderCommandEncoder> encoder;
-  vector_float2 viewport_size;
+  CALayer *layer;
+  CALayer *content_layer;
+  NSMutableArray *render_surfaces;
+  WoxDarwinSurface *frame_surface;
+  WoxDarwinSurface *front_surface;
+  CGContextRef context;
+  CGSize viewport_size;
   float scale;
+  uint64_t frame_generation;
+  uint64_t submission_sequence;
+  uint64_t presented_sequence;
   bool frame_open;
+  bool clip_active;
 };
-
-typedef struct {
-  vector_float2 viewport_size;
-  vector_float4 rect;
-  vector_float4 color;
-  float radius;
-  float stroke_width;
-  vector_float2 polygon[16];
-  uint32_t polygon_count;
-} WoxRectUniforms;
-
-typedef struct {
-  vector_float2 viewport_size;
-  vector_float4 rect;
-  vector_float4 color;
-} WoxTextureUniforms;
 
 static NSInteger wox_open_window_count = 0;
 static NSInteger wox_application_window_count = 0;
-
-static const char *const wox_metal_source =
-    "#include <metal_stdlib>\n"
-     "using namespace metal;\n"
-     "struct RectUniforms {\n"
-     "  float2 viewport_size;\n"
-     "  float4 rect;\n"
-     "  float4 color;\n"
-     "  float radius;\n"
-     "  float stroke_width;\n"
-     "  float2 polygon[16];\n"
-     "  uint polygon_count;\n"
-     "};\n"
-     "struct TextureUniforms {\n"
-     "  float2 viewport_size;\n"
-     "  float4 rect;\n"
-     "  float4 color;\n"
-     "};\n"
-     "struct VertexOut {\n"
-     "  float4 position [[position]];\n"
-     "  float2 local;\n"
-     "};\n"
-     "vertex VertexOut rect_vertex(uint vertex_id [[vertex_id]], constant RectUniforms &uniforms [[buffer(0)]]) {\n"
-     "  const float2 corners[4] = {float2(0.0, 0.0), float2(1.0, 0.0), float2(0.0, 1.0), float2(1.0, 1.0)};\n"
-     "  float2 corner = corners[vertex_id];\n"
-     "  float2 point = uniforms.rect.xy + corner * uniforms.rect.zw;\n"
-     "  VertexOut output;\n"
-     "  output.position = float4(point.x / uniforms.viewport_size.x * 2.0 - 1.0, 1.0 - point.y / uniforms.viewport_size.y * 2.0, 0.0, 1.0);\n"
-     "  output.local = corner * uniforms.rect.zw;\n"
-     "  return output;\n"
-     "}\n"
-     "float cross2(float2 left, float2 right) { return left.x * right.y - left.y * right.x; }\n"
-     "fragment float4 rect_fragment(VertexOut input [[stage_in]], constant RectUniforms &uniforms [[buffer(0)]]) {\n"
-     "  if (uniforms.polygon_count >= 3) {\n"
-     "    float area = 0.0;\n"
-     "    for (uint index = 0; index < uniforms.polygon_count; index++) {\n"
-     "      area += cross2(uniforms.polygon[index], uniforms.polygon[(index + 1) % uniforms.polygon_count]);\n"
-     "    }\n"
-     "    float orientation = area >= 0.0 ? 1.0 : -1.0;\n"
-     "    float2 point = uniforms.rect.xy + input.local;\n"
-     "    float distance = 1e20;\n"
-     "    for (uint index = 0; index < uniforms.polygon_count; index++) {\n"
-     "      float2 start = uniforms.polygon[index];\n"
-     "      float2 edge = uniforms.polygon[(index + 1) % uniforms.polygon_count] - start;\n"
-     "      distance = min(distance, orientation * cross2(edge, point - start) / max(length(edge), 0.001));\n"
-     "    }\n"
-     "    float antialias = max(fwidth(distance), 0.001);\n"
-     "    return uniforms.color * smoothstep(-antialias * 0.5, antialias * 0.5, distance);\n"
-     "  }\n"
-     "  float radius = clamp(uniforms.radius, 0.0, min(uniforms.rect.z, uniforms.rect.w) * 0.5);\n"
-     "  float2 half_size = uniforms.rect.zw * 0.5;\n"
-     "  float2 edge = abs(input.local - half_size) - (half_size - radius);\n"
-     "  float distance = length(max(edge, float2(0.0))) + min(max(edge.x, edge.y), 0.0) - radius;\n"
-     "  float antialias = max(fwidth(distance), 0.001);\n"
-     "  float outer_coverage = 1.0 - smoothstep(-antialias * 0.5, antialias * 0.5, distance);\n"
-     "  if (uniforms.stroke_width <= 0.0) { return uniforms.color * outer_coverage; }\n"
-     "  float inner_radius = max(radius - uniforms.stroke_width, 0.0);\n"
-     "  float2 inner_half = max(half_size - uniforms.stroke_width, float2(0.0));\n"
-     "  float2 inner_edge = abs(input.local - half_size) - max(inner_half - inner_radius, float2(0.0));\n"
-     "  float inner_distance = length(max(inner_edge, float2(0.0))) + min(max(inner_edge.x, inner_edge.y), 0.0) - inner_radius;\n"
-     "  float inner_antialias = max(fwidth(inner_distance), 0.001);\n"
-     "  float inner_coverage = 1.0 - smoothstep(-inner_antialias * 0.5, inner_antialias * 0.5, inner_distance);\n"
-     "  float coverage = clamp(outer_coverage - inner_coverage, 0.0, 1.0);\n"
-     "  return uniforms.color * coverage;\n"
-     "}\n"
-     "struct TextureVertexOut {\n"
-     "  float4 position [[position]];\n"
-     "  float2 uv;\n"
-     "};\n"
-     "vertex TextureVertexOut texture_vertex(uint vertex_id [[vertex_id]], constant TextureUniforms &uniforms [[buffer(0)]]) {\n"
-     "  const float2 corners[4] = {float2(0.0, 0.0), float2(1.0, 0.0), float2(0.0, 1.0), float2(1.0, 1.0)};\n"
-     "  float2 corner = corners[vertex_id];\n"
-     "  float2 point = uniforms.rect.xy + corner * uniforms.rect.zw;\n"
-     "  TextureVertexOut output;\n"
-     "  output.position = float4(point.x / uniforms.viewport_size.x * 2.0 - 1.0, 1.0 - point.y / uniforms.viewport_size.y * 2.0, 0.0, 1.0);\n"
-     "  output.uv = corner;\n"
-     "  return output;\n"
-     "}\n"
-     "fragment float4 texture_fragment(TextureVertexOut input [[stage_in]], texture2d<float> image [[texture(0)]], constant TextureUniforms &uniforms [[buffer(0)]]) {\n"
-     "  constexpr sampler texture_sampler(address::clamp_to_zero, filter::linear);\n"
-     "  return image.sample(texture_sampler, input.uv) * uniforms.color;\n"
-     "}\n";
 
 @interface WoxNativeWindow : NSWindow
 @end
@@ -234,7 +131,64 @@ static const char *const wox_metal_source =
 }
 @end
 
-@interface WoxMetalView : NSView <NSTextInputClient> {
+@interface WoxDarwinSurface : NSObject {
+@public
+  IOSurfaceRef io_surface;
+  NSUInteger width;
+  NSUInteger height;
+  atomic_uint presentation_references;
+}
+- (instancetype)initWithWidth:(NSUInteger)width height:(NSUInteger)height;
+@end
+
+@implementation WoxDarwinSurface
+// initWithWidth creates the shared CPU/Core Animation backing store for one window size.
+- (instancetype)initWithWidth:(NSUInteger)surface_width height:(NSUInteger)surface_height {
+  self = [super init];
+  if (self == nil) {
+    return nil;
+  }
+  width = surface_width;
+  height = surface_height;
+  atomic_init(&presentation_references, 0);
+
+  const size_t bytes_per_element = 4;
+  size_t bytes_per_row = IOSurfaceAlignProperty(kIOSurfaceBytesPerRow, width * bytes_per_element);
+  size_t allocation_size = IOSurfaceAlignProperty(kIOSurfaceAllocSize, height * bytes_per_row);
+  NSDictionary *properties = @{
+    (id)kIOSurfaceWidth : @(width),
+    (id)kIOSurfaceHeight : @(height),
+    (id)kIOSurfacePixelFormat : @(kCVPixelFormatType_32BGRA),
+    (id)kIOSurfaceBytesPerElement : @(bytes_per_element),
+    (id)kIOSurfaceBytesPerRow : @(bytes_per_row),
+    (id)kIOSurfaceAllocSize : @(allocation_size),
+  };
+  io_surface = IOSurfaceCreate((CFDictionaryRef)properties);
+  if (io_surface == NULL) {
+    [self release];
+    return nil;
+  }
+  CGColorSpaceRef color_space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  if (color_space != NULL) {
+    CFPropertyListRef color_space_properties = CGColorSpaceCopyPropertyList(color_space);
+    if (color_space_properties != NULL) {
+      IOSurfaceSetValue(io_surface, kIOSurfaceColorSpace, color_space_properties);
+      CFRelease(color_space_properties);
+    }
+    CGColorSpaceRelease(color_space);
+  }
+  return self;
+}
+
+- (void)dealloc {
+  if (io_surface != NULL) {
+    CFRelease(io_surface);
+  }
+  [super dealloc];
+}
+@end
+
+@interface WoxRenderView : NSView <NSTextInputClient> {
 @public
   WoxDarwinWindow *_owner;
   NSString *_marked_text;
@@ -242,7 +196,7 @@ static const char *const wox_metal_source =
   NSTrackingArea *_tracking_area;
   NSArray *_accessibility_children;
 }
-- (void)updateDrawableSize;
+- (void)updateBackingScale;
 - (void)renderFrame;
 - (void)renderFrameSynchronously:(BOOL)transactional;
 - (void)setWoxAccessibilityChildren:(NSArray *)children;
@@ -263,7 +217,7 @@ static const char *const wox_metal_source =
 }
 @end
 
-// schedule_render coalesces ordinary state changes into one Metal frame on the next main-queue turn.
+// schedule_render coalesces ordinary state changes into one frame on the next main-queue turn.
 static void schedule_render(WoxDarwinWindow *window) {
   if (window == NULL) {
     return;
@@ -290,13 +244,13 @@ static void schedule_render(WoxDarwinWindow *window) {
   }
 }
 
-// render_resize_frame presents the target-size drawable in the current Core Animation transaction.
+// render_resize_frame presents the target-size surface in the current Core Animation transaction.
 static void render_resize_frame(WoxDarwinWindow *window) {
   if (window == NULL || window->closed || !window->visible || window->view == nil || window->context == 0) {
     return;
   }
   window->render_scheduled = false;
-  ((CAMetalLayer *)window->view.layer).presentsWithTransaction = YES;
+  atomic_fetch_add_explicit(&window->presentation_generation, 1, memory_order_relaxed);
   [window->view renderFrameSynchronously:YES];
 }
 
@@ -309,112 +263,84 @@ static void run_on_main_sync(dispatch_block_t block) {
   }
 }
 
-static vector_float4 premultiplied_color(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
-  float a = (float)alpha / 255.0f;
-  return (vector_float4){(float)red / 255.0f * a, (float)green / 255.0f * a, (float)blue / 255.0f * a, a};
-}
-
-static void configure_blend(MTLRenderPipelineColorAttachmentDescriptor *attachment) {
-  attachment.blendingEnabled = YES;
-  attachment.rgbBlendOperation = MTLBlendOperationAdd;
-  attachment.alphaBlendOperation = MTLBlendOperationAdd;
-  attachment.sourceRGBBlendFactor = MTLBlendFactorOne;
-  attachment.sourceAlphaBlendFactor = MTLBlendFactorOne;
-  attachment.destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-  attachment.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-}
-
-// create_renderer builds the two tiny pipelines used by the backend proof.
-static WoxDarwinRenderer *create_renderer(CAMetalLayer *layer) {
-  id<MTLDevice> device = MTLCreateSystemDefaultDevice();
-  if (device == nil) {
-    NSLog(@"Wox Go UI: Metal is unavailable");
-    return NULL;
-  }
-
+// create_renderer owns a bounded IOSurface pool without creating a Metal command queue.
+static WoxDarwinRenderer *create_renderer(CALayer *layer) {
   WoxDarwinRenderer *renderer = calloc(1, sizeof(WoxDarwinRenderer));
-  renderer->device = [device retain];
-  renderer->queue = [device newCommandQueue];
-  renderer->text_texture_cache = [[NSMutableDictionary alloc] init];
-  renderer->text_texture_costs = [[NSMutableDictionary alloc] init];
-  renderer->text_texture_uses = [[NSMutableDictionary alloc] init];
-  renderer->image_texture_cache = [[NSMutableDictionary alloc] init];
-  renderer->image_texture_costs = [[NSMutableDictionary alloc] init];
-  renderer->image_texture_uses = [[NSMutableDictionary alloc] init];
+  if (renderer == NULL) {
+    return NULL;
+  }
   renderer->layer = layer;
+  renderer->render_surfaces = [[NSMutableArray alloc] init];
+  renderer->content_layer = [[CALayer alloc] init];
+  renderer->content_layer.opaque = NO;
+  renderer->content_layer.needsDisplayOnBoundsChange = NO;
   renderer->scale = 1.0f;
-  layer.device = device;
-
-  NSError *error = nil;
-  NSString *metal_source = [NSString stringWithUTF8String:wox_metal_source];
-  id<MTLLibrary> library = [device newLibraryWithSource:metal_source options:nil error:&error];
-  if (library == nil) {
-    NSLog(@"Wox Go UI: Metal shader compilation failed: %@", error);
-    [renderer->image_texture_uses release];
-    [renderer->image_texture_costs release];
-    [renderer->image_texture_cache release];
-    [renderer->text_texture_uses release];
-    [renderer->text_texture_costs release];
-    [renderer->text_texture_cache release];
-    [renderer->queue release];
-    [renderer->device release];
-    free(renderer);
-    return NULL;
-  }
-
-  id<MTLFunction> rect_vertex = [library newFunctionWithName:@"rect_vertex"];
-  id<MTLFunction> rect_fragment = [library newFunctionWithName:@"rect_fragment"];
-  id<MTLFunction> texture_vertex = [library newFunctionWithName:@"texture_vertex"];
-  id<MTLFunction> texture_fragment = [library newFunctionWithName:@"texture_fragment"];
-
-  MTLRenderPipelineDescriptor *descriptor = [[MTLRenderPipelineDescriptor alloc] init];
-  descriptor.vertexFunction = rect_vertex;
-  descriptor.fragmentFunction = rect_fragment;
-  descriptor.colorAttachments[0].pixelFormat = layer.pixelFormat;
-  configure_blend(descriptor.colorAttachments[0]);
-  renderer->rect_pipeline = [device newRenderPipelineStateWithDescriptor:descriptor error:&error];
-
-  descriptor.vertexFunction = texture_vertex;
-  descriptor.fragmentFunction = texture_fragment;
-  renderer->texture_pipeline = [device newRenderPipelineStateWithDescriptor:descriptor error:&error];
-  if (renderer->rect_pipeline == nil || renderer->texture_pipeline == nil) {
-    NSLog(@"Wox Go UI: Metal pipeline creation failed: %@", error);
-  }
-
-  [descriptor release];
-  [rect_vertex release];
-  [rect_fragment release];
-  [texture_vertex release];
-  [texture_fragment release];
-  [library release];
-
-  if (renderer->rect_pipeline == nil || renderer->texture_pipeline == nil) {
-    [renderer->texture_pipeline release];
-    [renderer->rect_pipeline release];
-    [renderer->image_texture_uses release];
-    [renderer->image_texture_costs release];
-    [renderer->image_texture_cache release];
-    [renderer->text_texture_uses release];
-    [renderer->text_texture_costs release];
-    [renderer->text_texture_cache release];
-    [renderer->queue release];
-    [renderer->device release];
-    free(renderer);
-    return NULL;
-  }
+  [layer addSublayer:renderer->content_layer];
   return renderer;
 }
 
-// clear_renderer_texture_caches releases content-derived GPU textures once a window no longer needs its rendered history.
-static void clear_renderer_texture_caches(WoxDarwinRenderer *renderer) {
-  [renderer->image_texture_uses removeAllObjects];
-  [renderer->image_texture_costs removeAllObjects];
-  [renderer->image_texture_cache removeAllObjects];
-  renderer->image_texture_total_cost = 0;
-  [renderer->text_texture_uses removeAllObjects];
-  [renderer->text_texture_costs removeAllObjects];
-  [renderer->text_texture_cache removeAllObjects];
-  renderer->text_texture_total_cost = 0;
+static void clear_renderer_surfaces(WoxDarwinRenderer *renderer) {
+  renderer->content_layer.contents = nil;
+  if (renderer->front_surface != nil) {
+    atomic_fetch_sub_explicit(&renderer->front_surface->presentation_references, 1, memory_order_relaxed);
+    renderer->front_surface = nil;
+  }
+  [renderer->render_surfaces removeAllObjects];
+}
+
+// acquire_render_surface returns a retained backing store no longer owned by Core Animation.
+static WoxDarwinSurface *acquire_render_surface(WoxDarwinRenderer *renderer, NSUInteger width, NSUInteger height) {
+  NSMutableArray *stale_surfaces = [NSMutableArray array];
+  NSUInteger matching_count = 0;
+  for (WoxDarwinSurface *surface in renderer->render_surfaces) {
+    if (surface->width == width && surface->height == height) {
+      matching_count++;
+      if (atomic_load_explicit(&surface->presentation_references, memory_order_relaxed) == 0 &&
+          !IOSurfaceIsInUse(surface->io_surface)) {
+        return [surface retain];
+      }
+    } else if (atomic_load_explicit(&surface->presentation_references, memory_order_relaxed) == 0 &&
+               !IOSurfaceIsInUse(surface->io_surface)) {
+      [stale_surfaces addObject:surface];
+    }
+  }
+  [renderer->render_surfaces removeObjectsInArray:stale_surfaces];
+
+  // Triple buffering absorbs compositor stalls while keeping the visible backing store bounded.
+  if (matching_count >= 3) {
+    return nil;
+  }
+  WoxDarwinSurface *surface = [[WoxDarwinSurface alloc] initWithWidth:width height:height];
+  if (surface != nil) {
+    [renderer->render_surfaces addObject:surface];
+  }
+  return surface;
+}
+
+// present_render_surface rejects delayed frames after hide, resize, or a newer submission.
+static void present_render_surface(WoxDarwinWindow *window, WoxDarwinRenderer *renderer, WoxDarwinSurface *surface, uint64_t sequence, uint64_t generation) {
+  if (window->closed || !window->visible || window->renderer != renderer ||
+      atomic_load_explicit(&window->presentation_generation, memory_order_relaxed) != generation ||
+      sequence <= renderer->presented_sequence) {
+    atomic_fetch_sub_explicit(&surface->presentation_references, 1, memory_order_relaxed);
+    return;
+  }
+
+  if (renderer->front_surface == surface) {
+    atomic_fetch_sub_explicit(&surface->presentation_references, 1, memory_order_relaxed);
+  } else {
+    if (renderer->front_surface != nil) {
+      atomic_fetch_sub_explicit(&renderer->front_surface->presentation_references, 1, memory_order_relaxed);
+    }
+    renderer->front_surface = surface;
+  }
+  renderer->presented_sequence = sequence;
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  renderer->content_layer.frame = renderer->layer.bounds;
+  renderer->content_layer.contentsScale = renderer->layer.contentsScale;
+  renderer->content_layer.contents = (__bridge id)surface->io_surface;
+  [CATransaction commit];
 }
 
 static void destroy_renderer(WoxDarwinRenderer *renderer) {
@@ -422,79 +348,19 @@ static void destroy_renderer(WoxDarwinRenderer *renderer) {
     return;
   }
   if (renderer->frame_open) {
-    [renderer->encoder endEncoding];
+    if (renderer->clip_active) {
+      CGContextRestoreGState(renderer->context);
+    }
+    CGContextRelease(renderer->context);
+    IOSurfaceUnlock(renderer->frame_surface->io_surface, 0, NULL);
+    [renderer->frame_surface release];
+    renderer->frame_surface = nil;
   }
-  [renderer->encoder release];
-  [renderer->command_buffer release];
-  [renderer->drawable release];
-  clear_renderer_texture_caches(renderer);
-  [renderer->image_texture_uses release];
-  [renderer->image_texture_costs release];
-  [renderer->image_texture_cache release];
-  [renderer->text_texture_uses release];
-  [renderer->text_texture_costs release];
-  [renderer->text_texture_cache release];
-  [renderer->texture_pipeline release];
-  [renderer->rect_pipeline release];
-  [renderer->queue release];
-  [renderer->device release];
+  clear_renderer_surfaces(renderer);
+  [renderer->content_layer removeFromSuperlayer];
+  [renderer->content_layer release];
+  [renderer->render_surfaces release];
   free(renderer);
-}
-
-// trim_image_texture_cache deterministically bounds GPU textures without allowing NSCache pressure eviction to recreate hot images.
-static void trim_image_texture_cache(WoxDarwinRenderer *renderer, NSNumber *keep_key) {
-  const NSUInteger maximum_count = 512;
-  const NSUInteger maximum_cost = 64 * 1024 * 1024;
-  while (renderer->image_texture_cache.count > maximum_count || renderer->image_texture_total_cost > maximum_cost) {
-    NSNumber *oldest_key = nil;
-    uint64_t oldest_use = UINT64_MAX;
-    for (NSNumber *key in renderer->image_texture_uses) {
-      if ([key isEqualToNumber:keep_key]) {
-        continue;
-      }
-      uint64_t use = [[renderer->image_texture_uses objectForKey:key] unsignedLongLongValue];
-      if (oldest_key == nil || use < oldest_use) {
-        oldest_key = key;
-        oldest_use = use;
-      }
-    }
-    if (oldest_key == nil) {
-      return;
-    }
-    NSUInteger cost = [[renderer->image_texture_costs objectForKey:oldest_key] unsignedIntegerValue];
-    renderer->image_texture_total_cost = cost < renderer->image_texture_total_cost ? renderer->image_texture_total_cost - cost : 0;
-    [renderer->image_texture_uses removeObjectForKey:oldest_key];
-    [renderer->image_texture_costs removeObjectForKey:oldest_key];
-    [renderer->image_texture_cache removeObjectForKey:oldest_key];
-  }
-}
-
-// trim_text_texture_cache retains the launcher text working set while bounding its GPU cost and entry count.
-static void trim_text_texture_cache(WoxDarwinRenderer *renderer, NSArray *keep_key) {
-  const NSUInteger maximum_count = 2048;
-  const NSUInteger maximum_cost = 64 * 1024 * 1024;
-  while (renderer->text_texture_cache.count > maximum_count || renderer->text_texture_total_cost > maximum_cost) {
-    NSArray *oldest_key = nil;
-    uint64_t oldest_use = UINT64_MAX;
-    for (NSArray *key in renderer->text_texture_uses) {
-      if ([key isEqualToArray:keep_key]) {
-        continue;
-      }
-      uint64_t use = [[renderer->text_texture_uses objectForKey:key] unsignedLongLongValue];
-      if (oldest_key == nil || use < oldest_use) {
-        oldest_key = key;
-        oldest_use = use;
-      }
-    }
-    if (oldest_key == nil) {
-      return;
-    }
-    NSUInteger cost = [[renderer->text_texture_costs objectForKey:oldest_key] unsignedIntegerValue];
-    renderer->text_texture_total_cost = cost < renderer->text_texture_total_cost ? renderer->text_texture_total_cost - cost : 0;
-    [renderer->text_texture_uses removeObjectForKey:oldest_key];
-    [renderer->text_texture_costs removeObjectForKey:oldest_key];
-    [renderer->text_texture_cache removeObjectForKey:oldest_key];
-  }
 }
 
 static void emit_focus(WoxDarwinWindow *window, bool active) {
@@ -730,11 +596,9 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   }
 }
 
-@implementation WoxMetalView
+@implementation WoxRenderView
 - (CALayer *)makeBackingLayer {
-  CAMetalLayer *layer = [CAMetalLayer layer];
-  layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-  layer.framebufferOnly = YES;
+  CALayer *layer = [CALayer layer];
   layer.opaque = NO;
   layer.needsDisplayOnBoundsChange = NO;
   return layer;
@@ -967,37 +831,35 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   (void)selector;
 }
 
-- (void)updateDrawableSize {
+- (void)updateBackingScale {
   if (_owner == NULL || _owner->closed || self.window == nil) {
     return;
   }
-  CAMetalLayer *layer = (CAMetalLayer *)self.layer;
-  if (!_owner->visible) {
-    // A zero drawable size lets CAMetalLayer discard its IOSurface pool while the window is hidden.
-    layer.drawableSize = CGSizeZero;
-    return;
-  }
-  CGFloat scale = self.window.backingScaleFactor;
-  NSSize size = self.bounds.size;
-  layer.contentsScale = scale;
-  layer.drawableSize = CGSizeMake(ceil(size.width * scale), ceil(size.height * scale));
+  self.layer.contentsScale = self.window.backingScaleFactor;
 }
 
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];
-  [self updateDrawableSize];
+  [self updateBackingScale];
 }
 
 - (void)viewDidChangeBackingProperties {
   [super viewDidChangeBackingProperties];
-  [self updateDrawableSize];
+  [self updateBackingScale];
+  if (_owner != NULL && !_owner->closed) {
+    atomic_fetch_add_explicit(&_owner->presentation_generation, 1, memory_order_relaxed);
+  }
   schedule_render(_owner);
 }
 
 - (void)setFrameSize:(NSSize)newSize {
+  NSSize old_size = self.frame.size;
   [super setFrameSize:newSize];
-  [self updateDrawableSize];
+  [self updateBackingScale];
   if (_owner != NULL && !_owner->suppress_resize_render) {
+    if (!NSEqualSizes(old_size, newSize)) {
+      atomic_fetch_add_explicit(&_owner->presentation_generation, 1, memory_order_relaxed);
+    }
     schedule_render(_owner);
   }
 }
@@ -1012,7 +874,7 @@ static uint8_t portable_pointer_button(NSEvent *event) {
     return;
   }
   owner->render_scheduled = false;
-  [self updateDrawableSize];
+  [self updateBackingScale];
   NSSize size = self.bounds.size;
   CGFloat scale = self.window.backingScaleFactor;
   int32_t pixel_width = (int32_t)ceil(size.width * scale);
@@ -1066,7 +928,13 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   emit_focus(owner, false);
   if (!owner->closed && owner->hide_on_blur && owner->visible) {
     owner->visible = false;
+    atomic_fetch_add_explicit(&owner->presentation_generation, 1, memory_order_relaxed);
     [owner->window orderOut:nil];
+    owner->renderer->content_layer.contents = nil;
+    if (owner->renderer->front_surface != nil) {
+      atomic_fetch_sub_explicit(&owner->renderer->front_surface->presentation_references, 1, memory_order_relaxed);
+      owner->renderer->front_surface = nil;
+    }
   }
 }
 @end
@@ -1133,12 +1001,13 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     }
 
     WoxDarwinWindow *window = calloc(1, sizeof(WoxDarwinWindow));
-    WoxMetalView *view = [[WoxMetalView alloc] initWithFrame:frame];
+    atomic_init(&window->presentation_generation, 0);
+    WoxRenderView *view = [[WoxRenderView alloc] initWithFrame:frame];
     view->_owner = window;
     view->_marked_selection = NSMakeRange(NSNotFound, 0);
     view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     view.wantsLayer = YES;
-    CAMetalLayer *layer = (CAMetalLayer *)view.layer;
+    CALayer *layer = view.layer;
 
     WoxDarwinRenderer *renderer = create_renderer(layer);
     if (renderer == NULL) {
@@ -1161,7 +1030,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->context = context;
     window->hide_on_blur = hide_on_blur != 0;
     window->application_window = is_application_window;
-    // Use launcher material instead of compositing the transparent Metal surface directly over the desktop.
+    // Use launcher material instead of compositing the transparent UI surface directly over the desktop.
     NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
     effect_view.material = NSVisualEffectMaterialPopover;
     effect_view.state = NSVisualEffectStateActive;
@@ -1175,7 +1044,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     [effect_view release];
     native_window.delegate = delegate;
     [native_window center];
-    [view updateDrawableSize];
+    [view updateBackingScale];
     wox_open_window_count++;
     if (window->application_window) {
       wox_application_window_count++;
@@ -1201,9 +1070,10 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
       }
     }
     window->epoch++;
+    atomic_fetch_add_explicit(&window->presentation_generation, 1, memory_order_relaxed);
     epoch = window->epoch;
     window->visible = true;
-    [window->view updateDrawableSize];
+    [window->view updateBackingScale];
     [NSApp activateIgnoringOtherApps:YES];
     if (window->window.isMiniaturized) {
       [window->window deminiaturize:nil];
@@ -1214,7 +1084,7 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
       emit_focus(window, true);
     }
     if (!window->closed) {
-      // CAMetalLayer rendering is explicit; AppKit does not reliably deliver updateLayer for the first frame.
+      // Rendering is explicit; AppKit does not reliably deliver updateLayer for the first frame.
       [window->view renderFrame];
     }
   });
@@ -1234,9 +1104,9 @@ int32_t wox_darwin_window_hide(WoxDarwinWindow *window) {
     emit_focus(window, false);
     if (!window->closed) {
       window->visible = false;
+      atomic_fetch_add_explicit(&window->presentation_generation, 1, memory_order_relaxed);
       [window->window orderOut:nil];
-      clear_renderer_texture_caches(window->renderer);
-      [window->view updateDrawableSize];
+      clear_renderer_surfaces(window->renderer);
     }
   });
   return result;
@@ -1260,7 +1130,6 @@ int32_t wox_darwin_window_set_bounds(WoxDarwinWindow *window, float x, float y, 
     window->suppress_resize_render = false;
     render_resize_frame(window);
     [CATransaction commit];
-    ((CAMetalLayer *)window->view.layer).presentsWithTransaction = NO;
   });
   return result;
 }
@@ -1294,7 +1163,7 @@ int32_t wox_darwin_window_capture_png(WoxDarwinWindow *window, const char *path)
       result = -1;
       return;
     }
-    // Captures need the freshly encoded drawable, while normal UI frames remain asynchronous.
+    // Captures need the freshly rendered surface, while normal UI frames remain asynchronous.
     window->synchronous_frame = true;
     [window->view renderFrameSynchronously:NO];
     window->synchronous_frame = false;
@@ -1349,7 +1218,6 @@ int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float hei
     window->suppress_resize_render = false;
     render_resize_frame(window);
     [CATransaction commit];
-    ((CAMetalLayer *)window->view.layer).presentsWithTransaction = NO;
   });
   return result;
 }
@@ -1961,32 +1829,58 @@ int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_wid
     return -1;
   }
 
-  id<CAMetalDrawable> drawable = [renderer->layer nextDrawable];
-  if (drawable == nil) {
+  NSUInteger pixel_width = (NSUInteger)ceilf(logical_width * scale);
+  NSUInteger pixel_height = (NSUInteger)ceilf(logical_height * scale);
+  if (pixel_width == 0 || pixel_height == 0 || pixel_width > 16384 || pixel_height > 16384) {
+    return -1;
+  }
+  WoxDarwinSurface *surface = acquire_render_surface(renderer, pixel_width, pixel_height);
+  if (surface == nil) {
     return 1;
   }
-  id<MTLCommandBuffer> command_buffer = [renderer->queue commandBuffer];
-  if (command_buffer == nil) {
+  if (IOSurfaceLock(surface->io_surface, 0, NULL) != kIOReturnSuccess) {
+    [surface release];
     return -1;
   }
 
-  vector_float4 clear = premultiplied_color(red, green, blue, alpha);
-  MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
-  pass.colorAttachments[0].texture = drawable.texture;
-  pass.colorAttachments[0].loadAction = MTLLoadActionClear;
-  pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-  pass.colorAttachments[0].clearColor = MTLClearColorMake(clear.x, clear.y, clear.z, clear.w);
-  id<MTLRenderCommandEncoder> encoder = [command_buffer renderCommandEncoderWithDescriptor:pass];
-  if (encoder == nil) {
+  CGColorSpaceRef color_space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  if (color_space == NULL) {
+    IOSurfaceUnlock(surface->io_surface, 0, NULL);
+    [surface release];
+    return -1;
+  }
+  CGContextRef context = CGBitmapContextCreate(
+      IOSurfaceGetBaseAddress(surface->io_surface),
+      pixel_width,
+      pixel_height,
+      8,
+      IOSurfaceGetBytesPerRow(surface->io_surface),
+      color_space,
+      kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+  CGColorSpaceRelease(color_space);
+  if (context == NULL) {
+    IOSurfaceUnlock(surface->io_surface, 0, NULL);
+    [surface release];
     return -1;
   }
 
-  renderer->drawable = [drawable retain];
-  renderer->command_buffer = [command_buffer retain];
-  renderer->encoder = [encoder retain];
-  renderer->viewport_size = (vector_float2){logical_width, logical_height};
+  // On M3, the first Metal render pass reserves about 200 MB of driver memory; drawing the same IOSurface on the CPU avoids that fixed visible-state cost.
+  CGContextSetBlendMode(context, kCGBlendModeCopy);
+  CGContextSetRGBFillColor(context, red / 255.0, green / 255.0, blue / 255.0, alpha / 255.0);
+  CGContextFillRect(context, CGRectMake(0.0, 0.0, pixel_width, pixel_height));
+  CGContextSetBlendMode(context, kCGBlendModeNormal);
+  CGContextTranslateCTM(context, 0.0, pixel_height);
+  CGContextScaleCTM(context, scale, -scale);
+  CGContextSetShouldAntialias(context, true);
+  CGContextSetInterpolationQuality(context, kCGInterpolationHigh);
+
+  renderer->frame_surface = surface;
+  renderer->context = context;
+  renderer->viewport_size = CGSizeMake(logical_width, logical_height);
   renderer->scale = scale;
+  renderer->frame_generation = atomic_load_explicit(&window->presentation_generation, memory_order_relaxed);
   renderer->frame_open = true;
+  renderer->clip_active = false;
   return 0;
 }
 
@@ -1999,18 +1893,12 @@ int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, fl
   }
 
   WoxDarwinRenderer *renderer = window->renderer;
-  WoxRectUniforms uniforms = {
-      .viewport_size = renderer->viewport_size,
-      .rect = (vector_float4){x, y, width, height},
-      .color = premultiplied_color(red, green, blue, alpha),
-      .radius = radius,
-      .stroke_width = 0.0f,
-      .polygon_count = 0,
-  };
-  [renderer->encoder setRenderPipelineState:renderer->rect_pipeline];
-  [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-  [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-  [renderer->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+  CGFloat clamped_radius = fmaxf(0.0f, fminf(radius, fminf(width, height) / 2.0f));
+  CGPathRef path = CGPathCreateWithRoundedRect(CGRectMake(x, y, width, height), clamped_radius, clamped_radius, NULL);
+  CGContextSetRGBFillColor(renderer->context, red / 255.0, green / 255.0, blue / 255.0, alpha / 255.0);
+  CGContextAddPath(renderer->context, path);
+  CGContextFillPath(renderer->context);
+  CGPathRelease(path);
   return 0;
 }
 
@@ -2023,31 +1911,14 @@ int32_t wox_darwin_window_fill_convex_polygon(WoxDarwinWindow *window, const flo
   }
 
   WoxDarwinRenderer *renderer = window->renderer;
-  float min_x = points[0];
-  float max_x = points[0];
-  float min_y = points[1];
-  float max_y = points[1];
-  WoxRectUniforms uniforms = {
-      .viewport_size = renderer->viewport_size,
-      .color = premultiplied_color(red, green, blue, alpha),
-      .radius = 0.0f,
-      .stroke_width = 0.0f,
-      .polygon_count = (uint32_t)point_count,
-  };
-  for (int32_t index = 0; index < point_count; index++) {
-    float point_x = points[index * 2];
-    float point_y = points[index * 2 + 1];
-    uniforms.polygon[index] = (vector_float2){point_x, point_y};
-    min_x = fminf(min_x, point_x);
-    max_x = fmaxf(max_x, point_x);
-    min_y = fminf(min_y, point_y);
-    max_y = fmaxf(max_y, point_y);
+  CGContextBeginPath(renderer->context);
+  CGContextMoveToPoint(renderer->context, points[0], points[1]);
+  for (int32_t index = 1; index < point_count; index++) {
+    CGContextAddLineToPoint(renderer->context, points[index * 2], points[index * 2 + 1]);
   }
-  uniforms.rect = (vector_float4){min_x, min_y, max_x - min_x, max_y - min_y};
-  [renderer->encoder setRenderPipelineState:renderer->rect_pipeline];
-  [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-  [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-  [renderer->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+  CGContextClosePath(renderer->context);
+  CGContextSetRGBFillColor(renderer->context, red / 255.0, green / 255.0, blue / 255.0, alpha / 255.0);
+  CGContextFillPath(renderer->context);
   return 0;
 }
 
@@ -2074,18 +1945,18 @@ int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, 
   }
 
   WoxDarwinRenderer *renderer = window->renderer;
-  WoxRectUniforms uniforms = {
-      .viewport_size = renderer->viewport_size,
-      .rect = (vector_float4){x, y, width, height},
-      .color = premultiplied_color(red, green, blue, alpha),
-      .radius = radius,
-      .stroke_width = stroke_width,
-      .polygon_count = 0,
-  };
-  [renderer->encoder setRenderPipelineState:renderer->rect_pipeline];
-  [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-  [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-  [renderer->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+  CGFloat inset = stroke_width / 2.0f;
+  if (width <= stroke_width || height <= stroke_width) {
+    return 0;
+  }
+  CGRect stroke_rect = CGRectInset(CGRectMake(x, y, width, height), inset, inset);
+  CGFloat stroke_radius = fmaxf(0.0f, fminf(radius - inset, fminf(stroke_rect.size.width, stroke_rect.size.height) / 2.0f));
+  CGPathRef path = CGPathCreateWithRoundedRect(stroke_rect, stroke_radius, stroke_radius, NULL);
+  CGContextSetRGBStrokeColor(renderer->context, red / 255.0, green / 255.0, blue / 255.0, alpha / 255.0);
+  CGContextSetLineWidth(renderer->context, stroke_width);
+  CGContextAddPath(renderer->context, path);
+  CGContextStrokePath(renderer->context);
+  CGPathRelease(path);
   return 0;
 }
 
@@ -2098,105 +1969,29 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
     return 0;
   }
 
-  NSUInteger available_pixel_width = (NSUInteger)ceil(width * renderer->scale);
-  NSUInteger pixel_height = (NSUInteger)ceil(height * renderer->scale);
-  if (available_pixel_width == 0 || pixel_height == 0 || available_pixel_width > 16384 || pixel_height > 16384) {
-    return -1;
-  }
   NSString *string = [[NSString alloc] initWithUTF8String:text];
   if (string == nil) {
     return -1;
   }
-  NSString *family = font_family == NULL ? @"" : [NSString stringWithUTF8String:font_family];
-  NSFont *font = wox_font(font_family, font_size * renderer->scale, font_weight);
+  NSFont *font = wox_font(font_family, font_size, font_weight);
+  NSColor *color = [NSColor colorWithSRGBRed:red / 255.0 green:green / 255.0 blue:blue / 255.0 alpha:alpha / 255.0];
   NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
       font, (id)kCTFontAttributeName,
-      (id)[[NSColor whiteColor] CGColor], (id)kCTForegroundColorAttributeName,
+      (id)color.CGColor, (id)kCTForegroundColorAttributeName,
       nil];
   NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:string attributes:attributes];
   CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)attributed);
   CGFloat ascent = 0.0;
-  double typographic_width = CTLineGetTypographicBounds(line, &ascent, NULL, NULL);
-  NSUInteger natural_pixel_width = (NSUInteger)ceil(fmax(1.0, typographic_width + 1.0));
-  NSUInteger pixel_width = MIN(available_pixel_width, natural_pixel_width);
-  NSArray *cache_key = @[ string, family ?: @"", @(pixel_width), @(pixel_height), @(font_size * renderer->scale), @(font_weight) ];
-  id<MTLTexture> texture = [[renderer->text_texture_cache objectForKey:cache_key] retain];
-  renderer->text_texture_use_sequence++;
-  [renderer->text_texture_uses setObject:[NSNumber numberWithUnsignedLongLong:renderer->text_texture_use_sequence] forKey:cache_key];
-  if (texture == nil) {
-    size_t row_bytes = pixel_width * 4;
-    void *pixels = calloc(pixel_height, row_bytes);
-    if (pixels == NULL) {
-      CFRelease(line);
-      [attributed release];
-      [string release];
-      return -1;
-    }
+  CTLineGetTypographicBounds(line, &ascent, NULL, NULL);
+  CGContextSaveGState(renderer->context);
+  CGContextClipToRect(renderer->context, CGRectMake(x, y, width, height));
+  CGContextSetTextMatrix(renderer->context, CGAffineTransformMakeScale(1.0, -1.0));
+  CGContextSetTextPosition(renderer->context, x, y + ascent);
+  CTLineDraw(line, renderer->context);
+  CGContextRestoreGState(renderer->context);
 
-    CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
-    CGContextRef context = CGBitmapContextCreate(
-        pixels,
-        pixel_width,
-        pixel_height,
-        8,
-        row_bytes,
-        color_space,
-        kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
-    CGColorSpaceRelease(color_space);
-    if (context == NULL) {
-      free(pixels);
-      CFRelease(line);
-      [attributed release];
-      [string release];
-      return -1;
-    }
-
-    CGContextSetTextMatrix(context, CGAffineTransformIdentity);
-    CGContextSetShouldAntialias(context, true);
-    CGContextSetTextPosition(context, 0.0, fmax(0.0, (CGFloat)pixel_height - ascent));
-    CTLineDraw(line, context);
-
-    MTLTextureDescriptor *texture_descriptor = [MTLTextureDescriptor
-        texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-                                     width:pixel_width
-                                    height:pixel_height
-                                 mipmapped:NO];
-    texture_descriptor.usage = MTLTextureUsageShaderRead;
-    texture = [renderer->device newTextureWithDescriptor:texture_descriptor];
-    if (texture != nil) {
-      [texture replaceRegion:MTLRegionMake2D(0, 0, pixel_width, pixel_height)
-                 mipmapLevel:0
-                   withBytes:pixels
-                 bytesPerRow:row_bytes];
-      NSUInteger cost = row_bytes * pixel_height;
-      // Text colors are applied by the shader, so one bounded white-mask cache serves every frame and theme color.
-      [renderer->text_texture_cache setObject:texture forKey:cache_key];
-      [renderer->text_texture_costs setObject:[NSNumber numberWithUnsignedInteger:cost] forKey:cache_key];
-      renderer->text_texture_total_cost += cost;
-      trim_text_texture_cache(renderer, cache_key);
-    }
-
-    CGContextRelease(context);
-    free(pixels);
-  }
   CFRelease(line);
   [attributed release];
-  if (texture == nil) {
-    [string release];
-    return -1;
-  }
-
-  WoxTextureUniforms uniforms = {
-      .viewport_size = renderer->viewport_size,
-      .rect = (vector_float4){x, y, fminf(width, (float)pixel_width / renderer->scale), height},
-      .color = premultiplied_color(red, green, blue, alpha),
-  };
-  [renderer->encoder setRenderPipelineState:renderer->texture_pipeline];
-  [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-  [renderer->encoder setFragmentTexture:texture atIndex:0];
-  [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-  [renderer->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
-  [texture release];
   [string release];
   return 0;
 }
@@ -2206,43 +2001,40 @@ int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id,
     return -1;
   }
   WoxDarwinRenderer *renderer = window->renderer;
-  NSNumber *cache_key = [NSNumber numberWithUnsignedLongLong:image_id];
-  id<MTLTexture> texture = [[renderer->image_texture_cache objectForKey:cache_key] retain];
-  renderer->image_texture_use_sequence++;
-  [renderer->image_texture_uses setObject:[NSNumber numberWithUnsignedLongLong:renderer->image_texture_use_sequence] forKey:cache_key];
-  if (texture == nil) {
-    MTLTextureDescriptor *descriptor = [MTLTextureDescriptor
-        texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-                                     width:(NSUInteger)image_width
-                                    height:(NSUInteger)image_height
-                                 mipmapped:NO];
-    descriptor.usage = MTLTextureUsageShaderRead;
-    texture = [renderer->device newTextureWithDescriptor:descriptor];
-    if (texture == nil) {
-      return -1;
-    }
-    [texture replaceRegion:MTLRegionMake2D(0, 0, (NSUInteger)image_width, (NSUInteger)image_height)
-               mipmapLevel:0
-                 withBytes:pixels
-               bytesPerRow:(NSUInteger)row_stride];
-    NSUInteger cost = (NSUInteger)image_width * (NSUInteger)image_height * 4;
-    [renderer->image_texture_cache setObject:texture forKey:cache_key];
-    [renderer->image_texture_costs setObject:[NSNumber numberWithUnsignedInteger:cost] forKey:cache_key];
-    renderer->image_texture_total_cost += cost;
-    trim_image_texture_cache(renderer, cache_key);
+  size_t data_size = (size_t)row_stride * (size_t)image_height;
+  CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, pixels, data_size, NULL);
+  if (provider == NULL) {
+    return -1;
+  }
+  CGColorSpaceRef color_space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  if (color_space == NULL) {
+    CGDataProviderRelease(provider);
+    return -1;
+  }
+  CGImageRef image = CGImageCreate(
+      (size_t)image_width,
+      (size_t)image_height,
+      8,
+      32,
+      (size_t)row_stride,
+      color_space,
+      kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big,
+      provider,
+      NULL,
+      false,
+      kCGRenderingIntentDefault);
+  CGColorSpaceRelease(color_space);
+  CGDataProviderRelease(provider);
+  if (image == NULL) {
+    return -1;
   }
 
-  WoxTextureUniforms uniforms = {
-      .viewport_size = renderer->viewport_size,
-      .rect = (vector_float4){x, y, width, height},
-      .color = premultiplied_color(255, 255, 255, 255),
-  };
-  [renderer->encoder setRenderPipelineState:renderer->texture_pipeline];
-  [renderer->encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-  [renderer->encoder setFragmentTexture:texture atIndex:0];
-  [renderer->encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-  [renderer->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
-  [texture release];
+  CGContextSaveGState(renderer->context);
+  CGContextTranslateCTM(renderer->context, x, y + height);
+  CGContextScaleCTM(renderer->context, 1.0, -1.0);
+  CGContextDrawImage(renderer->context, CGRectMake(0.0, 0.0, width, height), image);
+  CGContextRestoreGState(renderer->context);
+  CGImageRelease(image);
   return 0;
 }
 
@@ -2251,17 +2043,22 @@ int32_t wox_darwin_window_set_clip_rect(WoxDarwinWindow *window, float x, float 
     return -1;
   }
   WoxDarwinRenderer *renderer = window->renderer;
-  float max_width = renderer->viewport_size.x;
-  float max_height = renderer->viewport_size.y;
+  float max_width = renderer->viewport_size.width;
+  float max_height = renderer->viewport_size.height;
   float left = fmaxf(0.0f, fminf(max_width, x));
   float top = fmaxf(0.0f, fminf(max_height, y));
   float right = fmaxf(left, fminf(max_width, x + fmaxf(0.0f, width)));
   float bottom = fmaxf(top, fminf(max_height, y + fmaxf(0.0f, height)));
-  NSUInteger pixel_left = (NSUInteger)floorf(left * renderer->scale);
-  NSUInteger pixel_top = (NSUInteger)floorf(top * renderer->scale);
-  NSUInteger pixel_right = (NSUInteger)ceilf(right * renderer->scale);
-  NSUInteger pixel_bottom = (NSUInteger)ceilf(bottom * renderer->scale);
-  [renderer->encoder setScissorRect:(MTLScissorRect){pixel_left, pixel_top, pixel_right - pixel_left, pixel_bottom - pixel_top}];
+  left = floorf(left * renderer->scale) / renderer->scale;
+  top = floorf(top * renderer->scale) / renderer->scale;
+  right = ceilf(right * renderer->scale) / renderer->scale;
+  bottom = ceilf(bottom * renderer->scale) / renderer->scale;
+  if (renderer->clip_active) {
+    CGContextRestoreGState(renderer->context);
+  }
+  CGContextSaveGState(renderer->context);
+  CGContextClipToRect(renderer->context, CGRectMake(left, top, right - left, bottom - top));
+  renderer->clip_active = true;
   return 0;
 }
 
@@ -2270,9 +2067,10 @@ int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window) {
     return -1;
   }
   WoxDarwinRenderer *renderer = window->renderer;
-  NSUInteger width = (NSUInteger)ceilf(renderer->viewport_size.x * renderer->scale);
-  NSUInteger height = (NSUInteger)ceilf(renderer->viewport_size.y * renderer->scale);
-  [renderer->encoder setScissorRect:(MTLScissorRect){0, 0, width, height}];
+  if (renderer->clip_active) {
+    CGContextRestoreGState(renderer->context);
+    renderer->clip_active = false;
+  }
   return 0;
 }
 
@@ -2281,24 +2079,31 @@ int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transaction
     return -1;
   }
   WoxDarwinRenderer *renderer = window->renderer;
-  [renderer->encoder endEncoding];
-  if (transactional != 0) {
-    [renderer->command_buffer commit];
-    [renderer->command_buffer waitUntilScheduled];
-    [renderer->drawable present];
-  } else {
-    [renderer->command_buffer presentDrawable:renderer->drawable];
-    [renderer->command_buffer commit];
+  if (renderer->clip_active) {
+    CGContextRestoreGState(renderer->context);
+    renderer->clip_active = false;
   }
-  if (window->synchronous_frame) {
-    [renderer->command_buffer waitUntilCompleted];
-  }
-  [renderer->encoder release];
-  [renderer->command_buffer release];
-  [renderer->drawable release];
-  renderer->encoder = nil;
-  renderer->command_buffer = nil;
-  renderer->drawable = nil;
+  CGContextFlush(renderer->context);
+  CGContextRelease(renderer->context);
+  renderer->context = NULL;
+  WoxDarwinSurface *surface = renderer->frame_surface;
+  IOSurfaceUnlock(surface->io_surface, 0, NULL);
+  renderer->frame_surface = nil;
   renderer->frame_open = false;
+
+  uint64_t sequence = ++renderer->submission_sequence;
+  uint64_t generation = renderer->frame_generation;
+  atomic_fetch_add_explicit(&surface->presentation_references, 1, memory_order_relaxed);
+  if ([NSThread isMainThread]) {
+    present_render_surface(window, renderer, surface, sequence, generation);
+  } else {
+    WoxDarwinSurface *present_surface = [surface retain];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      present_render_surface(window, renderer, present_surface, sequence, generation);
+      [present_surface release];
+    });
+  }
+  [surface release];
+  (void)transactional;
   return 0;
 }

@@ -6,10 +6,10 @@
 
 ## Architecture contract
 
-The portable Go layer owns widget layout, focus routing, text editing state, scrolling, Wox protocol DTOs, query behavior, previews, actions, and settings pages. Platform files are deliberately thin and own only the native window/event loop, GPU command submission, font measurement, clipboard, file dialogs, external browser dispatch, and IME integration:
+The portable Go layer owns widget layout, focus routing, text editing state, scrolling, Wox protocol DTOs, query behavior, previews, actions, and settings pages. Platform files are deliberately thin and own only the native window/event loop, renderer submission, font measurement, clipboard, file dialogs, external browser dispatch, and IME integration:
 
 - Windows: Win32 + Direct2D/DirectWrite.
-- macOS: AppKit + Metal/CoreText.
+- macOS: AppKit + CoreGraphics/CoreText.
 - Linux: GTK3 + GtkGLArea/OpenGL/Pango, with layer-shell and WebKitGTK used when available.
 
 Display-list and widget changes must compile unchanged on all three platforms. A platform-specific feature should first expose a small capability on `Window`; business widgets must not import Win32, AppKit, GTK, or renderer APIs.

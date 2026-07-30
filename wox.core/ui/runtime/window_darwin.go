@@ -4,7 +4,7 @@ package woxui
 
 /*
 #cgo CFLAGS: -fblocks -Wno-deprecated-declarations
-#cgo LDFLAGS: -framework Cocoa -framework Metal -framework QuartzCore -framework CoreText -framework CoreGraphics -framework WebKit
+#cgo LDFLAGS: -framework Cocoa -framework QuartzCore -framework CoreText -framework CoreGraphics -framework CoreVideo -framework IOSurface -framework WebKit
 #include <stdlib.h>
 #include "native_darwin.h"
 */
@@ -142,7 +142,7 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	)
 	if window.native == nil {
 		window.handle.Delete()
-		return nil, errors.New("woxui: failed to create AppKit window or Metal renderer")
+		return nil, errors.New("woxui: failed to create AppKit window or native renderer")
 	}
 	window.startRenderWorker()
 	run.mu.Lock()
@@ -525,7 +525,7 @@ func (w *platformWindow) recordRenderError(operation string, result C.int32_t) {
 	w.mu.Unlock()
 }
 
-// startRenderWorker owns ordinary Metal encoding so AppKit callbacks can return after building the display list.
+// startRenderWorker owns ordinary frame encoding so AppKit callbacks can return after building the display list.
 func (w *platformWindow) startRenderWorker() {
 	w.mu.Lock()
 	w.renderWake = make(chan struct{}, 1)
@@ -545,7 +545,7 @@ func (w *platformWindow) stopRenderWorkerLocked() {
 	close(w.renderStop)
 }
 
-// renderLoop serializes Metal access and consumes only the newest frame queued while encoding.
+// renderLoop serializes renderer access and consumes only the newest frame queued while encoding.
 func (w *platformWindow) renderLoop() {
 	// Objective-C autorelease pools are thread-affine across the frame's cgo calls.
 	runtime.LockOSThread()
@@ -659,7 +659,7 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 		return
 	}
 	if result < 0 {
-		w.recordRenderError("begin Metal frame", result)
+		w.recordRenderError("begin macOS frame", result)
 		return
 	}
 
@@ -751,7 +751,7 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 		}
 		if result != 0 {
 			_ = C.wox_darwin_window_end_frame(native, transactionalFrame)
-			w.recordRenderError("encode Metal frame", result)
+			w.recordRenderError("encode macOS frame", result)
 			return
 		}
 	}
@@ -759,7 +759,7 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 
 	endStart := time.Now()
 	if result = C.wox_darwin_window_end_frame(native, transactionalFrame); result != 0 {
-		w.recordRenderError("present Metal frame", result)
+		w.recordRenderError("present macOS frame", result)
 	}
 	endCost := time.Since(endStart)
 	totalCost := renderFrame.buildCost + time.Since(frameStart)
