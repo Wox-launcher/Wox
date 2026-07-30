@@ -44,3 +44,5 @@ docs
 www/docs/.vitepress/cache
 www/docs/.vitepress/dist
 .deps
+wox.ui.flutter/
+wox.core/resource/ui/flutter/
