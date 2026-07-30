@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wox Commit"
+  short_description: "Generate and commit the current Wox changes"
+  default_prompt: "Use $wox-commit to review and commit my current Wox changes."

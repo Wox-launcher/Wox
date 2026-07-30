@@ -8,18 +8,22 @@ import (
 
 // PrivacySettingsProps contains the immutable state and actions rendered by the privacy page.
 type PrivacySettingsProps struct {
-	Width                float32
-	Height               float32
-	Theme                woxcomponent.Theme
-	Title                string
-	Description          string
-	TelemetryTitle       string
-	TelemetryDescription string
-	TelemetryEnabled     bool
-	ViewSampleLabel      string
-	Error                string
-	OnToggleTelemetry    func()
-	OnViewSample         func()
+	Width                  float32
+	Height                 float32
+	Theme                  woxcomponent.Theme
+	Title                  string
+	Description            string
+	PrivateModeTitle       string
+	PrivateModeDescription string
+	PrivateModeEnabled     bool
+	TelemetryTitle         string
+	TelemetryDescription   string
+	TelemetryEnabled       bool
+	ViewSampleLabel        string
+	Error                  string
+	OnTogglePrivateMode    func()
+	OnToggleTelemetry      func()
+	OnViewSample           func()
 }
 
 // PrivacySettingsView builds the privacy page without depending on launcher controller state.
@@ -28,7 +32,7 @@ func PrivacySettingsView(props PrivacySettingsProps) woxwidget.Widget {
 	const controlWidth = float32(178)
 	labelWidth := min(float32(550), max(float32(180), contentWidth-controlWidth-32))
 	controlAreaWidth := max(controlWidth, contentWidth-labelWidth-32)
-	controls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+	telemetryControls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: "privacy-view-sample", Label: props.ViewSampleLabel, Width: 126, Height: 30, FontSize: 12,
 			Padding: woxwidget.Insets{Right: 8}, Variant: woxcomponent.ButtonText, OnTap: props.OnViewSample, Theme: props.Theme,
@@ -47,9 +51,21 @@ func PrivacySettingsView(props PrivacySettingsProps) woxwidget.Widget {
 			Title: props.Title, Description: props.Description, Width: contentWidth, Theme: props.Theme,
 		}),
 		woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
+			Label: props.PrivateModeTitle, Description: props.PrivateModeDescription, Width: contentWidth, Height: 84,
+			LabelWidth: labelWidth, Gap: 32, DescriptionMaxLines: 3, Theme: props.Theme,
+			Child: woxwidget.Align{Width: controlAreaWidth, Height: 84, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
+				ID: "privacy-mode-switch", Label: props.PrivateModeTitle, Value: props.PrivateModeEnabled,
+				OnChange: func(bool) {
+					if props.OnTogglePrivateMode != nil {
+						props.OnTogglePrivateMode()
+					}
+				}, Theme: props.Theme,
+			})},
+		}),
+		woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 			Label: props.TelemetryTitle, Description: props.TelemetryDescription, Width: contentWidth, Height: 84,
 			LabelWidth: labelWidth, Gap: 32, DescriptionMaxLines: 3, Theme: props.Theme,
-			Child: woxwidget.Align{Width: controlAreaWidth, Height: 84, Horizontal: 1, Vertical: 0.5, Child: controls},
+			Child: woxwidget.Align{Width: controlAreaWidth, Height: 84, Horizontal: 1, Vertical: 0.5, Child: telemetryControls},
 		}),
 	}
 	if props.Error != "" {

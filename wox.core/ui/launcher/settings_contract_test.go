@@ -21,6 +21,7 @@ func TestSettingsDataFromContract(t *testing.T) {
 		CloudSyncDisabledPlugins: []string{"plugin-a"},
 		PrimaryGlance:            setting.GlanceRef{PluginId: "plugin-a", GlanceId: "weather"},
 		UIDensity:                setting.UiDensityCompact,
+		EnablePrivacyMode:        true,
 	}
 
 	data, err := settingsDataFromContract(loaded)
@@ -29,6 +30,9 @@ func TestSettingsDataFromContract(t *testing.T) {
 	}
 	if data.MainHotkey != "Alt+Space" || data.LangCode != "zh_CN" || data.UIDensity != "compact" {
 		t.Fatalf("basic settings = %+v", data)
+	}
+	if !data.EnablePrivacyMode {
+		t.Fatal("private mode was not copied")
 	}
 	if len(data.QueryHotkeys) != 1 || data.QueryHotkeys[0].Position != "top_center" || data.QueryHotkeys[0].MaxResultCount != 8 {
 		t.Fatalf("query hotkeys = %+v", data.QueryHotkeys)

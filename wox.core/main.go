@@ -13,6 +13,7 @@ import (
 	"wox/database"
 	"wox/diagnostic"
 	"wox/migration"
+	"wox/privacy"
 	"wox/telemetry"
 
 	"runtime"
@@ -74,6 +75,10 @@ import (
 var embeddedGoUIApp *golauncher.App
 
 func main() {
+	if privacy.IsCleanupProcess(os.Args) {
+		os.Exit(privacy.RunCleanupProcess(os.Args))
+	}
+
 	// Permission APIs cache an initial denial for the lifetime of a process. Run the
 	// passive checks before AppKit and the normal Wox lifecycle initialize so the
 	// parent can observe permissions granted while it is already running.
@@ -113,6 +118,12 @@ func main() {
 }
 
 func run() {
+	// Private mode cleanup must run before location initialization creates files or the logger opens them.
+	if err := privacy.PrepareAtStartup(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "failed to prepare private Wox session: %v\n", err)
+		os.Exit(1)
+	}
+
 	// logger depends on location, so location must be initialized first
 	locationErr := util.GetLocation().Init()
 	if locationErr != nil {
@@ -269,6 +280,10 @@ func run() {
 		return
 	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if err := privacy.ApplyPreservedSettings(woxSetting); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to restore private mode settings: %s", err.Error()))
+		return
+	}
 	util.GetLogger().SetLevel(woxSetting.LogLevel.Get())
 	if diagnostic.GetManager().IsEnabled() {
 		util.GetLogger().SetLevel(setting.LogLevelDebug)

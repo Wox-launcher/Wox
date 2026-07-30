@@ -153,6 +153,7 @@ type GeneralSettings struct {
 	EnableAutoUpdate                   bool
 	ReleaseChannel                     setting.ReleaseChannel
 	EnableAnonymousUsageStats          bool
+	EnablePrivacyMode                  bool
 	CustomPythonPath                   string
 	CustomNodejsPath                   string
 	CloudSyncServerURL                 string

@@ -726,7 +726,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 		AIMCPServers: loaded.AIMCPServers, AISkills: loaded.AISkills, HttpProxyEnabled: loaded.HTTPProxyEnabled,
 		HttpProxyUrl: loaded.HTTPProxyURL, ShowPosition: loaded.ShowPosition, IsLinuxWaylandSession: loaded.IsLinuxWaylandSession,
 		IsEvdevReadAvailable: loaded.IsEvdevReadAvailable, EnableAutoBackup: loaded.EnableAutoBackup, EnableAutoUpdate: loaded.EnableAutoUpdate,
-		ReleaseChannel: loaded.ReleaseChannel, EnableAnonymousUsageStats: loaded.EnableAnonymousUsageStats,
+		ReleaseChannel: loaded.ReleaseChannel, EnableAnonymousUsageStats: loaded.EnableAnonymousUsageStats, EnablePrivacyMode: loaded.EnablePrivacyMode,
 		CustomPythonPath: loaded.CustomPythonPath, CustomNodejsPath: loaded.CustomNodejsPath,
 		CloudSyncServerUrl: loaded.CloudSyncServerURL, CloudSyncDisabledPlugins: loaded.CloudSyncDisabledPlugins,
 		AppWidth: loaded.AppWidth, MaxResultCount: loaded.MaxResultCount, UiDensity: loaded.UIDensity, ThemeId: loaded.ThemeID,

@@ -19,10 +19,16 @@ func (a *App) buildPrivacySettingsPage(snapshot settingsSnapshot, width, height 
 	return launcherview.PrivacySettingsView(launcherview.PrivacySettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(),
 		Title: a.translate("i18n:ui_privacy"), Description: a.translate("i18n:ui_privacy_description"),
-		TelemetryTitle: a.translate("i18n:ui_privacy_anonymous_stats_title"), TelemetryDescription: a.translate("i18n:ui_privacy_anonymous_stats_description"),
+		PrivateModeTitle: a.translate("i18n:ui_privacy_mode_title"), PrivateModeDescription: a.translate("i18n:ui_privacy_mode_description"),
+		PrivateModeEnabled: snapshot.general.Data.EnablePrivacyMode,
+		TelemetryTitle:     a.translate("i18n:ui_privacy_anonymous_stats_title"), TelemetryDescription: a.translate("i18n:ui_privacy_anonymous_stats_description"),
 		TelemetryEnabled: snapshot.general.Data.EnableAnonymousUsageStats, ViewSampleLabel: a.translate("i18n:ui_privacy_view_sample"), Error: snapshot.privacy.Error,
-		OnToggleTelemetry: func() {
+		OnTogglePrivateMode: func() {
 			a.selectSettingRow(0)
+			a.activateSetting(1)
+		},
+		OnToggleTelemetry: func() {
+			a.selectSettingRow(1)
 			a.activateSetting(1)
 		},
 		OnViewSample: a.togglePrivacySample,

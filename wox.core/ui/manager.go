@@ -27,6 +27,7 @@ import (
 	"wox/plugin"
 	dictationplugin "wox/plugin/system/dictation"
 	"wox/plugin/system/shell/terminal"
+	"wox/privacy"
 	"wox/resource"
 	"wox/setting"
 	"wox/ui/contract"
@@ -1298,7 +1299,10 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 			logger.Error(ctx, fmt.Sprintf("failed to set autostart: %s", err.Error()))
 		}
 	case "EnableAutoUpdate":
-		updater.CheckForUpdatesWithCallback(ctx, nil)
+		// Update checks are network-bound and must not block settings applied by cloud restore.
+		util.Go(ctx, "check for updates after setting change", func() {
+			updater.CheckForUpdatesWithCallback(ctx, nil)
+		})
 	case "AIProviders":
 		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "models")
 	case "AIMCPServers":
@@ -1803,6 +1807,9 @@ func (m *Manager) ExitApp(ctx context.Context) {
 		plugin.GetPluginManager().Stop(ctx)
 		diagnostic.GetManager().MarkCleanExit(ctx)
 		util.GetLogger().Info(ctx, "bye~")
+		if err := privacy.StartExitCleanup(setting.GetSettingManager().GetWoxSetting(ctx)); err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start private mode cleanup: %s", err.Error()))
+		}
 		os.Exit(0)
 	})
 }
@@ -2110,6 +2117,12 @@ func (m *Manager) ChangeUserDataDirectory(ctx context.Context, newDirectory stri
 		return fmt.Errorf("failed to expand directory path: %w", expandErr)
 	}
 	newDirectory = expandedDir
+
+	if privacy.IsEnabled() {
+		if err := privacy.ValidateUserDataDirectory(newDirectory); err != nil {
+			return err
+		}
+	}
 
 	logger.Info(ctx, fmt.Sprintf("Changing user data directory from %s to %s", oldDirectory, newDirectory))
 

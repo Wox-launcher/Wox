@@ -49,6 +49,7 @@ type settingsData struct {
 	EnableAutoUpdate                   bool
 	ReleaseChannel                     string
 	EnableAnonymousUsageStats          bool
+	EnablePrivacyMode                  bool
 	CustomPythonPath                   string
 	CustomNodejsPath                   string
 	CloudSyncServerURL                 string `json:"CloudSyncServerUrl"`
@@ -538,6 +539,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		EnableAutoUpdate:                   loaded.EnableAutoUpdate,
 		ReleaseChannel:                     string(loaded.ReleaseChannel),
 		EnableAnonymousUsageStats:          loaded.EnableAnonymousUsageStats,
+		EnablePrivacyMode:                  loaded.EnablePrivacyMode,
 		CustomPythonPath:                   loaded.CustomPythonPath,
 		CustomNodejsPath:                   loaded.CustomNodejsPath,
 		CloudSyncServerURL:                 loaded.CloudSyncServerURL,
@@ -1302,6 +1304,7 @@ func settingItems(tab string, data settingsData) []settingItem {
 		}
 	case "privacy":
 		return []settingItem{
+			{key: "EnablePrivacyMode", title: "Private mode", description: "Clear local data after exit while retaining non-sensitive settings", value: boolValue(data.EnablePrivacyMode), choices: boolChoices},
 			{key: "EnableAnonymousUsageStats", title: "Anonymous usage stats", description: "Help improve Wox with anonymous telemetry", value: boolValue(data.EnableAnonymousUsageStats), choices: boolChoices},
 		}
 	default:

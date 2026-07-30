@@ -12,6 +12,7 @@ import (
 	"wox/i18n"
 	"wox/plugin"
 	pluginhost "wox/plugin/host"
+	"wox/privacy"
 	"wox/setting"
 	"wox/telemetry"
 	"wox/ui/contract"
@@ -58,6 +59,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		EnableAutoUpdate:                   woxSetting.EnableAutoUpdate.Get(),
 		ReleaseChannel:                     woxSetting.ReleaseChannel.Get(),
 		EnableAnonymousUsageStats:          woxSetting.EnableAnonymousUsageStats.Get(),
+		EnablePrivacyMode:                  privacy.IsEnabled(),
 		CustomPythonPath:                   woxSetting.CustomPythonPath.Get(),
 		CustomNodejsPath:                   woxSetting.CustomNodejsPath.Get(),
 		CloudSyncServerURL:                 woxSetting.CloudSyncServerUrl.Get(),
@@ -104,7 +106,7 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 			return err
 		}
 		GetUIManager().PostSettingUpdate(ctx, key, updatedValue)
-		return nil
+		return privacy.RefreshPreservedSettings(woxSetting)
 	}
 
 	boolValue, _ := strconv.ParseBool(value)
@@ -120,7 +122,7 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 			}
 		}
 		woxSetting.MainHotkey.Set(value)
-		return nil
+		return privacy.RefreshPreservedSettings(woxSetting)
 	case "SelectionHotkey":
 		if value != woxSetting.SelectionHotkey.Get() {
 			if err := GetUIManager().RegisterSelectionHotkey(ctx, value); err != nil {
@@ -128,7 +130,7 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 			}
 		}
 		woxSetting.SelectionHotkey.Set(value)
-		return nil
+		return privacy.RefreshPreservedSettings(woxSetting)
 	case "QueryHotkeys":
 		queryHotkeys, err := parseQueryHotkeysSettingValue(value)
 		if err != nil {
@@ -285,10 +287,19 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 		if !boolValue {
 			telemetry.DeleteTelemetryState(ctx)
 		}
+	case "EnablePrivacyMode":
+		if err := privacy.SetEnabled(boolValue, woxSetting); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unknown setting key: %s", key)
 	}
 
+	if key != "EnablePrivacyMode" {
+		if err := privacy.RefreshPreservedSettings(woxSetting); err != nil {
+			return err
+		}
+	}
 	GetUIManager().PostSettingUpdate(ctx, key, updatedValue)
 	return nil
 }
