@@ -16,12 +16,13 @@ type Position struct {
 	Y    int
 }
 
-// ShowOptions contains only the window behavior currently consumed by the Go UI.
+// ShowOptions contains the launch-time state and window behavior consumed by the Go UI.
 type ShowOptions struct {
 	SelectAll        bool
 	Position         Position
 	WindowWidth      int
 	MaxResultCount   int
+	QueryHistories   []common.PlainQuery
 	LaunchMode       string
 	StartPage        string
 	HideQueryBox     bool

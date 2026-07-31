@@ -73,7 +73,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 		}
 		rows = append(rows, launcherview.RuntimeSettingRow{
 			ID: "runtime-setting-" + item.key, Title: item.title, Description: item.description, Placeholder: a.runtimeExecutablePlaceholder(item.key),
-			State: state, Focused: focused, Disabled: snapshot.saving || item.disabled, Window: a.settingsNativeWindow(),
+			State: state, Focused: focused, Disabled: snapshot.saving || item.disabled, Highlighted: snapshot.highlight == "built-in:"+item.key, Window: a.settingsNativeWindow(),
 			OnHover:   func() { a.selectSettingRow(index) },
 			OnFocus:   func() { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, -1) },
 			OnChanged: func(value string) { a.setBuiltInSettingEditValue(item, value) }, OnKey: a.onBuiltInSettingsEditorKey,

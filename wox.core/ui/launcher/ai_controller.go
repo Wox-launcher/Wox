@@ -118,7 +118,11 @@ func (c *aiSettingsController) ReloadProviders(ctx context.Context, service cont
 	cancel()
 	providers := make([]aiProviderInfo, len(loaded))
 	for index, provider := range loaded {
-		providers[index] = aiProviderInfo{Name: provider.Name, DefaultHost: provider.DefaultHost}
+		providers[index] = aiProviderInfo{
+			Name:        provider.Name,
+			Icon:        woxImage{ImageType: provider.Icon.ImageType, ImageData: provider.Icon.ImageData},
+			DefaultHost: provider.DefaultHost,
+		}
 	}
 
 	c.deps.OnUI("apply AI provider catalog", func() {

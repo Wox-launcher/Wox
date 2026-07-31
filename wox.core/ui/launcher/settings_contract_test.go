@@ -48,3 +48,15 @@ func TestSettingsDataFromContract(t *testing.T) {
 		t.Fatalf("tray queries = %+v", trayQueries)
 	}
 }
+
+func TestLocalizedLanguageSettingIncludesDescription(t *testing.T) {
+	app := &App{translations: map[string]string{
+		"ui_lang":      "语言",
+		"ui_lang_tips": "Wox 使用的界面语言",
+	}}
+	item := app.localizedSettingItem(settingItem{key: "LangCode", title: "Language", description: "Language used by Wox"})
+
+	if item.title != "语言" || item.description != "Wox 使用的界面语言" {
+		t.Fatalf("localized language item = %#v", item)
+	}
+}

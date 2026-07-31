@@ -237,6 +237,7 @@
   "ui_switch_input_method_abc": "Switch to ABC",
   "ui_switch_input_method_abc_tips": "When selected, the input method will be switched to english when the query box gains focus",
   "ui_lang": "Language",
+  "ui_lang_tips": "Language used by Wox",
   "ui_query_hotkeys": "Query Hotkeys",
   "ui_query_hotkeys_tips": "Quickly trigger predefined queries using hotkeys. Supports variables (like selected text, browser URL, etc.) to build dynamic queries, and can be set to silent execution mode to automatically execute single results.",
   "ui_query_hotkeys_dialog_create_title": "Add Query Hotkey",

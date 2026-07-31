@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -166,6 +167,7 @@ func (a *App) reloadPlugins(store bool, preferredID string) error {
 	}
 
 	requestModels := false
+	requestProviders := false
 	if err := a.runOnUI("apply loaded plugin catalog", func() {
 		plugins := a.pluginSettings.Plugins()
 		if !store {
@@ -179,7 +181,8 @@ func (a *App) reloadPlugins(store bool, preferredID string) error {
 			a.setPluginSelectionLocked(selected)
 		}
 		form := a.pluginSettings.Form()
-		requestModels = form != nil && hasFormDefinitionType(form.definitions, "selectAIModel") && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
+		requestProviders = form != nil && hasFormDefinitionType(form.definitions, "selectAIModel")
+		requestModels = requestProviders && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
 		if requestModels {
 			a.aiSettings.SetModelsLoading(true)
 		}
@@ -189,6 +192,9 @@ func (a *App) reloadPlugins(store bool, preferredID string) error {
 	}
 	if requestModels {
 		util.Go(a.lifecycleCtx, "load AI models for plugin settings", a.loadAIModels)
+	}
+	if requestProviders {
+		util.Go(a.lifecycleCtx, "load AI provider icons for plugin settings", a.loadAIProviderCatalog)
 	}
 	return nil
 }
@@ -207,10 +213,7 @@ func (a *App) switchPluginList(store bool) {
 	if form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
-			form.status = "Save the current plugin changes before switching lists."
-			form.statusError = true
-			a.invalidateSettingsWindow()
-			return
+			a.submitPluginSettings()
 		}
 	}
 	a.pluginSettings.SetPluginsStore(store)
@@ -253,10 +256,7 @@ func (a *App) runPluginOperation(kind string) {
 	if form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
-			form.status = "Save the current plugin changes before managing this plugin."
-			form.statusError = true
-			a.invalidateSettingsWindow()
-			return
+			a.submitPluginSettings()
 		}
 	}
 	switch kind {
@@ -483,21 +483,22 @@ func (a *App) selectPlugin(index int) {
 	if form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
-			form.status = "Save the current plugin changes before selecting another plugin."
-			form.statusError = true
-			a.invalidateSettingsWindow()
-			return
+			a.submitPluginSettings()
 		}
 	}
 	a.setPluginSelectionLocked(index)
 	form = a.pluginSettings.Form()
-	requestModels := form != nil && hasFormDefinitionType(form.definitions, "selectAIModel") && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
+	requestProviders := form != nil && hasFormDefinitionType(form.definitions, "selectAIModel")
+	requestModels := requestProviders && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
 	if requestModels {
 		a.aiSettings.SetModelsLoading(true)
 	}
 	a.updateSettingsTextInput(false)
 	if requestModels {
 		util.Go(a.lifecycleCtx, "load AI models for selected plugin", a.loadAIModels)
+	}
+	if requestProviders {
+		util.Go(a.lifecycleCtx, "load AI provider icons for selected plugin", a.loadAIProviderCatalog)
 	}
 	a.invalidateSettingsWindow()
 }
@@ -710,10 +711,14 @@ func (a *App) selectPluginDetailTab(tab string) {
 	default:
 		return
 	}
+	a.stopHotkeyRecording()
 	a.pluginSettings.SetDetailTab(tab)
 	if form := a.pluginSettings.Form(); form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		form.active = false
+		if pluginFormDirty(form.definitions, form.values, form.initial) {
+			a.submitPluginSettings()
+		}
 	}
 	a.pluginSettings.SetSearchFocused(false)
 	a.updateSettingsTextInput(false)
@@ -740,10 +745,6 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 			fieldType = state.definitions[focused].Type
 			multiline = fieldType == "textbox" && state.definitions[focused].Value.MaxLines > 1
 		}
-	}
-	if event.Modifiers.HasPrimary() && (event.Key == woxui.Key("s") || event.Key == woxui.KeyEnter) {
-		a.submitPluginSettings()
-		return true
 	}
 	if !active {
 		switch event.Key {
@@ -836,7 +837,11 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 		} else if fieldType == "table" {
 			a.openPluginFormTable(focused)
 		} else if fieldType == "dictationModel" || fieldType == "ocrModel" {
-			a.openPluginModelManager(focused)
+			anchor := woxui.Rect{}
+			if host := a.settingsHost; host != nil {
+				anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", focused)))
+			}
+			a.openPluginModelManager(focused, anchor)
 		} else if fieldType == "dictationHotkey" {
 			a.recordPluginFormHotkey(focused)
 		} else if fieldType == "select" || fieldType == "selectAIModel" {
@@ -863,7 +868,7 @@ func (a *App) recordPluginFormHotkey(index int) {
 // activatePluginForm transfers keyboard and IME ownership from the plugin list to its first field.
 func (a *App) activatePluginForm() {
 	state := a.pluginSettings.Form()
-	if state == nil || state.saving || len(state.definitions) == 0 {
+	if state == nil || len(state.definitions) == 0 {
 		return
 	}
 	index := state.focused
@@ -886,9 +891,13 @@ func (a *App) activatePluginForm() {
 
 // deactivatePluginForm returns keyboard ownership to the settings page while preserving edits.
 func (a *App) deactivatePluginForm() {
+	a.stopHotkeyRecording()
 	if form := a.pluginSettings.Form(); form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		form.active = false
+		if pluginFormDirty(form.definitions, form.values, form.initial) {
+			a.submitPluginSettings()
+		}
 	}
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
@@ -896,15 +905,32 @@ func (a *App) deactivatePluginForm() {
 
 func (a *App) focusPluginFormField(index int) {
 	state := a.pluginSettings.Form()
-	if state == nil || state.saving || index < 0 || index >= len(state.definitions) || !formDefinitionFocusable(state.definitions[index]) {
+	if state == nil || index < 0 || index >= len(state.definitions) || !formDefinitionFocusable(state.definitions[index]) {
 		return
 	}
+	a.releasePluginSearchFocusForField(state.definitions[index])
+	a.stopHotkeyRecordingForDifferentField(&state.formFieldsState, index)
+	previousFocused := state.focused
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.status = ""
 	textInput := state.editor != nil
 	a.updateSettingsTextInput(textInput)
 	a.invalidateSettingsWindow()
+	if previousFocused != index && pluginFormDirty(state.definitions, state.values, state.initial) {
+		a.submitPluginSettings()
+	}
+}
+
+// releasePluginSearchFocusForField transfers retained keyboard ownership from the catalog search to the plugin form.
+func (a *App) releasePluginSearchFocusForField(definition formDefinition) {
+	a.pluginSettings.SetSearchFocused(false)
+	if formDefinitionTextEditable(definition) {
+		return
+	}
+	if host := a.settingsHost; host != nil {
+		host.ClearFocus()
+	}
 }
 
 func (a *App) movePluginFormFocus(delta int) {
@@ -921,6 +947,8 @@ func (a *App) movePluginFormFocus(delta int) {
 			break
 		}
 	}
+	a.releasePluginSearchFocusForField(state.definitions[index])
+	a.stopHotkeyRecordingForDifferentField(&state.formFieldsState, index)
 	textInput := state.editor != nil
 	a.updateSettingsTextInput(textInput)
 	a.invalidateSettingsWindow()
@@ -928,20 +956,25 @@ func (a *App) movePluginFormFocus(delta int) {
 
 func (a *App) changePluginFormChoice(index, delta int) {
 	state := a.pluginSettings.Form()
-	if state == nil || !state.active || state.saving {
+	if state == nil || !state.active {
 		return
 	}
 	changeFormFieldsChoiceLocked(&state.formFieldsState, index, delta)
 	state.status = ""
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
+	a.submitPluginSettings()
 }
 
 // openFocusedPluginFormChoice resolves the retained field bounds for keyboard-opened menus.
 func (a *App) openFocusedPluginFormChoice(index int) {
 	anchor := woxui.Rect{}
 	if host := a.settingsHost; host != nil {
-		anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", index)))
+		key := fmt.Sprintf("plugin-settings-field-%d", index)
+		if form := a.pluginSettings.Form(); form != nil && index >= 0 && index < len(form.definitions) && form.definitions[index].Type == "selectAIModel" {
+			key += "-model"
+		}
+		anchor, _ = host.BoundsForKey(woxwidget.Key(key))
 	}
 	a.openPluginFormChoice(index, anchor)
 }
@@ -949,11 +982,15 @@ func (a *App) openFocusedPluginFormChoice(index int) {
 // openPluginFormChoice presents the shared anchored dropdown for a plugin select field.
 func (a *App) openPluginFormChoice(index int, anchor woxui.Rect) {
 	state := a.pluginSettings.Form()
-	if state == nil || state.saving || index < 0 || index >= len(state.definitions) {
+	if state == nil || index < 0 || index >= len(state.definitions) {
 		return
 	}
 	definition := state.definitions[index]
-	if (definition.Type != "select" && definition.Type != "selectAIModel") || len(definition.Value.Options) == 0 {
+	if definition.Type == "selectAIModel" {
+		a.openPluginAIModelChoice(index, false, anchor)
+		return
+	}
+	if definition.Type != "select" || len(definition.Value.Options) == 0 {
 		return
 	}
 	if anchor.Width <= 0 || anchor.Height <= 0 {
@@ -984,10 +1021,172 @@ func (a *App) openPluginFormChoice(index int, anchor woxui.Rect) {
 	a.invalidateSettingsWindow()
 }
 
+func aiModelProviderKey(model aiModel) string {
+	return model.Provider + "\x00" + model.ProviderAlias
+}
+
+// openPluginAIModelChoice opens the provider or filterable model menu for one AI model field.
+func (a *App) openPluginAIModelChoice(index int, providerChoice bool, anchor woxui.Rect) {
+	state := a.pluginSettings.Form()
+	if state == nil || index < 0 || index >= len(state.definitions) {
+		return
+	}
+	definition := state.definitions[index]
+	if definition.Type != "selectAIModel" {
+		return
+	}
+	models := aiModelsFromOptions(definition.Value.Options)
+	if len(models) == 0 {
+		return
+	}
+	var selected aiModel
+	_ = json.Unmarshal([]byte(state.values[definition.Value.Key]), &selected)
+	selectedProvider := aiModelProviderKey(selected)
+	choices := make([]settingChoice, 0, len(models))
+	icons := make(map[string]woxImage)
+	if providerChoice {
+		seen := make(map[string]bool)
+		for _, model := range models {
+			key := aiModelProviderKey(model)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			label := model.Provider
+			if model.ProviderAlias != "" {
+				label = model.ProviderAlias
+			}
+			choices = append(choices, settingChoice{value: key, label: label})
+		}
+		for _, provider := range a.aiSettings.ProviderCatalog() {
+			for _, choice := range choices {
+				providerName, _, _ := strings.Cut(choice.value, "\x00")
+				if provider.Name == providerName {
+					icons[choice.value] = provider.Icon
+				}
+			}
+		}
+	} else {
+		for _, model := range models {
+			if selectedProvider != "\x00" && aiModelProviderKey(model) != selectedProvider {
+				continue
+			}
+			encoded, err := json.Marshal(model)
+			if err == nil {
+				choices = append(choices, settingChoice{value: string(encoded), label: model.Name})
+			}
+		}
+		if len(choices) == 0 && selected.Name != "" {
+			choices = append(choices, settingChoice{value: state.values[definition.Value.Key], label: selected.Name})
+		}
+		for _, provider := range a.aiSettings.ProviderCatalog() {
+			if provider.Name != selected.Provider {
+				continue
+			}
+			for _, choice := range choices {
+				icons[choice.value] = provider.Icon
+			}
+		}
+	}
+	if len(choices) == 0 {
+		return
+	}
+	syncFormFieldsEditorLocked(&state.formFieldsState)
+	setFormFieldsFocusLocked(&state.formFieldsState, index)
+	currentValue := state.values[definition.Value.Key]
+	if providerChoice {
+		currentValue = selectedProvider
+	}
+	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
+		item: settingItem{
+			key: "plugin-ai-model:" + definition.Value.Key, title: a.translate(definition.Value.Label), value: currentValue,
+			choices: choices, icons: icons, preserveIconColor: true, filterable: !providerChoice,
+		},
+		anchor: anchor,
+		onChoose: func(choice settingChoice) {
+			if providerChoice {
+				a.setPluginAIModelProvider(index, choice.value)
+			} else {
+				a.setPluginFormChoice(index, choice.value)
+			}
+		},
+	})
+	state.status = ""
+	a.updateSettingsTextInput(false)
+	a.invalidateSettingsWindow()
+}
+
+func (a *App) setPluginAIModelProvider(index int, providerKey string) {
+	state := a.pluginSettings.Form()
+	if state == nil || index < 0 || index >= len(state.definitions) {
+		return
+	}
+	for _, model := range aiModelsFromOptions(state.definitions[index].Value.Options) {
+		if aiModelProviderKey(model) == providerKey {
+			encoded, err := json.Marshal(model)
+			if err == nil {
+				a.setPluginFormChoice(index, string(encoded))
+			}
+			return
+		}
+	}
+}
+
+func (a *App) setPluginAIModelName(index int, name string) {
+	state := a.pluginSettings.Form()
+	if state == nil || index < 0 || index >= len(state.definitions) || strings.TrimSpace(name) == "" {
+		return
+	}
+	definition := state.definitions[index]
+	var model aiModel
+	if json.Unmarshal([]byte(state.values[definition.Value.Key]), &model) != nil || model.Provider == "" {
+		return
+	}
+	model.Name = name
+	encoded, err := json.Marshal(model)
+	if err != nil {
+		return
+	}
+	setFormFieldsFocusLocked(&state.formFieldsState, index)
+	state.values[definition.Value.Key] = string(encoded)
+	state.status = ""
+	a.invalidateSettingsWindow()
+	a.submitPluginSettings()
+}
+
+func (a *App) finishPluginAIModelEdit(index int, name string) {
+	state := a.pluginSettings.Form()
+	if state == nil || index < 0 || index >= len(state.definitions) {
+		return
+	}
+	definition := state.definitions[index]
+	var selected aiModel
+	_ = json.Unmarshal([]byte(state.values[definition.Value.Key]), &selected)
+	models := aiModelsFromOptions(definition.Value.Options)
+	for _, model := range models {
+		if aiModelProviderKey(model) == aiModelProviderKey(selected) && model.Name == name {
+			encoded, err := json.Marshal(model)
+			if err == nil {
+				a.setPluginFormChoice(index, string(encoded))
+			}
+			return
+		}
+	}
+	for _, model := range models {
+		if aiModelProviderKey(model) == aiModelProviderKey(selected) {
+			encoded, err := json.Marshal(model)
+			if err == nil {
+				a.setPluginFormChoice(index, string(encoded))
+			}
+			return
+		}
+	}
+}
+
 // setPluginFormChoice stages one exact dropdown value without depending on option ordering.
 func (a *App) setPluginFormChoice(index int, value string) {
 	state := a.pluginSettings.Form()
-	if state == nil || state.saving || index < 0 || index >= len(state.definitions) {
+	if state == nil || index < 0 || index >= len(state.definitions) {
 		return
 	}
 	definition := state.definitions[index]
@@ -1006,6 +1205,7 @@ func (a *App) setPluginFormChoice(index int, value string) {
 	state.status = ""
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
+	a.submitPluginSettings()
 }
 
 func (a *App) editPluginFormKey(event woxui.KeyEvent) {
@@ -1038,7 +1238,7 @@ func (a *App) setPluginFormText(index int, value string) {
 	}
 }
 
-// submitPluginSettings saves only changed keys, then reloads dynamic definitions from core.
+// submitPluginSettings serializes auto-saves while retaining edits made during an in-flight request.
 func (a *App) submitPluginSettings() {
 	state := a.pluginSettings.Form()
 	if state == nil || state.saving || a.pluginSettings.Operation() != "" {
@@ -1068,41 +1268,38 @@ func (a *App) submitPluginSettings() {
 		return
 	}
 	if len(values) == 0 {
-		state.status = "No changes to save."
-		state.statusError = false
-		a.invalidateSettingsWindow()
 		return
 	}
 	state.saving = true
-	state.status = "Saving…"
+	state.status = ""
 	state.statusError = false
-	state.active = false
 	state.revision++
-	revision := state.revision
 	pluginID := state.pluginID
-	store := a.pluginSettings.PluginsStore()
-	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 
 	util.Go(a.lifecycleCtx, "save plugin settings", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		saveErr := a.services.UpdatePluginSettings(ctx, a.sessionID, pluginID, values)
-		if saveErr == nil {
-			saveErr = a.reloadPlugins(store, pluginID)
-		}
 		_ = a.runOnUI("apply plugin settings save", func() {
 			form := a.pluginSettings.Form()
 			if form != nil && form.pluginID == pluginID {
-				if form.revision == revision || saveErr == nil {
-					form.saving = false
-				}
+				form.saving = false
 				if saveErr != nil {
 					form.status = saveErr.Error()
 					form.statusError = true
 				} else {
-					form.status = "Saved"
+					for key, value := range values {
+						form.initial[key] = value
+					}
+					form.status = ""
 					form.statusError = false
+				}
+			}
+			if saveErr == nil {
+				a.applySavedPluginSettingValues(pluginID, values)
+				if form != nil && form.pluginID == pluginID && pluginFormDirty(form.definitions, form.values, form.initial) {
+					a.submitPluginSettings()
 				}
 			}
 			a.invalidateSettingsWindow()
@@ -1111,4 +1308,41 @@ func (a *App) submitPluginSettings() {
 			log.Printf("save plugin settings: %v", saveErr)
 		}
 	})
+}
+
+// applySavedPluginSettingValues keeps the local catalog consistent until its next normal refresh.
+func (a *App) applySavedPluginSettingValues(pluginID string, values map[string]string) {
+	plugins := a.pluginSettings.Plugins()
+	for index := range plugins {
+		if plugins[index].ID != pluginID {
+			continue
+		}
+		if plugins[index].Setting.Settings == nil {
+			plugins[index].Setting.Settings = make(map[string]string)
+		}
+		for key, value := range values {
+			if key == "TriggerKeywords" {
+				keywords := splitPluginTriggerKeywords(value)
+				plugins[index].Setting.TriggerKeywords = keywords
+				plugins[index].TriggerKeywords = append([]string(nil), keywords...)
+				continue
+			}
+			plugins[index].Setting.Settings[key] = value
+		}
+		break
+	}
+	a.pluginSettings.SetPlugins(plugins)
+	a.settingsSearch.SetPlugins(plugins)
+}
+
+// splitPluginTriggerKeywords normalizes the comma-separated core representation.
+func splitPluginTriggerKeywords(value string) []string {
+	parts := strings.Split(value, ",")
+	keywords := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if keyword := strings.TrimSpace(part); keyword != "" {
+			keywords = append(keywords, keyword)
+		}
+	}
+	return keywords
 }

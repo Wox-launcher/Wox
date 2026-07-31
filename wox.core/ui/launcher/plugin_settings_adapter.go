@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -79,7 +80,8 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height float32) 
 		props.Items = append(props.Items, launcherview.PluginListItem{
 			ID: plugin.ID, Name: plugin.Name, Status: status, Badge: badge,
 			Icon: a.imageFor(plugin.Icon), FallbackColor: resultColors[visibleIndex%len(resultColors)], Selected: index == plugins.PluginSelected,
-			OnSelect: func() { a.selectPlugin(index) },
+			Highlighted: snapshot.highlight == "plugin:"+plugin.ID,
+			OnSelect:    func() { a.selectPlugin(index) },
 		})
 	}
 	return props
@@ -112,17 +114,20 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		OnSelectTab: a.selectPluginDetailTab,
 	}
 	callbacks := formFieldCallbacks{
-		idPrefix:   "plugin-settings",
-		labelWidth: a.pluginFormLabelWidth(form.definitions[1:]),
-		imageScale: imageScale,
-		focus:      a.focusPluginFormField,
-		change:     a.changePluginFormChoice,
-		setText:    a.setPluginFormText,
-		onKey:      a.onPluginSettingsKey,
-		openTable:  a.openPluginFormTable,
-		openChoice: a.openPluginFormChoice,
-		openModel:  a.openPluginModelManager,
-		recordKey:  a.recordPluginFormHotkey,
+		idPrefix:          "plugin-settings",
+		labelWidth:        a.pluginFormLabelWidth(form.definitions[1:]),
+		imageScale:        imageScale,
+		focus:             a.focusPluginFormField,
+		change:            a.changePluginFormChoice,
+		setText:           a.setPluginFormText,
+		onKey:             a.onPluginSettingsKey,
+		openTable:         a.openPluginFormTable,
+		openChoice:        a.openPluginFormChoice,
+		openAIModelChoice: a.openPluginAIModelChoice,
+		setAIModelName:    a.setPluginAIModelName,
+		finishAIModelEdit: a.finishPluginAIModelEdit,
+		openModel:         a.openPluginModelManager,
+		recordKey:         a.recordPluginFormHotkey,
 	}
 	if detailTab == "keywords" {
 		keywordDefinition := form.definitions[0]
@@ -134,7 +139,6 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 			ContentHeight: formDefinitionHeight(keywordDefinition, form.values),
 			Intro:         a.translate("i18n:ui_plugin_trigger_keywords_tip"),
 		}
-		a.applyPluginFormState(editor, snapshot)
 		props.Editor = editor
 		return props
 	}
@@ -150,13 +154,16 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 	rows := make([]woxwidget.Widget, 0, len(settingDefinitions))
 	for index, definition := range settingDefinitions {
 		formIndex := index + 1
-		rows = append(rows, a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, formIndex, definition, innerWidth, formDefinitionHeight(definition, form.values)))
+		rowHeight := formDefinitionHeight(definition, form.values)
+		field := a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, formIndex, definition, innerWidth, rowHeight)
+		rows = append(rows, woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
+			Width: innerWidth, Height: rowHeight, Highlighted: snapshot.highlight == "plugin-setting:"+plugin.ID+"\x00"+definition.Value.Key, Child: field, Theme: snapshot.palette.componentTheme(),
+		}))
 	}
 	editor.Form = &launcherview.PluginFormProps{
 		Rows: rows, ContentHeight: formDefinitionsContentHeight(settingDefinitions, form.values), KeepVisible: pluginSettingsKeepVisible(form.formFieldsSnapshot),
 		EmptyTitle: a.translate("i18n:ui_plugin_no_settings"), EmptyDescription: a.translate("i18n:ui_plugin_no_settings_subtitle"),
 	}
-	a.applyPluginFormState(editor, snapshot)
 	props.Editor = editor
 	return props
 }
@@ -183,28 +190,6 @@ func (a *App) pluginFormLabelWidth(definitions []formDefinition) float32 {
 		}
 	}
 	return min(width, float32(200))
-}
-
-// applyPluginFormState keeps the shared save and operation state identical across
-// the Settings and Trigger Keywords tabs.
-func (a *App) applyPluginFormState(editor *launcherview.PluginEditorProps, snapshot settingsSnapshot) {
-	form := snapshot.plugins.PluginForm
-	if form == nil {
-		return
-	}
-	editor.Status = form.status
-	editor.StatusError = form.statusError
-	if snapshot.plugins.PluginOperationError != "" {
-		editor.Status = snapshot.plugins.PluginOperationError
-		editor.StatusError = true
-	}
-	editor.SaveLabel = a.translate("i18n:ui_save")
-	if form.saving {
-		editor.SaveLabel += "…"
-	}
-	editor.ShowSave = form.dirty || form.saving
-	editor.SaveHighlight = form.dirty && !form.saving
-	editor.OnSave = a.submitPluginSettings
 }
 
 // pluginSettingsKeepVisible translates the retained form index past the hidden

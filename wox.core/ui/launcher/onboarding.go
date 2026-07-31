@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"wox/common"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -209,7 +208,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 		selectionHotkeyLabels = formatHotkeyLabels(snapshot.hotkey.Form.values["SelectionHotkey"])
 	}
 	return launcherview.OnboardingView(launcherview.OnboardingProps{
-		Width: frame.Size.Width, Height: frame.Size.Height, AppIcon: a.imageFor(fromCoreImage(common.WoxIcon)),
+		Width: frame.Size.Width, Height: frame.Size.Height, AppIcon: a.imageFor(appIconImageSource),
 		Wallpaper: snapshot.theme.ThemeWallpaperImage, WallpaperBlurred: snapshot.theme.ThemeWallpaperBlurred,
 		Steps: steps, ActiveStep: active, Labels: labels, Language: language,
 		GlanceEnabled: snapshot.general.Data.EnableGlance, GlanceLabel: glanceLabel, GlanceValue: glanceValue, GlanceIcon: glanceIcon,

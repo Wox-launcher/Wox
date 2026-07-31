@@ -36,6 +36,8 @@ type SettingsChoiceProps struct {
 	Theme        woxcomponent.Theme
 	Window       *woxui.Window
 	Title        string
+	FilterHint   string
+	SearchIcon   *woxui.Image
 	CurrentValue string
 	Choices      []SettingsChoice
 	OnChoose     func(int)
@@ -114,16 +116,17 @@ func buildSettingsChoiceView(context woxwidget.StateContext, props SettingsChoic
 	menuWidth := min(anchor.Width, max(float32(1), props.Width-settingsChoiceMenuMargin*2))
 	menuLeft := min(max(settingsChoiceMenuMargin, anchor.X), max(settingsChoiceMenuMargin, props.Width-menuWidth-settingsChoiceMenuMargin))
 	searchHeight := float32(0)
+	menuPadding := settingsChoiceMenuPadding
 	if props.Filterable {
 		searchHeight = settingsChoiceSearchHeight
+		menuPadding = 0
 	}
-	rowCount := max(1, len(visible))
-	maximumMenuHeight := min(settingsChoiceMaxHeight, max(settingsChoiceRowHeight+settingsChoiceMenuPadding*2+searchHeight, props.Height-settingsChoiceMenuMargin*2))
-	maximumListHeight := max(settingsChoiceRowHeight, maximumMenuHeight-settingsChoiceMenuPadding*2-searchHeight)
-	listHeight := min(float32(rowCount)*settingsChoiceRowHeight, maximumListHeight)
-	menuHeight := settingsChoiceMenuPadding*2 + searchHeight + listHeight
+	maximumMenuHeight := min(settingsChoiceMaxHeight, max(searchHeight+menuPadding*2, props.Height-settingsChoiceMenuMargin*2))
+	maximumListHeight := max(float32(0), maximumMenuHeight-menuPadding*2-searchHeight)
+	listHeight := min(float32(len(visible))*settingsChoiceRowHeight, maximumListHeight)
+	menuHeight := menuPadding*2 + searchHeight + listHeight
 	menuTop := settingsChoiceMenuTop(props, anchor, menuHeight, listHeight)
-	menu := settingsChoiceMenu(context, props, state, visible, menuWidth, menuHeight, listHeight)
+	menu := settingsChoiceMenu(context, props, state, visible, menuWidth, menuHeight, listHeight, menuPadding)
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
 		{Child: woxwidget.Gesture{ID: "setting-choice-backdrop", OnTap: props.OnCancel, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
 		{Left: menuLeft, Top: menuTop, Child: menu},
@@ -142,10 +145,10 @@ func settingsChoiceCurrentIndex(choices []SettingsChoice, value string) int {
 
 // filteredSettingsChoices retains original option indexes for business-value callbacks.
 func filteredSettingsChoices(choices []SettingsChoice, query string) []visibleSettingsChoice {
-	query = strings.ToLower(strings.TrimSpace(query))
+	query = strings.ToLower(query)
 	visible := make([]visibleSettingsChoice, 0, len(choices))
 	for index, choice := range choices {
-		if query == "" || strings.Contains(strings.ToLower(choice.Label), query) || strings.Contains(strings.ToLower(choice.Value), query) {
+		if query == "" || strings.Contains(strings.ToLower(choice.Label), query) || strings.Contains(strings.ToLower(choice.Trailing), query) || strings.Contains(strings.ToLower(choice.Tooltip), query) {
 			visible = append(visible, visibleSettingsChoice{choice: choice, originalIndex: index})
 		}
 	}
@@ -174,13 +177,13 @@ func settingsChoiceMenuTop(props SettingsChoiceProps, anchor woxui.Rect, menuHei
 	return min(max(settingsChoiceMenuMargin, top), max(settingsChoiceMenuMargin, props.Height-menuHeight-settingsChoiceMenuMargin))
 }
 
-func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProps, state *settingsChoiceState, visible []visibleSettingsChoice, width, height, listHeight float32) woxwidget.Widget {
+func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProps, state *settingsChoiceState, visible []visibleSettingsChoice, width, height, listHeight, menuPadding float32) woxwidget.Widget {
 	rows := make([]woxwidget.Widget, 0, max(1, len(visible)))
 	for index, visibleChoice := range visible {
 		index := index
 		visibleChoice := visibleChoice
 		choice := visibleChoice.choice
-		selected := index == state.selected
+		selected := choice.Value == props.CurrentValue
 		background := props.Theme.ActionBackground
 		foreground := props.Theme.ActionText
 		if selected {
@@ -257,21 +260,21 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			}, Child: row,
 		})
 	}
-	if len(rows) == 0 {
-		rows = append(rows, woxwidget.Container{Width: width, Height: settingsChoiceRowHeight, Padding: woxwidget.Insets{Left: 16, Top: 15}, Child: woxwidget.Text{
-			Value: "No matching choices", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle,
-		}})
-	}
-	list := woxwidget.ScrollView{
-		Key: woxwidget.Key(props.ID + "-list"), ID: props.ID + "-list", Controller: state.scrollController,
-		Width: width, Height: listHeight, ContentHeight: max(listHeight, float32(len(rows))*settingsChoiceRowHeight),
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-	}
 	children := make([]woxwidget.Widget, 0, 2)
 	if props.Filterable {
+		filterHint := props.FilterHint
+		if filterHint == "" {
+			filterHint = "Filter..."
+		}
+		iconWidth := float32(0)
+		var icon woxwidget.Widget = woxwidget.Painter{}
+		if props.SearchIcon != nil {
+			iconWidth = 28
+			icon = woxwidget.Align{Width: iconWidth, Height: settingsChoiceSearchHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: props.SearchIcon, Width: 16, Height: 16}}
+		}
 		search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
-			ID: "setting-choice-search", Label: "Filter choices", Hint: "Filter choices…", Width: width, Height: 40, Radius: 4,
-			Padding: woxwidget.Insets{Left: 10, Top: 9, Right: 10, Bottom: 7}, Background: props.Theme.ToolbarBackground,
+			ID: "setting-choice-search", Label: filterHint, Hint: filterHint, Width: max(float32(0), width-16-iconWidth), Height: 40, Radius: 0,
+			Padding: woxwidget.Insets{Left: 2, Top: 9, Right: 8, Bottom: 7}, TextAlignmentY: 0.5, Transparent: true,
 			Controller: state.queryController, FocusNode: state.queryFocusNode, Autofocus: true, MaxLines: 1, Window: props.Window, Theme: props.Theme,
 			OnKey: func(event woxui.KeyEvent) bool { return state.handleKey(context, props, visible, event) },
 			OnChanged: func(string) {
@@ -281,11 +284,17 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 				})
 			},
 		})
-		children = append(children, woxwidget.Container{Width: width, Height: settingsChoiceSearchHeight, Padding: woxwidget.Insets{Bottom: 8}, Child: search})
+		children = append(children, woxwidget.Container{Width: width, Height: settingsChoiceSearchHeight, Color: props.Theme.ToolbarBackground, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{icon, search}}})
 	}
-	children = append(children, list)
+	if len(rows) > 0 {
+		children = append(children, woxwidget.ScrollView{
+			Key: woxwidget.Key(props.ID + "-list"), ID: props.ID + "-list", Controller: state.scrollController,
+			Width: width, Height: listHeight, ContentHeight: max(listHeight, float32(len(rows))*settingsChoiceRowHeight),
+			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
+		})
+	}
 	menuContent := woxwidget.Container{Width: width, Height: height, Radius: 4, Color: props.Theme.ActionBackground,
-		Padding: woxwidget.Insets{Top: settingsChoiceMenuPadding, Bottom: settingsChoiceMenuPadding},
+		Padding: woxwidget.Insets{Top: menuPadding, Bottom: menuPadding},
 		Child:   woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
 	// Paint the border after the rows so their full-width backgrounds cannot cover the inset stroke.
 	menuBorder := woxwidget.Container{Width: width, Height: height, Radius: 4, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1}

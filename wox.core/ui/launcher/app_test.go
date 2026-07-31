@@ -3,7 +3,10 @@ package launcher
 import (
 	"testing"
 
+	"wox/common"
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
+	utilselection "wox/util/selection"
 )
 
 func TestLauncherWindowOriginPreservesDraggedPosition(t *testing.T) {
@@ -61,5 +64,72 @@ func TestHotkeyMatchesOnlyKeyDown(t *testing.T) {
 	}
 	if hotkeyMatches("cmd+t", woxui.KeyEvent{Key: "t", Modifiers: woxui.KeyModifierMeta, Down: true, Composing: true}) {
 		t.Fatal("composing key unexpectedly matched Cmd+T")
+	}
+}
+
+func TestPreviousQueryHistoryStartsAtLatestInFreshMode(t *testing.T) {
+	app := &App{
+		queryHistories:    []plainQuery{newInputQuery("latest"), newInputQuery("older")},
+		queryHistoryIndex: -1,
+		canRecallHistory:  true,
+	}
+
+	query, handled := app.previousQueryHistory()
+	if !handled || query == nil || query.QueryText != "latest" {
+		t.Fatalf("first recalled query = %#v, handled = %v, want latest", query, handled)
+	}
+	query, handled = app.previousQueryHistory()
+	if !handled || query == nil || query.QueryText != "older" {
+		t.Fatalf("second recalled query = %#v, handled = %v, want older", query, handled)
+	}
+	query, handled = app.previousQueryHistory()
+	if !handled || query != nil {
+		t.Fatalf("exhausted history query = %#v, handled = %v, want nil and handled", query, handled)
+	}
+}
+
+func TestPreviousQueryHistorySkipsCurrentQueryInContinueMode(t *testing.T) {
+	app := &App{
+		queryHistories:    []plainQuery{newInputQuery("current"), newInputQuery("previous")},
+		queryHistoryIndex: 0,
+		canRecallHistory:  true,
+	}
+
+	query, handled := app.previousQueryHistory()
+	if !handled || query == nil || query.QueryText != "previous" {
+		t.Fatalf("recalled query = %#v, handled = %v, want previous", query, handled)
+	}
+	app.canRecallHistory = false
+	query, handled = app.previousQueryHistory()
+	if handled || query != nil {
+		t.Fatalf("disabled history query = %#v, handled = %v, want nil and unhandled", query, handled)
+	}
+}
+
+func TestQueryTextChangeDisablesHistoryRecall(t *testing.T) {
+	app := &App{query: newInputQuery(""), canRecallHistory: true, selected: -1}
+
+	app.applyQueryTextChangeLocked("typed")
+
+	if app.canRecallHistory {
+		t.Fatal("history recall remained enabled after query text changed")
+	}
+}
+
+func TestFromCoreShowOptionsPreservesQueryHistoryOrderAndPayload(t *testing.T) {
+	options := contract.ShowOptions{QueryHistories: []common.PlainQuery{
+		{QueryId: "latest-id", QueryType: "input", QueryText: "latest", QueryRefinements: map[string]string{"scope": "recent"}, ContextData: common.ContextData{"token": "latest"}},
+		{QueryId: "older-id", QueryType: "selection", QueryText: "older", QuerySelection: utilselection.Selection{Text: "selected"}},
+	}}
+
+	params := fromCoreShowOptions(options)
+	if len(params.QueryHistories) != 2 {
+		t.Fatalf("query history count = %d, want 2", len(params.QueryHistories))
+	}
+	if got := params.QueryHistories[0]; got.QueryID != "latest-id" || got.QueryText != "latest" || got.QueryRefinements["scope"] != "recent" || got.ContextData["token"] != "latest" {
+		t.Fatalf("latest query history = %#v, want complete latest payload", got)
+	}
+	if got := params.QueryHistories[1]; got.QueryID != "older-id" || got.QueryType != "selection" || got.QuerySelection.Text != "selected" {
+		t.Fatalf("older query history = %#v, want complete older payload", got)
 	}
 }

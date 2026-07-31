@@ -68,6 +68,43 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 	}
 }
 
+func TestPluginListSearchHighlightKeepsSelectedFillAndAddsBorder(t *testing.T) {
+	selected := woxui.Color{R: 60, G: 80, B: 100, A: 255}
+	list := PluginList(PluginListProps{
+		Width: 260, Height: 660,
+		Items: []PluginListItem{{ID: "clipboard", Name: "Clipboard", Selected: true, Highlighted: true}},
+		Theme: woxcomponent.Theme{SelectedBackground: selected},
+	})
+
+	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
+	row := column.Children[1].(woxwidget.ScrollView).Child.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
+	if row.Color != selected {
+		t.Fatalf("selected plugin fill = %#v, want selected color %#v", row.Color, selected)
+	}
+	if row.BorderWidth != 1 || row.BorderColor.A != 122 {
+		t.Fatalf("plugin search highlight border = %#v at %v, want Flutter 0.48 alpha border", row.BorderColor, row.BorderWidth)
+	}
+}
+
+func TestPluginEditorAutoSavingFormHasNoFooter(t *testing.T) {
+	editor := pluginEditor(PluginEditorProps{
+		Header:    PluginHeaderProps{},
+		ActiveTab: "settings",
+		Form: &PluginFormProps{
+			Rows:          []woxwidget.Widget{woxwidget.Container{Width: 400, Height: 40}},
+			ContentHeight: 40,
+		},
+	}, 600, 500, woxcomponent.Theme{})
+
+	children := editor.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	if len(children) != 3 {
+		t.Fatalf("plugin editor child count = %d, want header, tabs, and form only", len(children))
+	}
+	if _, ok := children[2].(woxwidget.ScrollView); !ok {
+		t.Fatalf("plugin editor body type = %T, want scroll view without a save footer", children[2])
+	}
+}
+
 func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 	field := FormTableField(FormTableFieldProps{
 		ID: "commands", Title: "Commands", Width: 720, Height: 220, InlineTitle: true,

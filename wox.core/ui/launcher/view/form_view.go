@@ -6,6 +6,8 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+const formAIModelControlHeight = float32(34)
+
 // FormPanelProps contains the prepared rows and actions rendered by a launcher form.
 type FormPanelProps struct {
 	Width         float32
@@ -79,26 +81,22 @@ type FormModelFieldProps struct {
 	Label       string
 	Description string
 	Value       string
-	Status      string
 	Width       float32
 	Height      float32
 	LabelWidth  float32
 	Focused     bool
 	Theme       woxcomponent.Theme
-	OnTap       func()
+	OnTap       func(woxui.Rect)
 }
 
-// FormModelField builds a model selector row.
+// FormModelField builds the same compact outlined dropdown trigger used by Flutter.
 func FormModelField(props FormModelFieldProps) woxwidget.Widget {
-	background := formFieldBackground(props.Focused, props.Theme)
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
-	control := woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
-		Width: controlWidth, Height: 56, Radius: 8, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: props.Value, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
-			woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.ActionHeader},
-		}},
-	}}
-	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 56, props.Theme)
+	control := woxDropdown(dropdownTriggerProps{
+		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: 34, Outline: formFieldOutline(props.Focused, props.Theme),
+		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, OnTapBounds: props.OnTap,
+	})
+	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 34, props.Theme)
 }
 
 // FormAppFieldProps contains one application selector row.
@@ -139,24 +137,22 @@ type FormHotkeyFieldProps struct {
 	Status      string
 	Width       float32
 	Height      float32
+	LabelWidth  float32
 	Focused     bool
 	Recording   bool
+	Error       bool
+	Hold        bool
+	HoldPrefix  string
 	Window      *woxui.Window
 	Theme       woxcomponent.Theme
 	OnTap       func()
 }
 
-// FormHotkeyField keeps the recorder right-aligned without moving it when a recording hint appears.
+// FormHotkeyField keeps the recorder at the start of Flutter's shared control column.
 func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
-	labelWidth := float32(132)
-	gap := float32(10)
-	if props.Width >= 842 {
-		labelWidth = min(float32(550), max(float32(132), props.Width-292))
-		gap = 32
-	}
-	controlWidth := max(float32(0), props.Width-labelWidth-gap)
 	recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
-		Labels: props.Labels, Placeholder: props.Placeholder, Focused: props.Focused, Window: props.Window, Theme: props.Theme,
+		Labels: props.Labels, Placeholder: props.Placeholder, Focused: props.Focused, Error: props.Error, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
+		Window: props.Window, Theme: props.Theme,
 	})
 	recorder = woxwidget.Semantics{
 		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,
@@ -169,18 +165,19 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 		},
 		Child: woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: recorder},
 	}
-	recorderLeft := max(float32(0), controlWidth-recorderWidth)
-	controlChildren := []woxwidget.StackChild{{Left: recorderLeft, Top: 8, Child: recorder}}
-	if props.Recording && props.Status != "" && recorderLeft > 8 {
-		controlChildren = append(controlChildren, woxwidget.StackChild{Top: 14, Child: woxwidget.Align{
-			Width: recorderLeft - 8, Height: 18, Horizontal: 1, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
+	controlChildren := []woxwidget.StackChild{{Top: 2, Child: recorder}}
+	if props.Recording && props.Status != "" && controlWidth > recorderWidth+12 {
+		statusColor := props.Theme.ResultSubtitle
+		if props.Error {
+			statusColor = props.Theme.ErrorText
+		}
+		controlChildren = append(controlChildren, woxwidget.StackChild{Left: recorderWidth + 12, Top: 8, Child: woxwidget.Text{
+			Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
 		}})
 	}
-	control := woxwidget.Stack{Width: controlWidth, Height: 46, Children: controlChildren}
-	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
-		Label: props.Label, Description: props.Description, Width: props.Width, Height: props.Height, LabelWidth: labelWidth, Gap: gap,
-		Padding: woxwidget.Insets{Top: 5, Bottom: 5}, Child: control, Theme: props.Theme,
-	})
+	control := woxwidget.Stack{Width: controlWidth, Height: 34, Children: controlChildren}
+	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 34, props.Theme)
 }
 
 // FormSwitchFieldProps contains one Flutter-style plugin boolean row.
@@ -226,6 +223,127 @@ func FormSelectField(props FormSelectFieldProps) woxwidget.Widget {
 	})
 	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 34, props.Theme)
 }
+
+// FormAIModelFieldProps contains Flutter's two-part provider/model selector state.
+type FormAIModelFieldProps struct {
+	ID                 string
+	Label              string
+	Description        string
+	Provider           string
+	Model              string
+	ModelNameHint      string
+	ProviderIcon       *woxui.Image
+	ModelIcon          *woxui.Image
+	EditIcon           *woxui.Image
+	ListIcon           *woxui.Image
+	ModelsAvailable    bool
+	Width              float32
+	Height             float32
+	LabelWidth         float32
+	Focused            bool
+	Window             *woxui.Window
+	Theme              woxcomponent.Theme
+	OnProviderTap      func(woxui.Rect)
+	OnModelTap         func(woxui.Rect)
+	OnModelNameChanged func(string)
+	OnFinishEdit       func(string)
+	OnEditModeChanged  func(bool)
+}
+
+// FormAIModelField retains only edit-mode and text interaction state; the committed model stays in the form.
+func FormAIModelField(props FormAIModelFieldProps) woxwidget.Widget {
+	return woxwidget.Stateful{
+		Key: woxwidget.Key(props.ID + "-ai-model"), Type: (*formAIModelFieldState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &formAIModelFieldState{} },
+	}
+}
+
+type formAIModelFieldState struct {
+	editing    bool
+	controller *woxwidget.TextEditingController
+	focusNode  *woxwidget.FocusNode
+}
+
+func (s *formAIModelFieldState) InitState(_ woxwidget.StateContext, widget any) {
+	props := widget.(FormAIModelFieldProps)
+	s.controller = woxwidget.NewTextEditingController(props.Model)
+	s.focusNode = woxwidget.NewFocusNode()
+}
+
+func (s *formAIModelFieldState) DidUpdateWidget(_ woxwidget.StateContext, oldWidget, newWidget any) {
+	oldProps := oldWidget.(FormAIModelFieldProps)
+	props := newWidget.(FormAIModelFieldProps)
+	if !s.editing && oldProps.Model != props.Model {
+		s.controller.SetText(props.Model, false)
+	}
+}
+
+func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(FormAIModelFieldProps)
+	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
+	editWidth := float32(34)
+	gap := float32(8)
+	selectorsWidth := max(float32(0), controlWidth-editWidth-gap)
+	providerWidth := max(float32(90), (selectorsWidth-gap)/3)
+	modelWidth := max(float32(120), selectorsWidth-gap-providerWidth)
+	outline := formFieldOutline(props.Focused, props.Theme)
+
+	provider := woxDropdown(dropdownTriggerProps{
+		ID: props.ID + "-provider", Label: props.Label + " provider", Value: props.Provider, Leading: props.ProviderIcon,
+		Width: providerWidth, Height: formAIModelControlHeight, Outline: outline, Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader,
+		OnTapBounds: props.OnProviderTap,
+	})
+	var model woxwidget.Widget
+	if s.editing {
+		model = woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
+			ID: props.ID + "-name", Label: props.Label, Hint: props.ModelNameHint, Width: modelWidth, Height: formAIModelControlHeight, Radius: 4,
+			Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 9, Bottom: 6}, Transparent: true, BorderColor: outline, BorderWidth: 1,
+			Style: woxui.TextStyle{Size: 13}, Controller: s.controller, FocusNode: s.focusNode, Autofocus: true, MaxLines: 1, Window: props.Window, Theme: props.Theme,
+			OnChanged: props.OnModelNameChanged,
+		})
+	} else {
+		model = woxDropdown(dropdownTriggerProps{
+			ID: props.ID + "-model", Label: props.Label + " model", Value: props.Model, Leading: props.ModelIcon,
+			Width: modelWidth, Height: formAIModelControlHeight, Outline: outline, Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader,
+			OnTapBounds: props.OnModelTap,
+		})
+	}
+
+	icon := props.EditIcon
+	buttonLabel := "Edit model name"
+	if s.editing {
+		icon = props.ListIcon
+		buttonLabel = "Choose a configured model"
+	}
+	toggleEditing := func() {
+		if s.editing && props.OnFinishEdit != nil {
+			props.OnFinishEdit(s.controller.Text())
+		}
+		if props.OnEditModeChanged != nil {
+			props.OnEditModeChanged(!s.editing)
+		}
+		context.SetState(func() { s.editing = !s.editing })
+	}
+	toggle := woxwidget.Semantics{
+		Key: woxwidget.Key(props.ID + "-edit"), AutomationID: props.ID + "-edit", Role: woxui.AccessibilityRoleButton, Label: buttonLabel,
+		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+		OnAction: func(action woxui.AccessibilityAction, _ string) error {
+			if action == woxui.AccessibilityActionActivate {
+				toggleEditing()
+			}
+			return nil
+		},
+		Child: woxwidget.Gesture{ID: props.ID + "-edit", OnTap: toggleEditing, Child: woxwidget.Align{Width: editWidth, Height: formAIModelControlHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: icon, Width: 18, Height: 18}}},
+	}
+	if !props.ModelsAvailable || props.Model == "" {
+		toggle = woxwidget.Semantics{Key: woxwidget.Key(props.ID + "-edit"), AutomationID: props.ID + "-edit", Role: woxui.AccessibilityRoleButton, Label: buttonLabel, Disabled: true,
+			Child: woxwidget.Align{Width: editWidth, Height: formAIModelControlHeight, Horizontal: 0.5, Vertical: 0.5}}
+	}
+	control := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{provider, model, toggle}}
+	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, formAIModelControlHeight, props.Theme)
+}
+
+func (s *formAIModelFieldState) Dispose() {}
 
 // FormTextFieldProps contains one editable form row.
 type FormTextFieldProps struct {

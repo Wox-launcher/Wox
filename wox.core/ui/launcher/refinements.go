@@ -133,6 +133,7 @@ func (a *App) applyRefinementsLocked(refinements []queryRefinement) {
 
 // applyQueryTextChangeLocked starts a new query while retaining controls only inside their plugin scope.
 func (a *App) applyQueryTextChangeLocked(text string) {
+	a.canRecallHistory = false
 	a.reuseCompletionHintLocked(text)
 	nextScope := refinementQueryScope(text)
 	if a.refinementScope != "" && nextScope != a.refinementScope {

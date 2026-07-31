@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 
-	"wox/common"
 	launcherview "wox/ui/launcher/view"
 	woxwidget "wox/ui/widget"
 )
@@ -25,7 +24,7 @@ func (a *App) buildAboutSettingsPage(snapshot settingsSnapshot, width, height fl
 	theme := snapshot.palette.componentTheme()
 	iconTint := theme.ResultTitle
 	return launcherview.AboutSettingsView(launcherview.AboutSettingsProps{
-		Width: width, Height: height, AppIcon: a.imageFor(fromCoreImage(common.WoxIcon)), Version: version,
+		Width: width, Height: height, AppIcon: a.imageFor(appIconImageSource), Version: version,
 		Description: a.translate("i18n:ui_about_description"), Status: status, Theme: theme,
 		Links: []launcherview.AboutLink{
 			{ID: "about-open-onboarding-button", Label: a.translate("i18n:ui_about_onboarding"), Icon: a.imageForTint(settingControlIconSource("onboarding"), &iconTint, 18), OnTap: a.openAboutOnboarding},

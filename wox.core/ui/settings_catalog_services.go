@@ -80,7 +80,7 @@ func (s *CoreServices) AIProviders(_ context.Context, _ string) ([]contract.AIPr
 	providers := ai.GetAllProviders()
 	converted := make([]contract.AIProvider, len(providers))
 	for index, provider := range providers {
-		converted[index] = contract.AIProvider{Name: string(provider.Name), DefaultHost: provider.DefaultHost}
+		converted[index] = contract.AIProvider{Name: string(provider.Name), Icon: provider.Icon, DefaultHost: provider.DefaultHost}
 	}
 	return converted, nil
 }

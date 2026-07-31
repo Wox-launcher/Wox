@@ -3,12 +3,15 @@ package launcher
 import (
 	"sort"
 	"strings"
+	"time"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/fuzzymatch"
 )
+
+const settingsSearchHighlightDuration = 1500 * time.Millisecond
 
 type settingsSearchResultKind uint8
 
@@ -23,6 +26,7 @@ type settingsSearchResult struct {
 	kind        settingsSearchResultKind
 	title       string
 	subtitle    string
+	icon        woxImage
 	tab         string
 	settingKey  string
 	pluginID    string
@@ -64,17 +68,19 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 
 	candidates := make([]settingsSearchResult, 0, 96)
 	for _, tab := range settingTabs(snapshot.isDev) {
+		tabLabel := a.settingsSearchTabLabel(tab, snapshot.isDev)
 		candidates = append(candidates, settingsSearchResult{
-			kind: settingsSearchSection, title: tab.label, subtitle: "Settings section", tab: tab.id,
-			searchTexts: []string{tab.id, tab.label},
+			kind: settingsSearchSection, title: tabLabel, subtitle: "Settings section", tab: tab.id,
+			searchTexts: []string{tab.id, tabLabel},
 		})
 		tabSnapshot := snapshot
 		tabSnapshot.tab = tab.id
 		for _, item := range settingItemsForSnapshot(tabSnapshot) {
-			texts := []string{item.key, item.title, tab.label}
+			item = a.localizedSettingItem(item)
+			texts := []string{item.key, item.title, tabLabel}
 			texts = append(texts, builtInSettingSearchAliases[item.key]...)
 			candidates = append(candidates, settingsSearchResult{
-				kind: settingsSearchSetting, title: item.title, subtitle: tab.label, tab: tab.id, settingKey: item.key, searchTexts: normalizeSettingsSearchTexts(texts),
+				kind: settingsSearchSetting, title: item.title, subtitle: tabLabel, tab: tab.id, settingKey: item.key, searchTexts: normalizeSettingsSearchTexts(texts),
 			})
 		}
 	}
@@ -91,7 +97,7 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 			pluginTitle = plugin.ID
 		}
 		candidates = append(candidates, settingsSearchResult{
-			kind: settingsSearchPlugin, title: pluginTitle, subtitle: firstNonEmpty(plugin.Description, plugin.ID), tab: "plugins", pluginID: plugin.ID,
+			kind: settingsSearchPlugin, title: pluginTitle, subtitle: firstNonEmpty(plugin.Description, plugin.ID), icon: plugin.Icon, tab: "plugins", pluginID: plugin.ID,
 			searchTexts: normalizeSettingsSearchTexts(append([]string{plugin.ID, pluginTitle, plugin.Author, plugin.Runtime}, plugin.TriggerKeywords...)),
 		})
 		for _, definition := range plugin.SettingDefinitions {
@@ -105,7 +111,7 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 				texts = append(texts, a.translate(alias))
 			}
 			candidates = append(candidates, settingsSearchResult{
-				kind: settingsSearchPluginSetting, title: title, subtitle: pluginTitle, tab: "plugins", pluginID: plugin.ID, settingKey: key,
+				kind: settingsSearchPluginSetting, title: title, subtitle: pluginTitle, icon: plugin.Icon, tab: "plugins", pluginID: plugin.ID, settingKey: key,
 				searchTexts: normalizeSettingsSearchTexts(texts),
 			})
 		}
@@ -131,6 +137,16 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 		results = results[:8]
 	}
 	return results
+}
+
+// settingsSearchTabLabel uses the same localized navigation label shown by the destination page.
+func (a *App) settingsSearchTabLabel(tab settingTab, isDev bool) string {
+	for _, spec := range settingNavSpecs(isDev) {
+		if spec.tab == tab.id {
+			return a.settingNavLabel(spec)
+		}
+	}
+	return tab.label
 }
 
 func (a *App) settingsFormSearchCandidates(form *formFieldsSnapshot, tab, subtitle string) []settingsSearchResult {
@@ -377,6 +393,7 @@ func (a *App) activateSettingsSearchResult(result settingsSearchResult) {
 	a.selectSettingTab(result.tab)
 	if result.settingKey != "" {
 		a.focusBuiltInSettingsSearchTarget(result.tab, result.settingKey)
+		a.startSettingsSearchHighlight(settingsSearchHighlightTarget(result))
 	}
 	a.invalidateSettingsWindow()
 }
@@ -417,6 +434,7 @@ func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
 		for index, plugin := range plugins {
 			if plugin.ID == result.pluginID {
 				a.selectPlugin(index)
+				a.startSettingsSearchHighlight(settingsSearchHighlightTarget(result))
 				a.focusPluginSettingsSearchTarget(result.pluginID, result.settingKey)
 				return
 			}
@@ -427,11 +445,7 @@ func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
 	if form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
-			form.status = "Save the current plugin changes before opening a search result."
-			form.statusError = true
-			a.selectSettingTab("plugins")
-			a.invalidateSettingsWindow()
-			return
+			a.submitPluginSettings()
 		}
 	}
 	a.pluginSettings.SetPluginsStore(false)
@@ -444,6 +458,7 @@ func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
 	util.Go(a.lifecycleCtx, "open plugin setting search result", func() {
 		if err := a.reloadPlugins(false, result.pluginID); err == nil {
 			if dispatchErr := a.runOnUI("focus plugin setting search target", func() {
+				a.startSettingsSearchHighlight(settingsSearchHighlightTarget(result))
 				a.focusPluginSettingsSearchTarget(result.pluginID, result.settingKey)
 			}); dispatchErr != nil {
 				return
@@ -459,6 +474,7 @@ func (a *App) focusPluginSettingsSearchTarget(pluginID, settingKey string) {
 	}
 	form := a.pluginSettings.Form()
 	if form != nil && form.pluginID == pluginID {
+		a.pluginSettings.SetDetailTab("settings")
 		for index, definition := range form.definitions {
 			if definition.Value.Key == settingKey {
 				form.focused = index
@@ -467,4 +483,48 @@ func (a *App) focusPluginSettingsSearchTarget(pluginID, settingKey string) {
 		}
 	}
 	a.invalidateSettingsWindow()
+}
+
+func settingsSearchHighlightTarget(result settingsSearchResult) string {
+	switch result.kind {
+	case settingsSearchPlugin:
+		return "plugin:" + result.pluginID
+	case settingsSearchPluginSetting:
+		return "plugin-setting:" + result.pluginID + "\x00" + result.settingKey
+	default:
+		if result.settingKey != "" {
+			return "built-in:" + result.settingKey
+		}
+		return ""
+	}
+}
+
+// startSettingsSearchHighlight flashes the destination after search navigation and replaces any older cue.
+func (a *App) startSettingsSearchHighlight(target string) {
+	if target == "" {
+		return
+	}
+	if a.settingFlashTimer != nil {
+		a.settingFlashTimer.Stop()
+	}
+	a.settingFlash = target
+	a.settingFlashTimer = time.AfterFunc(settingsSearchHighlightDuration, func() {
+		_ = a.runOnUI("clear settings search highlight", func() {
+			if a.settingFlash != target {
+				return
+			}
+			a.settingFlash = ""
+			a.settingFlashTimer = nil
+			a.invalidateSettingsWindow()
+		})
+	})
+	a.invalidateSettingsWindow()
+}
+
+func (a *App) clearSettingsSearchHighlight() {
+	if a.settingFlashTimer != nil {
+		a.settingFlashTimer.Stop()
+		a.settingFlashTimer = nil
+	}
+	a.settingFlash = ""
 }

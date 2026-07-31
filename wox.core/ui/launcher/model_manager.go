@@ -32,6 +32,8 @@ type modelManagerState struct {
 	loading     bool
 	busy        string
 	error       string
+	anchor      woxui.Rect
+	anchored    bool
 }
 
 type modelManagerSnapshot struct {
@@ -43,13 +45,22 @@ type modelManagerSnapshot struct {
 	loading     bool
 	busy        string
 	error       string
+	anchor      woxui.Rect
+	anchored    bool
 }
 
 // buildModelManagerOverlay converts controller state into the pure modal view.
 func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
 	title := "Dictation models"
+	downloadLabel := a.translate("i18n:plugin_dictation_model_download")
+	retryLabel := a.translate("i18n:plugin_dictation_model_retry")
+	deleteLabel := a.translate("i18n:plugin_dictation_model_delete")
+	recommendedLabel := a.translate("i18n:plugin_dictation_model_recommended")
 	if snapshot.kind == "ocrModel" {
 		title = "OCR models"
+		downloadLabel = a.translate("i18n:plugin_ocr_model_download")
+		retryLabel = a.translate("i18n:plugin_ocr_model_retry")
+		deleteLabel = "Delete"
 	}
 	engineLabel := "Checking inference engine…"
 	engineButtonLabel := "Download engine"
@@ -80,7 +91,7 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 		option := option
 		selected := modelOptionID(option) == snapshot.selected
 		usable := modelOptionUsable(snapshot.kind, option)
-		actionLabel := "Download"
+		actionLabel := downloadLabel
 		actionEnabled := snapshot.busy == "" && !snapshot.loading
 		action := func() { a.runModelManagerAction("download", index) }
 		if usable {
@@ -94,7 +105,7 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 			actionLabel = fmt.Sprintf("%d%%", option.DownloadProgress)
 			actionEnabled = false
 		} else if option.Status == "failed" {
-			actionLabel = "Retry"
+			actionLabel = retryLabel
 		}
 		if selected {
 			actionLabel = "Selected"
@@ -110,13 +121,13 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 			detail = modelStatusLabel(option)
 		}
 		name := modelOptionLabel(option)
-		if option.Recommended {
-			name += " · Recommended"
-		}
 		converted := launcherview.ModelManagerOption{
-			Name: name, Detail: detail, Status: modelStatusLabel(option), SelectedRow: index == snapshot.selectedRow,
+			Name: name, Detail: detail, Status: modelStatusLabel(option), Languages: option.Languages, Description: option.Description, SizeMB: option.SizeMB, Recommended: option.Recommended, SelectedRow: index == snapshot.selectedRow,
 			PrimaryAction: usable, ActionLabel: actionLabel, ActionEnabled: actionEnabled, OnAction: action,
 			OnSelect: func() { a.selectModelManagerRow(index) },
+		}
+		if usable {
+			converted.OnChoose = func() { a.chooseManagedModel(index) }
 		}
 		if snapshot.kind == "dictationModel" && option.Status == "downloaded" {
 			converted.OnDelete = func() { a.runModelManagerAction("delete", index) }
@@ -125,8 +136,10 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 	}
 	return launcherview.ModelManagerView(launcherview.ModelManagerProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Title: title,
+		Anchor: snapshot.anchor, Anchored: snapshot.anchored,
 		Loading: snapshot.loading, Busy: snapshot.busy != "", Error: snapshot.error,
-		EngineLabel: engineLabel, EngineButtonLabel: engineButtonLabel, EngineEnabled: engineEnabled, Options: options,
+		EngineLabel: engineLabel, EngineButtonLabel: engineButtonLabel, EngineEnabled: engineEnabled, EngineReady: snapshot.engine.Known && snapshot.engine.Ready,
+		RecommendedLabel: recommendedLabel, DeleteLabel: deleteLabel, Options: options,
 		OnEngine: func() { a.runModelManagerAction("engine", -1) },
 		OnRefresh: func() {
 			state := a.aiSettings.ModelManager()
@@ -146,7 +159,7 @@ func snapshotModelManagerLocked(state *modelManagerState) *modelManagerSnapshot 
 	}
 	return &modelManagerSnapshot{
 		kind: state.kind, options: append([]formOption(nil), state.options...), selected: state.selected, selectedRow: state.selectedRow,
-		engine: state.engine, loading: state.loading, busy: state.busy, error: state.error,
+		engine: state.engine, loading: state.loading, busy: state.busy, error: state.error, anchor: state.anchor, anchored: state.anchored,
 	}
 }
 
@@ -213,10 +226,10 @@ func modelManagerNeedsPoll(state *modelManagerState) bool {
 }
 
 // openPluginModelManager binds the overlay to the current plugin form without exposing model routes to widgets.
-func (a *App) openPluginModelManager(index int) {
+func (a *App) openPluginModelManager(index int, anchor woxui.Rect) {
 	a.stopHotkeyRecording()
 	state := a.pluginSettings.Form()
-	if state == nil || state.saving || index < 0 || index >= len(state.definitions) {
+	if state == nil || index < 0 || index >= len(state.definitions) {
 		return
 	}
 	definition := state.definitions[index]
@@ -234,7 +247,7 @@ func (a *App) openPluginModelManager(index int) {
 	}
 	manager := &modelManagerState{
 		kind: definition.Type, target: &state.formFieldsState, fieldIndex: index, options: append([]formOption(nil), definition.Value.Options...),
-		selected: selected, selectedRow: selectedRow,
+		selected: selected, selectedRow: selectedRow, anchor: anchor, anchored: definition.Type == "dictationModel",
 	}
 	a.aiSettings.SetModelManager(manager)
 	a.updateSettingsTextInput(false)
@@ -376,7 +389,12 @@ func (a *App) chooseManagedModel(index int) {
 	key := state.target.definitions[state.fieldIndex].Value.Key
 	state.target.values[key] = modelOptionID(option)
 	state.selected = modelOptionID(option)
+	pluginForm := a.pluginSettings.Form()
+	pluginTarget := pluginForm != nil && state.target == &pluginForm.formFieldsState
 	a.closeModelManager()
+	if pluginTarget {
+		a.submitPluginSettings()
+	}
 }
 
 // runModelManagerAction starts core-owned downloads or deletion and leaves progress polling in the shared overlay.

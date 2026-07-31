@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/resource"
 	woxui "wox/ui/runtime"
 	"wox/util"
 	woxsvg "wox/util/svg"
@@ -27,6 +28,8 @@ type woxImage struct {
 	ImageType string `json:"ImageType"`
 	ImageData string `json:"ImageData"`
 }
+
+var appIconImageSource = woxImage{ImageType: "appicon", ImageData: "embedded"}
 
 // UnmarshalJSON accepts both the structured image DTO and legacy type:data strings.
 func (w *woxImage) UnmarshalJSON(data []byte) error {
@@ -257,6 +260,8 @@ func decodeWoxImageWithTint(source woxImage, tint *woxui.Color, svgSize int) (*w
 		return decodeSVGImage(source.ImageData, svgSize, tint)
 	case "theme":
 		return decodeThemeImage(source.ImageData)
+	case "appicon":
+		return woxui.DecodeImage(bytes.NewReader(resource.GetAppIconPNG()))
 	default:
 		return nil, fmt.Errorf("unsupported Wox image type %q", source.ImageType)
 	}

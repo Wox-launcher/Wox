@@ -100,18 +100,19 @@ type settingChoice struct {
 }
 
 type settingItem struct {
-	key          string
-	title        string
-	description  string
-	value        string
-	choices      []settingChoice
-	trailers     map[string]string
-	icons        map[string]woxImage
-	filterable   bool
-	text         bool
-	controlWidth float32
-	browseFile   bool
-	disabled     bool
+	key               string
+	title             string
+	description       string
+	value             string
+	choices           []settingChoice
+	trailers          map[string]string
+	icons             map[string]woxImage
+	preserveIconColor bool
+	filterable        bool
+	text              bool
+	controlWidth      float32
+	browseFile        bool
+	disabled          bool
 }
 
 type settingsSnapshot struct {
@@ -120,6 +121,7 @@ type settingsSnapshot struct {
 	row         int
 	note        string
 	saving      bool
+	highlight   string
 	search      settingsSearchSnapshot
 	update      updateSettingsSnapshot
 	palette     uiPalette
@@ -608,6 +610,12 @@ func (a *App) closeSettings() error {
 	var settingsView *woxui.ManagedWindow
 	if err := a.runOnUI("prepare settings close", func() {
 		a.stopHotkeyRecording()
+		if form := a.pluginSettings.Form(); form != nil {
+			syncFormFieldsEditorLocked(&form.formFieldsState)
+			if pluginFormDirty(form.definitions, form.values, form.initial) {
+				a.submitPluginSettings()
+			}
+		}
 		settingsView = a.settingsView
 	}); err != nil {
 		return err
@@ -628,12 +636,14 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.onCloudSettingsKey(event) {
 		return true
 	}
-	choicePickerOpen := a.generalSettings.ChoicePicker() != nil
-	if choicePickerOpen {
+	choicePicker := a.generalSettings.ChoicePicker()
+	if choicePicker != nil {
 		if event.Key == woxui.KeyEscape {
 			a.closeSettingChoicePicker()
+			return true
 		}
-		return true
+		// Printable keys must reach the native text-input path while the filter field owns focus.
+		return !choicePicker.item.filterable
 	}
 	if a.onSettingsSearchKey(event) {
 		return true
@@ -712,6 +722,7 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		row:         a.settingRow,
 		note:        a.settingNote,
 		saving:      a.settingSaving,
+		highlight:   a.settingFlash,
 		search:      search,
 		update:      update,
 		palette:     a.palette,
@@ -766,6 +777,9 @@ func (a *App) selectSettingTab(tab string) {
 		if form := a.pluginSettings.Form(); form != nil {
 			syncFormFieldsEditorLocked(&form.formFieldsState)
 			form.active = false
+			if pluginFormDirty(form.definitions, form.values, form.initial) {
+				a.submitPluginSettings()
+			}
 		}
 		a.settingTab = tab
 		a.settingRow = 0

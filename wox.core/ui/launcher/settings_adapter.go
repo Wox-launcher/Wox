@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"strings"
 
-	"wox/common"
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -86,7 +85,7 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth 
 		}
 	}
 	return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
-		Width: width, RailWidth: railWidth, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.imageFor(fromCoreImage(common.WoxIcon)),
+		Width: width, RailWidth: railWidth, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.imageFor(appIconImageSource),
 		Theme: snapshot.palette.componentTheme(),
 		OnDrag: func() {
 			if window := a.settingsNativeWindow(); window != nil {
@@ -202,8 +201,18 @@ func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, a
 	for index, result := range results {
 		index := index
 		result := result
+		iconTint := snapshot.palette.resultSubtitle
+		if index == snapshot.search.Selected {
+			iconTint = snapshot.palette.resultTitle
+		}
+		icon := a.imageForTint(settingsSearchResultIconSource(result.kind), &iconTint, 24)
+		if (result.kind == settingsSearchPlugin || result.kind == settingsSearchPluginSetting) && result.icon.ImageData != "" {
+			if pluginIcon := a.imageForSize(result.icon, 24); pluginIcon != nil {
+				icon = pluginIcon
+			}
+		}
 		items = append(items, launcherview.SettingsSearchResult{
-			Title: result.title, Subtitle: a.settingsSearchResultTypeLabel(result.kind) + " · " + result.subtitle,
+			Title: result.title, Subtitle: a.settingsSearchResultTypeLabel(result.kind) + " · " + result.subtitle, Icon: icon,
 			OnHover: func() { a.selectSettingsSearchResult(index) }, OnTap: func() { a.activateSettingsSearchResult(result) },
 		})
 	}
@@ -219,6 +228,17 @@ func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, a
 		Width: width, AvailableHeight: availableHeight, Results: items, Selected: snapshot.search.Selected,
 		EmptyMessage: emptyMessage, Theme: snapshot.palette.componentTheme(),
 	})
+}
+
+func settingsSearchResultIconSource(kind settingsSearchResultKind) woxImage {
+	switch kind {
+	case settingsSearchPlugin:
+		return settingNavIconSource("plugins")
+	case settingsSearchPluginSetting:
+		return settingControlIconSource("settings-suggest")
+	default:
+		return settingControlIconSource("tune")
+	}
 }
 
 func (a *App) settingsSearchResultTypeLabel(kind settingsSearchResultKind) string {
@@ -258,7 +278,10 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		if index == snapshot.row {
 			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + 62}
 		}
-		children = append(children, a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{}))
+		row := a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{})
+		children = append(children, woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
+			Width: contentWidth, Height: 62, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette.componentTheme(),
+		}))
 		contentHeight += 62
 	}
 	if snapshot.tab == "general" && snapshot.hotkey.Form != nil {
@@ -274,7 +297,10 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			if hotkeyForm.active && index == hotkeyForm.focused {
 				keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + rowHeight}
 			}
-			children = append(children, a.buildFormField(hotkeyForm, callbacks, snapshot.palette, index, definition, contentWidth, rowHeight))
+			field := a.buildFormField(hotkeyForm, callbacks, snapshot.palette, index, definition, contentWidth, rowHeight)
+			children = append(children, woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
+				Width: contentWidth, Height: rowHeight, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key, Child: field, Theme: snapshot.palette.componentTheme(),
+			}))
 			contentHeight += rowHeight
 		}
 	}
@@ -348,7 +374,7 @@ func (a *App) localizedSettingItem(item settingItem) settingItem {
 		"EnableAutostart": {"ui_autostart", "ui_autostart_tips"}, "HideOnStart": {"ui_hide_on_start", "ui_hide_on_start_tips"},
 		"LaunchMode": {"ui_launch_mode", "ui_launch_mode_tips"}, "StartPage": {"ui_start_page", "ui_start_page_tips"},
 		"HideOnLostFocus": {"ui_hide_on_lost_focus", "ui_hide_on_lost_focus_tips"}, "UsePinYin": {"ui_use_pinyin", "ui_use_pinyin_tips"},
-		"SwitchInputMethodABC": {"ui_switch_input_method_abc", "ui_switch_input_method_abc_tips"}, "LangCode": {"ui_lang", ""},
+		"SwitchInputMethodABC": {"ui_switch_input_method_abc", "ui_switch_input_method_abc_tips"}, "LangCode": {"ui_lang", "ui_lang_tips"},
 		"ShowPosition": {"ui_show_position", "ui_show_position_tips"}, "ShowTray": {"ui_show_tray", "ui_show_tray_tips"},
 		"AppWidth": {"ui_app_width", "ui_app_width_tips"}, "UiDensity": {"ui_interface_size", "ui_interface_size_tips"},
 		"AppFontFamily": {"ui_app_font_family", "ui_app_font_family_tips"}, "EnableQueryCompletionHint": {"ui_query_completion_hint", "ui_query_completion_hint_tips"},

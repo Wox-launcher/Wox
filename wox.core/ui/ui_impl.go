@@ -421,11 +421,17 @@ func getShowOptions(ctx context.Context, showContext common.ShowContext) contrac
 		}
 	}
 
+	latestHistories := setting.GetSettingManager().GetLatestQueryHistory(ctx, 10)
+	queryHistories := make([]common.PlainQuery, 0, len(latestHistories))
+	for _, history := range latestHistories {
+		queryHistories = append(queryHistories, history.Query)
+	}
+
 	return contract.ShowOptions{
 		SelectAll: showContext.SelectAll, HideQueryBox: showContext.HideQueryBox, HideToolbar: hideToolbar,
 		QueryBoxAtBottom: showContext.QueryBoxAtBottom, HideOnBlur: showContext.HideOnBlur,
 		Position:    contract.Position{Type: string(position.Type), X: position.X, Y: position.Y},
-		WindowWidth: windowWidth, MaxResultCount: maxResultCount, LaunchMode: woxSetting.LaunchMode.Get(),
+		WindowWidth: windowWidth, MaxResultCount: maxResultCount, QueryHistories: queryHistories, LaunchMode: woxSetting.LaunchMode.Get(),
 		StartPage: woxSetting.StartPage.Get(), ShowSource: string(showSource),
 	}
 }

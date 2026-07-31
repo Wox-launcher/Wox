@@ -426,6 +426,7 @@ func (a *App) onSettingsWindowClosed() {
 	a.settingsSearch.SetFocused(false)
 	a.settingsSearch.SetPanel(false)
 	a.settingsSearch.SetSelected(0)
+	a.clearSettingsSearchHighlight()
 	a.pluginSettings.SetSearchEditor(nil)
 	a.pluginSettings.SetSearchFocused(false)
 	a.pluginSettings.SetDetailTab("settings")

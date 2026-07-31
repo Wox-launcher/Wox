@@ -237,6 +237,7 @@
   "ui_switch_input_method_abc": "切换输入法",
   "ui_switch_input_method_abc_tips": "选中后，查询框获得焦点时输入法将切换到英文",
   "ui_lang": "语言",
+  "ui_lang_tips": "Wox 使用的界面语言",
   "ui_query_hotkeys": "快捷键查询",
   "ui_query_hotkeys_tips": "通过快捷键快速触发预定义的查询。支持使用变量（如选中的文本、浏览器URL等）来构建动态查询，还可以设置静默执行模式自动执行单一结果。",
   "ui_query_hotkeys_dialog_create_title": "新增快捷键查询",

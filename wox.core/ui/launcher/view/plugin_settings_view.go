@@ -45,6 +45,7 @@ type PluginListItem struct {
 	Icon          *woxui.Image
 	FallbackColor woxui.Color
 	Selected      bool
+	Highlighted   bool
 	OnSelect      func()
 }
 
@@ -98,6 +99,15 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 			background = props.Theme.SelectedBackground
 			titleColor = props.Theme.SelectedTitle
 		}
+		border := woxui.Color{}
+		if item.Highlighted {
+			border = props.Theme.SelectedBackground
+			border.A = 122
+			if !item.Selected {
+				background = props.Theme.SelectedBackground
+				background.A = 41
+			}
+		}
 		var icon woxwidget.Widget = woxwidget.Container{Width: 32, Height: 32, Radius: 7, Color: item.FallbackColor}
 		if item.Icon != nil {
 			icon = woxwidget.Image{Source: item.Icon, Width: 32, Height: 32}
@@ -117,10 +127,11 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 			}}
 			rowChildren = append(rowChildren, woxwidget.Align{Width: 44, Height: 44, Horizontal: 1, Vertical: 0.5, Child: badge})
 		}
-		rows = append(rows, woxwidget.Gesture{ID: "plugin-list-" + item.ID, OnTap: item.OnSelect, Child: woxwidget.Container{
-			Width: props.Width, Height: rowHeight, Radius: 4, Color: background, Padding: woxwidget.Insets{Left: 6, Top: 9, Right: 6, Bottom: 8},
+		row := woxwidget.Container{
+			Width: props.Width, Height: rowHeight, Radius: 4, Color: background, BorderColor: border, BorderWidth: 1, Padding: woxwidget.Insets{Left: 6, Top: 9, Right: 6, Bottom: 8},
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: rowChildren},
-		}})
+		}
+		rows = append(rows, woxwidget.Gesture{ID: "plugin-list-" + item.ID, OnTap: item.OnSelect, Child: row})
 	}
 
 	var list woxwidget.Widget
@@ -251,18 +262,12 @@ type PluginFormProps struct {
 
 // PluginEditorProps contains the selected plugin detail and editable state.
 type PluginEditorProps struct {
-	Header        PluginHeaderProps
-	ActiveTab     string
-	Tabs          []PluginTab
-	Metadata      *PluginMetadataProps
-	Form          *PluginFormProps
-	Status        string
-	StatusError   bool
-	SaveLabel     string
-	ShowSave      bool
-	SaveHighlight bool
-	OnSelectTab   func(string)
-	OnSave        func()
+	Header      PluginHeaderProps
+	ActiveTab   string
+	Tabs        []PluginTab
+	Metadata    *PluginMetadataProps
+	Form        *PluginFormProps
+	OnSelectTab func(string)
 }
 
 // PluginStoreDetailProps contains the store-only plugin detail page.
@@ -314,7 +319,7 @@ func PluginDetail(props PluginDetailProps) woxwidget.Widget {
 	}}
 }
 
-// pluginEditor composes the shared identity, tabs, metadata or form body, and save footer.
+// pluginEditor composes the shared identity, tabs, metadata, and auto-saving form body.
 func pluginEditor(props PluginEditorProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	innerWidth := max(float32(0), width-32)
 	innerHeight := height
@@ -326,15 +331,7 @@ func pluginEditor(props PluginEditorProps, width, height float32, theme woxcompo
 	if props.Metadata != nil {
 		children = append(children, pluginMetadataTab(*props.Metadata, innerWidth, max(float32(0), innerHeight-headerHeight-tabHeight), "plugin-metadata-"+props.ActiveTab, theme))
 	} else if props.Form != nil {
-		statusHeight := float32(0)
-		if props.Status != "" {
-			statusHeight = 28
-		}
-		footerHeight := float32(0)
-		if props.ShowSave {
-			footerHeight = 48
-		}
-		bodyHeight := max(float32(48), innerHeight-headerHeight-tabHeight-footerHeight-statusHeight)
+		bodyHeight := max(float32(48), innerHeight-headerHeight-tabHeight)
 		if len(props.Form.Rows) == 0 {
 			children = append(children, pluginEmptySettings(props.Form.EmptyTitle, props.Form.EmptyDescription, innerWidth, bodyHeight, theme))
 		} else {
@@ -353,23 +350,6 @@ func pluginEditor(props PluginEditorProps, width, height float32, theme woxcompo
 				ContentHeight: scrollContentHeight, KeepVisible: props.Form.KeepVisible,
 				Child: woxwidget.Container{Width: innerWidth, Height: scrollContentHeight, Padding: woxwidget.Insets{Top: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: formRows}},
 			})
-		}
-		if props.Status != "" {
-			color := theme.ResultSubtitle
-			if props.StatusError {
-				color = theme.ErrorText
-			}
-			children = append(children, woxwidget.Container{Width: innerWidth, Height: 28, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 11}, Color: color}})
-		}
-		if props.ShowSave {
-			variant := woxcomponent.ButtonSelected
-			if props.SaveHighlight {
-				variant = woxcomponent.ButtonPrimary
-			}
-			children = append(children, woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-				woxwidget.Painter{Width: max(float32(0), innerWidth-128), Height: footerHeight},
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "plugin-settings-save", Label: props.SaveLabel, Width: 128, Height: 36, Variant: variant, OnTap: props.OnSave, Theme: theme}),
-			}})
 		}
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 16, Right: 16}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}

@@ -15,6 +15,7 @@ import (
 
 type aiProviderInfo struct {
 	Name        string
+	Icon        woxImage
 	DefaultHost string
 }
 
@@ -46,8 +47,7 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 			a.addAISkillTableActions(&field, aiForm.values[definition.Value.Key], imageScale)
 		}
 		props.Tables = append(props.Tables, launcherview.AISettingsTable{
-			Index: index,
-			Field: field,
+			Index: index, Field: field, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key,
 		})
 	}
 	props.Note = snapshot.note

@@ -47,6 +47,7 @@ type RuntimeSettingRow struct {
 	State       woxui.TextEditingState
 	Focused     bool
 	Disabled    bool
+	Highlighted bool
 	Window      *woxui.Window
 	OnHover     func()
 	OnFocus     func()
@@ -285,11 +286,12 @@ func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingR
 		Label: row.Title, Description: row.Description, Width: width, Height: height, LabelWidth: labelWidth, Gap: 32,
 		Padding: woxwidget.Insets{Top: 4, Bottom: 4}, DescriptionMaxLines: 2, Child: controls, Theme: props.Theme,
 	})
+	target := woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{Width: width, Height: height, Highlighted: row.Highlighted, Child: field, Theme: props.Theme})
 	return woxwidget.Gesture{ID: row.ID, OnHover: func(inside bool) {
 		if inside && row.OnHover != nil {
 			row.OnHover()
 		}
-	}, Child: field}
+	}, Child: target}
 }
 
 // runtimeLabelWidth approximates intrinsic button and pill widths across Latin and CJK labels.

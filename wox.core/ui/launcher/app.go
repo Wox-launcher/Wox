@@ -65,6 +65,9 @@ type App struct {
 	query             plainQuery
 	queryContext      queryContext
 	queryContextKnown bool
+	queryHistories    []plainQuery
+	queryHistoryIndex int
+	canRecallHistory  bool
 	editor            *woxui.TextEditor
 	// selectionAnchor holds the rune offset captured at query drag-selection start so extend updates only the focus.
 	selectionAnchor        int
@@ -112,6 +115,8 @@ type App struct {
 	settingRow             int
 	settingNote            string
 	settingSaving          bool
+	settingFlash           string
+	settingFlashTimer      *time.Timer
 	cloudPlanTooltip       *cloudPlanTooltipState
 	settingsDemo           *settingsDemoState
 	settingsDemoRevision   atomic.Uint64
@@ -380,6 +385,14 @@ func (a *App) showWindow(params showAppParams) error {
 			params.MaxResultCount = defaultMaxResult
 		}
 		a.show = params
+		a.queryHistories = append(a.queryHistories[:0], params.QueryHistories...)
+		a.canRecallHistory = a.query.QueryType == "input"
+		if params.LaunchMode == "continue" {
+			// The newest history is the current continued query, so the first Up recalls the entry before it.
+			a.queryHistoryIndex = 0
+		} else {
+			a.queryHistoryIndex = -1
+		}
 		if params.SelectAll {
 			a.editor.SelectAll()
 		}
@@ -995,9 +1008,25 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	}
 	switch event.Key {
 	case woxui.KeyArrowUp:
+		if event.Modifiers == 0 {
+			query, handled := a.previousQueryHistory()
+			if handled {
+				if query != nil {
+					a.setQuery(*query)
+					a.editor.SelectAll()
+					if err := a.sendCurrentQuery(); err != nil {
+						log.Printf("send recalled query history: %v", err)
+					}
+				}
+				return true
+			}
+		}
 		a.moveSelection(-a.resultNavigationColumns())
 		return true
 	case woxui.KeyArrowDown:
+		if event.Modifiers == 0 {
+			a.canRecallHistory = false
+		}
 		a.moveSelection(a.resultNavigationColumns())
 		return true
 	case woxui.KeyEnter:
@@ -1014,6 +1043,19 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 		return false
 	}
 	return false
+}
+
+// previousQueryHistory advances through the show-time history snapshot while history recall remains active.
+func (a *App) previousQueryHistory() (*plainQuery, bool) {
+	if !a.canRecallHistory {
+		return nil, false
+	}
+	if a.queryHistoryIndex >= len(a.queryHistories)-1 {
+		return nil, true
+	}
+	a.queryHistoryIndex++
+	query := a.queryHistories[a.queryHistoryIndex]
+	return &query, true
 }
 
 func (a *App) resultNavigationColumns() int {
@@ -1207,17 +1249,18 @@ func newInputQuery(text string) plainQuery {
 }
 
 type showAppParams struct {
-	SelectAll        bool     `json:"SelectAll"`
-	Position         position `json:"Position"`
-	WindowWidth      int      `json:"WindowWidth"`
-	MaxResultCount   int      `json:"MaxResultCount"`
-	LaunchMode       string   `json:"LaunchMode"`
-	StartPage        string   `json:"StartPage"`
-	HideQueryBox     bool     `json:"HideQueryBox"`
-	HideToolbar      bool     `json:"HideToolbar"`
-	QueryBoxAtBottom bool     `json:"QueryBoxAtBottom"`
-	HideOnBlur       bool     `json:"HideOnBlur"`
-	ShowSource       string   `json:"ShowSource"`
+	SelectAll        bool         `json:"SelectAll"`
+	Position         position     `json:"Position"`
+	WindowWidth      int          `json:"WindowWidth"`
+	MaxResultCount   int          `json:"MaxResultCount"`
+	QueryHistories   []plainQuery `json:"QueryHistories"`
+	LaunchMode       string       `json:"LaunchMode"`
+	StartPage        string       `json:"StartPage"`
+	HideQueryBox     bool         `json:"HideQueryBox"`
+	HideToolbar      bool         `json:"HideToolbar"`
+	QueryBoxAtBottom bool         `json:"QueryBoxAtBottom"`
+	HideOnBlur       bool         `json:"HideOnBlur"`
+	ShowSource       string       `json:"ShowSource"`
 }
 
 type position struct {

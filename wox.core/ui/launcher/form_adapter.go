@@ -11,19 +11,22 @@ import (
 )
 
 type formFieldCallbacks struct {
-	idPrefix   string
-	labelWidth float32
-	imageScale float32
-	focus      func(index int)
-	change     func(index, delta int)
-	setText    func(index int, value string)
-	onKey      func(woxui.KeyEvent) bool
-	openTable  func(index int)
-	openChoice func(index int, anchor woxui.Rect)
-	pickDir    func(index int)
-	pickApp    func(index int)
-	recordKey  func(index int)
-	openModel  func(index int)
+	idPrefix          string
+	labelWidth        float32
+	imageScale        float32
+	focus             func(index int)
+	change            func(index, delta int)
+	setText           func(index int, value string)
+	onKey             func(woxui.KeyEvent) bool
+	openTable         func(index int)
+	openChoice        func(index int, anchor woxui.Rect)
+	openAIModelChoice func(index int, provider bool, anchor woxui.Rect)
+	setAIModelName    func(index int, value string)
+	finishAIModelEdit func(index int, value string)
+	pickDir           func(index int)
+	pickApp           func(index int)
+	recordKey         func(index int)
+	openModel         func(index int, anchor woxui.Rect)
 }
 
 // buildFormPanel maps action form state into the shared form view.
@@ -61,7 +64,11 @@ func formDefinitionHeight(definition formDefinition, valueMaps ...map[string]str
 			return 30 + float32(min(definition.Value.MaxLines, 8))*20 + tooltipHeight
 		}
 		return 44 + tooltipHeight
-	case "password", "dirPath", "select", "selectAIModel":
+	case "password", "dirPath", "select":
+		return 44 + tooltipHeight
+	case "hotkey", "dictationHotkey":
+		return 44 + tooltipHeight
+	case "selectAIModel":
 		return 44 + tooltipHeight
 	case "checkbox":
 		return 40 + tooltipHeight
@@ -76,7 +83,7 @@ func formDefinitionHeight(definition formDefinition, valueMaps ...map[string]str
 		}
 		return launcherview.FormTableFieldHeight(definition.Value.InlineTable, definition.Value.Tooltip, len(rows), definition.Value.MaxHeight)
 	case "dictationModel", "ocrModel":
-		return 70 + tooltipHeight
+		return 44 + tooltipHeight
 	default:
 		return 56
 	}
@@ -101,7 +108,12 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 		return a.buildFormHotkey(fields, callbacks, palette, index, definition, width, height)
 	case "app":
 		return a.buildFormApp(fields, callbacks, palette, index, definition, width, height)
-	case "select", "selectAIModel":
+	case "selectAIModel":
+		if callbacks.openAIModelChoice != nil {
+			return a.buildFormAIModelField(fields, callbacks, palette, index, definition, width, height)
+		}
+		fallthrough
+	case "select":
 		selectedLabel := fields.values[value.Key]
 		for _, option := range value.Options {
 			if option.Value == selectedLabel {
@@ -119,30 +131,78 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 	}
 }
 
+// buildFormAIModelField maps the JSON-backed model value into Flutter's provider and model controls.
+func (a *App) buildFormAIModelField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
+	models := aiModelsFromOptions(definition.Value.Options)
+	selected := aiModel{}
+	_ = json.Unmarshal([]byte(fields.values[definition.Value.Key]), &selected)
+	providerLabel := selected.Provider
+	if selected.ProviderAlias != "" {
+		providerLabel = selected.ProviderAlias
+	}
+	if providerLabel == "" {
+		providerLabel = a.translate("i18n:ui_ai_model_selector_not_selected")
+	}
+	modelLabel := selected.Name
+	if modelLabel == "" {
+		modelLabel = a.translate("i18n:ui_ai_model_selector_not_selected")
+	}
+
+	var providerIcon *woxui.Image
+	for _, provider := range a.aiSettings.ProviderCatalog() {
+		if provider.Name == selected.Provider {
+			providerIcon = a.imageForSize(provider.Icon, physicalImageSize(18, callbacks.imageScale))
+			break
+		}
+	}
+	foreground := palette.resultTitle
+	return launcherview.FormAIModelField(launcherview.FormAIModelFieldProps{
+		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
+		Provider: providerLabel, Model: modelLabel, ProviderIcon: providerIcon, ModelIcon: providerIcon, ModelsAvailable: len(models) > 0,
+		ModelNameHint: a.translate("i18n:ui_ai_model_selector_model_name"),
+		Width:         width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index,
+		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, physicalImageSize(18, callbacks.imageScale)),
+		ListIcon: a.imageForTint(settingControlIconSource("list"), &foreground, physicalImageSize(18, callbacks.imageScale)),
+		Window:   a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(),
+		OnProviderTap:      func(anchor woxui.Rect) { callbacks.openAIModelChoice(index, true, anchor) },
+		OnModelTap:         func(anchor woxui.Rect) { callbacks.openAIModelChoice(index, false, anchor) },
+		OnModelNameChanged: func(value string) { callbacks.setAIModelName(index, value) },
+		OnFinishEdit:       func(value string) { callbacks.finishAIModelEdit(index, value) },
+		OnEditModeChanged:  func(bool) { callbacks.focus(index) },
+	})
+}
+
+func aiModelsFromOptions(options []formOption) []aiModel {
+	models := make([]aiModel, 0, len(options))
+	for _, option := range options {
+		var model aiModel
+		if json.Unmarshal([]byte(option.Value), &model) == nil && strings.TrimSpace(model.Name) != "" && strings.TrimSpace(model.Provider) != "" {
+			models = append(models, model)
+		}
+	}
+	return models
+}
+
 func (a *App) buildFormModelField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	selectedID := fields.values[definition.Value.Key]
 	selectedLabel := selectedID
-	status := "Manage models"
 	for _, option := range definition.Value.Options {
 		if modelOptionID(option) != selectedID {
 			continue
 		}
 		selectedLabel = modelOptionLabel(option)
-		if option.Status != "" {
-			status = modelStatusLabel(option)
-		}
 		break
 	}
 	if strings.TrimSpace(selectedLabel) == "" {
-		selectedLabel = "No model selected"
+		selectedLabel = a.translate("i18n:plugin_dictation_model_select_hint")
 	}
 	return launcherview.FormModelField(launcherview.FormModelFieldProps{
-		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Value: selectedLabel, Status: status,
+		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Value: selectedLabel,
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index, Theme: palette.componentTheme(),
-		OnTap: func() {
+		OnTap: func(anchor woxui.Rect) {
 			callbacks.focus(index)
 			if callbacks.openModel != nil {
-				callbacks.openModel(index)
+				callbacks.openModel(index, anchor)
 			}
 		},
 	})
@@ -173,15 +233,20 @@ func (a *App) buildFormApp(fields formFieldsSnapshot, callbacks formFieldCallbac
 
 func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	value := fields.values[definition.Value.Key]
-	recording, status := a.hotkeyRecordingFieldStatus(callbacks.idPrefix, index)
+	presentation := a.hotkeyRecordingFieldStatus(callbacks.idPrefix, index)
+	if presentation.Active {
+		value = presentation.Value
+	}
+	hold := strings.HasPrefix(strings.TrimSpace(value), "hold:")
 	placeholder := a.translate("i18n:ui_hotkey_click_to_set")
-	if recording {
+	if presentation.Active {
 		placeholder = a.translate("i18n:ui_hotkey_recording")
 	}
 	return launcherview.FormHotkeyField(launcherview.FormHotkeyFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
-		Labels: formatHotkeyLabels(value), Placeholder: placeholder, Status: status, Recording: recording,
-		Width: width, Height: height, Focused: fields.active && fields.focused == index, Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(),
+		Labels: formatHotkeyLabels(value), Placeholder: placeholder, Status: presentation.Status, Recording: presentation.Active, Error: presentation.Error,
+		Hold: hold, HoldPrefix: a.translate("i18n:ui_hotkey_hold_prefix"),
+		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Focused: fields.active && fields.focused == index, Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(),
 		OnTap: func() {
 			callbacks.focus(index)
 			if callbacks.recordKey != nil {

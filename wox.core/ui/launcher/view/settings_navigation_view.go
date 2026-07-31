@@ -78,7 +78,7 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 		stackChildren = append(stackChildren, woxwidget.StackChild{Child: props.SearchPanel})
 	}
 	railColor := settingsColorAlpha(props.Theme.ToolbarText, 9)
-	rail := woxwidget.Container{Width: props.Width, Height: props.Height, Color: railColor, Padding: woxwidget.Insets{Left: 14, Top: 14, Right: 14, Bottom: 14}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+	rail := woxwidget.Container{Width: props.Width, Height: props.Height, Color: railColor, Padding: woxwidget.Insets{Left: 14, Top: 14, Right: 14, Bottom: 14}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 		props.SearchBox,
 		woxwidget.Stack{Width: innerWidth, Height: viewportHeight, Children: stackChildren},
 	}}}
@@ -116,6 +116,7 @@ func SettingsSearchBox(props SettingsSearchBoxProps) woxwidget.Widget {
 type SettingsSearchResult struct {
 	Title    string
 	Subtitle string
+	Icon     *woxui.Image
 	OnHover  func()
 	OnTap    func()
 }
@@ -150,6 +151,7 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 		return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: 7, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 18, Right: 12}, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}
 	}
 	rows := make([]woxwidget.Widget, 0, len(props.Results))
+	showIcons := props.Width-32 >= 72
 	for index, result := range props.Results {
 		index := index
 		rowBackground := background
@@ -158,14 +160,22 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 			rowBackground = props.Theme.SelectedBackground
 			titleColor = props.Theme.SelectedTitle
 		}
+		textColumn := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: titleColor},
+			woxwidget.Text{Value: result.Subtitle, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultSubtitle},
+		}}
+		var content woxwidget.Widget = textColumn
+		if showIcons && result.Icon != nil {
+			content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+				woxwidget.Align{Width: 24, Height: 38, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: result.Icon, Width: 24, Height: 24}},
+				woxwidget.Align{Width: max(float32(0), props.Width-64), Height: 38, Vertical: 0.5, Child: textColumn},
+			}}
+		}
 		rows = append(rows, woxwidget.Gesture{ID: fmt.Sprintf("settings-search-result-%d", index), OnHover: func(inside bool) {
 			if inside && result.OnHover != nil {
 				result.OnHover()
 			}
-		}, OnTap: result.OnTap, Child: woxwidget.Container{Width: props.Width - 12, Height: rowHeight, Radius: 5, Color: rowBackground, Padding: woxwidget.Insets{Left: 10, Top: 8, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: titleColor},
-			woxwidget.Text{Value: result.Subtitle, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultSubtitle},
-		}}}})
+		}, OnTap: result.OnTap, Child: woxwidget.Container{Width: props.Width - 12, Height: rowHeight, Radius: 5, Color: rowBackground, Padding: woxwidget.Insets{Left: 10, Top: 8, Right: 10}, Child: content}})
 	}
 	start := float32(selected) * rowHeight
 	return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: 7, Color: background, Padding: woxwidget.UniformInsets(6), Child: woxwidget.ScrollView{

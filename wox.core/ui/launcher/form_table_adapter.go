@@ -465,12 +465,18 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		props.Value = selectedLabel
 		props.OnChoiceTap = func(anchor woxui.Rect) { callbacks.openChoice(index, anchor) }
 	case "hotkey", "dictationHotkey":
-		recording, status := a.hotkeyRecordingFieldStatus("form-table-row", index)
+		presentation := a.hotkeyRecordingFieldStatus("form-table-row", index)
+		if presentation.Active {
+			fieldValue = presentation.Value
+		}
 		props.HotkeyLabels = formatHotkeyLabels(fieldValue)
-		props.Recording = recording
-		props.RecordingStatus = status
+		props.Recording = presentation.Active
+		props.RecordingStatus = presentation.Status
+		props.RecordingError = presentation.Error
+		props.Hold = strings.HasPrefix(strings.TrimSpace(fieldValue), "hold:")
+		props.HoldPrefix = a.translate("i18n:ui_hotkey_hold_prefix")
 		props.Placeholder = a.translate("i18n:ui_hotkey_click_to_set")
-		if recording {
+		if presentation.Active {
 			props.Placeholder = a.translate("i18n:ui_hotkey_recording")
 		}
 		props.OnTap = func() {

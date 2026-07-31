@@ -709,6 +709,9 @@ type FormTableRowFieldProps struct {
 	State           woxui.TextEditingState
 	Focused         bool
 	Recording       bool
+	RecordingError  bool
+	Hold            bool
+	HoldPrefix      string
 	Checked         bool
 	Protected       bool
 	MaxLines        int
@@ -821,16 +824,21 @@ func formTableRowControl(props FormTableRowFieldProps, width, height float32) wo
 		return formTableRowSelectControl(props, width, height)
 	case "hotkey", "dictationHotkey":
 		recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
-			Labels: props.HotkeyLabels, Placeholder: props.Placeholder, Focused: props.Focused, Window: props.Window, Theme: props.Theme,
+			Labels: props.HotkeyLabels, Placeholder: props.Placeholder, Focused: props.Focused, Error: props.RecordingError, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
+			Window: props.Window, Theme: props.Theme,
 		})
 		recorder = woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: recorder}
 		if !props.Recording || props.RecordingStatus == "" || width-recorderWidth <= 8 {
 			return recorder
 		}
+		statusColor := props.Theme.ResultSubtitle
+		if props.RecordingError {
+			statusColor = props.Theme.ErrorText
+		}
 		return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 			recorder,
 			woxwidget.Align{Width: max(float32(0), width-recorderWidth-8), Height: height, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.RecordingStatus, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle,
+				Value: props.RecordingStatus, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
 			}},
 		}}
 	case "label":

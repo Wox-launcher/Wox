@@ -29,16 +29,21 @@ func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnaps
 	for index, choice := range snapshot.item.choices {
 		var leading *woxui.Image
 		if source := snapshot.item.icons[choice.value]; source.ImageData != "" {
-			leading = a.imageForTint(source, &palette.resultTitle, 18)
+			if snapshot.item.preserveIconColor {
+				leading = a.imageForSize(source, 18)
+			} else {
+				leading = a.imageForTint(source, &palette.resultTitle, 18)
+			}
 		}
 		choices[index] = launcherview.SettingsChoice{
 			Value: choice.value, Label: choice.label, Leading: leading, Trailing: snapshot.item.trailers[choice.value],
 			Tooltip: a.localizedSettingChoiceTooltip(snapshot.item.key, choice),
 		}
 	}
+	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.resultSubtitle, 16)
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
 		ID: "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette.componentTheme(), Window: a.settingsNativeWindow(), Title: snapshot.item.title,
-		CurrentValue: snapshot.item.value, Choices: choices, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnTooltip: a.setSettingChoiceTooltip,
+		FilterHint: a.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, CurrentValue: snapshot.item.value, Choices: choices, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnTooltip: a.setSettingChoiceTooltip,
 	})
 }
 

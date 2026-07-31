@@ -15,6 +15,10 @@ type ModelManagerOption struct {
 	Name          string
 	Detail        string
 	Status        string
+	Languages     string
+	Description   string
+	SizeMB        int
+	Recommended   bool
 	SelectedRow   bool
 	PrimaryAction bool
 	ActionLabel   string
@@ -22,6 +26,7 @@ type ModelManagerOption struct {
 	OnAction      func()
 	OnDelete      func()
 	OnSelect      func()
+	OnChoose      func()
 }
 
 // ModelManagerProps contains the model manager overlay state.
@@ -30,12 +35,17 @@ type ModelManagerProps struct {
 	Height            float32
 	Theme             woxcomponent.Theme
 	Title             string
+	Anchor            woxui.Rect
+	Anchored          bool
 	Loading           bool
 	Busy              bool
 	Error             string
 	EngineLabel       string
 	EngineButtonLabel string
 	EngineEnabled     bool
+	EngineReady       bool
+	RecommendedLabel  string
+	DeleteLabel       string
 	Options           []ModelManagerOption
 	OnEngine          func()
 	OnRefresh         func()
@@ -44,9 +54,116 @@ type ModelManagerProps struct {
 
 // ModelManagerView builds the modal engine and model manager.
 func ModelManagerView(props ModelManagerProps) woxwidget.Widget {
+	if props.Anchored {
+		return modelManagerDropdown(props)
+	}
 	panelWidth := max(float32(0), min(float32(780), props.Width-28))
 	panelHeight := max(float32(0), min(float32(660), props.Height-28))
 	return modelManagerPanel(props, panelWidth, panelHeight)
+}
+
+// modelManagerDropdown mirrors Flutter's field-width model menu without replacing the settings page with a dialog.
+func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
+	const margin = float32(12)
+	anchor := props.Anchor
+	if anchor.Width <= 0 || anchor.Height <= 0 {
+		anchor = woxui.Rect{X: max(margin, props.Width-620-margin), Y: 160, Width: min(float32(620), props.Width-margin*2), Height: 34}
+	}
+	menuWidth := min(anchor.Width, max(float32(1), props.Width-margin*2))
+	menuLeft := min(max(margin, anchor.X), max(margin, props.Width-menuWidth-margin))
+	engineHeight := float32(0)
+	if !props.EngineReady {
+		engineHeight = 54
+	}
+	errorHeight := float32(0)
+	if props.Error != "" {
+		errorHeight = 34
+	}
+	listHeight := min(float32(len(props.Options))*ModelManagerRowHeight, max(ModelManagerRowHeight, float32(300)-engineHeight-errorHeight))
+	menuHeight := engineHeight + listHeight + errorHeight
+	menuTop := anchor.Y + anchor.Height
+	if menuTop+menuHeight > props.Height-margin {
+		menuTop = anchor.Y - menuHeight
+	}
+	menuTop = min(max(margin, menuTop), max(margin, props.Height-menuHeight-margin))
+
+	children := make([]woxwidget.Widget, 0, 3)
+	if !props.EngineReady {
+		engineTextWidth := max(float32(80), menuWidth-174)
+		engineChildren := []woxwidget.Widget{
+			woxwidget.TextBlock{Value: props.EngineLabel, Width: engineTextWidth, Height: 34, MaxLines: 2, LineHeight: 16, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},
+		}
+		if props.EngineEnabled {
+			engineChildren = append(engineChildren, woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: "model-manager-engine", Label: props.EngineButtonLabel, Width: 132, Height: 34, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnEngine, Theme: props.Theme,
+			}))
+		}
+		children = append(children, woxwidget.Container{Width: menuWidth, Height: engineHeight, Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: engineChildren}})
+	}
+
+	rows := make([]woxwidget.Widget, 0, len(props.Options))
+	for index, option := range props.Options {
+		index := index
+		option := option
+		background := props.Theme.ActionBackground
+		if option.SelectedRow {
+			background = props.Theme.SelectedBackground
+			background.A = min(uint8(80), background.A)
+		}
+		trailingWidth := float32(96)
+		contentWidth := max(float32(100), menuWidth-trailingWidth-36)
+		titleChildren := []woxwidget.Widget{
+			woxwidget.Text{Value: option.Name, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
+		}
+		if option.Recommended {
+			titleChildren = append(titleChildren, woxwidget.Container{Height: 18, Radius: 3, Color: modelManagerAlpha(props.Theme.Cursor, 38), Padding: woxwidget.Insets{Left: 5, Top: 2, Right: 5}, Child: woxwidget.Text{
+				Value: props.RecommendedLabel, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Cursor,
+			}})
+		}
+		if option.SizeMB > 0 {
+			titleChildren = append(titleChildren, woxwidget.Text{Value: fmt.Sprintf("~%dMB", option.SizeMB), Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle})
+		}
+		var trailing woxwidget.Widget
+		if option.OnDelete != nil {
+			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-delete-%d", index), Label: props.DeleteLabel, Width: trailingWidth, Height: 34, Disabled: props.Busy || props.Loading, Variant: woxcomponent.ButtonSecondary, OnTap: option.OnDelete, Theme: props.Theme})
+		} else {
+			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-action-%d", index), Label: option.ActionLabel, Width: trailingWidth, Height: 34, Disabled: !option.ActionEnabled, Variant: woxcomponent.ButtonSecondary, OnTap: option.OnAction, Theme: props.Theme})
+		}
+		activate := option.OnSelect
+		if option.OnChoose != nil {
+			activate = option.OnChoose
+		}
+		detail := woxwidget.Container{Width: contentWidth, Height: 64, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: titleChildren},
+			woxwidget.TextBlock{Value: option.Languages, Width: contentWidth, Height: 16, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},
+			woxwidget.TextBlock{Value: option.Description, Width: contentWidth, Height: 32, MaxLines: 2, LineHeight: 15, Style: woxui.TextStyle{Size: 11}, Color: modelManagerAlpha(props.Theme.ResultSubtitle, 204)},
+		}}}
+		rowContent := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{detail, trailing}}
+		rows = append(rows, woxwidget.Gesture{ID: fmt.Sprintf("model-row-%d", index), OnTap: activate, Child: woxwidget.Container{
+			Width: menuWidth, Height: ModelManagerRowHeight, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 12}, Child: rowContent,
+		}})
+	}
+	children = append(children, woxwidget.ScrollView{
+		Key: "model-manager-list", ID: "model-manager-list", Width: menuWidth, Height: listHeight, ContentHeight: max(listHeight, float32(len(rows))*ModelManagerRowHeight),
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
+	})
+	if props.Error != "" {
+		children = append(children, woxwidget.Container{Width: menuWidth, Height: errorHeight, Padding: woxwidget.Insets{Left: 12, Top: 8, Right: 12}, Child: woxwidget.TextBlock{
+			Value: props.Error, Width: menuWidth - 24, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ErrorText,
+		}})
+	}
+	menuContent := woxwidget.Container{Width: menuWidth, Height: menuHeight, Radius: 4, Color: props.Theme.ActionBackground, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
+	menuBorder := woxwidget.Container{Width: menuWidth, Height: menuHeight, Radius: 4, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1}
+	menu := woxwidget.FocusScope{Key: "model-manager-scope", Modal: true, Child: woxwidget.Stack{Width: menuWidth, Height: menuHeight, Children: []woxwidget.StackChild{{Child: menuContent}, {Child: menuBorder}}}}
+	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+		{Child: woxwidget.Gesture{ID: "model-manager-backdrop", OnTap: props.OnClose, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
+		{Left: menuLeft, Top: menuTop, Child: menu},
+	}}
+}
+
+func modelManagerAlpha(color woxui.Color, alpha uint8) woxui.Color {
+	color.A = alpha
+	return color
 }
 
 func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget.Widget {

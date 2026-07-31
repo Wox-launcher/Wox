@@ -45,6 +45,10 @@ func (a *App) Toggle(_ context.Context, options contract.ShowOptions) error {
 }
 
 func fromCoreShowOptions(options contract.ShowOptions) showAppParams {
+	queryHistories := make([]plainQuery, 0, len(options.QueryHistories))
+	for _, query := range options.QueryHistories {
+		queryHistories = append(queryHistories, fromCorePlainQuery(query))
+	}
 	return showAppParams{
 		SelectAll: options.SelectAll,
 		Position: position{
@@ -52,7 +56,7 @@ func fromCoreShowOptions(options contract.ShowOptions) showAppParams {
 			X:    options.Position.X,
 			Y:    options.Position.Y,
 		},
-		WindowWidth: options.WindowWidth, MaxResultCount: options.MaxResultCount,
+		WindowWidth: options.WindowWidth, MaxResultCount: options.MaxResultCount, QueryHistories: queryHistories,
 		LaunchMode: options.LaunchMode, StartPage: options.StartPage,
 		HideQueryBox: options.HideQueryBox, HideToolbar: options.HideToolbar,
 		QueryBoxAtBottom: options.QueryBoxAtBottom, HideOnBlur: options.HideOnBlur,

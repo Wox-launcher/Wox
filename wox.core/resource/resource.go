@@ -177,6 +177,11 @@ func GetAppIcon() []byte {
 	return appIcon
 }
 
+// GetAppIconPNG returns the cross-platform PNG used by application UI surfaces.
+func GetAppIconPNG() []byte {
+	return appIcon
+}
+
 // EnsureLinuxDesktopIcon installs Wox's icon into the user icon theme so the
 // generated desktop entry resolves correctly for AppImage and manual binaries.
 func EnsureLinuxDesktopIcon(ctx context.Context) {

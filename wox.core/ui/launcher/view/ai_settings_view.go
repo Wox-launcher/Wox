@@ -8,8 +8,9 @@ import (
 
 // AISettingsTable ties keyboard selection to one shared table field.
 type AISettingsTable struct {
-	Index int
-	Field FormTableFieldProps
+	Index       int
+	Field       FormTableFieldProps
+	Highlighted bool
 }
 
 // AISettingsProps contains AI settings page presentation data.
@@ -46,7 +47,9 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 		if table.Index == props.Selected {
 			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + tableHeight}
 		}
-		children = append(children, FormTableField(table.Field))
+		children = append(children, woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
+			Width: table.Field.Width, Height: tableHeight, Highlighted: table.Highlighted, Child: FormTableField(table.Field), Theme: props.Theme,
+		}))
 		contentHeight += tableHeight
 	}
 	if props.Note != "" {

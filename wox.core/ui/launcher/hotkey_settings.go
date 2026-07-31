@@ -192,6 +192,7 @@ func (a *App) moveHotkeySettingsFocus(delta int) {
 			break
 		}
 	}
+	a.stopHotkeyRecordingForDifferentField(fields, index)
 	a.invalidateSettingsWindow()
 }
 

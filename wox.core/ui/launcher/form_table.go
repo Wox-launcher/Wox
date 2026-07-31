@@ -674,6 +674,8 @@ func (a *App) saveFormTableRowEdit() {
 		a.invalidateFormTableWindow()
 		return
 	}
+	pluginForm := a.pluginSettings.Form()
+	pluginTarget := pluginForm != nil && state.target == &pluginForm.formFieldsState
 	persist := state.target == a.aiSettings.Form() || state.target == a.hotkeySettings.Form()
 	closeEditor := state.rowEditorOnly
 	key := state.definition.Value.Key
@@ -698,6 +700,8 @@ func (a *App) saveFormTableRowEdit() {
 		util.Go(a.lifecycleCtx, "save settings table", func() {
 			a.saveSettingsTable(state, key, value, previousValue)
 		})
+	} else if pluginTarget {
+		a.submitPluginSettings()
 	}
 }
 
@@ -770,6 +774,7 @@ func (a *App) confirmFormTableRowDelete() {
 		state.selected = -1
 	}
 	persist := false
+	pluginTarget := false
 	key := state.definition.Value.Key
 	value := ""
 	if err := a.commitFormTableRowsLocked(state); err != nil {
@@ -777,6 +782,8 @@ func (a *App) confirmFormTableRowDelete() {
 	} else {
 		state.status = ""
 		persist = state.target == a.aiSettings.Form() || state.target == a.hotkeySettings.Form()
+		pluginForm := a.pluginSettings.Form()
+		pluginTarget = pluginForm != nil && state.target == &pluginForm.formFieldsState
 		value = state.target.values[key]
 		if persist {
 			state.saving = true
@@ -793,6 +800,8 @@ func (a *App) confirmFormTableRowDelete() {
 		util.Go(a.lifecycleCtx, "save settings table after delete", func() {
 			a.saveSettingsTable(state, key, value, previousValue)
 		})
+	} else if pluginTarget {
+		a.submitPluginSettings()
 	}
 }
 
@@ -860,6 +869,7 @@ func (a *App) moveFormTableRowFocus(delta int) {
 			break
 		}
 	}
+	a.stopHotkeyRecordingForDifferentField(state.rowForm, index)
 	textInput := state.rowForm.editor != nil
 	a.updateFormTableTextInput(textInput)
 	a.invalidateFormTableWindow()

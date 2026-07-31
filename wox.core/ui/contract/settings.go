@@ -234,6 +234,7 @@ type HotkeyInteractionSettingsServices interface {
 // AIProvider describes one built-in provider option.
 type AIProvider struct {
 	Name        string
+	Icon        common.WoxImage
 	DefaultHost string
 }
 
