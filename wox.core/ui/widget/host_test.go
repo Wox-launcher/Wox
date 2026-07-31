@@ -116,6 +116,29 @@ func TestHostKeepsPressedIdentityAcrossKeyedReorder(t *testing.T) {
 	}
 }
 
+func TestHostAutomationActivatePassesGestureBounds(t *testing.T) {
+	var activatedBounds woxui.Rect
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Semantics{
+			Key: "anchored-control", AutomationID: "anchored-control", Role: woxui.AccessibilityRoleButton, Label: "Anchored control",
+			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+			Child: Gesture{ID: "anchored-control", OnTapBounds: func(bounds woxui.Rect) {
+				activatedBounds = bounds
+			}, Child: Container{Width: 80, Height: 24}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	control := findAutomationNode(t, host.Snapshot().Tree, "anchored-control")
+	if err := host.performAccessibilityAction(control.ID, woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("activate anchored control: %v", err)
+	}
+	if activatedBounds.Width != 80 || activatedBounds.Height != 24 {
+		t.Fatalf("activated bounds = %#v, want 80x24 control bounds", activatedBounds)
+	}
+}
+
 func TestHostTrapsAndRestoresModalFocusOrder(t *testing.T) {
 	modal := false
 	host := NewHost(func(frame woxui.FrameInfo) Widget {

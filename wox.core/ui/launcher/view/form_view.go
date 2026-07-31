@@ -220,26 +220,11 @@ type FormSelectFieldProps struct {
 // FormSelectField builds an expanded dropdown with the same value and indicator split as Flutter.
 func FormSelectField(props FormSelectFieldProps) woxwidget.Widget {
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
-	control := woxDropdownTrigger(dropdownTriggerProps{
-		ID: props.ID, Value: props.Value, Width: controlWidth, Height: 34, Outline: formFieldOutline(props.Focused, props.Theme),
+	control := woxDropdown(dropdownTriggerProps{
+		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: 34, Outline: formFieldOutline(props.Focused, props.Theme),
 		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
 	})
-	semanticControl := woxwidget.Semantics{
-		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label, Value: props.Value,
-		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
-		OnAction: func(action woxui.AccessibilityAction, _ string) error {
-			if action == woxui.AccessibilityActionActivate {
-				if props.OnChoiceTap != nil {
-					props.OnChoiceTap(woxui.Rect{})
-				} else if props.OnTap != nil {
-					props.OnTap()
-				}
-			}
-			return nil
-		},
-		Child: control,
-	}
-	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, semanticControl, 34, props.Theme)
+	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 34, props.Theme)
 }
 
 // FormTextFieldProps contains one editable form row.

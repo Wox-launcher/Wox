@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	launcherview "wox/ui/launcher/view"
+	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
 )
@@ -31,7 +32,7 @@ func (a *App) buildDataSettingsPage(snapshot settingsSnapshot, width, height flo
 		Note: snapshot.note, Loading: snapshot.dataState.Loading, Error: snapshot.dataState.Error,
 		OnOpenPath: a.openDataPath, OnChooseLocation: a.chooseDataLocation, OnCancelLocation: a.cancelDataLocationChange,
 		OnConfirmLocation: a.confirmDataLocationChange, OnToggleAutoBackup: a.toggleDataAutoBackup, OnCreateBackup: a.createDataBackup,
-		OnRestoreBackup: a.restoreDataBackup, OnCycleLogLevel: a.cycleDataLogLevel, OnClearLogs: a.clearDataLogs, OnOpenLog: a.openDataLog,
+		OnRestoreBackup: a.restoreDataBackup, OnOpenLogLevel: a.openDataLogLevelPicker, OnClearLogs: a.clearDataLogs, OnOpenLog: a.openDataLog,
 	})
 }
 
@@ -63,6 +64,8 @@ func (a *App) dataSettingsLabels() launcherview.DataSettingsLabels {
 		BackupRestoreConfirm:  a.translate("i18n:ui_data_backup_restore_confirm"),
 		LogLevelTitle:         a.translate("i18n:ui_data_log_level_title"),
 		LogLevelDescription:   a.translate("i18n:ui_data_log_level_tips"),
+		LogLevelInfo:          a.translate("i18n:ui_data_log_level_info"),
+		LogLevelDebug:         a.translate("i18n:ui_data_log_level_debug"),
 		LogClearButton:        a.translate("i18n:ui_data_log_clear_button"),
 		LogClearConfirm:       a.translate("i18n:ui_data_log_clear_confirm"),
 		LogClearTitle:         a.translate("i18n:ui_data_log_clear_title"),
@@ -114,8 +117,7 @@ func (a *App) toggleDataAutoBackup() {
 	if next {
 		label = "On"
 	}
-	a.settingSaving = true
-	a.settingNote = "Saving Automatic backup…"
+	a.beginSettingSave()
 	a.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "save automatic backup setting", func() {
 		a.saveSetting(
@@ -125,27 +127,19 @@ func (a *App) toggleDataAutoBackup() {
 	})
 }
 
-// cycleDataLogLevel keeps the compact page to the two log levels accepted by core.
-// Stays on App for the same reason as toggleDataAutoBackup: it edits the general-domain
-// LogLevel setting through the shared save flow.
-func (a *App) cycleDataLogLevel() {
-	if a.settingSaving {
-		return
-	}
+// openDataLogLevelPicker uses the same anchored choice menu as other settings dropdowns.
+func (a *App) openDataLogLevelPicker(anchor woxui.Rect) {
 	current := a.generalSettings.Data().LogLevel
-	next := "DEBUG"
-	if strings.EqualFold(current, "DEBUG") {
-		next = "INFO"
+	if !strings.EqualFold(current, "DEBUG") {
+		current = "INFO"
+	} else {
+		current = "DEBUG"
 	}
-	a.settingSaving = true
-	a.settingNote = "Saving Log level…"
-	a.invalidateSettingsWindow()
-	util.Go(a.lifecycleCtx, "save log level setting", func() {
-		a.saveSetting(
-			settingItem{key: "LogLevel", title: "Log level", value: current, choices: []settingChoice{{"INFO", "Info"}, {"DEBUG", "Debug"}}},
-			settingChoice{value: next, label: strings.ToLower(next)},
-		)
-	})
+	labels := a.dataSettingsLabels()
+	a.openSettingChoicePickerAt(settingItem{
+		key: "LogLevel", title: labels.LogLevelTitle, value: current,
+		choices: []settingChoice{{value: "INFO", label: labels.LogLevelInfo}, {value: "DEBUG", label: labels.LogLevelDebug}},
+	}, anchor)
 }
 
 // clearDataLogs delegates to dataSettingsController.

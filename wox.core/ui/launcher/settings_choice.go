@@ -129,8 +129,7 @@ func (a *App) chooseSettingChoice(index int) {
 		a.invalidateSettingsWindow()
 		return
 	}
-	a.settingSaving = true
-	a.settingNote = "Saving " + item.title + "…"
+	a.beginSettingSave()
 	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()

@@ -989,8 +989,7 @@ func (a *App) activateSetting(direction int) {
 	if !ok {
 		return
 	}
-	a.settingSaving = true
-	a.settingNote = ""
+	a.beginSettingSave()
 	a.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "save setting choice", func() {
 		a.saveSetting(item, next)
@@ -1045,8 +1044,7 @@ func (a *App) submitBuiltInSettingEdit() {
 	}
 	item := items[index]
 	value := snapshot.general.Editing.Text
-	a.settingSaving = true
-	a.settingNote = "Saving " + item.title + "…"
+	a.beginSettingSave()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "save setting text value", func() {
@@ -1114,6 +1112,11 @@ func (a *App) browseBuiltInSettingFile(item settingItem) {
 	a.startBuiltInSettingEdit(item, -1)
 	a.generalSettings.SetEditText(item.key, path)
 	a.invalidateSettingsWindow()
+}
+
+func (a *App) beginSettingSave() {
+	a.settingSaving = true
+	a.settingNote = ""
 }
 
 func (a *App) saveSetting(item settingItem, choice settingChoice) {

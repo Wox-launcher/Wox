@@ -7,15 +7,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"wox/test/automationdriver"
+	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
-// TestSettingsSmoke verifies General settings renders in the independent settings window.
+// TestSettingsSmoke verifies built-in pages and shared choice menus in the independent settings window.
 func TestSettingsSmoke(t *testing.T) {
 	executable := strings.TrimSpace(os.Getenv("WOX_GO_UI_SMOKE_BINARY"))
 	if executable == "" {
@@ -45,15 +47,40 @@ func TestSettingsSmoke(t *testing.T) {
 
 	showLauncher(t, ctx, process.Client)
 
-	if err := process.Client.OpenSettings(ctx, "/general"); err != nil {
-		t.Fatalf("open General settings: %v", err)
+	if err := process.Client.OpenSettings(ctx, "/data"); err != nil {
+		t.Fatalf("open Data settings: %v", err)
 	}
 	_, err = process.Client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 		_, windowFound := automationdriver.Find(snapshot, "settings.window")
-		_, pageFound := automationdriver.Find(snapshot, "settings.page.general")
-		return windowFound && pageFound
+		_, pageFound := automationdriver.Find(snapshot, "settings.page.data")
+		_, logLevelFound := automationdriver.Find(snapshot, "data-log-level")
+		return windowFound && pageFound && logLevelFound
 	})
 	if err != nil {
-		t.Fatalf("wait for General settings: %v", err)
+		t.Fatalf("wait for Data settings: %v", err)
 	}
+
+	if err := process.Client.Perform(ctx, "data-log-level", woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("open log level dropdown: %v", err)
+	}
+	if _, err := process.Client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, menuFound := automationdriver.Find(snapshot, "setting-choice-menu")
+		info, infoFound := automationdriver.Find(snapshot, "setting-choice-0")
+		debug, debugFound := automationdriver.Find(snapshot, "setting-choice-1")
+		return menuFound && infoFound && debugFound && info.Label == "INFO" && debug.Label == "DEBUG"
+	}); err != nil {
+		t.Fatalf("wait for log level dropdown choices: %v", err)
+	}
+	artifactDirectory := strings.TrimSpace(os.Getenv("WOX_GO_UI_ARTIFACT_DIR"))
+	if artifactDirectory == "" {
+		artifactDirectory = t.TempDir()
+	}
+	if err := os.MkdirAll(artifactDirectory, 0o755); err != nil {
+		t.Fatalf("create settings artifact directory: %v", err)
+	}
+	capturePath := filepath.Join(artifactDirectory, "settings-data-log-level-"+runtime.GOOS+".png")
+	if err := process.Client.Capture(ctx, capturePath); err != nil {
+		t.Fatalf("capture log level dropdown: %v", err)
+	}
+	assertPNG(t, capturePath)
 }

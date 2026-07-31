@@ -917,8 +917,8 @@ func formTableRowSelectControl(props FormTableRowFieldProps, width, height float
 	if props.OnChoiceTap == nil {
 		foreground = formTableAlpha(foreground, 128)
 	}
-	return woxDropdownTrigger(dropdownTriggerProps{
-		ID: props.ID, Value: props.Value, Width: width, Height: height, Outline: formTableRowOutline(props.Theme, props.Focused),
+	return woxDropdown(dropdownTriggerProps{
+		ID: props.ID, Label: props.Label, Value: props.Value, Width: width, Height: height, Outline: formTableRowOutline(props.Theme, props.Focused),
 		Foreground: foreground, Secondary: props.Theme.ActionHeader, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
 	})
 }

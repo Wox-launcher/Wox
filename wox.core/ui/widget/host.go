@@ -922,8 +922,13 @@ func (h *Host) performAccessibilityAction(nodeID woxui.AccessibilityNodeID, acti
 		h.invalidate()
 		return nil
 	}
-	if action == woxui.AccessibilityActionActivate && current.gesture != nil && current.gesture.onTap != nil {
-		current.gesture.onTap()
+	if action == woxui.AccessibilityActionActivate && current.gesture != nil && (current.gesture.onTap != nil || current.gesture.onTapBounds != nil) {
+		if current.gesture.onTap != nil {
+			current.gesture.onTap()
+		}
+		if current.gesture.onTapBounds != nil {
+			current.gesture.onTapBounds(current.bounds)
+		}
 		h.invalidate()
 		return nil
 	}

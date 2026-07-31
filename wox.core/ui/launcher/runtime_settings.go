@@ -166,9 +166,8 @@ func (a *App) saveRuntimeExecutablePath(item settingItem, value string) {
 	if a.settingSaving {
 		return
 	}
-	a.settingSaving = true
 	a.generalSettings.EndEdit()
-	a.settingNote = "Saving " + item.title + "…"
+	a.beginSettingSave()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 	label := value

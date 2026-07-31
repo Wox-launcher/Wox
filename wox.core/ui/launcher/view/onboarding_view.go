@@ -283,22 +283,11 @@ func onboardingWelcome(props OnboardingProps, width, height float32, description
 			props.OnOpenChoice("language")
 		}
 	}
-	dropdown := woxDropdownTrigger(dropdownTriggerProps{
-		ID: "onboarding-language", Value: props.Language, Width: choiceWidth, Height: 34,
+	dropdown := woxDropdown(dropdownTriggerProps{
+		ID: "onboarding-language", Label: props.Labels["language"], Value: props.Language, Width: choiceWidth, Height: 34,
 		Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140), Foreground: props.Theme.ResultTitle,
 		Secondary: props.Theme.ResultSubtitle, OnTap: openChoice,
 	})
-	dropdown = woxwidget.Semantics{
-		Key: woxwidget.Key("onboarding-language"), AutomationID: "onboarding-language", Role: woxui.AccessibilityRoleButton,
-		Label: props.Labels["language"], Value: props.Language, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
-		OnAction: func(action woxui.AccessibilityAction, _ string) error {
-			if action == woxui.AccessibilityActionActivate {
-				openChoice()
-			}
-			return nil
-		},
-		Child: dropdown,
-	}
 	return woxcomponent.WoxPanel(woxcomponent.PanelProps{
 		Width: width, Height: height, Padding: woxwidget.UniformInsets(22),
 		Color: settingsColorAlpha(props.Theme.ResultTitle, 14), BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 40), Theme: props.Theme,
@@ -387,22 +376,11 @@ func onboardingGlance(props OnboardingProps, width, height float32) woxwidget.Wi
 				props.OnOpenChoice("glance")
 			}
 		}
-		dropdown := woxDropdownTrigger(dropdownTriggerProps{
-			ID: "onboarding-glance-choice", Value: props.GlanceLabel, Trailing: props.GlanceValue, Leading: props.GlanceIcon,
+		dropdown := woxDropdown(dropdownTriggerProps{
+			ID: "onboarding-glance-choice", Label: props.Labels["glance.primary"], Value: props.GlanceLabel, Trailing: props.GlanceValue, Leading: props.GlanceIcon,
 			Width: choiceWidth, Height: 34, Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140),
 			Foreground: props.Theme.ResultTitle, Secondary: props.Theme.ResultSubtitle, OnTap: openChoice,
 		})
-		dropdown = woxwidget.Semantics{
-			Key: woxwidget.Key("onboarding-glance-choice"), AutomationID: "onboarding-glance-choice", Role: woxui.AccessibilityRoleButton,
-			Label: props.Labels["glance.primary"], Value: props.GlanceLabel, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
-			OnAction: func(action woxui.AccessibilityAction, _ string) error {
-				if action == woxui.AccessibilityActionActivate {
-					openChoice()
-				}
-				return nil
-			},
-			Child: dropdown,
-		}
 		children = append(children, woxwidget.Stack{Width: contentWidth, Height: 34, Children: []woxwidget.StackChild{
 			{Top: 7, Child: woxwidget.Text{Value: props.Labels["glance.primary"], Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}},
 			{Left: contentWidth - choiceWidth, Child: dropdown},

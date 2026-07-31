@@ -45,6 +45,8 @@ type DataSettingsLabels struct {
 	BackupRestoreConfirm  string
 	LogLevelTitle         string
 	LogLevelDescription   string
+	LogLevelInfo          string
+	LogLevelDebug         string
 	LogClearButton        string
 	LogClearConfirm       string
 	LogClearTitle         string
@@ -76,7 +78,7 @@ type DataSettingsProps struct {
 	OnToggleAutoBackup func()
 	OnCreateBackup     func()
 	OnRestoreBackup    func(string)
-	OnCycleLogLevel    func()
+	OnOpenLogLevel     func(woxui.Rect)
 	OnClearLogs        func()
 	OnOpenLog          func()
 }
@@ -288,13 +290,10 @@ func dataLogLevelField(props DataSettingsProps, width float32) woxwidget.Widget 
 	}
 	controlWidth := min(float32(280), width*0.34)
 	labelWidth := max(float32(220), width-controlWidth-32)
-	choice := woxwidget.Gesture{ID: "data-log-level", OnTap: props.OnCycleLogLevel, Child: woxwidget.Container{
-		Width: controlWidth, Height: 34, Radius: 4, BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 140), BorderWidth: 1,
-		Padding: woxwidget.Insets{Left: 8, Top: 5, Right: 8, Bottom: 5}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Align{Width: max(float32(0), controlWidth-40), Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: level, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultTitle}},
-			dropdownIndicator(24, 24, props.Theme.ResultTitle),
-		}},
-	}}
+	choice := woxwidget.Keyed{Key: SettingChoiceAnchorKey("LogLevel"), Child: woxDropdown(dropdownTriggerProps{
+		ID: "data-log-level", Label: props.Labels.LogLevelTitle, Value: level, Width: controlWidth, Height: 34,
+		Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140), Foreground: props.Theme.ResultTitle, OnTapBounds: props.OnOpenLogLevel,
+	})}
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LogLevelTitle, Description: props.Labels.LogLevelDescription,
 		Width: width, Height: 66, LabelWidth: labelWidth, Gap: 32, Padding: woxwidget.Insets{Top: 5}, Child: choice, Theme: props.Theme,

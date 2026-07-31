@@ -22,6 +22,7 @@ func dropdownIndicator(width, height float32, color woxui.Color) woxwidget.Widge
 
 type dropdownTriggerProps struct {
 	ID          string
+	Label       string
 	Value       string
 	Trailing    string
 	Leading     *woxui.Image
@@ -34,7 +35,24 @@ type dropdownTriggerProps struct {
 	OnTapBounds func(woxui.Rect)
 }
 
-// woxDropdownTrigger keeps rich and plain selected values aligned in every outlined dropdown.
+// woxDropdown keeps rich and plain selected values aligned in every accessible outlined dropdown.
+func woxDropdown(props dropdownTriggerProps) woxwidget.Widget {
+	trigger := woxDropdownTrigger(props)
+	disabled := props.OnTap == nil && props.OnTapBounds == nil
+	actions := []woxui.AccessibilityAction(nil)
+	if !disabled {
+		actions = []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}
+	}
+	label := props.Label
+	if label == "" {
+		label = props.Value
+	}
+	return woxwidget.Semantics{
+		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: label, Value: props.Value,
+		Actions: actions, Disabled: disabled, Child: trigger,
+	}
+}
+
 func woxDropdownTrigger(props dropdownTriggerProps) woxwidget.Widget {
 	const horizontalPadding = float32(8)
 	const indicatorWidth = float32(24)

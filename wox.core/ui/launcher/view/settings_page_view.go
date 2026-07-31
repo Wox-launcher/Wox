@@ -140,8 +140,8 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 			onTap = nil
 			onTapBounds = nil
 		}
-		valueField = woxwidget.Keyed{Key: SettingChoiceAnchorKey(props.ID), Child: woxDropdownTrigger(dropdownTriggerProps{
-			ID: "setting-choice-" + props.ID, Value: props.Value, Trailing: props.ValueTrailing, Leading: props.ValueLeading,
+		valueField = woxwidget.Keyed{Key: SettingChoiceAnchorKey(props.ID), Child: woxDropdown(dropdownTriggerProps{
+			ID: "setting-choice-" + props.ID, Label: props.Title, Value: props.Value, Trailing: props.ValueTrailing, Leading: props.ValueLeading,
 			Width: valueWidth, Height: 34, Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140),
 			Foreground: valueColor, Secondary: subtitle, OnTap: onTap, OnTapBounds: onTapBounds,
 		})}
