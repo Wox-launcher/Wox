@@ -16,10 +16,9 @@ type editorPreviewShellProps struct {
 	BeforeBodyHeight  float32
 	MinimumBodyHeight float32
 	Rows              []woxwidget.Widget
-	RowsHeight        float32
 	EmptyMessage      string
 	ScrollID          string
-	KeepVisible       *woxwidget.ScrollRange
+	KeepVisibleKey    woxwidget.Key
 	Error             string
 	ShowError         bool
 	SaveButton        woxcomponent.ButtonProps
@@ -43,8 +42,8 @@ func editorPreviewShell(props editorPreviewShellProps) woxwidget.Widget {
 	} else {
 		body = woxwidget.ScrollView{
 			Key: woxwidget.Key(props.ScrollID), ID: props.ScrollID, Width: innerWidth, Height: bodyHeight,
-			ContentHeight: max(bodyHeight, props.RowsHeight), KeepVisible: props.KeepVisible,
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
+			KeepVisibleKey: props.KeepVisibleKey,
+			Child:          woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
 		}
 	}
 	button := woxcomponent.WoxButton(props.SaveButton)

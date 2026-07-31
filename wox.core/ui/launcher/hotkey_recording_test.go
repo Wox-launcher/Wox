@@ -54,6 +54,9 @@ func TestHotkeyRecordingFocusKeysMatchFlutter(t *testing.T) {
 	if !hotkeyRecordingMovesFocus(woxui.KeyEvent{Key: woxui.KeyEnter}) {
 		t.Fatal("Enter should move focus from the recorder")
 	}
+	if hotkeyRecordingMovesFocus(woxui.KeyEvent{Key: woxui.KeyEnter, Modifiers: woxui.KeyModifierShift}) {
+		t.Fatal("Shift+Enter should remain available as a shortcut candidate")
+	}
 }
 
 func TestEscapeKeepsHotkeyRecorderFocused(t *testing.T) {

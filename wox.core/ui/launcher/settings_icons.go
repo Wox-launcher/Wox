@@ -70,6 +70,8 @@ func settingControlIconSource(id string) woxImage {
 			"folder-open":        `<path d="M3 7h6l2 2h10l-2 10H5z"/><path d="M3 7v12h2"/>`,
 			"emoji":              `<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>`,
 			"upload":             `<path d="M12 16V4M8 8l4-4 4 4M5 14v5h14v-5"/>`,
+			"download":           `<path d="M12 4v12M8 12l4 4 4-4M5 20h14"/>`,
+			"error":              `<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>`,
 			"refresh":            `<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`,
 			"email":              `<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>`,
 			"key":                `<circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M15 8l3 3M17 6l3 3"/>`,

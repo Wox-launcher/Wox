@@ -483,6 +483,16 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 			callbacks.focus(index)
 			callbacks.recordKey(index)
 		}
+		props.OnFocusChange = func(focused bool) {
+			if focused {
+				callbacks.focus(index)
+				callbacks.recordKey(index)
+				return
+			}
+			if a.hotkeyRecordingFieldStatus("form-table-row", index).Active {
+				a.stopHotkeyRecording()
+			}
+		}
 	case "dirPath":
 		props.OnBrowse = func() { callbacks.pickDir(index) }
 	case "app":

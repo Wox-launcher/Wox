@@ -28,11 +28,11 @@ func (a *App) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height f
 	}
 	rows := make([]woxwidget.Widget, 0, len(snapshot.hotkey.Form.definitions))
 	for index, definition := range snapshot.hotkey.Form.definitions {
-		rows = append(rows, a.buildFormField(*snapshot.hotkey.Form, callbacks, snapshot.palette, index, definition, innerWidth, formDefinitionHeight(definition, snapshot.hotkey.Form.values)))
+		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("hotkey-settings", index), Child: a.buildFormField(*snapshot.hotkey.Form, callbacks, snapshot.palette, index, definition, innerWidth, 0)})
 	}
 	return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: true,
-		Rows: rows, RowsHeight: formDefinitionsContentHeight(snapshot.hotkey.Form.definitions, snapshot.hotkey.Form.values), KeepVisible: formFieldsKeepVisible(*snapshot.hotkey.Form), Note: snapshot.note,
+		Rows: rows, KeepVisibleKey: formFieldsKeepVisibleKey("hotkey-settings", *snapshot.hotkey.Form), Note: snapshot.note,
 	})
 }
 

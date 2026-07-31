@@ -149,9 +149,8 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	var floating *launcherview.LauncherFloatingView
 	if snapshot.form != nil {
-		queryChromeHeight := queryHeight + refinementHeight
-		panel, panelWidth, panelHeight := a.buildFormPanel(snapshot, width)
-		floating = &launcherview.LauncherFloatingView{Child: panel, Left: max(float32(14), width-panelWidth-14), Top: max(queryChromeHeight+8, height-toolbarHeight-panelHeight-12)}
+		panel, panelWidth, _ := a.buildFormPanel(snapshot, width)
+		floating = &launcherview.LauncherFloatingView{Child: panel, Left: max(float32(14), width-panelWidth-14), Bottom: toolbarHeight + 12, AnchorBottom: true}
 	} else if snapshot.actionPanel {
 		queryChromeHeight := queryHeight + refinementHeight
 		panel, panelWidth, panelHeight := a.buildActionPanel(snapshot, width, height, queryChromeHeight, toolbarHeight)

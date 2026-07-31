@@ -79,6 +79,21 @@ func (n *FocusNode) RequestFocus() bool {
 	return host != nil && key != "" && host.RequestFocus(key)
 }
 
+// MoveFocus asks the attached Host to focus the previous or next control.
+func (n *FocusNode) MoveFocus(reverse bool) bool {
+	if n == nil {
+		return false
+	}
+	n.mu.RLock()
+	host := n.host
+	key := n.key
+	n.mu.RUnlock()
+	if host == nil || key == "" || !host.isFocusedKey(key) {
+		return false
+	}
+	return host.moveFocus(reverse)
+}
+
 // Unfocus releases focus only when this node still owns the Host focus target.
 func (n *FocusNode) Unfocus() {
 	if n == nil {

@@ -49,12 +49,20 @@ type modelManagerSnapshot struct {
 	anchored    bool
 }
 
+type modelManagerOptionAction struct {
+	label     string
+	enabled   bool
+	operation string
+}
+
 // buildModelManagerOverlay converts controller state into the pure modal view.
 func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
 	title := "Dictation models"
 	downloadLabel := a.translate("i18n:plugin_dictation_model_download")
 	retryLabel := a.translate("i18n:plugin_dictation_model_retry")
 	deleteLabel := a.translate("i18n:plugin_dictation_model_delete")
+	extractingLabel := a.translate("i18n:plugin_dictation_model_extracting")
+	finalizingLabel := a.translate("i18n:plugin_dictation_model_finalizing")
 	recommendedLabel := a.translate("i18n:plugin_dictation_model_recommended")
 	if snapshot.kind == "ocrModel" {
 		title = "OCR models"
@@ -91,24 +99,10 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 		option := option
 		selected := modelOptionID(option) == snapshot.selected
 		usable := modelOptionUsable(snapshot.kind, option)
-		actionLabel := downloadLabel
-		actionEnabled := snapshot.busy == "" && !snapshot.loading
-		action := func() { a.runModelManagerAction("download", index) }
-		if usable {
-			actionLabel = "Select"
-			actionEnabled = actionEnabled && !selected
+		actionState := resolveModelManagerOptionAction(snapshot.kind, option, selected, snapshot.busy != "" || snapshot.loading, downloadLabel, retryLabel, extractingLabel, finalizingLabel)
+		action := func() { a.runModelManagerAction(actionState.operation, index) }
+		if actionState.operation == "select" {
 			action = func() { a.chooseManagedModel(index) }
-		} else if snapshot.kind == "ocrModel" && option.Status == "downloaded" && !option.Available {
-			actionLabel = "Unavailable"
-			actionEnabled = false
-		} else if option.Status == "downloading" || option.Status == "extracting" || option.Status == "finalizing" {
-			actionLabel = fmt.Sprintf("%d%%", option.DownloadProgress)
-			actionEnabled = false
-		} else if option.Status == "failed" {
-			actionLabel = retryLabel
-		}
-		if selected {
-			actionLabel = "Selected"
 		}
 		detail := strings.TrimSpace(option.Description)
 		if option.Languages != "" {
@@ -122,8 +116,8 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 		}
 		name := modelOptionLabel(option)
 		converted := launcherview.ModelManagerOption{
-			Name: name, Detail: detail, Status: modelStatusLabel(option), Languages: option.Languages, Description: option.Description, SizeMB: option.SizeMB, Recommended: option.Recommended, SelectedRow: index == snapshot.selectedRow,
-			PrimaryAction: usable, ActionLabel: actionLabel, ActionEnabled: actionEnabled, OnAction: action,
+			Name: name, Detail: detail, Status: modelStatusLabel(option), State: option.Status, Progress: option.DownloadProgress, Languages: option.Languages, Description: option.Description, SizeMB: option.SizeMB, Recommended: option.Recommended, SelectedRow: index == snapshot.selectedRow,
+			PrimaryAction: usable, ActionLabel: actionState.label, ActionEnabled: actionState.enabled, OnAction: action,
 			OnSelect: func() { a.selectModelManagerRow(index) },
 		}
 		if usable {
@@ -134,12 +128,15 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 		}
 		options = append(options, converted)
 	}
+	iconTint := palette.resultSubtitle
+	errorTint := palette.componentTheme().ErrorText
 	return launcherview.ModelManagerView(launcherview.ModelManagerProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Title: title,
 		Anchor: snapshot.anchor, Anchored: snapshot.anchored,
 		Loading: snapshot.loading, Busy: snapshot.busy != "", Error: snapshot.error,
-		EngineLabel: engineLabel, EngineButtonLabel: engineButtonLabel, EngineEnabled: engineEnabled, EngineReady: snapshot.engine.Known && snapshot.engine.Ready,
-		RecommendedLabel: recommendedLabel, DeleteLabel: deleteLabel, Options: options,
+		EngineLabel: engineLabel, EngineButtonLabel: engineButtonLabel, EngineEnabled: engineEnabled, EngineKnown: snapshot.engine.Known, EngineReady: snapshot.engine.Ready,
+		RecommendedLabel: recommendedLabel, DeleteLabel: deleteLabel,
+		DownloadIcon: a.imageForTint(settingControlIconSource("download"), &iconTint, 16), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &iconTint, 16), ErrorIcon: a.imageForTint(settingControlIconSource("error"), &errorTint, 16), Options: options,
 		OnEngine: func() { a.runModelManagerAction("engine", -1) },
 		OnRefresh: func() {
 			state := a.aiSettings.ModelManager()
@@ -151,6 +148,29 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 		},
 		OnClose: a.closeModelManager,
 	})
+}
+
+// resolveModelManagerOptionAction keeps persisted selection separate from actual on-disk availability.
+func resolveModelManagerOptionAction(kind string, option formOption, selected, busy bool, downloadLabel, retryLabel, extractingLabel, finalizingLabel string) modelManagerOptionAction {
+	if modelOptionUsable(kind, option) {
+		return modelManagerOptionAction{label: "Select", enabled: !busy && !selected, operation: "select"}
+	}
+	if kind == "ocrModel" && option.Status == "downloaded" && !option.Available {
+		return modelManagerOptionAction{label: "Unavailable"}
+	}
+	if option.Status == "downloading" {
+		return modelManagerOptionAction{label: fmt.Sprintf("%d%%", option.DownloadProgress)}
+	}
+	if option.Status == "extracting" {
+		return modelManagerOptionAction{label: extractingLabel}
+	}
+	if option.Status == "finalizing" {
+		return modelManagerOptionAction{label: finalizingLabel}
+	}
+	if option.Status == "failed" {
+		return modelManagerOptionAction{label: retryLabel, enabled: !busy, operation: "download"}
+	}
+	return modelManagerOptionAction{label: downloadLabel, enabled: !busy, operation: "download"}
 }
 
 func snapshotModelManagerLocked(state *modelManagerState) *modelManagerSnapshot {
@@ -436,6 +456,12 @@ func (a *App) runModelManagerAction(action string, index int) {
 			state.busy = ""
 			if err != nil {
 				state.error = err.Error()
+			} else if action == "download" {
+				// Match Flutter's optimistic transition so the first refresh cannot leave an accepted download idle and unpolled.
+				state.options[index].Status = "downloading"
+				state.options[index].DownloadProgress = 0
+				state.options[index].Error = ""
+				state.target.definitions[state.fieldIndex].Value.Options = append([]formOption(nil), state.options...)
 			} else if action == "delete" && state.selected == modelID {
 				state.selected = ""
 				key := state.target.definitions[state.fieldIndex].Value.Key
@@ -443,8 +469,14 @@ func (a *App) runModelManagerAction(action string, index int) {
 			}
 			a.invalidateSettingsWindow()
 			if err == nil {
-				util.Go(a.lifecycleCtx, "refresh model manager after action", func() {
-					a.refreshModelManager(state)
+				delay := time.Duration(0)
+				if action == "download" || action == "engine" {
+					delay = 500 * time.Millisecond
+				}
+				time.AfterFunc(delay, func() {
+					util.Go(a.lifecycleCtx, "refresh model manager after action", func() {
+						a.refreshModelManager(state)
+					})
 				})
 			}
 		})

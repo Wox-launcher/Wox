@@ -25,13 +25,14 @@ type semanticBehavior struct {
 }
 
 type focusBehavior struct {
-	autofocus     bool
-	disabled      bool
-	onKeyCapture  func(event woxui.KeyEvent) bool
-	onKey         func(event woxui.KeyEvent) bool
-	onTextInput   func(event woxui.TextInputEvent) bool
-	onFocusChange func(focused bool)
-	textInput     func(bounds woxui.Rect) woxui.TextInputState
+	autofocus               bool
+	disabled                bool
+	unfocusOnPointerOutside bool
+	onKeyCapture            func(event woxui.KeyEvent) bool
+	onKey                   func(event woxui.KeyEvent) bool
+	onTextInput             func(event woxui.TextInputEvent) bool
+	onFocusChange           func(focused bool)
+	textInput               func(bounds woxui.Rect) woxui.TextInputState
 }
 
 type focusScopeBehavior struct {
@@ -109,15 +110,17 @@ func (w Semantics) layout(ctx context, available constraints) *node {
 
 // Focusable lets one retained element own keyboard focus and input callbacks.
 type Focusable struct {
-	Key           Key
-	Autofocus     bool
-	Disabled      bool
-	OnKeyCapture  func(event woxui.KeyEvent) bool
-	OnKey         func(event woxui.KeyEvent) bool
-	OnTextInput   func(event woxui.TextInputEvent) bool
-	OnFocusChange func(focused bool)
-	TextInput     func(bounds woxui.Rect) woxui.TextInputState
-	Child         Widget
+	Key       Key
+	Autofocus bool
+	Disabled  bool
+	// UnfocusOnPointerOutside releases focus when a primary pointer press lands outside this focusable subtree and does not target another focusable.
+	UnfocusOnPointerOutside bool
+	OnKeyCapture            func(event woxui.KeyEvent) bool
+	OnKey                   func(event woxui.KeyEvent) bool
+	OnTextInput             func(event woxui.TextInputEvent) bool
+	OnFocusChange           func(focused bool)
+	TextInput               func(bounds woxui.Rect) woxui.TextInputState
+	Child                   Widget
 }
 
 func (w Focusable) layout(ctx context, available constraints) *node {
@@ -129,13 +132,14 @@ func (w Focusable) layout(ctx context, available constraints) *node {
 		child.kind = "focusable"
 	}
 	child.focus = &focusBehavior{
-		autofocus:     w.Autofocus,
-		disabled:      w.Disabled,
-		onKeyCapture:  w.OnKeyCapture,
-		onKey:         w.OnKey,
-		onTextInput:   w.OnTextInput,
-		onFocusChange: w.OnFocusChange,
-		textInput:     w.TextInput,
+		autofocus:               w.Autofocus,
+		disabled:                w.Disabled,
+		unfocusOnPointerOutside: w.UnfocusOnPointerOutside,
+		onKeyCapture:            w.OnKeyCapture,
+		onKey:                   w.OnKey,
+		onTextInput:             w.OnTextInput,
+		onFocusChange:           w.OnFocusChange,
+		textInput:               w.TextInput,
 	}
 	return child
 }

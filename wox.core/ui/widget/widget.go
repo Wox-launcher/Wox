@@ -232,9 +232,13 @@ type Flex struct {
 
 // StackChild positions one child relative to its stack's top-left corner.
 type StackChild struct {
-	Left  float32
-	Top   float32
-	Child Widget
+	Left         float32
+	Top          float32
+	Right        float32
+	Bottom       float32
+	AnchorRight  bool
+	AnchorBottom bool
+	Child        Widget
 }
 
 // Stack overlays children in declaration order; later children receive pointer events first.
@@ -256,6 +260,7 @@ type ScrollView struct {
 	ID              string
 	Width           float32
 	Height          float32
+	MaxHeight       float32
 	ContentWidth    float32
 	ContentHeight   float32
 	Horizontal      bool
@@ -263,9 +268,10 @@ type ScrollView struct {
 	InitialOffset   float32
 	Controller      *ScrollController
 	KeepVisible     *ScrollRange
+	KeepVisibleKey  Key
 	OnOffsetChanged func(float32)
 	Child           Widget
-	onGeometry      func(viewport, content float32)
+	onGeometry      func(viewport, content float32, measuredKeepVisible *ScrollRange)
 }
 
 // Clip confines a child to a fixed logical rectangle without applying scrolling.
@@ -299,6 +305,8 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 	height := available.height
 	if w.Height > 0 {
 		height = min(w.Height, available.height)
+	} else if w.MaxHeight > 0 {
+		height = min(w.MaxHeight, available.height)
 	}
 	if w.Horizontal {
 		contentWidth := max(width, w.ContentWidth)
@@ -309,7 +317,7 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 		}
 		offset := min(max(float32(0), w.Offset), max(float32(0), contentWidth-width))
 		if w.onGeometry != nil {
-			w.onGeometry(width, contentWidth)
+			w.onGeometry(width, contentWidth, scrollChildRange(child, w.KeepVisibleKey, true))
 		}
 		result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
 		if child != nil {
@@ -325,9 +333,13 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 		// Flex children can legitimately exceed a caller's estimated extent. The measured height must remain scrollable.
 		contentHeight = max(contentHeight, child.bounds.Height)
 	}
+	if w.Height <= 0 && w.MaxHeight > 0 && child != nil {
+		height = max(float32(1), min(height, child.bounds.Height))
+		contentHeight = max(height, max(w.ContentHeight, child.bounds.Height))
+	}
 	offset := min(max(float32(0), w.Offset), max(float32(0), contentHeight-height))
 	if w.onGeometry != nil {
-		w.onGeometry(height, contentHeight)
+		w.onGeometry(height, contentHeight, scrollChildRange(child, w.KeepVisibleKey, false))
 	}
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
 	if child != nil {
@@ -335,6 +347,36 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 		result.children = []*node{child}
 	}
 	return result
+}
+
+// scrollChildRange resolves a keyed descendant after layout so scrolling follows measured geometry.
+func scrollChildRange(root *node, key Key, horizontal bool) *ScrollRange {
+	if root == nil || key == "" {
+		return nil
+	}
+	target := findNodeByKey(root, key)
+	if target == nil {
+		return nil
+	}
+	if horizontal {
+		return &ScrollRange{Start: target.bounds.X, End: target.bounds.X + target.bounds.Width}
+	}
+	return &ScrollRange{Start: target.bounds.Y, End: target.bounds.Y + target.bounds.Height}
+}
+
+func findNodeByKey(root *node, key Key) *node {
+	if root == nil {
+		return nil
+	}
+	if root.key == key {
+		return root
+	}
+	for _, child := range root.children {
+		if target := findNodeByKey(child, key); target != nil {
+			return target
+		}
+	}
+	return nil
 }
 
 func (w Stack) layout(ctx context, available constraints) *node {
@@ -352,7 +394,15 @@ func (w Stack) layout(ctx context, available constraints) *node {
 			continue
 		}
 		child := positioned.Child.layout(ctx, constraints{width: max(0, width-positioned.Left), height: max(0, height-positioned.Top)})
-		child.place(positioned.Left, positioned.Top)
+		x := positioned.Left
+		y := positioned.Top
+		if positioned.AnchorRight {
+			x = max(float32(0), width-positioned.Right-child.bounds.Width)
+		}
+		if positioned.AnchorBottom {
+			y = max(float32(0), height-positioned.Bottom-child.bounds.Height)
+		}
+		child.place(x, y)
 		result.children = append(result.children, child)
 	}
 	return result

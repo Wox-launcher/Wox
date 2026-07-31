@@ -179,7 +179,7 @@ type scrollViewState struct {
 func (s *scrollViewState) InitState(context StateContext, widget any) {
 	props := widget.(ScrollView)
 	s.updateBindings(context, props)
-	s.keepVisiblePending = props.KeepVisible != nil
+	s.keepVisiblePending = props.KeepVisible != nil || props.KeepVisibleKey != ""
 }
 
 // DidUpdateWidget rebinds an externally replaced controller without resetting its offset.
@@ -187,8 +187,8 @@ func (s *scrollViewState) DidUpdateWidget(context StateContext, oldWidget, newWi
 	oldProps := oldWidget.(ScrollView)
 	newProps := newWidget.(ScrollView)
 	s.updateBindings(context, newProps)
-	if !sameScrollRange(oldProps.KeepVisible, newProps.KeepVisible) {
-		s.keepVisiblePending = newProps.KeepVisible != nil
+	if !sameScrollRange(oldProps.KeepVisible, newProps.KeepVisible) || oldProps.KeepVisibleKey != newProps.KeepVisibleKey {
+		s.keepVisiblePending = newProps.KeepVisible != nil || newProps.KeepVisibleKey != ""
 	}
 }
 
@@ -204,15 +204,19 @@ func (s *scrollViewState) Build(context StateContext, widget any) Widget {
 	primitive.InitialOffset = 0
 	primitive.OnOffsetChanged = nil
 	primitive.Offset = s.controller.Offset()
-	primitive.onGeometry = func(viewport, content float32) {
+	primitive.onGeometry = func(viewport, content float32, measuredKeepVisible *ScrollRange) {
 		geometryChanged := !s.hasGeometry || s.viewport != viewport || s.content != content
 		s.hasGeometry = true
 		s.viewport = viewport
 		s.content = content
 		s.controller.setGeometry(viewport, content)
-		if props.KeepVisible != nil && (s.keepVisiblePending || geometryChanged) {
+		keepVisible := props.KeepVisible
+		if props.KeepVisibleKey != "" {
+			keepVisible = measuredKeepVisible
+		}
+		if keepVisible != nil && (s.keepVisiblePending || geometryChanged) {
 			s.keepVisiblePending = false
-			s.controller.EnsureVisible(props.KeepVisible.Start, props.KeepVisible.End)
+			s.controller.EnsureVisible(keepVisible.Start, keepVisible.End)
 		}
 	}
 	id := props.ID
@@ -268,5 +272,5 @@ func (s *scrollViewState) updateBindings(context StateContext, props ScrollView)
 	s.controller = controller
 	s.attachment = controller.attach(context, props.OnOffsetChanged)
 	s.hasGeometry = false
-	s.keepVisiblePending = props.KeepVisible != nil
+	s.keepVisiblePending = props.KeepVisible != nil || props.KeepVisibleKey != ""
 }

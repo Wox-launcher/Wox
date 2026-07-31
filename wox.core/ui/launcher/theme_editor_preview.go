@@ -114,7 +114,7 @@ func (a *App) buildThemeEditorSurface(state *themeEditorPreviewSnapshot, palette
 	callbacks := formFieldCallbacks{idPrefix: "theme-editor", focus: a.focusThemeEditorField, setText: a.setThemeEditorText, onKey: a.onThemeEditorPreviewKey}
 	rows := make([]woxwidget.Widget, 0, len(state.definitions))
 	for index, definition := range state.definitions {
-		rows = append(rows, a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, innerWidth, formDefinitionHeight(definition, state.values)))
+		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("theme-editor", index), Child: a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, innerWidth, 0)})
 	}
 	dirty := false
 	for key, value := range state.values {
@@ -131,7 +131,7 @@ func (a *App) buildThemeEditorSurface(state *themeEditorPreviewSnapshot, palette
 	return previewview.ThemeEditorPreviewView(previewview.ThemeEditorPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), DraftTheme: draftPalette.componentTheme(),
 		Error: state.error, SaveLabel: saveLabel, Dirty: dirty, Saving: state.saving,
-		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions, state.values), KeepVisible: formFieldsKeepVisible(state.formFieldsSnapshot),
+		Rows: rows, KeepVisibleKey: formFieldsKeepVisibleKey("theme-editor", state.formFieldsSnapshot),
 		OnSubmit: a.submitThemeEditorPreview,
 	})
 }

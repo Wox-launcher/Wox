@@ -9,14 +9,16 @@ import (
 
 // HotkeyRecorderProps describes the display state of a tappable hotkey recorder.
 type HotkeyRecorderProps struct {
-	Labels      []string
-	Placeholder string
-	Focused     bool
-	Error       bool
-	Hold        bool
-	HoldPrefix  string
-	Window      *woxui.Window
-	Theme       Theme
+	ID            string
+	Labels        []string
+	Placeholder   string
+	Focused       bool
+	Error         bool
+	Hold          bool
+	HoldPrefix    string
+	Window        *woxui.Window
+	Theme         Theme
+	OnFocusChange func(bool)
 }
 
 // WoxHotkeyRecorder matches Flutter's outlined recorder with platform-labelled keycaps.
@@ -53,8 +55,95 @@ func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
 	}
 
 	width := contentWidth + 16
-	return woxwidget.Container{
+	contentBox := woxwidget.Container{
 		Width: width, Height: 30, Padding: woxwidget.Insets{Left: 8, Top: 4, Right: 8, Bottom: 4},
 		BorderColor: border, BorderWidth: 1, Radius: 4, Child: content,
+	}
+	key := woxwidget.Key(props.ID)
+	return woxwidget.Stateful{
+		Key: key, Type: (*hotkeyRecorderFocusState)(nil), Widget: hotkeyRecorderFocusWidget{Props: props, Child: contentBox},
+		CreateState: func() woxwidget.State { return &hotkeyRecorderFocusState{} },
 	}, width
+}
+
+type hotkeyRecorderFocusWidget struct {
+	Props HotkeyRecorderProps
+	Child woxwidget.Widget
+}
+
+type hotkeyRecorderFocusState struct {
+	focusNode  *woxwidget.FocusNode
+	attachment *woxwidget.FocusAttachment
+	key        woxwidget.Key
+}
+
+func (s *hotkeyRecorderFocusState) InitState(context woxwidget.StateContext, widget any) {
+	s.focusNode = woxwidget.NewFocusNode()
+	s.updateBinding(context, widget.(hotkeyRecorderFocusWidget).Props.ID)
+	if widget.(hotkeyRecorderFocusWidget).Props.Focused {
+		context.PostFrame(func() { s.focusNode.RequestFocus() })
+	}
+}
+
+func (s *hotkeyRecorderFocusState) DidUpdateWidget(context woxwidget.StateContext, oldWidget, newWidget any) {
+	oldProps := oldWidget.(hotkeyRecorderFocusWidget).Props
+	props := newWidget.(hotkeyRecorderFocusWidget).Props
+	s.updateBinding(context, props.ID)
+	if oldProps.Focused == props.Focused {
+		return
+	}
+	if props.Focused {
+		context.PostFrame(func() { s.focusNode.RequestFocus() })
+	} else {
+		context.PostFrame(func() { s.focusNode.Unfocus() })
+	}
+}
+
+func (s *hotkeyRecorderFocusState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	config := widget.(hotkeyRecorderFocusWidget)
+	s.updateBinding(context, config.Props.ID)
+	return woxwidget.Focusable{
+		Key: s.key, UnfocusOnPointerOutside: true,
+		// Keep recorder navigation local so Enter and Escape cannot fall through to page actions.
+		OnKey: func(event woxui.KeyEvent) bool {
+			if event.Key == woxui.KeyEscape {
+				return true
+			}
+			if event.Down && !event.Composing && event.Key == woxui.KeyEnter && event.Modifiers == 0 {
+				if !s.focusNode.MoveFocus(false) {
+					s.focusNode.Unfocus()
+				}
+				return true
+			}
+			return false
+		},
+		OnFocusChange: func(focused bool) {
+			s.focusNode.UpdateFocus(focused)
+			if config.Props.OnFocusChange != nil {
+				config.Props.OnFocusChange(focused)
+			}
+			context.Invalidate()
+		},
+		Child: woxwidget.Gesture{ID: config.Props.ID, OnTap: func() { s.focusNode.RequestFocus() }, Child: config.Child},
+	}
+}
+
+func (s *hotkeyRecorderFocusState) Dispose() {
+	if s.attachment != nil {
+		s.attachment.Detach()
+		s.attachment = nil
+	}
+}
+
+// updateBinding keeps the recorder's stable FocusNode attached when its retained widget identity changes.
+func (s *hotkeyRecorderFocusState) updateBinding(context woxwidget.StateContext, id string) {
+	key := woxwidget.Key(id)
+	if s.attachment != nil && s.key == key {
+		return
+	}
+	if s.attachment != nil {
+		s.attachment.Detach()
+	}
+	s.key = key
+	s.attachment = context.BindFocusNode(s.focusNode, key)
 }

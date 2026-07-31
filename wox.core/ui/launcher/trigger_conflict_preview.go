@@ -61,7 +61,7 @@ func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPrevi
 	callbacks := formFieldCallbacks{idPrefix: "trigger-conflict", focus: a.focusTriggerConflictField, setText: a.setTriggerConflictText, onKey: a.onTriggerConflictPreviewKey}
 	rows := make([]woxwidget.Widget, 0, len(state.definitions))
 	for index, definition := range state.definitions {
-		rows = append(rows, a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, width-36, formDefinitionHeight(definition, state.values)))
+		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("trigger-conflict", index), Child: a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, definition, width-36, 0)})
 	}
 	dirty := false
 	for key, value := range state.values {
@@ -73,7 +73,7 @@ func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPrevi
 	return previewview.TriggerConflictPreviewView(previewview.TriggerConflictPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Keyword: state.keyword, Title: state.title, Message: state.message,
 		Error: state.error, SaveLabel: a.translate("i18n:ui_save"), Dirty: dirty, Saving: state.saving,
-		Rows: rows, RowsHeight: formDefinitionsContentHeight(state.definitions, state.values), KeepVisible: formFieldsKeepVisible(state.formFieldsSnapshot),
+		Rows: rows, KeepVisibleKey: formFieldsKeepVisibleKey("trigger-conflict", state.formFieldsSnapshot),
 		OnSubmit: a.submitTriggerConflictPreview,
 	})
 }

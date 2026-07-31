@@ -303,7 +303,7 @@ func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
 	}
 	if hotkeyRecordingMovesFocus(event) {
 		a.stopHotkeyRecording()
-		return false
+		return true
 	}
 	if !state.ready || state.raw || !state.fallback || state.checking {
 		return true

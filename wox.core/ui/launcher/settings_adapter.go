@@ -265,6 +265,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 	))
 	contentHeight := woxcomponent.PageHeaderHeight
 	var keepVisible *woxwidget.ScrollRange
+	var keepVisibleKey woxwidget.Key
 	currentSection := ""
 	for index, item := range items {
 		index := index
@@ -293,15 +294,15 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			idPrefix: "hotkey-settings", imageScale: imageScale, focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
 		}
 		for index, definition := range hotkeyForm.definitions {
-			rowHeight := formDefinitionHeight(definition, hotkeyForm.values)
 			if hotkeyForm.active && index == hotkeyForm.focused {
-				keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + rowHeight}
+				keepVisible = nil
+				keepVisibleKey = formFieldRowKey("settings-hotkey", index)
 			}
-			field := a.buildFormField(hotkeyForm, callbacks, snapshot.palette, index, definition, contentWidth, rowHeight)
-			children = append(children, woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
-				Width: contentWidth, Height: rowHeight, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key, Child: field, Theme: snapshot.palette.componentTheme(),
-			}))
-			contentHeight += rowHeight
+			field := a.buildFormField(hotkeyForm, callbacks, snapshot.palette, index, definition, contentWidth, 0)
+			target := woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
+				Width: contentWidth, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key, Child: field, Theme: snapshot.palette.componentTheme(),
+			})
+			children = append(children, woxwidget.Keyed{Key: formFieldRowKey("settings-hotkey", index), Child: target})
 		}
 	}
 	note := snapshot.note
@@ -310,7 +311,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		contentHeight += 34
 	}
 	return launcherview.SettingsPage(launcherview.SettingsPageProps{
-		ID: "settings-page-" + snapshot.tab, Width: width, Height: height, Children: children, ContentHeight: contentHeight, KeepVisible: keepVisible,
+		ID: "settings-page-" + snapshot.tab, Width: width, Height: height, Children: children, ContentHeight: contentHeight, KeepVisible: keepVisible, KeepVisibleKey: keepVisibleKey,
 	})
 }
 

@@ -253,8 +253,7 @@ type PluginMetadataProps struct {
 // PluginFormProps contains the shared form rows and scroll actions.
 type PluginFormProps struct {
 	Rows             []woxwidget.Widget
-	ContentHeight    float32
-	KeepVisible      *woxwidget.ScrollRange
+	KeepVisibleKey   woxwidget.Key
 	Intro            string
 	EmptyTitle       string
 	EmptyDescription string
@@ -336,19 +335,16 @@ func pluginEditor(props PluginEditorProps, width, height float32, theme woxcompo
 			children = append(children, pluginEmptySettings(props.Form.EmptyTitle, props.Form.EmptyDescription, innerWidth, bodyHeight, theme))
 		} else {
 			formRows := props.Form.Rows
-			contentHeight := props.Form.ContentHeight
 			if props.Form.Intro != "" {
 				intro := woxwidget.Container{Width: innerWidth, Height: 62, Radius: 6, Color: theme.QueryBackground, Padding: woxwidget.Insets{Left: 12, Top: 12, Right: 12}, Child: woxwidget.TextBlock{
 					Value: props.Form.Intro, Width: max(float32(0), innerWidth-24), Height: 38, MaxLines: 2, LineHeight: 18, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle,
 				}}
 				formRows = append([]woxwidget.Widget{intro}, formRows...)
-				contentHeight += 74
 			}
-			scrollContentHeight := max(bodyHeight, contentHeight+12)
 			children = append(children, woxwidget.ScrollView{
 				Key: "plugin-settings-scroll", ID: "plugin-settings-scroll", Width: innerWidth, Height: bodyHeight,
-				ContentHeight: scrollContentHeight, KeepVisible: props.Form.KeepVisible,
-				Child: woxwidget.Container{Width: innerWidth, Height: scrollContentHeight, Padding: woxwidget.Insets{Top: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: formRows}},
+				KeepVisibleKey: props.Form.KeepVisibleKey,
+				Child:          woxwidget.Container{Width: innerWidth, Padding: woxwidget.Insets{Top: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: formRows}},
 			})
 		}
 	}

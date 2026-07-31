@@ -908,7 +908,6 @@ func (a *App) focusPluginFormField(index int) {
 	if state == nil || index < 0 || index >= len(state.definitions) || !formDefinitionFocusable(state.definitions[index]) {
 		return
 	}
-	a.releasePluginSearchFocusForField(state.definitions[index])
 	a.stopHotkeyRecordingForDifferentField(&state.formFieldsState, index)
 	previousFocused := state.focused
 	syncFormFieldsEditorLocked(&state.formFieldsState)
@@ -919,17 +918,6 @@ func (a *App) focusPluginFormField(index int) {
 	a.invalidateSettingsWindow()
 	if previousFocused != index && pluginFormDirty(state.definitions, state.values, state.initial) {
 		a.submitPluginSettings()
-	}
-}
-
-// releasePluginSearchFocusForField transfers retained keyboard ownership from the catalog search to the plugin form.
-func (a *App) releasePluginSearchFocusForField(definition formDefinition) {
-	a.pluginSettings.SetSearchFocused(false)
-	if formDefinitionTextEditable(definition) {
-		return
-	}
-	if host := a.settingsHost; host != nil {
-		host.ClearFocus()
 	}
 }
 
@@ -947,7 +935,6 @@ func (a *App) movePluginFormFocus(delta int) {
 			break
 		}
 	}
-	a.releasePluginSearchFocusForField(state.definitions[index])
 	a.stopHotkeyRecordingForDifferentField(&state.formFieldsState, index)
 	textInput := state.editor != nil
 	a.updateSettingsTextInput(textInput)
@@ -1238,6 +1225,24 @@ func (a *App) setPluginFormText(index int, value string) {
 	}
 }
 
+// preparePluginSettingSaveValues separates staged form values from the normalized payload sent to core.
+func preparePluginSettingSaveValues(state *pluginSettingsFormState) (map[string]string, map[string]string, error) {
+	submitted := make(map[string]string)
+	for _, key := range editableFormKeys(state.definitions) {
+		if state.values[key] != state.initial[key] {
+			submitted[key] = state.values[key]
+		}
+	}
+	persisted := make(map[string]string, len(submitted))
+	for key, value := range submitted {
+		persisted[key] = value
+	}
+	if err := rewriteDictationSaveValues(state.pluginID, state.values, state.initial, persisted); err != nil {
+		return nil, nil, err
+	}
+	return submitted, persisted, nil
+}
+
 // submitPluginSettings serializes auto-saves while retaining edits made during an in-flight request.
 func (a *App) submitPluginSettings() {
 	state := a.pluginSettings.Form()
@@ -1255,19 +1260,14 @@ func (a *App) submitPluginSettings() {
 		a.invalidateSettingsWindow()
 		return
 	}
-	values := make(map[string]string)
-	for _, key := range editableFormKeys(state.definitions) {
-		if state.values[key] != state.initial[key] {
-			values[key] = state.values[key]
-		}
-	}
-	if err := rewriteDictationSaveValues(state.pluginID, state.values, state.initial, values); err != nil {
+	submittedValues, persistedValues, err := preparePluginSettingSaveValues(state)
+	if err != nil {
 		state.status = "Could not prepare dictation actions: " + err.Error()
 		state.statusError = true
 		a.invalidateSettingsWindow()
 		return
 	}
-	if len(values) == 0 {
+	if len(persistedValues) == 0 {
 		return
 	}
 	state.saving = true
@@ -1280,7 +1280,7 @@ func (a *App) submitPluginSettings() {
 	util.Go(a.lifecycleCtx, "save plugin settings", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		saveErr := a.services.UpdatePluginSettings(ctx, a.sessionID, pluginID, values)
+		saveErr := a.services.UpdatePluginSettings(ctx, a.sessionID, pluginID, persistedValues)
 		_ = a.runOnUI("apply plugin settings save", func() {
 			form := a.pluginSettings.Form()
 			if form != nil && form.pluginID == pluginID {
@@ -1289,7 +1289,7 @@ func (a *App) submitPluginSettings() {
 					form.status = saveErr.Error()
 					form.statusError = true
 				} else {
-					for key, value := range values {
+					for key, value := range submittedValues {
 						form.initial[key] = value
 					}
 					form.status = ""
@@ -1297,7 +1297,7 @@ func (a *App) submitPluginSettings() {
 				}
 			}
 			if saveErr == nil {
-				a.applySavedPluginSettingValues(pluginID, values)
+				a.applySavedPluginSettingValues(pluginID, persistedValues)
 				if form != nil && form.pluginID == pluginID && pluginFormDirty(form.definitions, form.values, form.initial) {
 					a.submitPluginSettings()
 				}

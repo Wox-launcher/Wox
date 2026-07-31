@@ -763,7 +763,9 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		actionPanel = a.actionPanel
 		palette = a.palette
 		densityMetrics = a.densityMetrics.normalized()
-		formHeight = formPanelHeight(a.form)
+		if a.form != nil {
+			formHeight = int(densityMetrics.scaled(formContentMaximumHeight) + 2*densityMetrics.scaled(10))
+		}
 		toolbarMessageVisible = a.toolbarMsg != nil
 		chatFullscreen = a.chatFullscreen
 		if actionPanel && a.actionFilter != nil {

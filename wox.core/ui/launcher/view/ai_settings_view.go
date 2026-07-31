@@ -1,6 +1,8 @@
 package view
 
 import (
+	"fmt"
+
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -41,16 +43,15 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 
 	children := []woxwidget.Widget{header}
 	contentHeight := woxcomponent.PageHeaderHeight
-	var keepVisible *woxwidget.ScrollRange
+	var keepVisibleKey woxwidget.Key
 	for _, table := range props.Tables {
-		tableHeight := table.Field.Height
 		if table.Index == props.Selected {
-			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + tableHeight}
+			keepVisibleKey = woxwidget.Key(fmt.Sprintf("ai-settings-table-%d", table.Index))
 		}
-		children = append(children, woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
-			Width: table.Field.Width, Height: tableHeight, Highlighted: table.Highlighted, Child: FormTableField(table.Field), Theme: props.Theme,
-		}))
-		contentHeight += tableHeight
+		target := woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
+			Width: table.Field.Width, Highlighted: table.Highlighted, Child: FormTableField(table.Field), Theme: props.Theme,
+		})
+		children = append(children, woxwidget.Keyed{Key: woxwidget.Key(fmt.Sprintf("ai-settings-table-%d", table.Index)), Child: target})
 	}
 	if props.Note != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
@@ -59,6 +60,6 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 		contentHeight += 30
 	}
 	return SettingsPage(SettingsPageProps{
-		ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight, KeepVisible: keepVisible,
+		ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight, KeepVisibleKey: keepVisibleKey,
 	})
 }

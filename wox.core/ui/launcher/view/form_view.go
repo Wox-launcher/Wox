@@ -10,40 +10,40 @@ const formAIModelControlHeight = float32(34)
 
 // FormPanelProps contains the prepared rows and actions rendered by a launcher form.
 type FormPanelProps struct {
-	Width         float32
-	Height        float32
-	Title         string
-	Rows          []woxwidget.Widget
-	ContentHeight float32
-	KeepVisible   *woxwidget.ScrollRange
-	CancelLabel   string
-	SaveLabel     string
-	Theme         woxcomponent.Theme
-	OnCancel      func()
-	OnSave        func()
+	Width          float32
+	MaximumHeight  float32
+	Padding        woxwidget.Insets
+	Rows           []woxwidget.Widget
+	KeepVisibleKey woxwidget.Key
+	CancelLabel    string
+	SaveLabel      string
+	Theme          woxcomponent.Theme
+	OnCancel       func()
+	OnSave         func()
 }
 
 // FormPanel builds the shared launcher form shell.
 func FormPanel(props FormPanelProps) woxwidget.Widget {
-	bodyHeight := props.Height - 100
-	body := woxwidget.ScrollView{
-		Key: "form-scroll", ID: "form-scroll", Width: props.Width - 28, Height: bodyHeight,
-		ContentHeight: max(bodyHeight, props.ContentHeight), KeepVisible: props.KeepVisible,
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
+	padding := props.Padding
+	if padding == (woxwidget.Insets{}) {
+		padding = woxwidget.Insets{Left: 14, Top: 10, Right: 14, Bottom: 10}
 	}
-	buttons := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-		woxwidget.Painter{Width: max(float32(0), props.Width-28-210), Height: 36},
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-cancel", Label: props.CancelLabel, Width: 86, Height: 36, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnCancel, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-save", Label: props.SaveLabel, Width: 104, Height: 36, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
+	contentWidth := props.Width - padding.Left - padding.Right
+	bodyMaximumHeight := max(float32(1), props.MaximumHeight-padding.Top-padding.Bottom-46)
+	body := woxwidget.ScrollView{
+		Key: "form-scroll", ID: "form-scroll", Width: contentWidth, MaxHeight: bodyMaximumHeight,
+		KeepVisibleKey: props.KeepVisibleKey,
+		Child:          woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
+	}
+	buttons := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
+		woxwidget.Painter{Width: max(float32(0), contentWidth-286), Height: 36},
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-cancel", Label: props.CancelLabel, Width: 108, Height: 36, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnCancel, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-save", Label: props.SaveLabel, Width: 166, Height: 36, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
 	}}
 	return woxwidget.Container{
-		Width: props.Width, Height: props.Height, Radius: 12, Color: props.Theme.ActionBackground,
-		Padding: woxwidget.Insets{Left: 14, Top: 12, Right: 14, Bottom: 12},
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: props.Width - 28, Height: 28, Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText}},
-			body,
-			buttons,
-		}},
+		Width: props.Width, Radius: 12, Color: props.Theme.ActionBackground,
+		Padding: padding,
+		Child:   woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{body, buttons}},
 	}
 }
 
@@ -59,7 +59,11 @@ type FormStaticFieldProps struct {
 // FormStaticField builds a heading, label, spacer, or unsupported field row.
 func FormStaticField(props FormStaticFieldProps) woxwidget.Widget {
 	if props.Kind == "newline" {
-		return woxwidget.Painter{Width: props.Width, Height: props.Height}
+		height := props.Height
+		if height <= 0 {
+			height = 12
+		}
+		return woxwidget.Painter{Width: props.Width, Height: height}
 	}
 	style := woxui.TextStyle{Size: 12}
 	color := props.Theme.ActionHeader
@@ -72,7 +76,11 @@ func FormStaticField(props FormStaticFieldProps) woxwidget.Widget {
 		style = woxui.TextStyle{Size: 11}
 		padding.Top = 10
 	}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: padding, Child: woxwidget.Text{Value: props.Value, Style: style, Color: color}}
+	height := props.Height
+	if height <= 0 {
+		height = 34
+	}
+	return woxwidget.Container{Width: props.Width, Height: height, Padding: padding, Child: woxwidget.Text{Value: props.Value, Style: style, Color: color}}
 }
 
 // FormModelFieldProps contains one model selector row.
@@ -129,30 +137,30 @@ func FormAppField(props FormAppFieldProps) woxwidget.Widget {
 
 // FormHotkeyFieldProps contains one Flutter-parity hotkey recorder row.
 type FormHotkeyFieldProps struct {
-	ID          string
-	Label       string
-	Description string
-	Labels      []string
-	Placeholder string
-	Status      string
-	Width       float32
-	Height      float32
-	LabelWidth  float32
-	Focused     bool
-	Recording   bool
-	Error       bool
-	Hold        bool
-	HoldPrefix  string
-	Window      *woxui.Window
-	Theme       woxcomponent.Theme
-	OnTap       func()
+	ID            string
+	Label         string
+	Description   string
+	Labels        []string
+	Placeholder   string
+	Status        string
+	Width         float32
+	Height        float32
+	LabelWidth    float32
+	Recording     bool
+	Error         bool
+	Hold          bool
+	HoldPrefix    string
+	Window        *woxui.Window
+	Theme         woxcomponent.Theme
+	OnTap         func()
+	OnFocusChange func(bool)
 }
 
 // FormHotkeyField keeps the recorder at the start of Flutter's shared control column.
 func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 	recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
-		Labels: props.Labels, Placeholder: props.Placeholder, Focused: props.Focused, Error: props.Error, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
-		Window: props.Window, Theme: props.Theme,
+		ID: props.ID, Labels: props.Labels, Placeholder: props.Placeholder, Focused: props.Recording, Error: props.Error, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
+		Window: props.Window, Theme: props.Theme, OnFocusChange: props.OnFocusChange,
 	})
 	recorder = woxwidget.Semantics{
 		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,
@@ -419,11 +427,15 @@ func formFieldLayout(label, description string, width, height, labelWidth float3
 	rightChildren := []woxwidget.Widget{control}
 	if description != "" {
 		rightChildren = append(rightChildren, woxwidget.TextBlock{
-			Value: description, Width: controlWidth, Height: 18, MaxLines: 1, LineHeight: 18,
+			Value: description, Width: controlWidth, LineHeight: 18,
 			Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle,
 		})
 	}
-	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{
+	padding := woxwidget.Insets{}
+	if height <= 0 {
+		padding.Bottom = 10
+	}
+	return woxwidget.Container{Width: width, Height: height, Padding: padding, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{
 		formFieldLabel(label, labelWidth, controlHeight, 6, theme),
 		woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: rightChildren},
 	}}}

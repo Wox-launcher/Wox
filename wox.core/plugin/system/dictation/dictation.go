@@ -1013,18 +1013,20 @@ func (p *DictationPlugin) StartModelDownload(ctx context.Context, modelID string
 		return nil
 	}
 
-	util.Go(ctx, "download dictation model", func() {
+	// Downloads outlive the initiating UI or HTTP request and report their lifecycle through model status polling.
+	downloadCtx := context.WithoutCancel(ctx)
+	util.Go(downloadCtx, "download dictation model", func() {
 		// Ensure native libraries are downloaded before the model so the
 		// model can be used immediately after download.
 		if p.nativeLibManager != nil && !p.nativeLibManager.IsReady() {
-			if err := p.nativeLibManager.EnsureLibraries(ctx); err != nil {
-				p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to download native libs for model %s: %s", modelID, err.Error()))
+			if err := p.nativeLibManager.EnsureLibraries(downloadCtx); err != nil {
+				p.api.Log(downloadCtx, plugin.LogLevelError, fmt.Sprintf("failed to download native libs for model %s: %s", modelID, err.Error()))
 				return
 			}
 		}
-		err := p.modelManager.DownloadModel(ctx, *info, nil)
+		err := p.modelManager.DownloadModel(downloadCtx, *info, nil)
 		if err != nil {
-			p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to download model %s: %s", modelID, err.Error()))
+			p.api.Log(downloadCtx, plugin.LogLevelError, fmt.Sprintf("failed to download model %s: %s", modelID, err.Error()))
 		}
 	})
 
@@ -1113,10 +1115,11 @@ func (p *DictationPlugin) StartNativeLibDownload(ctx context.Context) error {
 	if p.nativeLibManager.IsReady() {
 		return nil
 	}
-	util.Go(ctx, "download dictation native libs", func() {
-		err := p.nativeLibManager.EnsureLibraries(ctx)
+	downloadCtx := context.WithoutCancel(ctx)
+	util.Go(downloadCtx, "download dictation native libs", func() {
+		err := p.nativeLibManager.EnsureLibraries(downloadCtx)
 		if err != nil {
-			p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to download native libs: %s", err.Error()))
+			p.api.Log(downloadCtx, plugin.LogLevelError, fmt.Sprintf("failed to download native libs: %s", err.Error()))
 		}
 	})
 	return nil

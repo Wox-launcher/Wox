@@ -128,7 +128,11 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 			headerHeight = 60
 		}
 		header := formTableInlineHeader(props, props.Width, headerHeight)
-		return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{
+		padding := woxwidget.Insets{Top: 6}
+		if props.Height <= 0 {
+			padding.Bottom = 10
+		}
+		return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: padding, Child: woxwidget.Flex{
 			Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{header, formTableGrid(props, props.Width, gridHeight)},
 		}}
 	}
@@ -145,15 +149,23 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 	tableChildren := []woxwidget.Widget{formTableGrid(props, fieldWidth, gridHeight)}
 	if props.Description != "" {
 		tableChildren = append(tableChildren, woxwidget.TextBlock{
-			Value: props.Description, Width: min(fieldWidth, float32(620)), Height: 48, MaxLines: 3, LineHeight: 16,
+			Value: props.Description, Width: min(fieldWidth, float32(620)), MaxLines: 3, LineHeight: 16,
 			Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle,
 		})
 	}
-	label := woxwidget.Container{Width: labelWidth, Height: max(float32(0), props.Height-16), Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: labelChildren}}
+	labelHeight := float32(0)
+	if props.Height > 0 {
+		labelHeight = max(float32(0), props.Height-16)
+	}
+	label := woxwidget.Container{Width: labelWidth, Height: labelHeight, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: labelChildren}}
 	actions := woxwidget.Container{Width: fieldWidth, Height: 36, Padding: woxwidget.Insets{Left: max(float32(0), fieldWidth-74)}, Child: formTableAddButton(props)}
 	table := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: tableChildren}
 	field := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{actions, table}}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{label, field}}}
+	padding := woxwidget.Insets{Top: 6}
+	if props.Height <= 0 {
+		padding.Bottom = 10
+	}
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: padding, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{label, field}}}
 }
 
 func formTableInlineHeader(props FormTableFieldProps, width, height float32) woxwidget.Widget {
@@ -727,6 +739,7 @@ type FormTableRowFieldProps struct {
 	Window          *woxui.Window
 	Theme           woxcomponent.Theme
 	OnTap           func()
+	OnFocusChange   func(bool)
 	OnChoiceTap     func(woxui.Rect)
 	OnFocus         func()
 	OnChanged       func(string)
@@ -824,8 +837,8 @@ func formTableRowControl(props FormTableRowFieldProps, width, height float32) wo
 		return formTableRowSelectControl(props, width, height)
 	case "hotkey", "dictationHotkey":
 		recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
-			Labels: props.HotkeyLabels, Placeholder: props.Placeholder, Focused: props.Focused, Error: props.RecordingError, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
-			Window: props.Window, Theme: props.Theme,
+			ID: props.ID, Labels: props.HotkeyLabels, Placeholder: props.Placeholder, Focused: props.Recording, Error: props.RecordingError, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
+			Window: props.Window, Theme: props.Theme, OnFocusChange: props.OnFocusChange,
 		})
 		recorder = woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: recorder}
 		if !props.Recording || props.RecordingStatus == "" || width-recorderWidth <= 8 {

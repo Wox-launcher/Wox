@@ -134,10 +134,10 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		innerWidth := max(float32(0), width-32)
 		editor.Form = &launcherview.PluginFormProps{
 			Rows: []woxwidget.Widget{
-				a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, 0, keywordDefinition, innerWidth, formDefinitionHeight(keywordDefinition, form.values)),
+				woxwidget.Keyed{Key: pluginSettingRowKey(0), Child: a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, 0, keywordDefinition, innerWidth, 0)},
 			},
-			ContentHeight: formDefinitionHeight(keywordDefinition, form.values),
-			Intro:         a.translate("i18n:ui_plugin_trigger_keywords_tip"),
+			KeepVisibleKey: pluginSettingKeepVisibleKey(form.formFieldsSnapshot, 0),
+			Intro:          a.translate("i18n:ui_plugin_trigger_keywords_tip"),
 		}
 		props.Editor = editor
 		return props
@@ -154,14 +154,14 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 	rows := make([]woxwidget.Widget, 0, len(settingDefinitions))
 	for index, definition := range settingDefinitions {
 		formIndex := index + 1
-		rowHeight := formDefinitionHeight(definition, form.values)
-		field := a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, formIndex, definition, innerWidth, rowHeight)
-		rows = append(rows, woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
-			Width: innerWidth, Height: rowHeight, Highlighted: snapshot.highlight == "plugin-setting:"+plugin.ID+"\x00"+definition.Value.Key, Child: field, Theme: snapshot.palette.componentTheme(),
-		}))
+		field := a.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, formIndex, definition, innerWidth, 0)
+		target := woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
+			Width: innerWidth, Highlighted: snapshot.highlight == "plugin-setting:"+plugin.ID+"\x00"+definition.Value.Key, Child: field, Theme: snapshot.palette.componentTheme(),
+		})
+		rows = append(rows, woxwidget.Keyed{Key: pluginSettingRowKey(formIndex), Child: target})
 	}
 	editor.Form = &launcherview.PluginFormProps{
-		Rows: rows, ContentHeight: formDefinitionsContentHeight(settingDefinitions, form.values), KeepVisible: pluginSettingsKeepVisible(form.formFieldsSnapshot),
+		Rows: rows, KeepVisibleKey: pluginSettingKeepVisibleKey(form.formFieldsSnapshot, 1),
 		EmptyTitle: a.translate("i18n:ui_plugin_no_settings"), EmptyDescription: a.translate("i18n:ui_plugin_no_settings_subtitle"),
 	}
 	props.Editor = editor
@@ -192,17 +192,16 @@ func (a *App) pluginFormLabelWidth(definitions []formDefinition) float32 {
 	return min(width, float32(200))
 }
 
-// pluginSettingsKeepVisible translates the retained form index past the hidden
-// trigger-keyword editor into the Settings tab's visible scroll coordinates.
-func pluginSettingsKeepVisible(fields formFieldsSnapshot) *woxwidget.ScrollRange {
-	if fields.focused <= 0 || fields.focused >= len(fields.definitions) {
-		return nil
+func pluginSettingRowKey(index int) woxwidget.Key {
+	return woxwidget.Key(fmt.Sprintf("plugin-setting-row-%d", index))
+}
+
+// pluginSettingKeepVisibleKey maps form focus to a measured row on the active plugin tab.
+func pluginSettingKeepVisibleKey(fields formFieldsSnapshot, firstVisible int) woxwidget.Key {
+	if fields.focused < firstVisible || fields.focused >= len(fields.definitions) {
+		return ""
 	}
-	start := float32(0)
-	for index := 1; index < fields.focused; index++ {
-		start += formDefinitionHeight(fields.definitions[index], fields.values)
-	}
-	return &woxwidget.ScrollRange{Start: start, End: start + formDefinitionHeight(fields.definitions[fields.focused], fields.values)}
+	return pluginSettingRowKey(fields.focused)
 }
 
 func (a *App) pluginHeaderProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin) launcherview.PluginHeaderProps {

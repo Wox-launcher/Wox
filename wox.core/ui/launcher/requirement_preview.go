@@ -77,13 +77,13 @@ func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, 
 	}
 	rows := make([]woxwidget.Widget, 0, len(form.definitions))
 	for index, definition := range form.definitions {
-		rows = append(rows, a.buildFormField(form.formFieldsSnapshot, callbacks, palette, index, definition, width-36, formDefinitionHeight(definition, form.values)))
+		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("requirement-form", index), Child: a.buildFormField(form.formFieldsSnapshot, callbacks, palette, index, definition, width-36, 0)})
 	}
 	return previewview.RequirementPreviewView(previewview.RequirementPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Title: form.title, Message: form.message, PluginName: form.pluginName,
 		Error: errorMessage, SaveLabel: a.translate("i18n:ui_save"), Saving: form.saving, Rows: rows,
-		RowsHeight: formDefinitionsContentHeight(form.definitions, form.values), KeepVisible: formFieldsKeepVisible(form.formFieldsSnapshot),
-		OnSubmit: a.submitRequirementForm,
+		KeepVisibleKey: formFieldsKeepVisibleKey("requirement-form", form.formFieldsSnapshot),
+		OnSubmit:       a.submitRequirementForm,
 	})
 }
 

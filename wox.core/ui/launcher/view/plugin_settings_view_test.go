@@ -91,8 +91,7 @@ func TestPluginEditorAutoSavingFormHasNoFooter(t *testing.T) {
 		Header:    PluginHeaderProps{},
 		ActiveTab: "settings",
 		Form: &PluginFormProps{
-			Rows:          []woxwidget.Widget{woxwidget.Container{Width: 400, Height: 40}},
-			ContentHeight: 40,
+			Rows: []woxwidget.Widget{woxwidget.Container{Width: 400, Height: 40}},
 		},
 	}, 600, 500, woxcomponent.Theme{})
 
@@ -102,6 +101,11 @@ func TestPluginEditorAutoSavingFormHasNoFooter(t *testing.T) {
 	}
 	if _, ok := children[2].(woxwidget.ScrollView); !ok {
 		t.Fatalf("plugin editor body type = %T, want scroll view without a save footer", children[2])
+	}
+	scroll := children[2].(woxwidget.ScrollView)
+	content := scroll.Child.(woxwidget.Container)
+	if scroll.ContentHeight != 0 || content.Height != 0 {
+		t.Fatalf("plugin form height hints = scroll %.0f content %.0f, want intrinsic child measurement", scroll.ContentHeight, content.Height)
 	}
 }
 

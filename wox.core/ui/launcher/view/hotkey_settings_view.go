@@ -8,14 +8,13 @@ import (
 
 // HotkeySettingsProps contains prepared form rows for the hotkey settings page.
 type HotkeySettingsProps struct {
-	Width       float32
-	Height      float32
-	Theme       woxcomponent.Theme
-	Available   bool
-	Rows        []woxwidget.Widget
-	RowsHeight  float32
-	KeepVisible *woxwidget.ScrollRange
-	Note        string
+	Width          float32
+	Height         float32
+	Theme          woxcomponent.Theme
+	Available      bool
+	Rows           []woxwidget.Widget
+	KeepVisibleKey woxwidget.Key
+	Note           string
 }
 
 // HotkeySettingsView builds the hotkey settings page.
@@ -31,8 +30,8 @@ func HotkeySettingsView(props HotkeySettingsProps) woxwidget.Widget {
 	bodyHeight := max(float32(80), props.Height-60-headerHeight-noteHeight)
 	body := woxwidget.ScrollView{
 		Key: "hotkey-settings-scroll", ID: "hotkey-settings-scroll", Width: innerWidth, Height: bodyHeight,
-		ContentHeight: max(bodyHeight, props.RowsHeight), KeepVisible: props.KeepVisible,
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
+		KeepVisibleKey: props.KeepVisibleKey,
+		Child:          woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows},
 	}
 	note := props.Note
 	if note == "" {

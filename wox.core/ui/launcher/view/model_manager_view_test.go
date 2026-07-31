@@ -33,3 +33,18 @@ func TestDictationModelManagerUsesFieldAnchoredMenu(t *testing.T) {
 		t.Fatalf("model menu geometry = width %.0f radius %.0f, want field width %.0f and radius 4", content.Width, content.Radius, anchor.Width)
 	}
 }
+
+func TestDictationModelManagerHidesUnknownEngineStatus(t *testing.T) {
+	anchor := woxui.Rect{X: 320, Y: 180, Width: 600, Height: 34}
+	overlay := ModelManagerView(ModelManagerProps{
+		Width: 1200, Height: 800, Anchor: anchor, Anchored: true,
+		EngineKnown: false, EngineReady: false, EngineLabel: "Checking inference engine…", Theme: woxcomponent.Theme{},
+		Options: []ModelManagerOption{{Name: "Qwen3-ASR 0.6B", ActionLabel: "Download", ActionEnabled: true}},
+	})
+	stack := overlay.(woxwidget.Stack)
+	menuStack := stack.Children[1].Child.(woxwidget.FocusScope).Child.(woxwidget.Stack)
+	content := menuStack.Children[0].Child.(woxwidget.Container)
+	if content.Height != ModelManagerRowHeight {
+		t.Fatalf("unknown engine menu height = %.0f, want model-only height %.0f", content.Height, ModelManagerRowHeight)
+	}
+}

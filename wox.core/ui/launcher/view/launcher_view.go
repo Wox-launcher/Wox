@@ -17,9 +17,11 @@ func scaledLauncherSize(value, scale float32) float32 {
 
 // LauncherFloatingView contains one positioned launcher panel.
 type LauncherFloatingView struct {
-	Child woxwidget.Widget
-	Left  float32
-	Top   float32
+	Child        woxwidget.Widget
+	Left         float32
+	Top          float32
+	Bottom       float32
+	AnchorBottom bool
 }
 
 // LauncherViewProps contains the prepared launcher sections and overlays.
@@ -66,7 +68,7 @@ func LauncherView(props LauncherViewProps) woxwidget.Widget {
 	if props.Floating != nil && props.Floating.Child != nil {
 		body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
 			{Child: body},
-			{Left: props.Floating.Left, Top: props.Floating.Top, Child: props.Floating.Child},
+			{Left: props.Floating.Left, Top: props.Floating.Top, Bottom: props.Floating.Bottom, AnchorBottom: props.Floating.AnchorBottom, Child: props.Floating.Child},
 		}}
 	}
 	if props.Overlay != nil {

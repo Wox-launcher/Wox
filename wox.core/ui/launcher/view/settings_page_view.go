@@ -8,13 +8,14 @@ import (
 
 // SettingsPageProps contains prepared settings rows and scroll geometry.
 type SettingsPageProps struct {
-	ID            string
-	Width         float32
-	Height        float32
-	Children      []woxwidget.Widget
-	ContentHeight float32
-	Gap           float32
-	KeepVisible   *woxwidget.ScrollRange
+	ID             string
+	Width          float32
+	Height         float32
+	Children       []woxwidget.Widget
+	ContentHeight  float32
+	Gap            float32
+	KeepVisible    *woxwidget.ScrollRange
+	KeepVisibleKey woxwidget.Key
 }
 
 // SettingsPageContentWidth returns the content width inside the shared page insets.
@@ -31,7 +32,7 @@ func SettingsPage(props SettingsPageProps) woxwidget.Widget {
 		id = "settings-page-scroll"
 	}
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 38, Top: 34, Right: 44, Bottom: 24}, Child: woxwidget.ScrollView{
-		Key: woxwidget.Key(id), ID: id, KeepVisible: props.KeepVisible,
+		Key: woxwidget.Key(id), ID: id, KeepVisible: props.KeepVisible, KeepVisibleKey: props.KeepVisibleKey,
 		Width: contentWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, props.ContentHeight),
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.Gap, Children: props.Children},
 	}}

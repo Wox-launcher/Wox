@@ -8,19 +8,18 @@ import (
 
 // ThemeEditorPreviewProps contains prepared editor rows and draft colors.
 type ThemeEditorPreviewProps struct {
-	Width       float32
-	Height      float32
-	Theme       woxcomponent.Theme
-	FatalError  string
-	DraftTheme  woxcomponent.Theme
-	Error       string
-	SaveLabel   string
-	Dirty       bool
-	Saving      bool
-	Rows        []woxwidget.Widget
-	RowsHeight  float32
-	KeepVisible *woxwidget.ScrollRange
-	OnSubmit    func()
+	Width          float32
+	Height         float32
+	Theme          woxcomponent.Theme
+	FatalError     string
+	DraftTheme     woxcomponent.Theme
+	Error          string
+	SaveLabel      string
+	Dirty          bool
+	Saving         bool
+	Rows           []woxwidget.Widget
+	KeepVisibleKey woxwidget.Key
+	OnSubmit       func()
 }
 
 // ThemeEditorPreviewView builds the live sample and color editor surface.
@@ -47,7 +46,7 @@ func ThemeEditorPreviewView(props ThemeEditorPreviewProps) woxwidget.Widget {
 	return editorPreviewShell(editorPreviewShellProps{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 16, Top: 12, Right: 16, Bottom: 12}, Theme: props.Theme,
 		BeforeBody: beforeBody, BeforeBodyHeight: headerHeight + sampleHeight, MinimumBodyHeight: 72,
-		Rows: props.Rows, RowsHeight: props.RowsHeight, ScrollID: "theme-editor-scroll", KeepVisible: props.KeepVisible,
+		Rows: props.Rows, ScrollID: "theme-editor-scroll", KeepVisibleKey: props.KeepVisibleKey,
 		Error: props.Error, ShowError: props.Error != "",
 		SaveButton: woxcomponent.ButtonProps{ID: "theme-editor-save", Label: saveLabel, Width: 116, Variant: variant, OnTap: props.OnSubmit, Theme: props.Theme},
 	})

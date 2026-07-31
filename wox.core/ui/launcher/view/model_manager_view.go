@@ -15,6 +15,8 @@ type ModelManagerOption struct {
 	Name          string
 	Detail        string
 	Status        string
+	State         string
+	Progress      int
 	Languages     string
 	Description   string
 	SizeMB        int
@@ -43,9 +45,13 @@ type ModelManagerProps struct {
 	EngineLabel       string
 	EngineButtonLabel string
 	EngineEnabled     bool
+	EngineKnown       bool
 	EngineReady       bool
 	RecommendedLabel  string
 	DeleteLabel       string
+	DownloadIcon      *woxui.Image
+	DeleteIcon        *woxui.Image
+	ErrorIcon         *woxui.Image
 	Options           []ModelManagerOption
 	OnEngine          func()
 	OnRefresh         func()
@@ -72,7 +78,8 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 	menuWidth := min(anchor.Width, max(float32(1), props.Width-margin*2))
 	menuLeft := min(max(margin, anchor.X), max(margin, props.Width-menuWidth-margin))
 	engineHeight := float32(0)
-	if !props.EngineReady {
+	showEngine := props.EngineKnown && !props.EngineReady
+	if showEngine {
 		engineHeight = 54
 	}
 	errorHeight := float32(0)
@@ -88,7 +95,7 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 	menuTop = min(max(margin, menuTop), max(margin, props.Height-menuHeight-margin))
 
 	children := make([]woxwidget.Widget, 0, 3)
-	if !props.EngineReady {
+	if showEngine {
 		engineTextWidth := max(float32(80), menuWidth-174)
 		engineChildren := []woxwidget.Widget{
 			woxwidget.TextBlock{Value: props.EngineLabel, Width: engineTextWidth, Height: 34, MaxLines: 2, LineHeight: 16, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},
@@ -111,9 +118,16 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 			background.A = min(uint8(80), background.A)
 		}
 		trailingWidth := float32(96)
+		if option.OnDelete != nil {
+			trailingWidth = 34
+		}
 		contentWidth := max(float32(100), menuWidth-trailingWidth-36)
+		titleColor := props.Theme.ResultSubtitle
+		if option.OnDelete != nil {
+			titleColor = props.Theme.ActionText
+		}
 		titleChildren := []woxwidget.Widget{
-			woxwidget.Text{Value: option.Name, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
+			woxwidget.Text{Value: option.Name, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: titleColor},
 		}
 		if option.Recommended {
 			titleChildren = append(titleChildren, woxwidget.Container{Height: 18, Radius: 3, Color: modelManagerAlpha(props.Theme.Cursor, 38), Padding: woxwidget.Insets{Left: 5, Top: 2, Right: 5}, Child: woxwidget.Text{
@@ -125,9 +139,17 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 		}
 		var trailing woxwidget.Widget
 		if option.OnDelete != nil {
-			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-delete-%d", index), Label: props.DeleteLabel, Width: trailingWidth, Height: 34, Disabled: props.Busy || props.Loading, Variant: woxcomponent.ButtonSecondary, OnTap: option.OnDelete, Theme: props.Theme})
+			trailing = modelManagerIconButton(fmt.Sprintf("model-delete-%d", index), props.DeleteLabel, props.DeleteIcon, props.Busy || props.Loading, option.OnDelete, props.Theme)
+		} else if option.State == "downloading" {
+			trailing = modelManagerProgress(fmt.Sprintf("model-progress-%d", index), option.ActionLabel, option.Progress, trailingWidth, props.Theme)
 		} else {
-			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-action-%d", index), Label: option.ActionLabel, Width: trailingWidth, Height: 34, Disabled: !option.ActionEnabled, Variant: woxcomponent.ButtonSecondary, OnTap: option.OnAction, Theme: props.Theme})
+			icon := (*woxui.Image)(nil)
+			if option.State == "" || option.State == "not_downloaded" {
+				icon = props.DownloadIcon
+			} else if option.State == "failed" {
+				icon = props.ErrorIcon
+			}
+			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-action-%d", index), Label: option.ActionLabel, Icon: icon, IconSize: 14, IconGap: 6, Width: trailingWidth, Height: 34, Padding: woxwidget.Insets{Left: 10, Right: 10}, FontSize: 11, Disabled: !option.ActionEnabled, Variant: woxcomponent.ButtonOutline, OnTap: option.OnAction, Theme: props.Theme})
 		}
 		activate := option.OnSelect
 		if option.OnChoose != nil {
@@ -159,6 +181,43 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 		{Child: woxwidget.Gesture{ID: "model-manager-backdrop", OnTap: props.OnClose, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
 		{Left: menuLeft, Top: menuTop, Child: menu},
 	}}
+}
+
+func modelManagerIconButton(id, label string, icon *woxui.Image, disabled bool, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {
+	color := theme.ResultSubtitle
+	if disabled {
+		color.A = min(color.A, uint8(88))
+		onTap = nil
+	}
+	var content woxwidget.Widget = woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 10}, Color: color}
+	if icon != nil {
+		content = woxwidget.Image{Source: icon, Width: 16, Height: 16}
+	}
+	key := woxwidget.Key(id)
+	actions := []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}
+	if disabled {
+		actions = nil
+	}
+	return woxwidget.Semantics{Key: key, AutomationID: id, Role: woxui.AccessibilityRoleButton, Label: label, Actions: actions, Disabled: disabled, Child: woxwidget.Focusable{Key: key, Disabled: disabled, OnKey: func(event woxui.KeyEvent) bool {
+		if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
+			return false
+		}
+		if event.Down && onTap != nil {
+			onTap()
+		}
+		return true
+	}, Child: woxwidget.Gesture{ID: id, OnTap: onTap, Child: woxwidget.Align{Width: 34, Height: 34, Horizontal: 0.5, Vertical: 0.5, Child: content}}}}
+}
+
+func modelManagerProgress(id, label string, progress int, width float32, theme woxcomponent.Theme) woxwidget.Widget {
+	progress = min(100, max(0, progress))
+	trackWidth := max(float32(0), width-36)
+	track := woxwidget.Container{Width: trackWidth, Height: 4, Radius: 2, Color: modelManagerAlpha(theme.PreviewSplit, 150), Child: woxwidget.Container{Width: trackWidth * float32(progress) / 100, Height: 4, Radius: 2, Color: theme.Cursor}}
+	content := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		track,
+		woxwidget.Text{Value: fmt.Sprintf("%d%%", progress), Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle},
+	}}
+	return woxwidget.Semantics{Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleProgressBar, Label: label, Value: fmt.Sprintf("%d%%", progress), ReadOnly: true, Child: woxwidget.Align{Width: width, Height: 34, Vertical: 0.5, Child: content}}
 }
 
 func modelManagerAlpha(color woxui.Color, alpha uint8) woxui.Color {

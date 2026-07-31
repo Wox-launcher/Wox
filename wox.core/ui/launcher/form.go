@@ -2,11 +2,18 @@ package launcher
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+)
+
+const (
+	// Flutter constrains the form content before the theme-owned outer padding is applied.
+	formContentMaximumWidth  = 360
+	formContentMaximumHeight = 400
 )
 
 type formFieldsState struct {
@@ -104,16 +111,16 @@ func setFormFieldsTextLocked(state *formFieldsState, index int, value string) bo
 	return true
 }
 
-// formFieldsKeepVisible returns the focused field interval for a retained form scroll view.
-func formFieldsKeepVisible(fields formFieldsSnapshot) *woxwidget.ScrollRange {
+func formFieldRowKey(prefix string, index int) woxwidget.Key {
+	return woxwidget.Key(fmt.Sprintf("%s-row-%d", prefix, index))
+}
+
+// formFieldsKeepVisibleKey resolves form focus to a row measured by the scroll view.
+func formFieldsKeepVisibleKey(prefix string, fields formFieldsSnapshot) woxwidget.Key {
 	if fields.focused < 0 || fields.focused >= len(fields.definitions) {
-		return nil
+		return ""
 	}
-	start := float32(0)
-	for index := 0; index < fields.focused; index++ {
-		start += formDefinitionHeight(fields.definitions[index], fields.values)
-	}
-	return &woxwidget.ScrollRange{Start: start, End: start + formDefinitionHeight(fields.definitions[fields.focused], fields.values)}
+	return formFieldRowKey(prefix, fields.focused)
 }
 
 func snapshotFormLocked(state *formState) *formSnapshot {
@@ -121,21 +128,6 @@ func snapshotFormLocked(state *formState) *formSnapshot {
 		return nil
 	}
 	return &formSnapshot{formFieldsSnapshot: snapshotFormFieldsLocked(&state.formFieldsState), resultID: state.resultID, queryID: state.queryID, action: state.action}
-}
-
-func formPanelHeight(state *formState) int {
-	if state == nil {
-		return 0
-	}
-	return formDefinitionsPanelHeight(state.action.Form, state.values)
-}
-
-func formDefinitionsPanelHeight(definitions []formDefinition, valueMaps ...map[string]string) int {
-	height := 100
-	for _, definition := range definitions {
-		height += int(formDefinitionHeight(definition, valueMaps...))
-	}
-	return min(max(height, 160), 520)
 }
 
 type formTextLine struct {
@@ -210,14 +202,6 @@ func handleFormEditorKey(editor *woxui.TextEditor, definition formDefinition, ev
 	default:
 		return editor.HandleKey(event)
 	}
-}
-
-func formDefinitionsContentHeight(definitions []formDefinition, valueMaps ...map[string]string) float32 {
-	height := float32(0)
-	for _, definition := range definitions {
-		height += formDefinitionHeight(definition, valueMaps...)
-	}
-	return height
 }
 
 func formDefinitionFocusable(definition formDefinition) bool {

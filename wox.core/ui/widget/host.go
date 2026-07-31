@@ -524,7 +524,7 @@ func (h *Host) Key(event woxui.KeyEvent) bool {
 	if event.Down {
 		h.resetCaretBlink()
 	}
-	tabTraversal := event.Down && event.Key == woxui.KeyTab && !event.Composing
+	tabTraversal := event.Down && event.Key == woxui.KeyTab && !event.Composing && event.Modifiers & ^woxui.KeyModifierShift == 0
 	target := h.nodes[h.focused]
 	if target == nil {
 		if tabTraversal {
@@ -615,11 +615,18 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		h.pressed = nodeID(target)
 		h.pressedAt = event.Position
 		h.dragging = false
+		focused := h.nodes[h.focused]
+		var pointerFocusTarget *node
 		for focusTarget := target; focusTarget != nil; focusTarget = focusTarget.parent {
 			if h.isFocusable(focusTarget) {
-				h.setFocus(focusTarget.id)
+				pointerFocusTarget = focusTarget
 				break
 			}
+		}
+		if pointerFocusTarget != nil {
+			h.setFocus(pointerFocusTarget.id)
+		} else if focused != nil && focused.focus != nil && focused.focus.unfocusOnPointerOutside && (target == nil || !h.isDescendantOf(target, focused.id)) {
+			h.setFocus(0)
 		}
 		// A selection gesture captures the press to begin a drag-based selection. Tap dispatch is
 		// deferred to PointerUp; if the pointer moves meaningfully we keep the selection and skip tap.

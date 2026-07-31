@@ -194,6 +194,13 @@ func TestHostTrapsAndRestoresModalFocusOrder(t *testing.T) {
 	if !findAutomationNode(t, host.Snapshot().Tree, "first").Focused {
 		t.Fatal("modal scope did not focus its first control")
 	}
+	if host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Modifiers: woxui.KeyModifierControl, Down: true}) {
+		t.Fatal("Ctrl+Tab should remain available to the focused control")
+	}
+	renderTestFrame(host)
+	if !findAutomationNode(t, host.Snapshot().Tree, "first").Focused {
+		t.Fatal("Ctrl+Tab unexpectedly advanced focus")
+	}
 
 	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) {
 		t.Fatal("Tab was not handled by the focus manager")
@@ -278,6 +285,57 @@ func TestHorizontalScrollViewUsesHorizontalExtentAndPointerDelta(t *testing.T) {
 	after := findAutomationNode(t, host.Snapshot().Tree, "target")
 	if after.Bounds.X != before.Bounds.X-40 {
 		t.Fatalf("target x after horizontal scroll = %v, want %v", after.Bounds.X, before.Bounds.X-40)
+	}
+}
+
+func TestScrollViewKeepsMeasuredKeyVisible(t *testing.T) {
+	controller := NewScrollController(0)
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "measured-scroll", Width: 100, Height: 50, Controller: controller, KeepVisibleKey: "target-row",
+			Child: Flex{Axis: Vertical, Children: []Widget{
+				Container{Width: 100, Height: 70},
+				Keyed{Key: "target-row", Child: Container{Width: 100, Height: 30}},
+			}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	if controller.Offset() != 50 {
+		t.Fatalf("measured keep-visible offset = %v, want 50", controller.Offset())
+	}
+}
+
+func TestScrollViewShrinksToMeasuredContentBelowMaximumHeight(t *testing.T) {
+	controller := NewScrollController(0)
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "shrink-scroll", Width: 100, MaxHeight: 80, Controller: controller,
+			Child: Container{Width: 100, Height: 30},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	controller.mu.Lock()
+	viewport, content := controller.viewport, controller.content
+	controller.mu.Unlock()
+	if viewport != 30 || content != 30 {
+		t.Fatalf("shrink scroll geometry = viewport %v content %v, want 30/30", viewport, content)
+	}
+}
+
+func TestStackCanAnchorMeasuredChildToBottom(t *testing.T) {
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Stack{Width: 100, Height: 100, Children: []StackChild{{
+			Bottom: 10, AnchorBottom: true,
+			Child: Semantics{Key: "bottom", AutomationID: "bottom", Role: woxui.AccessibilityRoleText, Child: Container{Width: 20, Height: 30}},
+		}}}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	target := findAutomationNode(t, host.Snapshot().Tree, "bottom")
+	if target.Bounds.Y != 60 {
+		t.Fatalf("bottom-anchored y = %v, want 60", target.Bounds.Y)
 	}
 }
 
@@ -404,6 +462,31 @@ func TestHostRequiresPointerMoveBeforeHover(t *testing.T) {
 	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: position})
 	if len(hoverStates) != 1 || !hoverStates[0] {
 		t.Fatalf("pointer move hover states = %v, want [true]", hoverStates)
+	}
+}
+
+func TestHostUnfocusesOptedInControlOnOutsidePointerDown(t *testing.T) {
+	var focusChanges []bool
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Flex{Axis: Horizontal, Children: []Widget{
+			Focusable{
+				Key: "recorder", UnfocusOnPointerOutside: true,
+				OnFocusChange: func(focused bool) { focusChanges = append(focusChanges, focused) },
+				Child:         Gesture{ID: "recorder", Child: Container{Width: 20, Height: 20}},
+			},
+			Gesture{ID: "outside", Child: Container{Width: 20, Height: 20}},
+		}}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	if len(focusChanges) != 1 || !focusChanges[0] {
+		t.Fatalf("focus changes after recorder press = %v, want [true]", focusChanges)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 25, Y: 5}})
+	if len(focusChanges) != 2 || focusChanges[1] {
+		t.Fatalf("focus changes after outside press = %v, want [true false]", focusChanges)
 	}
 }
 

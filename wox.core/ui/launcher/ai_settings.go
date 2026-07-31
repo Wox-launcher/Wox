@@ -38,8 +38,7 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 	props.Tables = make([]launcherview.AISettingsTable, 0, len(aiForm.definitions))
 	for index, definition := range aiForm.definitions {
 		index := index
-		tableHeight := formDefinitionHeight(definition, aiForm.values)
-		field := a.formTableFieldProps(*aiForm, callbacks, snapshot.palette, index, definition, contentWidth, tableHeight)
+		field := a.formTableFieldProps(*aiForm, callbacks, snapshot.palette, index, definition, contentWidth, 0)
 		field.OnAdd = func() { a.addAISettingsTableRow(index) }
 		if definition.Value.Key == "AISkills" {
 			field.HideEditAction = true

@@ -8,6 +8,30 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestFormPanelUsesIntrinsicHeightUpToMaximum(t *testing.T) {
+	panel := FormPanel(FormPanelProps{
+		Width: 388, MaximumHeight: 420, Rows: []woxwidget.Widget{woxwidget.Container{Width: 360, Height: 44}},
+		CancelLabel: "Cancel (Esc)", SaveLabel: "Save (Cmd+Enter)", Theme: woxcomponent.Theme{},
+	}).(woxwidget.Container)
+	if panel.Height != 0 {
+		t.Fatalf("form panel height = %.0f, want intrinsic height", panel.Height)
+	}
+	column := panel.Child.(woxwidget.Flex)
+	if len(column.Children) != 2 {
+		t.Fatalf("form panel child count = %d, want body and actions without a title row", len(column.Children))
+	}
+	body := column.Children[0].(woxwidget.ScrollView)
+	if body.Width != 360 || body.Height != 0 || body.MaxHeight != 354 {
+		t.Fatalf("form body constraints = width %.0f height %.0f max %.0f, want Flutter 360 wide and intrinsic up to 354", body.Width, body.Height, body.MaxHeight)
+	}
+	buttons := column.Children[1].(woxwidget.Flex)
+	cancel := buttons.Children[1].(woxwidget.Semantics)
+	save := buttons.Children[2].(woxwidget.Semantics)
+	if cancel.Label != "Cancel (Esc)" || save.Label != "Save (Cmd+Enter)" {
+		t.Fatalf("form action labels = %q / %q", cancel.Label, save.Label)
+	}
+}
+
 func TestFormSwitchFieldUsesAccessibleSwitch(t *testing.T) {
 	field := FormSwitchField(FormSwitchFieldProps{ID: "history", Label: "History", Width: 400, Height: 40, LabelWidth: 100, Checked: true, Theme: woxcomponent.Theme{}, OnChange: func(bool) {}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
@@ -31,6 +55,23 @@ func TestFormSelectFieldUsesOutlinedDropdown(t *testing.T) {
 	content := control.Child.(woxwidget.Flex)
 	if len(content.Children) != 2 {
 		t.Fatalf("dropdown child count = %d, want value and indicator", len(content.Children))
+	}
+}
+
+func TestFormFieldNaturalHeightMeasuresWrappedDescription(t *testing.T) {
+	field := FormSelectField(FormSelectFieldProps{
+		ID: "action", Label: "Action", Description: "A description that may wrap onto multiple lines",
+		Value: "Paste", Width: 240, LabelWidth: 100, Theme: woxcomponent.Theme{},
+	})
+	container := field.(woxwidget.Container)
+	if container.Height != 0 || container.Padding.Bottom != 10 {
+		t.Fatalf("natural row geometry = height %.0f bottom %.0f, want intrinsic height with 10px spacing", container.Height, container.Padding.Bottom)
+	}
+	row := container.Child.(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Flex)
+	description := controlColumn.Children[1].(woxwidget.TextBlock)
+	if description.Height != 0 || description.MaxLines != 0 {
+		t.Fatalf("natural description limits = height %.0f lines %d, want measured wrapped content", description.Height, description.MaxLines)
 	}
 }
 
