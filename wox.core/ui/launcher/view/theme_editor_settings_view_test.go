@@ -122,7 +122,7 @@ func TestThemeEditorPreviewChromeMatchesLauncherLayout(t *testing.T) {
 	if !tagScroll.Horizontal || tagScroll.ContentWidth < tagScroll.Width {
 		t.Fatalf("preview tag strip = %#v, want Flutter horizontal overflow", tagScroll)
 	}
-	firstTag := tags.Children[0].(woxwidget.Container).Child.(woxwidget.Container).Child.(woxwidget.Text)
+	firstTag := tags.Children[0].(woxwidget.Container).Child.(woxwidget.Text)
 	if firstTag.Value != "2026-05-26 10:47:08" {
 		t.Fatalf("first preview tag = %q, want Flutter metadata sample", firstTag.Value)
 	}

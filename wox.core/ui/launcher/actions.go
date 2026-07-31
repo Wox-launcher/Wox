@@ -115,7 +115,7 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 }
 
 func (a *App) onActionKey(event woxui.KeyEvent) bool {
-	if toolbarHotkeyMatches(primaryHotkey("j"), event) {
+	if hotkeyMatches(primaryHotkey("j"), event) {
 		a.toggleActionPanel()
 		return true
 	}
@@ -159,7 +159,7 @@ func (a *App) onActionKey(event woxui.KeyEvent) bool {
 	entries := unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
 	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
 	for _, index := range indices {
-		if toolbarHotkeyMatches(entries[index].Hotkey, event) {
+		if hotkeyMatches(entries[index].Hotkey, event) {
 			a.actionSelected = index
 			a.actionSelectionKey = entries[index].Key
 			a.activateSelectedAction()
@@ -167,6 +167,35 @@ func (a *App) onActionKey(event woxui.KeyEvent) bool {
 		}
 	}
 	return false
+}
+
+// onResultActionHotkey executes a visible action without opening the action panel.
+func (a *App) onResultActionHotkey(event woxui.KeyEvent) bool {
+	if a.actionPanel {
+		return false
+	}
+	if event.Modifiers == 0 {
+		switch event.Key {
+		case woxui.KeyEscape, woxui.KeyEnter, woxui.KeyArrowUp, woxui.KeyArrowDown, woxui.KeyArrowLeft, woxui.KeyArrowRight, woxui.KeyTab, woxui.KeyHome, woxui.KeyEnd:
+			return false
+		}
+	}
+	entry, matched := actionPanelEntryForHotkey(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg), event)
+	if !matched {
+		return false
+	}
+	a.activateActionPanelEntry(entry)
+	return true
+}
+
+// actionPanelEntryForHotkey resolves launcher-wide actions in their displayed priority order.
+func actionPanelEntryForHotkey(entries []actionPanelEntry, event woxui.KeyEvent) (actionPanelEntry, bool) {
+	for _, entry := range entries {
+		if hotkeyMatches(entry.Hotkey, event) {
+			return entry, true
+		}
+	}
+	return actionPanelEntry{}, false
 }
 
 func (a *App) toggleActionPanel() {

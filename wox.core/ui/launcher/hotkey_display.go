@@ -3,7 +3,41 @@ package launcher
 import (
 	"runtime"
 	"strings"
+
+	woxui "wox/ui/runtime"
 )
+
+// hotkeyMatches compares a configured normal hotkey with one physical key-down event.
+func hotkeyMatches(hotkey string, event woxui.KeyEvent) bool {
+	if !event.Down || event.Composing {
+		return false
+	}
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(hotkey)), "+")
+	if len(parts) == 0 {
+		return false
+	}
+	key := strings.TrimSpace(parts[len(parts)-1])
+	if key == "return" {
+		key = string(woxui.KeyEnter)
+	}
+	if key != string(event.Key) {
+		return false
+	}
+	var expected woxui.KeyModifiers
+	for _, modifier := range parts[:len(parts)-1] {
+		switch strings.TrimSpace(modifier) {
+		case "ctrl", "control":
+			expected |= woxui.KeyModifierControl
+		case "cmd", "command", "meta":
+			expected |= woxui.KeyModifierMeta
+		case "alt", "option":
+			expected |= woxui.KeyModifierAlt
+		case "shift":
+			expected |= woxui.KeyModifierShift
+		}
+	}
+	return event.Modifiers == expected
+}
 
 // formatHotkeyLabels applies platform labels while keeping each physical key separate.
 func formatHotkeyLabels(hotkey string) []string {

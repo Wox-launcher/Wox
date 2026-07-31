@@ -925,6 +925,12 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if event.Key == woxui.Key("f") && event.Modifiers.HasPrimary() && a.toggleRefinementBar() {
 		return true
 	}
+	if a.onRefinementHotkey(event) {
+		return true
+	}
+	if a.onResultActionHotkey(event) {
+		return true
+	}
 	if a.layout.GridLayout != nil {
 		switch event.Key {
 		case woxui.KeyArrowLeft:

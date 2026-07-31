@@ -88,7 +88,7 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		if item.Group {
 			rows = append(rows, woxwidget.Container{
 				Width: rowWidth, Height: props.RowHeight, Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale), Top: scaledLauncherSize(18, props.DensityScale)},
-				Child: woxwidget.Text{Value: item.Title, Style: titleStyle, Color: subtitle},
+				Child: woxwidget.Text{Value: item.Title, Style: titleStyle, Color: title},
 			})
 			continue
 		}

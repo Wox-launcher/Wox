@@ -55,11 +55,9 @@ func previewSurface(body woxwidget.Widget, theme woxcomponent.Theme, width, heig
 	contentWidth := max(float32(0), width-2)
 	contentHeight := max(float32(0), height-2)
 	return woxwidget.Container{
-		Width: width, Height: height, Radius: 8, Color: previewColorWithOpacity(theme.PreviewSplit, 0.45), Padding: woxwidget.UniformInsets(1),
-		Child: woxwidget.Container{
-			Width: contentWidth, Height: contentHeight, Radius: 7, Color: previewOpaqueOverlay(theme.Background, theme.PreviewText, 0.035),
-			Child: woxwidget.Clip{Width: contentWidth, Height: contentHeight, Child: body},
-		},
+		Width: width, Height: height, Radius: 8, Color: previewColorWithOpacity(theme.PreviewText, 0.035),
+		BorderColor: previewColorWithOpacity(theme.PreviewSplit, 0.45), BorderWidth: 1, Padding: woxwidget.UniformInsets(1),
+		Child: woxwidget.Clip{Width: contentWidth, Height: contentHeight, Child: body},
 	}
 }
 
@@ -78,12 +76,10 @@ func PreviewTags(tags []string, theme woxcomponent.Theme, window *woxui.Window, 
 			contentWidth += 8
 		}
 		children = append(children, woxwidget.Container{
-			Width: chipWidth, Height: 26, Radius: 8, Color: previewColorWithOpacity(theme.PreviewPropertyTitle, 0.48), Padding: woxwidget.UniformInsets(1),
-			Child: woxwidget.Container{
-				Width: chipWidth - 2, Height: 24, Radius: 7, Color: previewOpaqueOverlay(theme.Background, theme.PreviewText, 0.035),
-				Padding: woxwidget.Insets{Left: 8, Top: 5, Right: 8, Bottom: 4},
-				Child:   woxwidget.Text{Value: label, Style: style, Color: previewColorWithOpacity(theme.PreviewPropertyContent, 0.9)},
-			},
+			Width: chipWidth, Height: 26, Radius: 8, Color: previewColorWithOpacity(theme.PreviewText, 0.035),
+			BorderColor: previewColorWithOpacity(theme.PreviewPropertyTitle, 0.48), BorderWidth: 1,
+			Padding: woxwidget.Insets{Left: 9, Top: 6, Right: 9, Bottom: 5},
+			Child:   woxwidget.Text{Value: label, Style: style, Color: previewColorWithOpacity(theme.PreviewPropertyContent, 0.9)},
 		})
 		contentWidth += chipWidth
 	}
@@ -97,13 +93,4 @@ func previewColorWithOpacity(color woxui.Color, opacity float32) woxui.Color {
 	opacity = min(max(float32(0), opacity), float32(1))
 	color.A = uint8(opacity*255 + 0.5)
 	return color
-}
-
-// previewOpaqueOverlay prevents a translucent border from tinting the nested surface.
-func previewOpaqueOverlay(background, foreground woxui.Color, opacity float32) woxui.Color {
-	opacity = min(max(float32(0), opacity), float32(1))
-	blend := func(base, overlay uint8) uint8 {
-		return uint8(float32(base) + (float32(overlay)-float32(base))*opacity + 0.5)
-	}
-	return woxui.Color{R: blend(background.R, foreground.R), G: blend(background.G, foreground.G), B: blend(background.B, foreground.B), A: 255}
 }

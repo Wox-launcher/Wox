@@ -47,13 +47,19 @@ func TestSelectableIndexFromPreservesExplicitRefreshIndex(t *testing.T) {
 	}
 }
 
-func TestToolbarHotkeyMatchesOnlyKeyDown(t *testing.T) {
+func TestHotkeyMatchesOnlyKeyDown(t *testing.T) {
 	event := woxui.KeyEvent{Key: "j", Modifiers: woxui.KeyModifierControl}
-	if toolbarHotkeyMatches("ctrl+j", event) {
+	if hotkeyMatches("ctrl+j", event) {
 		t.Fatal("key-up unexpectedly matched Ctrl+J")
 	}
 	event.Down = true
-	if !toolbarHotkeyMatches("ctrl+j", event) {
+	if !hotkeyMatches("ctrl+j", event) {
 		t.Fatal("key-down did not match Ctrl+J")
+	}
+	if !hotkeyMatches("cmd+t", woxui.KeyEvent{Key: "t", Modifiers: woxui.KeyModifierMeta, Down: true}) {
+		t.Fatal("key-down did not match Cmd+T")
+	}
+	if hotkeyMatches("cmd+t", woxui.KeyEvent{Key: "t", Modifiers: woxui.KeyModifierMeta, Down: true, Composing: true}) {
+		t.Fatal("composing key unexpectedly matched Cmd+T")
 	}
 }

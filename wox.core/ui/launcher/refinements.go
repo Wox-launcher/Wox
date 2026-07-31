@@ -8,10 +8,11 @@ import (
 	"time"
 
 	launcherview "wox/ui/launcher/view"
+	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
-const staleQueryResultsDuration = 80 * time.Millisecond
+const staleQueryResultsDuration = 150 * time.Millisecond
 
 func (a *App) refinementViewProps(snapshot viewSnapshot, width, height float32) launcherview.RefinementsProps {
 	fallback := a.translate("i18n:ui_query_refinement_filters")
@@ -38,7 +39,11 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height float32) 
 				OnTap:    func() { a.selectRefinementOption(refinementID, option.Value) },
 			})
 		}
-		groups = append(groups, launcherview.RefinementGroup{Title: a.translate(refinement.Title), Options: converted})
+		hotkey := strings.Join(formatHotkeyLabels(refinement.Hotkey), "+")
+		if !strings.Contains(hotkey, "+") {
+			hotkey = ""
+		}
+		groups = append(groups, launcherview.RefinementGroup{Title: a.translate(refinement.Title), Hotkey: hotkey, Options: converted})
 	}
 	return launcherview.RefinementsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
@@ -141,8 +146,20 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
 	a.resultScrollDetached = false
+	a.beginQueryTransitionLocked()
+	// Preserve the visible global accessory until the backend classifies the new query.
+	a.stopGlanceLocked(false)
+	a.actionPanel = false
+	a.actionSelected = 0
+	a.actionSelectionKey = ""
+	a.actionFilter = nil
+	a.chatFullscreen = false
+}
+
+// beginQueryTransitionLocked gives fast query responses time to replace the visible snapshot without an empty frame.
+func (a *App) beginQueryTransitionLocked() {
 	a.resetQueryTransitionLocked()
-	if text != "" && a.visible && len(a.results) > 0 {
+	if a.query.QueryText != "" && a.visible && len(a.results) > 0 {
 		queryID := a.query.QueryID
 		a.queryTransitionTimer = time.AfterFunc(staleQueryResultsDuration, func() {
 			if err := a.runOnUI("show pending query results", func() {
@@ -157,13 +174,6 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 		a.selected = -1
 		a.layout = queryLayout{}
 	}
-	// Preserve the visible global accessory until the backend classifies the new query.
-	a.stopGlanceLocked(false)
-	a.actionPanel = false
-	a.actionSelected = 0
-	a.actionSelectionKey = ""
-	a.actionFilter = nil
-	a.chatFullscreen = false
 }
 
 func (a *App) resetQueryTransitionLocked() {
@@ -205,6 +215,78 @@ func (a *App) toggleRefinementBar() bool {
 	return true
 }
 
+// onRefinementHotkey applies the first matching query-scoped refinement without moving query focus.
+func (a *App) onRefinementHotkey(event woxui.KeyEvent) bool {
+	if a.show.HideQueryBox {
+		return false
+	}
+	for index := range a.refinements {
+		refinement := &a.refinements[index]
+		if !hotkeyMatches(refinement.Hotkey, event) {
+			continue
+		}
+		a.updateRefinementSelection(refinement, nextRefinementHotkeyValues(*refinement, splitRefinementValues(a.query.QueryRefinements[refinement.ID])))
+		return true
+	}
+	return false
+}
+
+// nextRefinementHotkeyValues mirrors the cycling and bulk-toggle behavior of the visible controls.
+func nextRefinementHotkeyValues(refinement queryRefinement, selected []string) []string {
+	optionValues := make([]string, 0, len(refinement.Options))
+	for _, option := range refinement.Options {
+		if option.Value != "" {
+			optionValues = append(optionValues, option.Value)
+		}
+	}
+	selected = normalizeRefinementValues(refinement, selected)
+
+	switch refinement.Type {
+	case "toggle":
+		toggleValue := "true"
+		hasDefault := false
+		for _, value := range refinement.DefaultValue {
+			if value != "" {
+				toggleValue = value
+				hasDefault = true
+				break
+			}
+		}
+		if !hasDefault && len(optionValues) > 0 {
+			toggleValue = optionValues[0]
+		}
+		if slices.Contains(selected, toggleValue) {
+			return nil
+		}
+		return []string{toggleValue}
+	case "multiSelect":
+		if len(optionValues) > 0 {
+			allSelected := true
+			for _, value := range optionValues {
+				if !slices.Contains(selected, value) {
+					allSelected = false
+					break
+				}
+			}
+			if allSelected {
+				return nil
+			}
+		}
+		return optionValues
+	}
+
+	if len(optionValues) == 0 {
+		return nil
+	}
+	currentIndex := 0
+	if len(selected) > 0 {
+		if selectedIndex := slices.Index(optionValues, selected[0]); selectedIndex >= 0 {
+			currentIndex = selectedIndex
+		}
+	}
+	return []string{optionValues[(currentIndex+1)%len(optionValues)]}
+}
+
 func (a *App) selectRefinementOption(refinementID, value string) {
 	var refinement *queryRefinement
 	for index := range a.refinements {
@@ -227,22 +309,23 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 	default:
 		selected = []string{value}
 	}
+	a.updateRefinementSelection(refinement, selected)
+}
+
+// updateRefinementSelection routes keyboard and pointer changes through the same query refresh path.
+func (a *App) updateRefinementSelection(refinement *queryRefinement, selected []string) {
 	selected = normalizeRefinementValues(*refinement, selected)
 	if len(selected) == 0 {
-		delete(a.query.QueryRefinements, refinementID)
+		delete(a.query.QueryRefinements, refinement.ID)
 	} else {
-		a.query.QueryRefinements[refinementID] = strings.Join(selected, ",")
+		a.query.QueryRefinements[refinement.ID] = strings.Join(selected, ",")
 	}
 	a.query.QueryID = newID()
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
 	a.completionHint = nil
 	a.resultScrollDetached = false
-	a.resetQueryTransitionLocked()
-	a.results = nil
-	a.resultsQueryID = ""
-	a.selected = -1
-	a.layout = queryLayout{}
+	a.beginQueryTransitionLocked()
 	a.stopGlanceLocked(true)
 	a.actionPanel = false
 	a.actionSelected = 0
