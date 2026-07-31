@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 	"wox/plugin"
 	"wox/plugin/system/converter/core"
@@ -15,7 +16,10 @@ import (
 
 type CryptoModule struct {
 	*regexBaseModule
-	prices *util.HashMap[string, float64]
+	prices           *util.HashMap[string, float64]
+	priceSyncMu      sync.Mutex
+	priceSyncStarted bool
+	priceSyncCancel  context.CancelFunc
 }
 
 // CoinGecko API response structure
@@ -81,28 +85,60 @@ func NewCryptoModule(ctx context.Context, api plugin.API) *CryptoModule {
 	return m
 }
 
-func (m *CryptoModule) StartPriceSyncSchedule(ctx context.Context) {
-	util.Go(ctx, "crypto_price_sync", func() {
-		prices, err := m.fetchCryptoPrices(ctx)
+// StartPriceSyncSchedule starts the immediate and periodic price refresh at most once.
+func (m *CryptoModule) StartPriceSyncSchedule(ctx context.Context, onInitialSyncFinished func()) bool {
+	m.priceSyncMu.Lock()
+	if m.priceSyncStarted {
+		m.priceSyncMu.Unlock()
+		return false
+	}
+	syncCtx, cancel := context.WithCancel(ctx)
+	m.priceSyncStarted = true
+	m.priceSyncCancel = cancel
+	m.priceSyncMu.Unlock()
+
+	util.Go(syncCtx, "crypto_price_sync", func() {
+		prices, err := m.fetchCryptoPrices(syncCtx)
 		if err == nil {
 			for k, v := range prices {
 				m.prices.Store(k, v)
 			}
-		} else {
-			util.GetLogger().Error(ctx, fmt.Sprintf("Failed to fetch initial crypto prices: %s", err.Error()))
+		} else if syncCtx.Err() == nil {
+			util.GetLogger().Error(syncCtx, fmt.Sprintf("Failed to fetch initial crypto prices: %s", err.Error()))
+		}
+		if syncCtx.Err() == nil && onInitialSyncFinished != nil {
+			onInitialSyncFinished()
 		}
 
-		for range time.NewTicker(1 * time.Minute).C {
-			prices, err := m.fetchCryptoPrices(ctx)
-			if err == nil {
-				for k, v := range prices {
-					m.prices.Store(k, v)
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-syncCtx.Done():
+				return
+			case <-ticker.C:
+				prices, err := m.fetchCryptoPrices(syncCtx)
+				if err == nil {
+					for k, v := range prices {
+						m.prices.Store(k, v)
+					}
+				} else if syncCtx.Err() == nil {
+					util.GetLogger().Error(syncCtx, fmt.Sprintf("Failed to fetch crypto prices: %s", err.Error()))
 				}
-			} else {
-				util.GetLogger().Error(ctx, fmt.Sprintf("Failed to fetch crypto prices: %s", err.Error()))
 			}
 		}
 	})
+	return true
+}
+
+// StopPriceSyncSchedule cancels the refresh loop and releases its ticker.
+func (m *CryptoModule) StopPriceSyncSchedule() {
+	m.priceSyncMu.Lock()
+	defer m.priceSyncMu.Unlock()
+	if m.priceSyncCancel != nil {
+		m.priceSyncCancel()
+		m.priceSyncCancel = nil
+	}
 }
 
 func (m *CryptoModule) Convert(ctx context.Context, value core.Result, toUnit core.Unit) (core.Result, error) {

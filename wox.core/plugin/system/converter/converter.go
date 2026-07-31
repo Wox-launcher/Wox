@@ -15,14 +15,22 @@ import (
 	"github.com/samber/lo"
 )
 
+const (
+	cryptoPriceSyncConsentSettingKey = "cryptoPriceSyncConsent"
+	cryptoConsentResultID            = "converter_crypto_price_sync_consent"
+	cryptoConsentActionID            = "converter_crypto_price_sync_consent_allow"
+)
+
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &Converter{})
 }
 
 type Converter struct {
-	api       plugin.API
-	registry  *core.ModuleRegistry
-	tokenizer *core.Tokenizer
+	api          plugin.API
+	lifecycleCtx context.Context
+	registry     *core.ModuleRegistry
+	tokenizer    *core.Tokenizer
+	cryptoModule *modules.CryptoModule
 }
 
 func (c *Converter) GetMetadata() plugin.Metadata {
@@ -59,6 +67,7 @@ func (c *Converter) GetMetadata() plugin.Metadata {
 
 func (c *Converter) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.lifecycleCtx = ctx
 
 	registry := core.NewModuleRegistry()
 
@@ -79,13 +88,19 @@ func (c *Converter) Init(ctx context.Context, initParams plugin.InitParams) {
 	registry.Register(currencyModule)
 
 	cryptoModule := modules.NewCryptoModule(ctx, c.api)
-	cryptoModule.StartPriceSyncSchedule(ctx)
 	registry.Register(cryptoModule)
+	c.cryptoModule = cryptoModule
 
 	tokenizer := core.NewTokenizer(registry.GetTokenPatterns())
 	c.registry = registry
 	c.tokenizer = tokenizer
 
+	if c.api.GetSetting(ctx, cryptoPriceSyncConsentSettingKey) == "true" {
+		cryptoModule.StartPriceSyncSchedule(ctx, nil)
+	}
+	c.api.OnUnload(ctx, func(ctx context.Context) {
+		cryptoModule.StopPriceSyncSchedule()
+	})
 	c.api.OnMRURestore(ctx, c.handleMRURestore)
 }
 
@@ -354,6 +369,10 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 		return plugin.QueryResponse{}
 	}
 
+	if c.usesCryptoModule(tokens) && c.api.GetSetting(ctx, cryptoPriceSyncConsentSettingKey) != "true" {
+		return plugin.NewQueryResponse([]plugin.QueryResult{c.buildCryptoConsentResult()})
+	}
+
 	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Tokens: %s", strings.Join(lo.Map(tokens, func(t core.Token, _ int) string { return t.String() }), ", ")))
 
 	// Try to parse as an expression (could be a simple math expression or a mixed unit expression)
@@ -396,6 +415,62 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 			},
 		},
 	})
+}
+
+// usesCryptoModule identifies queries that would consume live CoinGecko prices.
+func (c *Converter) usesCryptoModule(tokens []core.Token) bool {
+	for _, token := range tokens {
+		// Regex token patterns are owned by the embedded regexBaseModule, so compare
+		// the logical module name instead of the outer CryptoModule pointer.
+		if token.Module != nil && token.Module.Name() == c.cryptoModule.Name() {
+			return true
+		}
+	}
+	return false
+}
+
+// buildCryptoConsentResult gates the first network access behind an explicit action.
+func (c *Converter) buildCryptoConsentResult() plugin.QueryResult {
+	return plugin.QueryResult{
+		Id:       cryptoConsentResultID,
+		Title:    "i18n:plugin_converter_crypto_consent_title",
+		SubTitle: "i18n:plugin_converter_crypto_consent_subtitle",
+		Icon:     common.PluginConverterIcon,
+		Actions: []plugin.QueryResultAction{
+			{
+				Id:                     cryptoConsentActionID,
+				Name:                   "i18n:plugin_converter_crypto_consent_allow",
+				Icon:                   common.ExecuteRunIcon,
+				IsDefault:              true,
+				PreventHideAfterAction: true,
+				Action: func(actionCtx context.Context, actionContext plugin.ActionContext) {
+					saveResult := c.api.SetSetting(actionCtx, plugin.SetSettingOption{
+						Key:     cryptoPriceSyncConsentSettingKey,
+						Value:   "true",
+						IsLocal: true,
+					})
+					if !saveResult.Success {
+						c.api.Notify(actionCtx, saveResult.ErrMsg)
+						return
+					}
+
+					if updatable := c.api.GetUpdatableResult(actionCtx, actionContext.ResultId); updatable != nil {
+						loadingTitle := c.api.GetTranslation(actionCtx, "plugin_converter_crypto_loading")
+						emptyActions := []plugin.QueryResultAction{}
+						updatable.Title = &loadingTitle
+						updatable.Actions = &emptyActions
+						c.api.UpdateResult(actionCtx, *updatable)
+					}
+
+					c.cryptoModule.StartPriceSyncSchedule(c.lifecycleCtx, func() {
+						if c.api.GetUpdatableResult(c.lifecycleCtx, actionContext.ResultId) != nil {
+							c.api.RefreshQuery(c.lifecycleCtx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+						}
+					})
+				},
+			},
+		},
+	}
 }
 
 // buildResultTails chooses the contextual tail for the calculated converter result.
@@ -498,6 +573,9 @@ func (c *Converter) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 	}
 
 	restored := results[0]
+	if restored.Id == cryptoConsentResultID {
+		return &restored, nil
+	}
 	restored.Title = fmt.Sprintf("%s: %s", query, restored.Title)
 	return &restored, nil
 }

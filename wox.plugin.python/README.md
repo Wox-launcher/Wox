@@ -58,6 +58,13 @@ When a plugin needs to control the preview width or grid layout, set
 `gridLayout` metadata features are deprecated because they can only describe
 static plugin or command defaults.
 
+## Saving Settings
+
+`set_setting()` requires Wox >= 2.4.0 and accepts a `SetSettingOption`. Set
+`is_local=True` when a value must stay on the current device and remain outside
+Cloud Sync. The older `save_setting()` method remains available for plugins
+targeting Wox releases before 2.4.0, but is deprecated for new integrations.
+
 ## Query Requirements
 
 Plugins can declare settings that must be configured before Wox calls `query()`:

@@ -177,7 +177,8 @@ Wox 会把规范化后的 `Query` 传给 `query()`：
 运行时常用 API：
 
 - `GetSetting`
-- `SaveSetting`
+- `SetSetting`（要求 Wox >= 2.4.0）；不应进入 Cloud Sync 的值设置 `IsLocal`
+- `SaveSetting` 仅用于兼容旧版 Wox，已不推荐使用
 - `OnSettingChanged`
 - `OnGetDynamicSetting`
 

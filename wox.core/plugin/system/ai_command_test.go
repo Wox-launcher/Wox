@@ -72,6 +72,10 @@ func (a *aiCommandTestAPI) GetSetting(ctx context.Context, key string) string   
 func (a *aiCommandTestAPI) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
 	a.settings[key] = value
 }
+func (a *aiCommandTestAPI) SetSetting(ctx context.Context, option plugin.SetSettingOption) plugin.SetSettingResult {
+	a.settings[option.Key] = option.Value
+	return plugin.SetSettingResult{Success: true}
+}
 func (a *aiCommandTestAPI) OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string)) {
 }
 func (a *aiCommandTestAPI) OnGetDynamicSetting(ctx context.Context, callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem) {

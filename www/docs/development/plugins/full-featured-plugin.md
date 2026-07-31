@@ -178,7 +178,8 @@ Common setting types:
 At runtime:
 
 - read values with `GetSetting`
-- persist values with `SaveSetting`
+- persist values with `SetSetting` (Wox >= 2.4.0); set `IsLocal` for values that must never enter Cloud Sync
+- use `SaveSetting` only for compatibility with older Wox versions; it is deprecated
 - react to changes with `OnSettingChanged`
 - provide runtime-generated settings with `OnGetDynamicSetting`
 

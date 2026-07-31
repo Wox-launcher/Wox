@@ -55,7 +55,7 @@ class MyPlugin:
 Methods for interacting with Wox:
 - **UI Control**: `show_app()`, `hide_app()`, `is_visible()`, `notify()`, `push_attention()`
 - **Query**: `change_query()`, `refresh_query()`, `push_results()`
-- **Settings**: `get_setting()`, `save_setting()`, `on_setting_changed()`
+- **Settings**: `get_setting()`, `set_setting()`, `on_setting_changed()`; legacy `save_setting()` is deprecated
 - **Logging**: `log()`
 - **i18n**: `get_translation()`
 - **Results**: `get_updatable_result()`, `update_result()`
@@ -219,7 +219,7 @@ settings = [
 
 from typing import List
 
-from .api import ChatStreamCallback, PublicAPI, ScreenshotOption, ScreenshotResult
+from .api import ChatStreamCallback, PublicAPI, ScreenshotOption, ScreenshotResult, SetSettingOption, SetSettingResult
 from .models.ai import (
     AIModel,
     ChatStreamData,
@@ -297,6 +297,8 @@ __all__: List[str] = [
     "ChatStreamCallback",
     "ScreenshotOption",
     "ScreenshotResult",
+    "SetSettingOption",
+    "SetSettingResult",
     "PushAttentionRequest",
     "AttentionAction",
     "AttentionActionType",

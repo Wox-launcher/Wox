@@ -41,7 +41,13 @@ type API interface {
 	Log(ctx context.Context, level LogLevel, msg string)
 	GetTranslation(ctx context.Context, key string) string
 	GetSetting(ctx context.Context, key string) string
+	// SaveSetting is kept for compatibility with plugins targeting Wox before v2.4.0.
+	//
+	// Deprecated: use SetSetting.
 	SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool)
+	// SetSetting saves a plugin setting with explicit platform and device-local behavior.
+	// Available since Wox v2.4.0.
+	SetSetting(ctx context.Context, option SetSettingOption) SetSettingResult
 	OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string))
 	OnGetDynamicSetting(ctx context.Context, callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem)
 	OnDeepLink(ctx context.Context, callback func(ctx context.Context, arguments map[string]string))
@@ -226,6 +232,22 @@ type ScreenshotResult struct {
 	ErrMsg         string
 }
 
+// SetSettingOption controls how a plugin setting is persisted.
+// Available since Wox v2.4.0.
+type SetSettingOption struct {
+	Key              string `json:"key"`
+	Value            string `json:"value"`
+	PlatformSpecific bool   `json:"platformSpecific,omitempty"`
+	IsLocal          bool   `json:"isLocal,omitempty"`
+}
+
+// SetSettingResult reports whether a plugin setting was persisted.
+// Available since Wox v2.4.0.
+type SetSettingResult struct {
+	Success bool
+	ErrMsg  string
+}
+
 // APIImpl is the concrete API implementation bound to one plugin instance.
 type APIImpl struct {
 	pluginInstance       *Instance
@@ -344,24 +366,62 @@ func (a *APIImpl) GetSetting(ctx context.Context, key string) string {
 	return ""
 }
 
+// SaveSetting persists a synchronized plugin setting for compatibility with older plugins.
+//
+// Deprecated: use SetSetting.
 func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
-	finalKey := key
-	if isPlatformSpecific {
-		finalKey = key + "@" + util.GetCurrentPlatform()
+	result := a.SetSetting(ctx, SetSettingOption{
+		Key:              key,
+		Value:            value,
+		PlatformSpecific: isPlatformSpecific,
+	})
+	if !result.Success {
+		a.Log(ctx, LogLevelError, fmt.Sprintf("failed to save setting %q: %s", key, result.ErrMsg))
+	}
+}
+
+// SetSetting persists a plugin setting according to the request's platform and local-only options.
+func (a *APIImpl) SetSetting(ctx context.Context, option SetSettingOption) SetSettingResult {
+	if option.Key == "" {
+		return SetSettingResult{ErrMsg: "setting key cannot be empty"}
+	}
+
+	finalKey := option.Key
+	if option.PlatformSpecific {
+		finalKey = option.Key + "@" + util.GetCurrentPlatform()
 	} else {
 		// if not platform specific, remove platform specific setting, otherwise it will be loaded first
-		a.pluginInstance.Setting.Delete(key + "@" + util.GetCurrentPlatform())
+		platformSpecificKey := option.Key + "@" + util.GetCurrentPlatform()
+		var deleteErr error
+		if option.IsLocal {
+			deleteErr = a.pluginInstance.Setting.DeleteLocal(platformSpecificKey)
+		} else {
+			deleteErr = a.pluginInstance.Setting.Delete(platformSpecificKey)
+		}
+		if deleteErr != nil {
+			return SetSettingResult{ErrMsg: fmt.Sprintf("failed to remove platform-specific setting: %s", deleteErr)}
+		}
 	}
 
 	existValue, exist := a.pluginInstance.Setting.Get(finalKey)
-	a.pluginInstance.Setting.Set(finalKey, value)
-	if !exist || (existValue != value) {
+	var saveErr error
+	if option.IsLocal {
+		saveErr = a.pluginInstance.Setting.SetLocal(finalKey, option.Value)
+	} else {
+		saveErr = a.pluginInstance.Setting.Set(finalKey, option.Value)
+	}
+	if saveErr != nil {
+		return SetSettingResult{ErrMsg: fmt.Sprintf("failed to persist setting: %s", saveErr)}
+	}
+
+	if !exist || existValue != option.Value {
 		for _, callback := range a.pluginInstance.SettingChangeCallbacks {
 			util.Go(ctx, "plugin setting change callback", func() {
-				callback(ctx, key, value)
+				callback(ctx, option.Key, option.Value)
 			})
 		}
 	}
+	return SetSettingResult{Success: true}
 }
 
 func (a *APIImpl) OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string)) {

@@ -11,6 +11,8 @@ import {
   ResultAction,
   ScreenshotOption,
   ScreenshotResult,
+  SetSettingOption,
+  SetSettingResult,
   UpdatableResult
 } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
@@ -143,6 +145,10 @@ export class PluginAPI implements PublicAPI {
 
   async SaveSetting(ctx: Context, key: string, value: string, isPlatformSpecific: boolean): Promise<void> {
     await this.invokeMethod(ctx, "SaveSetting", { key, value, isPlatformSpecific: isPlatformSpecific.toString() })
+  }
+
+  async SetSetting(ctx: Context, option: SetSettingOption): Promise<SetSettingResult> {
+    return (await this.invokeMethod(ctx, "SetSetting", { option: JSON.stringify(option) })) as SetSettingResult
   }
 
   async OnSettingChanged(ctx: Context, callback: (ctx: Context, key: string, value: string) => void): Promise<void> {

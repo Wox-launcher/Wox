@@ -47,6 +47,7 @@ type PluginSetting struct {
 	PluginID string `gorm:"primaryKey"`
 	Key      string `gorm:"primaryKey"`
 	Value    string
+	IsLocal  bool `gorm:"not null;default:false"`
 }
 
 type Oplog struct {

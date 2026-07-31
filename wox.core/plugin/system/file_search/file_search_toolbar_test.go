@@ -33,6 +33,9 @@ func (a fileSearchToolbarTestAPI) GetTranslation(ctx context.Context, key string
 func (a fileSearchToolbarTestAPI) GetSetting(ctx context.Context, key string) string { return "" }
 func (a fileSearchToolbarTestAPI) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
 }
+func (a fileSearchToolbarTestAPI) SetSetting(ctx context.Context, option plugin.SetSettingOption) plugin.SetSettingResult {
+	return plugin.SetSettingResult{Success: true}
+}
 func (a fileSearchToolbarTestAPI) OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string)) {
 }
 func (a fileSearchToolbarTestAPI) OnGetDynamicSetting(ctx context.Context, callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem) {

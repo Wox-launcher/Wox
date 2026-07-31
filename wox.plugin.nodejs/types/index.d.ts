@@ -1374,6 +1374,26 @@ export interface ScreenshotResult {
   ErrMsg: string
 }
 
+/**
+ * Controls how a plugin setting is persisted.
+ * Requires Wox >= 2.4.0.
+ */
+export interface SetSettingOption {
+  Key: string
+  Value: string
+  PlatformSpecific?: boolean
+  IsLocal?: boolean
+}
+
+/**
+ * Result of persisting a plugin setting.
+ * Requires Wox >= 2.4.0.
+ */
+export interface SetSettingResult {
+  Success: boolean
+  ErrMsg: string
+}
+
 export interface PublicAPI {
   /**
    * Change Wox query
@@ -1444,8 +1464,15 @@ export interface PublicAPI {
    * Save customized setting
    *
    * @isPlatformSpecific If true, setting will be only saved in current platform. If false, setting will be available in all platforms
+   * @deprecated Use SetSetting. SaveSetting remains available for plugins that support Wox before 2.4.0.
    */
   SaveSetting: (ctx: Context, key: string, value: string, isPlatformSpecific: boolean) => Promise<void>
+
+  /**
+   * Save a customized setting with explicit platform and device-local behavior.
+   * Requires Wox >= 2.4.0. Set plugin.json MinWoxVersion to at least 2.4.0 before using it.
+   */
+  SetSetting: (ctx: Context, option: SetSettingOption) => Promise<SetSettingResult>
 
   /**
    * Register setting changed callback

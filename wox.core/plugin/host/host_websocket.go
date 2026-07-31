@@ -524,6 +524,21 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 		pluginInstance.API.SaveSetting(ctx, key, value, isPlatformSpecific)
 		w.sendResponseToHost(ctx, request, "")
+	case "SetSetting":
+		optionJSON, exist := request.Params["option"]
+		if !exist {
+			w.sendResponseErrToHost(ctx, request, fmt.Errorf("[%s] SetSetting method must have an option parameter", request.PluginName))
+			return
+		}
+
+		var setSettingOption plugin.SetSettingOption
+		if err := json.Unmarshal([]byte(optionJSON), &setSettingOption); err != nil {
+			w.sendResponseErrToHost(ctx, request, fmt.Errorf("failed to unmarshal SetSetting option: %w", err))
+			return
+		}
+
+		result := pluginInstance.API.SetSetting(ctx, setSettingOption)
+		w.sendResponseToHost(ctx, request, result)
 	case "OnPluginSettingChanged":
 		callbackId, exist := request.Params["callbackId"]
 		if !exist {

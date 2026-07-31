@@ -51,6 +51,10 @@ func (e emptyAPIImpl) GetSetting(ctx context.Context, key string) string {
 func (e emptyAPIImpl) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
 }
 
+func (e emptyAPIImpl) SetSetting(ctx context.Context, option plugin.SetSettingOption) plugin.SetSettingResult {
+	return plugin.SetSettingResult{Success: true}
+}
+
 func (e emptyAPIImpl) OnSettingChanged(ctx context.Context, callback func(context.Context, string, string)) {
 }
 

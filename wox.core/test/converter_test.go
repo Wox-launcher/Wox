@@ -6,10 +6,35 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"wox/plugin"
 )
 
 func TestConverterCrypto(t *testing.T) {
 	suite := NewTestSuite(t)
+	converter := plugin.GetPluginManager().GetPluginInstanceById("a48dc5f0-dab9-4112-b883-b68129d6782b")
+	if converter == nil {
+		t.Fatal("converter plugin is not initialized")
+	}
+	if err := converter.Setting.DeleteLocal("cryptoPriceSyncConsent"); err != nil {
+		t.Fatalf("failed to clear crypto price sync consent: %v", err)
+	}
+	if ok, _ := suite.RunQueryTest(QueryTest{
+		Name:           "first crypto query requires consent",
+		Query:          "1BTC",
+		ExpectedTitle:  "Enable live cryptocurrency prices",
+		ExpectedAction: "Allow and continue",
+	}); !ok {
+		t.Fatal("first crypto query did not return the consent result")
+	}
+
+	settingResult := converter.API.SetSetting(suite.ctx, plugin.SetSettingOption{
+		Key:     "cryptoPriceSyncConsent",
+		Value:   "true",
+		IsLocal: true,
+	})
+	if !settingResult.Success {
+		t.Fatalf("failed to enable crypto price sync for converter integration tests: %s", settingResult.ErrMsg)
+	}
 
 	tests := []QueryTest{
 		{

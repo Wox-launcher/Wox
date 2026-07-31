@@ -90,6 +90,9 @@ func (s *LocalSnapshotter) collectLocalSnapshotOplogs(ctx context.Context) ([]da
 		if !isCurrentPlatformSettingKey(item.Key) {
 			continue
 		}
+		if item.IsLocal {
+			continue
+		}
 		if _, blocked := disabledPlugins[item.PluginID]; blocked {
 			continue
 		}

@@ -22,6 +22,8 @@ from wox_plugin import (
     ResultActionType,
     ScreenshotOption,
     ScreenshotResult,
+    SetSettingOption,
+    SetSettingResult,
     ToolbarMsg,
     UpdatableResult,
     WoxImage,
@@ -159,6 +161,17 @@ class PluginAPI(PublicAPI):
             ctx,
             "SaveSetting",
             {"key": key, "value": value, "isPlatformSpecific": is_platform_specific},
+        )
+
+    async def set_setting(self, ctx: Context, option: SetSettingOption) -> SetSettingResult:
+        """Save a setting value with explicit persistence options."""
+        response = await self.invoke_method(ctx, "SetSetting", {"option": json.dumps(option.to_dict())})
+        if not isinstance(response, dict):
+            return SetSettingResult(success=False, errmsg="invalid SetSetting response")
+
+        return SetSettingResult(
+            success=bool(response.get("Success", False)),
+            errmsg=str(response.get("ErrMsg", "") or ""),
         )
 
     async def on_setting_changed(

@@ -77,6 +77,9 @@ func (m *mockAPI) GetTranslation(ctx context.Context, key string) string        
 func (m *mockAPI) GetSetting(ctx context.Context, key string) string                      { return "" }
 func (m *mockAPI) SaveSetting(ctx context.Context, key string, value string, isGlobal bool) {
 }
+func (m *mockAPI) SetSetting(ctx context.Context, option plugin.SetSettingOption) plugin.SetSettingResult {
+	return plugin.SetSettingResult{Success: true}
+}
 func (m *mockAPI) GetAllSettings(ctx context.Context) map[string]string     { return nil }
 func (m *mockAPI) OpenSettingDialog(ctx context.Context)                    {}
 func (m *mockAPI) HideApp(ctx context.Context)                              {}

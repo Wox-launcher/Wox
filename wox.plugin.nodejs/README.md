@@ -122,7 +122,7 @@ Methods for interacting with Wox:
 - **UI Control**: `showApp()`, `hideApp()`, `isVisible()`, `notify()`
 - **Toolbar Msg**: `ShowToolbarMsg()`, `ClearToolbarMsg()`, `OnEnterPluginQuery()`, `OnLeavePluginQuery()`
 - **Query**: `changeQuery()`, `refreshQuery()`, `pushResults()`
-- **Settings**: `getSetting()`, `saveSetting()`, `onSettingChanged()`
+- **Settings**: `GetSetting()`, `SetSetting()`, `OnSettingChanged()`; legacy `SaveSetting()` remains available but is deprecated
 - **Logging**: `log()`
 - **i18n**: `getTranslation()`
 - **Results**: `getUpdatableResult()`, `updateResult()`
@@ -151,6 +151,11 @@ ResultAction({
 ## Settings
 
 Define settings for your plugin:
+
+`SetSetting()` requires Wox >= 2.4.0 and accepts a single `SetSettingOption`. Set
+`IsLocal: true` when a value must stay on the current device and remain outside
+Cloud Sync. Use legacy `SaveSetting()` only when the same plugin build must run
+on Wox releases before 2.4.0.
 
 ```typescript
 const settings: PluginSettingDefinitionItem[] = [

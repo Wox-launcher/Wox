@@ -159,7 +159,7 @@
 
 设置值如何到达插件：
 
-- 全功能插件：通过宿主 SDK 的 `GetSetting`/`SaveSetting` 读写，`dynamic` 内容通过动态设置回调提供。
+- 全功能插件：通过宿主 SDK 的 `GetSetting` 读取、`SetSetting` 写入。`SetSetting` 要求 Wox >= 2.4.0，并可通过 `IsLocal` 保存仅本机使用的值；`SaveSetting` 仍兼容保留，但已不推荐使用。`dynamic` 内容通过动态设置回调提供。
 - 脚本插件：每个键会导出为 `WOX_SETTING_<UPPER_SNAKE_KEY>` 环境变量。
 
 #### Dynamic 设置回调（后端如何填充）

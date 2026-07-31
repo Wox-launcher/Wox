@@ -159,7 +159,7 @@ Table + dynamic setting populated at runtime:
 
 How values reach your plugin:
 
-- Full-featured plugins: read/write with `GetSetting` + `SaveSetting` in the host SDK. Provide `dynamic` content via the SDK’s dynamic setting callback.
+- Full-featured plugins: read with `GetSetting` and write with `SetSetting` in the host SDK. `SetSetting` requires Wox >= 2.4.0 and supports device-local values through `IsLocal`; `SaveSetting` remains available but is deprecated. Provide `dynamic` content via the SDK’s dynamic setting callback.
 - Script plugins: Wox exports each key as `WOX_SETTING_<UPPER_SNAKE_KEY>` environment variables.
 
 #### Dynamic setting callback (backend wiring)

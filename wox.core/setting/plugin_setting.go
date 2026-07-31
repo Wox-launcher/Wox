@@ -9,7 +9,6 @@ type PluginSetting struct {
 	// So don't use this property directly, use Instance.TriggerKeywords instead
 	TriggerKeywords *PluginSettingValue[[]string]
 
-
 	store                     *PluginSettingStore
 	defaultSettingsInMetadata map[string]string
 }
@@ -45,9 +44,25 @@ func (p *PluginSetting) Set(key string, value string) error {
 	return p.store.Set(key, value)
 }
 
+// SetLocal persists a plugin setting without adding it to Cloud Sync.
+func (p *PluginSetting) SetLocal(key string, value string) error {
+	if syncStore, ok := any(p.store).(SyncableStore); ok {
+		return syncStore.SetWithSync(key, value, false)
+	}
+	return p.store.Set(key, value)
+}
+
 func (p *PluginSetting) Delete(key string) error {
 	if syncStore, ok := any(p.store).(SyncableStore); ok {
 		return syncStore.DeleteWithSync(key, true)
+	}
+	return p.store.Delete(key)
+}
+
+// DeleteLocal removes a plugin setting without adding a delete to Cloud Sync.
+func (p *PluginSetting) DeleteLocal(key string) error {
+	if syncStore, ok := any(p.store).(SyncableStore); ok {
+		return syncStore.DeleteWithSync(key, false)
 	}
 	return p.store.Delete(key)
 }

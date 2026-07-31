@@ -48,5 +48,6 @@ Storage queries use `B` as the Byte base unit, decimal units such as `GB` for ba
 - Use `to`, `in`, or `=?` to make conversion intent explicit.
 - For storage conversion, `gb` means Decimal storage unit `GB`; use `gib` for Binary storage unit `GiB`.
 - Base conversion expects an integer and a target base.
-- Currency and crypto rates refresh in the background and may use cached values while offline.
+- Currency rates refresh in the background. The first crypto query asks for explicit permission before Converter contacts CoinGecko; after confirmation, crypto prices refresh every minute while Wox is running and the choice is remembered only on that device.
+- Currency and crypto conversions may use fallback values while live sources are unavailable.
 - Set your default currency in plugin settings if fallback conversions are not what you expect.

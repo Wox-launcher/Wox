@@ -34,6 +34,9 @@ func (a *attentionActionTestAPI) GetSetting(ctx context.Context, key string) str
 }
 func (a *attentionActionTestAPI) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
 }
+func (a *attentionActionTestAPI) SetSetting(ctx context.Context, option plugin.SetSettingOption) plugin.SetSettingResult {
+	return plugin.SetSettingResult{Success: true}
+}
 func (a *attentionActionTestAPI) OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string)) {
 }
 func (a *attentionActionTestAPI) OnGetDynamicSetting(ctx context.Context, callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem) {

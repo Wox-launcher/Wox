@@ -51,6 +51,42 @@ class ScreenshotResult:
     errmsg: str = ""
 
 
+@dataclass
+class SetSettingOption:
+    """
+    Controls how a plugin setting is persisted.
+
+    Requires Wox >= 2.4.0.
+    """
+
+    key: str
+    value: str
+    platform_specific: bool = False
+    is_local: bool = False
+
+    def to_dict(self) -> Dict[str, object]:
+        """Convert Pythonic field names to the public API JSON fields expected by Wox core."""
+
+        return {
+            "Key": self.key,
+            "Value": self.value,
+            "PlatformSpecific": self.platform_specific,
+            "IsLocal": self.is_local,
+        }
+
+
+@dataclass
+class SetSettingResult:
+    """
+    Result of persisting a plugin setting.
+
+    Requires Wox >= 2.4.0.
+    """
+
+    success: bool = False
+    errmsg: str = ""
+
+
 class PublicAPI(Protocol):
     """
     Public API interface for Wox plugins.
@@ -298,6 +334,10 @@ class PublicAPI(Protocol):
         """
         Save setting value.
 
+        Deprecated:
+            Use set_setting. This method remains available for plugins that
+            support Wox before 2.4.0.
+
         Stores a setting value. If is_platform_specific is True,
         the value is stored separately for each platform.
 
@@ -313,6 +353,15 @@ class PublicAPI(Protocol):
 
             # Save platform-specific setting
             await api.save_setting(ctx, "path", "/usr/local/bin", True)
+        """
+        ...
+
+    async def set_setting(self, ctx: Context, option: SetSettingOption) -> SetSettingResult:
+        """
+        Save a setting with explicit platform and device-local behavior.
+
+        Requires Wox >= 2.4.0. Set plugin.json MinWoxVersion to at least
+        2.4.0 before using this method.
         """
         ...
 
