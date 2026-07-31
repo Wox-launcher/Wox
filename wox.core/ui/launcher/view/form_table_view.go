@@ -71,6 +71,8 @@ type FormTableFieldProps struct {
 	OperationLabel  string
 	EmptyLabel      string
 	InfoIcon        *woxui.Image
+	DemoIcon        *woxui.Image
+	DemoKind        string
 	SecondaryIcon   *woxui.Image
 	AddIcon         *woxui.Image
 	EditIcon        *woxui.Image
@@ -84,6 +86,7 @@ type FormTableFieldProps struct {
 	OnCloneRow      func(int)
 	OnDeleteRow     func(int)
 	OnTooltip       func(bool, string, woxui.Rect)
+	OnDemoHover     func(string, bool, woxui.Rect)
 }
 
 // FormTableFieldHeight returns the content height used by form scrolling and rendering.
@@ -159,8 +162,27 @@ func formTableInlineHeader(props FormTableFieldProps, width, height float32) wox
 		actionsWidth += 130
 	}
 	titleWidth := max(float32(0), width-actionsWidth-16)
+	var title woxwidget.Widget = woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}
+	if props.DemoKind != "" && props.DemoIcon != nil {
+		title = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			title,
+			woxwidget.Semantics{
+				Key: woxwidget.Key("settings-demo-trigger-" + props.DemoKind), AutomationID: "settings-demo-" + props.DemoKind, Role: woxui.AccessibilityRoleButton, Label: props.Title,
+				Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+				Child: woxwidget.Gesture{
+					ID: "settings-demo-hover-" + props.DemoKind,
+					OnHoverAt: func(inside bool, bounds woxui.Rect) {
+						if props.OnDemoHover != nil {
+							props.OnDemoHover(props.DemoKind, inside, bounds)
+						}
+					},
+					Child: woxwidget.Image{Source: props.DemoIcon, Width: 18, Height: 18},
+				},
+			},
+		}}
+	}
 	children := []woxwidget.StackChild{
-		{Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}},
+		{Child: woxwidget.Container{Width: titleWidth, Height: 22, Child: title}},
 		{Left: max(float32(0), width-actionsWidth), Top: max(float32(0), height-30), Child: formTableHeaderActions(props)},
 	}
 	if props.Description != "" {

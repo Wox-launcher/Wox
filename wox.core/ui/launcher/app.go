@@ -113,6 +113,8 @@ type App struct {
 	settingNote            string
 	settingSaving          bool
 	cloudPlanTooltip       *cloudPlanTooltipState
+	settingsDemo           *settingsDemoState
+	settingsDemoRevision   atomic.Uint64
 	choiceTooltipRevision  atomic.Uint64
 	tableEditor            *formTableEditorState
 	glanceItem             *glanceItem

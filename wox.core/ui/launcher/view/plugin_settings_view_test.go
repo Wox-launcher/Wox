@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
+	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
@@ -79,6 +80,33 @@ func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 	actions := header.Children[1].Child.(woxwidget.Flex)
 	if len(actions.Children) != 2 {
 		t.Fatalf("header action count = %d, want template and add", len(actions.Children))
+	}
+}
+
+func TestFormTableInlineHeaderForwardsDemoHover(t *testing.T) {
+	var gotKind string
+	var gotInside bool
+	var gotBounds woxui.Rect
+	field := FormTableField(FormTableFieldProps{
+		ID: "query-hotkeys", Title: "Query Hotkeys", Width: 720, Height: 220, InlineTitle: true,
+		DemoKind: "query-hotkeys", DemoIcon: &woxui.Image{}, AddLabel: "Add", Theme: woxcomponent.Theme{},
+		OnDemoHover: func(kind string, inside bool, bounds woxui.Rect) {
+			gotKind = kind
+			gotInside = inside
+			gotBounds = bounds
+		},
+	})
+
+	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
+	title := header.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	trigger := title.Children[1].(woxwidget.Semantics)
+	if trigger.AutomationID != "settings-demo-query-hotkeys" {
+		t.Fatalf("demo automation ID = %q", trigger.AutomationID)
+	}
+	bounds := woxui.Rect{X: 310, Y: 142, Width: 18, Height: 18}
+	trigger.Child.(woxwidget.Gesture).OnHoverAt(true, bounds)
+	if gotKind != "query-hotkeys" || !gotInside || gotBounds != bounds {
+		t.Fatalf("demo hover = (%q, %v, %+v), want query-hotkeys at %+v", gotKind, gotInside, gotBounds, bounds)
 	}
 }
 

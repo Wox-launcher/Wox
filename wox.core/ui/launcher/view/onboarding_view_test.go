@@ -63,14 +63,24 @@ func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
 }
 
 func TestOnboardingDemoTimelinesMatchFlutterPhases(t *testing.T) {
-	if got := demoTypedText("wpm", .50, .42, .57); got != "w" {
-		t.Fatalf("welcome midpoint query = %q, want one typed character", got)
-	}
 	if got := onboardingDemoDuration("queryHotkeys"); got != 9200*time.Millisecond {
 		t.Fatalf("query hotkey duration = %v, want 9.2s Flutter showcase", got)
 	}
 	if got := demoEnterHoldExit(.94, .56, .74, .92, 1); got >= 1 || got <= 0 {
 		t.Fatalf("selection window exit progress = %v, want in-flight exit", got)
+	}
+}
+
+func TestOnboardingDemoQueriesUseSharedFastTypingSpeed(t *testing.T) {
+	const start = float32(.2)
+	for _, duration := range []time.Duration{4400 * time.Millisecond, 5600 * time.Millisecond, 9500 * time.Millisecond} {
+		progress := start + float32(175*time.Millisecond)/float32(duration)
+		if got := demoTypedQuery("abcdef", progress, start, duration); got != "abc" {
+			t.Fatalf("typed query after 175ms with %v timeline = %q, want three characters", duration, got)
+		}
+	}
+	if demoQueryTypingInterval > 65*time.Millisecond {
+		t.Fatalf("query typing interval = %v, want no slower than the Flutter fast reference", demoQueryTypingInterval)
 	}
 }
 
@@ -82,6 +92,16 @@ func TestOnboardingDemoDesktopUsesLoadedWallpaper(t *testing.T) {
 	image, ok := stack.Children[1].Child.(woxwidget.Image)
 	if !ok || image.Source != wallpaper {
 		t.Fatalf("desktop wallpaper = %#v, want loaded image", stack.Children[1].Child)
+	}
+}
+
+func TestOnboardingDemoDesktopUsesBlackBeforeWallpaperLoads(t *testing.T) {
+	desktop := onboardingDemoDesktop(OnboardingProps{}, OnboardingStep{}, 640, 360, false, nil)
+	clip := desktop.(woxwidget.Clip)
+	stack := clip.Child.(woxwidget.Stack)
+	background, ok := stack.Children[0].Child.(woxwidget.Container)
+	if !ok || background.Color != (woxui.Color{A: 255}) {
+		t.Fatalf("desktop background = %#v, want opaque black", stack.Children[0].Child)
 	}
 }
 
@@ -128,6 +148,26 @@ func TestOnboardingDemoResultTextIsVerticallyCentered(t *testing.T) {
 
 	if text.Vertical != .5 || title.Height < title.LineHeight || usedWidth > availableWidth {
 		t.Fatalf("result text = %#v, title = %#v, used width = %v, available width = %v", text, title, usedWidth, availableWidth)
+	}
+}
+
+func TestOnboardingDemoHintCardTextIsVerticallyCentered(t *testing.T) {
+	card := onboardingDemoHintCard(
+		OnboardingProps{Theme: woxcomponent.Theme{}},
+		OnboardingStep{},
+		"Query Hotkeys",
+		"Cmd+Shift+G",
+		"github repo",
+		580,
+		255,
+	).(woxwidget.Container)
+	content := card.Child.(woxwidget.Stack)
+	title := content.Children[0].Child.(woxwidget.Align)
+	badge := content.Children[1].Child.(woxwidget.Container)
+	expansion := badge.Child.(woxwidget.Align)
+
+	if title.Vertical != .5 || expansion.Vertical != .5 || badge.Padding.Top != 0 {
+		t.Fatalf("hint alignment: title=%#v expansion=%#v padding=%#v", title, expansion, badge.Padding)
 	}
 }
 

@@ -1,28 +1,46 @@
 ---
 name: wox-align-go-ui
-description: Align Wox Go UI screens and interactions with the Flutter UI reference by running the installed Flutter app and the feature-go-ui implementation serially, inspecting Flutter source on master, comparing controlled screenshots and behavior, implementing focused Go UI fixes, and validating parity with the native automation driver. Use for Wox Flutter-to-Go UI migrations, visual parity work, interaction parity, Settings or launcher screen synchronization, and requests to make the Go UI match the existing Flutter product.
+description: Align Wox Go UI screens, behavior, and interactions with the Flutter implementation through source-level contract tracing by default, then implement focused Go UI changes and run targeted tests. Use for Wox Flutter-to-Go UI migrations, Settings or launcher synchronization, visual or interaction parity work, and requests to make Go UI match the former or current Flutter product. Request a serial runtime UI comparison only for complex flows, native lifecycle behavior, ambiguous source contracts, or special visual effects that source inspection cannot establish reliably.
 ---
 
 # Align Wox Go UI
 
-Align one named screen, component, or user flow at a time. Treat the running Flutter app as the product reference, Flutter source on `master` as explanatory evidence, and Go UI source on `feature-go-ui` as the implementation target.
+Align one named screen, component, state, or flow at a time. Use Flutter source as the default product contract and Go UI source as the implementation target. Source-level alignment is sufficient unless the user explicitly asks for runtime visual validation or the escalation criteria below apply.
 
-## Non-negotiable constraints
+## Choose the alignment level
 
-- Never run Flutter Wox and Go UI Wox at the same time. Wox is single-instance.
-- Before every Flutter or Go UI launch, terminate all existing Wox instances and verify a clean `stopped` boundary. A request that invokes this skill and requires launching Wox authorizes terminating exact verified Wox processes for runtime isolation, including installed/nested Flutter apps, `go run` children, `__debug_bin*`/Delve sessions, automation binaries, plugin hosts, and their Wox-owned debugger process.
-- Enforce the runtime sequence `clean -> stopped -> Flutter -> clean -> stopped -> Go UI -> clean -> stopped`. Repeat the cleanup even when the previous launch appeared to exit normally.
-- Inspect full command paths with `ps -Ao pid=,command=` before and after cleanup. Never kill by process name, a broad pattern, or an unresolved variable; collect exact PIDs first and exclude the process-check command itself. Do not assume closing a window ended Wox.
-- Prefer graceful quit when a responsive Wox window is available. Otherwise terminate only the exact verified Wox-related PIDs, then repeat the process check until it is empty.
-- Never switch branches in a dirty checkout, stash user changes, discard changes, or overwrite unrelated work.
-- Do not edit Flutter code unless the user explicitly requests it. The normal deliverable changes Go UI only.
-- Do not claim parity from compilation or tests alone. Complete a serial runtime comparison after the change.
+### Default: source-level alignment
+
+Do not launch Flutter Wox, launch Go UI, capture screenshots, or operate desktop UI merely because this skill was invoked.
+
+Use source-level alignment when Flutter code can establish the contract for:
+
+- routes, hierarchy, sections, ordering, and responsive structure
+- constraints, padding, gaps, typography, colors, borders, radii, icons, and shared tokens
+- controller state, API calls, subscriptions, validation, and asynchronous transitions
+- keyboard, focus, hover, pointer, scroll, semantics, and lifecycle intent
+- initial, loading, empty, populated, error, disabled, and long-content states
+
+Complete the implementation with focused formatting and tests. Report the result as **source-level aligned** and state that runtime visual comparison was not performed.
+
+### Escalate: runtime UI alignment
+
+Recommend a runtime UI comparison when one or more of these conditions make source inspection insufficient:
+
+- exact animation, blur, shadow, clipping, compositing, rasterization, or other special visual effects matter
+- platform-native focus, IME, window ownership, resize, close/reopen, or secondary-window behavior is part of acceptance
+- the feature has a complex multi-step or timing-sensitive flow whose observable behavior cannot be inferred confidently
+- installed Flutter behavior may have drifted from the available Flutter source
+- layout depends on runtime measurement, DPI, fonts, data, or platform appearance and the source leaves a meaningful ambiguity
+- the user explicitly requests screenshots, pixel-level parity, live comparison, or native UI validation
+
+If the user did not explicitly request runtime UI work, first finish any safe source investigation, then ask whether to upgrade to runtime UI alignment. Briefly identify the uncertain behavior and the extra work required. Do not launch or terminate Wox until the user agrees. If the user declines, finish at source level and record the limitation.
 
 ## Establish scope and repository state
 
 1. Resolve the repository root, normally `/Users/qianlifeng/Projects/Wox`.
 2. Read applicable `AGENTS.md`, relevant `README.md` files, and `Wox.code-workspace`.
-3. Inspect:
+3. Inspect the working tree and references without modifying user work:
 
    ```bash
    git status --short --branch
@@ -30,167 +48,57 @@ Align one named screen, component, or user flow at a time. Treat the running Flu
    git branch --list master feature-go-ui
    ```
 
-4. Identify the smallest requested screen, component, state, or flow and its acceptance criteria. If the request is broad, start with one coherent surface and report the remaining surfaces instead of silently expanding scope.
-5. Record the `master` and `feature-go-ui` commit IDs used for the comparison.
-6. Preserve the user's current worktree. Use `git show master:<path>` and `git grep <pattern> master -- wox.ui.flutter/wox` for focused Flutter inspection. For broad source navigation, create a temporary detached read-only worktree from `master`; do not switch the implementation checkout away from `feature-go-ui`.
-7. Implement only in a cleanly identified `feature-go-ui` checkout. If relevant target files already contain user changes, inspect and preserve them. Stop for direction only when the requested change cannot be separated safely.
+4. Identify the smallest requested surface and concrete acceptance states. If the request is broad, cover one coherent surface at a time while scanning related production implementations for shared contracts.
+5. Never switch branches in a dirty checkout, stash user changes, discard changes, or overwrite unrelated work. Do not edit Flutter code unless explicitly requested.
 
-## Define a reproducible comparison case
+## Trace the Flutter contract from source
 
-Before launching either UI, write down one comparison case containing:
-
-- screen or route and exact navigation steps
-- monitor, scale factor, window position, and logical window size
-- light or dark theme, locale, text scale, and platform appearance
-- account, plugin, settings, and data state that affect the surface
-- query text, selection, scroll offset, expanded sections, hover or focus target
-- expected loading, empty, populated, error, disabled, or validation state
-
-Use the same case for both implementations. If shared Wox data changes during the Flutter run, restore the intended state before launching Go UI.
-
-Create a temporary capture directory such as `/tmp/wox-ui-parity/<timestamp>/` with separate `flutter/` and `go/` subdirectories. Screenshots may be compared side by side or with an offline image diff after both application processes are stopped.
-
-## Capture the Flutter reference
-
-1. Find and terminate every existing Wox-related process, including IDE/Delve sessions and plugin hosts, then confirm the process check is empty.
-2. Confirm the installed reference exists at `/Applications/Wox.app`. If only `/Application/Wox.app` was supplied, correct the path rather than creating a second assumption.
-3. Load and follow the available Computer Use skill before any GUI operation. If GUI control is unavailable, ask for user-provided captures instead of claiming runtime comparison.
-4. Launch `/Applications/Wox.app` with `/usr/bin/open /Applications/Wox.app`, then wait for the exact bundle process and window to become ready.
-5. Reproduce the comparison case without changing unrelated settings.
-6. Capture:
-
-   - the full window at the agreed geometry
-   - focused component crops when small differences matter
-   - interaction states relevant to the request, including keyboard focus, hover, pressed, disabled, scrolling, validation, loading, empty, and error states
-   - observable window behavior such as resizing, secondary-window ownership, close, reopen, and focus restoration
-
-7. Record measured or directly observable facts rather than impressions: hierarchy, bounds, gaps, padding, alignment, typography, colors, borders, radii, shadows, icons, clipping, scroll behavior, focus order, shortcuts, and accessibility semantics.
-8. Quit Flutter Wox gracefully, wait for exit, and verify that no Wox process remains before continuing.
-
-The installed bundle is the visual and behavioral authority. If it disagrees with current `master`, report the drift and use source only to explain what can be confirmed.
-
-## Trace the Flutter contract on master
-
-Locate the relevant code under `wox.ui.flutter/wox` on `master`:
+Prefer focused history inspection over switching the implementation checkout:
 
 ```bash
-git grep -n '<visible text or symbol>' master -- wox.ui.flutter/wox
-git grep -n '<widget, route, controller, or setting>' master -- wox.ui.flutter/wox
+git grep -n '<visible text, widget, route, controller, or setting>' master -- wox.ui.flutter/wox
+git show master:<path>
 ```
+
+If Flutter no longer exists on `master`, locate the last revision that contains the relevant path and inspect its parent or file history with `git log`, `git rev-list`, and `git show`. Record the exact reference used rather than assuming current `master` still contains Flutter.
 
 Trace the complete contract, not only the leaf widget:
 
-- route and window orchestration
-- widget hierarchy and layout constraints
-- shared theme, spacing, typography, icons, and reusable components
-- controller state, API calls, subscriptions, and asynchronous transitions
-- keyboard, focus, hover, pointer, scroll, and accessibility behavior
-- empty, loading, error, disabled, and long-content states
-
-Keep a mapping from Flutter source and observed behavior to the corresponding Go UI owner. Do not copy Flutter code line for line; preserve the product contract in the appropriate Go UI layer.
-
-## Capture and compare Go UI
-
-1. Repeat the full Wox process cleanup and confirm the process check is empty, even if Flutter appeared to quit cleanly.
-2. Choose the appropriate launch path:
-
-   - Use the ordinary development entry for exploratory manual inspection:
-
-     ```bash
-     cd wox.core
-     CGO_ENABLED=1 GOCACHE=/tmp/wox-go-cache go run -tags sqlite_fts5 .
-     ```
-
-   - Use the automation-enabled binary and bundled capture driver for reproducible Settings navigation, logical geometry, semantics, and screenshots. Prefer this path for before/after evidence.
-
-3. Reproduce the exact comparison case and capture the same window and component states.
-4. Quit Go UI gracefully and verify the Wox process is gone.
-5. Compare the saved artifacts only after the serial captures are complete.
-
-Do not treat a GUI-control timeout as proof that Go UI failed to launch. A `go run` child is bundleless on macOS and may not be discoverable by bundle-based GUI tools even when its native window is visible. Check the exact process, terminal output, Wox log, or automation endpoint before diagnosing launch failure.
-
-### Reproducible Go UI Settings capture
-
-Build the repository-owned automation binary from the repository root:
-
-```bash
-GOCACHE=/tmp/wox-go-cache make build-go-ui-smoke
-```
-
-Then run the skill's driver from `wox.core`. It uses `wox_automation`, `test/automationdriver`, the real settings window lifecycle, and an authenticated loopback endpoint:
-
-```bash
-GOCACHE=/tmp/wox-go-cache go run \
-  ../.agents/skills/wox-align-go-ui/scripts/capture_go_ui_settings.go \
-  -binary ./.tmp/wox-go-ui-smoke \
-  -route /plugins/installed \
-  -capture /tmp/wox-ui-parity/go/plugin-settings.png \
-  -width 1152 \
-  -height 768 \
-  -wait-id settings.page.plugins \
-  -wait-id plugin-search \
-  -set-value 'plugin-search=剪贴板历史' \
-  -key arrow-down
-```
-
-Use `-activate <automation-id>` with `-activate-capture <path.png>` to capture a non-destructive interaction state such as an opened dropdown:
-
-```bash
-  -activate plugin-settings-field-7 \
-  -activate-capture /tmp/wox-ui-parity/go/plugin-settings-dropdown.png
-```
-
-Use `-hover <automation-id>` to move the logical pointer to a semantic node without depending on desktop coordinates. `-hover-wait-id` waits for the resulting hover surface, `-hover-stable` asserts that it remains present while the pointer is stationary, and the two hover captures record entry and exit:
-
-```bash
-  -hover cloud-plan-tooltip \
-  -hover-wait-id cloud-plan-tooltip-overlay \
-  -hover-stable 2s \
-  -hover-capture /tmp/wox-ui-parity/go/cloud-plan-tooltip.png \
-  -hover-exit-capture /tmp/wox-ui-parity/go/cloud-plan-tooltip-exit.png
-```
-
-Driver rules:
-
-- Run it only after the Flutter process is confirmed stopped.
-- By default it uses the active Wox user data so the captured state can match the installed Flutter app. Do not activate mutating controls merely to obtain a screenshot.
-- For isolated behavior tests, pass both `-data-dir <temp-dir>` and `-user-dir <temp-dir>` and seed the required state explicitly.
-- Use stable `AutomationID` values and inspect the printed semantics tree for roles, values, and logical bounds. If the needed shared control lacks semantics, add an appropriate generic semantic contract instead of relying on screen coordinates.
-- `-width` and `-height` are logical pixels. Native captures on Retina are normally 2x physical pixels; compare normalized images or visual proportions, and use semantic bounds for geometry assertions.
-- The driver owns and terminates the exact automation process group on every normal or error return. Still perform the stopped-boundary process check afterward.
-- A sandbox may require approval for the native GUI launch and loopback listener. Request the required approval; do not replace the real runtime check with a mocked result.
-
-Build a concise delta matrix with these categories:
-
-| Category | Compare |
+| Contract | Inspect |
 | --- | --- |
-| Structure | window, route, hierarchy, sections, ordering |
-| Geometry | size, position, constraints, padding, gaps, alignment |
-| Styling | theme tokens, typography, colors, borders, radius, shadow, icons |
-| State | initial, loading, empty, populated, error, disabled, long content |
-| Interaction | click, hover, keyboard, focus, scrolling, shortcuts, resize |
-| Semantics | accessibility role, label, focusability, activation |
-| Lifecycle | show, hide, close, reopen, secondary windows, focus restoration |
+| Structure | route, window, hierarchy, sections, ordering, responsive branches |
+| Geometry and style | constraints, padding, gaps, alignment, theme tokens, type, colors, borders, radius, shadow, icons |
+| State | controller ownership, API calls, subscriptions, async transitions, loading, empty, error, disabled, long content |
+| Interaction | click, hover, keyboard, focus, IME, scrolling, shortcuts, resize |
+| Semantics and lifecycle | roles, labels, focusability, show/hide, close/reopen, secondary windows, focus restoration |
 
-Prioritize contract and interaction defects first, major layout differences second, and cosmetic polish last. Distinguish real defects from expected platform font rasterization or timing differences.
+Build a concise Flutter-to-Go mapping that names:
 
-## Implement in the correct Go UI layer
+- Flutter route, view/widget, controller, and shared component owners
+- Go UI window/controller, adapter, view, widget, and theme owners
+- each state or interaction that must be preserved
+- deliberate platform differences or contracts that cannot be established from source
 
-- Follow the repository instructions and preserve existing semantics outside the scoped surface.
-- Prefer shared Go UI widgets, theme tokens, layout primitives, and lifecycle abstractions when the Flutter contract is shared. Avoid page-specific constants or workarounds for a shared defect.
-- Keep rendering pure: render prepared state and perform I/O, asynchronous loading, native window work, and WebView lifecycle work outside build/render callbacks.
-- Keep text input, focus, IME, and caret ownership in retained text-field state. Investigate shared focus lifecycle before patching one page.
-- Keep launcher result rows out of the keyboard focus chain while preserving pointer and accessibility activation.
-- Preserve independent window instances, message synchronization, and complete resource teardown for true secondary-window behavior.
-- Keep control flow straightforward. Add English intent comments only for non-obvious reasons, state transitions, or constraints. Add short comments for non-trivial new functions.
-- Use `apply_patch` for edits and `gofmt` for changed Go files.
+Do not copy Flutter code line for line. Preserve its product behavior in the correct Go UI layer.
 
-## Validate and repeat the runtime comparison
+## Compare and implement in Go UI
 
-Use this validation ladder:
+1. Inspect the current Go UI execution path before editing, including controller state, adapters, pure views, shared components, runtime/window ownership, and tests.
+2. Classify each difference as shared-contract, page-specific, intentional platform behavior, or unresolved ambiguity.
+3. Fix contract and interaction defects first, structural/layout differences second, and cosmetic constants last.
+4. Prefer shared widgets, theme tokens, layout primitives, and lifecycle abstractions when multiple production surfaces share the behavior. Avoid a page-local workaround for a shared defect.
+5. Keep build/render callbacks pure. Perform I/O, asynchronous loading, native window work, and WebView lifecycle work outside rendering, returning UI updates through the repository's UI-thread boundary.
+6. Keep text input, caret, selection, focus, and IME ownership in retained text-field state. Keep launcher result rows out of the keyboard focus chain while preserving pointer and accessibility activation.
+7. Preserve independent window instances, synchronization, and complete teardown for secondary-window behavior.
+8. Keep control flow straightforward. Add English intent comments only for non-obvious reasons, state transitions, or constraints. Add short comments for non-trivial new functions.
+9. Use `apply_patch` for edits and format according to repository rules.
 
-1. Format every changed Go file with `gofmt`.
-2. Run the narrowest changed packages from `wox.core`, for example:
+## Validate source-level alignment
+
+Use a risk-proportional validation ladder:
+
+1. Format all changed files. Use `gofmt` for Go; use the repository-configured Dart line length when Flutter edits were explicitly requested.
+2. Run the narrowest affected Go packages from `wox.core`, for example:
 
    ```bash
    GOCACHE=/tmp/wox-go-cache go test ./ui/launcher/...
@@ -202,29 +110,49 @@ Use this validation ladder:
    GOCACHE=/tmp/wox-go-cache make test-go-ui-unit
    ```
 
-4. Build the automation binary and run the bundled driver against the exact target route and state. Capture the initial state and each relevant interaction state. Confirm expected semantic roles and logical bounds in the driver's output.
-5. Run `make test-go-ui-smoke` when the change affects an existing smoke contract or broader launcher/settings lifecycle. Treat a smoke assertion only as evidence for that exact contract. If an unrelated existing assertion fails before reaching the target, report it separately and continue with a focused automation case.
-6. Repeat the same serial Flutter and Go UI capture case after implementation. Run the full cleanup and empty-process verification before each launch, including repeated launches of the same implementation.
-7. Verify window geometry, rapid input where relevant, focus semantics, pointer and keyboard activation, scrolling, and visual output. A successful build is not runtime acceptance.
-8. Re-run the process check before each launch and after each shutdown:
+4. Add or update focused tests for meaningful state, interaction, semantics, or layout contracts that can be asserted without a desktop runtime.
+5. Review the final diff against the Flutter-to-Go mapping. Confirm every scoped contract is implemented or explicitly listed as unresolved.
 
-   ```bash
-   ps -Ao pid=,command= | rg '(/Applications/[W]ox\.app|/\.wox[^/]*/ui/flutter/[w]ox-ui\.app|[w]ox-go-ui-smoke|/go-build.*/exe/[w]ox\.core|/wox\.core/(wox\.core|__debug_bin)|/\.wox[^/]*/hosts/(python-host|node-host)|[w]ox\.plugin\.host)'
-   ```
+Compilation and tests validate the source implementation, not pixel-level or native runtime parity. Do not imply that runtime UI behavior was observed when it was not.
 
-   An empty result is the required `stopped` boundary. The character-class patterns avoid matching the process-check command itself. Because launching through this skill requires an isolated single instance, terminate exact matching IDE/Delve Wox sessions as part of cleanup.
-9. Leave at most one Wox implementation running. Prefer restoring the initial runtime state; otherwise leave both stopped and report it.
+## Run runtime UI alignment only after approval
+
+When runtime alignment is explicitly requested or approved, use the following additional workflow.
+
+### Preserve single-instance isolation
+
+- Never run Flutter Wox and Go UI Wox at the same time.
+- Before every launch, inspect full command paths with `ps -Ao pid=,command=`, collect exact verified Wox-related PIDs, terminate only those processes, and repeat the check until it is empty.
+- Prefer graceful quit for a responsive window. Never kill by broad process name, pattern, glob, or unresolved variable.
+- Enforce `clean -> stopped -> Flutter -> clean -> stopped -> Go UI -> clean -> stopped`.
+- Load and follow the available Computer Use skill before GUI operations. Request required sandbox approval for GUI launch or loopback automation.
+
+### Compare one reproducible case
+
+Define the exact route, navigation, window geometry, display scale, theme, locale, data state, query, selection, scroll, focus/hover target, and expected state. Use the same case for both implementations.
+
+Capture Flutter first and Go UI second into separate directories under `/tmp/wox-ui-parity/<timestamp>/`. Record observable geometry and behavior rather than impressions. If the installed Flutter bundle disagrees with the selected source revision, report the drift and treat the installed product as the runtime reference for that comparison.
+
+For reproducible Go UI Settings capture, build the automation target from the repository root:
+
+```bash
+GOCACHE=/tmp/wox-go-cache make build-go-ui-smoke
+```
+
+Then run `.agents/skills/wox-align-go-ui/scripts/capture_go_ui_settings.go` from `wox.core` with the target route, logical width/height, stable `AutomationID` waits, and capture path. Use the driver's activation, hover, input, and key options only for scoped, non-destructive states. Inspect its semantics tree for roles, values, and logical bounds instead of relying on desktop coordinates.
+
+After implementation, repeat the same serial case. Validate relevant geometry, visual output, keyboard/pointer behavior, focus/IME, scrolling, and lifecycle states. Run `make test-go-ui-smoke` when the change affects an existing smoke contract. Leave both implementations stopped unless the user requested another final state.
 
 ## Completion report
 
 Report:
 
 - aligned screen, flow, and states
-- installed Flutter bundle identity when available, plus `master` and `feature-go-ui` commit IDs
-- Flutter-to-Go source mapping and files changed
-- capture directory and comparison conditions
-- differences fixed and any intentional or unresolved differences
-- formatting, focused tests, unit suite, smoke, and serial runtime validation actually completed
-- final Wox process state
+- Flutter source revision and Flutter-to-Go ownership mapping
+- files changed and differences fixed
+- formatting and focused tests actually completed
+- unresolved or intentional differences
+- alignment level: source-level, or approved runtime UI comparison
+- for runtime comparison only: installed bundle identity, comparison conditions, capture directory, runtime/smoke evidence, and final process state
 
-State limitations plainly. Do not say the interfaces are aligned if the post-change Go UI was not launched and compared against the saved Flutter reference.
+Use **source-level aligned** when only source and tests were checked. Reserve claims of visual or runtime parity for cases actually launched and compared after the change.

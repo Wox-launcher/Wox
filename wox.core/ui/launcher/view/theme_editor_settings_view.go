@@ -288,6 +288,8 @@ func themeEditorLivePreview(props ThemeEditorSettingsProps, width, height float3
 	}}
 	if props.Wallpaper != nil {
 		stage.Children = append(stage.Children, woxwidget.StackChild{Child: woxwidget.Clip{Width: stageWidth, Height: stageHeight, Child: woxwidget.Image{Source: props.Wallpaper, Width: stageWidth, Height: stageHeight}}})
+	} else {
+		stage.Children = append(stage.Children, woxwidget.StackChild{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Color: woxui.Color{A: 255}}})
 	}
 	stage.Children = append(stage.Children,
 		woxwidget.StackChild{Left: windowLeft, Top: windowTop, Child: themeEditorPreviewWindow(props, windowWidth, windowHeight)},
@@ -317,6 +319,8 @@ func themeEditorPreviewWindow(props ThemeEditorSettingsProps, width, height floa
 	children := []woxwidget.StackChild{}
 	if props.WallpaperBlurred != nil {
 		children = append(children, woxwidget.StackChild{Child: woxwidget.Image{Source: props.WallpaperBlurred, Width: width, Height: height}})
+	} else {
+		children = append(children, woxwidget.StackChild{Child: woxwidget.Container{Width: width, Height: height, Color: woxui.Color{A: 255}}})
 	}
 	children = append(children,
 		woxwidget.StackChild{Child: woxwidget.Container{Width: width, Height: height, Radius: 12, Color: themeEditorMicaSurfaceColor(props.DraftTheme.Background)}},

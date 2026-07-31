@@ -64,6 +64,8 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildCloudFormOverlay(snapshot.cloud.Form, snapshot.palette, width, height)
 	} else if snapshot.privacy.Sample != "" {
 		overlay = a.buildPrivacySampleOverlay(snapshot, width, height)
+	} else if a.settingsDemo != nil {
+		overlay, overlayLeft, overlayTop = a.buildSettingsDemoOverlay(snapshot, width, height)
 	} else if snapshot.tab == "cloud" && a.cloudPlanTooltip != nil {
 		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudIntroViewProps(snapshot), a.cloudPlanTooltip.anchor, width, height, snapshot.palette.componentTheme())
 	}

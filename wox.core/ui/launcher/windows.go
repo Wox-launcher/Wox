@@ -443,6 +443,8 @@ func (a *App) onSettingsWindowClosed() {
 		a.hotkeySettings.SetFocused(false)
 	}
 	a.cloudPlanTooltip = nil
+	a.settingsDemo = nil
+	a.settingsDemoRevision.Add(1)
 	if form := a.pluginSettings.Form(); form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		form.active = false

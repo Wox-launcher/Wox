@@ -319,6 +319,8 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.aiSettings.SetModelManager(nil)
 		a.cloudSettings.SetForm(nil)
 		a.cloudPlanTooltip = nil
+		a.settingsDemo = nil
+		a.settingsDemoRevision.Add(1)
 		a.cloudSettings.SetActionMenu("")
 		a.form = nil
 		a.requirementForm = nil
@@ -349,7 +351,6 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		// Reset the shared built-in editor and any open choice picker on settings open.
 		a.generalSettings.EndEdit()
 		a.generalSettings.SetChoicePicker(nil)
-		a.preloadDemoWallpaper(true)
 		a.deactivateTerminalPreview()
 		a.resetChatPreview()
 	}); err != nil {
@@ -772,6 +773,8 @@ func (a *App) selectSettingTab(tab string) {
 		a.generalSettings.EndEdit()
 		a.cloudSettings.SetForm(nil)
 		a.cloudPlanTooltip = nil
+		a.settingsDemo = nil
+		a.settingsDemoRevision.Add(1)
 		if tab != "plugins" {
 			a.aiSettings.SetModelManager(nil)
 		}

@@ -255,6 +255,8 @@ func (a *App) onboardingLabels() map[string]string {
 		"selectionHotkey.body":          a.translate("i18n:onboarding_selection_hotkey_description"),
 		"glance.body":                   a.translate("i18n:onboarding_glance_description"),
 		"queryHotkeys.body":             a.translate("i18n:onboarding_query_hotkeys_body"),
+		"queryShortcuts.body":           a.translate("i18n:onboarding_query_shortcuts_body"),
+		"queryShortcuts.title":          a.translate("i18n:ui_query_shortcuts"),
 		"trayQueries.body":              a.translate("i18n:onboarding_tray_queries_body"),
 		"wpmInstall.body":               a.translate("i18n:onboarding_wpm_install_body"),
 		"themeInstall.body":             a.translate("i18n:onboarding_theme_install_body"),

@@ -1,4 +1,4 @@
 interface:
   display_name: "Align Wox Go UI"
-  short_description: "Match Go UI screens to the Flutter reference"
-  default_prompt: "Use $wox-align-go-ui to align a Wox Go UI screen with the Flutter reference."
+  short_description: "Source-first Flutter to Go UI alignment"
+  default_prompt: "Use $wox-align-go-ui to align a Wox Go UI screen from Flutter source, escalating to runtime UI comparison only when needed."

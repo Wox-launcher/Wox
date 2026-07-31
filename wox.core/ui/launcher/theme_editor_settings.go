@@ -1,10 +1,15 @@
 package launcher
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"image"
+	"image/png"
+	"io"
 	"log"
 	"math"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +21,14 @@ import (
 	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/wallpaper"
+)
+
+const (
+	demoWallpaperCacheVersion  = "v1-1440x672-702x344"
+	demoWallpaperWidth         = 1440
+	demoWallpaperHeight        = 672
+	demoWallpaperBlurredWidth  = 702
+	demoWallpaperBlurredHeight = 344
 )
 
 // buildThemeEditorSettingsSurface adapts the shared draft controller to Flutter's settings-only editor layout.
@@ -148,6 +161,21 @@ func (a *App) releaseDemoWallpaperLocked() {
 
 // decodeDemoWallpaper prepares the desktop image and optionally the blurred theme-editor crop.
 func decodeDemoWallpaper(path string, includeBlurred bool) (*woxui.Image, *woxui.Image, error) {
+	return decodeDemoWallpaperWithCache(path, includeBlurred, util.GetLocation().GetImageCacheDirectory())
+}
+
+// decodeDemoWallpaperWithCache loads processed previews first and generates them only on a cache miss.
+func decodeDemoWallpaperWithCache(path string, includeBlurred bool, cacheDirectory string) (*woxui.Image, *woxui.Image, error) {
+	cacheKey, err := demoWallpaperCacheKey(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	wallpaperCachePath := filepath.Join(cacheDirectory, "demo_wallpaper_"+cacheKey+".png")
+	blurredCachePath := filepath.Join(cacheDirectory, "demo_wallpaper_blurred_"+cacheKey+".png")
+	if wallpaperImage, wallpaperBlurred, ok := loadDemoWallpaperCache(wallpaperCachePath, blurredCachePath, includeBlurred); ok {
+		return wallpaperImage, wallpaperBlurred, nil
+	}
+
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, nil, err
@@ -161,24 +189,102 @@ func decodeDemoWallpaper(path string, includeBlurred bool) (*woxui.Image, *woxui
 	if bounds.Dx() > 2048 {
 		source = imaging.Resize(source, 2048, 0, imaging.CatmullRom)
 	}
-	stage := imaging.Fill(source, 1800, 840, imaging.Center, imaging.Lanczos)
-	maskDemoWallpaperRoundedCorners(stage, 36)
+	stage := imaging.Fill(source, demoWallpaperWidth, demoWallpaperHeight, imaging.Center, imaging.Lanczos)
+	maskDemoWallpaperRoundedCorners(stage, 29)
 	wallpaperImage, err := woxui.NewImage(stage)
 	if err != nil {
 		return nil, nil, err
 	}
 	if !includeBlurred {
+		persistDemoWallpaperCache(cacheDirectory, wallpaperCachePath, stage)
 		return wallpaperImage, nil, nil
 	}
 	logicalStage := imaging.Resize(stage, 900, 420, imaging.Lanczos)
 	blurredStage := imaging.Blur(logicalStage, 24)
-	blurredWindow := imaging.CropCenter(blurredStage, 702, 344)
+	blurredWindow := imaging.CropCenter(blurredStage, demoWallpaperBlurredWidth, demoWallpaperBlurredHeight)
 	maskDemoWallpaperRoundedCorners(blurredWindow, 12)
 	wallpaperBlurred, err := woxui.NewImage(blurredWindow)
 	if err != nil {
 		return nil, nil, err
 	}
+	persistDemoWallpaperCache(cacheDirectory, wallpaperCachePath, stage)
+	persistDemoWallpaperCache(cacheDirectory, blurredCachePath, blurredWindow)
 	return wallpaperImage, wallpaperBlurred, nil
+}
+
+// demoWallpaperCacheKey invalidates processed previews when the source or rendering contract changes.
+func demoWallpaperCacheKey(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	_, _ = io.WriteString(hash, demoWallpaperCacheVersion+"|")
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)[:12]), nil
+}
+
+// loadDemoWallpaperCache requires the complete cache pair before replacing the lightweight placeholder.
+func loadDemoWallpaperCache(wallpaperPath, blurredPath string, includeBlurred bool) (*woxui.Image, *woxui.Image, bool) {
+	wallpaperImage, err := decodeDemoWallpaperCacheFile(wallpaperPath)
+	if err != nil {
+		return nil, nil, false
+	}
+	if !includeBlurred {
+		return wallpaperImage, nil, true
+	}
+	wallpaperBlurred, err := decodeDemoWallpaperCacheFile(blurredPath)
+	if err != nil {
+		return nil, nil, false
+	}
+	return wallpaperImage, wallpaperBlurred, true
+}
+
+// decodeDemoWallpaperCacheFile loads one bounded processed preview instead of the original desktop image.
+func decodeDemoWallpaperCacheFile(path string) (*woxui.Image, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	decoded, err := woxui.DecodeImage(file)
+	if err == nil {
+		now := time.Now()
+		_ = os.Chtimes(path, now, now)
+	}
+	return decoded, err
+}
+
+// persistDemoWallpaperCache keeps disk failures from hiding the already-generated in-memory preview.
+func persistDemoWallpaperCache(cacheDirectory, path string, source image.Image) {
+	if err := os.MkdirAll(cacheDirectory, 0755); err != nil {
+		log.Printf("create demo wallpaper cache directory: %v", err)
+		return
+	}
+	if err := writeDemoWallpaperCache(path, source); err != nil {
+		log.Printf("write demo wallpaper cache: %v", err)
+	}
+}
+
+// writeDemoWallpaperCache publishes a complete PNG without exposing partial files to readers.
+func writeDemoWallpaperCache(path string, source image.Image) error {
+	temporary, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := png.Encode(temporary, source); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
 }
 
 // maskDemoWallpaperRoundedCorners keeps preprocessed wallpaper layers inside the same rounded bounds as Flutter's clips.
