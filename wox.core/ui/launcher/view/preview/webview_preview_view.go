@@ -18,7 +18,7 @@ type WebViewPreviewProps struct {
 func WebViewPreview(props WebViewPreviewProps) woxwidget.Widget {
 	return woxwidget.Painter{Width: props.Width, Height: props.Height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 		displayList.FillRoundedRect(bounds, 10, props.Theme.QueryBackground)
-		if props.OnBounds != nil {
+		if props.OnBounds != nil && bounds.Width > 0 && bounds.Height > 0 {
 			props.OnBounds(bounds)
 		}
 	}}

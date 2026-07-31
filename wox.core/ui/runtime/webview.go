@@ -15,6 +15,23 @@ type WebViewContent struct {
 	InjectCSS     string
 	CacheDisabled bool
 	CacheKey      string
+	ToolbarLabels WebViewToolbarLabels
+}
+
+// WebViewToolbarLabels contains localized native toolbar help text.
+type WebViewToolbarLabels struct {
+	GoBack        string
+	Refresh       string
+	GoForward     string
+	OpenInBrowser string
+	HideWox       string
+}
+
+// WebViewTooltipEvent reports native toolbar hover in virtual desktop coordinates.
+type WebViewTooltipEvent struct {
+	Visible bool
+	Text    string
+	Bounds  Rect
 }
 
 // ShowWebView attaches or updates the window's system WebView in logical client coordinates.

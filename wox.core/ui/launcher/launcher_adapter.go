@@ -23,7 +23,6 @@ type viewSnapshot struct {
 	editing               woxui.TextEditingState
 	results               []queryResult
 	resultsQueryID        string
-	pendingResults        bool
 	selected              int
 	hoveredResult         int
 	resultScroll          scrollController
@@ -90,7 +89,6 @@ func (a *App) snapshot() viewSnapshot {
 		editing:               a.editor.State(),
 		results:               append([]queryResult(nil), a.results...),
 		resultsQueryID:        a.resultsQueryID,
-		pendingResults:        a.pendingResults,
 		selected:              a.selected,
 		hoveredResult:         a.hoveredResult,
 		resultScroll:          a.resultScroll,
@@ -311,7 +309,7 @@ func (a *App) queryOffsetAt(text string, x float32, style woxui.TextStyle) int {
 
 func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
 	if len(snapshot.results) == 0 {
-		return launcherview.LauncherEmptyResultsView(width, height, snapshot.pendingResults, "Type a query to search Wox plugins", snapshot.palette.resultSubtitle)
+		return woxwidget.Container{Width: width, Height: height}
 	}
 	previewVisible := snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) && snapshot.results[snapshot.selected].Preview.PreviewData != ""
 	if !previewVisible {

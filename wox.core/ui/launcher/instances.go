@@ -64,22 +64,28 @@ func (r *appInstanceRegistry) open(ctx context.Context, options contract.OpenIns
 		r.mu.Unlock()
 		return errors.New("primary launcher instance is unavailable")
 	}
-	secondary := newApp(primary.isDev, primary.services, primary.windows, r, primary, false, options.InstanceName, "")
+	newWindow := newApp(primary.isDev, primary.services, primary.windows, r, primary, false, options.InstanceName, "")
 	if options.Show.WindowWidth > 0 {
-		secondary.show.WindowWidth = options.Show.WindowWidth
+		newWindow.show.WindowWidth = options.Show.WindowWidth
 	}
-	if err := secondary.start(); err != nil {
+	var startErr error
+	if err := newWindow.runOnUI("start secondary launcher", func() {
+		startErr = newWindow.start()
+	}); err != nil {
+		startErr = err
+	}
+	if startErr != nil {
 		r.mu.Unlock()
-		_ = secondary.Close()
-		return err
+		_ = newWindow.Close()
+		return startErr
 	}
-	r.bySessionID[secondary.sessionID] = secondary
+	r.bySessionID[newWindow.sessionID] = newWindow
 	if options.InstanceName != "" {
-		r.sessionByName[options.InstanceName] = secondary.sessionID
+		r.sessionByName[options.InstanceName] = newWindow.sessionID
 	}
 	r.mu.Unlock()
-	if err := openAppInstance(ctx, secondary, options); err != nil {
-		_ = secondary.Close()
+	if err := openAppInstance(ctx, newWindow, options); err != nil {
+		_ = newWindow.Close()
 		return err
 	}
 	return nil

@@ -81,7 +81,7 @@ type App struct {
 	queryTransitionTimer   *time.Timer
 	queryResizeTimer       *time.Timer
 	queryResizeRevision    uint64
-	pendingResults         bool
+	webViewTooltipRevision atomic.Uint64
 	selected               int
 	hoveredResult          int
 	resultScroll           scrollController
@@ -298,6 +298,14 @@ func (a *App) start() error {
 			}
 		},
 		OnFocus: a.onFocus,
+		OnWebViewHideRequested: func() {
+			util.Go(a.lifecycleCtx, "hide launcher from webview toolbar", func() {
+				if err := a.hideWindow(true); err != nil {
+					log.Printf("hide launcher from webview toolbar: %v", err)
+				}
+			})
+		},
+		OnWebViewTooltip: a.setWebViewToolbarTooltip,
 		OnClosed: func() {
 			host.Dispose()
 			a.onLauncherWindowClosed()

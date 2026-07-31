@@ -1,14 +1,19 @@
 package launcher
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
+	"wox/ui/contract"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type webViewPreviewData struct {
@@ -67,6 +72,13 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 		return previewview.WebViewPreviewMessage("Loading WebView preview…", theme.PreviewText, theme, width, height)
 	}
 	content := data.content()
+	content.ToolbarLabels = woxui.WebViewToolbarLabels{
+		GoBack:        a.translate("i18n:ui_action_webview_go_back"),
+		Refresh:       a.translate("i18n:ui_action_webview_refresh"),
+		GoForward:     a.translate("i18n:ui_action_webview_go_forward"),
+		OpenInBrowser: a.translate("i18n:ui_action_webview_open_in_browser"),
+		HideWox:       a.translate("i18n:ui_action_webview_hide_wox"),
+	}
 	return previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnBounds: func(bounds woxui.Rect) {
 		current := a.webViewPreviewData == previewData && a.webViewPreviewError == ""
 		if !current {
@@ -112,5 +124,33 @@ func (a *App) hideWebView() {
 	}
 	_ = woxui.Call(func() {
 		_ = a.window.HideWebView()
+	})
+}
+
+// setWebViewToolbarTooltip keeps native WebView buttons on the shared Wox tooltip path.
+func (a *App) setWebViewToolbarTooltip(event woxui.WebViewTooltipEvent) {
+	revision := a.webViewTooltipRevision.Add(1)
+	util.Go(a.lifecycleCtx, "update webview toolbar tooltip", func() {
+		a.tooltipMu.Lock()
+		defer a.tooltipMu.Unlock()
+		if revision != a.webViewTooltipRevision.Load() {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		name := "go-ui-webview-toolbar-" + a.sessionID
+		if !event.Visible {
+			if err := a.services.HideTooltip(ctx, a.sessionID, name); err != nil {
+				log.Printf("hide webview toolbar tooltip: %v", err)
+			}
+			return
+		}
+		if err := a.services.ShowTooltip(ctx, a.sessionID, contract.TooltipOptions{
+			Name: name, Text: event.Text, Side: "top",
+			AnchorX: float64(event.Bounds.X), AnchorY: float64(event.Bounds.Y),
+			AnchorWidth: float64(event.Bounds.Width), AnchorHeight: float64(event.Bounds.Height),
+		}); err != nil {
+			log.Printf("show webview toolbar tooltip: %v", err)
+		}
 	})
 }

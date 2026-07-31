@@ -54,17 +54,6 @@ type LauncherResultsProps struct {
 	OnScroll          func(float32)
 }
 
-// LauncherEmptyResultsView builds the launcher content shown before results arrive.
-func LauncherEmptyResultsView(width, height float32, pending bool, message string, color woxui.Color) woxwidget.Widget {
-	if pending {
-		return woxwidget.Container{Width: width, Height: height}
-	}
-	return woxwidget.Container{
-		Width: width, Height: height, Padding: woxwidget.Insets{Left: 28, Top: 18},
-		Child: woxwidget.Text{Value: message, Style: woxui.TextStyle{Size: 14}, Color: color},
-	}
-}
-
 // LauncherSplitContentView places the result list beside a prepared preview.
 func LauncherSplitContentView(results, preview woxwidget.Widget) woxwidget.Widget {
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{results, preview}}

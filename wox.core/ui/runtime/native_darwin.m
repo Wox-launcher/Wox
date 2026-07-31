@@ -7,6 +7,7 @@
 #import <CoreVideo/CoreVideo.h>
 #import <IOSurface/IOSurface.h>
 #import <QuartzCore/CALayer.h>
+#import <QuartzCore/CAMediaTimingFunction.h>
 #import <QuartzCore/CATransaction.h>
 #import <WebKit/WebKit.h>
 #import <dispatch/dispatch.h>
@@ -20,6 +21,8 @@
 
 extern int32_t woxGoDarwinStart(uintptr_t context);
 extern void woxGoDarwinCloseRequested(uintptr_t context);
+extern void woxGoDarwinWebViewHideRequested(uintptr_t context);
+extern void woxGoDarwinWebViewTooltip(uintptr_t context, int32_t visible, const char *text, float x, float y, float width, float height);
 extern void woxGoDarwinCall(uintptr_t context);
 extern void woxGoDarwinFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
 extern void woxGoDarwinFrameSync(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale, int32_t transactional);
@@ -65,6 +68,7 @@ typedef struct WoxDarwinRenderer WoxDarwinRenderer;
 @class WoxDarwinSurface;
 @class WoxRenderView;
 @class WoxWindowDelegate;
+@class WoxWebViewToolbar;
 
 struct WoxDarwinWindow {
   NSWindow *window;
@@ -75,6 +79,7 @@ struct WoxDarwinWindow {
   NSMutableDictionary *web_view_signatures;
   NSMutableDictionary *web_view_content_keys;
   WKWebView *active_web_view;
+  WoxWebViewToolbar *web_view_toolbar;
   NSString *active_web_view_key;
   NSString *active_web_view_signature;
   NSString *active_web_view_content_key;
@@ -117,6 +122,7 @@ struct WoxDarwinRenderer {
 
 static NSInteger wox_open_window_count = 0;
 static NSInteger wox_application_window_count = 0;
+static const CGFloat wox_window_corner_radius = 14.0;
 
 @interface WoxNativeWindow : NSWindow
 @end
@@ -381,6 +387,8 @@ static NSString *web_view_string(const char *value) {
   return [NSString stringWithUTF8String:value] ?: @"";
 }
 
+static CGFloat desktop_top(void);
+
 static NSString *web_view_css_script(NSString *css) {
   if (css.length == 0) {
     return nil;
@@ -397,7 +405,380 @@ static NSString *web_view_css_script(NSString *css) {
                        json];
 }
 
-@interface WoxWebViewMessageHandler : NSObject <WKScriptMessageHandler> {
+@interface WoxWebViewToolbarBackground : NSVisualEffectView {
+@public
+  WoxDarwinWindow *_owner;
+}
+@end
+
+@implementation WoxWebViewToolbarBackground
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+  (void)event;
+  return YES;
+}
+
+- (void)mouseDown:(NSEvent *)event {
+  if (_owner != NULL && !_owner->closed) {
+    [_owner->window performWindowDragWithEvent:event];
+  }
+}
+
+- (void)resetCursorRects {
+  [super resetCursorRects];
+  [self addCursorRect:self.bounds cursor:[NSCursor arrowCursor]];
+}
+@end
+
+@interface WoxWebViewToolbar : NSView {
+@public
+  WoxDarwinWindow *_owner;
+  WKWebView *_web_view;
+  WoxWebViewToolbarBackground *_background;
+  NSButton *_back_button;
+  NSButton *_refresh_button;
+  NSButton *_forward_button;
+  NSButton *_open_button;
+  NSButton *_hide_button;
+  NSTrackingArea *_tracking_area;
+  NSMutableArray *_button_tracking_areas;
+  NSButton *_tooltip_button;
+  NSTimer *_hide_timer;
+  float _shadow_opacity;
+}
+- (instancetype)initWithOwner:(WoxDarwinWindow *)owner;
+- (void)setWebView:(WKWebView *)web_view;
+- (void)setLabelsBack:(NSString *)back
+              refresh:(NSString *)refresh
+              forward:(NSString *)forward
+        openInBrowser:(NSString *)open_in_browser
+              hideWox:(NSString *)hide_wox;
+- (void)positionOverWebViewFrame:(NSRect)frame;
+- (void)showTemporarily;
+@end
+
+static void *wox_web_view_toolbar_back_context = &wox_web_view_toolbar_back_context;
+static void *wox_web_view_toolbar_forward_context = &wox_web_view_toolbar_forward_context;
+
+@implementation WoxWebViewToolbar
+- (instancetype)initWithOwner:(WoxDarwinWindow *)owner {
+  self = [super initWithFrame:NSMakeRect(0.0, 0.0, 288.0, 72.0)];
+  if (self == nil) {
+    return nil;
+  }
+  _owner = owner;
+  self.wantsLayer = YES;
+  self.layer.shadowColor = NSColor.blackColor.CGColor;
+  self.layer.shadowRadius = 20.0;
+  self.layer.shadowOffset = CGSizeMake(0.0, -8.0);
+  CGPathRef shadow_path = CGPathCreateWithRoundedRect(CGRectMake(18.0, 18.0, 252.0, 36.0), 18.0, 18.0, NULL);
+  self.layer.shadowPath = shadow_path;
+  CGPathRelease(shadow_path);
+
+  _background = [[WoxWebViewToolbarBackground alloc] initWithFrame:NSMakeRect(18.0, 18.0, 252.0, 36.0)];
+  _background->_owner = owner;
+  _background.material = NSVisualEffectMaterialLight;
+  _background.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  _background.state = NSVisualEffectStateActive;
+  _background.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+  _background.wantsLayer = YES;
+  _background.layer.cornerRadius = 18.0;
+  _background.layer.borderWidth = 1.0;
+  _background.layer.masksToBounds = YES;
+  [self addSubview:_background];
+
+  _back_button = [[self toolbarButtonWithSymbol:@"arrow.left" action:@selector(goBack:)] retain];
+  _refresh_button = [[self toolbarButtonWithSymbol:@"arrow.clockwise" action:@selector(refresh:)] retain];
+  _forward_button = [[self toolbarButtonWithSymbol:@"arrow.right" action:@selector(goForward:)] retain];
+  _open_button = [[self toolbarButtonWithSymbol:@"arrow.up.forward.app" action:@selector(openInBrowser:)] retain];
+  _hide_button = [[self toolbarButtonWithSymbol:@"eye.slash" action:@selector(hideWox:)] retain];
+  _button_tracking_areas = [[NSMutableArray alloc] init];
+  NSArray *buttons = @[ _back_button, _refresh_button, _forward_button, _open_button, _hide_button ];
+  for (NSUInteger index = 0; index < buttons.count; index++) {
+    NSButton *button = buttons[index];
+    button.frame = NSMakeRect(46.0 + index * 32.0, 2.0, 32.0, 32.0);
+    [_background addSubview:button];
+  }
+  [self updateStyle];
+  return self;
+}
+
+- (BOOL)isFlipped {
+  return YES;
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+  (void)event;
+  return YES;
+}
+
+- (void)dealloc {
+  [self cancelHideTimer];
+  [self hideTooltip];
+  [self setWebView:nil];
+  [self clearButtonTrackingAreas];
+  [_button_tracking_areas release];
+  [_tracking_area release];
+  [_back_button release];
+  [_refresh_button release];
+  [_forward_button release];
+  [_open_button release];
+  [_hide_button release];
+  [_background release];
+  [super dealloc];
+}
+
+- (void)updateTrackingAreas {
+  [super updateTrackingAreas];
+  if (_tracking_area != nil) {
+    [self removeTrackingArea:_tracking_area];
+    [_tracking_area release];
+  }
+  _tracking_area = [[NSTrackingArea alloc]
+      initWithRect:NSZeroRect
+           options:NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways | NSTrackingInVisibleRect
+             owner:self
+          userInfo:nil];
+  [self addTrackingArea:_tracking_area];
+  [self clearButtonTrackingAreas];
+  for (NSButton *button in @[ _back_button, _refresh_button, _forward_button, _open_button, _hide_button ]) {
+    NSTrackingArea *tracking_area = [[NSTrackingArea alloc]
+        initWithRect:NSZeroRect
+             options:NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways | NSTrackingInVisibleRect
+               owner:self
+            userInfo:@{ @"button" : button }];
+    [button addTrackingArea:tracking_area];
+    [_button_tracking_areas addObject:tracking_area];
+    [tracking_area release];
+  }
+}
+
+- (void)mouseEntered:(NSEvent *)event {
+  [self showToolbarKeepingVisible:YES];
+  NSButton *button = event.trackingArea.userInfo[@"button"];
+  if (button != nil) {
+    [self showTooltipForButton:button];
+  }
+}
+
+- (void)mouseExited:(NSEvent *)event {
+  NSButton *button = event.trackingArea.userInfo[@"button"];
+  if (button != nil) {
+    [self hideTooltip];
+    return;
+  }
+  [self hideTooltip];
+  [self scheduleHide];
+}
+
+// toolbarButtonWithSymbol creates one fixed Flutter-sized native toolbar action.
+- (NSButton *)toolbarButtonWithSymbol:(NSString *)symbol action:(SEL)action {
+  NSButton *button = [NSButton buttonWithImage:[NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil] target:self action:action];
+  button.bordered = NO;
+  button.imagePosition = NSImageOnly;
+  button.imageScaling = NSImageScaleProportionallyDown;
+  button.focusRingType = NSFocusRingTypeNone;
+  return button;
+}
+
+- (void)setWebView:(WKWebView *)web_view {
+  if (_web_view == web_view) {
+    [self updateNavigationButtons];
+    return;
+  }
+  if (_web_view != nil) {
+    [_web_view removeObserver:self forKeyPath:@"canGoBack" context:wox_web_view_toolbar_back_context];
+    [_web_view removeObserver:self forKeyPath:@"canGoForward" context:wox_web_view_toolbar_forward_context];
+  }
+  _web_view = web_view;
+  if (_web_view != nil) {
+    [_web_view addObserver:self forKeyPath:@"canGoBack" options:NSKeyValueObservingOptionInitial context:wox_web_view_toolbar_back_context];
+    [_web_view addObserver:self forKeyPath:@"canGoForward" options:NSKeyValueObservingOptionInitial context:wox_web_view_toolbar_forward_context];
+  } else {
+    [self hideTooltip];
+    [self updateNavigationButtons];
+  }
+}
+
+- (void)observeValueForKeyPath:(NSString *)key_path
+                      ofObject:(id)object
+                        change:(NSDictionary<NSKeyValueChangeKey, id> *)change
+                       context:(void *)context {
+  (void)key_path;
+  (void)object;
+  (void)change;
+  if (context == wox_web_view_toolbar_back_context || context == wox_web_view_toolbar_forward_context) {
+    [self updateNavigationButtons];
+    return;
+  }
+  [super observeValueForKeyPath:key_path ofObject:object change:change context:context];
+}
+
+- (void)setLabelsBack:(NSString *)back
+              refresh:(NSString *)refresh
+              forward:(NSString *)forward
+        openInBrowser:(NSString *)open_in_browser
+              hideWox:(NSString *)hide_wox {
+  [self setLabel:back fallback:@"Go Back" forButton:_back_button];
+  [self setLabel:refresh fallback:@"Refresh" forButton:_refresh_button];
+  [self setLabel:forward fallback:@"Go Forward" forButton:_forward_button];
+  [self setLabel:open_in_browser fallback:@"Open in Browser" forButton:_open_button];
+  [self setLabel:hide_wox fallback:@"Hide Wox" forButton:_hide_button];
+}
+
+- (void)positionOverWebViewFrame:(NSRect)frame {
+  self.frame = NSMakeRect(NSMidX(frame) - 144.0, NSMaxY(frame) - 114.0, 288.0, 72.0);
+}
+
+- (void)showTemporarily {
+  [self showToolbarKeepingVisible:NO];
+}
+
+- (void)goBack:(id)sender {
+  (void)sender;
+  if (_web_view.canGoBack) {
+    [_web_view goBack];
+  }
+}
+
+- (void)refresh:(id)sender {
+  (void)sender;
+  [_web_view reload];
+}
+
+- (void)goForward:(id)sender {
+  (void)sender;
+  if (_web_view.canGoForward) {
+    [_web_view goForward];
+  }
+}
+
+- (void)openInBrowser:(id)sender {
+  (void)sender;
+  NSURL *url = _web_view.URL;
+  NSString *scheme = url.scheme.lowercaseString;
+  if (url.host.length > 0 && ([scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"])) {
+    [[NSWorkspace sharedWorkspace] openURL:url];
+  }
+}
+
+- (void)hideWox:(id)sender {
+  (void)sender;
+  if (_owner != NULL && !_owner->closed && _owner->context != 0) {
+    woxGoDarwinWebViewHideRequested(_owner->context);
+  }
+}
+
+- (void)setLabel:(NSString *)label fallback:(NSString *)fallback forButton:(NSButton *)button {
+  NSString *resolved = label.length > 0 ? label : fallback;
+  button.accessibilityLabel = resolved;
+  button.accessibilityHelp = resolved;
+}
+
+- (void)clearButtonTrackingAreas {
+  for (NSTrackingArea *tracking_area in _button_tracking_areas) {
+    NSButton *button = tracking_area.userInfo[@"button"];
+    [button removeTrackingArea:tracking_area];
+  }
+  [_button_tracking_areas removeAllObjects];
+}
+
+- (void)showTooltipForButton:(NSButton *)button {
+  NSString *text = button.accessibilityHelp;
+  if (button == nil || text.length == 0 || _tooltip_button == button || _owner == NULL || _owner->closed || _owner->context == 0 || button.window == nil) {
+    return;
+  }
+  [self hideTooltip];
+  _tooltip_button = button;
+  NSRect window_rect = [button convertRect:button.bounds toView:nil];
+  NSRect screen_rect = [button.window convertRectToScreen:window_rect];
+  woxGoDarwinWebViewTooltip(
+      _owner->context,
+      1,
+      text.UTF8String,
+      (float)NSMinX(screen_rect),
+      (float)(desktop_top() - NSMaxY(screen_rect)),
+      (float)NSWidth(screen_rect),
+      (float)NSHeight(screen_rect));
+}
+
+- (void)hideTooltip {
+  if (_tooltip_button == nil) {
+    return;
+  }
+  _tooltip_button = nil;
+  if (_owner != NULL && !_owner->closed && _owner->context != 0) {
+    woxGoDarwinWebViewTooltip(_owner->context, 0, "", 0.0f, 0.0f, 0.0f, 0.0f);
+  }
+}
+
+- (void)updateNavigationButtons {
+  _back_button.enabled = _web_view != nil && _web_view.canGoBack;
+  _forward_button.enabled = _web_view != nil && _web_view.canGoForward;
+}
+
+- (void)updateStyle {
+  NSString *appearance = [self.effectiveAppearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameDarkAqua, NSAppearanceNameAqua ]];
+  BOOL dark = [appearance isEqualToString:NSAppearanceNameDarkAqua];
+  NSColor *icon_color = [NSColor colorWithWhite:0.0 alpha:dark ? 0.82 : 0.72];
+  for (NSButton *button in @[ _back_button, _refresh_button, _forward_button, _open_button, _hide_button ]) {
+    button.contentTintColor = icon_color;
+  }
+  _background.layer.backgroundColor = [NSColor colorWithWhite:1.0 alpha:dark ? 0.58 : 0.72].CGColor;
+  _background.layer.borderColor = [NSColor colorWithWhite:1.0 alpha:dark ? 0.28 : 0.46].CGColor;
+  _shadow_opacity = dark ? 0.22f : 0.12f;
+  self.layer.shadowOpacity = _background.alphaValue > 0.0 ? _shadow_opacity : 0.0f;
+}
+
+- (void)viewDidChangeEffectiveAppearance {
+  [super viewDidChangeEffectiveAppearance];
+  [self updateStyle];
+}
+
+- (void)showToolbarKeepingVisible:(BOOL)keep_visible {
+  [self cancelHideTimer];
+  self.hidden = NO;
+  self.layer.shadowOpacity = _shadow_opacity;
+  [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+    context.duration = 0.18;
+    context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+    _background.animator.alphaValue = 1.0;
+  }
+      completionHandler:nil];
+  if (!keep_visible) {
+    [self scheduleHide];
+  }
+}
+
+- (void)scheduleHide {
+  [self cancelHideTimer];
+  _hide_timer = [[NSTimer scheduledTimerWithTimeInterval:1.2 target:self selector:@selector(hideTimerFired:) userInfo:nil repeats:NO] retain];
+}
+
+- (void)cancelHideTimer {
+  if (_hide_timer == nil) {
+    return;
+  }
+  [_hide_timer invalidate];
+  [_hide_timer release];
+  _hide_timer = nil;
+}
+
+- (void)hideTimerFired:(NSTimer *)timer {
+  if (timer != _hide_timer) {
+    return;
+  }
+  [self cancelHideTimer];
+  self.layer.shadowOpacity = 0.0f;
+  [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+    context.duration = 0.18;
+    context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+    _background.animator.alphaValue = 0.0;
+  }
+      completionHandler:nil];
+}
+@end
+
+@interface WoxWebViewMessageHandler : NSObject <WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate> {
 @public
   WoxDarwinWindow *_owner;
 }
@@ -411,6 +792,31 @@ static NSString *web_view_css_script(NSString *css) {
     return;
   }
   woxGoDarwinKey(owner->context, "escape", 0, 1, 0, 0);
+}
+
+- (WKWebView *)webView:(WKWebView *)webView
+    createWebViewWithConfiguration:(WKWebViewConfiguration *)configuration
+               forNavigationAction:(WKNavigationAction *)navigationAction
+                    windowFeatures:(WKWindowFeatures *)windowFeatures {
+  (void)configuration;
+  (void)windowFeatures;
+  if (navigationAction.targetFrame == nil && navigationAction.request.URL != nil) {
+    [webView loadRequest:navigationAction.request];
+  }
+  return nil;
+}
+
+- (void)webView:(WKWebView *)webView
+    decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction
+                    decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
+  (void)webView;
+  NSString *scheme = navigationAction.request.URL.scheme.lowercaseString;
+  // Mobile sites use Safari-only schemes to escape embedded browsers; keep preview navigation in Wox.
+  if ([scheme isEqualToString:@"x-safari-http"] || [scheme isEqualToString:@"x-safari-https"]) {
+    decisionHandler(WKNavigationActionPolicyCancel);
+    return;
+  }
+  decisionHandler(WKNavigationActionPolicyAllow);
 }
 @end
 
@@ -426,7 +832,6 @@ static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css)
   WoxWebViewMessageHandler *message_handler = [[WoxWebViewMessageHandler alloc] init];
   message_handler->_owner = window;
   [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewPreview"];
-  [message_handler release];
   WKUserScript *escape_script = [[[WKUserScript alloc] initWithSource:web_view_escape_script() injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES] autorelease];
   [configuration.userContentController addUserScript:escape_script];
   NSString *script = web_view_css_script(inject_css);
@@ -435,7 +840,13 @@ static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css)
     [configuration.userContentController addUserScript:user_script];
   }
   WKWebView *web_view = [[WKWebView alloc] initWithFrame:NSZeroRect configuration:configuration];
+  web_view.navigationDelegate = message_handler;
+  web_view.UIDelegate = message_handler;
+  [message_handler release];
   web_view.autoresizingMask = NSViewNotSizable;
+  web_view.wantsLayer = YES;
+  web_view.layer.cornerRadius = wox_window_corner_radius;
+  web_view.layer.masksToBounds = YES;
   web_view.customUserAgent = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1";
   if (@available(macOS 13.3, *)) {
     web_view.inspectable = YES;
@@ -444,6 +855,10 @@ static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css)
 }
 
 static void clear_active_web_view(WoxDarwinWindow *window, bool discard_transient) {
+  if (window->web_view_toolbar != nil) {
+    [window->web_view_toolbar setWebView:nil];
+    [window->web_view_toolbar removeFromSuperview];
+  }
   if (window->active_web_view != nil) {
     [window->active_web_view removeFromSuperview];
     if (window->active_web_view_transient && discard_transient) {
@@ -1050,7 +1465,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     effect_view.blendingMode = NSVisualEffectBlendingModeBehindWindow;
     effect_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     effect_view.wantsLayer = YES;
-    effect_view.layer.cornerRadius = is_screenshot_window ? 0.0 : 14.0;
+    effect_view.layer.cornerRadius = is_screenshot_window ? 0.0 : wox_window_corner_radius;
     effect_view.layer.masksToBounds = YES;
     [effect_view addSubview:view];
     native_window.contentView = effect_view;
@@ -1417,7 +1832,7 @@ int32_t wox_darwin_window_open_external_url(WoxDarwinWindow *window, const char 
   return result;
 }
 
-int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height) {
+int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, const char *go_back_label, const char *refresh_label, const char *go_forward_label, const char *open_in_browser_label, const char *hide_wox_label, float x, float y, float width, float height) {
   if (window == NULL || url == NULL || html == NULL || inject_css == NULL || cache_key == NULL || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
@@ -1431,6 +1846,11 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
     NSString *html_value = web_view_string(html);
     NSString *css_value = web_view_string(inject_css);
     NSString *key_value = web_view_string(cache_key);
+    NSString *go_back_value = web_view_string(go_back_label);
+    NSString *refresh_value = web_view_string(refresh_label);
+    NSString *go_forward_value = web_view_string(go_forward_label);
+    NSString *open_in_browser_value = web_view_string(open_in_browser_label);
+    NSString *hide_wox_value = web_view_string(hide_wox_label);
     bool use_cache = cache_disabled == 0 && key_value.length > 0;
     NSString *signature = css_value;
     NSString *content_key = html_value.length > 0 ? [@"html|" stringByAppendingString:html_value] : [@"url|" stringByAppendingString:url_value];
@@ -1478,6 +1898,23 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
     }
     web_view.frame = NSMakeRect(x, y, width, height);
     web_view.hidden = NO;
+    bool toolbar_attached = window->web_view_toolbar.superview != nil;
+    if (window->web_view_toolbar == nil) {
+      window->web_view_toolbar = [[WoxWebViewToolbar alloc] initWithOwner:window];
+    }
+    [window->web_view_toolbar setWebView:web_view];
+    [window->web_view_toolbar setLabelsBack:go_back_value
+                                    refresh:refresh_value
+                                    forward:go_forward_value
+                              openInBrowser:open_in_browser_value
+                                    hideWox:hide_wox_value];
+    [window->web_view_toolbar positionOverWebViewFrame:web_view.frame];
+    if (!toolbar_attached) {
+      [window->view addSubview:window->web_view_toolbar positioned:NSWindowAbove relativeTo:web_view];
+    }
+    if (!same_active || !toolbar_attached || should_load) {
+      [window->web_view_toolbar showTemporarily];
+    }
 
     if (!should_load) {
       return;
@@ -1824,6 +2261,8 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
     window->view->_owner = NULL;
     window->delegate->_owner = NULL;
     clear_active_web_view(window, true);
+    [window->web_view_toolbar release];
+    window->web_view_toolbar = nil;
     [window->web_view_cache removeAllObjects];
     [window->web_view_signatures removeAllObjects];
     [window->web_view_content_keys removeAllObjects];

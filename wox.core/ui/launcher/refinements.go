@@ -178,7 +178,6 @@ func (a *App) resetQueryTransitionLocked() {
 		a.queryResizeTimer = nil
 	}
 	a.queryResizeRevision++
-	a.pendingResults = false
 }
 
 // showPendingQueryResults clears stale content without shrinking the window while the current query is still waiting.
@@ -187,7 +186,6 @@ func (a *App) showPendingQueryResults(queryID string) {
 		return
 	}
 	a.queryTransitionTimer = nil
-	a.pendingResults = true
 	a.results = nil
 	a.resultsQueryID = ""
 	a.selected = -1

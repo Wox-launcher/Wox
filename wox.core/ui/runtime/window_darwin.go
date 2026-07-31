@@ -333,15 +333,25 @@ func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error 
 	html := C.CString(content.HTML)
 	css := C.CString(content.InjectCSS)
 	cacheKey := C.CString(content.CacheKey)
+	goBackLabel := C.CString(content.ToolbarLabels.GoBack)
+	refreshLabel := C.CString(content.ToolbarLabels.Refresh)
+	goForwardLabel := C.CString(content.ToolbarLabels.GoForward)
+	openInBrowserLabel := C.CString(content.ToolbarLabels.OpenInBrowser)
+	hideWoxLabel := C.CString(content.ToolbarLabels.HideWox)
 	defer C.free(unsafe.Pointer(url))
 	defer C.free(unsafe.Pointer(html))
 	defer C.free(unsafe.Pointer(css))
 	defer C.free(unsafe.Pointer(cacheKey))
+	defer C.free(unsafe.Pointer(goBackLabel))
+	defer C.free(unsafe.Pointer(refreshLabel))
+	defer C.free(unsafe.Pointer(goForwardLabel))
+	defer C.free(unsafe.Pointer(openInBrowserLabel))
+	defer C.free(unsafe.Pointer(hideWoxLabel))
 	cacheDisabled := C.int32_t(0)
 	if content.CacheDisabled {
 		cacheDisabled = 1
 	}
-	if C.wox_darwin_window_show_webview(native, url, html, css, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
+	if C.wox_darwin_window_show_webview(native, url, html, css, cacheDisabled, cacheKey, goBackLabel, refreshLabel, goForwardLabel, openInBrowserLabel, hideWoxLabel, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
 		return errors.New("woxui: failed to show macOS WebView")
 	}
 	return nil
@@ -848,6 +858,27 @@ func woxGoDarwinCloseRequested(context C.uintptr_t) {
 			window.recordRenderError("close requested window", -1)
 		}
 	}()
+}
+
+//export woxGoDarwinWebViewHideRequested
+func woxGoDarwinWebViewHideRequested(context C.uintptr_t) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnWebViewHideRequested != nil {
+		window.options.OnWebViewHideRequested()
+	}
+}
+
+//export woxGoDarwinWebViewTooltip
+func woxGoDarwinWebViewTooltip(context C.uintptr_t, visible C.int32_t, text *C.char, x C.float, y C.float, width C.float, height C.float) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnWebViewTooltip == nil {
+		return
+	}
+	window.options.OnWebViewTooltip(WebViewTooltipEvent{
+		Visible: visible != 0,
+		Text:    C.GoString(text),
+		Bounds:  Rect{X: float32(x), Y: float32(y), Width: float32(width), Height: float32(height)},
+	})
 }
 
 //export woxGoDarwinFrame
