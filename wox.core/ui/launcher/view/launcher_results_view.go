@@ -50,6 +50,7 @@ type LauncherResultsProps struct {
 	TailColor         woxui.Color
 	SelectedTailColor woxui.Color
 	Theme             woxcomponent.Theme
+	DensityScale      float32
 	Items             []LauncherResultItem
 	OnScroll          func(float32)
 }
@@ -61,6 +62,11 @@ func LauncherSplitContentView(results, preview woxwidget.Widget) woxwidget.Widge
 
 // LauncherResultsView builds the virtualized result list.
 func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
+	baseHeight := scaledLauncherSize(50, props.DensityScale)
+	iconSize := scaledLauncherSize(28, props.DensityScale)
+	iconGap := scaledLauncherSize(10, props.DensityScale)
+	titleStyle := woxui.TextStyle{Size: scaledLauncherSize(15, props.DensityScale)}
+	subtitleStyle := woxui.TextStyle{Size: scaledLauncherSize(12, props.DensityScale)}
 	rowWidth := max(float32(0), props.Width-props.ContainerPadding.Left-props.ContainerPadding.Right)
 	innerRowWidth := max(float32(0), rowWidth-props.ItemPadding.Left-props.ItemPadding.Right)
 	rows := make([]woxwidget.Widget, 0, len(props.Items))
@@ -81,28 +87,28 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		}
 		if item.Group {
 			rows = append(rows, woxwidget.Container{
-				Width: rowWidth, Height: props.RowHeight, Padding: woxwidget.Insets{Left: 8, Top: 18},
-				Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 15}, Color: subtitle},
+				Width: rowWidth, Height: props.RowHeight, Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale), Top: scaledLauncherSize(18, props.DensityScale)},
+				Child: woxwidget.Text{Value: item.Title, Style: titleStyle, Color: subtitle},
 			})
 			continue
 		}
-		var icon woxwidget.Widget = woxwidget.Painter{Width: 28, Height: 28}
+		var icon woxwidget.Widget = woxwidget.Painter{Width: iconSize, Height: iconSize}
 		if item.Icon != nil {
-			icon = woxwidget.Image{Source: item.Icon, Width: 28, Height: 28}
+			icon = woxwidget.Image{Source: item.Icon, Width: iconSize, Height: iconSize}
 		}
 		var tail woxwidget.Widget
 		if len(item.Tails) > 0 {
-			tail = launcherResultTails(item.Tails, item.TailWidth, item.TailHeight, tailColor, item.Selected)
+			tail = launcherResultTailsWithDensity(item.Tails, item.TailWidth, item.TailHeight, tailColor, item.Selected, props.DensityScale)
 		}
-		labelWidth := max(float32(50), innerRowWidth-28-20-item.TailWidth)
-		labelChildren := []woxwidget.Widget{woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 15}, Color: title}}
-		labelTop := float32(7)
+		labelWidth := max(baseHeight, innerRowWidth-iconSize-scaledLauncherSize(20, props.DensityScale)-item.TailWidth)
+		labelChildren := []woxwidget.Widget{woxwidget.Text{Value: item.Title, Style: titleStyle, Color: title}}
+		labelTop := scaledLauncherSize(7, props.DensityScale)
 		labelGap := float32(0)
 		if item.Subtitle != "" {
-			labelChildren = append(labelChildren, woxwidget.Text{Value: item.Subtitle, Style: woxui.TextStyle{Size: 12}, Color: subtitle})
-			labelGap = 2
+			labelChildren = append(labelChildren, woxwidget.Text{Value: item.Subtitle, Style: subtitleStyle, Color: subtitle})
+			labelGap = scaledLauncherSize(2, props.DensityScale)
 		} else {
-			labelTop = max(float32(0), (50-item.TitleHeight)/2)
+			labelTop = max(float32(0), (baseHeight-item.TitleHeight)/2)
 		}
 		resultKey := woxwidget.Key(fmt.Sprintf("launcher-result-key-%s", item.ID))
 		resultControl := woxwidget.Gesture{
@@ -123,10 +129,10 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 			},
 			Child: woxwidget.Container{
 				Width: rowWidth, Height: props.RowHeight, Radius: props.ItemRadius, Color: background, Padding: props.ItemPadding,
-				Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-					woxwidget.Container{Width: 28, Height: 50, Padding: woxwidget.Insets{Top: 11}, Child: icon},
-					woxwidget.Container{Width: labelWidth, Height: 50, Padding: woxwidget.Insets{Top: labelTop}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: labelGap, Children: labelChildren}},
-					woxwidget.Container{Width: item.TailWidth, Height: 50, Padding: woxwidget.Insets{Top: max(float32(0), (50-item.TailHeight)/2)}, Child: tail},
+				Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: iconGap, Children: []woxwidget.Widget{
+					woxwidget.Container{Width: iconSize, Height: baseHeight, Padding: woxwidget.Insets{Top: max(float32(0), (baseHeight-iconSize)/2)}, Child: icon},
+					woxwidget.Container{Width: labelWidth, Height: baseHeight, Padding: woxwidget.Insets{Top: labelTop}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: labelGap, Children: labelChildren}},
+					woxwidget.Container{Width: item.TailWidth, Height: baseHeight, Padding: woxwidget.Insets{Top: max(float32(0), (baseHeight-item.TailHeight)/2)}, Child: tail},
 				}},
 			},
 		}
@@ -165,7 +171,12 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 
 // launcherResultTails restores Flutter's text-tag and image-tail presentation.
 func launcherResultTails(tails []LauncherResultTail, width, height float32, foreground woxui.Color, selected bool) woxwidget.Widget {
-	const itemLeftPadding = float32(10)
+	return launcherResultTailsWithDensity(tails, width, height, foreground, selected, 1)
+}
+
+// launcherResultTailsWithDensity scales launcher-only tail geometry without changing fixed theme previews.
+func launcherResultTailsWithDensity(tails []LauncherResultTail, width, height float32, foreground woxui.Color, selected bool, densityScale float32) woxwidget.Widget {
+	itemLeftPadding := scaledLauncherSize(10, densityScale)
 	children := make([]woxwidget.Widget, 0, len(tails))
 	for _, item := range tails {
 		var content woxwidget.Widget
@@ -173,18 +184,20 @@ func launcherResultTails(tails []LauncherResultTail, width, height float32, fore
 			content = woxwidget.Image{Source: item.Image, Width: item.Width, Height: item.Height}
 		} else {
 			textColor, background, border := launcherResultTextTailStyle(item.TextCategory, foreground, selected)
-			textWidth := max(float32(0), item.Width-16)
-			textHeight := max(float32(0), item.Height-6)
+			horizontalPadding := scaledLauncherSize(8, densityScale)
+			textWidth := max(float32(0), item.Width-horizontalPadding*2)
 			content = woxwidget.Container{
 				Width: item.Width, Height: item.Height, Radius: item.Height / 2, Color: background, BorderColor: border, BorderWidth: 1,
-				Padding: woxwidget.Insets{Left: 8, Top: 3, Right: 8, Bottom: 3}, Child: woxwidget.TextBlock{
-					Value: item.Text, Width: textWidth, Height: textHeight, MaxLines: 1, LineHeight: textHeight, Style: woxui.TextStyle{Size: 11}, Color: textColor,
-				},
+				Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding},
+				Child: woxwidget.Align{Width: textWidth, Height: item.Height, Vertical: 0.5, Child: woxwidget.Text{
+					Value: item.Text, Style: woxui.TextStyle{Size: scaledLauncherSize(11, densityScale)}, Color: textColor,
+				}},
 			}
 		}
 		children = append(children, woxwidget.Container{
 			Width: itemLeftPadding + item.Width, Height: height,
-			Padding: woxwidget.Insets{Left: itemLeftPadding, Top: max(float32(0), (height-item.Height)/2)}, Child: content,
+			Padding: woxwidget.Insets{Left: itemLeftPadding},
+			Child:   woxwidget.Align{Width: item.Width, Height: height, Vertical: 0.5, Child: content},
 		})
 	}
 	return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}

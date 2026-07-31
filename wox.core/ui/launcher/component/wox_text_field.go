@@ -7,7 +7,10 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const textFieldLineHeight = float32(20)
+const (
+	textFieldLineHeight  = float32(20)
+	textFieldCursorWidth = float32(2)
+)
 
 type textFieldLine struct {
 	start int
@@ -487,7 +490,7 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 		displayList.FillRect(woxui.Rect{X: bounds.X - horizontalOffset + prefixMetrics.Size.Width, Y: cursorY + 19, Width: compositionMetrics.Size.Width, Height: 1}, theme.Cursor)
 	}
 	if caretVisible {
-		displayList.FillRect(woxui.Rect{X: cursorX, Y: cursorY, Width: 1, Height: textFieldLineHeight}, theme.Cursor)
+		displayList.FillRect(woxui.Rect{X: cursorX, Y: cursorY, Width: textFieldCursorWidth, Height: textFieldLineHeight}, theme.Cursor)
 	}
 }
 
@@ -506,7 +509,7 @@ func textFieldCursorRect(state woxui.TextEditingState, style woxui.TextStyle, ma
 	return woxui.Rect{
 		X:     bounds.X - horizontalOffset + metrics.Size.Width,
 		Y:     bounds.Y + float32(caretLine-firstLine)*textFieldLineHeight,
-		Width: 1, Height: 22,
+		Width: textFieldCursorWidth, Height: 22,
 	}
 }
 

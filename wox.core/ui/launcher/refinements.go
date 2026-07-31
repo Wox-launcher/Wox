@@ -11,8 +11,6 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const refinementBarHeight = 44
-
 const staleQueryResultsDuration = 80 * time.Millisecond
 
 func (a *App) refinementViewProps(snapshot viewSnapshot, width, height float32) launcherview.RefinementsProps {
@@ -35,7 +33,7 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height float32) 
 			option := option
 			refinementID := refinement.ID
 			converted = append(converted, launcherview.RefinementOption{
-				Value: option.Value, Label: a.translate(option.Title), Count: option.Count, Icon: a.imageForSize(option.Icon, 16),
+				Value: option.Value, Label: a.translate(option.Title), Count: option.Count, Icon: a.imageForSize(option.Icon, int(snapshot.densityMetrics.scaled(16))),
 				Selected: slices.Contains(splitRefinementValues(snapshot.refinementValues[refinement.ID]), option.Value),
 				OnTap:    func() { a.selectRefinementOption(refinementID, option.Value) },
 			})
@@ -43,7 +41,7 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height float32) 
 		groups = append(groups, launcherview.RefinementGroup{Title: a.translate(refinement.Title), Options: converted})
 	}
 	return launcherview.RefinementsProps{
-		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Window: a.window,
+		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
 		Summary: a.refinementSummary(snapshot, fallback), DefaultLabel: fallback, Open: snapshot.refinementOpen,
 		Groups: groups, OnToggle: func() { a.toggleRefinementBar() },
 	}

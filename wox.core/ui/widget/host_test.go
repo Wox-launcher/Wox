@@ -87,6 +87,41 @@ func TestLoopAnimationAdvancesAndWraps(t *testing.T) {
 	}
 }
 
+func TestHostHidesCaretWhileWindowIsUnfocused(t *testing.T) {
+	caretVisible := false
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return CaretPainter{Width: 20, Height: 20, Active: true, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, visible bool) {
+			caretVisible = visible
+		}}
+	})
+	services := &fakeHostServices{}
+	host.AttachServices(services)
+	defer host.Dispose()
+
+	renderTestFrame(host)
+	if !caretVisible {
+		t.Fatal("caret is hidden while the window is focused")
+	}
+
+	host.SetWindowFocused(false)
+	renderTestFrame(host)
+	if caretVisible {
+		t.Fatal("caret is visible while the window is unfocused")
+	}
+	host.caretBlinkMu.Lock()
+	blinkActive := host.caretBlinkActive
+	host.caretBlinkMu.Unlock()
+	if blinkActive {
+		t.Fatal("caret blink remains active while the window is unfocused")
+	}
+
+	host.SetWindowFocused(true)
+	renderTestFrame(host)
+	if !caretVisible {
+		t.Fatal("caret did not return when the window regained focus")
+	}
+}
+
 func TestHostKeepsPressedIdentityAcrossKeyedReorder(t *testing.T) {
 	order := []string{"a", "b"}
 	taps := map[string]int{}
@@ -346,6 +381,29 @@ func TestHostDragSelectionExtendsAndClickCollapses(t *testing.T) {
 	}
 	if tapCalls != 1 {
 		t.Fatalf("click without drag should dispatch tap, got %d taps", tapCalls)
+	}
+}
+
+func TestHostRequiresPointerMoveBeforeHover(t *testing.T) {
+	var hoverStates []bool
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Gesture{
+			ID:      "hover",
+			OnHover: func(inside bool) { hoverStates = append(hoverStates, inside) },
+			Child:   Container{Width: 100, Height: 20},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	position := woxui.Point{X: 5, Y: 5}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerEnter, Position: position})
+	if len(hoverStates) != 0 {
+		t.Fatalf("pointer enter hover states = %v, want none", hoverStates)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: position})
+	if len(hoverStates) != 1 || !hoverStates[0] {
+		t.Fatalf("pointer move hover states = %v, want [true]", hoverStates)
 	}
 }
 

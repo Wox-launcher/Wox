@@ -34,6 +34,9 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 			Role:      woxui.WindowRoleApplication,
 			OnFrame:   host.Frame,
 			OnPointer: host.Pointer,
+			OnFocus: func(event woxui.FocusEvent) {
+				host.SetWindowFocused(event.Active)
+			},
 			OnKey: func(event woxui.KeyEvent) bool {
 				if host.Key(event) {
 					return true
@@ -109,7 +112,10 @@ func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
 			Role:      woxui.WindowRoleApplication,
 			OnFrame:   host.Frame,
 			OnPointer: host.Pointer,
-			OnFocus:   a.onOnboardingWindowFocus,
+			OnFocus: func(event woxui.FocusEvent) {
+				host.SetWindowFocused(event.Active)
+				a.onOnboardingWindowFocus(event)
+			},
 			OnKey: func(event woxui.KeyEvent) bool {
 				if host.Key(event) {
 					return true

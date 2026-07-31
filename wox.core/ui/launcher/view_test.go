@@ -24,8 +24,9 @@ func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 	if len(rows.Children) != 12 {
 		t.Fatalf("built rows = %d, want 12 viewport rows including overscan", len(rows.Children))
 	}
+	resultRowBaseHeight := launcherDensityMetricsFor("").resultRowBaseHeight
 	if container.Height != 241*resultRowBaseHeight {
-		t.Fatalf("virtual content height = %.0f, want %d", container.Height, 241*resultRowBaseHeight)
+		t.Fatalf("virtual content height = %.0f, want %.0f", container.Height, 241*resultRowBaseHeight)
 	}
 }
 

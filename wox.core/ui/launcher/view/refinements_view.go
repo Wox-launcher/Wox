@@ -30,6 +30,7 @@ type RefinementsProps struct {
 	Height       float32
 	Theme        woxcomponent.Theme
 	Window       *woxui.Window
+	DensityScale float32
 	Summary      string
 	DefaultLabel string
 	Open         bool
@@ -39,8 +40,8 @@ type RefinementsProps struct {
 
 // RefinementToggleWidth measures the shared query accessory.
 func RefinementToggleWidth(props RefinementsProps) float32 {
-	metrics, _ := props.Window.MeasureText(props.Summary, woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold})
-	return min(float32(150), max(float32(72), metrics.Size.Width+37))
+	metrics, _ := props.Window.MeasureText(props.Summary, woxui.TextStyle{Size: scaledLauncherSize(11, props.DensityScale), Weight: woxui.FontWeightSemibold})
+	return min(scaledLauncherSize(150, props.DensityScale), max(scaledLauncherSize(72, props.DensityScale), metrics.Size.Width+scaledLauncherSize(37, props.DensityScale)))
 }
 
 // RefinementToggle builds the compact query accessory.
@@ -57,14 +58,17 @@ func RefinementToggle(props RefinementsProps) woxwidget.Widget {
 		textOpacity = 0.94
 	}
 	width := RefinementToggleWidth(props)
+	toggleHeight := scaledLauncherSize(34, props.DensityScale)
+	controlHeight := scaledLauncherSize(26, props.DensityScale)
+	contentHeight := scaledLauncherSize(24, props.DensityScale)
 	return woxwidget.Gesture{ID: "query-refinements-toggle", OnTap: props.OnToggle, Child: woxwidget.Container{
-		Width: width, Height: 34, Padding: woxwidget.Insets{Top: 4}, Child: woxwidget.Container{
-			Width: width, Height: 26, Radius: 7, Color: refinementColorWithOpacity(tint, borderOpacity), Padding: woxwidget.UniformInsets(1),
+		Width: width, Height: toggleHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(4, props.DensityScale)}, Child: woxwidget.Container{
+			Width: width, Height: controlHeight, Radius: scaledLauncherSize(7, props.DensityScale), Color: refinementColorWithOpacity(tint, borderOpacity), Padding: woxwidget.UniformInsets(1),
 			Child: woxwidget.Container{
-				Width: width - 2, Height: 24, Radius: 6, Color: refinementOpaqueOverlay(props.Theme.Background, tint, backgroundOpacity),
-				Padding: woxwidget.Insets{Left: 7, Top: 4, Right: 8, Bottom: 3}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, Children: []woxwidget.Widget{
-					refinementFilterIcon(refinementColorWithOpacity(tint, 0.92)),
-					woxwidget.Text{Value: props.Summary, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: refinementColorWithOpacity(props.Theme.QueryText, textOpacity)},
+				Width: width - 2, Height: contentHeight, Radius: scaledLauncherSize(6, props.DensityScale), Color: refinementOpaqueOverlay(props.Theme.Background, tint, backgroundOpacity),
+				Padding: woxwidget.Insets{Left: scaledLauncherSize(7, props.DensityScale), Top: scaledLauncherSize(4, props.DensityScale), Right: scaledLauncherSize(8, props.DensityScale), Bottom: scaledLauncherSize(3, props.DensityScale)}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(5, props.DensityScale), Children: []woxwidget.Widget{
+					refinementFilterIcon(refinementColorWithOpacity(tint, 0.92), props.DensityScale),
+					woxwidget.Text{Value: props.Summary, Style: woxui.TextStyle{Size: scaledLauncherSize(11, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: refinementColorWithOpacity(props.Theme.QueryText, textOpacity)},
 				}},
 			},
 		},
@@ -73,34 +77,37 @@ func RefinementToggle(props RefinementsProps) woxwidget.Widget {
 
 // RefinementsView builds the expanded horizontal controls.
 func RefinementsView(props RefinementsProps) woxwidget.Widget {
+	groupHeight := scaledLauncherSize(22, props.DensityScale)
+	controlHeight := scaledLauncherSize(26, props.DensityScale)
+	contentHeight := scaledLauncherSize(24, props.DensityScale)
 	controls := make([]woxwidget.Widget, 0, len(props.Groups))
 	for _, refinement := range props.Groups {
 		group := make([]woxwidget.Widget, 0, len(refinement.Options)+2)
 		if refinement.Title != "" {
-			group = append(group, woxwidget.Container{Height: 22, Padding: woxwidget.Insets{Left: 7, Top: 5, Right: 7, Bottom: 3}, Child: woxwidget.Text{
-				Value: refinement.Title, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.68),
+			group = append(group, woxwidget.Container{Height: groupHeight, Padding: woxwidget.Insets{Left: scaledLauncherSize(7, props.DensityScale), Top: scaledLauncherSize(5, props.DensityScale), Right: scaledLauncherSize(7, props.DensityScale), Bottom: scaledLauncherSize(3, props.DensityScale)}, Child: woxwidget.Text{
+				Value: refinement.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(11, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.68),
 			}})
-			group = append(group, woxwidget.Container{Width: 1, Height: 22, Padding: woxwidget.Insets{Top: 4, Bottom: 4}, Child: woxwidget.Container{
-				Width: 1, Height: 14, Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.13),
+			group = append(group, woxwidget.Container{Width: 1, Height: groupHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(4, props.DensityScale), Bottom: scaledLauncherSize(4, props.DensityScale)}, Child: woxwidget.Container{
+				Width: 1, Height: scaledLauncherSize(14, props.DensityScale), Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.13),
 			}})
 		}
 		for _, option := range refinement.Options {
-			group = append(group, refinementOption(option, props.Theme))
+			group = append(group, refinementOption(option, props.Theme, props.DensityScale))
 		}
 		controls = append(controls, woxwidget.Container{
-			Height: 26, Radius: 7, Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.12), Padding: woxwidget.UniformInsets(1),
+			Height: controlHeight, Radius: scaledLauncherSize(7, props.DensityScale), Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.12), Padding: woxwidget.UniformInsets(1),
 			Child: woxwidget.Container{
-				Height: 24, Radius: 6, Color: refinementOpaqueOverlay(props.Theme.Background, props.Theme.QueryText, 0.035), Padding: woxwidget.Insets{Left: 2, Top: 1, Right: 2, Bottom: 1},
+				Height: contentHeight, Radius: scaledLauncherSize(6, props.DensityScale), Color: refinementOpaqueOverlay(props.Theme.Background, props.Theme.QueryText, 0.035), Padding: woxwidget.Insets{Left: scaledLauncherSize(2, props.DensityScale), Top: 1, Right: scaledLauncherSize(2, props.DensityScale), Bottom: 1},
 				Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 1, Children: group},
 			},
 		})
 	}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 8, Bottom: 8}, Child: woxwidget.Clip{
-		Width: max(float32(0), props.Width-16), Height: 26, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: controls},
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale), Top: scaledLauncherSize(10, props.DensityScale), Right: scaledLauncherSize(8, props.DensityScale), Bottom: scaledLauncherSize(8, props.DensityScale)}, Child: woxwidget.Clip{
+		Width: max(float32(0), props.Width-scaledLauncherSize(16, props.DensityScale)), Height: controlHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(10, props.DensityScale), Children: controls},
 	}}
 }
 
-func refinementOption(option RefinementOption, theme woxcomponent.Theme) woxwidget.Widget {
+func refinementOption(option RefinementOption, theme woxcomponent.Theme, densityScale float32) woxwidget.Widget {
 	background := woxui.Color{}
 	foreground := refinementColorWithOpacity(theme.QueryText, 0.82)
 	if option.Selected {
@@ -116,19 +123,20 @@ func refinementOption(option RefinementOption, theme woxcomponent.Theme) woxwidg
 	}
 	children := make([]woxwidget.Widget, 0, 2)
 	if option.Icon != nil {
-		children = append(children, woxwidget.Image{Source: option.Icon, Width: 16, Height: 16})
+		iconSize := scaledLauncherSize(16, densityScale)
+		children = append(children, woxwidget.Image{Source: option.Icon, Width: iconSize, Height: iconSize})
 	}
-	children = append(children, woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: foreground})
+	children = append(children, woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: scaledLauncherSize(12, densityScale), Weight: woxui.FontWeightSemibold}, Color: foreground})
 	return woxwidget.Gesture{ID: "refinement-" + option.Value, OnTap: option.OnTap, Child: woxwidget.Container{
-		Height: 22, Radius: 5, Color: background, Padding: woxwidget.Insets{Left: 10, Top: 4, Right: 10, Bottom: 3},
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: children},
+		Height: scaledLauncherSize(22, densityScale), Radius: scaledLauncherSize(5, densityScale), Color: background, Padding: woxwidget.Insets{Left: scaledLauncherSize(10, densityScale), Top: scaledLauncherSize(4, densityScale), Right: scaledLauncherSize(10, densityScale), Bottom: scaledLauncherSize(3, densityScale)},
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(6, densityScale), Children: children},
 	}}
 }
 
-func refinementFilterIcon(color woxui.Color) woxwidget.Widget {
-	return woxwidget.Painter{Width: 15, Height: 15, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+func refinementFilterIcon(color woxui.Color, densityScale float32) woxwidget.Widget {
+	return woxwidget.Painter{Width: scaledLauncherSize(15, densityScale), Height: scaledLauncherSize(15, densityScale), Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 		for index, lineWidth := range []float32{13, 9, 5} {
-			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 1, Y: bounds.Y + 3 + float32(index)*4, Width: lineWidth, Height: 1.5}, 0.75, color)
+			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + scaledLauncherSize(1, densityScale), Y: bounds.Y + scaledLauncherSize(3+float32(index)*4, densityScale), Width: scaledLauncherSize(lineWidth, densityScale), Height: scaledLauncherSize(1.5, densityScale)}, scaledLauncherSize(0.75, densityScale), color)
 		}
 	}}
 }

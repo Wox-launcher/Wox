@@ -35,3 +35,25 @@ func TestLauncherWindowOriginUsesShowPositionWhenRequested(t *testing.T) {
 		t.Fatalf("show origin = %.0f,%.0f, want 400,300", x, y)
 	}
 }
+
+func TestSelectableIndexFromPreservesExplicitRefreshIndex(t *testing.T) {
+	results := []queryResult{{ID: "first"}, {ID: "group", IsGroup: true}, {ID: "third"}}
+
+	if index := selectableIndex(results); index != 0 {
+		t.Fatalf("default selected index = %d, want 0", index)
+	}
+	if index := selectableIndexFrom(results, 1); index != 2 {
+		t.Fatalf("preserved selected index = %d, want 2", index)
+	}
+}
+
+func TestToolbarHotkeyMatchesOnlyKeyDown(t *testing.T) {
+	event := woxui.KeyEvent{Key: "j", Modifiers: woxui.KeyModifierControl}
+	if toolbarHotkeyMatches("ctrl+j", event) {
+		t.Fatal("key-up unexpectedly matched Ctrl+J")
+	}
+	event.Down = true
+	if !toolbarHotkeyMatches("ctrl+j", event) {
+		t.Fatal("key-down did not match Ctrl+J")
+	}
+}

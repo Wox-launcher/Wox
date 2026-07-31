@@ -64,6 +64,7 @@ type Host struct {
 	caretBlinkActive     bool
 	caretVisible         bool
 	caretBlinkGeneration uint64
+	windowFocused        bool
 	animations           animationHost
 	elements             *elementTree
 	postFrame            []func()
@@ -73,13 +74,14 @@ type Host struct {
 // NewHost creates a retained host whose builder runs once per invalidated frame.
 func NewHost(build func(frame woxui.FrameInfo) Widget) *Host {
 	host := &Host{
-		build:        build,
-		identities:   map[string]woxui.AccessibilityNodeID{},
-		nodes:        map[woxui.AccessibilityNodeID]*node{},
-		scopeRestore: map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID{},
-		change:       make(chan struct{}),
-		reported:     map[string]bool{},
-		caretVisible: true,
+		build:         build,
+		identities:    map[string]woxui.AccessibilityNodeID{},
+		nodes:         map[woxui.AccessibilityNodeID]*node{},
+		scopeRestore:  map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID{},
+		change:        make(chan struct{}),
+		reported:      map[string]bool{},
+		caretVisible:  true,
+		windowFocused: true,
 	}
 	host.snapshot.Store(AutomationSnapshot{})
 	host.elements = newElementTree(host)
@@ -94,6 +96,27 @@ func (h *Host) Attach(window *woxui.Window) {
 // AttachServices connects a virtual or native host surface using the same widget execution path.
 func (h *Host) AttachServices(services HostServices) {
 	h.window = services
+}
+
+// SetWindowFocused keeps the retained editor focus while suspending its caret and IME when the native window is inactive.
+func (h *Host) SetWindowFocused(focused bool) {
+	h.caretBlinkMu.Lock()
+	if h.windowFocused == focused {
+		h.caretBlinkMu.Unlock()
+		return
+	}
+	h.windowFocused = focused
+	window := h.window
+	h.caretBlinkMu.Unlock()
+	if !focused {
+		h.updateCaretBlink(false)
+		if window != nil {
+			_ = window.SetTextInputState(woxui.TextInputState{})
+		}
+	}
+	if window != nil {
+		_ = window.Invalidate()
+	}
 }
 
 // Frame reconciles one widget description, publishes semantics, and paints it.
@@ -578,7 +601,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		return
 	}
 	target := h.root.hitTest(event.Position)
-	if event.Kind == woxui.PointerMove || event.Kind == woxui.PointerEnter || event.Kind == woxui.PointerLeave {
+	if event.Kind == woxui.PointerMove || event.Kind == woxui.PointerLeave {
 		if event.Kind == woxui.PointerLeave {
 			target = nil
 		}
@@ -691,13 +714,14 @@ func nodeHasActiveCaret(current *node) bool {
 func (h *Host) caretVisibleForFrame() bool {
 	h.caretBlinkMu.Lock()
 	defer h.caretBlinkMu.Unlock()
-	return h.caretVisible
+	return h.windowFocused && h.caretVisible
 }
 
 // updateCaretBlink starts or stops the one-shot blink cycle based on the current widget tree.
 func (h *Host) updateCaretBlink(active bool) {
 	h.caretBlinkMu.Lock()
 	defer h.caretBlinkMu.Unlock()
+	active = active && h.windowFocused
 	if h.caretBlinkActive != active {
 		h.caretBlinkGeneration++
 		if h.caretBlinkTimer != nil {

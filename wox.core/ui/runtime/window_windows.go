@@ -161,6 +161,8 @@ type platformWindow struct {
 	inputComposing     bool
 	pointerInside      bool
 	pointerPosition    Point
+	pointerScreen      Point
+	pointerScreenKnown bool
 }
 
 type candidateForm struct {
@@ -363,6 +365,11 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		options:    options,
 		uiThreadID: uiThreadID,
 		done:       make(chan struct{}),
+	}
+	var pointerScreen win.POINT
+	if win.GetCursorPos(&pointerScreen) {
+		window.pointerScreen = Point{X: float32(pointerScreen.X), Y: float32(pointerScreen.Y)}
+		window.pointerScreenKnown = true
 	}
 	if err := window.createNativeWindow(); err != nil {
 		close(window.done)
@@ -720,13 +727,23 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 	case win.WM_ERASEBKGND:
 		return 1
 	case win.WM_MOUSEMOVE:
+		var screenPosition win.POINT
+		screenPositionKnown := win.GetCursorPos(&screenPosition)
+		screenPoint := Point{X: float32(screenPosition.X), Y: float32(screenPosition.Y)}
+		pointerMoved := !screenPositionKnown || pointerPositionChanged(window.pointerScreen, screenPoint, window.pointerScreenKnown)
+		if screenPositionKnown {
+			window.pointerScreen = screenPoint
+			window.pointerScreenKnown = true
+		}
 		position := window.logicalPointerPosition(lParam)
 		if !window.pointerInside {
 			window.pointerInside = true
 			win.TrackMouseEvent(&win.TRACKMOUSEEVENT{CbSize: uint32(unsafe.Sizeof(win.TRACKMOUSEEVENT{})), DwFlags: win.TME_LEAVE, HwndTrack: hwnd})
 			window.emitPointer(PointerEvent{Kind: PointerEnter, Position: position, Modifiers: windowsKeyModifiers()})
 		}
-		window.emitPointer(PointerEvent{Kind: PointerMove, Position: position, Modifiers: windowsKeyModifiers()})
+		if pointerMoved {
+			window.emitPointer(PointerEvent{Kind: PointerMove, Position: position, Modifiers: windowsKeyModifiers()})
+		}
 		return 0
 	case win.WM_MOUSELEAVE:
 		window.pointerInside = false

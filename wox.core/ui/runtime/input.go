@@ -102,3 +102,7 @@ type PointerEvent struct {
 	Scroll    Point
 	Modifiers KeyModifiers
 }
+
+func pointerPositionChanged(previous Point, current Point, known bool) bool {
+	return !known || previous != current
+}

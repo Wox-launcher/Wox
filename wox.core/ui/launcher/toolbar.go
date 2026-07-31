@@ -138,6 +138,9 @@ func (a *App) onToolbarKey(event woxui.KeyEvent) bool {
 }
 
 func toolbarHotkeyMatches(hotkey string, event woxui.KeyEvent) bool {
+	if !event.Down || event.Composing {
+		return false
+	}
 	parts := strings.Split(strings.ToLower(strings.TrimSpace(hotkey)), "+")
 	if len(parts) == 0 {
 		return false

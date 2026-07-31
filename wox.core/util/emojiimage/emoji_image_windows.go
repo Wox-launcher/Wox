@@ -1,6 +1,6 @@
 //go:build windows
 
-package emoji
+package emojiimage
 
 import (
 	"errors"
@@ -52,7 +52,8 @@ const (
 	clsctxInprocServer            = 0x1
 )
 
-func getNativeEmojiImage(emoji string, size int) (image.Image, error) {
+// Render creates a platform-native color emoji image.
+func Render(emoji string, size int) (image.Image, error) {
 	if size <= 0 {
 		size = 256
 	}

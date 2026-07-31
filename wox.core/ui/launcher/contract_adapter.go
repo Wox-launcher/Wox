@@ -96,9 +96,11 @@ func (a *App) RefreshQuery(_ context.Context, preserveSelectedIndex bool) error 
 		a.completionHint = nil
 		a.stopGlanceLocked(true)
 		if !preserveSelectedIndex {
+			a.pendingSelection = nil
 			a.selected = -1
 			a.resultScrollDetached = false
 		} else {
+			a.pendingSelection = &pendingResultSelection{queryID: a.query.QueryID, index: selected}
 			a.selected = selected
 		}
 		a.reconcileSelectedPreview()
@@ -502,7 +504,7 @@ func (a *App) applyTypedCloudSyncProgress(progress cloudsync.CloudSyncProgress) 
 	}
 	_ = a.window.Invalidate()
 	if !progress.Active {
-		util.Go(a.lifecycleCtx, "reload cloud sync after progress", a.reloadCloudSync)
+		util.Go(a.lifecycleCtx, "reload cloud sync after progress", a.reloadCloudSyncSilently)
 	}
 }
 
@@ -567,7 +569,7 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 	a.resultsQueryID = queryID
 	a.results = append(a.results, results...)
 	if a.selected < 0 {
-		a.selected = selectableIndex(a.results, "")
+		a.selected = selectableIndex(a.results)
 	}
 	a.reconcileSelectedPreview()
 	if err := a.applyWindowBounds(); err != nil {

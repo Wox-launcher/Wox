@@ -121,7 +121,7 @@ func TestCloudControllerReloadSuccess(t *testing.T) {
 		devices: cloudsync.CloudSyncDeviceListResponse{Devices: []cloudsync.CloudSyncDevice{{DeviceID: "d1"}}},
 		plugins: []contract.PluginCatalogItem{{ID: "p1", Name: "Plugin One"}},
 	}
-	c.ReloadCloudSync(context.Background(), service, "session", nil)
+	c.ReloadCloudSync(context.Background(), service, "session", nil, true)
 	snap := c.Snapshot()
 	if !c.Loaded() {
 		t.Fatalf("Loaded should be true after successful reload")
@@ -153,7 +153,7 @@ func TestCloudControllerReloadError(t *testing.T) {
 	deps, _ := newCloudControllerDeps()
 	c := newCloudSettingsController(deps)
 	service := &cloudFakeService{accountErr: errors.New("network down")}
-	c.ReloadCloudSync(context.Background(), service, "session", nil)
+	c.ReloadCloudSync(context.Background(), service, "session", nil, true)
 	snap := c.Snapshot()
 	if c.Loaded() {
 		t.Fatalf("Loaded should be false after error")
@@ -163,6 +163,34 @@ func TestCloudControllerReloadError(t *testing.T) {
 	}
 	if snap.Loading {
 		t.Fatalf("Loading should be false after error")
+	}
+}
+
+func TestCloudControllerSilentReloadDoesNotShowLoading(t *testing.T) {
+	deps, _ := newCloudControllerDeps()
+	c := newCloudSettingsController(deps)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	service := &cloudFakeService{entered: entered, release: release, pathSel: "/account/status"}
+
+	go func() {
+		c.ReloadCloudSync(context.Background(), service, "session", nil, false)
+		close(done)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for silent reload")
+	}
+	if c.Snapshot().Loading {
+		t.Fatal("silent reload should keep loading hidden")
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for silent reload to finish")
 	}
 }
 
@@ -185,7 +213,7 @@ func TestCloudControllerRevisionGuard(t *testing.T) {
 	}
 
 	// First reload blocks inside AccountStatus.
-	go c.ReloadCloudSync(context.Background(), blockingService, "session", nil)
+	go c.ReloadCloudSync(context.Background(), blockingService, "session", nil, true)
 
 	// Wait until the first reload has entered Post and is blocked.
 	select {
@@ -200,7 +228,7 @@ func TestCloudControllerRevisionGuard(t *testing.T) {
 		account: account.Status{LoggedIn: false, Email: "fresh@x.com"},
 		sync:    cloudsync.ServiceStatus{Enabled: false},
 	}
-	c.ReloadCloudSync(context.Background(), secondService, "session", nil)
+	c.ReloadCloudSync(context.Background(), secondService, "session", nil, true)
 
 	// After the second reload, Loaded must be true (both account and sync succeeded),
 	// and the account must be the second client's (fresh), not the first's (stale).

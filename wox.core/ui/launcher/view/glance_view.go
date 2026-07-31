@@ -10,13 +10,14 @@ import (
 
 // GlanceProps contains the display state and actions for the query-box glance accessory.
 type GlanceProps struct {
-	Text    string
-	Tooltip string
-	Width   float32
-	Icon    *woxui.Image
-	Theme   woxcomponent.Theme
-	OnTap   func()
-	OnHover func(bool, string, woxui.Rect)
+	Text         string
+	Tooltip      string
+	Width        float32
+	Icon         *woxui.Image
+	Theme        woxcomponent.Theme
+	DensityScale float32
+	OnTap        func()
+	OnHover      func(bool, string, woxui.Rect)
 }
 
 type glanceViewState struct {
@@ -42,20 +43,22 @@ func (s *glanceViewState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
 // Build composes immutable glance content with locally owned hover state.
 func (s *glanceViewState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
 	props := widget.(GlanceProps)
+	iconSize := scaledLauncherSize(16, props.DensityScale)
+	height := scaledLauncherSize(30, props.DensityScale)
+	horizontalPadding := scaledLauncherSize(8, props.DensityScale)
+	gap := scaledLauncherSize(5, props.DensityScale)
 	children := make([]woxwidget.Widget, 0, 2)
-	textWidth := props.Width - 16
+	contentWidth := max(float32(0), props.Width-horizontalPadding*2)
+	textWidth := contentWidth
 	foreground := props.Theme.QueryText
 	foreground.A = uint8(float32(foreground.A) * 0.8)
 	if props.Icon != nil {
-		children = append(children, woxwidget.Container{
-			Width: 16, Height: 28, Padding: woxwidget.Insets{Top: 6, Bottom: 6},
-			Child: woxwidget.Image{Source: props.Icon, Width: 16, Height: 16},
-		})
-		textWidth -= 21
+		children = append(children, woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize})
+		textWidth -= iconSize + gap
 	}
 	text := strings.TrimSpace(props.Text)
-	children = append(children, woxwidget.Container{Width: max(float32(20), textWidth), Height: 28, Padding: woxwidget.Insets{Top: 5}, Child: woxwidget.Text{
-		Value: compactViewText(text, 22), Style: woxui.TextStyle{Size: 15}, Color: foreground,
+	children = append(children, woxwidget.Container{Width: max(scaledLauncherSize(20, props.DensityScale), textWidth), Child: woxwidget.Text{
+		Value: compactViewText(text, 22), Style: woxui.TextStyle{Size: scaledLauncherSize(15, props.DensityScale)}, Color: foreground,
 	}})
 	background := woxui.Color{}
 	if s.hovered {
@@ -74,8 +77,10 @@ func (s *glanceViewState) Build(context woxwidget.StateContext, widget any) woxw
 			props.OnHover(inside, tooltip, bounds)
 		}
 	}, Child: woxwidget.Container{
-		Width: props.Width, Height: 30, Radius: 5, Color: background, Padding: woxwidget.Insets{Left: 8, Top: 1, Right: 8, Bottom: 1},
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, Children: children},
+		Width: props.Width, Height: height, Radius: scaledLauncherSize(5, props.DensityScale), Color: background, Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding},
+		Child: woxwidget.Align{Width: contentWidth, Height: height, Vertical: 0.5, Child: woxwidget.Flex{
+			Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
+		}},
 	}}
 }
 

@@ -470,6 +470,7 @@ func (a *App) reloadSettings() error {
 		data.LogLevel = "INFO"
 	}
 	var applyErr error
+	densityChanged := false
 	if err := a.runOnUI("apply general settings snapshot", func() {
 		aiForm := newAISettingsForm(data)
 		hotkeyForm := newHotkeySettingsForm(data)
@@ -479,6 +480,9 @@ func (a *App) reloadSettings() error {
 		a.aiSettings.SetForm(&aiForm)
 		a.hotkeySettings.SetForm(&hotkeyForm)
 
+		nextDensityMetrics := launcherDensityMetricsFor(data.UIDensity)
+		densityChanged = a.densityMetrics != nextDensityMetrics
+		a.densityMetrics = nextDensityMetrics
 		// Domain controllers receive the same authoritative payload in one UI transaction.
 		a.generalSettings.ApplyData(data)
 		a.generalSettings.SetLanguages(languageChoices)
@@ -503,7 +507,13 @@ func (a *App) reloadSettings() error {
 	}); err != nil {
 		return err
 	}
-	return applyErr
+	if applyErr != nil {
+		return applyErr
+	}
+	if densityChanged && a.window != nil {
+		return a.applyWindowBounds()
+	}
+	return nil
 }
 
 // settingsDataFromContract adapts core domain types to launcher-owned form state.

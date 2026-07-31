@@ -200,13 +200,13 @@ func (c *cloudSettingsController) SetPlugins(plugins []pluginSettingsPlugin) {
 // billing plan has not been loaded yet, so the App can kick off a billing reload
 // without coupling the controller to the billing reload path. Responses from
 // superseded refreshes are discarded via the revision guard.
-func (c *cloudSettingsController) ReloadCloudSync(ctx context.Context, service cloudReloadServices, sessionID string, onNeedBilling func()) {
+func (c *cloudSettingsController) ReloadCloudSync(ctx context.Context, service cloudReloadServices, sessionID string, onNeedBilling func(), showLoading bool) {
 	var revision uint64
 	if !c.deps.OnUI("start loading cloud sync", func() {
 		c.revision++
 		revision = c.revision
 		needBilling := !c.billingLoaded
-		c.loading = true
+		c.loading = showLoading
 		c.errMsg = ""
 		c.deps.Invalidate()
 		if needBilling && onNeedBilling != nil {

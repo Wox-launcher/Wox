@@ -1,12 +1,13 @@
 //go:build !darwin && !windows
 
-package emoji
+package emojiimage
 
 import (
 	"errors"
 	"image"
 )
 
-func getNativeEmojiImage(emoji string, size int) (image.Image, error) {
+// Render reports that native color emoji rendering is unavailable.
+func Render(emoji string, size int) (image.Image, error) {
 	return nil, errors.New("native emoji rendering not supported on this platform")
 }

@@ -1,10 +1,19 @@
 package view
 
 import (
+	"math"
+
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+func scaledLauncherSize(value, scale float32) float32 {
+	if scale <= 0 {
+		scale = 1
+	}
+	return float32(math.Round(float64(value * scale)))
+}
 
 // LauncherFloatingView contains one positioned launcher panel.
 type LauncherFloatingView struct {

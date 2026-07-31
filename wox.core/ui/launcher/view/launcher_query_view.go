@@ -44,6 +44,7 @@ type LauncherHeaderProps struct {
 	Height            float32
 	QueryBoxHeight    float32
 	QueryEditorHeight float32
+	DensityScale      float32
 	QueryWidth        float32
 	QueryRadius       float32
 	AppPadding        woxwidget.Insets
@@ -58,27 +59,31 @@ type LauncherHeaderProps struct {
 
 // LauncherHeaderView builds the query box and prepared accessory views.
 func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
-	const queryLeftPadding = float32(8)
-	const accessoryGap = float32(12)
+	queryLeftPadding := scaledLauncherSize(8, props.DensityScale)
+	accessoryGap := scaledLauncherSize(12, props.DensityScale)
 	queryVerticalPadding := (props.QueryBoxHeight - props.QueryEditorHeight) / 2
 	children := []woxwidget.Widget{woxwidget.Container{
 		Width: props.QueryWidth, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: queryVerticalPadding, Bottom: queryVerticalPadding},
 		Child: LauncherQueryView(props.Query),
 	}}
 	if props.Refinement != nil {
+		accessoryHeight := scaledLauncherSize(34, props.DensityScale)
 		children = append(children, woxwidget.Container{
-			Width: props.RefinementWidth, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: 10.5, Bottom: 10.5}, Child: props.Refinement,
+			Width: props.RefinementWidth, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: (props.QueryBoxHeight - accessoryHeight) / 2, Bottom: (props.QueryBoxHeight - accessoryHeight) / 2}, Child: props.Refinement,
 		})
 	}
 	if props.Glance != nil {
+		glanceHeight := scaledLauncherSize(30, props.DensityScale)
 		children = append(children, woxwidget.Container{
-			Width: props.GlanceWidth, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: 12.5, Bottom: 12.5}, Child: props.Glance,
+			Width: props.GlanceWidth, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: (props.QueryBoxHeight - glanceHeight) / 2, Bottom: (props.QueryBoxHeight - glanceHeight) / 2}, Child: props.Glance,
 		})
 	}
 	if props.Icon != nil {
+		iconSize := scaledLauncherSize(30, props.DensityScale)
+		iconContainerHeight := scaledLauncherSize(34, props.DensityScale)
 		children = append(children, woxwidget.Container{
-			Width: 30, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: 10.5, Bottom: 10.5},
-			Child: woxwidget.Container{Width: 30, Height: 34, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Image{Source: props.Icon, Width: 30, Height: 30}},
+			Width: iconSize, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: (props.QueryBoxHeight - iconContainerHeight) / 2, Bottom: (props.QueryBoxHeight - iconContainerHeight) / 2},
+			Child: woxwidget.Container{Width: iconSize, Height: iconContainerHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(2, props.DensityScale)}, Child: woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize}},
 		})
 	}
 	horizontalPadding := props.AppPadding.Left + props.AppPadding.Right
@@ -87,7 +92,7 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 		Padding: woxwidget.Insets{Left: props.AppPadding.Left, Top: props.AppPadding.Top, Right: props.AppPadding.Right},
 		Child: woxwidget.Container{
 			Width: props.Width - horizontalPadding, Height: props.QueryBoxHeight, Radius: props.QueryRadius, Color: props.Theme.QueryBackground,
-			Padding: woxwidget.Insets{Left: queryLeftPadding, Right: 6},
+			Padding: woxwidget.Insets{Left: queryLeftPadding, Right: scaledLauncherSize(6, props.DensityScale)},
 			Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: accessoryGap, Children: children},
 		},
 	}
@@ -95,6 +100,8 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 
 // LauncherQueryView builds the query editor from adapter-prepared text metrics.
 func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
+	const cursorWidth = float32(2)
+
 	var editor woxwidget.Widget = woxwidget.Gesture{
 		ID: "query-editor",
 		OnTapAt: func(position woxui.Point) {
@@ -132,10 +139,10 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 
 			cursorX := bounds.X + props.CaretWidth
 			if caretVisible {
-				displayList.FillRect(woxui.Rect{X: cursorX, Y: caretY, Width: 1, Height: props.CaretHeight}, props.Theme.Cursor)
+				displayList.FillRect(woxui.Rect{X: cursorX, Y: caretY, Width: cursorWidth, Height: props.CaretHeight}, props.Theme.Cursor)
 			}
 			if props.OnTextInputState != nil {
-				props.OnTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: cursorX, Y: caretY, Width: 1, Height: props.CaretHeight}})
+				props.OnTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: cursorX, Y: caretY, Width: cursorWidth, Height: props.CaretHeight}})
 			}
 			if props.State.Composition != "" {
 				displayList.FillRect(woxui.Rect{X: bounds.X + props.PrefixWidth, Y: caretY + props.CaretHeight - 1, Width: props.CompositionWidth, Height: 1}, props.Theme.Cursor)
@@ -154,7 +161,7 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 		OnFocusChange: props.OnFocusChange,
 		OnSetValue:    props.OnSetValue,
 		TextInput: func(bounds woxui.Rect) woxui.TextInputState {
-			return woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X + props.FocusWidth, Y: bounds.Y, Width: 1, Height: bounds.Height}}
+			return woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X + props.FocusWidth, Y: bounds.Y, Width: cursorWidth, Height: bounds.Height}}
 		},
 		Child: editor,
 	}

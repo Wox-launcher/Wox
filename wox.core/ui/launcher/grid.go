@@ -68,6 +68,9 @@ func gridResultsHeight(results []queryResult, width float32, raw *gridLayout) in
 func (a *App) buildGridResults(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
 	layout := normalizedGridLayout(snapshot.layout.GridLayout)
 	cellWidth, cellHeight, visualWidth, visualHeight := gridCellMetrics(width, layout)
+	contentHeight := float32(gridResultsHeight(snapshot.results, width, snapshot.layout.GridLayout))
+	scroll := resolveResultScroll(snapshot.results, snapshot.layout.GridLayout, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics)
+	visible := visibleGridResults(snapshot.results, layout.Columns, cellHeight, scroll.offset, height)
 	results := make([]launcherview.LauncherGridResult, 0, len(snapshot.results))
 	for index, result := range snapshot.results {
 		index := index
@@ -75,15 +78,15 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height float32) wox
 			ID: result.ID, Title: result.Title, Group: result.IsGroup, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 		}
 		if !result.IsGroup {
-			item.Icon = a.imageForSize(result.Icon, int(math.Ceil(float64(max(visualWidth, visualHeight)))))
+			if visible[index] {
+				item.Icon = a.imageForSize(result.Icon, int(math.Ceil(float64(max(visualWidth, visualHeight)))))
+			}
 			item.OnHover = func(inside bool) { a.hoverResult(index, inside) }
 			item.OnSelect = func() { a.selectResult(index) }
 			item.OnActivate = func() { a.activateResult(index) }
 		}
 		results = append(results, item)
 	}
-	contentHeight := float32(gridResultsHeight(snapshot.results, width, snapshot.layout.GridLayout))
-	scroll := resolveResultScroll(snapshot.results, snapshot.layout.GridLayout, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette)
 	a.rememberResolvedResultScroll(snapshot, scroll)
 	return launcherview.LauncherGridView(launcherview.LauncherGridProps{
 		Width: width, Height: height, ContentHeight: contentHeight, Offset: scroll.offset, Columns: layout.Columns,
@@ -92,6 +95,68 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height float32) wox
 		GroupHeaderHeight: gridGroupHeaderHeight, TitleHeight: gridTitleHeight, Theme: snapshot.palette.componentTheme(), Results: results,
 		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
+}
+
+// visibleGridResults limits image resolution to the viewport plus one row of overscan.
+func visibleGridResults(results []queryResult, columns int, rowHeight, offset, viewport float32) []bool {
+	visible := make([]bool, len(results))
+	if columns <= 0 || rowHeight <= 0 || viewport <= 0 {
+		return visible
+	}
+	top := max(float32(0), offset-rowHeight)
+	bottom := offset + viewport + rowHeight
+	y := float32(0)
+	for index := 0; index < len(results); {
+		if results[index].IsGroup {
+			y += gridGroupHeaderHeight
+			index++
+			continue
+		}
+		rowStart := index
+		for index < len(results) && !results[index].IsGroup && index-rowStart < columns {
+			index++
+		}
+		if y+rowHeight >= top && y <= bottom {
+			for itemIndex := rowStart; itemIndex < index; itemIndex++ {
+				visible[itemIndex] = true
+			}
+		}
+		y += rowHeight
+	}
+	return visible
+}
+
+// gridSelectionIndex moves vertically through visual rows while preserving the current column.
+func gridSelectionIndex(results []queryResult, current, columns, direction int) int {
+	if columns <= 0 || direction == 0 {
+		return current
+	}
+	rows := make([][]int, 0)
+	for index := 0; index < len(results); {
+		if results[index].IsGroup {
+			index++
+			continue
+		}
+		row := make([]int, 0, columns)
+		for index < len(results) && !results[index].IsGroup && len(row) < columns {
+			row = append(row, index)
+			index++
+		}
+		if len(row) > 0 {
+			rows = append(rows, row)
+		}
+	}
+	for rowIndex, row := range rows {
+		for columnIndex, resultIndex := range row {
+			if resultIndex != current {
+				continue
+			}
+			targetRow := (rowIndex + direction + len(rows)) % len(rows)
+			targetColumn := min(columnIndex, len(rows[targetRow])-1)
+			return rows[targetRow][targetColumn]
+		}
+	}
+	return current
 }
 
 // gridResultVerticalBounds maps a source index through group headers and wrapped grid rows.

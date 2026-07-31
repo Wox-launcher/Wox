@@ -244,7 +244,8 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
     result = DCompositionCreateDevice(dxgi_device, __uuidof(IDCompositionDevice), reinterpret_cast<void **>(&renderer->composition_device));
   }
   if (SUCCEEDED(result)) {
-    result = renderer->composition_device->CreateTargetForHwnd(reinterpret_cast<HWND>(window_handle), TRUE, &renderer->composition_target);
+    // Keep HWND-hosted controls such as WebView2 above the DirectComposition surface.
+    result = renderer->composition_device->CreateTargetForHwnd(reinterpret_cast<HWND>(window_handle), FALSE, &renderer->composition_target);
   }
   if (SUCCEEDED(result)) {
     result = renderer->composition_device->CreateVisual(&renderer->composition_visual);

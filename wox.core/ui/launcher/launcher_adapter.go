@@ -46,6 +46,7 @@ type viewSnapshot struct {
 	actionIndices         []int
 	show                  showAppParams
 	palette               uiPalette
+	densityMetrics        launcherDensityMetrics
 }
 
 func (a *App) snapshot() viewSnapshot {
@@ -112,6 +113,7 @@ func (a *App) snapshot() viewSnapshot {
 		actionIndices:         actionIndices,
 		show:                  a.show,
 		palette:               a.palette,
+		densityMetrics:        a.densityMetrics.normalized(),
 	}
 }
 
@@ -121,15 +123,15 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	height := frame.Size.Height
 	queryHeight := float32(0)
 	if !snapshot.show.HideQueryBox && !snapshot.chatFullscreen {
-		queryHeight = queryBoxHeight + snapshot.palette.appPadding.Top
+		queryHeight = snapshot.densityMetrics.queryBoxHeight + snapshot.palette.appPadding.Top
 	}
 	toolbarHeight := float32(0)
 	if !snapshot.show.HideToolbar && !snapshot.chatFullscreen && (len(snapshot.results) > 0 || snapshot.toolbarMsg != nil) {
-		toolbarHeight = footerHeight
+		toolbarHeight = snapshot.densityMetrics.toolbarHeight
 	}
 	refinementHeight := float32(0)
 	if queryHeight > 0 && snapshot.refinementOpen && len(snapshot.refinements) > 0 {
-		refinementHeight = refinementBarHeight
+		refinementHeight = snapshot.densityMetrics.refinementBarHeight
 	}
 	contentHeight := max(0, height-queryHeight-refinementHeight-toolbarHeight)
 	content := a.buildContent(snapshot, width, contentHeight)
@@ -170,19 +172,19 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 }
 
 func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) woxwidget.Widget {
-	const queryLeftPadding = float32(8)
-	const accessoryGap = float32(12)
+	queryLeftPadding := snapshot.densityMetrics.scaled(8)
+	accessoryGap := snapshot.densityMetrics.scaled(12)
 	horizontalPadding := snapshot.palette.appPadding.Left + snapshot.palette.appPadding.Right
-	contentWidth := max(float32(0), width-horizontalPadding-queryLeftPadding-6)
+	contentWidth := max(float32(0), width-horizontalPadding-queryLeftPadding-snapshot.densityMetrics.scaled(6))
 	queryWidth := contentWidth
 	glanceWidth := float32(0)
 	if snapshot.glance != nil {
-		metrics, _ := a.window.MeasureText(strings.TrimSpace(snapshot.glance.Text), woxui.TextStyle{Size: 15})
-		glanceWidth = metrics.Size.Width + 20
+		metrics, _ := a.window.MeasureText(strings.TrimSpace(snapshot.glance.Text), woxui.TextStyle{Size: snapshot.densityMetrics.scaled(15)})
+		glanceWidth = metrics.Size.Width + snapshot.densityMetrics.scaled(20)
 		if !snapshot.hideGlanceIcon && snapshot.glance.Icon.ImageData != "" {
-			glanceWidth += 21
+			glanceWidth += snapshot.densityMetrics.scaled(21)
 		}
-		glanceWidth = min(float32(192), max(float32(44), glanceWidth))
+		glanceWidth = min(snapshot.densityMetrics.scaled(192), max(snapshot.densityMetrics.scaled(44), glanceWidth))
 		queryWidth -= glanceWidth + accessoryGap
 	}
 	refinementWidth := float32(0)
@@ -192,32 +194,32 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 	}
 	var queryIcon *woxui.Image
 	if snapshot.glance == nil {
-		if image := a.imageForSize(snapshot.layout.Icon, 32); image != nil {
+		if image := a.imageForSize(snapshot.layout.Icon, int(snapshot.densityMetrics.scaled(32))); image != nil {
 			queryIcon = image
-			queryWidth -= 30 + accessoryGap
+			queryWidth -= snapshot.densityMetrics.scaled(30) + accessoryGap
 		}
 	}
-	queryWidth = max(float32(140), queryWidth)
+	queryWidth = max(snapshot.densityMetrics.scaled(140), queryWidth)
 	var refinement woxwidget.Widget
 	if len(snapshot.refinements) > 0 {
 		refinement = a.buildRefinementToggle(snapshot)
 	}
 	var glance woxwidget.Widget
 	if snapshot.glance != nil {
-		glance = a.buildGlance(*snapshot.glance, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth, scale)
+		glance = a.buildGlance(*snapshot.glance, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth, scale, snapshot.densityMetrics)
 	}
 	return launcherview.LauncherHeaderView(launcherview.LauncherHeaderProps{
-		Width: width, Height: height, QueryBoxHeight: queryBoxHeight, QueryEditorHeight: queryEditorHeight,
+		Width: width, Height: height, QueryBoxHeight: snapshot.densityMetrics.queryBoxHeight, QueryEditorHeight: snapshot.densityMetrics.queryEditorHeight, DensityScale: snapshot.densityMetrics.scale,
 		QueryWidth: queryWidth, QueryRadius: snapshot.palette.queryRadius, AppPadding: snapshot.palette.appPadding, Theme: snapshot.palette.componentTheme(),
-		Query: a.queryViewProps(snapshot, queryWidth, queryEditorHeight), Refinement: refinement, RefinementWidth: refinementWidth,
+		Query: a.queryViewProps(snapshot, queryWidth, snapshot.densityMetrics.queryEditorHeight), Refinement: refinement, RefinementWidth: refinementWidth,
 		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon,
 	})
 }
 
 // queryViewProps prepares text slices and measurements without exposing controller state to the view.
 func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launcherview.LauncherQueryProps {
-	const caretHeight = float32(34)
-	style := woxui.TextStyle{Size: 28}
+	caretHeight := snapshot.densityMetrics.scaled(34)
+	style := woxui.TextStyle{Size: snapshot.densityMetrics.scaled(28)}
 	queryFocused := snapshot.form == nil && snapshot.tableEditor == nil && !snapshot.requirementFormActive && !snapshot.actionPanel
 	state := snapshot.editing
 	runes := []rune(state.Text)
@@ -339,17 +341,18 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 	if snapshot.layout.GridLayout != nil {
 		return a.buildGridResults(snapshot, width, height)
 	}
-	rowHeight := resultRowHeightForPalette(snapshot.palette)
+	densityMetrics := snapshot.densityMetrics.normalized()
+	rowHeight := densityMetrics.resultRowHeight(snapshot.palette)
 	containerPadding := snapshot.palette.resultContainerPadding
 	containerPadding.Left += snapshot.palette.appPadding.Left
 	containerPadding.Right += snapshot.palette.appPadding.Right
 	containerPadding.Bottom += snapshot.palette.appPadding.Bottom
 	rowPadding := snapshot.palette.resultItemPadding
-	rowPadding.Left += 5
-	rowPadding.Right += 5
+	rowPadding.Left += densityMetrics.scaled(5)
+	rowPadding.Right += densityMetrics.scaled(5)
 	tailLayoutWidth := max(float32(0), width-containerPadding.Left-containerPadding.Right-snapshot.palette.resultItemPadding.Left-snapshot.palette.resultItemPadding.Right)
 	contentHeight := containerPadding.Top + containerPadding.Bottom + float32(len(snapshot.results))*rowHeight + float32(max(0, len(snapshot.results)-1)*resultRowGap)
-	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette)
+	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics)
 	a.rememberResolvedResultScroll(snapshot, scroll)
 	offset := scroll.offset
 	start, end := visibleResultRange(len(snapshot.results), offset, height, containerPadding.Top, rowHeight, resultRowGap)
@@ -363,36 +366,34 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 			})
 			continue
 		}
-		tails, tailWidth, tailHeight := a.resultTailViewProps(result.Tails, tailLayoutWidth)
+		tails, tailWidth, tailHeight := a.resultTailViewProps(result.Tails, tailLayoutWidth, densityMetrics)
 		titleHeight := float32(0)
 		if result.SubTitle == "" {
-			metrics, _ := a.window.MeasureText(result.Title, woxui.TextStyle{Size: 15})
+			metrics, _ := a.window.MeasureText(result.Title, woxui.TextStyle{Size: densityMetrics.scaled(15)})
 			titleHeight = metrics.Size.Height
 		}
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
-			Icon: a.imageForSize(result.Icon, 32), TitleHeight: titleHeight, Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
+			Icon: a.imageForSize(result.Icon, int(densityMetrics.scaled(32))), TitleHeight: titleHeight, Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnActivate: func() { a.activateResult(index) },
 		})
 	}
 	return launcherview.LauncherResultsView(launcherview.LauncherResultsProps{
 		Width: width, Height: height, ContentHeight: contentHeight, Offset: offset, StartIndex: start, RowHeight: rowHeight, RowGap: resultRowGap,
 		ContainerPadding: containerPadding, ItemPadding: rowPadding, ItemRadius: snapshot.palette.resultItemRadius,
-		TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail, Theme: snapshot.palette.componentTheme(), Items: items,
+		TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail, Theme: snapshot.palette.componentTheme(), DensityScale: densityMetrics.scale, Items: items,
 		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
 }
 
 // resultTailViewProps resolves tail images and bounds their measured widths before rendering.
-func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32) ([]launcherview.LauncherResultTail, float32, float32) {
-	const (
-		tailOuterPadding = float32(15)
-		tailItemPadding  = float32(10)
-		textPadding      = float32(16)
-		textHeight       = float32(22)
-		defaultImageSize = float32(20)
-	)
-	style := woxui.TextStyle{Size: 11}
+func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityMetrics launcherDensityMetrics) ([]launcherview.LauncherResultTail, float32, float32) {
+	tailOuterPadding := densityMetrics.scaled(15)
+	tailItemPadding := densityMetrics.scaled(10)
+	textPadding := densityMetrics.scaled(16)
+	textHeight := densityMetrics.scaled(22)
+	defaultImageSize := densityMetrics.scaled(20)
+	style := woxui.TextStyle{Size: densityMetrics.scaled(11)}
 	// Flutter's one-third cap includes the 10 px leading and 5 px trailing tail padding; the row owns those gaps in Go UI, so only the inner tail width is reserved here.
 	maximum := max(float32(0), rowWidth/3-tailOuterPadding)
 	maximumTextWidth := max(float32(0), maximum-tailItemPadding)
@@ -409,6 +410,10 @@ func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32) ([]launc
 			metrics, _ := a.window.MeasureText(tail.Text, style)
 			item.Width = min(maximumTextWidth, metrics.Size.Width+textPadding)
 			item.Height = textHeight
+			layout := woxwidget.LayoutTextBlock(a.window, tail.Text, style, max(float32(0), item.Width-textPadding), 1, 0)
+			if len(layout.Lines) > 0 {
+				item.Text = layout.Lines[0]
+			}
 		case "image":
 			item.Width = defaultImageSize
 			item.Height = defaultImageSize
@@ -447,12 +452,12 @@ func visibleResultRange(count int, offset, viewport, topPadding, rowHeight, gap 
 }
 
 // resolveResultScroll follows keyboard selection until pointer scrolling takes ownership of the viewport.
-func resolveResultScroll(results []queryResult, layout *gridLayout, selected int, width, viewport, content float32, current scrollController, detached bool, palette uiPalette) scrollController {
+func resolveResultScroll(results []queryResult, layout *gridLayout, selected int, width, viewport, content float32, current scrollController, detached bool, palette uiPalette, densityMetrics launcherDensityMetrics) scrollController {
 	scroll := current.withGeometry(viewport, content)
 	if detached || selected < 0 || selected >= len(results) || viewport <= 0 || content <= viewport {
 		return scroll
 	}
-	rowHeight := resultRowHeightForPalette(palette)
+	rowHeight := densityMetrics.normalized().resultRowHeight(palette)
 	top := palette.resultContainerPadding.Top + float32(selected)*(rowHeight+resultRowGap)
 	bottom := top + rowHeight
 	if layout != nil {
@@ -532,7 +537,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidge
 		})
 	}
 	return launcherview.LauncherToolbarView(launcherview.LauncherToolbarProps{
-		Width: width, Height: height, Padding: snapshot.palette.toolbarPadding, Theme: snapshot.palette.componentTheme(), Window: a.window,
+		Width: width, Height: height, Padding: snapshot.palette.toolbarPadding, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
 		Label: leftLabel, Icon: leftIcon, ProgressLabel: progressLabel, Actions: actions,
 	})
 }

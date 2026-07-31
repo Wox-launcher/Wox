@@ -1,6 +1,6 @@
 //go:build darwin
 
-package emoji
+package emojiimage
 
 /*
 #cgo CFLAGS: -x objective-c -fobjc-arc
@@ -90,7 +90,8 @@ import (
 	"unsafe"
 )
 
-func getNativeEmojiImage(emoji string, size int) (image.Image, error) {
+// Render creates a platform-native color emoji image.
+func Render(emoji string, size int) (image.Image, error) {
 	var length C.size_t
 	cstr := C.CString(emoji)
 	defer C.free(unsafe.Pointer(cstr))

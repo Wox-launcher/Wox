@@ -164,7 +164,12 @@ func newCloudFormState(fields formFieldsState, kind, title string) *cloudFormSta
 func (a *App) reloadCloudSync() {
 	a.cloudSettings.ReloadCloudSync(context.Background(), a.services, a.sessionID, func() {
 		util.Go(a.lifecycleCtx, "reload cloud billing plan", a.reloadCloudBillingPlan)
-	})
+	}, true)
+}
+
+// reloadCloudSyncSilently refreshes final sync state without replacing operation progress with a loading placeholder.
+func (a *App) reloadCloudSyncSilently() {
+	a.cloudSettings.ReloadCloudSync(context.Background(), a.services, a.sessionID, nil, false)
 }
 
 // reloadCloudBillingPlan fetches display pricing independently so it cannot delay local sync status.
@@ -188,7 +193,11 @@ func (a *App) runCloudAction(name string, action func(context.Context) error) {
 			a.cloudSettings.SetError(fmt.Sprintf("%s failed: %v", cloudActionLabel(name), err))
 		}
 		a.cloudSettings.SetBusy("")
-		a.reloadCloudSync()
+		if name == "sync" {
+			a.reloadCloudSyncSilently()
+		} else {
+			a.reloadCloudSync()
+		}
 		if err != nil {
 			a.cloudSettings.SetError(fmt.Sprintf("%s failed: %v", cloudActionLabel(name), err))
 			a.invalidateSettingsWindow()
@@ -309,6 +318,16 @@ func (a *App) beginCloudBootstrap() {
 		a.updateSettingsTextInput(true)
 		a.invalidateSettingsWindow()
 	})
+}
+
+// cloudSyncNeedsBootstrap mirrors the post-authentication setup gate used by the Flutter settings UI.
+func cloudSyncNeedsBootstrap(snapshot cloudSettingsSnapshot) bool {
+	account := snapshot.Account
+	if !account.LoggedIn || account.SessionExpired || !account.SyncEligible {
+		return false
+	}
+	state := snapshot.Sync.State
+	return !account.SyncEnabled || !snapshot.Sync.KeyStatus.Available || state == nil || !state.Bootstrapped
 }
 
 func newCloudBootstrapForm(status contract.CloudBootstrapStatus) *cloudFormState {
@@ -757,6 +776,9 @@ func (a *App) submitCloudFormRequest(kind string, values map[string]string, emai
 		return
 	}
 	a.reloadCloudSync()
+	if (kind == "login" || kind == "register" || kind == "verify") && cloudSyncNeedsBootstrap(a.cloudSettings.Snapshot()) {
+		a.beginCloudBootstrap()
+	}
 	if kind == "bootstrap" {
 		util.Go(a.lifecycleCtx, "reload cloud sync after form bootstrap", func() {
 			timer := time.NewTimer(2 * time.Second)

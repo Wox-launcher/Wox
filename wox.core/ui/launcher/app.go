@@ -19,17 +19,9 @@ import (
 const (
 	defaultWidth              = 760
 	defaultMaxResult          = 10
-	queryBoxHeight            = 55
-	queryEditorHeight         = 38
-	footerHeight              = 40
-	resultRowBaseHeight       = 50
 	resultRowGap              = 0
 	queryResizeSettleDuration = 80 * time.Millisecond
 )
-
-func resultRowHeightForPalette(palette uiPalette) float32 {
-	return resultRowBaseHeight + palette.resultItemPadding.Top + palette.resultItemPadding.Bottom
-}
 
 const (
 	launcherWindowID   woxui.WindowID = "wox.launcher"
@@ -84,6 +76,7 @@ type App struct {
 	webViewTooltipRevision atomic.Uint64
 	selected               int
 	hoveredResult          int
+	pendingSelection       *pendingResultSelection
 	resultScroll           scrollController
 	resultScrollDetached   bool
 	layout                 queryLayout
@@ -145,6 +138,7 @@ type App struct {
 	settingsSearch     *settingsSearchController
 	sharedEdit         *sharedEditState
 	palette            uiPalette
+	densityMetrics     launcherDensityMetrics
 	translations       map[string]string
 	images             map[string]*woxui.Image
 	imageRequested     map[string]string
@@ -195,6 +189,7 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 		hoveredResult:   -1,
 		settingTab:      "general",
 		palette:         defaultPalette(),
+		densityMetrics:  launcherDensityMetricsFor(""),
 		translations:    map[string]string{},
 		images:          map[string]*woxui.Image{},
 		imageRequested:  map[string]string{},
@@ -283,7 +278,7 @@ func (a *App) start() error {
 	host := woxwidget.NewHost(a.buildLauncher)
 	launcher, _, err := a.windows.Open(a.windowID, woxui.WindowOptions{
 		Title:     "Wox",
-		Size:      woxui.Size{Width: float32(a.show.WindowWidth), Height: queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom + footerHeight},
+		Size:      woxui.Size{Width: float32(a.show.WindowWidth), Height: a.densityMetrics.queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom + a.densityMetrics.toolbarHeight},
 		OnFrame:   host.Frame,
 		OnPointer: host.Pointer,
 		OnKey: func(event woxui.KeyEvent) bool {
@@ -297,7 +292,10 @@ func (a *App) start() error {
 				a.onTextInput(event)
 			}
 		},
-		OnFocus: a.onFocus,
+		OnFocus: func(event woxui.FocusEvent) {
+			host.SetWindowFocused(event.Active)
+			a.onFocus(event)
+		},
 		OnWebViewHideRequested: func() {
 			util.Go(a.lifecycleCtx, "hide launcher from webview toolbar", func() {
 				if err := a.hideWindow(true); err != nil {
@@ -632,10 +630,6 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	if a.isDev && a.generalSettings.Data().ShowPerformanceTail && a.generalSettings.Data().ShowPerformanceTailUIReceived && queryStartTimestamp > 0 {
 		appendUIReceivedTails(results, max(int64(0), time.Now().UnixMilli()-queryStartTimestamp))
 	}
-	selectedID := ""
-	if a.selected >= 0 && a.selected < len(a.results) {
-		selectedID = a.results[a.selected].ID
-	}
 	for index := range results {
 		if results[index].QueryID == "" {
 			results[index].QueryID = queryID
@@ -668,8 +662,16 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	} else if !glanceEligible {
 		a.stopGlanceLocked(true)
 	}
-	a.selected = selectableIndex(results, selectedID)
-	if selectedID == "" || a.selected < 0 || a.results[a.selected].ID != selectedID {
+	a.selected = selectableIndex(results)
+	preservedSelection := false
+	if a.pendingSelection != nil {
+		if a.pendingSelection.queryID == queryID {
+			a.selected = selectableIndexFrom(results, a.pendingSelection.index)
+			preservedSelection = true
+		}
+		a.pendingSelection = nil
+	}
+	if !preservedSelection {
 		a.resultScrollDetached = false
 	}
 	closedActionPanel := false
@@ -727,6 +729,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	var results []queryResult
 	var layout queryLayout
 	var palette uiPalette
+	var densityMetrics launcherDensityMetrics
 	var resultCount int
 	var actionCount int
 	var formHeight int
@@ -744,6 +747,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		refinementVisible = len(a.refinements) > 0 && a.refinementOpen && !params.HideQueryBox
 		actionPanel = a.actionPanel
 		palette = a.palette
+		densityMetrics = a.densityMetrics.normalized()
 		formHeight = formPanelHeight(a.form)
 		toolbarMessageVisible = a.toolbarMsg != nil
 		chatFullscreen = a.chatFullscreen
@@ -766,16 +770,16 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		maxResults = defaultMaxResult
 	}
 	visibleResults := min(resultCount, maxResults)
-	resultRowHeight := int(resultRowHeightForPalette(palette))
+	resultRowHeight := int(densityMetrics.resultRowHeight(palette))
 	resultVerticalPadding := int(palette.resultContainerPadding.Top + palette.resultContainerPadding.Bottom)
-	queryAreaHeight := int(queryBoxHeight + palette.appPadding.Top + palette.appPadding.Bottom)
+	queryAreaHeight := int(densityMetrics.queryBoxHeight + palette.appPadding.Top + palette.appPadding.Bottom)
 	toolbarVisible := !params.HideToolbar && !chatFullscreen && (resultCount > 0 || toolbarMessageVisible)
 	height := 0
 	if !params.HideQueryBox {
 		height += queryAreaHeight
 	}
 	if refinementVisible {
-		height += refinementBarHeight
+		height += int(densityMetrics.refinementBarHeight)
 	}
 	if visibleResults > 0 {
 		if layout.GridLayout != nil {
@@ -785,17 +789,17 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		}
 	}
 	if toolbarVisible {
-		height += footerHeight
+		height += int(densityMetrics.toolbarHeight)
 	}
 	maximumResultWindowHeight := resultVerticalPadding + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
 	if !params.HideQueryBox {
 		maximumResultWindowHeight += queryAreaHeight
 	}
 	if refinementVisible {
-		maximumResultWindowHeight += refinementBarHeight
+		maximumResultWindowHeight += int(densityMetrics.refinementBarHeight)
 	}
 	if toolbarVisible {
-		maximumResultWindowHeight += footerHeight
+		maximumResultWindowHeight += int(densityMetrics.toolbarHeight)
 	}
 	if previewVisible {
 		height = max(height, maximumResultWindowHeight)
@@ -806,10 +810,10 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 			minimumHeight += queryAreaHeight
 		}
 		if refinementVisible {
-			minimumHeight += refinementBarHeight
+			minimumHeight += int(densityMetrics.refinementBarHeight)
 		}
 		if toolbarVisible {
-			minimumHeight += footerHeight
+			minimumHeight += int(densityMetrics.toolbarHeight)
 		}
 		height = max(height, minimumHeight)
 	}
@@ -819,10 +823,10 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 			actionHeight += queryAreaHeight
 		}
 		if refinementVisible {
-			actionHeight += refinementBarHeight
+			actionHeight += int(densityMetrics.refinementBarHeight)
 		}
 		if toolbarVisible {
-			actionHeight += footerHeight
+			actionHeight += int(densityMetrics.toolbarHeight)
 		}
 		// Opening the action panel restores Flutter's full configured result height while still allowing larger panels to fit.
 		height = max(height, maximumResultWindowHeight, actionHeight)
@@ -833,10 +837,10 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 			formWindowHeight += queryAreaHeight
 		}
 		if refinementVisible {
-			formWindowHeight += refinementBarHeight
+			formWindowHeight += int(densityMetrics.refinementBarHeight)
 		}
 		if toolbarVisible {
-			formWindowHeight += footerHeight
+			formWindowHeight += int(densityMetrics.toolbarHeight)
 		}
 		height = max(height, formWindowHeight)
 	}
@@ -919,6 +923,16 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if event.Key == woxui.Key("f") && event.Modifiers.HasPrimary() && a.toggleRefinementBar() {
 		return true
 	}
+	if a.layout.GridLayout != nil {
+		switch event.Key {
+		case woxui.KeyArrowLeft:
+			a.moveSelection(-1)
+			return true
+		case woxui.KeyArrowRight:
+			a.moveSelection(1)
+			return true
+		}
+	}
 	// Copy/cut/paste on the query editor use the primary modifier and the cross-platform clipboard.
 	if event.Down && !event.Composing && event.Modifiers.HasPrimary() && (event.Key == woxui.Key("c") || event.Key == woxui.Key("x") || event.Key == woxui.Key("v")) {
 		switch event.Key {
@@ -978,17 +992,6 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	case woxui.KeyArrowDown:
 		a.moveSelection(a.resultNavigationColumns())
 		return true
-	case woxui.KeyArrowLeft:
-		if a.resultNavigationColumns() > 1 {
-			a.moveSelection(-1)
-			return true
-		}
-	case woxui.KeyArrowRight:
-		if a.resultNavigationColumns() > 1 {
-			a.moveSelection(1)
-			return true
-		}
-		return false
 	case woxui.KeyEnter:
 		a.activateSelected()
 		return true
@@ -1055,26 +1058,30 @@ func (a *App) moveSelection(delta int) {
 	if len(a.results) == 0 {
 		return
 	}
-	index := a.selected
-	changed := false
-	for {
-		index += delta
-		if index < 0 || index >= len(a.results) {
-			break
+	target := a.selected
+	columns := a.resultNavigationColumns()
+	if a.layout.GridLayout != nil && (delta == columns || delta == -columns) {
+		direction := 1
+		if delta < 0 {
+			direction = -1
 		}
-		if !a.results[index].IsGroup {
-			a.selected = index
-			a.resultScrollDetached = false
-			changed = true
-			a.actionPanel = false
-			a.actionSelected = 0
-			a.actionSelectionKey = ""
-			a.actionFilter = nil
-			a.chatFullscreen = false
-			break
+		target = gridSelectionIndex(a.results, a.selected, columns, direction)
+	} else {
+		for index := a.selected + delta; index >= 0 && index < len(a.results); index += delta {
+			if !a.results[index].IsGroup {
+				target = index
+				break
+			}
 		}
 	}
-	if changed {
+	if target != a.selected {
+		a.selected = target
+		a.resultScrollDetached = false
+		a.actionPanel = false
+		a.actionSelected = 0
+		a.actionSelectionKey = ""
+		a.actionFilter = nil
+		a.chatFullscreen = false
 		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
 	}
@@ -1141,18 +1148,28 @@ func (a *App) activateResult(index int) {
 	a.activateActionPanelEntry(entry)
 }
 
-func selectableIndex(results []queryResult, selectedID string) int {
-	for index, result := range results {
-		if selectedID != "" && result.ID == selectedID && !result.IsGroup {
-			return index
-		}
-	}
+func selectableIndex(results []queryResult) int {
 	for index, result := range results {
 		if !result.IsGroup {
 			return index
 		}
 	}
 	return -1
+}
+
+// selectableIndexFrom restores an explicitly preserved refresh index while skipping group rows.
+func selectableIndexFrom(results []queryResult, start int) int {
+	for index := max(0, start); index < len(results); index++ {
+		if !results[index].IsGroup {
+			return index
+		}
+	}
+	return selectableIndex(results)
+}
+
+type pendingResultSelection struct {
+	queryID string
+	index   int
 }
 
 type plainQuery struct {

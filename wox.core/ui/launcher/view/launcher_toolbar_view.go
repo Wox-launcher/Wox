@@ -21,6 +21,7 @@ type LauncherToolbarProps struct {
 	Padding       woxwidget.Insets
 	Theme         woxcomponent.Theme
 	Window        *woxui.Window
+	DensityScale  float32
 	Label         string
 	Icon          *woxui.Image
 	ProgressLabel string
@@ -34,18 +35,21 @@ type measuredLauncherToolbarAction struct {
 
 // LauncherToolbarView builds the status footer and the actions that fit its current width.
 func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
+	contentHeight := scaledLauncherSize(28, props.DensityScale)
+	fontSize := scaledLauncherSize(12, props.DensityScale)
+	actionGap := scaledLauncherSize(16, props.DensityScale)
 	contentWidth := max(float32(0), props.Width-props.Padding.Left-props.Padding.Right)
 	leftWidth := float32(0)
 	if props.Label != "" || props.Icon != nil || props.ProgressLabel != "" {
-		leftWidth = min(contentWidth*0.42, float32(320))
+		leftWidth = min(contentWidth*0.42, scaledLauncherSize(320, props.DensityScale))
 	}
 	rightAvailable := max(float32(0), contentWidth-leftWidth)
 	if leftWidth > 0 && len(props.Actions) > 0 {
-		rightAvailable -= 16
+		rightAvailable -= actionGap
 	}
 	measured := make([]measuredLauncherToolbarAction, 0, len(props.Actions))
 	for _, action := range props.Actions {
-		widget, width := launcherToolbarActionView(action, props.Theme, props.Window)
+		widget, width := launcherToolbarActionView(action, props.Theme, props.Window, props.DensityScale)
 		measured = append(measured, measuredLauncherToolbarAction{widget: widget, width: width})
 	}
 	shown := make([]measuredLauncherToolbarAction, 0, len(measured))
@@ -53,7 +57,7 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 	for index := len(measured) - 1; index >= 0; index-- {
 		nextWidth := measured[index].width
 		if len(shown) > 0 {
-			nextWidth += 16
+			nextWidth += actionGap
 		}
 		if rightWidth+nextWidth > rightAvailable {
 			break
@@ -67,38 +71,40 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 	}
 	extraWidth := float32(0)
 	if props.Icon != nil {
-		extraWidth += 26
+		extraWidth += scaledLauncherSize(26, props.DensityScale)
 	}
 	progressWidth := float32(0)
 	if props.ProgressLabel != "" {
-		metrics, _ := props.Window.MeasureText(props.ProgressLabel, woxui.TextStyle{Size: 12})
-		progressWidth = min(float32(90), metrics.Size.Width+4)
-		extraWidth += progressWidth + 8
+		metrics, _ := props.Window.MeasureText(props.ProgressLabel, woxui.TextStyle{Size: fontSize})
+		progressWidth = min(scaledLauncherSize(90, props.DensityScale), metrics.Size.Width+scaledLauncherSize(4, props.DensityScale))
+		extraWidth += progressWidth + scaledLauncherSize(8, props.DensityScale)
 	}
 	labelWidth := max(float32(0), leftWidth-extraWidth)
 	leftWidgets := make([]woxwidget.Widget, 0, 3)
 	if props.Icon != nil {
+		iconSize := scaledLauncherSize(18, props.DensityScale)
 		leftWidgets = append(leftWidgets, woxwidget.Container{
-			Width: 18, Height: 28, Padding: woxwidget.Insets{Top: 5}, Child: woxwidget.Image{Source: props.Icon, Width: 18, Height: 18},
+			Width: iconSize, Height: contentHeight, Padding: woxwidget.Insets{Top: max(float32(0), (contentHeight-iconSize)/2)}, Child: woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize},
 		})
 	}
 	leftWidgets = append(leftWidgets, woxwidget.Container{
-		Width: labelWidth, Height: 28, Padding: woxwidget.Insets{Top: 7},
-		Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ToolbarText},
+		Width: labelWidth, Height: contentHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(7, props.DensityScale)},
+		Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize}, Color: props.Theme.ToolbarText},
 	})
 	if props.ProgressLabel != "" {
 		leftWidgets = append(leftWidgets, woxwidget.Container{
-			Width: progressWidth, Height: 28, Padding: woxwidget.Insets{Top: 7},
-			Child: woxwidget.Text{Value: props.ProgressLabel, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Cursor},
+			Width: progressWidth, Height: contentHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(7, props.DensityScale)},
+			Child: woxwidget.Text{Value: props.ProgressLabel, Style: woxui.TextStyle{Size: fontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Cursor},
 		})
 	}
+	verticalPadding := max(float32(0), (props.Height-contentHeight)/2)
 	body := woxwidget.Container{
 		Width: props.Width, Height: props.Height, Color: props.Theme.ToolbarBackground,
-		Padding: woxwidget.Insets{Left: props.Padding.Left, Top: 6, Right: props.Padding.Right, Bottom: 6},
+		Padding: woxwidget.Insets{Left: props.Padding.Left, Top: verticalPadding, Right: props.Padding.Right, Bottom: verticalPadding},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: leftWidth, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: leftWidgets}},
+			woxwidget.Container{Width: leftWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(8, props.DensityScale), Children: leftWidgets}},
 			woxwidget.Painter{Width: max(float32(0), contentWidth-leftWidth-rightWidth), Height: 1},
-			woxwidget.Container{Width: rightWidth, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: rightChildren}},
+			woxwidget.Container{Width: rightWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: actionGap, Children: rightChildren}},
 		}},
 	}
 	border := props.Theme.ToolbarText
@@ -112,15 +118,17 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 }
 
 // launcherToolbarActionView builds one label-and-keycap unit and reports its width.
-func launcherToolbarActionView(action LauncherToolbarAction, theme woxcomponent.Theme, window *woxui.Window) (woxwidget.Widget, float32) {
-	labelStyle := woxui.TextStyle{Size: 12}
+func launcherToolbarActionView(action LauncherToolbarAction, theme woxcomponent.Theme, window *woxui.Window, densityScale float32) (woxwidget.Widget, float32) {
+	labelStyle := woxui.TextStyle{Size: scaledLauncherSize(12, densityScale)}
 	labelMetrics, _ := window.MeasureText(action.Label, labelStyle)
 	chip, chipWidth := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
-		Labels: action.HotkeyLabels, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground, Window: window,
+		Labels: action.HotkeyLabels, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground, Compact: densityScale < 1, Window: window,
 	})
-	width := labelMetrics.Size.Width + 8 + chipWidth
-	content := woxwidget.Container{Width: width, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: labelMetrics.Size.Width, Height: 28, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{Value: action.Label, Style: labelStyle, Color: theme.ToolbarText}},
+	contentHeight := scaledLauncherSize(28, densityScale)
+	gap := scaledLauncherSize(8, densityScale)
+	width := labelMetrics.Size.Width + gap + chipWidth
+	content := woxwidget.Container{Width: width, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: labelMetrics.Size.Width, Height: contentHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(7, densityScale)}, Child: woxwidget.Text{Value: action.Label, Style: labelStyle, Color: theme.ToolbarText}},
 		chip,
 	}}}
 	return woxwidget.Gesture{ID: action.ID, OnTap: action.OnTap, Child: content}, width

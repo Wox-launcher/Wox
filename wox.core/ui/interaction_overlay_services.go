@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"strings"
 
 	aitool "wox/ai/builtintool/wox"
 	"wox/common"
 	"wox/plugin"
 	"wox/ui/contract"
+	"wox/util/emojiimage"
 	"wox/util/overlay"
 	"wox/util/overlay/imageoverlay"
 	"wox/util/tooltip"
@@ -64,26 +66,34 @@ func (s *CoreServices) LoadLazyResultImage(ctx context.Context, sessionID string
 }
 
 // ResolveImage converts core-owned URL, emoji, and file-icon sources into raster payloads.
-func (s *CoreServices) ResolveImage(ctx context.Context, sessionID string, image common.WoxImage, size int) (common.WoxImage, error) {
+func (s *CoreServices) ResolveImage(ctx context.Context, sessionID string, source common.WoxImage, size int) (common.WoxImage, error) {
 	ctx = uiServiceContext(ctx, sessionID)
-	if image.IsEmpty() {
+	if source.IsEmpty() {
 		return common.WoxImage{}, errors.New("image is empty")
 	}
 	if size <= 0 {
 		size = 128
 	}
 	size = min(max(size, 16), 2048)
-	if image.ImageType == common.WoxImageTypeFileIcon {
-		resolved := common.ConvertFileIconToAbsolutePathWithSize(ctx, image, size)
+	if source.ImageType == common.WoxImageTypeFileIcon {
+		resolved := common.ConvertFileIconToAbsolutePathWithSize(ctx, source, size)
 		if resolved.ImageType == common.WoxImageTypeFileIcon || resolved.IsEmpty() {
 			return common.WoxImage{}, errors.New("failed to resolve file icon")
 		}
 		return resolved, nil
 	}
-	if image.ImageType != common.WoxImageTypeUrl && image.ImageType != common.WoxImageTypeEmoji {
-		return common.WoxImage{}, fmt.Errorf("image type %s does not require core resolution", image.ImageType)
+	if source.ImageType != common.WoxImageTypeUrl && source.ImageType != common.WoxImageTypeEmoji {
+		return common.WoxImage{}, fmt.Errorf("image type %s does not require core resolution", source.ImageType)
 	}
-	decoded, err := image.ToImageWithContext(ctx)
+	var decoded image.Image
+	var err error
+	if source.ImageType == common.WoxImageTypeEmoji {
+		// Flutter renders emoji with the platform color font. Reuse that font here so glyph coverage and visual metrics match without a network fetch.
+		decoded, err = emojiimage.Render(source.ImageData, size)
+	}
+	if decoded == nil {
+		decoded, err = source.ToImageWithContext(ctx)
+	}
 	if err != nil {
 		return common.WoxImage{}, err
 	}

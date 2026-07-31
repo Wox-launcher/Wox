@@ -211,8 +211,13 @@ func (a *App) cloudSyncPresentation(snapshot settingsSnapshot) (string, string, 
 		detail := strings.Title(progress.Operation)
 		if progress.Total > 0 {
 			detail = fmt.Sprintf("%s · %d / %d", detail, progress.Current, progress.Total)
+		} else if progress.Current > 0 {
+			detail = fmt.Sprintf("%s · %d", detail, progress.Current)
 		}
 		return a.translate("i18n:ui_cloud_sync_syncing"), detail, muted
+	}
+	if snapshot.cloud.Busy == "sync" {
+		return a.translate("i18n:ui_cloud_sync_syncing"), a.translate("i18n:ui_cloud_sync_progress_starting"), muted
 	}
 	if state := snapshot.cloud.Sync.State; state != nil && state.LastError != "" {
 		return a.translate("i18n:ui_cloud_sync_sync_error"), state.LastError, errorColor
