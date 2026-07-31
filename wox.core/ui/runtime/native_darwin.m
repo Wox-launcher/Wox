@@ -90,6 +90,7 @@ struct WoxDarwinWindow {
   bool active;
   bool hide_on_blur;
   bool application_window;
+  bool screenshot_window;
   bool native_dialog_active;
   bool input_enabled;
   bool closed;
@@ -123,6 +124,15 @@ struct WoxDarwinRenderer {
 static NSInteger wox_open_window_count = 0;
 static NSInteger wox_application_window_count = 0;
 static const CGFloat wox_window_corner_radius = 14.0;
+static CGFloat desktop_top(void);
+
+// Resolve the compositor capture entry point dynamically because newer SDKs hide the declaration
+// even though supported Wox targets still expose it at runtime.
+static CGImageRef capture_display_image(CGDirectDisplayID display_id) {
+  typedef CGImageRef (*WoxDesktopCaptureFunction)(CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption);
+  WoxDesktopCaptureFunction capture = (WoxDesktopCaptureFunction)dlsym(RTLD_DEFAULT, "CGWindowListCreateImage");
+  return capture == NULL ? NULL : capture(CGDisplayBounds(display_id), kCGWindowListOptionOnScreenOnly, kCGNullWindowID, kCGWindowImageBestResolution);
+}
 
 @interface WoxNativeWindow : NSWindow
 @end
@@ -134,6 +144,361 @@ static const CGFloat wox_window_corner_radius = 14.0;
 
 - (BOOL)canBecomeMainWindow {
   return YES;
+}
+@end
+
+@interface WoxScreenshotDisplayCapture : NSObject {
+@public
+  CGDirectDisplayID display_id;
+  NSRect logical_bounds;
+  CGImageRef image;
+}
+- (instancetype)initWithScreen:(NSScreen *)screen desktopTop:(CGFloat)desktop_top;
+@end
+
+@implementation WoxScreenshotDisplayCapture
+- (instancetype)initWithScreen:(NSScreen *)screen desktopTop:(CGFloat)desktop_top_value {
+  self = [super init];
+  if (self == nil) {
+    return nil;
+  }
+  NSNumber *screen_number = [screen.deviceDescription objectForKey:@"NSScreenNumber"];
+  if (screen_number == nil) {
+    [self release];
+    return nil;
+  }
+  display_id = (CGDirectDisplayID)screen_number.unsignedIntValue;
+  NSRect frame = screen.frame;
+  logical_bounds = NSMakeRect(NSMinX(frame), desktop_top_value - NSMaxY(frame), NSWidth(frame), NSHeight(frame));
+  image = capture_display_image(display_id);
+  if (image == NULL) {
+    [self release];
+    return nil;
+  }
+  return self;
+}
+
+- (void)dealloc {
+  if (image != NULL) {
+    CGImageRelease(image);
+  }
+  [super dealloc];
+}
+@end
+
+@interface WoxScreenshotSelectionView : NSView {
+  WoxScreenshotDisplayCapture *_capture;
+  NSRect _global_selection;
+  BOOL _has_selection;
+}
+- (instancetype)initWithCapture:(WoxScreenshotDisplayCapture *)capture;
+- (void)setGlobalSelection:(NSRect)selection visible:(BOOL)visible;
+@end
+
+@implementation WoxScreenshotSelectionView
+- (instancetype)initWithCapture:(WoxScreenshotDisplayCapture *)capture {
+  self = [super initWithFrame:NSMakeRect(0.0, 0.0, NSWidth(capture->logical_bounds), NSHeight(capture->logical_bounds))];
+  if (self == nil) {
+    return nil;
+  }
+  _capture = [capture retain];
+  _global_selection = NSZeroRect;
+  _has_selection = NO;
+  return self;
+}
+
+- (BOOL)isFlipped {
+  return YES;
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+  (void)event;
+  return YES;
+}
+
+- (void)resetCursorRects {
+  [self discardCursorRects];
+  [self addCursorRect:self.bounds cursor:[NSCursor crosshairCursor]];
+}
+
+- (void)setGlobalSelection:(NSRect)selection visible:(BOOL)visible {
+  _global_selection = selection;
+  _has_selection = visible;
+  self.needsDisplay = YES;
+}
+
+- (void)drawRect:(NSRect)dirty_rect {
+  (void)dirty_rect;
+  CGContextRef context = NSGraphicsContext.currentContext.CGContext;
+  if (context == NULL || _capture->image == NULL) {
+    return;
+  }
+
+  CGContextSaveGState(context);
+  CGContextSetInterpolationQuality(context, kCGInterpolationHigh);
+  CGContextTranslateCTM(context, 0.0, NSHeight(self.bounds));
+  CGContextScaleCTM(context, 1.0, -1.0);
+  CGContextDrawImage(context, NSMakeRect(0.0, 0.0, NSWidth(self.bounds), NSHeight(self.bounds)), _capture->image);
+  CGContextRestoreGState(context);
+
+  NSBezierPath *mask = [NSBezierPath bezierPathWithRect:self.bounds];
+  NSRect intersection = NSIntersectionRect(_capture->logical_bounds, _global_selection);
+  if (_has_selection && !NSIsEmptyRect(intersection)) {
+    NSRect local_selection = NSMakeRect(
+        NSMinX(intersection) - NSMinX(_capture->logical_bounds),
+        NSMinY(intersection) - NSMinY(_capture->logical_bounds),
+        NSWidth(intersection),
+        NSHeight(intersection));
+    [mask appendBezierPathWithRect:local_selection];
+    mask.windingRule = NSEvenOddWindingRule;
+    [[NSColor colorWithCalibratedWhite:0.0 alpha:0.46] setFill];
+    [mask fill];
+    [[NSColor colorWithCalibratedRed:41.0 / 255.0 green:1.0 blue:114.0 / 255.0 alpha:1.0] setStroke];
+    NSBezierPath *border = [NSBezierPath bezierPathWithRect:NSInsetRect(local_selection, 1.0, 1.0)];
+    border.lineWidth = 2.0;
+    [border stroke];
+    return;
+  }
+
+  [[NSColor colorWithCalibratedWhite:0.0 alpha:0.46] setFill];
+  [mask fill];
+}
+
+- (void)dealloc {
+  [_capture release];
+  [super dealloc];
+}
+@end
+
+@interface WoxScreenshotSelectionWindow : WoxNativeWindow
+@end
+
+@implementation WoxScreenshotSelectionWindow
+@end
+
+@interface WoxScreenshotSelectionSession : NSObject {
+  NSArray *_captures;
+  NSArray *_windows;
+  id _event_monitor;
+  dispatch_semaphore_t _completion;
+  NSPoint _drag_start;
+  BOOL _dragging;
+  BOOL _completed;
+  BOOL _cancelled;
+  BOOL _dismissed;
+  WoxScreenshotDisplayCapture *_drag_capture;
+  WoxScreenshotDisplayCapture *_selected_capture;
+  NSRect _selection;
+}
+- (instancetype)initWithCaptures:(NSArray *)captures;
+- (void)begin;
+- (void)dismiss;
+- (BOOL)cancelled;
+- (WoxScreenshotDisplayCapture *)selectedCapture;
+- (NSRect)selection;
+- (dispatch_semaphore_t)completion;
+@end
+
+@implementation WoxScreenshotSelectionSession
+- (instancetype)initWithCaptures:(NSArray *)captures {
+  self = [super init];
+  if (self == nil) {
+    return nil;
+  }
+  _captures = [captures copy];
+  _completion = dispatch_semaphore_create(0);
+  NSMutableArray *windows = [NSMutableArray arrayWithCapacity:_captures.count];
+  for (WoxScreenshotDisplayCapture *capture in _captures) {
+    WoxScreenshotSelectionWindow *window = [[WoxScreenshotSelectionWindow alloc]
+        initWithContentRect:NSMakeRect(
+                                NSMinX(capture->logical_bounds),
+                                desktop_top() - NSMaxY(capture->logical_bounds),
+                                NSWidth(capture->logical_bounds),
+                                NSHeight(capture->logical_bounds))
+                  styleMask:NSWindowStyleMaskBorderless
+                    backing:NSBackingStoreBuffered
+                      defer:NO];
+    window.releasedWhenClosed = NO;
+    window.opaque = NO;
+    window.backgroundColor = [NSColor clearColor];
+    window.hasShadow = NO;
+    window.acceptsMouseMovedEvents = YES;
+    window.animationBehavior = NSWindowAnimationBehaviorNone;
+    window.level = MAX(NSScreenSaverWindowLevel, CGShieldingWindowLevel());
+    NSWindowCollectionBehavior behavior =
+        NSWindowCollectionBehaviorCanJoinAllSpaces |
+        NSWindowCollectionBehaviorFullScreenAuxiliary |
+        NSWindowCollectionBehaviorStationary |
+        NSWindowCollectionBehaviorIgnoresCycle;
+    if (@available(macOS 13.0, *)) {
+      behavior |= NSWindowCollectionBehaviorCanJoinAllApplications;
+    }
+    window.collectionBehavior = behavior;
+    WoxScreenshotSelectionView *view = [[WoxScreenshotSelectionView alloc] initWithCapture:capture];
+    window.contentView = view;
+    [view release];
+    [windows addObject:window];
+    [window release];
+  }
+  _windows = [windows copy];
+  return self;
+}
+
+- (NSPoint)topLeftMouseLocation {
+  NSPoint location = NSEvent.mouseLocation;
+  return NSMakePoint(location.x, desktop_top() - location.y);
+}
+
+- (NSPoint)clampPoint:(NSPoint)point toBounds:(NSRect)bounds {
+  return NSMakePoint(
+      MIN(MAX(point.x, NSMinX(bounds)), NSMaxX(bounds)),
+      MIN(MAX(point.y, NSMinY(bounds)), NSMaxY(bounds)));
+}
+
+- (WoxScreenshotDisplayCapture *)captureAtPoint:(NSPoint)point {
+  for (WoxScreenshotDisplayCapture *capture in _captures) {
+    if (NSPointInRect(point, capture->logical_bounds)) {
+      return capture;
+    }
+  }
+  return nil;
+}
+
+- (NSRect)rectFromStart:(NSPoint)start end:(NSPoint)end {
+  return NSMakeRect(
+      MIN(start.x, end.x),
+      MIN(start.y, end.y),
+      fabs(end.x - start.x),
+      fabs(end.y - start.y));
+}
+
+- (void)updateSelection:(NSRect)selection visible:(BOOL)visible {
+  for (WoxScreenshotSelectionWindow *window in _windows) {
+    [(WoxScreenshotSelectionView *)window.contentView setGlobalSelection:selection visible:visible];
+  }
+}
+
+- (void)completeCancelled:(BOOL)cancelled selection:(NSRect)selection {
+  if (_completed) {
+    return;
+  }
+  if (!cancelled && (NSWidth(selection) < 2.0 || NSHeight(selection) < 2.0)) {
+    cancelled = YES;
+  }
+  _completed = YES;
+  _cancelled = cancelled;
+  _dragging = NO;
+  if (_event_monitor != nil) {
+    [NSEvent removeMonitor:_event_monitor];
+    _event_monitor = nil;
+  }
+  if (!cancelled) {
+    WoxScreenshotDisplayCapture *capture = _drag_capture;
+    NSRect local_selection = NSIntersectionRect(capture->logical_bounds, selection);
+    _selected_capture = [capture retain];
+    _selection = NSMakeRect(
+        NSMinX(local_selection) - NSMinX(capture->logical_bounds),
+        NSMinY(local_selection) - NSMinY(capture->logical_bounds),
+        NSWidth(local_selection),
+        NSHeight(local_selection));
+  }
+  dispatch_semaphore_signal(_completion);
+}
+
+- (void)begin {
+  WoxScreenshotSelectionSession *session = self;
+  _event_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:
+                                NSEventMaskLeftMouseDown |
+                                NSEventMaskLeftMouseDragged |
+                                NSEventMaskLeftMouseUp |
+                                NSEventMaskKeyDown
+                                                        handler:^NSEvent *(NSEvent *event) {
+    if (session->_completed) {
+      return nil;
+    }
+    if (event.type == NSEventTypeKeyDown) {
+      if (event.keyCode == 53) {
+        [session completeCancelled:YES selection:NSZeroRect];
+      }
+      return nil;
+    }
+    NSPoint mouse_location = [session topLeftMouseLocation];
+    if (event.type == NSEventTypeLeftMouseDown) {
+      session->_drag_capture = [session captureAtPoint:mouse_location];
+      if (session->_drag_capture == nil) {
+        return nil;
+      }
+      NSPoint point = [session clampPoint:mouse_location toBounds:session->_drag_capture->logical_bounds];
+      session->_drag_start = point;
+      session->_dragging = YES;
+      [session updateSelection:[session rectFromStart:point end:point] visible:YES];
+      return nil;
+    }
+    if (event.type == NSEventTypeLeftMouseDragged && session->_dragging) {
+      // The portable annotation editor owns one display after handoff. Keeping the native drag on
+      // its starting display avoids presenting a cross-display selection that export would crop.
+      NSPoint point = [session clampPoint:mouse_location toBounds:session->_drag_capture->logical_bounds];
+      [session updateSelection:[session rectFromStart:session->_drag_start end:point] visible:YES];
+      return nil;
+    }
+    if (event.type == NSEventTypeLeftMouseUp && session->_dragging) {
+      NSPoint point = [session clampPoint:mouse_location toBounds:session->_drag_capture->logical_bounds];
+      NSRect selection = [session rectFromStart:session->_drag_start end:point];
+      [session updateSelection:selection visible:YES];
+      [session completeCancelled:NO selection:selection];
+      return nil;
+    }
+    return event;
+  }];
+  for (WoxScreenshotSelectionWindow *window in _windows) {
+    [window orderFrontRegardless];
+  }
+  WoxScreenshotSelectionWindow *first = _windows.firstObject;
+  [first makeKeyAndOrderFront:nil];
+  [NSApp activateIgnoringOtherApps:YES];
+}
+
+- (void)dismiss {
+  if (_dismissed) {
+    return;
+  }
+  _dismissed = YES;
+  if (_event_monitor != nil) {
+    [NSEvent removeMonitor:_event_monitor];
+    _event_monitor = nil;
+  }
+  for (WoxScreenshotSelectionWindow *window in _windows) {
+    [window orderOut:nil];
+    window.contentView = nil;
+    [window close];
+  }
+}
+
+- (BOOL)cancelled {
+  return _cancelled;
+}
+
+- (WoxScreenshotDisplayCapture *)selectedCapture {
+  return _selected_capture;
+}
+
+- (NSRect)selection {
+  return _selection;
+}
+
+- (dispatch_semaphore_t)completion {
+  return _completion;
+}
+
+- (void)dealloc {
+  [self dismiss];
+  [_selected_capture release];
+  [_windows release];
+  [_captures release];
+#if !OS_OBJECT_USE_OBJC
+  dispatch_release(_completion);
+#endif
+  [super dealloc];
 }
 @end
 
@@ -1458,6 +1823,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->context = context;
     window->hide_on_blur = hide_on_blur != 0;
     window->application_window = is_application_window;
+    window->screenshot_window = is_screenshot_window;
     // Use launcher material instead of compositing the transparent UI surface directly over the desktop.
     NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
     effect_view.material = NSVisualEffectMaterialPopover;
@@ -1511,7 +1877,11 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
     if (!window->closed && window->window.isKeyWindow) {
       emit_focus(window, true);
     }
-    if (!window->closed) {
+    if (!window->closed && window->screenshot_window) {
+      // Screenshot handoff keeps native selection overlays visible until this first complete frame
+      // is ready, avoiding a transparent gap between the native selector and portable editor.
+      [window->view renderFrameSynchronously:YES];
+    } else if (!window->closed) {
       // Rendering is explicit; AppKit does not reliably deliver updateLayer for the first frame.
       [window->view renderFrame];
     }
@@ -1620,56 +1990,126 @@ int32_t wox_darwin_window_capture_png(WoxDarwinWindow *window, const char *path)
   return result;
 }
 
-int32_t wox_darwin_capture_desktop_png(const char *path, float *x, float *y, float *width, float *height) {
-  if (path == NULL || path[0] == '\0' || x == NULL || y == NULL || width == NULL || height == NULL) {
+static int32_t write_cgimage_png(CGImageRef image, const char *path) {
+  if (image == NULL || path == NULL || path[0] == '\0') {
     return -1;
   }
-  __block int32_t result = 0;
-  run_on_main_sync(^{
-    if (@available(macOS 10.15, *)) {
-      if (!CGPreflightScreenCaptureAccess()) {
-        result = -2;
-        return;
-      }
-    }
-    NSArray<NSScreen *> *screens = [NSScreen screens];
-    if (screens.count == 0) {
-      result = -1;
-      return;
-    }
-    CGFloat top = desktop_top();
-    NSRect desktop_bounds = NSZeroRect;
-    for (NSScreen *screen in screens) {
-      NSRect frame = screen.frame;
-      NSRect logical_frame = NSMakeRect(NSMinX(frame), top - NSMaxY(frame), NSWidth(frame), NSHeight(frame));
-      desktop_bounds = NSIsEmptyRect(desktop_bounds) ? logical_frame : NSUnionRect(desktop_bounds, logical_frame);
-    }
-
-    typedef CGImageRef (*WoxDesktopCaptureFunction)(CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption);
-    WoxDesktopCaptureFunction capture = (WoxDesktopCaptureFunction)dlsym(RTLD_DEFAULT, "CGWindowListCreateImage");
-    if (capture == NULL) {
-      result = -1;
-      return;
-    }
-    CGImageRef image = capture(CGRectInfinite, kCGWindowListOptionOnScreenOnly, kCGNullWindowID, kCGWindowImageBestResolution);
-    if (image == NULL) {
-      result = -1;
-      return;
-    }
+  @autoreleasepool {
     NSBitmapImageRep *representation = [[NSBitmapImageRep alloc] initWithCGImage:image];
-    CGImageRelease(image);
     NSData *png = [representation representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
     NSString *file_path = [NSString stringWithUTF8String:path];
-    if (png == nil || file_path == nil || ![png writeToFile:file_path atomically:YES]) {
-      result = -1;
-    } else {
-      *x = (float)NSMinX(desktop_bounds);
-      *y = (float)NSMinY(desktop_bounds);
-      *width = (float)NSWidth(desktop_bounds);
-      *height = (float)NSHeight(desktop_bounds);
-    }
+    int32_t result = png != nil && file_path != nil && [png writeToFile:file_path atomically:YES] ? 0 : -1;
     [representation release];
+    return result;
+  }
+}
+
+int32_t wox_darwin_select_screenshot_region(
+    const char *path,
+    uintptr_t *session_handle,
+    uint32_t *display_id,
+    float *display_x,
+    float *display_y,
+    float *display_width,
+    float *display_height,
+    float *selection_x,
+    float *selection_y,
+    float *selection_width,
+    float *selection_height) {
+  if (path == NULL || path[0] == '\0' || session_handle == NULL || display_id == NULL || display_x == NULL || display_y == NULL || display_width == NULL || display_height == NULL ||
+      selection_x == NULL || selection_y == NULL || selection_width == NULL || selection_height == NULL || [NSThread isMainThread]) {
+    return -1;
+  }
+  if (@available(macOS 10.15, *)) {
+    if (!CGPreflightScreenCaptureAccess()) {
+      return -2;
+    }
+  }
+
+  __block WoxScreenshotSelectionSession *session = nil;
+  __block int32_t setup_result = 0;
+  run_on_main_sync(^{
+    NSArray<NSScreen *> *screens = [NSScreen screens];
+    NSMutableArray *captures = [NSMutableArray arrayWithCapacity:screens.count];
+    CGFloat top = desktop_top();
+    for (NSScreen *screen in screens) {
+      WoxScreenshotDisplayCapture *capture = [[WoxScreenshotDisplayCapture alloc] initWithScreen:screen desktopTop:top];
+      if (capture == nil) {
+        setup_result = -1;
+        break;
+      }
+      [captures addObject:capture];
+      [capture release];
+    }
+    if (setup_result != 0 || captures.count == 0) {
+      return;
+    }
+    session = [[WoxScreenshotSelectionSession alloc] initWithCaptures:captures];
+    if (session == nil) {
+      setup_result = -1;
+      return;
+    }
+    [session begin];
   });
+  if (setup_result != 0 || session == nil) {
+    [session release];
+    return -1;
+  }
+
+  dispatch_semaphore_wait([session completion], DISPATCH_TIME_FOREVER);
+  if ([session cancelled]) {
+    run_on_main_sync(^{
+      [session dismiss];
+    });
+    [session release];
+    return 1;
+  }
+
+  WoxScreenshotDisplayCapture *capture = [session selectedCapture];
+  NSRect selection = [session selection];
+  int32_t result = write_cgimage_png(capture->image, path);
+  if (result == 0) {
+    *session_handle = (uintptr_t)session;
+    *display_id = capture->display_id;
+    *display_x = (float)NSMinX(capture->logical_bounds);
+    *display_y = (float)NSMinY(capture->logical_bounds);
+    *display_width = (float)NSWidth(capture->logical_bounds);
+    *display_height = (float)NSHeight(capture->logical_bounds);
+    *selection_x = (float)NSMinX(selection);
+    *selection_y = (float)NSMinY(selection);
+    *selection_width = (float)NSWidth(selection);
+    *selection_height = (float)NSHeight(selection);
+  }
+  if (result != 0) {
+    run_on_main_sync(^{
+      [session dismiss];
+    });
+    [session release];
+  }
+  return result;
+}
+
+void wox_darwin_dismiss_screenshot_selection(uintptr_t session_handle) {
+  if (session_handle == 0) {
+    return;
+  }
+  WoxScreenshotSelectionSession *session = (WoxScreenshotSelectionSession *)session_handle;
+  run_on_main_sync(^{
+    [session dismiss];
+  });
+  [session release];
+}
+
+int32_t wox_darwin_capture_display_png(uint32_t display_id, const char *path) {
+  if (display_id == 0 || path == NULL || path[0] == '\0') {
+    return -1;
+  }
+  CGImageRef image = capture_display_image((CGDirectDisplayID)display_id);
+  if (image == NULL) {
+    return -1;
+  }
+  int32_t result = write_cgimage_png(image, path);
+  CGImageRelease(image);
   return result;
 }
 

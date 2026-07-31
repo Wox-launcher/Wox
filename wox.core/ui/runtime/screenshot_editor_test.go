@@ -27,6 +27,31 @@ func TestScreenshotEditorSelectionMapsLogicalPointsToPixels(t *testing.T) {
 	}
 }
 
+func TestNewScreenshotEditorOverlayStateAppliesNativeSelection(t *testing.T) {
+	initial := Rect{X: -10, Y: 20, Width: 160, Height: 90}
+	state := newScreenshotEditorOverlayState(
+		ScreenshotOptions{AutoConfirm: true, HideAnnotationToolbar: true},
+		&Image{},
+		screenshotEditorPlatform{
+			frameSize:        Size{Width: 120, Height: 80},
+			initialSelection: &initial,
+		},
+	)
+
+	if state.selection != (Rect{X: 0, Y: 20, Width: 120, Height: 60}) {
+		t.Fatalf("selection = %+v, want clamped native selection", state.selection)
+	}
+	if !state.hasSelection {
+		t.Fatal("native selection should be active")
+	}
+	if !state.autoConfirm || !state.hideTools {
+		t.Fatalf("options were not preserved: autoConfirm=%t hideTools=%t", state.autoConfirm, state.hideTools)
+	}
+	if state.frameSize != (Size{Width: 120, Height: 80}) {
+		t.Fatalf("frame size = %+v", state.frameSize)
+	}
+}
+
 func TestScreenshotEditorToolbarMatchesFlutterGeometry(t *testing.T) {
 	state := &screenshotEditorOverlayState{
 		image:        &Image{Width: 1, Height: 1, pixels: []byte{0, 0, 0, 255}},

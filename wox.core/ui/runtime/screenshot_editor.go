@@ -114,6 +114,29 @@ type screenshotEditorPlatform struct {
 	setWindowBounds  func(window *Window) error
 	logicalSelection func(selection Rect, frameSize Size) Rect
 	captureDesktop   func() (image.Image, error)
+	frameSize        Size
+	initialSelection *Rect
+	afterShow        func()
+}
+
+// newScreenshotEditorOverlayState applies an optional native selection before the portable editor is shown.
+func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, platform screenshotEditorPlatform) *screenshotEditorOverlayState {
+	state := &screenshotEditorOverlayState{
+		image:           uiImage,
+		frameSize:       platform.frameSize,
+		autoConfirm:     options.AutoConfirm,
+		hideTools:       options.HideAnnotationToolbar,
+		annotationColor: screenshotEditorAnnotationColor,
+		mosaicRadius:    screenshotEditorMosaicRadius,
+		textFontSize:    screenshotEditorTextFontSize,
+		result:          make(chan screenshotEditorOverlayOutcome, 1),
+		scrollingStop:   make(chan struct{}),
+	}
+	if platform.initialSelection != nil {
+		state.selection = normalizeScreenshotEditorRect(*platform.initialSelection, platform.frameSize)
+		state.hasSelection = state.selection.Width >= 2 && state.selection.Height >= 2
+	}
+	return state
 }
 
 func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform screenshotEditorPlatform) (ScreenshotResult, error) {
@@ -128,16 +151,7 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		return ScreenshotResult{}, fmt.Errorf("prepare screenshot overlay image: %w", err)
 	}
 
-	state := &screenshotEditorOverlayState{
-		image:           uiImage,
-		autoConfirm:     options.AutoConfirm,
-		hideTools:       options.HideAnnotationToolbar,
-		annotationColor: screenshotEditorAnnotationColor,
-		mosaicRadius:    screenshotEditorMosaicRadius,
-		textFontSize:    screenshotEditorTextFontSize,
-		result:          make(chan screenshotEditorOverlayOutcome, 1),
-		scrollingStop:   make(chan struct{}),
-	}
+	state := newScreenshotEditorOverlayState(options, uiImage, platform)
 	state.startScrolling = func() {
 		state.beginScrollingCapture(source, platform)
 	}
@@ -172,6 +186,12 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		openErr = platform.setWindowBounds(overlay)
 		if openErr == nil {
 			_, openErr = managed.Show()
+		}
+		if openErr == nil && platform.afterShow != nil {
+			platform.afterShow()
+		}
+		if openErr == nil && state.autoConfirm && state.hasSelection {
+			state.complete(false)
 		}
 	})
 	if err != nil {
