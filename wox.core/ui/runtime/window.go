@@ -76,6 +76,7 @@ type WindowRole uint8
 const (
 	WindowRoleUtility WindowRole = iota
 	WindowRoleApplication
+	WindowRoleScreenshot
 )
 
 // WindowOptions configures a launcher window using platform-neutral units and behavior.
@@ -224,6 +225,32 @@ func (w *Window) Invalidate() error {
 		return errors.New("window is not initialized")
 	}
 	return w.native.invalidate()
+}
+
+// DispatchPointer sends portable input directly to an independently managed raw window.
+func (w *Window) DispatchPointer(event PointerEvent) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return Call(func() {
+		if w.native.options.OnPointer != nil {
+			w.native.options.OnPointer(event)
+		}
+	})
+}
+
+// DispatchKey sends portable keyboard input directly to an independently managed raw window.
+func (w *Window) DispatchKey(event KeyEvent) (bool, error) {
+	if w == nil || w.native == nil {
+		return false, errors.New("window is not initialized")
+	}
+	handled := false
+	err := Call(func() {
+		if w.native.options.OnKey != nil {
+			handled = w.native.options.OnKey(event)
+		}
+	})
+	return handled, err
 }
 
 // SetTextInputState enables or disables IME delivery and positions native candidate UI.

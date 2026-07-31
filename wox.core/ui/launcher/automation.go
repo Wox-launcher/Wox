@@ -39,6 +39,20 @@ func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, automationSur
 	return host, window, kind
 }
 
+// independentAutomationWindow routes black-box input and capture to a live raw multi-window surface.
+func (a *App) independentAutomationWindow() *woxui.Window {
+	managed, found := a.windows.Get(woxui.ScreenshotWindowID)
+	if !found {
+		return nil
+	}
+	switch managed.Lifecycle() {
+	case woxui.WindowLifecycleClosing, woxui.WindowLifecycleClosed:
+		return nil
+	default:
+		return managed.Window()
+	}
+}
+
 // AutomationSnapshot returns the latest immutable semantics tree.
 func (a *App) AutomationSnapshot() woxwidget.AutomationSnapshot {
 	host, _, _ := a.automationSurface()
@@ -68,6 +82,9 @@ func (a *App) PerformAutomationAction(automationID string, action woxui.Accessib
 
 // DispatchAutomationPointer sends a logical pointer event through the active retained host.
 func (a *App) DispatchAutomationPointer(event woxui.PointerEvent) error {
+	if window := a.independentAutomationWindow(); window != nil {
+		return window.DispatchPointer(event)
+	}
 	host, _, _ := a.automationSurface()
 	if host == nil {
 		return errors.New("active widget host is not initialized")
@@ -79,6 +96,13 @@ func (a *App) DispatchAutomationPointer(event woxui.PointerEvent) error {
 
 // PressAutomationKey sends a complete key press through the normal widget and launcher handlers.
 func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) error {
+	if window := a.independentAutomationWindow(); window != nil {
+		if _, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers, Down: true}); err != nil {
+			return err
+		}
+		_, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers})
+		return err
+	}
 	host, _, kind := a.automationSurface()
 	if host == nil {
 		return errors.New("active widget host is not initialized")
@@ -184,6 +208,9 @@ func (a *App) HideAutomationWindow() error {
 // AutomationWindowBounds reads native logical window bounds on the UI thread.
 func (a *App) AutomationWindowBounds() (woxui.Rect, error) {
 	_, window, _ := a.automationSurface()
+	if independent := a.independentAutomationWindow(); independent != nil {
+		window = independent
+	}
 	if window == nil {
 		return woxui.Rect{}, errors.New("active window is not initialized")
 	}
@@ -217,6 +244,9 @@ func (a *App) SetAutomationWindowBounds(bounds woxui.Rect) error {
 // CaptureAutomationWindow writes current native window pixels on the UI thread.
 func (a *App) CaptureAutomationWindow(path string) error {
 	_, window, _ := a.automationSurface()
+	if independent := a.independentAutomationWindow(); independent != nil {
+		window = independent
+	}
 	if window == nil {
 		return errors.New("active window is not initialized")
 	}

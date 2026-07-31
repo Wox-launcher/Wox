@@ -13,6 +13,7 @@ int32_t wox_linux_window_hide(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_bounds(WoxLinuxWindow *window, float x, float y, float width, float height);
 int32_t wox_linux_window_get_bounds(WoxLinuxWindow *window, float *x, float *y, float *width, float *height);
 int32_t wox_linux_window_capture_png(WoxLinuxWindow *window, const char *path);
+int32_t wox_linux_capture_desktop_png(const char *path, float *x, float *y, float *width, float *height);
 int32_t wox_linux_window_center(WoxLinuxWindow *window, float width, float height);
 int32_t wox_linux_window_start_dragging(WoxLinuxWindow *window);
 int32_t wox_linux_window_minimize(WoxLinuxWindow *window);

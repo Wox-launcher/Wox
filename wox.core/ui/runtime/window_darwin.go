@@ -128,16 +128,12 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	if options.HideOnBlur {
 		hideOnBlur = 1
 	}
-	applicationWindow := C.int32_t(0)
-	if options.Role == WindowRoleApplication {
-		applicationWindow = 1
-	}
 	window.native = C.wox_darwin_window_create(
 		title,
 		C.float(options.Size.Width),
 		C.float(options.Size.Height),
 		hideOnBlur,
-		applicationWindow,
+		C.int32_t(options.Role),
 		C.uintptr_t(window.handle),
 	)
 	if window.native == nil {

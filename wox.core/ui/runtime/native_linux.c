@@ -1403,6 +1403,91 @@ int32_t wox_linux_window_capture_png(WoxLinuxWindow *window, const char *path) {
   return run_on_main_sync(capture_png_main, &call) ? call.result : -1;
 }
 
+typedef struct {
+  const char *path;
+  float x;
+  float y;
+  float width;
+  float height;
+  int32_t result;
+} WoxDesktopCaptureCall;
+
+// capture_desktop_png_main captures the X11 root window; Wayland requires a portal-owned flow.
+static void capture_desktop_png_main(void *data) {
+  WoxDesktopCaptureCall *call = data;
+#ifdef GDK_WINDOWING_X11
+  GdkDisplay *display = gdk_display_get_default();
+  if (display == NULL || !GDK_IS_X11_DISPLAY(display)) {
+    call->result = -2;
+    return;
+  }
+  Display *xdisplay = GDK_DISPLAY_XDISPLAY(display);
+  Window xroot = DefaultRootWindow(xdisplay);
+  XWindowAttributes attributes;
+  if (!XGetWindowAttributes(xdisplay, xroot, &attributes) || attributes.width <= 0 || attributes.height <= 0) {
+    call->result = -1;
+    return;
+  }
+  GdkWindow *root = gdk_x11_window_lookup_for_display(display, xroot);
+  bool owns_root = false;
+  if (root == NULL) {
+    root = gdk_x11_window_foreign_new_for_display(display, xroot);
+    owns_root = root != NULL;
+  }
+  if (root == NULL) {
+    call->result = -1;
+    return;
+  }
+  int width = gdk_window_get_width(root);
+  int height = gdk_window_get_height(root);
+  if (width <= 0 || height <= 0) {
+    if (owns_root) {
+      g_object_unref(root);
+    }
+    call->result = -1;
+    return;
+  }
+  GdkPixbuf *pixels = gdk_pixbuf_get_from_window(root, 0, 0, width, height);
+  if (owns_root) {
+    g_object_unref(root);
+  }
+  if (pixels == NULL) {
+    call->result = -1;
+    return;
+  }
+  GError *error = NULL;
+  if (!gdk_pixbuf_save(pixels, call->path, "png", &error, NULL)) {
+    if (error != NULL) {
+      g_error_free(error);
+    }
+    call->result = -1;
+  } else {
+    call->x = 0.0f;
+    call->y = 0.0f;
+    call->width = (float)width;
+    call->height = (float)height;
+  }
+  g_object_unref(pixels);
+#else
+  call->result = -2;
+#endif
+}
+
+int32_t wox_linux_capture_desktop_png(const char *path, float *x, float *y, float *width, float *height) {
+  if (path == NULL || path[0] == '\0' || x == NULL || y == NULL || width == NULL || height == NULL) {
+    return -1;
+  }
+  WoxDesktopCaptureCall call = {.path = path};
+  if (!run_on_main_sync(capture_desktop_png_main, &call) || call.result != 0) {
+    return call.result != 0 ? call.result : -1;
+  }
+  *x = call.x;
+  *y = call.y;
+  *width = call.width;
+  *height = call.height;
+  return 0;
+}
+
 static void center_main(void *data) {
   WoxBoundsCall *call = data;
   WoxLinuxWindow *window = call->window;

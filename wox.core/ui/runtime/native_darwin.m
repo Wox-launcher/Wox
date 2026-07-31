@@ -958,14 +958,15 @@ int32_t wox_darwin_run(uintptr_t context) {
   return 0;
 }
 
-WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t application_window, uintptr_t context) {
+WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, uintptr_t context) {
   if (![NSThread isMainThread] || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
   }
 
   @autoreleasepool {
     NSRect frame = NSMakeRect(0.0, 0.0, width, height);
-    bool is_application_window = application_window != 0;
+    bool is_application_window = window_role == 1;
+    bool is_screenshot_window = window_role == 2;
     NSWindowStyleMask style_mask = NSWindowStyleMaskBorderless;
     if (is_application_window) {
       style_mask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskFullSizeContentView;
@@ -978,7 +979,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     native_window.releasedWhenClosed = NO;
     native_window.opaque = NO;
     native_window.backgroundColor = [NSColor clearColor];
-    native_window.hasShadow = YES;
+    native_window.hasShadow = !is_screenshot_window;
     native_window.acceptsMouseMovedEvents = YES;
     // Management windows participate in normal app switching while launcher surfaces remain cross-space utilities.
     if (is_application_window) {
@@ -989,6 +990,18 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
       [[native_window standardWindowButton:NSWindowCloseButton] setHidden:YES];
       [[native_window standardWindowButton:NSWindowMiniaturizeButton] setHidden:YES];
       [[native_window standardWindowButton:NSWindowZoomButton] setHidden:YES];
+    } else if (is_screenshot_window) {
+      NSWindowCollectionBehavior behavior =
+          NSWindowCollectionBehaviorCanJoinAllSpaces |
+          NSWindowCollectionBehaviorFullScreenAuxiliary |
+          NSWindowCollectionBehaviorStationary |
+          NSWindowCollectionBehaviorIgnoresCycle;
+      if (@available(macOS 13.0, *)) {
+        behavior |= NSWindowCollectionBehaviorCanJoinAllApplications;
+      }
+      native_window.level = MAX(NSScreenSaverWindowLevel, CGShieldingWindowLevel());
+      native_window.collectionBehavior = behavior;
+      native_window.animationBehavior = NSWindowAnimationBehaviorNone;
     } else {
       native_window.level = NSFloatingWindowLevel;
       native_window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
@@ -1037,7 +1050,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     effect_view.blendingMode = NSVisualEffectBlendingModeBehindWindow;
     effect_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     effect_view.wantsLayer = YES;
-    effect_view.layer.cornerRadius = 14.0;
+    effect_view.layer.cornerRadius = is_screenshot_window ? 0.0 : 14.0;
     effect_view.layer.masksToBounds = YES;
     [effect_view addSubview:view];
     native_window.contentView = effect_view;
@@ -1186,6 +1199,59 @@ int32_t wox_darwin_window_capture_png(WoxDarwinWindow *window, const char *path)
     NSString *file_path = [NSString stringWithUTF8String:path];
     if (png == nil || file_path == nil || ![png writeToFile:file_path atomically:YES]) {
       result = -1;
+    }
+    [representation release];
+  });
+  return result;
+}
+
+int32_t wox_darwin_capture_desktop_png(const char *path, float *x, float *y, float *width, float *height) {
+  if (path == NULL || path[0] == '\0' || x == NULL || y == NULL || width == NULL || height == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (@available(macOS 10.15, *)) {
+      if (!CGPreflightScreenCaptureAccess()) {
+        result = -2;
+        return;
+      }
+    }
+    NSArray<NSScreen *> *screens = [NSScreen screens];
+    if (screens.count == 0) {
+      result = -1;
+      return;
+    }
+    CGFloat top = desktop_top();
+    NSRect desktop_bounds = NSZeroRect;
+    for (NSScreen *screen in screens) {
+      NSRect frame = screen.frame;
+      NSRect logical_frame = NSMakeRect(NSMinX(frame), top - NSMaxY(frame), NSWidth(frame), NSHeight(frame));
+      desktop_bounds = NSIsEmptyRect(desktop_bounds) ? logical_frame : NSUnionRect(desktop_bounds, logical_frame);
+    }
+
+    typedef CGImageRef (*WoxDesktopCaptureFunction)(CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption);
+    WoxDesktopCaptureFunction capture = (WoxDesktopCaptureFunction)dlsym(RTLD_DEFAULT, "CGWindowListCreateImage");
+    if (capture == NULL) {
+      result = -1;
+      return;
+    }
+    CGImageRef image = capture(CGRectInfinite, kCGWindowListOptionOnScreenOnly, kCGNullWindowID, kCGWindowImageBestResolution);
+    if (image == NULL) {
+      result = -1;
+      return;
+    }
+    NSBitmapImageRep *representation = [[NSBitmapImageRep alloc] initWithCGImage:image];
+    CGImageRelease(image);
+    NSData *png = [representation representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+    NSString *file_path = [NSString stringWithUTF8String:path];
+    if (png == nil || file_path == nil || ![png writeToFile:file_path atomically:YES]) {
+      result = -1;
+    } else {
+      *x = (float)NSMinX(desktop_bounds);
+      *y = (float)NSMinY(desktop_bounds);
+      *width = (float)NSWidth(desktop_bounds);
+      *height = (float)NSHeight(desktop_bounds);
     }
     [representation release];
   });
