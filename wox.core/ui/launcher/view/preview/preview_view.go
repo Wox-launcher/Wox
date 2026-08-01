@@ -1,6 +1,7 @@
 package preview
 
 import (
+	"fmt"
 	"strings"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -10,12 +11,19 @@ import (
 
 // PreviewProps contains the content and metadata rendered by the generic preview shell.
 type PreviewProps struct {
-	Width  float32
-	Height float32
-	Tags   []string
-	Body   woxwidget.Widget
-	Theme  woxcomponent.Theme
-	Window *woxui.Window
+	Width      float32
+	Height     float32
+	Tags       []PreviewTag
+	Body       woxwidget.Widget
+	Theme      woxcomponent.Theme
+	Window     *woxui.Window
+	OnTagHover func(bool, string, woxui.Rect)
+}
+
+// PreviewTag keeps compact metadata text and its explanatory tooltip together.
+type PreviewTag struct {
+	Label   string
+	Tooltip string
 }
 
 // PreviewLayout contains the body dimensions shared by the adapter and preview shell.
@@ -43,7 +51,7 @@ func PreviewView(props PreviewProps) woxwidget.Widget {
 	surfaceHeight := layout.BodyHeight + 2
 	children := []woxwidget.StackChild{{Child: previewSurface(props.Body, props.Theme, layout.InnerWidth, surfaceHeight)}}
 	if len(props.Tags) > 0 {
-		children = append(children, woxwidget.StackChild{Top: surfaceHeight + 10, Child: PreviewTags(props.Tags, props.Theme, props.Window, layout.InnerWidth)})
+		children = append(children, woxwidget.StackChild{Top: surfaceHeight + 10, Child: PreviewTags(props.Tags, props.Theme, props.Window, layout.InnerWidth, props.OnTagHover)})
 	}
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 14, Top: 12, Right: 12, Bottom: 10},
@@ -62,10 +70,11 @@ func previewSurface(body woxwidget.Widget, theme woxcomponent.Theme, width, heig
 }
 
 // PreviewTags builds the metadata pills shared by real and theme-editor previews.
-func PreviewTags(tags []string, theme woxcomponent.Theme, window *woxui.Window, width float32) woxwidget.Widget {
+func PreviewTags(tags []PreviewTag, theme woxcomponent.Theme, window *woxui.Window, width float32, onHover func(bool, string, woxui.Rect)) woxwidget.Widget {
 	children := make([]woxwidget.Widget, 0, len(tags))
 	contentWidth := float32(0)
-	for _, label := range tags {
+	for index, tag := range tags {
+		label := strings.TrimSpace(tag.Label)
 		if strings.TrimSpace(label) == "" {
 			continue
 		}
@@ -75,12 +84,22 @@ func PreviewTags(tags []string, theme woxcomponent.Theme, window *woxui.Window, 
 		if len(children) > 0 {
 			contentWidth += 8
 		}
-		children = append(children, woxwidget.Container{
+		pill := woxwidget.Container{
 			Width: chipWidth, Height: 26, Radius: 8, Color: previewColorWithOpacity(theme.PreviewText, 0.035),
 			BorderColor: previewColorWithOpacity(theme.PreviewPropertyTitle, 0.48), BorderWidth: 1,
 			Padding: woxwidget.Insets{Left: 9, Top: 6, Right: 9, Bottom: 5},
 			Child:   woxwidget.Text{Value: label, Style: style, Color: previewColorWithOpacity(theme.PreviewPropertyContent, 0.9)},
-		})
+		}
+		tooltip := strings.TrimSpace(tag.Tooltip)
+		if tooltip == "" {
+			tooltip = label
+		}
+		if onHover != nil {
+			pill = woxwidget.Container{Width: chipWidth, Height: 26, Child: woxwidget.Gesture{
+				ID: fmt.Sprintf("preview-tag-%d", index), OnHoverAt: func(inside bool, bounds woxui.Rect) { onHover(inside, tooltip, bounds) }, Child: pill,
+			}}
+		}
+		children = append(children, pill)
 		contentWidth += chipWidth
 	}
 	return woxwidget.ScrollView{

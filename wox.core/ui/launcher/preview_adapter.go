@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"wox/common"
+	"wox/ui/contract"
+	woxcomponent "wox/ui/launcher/component"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -39,11 +43,11 @@ func (a *App) buildPreview(result queryResult, palette uiPalette, width, height 
 		return a.buildChatPreview(result, preview, palette, width, height)
 	}
 	scrollKey := result.QueryID + "\x00" + result.ID + "\x00" + preview.PreviewType
-	tags := append(a.previewTagLabels(preview.PreviewTags), a.previewTagLabels(a.previewBodyTags(preview))...)
+	tags := append(a.previewTags(preview.PreviewTags), a.previewTags(a.previewBodyTags(preview))...)
 	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0)
 	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight)
 	return previewview.PreviewView(previewview.PreviewProps{
-		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window,
+		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window, OnTagHover: a.setPreviewTagTooltip,
 	})
 }
 
@@ -59,7 +63,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 	case "text":
 		return a.buildTextPreview(scrollKey, preview.PreviewData, preview.ScrollPosition, palette, width, height)
 	case "markdown":
-		return content(preview.PreviewData, previewColorWithOpacity(palette.previewText, 0.86))
+		return a.buildMarkdownPreview(scrollKey, preview.PreviewData, "", preview.ScrollPosition, palette, width, height)
 	case "image":
 		source, ok := parsePreviewImage(preview.PreviewData)
 		if !ok {
@@ -77,6 +81,8 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 			return a.buildPreviewImage(file.Image, file.Image, palette, width, height)
 		case "error":
 			return content(file.Text, errorText)
+		case "markdown":
+			return a.buildMarkdownPreview(scrollKey, file.Text, filepath.Dir(preview.PreviewData), preview.ScrollPosition, palette, width, height)
 		default:
 			return a.buildTextPreview(scrollKey, file.Text, preview.ScrollPosition, palette, width, height)
 		}
@@ -125,6 +131,76 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 	default:
 		return content(preview.PreviewData, palette.previewText)
 	}
+}
+
+// buildMarkdownPreview injects launcher-owned image and external-link actions into the shared native component.
+func (a *App) buildMarkdownPreview(scrollKey, value, baseDirectory, scrollPosition string, palette uiPalette, width, height float32) woxwidget.Widget {
+	initialOffset := float32(0)
+	if scrollPosition == "bottom" {
+		initialOffset = float32(math.MaxFloat32)
+	}
+	resolveSource := func(source string) (woxImage, bool) {
+		trimmed := strings.TrimSpace(source)
+		if trimmed == "" {
+			return woxImage{}, false
+		}
+		if parsed, err := url.Parse(trimmed); err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") {
+			return woxImage{ImageType: "url", ImageData: parsed.String()}, true
+		}
+		if strings.HasPrefix(trimmed, "file://") {
+			parsed, err := url.Parse(trimmed)
+			if err != nil {
+				return woxImage{}, false
+			}
+			path, err := url.PathUnescape(parsed.Path)
+			if err != nil || path == "" {
+				return woxImage{}, false
+			}
+			return woxImage{ImageType: "absolute", ImageData: filepath.Clean(path)}, true
+		}
+		if filepath.IsAbs(trimmed) {
+			return woxImage{ImageType: "absolute", ImageData: filepath.Clean(trimmed)}, true
+		}
+		if baseDirectory != "" {
+			return woxImage{ImageType: "absolute", ImageData: filepath.Join(baseDirectory, trimmed)}, true
+		}
+		return woxImage{}, false
+	}
+	return previewview.MarkdownPreviewView(previewview.MarkdownPreviewProps{
+		ID: scrollKey, Document: a.markdownDocument(value), Width: width, Height: height, InitialOffset: initialOffset, Theme: palette.componentTheme(), Window: a.window,
+		ResolveImage: func(source string) (*woxui.Image, string) {
+			imageSource, ok := resolveSource(source)
+			if !ok {
+				return nil, "Unsupported Markdown image: " + source
+			}
+			return a.imageFor(imageSource), a.imageErrorFor(imageSource)
+		},
+		OnOpenImage: func(source string) {
+			if imageSource, ok := resolveSource(source); ok {
+				a.openPreviewImageOverlay(imageSource)
+			}
+		},
+		OnOpenLink: func(target string) {
+			if err := a.window.OpenExternalURL(target); err != nil {
+				log.Printf("open Markdown preview link: %v", err)
+			}
+		},
+	})
+}
+
+// markdownDocument bounds AST reuse so repeated frames do not reparse unchanged streaming content.
+func (a *App) markdownDocument(value string) woxcomponent.MarkdownDocument {
+	hash := sha256.Sum256([]byte(value))
+	key := fmt.Sprintf("%x", hash)
+	if document, ok := a.mdDocs[key]; ok {
+		return document
+	}
+	document := woxcomponent.ParseMarkdown(value)
+	if len(a.mdDocs) >= 64 {
+		a.mdDocs = map[string]woxcomponent.MarkdownDocument{}
+	}
+	a.mdDocs[key] = document
+	return document
 }
 
 // previewBodyTags resolves metadata before the body is built at its final tagged height.
@@ -238,14 +314,52 @@ func (a *App) buildListPreview(data previewListData, palette uiPalette, width, h
 	return previewview.PreviewList(previewview.PreviewListProps{Width: width, Height: height, Items: items, Theme: palette.componentTheme()})
 }
 
-func (a *App) previewTagLabels(tags []previewTag) []string {
-	labels := make([]string, 0, len(tags))
+func (a *App) previewTags(tags []previewTag) []previewview.PreviewTag {
+	resolved := make([]previewview.PreviewTag, 0, len(tags))
 	for _, tag := range tags {
-		if label := a.translate(tag.Label); strings.TrimSpace(label) != "" {
-			labels = append(labels, label)
+		label := strings.TrimSpace(a.translate(tag.Label))
+		tooltip := strings.TrimSpace(a.translate(tag.Tooltip))
+		if label == "" {
+			label = tooltip
+		}
+		if label != "" {
+			resolved = append(resolved, previewview.PreviewTag{Label: label, Tooltip: tooltip})
 		}
 	}
-	return labels
+	return resolved
+}
+
+// setPreviewTagTooltip anchors preview metadata help to the launcher window.
+func (a *App) setPreviewTagTooltip(inside bool, text string, anchor woxui.Rect) {
+	revision := a.previewTooltipRevision.Add(1)
+	util.Go(a.lifecycleCtx, "update preview tag tooltip", func() {
+		a.tooltipMu.Lock()
+		defer a.tooltipMu.Unlock()
+		if revision != a.previewTooltipRevision.Load() {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		const name = "go-ui-preview-tag"
+		if !inside {
+			if err := a.services.HideTooltip(ctx, a.sessionID, name); err != nil {
+				log.Printf("hide preview tag tooltip: %v", err)
+			}
+			return
+		}
+		windowBounds, err := a.window.Bounds()
+		if err != nil {
+			log.Printf("read launcher bounds for preview tag tooltip: %v", err)
+			return
+		}
+		if err := a.services.ShowTooltip(ctx, a.sessionID, contract.TooltipOptions{
+			Name: name, Text: text, Side: "top",
+			AnchorX: float64(windowBounds.X + anchor.X), AnchorY: float64(windowBounds.Y + anchor.Y),
+			AnchorWidth: float64(anchor.Width), AnchorHeight: float64(anchor.Height),
+		}); err != nil {
+			log.Printf("show preview tag tooltip: %v", err)
+		}
+	})
 }
 
 func previewColorWithOpacity(color woxui.Color, opacity float32) woxui.Color {

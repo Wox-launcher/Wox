@@ -99,7 +99,7 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		}
 		var tail woxwidget.Widget
 		if len(item.Tails) > 0 {
-			tail = launcherResultTailsWithDensity(item.Tails, item.TailWidth, item.TailHeight, tailColor, item.Selected, props.DensityScale)
+			tail = launcherResultTailsWithDensity(item.Tails, item.TailWidth, item.TailHeight, tailColor, item.Selected, props.DensityScale, woxwidget.Key("launcher-result-tails-"+item.ID))
 		}
 		labelWidth := max(baseHeight, innerRowWidth-iconSize-scaledLauncherSize(20, props.DensityScale)-item.TailWidth)
 		labelChildren := []woxwidget.Widget{woxwidget.Text{Value: item.Title, Style: titleStyle, Color: title}}
@@ -172,13 +172,14 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 
 // launcherResultTails restores Flutter's text-tag and image-tail presentation.
 func launcherResultTails(tails []LauncherResultTail, width, height float32, foreground woxui.Color, selected bool) woxwidget.Widget {
-	return launcherResultTailsWithDensity(tails, width, height, foreground, selected, 1)
+	return launcherResultTailsWithDensity(tails, width, height, foreground, selected, 1, "")
 }
 
 // launcherResultTailsWithDensity scales launcher-only tail geometry without changing fixed theme previews.
-func launcherResultTailsWithDensity(tails []LauncherResultTail, width, height float32, foreground woxui.Color, selected bool, densityScale float32) woxwidget.Widget {
+func launcherResultTailsWithDensity(tails []LauncherResultTail, width, height float32, foreground woxui.Color, selected bool, densityScale float32, scrollKey woxwidget.Key) woxwidget.Widget {
 	itemLeftPadding := scaledLauncherSize(10, densityScale)
 	children := make([]woxwidget.Widget, 0, len(tails))
+	contentWidth := float32(0)
 	for _, item := range tails {
 		var content woxwidget.Widget
 		if item.Image != nil {
@@ -195,13 +196,19 @@ func launcherResultTailsWithDensity(tails []LauncherResultTail, width, height fl
 				}},
 			}
 		}
+		itemWidth := itemLeftPadding + item.Width
 		children = append(children, woxwidget.Container{
-			Width: itemLeftPadding + item.Width, Height: height,
+			Width: itemWidth, Height: height,
 			Padding: woxwidget.Insets{Left: itemLeftPadding},
 			Child:   woxwidget.Align{Width: item.Width, Height: height, Vertical: 0.5, Child: content},
 		})
+		contentWidth += itemWidth
 	}
-	return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}
+	content := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}
+	if scrollKey == "" {
+		return woxwidget.Clip{Width: width, Height: height, Child: content}
+	}
+	return woxwidget.ScrollView{Key: scrollKey, Width: width, Height: height, ContentWidth: max(width, contentWidth), Horizontal: true, Child: content}
 }
 
 // launcherResultTextTailStyle maps semantic tail categories to Flutter's stable status colors.

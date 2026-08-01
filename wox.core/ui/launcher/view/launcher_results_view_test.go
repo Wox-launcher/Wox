@@ -36,6 +36,28 @@ func TestLauncherResultGroupUsesFlutterTitleTypography(t *testing.T) {
 	}
 }
 
+func TestLauncherResultTailsScrollHorizontallyWhenClipped(t *testing.T) {
+	result := LauncherResultsView(LauncherResultsProps{
+		Width: 300, Height: 50, ContentHeight: 50, RowHeight: 50,
+		Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}},
+		Items: []LauncherResultItem{{
+			ID: "many-tags", Title: "Result", TailWidth: 80, TailHeight: 22,
+			Tails: []LauncherResultTail{{Text: "first", Width: 50, Height: 22}, {Text: "second", Width: 50, Height: 22}},
+		}},
+	}).(woxwidget.Semantics)
+	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	tailContainer := row.Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
+	tails := tailContainer.Child.(woxwidget.ScrollView)
+
+	if !tails.Horizontal || tails.Key != "launcher-result-tails-many-tags" {
+		t.Fatalf("tail scroll = horizontal %v key %q, want true/stable result key", tails.Horizontal, tails.Key)
+	}
+	if tails.Width != 80 || tails.ContentWidth != 120 {
+		t.Fatalf("tail scroll geometry = viewport %.0f content %.0f, want 80/120", tails.Width, tails.ContentWidth)
+	}
+}
+
 func TestLauncherResultScrollbarOpacityFollowsScrollActivity(t *testing.T) {
 	props := launcherResultScrollProps{Width: 100, Height: 80, ContentHeight: 160, ThumbColor: woxui.Color{A: 255}}
 	state := &launcherResultScrollState{}

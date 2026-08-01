@@ -26,3 +26,21 @@ func TestPreviewSurfaceUsesFlutterTranslucentFill(t *testing.T) {
 		t.Fatal("preview uses a nested fill to simulate its border")
 	}
 }
+
+func TestPreviewTagHoverUsesTooltip(t *testing.T) {
+	var hovered bool
+	var tooltip string
+	var anchor woxui.Rect
+	view := PreviewTags([]PreviewTag{{Label: "51 chars", Tooltip: "Character count"}}, woxcomponent.Theme{}, &woxui.Window{}, 300, func(inside bool, text string, bounds woxui.Rect) {
+		hovered, tooltip, anchor = inside, text, bounds
+	}).(woxwidget.ScrollView)
+	row := view.Child.(woxwidget.Flex)
+	wrapper := row.Children[0].(woxwidget.Container)
+	gesture := wrapper.Child.(woxwidget.Gesture)
+	wantAnchor := woxui.Rect{X: 2, Y: 3, Width: 40, Height: 26}
+	gesture.OnHoverAt(true, wantAnchor)
+
+	if !hovered || tooltip != "Character count" || anchor != wantAnchor {
+		t.Fatalf("hover = %v, %q, %#v; want tooltip and anchor", hovered, tooltip, anchor)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"wox/ui/contract"
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
@@ -77,6 +78,7 @@ type App struct {
 	queryResizeTimer       *time.Timer
 	queryResizeRevision    uint64
 	webViewTooltipRevision atomic.Uint64
+	previewTooltipRevision atomic.Uint64
 	selected               int
 	hoveredResult          int
 	pendingSelection       *pendingResultSelection
@@ -156,6 +158,7 @@ type App struct {
 	previewRequests    map[string]bool
 	filePreviews       map[string]filePreviewContent
 	fileRequests       map[string]bool
+	mdDocs             map[string]woxcomponent.MarkdownDocument
 	previewLayouts     map[string]woxwidget.TextBlockLayout
 	terminalPreview    *terminalPreviewState
 }
@@ -206,6 +209,7 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 		previewRequests: map[string]bool{},
 		filePreviews:    map[string]filePreviewContent{},
 		fileRequests:    map[string]bool{},
+		mdDocs:          map[string]woxcomponent.MarkdownDocument{},
 		previewLayouts:  map[string]woxwidget.TextBlockLayout{},
 		show: showAppParams{
 			WindowWidth:    defaultWidth,

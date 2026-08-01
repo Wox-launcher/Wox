@@ -445,7 +445,7 @@ func themeEditorPreviewWithTextPanel(props ThemeEditorSettingsProps, width, heig
 		title, body, woxwidget.Align{Width: selectionWidth, Height: 16, Child: selection},
 	}}}
 	panelBody := previewview.PreviewView(previewview.PreviewProps{
-		Width: panelWidth, Height: height, Tags: []string{"2026-05-26 10:47:08", "2074x679", "702.7 KB", "OCR"},
+		Width: panelWidth, Height: height, Tags: []previewview.PreviewTag{{Label: "2026-05-26 10:47:08"}, {Label: "2074x679"}, {Label: "702.7 KB"}, {Label: "OCR"}},
 		Body: previewBody, Theme: props.DraftTheme, Window: props.Window,
 	})
 	panelChildren := []woxwidget.StackChild{

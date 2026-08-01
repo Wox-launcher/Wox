@@ -39,6 +39,7 @@ require (
 	github.com/tmc/langchaingo v0.1.14
 	github.com/wissance/stringFormatter v1.6.1
 	github.com/yalue/onnxruntime_go v1.27.0
+	github.com/yuin/goldmark v1.7.13
 	github.com/zalando/go-keyring v0.2.1
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.44.0

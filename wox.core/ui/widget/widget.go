@@ -493,9 +493,10 @@ func (w Wrap) layout(ctx context, available constraints) *node {
 
 // Text paints one measured line using the platform UI font.
 type Text struct {
-	Value string
-	Style woxui.TextStyle
-	Color woxui.Color
+	Value     string
+	Style     woxui.TextStyle
+	Color     woxui.Color
+	Underline bool
 }
 
 // TextBlock wraps and clips text in Go so every renderer receives the same shaped line boxes.
@@ -544,6 +545,9 @@ func (w Text) layout(ctx context, available constraints) *node {
 		bounds: woxui.Rect{Width: width, Height: height},
 		paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			displayList.DrawText(w.Value, bounds, w.Style, w.Color)
+			if w.Underline && bounds.Width > 0 && bounds.Height > 0 {
+				displayList.FillRect(woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height - 1, Width: bounds.Width, Height: 1}, w.Color)
+			}
 		},
 	}
 }
