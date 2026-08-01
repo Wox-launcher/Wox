@@ -332,21 +332,13 @@ func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any
 		}
 		context.SetState(func() { s.editing = !s.editing })
 	}
-	toggle := woxwidget.Semantics{
-		Key: woxwidget.Key(props.ID + "-edit"), AutomationID: props.ID + "-edit", Role: woxui.AccessibilityRoleButton, Label: buttonLabel,
-		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
-		OnAction: func(action woxui.AccessibilityAction, _ string) error {
-			if action == woxui.AccessibilityActionActivate {
-				toggleEditing()
-			}
-			return nil
-		},
-		Child: woxwidget.Gesture{ID: props.ID + "-edit", OnTap: toggleEditing, Child: woxwidget.Align{Width: editWidth, Height: formAIModelControlHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: icon, Width: 18, Height: 18}}},
-	}
-	if !props.ModelsAvailable || props.Model == "" {
-		toggle = woxwidget.Semantics{Key: woxwidget.Key(props.ID + "-edit"), AutomationID: props.ID + "-edit", Role: woxui.AccessibilityRoleButton, Label: buttonLabel, Disabled: true,
-			Child: woxwidget.Align{Width: editWidth, Height: formAIModelControlHeight, Horizontal: 0.5, Vertical: 0.5}}
-	}
+	hoverBackground := props.Theme.ResultSubtitle
+	hoverBackground.A = 26
+	toggle := woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+		ID: props.ID + "-edit", Label: buttonLabel, Icon: woxwidget.Image{Source: icon, Width: 18, Height: 18},
+		Width: editWidth, Height: formAIModelControlHeight, Radius: 4, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor,
+		Disabled: !props.ModelsAvailable || props.Model == "", OnTap: toggleEditing,
+	})
 	control := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{provider, model, toggle}}
 	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, formAIModelControlHeight, props.Theme)
 }

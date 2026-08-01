@@ -263,6 +263,14 @@ func (w *Window) SetTextInputState(state TextInputState) error {
 	return w.native.setTextInputState(state)
 }
 
+// SetPointerCursor updates the native cursor for the current pointer target.
+func (w *Window) SetPointerCursor(cursor PointerCursor) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.setPointerCursor(cursor)
+}
+
 // MeasureText measures one line using the same system font as DrawText.
 // It must be called from Run's start callback or a UI callback.
 func (w *Window) MeasureText(text string, style TextStyle) (TextMetrics, error) {

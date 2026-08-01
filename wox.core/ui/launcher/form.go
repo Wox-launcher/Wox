@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -481,11 +482,23 @@ func (a *App) updateFormTextInput(enabled bool) {
 }
 
 func (a *App) restoreQueryTextInput() {
-	themeEditor := a.themeSettings.ThemeEditor()
-	enabled := !a.show.HideQueryBox && !a.chatFullscreen && a.form == nil && (a.requirementForm == nil || !a.requirementForm.active) && (a.triggerConflict == nil || !a.triggerConflict.active) && (themeEditor == nil || !themeEditor.active) && (a.chatPreview == nil || !a.chatPreview.active) && (a.terminalPreview == nil || !a.terminalPreview.SearchOpen)
+	enabled := a.queryCanFocus() && a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey)
 	state := woxui.TextInputState{}
 	if enabled {
 		state = woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 130, Y: 29, Width: 1, Height: 24}}
 	}
 	_ = a.window.SetTextInputState(state)
+}
+
+// queryCanFocus keeps modal editors from accepting query input without disabling normal focus switching.
+func (a *App) queryCanFocus() bool {
+	var themeEditor *themeEditorPreviewState
+	if a.themeSettings != nil {
+		themeEditor = a.themeSettings.ThemeEditor()
+	}
+	formTableActive := a.tableEditor != nil && !a.formTableUsesSettingsWindow()
+	return !a.show.HideQueryBox && !a.chatFullscreen && a.form == nil && !formTableActive && !a.actionPanel &&
+		(a.requirementForm == nil || !a.requirementForm.active) && (a.triggerConflict == nil || !a.triggerConflict.active) &&
+		(themeEditor == nil || !themeEditor.active) &&
+		(a.terminalPreview == nil || !a.terminalPreview.SearchOpen)
 }

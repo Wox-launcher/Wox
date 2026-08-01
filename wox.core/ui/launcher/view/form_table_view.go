@@ -475,10 +475,18 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 }
 
 func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxui.Image, onTap func()) woxwidget.Widget {
+	if icon != nil {
+		hoverBackground := props.Theme.ResultSubtitle
+		hoverBackground.A = uint8(float32(hoverBackground.A) * 0.1)
+		return woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: id, Label: label, Icon: woxwidget.Image{Source: icon, Width: 16, Height: 16}, Width: 26, Height: 24, Radius: 4,
+			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: onTap,
+		})
+	}
 	theme := props.Theme
 	theme.ResultTitle = props.Theme.ResultSubtitle
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: id, Label: label, Icon: icon, IconSize: 16, IconOnly: icon != nil, Width: 26, Height: 24,
+		ID: id, Label: label, Width: 26, Height: 24,
 		Variant: woxcomponent.ButtonText, FontSize: 10, OnTap: onTap, Theme: theme,
 	})
 }

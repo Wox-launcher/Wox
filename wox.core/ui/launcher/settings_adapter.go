@@ -32,7 +32,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	if snapshot.tab == "plugins" {
 		page = a.buildPluginSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "theme" {
-		page = a.buildSettingsThemePage(snapshot, width-railWidth, pageHeight)
+		page = a.buildSettingsThemePage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "ai" {
 		page = a.buildAISettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "data" {
@@ -70,7 +70,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
 		Width: width, Height: height, PageID: snapshot.tab, Platform: runtime.GOOS, RailWidth: railWidth, Theme: snapshot.palette.componentTheme(),
-		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight), Page: page,
+		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight, frame.Scale), Page: page,
 		Overlay: overlay, OverlayLeft: overlayLeft, OverlayTop: overlayTop,
 	})
 }
@@ -108,12 +108,12 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth 
 }
 
 // buildSettingsThemePage mounts theme catalogs and the shared live editor under one portable route.
-func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	innerWidth := max(float32(0), width-40)
 	bodyHeight := max(float32(0), height-40)
 	var body woxwidget.Widget
 	if snapshot.theme.ThemesMode != "editor" {
-		body = a.buildThemeCatalog(snapshot, innerWidth, bodyHeight)
+		body = a.buildThemeCatalog(snapshot, innerWidth, bodyHeight, imageScale)
 	} else {
 		theme := snapshot.theme.ThemeEditor
 		if theme == nil {
@@ -131,7 +131,7 @@ func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height fl
 	})
 }
 
-func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	specs := settingNavSpecs(snapshot.isDev)
 	activeID := activeSettingNavID(snapshot.tab, snapshot.plugins.PluginsStore, snapshot.theme.ThemesMode)
 	items := make([]launcherview.SettingsNavItem, 0, len(specs))
@@ -159,7 +159,7 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height float32
 	viewportHeight := max(float32(1), height-searchAreaHeight-28)
 	return launcherview.SettingsRail(launcherview.SettingsRailProps{
 		Width: width, Height: height, Items: items, KeepVisible: keepVisible,
-		SearchBox: a.buildSettingsSearchBox(snapshot, innerWidth), SearchPanel: a.buildSettingsSearchResultPanel(snapshot, innerWidth, viewportHeight),
+		SearchBox: a.buildSettingsSearchBox(snapshot, innerWidth, imageScale), SearchPanel: a.buildSettingsSearchResultPanel(snapshot, innerWidth, viewportHeight),
 		ShowSearch: snapshot.search.Panel && strings.TrimSpace(snapshot.search.Query.Text) != "", Theme: snapshot.palette.componentTheme(),
 	})
 }
@@ -183,12 +183,12 @@ func (a *App) activeSettingsNavLabel(snapshot settingsSnapshot) string {
 }
 
 // buildSettingsSearchBox owns the settings window's default text-input focus and native IME cursor.
-func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width float32) woxwidget.Widget {
+func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width, imageScale float32) woxwidget.Widget {
 	placeholder := a.translate("i18n:ui_setting_search_placeholder")
 	iconTint := snapshot.palette.resultSubtitle
 	return launcherview.SettingsSearchBox(launcherview.SettingsSearchBoxProps{
 		Width: width, Placeholder: placeholder, State: snapshot.search.Query, Focused: snapshot.search.Focused,
-		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, 18), Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
+		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, physicalImageSize(18, imageScale)), Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
 		OnFocus: func() { a.focusSettingsSearch(false) }, OnClear: a.clearSettingsSearch,
 		OnKey: a.onSettingsSearchKey, OnFocusChange: a.setSettingsSearchFocused, OnChanged: func(value string) { _ = a.setSettingsSearchValue(value) }, OnSetValue: a.setSettingsSearchValue,
 	})

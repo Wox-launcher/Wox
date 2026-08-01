@@ -20,7 +20,7 @@ func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height, 
 	return launcherview.PluginSettingsPage(launcherview.PluginSettingsPageProps{
 		Width:       width,
 		Height:      height,
-		List:        a.pluginListProps(snapshot, listWidth, innerHeight),
+		List:        a.pluginListProps(snapshot, listWidth, innerHeight, imageScale),
 		Detail:      a.pluginDetailProps(snapshot, detailWidth, innerHeight, imageScale),
 		FilterPanel: a.pluginFilterPanelProps(snapshot),
 		Theme:       snapshot.palette.componentTheme(),
@@ -28,7 +28,7 @@ func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height, 
 }
 
 // pluginListProps resolves localized catalog labels, images, selection, and callbacks.
-func (a *App) pluginListProps(snapshot settingsSnapshot, width, height float32) launcherview.PluginListProps {
+func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageScale float32) launcherview.PluginListProps {
 	plugins := snapshot.plugins
 	iconTint := snapshot.palette.resultSubtitle
 	props := launcherview.PluginListProps{
@@ -37,8 +37,10 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height float32) 
 		Search:       plugins.PluginSearch,
 		Focused:      plugins.PluginSearchFocused,
 		Window:       a.settingsNativeWindow(),
-		FilterIcon:   a.imageForTint(settingControlIconSource("filter"), &iconTint, 18),
-		RefreshIcon:  a.imageForTint(settingControlIconSource("refresh"), &iconTint, 18),
+		FilterIcon:   a.imageForTint(settingControlIconSource("filter"), &iconTint, physicalImageSize(16, imageScale)),
+		RefreshIcon:  a.imageForTint(settingControlIconSource("refresh"), &iconTint, physicalImageSize(16, imageScale)),
+		FilterLabel:  a.translate("i18n:ui_filter_placeholder"),
+		RefreshLabel: a.translate("i18n:ui_refresh"),
 		FilterActive: plugins.PluginFilters.applied(plugins.PluginsStore),
 		Refreshing:   plugins.PluginsLoading,
 		EmptyLabel:   a.translate("i18n:ui_setting_plugin_empty_data"), Theme: snapshot.palette.componentTheme(),

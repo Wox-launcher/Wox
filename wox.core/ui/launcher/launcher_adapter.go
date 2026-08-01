@@ -38,6 +38,8 @@ type viewSnapshot struct {
 	form                  *formSnapshot
 	tableEditor           *formTableEditorSnapshot
 	requirementFormActive bool
+	queryFocused          bool
+	queryEnabled          bool
 	chatFullscreen        bool
 	actionPanel           bool
 	actionSelected        int
@@ -105,6 +107,8 @@ func (a *App) snapshot() viewSnapshot {
 		form:                  snapshotFormLocked(a.form),
 		tableEditor:           tableEditor,
 		requirementFormActive: a.requirementForm != nil && a.requirementForm.active,
+		queryFocused:          a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey),
+		queryEnabled:          a.queryCanFocus(),
 		chatFullscreen:        a.chatFullscreen,
 		actionPanel:           a.actionPanel,
 		actionSelected:        a.actionSelected,
@@ -219,7 +223,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launcherview.LauncherQueryProps {
 	caretHeight := snapshot.densityMetrics.scaled(34)
 	style := woxui.TextStyle{Size: snapshot.densityMetrics.scaled(28)}
-	queryFocused := snapshot.form == nil && snapshot.tableEditor == nil && !snapshot.requirementFormActive && !snapshot.actionPanel
+	queryFocused := snapshot.queryFocused
 	state := snapshot.editing
 	runes := []rune(state.Text)
 	start := max(0, min(len(runes), state.Selection.Start()))
@@ -243,15 +247,21 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launc
 	if queryFocused && state.Composition == "" && state.Selection.Collapsed() && state.Selection.Focus == len(runes) && snapshot.completionHint != nil && snapshot.completionHint.InputPrefix == state.Text {
 		completionSuffix = snapshot.completionHint.Suffix
 	}
+	focusQuery := func() {
+		if a.host != nil {
+			a.host.RequestFocus(launcherview.LauncherQueryInputKey)
+		}
+	}
 	return launcherview.LauncherQueryProps{
 		Width: width, Height: height, Style: style, State: state, DisplayValue: displayValue, Selected: selected,
 		CompletionSuffix: completionSuffix, PrefixWidth: measure(prefix), SelectedWidth: measure(selected), CaretWidth: measure(caretPrefix),
 		CompositionWidth: measure(state.Composition), FocusWidth: measure(string(runes[:focus])), TextWidth: measure(state.Text), CaretHeight: caretHeight,
-		Focused: queryFocused, Theme: snapshot.palette.componentTheme(), OnTapAt: func(x float32) { a.placeQueryCaret(x, style) },
-		OnTapEnd: func() { a.placeQueryCaret(width, style) }, OnDragStart: func() {
+		Focused: queryFocused, Enabled: snapshot.queryEnabled, Theme: snapshot.palette.componentTheme(), OnTapAt: func(x float32) { a.placeQueryCaret(x, style) },
+		OnTapEnd: focusQuery, OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {
 				log.Printf("start launcher window drag: %v", err)
 			}
+			focusQuery()
 		},
 		OnSelectionStart: func(x float32) {
 			a.hideActionPanel()
@@ -316,15 +326,21 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidg
 	if !previewVisible {
 		return a.buildResults(snapshot, width, height)
 	}
-	ratio := float32(0.4)
-	if snapshot.layout.ResultPreviewWidthRatio != nil && *snapshot.layout.ResultPreviewWidthRatio >= 0 && *snapshot.layout.ResultPreviewWidthRatio <= 1 {
-		ratio = float32(*snapshot.layout.ResultPreviewWidthRatio)
-	}
-	if snapshot.chatFullscreen {
-		ratio = 0
-	}
+	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen)
 	if ratio <= 0 {
-		return a.buildPreview(snapshot.results[snapshot.selected], snapshot.palette, width, height)
+		result := snapshot.results[snapshot.selected]
+		preview := a.buildPreview(result, snapshot.palette, width, height)
+		if launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) && a.resolvePreview(result.Preview).PreviewType != "chat" {
+			label := a.translate("i18n:ui_close")
+			if strings.TrimSpace(label) == "" || label == "i18n:ui_close" {
+				label = "Close"
+			}
+			return launcherview.PreviewHoverClose(launcherview.PreviewHoverCloseProps{
+				Width: width, Height: height, Child: preview, Label: label, Theme: snapshot.palette.componentTheme(), OnTooltip: a.setPreviewTooltip,
+				OnClose: a.closePreviewWindow,
+			})
+		}
+		return preview
 	}
 	if ratio >= 1 {
 		return a.buildResults(snapshot, width, height)
@@ -334,6 +350,22 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidg
 		a.buildResults(snapshot, splitX, height),
 		a.buildPreview(snapshot.results[snapshot.selected], snapshot.palette, width-splitX, height),
 	)
+}
+
+func launcherChromeHidden(show showAppParams, chatFullscreen bool) bool {
+	return chatFullscreen || show.HideQueryBox && show.HideToolbar
+}
+
+// launcherPreviewRatio keeps chat query layout separate from explicit fullscreen input mode.
+func launcherPreviewRatio(layout queryLayout, chatFullscreen bool) float32 {
+	ratio := float32(0.4)
+	if layout.ResultPreviewWidthRatio != nil && *layout.ResultPreviewWidthRatio >= 0 && *layout.ResultPreviewWidthRatio <= 1 {
+		ratio = float32(*layout.ResultPreviewWidthRatio)
+	}
+	if layout.ChatMode || chatFullscreen {
+		return 0
+	}
+	return ratio
 }
 
 func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidget.Widget {

@@ -29,7 +29,7 @@ type themeSettingsTheme struct {
 }
 
 // buildThemeCatalog converts core theme metadata into the pure catalog view.
-func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	themeSnap := snapshot.theme
 	filtered := filterThemes(themeSnap.Themes, themeSnap.ThemeSearch.Text)
 	items := make([]launcherview.ThemeCatalogItem, 0, len(filtered))
@@ -42,6 +42,7 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height float32
 		detail = &item
 	}
 	iconTint := snapshot.palette.resultTitle
+	searchActionTint := snapshot.palette.resultSubtitle
 	selectedIconTint := snapshot.palette.selectedTitle
 	installedTint := woxui.Color{R: 56, G: 176, B: 92, A: 255}
 	previewTexts := make([]string, 5)
@@ -54,17 +55,19 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height float32
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Mode: themeSnap.ThemesMode,
 		Error: themeSnap.ThemesError, Operation: themeSnap.ThemeOperation, UninstallArmed: themeSnap.ThemeUninstallArmed, Items: items, Detail: detail,
 		Search: themeSnap.ThemeSearch, SearchFocused: themeSnap.ThemeSearchFocused, SearchPlaceholder: fmt.Sprintf(a.translate("i18n:ui_setting_theme_search_placeholder"), len(items)),
-		EmptyLabel: a.translate("i18n:ui_setting_theme_empty_data"), WebsiteLabel: a.translate("i18n:ui_setting_theme_website"), InstallLabel: a.translate("i18n:ui_setting_theme_install"),
+		LocateLabel: a.translate("i18n:ui_setting_theme_locate_current"),
+		EmptyLabel:  a.translate("i18n:ui_setting_theme_empty_data"), WebsiteLabel: a.translate("i18n:ui_setting_theme_website"), InstallLabel: a.translate("i18n:ui_setting_theme_install"),
 		ApplyLabel: a.translate("i18n:ui_setting_theme_apply"), UninstallLabel: a.translate("i18n:ui_setting_theme_uninstall"), UpdateLabel: a.translate("i18n:ui_update"),
 		PreviewLabel: a.translate("i18n:ui_setting_theme_preview"), DescriptionLabel: a.translate("i18n:ui_setting_theme_description"), SystemLabel: a.translate("i18n:ui_setting_theme_system_tag"),
 		AutoAppearanceHint: a.translate("i18n:ui_setting_theme_auto_appearance_hint"), PreviewTitle: a.translate("i18n:ui_theme_preview_title"), PreviewTexts: previewTexts,
 		PreviewSubtitles: previewSubtitles, PreviewOpenLabel: a.translate("i18n:ui_theme_preview_open"), ActiveDetailTab: themeSnap.ThemeDetailTab, Window: a.settingsNativeWindow(),
-		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, 20), LocateIcon: a.imageForTint(settingControlIconSource("locate"), &iconTint, 18),
+		LocateIcon:   a.imageForTint(settingControlIconSource("locate"), &searchActionTint, physicalImageSize(18, imageScale)),
 		ExternalIcon: a.imageForTint(settingControlIconSource("external"), &iconTint, 13), InstalledIcon: a.imageForTint(settingControlIconSource("check-circle"), &installedTint, 20),
 		InstalledSelectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &selectedIconTint, 20),
 		OnSelect:              a.selectTheme,
 		OnSearchKey:           a.onThemeSearchKey, OnSearchFocusChange: a.setThemeSearchFocused,
 		OnSearchChanged: func(value string) { _ = a.setThemeSearchValue(value) }, OnSetSearchValue: a.setThemeSearchValue,
+		OnClear:         func() { _ = a.setThemeSearchValue("") },
 		OnLocateCurrent: a.locateCurrentTheme, OnSelectDetailTab: a.selectThemeDetailTab,
 		OnOpenWebsite: a.openSelectedThemeWebsite, OnOperation: a.runThemeOperation,
 	}

@@ -70,7 +70,12 @@ func (n *node) draw(displayList *woxui.DisplayList, focused woxui.AccessibilityN
 		child.draw(displayList, focused)
 	}
 	if n.id == focused && n.focus != nil && n.focus.focusRingColor.A != 0 {
-		displayList.StrokeRoundedRect(n.bounds, n.focus.focusRingRadius, 2, n.focus.focusRingColor)
+		outsets := n.focus.focusRingOutsets
+		bounds := woxui.Rect{
+			X: n.bounds.X - outsets.Left, Y: n.bounds.Y - outsets.Top,
+			Width: n.bounds.Width + outsets.Left + outsets.Right, Height: n.bounds.Height + outsets.Top + outsets.Bottom,
+		}
+		displayList.StrokeRoundedRect(bounds, n.focus.focusRingRadius, 2, n.focus.focusRingColor)
 	}
 	if n.clip {
 		displayList.PopClipRect()
@@ -709,6 +714,7 @@ func fittingRunePrefix(window textMeasurer, runes []rune, style woxui.TextStyle,
 }
 
 type gesture struct {
+	cursor      woxui.PointerCursor
 	id          string
 	onHover     func(bool)
 	onHoverAt   func(bool, woxui.Rect)
@@ -733,6 +739,7 @@ type gesture struct {
 // Gesture adds pointer behavior without changing its child's layout or paint.
 type Gesture struct {
 	ID          string
+	Cursor      woxui.PointerCursor
 	Child       Widget
 	OnHover     func(bool)
 	OnHoverAt   func(inside bool, bounds woxui.Rect)
@@ -770,7 +777,7 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 	}
 	target.kind = "gesture"
 	target.gesture = &gesture{
-		id: w.ID, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap, onTapAt: w.OnTapAt,
+		id: w.ID, cursor: w.Cursor, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap, onTapAt: w.OnTapAt,
 		onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onPanStart: w.OnPanStart, onPanUpdate: w.OnPanUpdate, onPanEnd: w.OnPanEnd,
 		onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled,
 		onSelectionStart: w.OnSelectionStart, onSelectionExtend: w.OnSelectionExtend,

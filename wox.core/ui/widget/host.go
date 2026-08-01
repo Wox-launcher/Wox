@@ -25,6 +25,7 @@ type HostServices interface {
 	MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error)
 	Invalidate() error
 	SetTextInputState(state woxui.TextInputState) error
+	SetPointerCursor(cursor woxui.PointerCursor) error
 	UpdateAccessibility(tree woxui.AccessibilityTree, handler woxui.AccessibilityActionHandler) error
 }
 
@@ -49,7 +50,9 @@ type Host struct {
 	lastTapID woxui.AccessibilityNodeID
 	lastTapAt time.Time
 
-	focused      woxui.AccessibilityNodeID
+	focused woxui.AccessibilityNodeID
+	// focusVisible mirrors :focus-visible so pointer focus keeps keyboard behavior without painting a ring.
+	focusVisible bool
 	modalScopes  []woxui.AccessibilityNodeID
 	scopeRestore map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID
 
@@ -151,7 +154,11 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	h.reconcileFocus()
 
 	displayList.Clear(woxui.Color{})
-	h.root.draw(displayList, h.focused)
+	focusRingTarget := h.focused
+	if !h.focusVisible {
+		focusRingTarget = 0
+	}
+	h.root.draw(displayList, focusRingTarget)
 	h.generation++
 	tree, diagnostics := h.buildAccessibilityTree(diagnostics)
 	h.publishSnapshot(tree, diagnostics)
@@ -257,6 +264,9 @@ func (h *Host) reconcileTransientState(oldNodes map[woxui.AccessibilityNodeID]*n
 			}
 		}
 		h.hovered = 0
+		if h.window != nil {
+			_ = h.window.SetPointerCursor(woxui.PointerCursorDefault)
+		}
 	}
 	if h.pressed != 0 && h.nodes[h.pressed] == nil {
 		h.pressed = 0
@@ -416,7 +426,16 @@ func (h *Host) moveFocus(reverse bool) bool {
 	} else {
 		index = (index + 1) % len(order)
 	}
-	h.setFocus(order[index].id)
+	target := order[index].id
+	if target == h.focused {
+		if !h.focusVisible {
+			h.focusVisible = true
+			h.invalidate()
+		}
+		return true
+	}
+	h.focusVisible = true
+	h.setFocus(target)
 	return true
 }
 
@@ -500,6 +519,11 @@ func (h *Host) clearFocusForKey(key Key) {
 func (h *Host) isFocusedKey(key Key) bool {
 	current := h.nodes[h.focused]
 	return current != nil && current.key == key
+}
+
+// HasFocus reports whether the Host's single focused element has the given stable key.
+func (h *Host) HasFocus(key Key) bool {
+	return h != nil && h.isFocusedKey(key)
 }
 
 // BoundsForKey returns the latest laid-out bounds for a retained widget key.
@@ -640,6 +664,10 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		}
 	}
 	if event.Kind == woxui.PointerDown && event.Button == woxui.PointerButtonPrimary {
+		if h.focusVisible {
+			h.focusVisible = false
+			h.invalidate()
+		}
 		h.resetCaretBlink()
 		h.pressed = nodeID(target)
 		h.pressedAt = event.Position
@@ -828,6 +856,16 @@ func (h *Host) setHovered(target *node) {
 		}
 	}
 	h.hovered = nodeID(target)
+	cursor := woxui.PointerCursorDefault
+	for current := target; current != nil; current = current.parent {
+		if current.gesture != nil && current.gesture.cursor != woxui.PointerCursorDefault {
+			cursor = current.gesture.cursor
+			break
+		}
+	}
+	if h.window != nil {
+		_ = h.window.SetPointerCursor(cursor)
+	}
 	if target != nil && target.gesture != nil {
 		if target.gesture.onHover != nil {
 			target.gesture.onHover(true)

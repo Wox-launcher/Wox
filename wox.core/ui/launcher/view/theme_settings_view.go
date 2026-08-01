@@ -44,6 +44,7 @@ type ThemeSettingsProps struct {
 	Search                woxui.TextEditingState
 	SearchFocused         bool
 	SearchPlaceholder     string
+	LocateLabel           string
 	EmptyLabel            string
 	WebsiteLabel          string
 	InstallLabel          string
@@ -60,7 +61,6 @@ type ThemeSettingsProps struct {
 	PreviewOpenLabel      string
 	ActiveDetailTab       string
 	Window                *woxui.Window
-	SearchIcon            *woxui.Image
 	LocateIcon            *woxui.Image
 	ExternalIcon          *woxui.Image
 	InstalledIcon         *woxui.Image
@@ -70,6 +70,7 @@ type ThemeSettingsProps struct {
 	OnSearchFocusChange   func(bool)
 	OnSearchChanged       func(string)
 	OnSetSearchValue      func(string) error
+	OnClear               func()
 	OnLocateCurrent       func()
 	OnSelectDetailTab     func(string)
 	OnOpenWebsite         func()
@@ -89,7 +90,7 @@ func ThemeSettingsView(props ThemeSettingsProps) woxwidget.Widget {
 }
 
 func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget {
-	const searchHeight = float32(44)
+	const searchHeight = float32(42)
 	const searchGap = float32(20)
 	viewportHeight := max(float32(0), height-searchHeight-searchGap)
 
@@ -156,27 +157,15 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 		}
 	}
 
-	actionWidth := float32(42)
+	actions := make([]woxcomponent.SearchFieldAction, 0, 1)
 	if props.Mode != "store" {
-		actionWidth = 74
+		actions = append(actions, woxcomponent.SearchFieldAction{ID: "theme-locate-current", Label: props.LocateLabel, Icon: props.LocateIcon, Width: 32, IconSize: 18, OnTap: props.OnLocateCurrent})
 	}
-	inputWidth := max(float32(40), width-actionWidth)
-	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
-		ID: "theme-search", Label: props.SearchPlaceholder, Hint: props.SearchPlaceholder, Width: inputWidth, Height: searchHeight, Radius: 4,
-		Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 4, Bottom: 8}, Transparent: true, Style: woxui.TextStyle{Size: 13}, Value: props.Search.Text,
-		Focused: props.SearchFocused, Autofocus: true, MaxLines: 1, Window: props.Window, Theme: props.Theme,
+	searchField := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
+		ID: "theme-search", Label: props.SearchPlaceholder, Width: width, Value: props.Search.Text, Focused: props.SearchFocused, Autofocus: true,
+		Actions: actions, Window: props.Window, Theme: props.Theme, OnClear: props.OnClear,
 		OnKey: props.OnSearchKey, OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,
 	})
-	actions := make([]woxwidget.Widget, 0, 2)
-	actions = append(actions, woxwidget.Align{Width: 32, Height: searchHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: props.SearchIcon, Width: 20, Height: 20}})
-	if props.Mode != "store" {
-		actions = append(actions, woxwidget.Gesture{ID: "theme-locate-current", OnTap: props.OnLocateCurrent, Child: woxwidget.Align{Width: 32, Height: searchHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{
-			Source: props.LocateIcon, Width: 18, Height: 18,
-		}}})
-	}
-	border := props.Theme.ResultSubtitle
-	border.A = 170
-	searchField := woxwidget.Container{Width: width, Height: searchHeight, Radius: 4, BorderColor: border, BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: append([]woxwidget.Widget{search}, actions...)}}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: searchGap, Children: []woxwidget.Widget{searchField, list}}
 }
 

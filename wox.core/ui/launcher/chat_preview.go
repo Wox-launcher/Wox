@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"wox/common"
 	woxui "wox/ui/runtime"
@@ -19,6 +20,12 @@ import (
 )
 
 const enterChatModeActionID = "__wox_internal_enter_chat_mode__"
+
+const (
+	chatCommandPanel             = "commands"
+	chatCatalogRowHeight         = float32(38)
+	chatCatalogGroupHeaderHeight = float32(28)
+)
 
 var chatSkillTagPattern = regexp.MustCompile(`\{skill:([^}]+)\}`)
 
@@ -136,6 +143,7 @@ type chatPreviewState struct {
 	revision         uint64
 	remoteVersion    uint64
 	panel            string
+	panelQuery       string
 	panelSelected    int
 	panelScroll      float32
 	panelViewport    float32
@@ -164,12 +172,109 @@ type chatPreviewSnapshot struct {
 	skillsLoading    bool
 	skillsError      string
 	panel            string
+	panelQuery       string
 	panelSelected    int
 	panelScroll      float32
 	panelViewport    float32
 	question         *aiQuestion
 	questionEditing  woxui.TextEditingState
 	questionSelected int
+}
+
+type chatCommandPaletteItem struct {
+	group       string
+	sourceIndex int
+	title       string
+	subtitle    string
+	searchText  string
+	current     bool
+}
+
+type chatSlashToken struct {
+	start int
+	end   int
+	query string
+}
+
+// findChatSlashToken returns the whitespace-delimited slash token surrounding the caret.
+func findChatSlashToken(editing woxui.TextEditingState) (chatSlashToken, bool) {
+	runes := []rune(editing.Text)
+	cursor := min(max(0, editing.Selection.Focus), len(runes))
+	start := cursor
+	for start > 0 && !unicode.IsSpace(runes[start-1]) {
+		start--
+	}
+	if start >= len(runes) || runes[start] != '/' {
+		return chatSlashToken{}, false
+	}
+	end := cursor
+	for end < len(runes) && !unicode.IsSpace(runes[end]) {
+		end++
+	}
+	return chatSlashToken{start: start, end: end, query: strings.TrimSpace(string(runes[start+1 : end]))}, true
+}
+
+// chatCommandPaletteItems mirrors Flutter's case-insensitive model and skill filtering.
+func chatCommandPaletteItems(models []aiModel, skills []chatSkill, current aiModel, query, filterGroup string) []chatCommandPaletteItem {
+	query = strings.ToLower(strings.TrimSpace(query))
+	items := make([]chatCommandPaletteItem, 0, len(models)+len(skills))
+	if filterGroup == "" || filterGroup == chatCommandPanel || filterGroup == "models" {
+		for index, model := range models {
+			subtitle := model.Provider
+			if model.ProviderAlias != "" {
+				subtitle += " (" + model.ProviderAlias + ")"
+			}
+			item := chatCommandPaletteItem{group: "models", sourceIndex: index, title: model.Name, subtitle: subtitle, current: model == current}
+			item.searchText = "model 模型 " + model.Name + " " + model.Provider + " " + model.ProviderAlias
+			if query == "" || strings.Contains(strings.ToLower(item.searchText), query) || strings.Contains(strings.ToLower(item.subtitle), query) {
+				items = append(items, item)
+			}
+		}
+	}
+	if filterGroup == "" || filterGroup == chatCommandPanel || filterGroup == "skills" {
+		for index, skill := range skills {
+			subtitle := skill.SourceName
+			if subtitle == "" {
+				subtitle = skill.Source
+			}
+			if skill.Description != "" {
+				if subtitle != "" {
+					subtitle += " · "
+				}
+				subtitle += skill.Description
+			}
+			item := chatCommandPaletteItem{group: "skills", sourceIndex: index, title: skill.Name, subtitle: subtitle}
+			item.searchText = "skill 技能 " + skill.Name + " " + skill.Description + " " + skill.Source + " " + skill.SourceName
+			if query == "" || strings.Contains(strings.ToLower(item.searchText), query) || strings.Contains(strings.ToLower(item.subtitle), query) {
+				items = append(items, item)
+			}
+		}
+	}
+	return items
+}
+
+// chatCommandItemOffset includes each visible group header before the target row.
+func chatCommandItemOffset(items []chatCommandPaletteItem, target int) float32 {
+	offset := float32(0)
+	group := ""
+	for index, item := range items {
+		if item.group != group {
+			group = item.group
+			offset += chatCatalogGroupHeaderHeight
+		}
+		if index == target {
+			return offset
+		}
+		offset += chatCatalogRowHeight
+	}
+	return offset
+}
+
+func chatCommandContentHeight(items []chatCommandPaletteItem) float32 {
+	if len(items) == 0 {
+		return 0
+	}
+	return chatCommandItemOffset(items, len(items)-1) + chatCatalogRowHeight
 }
 
 // cloneChatData isolates nested message slices before transport and render state diverge.
@@ -261,6 +366,7 @@ func snapshotChatPreviewLocked(state *chatPreviewState) *chatPreviewSnapshot {
 		error:            state.error,
 		chats:            append([]chatData(nil), state.chats...),
 		panel:            state.panel,
+		panelQuery:       state.panelQuery,
 		panelSelected:    state.panelSelected,
 		panelScroll:      state.panelScroll,
 		panelViewport:    state.panelViewport,
@@ -425,8 +531,10 @@ func (a *App) toggleChatPanel(panel string) {
 	}
 	if state.panel == panel {
 		state.panel = ""
+		state.panelQuery = ""
 	} else {
 		state.panel = panel
+		state.panelQuery = ""
 		state.panelScroll = 0
 		state.panelViewport = 0
 		state.panelMaxScroll = 0
@@ -439,7 +547,7 @@ func (a *App) toggleChatPanel(panel string) {
 				}
 			}
 		}
-		if panel == "models" {
+		if panel == "models" || panel == chatCommandPanel {
 			for index, model := range a.aiSettings.Models() {
 				if model == state.chat.Model {
 					state.panelSelected = index
@@ -451,7 +559,7 @@ func (a *App) toggleChatPanel(panel string) {
 				a.aiSettings.SetModelsLoading(true)
 			}
 		}
-		if panel == "skills" {
+		if panel == "skills" || panel == chatCommandPanel {
 			requestSkills = !a.aiSettings.SkillsLoaded() && !a.aiSettings.SkillsLoading()
 			if requestSkills {
 				a.aiSettings.SetSkillsLoading(true)
@@ -479,14 +587,14 @@ func (a *App) reloadChatResourceName(resource string) {
 	requestSkills := false
 	if resource == "models" || resource == "all" {
 		a.aiSettings.ResetModels()
-		if state := a.chatPreview; state != nil && state.panel == "models" && !a.aiSettings.ModelsLoading() {
+		if state := a.chatPreview; state != nil && (state.panel == "models" || state.panel == chatCommandPanel) && !a.aiSettings.ModelsLoading() {
 			a.aiSettings.SetModelsLoading(true)
 			requestModels = true
 		}
 	}
 	if resource == "skills" || resource == "all" {
 		a.aiSettings.ResetSkills()
-		if state := a.chatPreview; state != nil && state.panel == "skills" && !a.aiSettings.SkillsLoading() {
+		if state := a.chatPreview; state != nil && (state.panel == "skills" || state.panel == chatCommandPanel) && !a.aiSettings.SkillsLoading() {
 			a.aiSettings.SetSkillsLoading(true)
 			requestSkills = true
 		}
@@ -507,7 +615,7 @@ func (a *App) loadAISkills() {
 			_ = a.window.Invalidate()
 			return
 		}
-		if a.chatPreview != nil && a.chatPreview.panel == "skills" {
+		if a.chatPreview != nil && (a.chatPreview.panel == "skills" || a.chatPreview.panel == chatCommandPanel) {
 			a.chatPreview.panelSelected = 0
 			a.chatPreview.panelScroll = 0
 			a.chatPreview.panelViewport = 0
@@ -704,9 +812,13 @@ func (a *App) selectChatModel(index int) {
 		_ = a.window.Invalidate()
 		return
 	}
+	if state.panel == chatCommandPanel {
+		replaceChatSlashToken(state.editor, "")
+	}
 	state.chat.Model = model
 	state.panelSelected = index
 	state.panel = ""
+	state.panelQuery = ""
 	state.error = ""
 	state.active = true
 	a.updateChatTextInput(true)
@@ -723,13 +835,47 @@ func (a *App) insertChatSkill(index int) {
 	if !ok {
 		return
 	}
-	state.editor.InsertText("{skill:" + skill.Name + "} ")
+	tag := "{skill:" + skill.Name + "}"
+	if state.panel == chatCommandPanel {
+		replaceChatSlashToken(state.editor, tag)
+	} else {
+		state.editor.InsertText(tag + " ")
+	}
 	state.panelSelected = index
 	state.panel = ""
+	state.panelQuery = ""
 	state.error = ""
 	state.active = true
 	a.updateChatTextInput(true)
 	_ = a.window.Invalidate()
+}
+
+// replaceChatSlashToken replaces the active token while preserving surrounding message text.
+func replaceChatSlashToken(editor *woxui.TextEditor, replacement string) {
+	if editor == nil {
+		return
+	}
+	state := editor.State()
+	token, ok := findChatSlashToken(state)
+	if !ok {
+		if replacement != "" {
+			editor.InsertText(replacement)
+		}
+		return
+	}
+	runes := []rune(state.Text)
+	before := append([]rune(nil), runes[:token.start]...)
+	after := runes[token.end:]
+	inserted := []rune(replacement)
+	if replacement == "" && len(before) > 0 && len(after) > 0 && !unicode.IsSpace(before[len(before)-1]) && !unicode.IsSpace(after[0]) {
+		inserted = []rune{' '}
+	}
+	next := make([]rune, 0, len(before)+len(inserted)+len(after))
+	next = append(next, before...)
+	next = append(next, inserted...)
+	next = append(next, after...)
+	editor.SetText(string(next), false)
+	editor.SetCaret(len(before) + len(inserted))
 }
 
 // chatSkillRefsFromText resolves unique inline tags against the current enabled catalog.
@@ -779,27 +925,32 @@ func unresolvedChatSkillTag(text string, skills []chatSkill) string {
 func (a *App) closeChatPanel() {
 	if state := a.chatPreview; state != nil {
 		state.panel = ""
+		state.panelQuery = ""
 		state.active = true
 	}
 	a.updateChatTextInput(true)
 	_ = a.window.Invalidate()
 }
 
-// moveChatPanelSelection wraps keyboard navigation inside the active catalog.
+// moveChatPanelSelection follows Flutter's clamped command-palette navigation.
 func (a *App) moveChatPanelSelection(delta int) {
 	state := a.chatPreview
 	if state == nil || state.panel == "" {
 		return
 	}
 	count := len(state.chats)
-	if state.panel == "models" {
-		count = a.aiSettings.ModelsCount()
-	} else if state.panel == "skills" {
-		count = a.aiSettings.SkillsCount()
+	var commands []chatCommandPaletteItem
+	if state.panel != "history" {
+		commands = chatCommandPaletteItems(a.aiSettings.Models(), a.aiSettings.Skills(), state.chat.Model, state.panelQuery, state.panel)
+		count = len(commands)
 	}
 	if count > 0 {
-		state.panelSelected = (state.panelSelected + delta + count) % count
-		ensureChatPanelSelectionVisibleLocked(state, count)
+		state.panelSelected = min(max(0, state.panelSelected+delta), count-1)
+		if state.panel == "history" {
+			ensureChatPanelSelectionVisibleLocked(state, count)
+		} else {
+			ensureChatCommandSelectionVisibleLocked(state, commands)
+		}
 	}
 	_ = a.window.Invalidate()
 }
@@ -818,10 +969,16 @@ func (a *App) activateChatPanelSelection() {
 	}
 	if panel == "history" {
 		a.selectChatHistory(chatID)
-	} else if panel == "models" {
-		a.selectChatModel(selected)
-	} else if panel == "skills" {
-		a.insertChatSkill(selected)
+	} else {
+		items := chatCommandPaletteItems(a.aiSettings.Models(), a.aiSettings.Skills(), state.chat.Model, state.panelQuery, panel)
+		if selected < 0 || selected >= len(items) {
+			return
+		}
+		if items[selected].group == "models" {
+			a.selectChatModel(items[selected].sourceIndex)
+		} else {
+			a.insertChatSkill(items[selected].sourceIndex)
+		}
 	}
 }
 
@@ -831,15 +988,23 @@ func (a *App) setChatPanelViewport(height float32) {
 		initialize := state.panelViewport <= 0
 		state.panelViewport = max(float32(1), height)
 		count := len(state.chats)
-		if state.panel == "models" {
-			count = a.aiSettings.ModelsCount()
-		} else if state.panel == "skills" {
-			count = a.aiSettings.SkillsCount()
+		commands := []chatCommandPaletteItem(nil)
+		if state.panel != "history" {
+			commands = chatCommandPaletteItems(a.aiSettings.Models(), a.aiSettings.Skills(), state.chat.Model, state.panelQuery, state.panel)
+			count = len(commands)
 		}
 		if initialize {
-			ensureChatPanelSelectionVisibleLocked(state, count)
+			if state.panel == "history" {
+				ensureChatPanelSelectionVisibleLocked(state, count)
+			} else {
+				ensureChatCommandSelectionVisibleLocked(state, commands)
+			}
 		} else {
-			maxOffset := max(float32(0), float32(count)*44-state.panelViewport)
+			contentHeight := float32(count) * chatCatalogRowHeight
+			if state.panel != "history" {
+				contentHeight = chatCommandContentHeight(commands)
+			}
+			maxOffset := max(float32(0), contentHeight-state.panelViewport)
 			state.panelScroll = min(max(float32(0), state.panelScroll), maxOffset)
 		}
 	}
@@ -850,7 +1015,7 @@ func ensureChatPanelSelectionVisibleLocked(state *chatPreviewState, count int) {
 	if state == nil || count <= 0 {
 		return
 	}
-	const rowHeight = float32(44)
+	const rowHeight = chatCatalogRowHeight
 	maxOffset := max(float32(0), float32(count)*rowHeight-state.panelViewport)
 	rowTop := float32(state.panelSelected) * rowHeight
 	rowBottom := rowTop + rowHeight
@@ -862,19 +1027,35 @@ func ensureChatPanelSelectionVisibleLocked(state *chatPreviewState, count int) {
 	state.panelScroll = min(max(float32(0), state.panelScroll), maxOffset)
 }
 
+// ensureChatCommandSelectionVisibleLocked accounts for grouped headers when revealing a row.
+func ensureChatCommandSelectionVisibleLocked(state *chatPreviewState, items []chatCommandPaletteItem) {
+	if state == nil || len(items) == 0 {
+		return
+	}
+	state.panelSelected = min(max(0, state.panelSelected), len(items)-1)
+	rowTop := chatCommandItemOffset(items, state.panelSelected)
+	rowBottom := rowTop + chatCatalogRowHeight
+	if rowTop < state.panelScroll {
+		state.panelScroll = rowTop
+	} else if rowBottom > state.panelScroll+state.panelViewport {
+		state.panelScroll = rowBottom - state.panelViewport
+	}
+	maxOffset := max(float32(0), chatCommandContentHeight(items)-state.panelViewport)
+	state.panelScroll = min(max(float32(0), state.panelScroll), maxOffset)
+}
+
 // scrollChatPanel applies pointer-wheel movement without changing the selected row.
 func (a *App) scrollChatPanel(delta float32) {
 	state := a.chatPreview
 	if state == nil || state.panel == "" {
 		return
 	}
-	count := len(state.chats)
-	if state.panel == "models" {
-		count = a.aiSettings.ModelsCount()
-	} else if state.panel == "skills" {
-		count = a.aiSettings.SkillsCount()
+	contentHeight := float32(len(state.chats)) * chatCatalogRowHeight
+	if state.panel != "history" {
+		items := chatCommandPaletteItems(a.aiSettings.Models(), a.aiSettings.Skills(), state.chat.Model, state.panelQuery, state.panel)
+		contentHeight = chatCommandContentHeight(items)
 	}
-	maxOffset := max(float32(0), float32(count)*44-state.panelViewport)
+	maxOffset := max(float32(0), contentHeight-state.panelViewport)
 	state.panelScroll = min(max(float32(0), state.panelScroll+delta), maxOffset)
 	_ = a.window.Invalidate()
 }
@@ -1215,6 +1396,10 @@ func (a *App) regenerateChatConversation(messageID string) {
 
 // onChatPreviewKey keeps chat editing and ask_user behavior identical on every platform.
 func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
+	// Key releases must not repeat palette navigation, and composing keys belong to native text input.
+	if !event.Down || event.Composing {
+		return false
+	}
 	state := a.chatPreview
 	active := state != nil && state.active
 	hasQuestion := active && state.question != nil
@@ -1253,22 +1438,27 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 		switch event.Key {
 		case woxui.KeyEscape:
 			a.closeChatPanel()
+			return true
 		case woxui.KeyArrowUp:
 			a.moveChatPanelSelection(-1)
+			return true
 		case woxui.KeyArrowDown, woxui.KeyTab:
 			delta := 1
 			if event.Key == woxui.KeyTab && event.Modifiers&woxui.KeyModifierShift != 0 {
 				delta = -1
 			}
 			a.moveChatPanelSelection(delta)
+			return true
 		case woxui.KeyEnter:
 			a.activateChatPanelSelection()
+			return true
 		case woxui.KeyDelete:
 			if panel == "history" {
 				a.deleteChatHistory(panelChatID)
+				return true
 			}
 		}
-		return true
+		return false
 	}
 	if !active {
 		return false
@@ -1309,7 +1499,11 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 		return false
 	}
 	if event.Key == woxui.KeyEscape {
-		a.exitChatMode()
+		if launcherChromeHidden(a.show, a.chatFullscreen) {
+			a.closePreviewWindow()
+		} else {
+			a.exitChatMode()
+		}
 		return true
 	}
 	if event.Key == woxui.KeyEnter && event.Modifiers&woxui.KeyModifierShift == 0 {
@@ -1382,18 +1576,40 @@ func (a *App) focusAIQuestionInput() {
 }
 
 func (a *App) setChatText(value string) {
-	openSkills := false
+	requestModels := false
+	requestSkills := false
 	if state := a.chatPreview; state != nil && state.editor != nil && state.question == nil {
 		state.editor.SetText(value, false)
 		state.error = ""
-		if value == "/" {
-			state.editor.SetText("", false)
-			openSkills = true
+		token, hasToken := findChatSlashToken(state.editor.State())
+		if hasToken {
+			queryChanged := state.panel != chatCommandPanel || state.panelQuery != token.query
+			state.panel = chatCommandPanel
+			state.panelQuery = token.query
+			state.active = true
+			if queryChanged {
+				state.panelSelected = 0
+				state.panelScroll = 0
+				state.panelViewport = 0
+			}
+			requestModels = !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
+			requestSkills = !a.aiSettings.SkillsLoaded() && !a.aiSettings.SkillsLoading()
+			if requestModels {
+				a.aiSettings.SetModelsLoading(true)
+			}
+			if requestSkills {
+				a.aiSettings.SetSkillsLoading(true)
+			}
+		} else if state.panel == chatCommandPanel {
+			state.panel = ""
+			state.panelQuery = ""
 		}
 	}
-	if openSkills {
-		a.toggleChatPanel("skills")
-		return
+	if requestModels {
+		util.Go(a.lifecycleCtx, "load AI models for chat", a.loadAIModels)
+	}
+	if requestSkills {
+		util.Go(a.lifecycleCtx, "load AI skills for chat", a.loadAISkills)
 	}
 	_ = a.window.Invalidate()
 }

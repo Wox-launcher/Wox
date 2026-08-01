@@ -101,6 +101,8 @@ func (s *hotkeyRecorderHostServices) Invalidate() error { return nil }
 
 func (s *hotkeyRecorderHostServices) SetTextInputState(state woxui.TextInputState) error { return nil }
 
+func (s *hotkeyRecorderHostServices) SetPointerCursor(cursor woxui.PointerCursor) error { return nil }
+
 func (s *hotkeyRecorderHostServices) UpdateAccessibility(tree woxui.AccessibilityTree, handler woxui.AccessibilityActionHandler) error {
 	return nil
 }

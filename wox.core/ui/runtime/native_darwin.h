@@ -29,6 +29,7 @@ int32_t wox_darwin_window_write_clipboard_text(WoxDarwinWindow *window, const ch
 int32_t wox_darwin_window_write_clipboard_image(WoxDarwinWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);
 int32_t wox_darwin_window_invalidate(WoxDarwinWindow *window);
 int32_t wox_darwin_window_set_text_input_state(WoxDarwinWindow *window, int32_t enabled, float x, float y, float width, float height);
+int32_t wox_darwin_window_set_pointer_cursor(WoxDarwinWindow *window, uint8_t cursor);
 int32_t wox_darwin_accessibility_begin(WoxDarwinWindow *window, uint64_t generation);
 int32_t wox_darwin_accessibility_add_node(WoxDarwinWindow *window, uint64_t id, uint64_t parent_id, const uint64_t *children, int32_t child_count, const char *automation_id, const char *role, const char *label, const char *description, const char *value, float x, float y, float width, float height, uint32_t state_flags, uint32_t action_flags, int32_t live_region);
 int32_t wox_darwin_accessibility_end(WoxDarwinWindow *window);

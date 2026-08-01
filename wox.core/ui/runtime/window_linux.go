@@ -402,6 +402,17 @@ func (w *platformWindow) setTextInputState(state TextInputState) error {
 	return nil
 }
 
+func (w *platformWindow) setPointerCursor(cursor PointerCursor) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_set_pointer_cursor(native, C.uint8_t(cursor)) != 0 {
+		return errors.New("woxui: failed to update Linux pointer cursor")
+	}
+	return nil
+}
+
 // measureText uses Pango on the GTK thread so it matches the native renderer.
 func (w *platformWindow) measureText(text string, style TextStyle) (TextMetrics, error) {
 	native, err := w.openNative()

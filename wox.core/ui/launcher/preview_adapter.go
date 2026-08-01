@@ -47,7 +47,7 @@ func (a *App) buildPreview(result queryResult, palette uiPalette, width, height 
 	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0)
 	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight)
 	return previewview.PreviewView(previewview.PreviewProps{
-		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window, OnTagHover: a.setPreviewTagTooltip,
+		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window, OnTagHover: a.setPreviewTooltip,
 	})
 }
 
@@ -329,8 +329,8 @@ func (a *App) previewTags(tags []previewTag) []previewview.PreviewTag {
 	return resolved
 }
 
-// setPreviewTagTooltip anchors preview metadata help to the launcher window.
-func (a *App) setPreviewTagTooltip(inside bool, text string, anchor woxui.Rect) {
+// setPreviewTooltip anchors preview controls and metadata help to the launcher window.
+func (a *App) setPreviewTooltip(inside bool, text string, anchor woxui.Rect) {
 	revision := a.previewTooltipRevision.Add(1)
 	util.Go(a.lifecycleCtx, "update preview tag tooltip", func() {
 		a.tooltipMu.Lock()

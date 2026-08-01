@@ -195,12 +195,14 @@ func (a *App) loadAIModels() {
 		if a.tableEditor != nil && a.tableEditor.rowForm != nil {
 			applyAIModelOptionsLocked(a.tableEditor.rowForm, models)
 		}
-		if a.chatPreview != nil && a.chatPreview.panel == "models" {
+		if a.chatPreview != nil && (a.chatPreview.panel == "models" || a.chatPreview.panel == chatCommandPanel) {
 			a.chatPreview.panelSelected = 0
-			for index, model := range models {
-				if model == a.chatPreview.chat.Model {
-					a.chatPreview.panelSelected = index
-					break
+			if a.chatPreview.panel == "models" {
+				for index, model := range models {
+					if model == a.chatPreview.chat.Model {
+						a.chatPreview.panelSelected = index
+						break
+					}
 				}
 			}
 			a.chatPreview.panelScroll = 0

@@ -6,6 +6,11 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+const LauncherQueryInputKey woxwidget.Key = "launcher-query-input-key"
+
+// Keep short queries pointer-editable before the trailing window-drag region begins.
+const launcherQueryMinimumEditableWidth = float32(300)
+
 // LauncherQueryProps contains the prepared text and callbacks for the launcher query editor.
 type LauncherQueryProps struct {
 	Width            float32
@@ -23,6 +28,7 @@ type LauncherQueryProps struct {
 	TextWidth        float32
 	CaretHeight      float32
 	Focused          bool
+	Enabled          bool
 	Theme            woxcomponent.Theme
 	OnTapAt          func(float32)
 	OnTapEnd         func()
@@ -101,9 +107,14 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 // LauncherQueryView builds the query editor from adapter-prepared text metrics.
 func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 	const cursorWidth = float32(2)
+	pointerCursor := woxui.PointerCursorText
+	if !props.Enabled {
+		pointerCursor = woxui.PointerCursorDefault
+	}
 
 	var editor woxwidget.Widget = woxwidget.Gesture{
-		ID: "query-editor",
+		ID:     "query-editor",
+		Cursor: pointerCursor,
 		OnTapAt: func(position woxui.Point) {
 			if props.OnTapAt != nil {
 				props.OnTapAt(position.X)
@@ -150,12 +161,12 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 		}},
 	}
 	editor = woxwidget.EditableText{
-		Key:           "launcher-query-input-key",
+		Key:           LauncherQueryInputKey,
 		AutomationID:  "launcher.query.input",
 		Label:         "Search Wox",
 		Value:         props.State.Text,
 		Autofocus:     true,
-		Disabled:      !props.Focused,
+		Disabled:      !props.Enabled,
 		OnKey:         props.OnKey,
 		OnTextInput:   props.OnTextInput,
 		OnFocusChange: props.OnFocusChange,
@@ -165,7 +176,7 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 		},
 		Child: editor,
 	}
-	dragLeft := min(props.Width, props.TextWidth+6)
+	dragLeft := min(props.Width, launcherQueryMinimumEditableWidth+props.TextWidth)
 	if dragLeft >= props.Width {
 		return editor
 	}

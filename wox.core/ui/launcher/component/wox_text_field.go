@@ -20,19 +20,21 @@ type textFieldLine struct {
 
 // TextFieldProps describes a retained Wox text field and its business-value callbacks.
 type TextFieldProps struct {
-	ID          string
-	Label       string
-	Hint        string
-	Width       float32
-	Height      float32
-	Radius      float32
-	Padding     woxwidget.Insets
-	Background  woxui.Color
-	Transparent bool
-	BorderColor woxui.Color
-	BorderWidth float32
-	Style       woxui.TextStyle
-	TextColor   woxui.Color
+	ID               string
+	Label            string
+	Hint             string
+	Width            float32
+	Height           float32
+	Radius           float32
+	Padding          woxwidget.Insets
+	Background       woxui.Color
+	Transparent      bool
+	BorderColor      woxui.Color
+	BorderWidth      float32
+	FocusRingColor   woxui.Color
+	FocusRingOutsets woxwidget.Insets
+	Style            woxui.TextStyle
+	TextColor        woxui.Color
 	// TextAlignmentY optically positions measured glyph bounds within each line without moving the caret.
 	TextAlignmentY float32
 	Value          string
@@ -365,7 +367,11 @@ func buildWoxTextField(props TextFieldProps) woxwidget.Widget {
 	innerWidth := max(float32(0), props.Width-padding.Left-padding.Right)
 	innerHeight := max(float32(0), height-padding.Top-padding.Bottom)
 	state := props.editingState
-	content := woxwidget.Gesture{ID: props.ID, OnScrollHandled: props.onScroll, OnTapAt: func(position woxui.Point) {
+	pointerCursor := woxui.PointerCursorText
+	if props.Disabled {
+		pointerCursor = woxui.PointerCursorDefault
+	}
+	content := woxwidget.Gesture{ID: props.ID, Cursor: pointerCursor, OnScrollHandled: props.onScroll, OnTapAt: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onCaret == nil {
 			return
 		}
@@ -395,14 +401,14 @@ func buildWoxTextField(props TextFieldProps) woxwidget.Widget {
 		}},
 		}}}
 	key := woxwidget.Key(props.ID)
-	focusRingColor := woxui.Color{}
-	if props.BorderWidth > 0 {
+	focusRingColor := props.FocusRingColor
+	if focusRingColor.A == 0 && props.BorderWidth > 0 {
 		focusRingColor = props.Theme.Cursor
 	}
 	return woxwidget.EditableText{
 		Key: key, AutomationID: props.ID, Label: props.Label, Value: state.Text, ReadOnly: props.ReadOnly, Protected: props.Protected,
 		Autofocus: props.Autofocus, Disabled: props.Disabled, OnKey: props.OnKey, OnTextInput: props.onTextInput,
-		FocusRingColor: focusRingColor, FocusRingRadius: radius,
+		FocusRingColor: focusRingColor, FocusRingRadius: radius, FocusRingOutsets: props.FocusRingOutsets,
 		OnFocusChange: props.OnFocusChange, OnSetValue: props.OnSetValue,
 		TextInput: func(bounds woxui.Rect) woxui.TextInputState {
 			if !props.Focused || props.Window == nil {

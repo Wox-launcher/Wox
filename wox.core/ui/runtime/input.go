@@ -94,6 +94,14 @@ const (
 	PointerButtonMiddle
 )
 
+// PointerCursor names the native cursor shown for a portable pointer target.
+type PointerCursor uint8
+
+const (
+	PointerCursorDefault PointerCursor = iota
+	PointerCursorText
+)
+
 // PointerEvent uses logical client coordinates; positive scroll Y means upward motion.
 type PointerEvent struct {
 	Kind      PointerEventKind

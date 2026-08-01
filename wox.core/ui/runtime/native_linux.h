@@ -27,6 +27,7 @@ int32_t wox_linux_window_write_clipboard_text(WoxLinuxWindow *window, const char
 int32_t wox_linux_window_write_clipboard_image(WoxLinuxWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);
 int32_t wox_linux_window_invalidate(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_text_input_state(WoxLinuxWindow *window, int32_t enabled, float x, float y, float width, float height);
+int32_t wox_linux_window_set_pointer_cursor(WoxLinuxWindow *window, uint8_t cursor);
 int32_t wox_linux_accessibility_begin(WoxLinuxWindow *window, uint64_t generation);
 int32_t wox_linux_accessibility_add_node(WoxLinuxWindow *window, uint64_t id, uint64_t parent_id, const uint64_t *children, int32_t child_count, const char *automation_id, const char *role, const char *label, const char *description, const char *value, float x, float y, float width, float height, uint32_t state_flags, uint32_t action_flags, int32_t live_region);
 int32_t wox_linux_accessibility_end(WoxLinuxWindow *window);

@@ -93,6 +93,7 @@ struct WoxDarwinWindow {
   bool screenshot_window;
   bool native_dialog_active;
   bool input_enabled;
+  uint8_t pointer_cursor;
   bool closed;
   bool render_scheduled;
   bool suppress_resize_render;
@@ -1377,6 +1378,12 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 }
 
 @implementation WoxRenderView
+- (void)resetCursorRects {
+  [super resetCursorRects];
+  NSCursor *cursor = _owner != NULL && _owner->pointer_cursor == 1 ? [NSCursor IBeamCursor] : [NSCursor arrowCursor];
+  [self addCursorRect:self.bounds cursor:cursor];
+}
+
 - (CALayer *)makeBackingLayer {
   CALayer *layer = [CALayer layer];
   layer.opaque = NO;
@@ -2488,6 +2495,22 @@ int32_t wox_darwin_window_set_text_input_state(WoxDarwinWindow *window, int32_t 
       [window->window makeFirstResponder:window->view];
     }
     [[window->view inputContext] invalidateCharacterCoordinates];
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_set_pointer_cursor(WoxDarwinWindow *window, uint8_t cursor) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    window->pointer_cursor = cursor;
+    [window->window invalidateCursorRectsForView:window->view];
   });
   return result;
 }

@@ -32,15 +32,3 @@ func TestWoxButtonCentersContentInsideSymmetricPadding(t *testing.T) {
 		t.Fatalf("button label style = %+v, want regular 13px", label.Style)
 	}
 }
-
-func TestWoxButtonSupportsIntrinsicIconOnlyContent(t *testing.T) {
-	icon := &woxui.Image{}
-	button := WoxButton(ButtonProps{ID: "icon", Label: "Delete", Icon: icon, IconOnly: true, IntrinsicWidth: true, Height: 24, Theme: Theme{}})
-	container := button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
-	if container.Padding != (woxwidget.Insets{}) {
-		t.Fatalf("icon-only padding = %+v, want zero", container.Padding)
-	}
-	if _, ok := container.Child.(woxwidget.Image); !ok {
-		t.Fatalf("intrinsic icon-only child = %T, want woxwidget.Image", container.Child)
-	}
-}

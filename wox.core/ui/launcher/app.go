@@ -439,6 +439,12 @@ func (a *App) showWindow(params showAppParams) error {
 }
 
 func (a *App) hideWindow(notify bool) error {
+	// Secondary launchers are transient query-owned windows. Match Flutter's
+	// multiple-window driver by destroying them instead of retaining them hidden.
+	if !a.isPrimary {
+		return a.Close()
+	}
+
 	var launcher *woxui.ManagedWindow
 	alreadyHidden := false
 	if err := a.runOnUI("prepare launcher hide", func() {
@@ -475,6 +481,15 @@ func (a *App) hideWindow(notify bool) error {
 		return a.notifyHidden()
 	}
 	return nil
+}
+
+// closePreviewWindow dismisses only the launcher instance that owns the preview.
+func (a *App) closePreviewWindow() {
+	util.Go(a.lifecycleCtx, "close launcher from preview close", func() {
+		if err := a.hideWindow(true); err != nil {
+			log.Printf("close launcher from preview close: %v", err)
+		}
+	})
 }
 
 func (a *App) onFocus(event woxui.FocusEvent) {
@@ -659,11 +674,8 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	a.resultsQueryID = queryID
 	a.hoveredResult = -1
 	if layout != nil {
-		enterChatMode := layout.ChatMode && !a.layout.ChatMode
 		a.layout = *layout
-		if enterChatMode {
-			a.chatFullscreen = true
-		} else if !layout.ChatMode {
+		if !layout.ChatMode {
 			a.chatFullscreen = false
 		}
 	}

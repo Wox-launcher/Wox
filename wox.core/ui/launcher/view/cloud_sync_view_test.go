@@ -76,7 +76,8 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 }
 
 func TestCloudAccountActionsUseCenteredSharedDropdownIndicator(t *testing.T) {
-	action := cloudValueAction("cloud-account-action", "account@example.com", 260, func() {}, woxcomponent.Theme{}).(woxwidget.Align)
+	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 255}}
+	action := cloudValueAction("cloud-account-action", "account@example.com", 260, func() {}, theme).(woxwidget.Align)
 	if action.Horizontal != 1 || action.Vertical != 0.5 {
 		t.Fatalf("account action alignment = (%v, %v), want (1, 0.5)", action.Horizontal, action.Vertical)
 	}
@@ -84,8 +85,11 @@ func TestCloudAccountActionsUseCenteredSharedDropdownIndicator(t *testing.T) {
 	if content.Gap != 6 || content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
 		t.Fatalf("account action content = gap %v alignment %v, want gap 6 and centered", content.Gap, content.CrossAxisAlignment)
 	}
-	indicatorGesture := content.Children[1].(woxwidget.Gesture)
-	indicator := indicatorGesture.Child.(woxwidget.Painter)
+	button := content.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	if button.Width != 28 || button.Height != 28 || button.HoverBackground.A == 0 || button.OnHoverAt != nil {
+		t.Fatalf("account dropdown button = %+v, want hoverable 28x28 icon button without tooltip", button)
+	}
+	indicator := button.Icon.(woxwidget.Painter)
 	if indicator.Width != 28 || indicator.Height != 28 {
 		t.Fatalf("account dropdown indicator = %vx%v, want 28x28", indicator.Width, indicator.Height)
 	}

@@ -62,6 +62,8 @@ type PluginListProps struct {
 	Window              *woxui.Window
 	FilterIcon          *woxui.Image
 	RefreshIcon         *woxui.Image
+	FilterLabel         string
+	RefreshLabel        string
 	FilterActive        bool
 	Refreshing          bool
 	EmptyLabel          string
@@ -157,8 +159,8 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 	searchField := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
 		ID: "plugin-search", Label: props.Placeholder, Width: searchFieldWidth, Value: props.Search.Text, Focused: props.Focused, Autofocus: props.Focused,
 		Actions: []woxcomponent.SearchFieldAction{
-			{ID: "plugin-filter", Icon: props.FilterIcon, Active: props.FilterActive, OnTap: props.OnFilter},
-			{ID: "plugin-refresh", Icon: props.RefreshIcon, Disabled: props.Refreshing, OnTap: props.OnRefresh},
+			{ID: "plugin-filter", Label: props.FilterLabel, Icon: props.FilterIcon, Active: props.FilterActive, OnTap: props.OnFilter},
+			{ID: "plugin-refresh", Label: props.RefreshLabel, Icon: props.RefreshIcon, Disabled: props.Refreshing, OnTap: props.OnRefresh},
 		},
 		Window: props.Window, Theme: props.Theme, OnClear: props.OnClear, OnKey: props.OnSearchKey,
 		OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,

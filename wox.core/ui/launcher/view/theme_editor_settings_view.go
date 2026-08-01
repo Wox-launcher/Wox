@@ -236,6 +236,7 @@ type ThemeEditorSettingsProps struct {
 	DiscardIcon          *woxui.Image
 	OverwriteIcon        *woxui.Image
 	SaveAsIcon           *woxui.Image
+	LocateLabel          string
 	DiscardLabel         string
 	OverwriteLabel       string
 	SaveAsLabel          string
@@ -609,11 +610,17 @@ func themeEditorTokens(props ThemeEditorSettingsProps, width, height float32) wo
 
 func themeEditorTokenCard(props ThemeEditorSettingsProps, token ThemeEditorColorToken, width, height float32) woxwidget.Widget {
 	labelWidth := max(float32(0), width-86)
-	locate := woxwidget.Gesture{ID: "theme-editor-locate-" + token.Key, OnTap: func() {
-		if props.OnLocateToken != nil {
-			props.OnLocateToken(token.Key)
-		}
-	}, Child: woxwidget.Align{Width: 26, Height: height - 2, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: props.LocateIcon, Width: 15, Height: 15}}}
+	hoverBackground := props.Theme.ResultSubtitle
+	hoverBackground.A = 26
+	locate := woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+		ID: "theme-editor-locate-" + token.Key, Label: props.LocateLabel + ": " + token.Label,
+		Icon: woxwidget.Image{Source: props.LocateIcon, Width: 15, Height: 15}, Width: 26, Height: height - 2, Radius: 4,
+		HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: func() {
+			if props.OnLocateToken != nil {
+				props.OnLocateToken(token.Key)
+			}
+		},
+	})
 	label := woxwidget.Clip{Width: labelWidth, Height: height - 2, Child: woxwidget.Align{
 		Width: labelWidth, Height: height - 2, Vertical: 0.5,
 		Child: woxwidget.Text{Value: token.Label, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultTitle},

@@ -442,6 +442,9 @@ func (a *App) onQueryFocusChanged(focused bool) {
 	if !focused {
 		return
 	}
+	if state := a.chatPreview; state != nil {
+		state.active = false
+	}
 	formVisible := a.form != nil
 	if formVisible {
 		return

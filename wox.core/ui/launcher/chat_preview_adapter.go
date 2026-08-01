@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -46,10 +47,9 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 		catalogWidth := min(float32(260), max(float32(220), innerWidth*0.46))
 		props := a.chatCatalogProps(snapshot, palette, catalogWidth, innerHeight)
 		catalog = &props
-	} else if snapshot.panel == "models" || snapshot.panel == "skills" {
-		catalogWidth := min(float32(440), innerWidth)
+	} else if snapshot.panel == "models" || snapshot.panel == "skills" || snapshot.panel == chatCommandPanel {
 		catalogHeight := chatCatalogPanelHeight(snapshot, innerHeight-questionHeight)
-		props := a.chatCatalogProps(snapshot, palette, catalogWidth, catalogHeight)
+		props := a.chatCatalogProps(snapshot, palette, innerWidth, catalogHeight)
 		catalog = &props
 	}
 	panel := snapshot.panel
@@ -73,10 +73,21 @@ func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, 
 		title = "New chat"
 	}
 	hasDebug := len(bytes.TrimSpace(snapshot.chat.DebugTrace)) > 0 && !bytes.Equal(bytes.TrimSpace(snapshot.chat.DebugTrace), []byte("null"))
+	exitLabel := a.translate("i18n:ui_close")
+	if strings.TrimSpace(exitLabel) == "" || exitLabel == "i18n:ui_close" {
+		exitLabel = "Close"
+	}
+	exitLabel += " (Esc)"
 	return previewview.ChatHeaderProps{
 		Width: width, Height: height, Key: snapshot.key, Title: title, HistoryOpen: snapshot.panel == "history",
-		ShowDebug: hasDebug, DebugOpen: snapshot.panel == "debug", Theme: palette.componentTheme(),
+		ShowDebug: hasDebug, DebugOpen: snapshot.panel == "debug", ShowExit: launcherChromeHidden(a.show, a.chatFullscreen), ExitLabel: exitLabel,
+		HistoryLabel: a.translate("i18n:ui_action_toggle_sidebar"), Theme: palette.componentTheme(),
 		OnHistory: func() { a.toggleChatPanel("history") }, OnDebug: func() { a.toggleChatPanel("debug") },
+		OnExit: a.closePreviewWindow, OnDrag: func() {
+			if err := a.window.StartDragging(); err != nil {
+				log.Printf("start chat preview window drag: %v", err)
+			}
+		}, OnExitHover: a.setPreviewTooltip,
 	}
 }
 
@@ -90,24 +101,39 @@ func chatCatalogPanelHeight(snapshot *chatPreviewSnapshot, available float32) fl
 
 // chatCatalogProps prepares history, model, and skill rows without constructing widgets.
 func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatCatalogProps {
-	const rowHeight = float32(44)
-	viewportHeight := max(float32(40), height-42)
-	count := len(snapshot.chats)
-	label := "Conversations"
-	if snapshot.panel == "models" {
-		count = len(snapshot.models)
-		label = "Models"
-	} else if snapshot.panel == "skills" {
-		count = len(snapshot.skills)
-		label = "Skills"
+	grouped := snapshot.panel == chatCommandPanel
+	viewportHeight := max(float32(40), height-44)
+	if grouped {
+		viewportHeight = max(float32(40), height-14)
 	}
-	contentHeight := max(viewportHeight, float32(count)*rowHeight)
+	count := len(snapshot.chats)
+	label := a.translate("i18n:ui_ai_chat_new_chat")
+	commands := []chatCommandPaletteItem(nil)
+	if snapshot.panel != "history" {
+		commands = chatCommandPaletteItems(snapshot.models, snapshot.skills, snapshot.chat.Model, snapshot.panelQuery, snapshot.panel)
+		count = len(commands)
+	}
+	if snapshot.panel == "models" {
+		label = a.translate("i18n:ui_ai_chat_select_model_title")
+	} else if snapshot.panel == "skills" {
+		label = a.translate("i18n:ui_ai_skills")
+	} else if grouped {
+		label = ""
+	}
+	contentHeight := float32(count) * chatCatalogRowHeight
+	if grouped {
+		contentHeight = chatCommandContentHeight(commands)
+	}
+	contentHeight = max(viewportHeight, contentHeight)
 	maxOffset := max(float32(0), contentHeight-viewportHeight)
 	offset := min(max(float32(0), snapshot.panelScroll), maxOffset)
 	if count > 0 && snapshot.panelViewport <= 0 {
 		selected := min(max(0, snapshot.panelSelected), count-1)
-		rowTop := float32(selected) * rowHeight
-		rowBottom := rowTop + rowHeight
+		rowTop := float32(selected) * chatCatalogRowHeight
+		if grouped {
+			rowTop = chatCommandItemOffset(commands, selected)
+		}
+		rowBottom := rowTop + chatCatalogRowHeight
 		if rowTop < offset {
 			offset = rowTop
 		} else if rowBottom > offset+viewportHeight {
@@ -134,41 +160,32 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 			}
 			items = append(items, previewview.ChatCatalogItemProps{
 				SelectID: fmt.Sprintf("chat-history-row-%s-%d", snapshot.key, index), DeleteID: fmt.Sprintf("chat-history-delete-%s-%d", snapshot.key, index),
-				Title: title, Subtitle: subtitle, Selected: index == snapshot.panelSelected,
+				Title: title, Subtitle: subtitle, DeleteLabel: a.translate("i18n:ui_delete"), Selected: index == snapshot.panelSelected,
 				OnSelect: func() { a.selectChatHistory(chatID) }, OnDelete: func() { a.deleteChatHistory(chatID) },
 			})
 		}
-	} else if snapshot.panel == "models" {
-		for index, model := range snapshot.models {
-			index := index
-			provider := model.Provider
-			if model.ProviderAlias != "" {
-				provider += " (" + model.ProviderAlias + ")"
-			}
-			if model == snapshot.chat.Model {
-				provider += " · Selected"
-			}
-			items = append(items, previewview.ChatCatalogItemProps{
-				SelectID: fmt.Sprintf("chat-model-row-%s-%d", snapshot.key, index), Title: model.Name, Subtitle: provider,
-				Selected: index == snapshot.panelSelected, OnSelect: func() { a.selectChatModel(index) },
-			})
-		}
 	} else {
-		for index, skill := range snapshot.skills {
+		for index, command := range commands {
 			index := index
-			subtitle := skill.SourceName
-			if subtitle == "" {
-				subtitle = skill.Source
-			}
-			if skill.Description != "" {
-				if subtitle != "" {
-					subtitle += " · "
+			command := command
+			groupLabel := ""
+			if grouped {
+				if command.group == "models" {
+					groupLabel = a.translate("i18n:ui_ai_chat_select_model_title")
+				} else {
+					groupLabel = a.translate("i18n:ui_ai_skills")
 				}
-				subtitle += skill.Description
 			}
 			items = append(items, previewview.ChatCatalogItemProps{
-				SelectID: fmt.Sprintf("chat-skill-row-%s-%d", snapshot.key, index), Title: skill.Name, Subtitle: subtitle,
-				Selected: index == snapshot.panelSelected, OnSelect: func() { a.insertChatSkill(index) },
+				SelectID: fmt.Sprintf("chat-%s-row-%s-%d", command.group, snapshot.key, index), GroupLabel: groupLabel,
+				Title: command.title, Subtitle: command.subtitle, Selected: index == snapshot.panelSelected, Current: command.current,
+				OnSelect: func() {
+					if command.group == "models" {
+						a.selectChatModel(command.sourceIndex)
+					} else {
+						a.insertChatSkill(command.sourceIndex)
+					}
+				},
 			})
 		}
 	}
@@ -187,10 +204,17 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 		} else if snapshot.skillsError != "" {
 			emptyMessage = snapshot.skillsError
 		}
+	} else if grouped {
+		emptyMessage = a.translate("i18n:ui_no_data")
+		if snapshot.modelsLoading || snapshot.skillsLoading {
+			emptyMessage = "Loading…"
+		} else if snapshot.modelsError != "" && snapshot.skillsError != "" {
+			emptyMessage = snapshot.modelsError + "; " + snapshot.skillsError
+		}
 	}
 	return previewview.ChatCatalogProps{
 		Width: width, Height: height, Key: snapshot.key, Label: label, Items: items, EmptyMessage: emptyMessage,
-		Scroll: offset, ContentHeight: contentHeight, ShowNew: snapshot.panel == "history", Theme: palette.componentTheme(),
+		Scroll: offset, ContentHeight: contentHeight, ShowNew: snapshot.panel == "history", NewLabel: a.translate("i18n:ui_ai_chat_new_chat"), Theme: palette.componentTheme(),
 		OnScroll: a.scrollChatPanel, OnNew: a.startNewChat,
 	}
 }
@@ -377,11 +401,13 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 		model = "Select model"
 	}
 	modelMetrics, _ := a.window.MeasureText(model, woxui.TextStyle{Size: 11})
-	modelWidth := min(float32(230), max(float32(110), modelMetrics.Size.Width+34))
+	modelWidth := min(float32(250), max(float32(120), modelMetrics.Size.Width+54))
 	streaming := snapshot.chat.IsStreaming || snapshot.sending
 	action := a.sendChatMessage
+	actionLabel := a.translate("i18n:ui_ai_chat_send")
 	if streaming {
 		action = a.stopChatMessage
+		actionLabel = a.translate("i18n:ui_ai_chat_stop")
 	}
 	status := ""
 	statusColor := palette.resultSubtitle
@@ -396,8 +422,8 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 	}
 	return previewview.ChatInputProps{
 		Width: width, Height: height, Key: snapshot.key, Editing: snapshot.editing,
-		Focused: snapshot.active && snapshot.question == nil && snapshot.panel == "", Hint: hint, Window: a.window,
-		Model: model, ModelWidth: modelWidth, Status: status, StatusColor: statusColor, Sending: streaming, Theme: palette.componentTheme(),
+		Focused: snapshot.active && snapshot.question == nil, Hint: hint, Window: a.window,
+		Model: model, ModelWidth: modelWidth, Status: status, StatusColor: statusColor, ActionLabel: actionLabel, Sending: streaming, Theme: palette.componentTheme(),
 		OnFocus: a.focusChatInput, OnChanged: a.setChatText, OnKey: a.onChatPreviewKey,
 		OnModels: func() { a.toggleChatPanel("models") }, OnSend: action,
 	}

@@ -19,6 +19,51 @@ func TestLauncherWindowOriginPreservesDraggedPosition(t *testing.T) {
 	}
 }
 
+func TestLauncherPreviewRatioUsesChatLayout(t *testing.T) {
+	ratio := 0.25
+	if got := launcherPreviewRatio(queryLayout{ResultPreviewWidthRatio: &ratio}, false); got != 0.25 {
+		t.Fatalf("regular preview ratio = %v, want 0.25", got)
+	}
+	if got := launcherPreviewRatio(queryLayout{ResultPreviewWidthRatio: &ratio, ChatMode: true}, false); got != 0 {
+		t.Fatalf("chat preview ratio = %v, want 0", got)
+	}
+	if got := launcherPreviewRatio(queryLayout{ResultPreviewWidthRatio: &ratio}, true); got != 0 {
+		t.Fatalf("fullscreen preview ratio = %v, want 0", got)
+	}
+}
+
+func TestLauncherChromeHiddenForPreviewOnlyModes(t *testing.T) {
+	if !launcherChromeHidden(showAppParams{HideQueryBox: true, HideToolbar: true}, false) {
+		t.Fatal("hidden query box and toolbar should expose preview close behavior")
+	}
+	if !launcherChromeHidden(showAppParams{}, true) {
+		t.Fatal("chat fullscreen should expose preview close behavior")
+	}
+	if launcherChromeHidden(showAppParams{HideQueryBox: true}, false) {
+		t.Fatal("partially hidden launcher chrome should keep normal navigation behavior")
+	}
+}
+
+func TestSecondaryLauncherHideClosesInstance(t *testing.T) {
+	app := &App{}
+	// Keep the test scoped to hide routing; native-close cleanup is covered by the instance lifecycle.
+	app.destroyOnce.Do(func() {})
+	if err := app.hideWindow(false); err != nil {
+		t.Fatalf("secondary launcher hide should close the instance: %v", err)
+	}
+}
+
+func TestQueryCanFocusWhileChatPreviewIsActive(t *testing.T) {
+	app := &App{}
+	if !app.queryCanFocus() {
+		t.Fatal("query input should own focus without an active overlay")
+	}
+	app.chatPreview = &chatPreviewState{active: true}
+	if !app.queryCanFocus() {
+		t.Fatal("active chat input prevented the query from accepting pointer focus")
+	}
+}
+
 func TestLauncherWindowOriginKeepsBottomQueryBoxAnchored(t *testing.T) {
 	params := showAppParams{QueryBoxAtBottom: true}
 	current := woxui.Rect{X: 92, Y: 200, Width: 760, Height: 420}

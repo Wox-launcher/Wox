@@ -1987,6 +1987,23 @@ int32_t wox_linux_window_set_text_input_state(WoxLinuxWindow *window, int32_t en
   return run_on_main_sync(set_text_input_main, &call) ? call.result : -1;
 }
 
+int32_t wox_linux_window_set_pointer_cursor(WoxLinuxWindow *window, uint8_t cursor) {
+  if (window == NULL || window->closed) {
+    return -1;
+  }
+  GdkWindow *native_window = gtk_widget_get_window(window->gl_area);
+  GdkDisplay *display = native_window != NULL ? gdk_window_get_display(native_window) : NULL;
+  if (native_window == NULL || display == NULL) {
+    return -1;
+  }
+  GdkCursor *native_cursor = cursor == 1 ? gdk_cursor_new_from_name(display, "text") : NULL;
+  gdk_window_set_cursor(native_window, native_cursor);
+  if (native_cursor != NULL) {
+    g_object_unref(native_cursor);
+  }
+  return 0;
+}
+
 typedef struct {
   WoxLinuxWindow *window;
   uint64_t node_id;

@@ -157,6 +157,7 @@ type platformWindow struct {
 	scale    float32
 
 	inputState         TextInputState
+	pointerCursor      PointerCursor
 	inputHighSurrogate uint16
 	inputComposing     bool
 	pointerInside      bool
@@ -478,6 +479,25 @@ func (w *platformWindow) setTextInputState(state TextInputState) error {
 	return nil
 }
 
+func (w *platformWindow) setPointerCursor(cursor PointerCursor) error {
+	w.mu.Lock()
+	if w.hwnd == 0 {
+		w.mu.Unlock()
+		return errors.New("window is closed")
+	}
+	w.pointerCursor = cursor
+	w.mu.Unlock()
+	win.SetCursor(windowsPointerCursor(cursor))
+	return nil
+}
+
+func windowsPointerCursor(cursor PointerCursor) win.HCURSOR {
+	if cursor == PointerCursorText {
+		return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_IBEAM))
+	}
+	return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_ARROW))
+}
+
 // measureText stays on the UI thread because the renderer is destroyed with its HWND.
 func (w *platformWindow) measureText(text string, style TextStyle) (TextMetrics, error) {
 	if win.GetCurrentThreadId() != w.uiThreadID {
@@ -725,6 +745,9 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		win.EndPaint(hwnd, &paint)
 		return 0
 	case win.WM_ERASEBKGND:
+		return 1
+	case win.WM_SETCURSOR:
+		win.SetCursor(windowsPointerCursor(window.pointerCursor))
 		return 1
 	case win.WM_MOUSEMOVE:
 		var screenPosition win.POINT

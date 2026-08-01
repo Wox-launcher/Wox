@@ -325,13 +325,24 @@ func TestFormTableDataCellDoesNotOpenEditor(t *testing.T) {
 }
 
 func TestFormTableOperationIncludesEditCloneAndDelete(t *testing.T) {
+	icon := &woxui.Image{}
 	props := FormTableFieldProps{
-		ID: "commands", EditLabel: "Edit", CloneLabel: "Clone", DeleteLabel: "Delete", Theme: woxcomponent.Theme{},
+		ID: "commands", EditLabel: "Edit", CloneLabel: "Clone", DeleteLabel: "Delete",
+		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon, Theme: woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 255}},
 	}
 	cell := formTableOperationCell(props, FormTableRow{Index: 3}, 130).(woxwidget.Container)
 	actions := cell.Child.(woxwidget.Flex)
 	if len(actions.Children) != 3 {
 		t.Fatalf("operation action count = %d, want edit, clone, and delete", len(actions.Children))
+	}
+	for index, action := range actions.Children {
+		button := action.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+		if button.Width != 26 || button.Height != 24 || button.HoverBackground.A == 0 {
+			t.Fatalf("operation action %d = %+v, want hoverable 26x24 icon button", index, button)
+		}
+		if button.OnHoverAt != nil {
+			t.Fatalf("operation action %d unexpectedly exposes a tooltip hover callback", index)
+		}
 	}
 }
 

@@ -16,6 +16,7 @@ func (settingsWindowHostServices) Invalidate() error { return nil }
 func (settingsWindowHostServices) SetTextInputState(woxui.TextInputState) error {
 	return nil
 }
+func (settingsWindowHostServices) SetPointerCursor(woxui.PointerCursor) error { return nil }
 func (settingsWindowHostServices) UpdateAccessibility(woxui.AccessibilityTree, woxui.AccessibilityActionHandler) error {
 	return nil
 }

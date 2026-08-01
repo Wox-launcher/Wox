@@ -8,6 +8,7 @@ import (
 // SearchFieldAction describes one centered trailing search-field action.
 type SearchFieldAction struct {
 	ID       string
+	Label    string
 	Icon     *woxui.Image
 	Width    float32
 	IconSize float32
@@ -55,19 +56,24 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		}
 		actionsWidth += width
 	}
-	inputWidth := max(float32(40), props.Width-leadingWidth-clearWidth-actionsWidth)
+	trailingInset := float32(0)
+	if clearWidth > 0 || actionsWidth > 0 {
+		trailingInset = 4
+	}
+	inputWidth := max(float32(40), props.Width-leadingWidth-clearWidth-actionsWidth-trailingInset)
 	leftPadding := float32(12)
 	if leadingWidth > 0 {
 		leftPadding = 2
 	}
 	input := WoxTextField(TextFieldProps{
-		ID: props.ID, Label: props.Label, Hint: props.Label, Width: inputWidth, Height: height,
+		ID: props.ID, Label: props.Label, Hint: props.Label, Width: inputWidth, Height: height, Radius: 4,
 		Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: 6, Bottom: 11}, Transparent: true,
+		FocusRingColor: props.Theme.Cursor, FocusRingOutsets: woxwidget.Insets{Left: leadingWidth, Right: clearWidth + actionsWidth + trailingInset},
 		Style: woxui.TextStyle{Size: 13}, TextColor: props.Theme.ResultTitle, TextAlignmentY: 0.5,
 		Value: props.Value, Focused: props.Focused, Autofocus: props.Autofocus, MaxLines: 1, Window: props.Window, Theme: props.Theme,
 		OnKey: props.OnKey, OnFocusChange: props.OnFocusChange, OnChanged: props.OnChanged, OnSetValue: props.OnSetValue,
 	})
-	children := make([]woxwidget.Widget, 0, len(props.Actions)+3)
+	children := make([]woxwidget.Widget, 0, len(props.Actions)+4)
 	if props.SearchIcon != nil {
 		children = append(children, woxwidget.Gesture{ID: props.ID + "-icon", OnTap: props.OnFocus, Child: woxwidget.Align{
 			Width: leadingWidth, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: props.SearchIcon, Width: 18, Height: 18},
@@ -75,10 +81,11 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 	}
 	children = append(children, input)
 	if clearWidth > 0 {
-		children = append(children, woxwidget.Gesture{ID: props.ID + "-clear", OnTap: props.OnClear, Child: woxwidget.Align{
-			Width: clearWidth, Height: height, Horizontal: 0.5, Vertical: 0.5,
-			Child: woxwidget.Text{Value: "×", Style: woxui.TextStyle{Size: 17}, Color: props.Theme.ResultSubtitle},
-		}})
+		hoverBackground := withAlpha(props.Theme.ResultSubtitle, 25)
+		children = append(children, woxwidget.Align{Width: clearWidth, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: WoxIconButton(IconButtonProps{
+			ID: props.ID + "-clear", Label: "Clear search", Icon: CloseGlyph(16, props.Theme.ResultSubtitle), Width: 28, Height: 28, Radius: 14,
+			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: props.OnClear,
+		})})
 	}
 	for _, action := range props.Actions {
 		action := action
@@ -94,20 +101,23 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		if action.Active {
 			background = props.Theme.SelectedBackground
 		}
-		onTap := action.OnTap
-		if action.Disabled {
-			onTap = nil
+		hoverBackground := withAlpha(props.Theme.ResultSubtitle, 25)
+		if action.Active {
+			hoverBackground = props.Theme.SelectedBackground
 		}
-		children = append(children, woxwidget.Gesture{ID: action.ID, OnTap: onTap, Child: woxwidget.Container{
-			Width: width, Height: height, Radius: 4, Color: background,
-			Child: woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: action.Icon, Width: iconSize, Height: iconSize}},
-		}})
+		label := action.Label
+		if label == "" {
+			label = action.ID
+		}
+		buttonSize := min(width, float32(30))
+		children = append(children, woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: WoxIconButton(IconButtonProps{
+			ID: action.ID, Label: label, Icon: woxwidget.Image{Source: action.Icon, Width: iconSize, Height: iconSize}, Width: buttonSize, Height: buttonSize, Radius: buttonSize / 2,
+			Background: background, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, Disabled: action.Disabled, OnTap: action.OnTap,
+		})})
+	}
+	if trailingInset > 0 {
+		children = append(children, woxwidget.Container{Width: trailingInset, Height: height})
 	}
 	border := withAlpha(props.Theme.ResultSubtitle, 170)
-	borderWidth := float32(1)
-	if props.Focused {
-		border = props.Theme.Cursor
-		borderWidth = 2
-	}
-	return woxwidget.Container{Width: props.Width, Height: height, Radius: 4, BorderColor: border, BorderWidth: borderWidth, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}
+	return woxwidget.Container{Width: props.Width, Height: height, Radius: 4, BorderColor: border, BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}
 }

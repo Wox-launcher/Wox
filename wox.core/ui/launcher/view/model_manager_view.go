@@ -139,12 +139,22 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 		}
 		var trailing woxwidget.Widget
 		if option.OnDelete != nil {
-			buttonTheme := props.Theme
-			buttonTheme.ResultTitle = props.Theme.ResultSubtitle
-			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: fmt.Sprintf("model-delete-%d", index), Label: props.DeleteLabel, Icon: props.DeleteIcon, IconSize: 16, IconOnly: props.DeleteIcon != nil,
-				Width: 34, Height: 34, Variant: woxcomponent.ButtonText, FontSize: 10, Disabled: props.Busy || props.Loading, OnTap: option.OnDelete, Theme: buttonTheme,
-			})
+			if props.DeleteIcon != nil {
+				hoverBackground := props.Theme.ResultSubtitle
+				hoverBackground.A = uint8(float32(hoverBackground.A) * 0.1)
+				trailing = woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+					ID: fmt.Sprintf("model-delete-%d", index), Label: props.DeleteLabel, Icon: woxwidget.Image{Source: props.DeleteIcon, Width: 16, Height: 16},
+					Width: 34, Height: 34, Radius: 6, HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor,
+					Disabled: props.Busy || props.Loading, OnTap: option.OnDelete,
+				})
+			} else {
+				buttonTheme := props.Theme
+				buttonTheme.ResultTitle = props.Theme.ResultSubtitle
+				trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{
+					ID: fmt.Sprintf("model-delete-%d", index), Label: props.DeleteLabel, Width: 34, Height: 34,
+					Variant: woxcomponent.ButtonText, FontSize: 10, Disabled: props.Busy || props.Loading, OnTap: option.OnDelete, Theme: buttonTheme,
+				})
+			}
 		} else if option.State == "downloading" {
 			trailing = modelManagerProgress(fmt.Sprintf("model-progress-%d", index), option.ActionLabel, option.Progress, trailingWidth, props.Theme)
 		} else {

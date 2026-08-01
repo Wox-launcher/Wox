@@ -34,7 +34,6 @@ type ButtonProps struct {
 	Icon           *woxui.Image
 	IconSize       float32
 	IconGap        float32
-	IconOnly       bool
 	IntrinsicWidth bool
 	Width          float32
 	Height         float32
@@ -126,15 +125,10 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 			iconGap = 8
 		}
 		child = woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize}
-		if !props.IconOnly {
-			child = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: iconGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-				child,
-				woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: fontWeight}, Color: foreground},
-			}}
-		}
-	}
-	if props.IconOnly && props.Padding == (woxwidget.Insets{}) {
-		padding = woxwidget.Insets{}
+		child = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: iconGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			child,
+			woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: fontWeight}, Color: foreground},
+		}}
 	}
 	var alignedChild woxwidget.Widget = woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: child}
 	if props.IntrinsicWidth {

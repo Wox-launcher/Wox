@@ -12,6 +12,7 @@ type fakeHostServices struct {
 	tree          woxui.AccessibilityTree
 	handler       woxui.AccessibilityActionHandler
 	textInput     woxui.TextInputState
+	pointerCursor woxui.PointerCursor
 	invalidations int
 }
 
@@ -26,6 +27,11 @@ func (f *fakeHostServices) Invalidate() error {
 
 func (f *fakeHostServices) SetTextInputState(state woxui.TextInputState) error {
 	f.textInput = state
+	return nil
+}
+
+func (f *fakeHostServices) SetPointerCursor(cursor woxui.PointerCursor) error {
+	f.pointerCursor = cursor
 	return nil
 }
 
@@ -228,6 +234,31 @@ func TestHostTrapsAndRestoresModalFocusOrder(t *testing.T) {
 	renderTestFrame(host)
 	if !findAutomationNode(t, host.Snapshot().Tree, "base").Focused {
 		t.Fatal("closing the modal scope did not restore the previous focus")
+	}
+}
+
+func TestHostShowsFocusRingOnlyForKeyboardTraversal(t *testing.T) {
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Stack{Width: 100, Height: 100, Children: []StackChild{
+			{Child: testButton("first", nil)},
+			{Top: 20, Child: testButton("second", nil)},
+		}}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	if !host.FocusAutomationID("first") || host.focusVisible {
+		t.Fatal("programmatic focus should not show the focus ring")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.focusVisible {
+		t.Fatal("Tab traversal should show the focus ring")
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 25}})
+	if host.focusVisible {
+		t.Fatal("pointer focus should hide the focus ring")
+	}
+	if !host.isFocusedKey("second") {
+		t.Fatal("pointer focus should keep the control logically focused")
 	}
 }
 
@@ -504,6 +535,24 @@ func TestHostRequiresPointerMoveBeforeHover(t *testing.T) {
 	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: position})
 	if len(hoverStates) != 1 || !hoverStates[0] {
 		t.Fatalf("pointer move hover states = %v, want [true]", hoverStates)
+	}
+}
+
+func TestHostUpdatesPointerCursorForHoveredGesture(t *testing.T) {
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Gesture{ID: "input", Cursor: woxui.PointerCursorText, Child: Container{Width: 100, Height: 20}}
+	})
+	services := &fakeHostServices{}
+	host.AttachServices(services)
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 5, Y: 5}})
+	if services.pointerCursor != woxui.PointerCursorText {
+		t.Fatalf("hover cursor = %v, want text", services.pointerCursor)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerLeave, Position: woxui.Point{X: 5, Y: 5}})
+	if services.pointerCursor != woxui.PointerCursorDefault {
+		t.Fatalf("leave cursor = %v, want default", services.pointerCursor)
 	}
 }
 

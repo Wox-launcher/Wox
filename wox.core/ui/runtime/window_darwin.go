@@ -443,6 +443,17 @@ func (w *platformWindow) setTextInputState(state TextInputState) error {
 	return nil
 }
 
+func (w *platformWindow) setPointerCursor(cursor PointerCursor) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_set_pointer_cursor(native, C.uint8_t(cursor)) != 0 {
+		return errors.New("woxui: failed to update macOS pointer cursor")
+	}
+	return nil
+}
+
 // measureText uses CoreText on the AppKit thread so it matches the native renderer.
 func (w *platformWindow) measureText(text string, style TextStyle) (TextMetrics, error) {
 	native, err := w.openNative()

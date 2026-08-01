@@ -511,10 +511,15 @@ func CloudPlanTooltipOverlay(props CloudIntroProps, anchor woxui.Rect, windowWid
 
 // cloudValueAction right-aligns an account value and the shared dropdown indicator on one center line.
 func cloudValueAction(id, value string, width float32, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {
+	hoverBackground := theme.ResultSubtitle
+	hoverBackground.A = uint8(float32(hoverBackground.A) * 0.1)
 	return woxwidget.Align{Width: width, Height: 34, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: value, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-			woxwidget.Gesture{ID: id, OnTap: onTap, Child: woxcomponent.WoxDropdownIndicator(28, 28, cloudAlpha(theme.ResultTitle, 194))},
+			woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+				ID: id, Label: value, Icon: woxcomponent.WoxDropdownIndicator(28, 28, cloudAlpha(theme.ResultTitle, 194)), Width: 28, Height: 28, Radius: 6,
+				HoverBackground: hoverBackground, FocusRingColor: theme.Cursor, OnTap: onTap,
+			}),
 		},
 	}}
 }
