@@ -89,7 +89,6 @@ struct WoxDarwinWindow {
   bool visible;
   bool active;
   bool hide_on_blur;
-  bool application_window;
   bool screenshot_window;
   bool native_dialog_active;
   bool input_enabled;
@@ -123,7 +122,6 @@ struct WoxDarwinRenderer {
 };
 
 static NSInteger wox_open_window_count = 0;
-static NSInteger wox_application_window_count = 0;
 static const CGFloat wox_window_corner_radius = 14.0;
 static CGFloat desktop_top(void);
 
@@ -1768,10 +1766,10 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     native_window.backgroundColor = [NSColor clearColor];
     native_window.hasShadow = !is_screenshot_window;
     native_window.acceptsMouseMovedEvents = YES;
-    // Management windows participate in normal app switching while launcher surfaces remain cross-space utilities.
+    // Management windows keep their titled style while sharing the launcher's cross-space activation behavior.
     if (is_application_window) {
       native_window.level = NSNormalWindowLevel;
-      native_window.collectionBehavior = NSWindowCollectionBehaviorDefault;
+      native_window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
       native_window.titlebarAppearsTransparent = YES;
       native_window.titleVisibility = NSWindowTitleHidden;
       [[native_window standardWindowButton:NSWindowCloseButton] setHidden:YES];
@@ -1829,7 +1827,6 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->web_view_content_keys = [[NSMutableDictionary alloc] init];
     window->context = context;
     window->hide_on_blur = hide_on_blur != 0;
-    window->application_window = is_application_window;
     window->screenshot_window = is_screenshot_window;
     // Use launcher material instead of compositing the transparent UI surface directly over the desktop.
     NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
@@ -1847,10 +1844,6 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     [native_window center];
     [view updateBackingScale];
     wox_open_window_count++;
-    if (window->application_window) {
-      wox_application_window_count++;
-      [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-    }
     return window;
   }
 }
@@ -2755,12 +2748,6 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
 
     if (wox_open_window_count > 0) {
       wox_open_window_count--;
-    }
-    if (window->application_window && wox_application_window_count > 0) {
-      wox_application_window_count--;
-      if (wox_application_window_count == 0) {
-        [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
-      }
     }
     if (wox_open_window_count == 0) {
       [NSApp stop:nil];
