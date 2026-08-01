@@ -19,10 +19,11 @@ import (
 
 // Client drives one authenticated wox_automation process.
 type Client struct {
-	address string
-	token   string
-	http    *http.Client
-	nextID  atomic.Uint64
+	address   string
+	token     string
+	http      *http.Client
+	nextID    atomic.Uint64
+	stepDelay time.Duration
 }
 
 const (
@@ -30,6 +31,8 @@ const (
 	SharedInfoFileEnvironment = "WOX_GO_UI_AUTOMATION_INFO_FILE"
 	// SharedDataDirectoryEnvironment points smoke cases at the isolated Wox data directory.
 	SharedDataDirectoryEnvironment = "WOX_GO_UI_SMOKE_DATA_DIR"
+	// SmokeStepDelayEnvironment slows visible automation steps for interactive observation.
+	SmokeStepDelayEnvironment = "WOX_GO_UI_SMOKE_STEP_DELAY"
 )
 
 type request struct {
@@ -52,11 +55,42 @@ func NewClient(info automation.Info) (*Client, error) {
 	if strings.TrimSpace(info.Address) == "" || strings.TrimSpace(info.Token) == "" {
 		return nil, errors.New("automation address and token are required")
 	}
+	var stepDelay time.Duration
+	if value := strings.TrimSpace(os.Getenv(SmokeStepDelayEnvironment)); value != "" {
+		var err error
+		stepDelay, err = time.ParseDuration(value)
+		if err != nil || stepDelay < 0 {
+			return nil, fmt.Errorf("invalid %s %q", SmokeStepDelayEnvironment, value)
+		}
+	}
 	return &Client{
-		address: strings.TrimRight(info.Address, "/"),
-		token:   info.Token,
-		http:    &http.Client{Timeout: 35 * time.Second},
+		address:   strings.TrimRight(info.Address, "/"),
+		token:     info.Token,
+		http:      &http.Client{Timeout: 35 * time.Second},
+		stepDelay: stepDelay,
 	}, nil
+}
+
+// pauseStep delays only user-visible automation operations when slow mode is enabled.
+func (c *Client) pauseStep(ctx context.Context) error {
+	if c.stepDelay <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(c.stepDelay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func (c *Client) pauseAfterStep(ctx context.Context, err error) error {
+	if err != nil {
+		return err
+	}
+	return c.pauseStep(ctx)
 }
 
 // ReadInfo waits for Wox to atomically publish its automation endpoint metadata.
@@ -137,13 +171,13 @@ func (c *Client) Perform(ctx context.Context, automationID string, action woxui.
 		"action":       action,
 		"value":        value,
 	})
-	return err
+	return c.pauseAfterStep(ctx, err)
 }
 
 // Pointer sends one logical pointer event to the active widget host.
 func (c *Client) Pointer(ctx context.Context, event woxui.PointerEvent) error {
 	_, err := call[bool](ctx, c, "input.pointer", event)
-	return err
+	return c.pauseAfterStep(ctx, err)
 }
 
 // MovePointer moves the logical pointer without changing button state.
@@ -173,13 +207,13 @@ func (c *Client) LeavePointer(ctx context.Context) error {
 // PressKey sends one complete semantic key press.
 func (c *Client) PressKey(ctx context.Context, key woxui.Key, modifiers woxui.KeyModifiers) error {
 	_, err := call[bool](ctx, c, "input.key", map[string]any{"key": key, "modifiers": modifiers})
-	return err
+	return c.pauseAfterStep(ctx, err)
 }
 
 // EnterText commits UTF-8 text through the focused editor.
 func (c *Client) EnterText(ctx context.Context, text string) error {
 	_, err := call[bool](ctx, c, "input.text", map[string]string{"text": text})
-	return err
+	return c.pauseAfterStep(ctx, err)
 }
 
 // Reset returns the shared smoke process to its hidden launcher baseline.
@@ -191,17 +225,20 @@ func (c *Client) Reset(ctx context.Context) error {
 // Show opens the launcher through its product lifecycle.
 func (c *Client) Show(ctx context.Context) error {
 	_, err := call[bool](ctx, c, "window.show", nil)
-	return err
+	return c.pauseAfterStep(ctx, err)
 }
 
 // OpenSettings opens one settings route through the product window lifecycle.
 func (c *Client) OpenSettings(ctx context.Context, path string) error {
 	_, err := call[bool](ctx, c, "window.open_settings", map[string]string{"path": path})
-	return err
+	return c.pauseAfterStep(ctx, err)
 }
 
 // Hide closes the launcher through its product lifecycle.
 func (c *Client) Hide(ctx context.Context) error {
+	if err := c.pauseStep(ctx); err != nil {
+		return err
+	}
 	_, err := call[bool](ctx, c, "window.hide", nil)
 	return err
 }
@@ -214,7 +251,7 @@ func (c *Client) Bounds(ctx context.Context) (woxui.Rect, error) {
 // SetBounds updates logical native window geometry.
 func (c *Client) SetBounds(ctx context.Context, bounds woxui.Rect) error {
 	_, err := call[bool](ctx, c, "window.set_bounds", bounds)
-	return err
+	return c.pauseAfterStep(ctx, err)
 }
 
 // Capture writes the current native window pixels to an absolute PNG path in the Wox process.

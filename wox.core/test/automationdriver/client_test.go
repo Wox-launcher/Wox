@@ -7,10 +7,22 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"wox/ui/automation"
 	woxui "wox/ui/runtime"
 )
+
+func TestNewClientReadsSmokeStepDelay(t *testing.T) {
+	t.Setenv(SmokeStepDelayEnvironment, "250ms")
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create slow client: %v", err)
+	}
+	if client.stepDelay != 250*time.Millisecond {
+		t.Fatalf("step delay = %s, want 250ms", client.stepDelay)
+	}
+}
 
 func TestClientAuthenticatesAndDecodesSnapshot(t *testing.T) {
 	t.Parallel()

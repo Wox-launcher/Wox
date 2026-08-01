@@ -75,8 +75,9 @@ func TerminalPreviewView(props TerminalPreviewProps) woxwidget.Widget {
 				props.OnScroll(-delta.Y, maxOffset)
 			}
 		},
-		Child: woxwidget.ScrollView{Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight, Offset: offset, Child: woxwidget.TextBlock{
-			Value: value, Width: innerWidth, Height: contentHeight, Style: style, LineHeight: 18, Color: props.Theme.PreviewText, Layout: &layout,
+		Child: woxwidget.ScrollView{Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight, Offset: offset, Child: woxwidget.Semantics{
+			AutomationID: "launcher.preview.terminal.output", Role: woxui.AccessibilityRoleText, Label: "Terminal output", Value: value, ReadOnly: true,
+			Child: woxwidget.TextBlock{Value: value, Width: innerWidth, Height: contentHeight, Style: style, LineHeight: 18, Color: props.Theme.PreviewText, Layout: &layout},
 		}},
 	}}
 	children := []woxwidget.Widget{header}
@@ -113,7 +114,10 @@ func terminalHeader(props TerminalPreviewProps) woxwidget.Widget {
 	return woxwidget.Container{Width: props.Width, Height: 38, Radius: 8, Color: props.Theme.QueryBackground, Padding: woxwidget.Insets{Left: 12, Top: 8, Right: 12}, Child: woxwidget.Stack{Width: contentWidth, Height: 22, Children: []woxwidget.StackChild{
 		{Top: 7, Child: woxwidget.Container{Width: 8, Height: 8, Radius: 4, Color: statusColor}},
 		{Left: 17, Top: 3, Child: woxwidget.Container{Width: commandWidth, Height: 18, Child: woxwidget.Text{Value: command, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText}}},
-		{Left: contentWidth - searchWidth - statusWidth - 8, Top: 4, Child: woxwidget.Container{Width: statusWidth, Height: 18, Child: woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 10}, Color: statusColor}}},
+		{Left: contentWidth - searchWidth - statusWidth - 8, Top: 4, Child: woxwidget.Semantics{
+			AutomationID: "launcher.preview.terminal.status", Role: woxui.AccessibilityRoleText, Label: "Terminal status", Value: status, LiveRegion: woxui.AccessibilityLiveRegionPolite,
+			Child: woxwidget.Container{Width: statusWidth, Height: 18, Child: woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 10}, Color: statusColor}},
+		}},
 		{Left: contentWidth - searchWidth, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: "terminal-search-open-" + props.SessionID, Label: "Find", Width: searchWidth, Height: 22, Radius: 6,
 			Padding: woxwidget.Insets{Left: 9}, FontSize: 9, Variant: woxcomponent.ButtonSurface, OnTap: props.OnOpenSearch, Theme: props.Theme,

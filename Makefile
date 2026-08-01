@@ -1,11 +1,18 @@
 .PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
 
 ifeq ($(firstword $(MAKECMDGOALS)),smoke)
-SMOKE_CASE_TARGET := $(word 2,$(MAKECMDGOALS))
+SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+SMOKE_CASE_TARGET := $(firstword $(filter-out slow,$(SMOKE_ARGUMENTS)))
 SMOKE_CASE := $(if $(strip $(CASE)),$(strip $(CASE)),$(SMOKE_CASE_TARGET))
+SMOKE_STEP_DELAY ?= $(if $(filter slow,$(SMOKE_ARGUMENTS)),500ms,)
 ifneq ($(SMOKE_CASE_TARGET),)
 .PHONY: $(SMOKE_CASE_TARGET)
 $(SMOKE_CASE_TARGET):
+	@:
+endif
+ifneq ($(filter slow,$(SMOKE_ARGUMENTS)),)
+.PHONY: slow
+slow:
 	@:
 endif
 endif
@@ -79,6 +86,7 @@ help:
 	@echo "  test       Run tests"
 	@echo "  test-go-ui-unit  Run retained-widget, automation-contract, and driver tests"
 	@echo "  smoke      Run all native smoke cases, or one with: make smoke launcher/query/plugin/calculator/001"
+	@echo "             Add slow to pause 500ms after visible steps; override with SMOKE_STEP_DELAY=1s"
 	@echo "  build      Build all components"
 	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
 	@echo "  appimage   Build Linux AppImage"
@@ -213,7 +221,7 @@ clean-go-ui-smoke:
 smoke: build-go-ui-smoke
 	@trap 'rm -f "$(GO_UI_SMOKE_BINARY)"' EXIT; \
 		cd wox.core && \
-		WOX_GO_UI_SMOKE_BINARY="$(GO_UI_SMOKE_BINARY)" $(GO_UI_SMOKE_RUNNER) go run ./test/smokerunner -case "$(SMOKE_CASE)"
+		WOX_GO_UI_SMOKE_BINARY="$(GO_UI_SMOKE_BINARY)" WOX_GO_UI_SMOKE_STEP_DELAY="$(SMOKE_STEP_DELAY)" $(GO_UI_SMOKE_RUNNER) go run ./test/smokerunner -case "$(SMOKE_CASE)"
 
 # Test without network dependencies
 test-offline:
