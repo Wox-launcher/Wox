@@ -10,7 +10,7 @@ import (
 func TestSmokeTestArgs(t *testing.T) {
 	directory := t.TempDir()
 	t.Chdir(directory)
-	caseDirectory := filepath.Join("test", "smoke", "launcher", "query")
+	caseDirectory := filepath.Join("test", "smoke", "launcher", "query", "plugin", "calculator")
 	if err := os.MkdirAll(caseDirectory, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -25,15 +25,15 @@ func TestSmokeTestArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := [][]string{{"test", "-failfast", "-tags", "wox_ui_smoke", "-count=1", "-v", "./test/smoke/launcher/query"}}
+	want := [][]string{{"test", "-failfast", "-tags", "wox_ui_smoke", "-count=1", "-v", "./test/smoke/launcher/query/plugin/calculator"}}
 	if !reflect.DeepEqual(all, want) {
 		t.Fatalf("all smoke args = %v, want %v", all, want)
 	}
-	one, err := smokeTestCommands("launcher/query/001")
+	one, err := smokeTestCommands("launcher/query/plugin/calculator/001")
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantOne := [][]string{{"test", "-failfast", "-tags", "wox_ui_smoke", "-count=1", "-v", "-run", "^Test001", "./test/smoke/launcher/query"}}
+	wantOne := [][]string{{"test", "-failfast", "-tags", "wox_ui_smoke", "-count=1", "-v", "-run", "^Test001", "./test/smoke/launcher/query/plugin/calculator"}}
 	if !reflect.DeepEqual(one, wantOne) {
 		t.Fatalf("single smoke args = %v, want %v", one, wantOne)
 	}

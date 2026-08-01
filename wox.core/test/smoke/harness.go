@@ -2,10 +2,7 @@ package smoke
 
 import (
 	"context"
-	"image/png"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -62,35 +59,5 @@ func ShowLauncher(t *testing.T, ctx context.Context, client *automationdriver.Cl
 		return found
 	}); err != nil {
 		t.Fatalf("wait for query input: %v", err)
-	}
-}
-
-// ArtifactPath returns a case-specific PNG path in the configured artifact directory.
-func ArtifactPath(t *testing.T, name string) string {
-	t.Helper()
-	directory := strings.TrimSpace(os.Getenv("WOX_GO_UI_ARTIFACT_DIR"))
-	if directory == "" {
-		directory = t.TempDir()
-	}
-	if err := os.MkdirAll(directory, 0o755); err != nil {
-		t.Fatalf("create smoke artifact directory: %v", err)
-	}
-	return filepath.Join(directory, name+"-"+runtime.GOOS+".png")
-}
-
-// AssertPNG verifies that a native capture is a usable launcher-sized PNG.
-func AssertPNG(t *testing.T, path string) {
-	t.Helper()
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("open smoke capture: %v", err)
-	}
-	defer file.Close()
-	config, err := png.DecodeConfig(file)
-	if err != nil {
-		t.Fatalf("decode smoke capture: %v", err)
-	}
-	if config.Width < 600 || config.Height < 100 {
-		t.Fatalf("smoke capture is unexpectedly small: %dx%d", config.Width, config.Height)
 	}
 }

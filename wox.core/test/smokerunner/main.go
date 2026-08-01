@@ -24,7 +24,7 @@ var caseSelectorPattern = regexp.MustCompile(`^[a-z0-9_-]+(?:/[a-z0-9_-]+)*/[0-9
 var caseFilePattern = regexp.MustCompile(`^[0-9]{3}_.+_test\.go$`)
 
 func main() {
-	caseSelector := flag.String("case", "", "functional path and case number, for example launcher/query/001")
+	caseSelector := flag.String("case", "", "functional path and case number, for example launcher/query/plugin/calculator/001")
 	flag.Parse()
 	code, err := run(strings.TrimSpace(*caseSelector))
 	if err != nil {
@@ -59,12 +59,14 @@ func run(caseSelector string) (int, error) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	woxDataDirectory := filepath.Join(suiteDirectory, "wox-data")
 	process, err := automationdriver.Launch(ctx, absoluteExecutable, automationdriver.LaunchOptions{
 		Environment: []string{
-			"WOX_TEST_DATA_DIR=" + filepath.Join(suiteDirectory, "wox-data"),
+			"WOX_TEST_DATA_DIR=" + woxDataDirectory,
 			"WOX_TEST_USER_DIR=" + filepath.Join(suiteDirectory, "user-data"),
 			fmt.Sprintf("WOX_TEST_SERVER_PORT=%d", port),
 			"WOX_TEST_DISABLE_TELEMETRY=true",
+			"WOX_TEST_SKIP_ONBOARDING=true",
 		},
 		StartupTimeout: 45 * time.Second,
 	})
@@ -74,6 +76,7 @@ func run(caseSelector string) (int, error) {
 	defer process.Close()
 
 	testEnvironment := replaceEnvironment(os.Environ(), automationdriver.SharedInfoFileEnvironment, process.InfoFile())
+	testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedDataDirectoryEnvironment, woxDataDirectory)
 	for _, testArgs := range testCommands {
 		command := exec.CommandContext(ctx, "go", testArgs...)
 		command.Env = testEnvironment
@@ -125,7 +128,7 @@ func smokeTestCommands(caseSelector string) ([][]string, error) {
 		return commands, nil
 	}
 	if !caseSelectorPattern.MatchString(caseSelector) {
-		return nil, fmt.Errorf("invalid smoke CASE %q; expected a path like launcher/query/001", caseSelector)
+		return nil, fmt.Errorf("invalid smoke CASE %q; expected a path like launcher/query/plugin/calculator/001", caseSelector)
 	}
 	matches, err := filepath.Glob(filepath.FromSlash("test/smoke/" + caseSelector + "_*_test.go"))
 	if err != nil {

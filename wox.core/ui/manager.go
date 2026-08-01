@@ -1009,7 +1009,7 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 	m.applyAutoAppearanceThemeIfNeed(ctx)
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if !woxSetting.OnboardingFinished.Get() {
+	if !woxSetting.OnboardingFinished.Get() && !util.ShouldSkipOnboardingForTest() {
 		// The first-run guide must win over HideOnStart so every user data
 		// directory gets one skippable setup pass before normal launcher startup.
 		m.ui.OpenOnboardingWindow(ctx)

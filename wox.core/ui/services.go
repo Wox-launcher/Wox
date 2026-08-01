@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"wox/common"
 	"wox/plugin"
 	"wox/plugin/system/shell/terminal"
 	"wox/setting"
@@ -95,6 +96,13 @@ func (s *CoreServices) DestroyInstance(ctx context.Context, sessionID string) er
 func (s *CoreServices) ResetAutomationSession(ctx context.Context, sessionID string) error {
 	plugin.GetPluginManager().ClearSessionState(uiServiceContext(ctx, sessionID), sessionID)
 	return nil
+}
+
+// AutomationShowOptions resolves the normal launcher settings and screen position for smoke tests.
+func (s *CoreServices) AutomationShowOptions(ctx context.Context, sessionID string) contract.ShowOptions {
+	ctx = uiServiceContext(ctx, sessionID)
+	GetUIManager().RefreshActiveWindowSnapshot(ctx)
+	return getShowOptions(ctx, common.ShowContext{})
 }
 
 // Shown records that the launcher window became visible.

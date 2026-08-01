@@ -25,8 +25,12 @@ type Client struct {
 	nextID  atomic.Uint64
 }
 
-// SharedInfoFileEnvironment points smoke clients at the suite-owned automation endpoint.
-const SharedInfoFileEnvironment = "WOX_GO_UI_AUTOMATION_INFO_FILE"
+const (
+	// SharedInfoFileEnvironment points smoke clients at the suite-owned automation endpoint.
+	SharedInfoFileEnvironment = "WOX_GO_UI_AUTOMATION_INFO_FILE"
+	// SharedDataDirectoryEnvironment points smoke cases at the isolated Wox data directory.
+	SharedDataDirectoryEnvironment = "WOX_GO_UI_SMOKE_DATA_DIR"
+)
 
 type request struct {
 	JSONRPC string `json:"jsonrpc"`

@@ -1,5 +1,15 @@
 .PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
 
+ifeq ($(firstword $(MAKECMDGOALS)),smoke)
+SMOKE_CASE_TARGET := $(word 2,$(MAKECMDGOALS))
+SMOKE_CASE := $(if $(strip $(CASE)),$(strip $(CASE)),$(SMOKE_CASE_TARGET))
+ifneq ($(SMOKE_CASE_TARGET),)
+.PHONY: $(SMOKE_CASE_TARGET)
+$(SMOKE_CASE_TARGET):
+	@:
+endif
+endif
+
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 
 # GNU Make on Windows may choose Git's sh.exe without exposing Git usr/bin to
@@ -68,7 +78,7 @@ help:
 	@echo "  dev        Setup development environment"
 	@echo "  test       Run tests"
 	@echo "  test-go-ui-unit  Run retained-widget, automation-contract, and driver tests"
-	@echo "  smoke      Run all native smoke cases, or one case with CASE=launcher/query/001"
+	@echo "  smoke      Run all native smoke cases, or one with: make smoke launcher/query/plugin/calculator/001"
 	@echo "  build      Build all components"
 	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
 	@echo "  appimage   Build Linux AppImage"
@@ -203,7 +213,7 @@ clean-go-ui-smoke:
 smoke: build-go-ui-smoke
 	@trap 'rm -f "$(GO_UI_SMOKE_BINARY)"' EXIT; \
 		cd wox.core && \
-		WOX_GO_UI_SMOKE_BINARY="$(GO_UI_SMOKE_BINARY)" $(GO_UI_SMOKE_RUNNER) go run ./test/smokerunner -case "$(CASE)"
+		WOX_GO_UI_SMOKE_BINARY="$(GO_UI_SMOKE_BINARY)" $(GO_UI_SMOKE_RUNNER) go run ./test/smokerunner -case "$(SMOKE_CASE)"
 
 # Test without network dependencies
 test-offline:

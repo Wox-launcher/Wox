@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -193,9 +194,21 @@ func (a *App) ShowAutomationWindow() error {
 	if a.window == nil {
 		return errors.New("launcher window is not initialized")
 	}
+	var params showAppParams
+	resolved := false
+	if provider, ok := a.services.(interface {
+		AutomationShowOptions(context.Context, string) contract.ShowOptions
+	}); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		params = fromCoreShowOptions(provider.AutomationShowOptions(ctx, a.sessionID))
+		resolved = true
+	}
 	var actionErr error
 	err := woxui.Call(func() {
-		params := a.show
+		if !resolved {
+			params = a.show
+		}
 		actionErr = a.showWindow(params)
 	})
 	if err != nil {

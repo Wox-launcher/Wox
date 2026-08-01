@@ -108,15 +108,7 @@ jobs:
       - name: Run native smoke
         env:
           GO_UI_SMOKE_RUNNER: xvfb-run -a
-          WOX_GO_UI_ARTIFACT_DIR: ${{ runner.temp }}/go-ui-artifacts
         run: make smoke
-      - name: Upload native visual
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-ui-smoke-linux
-          path: ${{ runner.temp }}/go-ui-artifacts
-          if-no-files-found: warn
 
   native-smoke-daily:
     name: Native launcher smoke (${{ matrix.name }})
@@ -169,12 +161,4 @@ jobs:
         shell: bash
         env:
           GO_UI_SMOKE_RUNNER: ${{ matrix.runner }}
-          WOX_GO_UI_ARTIFACT_DIR: ${{ runner.temp }}/go-ui-artifacts
         run: make smoke
-      - name: Upload native visual
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-ui-smoke-${{ matrix.name }}
-          path: ${{ runner.temp }}/go-ui-artifacts
-          if-no-files-found: warn
