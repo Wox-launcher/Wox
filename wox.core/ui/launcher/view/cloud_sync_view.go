@@ -514,7 +514,7 @@ func cloudValueAction(id, value string, width float32, onTap func(), theme woxco
 	return woxwidget.Align{Width: width, Height: 34, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: value, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-			woxwidget.Gesture{ID: id, OnTap: onTap, Child: dropdownIndicator(28, 28, cloudAlpha(theme.ResultTitle, 194))},
+			woxwidget.Gesture{ID: id, OnTap: onTap, Child: woxcomponent.WoxDropdownIndicator(28, 28, cloudAlpha(theme.ResultTitle, 194))},
 		},
 	}}
 }

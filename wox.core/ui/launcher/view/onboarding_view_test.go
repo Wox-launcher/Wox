@@ -229,7 +229,7 @@ func TestOnboardingGlanceUsesSharedRichDropdown(t *testing.T) {
 	selectorRow := rows.Children[1].(woxwidget.Stack)
 	selectorSlot := selectorRow.Children[1]
 	semantics := selectorSlot.Child.(woxwidget.Semantics)
-	trigger := semantics.Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	trigger := semantics.Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	content := trigger.Child.(woxwidget.Flex)
 
 	if trigger.Width != 300 || selectorSlot.Left+trigger.Width > selectorRow.Width || len(content.Children) != 6 {

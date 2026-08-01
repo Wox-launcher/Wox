@@ -45,6 +45,7 @@ type node struct {
 	focus    *focusBehavior
 	scope    *focusScopeBehavior
 	semantic *semanticBehavior
+	scroll   *scrollBehavior
 	caret    bool
 	clip     bool
 	children []*node
@@ -58,7 +59,7 @@ func (n *node) place(x, y float32) {
 	}
 }
 
-func (n *node) draw(displayList *woxui.DisplayList) {
+func (n *node) draw(displayList *woxui.DisplayList, focused woxui.AccessibilityNodeID) {
 	if n.paint != nil {
 		n.paint(displayList, n.bounds)
 	}
@@ -66,7 +67,10 @@ func (n *node) draw(displayList *woxui.DisplayList) {
 		displayList.PushClipRect(n.bounds)
 	}
 	for _, child := range n.children {
-		child.draw(displayList)
+		child.draw(displayList, focused)
+	}
+	if n.id == focused && n.focus != nil && n.focus.focusRingColor.A != 0 {
+		displayList.StrokeRoundedRect(n.bounds, n.focus.focusRingRadius, 2, n.focus.focusRingColor)
 	}
 	if n.clip {
 		displayList.PopClipRect()
@@ -272,6 +276,7 @@ type ScrollView struct {
 	OnOffsetChanged func(float32)
 	Child           Widget
 	onGeometry      func(viewport, content float32, measuredKeepVisible *ScrollRange)
+	onEnsureVisible func(start, end float32) bool
 }
 
 // Clip confines a child to a fixed logical rectangle without applying scrolling.
@@ -320,6 +325,9 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 			w.onGeometry(width, contentWidth, scrollChildRange(child, w.KeepVisibleKey, true))
 		}
 		result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
+		if w.onEnsureVisible != nil {
+			result.scroll = &scrollBehavior{horizontal: true, offset: offset, ensureVisible: w.onEnsureVisible}
+		}
 		if child != nil {
 			child.place(-offset, 0)
 			result.children = []*node{child}
@@ -342,6 +350,9 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 		w.onGeometry(height, contentHeight, scrollChildRange(child, w.KeepVisibleKey, false))
 	}
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
+	if w.onEnsureVisible != nil {
+		result.scroll = &scrollBehavior{offset: offset, ensureVisible: w.onEnsureVisible}
+	}
 	if child != nil {
 		child.place(0, -offset)
 		result.children = []*node{child}

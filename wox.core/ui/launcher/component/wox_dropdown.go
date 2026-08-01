@@ -1,26 +1,12 @@
-package view
+package component
 
 import (
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
-// dropdownIndicator centers Flutter's 10x6 arrow_drop_down geometry in the available icon slot.
-func dropdownIndicator(width, height float32, color woxui.Color) woxwidget.Widget {
-	return woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		triangleWidth := min(float32(10), bounds.Width)
-		triangleHeight := min(float32(6), bounds.Height)
-		left := bounds.X + (bounds.Width-triangleWidth)/2
-		top := bounds.Y + (bounds.Height-triangleHeight)/2
-		displayList.FillConvexPolygon([]woxui.Point{
-			{X: left, Y: top},
-			{X: left + triangleWidth, Y: top},
-			{X: left + triangleWidth/2, Y: top + triangleHeight},
-		}, color)
-	}}
-}
-
-type dropdownTriggerProps struct {
+// DropdownProps describes one accessible outlined dropdown trigger.
+type DropdownProps struct {
 	ID          string
 	Label       string
 	Value       string
@@ -31,12 +17,13 @@ type dropdownTriggerProps struct {
 	Outline     woxui.Color
 	Foreground  woxui.Color
 	Secondary   woxui.Color
+	Theme       Theme
 	OnTap       func()
 	OnTapBounds func(woxui.Rect)
 }
 
-// woxDropdown keeps rich and plain selected values aligned in every accessible outlined dropdown.
-func woxDropdown(props dropdownTriggerProps) woxwidget.Widget {
+// WoxDropdown builds a focusable dropdown trigger with shared visuals and accessibility semantics.
+func WoxDropdown(props DropdownProps) woxwidget.Widget {
 	trigger := woxDropdownTrigger(props)
 	disabled := props.OnTap == nil && props.OnTapBounds == nil
 	actions := []woxui.AccessibilityAction(nil)
@@ -49,11 +36,13 @@ func woxDropdown(props dropdownTriggerProps) woxwidget.Widget {
 	}
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: label, Value: props.Value,
-		Actions: actions, Disabled: disabled, Child: trigger,
+		Actions: actions, Disabled: disabled, Child: woxwidget.Focusable{
+			Key: woxwidget.Key(props.ID), Disabled: disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 4, Child: trigger,
+		},
 	}
 }
 
-func woxDropdownTrigger(props dropdownTriggerProps) woxwidget.Widget {
+func woxDropdownTrigger(props DropdownProps) woxwidget.Widget {
 	const horizontalPadding = float32(8)
 	const indicatorWidth = float32(24)
 	contentWidth := max(float32(0), props.Width-horizontalPadding*2-indicatorWidth)
@@ -85,10 +74,25 @@ func woxDropdownTrigger(props dropdownTriggerProps) woxwidget.Widget {
 			}},
 		)
 	}
-	children = append(children, dropdownIndicator(indicatorWidth, props.Height, props.Foreground))
+	children = append(children, WoxDropdownIndicator(indicatorWidth, props.Height, props.Foreground))
 	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnTapBounds: props.OnTapBounds, Child: woxwidget.Container{
 		Width: props.Width, Height: props.Height, Radius: 4, BorderColor: props.Outline, BorderWidth: 1,
 		Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding},
 		Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children},
+	}}
+}
+
+// WoxDropdownIndicator builds the shared dropdown arrow without its trigger surface.
+func WoxDropdownIndicator(width, height float32, color woxui.Color) woxwidget.Widget {
+	return woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		triangleWidth := min(float32(10), bounds.Width)
+		triangleHeight := min(float32(6), bounds.Height)
+		left := bounds.X + (bounds.Width-triangleWidth)/2
+		top := bounds.Y + (bounds.Height-triangleHeight)/2
+		displayList.FillConvexPolygon([]woxui.Point{
+			{X: left, Y: top},
+			{X: left + triangleWidth, Y: top},
+			{X: left + triangleWidth/2, Y: top + triangleHeight},
+		}, color)
 	}}
 }

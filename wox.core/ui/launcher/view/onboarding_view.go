@@ -283,10 +283,10 @@ func onboardingWelcome(props OnboardingProps, width, height float32, description
 			props.OnOpenChoice("language")
 		}
 	}
-	dropdown := woxDropdown(dropdownTriggerProps{
+	dropdown := woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: "onboarding-language", Label: props.Labels["language"], Value: props.Language, Width: choiceWidth, Height: 34,
 		Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140), Foreground: props.Theme.ResultTitle,
-		Secondary: props.Theme.ResultSubtitle, OnTap: openChoice,
+		Secondary: props.Theme.ResultSubtitle, Theme: props.Theme, OnTap: openChoice,
 	})
 	return woxcomponent.WoxPanel(woxcomponent.PanelProps{
 		Width: width, Height: height, Padding: woxwidget.UniformInsets(22),
@@ -376,10 +376,10 @@ func onboardingGlance(props OnboardingProps, width, height float32) woxwidget.Wi
 				props.OnOpenChoice("glance")
 			}
 		}
-		dropdown := woxDropdown(dropdownTriggerProps{
+		dropdown := woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 			ID: "onboarding-glance-choice", Label: props.Labels["glance.primary"], Value: props.GlanceLabel, Trailing: props.GlanceValue, Leading: props.GlanceIcon,
 			Width: choiceWidth, Height: 34, Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140),
-			Foreground: props.Theme.ResultTitle, Secondary: props.Theme.ResultSubtitle, OnTap: openChoice,
+			Foreground: props.Theme.ResultTitle, Secondary: props.Theme.ResultSubtitle, Theme: props.Theme, OnTap: openChoice,
 		})
 		children = append(children, woxwidget.Stack{Width: contentWidth, Height: 34, Children: []woxwidget.StackChild{
 			{Top: 7, Child: woxwidget.Text{Value: props.Labels["glance.primary"], Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}},

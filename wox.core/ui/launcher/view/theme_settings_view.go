@@ -117,14 +117,16 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 		if trailing != nil {
 			rowChildren = append(rowChildren, trailing)
 		}
-		rows = append(rows, woxwidget.Gesture{ID: "theme-list-" + item.ID, OnTap: func() {
-			if props.OnSelect != nil {
-				props.OnSelect(item.SourceIndex)
-			}
-		}, Child: woxwidget.Container{
-			Width: width, Height: ThemeListRowHeight - 8, Radius: 4, Color: background, Padding: woxwidget.Insets{Left: 6, Top: 10, Right: 6, Bottom: 10},
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: rowChildren},
-		}})
+		radius := float32(4)
+		rows = append(rows, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
+			ID: "theme-list-" + item.ID, Label: item.Name, Width: width, Height: ThemeListRowHeight - 8, Radius: &radius,
+			Background: &background, Selected: item.Selected, Padding: woxwidget.Insets{Left: 6, Top: 10, Right: 6, Bottom: 10}, Theme: props.Theme,
+			OnTap: func() {
+				if props.OnSelect != nil {
+					props.OnSelect(item.SourceIndex)
+				}
+			}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: rowChildren},
+		}))
 	}
 
 	var list woxwidget.Widget

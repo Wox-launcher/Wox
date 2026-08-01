@@ -151,7 +151,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	h.reconcileFocus()
 
 	displayList.Clear(woxui.Color{})
-	h.root.draw(displayList)
+	h.root.draw(displayList, h.focused)
 	h.generation++
 	tree, diagnostics := h.buildAccessibilityTree(diagnostics)
 	h.publishSnapshot(tree, diagnostics)
@@ -446,9 +446,32 @@ func (h *Host) setFocus(id woxui.AccessibilityNodeID) {
 	if current != nil && current.focus != nil && current.focus.onFocusChange != nil {
 		current.focus.onFocusChange(true)
 	}
+	h.ensureFocusedVisible()
 	h.resetCaretBlink()
 	h.syncTextInput()
 	h.invalidate()
+}
+
+// ensureFocusedVisible minimally scrolls the nearest clipped ancestor that hides the focused node.
+func (h *Host) ensureFocusedVisible() {
+	current := h.nodes[h.focused]
+	if current == nil {
+		return
+	}
+	for ancestor := current.parent; ancestor != nil; ancestor = ancestor.parent {
+		if ancestor.scroll == nil {
+			continue
+		}
+		start := current.bounds.Y - ancestor.bounds.Y + ancestor.scroll.offset
+		end := start + current.bounds.Height
+		if ancestor.scroll.horizontal {
+			start = current.bounds.X - ancestor.bounds.X + ancestor.scroll.offset
+			end = start + current.bounds.Width
+		}
+		if ancestor.scroll.ensureVisible(start, end) {
+			return
+		}
+	}
 }
 
 // RequestFocus focuses the retained element with the matching widget key.
@@ -543,6 +566,12 @@ func (h *Host) Key(event woxui.KeyEvent) bool {
 	}
 	for _, current := range path {
 		if current.focus != nil && current.focus.onKey != nil && current.focus.onKey(event) {
+			return true
+		}
+	}
+	// Focusable semantic controls inherit the same activation path used by accessibility and pointer input.
+	if event.Down && !event.Composing && event.Modifiers == 0 && (event.Key == woxui.KeyEnter || event.Key == woxui.KeySpace) && target.semantic != nil && containsAction(target.semantic.actions, woxui.AccessibilityActionActivate) {
+		if err := h.performAccessibilityAction(target.id, woxui.AccessibilityActionActivate, ""); err == nil {
 			return true
 		}
 	}

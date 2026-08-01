@@ -431,6 +431,13 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	}
 	a.updateSettingsTextInput(false)
 	util.Go(a.lifecycleCtx, "load settings search plugins", a.loadSettingsSearchPlugins)
+	if _, loaded := a.pluginSettings.CachedPlugins(true); !loaded {
+		util.Go(a.lifecycleCtx, "preload plugin store", func() {
+			if err := a.pluginSettings.PreloadPlugins(a.lifecycleCtx, a.services, a.sessionID, true); err != nil {
+				log.Printf("preload plugin store: %v", err)
+			}
+		})
+	}
 	return settingsWindow.Invalidate()
 }
 
@@ -668,12 +675,6 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 		return true
 	}
 	switch event.Key {
-	case woxui.KeyTab:
-		direction := 1
-		if event.Modifiers&woxui.KeyModifierShift != 0 {
-			direction = -1
-		}
-		a.moveSettingTab(direction)
 	case woxui.KeyArrowUp:
 		a.moveSettingRow(-1)
 	case woxui.KeyArrowDown:

@@ -79,13 +79,18 @@ func MediaPreviewView(props MediaPreviewProps) woxwidget.Widget {
 
 // mediaControl keeps the three transport controls visually consistent.
 func mediaControl(id, label string, primary bool, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {
-	background := theme.QueryBackground
+	variant := woxcomponent.ButtonSecondary
 	if primary {
-		background = woxui.Color{R: 255, G: 107, B: 53, A: 255}
+		variant = woxcomponent.ButtonPrimary
+		theme.ActionSelected = woxui.Color{R: 255, G: 107, B: 53, A: 255}
+		theme.ActionSelectedText = theme.PreviewText
+	} else {
+		theme.ActionText = theme.PreviewText
 	}
-	return woxwidget.Gesture{ID: "media-preview-" + id, OnTap: onTap, Child: woxwidget.Container{
-		Width: 46, Height: 38, Radius: 19, Color: background, Padding: woxwidget.Insets{Left: 15, Top: 10}, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.PreviewText},
-	}}
+	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		ID: "media-preview-" + id, Label: label, Width: 46, Height: 38, Radius: 19, FontSize: 12,
+		Size: woxcomponent.ButtonCompact, Variant: variant, OnTap: onTap, Theme: theme,
+	})
 }
 
 func formatMediaDuration(seconds int64) string {

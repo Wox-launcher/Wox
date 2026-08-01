@@ -45,6 +45,10 @@ type pluginSettingsController struct {
 	deps CommonDeps
 
 	plugins              []pluginSettingsPlugin
+	installedPlugins     []pluginSettingsPlugin
+	storePlugins         []pluginSettingsPlugin
+	installedLoaded      bool
+	storeLoaded          bool
 	pluginsLoading       bool
 	pluginsLoaded        bool
 	pluginsError         string
@@ -71,6 +75,34 @@ func (c *pluginSettingsController) Plugins() []pluginSettingsPlugin {
 
 func (c *pluginSettingsController) SetPlugins(plugins []pluginSettingsPlugin) {
 	c.plugins = append([]pluginSettingsPlugin(nil), plugins...)
+}
+
+// CachedPlugins returns the previously loaded catalog for immediate list switching.
+func (c *pluginSettingsController) CachedPlugins(store bool) ([]pluginSettingsPlugin, bool) {
+	if store {
+		return append([]pluginSettingsPlugin(nil), c.storePlugins...), c.storeLoaded
+	}
+	return append([]pluginSettingsPlugin(nil), c.installedPlugins...), c.installedLoaded
+}
+
+// cachePlugins stores one catalog independently from the currently visible list.
+func (c *pluginSettingsController) cachePlugins(store bool, plugins []pluginSettingsPlugin) {
+	if store {
+		c.storePlugins = append([]pluginSettingsPlugin(nil), plugins...)
+		c.storeLoaded = true
+		return
+	}
+	c.installedPlugins = append([]pluginSettingsPlugin(nil), plugins...)
+	c.installedLoaded = true
+}
+
+// invalidateCachedPlugins prevents lifecycle changes from exposing stale related-catalog data.
+func (c *pluginSettingsController) invalidateCachedPlugins(store bool) {
+	if store {
+		c.storeLoaded = false
+		return
+	}
+	c.installedLoaded = false
 }
 
 func (c *pluginSettingsController) PluginsLoading() bool {
@@ -206,34 +238,18 @@ func (c *pluginSettingsController) ReloadPlugins(ctx context.Context, service co
 		return nil
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	catalog := contract.PluginCatalogInstalled
-	if store {
-		catalog = contract.PluginCatalogStore
-	}
-	loaded, err := service.Plugins(timeoutCtx, sessionID, catalog)
+	plugins, err := loadPluginSettingsPlugins(ctx, service, sessionID, store)
 	if err != nil {
 		c.finishPluginLoadError(err)
 		return err
 	}
-	plugins, err := pluginSettingsPluginsFromContract(loaded)
-	if err != nil {
-		c.finishPluginLoadError(err)
-		return err
-	}
-	sort.SliceStable(plugins, func(i, j int) bool {
-		if !store && plugins[i].IsSystem != plugins[j].IsSystem {
-			return plugins[i].IsSystem
-		}
-		return strings.ToLower(plugins[i].Name) < strings.ToLower(plugins[j].Name)
-	})
 
 	c.deps.OnUI("apply plugin catalog", func() {
 		if preferredID == "" && c.pluginSelected >= 0 && c.pluginSelected < len(c.plugins) {
 			preferredID = c.plugins[c.pluginSelected].ID
 		}
 		c.plugins = plugins
+		c.cachePlugins(store, plugins)
 		c.pluginsLoading = false
 		c.pluginsLoaded = true
 		c.pluginsError = ""
@@ -260,6 +276,43 @@ func (c *pluginSettingsController) ReloadPlugins(ctx context.Context, service co
 		c.deps.Invalidate()
 	})
 	return nil
+}
+
+// PreloadPlugins fills one catalog cache without changing the visible plugin page.
+func (c *pluginSettingsController) PreloadPlugins(ctx context.Context, service contract.PluginCatalogSettingsServices, sessionID string, store bool) error {
+	plugins, err := loadPluginSettingsPlugins(ctx, service, sessionID, store)
+	if err != nil {
+		return err
+	}
+	c.deps.OnUI("cache plugin catalog", func() {
+		c.cachePlugins(store, plugins)
+	})
+	return nil
+}
+
+// loadPluginSettingsPlugins fetches and sorts one plugin catalog for active and background loads.
+func loadPluginSettingsPlugins(ctx context.Context, service contract.PluginCatalogSettingsServices, sessionID string, store bool) ([]pluginSettingsPlugin, error) {
+	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	catalog := contract.PluginCatalogInstalled
+	if store {
+		catalog = contract.PluginCatalogStore
+	}
+	loaded, err := service.Plugins(timeoutCtx, sessionID, catalog)
+	if err != nil {
+		return nil, err
+	}
+	plugins, err := pluginSettingsPluginsFromContract(loaded)
+	if err != nil {
+		return nil, err
+	}
+	sort.SliceStable(plugins, func(i, j int) bool {
+		if !store && plugins[i].IsSystem != plugins[j].IsSystem {
+			return plugins[i].IsSystem
+		}
+		return strings.ToLower(plugins[i].Name) < strings.ToLower(plugins[j].Name)
+	})
+	return plugins, nil
 }
 
 // pluginSettingsPluginsFromContract adapts canonical plugin metadata to launcher-owned form models.

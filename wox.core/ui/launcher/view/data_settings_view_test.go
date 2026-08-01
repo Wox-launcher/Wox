@@ -28,7 +28,7 @@ func TestDataLogLevelUsesSharedAnchoredDropdown(t *testing.T) {
 	if semantics.AutomationID != "data-log-level" || semantics.Role != woxui.AccessibilityRoleButton {
 		t.Fatalf("dropdown semantics = %#v, want standard button", semantics)
 	}
-	trigger := semantics.Child.(woxwidget.Gesture)
+	trigger := semantics.Child.(woxwidget.Focusable).Child.(woxwidget.Gesture)
 	if trigger.OnTap != nil || trigger.OnTapBounds == nil {
 		t.Fatal("log level should open an anchored dropdown instead of changing directly")
 	}

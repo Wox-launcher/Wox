@@ -475,20 +475,12 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 }
 
 func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxui.Image, onTap func()) woxwidget.Widget {
-	var content woxwidget.Widget = woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultSubtitle}
-	if icon != nil {
-		content = woxwidget.Image{Source: icon, Width: 16, Height: 16}
-	}
-	key := woxwidget.Key(id)
-	return woxwidget.Semantics{Key: key, AutomationID: id, Role: woxui.AccessibilityRoleButton, Label: label, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}, Child: woxwidget.Focusable{Key: key, OnKey: func(event woxui.KeyEvent) bool {
-		if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
-			return false
-		}
-		if event.Down && onTap != nil {
-			onTap()
-		}
-		return true
-	}, Child: woxwidget.Gesture{ID: id, OnTap: onTap, Child: woxwidget.Align{Width: 26, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: content}}}}
+	theme := props.Theme
+	theme.ResultTitle = props.Theme.ResultSubtitle
+	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		ID: id, Label: label, Icon: icon, IconSize: 16, IconOnly: icon != nil, Width: 26, Height: 24,
+		Variant: woxcomponent.ButtonText, FontSize: 10, OnTap: onTap, Theme: theme,
+	})
 }
 
 func formTableDataCell(props FormTableFieldProps, cell FormTableCell, width float32) woxwidget.Widget {
@@ -960,9 +952,9 @@ func formTableRowSelectControl(props FormTableRowFieldProps, width, height float
 	if props.OnChoiceTap == nil {
 		foreground = formTableAlpha(foreground, 128)
 	}
-	return woxDropdown(dropdownTriggerProps{
+	return woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: props.ID, Label: props.Label, Value: props.Value, Width: width, Height: height, Outline: formTableRowOutline(props.Theme, props.Focused),
-		Foreground: foreground, Secondary: props.Theme.ActionHeader, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
+		Foreground: foreground, Secondary: props.Theme.ActionHeader, Theme: props.Theme, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
 	})
 }
 

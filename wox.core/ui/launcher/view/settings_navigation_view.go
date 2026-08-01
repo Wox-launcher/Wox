@@ -58,12 +58,16 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 		if item.Icon != nil {
 			icon = woxwidget.Image{Source: item.Icon, Width: 18, Height: 18}
 		}
-		row := woxwidget.Container{Width: props.Width - 28, Height: 46, Radius: 6, Color: color, BorderColor: border, BorderWidth: 1, Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-			woxwidget.Align{Width: 22, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
-			woxwidget.Align{Width: max(float32(0), props.Width-leftPadding-98), Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}},
-			woxwidget.Align{Width: 18, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: trailing, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle}},
-		}}}
-		items = append(items, woxwidget.Gesture{ID: "settings-nav-" + item.ID, OnTap: item.OnTap, Child: row})
+		radius := float32(6)
+		items = append(items, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
+			ID: "settings-nav-" + item.ID, Label: item.Label, Width: props.Width - 28, Height: 46, Radius: &radius,
+			Background: &color, BorderColor: border, BorderWidth: 1, Selected: item.Selected, SkipFocus: item.Parent, OnTap: item.OnTap, Theme: props.Theme,
+			Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+				woxwidget.Align{Width: 22, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
+				woxwidget.Align{Width: max(float32(0), props.Width-leftPadding-98), Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}},
+				woxwidget.Align{Width: 18, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: trailing, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle}},
+			}},
+		}))
 	}
 	innerWidth := props.Width - 28
 	const searchAreaHeight = float32(58)

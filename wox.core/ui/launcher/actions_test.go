@@ -40,6 +40,13 @@ func TestActionPanelEntryForHotkeyIgnoresKeyUp(t *testing.T) {
 	}
 }
 
+func TestOnActionKeyIgnoresKeyUp(t *testing.T) {
+	app := &App{actionPanel: true}
+	if app.onActionKey(woxui.KeyEvent{Key: woxui.KeyArrowDown}) {
+		t.Fatal("action panel handled key-up")
+	}
+}
+
 func TestOnResultActionHotkeyHandlesClosedPanel(t *testing.T) {
 	app := &App{selected: 0, results: []queryResult{{ID: "selected", Actions: []resultAction{{ID: "delete", Type: "local", Hotkey: "cmd+d"}}}}}
 	if !app.onResultActionHotkey(woxui.KeyEvent{Key: "d", Modifiers: woxui.KeyModifierMeta, Down: true}) {

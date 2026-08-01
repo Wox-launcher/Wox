@@ -127,11 +127,12 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 			}}
 			rowChildren = append(rowChildren, woxwidget.Align{Width: 44, Height: 44, Horizontal: 1, Vertical: 0.5, Child: badge})
 		}
-		row := woxwidget.Container{
-			Width: props.Width, Height: rowHeight, Radius: 4, Color: background, BorderColor: border, BorderWidth: 1, Padding: woxwidget.Insets{Left: 6, Top: 9, Right: 6, Bottom: 8},
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: rowChildren},
-		}
-		rows = append(rows, woxwidget.Gesture{ID: "plugin-list-" + item.ID, OnTap: item.OnSelect, Child: row})
+		radius := float32(4)
+		rows = append(rows, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
+			ID: "plugin-list-" + item.ID, Label: item.Name, Width: props.Width, Height: rowHeight, Radius: &radius,
+			Background: &background, BorderColor: border, BorderWidth: 1, Selected: item.Selected, OnTap: item.OnSelect, Theme: props.Theme,
+			Padding: woxwidget.Insets{Left: 6, Top: 9, Right: 6, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: rowChildren},
+		}))
 	}
 
 	var list woxwidget.Widget

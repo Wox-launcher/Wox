@@ -31,7 +31,10 @@ func AboutSettingsView(props AboutSettingsProps) woxwidget.Widget {
 	contentWidth := min(float32(600), max(float32(0), props.Width-48))
 	links := make([]woxwidget.Widget, 0, len(props.Links))
 	for _, link := range props.Links {
-		links = append(links, aboutLinkButton(link, props.Theme))
+		links = append(links, woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: link.ID, Label: link.Label, Icon: link.Icon, IconSize: 18, IconGap: 8, Height: 26, IntrinsicWidth: true,
+			Variant: woxcomponent.ButtonText, Padding: woxwidget.Insets{Left: 6, Top: 4, Right: 6, Bottom: 4}, OnTap: link.OnTap, Theme: props.Theme,
+		}))
 	}
 
 	var logo woxwidget.Widget = woxwidget.Container{
@@ -70,28 +73,4 @@ func AboutSettingsView(props AboutSettingsProps) woxwidget.Widget {
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Child: woxwidget.Align{
 		Width: props.Width, Height: props.Height, Horizontal: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children},
 	}}
-}
-
-// aboutLinkButton keeps the About actions visually lightweight while preserving keyboard and accessibility behavior.
-func aboutLinkButton(link AboutLink, theme woxcomponent.Theme) woxwidget.Widget {
-	children := make([]woxwidget.Widget, 0, 2)
-	if link.Icon != nil {
-		children = append(children, woxwidget.Image{Source: link.Icon, Width: 18, Height: 18})
-	}
-	children = append(children, woxwidget.Text{Value: link.Label, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultTitle})
-	key := woxwidget.Key(link.ID)
-	return woxwidget.Semantics{
-		Key: key, AutomationID: string(key), Role: woxui.AccessibilityRoleButton, Label: link.Label, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
-		Child: woxwidget.Focusable{Key: key, OnKey: func(event woxui.KeyEvent) bool {
-			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
-				return false
-			}
-			if event.Down && link.OnTap != nil {
-				link.OnTap()
-			}
-			return true
-		}, Child: woxwidget.Gesture{ID: string(key), OnTap: link.OnTap, Child: woxwidget.Container{
-			Height: 26, Padding: woxwidget.Insets{Left: 6, Top: 4, Right: 6, Bottom: 4}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: children},
-		}}},
-	}
 }

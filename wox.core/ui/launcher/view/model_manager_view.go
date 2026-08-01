@@ -139,7 +139,12 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 		}
 		var trailing woxwidget.Widget
 		if option.OnDelete != nil {
-			trailing = modelManagerIconButton(fmt.Sprintf("model-delete-%d", index), props.DeleteLabel, props.DeleteIcon, props.Busy || props.Loading, option.OnDelete, props.Theme)
+			buttonTheme := props.Theme
+			buttonTheme.ResultTitle = props.Theme.ResultSubtitle
+			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: fmt.Sprintf("model-delete-%d", index), Label: props.DeleteLabel, Icon: props.DeleteIcon, IconSize: 16, IconOnly: props.DeleteIcon != nil,
+				Width: 34, Height: 34, Variant: woxcomponent.ButtonText, FontSize: 10, Disabled: props.Busy || props.Loading, OnTap: option.OnDelete, Theme: buttonTheme,
+			})
 		} else if option.State == "downloading" {
 			trailing = modelManagerProgress(fmt.Sprintf("model-progress-%d", index), option.ActionLabel, option.Progress, trailingWidth, props.Theme)
 		} else {
@@ -161,9 +166,11 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 			woxwidget.TextBlock{Value: option.Description, Width: contentWidth, Height: 32, MaxLines: 2, LineHeight: 15, Style: woxui.TextStyle{Size: 11}, Color: modelManagerAlpha(props.Theme.ResultSubtitle, 204)},
 		}}}
 		rowContent := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{detail, trailing}}
-		rows = append(rows, woxwidget.Gesture{ID: fmt.Sprintf("model-row-%d", index), OnTap: activate, Child: woxwidget.Container{
-			Width: menuWidth, Height: ModelManagerRowHeight, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 12}, Child: rowContent,
-		}})
+		radius := float32(0)
+		rows = append(rows, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
+			ID: fmt.Sprintf("model-row-%d", index), Label: option.Name, Width: menuWidth, Height: ModelManagerRowHeight, Radius: &radius,
+			Background: &background, Selected: option.SelectedRow, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 12}, OnTap: activate, Child: rowContent, Theme: props.Theme,
+		}))
 	}
 	children = append(children, woxwidget.ScrollView{
 		Key: "model-manager-list", ID: "model-manager-list", Width: menuWidth, Height: listHeight, ContentHeight: max(listHeight, float32(len(rows))*ModelManagerRowHeight),
@@ -181,32 +188,6 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 		{Child: woxwidget.Gesture{ID: "model-manager-backdrop", OnTap: props.OnClose, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
 		{Left: menuLeft, Top: menuTop, Child: menu},
 	}}
-}
-
-func modelManagerIconButton(id, label string, icon *woxui.Image, disabled bool, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {
-	color := theme.ResultSubtitle
-	if disabled {
-		color.A = min(color.A, uint8(88))
-		onTap = nil
-	}
-	var content woxwidget.Widget = woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 10}, Color: color}
-	if icon != nil {
-		content = woxwidget.Image{Source: icon, Width: 16, Height: 16}
-	}
-	key := woxwidget.Key(id)
-	actions := []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}
-	if disabled {
-		actions = nil
-	}
-	return woxwidget.Semantics{Key: key, AutomationID: id, Role: woxui.AccessibilityRoleButton, Label: label, Actions: actions, Disabled: disabled, Child: woxwidget.Focusable{Key: key, Disabled: disabled, OnKey: func(event woxui.KeyEvent) bool {
-		if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
-			return false
-		}
-		if event.Down && onTap != nil {
-			onTap()
-		}
-		return true
-	}, Child: woxwidget.Gesture{ID: id, OnTap: onTap, Child: woxwidget.Align{Width: 34, Height: 34, Horizontal: 0.5, Vertical: 0.5, Child: content}}}}
 }
 
 func modelManagerProgress(id, label string, progress int, width float32, theme woxcomponent.Theme) woxwidget.Widget {
@@ -269,8 +250,11 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 			buttonWidth += 8
 		}
 		detailWidth := max(float32(120), innerWidth-buttonWidth-42)
-		rows = append(rows, woxwidget.Gesture{ID: fmt.Sprintf("model-row-%d", index), OnTap: option.OnSelect, Child: woxwidget.Container{
-			Width: innerWidth, Height: ModelManagerRowHeight, Radius: 7, Color: background, Padding: woxwidget.Insets{Left: 14, Top: 10, Right: 10, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		radius := float32(7)
+		rows = append(rows, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
+			ID: fmt.Sprintf("model-row-%d", index), Label: option.Name, Width: innerWidth, Height: ModelManagerRowHeight, Radius: &radius,
+			Background: &background, Selected: option.SelectedRow, OnTap: option.OnSelect, Theme: props.Theme, Padding: woxwidget.Insets{Left: 14, Top: 10, Right: 10, Bottom: 8},
+			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 				woxwidget.Container{Width: detailWidth, Height: 62, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 					woxwidget.Text{Value: option.Name, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: foreground},
 					woxwidget.TextBlock{Value: option.Detail, Width: detailWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.ActionHeader},
@@ -278,7 +262,7 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 				}}},
 				woxwidget.Container{Width: buttonWidth, Height: 48, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttons}},
 			}},
-		}})
+		}))
 	}
 	var list woxwidget.Widget
 	if len(rows) == 0 {

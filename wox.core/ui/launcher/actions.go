@@ -115,6 +115,9 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 }
 
 func (a *App) onActionKey(event woxui.KeyEvent) bool {
+	if !event.Down || event.Composing {
+		return false
+	}
 	if hotkeyMatches(primaryHotkey("j"), event) {
 		a.toggleActionPanel()
 		return true

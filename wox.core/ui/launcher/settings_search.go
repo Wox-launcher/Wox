@@ -56,7 +56,12 @@ var builtInSettingSearchAliases = map[string][]string{
 // the call so it can invalidate the settings window at the right lifecycle points.
 func (a *App) loadSettingsSearchPlugins() {
 	a.invalidateSettingsWindow()
-	_ = a.settingsSearch.ReloadPlugins(a.lifecycleCtx, a.services, a.sessionID)
+	if err := a.settingsSearch.ReloadPlugins(a.lifecycleCtx, a.services, a.sessionID); err != nil {
+		return
+	}
+	_ = a.runOnUI("cache installed plugin catalog", func() {
+		a.pluginSettings.cachePlugins(false, a.settingsSearch.Plugins())
+	})
 }
 
 // settingsSearchResults builds one ranked index across built-in controls, sections, plugins, and plugin settings.
@@ -334,11 +339,6 @@ func (a *App) onSettingsSearchKey(event woxui.KeyEvent) bool {
 			a.clearSettingsSearch()
 			return true
 		}
-	}
-	if event.Key == woxui.KeyTab {
-		a.blurSettingsSearch()
-		a.moveSettingTab(1)
-		return true
 	}
 	if event.Key == woxui.KeyEscape && query == "" {
 		a.blurSettingsSearch()

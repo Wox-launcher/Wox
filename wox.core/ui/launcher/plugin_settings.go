@@ -216,10 +216,16 @@ func (a *App) switchPluginList(store bool) {
 			a.submitPluginSettings()
 		}
 	}
+	plugins, loaded := a.pluginSettings.CachedPlugins(store)
+	if !loaded && !store && a.settingsSearch.Loaded() {
+		plugins = a.settingsSearch.Plugins()
+		a.pluginSettings.cachePlugins(false, plugins)
+		loaded = true
+	}
 	a.pluginSettings.SetPluginsStore(store)
-	a.pluginSettings.SetPlugins(nil)
-	a.pluginSettings.SetPluginsLoaded(false)
-	a.pluginSettings.SetPluginsLoading(true)
+	a.pluginSettings.SetPlugins(plugins)
+	a.pluginSettings.SetPluginsLoaded(loaded)
+	a.pluginSettings.SetPluginsLoading(!loaded)
 	a.pluginSettings.SetPluginsError("")
 	a.pluginSettings.SetSelected(-1)
 	a.pluginSettings.SetForm(nil)
@@ -237,6 +243,13 @@ func (a *App) switchPluginList(store bool) {
 	}
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
+	if loaded {
+		if len(plugins) > 0 {
+			a.setPluginSelectionLocked(0)
+		}
+		a.invalidateSettingsWindow()
+		return
+	}
 	util.Go(a.lifecycleCtx, "switch plugin list", func() {
 		if err := a.reloadPlugins(store, ""); err != nil {
 			log.Printf("switch plugin list: %v", err)
@@ -305,6 +318,28 @@ func (a *App) runPluginOperation(kind string) {
 		cancel()
 		if err == nil {
 			err = a.reloadPlugins(store, plugin.ID)
+		}
+		if err == nil {
+			_ = a.runOnUI("invalidate related plugin catalog", func() {
+				a.pluginSettings.invalidateCachedPlugins(!store)
+				if store {
+					a.settingsSearch.SetLoaded(false)
+				}
+			})
+			util.Go(a.lifecycleCtx, "refresh related plugin catalog", func() {
+				if preloadErr := a.pluginSettings.PreloadPlugins(a.lifecycleCtx, a.services, a.sessionID, !store); preloadErr != nil {
+					log.Printf("refresh related plugin catalog: %v", preloadErr)
+					return
+				}
+				if store {
+					_ = a.runOnUI("refresh installed plugin search cache", func() {
+						plugins, _ := a.pluginSettings.CachedPlugins(false)
+						a.settingsSearch.SetPlugins(plugins)
+						a.settingsSearch.SetLoaded(true)
+						a.settingsSearch.SetError("")
+					})
+				}
+			})
 		}
 		_ = a.runOnUI("apply plugin operation", func() {
 			a.pluginSettings.SetOperation("")
@@ -1332,6 +1367,7 @@ func (a *App) applySavedPluginSettingValues(pluginID string, values map[string]s
 		break
 	}
 	a.pluginSettings.SetPlugins(plugins)
+	a.pluginSettings.cachePlugins(a.pluginSettings.PluginsStore(), plugins)
 	a.settingsSearch.SetPlugins(plugins)
 }
 

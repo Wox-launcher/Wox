@@ -22,6 +22,12 @@ type ScrollAttachment struct {
 	onChanged  func(float32)
 }
 
+type scrollBehavior struct {
+	horizontal    bool
+	offset        float32
+	ensureVisible func(start, end float32) bool
+}
+
 // NewScrollController creates a controller with an initial logical offset.
 func NewScrollController(initialOffset float32) *ScrollController {
 	return &ScrollController{offset: max(float32(0), initialOffset)}
@@ -204,6 +210,7 @@ func (s *scrollViewState) Build(context StateContext, widget any) Widget {
 	primitive.InitialOffset = 0
 	primitive.OnOffsetChanged = nil
 	primitive.Offset = s.controller.Offset()
+	primitive.onEnsureVisible = s.controller.EnsureVisible
 	primitive.onGeometry = func(viewport, content float32, measuredKeepVisible *ScrollRange) {
 		geometryChanged := !s.hasGeometry || s.viewport != viewport || s.content != content
 		s.hasGeometry = true

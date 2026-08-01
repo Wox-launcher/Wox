@@ -362,9 +362,14 @@ func buildWoxTextField(props TextFieldProps) woxwidget.Widget {
 		}},
 		}}}
 	key := woxwidget.Key(props.ID)
+	focusRingColor := woxui.Color{}
+	if props.BorderWidth > 0 {
+		focusRingColor = props.Theme.Cursor
+	}
 	return woxwidget.EditableText{
 		Key: key, AutomationID: props.ID, Label: props.Label, Value: state.Text, ReadOnly: props.ReadOnly, Protected: props.Protected,
 		Autofocus: props.Autofocus, Disabled: props.Disabled, OnKey: props.OnKey, OnTextInput: props.onTextInput,
+		FocusRingColor: focusRingColor, FocusRingRadius: radius,
 		OnFocusChange: props.OnFocusChange, OnSetValue: props.OnSetValue,
 		TextInput: func(bounds woxui.Rect) woxui.TextInputState {
 			if !props.Focused || props.Window == nil {

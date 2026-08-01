@@ -157,9 +157,9 @@ func TestHostAutomationActivatePassesGestureBounds(t *testing.T) {
 		return Semantics{
 			Key: "anchored-control", AutomationID: "anchored-control", Role: woxui.AccessibilityRoleButton, Label: "Anchored control",
 			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
-			Child: Gesture{ID: "anchored-control", OnTapBounds: func(bounds woxui.Rect) {
+			Child: Focusable{Key: "anchored-control", Child: Gesture{ID: "anchored-control", OnTapBounds: func(bounds woxui.Rect) {
 				activatedBounds = bounds
-			}, Child: Container{Width: 80, Height: 24}},
+			}, Child: Container{Width: 80, Height: 24}}},
 		}
 	})
 	host.AttachServices(&fakeHostServices{})
@@ -171,6 +171,13 @@ func TestHostAutomationActivatePassesGestureBounds(t *testing.T) {
 	}
 	if activatedBounds.Width != 80 || activatedBounds.Height != 24 {
 		t.Fatalf("activated bounds = %#v, want 80x24 control bounds", activatedBounds)
+	}
+	activatedBounds = woxui.Rect{}
+	if !host.FocusAutomationID("anchored-control") || !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
+		t.Fatal("keyboard activation was not handled")
+	}
+	if activatedBounds.Width != 80 || activatedBounds.Height != 24 {
+		t.Fatalf("keyboard activated bounds = %#v, want 80x24 control bounds", activatedBounds)
 	}
 }
 
@@ -303,6 +310,41 @@ func TestScrollViewKeepsMeasuredKeyVisible(t *testing.T) {
 	renderTestFrame(host)
 	if controller.Offset() != 50 {
 		t.Fatalf("measured keep-visible offset = %v, want 50", controller.Offset())
+	}
+}
+
+func TestHostKeepsTabFocusedControlVisibleInScrollView(t *testing.T) {
+	controller := NewScrollController(0)
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "focus-scroll", Width: 100, Height: 40, Controller: controller,
+			Child: Flex{Axis: Vertical, Children: []Widget{
+				testButton("first", nil),
+				Container{Width: 100, Height: 60},
+				testButton("second", nil),
+				Container{Width: 100, Height: 100},
+			}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	if !host.FocusAutomationID("first") || !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) {
+		t.Fatal("Tab should move focus to the second control")
+	}
+	if controller.Offset() != 40 {
+		t.Fatalf("offset after Tab = %v, want 40", controller.Offset())
+	}
+	renderTestFrame(host)
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 5, Y: 5}, Scroll: woxui.Point{Y: -50}})
+	renderTestFrame(host)
+	if controller.Offset() != 90 {
+		t.Fatalf("offset after pointer scroll = %v, want 90 without focus snap-back", controller.Offset())
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true, Modifiers: woxui.KeyModifierShift}) {
+		t.Fatal("Shift+Tab should move focus to the first control")
+	}
+	if controller.Offset() != 0 {
+		t.Fatalf("offset after Shift+Tab = %v, want 0", controller.Offset())
 	}
 }
 

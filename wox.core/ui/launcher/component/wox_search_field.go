@@ -104,8 +104,10 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		}})
 	}
 	border := withAlpha(props.Theme.ResultSubtitle, 170)
+	borderWidth := float32(1)
 	if props.Focused {
 		border = props.Theme.Cursor
+		borderWidth = 2
 	}
-	return woxwidget.Container{Width: props.Width, Height: height, Radius: 4, BorderColor: border, BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}
+	return woxwidget.Container{Width: props.Width, Height: height, Radius: 4, BorderColor: border, BorderWidth: borderWidth, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}
 }

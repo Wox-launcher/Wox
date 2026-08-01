@@ -190,22 +190,13 @@ func usagePeriodButtonWidth(label string) float32 {
 // usageShareButton builds the outlined share action without giving it more visual weight than the page filter.
 func usageShareButton(props UsageSettingsProps) (woxwidget.Widget, float32) {
 	width := min(float32(168), max(float32(104), float32(utf8.RuneCountInString(props.ShareLabel))*7.5+48))
-	foreground := props.Theme.ResultTitle
-	onShare := props.OnShare
-	if props.Loading {
-		foreground = usageWithAlpha(props.Theme.ResultSubtitle, 130)
-		onShare = nil
-	}
-	var icon woxwidget.Widget = woxwidget.Container{Width: 16, Height: 16}
-	if props.ShareIcon != nil {
-		icon = woxwidget.Image{Source: props.ShareIcon, Width: 16, Height: 16}
-	}
-	return woxwidget.Gesture{ID: "usage-share-x", OnTap: onShare, Child: woxwidget.Container{
-		Width: width, Height: 38, Radius: 8, Color: props.Theme.QueryBackground, BorderColor: usageOutlineColor(props.Theme), BorderWidth: 1,
-		Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-			icon, woxwidget.Text{Value: props.ShareLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: foreground},
-		}},
-	}}, width
+	theme := props.Theme
+	theme.ResultSubtitle = usageOutlineColor(props.Theme)
+	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		ID: "usage-share-x", Label: props.ShareLabel, Icon: props.ShareIcon, IconSize: 16, IconGap: 8, Width: width, Height: 38, Radius: 8,
+		Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 12}, FontSize: 13, Size: woxcomponent.ButtonCompact, Variant: woxcomponent.ButtonOutlinedSurface,
+		Disabled: props.Loading, OnTap: props.OnShare, Theme: theme,
+	}), width
 }
 
 // usageKPIGrid follows Flutter's four-column desktop grid and collapses cleanly on narrower settings windows.

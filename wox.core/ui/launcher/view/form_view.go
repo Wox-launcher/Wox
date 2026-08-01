@@ -100,9 +100,9 @@ type FormModelFieldProps struct {
 // FormModelField builds the same compact outlined dropdown trigger used by Flutter.
 func FormModelField(props FormModelFieldProps) woxwidget.Widget {
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
-	control := woxDropdown(dropdownTriggerProps{
+	control := woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: 34, Outline: formFieldOutline(props.Focused, props.Theme),
-		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, OnTapBounds: props.OnTap,
+		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, Theme: props.Theme, OnTapBounds: props.OnTap,
 	})
 	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 34, props.Theme)
 }
@@ -225,9 +225,9 @@ type FormSelectFieldProps struct {
 // FormSelectField builds an expanded dropdown with the same value and indicator split as Flutter.
 func FormSelectField(props FormSelectFieldProps) woxwidget.Widget {
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
-	control := woxDropdown(dropdownTriggerProps{
+	control := woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: 34, Outline: formFieldOutline(props.Focused, props.Theme),
-		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
+		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, Theme: props.Theme, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
 	})
 	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 34, props.Theme)
 }
@@ -296,10 +296,10 @@ func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any
 	modelWidth := max(float32(120), selectorsWidth-gap-providerWidth)
 	outline := formFieldOutline(props.Focused, props.Theme)
 
-	provider := woxDropdown(dropdownTriggerProps{
+	provider := woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: props.ID + "-provider", Label: props.Label + " provider", Value: props.Provider, Leading: props.ProviderIcon,
 		Width: providerWidth, Height: formAIModelControlHeight, Outline: outline, Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader,
-		OnTapBounds: props.OnProviderTap,
+		Theme: props.Theme, OnTapBounds: props.OnProviderTap,
 	})
 	var model woxwidget.Widget
 	if s.editing {
@@ -310,10 +310,10 @@ func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any
 			OnChanged: props.OnModelNameChanged,
 		})
 	} else {
-		model = woxDropdown(dropdownTriggerProps{
+		model = woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 			ID: props.ID + "-model", Label: props.Label + " model", Value: props.Model, Leading: props.ModelIcon,
 			Width: modelWidth, Height: formAIModelControlHeight, Outline: outline, Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader,
-			OnTapBounds: props.OnModelTap,
+			Theme: props.Theme, OnTapBounds: props.OnModelTap,
 		})
 	}
 

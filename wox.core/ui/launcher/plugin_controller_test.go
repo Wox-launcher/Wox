@@ -150,6 +150,26 @@ func TestPluginControllerReloadPluginsSuccess(t *testing.T) {
 	}
 }
 
+func TestPluginControllerPreloadPluginsCachesWithoutReplacingActiveCatalog(t *testing.T) {
+	deps, _ := newPluginControllerDeps()
+	c := newPluginSettingsController(deps)
+	c.SetPlugins([]pluginSettingsPlugin{{ID: "installed"}})
+	service := &pluginFakeService{plugins: map[contract.PluginCatalog][]contract.PluginCatalogItem{
+		contract.PluginCatalogStore: {{ID: "store", Name: "Store Plugin"}},
+	}}
+
+	if err := c.PreloadPlugins(context.Background(), service, "session", true); err != nil {
+		t.Fatalf("PreloadPlugins error: %v", err)
+	}
+	if got := c.Plugins(); len(got) != 1 || got[0].ID != "installed" {
+		t.Fatalf("active plugins = %+v, want installed catalog unchanged", got)
+	}
+	cached, loaded := c.CachedPlugins(true)
+	if !loaded || len(cached) != 1 || cached[0].ID != "store" {
+		t.Fatalf("cached store plugins = %+v, loaded = %v", cached, loaded)
+	}
+}
+
 func TestPluginControllerPluginsStore(t *testing.T) {
 	deps, _ := newPluginControllerDeps()
 	c := newPluginSettingsController(deps)

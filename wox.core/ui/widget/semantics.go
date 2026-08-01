@@ -27,6 +27,8 @@ type semanticBehavior struct {
 type focusBehavior struct {
 	autofocus               bool
 	disabled                bool
+	focusRingColor          woxui.Color
+	focusRingRadius         float32
 	unfocusOnPointerOutside bool
 	onKeyCapture            func(event woxui.KeyEvent) bool
 	onKey                   func(event woxui.KeyEvent) bool
@@ -110,9 +112,11 @@ func (w Semantics) layout(ctx context, available constraints) *node {
 
 // Focusable lets one retained element own keyboard focus and input callbacks.
 type Focusable struct {
-	Key       Key
-	Autofocus bool
-	Disabled  bool
+	Key             Key
+	Autofocus       bool
+	Disabled        bool
+	FocusRingColor  woxui.Color
+	FocusRingRadius float32
 	// UnfocusOnPointerOutside releases focus when a primary pointer press lands outside this focusable subtree and does not target another focusable.
 	UnfocusOnPointerOutside bool
 	OnKeyCapture            func(event woxui.KeyEvent) bool
@@ -134,6 +138,8 @@ func (w Focusable) layout(ctx context, available constraints) *node {
 	child.focus = &focusBehavior{
 		autofocus:               w.Autofocus,
 		disabled:                w.Disabled,
+		focusRingColor:          w.FocusRingColor,
+		focusRingRadius:         w.FocusRingRadius,
 		unfocusOnPointerOutside: w.UnfocusOnPointerOutside,
 		onKeyCapture:            w.OnKeyCapture,
 		onKey:                   w.OnKey,
@@ -165,20 +171,22 @@ func (w FocusScope) layout(ctx context, available constraints) *node {
 
 // EditableText combines text-field semantics with focus, key, IME, and value actions.
 type EditableText struct {
-	Key           Key
-	AutomationID  string
-	Label         string
-	Value         string
-	ReadOnly      bool
-	Protected     bool
-	Autofocus     bool
-	Disabled      bool
-	OnKey         func(event woxui.KeyEvent) bool
-	OnTextInput   func(event woxui.TextInputEvent) bool
-	OnFocusChange func(focused bool)
-	OnSetValue    func(value string) error
-	TextInput     func(bounds woxui.Rect) woxui.TextInputState
-	Child         Widget
+	Key             Key
+	AutomationID    string
+	Label           string
+	Value           string
+	ReadOnly        bool
+	Protected       bool
+	Autofocus       bool
+	Disabled        bool
+	FocusRingColor  woxui.Color
+	FocusRingRadius float32
+	OnKey           func(event woxui.KeyEvent) bool
+	OnTextInput     func(event woxui.TextInputEvent) bool
+	OnFocusChange   func(focused bool)
+	OnSetValue      func(value string) error
+	TextInput       func(bounds woxui.Rect) woxui.TextInputState
+	Child           Widget
 }
 
 func (w EditableText) layout(ctx context, available constraints) *node {
@@ -187,14 +195,16 @@ func (w EditableText) layout(ctx context, available constraints) *node {
 		actions = append(actions, woxui.AccessibilityActionSetValue)
 	}
 	child := Focusable{
-		Key:           w.Key,
-		Autofocus:     w.Autofocus,
-		Disabled:      w.Disabled,
-		OnKey:         w.OnKey,
-		OnTextInput:   w.OnTextInput,
-		OnFocusChange: w.OnFocusChange,
-		TextInput:     w.TextInput,
-		Child:         w.Child,
+		Key:             w.Key,
+		Autofocus:       w.Autofocus,
+		Disabled:        w.Disabled,
+		FocusRingColor:  w.FocusRingColor,
+		FocusRingRadius: w.FocusRingRadius,
+		OnKey:           w.OnKey,
+		OnTextInput:     w.OnTextInput,
+		OnFocusChange:   w.OnFocusChange,
+		TextInput:       w.TextInput,
+		Child:           w.Child,
 	}.layout(ctx, available)
 	child.semantic = &semanticBehavior{
 		automationID: w.AutomationID,

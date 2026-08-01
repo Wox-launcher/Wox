@@ -24,10 +24,12 @@ type HotkeyRecorderProps struct {
 // WoxHotkeyRecorder matches Flutter's outlined recorder with platform-labelled keycaps.
 func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
 	border := withAlpha(props.Theme.ResultSubtitle, 140)
+	borderWidth := float32(1)
 	if props.Error {
 		border = props.Theme.ErrorText
 	} else if props.Focused {
 		border = props.Theme.Cursor
+		borderWidth = 2
 	}
 
 	contentWidth := float32(80)
@@ -57,7 +59,7 @@ func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
 	width := contentWidth + 16
 	contentBox := woxwidget.Container{
 		Width: width, Height: 30, Padding: woxwidget.Insets{Left: 8, Top: 4, Right: 8, Bottom: 4},
-		BorderColor: border, BorderWidth: 1, Radius: 4, Child: content,
+		BorderColor: border, BorderWidth: borderWidth, Radius: 4, Child: content,
 	}
 	key := woxwidget.Key(props.ID)
 	return woxwidget.Stateful{

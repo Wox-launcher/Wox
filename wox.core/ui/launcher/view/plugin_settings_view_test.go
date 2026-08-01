@@ -48,7 +48,7 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
 	scroll := column.Children[1].(woxwidget.ScrollView)
 	rows := scroll.Child.(woxwidget.Flex)
-	row := rows.Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
+	row := rows.Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	rowContent := row.Child.(woxwidget.Flex)
 	badgeSlot := rowContent.Children[2].(woxwidget.Align)
 	if badgeSlot.Horizontal != 1 || badgeSlot.Vertical != 0.5 {
@@ -77,7 +77,7 @@ func TestPluginListSearchHighlightKeepsSelectedFillAndAddsBorder(t *testing.T) {
 	})
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
-	row := column.Children[1].(woxwidget.ScrollView).Child.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
+	row := column.Children[1].(woxwidget.ScrollView).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	if row.Color != selected {
 		t.Fatalf("selected plugin fill = %#v, want selected color %#v", row.Color, selected)
 	}
