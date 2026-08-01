@@ -257,6 +257,102 @@ func formatChatDebugTrace(raw json.RawMessage) (string, string) {
 	return summary, formatted.String()
 }
 
+// chatRenderItem separates controller conversations from the visible round disclosure state.
+type chatRenderItem struct {
+	kind          string
+	conversation  chatConversation
+	showMeta      bool
+	hideReasoning bool
+	roundID       string
+	roundStart    int64
+	roundEnd      int64
+	roundExpanded bool
+}
+
+// chatRenderItems groups assistant and tool messages into the same completed rounds as Flutter.
+func chatRenderItems(conversations []chatConversation, streaming bool, expandedRounds map[string]bool) []chatRenderItem {
+	items := make([]chatRenderItem, 0, len(conversations))
+	round := make([]chatConversation, 0)
+	closeRound := func(complete bool) {
+		if len(round) == 0 {
+			return
+		}
+		finalIndex := -1
+		if round[len(round)-1].Role == "assistant" {
+			finalIndex = len(round) - 1
+		}
+		intermediate := append([]chatConversation(nil), round...)
+		if finalIndex >= 0 {
+			intermediate = intermediate[:finalIndex]
+			if reasoning := strings.TrimSpace(round[finalIndex].Reasoning); reasoning != "" {
+				reasoningMessage := round[finalIndex]
+				reasoningMessage.Text = ""
+				reasoningMessage.Images = nil
+				intermediate = append(intermediate, reasoningMessage)
+			}
+		}
+		canCollapse := complete && finalIndex >= 0 && len(intermediate) > 0
+		if canCollapse {
+			firstID := round[0].ID
+			lastID := round[finalIndex].ID
+			roundID := "round:" + firstID + ":" + lastID
+			start := int64(0)
+			for _, message := range round {
+				if message.Role == "assistant" {
+					start = message.Timestamp
+					break
+				}
+			}
+			expanded := expandedRounds[roundID]
+			items = append(items, chatRenderItem{kind: "round", roundID: roundID, roundStart: start, roundEnd: round[finalIndex].Timestamp, roundExpanded: expanded})
+			if expanded {
+				for _, message := range intermediate {
+					items = append(items, chatRenderItem{conversation: message})
+				}
+			}
+			items = append(items, chatRenderItem{conversation: round[finalIndex], showMeta: true, hideReasoning: true})
+			round = round[:0]
+			return
+		}
+		for index, message := range round {
+			items = append(items, chatRenderItem{conversation: message, showMeta: index == finalIndex})
+		}
+		round = round[:0]
+	}
+
+	for _, conversation := range conversations {
+		if conversation.Role == "system" {
+			continue
+		}
+		if conversation.Role == "user" {
+			closeRound(true)
+			items = append(items, chatRenderItem{conversation: conversation, showMeta: true})
+			continue
+		}
+		round = append(round, conversation)
+	}
+	closeRound(!streaming)
+	return items
+}
+
+// formatChatRoundDuration matches Flutter's compact seconds and minute labels.
+func formatChatRoundDuration(start, end int64) string {
+	duration := end - start
+	if start <= 0 || end <= 0 || duration < 0 {
+		duration = 0
+	}
+	seconds := (duration + 500) / 1000
+	if seconds < 60 {
+		return fmt.Sprintf("%ds", seconds)
+	}
+	minutes := seconds / 60
+	seconds %= 60
+	if seconds == 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+	return fmt.Sprintf("%dm %ds", minutes, seconds)
+}
+
 // chatMessagesProps prepares semantic messages and leaves their widget composition to the view.
 func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatMessagesProps {
 	// ponytail: Add viewport virtualization after profiling a real long chat; the current full list preserves exact scroll height with less state.
@@ -279,9 +375,22 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 		return props
 	}
 	actionsEnabled := !snapshot.chat.IsStreaming && !snapshot.sending && snapshot.question == nil
-	props.Messages = make([]previewview.ChatMessageProps, 0, len(snapshot.chat.Conversations))
-	for index, conversation := range snapshot.chat.Conversations {
-		props.Messages = append(props.Messages, a.chatMessageProps(snapshot.key, index, conversation, palette, innerWidth, actionsEnabled))
+	renderItems := chatRenderItems(snapshot.chat.Conversations, snapshot.chat.IsStreaming || snapshot.sending, snapshot.expandedRounds)
+	props.Messages = make([]previewview.ChatMessageProps, 0, len(renderItems))
+	for index, item := range renderItems {
+		if item.kind == "round" {
+			label := a.translate("i18n:ui_ai_chat_round_worked_duration")
+			if strings.TrimSpace(label) == "" || label == "i18n:ui_ai_chat_round_worked_duration" {
+				label = "Worked for %s"
+			}
+			label = fmt.Sprintf(label, formatChatRoundDuration(item.roundStart, item.roundEnd))
+			roundID := item.roundID
+			props.Messages = append(props.Messages, previewview.ChatMessageProps{
+				Key: roundID, Kind: "round", RoundLabel: label, RoundExpanded: item.roundExpanded, Theme: palette.componentTheme(), OnToggleRound: func() { a.toggleChatRound(roundID) },
+			})
+			continue
+		}
+		props.Messages = append(props.Messages, a.chatMessageProps(snapshot.key, index, item.conversation, palette, innerWidth, actionsEnabled, item.showMeta, item.hideReasoning, snapshot.chat.IsStreaming || snapshot.sending))
 	}
 	props.ContentHeight = previewview.ChatMessagesContentHeight(props.Messages, innerHeight)
 	maxOffset := max(float32(0), props.ContentHeight-innerHeight)
@@ -290,29 +399,32 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 }
 
 // chatMessageProps resolves text layouts, images, and controller actions for one conversation.
-func (a *App) chatMessageProps(key string, index int, conversation chatConversation, palette uiPalette, width float32, actionsEnabled bool) previewview.ChatMessageProps {
+func (a *App) chatMessageProps(key string, index int, conversation chatConversation, palette uiPalette, width float32, actionsEnabled, showMeta, hideReasoning, streaming bool) previewview.ChatMessageProps {
 	cardWidth := width
 	if conversation.Role == "user" {
-		cardWidth = max(float32(180), width*0.82)
+		cardWidth = width * 0.82
 	}
 	innerWidth := max(float32(40), cardWidth-24)
 	props := previewview.ChatMessageProps{
-		Key: fmt.Sprintf("%s-%d", key, index), Role: conversation.Role, Theme: palette.componentTheme(),
+		Key: fmt.Sprintf("%s-%d", key, index), Role: conversation.Role, ShowMeta: showMeta, Theme: palette.componentTheme(),
+		CopyLabel: a.translate("i18n:ui_ai_chat_copy_message"), EditLabel: a.translate("i18n:ui_ai_chat_edit_message"), RetryLabel: a.translate("i18n:ui_ai_chat_regenerate_response"),
 	}
 	if conversation.Timestamp > 0 {
 		props.Timestamp = time.UnixMilli(conversation.Timestamp).Local().Format("15:04")
+		if metrics, err := a.window.MeasureText(props.Timestamp, woxui.TextStyle{Size: 11}); err == nil {
+			props.TimestampWidth = metrics.Size.Width
+		}
 	}
 	if conversation.Role == "tool" || conversation.ToolCallInfo.Name != "" {
 		props.ToolText = formatChatToolCall(conversation)
 		props.ToolLayout = a.previewTextLayout(fmt.Sprintf("chat-tool\x00%s\x00%d", key, index), props.ToolText, woxui.TextStyle{Size: 11}, innerWidth, 17)
 	} else {
-		if reasoning := strings.TrimSpace(conversation.Reasoning); reasoning != "" {
-			props.Reasoning = "Reasoning\n" + reasoning
-			reasoningWidth := max(float32(20), innerWidth-16)
-			props.ReasoningLayout = a.previewTextLayout(fmt.Sprintf("chat-reasoning\x00%s\x00%d", key, index), props.Reasoning, woxui.TextStyle{Size: 11}, reasoningWidth, 17)
+		if reasoning := strings.TrimSpace(conversation.Reasoning); reasoning != "" && !hideReasoning {
+			props.Reasoning = reasoning
+			props.ReasoningLayout = a.previewTextLayout(fmt.Sprintf("chat-reasoning\x00%s\x00%d", key, index), props.Reasoning, woxui.TextStyle{Size: 11}, innerWidth, 17)
 		}
 		props.Text = strings.TrimSpace(conversation.Text)
-		if props.Text == "" && conversation.Role == "assistant" {
+		if props.Text == "" && conversation.Role == "assistant" && streaming && !hideReasoning {
 			props.Text = "Thinking…"
 		}
 		if props.Text != "" {
@@ -333,6 +445,22 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 		for _, source := range conversation.Images[:min(3, len(conversation.Images))] {
 			props.Images = append(props.Images, a.imageFor(source))
 		}
+	}
+	if conversation.Role == "user" {
+		for _, line := range props.TextLayout.Lines {
+			if metrics, err := a.window.MeasureText(line, woxui.TextStyle{Size: 13}); err == nil {
+				props.ContentWidth = max(props.ContentWidth, metrics.Size.Width)
+			}
+		}
+		if props.Skills != "" {
+			if metrics, err := a.window.MeasureText(props.Skills, woxui.TextStyle{Size: 10}); err == nil {
+				props.ContentWidth = max(props.ContentWidth, metrics.Size.Width)
+			}
+		}
+		if len(props.Images) > 0 {
+			props.ContentWidth = max(props.ContentWidth, float32(len(props.Images))*82+float32(len(props.Images)-1)*8)
+		}
+		props.ContentWidth = min(innerWidth, props.ContentWidth)
 	}
 	if copyText := chatConversationClipboardText(conversation); copyText != "" {
 		props.OnCopy = func() { a.copyChatText(copyText) }

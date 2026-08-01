@@ -4,7 +4,26 @@ import (
 	"testing"
 
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
+
+func TestSettingsSearchCommandFSelectsExistingText(t *testing.T) {
+	deps, _ := newSearchControllerDeps()
+	app := &App{
+		settingsSearch: newSettingsSearchController(deps),
+		pluginSettings: newPluginSettingsController(deps),
+		themeSettings:  newThemeSettingsController(deps),
+	}
+	app.settingsSearch.SetEditor(woxwidget.NewTextEditingController("existing"))
+
+	if !app.onSettingsSearchKey(woxui.KeyEvent{Key: "f", Modifiers: woxui.KeyModifierMeta, Down: true}) {
+		t.Fatal("Cmd+F was not handled")
+	}
+	state := app.settingsSearch.Editor().State()
+	if !app.settingsSearch.Focused() || state.Selection != (woxui.TextSelection{Anchor: 0, Focus: 8}) {
+		t.Fatalf("settings search focus/selection = %v/%+v, want focused with existing text selected", app.settingsSearch.Focused(), state.Selection)
+	}
+}
 
 func TestSettingsSearchPluginResultKeepsPluginIcon(t *testing.T) {
 	icon := woxImage{ImageType: "emoji", ImageData: "P"}

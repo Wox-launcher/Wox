@@ -1,6 +1,64 @@
 package launcher
 
-import "testing"
+import (
+	"testing"
+
+	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
+)
+
+type formTableHostServices struct{}
+
+func (formTableHostServices) MeasureText(string, woxui.TextStyle) (woxui.TextMetrics, error) {
+	return woxui.TextMetrics{}, nil
+}
+func (formTableHostServices) Invalidate() error { return nil }
+func (formTableHostServices) SetTextInputState(woxui.TextInputState) error {
+	return nil
+}
+func (formTableHostServices) SetPointerCursor(woxui.PointerCursor) error { return nil }
+func (formTableHostServices) UpdateAccessibility(woxui.AccessibilityTree, woxui.AccessibilityActionHandler) error {
+	return nil
+}
+
+func TestFormTableTabIncludesFooterButtons(t *testing.T) {
+	definition := formDefinition{Type: "table", Value: formDefinitionValue{Key: "Commands"}}
+	form := &formState{formFieldsState: newFormFieldsState([]formDefinition{definition}, map[string]string{"Commands": "[]"}, true)}
+	deps := CommonDeps{}
+	rowForm := newFormFieldsState([]formDefinition{{Type: "checkbox", Value: formDefinitionValue{Key: "Disabled"}}}, nil, true)
+	app := &App{
+		form:           form,
+		aiSettings:     newAISettingsController(deps),
+		pluginSettings: newPluginSettingsController(deps),
+		hotkeySettings: newHotkeySettingsController(deps),
+		tableEditor:    &formTableEditorState{target: &form.formFieldsState, rowForm: &rowForm, deletePending: -1},
+	}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+			woxwidget.Focusable{Key: "form-table-row-field-0", OnKey: app.onFormTableKey, Child: woxwidget.Container{Width: 100, Height: 30}},
+			woxwidget.Focusable{Key: "form-table-row-cancel", Child: woxwidget.Container{Width: 100, Height: 30}},
+			woxwidget.Focusable{Key: "form-table-row-save", Child: woxwidget.Container{Width: 100, Height: 30}},
+		}}
+	})
+	host.AttachServices(formTableHostServices{})
+	displayList := woxui.DisplayList{}
+	host.Frame(&displayList, woxui.FrameInfo{Size: woxui.Size{Width: 200, Height: 100}, PixelSize: woxui.PixelSize{Width: 200, Height: 100}, Scale: 1})
+	host.RequestFocus("form-table-row-field-0")
+	app.host = host
+
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.HasFocus("form-table-row-cancel") {
+		t.Fatal("Tab from the last field should focus Cancel")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.HasFocus("form-table-row-save") {
+		t.Fatal("Tab from Cancel should focus Save")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.HasFocus("form-table-row-field-0") {
+		t.Fatal("Tab from Save should wrap to the first field")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Modifiers: woxui.KeyModifierShift, Down: true}) || !host.HasFocus("form-table-row-save") {
+		t.Fatal("Shift+Tab from the first field should focus Save")
+	}
+}
 
 func TestBeginCloneFormTableRowDirectPrefillsNewRow(t *testing.T) {
 	definition := formDefinition{

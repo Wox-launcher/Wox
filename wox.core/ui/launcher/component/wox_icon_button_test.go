@@ -24,3 +24,21 @@ func TestWoxIconButtonOwnsHoverAndTapGesture(t *testing.T) {
 		t.Fatalf("icon button hover background = %#v, want %#v", hovered.Color, hoverColor)
 	}
 }
+
+func TestSharedIconGlyphsUseFixedPainterBounds(t *testing.T) {
+	color := woxui.Color{R: 10, G: 20, B: 30, A: 255}
+	glyphs := []woxwidget.Widget{
+		ChevronGlyph(16, color, false),
+		ChevronGlyph(16, color, true),
+		CopyGlyph(14, color),
+		EditGlyph(14, color),
+		RefreshGlyph(14, color),
+		DebugGlyph(16, color),
+	}
+	for index, glyph := range glyphs {
+		painter, ok := glyph.(woxwidget.Painter)
+		if !ok || painter.Width <= 0 || painter.Height <= 0 || painter.Paint == nil {
+			t.Fatalf("glyph %d = %#v", index, glyph)
+		}
+	}
+}

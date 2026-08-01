@@ -42,33 +42,22 @@ func TestHotkeyRecordingPresentationKeepsConflictCandidate(t *testing.T) {
 }
 
 func TestHotkeyRecordingFocusKeysMatchFlutter(t *testing.T) {
-	if !hotkeyRecordingMovesFocus(woxui.KeyEvent{Key: woxui.KeyTab}) {
-		t.Fatal("Tab should move focus from the recorder")
+	if !hotkeyRecordingStops(woxui.KeyEvent{Key: woxui.KeyEscape}) {
+		t.Fatal("Escape should stop the recorder")
 	}
-	if !hotkeyRecordingMovesFocus(woxui.KeyEvent{Key: woxui.KeyTab, Modifiers: woxui.KeyModifierShift}) {
-		t.Fatal("Shift+Tab should move focus backward from the recorder")
+	if !hotkeyRecordingStops(woxui.KeyEvent{Key: woxui.KeyTab}) {
+		t.Fatal("Tab should stop the recorder")
 	}
-	if hotkeyRecordingMovesFocus(woxui.KeyEvent{Key: woxui.KeyTab, Modifiers: woxui.KeyModifierControl}) {
+	if !hotkeyRecordingStops(woxui.KeyEvent{Key: woxui.KeyTab, Modifiers: woxui.KeyModifierShift}) {
+		t.Fatal("Shift+Tab should stop the recorder")
+	}
+	if hotkeyRecordingStops(woxui.KeyEvent{Key: woxui.KeyTab, Modifiers: woxui.KeyModifierControl}) {
 		t.Fatal("Ctrl+Tab should remain available as a shortcut candidate")
 	}
-	if !hotkeyRecordingMovesFocus(woxui.KeyEvent{Key: woxui.KeyEnter}) {
-		t.Fatal("Enter should move focus from the recorder")
+	if !hotkeyRecordingStops(woxui.KeyEvent{Key: woxui.KeyEnter}) {
+		t.Fatal("Enter should stop the recorder")
 	}
-	if hotkeyRecordingMovesFocus(woxui.KeyEvent{Key: woxui.KeyEnter, Modifiers: woxui.KeyModifierShift}) {
+	if hotkeyRecordingStops(woxui.KeyEvent{Key: woxui.KeyEnter, Modifiers: woxui.KeyModifierShift}) {
 		t.Fatal("Shift+Enter should remain available as a shortcut candidate")
-	}
-}
-
-func TestEscapeKeepsHotkeyRecorderFocused(t *testing.T) {
-	controller := newHotkeySettingsController(CommonDeps{})
-	state := &hotkeyRecordingState{}
-	controller.SetRecording(state)
-	app := &App{hotkeySettings: controller}
-
-	if !app.onHotkeyRecordingKey(woxui.KeyEvent{Key: woxui.KeyEscape}) {
-		t.Fatal("Escape should be consumed while recording")
-	}
-	if controller.Recording() != state {
-		t.Fatal("Escape should not stop the recorder")
 	}
 }

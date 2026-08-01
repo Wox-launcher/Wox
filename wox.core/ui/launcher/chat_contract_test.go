@@ -30,3 +30,26 @@ func TestChatDataContractRoundTrip(t *testing.T) {
 		t.Fatalf("round trip chat = %+v", roundTrip)
 	}
 }
+
+func TestChatRenderItemsCollapseCompletedReasoningRound(t *testing.T) {
+	conversations := []chatConversation{
+		{ID: "user-1", Role: "user", Text: "hello", Timestamp: 1_000},
+		{ID: "assistant-1", Role: "assistant", Text: "answer", Reasoning: "process", Timestamp: 2_400},
+	}
+
+	collapsed := chatRenderItems(conversations, false, nil)
+	if len(collapsed) != 3 || collapsed[1].kind != "round" || collapsed[1].roundExpanded || !collapsed[2].hideReasoning || !collapsed[2].showMeta {
+		t.Fatalf("collapsed render items = %+v", collapsed)
+	}
+	expanded := chatRenderItems(conversations, false, map[string]bool{collapsed[1].roundID: true})
+	if len(expanded) != 4 || !expanded[1].roundExpanded || expanded[2].conversation.Reasoning != "process" || expanded[2].conversation.Text != "" {
+		t.Fatalf("expanded render items = %+v", expanded)
+	}
+	streaming := chatRenderItems(conversations, true, nil)
+	if len(streaming) != 2 || streaming[1].kind == "round" || streaming[1].hideReasoning {
+		t.Fatalf("streaming render items = %+v", streaming)
+	}
+	if duration := formatChatRoundDuration(1_000, 62_400); duration != "1m 1s" {
+		t.Fatalf("duration = %q", duration)
+	}
+}

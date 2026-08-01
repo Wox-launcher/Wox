@@ -10,6 +10,7 @@ import (
 
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 	"wox/util"
 )
 
@@ -305,7 +306,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.settingRow = 0
 		a.settingNote = note
 		a.settingSaving = false
-		a.settingsSearch.SetEditor(woxui.NewTextEditor(""))
+		a.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
 		a.settingsSearch.SetFocused(tab != "plugins")
 		a.settingsSearch.SetPanel(false)
 		a.settingsSearch.SetSelected(0)

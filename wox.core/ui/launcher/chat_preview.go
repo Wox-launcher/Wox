@@ -151,6 +151,7 @@ type chatPreviewState struct {
 	question         *aiQuestion
 	questionEditor   *woxui.TextEditor
 	questionSelected int
+	expandedRounds   map[string]bool
 }
 
 type chatPreviewSnapshot struct {
@@ -179,6 +180,7 @@ type chatPreviewSnapshot struct {
 	question         *aiQuestion
 	questionEditing  woxui.TextEditingState
 	questionSelected int
+	expandedRounds   map[string]bool
 }
 
 type chatCommandPaletteItem struct {
@@ -372,6 +374,10 @@ func snapshotChatPreviewLocked(state *chatPreviewState) *chatPreviewSnapshot {
 		panelViewport:    state.panelViewport,
 		question:         cloneChatQuestion(state.question),
 		questionSelected: state.questionSelected,
+		expandedRounds:   make(map[string]bool, len(state.expandedRounds)),
+	}
+	for roundID, expanded := range state.expandedRounds {
+		snapshot.expandedRounds[roundID] = expanded
 	}
 	if state.editor != nil {
 		snapshot.editing = state.editor.State()
@@ -414,15 +420,16 @@ func (a *App) activateChatPreview(result queryResult, preview queryPreview) erro
 	loadChatID := ""
 	if a.chatPreview == nil || a.chatPreview.key != key {
 		a.chatPreview = &chatPreviewState{
-			key:        key,
-			queryID:    result.QueryID,
-			resultID:   result.ID,
-			chat:       cloneChatData(data.ActiveChat),
-			chats:      append([]chatData(nil), data.Chats...),
-			editor:     woxui.NewTextEditor(""),
-			active:     a.chatFullscreen,
-			autoFollow: true,
-			scroll:     float32(math.MaxFloat32),
+			key:            key,
+			queryID:        result.QueryID,
+			resultID:       result.ID,
+			chat:           cloneChatData(data.ActiveChat),
+			chats:          append([]chatData(nil), data.Chats...),
+			editor:         woxui.NewTextEditor(""),
+			active:         a.chatFullscreen,
+			autoFollow:     true,
+			scroll:         float32(math.MaxFloat32),
+			expandedRounds: make(map[string]bool),
 		}
 		if data.ActiveChatID != "" {
 			a.chatPreview.loading = true
@@ -514,6 +521,19 @@ func (a *App) applyChatResponse(chat chatData) {
 			state.scroll = float32(math.MaxFloat32)
 		}
 	}
+	_ = a.window.Invalidate()
+}
+
+// toggleChatRound expands or collapses one completed assistant round.
+func (a *App) toggleChatRound(roundID string) {
+	state := a.chatPreview
+	if state == nil || roundID == "" {
+		return
+	}
+	if state.expandedRounds == nil {
+		state.expandedRounds = make(map[string]bool)
+	}
+	state.expandedRounds[roundID] = !state.expandedRounds[roundID]
 	_ = a.window.Invalidate()
 }
 
@@ -651,6 +671,7 @@ func (a *App) startNewChat() {
 	state.panel = ""
 	state.question = nil
 	state.questionEditor = nil
+	clear(state.expandedRounds)
 	state.autoFollow = true
 	state.scroll = float32(math.MaxFloat32)
 	state.revision++
@@ -731,6 +752,7 @@ func (a *App) selectChatHistory(chatID string) {
 		questionID = state.question.QuestionID
 	}
 	state.chat = *selected
+	clear(state.expandedRounds)
 	state.editor.SetText("", false)
 	state.loading = true
 	state.sending = false

@@ -25,6 +25,7 @@ type SearchFieldProps struct {
 	Value         string
 	Focused       bool
 	Autofocus     bool
+	Controller    *woxwidget.TextEditingController
 	SearchIcon    *woxui.Image
 	Actions       []SearchFieldAction
 	Window        *woxui.Window
@@ -70,7 +71,7 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: 6, Bottom: 11}, Transparent: true,
 		FocusRingColor: props.Theme.Cursor, FocusRingOutsets: woxwidget.Insets{Left: leadingWidth, Right: clearWidth + actionsWidth + trailingInset},
 		Style: woxui.TextStyle{Size: 13}, TextColor: props.Theme.ResultTitle, TextAlignmentY: 0.5,
-		Value: props.Value, Focused: props.Focused, Autofocus: props.Autofocus, MaxLines: 1, Window: props.Window, Theme: props.Theme,
+		Value: props.Value, Focused: props.Focused, Autofocus: props.Autofocus, Controller: props.Controller, MaxLines: 1, Window: props.Window, Theme: props.Theme,
 		OnKey: props.OnKey, OnFocusChange: props.OnFocusChange, OnChanged: props.OnChanged, OnSetValue: props.OnSetValue,
 	})
 	children := make([]woxwidget.Widget, 0, len(props.Actions)+4)

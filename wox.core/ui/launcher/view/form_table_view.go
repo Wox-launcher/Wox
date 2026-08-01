@@ -837,7 +837,7 @@ func formTableRowControl(props FormTableRowFieldProps, width, height float32) wo
 		return formTableRowSelectControl(props, width, height)
 	case "hotkey", "dictationHotkey":
 		recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
-			ID: props.ID, Labels: props.HotkeyLabels, Placeholder: props.Placeholder, Focused: props.Recording, Error: props.RecordingError, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
+			ID: props.ID, Labels: props.HotkeyLabels, Placeholder: props.Placeholder, Focused: props.Focused, Error: props.RecordingError, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
 			Window: props.Window, Theme: props.Theme, OnFocusChange: props.OnFocusChange,
 		})
 		recorder = woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: recorder}
@@ -895,9 +895,10 @@ func formTableRowCheckboxControl(props FormTableRowFieldProps) woxwidget.Widget 
 			Value: "✓", Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText,
 		}}
 	}
-	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
+	control := woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
 		Width: 18, Height: 18, Radius: 3, BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1, Padding: woxwidget.UniformInsets(1), Child: mark,
 	}}
+	return formTableRowFocusableControl(props, control)
 }
 
 // formTableRowImageControl restores Flutter's preview plus emoji and upload actions.
@@ -945,13 +946,14 @@ func formTableRowImageControl(props FormTableRowFieldProps, height float32) woxw
 }
 
 func formTableRowAppControl(props FormTableRowFieldProps, width, height float32) woxwidget.Widget {
-	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
+	control := woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
 		Width: width, Height: height, Radius: 4, BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1, Padding: woxwidget.Insets{Left: 10, Top: 5, Right: 9},
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
 			woxwidget.TextBlock{Value: props.Value, Width: width - 20, Height: 17, MaxLines: 1, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
 			woxwidget.TextBlock{Value: props.Detail, Width: width - 20, Height: 14, MaxLines: 1, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.ActionHeader},
 		}},
 	}}
+	return formTableRowFocusableControl(props, control)
 }
 
 // formTableRowSelectControl keeps the selected value and dropdown indicator in separate aligned slots, matching Flutter's expanded dropdown button.
@@ -962,8 +964,27 @@ func formTableRowSelectControl(props FormTableRowFieldProps, width, height float
 	}
 	return woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: props.ID, Label: props.Label, Value: props.Value, Width: width, Height: height, Outline: formTableRowOutline(props.Theme, props.Focused),
-		Foreground: foreground, Secondary: props.Theme.ActionHeader, Theme: props.Theme, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
+		Foreground: foreground, Secondary: props.Theme.ActionHeader, Theme: props.Theme, Focused: props.Focused, OnKey: props.OnKey,
+		OnFocusChange: func(focused bool) {
+			if focused && props.OnFocus != nil {
+				props.OnFocus()
+			}
+		},
+		OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
 	})
+}
+
+// formTableRowFocusableControl gives non-text row controls the same controlled focus contract as text fields.
+func formTableRowFocusableControl(props FormTableRowFieldProps, child woxwidget.Widget) woxwidget.Widget {
+	return woxwidget.Focusable{
+		Key: woxwidget.Key(props.ID), Autofocus: props.Focused, OnKey: props.OnKey,
+		OnFocusChange: func(focused bool) {
+			if focused && props.OnFocus != nil {
+				props.OnFocus()
+			}
+		},
+		Child: child,
+	}
 }
 
 func formTableRowValueControl(props FormTableRowFieldProps, width, height float32) woxwidget.Widget {

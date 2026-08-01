@@ -24,12 +24,8 @@ type HotkeyRecorderProps struct {
 // WoxHotkeyRecorder matches Flutter's outlined recorder with platform-labelled keycaps.
 func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
 	border := withAlpha(props.Theme.ResultSubtitle, 140)
-	borderWidth := float32(1)
 	if props.Error {
 		border = props.Theme.ErrorText
-	} else if props.Focused {
-		border = props.Theme.Cursor
-		borderWidth = 2
 	}
 
 	contentWidth := float32(80)
@@ -59,7 +55,7 @@ func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
 	width := contentWidth + 16
 	contentBox := woxwidget.Container{
 		Width: width, Height: 30, Padding: woxwidget.Insets{Left: 8, Top: 4, Right: 8, Bottom: 4},
-		BorderColor: border, BorderWidth: borderWidth, Radius: 4, Child: content,
+		BorderColor: border, BorderWidth: 1, Radius: 4, Child: content,
 	}
 	key := woxwidget.Key(props.ID)
 	return woxwidget.Stateful{
@@ -105,16 +101,11 @@ func (s *hotkeyRecorderFocusState) Build(context woxwidget.StateContext, widget 
 	config := widget.(hotkeyRecorderFocusWidget)
 	s.updateBinding(context, config.Props.ID)
 	return woxwidget.Focusable{
-		Key: s.key, UnfocusOnPointerOutside: true,
+		Key: s.key, Autofocus: config.Props.Focused, UnfocusOnPointerOutside: true, FocusRingColor: config.Props.Theme.Cursor, FocusRingRadius: 4,
 		// Keep recorder navigation local so Enter and Escape cannot fall through to page actions.
 		OnKey: func(event woxui.KeyEvent) bool {
-			if event.Key == woxui.KeyEscape {
-				return true
-			}
-			if event.Down && !event.Composing && event.Key == woxui.KeyEnter && event.Modifiers == 0 {
-				if !s.focusNode.MoveFocus(false) {
-					s.focusNode.Unfocus()
-				}
+			if event.Down && !event.Composing && (event.Key == woxui.KeyEscape || (event.Key == woxui.KeyEnter && event.Modifiers == 0)) {
+				s.focusNode.Unfocus()
 				return true
 			}
 			return false

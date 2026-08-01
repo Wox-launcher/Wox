@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"wox/ui/contract"
-	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 // mockSearchable is a minimal Searchable source for Run-aggregation tests.
@@ -55,7 +55,7 @@ func TestSettingsSearchRunEmptyQueryReturnsNil(t *testing.T) {
 func TestSettingsSearchEnterExit(t *testing.T) {
 	deps, _ := newSearchControllerDeps()
 	c := newSettingsSearchController(deps)
-	c.SetEditor(woxui.NewTextEditor("hotkey"))
+	c.SetEditor(woxwidget.NewTextEditingController("hotkey"))
 	c.SetFocused(true)
 	c.SetPanel(true)
 

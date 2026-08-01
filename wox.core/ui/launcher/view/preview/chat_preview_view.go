@@ -105,7 +105,14 @@ func ChatHeader(props ChatHeaderProps) woxwidget.Widget {
 		{Left: 44, Top: 5, Child: title},
 	}
 	if props.ShowDebug {
-		children = append(children, woxwidget.StackChild{Left: props.Width - 48 - exitWidth, Top: 6, Child: chatHeaderButton("chat-debug-"+props.Key, "Trace", 46, props.DebugOpen, props.Theme, props.OnDebug)})
+		debugBackground := woxui.Color{}
+		if props.DebugOpen {
+			debugBackground = props.Theme.ActionBackground
+		}
+		children = append(children, woxwidget.StackChild{Left: props.Width - 40 - exitWidth, Top: 9, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: "chat-debug-" + props.Key, Label: "Debug trace", Icon: woxcomponent.DebugGlyph(16, props.Theme.ResultSubtitle),
+			Width: 28, Height: 28, Radius: 7, Background: debugBackground, HoverBackground: menuHoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: props.OnDebug,
+		})})
 	}
 	if props.ShowExit {
 		hoverBackground := props.Theme.ResultSubtitle
@@ -292,9 +299,15 @@ func ChatDebug(props ChatDebugProps) woxwidget.Widget {
 // ChatMessageProps contains one prepared conversation and its controller callbacks.
 type ChatMessageProps struct {
 	Key             string
+	AvailableWidth  float32
+	Kind            string
 	Role            string
 	Timestamp       string
+	TimestampWidth  float32
+	RoundLabel      string
+	RoundExpanded   bool
 	Text            string
+	ContentWidth    float32
 	TextLayout      woxwidget.TextBlockLayout
 	Reasoning       string
 	ReasoningLayout woxwidget.TextBlockLayout
@@ -303,9 +316,14 @@ type ChatMessageProps struct {
 	Skills          string
 	Images          []*woxui.Image
 	Theme           woxcomponent.Theme
+	ShowMeta        bool
+	CopyLabel       string
+	EditLabel       string
+	RetryLabel      string
 	OnCopy          func()
 	OnEdit          func()
 	OnRetry         func()
+	OnToggleRound   func()
 }
 
 // ChatMessagesProps contains typed conversations and scroll geometry.
@@ -326,11 +344,8 @@ type ChatMessagesProps struct {
 // ChatMessagesContentHeight returns the shared scroll extent for prepared messages.
 func ChatMessagesContentHeight(messages []ChatMessageProps, viewportHeight float32) float32 {
 	height := float32(0)
-	for index, message := range messages {
+	for _, message := range messages {
 		height += chatMessageHeight(message)
-		if index > 0 {
-			height += 10
-		}
 	}
 	return max(viewportHeight, height)
 }
@@ -360,24 +375,59 @@ func ChatMessages(props ChatMessagesProps) woxwidget.Widget {
 			if props.OnScroll != nil {
 				props.OnScroll(-delta.Y, maxOffset)
 			}
-		}, Child: woxwidget.ScrollView{Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight, Offset: min(max(float32(0), props.Scroll), maxOffset), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: rows}},
+		}, Child: woxwidget.ScrollView{Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight, Offset: min(max(float32(0), props.Scroll), maxOffset), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}},
 	}}
 }
 
-// ChatMessage maps a prepared conversation to one portable card.
+// chatMessageState keeps hover-only metadata out of the launcher controller.
+type chatMessageState struct {
+	hovered bool
+}
+
+// ChatMessage maps a prepared conversation to the Flutter-aligned reading surface.
 func ChatMessage(props ChatMessageProps, width float32) woxwidget.Widget {
+	props.AvailableWidth = width
+	return woxwidget.Stateful{
+		Key: woxwidget.Key("chat-message-" + props.Key), Type: (*chatMessageState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &chatMessageState{} },
+	}
+}
+
+func (s *chatMessageState) InitState(_ woxwidget.StateContext, _ any) {}
+
+func (s *chatMessageState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
+
+func (s *chatMessageState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(ChatMessageProps)
+	width := props.AvailableWidth
+	return chatMessageContent(props, width, s.hovered, func(inside bool) {
+		if inside != s.hovered {
+			context.SetState(func() { s.hovered = inside })
+		}
+	})
+}
+
+func (s *chatMessageState) Dispose() {}
+
+// chatMessageContent builds the message body while its retained owner supplies hover state.
+func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onHover func(bool)) woxwidget.Widget {
+	if props.Kind == "round" {
+		return woxwidget.Gesture{ID: "chat-round-" + props.Key, OnTap: props.OnToggleRound, Child: woxwidget.Container{
+			Width: width, Height: 30, Padding: woxwidget.Insets{Left: 14, Top: 7, Right: 12, Bottom: 7}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+				woxcomponent.ChevronGlyph(16, props.Theme.ResultSubtitle, props.RoundExpanded),
+				woxwidget.Text{Value: props.RoundLabel, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle},
+			}},
+		}}
+	}
 	cardWidth := width
 	left := float32(0)
-	background := props.Theme.QueryBackground
+	background := woxui.Color{}
 	textColor := props.Theme.PreviewText
 	role := strings.ToUpper(props.Role)
 	if props.Role == "user" {
-		cardWidth = max(float32(180), width*0.82)
+		cardWidth = min(width*0.82, max(float32(24), props.ContentWidth+24))
 		left = max(float32(0), width-cardWidth)
 		background = props.Theme.SelectedBackground
-		if background.A > 190 {
-			background.A = 190
-		}
 		textColor = props.Theme.SelectedTitle
 		role = "YOU"
 	} else if props.Role == "assistant" {
@@ -393,11 +443,12 @@ func ChatMessage(props ChatMessageProps, width float32) woxwidget.Widget {
 		role = "MESSAGE"
 	}
 
-	innerWidth := max(float32(40), cardWidth-24)
-	actions, actionWidth := chatMessageActions(props)
+	innerWidth := max(float32(24), cardWidth-24)
+	actions, actionWidth := chatMessageActions(props, hovered, onHover)
 	hasActions := len(actions) > 0
 	showRoleHeader := props.Role == "tool" || props.Role == "system" || props.ToolText != ""
 	children := make([]woxwidget.Widget, 0, 6)
+	var footer woxwidget.Widget
 	meta := role
 	if props.Timestamp != "" {
 		meta += "  " + props.Timestamp
@@ -417,10 +468,7 @@ func ChatMessage(props ChatMessageProps, width float32) woxwidget.Widget {
 		children = append(children, woxwidget.TextBlock{Value: props.ToolText, Width: innerWidth, Height: props.ToolLayout.Size.Height, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: textColor, Layout: &props.ToolLayout})
 	} else {
 		if props.Reasoning != "" {
-			reasoningWidth := max(float32(20), innerWidth-16)
-			children = append(children, woxwidget.Container{Width: innerWidth, Height: props.ReasoningLayout.Size.Height + 12, Radius: 7, Color: props.Theme.ActionBackground, Padding: woxwidget.Insets{Left: 8, Top: 6, Right: 8, Bottom: 6}, Child: woxwidget.TextBlock{
-				Value: props.Reasoning, Width: reasoningWidth, Height: props.ReasoningLayout.Size.Height, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: props.Theme.ResultSubtitle, Layout: &props.ReasoningLayout,
-			}})
+			children = append(children, woxwidget.TextBlock{Value: props.Reasoning, Width: innerWidth, Height: props.ReasoningLayout.Size.Height, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: props.Theme.ResultSubtitle, Layout: &props.ReasoningLayout})
 		}
 		if props.Text != "" {
 			children = append(children, woxwidget.TextBlock{Value: props.Text, Width: innerWidth, Height: props.TextLayout.Size.Height, Style: woxui.TextStyle{Size: 13}, LineHeight: 19, Color: textColor, Layout: &props.TextLayout})
@@ -440,25 +488,56 @@ func ChatMessage(props ChatMessageProps, width float32) woxwidget.Widget {
 		}
 		children = append(children, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: imageChildren})
 	}
-	if !showRoleHeader && (props.Timestamp != "" || hasActions) {
-		metaWidth := innerWidth
-		if hasActions {
-			metaWidth = max(float32(0), innerWidth-actionWidth-8)
+	if !showRoleHeader && props.ShowMeta {
+		reservedActionWidth := chatMessageActionWidth(props)
+		footerWidth := props.TimestampWidth + 24 + reservedActionWidth
+		metaColor := props.Theme.ResultSubtitle
+		if !hovered {
+			metaColor.A = 0
 		}
-		footerChildren := []woxwidget.StackChild{{Top: 3, Child: woxwidget.Container{Width: metaWidth, Height: 15, Child: woxwidget.Text{Value: props.Timestamp, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.ResultSubtitle}}}}
-		if hasActions {
-			footerChildren = append(footerChildren, woxwidget.StackChild{Left: innerWidth - actionWidth, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: actions}})
+		footerChildren := []woxwidget.Widget{
+			woxwidget.Text{Value: props.Timestamp, Style: woxui.TextStyle{Size: 11}, Color: metaColor},
+			woxwidget.Container{Width: 10},
+			woxwidget.Painter{Width: 4, Height: 4, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+				displayList.FillRoundedRect(bounds, 2, metaColor)
+			}},
+			woxwidget.Container{Width: 10},
 		}
-		children = append(children, woxwidget.Stack{Width: innerWidth, Height: 18, Children: footerChildren})
+		if hasActions {
+			footerChildren = append(footerChildren, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: actions})
+		}
+		footer = woxwidget.Align{Width: footerWidth, Height: 18, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: footerChildren}}
 	}
 
 	cardHeight := chatMessageHeight(props)
-	card := woxwidget.Container{Width: cardWidth, Height: cardHeight, Radius: 10, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 12, Bottom: 10}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: children}}
-	return woxwidget.Stack{Width: width, Height: cardHeight, Children: []woxwidget.StackChild{{Left: left, Child: card}}}
+	bodyHeight := cardHeight
+	if footer != nil {
+		bodyHeight -= 21
+	}
+	padding := woxwidget.Insets{Left: 12, Top: 3, Right: 4, Bottom: 3}
+	radius := float32(0)
+	if props.Role == "user" {
+		padding = woxwidget.Insets{Left: 12, Top: 8, Right: 12, Bottom: 8}
+		radius = 8
+	}
+	body := woxwidget.Container{Width: cardWidth, Height: bodyHeight, Radius: radius, Color: background, Padding: padding, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: children}}
+	cardChildren := []woxwidget.Widget{body}
+	if footer != nil {
+		cardChildren = append(cardChildren, footer)
+	}
+	crossAxisAlignment := woxwidget.CrossAxisStart
+	if props.Role == "user" {
+		crossAxisAlignment = woxwidget.CrossAxisEnd
+	}
+	card := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, CrossAxisAlignment: crossAxisAlignment, Children: cardChildren}
+	return woxwidget.Gesture{ID: "chat-message-hover-" + props.Key, OnHover: onHover, Child: woxwidget.Stack{Width: width, Height: cardHeight, Children: []woxwidget.StackChild{{Left: left, Child: card}}}}
 }
 
 // chatMessageActions builds the available controller-owned message actions.
-func chatMessageActions(props ChatMessageProps) ([]woxwidget.Widget, float32) {
+func chatMessageActions(props ChatMessageProps, visible bool, onHover func(bool)) ([]woxwidget.Widget, float32) {
+	if !visible {
+		return nil, 0
+	}
 	actions := make([]woxwidget.Widget, 0, 2)
 	width := float32(0)
 	appendAction := func(name, label string, actionWidth float32, action func()) {
@@ -466,21 +545,46 @@ func chatMessageActions(props ChatMessageProps) ([]woxwidget.Widget, float32) {
 			return
 		}
 		if len(actions) > 0 {
-			width += 6
+			width += 8
 		}
 		width += actionWidth
-		actions = append(actions, woxwidget.Gesture{ID: "chat-" + name + "-" + props.Key, OnTap: action, Child: woxwidget.Container{
-			Width: actionWidth, Height: 18, Radius: 6, Color: props.Theme.ActionBackground, Padding: woxwidget.Insets{Left: 7, Top: 3}, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 9, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText},
-		}})
+		icon := woxcomponent.CopyGlyph(14, props.Theme.ResultSubtitle)
+		if name == "edit" {
+			icon = woxcomponent.EditGlyph(14, props.Theme.ResultSubtitle)
+		} else if name == "retry" {
+			icon = woxcomponent.RefreshGlyph(14, props.Theme.ResultSubtitle)
+		}
+		actions = append(actions, woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: "chat-" + name + "-" + props.Key, Label: label, Icon: icon,
+			Width: actionWidth, Height: 18, Radius: 5, HoverBackground: props.Theme.ActionBackground, FocusRingColor: props.Theme.Cursor, OnTap: action,
+			OnHoverAt: func(inside bool, _ woxui.Rect) { onHover(inside) },
+		}))
 	}
-	appendAction("copy", "Copy", 38, props.OnCopy)
-	appendAction("edit", "Edit", 34, props.OnEdit)
-	appendAction("retry", "Retry", 40, props.OnRetry)
+	appendAction("copy", props.CopyLabel, 18, props.OnCopy)
+	appendAction("edit", props.EditLabel, 18, props.OnEdit)
+	appendAction("retry", props.RetryLabel, 18, props.OnRetry)
 	return actions, width
+}
+
+// chatMessageActionWidth reserves the Flutter toolbar width while hover metadata is hidden.
+func chatMessageActionWidth(props ChatMessageProps) float32 {
+	count := 0
+	for _, action := range []func(){props.OnCopy, props.OnEdit, props.OnRetry} {
+		if action != nil {
+			count++
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float32(count*18 + (count-1)*8)
 }
 
 // chatMessageHeight derives the card extent from the visible message sections.
 func chatMessageHeight(props ChatMessageProps) float32 {
+	if props.Kind == "round" {
+		return 30
+	}
 	height := float32(0)
 	parts := 0
 	add := func(value float32) {
@@ -490,7 +594,6 @@ func chatMessageHeight(props ChatMessageProps) float32 {
 		height += value
 		parts++
 	}
-	hasActions := props.OnCopy != nil || props.OnEdit != nil || props.OnRetry != nil
 	showRoleHeader := props.Role == "tool" || props.Role == "system" || props.ToolText != ""
 	if showRoleHeader {
 		add(18)
@@ -499,7 +602,7 @@ func chatMessageHeight(props ChatMessageProps) float32 {
 		add(props.ToolLayout.Size.Height)
 	} else {
 		if props.Reasoning != "" {
-			add(props.ReasoningLayout.Size.Height + 12)
+			add(props.ReasoningLayout.Size.Height)
 		}
 		if props.Text != "" {
 			add(props.TextLayout.Size.Height)
@@ -511,10 +614,14 @@ func chatMessageHeight(props ChatMessageProps) float32 {
 	if len(props.Images) > 0 {
 		add(82)
 	}
-	if !showRoleHeader && (props.Timestamp != "" || hasActions) {
+	if !showRoleHeader && props.ShowMeta {
 		add(18)
 	}
-	return height + float32(max(0, parts-1))*6 + 20
+	verticalPadding := float32(6)
+	if props.Role == "user" {
+		verticalPadding = 16
+	}
+	return height + float32(max(0, parts-1))*3 + verticalPadding
 }
 
 // ChatInputProps contains the committed input value and toolbar state.

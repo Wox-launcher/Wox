@@ -137,26 +137,27 @@ func FormAppField(props FormAppFieldProps) woxwidget.Widget {
 
 // FormHotkeyFieldProps contains one Flutter-parity hotkey recorder row.
 type FormHotkeyFieldProps struct {
-	ID            string
-	Label         string
-	Description   string
-	Labels        []string
-	Placeholder   string
-	Status        string
-	Width         float32
-	Height        float32
-	LabelWidth    float32
-	Recording     bool
-	Error         bool
-	Hold          bool
-	HoldPrefix    string
-	Window        *woxui.Window
-	Theme         woxcomponent.Theme
-	OnTap         func()
-	OnFocusChange func(bool)
+	ID             string
+	Label          string
+	Description    string
+	Labels         []string
+	Placeholder    string
+	Status         string
+	Width          float32
+	Height         float32
+	LabelWidth     float32
+	SettingsLayout bool
+	Recording      bool
+	Error          bool
+	Hold           bool
+	HoldPrefix     string
+	Window         *woxui.Window
+	Theme          woxcomponent.Theme
+	OnTap          func()
+	OnFocusChange  func(bool)
 }
 
-// FormHotkeyField keeps the recorder at the start of Flutter's shared control column.
+// FormHotkeyField builds the shared recorder row for form and built-in settings layouts.
 func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 	recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
 		ID: props.ID, Labels: props.Labels, Placeholder: props.Placeholder, Focused: props.Recording, Error: props.Error, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
@@ -174,17 +175,47 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 		Child: woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: recorder},
 	}
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
+	statusGap := float32(12)
 	controlChildren := []woxwidget.StackChild{{Top: 2, Child: recorder}}
-	if props.Recording && props.Status != "" && controlWidth > recorderWidth+12 {
+	if props.SettingsLayout {
+		const (
+			gap       = float32(32)
+			edgeInset = float32(2)
+		)
+		controlWidth = max(float32(0), props.Width-props.LabelWidth-gap)
+		controlChildren[0] = woxwidget.StackChild{Top: 2, Right: edgeInset, AnchorRight: true, Child: recorder}
+	}
+	if props.Recording && props.Status != "" && controlWidth > recorderWidth+statusGap {
 		statusColor := props.Theme.ResultSubtitle
 		if props.Error {
 			statusColor = props.Theme.ErrorText
 		}
-		controlChildren = append(controlChildren, woxwidget.StackChild{Left: recorderWidth + 12, Top: 8, Child: woxwidget.Text{
-			Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
-		}})
+		if props.SettingsLayout {
+			const labelGap = float32(32)
+			recorderLeft := controlWidth - 2 - recorderWidth
+			hintLeft := -props.LabelWidth - labelGap
+			hintWidth := max(float32(0), recorderLeft-statusGap-hintLeft)
+			// Flutter positions the hint from its actual render box. Clip Go's wider overflow area before the recorder so fallback glyphs cannot outpaint measured text bounds.
+			controlChildren = append(controlChildren, woxwidget.StackChild{Left: hintLeft, Top: 6, Child: woxwidget.Clip{
+				Width: hintWidth, Height: 22, Child: woxwidget.Align{Width: hintWidth, Height: 22, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{
+					Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
+				}},
+			}})
+		} else {
+			controlChildren = append(controlChildren, woxwidget.StackChild{Left: recorderWidth + statusGap, Top: 8, Child: woxwidget.Text{
+				Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
+			}})
+		}
 	}
 	control := woxwidget.Stack{Width: controlWidth, Height: 34, Children: controlChildren}
+	if props.SettingsLayout {
+		const gap = float32(32)
+		return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
+			Label: props.Label, Description: props.Description, Width: props.Width, Height: 62, LabelWidth: props.LabelWidth, Gap: gap,
+			Padding: woxwidget.Insets{Left: 2, Top: 5, Right: 2, Bottom: 5},
+			Child:   control, Theme: props.Theme,
+		})
+	}
 	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 34, props.Theme)
 }
 

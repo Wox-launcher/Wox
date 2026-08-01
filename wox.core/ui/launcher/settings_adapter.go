@@ -187,7 +187,7 @@ func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width, imageScal
 	placeholder := a.translate("i18n:ui_setting_search_placeholder")
 	iconTint := snapshot.palette.resultSubtitle
 	return launcherview.SettingsSearchBox(launcherview.SettingsSearchBoxProps{
-		Width: width, Placeholder: placeholder, State: snapshot.search.Query, Focused: snapshot.search.Focused,
+		Width: width, Placeholder: placeholder, State: snapshot.search.Query, Focused: snapshot.search.Focused, Controller: a.settingsSearch.Editor(),
 		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, physicalImageSize(18, imageScale)), Window: a.settingsNativeWindow(), Theme: snapshot.palette.componentTheme(),
 		OnFocus: func() { a.focusSettingsSearch(false) }, OnClear: a.clearSettingsSearch,
 		OnKey: a.onSettingsSearchKey, OnFocusChange: a.setSettingsSearchFocused, OnChanged: func(value string) { _ = a.setSettingsSearchValue(value) }, OnSetValue: a.setSettingsSearchValue,
@@ -291,7 +291,8 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		hotkeyForm := *snapshot.hotkey.Form
 		hotkeyForm.active = snapshot.hotkey.Focused
 		callbacks := formFieldCallbacks{
-			idPrefix: "hotkey-settings", imageScale: imageScale, focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
+			idPrefix: "hotkey-settings", labelWidth: 550, settingsLayout: true, imageScale: imageScale,
+			focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
 		}
 		for index, definition := range hotkeyForm.definitions {
 			if hotkeyForm.active && index == hotkeyForm.focused {

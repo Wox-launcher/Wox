@@ -225,11 +225,11 @@ func firstNonEmpty(values ...string) string {
 
 func (a *App) focusSettingsSearch(selectAll bool) {
 	if a.settingsSearch.Editor() == nil {
-		a.settingsSearch.SetEditor(woxui.NewTextEditor(""))
+		a.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
 	}
 	if selectAll && a.settingsSearch.Editor() != nil {
 		editor := a.settingsSearch.Editor()
-		editor.SelectAll()
+		editor.SetText(editor.Text(), true)
 	}
 	a.settingsSearch.SetFocused(true)
 	a.pluginSettings.SetSearchFocused(false)
@@ -249,7 +249,7 @@ func (a *App) focusSettingsSearch(selectAll bool) {
 // setSettingsSearchFocused keeps controller routing aligned with the retained text-field focus.
 func (a *App) setSettingsSearchFocused(focused bool) {
 	if a.settingsSearch.Editor() == nil {
-		a.settingsSearch.SetEditor(woxui.NewTextEditor(""))
+		a.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
 	}
 	a.settingsSearch.SetFocused(focused)
 	if focused {
@@ -269,10 +269,12 @@ func (a *App) setSettingsSearchFocused(focused bool) {
 // setSettingsSearchValue applies accessibility value changes through the same search state.
 func (a *App) setSettingsSearchValue(value string) error {
 	if a.settingsSearch.Editor() == nil {
-		a.settingsSearch.SetEditor(woxui.NewTextEditor(value))
+		a.settingsSearch.SetEditor(woxwidget.NewTextEditingController(value))
 	} else {
 		editor := a.settingsSearch.Editor()
-		editor.SetText(value, false)
+		if editor.Text() != value {
+			editor.SetText(value, false)
+		}
 	}
 	a.settingsSearch.SetPanel(strings.TrimSpace(value) != "")
 	a.settingsSearch.SetSelected(0)
@@ -282,7 +284,7 @@ func (a *App) setSettingsSearchValue(value string) error {
 
 func (a *App) clearSettingsSearch() {
 	if a.settingsSearch.Editor() == nil {
-		a.settingsSearch.SetEditor(woxui.NewTextEditor(""))
+		a.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
 	} else {
 		editor := a.settingsSearch.Editor()
 		editor.SetText("", false)

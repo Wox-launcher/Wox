@@ -8,6 +8,7 @@ import (
 
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 // settingsSearchSnapshot is the immutable Settings-search state consumed by the view layer.
@@ -36,7 +37,7 @@ type settingsSearchSnapshot struct {
 type settingsSearchController struct {
 	deps CommonDeps
 
-	editor   *woxui.TextEditor
+	editor   *woxwidget.TextEditingController
 	focused  bool
 	panel    bool
 	selected int
@@ -51,12 +52,12 @@ func newSettingsSearchController(deps CommonDeps) *settingsSearchController {
 }
 
 // Editor returns the floating search editor. May be nil before the settings window is opened.
-func (c *settingsSearchController) Editor() *woxui.TextEditor {
+func (c *settingsSearchController) Editor() *woxwidget.TextEditingController {
 	return c.editor
 }
 
 // SetEditor installs the floating search editor. Passing nil clears it (used on window close).
-func (c *settingsSearchController) SetEditor(editor *woxui.TextEditor) {
+func (c *settingsSearchController) SetEditor(editor *woxwidget.TextEditingController) {
 	c.editor = editor
 }
 

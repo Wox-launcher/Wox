@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 	"wox/util"
 )
 
@@ -869,6 +870,13 @@ func (a *App) moveFormTableRowFocus(delta int) {
 			break
 		}
 	}
+	host := a.host
+	if a.formTableUsesSettingsWindow() {
+		host = a.settingsHost
+	}
+	if host != nil {
+		host.RequestFocus(woxwidget.Key(fmt.Sprintf("form-table-row-field-%d", index)))
+	}
 	a.stopHotkeyRecordingForDifferentField(state.rowForm, index)
 	textInput := state.rowForm.editor != nil
 	a.updateFormTableTextInput(textInput)
@@ -1002,6 +1010,17 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 		return false
 	}
 	rowForm := state.rowForm
+	focused := -1
+	fieldType := ""
+	if rowForm != nil {
+		focused = rowForm.focused
+		if focused >= 0 && focused < len(rowForm.definitions) {
+			fieldType = rowForm.definitions[focused].Type
+		}
+	}
+	if !event.Down || event.Composing {
+		return false
+	}
 	selected := state.selected
 	saving := state.saving
 	appPicker := state.appPicker
@@ -1010,14 +1029,10 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 		appSelected = appPicker.selected
 	}
 	choicePicker := state.choicePicker
-	fieldType := ""
 	multiline := false
 	textEditable := false
-	focused := -1
 	if rowForm != nil {
-		focused = rowForm.focused
 		if focused >= 0 && focused < len(rowForm.definitions) {
-			fieldType = rowForm.definitions[focused].Type
 			multiline = fieldType == "textbox" && rowForm.definitions[focused].Value.MaxLines > 1
 			textEditable = formDefinitionTextEditable(rowForm.definitions[focused])
 		}
@@ -1083,13 +1098,6 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 	}
 	if textEditable {
 		switch event.Key {
-		case woxui.KeyTab:
-			delta := 1
-			if event.Modifiers&woxui.KeyModifierShift != 0 {
-				delta = -1
-			}
-			a.moveFormTableRowFocus(delta)
-			return true
 		case woxui.KeyArrowDown:
 			if !multiline {
 				a.moveFormTableRowFocus(1)
@@ -1105,17 +1113,16 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 		}
 		return false
 	}
+	if event.Key == woxui.KeyTab && event.Modifiers & ^woxui.KeyModifierShift == 0 {
+		return false
+	}
 	switch event.Key {
-	case woxui.KeyTab, woxui.KeyArrowDown:
-		if event.Key == woxui.KeyArrowDown && multiline {
+	case woxui.KeyArrowDown:
+		if multiline {
 			a.editFormTableRowKey(event)
 			break
 		}
-		delta := 1
-		if event.Key == woxui.KeyTab && event.Modifiers&woxui.KeyModifierShift != 0 {
-			delta = -1
-		}
-		a.moveFormTableRowFocus(delta)
+		a.moveFormTableRowFocus(1)
 	case woxui.KeyArrowUp:
 		if multiline {
 			a.editFormTableRowKey(event)

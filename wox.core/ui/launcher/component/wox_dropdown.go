@@ -7,19 +7,22 @@ import (
 
 // DropdownProps describes one accessible outlined dropdown trigger.
 type DropdownProps struct {
-	ID          string
-	Label       string
-	Value       string
-	Trailing    string
-	Leading     *woxui.Image
-	Width       float32
-	Height      float32
-	Outline     woxui.Color
-	Foreground  woxui.Color
-	Secondary   woxui.Color
-	Theme       Theme
-	OnTap       func()
-	OnTapBounds func(woxui.Rect)
+	ID            string
+	Label         string
+	Value         string
+	Trailing      string
+	Leading       *woxui.Image
+	Width         float32
+	Height        float32
+	Outline       woxui.Color
+	Foreground    woxui.Color
+	Secondary     woxui.Color
+	Theme         Theme
+	Focused       bool
+	OnKey         func(woxui.KeyEvent) bool
+	OnFocusChange func(bool)
+	OnTap         func()
+	OnTapBounds   func(woxui.Rect)
 }
 
 // WoxDropdown builds a focusable dropdown trigger with shared visuals and accessibility semantics.
@@ -37,7 +40,8 @@ func WoxDropdown(props DropdownProps) woxwidget.Widget {
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: label, Value: props.Value,
 		Actions: actions, Disabled: disabled, Child: woxwidget.Focusable{
-			Key: woxwidget.Key(props.ID), Disabled: disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 4, Child: trigger,
+			Key: woxwidget.Key(props.ID), Autofocus: props.Focused, Disabled: disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 4,
+			OnKey: props.OnKey, OnFocusChange: props.OnFocusChange, Child: trigger,
 		},
 	}
 }

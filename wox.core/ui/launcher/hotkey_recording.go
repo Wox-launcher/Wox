@@ -294,14 +294,11 @@ func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
 	if state == nil {
 		return false
 	}
-	if event.Key == woxui.KeyEscape {
-		return true
-	}
 	if event.Key == woxui.KeyBackspace && event.Modifiers == 0 {
 		a.acceptRecordedHotkey(state, "")
 		return true
 	}
-	if hotkeyRecordingMovesFocus(event) {
+	if hotkeyRecordingStops(event) {
 		a.stopHotkeyRecording()
 		return true
 	}
@@ -329,7 +326,10 @@ func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
 	return true
 }
 
-func hotkeyRecordingMovesFocus(event woxui.KeyEvent) bool {
+func hotkeyRecordingStops(event woxui.KeyEvent) bool {
+	if event.Key == woxui.KeyEscape {
+		return true
+	}
 	if event.Key == woxui.KeyTab {
 		return event.Modifiers & ^woxui.KeyModifierShift == 0
 	}

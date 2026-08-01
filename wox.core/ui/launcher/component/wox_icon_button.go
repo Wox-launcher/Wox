@@ -110,3 +110,78 @@ func MenuGlyph(size float32, color woxui.Color) woxwidget.Widget {
 		}
 	}}
 }
+
+// ChevronGlyph draws a font-independent disclosure chevron centered in its box.
+func ChevronGlyph(size float32, color woxui.Color, expanded bool) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return woxwidget.Painter{Width: size, Height: size, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		x := bounds.X + (bounds.Width-size)*0.5
+		y := bounds.Y + (bounds.Height-size)*0.5
+		if expanded {
+			displayList.FillConvexPolygon([]woxui.Point{{X: x + 3, Y: y + 5}, {X: x + 5, Y: y + 4}, {X: x + 9, Y: y + 8}, {X: x + 8, Y: y + 10}}, color)
+			displayList.FillConvexPolygon([]woxui.Point{{X: x + 7, Y: y + 8}, {X: x + 11, Y: y + 4}, {X: x + 13, Y: y + 5}, {X: x + 8, Y: y + 10}}, color)
+			return
+		}
+		displayList.FillConvexPolygon([]woxui.Point{{X: x + 5, Y: y + 3}, {X: x + 7, Y: y + 3}, {X: x + 11, Y: y + 8}, {X: x + 9, Y: y + 9}}, color)
+		displayList.FillConvexPolygon([]woxui.Point{{X: x + 9, Y: y + 7}, {X: x + 11, Y: y + 8}, {X: x + 7, Y: y + 13}, {X: x + 5, Y: y + 13}}, color)
+	}}
+}
+
+// CopyGlyph draws the overlapping document outline used by chat copy actions.
+func CopyGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 14
+	}
+	return woxwidget.Painter{Width: size, Height: size, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		x := bounds.X + (bounds.Width-size)*0.5
+		y := bounds.Y + (bounds.Height-size)*0.5
+		displayList.StrokeRoundedRect(woxui.Rect{X: x + 2, Y: y + 2, Width: size - 5, Height: size - 5}, 1, 1.25, color)
+		displayList.StrokeRoundedRect(woxui.Rect{X: x + 5, Y: y + 5, Width: size - 5, Height: size - 5}, 1, 1.25, color)
+	}}
+}
+
+// EditGlyph draws the diagonal pencil used by chat edit actions.
+func EditGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 14
+	}
+	return woxwidget.Painter{Width: size, Height: size, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		x := bounds.X + (bounds.Width-size)*0.5
+		y := bounds.Y + (bounds.Height-size)*0.5
+		displayList.FillConvexPolygon([]woxui.Point{{X: x + 4, Y: y + 10.5}, {X: x + 9.5, Y: y + 5}, {X: x + 11.5, Y: y + 7}, {X: x + 6, Y: y + 12.5}}, color)
+		displayList.FillConvexPolygon([]woxui.Point{{X: x + 2.5, Y: y + 13}, {X: x + 4, Y: y + 10.5}, {X: x + 6, Y: y + 12.5}}, color)
+	}}
+}
+
+// RefreshGlyph draws the circular arrow used by chat retry actions.
+func RefreshGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 14
+	}
+	return woxwidget.Painter{Width: size, Height: size, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		x := bounds.X + (bounds.Width-size)*0.5
+		y := bounds.Y + (bounds.Height-size)*0.5
+		displayList.StrokeRoundedRect(woxui.Rect{X: x + 2.5, Y: y + 2.5, Width: size - 5, Height: size - 5}, (size-5)/2, 1.25, color)
+		displayList.FillConvexPolygon([]woxui.Point{{X: x + 9, Y: y + 1.5}, {X: x + 13, Y: y + 2.5}, {X: x + 11, Y: y + 6}}, color)
+	}}
+}
+
+// DebugGlyph draws a compact bug outline without relying on an icon font.
+func DebugGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return woxwidget.Painter{Width: size, Height: size, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		x := bounds.X + (bounds.Width-size)*0.5
+		y := bounds.Y + (bounds.Height-size)*0.5
+		displayList.StrokeRoundedRect(woxui.Rect{X: x + 4, Y: y + 4, Width: size - 8, Height: size - 7}, 2, 1.25, color)
+		for _, offset := range []float32{5, 9} {
+			displayList.FillRoundedRect(woxui.Rect{X: x + 1.5, Y: y + offset, Width: 3, Height: 1.25}, 0.6, color)
+			displayList.FillRoundedRect(woxui.Rect{X: x + size - 4.5, Y: y + offset, Width: 3, Height: 1.25}, 0.6, color)
+		}
+		displayList.FillRoundedRect(woxui.Rect{X: x + 6, Y: y + 1.5, Width: 1.25, Height: 3}, 0.6, color)
+		displayList.FillRoundedRect(woxui.Rect{X: x + size - 7.25, Y: y + 1.5, Width: 1.25, Height: 3}, 0.6, color)
+	}}
+}

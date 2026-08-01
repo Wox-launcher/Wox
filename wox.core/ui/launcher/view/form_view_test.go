@@ -128,6 +128,36 @@ func TestFormHotkeyFieldStartsAtMeasuredControlColumn(t *testing.T) {
 	}
 }
 
+func TestFormHotkeyFieldUsesFlutterSettingsLayout(t *testing.T) {
+	field := FormHotkeyField(FormHotkeyFieldProps{
+		ID: "main-hotkey", Label: "Hotkey", Description: "Show or hide Wox",
+		Width: 1120, LabelWidth: 550, SettingsLayout: true, Recording: true, Status: "Press any key", Theme: woxcomponent.Theme{},
+	})
+	container := field.(woxwidget.Container)
+	row := container.Child.(woxwidget.Flex)
+	label := row.Children[0].(woxwidget.Container)
+	if label.Width != 550 || row.Gap != 32 {
+		t.Fatalf("settings label geometry = width %.0f gap %.0f, want Flutter 550/32", label.Width, row.Gap)
+	}
+	labelColumn := label.Child.(woxwidget.Flex)
+	description := labelColumn.Children[1].(woxwidget.Text)
+	if description.Value != "Show or hide Wox" {
+		t.Fatalf("settings description = %q, want it below the label", description.Value)
+	}
+	controlArea := row.Children[1].(woxwidget.Stack)
+	if controlArea.Width != 538 || !controlArea.Children[0].AnchorRight || controlArea.Children[0].Right != 2 {
+		t.Fatalf("settings recorder geometry = width %.0f right anchored %v inset %.0f, want 538/true/2", controlArea.Width, controlArea.Children[0].AnchorRight, controlArea.Children[0].Right)
+	}
+	hint := controlArea.Children[1]
+	if hint.Left != -582 {
+		t.Fatalf("settings hint left = %.0f, want Flutter-style overflow to page edge at -582", hint.Left)
+	}
+	hintClip := hint.Child.(woxwidget.Clip)
+	if hintClip.Width != 1010 {
+		t.Fatalf("settings hint clip width = %.0f, want the same 12px gap used by right-side hints", hintClip.Width)
+	}
+}
+
 func TestFormAIModelFieldUsesFlutterProviderAndModelProportions(t *testing.T) {
 	field := FormAIModelField(FormAIModelFieldProps{
 		ID: "default-model", Label: "Default model", Provider: "deepseek", Model: "deepseek-v4-flash",

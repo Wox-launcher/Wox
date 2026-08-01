@@ -11,8 +11,10 @@ func TestWoxSearchFieldUsesHostFocusRing(t *testing.T) {
 	cursor := woxui.Color{R: 10, G: 20, B: 30, A: 255}
 	subtitle := woxui.Color{R: 40, G: 50, B: 60, A: 255}
 	icon := &woxui.Image{}
+	controller := woxwidget.NewTextEditingController("existing")
+	controller.SetText(controller.Text(), true)
 	field := WoxSearchField(SearchFieldProps{
-		ID: "search", Label: "Search", Width: 200, Focused: true, SearchIcon: icon,
+		ID: "search", Label: "Search", Width: 200, Focused: true, Controller: controller, SearchIcon: icon,
 		Actions: []SearchFieldAction{{ID: "action", Width: 30}}, Theme: Theme{Cursor: cursor, ResultSubtitle: subtitle},
 	}).(woxwidget.Container)
 
@@ -20,6 +22,9 @@ func TestWoxSearchFieldUsesHostFocusRing(t *testing.T) {
 		t.Fatalf("focused search border = %#v at %v, want neutral 1px border", field.BorderColor, field.BorderWidth)
 	}
 	input := field.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(TextFieldProps)
+	if input.Controller != controller || input.Controller.State().Selection != (woxui.TextSelection{Anchor: 0, Focus: 8}) {
+		t.Fatalf("search controller selection = %+v, want existing text selected", input.Controller.State().Selection)
+	}
 	if input.FocusRingColor != cursor || input.FocusRingOutsets.Left != 36 || input.FocusRingOutsets.Right != 34 {
 		t.Fatalf("search focus ring = %#v with outsets %+v, want cursor with 36px left and 34px right", input.FocusRingColor, input.FocusRingOutsets)
 	}

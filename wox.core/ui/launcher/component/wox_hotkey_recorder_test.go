@@ -32,6 +32,16 @@ func TestWoxHotkeyRecorderUsesErrorBorder(t *testing.T) {
 	}
 }
 
+func TestWoxHotkeyRecorderUsesKeyboardOnlyFocusRing(t *testing.T) {
+	cursor := woxui.Color{R: 10, G: 20, B: 30, A: 255}
+	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Focused: true, Theme: Theme{Cursor: cursor}})
+	focusable := buildHotkeyRecorderForTest(recorder)
+	container := focusable.Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	if container.BorderWidth != 1 || focusable.FocusRingColor != cursor || !focusable.Autofocus {
+		t.Fatalf("recorder focus styling = border %.0f ring %+v, want idle border with host focus-visible ring", container.BorderWidth, focusable.FocusRingColor)
+	}
+}
+
 func TestWoxHotkeyRecorderFocusNodeOwnsRecordingLifecycle(t *testing.T) {
 	var focusChanges []bool
 	host := woxwidget.NewHost(func(frame woxui.FrameInfo) woxwidget.Widget {
@@ -73,14 +83,21 @@ func TestWoxHotkeyRecorderHandlesSpecialFocusKeys(t *testing.T) {
 	if !host.Key(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) {
 		t.Fatal("Escape should be consumed by the recorder")
 	}
-	if len(focusChanges) != 1 {
-		t.Fatalf("Escape focus changes = %v, want recorder to stay focused", focusChanges)
+	if len(focusChanges) != 2 || focusChanges[1] {
+		t.Fatalf("Escape focus changes = %v, want recorder focus released", focusChanges)
 	}
+
+	host.RequestFocus("hotkey")
 	if !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
 		t.Fatal("Enter should be consumed by the recorder")
 	}
-	if len(focusChanges) != 2 || focusChanges[1] {
+	if len(focusChanges) != 4 || focusChanges[3] {
 		t.Fatalf("Enter focus changes = %v, want recorder focus released", focusChanges)
+	}
+
+	host.RequestFocus("hotkey")
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.HasFocus("next") {
+		t.Fatal("Tab should leave recording and move focus to the next control")
 	}
 }
 

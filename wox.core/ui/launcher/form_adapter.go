@@ -13,6 +13,7 @@ import (
 type formFieldCallbacks struct {
 	idPrefix          string
 	labelWidth        float32
+	settingsLayout    bool
 	imageScale        float32
 	focus             func(index int)
 	change            func(index, delta int)
@@ -239,7 +240,8 @@ func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCall
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
 		Labels: formatHotkeyLabels(value), Placeholder: placeholder, Status: presentation.Status, Recording: presentation.Active, Error: presentation.Error,
 		Hold: hold, HoldPrefix: a.translate("i18n:ui_hotkey_hold_prefix"),
-		Width: width, Height: height, LabelWidth: callbacks.labelWidth, Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(),
+		Width: width, Height: height, LabelWidth: callbacks.labelWidth, SettingsLayout: callbacks.settingsLayout,
+		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(),
 		OnTap: func() {
 			callbacks.focus(index)
 			if callbacks.recordKey != nil {

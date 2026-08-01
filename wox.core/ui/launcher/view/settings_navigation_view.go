@@ -95,6 +95,7 @@ type SettingsSearchBoxProps struct {
 	Placeholder   string
 	State         woxui.TextEditingState
 	Focused       bool
+	Controller    *woxwidget.TextEditingController
 	SearchIcon    *woxui.Image
 	Window        *woxui.Window
 	Theme         woxcomponent.Theme
@@ -109,7 +110,7 @@ type SettingsSearchBoxProps struct {
 // SettingsSearchBox builds the rail search field.
 func SettingsSearchBox(props SettingsSearchBoxProps) woxwidget.Widget {
 	search := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
-		ID: "settings-search-field", Label: props.Placeholder, Width: props.Width, Value: props.State.Text, Focused: props.Focused, Autofocus: props.Focused,
+		ID: "settings-search-field", Label: props.Placeholder, Width: props.Width, Value: props.State.Text, Focused: props.Focused, Autofocus: props.Focused, Controller: props.Controller,
 		SearchIcon: props.SearchIcon, Window: props.Window, Theme: props.Theme, OnFocus: props.OnFocus, OnClear: props.OnClear,
 		OnKey: props.OnKey, OnFocusChange: props.OnFocusChange, OnChanged: props.OnChanged, OnSetValue: props.OnSetValue,
 	})
