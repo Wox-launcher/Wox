@@ -163,3 +163,14 @@ func TestFormTextFieldKeepsSuffixOutsideInput(t *testing.T) {
 		t.Fatalf("suffix = %q, want 天", suffix.Value)
 	}
 }
+
+func TestFormTextFieldUsesMeasuredActionLabelWidth(t *testing.T) {
+	field := FormTextField(FormTextFieldProps{ID: "content", Label: "内容", Width: 360, LabelWidth: 60, MaxLines: 8, Theme: woxcomponent.Theme{}})
+	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
+	label := row.Children[0].(woxwidget.Container)
+	controlColumn := row.Children[1].(woxwidget.Flex)
+	input := controlColumn.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if label.Width != 60 || input.Width != 288 {
+		t.Fatalf("form label/input widths = %.0f/%.0f, want measured 60 and expanded 288", label.Width, input.Width)
+	}
+}

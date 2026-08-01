@@ -15,7 +15,11 @@ func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 	app := &App{selected: -1}
 	built := app.buildResults(viewSnapshot{results: results, selected: -1}, 760, 500)
 	semantics := built.(woxwidget.Semantics)
-	surface := semantics.Child.(woxwidget.Gesture)
+	retained := semantics.Child.(woxwidget.Stateful)
+	state := retained.CreateState()
+	state.InitState(woxwidget.StateContext{}, retained.Widget)
+	defer state.Dispose()
+	surface := state.Build(woxwidget.StateContext{}, retained.Widget).(woxwidget.Gesture)
 	stack := surface.Child.(woxwidget.Stack)
 	scroll := stack.Children[0].Child.(woxwidget.ScrollView)
 	container := scroll.Child.(woxwidget.Container)

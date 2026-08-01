@@ -32,6 +32,7 @@ type formFieldCallbacks struct {
 // buildFormPanel maps action form state into the shared form view.
 func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwidget.Widget, float32, float32) {
 	form := snapshot.form
+	labelWidth := a.measureFormLabelWidth(form.action.Form, a.window, 60, 0)
 	panelPadding := woxwidget.Insets{
 		Left: snapshot.densityMetrics.scaled(14), Top: snapshot.densityMetrics.scaled(10),
 		Right: snapshot.densityMetrics.scaled(14), Bottom: snapshot.densityMetrics.scaled(10),
@@ -42,7 +43,7 @@ func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwid
 	contentWidth := panelWidth - panelPadding.Left - panelPadding.Right
 	rows := make([]woxwidget.Widget, 0, len(form.action.Form))
 	for index, definition := range form.action.Form {
-		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("action-form", index), Child: a.buildFormDefinition(snapshot, index, definition, contentWidth, 0)})
+		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("action-form", index), Child: a.buildFormDefinition(snapshot, index, definition, contentWidth, labelWidth, 0)})
 	}
 	panel := launcherview.FormPanel(launcherview.FormPanelProps{
 		Width: panelWidth, MaximumHeight: panelMaximumHeight, Padding: panelPadding, Rows: rows,
@@ -55,9 +56,35 @@ func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwid
 	return panel, panelWidth, panelMaximumHeight
 }
 
-func (a *App) buildFormDefinition(snapshot viewSnapshot, index int, definition formDefinition, width, height float32) woxwidget.Widget {
-	callbacks := formFieldCallbacks{idPrefix: "action-form", focus: a.focusFormField, change: a.changeFormChoice, setText: a.setFormText, onKey: a.onFormKey, openTable: a.openActionFormTable}
+func (a *App) buildFormDefinition(snapshot viewSnapshot, index int, definition formDefinition, width, labelWidth, height float32) woxwidget.Widget {
+	callbacks := formFieldCallbacks{idPrefix: "action-form", labelWidth: labelWidth, focus: a.focusFormField, change: a.changeFormChoice, setText: a.setFormText, onKey: a.onFormKey, openTable: a.openActionFormTable}
 	return a.buildFormField(snapshot.form.formFieldsSnapshot, callbacks, snapshot.palette, index, definition, width, height)
+}
+
+// measureFormLabelWidth mirrors Flutter's measured label column while allowing each form surface to keep its own bounds.
+func (a *App) measureFormLabelWidth(definitions []formDefinition, window *woxui.Window, minimum, maximum float32) float32 {
+	width := minimum
+	if window == nil {
+		return width
+	}
+	style := woxui.TextStyle{Size: 13}
+	for _, definition := range definitions {
+		labelKey := definition.Value.Label
+		if definition.Type == "table" {
+			labelKey = formTableTitle(definition)
+		}
+		label := strings.TrimSpace(a.translate(labelKey))
+		if label == "" {
+			continue
+		}
+		if metrics, err := window.MeasureText(label, style); err == nil {
+			width = max(width, metrics.Size.Width+8)
+		}
+	}
+	if maximum > 0 {
+		width = min(width, maximum)
+	}
+	return width
 }
 
 // buildFormField translates one private form definition into a reusable field view.

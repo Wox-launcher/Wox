@@ -170,26 +170,11 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 
 // pluginFormLabelWidth mirrors Flutter's shared measured label column for each plugin.
 func (a *App) pluginFormLabelWidth(definitions []formDefinition) float32 {
-	width := float32(0)
 	window := a.settingsNativeWindow()
 	if window == nil {
 		return 120
 	}
-	style := woxui.TextStyle{Size: 13}
-	for _, definition := range definitions {
-		labelKey := definition.Value.Label
-		if definition.Type == "table" {
-			labelKey = formTableTitle(definition)
-		}
-		label := strings.TrimSpace(a.translate(labelKey))
-		if label == "" {
-			continue
-		}
-		if metrics, err := window.MeasureText(label, style); err == nil {
-			width = max(width, metrics.Size.Width+8)
-		}
-	}
-	return min(width, float32(200))
+	return a.measureFormLabelWidth(definitions, window, 0, 200)
 }
 
 func pluginSettingRowKey(index int) woxwidget.Key {

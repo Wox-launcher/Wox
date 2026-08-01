@@ -56,7 +56,9 @@ type TextFieldProps struct {
 	onSelectionStart func(int)
 	// onSelectionExtend updates the selection focus to the given rune offset while dragging.
 	onSelectionExtend func(int)
+	onScroll          func(woxui.Point) bool
 	onTextInput       func(woxui.TextInputEvent) bool
+	verticalOffset    float32
 }
 
 // WoxTextField builds a retained text field with shared IME, selection, and accessibility behavior.
@@ -75,6 +77,9 @@ type textFieldState struct {
 	focusAttachment    *woxwidget.FocusAttachment
 	// selectionAnchor holds the rune offset captured at drag-selection start so extend updates only the focus.
 	selectionAnchor int
+	verticalOffset  float32
+	lastFocus       int
+	hasLastFocus    bool
 }
 
 // InitState creates fallback controller and focus objects when the caller does not supply them.
@@ -115,6 +120,22 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 	}
 	props.editingState = displayState
 	props.Focused = s.focusNode.HasFocus()
+	lines := textFieldLines(displayState.Text)
+	caretLine := textFieldLineIndex(lines, displayState.Selection.Focus)
+	innerHeight := textFieldInnerHeight(props)
+	maximumVerticalOffset := max(float32(0), float32(len(lines))*textFieldLineHeight-innerHeight)
+	s.verticalOffset = min(s.verticalOffset, maximumVerticalOffset)
+	if !s.hasLastFocus || s.lastFocus != displayState.Selection.Focus {
+		caretTop := float32(caretLine) * textFieldLineHeight
+		if caretTop < s.verticalOffset {
+			s.verticalOffset = caretTop
+		} else if caretTop+textFieldLineHeight > s.verticalOffset+innerHeight {
+			s.verticalOffset = caretTop + textFieldLineHeight - innerHeight
+		}
+	}
+	s.lastFocus = displayState.Selection.Focus
+	s.hasLastFocus = true
+	props.verticalOffset = s.verticalOffset
 	props.Controller = nil
 	props.FocusNode = nil
 	props.onCaret = func(offset int) {
@@ -133,6 +154,18 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		s.focusNode.RequestFocus()
 		s.controller.SetSelection(s.selectionAnchor, offset)
 		context.Invalidate()
+	}
+	props.onScroll = func(delta woxui.Point) bool {
+		if props.MaxLines <= 1 || maximumVerticalOffset <= 0 || delta.Y == 0 {
+			return false
+		}
+		next, changed := textFieldScrolledOffset(s.verticalOffset, maximumVerticalOffset, delta.Y)
+		if !changed {
+			return false
+		}
+		s.verticalOffset = next
+		context.Invalidate()
+		return true
 	}
 	props.OnKey = func(event woxui.KeyEvent) bool {
 		original := widget.(TextFieldProps)
@@ -332,24 +365,24 @@ func buildWoxTextField(props TextFieldProps) woxwidget.Widget {
 	innerWidth := max(float32(0), props.Width-padding.Left-padding.Right)
 	innerHeight := max(float32(0), height-padding.Top-padding.Bottom)
 	state := props.editingState
-	content := woxwidget.Gesture{ID: props.ID, OnTapAt: func(position woxui.Point) {
+	content := woxwidget.Gesture{ID: props.ID, OnScrollHandled: props.onScroll, OnTapAt: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onCaret == nil {
 			return
 		}
 		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
-		props.onCaret(textFieldOffsetAt(state, props.Window, style, maxLines, innerWidth, point))
+		props.onCaret(textFieldOffsetAt(state, props.Window, style, maxLines, props.verticalOffset, innerWidth, point))
 	}, OnSelectionStart: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onSelectionStart == nil {
 			return
 		}
 		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
-		props.onSelectionStart(textFieldOffsetAt(state, props.Window, style, maxLines, innerWidth, point))
+		props.onSelectionStart(textFieldOffsetAt(state, props.Window, style, maxLines, props.verticalOffset, innerWidth, point))
 	}, OnSelectionExtend: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onSelectionExtend == nil {
 			return
 		}
 		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
-		props.onSelectionExtend(textFieldOffsetAt(state, props.Window, style, maxLines, innerWidth, point))
+		props.onSelectionExtend(textFieldOffsetAt(state, props.Window, style, maxLines, props.verticalOffset, innerWidth, point))
 	}, Child: woxwidget.Container{
 		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: props.BorderColor, BorderWidth: props.BorderWidth, Padding: padding,
 		Child: woxwidget.Clip{Width: innerWidth, Height: innerHeight, Child: woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool) {
@@ -357,7 +390,7 @@ func buildWoxTextField(props TextFieldProps) woxwidget.Widget {
 				displayList.DrawText(props.Hint, textFieldAlignedTextBounds(bounds, props.Hint, style, props.TextAlignmentY, props.Window), style, props.Theme.ResultSubtitle)
 			}
 			if props.Window != nil {
-				drawTextField(displayList, bounds, state, style, textColor, props.Theme, props.Focused, caretVisible, maxLines, props.TextAlignmentY, props.Window)
+				drawTextField(displayList, bounds, state, style, textColor, props.Theme, props.Focused, caretVisible, maxLines, props.verticalOffset, props.TextAlignmentY, props.Window)
 			}
 		}},
 		}}}
@@ -376,7 +409,7 @@ func buildWoxTextField(props TextFieldProps) woxwidget.Widget {
 				return woxui.TextInputState{}
 			}
 			innerBounds := woxui.Rect{X: bounds.X + padding.Left, Y: bounds.Y + padding.Top, Width: innerWidth, Height: innerHeight}
-			return woxui.TextInputState{Enabled: true, CursorRect: textFieldCursorRect(state, style, maxLines, innerBounds, props.Window)}
+			return woxui.TextInputState{Enabled: true, CursorRect: textFieldCursorRect(state, style, maxLines, props.verticalOffset, innerBounds, props.Window)}
 		},
 		Child: content,
 	}
@@ -405,11 +438,9 @@ func textFieldLineIndex(lines []textFieldLine, offset int) int {
 	return 0
 }
 
-func textFieldOffsetAt(state woxui.TextEditingState, window *woxui.Window, style woxui.TextStyle, maxLines int, width float32, point woxui.Point) int {
+func textFieldOffsetAt(state woxui.TextEditingState, window *woxui.Window, style woxui.TextStyle, maxLines int, verticalOffset, width float32, point woxui.Point) int {
 	lines := textFieldLines(state.Text)
-	caretLine := textFieldLineIndex(lines, state.Selection.Focus)
-	firstLine := max(0, caretLine-maxLines+1)
-	lineIndex := min(len(lines)-1, firstLine+max(0, int(point.Y/textFieldLineHeight)))
+	lineIndex := min(len(lines)-1, max(0, int((point.Y+verticalOffset)/textFieldLineHeight)))
 	line := lines[lineIndex]
 	runes := []rune(line.text)
 	if maxLines == 1 {
@@ -449,20 +480,21 @@ func textFieldAlignedTextBounds(bounds woxui.Rect, value string, style woxui.Tex
 	return bounds
 }
 
-func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxui.TextEditingState, style woxui.TextStyle, textColor woxui.Color, theme Theme, focused, caretVisible bool, maxLines int, textAlignmentY float32, window *woxui.Window) {
+func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxui.TextEditingState, style woxui.TextStyle, textColor woxui.Color, theme Theme, focused, caretVisible bool, maxLines int, verticalOffset, textAlignmentY float32, window *woxui.Window) {
 	displayRunes, start, end, focus, compositionStart, compositionEnd := textFieldDisplayState(state)
 	lines := textFieldLines(string(displayRunes))
 	caretLine := textFieldLineIndex(lines, focus)
 	visibleLines := max(1, min(maxLines, int(bounds.Height/textFieldLineHeight)))
-	firstLine := max(0, caretLine-visibleLines+1)
-	lastLine := min(len(lines), firstLine+visibleLines)
+	firstLine := max(0, int(verticalOffset/textFieldLineHeight))
+	lineOffset := verticalOffset - float32(firstLine)*textFieldLineHeight
+	lastLine := min(len(lines), firstLine+visibleLines+1)
 	horizontalOffset := float32(0)
 	if visibleLines == 1 {
 		horizontalOffset = textFieldHorizontalOffset(displayRunes, focus, style, bounds.Width, window)
 	}
 	for lineIndex := firstLine; lineIndex < lastLine; lineIndex++ {
 		line := lines[lineIndex]
-		y := bounds.Y + float32(lineIndex-firstLine)*textFieldLineHeight
+		y := bounds.Y + float32(lineIndex-firstLine)*textFieldLineHeight - lineOffset
 		textBounds := textFieldAlignedTextBounds(woxui.Rect{X: bounds.X - horizontalOffset, Y: y, Width: bounds.Width + horizontalOffset, Height: textFieldLineHeight}, line.text, style, textAlignmentY, window)
 		selectionStart := max(start, line.start)
 		selectionEnd := min(end, line.end)
@@ -488,7 +520,7 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 	line := lines[caretLine]
 	caretMetrics, _ := window.MeasureText(string(displayRunes[line.start:focus]), style)
 	cursorX := bounds.X - horizontalOffset + caretMetrics.Size.Width
-	cursorY := bounds.Y + float32(caretLine-firstLine)*textFieldLineHeight
+	cursorY := bounds.Y + float32(caretLine-firstLine)*textFieldLineHeight - lineOffset
 	if compositionStart >= line.start && compositionEnd <= line.end {
 		prefixMetrics, _ := window.MeasureText(string(displayRunes[line.start:compositionStart]), style)
 		compositionMetrics, _ := window.MeasureText(string(displayRunes[compositionStart:compositionEnd]), style)
@@ -499,12 +531,13 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 	}
 }
 
-func textFieldCursorRect(state woxui.TextEditingState, style woxui.TextStyle, maxLines int, bounds woxui.Rect, window *woxui.Window) woxui.Rect {
+func textFieldCursorRect(state woxui.TextEditingState, style woxui.TextStyle, maxLines int, verticalOffset float32, bounds woxui.Rect, window *woxui.Window) woxui.Rect {
 	displayRunes, _, _, focus, _, _ := textFieldDisplayState(state)
 	lines := textFieldLines(string(displayRunes))
 	caretLine := textFieldLineIndex(lines, focus)
 	visibleLines := max(1, min(maxLines, int(bounds.Height/textFieldLineHeight)))
-	firstLine := max(0, caretLine-visibleLines+1)
+	firstLine := max(0, int(verticalOffset/textFieldLineHeight))
+	lineOffset := verticalOffset - float32(firstLine)*textFieldLineHeight
 	horizontalOffset := float32(0)
 	if visibleLines == 1 {
 		horizontalOffset = textFieldHorizontalOffset(displayRunes, focus, style, bounds.Width, window)
@@ -513,9 +546,26 @@ func textFieldCursorRect(state woxui.TextEditingState, style woxui.TextStyle, ma
 	metrics, _ := window.MeasureText(string(displayRunes[line.start:focus]), style)
 	return woxui.Rect{
 		X:     bounds.X - horizontalOffset + metrics.Size.Width,
-		Y:     bounds.Y + float32(caretLine-firstLine)*textFieldLineHeight,
+		Y:     bounds.Y + float32(caretLine-firstLine)*textFieldLineHeight - lineOffset,
 		Width: textFieldCursorWidth, Height: 22,
 	}
+}
+
+func textFieldScrolledOffset(offset, maximumOffset, deltaY float32) (float32, bool) {
+	next := max(float32(0), min(maximumOffset, offset-deltaY))
+	return next, next != offset
+}
+
+func textFieldInnerHeight(props TextFieldProps) float32 {
+	height := props.Height
+	if height <= 0 {
+		height = 40
+	}
+	padding := props.Padding
+	if padding == (woxwidget.Insets{}) {
+		padding = woxwidget.Insets{Left: 12, Top: 9, Right: 12, Bottom: 7}
+	}
+	return max(float32(0), height-padding.Top-padding.Bottom)
 }
 
 func textFieldDisplayState(state woxui.TextEditingState) ([]rune, int, int, int, int, int) {

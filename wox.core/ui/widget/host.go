@@ -701,9 +701,13 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 	}
 	if event.Kind == woxui.PointerUp && event.Button == woxui.PointerButtonPrimary {
 		if h.panning != 0 {
+			panner := h.nodes[h.panning]
 			h.panning = 0
 			h.dragging = false
 			h.pressed = 0
+			if panner != nil && panner.gesture != nil && panner.gesture.onPanEnd != nil {
+				panner.gesture.onPanEnd()
+			}
 			h.invalidate()
 			return
 		}

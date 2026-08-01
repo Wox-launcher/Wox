@@ -534,11 +534,13 @@ func TestHostUnfocusesOptedInControlOnOutsidePointerDown(t *testing.T) {
 
 func TestHostPanTracksPointerOutsideBounds(t *testing.T) {
 	var points []woxui.Point
+	ended := false
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
 		return Gesture{
 			ID:          "pan",
 			OnPanStart:  func(point woxui.Point) { points = append(points, point) },
 			OnPanUpdate: func(point woxui.Point) { points = append(points, point) },
+			OnPanEnd:    func() { ended = true },
 			Child:       Container{Width: 100, Height: 20},
 		}
 	})
@@ -549,7 +551,7 @@ func TestHostPanTracksPointerOutsideBounds(t *testing.T) {
 	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 120, Y: 5}})
 	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 120, Y: 5}})
 
-	if len(points) != 2 || points[0].X != 5 || points[1].X != 120 {
-		t.Fatalf("pan points = %#v, want local X positions 5 and 120", points)
+	if len(points) != 2 || points[0].X != 5 || points[1].X != 120 || !ended {
+		t.Fatalf("pan = points %#v ended %v, want local X positions 5/120 and ended", points, ended)
 	}
 }
