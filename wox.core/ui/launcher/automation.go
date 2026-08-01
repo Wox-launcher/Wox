@@ -3,10 +3,15 @@ package launcher
 import (
 	"context"
 	"errors"
+	"time"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+type automationSessionResetter interface {
+	ResetAutomationSession(ctx context.Context, sessionID string) error
+}
 
 type automationSurfaceKind uint8
 
@@ -149,6 +154,38 @@ func (a *App) EnterAutomationText(text string) error {
 			}
 		}
 	})
+}
+
+// ResetAutomationState destroys secondary surfaces and clears primary launcher state between smoke cases.
+func (a *App) ResetAutomationState() error {
+	if a.window == nil || a.windows == nil {
+		return errors.New("launcher automation state is not initialized")
+	}
+	var resetErr error
+	if err := woxui.Call(func() {
+		if err := a.windows.CloseAllExcept(a.windowID); err != nil {
+			resetErr = err
+			return
+		}
+		a.setQuery(plainQuery{})
+		a.queryHistories = nil
+		a.toolbarMsg = nil
+		a.toolbarRevision++
+		resetErr = a.hideWindow(true)
+	}); err != nil {
+		return err
+	}
+	if resetErr != nil {
+		return resetErr
+	}
+	if resetter, ok := a.services.(automationSessionResetter); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := resetter.ResetAutomationSession(ctx, a.sessionID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ShowAutomationWindow opens the launcher through its normal product path.

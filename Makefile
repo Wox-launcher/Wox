@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke test-go-ui-smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
+.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 
@@ -68,7 +68,7 @@ help:
 	@echo "  dev        Setup development environment"
 	@echo "  test       Run tests"
 	@echo "  test-go-ui-unit  Run retained-widget, automation-contract, and driver tests"
-	@echo "  test-go-ui-smoke Build the test-only Wox binary and run native launcher smoke"
+	@echo "  smoke      Run all native smoke cases, or one case with CASE=launcher/query/001"
 	@echo "  build      Build all components"
 	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
 	@echo "  appimage   Build Linux AppImage"
@@ -199,11 +199,11 @@ build-go-ui-smoke: ensure-resources
 clean-go-ui-smoke:
 	@rm -f "$(GO_UI_SMOKE_BINARY)"
 
-# The native smoke uses the same product binary with only the authenticated automation server added.
-test-go-ui-smoke: build-go-ui-smoke
+# The suite runner owns one Wox process shared by every serial smoke package.
+smoke: build-go-ui-smoke
 	@trap 'rm -f "$(GO_UI_SMOKE_BINARY)"' EXIT; \
 		cd wox.core && \
-		WOX_GO_UI_SMOKE_BINARY="$(GO_UI_SMOKE_BINARY)" $(GO_UI_SMOKE_RUNNER) go test -tags "wox_ui_smoke" ./test/gouismoke -count=1 -v
+		WOX_GO_UI_SMOKE_BINARY="$(GO_UI_SMOKE_BINARY)" $(GO_UI_SMOKE_RUNNER) go run ./test/smokerunner -case "$(CASE)"
 
 # Test without network dependencies
 test-offline:

@@ -11,7 +11,8 @@ on:
       - "wox.core/plugin/system/shell/terminal/**"
       - "wox.core/ui/**"
       - "wox.core/test/automationdriver/**"
-      - "wox.core/test/gouismoke/**"
+      - "wox.core/test/smoke/**"
+      - "wox.core/test/smokerunner/**"
   schedule:
     - cron: "17 18 * * *"
   workflow_dispatch:
@@ -108,7 +109,7 @@ jobs:
         env:
           GO_UI_SMOKE_RUNNER: xvfb-run -a
           WOX_GO_UI_ARTIFACT_DIR: ${{ runner.temp }}/go-ui-artifacts
-        run: make test-go-ui-smoke
+        run: make smoke
       - name: Upload native visual
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -169,7 +170,7 @@ jobs:
         env:
           GO_UI_SMOKE_RUNNER: ${{ matrix.runner }}
           WOX_GO_UI_ARTIFACT_DIR: ${{ runner.temp }}/go-ui-artifacts
-        run: make test-go-ui-smoke
+        run: make smoke
       - name: Upload native visual
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

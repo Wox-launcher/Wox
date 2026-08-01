@@ -1,8 +1,9 @@
 //go:build wox_ui_smoke
 
-package gouismoke
+package query
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"image"
@@ -11,8 +12,14 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/image/draw"
+
+	"wox/test/automationdriver"
+	"wox/test/smoke"
+	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 const (
@@ -42,7 +49,100 @@ var launcherQueryGolden = visualSignature{
 	Aspect: 4.245810055865922,
 }
 
-// assertVisualGolden compares normalized composition while tolerating native font and scale differences.
+// Test001LauncherQueryCalculator covers the native launcher query path and its visual baseline.
+func Test001LauncherQueryCalculator(t *testing.T) {
+	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
+		smoke.ShowLauncher(t, ctx, client)
+		initialBounds, err := client.Bounds(ctx)
+		if err != nil {
+			t.Fatalf("read initial launcher bounds: %v", err)
+		}
+		movedBounds := initialBounds
+		movedBounds.X += 37
+		movedBounds.Y += 29
+		if err := client.SetBounds(ctx, movedBounds); err != nil {
+			t.Fatalf("move launcher before query: %v", err)
+		}
+		actualMovedBounds, err := client.Bounds(ctx)
+		if err != nil {
+			t.Fatalf("read moved launcher bounds: %v", err)
+		}
+		assertWindowOrigin(t, actualMovedBounds, movedBounds)
+		for _, query := range []string{"s", "sm", "smo", "smok", "smoke"} {
+			if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, query); err != nil {
+				t.Fatalf("enter rapid query %q: %v", query, err)
+			}
+		}
+		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			node, found := automationdriver.Find(snapshot, "launcher.query.input")
+			return found && node.Value == "smoke"
+		}); err != nil {
+			t.Fatalf("wait for rapid query input: %v", err)
+		}
+		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, "1+1"); err != nil {
+			t.Fatalf("enter calculator query: %v", err)
+		}
+		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			_, found := calculatorResult(snapshot)
+			return found
+		})
+		if err != nil {
+			t.Fatalf("wait for query result: %v", err)
+		}
+		if len(snapshot.Diagnostics) > 0 {
+			t.Fatalf("launcher semantics diagnostics: %v", snapshot.Diagnostics)
+		}
+		resultBounds := waitForExpandedLauncher(t, ctx, client, initialBounds.Height)
+		assertWindowOrigin(t, resultBounds, movedBounds)
+		capturePath := smoke.ArtifactPath(t, "launcher-query-001-calculator")
+		if err := client.Capture(ctx, capturePath); err != nil {
+			t.Fatalf("capture launcher visual: %v", err)
+		}
+		smoke.AssertPNG(t, capturePath)
+		assertVisualGolden(t, capturePath)
+		if err := client.Hide(ctx); err != nil {
+			t.Fatalf("hide launcher: %v", err)
+		}
+	})
+}
+
+// waitForExpandedLauncher waits for native resize to catch up with the published result snapshot.
+func waitForExpandedLauncher(t *testing.T, ctx context.Context, client *automationdriver.Client, initialHeight float32) woxui.Rect {
+	t.Helper()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		bounds, err := client.Bounds(ctx)
+		if err != nil {
+			t.Fatalf("read launcher bounds after query: %v", err)
+		}
+		if bounds.Height > initialHeight+1 {
+			return bounds
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("wait for launcher result resize: %v", ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func assertWindowOrigin(t *testing.T, actual, expected woxui.Rect) {
+	t.Helper()
+	if math.Abs(float64(actual.X-expected.X)) > 1 || math.Abs(float64(actual.Y-expected.Y)) > 1 {
+		t.Fatalf("launcher origin = %.1f,%.1f, want %.1f,%.1f", actual.X, actual.Y, expected.X, expected.Y)
+	}
+}
+
+func calculatorResult(snapshot woxwidget.AutomationSnapshot) (string, bool) {
+	for _, node := range snapshot.Tree.Nodes {
+		if strings.HasPrefix(node.AutomationID, "launcher.result.") && strings.TrimSpace(node.Label) == "2" {
+			return node.AutomationID, true
+		}
+	}
+	return "", false
+}
+
 func assertVisualGolden(t *testing.T, path string) {
 	t.Helper()
 	actual, err := readVisualSignature(path)
@@ -52,9 +152,6 @@ func assertVisualGolden(t *testing.T, path string) {
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("WOX_UPDATE_GO_UI_GOLDEN")), "true") {
 		t.Logf("launcher query golden: %+v", actual)
 		return
-	}
-	if launcherQueryGolden.Hash == "" {
-		t.Fatal("launcher query visual golden is not configured")
 	}
 	hashDistance, err := hashDistance(actual.Hash, launcherQueryGolden.Hash)
 	if err != nil {

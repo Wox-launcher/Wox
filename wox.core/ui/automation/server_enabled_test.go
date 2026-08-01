@@ -20,6 +20,7 @@ type fakeController struct {
 	actionValue  string
 	pointer      woxui.PointerEvent
 	settingsPath string
+	reset        bool
 }
 
 func (f *fakeController) AutomationSnapshot() woxwidget.AutomationSnapshot {
@@ -50,7 +51,11 @@ func (f *fakeController) DispatchAutomationPointer(event woxui.PointerEvent) err
 
 func (*fakeController) PressAutomationKey(woxui.Key, woxui.KeyModifiers) error { return nil }
 func (*fakeController) EnterAutomationText(string) error                       { return nil }
-func (*fakeController) ShowAutomationWindow() error                            { return nil }
+func (f *fakeController) ResetAutomationState() error {
+	f.reset = true
+	return nil
+}
+func (*fakeController) ShowAutomationWindow() error { return nil }
 func (f *fakeController) OpenAutomationSettings(path string) error {
 	f.settingsPath = path
 	return nil
@@ -112,6 +117,11 @@ func TestHandlerDispatchesSemanticActionAndRejectsUnknownMethod(t *testing.T) {
 	}
 	if controller.settingsPath != "/appearance" {
 		t.Fatalf("unexpected settings path %q", controller.settingsPath)
+	}
+
+	resetResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"reset","method":"suite.reset"}`)
+	if resetResponse.Code != http.StatusOK || !controller.reset {
+		t.Fatalf("suite reset was not dispatched: status=%d reset=%v", resetResponse.Code, controller.reset)
 	}
 
 	unknownResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":2,"method":"core.business-route"}`)

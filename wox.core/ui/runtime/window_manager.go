@@ -130,12 +130,20 @@ func (m *WindowManager) Get(id WindowID) (*ManagedWindow, bool) {
 
 // CloseAll releases every currently registered native window.
 func (m *WindowManager) CloseAll() error {
+	return m.CloseAllExcept("")
+}
+
+// CloseAllExcept releases every registered native window except the retained ID.
+func (m *WindowManager) CloseAllExcept(retained WindowID) error {
 	if m == nil {
 		return nil
 	}
 	m.mu.RLock()
 	windows := make([]*ManagedWindow, 0, len(m.windows))
-	for _, window := range m.windows {
+	for id, window := range m.windows {
+		if retained != "" && id == retained {
+			continue
+		}
 		windows = append(windows, window)
 	}
 	m.mu.RUnlock()

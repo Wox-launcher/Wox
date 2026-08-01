@@ -32,6 +32,14 @@ type Process struct {
 	close    sync.Once
 }
 
+// InfoFile returns the endpoint metadata file shared with smoke test clients.
+func (p *Process) InfoFile() string {
+	if p == nil {
+		return ""
+	}
+	return p.infoFile
+}
+
 // Launch starts a wox_automation binary and waits for authenticated endpoint metadata.
 func Launch(ctx context.Context, executable string, options LaunchOptions) (*Process, error) {
 	if strings.TrimSpace(executable) == "" {

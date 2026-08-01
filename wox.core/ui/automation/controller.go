@@ -21,6 +21,7 @@ type Controller interface {
 	DispatchAutomationPointer(event woxui.PointerEvent) error
 	PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) error
 	EnterAutomationText(text string) error
+	ResetAutomationState() error
 	ShowAutomationWindow() error
 	OpenAutomationSettings(path string) error
 	HideAutomationWindow() error

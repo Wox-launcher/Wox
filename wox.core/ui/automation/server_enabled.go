@@ -180,6 +180,8 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 			return nil, invalidParams(err)
 		}
 		return resultOrError(true, controller.EnterAutomationText(params.Text))
+	case "suite.reset":
+		return resultOrError(true, controller.ResetAutomationState())
 	case "window.show":
 		return resultOrError(true, controller.ShowAutomationWindow())
 	case "window.open_settings":

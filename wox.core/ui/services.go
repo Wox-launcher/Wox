@@ -91,6 +91,12 @@ func (s *CoreServices) DestroyInstance(ctx context.Context, sessionID string) er
 	return nil
 }
 
+// ResetAutomationSession clears query-owned core state without unregistering the primary UI.
+func (s *CoreServices) ResetAutomationSession(ctx context.Context, sessionID string) error {
+	plugin.GetPluginManager().ClearSessionState(uiServiceContext(ctx, sessionID), sessionID)
+	return nil
+}
+
 // Shown records that the launcher window became visible.
 func (s *CoreServices) Shown(ctx context.Context, sessionID string) error {
 	GetUIManager().PostOnShow(uiServiceContext(ctx, sessionID))

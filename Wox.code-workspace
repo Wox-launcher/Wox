@@ -83,63 +83,6 @@
 				"env": {
 					"CGO_ENABLED": "1"
 				}
-			},
-			{
-				"name": "Smoke Test Go UI",
-				"type": "go",
-				"request": "launch",
-				"mode": "test",
-				"program": "${workspaceFolder:wox.core}/test/gouismoke",
-				"cwd": "${workspaceFolder:wox.core}",
-				"buildFlags": "-tags=wox_ui_smoke",
-				"preLaunchTask": "Build Go UI Smoke Binary",
-				"postDebugTask": "Clean Go UI Smoke Binary",
-				"env": {
-					"WOX_GO_UI_SMOKE_BINARY": "${workspaceFolder:wox.core}/.tmp/wox-go-ui-smoke"
-				},
-				"windows": {
-					"env": {
-						"WOX_GO_UI_SMOKE_BINARY": "${workspaceFolder:wox.core}/.tmp/wox-go-ui-smoke.exe"
-					}
-				}
-			}
-		]
-	},
-	"tasks": {
-		"version": "2.0.0",
-		"tasks": [
-			{
-				"label": "Build Go UI Smoke Binary",
-				"type": "process",
-				"command": "make",
-				"args": [
-					"build-go-ui-smoke"
-				],
-				"options": {
-					"cwd": "${workspaceFolder:wox}"
-				},
-				"problemMatcher": "$go",
-				"presentation": {
-					"reveal": "silent",
-					"panel": "dedicated",
-					"clear": true
-				}
-			},
-			{
-				"label": "Clean Go UI Smoke Binary",
-				"type": "process",
-				"command": "make",
-				"args": [
-					"clean-go-ui-smoke"
-				],
-				"options": {
-					"cwd": "${workspaceFolder:wox}"
-				},
-				"problemMatcher": [],
-				"presentation": {
-					"reveal": "never",
-					"panel": "dedicated"
-				}
 			}
 		]
 	}

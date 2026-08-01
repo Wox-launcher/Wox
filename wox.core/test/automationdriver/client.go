@@ -25,6 +25,9 @@ type Client struct {
 	nextID  atomic.Uint64
 }
 
+// SharedInfoFileEnvironment points smoke clients at the suite-owned automation endpoint.
+const SharedInfoFileEnvironment = "WOX_GO_UI_AUTOMATION_INFO_FILE"
+
 type request struct {
 	JSONRPC string `json:"jsonrpc"`
 	ID      uint64 `json:"id"`
@@ -172,6 +175,12 @@ func (c *Client) PressKey(ctx context.Context, key woxui.Key, modifiers woxui.Ke
 // EnterText commits UTF-8 text through the focused editor.
 func (c *Client) EnterText(ctx context.Context, text string) error {
 	_, err := call[bool](ctx, c, "input.text", map[string]string{"text": text})
+	return err
+}
+
+// Reset returns the shared smoke process to its hidden launcher baseline.
+func (c *Client) Reset(ctx context.Context) error {
+	_, err := call[bool](ctx, c, "suite.reset", nil)
 	return err
 }
 
