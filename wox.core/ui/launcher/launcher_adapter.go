@@ -53,8 +53,8 @@ type viewSnapshot struct {
 
 func (a *App) snapshot() viewSnapshot {
 	var tableEditor *formTableEditorSnapshot
-	if a.tableEditor != nil && a.formTableTargetCurrentLocked(a.tableEditor.target) {
-		tableEditor = snapshotFormTableEditorLocked(a.tableEditor)
+	if a.launcherTableEditor != nil && a.formTableTargetCurrentLocked(a.launcherTableEditor.target) {
+		tableEditor = snapshotFormTableEditorLocked(a.launcherTableEditor)
 	}
 	refinementValues := make(map[string]string, len(a.query.QueryRefinements))
 	for key, value := range a.query.QueryRefinements {

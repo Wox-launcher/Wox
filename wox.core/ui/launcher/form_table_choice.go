@@ -28,7 +28,7 @@ func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot
 func (a *App) openFocusedFormTableRowChoice(index int) {
 	anchor := woxui.Rect{}
 	host := a.host
-	if a.tableEditor != nil && a.formTableTargetUsesSettingsLocked(a.tableEditor.target) {
+	if a.settingsTableEditor != nil {
 		host = a.settingsHost
 	}
 	if host != nil {
@@ -40,7 +40,7 @@ func (a *App) openFocusedFormTableRowChoice(index int) {
 // openFormTableRowChoice opens the menu at the exact field bounds captured by pointer hit testing.
 func (a *App) openFormTableRowChoice(index int, anchor woxui.Rect) {
 	a.stopHotkeyRecording()
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) {
 		return
 	}
@@ -59,7 +59,7 @@ func (a *App) openFormTableRowChoice(index int, anchor woxui.Rect) {
 
 // closeFormTableChoicePicker dismisses the menu and restores the row editor's input ownership.
 func (a *App) closeFormTableChoicePicker() {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	textInput := false
 	if state != nil && state.choicePicker != nil {
 		state.choicePicker = nil
@@ -72,7 +72,7 @@ func (a *App) closeFormTableChoicePicker() {
 
 // chooseFormTableChoice commits one option while preserving table-specific dependent defaults.
 func (a *App) chooseFormTableChoice(index int) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || state.choicePicker == nil || index < 0 {
 		return
 	}

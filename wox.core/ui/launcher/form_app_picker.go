@@ -31,7 +31,7 @@ func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, pale
 // openFormTableAppPicker opens a shared DTO picker after core has supplied the current platform's application identities.
 func (a *App) openFormTableAppPicker(index int) {
 	startLoading := false
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "app" {
 		return
 	}
@@ -45,7 +45,7 @@ func (a *App) openFormTableAppPicker(index int) {
 		if startLoading {
 			util.Go(a.lifecycleCtx, "load hotkey app candidates", a.loadHotkeyAppCandidates)
 		}
-		_ = a.window.Invalidate()
+		a.invalidateFormTableWindow()
 		return
 	}
 
@@ -70,24 +70,24 @@ func (a *App) openFormTableAppPicker(index int) {
 	}
 	state.appPicker = &formTableAppPickerState{fieldIndex: index, candidates: candidates, selected: selected}
 	state.status = ""
-	a.updateFormTextInput(false)
-	_ = a.window.Invalidate()
+	a.updateFormTableTextInput(false)
+	a.invalidateFormTableWindow()
 }
 
 func (a *App) closeFormTableAppPicker() {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	textInput := false
 	if state != nil && state.appPicker != nil {
 		state.appPicker = nil
 		state.status = ""
 		textInput = state.rowForm != nil && state.rowForm.editor != nil
 	}
-	a.updateFormTextInput(textInput)
-	_ = a.window.Invalidate()
+	a.updateFormTableTextInput(textInput)
+	a.invalidateFormTableWindow()
 }
 
 func (a *App) chooseFormTableAppCandidate(index int) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || state.appPicker == nil || index < 0 || index >= len(state.appPicker.candidates) {
 		return
 	}
@@ -98,22 +98,22 @@ func (a *App) chooseFormTableAppCandidate(index int) {
 	encoded, err := json.Marshal(state.appPicker.candidates[index])
 	if err != nil {
 		state.status = err.Error()
-		_ = a.window.Invalidate()
+		a.invalidateFormTableWindow()
 		return
 	}
 	state.rowForm.values[state.rowForm.definitions[fieldIndex].Value.Key] = string(encoded)
 	state.appPicker = nil
 	state.status = ""
 	setFormFieldsFocusLocked(state.rowForm, fieldIndex)
-	a.updateFormTextInput(false)
-	_ = a.window.Invalidate()
+	a.updateFormTableTextInput(false)
+	a.invalidateFormTableWindow()
 }
 
 func (a *App) moveFormTableAppCandidate(delta int) {
-	if state := a.tableEditor; state != nil && state.appPicker != nil && len(state.appPicker.candidates) > 0 {
+	if state := a.activeFormTableEditor(); state != nil && state.appPicker != nil && len(state.appPicker.candidates) > 0 {
 		state.appPicker.selected = (state.appPicker.selected + delta + len(state.appPicker.candidates)) % len(state.appPicker.candidates)
 	}
-	_ = a.window.Invalidate()
+	a.invalidateFormTableWindow()
 }
 
 func (a *App) onFormTableAppPickerKey(event woxui.KeyEvent, selected int) {

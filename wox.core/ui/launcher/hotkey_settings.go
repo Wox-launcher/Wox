@@ -161,7 +161,7 @@ func queryHotkeyPositionOptions() []formOption {
 
 // onHotkeySettingsKey moves between shared fields without stealing keys from an active recorder.
 func (a *App) onHotkeySettingsKey(event woxui.KeyEvent) bool {
-	active := a.settingsOpen && a.settingTab == "general" && a.hotkeySettings.Focused() && a.hotkeySettings.Form() != nil && a.tableEditor == nil
+	active := a.settingsOpen && a.settingTab == "general" && a.hotkeySettings.Focused() && a.hotkeySettings.Form() != nil && a.settingsTableEditor == nil
 	if !active {
 		return false
 	}

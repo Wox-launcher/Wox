@@ -93,6 +93,7 @@ type App struct {
 	toolbarRevision        uint64
 	form                   *formState
 	requirementForm        *requirementFormState
+	launcherTableEditor    *formTableEditorState
 	triggerConflict        *triggerConflictPreviewState
 	chatPreview            *chatPreviewState
 	webViewPreviewData     string
@@ -123,7 +124,7 @@ type App struct {
 	settingsDemo           *settingsDemoState
 	settingsDemoRevision   atomic.Uint64
 	choiceTooltipRevision  atomic.Uint64
-	tableEditor            *formTableEditorState
+	settingsTableEditor    *formTableEditorState
 	glanceItem             *glanceItem
 	glanceLoading          bool
 	glanceRevision         uint64

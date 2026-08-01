@@ -256,9 +256,7 @@ func (a *App) restoreThemeEditorTextInput() {
 }
 
 func (a *App) formTableUsesSettingsWindow() bool {
-	state := a.tableEditor
-	usesSettings := state != nil && a.formTableTargetUsesSettingsLocked(state.target)
-	return usesSettings
+	return a.settingsTableEditor != nil
 }
 
 func (a *App) formTableTargetUsesSettingsLocked(target *formFieldsState) bool {
@@ -293,8 +291,8 @@ func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
 	if state != nil {
 		pluginForm := a.pluginSettings.Form()
 		usesSettings = (!a.onboardingOpen && state.target == a.hotkeySettings.Form()) || (pluginForm != nil && state.target == &pluginForm.formFieldsState)
-		if !usesSettings && a.tableEditor != nil && a.tableEditor.rowForm == state.target {
-			usesSettings = a.formTableTargetUsesSettingsLocked(a.tableEditor.target)
+		if !usesSettings && a.settingsTableEditor != nil && a.settingsTableEditor.rowForm == state.target {
+			usesSettings = true
 		}
 	}
 	return usesSettings
@@ -437,7 +435,7 @@ func (a *App) onSettingsWindowClosed() {
 	a.generalSettings.SetChoicePicker(nil)
 	a.cloudSettings.SetForm(nil)
 	a.cloudSettings.SetActionMenu("")
-	a.tableEditor = nil
+	a.settingsTableEditor = nil
 	a.aiSettings.SetModelManager(nil)
 	if !a.onboardingOpen {
 		a.hotkeySettings.ClearRecording()

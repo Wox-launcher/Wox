@@ -167,6 +167,14 @@ func (a *App) formTableTargetCurrentLocked(target *formFieldsState) bool {
 	return a.formTableTargetCurrentWithFormsLocked(target, pluginForm, a.aiSettings.Form(), a.hotkeySettings.Form())
 }
 
+// activeFormTableEditor returns the settings flow first because its modal state remains independent when the launcher is activated.
+func (a *App) activeFormTableEditor() *formTableEditorState {
+	if a.settingsTableEditor != nil {
+		return a.settingsTableEditor
+	}
+	return a.launcherTableEditor
+}
+
 // formTableTargetCurrentWithFormsLocked compares one table target using controller pointers captured for the UI-thread snapshot.
 func (a *App) formTableTargetCurrentWithFormsLocked(target *formFieldsState, pluginForm *pluginSettingsFormState, aiForm *formFieldsState, hotkeyForm *formFieldsState) bool {
 	return target != nil && ((a.form != nil && target == &a.form.formFieldsState) ||
@@ -221,14 +229,22 @@ func (a *App) openFormTableLocked(target *formFieldsState, index int) {
 		state.invalid = true
 		state.status = "Invalid table JSON. Close this editor without saving to preserve the original value."
 	}
-	a.tableEditor = state
+	if a.formTableTargetUsesSettingsLocked(target) {
+		a.settingsTableEditor = state
+	} else {
+		a.launcherTableEditor = state
+	}
 }
 
 // closeFormTableEditor returns input ownership to the form that opened the portable table overlay.
 func (a *App) closeFormTableEditor() {
 	a.stopHotkeyRecording()
-	state := a.tableEditor
-	a.tableEditor = nil
+	state := a.activeFormTableEditor()
+	if state == a.settingsTableEditor {
+		a.settingsTableEditor = nil
+	} else if state == a.launcherTableEditor {
+		a.launcherTableEditor = nil
+	}
 	textInput := state != nil && a.formTableTargetCurrentLocked(state.target) && state.target.editor != nil
 	settingsTarget := state != nil && a.formTableTargetUsesSettingsLocked(state.target)
 	if settingsTarget {
@@ -241,7 +257,7 @@ func (a *App) closeFormTableEditor() {
 }
 
 func (a *App) selectFormTableRow(index int) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state != nil && state.rowForm == nil && index >= 0 && index < len(state.rows) {
 		state.selected = index
 		state.deletePending = -1
@@ -252,7 +268,7 @@ func (a *App) selectFormTableRow(index int) {
 }
 
 func (a *App) moveFormTableSelection(delta int) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state != nil && state.rowForm == nil && len(state.rows) > 0 {
 		if state.selected < 0 {
 			state.selected = 0
@@ -394,8 +410,8 @@ func (a *App) beginEditFormTableRowDirect() {
 // beginSelectedFormTableRowEdit preserves whether the selected row came from the list or an inline table.
 func (a *App) beginSelectedFormTableRowEdit(rowEditorOnly bool) {
 	index := -1
-	if a.tableEditor != nil {
-		index = a.tableEditor.selected
+	if state := a.activeFormTableEditor(); state != nil {
+		index = state.selected
 	}
 	if index >= 0 {
 		a.beginFormTableRowEdit(index, rowEditorOnly, false)
@@ -405,8 +421,8 @@ func (a *App) beginSelectedFormTableRowEdit(rowEditorOnly bool) {
 // beginCloneFormTableRowDirect opens a new-row editor prefilled from the selected row.
 func (a *App) beginCloneFormTableRowDirect() {
 	index := -1
-	if a.tableEditor != nil {
-		index = a.tableEditor.selected
+	if state := a.activeFormTableEditor(); state != nil {
+		index = state.selected
 	}
 	if index >= 0 {
 		a.beginFormTableRowEdit(index, true, true)
@@ -415,7 +431,7 @@ func (a *App) beginCloneFormTableRowDirect() {
 
 func (a *App) beginFormTableRowEdit(index int, rowEditorOnly, cloneRow bool) {
 	requestModels := false
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.invalid || state.saving || state.rowForm != nil || index >= len(state.rows) {
 		return
 	}
@@ -456,20 +472,21 @@ func (a *App) beginFormTableRowEdit(index int, rowEditorOnly, cloneRow bool) {
 }
 
 func (a *App) cancelFormTableRowEdit() {
-	closeEditor := a.tableEditor != nil && a.tableEditor.rowEditorOnly
+	state := a.activeFormTableEditor()
+	closeEditor := state != nil && state.rowEditorOnly
 	if closeEditor {
 		a.closeFormTableEditor()
 		return
 	}
 	a.stopHotkeyRecording()
-	if a.tableEditor != nil {
-		a.tableEditor.rowForm = nil
-		a.tableEditor.rowIndex = -1
-		a.tableEditor.rowBase = nil
-		a.tableEditor.rowEditorOnly = false
-		a.tableEditor.appPicker = nil
-		a.tableEditor.skillClone = false
-		a.tableEditor.status = ""
+	if state := a.activeFormTableEditor(); state != nil {
+		state.rowForm = nil
+		state.rowIndex = -1
+		state.rowBase = nil
+		state.rowEditorOnly = false
+		state.appPicker = nil
+		state.skillClone = false
+		state.status = ""
 	}
 	a.updateFormTableTextInput(false)
 	a.invalidateFormTableWindow()
@@ -618,7 +635,7 @@ func parseFormTableApp(value string) (map[string]any, error) {
 
 func (a *App) saveFormTableRowEdit() {
 	a.stopHotkeyRecording()
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || state.invalid || state.saving || !a.formTableTargetCurrentLocked(state.target) {
 		return
 	}
@@ -626,7 +643,7 @@ func (a *App) saveFormTableRowEdit() {
 	if state.skillClone {
 		if validationKey := validateFormFields(state.rowForm.definitions, state.rowForm.values); validationKey != "" {
 			message := a.translate(validationKey)
-			if a.tableEditor == state {
+			if a.activeFormTableEditor() == state {
 				state.status = message
 			}
 			a.invalidateFormTableWindow()
@@ -650,7 +667,7 @@ func (a *App) saveFormTableRowEdit() {
 	}
 	if validationKey := validateFormTableRow(state.definition, state.rowForm, state.rows, state.rowIndex); validationKey != "" {
 		message := a.translate(validationKey)
-		if a.tableEditor == state {
+		if a.activeFormTableEditor() == state {
 			state.status = message
 		}
 		a.invalidateFormTableWindow()
@@ -716,7 +733,7 @@ func (a *App) beginDeleteFormTableRowDirect() {
 }
 
 func (a *App) beginFormTableRowDelete(direct bool) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.invalid || state.saving || state.rowForm != nil || state.selected < 0 || state.selected >= len(state.rows) || !a.formTableTargetCurrentLocked(state.target) || formTableSkillRowReadOnly(state.definition, state.rows[state.selected]) {
 		return
 	}
@@ -729,7 +746,7 @@ func (a *App) beginFormTableRowDelete(direct bool) {
 
 // cancelFormTableRowDelete dismisses the confirmation without mutating the table.
 func (a *App) cancelFormTableRowDelete() {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.deletePending < 0 {
 		return
 	}
@@ -745,7 +762,7 @@ func (a *App) cancelFormTableRowDelete() {
 
 // confirmFormTableRowDelete re-matches the captured row against the latest table value before removal.
 func (a *App) confirmFormTableRowDelete() {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.invalid || state.saving || state.rowForm != nil || state.deletePending < 0 || state.deletePending >= len(state.rows) || !a.formTableTargetCurrentLocked(state.target) {
 		return
 	}
@@ -840,11 +857,11 @@ func (a *App) commitFormTableRowsLocked(state *formTableEditorState) error {
 
 func (a *App) focusFormTableRowField(index int) {
 	var target *formFieldsState
-	if a.tableEditor != nil {
-		target = a.tableEditor.rowForm
+	if state := a.activeFormTableEditor(); state != nil {
+		target = state.rowForm
 	}
 	a.stopHotkeyRecordingForDifferentField(target, index)
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || !formDefinitionFocusable(state.rowForm.definitions[index]) {
 		return
 	}
@@ -857,7 +874,7 @@ func (a *App) focusFormTableRowField(index int) {
 }
 
 func (a *App) moveFormTableRowFocus(delta int) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || len(state.rowForm.definitions) == 0 {
 		return
 	}
@@ -884,7 +901,7 @@ func (a *App) moveFormTableRowFocus(delta int) {
 }
 
 func (a *App) changeFormTableRowChoice(index, delta int) {
-	if state := a.tableEditor; state != nil && state.rowForm != nil {
+	if state := a.activeFormTableEditor(); state != nil && state.rowForm != nil {
 		changeFormFieldsChoiceLocked(state.rowForm, index, delta)
 		if index >= 0 && index < len(state.rowForm.definitions) && state.rowForm.definitions[index].Value.Key == "Name" {
 			applyAIProviderDefaultHostLocked(state, true, a.aiSettings.ProviderCatalog())
@@ -896,7 +913,7 @@ func (a *App) changeFormTableRowChoice(index, delta int) {
 }
 
 func (a *App) editFormTableRowKey(event woxui.KeyEvent) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state != nil && state.rowForm != nil && state.rowForm.editor != nil && state.rowForm.focused >= 0 && state.rowForm.focused < len(state.rowForm.definitions) {
 		_, changed := handleFormEditorKey(state.rowForm.editor, state.rowForm.definitions[state.rowForm.focused], event)
 		if changed {
@@ -908,7 +925,7 @@ func (a *App) editFormTableRowKey(event woxui.KeyEvent) {
 }
 
 func (a *App) setFormTableRowText(index int, value string) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	changed := state != nil && state.rowForm != nil && !state.saving && setFormFieldsTextLocked(state.rowForm, index, value)
 	if changed {
 		state.status = ""
@@ -920,7 +937,7 @@ func (a *App) setFormTableRowText(index int, value string) {
 
 // beginFormTableRowEmojiEdit selects the current icon value so the next emoji input replaces it.
 func (a *App) beginFormTableRowEmojiEdit(index int) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "woxImage" {
 		return
 	}
@@ -933,7 +950,7 @@ func (a *App) beginFormTableRowEmojiEdit(index int) {
 
 // pickFormTableRowImage stores an uploaded image in the same portable WoxImage shape used by Flutter.
 func (a *App) pickFormTableRowImage(index int) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "woxImage" {
 		return
 	}
@@ -958,7 +975,7 @@ func (a *App) pickFormTableRowImage(index int) {
 		}
 	}
 
-	if a.tableEditor != state || state.rowForm != rowForm {
+	if a.activeFormTableEditor() != state || state.rowForm != rowForm {
 		return
 	}
 	if err != nil {
@@ -980,14 +997,14 @@ func (a *App) pickFormTableRowImage(index int) {
 
 // pickFormTableRowDirectory uses the platform window adapter while keeping the selected path in the shared row form.
 func (a *App) pickFormTableRowDirectory(index int) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "dirPath" {
 		return
 	}
 	rowForm := state.rowForm
 	a.updateFormTableTextInput(false)
 	path, err := a.formTableNativeWindow().PickFile(woxui.FileDialogOptions{Directory: true})
-	if a.tableEditor != state || state.rowForm != rowForm {
+	if a.activeFormTableEditor() != state || state.rowForm != rowForm {
 		return
 	}
 	if err != nil {
@@ -1005,7 +1022,7 @@ func (a *App) pickFormTableRowDirectory(index int) {
 
 // onFormTableKey gives the modal table editor first refusal before launcher or settings navigation.
 func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || !a.formTableTargetCurrentLocked(state.target) {
 		return false
 	}
@@ -1160,7 +1177,7 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) onFormTableTextInput(_ woxui.TextInputEvent) bool {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || !a.formTableTargetCurrentLocked(state.target) {
 		return false
 	}

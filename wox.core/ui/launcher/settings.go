@@ -327,6 +327,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.cloudSettings.SetActionMenu("")
 		a.form = nil
 		a.requirementForm = nil
+		a.launcherTableEditor = nil
 		a.triggerConflict = nil
 		a.themeSettings.SetThemeEditor(nil)
 		if form := a.hotkeySettings.Form(); form != nil {
@@ -715,8 +716,8 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	hotkeyForm := a.hotkeySettings.Form()
 
 	var tableEditor *formTableEditorSnapshot
-	if a.tableEditor != nil && a.formTableTargetCurrentWithFormsLocked(a.tableEditor.target, pluginForm, aiForm, hotkeyForm) {
-		tableEditor = snapshotFormTableEditorLocked(a.tableEditor)
+	if a.settingsTableEditor != nil && a.formTableTargetCurrentWithFormsLocked(a.settingsTableEditor.target, pluginForm, aiForm, hotkeyForm) {
+		tableEditor = snapshotFormTableEditorLocked(a.settingsTableEditor)
 	}
 	return settingsSnapshot{
 		isDev:       a.isDev,

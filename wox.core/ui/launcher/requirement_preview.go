@@ -192,8 +192,10 @@ func (a *App) loadAIModels() {
 		if pluginForm := a.pluginSettings.Form(); pluginForm != nil {
 			applyAIModelOptionsLocked(&pluginForm.formFieldsState, models)
 		}
-		if a.tableEditor != nil && a.tableEditor.rowForm != nil {
-			applyAIModelOptionsLocked(a.tableEditor.rowForm, models)
+		for _, tableEditor := range []*formTableEditorState{a.launcherTableEditor, a.settingsTableEditor} {
+			if tableEditor != nil && tableEditor.rowForm != nil {
+				applyAIModelOptionsLocked(tableEditor.rowForm, models)
+			}
 		}
 		if a.chatPreview != nil && (a.chatPreview.panel == "models" || a.chatPreview.panel == chatCommandPanel) {
 			a.chatPreview.panelSelected = 0

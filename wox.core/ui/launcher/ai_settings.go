@@ -175,7 +175,7 @@ func (a *App) loadAIProviderCatalog() {
 		if form := a.aiSettings.Form(); form != nil {
 			applyAIProviderCatalogLocked(form, providers)
 		}
-		if state := a.tableEditor; state != nil && state.target == a.aiSettings.Form() && state.definition.Value.Key == "AIProviders" {
+		if state := a.settingsTableEditor; state != nil && state.target == a.aiSettings.Form() && state.definition.Value.Key == "AIProviders" {
 			state.definition = state.target.definitions[state.fieldIndex]
 			applyAIProviderOptionsToRowFormLocked(state.rowForm, state.definition)
 			applyAIProviderDefaultHostLocked(state, false, providers)
@@ -259,7 +259,7 @@ func applyAIProviderDefaultHostLocked(state *formTableEditorState, overwrite boo
 
 // onAISettingsKey keeps table selection portable while the modal editor owns row-level input.
 func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
-	active := a.settingsOpen && a.settingTab == "ai" && a.aiSettings.Form() != nil && a.tableEditor == nil
+	active := a.settingsOpen && a.settingTab == "ai" && a.aiSettings.Form() != nil && a.settingsTableEditor == nil
 	if !active {
 		return false
 	}
@@ -323,8 +323,8 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 	if a.settingsOpen && a.settingTab == "ai" && form != nil {
 		a.settingRow = tableIndex
 		a.openFormTableLocked(form, tableIndex)
-		if a.tableEditor != nil && rowIndex >= 0 && rowIndex < len(a.tableEditor.rows) {
-			a.tableEditor.selected = rowIndex
+		if a.settingsTableEditor != nil && rowIndex >= 0 && rowIndex < len(a.settingsTableEditor.rows) {
+			a.settingsTableEditor.selected = rowIndex
 		}
 	}
 	a.finishOpeningFormTable()
@@ -335,7 +335,7 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 
 // beginCloneRemoteAISkill reuses the row form surface for the one URL needed by core's clone operation.
 func (a *App) beginCloneRemoteAISkill() {
-	state := a.tableEditor
+	state := a.settingsTableEditor
 	if state == nil || state.definition.Value.Key != "AISkills" || state.invalid || state.saving || state.rowForm != nil || state.target != a.aiSettings.Form() {
 		return
 	}
@@ -378,7 +378,7 @@ func (a *App) cloneRemoteAISkills(state *formTableEditorState, url, previousValu
 	_ = a.runOnUI("apply cloned AI skills", func() {
 		if err != nil {
 			a.settingSaving = false
-			if a.tableEditor == state {
+			if a.settingsTableEditor == state {
 				state.saving = false
 				state.status = "Could not clone: " + err.Error()
 			}
@@ -392,7 +392,7 @@ func (a *App) cloneRemoteAISkills(state *formTableEditorState, url, previousValu
 			a.settingSaving = false
 			state.rows, _ = decodeFormTableRows(previousValue)
 			state.target.values[state.definition.Value.Key] = previousValue
-			if a.tableEditor == state {
+			if a.settingsTableEditor == state {
 				state.saving = false
 				state.status = commitErr.Error()
 			}
@@ -400,7 +400,7 @@ func (a *App) cloneRemoteAISkills(state *formTableEditorState, url, previousValu
 			return
 		}
 		value = state.target.values[state.definition.Value.Key]
-		if a.tableEditor == state {
+		if a.settingsTableEditor == state {
 			state.status = "Saving cloned skills…"
 		}
 		save = true
@@ -455,7 +455,7 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 			_ = a.runOnUI("apply invalid settings table value", func() {
 				a.settingSaving = false
 				state.target.values[key] = previousValue
-				if a.tableEditor == state {
+				if a.settingsTableEditor == state {
 					state.saving = false
 					state.status = "Could not save: " + err.Error()
 				}
@@ -473,7 +473,7 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 		a.settingSaving = false
 		if err != nil {
 			state.target.values[key] = previousValue
-			if a.tableEditor == state {
+			if a.settingsTableEditor == state {
 				if rows, decodeErr := decodeFormTableRows(previousValue); decodeErr == nil {
 					state.rows = rows
 					state.selected = min(state.selected, len(rows)-1)
@@ -488,7 +488,7 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 			} else if state.target == a.hotkeySettings.Form() {
 				a.applyHotkeySettingsRawLocked(key, coreValue)
 			}
-			if a.tableEditor == state {
+			if a.settingsTableEditor == state {
 				state.saving = false
 				state.status = "Saved"
 			}

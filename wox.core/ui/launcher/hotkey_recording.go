@@ -121,8 +121,9 @@ func containsString(values []string, target string) bool {
 
 func (a *App) hotkeyRecordingTargetCurrentLocked(target *formFieldsState) bool {
 	pluginForm := a.pluginSettings.Form()
+	tableEditor := a.activeFormTableEditor()
 	return target != nil && (((a.onboardingOpen || (a.settingsOpen && a.settingTab == "general")) && target == a.hotkeySettings.Form()) ||
-		(a.tableEditor != nil && a.tableEditor.rowForm == target) ||
+		(tableEditor != nil && tableEditor.rowForm == target) ||
 		(a.form != nil && target == &a.form.formFieldsState) ||
 		(a.requirementForm != nil && target == &a.requirementForm.formFieldsState) ||
 		(pluginForm != nil && target == &pluginForm.formFieldsState))
@@ -251,8 +252,8 @@ func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 	state.checking = false
 	state.status = state.hint
 	state.statusError = false
-	if a.tableEditor != nil && a.tableEditor.rowForm == state.target {
-		a.tableEditor.status = ""
+	if editor := a.activeFormTableEditor(); editor != nil && editor.rowForm == state.target {
+		editor.status = ""
 	}
 	a.invalidateHotkeyWindows()
 	if state.idPrefix == "plugin-settings" {
@@ -383,7 +384,7 @@ func fallbackHotkeyString(event woxui.KeyEvent) string {
 
 // recordFormTableRowHotkey starts recording for a specialized hotkey column in the shared table row editor.
 func (a *App) recordFormTableRowHotkey(index int) {
-	state := a.tableEditor
+	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) {
 		return
 	}
