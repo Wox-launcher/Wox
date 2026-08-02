@@ -93,10 +93,6 @@ func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
 	}
 	a.generalSettings.EndEdit()
 	a.generalSettings.SetChoicePicker(&settingChoicePickerState{item: item, anchor: anchor})
-	a.settingNote = ""
-	if item.filterable {
-		a.settingNote = "Filter and select " + item.title
-	}
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
@@ -105,7 +101,6 @@ func (a *App) closeSettingChoicePicker() {
 	closed := false
 	if a.generalSettings.ChoicePicker() != nil {
 		a.generalSettings.SetChoicePicker(nil)
-		a.settingNote = ""
 		closed = true
 	}
 	if closed {
@@ -127,7 +122,6 @@ func (a *App) chooseSettingChoice(index int) {
 	choice := state.item.choices[index]
 	a.generalSettings.SetChoicePicker(nil)
 	if state.onChoose != nil {
-		a.settingNote = ""
 		a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 		a.updateSettingsTextInput(false)
 		state.onChoose(choice)
@@ -201,9 +195,7 @@ func systemFontSettingItem(snapshot settingsSnapshot) settingItem {
 		choices = append([]settingChoice{{value: snapshot.general.Data.AppFontFamily, label: snapshot.general.Data.AppFontFamily}}, choices...)
 	}
 	description := "Font family used by Query and Settings windows"
-	if appearance.FontsLoading {
-		description = "Loading installed font families…"
-	} else if appearance.FontsError != "" {
+	if appearance.FontsError != "" {
 		description = "Could not load installed fonts: " + appearance.FontsError
 	}
 	return settingItem{key: "AppFontFamily", title: "Application font", description: description, value: snapshot.general.Data.AppFontFamily, choices: choices, filterable: true}

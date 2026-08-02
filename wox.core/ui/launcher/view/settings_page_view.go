@@ -45,11 +45,6 @@ func SettingsMessage(value string, width, height float32, theme woxcomponent.The
 	}}
 }
 
-// SettingsNote builds the compact note shown below a settings form.
-func SettingsNote(value string, width float32, theme woxcomponent.Theme) woxwidget.Widget {
-	return woxwidget.Container{Width: width, Height: 34, Padding: woxwidget.Insets{Top: 10}, Child: woxwidget.Text{Value: value, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle}}
-}
-
 // SettingRowProps contains one built-in setting and its editing actions.
 type SettingRowProps struct {
 	ID            string

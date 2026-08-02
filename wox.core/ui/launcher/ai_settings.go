@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -49,11 +50,8 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 			Index: index, Field: field, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key,
 		})
 	}
-	props.Note = snapshot.note
-	if snapshot.ai.ProvidersLoading {
-		props.Note = "Loading the provider catalog…"
-	} else if snapshot.ai.ProvidersError != "" {
-		props.Note = snapshot.ai.ProvidersError
+	if snapshot.ai.ProvidersError != "" {
+		props.Error = snapshot.ai.ProvidersError
 	}
 	return launcherview.AISettingsView(props)
 }
@@ -93,10 +91,7 @@ func (a *App) openAISkillPath(path string) {
 		err := a.services.OpenPath(ctx, a.sessionID, path)
 		cancel()
 		if err != nil {
-			_ = a.runOnUI("apply AI skill path error", func() {
-				a.settingNote = "Could not open skill path: " + err.Error()
-				a.invalidateSettingsWindow()
-			})
+			log.Printf("open AI skill path: %v", err)
 		}
 	})
 }
@@ -382,7 +377,6 @@ func (a *App) cloneRemoteAISkills(state *formTableEditorState, url, previousValu
 				state.saving = false
 				state.status = "Could not clone: " + err.Error()
 			}
-			a.settingNote = "Could not clone remote skills: " + err.Error()
 			a.invalidateSettingsWindow()
 			return
 		}
@@ -400,9 +394,6 @@ func (a *App) cloneRemoteAISkills(state *formTableEditorState, url, previousValu
 			return
 		}
 		value = state.target.values[state.definition.Value.Key]
-		if a.settingsTableEditor == state {
-			state.status = "Saving cloned skills…"
-		}
 		save = true
 	})
 	if save {
@@ -432,19 +423,6 @@ func validateAISettingsTableRow(definition formDefinition, fields *formFieldsSta
 	return ""
 }
 
-func aiSettingsTableLabel(key string) string {
-	switch key {
-	case "AIProviders":
-		return "AI providers"
-	case "AIMCPServers":
-		return "MCP servers"
-	case "AISkills":
-		return "Skills"
-	default:
-		return key
-	}
-}
-
 // saveSettingsTable persists one settings-owned table and rolls the editor back if core rejects it.
 func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previousValue string) {
 	coreValue := value
@@ -459,7 +437,6 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 					state.saving = false
 					state.status = "Could not save: " + err.Error()
 				}
-				a.settingNote = "Could not save " + settingsTableLabel(key) + ": " + err.Error()
 				a.invalidateSettingsWindow()
 			})
 			return
@@ -481,7 +458,6 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 				state.saving = false
 				state.status = "Could not save: " + err.Error()
 			}
-			a.settingNote = "Could not save " + settingsTableLabel(key) + ": " + err.Error()
 		} else {
 			if state.target == a.aiSettings.Form() {
 				a.applyAISettingsRawLocked(key, value)
@@ -490,19 +466,11 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 			}
 			if a.settingsTableEditor == state {
 				state.saving = false
-				state.status = "Saved"
+				state.status = ""
 			}
-			a.settingNote = settingsTableLabel(key) + " saved"
 		}
 		a.invalidateSettingsWindow()
 	})
-}
-
-func settingsTableLabel(key string) string {
-	if label := hotkeySettingsLabel(key); label != key {
-		return label
-	}
-	return aiSettingsTableLabel(key)
 }
 
 // applyAISettingsRawLocked keeps the settings snapshot and dependent chat catalogs coherent after a save.

@@ -766,8 +766,6 @@ func (a *App) submitCloudFormRequest(kind string, values map[string]string, emai
 		case "reset-confirm":
 			a.openCloudAccountForm("login")
 			return
-		case "change-password":
-			a.settingNote = "Account password changed."
 		}
 		a.closeCloudForm()
 		reload = true

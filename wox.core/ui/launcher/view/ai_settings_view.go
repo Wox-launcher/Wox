@@ -23,7 +23,7 @@ type AISettingsProps struct {
 	Available   bool
 	Title       string
 	Description string
-	Note        string
+	Error       string
 	Tables      []AISettingsTable
 	Selected    int
 }
@@ -53,9 +53,9 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 		})
 		children = append(children, woxwidget.Keyed{Key: woxwidget.Key(fmt.Sprintf("ai-settings-table-%d", table.Index)), Child: target})
 	}
-	if props.Note != "" {
+	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
-			Value: props.Note, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle,
+			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText,
 		}})
 		contentHeight += 30
 	}

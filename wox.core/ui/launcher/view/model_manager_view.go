@@ -296,11 +296,7 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 	}
 	status := props.Error
 	if status == "" {
-		if props.Loading {
-			status = "Refreshing model and engine status…"
-		} else {
-			status = "↑↓ select · Enter download/select · Delete removes a dictation model · Ctrl+R refresh"
-		}
+		status = "↑↓ select · Enter download/select · Delete removes a dictation model · Ctrl+R refresh"
 	}
 	statusColor := props.Theme.ActionHeader
 	if props.Error != "" {

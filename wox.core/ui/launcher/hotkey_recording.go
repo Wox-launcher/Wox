@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"log"
 	"runtime"
 	"strings"
 	"time"
@@ -275,7 +276,7 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 			if state.target != nil {
 				state.target.values[key] = previous
 			}
-			a.settingNote = "Could not save " + state.persistKey + ": " + err.Error()
+			log.Printf("save recorded hotkey setting %s: %v", state.persistKey, err)
 		} else {
 			switch state.persistKey {
 			case "MainHotkey":
@@ -283,7 +284,6 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 			case "SelectionHotkey":
 				a.generalSettings.Update(func(d *settingsData) { d.SelectionHotkey = value })
 			}
-			a.settingNote = state.persistKey + " saved"
 		}
 		a.invalidateHotkeyWindows()
 	})

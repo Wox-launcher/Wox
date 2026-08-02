@@ -83,7 +83,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 	}
 	return launcherview.RuntimeSettingsView(launcherview.RuntimeSettingsProps{
 		Width: width, Height: height, SettingRowHeight: runtimeSettingRowHeight, Theme: snapshot.palette.componentTheme(), Labels: a.runtimeSettingsLabels(), Loading: snapshot.runtime.Loading,
-		Restarting: snapshot.runtime.Restarting != "", Error: snapshot.runtime.Error, Note: snapshot.note,
+		Restarting: snapshot.runtime.Restarting != "", Error: snapshot.runtime.Error,
 		Selected: snapshot.row, Statuses: statuses, Settings: rows,
 	})
 }
@@ -97,7 +97,6 @@ func (a *App) runtimeSettingsLabels() launcherview.RuntimeSettingsLabels {
 		ExecutableSection: a.translate("i18n:ui_runtime_executable_paths"),
 		Browse:            a.translate("i18n:ui_runtime_browse"),
 		Clear:             a.translate("i18n:ui_runtime_clear"),
-		Loading:           a.translate("i18n:ui_runtime_status_refresh") + "…",
 		Empty:             a.translate("i18n:ui_runtime_status_empty"),
 	}
 }
@@ -152,8 +151,7 @@ func (a *App) browseRuntimeExecutable(item settingItem) {
 	}
 	path, err := window.PickFile(woxui.FileDialogOptions{})
 	if err != nil {
-		a.settingNote = "Could not select " + item.title + ": " + err.Error()
-		a.invalidateSettingsWindow()
+		a.runtimeSettings.SetError("Could not select " + item.title + ": " + err.Error())
 		return
 	}
 	if path != "" {

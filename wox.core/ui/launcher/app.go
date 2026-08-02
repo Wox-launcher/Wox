@@ -118,7 +118,6 @@ type App struct {
 	settingsCtx            settingWindowContext
 	settingTab             string
 	settingRow             int
-	settingNote            string
 	settingSaving          bool
 	settingFlash           string
 	settingFlashTimer      *time.Timer
@@ -237,15 +236,8 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	app.networkSettings = newNetworkSettingsController(deps)
 	app.dataSettings = newDataSettingsController(deps)
 	// Wire cross-domain helpers the controller needs without giving it a back-reference to *App.
-	// setNote writes the shared settings note and invalidates; reloadSettings refreshes all
-	// settings after a restore; pickDirectory opens the native directory picker.
+	// reloadSettings refreshes all settings after a restore; pickDirectory opens the native directory picker.
 	app.dataSettings.BindCrossDomain(
-		func(note string) {
-			_ = app.runOnUI("apply data settings note", func() {
-				app.settingNote = note
-				app.invalidateSettingsWindow()
-			})
-		},
 		app.reloadSettings,
 		func() (string, error) {
 			window := app.settingsNativeWindow()

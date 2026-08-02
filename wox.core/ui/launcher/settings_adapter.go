@@ -117,11 +117,10 @@ func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height, i
 	} else {
 		theme := snapshot.theme.ThemeEditor
 		if theme == nil {
-			message := "Loading active theme…"
+			body = woxwidget.Container{Width: innerWidth, Height: bodyHeight}
 			if snapshot.theme.ThemesError != "" {
-				message = snapshot.theme.ThemesError
+				body = launcherview.SettingsMessage(snapshot.theme.ThemesError, innerWidth, bodyHeight, snapshot.palette.componentTheme())
 			}
-			body = launcherview.SettingsMessage(message, innerWidth, bodyHeight, snapshot.palette.componentTheme())
 		} else {
 			body = a.buildThemeEditorSettingsSurface(theme, snapshot.palette, innerWidth, bodyHeight)
 		}
@@ -305,11 +304,6 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			})
 			children = append(children, woxwidget.Keyed{Key: formFieldRowKey("settings-hotkey", index), Child: target})
 		}
-	}
-	note := snapshot.note
-	if note != "" {
-		children = append(children, launcherview.SettingsNote(note, contentWidth, snapshot.palette.componentTheme()))
-		contentHeight += 34
 	}
 	return launcherview.SettingsPage(launcherview.SettingsPageProps{
 		ID: "settings-page-" + snapshot.tab, Width: width, Height: height, Children: children, ContentHeight: contentHeight, KeepVisible: keepVisible, KeepVisibleKey: keepVisibleKey,

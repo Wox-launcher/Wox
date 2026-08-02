@@ -102,7 +102,6 @@ func (f *dataFakeService) OpenLog(_ context.Context, _ string) error {
 func newDataController(deps CommonDeps) *dataSettingsController {
 	c := newDataSettingsController(deps)
 	c.BindCrossDomain(
-		func(string) {},
 		func() error { return nil },
 		func() (string, error) { return "", nil },
 	)
@@ -183,13 +182,10 @@ func TestDataControllerReloadAggregatesErrors(t *testing.T) {
 }
 
 func TestDataControllerCreateBackupSetsBusyThenClears(t *testing.T) {
-	var noteMu sync.Mutex
-	var lastNote string
 	ui := &testUIRunner{}
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newDataSettingsController(deps)
 	c.BindCrossDomain(
-		func(note string) { noteMu.Lock(); lastNote = note; noteMu.Unlock() },
 		func() error { return nil },
 		func() (string, error) { return "", nil },
 	)
@@ -217,7 +213,7 @@ func TestDataControllerCreateBackupSetsBusyThenClears(t *testing.T) {
 	}
 	close(release)
 
-	// Wait for Busy to clear and the note to be set.
+	// Wait for Busy to clear.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if dataSnapshotOnUI(ui, c).Busy == "" {
@@ -229,22 +225,13 @@ func TestDataControllerCreateBackupSetsBusyThenClears(t *testing.T) {
 		t.Fatalf("Busy = %q after goroutine completed, want empty", got)
 	}
 
-	noteMu.Lock()
-	got := lastNote
-	noteMu.Unlock()
-	if got != "Manual backup created" {
-		t.Fatalf("setNote = %q, want \"Manual backup created\"", got)
-	}
 }
 
 func TestDataControllerRestoreBackupTwoStepArming(t *testing.T) {
-	var noteMu sync.Mutex
-	var notes []string
 	ui := &testUIRunner{}
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newDataSettingsController(deps)
 	c.BindCrossDomain(
-		func(note string) { noteMu.Lock(); notes = append(notes, note); noteMu.Unlock() },
 		func() error { return nil },
 		func() (string, error) { return "", nil },
 	)
@@ -296,35 +283,13 @@ func TestDataControllerRestoreBackupTwoStepArming(t *testing.T) {
 		t.Fatalf("Busy = %q after restore completed, want empty", got)
 	}
 
-	noteMu.Lock()
-	defer noteMu.Unlock()
-	// Expect at least the arming note and the success note.
-	wantArming := false
-	wantSuccess := false
-	for _, n := range notes {
-		if strings.Contains(n, "Press Confirm restore") {
-			wantArming = true
-		}
-		if n == "Backup restored" {
-			wantSuccess = true
-		}
-	}
-	if !wantArming {
-		t.Fatalf("arming note not set, notes = %+v", notes)
-	}
-	if !wantSuccess {
-		t.Fatalf("success note not set, notes = %+v", notes)
-	}
 }
 
 func TestDataControllerClearLogsTwoStepArming(t *testing.T) {
-	var noteMu sync.Mutex
-	var notes []string
 	ui := &testUIRunner{}
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newDataSettingsController(deps)
 	c.BindCrossDomain(
-		func(note string) { noteMu.Lock(); notes = append(notes, note); noteMu.Unlock() },
 		func() error { return nil },
 		func() (string, error) { return "", nil },
 	)
@@ -375,22 +340,4 @@ func TestDataControllerClearLogsTwoStepArming(t *testing.T) {
 		t.Fatalf("Busy = %q after clear completed, want empty", got)
 	}
 
-	noteMu.Lock()
-	defer noteMu.Unlock()
-	wantArming := false
-	wantSuccess := false
-	for _, n := range notes {
-		if strings.Contains(n, "Press Confirm clear") {
-			wantArming = true
-		}
-		if n == "Logs cleared" {
-			wantSuccess = true
-		}
-	}
-	if !wantArming {
-		t.Fatalf("arming note not set, notes = %+v", notes)
-	}
-	if !wantSuccess {
-		t.Fatalf("success note not set, notes = %+v", notes)
-	}
 }

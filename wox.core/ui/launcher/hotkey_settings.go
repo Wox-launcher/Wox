@@ -32,7 +32,7 @@ func (a *App) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height f
 	}
 	return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Available: true,
-		Rows: rows, KeepVisibleKey: formFieldsKeepVisibleKey("hotkey-settings", *snapshot.hotkey.Form), Note: snapshot.note,
+		Rows: rows, KeepVisibleKey: formFieldsKeepVisibleKey("hotkey-settings", *snapshot.hotkey.Form),
 	})
 }
 
@@ -235,21 +235,6 @@ func (a *App) openHotkeySettingsTable(index int) {
 		a.openFormTableLocked(form, index)
 	}
 	a.finishOpeningFormTable()
-}
-
-func hotkeySettingsLabel(key string) string {
-	switch key {
-	case "QueryHotkeys":
-		return "Query hotkeys"
-	case "IgnoredHotkeyApps":
-		return "Ignored hotkey apps"
-	case "QueryShortcuts":
-		return "Query shortcuts"
-	case "TrayQueries":
-		return "Tray queries"
-	default:
-		return key
-	}
 }
 
 func (a *App) applyHotkeySettingsRawLocked(key, value string) {

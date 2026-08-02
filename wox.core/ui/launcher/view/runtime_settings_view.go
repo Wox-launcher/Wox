@@ -14,7 +14,6 @@ type RuntimeSettingsLabels struct {
 	ExecutableSection string
 	Browse            string
 	Clear             string
-	Loading           string
 	Empty             string
 }
 
@@ -67,7 +66,6 @@ type RuntimeSettingsProps struct {
 	Loading          bool
 	Restarting       bool
 	Error            string
-	Note             string
 	Selected         int
 	Statuses         []RuntimeStatus
 	Settings         []RuntimeSettingRow
@@ -92,14 +90,10 @@ func buildRuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
 		}},
 	}
 	messageHeight := float32(0)
-	if props.Loading || props.Error != "" {
+	if props.Error != "" {
 		messageHeight = 24
-		message := props.Labels.Loading
-		color := props.Theme.ResultSubtitle
-		if props.Error != "" {
-			message = props.Error
-			color = props.Theme.ErrorText
-		}
+		message := props.Error
+		color := props.Theme.ErrorText
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: messageHeight, Padding: woxwidget.Insets{Bottom: 6}, Child: woxwidget.Text{
 			Value: message, Style: woxui.TextStyle{Size: 11}, Color: color,
 		}})
@@ -116,10 +110,6 @@ func buildRuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
 	}
 	children = append(children, woxwidget.Container{Width: contentWidth, Height: 16})
 	contentHeight := rowsTop + float32(len(props.Settings))*settingRowHeight + 16
-	if props.Note != "" {
-		children = append(children, SettingsNote(props.Note, contentWidth, props.Theme))
-		contentHeight += 34
-	}
 	var keepVisible *woxwidget.ScrollRange
 	if props.Selected >= 0 && props.Selected < len(props.Settings) {
 		top := rowsTop + float32(props.Selected)*settingRowHeight
@@ -262,14 +252,9 @@ func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingR
 	browseWidth := runtimeLabelWidth(props.Labels.Browse, 62, 96)
 	clearWidth := runtimeLabelWidth(props.Labels.Clear, 62, 96)
 	inputWidth := max(float32(80), controlWidth-browseWidth-clearWidth-20)
-	borderColor := runtimeWithAlpha(props.Theme.ResultSubtitle, 164)
-	if row.Focused {
-		borderColor = props.Theme.Cursor
-	}
-	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
-		ID: row.ID + "-input", Label: row.Title, Hint: row.Placeholder, Width: inputWidth, Height: 38, Radius: 4,
-		Padding: woxwidget.Insets{Left: 12, Top: 8, Right: 12, Bottom: 6}, Background: props.Theme.ToolbarBackground, BorderColor: borderColor, BorderWidth: 1,
-		Style: woxui.TextStyle{Size: 13}, Value: row.State.Text, Focused: row.Focused, MaxLines: 1, Window: row.Window,
+	input := woxcomponent.WoxSettingTextField(woxcomponent.TextFieldProps{
+		ID: row.ID + "-input", Label: row.Title, Hint: row.Placeholder, Width: inputWidth,
+		Value: row.State.Text, Focused: row.Focused, Window: row.Window,
 		Theme: props.Theme, Disabled: row.Disabled, OnChanged: row.OnChanged, OnKey: row.OnKey,
 		OnFocusChange: func(focused bool) {
 			if focused && row.OnFocus != nil {
@@ -296,10 +281,10 @@ func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingR
 
 // runtimeLabelWidth approximates intrinsic button and pill widths across Latin and CJK labels.
 func runtimeLabelWidth(label string, minimum, maximum float32) float32 {
-	width := float32(28)
+	width := float32(40)
 	for _, character := range label {
 		if character > 127 {
-			width += 12
+			width += 13
 		} else {
 			width += 6.5
 		}

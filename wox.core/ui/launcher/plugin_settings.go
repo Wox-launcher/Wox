@@ -287,7 +287,6 @@ func (a *App) runPluginOperation(kind string) {
 		}
 		if a.pluginSettings.UninstallArmed() != plugin.ID {
 			a.pluginSettings.SetUninstallArmed(plugin.ID)
-			a.settingNote = "Press Confirm uninstall to remove " + plugin.Name + "."
 			a.invalidateSettingsWindow()
 			return
 		}
@@ -347,7 +346,6 @@ func (a *App) runPluginOperation(kind string) {
 				a.pluginSettings.SetOperationError(err.Error())
 			} else {
 				a.pluginSettings.SetOperationError("")
-				a.settingNote = kind + " completed for " + plugin.Name
 			}
 			a.invalidateSettingsWindow()
 		})

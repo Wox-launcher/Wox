@@ -23,10 +23,6 @@ func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height, i
 	theme := snapshot.palette.componentTheme()
 	message := snapshot.cloud.Error
 	messageColor := theme.ErrorText
-	if message == "" {
-		message = snapshot.note
-		messageColor = snapshot.palette.resultSubtitle
-	}
 	return launcherview.CloudSettingsPage(launcherview.CloudSettingsPageProps{
 		Width:        width,
 		Height:       height,

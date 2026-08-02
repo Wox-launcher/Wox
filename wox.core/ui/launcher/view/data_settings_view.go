@@ -52,7 +52,6 @@ type DataSettingsLabels struct {
 	LogClearTitle         string
 	LogClearDescription   string
 	LogOpenButton         string
-	Loading               string
 }
 
 // DataSettingsProps contains the immutable state and actions rendered by the data page.
@@ -68,8 +67,6 @@ type DataSettingsProps struct {
 	RestoreArmed       string
 	LogLevel           string
 	ClearLogsArmed     bool
-	Note               string
-	Loading            bool
 	Error              string
 	OnOpenPath         func(string)
 	OnChooseLocation   func()
@@ -110,17 +107,9 @@ func DataSettingsView(props DataSettingsProps) woxwidget.Widget {
 	backupRows := min(5, len(props.Backups))
 	backupTableHeight := dataBackupTableHeight(backupRows)
 	contentHeight := woxcomponent.PageHeaderHeight + 43 + 78 + 43 + 66 + backupTableHeight + 43 + 66 + 66
-	if props.Note != "" || props.Loading || props.Error != "" {
-		note := props.Note
-		color := props.Theme.ResultSubtitle
-		if props.Loading {
-			note = props.Labels.Loading
-		} else if props.Error != "" {
-			note = props.Error
-			color = props.Theme.ErrorText
-		}
+	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
-			Value: note, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: color,
+			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText,
 		}})
 		contentHeight += 30
 	}

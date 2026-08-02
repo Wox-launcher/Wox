@@ -214,7 +214,6 @@ func (a *App) runThemeOperation(kind string) {
 		}
 		if a.themeSettings.ThemeUninstallArmed() != theme.ID {
 			a.themeSettings.SetThemeUninstallArmed(theme.ID)
-			a.settingNote = "Press Confirm uninstall to remove " + theme.Name + "."
 			a.invalidateSettingsWindow()
 			return
 		}
@@ -260,7 +259,6 @@ func (a *App) runThemeOperation(kind string) {
 				a.themeSettings.SetThemesError(err.Error())
 			} else {
 				a.themeSettings.SetThemesError("")
-				a.settingNote = kind + " completed for " + theme.Name
 			}
 			a.invalidateSettingsWindow()
 		})

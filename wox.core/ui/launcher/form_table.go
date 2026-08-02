@@ -705,7 +705,6 @@ func (a *App) saveFormTableRowEdit() {
 	state.status = ""
 	if persist {
 		state.saving = true
-		state.status = "Saving…"
 		a.settingSaving = true
 	}
 	if closeEditor {
@@ -805,7 +804,6 @@ func (a *App) confirmFormTableRowDelete() {
 		value = state.target.values[key]
 		if persist {
 			state.saving = true
-			state.status = "Saving…"
 			a.settingSaving = true
 		}
 	}

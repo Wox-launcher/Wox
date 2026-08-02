@@ -120,7 +120,6 @@ type settingsSnapshot struct {
 	isDev       bool
 	tab         string
 	row         int
-	note        string
 	saving      bool
 	highlight   string
 	search      settingsSearchSnapshot
@@ -279,10 +278,9 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if err := a.hideWindow(true); err != nil {
 		return err
 	}
-	tab, note := settingTabForPath(windowContext.Path)
+	tab := settingTabForPath(windowContext.Path)
 	if tab == "debug" && !a.isDev {
 		tab = "general"
-		note = "Debug settings are only available in development builds."
 	}
 	themeMode := ""
 	if tab == "theme" {
@@ -296,7 +294,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 			return err
 		}
 		if err := a.reloadPlugins(store, windowContext.Param); err != nil {
-			note = "Could not load plugins: " + err.Error()
+			log.Printf("load settings plugins: %v", err)
 		}
 	}
 	if err := a.runOnUI("open settings state", func() {
@@ -304,7 +302,6 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.settingsCtx = windowContext
 		a.settingTab = tab
 		a.settingRow = 0
-		a.settingNote = note
 		a.settingSaving = false
 		a.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
 		a.settingsSearch.SetFocused(tab != "plugins")
@@ -363,14 +360,14 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if tab == "theme" && themeMode == "editor" {
 		if err := a.loadSettingsThemeEditor(); err != nil {
 			_ = a.runOnUI("apply theme editor load error", func() {
-				a.settingNote = "Could not load theme editor: " + err.Error()
+				a.themeSettings.SetThemesError(err.Error())
 			})
 		}
 	}
 	if tab == "theme" && themeMode != "editor" {
 		if err := a.reloadThemes(themeMode, ""); err != nil {
 			_ = a.runOnUI("apply theme catalog load error", func() {
-				a.settingNote = "Could not load themes: " + err.Error()
+				a.themeSettings.SetThemesError(err.Error())
 			})
 		}
 	}
@@ -723,7 +720,6 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		isDev:       a.isDev,
 		tab:         a.settingTab,
 		row:         a.settingRow,
-		note:        a.settingNote,
 		saving:      a.settingSaving,
 		highlight:   a.settingFlash,
 		search:      search,
@@ -786,7 +782,6 @@ func (a *App) selectSettingTab(tab string) {
 		}
 		a.settingTab = tab
 		a.settingRow = 0
-		a.settingNote = ""
 		a.generalSettings.EndEdit()
 		a.cloudSettings.SetForm(nil)
 		a.cloudPlanTooltip = nil
@@ -853,7 +848,7 @@ func (a *App) selectSettingTab(tab string) {
 		util.Go(a.lifecycleCtx, "load settings theme editor", func() {
 			if err := a.loadSettingsThemeEditor(); err != nil {
 				_ = a.runOnUI("apply theme editor load error", func() {
-					a.settingNote = "Could not load theme editor: " + err.Error()
+					a.themeSettings.SetThemesError(err.Error())
 					a.invalidateSettingsWindow()
 				})
 			}
@@ -1041,7 +1036,6 @@ func (a *App) startBuiltInSettingEdit(item settingItem, caret int) {
 	} else if caret >= 0 {
 		a.generalSettings.Editor().SetCaret(caret)
 	}
-	a.settingNote = "Editing " + item.title + " · Enter saves · Esc cancels"
 	a.updateSettingsTextInput(true)
 	a.invalidateSettingsWindow()
 }
@@ -1049,7 +1043,6 @@ func (a *App) startBuiltInSettingEdit(item settingItem, caret int) {
 // cancelBuiltInSettingEdit discards an unsaved text value without mutating the loaded settings snapshot.
 func (a *App) cancelBuiltInSettingEdit() {
 	a.generalSettings.EndEdit()
-	a.settingNote = ""
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 }
@@ -1132,8 +1125,7 @@ func (a *App) browseBuiltInSettingFile(item settingItem) {
 	}
 	path, err := settingsWindow.PickFile(woxui.FileDialogOptions{})
 	if err != nil {
-		a.settingNote = "Could not select " + item.title + ": " + err.Error()
-		a.invalidateSettingsWindow()
+		log.Printf("select setting file %s: %v", item.key, err)
 		return
 	}
 	if path == "" {
@@ -1146,7 +1138,6 @@ func (a *App) browseBuiltInSettingFile(item settingItem) {
 
 func (a *App) beginSettingSave() {
 	a.settingSaving = true
-	a.settingNote = ""
 }
 
 func (a *App) saveSetting(item settingItem, choice settingChoice) {
@@ -1175,9 +1166,7 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 			}
 		}
 		if err != nil {
-			a.settingNote = "Could not save " + item.title + ": " + err.Error()
-		} else {
-			a.settingNote = ""
+			log.Printf("save setting %s: %v", item.key, err)
 		}
 		if err == nil && (item.key == "EnableGlance" || item.key == "PrimaryGlance") {
 			a.stopGlanceLocked(true)
@@ -1197,42 +1186,42 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 	a.publishSettingsChanged(item.key)
 }
 
-func settingTabForPath(path string) (string, string) {
+func settingTabForPath(path string) string {
 	switch strings.TrimSpace(path) {
 	case "", "/", "/general":
-		return "general", ""
+		return "general"
 	case "/ui", "/appearance":
-		return "appearance", ""
+		return "appearance"
 	case "/hotkeys", "hotkeys", "/query/hotkeys":
-		return "general", ""
+		return "general"
 	case "/network":
-		return "network", ""
+		return "network"
 	case "/data", "/data/backup", "/data.backup", "data", "data.backup":
-		return "data", ""
+		return "data"
 	case "/data/cloudsync", "/cloud", "/cloud-sync", "data.cloudsync":
-		return "cloud", ""
+		return "cloud"
 	case "/runtime", "/plugins/runtime", "plugins.runtime":
-		return "runtime", ""
+		return "runtime"
 	case "/themes", "/themes/installed", "themes.installed", "/themes/store", "themes.store", "/themes/edit", "/themes.edit", "themes.edit":
-		return "theme", ""
+		return "theme"
 	case "/plugin", "/plugins", "/plugins/installed", "plugins.installed", "/plugin/setting":
-		return "plugins", ""
+		return "plugins"
 	case "/plugins/store", "plugins.store":
-		return "plugins", ""
+		return "plugins"
 	case "/ai", "ai":
-		return "ai", ""
+		return "ai"
 	case "/debug", "debug":
-		return "debug", ""
+		return "debug"
 	case "/update", "/updates":
-		return "updates", ""
+		return "updates"
 	case "/privacy", "privacy":
-		return "privacy", ""
+		return "privacy"
 	case "/usage", "usage":
-		return "usage", ""
+		return "usage"
 	case "/about", "about":
-		return "about", ""
+		return "about"
 	default:
-		return "general", "This deep-linked settings section is not in the Go UI yet."
+		return "general"
 	}
 }
 
@@ -1303,9 +1292,7 @@ func primaryGlanceSettingItem(snapshot settingsSnapshot) settingItem {
 		choices = append([]settingChoice{{value: currentValue, label: current.GlanceID}}, choices...)
 	}
 	description := "Select the status shown in the global query box"
-	if appearance.GlanceCatalogLoading {
-		description = "Loading available Glance providers…"
-	} else if appearance.GlanceCatalogError != "" {
+	if appearance.GlanceCatalogError != "" {
 		description = "Could not load Glance providers: " + appearance.GlanceCatalogError
 	}
 	return settingItem{key: "PrimaryGlance", title: "Primary glance", description: description, value: currentValue, choices: choices, trailers: trailers, icons: icons}

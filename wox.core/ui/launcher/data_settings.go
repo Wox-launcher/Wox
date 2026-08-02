@@ -29,7 +29,7 @@ func (a *App) buildDataSettingsPage(snapshot settingsSnapshot, width, height flo
 		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Labels: a.dataSettingsLabels(),
 		Location: snapshot.dataState.Location, PendingLocation: snapshot.dataState.PendingLocation, AutoBackup: snapshot.general.Data.EnableAutoBackup,
 		Backups: backups, RestoreArmed: snapshot.dataState.RestoreArmed, LogLevel: snapshot.general.Data.LogLevel, ClearLogsArmed: snapshot.dataState.ClearLogsArmed,
-		Note: snapshot.note, Loading: snapshot.dataState.Loading, Error: snapshot.dataState.Error,
+		Error:      snapshot.dataState.Error,
 		OnOpenPath: a.openDataPath, OnChooseLocation: a.chooseDataLocation, OnCancelLocation: a.cancelDataLocationChange,
 		OnConfirmLocation: a.confirmDataLocationChange, OnToggleAutoBackup: a.toggleDataAutoBackup, OnCreateBackup: a.createDataBackup,
 		OnRestoreBackup: a.restoreDataBackup, OnOpenLogLevel: a.openDataLogLevelPicker, OnClearLogs: a.clearDataLogs, OnOpenLog: a.openDataLog,
@@ -71,7 +71,6 @@ func (a *App) dataSettingsLabels() launcherview.DataSettingsLabels {
 		LogClearTitle:         a.translate("i18n:ui_data_log_clear_title"),
 		LogClearDescription:   a.translate("i18n:ui_data_log_clear_tips"),
 		LogOpenButton:         a.translate("i18n:ui_data_log_open_button"),
-		Loading:               "Loading storage and backups…",
 	}
 }
 
@@ -106,8 +105,7 @@ func (a *App) confirmDataLocationChange() {
 }
 
 // toggleDataAutoBackup reuses the regular key-value settings save and rollback behavior.
-// Stays on App because it operates on the general-domain EnableAutoBackup setting and
-// the shared settingSaving/settingNote/saveSetting machinery.
+// Stays on App because it operates on the general-domain EnableAutoBackup setting.
 func (a *App) toggleDataAutoBackup() {
 	if a.settingSaving {
 		return

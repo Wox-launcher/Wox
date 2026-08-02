@@ -39,7 +39,7 @@ func (a *App) openFormTableAppPicker(index int) {
 		if err := a.hotkeySettings.AppsError(); err != "" {
 			state.status = "Could not load applications: " + err
 		} else {
-			state.status = "Loading applications…"
+			state.status = ""
 		}
 		startLoading = !a.hotkeySettings.AppsLoading()
 		if startLoading {

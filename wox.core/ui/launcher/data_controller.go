@@ -24,9 +24,8 @@ type dataSettingsSnapshot struct {
 }
 
 // dataSettingsController owns the Data tab state (backups, location, restore, logs).
-// Cross-domain needs (writing the shared settings note, reloading all settings after
-// a restore, and picking a native directory) are injected via BindCrossDomain so the
-// controller never depends on *App directly.
+// Cross-domain needs (reloading all settings after a restore and picking a native
+// directory) are injected via BindCrossDomain so the controller never depends on App.
 type dataSettingsController struct {
 	deps CommonDeps
 
@@ -41,7 +40,6 @@ type dataSettingsController struct {
 	clearLogsArmed  bool
 
 	// Cross-domain callbacks wired by App after construction.
-	setNote        func(string)
 	reloadSettings func() error
 	pickDirectory  func() (string, error)
 }
@@ -52,8 +50,7 @@ func newDataSettingsController(deps CommonDeps) *dataSettingsController {
 
 // BindCrossDomain wires App-owned helpers used by data operations. Called by newApp
 // after both the controller and App are constructed.
-func (c *dataSettingsController) BindCrossDomain(setNote func(string), reloadSettings func() error, pickDirectory func() (string, error)) {
-	c.setNote = setNote
+func (c *dataSettingsController) BindCrossDomain(reloadSettings func() error, pickDirectory func() (string, error)) {
 	c.reloadSettings = reloadSettings
 	c.pickDirectory = pickDirectory
 }
@@ -112,7 +109,7 @@ func (c *dataSettingsController) Reload(ctx context.Context, service contract.Da
 }
 
 // CreateBackup starts a manual backup. While the async Post is in flight Busy is set
-// to "backup"; on success the shared note is updated and the catalog is refreshed.
+// to "backup"; on success the catalog is refreshed.
 func (c *dataSettingsController) CreateBackup(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
 	if c.busy != "" {
 		return
@@ -130,8 +127,6 @@ func (c *dataSettingsController) CreateBackup(ctx context.Context, service contr
 			c.busy = ""
 			if err != nil {
 				c.errMsg = "Could not create backup: " + err.Error()
-			} else if c.setNote != nil {
-				c.setNote("Manual backup created")
 			}
 			c.deps.Invalidate()
 		})
@@ -150,9 +145,6 @@ func (c *dataSettingsController) RestoreBackup(ctx context.Context, service cont
 	}
 	if c.restoreArmed != id {
 		c.restoreArmed = id
-		if c.setNote != nil {
-			c.setNote("Press Confirm restore to replace current settings with this backup.")
-		}
 		c.deps.Invalidate()
 		return
 	}
@@ -173,8 +165,6 @@ func (c *dataSettingsController) RestoreBackup(ctx context.Context, service cont
 			c.busy = ""
 			if err != nil {
 				c.errMsg = "Could not restore backup: " + err.Error()
-			} else if c.setNote != nil {
-				c.setNote("Backup restored")
 			}
 			c.deps.Invalidate()
 		})
@@ -188,25 +178,17 @@ func (c *dataSettingsController) ChooseLocation() {
 		return
 	}
 	path, err := c.pickDirectory()
-	var note string
 	if err != nil {
 		c.errMsg = "Could not select data directory: " + err.Error()
 	} else if strings.TrimSpace(path) != "" && path != c.location {
 		c.pendingLocation = path
-		note = "Confirm the new data directory before Wox moves its files."
-	}
-	if note != "" && c.setNote != nil {
-		c.setNote(note)
 	}
 	c.deps.Invalidate()
 }
 
-// CancelLocationChange clears any staged directory and the shared note.
+// CancelLocationChange clears any staged directory.
 func (c *dataSettingsController) CancelLocationChange() {
 	c.pendingLocation = ""
-	if c.setNote != nil {
-		c.setNote("")
-	}
 	c.deps.Invalidate()
 }
 
@@ -236,9 +218,6 @@ func (c *dataSettingsController) ConfirmLocationChange(ctx context.Context, serv
 			} else {
 				c.location = location
 			}
-			if err == nil && c.setNote != nil {
-				c.setNote("Data directory updated")
-			}
 			c.deps.Invalidate()
 		})
 	})
@@ -252,9 +231,6 @@ func (c *dataSettingsController) ClearLogs(ctx context.Context, service contract
 	}
 	if !c.clearLogsArmed {
 		c.clearLogsArmed = true
-		if c.setNote != nil {
-			c.setNote("Press Confirm clear to delete historical logs.")
-		}
 		c.deps.Invalidate()
 		return
 	}
@@ -272,8 +248,6 @@ func (c *dataSettingsController) ClearLogs(ctx context.Context, service contract
 			c.busy = ""
 			if err != nil {
 				c.errMsg = "Could not clear logs: " + err.Error()
-			} else if c.setNote != nil {
-				c.setNote("Logs cleared")
 			}
 			c.deps.Invalidate()
 		})

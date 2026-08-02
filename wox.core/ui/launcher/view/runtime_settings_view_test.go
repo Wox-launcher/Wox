@@ -1,0 +1,35 @@
+package view
+
+import (
+	"testing"
+
+	woxcomponent "wox/ui/launcher/component"
+	woxwidget "wox/ui/widget"
+)
+
+func TestRuntimeLabelWidthIncludesButtonPadding(t *testing.T) {
+	if width := runtimeLabelWidth("浏览", 62, 96); width != 66 {
+		t.Fatalf("runtime label width = %v, want 66", width)
+	}
+}
+
+func TestRuntimeExecutableSettingUsesAlignedSettingsTextField(t *testing.T) {
+	row := runtimeExecutableSettingRow(RuntimeSettingsProps{}, RuntimeSettingRow{ID: "python", Title: "Python"}, 800, 72).(woxwidget.Gesture)
+	target := row.Child.(woxwidget.Container)
+	field := target.Child.(woxwidget.Container)
+	controls := field.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
+	input := controls.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if input.TextAlignmentY != 0.5 {
+		t.Fatalf("runtime input vertical alignment = %v, want 0.5", input.TextAlignmentY)
+	}
+}
+
+func TestRuntimeLoadingDoesNotAddStatusText(t *testing.T) {
+	for _, statuses := range [][]RuntimeStatus{nil, {{Runtime: "PYTHON"}}} {
+		page := buildRuntimeSettingsView(RuntimeSettingsProps{Width: 1000, Height: 700, Loading: true, Statuses: statuses}).(woxwidget.Container)
+		content := page.Child.(woxwidget.ScrollView).Child.(woxwidget.Flex)
+		if len(content.Children) != 6 {
+			t.Fatalf("runtime page children while loading = %d, want 6 without a loading message", len(content.Children))
+		}
+	}
+}
