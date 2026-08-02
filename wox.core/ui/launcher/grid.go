@@ -91,7 +91,7 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height float32) wox
 		Width: width, Height: height, ContentHeight: contentHeight, Offset: scroll.offset, Columns: layout.Columns,
 		ItemPadding: float32(layout.ItemPadding), ItemMargin: float32(layout.ItemMargin), ShowTitle: layout.ShowTitle,
 		CellWidth: cellWidth, CellHeight: cellHeight, VisualWidth: visualWidth, VisualHeight: visualHeight,
-		GroupHeaderHeight: gridGroupHeaderHeight, TitleHeight: gridTitleHeight, Theme: snapshot.palette.componentTheme(), Results: results,
+		GroupHeaderHeight: gridGroupHeaderHeight, TitleHeight: gridTitleHeight, DensityScale: snapshot.densityMetrics.scale, Theme: snapshot.palette.componentTheme(), Results: results,
 		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
 }

@@ -31,6 +31,7 @@ type ActionsProps struct {
 	WindowHeight          float32
 	QueryHeight           float32
 	ToolbarHeight         float32
+	DensityScale          float32
 	Theme                 woxcomponent.Theme
 	ActionHeader          woxui.Color
 	ActionQueryBackground woxui.Color
@@ -99,6 +100,10 @@ func actionPanelGeometry(props ActionsProps) (panelWidth, innerWidth, panelHeigh
 // buildActionsView composes the current immutable action rows around the retained scroll controller.
 func buildActionsView(context woxwidget.StateContext, props ActionsProps, scrollController *woxwidget.ScrollController) woxwidget.Widget {
 	panelWidth, innerWidth, panelHeight, visibleRows := actionPanelGeometry(props)
+	actionTitleFontSize := scaledLauncherSize(woxcomponent.ActionTitleFontSize, props.DensityScale)
+	actionHeaderFontSize := scaledLauncherSize(woxcomponent.ActionHeaderFontSize, props.DensityScale)
+	actionFilterFontSize := scaledLauncherSize(woxcomponent.ActionFilterFontSize, props.DensityScale)
+	emptyFontSize := scaledLauncherSize(woxcomponent.ListEmptyFontSize, props.DensityScale)
 	rows := make([]woxwidget.Widget, 0, max(1, len(props.Items)))
 	for _, item := range props.Items {
 		selected := item.Index == props.Selected
@@ -122,7 +127,8 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 				chipBackground = props.Theme.ActionSelected
 			}
 			chip, chipWidth := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
-				Labels: item.HotkeyLabels, Foreground: tailColor, Background: chipBackground, Window: props.Window,
+				Labels: item.HotkeyLabels, Foreground: tailColor, Background: chipBackground,
+				FontSize: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Window: props.Window,
 			})
 			hotkeyWidth = chipWidth + 15
 			hotkey = woxwidget.Container{Width: hotkeyWidth, Height: ActionRowHeight, Padding: woxwidget.Insets{Left: 10, Top: 6, Right: 5, Bottom: 6}, Child: chip}
@@ -147,7 +153,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 			OnTap: activate,
 			Child: woxwidget.Container{Width: innerWidth, Height: ActionRowHeight, Radius: props.ResultItemRadius, Color: background, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 				woxwidget.Container{Width: 37, Height: ActionRowHeight, Padding: woxwidget.Insets{Left: 5, Top: 9, Right: 10, Bottom: 9}, Child: icon},
-				woxwidget.Container{Width: labelWidth, Height: ActionRowHeight, Padding: woxwidget.Insets{Top: 12}, Child: woxwidget.Text{Value: item.Label, Style: woxui.TextStyle{Size: 13}, Color: foreground}},
+				woxwidget.Container{Width: labelWidth, Height: ActionRowHeight, Padding: woxwidget.Insets{Top: 12}, Child: woxwidget.Text{Value: item.Label, Style: woxui.TextStyle{Size: actionTitleFontSize}, Color: foreground}},
 				hotkey,
 			}}},
 		}
@@ -165,7 +171,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 	}
 	if len(rows) == 0 {
 		rows = append(rows, woxwidget.Container{Width: innerWidth, Height: ActionRowHeight, Padding: woxwidget.Insets{Left: 8, Top: 13}, Child: woxwidget.Text{
-			Value: props.NoMatchesLabel, Style: woxui.TextStyle{Size: 12}, Color: props.ActionHeader,
+			Value: props.NoMatchesLabel, Style: woxui.TextStyle{Size: emptyFontSize}, Color: props.ActionHeader,
 		}})
 	}
 	listHeight := float32(visibleRows * ActionRowHeight)
@@ -195,14 +201,14 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "action-search", Label: "Filter actions", Width: innerWidth, Height: 40, Radius: props.ActionQueryRadius,
 		Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 8, Bottom: 8}, Background: props.ActionQueryBackground,
-		Style: woxui.TextStyle{Size: 12}, TextColor: props.ActionQueryText, Value: props.Filter, Focused: true, Autofocus: true,
+		Style: woxui.TextStyle{Size: actionFilterFontSize}, TextColor: props.ActionQueryText, Value: props.Filter, Focused: true, Autofocus: true,
 		MaxLines: 1, Window: props.Window, Theme: props.Theme, OnChanged: props.OnFilterChanged, OnKey: props.OnFilterKey,
 	})
 	return woxwidget.Container{
 		Width: panelWidth, Height: panelHeight, Radius: props.ActionQueryRadius, Color: props.Theme.ActionBackground,
 		Padding: props.ActionPadding,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: innerWidth, Height: ActionHeaderHeight, Child: woxwidget.Text{Value: props.HeaderLabel, Style: woxui.TextStyle{Size: 13}, Color: props.ActionHeader}},
+			woxwidget.Container{Width: innerWidth, Height: ActionHeaderHeight, Child: woxwidget.Text{Value: props.HeaderLabel, Style: woxui.TextStyle{Size: actionHeaderFontSize}, Color: props.ActionHeader}},
 			woxwidget.Container{Width: innerWidth, Height: ActionDividerHeight, Padding: woxwidget.Insets{Top: 7, Bottom: 8}, Child: woxwidget.Container{Width: innerWidth, Height: 1, Color: props.Theme.PreviewSplit}},
 			actionList,
 			woxwidget.Container{Width: innerWidth, Height: ActionSearchHeight, Padding: woxwidget.Insets{Top: 6}, Child: search},

@@ -110,6 +110,22 @@ func TestThemeControllerReloadThemesSuccess(t *testing.T) {
 	}
 }
 
+func TestThemeControllerRetainsAutoAppearanceVariantIDs(t *testing.T) {
+	deps, _ := newThemeControllerDeps()
+	c := newThemeSettingsController(deps)
+	service := &themeFakeService{themes: map[contract.ThemeCatalog][]contract.ThemeCatalogItem{
+		contract.ThemeCatalogInstalled: {{Theme: common.Theme{ThemeId: "auto", IsAutoAppearance: true, LightThemeId: "light", DarkThemeId: "dark"}}},
+	}}
+
+	if err := c.ReloadThemes(context.Background(), service, "session", "installed", "", ""); err != nil {
+		t.Fatalf("ReloadThemes error: %v", err)
+	}
+	got := c.Snapshot().Themes[0]
+	if got.LightThemeID != "light" || got.DarkThemeID != "dark" {
+		t.Fatalf("AUTO variant IDs = %q/%q, want light/dark", got.LightThemeID, got.DarkThemeID)
+	}
+}
+
 func TestThemeControllerReloadThemesError(t *testing.T) {
 	deps, _ := newThemeControllerDeps()
 	c := newThemeSettingsController(deps)

@@ -365,7 +365,7 @@ func (a *App) settingsSectionLabel(tab, key string) string {
 	if tab == "updates" {
 		return a.translate("i18n:ui_update_section_updates")
 	}
-	return a.activeSettingsNavLabel(a.settingsSnapshot())
+	return ""
 }
 
 func (a *App) localizedSettingItem(item settingItem) settingItem {

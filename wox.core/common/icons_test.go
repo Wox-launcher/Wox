@@ -20,3 +20,9 @@ func TestUIIconsAreCategorizedSVGs(t *testing.T) {
 		}
 	}
 }
+
+func TestThemeEditorReusesTuneIcon(t *testing.T) {
+	if UIIcon("settings.themes.edit") != UIIcon("control.tune") {
+		t.Fatal("theme editor icon does not reuse the tune icon")
+	}
+}

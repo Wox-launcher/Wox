@@ -385,11 +385,11 @@ func formTableHeaderCell(props FormTableFieldProps, column FormTableColumn, widt
 	style := newTableSurfaceStyle(props.Theme)
 	contentWidth := max(float32(0), width-16)
 	children := []woxwidget.Widget{woxwidget.TextBlock{
-		Value: column.Label, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: tableSurfaceHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText,
+		Value: column.Label, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText,
 	}}
 	if column.Tooltip != "" {
 		contentWidth = max(float32(0), contentWidth-20)
-		children[0] = woxwidget.TextBlock{Value: column.Label, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: tableSurfaceHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText}
+		children[0] = woxwidget.TextBlock{Value: column.Label, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText}
 		var icon woxwidget.Widget = woxwidget.Container{Width: 14, Height: 14}
 		if props.InfoIcon != nil {
 			icon = woxwidget.Image{Source: props.InfoIcon, Width: 14, Height: 14}
@@ -417,7 +417,7 @@ func formTableEmptyState(props FormTableFieldProps, width, height float32) woxwi
 	contentWidth := float32(110)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 		woxwidget.Align{Width: contentWidth, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
-		woxwidget.Align{Width: contentWidth, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}},
+		woxwidget.Align{Width: contentWidth, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: woxcomponent.TableEmptyFontSize}, Color: props.Theme.ResultSubtitle}},
 	}}
 	return woxwidget.Container{Width: width, Height: height, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
 		Padding: woxwidget.Insets{Left: max(float32(0), (width-contentWidth)/2), Top: max(float32(0), (height-46)/2)}, Child: content}
@@ -493,13 +493,13 @@ func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxu
 func formTableDataCell(props FormTableFieldProps, cell FormTableCell, width float32) woxwidget.Widget {
 	style := newTableSurfaceStyle(props.Theme)
 	contentWidth := max(float32(0), width-14)
-	var content woxwidget.Widget = woxwidget.TextBlock{Value: cell.Text, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle}
+	var content woxwidget.Widget = woxwidget.TextBlock{Value: cell.Text, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle}
 	if cell.IndicatorColor != nil {
 		content = woxwidget.Container{Width: 16, Height: 16, Radius: 8, Color: *cell.IndicatorColor}
 	} else if cell.Icon != nil {
 		children := []woxwidget.Widget{woxwidget.Image{Source: cell.Icon, Width: 16, Height: 16}}
 		if cell.Text != "" {
-			children = append(children, woxwidget.TextBlock{Value: cell.Text, Width: max(float32(0), contentWidth-22), Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle})
+			children = append(children, woxwidget.TextBlock{Value: cell.Text, Width: max(float32(0), contentWidth-22), Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle})
 		}
 		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: children}
 	}

@@ -13,6 +13,8 @@ type ScrollablePreviewTextProps struct {
 	Color         woxui.Color
 	Width         float32
 	Height        float32
+	FontSize      float32
+	LineHeight    float32
 	Layout        woxwidget.TextBlockLayout
 	InitialOffset float32
 }
@@ -27,19 +29,21 @@ func ScrollablePreviewText(props ScrollablePreviewTextProps) woxwidget.Widget {
 		Child: woxwidget.ScrollView{
 			Key: woxwidget.Key("preview-scroll-" + props.ID), ID: "preview-scroll-" + props.ID, InitialOffset: props.InitialOffset,
 			Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight,
-			Child: woxwidget.TextBlock{Value: props.Value, Width: innerWidth, Height: contentHeight, Style: woxui.TextStyle{Size: 15}, LineHeight: 23, Color: props.Color, Layout: &props.Layout},
+			Child: woxwidget.TextBlock{Value: props.Value, Width: innerWidth, Height: contentHeight, Style: woxui.TextStyle{Size: props.FontSize}, LineHeight: props.LineHeight, Color: props.Color, Layout: &props.Layout},
 		},
 	}
 }
 
 // TextPreviewProps contains the centered quote layout.
 type TextPreviewProps struct {
-	Value  string
-	Width  float32
-	Height float32
-	Layout woxwidget.TextBlockLayout
-	Theme  woxcomponent.Theme
-	Window *woxui.Window
+	Value      string
+	Width      float32
+	Height     float32
+	FontSize   float32
+	LineHeight float32
+	Layout     woxwidget.TextBlockLayout
+	Theme      woxcomponent.Theme
+	Window     *woxui.Window
 }
 
 // TextPreviewFits reports whether the centered quote treatment can display every line.
@@ -55,8 +59,7 @@ func TextPreview(props TextPreviewProps) woxwidget.Widget {
 	if !TextPreviewFits(props.Layout, props.Width, props.Height) {
 		return woxwidget.Container{Width: props.Width, Height: props.Height}
 	}
-	style := woxui.TextStyle{Size: 17}
-	lineHeight := float32(25)
+	style := woxui.TextStyle{Size: props.FontSize}
 	textTop := max(verticalPadding, (props.Height-props.Layout.Size.Height)*0.5)
 	bodyColor := previewColorWithOpacity(props.Theme.PreviewText, 0.86)
 	quoteColor := previewColorWithOpacity(props.Theme.PreviewText, 0.16)
@@ -68,8 +71,8 @@ func TextPreview(props TextPreviewProps) woxwidget.Widget {
 		for index, line := range props.Layout.Lines {
 			metrics, _ := props.Window.MeasureText(line, style)
 			left := bounds.X + (bounds.Width-metrics.Size.Width)*0.5
-			top := bounds.Y + textTop + float32(index)*lineHeight
-			displayList.DrawText(line, woxui.Rect{X: left, Y: top, Width: metrics.Size.Width, Height: lineHeight}, style, bodyColor)
+			top := bounds.Y + textTop + float32(index)*props.LineHeight
+			displayList.DrawText(line, woxui.Rect{X: left, Y: top, Width: metrics.Size.Width, Height: props.LineHeight}, style, bodyColor)
 		}
 	}}
 }

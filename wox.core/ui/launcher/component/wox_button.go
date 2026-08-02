@@ -52,13 +52,13 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	height := float32(38)
 	radius := float32(4)
 	padding := woxwidget.Insets{Left: 20, Right: 20}
-	fontSize := float32(13)
+	fontSize := ButtonFontSize
 	fontWeight := woxui.FontWeightRegular
 	if props.Size == ButtonCompact {
 		height = 30
 		radius = 4
 		padding = woxwidget.Insets{Left: 12, Right: 12}
-		fontSize = 11
+		fontSize = CompactButtonFontSize
 		fontWeight = woxui.FontWeightSemibold
 	}
 	if props.Height > 0 {
@@ -132,6 +132,9 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	}
 	var alignedChild woxwidget.Widget = woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: child}
 	if props.IntrinsicWidth {
+		if padding.Top == 0 && padding.Bottom == 0 {
+			padding.Top = max(float32(0), (height-fontSize*1.35)/2)
+		}
 		alignedChild = child
 	}
 	// Center measured text and icon content inside symmetric padding instead of relying on font-specific offsets.

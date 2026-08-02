@@ -54,7 +54,8 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 		t.Fatalf("support button right edge = %v, want %v", got+112, supportValue.Width)
 	}
 
-	syncCard := cloudSyncCard(CloudSyncProps{LabelWidth: labelWidth, ButtonLabel: "Sync"}, width, woxcomponent.Theme{}).(woxwidget.Container)
+	buttonTheme := woxcomponent.Theme{ActionSelected: woxui.Color{R: 1, A: 255}, ResultSubtitle: woxui.Color{R: 2, A: 255}}
+	syncCard := cloudSyncCard(CloudSyncProps{LabelWidth: labelWidth, ButtonLabel: "Sync"}, width, buttonTheme).(woxwidget.Container)
 	syncRow := syncCard.Child.(woxwidget.Flex)
 	syncValue := syncRow.Children[1].(woxwidget.Container)
 	if got := labelWidth + gap + syncValue.Width; got != width {
@@ -64,7 +65,7 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 		t.Fatalf("sync button right edge = %v, want %v", got+64, syncValue.Width)
 	}
 
-	deviceHeader := cloudDeviceHeader(CloudDevicesProps{LabelWidth: labelWidth, RefreshLabel: "Refresh"}, width, woxcomponent.Theme{}).(woxwidget.Container)
+	deviceHeader := cloudDeviceHeader(CloudDevicesProps{LabelWidth: labelWidth, RefreshLabel: "Refresh"}, width, buttonTheme).(woxwidget.Container)
 	deviceRow := deviceHeader.Child.(woxwidget.Flex)
 	refreshValue := deviceRow.Children[1].(woxwidget.Container)
 	if got := labelWidth + gap + refreshValue.Width; got != width {
@@ -72,6 +73,11 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	}
 	if got := refreshValue.Padding.Left; got+88 != refreshValue.Width {
 		t.Fatalf("refresh button right edge = %v, want %v", got+88, refreshValue.Width)
+	}
+	syncButton := syncValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	refreshButton := refreshValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	if syncButton.Color != refreshButton.Color || syncButton.BorderColor != refreshButton.BorderColor || syncButton.BorderWidth != refreshButton.BorderWidth {
+		t.Fatalf("sync button surface = %+v, want refresh surface %+v", syncButton, refreshButton)
 	}
 }
 

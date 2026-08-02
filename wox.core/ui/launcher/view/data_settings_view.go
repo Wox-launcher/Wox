@@ -227,12 +227,12 @@ func dataBackupGridRow(props DataSettingsProps, columns []dataColumn, backup Dat
 			}
 		}
 		weight := woxui.FontWeightRegular
-		fontSize := float32(11)
+		fontSize := woxcomponent.TableBodyFontSize
 		textColor := props.Theme.ResultTitle
 		paddingTop := float32(10)
 		if header {
 			weight = woxui.FontWeightSemibold
-			fontSize = tableSurfaceHeaderFontSize
+			fontSize = woxcomponent.TableHeaderFontSize
 			textColor = style.headerText
 			paddingTop = 9
 		}
@@ -255,14 +255,14 @@ func dataBackupGridRow(props DataSettingsProps, columns []dataColumn, backup Dat
 							props.OnRestoreBackup(current.ID)
 						}
 					}, Child: woxwidget.Container{Width: buttonWidth, Height: height, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth, Padding: woxwidget.Insets{Left: 8, Top: 10}, Child: woxwidget.TextBlock{
-						Value: restoreLabel, Width: max(float32(0), buttonWidth-14), Height: height - 10, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle,
+						Value: restoreLabel, Width: max(float32(0), buttonWidth-14), Height: height - 10, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle,
 					}}},
 					woxwidget.Gesture{ID: fmt.Sprintf("data-backup-open-%d", rowIndex), OnTap: func() {
 						if props.OnOpenPath != nil {
 							props.OnOpenPath(current.Path)
 						}
 					}, Child: woxwidget.Container{Width: cellWidth - buttonWidth, Height: height, Padding: woxwidget.Insets{Left: 8, Top: 10}, Child: woxwidget.Text{
-						Value: props.Labels.Open, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle,
+						Value: props.Labels.Open, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle,
 					}}},
 				}},
 			}

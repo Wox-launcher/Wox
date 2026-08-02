@@ -225,6 +225,7 @@ func (c *themeSettingsController) ReloadThemes(ctx context.Context, service cont
 		theme := themeSettingsTheme{
 			ID: source.ThemeId, Name: source.ThemeName, Author: source.ThemeAuthor, URL: source.ThemeUrl, Version: source.Version, Description: source.Description,
 			IsSystem: source.IsSystem, IsInstalled: source.IsInstalled, IsUpgradable: item.IsUpgradable, IsAuto: source.IsAutoAppearance,
+			DarkThemeID: source.DarkThemeId, LightThemeID: source.LightThemeId,
 		}
 		payload, err := json.Marshal(source)
 		if err != nil {

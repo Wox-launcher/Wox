@@ -32,3 +32,12 @@ func TestWoxButtonCentersContentInsideSymmetricPadding(t *testing.T) {
 		t.Fatalf("button label style = %+v, want regular 13px", label.Style)
 	}
 }
+
+func TestWoxButtonCentersIntrinsicContentVertically(t *testing.T) {
+	button := WoxButton(ButtonProps{ID: "apply", Label: "应用", Height: 36, IntrinsicWidth: true})
+	container := button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+
+	if container.Width != 0 || container.Padding.Top <= 0 {
+		t.Fatalf("intrinsic button = width %v top padding %v, want natural width and centered content", container.Width, container.Padding.Top)
+	}
+}

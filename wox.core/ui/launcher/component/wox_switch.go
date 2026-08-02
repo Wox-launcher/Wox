@@ -33,9 +33,10 @@ func WoxSwitch(props SwitchProps) woxwidget.Widget {
 	visual := woxwidget.AnimatedFloat{Key: key, Target: target, Duration: 300 * time.Millisecond, Curve: woxwidget.AnimationEaseOutBack, Builder: func(position float32) woxwidget.Widget {
 		colorPosition := min(max(position, float32(0)), float32(1))
 		trackColor := lerpColor(withAlpha(props.Theme.ResultTitle, 77), props.Theme.ActionSelected, colorPosition)
-		return woxwidget.Stack{Width: 42, Height: 22, Children: []woxwidget.StackChild{
-			{Child: woxwidget.Container{Width: 42, Height: 22, Radius: 11, Color: trackColor}},
-			{Left: 2 + 20*position, Top: 2, Child: woxwidget.Container{Width: 18, Height: 18, Radius: 9, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255}}},
+		thumbSize := 9.6 + 4.8*colorPosition
+		return woxwidget.Stack{Width: 36, Height: 24, Children: []woxwidget.StackChild{
+			{Left: 2.4, Top: 2.4, Child: woxwidget.Container{Width: 31.2, Height: 19.2, Radius: 9.6, Color: trackColor}},
+			{Left: 12 + 12*position - thumbSize/2, Top: 12 - thumbSize/2, Child: woxwidget.Container{Width: thumbSize, Height: thumbSize, Radius: thumbSize / 2, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255}}},
 		}}
 	}}
 	content := woxwidget.Gesture{ID: props.ID, OnTap: toggle, Child: visual}
@@ -56,7 +57,7 @@ func WoxSwitch(props SwitchProps) woxwidget.Widget {
 			toggle()
 			return nil
 		},
-		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 11, OnKey: func(event woxui.KeyEvent) bool {
+		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 12, OnKey: func(event woxui.KeyEvent) bool {
 			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 				return false
 			}

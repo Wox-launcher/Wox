@@ -11,13 +11,18 @@ type HotkeyProps struct {
 	Foreground woxui.Color
 	Background woxui.Color
 	Border     woxui.Color
+	FontSize   float32
 	Compact    bool
 	Window     *woxui.Window
 }
 
 // WoxHotkey builds shared keycaps and returns their total width.
 func WoxHotkey(props HotkeyProps) (woxwidget.Widget, float32) {
-	style := woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}
+	fontSize := props.FontSize
+	if fontSize <= 0 {
+		fontSize = TailFontSize
+	}
+	style := woxui.TextStyle{Size: fontSize, Weight: woxui.FontWeightSemibold}
 	border := props.Border
 	if border.A == 0 {
 		border = props.Foreground

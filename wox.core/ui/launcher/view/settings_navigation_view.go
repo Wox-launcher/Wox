@@ -85,7 +85,7 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 		props.SearchBox,
 		woxwidget.Stack{Width: innerWidth, Height: viewportHeight, Children: stackChildren},
 	}}}
-	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: rail}, {Left: props.Width - 1, Child: woxwidget.Container{Width: 1, Height: props.Height, Color: settingsColorAlpha(props.Theme.PreviewSplit, 128)}}}}
+	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: rail}, {Left: props.Width - 1, Child: woxwidget.Container{Width: 1, Height: props.Height, Color: settingsColorAlpha(props.Theme.ToolbarText, 26)}}}}
 }
 
 // SettingsSearchBoxProps contains the search editing state and actions.
@@ -152,7 +152,7 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 	background := props.Theme.ToolbarBackground
 	background.A = 255
 	if len(props.Results) == 0 {
-		return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: 7, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 18, Right: 12}, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}
+		return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: 7, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 18, Right: 12}, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchTitleFontSize}, Color: props.Theme.ResultSubtitle}}
 	}
 	rows := make([]woxwidget.Widget, 0, len(props.Results))
 	showIcons := props.Width-32 >= 72
@@ -164,8 +164,8 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 			titleColor = props.Theme.SelectedTitle
 		}
 		textColumn := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: titleColor},
-			woxwidget.Text{Value: result.Subtitle, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultSubtitle},
+			woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: titleColor},
+			woxwidget.Text{Value: result.Subtitle, Style: woxui.TextStyle{Size: woxcomponent.SettingsSearchSubtitleFontSize}, Color: props.Theme.ResultSubtitle},
 		}}
 		var content woxwidget.Widget = textColumn
 		if showIcons && result.Icon != nil {

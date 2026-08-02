@@ -79,7 +79,7 @@ func SettingChoiceAnchorKey(id string) woxwidget.Key {
 func SettingRow(props SettingRowProps) woxwidget.Widget {
 	fieldTheme := props.Theme
 	subtitle := props.Theme.ResultSubtitle
-	valueColor := props.Theme.Cursor
+	valueColor := props.Theme.ResultTitle
 	if props.Disabled {
 		fieldTheme.ResultTitle = props.Theme.ResultSubtitle
 		valueColor = props.Theme.ResultSubtitle
@@ -144,6 +144,6 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 	}
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Title, Description: props.Description, Width: props.Width, Height: 62, LabelWidth: labelWidth, Gap: 28,
-		Radius: 6, Background: props.Background, Padding: woxwidget.Insets{Left: 2, Top: 5, Right: 2, Bottom: 5}, Child: valueField, Theme: fieldTheme,
+		Radius: 6, Background: props.Background, Padding: woxwidget.Insets{Left: 2, Right: 2, Bottom: 5}, Child: valueField, Theme: fieldTheme,
 	})
 }

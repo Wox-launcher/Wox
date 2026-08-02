@@ -78,6 +78,7 @@ func SettingsTitleBar(props SettingsTitleBarProps) woxwidget.Widget {
 
 type settingsTitleBarState struct {
 	hovered string
+	pressed string
 }
 
 // InitState starts the title bar without a hovered native control.
@@ -98,14 +99,23 @@ func (s *settingsTitleBarState) Build(context woxwidget.StateContext, widget any
 			}
 		})
 	}
-	return buildSettingsTitleBar(props, s.hovered, onHover)
+	onPress := func(control string, pressed bool) {
+		context.SetState(func() {
+			if pressed {
+				s.pressed = control
+			} else if s.pressed == control {
+				s.pressed = ""
+			}
+		})
+	}
+	return buildSettingsTitleBar(props, s.hovered, s.pressed, onHover, onPress)
 }
 
 // Dispose releases no external title bar resources.
 func (s *settingsTitleBarState) Dispose() {}
 
 // buildSettingsTitleBar composes platform title controls from retained hover state.
-func buildSettingsTitleBar(props SettingsTitleBarProps, hovered string, onHover func(string, bool)) woxwidget.Widget {
+func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string, onHover, onPress func(string, bool)) woxwidget.Widget {
 	height := SettingsTitleBarHeight
 	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
 	dragWidth := props.Width
@@ -121,10 +131,10 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered string, onHover 
 	switch props.Platform {
 	case "darwin":
 		children = append(children,
-			woxwidget.StackChild{Left: max(float32(0), props.RailWidth-1), Child: woxwidget.Container{Width: 1, Height: height, Color: settingsTitleBarAlpha(props.Theme.PreviewSplit, 128)}},
-			woxwidget.StackChild{Left: 13, Child: settingsMacTrafficLight("settings-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", props.OnClose, onHover)},
-			woxwidget.StackChild{Left: 36, Child: settingsMacTrafficLight("settings-window-minimize", woxui.Color{R: 250, G: 200, B: 0, A: 255}, "−", woxui.Color{R: 126, G: 100, B: 11, A: 255}, hovered == "mac-controls", props.OnMinimize, onHover)},
-			woxwidget.StackChild{Left: 59, Child: settingsMacTrafficLight("settings-window-zoom", woxui.Color{R: 142, G: 142, B: 147, A: 255}, "", woxui.Color{}, false, nil, nil)},
+			woxwidget.StackChild{Left: max(float32(0), props.RailWidth-1), Child: woxwidget.Container{Width: 1, Height: height, Color: settingsTitleBarAlpha(props.Theme.ToolbarText, 26)}},
+			woxwidget.StackChild{Left: 13, Child: settingsMacTrafficLight("settings-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", pressed == "settings-window-close", props.OnClose, onHover, onPress)},
+			woxwidget.StackChild{Left: 36, Child: settingsMacTrafficLight("settings-window-minimize", woxui.Color{R: 250, G: 200, B: 0, A: 255}, "−", woxui.Color{R: 126, G: 100, B: 11, A: 255}, hovered == "mac-controls", pressed == "settings-window-minimize", props.OnMinimize, onHover, onPress)},
+			woxwidget.StackChild{Left: 59, Child: settingsMacTrafficLight("settings-window-zoom", woxui.Color{R: 142, G: 142, B: 147, A: 255}, "", woxui.Color{}, false, false, nil, nil, nil)},
 		)
 	case "windows":
 		if props.AppIcon != nil {
@@ -168,12 +178,15 @@ func settingsWindowsTitleBarButton(id, glyph string, closeButton, hovered bool, 
 }
 
 // settingsMacTrafficLight matches the compact macOS controls and reveals their glyphs while the group is hovered.
-func settingsMacTrafficLight(id string, color woxui.Color, glyph string, glyphColor woxui.Color, hovered bool, onTap func(), onHover func(string, bool)) woxwidget.Widget {
+func settingsMacTrafficLight(id string, color woxui.Color, glyph string, glyphColor woxui.Color, hovered, pressed bool, onTap func(), onHover, onPress func(string, bool)) woxwidget.Widget {
+	if pressed {
+		color = settingsMacTrafficLightPressedColor(color)
+	}
 	var symbol woxwidget.Widget = woxwidget.Container{Width: 14, Height: 14}
 	if hovered {
 		switch glyph {
 		case "×":
-			symbol = woxcomponent.CloseGlyph(10, glyphColor)
+			symbol = settingsMacCloseGlyph(glyphColor)
 		case "−":
 			symbol = woxwidget.Container{Width: 7, Height: 2, Radius: 1, Color: glyphColor}
 		default:
@@ -181,14 +194,37 @@ func settingsMacTrafficLight(id string, color woxui.Color, glyph string, glyphCo
 		}
 	}
 	control := woxwidget.Align{Width: 20, Height: SettingsTitleBarHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Container{Width: 14, Height: 14, Radius: 7, Color: color, Child: woxwidget.Align{Width: 14, Height: 14, Horizontal: 0.5, Vertical: 0.5, Child: symbol}}}
-	if onTap == nil && onHover == nil {
+	if onTap == nil && onHover == nil && onPress == nil {
 		return control
 	}
-	return woxwidget.Gesture{ID: id, OnTap: onTap, OnHover: func(inside bool) {
+	return woxwidget.Gesture{ID: id, OnTap: onTap, OnPressChange: func(pressed bool) {
+		if onPress != nil {
+			onPress(id, pressed)
+		}
+	}, OnHover: func(inside bool) {
 		if onHover != nil {
 			onHover("mac-controls", inside)
 		}
 	}, Child: control}
+}
+
+// settingsMacTrafficLightPressedColor approximates AppKit's highlighted luminance while preserving hue.
+func settingsMacTrafficLightPressedColor(color woxui.Color) woxui.Color {
+	color.R = uint8(uint16(color.R) * 220 / 255)
+	color.G = uint8(uint16(color.G) * 220 / 255)
+	color.B = uint8(uint16(color.B) * 220 / 255)
+	return color
+}
+
+// settingsMacCloseGlyph draws the thicker cross used by the native macOS traffic light.
+func settingsMacCloseGlyph(color woxui.Color) woxwidget.Widget {
+	return woxwidget.Painter{Width: 14, Height: 14, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		for step := 0; step < 5; step++ {
+			offset := float32(step)
+			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 4 + offset, Y: bounds.Y + 4 + offset, Width: 2, Height: 2}, 1, color)
+			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 8 - offset, Y: bounds.Y + 4 + offset, Width: 2, Height: 2}, 1, color)
+		}
+	}}
 }
 
 func settingsTitleBarAlpha(color woxui.Color, alpha uint8) woxui.Color {

@@ -20,7 +20,7 @@ type HotkeySettingsProps struct {
 func HotkeySettingsView(props HotkeySettingsProps) woxwidget.Widget {
 	if !props.Available {
 		return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(36), Child: woxwidget.Text{
-			Value: "Hotkey settings are unavailable.", Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle,
+			Value: "Hotkey settings are unavailable.", Style: woxui.TextStyle{Size: woxcomponent.SettingsPageDescriptionFontSize}, Color: props.Theme.ResultSubtitle,
 		}}
 	}
 	innerWidth := max(float32(0), props.Width-72)
@@ -33,8 +33,8 @@ func HotkeySettingsView(props HotkeySettingsProps) woxwidget.Widget {
 	}
 	children := []woxwidget.Widget{
 		woxwidget.Container{Width: innerWidth, Height: headerHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 7, Children: []woxwidget.Widget{
-			woxwidget.Text{Value: "Hotkeys", Style: woxui.TextStyle{Size: 24, Weight: woxui.FontWeightSemibold}, Color: props.Theme.QueryText},
-			woxwidget.Text{Value: "Global activation and reusable query launchers", Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle},
+			woxwidget.Text{Value: "Hotkeys", Style: woxui.TextStyle{Size: woxcomponent.SettingsPageTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.QueryText},
+			woxwidget.Text{Value: "Global activation and reusable query launchers", Style: woxui.TextStyle{Size: woxcomponent.SettingsPageDescriptionFontSize}, Color: props.Theme.ResultSubtitle},
 		}}},
 		body,
 	}

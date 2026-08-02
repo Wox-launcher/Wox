@@ -102,7 +102,7 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 		})
 	}
 	return launcherview.ActionsView(launcherview.ActionsProps{
-		Window: a.window, WindowWidth: windowWidth, WindowHeight: windowHeight, QueryHeight: queryHeight, ToolbarHeight: toolbarHeight,
+		Window: a.window, WindowWidth: windowWidth, WindowHeight: windowHeight, QueryHeight: queryHeight, ToolbarHeight: toolbarHeight, DensityScale: snapshot.densityMetrics.scale,
 		Theme: snapshot.palette.componentTheme(), ActionHeader: snapshot.palette.actionHeader,
 		ActionQueryBackground: snapshot.palette.actionQueryBackground, ActionQueryText: snapshot.palette.actionQueryText,
 		ResultTail: snapshot.palette.resultTail, SelectedTail: snapshot.palette.selectedTail,

@@ -63,10 +63,32 @@ func TestSettingsWindowWindowsRetainsFullWidthTitleBarRow(t *testing.T) {
 }
 
 func TestSettingsTitleBarMacLimitsDragAreaToRail(t *testing.T) {
-	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{Width: 1200, RailWidth: 240, Platform: "darwin"}, "", nil).(woxwidget.Stack)
+	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{Width: 1200, RailWidth: 240, Platform: "darwin"}, "", "", nil, nil).(woxwidget.Stack)
 	drag := titleBar.Children[1].Child.(woxwidget.Gesture)
 	if width := drag.Child.(woxwidget.Container).Width; width != 240 {
 		t.Fatalf("macOS title-bar drag width = %v, want rail width 240", width)
+	}
+}
+
+func TestSettingsMacCloseUsesPixelPainter(t *testing.T) {
+	closeControl := settingsMacTrafficLight("close", woxui.Color{}, "×", woxui.Color{}, true, false, func() {}, nil, nil).(woxwidget.Gesture)
+	symbol := closeControl.Child.(woxwidget.Align).Child.(woxwidget.Container).Child.(woxwidget.Align).Child
+	painter, ok := symbol.(woxwidget.Painter)
+	if !ok || painter.Width != 14 || painter.Height != 14 || painter.Paint == nil {
+		t.Fatalf("macOS close symbol = %#v, want 14x14 pixel painter", symbol)
+	}
+}
+
+func TestSettingsMacTrafficLightDarkensItsNativeColorWhilePressed(t *testing.T) {
+	glyphColor := woxui.Color{R: 126, G: 100, B: 11, A: 255}
+	control := settingsMacTrafficLight("minimize", woxui.Color{R: 250, G: 200, B: 0, A: 255}, "−", glyphColor, true, true, func() {}, nil, nil).(woxwidget.Gesture)
+	button := control.Child.(woxwidget.Align).Child.(woxwidget.Container)
+	if button.Color != (woxui.Color{R: 215, G: 172, B: 0, A: 255}) {
+		t.Fatalf("pressed macOS traffic light color = %#v, want darkened native yellow", button.Color)
+	}
+	symbol := button.Child.(woxwidget.Align).Child.(woxwidget.Container)
+	if symbol.Color != glyphColor {
+		t.Fatalf("pressed macOS traffic light glyph = %#v, want unchanged %#v", symbol.Color, glyphColor)
 	}
 }
 

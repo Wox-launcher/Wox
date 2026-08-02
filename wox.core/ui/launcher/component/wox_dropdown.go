@@ -64,7 +64,7 @@ func woxDropdownTrigger(props DropdownProps) woxwidget.Widget {
 		contentWidth = max(float32(0), contentWidth-trailingWidth-10)
 	}
 	children = append(children, woxwidget.Align{Width: contentWidth, Height: props.Height, Vertical: 0.5, Child: woxwidget.TextBlock{
-		Value: props.Value, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: props.Foreground,
+		Value: props.Value, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: SettingsControlFontSize}, Color: props.Foreground,
 	}})
 	if trailingWidth > 0 {
 		secondary := props.Secondary
@@ -74,7 +74,7 @@ func woxDropdownTrigger(props DropdownProps) woxwidget.Widget {
 		children = append(children,
 			woxwidget.Container{Width: 10, Height: props.Height},
 			woxwidget.Align{Width: trailingWidth, Height: props.Height, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.Trailing, Style: woxui.TextStyle{Size: 12}, Color: secondary,
+				Value: props.Trailing, Style: woxui.TextStyle{Size: SettingsSecondaryFontSize}, Color: secondary,
 			}},
 		)
 	}

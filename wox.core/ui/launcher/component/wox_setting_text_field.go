@@ -14,7 +14,7 @@ func WoxSettingTextField(props TextFieldProps) woxwidget.Widget {
 	props.Transparent = true
 	props.BorderColor = props.Theme.ResultSubtitle
 	props.BorderWidth = 1
-	props.Style = woxui.TextStyle{Size: 13}
+	props.Style = woxui.TextStyle{Size: SettingsControlFontSize}
 	props.TextColor = props.Theme.ResultTitle
 	if props.Disabled {
 		props.TextColor = props.Theme.ResultSubtitle

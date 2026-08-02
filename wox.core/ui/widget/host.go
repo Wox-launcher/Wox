@@ -672,6 +672,10 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		h.pressed = nodeID(target)
 		h.pressedAt = event.Position
 		h.dragging = false
+		if target != nil && target.gesture != nil && target.gesture.onPressChange != nil {
+			target.gesture.onPressChange(true)
+			h.invalidate()
+		}
 		focused := h.nodes[h.focused]
 		var pointerFocusTarget *node
 		for focusTarget := target; focusTarget != nil; focusTarget = focusTarget.parent {
@@ -702,6 +706,10 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		deltaX := event.Position.X - h.pressedAt.X
 		deltaY := event.Position.Y - h.pressedAt.Y
 		if deltaX*deltaX+deltaY*deltaY >= 9 {
+			if pressed.gesture.onPressChange != nil {
+				pressed.gesture.onPressChange(false)
+				h.invalidate()
+			}
 			h.pressed = 0
 			h.dragging = true
 			pressed.gesture.onDragStart()
@@ -728,6 +736,10 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		}
 	}
 	if event.Kind == woxui.PointerUp && event.Button == woxui.PointerButtonPrimary {
+		if pressed != nil && pressed.gesture != nil && pressed.gesture.onPressChange != nil {
+			pressed.gesture.onPressChange(false)
+			h.invalidate()
+		}
 		if h.panning != 0 {
 			panner := h.nodes[h.panning]
 			h.panning = 0

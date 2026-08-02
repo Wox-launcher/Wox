@@ -357,7 +357,7 @@ func buildWoxTextField(props TextFieldProps) woxwidget.Widget {
 	}
 	style := props.Style
 	if style.Size <= 0 {
-		style = woxui.TextStyle{Size: 13}
+		style = woxui.TextStyle{Size: SettingsControlFontSize}
 	}
 	textColor := props.TextColor
 	if textColor.A == 0 {

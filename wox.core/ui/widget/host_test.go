@@ -2,6 +2,7 @@ package widget
 
 import (
 	stdcontext "context"
+	"slices"
 	"testing"
 	"time"
 
@@ -535,6 +536,31 @@ func TestHostRequiresPointerMoveBeforeHover(t *testing.T) {
 	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: position})
 	if len(hoverStates) != 1 || !hoverStates[0] {
 		t.Fatalf("pointer move hover states = %v, want [true]", hoverStates)
+	}
+}
+
+func TestHostReportsGesturePressWithoutChangingTap(t *testing.T) {
+	var pressed []bool
+	taps := 0
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Gesture{
+			ID: "button", OnPressChange: func(value bool) { pressed = append(pressed, value) }, OnTap: func() { taps++ },
+			Child: Container{Width: 40, Height: 20},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	if !slices.Equal(pressed, []bool{true, false}) || taps != 1 {
+		t.Fatalf("press states = %v, taps = %d, want [true false] and one tap", pressed, taps)
+	}
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 50, Y: 5}})
+	if !slices.Equal(pressed, []bool{true, false, true, false}) || taps != 1 {
+		t.Fatalf("outside release states = %v, taps = %d, want paired release without another tap", pressed, taps)
 	}
 }
 

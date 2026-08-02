@@ -19,7 +19,7 @@ type PageHeaderProps struct {
 // WoxPageHeader builds the shared title and description block used by settings pages.
 func WoxPageHeader(props PageHeaderProps) woxwidget.Widget {
 	return woxwidget.Container{Width: props.Width, Height: PageHeaderHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 22, Weight: woxui.FontWeightSemibold}, Color: props.Theme.QueryText},
-		woxwidget.Text{Value: props.Description, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle},
+		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: SettingsPageTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.QueryText},
+		woxwidget.Text{Value: props.Description, Style: woxui.TextStyle{Size: SettingsPageDescriptionFontSize}, Color: props.Theme.ResultSubtitle},
 	}}}
 }

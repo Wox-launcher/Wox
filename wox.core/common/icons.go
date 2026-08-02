@@ -70,6 +70,8 @@ var (
 	MultipleFileStackIcon         = NewWoxImageSvg(`<svg width="800px" height="800px" viewBox="0 0 1024 1024" class="icon"  version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M372.778667 182.997333l566.272 189.952-189.952 566.272L182.826667 749.269333z" fill="#64B5F6" /><path d="M410.410667 266.752l446.336 145.493333-132.266667 405.76-446.336-145.493333z" fill="#1E88E5" /><path d="M232.128 123.264l587.178667 108.117333-108.117334 587.178667-587.178666-108.117333z" fill="#90CAF9" /><path d="M282.005333 201.472l462.293334 82.133333-74.666667 420.266667-462.293333-82.133333z" fill="#42A5F5" /><path d="M85.333333 85.333333h597.333334v597.333334H85.333333z" fill="#BBDEFB" /><path d="M149.333333 149.333333h469.333334v426.666667H149.333333z" fill="#4CAF50" /><path d="M341.333333 277.333333c0-23.466667 19.2-42.666667 42.666667-42.666666s42.666667 19.2 42.666667 42.666666-42.666667 85.333333-42.666667 85.333334-42.666667-61.866667-42.666667-85.333334zM426.666667 448c0 23.466667-19.2 42.666667-42.666667 42.666667s-42.666667-19.2-42.666667-42.666667 42.666667-85.333333 42.666667-85.333333 42.666667 61.866667 42.666667 85.333333z" fill="#FFFFFF" /><path d="M288 356.266667c-21.333333-12.8-27.733333-38.4-14.933333-57.6 12.8-21.333333 38.4-27.733333 57.6-14.933334 21.333333 12.8 53.333333 78.933333 53.333333 78.933334s-74.666667 6.4-96-6.4zM480 369.066667c21.333333 12.8 27.733333 38.4 14.933333 57.6-12.8 21.333333-38.4 27.733333-57.6 14.933333-21.333333-10.666667-53.333333-78.933333-53.333333-78.933333s74.666667-6.4 96 6.4z" fill="#FFFFFF" /><path d="M480 356.266667c21.333333-12.8 27.733333-38.4 14.933333-57.6-12.8-21.333333-38.4-27.733333-57.6-14.933334-21.333333 10.666667-53.333333 78.933333-53.333333 78.933334s74.666667 6.4 96-6.4zM288 369.066667c-21.333333 12.8-27.733333 38.4-14.933333 57.6 12.8 21.333333 38.4 27.733333 57.6 14.933333 21.333333-12.8 53.333333-78.933333 53.333333-78.933333s-74.666667-6.4-96 6.4z" fill="#FFFFFF" /><path d="M384 362.666667m-42.666667 0a42.666667 42.666667 0 1 0 85.333334 0 42.666667 42.666667 0 1 0-85.333334 0Z" fill="#FFC107" /></svg>`)
 )
 
+var tuneUIIcon = NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>`)
+
 // UI icons are grouped by semantic use so callers can reuse assets before adding new ones.
 var uiIcons = map[string]WoxImage{
 	// Settings navigation.
@@ -87,7 +89,7 @@ var uiIcons = map[string]WoxImage{
 	"settings.themes":            newMonochromeUIIcon(`<path d="M12 3a9 9 0 1 0 0 18h1.5a1.5 1.5 0 0 0 0-3H12a1.5 1.5 0 0 1 0-3h2a7 7 0 0 0 7-7c0-2.76-4.03-5-9-5z"/><path d="M7.5 10.5h.01M9.5 6.5h.01M14.5 6.5h.01M17 10h.01"/>`),
 	"settings.themes.store":      newMonochromeUIIcon(`<path d="M6 8h12l1 13H5zM9 8V6a3 3 0 0 1 6 0v2"/>`),
 	"settings.themes.installed":  newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>`),
-	"settings.themes.edit":       newMonochromeUIIcon(`<path d="M4 7h10M18 7h2M14 4v6M4 17h2M10 17h10M6 14v6M4 12h4M12 12h8M8 9v6"/>`),
+	"settings.themes.edit":       tuneUIIcon,
 	"settings.usage":             newMonochromeUIIcon(`<path d="M4 19V9M9 19V5M14 19v-7M19 19V3"/>`),
 	"settings.debug":             newMonochromeUIIcon(`<path d="M8 9h8M9 4h6l1 3H8zM6 12h12v5a6 6 0 0 1-12 0zM3 14h3M18 14h3M4 20l3-2M20 20l-3-2"/>`),
 	"settings.update":            newMonochromeUIIcon(`<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`),
@@ -103,9 +105,10 @@ var uiIcons = map[string]WoxImage{
 	"control.search":             newMonochromeUIIcon(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>`),
 	"control.fullscreen":         newMonochromeUIIcon(`<path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>`),
 	"control.fullscreen-exit":    newMonochromeUIIcon(`<path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/>`),
-	"control.tune":               newMonochromeUIIcon(`<path d="M4 7h10M18 7h2M14 4v6M4 17h2M10 17h10M6 14v6M4 12h4M12 12h8M8 9v6"/>`),
+	"control.tune":               tuneUIIcon,
 	"control.settings-suggest":   newMonochromeUIIcon(`<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15"/><path d="m18 3 .55 1.45L20 5l-1.45.55L18 7l-.55-1.45L16 5l1.45-.55z"/>`),
 	"control.locate":             newMonochromeUIIcon(`<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>`),
+	"control.brightness":         newMonochromeUIIcon(`<circle cx="12" cy="12" r="5"/><path d="M12 7a5 5 0 0 0 0 10zM12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/>`),
 	"control.check-circle":       newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>`),
 	"control.external":           newMonochromeUIIcon(`<path d="M14 5h5v5M19 5l-9 9"/><path d="M13 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-7"/>`),
 	"control.store":              newMonochromeUIIcon(`<path d="M4 9h16M5 9l1-5h12l1 5M6 9v11h12V9"/><path d="M9 20v-6h6v6"/>`),

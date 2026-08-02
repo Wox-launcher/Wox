@@ -202,10 +202,10 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 		woxwidget.Container{Width: titleWidth, Height: 48, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 				woxwidget.Container{Width: max(float32(20), titleWidth-62), Height: 20, Child: woxwidget.Text{Value: status.DisplayName, Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
-				woxwidget.Container{Width: 62, Height: 20, Child: woxwidget.Text{Value: status.Version, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle}},
+				woxwidget.Container{Width: 62, Height: 20, Child: woxwidget.Text{Value: status.Version, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize}, Color: theme.ResultSubtitle}},
 			}},
 			woxwidget.Container{Width: pillWidth, Height: 22, Radius: 11, Color: runtimeStatusBackground(status.StatusCode, theme), Padding: woxwidget.Insets{Left: 8, Top: 4}, Child: woxwidget.Text{
-				Value: status.StatusLabel, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: statusColor,
+				Value: status.StatusLabel, Style: woxui.TextStyle{Size: woxcomponent.SettingsSecondaryFontSize, Weight: woxui.FontWeightSemibold}, Color: statusColor,
 			}},
 		}}},
 	}}

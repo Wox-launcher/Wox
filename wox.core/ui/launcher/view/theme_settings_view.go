@@ -12,20 +12,22 @@ const ThemeListRowHeight = float32(72)
 
 // ThemeCatalogItem contains resolved presentation data for one theme.
 type ThemeCatalogItem struct {
-	SourceIndex  int
-	ID           string
-	Name         string
-	Author       string
-	URL          string
-	Version      string
-	Description  string
-	IsSystem     bool
-	IsInstalled  bool
-	IsUpgradable bool
-	IsAuto       bool
-	Active       bool
-	Selected     bool
-	PreviewTheme woxcomponent.Theme
+	SourceIndex       int
+	ID                string
+	Name              string
+	Author            string
+	URL               string
+	Version           string
+	Description       string
+	IsSystem          bool
+	IsInstalled       bool
+	IsUpgradable      bool
+	IsAuto            bool
+	Active            bool
+	Selected          bool
+	PreviewTheme      woxcomponent.Theme
+	LightPreviewTheme woxcomponent.Theme
+	DarkPreviewTheme  woxcomponent.Theme
 }
 
 // ThemeSettingsProps contains theme catalog state, localized labels, and actions.
@@ -55,6 +57,7 @@ type ThemeSettingsProps struct {
 	DescriptionLabel      string
 	SystemLabel           string
 	AutoAppearanceHint    string
+	AutoAppearanceAccent  woxui.Color
 	PreviewTitle          string
 	PreviewTexts          []string
 	PreviewSubtitles      []string
@@ -65,6 +68,7 @@ type ThemeSettingsProps struct {
 	ExternalIcon          *woxui.Image
 	InstalledIcon         *woxui.Image
 	InstalledSelectedIcon *woxui.Image
+	AutoAppearanceIcon    *woxui.Image
 	OnSelect              func(int)
 	OnSearchKey           func(woxui.KeyEvent) bool
 	OnSearchFocusChange   func(bool)
@@ -101,14 +105,18 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 		subtitleColor := props.Theme.ResultSubtitle
 		if item.Selected {
 			background = props.Theme.SelectedBackground
-			titleColor = props.Theme.SelectedTitle
-			subtitleColor = props.Theme.SelectedTitle
+			titleColor = props.Theme.ActionSelectedText
+			subtitleColor = props.Theme.ActionSelectedText
 		}
-		trailing, trailingWidth := themeListTrailing(props, item, titleColor, subtitleColor)
+		trailing, trailingWidth := themeListTrailing(props, item, subtitleColor)
 		textWidth := max(float32(0), width-32-10-trailingWidth-18)
 		status := strings.TrimSpace(item.Version + "  " + item.Author)
+		var swatch woxwidget.Widget = themeSwatch(item.PreviewTheme, 32)
+		if item.IsAuto {
+			swatch = themeAutoSwatch(item.LightPreviewTheme, item.DarkPreviewTheme, 32)
+		}
 		rowChildren := []woxwidget.Widget{
-			themeSwatch(item.PreviewTheme, 32),
+			swatch,
 			woxwidget.Container{Width: textWidth, Height: 44, Child: woxwidget.Clip{Width: textWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
 				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor},
 				woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
@@ -168,7 +176,7 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: searchGap, Children: []woxwidget.Widget{searchField, list}}
 }
 
-func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem, titleColor, subtitleColor woxui.Color) (woxwidget.Widget, float32) {
+func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem, tagColor woxui.Color) (woxwidget.Widget, float32) {
 	if props.Mode == "store" && item.IsInstalled {
 		icon := props.InstalledIcon
 		if item.Selected {
@@ -177,11 +185,8 @@ func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem, titleCol
 		return woxwidget.Align{Width: 26, Height: 44, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: icon, Width: 20, Height: 20}}, 26
 	}
 	if props.Mode != "store" && item.IsSystem {
-		width := max(float32(38), float32(len([]rune(props.SystemLabel)))*7+10)
-		return woxwidget.Align{Width: width, Height: 44, Vertical: 0.5, Child: woxwidget.Container{
-			Width: width, Height: 20, Radius: 3, BorderColor: subtitleColor, BorderWidth: 1, Padding: woxwidget.Insets{Left: 5, Top: 3, Right: 5},
-			Child: woxwidget.Text{Value: props.SystemLabel, Style: woxui.TextStyle{Size: 11}, Color: titleColor},
-		}}, width
+		const width = float32(44)
+		return woxwidget.Align{Width: width, Height: 44, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxTag(props.SystemLabel, tagColor)}, width
 	}
 	return nil, 0
 }
@@ -258,13 +263,33 @@ func themePreviewTab(props ThemeSettingsProps, theme ThemeCatalogItem, width, he
 	children := make([]woxwidget.Widget, 0, 2)
 	if theme.IsAuto && props.AutoAppearanceHint != "" {
 		hintHeight = 58
+		accent := props.AutoAppearanceAccent
+		backgroundAlpha := uint8(26)
+		borderAlpha := uint8(77)
+		if int(props.Theme.Background.R)*299+int(props.Theme.Background.G)*587+int(props.Theme.Background.B)*114 < 128000 {
+			backgroundAlpha = 36
+			borderAlpha = 89
+		}
+		icon := woxwidget.Widget(woxwidget.Painter{Width: 16, Height: 16})
+		if props.AutoAppearanceIcon != nil {
+			icon = woxwidget.Image{Source: props.AutoAppearanceIcon, Width: 16, Height: 16}
+		}
 		children = append(children, woxwidget.Container{
-			Width: max(float32(0), width-horizontalPadding*2), Height: 46, Radius: 7, Color: props.Theme.ActionBackground,
-			Padding: woxwidget.Insets{Left: 12, Top: 12, Right: 12}, Child: woxwidget.Text{Value: props.AutoAppearanceHint, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},
+			Width: max(float32(0), width-horizontalPadding*2), Height: 46, Radius: 10, Color: settingsColorAlpha(accent, backgroundAlpha),
+			BorderColor: settingsColorAlpha(accent, borderAlpha), BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Top: 14, Right: 12},
+			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+				icon,
+				woxwidget.TextBlock{Value: props.AutoAppearanceHint, Width: max(float32(0), width-horizontalPadding*2-50), Height: 18, MaxLines: 1, LineHeight: 18, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultTitle},
+			}},
 		})
 	}
 	previewHeight := max(float32(0), height-topPadding-bottomPadding-hintHeight)
-	children = append(children, themeCatalogPreview(props, theme.PreviewTheme, max(float32(0), width-horizontalPadding*2), previewHeight))
+	previewWidth := max(float32(0), width-horizontalPadding*2)
+	preview := themeCatalogPreview(props, theme.PreviewTheme, previewWidth, previewHeight)
+	if theme.IsAuto {
+		preview = themeAutoCatalogPreview(props, theme.LightPreviewTheme, theme.DarkPreviewTheme, previewWidth, previewHeight)
+	}
+	children = append(children, preview)
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: horizontalPadding, Top: topPadding, Right: horizontalPadding, Bottom: bottomPadding}, Child: woxwidget.Flex{
 		Axis: woxwidget.Vertical, Gap: 12, Children: children,
 	}}
@@ -324,14 +349,193 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 	}}}
 }
 
+// themeAutoCatalogPreview layers shared preview content over diagonally split light and dark surfaces.
+func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.Theme, width, height float32) woxwidget.Widget {
+	if width <= 0 || height <= 0 {
+		return woxwidget.Container{Width: max(float32(0), width), Height: max(float32(0), height)}
+	}
+	const queryAreaHeight = float32(60)
+	const toolbarHeight = float32(34)
+	rowsHeight := max(float32(0), height-queryAreaHeight-toolbarHeight)
+	background := woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		fillThemeDiagonalRect(displayList, bounds, bounds, light.Background, dark.Background)
+		query := woxui.Rect{X: bounds.X + 10, Y: bounds.Y + 10, Width: max(float32(0), bounds.Width-20), Height: 40}
+		fillThemeDiagonalRect(displayList, query, bounds, light.QueryBackground, dark.QueryBackground)
+		for index := range props.PreviewTexts {
+			row := woxui.Rect{X: bounds.X + 10, Y: bounds.Y + queryAreaHeight + float32(index)*60, Width: max(float32(0), bounds.Width-20), Height: 60}
+			lightColor, darkColor := light.Background, dark.Background
+			if index == 1 {
+				lightColor, darkColor = light.SelectedBackground, dark.SelectedBackground
+			}
+			fillThemeDiagonalRect(displayList, row, bounds, lightColor, darkColor)
+		}
+		toolbar := woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height - toolbarHeight, Width: bounds.Width, Height: toolbarHeight}
+		fillThemeDiagonalRect(displayList, toolbar, bounds, light.ToolbarBackground, dark.ToolbarBackground)
+		fillThemeDiagonalRect(displayList, woxui.Rect{X: toolbar.X, Y: toolbar.Y, Width: toolbar.Width, Height: 1}, bounds, light.PreviewSplit, dark.PreviewSplit)
+		drawThemeDiagonalLine(displayList, bounds, 2)
+	}}
+	rows := make([]woxwidget.Widget, 0, len(props.PreviewTexts))
+	for index, title := range props.PreviewTexts {
+		subtitle := ""
+		if index < len(props.PreviewSubtitles) {
+			subtitle = props.PreviewSubtitles[index]
+		}
+		titleColor, subtitleColor := light.ResultTitle, light.ResultSubtitle
+		if index == 1 {
+			titleColor, subtitleColor = light.SelectedTitle, light.SelectedSubtitle
+		}
+		rows = append(rows, woxwidget.Container{Width: max(float32(0), width-20), Height: 60, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 10}, Child: woxwidget.Flex{
+			Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
+				woxwidget.Align{Width: 30, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: "📁", Style: woxui.TextStyle{Size: 22}, Color: titleColor}},
+				woxwidget.Container{Width: max(float32(0), width-84), Height: 42, Child: woxwidget.Clip{Width: max(float32(0), width-84), Height: 42, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+					woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 13}, Color: titleColor},
+					woxwidget.Text{Value: subtitle, Style: woxui.TextStyle{Size: 11}, Color: subtitleColor},
+				}}}},
+			},
+		}})
+	}
+	query := woxwidget.Container{Width: max(float32(0), width-20), Height: 40, Padding: woxwidget.Insets{Left: 10, Top: 11}, Child: woxwidget.Text{
+		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: 13}, Color: light.QueryText,
+	}}
+	rowList := woxwidget.ScrollView{Width: max(float32(0), width-20), Height: rowsHeight, ContentHeight: max(rowsHeight, float32(len(rows))*60), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}}
+	openWidth := max(float32(0), width-108)
+	toolbar := woxwidget.Container{Width: width, Height: toolbarHeight, Padding: woxwidget.Insets{Left: 10, Top: 8, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: openWidth, Height: 24},
+		woxwidget.Text{Value: props.PreviewOpenLabel, Style: woxui.TextStyle{Size: 11}, Color: dark.ToolbarText},
+		woxwidget.Container{Width: 8, Height: 24},
+		woxwidget.Container{Width: 30, Height: 22, Radius: 4, BorderColor: dark.ToolbarText, BorderWidth: 1, Padding: woxwidget.Insets{Left: 8, Top: 3}, Child: woxwidget.Text{Value: "↵", Style: woxui.TextStyle{Size: 12}, Color: dark.ToolbarText}},
+	}}}
+	content := woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: width, Height: queryAreaHeight, Padding: woxwidget.UniformInsets(10), Child: query},
+		woxwidget.Container{Width: width, Height: rowsHeight, Padding: woxwidget.Insets{Left: 10, Right: 10}, Child: rowList},
+		toolbar,
+	}}
+	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Child: background}, {Child: content}}}
+}
+
+// themeAutoSwatch mirrors Flutter's compact diagonal AUTO theme icon.
+func themeAutoSwatch(light, dark woxcomponent.Theme, size float32) woxwidget.Widget {
+	return woxwidget.Painter{Width: size, Height: size, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		fillThemeDiagonalPolygon(displayList, themeRoundedRectPoints(bounds, 8), bounds, light.Background, dark.Background)
+		query := woxui.Rect{X: bounds.X + 4, Y: bounds.Y + 5, Width: max(float32(0), bounds.Width-8), Height: 10}
+		result := woxui.Rect{X: bounds.X + 4, Y: bounds.Y + 19, Width: max(float32(0), bounds.Width-8), Height: 5}
+		fillThemeDiagonalRect(displayList, query, bounds, light.QueryBackground, dark.QueryBackground)
+		fillThemeDiagonalRect(displayList, result, bounds, light.SelectedBackground, dark.SelectedBackground)
+		drawThemeDiagonalLine(displayList, bounds, 1.5)
+	}}
+}
+
+// themeRoundedRectPoints approximates Flutter's clipped 8px swatch corners with one portable convex path.
+func themeRoundedRectPoints(bounds woxui.Rect, radius float32) []woxui.Point {
+	radius = min(max(float32(0), radius), min(bounds.Width, bounds.Height)/2)
+	if radius == 0 {
+		return []woxui.Point{{X: bounds.X, Y: bounds.Y}, {X: bounds.X + bounds.Width, Y: bounds.Y}, {X: bounds.X + bounds.Width, Y: bounds.Y + bounds.Height}, {X: bounds.X, Y: bounds.Y + bounds.Height}}
+	}
+	const half = float32(0.5)
+	const near = float32(0.134)
+	const far = float32(0.866)
+	left, top := bounds.X, bounds.Y
+	right, bottom := bounds.X+bounds.Width, bounds.Y+bounds.Height
+	return []woxui.Point{
+		{X: right - radius, Y: top}, {X: right - radius*half, Y: top + radius*near}, {X: right - radius*near, Y: top + radius*half}, {X: right, Y: top + radius},
+		{X: right, Y: bottom - radius}, {X: right - radius*near, Y: bottom - radius*half}, {X: right - radius*half, Y: bottom - radius*near}, {X: right - radius, Y: bottom},
+		{X: left + radius, Y: bottom}, {X: left + radius*half, Y: bottom - radius*near}, {X: left + radius*near, Y: bottom - radius*half}, {X: left, Y: bottom - radius},
+		{X: left, Y: top + radius}, {X: left + radius*near, Y: top + radius*half}, {X: left + radius*half, Y: top + radius*near}, {X: left + radius, Y: top},
+	}
+}
+
+// fillThemeDiagonalRect clips one surface against both halves of the AUTO preview diagonal.
+func fillThemeDiagonalRect(displayList *woxui.DisplayList, rect, splitBounds woxui.Rect, light, dark woxui.Color) {
+	fillThemeDiagonalPolygon(displayList, themeDiagonalRectPoints(rect, splitBounds), splitBounds, light, dark)
+}
+
+// fillThemeDiagonalPolygon paints both AUTO colors inside one convex surface.
+func fillThemeDiagonalPolygon(displayList *woxui.DisplayList, points []woxui.Point, splitBounds woxui.Rect, light, dark woxui.Color) {
+	if points := themeDiagonalPolygon(points, splitBounds, true); len(points) >= 3 {
+		displayList.FillConvexPolygon(points, light)
+	}
+	if points := themeDiagonalPolygon(points, splitBounds, false); len(points) >= 3 {
+		displayList.FillConvexPolygon(points, dark)
+	}
+}
+
+// themeDiagonalRectPoints limits a rectangular preview surface to its visible bounds.
+func themeDiagonalRectPoints(rect, splitBounds woxui.Rect) []woxui.Point {
+	if rect.Width <= 0 || rect.Height <= 0 || splitBounds.Width <= 0 || splitBounds.Height <= 0 {
+		return nil
+	}
+	left := max(rect.X, splitBounds.X)
+	top := max(rect.Y, splitBounds.Y)
+	right := min(rect.X+rect.Width, splitBounds.X+splitBounds.Width)
+	bottom := min(rect.Y+rect.Height, splitBounds.Y+splitBounds.Height)
+	if right <= left || bottom <= top {
+		return nil
+	}
+	rect = woxui.Rect{X: left, Y: top, Width: right - left, Height: bottom - top}
+	return []woxui.Point{{X: rect.X, Y: rect.Y}, {X: rect.X + rect.Width, Y: rect.Y}, {X: rect.X + rect.Width, Y: rect.Y + rect.Height}, {X: rect.X, Y: rect.Y + rect.Height}}
+}
+
+// themeDiagonalPolygon clips a convex surface to one AUTO preview half-plane.
+func themeDiagonalPolygon(points []woxui.Point, splitBounds woxui.Rect, light bool) []woxui.Point {
+	if len(points) < 3 || splitBounds.Width <= 0 || splitBounds.Height <= 0 {
+		return nil
+	}
+	value := func(point woxui.Point) float32 {
+		return (point.X-splitBounds.X)*splitBounds.Height + (point.Y-splitBounds.Y)*splitBounds.Width - splitBounds.Width*splitBounds.Height
+	}
+	inside := func(v float32) bool {
+		if light {
+			return v <= 0
+		}
+		return v >= 0
+	}
+	clipped := make([]woxui.Point, 0, 5)
+	appendPoint := func(point woxui.Point) {
+		if len(clipped) == 0 || clipped[len(clipped)-1] != point {
+			clipped = append(clipped, point)
+		}
+	}
+	for index, current := range points {
+		next := points[(index+1)%len(points)]
+		currentValue, nextValue := value(current), value(next)
+		currentInside, nextInside := inside(currentValue), inside(nextValue)
+		if currentInside {
+			appendPoint(current)
+		}
+		if currentInside != nextInside {
+			t := currentValue / (currentValue - nextValue)
+			appendPoint(woxui.Point{X: current.X + (next.X-current.X)*t, Y: current.Y + (next.Y-current.Y)*t})
+		}
+	}
+	if len(clipped) > 1 && clipped[0] == clipped[len(clipped)-1] {
+		clipped = clipped[:len(clipped)-1]
+	}
+	return clipped
+}
+
+// themeDiagonalRectPolygon retains the rectangle helper used by focused geometry checks.
+func themeDiagonalRectPolygon(rect, splitBounds woxui.Rect, light bool) []woxui.Point {
+	return themeDiagonalPolygon(themeDiagonalRectPoints(rect, splitBounds), splitBounds, light)
+}
+
+// drawThemeDiagonalLine separates the light and dark preview halves with Flutter's subtle dark rule.
+func drawThemeDiagonalLine(displayList *woxui.DisplayList, bounds woxui.Rect, width float32) {
+	half := width / 2
+	displayList.FillConvexPolygon([]woxui.Point{
+		{X: bounds.X + bounds.Width - half, Y: bounds.Y},
+		{X: bounds.X + bounds.Width + half, Y: bounds.Y},
+		{X: bounds.X + half, Y: bounds.Y + bounds.Height},
+		{X: bounds.X - half, Y: bounds.Y + bounds.Height},
+	}, woxui.Color{A: 38})
+}
+
 func themeActions(props ThemeSettingsProps, theme ThemeCatalogItem) []woxwidget.Widget {
 	busy := props.Operation != ""
 	button := func(id, label, operation string, disabled bool) woxwidget.Widget {
 		if props.Operation == operation+":"+theme.ID {
 			label += "…"
 		}
-		width := max(float32(88), float32(len([]rune(label)))*7+34)
-		return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, Width: width, Height: 36, Disabled: busy || disabled, Variant: woxcomponent.ButtonSecondary, OnTap: func() {
+		return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, Height: 36, IntrinsicWidth: true, Disabled: busy || disabled, Variant: woxcomponent.ButtonOutline, OnTap: func() {
 			if props.OnOperation != nil {
 				props.OnOperation(operation)
 			}

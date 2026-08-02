@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 
+	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -187,7 +188,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 	queryWidth := contentWidth
 	glanceWidth := float32(0)
 	if snapshot.glance != nil {
-		metrics, _ := a.window.MeasureText(strings.TrimSpace(snapshot.glance.Text), woxui.TextStyle{Size: snapshot.densityMetrics.scaled(15)})
+		metrics, _ := a.window.MeasureText(strings.TrimSpace(snapshot.glance.Text), woxui.TextStyle{Size: snapshot.densityMetrics.scaled(woxcomponent.GlanceFontSize)})
 		glanceWidth = metrics.Size.Width + snapshot.densityMetrics.scaled(20)
 		if !snapshot.hideGlanceIcon && snapshot.glance.Icon.ImageData != "" {
 			glanceWidth += snapshot.densityMetrics.scaled(21)
@@ -227,7 +228,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 // queryViewProps prepares text slices and measurements without exposing controller state to the view.
 func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launcherview.LauncherQueryProps {
 	caretHeight := snapshot.densityMetrics.scaled(34)
-	style := woxui.TextStyle{Size: snapshot.densityMetrics.scaled(28)}
+	style := woxui.TextStyle{Size: snapshot.densityMetrics.scaled(woxcomponent.QueryFontSize)}
 	queryFocused := snapshot.queryFocused
 	state := snapshot.editing
 	runes := []rune(state.Text)
@@ -404,7 +405,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 		tails, tailWidth, tailHeight := a.resultTailViewProps(result.Tails, tailLayoutWidth, densityMetrics)
 		titleHeight := float32(0)
 		if result.SubTitle == "" {
-			metrics, _ := a.window.MeasureText(result.Title, woxui.TextStyle{Size: densityMetrics.scaled(15)})
+			metrics, _ := a.window.MeasureText(result.Title, woxui.TextStyle{Size: densityMetrics.scaled(woxcomponent.ResultTitleFontSize)})
 			titleHeight = metrics.Size.Height
 		}
 		items = append(items, launcherview.LauncherResultItem{
@@ -429,7 +430,7 @@ func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityM
 	textPadding := densityMetrics.scaled(16)
 	textHeight := densityMetrics.scaled(22)
 	defaultImageSize := densityMetrics.scaled(20)
-	style := woxui.TextStyle{Size: densityMetrics.scaled(11)}
+	style := woxui.TextStyle{Size: densityMetrics.scaled(woxcomponent.TailFontSize)}
 	// Flutter's one-third cap includes the 10 px leading and 5 px trailing tail padding; the row owns those gaps in Go UI, so only the inner tail width is reserved here.
 	maximum := max(float32(0), rowWidth/3-tailOuterPadding)
 	maximumTextWidth := max(float32(0), maximum-tailItemPadding)

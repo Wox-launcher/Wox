@@ -67,8 +67,8 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 	baseHeight := scaledLauncherSize(50, props.DensityScale)
 	iconSize := scaledLauncherSize(28, props.DensityScale)
 	iconGap := scaledLauncherSize(10, props.DensityScale)
-	titleStyle := woxui.TextStyle{Size: scaledLauncherSize(15, props.DensityScale)}
-	subtitleStyle := woxui.TextStyle{Size: scaledLauncherSize(12, props.DensityScale)}
+	titleStyle := woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.ResultTitleFontSize, props.DensityScale)}
+	subtitleStyle := woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.ResultSubtitleFontSize, props.DensityScale)}
 	rowWidth := max(float32(0), props.Width-props.ContainerPadding.Left-props.ContainerPadding.Right)
 	innerRowWidth := max(float32(0), rowWidth-props.ItemPadding.Left-props.ItemPadding.Right)
 	rows := make([]woxwidget.Widget, 0, len(props.Items))
@@ -197,7 +197,7 @@ func launcherResultTailsWithDensity(tails []LauncherResultTail, width, height fl
 				Width: item.Width, Height: item.Height, Radius: item.Height / 2, Color: background, BorderColor: border, BorderWidth: 1,
 				Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding},
 				Child: woxwidget.Align{Width: textWidth, Height: item.Height, Vertical: 0.5, Child: woxwidget.Text{
-					Value: item.Text, Style: woxui.TextStyle{Size: scaledLauncherSize(11, densityScale)}, Color: textColor,
+					Value: item.Text, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, densityScale)}, Color: textColor,
 				}},
 			}
 		}

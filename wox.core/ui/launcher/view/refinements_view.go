@@ -42,7 +42,7 @@ type RefinementsProps struct {
 
 // RefinementToggleWidth measures the shared query accessory.
 func RefinementToggleWidth(props RefinementsProps) float32 {
-	metrics, _ := props.Window.MeasureText(props.Summary, woxui.TextStyle{Size: scaledLauncherSize(11, props.DensityScale), Weight: woxui.FontWeightSemibold})
+	metrics, _ := props.Window.MeasureText(props.Summary, woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold})
 	return min(scaledLauncherSize(150, props.DensityScale), metrics.Size.Width+scaledLauncherSize(37, props.DensityScale))
 }
 
@@ -69,7 +69,7 @@ func RefinementToggle(props RefinementsProps) woxwidget.Widget {
 			Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale), Right: scaledLauncherSize(9, props.DensityScale)}, Child: woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{
 				Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(5, props.DensityScale), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 					refinementFilterIcon(refinementColorWithOpacity(tint, 0.92), props.DensityScale),
-					woxwidget.Text{Value: props.Summary, Style: woxui.TextStyle{Size: scaledLauncherSize(11, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: refinementColorWithOpacity(props.Theme.QueryText, textOpacity)},
+					woxwidget.Text{Value: props.Summary, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: refinementColorWithOpacity(props.Theme.QueryText, textOpacity)},
 				},
 			}},
 		},
@@ -86,10 +86,10 @@ func RefinementsView(props RefinementsProps) woxwidget.Widget {
 		group := make([]woxwidget.Widget, 0, len(refinement.Options)+8)
 		groupWidth := float32(0)
 		if refinement.Title != "" {
-			titleStyle := woxui.TextStyle{Size: scaledLauncherSize(11, props.DensityScale), Weight: woxui.FontWeightSemibold}
+			titleStyle := woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}
 			titleWidth := refinementTextWidth(props.Window, refinement.Title, titleStyle) + scaledLauncherSize(14, props.DensityScale)
 			group = append(group, woxwidget.Container{Width: titleWidth, Height: groupHeight, Padding: woxwidget.Insets{Left: scaledLauncherSize(7, props.DensityScale), Right: scaledLauncherSize(7, props.DensityScale)}, Child: woxwidget.Align{Vertical: 0.5, Child: woxwidget.Text{
-				Value: refinement.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(11, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.68),
+				Value: refinement.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.68),
 			}}})
 			group = append(group,
 				woxwidget.Container{Width: 1, Height: scaledLauncherSize(14, props.DensityScale), Color: refinementColorWithOpacity(props.Theme.ResultSubtitle, 0.13)},
@@ -108,7 +108,7 @@ func RefinementsView(props RefinementsProps) woxwidget.Widget {
 			groupWidth += optionWidth
 		}
 		if refinement.Hotkey != "" {
-			hotkeyStyle := woxui.TextStyle{Size: scaledLauncherSize(11, props.DensityScale), Weight: woxui.FontWeightSemibold}
+			hotkeyStyle := woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}
 			hotkeyWidth := refinementTextWidth(props.Window, refinement.Hotkey, hotkeyStyle)
 			leadingGap := scaledLauncherSize(7, props.DensityScale)
 			trailingGap := scaledLauncherSize(4, props.DensityScale)
@@ -155,7 +155,7 @@ func refinementOption(option RefinementOption, theme woxcomponent.Theme, window 
 	if option.Count != nil {
 		label = fmt.Sprintf("%s (%d)", label, *option.Count)
 	}
-	style := woxui.TextStyle{Size: scaledLauncherSize(11, densityScale), Weight: woxui.FontWeightSemibold}
+	style := woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, densityScale), Weight: woxui.FontWeightSemibold}
 	contentWidth := refinementTextWidth(window, label, style)
 	children := make([]woxwidget.Widget, 0, 2)
 	if option.Icon != nil {

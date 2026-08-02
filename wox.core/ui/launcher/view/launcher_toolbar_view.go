@@ -36,7 +36,7 @@ type measuredLauncherToolbarAction struct {
 // LauncherToolbarView builds the status footer and the actions that fit its current width.
 func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 	contentHeight := scaledLauncherSize(28, props.DensityScale)
-	fontSize := scaledLauncherSize(12, props.DensityScale)
+	fontSize := scaledLauncherSize(woxcomponent.ToolbarFontSize, props.DensityScale)
 	actionGap := scaledLauncherSize(16, props.DensityScale)
 	contentWidth := max(float32(0), props.Width-props.Padding.Left-props.Padding.Right)
 	leftWidth := float32(0)
@@ -119,10 +119,11 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 
 // launcherToolbarActionView builds one label-and-keycap unit and reports its width.
 func launcherToolbarActionView(action LauncherToolbarAction, theme woxcomponent.Theme, window *woxui.Window, densityScale float32) (woxwidget.Widget, float32) {
-	labelStyle := woxui.TextStyle{Size: scaledLauncherSize(12, densityScale)}
+	labelStyle := woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.ToolbarFontSize, densityScale)}
 	labelMetrics, _ := window.MeasureText(action.Label, labelStyle)
 	chip, chipWidth := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
-		Labels: action.HotkeyLabels, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground, Compact: densityScale < 1, Window: window,
+		Labels: action.HotkeyLabels, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground,
+		FontSize: scaledLauncherSize(woxcomponent.TailFontSize, densityScale), Compact: densityScale < 1, Window: window,
 	})
 	contentHeight := scaledLauncherSize(28, densityScale)
 	gap := scaledLauncherSize(8, densityScale)

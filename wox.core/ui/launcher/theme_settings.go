@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"wox/ui/contract"
+	"wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -25,6 +26,8 @@ type themeSettingsTheme struct {
 	IsInstalled   bool   `json:"IsInstalled"`
 	IsUpgradable  bool   `json:"IsUpgradable"`
 	IsAuto        bool   `json:"IsAutoAppearance"`
+	DarkThemeID   string `json:"DarkThemeId"`
+	LightThemeID  string `json:"LightThemeId"`
 	previewValues map[string]string
 }
 
@@ -45,6 +48,10 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageS
 	searchActionTint := snapshot.palette.resultSubtitle
 	selectedIconTint := snapshot.palette.selectedTitle
 	installedTint := woxui.Color{R: 56, G: 176, B: 92, A: 255}
+	autoHintAccent := woxui.Color{R: 33, G: 150, B: 243, A: 255}
+	if themeColorIsDark(snapshot.palette.background) {
+		autoHintAccent = woxui.Color{R: 64, G: 196, B: 255, A: 255}
+	}
 	previewTexts := make([]string, 5)
 	previewSubtitles := make([]string, 5)
 	for index := range previewTexts {
@@ -61,7 +68,8 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageS
 		PreviewLabel: a.translate("i18n:ui_setting_theme_preview"), DescriptionLabel: a.translate("i18n:ui_setting_theme_description"), SystemLabel: a.translate("i18n:ui_setting_theme_system_tag"),
 		AutoAppearanceHint: a.translate("i18n:ui_setting_theme_auto_appearance_hint"), PreviewTitle: a.translate("i18n:ui_theme_preview_title"), PreviewTexts: previewTexts,
 		PreviewSubtitles: previewSubtitles, PreviewOpenLabel: a.translate("i18n:ui_theme_preview_open"), ActiveDetailTab: themeSnap.ThemeDetailTab, Window: a.settingsNativeWindow(),
-		LocateIcon:   a.imageForTint(settingControlIconSource("locate"), &searchActionTint, physicalImageSize(18, imageScale)),
+		LocateIcon:         a.imageForTint(settingControlIconSource("locate"), &searchActionTint, physicalImageSize(18, imageScale)),
+		AutoAppearanceIcon: a.imageForTint(settingControlIconSource("brightness"), &autoHintAccent, physicalImageSize(16, imageScale)), AutoAppearanceAccent: autoHintAccent,
 		ExternalIcon: a.imageForTint(settingControlIconSource("external"), &iconTint, 13), InstalledIcon: a.imageForTint(settingControlIconSource("check-circle"), &installedTint, 20),
 		InstalledSelectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &selectedIconTint, 20),
 		OnSelect:              a.selectTheme,
@@ -98,11 +106,41 @@ func filterThemes(themes []themeSettingsTheme, query string) []filteredTheme {
 
 // themeCatalogItem resolves controller state into one immutable view item.
 func themeCatalogItem(theme themeSettingsTheme, sourceIndex int, snapshot settingsSnapshot) launcherview.ThemeCatalogItem {
+	previewTheme := themeEditorPalette(theme.previewValues).componentTheme()
+	lightTheme := previewTheme
+	darkTheme := previewTheme
+	if theme.IsAuto {
+		lightTheme = themeVariantPreview(snapshot.theme.Themes, theme.LightThemeID, true)
+		darkTheme = themeVariantPreview(snapshot.theme.Themes, theme.DarkThemeID, false)
+	}
 	return launcherview.ThemeCatalogItem{
 		SourceIndex: sourceIndex, ID: theme.ID, Name: theme.Name, Author: theme.Author, URL: theme.URL, Version: theme.Version, Description: theme.Description,
 		IsSystem: theme.IsSystem, IsInstalled: theme.IsInstalled, IsUpgradable: theme.IsUpgradable, IsAuto: theme.IsAuto,
-		Active: theme.ID == snapshot.general.Data.ThemeID, Selected: sourceIndex == snapshot.theme.ThemeSelected, PreviewTheme: themeEditorPalette(theme.previewValues).componentTheme(),
+		Active: theme.ID == snapshot.general.Data.ThemeID, Selected: sourceIndex == snapshot.theme.ThemeSelected,
+		PreviewTheme: previewTheme, LightPreviewTheme: lightTheme, DarkPreviewTheme: darkTheme,
 	}
+}
+
+// themeVariantPreview resolves an AUTO endpoint and keeps Flutter's readable fallback when it is unavailable.
+func themeVariantPreview(themes []themeSettingsTheme, id string, light bool) component.Theme {
+	for _, theme := range themes {
+		if theme.ID == id {
+			return themeEditorPalette(theme.previewValues).componentTheme()
+		}
+	}
+	values := map[string]string{
+		"AppBackgroundColor": "#2B2B2B", "QueryBoxBackgroundColor": "#3D3D3D", "QueryBoxFontColor": "#FFFFFF",
+		"ResultItemTitleColor": "#FFFFFF", "ResultItemSubTitleColor": "#AAAAAA", "ResultItemActiveBackgroundColor": "#4A4A4A",
+		"ResultItemActiveTitleColor": "#FFFFFF", "ResultItemActiveSubTitleColor": "#AAAAAA", "ToolbarBackgroundColor": "#2B2B2B", "ToolbarFontColor": "#FFFFFF",
+	}
+	if light {
+		values = map[string]string{
+			"AppBackgroundColor": "#F5F5F5", "QueryBoxBackgroundColor": "#E8E8E8", "QueryBoxFontColor": "#000000",
+			"ResultItemTitleColor": "#000000", "ResultItemSubTitleColor": "#666666", "ResultItemActiveBackgroundColor": "#D8D8D8",
+			"ResultItemActiveTitleColor": "#000000", "ResultItemActiveSubTitleColor": "#666666", "ToolbarBackgroundColor": "#F5F5F5", "ToolbarFontColor": "#000000",
+		}
+	}
+	return themeEditorPalette(values).componentTheme()
 }
 
 // reloadThemes fetches one catalog while retaining the full resolved palette for local preview.

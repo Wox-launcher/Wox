@@ -39,10 +39,15 @@ func TestPluginSettingsPageUsesFlutterPaneSpacing(t *testing.T) {
 }
 
 func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
+	activeColor := woxui.Color{R: 90, G: 100, B: 110, A: 255}
+	inactiveColor := woxui.Color{R: 120, G: 130, B: 140, A: 255}
 	list := PluginList(PluginListProps{
 		Width: 260, Height: 660,
-		Items: []PluginListItem{{ID: "clipboard", Name: "Clipboard", Status: "1.0.0", Badge: "System"}},
-		Theme: woxcomponent.Theme{},
+		Items: []PluginListItem{
+			{ID: "clipboard", Name: "Clipboard", Status: "1.0.0", Badge: "System", Selected: true},
+			{ID: "shell", Name: "Shell", Status: "1.0.0", Badge: "System"},
+		},
+		Theme: woxcomponent.Theme{ActionSelectedText: activeColor, ResultSubtitle: inactiveColor},
 	})
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
@@ -50,6 +55,15 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 	rows := scroll.Child.(woxwidget.Flex)
 	row := rows.Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	rowContent := row.Child.(woxwidget.Flex)
+	status := rowContent.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
+	if status.Color != activeColor {
+		t.Fatalf("selected plugin subtitle color = %#v, want %#v", status.Color, activeColor)
+	}
+	inactiveRow := rows.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	inactiveStatus := inactiveRow.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
+	if inactiveStatus.Color != inactiveColor {
+		t.Fatalf("unselected plugin subtitle color = %#v, want %#v", inactiveStatus.Color, inactiveColor)
+	}
 	badgeSlot := rowContent.Children[2].(woxwidget.Align)
 	if badgeSlot.Horizontal != 1 || badgeSlot.Vertical != 0.5 {
 		t.Fatalf("badge slot alignment = (%v, %v), want trailing and vertically centered", badgeSlot.Horizontal, badgeSlot.Vertical)
@@ -321,6 +335,17 @@ func TestFormTableDataCellDoesNotOpenEditor(t *testing.T) {
 	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.Theme{}}, FormTableCell{Text: "value"}, 120)
 	if _, interactive := cell.(woxwidget.Gesture); interactive {
 		t.Fatal("plain table cells must not open the row editor")
+	}
+}
+
+func TestFormTableTypographyMatchesSharedTokens(t *testing.T) {
+	props := FormTableFieldProps{ID: "commands", EmptyLabel: "No rows", Theme: woxcomponent.Theme{}}
+	header := formTableHeaderCell(props, FormTableColumn{Label: "Name"}, 120, 0).(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.TextBlock)
+	body := formTableDataCell(props, FormTableCell{Text: "Translate"}, 120).(woxwidget.Container).Child.(woxwidget.TextBlock)
+	empty := formTableEmptyState(props, 240, tableSurfaceEmptyHeight).(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Text)
+
+	if header.Style.Size != woxcomponent.TableHeaderFontSize || body.Style.Size != woxcomponent.TableBodyFontSize || empty.Style.Size != woxcomponent.TableEmptyFontSize {
+		t.Fatalf("table typography = %v/%v/%v, want %v/%v/%v", header.Style.Size, body.Style.Size, empty.Style.Size, woxcomponent.TableHeaderFontSize, woxcomponent.TableBodyFontSize, woxcomponent.TableEmptyFontSize)
 	}
 }
 

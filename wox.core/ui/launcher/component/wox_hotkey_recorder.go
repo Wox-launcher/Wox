@@ -30,18 +30,18 @@ func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
 
 	contentWidth := float32(80)
 	var content woxwidget.Widget = woxwidget.Align{Width: contentWidth, Height: 22, Vertical: 0.5, Child: woxwidget.Text{
-		Value: props.Placeholder, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle,
+		Value: props.Placeholder, Style: woxui.TextStyle{Size: SettingsControlFontSize}, Color: props.Theme.ResultSubtitle,
 	}}
 	if props.Hold && len(props.Labels) > 0 {
 		label := strings.TrimSpace(props.HoldPrefix + " " + strings.Join(props.Labels, " + "))
 		contentWidth = float32(len([]rune(label)))*8 + 2
 		if props.Window != nil {
-			if metrics, err := props.Window.MeasureText(label, woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}); err == nil {
+			if metrics, err := props.Window.MeasureText(label, woxui.TextStyle{Size: SettingsControlFontSize, Weight: woxui.FontWeightSemibold}); err == nil {
 				contentWidth = metrics.Size.Width
 			}
 		}
 		content = woxwidget.Align{Width: contentWidth, Height: 22, Vertical: 0.5, Child: woxwidget.Text{
-			Value: label, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText,
+			Value: label, Style: woxui.TextStyle{Size: SettingsControlFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText,
 		}}
 	} else if len(props.Labels) > 0 {
 		content, contentWidth = WoxHotkey(HotkeyProps{

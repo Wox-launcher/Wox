@@ -96,9 +96,11 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 	for _, item := range props.Items {
 		background := woxui.Color{}
 		titleColor := props.Theme.ResultTitle
+		subtitleColor := props.Theme.ResultSubtitle
 		if item.Selected {
 			background = props.Theme.SelectedBackground
-			titleColor = props.Theme.SelectedTitle
+			titleColor = props.Theme.ActionSelectedText
+			subtitleColor = props.Theme.ActionSelectedText
 		}
 		border := woxui.Color{}
 		if item.Highlighted {
@@ -120,12 +122,14 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 		}
 		rowChildren = append(rowChildren, woxwidget.Container{Width: textWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor},
-			woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+			woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
 		}}})
 		if item.Badge != "" {
-			badge := woxwidget.Container{Radius: 3, BorderColor: props.Theme.ResultSubtitle, BorderWidth: 0.5, Padding: woxwidget.Insets{Left: 4, Top: 1, Right: 4, Bottom: 1}, Child: woxwidget.Text{
-				Value: item.Badge, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle,
-			}}
+			badgeColor := props.Theme.ResultSubtitle
+			if item.Selected {
+				badgeColor = props.Theme.ActionSelectedText
+			}
+			badge := woxcomponent.WoxTag(item.Badge, badgeColor)
 			rowChildren = append(rowChildren, woxwidget.Align{Width: 44, Height: 44, Horizontal: 1, Vertical: 0.5, Child: badge})
 		}
 		radius := float32(4)

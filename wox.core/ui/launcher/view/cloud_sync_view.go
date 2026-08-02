@@ -534,7 +534,7 @@ func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Theme
 		labelWidth = max(float32(220), width-260)
 	}
 	valueWidth := max(buttonWidth, availableWidth-labelWidth-labelGap)
-	button := woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-sync", Label: props.ButtonLabel, Width: buttonWidth, Disabled: !props.ButtonEnabled, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSync, Theme: theme})
+	button := woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-sync", Label: props.ButtonLabel, Width: buttonWidth, Disabled: !props.ButtonEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnSync, Theme: theme})
 	statusLine := props.Label
 	if props.Detail != "" {
 		statusLine += ", " + props.Detail

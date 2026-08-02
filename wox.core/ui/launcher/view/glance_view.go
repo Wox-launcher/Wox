@@ -58,7 +58,7 @@ func (s *glanceViewState) Build(context woxwidget.StateContext, widget any) woxw
 	}
 	text := strings.TrimSpace(props.Text)
 	children = append(children, woxwidget.Container{Width: max(scaledLauncherSize(20, props.DensityScale), textWidth), Child: woxwidget.Text{
-		Value: compactViewText(text, 22), Style: woxui.TextStyle{Size: scaledLauncherSize(15, props.DensityScale)}, Color: foreground,
+		Value: compactViewText(text, 22), Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.GlanceFontSize, props.DensityScale)}, Color: foreground,
 	}})
 	background := woxui.Color{}
 	if s.hovered {

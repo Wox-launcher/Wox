@@ -70,7 +70,7 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		ID: props.ID, Label: props.Label, Hint: props.Label, Width: inputWidth, Height: height, Radius: 4,
 		Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: 6, Bottom: 11}, Transparent: true,
 		FocusRingColor: props.Theme.Cursor, FocusRingOutsets: woxwidget.Insets{Left: leadingWidth, Right: clearWidth + actionsWidth + trailingInset},
-		Style: woxui.TextStyle{Size: 13}, TextColor: props.Theme.ResultTitle, TextAlignmentY: 0.5,
+		Style: woxui.TextStyle{Size: SettingsControlFontSize}, TextColor: props.Theme.ResultTitle, TextAlignmentY: 0.5,
 		Value: props.Value, Focused: props.Focused, Autofocus: props.Autofocus, Controller: props.Controller, MaxLines: 1, Window: props.Window, Theme: props.Theme,
 		OnKey: props.OnKey, OnFocusChange: props.OnFocusChange, OnChanged: props.OnChanged, OnSetValue: props.OnSetValue,
 	})

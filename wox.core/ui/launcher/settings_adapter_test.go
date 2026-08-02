@@ -45,3 +45,17 @@ func TestSettingsRailKeepsCachedIconWhileSelectedTintLoads(t *testing.T) {
 		t.Fatalf("selected navigation icon = %p, want cached SVG %p while the selected tint loads", icon.Source, normalIcon)
 	}
 }
+
+func TestSettingsSectionLabelMatchesFlutterGrouping(t *testing.T) {
+	app := &App{translations: map[string]string{"ui_update_section_updates": "Updates"}}
+
+	if got := app.settingsSectionLabel("network", "HttpProxyEnabled"); got != "" {
+		t.Fatalf("network section label = %q, want no group header", got)
+	}
+	if got := app.settingsSectionLabel("debug", "ShowScoreTail"); got != "" {
+		t.Fatalf("debug section label = %q, want no group header", got)
+	}
+	if got := app.settingsSectionLabel("updates", "EnableAutoUpdate"); got != "Updates" {
+		t.Fatalf("updates section label = %q, want %q", got, "Updates")
+	}
+}

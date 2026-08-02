@@ -25,10 +25,10 @@ func WoxSectionHeader(props SectionHeaderProps) woxwidget.Widget {
 		actionWidth = 0
 	}
 	return woxwidget.Container{Width: props.Width, Height: 43, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: props.Width, Height: 1, Color: props.Theme.PreviewSplit},
+		woxwidget.Container{Width: props.Width, Height: 1, Color: withAlpha(props.Theme.ToolbarText, 26)},
 		woxwidget.Container{Width: props.Width, Height: 42, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: max(float32(0), props.Width-actionWidth), Height: 42, Padding: woxwidget.Insets{Top: 14}, Child: woxwidget.Text{
-				Value: strings.ToUpper(props.Label), Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle,
+				Value: strings.ToUpper(props.Label), Style: woxui.TextStyle{Size: SettingsSectionTitleFontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle,
 			}},
 			action,
 		}}},

@@ -37,6 +37,7 @@ type LauncherGridProps struct {
 	VisualHeight      float32
 	GroupHeaderHeight float32
 	TitleHeight       float32
+	DensityScale      float32
 	Theme             woxcomponent.Theme
 	Results           []LauncherGridResult
 	OnScroll          func(float32)
@@ -50,7 +51,7 @@ func LauncherGridView(props LauncherGridProps) woxwidget.Widget {
 			result := props.Results[index]
 			rows = append(rows, woxwidget.Container{
 				Width: props.Width - 28, Height: props.GroupHeaderHeight, Padding: woxwidget.Insets{Left: 8, Top: 9},
-				Child: woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle},
+				Child: woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.GridHeaderFontSize, props.DensityScale), Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle},
 			})
 			index++
 			continue
@@ -96,7 +97,7 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 	if props.ShowTitle {
 		children = append(children, woxwidget.Container{
 			Width: props.VisualWidth, Height: props.TitleHeight, Padding: woxwidget.Insets{Top: 4},
-			Child: woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle},
+			Child: woxwidget.Text{Value: result.Title, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.GridItemTitleFontSize, props.DensityScale)}, Color: props.Theme.ResultTitle},
 		})
 	}
 	return woxwidget.Gesture{
