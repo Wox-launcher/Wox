@@ -137,19 +137,26 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height, imageS
 	var keepVisible *woxwidget.ScrollRange
 	for index, spec := range specs {
 		spec := spec
+		selected := spec.id == activeID
 		foreground := snapshot.palette.toolbarText
-		if spec.id == activeID {
+		if selected {
 			foreground = snapshot.palette.selectedTitle
 		}
 		var icon *woxui.Image
 		if source := settingNavIconSource(spec.id); source.ImageData != "" {
-			icon = a.imageForTint(source, &foreground, 24)
+			icon = a.imageForTint(source, &snapshot.palette.toolbarText, 24)
+			if selected {
+				// Keep the cached SVG shape while its selected tint is rasterized asynchronously.
+				if selectedIcon := a.imageForTint(source, &foreground, 24); selectedIcon != nil {
+					icon = selectedIcon
+				}
+			}
 		}
 		items = append(items, launcherview.SettingsNavItem{
-			ID: spec.id, Label: a.settingNavLabel(spec), FallbackIcon: spec.icon, Icon: icon, Depth: spec.depth, Parent: spec.parent, Selected: spec.id == activeID,
+			ID: spec.id, Label: a.settingNavLabel(spec), FallbackIcon: spec.icon, Icon: icon, Depth: spec.depth, Parent: spec.parent, Selected: selected,
 			OnTap: func() { a.selectSettingsNavItem(spec) },
 		})
-		if spec.id == activeID {
+		if selected {
 			keepVisible = &woxwidget.ScrollRange{Start: float32(index * 50), End: float32(index*50 + 46)}
 		}
 	}
