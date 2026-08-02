@@ -94,7 +94,6 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 	viewportHeight := max(float32(0), props.Height-headerHeight)
 	rows := make([]woxwidget.Widget, 0, len(props.Items))
 	for _, item := range props.Items {
-		item := item
 		background := woxui.Color{}
 		titleColor := props.Theme.ResultTitle
 		if item.Selected {
@@ -194,12 +193,10 @@ func PluginFilterPanel(props PluginFilterPanelProps) woxwidget.Widget {
 	rows := make([]woxwidget.Widget, 0, len(props.Options)+len(props.Runtimes)+2)
 	rows = append(rows, woxwidget.Container{Width: innerWidth, Height: 30, Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}})
 	for _, option := range props.Options {
-		option := option
 		rows = append(rows, pluginFilterRow(option, innerWidth, rowHeight, props))
 	}
 	rows = append(rows, woxwidget.Container{Width: innerWidth, Height: 30, Padding: woxwidget.Insets{Top: 9}, Child: woxwidget.Text{Value: props.RuntimeTitle, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}})
 	for _, option := range props.Runtimes {
-		option := option
 		rows = append(rows, pluginFilterRow(option, innerWidth, rowHeight, props))
 	}
 	height := float32(28) + float32(len(rows))*rowHeight
@@ -415,7 +412,6 @@ type PluginTabsProps struct {
 func PluginTabs(props PluginTabsProps) woxwidget.Widget {
 	children := make([]woxwidget.Widget, 0, len(props.Tabs))
 	for _, tab := range props.Tabs {
-		tab := tab
 		underline := woxui.Color{}
 		color := props.Theme.ResultTitle
 		if tab.ID == props.Active {

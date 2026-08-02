@@ -268,8 +268,6 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot, contentWidth, ima
 		if strings.EqualFold(snapshot.cloud.Account.Plan, "pro") && device.RevokedAt > 0 {
 			continue
 		}
-		index := index
-		device := device
 		name := device.DeviceName
 		if strings.TrimSpace(name) == "" {
 			name = device.DeviceID
@@ -345,7 +343,6 @@ func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot, imageSca
 	}
 	items := make([]launcherview.CloudPluginExclusionProps, 0, len(snapshot.general.Data.CloudSyncDisabledPlugins))
 	for index, pluginID := range snapshot.general.Data.CloudSyncDisabledPlugins {
-		index := index
 		pluginID := strings.TrimSpace(pluginID)
 		if pluginID == "" {
 			continue
@@ -440,7 +437,6 @@ func (a *App) cloudActionMenuViewProps(snapshot settingsSnapshot) *launcherview.
 		}
 		actions = actions[:0]
 		for _, plugin := range snapshot.cloud.Plugins {
-			plugin := plugin
 			if strings.TrimSpace(plugin.ID) == "" || excluded[plugin.ID] {
 				continue
 			}
@@ -455,7 +451,6 @@ func (a *App) cloudActionMenuViewProps(snapshot settingsSnapshot) *launcherview.
 	}
 	items := make([]launcherview.CloudActionMenuItemProps, 0, len(actions))
 	for _, entry := range actions {
-		entry := entry
 		onTap := func() { a.runCloudMenuAction(entry.action) }
 		if strings.HasPrefix(entry.action, "plugin:") {
 			pluginID := strings.TrimPrefix(entry.action, "plugin:")
@@ -482,8 +477,6 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalet
 	fields := make([]launcherview.CloudFormFieldProps, 0, len(snapshot.definitions))
 	window := a.formFieldNativeWindow("cloud-form")
 	for index, definition := range snapshot.definitions {
-		index := index
-		definition := definition
 		focused := snapshot.active && snapshot.focused == index
 		state := snapshot.editing
 		if !focused {

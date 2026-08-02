@@ -36,7 +36,6 @@ type SettingsRailProps struct {
 func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 	items := make([]woxwidget.Widget, 0, len(props.Items))
 	for _, item := range props.Items {
-		item := item
 		color := woxui.Color{}
 		border := woxui.Color{}
 		foreground := props.Theme.ToolbarText
@@ -158,7 +157,6 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 	rows := make([]woxwidget.Widget, 0, len(props.Results))
 	showIcons := props.Width-32 >= 72
 	for index, result := range props.Results {
-		index := index
 		rowBackground := background
 		titleColor := props.Theme.ResultTitle
 		if index == selected {

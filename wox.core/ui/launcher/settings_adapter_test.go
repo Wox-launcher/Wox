@@ -12,11 +12,14 @@ func TestSettingsRailKeepsCachedIconWhileSelectedTintLoads(t *testing.T) {
 	windows := woxui.NewWindowManager()
 	app := newApp(false, nil, windows, newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
+	app.uiCall = func(callback func()) error {
+		callback()
+		return nil
+	}
 	palette := defaultPalette()
 	cacheKey := func(source woxImage, tint woxui.Color, size int) string {
 		return fmt.Sprintf("%s-svg-%d-tint-%02x%02x%02x%02x", imageKey(source), size, tint.R, tint.G, tint.B, tint.A)
 	}
-	var normalIcon *woxui.Image
 	for _, spec := range settingNavSpecs(false) {
 		source := settingNavIconSource(spec.id)
 		if source.ImageData == "" {
@@ -24,11 +27,10 @@ func TestSettingsRailKeepsCachedIconWhileSelectedTintLoads(t *testing.T) {
 		}
 		icon := &woxui.Image{}
 		app.images[cacheKey(source, palette.toolbarText, 24)] = icon
-		if spec.id == "ui" {
-			normalIcon = icon
-			app.imageRequested[cacheKey(source, palette.selectedTitle, 24)] = source.ImageData
-		}
 	}
+	selectedSource := settingNavIconSource("ui")
+	normalIcon := app.images[cacheKey(selectedSource, palette.toolbarText, 24)]
+	app.imageRequested[cacheKey(selectedSource, palette.selectedTitle, 24)] = selectedSource.ImageData
 	searchSource := settingControlIconSource("search")
 	app.images[cacheKey(searchSource, palette.resultSubtitle, 18)] = &woxui.Image{}
 
@@ -40,6 +42,6 @@ func TestSettingsRailKeepsCachedIconWhileSelectedTintLoads(t *testing.T) {
 	icon := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Image)
 
 	if icon.Source != normalIcon {
-		t.Fatal("selected navigation item replaced its cached SVG while the selected tint was loading")
+		t.Fatalf("selected navigation icon = %p, want cached SVG %p while the selected tint loads", icon.Source, normalIcon)
 	}
 }

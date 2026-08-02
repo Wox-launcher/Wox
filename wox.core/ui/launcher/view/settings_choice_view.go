@@ -180,8 +180,6 @@ func settingsChoiceMenuTop(props SettingsChoiceProps, anchor woxui.Rect, menuHei
 func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProps, state *settingsChoiceState, visible []visibleSettingsChoice, width, height, listHeight, menuPadding float32) woxwidget.Widget {
 	rows := make([]woxwidget.Widget, 0, max(1, len(visible)))
 	for index, visibleChoice := range visible {
-		index := index
-		visibleChoice := visibleChoice
 		choice := visibleChoice.choice
 		selected := choice.Value == props.CurrentValue
 		background := props.Theme.ActionBackground

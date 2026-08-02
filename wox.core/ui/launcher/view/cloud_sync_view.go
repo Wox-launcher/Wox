@@ -614,7 +614,6 @@ func cloudDeviceCard(props CloudDevicesProps, width, height float32, theme woxco
 func cloudPluginExclusionsCard(props CloudPluginExclusionsProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	rows := make([]FormTableRow, 0, len(props.Items))
 	for index, item := range props.Items {
-		item := item
 		rows = append(rows, FormTableRow{Index: index, Cells: []FormTableCell{{Text: item.Name}}})
 	}
 	return FormTableField(FormTableFieldProps{

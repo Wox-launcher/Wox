@@ -394,7 +394,6 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 	start, end := visibleResultRange(len(snapshot.results), offset, height, containerPadding.Top, rowHeight, resultRowGap)
 	items := make([]launcherview.LauncherResultItem, 0, end-start)
 	for index := start; index < end; index++ {
-		index := index
 		result := snapshot.results[index]
 		if result.IsGroup {
 			items = append(items, launcherview.LauncherResultItem{
@@ -556,7 +555,6 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidge
 			if entry.Source != source || strings.TrimSpace(entry.Hotkey) == "" {
 				continue
 			}
-			entry := entry
 			actions = append(actions, launcherview.LauncherToolbarAction{
 				ID: "toolbar-action-" + entry.ID, Label: a.translate(entry.Name), HotkeyLabels: formatHotkeyLabels(entry.Hotkey), OnTap: func() {
 					if entry.Source == actionPanelSourceToolbar {

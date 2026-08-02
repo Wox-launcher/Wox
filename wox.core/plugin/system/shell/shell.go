@@ -947,7 +947,6 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, show
 
 	var results []plugin.QueryResult
 	for _, history := range histories {
-		history := history
 		s.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("History: %s, created_at:%s", history.Command, history.CreatedAt.String()))
 
 		runtimeSessionID := history.SessionID

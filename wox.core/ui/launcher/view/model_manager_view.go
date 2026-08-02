@@ -110,8 +110,6 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 
 	rows := make([]woxwidget.Widget, 0, len(props.Options))
 	for index, option := range props.Options {
-		index := index
-		option := option
 		background := props.Theme.ActionBackground
 		if option.SelectedRow {
 			background = props.Theme.SelectedBackground
@@ -236,8 +234,6 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 	}}}
 	rows := make([]woxwidget.Widget, 0, len(props.Options))
 	for index, option := range props.Options {
-		index := index
-		option := option
 		background := props.Theme.QueryBackground
 		foreground := props.Theme.ActionText
 		if option.SelectedRow {

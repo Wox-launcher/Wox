@@ -111,7 +111,6 @@ func ensureHoldKeyListener() error {
 				return false
 			}
 			for _, hcb := range callbacks {
-				hcb := hcb
 				util.Go(util.NewTraceContext(), fmt.Sprintf("hold hotkey release: %s", modifierKeyLogLabel(hcb.key)), func() {
 					hcb.onRelease()
 				})

@@ -136,7 +136,6 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height, imageS
 	items := make([]launcherview.SettingsNavItem, 0, len(specs))
 	var keepVisible *woxwidget.ScrollRange
 	for index, spec := range specs {
-		spec := spec
 		selected := spec.id == activeID
 		foreground := snapshot.palette.toolbarText
 		if selected {
@@ -205,8 +204,6 @@ func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, a
 	results := a.settingsSearchResults(snapshot)
 	items := make([]launcherview.SettingsSearchResult, 0, len(results))
 	for index, result := range results {
-		index := index
-		result := result
 		iconTint := snapshot.palette.resultSubtitle
 		if index == snapshot.search.Selected {
 			iconTint = snapshot.palette.resultTitle
@@ -274,7 +271,6 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 	var keepVisibleKey woxwidget.Key
 	currentSection := ""
 	for index, item := range items {
-		index := index
 		item = a.localizedSettingItem(item)
 		section := a.settingsSectionLabel(snapshot.tab, item.key)
 		if section != currentSection {

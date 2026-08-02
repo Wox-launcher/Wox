@@ -96,7 +96,6 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 
 	rows := make([]woxwidget.Widget, 0, len(props.Items))
 	for _, item := range props.Items {
-		item := item
 		background := woxui.Color{}
 		titleColor := props.Theme.ResultTitle
 		subtitleColor := props.Theme.ResultSubtitle

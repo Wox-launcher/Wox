@@ -31,7 +31,6 @@ const runtimeSettingRowHeight = float32(72)
 func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settingItem, width, height float32) woxwidget.Widget {
 	statuses := make([]launcherview.RuntimeStatus, 0, len(snapshot.runtime.Statuses))
 	for _, status := range snapshot.runtime.Statuses {
-		status := status
 		version := strings.TrimSpace(status.HostVersion)
 		if version != "" && !strings.HasPrefix(strings.ToLower(version), "v") {
 			version = "v" + version
@@ -64,7 +63,6 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 	}
 	rows := make([]launcherview.RuntimeSettingRow, 0, len(items))
 	for index, item := range items {
-		index := index
 		item := a.localizedSettingItem(item)
 		state := woxui.TextEditingState{Text: item.value}
 		focused := snapshot.general.EditKey == item.key

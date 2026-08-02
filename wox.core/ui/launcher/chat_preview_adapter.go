@@ -145,7 +145,6 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 	items := make([]previewview.ChatCatalogItemProps, 0, count)
 	if snapshot.panel == "history" {
 		for index, chat := range snapshot.chats {
-			index := index
 			chatID := chat.ID
 			title := strings.TrimSpace(chat.Title)
 			if title == "" {
@@ -166,8 +165,6 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 		}
 	} else {
 		for index, command := range commands {
-			index := index
-			command := command
 			groupLabel := ""
 			if grouped {
 				if command.group == "models" {
@@ -581,7 +578,6 @@ func (a *App) chatQuestionProps(snapshot *chatPreviewSnapshot, palette uiPalette
 	}
 	props.Options = make([]previewview.ChatQuestionOptionProps, 0, len(question.Options))
 	for index, option := range question.Options {
-		index := index
 		label := option.Title
 		if option.SubTitle != "" {
 			label += " — " + option.SubTitle

@@ -206,8 +206,6 @@ func (s *launcherState) buildQuery(width, height float32) woxwidget.Widget {
 func (s *launcherState) buildResults(width, height float32) woxwidget.Widget {
 	rows := make([]woxwidget.Widget, 0, len(results))
 	for index, result := range results {
-		index := index
-		result := result
 		selected := index == s.selected
 		background := woxui.Color{}
 		subtitle := woxui.Color{R: 166, G: 176, B: 190, A: 255}

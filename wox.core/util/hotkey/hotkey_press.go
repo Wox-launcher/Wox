@@ -289,7 +289,6 @@ func cancelPressModifierPendingForDouble(rawKey keyboard.Key) {
 
 func dispatchPressModifierTriggers(triggers []modifierPressTrigger) {
 	for _, trigger := range triggers {
-		trigger := trigger
 		callback, ok := pressModifierCallbacks.Load(trigger.combo)
 		if !ok || callback == nil {
 			continue

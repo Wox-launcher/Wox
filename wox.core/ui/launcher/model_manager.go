@@ -95,8 +95,6 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 	}
 	options := make([]launcherview.ModelManagerOption, 0, len(snapshot.options))
 	for index, option := range snapshot.options {
-		index := index
-		option := option
 		selected := modelOptionID(option) == snapshot.selected
 		usable := modelOptionUsable(snapshot.kind, option)
 		actionState := resolveModelManagerOptionAction(snapshot.kind, option, selected, snapshot.busy != "" || snapshot.loading, downloadLabel, retryLabel, extractingLabel, finalizingLabel)

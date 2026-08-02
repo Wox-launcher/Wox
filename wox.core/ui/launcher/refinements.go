@@ -31,7 +31,6 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height float32) 
 		}
 		converted := make([]launcherview.RefinementOption, 0, len(options))
 		for _, option := range options {
-			option := option
 			refinementID := refinement.ID
 			converted = append(converted, launcherview.RefinementOption{
 				Value: option.Value, Label: a.translate(option.Title), Count: option.Count, Icon: a.imageForSize(option.Icon, int(snapshot.densityMetrics.scaled(16))),

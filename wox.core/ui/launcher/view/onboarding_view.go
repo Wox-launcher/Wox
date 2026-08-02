@@ -138,7 +138,6 @@ func onboardingRail(props OnboardingProps, active int, height float32) woxwidget
 	}
 	rows := make([]woxwidget.Widget, 0, len(props.Steps))
 	for index, step := range props.Steps {
-		index := index
 		rows = append(rows, onboardingRailStep(step, index, active, innerWidth, func() {
 			if props.OnStep != nil {
 				props.OnStep(index)
@@ -308,7 +307,6 @@ func onboardingPermissions(props OnboardingProps, width, height float32) woxwidg
 	rows := make([]woxwidget.Widget, 0, len(props.Permissions))
 	rowHeight := height / max(float32(1), float32(len(props.Permissions)))
 	for _, permission := range props.Permissions {
-		permission := permission
 		status := props.Labels["permission.authorize"]
 		var action woxwidget.Widget
 		if permission.Ready {

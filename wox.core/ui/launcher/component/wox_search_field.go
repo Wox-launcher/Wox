@@ -89,7 +89,6 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 		})})
 	}
 	for _, action := range props.Actions {
-		action := action
 		width := action.Width
 		if width <= 0 {
 			width = 30

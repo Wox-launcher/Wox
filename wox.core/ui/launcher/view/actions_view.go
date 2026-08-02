@@ -101,7 +101,6 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 	panelWidth, innerWidth, panelHeight, visibleRows := actionPanelGeometry(props)
 	rows := make([]woxwidget.Widget, 0, max(1, len(props.Items)))
 	for _, item := range props.Items {
-		item := item
 		selected := item.Index == props.Selected
 		background := woxui.Color{}
 		foreground := props.Theme.ActionText

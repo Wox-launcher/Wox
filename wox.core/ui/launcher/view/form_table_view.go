@@ -462,7 +462,6 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 		}),
 	)
 	for index, action := range row.TrailingActions {
-		action := action
 		actionID := action.ID
 		if actionID == "" {
 			actionID = fmt.Sprintf("trailing-%d", index)
@@ -640,7 +639,6 @@ func FormTableList(props FormTableListProps) woxwidget.Widget {
 	viewportHeight := max(float32(48), props.Height-footerHeight-statusHeight)
 	rows := make([]woxwidget.Widget, 0, len(props.Rows))
 	for index, value := range props.Rows {
-		index := index
 		background := props.Theme.QueryBackground
 		foreground := props.Theme.ActionText
 		if index == props.Selected {

@@ -73,7 +73,6 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 	innerRowWidth := max(float32(0), rowWidth-props.ItemPadding.Left-props.ItemPadding.Right)
 	rows := make([]woxwidget.Widget, 0, len(props.Items))
 	for _, item := range props.Items {
-		item := item
 		background := woxui.Color{}
 		title := props.Theme.ResultTitle
 		subtitle := props.Theme.ResultSubtitle

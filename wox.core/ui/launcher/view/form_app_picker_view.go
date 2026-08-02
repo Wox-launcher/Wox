@@ -35,7 +35,6 @@ func FormAppPickerView(props FormAppPickerProps) woxwidget.Widget {
 	viewportHeight := max(float32(58), props.Height-footerHeight)
 	rows := make([]woxwidget.Widget, 0, len(props.Candidates))
 	for index, candidate := range props.Candidates {
-		index := index
 		foreground := props.Theme.ActionText
 		if index == props.Selected {
 			foreground = props.Theme.SelectedTitle

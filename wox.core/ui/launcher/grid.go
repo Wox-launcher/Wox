@@ -73,7 +73,6 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height float32) wox
 	visible := visibleGridResults(snapshot.results, layout.Columns, cellHeight, scroll.offset, height)
 	results := make([]launcherview.LauncherGridResult, 0, len(snapshot.results))
 	for index, result := range snapshot.results {
-		index := index
 		item := launcherview.LauncherGridResult{
 			ID: result.ID, Title: result.Title, Group: result.IsGroup, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 		}

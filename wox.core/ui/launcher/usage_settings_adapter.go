@@ -15,7 +15,6 @@ func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height fl
 	theme := snapshot.palette.componentTheme()
 	periods := make([]launcherview.UsagePeriod, 0, 4)
 	for _, id := range []string{"7d", "30d", "365d", "all"} {
-		id := id
 		periods = append(periods, launcherview.UsagePeriod{
 			ID: id, Label: a.translate("i18n:" + usagePeriodLabelKey(id)), Selected: id == snapshot.usage.Period,
 			OnSelect: func() {

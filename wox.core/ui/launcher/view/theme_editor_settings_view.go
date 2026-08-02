@@ -541,7 +541,6 @@ func themeEditorControlPane(props ThemeEditorSettingsProps, width, height float3
 func themeEditorGroupSelector(props ThemeEditorSettingsProps, width, height float32) woxwidget.Widget {
 	chips := make([]woxwidget.Widget, 0, len(props.Groups))
 	for index, group := range props.Groups {
-		index := index
 		chipWidth := max(float32(54), group.LabelWidth+24)
 		if group.LabelWidth <= 0 {
 			chipWidth = max(float32(54), float32(utf8.RuneCountInString(group.Label))*7+24)
@@ -598,7 +597,6 @@ func themeEditorTokens(props ThemeEditorSettingsProps, width, height float32) wo
 	group := props.Groups[props.ActiveGroup]
 	cards := make([]woxwidget.Widget, 0, len(group.Tokens))
 	for _, token := range group.Tokens {
-		token := token
 		cards = append(cards, themeEditorTokenCard(props, token, 190, min(float32(44), height)))
 	}
 	contentWidth := max(width, float32(len(cards))*190+float32(max(0, len(cards)-1))*12)
