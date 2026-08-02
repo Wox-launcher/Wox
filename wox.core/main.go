@@ -379,7 +379,7 @@ func run() {
 	}
 
 	if util.IsWindows() {
-		loaderPath := filepath.Join(util.GetLocation().GetUIDirectory(), "go", "WebView2Loader.dll")
+		loaderPath := filepath.Join(util.GetLocation().GetOthersDirectory(), "webview", "WebView2Loader.dll")
 		if util.IsFileExists(loaderPath) {
 			if err := os.Setenv("WOX_WEBVIEW2_LOADER_PATH", loaderPath); err != nil {
 				util.GetLogger().Warn(ctx, fmt.Sprintf("failed to configure embedded WebView2 loader: %s", err.Error()))

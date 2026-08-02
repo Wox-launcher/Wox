@@ -26,7 +26,7 @@ The Go process currently supports the Wox query protocol, list and grid results,
 
 The settings domain state has been split into 13 per-domain settings controllers (about, privacy, usage, update, runtime, data, network, appearance, ai, hotkey, theme, plugin, cloud) plus a `settingsSearchController`, all with zero back-dependency on `App`. Each controller owns its slice of settings state and exposes a `Snapshot()` for the view layer; `settingsSnapshot` is now a nested struct of per-domain snapshots rather than a flat 90-field mirror. `App` retains only window-level settings state (tab, row, note, saving) and delegates the `settingsData` payload to `generalSettingsController`'s `sharedEditState`. Cross-domain reads (e.g. query domain reading `UsePinYin`) still go through `App` getters, and the settings search controller aggregates matches from each controller via a `Searchable` interface.
 
-Windows builds embed the checked-in `WebView2Loader.dll`, extract it under the Wox data directory, and set `WOX_WEBVIEW2_LOADER_PATH` before the first WebView opens. Linux builds do not require WebKitGTK headers, but WebView previews need a WebKitGTK 4.1 or 4.0 runtime installed.
+Windows builds embed the checked-in `resource/others/webview/WebView2Loader.dll`, extract it under the Wox data directory, and set `WOX_WEBVIEW2_LOADER_PATH` before the first WebView opens. Linux builds do not require WebKitGTK headers, but WebView previews need a WebKitGTK 4.1 or 4.0 runtime installed.
 
 ## macOS memory baseline and renderer invariants
 

@@ -83,7 +83,7 @@ clean:
 
 ui-resources:
 ifeq ($(PLATFORM),windows)
-	@echo "WebView2Loader.dll is managed under resource/ui/go for Windows builds"
+	@echo "WebView2Loader.dll is managed under resource/others/webview for Windows builds"
 else
 	@echo "The embedded Go UI does not require staged resources on $(PLATFORM)"
 endif
