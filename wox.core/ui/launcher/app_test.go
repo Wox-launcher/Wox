@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"strings"
 	"testing"
 
 	"wox/common"
@@ -64,6 +65,20 @@ func TestQueryCanFocusWhileChatPreviewIsActive(t *testing.T) {
 	}
 }
 
+func TestQueryCanFocusWhileTerminalSearchIsOpen(t *testing.T) {
+	app := &App{terminalPreview: &terminalPreviewState{SearchOpen: true}}
+	if !app.queryCanFocus() {
+		t.Fatal("terminal search prevented pointer focus from returning to the query input")
+	}
+}
+
+func TestTerminalSearchIgnoresKeyUp(t *testing.T) {
+	app := &App{terminalPreview: &terminalPreviewState{SearchOpen: true, Matches: []terminalMatch{{start: 0, end: 2}, {start: 3, end: 5}}, MatchIndex: 0}}
+	if app.onTerminalPreviewKey(woxui.KeyEvent{Key: woxui.KeyEnter}) || app.terminalPreview.MatchIndex != 0 {
+		t.Fatal("terminal search advanced on Enter key-up")
+	}
+}
+
 func TestLauncherWindowOriginKeepsBottomQueryBoxAnchored(t *testing.T) {
 	params := showAppParams{QueryBoxAtBottom: true}
 	current := woxui.Rect{X: 92, Y: 200, Width: 760, Height: 420}
@@ -109,6 +124,17 @@ func TestHotkeyMatchesOnlyKeyDown(t *testing.T) {
 	}
 	if hotkeyMatches("cmd+t", woxui.KeyEvent{Key: "t", Modifiers: woxui.KeyModifierMeta, Down: true, Composing: true}) {
 		t.Fatal("composing key unexpectedly matched Cmd+T")
+	}
+	searchHotkey := primaryHotkey("shift+f")
+	primaryModifier := woxui.KeyModifierControl
+	if strings.HasPrefix(searchHotkey, "command+") {
+		primaryModifier = woxui.KeyModifierMeta
+	}
+	if !hotkeyMatches(searchHotkey, woxui.KeyEvent{Key: "f", Modifiers: woxui.KeyModifierShift | primaryModifier, Down: true}) {
+		t.Fatalf("%s did not match terminal search shortcut", searchHotkey)
+	}
+	if hotkeyMatches(searchHotkey, woxui.KeyEvent{Key: "f", Modifiers: primaryModifier, Down: true}) {
+		t.Fatalf("%s unexpectedly accepted the shortcut without Shift", searchHotkey)
 	}
 }
 

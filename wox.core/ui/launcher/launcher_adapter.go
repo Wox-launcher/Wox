@@ -23,6 +23,7 @@ type viewSnapshot struct {
 	editing               woxui.TextEditingState
 	results               []queryResult
 	resultsQueryID        string
+	queryComplete         bool
 	selected              int
 	hoveredResult         int
 	resultScroll          scrollController
@@ -41,6 +42,7 @@ type viewSnapshot struct {
 	queryFocused          bool
 	queryEnabled          bool
 	chatFullscreen        bool
+	terminalFullscreen    bool
 	actionPanel           bool
 	actionSelected        int
 	actionFilter          string
@@ -92,6 +94,7 @@ func (a *App) snapshot() viewSnapshot {
 		editing:               a.editor.State(),
 		results:               append([]queryResult(nil), a.results...),
 		resultsQueryID:        a.resultsQueryID,
+		queryComplete:         a.queryComplete,
 		selected:              a.selected,
 		hoveredResult:         a.hoveredResult,
 		resultScroll:          a.resultScroll,
@@ -110,6 +113,7 @@ func (a *App) snapshot() viewSnapshot {
 		queryFocused:          a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey),
 		queryEnabled:          a.queryCanFocus(),
 		chatFullscreen:        a.chatFullscreen,
+		terminalFullscreen:    a.terminalFullscreen,
 		actionPanel:           a.actionPanel,
 		actionSelected:        a.actionSelected,
 		actionFilter:          actionFilter,
@@ -126,11 +130,12 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	width := frame.Size.Width
 	height := frame.Size.Height
 	queryHeight := float32(0)
-	if !snapshot.show.HideQueryBox && !snapshot.chatFullscreen {
+	previewFullscreen := snapshot.chatFullscreen || snapshot.terminalFullscreen
+	if !snapshot.show.HideQueryBox && !previewFullscreen {
 		queryHeight = snapshot.densityMetrics.queryBoxHeight + snapshot.palette.appPadding.Top
 	}
 	toolbarHeight := float32(0)
-	if !snapshot.show.HideToolbar && !snapshot.chatFullscreen && (len(snapshot.results) > 0 || snapshot.toolbarMsg != nil) {
+	if !snapshot.show.HideToolbar && !previewFullscreen && (len(snapshot.results) > 0 || snapshot.toolbarMsg != nil) {
 		toolbarHeight = snapshot.densityMetrics.toolbarHeight
 	}
 	refinementHeight := float32(0)
@@ -326,7 +331,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidg
 	if !previewVisible {
 		return a.buildResults(snapshot, width, height)
 	}
-	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen)
+	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.terminalFullscreen)
 	if ratio <= 0 {
 		result := snapshot.results[snapshot.selected]
 		preview := a.buildPreview(result, snapshot.palette, width, height)
@@ -413,6 +418,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 		Width: width, Height: height, ContentHeight: contentHeight, Offset: offset, StartIndex: start, RowHeight: rowHeight, RowGap: resultRowGap,
 		ContainerPadding: containerPadding, ItemPadding: rowPadding, ItemRadius: snapshot.palette.resultItemRadius,
 		TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail, Theme: snapshot.palette.componentTheme(), DensityScale: densityMetrics.scale, Items: items,
+		Complete: snapshot.queryComplete,
 		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
 }

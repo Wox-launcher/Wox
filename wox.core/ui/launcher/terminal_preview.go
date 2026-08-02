@@ -78,20 +78,28 @@ type terminalPreviewSnapshot struct {
 	CaseSensitive  bool
 	MatchCount     int
 	MatchIndex     int
+	Matches        []terminalMatch
 }
 
 type terminalMatch struct {
 	start int
+	end   int
 }
 
 // buildTerminalPreview delegates presentation to the pure view while retaining controller-owned text layout caching.
-func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiPalette, width, height float32, tags []previewview.PreviewTag) woxwidget.Widget {
 	key := "terminal\x00" + snapshot.SessionID
+	matches := make([]previewview.TerminalMatch, len(snapshot.Matches))
+	for index, match := range snapshot.Matches {
+		matches[index] = previewview.TerminalMatch{Start: match.start, End: match.end}
+	}
 	return previewview.TerminalPreviewView(previewview.TerminalPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Window: a.window,
 		SessionID: snapshot.SessionID, Command: snapshot.Command, Status: snapshot.Status, Error: snapshot.Error, Text: snapshot.Text,
 		Scroll: snapshot.Scroll, LoadingHistory: snapshot.LoadingHistory, SearchOpen: snapshot.SearchOpen, SearchEditing: snapshot.SearchEditing,
-		CaseSensitive: snapshot.CaseSensitive, MatchCount: snapshot.MatchCount, MatchIndex: snapshot.MatchIndex,
+		CaseSensitive: snapshot.CaseSensitive, MatchCount: snapshot.MatchCount, MatchIndex: snapshot.MatchIndex, Matches: matches,
+		Fullscreen: a.terminalFullscreen, SearchHotkey: strings.Join(formatHotkeyLabels(primaryHotkey("shift+f")), "+"),
+		FullscreenHotkey: strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+"), Tags: tags,
 		LayoutText: func(value string, style woxui.TextStyle, textWidth, lineHeight float32) woxwidget.TextBlockLayout {
 			return a.previewTextLayout(key, value, style, textWidth, lineHeight)
 		},
@@ -99,6 +107,7 @@ func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiP
 		OnSetSearch: a.setTerminalSearchQuery, OnSearchChanged: func(value string) { _ = a.setTerminalSearchQuery(value) },
 		OnSearchKey:  a.onTerminalPreviewKey,
 		OnMoveSearch: a.moveTerminalSearch, OnToggleSearchCase: a.toggleTerminalSearchCase, OnCloseSearch: a.closeTerminalSearch,
+		OnToggleFullscreen: a.toggleTerminalFullscreen, OnTagHover: a.setPreviewTooltip,
 	})
 }
 
@@ -152,6 +161,7 @@ func snapshotTerminalPreview(state *terminalPreviewState) terminalPreviewSnapsho
 	snapshot := terminalPreviewSnapshot{
 		SessionID: state.SessionID, Command: state.Command, Status: state.Status, Error: state.Error, Text: state.Text, Scroll: state.Scroll,
 		LoadingHistory: state.LoadingHistory, SearchOpen: state.SearchOpen, CaseSensitive: state.CaseSensitive, MatchCount: len(state.Matches), MatchIndex: state.MatchIndex,
+		Matches: append([]terminalMatch(nil), state.Matches...),
 	}
 	if state.SearchEditor != nil {
 		snapshot.SearchEditing = state.SearchEditor.State()
@@ -202,6 +212,7 @@ func (a *App) deactivateTerminalPreview() {
 		searchWasOpen = a.terminalPreview.SearchOpen
 		a.terminalPreview = nil
 	}
+	a.terminalFullscreen = false
 	if oldSessionID != "" {
 		a.scheduleTerminalSubscription("")
 	}
@@ -371,7 +382,7 @@ func rebuildTerminalMatches(state *terminalPreviewState, preserveCurrent bool) {
 			break
 		}
 		start := from + index
-		matches = append(matches, terminalMatch{start: start})
+		matches = append(matches, terminalMatch{start: start, end: start + len(query)})
 		from = start + len(query)
 	}
 	state.Matches = matches
@@ -402,6 +413,9 @@ func (a *App) openTerminalSearch() {
 		state.SearchEditor = woxui.NewTextEditor("")
 	}
 	rebuildTerminalMatches(state, false)
+	if a.host != nil {
+		a.host.RequestFocus(previewview.TerminalSearchInputKey(state.SessionID))
+	}
 	a.updateFormTextInput(true)
 	_ = a.window.Invalidate()
 }
@@ -462,13 +476,22 @@ func (a *App) toggleTerminalSearchCase() {
 
 // onTerminalPreviewKey handles preview-local find before launcher navigation sees the keystroke.
 func (a *App) onTerminalPreviewKey(event woxui.KeyEvent) bool {
-	state := a.terminalPreview
-	searchOpen := state != nil && state.SearchOpen
-	if event.Modifiers.HasPrimary() && event.Key == woxui.Key("f") {
-		a.openTerminalSearch()
-		return state != nil
+	if !event.Down || event.Composing {
+		return false
 	}
-	if !searchOpen {
+	state := a.terminalPreview
+	if state == nil {
+		return false
+	}
+	if hotkeyMatches(primaryHotkey("shift+f"), event) {
+		a.openTerminalSearch()
+		return true
+	}
+	if hotkeyMatches(primaryHotkey("b"), event) {
+		a.toggleTerminalFullscreen()
+		return true
+	}
+	if !state.SearchOpen || !a.terminalSearchFocused() {
 		return false
 	}
 	if event.Key == woxui.KeyEscape {
@@ -492,5 +515,19 @@ func (a *App) onTerminalPreviewTextInput(_ woxui.TextInputEvent) bool {
 	if state == nil || !state.SearchOpen || state.SearchEditor == nil {
 		return false
 	}
-	return true
+	return a.terminalSearchFocused()
+}
+
+func (a *App) terminalSearchFocused() bool {
+	return a.host != nil && a.terminalPreview != nil && a.host.HasFocus(previewview.TerminalSearchInputKey(a.terminalPreview.SessionID))
+}
+
+// toggleTerminalFullscreen switches the terminal preview between split and preview-only layout.
+func (a *App) toggleTerminalFullscreen() {
+	if a.terminalPreview == nil {
+		return
+	}
+	a.terminalFullscreen = !a.terminalFullscreen
+	_ = a.applyWindowBounds()
+	_ = a.window.Invalidate()
 }

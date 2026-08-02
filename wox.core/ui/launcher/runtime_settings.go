@@ -179,21 +179,6 @@ func (a *App) saveRuntimeExecutablePath(item settingItem, value string) {
 	})
 }
 
-// runtimeIconSource reuses the colored runtime marks from the Flutter settings implementation.
-func runtimeIconSource(runtime string) woxImage {
-	const pythonIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#0288d1" d="M9.86 2A2.86 2.86 0 0 0 7 4.86v1.68h4.29c.39 0 .71.57.71.96H4.86A2.86 2.86 0 0 0 2 10.36v3.781a2.86 2.86 0 0 0 2.86 2.86h1.18v-2.68a2.85 2.85 0 0 1 2.85-2.86h5.25c1.58 0 2.86-1.271 2.86-2.851V4.86A2.86 2.86 0 0 0 14.14 2zm-.72 1.61c.4 0 .72.12.72.71s-.32.891-.72.891c-.39 0-.71-.3-.71-.89s.32-.711.71-.711"/><path fill="#fdd835" d="M17.959 7v2.68a2.85 2.85 0 0 1-2.85 2.859H9.86A2.85 2.85 0 0 0 7 15.389v3.75a2.86 2.86 0 0 0 2.86 2.86h4.28A2.86 2.86 0 0 0 17 19.14v-1.68h-4.291c-.39 0-.709-.57-.709-.96h7.14A2.86 2.86 0 0 0 22 13.64V9.86A2.86 2.86 0 0 0 19.14 7zM8.32 11.513l-.004.004l.038-.004zm6.54 7.276c.39 0 .71.3.71.89a.71.71 0 0 1-.71.71c-.4 0-.72-.12-.72-.71s.32-.89.72-.89"/></svg>`
-	const nodejsIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="#8bc34a" d="M16 20.003v2h4a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-2v-2h4v-2h-4a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2v2Z"/><path fill="#8bc34a" d="m16 3.003l-12 7v14l4 2h6v-13.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v11.5H8l-2-1.034V11.15l10-5.833l10 5.833v11.703l-10 5.833l-1.745-1.022L13 29.253l3 1.75l12-7v-14Z"/></svg>`
-	const scriptIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke-width="1.5"><path fill="#d7e0ff" d="M18 22H2v-6h3V2h17v6h-4z"/><path stroke="#4147d5" d="M14.25 22h3.25H2v-6h12.25v4"/><path stroke="#4147d5" d="M13.5 22H18V4.5M8 8h7m-7 4h7"/><path stroke="#4147d5" d="M5 16V2h17v6h-4"/></g></svg>`
-	source := scriptIcon
-	switch strings.ToUpper(runtime) {
-	case "PYTHON":
-		source = pythonIcon
-	case "NODEJS":
-		source = nodejsIcon
-	}
-	return woxImage{ImageType: "svg", ImageData: source}
-}
-
 // runtimeFallbackMark remains visible during the first asynchronous SVG decode.
 func runtimeFallbackMark(runtime string) string {
 	switch strings.ToUpper(runtime) {

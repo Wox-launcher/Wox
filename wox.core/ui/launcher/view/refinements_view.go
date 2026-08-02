@@ -182,11 +182,7 @@ func refinementTextWidth(window *woxui.Window, value string, style woxui.TextSty
 }
 
 func refinementFilterIcon(color woxui.Color, densityScale float32) woxwidget.Widget {
-	return woxwidget.Painter{Width: scaledLauncherSize(15, densityScale), Height: scaledLauncherSize(15, densityScale), Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		for index, lineWidth := range []float32{13, 9, 5} {
-			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + scaledLauncherSize(1, densityScale), Y: bounds.Y + scaledLauncherSize(3+float32(index)*4, densityScale), Width: scaledLauncherSize(lineWidth, densityScale), Height: scaledLauncherSize(1.5, densityScale)}, scaledLauncherSize(0.75, densityScale), color)
-		}
-	}}
+	return woxcomponent.FilterListGlyph(scaledLauncherSize(15, densityScale), color)
 }
 
 func refinementColorWithOpacity(color woxui.Color, opacity float32) woxui.Color {

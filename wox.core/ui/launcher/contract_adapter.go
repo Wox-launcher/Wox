@@ -333,25 +333,8 @@ func (a *App) PickFiles(_ context.Context, params common.PickFilesParams) ([]str
 	return []string{path}, nil
 }
 
-// CaptureScreenshot hides the launcher before starting the native capture session.
+// CaptureScreenshot starts the native capture session without changing launcher visibility.
 func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error) {
-	var restoreParams showAppParams
-	wasVisible := false
-	if err := a.runOnUI("prepare screenshot launcher state", func() {
-		wasVisible = a.visible
-		restoreParams = a.show
-	}); err != nil {
-		return common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusFailed, ErrorCode: "capture_failed", ErrorMessage: err.Error()}, nil
-	}
-	if err := a.hideWindow(true); err != nil {
-		return common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusFailed, ErrorCode: "hide_launcher_failed", ErrorMessage: err.Error()}, nil
-	}
-	restoreLauncher := func() error {
-		if !wasVisible {
-			return nil
-		}
-		return a.showWindow(restoreParams)
-	}
 	result, err := woxui.CaptureScreenshot(woxui.ScreenshotOptions{
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, WindowManager: a.windows,
@@ -361,16 +344,9 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 		if strings.Contains(strings.ToLower(err.Error()), "screen recording permission") {
 			errorCode = "permission_denied"
 		}
-		errorMessage := err.Error()
-		if restoreErr := restoreLauncher(); restoreErr != nil {
-			errorMessage += "; failed to restore launcher: " + restoreErr.Error()
-		}
-		return common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusFailed, ErrorCode: errorCode, ErrorMessage: errorMessage}, nil
+		return common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusFailed, ErrorCode: errorCode, ErrorMessage: err.Error()}, nil
 	}
 	if result.Cancelled {
-		if err := restoreLauncher(); err != nil {
-			return common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusFailed, ErrorCode: "restore_launcher_failed", ErrorMessage: err.Error()}, nil
-		}
 		return common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusCancelled}, nil
 	}
 	selection := common.ScreenshotRect{X: float64(result.LogicalSelection.X), Y: float64(result.LogicalSelection.Y), Width: float64(result.LogicalSelection.Width), Height: float64(result.LogicalSelection.Height)}

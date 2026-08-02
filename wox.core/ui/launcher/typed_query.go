@@ -54,7 +54,7 @@ func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryRespo
 	queryContext := queryContext{IsGlobalQuery: response.Response.Context.IsGlobalQuery, PluginID: response.Response.Context.PluginId}
 	if err := a.runOnUI("apply query response", func() {
 		if !a.isDestroyed() {
-			a.applyResults(response.QueryID, results, &layout, &refinements, &queryContext, response.Response.QueryStartTimestamp)
+			a.applyResults(response.QueryID, results, &layout, &refinements, &queryContext, response.Response.QueryStartTimestamp, response.IsFinal)
 		}
 	}); err != nil {
 		log.Printf("dispatch query response: %v", err)
@@ -121,7 +121,7 @@ func (a *App) loadTypedMRU(queryID string) {
 		converted[index].QueryID = queryID
 	}
 	if err := a.runOnUI("apply MRU results", func() {
-		a.applyResults(queryID, converted, nil, nil, nil, 0)
+		a.applyResults(queryID, converted, nil, nil, nil, 0, true)
 	}); err != nil {
 		log.Printf("dispatch MRU results: %v", err)
 	}

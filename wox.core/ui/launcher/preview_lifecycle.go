@@ -70,7 +70,7 @@ func (a *App) selectedPreviewForLifecycle() (queryResult, queryPreview, bool) {
 	if a.layout.ResultPreviewWidthRatio != nil && *a.layout.ResultPreviewWidthRatio >= 0 && *a.layout.ResultPreviewWidthRatio <= 1 {
 		ratio = float32(*a.layout.ResultPreviewWidthRatio)
 	}
-	if a.chatFullscreen {
+	if a.chatFullscreen || a.terminalFullscreen {
 		ratio = 0
 	}
 	if ratio >= 1 {

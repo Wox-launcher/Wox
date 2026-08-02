@@ -162,36 +162,14 @@ func onboardingDemoDesktop(props OnboardingProps, step OnboardingStep, width, he
 	return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Stack{Width: width, Height: height, Children: children}}
 }
 
-// onboardingDemoSearchIcon draws the macOS menu bar magnifier without depending on a font glyph.
+// onboardingDemoSearchIcon reuses the shared SVG search icon.
 func onboardingDemoSearchIcon(color woxui.Color) woxwidget.Widget {
-	return woxwidget.Painter{Width: 16, Height: 16, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		displayList.StrokeRoundedRect(woxui.Rect{X: bounds.X + 2, Y: bounds.Y + 2, Width: 8, Height: 8}, 4, 1.5, color)
-		displayList.FillConvexPolygon([]woxui.Point{
-			{X: bounds.X + 9, Y: bounds.Y + 9},
-			{X: bounds.X + 10, Y: bounds.Y + 8},
-			{X: bounds.X + 14, Y: bounds.Y + 12},
-			{X: bounds.X + 13, Y: bounds.Y + 13},
-		}, color)
-	}}
+	return woxcomponent.SearchGlyph(16, color)
 }
 
-// onboardingDemoClockIcon keeps the Glance glyph optically centered beside its value.
+// onboardingDemoClockIcon reuses the shared SVG clock icon.
 func onboardingDemoClockIcon(color woxui.Color) woxwidget.Widget {
-	return woxwidget.Painter{Width: 16, Height: 16, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		displayList.StrokeRoundedRect(woxui.Rect{X: bounds.X + 1.5, Y: bounds.Y + 1.5, Width: 13, Height: 13}, 6.5, 1.5, color)
-		displayList.FillConvexPolygon([]woxui.Point{
-			{X: bounds.X + 7.25, Y: bounds.Y + 4},
-			{X: bounds.X + 8.75, Y: bounds.Y + 4},
-			{X: bounds.X + 8.75, Y: bounds.Y + 8.5},
-			{X: bounds.X + 7.25, Y: bounds.Y + 8.5},
-		}, color)
-		displayList.FillConvexPolygon([]woxui.Point{
-			{X: bounds.X + 8, Y: bounds.Y + 7.25},
-			{X: bounds.X + 12, Y: bounds.Y + 9.25},
-			{X: bounds.X + 11.3, Y: bounds.Y + 10.55},
-			{X: bounds.X + 7.3, Y: bounds.Y + 8.55},
-		}, color)
-	}}
+	return woxcomponent.ClockGlyph(16, color)
 }
 
 // onboardingDemoCursor draws the outlined arrow used by the macOS pointer.

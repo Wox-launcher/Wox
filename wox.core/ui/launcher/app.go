@@ -74,6 +74,7 @@ type App struct {
 	selectionAnchor        int
 	results                []queryResult
 	resultsQueryID         string
+	queryComplete          bool
 	queryTransitionTimer   *time.Timer
 	queryResizeTimer       *time.Timer
 	queryResizeRevision    uint64
@@ -99,6 +100,7 @@ type App struct {
 	webViewPreviewData     string
 	webViewPreviewError    string
 	chatFullscreen         bool
+	terminalFullscreen     bool
 	actionPanel            bool
 	actionSelected         int
 	actionSelectionKey     string
@@ -568,6 +570,7 @@ func (a *App) setQuery(query plainQuery) {
 	a.resetQueryTransitionLocked()
 	a.results = nil
 	a.resultsQueryID = ""
+	a.queryComplete = false
 	a.selected = -1
 	a.hoveredResult = -1
 	a.resultScroll.reset()
@@ -629,6 +632,7 @@ func (a *App) requestMRU() error {
 		a.resetQueryTransitionLocked()
 		a.results = nil
 		a.resultsQueryID = ""
+		a.queryComplete = false
 		a.selected = -1
 		a.hoveredResult = -1
 		a.resultScroll.reset()
@@ -658,7 +662,7 @@ func (a *App) requestMRU() error {
 	return nil
 }
 
-func (a *App) applyResults(queryID string, results []queryResult, layout *queryLayout, refinements *[]queryRefinement, context *queryContext, queryStartTimestamp int64) {
+func (a *App) applyResults(queryID string, results []queryResult, layout *queryLayout, refinements *[]queryRefinement, context *queryContext, queryStartTimestamp int64, complete bool) {
 	if a.destroyed.Load() || queryID == "" || queryID != a.query.QueryID {
 		return
 	}
@@ -673,6 +677,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	a.resetQueryTransitionLocked()
 	a.results = results
 	a.resultsQueryID = queryID
+	a.queryComplete = complete
 	a.hoveredResult = -1
 	if layout != nil {
 		a.layout = *layout
@@ -770,7 +775,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	var requirementPreview bool
 	var previewVisible bool
 	var toolbarMessageVisible bool
-	var chatFullscreen bool
+	var previewFullscreen bool
 	if err := a.runOnUI("snapshot launcher window bounds", func() {
 		params = a.show
 		results = append([]queryResult(nil), a.results...)
@@ -784,7 +789,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 			formHeight = int(densityMetrics.scaled(formContentMaximumHeight) + 2*densityMetrics.scaled(10))
 		}
 		toolbarMessageVisible = a.toolbarMsg != nil
-		chatFullscreen = a.chatFullscreen
+		previewFullscreen = a.chatFullscreen || a.terminalFullscreen
 		if actionPanel && a.actionFilter != nil {
 			actionCount = len(filteredActionIndices(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg), a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin()))
 		}
@@ -807,7 +812,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	resultRowHeight := int(densityMetrics.resultRowHeight(palette))
 	resultVerticalPadding := int(palette.resultContainerPadding.Top + palette.resultContainerPadding.Bottom)
 	queryAreaHeight := int(densityMetrics.queryBoxHeight + palette.appPadding.Top + palette.appPadding.Bottom)
-	toolbarVisible := !params.HideToolbar && !chatFullscreen && (resultCount > 0 || toolbarMessageVisible)
+	toolbarVisible := !params.HideToolbar && !previewFullscreen && (resultCount > 0 || toolbarMessageVisible)
 	height := 0
 	if !params.HideQueryBox {
 		height += queryAreaHeight

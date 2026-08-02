@@ -1,0 +1,145 @@
+package component
+
+import (
+	"math"
+	"sync"
+
+	"wox/common"
+	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
+	woxsvg "wox/util/svg"
+)
+
+type svgIconCacheKey struct {
+	name       string
+	rasterSize int
+	color      woxui.Color
+}
+
+var svgIconCache sync.Map
+
+// svgIcon renders and caches a categorized common SVG for pure component views.
+func svgIcon(name string, size float32, color woxui.Color) woxwidget.Widget {
+	rasterSize := max(32, int(math.Ceil(float64(size*2))))
+	key := svgIconCacheKey{name: name, rasterSize: rasterSize, color: color}
+	if cached, ok := svgIconCache.Load(key); ok {
+		return woxwidget.Image{Source: cached.(*woxui.Image), Width: size, Height: size}
+	}
+	source := common.UIIcon(name)
+	if source.ImageType != "svg" || source.ImageData == "" {
+		return woxwidget.Painter{Width: size, Height: size}
+	}
+	rgba, err := woxsvg.Render(source.ImageData, rasterSize, rasterSize)
+	if err != nil {
+		return woxwidget.Painter{Width: size, Height: size}
+	}
+	for index := 0; index < len(rgba.Pix); index += 4 {
+		alpha := uint8((uint16(rgba.Pix[index+3])*uint16(color.A) + 127) / 255)
+		rgba.Pix[index] = uint8((uint16(color.R)*uint16(alpha) + 127) / 255)
+		rgba.Pix[index+1] = uint8((uint16(color.G)*uint16(alpha) + 127) / 255)
+		rgba.Pix[index+2] = uint8((uint16(color.B)*uint16(alpha) + 127) / 255)
+		rgba.Pix[index+3] = alpha
+	}
+	image, err := woxui.NewImage(rgba)
+	if err != nil {
+		return woxwidget.Painter{Width: size, Height: size}
+	}
+	actual, _ := svgIconCache.LoadOrStore(key, image)
+	return woxwidget.Image{Source: actual.(*woxui.Image), Width: size, Height: size}
+}
+
+// CloseGlyph returns the shared SVG close icon.
+func CloseGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return svgIcon("control.close", size, color)
+}
+
+// SearchGlyph returns the shared SVG search icon.
+func SearchGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 18
+	}
+	return svgIcon("control.search", size, color)
+}
+
+// FullscreenGlyph returns the shared enter or exit fullscreen icon.
+func FullscreenGlyph(size float32, color woxui.Color, fullscreen bool) woxwidget.Widget {
+	if size <= 0 {
+		size = 18
+	}
+	name := "control.fullscreen"
+	if fullscreen {
+		name = "control.fullscreen-exit"
+	}
+	return svgIcon(name, size, color)
+}
+
+// MenuGlyph returns the shared SVG menu icon.
+func MenuGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 18
+	}
+	return svgIcon("control.menu", size, color)
+}
+
+// ChevronGlyph returns the shared SVG disclosure icon.
+func ChevronGlyph(size float32, color woxui.Color, expanded bool) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	name := "control.chevron-down"
+	if expanded {
+		name = "control.chevron-up"
+	}
+	return svgIcon(name, size, color)
+}
+
+// CopyGlyph returns the shared SVG copy icon.
+func CopyGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 14
+	}
+	return svgIcon("control.copy", size, color)
+}
+
+// EditGlyph returns the shared SVG edit icon.
+func EditGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 14
+	}
+	return svgIcon("control.edit", size, color)
+}
+
+// RefreshGlyph returns the shared SVG refresh icon.
+func RefreshGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 14
+	}
+	return svgIcon("control.refresh", size, color)
+}
+
+// DebugGlyph returns the shared SVG debug icon.
+func DebugGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return svgIcon("settings.debug", size, color)
+}
+
+// ClockGlyph returns the shared SVG clock icon.
+func ClockGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return svgIcon("control.clock", size, color)
+}
+
+// FilterListGlyph returns the shared SVG compact filter-list icon.
+func FilterListGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 15
+	}
+	return svgIcon("control.filter-list", size, color)
+}

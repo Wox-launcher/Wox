@@ -36,6 +36,13 @@ func TestLauncherResultGroupUsesFlutterTitleTypography(t *testing.T) {
 	}
 }
 
+func TestLauncherResultsExposeCompletionState(t *testing.T) {
+	result := LauncherResultsView(LauncherResultsProps{Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50, Complete: true}).(woxwidget.Semantics)
+	if result.Value != "complete" || !result.ReadOnly {
+		t.Fatalf("result completion semantics = value %q readonly %v", result.Value, result.ReadOnly)
+	}
+}
+
 func TestLauncherResultTailsScrollHorizontallyWhenClipped(t *testing.T) {
 	result := LauncherResultsView(LauncherResultsProps{
 		Width: 300, Height: 50, ContentHeight: 50, RowHeight: 50,

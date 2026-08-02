@@ -497,8 +497,7 @@ func (a *App) queryCanFocus() bool {
 		themeEditor = a.themeSettings.ThemeEditor()
 	}
 	formTableActive := a.launcherTableEditor != nil
-	return !a.show.HideQueryBox && !a.chatFullscreen && a.form == nil && !formTableActive && !a.actionPanel &&
+	return !a.show.HideQueryBox && !a.chatFullscreen && !a.terminalFullscreen && a.form == nil && !formTableActive && !a.actionPanel &&
 		(a.requirementForm == nil || !a.requirementForm.active) && (a.triggerConflict == nil || !a.triggerConflict.active) &&
-		(themeEditor == nil || !themeEditor.active) &&
-		(a.terminalPreview == nil || !a.terminalPreview.SearchOpen)
+		(themeEditor == nil || !themeEditor.active)
 }

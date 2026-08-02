@@ -173,7 +173,7 @@ func settingsMacTrafficLight(id string, color woxui.Color, glyph string, glyphCo
 	if hovered {
 		switch glyph {
 		case "×":
-			symbol = settingsMacCloseGlyph(glyphColor)
+			symbol = woxcomponent.CloseGlyph(10, glyphColor)
 		case "−":
 			symbol = woxwidget.Container{Width: 7, Height: 2, Radius: 1, Color: glyphColor}
 		default:
@@ -189,17 +189,6 @@ func settingsMacTrafficLight(id string, color woxui.Color, glyph string, glyphCo
 			onHover("mac-controls", inside)
 		}
 	}, Child: control}
-}
-
-// settingsMacCloseGlyph draws a centered cross without relying on font baseline metrics.
-func settingsMacCloseGlyph(color woxui.Color) woxwidget.Widget {
-	return woxwidget.Painter{Width: 14, Height: 14, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		for step := 0; step < 5; step++ {
-			offset := float32(step)
-			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 4 + offset, Y: bounds.Y + 4 + offset, Width: 2, Height: 2}, 1, color)
-			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 8 - offset, Y: bounds.Y + 4 + offset, Width: 2, Height: 2}, 1, color)
-		}
-	}}
 }
 
 func settingsTitleBarAlpha(color woxui.Color, alpha uint8) woxui.Color {

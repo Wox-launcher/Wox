@@ -12,6 +12,9 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"wox/common"
+	woxsvg "wox/util/svg"
 )
 
 type screenshotEditorOverlayOutcome struct {
@@ -29,6 +32,22 @@ const (
 	screenshotEditorToolArrow
 	screenshotEditorToolMosaic
 )
+
+var screenshotEditorToolIconNames = [...]string{
+	"screenshot.select",
+	"screenshot.rectangle",
+	"screenshot.ellipse",
+	"screenshot.text",
+	"screenshot.arrow",
+	"screenshot.mosaic",
+}
+
+type screenshotEditorIconCacheKey struct {
+	name  string
+	color Color
+}
+
+var screenshotEditorIconCache sync.Map
 
 type screenshotEditorEditMode uint8
 
@@ -443,22 +462,22 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 				displayList.FillRoundedRect(rect, 10, Color{R: 41, G: 255, B: 114, A: 51})
 				foreground = green
 			}
-			drawScreenshotEditorToolIcon(displayList, screenshotEditorTool(index), rect, foreground)
+			drawScreenshotEditorToolbarIcon(displayList, screenshotEditorToolIconNames[index], rect, foreground)
 		}
 		undoColor := Color{R: 255, G: 255, B: 255, A: 97}
 		if len(annotations) > 0 {
 			undoColor.A = 255
 		}
-		drawScreenshotEditorToolbarGlyph(displayList, "↶", undoRect, undoColor)
+		drawScreenshotEditorToolbarIcon(displayList, "control.undo", undoRect, undoColor)
 		scrollColor := Color{R: 255, G: 255, B: 255, A: 255}
 		if scrollingStarting {
 			scrollColor = green
 		}
-		drawScreenshotEditorToolbarGlyph(displayList, "↕", scrollRect, scrollColor)
-		drawScreenshotEditorPinIcon(displayList, pinRect, Color{R: 255, G: 255, B: 255, A: 255})
+		drawScreenshotEditorToolbarIcon(displayList, "screenshot.scrolling-capture", scrollRect, scrollColor)
+		drawScreenshotEditorToolbarIcon(displayList, "screenshot.pin", pinRect, Color{R: 255, G: 255, B: 255, A: 255})
 	}
-	drawScreenshotEditorToolbarGlyph(displayList, "×", cancelRect, Color{R: 255, G: 107, B: 107, A: 255})
-	drawScreenshotEditorToolbarGlyph(displayList, "✓", confirmRect, Color{R: 48, G: 227, B: 122, A: 255})
+	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancelRect, Color{R: 255, G: 107, B: 107, A: 255})
+	drawScreenshotEditorToolbarIcon(displayList, "control.check", confirmRect, Color{R: 48, G: 227, B: 122, A: 255})
 	if !hideTools {
 		var selectedMark *screenshotEditorAnnotation
 		if hasSelectedMark {
@@ -552,18 +571,18 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 		decreaseRect = Rect{X: left + (width-42)/2, Y: cursorY, Width: 42, Height: 42}
 		cursorY += 42
 		displayList.FillRoundedRect(decreaseRect, 10, Color{R: 255, G: 255, B: 255, A: 34})
-		drawScreenshotEditorToolbarGlyph(displayList, "−", decreaseRect, Color{R: 255, G: 255, B: 255, A: 255})
+		drawScreenshotEditorToolbarIcon(displayList, "control.remove", decreaseRect, Color{R: 255, G: 255, B: 255, A: 255})
 		displayList.DrawText(fmt.Sprintf("%.0f", textSize), Rect{X: left, Y: cursorY + 2, Width: width, Height: 18}, TextStyle{Size: 12, Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
 		cursorY += 22
 		increaseRect = Rect{X: left + (width-42)/2, Y: cursorY, Width: 42, Height: 42}
 		cursorY += 52
 		displayList.FillRoundedRect(increaseRect, 10, Color{R: 255, G: 255, B: 255, A: 34})
-		drawScreenshotEditorToolbarGlyph(displayList, "+", increaseRect, Color{R: 255, G: 255, B: 255, A: 255})
+		drawScreenshotEditorToolbarIcon(displayList, "control.add", increaseRect, Color{R: 255, G: 255, B: 255, A: 255})
 	}
 	if selected != nil {
 		deleteRect = Rect{X: left + (width-42)/2, Y: cursorY, Width: 42, Height: 42}
 		displayList.FillRoundedRect(deleteRect, 10, Color{R: 255, G: 255, B: 255, A: 34})
-		drawScreenshotEditorToolbarGlyph(displayList, "×", deleteRect, Color{R: 255, G: 107, B: 107, A: 255})
+		drawScreenshotEditorToolbarIcon(displayList, "control.delete", deleteRect, Color{R: 255, G: 107, B: 107, A: 255})
 	}
 
 	state.mu.Lock()
@@ -576,41 +595,34 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 	state.mu.Unlock()
 }
 
-func drawScreenshotEditorToolIcon(displayList *DisplayList, tool screenshotEditorTool, rect Rect, color Color) {
-	switch tool {
-	case screenshotEditorToolSelect:
-		displayList.StrokeRoundedRect(Rect{X: rect.X + 12, Y: rect.Y + 12, Width: 16, Height: 16}, 1, 2, color)
-		for _, point := range []Point{{X: rect.X + 9, Y: rect.Y + 9}, {X: rect.X + 19, Y: rect.Y + 9}, {X: rect.X + 29, Y: rect.Y + 9}, {X: rect.X + 9, Y: rect.Y + 19}, {X: rect.X + 29, Y: rect.Y + 19}, {X: rect.X + 9, Y: rect.Y + 29}, {X: rect.X + 19, Y: rect.Y + 29}, {X: rect.X + 29, Y: rect.Y + 29}} {
-			displayList.FillRoundedRect(Rect{X: point.X - 1.5, Y: point.Y - 1.5, Width: 3, Height: 3}, 1, color)
-		}
-	case screenshotEditorToolRect:
-		displayList.StrokeRoundedRect(Rect{X: rect.X + 9, Y: rect.Y + 9, Width: 22, Height: 22}, 1, 2, color)
-	case screenshotEditorToolEllipse:
-		drawScreenshotEditorToolbarGlyph(displayList, "○", rect, color)
-	case screenshotEditorToolText:
-		drawScreenshotEditorToolbarGlyph(displayList, "Tᵀ", rect, color)
-	case screenshotEditorToolArrow:
-		drawScreenshotEditorToolbarGlyph(displayList, "↗", rect, color)
-	case screenshotEditorToolMosaic:
-		for row := range 5 {
-			for column := range 5 {
-				if (row+column)%2 == 0 {
-					displayList.FillRect(Rect{X: rect.X + 11 + float32(column)*3.6, Y: rect.Y + 11 + float32(row)*3.6, Width: 3.6, Height: 3.6}, color)
-				}
-			}
-		}
-		displayList.StrokeRoundedRect(Rect{X: rect.X + 10, Y: rect.Y + 10, Width: 20, Height: 20}, 0, 2, color)
+// drawScreenshotEditorToolbarIcon renders the shared SVG at a consistent visual size.
+func drawScreenshotEditorToolbarIcon(displayList *DisplayList, name string, rect Rect, color Color) {
+	key := screenshotEditorIconCacheKey{name: name, color: color}
+	if cached, ok := screenshotEditorIconCache.Load(key); ok {
+		displayList.DrawImage(cached.(*Image), Rect{X: rect.X + 8, Y: rect.Y + 8, Width: 24, Height: 24})
+		return
 	}
-}
-
-func drawScreenshotEditorToolbarGlyph(displayList *DisplayList, glyph string, rect Rect, color Color) {
-	displayList.DrawText(glyph, Rect{X: rect.X + 7, Y: rect.Y + 4, Width: 28, Height: 30}, TextStyle{Size: 24, Weight: FontWeightSemibold}, color)
-}
-
-func drawScreenshotEditorPinIcon(displayList *DisplayList, rect Rect, color Color) {
-	displayList.FillRoundedRect(Rect{X: rect.X + 17, Y: rect.Y + 8, Width: 6, Height: 17}, 1, color)
-	displayList.FillRoundedRect(Rect{X: rect.X + 12, Y: rect.Y + 22, Width: 16, Height: 3}, 1, color)
-	displayList.FillConvexPolygon([]Point{{X: rect.X + 18, Y: rect.Y + 25}, {X: rect.X + 22, Y: rect.Y + 25}, {X: rect.X + 20, Y: rect.Y + 34}}, color)
+	icon := common.UIIcon(name)
+	if icon.ImageType != common.WoxImageTypeSvg || icon.ImageData == "" {
+		return
+	}
+	rgba, err := woxsvg.Render(icon.ImageData, 48, 48)
+	if err != nil {
+		return
+	}
+	for index := 0; index < len(rgba.Pix); index += 4 {
+		alpha := uint8((uint16(rgba.Pix[index+3])*uint16(color.A) + 127) / 255)
+		rgba.Pix[index] = uint8((uint16(color.R)*uint16(alpha) + 127) / 255)
+		rgba.Pix[index+1] = uint8((uint16(color.G)*uint16(alpha) + 127) / 255)
+		rgba.Pix[index+2] = uint8((uint16(color.B)*uint16(alpha) + 127) / 255)
+		rgba.Pix[index+3] = alpha
+	}
+	image, err := NewImage(rgba)
+	if err != nil {
+		return
+	}
+	actual, _ := screenshotEditorIconCache.LoadOrStore(key, image)
+	displayList.DrawImage(actual.(*Image), Rect{X: rect.X + 8, Y: rect.Y + 8, Width: 24, Height: 24})
 }
 
 func drawScreenshotEditorHandles(displayList *DisplayList, selection Rect, color Color) {

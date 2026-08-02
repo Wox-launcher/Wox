@@ -129,26 +129,39 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 			hotkey = woxwidget.Container{Width: hotkeyWidth, Height: ActionRowHeight, Padding: woxwidget.Insets{Left: 10, Top: 6, Right: 5, Bottom: 6}, Child: chip}
 		}
 		labelWidth := max(float32(40), innerWidth-37-hotkeyWidth)
-		rows = append(rows, woxwidget.Gesture{
+		activate := func() {
+			if props.OnSelect != nil {
+				props.OnSelect(item.Index)
+			}
+			if props.OnActivate != nil {
+				props.OnActivate()
+			}
+		}
+		automationID := "action-" + item.ID
+		row := woxwidget.Gesture{
 			ID: "action-" + item.ID,
 			OnHover: func(inside bool) {
 				if inside && props.OnSelect != nil {
 					props.OnSelect(item.Index)
 				}
 			},
-			OnTap: func() {
-				if props.OnSelect != nil {
-					props.OnSelect(item.Index)
-				}
-				if props.OnActivate != nil {
-					props.OnActivate()
-				}
-			},
+			OnTap: activate,
 			Child: woxwidget.Container{Width: innerWidth, Height: ActionRowHeight, Radius: props.ResultItemRadius, Color: background, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 				woxwidget.Container{Width: 37, Height: ActionRowHeight, Padding: woxwidget.Insets{Left: 5, Top: 9, Right: 10, Bottom: 9}, Child: icon},
 				woxwidget.Container{Width: labelWidth, Height: ActionRowHeight, Padding: woxwidget.Insets{Top: 12}, Child: woxwidget.Text{Value: item.Label, Style: woxui.TextStyle{Size: 13}, Color: foreground}},
 				hotkey,
 			}}},
+		}
+		rows = append(rows, woxwidget.Semantics{
+			Key: woxwidget.Key(automationID), AutomationID: automationID, Role: woxui.AccessibilityRoleMenuItem, Label: item.Label, Selected: selected,
+			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+			OnAction: func(action woxui.AccessibilityAction, _ string) error {
+				if action == woxui.AccessibilityActionActivate {
+					activate()
+				}
+				return nil
+			},
+			Child: row,
 		})
 	}
 	if len(rows) == 0 {

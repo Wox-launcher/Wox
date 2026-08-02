@@ -52,6 +52,7 @@ type LauncherResultsProps struct {
 	SelectedTailColor woxui.Color
 	Theme             woxcomponent.Theme
 	DensityScale      float32
+	Complete          bool
 	Items             []LauncherResultItem
 	OnScroll          func(float32)
 }
@@ -161,8 +162,13 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		Width: props.Width, Height: props.ContentHeight, Padding: visiblePadding,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.RowGap, Children: rows},
 	}
+	state := "loading"
+	if props.Complete {
+		state = "complete"
+	}
 	return woxwidget.Semantics{
 		Key: "launcher-results-key", AutomationID: "launcher.results", Role: woxui.AccessibilityRoleList, Label: "Search results",
+		Value: state, ReadOnly: true,
 		Child: launcherResultScrollView(launcherResultScrollProps{
 			Content: content, Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight, Offset: props.Offset,
 			ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll,

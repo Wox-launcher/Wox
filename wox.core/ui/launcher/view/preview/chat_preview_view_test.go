@@ -32,7 +32,7 @@ func TestChatMessageUsesContentWidthAndCenteredDisclosureIcon(t *testing.T) {
 	if row.CrossAxisAlignment != woxwidget.CrossAxisCenter {
 		t.Fatalf("round alignment = %v", row.CrossAxisAlignment)
 	}
-	if _, ok := row.Children[0].(woxwidget.Painter); !ok {
+	if icon, ok := row.Children[0].(woxwidget.Image); !ok || icon.Source == nil {
 		t.Fatalf("round icon = %#v", row.Children[0])
 	}
 }

@@ -76,6 +76,26 @@ func TestScreenshotEditorToolbarMatchesFlutterGeometry(t *testing.T) {
 	}
 }
 
+func TestScreenshotEditorToolbarIconsRenderFromSharedSVGs(t *testing.T) {
+	names := append(screenshotEditorToolIconNames[:],
+		"control.undo",
+		"screenshot.scrolling-capture",
+		"screenshot.pin",
+		"control.close",
+		"control.check",
+		"control.remove",
+		"control.add",
+		"control.delete",
+	)
+	for _, name := range names {
+		displayList := &DisplayList{}
+		drawScreenshotEditorToolbarIcon(displayList, name, Rect{Width: 40, Height: 40}, Color{R: 255, G: 255, B: 255, A: 255})
+		if len(displayList.commands) != 1 || displayList.commands[0].kind != displayCommandDrawImage {
+			t.Fatalf("toolbar icon %q did not render as an SVG image", name)
+		}
+	}
+}
+
 func TestScreenshotEditorAnnotationDrawUndoAndExport(t *testing.T) {
 	state := &screenshotEditorOverlayState{
 		image:        &Image{Width: 1, Height: 1, pixels: []byte{0, 0, 0, 255}},

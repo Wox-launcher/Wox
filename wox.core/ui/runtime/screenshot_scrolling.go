@@ -473,6 +473,6 @@ func drawScreenshotScrollingControls(displayList *DisplayList, frame Size, previ
 		TextStyle{Size: 13, Weight: FontWeightSemibold},
 		Color{R: 255, G: 255, B: 255, A: 153},
 	)
-	drawScreenshotEditorToolbarGlyph(displayList, "×", Rect{X: 24, Y: frame.Height - 56, Width: 40, Height: 40}, Color{R: 255, G: 107, B: 107, A: 255})
-	drawScreenshotEditorToolbarGlyph(displayList, "✓", Rect{X: frame.Width - 64, Y: frame.Height - 56, Width: 40, Height: 40}, Color{R: 48, G: 227, B: 122, A: 255})
+	drawScreenshotEditorToolbarIcon(displayList, "control.close", Rect{X: 24, Y: frame.Height - 56, Width: 40, Height: 40}, Color{R: 255, G: 107, B: 107, A: 255})
+	drawScreenshotEditorToolbarIcon(displayList, "control.check", Rect{X: frame.Width - 64, Y: frame.Height - 56, Width: 40, Height: 40}, Color{R: 48, G: 227, B: 122, A: 255})
 }

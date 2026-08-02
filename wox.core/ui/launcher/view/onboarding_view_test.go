@@ -189,11 +189,11 @@ func TestOnboardingMacDesktopUsesNativeMenuAndCursorGeometry(t *testing.T) {
 	}
 	desktop := onboardingDemoDesktop(OnboardingProps{Theme: woxcomponent.Theme{}}, OnboardingStep{}, 640, 360, false, nil).(woxwidget.Clip)
 	menu := desktop.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Container).Child.(woxwidget.Stack)
-	search := menu.Children[1].Child.(woxwidget.Painter)
+	search := menu.Children[1].Child.(woxwidget.Image)
 	timeSlot := menu.Children[2]
 	cursor := onboardingDemoCursor(1).(woxwidget.Painter)
 
-	if search.Width != 16 || timeSlot.Left-(menu.Children[1].Left+search.Width) != 12 || cursor.Width != 22 || cursor.Height != 30 {
+	if search.Source == nil || search.Width != 16 || timeSlot.Left-(menu.Children[1].Left+search.Width) != 12 || cursor.Width != 22 || cursor.Height != 30 {
 		t.Fatalf("mac desktop geometry = search %#v, time left %v, cursor %#v", search, timeSlot.Left, cursor)
 	}
 }

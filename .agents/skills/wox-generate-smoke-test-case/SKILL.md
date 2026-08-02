@@ -53,16 +53,25 @@ If the user asked only for design, stop after the recommendation. If the user al
    - File: `NNN_descriptive_name_test.go`
    - Function: `TestNNNDescriptiveName`
    - Build constraint: `//go:build wox_ui_smoke`
-4. Drive the UI through `automationdriver.Client`. Wait for stable semantic state with `client.WaitFor`; never use fixed sleeps to guess readiness. Prefer stable automation IDs and state over coordinates, timing, screenshots, or implementation details.
-5. Let `smoke.Case` own before/after reset and the shared client. Do not launch another Wox process or create a second data directory inside a case. Use `automationdriver.SharedDataDirectoryEnvironment` only when the behavior must inspect real persisted output.
-6. Keep assertions user-visible and deterministic. Treat snapshot diagnostics as failures when they are relevant to the exercised UI. Do not weaken assertions or add retries merely to hide a race.
-7. Format every touched Go file with the repository formatter. Run the new case from the repository root:
+4. Immediately above every generated `TestNNN...` function, add a concise English doc comment that states the user-visible intent, the ordered UI flow, and the final evidence that proves the behavior. Mention prerequisites or cleanup only when they are part of the contract. Describe product behavior rather than automation implementation details. Use this shape:
+
+   ```go
+   // TestNNNDescriptiveName verifies <user-visible behavior and boundary>.
+   // Flow: <entry> -> <important actions or state transitions> -> <observable result>.
+   // Evidence: <real UI, runtime, persisted artifact, or log assertion that proves success>.
+   func TestNNNDescriptiveName(t *testing.T) {
+   ```
+
+5. Drive the UI through `automationdriver.Client`. Wait for stable semantic state with `client.WaitFor`; never use fixed sleeps to guess readiness. Prefer stable automation IDs and state over coordinates, timing, screenshots, or implementation details.
+6. Let `smoke.Case` own before/after reset and the shared client. Do not launch another Wox process or create a second data directory inside a case. Use `automationdriver.SharedDataDirectoryEnvironment` only when the behavior must inspect real persisted output.
+7. Keep assertions user-visible and deterministic. Treat snapshot diagnostics as failures when they are relevant to the exercised UI. Do not weaken assertions or add retries merely to hide a race.
+8. Format every touched Go file with the repository formatter. Run the new case from the repository root:
 
    ```text
    make smoke <functional/path/NNN>
    ```
 
-8. After the targeted case passes, run `make smoke` to catch leaked state and shared-process cleanup failures. If execution is blocked by the environment, report the exact blocker and do not claim runtime coverage.
+9. After the targeted case passes, run `make smoke` to catch leaked state and shared-process cleanup failures. If execution is blocked by the environment, report the exact blocker and do not claim runtime coverage.
 
 ## Failure Handling
 

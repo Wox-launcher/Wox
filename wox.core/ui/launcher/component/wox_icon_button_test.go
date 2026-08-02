@@ -25,19 +25,24 @@ func TestWoxIconButtonOwnsHoverAndTapGesture(t *testing.T) {
 	}
 }
 
-func TestSharedIconGlyphsUseFixedPainterBounds(t *testing.T) {
+func TestSharedIconGlyphsUseSVGImages(t *testing.T) {
 	color := woxui.Color{R: 10, G: 20, B: 30, A: 255}
 	glyphs := []woxwidget.Widget{
+		CloseGlyph(16, color),
+		SearchGlyph(18, color),
+		MenuGlyph(18, color),
 		ChevronGlyph(16, color, false),
 		ChevronGlyph(16, color, true),
 		CopyGlyph(14, color),
 		EditGlyph(14, color),
 		RefreshGlyph(14, color),
 		DebugGlyph(16, color),
+		ClockGlyph(16, color),
+		FilterListGlyph(15, color),
 	}
 	for index, glyph := range glyphs {
-		painter, ok := glyph.(woxwidget.Painter)
-		if !ok || painter.Width <= 0 || painter.Height <= 0 || painter.Paint == nil {
+		image, ok := glyph.(woxwidget.Image)
+		if !ok || image.Source == nil || image.Width <= 0 || image.Height <= 0 {
 			t.Fatalf("glyph %d = %#v", index, glyph)
 		}
 	}

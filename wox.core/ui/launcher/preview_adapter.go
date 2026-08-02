@@ -42,8 +42,11 @@ func (a *App) buildPreview(result queryResult, palette uiPalette, width, height 
 	if preview.PreviewType == "chat" {
 		return a.buildChatPreview(result, preview, palette, width, height)
 	}
-	scrollKey := result.QueryID + "\x00" + result.ID + "\x00" + preview.PreviewType
 	tags := append(a.previewTags(preview.PreviewTags), a.previewTags(a.previewBodyTags(preview))...)
+	if preview.PreviewType == "terminal" {
+		return a.buildTerminalPreview(a.terminalPreviewSnapshotFor(preview), palette, width, height, tags)
+	}
+	scrollKey := result.QueryID + "\x00" + result.ID + "\x00" + preview.PreviewType
 	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0)
 	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight)
 	return previewview.PreviewView(previewview.PreviewProps{
@@ -124,8 +127,6 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 		return content(a.formatHotkeyOverview(data), palette.previewText)
 	case "url":
 		return content("URL preview\n\n"+preview.PreviewData+"\n\nThe embedded browser surface will be attached through the platform preview host.", palette.previewText)
-	case "terminal":
-		return a.buildTerminalPreview(a.terminalPreviewSnapshotFor(preview), palette, width, height)
 	case "webview":
 		return a.buildWebViewPreview(preview.PreviewData, palette, width, height)
 	default:

@@ -7,6 +7,7 @@
 ## Rules
 
 - **Comments**: English only. Add intent-level comments only where they are necessary, such as complex logic, counterintuitive behavior, important state transitions, or code whose purpose is not obvious from the implementation.
+- **Icons**: When adding or using UI icons, prefer an existing categorized SVG from `wox.core/common/icons.go` over font glyphs. Add reusable icons there before introducing local assets.
 - **New Functions**: Add a short comment for new functions unless the function is trivial, such as 2-4 straightforward lines whose purpose is obvious from the name and body.
 - **Change Comments**: For optimizations, bug fixes, and new features, add comments near the relevant code only when they clarify a non-obvious reason, previous limitation, or implementation choice. Avoid boilerplate comments for obvious changes.
 - **Readability First**: Favor the simplest control flow that keeps behavior correct. Avoid clever abstractions, layered state handling, or indirection that make the execution path harder to follow.
