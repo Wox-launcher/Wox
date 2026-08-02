@@ -11,6 +11,7 @@ import (
 
 	"wox/ui/automation"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 func TestNewClientReadsSmokeStepDelay(t *testing.T) {
@@ -189,6 +190,17 @@ func TestClientMovesPointerToSemanticsNodeCenter(t *testing.T) {
 	}
 	if pointer.Kind != woxui.PointerMove || pointer.Position != (woxui.Point{X: 107, Y: 47}) {
 		t.Fatalf("unexpected pointer event: %+v", pointer)
+	}
+}
+
+func TestFindByAutomationIDPrefix(t *testing.T) {
+	snapshot := woxwidget.AutomationSnapshot{Tree: woxui.AccessibilityTree{Nodes: []woxui.AccessibilityNode{
+		{AutomationID: "terminal-search-input-first"},
+		{AutomationID: "terminal-search-next-first"},
+	}}}
+	node, found := FindByAutomationIDPrefix(snapshot, "terminal-search-next-")
+	if !found || node.AutomationID != "terminal-search-next-first" {
+		t.Fatalf("dynamic node = found %v, id %q", found, node.AutomationID)
 	}
 }
 

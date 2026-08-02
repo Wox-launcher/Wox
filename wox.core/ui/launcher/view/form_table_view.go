@@ -898,7 +898,20 @@ func formTableRowCheckboxControl(props FormTableRowFieldProps) woxwidget.Widget 
 	control := woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
 		Width: 18, Height: 18, Radius: 3, BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1, Padding: woxwidget.UniformInsets(1), Child: mark,
 	}}
-	return formTableRowFocusableControl(props, control)
+	return woxwidget.Semantics{
+		AutomationID: props.ID, Role: woxui.AccessibilityRoleCheckBox, Label: props.Label,
+		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionToggle}, Checked: props.Checked,
+		OnAction: func(action woxui.AccessibilityAction, _ string) error {
+			if action != woxui.AccessibilityActionToggle && action != woxui.AccessibilityActionActivate {
+				return fmt.Errorf("unsupported checkbox action %q", action)
+			}
+			if props.OnTap != nil {
+				props.OnTap()
+			}
+			return nil
+		},
+		Child: formTableRowFocusableControl(props, control),
+	}
 }
 
 // formTableRowImageControl restores Flutter's preview plus emoji and upload actions.

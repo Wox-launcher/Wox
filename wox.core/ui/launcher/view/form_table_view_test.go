@@ -15,7 +15,11 @@ func TestFormTableRowNonTextControlsExposeControlledFocus(t *testing.T) {
 		OnFocus: func() { focused++ }, OnKey: func(woxui.KeyEvent) bool { return true }, OnTap: func() {},
 	}
 
-	checkbox := formTableRowCheckboxControl(props).(woxwidget.Focusable)
+	checkboxSemantics := formTableRowCheckboxControl(props).(woxwidget.Semantics)
+	if checkboxSemantics.AutomationID != "field" || checkboxSemantics.Role != woxui.AccessibilityRoleCheckBox || len(checkboxSemantics.Actions) != 1 || checkboxSemantics.Actions[0] != woxui.AccessibilityActionToggle {
+		t.Fatal("checkbox should expose its controlled value to accessibility and automation")
+	}
+	checkbox := checkboxSemantics.Child.(woxwidget.Focusable)
 	if !checkbox.Autofocus || checkbox.OnKey == nil || checkbox.OnFocusChange == nil {
 		t.Fatal("checkbox should expose the controlled table-row focus contract")
 	}

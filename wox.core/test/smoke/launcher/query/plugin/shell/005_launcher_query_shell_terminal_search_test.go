@@ -118,10 +118,6 @@ func waitForTerminalMatchCount(t *testing.T, ctx context.Context, client *automa
 
 // terminalControl resolves the current session's dynamic control ID by its stable action prefix.
 func terminalControl(snapshot woxwidget.AutomationSnapshot, prefix string) (string, bool) {
-	for _, node := range snapshot.Tree.Nodes {
-		if strings.HasPrefix(node.AutomationID, prefix) {
-			return node.AutomationID, true
-		}
-	}
-	return "", false
+	node, found := automationdriver.FindByAutomationIDPrefix(snapshot, prefix)
+	return node.AutomationID, found
 }

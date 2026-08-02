@@ -164,6 +164,16 @@ func Find(snapshot woxwidget.AutomationSnapshot, automationID string) (woxui.Acc
 	return woxui.AccessibilityNode{}, false
 }
 
+// FindByAutomationIDPrefix returns the first semantics node with the requested dynamic ID prefix.
+func FindByAutomationIDPrefix(snapshot woxwidget.AutomationSnapshot, prefix string) (woxui.AccessibilityNode, bool) {
+	for _, node := range snapshot.Tree.Nodes {
+		if strings.HasPrefix(node.AutomationID, prefix) {
+			return node, true
+		}
+	}
+	return woxui.AccessibilityNode{}, false
+}
+
 // Perform invokes one action on a semantics node.
 func (c *Client) Perform(ctx context.Context, automationID string, action woxui.AccessibilityAction, value string) error {
 	_, err := call[bool](ctx, c, "semantics.perform", map[string]any{

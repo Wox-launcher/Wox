@@ -79,22 +79,12 @@ func Test003LauncherQueryShellSavedCommand(t *testing.T) {
 			t.Fatalf("wait for saved Shell command deletion: %v", err)
 		}
 
-		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, "> "); err != nil {
-			t.Fatalf("open Shell history: %v", err)
-		}
+		smoke.ReplaceLauncherQuery(t, ctx, client, "> ")
 		historyResultID := waitForShellResult(t, ctx, client, alias)
-		historyNode, err := client.MovePointerTo(ctx, historyResultID)
-		if err != nil {
-			t.Fatalf("move pointer to saved Shell command history: %v", err)
-		}
-		historyPosition := woxui.Point{X: historyNode.Bounds.X + historyNode.Bounds.Width/2, Y: historyNode.Bounds.Y + historyNode.Bounds.Height/2}
-		if err := client.Pointer(ctx, woxui.PointerEvent{Kind: woxui.PointerDown, Position: historyPosition, Button: woxui.PointerButtonPrimary}); err != nil {
-			t.Fatalf("press saved Shell command history: %v", err)
-		}
-		if err := client.Pointer(ctx, woxui.PointerEvent{Kind: woxui.PointerUp, Position: historyPosition, Button: woxui.PointerButtonPrimary}); err != nil {
-			t.Fatalf("select saved Shell command history: %v", err)
-		}
-		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		selectShellResult(t, ctx, client, historyResultID)
+		waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		snapshot, err := client.WaitFor(waitCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
 			status, statusFound := automationdriver.Find(snapshot, "launcher.preview.terminal.status")
 			output, outputFound := automationdriver.Find(snapshot, "launcher.preview.terminal.output")

@@ -32,7 +32,7 @@ When the target is a plugin:
 
 ## Recommend Coverage
 
-Present the design before editing code:
+When the user asks for coverage design, present:
 
 - **Code map:** Name the main source files, functions, and responsibilities.
 - **Functional points:** Summarize the primary user-visible behaviors and important boundaries.
@@ -41,6 +41,8 @@ Present the design before editing code:
 - **Recommended first case:** Select the smallest flow that covers the highest-risk real integration boundary and explain briefly why it belongs in smoke rather than a unit test.
 - **Automation gap:** Identify any missing stable automation ID or action required by the recommended flow.
 
+When the user already specified the exact flow, keep the pre-edit design brief: present only the code map, one observable behavior contract, and any automation gap. Do not expand an approved flow into an unnecessary candidate list or full setting matrix.
+
 Recommend smoke coverage only for real-process native UI, lifecycle, persistence, plugin integration, platform, accessibility, or rendering boundaries. Prefer unit tests for local pure logic and skip behavior already covered at the same boundary.
 
 If the user asked only for design, stop after the recommendation. If the user already named or approved an exact flow, continue. Otherwise ask which recommended case to generate before editing product or test code.
@@ -48,12 +50,13 @@ If the user asked only for design, stop after the recommendation. If the user al
 ## Generate the Case
 
 1. State one observable behavior contract for the selected flow.
-2. Reuse existing automation IDs, actions, `smoke.Case`, and helpers. If the product exposes no stable automation path, add only the smallest semantics ID or action at the owning UI component. Do not add a test-only bypass around the real user flow.
-3. Add the case under a functional path such as `wox.core/test/smoke/launcher/query/plugin/calculator/`. Use the next unused three-digit number without renumbering existing cases:
+2. Search all smoke packages for an existing helper before adding a local one. Promote a helper to `automationdriver` or `smoke` when a second consumer uses the same interaction contract; keep plugin-specific behavior in the leaf package. Avoid page-object layers or table-editor DSLs until repeated cases justify them.
+3. Reuse existing automation IDs, actions, `smoke.Case`, and helpers. Before driving a control, confirm its semantics expose a stable ID, role, label, current value or checked state, selected state when relevant, and the correct action. If that contract is missing, modify the smallest shared owning UI component to add a stable automation ID or semantic action, then add a focused component test for that contract. The semantic action must follow the real user interaction path; do not add a test-only bypass around product behavior.
+4. Add the case under a functional path such as `wox.core/test/smoke/launcher/query/plugin/calculator/`. Use the next unused three-digit number without renumbering existing cases:
    - File: `NNN_descriptive_name_test.go`
    - Function: `TestNNNDescriptiveName`
    - Build constraint: `//go:build wox_ui_smoke`
-4. Immediately above every generated `TestNNN...` function, add a concise English doc comment that states the user-visible intent, the ordered UI flow, and the final evidence that proves the behavior. Mention prerequisites or cleanup only when they are part of the contract. Describe product behavior rather than automation implementation details. Use this shape:
+5. Immediately above every generated `TestNNN...` function, add a concise English doc comment that states the user-visible intent, the ordered UI flow, and the final evidence that proves the behavior. Mention prerequisites or cleanup only when they are part of the contract. Describe product behavior rather than automation implementation details. Use this shape:
 
    ```go
    // TestNNNDescriptiveName verifies <user-visible behavior and boundary>.
@@ -62,20 +65,23 @@ If the user asked only for design, stop after the recommendation. If the user al
    func TestNNNDescriptiveName(t *testing.T) {
    ```
 
-5. Drive the UI through `automationdriver.Client`. Wait for stable semantic state with `client.WaitFor`; never use fixed sleeps to guess readiness. Prefer stable automation IDs and state over coordinates, timing, screenshots, or implementation details.
-6. Let `smoke.Case` own before/after reset and the shared client. Do not launch another Wox process or create a second data directory inside a case. Use `automationdriver.SharedDataDirectoryEnvironment` only when the behavior must inspect real persisted output.
-7. Keep assertions user-visible and deterministic. Treat snapshot diagnostics as failures when they are relevant to the exercised UI. Do not weaken assertions or add retries merely to hide a race.
-8. Format every touched Go file with the repository formatter. Run the new case from the repository root:
+6. Drive the UI through `automationdriver.Client`. Wait for stable semantic state with `client.WaitFor`; never use fixed sleeps to guess readiness. Use explicit semantic actions and postconditions such as `Selected`, `Checked`, `Value`, status, or disappearance. Do not use node bounds, pointer coordinates, or screenshot pixels when the owning UI can expose a semantic route. Coordinate interaction is allowed only for an unavoidable native or platform surface that cannot expose semantics; document why, resolve coordinates from a current semantic node instead of hard-coding them, and assert the resulting functional state rather than geometry.
+7. Treat query and result state as generation-bound. Setting the same query value may be a no-op, and refreshes may replace dynamic result IDs. Force a real query transition when freshness matters, wait for both the input value and `launcher.results=complete`, and resolve dynamic IDs again after refresh instead of retaining them across generations.
+8. Let `smoke.Case` own before/after reset and the shared client, but do not assume reset restores plugin settings or desktop side effects. Explicitly restore changed settings and clean external state. Reopen settings or inspect persisted data before exercising runtime behavior; a locally updated control does not prove an asynchronous save completed.
+9. Keep assertions user-visible and deterministic. Prefer evidence in this order: real runtime artifact or fresh log slice, reloaded persisted value, then live semantic state. Treat relevant snapshot diagnostics as failures. Do not weaken assertions or add retries merely to hide a race.
+10. Do not launch another Wox process or create a second data directory inside a case. Use `automationdriver.SharedDataDirectoryEnvironment` only when the behavior must inspect real persisted output, and poll artifacts independently of UI generation changes.
+11. Format every touched Go file with the repository formatter. Run the new case from the repository root:
 
    ```text
    make smoke <functional/path/NNN>
    ```
 
-9. After the targeted case passes, run `make smoke` to catch leaked state and shared-process cleanup failures. If execution is blocked by the environment, report the exact blocker and do not claim runtime coverage.
+12. After the targeted case passes, run `make smoke` to catch leaked state and shared-process cleanup failures. If the full suite fails in an existing case, distinguish that baseline failure from the new selector instead of attributing it to the new coverage. If execution is blocked by the environment, report the exact blocker and do not claim runtime coverage.
 
 ## Failure Handling
 
 - Start from the exact command output, logs, snapshot, and failing state.
+- On a wait failure, capture the current values, checked states, status nodes, diagnostics, and relevant fresh log or artifact contents. Report the observed boundary instead of only the timeout.
 - Fix the shared product or automation boundary when that is the root cause; do not patch every case around it.
 - Add diagnostic logging only when the failure path cannot be identified with certainty, then use the new evidence before changing behavior.
 - Preserve unrelated worktree changes and keep the diff limited to the case plus any strictly required automation exposure.
