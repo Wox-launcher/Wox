@@ -19,7 +19,7 @@ import (
 // Evidence: the live highlighted-match state changes 1/2 -> 2/2 -> 1/2 before the search UI disappears.
 func Test005LauncherQueryShellTerminalSearch(t *testing.T) {
 	const (
-		command = "echo woxfind && echo woxfind"
+		command = "echo woxfind; echo woxfind"
 		query   = "woxfind"
 	)
 

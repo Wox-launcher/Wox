@@ -1,13 +1,14 @@
 package launcher
 
 import (
+	"runtime"
 	"testing"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
-func TestSettingsSearchCommandFSelectsExistingText(t *testing.T) {
+func TestSettingsSearchPrimaryFSelectsExistingText(t *testing.T) {
 	deps, _ := newSearchControllerDeps()
 	app := &App{
 		settingsSearch: newSettingsSearchController(deps),
@@ -16,8 +17,12 @@ func TestSettingsSearchCommandFSelectsExistingText(t *testing.T) {
 	}
 	app.settingsSearch.SetEditor(woxwidget.NewTextEditingController("existing"))
 
-	if !app.onSettingsSearchKey(woxui.KeyEvent{Key: "f", Modifiers: woxui.KeyModifierMeta, Down: true}) {
-		t.Fatal("Cmd+F was not handled")
+	modifier := woxui.KeyModifierControl
+	if runtime.GOOS == "darwin" {
+		modifier = woxui.KeyModifierMeta
+	}
+	if !app.onSettingsSearchKey(woxui.KeyEvent{Key: "f", Modifiers: modifier, Down: true}) {
+		t.Fatal("primary+F was not handled")
 	}
 	state := app.settingsSearch.Editor().State()
 	if !app.settingsSearch.Focused() || state.Selection != (woxui.TextSelection{Anchor: 0, Focus: 8}) {

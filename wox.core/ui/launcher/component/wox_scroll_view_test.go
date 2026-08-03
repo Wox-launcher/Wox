@@ -36,7 +36,9 @@ func TestWoxScrollViewCanKeepOverflowIndicatorVisible(t *testing.T) {
 	stack := view.Child.(woxwidget.Stack)
 	thumb := stack.Children[1].Child.(woxwidget.Gesture)
 	animation := thumb.Child.(woxwidget.AnimatedFloat)
-	view.OnScroll(woxui.Point{Y: -20})
+	if !view.OnScrollHandled(woxui.Point{Y: -20}) {
+		t.Fatal("scroll within the viewport should be handled")
+	}
 	semantics = state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics)
 	if animation.Target != 1 || state.controller.Offset() != 20 || semantics.AutomationID != "persistent-scroll-state" || semantics.Value != "20/80" {
 		t.Fatalf("persistent scrollbar = opacity %.0f offset %.0f automation %q value %q", animation.Target, state.controller.Offset(), semantics.AutomationID, semantics.Value)
@@ -49,11 +51,15 @@ func TestWoxScrollViewOwnsActivityHoverAndDrag(t *testing.T) {
 	props := ScrollViewProps{Key: "test-scroll", Width: 100, Height: 80, ContentHeight: 160, OnScroll: func(delta float32) { scrolled += delta }}
 	state := &scrollViewState{}
 	view := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture)
-	view.OnScroll(woxui.Point{Y: 20})
+	if view.OnScrollHandled(woxui.Point{Y: 20}) {
+		t.Fatal("top-boundary scroll should remain unhandled")
+	}
 	if state.visible || scrolled != 0 {
 		t.Fatalf("top-boundary scroll = visible %v delta %.0f, want false/0", state.visible, scrolled)
 	}
-	view.OnScroll(woxui.Point{Y: -20})
+	if !view.OnScrollHandled(woxui.Point{Y: -20}) {
+		t.Fatal("scroll within the viewport should be handled")
+	}
 	if !state.visible || scrolled != 20 || state.hideTimer == nil {
 		t.Fatalf("real scroll = visible %v delta %.0f timer %v, want true/20/non-nil", state.visible, scrolled, state.hideTimer)
 	}
@@ -70,6 +76,20 @@ func TestWoxScrollViewOwnsActivityHoverAndDrag(t *testing.T) {
 	thumb.OnPanEnd()
 	if state.dragging || state.hideTimer == nil {
 		t.Fatalf("ended drag = dragging %v timer %v, want false/non-nil", state.dragging, state.hideTimer)
+	}
+	state.Dispose()
+}
+
+func TestWoxScrollViewLeavesBottomBoundaryUnhandled(t *testing.T) {
+	applied := false
+	state := &scrollViewState{}
+	view := state.Build(woxwidget.StateContext{}, ScrollViewProps{
+		Key: "boundary-scroll", Width: 100, Height: 80, ContentHeight: 160, Offset: 80,
+		OnScroll: func(float32) { applied = true },
+	}).(woxwidget.Gesture)
+	handled := view.OnScrollHandled(woxui.Point{Y: -20})
+	if handled || applied {
+		t.Fatalf("bottom-boundary scroll = handled %v applied %v, want false/false", handled, applied)
 	}
 	state.Dispose()
 }
@@ -151,7 +171,9 @@ func TestWoxScrollViewCanHideScrollbarWithoutDisablingScroll(t *testing.T) {
 	state := &scrollViewState{}
 	state.InitState(woxwidget.StateContext{}, props)
 	view := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture)
-	view.OnScroll(woxui.Point{Y: -20})
+	if !view.OnScrollHandled(woxui.Point{Y: -20}) {
+		t.Fatal("scroll with a hidden scrollbar should still be handled")
+	}
 	stack := view.Child.(woxwidget.Stack)
 
 	if state.controller.Offset() != 20 || len(stack.Children) != 1 || state.visible || state.hideTimer != nil {

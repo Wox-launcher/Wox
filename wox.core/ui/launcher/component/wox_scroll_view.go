@@ -193,14 +193,16 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 		}
 		children = append(children, woxwidget.StackChild{Left: max(float32(0), props.Width-14), Top: thumbTop, Child: thumb})
 	}
-	var result woxwidget.Widget = woxwidget.Gesture{ID: string(props.Key), OnScroll: func(delta woxui.Point) {
+	var result woxwidget.Widget = woxwidget.Gesture{ID: string(props.Key), OnScrollHandled: func(delta woxui.Point) bool {
 		scrollDelta := -delta.Y
-		if scrollOffset(props, scrollDelta) != scrollCurrentOffset(props) {
-			if state != nil && !props.HideScrollbar {
-				state.show(context)
-			}
-			applyScroll(props, scrollDelta)
+		if scrollOffset(props, scrollDelta) == scrollCurrentOffset(props) {
+			return false
 		}
+		if state != nil && !props.HideScrollbar {
+			state.show(context)
+		}
+		applyScroll(props, scrollDelta)
+		return true
 	}, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: children}}
 	if props.AutomationID != "" {
 		result = woxwidget.Semantics{

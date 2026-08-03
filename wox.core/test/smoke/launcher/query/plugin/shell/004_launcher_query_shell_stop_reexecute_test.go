@@ -13,7 +13,7 @@ import (
 
 // Test004LauncherQueryShellStopReexecute covers stopping a command and rerunning it from history.
 func Test004LauncherQueryShellStopReexecute(t *testing.T) {
-	const command = "sleep 10"
+	const command = "sleep 2"
 
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.ShowLauncher(t, ctx, client)

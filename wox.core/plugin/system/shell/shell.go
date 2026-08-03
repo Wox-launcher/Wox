@@ -1504,7 +1504,6 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 
 	tracker := newShellHistoryTracker(s.historyManager, historyID, state, session.OutputPath)
 	tracker.start(ctx)
-	_ = updateUI()
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -1551,6 +1550,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		s.notifyCommandFinished(ctx, data, "failed", 1)
 		return
 	}
+	_ = updateUI()
 
 	stopUpdater := make(chan struct{})
 	util.Go(ctx, "shell command metadata updater", func() {
