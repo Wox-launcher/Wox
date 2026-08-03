@@ -43,15 +43,16 @@ const (
 )
 
 type displayCommand struct {
-	kind   displayCommandKind
-	rect   Rect
-	radius float32
-	stroke float32
-	color  Color
-	text   string
-	style  TextStyle
-	image  *Image
-	points []Point
+	kind     displayCommandKind
+	rect     Rect
+	radius   float32
+	stroke   float32
+	color    Color
+	text     string
+	style    TextStyle
+	image    *Image
+	rotation float32
+	points   []Point
 }
 
 // FillConvexPolygon fills 3 to MaxConvexPolygonPoints ordered vertices with portable edge antialiasing.
@@ -186,8 +187,18 @@ func (d *DisplayList) DrawText(text string, rect Rect, style TextStyle, color Co
 
 // DrawImage scales one immutable raster image into the destination rectangle.
 func (d *DisplayList) DrawImage(image *Image, rect Rect) {
+	d.DrawRotatedImage(image, rect, 0)
+}
+
+// DrawRotatedImage scales an image into rect and rotates it around the destination center.
+func (d *DisplayList) DrawRotatedImage(image *Image, rect Rect, radians float32) {
+	d.DrawRotatedRoundedImage(image, rect, radians, 0)
+}
+
+// DrawRotatedRoundedImage scales, clips, and rotates an image around the destination center.
+func (d *DisplayList) DrawRotatedRoundedImage(image *Image, rect Rect, radians, radius float32) {
 	if image == nil || image.Width <= 0 || image.Height <= 0 || len(image.pixels) == 0 || rect.Width <= 0 || rect.Height <= 0 {
 		return
 	}
-	d.commands = append(d.commands, displayCommand{kind: displayCommandDrawImage, rect: rect, image: image})
+	d.commands = append(d.commands, displayCommand{kind: displayCommandDrawImage, rect: rect, image: image, rotation: radians, radius: min(max(float32(0), radius), min(rect.Width, rect.Height)/2)})
 }

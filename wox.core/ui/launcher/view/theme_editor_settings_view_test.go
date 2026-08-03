@@ -131,3 +131,22 @@ func TestThemeEditorPreviewChromeMatchesLauncherLayout(t *testing.T) {
 		t.Fatalf("preview divider = %#v, want Flutter left-only divider", previewDivider)
 	}
 }
+
+func TestThemeEditorToolbarKeepsFlutterActionAndKeySpacing(t *testing.T) {
+	toolbar := themeEditorPreviewToolbar(ThemeEditorSettingsProps{
+		DraftTheme: woxcomponent.Theme{ToolbarText: woxui.Color{A: 255}},
+	}, 600, 40).(woxwidget.Stack)
+	body := toolbar.Children[0].Child.(woxwidget.Container)
+	if body.BorderWidth != 0 || toolbar.Children[1].Child.(woxwidget.Container).Height != 1 {
+		t.Fatalf("toolbar border = %v, want only Flutter top divider", body.BorderWidth)
+	}
+	right := body.Child.(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+	if right.Gap != 16 {
+		t.Fatalf("toolbar action gap = %v, want Flutter spacing 16", right.Gap)
+	}
+	moreAction := right.Children[1].(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	keycaps := moreAction.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(keycaps.Children) != 2 || keycaps.Gap != 4 {
+		t.Fatalf("more-action keycaps = %d gap %v, want separate Cmd/J keys with Flutter spacing 4", len(keycaps.Children), keycaps.Gap)
+	}
+}

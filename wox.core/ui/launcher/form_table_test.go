@@ -60,6 +60,52 @@ func TestFormTableTabIncludesFooterButtons(t *testing.T) {
 	}
 }
 
+func TestPluginTriggerKeywordRowAcceptsTextInput(t *testing.T) {
+	definition := pluginTriggerKeywordDefinition()
+	target := newFormFieldsState([]formDefinition{definition}, map[string]string{"TriggerKeywords": "[]"}, true)
+	deps := CommonDeps{}
+	plugins := newPluginSettingsController(deps)
+	plugins.SetForm(&pluginSettingsFormState{formFieldsState: target})
+	app := &App{
+		settingsOpen: true, settingTab: "plugins", pluginSettings: plugins,
+		aiSettings: newAISettingsController(deps), hotkeySettings: newHotkeySettingsController(deps),
+	}
+	app.openFormTableLocked(&plugins.Form().formFieldsState, 0)
+	app.beginAddFormTableRowDirect()
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsTableEditor), uiPalette{}, 800, 600, 1)
+	})
+	host.AttachServices(formTableHostServices{})
+	app.settingsHost = host
+	displayList := woxui.DisplayList{}
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 600}, PixelSize: woxui.PixelSize{Width: 800, Height: 600}, Scale: 1}
+	host.Frame(&displayList, frame)
+	host.Frame(&displayList, frame)
+
+	key := woxui.KeyEvent{Key: "c", Down: true}
+	if host.Key(key) {
+		t.Fatal("printable key should continue to native text input")
+	}
+	if app.onSettingsWindowKey(key) {
+		t.Fatal("settings window should not route a table editor key to the underlying plugin form")
+	}
+	if !host.TextInput(woxui.TextInputEvent{Kind: woxui.TextInputCommit, Text: "chat"}) {
+		t.Fatal("trigger keyword input did not handle committed text")
+	}
+	if got := app.settingsTableEditor.rowForm.values["keyword"]; got != "chat" {
+		t.Fatalf("trigger keyword = %q, want committed input", got)
+	}
+	app.settingsTableEditor.status = "duplicate keyword"
+	app.focusFormTableRowField(0)
+	if got := app.settingsTableEditor.status; got != "duplicate keyword" {
+		t.Fatalf("validation status = %q after refocus, want it preserved", got)
+	}
+	app.setFormTableRowText(0, "chat2")
+	if got := app.settingsTableEditor.status; got != "" {
+		t.Fatalf("validation status = %q after changing text, want it cleared", got)
+	}
+}
+
 func TestBeginCloneFormTableRowDirectPrefillsNewRow(t *testing.T) {
 	definition := formDefinition{
 		Type: "table",

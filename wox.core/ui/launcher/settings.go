@@ -365,6 +365,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		}
 	}
 	if tab == "theme" && themeMode != "editor" {
+		a.preloadDemoWallpaper(true)
 		if err := a.reloadThemes(themeMode, ""); err != nil {
 			_ = a.runOnUI("apply theme catalog load error", func() {
 				a.themeSettings.SetThemesError(err.Error())
@@ -817,6 +818,9 @@ func (a *App) selectSettingTab(tab string) {
 	themeEditor := a.themeSettings.ThemeEditor()
 	loadTheme = tab == "theme" && a.themeSettings.ThemesMode() == "editor" && (themeEditor == nil || !strings.HasPrefix(themeEditor.key, "settings-theme|"))
 	loadThemes = tab == "theme" && a.themeSettings.ThemesMode() != "editor" && !a.themeSettings.ThemesLoaded() && !a.themeSettings.ThemesLoading()
+	if tab == "theme" {
+		a.preloadDemoWallpaper(true)
+	}
 	usageSnap := a.usageSettings.Snapshot()
 	loadUsage = tab == "usage" && !usageSnap.Loaded && !usageSnap.Loading
 	aboutSnap := a.aboutSettings.Snapshot()

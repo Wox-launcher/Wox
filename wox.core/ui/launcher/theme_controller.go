@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -226,16 +225,8 @@ func (c *themeSettingsController) ReloadThemes(ctx context.Context, service cont
 			ID: source.ThemeId, Name: source.ThemeName, Author: source.ThemeAuthor, URL: source.ThemeUrl, Version: source.Version, Description: source.Description,
 			IsSystem: source.IsSystem, IsInstalled: source.IsInstalled, IsUpgradable: item.IsUpgradable, IsAuto: source.IsAutoAppearance,
 			DarkThemeID: source.DarkThemeId, LightThemeID: source.LightThemeId,
+			previewTheme: fromCoreTheme(source),
 		}
-		payload, err := json.Marshal(source)
-		if err != nil {
-			return c.finishThemeLoadError(fmt.Errorf("encode theme values: %w", err))
-		}
-		var raw map[string]any
-		if err := json.Unmarshal(payload, &raw); err != nil {
-			return c.finishThemeLoadError(fmt.Errorf("decode theme values: %w", err))
-		}
-		_, theme.previewValues = themeEditorForm(raw)
 		themes = append(themes, theme)
 	}
 	sort.SliceStable(themes, func(i, j int) bool {

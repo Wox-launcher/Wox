@@ -39,6 +39,7 @@ func TestSharedIconGlyphsUseSVGImages(t *testing.T) {
 		DebugGlyph(16, color),
 		ClockGlyph(16, color),
 		FilterListGlyph(15, color),
+		CheckGlyph(12, color),
 	}
 	for index, glyph := range glyphs {
 		image, ok := glyph.(woxwidget.Image)

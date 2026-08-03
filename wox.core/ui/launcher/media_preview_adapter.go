@@ -18,13 +18,6 @@ func (a *App) buildMediaPreview(result queryResult, data mediaPreviewData, palet
 	if artist == "" {
 		artist = "Unknown artist"
 	}
-	details := make([]string, 0, 2)
-	if album := strings.TrimSpace(data.Album); album != "" {
-		details = append(details, album)
-	}
-	if appName := strings.TrimSpace(data.AppName); appName != "" {
-		details = append(details, appName)
-	}
 	duration := max(int64(0), data.Duration)
 	position := min(max(int64(0), data.Position), duration)
 	var artwork *woxui.Image
@@ -34,9 +27,15 @@ func (a *App) buildMediaPreview(result queryResult, data mediaPreviewData, palet
 	action := func(id string) func() {
 		return func() { a.activateResultActionByID(result.QueryID, result.ID, id) }
 	}
+	toggleLabelKey := "i18n:plugin_mediaplayer_play"
+	if data.IsPlaying {
+		toggleLabelKey = "i18n:plugin_mediaplayer_pause"
+	}
 	return previewview.MediaPreviewView(previewview.MediaPreviewProps{
-		Width: width, Height: height, Title: title, Artist: artist, Details: strings.Join(details, "  ·  "), Artwork: artwork,
+		Width: width, Height: height, Title: title, Artist: artist, Album: strings.TrimSpace(data.Album), AppName: strings.TrimSpace(data.AppName), Artwork: artwork,
 		Position: position, Duration: duration, Playing: data.IsPlaying, Theme: palette.componentTheme(),
+		PreviousLabel: a.translate("i18n:plugin_mediaplayer_previous"), ToggleLabel: a.translate(toggleLabelKey), NextLabel: a.translate("i18n:plugin_mediaplayer_next"),
+		Window:     a.window,
 		OnPrevious: action("media-control-previous"), OnPlay: action("media-control-play"), OnPause: action("media-control-pause"), OnNext: action("media-control-next"),
 	})
 }

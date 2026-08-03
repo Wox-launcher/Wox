@@ -2,7 +2,6 @@ package view
 
 import (
 	"fmt"
-	"time"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -168,8 +167,8 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 	return woxwidget.Semantics{
 		Key: "launcher-results-key", AutomationID: "launcher.results", Role: woxui.AccessibilityRoleList, Label: "Search results",
 		Value: state, ReadOnly: true,
-		Child: launcherResultScrollView(launcherResultScrollProps{
-			Content: content, Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight, Offset: props.Offset,
+		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+			Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight, Offset: props.Offset,
 			ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll,
 		}),
 	}
@@ -238,163 +237,4 @@ func launcherResultTextTailStyle(category string, foreground woxui.Color, select
 		border.A = 87
 	}
 	return foreground, woxui.Color{}, border
-}
-
-type launcherResultScrollProps struct {
-	Content       woxwidget.Widget
-	Width         float32
-	Height        float32
-	ContentHeight float32
-	Offset        float32
-	ThumbColor    woxui.Color
-	OnScroll      func(float32)
-}
-
-// launcherResultScrollState owns transient scrollbar visibility, hover, and drag interaction.
-type launcherResultScrollState struct {
-	visible   bool
-	hovered   bool
-	dragging  bool
-	dragY     float32
-	hideAt    time.Time
-	hideTimer *time.Timer
-}
-
-// launcherResultScrollView keeps list and grid scrolling visually consistent.
-func launcherResultScrollView(props launcherResultScrollProps) woxwidget.Widget {
-	if props.ContentHeight <= props.Height || props.Height <= 0 {
-		return buildLauncherResultScrollView(woxwidget.StateContext{}, props, nil)
-	}
-	return woxwidget.Stateful{
-		Key: "launcher-result-scroll", Type: (*launcherResultScrollState)(nil), Widget: props,
-		CreateState: func() woxwidget.State { return &launcherResultScrollState{} },
-	}
-}
-
-func (s *launcherResultScrollState) InitState(_ woxwidget.StateContext, _ any) {}
-
-// DidUpdateWidget reveals the scrollbar when keyboard navigation moves the controlled offset.
-func (s *launcherResultScrollState) DidUpdateWidget(context woxwidget.StateContext, oldWidget, newWidget any) {
-	oldProps := oldWidget.(launcherResultScrollProps)
-	newProps := newWidget.(launcherResultScrollProps)
-	if newProps.Offset != oldProps.Offset && newProps.Height == oldProps.Height && newProps.ContentHeight == oldProps.ContentHeight {
-		s.show(context)
-	}
-}
-
-// Build expires inactivity and composes the scroll surface from local interaction state.
-func (s *launcherResultScrollState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
-	if s.visible && !s.hovered && !s.dragging && !s.hideAt.IsZero() && !time.Now().Before(s.hideAt) {
-		s.visible = false
-		s.hideAt = time.Time{}
-		s.hideTimer = nil
-	}
-	return buildLauncherResultScrollView(context, widget.(launcherResultScrollProps), s)
-}
-
-// Dispose cancels the pending inactivity frame when the result surface leaves the tree.
-func (s *launcherResultScrollState) Dispose() {
-	if s.hideTimer != nil {
-		s.hideTimer.Stop()
-		s.hideTimer = nil
-	}
-}
-
-func (s *launcherResultScrollState) show(context woxwidget.StateContext) {
-	s.visible = true
-	s.scheduleHide(context)
-	context.Invalidate()
-}
-
-// scheduleHide restarts the inactivity deadline unless hover is holding the scrollbar open.
-func (s *launcherResultScrollState) scheduleHide(context woxwidget.StateContext) {
-	if s.hideTimer != nil {
-		s.hideTimer.Stop()
-		s.hideTimer = nil
-	}
-	s.hideAt = time.Time{}
-	if s.hovered || s.dragging {
-		return
-	}
-	s.hideAt = time.Now().Add(2 * time.Second)
-	s.hideTimer = time.AfterFunc(2*time.Second, context.Invalidate)
-}
-
-// setHovered pauses or resumes the local inactivity deadline.
-func (s *launcherResultScrollState) setHovered(context woxwidget.StateContext, hovered bool) {
-	if s.hovered == hovered {
-		return
-	}
-	s.hovered = hovered
-	s.scheduleHide(context)
-	context.Invalidate()
-}
-
-// buildLauncherResultScrollView composes the controlled viewport around optional retained scrollbar state.
-func buildLauncherResultScrollView(context woxwidget.StateContext, props launcherResultScrollProps, state *launcherResultScrollState) woxwidget.Widget {
-	children := []woxwidget.StackChild{{Child: woxwidget.ScrollView{
-		Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight, Offset: props.Offset, Child: props.Content,
-	}}}
-	if props.ContentHeight > props.Height && props.Height > 0 {
-		thumbHeight := max(float32(24), props.Height*props.Height/props.ContentHeight)
-		thumbTop := (props.Height - thumbHeight) * props.Offset / (props.ContentHeight - props.Height)
-		thumbColor := props.ThumbColor
-		thumbColor.A = min(150, thumbColor.A)
-		visible := state != nil && state.visible
-		targetOpacity := float32(0)
-		if visible {
-			targetOpacity = 1
-		}
-		targetWidth := float32(3)
-		if state != nil && (state.hovered || state.dragging) {
-			targetWidth = 7
-		}
-		var thumb woxwidget.Widget = woxwidget.AnimatedFloat{Key: "result-scrollbar-opacity", Target: targetOpacity, Duration: 200 * time.Millisecond, Builder: func(opacity float32) woxwidget.Widget {
-			return woxwidget.AnimatedFloat{Key: "result-scrollbar-width", Target: targetWidth, Duration: 120 * time.Millisecond, Builder: func(width float32) woxwidget.Widget {
-				color := thumbColor
-				color.A = uint8(float32(color.A)*opacity + 0.5)
-				return woxwidget.Align{Width: 12, Height: thumbHeight, Horizontal: 1, Child: woxwidget.Container{Width: width, Height: thumbHeight, Radius: width / 2, Color: color}}
-			}}
-		}}
-		if visible {
-			thumb = woxwidget.Gesture{ID: "result-scrollbar", OnHover: func(hovered bool) { state.setHovered(context, hovered) }, OnPanStart: func(point woxui.Point) {
-				state.dragY = thumbTop + point.Y
-				state.dragging = true
-				state.setHovered(context, true)
-			}, OnPanUpdate: func(point woxui.Point) {
-				pointerY := thumbTop + point.Y
-				delta := (pointerY - state.dragY) * props.ContentHeight / props.Height
-				state.dragY = pointerY
-				if resultScrollOffset(props, delta) != props.Offset {
-					state.show(context)
-					if props.OnScroll != nil {
-						props.OnScroll(delta)
-					}
-				}
-			}, OnPanEnd: func() {
-				state.dragging = false
-				state.scheduleHide(context)
-				context.Invalidate()
-			}, Child: thumb}
-		}
-		children = append(children, woxwidget.StackChild{
-			Left: max(float32(0), props.Width-14), Top: thumbTop, Child: thumb,
-		})
-	}
-	return woxwidget.Gesture{ID: "result-scroll", OnScroll: func(delta woxui.Point) {
-		scrollDelta := -delta.Y
-		if resultScrollOffset(props, scrollDelta) != props.Offset {
-			if state != nil {
-				state.show(context)
-			}
-			if props.OnScroll != nil {
-				props.OnScroll(scrollDelta)
-			}
-		}
-	}, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: children}}
-}
-
-// resultScrollOffset clamps a requested movement to the controlled viewport geometry.
-func resultScrollOffset(props launcherResultScrollProps, delta float32) float32 {
-	return min(max(float32(0), props.Offset+delta), max(float32(0), props.ContentHeight-props.Height))
 }

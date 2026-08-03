@@ -28,7 +28,7 @@ func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height, i
 		Height:       height,
 		Title:        a.translate("i18n:ui_cloud_sync"),
 		Description:  a.translate("i18n:ui_cloud_sync_description"),
-		Intro:        a.cloudIntroViewProps(snapshot),
+		Intro:        a.cloudIntroViewProps(snapshot, imageScale),
 		Account:      a.cloudAccountViewProps(snapshot, contentWidth, imageScale),
 		Sync:         a.cloudSyncViewProps(snapshot, contentWidth),
 		Devices:      a.cloudDevicesViewProps(snapshot, contentWidth, imageScale),
@@ -43,7 +43,7 @@ func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height, i
 }
 
 // cloudIntroViewProps prepares the signed-out Flutter-equivalent product and plan summary.
-func (a *App) cloudIntroViewProps(snapshot settingsSnapshot) launcherview.CloudIntroProps {
+func (a *App) cloudIntroViewProps(snapshot settingsSnapshot, imageScale float32) launcherview.CloudIntroProps {
 	iconTint := snapshot.palette.resultTitle
 	freePrice := cloudBillingPriceText(snapshot.cloud.BillingPlan.Free.Price)
 	if freePrice == "" {
@@ -61,15 +61,15 @@ func (a *App) cloudIntroViewProps(snapshot settingsSnapshot) launcherview.CloudI
 		SectionLabel:     a.translate("i18n:ui_cloud_sync_intro_title"),
 		Headline:         a.translate("i18n:ui_cloud_sync_intro_headline"),
 		Description:      a.translate("i18n:ui_cloud_sync_intro_description"),
-		HeroIcon:         a.imageForTint(settingNavIconSource("data.cloudsync"), &iconTint, 28),
+		HeroIcon:         a.imageForTint(settingNavIconSource("data.cloudsync"), &iconTint, physicalImageSize(28, imageScale)),
 		HeroFallback:     "☁",
 		FreeLabel:        a.translate("i18n:ui_cloud_sync_plan_free"),
 		ProLabel:         a.translate("i18n:ui_cloud_sync_plan_pro"),
 		RecommendedLabel: a.translate("i18n:ui_cloud_sync_plan_recommended"),
 		Features: []launcherview.CloudIntroFeatureProps{
-			{Title: a.translate("i18n:ui_cloud_sync_intro_settings_title"), Description: a.translate("i18n:ui_cloud_sync_intro_settings_description"), Icon: a.imageForTint(settingNavIconSource("general"), &iconTint, 18), FallbackIcon: "⚙"},
-			{Title: a.translate("i18n:ui_cloud_sync_intro_plugins_title"), Description: a.translate("i18n:ui_cloud_sync_intro_plugins_description"), Icon: a.imageForTint(settingNavIconSource("plugins"), &iconTint, 18), FallbackIcon: "◇"},
-			{Title: a.translate("i18n:ui_cloud_sync_intro_keys_title"), Description: a.translate("i18n:ui_cloud_sync_intro_keys_description"), Icon: a.imageForTint(settingControlIconSource("key"), &iconTint, 18), FallbackIcon: "⌁"},
+			{Title: a.translate("i18n:ui_cloud_sync_intro_settings_title"), Description: a.translate("i18n:ui_cloud_sync_intro_settings_description"), Icon: a.imageForTint(settingNavIconSource("general"), &iconTint, physicalImageSize(17, imageScale)), FallbackIcon: "⚙"},
+			{Title: a.translate("i18n:ui_cloud_sync_intro_plugins_title"), Description: a.translate("i18n:ui_cloud_sync_intro_plugins_description"), Icon: a.imageForTint(settingNavIconSource("plugins"), &iconTint, physicalImageSize(17, imageScale)), FallbackIcon: "◇"},
+			{Title: a.translate("i18n:ui_cloud_sync_intro_keys_title"), Description: a.translate("i18n:ui_cloud_sync_intro_keys_description"), Icon: a.imageForTint(settingControlIconSource("key"), &iconTint, physicalImageSize(17, imageScale)), FallbackIcon: "⌁"},
 		},
 		PlanRows: []launcherview.CloudPlanRowProps{
 			{Label: a.translate("i18n:ui_cloud_sync_plan_row_price"), FreeValue: freePrice, ProValue: proPrice},

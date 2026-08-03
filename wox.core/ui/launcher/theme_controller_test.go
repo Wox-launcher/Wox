@@ -84,7 +84,7 @@ func TestThemeControllerReloadThemesSuccess(t *testing.T) {
 	deps, invalidateCalled := newThemeControllerDeps()
 	c := newThemeSettingsController(deps)
 	items := []contract.ThemeCatalogItem{
-		{Theme: common.Theme{ThemeId: "t1", ThemeName: "Theme One", AppBackgroundColor: "#000000"}},
+		{Theme: common.Theme{ThemeId: "t1", ThemeName: "Theme One", AppBackgroundColor: "#000000", ResultItemActiveSubTitleColor: "#20202A"}},
 		{Theme: common.Theme{ThemeId: "t2", ThemeName: "Theme Two", AppBackgroundColor: "#111111"}},
 	}
 	service := &themeFakeService{themes: map[contract.ThemeCatalog][]contract.ThemeCatalogItem{contract.ThemeCatalogStore: items}}
@@ -104,6 +104,9 @@ func TestThemeControllerReloadThemesSuccess(t *testing.T) {
 	}
 	if len(snap.Themes) != 2 {
 		t.Fatalf("Themes len = %d, want 2", len(snap.Themes))
+	}
+	if got := themeCatalogItem(snap.Themes[0], 0, settingsSnapshot{}).PreviewTheme.SelectedSubtitle; got != (woxui.Color{R: 32, G: 32, B: 42, A: 255}) {
+		t.Fatalf("preview selected subtitle = %#v, want actual theme color", got)
 	}
 	if *invalidateCalled < 2 {
 		t.Fatalf("Invalidate should be called at least twice, got %d", *invalidateCalled)

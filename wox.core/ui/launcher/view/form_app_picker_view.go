@@ -71,11 +71,11 @@ func FormAppPickerView(props FormAppPickerProps) woxwidget.Widget {
 			start := float32(props.Selected) * formAppPickerRowHeight
 			keepVisible = &woxwidget.ScrollRange{Start: start, End: start + formAppPickerRowHeight}
 		}
-		list = woxwidget.ScrollView{
-			Key: "form-table-app-scroll", ID: "form-table-app-scroll", Width: props.Width, Height: viewportHeight,
+		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+			Key: "form-table-app-scroll", Width: props.Width, Height: viewportHeight,
 			ContentHeight: max(viewportHeight, float32(len(rows))*formAppPickerRowHeight), KeepVisible: keepVisible,
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-		}
+			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+		})
 	}
 	footer := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: max(float32(0), props.Width-112), Height: 42, Padding: woxwidget.Insets{Top: 13}, Child: woxwidget.Text{

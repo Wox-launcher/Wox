@@ -40,11 +40,11 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	} else if snapshot.tab == "cloud" {
 		page = a.buildCloudSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "runtime" {
-		page = a.buildRuntimeSettingsPage(snapshot, items, width-railWidth, pageHeight)
+		page = a.buildRuntimeSettingsPage(snapshot, items, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "usage" {
-		page = a.buildUsageSettingsPage(snapshot, width-railWidth, pageHeight)
+		page = a.buildUsageSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "about" {
-		page = a.buildAboutSettingsPage(snapshot, width-railWidth, pageHeight)
+		page = a.buildAboutSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "privacy" {
 		page = a.buildPrivacySettingsPage(snapshot, width-railWidth, pageHeight)
 	} else {
@@ -54,11 +54,11 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	var overlayLeft float32
 	var overlayTop float32
 	if snapshot.tableEditor != nil {
-		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height)
+		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.ai.ModelManager != nil {
-		overlay = a.buildModelManagerOverlay(snapshot.ai.ModelManager, snapshot.palette, width, height)
+		overlay = a.buildModelManagerOverlay(snapshot.ai.ModelManager, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.general.ChoicePicker != nil {
-		overlay = a.buildSettingChoicePickerOverlay(snapshot.general.ChoicePicker, snapshot.palette, width, height)
+		overlay = a.buildSettingChoicePickerOverlay(snapshot.general.ChoicePicker, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.cloud.Form != nil {
 		overlay = a.buildCloudFormOverlay(snapshot.cloud.Form, snapshot.palette, width, height)
 	} else if snapshot.privacy.Sample != "" {
@@ -66,7 +66,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	} else if a.settingsDemo != nil {
 		overlay, overlayLeft, overlayTop = a.buildSettingsDemoOverlay(snapshot, width, height)
 	} else if snapshot.tab == "cloud" && a.cloudPlanTooltip != nil {
-		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudIntroViewProps(snapshot), a.cloudPlanTooltip.anchor, width, height, snapshot.palette.componentTheme())
+		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudIntroViewProps(snapshot, frame.Scale), a.cloudPlanTooltip.anchor, width, height, snapshot.palette.componentTheme())
 	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
 		Width: width, Height: height, PageID: snapshot.tab, Platform: runtime.GOOS, RailWidth: railWidth, Theme: snapshot.palette.componentTheme(),
@@ -122,7 +122,7 @@ func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height, i
 				body = launcherview.SettingsMessage(snapshot.theme.ThemesError, innerWidth, bodyHeight, snapshot.palette.componentTheme())
 			}
 		} else {
-			body = a.buildThemeEditorSettingsSurface(theme, snapshot.palette, innerWidth, bodyHeight)
+			body = a.buildThemeEditorSettingsSurface(theme, snapshot.palette, innerWidth, bodyHeight, imageScale)
 		}
 	}
 	return launcherview.SettingsThemePage(launcherview.SettingsThemePageProps{
@@ -143,10 +143,10 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height, imageS
 		}
 		var icon *woxui.Image
 		if source := settingNavIconSource(spec.id); source.ImageData != "" {
-			icon = a.imageForTint(source, &snapshot.palette.toolbarText, 24)
+			icon = a.imageForTint(source, &snapshot.palette.toolbarText, physicalImageSize(18, imageScale))
 			if selected {
 				// Keep the cached SVG shape while its selected tint is rasterized asynchronously.
-				if selectedIcon := a.imageForTint(source, &foreground, 24); selectedIcon != nil {
+				if selectedIcon := a.imageForTint(source, &foreground, physicalImageSize(18, imageScale)); selectedIcon != nil {
 					icon = selectedIcon
 				}
 			}
@@ -164,7 +164,7 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height, imageS
 	viewportHeight := max(float32(1), height-searchAreaHeight-28)
 	return launcherview.SettingsRail(launcherview.SettingsRailProps{
 		Width: width, Height: height, Items: items, KeepVisible: keepVisible,
-		SearchBox: a.buildSettingsSearchBox(snapshot, innerWidth, imageScale), SearchPanel: a.buildSettingsSearchResultPanel(snapshot, innerWidth, viewportHeight),
+		SearchBox: a.buildSettingsSearchBox(snapshot, innerWidth, imageScale), SearchPanel: a.buildSettingsSearchResultPanel(snapshot, innerWidth, viewportHeight, imageScale),
 		ShowSearch: snapshot.search.Panel && strings.TrimSpace(snapshot.search.Query.Text) != "", Theme: snapshot.palette.componentTheme(),
 	})
 }
@@ -200,17 +200,17 @@ func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width, imageScal
 }
 
 // buildSettingsSearchResultPanel overlays navigation without shifting the rail while the query changes.
-func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, availableHeight float32) woxwidget.Widget {
+func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, availableHeight, imageScale float32) woxwidget.Widget {
 	results := a.settingsSearchResults(snapshot)
 	items := make([]launcherview.SettingsSearchResult, 0, len(results))
 	for index, result := range results {
 		iconTint := snapshot.palette.resultSubtitle
 		if index == snapshot.search.Selected {
-			iconTint = snapshot.palette.resultTitle
+			iconTint = snapshot.palette.selectedTitle
 		}
-		icon := a.imageForTint(settingsSearchResultIconSource(result.kind), &iconTint, 24)
+		icon := a.imageForTint(settingsSearchResultIconSource(result.kind), &iconTint, physicalImageSize(24, imageScale))
 		if (result.kind == settingsSearchPlugin || result.kind == settingsSearchPluginSetting) && result.icon.ImageData != "" {
-			if pluginIcon := a.imageForSize(result.icon, 24); pluginIcon != nil {
+			if pluginIcon := a.imageForSize(result.icon, physicalImageSize(24, imageScale)); pluginIcon != nil {
 				icon = pluginIcon
 			}
 		}
@@ -281,7 +281,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		if index == snapshot.row {
 			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + 62}
 		}
-		row := a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{})
+		row := a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{}, imageScale)
 		children = append(children, woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
 			Width: contentWidth, Height: 62, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette.componentTheme(),
 		}))
@@ -381,6 +381,10 @@ func (a *App) localizedSettingItem(item settingItem) settingItem {
 		"HideGlanceIcon": {"ui_glance_hide_icon", "ui_glance_hide_icon_tips"}, "PrimaryGlance": {"ui_glance_primary", "ui_glance_primary_tips"},
 		"HttpProxyEnabled": {"ui_proxy_enabled", ""}, "HttpProxyUrl": {"ui_proxy_url", "ui_proxy_url_tips"},
 		"CustomPythonPath": {"ui_runtime_python_path", "ui_runtime_python_path_tips"}, "CustomNodejsPath": {"ui_runtime_nodejs_path", "ui_runtime_nodejs_path_tips"},
+		"CloudSyncServerUrl": {"ui_cloud_sync_server_url", "ui_cloud_sync_server_url_tips"},
+		"ShowScoreTail":      {"ui_debug_show_score_tail", "ui_debug_show_score_tail_tips"}, "ShowPerformanceTail": {"ui_debug_show_performance_tail", "ui_debug_show_performance_tail_tips"},
+		"ShowPerformanceTailBatch": {"ui_debug_show_performance_tail_batch", "ui_debug_show_performance_tail_batch_tips"}, "ShowPerformanceTailPluginQuery": {"ui_debug_show_performance_tail_plugin_query", "ui_debug_show_performance_tail_plugin_query_tips"},
+		"ShowPerformanceTailBackendPrepared": {"ui_debug_show_performance_tail_backend_prepared", "ui_debug_show_performance_tail_backend_prepared_tips"}, "ShowPerformanceTailUiReceived": {"ui_debug_show_performance_tail_ui_received", "ui_debug_show_performance_tail_ui_received_tips"},
 		"EnableAutoUpdate": {"ui_enable_auto_update", "ui_enable_auto_update_tips"}, "ReleaseChannel": {"ui_release_channel", "ui_release_channel_tips"},
 	}
 	if pair, ok := keys[item.key]; ok {
@@ -397,11 +401,12 @@ func (a *App) localizedSettingItem(item settingItem) settingItem {
 
 func (a *App) localizedSettingChoiceLabel(key string, choice settingChoice) string {
 	choiceKeys := map[string]map[string]string{
-		"LaunchMode":     {"fresh": "ui_launch_mode_fresh", "continue": "ui_launch_mode_continue"},
-		"StartPage":      {"blank": "ui_start_page_blank", "mru": "ui_start_page_mru"},
-		"ShowPosition":   {"mouse_screen": "ui_show_position_mouse_screen", "active_screen": "ui_show_position_active_screen", "last_location": "ui_show_position_last_location"},
-		"UiDensity":      {"compact": "ui_interface_size_compact", "normal": "ui_interface_size_normal", "comfortable": "ui_interface_size_comfortable"},
-		"ReleaseChannel": {"stable": "ui_release_channel_stable", "beta": "ui_release_channel_beta"},
+		"LaunchMode":         {"fresh": "ui_launch_mode_fresh", "continue": "ui_launch_mode_continue"},
+		"StartPage":          {"blank": "ui_start_page_blank", "mru": "ui_start_page_mru"},
+		"ShowPosition":       {"mouse_screen": "ui_show_position_mouse_screen", "active_screen": "ui_show_position_active_screen", "last_location": "ui_show_position_last_location"},
+		"UiDensity":          {"compact": "ui_interface_size_compact", "normal": "ui_interface_size_normal", "comfortable": "ui_interface_size_comfortable"},
+		"CloudSyncServerUrl": {"https://sync.woxlauncher.com": "ui_cloud_sync_server_url_production", "http://127.0.0.1:8787": "ui_cloud_sync_server_url_local"},
+		"ReleaseChannel":     {"stable": "ui_release_channel_stable", "beta": "ui_release_channel_beta"},
 	}
 	if valueKeys := choiceKeys[key]; valueKeys != nil {
 		if labelKey := valueKeys[choice.value]; labelKey != "" {
@@ -425,7 +430,7 @@ func (a *App) localizedSettingChoiceTooltip(key string, choice settingChoice) st
 	return ""
 }
 
-func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index int, width float32, background woxui.Color) woxwidget.Widget {
+func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index int, width float32, background woxui.Color, imageScale float32) woxwidget.Widget {
 	kind := "choice"
 	value := settingValueLabel(item)
 	state := woxui.TextEditingState{Text: item.value}
@@ -442,7 +447,7 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 	}
 	var valueLeading *woxui.Image
 	if source := item.icons[item.value]; source.ImageData != "" {
-		valueLeading = a.imageForTint(source, &snapshot.palette.resultTitle, 18)
+		valueLeading = a.imageForTint(source, &snapshot.palette.resultTitle, physicalImageSize(18, imageScale))
 	}
 	return launcherview.SettingRow(launcherview.SettingRowProps{
 		ID: item.key, Title: item.title, Description: item.description, Value: value, ValueTrailing: item.trailers[item.value], ValueLeading: valueLeading,

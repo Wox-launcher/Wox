@@ -13,6 +13,7 @@ type AnimationCurve uint8
 const (
 	AnimationLinear AnimationCurve = iota
 	AnimationEaseOutBack
+	AnimationEaseInOutCubic
 )
 
 // AnimatedFloat retains a keyed numeric value and rebuilds its child while the value changes.
@@ -43,13 +44,14 @@ func (w AnimatedFloat) layout(ctx context, available constraints) *node {
 type LoopAnimation struct {
 	Key      Key
 	Duration time.Duration
+	Paused   bool
 	Builder  func(float32) Widget
 }
 
 func (w LoopAnimation) layout(ctx context, available constraints) *node {
 	progress := float32(0)
 	if w.Key != "" && w.Duration > 0 {
-		progress = ctx.animation.loopValue(w.Key, w.Duration)
+		progress = ctx.animation.loopValue(w.Key, w.Duration, w.Paused)
 	}
 	if w.Builder == nil {
 		return &node{}
@@ -74,11 +76,11 @@ func (f animationFrame) value(key Key, target float32, duration time.Duration, c
 	return f.host.value(f, key, target, duration, curve)
 }
 
-func (f animationFrame) loopValue(key Key, duration time.Duration) float32 {
+func (f animationFrame) loopValue(key Key, duration time.Duration, paused bool) float32 {
 	if f.host == nil {
 		return 0
 	}
-	return f.host.loopValue(f, key, duration)
+	return f.host.loopValue(f, key, duration, paused)
 }
 
 type floatAnimation struct {
@@ -93,6 +95,8 @@ type floatAnimation struct {
 type loopAnimation struct {
 	startedAt  time.Time
 	duration   time.Duration
+	pausedAt   time.Time
+	paused     bool
 	lastSeenAt uint64
 }
 
@@ -114,6 +118,13 @@ func (a *floatAnimation) valueAt(now time.Time) float32 {
 
 // transformAnimationProgress applies the selected timing curve to normalized time.
 func transformAnimationProgress(progress float32, curve AnimationCurve) float32 {
+	if curve == AnimationEaseInOutCubic {
+		if progress < 0.5 {
+			return 4 * progress * progress * progress
+		}
+		shifted := -2*progress + 2
+		return 1 - shifted*shifted*shifted/2
+	}
 	if curve != AnimationEaseOutBack {
 		return progress
 	}
@@ -170,7 +181,7 @@ func (h *animationHost) value(frame animationFrame, key Key, target float32, dur
 	return animation.valueAt(frame.now)
 }
 
-func (h *animationHost) loopValue(frame animationFrame, key Key, duration time.Duration) float32 {
+func (h *animationHost) loopValue(frame animationFrame, key Key, duration time.Duration, paused bool) float32 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.loops == nil {
@@ -178,12 +189,28 @@ func (h *animationHost) loopValue(frame animationFrame, key Key, duration time.D
 	}
 	animation := h.loops[key]
 	if animation == nil || animation.duration != duration {
-		animation = &loopAnimation{startedAt: frame.now, duration: duration}
+		animation = &loopAnimation{startedAt: frame.now, duration: duration, paused: paused}
+		if paused {
+			animation.pausedAt = frame.now
+		}
 		h.loops[key] = animation
+	} else if animation.paused != paused {
+		if paused {
+			animation.pausedAt = frame.now
+		} else {
+			animation.startedAt = animation.startedAt.Add(frame.now.Sub(animation.pausedAt))
+		}
+		animation.paused = paused
 	}
 	animation.lastSeenAt = frame.generation
-	h.active = true
-	return float32(frame.now.Sub(animation.startedAt)%duration) / float32(duration)
+	if !paused {
+		h.active = true
+	}
+	now := frame.now
+	if paused {
+		now = animation.pausedAt
+	}
+	return float32(now.Sub(animation.startedAt)%duration) / float32(duration)
 }
 
 // endFrame drops absent animations and requests the next frame only while a value is moving.

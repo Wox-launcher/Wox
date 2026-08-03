@@ -9,7 +9,7 @@ import (
 )
 
 // buildAboutSettingsPage maps core version state and external actions into the About view.
-func (a *App) buildAboutSettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildAboutSettingsPage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	version := snapshot.about.Version
 	if version == "" && snapshot.about.Loading {
 		version = a.translate("i18n:ui_about_version") + "…"
@@ -27,9 +27,9 @@ func (a *App) buildAboutSettingsPage(snapshot settingsSnapshot, width, height fl
 		Width: width, Height: height, AppIcon: a.imageFor(appIconImageSource), Version: version,
 		Description: a.translate("i18n:ui_about_description"), Status: status, Theme: theme,
 		Links: []launcherview.AboutLink{
-			{ID: "about-open-onboarding-button", Label: a.translate("i18n:ui_about_onboarding"), Icon: a.imageForTint(settingControlIconSource("onboarding"), &iconTint, 18), OnTap: a.openAboutOnboarding},
-			{ID: "about-link-documentation", Label: a.translate("i18n:ui_about_docs"), Icon: a.imageForTint(settingControlIconSource("document"), &iconTint, 18), OnTap: func() { a.openAboutLink("https://wox-launcher.github.io/Wox/#/") }},
-			{ID: "about-link-github", Label: a.translate("i18n:ui_about_github"), Icon: a.imageForTint(settingControlIconSource("code"), &iconTint, 18), OnTap: func() { a.openAboutLink("https://github.com/Wox-launcher/Wox") }},
+			{ID: "about-open-onboarding-button", Label: a.translate("i18n:ui_about_onboarding"), Icon: a.imageForTint(settingControlIconSource("onboarding"), &iconTint, physicalImageSize(18, imageScale)), OnTap: a.openAboutOnboarding},
+			{ID: "about-link-documentation", Label: a.translate("i18n:ui_about_docs"), Icon: a.imageForTint(settingControlIconSource("document"), &iconTint, physicalImageSize(18, imageScale)), OnTap: func() { a.openAboutLink("https://wox-launcher.github.io/Wox/#/") }},
+			{ID: "about-link-github", Label: a.translate("i18n:ui_about_github"), Icon: a.imageForTint(settingControlIconSource("code"), &iconTint, physicalImageSize(18, imageScale)), OnTap: func() { a.openAboutLink("https://github.com/Wox-launcher/Wox") }},
 		},
 	})
 }

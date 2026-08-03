@@ -72,6 +72,8 @@ typedef struct {
   GLint texture_viewport;
   GLint texture_bounds;
   GLint texture_color;
+  GLint texture_rotation;
+  GLint texture_radius;
   bool ready;
   bool frame_open;
   float logical_width;
@@ -322,11 +324,15 @@ static const char *const texture_vertex_source =
     "#version 330 core\n"
     "uniform vec2 u_viewport;\n"
     "uniform vec4 u_rect;\n"
+    "uniform float u_rotation;\n"
     "out vec2 v_uv;\n"
     "void main() {\n"
     "  vec2 corners[4] = vec2[4](vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(1.0, 1.0));\n"
     "  vec2 corner = corners[gl_VertexID];\n"
-    "  vec2 point = u_rect.xy + corner * u_rect.zw;\n"
+    "  vec2 local = (corner - vec2(0.5)) * u_rect.zw;\n"
+    "  float cosine = cos(u_rotation);\n"
+    "  float sine = sin(u_rotation);\n"
+    "  vec2 point = u_rect.xy + u_rect.zw * 0.5 + mat2(cosine, sine, -sine, cosine) * local;\n"
     "  gl_Position = vec4(point.x / u_viewport.x * 2.0 - 1.0, 1.0 - point.y / u_viewport.y * 2.0, 0.0, 1.0);\n"
     "  v_uv = corner;\n"
     "}\n";
@@ -335,9 +341,22 @@ static const char *const texture_fragment_source =
     "#version 330 core\n"
     "uniform sampler2D u_texture;\n"
     "uniform vec4 u_color;\n"
+    "uniform vec4 u_rect;\n"
+    "uniform float u_radius;\n"
     "in vec2 v_uv;\n"
     "out vec4 fragment_color;\n"
-    "void main() { fragment_color = texture(u_texture, v_uv) * u_color; }\n";
+    "void main() {\n"
+    "  float coverage = 1.0;\n"
+    "  if (u_radius > 0.0) {\n"
+    "    float radius = min(u_radius, min(u_rect.z, u_rect.w) * 0.5);\n"
+    "    vec2 half_size = u_rect.zw * 0.5;\n"
+    "    vec2 edge = abs(v_uv * u_rect.zw - half_size) - (half_size - radius);\n"
+    "    float distance_value = length(max(edge, vec2(0.0))) + min(max(edge.x, edge.y), 0.0) - radius;\n"
+    "    float antialias = max(fwidth(distance_value), 0.001);\n"
+    "    coverage = 1.0 - smoothstep(-antialias * 0.5, antialias * 0.5, distance_value);\n"
+    "  }\n"
+    "  fragment_color = texture(u_texture, v_uv) * u_color * coverage;\n"
+    "}\n";
 
 typedef void (*WoxMainFunction)(void *data);
 
@@ -491,6 +510,8 @@ static bool initialize_renderer(WoxLinuxWindow *window) {
   renderer->texture_viewport = glGetUniformLocation(renderer->texture_program, "u_viewport");
   renderer->texture_bounds = glGetUniformLocation(renderer->texture_program, "u_rect");
   renderer->texture_color = glGetUniformLocation(renderer->texture_program, "u_color");
+  renderer->texture_rotation = glGetUniformLocation(renderer->texture_program, "u_rotation");
+  renderer->texture_radius = glGetUniformLocation(renderer->texture_program, "u_radius");
   glUseProgram(renderer->texture_program);
   glUniform1i(glGetUniformLocation(renderer->texture_program, "u_texture"), 0);
   glUseProgram(0);
@@ -2379,6 +2400,8 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   glUniform2f(renderer->texture_viewport, renderer->logical_width, renderer->logical_height);
   glUniform4f(renderer->texture_bounds, x, y, width, height);
   glUniform4fv(renderer->texture_color, 1, color);
+  glUniform1f(renderer->texture_rotation, 0.0f);
+  glUniform1f(renderer->texture_radius, 0.0f);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glBindTexture(GL_TEXTURE_2D, 0);
   glDeleteTextures(1, &texture);
@@ -2390,7 +2413,7 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   return 0;
 }
 
-int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height) {
+int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
   if (window == NULL || !window->renderer.frame_open || pixels == NULL || image_width <= 0 || image_height <= 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
@@ -2414,6 +2437,8 @@ int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, const uint8_t *pixel
   glUniform2f(renderer->texture_viewport, renderer->logical_width, renderer->logical_height);
   glUniform4f(renderer->texture_bounds, x, y, width, height);
   glUniform4fv(renderer->texture_color, 1, color);
+  glUniform1f(renderer->texture_rotation, rotation_radians);
+  glUniform1f(renderer->texture_radius, corner_radius);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glBindTexture(GL_TEXTURE_2D, 0);
   glDeleteTextures(1, &texture);

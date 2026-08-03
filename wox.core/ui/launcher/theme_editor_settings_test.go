@@ -2,8 +2,11 @@ package launcher
 
 import (
 	"image"
+	"image/color"
+	"image/draw"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -58,7 +61,9 @@ func TestWriteDemoWallpaperCachePublishesDecodableImage(t *testing.T) {
 func TestDecodeDemoWallpaperCreatesAndReusesProcessedCache(t *testing.T) {
 	directory := t.TempDir()
 	sourcePath := filepath.Join(directory, "source.png")
-	if err := writeDemoWallpaperCache(sourcePath, image.NewNRGBA(image.Rect(0, 0, 32, 24))); err != nil {
+	source := image.NewNRGBA(image.Rect(0, 0, 32, 24))
+	draw.Draw(source, source.Bounds(), image.NewUniform(color.NRGBA{R: 30, G: 60, B: 90, A: 255}), image.Point{}, draw.Src)
+	if err := writeDemoWallpaperCache(sourcePath, source); err != nil {
 		t.Fatal(err)
 	}
 	cacheDirectory := filepath.Join(directory, "cache")
@@ -78,6 +83,23 @@ func TestDecodeDemoWallpaperCreatesAndReusesProcessedCache(t *testing.T) {
 	}
 	if len(entries) != 2 {
 		t.Fatalf("cache entries = %d, want normal and blurred previews", len(entries))
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "demo_wallpaper_blurred_") {
+			continue
+		}
+		file, err := os.Open(filepath.Join(cacheDirectory, entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cached, _, err := image.Decode(file)
+		_ = file.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if alpha := color.NRGBAModel.Convert(cached.At(0, 0)).(color.NRGBA).A; alpha != 0 {
+			t.Fatalf("wallpaper corner alpha = %d, want rounded transparent corner", alpha)
+		}
 	}
 	old := time.Now().Add(-time.Hour)
 	for _, entry := range entries {

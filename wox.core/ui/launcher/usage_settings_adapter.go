@@ -11,7 +11,7 @@ import (
 )
 
 // buildUsageSettingsPage maps the local analytics snapshot into its portable view.
-func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	theme := snapshot.palette.componentTheme()
 	periods := make([]launcherview.UsagePeriod, 0, 4)
 	for _, id := range []string{"7d", "30d", "365d", "all"} {
@@ -50,22 +50,22 @@ func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height fl
 		TopPluginsTitle: a.translate("i18n:ui_usage_top_plugins"), EmptyLabel: a.translate("i18n:ui_usage_no_data"),
 		MonthLabels: monthLabels, OnShare: a.shareUsageToX,
 		KPIs: []launcherview.UsageKPI{
-			{Label: a.translate("i18n:ui_usage_opened"), Value: snapshot.usage.Stats.PeriodOpened, Icon: a.imageForTint(usageIconSource("visibility"), &blueAccent, 22), Accent: blueAccent},
-			{Label: a.translate("i18n:ui_usage_app_launches"), Value: snapshot.usage.Stats.PeriodAppLaunch, Icon: a.imageForTint(usageIconSource("rocket"), &tealAccent, 22), Accent: tealAccent},
-			{Label: a.translate("i18n:ui_usage_apps_used"), Value: snapshot.usage.Stats.PeriodAppsUsed, Icon: a.imageForTint(usageIconSource("apps"), &amberAccent, 22), Accent: amberAccent},
-			{Label: a.translate("i18n:ui_usage_actions"), Value: snapshot.usage.Stats.PeriodActions, Icon: a.imageForTint(usageIconSource("bolt"), &violetAccent, 22), Accent: violetAccent},
+			{Label: a.translate("i18n:ui_usage_opened"), Value: snapshot.usage.Stats.PeriodOpened, Icon: a.imageForTint(usageIconSource("visibility"), &blueAccent, physicalImageSize(22, imageScale)), Accent: blueAccent},
+			{Label: a.translate("i18n:ui_usage_app_launches"), Value: snapshot.usage.Stats.PeriodAppLaunch, Icon: a.imageForTint(usageIconSource("rocket"), &tealAccent, physicalImageSize(22, imageScale)), Accent: tealAccent},
+			{Label: a.translate("i18n:ui_usage_apps_used"), Value: snapshot.usage.Stats.PeriodAppsUsed, Icon: a.imageForTint(usageIconSource("apps"), &amberAccent, physicalImageSize(22, imageScale)), Accent: amberAccent},
+			{Label: a.translate("i18n:ui_usage_actions"), Value: snapshot.usage.Stats.PeriodActions, Icon: a.imageForTint(usageIconSource("bolt"), &violetAccent, physicalImageSize(22, imageScale)), Accent: violetAccent},
 		},
 		Days: days, HeatmapAccent: greenAccent,
 		TopApps: usageRankingItems(a, snapshot.usage.Stats.TopApps, true), TopPlugins: usageRankingItems(a, snapshot.usage.Stats.TopPlugins, false),
-		ShareIcon:       a.imageForTint(usageIconSource("share"), &theme.ResultTitle, 16),
-		CalendarIcon:    a.imageForTint(usageIconSource("calendar"), &theme.ResultTitle, 16),
-		AppsIcon:        a.imageForTint(usageIconSource("apps"), &theme.ResultTitle, 16),
-		PluginsIcon:     a.imageForTint(usageIconSource("extension"), &theme.ResultTitle, 16),
-		AppFallbackIcon: a.imageForTint(usageIconSource("apps"), &blueAccent, 14),
+		ShareIcon:       a.imageForTint(usageIconSource("share"), &theme.ResultTitle, physicalImageSize(16, imageScale)),
+		CalendarIcon:    a.imageForTint(usageIconSource("calendar"), &theme.ResultTitle, physicalImageSize(16, imageScale)),
+		AppsIcon:        a.imageForTint(usageIconSource("apps"), &theme.ResultTitle, physicalImageSize(16, imageScale)),
+		PluginsIcon:     a.imageForTint(usageIconSource("extension"), &theme.ResultTitle, physicalImageSize(16, imageScale)),
+		AppFallbackIcon: a.imageForTint(usageIconSource("apps"), &blueAccent, physicalImageSize(14, imageScale)),
 		RankIcons: []*woxui.Image{
-			a.imageForTint(usageIconSource("trophy"), &amberAccent, 16),
-			a.imageForTint(usageIconSource("medal"), &silverAccent, 16),
-			a.imageForTint(usageIconSource("medal"), &bronzeAccent, 16),
+			a.imageForTint(usageIconSource("trophy"), &amberAccent, physicalImageSize(16, imageScale)),
+			a.imageForTint(usageIconSource("medal"), &silverAccent, physicalImageSize(16, imageScale)),
+			a.imageForTint(usageIconSource("medal"), &bronzeAccent, physicalImageSize(16, imageScale)),
 		},
 		AppAccent: blueAccent, PluginAccent: violetAccent,
 	})

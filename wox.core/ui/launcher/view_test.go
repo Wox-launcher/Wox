@@ -13,7 +13,7 @@ func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 		results[index] = queryResult{ID: fmt.Sprintf("result-%d", index), Title: fmt.Sprintf("Result %d", index), IsGroup: true}
 	}
 	app := &App{selected: -1}
-	built := app.buildResults(viewSnapshot{results: results, selected: -1}, 760, 500)
+	built := app.buildResults(viewSnapshot{results: results, selected: -1}, 760, 500, 1)
 	semantics := built.(woxwidget.Semantics)
 	retained := semantics.Child.(woxwidget.Stateful)
 	state := retained.CreateState()

@@ -63,6 +63,8 @@ type settingsChoiceState struct {
 	queryFocusNode   *woxwidget.FocusNode
 	scrollController *woxwidget.ScrollController
 	selected         int
+	hovered          int
+	keyboardSelected bool
 }
 
 // InitState creates the dropdown's private query, focus, highlight, and scroll state.
@@ -71,6 +73,7 @@ func (s *settingsChoiceState) InitState(_ woxwidget.StateContext, widget any) {
 	s.queryController = woxwidget.NewTextEditingController("")
 	s.queryFocusNode = woxwidget.NewFocusNode()
 	s.selected = settingsChoiceCurrentIndex(props.Choices, props.CurrentValue)
+	s.hovered = -1
 	s.scrollController = woxwidget.NewScrollController(max(float32(0), float32(s.selected-4)*settingsChoiceRowHeight))
 }
 
@@ -80,6 +83,8 @@ func (s *settingsChoiceState) DidUpdateWidget(_ woxwidget.StateContext, oldWidge
 	props := newWidget.(SettingsChoiceProps)
 	if oldProps.CurrentValue != props.CurrentValue {
 		s.selected = settingsChoiceCurrentIndex(props.Choices, props.CurrentValue)
+		s.hovered = -1
+		s.keyboardSelected = false
 		s.scrollController.JumpTo(max(float32(0), float32(s.selected-4)*settingsChoiceRowHeight))
 	}
 }
@@ -90,8 +95,12 @@ func (s *settingsChoiceState) Build(context woxwidget.StateContext, widget any) 
 	visible := filteredSettingsChoices(props.Choices, s.queryController.Text())
 	if len(visible) == 0 {
 		s.selected = -1
+		s.hovered = -1
 	} else {
 		s.selected = min(max(0, s.selected), len(visible)-1)
+		if s.hovered >= len(visible) {
+			s.hovered = -1
+		}
 	}
 	return buildSettingsChoiceView(context, props, s, visible)
 }
@@ -186,8 +195,10 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 		foreground := props.Theme.ActionText
 		if selected {
 			background = props.Theme.SelectedBackground
-			background.A = min(uint8(80), background.A)
 			foreground = props.Theme.SelectedTitle
+		} else if state.hovered == index || (state.hovered < 0 && state.keyboardSelected && state.selected == index) {
+			background = props.Theme.SelectedBackground
+			background.A = uint8(float32(background.A)*0.25 + 0.5)
 		}
 		contentWidth := max(float32(0), width-32)
 		leadingWidth := float32(0)
@@ -236,17 +247,26 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			)
 		}
 		rowChildren = append(rowChildren, tooltip)
+		rowContent := woxwidget.Container{
+			Width: width, Height: settingsChoiceRowHeight, Padding: woxwidget.Insets{Left: 16},
+			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: rowChildren},
+		}
+		var rowBackground woxwidget.Widget = woxwidget.Container{Width: width, Height: settingsChoiceRowHeight, Color: background}
+		if menuPadding == 0 && index == len(visible)-1 {
+			rowBackground = settingsChoiceRoundedEndBackground(width, settingsChoiceRowHeight, background, false)
+		}
 		row := woxwidget.Gesture{ID: string(key), OnHover: func(inside bool) {
-			if inside && state.selected != index {
+			if inside && (state.hovered != index || state.selected != index) {
 				context.SetState(func() {
+					state.hovered = index
 					state.selected = index
+					state.keyboardSelected = false
 					state.scrollController.EnsureVisible(float32(index)*settingsChoiceRowHeight, float32(index+1)*settingsChoiceRowHeight)
 				})
+			} else if !inside && state.hovered == index {
+				context.SetState(func() { state.hovered = -1 })
 			}
-		}, OnTap: activate, Child: woxwidget.Container{
-			Width: width, Height: settingsChoiceRowHeight, Color: background, Padding: woxwidget.Insets{Left: 16},
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: rowChildren},
-		}}
+		}, OnTap: activate, Child: woxwidget.Stack{Width: width, Height: settingsChoiceRowHeight, Children: []woxwidget.StackChild{{Child: rowBackground}, {Child: rowContent}}}}
 		rows = append(rows, woxwidget.Semantics{
 			Key: key, AutomationID: string(key), Role: woxui.AccessibilityRoleMenuItem, Label: choice.Label,
 			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}, Selected: selected,
@@ -278,18 +298,24 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			OnChanged: func(string) {
 				context.SetState(func() {
 					state.selected = 0
+					state.hovered = -1
+					state.keyboardSelected = false
 					state.scrollController.JumpTo(0)
 				})
 			},
 		})
-		children = append(children, woxwidget.Container{Width: width, Height: settingsChoiceSearchHeight, Color: props.Theme.ToolbarBackground, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{icon, search}}})
+		searchContent := woxwidget.Container{Width: width, Height: settingsChoiceSearchHeight, Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{icon, search}}}
+		children = append(children, woxwidget.Stack{Width: width, Height: settingsChoiceSearchHeight, Children: []woxwidget.StackChild{
+			{Child: settingsChoiceRoundedEndBackground(width, settingsChoiceSearchHeight, props.Theme.ToolbarBackground, true)},
+			{Child: searchContent},
+		}})
 	}
 	if len(rows) > 0 {
-		children = append(children, woxwidget.ScrollView{
-			Key: woxwidget.Key(props.ID + "-list"), ID: props.ID + "-list", Controller: state.scrollController,
-			Width: width, Height: listHeight, ContentHeight: max(listHeight, float32(len(rows))*settingsChoiceRowHeight),
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-		})
+		contentHeight := max(listHeight, float32(len(rows))*settingsChoiceRowHeight)
+		children = append(children, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+			Key: woxwidget.Key(props.ID + "-scroll"), Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Width: width, Height: listHeight, ContentHeight: contentHeight,
+			Controller: state.scrollController, ThumbColor: props.Theme.ResultSubtitle,
+		}))
 	}
 	menuContent := woxwidget.Container{Width: width, Height: height, Radius: 4, Color: props.Theme.ActionBackground,
 		Padding: woxwidget.Insets{Top: menuPadding, Bottom: menuPadding},
@@ -306,6 +332,19 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 		}, Child: surface}
 	}
 	return woxwidget.FocusScope{Key: "setting-choice-scope", Modal: true, Child: surface}
+}
+
+// settingsChoiceRoundedEndBackground keeps menu corner pixels transparent without requiring rounded subtree clipping.
+func settingsChoiceRoundedEndBackground(width, height float32, color woxui.Color, top bool) woxwidget.Widget {
+	const radius = float32(4)
+	return woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+		displayList.FillRoundedRect(bounds, radius, color)
+		if top {
+			displayList.FillRect(woxui.Rect{X: bounds.X, Y: bounds.Y + radius, Width: bounds.Width, Height: max(float32(0), bounds.Height-radius)}, color)
+		} else {
+			displayList.FillRect(woxui.Rect{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: max(float32(0), bounds.Height-radius)}, color)
+		}
+	}}
 }
 
 // handleKey owns modal navigation while leaving ordinary editing keys to WoxTextField.
@@ -325,6 +364,8 @@ func (s *settingsChoiceState) handleKey(context woxwidget.StateContext, props Se
 			delta = 1
 		}
 		context.SetState(func() {
+			s.hovered = -1
+			s.keyboardSelected = true
 			s.selected = (s.selected + delta + len(visible)) % len(visible)
 			s.scrollController.EnsureVisible(float32(s.selected)*settingsChoiceRowHeight, float32(s.selected+1)*settingsChoiceRowHeight)
 		})

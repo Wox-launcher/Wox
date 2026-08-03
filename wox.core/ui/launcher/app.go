@@ -537,6 +537,9 @@ func (a *App) notifyHidden() error {
 }
 
 func (a *App) notifyFocusLost() error {
+	if !a.isPrimary {
+		return nil
+	}
 	ctx, cancel := a.lifecycleContext()
 	defer cancel()
 	return a.services.FocusLost(ctx, a.sessionID)
@@ -914,8 +917,8 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if !a.hotkeyRecordingUsesSettingsWindow() && a.onHotkeyRecordingKey(event) {
 		return true
 	}
-	if !a.formTableUsesSettingsWindow() && a.onFormTableKey(event) {
-		return true
+	if !a.formTableUsesSettingsWindow() && a.launcherTableEditor != nil {
+		return a.onFormTableKey(event)
 	}
 	if a.onFormKey(event) {
 		return true
@@ -1439,6 +1442,8 @@ type formDefinitionValue struct {
 	SortOrder         string            `json:"SortOrder"`
 	MaxHeight         int               `json:"MaxHeight"`
 	InlineTable       bool              `json:"InlineTable"`
+	MinimumRowCount   int               `json:"MinimumRowCount"`
+	MinimumRowMessage string            `json:"MinimumRowMessage"`
 	UpdateDialogWidth int               `json:"UpdateDialogWidth"`
 }
 

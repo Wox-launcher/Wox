@@ -154,10 +154,10 @@ func onboardingRail(props OnboardingProps, active int, height float32) woxwidget
 				Value: props.Labels["subtitle"], Width: innerWidth, Height: 38, MaxLines: 2,
 				Style: woxui.TextStyle{Size: 13}, LineHeight: 19, Color: props.Theme.ResultSubtitle,
 			},
-			woxwidget.ScrollView{
-				Key: "onboarding-rail-scroll", ID: "onboarding-rail-scroll", Width: innerWidth, Height: listHeight,
-				ContentHeight: float32(len(rows)) * 58, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-			},
+			woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+				Key: "onboarding-rail-scroll", Width: innerWidth, Height: listHeight, ContentHeight: max(listHeight, float32(len(rows))*58),
+				Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+			}),
 		}},
 	}
 	return woxwidget.Stack{Width: OnboardingSidebarWidth, Height: height, Children: []woxwidget.StackChild{

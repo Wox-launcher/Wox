@@ -69,6 +69,8 @@ type ThemeSettingsProps struct {
 	InstalledIcon         *woxui.Image
 	InstalledSelectedIcon *woxui.Image
 	AutoAppearanceIcon    *woxui.Image
+	Wallpaper             *woxui.Image
+	WallpaperBlurred      *woxui.Image
 	OnSelect              func(int)
 	OnSearchKey           func(woxui.KeyEvent) bool
 	OnSearchFocusChange   func(bool)
@@ -109,7 +111,10 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 			subtitleColor = props.Theme.ActionSelectedText
 		}
 		trailing, trailingWidth := themeListTrailing(props, item, subtitleColor)
-		textWidth := max(float32(0), width-32-10-trailingWidth-18)
+		textWidth := max(float32(0), width-12-32-10)
+		if trailing != nil {
+			textWidth = max(float32(0), textWidth-10-trailingWidth)
+		}
 		status := strings.TrimSpace(item.Version + "  " + item.Author)
 		var swatch woxwidget.Widget = themeSwatch(item.PreviewTheme, 32)
 		if item.IsAuto {
@@ -157,11 +162,10 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 				break
 			}
 		}
-		list = woxwidget.ScrollView{
-			Key: "theme-list-scroll", ID: "theme-list-scroll", Width: width, Height: viewportHeight,
-			ContentHeight: max(viewportHeight, float32(len(rows))*ThemeListRowHeight), KeepVisible: keepVisible,
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: rows},
-		}
+		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+			Key: "theme-list-scroll", Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: rows}, Width: width, Height: viewportHeight,
+			ContentHeight: max(viewportHeight, float32(len(rows))*ThemeListRowHeight), KeepVisible: keepVisible, ThumbColor: props.Theme.ResultSubtitle,
+		})
 	}
 
 	actions := make([]woxcomponent.SearchFieldAction, 0, 1)
@@ -212,12 +216,10 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 			Axis: woxwidget.Horizontal, Gap: 7, Children: websiteChildren,
 		}}}
 	}
-	versionWidth := float32(84)
-	nameWidth := max(float32(80), innerWidth-versionWidth-10)
 	header := woxwidget.Container{Width: width, Height: headerHeight, Padding: woxwidget.Insets{Left: 16, Right: 16}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: innerWidth, Height: 40, Padding: woxwidget.Insets{Left: 2}, Child: woxwidget.Clip{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: nameWidth, Height: 32, Child: woxwidget.Clip{Width: nameWidth, Height: 32, Child: woxwidget.Text{Value: theme.Name, Style: woxui.TextStyle{Size: 20}, Color: props.Theme.QueryText}}},
-			woxwidget.Container{Width: versionWidth, Height: 32, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{Value: theme.Version, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}},
+		woxwidget.Container{Width: innerWidth, Height: 40, Padding: woxwidget.Insets{Left: 2}, Child: woxwidget.Clip{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: theme.Name, Style: woxui.TextStyle{Size: 20}, Color: props.Theme.QueryText},
+			woxwidget.Text{Value: theme.Version, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle},
 		}}}},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: max(float32(0), innerWidth-104), Height: 28, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}},
@@ -262,34 +264,36 @@ func themePreviewTab(props ThemeSettingsProps, theme ThemeCatalogItem, width, he
 	hintHeight := float32(0)
 	children := make([]woxwidget.Widget, 0, 2)
 	if theme.IsAuto && props.AutoAppearanceHint != "" {
-		hintHeight = 58
-		accent := props.AutoAppearanceAccent
-		backgroundAlpha := uint8(26)
-		borderAlpha := uint8(77)
-		if int(props.Theme.Background.R)*299+int(props.Theme.Background.G)*587+int(props.Theme.Background.B)*114 < 128000 {
-			backgroundAlpha = 36
-			borderAlpha = 89
-		}
-		icon := woxwidget.Widget(woxwidget.Painter{Width: 16, Height: 16})
-		if props.AutoAppearanceIcon != nil {
-			icon = woxwidget.Image{Source: props.AutoAppearanceIcon, Width: 16, Height: 16}
-		}
-		children = append(children, woxwidget.Container{
-			Width: max(float32(0), width-horizontalPadding*2), Height: 46, Radius: 10, Color: settingsColorAlpha(accent, backgroundAlpha),
-			BorderColor: settingsColorAlpha(accent, borderAlpha), BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Top: 14, Right: 12},
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-				icon,
-				woxwidget.TextBlock{Value: props.AutoAppearanceHint, Width: max(float32(0), width-horizontalPadding*2-50), Height: 18, MaxLines: 1, LineHeight: 18, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultTitle},
-			}},
-		})
+		hintHeight = 54
+		children = append(children, woxcomponent.WoxHintBox(woxcomponent.HintBoxProps{
+			Text: props.AutoAppearanceHint, Width: max(float32(0), width-horizontalPadding*2), MaxLines: 1,
+			Icon: props.AutoAppearanceIcon, Accent: props.AutoAppearanceAccent, Theme: props.Theme,
+		}))
 	}
-	previewHeight := max(float32(0), height-topPadding-bottomPadding-hintHeight)
-	previewWidth := max(float32(0), width-horizontalPadding*2)
+	stageSlotHeight := max(float32(0), height-topPadding-bottomPadding-hintHeight)
+	stageSlotWidth := max(float32(0), width-horizontalPadding*2)
+	stageWidth := stageSlotWidth
+	stageHeight := stageWidth * 420 / 900
+	if stageHeight > stageSlotHeight {
+		stageHeight = stageSlotHeight
+		stageWidth = stageHeight * 900 / 420
+	}
+	stageRadius := 29 * stageWidth / 1440
+	previewWidth := min(float32(780), max(float32(0), stageWidth*0.78))
+	previewHeight := min(float32(360), max(float32(0), stageHeight*0.82))
 	preview := themeCatalogPreview(props, theme.PreviewTheme, previewWidth, previewHeight)
 	if theme.IsAuto {
 		preview = themeAutoCatalogPreview(props, theme.LightPreviewTheme, theme.DarkPreviewTheme, previewWidth, previewHeight)
 	}
-	children = append(children, preview)
+	stageChildren := []woxwidget.StackChild{{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: stageRadius, Color: props.Theme.QueryBackground}}}
+	if props.Wallpaper != nil {
+		stageChildren = append(stageChildren, woxwidget.StackChild{Child: woxwidget.Image{Source: props.Wallpaper, Width: stageWidth, Height: stageHeight}})
+	}
+	stageChildren = append(stageChildren,
+		woxwidget.StackChild{Left: (stageWidth - previewWidth) / 2, Top: (stageHeight - previewHeight) / 2, Child: preview},
+		woxwidget.StackChild{Child: woxwidget.Container{Width: stageWidth, Height: stageHeight, Radius: stageRadius, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1}},
+	)
+	children = append(children, woxwidget.Align{Width: stageSlotWidth, Height: stageSlotHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Stack{Width: stageWidth, Height: stageHeight, Children: stageChildren}})
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: horizontalPadding, Top: topPadding, Right: horizontalPadding, Bottom: bottomPadding}, Child: woxwidget.Flex{
 		Axis: woxwidget.Vertical, Gap: 12, Children: children,
 	}}
@@ -300,7 +304,7 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 		return woxwidget.Container{Width: max(float32(0), width), Height: max(float32(0), height)}
 	}
 	const queryAreaHeight = float32(60)
-	const toolbarHeight = float32(34)
+	const toolbarHeight = float32(40)
 	rowsHeight := max(float32(0), height-queryAreaHeight-toolbarHeight)
 	rowWidgets := make([]woxwidget.Widget, 0, len(props.PreviewTexts))
 	for index, title := range props.PreviewTexts {
@@ -330,23 +334,20 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 	query := woxwidget.Container{Width: max(float32(0), width-20), Height: 40, Radius: 7, Color: theme.QueryBackground, Padding: woxwidget.Insets{Left: 10, Top: 11}, Child: woxwidget.Text{
 		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: 13}, Color: theme.QueryText,
 	}}
-	rows := woxwidget.ScrollView{Width: max(float32(0), width-20), Height: rowsHeight, ContentHeight: max(rowsHeight, float32(len(rowWidgets))*60), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rowWidgets}}
-	openWidth := max(float32(0), width-108)
-	toolbarContent := woxwidget.Container{Width: width, Height: toolbarHeight - 1, Color: theme.ToolbarBackground, Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: openWidth, Height: 24},
-		woxwidget.Text{Value: props.PreviewOpenLabel, Style: woxui.TextStyle{Size: 11}, Color: theme.ToolbarText},
-		woxwidget.Container{Width: 8, Height: 24},
-		woxwidget.Container{Width: 30, Height: 22, Radius: 4, BorderColor: theme.ToolbarText, BorderWidth: 1, Padding: woxwidget.Insets{Left: 8, Top: 3}, Child: woxwidget.Text{Value: "↵", Style: woxui.TextStyle{Size: 12}, Color: theme.ToolbarText}},
-	}}}
-	toolbar := woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: width, Height: 1, Color: theme.PreviewSplit},
-		toolbarContent,
-	}}
-	return woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.Background, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+	rows := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-preview-results", Width: max(float32(0), width-20), Height: rowsHeight, ContentHeight: max(rowsHeight, float32(len(rowWidgets))*60), Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rowWidgets}, ThumbColor: theme.ResultSubtitle})
+	toolbar := themeCatalogToolbar(props, theme, width, true)
+	window := woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.Background, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: width, Height: queryAreaHeight, Padding: woxwidget.UniformInsets(10), Child: query},
 		woxwidget.Container{Width: width, Height: rowsHeight, Padding: woxwidget.Insets{Left: 10, Right: 10}, Child: rows},
 		toolbar,
 	}}}
+	if props.WallpaperBlurred == nil {
+		return window
+	}
+	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		{Child: woxwidget.Image{Source: props.WallpaperBlurred, Width: width, Height: height}},
+		{Child: window},
+	}}
 }
 
 // themeAutoCatalogPreview layers shared preview content over diagonally split light and dark surfaces.
@@ -355,7 +356,7 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 		return woxwidget.Container{Width: max(float32(0), width), Height: max(float32(0), height)}
 	}
 	const queryAreaHeight = float32(60)
-	const toolbarHeight = float32(34)
+	const toolbarHeight = float32(40)
 	rowsHeight := max(float32(0), height-queryAreaHeight-toolbarHeight)
 	background := woxwidget.Painter{Width: width, Height: height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 		fillThemeDiagonalRect(displayList, bounds, bounds, light.Background, dark.Background)
@@ -371,7 +372,7 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 		}
 		toolbar := woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height - toolbarHeight, Width: bounds.Width, Height: toolbarHeight}
 		fillThemeDiagonalRect(displayList, toolbar, bounds, light.ToolbarBackground, dark.ToolbarBackground)
-		fillThemeDiagonalRect(displayList, woxui.Rect{X: toolbar.X, Y: toolbar.Y, Width: toolbar.Width, Height: 1}, bounds, light.PreviewSplit, dark.PreviewSplit)
+		fillThemeDiagonalRect(displayList, woxui.Rect{X: toolbar.X, Y: toolbar.Y, Width: toolbar.Width, Height: 1}, bounds, themeAlpha(light.ToolbarText, 26), themeAlpha(dark.ToolbarText, 26))
 		drawThemeDiagonalLine(displayList, bounds, 2)
 	}}
 	rows := make([]woxwidget.Widget, 0, len(props.PreviewTexts))
@@ -397,20 +398,53 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 	query := woxwidget.Container{Width: max(float32(0), width-20), Height: 40, Padding: woxwidget.Insets{Left: 10, Top: 11}, Child: woxwidget.Text{
 		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: 13}, Color: light.QueryText,
 	}}
-	rowList := woxwidget.ScrollView{Width: max(float32(0), width-20), Height: rowsHeight, ContentHeight: max(rowsHeight, float32(len(rows))*60), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}}
-	openWidth := max(float32(0), width-108)
-	toolbar := woxwidget.Container{Width: width, Height: toolbarHeight, Padding: woxwidget.Insets{Left: 10, Top: 8, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: openWidth, Height: 24},
-		woxwidget.Text{Value: props.PreviewOpenLabel, Style: woxui.TextStyle{Size: 11}, Color: dark.ToolbarText},
-		woxwidget.Container{Width: 8, Height: 24},
-		woxwidget.Container{Width: 30, Height: 22, Radius: 4, BorderColor: dark.ToolbarText, BorderWidth: 1, Padding: woxwidget.Insets{Left: 8, Top: 3}, Child: woxwidget.Text{Value: "↵", Style: woxui.TextStyle{Size: 12}, Color: dark.ToolbarText}},
-	}}}
+	rowList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-auto-preview-results", Width: max(float32(0), width-20), Height: rowsHeight, ContentHeight: max(rowsHeight, float32(len(rows))*60), Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: dark.ResultSubtitle})
+	toolbar := themeCatalogToolbar(props, dark, width, false)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: width, Height: queryAreaHeight, Padding: woxwidget.UniformInsets(10), Child: query},
 		woxwidget.Container{Width: width, Height: rowsHeight, Padding: woxwidget.Insets{Left: 10, Right: 10}, Child: rowList},
 		toolbar,
 	}}
-	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{{Child: background}, {Child: content}}}
+	children := make([]woxwidget.StackChild, 0, 3)
+	if props.WallpaperBlurred != nil {
+		children = append(children, woxwidget.StackChild{Child: woxwidget.Image{Source: props.WallpaperBlurred, Width: width, Height: height}})
+	}
+	children = append(children, woxwidget.StackChild{Child: background}, woxwidget.StackChild{Child: content})
+	return woxwidget.Stack{Width: width, Height: height, Children: children}
+}
+
+// themeCatalogToolbar mirrors Flutter's installed-theme preview footer.
+func themeCatalogToolbar(props ThemeSettingsProps, theme woxcomponent.Theme, width float32, paintBackground bool) woxwidget.Widget {
+	const height = float32(40)
+	const horizontalPadding = float32(10)
+	labelStyle := woxui.TextStyle{Size: 14}
+	labelMetrics, _ := props.Window.MeasureText(props.PreviewOpenLabel, labelStyle)
+	keycap, keycapWidth := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
+		Labels: []string{"Enter"}, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground,
+		Border: theme.ToolbarText, FontSize: woxcomponent.TailFontSize, Window: props.Window,
+	})
+	actionWidth := labelMetrics.Size.Width + 8 + keycapWidth
+	action := woxwidget.Container{Width: actionWidth, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
+		woxwidget.Align{Width: labelMetrics.Size.Width, Height: 28, Vertical: 0.5, Child: woxwidget.Text{Value: props.PreviewOpenLabel, Style: labelStyle, Color: theme.ToolbarText}},
+		keycap,
+	}}}
+	background := woxui.Color{}
+	if paintBackground {
+		background = theme.ToolbarBackground
+	}
+	body := woxwidget.Container{Width: width, Height: height, Color: background, Padding: woxwidget.Insets{Left: horizontalPadding, Top: 6, Right: horizontalPadding, Bottom: 6}, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+			woxwidget.Container{Width: max(float32(0), width-horizontalPadding*2-actionWidth), Height: 28},
+			action,
+		},
+	}}
+	if !paintBackground {
+		return body
+	}
+	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		{Child: body},
+		{Child: woxwidget.Container{Width: width, Height: 1, Color: themeAlpha(theme.ToolbarText, 26)}},
+	}}
 }
 
 // themeAutoSwatch mirrors Flutter's compact diagonal AUTO theme icon.

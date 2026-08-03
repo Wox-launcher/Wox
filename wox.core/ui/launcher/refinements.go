@@ -14,7 +14,7 @@ import (
 
 const staleQueryResultsDuration = 150 * time.Millisecond
 
-func (a *App) refinementViewProps(snapshot viewSnapshot, width, height float32) launcherview.RefinementsProps {
+func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageScale float32) launcherview.RefinementsProps {
 	fallback := a.translate("i18n:ui_query_refinement_filters")
 	if strings.HasPrefix(fallback, "ui query refinement") || fallback == "" {
 		fallback = "Filters"
@@ -33,7 +33,7 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height float32) 
 		for _, option := range options {
 			refinementID := refinement.ID
 			converted = append(converted, launcherview.RefinementOption{
-				Value: option.Value, Label: a.translate(option.Title), Count: option.Count, Icon: a.imageForSize(option.Icon, int(snapshot.densityMetrics.scaled(16))),
+				Value: option.Value, Label: a.translate(option.Title), Count: option.Count, Icon: a.imageForSize(option.Icon, physicalImageSize(int(snapshot.densityMetrics.scaled(16)), imageScale)),
 				Selected: slices.Contains(splitRefinementValues(snapshot.refinementValues[refinement.ID]), option.Value),
 				OnTap:    func() { a.selectRefinementOption(refinementID, option.Value) },
 			})
@@ -51,16 +51,16 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height float32) 
 	}
 }
 
-func (a *App) buildRefinementToggle(snapshot viewSnapshot) woxwidget.Widget {
-	return launcherview.RefinementToggle(a.refinementViewProps(snapshot, 0, 0))
+func (a *App) buildRefinementToggle(snapshot viewSnapshot, imageScale float32) woxwidget.Widget {
+	return launcherview.RefinementToggle(a.refinementViewProps(snapshot, 0, 0, imageScale))
 }
 
-func (a *App) refinementToggleWidth(snapshot viewSnapshot) float32 {
-	return launcherview.RefinementToggleWidth(a.refinementViewProps(snapshot, 0, 0))
+func (a *App) refinementToggleWidth(snapshot viewSnapshot, imageScale float32) float32 {
+	return launcherview.RefinementToggleWidth(a.refinementViewProps(snapshot, 0, 0, imageScale))
 }
 
-func (a *App) buildRefinementBar(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
-	return launcherview.RefinementsView(a.refinementViewProps(snapshot, width, height))
+func (a *App) buildRefinementBar(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
+	return launcherview.RefinementsView(a.refinementViewProps(snapshot, width, height, imageScale))
 }
 
 func (a *App) refinementSummary(snapshot viewSnapshot, fallback string) string {

@@ -184,20 +184,10 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 			break
 		}
 	}
-	offset := scrollController.Offset()
-	listChildren := []woxwidget.StackChild{{Child: woxwidget.ScrollView{
-		Key: "action-scroll", ID: "action-scroll", Controller: scrollController, KeepVisible: keepVisible,
-		Width: innerWidth, Height: listHeight, ContentHeight: listContentHeight, OnOffsetChanged: func(float32) { context.Invalidate() },
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-	}}}
-	if len(props.Items) > MaxVisibleActions {
-		thumbHeight := max(float32(24), listHeight*listHeight/listContentHeight)
-		thumbTop := (listHeight - thumbHeight) * offset / (listContentHeight - listHeight)
-		thumbColor := props.ActionHeader
-		thumbColor.A = min(150, thumbColor.A)
-		listChildren = append(listChildren, woxwidget.StackChild{Left: max(float32(0), innerWidth-5), Top: thumbTop, Child: woxwidget.Container{Width: 3, Height: thumbHeight, Radius: 2, Color: thumbColor}})
-	}
-	actionList := woxwidget.Stack{Width: innerWidth, Height: listHeight, Children: listChildren}
+	actionList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+		Key: "action-scroll", Controller: scrollController, KeepVisible: keepVisible, Width: innerWidth, Height: listHeight, ContentHeight: listContentHeight,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.ActionHeader,
+	})
 	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "action-search", Label: "Filter actions", Width: innerWidth, Height: 40, Radius: props.ActionQueryRadius,
 		Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 8, Bottom: 8}, Background: props.ActionQueryBackground,

@@ -87,7 +87,7 @@ func unifiedActionPanelEntries(results []queryResult, selected int, message *too
 }
 
 // buildActionPanel resolves action labels and icons before delegating to the pure panel view.
-func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight, queryHeight, toolbarHeight float32) (woxwidget.Widget, float32, float32) {
+func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight, queryHeight, toolbarHeight, imageScale float32) (woxwidget.Widget, float32, float32) {
 	if len(snapshot.actionEntries) == 0 {
 		return nil, 0, 0
 	}
@@ -98,7 +98,7 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 		}
 		action := snapshot.actionEntries[index]
 		items = append(items, launcherview.ActionItem{
-			Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: a.imageForSize(action.Icon, 22), HotkeyLabels: formatHotkeyLabels(action.Hotkey),
+			Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: a.imageForSize(action.Icon, physicalImageSize(22, imageScale)), HotkeyLabels: formatHotkeyLabels(action.Hotkey),
 		})
 	}
 	return launcherview.ActionsView(launcherview.ActionsProps{

@@ -154,12 +154,12 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 			fields.active = true
 			fields.focused = index
 			hotkey = a.buildFormHotkey(fields, formFieldCallbacks{
-				idPrefix: "hotkey-settings", focus: a.focusOnboardingHotkey, recordKey: a.recordHotkeySettingsField,
+				idPrefix: "hotkey-settings", imageScale: frame.Scale, focus: a.focusOnboardingHotkey, recordKey: a.recordHotkeySettingsField,
 			}, snapshot.palette, index, fields.definitions[index], max(float32(0), frame.Size.Width-launcherview.OnboardingSidebarWidth-148), 94)
 		}
 	}
 
-	choices := a.onboardingChoices(snapshot, a.onboardingChoice)
+	choices := a.onboardingChoices(snapshot, a.onboardingChoice, frame.Scale)
 	choiceValue := ""
 	if a.onboardingChoice == "language" {
 		choiceValue = snapshot.general.Data.LangCode
@@ -188,7 +188,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 					source = item.Preview.Icon
 				}
 			}
-			glanceIcon = a.imageForTint(source, &snapshot.palette.resultTitle, 18)
+			glanceIcon = a.imageForTint(source, &snapshot.palette.resultTitle, physicalImageSize(18, frame.Scale))
 			break
 		}
 	}
@@ -352,7 +352,7 @@ func (a *App) openOnboardingChoice(kind string) {
 	a.invalidateOnboardingWindow()
 }
 
-func (a *App) onboardingChoices(snapshot settingsSnapshot, kind string) []launcherview.OnboardingChoice {
+func (a *App) onboardingChoices(snapshot settingsSnapshot, kind string, imageScale float32) []launcherview.OnboardingChoice {
 	if kind == "language" {
 		choices := make([]launcherview.OnboardingChoice, len(snapshot.general.Languages))
 		for index, choice := range snapshot.general.Languages {
@@ -373,7 +373,7 @@ func (a *App) onboardingChoices(snapshot settingsSnapshot, kind string) []launch
 				}
 			}
 			choices = append(choices, launcherview.OnboardingChoice{
-				Value: glanceRefJSON(item.Ref), Label: label, Leading: a.imageForTint(source, &snapshot.palette.resultTitle, 18), Trailing: trailing,
+				Value: glanceRefJSON(item.Ref), Label: label, Leading: a.imageForTint(source, &snapshot.palette.resultTitle, physicalImageSize(18, imageScale)), Trailing: trailing,
 			})
 		}
 		return choices

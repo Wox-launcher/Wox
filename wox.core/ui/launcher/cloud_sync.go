@@ -252,8 +252,7 @@ func (a *App) openCloudBilling() {
 func (a *App) openCloudSupportEmail() {
 	subject := url.QueryEscape(a.translate("i18n:ui_cloud_sync_billing_help_email_subject"))
 	if err := a.settingsNativeWindow().OpenExternalURL("mailto:billing@woxlauncher.com?subject=" + subject); err != nil {
-		a.cloudSettings.SetError(err.Error())
-		a.invalidateSettingsWindow()
+		util.GetLogger().Error(context.Background(), "failed to open cloud support email: "+err.Error())
 	}
 }
 

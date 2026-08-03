@@ -430,10 +430,11 @@ func (a *App) setPluginSelectionLocked(index int) {
 	}
 	definitions := pluginSettingsFormDefinitions(plugin)
 	values := make(map[string]string, len(plugin.Setting.Settings)+2)
-	values["TriggerKeywords"] = strings.Join(plugin.Setting.TriggerKeywords, ",")
-	if values["TriggerKeywords"] == "" {
-		values["TriggerKeywords"] = strings.Join(plugin.TriggerKeywords, ",")
+	triggerKeywords := plugin.Setting.TriggerKeywords
+	if len(triggerKeywords) == 0 {
+		triggerKeywords = plugin.TriggerKeywords
 	}
+	values["TriggerKeywords"] = encodePluginTriggerKeywordRows(triggerKeywords)
 	for key, value := range plugin.Setting.Settings {
 		values[key] = value
 	}
@@ -457,9 +458,7 @@ func pluginSettingsFormDefinitions(plugin pluginSettingsPlugin) []formDefinition
 	// Plugin lifecycle actions belong to the detail header, while trigger keywords have
 	// their own tab. Keeping only the keyword editor ahead of manifest definitions
 	// preserves its save flow without duplicating either control in the Settings tab.
-	definitions := []formDefinition{
-		{Type: "textbox", Value: formDefinitionValue{Key: "TriggerKeywords", Label: "i18n:ui_plugin_tab_trigger_keywords", Tooltip: "i18n:ui_plugin_trigger_keywords_tip"}},
-	}
+	definitions := []formDefinition{pluginTriggerKeywordDefinition()}
 	definitions = append(definitions, plugin.SettingDefinitions...)
 	allSettingsAreTables := len(plugin.SettingDefinitions) > 0
 	for _, definition := range plugin.SettingDefinitions {
@@ -474,6 +473,44 @@ func pluginSettingsFormDefinitions(plugin pluginSettingsPlugin) []formDefinition
 		}
 	}
 	return definitions
+}
+
+// pluginTriggerKeywordDefinition maps the built-in keyword editor onto the shared table flow.
+func pluginTriggerKeywordDefinition() formDefinition {
+	return formDefinition{Type: "table", Value: formDefinitionValue{
+		Key: "TriggerKeywords", InlineTable: true, MaxHeight: 300, MinimumRowCount: 1, MinimumRowMessage: "i18n:ui_plugin_trigger_keyword_keep_one",
+		Columns:       []formTableColumn{{Key: "keyword", Label: "i18n:ui_plugin_trigger_keyword_column", Tooltip: "i18n:ui_plugin_trigger_keyword_tooltip", Type: "text", TextMaxLines: 1, Validators: []formValidator{{Type: "not_empty"}}}},
+		SortColumnKey: "keyword",
+	}}
+}
+
+// encodePluginTriggerKeywordRows adapts core's string list to the portable table value.
+func encodePluginTriggerKeywordRows(keywords []string) string {
+	rows := make([]map[string]string, 0, len(keywords))
+	for _, keyword := range keywords {
+		if keyword = strings.TrimSpace(keyword); keyword != "" {
+			rows = append(rows, map[string]string{"keyword": keyword})
+		}
+	}
+	encoded, _ := json.Marshal(rows)
+	return string(encoded)
+}
+
+// decodePluginTriggerKeywordRows adapts table rows back to core's normalized string list.
+func decodePluginTriggerKeywordRows(value string) ([]string, error) {
+	rows, err := decodeFormTableRows(value)
+	if err != nil {
+		return nil, err
+	}
+	keywords := make([]string, 0, len(rows))
+	for _, row := range rows {
+		keyword := strings.TrimSpace(fmt.Sprint(row["keyword"]))
+		if keyword == "" {
+			return nil, fmt.Errorf("trigger keyword must not be empty")
+		}
+		keywords = append(keywords, keyword)
+	}
+	return keywords, nil
 }
 
 // snapshotPluginSettingsFormLocked copies mutable maps before the render lock is released.
@@ -1270,10 +1307,53 @@ func preparePluginSettingSaveValues(state *pluginSettingsFormState) (map[string]
 	for key, value := range submitted {
 		persisted[key] = value
 	}
+	if value, ok := persisted["TriggerKeywords"]; ok {
+		keywords, err := decodePluginTriggerKeywordRows(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		persisted["TriggerKeywords"] = strings.Join(keywords, ",")
+	}
 	if err := rewriteDictationSaveValues(state.pluginID, state.values, state.initial, persisted); err != nil {
 		return nil, nil, err
 	}
 	return submitted, persisted, nil
+}
+
+// validatePluginTriggerKeywordTableRow prevents installed plugins from claiming the same non-global route.
+func (a *App) validatePluginTriggerKeywordTableRow(state *formTableEditorState) string {
+	if state == nil || state.definition.Value.Key != "TriggerKeywords" || state.rowForm == nil {
+		return ""
+	}
+	keyword := strings.TrimSpace(state.rowForm.values["keyword"])
+	state.rowForm.values["keyword"] = keyword
+	if keyword == "" || keyword == "*" {
+		return ""
+	}
+	for index, row := range state.rows {
+		if index != state.rowIndex && strings.TrimSpace(fmt.Sprint(row["keyword"])) == keyword {
+			return a.translate("i18n:ui_plugin_trigger_keyword_duplicate_in_plugin")
+		}
+	}
+	pluginForm := a.pluginSettings.Form()
+	if pluginForm == nil {
+		return ""
+	}
+	for _, plugin := range a.pluginSettings.Plugins() {
+		if plugin.ID == pluginForm.pluginID {
+			continue
+		}
+		for _, existing := range plugin.TriggerKeywords {
+			if strings.TrimSpace(existing) == keyword {
+				name := strings.TrimSpace(plugin.Name)
+				if name == "" {
+					name = plugin.ID
+				}
+				return fmt.Sprintf(a.translate("i18n:ui_plugin_trigger_keyword_duplicate_in_other_plugin"), name)
+			}
+		}
+	}
+	return ""
 }
 
 // submitPluginSettings serializes auto-saves while retaining edits made during an in-flight request.

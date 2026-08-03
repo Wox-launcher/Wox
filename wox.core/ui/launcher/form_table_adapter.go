@@ -130,7 +130,7 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	for columnIndex, column := range visibleColumns {
 		columns[columnIndex] = launcherview.FormTableColumn{Label: a.translate(column.Label), Tooltip: a.translate(column.Tooltip), Width: float32(column.Width)}
 	}
-	viewRows := a.formTableViewRows(definition, visibleColumns, rows, theme)
+	viewRows := a.formTableViewRows(definition, visibleColumns, rows, theme, callbacks.imageScale)
 	onTooltip := (func(bool, string, woxui.Rect))(nil)
 	if callbacks.idPrefix == "hotkey-settings" || callbacks.idPrefix == "plugin-settings" || callbacks.idPrefix == "ai-settings" {
 		onTooltip = a.setSettingChoiceTooltip
@@ -196,7 +196,7 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	}
 }
 
-func (a *App) formTableViewRows(definition formDefinition, columns []formTableColumn, rows []map[string]any, theme woxcomponent.Theme) []launcherview.FormTableRow {
+func (a *App) formTableViewRows(definition formDefinition, columns []formTableColumn, rows []map[string]any, theme woxcomponent.Theme, imageScale float32) []launcherview.FormTableRow {
 	type indexedRow struct {
 		index int
 		row   map[string]any
@@ -219,14 +219,14 @@ func (a *App) formTableViewRows(definition formDefinition, columns []formTableCo
 	for _, current := range ordered {
 		cells := make([]launcherview.FormTableCell, len(columns))
 		for columnIndex, column := range columns {
-			cells[columnIndex] = a.formTableViewCell(column, current.row, theme)
+			cells[columnIndex] = a.formTableViewCell(column, current.row, theme, imageScale)
 		}
 		viewRows = append(viewRows, launcherview.FormTableRow{Index: current.index, Cells: cells})
 	}
 	return viewRows
 }
 
-func (a *App) formTableViewCell(column formTableColumn, row map[string]any, theme woxcomponent.Theme) launcherview.FormTableCell {
+func (a *App) formTableViewCell(column formTableColumn, row map[string]any, theme woxcomponent.Theme, imageScale float32) launcherview.FormTableCell {
 	cell := launcherview.FormTableCell{Text: compactFormTableText(a.formTableDisplayValue(column, row), 80)}
 	iconTint := theme.ResultTitle
 	if column.Type == "aiModelStatus" {
@@ -241,7 +241,7 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 			iconName = "checkbox.checked"
 		}
 		cell.Text = ""
-		cell.Icon = a.imageForTint(settingControlIconSource(iconName), &iconTint, 16)
+		cell.Icon = a.imageForTint(settingControlIconSource(iconName), &iconTint, physicalImageSize(16, imageScale))
 		return cell
 	}
 	if column.Type == "app" {
@@ -270,7 +270,7 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 }
 
 // buildFormTableOverlay maps table editor state into the shared modal view.
-func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	if snapshot.deletePending >= 0 && snapshot.deleteDirect {
 		return a.buildFormTableDeleteDialog(palette, width, height)
 	}
@@ -298,9 +298,9 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 	}
 	var body woxwidget.Widget
 	if snapshot.appPicker != nil {
-		body = a.buildFormTableAppPicker(snapshot.appPicker, palette, innerWidth, bodyHeight)
+		body = a.buildFormTableAppPicker(snapshot.appPicker, palette, innerWidth, bodyHeight, imageScale)
 	} else if snapshot.rowForm != nil {
-		body = a.buildFormTableRowEditor(snapshot, palette, innerWidth, bodyHeight)
+		body = a.buildFormTableRowEditor(snapshot, palette, innerWidth, bodyHeight, imageScale)
 	} else {
 		body = a.buildFormTableList(snapshot, palette, innerWidth, bodyHeight)
 	}
@@ -393,9 +393,9 @@ func (a *App) buildFormTableList(snapshot *formTableEditorSnapshot, palette uiPa
 	})
 }
 
-func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	rowForm := snapshot.rowForm
-	callbacks := formFieldCallbacks{idPrefix: "form-table-row", focus: a.focusFormTableRowField, change: a.changeFormTableRowChoice, setText: a.setFormTableRowText, onKey: a.onFormTableKey, openChoice: a.openFormTableRowChoice, pickDir: a.pickFormTableRowDirectory, pickApp: a.openFormTableAppPicker, recordKey: a.recordFormTableRowHotkey}
+	callbacks := formFieldCallbacks{idPrefix: "form-table-row", imageScale: imageScale, focus: a.focusFormTableRowField, change: a.changeFormTableRowChoice, setText: a.setFormTableRowText, onKey: a.onFormTableKey, openChoice: a.openFormTableRowChoice, pickDir: a.pickFormTableRowDirectory, pickApp: a.openFormTableAppPicker, recordKey: a.recordFormTableRowHotkey}
 	labelWidth := a.formTableRowLabelWidth(rowForm.definitions)
 	fieldWidth := max(float32(0), width-20)
 	rows := make([]woxwidget.Widget, 0, len(rowForm.definitions))
@@ -518,8 +518,8 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 			props.Image = a.imageFor(image)
 		}
 		iconTint := palette.componentTheme().ActionText
-		props.EmojiIcon = a.imageForTint(settingControlIconSource("emoji"), &iconTint, 16)
-		props.UploadIcon = a.imageForTint(settingControlIconSource("upload"), &iconTint, 16)
+		props.EmojiIcon = a.imageForTint(settingControlIconSource("emoji"), &iconTint, physicalImageSize(16, callbacks.imageScale))
+		props.UploadIcon = a.imageForTint(settingControlIconSource("upload"), &iconTint, physicalImageSize(16, callbacks.imageScale))
 		props.EmojiWidth = a.formTableImageButtonWidth(props.EmojiLabel)
 		props.UploadWidth = a.formTableImageButtonWidth(props.UploadLabel)
 		props.OnEmoji = func() { a.beginFormTableRowEmojiEdit(index) }

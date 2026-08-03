@@ -16,19 +16,19 @@ import (
 )
 
 type themeSettingsTheme struct {
-	ID            string `json:"ThemeId"`
-	Name          string `json:"ThemeName"`
-	Author        string `json:"ThemeAuthor"`
-	URL           string `json:"ThemeUrl"`
-	Version       string `json:"Version"`
-	Description   string `json:"Description"`
-	IsSystem      bool   `json:"IsSystem"`
-	IsInstalled   bool   `json:"IsInstalled"`
-	IsUpgradable  bool   `json:"IsUpgradable"`
-	IsAuto        bool   `json:"IsAutoAppearance"`
-	DarkThemeID   string `json:"DarkThemeId"`
-	LightThemeID  string `json:"LightThemeId"`
-	previewValues map[string]string
+	ID           string `json:"ThemeId"`
+	Name         string `json:"ThemeName"`
+	Author       string `json:"ThemeAuthor"`
+	URL          string `json:"ThemeUrl"`
+	Version      string `json:"Version"`
+	Description  string `json:"Description"`
+	IsSystem     bool   `json:"IsSystem"`
+	IsInstalled  bool   `json:"IsInstalled"`
+	IsUpgradable bool   `json:"IsUpgradable"`
+	IsAuto       bool   `json:"IsAutoAppearance"`
+	DarkThemeID  string `json:"DarkThemeId"`
+	LightThemeID string `json:"LightThemeId"`
+	previewTheme themeData
 }
 
 // buildThemeCatalog converts core theme metadata into the pure catalog view.
@@ -70,8 +70,9 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageS
 		PreviewSubtitles: previewSubtitles, PreviewOpenLabel: a.translate("i18n:ui_theme_preview_open"), ActiveDetailTab: themeSnap.ThemeDetailTab, Window: a.settingsNativeWindow(),
 		LocateIcon:         a.imageForTint(settingControlIconSource("locate"), &searchActionTint, physicalImageSize(18, imageScale)),
 		AutoAppearanceIcon: a.imageForTint(settingControlIconSource("brightness"), &autoHintAccent, physicalImageSize(16, imageScale)), AutoAppearanceAccent: autoHintAccent,
-		ExternalIcon: a.imageForTint(settingControlIconSource("external"), &iconTint, 13), InstalledIcon: a.imageForTint(settingControlIconSource("check-circle"), &installedTint, 20),
-		InstalledSelectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &selectedIconTint, 20),
+		Wallpaper: themeSnap.ThemeWallpaperImage, WallpaperBlurred: themeSnap.ThemeWallpaperBlurred,
+		ExternalIcon: a.imageForTint(settingControlIconSource("external"), &iconTint, physicalImageSize(13, imageScale)), InstalledIcon: a.imageForTint(settingControlIconSource("check-circle"), &installedTint, physicalImageSize(20, imageScale)),
+		InstalledSelectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &selectedIconTint, physicalImageSize(20, imageScale)),
 		OnSelect:              a.selectTheme,
 		OnSearchKey:           a.onThemeSearchKey, OnSearchFocusChange: a.setThemeSearchFocused,
 		OnSearchChanged: func(value string) { _ = a.setThemeSearchValue(value) }, OnSetSearchValue: a.setThemeSearchValue,
@@ -106,7 +107,7 @@ func filterThemes(themes []themeSettingsTheme, query string) []filteredTheme {
 
 // themeCatalogItem resolves controller state into one immutable view item.
 func themeCatalogItem(theme themeSettingsTheme, sourceIndex int, snapshot settingsSnapshot) launcherview.ThemeCatalogItem {
-	previewTheme := themeEditorPalette(theme.previewValues).componentTheme()
+	previewTheme := paletteForTheme(theme.previewTheme).componentTheme()
 	lightTheme := previewTheme
 	darkTheme := previewTheme
 	if theme.IsAuto {
@@ -125,7 +126,7 @@ func themeCatalogItem(theme themeSettingsTheme, sourceIndex int, snapshot settin
 func themeVariantPreview(themes []themeSettingsTheme, id string, light bool) component.Theme {
 	for _, theme := range themes {
 		if theme.ID == id {
-			return themeEditorPalette(theme.previewValues).componentTheme()
+			return paletteForTheme(theme.previewTheme).componentTheme()
 		}
 	}
 	values := map[string]string{

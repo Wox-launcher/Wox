@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	demoWallpaperCacheVersion  = "v1-1440x672-702x344"
+	demoWallpaperCacheVersion  = "v3-rounded-stage-1440x672-702x344"
 	demoWallpaperWidth         = 1440
 	demoWallpaperHeight        = 672
 	demoWallpaperBlurredWidth  = 702
@@ -32,7 +32,7 @@ const (
 )
 
 // buildThemeEditorSettingsSurface adapts the shared draft controller to Flutter's settings-only editor layout.
-func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	groups := make([]launcherview.ThemeEditorColorGroup, 0, len(themeEditorColorGroups))
 	for _, group := range themeEditorColorGroups {
 		label := a.translate(group.label)
@@ -54,10 +54,10 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 
 	foreground := palette.resultTitle
 	primaryForeground := palette.actionSelectedText
-	locateIcon := a.imageForTint(settingControlIconSource("locate"), &foreground, 18)
-	discardIcon := a.imageForTint(settingControlIconSource("undo"), &foreground, 18)
-	overwriteIcon := a.imageForTint(settingControlIconSource("save-edit"), &foreground, 18)
-	saveAsIcon := a.imageForTint(settingControlIconSource("save"), &primaryForeground, 18)
+	locateIcon := a.imageForTint(settingControlIconSource("locate"), &foreground, physicalImageSize(18, imageScale))
+	discardIcon := a.imageForTint(settingControlIconSource("undo"), &foreground, physicalImageSize(18, imageScale))
+	overwriteIcon := a.imageForTint(settingControlIconSource("save-edit"), &foreground, physicalImageSize(18, imageScale))
+	saveAsIcon := a.imageForTint(settingControlIconSource("save"), &primaryForeground, physicalImageSize(18, imageScale))
 	wallpaperImage := a.themeSettings.ThemeWallpaperImage()
 	wallpaperBlurred := a.themeSettings.ThemeWallpaperBlurred()
 	draftPalette := themeEditorDraftPalette(state.raw, state.values)

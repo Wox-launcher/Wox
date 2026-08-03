@@ -102,11 +102,10 @@ func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height,
 		Padding: woxwidget.Insets{Left: usagePageHorizontalInset, Top: usagePageTopInset, Right: usagePageRightInset, Bottom: usagePageBottomInset},
-		Child: woxwidget.ScrollView{
-			Key: "usage-page-scroll", ID: "usage-page-scroll",
-			Width: contentWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, contentHeight),
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: usageSectionGap, Children: children},
-		},
+		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+			Key: "usage-page-scroll", Width: contentWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, contentHeight),
+			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: usageSectionGap, Children: children}, ThumbColor: props.Theme.ResultSubtitle,
+		}),
 	}
 }
 
@@ -194,7 +193,7 @@ func usageShareButton(props UsageSettingsProps) (woxwidget.Widget, float32) {
 	theme.ResultSubtitle = usageOutlineColor(props.Theme)
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
 		ID: "usage-share-x", Label: props.ShareLabel, Icon: props.ShareIcon, IconSize: 16, IconGap: 8, Width: width, Height: 38, Radius: 8,
-		Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 12}, FontSize: 13, Size: woxcomponent.ButtonCompact, Variant: woxcomponent.ButtonOutlinedSurface,
+		Padding: woxwidget.Insets{Left: 12, Right: 12}, FontSize: 13, Size: woxcomponent.ButtonCompact, Variant: woxcomponent.ButtonOutlinedSurface,
 		Disabled: props.Loading, OnTap: props.OnShare, Theme: theme,
 	}), width
 }

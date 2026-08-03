@@ -81,7 +81,7 @@ func TestLoopAnimationAdvancesAndWraps(t *testing.T) {
 	host := &animationHost{}
 	start := time.Now()
 	frame := animationFrame{host: host, generation: 1, now: start}
-	if progress := host.loopValue(frame, "demo", time.Second); progress != 0 {
+	if progress := host.loopValue(frame, "demo", time.Second, false); progress != 0 {
 		t.Fatalf("initial loop progress = %v, want 0", progress)
 	}
 	if !host.active {
@@ -89,8 +89,39 @@ func TestLoopAnimationAdvancesAndWraps(t *testing.T) {
 	}
 	frame.generation++
 	frame.now = start.Add(1250 * time.Millisecond)
-	if progress := host.loopValue(frame, "demo", time.Second); progress != .25 {
+	if progress := host.loopValue(frame, "demo", time.Second, false); progress != .25 {
 		t.Fatalf("wrapped loop progress = %v, want 0.25", progress)
+	}
+}
+
+func TestLoopAnimationPreservesPhaseWhilePaused(t *testing.T) {
+	host := &animationHost{}
+	start := time.Now()
+	frame := animationFrame{host: host, generation: 1, now: start}
+	host.loopValue(frame, "record", time.Second, false)
+	frame.generation++
+	frame.now = start.Add(400 * time.Millisecond)
+	if progress := host.loopValue(frame, "record", time.Second, true); progress != .4 {
+		t.Fatalf("paused loop progress = %v, want 0.4", progress)
+	}
+	frame.generation++
+	frame.now = start.Add(900 * time.Millisecond)
+	if progress := host.loopValue(frame, "record", time.Second, true); progress != .4 {
+		t.Fatalf("held loop progress = %v, want 0.4", progress)
+	}
+	frame.generation++
+	frame.now = start.Add(1100 * time.Millisecond)
+	if progress := host.loopValue(frame, "record", time.Second, false); progress != .4 {
+		t.Fatalf("resumed loop progress = %v, want continuity at 0.4", progress)
+	}
+}
+
+func TestEaseInOutCubicMatchesFlutterTonearmCurve(t *testing.T) {
+	if got := transformAnimationProgress(.25, AnimationEaseInOutCubic); got != .0625 {
+		t.Fatalf("ease-in progress = %v, want 0.0625", got)
+	}
+	if got := transformAnimationProgress(.75, AnimationEaseInOutCubic); got != .9375 {
+		t.Fatalf("ease-out progress = %v, want 0.9375", got)
 	}
 }
 

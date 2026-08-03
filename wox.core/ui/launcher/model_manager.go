@@ -56,7 +56,7 @@ type modelManagerOptionAction struct {
 }
 
 // buildModelManagerOverlay converts controller state into the pure modal view.
-func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	title := "Dictation models"
 	downloadLabel := a.translate("i18n:plugin_dictation_model_download")
 	retryLabel := a.translate("i18n:plugin_dictation_model_retry")
@@ -134,7 +134,7 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette u
 		Loading: snapshot.loading, Busy: snapshot.busy != "", Error: snapshot.error,
 		EngineLabel: engineLabel, EngineButtonLabel: engineButtonLabel, EngineEnabled: engineEnabled, EngineKnown: snapshot.engine.Known, EngineReady: snapshot.engine.Ready,
 		RecommendedLabel: recommendedLabel, DeleteLabel: deleteLabel,
-		DownloadIcon: a.imageForTint(settingControlIconSource("download"), &iconTint, 16), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &iconTint, 16), ErrorIcon: a.imageForTint(settingControlIconSource("error"), &errorTint, 16), Options: options,
+		DownloadIcon: a.imageForTint(settingControlIconSource("download"), &iconTint, physicalImageSize(14, imageScale)), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &iconTint, physicalImageSize(16, imageScale)), ErrorIcon: a.imageForTint(settingControlIconSource("error"), &errorTint, physicalImageSize(14, imageScale)), Options: options,
 		OnEngine: func() { a.runModelManagerAction("engine", -1) },
 		OnRefresh: func() {
 			state := a.aiSettings.ModelManager()

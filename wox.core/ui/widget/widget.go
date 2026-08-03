@@ -653,7 +653,17 @@ func wrapTextLines(window textMeasurer, value string, style woxui.TextStyle, wid
 			breakAt := fit
 			for index := fit - 1; index > 0; index-- {
 				if unicode.IsSpace(remaining[index]) {
-					breakAt = index
+					hasCJK := false
+					for _, candidate := range remaining[index+1 : fit] {
+						if unicode.In(candidate, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul) {
+							hasCJK = true
+							break
+						}
+					}
+					// Mixed CJK text can break between characters; backing up to a distant Latin-space boundary wastes most of the line.
+					if !hasCJK {
+						breakAt = index
+					}
 					break
 				}
 			}

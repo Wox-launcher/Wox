@@ -54,6 +54,12 @@ func TestSecondaryLauncherHideClosesInstance(t *testing.T) {
 	}
 }
 
+func TestSecondaryLauncherIgnoresGlobalFocusLoss(t *testing.T) {
+	if err := (&App{}).notifyFocusLost(); err != nil {
+		t.Fatalf("secondary launcher should ignore global focus loss: %v", err)
+	}
+}
+
 func TestQueryCanFocusWhileChatPreviewIsActive(t *testing.T) {
 	app := &App{}
 	if !app.queryCanFocus() {

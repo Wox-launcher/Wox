@@ -298,16 +298,31 @@ func (w *Window) PickFile(options FileDialogOptions) (string, error) {
 	return w.native.pickFile(options)
 }
 
-// OpenExternalURL asks the desktop to open an HTTP or HTTPS URL in the user's default browser.
+// OpenExternalURL asks the desktop to open a web URL or email draft in the user's default application.
 func (w *Window) OpenExternalURL(rawURL string) error {
 	if w == nil || w.native == nil {
 		return errors.New("window is not initialized")
 	}
-	parsed, err := url.ParseRequestURI(rawURL)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+	parsed, err := parseExternalURL(rawURL)
+	if err != nil {
 		return fmt.Errorf("unsupported external URL %q", rawURL)
 	}
 	return w.native.openExternalURL(parsed.String())
+}
+
+// parseExternalURL limits native URL dispatch to the schemes used by Wox-owned actions.
+func parseExternalURL(rawURL string) (*url.URL, error) {
+	parsed, err := url.ParseRequestURI(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	if (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != "" {
+		return parsed, nil
+	}
+	if parsed.Scheme == "mailto" && parsed.Opaque != "" {
+		return parsed, nil
+	}
+	return nil, errors.New("unsupported external URL")
 }
 
 // Close releases the native window. Run returns after the final window closes.

@@ -496,7 +496,6 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, is
 					Label:        "i18n:plugin_emoji_add_keyword_label",
 					DefaultValue: existingDescriptions,
 					Tooltip:      "i18n:plugin_emoji_add_keyword_hint",
-					MaxLines:     2,
 				},
 			},
 		},

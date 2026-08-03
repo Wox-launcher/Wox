@@ -352,8 +352,8 @@ func (a *App) onSettingsWindowKey(event woxui.KeyEvent) bool {
 	if a.hotkeyRecordingUsesSettingsWindow() && a.onHotkeyRecordingKey(event) {
 		return true
 	}
-	if a.formTableUsesSettingsWindow() && a.onFormTableKey(event) {
-		return true
+	if a.formTableUsesSettingsWindow() {
+		return a.onFormTableKey(event)
 	}
 	return a.onSettingsKey(event)
 }

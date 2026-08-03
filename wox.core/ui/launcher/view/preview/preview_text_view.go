@@ -26,11 +26,11 @@ func ScrollablePreviewText(props ScrollablePreviewTextProps) woxwidget.Widget {
 	contentHeight := max(innerHeight, props.Layout.Size.Height)
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(24),
-		Child: woxwidget.ScrollView{
-			Key: woxwidget.Key("preview-scroll-" + props.ID), ID: "preview-scroll-" + props.ID, InitialOffset: props.InitialOffset,
-			Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight,
-			Child: woxwidget.TextBlock{Value: props.Value, Width: innerWidth, Height: contentHeight, Style: woxui.TextStyle{Size: props.FontSize}, LineHeight: props.LineHeight, Color: props.Color, Layout: &props.Layout},
-		},
+		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+			Key: woxwidget.Key("preview-scroll-" + props.ID), Offset: props.InitialOffset, Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight,
+			Content:    woxwidget.TextBlock{Value: props.Value, Width: innerWidth, Height: contentHeight, Style: woxui.TextStyle{Size: props.FontSize}, LineHeight: props.LineHeight, Color: props.Color, Layout: &props.Layout},
+			ThumbColor: props.Color,
+		}),
 	}
 }
 

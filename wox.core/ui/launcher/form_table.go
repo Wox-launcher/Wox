@@ -665,6 +665,11 @@ func (a *App) saveFormTableRowEdit() {
 		})
 		return
 	}
+	if validationMessage := a.validatePluginTriggerKeywordTableRow(state); validationMessage != "" {
+		state.status = validationMessage
+		a.invalidateFormTableWindow()
+		return
+	}
 	if validationKey := validateFormTableRow(state.definition, state.rowForm, state.rows, state.rowIndex); validationKey != "" {
 		message := a.translate(validationKey)
 		if a.activeFormTableEditor() == state {
@@ -734,6 +739,11 @@ func (a *App) beginDeleteFormTableRowDirect() {
 func (a *App) beginFormTableRowDelete(direct bool) {
 	state := a.activeFormTableEditor()
 	if state == nil || state.invalid || state.saving || state.rowForm != nil || state.selected < 0 || state.selected >= len(state.rows) || !a.formTableTargetCurrentLocked(state.target) || formTableSkillRowReadOnly(state.definition, state.rows[state.selected]) {
+		return
+	}
+	if len(state.rows) <= state.definition.Value.MinimumRowCount {
+		state.status = a.translate(state.definition.Value.MinimumRowMessage)
+		a.invalidateFormTableWindow()
 		return
 	}
 	state.deletePending = state.selected
@@ -865,7 +875,6 @@ func (a *App) focusFormTableRowField(index int) {
 	}
 	syncFormFieldsEditorLocked(state.rowForm)
 	setFormFieldsFocusLocked(state.rowForm, index)
-	state.status = ""
 	textInput := state.rowForm.editor != nil
 	a.updateFormTableTextInput(textInput)
 	a.invalidateFormTableWindow()

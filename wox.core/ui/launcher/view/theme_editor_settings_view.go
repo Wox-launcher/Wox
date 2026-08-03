@@ -492,28 +492,51 @@ func themeEditorPreviewWithActionPanel(props ThemeEditorSettingsProps, width, he
 }
 
 func themeEditorPreviewToolbar(props ThemeEditorSettingsProps, width, height float32) woxwidget.Widget {
-	copyWidth := max(float32(120), float32(utf8.RuneCountInString(props.ToolbarCopyLabel))*7+46)
-	moreWidth := max(float32(108), float32(utf8.RuneCountInString(props.ToolbarMoreLabel))*7+66)
-	spacerWidth := max(float32(0), width-copyWidth-moreWidth-20)
+	actions := []LauncherToolbarAction{
+		{Label: props.ToolbarCopyLabel, HotkeyLabels: []string{"Enter"}},
+		{Label: props.ToolbarMoreLabel, HotkeyLabels: []string{"Cmd", "J"}},
+	}
+	measured := make([]measuredLauncherToolbarAction, 0, len(actions))
+	actionsWidth := float32(0)
+	for _, action := range actions {
+		widget, actionWidth := themeEditorToolbarActionView(action, props.DraftTheme, props.Window)
+		measured = append(measured, measuredLauncherToolbarAction{widget: widget, width: actionWidth})
+		actionsWidth += actionWidth
+	}
+	const actionGap = float32(16)
+	actionsWidth += actionGap * float32(len(measured)-1)
 	padding := props.PreviewGeometry.ToolbarPadding
-	padding.Top = 9
-	toolbar := woxwidget.Container{Width: width, Height: height, Color: props.DraftTheme.ToolbarBackground, BorderColor: themeAlpha(props.DraftTheme.ToolbarText, 32), BorderWidth: 1, Padding: padding, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: spacerWidth, Height: 22},
-		themeEditorToolbarAction(props.ToolbarCopyLabel, "Enter", copyWidth, props.DraftTheme.ToolbarText, props.FlashToken == "ToolbarFontColor"),
-		themeEditorToolbarAction(props.ToolbarMoreLabel, "Cmd  J", moreWidth, props.DraftTheme.ToolbarText, props.FlashToken == "ToolbarFontColor"),
+	contentWidth := max(float32(0), width-padding.Left-padding.Right)
+	actionWidgets := make([]woxwidget.Widget, 0, len(measured))
+	for _, action := range measured {
+		actionWidgets = append(actionWidgets, themeEditorFlashOverlay(action.widget, action.width, 28, 4, props.FlashToken == "ToolbarFontColor"))
+	}
+	body := woxwidget.Container{Width: width, Height: height, Color: props.DraftTheme.ToolbarBackground, Padding: woxwidget.Insets{
+		Left: padding.Left, Top: max(float32(0), (height-28)/2), Right: padding.Right, Bottom: max(float32(0), (height-28)/2),
+	}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: max(float32(0), contentWidth-actionsWidth), Height: 28},
+		woxwidget.Container{Width: actionsWidth, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: actionGap, Children: actionWidgets}},
 	}}}
+	toolbar := woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		{Child: body},
+		{Child: woxwidget.Container{Width: width, Height: 1, Color: themeAlpha(props.DraftTheme.ToolbarText, 26)}},
+	}}
 	return themeEditorFlashOverlay(toolbar, width, height, 0, props.FlashToken == "ToolbarBackgroundColor")
 }
 
-func themeEditorToolbarAction(label, key string, width float32, color woxui.Color, flash bool) woxwidget.Widget {
-	keyWidth := max(float32(34), float32(utf8.RuneCountInString(key))*6+12)
-	labelWidth := max(float32(0), width-keyWidth-8)
-	labelWidget := woxwidget.Container{Width: labelWidth, Height: 22, Padding: woxwidget.Insets{Top: 3}, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 9}, Color: color}}
-	keyWidget := woxwidget.Container{Width: keyWidth, Height: 20, Radius: 4, BorderColor: themeAlpha(color, 180), BorderWidth: 1, Padding: woxwidget.Insets{Left: 7, Top: 3}, Child: woxwidget.Text{Value: key, Style: woxui.TextStyle{Size: 8}, Color: color}}
-	return woxwidget.Container{Width: width, Height: 22, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		themeEditorFlashOverlay(labelWidget, labelWidth, 22, 4, flash),
-		themeEditorFlashOverlay(keyWidget, keyWidth, 20, 4, flash),
-	}}}
+// themeEditorToolbarActionView keeps the preview keycaps on Flutter's lighter toolbar treatment.
+func themeEditorToolbarActionView(action LauncherToolbarAction, theme woxcomponent.Theme, window *woxui.Window) (woxwidget.Widget, float32) {
+	labelStyle := woxui.TextStyle{Size: woxcomponent.ToolbarFontSize}
+	labelMetrics, _ := window.MeasureText(action.Label, labelStyle)
+	keycaps, keycapsWidth := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
+		Labels: action.HotkeyLabels, Foreground: theme.ToolbarText, Background: themeAlpha(theme.ToolbarText, 6),
+		Border: themeAlpha(theme.ToolbarText, 184), FontSize: woxcomponent.TailFontSize, Window: window,
+	})
+	width := labelMetrics.Size.Width + 8 + keycapsWidth
+	return woxwidget.Gesture{Child: woxwidget.Container{Width: width, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: labelMetrics.Size.Width, Height: 28, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{Value: action.Label, Style: labelStyle, Color: theme.ToolbarText}},
+		keycaps,
+	}}}}, width
 }
 
 func themeEditorControlPane(props ThemeEditorSettingsProps, width, height float32) woxwidget.Widget {

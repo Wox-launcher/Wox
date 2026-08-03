@@ -80,14 +80,6 @@ type DataSettingsProps struct {
 	OnOpenLog          func()
 }
 
-type dataColumn struct {
-	key    string
-	label  string
-	weight float32
-}
-
-const dataBackupTitleHeight = float32(38)
-
 // DataSettingsView builds the storage, backup, and logs page without controller dependencies.
 func DataSettingsView(props DataSettingsProps) woxwidget.Widget {
 	contentWidth := SettingsPageContentWidth(props.Width)
@@ -105,7 +97,7 @@ func DataSettingsView(props DataSettingsProps) woxwidget.Widget {
 		dataLogActionsField(props, contentWidth),
 	}
 	backupRows := min(5, len(props.Backups))
-	backupTableHeight := dataBackupTableHeight(backupRows)
+	backupTableHeight := FormTableFieldHeight(true, "", backupRows, int(tableSurfaceHeaderHeight+tableSurfaceRowHeight*5))
 	contentHeight := woxcomponent.PageHeaderHeight + 43 + 78 + 43 + 66 + backupTableHeight + 43 + 66 + 66
 	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
@@ -130,7 +122,7 @@ func dataStorageField(props DataSettingsProps, width float32) woxwidget.Widget {
 				props.OnOpenPath(props.Location)
 			}
 		}),
-		dataButton(props, "data-location-change", props.Labels.LocationChange, 112, woxcomponent.ButtonMuted, props.OnChooseLocation),
+		dataButton(props, "data-location-change", props.Labels.LocationChange, 112, woxcomponent.ButtonOutline, props.OnChooseLocation),
 	}
 	if props.PendingLocation != "" {
 		buttons = []woxwidget.Widget{
@@ -162,114 +154,52 @@ func dataAutoBackupField(props DataSettingsProps, width float32) woxwidget.Widge
 
 func dataBackupTable(props DataSettingsProps, width float32) woxwidget.Widget {
 	visibleRows := min(5, len(props.Backups))
-	height := dataBackupTableHeight(visibleRows)
-	title := woxwidget.Container{Width: width, Height: dataBackupTitleHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: max(float32(0), width-112), Height: dataBackupTitleHeight, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Text{
-			Value: props.Labels.BackupListTitle, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle,
-		}},
-		dataButton(props, "data-backup-now", props.Labels.BackupNow, 100, woxcomponent.ButtonOutline, props.OnCreateBackup),
-	}}}
-	columns := []dataColumn{
-		{key: "date", label: props.Labels.BackupDate, weight: 0.42},
-		{key: "type", label: props.Labels.BackupType, weight: 0.23},
-		{key: "operation", label: props.Labels.BackupOperation, weight: 0.35},
-	}
-	style := newTableSurfaceStyle(props.Theme)
-	rows := []woxwidget.Widget{dataBackupGridRow(props, columns, DataBackup{}, -1, width, tableSurfaceHeaderHeight, true)}
-	if visibleRows == 0 {
-		rows = append(rows, woxwidget.Container{Width: width, Height: tableSurfaceEmptyHeight, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-			Padding: woxwidget.Insets{Left: max(float32(0), width/2-48), Top: 30}, Child: woxwidget.Text{
-				Value: props.Labels.BackupEmpty, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle,
-			}})
-	} else {
-		for index := 0; index < visibleRows; index++ {
-			rows = append(rows, dataBackupGridRow(props, columns, props.Backups[index], index, width, tableSurfaceRowHeight, false))
+	rows := make([]FormTableRow, 0, visibleRows)
+	for index := 0; index < visibleRows; index++ {
+		backup := props.Backups[index]
+		backupType := props.Labels.BackupTypeManual
+		if strings.EqualFold(backup.Type, "auto") {
+			backupType = props.Labels.BackupTypeAuto
 		}
+		rows = append(rows, FormTableRow{Index: index, Cells: []FormTableCell{
+			{Text: time.UnixMilli(backup.Timestamp).Format("2006-01-02 15:04:05")},
+			{Text: backupType},
+			{Child: dataBackupOperationCell(props, backup, index)},
+		}})
 	}
-	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		title,
-		woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-	}}}
+	maxHeight := int(tableSurfaceHeaderHeight + tableSurfaceRowHeight*5)
+	return FormTableField(FormTableFieldProps{
+		ID: "data-backups", Title: props.Labels.BackupListTitle, Width: width,
+		Height: FormTableFieldHeight(true, "", visibleRows, maxHeight), MaxHeight: maxHeight, InlineTitle: true, ReadOnly: true,
+		Columns: []FormTableColumn{{Label: props.Labels.BackupDate, Width: 350}, {Label: props.Labels.BackupType, Width: 220}, {Label: props.Labels.BackupOperation, Width: 300}},
+		Rows:    rows, SecondaryLabel: props.Labels.BackupNow, EmptyLabel: props.Labels.BackupEmpty, Theme: props.Theme, OnSecondary: props.OnCreateBackup,
+	})
 }
 
-func dataBackupTableHeight(rowCount int) float32 {
-	bodyHeight := tableSurfaceEmptyHeight
-	if rowCount > 0 {
-		bodyHeight = float32(rowCount) * tableSurfaceRowHeight
+// dataBackupOperationCell keeps backup-specific actions inside the shared table cell.
+func dataBackupOperationCell(props DataSettingsProps, backup DataBackup, rowIndex int) woxwidget.Widget {
+	restoreLabel := props.Labels.BackupRestore
+	if props.RestoreArmed == backup.ID {
+		restoreLabel = props.Labels.BackupRestoreConfirm
 	}
-	return dataBackupTitleHeight + tableSurfaceHeaderHeight + bodyHeight
-}
-
-func dataBackupGridRow(props DataSettingsProps, columns []dataColumn, backup DataBackup, rowIndex int, width, height float32, header bool) woxwidget.Widget {
-	style := newTableSurfaceStyle(props.Theme)
-	background := style.bodyBackground
-	if header {
-		background = style.headerBackground
-	}
-	cells := make([]woxwidget.Widget, 0, len(columns))
-	remaining := width
-	for columnIndex, column := range columns {
-		cellWidth := width * column.weight
-		if columnIndex == len(columns)-1 {
-			cellWidth = remaining
-		}
-		remaining -= cellWidth
-		label := column.label
-		if !header {
-			switch column.key {
-			case "date":
-				label = time.UnixMilli(backup.Timestamp).Format("2006-01-02 15:04:05")
-			case "type":
-				label = props.Labels.BackupTypeManual
-				if strings.EqualFold(backup.Type, "auto") {
-					label = props.Labels.BackupTypeAuto
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: fmt.Sprintf("data-backup-restore-%d", rowIndex), Label: restoreLabel, Width: 80, Height: 24,
+			Padding: woxwidget.Insets{Left: 4, Right: 4}, FontSize: woxcomponent.TableBodyFontSize, Variant: woxcomponent.ButtonText, OnTap: func() {
+				if props.OnRestoreBackup != nil {
+					props.OnRestoreBackup(backup.ID)
 				}
-			}
-		}
-		weight := woxui.FontWeightRegular
-		fontSize := woxcomponent.TableBodyFontSize
-		textColor := props.Theme.ResultTitle
-		paddingTop := float32(10)
-		if header {
-			weight = woxui.FontWeightSemibold
-			fontSize = woxcomponent.TableHeaderFontSize
-			textColor = style.headerText
-			paddingTop = 9
-		}
-		cell := woxwidget.Container{Width: cellWidth, Height: height, Color: background, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-			Padding: woxwidget.Insets{Left: 8, Top: paddingTop, Right: 6}, Child: woxwidget.TextBlock{
-				Value: label, Width: max(float32(0), cellWidth-14), Height: height - 10, MaxLines: 1,
-				Style: woxui.TextStyle{Size: fontSize, Weight: weight}, Color: textColor,
-			}}
-		if !header && column.key == "operation" {
-			current := backup
-			buttonWidth := cellWidth / 2
-			restoreLabel := props.Labels.BackupRestore
-			if props.RestoreArmed == current.ID {
-				restoreLabel = props.Labels.BackupRestoreConfirm
-			}
-			cell = woxwidget.Container{Width: cellWidth, Height: height, Color: background, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-				Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-					woxwidget.Gesture{ID: fmt.Sprintf("data-backup-restore-%d", rowIndex), OnTap: func() {
-						if props.OnRestoreBackup != nil {
-							props.OnRestoreBackup(current.ID)
-						}
-					}, Child: woxwidget.Container{Width: buttonWidth, Height: height, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth, Padding: woxwidget.Insets{Left: 8, Top: 10}, Child: woxwidget.TextBlock{
-						Value: restoreLabel, Width: max(float32(0), buttonWidth-14), Height: height - 10, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle,
-					}}},
-					woxwidget.Gesture{ID: fmt.Sprintf("data-backup-open-%d", rowIndex), OnTap: func() {
-						if props.OnOpenPath != nil {
-							props.OnOpenPath(current.Path)
-						}
-					}, Child: woxwidget.Container{Width: cellWidth - buttonWidth, Height: height, Padding: woxwidget.Insets{Left: 8, Top: 10}, Child: woxwidget.Text{
-						Value: props.Labels.Open, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle,
-					}}},
-				}},
-			}
-		}
-		cells = append(cells, cell)
-	}
-	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells}
+			}, Theme: props.Theme,
+		}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: fmt.Sprintf("data-backup-open-%d", rowIndex), Label: props.Labels.Open, Width: 52, Height: 24,
+			Padding: woxwidget.Insets{Left: 4, Right: 4}, FontSize: woxcomponent.TableBodyFontSize, Variant: woxcomponent.ButtonText, OnTap: func() {
+				if props.OnOpenPath != nil {
+					props.OnOpenPath(backup.Path)
+				}
+			}, Theme: props.Theme,
+		}),
+	}}
 }
 
 func dataLogLevelField(props DataSettingsProps, width float32) woxwidget.Widget {

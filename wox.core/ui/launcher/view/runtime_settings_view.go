@@ -264,7 +264,7 @@ func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingR
 	})
 	controls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		input,
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-browse", Label: props.Labels.Browse, Width: browseWidth, Height: 38, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonPrimary, OnTap: row.OnBrowse, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-browse", Label: props.Labels.Browse, Width: browseWidth, Height: 38, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonOutline, OnTap: row.OnBrowse, Theme: props.Theme}),
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-clear", Label: props.Labels.Clear, Width: clearWidth, Height: 38, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonOutline, OnTap: row.OnClear, Theme: props.Theme}),
 	}}
 	field := woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{

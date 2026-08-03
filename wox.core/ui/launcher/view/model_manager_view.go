@@ -180,10 +180,10 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 			Background: &background, Selected: option.SelectedRow, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 12}, OnTap: activate, Child: rowContent, Theme: props.Theme,
 		}))
 	}
-	children = append(children, woxwidget.ScrollView{
-		Key: "model-manager-list", ID: "model-manager-list", Width: menuWidth, Height: listHeight, ContentHeight: max(listHeight, float32(len(rows))*ModelManagerRowHeight),
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-	})
+	children = append(children, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+		Key: "model-manager-list", Width: menuWidth, Height: listHeight, ContentHeight: max(listHeight, float32(len(rows))*ModelManagerRowHeight),
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+	}))
 	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: menuWidth, Height: errorHeight, Padding: woxwidget.Insets{Left: 12, Top: 8, Right: 12}, Child: woxwidget.TextBlock{
 			Value: props.Error, Width: menuWidth - 24, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ErrorText,
@@ -284,11 +284,11 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 				break
 			}
 		}
-		list = woxwidget.ScrollView{
-			Key: "model-manager-list", ID: "model-manager-list", Width: innerWidth, Height: viewportHeight,
+		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+			Key: "model-manager-list", Width: innerWidth, Height: viewportHeight,
 			ContentHeight: max(viewportHeight, float32(len(rows))*ModelManagerRowHeight), KeepVisible: keepVisible,
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-		}
+			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+		})
 	}
 	status := props.Error
 	if status == "" {

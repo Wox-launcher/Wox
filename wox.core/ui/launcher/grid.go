@@ -65,7 +65,7 @@ func gridResultsHeight(results []queryResult, width float32, raw *gridLayout) in
 	return int(math.Ceil(float64(height)))
 }
 
-func (a *App) buildGridResults(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	layout := normalizedGridLayout(snapshot.layout.GridLayout)
 	cellWidth, cellHeight, visualWidth, visualHeight := gridCellMetrics(width, layout)
 	contentHeight := float32(gridResultsHeight(snapshot.results, width, snapshot.layout.GridLayout))
@@ -78,7 +78,7 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height float32) wox
 		}
 		if !result.IsGroup {
 			if visible[index] {
-				item.Icon = a.imageForSize(result.Icon, int(math.Ceil(float64(max(visualWidth, visualHeight)))))
+				item.Icon = a.imageForSize(result.Icon, physicalImageSize(int(math.Ceil(float64(max(visualWidth, visualHeight)))), imageScale))
 			}
 			item.OnHover = func(inside bool) { a.hoverResult(index, inside) }
 			item.OnSelect = func() { a.selectResult(index) }

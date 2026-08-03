@@ -70,8 +70,8 @@ func LauncherGridView(props LauncherGridProps) woxwidget.Widget {
 		Width: props.Width, Height: props.ContentHeight, Padding: woxwidget.Insets{Left: 14, Right: 14},
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
 	}
-	return launcherResultScrollView(launcherResultScrollProps{
-		Content: content, Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight, Offset: props.Offset,
+	return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+		Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight, Offset: props.Offset,
 		ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll,
 	})
 }

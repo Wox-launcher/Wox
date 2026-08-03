@@ -144,18 +144,18 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		refinementHeight = snapshot.densityMetrics.refinementBarHeight
 	}
 	contentHeight := max(0, height-queryHeight-refinementHeight-toolbarHeight)
-	content := a.buildContent(snapshot, width, contentHeight)
+	content := a.buildContent(snapshot, width, contentHeight, frame.Scale)
 	var header woxwidget.Widget
 	if queryHeight > 0 {
 		header = a.buildHeader(snapshot, width, queryHeight, frame.Scale)
 	}
 	var refinements woxwidget.Widget
 	if refinementHeight > 0 {
-		refinements = a.buildRefinementBar(snapshot, width, refinementHeight)
+		refinements = a.buildRefinementBar(snapshot, width, refinementHeight, frame.Scale)
 	}
 	var footer woxwidget.Widget
 	if toolbarHeight > 0 {
-		footer = a.buildFooter(snapshot, width, toolbarHeight)
+		footer = a.buildFooter(snapshot, width, toolbarHeight, frame.Scale)
 	}
 	var floating *launcherview.LauncherFloatingView
 	if snapshot.form != nil {
@@ -163,7 +163,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		floating = &launcherview.LauncherFloatingView{Child: panel, Left: max(float32(14), width-panelWidth-14), Bottom: toolbarHeight + 12, AnchorBottom: true}
 	} else if snapshot.actionPanel {
 		queryChromeHeight := queryHeight + refinementHeight
-		panel, panelWidth, panelHeight := a.buildActionPanel(snapshot, width, height, queryChromeHeight, toolbarHeight)
+		panel, panelWidth, panelHeight := a.buildActionPanel(snapshot, width, height, queryChromeHeight, toolbarHeight, frame.Scale)
 		if panel != nil {
 			rightOffset := snapshot.palette.appPadding.Right + 10
 			bottomOffset := snapshot.palette.appPadding.Bottom + 10
@@ -172,7 +172,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	var overlay woxwidget.Widget
 	if snapshot.tableEditor != nil {
-		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height)
+		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale)
 	}
 	return launcherview.LauncherView(launcherview.LauncherViewProps{
 		Width: width, Height: height, Header: header, Refinements: refinements, Content: content, Footer: footer,
@@ -198,12 +198,12 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 	}
 	refinementWidth := float32(0)
 	if len(snapshot.refinements) > 0 {
-		refinementWidth = a.refinementToggleWidth(snapshot)
+		refinementWidth = a.refinementToggleWidth(snapshot, scale)
 		queryWidth -= refinementWidth + accessoryGap
 	}
 	var queryIcon *woxui.Image
 	if snapshot.glance == nil {
-		if image := a.imageForSize(snapshot.layout.Icon, int(snapshot.densityMetrics.scaled(32))); image != nil {
+		if image := a.imageForSize(snapshot.layout.Icon, physicalImageSize(int(snapshot.densityMetrics.scaled(32)), scale)); image != nil {
 			queryIcon = image
 			queryWidth -= snapshot.densityMetrics.scaled(30) + accessoryGap
 		}
@@ -211,7 +211,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 	queryWidth = max(snapshot.densityMetrics.scaled(140), queryWidth)
 	var refinement woxwidget.Widget
 	if len(snapshot.refinements) > 0 {
-		refinement = a.buildRefinementToggle(snapshot)
+		refinement = a.buildRefinementToggle(snapshot, scale)
 	}
 	var glance woxwidget.Widget
 	if snapshot.glance != nil {
@@ -324,13 +324,13 @@ func (a *App) queryOffsetAt(text string, x float32, style woxui.TextStyle) int {
 	return offset
 }
 
-func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	if len(snapshot.results) == 0 {
 		return woxwidget.Container{Width: width, Height: height}
 	}
 	previewVisible := snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) && snapshot.results[snapshot.selected].Preview.PreviewData != ""
 	if !previewVisible {
-		return a.buildResults(snapshot, width, height)
+		return a.buildResults(snapshot, width, height, imageScale)
 	}
 	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.terminalFullscreen)
 	if ratio <= 0 {
@@ -349,11 +349,11 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height float32) woxwidg
 		return preview
 	}
 	if ratio >= 1 {
-		return a.buildResults(snapshot, width, height)
+		return a.buildResults(snapshot, width, height, imageScale)
 	}
 	splitX := width * ratio
 	return launcherview.LauncherSplitContentView(
-		a.buildResults(snapshot, splitX, height),
+		a.buildResults(snapshot, splitX, height, imageScale),
 		a.buildPreview(snapshot.results[snapshot.selected], snapshot.palette, width-splitX, height),
 	)
 }
@@ -374,9 +374,9 @@ func launcherPreviewRatio(layout queryLayout, chatFullscreen bool) float32 {
 	return ratio
 }
 
-func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	if snapshot.layout.GridLayout != nil {
-		return a.buildGridResults(snapshot, width, height)
+		return a.buildGridResults(snapshot, width, height, imageScale)
 	}
 	densityMetrics := snapshot.densityMetrics.normalized()
 	rowHeight := densityMetrics.resultRowHeight(snapshot.palette)
@@ -402,7 +402,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 			})
 			continue
 		}
-		tails, tailWidth, tailHeight := a.resultTailViewProps(result.Tails, tailLayoutWidth, densityMetrics)
+		tails, tailWidth, tailHeight := a.resultTailViewProps(result.Tails, tailLayoutWidth, densityMetrics, imageScale)
 		titleHeight := float32(0)
 		if result.SubTitle == "" {
 			metrics, _ := a.window.MeasureText(result.Title, woxui.TextStyle{Size: densityMetrics.scaled(woxcomponent.ResultTitleFontSize)})
@@ -410,7 +410,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 		}
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
-			Icon: a.imageForSize(result.Icon, int(densityMetrics.scaled(32))), TitleHeight: titleHeight, Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
+			Icon: a.imageForSize(result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale)), TitleHeight: titleHeight, Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnActivate: func() { a.activateResult(index) },
 		})
 	}
@@ -424,7 +424,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height float32) woxwidg
 }
 
 // resultTailViewProps resolves tail images and bounds their measured widths before rendering.
-func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityMetrics launcherDensityMetrics) ([]launcherview.LauncherResultTail, float32, float32) {
+func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityMetrics launcherDensityMetrics, imageScale float32) ([]launcherview.LauncherResultTail, float32, float32) {
 	tailOuterPadding := densityMetrics.scaled(15)
 	tailItemPadding := densityMetrics.scaled(10)
 	textPadding := densityMetrics.scaled(16)
@@ -460,7 +460,7 @@ func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityM
 			if tail.ImageHeight != nil && *tail.ImageHeight > 0 {
 				item.Height = float32(*tail.ImageHeight)
 			}
-			item.Image = a.imageForSize(tail.Image, int(math.Ceil(float64(max(item.Width, item.Height)))))
+			item.Image = a.imageForSize(tail.Image, physicalImageSize(int(math.Ceil(float64(max(item.Width, item.Height)))), imageScale))
 			if item.Image == nil {
 				continue
 			}
@@ -534,13 +534,13 @@ func (a *App) scrollResultsFrom(snapshotDetached bool, rendered scrollController
 	a.resultScrollDetached = true
 }
 
-func (a *App) buildFooter(snapshot viewSnapshot, width, height float32) woxwidget.Widget {
+func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	leftLabel := ""
 	var leftIcon *woxui.Image
 	progressLabel := ""
 	if snapshot.toolbarMsg != nil {
 		leftLabel = snapshot.toolbarMsg.displayText()
-		if image := a.imageForSize(snapshot.toolbarMsg.Icon, 18); image != nil {
+		if image := a.imageForSize(snapshot.toolbarMsg.Icon, physicalImageSize(18, imageScale)); image != nil {
 			leftIcon = image
 		}
 		if snapshot.toolbarMsg.Progress != nil {

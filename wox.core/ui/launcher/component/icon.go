@@ -143,3 +143,11 @@ func FilterListGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	}
 	return svgIcon("control.filter-list", size, color)
 }
+
+// CheckGlyph returns the shared SVG check icon.
+func CheckGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 12
+	}
+	return svgIcon("control.check", size, color)
+}

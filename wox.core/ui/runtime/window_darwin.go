@@ -794,6 +794,8 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 				C.float(command.rect.Y),
 				C.float(command.rect.Width),
 				C.float(command.rect.Height),
+				C.float(command.rotation),
+				C.float(command.radius),
 			)
 			imageCost += time.Since(commandStart)
 			imageCount++

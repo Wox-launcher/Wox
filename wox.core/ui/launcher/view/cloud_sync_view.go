@@ -631,51 +631,15 @@ func cloudPluginExclusionsCard(props CloudPluginExclusionsProps, width, height f
 
 // cloudConfigNotesCard renders translated platform sync caveats.
 func cloudConfigNotesCard(props CloudConfigNotesProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
-	const headerHeight = float32(42)
-	const rowHeight = float32(42)
-	const modeWidth = float32(360)
-	itemWidth := max(float32(180), width-modeWidth)
-	rows := make([]woxwidget.Widget, 0, len(props.Items)+1)
-	rows = append(rows, cloudConfigNoteRow(props.ItemLabel, props.ModeLabel, "", itemWidth, modeWidth, headerHeight, true, props.InfoIcon, nil, theme))
-	for _, note := range props.Items {
-		rows = append(rows, cloudConfigNoteRow(note.Item, note.Mode, note.Tooltip, itemWidth, modeWidth, rowHeight, false, props.InfoIcon, props.OnTooltip, theme))
+	rows := make([]FormTableRow, 0, len(props.Items))
+	for index, note := range props.Items {
+		rows = append(rows, FormTableRow{Index: index, Cells: []FormTableCell{{Text: note.Item}, {Text: note.Mode, Tooltip: note.Tooltip}}})
 	}
-	tableHeight := headerHeight + float32(len(props.Items))*rowHeight
-	tableViewportHeight := min(float32(720), tableHeight)
-	header := woxwidget.Container{Width: width, Height: 60, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: props.SectionLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-		woxwidget.TextBlock{Value: props.Tips, Width: width, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: theme.ResultSubtitle},
-	}}}
-	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
-		header,
-		woxwidget.Container{Width: width, Height: tableViewportHeight, BorderWidth: 1, BorderColor: theme.PreviewSplit, Child: woxwidget.ScrollView{
-			Key: "cloud-config-notes-scroll", ID: "cloud-config-notes-scroll", Width: width, Height: tableViewportHeight, ContentHeight: tableHeight,
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-		}},
-	}}}
-}
-
-func cloudConfigNoteRow(item, mode, tooltip string, itemWidth, modeWidth, height float32, header bool, infoIcon *woxui.Image, onTooltip func(bool, string, woxui.Rect), theme woxcomponent.Theme) woxwidget.Widget {
-	background := woxui.Color{}
-	weight := woxui.FontWeightRegular
-	if header {
-		background = theme.ToolbarBackground
-		weight = woxui.FontWeightSemibold
-	}
-	modeChildren := []woxwidget.Widget{woxwidget.Text{Value: mode, Style: woxui.TextStyle{Size: 12, Weight: weight}, Color: theme.ResultTitle}}
-	if tooltip != "" && infoIcon != nil {
-		modeChildren = append(modeChildren, woxwidget.Gesture{ID: "cloud-config-tooltip-" + item, OnHoverAt: func(inside bool, bounds woxui.Rect) {
-			if onTooltip != nil {
-				onTooltip(inside, tooltip, bounds)
-			}
-		}, Child: woxwidget.Image{Source: infoIcon, Width: 14, Height: 14}})
-	}
-	return woxwidget.Container{Width: itemWidth + modeWidth, Height: height, Color: background, BorderColor: theme.PreviewSplit, BorderWidth: 1, Child: woxwidget.Flex{
-		Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: itemWidth, Height: height, Padding: woxwidget.Insets{Left: 10, Top: 12}, Child: woxwidget.Text{Value: item, Style: woxui.TextStyle{Size: 12, Weight: weight}, Color: theme.ResultTitle}},
-			woxwidget.Container{Width: modeWidth, Height: height, Padding: woxwidget.Insets{Left: 10, Top: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: modeChildren}},
-		},
-	}}
+	return FormTableField(FormTableFieldProps{
+		ID: "cloud-config-notes", Title: props.SectionLabel, Description: props.Tips, Width: width, Height: height, MaxHeight: 720, InlineTitle: true, ReadOnly: true,
+		Columns: []FormTableColumn{{Label: props.ItemLabel}, {Label: props.ModeLabel, Width: 220}}, Rows: rows,
+		InfoIcon: props.InfoIcon, Theme: theme, OnTooltip: props.OnTooltip,
+	})
 }
 
 // cloudActionMenu renders the active account or subscription menu.
@@ -690,10 +654,10 @@ func cloudActionMenu(props CloudActionMenuProps, width float32, theme woxcompone
 	contentHeight := float32(len(rows)) * 40
 	height := min(float32(420), contentHeight+12)
 	bodyHeight := max(float32(0), height-12)
-	return woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.ActionBackground, Padding: woxwidget.UniformInsets(6), Child: woxwidget.ScrollView{
-		Key: "cloud-action-menu-scroll", ID: "cloud-action-menu-scroll", Width: width - 12, Height: bodyHeight, ContentHeight: contentHeight,
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-	}}
+	return woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.ActionBackground, Padding: woxwidget.UniformInsets(6), Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+		Key: "cloud-action-menu-scroll", Width: width - 12, Height: bodyHeight, ContentHeight: contentHeight,
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: theme.ResultSubtitle,
+	})}
 }
 
 // CloudFormOverlayProps contains cloud account form data and actions.

@@ -595,6 +595,8 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 				C.float(command.rect.Y),
 				C.float(command.rect.Width),
 				C.float(command.rect.Height),
+				C.float(command.rotation),
+				C.float(command.radius),
 			)
 		case displayCommandSetClipRect:
 			result = C.wox_linux_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))

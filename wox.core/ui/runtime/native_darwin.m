@@ -2990,7 +2990,7 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
   return 0;
 }
 
-int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height) {
+int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
   if (window == NULL || window->renderer == NULL || !window->renderer->frame_open || image_id == 0 || pixels == NULL || image_width <= 0 || image_height <= 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
@@ -3024,9 +3024,17 @@ int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id,
   }
 
   CGContextSaveGState(renderer->context);
-  CGContextTranslateCTM(renderer->context, x, y + height);
+  CGContextTranslateCTM(renderer->context, x + width * 0.5f, y + height * 0.5f);
+  CGContextRotateCTM(renderer->context, rotation_radians);
+  if (corner_radius > 0.0f) {
+    float radius = fminf(corner_radius, fminf(width, height) * 0.5f);
+    CGPathRef clip_path = CGPathCreateWithRoundedRect(CGRectMake(-width * 0.5f, -height * 0.5f, width, height), radius, radius, NULL);
+    CGContextAddPath(renderer->context, clip_path);
+    CGContextClip(renderer->context);
+    CGPathRelease(clip_path);
+  }
   CGContextScaleCTM(renderer->context, 1.0, -1.0);
-  CGContextDrawImage(renderer->context, CGRectMake(0.0, 0.0, width, height), image);
+  CGContextDrawImage(renderer->context, CGRectMake(-width * 0.5f, -height * 0.5f, width, height), image);
   CGContextRestoreGState(renderer->context);
   CGImageRelease(image);
   return 0;

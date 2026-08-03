@@ -411,7 +411,7 @@ extern "C" int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *tex
   return S_OK;
 }
 
-extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, float x, float y, float width, float height) {
+extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
   if (renderer == nullptr || !renderer->frame_open || pixels == nullptr || image_width == 0 || image_height == 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
     return E_INVALIDARG;
   }
@@ -429,7 +429,40 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, const uint8_t 
   const auto snap = [renderer](float value) { return std::round(value * renderer->scale) / renderer->scale; };
   const D2D1_RECT_F destination = {snap(x), snap(y), snap(x + width), snap(y + height)};
   const D2D1_RECT_F source = {0.0f, 0.0f, static_cast<float>(image_width), static_cast<float>(image_height)};
+  D2D1_MATRIX_3X2_F transform;
+  renderer->d2d_context->GetTransform(&transform);
+  if (rotation_radians != 0.0f) {
+    const float degrees = rotation_radians * 180.0f / 3.14159265358979323846f;
+    const D2D1_POINT_2F center = D2D1::Point2F(x + width * 0.5f, y + height * 0.5f);
+    renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Rotation(degrees, center) * transform);
+  }
+  ID2D1RoundedRectangleGeometry *clip_geometry = nullptr;
+  if (corner_radius > 0.0f) {
+    const float radius = std::min(corner_radius, std::min(width, height) * 0.5f);
+    const D2D1_ROUNDED_RECT rounded = {destination, radius, radius};
+    result = renderer->d2d_factory->CreateRoundedRectangleGeometry(rounded, &clip_geometry);
+    if (FAILED(result)) {
+      renderer->d2d_context->SetTransform(transform);
+      bitmap->Release();
+      return result;
+    }
+    D2D1_LAYER_PARAMETERS1 layer = {};
+    layer.contentBounds = D2D1::InfiniteRect();
+    layer.geometricMask = clip_geometry;
+    layer.maskAntialiasMode = D2D1_ANTIALIAS_MODE_PER_PRIMITIVE;
+    layer.maskTransform = D2D1::Matrix3x2F::Identity();
+    layer.opacity = 1.0f;
+    layer.layerOptions = D2D1_LAYER_OPTIONS1_NONE;
+    renderer->d2d_context->PushLayer(&layer, nullptr);
+  }
   renderer->d2d_context->DrawBitmap(bitmap, &destination, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, &source);
+  if (clip_geometry != nullptr) {
+    renderer->d2d_context->PopLayer();
+    clip_geometry->Release();
+  }
+  if (rotation_radians != 0.0f) {
+    renderer->d2d_context->SetTransform(transform);
+  }
   bitmap->Release();
   return S_OK;
 }
