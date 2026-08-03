@@ -133,6 +133,8 @@ uint16_t THORVG_VERSION_NUMBER()
 }
 
 
+#ifndef __MINGW32__
+// MinGW's static libstdc++ provides strong global allocator symbols, so defining them here causes duplicate symbols in the final executable.
 void* operator new(std::size_t size)
 {
     return tvg::malloc(size);
@@ -155,3 +157,4 @@ void operator delete[](void* ptr) noexcept
 {
     tvg::free(ptr);
 }
+#endif
