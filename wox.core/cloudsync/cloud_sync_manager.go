@@ -99,23 +99,18 @@ func (m *CloudSyncManager) Start(ctx context.Context) {
 		return
 	}
 	m.started = true
-	runCtx, cancel := context.WithCancel(ctx)
+	// Manager startup can do network I/O and must outlive short-lived UI and request contexts.
+	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	m.cancel = cancel
 	m.mu.Unlock()
 
-	if err := m.updateCurrentDevice(ctx); err != nil {
-		m.recordFailure(ctx, err)
-		if isCloudSyncDeviceRevokedError(err) {
-			m.mu.Lock()
-			m.started = false
-			m.cancel = nil
-			m.mu.Unlock()
-			cancel()
-			return
-		}
-	}
-
 	util.Go(runCtx, "cloud sync loop", func() {
+		if err := m.updateCurrentDevice(runCtx); err != nil {
+			m.recordFailure(runCtx, err)
+			if isCloudSyncDeviceRevokedError(err) {
+				return
+			}
+		}
 		m.runSyncLoop(runCtx)
 	})
 }

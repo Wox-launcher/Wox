@@ -1,6 +1,9 @@
 package launcher
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 func TestLauncherDensityMetricsMatchFlutterBuckets(t *testing.T) {
 	tests := []struct {
@@ -20,10 +23,14 @@ func TestLauncherDensityMetricsMatchFlutterBuckets(t *testing.T) {
 	}
 }
 
-func TestLauncherQueryHeightFollowsFlutterMultilineLimit(t *testing.T) {
+func TestLauncherQueryHeightFollowsMultilineLimit(t *testing.T) {
 	metrics := launcherDensityMetricsFor("normal")
-	if got := metrics.queryBoxHeightForText("one\ntwo\nthree"); got != 123 {
-		t.Fatalf("three-line query height = %v, want 123", got)
+	want := float32(123)
+	if runtime.GOOS == "windows" {
+		want = 131
+	}
+	if got := metrics.queryBoxHeightForText("one\ntwo\nthree"); got != want {
+		t.Fatalf("three-line query height = %v, want %v", got, want)
 	}
 	if got := launcherQueryLineCount("one\ntwo\nthree\nfour\nfive"); got != launcherQueryMaxLines {
 		t.Fatalf("query line count = %d, want max %d", got, launcherQueryMaxLines)

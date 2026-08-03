@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"math"
+	"runtime"
 	"strings"
 
 	"wox/setting"
@@ -30,7 +31,7 @@ func launcherDensityMetricsFor(value string) launcherDensityMetrics {
 	}
 	metrics := launcherDensityMetrics{scale: scale}
 	metrics.queryBoxHeight = metrics.scaled(55)
-	metrics.queryEditorHeight = metrics.scaled(38)
+	metrics.queryEditorHeight = metrics.queryLineHeight() + metrics.scaled(4)
 	metrics.resultRowBaseHeight = metrics.scaled(50)
 	metrics.toolbarHeight = metrics.scaled(40)
 	metrics.refinementBarHeight = metrics.scaled(44)
@@ -57,6 +58,10 @@ func (metrics launcherDensityMetrics) resultRowHeight(palette uiPalette) float32
 }
 
 func (metrics launcherDensityMetrics) queryLineHeight() float32 {
+	// DirectWrite needs the full Segoe UI line box to avoid clipping descenders.
+	if runtime.GOOS == "windows" {
+		return metrics.scaled(38)
+	}
 	return metrics.scaled(34)
 }
 
