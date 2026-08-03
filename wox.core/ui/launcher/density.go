@@ -2,9 +2,12 @@ package launcher
 
 import (
 	"math"
+	"strings"
 
 	"wox/setting"
 )
+
+const launcherQueryMaxLines = 4
 
 // launcherDensityMetrics contains the launcher-only values derived from the shared UiDensity setting.
 type launcherDensityMetrics struct {
@@ -51,4 +54,17 @@ func (metrics launcherDensityMetrics) scaled(value float32) float32 {
 
 func (metrics launcherDensityMetrics) resultRowHeight(palette uiPalette) float32 {
 	return metrics.resultRowBaseHeight + palette.resultItemPadding.Top + palette.resultItemPadding.Bottom
+}
+
+func (metrics launcherDensityMetrics) queryLineHeight() float32 {
+	return metrics.scaled(34)
+}
+
+func (metrics launcherDensityMetrics) queryBoxHeightForText(text string) float32 {
+	return metrics.queryBoxHeight + float32(launcherQueryLineCount(text)-1)*metrics.queryLineHeight()
+}
+
+func launcherQueryLineCount(text string) int {
+	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
+	return min(launcherQueryMaxLines, strings.Count(text, "\n")+1)
 }

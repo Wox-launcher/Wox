@@ -15,33 +15,44 @@ const launcherQueryMinimumEditableWidth = float32(300)
 type LauncherQueryProps struct {
 	Width            float32
 	Height           float32
+	LineHeight       float32
 	Style            woxui.TextStyle
 	State            woxui.TextEditingState
-	DisplayValue     string
-	Selected         string
+	Lines            []LauncherQueryLine
 	CompletionSuffix string
-	PrefixWidth      float32
-	SelectedWidth    float32
 	CaretWidth       float32
+	CaretLine        int
 	CompositionWidth float32
-	FocusWidth       float32
+	CompositionX     float32
+	CompositionLine  int
 	TextWidth        float32
 	CaretHeight      float32
 	Focused          bool
 	Enabled          bool
 	Theme            woxcomponent.Theme
-	OnTapAt          func(float32)
+	OnTapAt          func(woxui.Point)
+	OnDoubleTapAt    func(woxui.Point)
+	OnTripleTapAt    func(woxui.Point)
 	OnTapEnd         func()
 	OnDragStart      func()
-	// OnSelectionStart begins a drag selection at the given x (relative to the editor).
-	OnSelectionStart func(x float32)
-	// OnSelectionExtend updates the active drag selection focus to the given x.
-	OnSelectionExtend func(x float32)
+	// OnSelectionStart begins a drag selection at the given editor-local point.
+	OnSelectionStart func(woxui.Point)
+	// OnSelectionExtend updates the active drag selection focus to the given editor-local point.
+	OnSelectionExtend func(woxui.Point)
 	OnKey             func(woxui.KeyEvent) bool
 	OnTextInput       func(woxui.TextInputEvent) bool
 	OnFocusChange     func(bool)
 	OnSetValue        func(string) error
 	OnTextInputState  func(woxui.TextInputState)
+}
+
+// LauncherQueryLine contains adapter-measured text slices for one query line.
+type LauncherQueryLine struct {
+	Text          string
+	Selected      string
+	PrefixWidth   float32
+	SelectedWidth float32
+	TextWidth     float32
 }
 
 // LauncherHeaderProps contains the query box and its optional accessories.
@@ -113,44 +124,68 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 	if !props.Enabled {
 		pointerCursor = woxui.PointerCursorDefault
 	}
+	lineHeight := props.LineHeight
+	if lineHeight <= 0 {
+		lineHeight = props.CaretHeight
+	}
+	lines := props.Lines
+	if len(lines) == 0 {
+		lines = []LauncherQueryLine{{}}
+	}
+	contentHeight := max(props.Height, float32(len(lines))*lineHeight)
 
 	var editor woxwidget.Widget = woxwidget.Gesture{
 		ID:     "query-editor",
 		Cursor: pointerCursor,
 		OnTapAt: func(position woxui.Point) {
 			if props.OnTapAt != nil {
-				props.OnTapAt(position.X)
+				props.OnTapAt(position)
+			}
+		},
+		OnDoubleTapAt: func(position woxui.Point) {
+			if props.OnDoubleTapAt != nil {
+				props.OnDoubleTapAt(position)
+			}
+		},
+		OnTripleTapAt: func(position woxui.Point) {
+			if props.OnTripleTapAt != nil {
+				props.OnTripleTapAt(position)
 			}
 		},
 		OnSelectionStart: func(position woxui.Point) {
 			if props.OnSelectionStart != nil {
-				props.OnSelectionStart(position.X)
+				props.OnSelectionStart(position)
 			}
 		},
 		OnSelectionExtend: func(position woxui.Point) {
 			if props.OnSelectionExtend != nil {
-				props.OnSelectionExtend(position.X)
+				props.OnSelectionExtend(position)
 			}
 		},
-		Child: woxwidget.CaretPainter{Width: props.Width, Height: props.Height, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool) {
-			caretY := bounds.Y + (bounds.Height-props.CaretHeight)/2
+		Child: woxwidget.CaretPainter{Width: props.Width, Height: contentHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool) {
+			textTop := bounds.Y + max(float32(0), bounds.Height-float32(len(lines))*lineHeight)/2
+			lastLine := lines[len(lines)-1]
 			if props.Focused && props.State.Composition == "" && props.CompletionSuffix != "" {
 				hintColor := props.Theme.QueryText
 				hintColor.A = 96
-				displayList.DrawText(props.CompletionSuffix, woxui.Rect{X: bounds.X + props.TextWidth, Y: bounds.Y, Width: max(float32(0), bounds.Width-props.TextWidth), Height: bounds.Height}, props.Style, hintColor)
+				displayList.DrawText(props.CompletionSuffix, woxui.Rect{X: bounds.X + lastLine.TextWidth, Y: textTop + float32(len(lines)-1)*lineHeight, Width: max(float32(0), bounds.Width-lastLine.TextWidth), Height: lineHeight}, props.Style, hintColor)
 			}
-			if props.Focused && props.State.Composition == "" && props.Selected != "" {
-				displayList.FillRoundedRect(woxui.Rect{X: bounds.X + props.PrefixWidth, Y: caretY, Width: props.SelectedWidth, Height: props.CaretHeight}, 3, props.Theme.SelectionBackground)
-			}
-			displayList.DrawText(props.DisplayValue, bounds, props.Style, props.Theme.QueryText)
-			if props.Focused && props.State.Composition == "" && props.Selected != "" {
-				displayList.DrawText(props.Selected, woxui.Rect{X: bounds.X + props.PrefixWidth, Y: bounds.Y, Width: props.SelectedWidth, Height: bounds.Height}, props.Style, props.Theme.SelectionText)
+			for index, line := range lines {
+				lineY := textTop + float32(index)*lineHeight
+				if props.Focused && props.State.Composition == "" && line.Selected != "" {
+					displayList.FillRoundedRect(woxui.Rect{X: bounds.X + line.PrefixWidth, Y: lineY, Width: line.SelectedWidth, Height: props.CaretHeight}, 3, props.Theme.SelectionBackground)
+				}
+				displayList.DrawText(line.Text, woxui.Rect{X: bounds.X, Y: lineY, Width: bounds.Width, Height: lineHeight}, props.Style, props.Theme.QueryText)
+				if props.Focused && props.State.Composition == "" && line.Selected != "" {
+					displayList.DrawText(line.Selected, woxui.Rect{X: bounds.X + line.PrefixWidth, Y: lineY, Width: line.SelectedWidth, Height: lineHeight}, props.Style, props.Theme.SelectionText)
+				}
 			}
 			if !props.Focused {
 				return
 			}
 
 			cursorX := bounds.X + props.CaretWidth
+			caretY := textTop + float32(props.CaretLine)*lineHeight
 			if caretVisible {
 				displayList.FillRect(woxui.Rect{X: cursorX, Y: caretY, Width: cursorWidth, Height: props.CaretHeight}, props.Theme.Cursor)
 			}
@@ -158,7 +193,8 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 				props.OnTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: cursorX, Y: caretY, Width: cursorWidth, Height: props.CaretHeight}})
 			}
 			if props.State.Composition != "" {
-				displayList.FillRect(woxui.Rect{X: bounds.X + props.PrefixWidth, Y: caretY + props.CaretHeight - 1, Width: props.CompositionWidth, Height: 1}, props.Theme.Cursor)
+				compositionY := textTop + float32(props.CompositionLine)*lineHeight
+				displayList.FillRect(woxui.Rect{X: bounds.X + props.CompositionX, Y: compositionY + props.CaretHeight - 1, Width: props.CompositionWidth, Height: 1}, props.Theme.Cursor)
 			}
 		}},
 	}
@@ -174,12 +210,23 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 		OnFocusChange: props.OnFocusChange,
 		OnSetValue:    props.OnSetValue,
 		TextInput: func(bounds woxui.Rect) woxui.TextInputState {
-			return woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X + props.FocusWidth, Y: bounds.Y, Width: cursorWidth, Height: bounds.Height}}
+			textTop := max(float32(0), bounds.Height-float32(len(lines))*lineHeight) / 2
+			return woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X + props.CaretWidth, Y: bounds.Y + textTop + float32(props.CaretLine)*lineHeight, Width: cursorWidth, Height: props.CaretHeight}}
 		},
 		Child: editor,
 	}
+	keepVisible := &woxwidget.ScrollRange{Start: float32(props.CaretLine) * lineHeight, End: float32(props.CaretLine)*lineHeight + props.CaretHeight}
+	editor = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+		Key: "launcher-query-scroll", Content: editor, Width: props.Width, Height: props.Height, ContentHeight: contentHeight,
+		KeepVisible: keepVisible, ThumbColor: props.Theme.ResultSubtitle, AlwaysShowScrollbar: true,
+		AutomationID: "launcher.query.scroll", Label: "Query scroll position",
+	})
 	dragLeft := min(props.Width, launcherQueryMinimumEditableWidth+props.TextWidth)
-	if dragLeft >= props.Width {
+	dragRight := float32(0)
+	if contentHeight > props.Height {
+		dragRight = 14
+	}
+	if dragLeft >= props.Width-dragRight {
 		return editor
 	}
 	return woxwidget.Stack{
@@ -190,7 +237,7 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 				ID:          "query-drag-area",
 				OnTap:       props.OnTapEnd,
 				OnDragStart: props.OnDragStart,
-				Child:       woxwidget.Container{Width: props.Width - dragLeft, Height: props.Height},
+				Child:       woxwidget.Container{Width: props.Width - dragLeft - dragRight, Height: props.Height},
 			}},
 		},
 	}

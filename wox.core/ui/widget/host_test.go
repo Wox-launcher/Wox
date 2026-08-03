@@ -547,6 +547,50 @@ func TestHostDragSelectionExtendsAndClickCollapses(t *testing.T) {
 	}
 }
 
+func TestHostDispatchesPositionedDoubleAndTripleTap(t *testing.T) {
+	var taps, doubleTaps, tripleTaps, selectionStarts int
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Gesture{
+			ID: "multi-tap", OnTapAt: func(woxui.Point) { taps++ }, OnDoubleTapAt: func(woxui.Point) { doubleTaps++ }, OnTripleTapAt: func(woxui.Point) { tripleTaps++ },
+			OnSelectionStart: func(woxui.Point) { selectionStarts++ },
+			Child:            Container{Width: 100, Height: 20},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	for range 3 {
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	}
+	if taps != 1 || doubleTaps != 1 || tripleTaps != 1 {
+		t.Fatalf("tap counts = single %d, double %d, triple %d, want 1 each", taps, doubleTaps, tripleTaps)
+	}
+	if selectionStarts != 1 {
+		t.Fatalf("selection starts = %d, want 1 without collapsing the double or triple selection", selectionStarts)
+	}
+}
+
+func TestHostMultiTapRequiresNearbyClicks(t *testing.T) {
+	var taps, doubleTaps int
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Gesture{
+			ID: "multi-tap-distance", OnTapAt: func(woxui.Point) { taps++ }, OnDoubleTapAt: func(woxui.Point) { doubleTaps++ },
+			Child: Container{Width: 100, Height: 20},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	for _, x := range []float32{5, 20} {
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: x, Y: 5}})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: x, Y: 5}})
+	}
+	if taps != 2 || doubleTaps != 0 {
+		t.Fatalf("distant click counts = single %d, double %d, want 2 and 0", taps, doubleTaps)
+	}
+}
+
 func TestHostRequiresPointerMoveBeforeHover(t *testing.T) {
 	var hoverStates []bool
 	host := NewHost(func(frame woxui.FrameInfo) Widget {

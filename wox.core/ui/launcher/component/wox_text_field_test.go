@@ -1,6 +1,22 @@
 package component
 
-import "testing"
+import (
+	"testing"
+
+	woxwidget "wox/ui/widget"
+)
+
+func TestSingleLineTextFieldDefaultsToVerticalCenter(t *testing.T) {
+	singleLine := WoxTextField(TextFieldProps{ID: "single"}).(woxwidget.Stateful).Widget.(TextFieldProps)
+	if singleLine.TextAlignmentY != 0.5 {
+		t.Fatalf("single-line vertical alignment = %v, want 0.5", singleLine.TextAlignmentY)
+	}
+
+	multiline := WoxTextField(TextFieldProps{ID: "multi", MaxLines: 2}).(woxwidget.Stateful).Widget.(TextFieldProps)
+	if multiline.TextAlignmentY != 0 {
+		t.Fatalf("multiline vertical alignment = %v, want 0", multiline.TextAlignmentY)
+	}
+}
 
 func TestTextFieldScrolledOffsetConsumesOnlyMovableWheelDeltas(t *testing.T) {
 	if next, changed := textFieldScrolledOffset(0, 240, -40); next != 40 || !changed {

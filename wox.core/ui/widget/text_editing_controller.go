@@ -62,6 +62,26 @@ func (c *TextEditingController) SetSelection(anchor, focus int) {
 	c.mu.Unlock()
 }
 
+// SelectWordAt selects the Unicode word containing the rune offset.
+func (c *TextEditingController) SelectWordAt(offset int) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.editor.SelectWordAt(offset)
+	c.mu.Unlock()
+}
+
+// SelectLineAt selects the newline-delimited line containing the rune offset.
+func (c *TextEditingController) SelectLineAt(offset int) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.editor.SelectLineAt(offset)
+	c.mu.Unlock()
+}
+
 // InsertText replaces the selection with committed text.
 func (c *TextEditingController) InsertText(text string) bool {
 	if c == nil {

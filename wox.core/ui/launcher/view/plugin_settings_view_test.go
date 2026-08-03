@@ -70,6 +70,16 @@ func TestPluginSettingsFilterPanelUsesAvailableFlutterWidth(t *testing.T) {
 	}
 }
 
+func TestPluginListMessageKeepsSettingsBackground(t *testing.T) {
+	list := PluginList(PluginListProps{
+		Width: 260, Height: 660, Message: "Loading", Theme: woxcomponent.Theme{QueryBackground: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
+	}).(woxwidget.Container)
+
+	if list.Color.A != 0 {
+		t.Fatalf("plugin list message background = %#v, want transparent settings background", list.Color)
+	}
+}
+
 func TestPluginFilterPanelMatchesFlutterLayout(t *testing.T) {
 	panel := PluginFilterPanel(PluginFilterPanelProps{
 		Width: 360, LabelWidth: 80, RuntimeTitle: "Runtime",

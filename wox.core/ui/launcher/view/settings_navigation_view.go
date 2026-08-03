@@ -49,10 +49,6 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 			labelStyle.Weight = woxui.FontWeightSemibold
 		}
 		leftPadding := float32(10 + item.Depth*18)
-		trailing := ""
-		if item.Parent {
-			trailing = "⌄"
-		}
 		var icon woxwidget.Widget = woxwidget.Text{Value: item.FallbackIcon, Style: woxui.TextStyle{Size: 15}, Color: foreground}
 		if item.Icon != nil {
 			icon = woxwidget.Image{Source: item.Icon, Width: 18, Height: 18}
@@ -63,8 +59,7 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 			Background: &color, BorderColor: border, BorderWidth: 1, Selected: item.Selected, SkipFocus: item.Parent, OnTap: item.OnTap, Theme: props.Theme,
 			Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 				woxwidget.Align{Width: 22, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
-				woxwidget.Align{Width: max(float32(0), props.Width-leftPadding-98), Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}},
-				woxwidget.Align{Width: 18, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: trailing, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle}},
+				woxwidget.Align{Width: max(float32(0), props.Width-leftPadding-70), Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}},
 			}},
 		}))
 	}

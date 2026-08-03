@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -777,6 +778,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	var previewVisible bool
 	var toolbarMessageVisible bool
 	var previewFullscreen bool
+	var queryText string
 	if err := a.runOnUI("snapshot launcher window bounds", func() {
 		params = a.show
 		results = append([]queryResult(nil), a.results...)
@@ -786,6 +788,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		actionPanel = a.actionPanel
 		palette = a.palette
 		densityMetrics = a.densityMetrics.normalized()
+		queryText = a.editor.State().Text
 		if a.form != nil {
 			formHeight = int(densityMetrics.scaled(formContentMaximumHeight) + 2*densityMetrics.scaled(10))
 		}
@@ -812,7 +815,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	visibleResults := min(resultCount, maxResults)
 	resultRowHeight := int(densityMetrics.resultRowHeight(palette))
 	resultVerticalPadding := int(palette.resultContainerPadding.Top + palette.resultContainerPadding.Bottom)
-	queryAreaHeight := int(densityMetrics.queryBoxHeight + palette.appPadding.Top + palette.appPadding.Bottom)
+	queryAreaHeight := int(densityMetrics.queryBoxHeightForText(queryText) + palette.appPadding.Top + palette.appPadding.Bottom)
 	toolbarVisible := !params.HideToolbar && !previewFullscreen && (resultCount > 0 || toolbarMessageVisible)
 	height := 0
 	if !params.HideQueryBox {
@@ -988,6 +991,7 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			}
 			return true
 		case woxui.Key("x"):
+			previousText := a.editor.State().Text
 			selected := a.editor.SelectedText()
 			if selected != "" {
 				_ = clipboard.WriteText(selected)
@@ -1000,13 +1004,15 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			if err := a.sendCurrentQuery(); err != nil {
 				log.Printf("send query after cut: %v", err)
 			}
+			a.resizeLauncherForQueryLineChange(previousText)
 			return true
 		case woxui.Key("v"):
 			text, err := clipboard.ReadText()
 			if err != nil || text == "" {
 				return true
 			}
-			if a.editor.InsertText(text) {
+			previousText := a.editor.State().Text
+			if a.editor.InsertText(normalizeQueryNewlines(text)) {
 				a.applyQueryTextChangeLocked(a.editor.State().Text)
 			}
 			_ = a.window.Invalidate()
@@ -1014,10 +1020,12 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			if err := a.sendCurrentQuery(); err != nil {
 				log.Printf("send query after paste: %v", err)
 			}
+			a.resizeLauncherForQueryLineChange(previousText)
 			return true
 		}
 	}
-	textHandled, textChanged := a.editor.HandleKey(event)
+	previousText := a.editor.State().Text
+	textHandled, textChanged := handleQueryEditorKey(a.editor, event)
 	if textChanged {
 		a.applyQueryTextChangeLocked(a.editor.State().Text)
 	}
@@ -1028,6 +1036,7 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			if err := a.sendCurrentQuery(); err != nil {
 				log.Printf("send query after editing command: %v", err)
 			}
+			a.resizeLauncherForQueryLineChange(previousText)
 		}
 		return true
 	}
@@ -1068,6 +1077,23 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 		return false
 	}
 	return false
+}
+
+func handleQueryEditorKey(editor *woxui.TextEditor, event woxui.KeyEvent) (bool, bool) {
+	if editor != nil && event.Down && !event.Composing && event.Key == woxui.KeyEnter && event.Modifiers == woxui.KeyModifierShift {
+		return true, editor.InsertText("\n")
+	}
+	return editor.HandleKey(event)
+}
+
+// resizeLauncherForQueryLineChange avoids native window work for ordinary single-line edits.
+func (a *App) resizeLauncherForQueryLineChange(previousText string) {
+	if launcherQueryLineCount(previousText) == launcherQueryLineCount(a.editor.State().Text) {
+		return
+	}
+	if err := a.applyWindowBounds(); err != nil {
+		log.Printf("resize launcher after query line change: %v", err)
+	}
 }
 
 // previousQueryHistory advances through the show-time history snapshot while history recall remains active.
@@ -1116,6 +1142,10 @@ func (a *App) onTextInput(event woxui.TextInputEvent) {
 	if a.onTerminalPreviewTextInput(event) {
 		return
 	}
+	previousText := a.editor.State().Text
+	if event.Kind == woxui.TextInputCommit {
+		event.Text = normalizeQueryNewlines(event.Text)
+	}
 	committed := a.editor.HandleTextInput(event)
 	if committed {
 		a.applyQueryTextChangeLocked(a.editor.State().Text)
@@ -1126,7 +1156,12 @@ func (a *App) onTextInput(event woxui.TextInputEvent) {
 		if err := a.sendCurrentQuery(); err != nil {
 			log.Printf("send committed query: %v", err)
 		}
+		a.resizeLauncherForQueryLineChange(previousText)
 	}
+}
+
+func normalizeQueryNewlines(text string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
 }
 
 func (a *App) moveSelection(delta int) {

@@ -1,6 +1,7 @@
 package component
 
 import (
+	"fmt"
 	"time"
 
 	woxui "wox/ui/runtime"
@@ -9,17 +10,20 @@ import (
 
 // ScrollViewProps contains the geometry and optional controlled state for a vertical Wox scroll surface.
 type ScrollViewProps struct {
-	Key           woxwidget.Key
-	Content       woxwidget.Widget
-	Width         float32
-	Height        float32
-	ContentHeight float32
-	Offset        float32
-	Controller    *woxwidget.ScrollController
-	KeepVisible   *woxwidget.ScrollRange
-	ThumbColor    woxui.Color
-	HideScrollbar bool
-	OnScroll      func(float32)
+	Key                 woxwidget.Key
+	Content             woxwidget.Widget
+	Width               float32
+	Height              float32
+	ContentHeight       float32
+	Offset              float32
+	Controller          *woxwidget.ScrollController
+	KeepVisible         *woxwidget.ScrollRange
+	ThumbColor          woxui.Color
+	HideScrollbar       bool
+	AlwaysShowScrollbar bool
+	AutomationID        string
+	Label               string
+	OnScroll            func(float32)
 }
 
 type scrollViewState struct {
@@ -151,7 +155,7 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 		thumbTop := (props.Height - thumbHeight) * offset / (props.ContentHeight - props.Height)
 		thumbColor := props.ThumbColor
 		thumbColor.A = min(150, thumbColor.A)
-		visible := state != nil && state.visible
+		visible := state != nil && (state.visible || props.AlwaysShowScrollbar)
 		targetOpacity := float32(0)
 		if visible {
 			targetOpacity = 1
@@ -189,7 +193,7 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 		}
 		children = append(children, woxwidget.StackChild{Left: max(float32(0), props.Width-14), Top: thumbTop, Child: thumb})
 	}
-	return woxwidget.Gesture{ID: string(props.Key), OnScroll: func(delta woxui.Point) {
+	var result woxwidget.Widget = woxwidget.Gesture{ID: string(props.Key), OnScroll: func(delta woxui.Point) {
 		scrollDelta := -delta.Y
 		if scrollOffset(props, scrollDelta) != scrollCurrentOffset(props) {
 			if state != nil && !props.HideScrollbar {
@@ -198,6 +202,13 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 			applyScroll(props, scrollDelta)
 		}
 	}, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: children}}
+	if props.AutomationID != "" {
+		result = woxwidget.Semantics{
+			Key: props.Key + "-semantics", AutomationID: props.AutomationID, Role: woxui.AccessibilityRoleGroup, Label: props.Label,
+			Value: fmt.Sprintf("%.0f/%.0f", offset, max(float32(0), props.ContentHeight-props.Height)), ReadOnly: true, Child: result,
+		}
+	}
+	return result
 }
 
 func scrollOffset(props ScrollViewProps, delta float32) float32 {

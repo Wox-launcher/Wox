@@ -12,7 +12,11 @@ import (
 	woxui "wox/ui/runtime"
 )
 
-const caretBlinkInterval = 500 * time.Millisecond
+const (
+	caretBlinkInterval = 500 * time.Millisecond
+	multiTapInterval   = 500 * time.Millisecond
+	multiTapDistance   = float32(4)
+)
 
 // AutomationSnapshot is the immutable retained tree exposed to test drivers.
 type AutomationSnapshot struct {
@@ -45,10 +49,12 @@ type Host struct {
 	dragging  bool
 	// selecting tracks the gesture node that started a drag-based selection, so subsequent
 	// pointer-move events extend its selection until the pointer is released.
-	selecting woxui.AccessibilityNodeID
-	panning   woxui.AccessibilityNodeID
-	lastTapID woxui.AccessibilityNodeID
-	lastTapAt time.Time
+	selecting       woxui.AccessibilityNodeID
+	panning         woxui.AccessibilityNodeID
+	lastTapID       woxui.AccessibilityNodeID
+	lastTapAt       time.Time
+	lastTapPosition woxui.Point
+	lastTapCount    int
 
 	focused woxui.AccessibilityNodeID
 	// focusVisible mirrors :focus-visible so pointer focus keeps keyboard behavior without painting a ring.
@@ -281,6 +287,8 @@ func (h *Host) reconcileTransientState(oldNodes map[woxui.AccessibilityNodeID]*n
 	if h.lastTapID != 0 && h.nodes[h.lastTapID] == nil {
 		h.lastTapID = 0
 		h.lastTapAt = time.Time{}
+		h.lastTapPosition = woxui.Point{}
+		h.lastTapCount = 0
 	}
 }
 
@@ -691,7 +699,10 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		}
 		// A selection gesture captures the press to begin a drag-based selection. Tap dispatch is
 		// deferred to PointerUp; if the pointer moves meaningfully we keep the selection and skip tap.
-		if target != nil && target.gesture != nil && target.gesture.onSelectionStart != nil {
+		// Preserve the previous multi-click selection until the positioned double/triple handler replaces it.
+		multiTap := target != nil && target.gesture != nil && h.continuesMultiTap(target.id, event.Position, time.Now()) &&
+			((h.lastTapCount == 1 && target.gesture.onDoubleTapAt != nil) || (h.lastTapCount == 2 && target.gesture.onTripleTapAt != nil))
+		if target != nil && target.gesture != nil && target.gesture.onSelectionStart != nil && !multiTap {
 			h.selecting = h.pressed
 			target.gesture.onSelectionStart(woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y})
 			h.invalidate()
@@ -894,25 +905,59 @@ func (h *Host) activatePointerTarget(target *node, position woxui.Point) {
 		return
 	}
 	now := time.Now()
-	doubleTap := target.gesture.onDoubleTap != nil && target.id == h.lastTapID && now.Sub(h.lastTapAt) <= 200*time.Millisecond
-	if doubleTap {
-		target.gesture.onDoubleTap()
+	localPosition := woxui.Point{X: position.X - target.bounds.X, Y: position.Y - target.bounds.Y}
+	hasDoubleTap := target.gesture.onDoubleTap != nil || target.gesture.onDoubleTapAt != nil
+	hasTripleTap := target.gesture.onTripleTapAt != nil
+	if h.continuesMultiTap(target.id, position, now) {
+		h.lastTapCount++
+	} else {
+		h.lastTapCount = 1
+	}
+	h.lastTapID = target.id
+	h.lastTapAt = now
+	h.lastTapPosition = position
+
+	if h.lastTapCount == 3 && hasTripleTap {
+		target.gesture.onTripleTapAt(localPosition)
 		h.lastTapID = 0
 		h.lastTapAt = time.Time{}
-	} else if target.gesture.onTap != nil {
-		target.gesture.onTap()
+		h.lastTapPosition = woxui.Point{}
+		h.lastTapCount = 0
+	} else if h.lastTapCount == 2 && hasDoubleTap {
 		if target.gesture.onDoubleTap != nil {
-			h.lastTapID = target.id
-			h.lastTapAt = now
+			target.gesture.onDoubleTap()
+		}
+		if target.gesture.onDoubleTapAt != nil {
+			target.gesture.onDoubleTapAt(localPosition)
+		}
+		if !hasTripleTap {
+			h.lastTapID = 0
+			h.lastTapAt = time.Time{}
+			h.lastTapPosition = woxui.Point{}
+			h.lastTapCount = 0
+		}
+	} else {
+		if target.gesture.onTap != nil {
+			target.gesture.onTap()
+		}
+		if target.gesture.onTapAt != nil {
+			target.gesture.onTapAt(localPosition)
+		}
+		if target.gesture.onTapBounds != nil {
+			target.gesture.onTapBounds(target.bounds)
 		}
 	}
-	if target.gesture.onTapAt != nil {
-		target.gesture.onTapAt(woxui.Point{X: position.X - target.bounds.X, Y: position.Y - target.bounds.Y})
-	}
-	if target.gesture.onTapBounds != nil {
-		target.gesture.onTapBounds(target.bounds)
-	}
 	h.invalidate()
+}
+
+// continuesMultiTap applies the shared time and movement thresholds for consecutive clicks.
+func (h *Host) continuesMultiTap(target woxui.AccessibilityNodeID, position woxui.Point, now time.Time) bool {
+	if target != h.lastTapID || h.lastTapAt.IsZero() || now.Sub(h.lastTapAt) > multiTapInterval {
+		return false
+	}
+	deltaX := position.X - h.lastTapPosition.X
+	deltaY := position.Y - h.lastTapPosition.Y
+	return deltaX*deltaX+deltaY*deltaY <= multiTapDistance*multiTapDistance
 }
 
 func nodeID(current *node) woxui.AccessibilityNodeID {

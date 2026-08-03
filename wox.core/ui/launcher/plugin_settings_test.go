@@ -68,6 +68,47 @@ func TestPluginSettingKeepVisibleUsesMeasuredRowKey(t *testing.T) {
 	}
 }
 
+func TestPluginSettingTabMovesOneHostFocusPerPress(t *testing.T) {
+	fields := newFormFieldsState([]formDefinition{
+		{Type: "textbox", Value: formDefinitionValue{Key: "days"}},
+		{Type: "checkbox", Value: formDefinitionValue{Key: "enabled"}},
+		{Type: "textbox", Value: formDefinitionValue{Key: "imageDays"}},
+		{Type: "checkbox", Value: formDefinitionValue{Key: "ocr"}},
+	}, nil, true)
+	deps := CommonDeps{}
+	plugins := newPluginSettingsController(deps)
+	plugins.SetForm(&pluginSettingsFormState{formFieldsState: fields})
+	app := &App{settingTab: "plugins", pluginSettings: plugins, hotkeySettings: newHotkeySettingsController(deps)}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+			woxwidget.Focusable{Key: "plugin-settings-field-0", OnKey: app.onPluginSettingsKey, Child: woxwidget.Container{Width: 100, Height: 30}},
+			woxwidget.Focusable{Key: "plugin-settings-field-1", Child: woxwidget.Container{Width: 100, Height: 30}},
+			woxwidget.Focusable{Key: "plugin-settings-field-2", OnKey: app.onPluginSettingsKey, OnFocusChange: func(focused bool) {
+				if focused {
+					app.focusPluginFormField(2)
+				}
+			}, Child: woxwidget.Container{Width: 100, Height: 30}},
+			woxwidget.Focusable{Key: "plugin-settings-field-3", Child: woxwidget.Container{Width: 100, Height: 30}},
+		}}
+	})
+	host.AttachServices(formTableHostServices{})
+	app.settingsHost = host
+	displayList := woxui.DisplayList{}
+	host.Frame(&displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 120}, PixelSize: woxui.PixelSize{Width: 100, Height: 120}, Scale: 1})
+	host.RequestFocus("plugin-settings-field-0")
+
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.HasFocus("plugin-settings-field-1") {
+		t.Fatal("Tab from a plugin text field did not focus the next plugin setting")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.HasFocus("plugin-settings-field-2") {
+		t.Fatal("Tab from a plugin checkbox did not focus the next plugin setting")
+	}
+	host.Key(woxui.KeyEvent{Key: woxui.KeyTab})
+	if !host.HasFocus("plugin-settings-field-2") {
+		t.Fatal("Tab key release advanced plugin focus a second time")
+	}
+}
+
 func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 	plugins := newPluginSettingsController(CommonDeps{})
 	plugins.SetPlugins([]pluginSettingsPlugin{{

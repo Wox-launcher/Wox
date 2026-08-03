@@ -41,3 +41,19 @@ func TestTextEditorInsertTextReplacesSelection(t *testing.T) {
 		t.Fatalf("after insert caret = (%d,%d), want (4,4)", anchor, focus)
 	}
 }
+
+func TestTextEditorMultiClickSelections(t *testing.T) {
+	editor := NewTextEditor("alpha_beta 世界\nsecond line")
+	editor.SelectWordAt(3)
+	if selected := editor.SelectedText(); selected != "alpha_beta" {
+		t.Fatalf("word selection = %q, want %q", selected, "alpha_beta")
+	}
+	editor.SelectWordAt(11)
+	if selected := editor.SelectedText(); selected != "世界" {
+		t.Fatalf("Unicode word selection = %q, want %q", selected, "世界")
+	}
+	editor.SelectLineAt(17)
+	if selected := editor.SelectedText(); selected != "second line" {
+		t.Fatalf("line selection = %q, want %q", selected, "second line")
+	}
+}

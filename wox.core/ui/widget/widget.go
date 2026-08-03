@@ -731,6 +731,8 @@ type gesture struct {
 	onPressChange func(bool)
 	onTap         func()
 	onDoubleTap   func()
+	onDoubleTapAt func(woxui.Point)
+	onTripleTapAt func(woxui.Point)
 	onTapAt       func(woxui.Point)
 	onTapBounds   func(woxui.Rect)
 	onDragStart   func()
@@ -758,6 +760,8 @@ type Gesture struct {
 	OnPressChange func(pressed bool)
 	OnTap         func()
 	OnDoubleTap   func()
+	OnDoubleTapAt func(position woxui.Point)
+	OnTripleTapAt func(position woxui.Point)
 	OnTapAt       func(position woxui.Point)
 	OnTapBounds   func(bounds woxui.Rect)
 	OnDragStart   func()
@@ -790,7 +794,8 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 	}
 	target.kind = "gesture"
 	target.gesture = &gesture{
-		id: w.ID, cursor: w.Cursor, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onPressChange: w.OnPressChange, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap, onTapAt: w.OnTapAt,
+		id: w.ID, cursor: w.Cursor, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onPressChange: w.OnPressChange, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap,
+		onDoubleTapAt: w.OnDoubleTapAt, onTripleTapAt: w.OnTripleTapAt, onTapAt: w.OnTapAt,
 		onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onPanStart: w.OnPanStart, onPanUpdate: w.OnPanUpdate, onPanEnd: w.OnPanEnd,
 		onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled,
 		onSelectionStart: w.OnSelectionStart, onSelectionExtend: w.OnSelectionExtend,

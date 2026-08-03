@@ -36,24 +36,26 @@ type TextFieldProps struct {
 	Style            woxui.TextStyle
 	TextColor        woxui.Color
 	// TextAlignmentY optically positions measured glyph bounds within each line without moving the caret.
-	TextAlignmentY float32
-	Value          string
-	Focused        bool
-	Autofocus      bool
-	Controller     *woxwidget.TextEditingController
-	FocusNode      *woxwidget.FocusNode
-	Disabled       bool
-	ReadOnly       bool
-	Protected      bool
-	MaxLines       int
-	Window         *woxui.Window
-	Theme          Theme
-	OnKey          func(woxui.KeyEvent) bool
-	OnFocusChange  func(bool)
-	OnChanged      func(string)
-	OnSetValue     func(string) error
-	editingState   woxui.TextEditingState
-	onCaret        func(int)
+	TextAlignmentY  float32
+	Value           string
+	Focused         bool
+	Autofocus       bool
+	Controller      *woxwidget.TextEditingController
+	FocusNode       *woxwidget.FocusNode
+	Disabled        bool
+	ReadOnly        bool
+	Protected       bool
+	MaxLines        int
+	Window          *woxui.Window
+	Theme           Theme
+	OnKey           func(woxui.KeyEvent) bool
+	OnFocusChange   func(bool)
+	OnChanged       func(string)
+	OnSetValue      func(string) error
+	editingState    woxui.TextEditingState
+	onCaret         func(int)
+	onWordSelection func(int)
+	onLineSelection func(int)
 	// onSelectionStart begins a drag selection anchored at the given rune offset.
 	onSelectionStart func(int)
 	// onSelectionExtend updates the selection focus to the given rune offset while dragging.
@@ -65,6 +67,9 @@ type TextFieldProps struct {
 
 // WoxTextField builds a retained text field with shared IME, selection, and accessibility behavior.
 func WoxTextField(props TextFieldProps) woxwidget.Widget {
+	if props.MaxLines <= 1 && props.TextAlignmentY == 0 {
+		props.TextAlignmentY = 0.5
+	}
 	return woxwidget.Stateful{
 		Key: woxwidget.Key(props.ID), Type: (*textFieldState)(nil), Widget: props,
 		CreateState: func() woxwidget.State { return &textFieldState{} },
@@ -143,6 +148,16 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 	props.onCaret = func(offset int) {
 		s.focusNode.RequestFocus()
 		s.controller.SetCaret(offset)
+		context.Invalidate()
+	}
+	props.onWordSelection = func(offset int) {
+		s.focusNode.RequestFocus()
+		s.controller.SelectWordAt(offset)
+		context.Invalidate()
+	}
+	props.onLineSelection = func(offset int) {
+		s.focusNode.RequestFocus()
+		s.controller.SelectLineAt(offset)
 		context.Invalidate()
 	}
 	// Capture the anchor at drag start so subsequent extends update only the focus.
@@ -377,6 +392,18 @@ func buildWoxTextField(props TextFieldProps) woxwidget.Widget {
 		}
 		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
 		props.onCaret(textFieldOffsetAt(state, props.Window, style, maxLines, props.verticalOffset, innerWidth, point))
+	}, OnDoubleTapAt: func(position woxui.Point) {
+		if props.Disabled || props.Window == nil || props.onWordSelection == nil {
+			return
+		}
+		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
+		props.onWordSelection(textFieldOffsetAt(state, props.Window, style, maxLines, props.verticalOffset, innerWidth, point))
+	}, OnTripleTapAt: func(position woxui.Point) {
+		if props.Disabled || props.Window == nil || props.onLineSelection == nil {
+			return
+		}
+		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
+		props.onLineSelection(textFieldOffsetAt(state, props.Window, style, maxLines, props.verticalOffset, innerWidth, point))
 	}, OnSelectionStart: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onSelectionStart == nil {
 			return

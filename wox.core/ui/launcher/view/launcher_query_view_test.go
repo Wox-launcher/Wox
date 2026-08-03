@@ -3,12 +3,13 @@ package view
 import (
 	"testing"
 
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
 func TestLauncherQueryRemainsFocusableWithoutOwningFocus(t *testing.T) {
-	query := LauncherQueryView(LauncherQueryProps{Focused: false, Enabled: true}).(woxwidget.EditableText)
+	query := launcherQueryEditable(LauncherQueryView(LauncherQueryProps{Height: 40, Focused: false, Enabled: true}))
 	if query.Disabled {
 		t.Fatal("unfocused query was disabled instead of remaining pointer-focusable")
 	}
@@ -32,4 +33,52 @@ func TestLauncherQueryKeepsMinimumEditableAreaBeforeDragOverlay(t *testing.T) {
 	if !tapped {
 		t.Fatal("drag area tap did not request query focus")
 	}
+}
+
+func TestLauncherQueryForwardsMultiClickSelection(t *testing.T) {
+	doubleTaps, tripleTaps := 0, 0
+	query := launcherQueryEditable(LauncherQueryView(LauncherQueryProps{
+		Height: 40, Enabled: true, OnDoubleTapAt: func(woxui.Point) { doubleTaps++ }, OnTripleTapAt: func(woxui.Point) { tripleTaps++ },
+	}))
+	gesture := query.Child.(woxwidget.Gesture)
+	gesture.OnDoubleTapAt(woxui.Point{X: 10})
+	gesture.OnTripleTapAt(woxui.Point{X: 10})
+	if doubleTaps != 1 || tripleTaps != 1 {
+		t.Fatalf("query multi-click callbacks = double %d, triple %d, want 1 each", doubleTaps, tripleTaps)
+	}
+}
+
+func TestLauncherQueryUsesSharedScrollViewForHiddenLines(t *testing.T) {
+	query := LauncherQueryView(LauncherQueryProps{
+		Width: 100, Height: 136, LineHeight: 34, CaretHeight: 34, CaretLine: 4, Lines: make([]LauncherQueryLine, 5),
+	}).(woxwidget.Stateful)
+	props := query.Widget.(woxcomponent.ScrollViewProps)
+	if props.ContentHeight != 170 || props.KeepVisible == nil || props.KeepVisible.Start != 136 || props.KeepVisible.End != 170 || !props.AlwaysShowScrollbar || props.AutomationID != "launcher.query.scroll" {
+		t.Fatalf("query scroll props = content %.0f keep %#v always visible %v automation %q", props.ContentHeight, props.KeepVisible, props.AlwaysShowScrollbar, props.AutomationID)
+	}
+}
+
+func TestLauncherQueryLeavesSharedScrollbarGutterOutsideDragOverlay(t *testing.T) {
+	query := LauncherQueryView(LauncherQueryProps{
+		Width: 500, Height: 136, TextWidth: 50, LineHeight: 34, Lines: make([]LauncherQueryLine, 5),
+	}).(woxwidget.Stack)
+	dragArea := query.Children[1].Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	if dragArea.Width != 136 {
+		t.Fatalf("multiline drag area width = %.0f, want 136", dragArea.Width)
+	}
+}
+
+func launcherQueryEditable(widget woxwidget.Widget) woxwidget.EditableText {
+	if stack, ok := widget.(woxwidget.Stack); ok {
+		widget = stack.Children[0].Child
+	}
+	if stateful, ok := widget.(woxwidget.Stateful); ok {
+		return stateful.Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.EditableText)
+	}
+	if semantics, ok := widget.(woxwidget.Semantics); ok {
+		widget = semantics.Child
+	}
+	stack := widget.(woxwidget.Gesture).Child.(woxwidget.Stack)
+	scroll := stack.Children[0].Child.(woxwidget.ScrollView)
+	return scroll.Child.(woxwidget.EditableText)
 }

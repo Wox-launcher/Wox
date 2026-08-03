@@ -203,6 +203,46 @@ func TestQueryTextChangeDisablesHistoryRecall(t *testing.T) {
 	}
 }
 
+func TestQueryEditorShiftEnterInsertsNewline(t *testing.T) {
+	editor := woxui.NewTextEditor("firstsecond")
+	editor.SetCaret(5)
+	handled, changed := handleQueryEditorKey(editor, woxui.KeyEvent{Key: woxui.KeyEnter, Modifiers: woxui.KeyModifierShift, Down: true})
+	if !handled || !changed || editor.State().Text != "first\nsecond" {
+		t.Fatalf("Shift+Enter = handled %v, changed %v, text %q", handled, changed, editor.State().Text)
+	}
+	if handled, changed = handleQueryEditorKey(editor, woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}); handled || changed {
+		t.Fatalf("plain Enter = handled %v, changed %v, want launcher activation", handled, changed)
+	}
+}
+
+func TestNormalizeQueryNewlinesPreservesPastedLines(t *testing.T) {
+	if got := normalizeQueryNewlines("one\r\ntwo\rthree"); got != "one\ntwo\nthree" {
+		t.Fatalf("normalized pasted text = %q", got)
+	}
+}
+
+func TestQueryPasteReplacesSelectionWithMultilineText(t *testing.T) {
+	editor := woxui.NewTextEditor("replace me")
+	editor.SelectAll()
+	if !editor.InsertText(normalizeQueryNewlines("one\r\ntwo\rthree")) {
+		t.Fatal("multiline paste did not change query text")
+	}
+	state := editor.State()
+	if state.Text != "one\ntwo\nthree" || state.Selection.Focus != len([]rune(state.Text)) || !state.Selection.Collapsed() {
+		t.Fatalf("pasted query state = text %q selection %#v", state.Text, state.Selection)
+	}
+}
+
+func TestQueryDisplayProvidesAllLinesToSharedViewport(t *testing.T) {
+	runes := []rune("one\ntwo\nthree\nfour\nfive")
+	lines, caretLine, _, _, _, _, _ := queryDisplayLines(runes, len(runes), len(runes), len(runes), -1, 0, func(value string) float32 {
+		return float32(len([]rune(value)))
+	})
+	if len(lines) != 5 || caretLine != 4 || lines[4].Text != "five" {
+		t.Fatalf("query lines = count %d, caret %d, last %q", len(lines), caretLine, lines[4].Text)
+	}
+}
+
 func TestFromCoreShowOptionsPreservesQueryHistoryOrderAndPayload(t *testing.T) {
 	options := contract.ShowOptions{QueryHistories: []common.PlainQuery{
 		{QueryId: "latest-id", QueryType: "input", QueryText: "latest", QueryRefinements: map[string]string{"scope": "recent"}, ContextData: common.ContextData{"token": "latest"}},

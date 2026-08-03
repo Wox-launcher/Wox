@@ -1,5 +1,7 @@
 package woxui
 
+import "unicode"
+
 // TextSelection stores anchor and focus as rune offsets so UTF-8 editing stays deterministic.
 type TextSelection struct {
 	Anchor int
@@ -76,6 +78,43 @@ func (e *TextEditor) SetSelection(anchor, focus int) {
 	length := len([]rune(e.state.Text))
 	e.state.Selection = TextSelection{Anchor: max(0, min(length, anchor)), Focus: max(0, min(length, focus))}
 	e.state.Composition = ""
+}
+
+// SelectWordAt selects the Unicode word containing the rune offset.
+func (e *TextEditor) SelectWordAt(offset int) {
+	runes := []rune(e.state.Text)
+	if len(runes) == 0 {
+		e.SetCaret(0)
+		return
+	}
+	offset = min(max(0, offset), len(runes)-1)
+	isWord := func(current rune) bool {
+		return unicode.IsLetter(current) || unicode.IsDigit(current) || unicode.IsMark(current) || current == '_'
+	}
+	start, end := offset, offset+1
+	if isWord(runes[offset]) {
+		for start > 0 && isWord(runes[start-1]) {
+			start--
+		}
+		for end < len(runes) && isWord(runes[end]) {
+			end++
+		}
+	}
+	e.SetSelection(start, end)
+}
+
+// SelectLineAt selects the newline-delimited line containing the rune offset.
+func (e *TextEditor) SelectLineAt(offset int) {
+	runes := []rune(e.state.Text)
+	offset = min(max(0, offset), len(runes))
+	start, end := offset, offset
+	for start > 0 && runes[start-1] != '\n' {
+		start--
+	}
+	for end < len(runes) && runes[end] != '\n' {
+		end++
+	}
+	e.SetSelection(start, end)
 }
 
 // InsertText replaces the current selection with committed text.

@@ -655,6 +655,10 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.onSettingsSearchKey(event) {
 		return true
 	}
+	// A focused search field owns printable keys; stale page editors must not consume them.
+	if a.settingsSearch.Focused() {
+		return false
+	}
 	if a.onPluginSettingsKey(event) {
 		return true
 	}

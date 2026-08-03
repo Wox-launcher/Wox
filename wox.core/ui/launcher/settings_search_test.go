@@ -25,6 +25,22 @@ func TestSettingsSearchCommandFSelectsExistingText(t *testing.T) {
 	}
 }
 
+func TestSettingsSearchKeepsPrintableKeysAfterOCRModelManagerCloses(t *testing.T) {
+	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer app.cancel()
+	app.settingsOpen = true
+	app.settingTab = "plugins"
+	app.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
+	fields := newFormFieldsState([]formDefinition{{Type: "ocrModel"}}, nil, true)
+	setFormFieldsFocusLocked(&fields, 0)
+	app.pluginSettings.SetForm(&pluginSettingsFormState{formFieldsState: fields})
+	app.settingsSearch.SetFocused(true)
+
+	if app.onSettingsKey(woxui.KeyEvent{Key: "s", Down: true}) {
+		t.Fatal("active OCR field consumed a printable key owned by settings search")
+	}
+}
+
 func TestSettingsSearchPluginResultKeepsPluginIcon(t *testing.T) {
 	icon := woxImage{ImageType: "emoji", ImageData: "P"}
 	app := &App{}

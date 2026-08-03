@@ -133,7 +133,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	queryHeight := float32(0)
 	previewFullscreen := snapshot.chatFullscreen || snapshot.terminalFullscreen
 	if !snapshot.show.HideQueryBox && !previewFullscreen {
-		queryHeight = snapshot.densityMetrics.queryBoxHeight + snapshot.palette.appPadding.Top
+		queryHeight = snapshot.densityMetrics.queryBoxHeightForText(snapshot.editing.Text) + snapshot.palette.appPadding.Top
 	}
 	toolbarHeight := float32(0)
 	if !snapshot.show.HideToolbar && !previewFullscreen && (len(snapshot.results) > 0 || snapshot.toolbarMsg != nil) {
@@ -181,6 +181,9 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 }
 
 func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) woxwidget.Widget {
+	queryLineCount := launcherQueryLineCount(snapshot.editing.Text)
+	queryBoxHeight := snapshot.densityMetrics.queryBoxHeightForText(snapshot.editing.Text)
+	queryEditorHeight := snapshot.densityMetrics.queryEditorHeight + float32(queryLineCount-1)*snapshot.densityMetrics.queryLineHeight()
 	queryLeftPadding := snapshot.densityMetrics.scaled(8)
 	accessoryGap := snapshot.densityMetrics.scaled(12)
 	horizontalPadding := snapshot.palette.appPadding.Left + snapshot.palette.appPadding.Right
@@ -218,9 +221,9 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 		glance = a.buildGlance(*snapshot.glance, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth, scale, snapshot.densityMetrics)
 	}
 	return launcherview.LauncherHeaderView(launcherview.LauncherHeaderProps{
-		Width: width, Height: height, QueryBoxHeight: snapshot.densityMetrics.queryBoxHeight, QueryEditorHeight: snapshot.densityMetrics.queryEditorHeight, DensityScale: snapshot.densityMetrics.scale,
+		Width: width, Height: height, QueryBoxHeight: queryBoxHeight, QueryEditorHeight: queryEditorHeight, DensityScale: snapshot.densityMetrics.scale,
 		QueryWidth: queryWidth, QueryRadius: snapshot.palette.queryRadius, AppPadding: snapshot.palette.appPadding, Theme: snapshot.palette.componentTheme(),
-		Query: a.queryViewProps(snapshot, queryWidth, snapshot.densityMetrics.queryEditorHeight), Refinement: refinement, RefinementWidth: refinementWidth,
+		Query: a.queryViewProps(snapshot, queryWidth, queryEditorHeight), Refinement: refinement, RefinementWidth: refinementWidth,
 		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon,
 	})
 }
@@ -228,6 +231,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 // queryViewProps prepares text slices and measurements without exposing controller state to the view.
 func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launcherview.LauncherQueryProps {
 	caretHeight := snapshot.densityMetrics.scaled(34)
+	lineHeight := snapshot.densityMetrics.queryLineHeight()
 	style := woxui.TextStyle{Size: snapshot.densityMetrics.scaled(woxcomponent.QueryFontSize)}
 	queryFocused := snapshot.queryFocused
 	state := snapshot.editing
@@ -235,15 +239,16 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launc
 	start := max(0, min(len(runes), state.Selection.Start()))
 	end := max(start, min(len(runes), state.Selection.End()))
 	focus := max(0, min(len(runes), state.Selection.Focus))
-	prefix := string(runes[:start])
-	selected := string(runes[start:end])
-	displayValue := state.Text
+	displayRunes := runes
+	displayStart, displayEnd, displayFocus := start, end, focus
+	compositionStart := -1
 	if state.Composition != "" {
-		displayValue = prefix + state.Composition + string(runes[end:])
-	}
-	caretPrefix := string(runes[:focus])
-	if state.Composition != "" {
-		caretPrefix = prefix + state.Composition
+		composition := []rune(state.Composition)
+		displayRunes = append(append(append([]rune(nil), runes[:start]...), composition...), runes[end:]...)
+		compositionStart = start
+		displayStart = start + len(composition)
+		displayEnd = displayStart
+		displayFocus = displayStart
 	}
 	measure := func(value string) float32 {
 		metrics, _ := a.window.MeasureText(value, style)
@@ -258,29 +263,44 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launc
 			a.host.RequestFocus(launcherview.LauncherQueryInputKey)
 		}
 	}
+	lines, caretLine, caretWidth, compositionLine, compositionX, compositionWidth, textWidth := queryDisplayLines(
+		displayRunes, displayStart, displayEnd, displayFocus, compositionStart, len([]rune(state.Composition)), measure,
+	)
+	selectQueryAt := func(point woxui.Point, line bool) {
+		a.hideActionPanel()
+		a.deactivateRequirementForm()
+		offset := a.queryOffsetAt(a.editor.State().Text, point, style, lineHeight)
+		if line {
+			a.editor.SelectLineAt(offset)
+		} else {
+			a.editor.SelectWordAt(offset)
+		}
+		_ = a.window.Invalidate()
+	}
 	return launcherview.LauncherQueryProps{
-		Width: width, Height: height, Style: style, State: state, DisplayValue: displayValue, Selected: selected,
-		CompletionSuffix: completionSuffix, PrefixWidth: measure(prefix), SelectedWidth: measure(selected), CaretWidth: measure(caretPrefix),
-		CompositionWidth: measure(state.Composition), FocusWidth: measure(string(runes[:focus])), TextWidth: measure(state.Text), CaretHeight: caretHeight,
-		Focused: queryFocused, Enabled: snapshot.queryEnabled, Theme: snapshot.palette.componentTheme(), OnTapAt: func(x float32) { a.placeQueryCaret(x, style) },
+		Width: width, Height: height, LineHeight: lineHeight, Style: style, State: state, Lines: lines,
+		CompletionSuffix: completionSuffix, CaretWidth: caretWidth, CaretLine: caretLine,
+		CompositionWidth: compositionWidth, CompositionX: compositionX, CompositionLine: compositionLine, TextWidth: textWidth, CaretHeight: caretHeight,
+		Focused: queryFocused, Enabled: snapshot.queryEnabled, Theme: snapshot.palette.componentTheme(), OnTapAt: func(point woxui.Point) { a.placeQueryCaret(point, style, lineHeight) },
+		OnDoubleTapAt: func(point woxui.Point) { selectQueryAt(point, false) }, OnTripleTapAt: func(point woxui.Point) { selectQueryAt(point, true) },
 		OnTapEnd: focusQuery, OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {
 				log.Printf("start launcher window drag: %v", err)
 			}
 			focusQuery()
 		},
-		OnSelectionStart: func(x float32) {
+		OnSelectionStart: func(point woxui.Point) {
 			a.hideActionPanel()
 			a.deactivateRequirementForm()
 			text := a.editor.State().Text
-			anchor := a.queryOffsetAt(text, x, style)
+			anchor := a.queryOffsetAt(text, point, style, lineHeight)
 			a.selectionAnchor = anchor
 			a.editor.SetCaret(anchor)
 			_ = a.window.Invalidate()
 		},
-		OnSelectionExtend: func(x float32) {
+		OnSelectionExtend: func(point woxui.Point) {
 			text := a.editor.State().Text
-			focus := a.queryOffsetAt(text, x, style)
+			focus := a.queryOffsetAt(text, point, style, lineHeight)
 			a.editor.SetSelection(a.selectionAnchor, focus)
 			_ = a.window.Invalidate()
 		},
@@ -292,36 +312,101 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launc
 // setQueryText applies an accessibility or automation value through the normal query pipeline.
 func (a *App) setQueryText(value string) error {
 	a.deactivateRequirementForm()
+	previousText := a.editor.State().Text
+	value = normalizeQueryNewlines(value)
 	a.editor.SetText(value, false)
 	a.applyQueryTextChangeLocked(value)
 	a.reconcileSelectedPreview()
 	_ = a.window.Invalidate()
+	a.resizeLauncherForQueryLineChange(previousText)
 	return a.sendCurrentQuery()
 }
 
-func (a *App) placeQueryCaret(x float32, style woxui.TextStyle) {
+func (a *App) placeQueryCaret(point woxui.Point, style woxui.TextStyle, lineHeight float32) {
 	a.hideActionPanel()
 	a.deactivateRequirementForm()
 	text := a.editor.State().Text
-	offset := a.queryOffsetAt(text, x, style)
+	offset := a.queryOffsetAt(text, point, style, lineHeight)
 	a.editor.SetCaret(offset)
 	_ = a.window.Invalidate()
 }
 
-// queryOffsetAt maps an x position (relative to the editor) to a rune offset using per-rune midpoints.
-func (a *App) queryOffsetAt(text string, x float32, style woxui.TextStyle) int {
-	runes := []rune(text)
+// queryOffsetAt maps an editor position to a rune offset using line selection and per-rune midpoints.
+func (a *App) queryOffsetAt(text string, point woxui.Point, style woxui.TextStyle, lineHeight float32) int {
+	lines := queryRuneLines([]rune(text))
+	lineIndex := min(len(lines)-1, max(0, int(point.Y/lineHeight)))
+	line := lines[lineIndex]
+	runes := line.runes
 	offset := len(runes)
 	previousWidth := float32(0)
 	for index := 1; index <= len(runes); index++ {
 		metrics, _ := a.window.MeasureText(string(runes[:index]), style)
-		if x < (previousWidth+metrics.Size.Width)*0.5 {
+		if point.X < (previousWidth+metrics.Size.Width)*0.5 {
 			offset = index - 1
 			break
 		}
 		previousWidth = metrics.Size.Width
 	}
-	return offset
+	return line.start + offset
+}
+
+type queryRuneLine struct {
+	start int
+	runes []rune
+}
+
+// queryRuneLines keeps absolute rune offsets while splitting explicit query newlines.
+func queryRuneLines(runes []rune) []queryRuneLine {
+	lines := make([]queryRuneLine, 0, 1+strings.Count(string(runes), "\n"))
+	start := 0
+	for index, current := range runes {
+		if current == '\n' {
+			lines = append(lines, queryRuneLine{start: start, runes: runes[start:index]})
+			start = index + 1
+		}
+	}
+	return append(lines, queryRuneLine{start: start, runes: runes[start:]})
+}
+
+// queryDisplayLines prepares complete line geometry for the retained scroll viewport.
+func queryDisplayLines(runes []rune, selectionStart, selectionEnd, focus, compositionStart, compositionLength int, measure func(string) float32) ([]launcherview.LauncherQueryLine, int, float32, int, float32, float32, float32) {
+	runeLines := queryRuneLines(runes)
+	caretAbsoluteLine := len(runeLines) - 1
+	for index, line := range runeLines {
+		if focus <= line.start+len(line.runes) {
+			caretAbsoluteLine = index
+			break
+		}
+	}
+	lines := make([]launcherview.LauncherQueryLine, 0, len(runeLines))
+	caretLine, caretWidth := caretAbsoluteLine, float32(0)
+	compositionLine, compositionX, compositionWidth := 0, float32(0), float32(0)
+	textWidth := float32(0)
+	for index, line := range runeLines {
+		lineEnd := line.start + len(line.runes)
+		selectedStart := max(line.start, selectionStart)
+		selectedEnd := min(lineEnd, selectionEnd)
+		selected := ""
+		prefixWidth, selectedWidth := float32(0), float32(0)
+		if selectedStart < selectedEnd {
+			prefixWidth = measure(string(runes[line.start:selectedStart]))
+			selected = string(runes[selectedStart:selectedEnd])
+			selectedWidth = measure(selected)
+		}
+		width := measure(string(line.runes))
+		lines = append(lines, launcherview.LauncherQueryLine{Text: string(line.runes), Selected: selected, PrefixWidth: prefixWidth, SelectedWidth: selectedWidth, TextWidth: width})
+		textWidth = max(textWidth, width)
+		if focus >= line.start && (focus <= lineEnd || index == len(runeLines)-1) {
+			caretLine = index
+			caretWidth = measure(string(runes[line.start:min(focus, lineEnd)]))
+		}
+		if compositionStart >= line.start && compositionStart <= lineEnd {
+			compositionLine = index
+			compositionX = measure(string(runes[line.start:compositionStart]))
+			compositionWidth = measure(string(runes[compositionStart:min(len(runes), compositionStart+compositionLength)]))
+		}
+	}
+	return lines, caretLine, caretWidth, compositionLine, compositionX, compositionWidth, textWidth
 }
 
 func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {

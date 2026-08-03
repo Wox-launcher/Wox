@@ -28,6 +28,22 @@ func TestWoxScrollViewOpacityFollowsScrollActivity(t *testing.T) {
 	state.Dispose()
 }
 
+func TestWoxScrollViewCanKeepOverflowIndicatorVisible(t *testing.T) {
+	props := ScrollViewProps{Key: "persistent-scroll", Width: 100, Height: 80, ContentHeight: 160, ThumbColor: woxui.Color{A: 255}, AlwaysShowScrollbar: true, AutomationID: "persistent-scroll-state", Label: "Scroll position"}
+	state := &scrollViewState{}
+	semantics := state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics)
+	view := semantics.Child.(woxwidget.Gesture)
+	stack := view.Child.(woxwidget.Stack)
+	thumb := stack.Children[1].Child.(woxwidget.Gesture)
+	animation := thumb.Child.(woxwidget.AnimatedFloat)
+	view.OnScroll(woxui.Point{Y: -20})
+	semantics = state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics)
+	if animation.Target != 1 || state.controller.Offset() != 20 || semantics.AutomationID != "persistent-scroll-state" || semantics.Value != "20/80" {
+		t.Fatalf("persistent scrollbar = opacity %.0f offset %.0f automation %q value %q", animation.Target, state.controller.Offset(), semantics.AutomationID, semantics.Value)
+	}
+	state.Dispose()
+}
+
 func TestWoxScrollViewOwnsActivityHoverAndDrag(t *testing.T) {
 	scrolled := float32(0)
 	props := ScrollViewProps{Key: "test-scroll", Width: 100, Height: 80, ContentHeight: 160, OnScroll: func(delta float32) { scrolled += delta }}

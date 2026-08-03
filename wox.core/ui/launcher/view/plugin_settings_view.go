@@ -95,7 +95,7 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 		if props.MessageError {
 			color = props.Theme.ErrorText
 		}
-		return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 10, Color: props.Theme.QueryBackground, Padding: woxwidget.UniformInsets(16), Child: woxwidget.TextBlock{
+		return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(16), Child: woxwidget.TextBlock{
 			Value: props.Message, Width: max(float32(0), props.Width-32), Height: max(float32(0), props.Height-32), Style: woxui.TextStyle{Size: 12}, Color: color,
 		}}
 	}

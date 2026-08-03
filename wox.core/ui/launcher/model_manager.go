@@ -265,7 +265,7 @@ func (a *App) openPluginModelManager(index int, anchor woxui.Rect) {
 	}
 	manager := &modelManagerState{
 		kind: definition.Type, target: &state.formFieldsState, fieldIndex: index, options: append([]formOption(nil), definition.Value.Options...),
-		selected: selected, selectedRow: selectedRow, anchor: anchor, anchored: definition.Type == "dictationModel",
+		selected: selected, selectedRow: selectedRow, anchor: anchor, anchored: true,
 	}
 	a.aiSettings.SetModelManager(manager)
 	a.updateSettingsTextInput(false)

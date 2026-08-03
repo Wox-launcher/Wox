@@ -19,3 +19,13 @@ func TestLauncherDensityMetricsMatchFlutterBuckets(t *testing.T) {
 		}
 	}
 }
+
+func TestLauncherQueryHeightFollowsFlutterMultilineLimit(t *testing.T) {
+	metrics := launcherDensityMetricsFor("normal")
+	if got := metrics.queryBoxHeightForText("one\ntwo\nthree"); got != 123 {
+		t.Fatalf("three-line query height = %v, want 123", got)
+	}
+	if got := launcherQueryLineCount("one\ntwo\nthree\nfour\nfive"); got != launcherQueryMaxLines {
+		t.Fatalf("query line count = %d, want max %d", got, launcherQueryMaxLines)
+	}
+}

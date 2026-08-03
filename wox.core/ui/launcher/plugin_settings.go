@@ -800,6 +800,9 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 	if a.onPluginSearchKey(event) {
 		return true
 	}
+	if !event.Down || event.Composing {
+		return false
+	}
 	if a.settingTab != "plugins" {
 		return false
 	}
@@ -1004,6 +1007,9 @@ func (a *App) movePluginFormFocus(delta int) {
 			setFormFieldsFocusLocked(&state.formFieldsState, index)
 			break
 		}
+	}
+	if host := a.settingsHost; host != nil {
+		host.RequestFocus(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", index)))
 	}
 	a.stopHotkeyRecordingForDifferentField(&state.formFieldsState, index)
 	textInput := state.editor != nil
