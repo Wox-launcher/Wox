@@ -177,6 +177,9 @@ func gridResultVerticalBounds(results []queryResult, target int, width float32, 
 			index++
 		}
 		if target >= rowStart && target < index {
+			if rowStart > 0 && results[rowStart-1].IsGroup {
+				return y - gridGroupHeaderHeight, y + cellHeight
+			}
 			return y, y + cellHeight
 		}
 		y += cellHeight

@@ -1260,11 +1260,8 @@ static void show_main(void *data) {
     return;
   }
   if (window->active) {
-    emit_focus(window, false);
-    if (window->closed) {
-      call->result = -1;
-      return;
-    }
+    // Starting a new focus epoch is not a real focus loss.
+    window->active = false;
   }
   window->epoch++;
   call->epoch = window->epoch;

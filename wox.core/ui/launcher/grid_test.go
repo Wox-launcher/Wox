@@ -46,3 +46,17 @@ func TestVisibleGridResultsIncludesViewportOverscan(t *testing.T) {
 		}
 	}
 }
+
+func TestGridResultVerticalBoundsIncludesHeaderForFirstGroupRow(t *testing.T) {
+	results := []queryResult{{IsGroup: true}, {}, {}, {}, {}, {}, {}}
+	layout := &gridLayout{Columns: 3, AspectRatio: 1}
+
+	firstTop, firstBottom := gridResultVerticalBounds(results, 3, 328, layout)
+	if firstTop != 0 || firstBottom != 132 {
+		t.Fatalf("first row bounds = (%v, %v), want (0, 132)", firstTop, firstBottom)
+	}
+	secondTop, secondBottom := gridResultVerticalBounds(results, 4, 328, layout)
+	if secondTop != 132 || secondBottom != 232 {
+		t.Fatalf("second row bounds = (%v, %v), want (132, 232)", secondTop, secondBottom)
+	}
+}

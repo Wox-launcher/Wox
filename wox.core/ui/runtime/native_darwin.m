@@ -1858,10 +1858,8 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
       return;
     }
     if (window->active) {
-      emit_focus(window, false);
-      if (window->closed) {
-        return;
-      }
+      // Starting a new focus epoch is not a real focus loss.
+      window->active = false;
     }
     window->epoch++;
     atomic_fetch_add_explicit(&window->presentation_generation, 1, memory_order_relaxed);

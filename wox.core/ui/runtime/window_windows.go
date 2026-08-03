@@ -1355,7 +1355,8 @@ func monitorScale(monitor win.HMONITOR) float32 {
 // showNative combines show, foreground activation, and keyboard focus into one epoch.
 func (w *platformWindow) showNative() FocusEpoch {
 	if w.focus.active {
-		w.setActive(false)
+		// Starting a new focus epoch is not a real focus loss.
+		w.focus.active = false
 	}
 	w.focus.epoch++
 	w.focus.visible = true
