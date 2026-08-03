@@ -90,7 +90,7 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 		visual = woxwidget.Image{Source: result.Icon, Width: props.VisualWidth, Height: props.VisualHeight}
 	}
 	visual = woxwidget.Container{
-		Width: props.VisualWidth + props.ItemPadding*2, Height: props.VisualHeight + props.ItemPadding*2, Radius: 8, Color: frameColor,
+		Width: props.VisualWidth + props.ItemPadding*2, Height: props.VisualHeight + props.ItemPadding*2, Radius: 8, BorderColor: frameColor, BorderWidth: 4,
 		Padding: woxwidget.UniformInsets(props.ItemPadding), Child: visual,
 	}
 	children := []woxwidget.Widget{visual}

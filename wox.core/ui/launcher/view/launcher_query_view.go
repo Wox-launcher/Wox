@@ -86,9 +86,11 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 	}
 	if props.Icon != nil {
 		iconSize := scaledLauncherSize(30, props.DensityScale)
+		// Flutter centers the icon in a 68px accessory slot, leaving 19px after it.
+		iconRightPadding := scaledLauncherSize(19, props.DensityScale)
 		iconContainerHeight := scaledLauncherSize(34, props.DensityScale)
 		children = append(children, woxwidget.Container{
-			Width: iconSize, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: (props.QueryBoxHeight - iconContainerHeight) / 2, Bottom: (props.QueryBoxHeight - iconContainerHeight) / 2},
+			Width: iconSize + iconRightPadding, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: (props.QueryBoxHeight - iconContainerHeight) / 2, Right: iconRightPadding, Bottom: (props.QueryBoxHeight - iconContainerHeight) / 2},
 			Child: woxwidget.Container{Width: iconSize, Height: iconContainerHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(2, props.DensityScale)}, Child: woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize}},
 		})
 	}

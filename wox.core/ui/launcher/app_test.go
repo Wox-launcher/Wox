@@ -33,6 +33,16 @@ func TestLauncherPreviewRatioUsesChatLayout(t *testing.T) {
 	}
 }
 
+func TestLauncherGridHidesRegularPreview(t *testing.T) {
+	layout := queryLayout{GridLayout: &gridLayout{Columns: 4}}
+	if launcherPreviewVisible(layout, queryPreview{PreviewType: "image", PreviewData: "wallpaper"}) {
+		t.Fatal("grid layout should hide regular result previews")
+	}
+	if !launcherPreviewVisible(layout, queryPreview{PreviewType: "query_requirement_settings", PreviewData: "settings"}) {
+		t.Fatal("grid layout should preserve Flutter's interactive settings preview exception")
+	}
+}
+
 func TestLauncherChromeHiddenForPreviewOnlyModes(t *testing.T) {
 	if !launcherChromeHidden(showAppParams{HideQueryBox: true, HideToolbar: true}, false) {
 		t.Fatal("hidden query box and toolbar should expose preview close behavior")

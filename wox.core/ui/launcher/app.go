@@ -156,6 +156,7 @@ type App struct {
 	imageLastUsed      map[string]uint64
 	imageUseSequence   uint64
 	imageErrors        map[string]string
+	lottieImages       *lottieImageCache
 	remotePreviews     map[string]queryPreview
 	previewRequests    map[string]bool
 	filePreviews       map[string]filePreviewContent
@@ -258,6 +259,11 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	app.aboutSettings = newAboutSettingsController(deps)
 	app.hotkeySettings = newHotkeySettingsController(deps)
 	app.settingsSearch = newSettingsSearchController(deps)
+	app.lottieImages = newLottieImageCache(app.lifecycleCtx, func() {
+		if err := app.runOnUI("invalidate lottie image", app.invalidateAllWindows); err != nil && !app.destroyed.Load() {
+			log.Printf("invalidate lottie image: %v", err)
+		}
+	})
 	return app
 }
 

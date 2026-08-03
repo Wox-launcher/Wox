@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
+.PHONY: build clean host thorvg _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
 
 ifeq ($(firstword $(MAKECMDGOALS)),smoke)
 SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -135,6 +135,9 @@ host:
 	$(MAKE) -C wox.plugin.host.nodejs build
 	$(MAKE) -C wox.plugin.host.python build
 
+thorvg:
+	cd wox.core && ./util/lottie/thorvg/build_wox.sh
+
 # SDK releases bump both SDK patch versions before publish because both npm and
 # PyPI reject already-published versions. The host dependency update still waits
 # until both publishes succeed so bundled hosts never point at an SDK release
@@ -190,7 +193,7 @@ else
 endif
 
 # Test without rebuilding dependencies (fast)
-test: ensure-resources
+test: thorvg ensure-resources
 	@trap '$(MAKE) clean-resources' EXIT; $(MAKE) test-isolated
 
 # Test with custom environment
@@ -202,15 +205,15 @@ test-isolated:
 	cd wox.core && WOX_TEST_CLEANUP=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
 # The fast Go UI layer runs on every relevant change and never opens a native window.
-test-go-ui-unit: ensure-resources
-	cd wox.core && go test -tags "wox_automation" ./appcontrol ./ui/automation ./ui/runtime ./ui/widget ./ui/launcher ./test/automationdriver -count=1
+test-go-ui-unit: thorvg ensure-resources
+	cd wox.core && go test -tags "wox_automation" ./appcontrol ./ui/automation ./ui/runtime ./util/lottie ./ui/widget ./ui/launcher ./test/automationdriver -count=1
 
 GO_UI_SMOKE_BINARY_NAME := wox-go-ui-smoke$(if $(filter windows,$(PLATFORM)),.exe,)
 GO_UI_SMOKE_BINARY := $(CURDIR)/wox.core/.tmp/$(GO_UI_SMOKE_BINARY_NAME)
 GO_UI_SMOKE_RUNNER ?=
 
 # Keep the smoke binary build reusable by CI, make, and editor launch configurations.
-build-go-ui-smoke: ensure-resources
+build-go-ui-smoke: thorvg ensure-resources
 	@mkdir -p wox.core/.tmp
 	cd wox.core && go build -tags "$(SQLITE_BUILD_TAGS) wox_automation" -o "$(GO_UI_SMOKE_BINARY)" .
 

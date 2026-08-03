@@ -89,6 +89,9 @@ func (a *App) imageForTint(source woxImage, tint *woxui.Color, svgSize int) *wox
 	if source.ImageType == "" || source.ImageData == "" {
 		return nil
 	}
+	if source.ImageType == "lottie" {
+		return a.lottieImages.frame(lottieImageCacheKey(source, svgSize), source.ImageData, svgSize)
+	}
 	key := imageKey(source)
 	key += fmt.Sprintf("-svg-%d", svgSize)
 	if tint != nil {

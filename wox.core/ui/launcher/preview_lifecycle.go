@@ -63,7 +63,7 @@ func (a *App) selectedPreviewForLifecycle() (queryResult, queryPreview, bool) {
 	}
 	result := a.results[a.selected]
 	preview := result.Preview
-	if preview.PreviewData == "" {
+	if !launcherPreviewVisible(a.layout, preview) {
 		return queryResult{}, queryPreview{}, false
 	}
 	ratio := float32(0.4)

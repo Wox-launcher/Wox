@@ -141,12 +141,17 @@ jobs:
             patchelf \
             libfuse2 \
             xvfb
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
           cache: true
           cache-dependency-path: wox.core/go.sum
+      - name: Install ThorVG build tools
+        run: python -m pip install meson==1.8.3 ninja==1.13.0
       - name: Test
         run: xvfb-run -a make test
 
@@ -179,6 +184,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Install ThorVG build tools
+        run: python -m pip install meson==1.8.3 ninja==1.13.0
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
@@ -296,6 +303,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Install ThorVG build tools
+        run: python -m pip install meson==1.8.3 ninja==1.13.0
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
@@ -436,6 +445,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Install ThorVG build tools
+        run: python -m pip install meson==1.8.3 ninja==1.13.0
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
@@ -562,6 +573,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Install ThorVG build tools
+        run: python -m pip install meson==1.8.3 ninja==1.13.0
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:

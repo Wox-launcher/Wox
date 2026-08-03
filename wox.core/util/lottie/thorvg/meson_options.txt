@@ -1,0 +1,70 @@
+option('engines',
+   type: 'array',
+   choices: ['cpu', 'gl', 'wg', 'all'],
+   value: ['cpu'],
+   description: 'Enable Rasterizer Engine in thorvg')
+
+option('partial',
+   type: 'boolean',
+   value: true,
+   description: 'Enable Partial Rendering in thorvg')
+
+option('loaders',
+   type: 'array',
+   choices: ['', 'svg', 'png', 'jpg', 'lottie', 'ttf', 'otf', 'webp', 'all'],
+   value: ['svg', 'lottie', 'ttf'],
+   description: 'Enable File Loaders in thorvg')
+
+option('savers',
+   type: 'array',
+   choices: ['', 'gif', 'all'],
+   value: [''],
+   description: 'Enable File Savers in thorvg')
+
+option('threads',
+   type: 'boolean',
+   value: true,
+   description: 'Enable the multi-threading task scheduler in thorvg')
+
+option('simd',
+   type: 'boolean',
+   value: false,
+   description: 'Enable CPU Vectorization(SIMD) in thorvg')
+
+option('bindings',
+   type: 'array',
+   choices: ['', 'capi'],
+   value: [''],
+   description: 'Enable API bindings')
+
+option('tools',
+   type: 'array',
+   choices: ['', 'svg2png', 'lottie2gif', 'all'],
+   value: [''],
+   description: 'Enable building thorvg tools')
+
+option('tests',
+   type: 'boolean',
+   value: false,
+   description: 'Enable building Unit Tests')
+
+option('log',
+   type: 'boolean',
+   value: false,
+   description: 'Enable log message')
+
+option('static',
+   type: 'boolean',
+   value: false,
+   description: 'Force to use static linking modules in thorvg')
+
+option('file',
+   type: 'boolean',
+   value: true,
+   description: 'Enable File IO calls in thorvg')
+
+option('extra',
+   type: 'array',
+   choices: ['', 'opengl_es', 'lottie_exp', 'openmp'],
+   value: ['lottie_exp', 'openmp'],
+   description: 'Enable support for extra options')

@@ -205,7 +205,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 	if snapshot.glance == nil {
 		if image := a.imageForSize(snapshot.layout.Icon, physicalImageSize(int(snapshot.densityMetrics.scaled(32)), scale)); image != nil {
 			queryIcon = image
-			queryWidth -= snapshot.densityMetrics.scaled(30) + accessoryGap
+			queryWidth -= snapshot.densityMetrics.scaled(49) + accessoryGap
 		}
 	}
 	queryWidth = max(snapshot.densityMetrics.scaled(140), queryWidth)
@@ -328,7 +328,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 	if len(snapshot.results) == 0 {
 		return woxwidget.Container{Width: width, Height: height}
 	}
-	previewVisible := snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) && snapshot.results[snapshot.selected].Preview.PreviewData != ""
+	previewVisible := snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) && launcherPreviewVisible(snapshot.layout, snapshot.results[snapshot.selected].Preview)
 	if !previewVisible {
 		return a.buildResults(snapshot, width, height, imageScale)
 	}
@@ -356,6 +356,22 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 		a.buildResults(snapshot, splitX, height, imageScale),
 		a.buildPreview(snapshot.results[snapshot.selected], snapshot.palette, width-splitX, height),
 	)
+}
+
+// launcherPreviewVisible mirrors Flutter's grid preview exceptions for system-owned guidance.
+func launcherPreviewVisible(layout queryLayout, preview queryPreview) bool {
+	if preview.PreviewData == "" {
+		return false
+	}
+	if layout.GridLayout == nil {
+		return true
+	}
+	switch preview.PreviewType {
+	case "query_requirement_settings", "trigger_keyword_conflict", "theme_edit", "hotkey_overview":
+		return true
+	default:
+		return false
+	}
 }
 
 func launcherChromeHidden(show showAppParams, chatFullscreen bool) bool {
