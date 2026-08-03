@@ -1,7 +1,9 @@
 #define UNICODE
 #define _UNICODE
+#define COBJMACROS
 #include <windows.h>
 #include <shellapi.h>
+#include <shobjidl.h>
 #include <stdlib.h>
 
 NOTIFYICONDATA nid;
@@ -17,6 +19,7 @@ DWORD lastActivateTick = 0;
 UINT lastActivateMessage = 0;
 UINT lastActivateIconId = 0;
 UINT lastActivateEventCode = 0;
+BOOL trayComInitialized = FALSE;
 
 void reportClick(UINT_PTR menuId);
 void reportLeftClick();
@@ -244,6 +247,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		}
 		hwnd = NULL;
 		nextMenuId = 1;
+		if (trayComInitialized)
+		{
+			CoUninitialize();
+			trayComInitialized = FALSE;
+		}
 		PostQuitMessage(0);
 		break;
 	default:
@@ -270,6 +278,10 @@ HICON loadIcon(const char *iconName)
 
 void init(const char *iconName, const char *tooltip)
 {
+	// ITaskbarList must be used from an initialized COM apartment on this
+	// long-lived tray thread, then balanced when its message loop exits.
+	HRESULT coInitResult = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+	trayComInitialized = SUCCEEDED(coInitResult);
 	hMenu = CreatePopupMenu();
 	nextMenuId = 1;
 	HICON icon = loadIcon(iconName);
@@ -280,14 +292,36 @@ void init(const char *iconName, const char *tooltip)
 	wc.lpszClassName = L"WoxWindowClass";
 	RegisterClassW(&wc);
 
-	hwnd = CreateWindowExW(0, L"WoxWindowClass", L"Wox", WS_OVERLAPPEDWINDOW,
-						   CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, wc.hInstance, NULL);
+	// Keep Wox under Task Manager's Apps group even while the launcher is hidden.
+	// Windows 11 ignores zero-sized or off-screen helper windows, so this HWND must
+	// remain visible on-screen; layering makes its 2x2 surface fully transparent.
+	hwnd = CreateWindowExW(WS_EX_APPWINDOW | WS_EX_TOOLWINDOW | WS_EX_LAYERED, L"WoxWindowClass", L"Wox",
+						   WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_SYSMENU, 0, 0, 2, 2, NULL, NULL, wc.hInstance, NULL);
 
 	if (hwnd == NULL)
 	{
+		if (trayComInitialized)
+		{
+			CoUninitialize();
+			trayComInitialized = FALSE;
+		}
 		return;
 	}
 
+	SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
+	ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+	// APPWINDOW is required for the Apps classification, but also makes the helper
+	// eligible for shell switching. DeleteTab preserves Apps grouping while keeping
+	// this invisible presence out of the taskbar and Alt+Tab.
+	ITaskbarList *taskbarList = NULL;
+	if (SUCCEEDED(CoCreateInstance(&CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, &IID_ITaskbarList, (void **)&taskbarList)))
+	{
+		if (SUCCEEDED(ITaskbarList_HrInit(taskbarList)))
+		{
+			ITaskbarList_DeleteTab(taskbarList, hwnd);
+		}
+		ITaskbarList_Release(taskbarList);
+	}
 	setTrayIcon(tooltip, icon);
 }
 
