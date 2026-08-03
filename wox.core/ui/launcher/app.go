@@ -432,7 +432,9 @@ func (a *App) showWindow(params showAppParams) error {
 		return err
 	}
 	if queryEmpty && params.StartPage == "mru" {
-		return a.requestMRU()
+		if err := a.requestMRU(); err != nil {
+			return err
+		}
 	}
 	util.Go(a.lifecycleCtx, "refresh glance after window shown", func() {
 		a.refreshGlance("windowShown", "", nil)
@@ -640,7 +642,8 @@ func (a *App) requestMRU() error {
 		a.resultScroll.reset()
 		a.resultScrollDetached = false
 		a.layout = queryLayout{}
-		a.stopGlanceLocked(true)
+		// MRU only replaces query results; the window-shown path owns the Glance refresh.
+		a.stopGlanceLocked(false)
 		a.refinements = nil
 		a.refinementOpen = false
 		a.refinementScope = ""
@@ -1177,7 +1180,9 @@ func (a *App) moveSelection(delta int) {
 		}
 		target = gridSelectionIndex(a.results, a.selected, columns, direction)
 	} else {
-		for index := a.selected + delta; index >= 0 && index < len(a.results); index += delta {
+		index := a.selected
+		for attempts := 0; attempts < len(a.results); attempts++ {
+			index = (index + delta + len(a.results)) % len(a.results)
 			if !a.results[index].IsGroup {
 				target = index
 				break

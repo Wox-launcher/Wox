@@ -62,13 +62,9 @@ func (a *App) buildGlance(item glanceItem, hideIcon bool, palette uiPalette, wid
 		iconTint.A = uint8(float32(iconTint.A) * 0.8 * 0.72)
 		icon = a.imageForTint(item.Icon, &iconTint, physicalImageSize(int(densityMetrics.scaled(16)), imageScale))
 	}
-	var onTap func()
-	if item.Action != nil {
-		onTap = a.executeGlanceAction
-	}
 	return launcherview.GlanceView(launcherview.GlanceProps{
 		Text: item.Text, Tooltip: item.Tooltip, Width: width, Icon: icon, Theme: palette.componentTheme(), DensityScale: densityMetrics.scale,
-		OnTap: onTap, OnHover: a.setGlanceHover,
+		OnTap: a.activateGlance, OnHover: a.setGlanceHover,
 	})
 }
 
@@ -251,6 +247,20 @@ func (a *App) loadGlanceCatalog() {
 
 func (a *App) loadGlancePickerPreviews() {
 	a.appearanceSettings.ReloadGlancePreviews(context.Background(), a.services, a.sessionID)
+}
+
+// activateGlance preserves plugin actions and refreshes informational items on demand.
+func (a *App) activateGlance() {
+	if a.glanceItem == nil {
+		return
+	}
+	if a.glanceItem.Action != nil {
+		a.executeGlanceAction()
+		return
+	}
+	util.Go(a.lifecycleCtx, "refresh glance after click", func() {
+		a.refreshGlance("manualRefresh", "", nil)
+	})
 }
 
 func (a *App) executeGlanceAction() {

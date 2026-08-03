@@ -1,14 +1,27 @@
 package launcher
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"wox/common"
+	"wox/plugin"
 	"wox/ui/contract"
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 	utilselection "wox/util/selection"
 )
+
+type requestMRUTestServices struct {
+	contract.Services
+}
+
+func (requestMRUTestServices) QueryMRU(context.Context, string, string) ([]plugin.QueryResultUI, error) {
+	return nil, errors.New("stop after request")
+}
 
 func TestLauncherWindowOriginPreservesDraggedPosition(t *testing.T) {
 	params := showAppParams{Position: position{X: 400, Y: 300}}
@@ -126,6 +139,20 @@ func TestSelectableIndexFromPreservesExplicitRefreshIndex(t *testing.T) {
 	}
 }
 
+func TestMoveSelectionWrapsPastLeadingGroup(t *testing.T) {
+	app := &App{
+		selected: 2,
+		results:  []queryResult{{ID: "group", IsGroup: true}, {ID: "first"}, {ID: "last"}},
+		uiCall:   func(func()) error { return nil },
+	}
+
+	app.moveSelection(1)
+
+	if app.selected != 1 {
+		t.Fatalf("wrapped selected index = %d, want 1", app.selected)
+	}
+}
+
 func TestHotkeyMatchesOnlyKeyDown(t *testing.T) {
 	event := woxui.KeyEvent{Key: "j", Modifiers: woxui.KeyModifierControl}
 	if hotkeyMatches("ctrl+j", event) {
@@ -200,6 +227,47 @@ func TestQueryTextChangeDisablesHistoryRecall(t *testing.T) {
 
 	if app.canRecallHistory {
 		t.Fatal("history recall remained enabled after query text changed")
+	}
+}
+
+func TestRequestMRUPreservesGlance(t *testing.T) {
+	item := &glanceItem{Text: "100 MB"}
+	uiDepth := 0
+	app := &App{
+		services:      requestMRUTestServices{},
+		lifecycleCtx:  context.Background(),
+		editor:        woxui.NewTextEditor("query"),
+		glanceItem:    item,
+		selected:      -1,
+		themeSettings: newThemeSettingsController(CommonDeps{}),
+		uiCall: func(fn func()) error {
+			uiDepth++
+			defer func() { uiDepth-- }()
+			if uiDepth == 1 {
+				fn()
+			}
+			return nil
+		},
+	}
+
+	if err := app.requestMRU(); err != nil {
+		t.Fatalf("request MRU: %v", err)
+	}
+	if app.glanceItem != item {
+		t.Fatal("MRU request cleared the visible Glance item")
+	}
+}
+
+func TestInformationalGlanceCanBeTapped(t *testing.T) {
+	app := &App{}
+	widget := app.buildGlance(glanceItem{Text: "100 MB"}, true, defaultPalette(), 100, 1, launcherDensityMetricsFor(""))
+	stateful, ok := widget.(woxwidget.Stateful)
+	if !ok {
+		t.Fatalf("Glance widget = %T, want stateful", widget)
+	}
+	props, ok := stateful.Widget.(launcherview.GlanceProps)
+	if !ok || props.OnTap == nil {
+		t.Fatal("informational Glance should expose a refresh tap handler")
 	}
 }
 
