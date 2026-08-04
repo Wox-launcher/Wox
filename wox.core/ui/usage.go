@@ -2,10 +2,7 @@ package ui
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
 	"time"
 
 	"wox/analytics"
@@ -17,10 +14,6 @@ import (
 )
 
 const defaultUsageStatsPeriod = "30d"
-
-type usageStatsRequest struct {
-	Period string `json:"Period"`
-}
 
 type usageStatsItem struct {
 	Id    string `json:"Id"`
@@ -75,17 +68,7 @@ type usageStatsResponse struct {
 	previousPeriodEndUnixMs   int64
 }
 
-func handleUsageStats(w http.ResponseWriter, r *http.Request) {
-	req := readUsageStatsRequest(r)
-	resp, err := getUsageStats(getTraceContext(r), req.Period)
-	if err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-	writeSuccessResponse(w, resp)
-}
-
-// getUsageStats builds one usage report for typed services and compatibility routes.
+// getUsageStats builds one usage report for typed services.
 func getUsageStats(ctx context.Context, period string) (usageStatsResponse, error) {
 	db := database.GetDB()
 	if db == nil {
@@ -111,14 +94,6 @@ func getUsageStats(ctx context.Context, period string) (usageStatsResponse, erro
 	fillOpenedByDay(ctx, &resp)
 	fillTopItems(ctx, &resp)
 	return resp, nil
-}
-
-func readUsageStatsRequest(r *http.Request) usageStatsRequest {
-	var req usageStatsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
-		return usageStatsRequest{Period: defaultUsageStatsPeriod}
-	}
-	return req
 }
 
 func configureUsageStatsPeriod(resp *usageStatsResponse, requestedPeriod string) {

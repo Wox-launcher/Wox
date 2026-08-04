@@ -172,11 +172,7 @@ func (s *CoreServices) BillingSession(ctx context.Context, sessionID string, kin
 
 // CloudBootstrapStatus returns the remote data and key state needed by recovery UI.
 func (s *CoreServices) CloudBootstrapStatus(ctx context.Context, sessionID string) (contract.CloudBootstrapStatus, error) {
-	status, err := resolveSyncBootstrapStatus(uiServiceContext(ctx, sessionID))
-	if err != nil {
-		return contract.CloudBootstrapStatus{}, err
-	}
-	return contract.CloudBootstrapStatus{HasRemoteData: status.HasRemoteData, HasRemoteKey: status.HasRemoteKey}, nil
+	return resolveSyncBootstrapStatus(uiServiceContext(ctx, sessionID))
 }
 
 // StartCloudBootstrap initializes or restores the sync key and schedules the first transfer.

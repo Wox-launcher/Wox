@@ -1,86 +1,55 @@
 package ui
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
+
 	"wox/account"
 	"wox/cloudsync"
 	"wox/database"
 	"wox/util"
 )
 
-func TestSyncBootstrapRoutesRegistered(t *testing.T) {
-	if routers["/sync/bootstrap/status"] == nil {
-		t.Fatal("sync bootstrap status route is not registered")
-	}
-	if routers["/sync/bootstrap/start"] == nil {
-		t.Fatal("sync bootstrap start route is not registered")
-	}
-	if routers["/sync/devices/join"] == nil {
-		t.Fatal("sync device join route is not registered")
+func TestCloudBootstrapStatusRequiresLoggedInEligibleAccount(t *testing.T) {
+	initSyncBootstrapServiceTest(t, database.AccountState{})
+
+	_, err := NewCoreServices().CloudBootstrapStatus(context.Background(), "")
+	if err == nil || !strings.Contains(err.Error(), "account is not logged in") {
+		t.Fatalf("error = %v, want login error", err)
 	}
 }
 
-func TestHandleSyncBootstrapStatusRequiresLoggedInEligibleAccount(t *testing.T) {
-	initSyncBootstrapRouterTest(t, database.AccountState{})
-
-	response := postSyncBootstrapStatus()
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("http status = %d, want %d", response.Code, http.StatusOK)
-	}
-	if !bytes.Contains(response.Body.Bytes(), []byte("account is not logged in")) {
-		t.Fatalf("body = %s, want login error", response.Body.String())
-	}
-}
-
-func TestHandleSyncBootstrapStatusReportsRemoteDataAndKey(t *testing.T) {
-	client := &routerCloudSyncClient{
+func TestCloudBootstrapStatusReportsRemoteDataAndKey(t *testing.T) {
+	client := &testCloudSyncClient{
 		snapshotResponse: &cloudsync.CloudSyncPullResponse{
 			Records: []cloudsync.CloudSyncRecord{{EntityType: cloudsync.EntityWoxSetting, Key: "ThemeId", Op: cloudsync.OpUpsert}},
 		},
 	}
-	keyClient := &routerCloudSyncKeyClient{status: cloudsync.CloudSyncKeyStatus{Available: true, Version: 1}}
-	initSyncBootstrapRouterTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true}, client, keyClient)
+	keyClient := &testCloudSyncKeyClient{status: cloudsync.CloudSyncKeyStatus{Available: true, Version: 1}}
+	initSyncBootstrapServiceTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true}, client, keyClient)
 
-	response := postSyncBootstrapStatus()
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("http status = %d, want %d, body=%s", response.Code, http.StatusOK, response.Body.String())
+	status, err := NewCoreServices().CloudBootstrapStatus(context.Background(), "")
+	if err != nil {
+		t.Fatalf("CloudBootstrapStatus: %v", err)
 	}
-	var envelope struct {
-		Data struct {
-			HasRemoteData bool `json:"has_remote_data"`
-			HasRemoteKey  bool `json:"has_remote_key"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if !envelope.Data.HasRemoteData || !envelope.Data.HasRemoteKey {
-		t.Fatalf("data = %#v, want remote data and key", envelope.Data)
+	if !status.HasRemoteData || !status.HasRemoteKey {
+		t.Fatalf("status = %#v, want remote data and key", status)
 	}
 	if len(client.snapshotRequests) != 1 || client.snapshotRequests[0].Limit != 1 {
 		t.Fatalf("snapshot requests = %#v, want one limit=1 request", client.snapshotRequests)
 	}
 }
 
-func TestHandleSyncBootstrapStartInitializesKeyAndEnablesSync(t *testing.T) {
-	keyClient := &routerCloudSyncKeyClient{status: cloudsync.CloudSyncKeyStatus{Available: false}}
-	initSyncBootstrapRouterTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true}, &routerCloudSyncClient{}, keyClient)
+func TestStartCloudBootstrapInitializesKeyAndEnablesSync(t *testing.T) {
+	keyClient := &testCloudSyncKeyClient{status: cloudsync.CloudSyncKeyStatus{Available: false}}
+	initSyncBootstrapServiceTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true}, &testCloudSyncClient{}, keyClient)
 
-	request := httptest.NewRequest(http.MethodPost, "/sync/bootstrap/start", bytes.NewReader([]byte(`{"recovery_code":"test recovery code"}`)))
-	response := httptest.NewRecorder()
-	routers["/sync/bootstrap/start"](response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("http status = %d, want %d, body=%s", response.Code, http.StatusOK, response.Body.String())
+	if err := NewCoreServices().StartCloudBootstrap(context.Background(), "", "test recovery code"); err != nil {
+		t.Fatalf("StartCloudBootstrap: %v", err)
 	}
 	if keyClient.initCalls != 1 {
 		t.Fatalf("init key calls = %d, want 1", keyClient.initCalls)
@@ -91,16 +60,12 @@ func TestHandleSyncBootstrapStartInitializesKeyAndEnablesSync(t *testing.T) {
 	}
 }
 
-func TestHandleSyncDevicesListUpdatesCurrentDeviceBeforeListing(t *testing.T) {
-	client := &routerCloudSyncClient{}
-	initSyncBootstrapRouterTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true}, client)
+func TestCloudDevicesUpdatesCurrentDeviceBeforeListing(t *testing.T) {
+	client := &testCloudSyncClient{}
+	initSyncBootstrapServiceTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true}, client)
 
-	request := httptest.NewRequest(http.MethodPost, "/sync/devices/list", nil)
-	response := httptest.NewRecorder()
-	routers["/sync/devices/list"](response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("http status = %d, want %d, body=%s", response.Code, http.StatusOK, response.Body.String())
+	if _, err := NewCoreServices().CloudDevices(context.Background(), ""); err != nil {
+		t.Fatalf("CloudDevices: %v", err)
 	}
 	if len(client.deviceUpdateRequests) != 1 {
 		t.Fatalf("device update requests = %#v, want one request", client.deviceUpdateRequests)
@@ -120,19 +85,21 @@ func TestHandleSyncDevicesListUpdatesCurrentDeviceBeforeListing(t *testing.T) {
 	}
 }
 
-func TestHandleSyncDeviceJoinUsesCurrentDeviceAndStartsManager(t *testing.T) {
-	client := &routerCloudSyncClient{}
-	initSyncBootstrapRouterTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true, SyncPlan: "pro", SyncEnabled: true}, client)
+func TestJoinCloudDeviceUsesCurrentDeviceAndStartsManager(t *testing.T) {
+	client := &testCloudSyncClient{deviceUpdated: make(chan struct{}, 1)}
+	initSyncBootstrapServiceTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true, SyncPlan: "pro", SyncEnabled: true}, client)
+	cloudsync.MarkCloudSyncBootstrapComplete(context.Background())
 
-	request := httptest.NewRequest(http.MethodPost, "/sync/devices/join", nil)
-	response := httptest.NewRecorder()
-	routers["/sync/devices/join"](response, request)
+	err := NewCoreServices().JoinCloudDevice(context.Background(), "")
+	select {
+	case <-client.deviceUpdated:
+	case <-time.After(time.Second):
+	}
 	if service := cloudsync.GetService(); service != nil && service.Manager != nil {
 		service.Manager.Stop(context.Background())
 	}
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("http status = %d, want %d, body=%s", response.Code, http.StatusOK, response.Body.String())
+	if err != nil {
+		t.Fatalf("JoinCloudDevice: %v", err)
 	}
 	if len(client.deviceJoinRequests) != 1 {
 		t.Fatalf("device join requests = %#v, want one request", client.deviceJoinRequests)
@@ -152,13 +119,13 @@ func TestHandleSyncDeviceJoinUsesCurrentDeviceAndStartsManager(t *testing.T) {
 	}
 }
 
-func initSyncBootstrapRouterTest(t *testing.T, accountState database.AccountState, clientAndKey ...any) {
+func initSyncBootstrapServiceTest(t *testing.T, accountState database.AccountState, clientAndKey ...any) {
 	t.Helper()
-	woxDataDir, err := os.MkdirTemp("", "wox-sync-router-test-*")
+	woxDataDir, err := os.MkdirTemp("", "wox-sync-service-test-*")
 	if err != nil {
 		t.Fatalf("create wox data directory: %v", err)
 	}
-	userDataDir, err := os.MkdirTemp("", "wox-sync-router-user-test-*")
+	userDataDir, err := os.MkdirTemp("", "wox-sync-service-user-test-*")
 	if err != nil {
 		t.Fatalf("create user data directory: %v", err)
 	}
@@ -183,9 +150,9 @@ func initSyncBootstrapRouterTest(t *testing.T, accountState database.AccountStat
 		cloudsync.SetService(nil)
 	})
 
-	var client cloudsync.CloudSyncClient = &routerCloudSyncClient{}
+	var client cloudsync.CloudSyncClient = &testCloudSyncClient{}
 	var deviceClient cloudsync.CloudSyncDeviceClient
-	keyClient := &routerCloudSyncKeyClient{}
+	keyClient := &testCloudSyncKeyClient{}
 	for _, item := range clientAndKey {
 		switch typed := item.(type) {
 		case cloudsync.CloudSyncClient:
@@ -193,15 +160,15 @@ func initSyncBootstrapRouterTest(t *testing.T, accountState database.AccountStat
 			if typedDeviceClient, ok := item.(cloudsync.CloudSyncDeviceClient); ok {
 				deviceClient = typedDeviceClient
 			}
-		case *routerCloudSyncKeyClient:
+		case *testCloudSyncKeyClient:
 			keyClient = typed
 		}
 	}
 	if deviceClient == nil {
 		deviceClient = client.(cloudsync.CloudSyncDeviceClient)
 	}
-	deviceProvider := routerCloudSyncDeviceProvider{}
-	keyring := &routerCloudSyncKeyring{values: map[string]string{"dek": `{"dek":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","version":1}`}}
+	deviceProvider := testCloudSyncDeviceProvider{}
+	keyring := &testCloudSyncKeyring{values: map[string]string{"dek": `{"dek":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","version":1}`}}
 	keyManager := cloudsync.NewKeyManager(cloudsync.KeyManagerConfig{
 		Keyring:        keyring,
 		KeyClient:      keyClient,
@@ -209,43 +176,37 @@ func initSyncBootstrapRouterTest(t *testing.T, accountState database.AccountStat
 	})
 	manager := cloudsync.NewCloudSyncManager(cloudsync.DefaultCloudSyncConfig(), cloudsync.CloudSyncDependencies{
 		Client:         client,
-		Crypto:         routerCloudSyncCrypto{},
+		Crypto:         testCloudSyncCrypto{},
 		DeviceProvider: deviceProvider,
-		Applier:        &routerCloudSyncApplier{},
-		OplogStore:     &routerCloudSyncOplogStore{},
-		Snapshotter:    routerCloudSyncSnapshotter{},
+		Applier:        &testCloudSyncApplier{},
+		OplogStore:     &testCloudSyncOplogStore{},
+		Snapshotter:    testCloudSyncSnapshotter{},
 	})
 	cloudsync.SetService(&cloudsync.Service{Manager: manager, DeviceClient: deviceClient, KeyManager: keyManager, DeviceProvider: deviceProvider})
 }
 
-func postSyncBootstrapStatus() *httptest.ResponseRecorder {
-	request := httptest.NewRequest(http.MethodPost, "/sync/bootstrap/status", nil)
-	response := httptest.NewRecorder()
-	routers["/sync/bootstrap/status"](response, request)
-	return response
-}
-
-type routerCloudSyncClient struct {
+type testCloudSyncClient struct {
 	snapshotResponse     *cloudsync.CloudSyncPullResponse
 	snapshotRequests     []cloudsync.CloudSyncPullRequest
 	deviceUpdateRequests []cloudsync.CloudSyncDeviceUpdateRequest
+	deviceUpdated        chan struct{}
 	deviceListRequests   []cloudsync.CloudSyncDeviceListRequest
 	deviceJoinRequests   []cloudsync.CloudSyncDeviceJoinRequest
 }
 
-func (c *routerCloudSyncClient) Push(ctx context.Context, req cloudsync.CloudSyncPushRequest) (*cloudsync.CloudSyncPushResponse, error) {
+func (c *testCloudSyncClient) Push(ctx context.Context, req cloudsync.CloudSyncPushRequest) (*cloudsync.CloudSyncPushResponse, error) {
 	_ = ctx
 	_ = req
 	return &cloudsync.CloudSyncPushResponse{}, nil
 }
 
-func (c *routerCloudSyncClient) Pull(ctx context.Context, req cloudsync.CloudSyncPullRequest) (*cloudsync.CloudSyncPullResponse, error) {
+func (c *testCloudSyncClient) Pull(ctx context.Context, req cloudsync.CloudSyncPullRequest) (*cloudsync.CloudSyncPullResponse, error) {
 	_ = ctx
 	_ = req
 	return &cloudsync.CloudSyncPullResponse{}, nil
 }
 
-func (c *routerCloudSyncClient) Snapshot(ctx context.Context, req cloudsync.CloudSyncPullRequest) (*cloudsync.CloudSyncPullResponse, error) {
+func (c *testCloudSyncClient) Snapshot(ctx context.Context, req cloudsync.CloudSyncPullRequest) (*cloudsync.CloudSyncPullResponse, error) {
 	_ = ctx
 	c.snapshotRequests = append(c.snapshotRequests, req)
 	if c.snapshotResponse != nil {
@@ -254,94 +215,97 @@ func (c *routerCloudSyncClient) Snapshot(ctx context.Context, req cloudsync.Clou
 	return &cloudsync.CloudSyncPullResponse{}, nil
 }
 
-func (c *routerCloudSyncClient) ListRecordKeys(ctx context.Context, req cloudsync.CloudSyncRecordKeyListRequest) (*cloudsync.CloudSyncRecordKeyListResponse, error) {
+func (c *testCloudSyncClient) ListRecordKeys(ctx context.Context, req cloudsync.CloudSyncRecordKeyListRequest) (*cloudsync.CloudSyncRecordKeyListResponse, error) {
 	_ = ctx
 	_ = req
 	return &cloudsync.CloudSyncRecordKeyListResponse{}, nil
 }
 
-func (c *routerCloudSyncClient) UpdateDevice(ctx context.Context, req cloudsync.CloudSyncDeviceUpdateRequest) (*cloudsync.CloudSyncDeviceUpdateResponse, error) {
+func (c *testCloudSyncClient) UpdateDevice(ctx context.Context, req cloudsync.CloudSyncDeviceUpdateRequest) (*cloudsync.CloudSyncDeviceUpdateResponse, error) {
 	_ = ctx
 	c.deviceUpdateRequests = append(c.deviceUpdateRequests, req)
+	if c.deviceUpdated != nil {
+		c.deviceUpdated <- struct{}{}
+	}
 	return &cloudsync.CloudSyncDeviceUpdateResponse{DeviceID: req.DeviceID, DeviceName: req.DeviceName, Platform: req.Platform}, nil
 }
 
-func (c *routerCloudSyncClient) ListDevices(ctx context.Context, req cloudsync.CloudSyncDeviceListRequest) (*cloudsync.CloudSyncDeviceListResponse, error) {
+func (c *testCloudSyncClient) ListDevices(ctx context.Context, req cloudsync.CloudSyncDeviceListRequest) (*cloudsync.CloudSyncDeviceListResponse, error) {
 	_ = ctx
 	c.deviceListRequests = append(c.deviceListRequests, req)
 	return &cloudsync.CloudSyncDeviceListResponse{}, nil
 }
 
-func (c *routerCloudSyncClient) RevokeDevice(ctx context.Context, req cloudsync.CloudSyncDeviceRevokeRequest) (*cloudsync.CloudSyncDeviceRevokeResponse, error) {
+func (c *testCloudSyncClient) RevokeDevice(ctx context.Context, req cloudsync.CloudSyncDeviceRevokeRequest) (*cloudsync.CloudSyncDeviceRevokeResponse, error) {
 	_ = ctx
 	_ = req
 	return &cloudsync.CloudSyncDeviceRevokeResponse{OK: true}, nil
 }
 
-func (c *routerCloudSyncClient) JoinDevice(ctx context.Context, req cloudsync.CloudSyncDeviceJoinRequest) (*cloudsync.CloudSyncDeviceJoinResponse, error) {
+func (c *testCloudSyncClient) JoinDevice(ctx context.Context, req cloudsync.CloudSyncDeviceJoinRequest) (*cloudsync.CloudSyncDeviceJoinResponse, error) {
 	_ = ctx
 	c.deviceJoinRequests = append(c.deviceJoinRequests, req)
 	return &cloudsync.CloudSyncDeviceJoinResponse{DeviceID: req.DeviceID, DeviceName: req.DeviceName, Platform: req.Platform}, nil
 }
 
-type routerCloudSyncKeyClient struct {
+type testCloudSyncKeyClient struct {
 	status    cloudsync.CloudSyncKeyStatus
 	initCalls int
 }
 
-func (c *routerCloudSyncKeyClient) Status(ctx context.Context) (cloudsync.CloudSyncKeyStatus, error) {
+func (c *testCloudSyncKeyClient) Status(ctx context.Context) (cloudsync.CloudSyncKeyStatus, error) {
 	_ = ctx
 	return c.status, nil
 }
 
-func (c *routerCloudSyncKeyClient) InitKey(ctx context.Context, req cloudsync.CloudSyncKeyInitRequest) (*cloudsync.CloudSyncKeyInitResponse, error) {
+func (c *testCloudSyncKeyClient) InitKey(ctx context.Context, req cloudsync.CloudSyncKeyInitRequest) (*cloudsync.CloudSyncKeyInitResponse, error) {
 	_ = ctx
 	_ = req
 	c.initCalls++
 	return &cloudsync.CloudSyncKeyInitResponse{KeyVersion: 1}, nil
 }
 
-func (c *routerCloudSyncKeyClient) FetchKey(ctx context.Context, req cloudsync.CloudSyncKeyFetchRequest) (*cloudsync.CloudSyncKeyFetchResponse, error) {
+func (c *testCloudSyncKeyClient) FetchKey(ctx context.Context, req cloudsync.CloudSyncKeyFetchRequest) (*cloudsync.CloudSyncKeyFetchResponse, error) {
 	_ = ctx
 	_ = req
 	return &cloudsync.CloudSyncKeyFetchResponse{}, nil
 }
 
-func (c *routerCloudSyncKeyClient) PrepareKeyReset(ctx context.Context) (*cloudsync.CloudSyncKeyResetPrepareResponse, error) {
+func (c *testCloudSyncKeyClient) PrepareKeyReset(ctx context.Context) (*cloudsync.CloudSyncKeyResetPrepareResponse, error) {
 	_ = ctx
 	return &cloudsync.CloudSyncKeyResetPrepareResponse{}, nil
 }
 
-func (c *routerCloudSyncKeyClient) ResetKey(ctx context.Context, req cloudsync.CloudSyncKeyResetRequest) (*cloudsync.CloudSyncKeyResetResponse, error) {
+func (c *testCloudSyncKeyClient) ResetKey(ctx context.Context, req cloudsync.CloudSyncKeyResetRequest) (*cloudsync.CloudSyncKeyResetResponse, error) {
 	_ = ctx
 	_ = req
 	return &cloudsync.CloudSyncKeyResetResponse{}, nil
 }
 
-type routerCloudSyncDeviceProvider struct{}
+type testCloudSyncDeviceProvider struct{}
 
-func (routerCloudSyncDeviceProvider) DeviceID(ctx context.Context) (string, error) {
+func (testCloudSyncDeviceProvider) DeviceID(ctx context.Context) (string, error) {
 	_ = ctx
 	return "device-a", nil
 }
 
-type routerCloudSyncCrypto struct{}
+type testCloudSyncCrypto struct{}
 
-func (routerCloudSyncCrypto) Encrypt(ctx context.Context, plaintext string, aad string) (*cloudsync.CloudSyncEncryptedValue, error) {
+func (testCloudSyncCrypto) Encrypt(ctx context.Context, plaintext string, aad string) (*cloudsync.CloudSyncEncryptedValue, error) {
 	_ = ctx
 	_ = aad
 	return &cloudsync.CloudSyncEncryptedValue{KeyVersion: 1, Ciphertext: plaintext}, nil
 }
 
-func (routerCloudSyncCrypto) Decrypt(ctx context.Context, value cloudsync.CloudSyncEncryptedValue, aad string) (string, error) {
+func (testCloudSyncCrypto) Decrypt(ctx context.Context, value cloudsync.CloudSyncEncryptedValue, aad string) (string, error) {
 	_ = ctx
 	_ = aad
 	return value.Ciphertext, nil
 }
 
-type routerCloudSyncApplier struct{}
+type testCloudSyncApplier struct{}
 
-func (a *routerCloudSyncApplier) ApplyWoxSetting(ctx context.Context, key string, op string, rawValue string) error {
+func (a *testCloudSyncApplier) ApplyWoxSetting(ctx context.Context, key string, op string, rawValue string) error {
 	_ = ctx
 	_ = key
 	_ = op
@@ -349,7 +313,7 @@ func (a *routerCloudSyncApplier) ApplyWoxSetting(ctx context.Context, key string
 	return nil
 }
 
-func (a *routerCloudSyncApplier) ApplyPluginSetting(ctx context.Context, pluginID string, key string, op string, rawValue string) error {
+func (a *testCloudSyncApplier) ApplyPluginSetting(ctx context.Context, pluginID string, key string, op string, rawValue string) error {
 	_ = ctx
 	_ = pluginID
 	_ = key
@@ -358,7 +322,7 @@ func (a *routerCloudSyncApplier) ApplyPluginSetting(ctx context.Context, pluginI
 	return nil
 }
 
-func (a *routerCloudSyncApplier) ApplyInstalledPlugin(ctx context.Context, pluginID string, op string, rawValue string) error {
+func (a *testCloudSyncApplier) ApplyInstalledPlugin(ctx context.Context, pluginID string, op string, rawValue string) error {
 	_ = ctx
 	_ = pluginID
 	_ = op
@@ -366,7 +330,7 @@ func (a *routerCloudSyncApplier) ApplyInstalledPlugin(ctx context.Context, plugi
 	return nil
 }
 
-func (a *routerCloudSyncApplier) ApplyInstalledTheme(ctx context.Context, themeID string, op string, rawValue string) error {
+func (a *testCloudSyncApplier) ApplyInstalledTheme(ctx context.Context, themeID string, op string, rawValue string) error {
 	_ = ctx
 	_ = themeID
 	_ = op
@@ -374,44 +338,44 @@ func (a *routerCloudSyncApplier) ApplyInstalledTheme(ctx context.Context, themeI
 	return nil
 }
 
-type routerCloudSyncOplogStore struct{}
+type testCloudSyncOplogStore struct{}
 
-func (s *routerCloudSyncOplogStore) LoadPending(ctx context.Context, limit int) ([]database.Oplog, error) {
+func (s *testCloudSyncOplogStore) LoadPending(ctx context.Context, limit int) ([]database.Oplog, error) {
 	_ = ctx
 	_ = limit
 	return nil, nil
 }
 
-func (s *routerCloudSyncOplogStore) MarkSynced(ctx context.Context, ids []uint) error {
+func (s *testCloudSyncOplogStore) MarkSynced(ctx context.Context, ids []uint) error {
 	_ = ctx
 	_ = ids
 	return nil
 }
 
-func (s *routerCloudSyncOplogStore) MarkPushFailed(ctx context.Context, failures []cloudsync.CloudSyncOplogPushFailure) error {
+func (s *testCloudSyncOplogStore) MarkPushFailed(ctx context.Context, failures []cloudsync.CloudSyncOplogPushFailure) error {
 	_ = ctx
 	_ = failures
 	return nil
 }
 
-type routerCloudSyncSnapshotter struct{}
+type testCloudSyncSnapshotter struct{}
 
-func (routerCloudSyncSnapshotter) EnqueueLocalSnapshot(ctx context.Context) error {
+func (testCloudSyncSnapshotter) EnqueueLocalSnapshot(ctx context.Context) error {
 	_ = ctx
 	return nil
 }
 
-func (routerCloudSyncSnapshotter) EnqueueMissingLocalSnapshot(ctx context.Context, remoteKeys []cloudsync.CloudSyncRecordKey) error {
+func (testCloudSyncSnapshotter) EnqueueMissingLocalSnapshot(ctx context.Context, remoteKeys []cloudsync.CloudSyncRecordKey) error {
 	_ = ctx
 	_ = remoteKeys
 	return nil
 }
 
-type routerCloudSyncKeyring struct {
+type testCloudSyncKeyring struct {
 	values map[string]string
 }
 
-func (k *routerCloudSyncKeyring) Get(ctx context.Context, key string) (string, error) {
+func (k *testCloudSyncKeyring) Get(ctx context.Context, key string) (string, error) {
 	_ = ctx
 	if k.values == nil {
 		return "", cloudsync.ErrKeyNotFound
@@ -423,7 +387,7 @@ func (k *routerCloudSyncKeyring) Get(ctx context.Context, key string) (string, e
 	return value, nil
 }
 
-func (k *routerCloudSyncKeyring) Set(ctx context.Context, key string, value string) error {
+func (k *testCloudSyncKeyring) Set(ctx context.Context, key string, value string) error {
 	_ = ctx
 	if k.values == nil {
 		k.values = map[string]string{}
@@ -432,7 +396,7 @@ func (k *routerCloudSyncKeyring) Set(ctx context.Context, key string, value stri
 	return nil
 }
 
-func (k *routerCloudSyncKeyring) Delete(ctx context.Context, key string) error {
+func (k *testCloudSyncKeyring) Delete(ctx context.Context, key string) error {
 	_ = ctx
 	delete(k.values, key)
 	return nil
