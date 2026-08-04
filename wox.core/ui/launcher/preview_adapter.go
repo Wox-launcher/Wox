@@ -21,7 +21,7 @@ import (
 )
 
 // buildPreview resolves controller-owned preview state into a pure preview view.
-func (a *App) buildPreview(result queryResult, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildPreview(result queryResult, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	preview := a.resolvePreview(result.Preview)
 	if preview.PreviewType == "query_requirement_settings" {
 		return a.buildRequirementPreview(result, preview, palette, width, height)
@@ -42,19 +42,26 @@ func (a *App) buildPreview(result queryResult, palette uiPalette, width, height 
 	if preview.PreviewType == "chat" {
 		return a.buildChatPreview(result, preview, palette, width, height)
 	}
+	scrollKey := result.QueryID + "\x00" + result.ID + "\x00" + preview.PreviewType
+	if preview.PreviewType == "update" {
+		data, err := decodeStructuredPreview[updatePreviewData](preview.PreviewData)
+		if err != nil {
+			return previewview.PreviewError(fmt.Sprintf("Invalid update preview: %v", err), width, height, palette.componentTheme())
+		}
+		return a.buildUpdatePreview(scrollKey, data, palette, width, height, imageScale)
+	}
 	tags := append(a.previewTags(preview.PreviewTags), a.previewTags(a.previewBodyTags(preview))...)
 	if preview.PreviewType == "terminal" {
 		return a.buildTerminalPreview(a.terminalPreviewSnapshotFor(preview), palette, width, height, tags)
 	}
-	scrollKey := result.QueryID + "\x00" + result.ID + "\x00" + preview.PreviewType
 	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0)
-	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight)
+	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight, imageScale)
 	return previewview.PreviewView(previewview.PreviewProps{
 		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window, OnTagHover: a.setPreviewTooltip,
 	})
 }
 
-func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	content := func(value string, color woxui.Color) woxwidget.Widget {
 		if strings.TrimSpace(value) == "" {
 			value = "No preview available"
@@ -66,7 +73,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 	case "text":
 		return a.buildTextPreview(scrollKey, preview.PreviewData, preview.ScrollPosition, palette, width, height)
 	case "markdown":
-		return a.buildMarkdownPreview(scrollKey, preview.PreviewData, "", preview.ScrollPosition, palette, width, height)
+		return a.buildMarkdownPreview(scrollKey, preview.PreviewData, "", preview.ScrollPosition, palette, width, height, imageScale)
 	case "image":
 		source, ok := parsePreviewImage(preview.PreviewData)
 		if !ok {
@@ -85,7 +92,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 		case "error":
 			return content(file.Text, errorText)
 		case "markdown":
-			return a.buildMarkdownPreview(scrollKey, file.Text, filepath.Dir(preview.PreviewData), preview.ScrollPosition, palette, width, height)
+			return a.buildMarkdownPreview(scrollKey, file.Text, filepath.Dir(preview.PreviewData), preview.ScrollPosition, palette, width, height, imageScale)
 		default:
 			return a.buildTextPreview(scrollKey, file.Text, preview.ScrollPosition, palette, width, height)
 		}
@@ -101,12 +108,6 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 			return content(fmt.Sprintf("Invalid plugin detail preview: %v", err), errorText)
 		}
 		return a.buildPluginDetailPreview(data, palette, width, height)
-	case "update":
-		data, err := decodeStructuredPreview[updatePreviewData](preview.PreviewData)
-		if err != nil {
-			return content(fmt.Sprintf("Invalid update preview: %v", err), errorText)
-		}
-		return content(formatUpdatePreview(data), palette.previewText)
 	case "ai_stream":
 		data, err := decodeStructuredPreview[aiStreamPreviewData](preview.PreviewData)
 		if err != nil {
@@ -135,11 +136,20 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 }
 
 // buildMarkdownPreview injects launcher-owned image and external-link actions into the shared native component.
-func (a *App) buildMarkdownPreview(scrollKey, value, baseDirectory, scrollPosition string, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildMarkdownPreview(scrollKey, value, baseDirectory, scrollPosition string, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	initialOffset := float32(0)
 	if scrollPosition == "bottom" {
 		initialOffset = float32(math.MaxFloat32)
 	}
+	markdown := a.markdownProps(scrollKey, value, baseDirectory, palette, max(float32(0), width-40), imageScale)
+	return previewview.MarkdownPreviewView(previewview.MarkdownPreviewProps{
+		ID: scrollKey, Document: markdown.Document, Width: width, Height: height, InitialOffset: initialOffset, Theme: palette.componentTheme(), Window: a.window,
+		ResolveImage: markdown.ResolveImage, OnOpenImage: markdown.OnOpenImage, OnOpenLink: markdown.OnOpenLink,
+	})
+}
+
+// markdownProps centralizes the image and link actions shared by generic and structured Markdown previews.
+func (a *App) markdownProps(id, value, baseDirectory string, palette uiPalette, width, imageScale float32) woxcomponent.MarkdownProps {
 	resolveSource := func(source string) (woxImage, bool) {
 		trimmed := strings.TrimSpace(source)
 		if trimmed == "" {
@@ -167,14 +177,15 @@ func (a *App) buildMarkdownPreview(scrollKey, value, baseDirectory, scrollPositi
 		}
 		return woxImage{}, false
 	}
-	return previewview.MarkdownPreviewView(previewview.MarkdownPreviewProps{
-		ID: scrollKey, Document: a.markdownDocument(value), Width: width, Height: height, InitialOffset: initialOffset, Theme: palette.componentTheme(), Window: a.window,
+	return woxcomponent.MarkdownProps{
+		ID: id, Document: a.markdownDocument(value), Width: width, Theme: palette.componentTheme(), Window: a.window,
 		ResolveImage: func(source string) (*woxui.Image, string) {
 			imageSource, ok := resolveSource(source)
 			if !ok {
 				return nil, "Unsupported Markdown image: " + source
 			}
-			return a.imageFor(imageSource), a.imageErrorFor(imageSource)
+			requestSize := min(2048, max(256, physicalImageSize(int(math.Ceil(float64(width))), imageScale)))
+			return a.imageForSize(imageSource, requestSize), a.imageErrorFor(imageSource)
 		},
 		OnOpenImage: func(source string) {
 			if imageSource, ok := resolveSource(source); ok {
@@ -186,7 +197,7 @@ func (a *App) buildMarkdownPreview(scrollKey, value, baseDirectory, scrollPositi
 				log.Printf("open Markdown preview link: %v", err)
 			}
 		},
-	})
+	}
 }
 
 // markdownDocument bounds AST reuse so repeated frames do not reparse unchanged streaming content.
@@ -209,11 +220,6 @@ func (a *App) previewBodyTags(preview queryPreview) []previewTag {
 	switch preview.PreviewType {
 	case "file":
 		return a.filePreviewFor(preview.PreviewData).Tags
-	case "update":
-		data, err := decodeStructuredPreview[updatePreviewData](preview.PreviewData)
-		if err == nil {
-			return previewTagsForValues(data.ReleaseChannel, data.Status)
-		}
 	case "ai_stream":
 		data, err := decodeStructuredPreview[aiStreamPreviewData](preview.PreviewData)
 		if err == nil {

@@ -2,9 +2,12 @@ package launcher
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
+	woxcomponent "wox/ui/launcher/component"
 	previewview "wox/ui/launcher/view/preview"
+	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
@@ -99,36 +102,70 @@ func previewTagsForValues(values ...string) []previewTag {
 	return tags
 }
 
-func formatUpdatePreview(data updatePreviewData) string {
-	status := data.Status
+// buildUpdatePreview maps update state and translated labels into the dedicated Flutter-aligned view.
+func (a *App) buildUpdatePreview(id string, data updatePreviewData, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+	status := ""
+	statusColor := woxui.Color{R: 76, G: 175, B: 80, A: 255}
 	if !data.AutoUpdateEnabled {
-		status = "Automatic updates are disabled"
-	} else if !data.HasUpdate && status == "" {
-		status = "Wox is up to date"
+		status = a.translate("i18n:plugin_update_status_auto_update_disabled")
+		statusColor = woxui.Color{R: 255, G: 152, B: 0, A: 255}
+	} else if !data.HasUpdate {
+		version := strings.TrimSpace(data.LatestVersion)
+		if version == "" {
+			version = strings.TrimSpace(data.CurrentVersion)
+		}
+		if version == "" {
+			status = a.translate("i18n:plugin_update_status_none")
+		} else {
+			status = fmt.Sprintf(a.translate("i18n:plugin_update_status_none_with_version"), version)
+		}
+	} else {
+		current := strings.TrimSpace(data.CurrentVersion)
+		latest := strings.TrimSpace(data.LatestVersion)
+		unknown := a.translate("i18n:plugin_update_unknown")
+		if current == "" {
+			current = unknown
+		}
+		if latest == "" {
+			latest = unknown
+		}
+		status = current + " → " + latest
+		statusColor = woxui.Color{R: 255, G: 152, B: 0, A: 255}
 	}
-	versions := strings.TrimSpace(data.CurrentVersion)
-	if versions == "" {
-		versions = data.LatestVersion
-	} else if data.LatestVersion != "" && data.LatestVersion != data.CurrentVersion {
-		versions += "  →  " + data.LatestVersion
+	if data.AutoUpdateEnabled {
+		switch strings.ToLower(data.Status) {
+		case "error":
+			statusColor = woxui.Color{R: 244, G: 67, B: 54, A: 255}
+		case "downloading":
+			statusColor = woxui.Color{R: 33, G: 150, B: 243, A: 255}
+		}
 	}
-	parts := make([]string, 0, 4)
-	if versions != "" {
-		parts = append(parts, versions)
+	title := a.translate("i18n:plugin_update_title")
+	if data.HasUpdate {
+		title = a.translate("i18n:plugin_doctor_version_update_available")
 	}
-	if status != "" {
-		parts = append(parts, status)
+	betaLabel := ""
+	if strings.EqualFold(data.ReleaseChannel, "beta") {
+		betaLabel = a.translate("i18n:plugin_update_release_channel_beta")
 	}
-	if data.Error != "" {
-		parts = append(parts, "Error\n"+data.Error)
-	}
-	if data.DownloadURL != "" {
-		parts = append(parts, "Download\n"+data.DownloadURL)
-	}
-	if strings.TrimSpace(data.ReleaseNotes) != "" {
-		parts = append(parts, "Release notes\n\n"+data.ReleaseNotes)
-	}
-	return strings.Join(parts, "\n\n")
+	scale := a.densityMetrics.normalized().scale
+	return previewview.UpdatePreviewView(previewview.UpdatePreviewProps{
+		ID: id, Width: width, Height: height, Scale: scale, Theme: palette.componentTheme(), Title: title, Error: data.Error,
+		BetaLabel: betaLabel, StatusLabel: status, StatusColor: statusColor, AutoUpdateEnabled: data.AutoUpdateEnabled,
+		DisabledTitle: a.translate("i18n:plugin_update_auto_update_disabled_title"), DisabledDescription: a.translate("i18n:plugin_update_auto_update_disabled_desc"),
+		DisabledAction: a.translate("i18n:plugin_update_action_enable_auto_update") + " (enter)", OnPrimaryAction: a.activateSelected,
+		ReleaseNotes: data.ReleaseNotes, NoReleaseNotes: a.translate("i18n:plugin_update_no_release_notes"),
+		SectionNew: a.translate("i18n:plugin_update_section_new"), SectionImprovements: a.translate("i18n:plugin_update_section_improvements"),
+		SectionFixes: a.translate("i18n:plugin_update_section_fixes"), SectionChanged: a.translate("i18n:plugin_update_section_changed"),
+		SectionRemoved: a.translate("i18n:plugin_update_section_removed"), SectionSecurity: a.translate("i18n:plugin_update_section_security"),
+		MeasureText: func(value string, style woxui.TextStyle) float32 {
+			metrics, _ := a.window.MeasureText(value, style)
+			return metrics.Size.Width
+		},
+		RenderMarkdown: func(markdownID, value string, markdownWidth float32) woxwidget.Widget {
+			return woxcomponent.WoxMarkdown(a.markdownProps(markdownID, value, "", palette, markdownWidth, imageScale))
+		},
+	})
 }
 
 func formatAIStreamPreview(data aiStreamPreviewData) string {

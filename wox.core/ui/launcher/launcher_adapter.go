@@ -439,7 +439,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.terminalFullscreen)
 	if ratio <= 0 {
 		result := snapshot.results[snapshot.selected]
-		preview := a.buildPreview(result, snapshot.palette, width, height)
+		preview := a.buildPreview(result, snapshot.palette, width, height, imageScale)
 		if launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) && a.resolvePreview(result.Preview).PreviewType != "chat" {
 			label := a.translate("i18n:ui_close")
 			if strings.TrimSpace(label) == "" || label == "i18n:ui_close" {
@@ -458,7 +458,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 	splitX := width * ratio
 	return launcherview.LauncherSplitContentView(
 		a.buildResults(snapshot, splitX, height, imageScale),
-		a.buildPreview(snapshot.results[snapshot.selected], snapshot.palette, width-splitX, height),
+		a.buildPreview(snapshot.results[snapshot.selected], snapshot.palette, width-splitX, height, imageScale),
 	)
 }
 

@@ -22,6 +22,7 @@ import (
 var (
 	markdownParser          = goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser()
 	markdownWikiImageSyntax = regexp.MustCompile(`!\[\[([^\]]+)\]\]`)
+	markdownImageLine       = regexp.MustCompile(`^!\[[^\]]*\]\([^)]+\)$`)
 )
 
 type markdownBlockKind uint8
@@ -104,7 +105,7 @@ func WoxMarkdown(props MarkdownProps) woxwidget.Widget {
 
 // normalizeMarkdownImages preserves Wox's wiki-image shorthand before CommonMark parsing.
 func normalizeMarkdownImages(value string) string {
-	return markdownWikiImageSyntax.ReplaceAllStringFunc(value, func(match string) string {
+	value = markdownWikiImageSyntax.ReplaceAllStringFunc(value, func(match string) string {
 		parts := markdownWikiImageSyntax.FindStringSubmatch(match)
 		if len(parts) != 2 {
 			return match
@@ -118,6 +119,19 @@ func normalizeMarkdownImages(value string) string {
 		}
 		return fmt.Sprintf("![%s](%s)", label, path)
 	})
+	lines := strings.Split(value, "\n")
+	normalized := make([]string, 0, len(lines)+2)
+	for index, line := range lines {
+		standaloneImage := markdownImageLine.MatchString(strings.TrimSpace(line))
+		if standaloneImage && len(normalized) > 0 && strings.TrimSpace(normalized[len(normalized)-1]) != "" {
+			normalized = append(normalized, "")
+		}
+		normalized = append(normalized, line)
+		if standaloneImage && index+1 < len(lines) && strings.TrimSpace(lines[index+1]) != "" {
+			normalized = append(normalized, "")
+		}
+	}
+	return strings.Join(normalized, "\n")
 }
 
 // parseMarkdownBlocks converts Goldmark nodes into a renderer-owned immutable block model.
@@ -562,8 +576,7 @@ func markdownImageWidget(block markdownBlock, props MarkdownProps, width float32
 		return woxwidget.Container{Width: width, Height: 32, Child: woxwidget.Text{Value: "Invalid Markdown image", Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ErrorText}}
 	}
 	availableWidth := max(float32(1), width)
-	availableHeight := float32(280)
-	scale := min(availableWidth/float32(image.Width), availableHeight/float32(image.Height))
+	scale := availableWidth / float32(image.Width)
 	drawWidth := float32(image.Width) * scale
 	drawHeight := float32(image.Height) * scale
 	content := woxwidget.Align{Width: width, Height: drawHeight, Horizontal: 0.5, Child: woxwidget.Image{Source: image, Width: drawWidth, Height: drawHeight}}

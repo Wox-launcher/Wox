@@ -33,6 +33,28 @@ func TestParseMarkdownBuildsSharedPreviewBlocks(t *testing.T) {
 	}
 }
 
+func TestParseMarkdownPromotesImageOnSoftLineBreak(t *testing.T) {
+	document := ParseMarkdown("Intro paragraph\n![](https://example.com/shot.png)")
+	if len(document.blocks) != 2 || document.blocks[0].kind != markdownParagraph || document.blocks[1].kind != markdownImage {
+		t.Fatalf("blocks = %#v, want paragraph followed by image", document.blocks)
+	}
+	if document.blocks[1].image != "https://example.com/shot.png" {
+		t.Fatalf("image = %q", document.blocks[1].image)
+	}
+}
+
+func TestMarkdownImageUsesAvailableWidthWithoutHeightCap(t *testing.T) {
+	document := ParseMarkdown("![](https://example.com/shot.png)")
+	widget := renderMarkdownBlock(document.blocks[0], MarkdownProps{
+		ID: "preview", ResolveImage: func(string) (*woxui.Image, string) { return &woxui.Image{Width: 2560, Height: 1788}, "" },
+	}, 690, new(int))
+	align := widget.(woxwidget.Align)
+	image := align.Child.(woxwidget.Image)
+	if image.Width != 690 || image.Height <= 280 {
+		t.Fatalf("image size = %.0fx%.0f, want full width without 280px cap", image.Width, image.Height)
+	}
+}
+
 func TestParseMarkdownRejectsUnsafeLinksWithoutDroppingText(t *testing.T) {
 	document := ParseMarkdown(`[safe \[label\]](https://wox.one) [unsafe](javascript:alert(1))`)
 	if len(document.blocks) != 1 {
