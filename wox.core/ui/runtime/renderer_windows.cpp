@@ -28,6 +28,7 @@ struct WoxRenderer {
   ID2D1SolidColorBrush *brush = nullptr;
   IDWriteFactory *dwrite_factory = nullptr;
 	std::wstring font_family = L"Segoe UI";
+  bool uses_default_font_family = true;
   float scale = 1.0f;
   bool frame_open = false;
   bool clip_active = false;
@@ -121,11 +122,69 @@ static HRESULT create_text_format(WoxRenderer *renderer, float font_size, uint8_
   return result;
 }
 
+static constexpr bool is_cjk_codepoint(uint32_t codepoint) {
+  return (codepoint >= 0x2E80 && codepoint <= 0x303F) ||
+         (codepoint >= 0x31C0 && codepoint <= 0x31EF) ||
+         (codepoint >= 0x3400 && codepoint <= 0x4DBF) ||
+         (codepoint >= 0x4E00 && codepoint <= 0x9FFF) ||
+         (codepoint >= 0xF900 && codepoint <= 0xFAFF) ||
+         (codepoint >= 0xFE30 && codepoint <= 0xFE4F) ||
+         (codepoint >= 0xFF00 && codepoint <= 0xFFEF) ||
+         (codepoint >= 0x20000 && codepoint <= 0x2FA1F);
+}
+
+static_assert(is_cjk_codepoint(0x4E2D));
+static_assert(is_cjk_codepoint(0x20000));
+static_assert(!is_cjk_codepoint(L'A'));
+
+// apply_default_cjk_font keeps the Windows default aligned with Flutter without overriding a configured application font.
+static HRESULT apply_default_cjk_font(IDWriteTextLayout *layout, const std::wstring &text) {
+  for (UINT32 index = 0; index < text.size();) {
+    const UINT32 run_start = index;
+    uint32_t codepoint = text[index++];
+    if (codepoint >= 0xD800 && codepoint <= 0xDBFF && index < text.size()) {
+      const uint32_t low = text[index];
+      if (low >= 0xDC00 && low <= 0xDFFF) {
+        codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (low - 0xDC00);
+        index++;
+      }
+    }
+    if (!is_cjk_codepoint(codepoint)) {
+      continue;
+    }
+    const DWRITE_TEXT_RANGE range = {run_start, index - run_start};
+    const HRESULT result = layout->SetFontFamilyName(L"Microsoft YaHei", range);
+    if (FAILED(result)) {
+      return result;
+    }
+  }
+  return S_OK;
+}
+
+// create_text_layout keeps drawing and measurement on the same font fallback path.
+static HRESULT create_text_layout(WoxRenderer *renderer, const std::wstring &text, float font_size, uint8_t font_weight, float width, float height, IDWriteTextLayout **layout) {
+  IDWriteTextFormat *format = nullptr;
+  HRESULT result = create_text_format(renderer, font_size, font_weight, &format);
+  if (FAILED(result)) {
+    return result;
+  }
+  result = renderer->dwrite_factory->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.size()), format, width, height, layout);
+  format->Release();
+  if (SUCCEEDED(result) && renderer->uses_default_font_family) {
+    result = apply_default_cjk_font(*layout, text);
+    if (FAILED(result)) {
+      release_com(layout);
+    }
+  }
+  return result;
+}
+
 extern "C" int32_t wox_renderer_set_font_family(WoxRenderer *renderer, const char *font_family) {
 	if (renderer == nullptr) {
 		return E_INVALIDARG;
 	}
 	const std::wstring family = utf8_to_wide(font_family);
+	renderer->uses_default_font_family = family.empty();
 	renderer->font_family = family.empty() ? L"Segoe UI" : family;
 	return S_OK;
 }
@@ -389,25 +448,17 @@ extern "C" int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *tex
     return S_OK;
   }
 
-  // ponytail: create formats per invalidated frame; cache by style when animated text makes this measurable.
-  IDWriteTextFormat *format = nullptr;
-  HRESULT result = create_text_format(renderer, font_size, font_weight, &format);
+  // ponytail: create layouts per invalidated frame; cache by text and style when animated text makes this measurable.
+  IDWriteTextLayout *layout = nullptr;
+  HRESULT result = create_text_layout(renderer, wide_text, font_size, font_weight, width, height, &layout);
   if (FAILED(result)) {
     return result;
   }
 
   const D2D1_COLOR_F color = make_color(red, green, blue, alpha);
   renderer->brush->SetColor(color);
-  const D2D1_RECT_F rect = {x, y, x + width, y + height};
-  renderer->d2d_context->DrawTextW(
-      wide_text.c_str(),
-      static_cast<UINT32>(wide_text.size()),
-      format,
-      &rect,
-      renderer->brush,
-      D2D1_DRAW_TEXT_OPTIONS_CLIP,
-      DWRITE_MEASURING_MODE_NATURAL);
-  format->Release();
+  renderer->d2d_context->DrawTextLayout(D2D1::Point2F(x, y), layout, renderer->brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+  layout->Release();
   return S_OK;
 }
 
@@ -505,14 +556,8 @@ extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *
     return S_OK;
   }
 
-  IDWriteTextFormat *format = nullptr;
-  HRESULT result = create_text_format(renderer, font_size, font_weight, &format);
-  if (FAILED(result)) {
-    return result;
-  }
   IDWriteTextLayout *layout = nullptr;
-  result = renderer->dwrite_factory->CreateTextLayout(wide_text.c_str(), static_cast<UINT32>(wide_text.size()), format, 1000000.0f, 1000000.0f, &layout);
-  format->Release();
+  HRESULT result = create_text_layout(renderer, wide_text, font_size, font_weight, 1000000.0f, 1000000.0f, &layout);
   if (FAILED(result)) {
     return result;
   }
