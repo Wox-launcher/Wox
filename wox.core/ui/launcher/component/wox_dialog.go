@@ -21,7 +21,7 @@ type DialogProps struct {
 	BorderColor   woxui.Color
 	BorderWidth   float32
 	InitialFocus  woxwidget.Key
-	OnDismiss     func()
+	OnEscape      func()
 	Child         woxwidget.Widget
 	Theme         Theme
 }
@@ -74,7 +74,13 @@ func buildWoxDialog(props DialogProps) woxwidget.Widget {
 		radius = 12
 	}
 	key := woxwidget.Key(props.ID)
-	dialog := woxwidget.FocusScope{Key: key, Modal: true, Child: woxwidget.Semantics{
+	dialog := woxwidget.FocusScope{Key: key, Modal: true, OnKey: func(event woxui.KeyEvent) bool {
+		if !event.Down || event.Composing || event.Key != woxui.KeyEscape || props.OnEscape == nil {
+			return false
+		}
+		props.OnEscape()
+		return true
+	}, Child: woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleDialog, Label: props.Label,
 		Child: woxwidget.Container{
 			Width: props.Width, Height: props.Height, Radius: radius, Color: props.Theme.ActionBackground, Padding: props.Padding,
@@ -101,7 +107,7 @@ func buildWoxDialog(props DialogProps) woxwidget.Widget {
 	left := max(float32(0), (props.OverlayWidth-props.Width)/2)
 	top := max(float32(0), (props.OverlayHeight-props.Height)/2)
 	return woxwidget.Stack{Width: props.OverlayWidth, Height: props.OverlayHeight, Children: []woxwidget.StackChild{
-		{Child: woxwidget.Gesture{ID: backdropID, OnTap: props.OnDismiss, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.OverlayWidth, Height: props.OverlayHeight, Color: backdrop}}},
+		{Child: woxwidget.Gesture{ID: backdropID, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.OverlayWidth, Height: props.OverlayHeight, Color: backdrop}}},
 		{Left: left, Top: top, Child: dialog},
 	}}
 }

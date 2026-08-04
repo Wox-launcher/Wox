@@ -98,6 +98,7 @@ var uiIcons = map[string]WoxImage{
 
 	// Reusable controls.
 	"control.add":                newMonochromeUIIcon(`<path d="M12 5v14M5 12h14"/>`),
+	"control.add-circle":         newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>`),
 	"control.remove":             newMonochromeUIIcon(`<path d="M5 12h14"/>`),
 	"control.undo":               newMonochromeUIIcon(`<path d="M9 7 5 11l4 4"/><path d="M5 11h8a6 6 0 0 1 6 6v1"/>`),
 	"control.save":               newMonochromeUIIcon(`<path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/>`),
@@ -116,6 +117,7 @@ var uiIcons = map[string]WoxImage{
 	"control.play-circle":        newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>`),
 	"control.pause":              newMonochromeUIIcon(`<path d="M9 7v10M15 7v10"/>`),
 	"control.external":           newMonochromeUIIcon(`<path d="M14 5h5v5M19 5l-9 9"/><path d="M13 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-7"/>`),
+	"control.link":               newMonochromeUIIcon(`<path d="M10 13a5 5 0 0 0 7.07 0l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07 0l-2 2A5 5 0 0 0 12 20.07l1.15-1.15"/>`),
 	"control.store":              newMonochromeUIIcon(`<path d="M4 9h16M5 9l1-5h12l1 5M6 9v11h12V9"/><path d="M9 20v-6h6v6"/>`),
 	"control.filter":             newMonochromeUIIcon(`<path d="M4 5h16l-6 7v6l-4 2v-8z"/>`),
 	"control.inbox":              newMonochromeUIIcon(`<path d="M4 4h16v13a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V4z"/><path d="M4 13h3l3 3h4l3-3h3"/>`),
@@ -128,6 +130,7 @@ var uiIcons = map[string]WoxImage{
 	"control.upload":             newMonochromeUIIcon(`<path d="M12 16V4M8 8l4-4 4 4M5 14v5h14v-5"/>`),
 	"control.download":           newMonochromeUIIcon(`<path d="M12 4v12M8 12l4 4 4-4M5 20h14"/>`),
 	"control.error":              newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>`),
+	"control.warning":            newMonochromeUIIcon(`<path d="M12 3 2.8 20h18.4z"/><path d="M12 9v5M12 17h.01"/>`),
 	"control.refresh":            newMonochromeUIIcon(`<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`),
 	"control.loading":            newMonochromeUIIcon(`<circle cx="12" cy="12" r="9" opacity=".15"/><path d="M12 3a9 9 0 0 1 9 9"/>`),
 	"control.email":              newMonochromeUIIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>`),

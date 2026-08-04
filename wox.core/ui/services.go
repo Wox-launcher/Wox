@@ -30,6 +30,22 @@ func (s *CoreServices) Version(_ context.Context, _ string) (string, error) {
 	return updater.CURRENT_VERSION, nil
 }
 
+// BrowserExtensionConnected reports whether the browser system plugin has an active extension session.
+func (s *CoreServices) BrowserExtensionConnected(_ context.Context, _ string) (bool, error) {
+	return browserExtensionConnected(), nil
+}
+
+// browserExtensionConnected keeps the typed service and compatibility route on one status source.
+func browserExtensionConnected() bool {
+	const browserPluginID = "8f68a760-86a0-46a9-b331-58dcaf091daa"
+	sp := plugin.GetPluginManager().GetSystemPlugin(browserPluginID)
+	if sp == nil {
+		return false
+	}
+	connector, ok := sp.(interface{ IsExtensionConnected() bool })
+	return ok && connector.IsExtensionConnected()
+}
+
 // UpdateChannelVersions returns typed update metadata for the settings UI.
 func (s *CoreServices) UpdateChannelVersions(ctx context.Context, sessionID string) ([]contract.UpdateChannelVersion, error) {
 	versions := updateChannelVersionsProvider(uiServiceContext(ctx, sessionID))

@@ -128,7 +128,7 @@ func TestEaseInOutCubicMatchesFlutterTonearmCurve(t *testing.T) {
 func TestHostHidesCaretWhileWindowIsUnfocused(t *testing.T) {
 	caretVisible := false
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
-		return CaretPainter{Width: 20, Height: 20, Active: true, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, visible bool) {
+		return CaretPainter{Width: 20, Height: 20, Active: true, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, visible bool) {
 			caretVisible = visible
 		}}
 	})
@@ -216,6 +216,42 @@ func TestHostAutomationActivatePassesGestureBounds(t *testing.T) {
 	}
 	if activatedBounds.Width != 80 || activatedBounds.Height != 24 {
 		t.Fatalf("keyboard activated bounds = %#v, want 80x24 control bounds", activatedBounds)
+	}
+}
+
+func TestHostPaintsOnlyTheFocusedCaretWhenModalFocusChanges(t *testing.T) {
+	modal := false
+	backgroundFocused := false
+	modalFocused := false
+	paintedFocus := map[string]bool{}
+	caret := func(id string, focused *bool, autofocus bool) Widget {
+		return Focusable{
+			Key: Key(id), Autofocus: autofocus, OnFocusChange: func(next bool) { *focused = next },
+			Child: CaretPainter{Width: 20, Height: 20, Active: *focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
+				paintedFocus[id] = focused
+			}},
+		}
+	}
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		children := []StackChild{{Child: caret("background", &backgroundFocused, true)}}
+		if modal {
+			children = append(children, StackChild{Top: 20, Child: FocusScope{Key: "dialog", Modal: true, Child: caret("modal", &modalFocused, true)}})
+		}
+		return Stack{Width: 100, Height: 100, Children: children}
+	})
+	host.AttachServices(&fakeHostServices{})
+	defer host.Dispose()
+
+	renderTestFrame(host)
+	if !paintedFocus["background"] {
+		t.Fatal("background caret was not painted as focused")
+	}
+
+	modal = true
+	paintedFocus = map[string]bool{}
+	renderTestFrame(host)
+	if paintedFocus["background"] || !paintedFocus["modal"] {
+		t.Fatalf("painted focus = %v, want only the modal caret focused", paintedFocus)
 	}
 }
 

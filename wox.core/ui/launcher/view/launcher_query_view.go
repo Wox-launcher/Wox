@@ -178,25 +178,25 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 				props.OnSelectionExtend(position)
 			}
 		},
-		Child: woxwidget.CaretPainter{Width: props.Width, Height: contentHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool) {
+		Child: woxwidget.CaretPainter{Width: props.Width, Height: contentHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
 			textTop := bounds.Y + max(float32(0), bounds.Height-float32(len(lines))*lineHeight)/2
 			lastLine := lines[len(lines)-1]
-			if props.Focused && props.State.Composition == "" && props.CompletionSuffix != "" {
+			if focused && props.State.Composition == "" && props.CompletionSuffix != "" {
 				hintColor := props.Theme.QueryText
 				hintColor.A = 96
 				displayList.DrawText(props.CompletionSuffix, woxui.Rect{X: bounds.X + lastLine.TextWidth, Y: textTop + float32(len(lines)-1)*lineHeight, Width: max(float32(0), bounds.Width-lastLine.TextWidth), Height: lineHeight}, props.Style, hintColor)
 			}
 			for index, line := range lines {
 				lineY := textTop + float32(index)*lineHeight
-				if props.Focused && props.State.Composition == "" && line.Selected != "" {
+				if focused && props.State.Composition == "" && line.Selected != "" {
 					displayList.FillRoundedRect(woxui.Rect{X: bounds.X + line.PrefixWidth, Y: lineY, Width: line.SelectedWidth, Height: props.CaretHeight}, 3, props.Theme.SelectionBackground)
 				}
 				displayList.DrawText(line.Text, woxui.Rect{X: bounds.X, Y: lineY, Width: bounds.Width, Height: lineHeight}, props.Style, props.Theme.QueryText)
-				if props.Focused && props.State.Composition == "" && line.Selected != "" {
+				if focused && props.State.Composition == "" && line.Selected != "" {
 					displayList.DrawText(line.Selected, woxui.Rect{X: bounds.X + line.PrefixWidth, Y: lineY, Width: line.SelectedWidth, Height: lineHeight}, props.Style, props.Theme.SelectionText)
 				}
 			}
-			if !props.Focused {
+			if !focused {
 				return
 			}
 

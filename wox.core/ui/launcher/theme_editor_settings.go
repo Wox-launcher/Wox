@@ -491,7 +491,7 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 	}}}
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "theme-editor-dialog", Label: title, Width: panelWidth, Height: panelHeight, OverlayWidth: width, OverlayHeight: height,
-		BackdropID: "theme-editor-dialog-backdrop", BackdropAlpha: 190, Padding: woxwidget.UniformInsets(16), Theme: palette.componentTheme(), OnDismiss: a.cancelThemeEditorDialog,
+		BackdropID: "theme-editor-dialog-backdrop", BackdropAlpha: 190, Padding: woxwidget.UniformInsets(16), Theme: palette.componentTheme(), OnEscape: a.cancelThemeEditorDialog,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: panelWidth - 32, Height: 28, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: palette.actionText}},
 			field,

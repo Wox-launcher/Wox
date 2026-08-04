@@ -148,7 +148,6 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	animation := h.animations.beginFrame(h.window)
 	root := widget.layout(context{window: h.window, caretVisible: h.caretVisibleForFrame(), animation: animation, elements: h.elements, element: h.elements.root}, constraints{width: frame.Size.Width, height: frame.Size.Height})
 	h.animations.endFrame(animation)
-	h.updateCaretBlink(nodeHasActiveCaret(root))
 	identities := map[string]woxui.AccessibilityNodeID{}
 	nodes := map[woxui.AccessibilityNodeID]*node{}
 	diagnostics := h.elements.endFrame()
@@ -158,13 +157,14 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	h.nodes = nodes
 	h.reconcileTransientState(oldNodes)
 	h.reconcileFocus()
+	h.updateCaretBlink(nodeHasActiveCaret(root, h.focused, false, false))
 
 	displayList.Clear(woxui.Color{})
 	focusRingTarget := h.focused
 	if !h.focusVisible {
 		focusRingTarget = 0
 	}
-	h.root.draw(displayList, focusRingTarget)
+	h.root.draw(displayList, h.focused, focusRingTarget, false, false)
 	h.generation++
 	tree, diagnostics := h.buildAccessibilityTree(diagnostics)
 	h.publishSnapshot(tree, diagnostics)
@@ -579,6 +579,10 @@ func (h *Host) Key(event woxui.KeyEvent) bool {
 	if event.Down {
 		h.resetCaretBlink()
 	}
+	// The active modal gets first refusal so a nested dialog cannot let Escape reach its parent.
+	if scope := h.nodes[h.activeModalScope()]; scope != nil && scope.scope != nil && scope.scope.onKey != nil && scope.scope.onKey(event) {
+		return true
+	}
 	tabTraversal := event.Down && event.Key == woxui.KeyTab && !event.Composing && event.Modifiers & ^woxui.KeyModifierShift == 0
 	target := h.nodes[h.focused]
 	if target == nil {
@@ -787,15 +791,27 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 }
 
 // nodeHasActiveCaret reports whether the current retained tree contains an active editor caret.
-func nodeHasActiveCaret(current *node) bool {
+func nodeHasActiveCaret(current *node, focused woxui.AccessibilityNodeID, focusWithin, focusableWithin bool) bool {
 	if current == nil {
 		return false
 	}
-	if current.caret {
-		return true
+	if current.focus != nil {
+		focusWithin = current.id == focused
+		focusableWithin = true
+	} else {
+		focusWithin = focusWithin || current.id == focused
+	}
+	if current.caretPaint != nil {
+		caretActive := current.caret
+		if focusableWithin {
+			caretActive = focusWithin
+		}
+		if caretActive {
+			return true
+		}
 	}
 	for _, child := range current.children {
-		if nodeHasActiveCaret(child) {
+		if nodeHasActiveCaret(child, focused, focusWithin, focusableWithin) {
 			return true
 		}
 	}

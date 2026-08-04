@@ -30,35 +30,37 @@ type formTableEditorState struct {
 	rowIndex   int
 	rowBase    map[string]any
 	// rowEditorOnly closes the whole overlay when a row opened directly from an inline table exits.
-	rowEditorOnly bool
-	skillClone    bool
-	status        string
-	invalid       bool
-	saving        bool
-	deletePending int
-	deleteDirect  bool
-	appPicker     *formTableAppPickerState
-	choicePicker  *formTableChoicePickerState
-	queryVariable *formTableQueryVariablePickerState
-	queryPreset   queryHotkeyPreset
+	rowEditorOnly     bool
+	skillClone        bool
+	status            string
+	invalid           bool
+	saving            bool
+	deletePending     int
+	deleteDirect      bool
+	appPicker         *formTableAppPickerState
+	choicePicker      *formTableChoicePickerState
+	queryVariable     *formTableQueryVariablePickerState
+	queryPreset       queryHotkeyPreset
+	windowGroupEditor *windowGroupEditorState
 }
 
 type formTableEditorSnapshot struct {
-	definition    formDefinition
-	rows          []map[string]any
-	selected      int
-	rowForm       *formFieldsSnapshot
-	rowIndex      int
-	skillClone    bool
-	status        string
-	invalid       bool
-	saving        bool
-	deletePending int
-	deleteDirect  bool
-	appPicker     *formTableAppPickerSnapshot
-	choicePicker  *formTableChoicePickerSnapshot
-	queryVariable *formTableQueryVariablePickerSnapshot
-	queryPreset   queryHotkeyPreset
+	definition        formDefinition
+	rows              []map[string]any
+	selected          int
+	rowForm           *formFieldsSnapshot
+	rowIndex          int
+	skillClone        bool
+	status            string
+	invalid           bool
+	saving            bool
+	deletePending     int
+	deleteDirect      bool
+	appPicker         *formTableAppPickerSnapshot
+	choicePicker      *formTableChoicePickerSnapshot
+	queryVariable     *formTableQueryVariablePickerSnapshot
+	queryPreset       queryHotkeyPreset
+	windowGroupEditor *windowGroupEditorSnapshot
 }
 
 type queryHotkeyPreset string
@@ -198,21 +200,22 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		queryVariable = &formTableQueryVariablePickerSnapshot{fieldIndex: picker.fieldIndex, anchor: picker.anchor, query: query, selected: picker.selected}
 	}
 	return &formTableEditorSnapshot{
-		definition:    state.definition,
-		rows:          cloneFormTableRows(state.rows),
-		selected:      state.selected,
-		rowForm:       rowForm,
-		rowIndex:      state.rowIndex,
-		skillClone:    state.skillClone,
-		status:        state.status,
-		invalid:       state.invalid,
-		saving:        state.saving,
-		deletePending: state.deletePending,
-		deleteDirect:  state.deleteDirect,
-		appPicker:     appPicker,
-		choicePicker:  choicePicker,
-		queryVariable: queryVariable,
-		queryPreset:   state.queryPreset,
+		definition:        state.definition,
+		rows:              cloneFormTableRows(state.rows),
+		selected:          state.selected,
+		rowForm:           rowForm,
+		rowIndex:          state.rowIndex,
+		skillClone:        state.skillClone,
+		status:            state.status,
+		invalid:           state.invalid,
+		saving:            state.saving,
+		deletePending:     state.deletePending,
+		deleteDirect:      state.deleteDirect,
+		appPicker:         appPicker,
+		choicePicker:      choicePicker,
+		queryVariable:     queryVariable,
+		queryPreset:       state.queryPreset,
+		windowGroupEditor: snapshotWindowGroupEditorLocked(state.windowGroupEditor),
 	}
 }
 
@@ -450,6 +453,9 @@ func (a *App) beginAddFormTableRow() {
 }
 
 func (a *App) beginAddFormTableRowDirect() {
+	if a.beginWindowManagerGroupEdit(-1, true) {
+		return
+	}
 	a.beginFormTableRowEdit(-1, true, false)
 }
 
@@ -458,6 +464,13 @@ func (a *App) beginEditFormTableRow() {
 }
 
 func (a *App) beginEditFormTableRowDirect() {
+	if state := a.activeFormTableEditor(); state != nil && isWindowManagerGroupsEditor(a, state) {
+		if state.selected >= 0 {
+			if a.beginWindowManagerGroupEdit(state.selected, true) {
+				return
+			}
+		}
+	}
 	a.beginSelectedFormTableRowEdit(true)
 }
 
@@ -1360,6 +1373,21 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 		}
 	}
 	if event.Composing {
+		return false
+	}
+	if editor := state.windowGroupEditor; editor != nil {
+		if event.Key == woxui.KeyEscape {
+			if editor.appPickerSlot != "" {
+				a.closeWindowManagerGroupAppPicker()
+			} else if editor.urlEditorSlot != "" {
+				a.cancelWindowManagerGroupUrlEditor()
+			} else {
+				a.cancelWindowManagerGroupEdit()
+			}
+			return true
+		}
+		// The retained dialog controls own navigation and editing. Returning false for
+		// printable keys lets the native window continue into its text input client.
 		return false
 	}
 	selected := state.selected

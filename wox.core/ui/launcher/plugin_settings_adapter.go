@@ -47,9 +47,9 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 		RefreshLabel:          a.translate("i18n:ui_refresh"),
 		FilterActive:          plugins.PluginFilters.applied(plugins.PluginsStore),
 		Refreshing:            plugins.PluginsLoading,
-		EmptyLabel:            a.translate("i18n:ui_setting_plugin_empty_data"), Theme: snapshot.palette.componentTheme(),
-		OnClear:     a.clearPluginSearch,
-		OnSearchKey: a.onPluginSearchKey, OnSearchFocusChange: a.setPluginSearchFocused,
+		Theme:                 snapshot.palette.componentTheme(),
+		OnClear:               a.clearPluginSearch,
+		OnSearchKey:           a.onPluginSearchKey, OnSearchFocusChange: a.setPluginSearchFocused,
 		OnSearchChanged: func(value string) { _ = a.setPluginSearchValue(value) }, OnSetSearchValue: a.setPluginSearchValue,
 		OnFilter: a.togglePluginFilterPanel, OnRefresh: a.refreshPluginCatalog,
 	}
@@ -65,6 +65,7 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 
 	filtered := filterPlugins(plugins.Plugins, plugins.PluginSearch.Text, plugins.PluginFilters, plugins.PluginsStore)
 	props.Placeholder = fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(filtered))
+	a.applyPluginCatalogEmptyState(&props, plugins, filtered, iconTint, imageScale)
 	props.Items = make([]launcherview.PluginListItem, 0, len(filtered))
 	for visibleIndex, entry := range filtered {
 		index := entry.index
@@ -91,6 +92,22 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 		})
 	}
 	return props
+}
+
+func (a *App) applyPluginCatalogEmptyState(props *launcherview.PluginListProps, plugins pluginSettingsSnapshot, filtered []filteredPlugin, iconTint woxui.Color, imageScale float32) {
+	if len(filtered) > 0 {
+		return
+	}
+	emptyIconTint := iconTint
+	emptyIconTint.A = 160
+	props.EmptyIcon = a.imageForTint(settingControlIconSource("search"), &emptyIconTint, physicalImageSize(24, imageScale))
+	if len(plugins.Plugins) > 0 {
+		props.EmptyTitle = a.translate("i18n:ui_no_matches")
+		props.EmptyDescription = a.translate("i18n:ui_setting_catalog_search_empty_subtitle")
+		return
+	}
+	props.EmptyTitle = a.translate("i18n:ui_setting_plugin_empty_data")
+	props.EmptyDescription = a.translate("i18n:ui_setting_plugin_empty_subtitle")
 }
 
 // pluginDetailProps maps the selected plugin into an empty, store, or editable detail view.

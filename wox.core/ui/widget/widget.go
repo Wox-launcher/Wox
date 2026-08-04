@@ -35,20 +35,21 @@ type constraints struct {
 }
 
 type node struct {
-	id       woxui.AccessibilityNodeID
-	key      Key
-	kind     string
-	parent   *node
-	bounds   woxui.Rect
-	paint    func(*woxui.DisplayList, woxui.Rect)
-	gesture  *gesture
-	focus    *focusBehavior
-	scope    *focusScopeBehavior
-	semantic *semanticBehavior
-	scroll   *scrollBehavior
-	caret    bool
-	clip     bool
-	children []*node
+	id         woxui.AccessibilityNodeID
+	key        Key
+	kind       string
+	parent     *node
+	bounds     woxui.Rect
+	paint      func(*woxui.DisplayList, woxui.Rect)
+	gesture    *gesture
+	focus      *focusBehavior
+	scope      *focusScopeBehavior
+	semantic   *semanticBehavior
+	scroll     *scrollBehavior
+	caret      bool
+	caretPaint func(*woxui.DisplayList, woxui.Rect, bool)
+	clip       bool
+	children   []*node
 }
 
 func (n *node) place(x, y float32) {
@@ -59,17 +60,32 @@ func (n *node) place(x, y float32) {
 	}
 }
 
-func (n *node) draw(displayList *woxui.DisplayList, focused woxui.AccessibilityNodeID) {
+func (n *node) draw(displayList *woxui.DisplayList, focused, focusRingTarget woxui.AccessibilityNodeID, focusWithin, focusableWithin bool) {
+	if n.focus != nil {
+		focusWithin = n.id == focused
+		focusableWithin = true
+	} else {
+		focusWithin = focusWithin || n.id == focused
+	}
 	if n.paint != nil {
 		n.paint(displayList, n.bounds)
+	}
+	if n.caretPaint != nil {
+		caretFocused := n.caret
+		if focusableWithin {
+			// Reconciliation runs after retained widgets build, so the Host focus is the
+			// authoritative caret state for this frame rather than the captured FocusNode value.
+			caretFocused = focusWithin
+		}
+		n.caretPaint(displayList, n.bounds, caretFocused)
 	}
 	if n.clip {
 		displayList.PushClipRect(n.bounds)
 	}
 	for _, child := range n.children {
-		child.draw(displayList, focused)
+		child.draw(displayList, focused, focusRingTarget, focusWithin, focusableWithin)
 	}
-	if n.id == focused && n.focus != nil && n.focus.focusRingColor.A != 0 {
+	if n.id == focusRingTarget && n.focus != nil && n.focus.focusRingColor.A != 0 {
 		outsets := n.focus.focusRingOutsets
 		bounds := woxui.Rect{
 			X: n.bounds.X - outsets.Left, Y: n.bounds.Y - outsets.Top,
@@ -92,6 +108,11 @@ func (n *node) hitTest(point woxui.Point) *node {
 		}
 	}
 	if n.gesture != nil {
+		return n
+	}
+	// Modal scopes are opaque pointer surfaces. Returning the scope for an otherwise
+	// empty area prevents a backdrop behind the dialog from receiving the click.
+	if n.scope != nil && n.scope.modal {
 		return n
 	}
 	return nil
@@ -848,20 +869,20 @@ type CaretPainter struct {
 	Width  float32
 	Height float32
 	Active bool
-	Paint  func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool)
+	Paint  func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool)
 }
 
 func (w CaretPainter) layout(ctx context, available constraints) *node {
 	caretVisible := ctx.caretVisible
-	var paint func(*woxui.DisplayList, woxui.Rect)
+	var paint func(*woxui.DisplayList, woxui.Rect, bool)
 	if w.Paint != nil {
-		paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			w.Paint(displayList, bounds, caretVisible)
+		paint = func(displayList *woxui.DisplayList, bounds woxui.Rect, focused bool) {
+			w.Paint(displayList, bounds, focused, caretVisible && focused)
 		}
 	}
 	return &node{
-		bounds: woxui.Rect{Width: min(w.Width, available.width), Height: min(w.Height, available.height)},
-		caret:  w.Active,
-		paint:  paint,
+		bounds:     woxui.Rect{Width: min(w.Width, available.width), Height: min(w.Height, available.height)},
+		caret:      w.Active,
+		caretPaint: paint,
 	}
 }

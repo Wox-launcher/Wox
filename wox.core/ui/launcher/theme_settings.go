@@ -85,8 +85,26 @@ func (a *App) buildThemeCatalog(snapshot settingsSnapshot, width, height, imageS
 	} else if themeSnap.ThemesError != "" && len(themeSnap.Themes) == 0 {
 		props.Message = themeSnap.ThemesError
 		props.MessageError = true
+	} else {
+		a.applyThemeCatalogEmptyState(&props, themeSnap, filtered, searchActionTint, imageScale)
 	}
 	return launcherview.ThemeSettingsView(props)
+}
+
+func (a *App) applyThemeCatalogEmptyState(props *launcherview.ThemeSettingsProps, themeSnap themeSettingsSnapshot, filtered []filteredTheme, iconTint woxui.Color, imageScale float32) {
+	if len(filtered) > 0 {
+		return
+	}
+	emptyIconTint := iconTint
+	emptyIconTint.A = 160
+	props.EmptyIcon = a.imageForTint(settingControlIconSource("search"), &emptyIconTint, physicalImageSize(24, imageScale))
+	if len(themeSnap.Themes) > 0 || strings.TrimSpace(themeSnap.ThemeSearch.Text) != "" {
+		props.EmptyTitle = a.translate("i18n:ui_no_matches")
+		props.EmptyDescription = a.translate("i18n:ui_setting_catalog_search_empty_subtitle")
+		return
+	}
+	props.EmptyTitle = a.translate("i18n:ui_setting_theme_empty_data")
+	props.EmptyDescription = a.translate("i18n:ui_setting_theme_empty_subtitle")
 }
 
 type filteredTheme struct {

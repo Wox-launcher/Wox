@@ -752,21 +752,10 @@ func handleWindowManagerDisplays(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleBrowserExtensionStatus(w http.ResponseWriter, r *http.Request) {
-	const browserPluginID = "8f68a760-86a0-46a9-b331-58dcaf091daa"
-	sp := plugin.GetPluginManager().GetSystemPlugin(browserPluginID)
 	type extensionStatus struct {
 		Connected bool `json:"connected"`
 	}
-	connected := false
-	if sp != nil {
-		type connector interface {
-			IsExtensionConnected() bool
-		}
-		if c, ok := sp.(connector); ok {
-			connected = c.IsExtensionConnected()
-		}
-	}
-	writeSuccessResponse(w, extensionStatus{Connected: connected})
+	writeSuccessResponse(w, extensionStatus{Connected: browserExtensionConnected()})
 }
 
 func handleUpdateChannelVersions(w http.ResponseWriter, r *http.Request) {

@@ -664,7 +664,7 @@ func FormTableDeleteDialog(props FormTableDeleteDialogProps) woxwidget.Widget {
 		ID: "form-table-delete-dialog", Label: props.Message, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "form-table-delete-backdrop", BackdropAlpha: 210,
 		Radius: 20, Padding: woxwidget.Insets{Left: 24, Top: 20, Right: 24, Bottom: 22}, BorderColor: border, BorderWidth: 0.75,
-		InitialFocus: "form-table-delete-cancel", OnDismiss: props.OnCancel, Theme: props.Theme,
+		InitialFocus: "form-table-delete-cancel", OnEscape: props.OnCancel, Theme: props.Theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{
 			woxwidget.TextBlock{Value: props.Message, Width: innerWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ActionText},
 			actions,

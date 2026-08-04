@@ -32,6 +32,14 @@ func compactFormTableText(value string, maxRunes int) string {
 }
 
 func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) string {
+	if column.Key == "Name" || column.Key == "AppCount" || column.Key == "DisplayCount" {
+		if _, ok := row["Screens"]; ok {
+			return windowManagerGroupDisplayValue(column, row)
+		}
+		if _, ok := row["Id"]; ok {
+			return windowManagerGroupDisplayValue(column, row)
+		}
+	}
 	value := formTableColumnValue(column, row)
 	if column.Type == "aiMCPServerTools" {
 		switch tools := row[column.Key].(type) {
@@ -166,10 +174,14 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		secondaryIcon = a.imageForTint(settingControlIconSource("store"), &foreground, headerIconRasterSize)
 		onSecondary = func() { a.openAICommandTemplatePicker(index) }
 	}
+	hideCloneAction := false
+	if callbacks.idPrefix == "plugin-settings" && isWindowManagerGroupsTable(definition) && a.selectedPluginID() == windowManagerPluginID {
+		hideCloneAction = true
+	}
 	return launcherview.FormTableFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Title: a.translate(formTableTitle(definition)), Description: a.translate(definition.Value.Tooltip),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, MaxHeight: definition.Value.MaxHeight, InlineTitle: definition.Value.InlineTable, Invalid: err != nil,
-		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"),
+		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideCloneAction: hideCloneAction, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"),
 		OperationLabel: a.translate("i18n:ui_operation"), EmptyLabel: a.translate("i18n:ui_no_data"),
 		InfoIcon: a.imageForTint(settingNavIconSource("about"), &foreground, infoIconRasterSize), DemoIcon: demoIcon, DemoKind: demoKind, SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, headerIconRasterSize),
 		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, rowIconRasterSize), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, rowIconRasterSize), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, rowIconRasterSize), EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, emptyIconRasterSize),
@@ -273,6 +285,9 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	if snapshot.deletePending >= 0 && snapshot.deleteDirect {
 		return a.buildFormTableDeleteDialog(palette, width, height)
+	}
+	if snapshot.windowGroupEditor != nil {
+		return a.buildWindowManagerGroupEditor(snapshot.windowGroupEditor, palette, width, height, imageScale)
 	}
 	if snapshot.appPicker != nil {
 		return a.buildFormTableAppPicker(snapshot.appPicker, palette, width, height, imageScale)

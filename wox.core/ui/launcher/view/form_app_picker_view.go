@@ -162,7 +162,7 @@ func buildFormAppPickerDialog(context woxwidget.StateContext, props FormAppPicke
 		ID: "form-table-app-dialog", Label: props.Title, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.OverlayWidth, OverlayHeight: props.OverlayHeight, BackdropID: "form-table-app-backdrop", BackdropAlpha: 210,
 		Radius: 20, Padding: woxwidget.UniformInsets(24), BorderColor: border, BorderWidth: 1,
-		InitialFocus: "form-table-app-search", OnDismiss: props.OnCancel, Theme: props.Theme,
+		InitialFocus: "form-table-app-search", OnEscape: props.OnCancel, Theme: props.Theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: content},
 	})
 }

@@ -231,6 +231,11 @@ type HotkeyInteractionSettingsServices interface {
 	CheckHotkeyAvailability(ctx context.Context, sessionID string, hotkey string) (HotkeyAvailability, error)
 }
 
+// WindowManagerSettingsServices exposes browser integration used by workspace layouts.
+type WindowManagerSettingsServices interface {
+	BrowserExtensionConnected(ctx context.Context, sessionID string) (bool, error)
+}
+
 // AIProvider describes one built-in provider option.
 type AIProvider struct {
 	Name        string
@@ -495,6 +500,7 @@ type SettingsServices interface {
 	OnboardingSettingsServices
 	HotkeySettingsServices
 	HotkeyInteractionSettingsServices
+	WindowManagerSettingsServices
 	AICatalogSettingsServices
 	AIOperationSettingsServices
 	ModelManagementSettingsServices

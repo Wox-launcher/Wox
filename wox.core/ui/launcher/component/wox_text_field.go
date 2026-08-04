@@ -435,12 +435,12 @@ func buildWoxTextField(props TextFieldProps) woxwidget.Widget {
 		props.onSelectionExtend(textFieldOffsetAt(state, props.Window, style, maxLines, props.verticalOffset, innerWidth, point))
 	}, Child: woxwidget.Container{
 		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: props.BorderColor, BorderWidth: props.BorderWidth, Padding: padding,
-		Child: woxwidget.Clip{Width: innerWidth, Height: innerHeight, Child: woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, caretVisible bool) {
+		Child: woxwidget.Clip{Width: innerWidth, Height: innerHeight, Child: woxwidget.CaretPainter{Width: innerWidth, Height: innerHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
 			if state.Text == "" && state.Composition == "" && props.Hint != "" {
 				displayList.DrawText(props.Hint, textFieldAlignedTextBounds(bounds, props.Hint, style, props.TextAlignmentY, props.Window), style, props.Theme.ResultSubtitle)
 			}
 			if props.Window != nil {
-				drawTextField(displayList, bounds, state, style, textColor, props.Theme, props.Focused, caretVisible, maxLines, props.verticalOffset, props.TextAlignmentY, props.Window)
+				drawTextField(displayList, bounds, state, style, textColor, props.Theme, focused, caretVisible, maxLines, props.verticalOffset, props.TextAlignmentY, props.Window)
 			}
 		}},
 		}}}

@@ -48,6 +48,9 @@ type ThemeSettingsProps struct {
 	SearchPlaceholder     string
 	LocateLabel           string
 	EmptyLabel            string
+	EmptyTitle            string
+	EmptyDescription      string
+	EmptyIcon             *woxui.Image
 	WebsiteLabel          string
 	InstallLabel          string
 	ApplyLabel            string
@@ -152,7 +155,15 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 			Value: props.Message, Width: width, Height: min(float32(80), viewportHeight), MaxLines: 3, Style: woxui.TextStyle{Size: 12}, LineHeight: 18, Color: color,
 		}}
 	} else if len(rows) == 0 {
-		list = woxwidget.Container{Width: width, Height: viewportHeight, Padding: woxwidget.Insets{Top: 18}, Child: woxwidget.Text{Value: props.EmptyLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}
+		title := props.EmptyTitle
+		description := props.EmptyDescription
+		if title == "" && description == "" {
+			title = props.EmptyLabel
+		}
+		list = CatalogListEmptyState(CatalogListEmptyProps{
+			Width: width, Height: viewportHeight, Title: title, Description: description,
+			Icon: props.EmptyIcon, Window: props.Window, Theme: props.Theme,
+		})
 	} else {
 		var keepVisible *woxwidget.ScrollRange
 		for index, item := range props.Items {

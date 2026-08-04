@@ -40,6 +40,7 @@ type focusBehavior struct {
 
 type focusScopeBehavior struct {
 	modal bool
+	onKey func(event woxui.KeyEvent) bool
 }
 
 // Keyed assigns identity without changing layout or paint.
@@ -157,6 +158,7 @@ func (w Focusable) layout(ctx context, available constraints) *node {
 type FocusScope struct {
 	Key   Key
 	Modal bool
+	OnKey func(event woxui.KeyEvent) bool
 	Child Widget
 }
 
@@ -168,7 +170,7 @@ func (w FocusScope) layout(ctx context, available constraints) *node {
 	if child.kind == "" {
 		child.kind = "focus_scope"
 	}
-	child.scope = &focusScopeBehavior{modal: w.Modal}
+	child.scope = &focusScopeBehavior{modal: w.Modal, onKey: w.OnKey}
 	return child
 }
 

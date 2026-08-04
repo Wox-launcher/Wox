@@ -128,7 +128,7 @@ func PrivacySampleDialog(props PrivacySampleDialogProps) woxwidget.Widget {
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "privacy-sample-dialog", Label: props.Title, Width: dialogWidth, Height: dialogHeight,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "privacy-sample-backdrop", BackdropColor: woxui.Color{R: 0, G: 0, B: 0, A: 112},
-		Padding: woxwidget.UniformInsets(20), OnDismiss: props.OnClose, Theme: props.Theme,
+		Padding: woxwidget.UniformInsets(20), OnEscape: props.OnClose, Theme: props.Theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: children},
 	})
 }

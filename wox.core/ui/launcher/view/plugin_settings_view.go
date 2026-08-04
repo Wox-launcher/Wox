@@ -78,6 +78,9 @@ type PluginListProps struct {
 	FilterActive          bool
 	Refreshing            bool
 	EmptyLabel            string
+	EmptyTitle            string
+	EmptyDescription      string
+	EmptyIcon             *woxui.Image
 	Theme                 woxcomponent.Theme
 	OnClear               func()
 	OnSearchKey           func(woxui.KeyEvent) bool
@@ -163,7 +166,15 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 
 	var list woxwidget.Widget
 	if len(rows) == 0 {
-		list = woxwidget.Container{Width: props.Width, Height: viewportHeight, Padding: woxwidget.Insets{Left: 10, Top: 18}, Child: woxwidget.Text{Value: props.EmptyLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}
+		title := props.EmptyTitle
+		description := props.EmptyDescription
+		if title == "" && description == "" {
+			title = props.EmptyLabel
+		}
+		list = CatalogListEmptyState(CatalogListEmptyProps{
+			Width: props.Width, Height: viewportHeight, Title: title, Description: description,
+			Icon: props.EmptyIcon, Window: props.Window, Theme: props.Theme,
+		})
 	} else {
 		var keepVisible *woxwidget.ScrollRange
 		for index, item := range props.Items {
