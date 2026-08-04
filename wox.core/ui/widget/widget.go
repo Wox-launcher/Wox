@@ -523,11 +523,21 @@ type TextBlockLayout struct {
 	LineHeight float32
 }
 
+// ImageFit controls how an image preserves its aspect ratio inside its bounds.
+type ImageFit uint8
+
+const (
+	ImageFitFill ImageFit = iota
+	ImageFitContain
+	ImageFitCover
+)
+
 // Image paints a raster resource into a fixed logical rectangle.
 type Image struct {
 	Source *woxui.Image
 	Width  float32
 	Height float32
+	Fit    ImageFit
 }
 
 func (w Image) layout(ctx context, available constraints) *node {
@@ -537,9 +547,27 @@ func (w Image) layout(ctx context, available constraints) *node {
 	return &node{
 		bounds: woxui.Rect{Width: width, Height: height},
 		paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			displayList.DrawImage(w.Source, bounds)
+			if w.Fit == ImageFitCover {
+				displayList.PushClipRect(bounds)
+				defer displayList.PopClipRect()
+			}
+			displayList.DrawImage(w.Source, fittedImageBounds(w.Source, bounds, w.Fit))
 		},
 	}
+}
+
+// fittedImageBounds applies contain or cover sizing while keeping the image centered.
+func fittedImageBounds(source *woxui.Image, bounds woxui.Rect, fit ImageFit) woxui.Rect {
+	if source == nil || source.Width <= 0 || source.Height <= 0 || fit == ImageFitFill {
+		return bounds
+	}
+	scale := min(bounds.Width/float32(source.Width), bounds.Height/float32(source.Height))
+	if fit == ImageFitCover {
+		scale = max(bounds.Width/float32(source.Width), bounds.Height/float32(source.Height))
+	}
+	width := float32(source.Width) * scale
+	height := float32(source.Height) * scale
+	return woxui.Rect{X: bounds.X + (bounds.Width-width)/2, Y: bounds.Y + (bounds.Height-height)/2, Width: width, Height: height}
 }
 
 func (w Text) layout(ctx context, available constraints) *node {

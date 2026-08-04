@@ -68,6 +68,18 @@ func TestLauncherQueryLeavesSharedScrollbarGutterOutsideDragOverlay(t *testing.T
 	}
 }
 
+func TestLauncherHeaderExposesQueryLoadingProgress(t *testing.T) {
+	header := LauncherHeaderView(LauncherHeaderProps{
+		Width: 500, Height: 50, QueryBoxHeight: 50, QueryEditorHeight: 34, QueryWidth: 400,
+		Loading: woxwidget.Painter{Width: 20, Height: 20},
+	}).(woxwidget.Container)
+	row := header.Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	loading := row.Children[1].(woxwidget.Semantics)
+	if loading.AutomationID != "launcher.query.loading" || loading.Role != woxui.AccessibilityRoleProgressBar || loading.Value != "loading" || !loading.ReadOnly {
+		t.Fatalf("query loading semantics = id %q role %q value %q readonly %v", loading.AutomationID, loading.Role, loading.Value, loading.ReadOnly)
+	}
+}
+
 func launcherQueryEditable(widget woxwidget.Widget) woxwidget.EditableText {
 	if stack, ok := widget.(woxwidget.Stack); ok {
 		widget = stack.Children[0].Child

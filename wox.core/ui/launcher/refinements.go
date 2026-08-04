@@ -12,7 +12,10 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const staleQueryResultsDuration = 150 * time.Millisecond
+const (
+	staleQueryResultsDuration = 150 * time.Millisecond
+	queryLoadingDelay         = 500 * time.Millisecond
+)
 
 func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageScale float32) launcherview.RefinementsProps {
 	fallback := a.translate("i18n:ui_query_refinement_filters")
@@ -159,6 +162,7 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 // beginQueryTransitionLocked gives fast query responses time to replace the visible snapshot without an empty frame.
 func (a *App) beginQueryTransitionLocked() {
 	a.resetQueryTransitionLocked()
+	a.resetQueryLoadingLocked()
 	if a.query.QueryText != "" && a.visible && len(a.results) > 0 {
 		queryID := a.query.QueryID
 		a.queryTransitionTimer = time.AfterFunc(staleQueryResultsDuration, func() {
@@ -173,6 +177,42 @@ func (a *App) beginQueryTransitionLocked() {
 		a.resultsQueryID = ""
 		a.selected = -1
 		a.layout = queryLayout{}
+	}
+}
+
+// startQueryLoadingLocked starts Flutter's delay for every shared query entry point.
+func (a *App) startQueryLoadingLocked() {
+	a.resetQueryLoadingLocked()
+	if a.query.QueryText == "" {
+		return
+	}
+	queryID := a.query.QueryID
+	a.queryLoadingTimer = time.AfterFunc(queryLoadingDelay, func() {
+		if err := a.runOnUI("show query loading", func() { a.showQueryLoading(queryID) }); err != nil {
+			log.Printf("dispatch query loading: %v", err)
+		}
+	})
+}
+
+// resetQueryLoadingLocked cancels both the delayed trigger and any visible loading state.
+func (a *App) resetQueryLoadingLocked() {
+	if a.queryLoadingTimer != nil {
+		a.queryLoadingTimer.Stop()
+		a.queryLoadingTimer = nil
+	}
+	a.queryLoading = false
+}
+
+// showQueryLoading exposes the spinner only while the same query still has no result snapshot.
+func (a *App) showQueryLoading(queryID string) {
+	queryReturned := a.resultsQueryID == queryID && (len(a.results) > 0 || a.queryComplete)
+	if a.destroyed.Load() || a.query.QueryID != queryID || queryReturned {
+		return
+	}
+	a.queryLoadingTimer = nil
+	a.queryLoading = true
+	if a.window != nil {
+		_ = a.window.Invalidate()
 	}
 }
 

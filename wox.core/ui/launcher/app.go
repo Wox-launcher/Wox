@@ -77,6 +77,8 @@ type App struct {
 	resultsQueryID         string
 	queryComplete          bool
 	queryTransitionTimer   *time.Timer
+	queryLoading           bool
+	queryLoadingTimer      *time.Timer
 	queryResizeTimer       *time.Timer
 	queryResizeRevision    uint64
 	webViewTooltipRevision atomic.Uint64
@@ -572,6 +574,7 @@ func (a *App) setQuery(query plainQuery) {
 	a.queryContextKnown = false
 	a.editor.SetText(query.QueryText, false)
 	a.resetQueryTransitionLocked()
+	a.resetQueryLoadingLocked()
 	a.results = nil
 	a.resultsQueryID = ""
 	a.queryComplete = false
@@ -607,10 +610,12 @@ func (a *App) sendCurrentQuery() error {
 		query = a.query
 		startPage = a.show.StartPage
 		skipCompletionHint = !a.generalSettings.Data().EnableQueryCompletionHint
+		a.startQueryLoadingLocked()
 	}); err != nil {
 		return err
 	}
 	if err := a.startTypedQuery(query, skipCompletionHint); err != nil {
+		_ = a.runOnUI("stop query loading after start failure", a.resetQueryLoadingLocked)
 		return err
 	}
 	if query.QueryText == "" && startPage == "mru" {
@@ -634,6 +639,7 @@ func (a *App) requestMRU() error {
 		a.editor.SetText("", false)
 		queryID = a.query.QueryID
 		a.resetQueryTransitionLocked()
+		a.resetQueryLoadingLocked()
 		a.results = nil
 		a.resultsQueryID = ""
 		a.queryComplete = false
@@ -678,6 +684,9 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		if results[index].QueryID == "" {
 			results[index].QueryID = queryID
 		}
+	}
+	if len(results) > 0 || complete {
+		a.resetQueryLoadingLocked()
 	}
 	a.resetQueryTransitionLocked()
 	a.results = results

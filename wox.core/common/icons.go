@@ -124,6 +124,7 @@ var uiIcons = map[string]WoxImage{
 	"control.download":           newMonochromeUIIcon(`<path d="M12 4v12M8 12l4 4 4-4M5 20h14"/>`),
 	"control.error":              newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>`),
 	"control.refresh":            newMonochromeUIIcon(`<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`),
+	"control.loading":            newMonochromeUIIcon(`<circle cx="12" cy="12" r="9" opacity=".15"/><path d="M12 3a9 9 0 0 1 9 9"/>`),
 	"control.email":              newMonochromeUIIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>`),
 	"control.key":                newMonochromeUIIcon(`<circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M15 8l3 3M17 6l3 3"/>`),
 	"control.demo":               newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>`),

@@ -83,3 +83,35 @@ func TestBeginQueryTransitionClearsResultsWithoutVisibleGracePeriod(t *testing.T
 		t.Fatalf("hidden result state = results %#v query %q selected %d, want cleared", app.results, app.resultsQueryID, app.selected)
 	}
 }
+
+func TestQueryLoadingOnlyAppearsForUnansweredCurrentQuery(t *testing.T) {
+	app := &App{query: plainQuery{QueryID: "current", QueryText: "slow"}}
+	app.startQueryLoadingLocked()
+	if app.queryLoadingTimer == nil {
+		t.Fatal("query loading timer is nil")
+	}
+	app.queryLoadingTimer.Stop()
+	app.queryLoadingTimer = nil
+
+	app.showQueryLoading("stale")
+	if app.queryLoading {
+		t.Fatal("stale query showed loading")
+	}
+	app.showQueryLoading("current")
+	if !app.queryLoading {
+		t.Fatal("unanswered current query did not show loading")
+	}
+	app.resetQueryLoadingLocked()
+	app.resultsQueryID = "current"
+	app.results = []queryResult{{ID: "result", QueryID: "current"}}
+	app.showQueryLoading("current")
+	if app.queryLoading {
+		t.Fatal("answered current query showed loading")
+	}
+	app.results = nil
+	app.queryComplete = false
+	app.showQueryLoading("current")
+	if !app.queryLoading {
+		t.Fatal("non-final empty response stopped loading")
+	}
+}

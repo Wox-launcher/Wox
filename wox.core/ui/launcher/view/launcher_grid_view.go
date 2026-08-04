@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"math"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -87,7 +88,11 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 	}
 	var visual woxwidget.Widget = woxwidget.Painter{Width: props.VisualWidth, Height: props.VisualHeight}
 	if result.Icon != nil {
-		visual = woxwidget.Image{Source: result.Icon, Width: props.VisualWidth, Height: props.VisualHeight}
+		fit := woxwidget.ImageFitCover
+		if math.Abs(float64(props.VisualWidth/props.VisualHeight-1)) < 0.01 {
+			fit = woxwidget.ImageFitContain
+		}
+		visual = woxwidget.Image{Source: result.Icon, Width: props.VisualWidth, Height: props.VisualHeight, Fit: fit}
 	}
 	visual = woxwidget.Container{
 		Width: props.VisualWidth + props.ItemPadding*2, Height: props.VisualHeight + props.ItemPadding*2, Radius: 8, BorderColor: frameColor, BorderWidth: 4,

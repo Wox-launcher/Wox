@@ -1580,8 +1580,9 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		s.pipeOutputToSession(ctx, stderr, state)
 	}()
 
-	waitErr := cmd.Wait()
+	// Drain both pipes before Wait closes them so fast commands cannot lose their final output.
 	wg.Wait()
+	waitErr := cmd.Wait()
 	close(stopUpdater)
 
 	state.mutex.Lock()

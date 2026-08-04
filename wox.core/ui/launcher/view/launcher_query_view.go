@@ -72,6 +72,7 @@ type LauncherHeaderProps struct {
 	Glance            woxwidget.Widget
 	GlanceWidth       float32
 	Icon              *woxui.Image
+	Loading           woxwidget.Widget
 }
 
 // LauncherHeaderView builds the query box and prepared accessory views.
@@ -103,6 +104,12 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 		children = append(children, woxwidget.Container{
 			Width: iconSize + iconRightPadding, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: (props.QueryBoxHeight - iconContainerHeight) / 2, Right: iconRightPadding, Bottom: (props.QueryBoxHeight - iconContainerHeight) / 2},
 			Child: woxwidget.Container{Width: iconSize, Height: iconContainerHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(2, props.DensityScale)}, Child: woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize}},
+		})
+	}
+	if props.Loading != nil {
+		children = append(children, woxwidget.Semantics{
+			Key: "launcher-query-loading-key", AutomationID: "launcher.query.loading", Role: woxui.AccessibilityRoleProgressBar,
+			Label: "Search in progress", Value: "loading", ReadOnly: true, Child: props.Loading,
 		})
 	}
 	horizontalPadding := props.AppPadding.Left + props.AppPadding.Right

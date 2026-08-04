@@ -537,6 +537,7 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 			results[index].QueryID = queryID
 		}
 	}
+	a.resetQueryLoadingLocked()
 	a.resetQueryTransitionLocked()
 	if a.resultsQueryID != queryID {
 		a.results = nil

@@ -20,18 +20,27 @@ var svgIconCache sync.Map
 
 // svgIcon renders and caches a categorized common SVG for pure component views.
 func svgIcon(name string, size float32, color woxui.Color) woxwidget.Widget {
+	image := svgIconImage(name, size, color)
+	if image == nil {
+		return woxwidget.Painter{Width: size, Height: size}
+	}
+	return woxwidget.Image{Source: image, Width: size, Height: size}
+}
+
+// svgIconImage returns the cached raster used by static and animated icon widgets.
+func svgIconImage(name string, size float32, color woxui.Color) *woxui.Image {
 	rasterSize := max(32, int(math.Ceil(float64(size*2))))
 	key := svgIconCacheKey{name: name, rasterSize: rasterSize, color: color}
 	if cached, ok := svgIconCache.Load(key); ok {
-		return woxwidget.Image{Source: cached.(*woxui.Image), Width: size, Height: size}
+		return cached.(*woxui.Image)
 	}
 	source := common.UIIcon(name)
 	if source.ImageType != "svg" || source.ImageData == "" {
-		return woxwidget.Painter{Width: size, Height: size}
+		return nil
 	}
 	rgba, err := woxsvg.Render(source.ImageData, rasterSize, rasterSize)
 	if err != nil {
-		return woxwidget.Painter{Width: size, Height: size}
+		return nil
 	}
 	for index := 0; index < len(rgba.Pix); index += 4 {
 		alpha := uint8((uint16(rgba.Pix[index+3])*uint16(color.A) + 127) / 255)
@@ -42,10 +51,10 @@ func svgIcon(name string, size float32, color woxui.Color) woxwidget.Widget {
 	}
 	image, err := woxui.NewImage(rgba)
 	if err != nil {
-		return woxwidget.Painter{Width: size, Height: size}
+		return nil
 	}
 	actual, _ := svgIconCache.LoadOrStore(key, image)
-	return woxwidget.Image{Source: actual.(*woxui.Image), Width: size, Height: size}
+	return actual.(*woxui.Image)
 }
 
 // CloseGlyph returns the shared SVG close icon.

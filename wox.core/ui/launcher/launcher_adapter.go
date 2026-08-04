@@ -25,6 +25,7 @@ type viewSnapshot struct {
 	results               []queryResult
 	resultsQueryID        string
 	queryComplete         bool
+	queryLoading          bool
 	selected              int
 	hoveredResult         int
 	resultScroll          scrollController
@@ -96,6 +97,7 @@ func (a *App) snapshot() viewSnapshot {
 		results:               append([]queryResult(nil), a.results...),
 		resultsQueryID:        a.resultsQueryID,
 		queryComplete:         a.queryComplete,
+		queryLoading:          a.queryLoading,
 		selected:              a.selected,
 		hoveredResult:         a.hoveredResult,
 		resultScroll:          a.resultScroll,
@@ -190,7 +192,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 	contentWidth := max(float32(0), width-horizontalPadding-queryLeftPadding-snapshot.densityMetrics.scaled(6))
 	queryWidth := contentWidth
 	glanceWidth := float32(0)
-	if snapshot.glance != nil {
+	if !snapshot.queryLoading && snapshot.glance != nil {
 		metrics, _ := a.window.MeasureText(strings.TrimSpace(snapshot.glance.Text), woxui.TextStyle{Size: snapshot.densityMetrics.scaled(woxcomponent.GlanceFontSize)})
 		glanceWidth = metrics.Size.Width + snapshot.densityMetrics.scaled(20)
 		if !snapshot.hideGlanceIcon && snapshot.glance.Icon.ImageData != "" {
@@ -200,12 +202,12 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 		queryWidth -= glanceWidth + accessoryGap
 	}
 	refinementWidth := float32(0)
-	if len(snapshot.refinements) > 0 {
+	if !snapshot.queryLoading && len(snapshot.refinements) > 0 {
 		refinementWidth = a.refinementToggleWidth(snapshot, scale)
 		queryWidth -= refinementWidth + accessoryGap
 	}
 	var queryIcon *woxui.Image
-	if snapshot.glance == nil {
+	if !snapshot.queryLoading && snapshot.glance == nil {
 		if image := a.imageForSize(snapshot.layout.Icon, physicalImageSize(int(snapshot.densityMetrics.scaled(32)), scale)); image != nil {
 			queryIcon = image
 			queryWidth -= snapshot.densityMetrics.scaled(49) + accessoryGap
@@ -213,18 +215,30 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 	}
 	queryWidth = max(snapshot.densityMetrics.scaled(140), queryWidth)
 	var refinement woxwidget.Widget
-	if len(snapshot.refinements) > 0 {
+	if !snapshot.queryLoading && len(snapshot.refinements) > 0 {
 		refinement = a.buildRefinementToggle(snapshot, scale)
 	}
 	var glance woxwidget.Widget
-	if snapshot.glance != nil {
+	if !snapshot.queryLoading && snapshot.glance != nil {
 		glance = a.buildGlance(*snapshot.glance, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth, scale, snapshot.densityMetrics)
 	}
+	var loading woxwidget.Widget
+	if snapshot.queryLoading {
+		accessoryWidth := snapshot.densityMetrics.scaled(49)
+		loadingSize := snapshot.densityMetrics.scaled(20)
+		queryWidth -= accessoryWidth + accessoryGap
+		loading = woxwidget.Container{
+			Width: accessoryWidth, Height: queryBoxHeight,
+			Padding: woxwidget.Insets{Left: (accessoryWidth - loadingSize) / 2, Top: (queryBoxHeight - loadingSize) / 2, Right: (accessoryWidth - loadingSize) / 2, Bottom: (queryBoxHeight - loadingSize) / 2},
+			Child:   woxcomponent.WoxLoadingIndicator(loadingSize, snapshot.palette.cursor),
+		}
+	}
+	queryWidth = max(snapshot.densityMetrics.scaled(140), queryWidth)
 	return launcherview.LauncherHeaderView(launcherview.LauncherHeaderProps{
 		Width: width, Height: height, QueryBoxHeight: queryBoxHeight, QueryEditorHeight: queryEditorHeight, DensityScale: snapshot.densityMetrics.scale,
 		QueryWidth: queryWidth, QueryRadius: snapshot.palette.queryRadius, AppPadding: snapshot.palette.appPadding, Theme: snapshot.palette.componentTheme(),
 		Query: a.queryViewProps(snapshot, queryWidth, queryEditorHeight), Refinement: refinement, RefinementWidth: refinementWidth,
-		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon,
+		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon, Loading: loading,
 	})
 }
 

@@ -102,7 +102,11 @@ func (a *App) ApplyQueryError(_ context.Context, queryID string, err error) {
 		}
 		current := a.query.QueryID == queryID
 		if current {
+			a.resetQueryLoadingLocked()
 			log.Printf("query %s failed: %v", queryID, err)
+			if a.window != nil {
+				_ = a.window.Invalidate()
+			}
 		}
 	}); dispatchErr != nil {
 		log.Printf("dispatch query error: %v", dispatchErr)
