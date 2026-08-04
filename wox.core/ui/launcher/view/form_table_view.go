@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"strings"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -767,54 +768,61 @@ func FormTableList(props FormTableListProps) woxwidget.Widget {
 
 // FormTableRowFieldProps contains one Flutter-parity field in a table row editor.
 type FormTableRowFieldProps struct {
-	ID              string
-	Kind            string
-	Label           string
-	Description     string
-	Value           string
-	Detail          string
-	HotkeyLabels    []string
-	Placeholder     string
-	RecordingStatus string
-	Width           float32
-	Height          float32
-	LabelWidth      float32
-	State           woxui.TextEditingState
-	Focused         bool
-	Recording       bool
-	RecordingError  bool
-	Hold            bool
-	HoldPrefix      string
-	Checked         bool
-	Protected       bool
-	MaxLines        int
-	Image           *woxui.Image
-	ImageEmoji      string
-	EmojiLabel      string
-	UploadLabel     string
-	BrowseLabel     string
-	EmojiWidth      float32
-	UploadWidth     float32
-	EmojiIcon       *woxui.Image
-	UploadIcon      *woxui.Image
-	Window          *woxui.Window
-	Theme           woxcomponent.Theme
-	OnTap           func()
-	OnFocusChange   func(bool)
-	OnChoiceTap     func(woxui.Rect)
-	OnFocus         func()
-	OnChanged       func(string)
-	OnKey           func(woxui.KeyEvent) bool
-	OnBrowse        func()
-	OnEmoji         func()
-	OnUpload        func()
+	ID                  string
+	Kind                string
+	Label               string
+	Description         string
+	DescriptionMarkdown bool
+	Value               string
+	Detail              string
+	HotkeyLabels        []string
+	Placeholder         string
+	RecordingStatus     string
+	Width               float32
+	Height              float32
+	LabelWidth          float32
+	State               woxui.TextEditingState
+	Focused             bool
+	Recording           bool
+	RecordingError      bool
+	Hold                bool
+	HoldPrefix          string
+	Checked             bool
+	Protected           bool
+	MaxLines            int
+	Image               *woxui.Image
+	ImageEmoji          string
+	EmojiLabel          string
+	UploadLabel         string
+	BrowseLabel         string
+	SelectLabel         string
+	EmojiWidth          float32
+	UploadWidth         float32
+	SelectWidth         float32
+	EmojiIcon           *woxui.Image
+	UploadIcon          *woxui.Image
+	TrailingLabel       string
+	Window              *woxui.Window
+	Theme               woxcomponent.Theme
+	OnTap               func()
+	OnFocusChange       func(bool)
+	OnChoiceTap         func(woxui.Rect)
+	OnTrailingTap       func(woxui.Rect)
+	OnFocus             func()
+	OnChanged           func(string)
+	OnSelectionChanged  func(woxui.TextSelection)
+	OnKey               func(woxui.KeyEvent) bool
+	OnBrowse            func()
+	OnEmoji             func()
+	OnUpload            func()
+	OnOpenLink          func(string)
 }
 
 // FormTableRowFieldHeight returns the compact split-row height used by Flutter's table editor.
 func FormTableRowFieldHeight(kind, description string, maxLines int) float32 {
 	descriptionHeight := float32(0)
 	if description != "" {
-		descriptionHeight = 22
+		descriptionHeight = 22 + float32(strings.Count(description, "\n"))*18
 	}
 	switch kind {
 	case "label":
@@ -844,10 +852,19 @@ func FormTableRowField(props FormTableRowFieldProps) woxwidget.Widget {
 	control := formTableRowControl(props, controlWidth, controlHeight)
 	rightChildren := []woxwidget.Widget{control}
 	if props.Description != "" {
-		rightChildren = append(rightChildren, woxwidget.TextBlock{
-			Value: props.Description, Width: controlWidth, Height: 18, MaxLines: 1, LineHeight: 18,
+		descriptionLines := strings.Count(props.Description, "\n") + 1
+		var description woxwidget.Widget = woxwidget.TextBlock{
+			Value: props.Description, Width: controlWidth, Height: float32(descriptionLines) * 18, MaxLines: descriptionLines, LineHeight: 18,
 			Style: woxui.TextStyle{Size: 12}, Color: formTableAlpha(props.Theme.ActionText, 154),
-		})
+		}
+		if props.DescriptionMarkdown {
+			description = woxcomponent.WoxMarkdown(woxcomponent.MarkdownProps{
+				ID: props.ID + "-description", Document: woxcomponent.ParseMarkdown(props.Description), Width: controlWidth,
+				Theme: props.Theme, Window: props.Window, OnOpenLink: props.OnOpenLink,
+			})
+			description = woxwidget.Container{Width: controlWidth, Height: float32(descriptionLines) * 18, Child: description}
+		}
+		rightChildren = append(rightChildren, description)
 	}
 	labelTop := float32(8)
 	if props.Kind == "checkbox" {
@@ -928,18 +945,35 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 	if props.OnBrowse != nil {
 		inputWidth = max(float32(100), width-90)
 	}
+	padding := woxwidget.Insets{Left: 10, Top: 7, Right: 9, Bottom: 6}
+	if props.TrailingLabel != "" {
+		padding.Right = 38
+	}
 	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: props.ID, Label: props.Label, Width: inputWidth, Height: height, Radius: 4,
-		Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 9, Bottom: 6}, Transparent: true,
+		Padding: padding, Transparent: true,
 		BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1,
-		Style: woxui.TextStyle{Size: 13}, Value: props.State.Text, Focused: props.Focused, Protected: props.Protected,
+		Style: woxui.TextStyle{Size: 13}, Value: props.State.Text, Protected: props.Protected,
 		MaxLines: max(1, props.MaxLines), Window: props.Window, Theme: props.Theme, OnChanged: props.OnChanged, OnKey: props.OnKey,
+		OnSelectionChanged: props.OnSelectionChanged,
 		OnFocusChange: func(focused bool) {
+			if props.OnFocusChange != nil {
+				props.OnFocusChange(focused)
+			}
 			if focused && props.OnFocus != nil {
 				props.OnFocus()
 			}
 		},
 	})
+	if props.TrailingLabel != "" {
+		trailing := woxwidget.Gesture{ID: props.ID + "-trailing", OnTapBounds: props.OnTrailingTap, Child: woxwidget.Container{Width: 34, Height: height, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.Text{
+			Value: props.TrailingLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle,
+		}}}
+		input = woxwidget.Stack{Width: inputWidth, Height: height, Children: []woxwidget.StackChild{
+			{Child: input},
+			{Left: max(float32(0), inputWidth-34), Child: trailing},
+		}}
+	}
 	if props.OnBrowse == nil {
 		return input
 	}
@@ -1020,14 +1054,35 @@ func formTableRowImageControl(props FormTableRowFieldProps, height float32) woxw
 }
 
 func formTableRowAppControl(props FormTableRowFieldProps, width, height float32) woxwidget.Widget {
-	control := woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
-		Width: width, Height: height, Radius: 4, BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1, Padding: woxwidget.Insets{Left: 10, Top: 5, Right: 9},
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
-			woxwidget.TextBlock{Value: props.Value, Width: width - 20, Height: 17, MaxLines: 1, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
-			woxwidget.TextBlock{Value: props.Detail, Width: width - 20, Height: 14, MaxLines: 1, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.ActionHeader},
-		}},
-	}}
-	return formTableRowFocusableControl(props, control)
+	buttonWidth := max(float32(98), props.SelectWidth)
+	previewWidth := max(float32(0), width-buttonWidth-10)
+	previewChildren := make([]woxwidget.Widget, 0, 2)
+	textWidth := previewWidth - 24
+	if props.Image != nil {
+		previewChildren = append(previewChildren, woxwidget.Image{Source: props.Image, Width: 24, Height: 24, Fit: woxwidget.ImageFitContain})
+		textWidth -= 34
+	}
+	textColor := props.Theme.ActionText
+	if props.Detail == "" {
+		textColor = props.Theme.ResultSubtitle
+	}
+	previewChildren = append(previewChildren, woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.TextBlock{
+		Value: props.Value, Width: max(float32(0), textWidth), Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13}, Color: textColor,
+	}})
+	preview := woxwidget.Container{
+		Width: previewWidth, Height: height, Radius: 4, BorderColor: formTableAlpha(props.Theme.ResultSubtitle, 115), BorderWidth: 1,
+		Padding: woxwidget.Insets{Left: 12, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: previewChildren},
+	}
+	selectButton := woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		ID: props.ID, Label: props.SelectLabel, Width: buttonWidth, Height: height, Radius: 4, FontSize: 13,
+		Variant: woxcomponent.ButtonPrimary, OnTap: props.OnTap, Theme: props.Theme,
+		OnFocusChange: func(focused bool) {
+			if focused && props.OnFocus != nil {
+				props.OnFocus()
+			}
+		},
+	})
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{preview, selectButton}}
 }
 
 // formTableRowSelectControl keeps the selected value and dropdown indicator in separate aligned slots, matching Flutter's expanded dropdown button.
@@ -1080,6 +1135,8 @@ type FormTableRowEditorProps struct {
 	Width         float32
 	Height        float32
 	Title         string
+	Header        woxwidget.Widget
+	HeaderHeight  float32
 	Rows          []woxwidget.Widget
 	ContentHeight float32
 	KeepVisible   *woxwidget.ScrollRange
@@ -1095,7 +1152,9 @@ type FormTableRowEditorProps struct {
 func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 	footerHeight := float32(62)
 	titleHeight := float32(0)
-	if props.Title != "" {
+	if props.Header != nil {
+		titleHeight = props.HeaderHeight
+	} else if props.Title != "" {
 		titleHeight = 32
 	}
 	statusHeight := float32(0)
@@ -1109,7 +1168,9 @@ func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows}, ThumbColor: props.Theme.ResultSubtitle,
 	})
 	children := make([]woxwidget.Widget, 0, 4)
-	if titleHeight > 0 {
+	if props.Header != nil {
+		children = append(children, props.Header)
+	} else if titleHeight > 0 {
 		children = append(children, woxwidget.Container{Width: props.Width, Height: titleHeight, Child: woxwidget.Text{
 			Value: props.Title, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText,
 		}})
@@ -1127,6 +1188,137 @@ func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 	}}
 	children = append(children, woxwidget.Container{Width: props.Width, Height: footerHeight, Padding: woxwidget.Insets{Top: 8}, Child: buttons})
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}
+}
+
+// QueryHotkeyEditorHeaderProps contains the preset-first header used by Flutter's dedicated query hotkey dialog.
+type QueryHotkeyEditorHeaderProps struct {
+	Width         float32
+	Title         string
+	Selected      string
+	Description   string
+	NormalLabel   string
+	WebPanelLabel string
+	SilentLabel   string
+	CustomLabel   string
+	DemoIcon      *woxui.Image
+	DemoLabel     string
+	Theme         woxcomponent.Theme
+	OnSelect      func(string)
+	OnDemoHover   func(string, bool, woxui.Rect)
+}
+
+// QueryHotkeyEditorHeader builds the dedicated title, preset selector, and active preset description.
+func QueryHotkeyEditorHeader(props QueryHotkeyEditorHeaderProps) woxwidget.Widget {
+	type preset struct{ id, label string }
+	presets := []preset{{"normal", props.NormalLabel}, {"web-panel", props.WebPanelLabel}, {"silent", props.SilentLabel}, {"custom", props.CustomLabel}}
+	buttonWidth := max(float32(0), (props.Width-24)/4)
+	buttons := make([]woxwidget.Widget, 0, len(presets))
+	for _, item := range presets {
+		item := item
+		variant := woxcomponent.ButtonOutlinedSurface
+		if item.id == props.Selected {
+			variant = woxcomponent.ButtonSelected
+		}
+		demoIcon := props.DemoIcon
+		if item.id == "custom" {
+			demoIcon = nil
+		}
+		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: "query-hotkey-preset-" + item.id, Label: item.label, Width: buttonWidth, Height: 38, Radius: 8, FontSize: 12,
+			Variant: variant, OnTap: func() { props.OnSelect(item.id) }, Theme: props.Theme,
+			TrailingIcon:  demoIcon,
+			TrailingLabel: props.DemoLabel,
+			OnTrailingHoverAt: func(inside bool, bounds woxui.Rect) {
+				if item.id != "custom" && props.OnDemoHover != nil {
+					props.OnDemoHover(item.id, inside, bounds)
+				}
+			},
+		}))
+	}
+	return woxwidget.Container{Width: props.Width, Height: 122, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+		woxwidget.Container{Width: props.Width, Height: 44, Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: formTableAlpha(props.Theme.ActionText, 240)}},
+		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttons},
+		woxwidget.Container{Width: props.Width, Height: 40, Padding: woxwidget.Insets{Top: 9}, Child: woxcomponent.WoxMarkdown(woxcomponent.MarkdownProps{
+			ID: "query-hotkey-preset-description", Document: woxcomponent.ParseMarkdown(props.Description), Width: props.Width, Theme: props.Theme,
+		})},
+	}}}
+}
+
+// QueryVariableChoice is one Flutter-compatible query placeholder row.
+type QueryVariableChoice struct {
+	Label       string
+	Description string
+	Icon        *woxui.Image
+}
+
+type QueryVariablePickerProps struct {
+	Width, Height float32
+	Anchor        woxui.Rect
+	Choices       []QueryVariableChoice
+	Selected      int
+	Surface       woxui.Color
+	Theme         woxcomponent.Theme
+	OnChoose      func(int)
+	OnHover       func(int)
+	OnCancel      func()
+}
+
+// QueryVariablePicker renders the compact two-line picker used by Flutter's query field.
+func QueryVariablePicker(props QueryVariablePickerProps) woxwidget.Widget {
+	const rowHeight = float32(58)
+	menuWidth := min(float32(360), max(float32(1), props.Width-24))
+	menuHeight := min(float32(260), float32(len(props.Choices))*rowHeight+12)
+	left := min(max(float32(12), props.Anchor.X), max(float32(12), props.Width-menuWidth-12))
+	top := props.Anchor.Y + props.Anchor.Height
+	if top+menuHeight > props.Height-12 {
+		top = props.Anchor.Y - menuHeight
+	}
+	top = min(max(float32(12), top), max(float32(12), props.Height-menuHeight-12))
+	rows := make([]woxwidget.Widget, 0, len(props.Choices))
+	for index, choice := range props.Choices {
+		index, choice := index, choice
+		background := woxui.Color{}
+		if index == props.Selected {
+			background = formTableAlpha(props.Theme.SelectedBackground, 46)
+		}
+		activate := func() {
+			if props.OnChoose != nil {
+				props.OnChoose(index)
+			}
+		}
+		content := woxwidget.Container{Width: menuWidth - 12, Height: rowHeight, Radius: 4, Color: background, Padding: woxwidget.Insets{Left: 14, Top: 8, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
+			woxwidget.Align{Width: 20, Height: 42, Vertical: .5, Child: woxwidget.Image{Source: choice.Icon, Width: 18, Height: 18}},
+			woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
+				woxwidget.Text{Value: choice.Label, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
+				woxwidget.Text{Value: choice.Description, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle},
+			}},
+		}}}
+		row := woxwidget.Gesture{ID: fmt.Sprintf("query-variable-%d", index), OnTap: activate, OnHover: func(inside bool) {
+			if inside && props.OnHover != nil {
+				props.OnHover(index)
+			}
+		}, Child: content}
+		rows = append(rows, woxwidget.Semantics{AutomationID: fmt.Sprintf("query-variable-%d", index), Role: woxui.AccessibilityRoleMenuItem, Label: choice.Label, Description: choice.Description, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}, OnAction: func(action woxui.AccessibilityAction, _ string) error {
+			if action != woxui.AccessibilityActionActivate {
+				return fmt.Errorf("unsupported variable action %q", action)
+			}
+			activate()
+			return nil
+		}, Child: row})
+	}
+	surface := props.Surface
+	if surface.A == 0 {
+		surface = props.Theme.Background
+		surface.A = 255
+	}
+	menu := woxwidget.Semantics{AutomationID: "query-variable-picker", Role: woxui.AccessibilityRoleMenu, Child: woxwidget.Container{
+		Width: menuWidth, Height: menuHeight, Radius: 4, Color: surface, BorderColor: formTableAlpha(props.Theme.ResultSubtitle, 140), BorderWidth: 1,
+		Padding: woxwidget.UniformInsets(6), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
+	}}
+	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+		{Child: woxwidget.Gesture{ID: "query-variable-backdrop", OnTap: props.OnCancel, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
+		{Left: left, Top: top, Child: menu},
+	}}
 }
 
 func formTableButton(id, label string, width float32, enabled, primary bool, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {

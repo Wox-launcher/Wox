@@ -29,22 +29,27 @@ const (
 
 // ButtonProps describes one themed, focusable Wox button.
 type ButtonProps struct {
-	ID             string
-	Label          string
-	Icon           *woxui.Image
-	IconSize       float32
-	IconGap        float32
-	IntrinsicWidth bool
-	Width          float32
-	Height         float32
-	Radius         float32
-	Padding        woxwidget.Insets
-	FontSize       float32
-	Disabled       bool
-	Variant        ButtonVariant
-	Size           ButtonSize
-	OnTap          func()
-	Theme          Theme
+	ID                string
+	Label             string
+	Icon              *woxui.Image
+	TrailingIcon      *woxui.Image
+	TrailingLabel     string
+	IconSize          float32
+	TrailingIconSize  float32
+	IconGap           float32
+	IntrinsicWidth    bool
+	Width             float32
+	Height            float32
+	Radius            float32
+	Padding           woxwidget.Insets
+	FontSize          float32
+	Disabled          bool
+	Variant           ButtonVariant
+	Size              ButtonSize
+	OnTap             func()
+	OnTrailingHoverAt func(bool, woxui.Rect)
+	OnFocusChange     func(bool)
+	Theme             Theme
 }
 
 // WoxButton builds a button with shared visuals, keyboard activation, and accessibility semantics.
@@ -130,6 +135,21 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 			woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: fontWeight}, Color: foreground},
 		}}
 	}
+	if props.TrailingIcon != nil {
+		iconSize := props.TrailingIconSize
+		if iconSize <= 0 {
+			iconSize = 15
+		}
+		icon := woxwidget.Gesture{ID: props.ID + "-trailing", OnHoverAt: props.OnTrailingHoverAt, Child: woxwidget.Image{Source: props.TrailingIcon, Width: iconSize, Height: iconSize}}
+		trailingLabel := props.TrailingLabel
+		if trailingLabel == "" {
+			trailingLabel = props.Label
+		}
+		child = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			child,
+			woxwidget.Semantics{AutomationID: props.ID + "-trailing", Role: woxui.AccessibilityRoleButton, Label: trailingLabel, Child: icon},
+		}}
+	}
 	var alignedChild woxwidget.Widget = woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: child}
 	if props.IntrinsicWidth {
 		if padding.Top == 0 && padding.Bottom == 0 {
@@ -153,7 +173,7 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 				onTap()
 			}
 			return true
-		}, Child: content},
+		}, OnFocusChange: props.OnFocusChange, Child: content},
 	}
 }
 

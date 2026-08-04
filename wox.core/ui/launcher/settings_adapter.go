@@ -68,6 +68,14 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	} else if snapshot.tab == "cloud" && a.cloudPlanTooltip != nil {
 		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudIntroViewProps(snapshot, frame.Scale), a.cloudPlanTooltip.anchor, width, height, snapshot.palette.componentTheme())
 	}
+	if snapshot.tableEditor != nil && a.settingsDemo != nil {
+		demo, left, top := a.buildSettingsDemoOverlay(snapshot, width, height)
+		overlay = woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+			{Child: overlay},
+			{Left: left, Top: top, Child: demo},
+		}}
+		overlayLeft, overlayTop = 0, 0
+	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
 		Width: width, Height: height, PageID: snapshot.tab, Platform: runtime.GOOS, RailWidth: railWidth, Theme: snapshot.palette.componentTheme(),
 		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight, frame.Scale), Page: page,

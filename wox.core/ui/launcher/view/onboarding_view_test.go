@@ -66,6 +66,11 @@ func TestOnboardingDemoTimelinesMatchFlutterPhases(t *testing.T) {
 	if got := onboardingDemoDuration("queryHotkeys"); got != 9200*time.Millisecond {
 		t.Fatalf("query hotkey duration = %v, want 9.2s Flutter showcase", got)
 	}
+	for _, mode := range []string{"queryHotkeysNormal", "queryHotkeysWebPanel", "queryHotkeysSilent"} {
+		if got := onboardingDemoDuration(mode); got != 4600*time.Millisecond {
+			t.Fatalf("%s duration = %v, want 4.6s Flutter preset demo", mode, got)
+		}
+	}
 	if got := demoEnterHoldExit(.94, .56, .74, .92, 1); got >= 1 || got <= 0 {
 		t.Fatalf("selection window exit progress = %v, want in-flight exit", got)
 	}

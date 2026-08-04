@@ -77,6 +77,8 @@ func onboardingDemoDuration(stepID string) time.Duration {
 		return 5200 * time.Millisecond
 	case "queryHotkeys":
 		return 9200 * time.Millisecond
+	case "queryHotkeysNormal", "queryHotkeysWebPanel", "queryHotkeysSilent":
+		return 4600 * time.Millisecond
 	case "queryShortcuts":
 		return 4400 * time.Millisecond
 	case "trayQueries":
@@ -104,6 +106,14 @@ func onboardingDemoScene(props OnboardingProps, step OnboardingStep, width, heig
 		return onboardingGlanceDemo(props, step, width, height)
 	case "queryHotkeys":
 		return onboardingQueryHotkeysDemo(props, step, width, height, progress)
+	case "queryHotkeysNormal":
+		step.ID = "queryHotkeys"
+		return onboardingQueryHotkeysDemo(props, step, width, height, progress*.42)
+	case "queryHotkeysWebPanel":
+		step.ID = "queryHotkeys"
+		return onboardingQueryHotkeysDemo(props, step, width, height, .50+progress*.44)
+	case "queryHotkeysSilent":
+		return onboardingQueryHotkeySilentDemo(props, step, width, height, progress)
 	case "queryShortcuts":
 		return onboardingQueryShortcutsDemo(props, step, width, height, progress)
 	case "trayQueries":
@@ -802,6 +812,37 @@ func onboardingQueryHotkeysDemo(props OnboardingProps, step OnboardingStep, widt
 			instagramHeight := max(float32(190), contentHeight-72)
 			children = append(children, woxwidget.StackChild{Left: (width - instagramWidth) / 2, Top: contentTop + 70 + 20*(1-windowProgress), Child: onboardingInstagramWindow(props, instagramWidth, instagramHeight, windowProgress*example2Opacity)})
 		}
+	}
+	return onboardingDemoDesktop(props, step, width, height, false, children)
+}
+
+func onboardingQueryHotkeySilentDemo(props OnboardingProps, step OnboardingStep, width, height, progress float32) woxwidget.Widget {
+	sceneOpacity := float32(1)
+	if progress < .04 {
+		sceneOpacity = demoEaseOutCubic(demoInterval(progress, 0, .04))
+	} else if progress > .94 {
+		sceneOpacity = 1 - demoEaseInCubic(demoInterval(progress, .94, 1))
+	}
+	contentLeft := float32(48)
+	contentWidth := width - 100
+	contentTop := demoHintTop()
+	hotkey := demoQueryHotkey("S")
+	children := []woxwidget.StackChild{{Left: contentLeft, Top: contentTop, Child: onboardingDemoHintCard(props, step, step.Title, strings.Join(hotkey, "+"), "copy github repo", contentWidth, demoAlpha(sceneOpacity))}}
+	shortcutProgress := demoEnterHoldExit(progress, .10, .16, .26, .32)
+	if shortcutProgress > .01 {
+		children = append(children, woxwidget.StackChild{Left: (width - demoHotkeyWidth(hotkey)) / 2, Top: contentTop + 86, Child: onboardingDemoHotkey(hotkey, step.Accent, props.Theme, progress >= .16 && progress <= .22, shortcutProgress*sceneOpacity)})
+	}
+	toastProgress := demoEaseOutCubic(demoInterval(progress, .22, .34)) * sceneOpacity
+	if toastProgress > .01 {
+		toastWidth := min(float32(312), width-120)
+		toast := woxwidget.Container{Width: toastWidth, Height: 60, Radius: 12, Color: settingsColorAlpha(props.Theme.Background, demoScaledAlpha(toastProgress, 245)), BorderColor: settingsColorAlpha(step.Accent, demoScaledAlpha(toastProgress, 71)), BorderWidth: 1, Padding: woxwidget.Insets{Left: 14, Top: 13, Right: 14, Bottom: 13}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: "✓", Style: woxui.TextStyle{Size: 20, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(step.Accent, demoAlpha(toastProgress))},
+			woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
+				woxwidget.Text{Value: step.Title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultTitle, demoAlpha(toastProgress))},
+				woxwidget.Text{Value: "copy github repo", Style: woxui.TextStyle{Size: 10.5}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, demoAlpha(toastProgress))},
+			}},
+		}}}
+		children = append(children, woxwidget.StackChild{Left: (width - toastWidth) / 2, Top: height - 96 + 18*(1-toastProgress), Child: toast})
 	}
 	return onboardingDemoDesktop(props, step, width, height, false, children)
 }

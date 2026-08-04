@@ -5,72 +5,71 @@ import (
 	"strings"
 
 	launcherview "wox/ui/launcher/view"
-	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
 )
 
 // buildFormTableAppPicker resolves controller-owned image resources before delegating to the pure view.
 func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
-	candidates := make([]launcherview.FormAppCandidate, len(snapshot.candidates))
-	for index, candidate := range snapshot.candidates {
+	apps := a.hotkeySettings.AppCandidates()
+	if identity := strings.TrimSpace(snapshot.current.Identity); identity != "" {
+		found := false
+		for _, candidate := range apps {
+			if strings.EqualFold(strings.TrimSpace(candidate.Identity), identity) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			apps = append([]ignoredHotkeyApp{snapshot.current}, apps...)
+		}
+	}
+	candidates := make([]launcherview.FormAppCandidate, len(apps))
+	for index, candidate := range apps {
 		detail := strings.TrimSpace(candidate.Path)
 		if detail == "" {
 			detail = candidate.Identity
 		}
 		candidates[index] = launcherview.FormAppCandidate{
-			Name: candidate.Name, Detail: detail, Icon: a.imageForSize(candidate.Icon, physicalImageSize(34, imageScale)), FallbackColor: resultColors[index%len(resultColors)],
+			Name: candidate.Name, Identity: candidate.Identity, Detail: detail, Icon: a.imageForSize(candidate.Icon, physicalImageSize(28, imageScale)),
 		}
 	}
+	theme := palette.componentTheme()
+	cancelLabel := a.translate("i18n:ui_cancel")
+	confirmLabel := a.translate("i18n:ui_ok")
+	appsError := a.hotkeySettings.AppsError()
+	appsLoading := a.hotkeySettings.AppsLoading() || (!a.hotkeySettings.AppsLoaded() && appsError == "")
 	return launcherview.FormAppPickerView(launcherview.FormAppPickerProps{
-		Width: width, Height: height, Theme: palette.componentTheme(), Candidates: candidates, Selected: snapshot.selected,
-		OnChoose: a.chooseFormTableAppCandidate, OnCancel: a.closeFormTableAppPicker,
+		OverlayWidth: width, OverlayHeight: height, Window: a.formTableNativeWindow(), Theme: theme,
+		Title: a.translate("i18n:ui_hotkey_ignore_apps_dialog_title"), SearchPlaceholder: a.translate("i18n:ui_hotkey_ignore_apps_search"),
+		LoadingLabel: a.translate("i18n:ui_hotkey_ignore_apps_loading"), EmptyLabel: a.translate("i18n:ui_hotkey_ignore_apps_empty"),
+		CancelLabel: cancelLabel, ConfirmLabel: confirmLabel, CancelWidth: a.formTableButtonWidth(cancelLabel, 70), ConfirmWidth: a.formTableButtonWidth(confirmLabel, 70),
+		Candidates: candidates, SelectedIdentity: snapshot.current.Identity, Loading: appsLoading, Error: appsError,
+		OnConfirm: func(index int) {
+			if index < 0 || index >= len(apps) {
+				a.closeFormTableAppPicker()
+				return
+			}
+			a.chooseFormTableAppCandidate(apps[index])
+		},
+		OnCancel: a.closeFormTableAppPicker,
 	})
 }
 
-// openFormTableAppPicker opens a shared DTO picker after core has supplied the current platform's application identities.
+// openFormTableAppPicker opens the shared picker while the platform application catalog loads.
 func (a *App) openFormTableAppPicker(index int) {
-	startLoading := false
 	state := a.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "app" {
 		return
 	}
-	if !a.hotkeySettings.AppsLoaded() {
-		if err := a.hotkeySettings.AppsError(); err != "" {
-			state.status = "Could not load applications: " + err
-		} else {
-			state.status = ""
-		}
-		startLoading = !a.hotkeySettings.AppsLoading()
-		if startLoading {
-			util.Go(a.lifecycleCtx, "load hotkey app candidates", a.loadHotkeyAppCandidates)
-		}
-		a.invalidateFormTableWindow()
-		return
-	}
-
-	candidates := a.hotkeySettings.AppCandidates()
 	var current ignoredHotkeyApp
 	_ = json.Unmarshal([]byte(state.rowForm.values[state.rowForm.definitions[index].Value.Key]), &current)
-	selected := 0
-	found := false
-	for candidateIndex, candidate := range candidates {
-		if strings.EqualFold(strings.TrimSpace(candidate.Identity), strings.TrimSpace(current.Identity)) && strings.TrimSpace(current.Identity) != "" {
-			selected = candidateIndex
-			found = true
-			break
-		}
-	}
-	if !found && strings.TrimSpace(current.Identity) != "" {
-		candidates = append([]ignoredHotkeyApp{current}, candidates...)
-		selected = 0
-	}
-	if len(candidates) == 0 {
-		selected = -1
-	}
-	state.appPicker = &formTableAppPickerState{fieldIndex: index, candidates: candidates, selected: selected}
+	state.appPicker = &formTableAppPickerState{fieldIndex: index, current: current}
 	state.status = ""
-	a.updateFormTableTextInput(false)
+	a.updateFormTableTextInput(true)
+	if !a.hotkeySettings.AppsLoaded() && !a.hotkeySettings.AppsLoading() {
+		util.Go(a.lifecycleCtx, "load hotkey app candidates", a.loadHotkeyAppCandidates)
+	}
 	a.invalidateFormTableWindow()
 }
 
@@ -86,16 +85,16 @@ func (a *App) closeFormTableAppPicker() {
 	a.invalidateFormTableWindow()
 }
 
-func (a *App) chooseFormTableAppCandidate(index int) {
+func (a *App) chooseFormTableAppCandidate(candidate ignoredHotkeyApp) {
 	state := a.activeFormTableEditor()
-	if state == nil || state.rowForm == nil || state.appPicker == nil || index < 0 || index >= len(state.appPicker.candidates) {
+	if state == nil || state.rowForm == nil || state.appPicker == nil {
 		return
 	}
 	fieldIndex := state.appPicker.fieldIndex
 	if fieldIndex < 0 || fieldIndex >= len(state.rowForm.definitions) {
 		return
 	}
-	encoded, err := json.Marshal(state.appPicker.candidates[index])
+	encoded, err := json.Marshal(candidate)
 	if err != nil {
 		state.status = err.Error()
 		a.invalidateFormTableWindow()
@@ -107,26 +106,4 @@ func (a *App) chooseFormTableAppCandidate(index int) {
 	setFormFieldsFocusLocked(state.rowForm, fieldIndex)
 	a.updateFormTableTextInput(false)
 	a.invalidateFormTableWindow()
-}
-
-func (a *App) moveFormTableAppCandidate(delta int) {
-	if state := a.activeFormTableEditor(); state != nil && state.appPicker != nil && len(state.appPicker.candidates) > 0 {
-		state.appPicker.selected = (state.appPicker.selected + delta + len(state.appPicker.candidates)) % len(state.appPicker.candidates)
-	}
-	a.invalidateFormTableWindow()
-}
-
-func (a *App) onFormTableAppPickerKey(event woxui.KeyEvent, selected int) {
-	switch event.Key {
-	case woxui.KeyEscape:
-		a.closeFormTableAppPicker()
-	case woxui.KeyArrowUp:
-		a.moveFormTableAppCandidate(-1)
-	case woxui.KeyArrowDown:
-		a.moveFormTableAppCandidate(1)
-	case woxui.KeyEnter, woxui.KeySpace:
-		if selected >= 0 {
-			a.chooseFormTableAppCandidate(selected)
-		}
-	}
 }

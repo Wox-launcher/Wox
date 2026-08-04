@@ -36,26 +36,27 @@ type TextFieldProps struct {
 	Style            woxui.TextStyle
 	TextColor        woxui.Color
 	// TextAlignmentY optically positions measured glyph bounds within each line without moving the caret.
-	TextAlignmentY  float32
-	Value           string
-	Focused         bool
-	Autofocus       bool
-	Controller      *woxwidget.TextEditingController
-	FocusNode       *woxwidget.FocusNode
-	Disabled        bool
-	ReadOnly        bool
-	Protected       bool
-	MaxLines        int
-	Window          *woxui.Window
-	Theme           Theme
-	OnKey           func(woxui.KeyEvent) bool
-	OnFocusChange   func(bool)
-	OnChanged       func(string)
-	OnSetValue      func(string) error
-	editingState    woxui.TextEditingState
-	onCaret         func(int)
-	onWordSelection func(int)
-	onLineSelection func(int)
+	TextAlignmentY     float32
+	Value              string
+	Focused            bool
+	Autofocus          bool
+	Controller         *woxwidget.TextEditingController
+	FocusNode          *woxwidget.FocusNode
+	Disabled           bool
+	ReadOnly           bool
+	Protected          bool
+	MaxLines           int
+	Window             *woxui.Window
+	Theme              Theme
+	OnKey              func(woxui.KeyEvent) bool
+	OnFocusChange      func(bool)
+	OnChanged          func(string)
+	OnSelectionChanged func(woxui.TextSelection)
+	OnSetValue         func(string) error
+	editingState       woxui.TextEditingState
+	onCaret            func(int)
+	onWordSelection    func(int)
+	onLineSelection    func(int)
 	// onSelectionStart begins a drag selection anchored at the given rune offset.
 	onSelectionStart func(int)
 	// onSelectionExtend updates the selection focus to the given rune offset while dragging.
@@ -148,16 +149,19 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 	props.onCaret = func(offset int) {
 		s.focusNode.RequestFocus()
 		s.controller.SetCaret(offset)
+		notifyTextFieldSelectionChanged(widget.(TextFieldProps), s.controller.State().Selection)
 		context.Invalidate()
 	}
 	props.onWordSelection = func(offset int) {
 		s.focusNode.RequestFocus()
 		s.controller.SelectWordAt(offset)
+		notifyTextFieldSelectionChanged(widget.(TextFieldProps), s.controller.State().Selection)
 		context.Invalidate()
 	}
 	props.onLineSelection = func(offset int) {
 		s.focusNode.RequestFocus()
 		s.controller.SelectLineAt(offset)
+		notifyTextFieldSelectionChanged(widget.(TextFieldProps), s.controller.State().Selection)
 		context.Invalidate()
 	}
 	// Capture the anchor at drag start so subsequent extends update only the focus.
@@ -165,11 +169,13 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		s.focusNode.RequestFocus()
 		s.selectionAnchor = offset
 		s.controller.SetCaret(offset)
+		notifyTextFieldSelectionChanged(widget.(TextFieldProps), s.controller.State().Selection)
 		context.Invalidate()
 	}
 	props.onSelectionExtend = func(offset int) {
 		s.focusNode.RequestFocus()
 		s.controller.SetSelection(s.selectionAnchor, offset)
+		notifyTextFieldSelectionChanged(widget.(TextFieldProps), s.controller.State().Selection)
 		context.Invalidate()
 	}
 	props.onScroll = func(delta woxui.Point) bool {
@@ -216,6 +222,7 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 						notifyTextFieldChanged(original, s.controller.Text())
 					}
 				}
+				notifyTextFieldSelectionChanged(original, s.controller.State().Selection)
 				context.Invalidate()
 				return true
 			case woxui.Key("v"):
@@ -226,6 +233,7 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 				if s.controller.InsertText(text) {
 					notifyTextFieldChanged(original, s.controller.Text())
 				}
+				notifyTextFieldSelectionChanged(original, s.controller.State().Selection)
 				context.Invalidate()
 				return true
 			}
@@ -235,6 +243,7 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 			if changed {
 				notifyTextFieldChanged(original, s.controller.Text())
 			}
+			notifyTextFieldSelectionChanged(original, s.controller.State().Selection)
 			context.Invalidate()
 		}
 		return handled
@@ -248,6 +257,7 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		if changed {
 			notifyTextFieldChanged(original, s.controller.Text())
 		}
+		notifyTextFieldSelectionChanged(original, s.controller.State().Selection)
 		context.Invalidate()
 		return true
 	}
@@ -262,6 +272,7 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		original := widget.(TextFieldProps)
 		s.controller.SetText(value, false)
 		notifyTextFieldChanged(original, value)
+		notifyTextFieldSelectionChanged(original, s.controller.State().Selection)
 		context.Invalidate()
 		if original.OnSetValue != nil {
 			return original.OnSetValue(value)
@@ -308,6 +319,12 @@ func (s *textFieldState) updateBindings(context woxwidget.StateContext, props Te
 func notifyTextFieldChanged(props TextFieldProps, value string) {
 	if props.OnChanged != nil {
 		props.OnChanged(value)
+	}
+}
+
+func notifyTextFieldSelectionChanged(props TextFieldProps, selection woxui.TextSelection) {
+	if props.OnSelectionChanged != nil {
+		props.OnSelectionChanged(selection)
 	}
 }
 
