@@ -46,7 +46,7 @@ func NewClipboardDB(ctx context.Context, pluginId string) (*ClipboardDB, error) 
 	dsn := dbPath + "?" +
 		"_journal_mode=DELETE&" + // Avoid WAL sidecar files
 		"_synchronous=FULL&" + // Preserve durability in DELETE mode
-		"_cache_size=1000&" + // Set cache size
+		"_cache_size=-1000&" + // Set cache size
 		"_foreign_keys=true&" + // Enable foreign key constraints
 		"_busy_timeout=5000" // Set busy timeout to 5 seconds
 
@@ -57,14 +57,14 @@ func NewClipboardDB(ctx context.Context, pluginId string) (*ClipboardDB, error) 
 
 	// Set connection pool settings for better concurrency
 	db.SetMaxOpenConns(10)           // Maximum number of open connections
-	db.SetMaxIdleConns(5)            // Maximum number of idle connections
+	db.SetMaxIdleConns(2)            // Maximum number of idle connections
 	db.SetConnMaxLifetime(time.Hour) // Maximum lifetime of a connection
 
 	// Apply the same durability settings to every pooled connection.
 	pragmas := []string{
 		"PRAGMA journal_mode=DELETE", // Keep single-file journaling enabled
 		"PRAGMA synchronous=FULL",    // Preserve durability in DELETE mode
-		"PRAGMA cache_size=1000",     // Set cache size
+		"PRAGMA cache_size=-1000",    // Set cache size
 		"PRAGMA foreign_keys=ON",     // Enable foreign key constraints
 		"PRAGMA temp_store=memory",   // Store temporary tables in memory
 		"PRAGMA mmap_size=268435456", // Set memory-mapped I/O size (256MB)

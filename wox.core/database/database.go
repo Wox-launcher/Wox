@@ -163,7 +163,7 @@ func Init(ctx context.Context) error {
 	dsn := dbPath + "?" +
 		"_journal_mode=DELETE&" + // Use DELETE journal mode for cloud-friendly single-file sync
 		"_synchronous=FULL&" + // Safer for DELETE mode
-		"_cache_size=1000&" + // Set cache size
+		"_cache_size=-2000&" + // Set cache size
 		"_foreign_keys=true&" + // Enable foreign key constraints
 		"_busy_timeout=5000" // Set busy timeout to 5 seconds
 
@@ -183,14 +183,14 @@ func Init(ctx context.Context) error {
 
 	// Set connection pool settings
 	sqlDB.SetMaxOpenConns(10)           // Maximum number of open connections
-	sqlDB.SetMaxIdleConns(5)            // Maximum number of idle connections
+	sqlDB.SetMaxIdleConns(2)            // Maximum number of idle connections
 	sqlDB.SetConnMaxLifetime(time.Hour) // Maximum lifetime of a connection
 
 	// Execute additional PRAGMA statements for optimal concurrency
 	pragmas := []string{
 		"PRAGMA journal_mode=DELETE", // Ensure WAL mode is enabled
 		"PRAGMA synchronous=FULL",    // Balance safety and performance
-		"PRAGMA cache_size=1000",     // Set cache size
+		"PRAGMA cache_size=-2000",    // Set cache size
 		"PRAGMA foreign_keys=ON",     // Enable foreign key constraints
 		"PRAGMA temp_store=memory",   // Store temporary tables in memory
 		"PRAGMA mmap_size=268435456", // Set memory-mapped I/O size (256MB)
