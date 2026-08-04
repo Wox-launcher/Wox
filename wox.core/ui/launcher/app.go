@@ -166,6 +166,7 @@ type App struct {
 	fileRequests       map[string]bool
 	mdDocs             map[string]woxcomponent.MarkdownDocument
 	previewLayouts     map[string]woxwidget.TextBlockLayout
+	dictationAudio     *dictationPreviewAudioState
 	terminalPreview    *terminalPreviewState
 }
 

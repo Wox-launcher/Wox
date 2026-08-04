@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	previewview "wox/ui/launcher/view/preview"
@@ -152,36 +151,6 @@ func formatAIStreamPreview(data aiStreamPreviewData) string {
 		answer = data.AnswerTitle + "\n\n" + answer
 	}
 	parts = append(parts, answer)
-	return strings.Join(parts, "\n\n────────\n\n")
-}
-
-func formatDictationHistoryPreview(data dictationHistoryPreviewData) string {
-	refinedLabel := strings.TrimSpace(data.RefinedLabel)
-	if refinedLabel == "" {
-		refinedLabel = "Result"
-	}
-	parts := []string{refinedLabel + "\n\n" + data.RefinedText}
-	if strings.TrimSpace(data.OriginalText) != "" {
-		label := strings.TrimSpace(data.OriginalLabel)
-		if label == "" {
-			label = "Original transcript"
-		}
-		parts = append(parts, label+"\n\n"+data.OriginalText)
-	}
-	if data.RawAudioPath != "" || data.ProcessedAudioPath != "" {
-		label := strings.TrimSpace(data.AudioLabel)
-		if label == "" {
-			label = "Audio diagnostics"
-		}
-		audio := []string{label}
-		if data.RawAudioPath != "" {
-			audio = append(audio, fmt.Sprintf("%s\n%s", data.RawAudioLabel, data.RawAudioPath))
-		}
-		if data.ProcessedAudioPath != "" {
-			audio = append(audio, fmt.Sprintf("%s\n%s", data.ProcessedAudioLabel, data.ProcessedAudioPath))
-		}
-		parts = append(parts, strings.Join(audio, "\n\n"))
-	}
 	return strings.Join(parts, "\n\n────────\n\n")
 }
 

@@ -118,7 +118,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 		if err != nil {
 			return content(fmt.Sprintf("Invalid dictation history preview: %v", err), errorText)
 		}
-		return content(formatDictationHistoryPreview(data), palette.previewText)
+		return a.buildDictationHistoryPreview(scrollKey, data, palette, width, height)
 	case "hotkey_overview":
 		data, err := decodeStructuredPreview[hotkeyOverviewPreviewData](preview.PreviewData)
 		if err != nil {
@@ -219,13 +219,34 @@ func (a *App) previewBodyTags(preview queryPreview) []previewTag {
 		if err == nil {
 			return previewTagsForValues(data.StatusLabel)
 		}
-	case "dictation_history":
-		data, err := decodeStructuredPreview[dictationHistoryPreviewData](preview.PreviewData)
-		if err == nil {
-			return previewTagsForValues(data.StatusLabel)
-		}
 	}
 	return nil
+}
+
+// buildDictationHistoryPreview prepares portable text layout before composing the pure comparison view.
+func (a *App) buildDictationHistoryPreview(scrollKey string, data dictationHistoryPreviewData, palette uiPalette, width, height float32) woxwidget.Widget {
+	scale := a.densityMetrics.normalized().scale
+	scaled := func(value float32) float32 { return a.densityMetrics.scaled(value) }
+	innerWidth := max(float32(0), width-scaled(52))
+	refinedWidth := max(float32(0), innerWidth-scaled(16))
+	refinedStyle := woxui.TextStyle{Size: scaled(18), Weight: woxui.FontWeightSemibold}
+	originalStyle := woxui.TextStyle{Size: scaled(14)}
+	refinedLayout := a.previewTextLayout(scrollKey+"|dictation-refined", data.RefinedText, refinedStyle, refinedWidth, scaled(28))
+	originalLayout := a.previewTextLayout(scrollKey+"|dictation-original", data.OriginalText, originalStyle, innerWidth, scaled(22))
+	statusWidth := float32(0)
+	if status := strings.TrimSpace(data.StatusLabel); status != "" {
+		metrics, _ := a.window.MeasureText(status, woxui.TextStyle{Size: scaled(11)})
+		statusWidth = scaled(17) + metrics.Size.Width
+	}
+	return previewview.DictationHistoryPreviewView(previewview.DictationHistoryPreviewProps{
+		ID: scrollKey, Width: width, Height: height, Scale: scale, Theme: palette.componentTheme(),
+		RefinedText: data.RefinedText, OriginalText: data.OriginalText, RefinedLabel: data.RefinedLabel, OriginalLabel: data.OriginalLabel,
+		StatusLabel: data.StatusLabel, IsChanged: data.IsChanged, RefinedLayout: refinedLayout, OriginalLayout: originalLayout, StatusWidth: statusWidth,
+		AudioLabel: data.AudioLabel, RawAudioLabel: data.RawAudioLabel, RawAudioPath: data.RawAudioPath,
+		ProcessedAudioLabel: data.ProcessedAudioLabel, ProcessedAudioPath: data.ProcessedAudioPath,
+		RawPlayback: dictationPlaybackProps(a.dictationAudioSnapshot(data.RawAudioPath)), ProcessedPlayback: dictationPlaybackProps(a.dictationAudioSnapshot(data.ProcessedAudioPath)),
+		PlayLabel: a.translate("i18n:plugin_mediaplayer_play"), PauseLabel: a.translate("i18n:plugin_mediaplayer_pause"), OnPlayDiagnosticAudio: a.toggleDictationAudio,
+	})
 }
 
 func (a *App) buildScrollablePreviewText(scrollKey, value string, color woxui.Color, scrollPosition string, width, height float32) woxwidget.Widget {

@@ -160,3 +160,28 @@ func CheckGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	}
 	return svgIcon("control.check", size, color)
 }
+
+// SparklesGlyph returns the shared AI refinement icon.
+func SparklesGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.sparkles", size, color)
+}
+
+// WaveformGlyph returns the shared transcript waveform icon.
+func WaveformGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.waveform", size, color)
+}
+
+// MultitrackAudioGlyph returns the shared diagnostic audio icon.
+func MultitrackAudioGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.multitrack-audio", size, color)
+}
+
+// PlayCircleGlyph returns the shared audio playback icon.
+func PlayCircleGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.play-circle", size, color)
+}
+
+// PauseGlyph returns the shared audio pause icon.
+func PauseGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.pause", size, color)
+}
