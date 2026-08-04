@@ -6,12 +6,24 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 const (
 	defaultWindowWidth  = 760
 	defaultWindowHeight = 480
 	defaultWindowTitle  = "Wox Go UI"
+)
+
+var errWindowClosed = errors.New("woxui: window is closed")
+
+// windowLifecycle tracks the portable Close/OnClosed state machine for Window.
+type windowLifecycle uint32
+
+const (
+	windowLifecycleOpen windowLifecycle = iota
+	windowLifecycleClosing
+	windowLifecycleClosed
 )
 
 // FocusEpoch identifies one show/focus lifetime of a window.
@@ -99,7 +111,15 @@ type WindowOptions struct {
 
 // Window wraps the native implementation selected for the current platform.
 type Window struct {
-	native *platformWindow
+	native     *platformWindow
+	fontFamily atomic.Value // string; last successfully applied SetFontFamily value
+	lifecycle  atomic.Uint32
+	// measureTextFn overrides the native measurer for tests; production leaves it nil.
+	measureTextFn func(text string, style TextStyle) (TextMetrics, error)
+	// closeFn overrides native close for tests so failure/rollback can be exercised without a platform window.
+	closeFn func() error
+	// userOnClosed is the caller-supplied OnClosed, invoked after the window reaches closed.
+	userOnClosed func()
 }
 
 // Open creates a hidden window. It must be called from Run's start callback or a UI callback.
@@ -114,11 +134,16 @@ func Open(options WindowOptions) (*Window, error) {
 		options.Size.Height = defaultWindowHeight
 	}
 
+	window := &Window{userOnClosed: options.OnClosed}
+	window.lifecycle.Store(uint32(windowLifecycleOpen))
+	// Bind closed state to the real native teardown callback, including external destroys.
+	options.OnClosed = window.handleNativeClosed
 	native, err := openPlatformWindow(options)
 	if err != nil {
 		return nil, err
 	}
-	return &Window{native: native}, nil
+	window.native = native
+	return window, nil
 }
 
 // Show begins a new focus lifetime and requests platform activation.
@@ -215,10 +240,20 @@ func (w *Window) SetAppearance(isDark bool) error {
 
 // SetFontFamily changes the window-wide UI font while preserving platform fallback when family is empty or unavailable.
 func (w *Window) SetFontFamily(family string) error {
-	if w == nil || w.native == nil {
+	if w == nil || (w.native == nil && w.measureTextFn == nil) {
 		return errors.New("window is not initialized")
 	}
-	return w.native.setFontFamily(strings.TrimSpace(family))
+	if !w.isOpen() {
+		return errWindowClosed
+	}
+	family = strings.TrimSpace(family)
+	if w.native != nil {
+		if err := w.native.setFontFamily(family); err != nil {
+			return err
+		}
+	}
+	w.fontFamily.Store(family)
+	return nil
 }
 
 // Invalidate requests another frame without starting a continuous render loop.
@@ -273,9 +308,14 @@ func (w *Window) SetPointerCursor(cursor PointerCursor) error {
 
 // MeasureText measures one line using the same system font as DrawText.
 // It must be called from Run's start callback or a UI callback.
+// Results are cached by (text, style, font family) so layout hot paths avoid repeated CGO.
 func (w *Window) MeasureText(text string, style TextStyle) (TextMetrics, error) {
-	if w == nil || w.native == nil {
+	if w == nil || (w.native == nil && w.measureTextFn == nil) {
 		return TextMetrics{}, errors.New("window is not initialized")
+	}
+	// Only an open window may answer from cache or native; closing matches platform measure failures.
+	if !w.isOpen() {
+		return TextMetrics{}, errWindowClosed
 	}
 	if text == "" {
 		return TextMetrics{}, nil
@@ -286,7 +326,35 @@ func (w *Window) MeasureText(text string, style TextStyle) (TextMetrics, error) 
 	if style.Weight != FontWeightRegular && style.Weight != FontWeightSemibold {
 		style.Weight = FontWeightRegular
 	}
+	key := textMetricsCacheKey{text: text, size: style.Size, weight: style.Weight, family: w.currentFontFamily()}
+	if metrics, ok := globalTextMetricsCache.get(key); ok {
+		return metrics, nil
+	}
+	metrics, err := w.measureText(text, style)
+	if err != nil {
+		return metrics, err
+	}
+	globalTextMetricsCache.put(key, metrics)
+	return metrics, nil
+}
+
+// measureText calls the injectable test backend or the native platform measurer.
+func (w *Window) measureText(text string, style TextStyle) (TextMetrics, error) {
+	if w.measureTextFn != nil {
+		return w.measureTextFn(text, style)
+	}
 	return w.native.measureText(text, style)
+}
+
+// currentFontFamily returns the last font family applied via SetFontFamily.
+func (w *Window) currentFontFamily() string {
+	if w == nil {
+		return ""
+	}
+	if value := w.fontFamily.Load(); value != nil {
+		return value.(string)
+	}
+	return ""
 }
 
 // PickFile opens the platform file picker owned by this window.
@@ -327,9 +395,73 @@ func parseExternalURL(rawURL string) (*url.URL, error) {
 
 // Close releases the native window. Run returns after the final window closes.
 func (w *Window) Close() error {
-	if w == nil || w.native == nil {
+	if w == nil || (w.native == nil && w.measureTextFn == nil && w.closeFn == nil) {
 		return errors.New("window is not initialized")
 	}
-	clearAccessibility(w.native)
-	return w.native.close()
+	if !w.beginClose() {
+		return nil
+	}
+	if w.native != nil {
+		clearAccessibility(w.native)
+	}
+
+	var err error
+	switch {
+	case w.closeFn != nil:
+		err = w.closeFn()
+	case w.native != nil:
+		err = w.native.close()
+	default:
+		// Test windows without a native backend treat Close as a successful teardown.
+		w.handleNativeClosed()
+		return nil
+	}
+	if err != nil {
+		// Native close failed and the window remains usable.
+		w.abortClose()
+		return err
+	}
+	// Successful native close invokes OnClosed; finishClosed is idempotent if it already ran.
+	w.finishClosed()
+	return nil
+}
+
+// beginClose transitions open → closing. Returns false when already closing or closed.
+func (w *Window) beginClose() bool {
+	return w.lifecycle.CompareAndSwap(uint32(windowLifecycleOpen), uint32(windowLifecycleClosing))
+}
+
+// abortClose rolls closing → open after a failed native close.
+func (w *Window) abortClose() {
+	w.lifecycle.CompareAndSwap(uint32(windowLifecycleClosing), uint32(windowLifecycleOpen))
+}
+
+// finishClosed transitions open/closing → closed once the native window is gone.
+func (w *Window) finishClosed() {
+	for {
+		current := w.lifecycle.Load()
+		if windowLifecycle(current) == windowLifecycleClosed {
+			return
+		}
+		if w.lifecycle.CompareAndSwap(current, uint32(windowLifecycleClosed)) {
+			return
+		}
+	}
+}
+
+// handleNativeClosed is installed as WindowOptions.OnClosed so external native destroys
+// mark the wrapper closed even when Close() was never called.
+func (w *Window) handleNativeClosed() {
+	w.finishClosed()
+	if w.userOnClosed != nil {
+		w.userOnClosed()
+	}
+}
+
+func (w *Window) isClosed() bool {
+	return windowLifecycle(w.lifecycle.Load()) == windowLifecycleClosed
+}
+
+func (w *Window) isOpen() bool {
+	return windowLifecycle(w.lifecycle.Load()) == windowLifecycleOpen
 }
