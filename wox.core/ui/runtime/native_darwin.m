@@ -658,6 +658,15 @@ static void clear_renderer_surfaces(WoxDarwinRenderer *renderer) {
   [renderer->render_surfaces removeAllObjects];
 }
 
+// Hidden windows keep their AppKit state but release every IOSurface so the launcher has no
+// display-sized backing allocation while idle. A later frame recreates the pool on demand.
+static void hide_window_and_release_surfaces(WoxDarwinWindow *window) {
+  window->visible = false;
+  atomic_fetch_add_explicit(&window->presentation_generation, 1, memory_order_relaxed);
+  [window->window orderOut:nil];
+  clear_renderer_surfaces(window->renderer);
+}
+
 // acquire_render_surface returns a retained backing store no longer owned by Core Animation.
 static WoxDarwinSurface *acquire_render_surface(WoxDarwinRenderer *renderer, NSUInteger width, NSUInteger height) {
   NSMutableArray *stale_surfaces = [NSMutableArray array];
@@ -1712,14 +1721,7 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   }
   emit_focus(owner, false);
   if (!owner->closed && owner->hide_on_blur && owner->visible) {
-    owner->visible = false;
-    atomic_fetch_add_explicit(&owner->presentation_generation, 1, memory_order_relaxed);
-    [owner->window orderOut:nil];
-    owner->renderer->content_layer.contents = nil;
-    if (owner->renderer->front_surface != nil) {
-      atomic_fetch_sub_explicit(&owner->renderer->front_surface->presentation_references, 1, memory_order_relaxed);
-      owner->renderer->front_surface = nil;
-    }
+    hide_window_and_release_surfaces(owner);
   }
 }
 @end
@@ -1899,10 +1901,7 @@ int32_t wox_darwin_window_hide(WoxDarwinWindow *window) {
     }
     emit_focus(window, false);
     if (!window->closed) {
-      window->visible = false;
-      atomic_fetch_add_explicit(&window->presentation_generation, 1, memory_order_relaxed);
-      [window->window orderOut:nil];
-      clear_renderer_surfaces(window->renderer);
+      hide_window_and_release_surfaces(window);
     }
   });
   return result;
@@ -2776,6 +2775,11 @@ void wox_darwin_autorelease_pool_pop(void *pool) {
 int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_width, float logical_height, float scale, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL || window->closed || window->renderer == NULL || logical_width <= 0.0f || logical_height <= 0.0f || scale <= 0.0f) {
     return -1;
+  }
+  // A queued frame can reach the renderer after AppKit hides on blur without crossing Go's hide
+  // path. Skip it so it cannot recreate the IOSurface pool behind an invisible window.
+  if (!window->visible) {
+    return 1;
   }
   WoxDarwinRenderer *renderer = window->renderer;
   if (renderer->frame_open) {
