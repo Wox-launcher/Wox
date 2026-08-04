@@ -73,6 +73,9 @@ type LauncherHeaderProps struct {
 	GlanceWidth       float32
 	Icon              *woxui.Image
 	Loading           woxwidget.Widget
+	// OnDragStart starts a window drag when the pointer presses the header's
+	// empty padding around the query pill (e.g. above the input box).
+	OnDragStart func()
 }
 
 // LauncherHeaderView builds the query box and prepared accessory views.
@@ -113,7 +116,7 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 		})
 	}
 	horizontalPadding := props.AppPadding.Left + props.AppPadding.Right
-	return woxwidget.Container{
+	header := woxwidget.Widget(woxwidget.Container{
 		Width: props.Width, Height: props.Height,
 		Padding: woxwidget.Insets{Left: props.AppPadding.Left, Top: props.AppPadding.Top, Right: props.AppPadding.Right},
 		Child: woxwidget.Container{
@@ -121,7 +124,13 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 			Padding: woxwidget.Insets{Left: queryLeftPadding, Right: scaledLauncherSize(6, props.DensityScale)},
 			Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: accessoryGap, Children: children},
 		},
+	})
+	if props.OnDragStart == nil {
+		return header
 	}
+	// Nested gestures (query editor, buttons) still win the hit test over this
+	// wrapper, so only the empty padding around the pill starts a window drag.
+	return woxwidget.Gesture{ID: "launcher-header-drag", OnDragStart: props.OnDragStart, Child: header}
 }
 
 // LauncherQueryView builds the query editor from adapter-prepared text metrics.

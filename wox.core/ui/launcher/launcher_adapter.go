@@ -239,6 +239,11 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 		QueryWidth: queryWidth, QueryRadius: snapshot.palette.queryRadius, AppPadding: snapshot.palette.appPadding, Theme: snapshot.palette.componentTheme(),
 		Query: a.queryViewProps(snapshot, queryWidth, queryEditorHeight), Refinement: refinement, RefinementWidth: refinementWidth,
 		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon, Loading: loading,
+		OnDragStart: func() {
+			if err := a.window.StartDragging(); err != nil {
+				log.Printf("start launcher window drag: %v", err)
+			}
+		},
 	})
 }
 
