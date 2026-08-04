@@ -580,9 +580,18 @@ func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityM
 			if tail.ImageHeight != nil && *tail.ImageHeight > 0 {
 				item.Height = float32(*tail.ImageHeight)
 			}
-			item.Image = a.imageForSize(tail.Image, physicalImageSize(int(math.Ceil(float64(max(item.Width, item.Height)))), imageScale))
+			item.Image = a.imageForDimensions(
+				tail.Image,
+				physicalImageSize(int(math.Ceil(float64(item.Width))), imageScale),
+				physicalImageSize(int(math.Ceil(float64(item.Height))), imageScale),
+			)
 			if item.Image == nil {
 				continue
+			}
+			if text, ok := centeredSVGText(tail.Image, item.Width, item.Height); ok {
+				item.ImageText = text.Value
+				item.ImageTextColor = text.Color
+				item.ImageTextSize = text.Size
 			}
 		default:
 			continue

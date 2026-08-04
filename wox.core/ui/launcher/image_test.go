@@ -1,6 +1,10 @@
 package launcher
 
-import "testing"
+import (
+	"testing"
+
+	woxui "wox/ui/runtime"
+)
 
 func TestEmbeddedAppIconUsesHighResolutionPNG(t *testing.T) {
 	image, err := decodeWoxImageWithTint(appIconImageSource, nil, 256)
@@ -9,6 +13,32 @@ func TestEmbeddedAppIconUsesHighResolutionPNG(t *testing.T) {
 	}
 	if image.Width < 200 || image.Height < 200 {
 		t.Fatalf("embedded app icon size = %dx%d, want at least 200x200", image.Width, image.Height)
+	}
+}
+
+func TestDecodeWoxImagePreservesRectangularSVGDimensions(t *testing.T) {
+	image, err := decodeWoxImageWithTintDimensions(woxImage{
+		ImageType: "svg",
+		ImageData: `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="18" viewBox="0 0 96 18"><rect width="96" height="18" fill="#ffffff"/></svg>`,
+	}, nil, 192, 36)
+	if err != nil {
+		t.Fatalf("decode rectangular SVG: %v", err)
+	}
+	if image.Width != 192 || image.Height != 36 {
+		t.Fatalf("decoded image size = %dx%d, want 192x36", image.Width, image.Height)
+	}
+}
+
+func TestCenteredSVGTextExtractsBadgeLabel(t *testing.T) {
+	text, ok := centeredSVGText(woxImage{
+		ImageType: "svg",
+		ImageData: `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="18" viewBox="0 0 96 18"><rect width="96" height="18" fill="#ffffff"/><text x="48" y="12.4" text-anchor="middle" font-size="9.5" fill="#1f2937">周 --</text></svg>`,
+	}, 96, 18)
+	if !ok {
+		t.Fatal("expected centered SVG badge text")
+	}
+	if text.Value != "周 --" || text.Size != 9.5 || text.Color != (woxui.Color{R: 31, G: 41, B: 55, A: 255}) {
+		t.Fatalf("centered SVG text = %+v", text)
 	}
 }
 

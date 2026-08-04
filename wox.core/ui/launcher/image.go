@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"image"
 	"image/color"
@@ -14,6 +15,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,6 +67,27 @@ type lazyImagePayload struct {
 	Placeholder woxImage `json:"placeholder"`
 }
 
+type svgTextElement struct {
+	X          float32 `xml:"x,attr"`
+	FontSize   float32 `xml:"font-size,attr"`
+	TextAnchor string  `xml:"text-anchor,attr"`
+	Fill       string  `xml:"fill,attr"`
+	Value      string  `xml:",chardata"`
+}
+
+type svgTextDocument struct {
+	Width   string           `xml:"width,attr"`
+	Height  string           `xml:"height,attr"`
+	ViewBox string           `xml:"viewBox,attr"`
+	Texts   []svgTextElement `xml:"text"`
+}
+
+type svgCenteredText struct {
+	Value string
+	Color woxui.Color
+	Size  float32
+}
+
 const launcherImageCacheLimit = 512
 
 func (a *App) imageFor(source woxImage) *woxui.Image {
@@ -76,6 +99,11 @@ func (a *App) imageForSize(source woxImage, size int) *woxui.Image {
 	return a.imageForTint(source, nil, size)
 }
 
+// imageForDimensions preserves non-square SVG geometry at the requested physical resolution.
+func (a *App) imageForDimensions(source woxImage, width, height int) *woxui.Image {
+	return a.imageForTintDimensions(source, nil, width, height)
+}
+
 // physicalImageSize keeps rasterized vector assets sharp at the window's current backing scale.
 func physicalImageSize(logicalSize int, scale float32) int {
 	if scale <= 0 {
@@ -84,16 +112,72 @@ func physicalImageSize(logicalSize int, scale float32) int {
 	return max(1, int(math.Ceil(float64(float32(logicalSize)*scale))))
 }
 
+// centeredSVGText extracts a single centered label so the native text renderer can cover SVG text unsupported by the rasterizer.
+func centeredSVGText(source woxImage, targetWidth, targetHeight float32) (svgCenteredText, bool) {
+	if source.ImageType != "svg" || source.ImageData == "" || targetWidth <= 0 || targetHeight <= 0 {
+		return svgCenteredText{}, false
+	}
+	var document svgTextDocument
+	if err := xml.Unmarshal([]byte(source.ImageData), &document); err != nil || len(document.Texts) != 1 {
+		return svgCenteredText{}, false
+	}
+	text := document.Texts[0]
+	value := strings.TrimSpace(text.Value)
+	if value == "" || !strings.EqualFold(strings.TrimSpace(text.TextAnchor), "middle") || text.FontSize <= 0 {
+		return svgCenteredText{}, false
+	}
+	viewWidth, viewHeight, ok := svgDocumentSize(document)
+	if !ok || math.Abs(float64(text.X-viewWidth/2)) > 0.01 {
+		return svgCenteredText{}, false
+	}
+	scale := min(targetWidth/viewWidth, targetHeight/viewHeight)
+	color, ok := decodeThemeColor(text.Fill)
+	if !ok {
+		color = woxui.Color{A: 255}
+	}
+	return svgCenteredText{Value: value, Color: color, Size: text.FontSize * scale}, true
+}
+
+// svgDocumentSize resolves the coordinate space used to scale an extracted text label.
+func svgDocumentSize(document svgTextDocument) (float32, float32, bool) {
+	parts := strings.Fields(document.ViewBox)
+	if len(parts) == 4 {
+		width, widthErr := strconv.ParseFloat(parts[2], 32)
+		height, heightErr := strconv.ParseFloat(parts[3], 32)
+		if widthErr == nil && heightErr == nil && width > 0 && height > 0 {
+			return float32(width), float32(height), true
+		}
+	}
+	width, widthErr := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(document.Width), "px"), 32)
+	height, heightErr := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(document.Height), "px"), 32)
+	if widthErr != nil || heightErr != nil || width <= 0 || height <= 0 {
+		return 0, 0, false
+	}
+	return float32(width), float32(height), true
+}
+
 // imageForTint applies a source-in tint to SVG images and sets the resolution for core-resolved assets.
 func (a *App) imageForTint(source woxImage, tint *woxui.Color, svgSize int) *woxui.Image {
+	return a.imageForTintDimensions(source, tint, svgSize, svgSize)
+}
+
+// imageForTintDimensions keeps cache and decode dimensions aligned for rectangular SVGs.
+func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidth, svgHeight int) *woxui.Image {
 	if source.ImageType == "" || source.ImageData == "" {
 		return nil
 	}
+	svgWidth = max(1, svgWidth)
+	svgHeight = max(1, svgHeight)
 	if source.ImageType == "lottie" {
+		svgSize := max(svgWidth, svgHeight)
 		return a.lottieImages.frame(lottieImageCacheKey(source, svgSize), source.ImageData, svgSize)
 	}
 	key := imageKey(source)
-	key += fmt.Sprintf("-svg-%d", svgSize)
+	if svgWidth == svgHeight {
+		key += fmt.Sprintf("-svg-%d", svgWidth)
+	} else {
+		key += fmt.Sprintf("-svg-%dx%d", svgWidth, svgHeight)
+	}
 	if tint != nil {
 		key += fmt.Sprintf("-tint-%02x%02x%02x%02x", tint.R, tint.G, tint.B, tint.A)
 	}
@@ -107,12 +191,12 @@ func (a *App) imageForTint(source woxImage, tint *woxui.Color, svgSize int) *wox
 	a.imageRequested[key] = source.ImageData
 	delete(a.imageErrors, key)
 	util.Go(a.lifecycleCtx, "load launcher image", func() {
-		a.loadImage(key, source, tint, svgSize)
+		a.loadImage(key, source, tint, svgWidth, svgHeight)
 	})
 	return nil
 }
 
-func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgSize int) {
+func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth, svgHeight int) {
 	if source.ImageType == "lazyloadimage" {
 		var payload lazyImagePayload
 		if err := json.Unmarshal([]byte(source.ImageData), &payload); err != nil {
@@ -120,7 +204,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgSize 
 			a.storeImageError(key, err)
 			return
 		}
-		if placeholder, err := decodeWoxImageWithTint(payload.Placeholder, tint, svgSize); err == nil {
+		if placeholder, err := decodeWoxImageWithTintDimensions(payload.Placeholder, tint, svgWidth, svgHeight); err == nil {
 			a.storeImage(key, placeholder)
 		}
 		if payload.Token == "" {
@@ -135,7 +219,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgSize 
 			return
 		}
 		resolved := woxImage{ImageType: loaded.ImageType, ImageData: loaded.ImageData}
-		image, err := decodeWoxImageWithTint(resolved, tint, svgSize)
+		image, err := decodeWoxImageWithTintDimensions(resolved, tint, svgWidth, svgHeight)
 		if err != nil {
 			log.Printf("decode resolved lazy result image: %v", err)
 			a.storeImageError(key, err)
@@ -146,7 +230,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgSize 
 	}
 	if source.ImageType == "url" || source.ImageType == "emoji" || source.ImageType == "fileicon" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		loaded, err := a.services.ResolveImage(ctx, a.sessionID, common.WoxImage{ImageType: source.ImageType, ImageData: source.ImageData}, svgSize)
+		loaded, err := a.services.ResolveImage(ctx, a.sessionID, common.WoxImage{ImageType: source.ImageType, ImageData: source.ImageData}, max(svgWidth, svgHeight))
 		cancel()
 		if err != nil {
 			log.Printf("resolve %s result image %q: %v", source.ImageType, source.ImageData, err)
@@ -154,7 +238,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgSize 
 			return
 		}
 		resolved := woxImage{ImageType: loaded.ImageType, ImageData: loaded.ImageData}
-		image, err := decodeWoxImageWithTint(resolved, tint, svgSize)
+		image, err := decodeWoxImageWithTintDimensions(resolved, tint, svgWidth, svgHeight)
 		if err != nil {
 			log.Printf("decode resolved %s result image: %v", source.ImageType, err)
 			a.storeImageError(key, err)
@@ -164,7 +248,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgSize 
 		return
 	}
 
-	image, err := decodeWoxImageWithTint(source, tint, svgSize)
+	image, err := decodeWoxImageWithTintDimensions(source, tint, svgWidth, svgHeight)
 	if err != nil {
 		log.Printf("decode %s result image: %v", source.ImageType, err)
 		a.storeImageError(key, err)
@@ -231,6 +315,11 @@ func decodeWoxImage(source woxImage) (*woxui.Image, error) {
 }
 
 func decodeWoxImageWithTint(source woxImage, tint *woxui.Color, svgSize int) (*woxui.Image, error) {
+	return decodeWoxImageWithTintDimensions(source, tint, svgSize, svgSize)
+}
+
+// decodeWoxImageWithTintDimensions decodes vector sources at their requested width and height.
+func decodeWoxImageWithTintDimensions(source woxImage, tint *woxui.Color, svgWidth, svgHeight int) (*woxui.Image, error) {
 	switch source.ImageType {
 	case "absolute":
 		if strings.EqualFold(filepath.Ext(source.ImageData), ".svg") {
@@ -238,7 +327,7 @@ func decodeWoxImageWithTint(source woxImage, tint *woxui.Color, svgSize int) (*w
 			if err != nil {
 				return nil, err
 			}
-			return decodeSVGImage(string(data), svgSize, tint)
+			return decodeSVGImage(string(data), svgWidth, svgHeight, tint)
 		}
 		file, err := os.Open(source.ImageData)
 		if err != nil {
@@ -256,11 +345,11 @@ func decodeWoxImageWithTint(source woxImage, tint *woxui.Color, svgSize int) (*w
 			return nil, err
 		}
 		if strings.Contains(strings.ToLower(source.ImageData), "image/svg+xml") {
-			return decodeSVGImage(string(pixels), svgSize, tint)
+			return decodeSVGImage(string(pixels), svgWidth, svgHeight, tint)
 		}
 		return woxui.DecodeImage(bytes.NewReader(pixels))
 	case "svg":
-		return decodeSVGImage(source.ImageData, svgSize, tint)
+		return decodeSVGImage(source.ImageData, svgWidth, svgHeight, tint)
 	case "theme":
 		return decodeThemeImage(source.ImageData)
 	case "appicon":
@@ -270,8 +359,8 @@ func decodeWoxImageWithTint(source woxImage, tint *woxui.Color, svgSize int) (*w
 	}
 }
 
-func decodeSVGImage(data string, size int, tint *woxui.Color) (*woxui.Image, error) {
-	rgba, err := woxsvg.Render(data, size, size)
+func decodeSVGImage(data string, width, height int, tint *woxui.Color) (*woxui.Image, error) {
+	rgba, err := woxsvg.Render(data, width, height)
 	if err != nil {
 		return nil, err
 	}

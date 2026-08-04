@@ -64,3 +64,18 @@ func TestLauncherResultTailsScrollHorizontallyWhenClipped(t *testing.T) {
 		t.Fatalf("tail scroll geometry = viewport %.0f content %.0f, want 80/120", tails.Width, tails.ContentWidth)
 	}
 }
+
+func TestLauncherResultImageTailOverlaysCenteredSVGText(t *testing.T) {
+	tails := launcherResultTails([]LauncherResultTail{{
+		Image: &woxui.Image{Width: 192, Height: 36}, Width: 96, Height: 18,
+		ImageText: "周 --", ImageTextColor: woxui.Color{R: 31, G: 41, B: 55, A: 255}, ImageTextSize: 9.5,
+	}}, 106, 18, woxui.Color{}, false).(woxwidget.Clip)
+	row := tails.Child.(woxwidget.Flex)
+	item := row.Children[0].(woxwidget.Container)
+	stack := item.Child.(woxwidget.Align).Child.(woxwidget.Stack)
+	label := stack.Children[1].Child.(woxwidget.Align).Child.(woxwidget.Text)
+
+	if label.Value != "周 --" || label.Style.Size != 9.5 || label.Color != (woxui.Color{R: 31, G: 41, B: 55, A: 255}) {
+		t.Fatalf("image tail label = %#v", label)
+	}
+}

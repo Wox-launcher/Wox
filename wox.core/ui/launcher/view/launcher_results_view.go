@@ -10,11 +10,14 @@ import (
 
 // LauncherResultTail contains one resolved result-tail visual and its measured width.
 type LauncherResultTail struct {
-	Text         string
-	TextCategory string
-	Image        *woxui.Image
-	Width        float32
-	Height       float32
+	Text           string
+	TextCategory   string
+	Image          *woxui.Image
+	ImageText      string
+	ImageTextColor woxui.Color
+	ImageTextSize  float32
+	Width          float32
+	Height         float32
 }
 
 // LauncherResultItem contains one visible list result and its controller callbacks.
@@ -188,6 +191,14 @@ func launcherResultTailsWithDensity(tails []LauncherResultTail, width, height fl
 		var content woxwidget.Widget
 		if item.Image != nil {
 			content = woxwidget.Image{Source: item.Image, Width: item.Width, Height: item.Height}
+			if item.ImageText != "" && item.ImageTextSize > 0 {
+				content = woxwidget.Stack{Width: item.Width, Height: item.Height, Children: []woxwidget.StackChild{
+					{Child: content},
+					{Child: woxwidget.Align{Width: item.Width, Height: item.Height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
+						Value: item.ImageText, Style: woxui.TextStyle{Size: item.ImageTextSize}, Color: item.ImageTextColor,
+					}}},
+				}}
+			}
 		} else {
 			textColor, background, border := launcherResultTextTailStyle(item.TextCategory, foreground, selected)
 			horizontalPadding := scaledLauncherSize(8, densityScale)
