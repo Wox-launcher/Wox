@@ -79,6 +79,8 @@
 				"mode": "auto",
 				"program": "${workspaceFolder:wox.core}",
 				"cwd": "${workspaceFolder:wox.core}",
+				// Keep the macOS process identity stable so AppKit can reuse tray positions between debug builds.
+				"output": "${workspaceFolder:wox.core}/__debug_bin_wox",
 				"buildFlags": "-tags=sqlite_fts5",
 				"env": {
 					"CGO_ENABLED": "1"
