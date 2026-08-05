@@ -43,7 +43,7 @@ func (a *App) buildPreview(result queryResult, palette uiPalette, width, height,
 		return a.buildMediaPreview(result, data, palette, width, height)
 	}
 	if preview.PreviewType == "chat" {
-		return a.buildChatPreview(result, preview, palette, width, height)
+		return a.buildChatPreview(result, preview, palette, width, height, imageScale)
 	}
 	scrollKey := result.QueryID + "\x00" + result.ID + "\x00" + preview.PreviewType
 	if preview.PreviewType == "update" {

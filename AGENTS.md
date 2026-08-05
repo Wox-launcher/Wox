@@ -11,6 +11,7 @@
 - **New Functions**: Add a short comment for new functions unless the function is trivial, such as 2-4 straightforward lines whose purpose is obvious from the name and body.
 - **Change Comments**: For optimizations, bug fixes, and new features, add comments near the relevant code only when they clarify a non-obvious reason, previous limitation, or implementation choice. Avoid boilerplate comments for obvious changes.
 - **Readability First**: Favor the simplest control flow that keeps behavior correct. Avoid clever abstractions, layered state handling, or indirection that make the execution path harder to follow.
+- **Layout Alignment**: Prefer built-in horizontal and vertical alignment primitives for centering. Do not manually calculate padding or offsets when the layout system can express the intended alignment directly.
 - **Inline Small Logic**: Prefer keeping very small, single-use logic inline. Do not extract a 3-4 line block into a helper unless it is reused, clarifies a meaningful boundary, or clearly reduces complexity.
 - **Explain Structures And Logic**: Add comments for complex structs, state transitions, control-flow branches, and non-obvious or counterintuitive logic. Do not comment obvious code just to satisfy a rule.
 - **Refactors**: Scan `AGENTS.md` and `README.md` files first

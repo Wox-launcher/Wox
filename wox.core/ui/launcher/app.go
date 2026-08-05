@@ -772,6 +772,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	var previewVisible bool
 	var toolbarMessageVisible bool
 	var previewFullscreen bool
+	var chatFullscreen bool
 	var queryText string
 	if err := a.runOnUI("snapshot launcher window bounds", func() {
 		params = a.show
@@ -787,7 +788,8 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 			formHeight = int(densityMetrics.scaled(formContentMaximumHeight) + 2*densityMetrics.scaled(10))
 		}
 		toolbarMessageVisible = a.toolbarMsg != nil
-		previewFullscreen = a.chatFullscreen || a.terminalFullscreen
+		chatFullscreen = a.chatFullscreen
+		previewFullscreen = chatFullscreen || a.terminalFullscreen
 		if actionPanel && a.actionFilter != nil {
 			actionCount = len(filteredActionIndices(unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg), a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin()))
 		}
@@ -810,7 +812,8 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	resultRowHeight := int(densityMetrics.resultRowHeight(palette))
 	resultVerticalPadding := int(palette.resultContainerPadding.Top + palette.resultContainerPadding.Bottom)
 	queryAreaHeight := int(densityMetrics.queryBoxHeightForText(queryText) + palette.appPadding.Top + palette.appPadding.Bottom)
-	toolbarVisible := !params.HideToolbar && !previewFullscreen && (resultCount > 0 || toolbarMessageVisible)
+	toolbarHasContent := resultCount > 0 || toolbarMessageVisible
+	toolbarHeightIncluded := launcherToolbarHeightIncluded(params.HideToolbar, toolbarHasContent, previewFullscreen, chatFullscreen)
 	height := 0
 	if !params.HideQueryBox {
 		height += queryAreaHeight
@@ -825,7 +828,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 			height += resultVerticalPadding + visibleResults*resultRowHeight + max(0, visibleResults-1)*resultRowGap
 		}
 	}
-	if toolbarVisible {
+	if toolbarHeightIncluded {
 		height += int(densityMetrics.toolbarHeight)
 	}
 	maximumResultWindowHeight := resultVerticalPadding + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
@@ -835,7 +838,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	if refinementVisible {
 		maximumResultWindowHeight += int(densityMetrics.refinementBarHeight)
 	}
-	if toolbarVisible {
+	if toolbarHeightIncluded {
 		maximumResultWindowHeight += int(densityMetrics.toolbarHeight)
 	}
 	if previewVisible {
@@ -849,7 +852,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		if refinementVisible {
 			minimumHeight += int(densityMetrics.refinementBarHeight)
 		}
-		if toolbarVisible {
+		if toolbarHeightIncluded {
 			minimumHeight += int(densityMetrics.toolbarHeight)
 		}
 		height = max(height, minimumHeight)
@@ -862,7 +865,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		if refinementVisible {
 			actionHeight += int(densityMetrics.refinementBarHeight)
 		}
-		if toolbarVisible {
+		if toolbarHeightIncluded {
 			actionHeight += int(densityMetrics.toolbarHeight)
 		}
 		// Opening the action panel restores Flutter's full configured result height while still allowing larger panels to fit.
@@ -876,7 +879,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		if refinementVisible {
 			formWindowHeight += int(densityMetrics.refinementBarHeight)
 		}
-		if toolbarVisible {
+		if toolbarHeightIncluded {
 			formWindowHeight += int(densityMetrics.toolbarHeight)
 		}
 		height = max(height, formWindowHeight)
@@ -899,6 +902,11 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		return nil
 	}
 	return a.window.SetBounds(target)
+}
+
+// launcherToolbarHeightIncluded preserves the hidden toolbar's space only in Flutter's chat mode.
+func launcherToolbarHeightIncluded(hideToolbar, hasContent, previewFullscreen, chatFullscreen bool) bool {
+	return !hideToolbar && hasContent && (!previewFullscreen || chatFullscreen)
 }
 
 // launcherWindowOrigin keeps user-moved windows in place while preserving a bottom query box during height changes.

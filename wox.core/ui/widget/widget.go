@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"math"
 	"strings"
 	"unicode"
 
@@ -10,6 +11,15 @@ import (
 // Widget produces one laid-out render node for the current constraints.
 type Widget interface {
 	layout(context, constraints) *node
+}
+
+// MeasureStateless returns the natural size of a widget tree that does not contain retained State.
+func MeasureStateless(window HostServices, widget Widget, width float32) woxui.Size {
+	if widget == nil {
+		return woxui.Size{}
+	}
+	node := widget.layout(context{window: window}, constraints{width: width, height: math.MaxFloat32})
+	return woxui.Size{Width: node.bounds.Width, Height: node.bounds.Height}
 }
 
 type textMeasurer interface {

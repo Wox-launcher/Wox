@@ -30,6 +30,9 @@ func TestSharedIconGlyphsUseSVGImages(t *testing.T) {
 	glyphs := []woxwidget.Widget{
 		CloseGlyph(16, color),
 		SearchGlyph(18, color),
+		AddGlyph(18, color),
+		DeleteGlyph(15, color),
+		ChatBubbleGlyph(22, color),
 		MenuGlyph(18, color),
 		ChevronGlyph(16, color, false),
 		ChevronGlyph(16, color, true),
@@ -40,6 +43,17 @@ func TestSharedIconGlyphsUseSVGImages(t *testing.T) {
 		ClockGlyph(16, color),
 		FilterListGlyph(15, color),
 		CheckGlyph(12, color),
+		CheckCircleGlyph(14, color),
+		ErrorGlyph(14, color),
+		ToolGlyph(16, color),
+		ArticleGlyph(16, color),
+		TerminalGlyph(16, color),
+		PlayArrowGlyph(14, color),
+		HourglassGlyph(14, color),
+		ModelTrainingGlyph(18, color),
+		KeyboardArrowDownGlyph(14, color),
+		KeyboardArrowRightGlyph(16, color),
+		ExtensionGlyph(18, color),
 	}
 	for index, glyph := range glyphs {
 		image, ok := glyph.(woxwidget.Image)

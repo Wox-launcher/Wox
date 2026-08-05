@@ -6,16 +6,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
+	woxcomponent "wox/ui/launcher/component"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
 // buildChatPreview prepares chat view props while retaining lifecycle and actions in the controller.
-func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	snapshot, err := a.chatPreviewSnapshotFor(result, preview)
 	if err != nil {
 		return previewview.PreviewError(fmt.Sprintf("Invalid chat preview: %v", err), width, height, palette.componentTheme())
@@ -44,8 +46,8 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 	}
 	var catalog *previewview.ChatCatalogProps
 	if snapshot.panel == "history" {
-		catalogWidth := min(float32(260), max(float32(220), innerWidth*0.46))
-		props := a.chatCatalogProps(snapshot, palette, catalogWidth, innerHeight)
+		catalogWidth := min(float32(260), width)
+		props := a.chatCatalogProps(snapshot, palette, catalogWidth, height)
 		catalog = &props
 	} else if snapshot.panel == "models" || snapshot.panel == "skills" || snapshot.panel == chatCommandPanel {
 		catalogHeight := chatCatalogPanelHeight(snapshot, innerHeight-questionHeight)
@@ -56,7 +58,7 @@ func (a *App) buildChatPreview(result queryResult, preview queryPreview, palette
 	return previewview.ChatPreview(previewview.ChatPreviewProps{
 		Width: width, Height: height, Key: snapshot.key, Panel: panel,
 		Header:   a.chatHeaderProps(snapshot, palette, innerWidth, headerHeight),
-		Messages: a.chatMessagesProps(snapshot, palette, innerWidth, messagesHeight),
+		Messages: a.chatMessagesProps(snapshot, palette, innerWidth, messagesHeight, imageScale),
 		Debug:    debug, Question: question,
 		Input:   a.chatInputProps(snapshot, palette, innerWidth, inputHeight),
 		Catalog: catalog, OnDismiss: func() { a.toggleChatPanel(panel) },
@@ -78,11 +80,14 @@ func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, 
 		exitLabel = "Close"
 	}
 	exitLabel += " (Esc)"
+	historyLabel := a.translate("i18n:ui_action_toggle_sidebar")
+	// The sidebar toggle advertises the same Ctrl/Cmd+B shortcut Flutter binds to preview fullscreen.
+	historyTooltip := historyLabel + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+") + ")"
 	return previewview.ChatHeaderProps{
 		Width: width, Height: height, Key: snapshot.key, Title: title, HistoryOpen: snapshot.panel == "history",
 		ShowDebug: hasDebug, DebugOpen: snapshot.panel == "debug", ShowExit: launcherChromeHidden(a.show, a.chatFullscreen), ExitLabel: exitLabel,
-		HistoryLabel: a.translate("i18n:ui_action_toggle_sidebar"), Theme: palette.componentTheme(),
-		OnHistory: func() { a.toggleChatPanel("history") }, OnDebug: func() { a.toggleChatPanel("debug") },
+		HistoryLabel: historyLabel, HistoryTooltip: historyTooltip, Theme: palette.componentTheme(),
+		OnHistory: func() { a.toggleChatPanel("history") }, OnHistoryHover: a.setPreviewTooltip, OnDebug: func() { a.toggleChatPanel("debug") },
 		OnExit: a.closePreviewWindow, OnDrag: func() {
 			if err := a.window.StartDragging(); err != nil {
 				log.Printf("start chat preview window drag: %v", err)
@@ -96,11 +101,25 @@ func chatCatalogPanelHeight(snapshot *chatPreviewSnapshot, available float32) fl
 	if snapshot == nil || snapshot.panel == "" || snapshot.question != nil {
 		return 0
 	}
+	if snapshot.panel == "models" || snapshot.panel == "skills" || snapshot.panel == chatCommandPanel {
+		items := chatCommandPaletteItems(snapshot.models, snapshot.skills, snapshot.chat.Model, snapshot.panelQuery, snapshot.panel)
+		contentHeight := float32(len(items)) * chatCatalogRowHeight
+		if snapshot.panel == chatCommandPanel {
+			contentHeight = chatCommandContentHeight(items)
+		} else if len(items) > 0 {
+			contentHeight += chatCatalogGroupHeaderHeight
+		}
+		contentHeight = max(float32(40), contentHeight)
+		return min(contentHeight+14, min(float32(310), max(float32(96), available-104)))
+	}
 	return min(float32(270), max(float32(150), available*0.44))
 }
 
 // chatCatalogProps prepares history, model, and skill rows without constructing widgets.
 func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatCatalogProps {
+	if snapshot.panel == "history" {
+		return a.chatHistoryCatalogProps(snapshot, palette, width, height)
+	}
 	grouped := snapshot.panel == chatCommandPanel
 	viewportHeight := max(float32(40), height-44)
 	if grouped {
@@ -143,48 +162,26 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 	a.setChatPanelViewport(viewportHeight)
 
 	items := make([]previewview.ChatCatalogItemProps, 0, count)
-	if snapshot.panel == "history" {
-		for index, chat := range snapshot.chats {
-			chatID := chat.ID
-			title := strings.TrimSpace(chat.Title)
-			if title == "" {
-				title = "Untitled chat"
+	for index, command := range commands {
+		groupLabel := ""
+		if grouped {
+			if command.group == "models" {
+				groupLabel = a.translate("i18n:ui_ai_chat_select_model_title")
+			} else {
+				groupLabel = a.translate("i18n:ui_ai_skills")
 			}
-			subtitle := "Saved conversation"
-			if chat.UpdatedAt > 0 {
-				subtitle = time.UnixMilli(chat.UpdatedAt).Local().Format("2006-01-02 15:04")
-			}
-			if chatID == snapshot.chat.ID {
-				subtitle += " · Active"
-			}
-			items = append(items, previewview.ChatCatalogItemProps{
-				SelectID: fmt.Sprintf("chat-history-row-%s-%d", snapshot.key, index), DeleteID: fmt.Sprintf("chat-history-delete-%s-%d", snapshot.key, index),
-				Title: title, Subtitle: subtitle, DeleteLabel: a.translate("i18n:ui_delete"), Selected: index == snapshot.panelSelected,
-				OnSelect: func() { a.selectChatHistory(chatID) }, OnDelete: func() { a.deleteChatHistory(chatID) },
-			})
 		}
-	} else {
-		for index, command := range commands {
-			groupLabel := ""
-			if grouped {
+		items = append(items, previewview.ChatCatalogItemProps{
+			SelectID: fmt.Sprintf("chat-%s-row-%s-%d", command.group, snapshot.key, index), GroupLabel: groupLabel,
+			Kind: command.group, Title: command.title, Subtitle: command.subtitle, Selected: index == snapshot.panelSelected, Current: command.current,
+			OnSelect: func() {
 				if command.group == "models" {
-					groupLabel = a.translate("i18n:ui_ai_chat_select_model_title")
+					a.selectChatModel(command.sourceIndex)
 				} else {
-					groupLabel = a.translate("i18n:ui_ai_skills")
+					a.insertChatSkill(command.sourceIndex)
 				}
-			}
-			items = append(items, previewview.ChatCatalogItemProps{
-				SelectID: fmt.Sprintf("chat-%s-row-%s-%d", command.group, snapshot.key, index), GroupLabel: groupLabel,
-				Title: command.title, Subtitle: command.subtitle, Selected: index == snapshot.panelSelected, Current: command.current,
-				OnSelect: func() {
-					if command.group == "models" {
-						a.selectChatModel(command.sourceIndex)
-					} else {
-						a.insertChatSkill(command.sourceIndex)
-					}
-				},
-			})
-		}
+			},
+		})
 	}
 	emptyMessage := "No saved conversations"
 	if snapshot.panel == "models" {
@@ -214,6 +211,75 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 		Scroll: offset, ContentHeight: contentHeight, ShowNew: snapshot.panel == "history", NewLabel: a.translate("i18n:ui_ai_chat_new_chat"), Theme: palette.componentTheme(),
 		OnScroll: a.scrollChatPanel, OnNew: a.startNewChat,
 	}
+}
+
+// chatHistoryCatalogProps groups visible conversations using Flutter's local-day boundaries.
+func (a *App) chatHistoryCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatCatalogProps {
+	viewportHeight := max(float32(40), height-24)
+	items := make([]previewview.ChatCatalogItemProps, 0, len(snapshot.chats))
+	groupLabels := map[string]string{
+		"today":     a.translate("i18n:ui_ai_chat_history_today"),
+		"yesterday": a.translate("i18n:ui_ai_chat_history_yesterday"),
+		"history":   a.translate("i18n:ui_ai_chat_history_history"),
+	}
+	contentHeight := float32(46)
+	now := time.Now()
+	type indexedChat struct {
+		index int
+		chat  chatData
+	}
+	grouped := map[string][]indexedChat{"today": {}, "yesterday": {}, "history": {}}
+	for index, chat := range snapshot.chats {
+		if !chat.IsSummary && len(chat.Conversations) == 0 {
+			continue
+		}
+		group := chatHistoryGroup(chat.UpdatedAt, now)
+		grouped[group] = append(grouped[group], indexedChat{index: index, chat: chat})
+	}
+	for _, group := range []string{"today", "yesterday", "history"} {
+		if len(grouped[group]) == 0 {
+			continue
+		}
+		contentHeight += 32
+		for groupIndex, entry := range grouped[group] {
+			chatID := entry.chat.ID
+			title := strings.TrimSpace(entry.chat.Title)
+			if title == "" {
+				title = a.translate("i18n:ui_ai_chat_new_chat")
+			}
+			groupLabel := ""
+			if groupIndex == 0 {
+				groupLabel = groupLabels[group]
+			}
+			contentHeight += 46
+			items = append(items, previewview.ChatCatalogItemProps{
+				SelectID: fmt.Sprintf("chat-history-row-%s-%d", snapshot.key, entry.index), DeleteID: fmt.Sprintf("chat-history-delete-%s-%d", snapshot.key, entry.index),
+				Kind: "history", Title: title, GroupLabel: groupLabel, DeleteLabel: a.translate("i18n:ui_ai_chat_delete_chat"), Selected: chatID == snapshot.chat.ID,
+				OnSelect: func() { a.selectChatHistory(chatID) }, OnDelete: func() { a.deleteChatHistory(chatID) },
+			})
+		}
+	}
+	contentHeight = max(viewportHeight, contentHeight)
+	maxOffset := max(float32(0), contentHeight-viewportHeight)
+	offset := min(max(float32(0), snapshot.panelScroll), maxOffset)
+	a.setChatPanelViewport(viewportHeight)
+	return previewview.ChatCatalogProps{
+		Width: width, Height: height, Key: snapshot.key, Items: items, EmptyMessage: a.translate("i18n:ui_no_data"),
+		Scroll: offset, ContentHeight: contentHeight, ShowNew: true, NewLabel: a.translate("i18n:ui_ai_chat_new_chat"), Theme: palette.componentTheme(),
+		OnScroll: a.scrollChatPanel, OnNew: a.startNewChat,
+	}
+}
+
+func chatHistoryGroup(updatedAt int64, now time.Time) string {
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	updated := time.UnixMilli(updatedAt).In(now.Location())
+	if !updated.Before(today) {
+		return "today"
+	}
+	if !updated.Before(today.AddDate(0, 0, -1)) {
+		return "yesterday"
+	}
+	return "history"
 }
 
 // chatDebugProps prepares the copyable trace while the controller owns cached text measurement and scrolling.
@@ -258,6 +324,7 @@ func formatChatDebugTrace(raw json.RawMessage) (string, string) {
 type chatRenderItem struct {
 	kind          string
 	conversation  chatConversation
+	tools         []chatConversation
 	showMeta      bool
 	hideReasoning bool
 	roundID       string
@@ -270,6 +337,23 @@ type chatRenderItem struct {
 func chatRenderItems(conversations []chatConversation, streaming bool, expandedRounds map[string]bool) []chatRenderItem {
 	items := make([]chatRenderItem, 0, len(conversations))
 	round := make([]chatConversation, 0)
+	appendVisible := func(messages []chatConversation, showLastMeta bool) {
+		for index := 0; index < len(messages); {
+			if messages[index].Role != "tool" {
+				items = append(items, chatRenderItem{conversation: messages[index], showMeta: showLastMeta && index == len(messages)-1})
+				index++
+				continue
+			}
+			end := index + 1
+			for end < len(messages) && messages[end].Role == "tool" {
+				end++
+			}
+			tools := append([]chatConversation(nil), messages[index:end]...)
+			activityID := "tool-activity:" + tools[0].ID
+			items = append(items, chatRenderItem{kind: "tool-activity", roundID: activityID, tools: tools, roundExpanded: expandedRounds[activityID]})
+			index = end
+		}
+	}
 	closeRound := func(complete bool) {
 		if len(round) == 0 {
 			return
@@ -303,17 +387,13 @@ func chatRenderItems(conversations []chatConversation, streaming bool, expandedR
 			expanded := expandedRounds[roundID]
 			items = append(items, chatRenderItem{kind: "round", roundID: roundID, roundStart: start, roundEnd: round[finalIndex].Timestamp, roundExpanded: expanded})
 			if expanded {
-				for _, message := range intermediate {
-					items = append(items, chatRenderItem{conversation: message})
-				}
+				appendVisible(intermediate, false)
 			}
 			items = append(items, chatRenderItem{conversation: round[finalIndex], showMeta: true, hideReasoning: true})
 			round = round[:0]
 			return
 		}
-		for index, message := range round {
-			items = append(items, chatRenderItem{conversation: message, showMeta: index == finalIndex})
-		}
+		appendVisible(round, finalIndex >= 0)
 		round = round[:0]
 	}
 
@@ -351,10 +431,10 @@ func formatChatRoundDuration(start, end int64) string {
 }
 
 // chatMessagesProps prepares semantic messages and leaves their widget composition to the view.
-func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatMessagesProps {
+func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height, imageScale float32) previewview.ChatMessagesProps {
 	// ponytail: Add viewport virtualization after profiling a real long chat; the current full list preserves exact scroll height with less state.
-	innerWidth := max(float32(0), width-20)
-	innerHeight := max(float32(0), height-16)
+	innerWidth := max(float32(0), width-4)
+	innerHeight := max(float32(0), height-14)
 	emptyMessage := a.translate("i18n:ui_ai_chat_empty_prompt")
 	if strings.TrimSpace(emptyMessage) == "" || emptyMessage == "i18n:ui_ai_chat_empty_prompt" {
 		emptyMessage = "What do you want to ask Wox today?"
@@ -371,7 +451,6 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 	if len(snapshot.chat.Conversations) == 0 {
 		return props
 	}
-	actionsEnabled := !snapshot.chat.IsStreaming && !snapshot.sending && snapshot.question == nil
 	renderItems := chatRenderItems(snapshot.chat.Conversations, snapshot.chat.IsStreaming || snapshot.sending, snapshot.expandedRounds)
 	props.Messages = make([]previewview.ChatMessageProps, 0, len(renderItems))
 	for index, item := range renderItems {
@@ -383,11 +462,15 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 			label = fmt.Sprintf(label, formatChatRoundDuration(item.roundStart, item.roundEnd))
 			roundID := item.roundID
 			props.Messages = append(props.Messages, previewview.ChatMessageProps{
-				Key: roundID, Kind: "round", RoundLabel: label, RoundExpanded: item.roundExpanded, Theme: palette.componentTheme(), OnToggleRound: func() { a.toggleChatRound(roundID) },
+				Key: roundID, Kind: "round", RoundLabel: label, RoundExpanded: item.roundExpanded, Theme: palette.componentTheme(), OnToggleRound: func() { a.toggleChatDisclosure(roundID) },
 			})
 			continue
 		}
-		props.Messages = append(props.Messages, a.chatMessageProps(snapshot.key, index, item.conversation, palette, innerWidth, actionsEnabled, item.showMeta, item.hideReasoning, snapshot.chat.IsStreaming || snapshot.sending))
+		if item.kind == "tool-activity" {
+			props.Messages = append(props.Messages, a.chatToolActivityProps(item, snapshot.expandedRounds, palette, innerWidth))
+			continue
+		}
+		props.Messages = append(props.Messages, a.chatMessageProps(snapshot.key, index, item.conversation, palette, innerWidth, item.showMeta, item.hideReasoning, imageScale))
 	}
 	props.ContentHeight = previewview.ChatMessagesContentHeight(props.Messages, innerHeight)
 	maxOffset := max(float32(0), props.ContentHeight-innerHeight)
@@ -395,13 +478,189 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 	return props
 }
 
+// chatToolActivityProps prepares Flutter's grouped tool summary and nested detail rows.
+func (a *App) chatToolActivityProps(item chatRenderItem, expanded map[string]bool, palette uiPalette, width float32) previewview.ChatMessageProps {
+	status := chatToolActivityStatus(item.tools)
+	statusColor := chatToolStatusColor(status, palette.componentTheme())
+	actions := make([]string, 0, len(item.tools))
+	seen := make(map[string]bool)
+	leading := "tool"
+	for _, conversation := range item.tools {
+		action := a.chatToolActionLabel(conversation.ToolCallInfo.Name)
+		if !seen[action] {
+			seen[action] = true
+			actions = append(actions, action)
+		}
+		switch conversation.ToolCallInfo.Name {
+		case "web_search":
+			leading = "search"
+		case "web_fetch":
+			if leading != "search" {
+				leading = "document"
+			}
+		case "load_tools":
+			if leading == "tool" {
+				leading = "extension"
+			}
+		}
+	}
+	count := a.translate("i18n:ui_ai_chat_tool_activity_count_one")
+	if len(item.tools) != 1 {
+		count = fmt.Sprintf(a.translate("i18n:ui_ai_chat_tool_activity_count_many"), strconv.Itoa(len(item.tools)))
+	}
+	separator := a.translate("i18n:ui_ai_chat_tool_activity_action_separator")
+	summary := strings.Join([]string{a.chatToolActivityStatusLabel(status), strings.Join(actions, separator), count}, " · ")
+	summaryWidth := float32(0)
+	if metrics, err := a.window.MeasureText(summary, woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}); err == nil {
+		summaryWidth = metrics.Size.Width
+	}
+	activityID := item.roundID
+	props := previewview.ChatMessageProps{
+		Key: activityID, Kind: "tool-activity", RoundExpanded: item.roundExpanded,
+		ToolSummary: summary, ToolSummaryWidth: summaryWidth, ToolLeading: leading, ToolStatus: status, ToolStatusColor: statusColor,
+		Theme: palette.componentTheme(), OnToggleRound: func() { a.toggleChatDisclosure(activityID) },
+	}
+	props.Tools = make([]previewview.ChatToolCallProps, 0, len(item.tools))
+	for index, conversation := range item.tools {
+		props.Tools = append(props.Tools, a.chatToolCallProps(activityID, index, conversation, expanded, palette, width-24))
+	}
+	return props
+}
+
+// chatToolCallProps measures one tool badge and its expandable details.
+func (a *App) chatToolCallProps(activityID string, index int, conversation chatConversation, expanded map[string]bool, palette uiPalette, width float32) previewview.ChatToolCallProps {
+	tool := conversation.ToolCallInfo
+	status := tool.Status
+	if status == "" {
+		status = "pending"
+	}
+	start := tool.StartTimestamp
+	if start <= 0 {
+		start = conversation.Timestamp
+	}
+	end := tool.EndTimestamp
+	if status == "streaming" || status == "pending" || status == "running" {
+		end = time.Now().UnixMilli()
+	} else if end <= 0 {
+		end = start
+	}
+	duration := fmt.Sprintf("%dms", max(int64(0), end-start))
+	durationWidth := float32(0)
+	if metrics, err := a.window.MeasureText(duration, woxui.TextStyle{Size: 11}); err == nil {
+		durationWidth = metrics.Size.Width
+	}
+	name := tool.Name
+	if name == "" {
+		name = a.translate("i18n:ui_ai_chat_tools")
+	}
+	nameWidth := float32(0)
+	if metrics, err := a.window.MeasureText(name, woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}); err == nil {
+		nameWidth = metrics.Size.Width
+	}
+	callID := conversation.ID
+	if callID == "" {
+		callID = fmt.Sprintf("%s:%d", activityID, index)
+	}
+	props := previewview.ChatToolCallProps{
+		Key: callID, Name: name, NameWidth: nameWidth, Duration: duration, DurationWidth: durationWidth,
+		Status: status, StatusColor: chatToolStatusColor(status, palette.componentTheme()), Expanded: expanded[callID],
+		OnToggle: func() { a.toggleChatDisclosure(callID) },
+	}
+	params := tool.Delta
+	if status != "streaming" {
+		if encoded, err := json.Marshal(tool.Arguments); err == nil {
+			params = string(encoded)
+		}
+	}
+	details := [][2]string{
+		{a.translate("i18n:ui_ai_chat_tool_detail_id"), tool.ID},
+		{a.translate("i18n:ui_ai_chat_tool_detail_name"), tool.Name},
+		{a.translate("i18n:ui_ai_chat_tool_detail_params"), params},
+	}
+	if tool.Response != "" {
+		details = append(details, [2]string{a.translate("i18n:ui_ai_chat_tool_detail_response"), tool.Response})
+	}
+	detailTextWidth := max(float32(40), width-52)
+	props.Details = make([]previewview.ChatToolDetailProps, 0, len(details))
+	props.DetailsHeight = 16
+	for detailIndex, detail := range details {
+		layout := a.previewTextLayout(fmt.Sprintf("chat-tool-detail\x00%s\x00%d", callID, detailIndex), detail[1], woxui.TextStyle{Size: 11}, detailTextWidth, 16)
+		props.Details = append(props.Details, previewview.ChatToolDetailProps{Label: detail[0], Value: detail[1], Layout: layout})
+		props.DetailsHeight += layout.Size.Height + 40
+	}
+	return props
+}
+
+// chatToolActivityStatus applies Flutter's failed-first activity precedence.
+func chatToolActivityStatus(tools []chatConversation) string {
+	result := "succeeded"
+	for _, conversation := range tools {
+		switch conversation.ToolCallInfo.Status {
+		case "failed":
+			return "failed"
+		case "running":
+			result = "running"
+		case "streaming":
+			if result != "running" {
+				result = "streaming"
+			}
+		case "pending", "":
+			if result != "running" && result != "streaming" {
+				result = "pending"
+			}
+		}
+	}
+	return result
+}
+
+// chatToolStatusColor maps protocol states to Flutter's status colors.
+func chatToolStatusColor(status string, theme woxcomponent.Theme) woxui.Color {
+	switch status {
+	case "streaming", "running":
+		return woxui.Color{R: 33, G: 150, B: 243, A: 255}
+	case "succeeded":
+		return woxui.Color{R: 76, G: 175, B: 80, A: 255}
+	case "failed":
+		return theme.ErrorText
+	default:
+		return theme.ResultSubtitle
+	}
+}
+
+// chatToolActionLabel localizes the known tool activity verbs.
+func (a *App) chatToolActionLabel(name string) string {
+	key := ""
+	switch name {
+	case "web_search":
+		key = "ui_ai_chat_tool_action_web_search"
+	case "web_fetch":
+		key = "ui_ai_chat_tool_action_web_fetch"
+	case "read_skill":
+		key = "ui_ai_chat_tool_action_read_skill"
+	case "load_tools":
+		key = "ui_ai_chat_tool_action_load_tools"
+	}
+	if key == "" {
+		if name != "" {
+			return name
+		}
+		return a.translate("i18n:ui_ai_chat_tools")
+	}
+	return a.translate("i18n:" + key)
+}
+
+func (a *App) chatToolActivityStatusLabel(status string) string {
+	return a.translate("i18n:ui_ai_chat_tool_activity_status_" + status)
+}
+
 // chatMessageProps resolves text layouts, images, and controller actions for one conversation.
-func (a *App) chatMessageProps(key string, index int, conversation chatConversation, palette uiPalette, width float32, actionsEnabled, showMeta, hideReasoning, streaming bool) previewview.ChatMessageProps {
+func (a *App) chatMessageProps(key string, index int, conversation chatConversation, palette uiPalette, width float32, showMeta, hideReasoning bool, imageScale float32) previewview.ChatMessageProps {
 	cardWidth := width
+	innerWidth := max(float32(40), cardWidth-4)
 	if conversation.Role == "user" {
 		cardWidth = width * 0.82
+		innerWidth = max(float32(40), cardWidth-24)
 	}
-	innerWidth := max(float32(40), cardWidth-24)
 	props := previewview.ChatMessageProps{
 		Key: fmt.Sprintf("%s-%d", key, index), Role: conversation.Role, ShowMeta: showMeta, Theme: palette.componentTheme(),
 		CopyLabel: a.translate("i18n:ui_ai_chat_copy_message"), EditLabel: a.translate("i18n:ui_ai_chat_edit_message"), RetryLabel: a.translate("i18n:ui_ai_chat_regenerate_response"),
@@ -418,14 +677,18 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 	} else {
 		if reasoning := strings.TrimSpace(conversation.Reasoning); reasoning != "" && !hideReasoning {
 			props.Reasoning = reasoning
-			props.ReasoningLayout = a.previewTextLayout(fmt.Sprintf("chat-reasoning\x00%s\x00%d", key, index), props.Reasoning, woxui.TextStyle{Size: 11}, innerWidth, 17)
+			props.ReasoningLayout = a.previewTextLayout(fmt.Sprintf("chat-reasoning\x00%s\x00%d", key, index), props.Reasoning, woxui.TextStyle{Size: 11}, innerWidth, 15.4)
 		}
 		props.Text = strings.TrimSpace(conversation.Text)
-		if props.Text == "" && conversation.Role == "assistant" && streaming && !hideReasoning {
-			props.Text = "Thinking…"
-		}
 		if props.Text != "" {
-			props.TextLayout = a.previewTextLayout(fmt.Sprintf("chat-text\x00%s\x00%d", key, index), props.Text, woxui.TextStyle{Size: 13}, innerWidth, 19)
+			if conversation.Role == "assistant" {
+				markdown := a.markdownProps(fmt.Sprintf("chat-markdown-%s-%d", key, index), props.Text, "", palette, innerWidth, imageScale)
+				markdown.FontSize = 13
+				props.Markdown = &markdown
+				props.TextLayout.Size = woxwidget.MeasureStateless(a.window, woxcomponent.WoxMarkdown(markdown), innerWidth)
+			} else {
+				props.TextLayout = a.previewTextLayout(fmt.Sprintf("chat-text\x00%s\x00%d", key, index), props.Text, woxui.TextStyle{Size: 13}, innerWidth, 19)
+			}
 		}
 	}
 	if len(conversation.SkillRefs) > 0 {
@@ -462,7 +725,7 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 	if copyText := chatConversationClipboardText(conversation); copyText != "" {
 		props.OnCopy = func() { a.copyChatText(copyText) }
 	}
-	if actionsEnabled && conversation.ID != "" {
+	if conversation.ID != "" {
 		conversationID := conversation.ID
 		switch conversation.Role {
 		case "user":
@@ -526,7 +789,7 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 		model = "Select model"
 	}
 	modelMetrics, _ := a.window.MeasureText(model, woxui.TextStyle{Size: 11})
-	modelWidth := min(float32(250), max(float32(120), modelMetrics.Size.Width+54))
+	modelWidth := min(float32(267), modelMetrics.Size.Width+47)
 	streaming := snapshot.chat.IsStreaming || snapshot.sending
 	action := a.sendChatMessage
 	actionLabel := a.translate("i18n:ui_ai_chat_send")

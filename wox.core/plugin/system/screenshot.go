@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/png"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -29,7 +30,7 @@ import (
 
 var screenshotIcon = common.PluginScreenshotIcon
 var screenshotCommandNew = "new"
-var screenshotHistoryPreviewWidth = 400
+var screenshotHistoryPreviewWidth = 1024
 var screenshotHistoryIconWidth = 40
 var screenshotPinnedOverlayPrefix = "wox_screenshot_pin_"
 var screenshotRetentionDaysSettingKey = "retention_days"
@@ -501,7 +502,7 @@ func (p *ScreenshotPlugin) screenshotHistoryItemFromPath(screenshotPath string) 
 
 func (p *ScreenshotPlugin) ensureScreenshotHistoryThumbnails(ctx context.Context, item screenshotHistoryItem) error {
 	previewPath, iconPath := p.screenshotHistoryThumbnailPaths(item)
-	if util.IsFileExists(previewPath) && util.IsFileExists(iconPath) {
+	if screenshotHistoryThumbnailHasWidth(previewPath, screenshotHistoryPreviewWidth) && screenshotHistoryThumbnailHasWidth(iconPath, screenshotHistoryIconWidth) {
 		p.warmScreenshotHistoryManagerIconCache(ctx, iconPath)
 		return nil
 	}
@@ -509,7 +510,7 @@ func (p *ScreenshotPlugin) ensureScreenshotHistoryThumbnails(ctx context.Context
 	p.thumbnailM.Lock()
 	defer p.thumbnailM.Unlock()
 
-	if util.IsFileExists(previewPath) && util.IsFileExists(iconPath) {
+	if screenshotHistoryThumbnailHasWidth(previewPath, screenshotHistoryPreviewWidth) && screenshotHistoryThumbnailHasWidth(iconPath, screenshotHistoryIconWidth) {
 		p.warmScreenshotHistoryManagerIconCache(ctx, iconPath)
 		return nil
 	}
@@ -537,6 +538,17 @@ func (p *ScreenshotPlugin) ensureScreenshotHistoryThumbnails(ctx context.Context
 
 	p.warmScreenshotHistoryManagerIconCache(ctx, iconPath)
 	return nil
+}
+
+// screenshotHistoryThumbnailHasWidth invalidates cached thumbnails when their target size changes.
+func screenshotHistoryThumbnailHasWidth(path string, width int) bool {
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	config, err := png.DecodeConfig(file)
+	return err == nil && config.Width == width
 }
 
 func (p *ScreenshotPlugin) warmScreenshotHistoryManagerIconCache(ctx context.Context, iconPath string) {

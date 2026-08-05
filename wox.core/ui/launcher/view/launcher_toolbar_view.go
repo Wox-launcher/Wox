@@ -134,10 +134,12 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 			Width: iconSize, Height: contentHeight, Vertical: 0.5, Child: woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize},
 		})
 	}
-	leftWidgets = append(leftWidgets, woxwidget.Align{
-		Width: labelWidth, Height: contentHeight, Vertical: 0.5,
-		Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize}, Color: props.Theme.ToolbarText},
-	})
+	if props.Label != "" {
+		leftWidgets = append(leftWidgets, woxwidget.Align{
+			Width: labelWidth, Height: contentHeight, Vertical: 0.5,
+			Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize}, Color: props.Theme.ToolbarText},
+		})
+	}
 	if progressVisible {
 		progressSize := scaledLauncherSize(14, props.DensityScale)
 		progressValue := "loading"

@@ -567,6 +567,7 @@
   "ui_delete_row_confirm": "Tem certeza que deseja excluir esta linha?",
   "ui_clone_row": "Clonar linha",
   "ui_cancel": "Cancelar",
+  "ui_close": "Fechar",
   "ui_all": "Todos",
   "ui_saving": "Salvando...",
   "ui_ok": "OK",

@@ -98,6 +98,7 @@ var uiIcons = map[string]WoxImage{
 
 	// Reusable controls.
 	"control.add":                newMonochromeUIIcon(`<path d="M12 5v14M5 12h14"/>`),
+	"control.chat-bubble":        NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M4 4h16v13H8l-4 4z"/></svg>`),
 	"control.add-circle":         newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>`),
 	"control.remove":             newMonochromeUIIcon(`<path d="M5 12h14"/>`),
 	"control.undo":               newMonochromeUIIcon(`<path d="M9 7 5 11l4 4"/><path d="M5 11h8a6 6 0 0 1 6 6v1"/>`),
@@ -111,6 +112,11 @@ var uiIcons = map[string]WoxImage{
 	"control.locate":             newMonochromeUIIcon(`<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>`),
 	"control.brightness":         newMonochromeUIIcon(`<circle cx="12" cy="12" r="5"/><path d="M12 7a5 5 0 0 0 0 10zM12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/>`),
 	"control.check-circle":       newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>`),
+	"control.build":              newMonochromeUIIcon(`<path d="M14.7 6.3a4 4 0 0 0-5-5L12 3.6 9.6 6 7.3 3.7a4 4 0 0 0 5 5L20 16.4a2.1 2.1 0 0 1-3 3z"/>`),
+	"control.article":            newMonochromeUIIcon(`<rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h6M9 11h6M9 15h4"/>`),
+	"control.terminal":           newMonochromeUIIcon(`<path d="m5 7 5 5-5 5M12 17h7"/>`),
+	"control.play-arrow":         NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg>`),
+	"control.hourglass-empty":    newMonochromeUIIcon(`<path d="M6 2h12M6 22h12M7 2c0 5 2 7 5 10-3 3-5 5-5 10M17 2c0 5-2 7-5 10 3 3 5 5 5 10"/>`),
 	"control.sparkles":           newMonochromeUIIcon(`<path d="m12 3 1.15 3.1L16 7.25l-2.85 1.15L12 11.5l-1.15-3.1L8 7.25l2.85-1.15z"/><path d="m18 12 .85 2.15L21 15l-2.15.85L18 18l-.85-2.15L15 15l2.15-.85zM6 13l.65 1.85L8.5 15.5l-1.85.65L6 18l-.65-1.85-1.85-.65 1.85-.65z"/>`),
 	"control.waveform":           newMonochromeUIIcon(`<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10v4"/>`),
 	"control.multitrack-audio":   newMonochromeUIIcon(`<path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/>`),
@@ -148,6 +154,9 @@ var uiIcons = map[string]WoxImage{
 	"control.clock":              NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`),
 	"control.filter-list":        NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>`),
 	"control.check":              NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg>`),
+	"control.arrow-right":        NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>`),
+	"control.arrow-down":         NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>`),
+	"control.model-training":     NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M15.5 13.5c0 2-2.5 3.5-2.5 5h-2c0-1.5-2.5-3-2.5-5 0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5M13 19.5h-2v.5c0 .55.45 1 1 1s1-.45 1-1zM19 13c0 1.39-.41 2.69-1.12 3.78-.25.39-.19.91.14 1.24.44.44 1.2.38 1.54-.15A8.95 8.95 0 0 0 21 13c0-2.36-.91-4.51-2.4-6.12-.39-.42-1.05-.43-1.45-.03-.38.38-.38.99-.02 1.39A6.97 6.97 0 0 1 19 13M15.65 4.65l-2.79-2.79c-.32-.32-.86-.1-.86.35V4a9 9 0 0 0-7.56 13.88c.34.53 1.1.59 1.54.15.33-.33.39-.84.14-1.23A6.97 6.97 0 0 1 12 6v1.79c0 .45.54.67.85.35l2.79-2.79c.2-.19.2-.51.01-.7"/></svg>`),
 	"control.more-horizontal":    NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fff"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>`),
 
 	// Screenshot annotation toolbar.

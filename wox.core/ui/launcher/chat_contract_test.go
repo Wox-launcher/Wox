@@ -53,3 +53,26 @@ func TestChatRenderItemsCollapseCompletedReasoningRound(t *testing.T) {
 		t.Fatalf("duration = %q", duration)
 	}
 }
+
+func TestChatRenderItemsGroupsConsecutiveToolCalls(t *testing.T) {
+	tools := []chatConversation{
+		{ID: "tool-1", Role: "tool", ToolCallInfo: chatToolCallInfo{Name: "web_search", Status: "succeeded"}},
+		{ID: "tool-2", Role: "tool", ToolCallInfo: chatToolCallInfo{Name: "web_fetch", Status: "running"}},
+	}
+
+	items := chatRenderItems(tools, true, nil)
+	if len(items) != 1 || items[0].kind != "tool-activity" || len(items[0].tools) != 2 || items[0].roundExpanded {
+		t.Fatalf("tool activity = %+v", items)
+	}
+	expanded := chatRenderItems(tools, true, map[string]bool{items[0].roundID: true})
+	if !expanded[0].roundExpanded {
+		t.Fatal("tool activity did not retain its disclosure state")
+	}
+	if status := chatToolActivityStatus(tools); status != "running" {
+		t.Fatalf("tool activity status = %q, want running", status)
+	}
+	tools[0].ToolCallInfo.Status = "failed"
+	if status := chatToolActivityStatus(tools); status != "failed" {
+		t.Fatalf("failed tool activity status = %q", status)
+	}
+}

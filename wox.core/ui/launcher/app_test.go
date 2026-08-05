@@ -54,6 +54,18 @@ func TestLauncherPreviewRatioUsesChatLayout(t *testing.T) {
 	}
 }
 
+func TestLauncherToolbarHeightIncludedInChatFullscreen(t *testing.T) {
+	if !launcherToolbarHeightIncluded(false, true, true, true) {
+		t.Fatal("chat fullscreen should retain the hidden toolbar height")
+	}
+	if launcherToolbarHeightIncluded(false, true, true, false) {
+		t.Fatal("terminal fullscreen should not retain the hidden toolbar height")
+	}
+	if launcherToolbarHeightIncluded(true, true, true, true) || launcherToolbarHeightIncluded(false, false, true, true) {
+		t.Fatal("disabled or empty toolbar should not contribute height")
+	}
+}
+
 func TestApplyResultsEntersChatModeFromLayout(t *testing.T) {
 	app := New(false, nil)
 	app.uiCall = nil

@@ -82,6 +82,7 @@ type MarkdownProps struct {
 	ID           string
 	Document     MarkdownDocument
 	Width        float32
+	FontSize     float32
 	Theme        Theme
 	Window       *woxui.Window
 	ResolveImage func(source string) (*woxui.Image, string)
@@ -375,9 +376,10 @@ func renderMarkdownBlocks(blocks []markdownBlock, props MarkdownProps, width flo
 
 // renderMarkdownBlock picks the simplest native surface for one block.
 func renderMarkdownBlock(block markdownBlock, props MarkdownProps, width float32, linkIndex *int) woxwidget.Widget {
+	fontSize := markdownFontSize(props)
 	switch block.kind {
 	case markdownHeading:
-		return markdownRunsWidget(block.runs, props, width, 12, linkIndex)
+		return markdownRunsWidget(block.runs, props, width, fontSize, linkIndex)
 	case markdownCode:
 		return markdownCodeWidget(block, props, width)
 	case markdownQuote:
@@ -396,8 +398,15 @@ func renderMarkdownBlock(block markdownBlock, props MarkdownProps, width float32
 	case markdownImage:
 		return markdownImageWidget(block, props, width, linkIndex)
 	default:
-		return markdownRunsWidget(block.runs, props, width, 12, linkIndex)
+		return markdownRunsWidget(block.runs, props, width, fontSize, linkIndex)
 	}
+}
+
+func markdownFontSize(props MarkdownProps) float32 {
+	if props.FontSize > 0 {
+		return props.FontSize
+	}
+	return 12
 }
 
 // markdownRunsWidget wraps inline text while retaining native link actions.
@@ -492,11 +501,12 @@ func isMarkdownWideRune(value rune) bool {
 func markdownCodeWidget(block markdownBlock, props MarkdownProps, width float32) woxwidget.Widget {
 	innerWidth := max(float32(0), width-20)
 	code := strings.TrimSuffix(block.runs[0].text, "\n")
-	style := woxui.TextStyle{Size: 11}
+	fontSize := markdownFontSize(props)
+	style := woxui.TextStyle{Size: max(float32(10), fontSize-1)}
 	layout := woxwidget.LayoutTextBlock(props.Window, code, style, innerWidth, 0, 17)
 	children := make([]woxwidget.Widget, 0, 2)
 	if block.language != "" {
-		children = append(children, woxwidget.Text{Value: block.language, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: withAlpha(props.Theme.PreviewText, 180)})
+		children = append(children, woxwidget.Text{Value: block.language, Style: woxui.TextStyle{Size: max(float32(9), fontSize-2), Weight: woxui.FontWeightSemibold}, Color: withAlpha(props.Theme.PreviewText, 180)})
 	}
 	children = append(children, woxwidget.TextBlock{Value: code, Width: innerWidth, Height: layout.Size.Height, Layout: &layout, Style: style, LineHeight: 17, Color: props.Theme.PreviewText})
 	return woxwidget.Container{
@@ -511,7 +521,7 @@ func markdownListWidget(block markdownBlock, props MarkdownProps, width float32,
 	for _, item := range block.items {
 		markerWidth := float32(28)
 		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisStart, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: markerWidth, Padding: woxwidget.Insets{Top: 1}, Child: woxwidget.Text{Value: item.marker, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText}},
+			woxwidget.Container{Width: markerWidth, Padding: woxwidget.Insets{Top: 1}, Child: woxwidget.Text{Value: item.marker, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText}},
 			woxwidget.Container{Width: max(float32(0), width-markerWidth), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 7, Children: renderMarkdownBlocks(item.blocks, props, max(float32(0), width-markerWidth), linkIndex)}},
 		}})
 	}
@@ -545,7 +555,7 @@ func markdownTableWidget(table markdownTableData, props MarkdownProps, width flo
 			}
 			cells = append(cells, woxwidget.Container{
 				Width: cellWidth, Height: 38, Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 8}, Color: background, BorderColor: withAlpha(props.Theme.PreviewSplit, 100), BorderWidth: 1,
-				Child: woxwidget.TextBlock{Value: value, Width: max(float32(0), cellWidth-16), Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 12, Weight: weight}, Color: props.Theme.PreviewText},
+				Child: woxwidget.TextBlock{Value: value, Width: max(float32(0), cellWidth-16), Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: markdownFontSize(props), Weight: weight}, Color: props.Theme.PreviewText},
 			})
 		}
 		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells})

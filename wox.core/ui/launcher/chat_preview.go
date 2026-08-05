@@ -524,16 +524,16 @@ func (a *App) applyChatResponse(chat chatData) {
 	_ = a.window.Invalidate()
 }
 
-// toggleChatRound expands or collapses one completed assistant round.
-func (a *App) toggleChatRound(roundID string) {
+// toggleChatDisclosure expands or collapses a round, tool group, or tool detail.
+func (a *App) toggleChatDisclosure(disclosureID string) {
 	state := a.chatPreview
-	if state == nil || roundID == "" {
+	if state == nil || disclosureID == "" {
 		return
 	}
 	if state.expandedRounds == nil {
 		state.expandedRounds = make(map[string]bool)
 	}
-	state.expandedRounds[roundID] = !state.expandedRounds[roundID]
+	state.expandedRounds[disclosureID] = !state.expandedRounds[disclosureID]
 	_ = a.window.Invalidate()
 }
 
@@ -1441,6 +1441,11 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 		questionOptions = len(state.question.Options)
 		questionSelected = state.questionSelected
 	}
+	if active && event.Key == woxui.Key("b") && event.Modifiers.HasPrimary() {
+		// Ctrl/Cmd+B toggles the conversation sidebar, matching Flutter's preview fullscreen shortcut.
+		a.toggleChatPanel("history")
+		return true
+	}
 	if panel == "debug" {
 		switch event.Key {
 		case woxui.KeyEscape:
@@ -1662,6 +1667,8 @@ func (a *App) exitChatMode() {
 		state.active = false
 	}
 	a.restoreQueryTextInput()
+	// Returning from chat selects the whole query so a new search starts with a clean slate.
+	a.editor.SelectAll()
 	_ = a.applyWindowBounds()
 	_ = a.window.Invalidate()
 }

@@ -586,6 +586,7 @@
   "ui_delete_row_confirm": "确定要删除此行吗？",
   "ui_clone_row": "克隆此行",
   "ui_cancel": "取消",
+  "ui_close": "关闭",
   "ui_all": "全部",
   "ui_saving": "保存中...",
   "ui_ok": "确定",

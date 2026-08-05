@@ -77,6 +77,21 @@ func SearchGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.search", size, color)
 }
 
+// AddGlyph returns the shared add icon.
+func AddGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.add", size, color)
+}
+
+// DeleteGlyph returns the shared delete icon.
+func DeleteGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.delete", size, color)
+}
+
+// ChatBubbleGlyph returns Flutter's filled conversation icon.
+func ChatBubbleGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.chat-bubble", size, color)
+}
+
 // FullscreenGlyph returns the shared enter or exit fullscreen icon.
 func FullscreenGlyph(size float32, color woxui.Color, fullscreen bool) woxwidget.Widget {
 	if size <= 0 {
@@ -163,6 +178,61 @@ func CheckGlyph(size float32, color woxui.Color) woxwidget.Widget {
 		size = 12
 	}
 	return svgIcon("control.check", size, color)
+}
+
+// CheckCircleGlyph returns the shared successful-status icon.
+func CheckCircleGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.check-circle", size, color)
+}
+
+// ErrorGlyph returns the shared failed-status icon.
+func ErrorGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.error", size, color)
+}
+
+// ToolGlyph returns Flutter's outlined tool-call icon.
+func ToolGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.build", size, color)
+}
+
+// ArticleGlyph returns Flutter's outlined page-fetch icon.
+func ArticleGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.article", size, color)
+}
+
+// TerminalGlyph returns Flutter's generic tool-activity icon.
+func TerminalGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.terminal", size, color)
+}
+
+// PlayArrowGlyph returns Flutter's streaming tool-status icon.
+func PlayArrowGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.play-arrow", size, color)
+}
+
+// HourglassGlyph returns Flutter's pending tool-status icon.
+func HourglassGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.hourglass-empty", size, color)
+}
+
+// ModelTrainingGlyph returns Flutter's rounded AI model icon.
+func ModelTrainingGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.model-training", size, color)
+}
+
+// KeyboardArrowDownGlyph returns Flutter's compact model-selector arrow.
+func KeyboardArrowDownGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.arrow-down", size, color)
+}
+
+// KeyboardArrowRightGlyph returns Flutter's collapsed disclosure arrow.
+func KeyboardArrowRightGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.arrow-right", size, color)
+}
+
+// ExtensionGlyph returns Flutter's rounded skill icon.
+func ExtensionGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("usage.extension", size, color)
 }
 
 // SparklesGlyph returns the shared AI refinement icon.

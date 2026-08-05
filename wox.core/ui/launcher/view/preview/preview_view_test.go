@@ -138,3 +138,49 @@ func TestChatHeaderExitKeepsGlyphVisible(t *testing.T) {
 		t.Fatal("chat exit hover background remained transparent")
 	}
 }
+
+func TestChatModelSelectorUsesFlutterIconsAndHoverSurface(t *testing.T) {
+	theme := woxcomponent.Theme{
+		ResultTitle:        woxui.Color{R: 220, G: 225, B: 230, A: 255},
+		SelectedBackground: woxui.Color{R: 80, G: 90, B: 100, A: 255},
+	}
+	props := ChatInputProps{Key: "test", Model: "deepseek-v4-pro", ModelWidth: 160, Theme: theme, OnModels: func() {}}
+	state := chatModelSelectorState{hovered: true}
+	semantics := state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics)
+	focusable := semantics.Child.(woxwidget.Focusable)
+	gesture := focusable.Child.(woxwidget.Gesture)
+	chip := gesture.Child.(woxwidget.Container)
+	row := chip.Child.(woxwidget.Flex)
+
+	if chip.Height != 20 || chip.Radius != 4 || chip.Color.A != 40 || gesture.OnHover == nil {
+		t.Fatalf("model chip = height %.0f radius %.0f color %#v; want Flutter compact hover surface", chip.Height, chip.Radius, chip.Color)
+	}
+	modelIcon := row.Children[0].(woxwidget.Image)
+	modelText := row.Children[2].(woxwidget.Align)
+	arrowIcon := row.Children[4].(woxwidget.Image)
+	if modelIcon.Source == nil || modelIcon.Width != 16 || modelText.Height != 20 || modelText.Vertical != 0.5 || arrowIcon.Source == nil || arrowIcon.Width != 14 {
+		t.Fatalf("model chip icons = model %.0f arrow %.0f; want Flutter 16px and 14px SVGs", modelIcon.Width, arrowIcon.Width)
+	}
+	input := ChatInput(ChatInputProps{Width: 400, Height: 98, Key: "test", Model: "deepseek-v4-pro", ModelWidth: 160, Theme: theme}).(woxwidget.Container)
+	card := input.Child.(woxwidget.Container)
+	toolbar := card.Child.(woxwidget.Flex).Children[2].(woxwidget.Stack)
+	modelAlign := toolbar.Children[0].Child.(woxwidget.Align)
+	if toolbar.Children[0].Top != 0 || modelAlign.Height != 42 || modelAlign.Vertical != 0.5 {
+		t.Fatalf("model toolbar alignment = top %.0f height %.0f vertical %.1f; want native vertical centering", toolbar.Children[0].Top, modelAlign.Height, modelAlign.Vertical)
+	}
+}
+
+func TestChatCatalogModelRowHighlightsOnHover(t *testing.T) {
+	theme := woxcomponent.Theme{
+		PreviewText:        woxui.Color{R: 220, G: 225, B: 230, A: 255},
+		SelectedBackground: woxui.Color{R: 80, G: 90, B: 100, A: 255},
+	}
+	row := chatCatalogItem(ChatCatalogItemProps{SelectID: "model", Kind: "models", Title: "pro", OnSelect: func() {}}, 400, 38, theme, true, func(bool) {}).(woxwidget.Gesture)
+	container := row.Child.(woxwidget.Container)
+	stack := container.Child.(woxwidget.Stack)
+	icon := stack.Children[0].Child.(woxwidget.Image)
+
+	if row.OnHover == nil || container.Color.A != 40 || icon.Source == nil || icon.Width != 18 {
+		t.Fatalf("hovered model row = color %#v icon %.0f; want Flutter hover and 18px model icon", container.Color, icon.Width)
+	}
+}

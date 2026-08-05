@@ -1,10 +1,26 @@
 package launcher
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	woxui "wox/ui/runtime"
 )
+
+func TestChatHistoryGroupUsesLocalDayBoundaries(t *testing.T) {
+	location := time.FixedZone("test", 8*60*60)
+	now := time.Date(2026, 8, 5, 12, 0, 0, 0, location)
+	if group := chatHistoryGroup(time.Date(2026, 8, 5, 0, 0, 0, 0, location).UnixMilli(), now); group != "today" {
+		t.Fatalf("today group = %q", group)
+	}
+	if group := chatHistoryGroup(time.Date(2026, 8, 4, 23, 59, 0, 0, location).UnixMilli(), now); group != "yesterday" {
+		t.Fatalf("yesterday group = %q", group)
+	}
+	if group := chatHistoryGroup(time.Date(2026, 8, 3, 23, 59, 0, 0, location).UnixMilli(), now); group != "history" {
+		t.Fatalf("history group = %q", group)
+	}
+}
 
 func TestFindChatSlashTokenUsesTokenAtCaret(t *testing.T) {
 	text := "hello /wri"
@@ -25,6 +41,18 @@ func TestChatCommandPaletteFiltersModelsAndSkills(t *testing.T) {
 	items = chatCommandPaletteItems(models, skills, aiModel{}, "implementation", chatCommandPanel)
 	if len(items) != 1 || items[0].group != "skills" || items[0].sourceIndex != 0 {
 		t.Fatalf("skill filter = %+v", items)
+	}
+}
+
+func TestChatModelPaletteHeightShrinksToContentAndCaps(t *testing.T) {
+	snapshot := &chatPreviewSnapshot{panel: "models", models: []aiModel{{Name: "flash"}, {Name: "pro"}}}
+	if height := chatCatalogPanelHeight(snapshot, 600); height != 118 {
+		t.Fatalf("two-model palette height = %.0f, want content height 118", height)
+	}
+
+	snapshot.models = make([]aiModel, 20)
+	if height := chatCatalogPanelHeight(snapshot, 600); height != 310 {
+		t.Fatalf("large model palette height = %.0f, want maximum 310", height)
 	}
 }
 
@@ -61,5 +89,30 @@ func TestPrimaryChatEscapeReturnsToQuery(t *testing.T) {
 	}
 	if app.chatFullscreen || app.chatPreview == nil || app.chatPreview.active {
 		t.Fatalf("chat mode state = fullscreen:%v preview:%+v", app.chatFullscreen, app.chatPreview)
+	}
+	if selection := app.editor.State().Selection; selection.Anchor != 0 || selection.Focus != len([]rune("chat ")) {
+		t.Fatalf("query selection after escape = %+v, want full text selected", selection)
+	}
+}
+
+func TestPrimaryChatShortcutTogglesHistorySidebar(t *testing.T) {
+	app := &App{chatPreview: &chatPreviewState{active: true}}
+
+	primaryModifier := woxui.KeyModifierControl
+	if strings.HasPrefix(primaryHotkey("b"), "command+") {
+		primaryModifier = woxui.KeyModifierMeta
+	}
+	event := woxui.KeyEvent{Key: woxui.Key("b"), Modifiers: primaryModifier, Down: true}
+	if !app.onChatPreviewKey(event) {
+		t.Fatal("primary+B was not handled")
+	}
+	if app.chatPreview.panel != "history" {
+		t.Fatalf("history panel = %q after primary+B, want open", app.chatPreview.panel)
+	}
+	if !app.onChatPreviewKey(event) {
+		t.Fatal("second primary+B was not handled")
+	}
+	if app.chatPreview.panel != "" {
+		t.Fatalf("history panel = %q after second primary+B, want closed", app.chatPreview.panel)
 	}
 }
