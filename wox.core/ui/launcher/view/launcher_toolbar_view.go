@@ -1,6 +1,8 @@
 package view
 
 import (
+	"fmt"
+
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -37,13 +39,15 @@ type LauncherToolbarProps struct {
 	DensityScale  float32
 	Label         string
 	Icon          *woxui.Image
-	ProgressLabel string
+	Progress      int
+	HasProgress   bool
+	Indeterminate bool
 	Actions       []LauncherToolbarAction
 }
 
 // Equal compares every render dependency for the launcher toolbar section.
 func (p LauncherToolbarProps) Equal(other LauncherToolbarProps) bool {
-	if p.Width != other.Width || p.Height != other.Height || p.Padding != other.Padding || p.Theme != other.Theme || p.Window != other.Window || p.DensityScale != other.DensityScale || p.Label != other.Label || p.Icon != other.Icon || p.ProgressLabel != other.ProgressLabel || len(p.Actions) != len(other.Actions) {
+	if p.Width != other.Width || p.Height != other.Height || p.Padding != other.Padding || p.Theme != other.Theme || p.Window != other.Window || p.DensityScale != other.DensityScale || p.Label != other.Label || p.Icon != other.Icon || p.Progress != other.Progress || p.HasProgress != other.HasProgress || p.Indeterminate != other.Indeterminate || len(p.Actions) != len(other.Actions) {
 		return false
 	}
 	for index := range p.Actions {
@@ -73,9 +77,21 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 	fontSize := scaledLauncherSize(woxcomponent.ToolbarFontSize, props.DensityScale)
 	actionGap := scaledLauncherSize(16, props.DensityScale)
 	contentWidth := max(float32(0), props.Width-props.Padding.Left-props.Padding.Right)
+	progressVisible := props.HasProgress || props.Indeterminate
+	leftMaxWidth := max(float32(0), contentWidth-scaledLauncherSize(200, props.DensityScale))
 	leftWidth := float32(0)
-	if props.Label != "" || props.Icon != nil || props.ProgressLabel != "" {
-		leftWidth = min(contentWidth*0.42, scaledLauncherSize(320, props.DensityScale))
+	labelWidth := float32(0)
+	if props.Label != "" {
+		metrics, _ := props.Window.MeasureText(props.Label, woxui.TextStyle{Size: fontSize})
+		labelWidth = metrics.Size.Width
+		leftWidth = labelWidth
+		if props.Icon != nil {
+			leftWidth += scaledLauncherSize(26, props.DensityScale)
+		}
+		if progressVisible {
+			leftWidth += scaledLauncherSize(22, props.DensityScale)
+		}
+		leftWidth = min(leftWidth, leftMaxWidth)
 	}
 	rightAvailable := max(float32(0), contentWidth-leftWidth)
 	if leftWidth > 0 && len(props.Actions) > 0 {
@@ -107,28 +123,30 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 	if props.Icon != nil {
 		extraWidth += scaledLauncherSize(26, props.DensityScale)
 	}
-	progressWidth := float32(0)
-	if props.ProgressLabel != "" {
-		metrics, _ := props.Window.MeasureText(props.ProgressLabel, woxui.TextStyle{Size: fontSize})
-		progressWidth = min(scaledLauncherSize(90, props.DensityScale), metrics.Size.Width+scaledLauncherSize(4, props.DensityScale))
-		extraWidth += progressWidth + scaledLauncherSize(8, props.DensityScale)
+	if progressVisible {
+		extraWidth += scaledLauncherSize(22, props.DensityScale)
 	}
-	labelWidth := max(float32(0), leftWidth-extraWidth)
+	labelWidth = max(float32(0), leftWidth-extraWidth)
 	leftWidgets := make([]woxwidget.Widget, 0, 3)
 	if props.Icon != nil {
 		iconSize := scaledLauncherSize(18, props.DensityScale)
-		leftWidgets = append(leftWidgets, woxwidget.Container{
-			Width: iconSize, Height: contentHeight, Padding: woxwidget.Insets{Top: max(float32(0), (contentHeight-iconSize)/2)}, Child: woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize},
+		leftWidgets = append(leftWidgets, woxwidget.Align{
+			Width: iconSize, Height: contentHeight, Vertical: 0.5, Child: woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize},
 		})
 	}
-	leftWidgets = append(leftWidgets, woxwidget.Container{
-		Width: labelWidth, Height: contentHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(7, props.DensityScale)},
+	leftWidgets = append(leftWidgets, woxwidget.Align{
+		Width: labelWidth, Height: contentHeight, Vertical: 0.5,
 		Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize}, Color: props.Theme.ToolbarText},
 	})
-	if props.ProgressLabel != "" {
-		leftWidgets = append(leftWidgets, woxwidget.Container{
-			Width: progressWidth, Height: contentHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(7, props.DensityScale)},
-			Child: woxwidget.Text{Value: props.ProgressLabel, Style: woxui.TextStyle{Size: fontSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Cursor},
+	if progressVisible {
+		progressSize := scaledLauncherSize(14, props.DensityScale)
+		progressValue := "loading"
+		if props.HasProgress && !props.Indeterminate {
+			progressValue = fmt.Sprintf("%d%%", min(max(props.Progress, 0), 100))
+		}
+		leftWidgets = append(leftWidgets, woxwidget.Semantics{
+			Key: "launcher-toolbar-progress-key", AutomationID: "launcher.toolbar.progress", Role: woxui.AccessibilityRoleProgressBar, Label: props.Label, Value: progressValue, ReadOnly: true,
+			Child: woxwidget.Align{Width: progressSize, Height: contentHeight, Vertical: 0.5, Child: woxcomponent.WoxProgressIndicator(progressSize, props.Progress, props.Indeterminate, props.Theme.ToolbarText)},
 		})
 	}
 	verticalPadding := max(float32(0), (props.Height-contentHeight)/2)

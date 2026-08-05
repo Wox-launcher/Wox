@@ -708,8 +708,8 @@ static WoxDarwinSurface *acquire_render_surface(WoxDarwinRenderer *renderer, NSU
   return surface;
 }
 
-// present_render_surface rejects delayed frames after hide, resize, or a newer submission.
-static void present_render_surface(WoxDarwinWindow *window, WoxDarwinRenderer *renderer, WoxDarwinSurface *surface, uint64_t sequence, uint64_t generation) {
+// present_render_surface joins resize frames to the caller's transaction and owns ordinary frame transactions.
+static void present_render_surface(WoxDarwinWindow *window, WoxDarwinRenderer *renderer, WoxDarwinSurface *surface, uint64_t sequence, uint64_t generation, bool transactional) {
   if (window->closed || !window->visible || window->renderer != renderer ||
       atomic_load_explicit(&window->presentation_generation, memory_order_relaxed) != generation ||
       sequence <= renderer->presented_sequence) {
@@ -726,12 +726,16 @@ static void present_render_surface(WoxDarwinWindow *window, WoxDarwinRenderer *r
     renderer->front_surface = surface;
   }
   renderer->presented_sequence = sequence;
-  [CATransaction begin];
-  [CATransaction setDisableActions:YES];
+  if (!transactional) {
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+  }
   renderer->content_layer.frame = renderer->layer.bounds;
   renderer->content_layer.contentsScale = renderer->layer.contentsScale;
   renderer->content_layer.contents = (__bridge id)surface->io_surface;
-  [CATransaction commit];
+  if (!transactional) {
+    [CATransaction commit];
+  }
 }
 
 static void destroy_renderer(WoxDarwinRenderer *renderer) {
@@ -1770,8 +1774,11 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     bool is_application_window = window_role == 1;
     bool is_screenshot_window = window_role == 2;
     NSWindowStyleMask style_mask = NSWindowStyleMaskBorderless;
-    if (is_application_window) {
-      style_mask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskFullSizeContentView;
+    if (!is_screenshot_window) {
+      style_mask = NSWindowStyleMaskTitled | NSWindowStyleMaskFullSizeContentView;
+      if (is_application_window) {
+        style_mask |= NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
+      }
     }
     WoxNativeWindow *native_window = [[WoxNativeWindow alloc]
         initWithContentRect:frame
@@ -1783,15 +1790,17 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     native_window.backgroundColor = [NSColor clearColor];
     native_window.hasShadow = !is_screenshot_window;
     native_window.acceptsMouseMovedEvents = YES;
-    // Management windows keep their titled style while sharing the launcher's cross-space activation behavior.
-    if (is_application_window) {
-      native_window.level = NSNormalWindowLevel;
-      native_window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
+    if (!is_screenshot_window) {
       native_window.titlebarAppearsTransparent = YES;
       native_window.titleVisibility = NSWindowTitleHidden;
       [[native_window standardWindowButton:NSWindowCloseButton] setHidden:YES];
       [[native_window standardWindowButton:NSWindowMiniaturizeButton] setHidden:YES];
       [[native_window standardWindowButton:NSWindowZoomButton] setHidden:YES];
+    }
+    // Management windows keep their titled style while sharing the launcher's cross-space activation behavior.
+    if (is_application_window) {
+      native_window.level = NSNormalWindowLevel;
+      native_window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
     } else if (is_screenshot_window) {
       NSWindowCollectionBehavior behavior =
           NSWindowCollectionBehaviorCanJoinAllSpaces |
@@ -3149,15 +3158,14 @@ int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transaction
   uint64_t generation = renderer->frame_generation;
   atomic_fetch_add_explicit(&surface->presentation_references, 1, memory_order_relaxed);
   if ([NSThread isMainThread]) {
-    present_render_surface(window, renderer, surface, sequence, generation);
+    present_render_surface(window, renderer, surface, sequence, generation, transactional != 0);
   } else {
     WoxDarwinSurface *present_surface = [surface retain];
     dispatch_async(dispatch_get_main_queue(), ^{
-      present_render_surface(window, renderer, present_surface, sequence, generation);
+      present_render_surface(window, renderer, present_surface, sequence, generation, false);
       [present_surface release];
     });
   }
   [surface release];
-  (void)transactional;
   return 0;
 }

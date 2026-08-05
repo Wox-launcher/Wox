@@ -229,11 +229,6 @@ func (a *App) resetQueryTransitionLocked() {
 		a.queryTransitionTimer.Stop()
 		a.queryTransitionTimer = nil
 	}
-	if a.queryResizeTimer != nil {
-		a.queryResizeTimer.Stop()
-		a.queryResizeTimer = nil
-	}
-	a.queryResizeRevision++
 }
 
 // showPendingQueryResults clears stale content without shrinking the window while the current query is still waiting.

@@ -29,16 +29,20 @@ func svgIcon(name string, size float32, color woxui.Color) woxwidget.Widget {
 
 // svgIconImage returns the cached raster used by static and animated icon widgets.
 func svgIconImage(name string, size float32, color woxui.Color) *woxui.Image {
+	source := common.UIIcon(name)
+	if source.ImageType != "svg" || source.ImageData == "" {
+		return nil
+	}
+	return svgSourceImage(name, source.ImageData, size, color)
+}
+
+func svgSourceImage(name, source string, size float32, color woxui.Color) *woxui.Image {
 	rasterSize := max(32, int(math.Ceil(float64(size*2))))
 	key := svgIconCacheKey{name: name, rasterSize: rasterSize, color: color}
 	if cached, ok := svgIconCache.Load(key); ok {
 		return cached.(*woxui.Image)
 	}
-	source := common.UIIcon(name)
-	if source.ImageType != "svg" || source.ImageData == "" {
-		return nil
-	}
-	rgba, err := woxsvg.Render(source.ImageData, rasterSize, rasterSize)
+	rgba, err := woxsvg.Render(source, rasterSize, rasterSize)
 	if err != nil {
 		return nil
 	}

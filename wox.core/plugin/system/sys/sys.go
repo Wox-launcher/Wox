@@ -515,47 +515,38 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 		},
 
 		{
-			Title:                  "test toolbar msg",
+			ID:                     "test_toolbar_progress",
+			Title:                  "test toolbar progress",
+			SubTitle:               "Preview indeterminate and determinate toolbar progress",
 			Icon:                   common.CPUProfileIcon,
+			Aliases:                []string{"toolbar progress", "progress animation", "loading animation"},
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				var progress int = 0
+				toolbarMsgId := uuid.New().String()
+				toolbarUI := plugin.GetPluginManager().GetUI()
+				// Global sys results do not own the wildcard query, so the dev preview targets the action's session directly.
+				toolbarUI.ShowToolbarMsg(ctx, plugin.ToolbarMsgUI{
+					Id:            toolbarMsgId,
+					Title:         "Testing indeterminate toolbar progress",
+					Icon:          sysIcon,
+					Indeterminate: true,
+				})
+				util.Go(ctx, "test toolbar progress", func() {
+					time.Sleep(2 * time.Second)
 
-				util.Go(ctx, "test toolbar msg", func() {
-					toolbarMsgId := uuid.New().String()
-					for progress <= 100 {
-						time.Sleep(500 * time.Millisecond)
-						r.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
+					for progress := 0; progress <= 100; progress += 10 {
+						current := progress
+						toolbarUI.ShowToolbarMsg(ctx, plugin.ToolbarMsgUI{
 							Id:       toolbarMsgId,
-							Title:    fmt.Sprintf("Progress: %d%%", progress),
+							Title:    "Testing determinate toolbar progress",
 							Icon:     sysIcon,
-							Progress: &progress,
-							Actions: []plugin.ToolbarMsgAction{
-								{
-									Name:                   "Action1",
-									Icon:                   common.ExecuteRunIcon,
-									Hotkey:                 util.PrimaryHotkey("1"),
-									PreventHideAfterAction: true,
-									Action: func(ctx context.Context, actionContext plugin.ToolbarMsgActionContext) {
-										r.api.Notify(ctx, "Action 1 executed")
-									},
-								},
-								{
-									Name:                   "Stop and Clear",
-									Icon:                   common.ExecuteRunIcon,
-									Hotkey:                 util.PrimaryHotkey("enter"),
-									PreventHideAfterAction: true,
-									Action: func(ctx context.Context, actionContext plugin.ToolbarMsgActionContext) {
-										progress = 200
-										r.api.ClearToolbarMsg(ctx, toolbarMsgId)
-									},
-								},
-							},
+							Progress: &current,
 						})
-						progress += 10
+						time.Sleep(300 * time.Millisecond)
 					}
 
-					r.api.ClearToolbarMsg(ctx, toolbarMsgId)
+					time.Sleep(500 * time.Millisecond)
+					toolbarUI.ClearToolbarMsg(ctx, toolbarMsgId)
 				})
 			},
 		},

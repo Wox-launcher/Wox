@@ -23,6 +23,14 @@ func (requestMRUTestServices) QueryMRU(context.Context, string, string) ([]plugi
 	return nil, errors.New("stop after request")
 }
 
+type mruResultsTestServices struct {
+	contract.Services
+}
+
+func (mruResultsTestServices) QueryMRU(context.Context, string, string) ([]plugin.QueryResultUI, error) {
+	return []plugin.QueryResultUI{{Id: "mru"}}, nil
+}
+
 func TestLauncherWindowOriginPreservesDraggedPosition(t *testing.T) {
 	params := showAppParams{Position: position{X: 400, Y: 300}}
 	current := woxui.Rect{X: 92, Y: 74, Width: 760, Height: 420}
@@ -51,12 +59,7 @@ func TestApplyResultsEntersChatModeFromLayout(t *testing.T) {
 	app.uiCall = nil
 	app.visible = true
 	app.query = newInputQuery("chat ")
-	defer func() {
-		if app.queryResizeTimer != nil {
-			app.queryResizeTimer.Stop()
-		}
-		app.cancel()
-	}()
+	defer app.cancel()
 
 	app.applyResults(app.query.QueryID, []queryResult{{
 		ID: "chat",
@@ -78,6 +81,19 @@ func TestLauncherGridHidesRegularPreview(t *testing.T) {
 	}
 	if !launcherPreviewVisible(layout, queryPreview{PreviewType: "query_requirement_settings", PreviewData: "settings"}) {
 		t.Fatal("grid layout should preserve Flutter's interactive settings preview exception")
+	}
+}
+
+func TestMRUResultsResetGridLayout(t *testing.T) {
+	app := New(false, mruResultsTestServices{})
+	app.uiCall = nil
+	app.layout = queryLayout{GridLayout: &gridLayout{Columns: 4}}
+	defer app.cancel()
+
+	app.loadTypedMRU(app.query.QueryID)
+
+	if app.layout.GridLayout != nil {
+		t.Fatal("MRU results retained the previous query's grid layout")
 	}
 }
 

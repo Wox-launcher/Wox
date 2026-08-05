@@ -125,7 +125,7 @@ func (a *App) loadTypedMRU(queryID string) {
 		converted[index].QueryID = queryID
 	}
 	if err := a.runOnUI("apply MRU results", func() {
-		a.applyResults(queryID, converted, nil, nil, nil, 0, true)
+		a.applyResults(queryID, converted, &queryLayout{}, nil, nil, 0, true)
 	}); err != nil {
 		log.Printf("dispatch MRU results: %v", err)
 	}

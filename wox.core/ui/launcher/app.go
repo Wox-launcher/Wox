@@ -19,10 +19,9 @@ import (
 )
 
 const (
-	defaultWidth              = 760
-	defaultMaxResult          = 10
-	resultRowGap              = 0
-	queryResizeSettleDuration = 80 * time.Millisecond
+	defaultWidth     = 760
+	defaultMaxResult = 10
+	resultRowGap     = 0
 )
 
 const (
@@ -81,8 +80,6 @@ type App struct {
 	queryTransitionTimer       *time.Timer
 	queryLoading               bool
 	queryLoadingTimer          *time.Timer
-	queryResizeTimer           *time.Timer
-	queryResizeRevision        uint64
 	webViewTooltipRevision     atomic.Uint64
 	previewTooltipRevision     atomic.Uint64
 	selected                   int
@@ -746,31 +743,10 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 			a.refreshGlance("manualRefresh", "", nil)
 		})
 	}
-	a.scheduleQueryWindowBounds(queryID)
+	if err := a.applyWindowBounds(); err != nil {
+		log.Printf("resize launcher for query results: %v", err)
+	}
 	_ = a.window.Invalidate()
-}
-
-// scheduleQueryWindowBounds coalesces streaming query snapshots into one resize after input settles.
-func (a *App) scheduleQueryWindowBounds(queryID string) {
-	if a.destroyed.Load() || queryID == "" || queryID != a.query.QueryID {
-		return
-	}
-	a.queryResizeRevision++
-	revision := a.queryResizeRevision
-	if a.queryResizeTimer != nil {
-		a.queryResizeTimer.Stop()
-	}
-	a.queryResizeTimer = time.AfterFunc(queryResizeSettleDuration, func() {
-		_ = a.runOnUI("apply settled query window bounds", func() {
-			if a.destroyed.Load() || revision != a.queryResizeRevision || queryID != a.query.QueryID {
-				return
-			}
-			a.queryResizeTimer = nil
-			if err := a.applyWindowBounds(); err != nil {
-				log.Printf("resize launcher for query results: %v", err)
-			}
-		})
-	})
 }
 
 func (a *App) applyWindowBounds() error {

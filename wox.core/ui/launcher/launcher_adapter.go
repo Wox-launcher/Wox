@@ -750,16 +750,19 @@ func (a *App) scrollResultsFrom(snapshotDetached bool, rendered scrollController
 func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	leftLabel := ""
 	var leftIcon *woxui.Image
-	progressLabel := ""
+	progress := 0
+	hasProgress := false
+	indeterminate := false
 	if snapshot.toolbarMsg != nil {
 		leftLabel = snapshot.toolbarMsg.displayText()
 		if image := a.imageForSize(snapshot.toolbarMsg.Icon, physicalImageSize(18, imageScale)); image != nil {
 			leftIcon = image
 		}
 		if snapshot.toolbarMsg.Progress != nil {
-			progressLabel = fmt.Sprintf("%d%%", *snapshot.toolbarMsg.Progress)
+			progress = *snapshot.toolbarMsg.Progress
+			hasProgress = true
 		} else if snapshot.toolbarMsg.Indeterminate {
-			progressLabel = "Working…"
+			indeterminate = true
 		}
 	}
 	actions := make([]launcherview.LauncherToolbarAction, 0)
@@ -787,6 +790,6 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 	}
 	return launcherview.LauncherToolbarBoundary(launcherview.LauncherToolbarProps{
 		Width: width, Height: height, Padding: snapshot.palette.toolbarPadding, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
-		Label: leftLabel, Icon: leftIcon, ProgressLabel: progressLabel, Actions: actions,
+		Label: leftLabel, Icon: leftIcon, Progress: progress, HasProgress: hasProgress, Indeterminate: indeterminate, Actions: actions,
 	})
 }

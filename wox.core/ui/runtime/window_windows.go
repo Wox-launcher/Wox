@@ -681,6 +681,11 @@ func logicalToPhysical(value, scale float32) int {
 	return max(1, int(value*scale+0.5))
 }
 
+// redrawWindowAfterResize presents the target-size swap chain before the bounds command returns.
+func redrawWindowAfterResize(hwnd win.HWND) {
+	win.RedrawWindow(hwnd, nil, 0, win.RDW_INVALIDATE|win.RDW_UPDATENOW)
+}
+
 // ensureWindowClass registers the shared process-wide class exactly once.
 func ensureWindowClass() error {
 	registerWindowClassOnce.Do(func() {
@@ -1289,7 +1294,7 @@ func (w *platformWindow) setBoundsNative(bounds Rect) error {
 	if !win.SetWindowPos(w.hwnd, 0, x, y, width, height, win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
 		return errors.New("failed to set Windows window bounds")
 	}
-	win.InvalidateRect(w.hwnd, nil, false)
+	redrawWindowAfterResize(w.hwnd)
 	return nil
 }
 
@@ -1297,7 +1302,7 @@ func (w *platformWindow) setPhysicalBoundsNative(bounds Rect) error {
 	if !win.SetWindowPos(w.hwnd, 0, int32(math.Round(float64(bounds.X))), int32(math.Round(float64(bounds.Y))), int32(math.Round(float64(bounds.Width))), int32(math.Round(float64(bounds.Height))), win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
 		return errors.New("failed to set physical Windows window bounds")
 	}
-	win.InvalidateRect(w.hwnd, nil, false)
+	redrawWindowAfterResize(w.hwnd)
 	return nil
 }
 
@@ -1340,7 +1345,7 @@ func (w *platformWindow) centerNative(size Size) error {
 	if !win.SetWindowPos(w.hwnd, 0, x, y, width, height, win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
 		return errors.New("failed to center Windows window")
 	}
-	win.InvalidateRect(w.hwnd, nil, false)
+	redrawWindowAfterResize(w.hwnd)
 	return nil
 }
 
