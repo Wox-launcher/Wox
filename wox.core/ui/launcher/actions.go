@@ -282,7 +282,7 @@ func (a *App) setActionFilterValue(value string) {
 		}
 	}
 	_ = a.applyWindowBounds()
-	_ = a.window.Invalidate()
+	// WoxTextField invalidates the nearest Action Boundary after OnChanged; SetBounds handles real size changes.
 }
 
 // normalizeActionSelectionLocked preserves the same unified action across live result and toolbar refreshes.

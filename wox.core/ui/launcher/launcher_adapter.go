@@ -270,23 +270,22 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 	if !snapshot.queryLoading && snapshot.glance != nil {
 		glance = a.buildGlance(*snapshot.glance, snapshot.hideGlanceIcon, snapshot.palette, glanceWidth, scale, snapshot.densityMetrics)
 	}
-	var loading woxwidget.Widget
+	loading := false
+	loadingWidth := float32(0)
+	loadingSize := float32(0)
 	if snapshot.queryLoading {
-		accessoryWidth := snapshot.densityMetrics.scaled(49)
-		loadingSize := snapshot.densityMetrics.scaled(20)
-		queryWidth -= accessoryWidth + accessoryGap
-		loading = woxwidget.Container{
-			Width: accessoryWidth, Height: queryBoxHeight,
-			Padding: woxwidget.Insets{Left: (accessoryWidth - loadingSize) / 2, Top: (queryBoxHeight - loadingSize) / 2, Right: (accessoryWidth - loadingSize) / 2, Bottom: (queryBoxHeight - loadingSize) / 2},
-			Child:   woxcomponent.WoxLoadingIndicator(loadingSize, snapshot.palette.cursor),
-		}
+		loading = true
+		loadingWidth = snapshot.densityMetrics.scaled(49)
+		loadingSize = snapshot.densityMetrics.scaled(20)
+		queryWidth -= loadingWidth + accessoryGap
 	}
 	queryWidth = max(snapshot.densityMetrics.scaled(140), queryWidth)
 	return launcherview.LauncherHeaderView(launcherview.LauncherHeaderProps{
 		Width: width, Height: height, QueryBoxHeight: queryBoxHeight, QueryEditorHeight: queryEditorHeight, DensityScale: snapshot.densityMetrics.scale,
 		QueryWidth: queryWidth, QueryRadius: snapshot.palette.queryRadius, AppPadding: snapshot.palette.appPadding, Theme: snapshot.palette.componentTheme(),
 		Query: a.queryViewProps(snapshot, queryWidth, queryEditorHeight), Refinement: refinement, RefinementWidth: refinementWidth,
-		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon, Loading: loading,
+		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon,
+		Loading: loading, LoadingWidth: loadingWidth, LoadingSize: loadingSize, LoadingColor: snapshot.palette.cursor,
 		OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {
 				log.Printf("start launcher window drag: %v", err)
@@ -513,6 +512,10 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	child := a.buildPreview(result, snapshot.palette, width, height, imageScale)
 	resolved := a.resolvePreview(result.Preview)
+	// Media owns smaller animation and live-data boundaries; an enclosing section boundary would promote every update to the full preview.
+	if resolved.PreviewType == "media" {
+		return child
+	}
 	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.terminalFullscreen, width, height, imageScale, a.translationsRevision.Load(), a.imagesRevision.Load()}
 	switch resolved.PreviewType {
 	case "query_requirement_settings":
@@ -599,7 +602,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 		result := snapshot.results[index]
 		if result.IsGroup {
 			items = append(items, launcherview.LauncherResultItem{
-				ID: result.ID, Revision: result.Revision, Title: result.Title, Group: true, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
+				ID: result.ID, Title: result.Title, Group: true, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 			})
 			continue
 		}
@@ -610,14 +613,13 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 			titleHeight = metrics.Size.Height
 		}
 		items = append(items, launcherview.LauncherResultItem{
-			ID: result.ID, Revision: result.Revision, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
+			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 			Icon: a.imageForSize(result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale)), TitleHeight: titleHeight, Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnActivate: func() { a.activateResult(index) },
 		})
 	}
-	return launcherview.LauncherResultsBoundary(launcherview.LauncherResultsProps{
-		Revision: snapshot.resultsRevision,
-		Width:    width, Height: height, ContentHeight: contentHeight, Offset: offset, StartIndex: start, RowHeight: rowHeight, RowGap: resultRowGap,
+	return launcherview.LauncherResultsView(launcherview.LauncherResultsProps{
+		Width: width, Height: height, ContentHeight: contentHeight, Offset: offset, StartIndex: start, RowHeight: rowHeight, RowGap: resultRowGap,
 		ContainerPadding: containerPadding, ItemPadding: rowPadding, ItemRadius: snapshot.palette.resultItemRadius,
 		TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail, Theme: snapshot.palette.componentTheme(), DensityScale: densityMetrics.scale, Items: items,
 		Complete: snapshot.queryComplete, ScrollDetached: snapshot.resultScrollDetached,

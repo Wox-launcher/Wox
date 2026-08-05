@@ -20,7 +20,7 @@ func (t *frameDamageTracker) add(oldBounds woxui.Rect, current *node, always boo
 }
 
 func (t *frameDamageTracker) resolve(base woxui.Rect) woxui.Rect {
-	if t == nil || base.Width <= 0 || base.Height <= 0 {
+	if t == nil {
 		return base
 	}
 	result := base
@@ -71,16 +71,29 @@ func clipDamageRect(rect woxui.Rect, size woxui.Size) woxui.Rect {
 	return woxui.Rect{X: x, Y: y, Width: right - x, Height: bottom - y}
 }
 
-func boundaryCaretDamage(current *node) woxui.Rect {
+// activeCaretDamage returns only the focused editor paint bounds, independent of its enclosing Boundary.
+func activeCaretDamage(current *node, focused woxui.AccessibilityNodeID, focusWithin, focusableWithin bool) woxui.Rect {
 	if current == nil {
 		return woxui.Rect{}
 	}
+	if current.focus != nil {
+		focusWithin = current.id == focused
+		focusableWithin = true
+	} else {
+		focusWithin = focusWithin || current.id == focused
+	}
 	result := woxui.Rect{}
-	if current.boundary != nil && current.boundary.caret && current.boundary.node == current {
-		result = current.bounds
+	if current.caretPaint != nil {
+		caretActive := current.caret
+		if focusableWithin {
+			caretActive = focusWithin
+		}
+		if caretActive {
+			result = current.bounds
+		}
 	}
 	for _, child := range current.children {
-		result = unionDamageRects(result, boundaryCaretDamage(child))
+		result = unionDamageRects(result, activeCaretDamage(child, focused, focusWithin, focusableWithin))
 	}
 	return result
 }

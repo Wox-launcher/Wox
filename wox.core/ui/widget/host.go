@@ -124,7 +124,7 @@ func (h *Host) AttachServices(services HostServices) {
 	h.window = services
 }
 
-// SetRepaintDebugMode changes Boundary diagnostics for subsequent frames.
+// SetRepaintDebugMode changes repaint diagnostics for subsequent frames.
 func (h *Host) SetRepaintDebugMode(mode RepaintDebugMode) error {
 	parsed, err := parseRepaintDebugMode(string(mode))
 	if err != nil {
@@ -138,12 +138,25 @@ func (h *Host) SetRepaintDebugMode(mode RepaintDebugMode) error {
 	return nil
 }
 
-// RepaintDebugMode returns the active Boundary diagnostic mode.
+// RepaintDebugMode returns the active repaint diagnostic mode.
 func (h *Host) RepaintDebugMode() RepaintDebugMode {
 	if h == nil {
 		return RepaintDebugOff
 	}
 	return h.repaintDebugMode
+}
+
+// InvalidateBoundary schedules repaint for one retained Boundary's current bounds.
+func (h *Host) InvalidateBoundary(key Key) bool {
+	if h == nil || h.elements == nil {
+		return false
+	}
+	rect, found := h.elements.boundaryBounds(key)
+	if !found {
+		return false
+	}
+	h.invalidateRect(rect)
+	return true
 }
 
 // SetWindowFocused keeps the retained editor focus while suspending its caret and IME when the native window is inactive.
@@ -191,16 +204,20 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	}
 
 	oldNodes := h.nodes
-	animation := h.animations.beginFrame(h.window)
+	animation := h.animations.beginFrame()
 	var debugFrame *repaintDebugFrame
 	if h.repaintDebugMode != RepaintDebugOff {
 		debugFrame = &repaintDebugFrame{
-			mode: h.repaintDebugMode, now: time.Now(),
+			mode: h.repaintDebugMode, now: time.Now(), repaintCount: h.elements.generation,
 		}
 	}
+	caretVisible := h.caretVisibleForFrame()
 	damageTracker := &frameDamageTracker{}
-	root := widget.layout(context{window: h.window, caretVisible: h.caretVisibleForFrame(), animation: animation, damage: damageTracker, debug: debugFrame, elements: h.elements, element: h.elements.root}, constraints{width: frame.Size.Width, height: frame.Size.Height})
-	damage = damageTracker.resolve(damage)
+	root := widget.layout(context{window: h.window, animation: animation, damage: damageTracker, debug: debugFrame, elements: h.elements, element: h.elements.root}, constraints{width: frame.Size.Width, height: frame.Size.Height})
+	diagnostics, removedDamage := h.elements.endFrame()
+	boundaryDamage := damageTracker.resolve(woxui.Rect{})
+	damage = unionDamageRects(damage, boundaryDamage)
+	damage = unionDamageRects(damage, removedDamage)
 	if damage.Width > 0 && damage.Height > 0 {
 		damage = expandDamageRect(damage, 4)
 	}
@@ -209,9 +226,9 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 		damage = woxui.Rect{}
 	}
 	if h.repaintDebugMode != RepaintDebugOff {
-		debugFrame.damage = damage
+		debugFrame.repaintRegion = damage
 		if damage.Width <= 0 || damage.Height <= 0 {
-			debugFrame.damage = woxui.Rect{Width: frame.Size.Width, Height: frame.Size.Height}
+			debugFrame.repaintRegion = woxui.Rect{Width: frame.Size.Width, Height: frame.Size.Height}
 		}
 		damage = woxui.Rect{}
 	}
@@ -219,10 +236,15 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	if services, ok := h.window.(displayListDamageHostServices); ok && services.DisplayListDamageCullingEnabled() {
 		displayList.SetDamage(damage)
 	}
-	h.animations.endFrame(animation)
+	h.animations.endFrame(animation, func() {
+		if boundaryDamage.Width > 0 && boundaryDamage.Height > 0 {
+			h.invalidateRect(boundaryDamage)
+			return
+		}
+		h.invalidate()
+	})
 	identities := map[string]woxui.AccessibilityNodeID{}
 	nodes := map[woxui.AccessibilityNodeID]*node{}
-	diagnostics := h.elements.endFrame()
 	h.assignIdentities(root, nil, "root", 0, h.identities, identities, nodes, &diagnostics, nil)
 	h.root = root
 	h.identities = identities
@@ -230,7 +252,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	h.reconcileTransientState(oldNodes)
 	h.reconcileFocus()
 	h.updateCaretBlink(nodeHasActiveCaret(root, h.focused, false, false))
-	h.setCaretDamage(boundaryCaretDamage(root))
+	h.setCaretDamage(activeCaretDamage(root, h.focused, false, false))
 	h.recordFramePhase(frameID, woxui.FrameMetricBuildLayout, time.Since(buildLayoutStart))
 
 	drawStart := time.Now()
@@ -239,7 +261,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	if !h.focusVisible {
 		focusRingTarget = 0
 	}
-	h.root.draw(displayList, h.focused, focusRingTarget, false, false)
+	h.root.draw(displayList, h.focused, focusRingTarget, caretVisible, false, false)
 	debugFrame.draw(displayList)
 	h.recordFramePhase(frameID, woxui.FrameMetricDrawRecord, time.Since(drawStart))
 
@@ -1022,7 +1044,9 @@ func (h *Host) resetCaretBlink() {
 
 func (h *Host) setHovered(target *node) {
 	old := h.nodes[h.hovered]
+	damage := woxui.Rect{}
 	if old != nil && old.gesture != nil {
+		damage = unionDamageRects(damage, old.bounds)
 		if old.gesture.onHover != nil {
 			old.gesture.onHover(false)
 		}
@@ -1042,6 +1066,7 @@ func (h *Host) setHovered(target *node) {
 		_ = h.window.SetPointerCursor(cursor)
 	}
 	if target != nil && target.gesture != nil {
+		damage = unionDamageRects(damage, target.bounds)
 		if target.gesture.onHover != nil {
 			target.gesture.onHover(true)
 		}
@@ -1049,7 +1074,10 @@ func (h *Host) setHovered(target *node) {
 			target.gesture.onHoverAt(true, target.bounds)
 		}
 	}
-	h.invalidate()
+	// Hover callbacks may change both visuals, so redraw only their combined bounds.
+	if damage.Width > 0 && damage.Height > 0 {
+		h.invalidateRect(damage)
+	}
 }
 
 func (h *Host) activatePointerTarget(target *node, position woxui.Point) {

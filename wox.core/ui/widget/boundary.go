@@ -44,7 +44,6 @@ type scrollDependency struct {
 }
 
 type dynamicUse struct {
-	caret      bool
 	animations []animationDependency
 	scrolls    []scrollDependency
 }
@@ -53,15 +52,11 @@ func (u *dynamicUse) merge(other dynamicUse) {
 	if u == nil {
 		return
 	}
-	u.caret = u.caret || other.caret
 	u.animations = append(u.animations, other.animations...)
 	u.scrolls = append(u.scrolls, other.scrolls...)
 }
 
-func (u dynamicUse) matches(ctx context, caretVisible bool) bool {
-	if u.caret && ctx.caretVisible != caretVisible {
-		return false
-	}
+func (u dynamicUse) matches(ctx context) bool {
 	for _, dependency := range u.animations {
 		value, found := ctx.animation.observe(dependency)
 		if !found || value != dependency.value {
@@ -82,7 +77,6 @@ type boundaryState[T BoundaryProps[T]] struct {
 	constraints  constraints
 	node         *node
 	dynamic      dynamicUse
-	caret        bool
 	repaints     uint64
 	repaintTimes []time.Time
 	reusedAt     uint64
@@ -92,7 +86,6 @@ type boundaryState[T BoundaryProps[T]] struct {
 type boundaryCache struct {
 	hit                 bool
 	node                *node
-	caret               bool
 	identityValid       bool
 	identityRootPath    string
 	identityEntries     []boundaryIdentityEntry
@@ -147,7 +140,7 @@ func (w boundaryLayout[T]) layout(ctx context, available constraints) *node {
 	if state.node != nil {
 		oldBounds = state.node.bounds
 	}
-	cacheHit := !incrementalDisabled() && state.hasCache && state.node != nil && !w.dirty && state.constraints == available && w.boundary.Props.Equal(state.props) && state.dynamic.matches(ctx, state.caret)
+	cacheHit := !incrementalDisabled() && state.hasCache && state.node != nil && !w.dirty && state.constraints == available && w.boundary.Props.Equal(state.props) && state.dynamic.matches(ctx)
 	if cacheHit && ctx.elements != nil && state.reusedAt == ctx.elements.generation {
 		ctx.elements.diagnostics = append(ctx.elements.diagnostics, fmt.Sprintf("boundary %q reused the same cached subtree more than once in frame %d", boundaryLabel(w.boundary), ctx.elements.generation))
 		cacheHit = false
@@ -200,26 +193,20 @@ func (w boundaryLayout[T]) layout(ctx context, available constraints) *node {
 	state.node = result
 	state.cache.hit = false
 	state.cache.node = result
-	state.cache.caret = probe.caret
 	state.cache.a11yValid = false
 	result.boundary = &state.cache
 	state.dynamic = probe
-	state.caret = ctx.caretVisible
 	state.repaints++
-	if ctx.debug != nil && (ctx.debug.mode == RepaintDebugRainbow || ctx.debug.mode == RepaintDebugCounts) {
-		recentCount := 0
-		if ctx.debug.mode == RepaintDebugCounts {
-			cutoff := ctx.debug.now.Add(-time.Second)
-			kept := state.repaintTimes[:0]
-			for _, repaintAt := range state.repaintTimes {
-				if !repaintAt.Before(cutoff) {
-					kept = append(kept, repaintAt)
-				}
+	if ctx.debug != nil && ctx.debug.mode == RepaintDebugCounts {
+		cutoff := ctx.debug.now.Add(-time.Second)
+		kept := state.repaintTimes[:0]
+		for _, repaintAt := range state.repaintTimes {
+			if !repaintAt.Before(cutoff) {
+				kept = append(kept, repaintAt)
 			}
-			state.repaintTimes = append(kept, ctx.debug.now)
-			recentCount = len(state.repaintTimes)
 		}
-		ctx.debug.repaints = append(ctx.debug.repaints, boundaryRepaint{node: result, repaintCount: state.repaints, recentCount: recentCount})
+		state.repaintTimes = append(kept, ctx.debug.now)
+		ctx.debug.repaints = append(ctx.debug.repaints, boundaryRepaint{node: result, repaintCount: state.repaints, recentCount: len(state.repaintTimes)})
 	}
 	state.reusedAt = 0
 	ctx.damage.add(oldBounds, result, true)
@@ -250,8 +237,8 @@ func (w boundaryLayout[T]) verifyCachedNode(ctx context, available constraints, 
 	focused := ^woxui.AccessibilityNodeID(0)
 	cachedList := &woxui.DisplayList{}
 	shadowList := &woxui.DisplayList{}
-	cached.draw(cachedList, focused, focused, false, false)
-	shadow.draw(shadowList, focused, focused, false, false)
+	cached.draw(cachedList, focused, focused, true, false, false)
+	shadow.draw(shadowList, focused, focused, true, false, false)
 	return cachedList.Compare(shadowList)
 }
 

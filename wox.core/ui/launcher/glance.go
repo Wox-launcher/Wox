@@ -62,7 +62,7 @@ func (a *App) buildGlance(item glanceItem, hideIcon bool, palette uiPalette, wid
 		iconTint.A = uint8(float32(iconTint.A) * 0.8 * 0.72)
 		icon = a.imageForTint(item.Icon, &iconTint, physicalImageSize(int(densityMetrics.scaled(16)), imageScale))
 	}
-	return launcherview.GlanceView(launcherview.GlanceProps{
+	return launcherview.GlanceBoundary(launcherview.GlanceProps{
 		Text: item.Text, Tooltip: item.Tooltip, Width: width, Icon: icon, Theme: palette.componentTheme(), DensityScale: densityMetrics.scale,
 		OnTap: a.activateGlance, OnHover: a.setGlanceHover,
 	})
@@ -92,7 +92,7 @@ func (a *App) refreshGlance(reason, pluginID string, ids []string) {
 		}
 		if !a.glanceEligibleLocked() {
 			a.stopGlanceLocked(true)
-			_ = a.window.Invalidate()
+			a.invalidateLauncherBoundary(launcherview.GlanceBoundaryKey)
 			return
 		}
 		if a.glanceLoading && pluginID == "" && reason != "settingsChanged" {
@@ -141,7 +141,7 @@ func (a *App) refreshGlance(reason, pluginID string, ids []string) {
 			a.glanceItem = selected
 			a.scheduleGlanceRefreshLocked(request.ref)
 		}
-		_ = a.window.Invalidate()
+		a.invalidateLauncherBoundary(launcherview.GlanceBoundaryKey)
 	}); dispatchErr != nil {
 		log.Printf("dispatch glance refresh result: %v", dispatchErr)
 	}

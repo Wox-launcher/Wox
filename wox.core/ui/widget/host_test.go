@@ -10,12 +10,13 @@ import (
 )
 
 type fakeHostServices struct {
-	tree            woxui.AccessibilityTree
-	handler         woxui.AccessibilityActionHandler
-	textInput       woxui.TextInputState
-	pointerCursor   woxui.PointerCursor
-	invalidations   int
-	invalidatedRect woxui.Rect
+	tree             woxui.AccessibilityTree
+	handler          woxui.AccessibilityActionHandler
+	textInput        woxui.TextInputState
+	pointerCursor    woxui.PointerCursor
+	invalidations    int
+	invalidatedRect  woxui.Rect
+	invalidatedRects chan woxui.Rect
 }
 
 func (f *fakeHostServices) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
@@ -30,6 +31,12 @@ func (f *fakeHostServices) Invalidate() error {
 func (f *fakeHostServices) InvalidateRect(rect woxui.Rect) error {
 	f.invalidations++
 	f.invalidatedRect = rect
+	if f.invalidatedRects != nil {
+		select {
+		case f.invalidatedRects <- rect:
+		default:
+		}
+	}
 	return nil
 }
 
@@ -37,7 +44,8 @@ func (*fakeHostServices) DisplayListDamageCullingEnabled() bool { return true }
 
 func TestHostExpandsPartialDamageForPaintOutsets(t *testing.T) {
 	host := NewHost(func(woxui.FrameInfo) Widget { return Container{Width: 100, Height: 100} })
-	host.AttachServices(&fakeHostServices{})
+	services := &fakeHostServices{}
+	host.AttachServices(services)
 	displayList := &woxui.DisplayList{}
 	host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, Damage: woxui.Rect{X: 10, Y: 10, Width: 10, Height: 10}})
 	if got, want := displayList.Damage(), (woxui.Rect{X: 6, Y: 6, Width: 18, Height: 18}); got != want {
@@ -149,6 +157,52 @@ func TestLoopAnimationPreservesPhaseWhilePaused(t *testing.T) {
 	frame.now = start.Add(1100 * time.Millisecond)
 	if progress := host.loopValue(frame, "record", time.Second, false); progress != .4 {
 		t.Fatalf("resumed loop progress = %v, want continuity at 0.4", progress)
+	}
+}
+
+func TestBoundaryAnimationSchedulesPartialInvalidation(t *testing.T) {
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Boundary[boundaryTestProps]{Key: "animated-region", Props: boundaryTestProps{}, Build: func(boundaryTestProps) Widget {
+			return LoopAnimation{Key: "animated-region-loop", Duration: time.Second, Builder: func(float32) Widget {
+				return Container{Width: 20, Height: 30}
+			}}
+		}}
+	})
+	services := &fakeHostServices{invalidatedRects: make(chan woxui.Rect, 1)}
+	host.AttachServices(services)
+	defer host.Dispose()
+	renderTestFrame(host)
+
+	select {
+	case rect := <-services.invalidatedRects:
+		if rect != (woxui.Rect{Width: 20, Height: 30}) {
+			t.Fatalf("animation invalidation = %+v, want Boundary bounds", rect)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("animation did not schedule its next frame")
+	}
+}
+
+func TestHostIncludesRemovedBoundaryInDamage(t *testing.T) {
+	show := true
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		children := []StackChild{}
+		if show {
+			children = append(children, StackChild{Left: 10, Top: 20, Child: Boundary[boundaryTestProps]{Key: "removed-region", Props: boundaryTestProps{}, Build: func(boundaryTestProps) Widget {
+				return Container{Width: 20, Height: 30}
+			}}})
+		}
+		return Stack{Width: 100, Height: 100, Children: children}
+	})
+	host.AttachServices(&fakeHostServices{})
+	defer host.Dispose()
+	renderTestFrame(host)
+
+	show = false
+	displayList := &woxui.DisplayList{}
+	host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, PixelSize: woxui.PixelSize{Width: 100, Height: 100}, Scale: 1})
+	if got, want := displayList.NativeDamage(), (woxui.Rect{X: 6, Y: 16, Width: 28, Height: 38}); got != want {
+		t.Fatalf("removed Boundary damage = %+v, want old bounds with paint outset %+v", got, want)
 	}
 }
 
@@ -672,7 +726,8 @@ func TestHostRequiresPointerMoveBeforeHover(t *testing.T) {
 			Child:   Container{Width: 100, Height: 20},
 		}
 	})
-	host.AttachServices(&fakeHostServices{})
+	services := &fakeHostServices{}
+	host.AttachServices(services)
 	renderTestFrame(host)
 
 	position := woxui.Point{X: 5, Y: 5}
@@ -683,6 +738,29 @@ func TestHostRequiresPointerMoveBeforeHover(t *testing.T) {
 	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: position})
 	if len(hoverStates) != 1 || !hoverStates[0] {
 		t.Fatalf("pointer move hover states = %v, want [true]", hoverStates)
+	}
+	if services.invalidations != 1 || services.invalidatedRect != (woxui.Rect{Width: 100, Height: 20}) {
+		t.Fatalf("Host hover damage = %d %#v, want one row-local invalidation", services.invalidations, services.invalidatedRect)
+	}
+}
+
+func TestHostHoverMoveInvalidatesOldAndNewBounds(t *testing.T) {
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Flex{Axis: Vertical, Children: []Widget{
+			Gesture{ID: "first", Child: Container{Width: 100, Height: 20}},
+			Gesture{ID: "second", Child: Container{Width: 100, Height: 20}},
+		}}
+	})
+	services := &fakeHostServices{}
+	host.AttachServices(services)
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 5, Y: 5}})
+	services.invalidations = 0
+	services.invalidatedRect = woxui.Rect{}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 5, Y: 25}})
+	if services.invalidations != 1 || services.invalidatedRect != (woxui.Rect{Width: 100, Height: 40}) {
+		t.Fatalf("hover move damage = %d %#v, want one combined two-row invalidation", services.invalidations, services.invalidatedRect)
 	}
 }
 

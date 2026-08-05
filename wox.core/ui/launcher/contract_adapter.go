@@ -11,7 +11,9 @@ import (
 	"wox/plugin"
 	"wox/plugin/system/shell/terminal"
 	"wox/ui/contract"
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 	"wox/util"
 )
 
@@ -475,6 +477,24 @@ func cloneAnyMap(values map[string]any) map[string]any {
 	return copy
 }
 
+// updatedResultBoundaryKeys maps independently updatable result fields to their retained paint boundaries.
+func updatedResultBoundaryKeys(result plugin.UpdatableResult, grid bool) []woxwidget.Key {
+	keys := make([]woxwidget.Key, 0, 4)
+	if result.Icon != nil {
+		keys = append(keys, launcherview.LauncherResultIconBoundaryKey(result.Id))
+	}
+	if result.Title != nil {
+		keys = append(keys, launcherview.LauncherResultTitleBoundaryKey(result.Id))
+	}
+	if !grid && result.SubTitle != nil {
+		keys = append(keys, launcherview.LauncherResultSubtitleBoundaryKey(result.Id))
+	}
+	if !grid && result.Tails != nil {
+		keys = append(keys, launcherview.LauncherResultTailsBoundaryKey(result.Id))
+	}
+	return keys
+}
+
 func (a *App) applyTypedCloudSyncProgress(progress cloudsync.CloudSyncProgress) {
 	if progress.Active {
 		copy := cloudSyncProgress{Active: true, Operation: progress.Operation, EntityType: progress.EntityType, PluginID: progress.PluginID, Key: progress.Key, Current: progress.Current, Total: progress.Total}
@@ -528,6 +548,19 @@ func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 		a.results[updatedIndex].Revision = a.resultRevision
 		a.resultsSectionRevision++
 		a.reconcileSelectedPreview()
+		keys := updatedResultBoundaryKeys(result, a.layout.GridLayout != nil)
+		if result.Preview == nil && result.Actions == nil && a.host != nil {
+			if len(keys) == 0 {
+				return updated
+			}
+			allFound := true
+			for _, key := range keys {
+				allFound = a.host.InvalidateBoundary(key) && allFound
+			}
+			if allFound || a.host.InvalidateBoundary(launcherview.LauncherResultBackgroundBoundaryKey(result.Id)) {
+				return updated
+			}
+		}
 		_ = a.window.Invalidate()
 	}
 	return updated

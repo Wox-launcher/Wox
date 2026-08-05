@@ -670,7 +670,7 @@ func (w *platformWindow) queueFrame(frame *darwinRenderFrame) {
 	}
 	replaced := w.pendingFrame
 	if replaced != nil {
-		frame.frame.Damage = mergeFrameDamage(frame.frame.Damage, replaced.frame.Damage)
+		frame.displayList.SetNativeDamage(mergeFrameDamage(frame.displayList.NativeDamage(), replaced.displayList.NativeDamage()))
 	}
 	w.pendingFrame = frame
 	wake := w.renderWake
@@ -726,7 +726,7 @@ func (w *platformWindow) drawFrameSync(frame FrameInfo, transactional bool) {
 	wake := w.renderWake
 	w.mu.Unlock()
 	if replaced != nil {
-		frame.Damage = mergeFrameDamage(frame.Damage, replaced.frame.Damage)
+		displayList.SetNativeDamage(mergeFrameDamage(displayList.NativeDamage(), replaced.displayList.NativeDamage()))
 	}
 	if replaced != nil && w.options.frameMetrics != nil {
 		w.options.frameMetrics.dropFrame(replaced.displayList.frameID)

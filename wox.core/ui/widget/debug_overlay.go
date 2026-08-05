@@ -19,7 +19,6 @@ type RepaintDebugMode string
 const (
 	RepaintDebugOff     RepaintDebugMode = "off"
 	RepaintDebugRainbow RepaintDebugMode = "rainbow"
-	RepaintDebugDamage  RepaintDebugMode = "damage"
 	RepaintDebugCounts  RepaintDebugMode = "counts"
 	RepaintDebugVerify  RepaintDebugMode = "verify"
 )
@@ -31,10 +30,11 @@ type boundaryRepaint struct {
 }
 
 type repaintDebugFrame struct {
-	mode     RepaintDebugMode
-	now      time.Time
-	repaints []boundaryRepaint
-	damage   woxui.Rect
+	mode          RepaintDebugMode
+	now           time.Time
+	repaints      []boundaryRepaint
+	repaintRegion woxui.Rect
+	repaintCount  uint64
 }
 
 func parseRepaintDebugMode(value string) (RepaintDebugMode, error) {
@@ -43,8 +43,6 @@ func parseRepaintDebugMode(value string) (RepaintDebugMode, error) {
 		return RepaintDebugOff, nil
 	case RepaintDebugRainbow:
 		return RepaintDebugRainbow, nil
-	case RepaintDebugDamage:
-		return RepaintDebugDamage, nil
 	case RepaintDebugCounts:
 		return RepaintDebugCounts, nil
 	case RepaintDebugVerify:
@@ -68,10 +66,8 @@ func (f *repaintDebugFrame) draw(displayList *woxui.DisplayList) {
 	}
 	switch f.mode {
 	case RepaintDebugRainbow:
-		for _, repaint := range f.repaints {
-			if repaint.node != nil {
-				displayList.StrokeRoundedRect(repaint.node.bounds, 3, 2, repaintRainbowColor(repaint.repaintCount))
-			}
+		if f.repaintRegion.Width > 0 && f.repaintRegion.Height > 0 {
+			displayList.StrokeRoundedRect(f.repaintRegion, 0, 2, repaintRainbowColor(f.repaintCount))
 		}
 	case RepaintDebugCounts:
 		for _, repaint := range f.repaints {
@@ -79,10 +75,6 @@ func (f *repaintDebugFrame) draw(displayList *woxui.DisplayList) {
 				alpha := uint8(min(180, 28+repaint.recentCount*18))
 				displayList.FillRoundedRect(repaint.node.bounds, 3, woxui.Color{R: 255, G: 64, A: alpha})
 			}
-		}
-	case RepaintDebugDamage:
-		if f.damage.Width > 0 && f.damage.Height > 0 {
-			displayList.StrokeRoundedRect(f.damage, 0, 2, woxui.Color{R: 255, G: 32, B: 32, A: 255})
 		}
 	}
 }

@@ -196,6 +196,16 @@ func (a *App) invalidateOnboardingWindow() {
 	}
 }
 
+// invalidateLauncherBoundary uses retained geometry for controller-driven local updates.
+func (a *App) invalidateLauncherBoundary(key woxwidget.Key) {
+	if a.host != nil && a.host.InvalidateBoundary(key) {
+		return
+	}
+	if a.window != nil {
+		_ = a.window.Invalidate()
+	}
+}
+
 func (a *App) invalidateAllWindows() {
 	if a.window != nil {
 		_ = a.window.Invalidate()

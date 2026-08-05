@@ -261,13 +261,48 @@ func TestRequestMRUPreservesGlance(t *testing.T) {
 func TestInformationalGlanceCanBeTapped(t *testing.T) {
 	app := &App{}
 	widget := app.buildGlance(glanceItem{Text: "100 MB"}, true, defaultPalette(), 100, 1, launcherDensityMetricsFor(""))
-	stateful, ok := widget.(woxwidget.Stateful)
+	boundary, ok := widget.(woxwidget.Boundary[launcherview.GlanceProps])
 	if !ok {
-		t.Fatalf("Glance widget = %T, want stateful", widget)
+		t.Fatalf("Glance widget = %T, want boundary", widget)
 	}
-	props, ok := stateful.Widget.(launcherview.GlanceProps)
-	if !ok || props.OnTap == nil {
+	if boundary.Props.OnTap == nil {
 		t.Fatal("informational Glance should expose a refresh tap handler")
+	}
+}
+
+func TestUpdatedResultBoundaryKeysFollowFieldUpdates(t *testing.T) {
+	title := "Title"
+	subtitle := "Subtitle"
+	icon := common.WoxImage{}
+	tails := []plugin.QueryResultTail{}
+	update := plugin.UpdatableResult{Id: "live", Icon: &icon, Title: &title, SubTitle: &subtitle, Tails: &tails}
+	got := updatedResultBoundaryKeys(update, false)
+	want := []woxwidget.Key{
+		launcherview.LauncherResultIconBoundaryKey("live"),
+		launcherview.LauncherResultTitleBoundaryKey("live"),
+		launcherview.LauncherResultSubtitleBoundaryKey("live"),
+		launcherview.LauncherResultTailsBoundaryKey("live"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("updated result boundary keys = %v, want %v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("updated result boundary keys = %v, want %v", got, want)
+		}
+	}
+	grid := updatedResultBoundaryKeys(update, true)
+	if len(grid) != 2 || grid[0] != want[0] || grid[1] != want[1] {
+		t.Fatalf("grid updated result boundary keys = %v, want icon and title only", grid)
+	}
+}
+
+func TestMediaPreviewBypassesPreparedSectionBoundary(t *testing.T) {
+	app := &App{}
+	result := queryResult{Preview: queryPreview{PreviewType: "media", PreviewData: `{"title":"Track"}`}}
+	widget := app.buildPreviewSection(result, viewSnapshot{palette: defaultPalette()}, 700, 400, 1)
+	if _, wrapped := widget.(woxwidget.Boundary[launcherPreparedSectionProps]); wrapped {
+		t.Fatal("media preview retained the full-section boundary")
 	}
 }
 

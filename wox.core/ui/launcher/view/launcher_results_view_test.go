@@ -25,8 +25,9 @@ func TestLauncherResultGroupUsesFlutterTitleTypography(t *testing.T) {
 	stack := scrollGesture.Child.(woxwidget.Stack)
 	scroll := stack.Children[0].Child.(woxwidget.ScrollView)
 	content := scroll.Child.(woxwidget.Container)
-	row := buildLauncherResultBoundary(content.Child.(woxwidget.Flex).Children[0]).(woxwidget.Container)
-	label := row.Child.(woxwidget.Text)
+	row := content.Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
+	titleBoundary := row.Child.(woxwidget.Boundary[launcherResultTextProps])
+	label := titleBoundary.Build(titleBoundary.Props).(woxwidget.Text)
 
 	if label.Color != titleColor {
 		t.Fatalf("group title color = %#v, want Flutter result title color %#v", label.Color, titleColor)
@@ -53,9 +54,10 @@ func TestLauncherResultTailsScrollHorizontallyWhenClipped(t *testing.T) {
 		}},
 	}).(woxwidget.Semantics)
 	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-	row := buildLauncherResultBoundary(listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0]).(woxwidget.Semantics)
-	tailContainer := row.Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
-	tails := tailContainer.Child.(woxwidget.ScrollView)
+	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	tailContainer := launcherResultRowContent(row).Children[2].(woxwidget.Container)
+	tailBoundary := tailContainer.Child.(woxwidget.Boundary[launcherResultTailsProps])
+	tails := tailBoundary.Build(tailBoundary.Props).(woxwidget.ScrollView)
 
 	if !tails.Horizontal || tails.Key != "launcher-result-tails-many-tags" {
 		t.Fatalf("tail scroll = horizontal %v key %q, want true/stable result key", tails.Horizontal, tails.Key)
@@ -66,45 +68,68 @@ func TestLauncherResultTailsScrollHorizontallyWhenClipped(t *testing.T) {
 }
 
 func TestLauncherResultBoundaryEqualCoversAllFields(t *testing.T) {
-	woxwidget.AssertEqualCoversAllFields(t, LauncherResultItem{})
-	woxwidget.AssertEqualCoversAllFields(t, launcherResultRowProps{})
-	woxwidget.AssertEqualCoversAllFields(t, LauncherResultsProps{})
+	woxwidget.AssertEqualCoversAllFields(t, launcherResultBackgroundProps{})
+	woxwidget.AssertEqualCoversAllFields(t, launcherResultIconProps{})
+	woxwidget.AssertEqualCoversAllFields(t, launcherResultTextProps{})
+	woxwidget.AssertEqualCoversAllFields(t, launcherResultTailsProps{})
 }
 
-func TestLauncherResultHoverRebuildsOnlyChangedRows(t *testing.T) {
-	hovered := 0
-	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		items := []LauncherResultItem{
-			{ID: "first", Revision: 1, Title: "First", Hovered: hovered == 0},
-			{ID: "second", Revision: 2, Title: "Second", Hovered: hovered == 1},
-			{ID: "third", Revision: 3, Title: "Third", Hovered: hovered == 2},
+func TestLauncherResultUsesIndependentUpdateBoundaries(t *testing.T) {
+	result := LauncherResultsView(LauncherResultsProps{
+		Width: 300, Height: 50, ContentHeight: 50, RowHeight: 50,
+		Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}},
+		Items: []LauncherResultItem{{
+			ID: "live", Title: "Title", Subtitle: "Subtitle", Icon: &woxui.Image{Width: 28, Height: 28}, TailWidth: 60, TailHeight: 22,
+			Tails: []LauncherResultTail{{Text: "1%", Width: 60, Height: 22}},
+		}},
+	}).(woxwidget.Semantics)
+	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	rowStack := row.Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+	background := rowStack.Children[0].Child.(woxwidget.Boundary[launcherResultBackgroundProps])
+	content := launcherResultRowContent(row)
+	icon := content.Children[0].(woxwidget.Container).Child.(woxwidget.Boundary[launcherResultIconProps])
+	labelViewport := content.Children[1].(woxwidget.Clip)
+	labels := labelViewport.Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	title := labels.Children[0].(woxwidget.Boundary[launcherResultTextProps])
+	subtitle := labels.Children[1].(woxwidget.Boundary[launcherResultTextProps])
+	tails := content.Children[2].(woxwidget.Container).Child.(woxwidget.Boundary[launcherResultTailsProps])
+
+	want := []woxwidget.Key{
+		LauncherResultBackgroundBoundaryKey("live"), LauncherResultIconBoundaryKey("live"), LauncherResultTitleBoundaryKey("live"),
+		LauncherResultSubtitleBoundaryKey("live"), LauncherResultTailsBoundaryKey("live"),
+	}
+	got := []woxwidget.Key{background.Key, icon.Key, title.Key, subtitle.Key, tails.Key}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("result boundary keys = %v, want %v", got, want)
 		}
-		return LauncherResultsBoundary(LauncherResultsProps{
-			Width: 320, Height: 150, ContentHeight: 150, RowHeight: 50, Items: items,
-			Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}, SelectedBackground: woxui.Color{R: 50, G: 100, B: 200, A: 255}},
-		})
-	})
-	host.AttachServices(settingsWindowHostServices{})
-	if err := host.SetRepaintDebugMode(woxwidget.RepaintDebugRainbow); err != nil {
-		t.Fatal(err)
-	}
-	render := func() int {
-		displayList := &woxui.DisplayList{}
-		host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 320, Height: 150}, PixelSize: woxui.PixelSize{Width: 320, Height: 150}, Scale: 1})
-		return displayList.CommandCount()
-	}
-	render()
-	stableCommands := render()
-	hovered = 1
-	movedCommands := render()
-	if movedCommands != stableCommands+3 {
-		t.Fatalf("hover move commands = %d, stable = %d; want three repaint outlines for section and two changed rows", movedCommands, stableCommands)
 	}
 }
 
-func buildLauncherResultBoundary(value woxwidget.Widget) woxwidget.Widget {
-	boundary := value.(woxwidget.Boundary[launcherResultRowProps])
-	return boundary.Build(boundary.Props)
+func TestLauncherResultTailWidthDoesNotChangeLabelBoundaryConstraints(t *testing.T) {
+	labelGeometry := func(tailWidth float32) (float32, float32) {
+		result := LauncherResultsView(LauncherResultsProps{
+			Width: 300, Height: 50, ContentHeight: 50, RowHeight: 50,
+			Items: []LauncherResultItem{{ID: "live", Title: "Title", TailWidth: tailWidth}},
+		}).(woxwidget.Semantics)
+		listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+		row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+		viewport := launcherResultRowContent(row).Children[1].(woxwidget.Clip)
+		content := viewport.Child.(woxwidget.Container)
+		return viewport.Width, content.Width
+	}
+
+	firstViewport, firstContent := labelGeometry(40)
+	secondViewport, secondContent := labelGeometry(80)
+	if firstViewport == secondViewport || firstContent != secondContent {
+		t.Fatalf("label widths = viewport %.0f/%.0f content %.0f/%.0f, want changing viewport and stable content", firstViewport, secondViewport, firstContent, secondContent)
+	}
+}
+
+func launcherResultRowContent(row woxwidget.Semantics) woxwidget.Flex {
+	stack := row.Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+	return stack.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex)
 }
 
 func TestLauncherResultImageTailOverlaysCenteredSVGText(t *testing.T) {

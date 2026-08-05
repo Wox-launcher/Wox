@@ -71,17 +71,26 @@ func TestLauncherQueryLeavesSharedScrollbarGutterOutsideDragOverlay(t *testing.T
 func TestLauncherHeaderExposesQueryLoadingProgress(t *testing.T) {
 	header := LauncherHeaderView(LauncherHeaderProps{
 		Width: 500, Height: 50, QueryBoxHeight: 50, QueryEditorHeight: 34, QueryWidth: 400,
-		Loading: woxwidget.Painter{Width: 20, Height: 20},
+		Loading: true, LoadingWidth: 49, LoadingSize: 20,
 	}).(woxwidget.Container)
 	row := header.Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	loading := row.Children[1].(woxwidget.Semantics)
 	if loading.AutomationID != "launcher.query.loading" || loading.Role != woxui.AccessibilityRoleProgressBar || loading.Value != "loading" || !loading.ReadOnly {
 		t.Fatalf("query loading semantics = id %q role %q value %q readonly %v", loading.AutomationID, loading.Role, loading.Value, loading.ReadOnly)
 	}
+	boundary := loading.Child.(woxwidget.Boundary[launcherQueryLoadingProps])
+	if boundary.Key != LauncherQueryLoadingBoundaryKey {
+		t.Fatalf("query loading boundary key = %q, want %q", boundary.Key, LauncherQueryLoadingBoundaryKey)
+	}
 }
 
 func TestLauncherQueryBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, LauncherQueryProps{})
+	woxwidget.AssertEqualCoversAllFields(t, launcherQueryLoadingProps{})
+}
+
+func TestGlanceBoundaryEqualCoversAllFields(t *testing.T) {
+	woxwidget.AssertEqualCoversAllFields(t, GlanceProps{})
 }
 
 func launcherQueryEditable(widget woxwidget.Widget) woxwidget.EditableText {

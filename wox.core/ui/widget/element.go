@@ -167,10 +167,11 @@ type stateElement struct {
 }
 
 type elementTree struct {
-	host        *Host
-	root        *stateElement
-	generation  uint64
-	diagnostics []string
+	host          *Host
+	root          *stateElement
+	generation    uint64
+	diagnostics   []string
+	removedDamage woxui.Rect
 }
 
 // newElementTree creates the retained state root owned by one Host window.
@@ -184,6 +185,7 @@ func newElementTree(host *Host) *elementTree {
 func (t *elementTree) beginFrame() {
 	t.generation++
 	t.diagnostics = nil
+	t.removedDamage = woxui.Rect{}
 	t.root.seenAt = t.generation
 }
 
@@ -234,9 +236,9 @@ func (t *elementTree) reconcile(parent *stateElement, widget Stateful) *stateEle
 	return element
 }
 
-func (t *elementTree) endFrame() []string {
+func (t *elementTree) endFrame() ([]string, woxui.Rect) {
 	t.sweep(t.root)
-	return append([]string(nil), t.diagnostics...)
+	return append([]string(nil), t.diagnostics...), t.removedDamage
 }
 
 // sweep disposes retained subtrees that were not rebuilt in the current frame.
@@ -262,6 +264,26 @@ func (t *elementTree) markSubtreeSeen(parent *stateElement) {
 	}
 }
 
+// boundaryBounds finds the last retained geometry used to invalidate one external props update.
+func (t *elementTree) boundaryBounds(key Key) (woxui.Rect, bool) {
+	var find func(*stateElement) (woxui.Rect, bool)
+	find = func(parent *stateElement) (woxui.Rect, bool) {
+		if parent == nil {
+			return woxui.Rect{}, false
+		}
+		if parent.key == key && parent.boundary != nil && parent.boundary.node != nil {
+			return parent.boundary.node.bounds, true
+		}
+		for _, child := range parent.children {
+			if bounds, found := find(child); found {
+				return bounds, true
+			}
+		}
+		return woxui.Rect{}, false
+	}
+	return find(t.root)
+}
+
 // dispose releases every retained state when its Host window is destroyed.
 func (t *elementTree) dispose() {
 	for identity, child := range t.root.children {
@@ -274,6 +296,10 @@ func (t *elementTree) dispose() {
 func (t *elementTree) disposeElement(element *stateElement) {
 	if element == nil || !element.mounted.Load() {
 		return
+	}
+	// A removed Boundary must clear its last pixels even though it no longer participates in layout.
+	if element.boundary != nil && element.boundary.node != nil {
+		t.removedDamage = unionDamageRects(t.removedDamage, element.boundary.node.bounds)
 	}
 	for identity, child := range element.children {
 		t.disposeElement(child)

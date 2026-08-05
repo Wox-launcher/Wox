@@ -1263,7 +1263,6 @@ func (a *App) hoverResult(index int, inside bool) {
 	} else if a.hoveredResult == index {
 		a.hoveredResult = -1
 	}
-	_ = a.window.Invalidate()
 }
 
 func (a *App) activateSelected() {

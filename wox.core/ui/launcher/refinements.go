@@ -204,7 +204,11 @@ func (a *App) resetQueryLoadingLocked() {
 		a.queryLoadingTimer.Stop()
 		a.queryLoadingTimer = nil
 	}
+	wasLoading := a.queryLoading
 	a.queryLoading = false
+	if wasLoading && a.host != nil {
+		a.host.InvalidateBoundary(launcherview.LauncherQueryLoadingBoundaryKey)
+	}
 }
 
 // showQueryLoading exposes the spinner only while the same query still has no result snapshot.

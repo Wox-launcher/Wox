@@ -159,6 +159,24 @@ func TestBoundaryCachesByPropsAndConstraints(t *testing.T) {
 	}
 }
 
+func TestHostInvalidatesRetainedBoundaryBounds(t *testing.T) {
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Boundary[boundaryTestProps]{Key: "target-boundary", Props: boundaryTestProps{}, Build: func(boundaryTestProps) Widget {
+			return Container{Width: 30, Height: 20}
+		}}
+	})
+	services := &fakeHostServices{}
+	host.AttachServices(services)
+	renderBoundaryTestFrame(host, 100)
+
+	if !host.InvalidateBoundary("target-boundary") {
+		t.Fatal("retained boundary was not found")
+	}
+	if got, want := services.invalidatedRect, (woxui.Rect{Width: 30, Height: 20}); got != want {
+		t.Fatalf("invalidated boundary = %+v, want %+v", got, want)
+	}
+}
+
 func TestBoundaryInvalidateMarksRetainedAncestorsDirty(t *testing.T) {
 	var childContext StateContext
 	boundaryBuilds := 0
@@ -238,25 +256,33 @@ func TestBoundaryKeepsInvalidationRaisedDuringBuild(t *testing.T) {
 	}
 }
 
-func TestBoundaryCaretDependencyInvalidatesCache(t *testing.T) {
+func TestBoundaryCaretBlinkReusesCachedLayout(t *testing.T) {
 	builds := 0
 	host := NewHost(func(woxui.FrameInfo) Widget {
 		return Boundary[boundaryTestProps]{Key: "caret-boundary", Props: boundaryTestProps{}, Build: func(boundaryTestProps) Widget {
 			builds++
-			return CaretPainter{Width: 20, Height: 20}
+			return CaretPainter{Width: 20, Height: 20, Active: true, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, _, visible bool) {
+				if visible {
+					displayList.FillRect(bounds, woxui.Color{R: 255, A: 255})
+				}
+			}}
 		}}
 	})
 	host.AttachServices(&fakeHostServices{})
 
-	renderBoundaryTestFrame(host, 100)
-	renderBoundaryTestFrame(host, 100)
+	visible := &woxui.DisplayList{}
+	host.Frame(visible, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, PixelSize: woxui.PixelSize{Width: 100, Height: 100}, Scale: 1})
 	if builds != 1 {
-		t.Fatalf("stable caret build count = %d, want 1", builds)
+		t.Fatalf("initial caret build count = %d, want 1", builds)
 	}
 	host.caretVisible = !host.caretVisible
-	renderBoundaryTestFrame(host, 100)
-	if builds != 2 {
-		t.Fatalf("changed caret build count = %d, want 2", builds)
+	hidden := &woxui.DisplayList{}
+	host.Frame(hidden, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, PixelSize: woxui.PixelSize{Width: 100, Height: 100}, Scale: 1})
+	if builds != 1 {
+		t.Fatalf("blink caret build count = %d, want cached layout", builds)
+	}
+	if visible.CommandCount() != 1 || hidden.CommandCount() != 0 {
+		t.Fatalf("caret draw commands = visible %d hidden %d, want 1/0", visible.CommandCount(), hidden.CommandCount())
 	}
 }
 
@@ -440,7 +466,7 @@ func TestBoundaryReportsDuplicateCachedSubtreeReuse(t *testing.T) {
 	}
 }
 
-func TestBoundaryRainbowHighlightsOnlyRebuiltSubtrees(t *testing.T) {
+func TestRepaintRainbowHighlightsOnlyFrameRegion(t *testing.T) {
 	host := NewHost(func(woxui.FrameInfo) Widget {
 		return Boundary[boundaryTestProps]{Key: "rainbow-boundary", Props: boundaryTestProps{}, Build: func(boundaryTestProps) Widget {
 			return Container{Width: 20, Height: 20}
@@ -455,8 +481,19 @@ func TestBoundaryRainbowHighlightsOnlyRebuiltSubtrees(t *testing.T) {
 	host.Frame(first, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, PixelSize: woxui.PixelSize{Width: 100, Height: 100}, Scale: 1})
 	second := &woxui.DisplayList{}
 	host.Frame(second, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, PixelSize: woxui.PixelSize{Width: 100, Height: 100}, Scale: 1})
-	if first.CommandCount() != 1 || second.CommandCount() != 0 {
-		t.Fatalf("rainbow command counts = first %d second %d, want 1/0", first.CommandCount(), second.CommandCount())
+	if first.CommandCount() != 1 || second.CommandCount() != 1 {
+		t.Fatalf("rainbow command counts = first %d second %d, want one repaint-region outline per frame", first.CommandCount(), second.CommandCount())
+	}
+}
+
+func TestRainbowHighlightsRepaintRegion(t *testing.T) {
+	region := woxui.Rect{X: 12, Y: 8, Width: 80, Height: 24}
+	actual := &woxui.DisplayList{}
+	(&repaintDebugFrame{mode: RepaintDebugRainbow, repaintRegion: region, repaintCount: 7}).draw(actual)
+	expected := &woxui.DisplayList{}
+	expected.StrokeRoundedRect(region, 0, 2, repaintRainbowColor(7))
+	if err := actual.Compare(expected); err != nil {
+		t.Fatalf("rainbow repaint region: %v", err)
 	}
 }
 
@@ -493,16 +530,16 @@ func TestHostRepaintDebugModeValidatesRuntimeSwitch(t *testing.T) {
 	if err := host.SetRepaintDebugMode("unknown"); err == nil {
 		t.Fatal("unsupported repaint mode was accepted")
 	}
-	if err := host.SetRepaintDebugMode(RepaintDebugDamage); err != nil {
+	if err := host.SetRepaintDebugMode(RepaintDebugRainbow); err != nil {
 		t.Fatal(err)
 	}
-	if host.RepaintDebugMode() != RepaintDebugDamage || services.invalidations == 0 {
+	if host.RepaintDebugMode() != RepaintDebugRainbow || services.invalidations == 0 {
 		t.Fatalf("runtime repaint mode = %q invalidations = %d", host.RepaintDebugMode(), services.invalidations)
 	}
 	displayList := &woxui.DisplayList{}
 	host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, PixelSize: woxui.PixelSize{Width: 100, Height: 100}, Scale: 1})
 	if displayList.CommandCount() != 1 {
-		t.Fatalf("damage overlay command count = %d, want 1", displayList.CommandCount())
+		t.Fatalf("repaint highlight command count = %d, want 1", displayList.CommandCount())
 	}
 }
 

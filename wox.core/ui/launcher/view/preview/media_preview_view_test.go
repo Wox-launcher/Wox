@@ -31,6 +31,33 @@ func TestMediaPreviewMatchesFlutterResponsiveLayout(t *testing.T) {
 	}
 }
 
+func TestMediaPreviewUsesIndependentRepaintBoundaries(t *testing.T) {
+	props := MediaPreviewProps{Width: 900, Height: 500, Title: "Track", Artist: "Artist", AppName: "Player"}
+	content := MediaPreviewView(props).(woxwidget.Container).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	record := content.Children[0].(woxwidget.Align).Child.(woxwidget.Boundary[mediaRecordBoundaryProps])
+	details := content.Children[1].(woxwidget.Align).Child.(woxwidget.Flex)
+	status := details.Children[0].(woxwidget.Boundary[mediaStatusBoundaryProps])
+	metadata := details.Children[2].(woxwidget.Boundary[mediaMetadataBoundaryProps])
+	progress := details.Children[4].(woxwidget.Boundary[mediaProgressBoundaryProps])
+	controls := details.Children[6].(woxwidget.Align).Child.(woxwidget.Boundary[mediaControlsBoundaryProps])
+
+	got := []woxwidget.Key{record.Key, status.Key, metadata.Key, progress.Key, controls.Key}
+	want := []woxwidget.Key{mediaRecordBoundaryKey, mediaStatusBoundaryKey, mediaMetadataBoundaryKey, mediaProgressBoundaryKey, mediaControlsBoundaryKey}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("media boundary keys = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestMediaPreviewBoundaryEqualCoversAllFields(t *testing.T) {
+	woxwidget.AssertEqualCoversAllFields(t, mediaRecordBoundaryProps{})
+	woxwidget.AssertEqualCoversAllFields(t, mediaStatusBoundaryProps{})
+	woxwidget.AssertEqualCoversAllFields(t, mediaMetadataBoundaryProps{})
+	woxwidget.AssertEqualCoversAllFields(t, mediaProgressBoundaryProps{})
+	woxwidget.AssertEqualCoversAllFields(t, mediaControlsBoundaryProps{})
+}
+
 func TestMediaPreviewUsesFlutterControlSurface(t *testing.T) {
 	theme := woxcomponent.Theme{PreviewText: woxui.Color{R: 220, G: 225, B: 230, A: 255}, Cursor: woxui.Color{R: 255, G: 100, B: 50, A: 255}}
 	controls := mediaControls(MediaPreviewProps{Playing: true, Theme: theme}).(woxwidget.Container)

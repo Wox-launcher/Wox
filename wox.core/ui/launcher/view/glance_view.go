@@ -8,6 +8,9 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// GlanceBoundaryKey identifies the retained launcher Glance accessory.
+const GlanceBoundaryKey woxwidget.Key = "query-glance-boundary"
+
 // GlanceProps contains the display state and actions for the query-box glance accessory.
 type GlanceProps struct {
 	Text         string
@@ -16,8 +19,13 @@ type GlanceProps struct {
 	Icon         *woxui.Image
 	Theme        woxcomponent.Theme
 	DensityScale float32
-	OnTap        func()
-	OnHover      func(bool, string, woxui.Rect)
+	OnTap        func()                         `boundary:"stable"`
+	OnHover      func(bool, string, woxui.Rect) `boundary:"stable"`
+}
+
+// Equal compares every render dependency for the Glance accessory.
+func (p GlanceProps) Equal(other GlanceProps) bool {
+	return p.Text == other.Text && p.Tooltip == other.Tooltip && p.Width == other.Width && p.Icon == other.Icon && p.Theme == other.Theme && p.DensityScale == other.DensityScale
 }
 
 type glanceViewState struct {
@@ -29,6 +37,14 @@ func GlanceView(props GlanceProps) woxwidget.Widget {
 	return woxwidget.Stateful{
 		Key: "query-glance-state", Type: (*glanceViewState)(nil), Widget: props,
 		CreateState: func() woxwidget.State { return &glanceViewState{} },
+	}
+}
+
+// GlanceBoundary retains the accessory until its prepared content changes.
+func GlanceBoundary(props GlanceProps) woxwidget.Widget {
+	return woxwidget.Boundary[GlanceProps]{
+		Key: GlanceBoundaryKey, Label: "header:glance", Props: props,
+		Build: func(props GlanceProps) woxwidget.Widget { return GlanceView(props) },
 	}
 }
 

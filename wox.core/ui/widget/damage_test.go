@@ -19,6 +19,15 @@ func TestFrameDamageTrackerIncludesOldAndPlacedBoundaryBounds(t *testing.T) {
 	}
 }
 
+func TestFrameDamageTrackerSeedsDamageFromBoundary(t *testing.T) {
+	current := &node{bounds: woxui.Rect{X: 20, Y: 30, Width: 40, Height: 50}}
+	tracker := &frameDamageTracker{}
+	tracker.add(woxui.Rect{}, current, true)
+	if got := tracker.resolve(woxui.Rect{}); got != current.bounds {
+		t.Fatalf("boundary-seeded damage = %+v, want %+v", got, current.bounds)
+	}
+}
+
 func TestFrameDamageTrackerSkipsStationaryCacheHit(t *testing.T) {
 	current := &node{bounds: woxui.Rect{X: 20, Y: 20, Width: 10, Height: 10}}
 	tracker := &frameDamageTracker{}
@@ -56,6 +65,19 @@ func TestStateInvalidateUsesNearestBoundaryBounds(t *testing.T) {
 	}
 	if !child.dirty.Load() || !boundaryElement.dirty.Load() {
 		t.Fatal("state invalidation did not mark the retained ancestor chain dirty")
+	}
+}
+
+func TestActiveCaretDamageUsesFocusedEditorBounds(t *testing.T) {
+	backgroundCaret := &node{id: 2, bounds: woxui.Rect{X: 10, Y: 10, Width: 40, Height: 20}, caret: true, caretPaint: func(*woxui.DisplayList, woxui.Rect, bool, bool) {}}
+	actionCaret := &node{id: 4, bounds: woxui.Rect{X: 60, Y: 60, Width: 30, Height: 15}, caret: true, caretPaint: func(*woxui.DisplayList, woxui.Rect, bool, bool) {}}
+	root := &node{children: []*node{
+		{id: 1, focus: &focusBehavior{}, children: []*node{backgroundCaret}},
+		{id: 3, focus: &focusBehavior{}, children: []*node{actionCaret}},
+	}}
+
+	if got := activeCaretDamage(root, 3, false, false); got != actionCaret.bounds {
+		t.Fatalf("active caret damage = %+v, want focused editor %+v", got, actionCaret.bounds)
 	}
 }
 

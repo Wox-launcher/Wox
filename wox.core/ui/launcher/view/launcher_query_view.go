@@ -6,7 +6,10 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const LauncherQueryInputKey woxwidget.Key = "launcher-query-input-key"
+const (
+	LauncherQueryInputKey           woxwidget.Key = "launcher-query-input-key"
+	LauncherQueryLoadingBoundaryKey woxwidget.Key = "launcher-query-loading-boundary"
+)
 
 // Keep short queries pointer-editable before the trailing window-drag region begins.
 const launcherQueryMinimumEditableWidth = float32(300)
@@ -93,10 +96,24 @@ type LauncherHeaderProps struct {
 	Glance            woxwidget.Widget
 	GlanceWidth       float32
 	Icon              *woxui.Image
-	Loading           woxwidget.Widget
+	Loading           bool
+	LoadingWidth      float32
+	LoadingSize       float32
+	LoadingColor      woxui.Color
 	// OnDragStart starts a window drag when the pointer presses the header's
 	// empty padding around the query pill (e.g. above the input box).
 	OnDragStart func()
+}
+
+type launcherQueryLoadingProps struct {
+	Width  float32
+	Height float32
+	Size   float32
+	Color  woxui.Color
+}
+
+func (p launcherQueryLoadingProps) Equal(other launcherQueryLoadingProps) bool {
+	return p == other
 }
 
 // LauncherHeaderView builds the query box and prepared accessory views.
@@ -130,10 +147,21 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 			Child: woxwidget.Container{Width: iconSize, Height: iconContainerHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(2, props.DensityScale)}, Child: woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize}},
 		})
 	}
-	if props.Loading != nil {
+	if props.Loading {
+		loadingProps := launcherQueryLoadingProps{Width: props.LoadingWidth, Height: props.QueryBoxHeight, Size: props.LoadingSize, Color: props.LoadingColor}
 		children = append(children, woxwidget.Semantics{
 			Key: "launcher-query-loading-key", AutomationID: "launcher.query.loading", Role: woxui.AccessibilityRoleProgressBar,
-			Label: "Search in progress", Value: "loading", ReadOnly: true, Child: props.Loading,
+			Label: "Search in progress", Value: "loading", ReadOnly: true,
+			Child: woxwidget.Boundary[launcherQueryLoadingProps]{
+				Key: LauncherQueryLoadingBoundaryKey, Label: "header:loading", Props: loadingProps,
+				Build: func(props launcherQueryLoadingProps) woxwidget.Widget {
+					return woxwidget.Container{
+						Width: props.Width, Height: props.Height,
+						Padding: woxwidget.Insets{Left: (props.Width - props.Size) / 2, Top: (props.Height - props.Size) / 2, Right: (props.Width - props.Size) / 2, Bottom: (props.Height - props.Size) / 2},
+						Child:   woxcomponent.WoxLoadingIndicator(props.Size, props.Color),
+					}
+				},
+			},
 		})
 	}
 	horizontalPadding := props.AppPadding.Left + props.AppPadding.Right

@@ -8,6 +8,33 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+const launcherResultBoundaryKeyPrefix = "launcher-result-boundary-"
+
+// LauncherResultBackgroundBoundaryKey returns the retained background Boundary key for one result.
+func LauncherResultBackgroundBoundaryKey(id string) woxwidget.Key {
+	return woxwidget.Key(launcherResultBoundaryKeyPrefix + id + "-background")
+}
+
+// LauncherResultIconBoundaryKey returns the retained icon Boundary key for one result.
+func LauncherResultIconBoundaryKey(id string) woxwidget.Key {
+	return woxwidget.Key(launcherResultBoundaryKeyPrefix + id + "-icon")
+}
+
+// LauncherResultTitleBoundaryKey returns the retained title Boundary key for one result.
+func LauncherResultTitleBoundaryKey(id string) woxwidget.Key {
+	return woxwidget.Key(launcherResultBoundaryKeyPrefix + id + "-title")
+}
+
+// LauncherResultSubtitleBoundaryKey returns the retained subtitle Boundary key for one result.
+func LauncherResultSubtitleBoundaryKey(id string) woxwidget.Key {
+	return woxwidget.Key(launcherResultBoundaryKeyPrefix + id + "-subtitle")
+}
+
+// LauncherResultTailsBoundaryKey returns the retained tails Boundary key for one result.
+func LauncherResultTailsBoundaryKey(id string) woxwidget.Key {
+	return woxwidget.Key(launcherResultBoundaryKeyPrefix + id + "-tails")
+}
+
 // LauncherResultTail contains one resolved result-tail visual and its measured width.
 type LauncherResultTail struct {
 	Text           string
@@ -23,7 +50,6 @@ type LauncherResultTail struct {
 // LauncherResultItem contains one visible list result and its controller callbacks.
 type LauncherResultItem struct {
 	ID          string
-	Revision    uint64
 	Title       string
 	Subtitle    string
 	Group       bool
@@ -39,22 +65,8 @@ type LauncherResultItem struct {
 	OnActivate  func()     `boundary:"stable"`
 }
 
-// Equal compares the prepared visual and stable controller callbacks for one result row.
-func (i LauncherResultItem) Equal(other LauncherResultItem) bool {
-	if i.ID != other.ID || i.Revision != other.Revision || i.Title != other.Title || i.Subtitle != other.Subtitle || i.Group != other.Group || i.Selected != other.Selected || i.Hovered != other.Hovered || i.Icon != other.Icon || i.TitleHeight != other.TitleHeight || i.TailWidth != other.TailWidth || i.TailHeight != other.TailHeight || len(i.Tails) != len(other.Tails) {
-		return false
-	}
-	for index := range i.Tails {
-		if i.Tails[index] != other.Tails[index] {
-			return false
-		}
-	}
-	return true
-}
-
 // LauncherResultsProps contains the prepared viewport slice and result-list geometry.
 type LauncherResultsProps struct {
-	Revision          uint64
 	Width             float32
 	Height            float32
 	ContentHeight     float32
@@ -75,19 +87,6 @@ type LauncherResultsProps struct {
 	OnScroll          func(float32) `boundary:"stable"`
 }
 
-// Equal compares every render dependency for the virtualized result section.
-func (p LauncherResultsProps) Equal(other LauncherResultsProps) bool {
-	if p.Revision != other.Revision || p.Width != other.Width || p.Height != other.Height || p.ContentHeight != other.ContentHeight || p.Offset != other.Offset || p.StartIndex != other.StartIndex || p.RowHeight != other.RowHeight || p.RowGap != other.RowGap || p.ContainerPadding != other.ContainerPadding || p.ItemPadding != other.ItemPadding || p.ItemRadius != other.ItemRadius || p.TailColor != other.TailColor || p.SelectedTailColor != other.SelectedTailColor || p.Theme != other.Theme || p.DensityScale != other.DensityScale || p.Complete != other.Complete || p.ScrollDetached != other.ScrollDetached || len(p.Items) != len(other.Items) {
-		return false
-	}
-	for index := range p.Items {
-		if !p.Items[index].Equal(other.Items[index]) {
-			return false
-		}
-	}
-	return true
-}
-
 type launcherResultRowProps struct {
 	Item              LauncherResultItem
 	RowWidth          float32
@@ -106,21 +105,71 @@ type launcherResultRowProps struct {
 	SubtitleStyle     woxui.TextStyle
 }
 
-func (p launcherResultRowProps) Equal(other launcherResultRowProps) bool {
-	return p.Item.Equal(other.Item) && p.RowWidth == other.RowWidth && p.RowHeight == other.RowHeight && p.InnerRowWidth == other.InnerRowWidth && p.BaseHeight == other.BaseHeight && p.IconSize == other.IconSize && p.IconGap == other.IconGap && p.ItemPadding == other.ItemPadding && p.ItemRadius == other.ItemRadius && p.TailColor == other.TailColor && p.SelectedTailColor == other.SelectedTailColor && p.Theme == other.Theme && p.DensityScale == other.DensityScale && p.TitleStyle == other.TitleStyle && p.SubtitleStyle == other.SubtitleStyle
+type launcherResultBackgroundProps struct {
+	Width  float32
+	Height float32
+	Radius float32
+	Color  woxui.Color
+}
+
+func (p launcherResultBackgroundProps) Equal(other launcherResultBackgroundProps) bool {
+	return p == other
+}
+
+type launcherResultIconProps struct {
+	Image *woxui.Image
+	Size  float32
+}
+
+func (p launcherResultIconProps) Equal(other launcherResultIconProps) bool {
+	return p == other
+}
+
+type launcherResultTextProps struct {
+	Value string
+	Style woxui.TextStyle
+	Color woxui.Color
+}
+
+func (p launcherResultTextProps) Equal(other launcherResultTextProps) bool {
+	return p == other
+}
+
+type launcherResultTailsProps struct {
+	ID           string
+	Items        []LauncherResultTail
+	Width        float32
+	Height       float32
+	Foreground   woxui.Color
+	Selected     bool
+	DensityScale float32
+}
+
+func (p launcherResultTailsProps) Equal(other launcherResultTailsProps) bool {
+	if p.ID != other.ID || p.Width != other.Width || p.Height != other.Height || p.Foreground != other.Foreground || p.Selected != other.Selected || p.DensityScale != other.DensityScale || len(p.Items) != len(other.Items) {
+		return false
+	}
+	for index := range p.Items {
+		if p.Items[index] != other.Items[index] {
+			return false
+		}
+	}
+	return true
+}
+
+// launcherResultTextBoundary retains one independently updatable result label.
+func launcherResultTextBoundary(key woxwidget.Key, label string, props launcherResultTextProps) woxwidget.Widget {
+	return woxwidget.Boundary[launcherResultTextProps]{
+		Key: key, Label: label, Props: props,
+		Build: func(props launcherResultTextProps) woxwidget.Widget {
+			return woxwidget.Text{Value: props.Value, Style: props.Style, Color: props.Color}
+		},
+	}
 }
 
 // LauncherSplitContentView places the result list beside a prepared preview.
 func LauncherSplitContentView(results, preview woxwidget.Widget) woxwidget.Widget {
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{results, preview}}
-}
-
-// LauncherResultsBoundary retains the complete result section when its prepared props are unchanged.
-func LauncherResultsBoundary(props LauncherResultsProps) woxwidget.Widget {
-	return woxwidget.Boundary[LauncherResultsProps]{
-		Key: "launcher-results-boundary", Label: "results", Props: props,
-		Build: func(props LauncherResultsProps) woxwidget.Widget { return LauncherResultsView(props) },
-	}
 }
 
 // LauncherResultsView builds the virtualized result list.
@@ -138,16 +187,14 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		if key == "" {
 			key = fmt.Sprintf("index-%d", props.StartIndex+itemOffset)
 		}
+		item.ID = key
 		rowProps := launcherResultRowProps{
 			Item: item, RowWidth: rowWidth, RowHeight: props.RowHeight, InnerRowWidth: innerRowWidth,
 			BaseHeight: baseHeight, IconSize: iconSize, IconGap: iconGap, ItemPadding: props.ItemPadding, ItemRadius: props.ItemRadius,
 			TailColor: props.TailColor, SelectedTailColor: props.SelectedTailColor, Theme: props.Theme, DensityScale: props.DensityScale,
 			TitleStyle: titleStyle, SubtitleStyle: subtitleStyle,
 		}
-		rows = append(rows, woxwidget.Boundary[launcherResultRowProps]{
-			Key: woxwidget.Key("launcher-result-boundary-" + key), Label: "result:" + key, Props: rowProps,
-			Build: func(props launcherResultRowProps) woxwidget.Widget { return launcherResultRow(props) },
-		})
+		rows = append(rows, launcherResultRow(rowProps))
 	}
 	visiblePadding := props.ContainerPadding
 	visiblePadding.Top += float32(props.StartIndex) * (props.RowHeight + props.RowGap)
@@ -172,6 +219,7 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 // launcherResultRow builds one pure row subtree from fully prepared props.
 func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	item := props.Item
+	// UpdateResult changes row visuals independently; keep their Boundaries outside any enclosing row Boundary.
 	background := woxui.Color{}
 	title := props.Theme.ResultTitle
 	subtitle := props.Theme.ResultSubtitle
@@ -186,28 +234,59 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 		background.A = uint8(float32(background.A)*0.25 + 0.5)
 	}
 	if item.Group {
+		titleProps := launcherResultTextProps{Value: item.Title, Style: props.TitleStyle, Color: title}
 		return woxwidget.Container{
 			Width: props.RowWidth, Height: props.RowHeight, Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale), Top: scaledLauncherSize(18, props.DensityScale)},
-			Child: woxwidget.Text{Value: item.Title, Style: props.TitleStyle, Color: title},
+			Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps),
 		}
 	}
-	var icon woxwidget.Widget = woxwidget.Painter{Width: props.IconSize, Height: props.IconSize}
-	if item.Icon != nil {
-		icon = woxwidget.Image{Source: item.Icon, Width: props.IconSize, Height: props.IconSize}
+	iconProps := launcherResultIconProps{Image: item.Icon, Size: props.IconSize}
+	icon := woxwidget.Boundary[launcherResultIconProps]{
+		Key: LauncherResultIconBoundaryKey(item.ID), Label: "result-icon:" + item.ID, Props: iconProps,
+		Build: func(props launcherResultIconProps) woxwidget.Widget {
+			if props.Image == nil {
+				return woxwidget.Painter{Width: props.Size, Height: props.Size}
+			}
+			return woxwidget.Image{Source: props.Image, Width: props.Size, Height: props.Size}
+		},
 	}
 	var tail woxwidget.Widget
 	if len(item.Tails) > 0 {
-		tail = launcherResultTailsWithDensity(item.Tails, item.TailWidth, item.TailHeight, tailColor, item.Selected, props.DensityScale, woxwidget.Key("launcher-result-tails-"+item.ID))
+		tailProps := launcherResultTailsProps{ID: item.ID, Items: item.Tails, Width: item.TailWidth, Height: item.TailHeight, Foreground: tailColor, Selected: item.Selected, DensityScale: props.DensityScale}
+		tail = woxwidget.Boundary[launcherResultTailsProps]{
+			Key: LauncherResultTailsBoundaryKey(item.ID), Label: "result-tails:" + item.ID, Props: tailProps,
+			Build: func(props launcherResultTailsProps) woxwidget.Widget {
+				return launcherResultTailsWithDensity(props.Items, props.Width, props.Height, props.Foreground, props.Selected, props.DensityScale, woxwidget.Key("launcher-result-tails-"+props.ID))
+			},
+		}
 	}
-	labelWidth := max(props.BaseHeight, props.InnerRowWidth-props.IconSize-scaledLauncherSize(20, props.DensityScale)-item.TailWidth)
-	labelChildren := []woxwidget.Widget{woxwidget.Text{Value: item.Title, Style: props.TitleStyle, Color: title}}
+	labelContentWidth := max(props.BaseHeight, props.InnerRowWidth-props.IconSize-scaledLauncherSize(20, props.DensityScale))
+	labelWidth := max(props.BaseHeight, labelContentWidth-item.TailWidth)
+	titleProps := launcherResultTextProps{Value: item.Title, Style: props.TitleStyle, Color: title}
+	labelChildren := []woxwidget.Widget{launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps)}
 	labelTop := scaledLauncherSize(7, props.DensityScale)
 	labelGap := float32(0)
 	if item.Subtitle != "" {
-		labelChildren = append(labelChildren, woxwidget.Text{Value: item.Subtitle, Style: props.SubtitleStyle, Color: subtitle})
+		subtitleProps := launcherResultTextProps{Value: item.Subtitle, Style: props.SubtitleStyle, Color: subtitle}
+		labelChildren = append(labelChildren, launcherResultTextBoundary(LauncherResultSubtitleBoundaryKey(item.ID), "result-subtitle:"+item.ID, subtitleProps))
 		labelGap = scaledLauncherSize(2, props.DensityScale)
 	} else {
 		labelTop = max(float32(0), (props.BaseHeight-item.TitleHeight)/2)
+	}
+	backgroundProps := launcherResultBackgroundProps{Width: props.RowWidth, Height: props.RowHeight, Radius: props.ItemRadius, Color: background}
+	backgroundLayer := woxwidget.Boundary[launcherResultBackgroundProps]{
+		Key: LauncherResultBackgroundBoundaryKey(item.ID), Label: "result-background:" + item.ID, Props: backgroundProps,
+		Build: func(props launcherResultBackgroundProps) woxwidget.Widget {
+			return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: props.Radius, Color: props.Color}
+		},
+	}
+	contentLayer := woxwidget.Container{
+		Width: props.RowWidth, Height: props.RowHeight, Padding: props.ItemPadding,
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: props.IconGap, Children: []woxwidget.Widget{
+			woxwidget.Container{Width: props.IconSize, Height: props.BaseHeight, Padding: woxwidget.Insets{Top: max(float32(0), (props.BaseHeight-props.IconSize)/2)}, Child: icon},
+			woxwidget.Clip{Width: labelWidth, Height: props.BaseHeight, Child: woxwidget.Container{Width: labelContentWidth, Height: props.BaseHeight, Padding: woxwidget.Insets{Top: labelTop}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: labelGap, Children: labelChildren}}},
+			woxwidget.Container{Width: item.TailWidth, Height: props.BaseHeight, Padding: woxwidget.Insets{Top: max(float32(0), (props.BaseHeight-item.TailHeight)/2)}, Child: tail},
+		}},
 	}
 	resultControl := woxwidget.Gesture{
 		ID: fmt.Sprintf("result-gesture-%s", item.ID),
@@ -225,14 +304,7 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 				item.OnActivate()
 			}
 		},
-		Child: woxwidget.Container{
-			Width: props.RowWidth, Height: props.RowHeight, Radius: props.ItemRadius, Color: background, Padding: props.ItemPadding,
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: props.IconGap, Children: []woxwidget.Widget{
-				woxwidget.Container{Width: props.IconSize, Height: props.BaseHeight, Padding: woxwidget.Insets{Top: max(float32(0), (props.BaseHeight-props.IconSize)/2)}, Child: icon},
-				woxwidget.Container{Width: labelWidth, Height: props.BaseHeight, Padding: woxwidget.Insets{Top: labelTop}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: labelGap, Children: labelChildren}},
-				woxwidget.Container{Width: item.TailWidth, Height: props.BaseHeight, Padding: woxwidget.Insets{Top: max(float32(0), (props.BaseHeight-item.TailHeight)/2)}, Child: tail},
-			}},
-		},
+		Child: woxwidget.Stack{Width: props.RowWidth, Height: props.RowHeight, Children: []woxwidget.StackChild{{Child: backgroundLayer}, {Child: contentLayer}}},
 	}
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(fmt.Sprintf("launcher-result-key-%s", item.ID)), AutomationID: "launcher.result." + item.ID, Role: woxui.AccessibilityRoleListItem,

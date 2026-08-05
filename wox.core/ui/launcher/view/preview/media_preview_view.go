@@ -15,27 +15,100 @@ import (
 var mediaAccent = woxui.Color{R: 255, G: 107, B: 53, A: 255}
 var mediaVinylLabel = woxui.Color{R: 150, G: 0, B: 0, A: 255}
 
+const (
+	mediaRecordBoundaryKey   woxwidget.Key = "media-preview-record-boundary"
+	mediaStatusBoundaryKey   woxwidget.Key = "media-preview-status-boundary"
+	mediaMetadataBoundaryKey woxwidget.Key = "media-preview-metadata-boundary"
+	mediaProgressBoundaryKey woxwidget.Key = "media-preview-progress-boundary"
+	mediaControlsBoundaryKey woxwidget.Key = "media-preview-controls-boundary"
+)
+
 // MediaPreviewProps contains normalized media metadata and transport actions.
 type MediaPreviewProps struct {
-	Width         float32
-	Height        float32
-	Title         string
-	Artist        string
-	Album         string
-	AppName       string
-	Artwork       *woxui.Image
-	Position      int64
-	Duration      int64
-	Playing       bool
-	Theme         woxcomponent.Theme
-	PreviousLabel string
-	ToggleLabel   string
-	NextLabel     string
-	Window        *woxui.Window
-	OnPrevious    func()
-	OnPlay        func()
-	OnPause       func()
-	OnNext        func()
+	Width          float32
+	Height         float32
+	Title          string
+	Artist         string
+	Album          string
+	AppName        string
+	Artwork        *woxui.Image
+	Position       int64
+	Duration       int64
+	Playing        bool
+	Theme          woxcomponent.Theme
+	PreviousLabel  string
+	ToggleLabel    string
+	NextLabel      string
+	ActionIdentity string
+	Window         *woxui.Window
+	OnPrevious     func()
+	OnPlay         func()
+	OnPause        func()
+	OnNext         func()
+}
+
+type mediaRecordBoundaryProps struct {
+	Size    float32
+	Artwork *woxui.Image
+	Playing bool
+}
+
+func (p mediaRecordBoundaryProps) Equal(other mediaRecordBoundaryProps) bool {
+	return p == other
+}
+
+type mediaStatusBoundaryProps struct {
+	Width   float32
+	AppName string
+	Playing bool
+	Theme   woxcomponent.Theme
+	Window  *woxui.Window
+}
+
+func (p mediaStatusBoundaryProps) Equal(other mediaStatusBoundaryProps) bool {
+	return p == other
+}
+
+type mediaMetadataBoundaryProps struct {
+	Width   float32
+	Title   string
+	Artist  string
+	Album   string
+	Compact bool
+	Theme   woxcomponent.Theme
+}
+
+func (p mediaMetadataBoundaryProps) Equal(other mediaMetadataBoundaryProps) bool {
+	return p == other
+}
+
+type mediaProgressBoundaryProps struct {
+	Width     float32
+	Position  int64
+	Duration  int64
+	Secondary woxui.Color
+	Theme     woxcomponent.Theme
+}
+
+func (p mediaProgressBoundaryProps) Equal(other mediaProgressBoundaryProps) bool {
+	return p == other
+}
+
+type mediaControlsBoundaryProps struct {
+	Playing        bool
+	Theme          woxcomponent.Theme
+	PreviousLabel  string
+	ToggleLabel    string
+	NextLabel      string
+	ActionIdentity string
+	OnPrevious     func() `boundary:"stable"`
+	OnPlay         func() `boundary:"stable"`
+	OnPause        func() `boundary:"stable"`
+	OnNext         func() `boundary:"stable"`
+}
+
+func (p mediaControlsBoundaryProps) Equal(other mediaControlsBoundaryProps) bool {
+	return p.Playing == other.Playing && p.Theme == other.Theme && p.PreviousLabel == other.PreviousLabel && p.ToggleLabel == other.ToggleLabel && p.NextLabel == other.NextLabel && p.ActionIdentity == other.ActionIdentity
 }
 
 // MediaPreviewView builds the responsive Flutter media-preview composition.
@@ -60,7 +133,7 @@ func MediaPreviewView(props MediaPreviewProps) woxwidget.Widget {
 		detailsWidth := max(float32(0), columnsWidth-stageWidth)
 		recordSize := min(float32(330), min(stageWidth, contentHeight))
 		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Align{Width: stageWidth, Height: contentHeight, Horizontal: 0.5, Vertical: 0.5, Child: mediaRecordStage(recordSize, props)},
+			woxwidget.Align{Width: stageWidth, Height: contentHeight, Horizontal: 0.5, Vertical: 0.5, Child: mediaRecordBoundary(recordSize, props)},
 			mediaTrackDetails(props, detailsWidth, contentHeight, false),
 		}}
 	} else {
@@ -69,7 +142,7 @@ func MediaPreviewView(props MediaPreviewProps) woxwidget.Widget {
 		detailsHeight := max(float32(0), contentHeight-stageHeight-gap)
 		recordSize := min(float32(250), min(contentWidth, stageHeight))
 		content = woxwidget.Flex{Axis: woxwidget.Vertical, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Align{Width: contentWidth, Height: stageHeight, Horizontal: 0.5, Vertical: 0.5, Child: mediaRecordStage(recordSize, props)},
+			woxwidget.Align{Width: contentWidth, Height: stageHeight, Horizontal: 0.5, Vertical: 0.5, Child: mediaRecordBoundary(recordSize, props)},
 			mediaTrackDetails(props, contentWidth, detailsHeight, true),
 		}}
 	}
@@ -77,6 +150,17 @@ func MediaPreviewView(props MediaPreviewProps) woxwidget.Widget {
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 18, Top: 16, Right: 16, Bottom: 14},
 		Child: woxwidget.Container{Width: outerWidth, Height: outerHeight, Padding: woxwidget.Insets{Left: horizontalPadding, Top: verticalPadding, Right: horizontalPadding, Bottom: verticalPadding}, Child: content},
+	}
+}
+
+// mediaRecordBoundary confines continuous rotation and tonearm animation damage to the record stage.
+func mediaRecordBoundary(size float32, props MediaPreviewProps) woxwidget.Widget {
+	boundaryProps := mediaRecordBoundaryProps{Size: size, Artwork: props.Artwork, Playing: props.Playing}
+	return woxwidget.Boundary[mediaRecordBoundaryProps]{
+		Key: mediaRecordBoundaryKey, Label: "media:record", Props: boundaryProps,
+		Build: func(props mediaRecordBoundaryProps) woxwidget.Widget {
+			return mediaRecordStage(props.Size, MediaPreviewProps{Artwork: props.Artwork, Playing: props.Playing})
+		},
 	}
 }
 
@@ -210,50 +294,82 @@ func mediaTrackDetails(props MediaPreviewProps, width, height float32, compact b
 	if props.Theme.PreviewPropertyContent.A == 0 {
 		secondary = mediaColorAlpha(props.Theme.PreviewText, 0.72)
 	}
-	status := mediaPlaybackStatus(props, width)
-	titleSize := float32(30)
+	statusProps := mediaStatusBoundaryProps{Width: width, AppName: props.AppName, Playing: props.Playing, Theme: props.Theme, Window: props.Window}
+	status := woxwidget.Boundary[mediaStatusBoundaryProps]{
+		Key: mediaStatusBoundaryKey, Label: "media:status", Props: statusProps,
+		Build: func(props mediaStatusBoundaryProps) woxwidget.Widget {
+			return mediaPlaybackStatus(MediaPreviewProps{AppName: props.AppName, Playing: props.Playing, Theme: props.Theme, Window: props.Window}, props.Width)
+		},
+	}
 	statusGap := float32(22)
-	artistSize := float32(17)
 	progressGap := float32(30)
 	controlsGap := float32(22)
 	crossAxisAlignment := woxwidget.CrossAxisStart
 	horizontalAlignment := float32(0)
 	if compact {
-		titleSize = 22
 		statusGap = 10
-		artistSize = 14
 		progressGap = 14
 		controlsGap = 14
 		crossAxisAlignment = woxwidget.CrossAxisCenter
 		horizontalAlignment = 0.5
 	}
 	children := []woxwidget.Widget{status, woxwidget.Painter{Width: width, Height: statusGap}}
-	titleLines := 3
-	if compact {
-		titleLines = 1
-	}
-	title := woxwidget.TextBlock{Value: props.Title, Width: width, MaxLines: titleLines, LineHeight: titleSize * 1.14, Style: woxui.TextStyle{Size: titleSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText}
-	children = append(children, title)
-	if strings.TrimSpace(props.Artist) != "" {
-		children = append(children,
-			woxwidget.Painter{Width: width, Height: 9},
-			woxwidget.Text{Value: props.Artist, Style: woxui.TextStyle{Size: artistSize, Weight: woxui.FontWeightSemibold}, Color: mediaColorAlpha(props.Theme.PreviewText, 0.78)},
-		)
-	}
-	if !compact && strings.TrimSpace(props.Album) != "" {
-		children = append(children,
-			woxwidget.Painter{Width: width, Height: 5},
-			woxwidget.Text{Value: props.Album, Style: woxui.TextStyle{Size: 13}, Color: secondary},
-		)
+	metadataProps := mediaMetadataBoundaryProps{Width: width, Title: props.Title, Artist: props.Artist, Album: props.Album, Compact: compact, Theme: props.Theme}
+	children = append(children, woxwidget.Boundary[mediaMetadataBoundaryProps]{
+		Key: mediaMetadataBoundaryKey, Label: "media:metadata", Props: metadataProps,
+		Build: func(props mediaMetadataBoundaryProps) woxwidget.Widget { return mediaMetadata(props) },
+	})
+	progressProps := mediaProgressBoundaryProps{Width: width, Position: props.Position, Duration: props.Duration, Secondary: secondary, Theme: props.Theme}
+	controlsProps := mediaControlsBoundaryProps{
+		Playing: props.Playing, Theme: props.Theme, PreviousLabel: props.PreviousLabel, ToggleLabel: props.ToggleLabel, NextLabel: props.NextLabel,
+		ActionIdentity: props.ActionIdentity,
+		OnPrevious:     props.OnPrevious, OnPlay: props.OnPlay, OnPause: props.OnPause, OnNext: props.OnNext,
 	}
 	children = append(children,
 		woxwidget.Painter{Width: width, Height: progressGap},
-		mediaProgressBar(props, width, secondary),
+		woxwidget.Boundary[mediaProgressBoundaryProps]{
+			Key: mediaProgressBoundaryKey, Label: "media:progress", Props: progressProps,
+			Build: func(props mediaProgressBoundaryProps) woxwidget.Widget {
+				return mediaProgressBar(MediaPreviewProps{Position: props.Position, Duration: props.Duration, Theme: props.Theme}, props.Width, props.Secondary)
+			},
+		},
 		woxwidget.Painter{Width: width, Height: controlsGap},
-		woxwidget.Align{Width: width, Height: 48, Horizontal: 0.5, Child: mediaControls(props)},
+		woxwidget.Align{Width: width, Height: 48, Horizontal: 0.5, Child: woxwidget.Boundary[mediaControlsBoundaryProps]{
+			Key: mediaControlsBoundaryKey, Label: "media:controls", Props: controlsProps,
+			Build: func(props mediaControlsBoundaryProps) woxwidget.Widget {
+				return mediaControls(MediaPreviewProps{
+					Playing: props.Playing, Theme: props.Theme, PreviousLabel: props.PreviousLabel, ToggleLabel: props.ToggleLabel, NextLabel: props.NextLabel,
+					OnPrevious: props.OnPrevious, OnPlay: props.OnPlay, OnPause: props.OnPause, OnNext: props.OnNext,
+				})
+			},
+		}},
 	)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, CrossAxisAlignment: crossAxisAlignment, Children: children}
 	return woxwidget.Align{Width: width, Height: height, Horizontal: horizontalAlignment, Vertical: 0.5, Child: content}
+}
+
+// mediaMetadata keeps track text independent from position and playback-state updates.
+func mediaMetadata(props mediaMetadataBoundaryProps) woxwidget.Widget {
+	titleSize := float32(30)
+	artistSize := float32(17)
+	titleLines := 3
+	if props.Compact {
+		titleSize = 22
+		artistSize = 14
+		titleLines = 1
+	}
+	children := []woxwidget.Widget{woxwidget.TextBlock{Value: props.Title, Width: props.Width, MaxLines: titleLines, LineHeight: titleSize * 1.14, Style: woxui.TextStyle{Size: titleSize, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText}}
+	if strings.TrimSpace(props.Artist) != "" {
+		children = append(children, woxwidget.Painter{Width: props.Width, Height: 9}, woxwidget.Text{Value: props.Artist, Style: woxui.TextStyle{Size: artistSize, Weight: woxui.FontWeightSemibold}, Color: mediaColorAlpha(props.Theme.PreviewText, 0.78)})
+	}
+	if !props.Compact && strings.TrimSpace(props.Album) != "" {
+		secondary := mediaColorAlpha(props.Theme.PreviewPropertyContent, 0.72)
+		if props.Theme.PreviewPropertyContent.A == 0 {
+			secondary = mediaColorAlpha(props.Theme.PreviewText, 0.72)
+		}
+		children = append(children, woxwidget.Painter{Width: props.Width, Height: 5}, woxwidget.Text{Value: props.Album, Style: woxui.TextStyle{Size: 13}, Color: secondary})
+	}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}
 }
 
 // mediaPlaybackStatus builds the compact source and playback-state pill.

@@ -88,17 +88,13 @@ func (a *App) ResetAutomationFrameMetrics() error {
 }
 
 func nextRepaintDebugMode(current woxwidget.RepaintDebugMode) woxwidget.RepaintDebugMode {
-	switch current {
-	case woxwidget.RepaintDebugOff:
+	if current == woxwidget.RepaintDebugOff {
 		return woxwidget.RepaintDebugRainbow
-	case woxwidget.RepaintDebugRainbow:
-		return woxwidget.RepaintDebugDamage
-	default:
-		return woxwidget.RepaintDebugOff
 	}
+	return woxwidget.RepaintDebugOff
 }
 
-// ToggleRepaintDebugMode cycles partial-refresh visualization on the launcher widget host.
+// ToggleRepaintDebugMode toggles repaint highlighting on the launcher widget host.
 func (a *App) ToggleRepaintDebugMode(_ context.Context) (string, error) {
 	if a.host == nil {
 		return string(woxwidget.RepaintDebugOff), errors.New("launcher widget host is not initialized")

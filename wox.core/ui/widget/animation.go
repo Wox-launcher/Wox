@@ -153,7 +153,6 @@ type animationHost struct {
 	generation uint64
 	active     bool
 	timer      *time.Timer
-	window     HostServices
 }
 
 // observe keeps an animation alive when a cached Boundary skips its widget layout.
@@ -191,12 +190,11 @@ func (h *animationHost) observe(frame animationFrame, dependency animationDepend
 }
 
 // beginFrame records one shared timestamp so every animation in the tree advances together.
-func (h *animationHost) beginFrame(window HostServices) animationFrame {
+func (h *animationHost) beginFrame() animationFrame {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.generation++
 	h.active = false
-	h.window = window
 	return animationFrame{host: h, generation: h.generation, now: time.Now()}
 }
 
@@ -261,7 +259,7 @@ func (h *animationHost) loopValue(frame animationFrame, key Key, duration time.D
 }
 
 // endFrame drops absent animations and requests the next frame only while a value is moving.
-func (h *animationHost) endFrame(frame animationFrame) {
+func (h *animationHost) endFrame(frame animationFrame, invalidate func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for key, animation := range h.values {
@@ -292,10 +290,9 @@ func (h *animationHost) endFrame(frame animationFrame) {
 			return
 		}
 		h.timer = nil
-		window := h.window
 		h.mu.Unlock()
-		if window != nil {
-			_ = window.Invalidate()
+		if invalidate != nil {
+			invalidate()
 		}
 	})
 	h.timer = timer

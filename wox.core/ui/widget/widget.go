@@ -17,25 +17,18 @@ type textMeasurer interface {
 }
 
 type context struct {
-	window       textMeasurer
-	caretVisible bool
-	animation    animationFrame
-	dynamic      *dynamicUse
-	damage       *frameDamageTracker
-	debug        *repaintDebugFrame
-	elements     *elementTree
-	element      *stateElement
+	window    textMeasurer
+	animation animationFrame
+	dynamic   *dynamicUse
+	damage    *frameDamageTracker
+	debug     *repaintDebugFrame
+	elements  *elementTree
+	element   *stateElement
 }
 
 func (c context) withElement(element *stateElement) context {
 	c.element = element
 	return c
-}
-
-func (c context) useCaret() {
-	if c.dynamic != nil {
-		c.dynamic.caret = true
-	}
 }
 
 func (c context) useScroll(controller *ScrollController, offset float32) {
@@ -62,7 +55,7 @@ type node struct {
 	semantic   *semanticBehavior
 	scroll     *scrollBehavior
 	caret      bool
-	caretPaint func(*woxui.DisplayList, woxui.Rect, bool)
+	caretPaint func(*woxui.DisplayList, woxui.Rect, bool, bool)
 	clip       bool
 	children   []*node
 	boundary   *boundaryCache
@@ -76,7 +69,7 @@ func (n *node) place(x, y float32) {
 	}
 }
 
-func (n *node) draw(displayList *woxui.DisplayList, focused, focusRingTarget woxui.AccessibilityNodeID, focusWithin, focusableWithin bool) {
+func (n *node) draw(displayList *woxui.DisplayList, focused, focusRingTarget woxui.AccessibilityNodeID, caretVisible, focusWithin, focusableWithin bool) {
 	if n.focus != nil {
 		focusWithin = n.id == focused
 		focusableWithin = true
@@ -93,13 +86,13 @@ func (n *node) draw(displayList *woxui.DisplayList, focused, focusRingTarget wox
 			// authoritative caret state for this frame rather than the captured FocusNode value.
 			caretFocused = focusWithin
 		}
-		n.caretPaint(displayList, n.bounds, caretFocused)
+		n.caretPaint(displayList, n.bounds, caretFocused, caretVisible)
 	}
 	if n.clip {
 		displayList.PushClipRect(n.bounds)
 	}
 	for _, child := range n.children {
-		child.draw(displayList, focused, focusRingTarget, focusWithin, focusableWithin)
+		child.draw(displayList, focused, focusRingTarget, caretVisible, focusWithin, focusableWithin)
 	}
 	if n.id == focusRingTarget && n.focus != nil && n.focus.focusRingColor.A != 0 {
 		outsets := n.focus.focusRingOutsets
@@ -891,11 +884,9 @@ type CaretPainter struct {
 }
 
 func (w CaretPainter) layout(ctx context, available constraints) *node {
-	ctx.useCaret()
-	caretVisible := ctx.caretVisible
-	var paint func(*woxui.DisplayList, woxui.Rect, bool)
+	var paint func(*woxui.DisplayList, woxui.Rect, bool, bool)
 	if w.Paint != nil {
-		paint = func(displayList *woxui.DisplayList, bounds woxui.Rect, focused bool) {
+		paint = func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
 			w.Paint(displayList, bounds, focused, caretVisible && focused)
 		}
 	}
