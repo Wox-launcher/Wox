@@ -46,6 +46,31 @@ func TestLauncherPreviewRatioUsesChatLayout(t *testing.T) {
 	}
 }
 
+func TestApplyResultsEntersChatModeFromLayout(t *testing.T) {
+	app := New(false, nil)
+	app.uiCall = nil
+	app.visible = true
+	app.query = newInputQuery("chat ")
+	defer func() {
+		if app.queryResizeTimer != nil {
+			app.queryResizeTimer.Stop()
+		}
+		app.cancel()
+	}()
+
+	app.applyResults(app.query.QueryID, []queryResult{{
+		ID: "chat",
+		Preview: queryPreview{
+			PreviewType: "chat",
+			PreviewData: `{"ActiveChat":{"Id":"chat"}}`,
+		},
+	}}, &queryLayout{ChatMode: true}, nil, nil, 0, true)
+
+	if !app.chatFullscreen || app.chatPreview == nil || !app.chatPreview.active {
+		t.Fatalf("chat mode state = fullscreen:%v preview:%+v", app.chatFullscreen, app.chatPreview)
+	}
+}
+
 func TestLauncherGridHidesRegularPreview(t *testing.T) {
 	layout := queryLayout{GridLayout: &gridLayout{Columns: 4}}
 	if launcherPreviewVisible(layout, queryPreview{PreviewType: "image", PreviewData: "wallpaper"}) {
@@ -258,6 +283,38 @@ func TestRequestMRUPreservesGlance(t *testing.T) {
 	}
 }
 
+func TestRequestMRUPreservesVisibleResultsDuringTransition(t *testing.T) {
+	app := &App{
+		services:       requestMRUTestServices{},
+		lifecycleCtx:   context.Background(),
+		editor:         woxui.NewTextEditor("query"),
+		show:           showAppParams{StartPage: "mru"},
+		visible:        true,
+		query:          newInputQuery("old"),
+		results:        []queryResult{{ID: "old-result", QueryID: "old-query"}},
+		resultsQueryID: "old-query",
+		selected:       0,
+		themeSettings:  newThemeSettingsController(CommonDeps{}),
+	}
+
+	oldQueryID := app.query.QueryID
+	if err := app.requestMRU(); err != nil {
+		t.Fatalf("request MRU: %v", err)
+	}
+	if app.queryTransitionTimer == nil {
+		t.Fatal("MRU request did not start result transition timer")
+	}
+	app.queryTransitionTimer.Stop()
+	app.queryTransitionTimer = nil
+
+	if app.query.QueryID == oldQueryID {
+		t.Fatal("MRU request reused the previous query ID")
+	}
+	if len(app.results) != 1 || app.results[0].ID != "old-result" || app.selected != 0 {
+		t.Fatalf("MRU transition state = results %#v selected %d, want previous result selected", app.results, app.selected)
+	}
+}
+
 func TestInformationalGlanceCanBeTapped(t *testing.T) {
 	app := &App{}
 	widget := app.buildGlance(glanceItem{Text: "100 MB"}, true, defaultPalette(), 100, 1, launcherDensityMetricsFor(""))
@@ -303,6 +360,15 @@ func TestMediaPreviewBypassesPreparedSectionBoundary(t *testing.T) {
 	widget := app.buildPreviewSection(result, viewSnapshot{palette: defaultPalette()}, 700, 400, 1)
 	if _, wrapped := widget.(woxwidget.Boundary[launcherPreparedSectionProps]); wrapped {
 		t.Fatal("media preview retained the full-section boundary")
+	}
+}
+
+func TestUnresolvedRemotePreviewRendersBlank(t *testing.T) {
+	app := &App{remotePreviews: map[string]queryPreview{}}
+	widget := app.buildPreview(queryResult{Preview: queryPreview{PreviewType: "remote", PreviewData: "/preview?id=result"}}, defaultPalette(), 700, 400, 1)
+	blank, ok := widget.(woxwidget.Container)
+	if !ok || blank.Child != nil || blank.Width != 700 || blank.Height != 400 {
+		t.Fatalf("unresolved remote preview = %#v, want blank 700x400 container", widget)
 	}
 }
 

@@ -168,10 +168,6 @@ func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidt
 	}
 	svgWidth = max(1, svgWidth)
 	svgHeight = max(1, svgHeight)
-	if source.ImageType == "lottie" {
-		svgSize := max(svgWidth, svgHeight)
-		return a.lottieImages.frame(lottieImageCacheKey(source, svgSize), source.ImageData, svgSize)
-	}
 	key := imageKey(source)
 	if svgWidth == svgHeight {
 		key += fmt.Sprintf("-svg-%d", svgWidth)

@@ -2342,17 +2342,25 @@ func (m *Manager) GetQueryInfoByResultId(resultId string) (string, string) {
 	return resultCache.Query.SessionId, resultCache.Query.Id
 }
 
+// shouldWrapRemotePreview keeps previews that need their concrete type on the initial UI response inline.
+func shouldWrapRemotePreview(preview WoxPreview) bool {
+	if preview.IsEmpty() || len(preview.PreviewData) <= previewDataMaxSize {
+		return false
+	}
+	switch preview.PreviewType {
+	case WoxPreviewTypeRemote, WoxPreviewTypeQueryRequirementSettings, WoxPreviewTypeThemeEdit, WoxPreviewTypeTriggerKeywordConflict, WoxPreviewTypeMedia:
+		return false
+	default:
+		return true
+	}
+}
+
 func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) QueryResultUI {
 	uiResult := resultCache.Result
 	// Core-owned interactive previews must keep their concrete preview type in the
 	// result payload. If they were wrapped as remote previews, UI could not
 	// choose the dedicated fullscreen/editing surface before loading the preview.
-	if !uiResult.Preview.IsEmpty() &&
-		uiResult.Preview.PreviewType != WoxPreviewTypeRemote &&
-		uiResult.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
-		uiResult.Preview.PreviewType != WoxPreviewTypeThemeEdit &&
-		uiResult.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict &&
-		len(uiResult.Preview.PreviewData) > previewDataMaxSize {
+	if shouldWrapRemotePreview(uiResult.Preview) {
 		uiResult.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
 			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", resultCache.Query.SessionId, queryId, uiResult.Id),
@@ -2796,12 +2804,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	previewWrapTimingStart := time.Now()
 	// Core-owned interactive previews intentionally bypass remote wrapping so the UI
 	// can detect the type before deciding whether grid previews are allowed.
-	if !result.Preview.IsEmpty() &&
-		result.Preview.PreviewType != WoxPreviewTypeRemote &&
-		result.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
-		result.Preview.PreviewType != WoxPreviewTypeThemeEdit &&
-		result.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict &&
-		len(result.Preview.PreviewData) > previewDataMaxSize {
+	if shouldWrapRemotePreview(result.Preview) {
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
 			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", query.SessionId, query.Id, result.Id),

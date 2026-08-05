@@ -24,7 +24,7 @@ type previewListItem struct {
 	Tails    []resultTail `json:"tails"`
 }
 
-// resolvePreview returns the cached remote preview without starting work from the frame builder.
+// resolvePreview returns the cached remote preview while preserving unresolved remote state for blank rendering.
 func (a *App) resolvePreview(preview queryPreview) queryPreview {
 	if preview.PreviewType != "remote" {
 		return normalizePreviewMetadata(preview)
@@ -36,7 +36,7 @@ func (a *App) resolvePreview(preview queryPreview) queryPreview {
 	if resolved, ok := a.remotePreviews[key]; ok {
 		return normalizePreviewMetadata(resolved)
 	}
-	return queryPreview{PreviewType: "text", PreviewData: "Loading preview…", PreviewTags: preview.PreviewTags}
+	return preview
 }
 
 // prepareRemotePreview starts one deferred preview request before the next render.

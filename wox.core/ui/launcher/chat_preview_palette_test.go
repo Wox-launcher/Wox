@@ -47,3 +47,19 @@ func TestChatPaletteIgnoresKeyRelease(t *testing.T) {
 		t.Fatalf("selection moved to %d on key release", app.chatPreview.panelSelected)
 	}
 }
+
+func TestPrimaryChatEscapeReturnsToQuery(t *testing.T) {
+	app := &App{
+		isPrimary:      true,
+		chatFullscreen: true,
+		chatPreview:    &chatPreviewState{active: true},
+		editor:         woxui.NewTextEditor("chat "),
+	}
+
+	if !app.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) {
+		t.Fatal("Escape was not handled")
+	}
+	if app.chatFullscreen || app.chatPreview == nil || app.chatPreview.active {
+		t.Fatalf("chat mode state = fullscreen:%v preview:%+v", app.chatFullscreen, app.chatPreview)
+	}
+}

@@ -117,7 +117,6 @@ const (
 	WoxImageTypeRelativePath = "relative"
 	WoxImageTypeBase64       = "base64"
 	WoxImageTypeSvg          = "svg"
-	WoxImageTypeLottie       = "lottie" // only support lottie json data
 	WoxImageTypeEmoji        = "emoji"
 	WoxImageTypeUrl          = "url"
 	WoxImageTypeTheme        = "theme"
@@ -562,13 +561,6 @@ func NewWoxImageEmoji(emoji string) WoxImage {
 	}
 }
 
-func NewWoxImageLottie(lottieJson string) WoxImage {
-	return WoxImage{
-		ImageType: WoxImageTypeLottie,
-		ImageData: lottieJson,
-	}
-}
-
 func NewWoxImageTheme(theme Theme) WoxImage {
 	themeJson, err := json.Marshal(theme)
 	if err != nil {
@@ -666,9 +658,6 @@ func ParseWoxImage(image string) (WoxImage, error) {
 	}
 	if imageType == WoxImageTypeEmoji {
 		return NewWoxImageEmoji(imageData), nil
-	}
-	if imageType == WoxImageTypeLottie {
-		return NewWoxImageLottie(imageData), nil
 	}
 	if imageType == WoxImageTypeFileIcon {
 		return NewWoxImageFileIcon(imageData), nil

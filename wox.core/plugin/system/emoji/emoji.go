@@ -383,7 +383,7 @@ func (e *EmojiPlugin) createAIPlaceholderResult() plugin.QueryResult {
 		Id:         uuid.New().String(),
 		Title:      "i18n:plugin_emoji_ai_matching",
 		SubTitle:   "i18n:plugin_emoji_ai_matching_subtitle",
-		Icon:       common.AnimatedLoadingIcon,
+		Icon:       common.LoadingIcon,
 		Group:      "i18n:plugin_emoji_ai_group",
 		GroupScore: 90,
 		Score:      90,

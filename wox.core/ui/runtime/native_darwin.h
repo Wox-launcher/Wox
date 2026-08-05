@@ -5,6 +5,11 @@
 
 typedef struct WoxDarwinWindow WoxDarwinWindow;
 
+enum {
+  WOX_DARWIN_FRAME_SKIPPED = 1,
+  WOX_DARWIN_FRAME_SURFACE_BUSY = 2,
+};
+
 int32_t wox_darwin_run(uintptr_t context);
 int32_t wox_darwin_call(uintptr_t context);
 WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, uintptr_t context);

@@ -66,6 +66,32 @@ func TestBeginQueryTransitionKeepsVisibleResultsDuringGracePeriod(t *testing.T) 
 	}
 }
 
+func TestBeginQueryTransitionKeepsVisibleResultsForMRU(t *testing.T) {
+	app := &App{
+		query:          plainQuery{QueryID: "mru-query"},
+		show:           showAppParams{StartPage: "mru"},
+		visible:        true,
+		results:        []queryResult{{ID: "old-result", QueryID: "old-query"}},
+		resultsQueryID: "old-query",
+		selected:       0,
+	}
+
+	app.beginQueryTransitionLocked()
+	timer := app.queryTransitionTimer
+	if timer == nil {
+		t.Fatal("MRU transition timer is nil, want stale-result grace period")
+	}
+	timer.Stop()
+	app.queryTransitionTimer = nil
+
+	if len(app.results) != 1 || app.results[0].ID != "old-result" {
+		t.Fatalf("visible MRU transition results = %#v, want previous snapshot", app.results)
+	}
+	if app.resultsQueryID != "old-query" || app.selected != 0 {
+		t.Fatalf("visible MRU transition state = query %q selected %d, want old-query and 0", app.resultsQueryID, app.selected)
+	}
+}
+
 func TestBeginQueryTransitionClearsResultsWithoutVisibleGracePeriod(t *testing.T) {
 	app := &App{
 		query:          plainQuery{QueryID: "new-query", QueryText: "cb "},

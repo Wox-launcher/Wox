@@ -750,6 +750,19 @@ func (w *platformWindow) consumePendingDamage() Rect {
 	return damage
 }
 
+// restoreFrameDamage keeps a skipped partial frame's cleanup region in the next frame.
+func (w *platformWindow) restoreFrameDamage(damage Rect) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if damage.Width <= 0 || damage.Height <= 0 {
+		w.fullDamage = true
+		w.pendingDamage = Rect{}
+	} else if !w.fullDamage {
+		w.pendingDamage = unionRects(w.pendingDamage, damage)
+	}
+	w.damagePending = true
+}
+
 func mergeFrameDamage(current, replaced Rect) Rect {
 	if current.Width <= 0 || current.Height <= 0 || replaced.Width <= 0 || replaced.Height <= 0 {
 		return Rect{}
@@ -803,6 +816,11 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	)
 	beginCost := time.Since(beginStart)
 	if result > 0 {
+		// Preserve cleanup damage for the next naturally scheduled frame. Scheduling
+		// an immediate retry here can starve AppKit while every surface is still busy.
+		if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
+			w.restoreFrameDamage(nativeDamage)
+		}
 		if w.options.frameMetrics != nil {
 			w.options.frameMetrics.dropFrame(displayList.frameID)
 		}

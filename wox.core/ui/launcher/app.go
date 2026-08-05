@@ -166,7 +166,6 @@ type App struct {
 	imageLastUsed        map[string]uint64
 	imageUseSequence     uint64
 	imageErrors          map[string]string
-	lottieImages         *lottieImageCache
 	remotePreviews       map[string]queryPreview
 	previewRequests      map[string]bool
 	filePreviews         map[string]filePreviewContent
@@ -270,11 +269,6 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	app.aboutSettings = newAboutSettingsController(deps)
 	app.hotkeySettings = newHotkeySettingsController(deps)
 	app.settingsSearch = newSettingsSearchController(deps)
-	app.lottieImages = newLottieImageCache(app.lifecycleCtx, func() {
-		if err := app.runOnUI("invalidate lottie image", app.invalidateAllWindows); err != nil && !app.destroyed.Load() {
-			log.Printf("invalidate lottie image: %v", err)
-		}
-	})
 	return app
 }
 
@@ -648,17 +642,8 @@ func (a *App) requestMRU() error {
 		a.queryContextKnown = true
 		a.editor.SetText("", false)
 		queryID = a.query.QueryID
-		a.resetQueryTransitionLocked()
-		a.resetQueryLoadingLocked()
-		a.results = nil
-		a.resultsSectionRevision++
-		a.resultsQueryID = ""
 		a.queryComplete = false
-		a.selected = -1
-		a.hoveredResult = -1
-		a.resultScroll.reset()
-		a.resultScrollDetached = false
-		a.layout = queryLayout{}
+		a.beginQueryTransitionLocked()
 		// MRU only replaces query results; the window-shown path owns the Glance refresh.
 		a.stopGlanceLocked(false)
 		a.refinements = nil
@@ -710,6 +695,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	a.resultsQueryID = queryID
 	a.queryComplete = complete
 	a.hoveredResult = -1
+	enterChatMode := layout != nil && layout.ChatMode
 	if layout != nil {
 		a.layout = *layout
 		if !layout.ChatMode {
@@ -749,6 +735,9 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		a.normalizeActionSelectionLocked()
 	}
 	a.reconcileSelectedPreview()
+	if enterChatMode {
+		a.enterChatMode()
+	}
 	if closedActionPanel {
 		a.restoreQueryTextInput()
 	}

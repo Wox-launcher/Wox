@@ -23,6 +23,9 @@ import (
 // buildPreview resolves controller-owned preview state into a pure preview view.
 func (a *App) buildPreview(result queryResult, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	preview := a.resolvePreview(result.Preview)
+	if preview.PreviewType == "remote" {
+		return woxwidget.Container{Width: width, Height: height}
+	}
 	if preview.PreviewType == "query_requirement_settings" {
 		return a.buildRequirementPreview(result, preview, palette, width, height)
 	}

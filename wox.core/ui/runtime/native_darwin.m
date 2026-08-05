@@ -2794,7 +2794,7 @@ int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_wid
   // A queued frame can reach the renderer after AppKit hides on blur without crossing Go's hide
   // path. Skip it so it cannot recreate the IOSurface pool behind an invisible window.
   if (!window->visible) {
-    return 1;
+    return WOX_DARWIN_FRAME_SKIPPED;
   }
   WoxDarwinRenderer *renderer = window->renderer;
   if (renderer->frame_open) {
@@ -2808,7 +2808,7 @@ int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_wid
   }
   WoxDarwinSurface *surface = acquire_render_surface(renderer, pixel_width, pixel_height);
   if (surface == nil) {
-    return 1;
+    return WOX_DARWIN_FRAME_SURFACE_BUSY;
   }
   if (IOSurfaceLock(surface->io_surface, 0, NULL) != kIOReturnSuccess) {
     [surface release];

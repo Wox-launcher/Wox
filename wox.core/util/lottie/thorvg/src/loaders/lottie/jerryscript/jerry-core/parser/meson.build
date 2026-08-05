@@ -1,2 +1,0 @@
-subdir('js')
-subdir('regexp')

@@ -92,7 +92,7 @@ Methods for interacting with Wox:
 
 #### Image Models (`models/image.py`)
 - `WoxImage`: Image model with multiple types
-- `WoxImageType`: ABSOLUTE, RELATIVE, BASE64, SVG, LOTTIE, EMOJI, URL, THEME, FILE_ICON
+- `WoxImageType`: ABSOLUTE, RELATIVE, BASE64, SVG, EMOJI, URL, THEME, FILE_ICON
 - Factory methods: `new_base64()`, `new_svg()`, `new_emoji()`, etc.
 
 #### Preview Models (`models/preview.py`)

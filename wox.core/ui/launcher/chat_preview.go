@@ -1521,10 +1521,10 @@ func (a *App) onChatPreviewKey(event woxui.KeyEvent) bool {
 		return false
 	}
 	if event.Key == woxui.KeyEscape {
-		if launcherChromeHidden(a.show, a.chatFullscreen) {
-			a.closePreviewWindow()
-		} else {
+		if a.isPrimary {
 			a.exitChatMode()
+		} else {
+			a.closePreviewWindow()
 		}
 		return true
 	}

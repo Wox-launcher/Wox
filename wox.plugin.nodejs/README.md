@@ -102,7 +102,6 @@ Supported image types:
 - `svg`: SVG string content
 - `url`: HTTP/HTTPS URL
 - `emoji`: Emoji character
-- `lottie`: Lottie animation JSON
 
 ```typescript
 // Emoji icon

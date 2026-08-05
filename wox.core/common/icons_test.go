@@ -3,7 +3,19 @@ package common
 import (
 	"strings"
 	"testing"
+	woxsvg "wox/util/svg"
 )
+
+func TestStaticActivityIconsRenderAsSVG(t *testing.T) {
+	for name, icon := range map[string]WoxImage{"media playing": MediaPlayingIcon, "loading": LoadingIcon} {
+		if icon.ImageType != WoxImageTypeSvg {
+			t.Fatalf("%s icon type = %q, want svg", name, icon.ImageType)
+		}
+		if _, err := woxsvg.Render(icon.ImageData, 48, 48); err != nil {
+			t.Fatalf("render %s icon: %v", name, err)
+		}
+	}
+}
 
 func TestUIIconsAreCategorizedSVGs(t *testing.T) {
 	categories := map[string]bool{}

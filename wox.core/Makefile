@@ -1,4 +1,4 @@
-.PHONY: clean build help ui-resources thorvg-build window-hook-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
+.PHONY: clean build help ui-resources window-hook-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 FILESEARCH_REAL_INDEX_ROOT ?= ~/
@@ -88,10 +88,7 @@ else
 	@echo "The embedded Go UI does not require staged resources on $(PLATFORM)"
 endif
 
-thorvg-build:
-	./util/lottie/thorvg/build_wox.sh
-
-build: clean thorvg-build
+build: clean
 	$(MAKE) woxmr-build
 	$(MAKE) window-hook-build
 ifeq ($(PLATFORM),windows)

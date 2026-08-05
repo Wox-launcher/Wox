@@ -38,6 +38,12 @@ func TestConvertIconWithSizeMaybeLazyDefersLargeRasterIcon(t *testing.T) {
 	}
 }
 
+func TestParseWoxImageRejectsRemovedLottieType(t *testing.T) {
+	if _, err := ParseWoxImage("lottie:{}"); err == nil {
+		t.Fatal("expected removed lottie image type to be rejected")
+	}
+}
+
 func TestConvertIconWithSizeMaybeLazyKeepsSmallRasterSynchronous(t *testing.T) {
 	initConvertIconTestLocation(t)
 	sourcePath := writeTestImage(t, 64, 64)

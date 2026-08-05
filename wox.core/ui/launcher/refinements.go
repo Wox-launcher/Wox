@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	staleQueryResultsDuration = 150 * time.Millisecond
+	staleQueryResultsDuration = 200 * time.Millisecond
 	queryLoadingDelay         = 500 * time.Millisecond
 )
 
@@ -166,7 +166,7 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 func (a *App) beginQueryTransitionLocked() {
 	a.resetQueryTransitionLocked()
 	a.resetQueryLoadingLocked()
-	if a.query.QueryText != "" && a.visible && len(a.results) > 0 {
+	if a.visible && len(a.results) > 0 && (a.query.QueryText != "" || a.show.StartPage == "mru") {
 		queryID := a.query.QueryID
 		a.queryTransitionTimer = time.AfterFunc(staleQueryResultsDuration, func() {
 			if err := a.runOnUI("show pending query results", func() {

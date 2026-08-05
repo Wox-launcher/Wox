@@ -2,12 +2,30 @@ package plugin
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
 	"wox/common"
 	"wox/setting"
 	"wox/util"
 )
+
+func TestLargeMediaPreviewBypassesRemoteWrapping(t *testing.T) {
+	previewData := strings.Repeat("x", previewDataMaxSize+1)
+	preview := WoxPreview{PreviewType: WoxPreviewTypeMedia, PreviewData: previewData}
+	assert.False(t, shouldWrapRemotePreview(preview))
+	assert.True(t, shouldWrapRemotePreview(WoxPreview{PreviewType: WoxPreviewTypeText, PreviewData: previewData}))
+
+	result := (&Manager{}).buildResultUI(&QueryResultCache{
+		Result: QueryResult{Id: "media-result", Preview: preview},
+		Query:  Query{SessionId: "session"},
+	}, "query")
+
+	assert.Equal(t, WoxPreviewTypeMedia, result.Preview.PreviewType)
+	assert.Equal(t, previewData, result.Preview.PreviewData)
+}
 
 func Test_QueryShortcut(t *testing.T) {
 	shortcuts := []setting.QueryShortcut{
