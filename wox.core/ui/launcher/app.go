@@ -384,6 +384,7 @@ func (a *App) Close() error {
 func (a *App) showWindow(params showAppParams) error {
 	var launcher *woxui.ManagedWindow
 	queryEmpty := false
+	preserveQuery := false
 	if err := a.runOnUI("prepare launcher show", func() {
 		if params.WindowWidth <= 0 {
 			params.WindowWidth = defaultWidth
@@ -410,6 +411,7 @@ func (a *App) showWindow(params showAppParams) error {
 		a.form = nil
 		a.visible = true
 		queryEmpty = a.query.QueryText == ""
+		preserveQuery = a.shouldPreserveQueryOnShowLocked()
 		launcher = a.launcher
 		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
@@ -432,7 +434,7 @@ func (a *App) showWindow(params showAppParams) error {
 	if err := a.notifyShown(); err != nil {
 		return err
 	}
-	if queryEmpty && params.StartPage == "mru" {
+	if queryEmpty && params.StartPage == "mru" && !preserveQuery {
 		if err := a.requestMRU(); err != nil {
 			return err
 		}
@@ -607,10 +609,12 @@ func (a *App) sendCurrentQuery() error {
 	var query plainQuery
 	var startPage string
 	var skipCompletionHint bool
+	var preserveQuery bool
 	if err := a.runOnUI("prepare current query", func() {
 		query = a.query
 		startPage = a.show.StartPage
 		skipCompletionHint = !a.generalSettings.Data().EnableQueryCompletionHint
+		preserveQuery = a.shouldPreserveQueryOnShowLocked()
 		a.startQueryLoadingLocked()
 	}); err != nil {
 		return err
@@ -619,10 +623,28 @@ func (a *App) sendCurrentQuery() error {
 		_ = a.runOnUI("stop query loading after start failure", a.resetQueryLoadingLocked)
 		return err
 	}
-	if query.QueryText == "" && startPage == "mru" {
+	if !preserveQuery && query.QueryText == "" && startPage == "mru" {
 		return a.requestMRU()
 	}
 	return nil
+}
+
+// shouldPreserveQueryOnShowLocked mirrors Flutter's incoming-query preservation:
+// selection/query-hotkey/tray/explorer shows inject a new query payload on show, and
+// continue mode keeps an existing input or selection query. Both must survive the
+// MRU/blank start-page handling that otherwise replaces an empty input query.
+func (a *App) shouldPreserveQueryOnShowLocked() bool {
+	switch a.show.ShowSource {
+	case "query_hotkey", "selection", "tray_query", "explorer":
+		return true
+	}
+	if a.show.LaunchMode == "continue" {
+		if a.query.QueryType == "selection" {
+			return true
+		}
+		return a.query.QueryType == "input" && a.query.QueryText != ""
+	}
+	return false
 }
 
 // usePinYin is a cross-domain reader for the general-domain UsePinYin setting.

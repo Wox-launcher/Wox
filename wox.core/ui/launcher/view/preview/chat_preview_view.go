@@ -367,13 +367,11 @@ func chatHistoryItem(item ChatCatalogItemProps, width, height float32, theme wox
 	if item.Selected {
 		titleColor = theme.SelectedTitle
 	}
-	iconColor := theme.SelectedBackground
 	rowHeight := height - 4
 	deleteHover := theme.ResultSubtitle
 	deleteHover.A = uint8(float32(deleteHover.A) * 0.1)
 	row := woxwidget.Gesture{ID: item.SelectID, OnTap: item.OnSelect, OnHover: onHover, Child: woxwidget.Container{Width: width, Height: rowHeight, Radius: 6, Color: background, Child: woxwidget.Stack{Width: width, Height: rowHeight, Children: []woxwidget.StackChild{
-		{Left: 8, Top: 10, Child: woxcomponent.ChatBubbleGlyph(22, iconColor)},
-		{Left: 40, Top: 13, Child: woxwidget.Container{Width: max(float32(0), width-78), Height: 18, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: titleColor}}},
+		{Left: 12, Top: 13, Child: woxwidget.Container{Width: max(float32(0), width-50), Height: 18, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: titleColor}}},
 	}}}}
 	deleteButton := woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 		ID: item.DeleteID, Label: item.DeleteLabel, Icon: woxcomponent.DeleteGlyph(15, theme.ResultSubtitle), Width: 26, Height: 26, Radius: 13,

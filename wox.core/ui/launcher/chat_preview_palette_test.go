@@ -116,3 +116,63 @@ func TestPrimaryChatShortcutTogglesHistorySidebar(t *testing.T) {
 		t.Fatalf("history panel = %q after second primary+B, want closed", app.chatPreview.panel)
 	}
 }
+
+func TestChatHistoryContentHeightIncludesGroupsAndRows(t *testing.T) {
+	location := time.FixedZone("test", 8*60*60)
+	now := time.Date(2026, 8, 5, 12, 0, 0, 0, location)
+	chat := func(id string, updatedAt int64) chatData {
+		return chatData{ID: id, UpdatedAt: updatedAt, Conversations: []chatConversation{{Role: "user", Text: "hi"}}}
+	}
+	chats := []chatData{
+		chat("today-1", now.UnixMilli()),
+		chat("today-2", now.UnixMilli()),
+		chat("old", now.AddDate(0, 0, -5).UnixMilli()),
+	}
+	if got := chatHistoryContentHeight(chats, now); got != 46+2*32+3*46 {
+		t.Fatalf("history content height = %.0f, want %d", got, 46+2*32+3*46)
+	}
+	if got := chatHistoryContentHeight(nil, now); got != 46 {
+		t.Fatalf("empty history content height = %.0f, want 46", got)
+	}
+}
+
+func TestChatHistoryWheelScrollUsesDrawerContentHeight(t *testing.T) {
+	now := time.Now()
+	chats := make([]chatData, 12)
+	for i := range chats {
+		chats[i] = chatData{ID: string(rune('a' + i)), UpdatedAt: now.UnixMilli(), Conversations: []chatConversation{{Role: "user", Text: "hi"}}}
+	}
+	// The old len*38 estimate kept maxOffset at 0 for moderate histories, so wheel scroll never moved.
+	contentHeight := chatHistoryContentHeight(chats, time.Now())
+	viewport := float32(576)
+	app := &App{chatPreview: &chatPreviewState{panel: "history", chats: chats, panelViewport: viewport}}
+
+	app.scrollChatPanel(120)
+	want := min(float32(120), max(float32(0), contentHeight-viewport))
+	if app.chatPreview.panelScroll != want {
+		t.Fatalf("history panel scroll = %.0f, want %.0f (content %.0f, viewport %.0f)", app.chatPreview.panelScroll, want, contentHeight, viewport)
+	}
+	if app.chatPreview.panelScroll == 0 {
+		t.Fatal("history wheel scroll stayed at 0 with overflow")
+	}
+}
+
+func TestChatHistoryViewportUpdateKeepsWheelScroll(t *testing.T) {
+	now := time.Now()
+	chats := make([]chatData, 12)
+	for i := range chats {
+		chats[i] = chatData{ID: string(rune('a' + i)), UpdatedAt: now.UnixMilli(), Conversations: []chatConversation{{Role: "user", Text: "hi"}}}
+	}
+	app := &App{chatPreview: &chatPreviewState{panel: "history", chats: chats, panelViewport: 576}}
+
+	app.scrollChatPanel(120)
+	scrolled := app.chatPreview.panelScroll
+	if scrolled == 0 {
+		t.Fatal("wheel scroll did not move")
+	}
+	// The next build re-records the viewport and must not clamp the offset back to zero.
+	app.setChatPanelViewport(576)
+	if app.chatPreview.panelScroll != scrolled {
+		t.Fatalf("viewport update changed scroll from %.0f to %.0f", scrolled, app.chatPreview.panelScroll)
+	}
+}

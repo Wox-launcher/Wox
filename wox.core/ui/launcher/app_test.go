@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"wox/common"
 	"wox/plugin"
@@ -340,6 +341,102 @@ func TestRequestMRUPreservesVisibleResultsDuringTransition(t *testing.T) {
 	}
 	if len(app.results) != 1 || app.results[0].ID != "old-result" || app.selected != 0 {
 		t.Fatalf("MRU transition state = results %#v selected %d, want previous result selected", app.results, app.selected)
+	}
+}
+
+type sendQueryRecorderServices struct {
+	contract.Services
+	startedQuery common.PlainQuery
+	mruCalled    bool
+}
+
+func (s *sendQueryRecorderServices) StartQuery(_ context.Context, request contract.QueryRequest, _ contract.QueryView) error {
+	s.startedQuery = request.Query
+	return nil
+}
+
+func (s *sendQueryRecorderServices) QueryMRU(context.Context, string, string) ([]plugin.QueryResultUI, error) {
+	s.mruCalled = true
+	return nil, errors.New("stop after request")
+}
+
+func newSendQueryTestApp(services *sendQueryRecorderServices, query plainQuery, show showAppParams) *App {
+	return &App{
+		services:        services,
+		lifecycleCtx:    context.Background(),
+		editor:          woxui.NewTextEditor(query.QueryText),
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+		themeSettings:   newThemeSettingsController(CommonDeps{}),
+		query:           query,
+		show:            show,
+	}
+}
+
+func waitForMRUCalled(t *testing.T, services *sendQueryRecorderServices) bool {
+	t.Helper()
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for !services.mruCalled && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	return services.mruCalled
+}
+
+func TestSendCurrentQueryPreservesSelectionQuery(t *testing.T) {
+	services := &sendQueryRecorderServices{}
+	app := newSendQueryTestApp(services, plainQuery{
+		QueryID:        "sel",
+		QueryType:      "selection",
+		QuerySelection: selection{Type: "text", Text: "selected text"},
+	}, showAppParams{StartPage: "mru", ShowSource: "selection", LaunchMode: "continue"})
+
+	if err := app.sendCurrentQuery(); err != nil {
+		t.Fatalf("send current query: %v", err)
+	}
+	if services.startedQuery.QueryType != "selection" {
+		t.Fatalf("started query type = %q, want selection", services.startedQuery.QueryType)
+	}
+	if app.query.QueryType != "selection" || app.query.QuerySelection.Text != "selected text" {
+		t.Fatalf("selection query was not preserved: %+v", app.query)
+	}
+	if waitForMRUCalled(t, services) {
+		t.Fatal("selection query was replaced by MRU results")
+	}
+}
+
+func TestSendCurrentQueryLoadsMRUForEmptyInput(t *testing.T) {
+	services := &sendQueryRecorderServices{}
+	app := newSendQueryTestApp(services, newInputQuery(""), showAppParams{StartPage: "mru", ShowSource: "default", LaunchMode: "continue"})
+
+	if err := app.sendCurrentQuery(); err != nil {
+		t.Fatalf("send current query: %v", err)
+	}
+	if !waitForMRUCalled(t, services) {
+		t.Fatal("empty input with mru start page should request MRU")
+	}
+}
+
+func TestShouldPreserveQueryOnShowLocked(t *testing.T) {
+	selectionQuery := plainQuery{QueryType: "selection", QuerySelection: selection{Type: "text", Text: "selected"}}
+	tests := []struct {
+		name  string
+		query plainQuery
+		show  showAppParams
+		want  bool
+	}{
+		{name: "selection show source", query: selectionQuery, show: showAppParams{ShowSource: "selection"}, want: true},
+		{name: "query hotkey show source", query: selectionQuery, show: showAppParams{ShowSource: "query_hotkey"}, want: true},
+		{name: "tray query show source", query: selectionQuery, show: showAppParams{ShowSource: "tray_query"}, want: true},
+		{name: "explorer show source", query: selectionQuery, show: showAppParams{ShowSource: "explorer"}, want: true},
+		{name: "continue selection query", query: selectionQuery, show: showAppParams{LaunchMode: "continue"}, want: true},
+		{name: "continue input query with text", query: newInputQuery("abc"), show: showAppParams{LaunchMode: "continue"}, want: true},
+		{name: "continue empty input query", query: newInputQuery(""), show: showAppParams{LaunchMode: "continue"}, want: false},
+		{name: "default empty input query", query: newInputQuery(""), show: showAppParams{}, want: false},
+	}
+	for _, test := range tests {
+		app := newSendQueryTestApp(&sendQueryRecorderServices{}, test.query, test.show)
+		if got := app.shouldPreserveQueryOnShowLocked(); got != test.want {
+			t.Fatalf("%s: shouldPreserveQueryOnShowLocked() = %v, want %v", test.name, got, test.want)
+		}
 	}
 }
 

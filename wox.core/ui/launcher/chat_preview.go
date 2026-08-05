@@ -1022,7 +1022,7 @@ func (a *App) setChatPanelViewport(height float32) {
 				ensureChatCommandSelectionVisibleLocked(state, commands)
 			}
 		} else {
-			contentHeight := float32(count) * chatCatalogRowHeight
+			contentHeight := chatHistoryContentHeight(state.chats, time.Now())
 			if state.panel != "history" {
 				contentHeight = chatCommandContentHeight(commands)
 			}
@@ -1072,7 +1072,7 @@ func (a *App) scrollChatPanel(delta float32) {
 	if state == nil || state.panel == "" {
 		return
 	}
-	contentHeight := float32(len(state.chats)) * chatCatalogRowHeight
+	contentHeight := chatHistoryContentHeight(state.chats, time.Now())
 	if state.panel != "history" {
 		items := chatCommandPaletteItems(a.aiSettings.Models(), a.aiSettings.Skills(), state.chat.Model, state.panelQuery, state.panel)
 		contentHeight = chatCommandContentHeight(items)

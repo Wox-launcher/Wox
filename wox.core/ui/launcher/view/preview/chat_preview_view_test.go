@@ -142,3 +142,16 @@ func TestChatHistoryCatalogUsesFullHeightDrawerGeometry(t *testing.T) {
 		t.Fatalf("history panel = radius %.0f, padding %+v, color %#v", panel.Radius, panel.Padding, panel.Color)
 	}
 }
+
+func TestChatHistoryItemOmitsBubbleIcon(t *testing.T) {
+	item := ChatCatalogItemProps{SelectID: "row", Kind: "history", Title: "Suzhou", DeleteID: "delete", OnSelect: func() {}, OnDelete: func() {}}
+	view := chatHistoryItem(item, 260, 46, woxcomponent.Theme{PreviewText: woxui.Color{A: 255}}, false, func(bool) {}).(woxwidget.Container)
+	stack := view.Child.(woxwidget.Stack)
+	row := stack.Children[0].Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Stack)
+	if len(row.Children) != 1 {
+		t.Fatalf("history row children = %d, want title only (no bubble icon)", len(row.Children))
+	}
+	if row.Children[0].Left != 12 {
+		t.Fatalf("history title left = %.0f, want indented 12", row.Children[0].Left)
+	}
+}

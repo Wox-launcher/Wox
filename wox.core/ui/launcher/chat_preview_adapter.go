@@ -222,8 +222,8 @@ func (a *App) chatHistoryCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 		"yesterday": a.translate("i18n:ui_ai_chat_history_yesterday"),
 		"history":   a.translate("i18n:ui_ai_chat_history_history"),
 	}
-	contentHeight := float32(46)
 	now := time.Now()
+	contentHeight := chatHistoryContentHeight(snapshot.chats, now)
 	type indexedChat struct {
 		index int
 		chat  chatData
@@ -240,7 +240,6 @@ func (a *App) chatHistoryCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 		if len(grouped[group]) == 0 {
 			continue
 		}
-		contentHeight += 32
 		for groupIndex, entry := range grouped[group] {
 			chatID := entry.chat.ID
 			title := strings.TrimSpace(entry.chat.Title)
@@ -251,7 +250,6 @@ func (a *App) chatHistoryCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 			if groupIndex == 0 {
 				groupLabel = groupLabels[group]
 			}
-			contentHeight += 46
 			items = append(items, previewview.ChatCatalogItemProps{
 				SelectID: fmt.Sprintf("chat-history-row-%s-%d", snapshot.key, entry.index), DeleteID: fmt.Sprintf("chat-history-delete-%s-%d", snapshot.key, entry.index),
 				Kind: "history", Title: title, GroupLabel: groupLabel, DeleteLabel: a.translate("i18n:ui_ai_chat_delete_chat"), Selected: chatID == snapshot.chat.ID,
@@ -280,6 +278,24 @@ func chatHistoryGroup(updatedAt int64, now time.Time) string {
 		return "yesterday"
 	}
 	return "history"
+}
+
+// chatHistoryContentHeight returns the sidebar extent shared by the drawer view and wheel scrolling.
+func chatHistoryContentHeight(chats []chatData, now time.Time) float32 {
+	grouped := map[string]int{"today": 0, "yesterday": 0, "history": 0}
+	for _, chat := range chats {
+		if !chat.IsSummary && len(chat.Conversations) == 0 {
+			continue
+		}
+		grouped[chatHistoryGroup(chat.UpdatedAt, now)]++
+	}
+	height := float32(46)
+	for _, group := range []string{"today", "yesterday", "history"} {
+		if grouped[group] > 0 {
+			height += 32 + float32(grouped[group])*46
+		}
+	}
+	return height
 }
 
 // chatDebugProps prepares the copyable trace while the controller owns cached text measurement and scrolling.
@@ -804,9 +820,6 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 		statusColor = palette.componentTheme().ErrorText
 	} else if snapshot.loading {
 		status = "Loading…"
-	} else if streaming {
-		status = "Streaming…"
-		statusColor = woxui.Color{R: 68, G: 196, B: 120, A: 255}
 	}
 	return previewview.ChatInputProps{
 		Width: width, Height: height, Key: snapshot.key, Editing: snapshot.editing,
