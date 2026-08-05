@@ -1,16 +1,42 @@
 package launcher
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"log"
 	"math"
 	"strings"
+	"time"
 
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+type launcherPreparedSectionProps struct {
+	Signature string
+	Width     float32
+	Height    float32
+	Child     woxwidget.Widget `boundary:"stable"`
+}
+
+// Equal compares the immutable signature and geometry of a prepared launcher section.
+func (p launcherPreparedSectionProps) Equal(other launcherPreparedSectionProps) bool {
+	return p.Signature == other.Signature && p.Width == other.Width && p.Height == other.Height
+}
+
+func launcherPreparedSection(key woxwidget.Key, label string, props launcherPreparedSectionProps) woxwidget.Widget {
+	return woxwidget.Boundary[launcherPreparedSectionProps]{Key: key, Label: label, Props: props, Build: func(props launcherPreparedSectionProps) woxwidget.Widget { return props.Child }}
+}
+
+func launcherSectionSignature(values ...any) string {
+	hash := sha256.New()
+	for _, value := range values {
+		_, _ = fmt.Fprintf(hash, "%#v\x00", value)
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil))
+}
 
 var resultColors = []woxui.Color{
 	{R: 61, G: 205, B: 175, A: 255},
@@ -23,6 +49,7 @@ var resultColors = []woxui.Color{
 type viewSnapshot struct {
 	editing               woxui.TextEditingState
 	results               []queryResult
+	resultsRevision       uint64
 	resultsQueryID        string
 	queryComplete         bool
 	queryLoading          bool
@@ -32,6 +59,7 @@ type viewSnapshot struct {
 	resultScrollDetached  bool
 	layout                queryLayout
 	refinements           []queryRefinement
+	refinementsRevision   uint64
 	refinementValues      map[string]string
 	refinementOpen        bool
 	completionHint        *queryCompletionHint
@@ -50,19 +78,25 @@ type viewSnapshot struct {
 	actionFilter          string
 	actionEntries         []actionPanelEntry
 	actionIndices         []int
+	actionsRevision       uint64
 	show                  showAppParams
 	palette               uiPalette
 	densityMetrics        launcherDensityMetrics
 }
 
+type actionSectionRevisionState struct {
+	Open            bool
+	Selected        int
+	Filter          string
+	ResultsRevision uint64
+	ToolbarRevision uint64
+}
+
+// snapshot prepares one UI-thread-only render view; collection references are consumed before buildLauncher returns.
 func (a *App) snapshot() viewSnapshot {
 	var tableEditor *formTableEditorSnapshot
 	if a.launcherTableEditor != nil && a.formTableTargetCurrentLocked(a.launcherTableEditor.target) {
 		tableEditor = snapshotFormTableEditorLocked(a.launcherTableEditor)
-	}
-	refinementValues := make(map[string]string, len(a.query.QueryRefinements))
-	for key, value := range a.query.QueryRefinements {
-		refinementValues[key] = value
 	}
 	var completionHint *queryCompletionHint
 	if a.completionHint != nil {
@@ -92,9 +126,15 @@ func (a *App) snapshot() viewSnapshot {
 		actionEntries = unifiedActionPanelEntries(a.results, a.selected, a.toolbarMsg)
 		actionIndices = filteredActionIndices(actionEntries, actionFilter, a.translationSnapshot(), a.usePinYin())
 	}
+	actionState := actionSectionRevisionState{Open: a.actionPanel, Selected: a.actionSelected, Filter: actionFilter, ResultsRevision: a.resultsSectionRevision, ToolbarRevision: a.toolbarRevision}
+	if actionState != a.actionSectionState {
+		a.actionSectionState = actionState
+		a.actionsSectionRevision++
+	}
 	return viewSnapshot{
 		editing:               a.editor.State(),
-		results:               append([]queryResult(nil), a.results...),
+		results:               a.results,
+		resultsRevision:       a.resultsSectionRevision,
 		resultsQueryID:        a.resultsQueryID,
 		queryComplete:         a.queryComplete,
 		queryLoading:          a.queryLoading,
@@ -103,8 +143,9 @@ func (a *App) snapshot() viewSnapshot {
 		resultScroll:          a.resultScroll,
 		resultScrollDetached:  a.resultScrollDetached,
 		layout:                a.layout,
-		refinements:           append([]queryRefinement(nil), a.refinements...),
-		refinementValues:      refinementValues,
+		refinements:           a.refinements,
+		refinementsRevision:   a.refinementsSectionRevision,
+		refinementValues:      a.query.QueryRefinements,
 		refinementOpen:        a.refinementOpen,
 		completionHint:        completionHint,
 		toolbarMsg:            toolbarMsg,
@@ -122,6 +163,7 @@ func (a *App) snapshot() viewSnapshot {
 		actionFilter:          actionFilter,
 		actionEntries:         actionEntries,
 		actionIndices:         actionIndices,
+		actionsRevision:       a.actionsSectionRevision,
 		show:                  a.show,
 		palette:               a.palette,
 		densityMetrics:        a.densityMetrics.normalized(),
@@ -129,7 +171,11 @@ func (a *App) snapshot() viewSnapshot {
 }
 
 func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
+	snapshotStart := time.Now()
 	snapshot := a.snapshot()
+	if a.host != nil {
+		a.host.RecordSnapshotDuration(time.Since(snapshotStart))
+	}
 	width := frame.Size.Width
 	height := frame.Size.Height
 	queryHeight := float32(0)
@@ -162,6 +208,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	var floating *launcherview.LauncherFloatingView
 	if snapshot.form != nil {
 		panel, panelWidth, _ := a.buildFormPanel(snapshot, width)
+		panel = launcherPreparedSection("launcher-form-section", "form", launcherPreparedSectionProps{Signature: launcherSectionSignature(snapshot.form, snapshot.palette, snapshot.densityMetrics, panelWidth), Width: panelWidth, Height: height, Child: panel})
 		floating = &launcherview.LauncherFloatingView{Child: panel, Left: max(float32(14), width-panelWidth-14), Bottom: toolbarHeight + 12, AnchorBottom: true}
 	} else if snapshot.actionPanel {
 		queryChromeHeight := queryHeight + refinementHeight
@@ -175,6 +222,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	var overlay woxwidget.Widget
 	if snapshot.tableEditor != nil {
 		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale)
+		overlay = launcherPreparedSection("launcher-table-overlay-section", "table-overlay", launcherPreparedSectionProps{Signature: launcherSectionSignature(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale), Width: width, Height: height, Child: overlay})
 	}
 	return launcherview.LauncherView(launcherview.LauncherViewProps{
 		Width: width, Height: height, Header: header, Refinements: refinements, Content: content, Footer: footer,
@@ -439,7 +487,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.terminalFullscreen)
 	if ratio <= 0 {
 		result := snapshot.results[snapshot.selected]
-		preview := a.buildPreview(result, snapshot.palette, width, height, imageScale)
+		preview := a.buildPreviewSection(result, snapshot, width, height, imageScale)
 		if launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) && a.resolvePreview(result.Preview).PreviewType != "chat" {
 			label := a.translate("i18n:ui_close")
 			if strings.TrimSpace(label) == "" || label == "i18n:ui_close" {
@@ -458,8 +506,41 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 	splitX := width * ratio
 	return launcherview.LauncherSplitContentView(
 		a.buildResults(snapshot, splitX, height, imageScale),
-		a.buildPreview(snapshot.results[snapshot.selected], snapshot.palette, width-splitX, height, imageScale),
+		a.buildPreviewSection(snapshot.results[snapshot.selected], snapshot, width-splitX, height, imageScale),
 	)
+}
+
+func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
+	child := a.buildPreview(result, snapshot.palette, width, height, imageScale)
+	resolved := a.resolvePreview(result.Preview)
+	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.terminalFullscreen, width, height, imageScale, a.translationsRevision.Load(), a.imagesRevision.Load()}
+	switch resolved.PreviewType {
+	case "query_requirement_settings":
+		if a.requirementForm != nil {
+			state = append(state, snapshotRequirementFormLocked(a.requirementForm, a.aiSettings.ModelsError()))
+		}
+	case "trigger_keyword_conflict":
+		if a.triggerConflict != nil {
+			state = append(state, snapshotTriggerConflictPreviewLocked(a.triggerConflict))
+		}
+	case "theme_edit":
+		if editor := a.themeSettings.ThemeEditor(); editor != nil {
+			state = append(state, snapshotThemeEditorPreviewLocked(editor))
+		}
+	case "chat":
+		if a.chatPreview != nil {
+			state = append(state, snapshotChatPreviewLocked(a.chatPreview))
+		}
+	case "terminal":
+		state = append(state, snapshotTerminalPreview(a.terminalPreview))
+	case "dictation_history":
+		if a.dictationAudio != nil {
+			state = append(state, a.dictationAudio.revision, a.dictationAudio.path, a.dictationAudio.snapshot)
+		}
+	case "file":
+		state = append(state, a.filePreviewFor(resolved.PreviewData))
+	}
+	return launcherPreparedSection("launcher-preview-section", "preview", launcherPreparedSectionProps{Signature: launcherSectionSignature(state...), Width: width, Height: height, Child: child})
 }
 
 // launcherPreviewVisible mirrors Flutter's grid preview exceptions for system-owned guidance.
@@ -518,7 +599,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 		result := snapshot.results[index]
 		if result.IsGroup {
 			items = append(items, launcherview.LauncherResultItem{
-				ID: result.ID, Title: result.Title, Group: true, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
+				ID: result.ID, Revision: result.Revision, Title: result.Title, Group: true, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 			})
 			continue
 		}
@@ -529,16 +610,17 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 			titleHeight = metrics.Size.Height
 		}
 		items = append(items, launcherview.LauncherResultItem{
-			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
+			ID: result.ID, Revision: result.Revision, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 			Icon: a.imageForSize(result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale)), TitleHeight: titleHeight, Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnActivate: func() { a.activateResult(index) },
 		})
 	}
-	return launcherview.LauncherResultsView(launcherview.LauncherResultsProps{
-		Width: width, Height: height, ContentHeight: contentHeight, Offset: offset, StartIndex: start, RowHeight: rowHeight, RowGap: resultRowGap,
+	return launcherview.LauncherResultsBoundary(launcherview.LauncherResultsProps{
+		Revision: snapshot.resultsRevision,
+		Width:    width, Height: height, ContentHeight: contentHeight, Offset: offset, StartIndex: start, RowHeight: rowHeight, RowGap: resultRowGap,
 		ContainerPadding: containerPadding, ItemPadding: rowPadding, ItemRadius: snapshot.palette.resultItemRadius,
 		TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail, Theme: snapshot.palette.componentTheme(), DensityScale: densityMetrics.scale, Items: items,
-		Complete: snapshot.queryComplete,
+		Complete: snapshot.queryComplete, ScrollDetached: snapshot.resultScrollDetached,
 		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
 }
@@ -701,7 +783,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 			ID: "result-toolbar-more", Label: a.translate("i18n:toolbar_more_actions"), HotkeyLabels: formatHotkeyLabels(primaryHotkey("j")), OnTap: a.toggleActionPanel,
 		})
 	}
-	return launcherview.LauncherToolbarView(launcherview.LauncherToolbarProps{
+	return launcherview.LauncherToolbarBoundary(launcherview.LauncherToolbarProps{
 		Width: width, Height: height, Padding: snapshot.palette.toolbarPadding, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
 		Label: leftLabel, Icon: leftIcon, ProgressLabel: progressLabel, Actions: actions,
 	})

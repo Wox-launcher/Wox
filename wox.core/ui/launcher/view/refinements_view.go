@@ -16,7 +16,18 @@ type RefinementOption struct {
 	Count    *int
 	Icon     *woxui.Image
 	Selected bool
-	OnTap    func()
+	OnTap    func() `boundary:"stable"`
+}
+
+// Equal compares every visual dependency for one refinement option.
+func (o RefinementOption) Equal(other RefinementOption) bool {
+	if o.Value != other.Value || o.Label != other.Label || o.Icon != other.Icon || o.Selected != other.Selected {
+		return false
+	}
+	if o.Count == nil || other.Count == nil {
+		return o.Count == nil && other.Count == nil
+	}
+	return *o.Count == *other.Count
 }
 
 // RefinementGroup contains one titled set of query controls.
@@ -26,8 +37,22 @@ type RefinementGroup struct {
 	Options []RefinementOption
 }
 
+// Equal compares every visual dependency for one refinement group.
+func (g RefinementGroup) Equal(other RefinementGroup) bool {
+	if g.Title != other.Title || g.Hotkey != other.Hotkey || len(g.Options) != len(other.Options) {
+		return false
+	}
+	for index := range g.Options {
+		if !g.Options[index].Equal(other.Options[index]) {
+			return false
+		}
+	}
+	return true
+}
+
 // RefinementsProps contains the query refinement presentation state.
 type RefinementsProps struct {
+	Revision     uint64
 	Width        float32
 	Height       float32
 	Theme        woxcomponent.Theme
@@ -37,7 +62,36 @@ type RefinementsProps struct {
 	DefaultLabel string
 	Open         bool
 	Groups       []RefinementGroup
-	OnToggle     func()
+	OnToggle     func() `boundary:"stable"`
+}
+
+// Equal compares every render dependency for the expanded refinement section.
+func (p RefinementsProps) Equal(other RefinementsProps) bool {
+	if p.Revision != other.Revision || p.Width != other.Width || p.Height != other.Height || p.Theme != other.Theme || p.Window != other.Window || p.DensityScale != other.DensityScale || p.Summary != other.Summary || p.DefaultLabel != other.DefaultLabel || p.Open != other.Open || len(p.Groups) != len(other.Groups) {
+		return false
+	}
+	for groupIndex := range p.Groups {
+		if !p.Groups[groupIndex].Equal(other.Groups[groupIndex]) {
+			return false
+		}
+	}
+	return true
+}
+
+// RefinementsBoundary retains the expanded refinement section while its prepared props are unchanged.
+func RefinementsBoundary(props RefinementsProps) woxwidget.Widget {
+	return woxwidget.Boundary[RefinementsProps]{
+		Key: "launcher-refinements-boundary", Label: "refinements", Props: props,
+		Build: func(props RefinementsProps) woxwidget.Widget { return RefinementsView(props) },
+	}
+}
+
+// RefinementToggleBoundary retains the compact query accessory independently from the expanded bar.
+func RefinementToggleBoundary(props RefinementsProps) woxwidget.Widget {
+	return woxwidget.Boundary[RefinementsProps]{
+		Key: "launcher-refinement-toggle-boundary", Label: "header:refinement", Props: props,
+		Build: func(props RefinementsProps) woxwidget.Widget { return RefinementToggle(props) },
+	}
 }
 
 // RefinementToggleWidth measures the shared query accessory.

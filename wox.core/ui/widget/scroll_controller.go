@@ -210,6 +210,7 @@ func (s *scrollViewState) Build(context StateContext, widget any) Widget {
 	primitive.InitialOffset = 0
 	primitive.OnOffsetChanged = nil
 	primitive.Offset = s.controller.Offset()
+	primitive.dynamicController = s.controller
 	primitive.onEnsureVisible = s.controller.EnsureVisible
 	primitive.onGeometry = func(viewport, content float32, measuredKeepVisible *ScrollRange) {
 		geometryChanged := !s.hasGeometry || s.viewport != viewport || s.content != content

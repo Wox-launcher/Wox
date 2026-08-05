@@ -86,6 +86,53 @@ func TestClientAuthenticatesAndDecodesSnapshot(t *testing.T) {
 	}
 }
 
+func TestClientReadsAndResetsFrameMetrics(t *testing.T) {
+	t.Parallel()
+
+	var methods []string
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var requestPayload struct {
+			ID     uint64 `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		methods = append(methods, requestPayload.Method)
+		result := any(true)
+		if requestPayload.Method == "render.metrics" {
+			result = map[string]any{"frameCount": 12, "presentedFrameCount": 11}
+		}
+		body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": requestPayload.ID, "result": result})
+		if err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	metrics, err := client.FrameMetrics(context.Background())
+	if err != nil {
+		t.Fatalf("read frame metrics: %v", err)
+	}
+	if metrics.FrameCount != 12 || metrics.PresentedFrameCount != 11 {
+		t.Fatalf("unexpected frame metrics: %+v", metrics)
+	}
+	if err := client.ResetFrameMetrics(context.Background()); err != nil {
+		t.Fatalf("reset frame metrics: %v", err)
+	}
+	if err := client.SetRepaintDebugMode(context.Background(), woxwidget.RepaintDebugVerify); err != nil {
+		t.Fatalf("set repaint debug mode: %v", err)
+	}
+	if len(methods) != 3 || methods[0] != "render.metrics" || methods[1] != "render.metrics.reset" || methods[2] != "render.repaint_debug" {
+		t.Fatalf("unexpected methods: %v", methods)
+	}
+}
+
 func TestClientOpensSettingsRoute(t *testing.T) {
 	t.Parallel()
 

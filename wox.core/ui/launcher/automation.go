@@ -68,6 +68,70 @@ func (a *App) AutomationSnapshot() woxwidget.AutomationSnapshot {
 	return host.Snapshot()
 }
 
+// AutomationFrameMetrics returns timings for the native window currently controlled by automation.
+func (a *App) AutomationFrameMetrics() (woxui.FrameMetricsSnapshot, error) {
+	_, window, _ := a.automationSurface()
+	if window == nil {
+		return woxui.FrameMetricsSnapshot{}, errors.New("active automation window is not initialized")
+	}
+	return window.FrameMetrics(), nil
+}
+
+// ResetAutomationFrameMetrics starts a fresh measurement interval for the active window.
+func (a *App) ResetAutomationFrameMetrics() error {
+	_, window, _ := a.automationSurface()
+	if window == nil {
+		return errors.New("active automation window is not initialized")
+	}
+	window.ResetFrameMetrics()
+	return nil
+}
+
+func nextRepaintDebugMode(current woxwidget.RepaintDebugMode) woxwidget.RepaintDebugMode {
+	switch current {
+	case woxwidget.RepaintDebugOff:
+		return woxwidget.RepaintDebugRainbow
+	case woxwidget.RepaintDebugRainbow:
+		return woxwidget.RepaintDebugDamage
+	default:
+		return woxwidget.RepaintDebugOff
+	}
+}
+
+// ToggleRepaintDebugMode cycles partial-refresh visualization on the launcher widget host.
+func (a *App) ToggleRepaintDebugMode(_ context.Context) (string, error) {
+	if a.host == nil {
+		return string(woxwidget.RepaintDebugOff), errors.New("launcher widget host is not initialized")
+	}
+	var mode woxwidget.RepaintDebugMode
+	var modeErr error
+	if err := a.runOnUI("toggle repaint debug mode", func() {
+		mode = nextRepaintDebugMode(a.host.RepaintDebugMode())
+		modeErr = a.host.SetRepaintDebugMode(mode)
+	}); err != nil {
+		return "", err
+	}
+	if modeErr != nil {
+		return "", modeErr
+	}
+	return string(mode), nil
+}
+
+// SetAutomationRepaintDebugMode changes incremental-rendering diagnostics on the active widget host.
+func (a *App) SetAutomationRepaintDebugMode(mode woxwidget.RepaintDebugMode) error {
+	host, _, _ := a.automationSurface()
+	if host == nil {
+		return errors.New("active widget host is not initialized")
+	}
+	var modeErr error
+	if err := woxui.Call(func() {
+		modeErr = host.SetRepaintDebugMode(mode)
+	}); err != nil {
+		return err
+	}
+	return modeErr
+}
+
 // WaitForAutomationChange waits for a newer reconciled frame.
 func (a *App) WaitForAutomationChange(ctx context.Context, afterGeneration uint64) (woxwidget.AutomationSnapshot, error) {
 	host, _, _ := a.automationSurface()

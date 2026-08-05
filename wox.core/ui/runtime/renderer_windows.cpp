@@ -32,6 +32,7 @@ struct WoxRenderer {
   float scale = 1.0f;
   bool frame_open = false;
   bool clip_active = false;
+  bool damage_clip_active = false;
 };
 
 template <typename T>
@@ -199,6 +200,10 @@ static void destroy_renderer(WoxRenderer *renderer) {
       renderer->d2d_context->PopAxisAlignedClip();
       renderer->clip_active = false;
     }
+    if (renderer->damage_clip_active) {
+      renderer->d2d_context->PopAxisAlignedClip();
+      renderer->damage_clip_active = false;
+    }
     renderer->d2d_context->EndDraw();
   }
   if (renderer->d2d_context != nullptr) {
@@ -358,7 +363,7 @@ extern "C" int32_t wox_renderer_resize(WoxRenderer *renderer, uint32_t width, ui
   return create_target_bitmap(renderer);
 }
 
-extern "C" int32_t wox_renderer_begin_frame(WoxRenderer *renderer, float scale, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+extern "C" int32_t wox_renderer_begin_frame(WoxRenderer *renderer, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (renderer == nullptr || renderer->d2d_context == nullptr || renderer->frame_open) {
     return E_UNEXPECTED;
   }
@@ -371,7 +376,17 @@ extern "C" int32_t wox_renderer_begin_frame(WoxRenderer *renderer, float scale, 
   renderer->scale = scale;
   renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
   const D2D1_COLOR_F color = make_color(red, green, blue, alpha);
-  renderer->d2d_context->Clear(&color);
+  if (damage_width > 0.0f && damage_height > 0.0f) {
+    const D2D1_RECT_F damage = {damage_x, damage_y, damage_x + damage_width, damage_y + damage_height};
+    renderer->d2d_context->PushAxisAlignedClip(damage, D2D1_ANTIALIAS_MODE_ALIASED);
+    renderer->damage_clip_active = true;
+    renderer->brush->SetColor(color);
+    renderer->d2d_context->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_COPY);
+    renderer->d2d_context->FillRectangle(damage, renderer->brush);
+    renderer->d2d_context->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_SOURCE_OVER);
+  } else {
+    renderer->d2d_context->Clear(&color);
+  }
   return S_OK;
 }
 
@@ -586,6 +601,10 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
   if (renderer->clip_active) {
     renderer->d2d_context->PopAxisAlignedClip();
     renderer->clip_active = false;
+  }
+  if (renderer->damage_clip_active) {
+    renderer->d2d_context->PopAxisAlignedClip();
+    renderer->damage_clip_active = false;
   }
   HRESULT result = renderer->d2d_context->EndDraw();
   renderer->frame_open = false;

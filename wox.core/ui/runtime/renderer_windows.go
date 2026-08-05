@@ -63,7 +63,8 @@ func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics,
 
 // render replays one logical display list into the physical DirectComposition surface.
 func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
-	result := C.wox_renderer_begin_frame(r.handle, C.float(scale), C.uint8_t(displayList.clearColor.R), C.uint8_t(displayList.clearColor.G), C.uint8_t(displayList.clearColor.B), C.uint8_t(displayList.clearColor.A))
+	damage := displayList.NativeDamage()
+	result := C.wox_renderer_begin_frame(r.handle, C.float(scale), C.float(damage.X), C.float(damage.Y), C.float(damage.Width), C.float(damage.Height), C.uint8_t(displayList.clearColor.R), C.uint8_t(displayList.clearColor.G), C.uint8_t(displayList.clearColor.B), C.uint8_t(displayList.clearColor.A))
 	if result < 0 {
 		return hresultError("begin frame", result)
 	}

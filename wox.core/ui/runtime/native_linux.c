@@ -62,6 +62,15 @@ typedef struct {
   GLuint rect_program;
   GLuint texture_program;
   GLuint vertex_array;
+  GLuint frame_texture;
+  GLuint frame_framebuffer;
+  GLint default_framebuffer;
+  int frame_width;
+  int frame_height;
+  int damage_left;
+  int damage_bottom;
+  int damage_width;
+  int damage_height;
   GLint rect_viewport;
   GLint rect_bounds;
   GLint rect_color;
@@ -76,6 +85,7 @@ typedef struct {
   GLint texture_radius;
   bool ready;
   bool frame_open;
+  bool damage_active;
   float logical_width;
   float logical_height;
   float scale;
@@ -519,6 +529,35 @@ static bool initialize_renderer(WoxLinuxWindow *window) {
   return true;
 }
 
+// ensure_frame_storage creates the persistent texture that owns pixels across GtkGLArea swaps.
+static bool ensure_frame_storage(WoxLinuxRenderer *renderer, int width, int height, bool *recreated) {
+  *recreated = renderer->frame_width != width || renderer->frame_height != height || renderer->frame_texture == 0 || renderer->frame_framebuffer == 0;
+  if (!*recreated) {
+    return true;
+  }
+  if (renderer->frame_texture == 0) {
+    glGenTextures(1, &renderer->frame_texture);
+  }
+  if (renderer->frame_framebuffer == 0) {
+    glGenFramebuffers(1, &renderer->frame_framebuffer);
+  }
+  glBindTexture(GL_TEXTURE_2D, renderer->frame_texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, renderer->frame_framebuffer);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->frame_texture, 0);
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    return false;
+  }
+  renderer->frame_width = width;
+  renderer->frame_height = height;
+  return true;
+}
+
 static void destroy_renderer(WoxLinuxWindow *window) {
   WoxLinuxRenderer *renderer = &window->renderer;
   if (!renderer->ready) {
@@ -526,6 +565,12 @@ static void destroy_renderer(WoxLinuxWindow *window) {
   }
   gtk_gl_area_make_current(GTK_GL_AREA(window->gl_area));
   if (gtk_gl_area_get_error(GTK_GL_AREA(window->gl_area)) == NULL) {
+    if (renderer->frame_framebuffer != 0) {
+      glDeleteFramebuffers(1, &renderer->frame_framebuffer);
+    }
+    if (renderer->frame_texture != 0) {
+      glDeleteTextures(1, &renderer->frame_texture);
+    }
     glDeleteVertexArrays(1, &renderer->vertex_array);
     glDeleteProgram(renderer->texture_program);
     glDeleteProgram(renderer->rect_program);
@@ -2239,7 +2284,7 @@ int32_t wox_linux_window_close(WoxLinuxWindow *window) {
   return run_on_main_sync(close_main, &call) ? call.result : -1;
 }
 
-int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, float logical_width, float logical_height, float scale, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL || window->closed || !window->renderer.ready || window->renderer.frame_open || logical_width <= 0.0f || logical_height <= 0.0f || scale <= 0.0f) {
     return -1;
   }
@@ -2253,13 +2298,34 @@ int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, float logical_width
   renderer->scale = scale;
   int pixel_width = (int)ceilf(logical_width * scale);
   int pixel_height = (int)ceilf(logical_height * scale);
+  glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &renderer->default_framebuffer);
+  bool recreated = false;
+  if (!ensure_frame_storage(renderer, pixel_width, pixel_height, &recreated)) {
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->default_framebuffer);
+    return -1;
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER, renderer->frame_framebuffer);
   float clear[4];
   // Keep every Linux frame opaque even when a caller clears with a transparent color.
   (void)alpha;
   premultiplied_color(red, green, blue, 255, clear);
   glViewport(0, 0, pixel_width, pixel_height);
   glDisable(GL_DEPTH_TEST);
-  glDisable(GL_SCISSOR_TEST);
+  renderer->damage_active = !recreated && damage_width > 0.0f && damage_height > 0.0f;
+  if (renderer->damage_active) {
+    int left = (int)floorf(fmaxf(0.0f, damage_x) * scale);
+    int right = (int)ceilf(fminf(logical_width, damage_x + damage_width) * scale);
+    int top = (int)floorf(fmaxf(0.0f, damage_y) * scale);
+    int bottom = (int)ceilf(fminf(logical_height, damage_y + damage_height) * scale);
+    renderer->damage_left = left;
+    renderer->damage_bottom = pixel_height - bottom;
+    renderer->damage_width = (int)fmaxf(0.0f, (float)(right - left));
+    renderer->damage_height = (int)fmaxf(0.0f, (float)(bottom - top));
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(renderer->damage_left, renderer->damage_bottom, renderer->damage_width, renderer->damage_height);
+  } else {
+    glDisable(GL_SCISSOR_TEST);
+  }
   glEnable(GL_BLEND);
   glBlendEquation(GL_FUNC_ADD);
   glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -2456,8 +2522,18 @@ int32_t wox_linux_window_set_clip_rect(WoxLinuxWindow *window, float x, float y,
   int pixel_top = (int)floorf(top * renderer->scale);
   int pixel_bottom = (int)ceilf(bottom * renderer->scale);
   int framebuffer_height = (int)ceilf(renderer->logical_height * renderer->scale);
+  int scissor_left = pixel_left;
+  int scissor_bottom = framebuffer_height - pixel_bottom;
+  int scissor_right = pixel_right;
+  int scissor_top = framebuffer_height - pixel_top;
+  if (renderer->damage_active) {
+    scissor_left = fmax(scissor_left, renderer->damage_left);
+    scissor_bottom = fmax(scissor_bottom, renderer->damage_bottom);
+    scissor_right = fmin(scissor_right, renderer->damage_left + renderer->damage_width);
+    scissor_top = fmin(scissor_top, renderer->damage_bottom + renderer->damage_height);
+  }
   glEnable(GL_SCISSOR_TEST);
-  glScissor(pixel_left, framebuffer_height - pixel_bottom, pixel_right - pixel_left, pixel_bottom - pixel_top);
+  glScissor(scissor_left, scissor_bottom, (int)fmaxf(0.0f, (float)(scissor_right - scissor_left)), (int)fmaxf(0.0f, (float)(scissor_top - scissor_bottom)));
   return 0;
 }
 
@@ -2465,7 +2541,12 @@ int32_t wox_linux_window_clear_clip(WoxLinuxWindow *window) {
   if (window == NULL || !window->renderer.frame_open) {
     return -1;
   }
-  glDisable(GL_SCISSOR_TEST);
+  if (window->renderer.damage_active) {
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(window->renderer.damage_left, window->renderer.damage_bottom, window->renderer.damage_width, window->renderer.damage_height);
+  } else {
+    glDisable(GL_SCISSOR_TEST);
+  }
   return 0;
 }
 
@@ -2476,6 +2557,10 @@ int32_t wox_linux_window_end_frame(WoxLinuxWindow *window) {
   glBindVertexArray(0);
   glUseProgram(0);
   glDisable(GL_SCISSOR_TEST);
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, window->renderer.frame_framebuffer);
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, window->renderer.default_framebuffer);
+  glBlitFramebuffer(0, 0, window->renderer.frame_width, window->renderer.frame_height, 0, 0, window->renderer.frame_width, window->renderer.frame_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+  glBindFramebuffer(GL_FRAMEBUFFER, window->renderer.default_framebuffer);
   glFlush();
   window->renderer.frame_open = false;
   return 0;

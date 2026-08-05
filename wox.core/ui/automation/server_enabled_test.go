@@ -21,6 +21,22 @@ type fakeController struct {
 	pointer      woxui.PointerEvent
 	settingsPath string
 	reset        bool
+	metricsReset bool
+	repaintMode  woxwidget.RepaintDebugMode
+}
+
+func (*fakeController) AutomationFrameMetrics() (woxui.FrameMetricsSnapshot, error) {
+	return woxui.FrameMetricsSnapshot{FrameCount: 7, PresentedFrameCount: 6}, nil
+}
+
+func (f *fakeController) ResetAutomationFrameMetrics() error {
+	f.metricsReset = true
+	return nil
+}
+
+func (f *fakeController) SetAutomationRepaintDebugMode(mode woxwidget.RepaintDebugMode) error {
+	f.repaintMode = mode
+	return nil
 }
 
 func (f *fakeController) AutomationSnapshot() woxwidget.AutomationSnapshot {
@@ -95,6 +111,24 @@ func TestHandlerDispatchesSemanticActionAndRejectsUnknownMethod(t *testing.T) {
 
 	controller := &fakeController{}
 	handler := newHandler(controller, "secret-token")
+	metricsResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"metrics","method":"render.metrics"}`)
+	var metricsResult struct {
+		Result woxui.FrameMetricsSnapshot `json:"result"`
+	}
+	if err := json.Unmarshal(metricsResponse.Body.Bytes(), &metricsResult); err != nil {
+		t.Fatalf("decode metrics response: %v", err)
+	}
+	if metricsResult.Result.FrameCount != 7 || metricsResult.Result.PresentedFrameCount != 6 {
+		t.Fatalf("unexpected frame metrics: %+v", metricsResult.Result)
+	}
+	metricsResetResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"metrics-reset","method":"render.metrics.reset"}`)
+	if metricsResetResponse.Code != http.StatusOK || !controller.metricsReset {
+		t.Fatalf("frame metrics reset was not dispatched: status=%d reset=%v", metricsResetResponse.Code, controller.metricsReset)
+	}
+	repaintResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"repaint","method":"render.repaint_debug","params":{"mode":"verify"}}`)
+	if repaintResponse.Code != http.StatusOK || controller.repaintMode != woxwidget.RepaintDebugVerify {
+		t.Fatalf("repaint mode was not dispatched: status=%d mode=%q", repaintResponse.Code, controller.repaintMode)
+	}
 	actionResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"action","method":"semantics.perform","params":{"automationId":"launcher.query","action":"set_value","value":"hello"}}`)
 	if actionResponse.Code != http.StatusOK {
 		t.Fatalf("expected action status 200, got %d", actionResponse.Code)

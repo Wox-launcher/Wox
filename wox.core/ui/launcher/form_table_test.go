@@ -14,7 +14,8 @@ type formTableHostServices struct{}
 func (formTableHostServices) MeasureText(string, woxui.TextStyle) (woxui.TextMetrics, error) {
 	return woxui.TextMetrics{}, nil
 }
-func (formTableHostServices) Invalidate() error { return nil }
+func (formTableHostServices) Invalidate() error               { return nil }
+func (formTableHostServices) InvalidateRect(woxui.Rect) error { return nil }
 func (formTableHostServices) SetTextInputState(woxui.TextInputState) error {
 	return nil
 }

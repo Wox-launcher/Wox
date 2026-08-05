@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"sync/atomic"
+
+	woxui "wox/ui/runtime"
 )
 
 // State owns mutable data and lifecycle hooks for one retained Stateful widget.
@@ -17,6 +19,7 @@ type State interface {
 // StateContext connects retained state to its owning Host without exposing element internals.
 type StateContext struct {
 	element *stateElement
+	dirty   bool
 }
 
 // Mounted reports whether the state still belongs to a live element tree.
@@ -27,6 +30,22 @@ func (c StateContext) Mounted() bool {
 // Invalidate schedules a new frame for the stateful widget's owning Host.
 func (c StateContext) Invalidate() {
 	if !c.Mounted() || c.element.tree == nil || c.element.tree.host == nil {
+		return
+	}
+	var damage woxui.Rect
+	for element := c.element; element != nil; element = element.parent {
+		element.dirty.Store(true)
+		if element.boundary != nil && element.boundary.node != nil {
+			damage = element.boundary.node.bounds
+			break
+		}
+	}
+	if incrementalDisabled() {
+		c.element.tree.host.invalidate()
+		return
+	}
+	if damage.Width > 0 && damage.Height > 0 {
+		c.element.tree.host.invalidateRect(damage)
 		return
 	}
 	c.element.tree.host.invalidate()
@@ -87,7 +106,8 @@ func (w Stateful) layout(ctx context, available constraints) *node {
 	if element == nil || element.state == nil {
 		return &node{key: w.Key, kind: "stateful"}
 	}
-	child := element.state.Build(StateContext{element: element}, w.Widget)
+	dirty := element.dirty.Swap(false)
+	child := element.state.Build(StateContext{element: element, dirty: dirty}, w.Widget)
 	if child == nil {
 		return &node{key: w.Key, kind: "stateful"}
 	}
@@ -142,6 +162,8 @@ type stateElement struct {
 	seenAt     uint64
 	preparedAt uint64
 	mounted    atomic.Bool
+	dirty      atomic.Bool
+	boundary   *boundaryCache
 }
 
 type elementTree struct {
@@ -226,6 +248,17 @@ func (t *elementTree) sweep(parent *stateElement) {
 			continue
 		}
 		t.sweep(child)
+	}
+}
+
+// markSubtreeSeen preserves retained descendants when a cached Boundary skips their layout.
+func (t *elementTree) markSubtreeSeen(parent *stateElement) {
+	if parent == nil {
+		return
+	}
+	parent.seenAt = t.generation
+	for _, child := range parent.children {
+		t.markSubtreeSeen(child)
 	}
 }
 

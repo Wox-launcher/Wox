@@ -55,3 +55,9 @@ func TestRefinementControlsUseFlutterTranslucentFill(t *testing.T) {
 		t.Fatalf("refinement alpha = %d, want Flutter absolute 0.075 alpha", color.A)
 	}
 }
+
+func TestRefinementBoundaryEqualCoversAllFields(t *testing.T) {
+	woxwidget.AssertEqualCoversAllFields(t, RefinementOption{})
+	woxwidget.AssertEqualCoversAllFields(t, RefinementGroup{})
+	woxwidget.AssertEqualCoversAllFields(t, RefinementsProps{})
+}

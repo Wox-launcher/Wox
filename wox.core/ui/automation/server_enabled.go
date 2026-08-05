@@ -18,6 +18,7 @@ import (
 	"time"
 
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 const (
@@ -118,6 +119,18 @@ func newHandler(controller Controller, token string) http.Handler {
 
 func dispatch(ctx context.Context, controller Controller, method string, rawParams json.RawMessage) (any, *rpcError) {
 	switch method {
+	case "render.metrics":
+		return resultOrError(controller.AutomationFrameMetrics())
+	case "render.metrics.reset":
+		return resultOrError(true, controller.ResetAutomationFrameMetrics())
+	case "render.repaint_debug":
+		var params struct {
+			Mode woxwidget.RepaintDebugMode `json:"mode"`
+		}
+		if err := decodeParams(rawParams, &params); err != nil {
+			return nil, invalidParams(err)
+		}
+		return resultOrError(true, controller.SetAutomationRepaintDebugMode(params.Mode))
 	case "semantics.snapshot":
 		return controller.AutomationSnapshot(), nil
 	case "semantics.wait":

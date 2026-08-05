@@ -455,6 +455,26 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 			},
 		},
 		{
+			ID:                     "toggle_repaint_debug",
+			Title:                  "Toggle repaint debug",
+			SubTitle:               "Cycle partial-refresh visualization: off, rainbow boundaries, damage region",
+			Icon:                   common.CPUProfileIcon,
+			Aliases:                []string{"repaint debug", "rainbow repaint", "partial refresh", "damage debug", "局部刷新", "重绘调试"},
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				mode, err := ui.GetUIManager().ToggleRepaintDebugMode(ctx)
+				if err != nil {
+					subtitle := "Failed to toggle repaint debug: " + err.Error()
+					r.api.UpdateResult(ctx, plugin.UpdatableResult{Id: actionContext.ResultId, SubTitle: &subtitle})
+					return
+				}
+
+				title := "Toggle repaint debug"
+				subtitle := repaintDebugModeSubtitle(mode)
+				r.api.UpdateResult(ctx, plugin.UpdatableResult{Id: actionContext.ResultId, Title: &title, SubTitle: &subtitle})
+			},
+		},
+		{
 			Title: "test notification long",
 			Icon:  common.CPUProfileIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -966,4 +986,15 @@ func runShutdownCommand() (*exec.Cmd, error) {
 
 func runRestartCommand() (*exec.Cmd, error) {
 	return runPlatformRestartCommand()
+}
+
+func repaintDebugModeSubtitle(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "rainbow":
+		return "Repaint debug: rainbow outlines show repainted widget boundaries"
+	case "damage":
+		return "Repaint debug: red outline shows the native partial-refresh damage region"
+	default:
+		return "Repaint debug: off"
+	}
 }

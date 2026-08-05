@@ -20,6 +20,9 @@ type context struct {
 	window       textMeasurer
 	caretVisible bool
 	animation    animationFrame
+	dynamic      *dynamicUse
+	damage       *frameDamageTracker
+	debug        *repaintDebugFrame
 	elements     *elementTree
 	element      *stateElement
 }
@@ -27,6 +30,18 @@ type context struct {
 func (c context) withElement(element *stateElement) context {
 	c.element = element
 	return c
+}
+
+func (c context) useCaret() {
+	if c.dynamic != nil {
+		c.dynamic.caret = true
+	}
+}
+
+func (c context) useScroll(controller *ScrollController, offset float32) {
+	if c.dynamic != nil && controller != nil {
+		c.dynamic.scrolls = append(c.dynamic.scrolls, scrollDependency{controller: controller, offset: offset})
+	}
 }
 
 type constraints struct {
@@ -50,6 +65,7 @@ type node struct {
 	caretPaint func(*woxui.DisplayList, woxui.Rect, bool)
 	clip       bool
 	children   []*node
+	boundary   *boundaryCache
 }
 
 func (n *node) place(x, y float32) {
@@ -286,23 +302,24 @@ type ScrollRange struct {
 
 // ScrollView clips a larger child and optionally retains its own offset when Key is set.
 type ScrollView struct {
-	Key             Key
-	ID              string
-	Width           float32
-	Height          float32
-	MaxHeight       float32
-	ContentWidth    float32
-	ContentHeight   float32
-	Horizontal      bool
-	Offset          float32
-	InitialOffset   float32
-	Controller      *ScrollController
-	KeepVisible     *ScrollRange
-	KeepVisibleKey  Key
-	OnOffsetChanged func(float32)
-	Child           Widget
-	onGeometry      func(viewport, content float32, measuredKeepVisible *ScrollRange)
-	onEnsureVisible func(start, end float32) bool
+	Key               Key
+	ID                string
+	Width             float32
+	Height            float32
+	MaxHeight         float32
+	ContentWidth      float32
+	ContentHeight     float32
+	Horizontal        bool
+	Offset            float32
+	InitialOffset     float32
+	Controller        *ScrollController
+	KeepVisible       *ScrollRange
+	KeepVisibleKey    Key
+	OnOffsetChanged   func(float32)
+	Child             Widget
+	onGeometry        func(viewport, content float32, measuredKeepVisible *ScrollRange)
+	onEnsureVisible   func(start, end float32) bool
+	dynamicController *ScrollController
 }
 
 // Clip confines a child to a fixed logical rectangle without applying scrolling.
@@ -329,6 +346,7 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 			CreateState: func() State { return &scrollViewState{} },
 		}).layout(ctx, available)
 	}
+	ctx.useScroll(w.dynamicController, w.Offset)
 	width := available.width
 	if w.Width > 0 {
 		width = min(w.Width, available.width)
@@ -873,6 +891,7 @@ type CaretPainter struct {
 }
 
 func (w CaretPainter) layout(ctx context, available constraints) *node {
+	ctx.useCaret()
 	caretVisible := ctx.caretVisible
 	var paint func(*woxui.DisplayList, woxui.Rect, bool)
 	if w.Paint != nil {

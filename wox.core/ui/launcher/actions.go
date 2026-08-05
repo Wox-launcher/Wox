@@ -101,8 +101,9 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 			Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: a.imageForSize(action.Icon, physicalImageSize(22, imageScale)), HotkeyLabels: formatHotkeyLabels(action.Hotkey),
 		})
 	}
-	return launcherview.ActionsView(launcherview.ActionsProps{
-		Window: a.window, WindowWidth: windowWidth, WindowHeight: windowHeight, QueryHeight: queryHeight, ToolbarHeight: toolbarHeight, DensityScale: snapshot.densityMetrics.scale,
+	return launcherview.ActionsBoundary(launcherview.ActionsProps{
+		Revision: snapshot.actionsRevision,
+		Window:   a.window, WindowWidth: windowWidth, WindowHeight: windowHeight, QueryHeight: queryHeight, ToolbarHeight: toolbarHeight, DensityScale: snapshot.densityMetrics.scale,
 		Theme: snapshot.palette.componentTheme(), ActionHeader: snapshot.palette.actionHeader,
 		ActionQueryBackground: snapshot.palette.actionQueryBackground, ActionQueryText: snapshot.palette.actionQueryText,
 		ResultTail: snapshot.palette.resultTail, SelectedTail: snapshot.palette.selectedTail,

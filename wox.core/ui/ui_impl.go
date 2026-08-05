@@ -307,6 +307,15 @@ func (u *uiImpl) ToggleRecordingMode(ctx context.Context) (bool, error) {
 	return view.ToggleRecordingMode(ctx)
 }
 
+// ToggleRepaintDebugMode cycles partial-refresh visualization on the active launcher surface.
+func (u *uiImpl) ToggleRepaintDebugMode(ctx context.Context) (string, error) {
+	view, err := u.getView(ctx)
+	if err != nil {
+		return "", err
+	}
+	return view.ToggleRepaintDebugMode(ctx)
+}
+
 func (u *uiImpl) PickFiles(ctx context.Context, params common.PickFilesParams) []string {
 	view, err := u.getView(ctx)
 	if err != nil {

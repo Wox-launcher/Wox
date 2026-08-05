@@ -29,6 +29,9 @@ func (w AnimatedFloat) layout(ctx context, available constraints) *node {
 	value := w.Target
 	if w.Key != "" && w.Duration > 0 {
 		value = ctx.animation.value(w.Key, w.Target, w.Duration, w.Curve)
+		if ctx.dynamic != nil {
+			ctx.dynamic.animations = append(ctx.dynamic.animations, animationDependency{key: w.Key, kind: animationDependencyFloat, value: value})
+		}
 	}
 	if w.Builder == nil {
 		return &node{}
@@ -52,6 +55,9 @@ func (w LoopAnimation) layout(ctx context, available constraints) *node {
 	progress := float32(0)
 	if w.Key != "" && w.Duration > 0 {
 		progress = ctx.animation.loopValue(w.Key, w.Duration, w.Paused)
+		if ctx.dynamic != nil {
+			ctx.dynamic.animations = append(ctx.dynamic.animations, animationDependency{key: w.Key, kind: animationDependencyLoop, value: progress})
+		}
 	}
 	if w.Builder == nil {
 		return &node{}
@@ -81,6 +87,13 @@ func (f animationFrame) loopValue(key Key, duration time.Duration, paused bool) 
 		return 0
 	}
 	return f.host.loopValue(f, key, duration, paused)
+}
+
+func (f animationFrame) observe(dependency animationDependency) (float32, bool) {
+	if f.host == nil {
+		return dependency.value, true
+	}
+	return f.host.observe(f, dependency)
 }
 
 type floatAnimation struct {
@@ -141,6 +154,40 @@ type animationHost struct {
 	active     bool
 	timer      *time.Timer
 	window     HostServices
+}
+
+// observe keeps an animation alive when a cached Boundary skips its widget layout.
+func (h *animationHost) observe(frame animationFrame, dependency animationDependency) (float32, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	switch dependency.kind {
+	case animationDependencyFloat:
+		animation := h.values[dependency.key]
+		if animation == nil {
+			return 0, false
+		}
+		animation.lastSeenAt = frame.generation
+		value := animation.valueAt(frame.now)
+		if value != animation.target {
+			h.active = true
+		}
+		return value, true
+	case animationDependencyLoop:
+		animation := h.loops[dependency.key]
+		if animation == nil || animation.duration <= 0 {
+			return 0, false
+		}
+		animation.lastSeenAt = frame.generation
+		now := frame.now
+		if animation.paused {
+			now = animation.pausedAt
+		} else {
+			h.active = true
+		}
+		return float32(now.Sub(animation.startedAt)%animation.duration) / float32(animation.duration), true
+	default:
+		return 0, false
+	}
 }
 
 // beginFrame records one shared timestamp so every animation in the tree advances together.

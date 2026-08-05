@@ -164,6 +164,7 @@ type platformWindow struct {
 	pointerPosition    Point
 	pointerScreen      Point
 	pointerScreenKnown bool
+	damageHistory      bufferDamageHistory
 }
 
 type candidateForm struct {
@@ -463,6 +464,32 @@ func (w *platformWindow) invalidate() error {
 	return nil
 }
 
+func (w *platformWindow) invalidateRect(rect Rect) error {
+	w.mu.Lock()
+	hwnd := w.hwnd
+	scale := w.scale
+	w.mu.Unlock()
+	if hwnd == 0 {
+		return errors.New("window is closed")
+	}
+	if scale <= 0 {
+		scale = 1
+	}
+	damage := win.RECT{
+		Left: int32(math.Floor(float64(rect.X * scale))), Top: int32(math.Floor(float64(rect.Y * scale))),
+		Right: int32(math.Ceil(float64((rect.X + rect.Width) * scale))), Bottom: int32(math.Ceil(float64((rect.Y + rect.Height) * scale))),
+	}
+	if damage.Right <= damage.Left || damage.Bottom <= damage.Top {
+		return w.invalidate()
+	}
+	if !win.InvalidateRect(hwnd, &damage, false) {
+		return errors.New("failed to invalidate window rectangle")
+	}
+	return nil
+}
+
+func (*platformWindow) displayListDamageCullingEnabled() bool { return true }
+
 // setTextInputState stores logical editor geometry for the next native IME interaction.
 func (w *platformWindow) setTextInputState(state TextInputState) error {
 	w.mu.Lock()
@@ -704,6 +731,7 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		return 0
 	case win.WM_SIZE:
 		if window.renderer != nil {
+			window.damageHistory.reset()
 			width := int(win.LOWORD(uint32(lParam)))
 			height := int(win.HIWORD(uint32(lParam)))
 			if err := window.renderer.resize(width, height); err != nil {
@@ -741,7 +769,7 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 	case win.WM_PAINT:
 		var paint win.PAINTSTRUCT
 		win.BeginPaint(hwnd, &paint)
-		window.drawFrame(hwnd)
+		window.drawFrame(hwnd, paint.RcPaint)
 		win.EndPaint(hwnd, &paint)
 		return 0
 	case win.WM_ERASEBKGND:
@@ -1482,7 +1510,7 @@ func activateWindow(hwnd win.HWND) bool {
 }
 
 // drawFrame rebuilds the minimal display list only when Windows requests a paint.
-func (w *platformWindow) drawFrame(hwnd win.HWND) {
+func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) {
 	if w.renderer == nil {
 		return
 	}
@@ -1492,6 +1520,9 @@ func (w *platformWindow) drawFrame(hwnd win.HWND) {
 		return
 	}
 	displayList := DisplayList{}
+	if w.options.frameMetrics != nil {
+		displayList.frameID = w.options.frameMetrics.beginFrame()
+	}
 	pixelSize := PixelSize{
 		Width:  int(client.Right - client.Left),
 		Height: int(client.Bottom - client.Top),
@@ -1500,6 +1531,8 @@ func (w *platformWindow) drawFrame(hwnd win.HWND) {
 	if scale <= 0 {
 		scale = 1
 	}
+	currentDamage, currentFull := windowsPaintDamage(paint, client, scale)
+	damage := w.damageHistory.accumulate(currentDamage, currentFull)
 	if w.options.OnFrame != nil {
 		w.options.OnFrame(&displayList, FrameInfo{
 			Size: Size{
@@ -1508,12 +1541,25 @@ func (w *platformWindow) drawFrame(hwnd win.HWND) {
 			},
 			PixelSize: pixelSize,
 			Scale:     scale,
+			Damage:    damage,
 		})
 	}
-	if err := w.renderer.render(&displayList, scale); err != nil {
+	nativeStart := time.Now()
+	err := w.renderer.render(&displayList, scale)
+	if w.options.frameMetrics != nil {
+		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, err == nil)
+	}
+	if err != nil {
 		w.setRunError(err)
 		win.PostMessage(hwnd, win.WM_CLOSE, 0, 0)
 	}
+}
+
+func windowsPaintDamage(paint, client win.RECT, scale float32) (Rect, bool) {
+	if scale <= 0 || paint.Right <= paint.Left || paint.Bottom <= paint.Top || (paint.Left <= client.Left && paint.Top <= client.Top && paint.Right >= client.Right && paint.Bottom >= client.Bottom) {
+		return Rect{}, true
+	}
+	return Rect{X: float32(paint.Left) / scale, Y: float32(paint.Top) / scale, Width: float32(paint.Right-paint.Left) / scale, Height: float32(paint.Bottom-paint.Top) / scale}, false
 }
 
 // destroyNativeResources releases GPU state before invalidating the HWND-backed command queue.

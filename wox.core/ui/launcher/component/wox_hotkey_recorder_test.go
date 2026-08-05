@@ -114,7 +114,8 @@ func (s *hotkeyRecorderHostServices) MeasureText(text string, style woxui.TextSt
 	return woxui.TextMetrics{Size: woxui.Size{Width: float32(len([]rune(text))) * style.Size / 2, Height: style.Size}}, nil
 }
 
-func (s *hotkeyRecorderHostServices) Invalidate() error { return nil }
+func (s *hotkeyRecorderHostServices) Invalidate() error               { return nil }
+func (s *hotkeyRecorderHostServices) InvalidateRect(woxui.Rect) error { return nil }
 
 func (s *hotkeyRecorderHostServices) SetTextInputState(state woxui.TextInputState) error { return nil }
 

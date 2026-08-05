@@ -74,7 +74,7 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 	results := make([]launcherview.LauncherGridResult, 0, len(snapshot.results))
 	for index, result := range snapshot.results {
 		item := launcherview.LauncherGridResult{
-			ID: result.ID, Title: result.Title, Group: result.IsGroup, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
+			ID: result.ID, Revision: result.Revision, Title: result.Title, Group: result.IsGroup, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 		}
 		if !result.IsGroup {
 			if visible[index] {
@@ -87,11 +87,12 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 		results = append(results, item)
 	}
 	a.rememberResolvedResultScroll(snapshot, scroll)
-	return launcherview.LauncherGridView(launcherview.LauncherGridProps{
-		Width: width, Height: height, ContentHeight: contentHeight, Offset: scroll.offset, Columns: layout.Columns,
+	return launcherview.LauncherGridBoundary(launcherview.LauncherGridProps{
+		Revision: snapshot.resultsRevision,
+		Width:    width, Height: height, ContentHeight: contentHeight, Offset: scroll.offset, Columns: layout.Columns,
 		ItemPadding: float32(layout.ItemPadding), ItemMargin: float32(layout.ItemMargin), ShowTitle: layout.ShowTitle,
 		CellWidth: cellWidth, CellHeight: cellHeight, VisualWidth: visualWidth, VisualHeight: visualHeight,
-		GroupHeaderHeight: gridGroupHeaderHeight, TitleHeight: gridTitleHeight, DensityScale: snapshot.densityMetrics.scale, Theme: snapshot.palette.componentTheme(), Results: results,
+		GroupHeaderHeight: gridGroupHeaderHeight, TitleHeight: gridTitleHeight, DensityScale: snapshot.densityMetrics.scale, Theme: snapshot.palette.componentTheme(), ScrollDetached: snapshot.resultScrollDetached, Results: results,
 		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
 }

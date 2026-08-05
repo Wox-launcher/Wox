@@ -1,5 +1,11 @@
 package woxui
 
+import (
+	"bytes"
+	"fmt"
+	"math"
+)
+
 // FontWeight names portable text weights without exposing platform numeric values.
 type FontWeight uint8
 
@@ -22,9 +28,103 @@ type TextMetrics struct {
 
 // DisplayList records the drawing commands for one frame.
 type DisplayList struct {
-	clearColor Color
-	commands   []displayCommand
-	clipStack  []Rect
+	clearColor   Color
+	commands     []displayCommand
+	clipStack    []Rect
+	frameID      uint64
+	damage       Rect
+	nativeDamage Rect
+}
+
+// FrameMetricsID identifies this display list in its window's frame metrics stream.
+func (d *DisplayList) FrameMetricsID() uint64 {
+	if d == nil {
+		return 0
+	}
+	return d.frameID
+}
+
+// CommandCount reports the recorded portable drawing command count.
+func (d *DisplayList) CommandCount() int {
+	if d == nil {
+		return 0
+	}
+	return len(d.commands)
+}
+
+// SetDamage limits subsequent drawing commands to one logical redraw region; zero means full frame.
+func (d *DisplayList) SetDamage(rect Rect) {
+	if d == nil {
+		return
+	}
+	d.damage = rect
+}
+
+// Damage returns the logical redraw region associated with this command stream.
+func (d *DisplayList) Damage() Rect {
+	if d == nil {
+		return Rect{}
+	}
+	return d.damage
+}
+
+// SetNativeDamage stores the final logical region consumed by a retaining native surface.
+func (d *DisplayList) SetNativeDamage(rect Rect) {
+	if d != nil {
+		d.nativeDamage = rect
+	}
+}
+
+// NativeDamage returns the final native redraw region; zero means full frame.
+func (d *DisplayList) NativeDamage() Rect {
+	if d == nil {
+		return Rect{}
+	}
+	return d.nativeDamage
+}
+
+// Compare reports the first rendering difference between two portable command streams.
+func (d *DisplayList) Compare(other *DisplayList) error {
+	if d == nil || other == nil {
+		if d == other {
+			return nil
+		}
+		return fmt.Errorf("one display list is nil")
+	}
+	if d.clearColor != other.clearColor {
+		return fmt.Errorf("clear colors differ: %+v != %+v", d.clearColor, other.clearColor)
+	}
+	if len(d.commands) != len(other.commands) {
+		return fmt.Errorf("command counts differ: %d != %d", len(d.commands), len(other.commands))
+	}
+	for index := range d.commands {
+		if !displayCommandsEqual(d.commands[index], other.commands[index]) {
+			return fmt.Errorf("command %d differs", index)
+		}
+	}
+	return nil
+}
+
+func displayCommandsEqual(left, right displayCommand) bool {
+	if left.kind != right.kind || left.rect != right.rect || left.radius != right.radius || left.stroke != right.stroke || left.color != right.color || left.text != right.text || left.style != right.style || left.rotation != right.rotation {
+		return false
+	}
+	if len(left.points) != len(right.points) {
+		return false
+	}
+	for index := range left.points {
+		if left.points[index] != right.points[index] {
+			return false
+		}
+	}
+	return imagesRenderEqual(left.image, right.image)
+}
+
+func imagesRenderEqual(left, right *Image) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return left.Width == right.Width && left.Height == right.Height && bytes.Equal(left.pixels, right.pixels)
 }
 
 type displayCommandKind uint8
@@ -84,15 +184,19 @@ func (d *DisplayList) FillConvexPolygon(points []Point, color Color) {
 	if turn == 0 || maxX <= minX || maxY <= minY {
 		return
 	}
+	bounds := Rect{X: minX, Y: minY, Width: maxX - minX, Height: maxY - minY}
+	if !d.shouldRecord(bounds) {
+		return
+	}
 	immutablePoints := append([]Point(nil), points...)
 	d.commands = append(d.commands, displayCommand{
-		kind: displayCommandFillConvexPolygon, rect: Rect{X: minX, Y: minY, Width: maxX - minX, Height: maxY - minY}, color: color, points: immutablePoints,
+		kind: displayCommandFillConvexPolygon, rect: bounds, color: color, points: immutablePoints,
 	})
 }
 
 // StrokeRoundedRect draws an inset border without filling the interior.
 func (d *DisplayList) StrokeRoundedRect(rect Rect, radius, width float32, color Color) {
-	if rect.Width <= 0 || rect.Height <= 0 || width <= 0 {
+	if rect.Width <= 0 || rect.Height <= 0 || width <= 0 || !d.shouldRecord(rect) {
 		return
 	}
 	d.commands = append(d.commands, displayCommand{
@@ -154,7 +258,7 @@ func (d *DisplayList) FillRect(rect Rect, color Color) {
 
 // FillRoundedRect fills an axis-aligned rectangle with a uniform corner radius.
 func (d *DisplayList) FillRoundedRect(rect Rect, radius float32, color Color) {
-	if rect.Width <= 0 || rect.Height <= 0 {
+	if rect.Width <= 0 || rect.Height <= 0 || !d.shouldRecord(rect) {
 		return
 	}
 	if radius < 0 {
@@ -170,7 +274,7 @@ func (d *DisplayList) FillRoundedRect(rect Rect, radius float32, color Color) {
 
 // DrawText draws one non-wrapping line using the platform UI font.
 func (d *DisplayList) DrawText(text string, rect Rect, style TextStyle, color Color) {
-	if text == "" || rect.Width <= 0 || rect.Height <= 0 || style.Size <= 0 {
+	if text == "" || rect.Width <= 0 || rect.Height <= 0 || style.Size <= 0 || !d.shouldRecord(rect) {
 		return
 	}
 	if style.Weight != FontWeightRegular && style.Weight != FontWeightSemibold {
@@ -197,8 +301,38 @@ func (d *DisplayList) DrawRotatedImage(image *Image, rect Rect, radians float32)
 
 // DrawRotatedRoundedImage scales, clips, and rotates an image around the destination center.
 func (d *DisplayList) DrawRotatedRoundedImage(image *Image, rect Rect, radians, radius float32) {
-	if image == nil || image.Width <= 0 || image.Height <= 0 || len(image.pixels) == 0 || rect.Width <= 0 || rect.Height <= 0 {
+	if image == nil || image.Width <= 0 || image.Height <= 0 || len(image.pixels) == 0 || rect.Width <= 0 || rect.Height <= 0 || !d.shouldRecord(rotatedRectBounds(rect, radians)) {
 		return
 	}
 	d.commands = append(d.commands, displayCommand{kind: displayCommandDrawImage, rect: rect, image: image, rotation: radians, radius: min(max(float32(0), radius), min(rect.Width, rect.Height)/2)})
+}
+
+func (d *DisplayList) shouldRecord(rect Rect) bool {
+	if d == nil || d.damage.Width <= 0 || d.damage.Height <= 0 {
+		return true
+	}
+	if !rectsOverlap(rect, d.damage) {
+		return false
+	}
+	if len(d.clipStack) > 0 && !rectsOverlap(rect, d.clipStack[len(d.clipStack)-1]) {
+		return false
+	}
+	return true
+}
+
+func rectsOverlap(left, right Rect) bool {
+	return left.Width > 0 && left.Height > 0 && right.Width > 0 && right.Height > 0 && left.X < right.X+right.Width && right.X < left.X+left.Width && left.Y < right.Y+right.Height && right.Y < left.Y+left.Height
+}
+
+func rotatedRectBounds(rect Rect, radians float32) Rect {
+	if radians == 0 {
+		return rect
+	}
+	sine := math.Abs(math.Sin(float64(radians)))
+	cosine := math.Abs(math.Cos(float64(radians)))
+	width := float32(float64(rect.Width)*cosine + float64(rect.Height)*sine)
+	height := float32(float64(rect.Width)*sine + float64(rect.Height)*cosine)
+	centerX := rect.X + rect.Width/2
+	centerY := rect.Y + rect.Height/2
+	return Rect{X: centerX - width/2, Y: centerY - height/2, Width: width, Height: height}
 }

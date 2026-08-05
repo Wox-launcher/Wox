@@ -48,14 +48,15 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageSca
 		groups = append(groups, launcherview.RefinementGroup{Title: a.translate(refinement.Title), Hotkey: hotkey, Options: converted})
 	}
 	return launcherview.RefinementsProps{
-		Width: width, Height: height, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
+		Revision: snapshot.refinementsRevision,
+		Width:    width, Height: height, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
 		Summary: a.refinementSummary(snapshot, fallback), DefaultLabel: fallback, Open: snapshot.refinementOpen,
 		Groups: groups, OnToggle: func() { a.toggleRefinementBar() },
 	}
 }
 
 func (a *App) buildRefinementToggle(snapshot viewSnapshot, imageScale float32) woxwidget.Widget {
-	return launcherview.RefinementToggle(a.refinementViewProps(snapshot, 0, 0, imageScale))
+	return launcherview.RefinementToggleBoundary(a.refinementViewProps(snapshot, 0, 0, imageScale))
 }
 
 func (a *App) refinementToggleWidth(snapshot viewSnapshot, imageScale float32) float32 {
@@ -63,7 +64,7 @@ func (a *App) refinementToggleWidth(snapshot viewSnapshot, imageScale float32) f
 }
 
 func (a *App) buildRefinementBar(snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
-	return launcherview.RefinementsView(a.refinementViewProps(snapshot, width, height, imageScale))
+	return launcherview.RefinementsBoundary(a.refinementViewProps(snapshot, width, height, imageScale))
 }
 
 func (a *App) refinementSummary(snapshot viewSnapshot, fallback string) string {
@@ -126,6 +127,7 @@ func (a *App) applyRefinementsLocked(refinements []queryRefinement) {
 		valid = append(valid, refinement)
 	}
 	a.refinements = valid
+	a.refinementsSectionRevision++
 	a.query.QueryRefinements = values
 	a.refinementScope = refinementQueryScope(a.query.QueryText)
 	if len(valid) == 0 {
@@ -140,6 +142,7 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	nextScope := refinementQueryScope(text)
 	if a.refinementScope != "" && nextScope != a.refinementScope {
 		a.refinements = nil
+		a.refinementsSectionRevision++
 		a.refinementOpen = false
 		a.refinementScope = ""
 		a.query.QueryRefinements = map[string]string{}
@@ -174,6 +177,7 @@ func (a *App) beginQueryTransitionLocked() {
 		})
 	} else {
 		a.results = nil
+		a.resultsSectionRevision++
 		a.resultsQueryID = ""
 		a.selected = -1
 		a.layout = queryLayout{}
@@ -235,6 +239,7 @@ func (a *App) showPendingQueryResults(queryID string) {
 	}
 	a.queryTransitionTimer = nil
 	a.results = nil
+	a.resultsSectionRevision++
 	a.resultsQueryID = ""
 	a.selected = -1
 	a.resultScrollDetached = false

@@ -33,6 +33,7 @@ func (a *App) reloadTranslations() error {
 	a.translationsMu.Lock()
 	a.translations = translations
 	a.translationsMu.Unlock()
+	a.translationsRevision.Add(1)
 	a.invalidateAllWindows()
 	return nil
 }

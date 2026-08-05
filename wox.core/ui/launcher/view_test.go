@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	launcherview "wox/ui/launcher/view"
 	woxwidget "wox/ui/widget"
 )
 
@@ -14,6 +15,8 @@ func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 	}
 	app := &App{selected: -1}
 	built := app.buildResults(viewSnapshot{results: results, selected: -1}, 760, 500, 1)
+	boundary := built.(woxwidget.Boundary[launcherview.LauncherResultsProps])
+	built = boundary.Build(boundary.Props)
 	semantics := built.(woxwidget.Semantics)
 	retained := semantics.Child.(woxwidget.Stateful)
 	state := retained.CreateState()
@@ -32,6 +35,10 @@ func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 	if container.Height != 241*resultRowBaseHeight {
 		t.Fatalf("virtual content height = %.0f, want %.0f", container.Height, 241*resultRowBaseHeight)
 	}
+}
+
+func TestLauncherPreparedSectionEqualCoversAllFields(t *testing.T) {
+	woxwidget.AssertEqualCoversAllFields(t, launcherPreparedSectionProps{})
 }
 
 func TestVisibleResultRangeAtTop(t *testing.T) {

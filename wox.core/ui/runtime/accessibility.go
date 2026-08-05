@@ -2,7 +2,7 @@ package woxui
 
 import (
 	"errors"
-	"reflect"
+	"math"
 	"sync"
 )
 
@@ -91,8 +91,9 @@ type AccessibilityTree struct {
 type AccessibilityActionHandler func(nodeID AccessibilityNodeID, action AccessibilityAction, value string) error
 
 type accessibilityWindowState struct {
-	tree    AccessibilityTree
-	handler AccessibilityActionHandler
+	tree        AccessibilityTree
+	contentHash uint64
+	handler     AccessibilityActionHandler
 }
 
 var accessibilityWindows sync.Map
@@ -103,19 +104,77 @@ func (w *Window) UpdateAccessibility(tree AccessibilityTree, handler Accessibili
 		return errors.New("window is not initialized")
 	}
 	tree = cloneAccessibilityTree(tree)
+	contentHash := accessibilityTreeContentHash(tree)
 	previousValue, hadPrevious := accessibilityWindows.Load(w.native)
-	accessibilityWindows.Store(w.native, accessibilityWindowState{tree: tree, handler: handler})
-	if hadPrevious && accessibilityTreeContentEqual(previousValue.(accessibilityWindowState).tree, tree) {
+	accessibilityWindows.Store(w.native, accessibilityWindowState{tree: tree, contentHash: contentHash, handler: handler})
+	if hadPrevious && previousValue.(accessibilityWindowState).contentHash == contentHash {
 		return nil
 	}
 	return updateNativeAccessibility(w.native, tree)
 }
 
-// accessibilityTreeContentEqual ignores frame generation so unchanged retained trees do not rebuild native objects.
-func accessibilityTreeContentEqual(left AccessibilityTree, right AccessibilityTree) bool {
-	left.Generation = 0
-	right.Generation = 0
-	return reflect.DeepEqual(left, right)
+// accessibilityTreeContentHash covers ordered tree content while intentionally excluding frame generation.
+func accessibilityTreeContentHash(tree AccessibilityTree) uint64 {
+	hash := accessibilityHashOffset
+	hash = accessibilityHashUint64(hash, uint64(len(tree.RootIDs)))
+	for _, id := range tree.RootIDs {
+		hash = accessibilityHashUint64(hash, uint64(id))
+	}
+	hash = accessibilityHashUint64(hash, uint64(len(tree.Nodes)))
+	for _, node := range tree.Nodes {
+		hash = accessibilityHashUint64(hash, uint64(node.ID))
+		hash = accessibilityHashUint64(hash, uint64(node.ParentID))
+		hash = accessibilityHashUint64(hash, uint64(len(node.Children)))
+		for _, child := range node.Children {
+			hash = accessibilityHashUint64(hash, uint64(child))
+		}
+		hash = accessibilityHashString(hash, node.AutomationID)
+		hash = accessibilityHashString(hash, string(node.Role))
+		hash = accessibilityHashString(hash, node.Label)
+		hash = accessibilityHashString(hash, node.Description)
+		hash = accessibilityHashString(hash, node.Value)
+		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.Bounds.X)))
+		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.Bounds.Y)))
+		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.Bounds.Width)))
+		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.Bounds.Height)))
+		hash = accessibilityHashUint64(hash, uint64(len(node.Actions)))
+		for _, action := range node.Actions {
+			hash = accessibilityHashString(hash, string(action))
+		}
+		hash = accessibilityHashString(hash, string(node.LiveRegion))
+		hash = accessibilityHashUint64(hash, uint64(accessibilityNodeStateFlags(node)))
+		if node.NativeBoundary {
+			hash = accessibilityHashByte(hash, 1)
+		} else {
+			hash = accessibilityHashByte(hash, 0)
+		}
+	}
+	return hash
+}
+
+const (
+	accessibilityHashOffset = uint64(14695981039346656037)
+	accessibilityHashPrime  = uint64(1099511628211)
+)
+
+func accessibilityHashByte(hash uint64, value byte) uint64 {
+	return (hash ^ uint64(value)) * accessibilityHashPrime
+}
+
+func accessibilityHashUint64(hash, value uint64) uint64 {
+	for range 8 {
+		hash = accessibilityHashByte(hash, byte(value))
+		value >>= 8
+	}
+	return hash
+}
+
+func accessibilityHashString(hash uint64, value string) uint64 {
+	hash = accessibilityHashUint64(hash, uint64(len(value)))
+	for index := 0; index < len(value); index++ {
+		hash = accessibilityHashByte(hash, value[index])
+	}
+	return hash
 }
 
 // AccessibilitySnapshot returns a detached copy suitable for automation readers.

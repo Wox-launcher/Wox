@@ -10,11 +10,12 @@ import (
 )
 
 type fakeHostServices struct {
-	tree          woxui.AccessibilityTree
-	handler       woxui.AccessibilityActionHandler
-	textInput     woxui.TextInputState
-	pointerCursor woxui.PointerCursor
-	invalidations int
+	tree            woxui.AccessibilityTree
+	handler         woxui.AccessibilityActionHandler
+	textInput       woxui.TextInputState
+	pointerCursor   woxui.PointerCursor
+	invalidations   int
+	invalidatedRect woxui.Rect
 }
 
 func (f *fakeHostServices) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
@@ -24,6 +25,41 @@ func (f *fakeHostServices) MeasureText(text string, style woxui.TextStyle) (woxu
 func (f *fakeHostServices) Invalidate() error {
 	f.invalidations++
 	return nil
+}
+
+func (f *fakeHostServices) InvalidateRect(rect woxui.Rect) error {
+	f.invalidations++
+	f.invalidatedRect = rect
+	return nil
+}
+
+func (*fakeHostServices) DisplayListDamageCullingEnabled() bool { return true }
+
+func TestHostExpandsPartialDamageForPaintOutsets(t *testing.T) {
+	host := NewHost(func(woxui.FrameInfo) Widget { return Container{Width: 100, Height: 100} })
+	host.AttachServices(&fakeHostServices{})
+	displayList := &woxui.DisplayList{}
+	host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, Damage: woxui.Rect{X: 10, Y: 10, Width: 10, Height: 10}})
+	if got, want := displayList.Damage(), (woxui.Rect{X: 6, Y: 6, Width: 18, Height: 18}); got != want {
+		t.Fatalf("display-list damage = %+v, want conservative %+v", got, want)
+	}
+	if displayList.NativeDamage() != displayList.Damage() {
+		t.Fatalf("native damage = %+v, want recorded damage %+v", displayList.NativeDamage(), displayList.Damage())
+	}
+}
+
+func TestDisableIncrementalForcesFullFrameDamage(t *testing.T) {
+	t.Setenv(DisableIncrementalEnvironment, "1")
+	host := NewHost(func(woxui.FrameInfo) Widget { return Container{Width: 100, Height: 100} })
+	host.AttachServices(&fakeHostServices{})
+	displayList := &woxui.DisplayList{}
+	host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, Damage: woxui.Rect{X: 10, Y: 10, Width: 10, Height: 10}})
+	if got := displayList.Damage(); got != (woxui.Rect{}) {
+		t.Fatalf("disabled incremental damage = %+v, want full frame", got)
+	}
+	if got := displayList.NativeDamage(); got != (woxui.Rect{}) {
+		t.Fatalf("disabled incremental native damage = %+v, want full frame", got)
+	}
 }
 
 func (f *fakeHostServices) SetTextInputState(state woxui.TextInputState) error {

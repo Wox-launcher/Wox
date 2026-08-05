@@ -16,6 +16,7 @@
 - **Refactors**: Scan `AGENTS.md` and `README.md` files first
 - **Verification**: After code changes, run code formatting according to the project style. Go build may be run for Go/backend changes.
 - **Format**: When formatting code, you must adhere to the coding style guidelines specified in Wox.code-workspace file.
+- **Boundary Purity**: `widget.Boundary.Build` must derive its widget tree only from `Props` and stable callbacks carried by `Props`. It must not capture mutable application, controller, collection, or view state outside `Props`, because cache hits intentionally skip `Build`.
 
 ## User Coding Style Preferences
 

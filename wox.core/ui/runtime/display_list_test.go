@@ -29,3 +29,74 @@ func TestDrawRotatedRoundedImageClampsCornerRadius(t *testing.T) {
 		t.Fatalf("rounded image command = %+v, want radius clamped to 15", displayList.commands)
 	}
 }
+
+func TestDisplayListCompareUsesRenderedImageContent(t *testing.T) {
+	leftImage, err := NewImage(image.NewRGBA(image.Rect(0, 0, 2, 2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rightImage, err := NewImage(image.NewRGBA(image.Rect(0, 0, 2, 2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	left := &DisplayList{}
+	right := &DisplayList{}
+	left.DrawImage(leftImage, Rect{Width: 10, Height: 10})
+	right.DrawImage(rightImage, Rect{Width: 10, Height: 10})
+	if err := left.Compare(right); err != nil {
+		t.Fatalf("equivalent image commands differ: %v", err)
+	}
+
+	right.FillRect(Rect{Width: 1, Height: 1}, Color{R: 255, A: 255})
+	if err := left.Compare(right); err == nil {
+		t.Fatal("different command streams compared equal")
+	}
+}
+
+func TestDisplayListDamageCullsNonIntersectingCommands(t *testing.T) {
+	displayList := &DisplayList{}
+	displayList.SetDamage(Rect{X: 10, Y: 10, Width: 20, Height: 20})
+	displayList.FillRect(Rect{Width: 5, Height: 5}, Color{R: 255, A: 255})
+	displayList.FillRect(Rect{X: 15, Y: 15, Width: 5, Height: 5}, Color{G: 255, A: 255})
+	displayList.DrawText("outside", Rect{X: 40, Y: 40, Width: 20, Height: 10}, TextStyle{Size: 12}, Color{A: 255})
+	displayList.DrawText("inside", Rect{X: 20, Y: 20, Width: 20, Height: 10}, TextStyle{Size: 12}, Color{A: 255})
+
+	if len(displayList.commands) != 2 || displayList.commands[0].kind != displayCommandFillRoundedRect || displayList.commands[1].text != "inside" {
+		t.Fatalf("damage commands = %+v, want only intersecting fill and text", displayList.commands)
+	}
+}
+
+func TestDisplayListDamageHonorsCurrentClip(t *testing.T) {
+	displayList := &DisplayList{}
+	displayList.SetDamage(Rect{Width: 100, Height: 100})
+	displayList.PushClipRect(Rect{Width: 10, Height: 10})
+	displayList.FillRect(Rect{X: 20, Y: 20, Width: 10, Height: 10}, Color{A: 255})
+	displayList.FillRect(Rect{X: 5, Y: 5, Width: 10, Height: 10}, Color{A: 255})
+	displayList.PopClipRect()
+
+	if len(displayList.commands) != 3 || displayList.commands[1].kind != displayCommandFillRoundedRect {
+		t.Fatalf("clipped damage commands = %+v, want clip, intersecting fill, clear clip", displayList.commands)
+	}
+}
+
+func TestDisplayListDamageUsesRotatedImageBounds(t *testing.T) {
+	bitmap, err := NewImage(image.NewRGBA(image.Rect(0, 0, 2, 2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	displayList := &DisplayList{}
+	displayList.SetDamage(Rect{X: 19, Y: 5, Width: 2, Height: 2})
+	displayList.DrawRotatedImage(bitmap, Rect{X: 10, Y: 10, Width: 20, Height: 2}, math.Pi/2)
+
+	if len(displayList.commands) != 1 || displayList.commands[0].kind != displayCommandDrawImage {
+		t.Fatalf("rotated damage commands = %+v, want conservative image command", displayList.commands)
+	}
+}
+
+func TestDisplayListZeroDamageRecordsFullFrame(t *testing.T) {
+	displayList := &DisplayList{}
+	displayList.FillRect(Rect{X: 500, Y: 500, Width: 10, Height: 10}, Color{A: 255})
+	if len(displayList.commands) != 1 {
+		t.Fatalf("zero damage command count = %d, want 1", len(displayList.commands))
+	}
+}

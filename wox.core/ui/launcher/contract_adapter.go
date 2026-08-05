@@ -490,6 +490,7 @@ func (a *App) applyTypedCloudSyncProgress(progress cloudsync.CloudSyncProgress) 
 
 func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 	updated := false
+	updatedIndex := -1
 	for index := range a.results {
 		if a.results[index].ID != result.Id {
 			continue
@@ -519,9 +520,13 @@ func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 			a.results[index].Actions = actions
 		}
 		updated = true
+		updatedIndex = index
 		break
 	}
 	if updated {
+		a.resultRevision++
+		a.results[updatedIndex].Revision = a.resultRevision
+		a.resultsSectionRevision++
 		a.reconcileSelectedPreview()
 		_ = a.window.Invalidate()
 	}
@@ -541,6 +546,7 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 	a.resetQueryTransitionLocked()
 	if a.resultsQueryID != queryID {
 		a.results = nil
+		a.resultsSectionRevision++
 		a.selected = -1
 		a.hoveredResult = -1
 		a.resultScroll.reset()
@@ -548,7 +554,12 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 		a.layout = queryLayout{}
 	}
 	a.resultsQueryID = queryID
+	for index := range results {
+		a.resultRevision++
+		results[index].Revision = a.resultRevision
+	}
 	a.results = append(a.results, results...)
+	a.resultsSectionRevision++
 	if a.selected < 0 {
 		a.selected = selectableIndex(a.results)
 	}

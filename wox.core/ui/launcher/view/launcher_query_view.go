@@ -30,20 +30,41 @@ type LauncherQueryProps struct {
 	Focused          bool
 	Enabled          bool
 	Theme            woxcomponent.Theme
-	OnTapAt          func(woxui.Point)
-	OnDoubleTapAt    func(woxui.Point)
-	OnTripleTapAt    func(woxui.Point)
-	OnTapEnd         func()
-	OnDragStart      func()
+	OnTapAt          func(woxui.Point) `boundary:"stable"`
+	OnDoubleTapAt    func(woxui.Point) `boundary:"stable"`
+	OnTripleTapAt    func(woxui.Point) `boundary:"stable"`
+	OnTapEnd         func()            `boundary:"stable"`
+	OnDragStart      func()            `boundary:"stable"`
 	// OnSelectionStart begins a drag selection at the given editor-local point.
-	OnSelectionStart func(woxui.Point)
+	OnSelectionStart func(woxui.Point) `boundary:"stable"`
 	// OnSelectionExtend updates the active drag selection focus to the given editor-local point.
-	OnSelectionExtend func(woxui.Point)
-	OnKey             func(woxui.KeyEvent) bool
-	OnTextInput       func(woxui.TextInputEvent) bool
-	OnFocusChange     func(bool)
-	OnSetValue        func(string) error
-	OnTextInputState  func(woxui.TextInputState)
+	OnSelectionExtend func(woxui.Point)               `boundary:"stable"`
+	OnKey             func(woxui.KeyEvent) bool       `boundary:"stable"`
+	OnTextInput       func(woxui.TextInputEvent) bool `boundary:"stable"`
+	OnFocusChange     func(bool)                      `boundary:"stable"`
+	OnSetValue        func(string) error              `boundary:"stable"`
+	OnTextInputState  func(woxui.TextInputState)      `boundary:"stable"`
+}
+
+// Equal compares every prepared rendering dependency for the launcher query editor.
+func (p LauncherQueryProps) Equal(other LauncherQueryProps) bool {
+	if p.Width != other.Width || p.Height != other.Height || p.LineHeight != other.LineHeight || p.Style != other.Style || p.State != other.State || p.CompletionSuffix != other.CompletionSuffix || p.CaretWidth != other.CaretWidth || p.CaretLine != other.CaretLine || p.CompositionWidth != other.CompositionWidth || p.CompositionX != other.CompositionX || p.CompositionLine != other.CompositionLine || p.TextWidth != other.TextWidth || p.CaretHeight != other.CaretHeight || p.Focused != other.Focused || p.Enabled != other.Enabled || p.Theme != other.Theme || len(p.Lines) != len(other.Lines) {
+		return false
+	}
+	for index := range p.Lines {
+		if p.Lines[index] != other.Lines[index] {
+			return false
+		}
+	}
+	return true
+}
+
+// LauncherQueryBoundary retains the query subtree between text, focus, and caret phase changes.
+func LauncherQueryBoundary(props LauncherQueryProps) woxwidget.Widget {
+	return woxwidget.Boundary[LauncherQueryProps]{
+		Key: "launcher-query-boundary", Label: "header:query", Props: props,
+		Build: func(props LauncherQueryProps) woxwidget.Widget { return LauncherQueryView(props) },
+	}
 }
 
 // LauncherQueryLine contains adapter-measured text slices for one query line.
@@ -85,7 +106,7 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 	queryVerticalPadding := (props.QueryBoxHeight - props.QueryEditorHeight) / 2
 	children := []woxwidget.Widget{woxwidget.Container{
 		Width: props.QueryWidth, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: queryVerticalPadding, Bottom: queryVerticalPadding},
-		Child: LauncherQueryView(props.Query),
+		Child: LauncherQueryBoundary(props.Query),
 	}}
 	if props.Refinement != nil {
 		accessoryHeight := scaledLauncherSize(34, props.DensityScale)

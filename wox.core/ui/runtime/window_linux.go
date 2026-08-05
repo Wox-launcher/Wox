@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"runtime/cgo"
 	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -34,14 +35,17 @@ var linuxRuntime struct {
 }
 
 type platformWindow struct {
-	mu         sync.Mutex
-	native     *C.WoxLinuxWindow
-	options    WindowOptions
-	handle     cgo.Handle
-	closing    bool
-	closed     bool
-	renderErr  error
-	fontFamily string
+	mu            sync.Mutex
+	native        *C.WoxLinuxWindow
+	options       WindowOptions
+	handle        cgo.Handle
+	closing       bool
+	closed        bool
+	renderErr     error
+	fontFamily    string
+	pendingDamage Rect
+	damagePending bool
+	fullDamage    bool
 }
 
 // GTK and its OpenGL context stay on the process main thread for the runtime lifetime.
@@ -367,6 +371,9 @@ func (w *platformWindow) invalidate() error {
 		w.mu.Unlock()
 		return err
 	}
+	w.fullDamage = true
+	w.pendingDamage = Rect{}
+	w.damagePending = true
 	w.mu.Unlock()
 
 	native, err := w.openNative()
@@ -378,6 +385,31 @@ func (w *platformWindow) invalidate() error {
 	}
 	return nil
 }
+
+func (w *platformWindow) invalidateRect(rect Rect) error {
+	w.mu.Lock()
+	if w.renderErr != nil {
+		err := w.renderErr
+		w.mu.Unlock()
+		return err
+	}
+	if !w.fullDamage {
+		w.pendingDamage = unionRects(w.pendingDamage, rect)
+	}
+	w.damagePending = true
+	w.mu.Unlock()
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_invalidate(native) != 0 {
+		return errors.New("woxui: failed to invalidate Linux window rectangle")
+	}
+	return nil
+}
+
+// Linux records the full command stream because a GL context recreation can invalidate the FBO before Go observes it.
+func (*platformWindow) displayListDamageCullingEnabled() bool { return false }
 
 // setTextInputState updates GtkIMContext activation and candidate geometry on the GTK thread.
 func (w *platformWindow) setTextInputState(state TextInputState) error {
@@ -495,13 +527,21 @@ func (w *platformWindow) recordRenderError(operation string, result C.int32_t) {
 }
 
 func (w *platformWindow) drawFrame(frame FrameInfo) {
+	frame.Damage = w.consumePendingDamage()
 	displayList := &DisplayList{}
+	if w.options.frameMetrics != nil {
+		displayList.frameID = w.options.frameMetrics.beginFrame()
+	}
 	if w.options.OnFrame != nil {
 		w.options.OnFrame(displayList, frame)
 	}
 
+	nativeStart := time.Now()
 	native, err := w.openNative()
 	if err != nil {
+		if w.options.frameMetrics != nil {
+			w.options.frameMetrics.dropFrame(displayList.frameID)
+		}
 		return
 	}
 	w.mu.Lock()
@@ -509,20 +549,31 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 	w.mu.Unlock()
 	nativeFontFamily := C.CString(fontFamily)
 	defer C.free(unsafe.Pointer(nativeFontFamily))
+	nativeDamage := displayList.NativeDamage()
 	result := C.wox_linux_window_begin_frame(
 		native,
 		C.float(frame.Size.Width),
 		C.float(frame.Size.Height),
 		C.float(frame.Scale),
+		C.float(nativeDamage.X),
+		C.float(nativeDamage.Y),
+		C.float(nativeDamage.Width),
+		C.float(nativeDamage.Height),
 		C.uint8_t(displayList.clearColor.R),
 		C.uint8_t(displayList.clearColor.G),
 		C.uint8_t(displayList.clearColor.B),
 		C.uint8_t(displayList.clearColor.A),
 	)
 	if result > 0 {
+		if w.options.frameMetrics != nil {
+			w.options.frameMetrics.dropFrame(displayList.frameID)
+		}
 		return
 	}
 	if result < 0 {
+		if w.options.frameMetrics != nil {
+			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
+		}
 		w.recordRenderError("begin OpenGL frame", result)
 		return
 	}
@@ -605,14 +656,38 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 		}
 		if result != 0 {
 			_ = C.wox_linux_window_end_frame(native)
+			if w.options.frameMetrics != nil {
+				w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
+			}
 			w.recordRenderError("encode OpenGL frame", result)
 			return
 		}
 	}
 
-	if result = C.wox_linux_window_end_frame(native); result != 0 {
+	presentStart := time.Now()
+	result = C.wox_linux_window_end_frame(native)
+	presentCost := time.Since(presentStart)
+	if w.options.frameMetrics != nil {
+		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart)-presentCost, presentCost, result == 0)
+	}
+	if result != 0 {
 		w.recordRenderError("finish OpenGL frame", result)
 	}
+}
+
+func (w *platformWindow) consumePendingDamage() Rect {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.damagePending || w.fullDamage {
+		w.pendingDamage = Rect{}
+		w.damagePending = false
+		w.fullDamage = false
+		return Rect{}
+	}
+	damage := w.pendingDamage
+	w.pendingDamage = Rect{}
+	w.damagePending = false
+	return damage
 }
 
 //export woxGoLinuxStart

@@ -105,6 +105,12 @@ struct WoxDarwinWindow {
   uint64_t accessibility_generation;
 };
 
+typedef struct {
+  uint64_t sequence;
+  CGRect damage;
+  bool full;
+} WoxDarwinDamageRecord;
+
 struct WoxDarwinRenderer {
   CALayer *layer;
   CALayer *content_layer;
@@ -117,8 +123,13 @@ struct WoxDarwinRenderer {
   uint64_t frame_generation;
   uint64_t submission_sequence;
   uint64_t presented_sequence;
+  uint64_t frame_sequence;
+  CGRect frame_requested_damage;
+  bool frame_requested_full;
+  WoxDarwinDamageRecord damage_history[64];
   bool frame_open;
   bool clip_active;
+  bool damage_clip_active;
 };
 
 static NSInteger wox_open_window_count = 0;
@@ -507,6 +518,7 @@ static CGImageRef capture_display_image(CGDirectDisplayID display_id) {
   NSUInteger width;
   NSUInteger height;
   atomic_uint presentation_references;
+  uint64_t content_sequence;
 }
 - (instancetype)initWithWidth:(NSUInteger)width height:(NSUInteger)height;
 @end
@@ -728,6 +740,9 @@ static void destroy_renderer(WoxDarwinRenderer *renderer) {
   }
   if (renderer->frame_open) {
     if (renderer->clip_active) {
+      CGContextRestoreGState(renderer->context);
+    }
+    if (renderer->damage_clip_active) {
       CGContextRestoreGState(renderer->context);
     }
     CGContextRelease(renderer->context);
@@ -2772,7 +2787,7 @@ void wox_darwin_autorelease_pool_pop(void *pool) {
   [(NSAutoreleasePool *)pool drain];
 }
 
-int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_width, float logical_height, float scale, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL || window->closed || window->renderer == NULL || logical_width <= 0.0f || logical_height <= 0.0f || scale <= 0.0f) {
     return -1;
   }
@@ -2821,13 +2836,35 @@ int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_wid
     return -1;
   }
 
+  CGContextTranslateCTM(context, 0.0, pixel_height);
+  CGContextScaleCTM(context, scale, -scale);
+  uint64_t frame_sequence = renderer->submission_sequence + 1;
+  bool requested_full = damage_width <= 0.0f || damage_height <= 0.0f;
+  CGRect requested_damage = CGRectMake(damage_x, damage_y, fmaxf(0.0f, damage_width), fmaxf(0.0f, damage_height));
+  CGRect effective_damage = requested_damage;
+  bool effective_full = requested_full || surface->content_sequence == 0 || surface->content_sequence >= frame_sequence || frame_sequence - surface->content_sequence > 64;
+  if (!effective_full) {
+    for (uint64_t sequence = surface->content_sequence + 1; sequence < frame_sequence; sequence++) {
+      const WoxDarwinDamageRecord record = renderer->damage_history[sequence % 64];
+      if (record.sequence != sequence || record.full) {
+        effective_full = true;
+        break;
+      }
+      effective_damage = CGRectUnion(effective_damage, record.damage);
+    }
+  }
+
   // On M3, the first Metal render pass reserves about 200 MB of driver memory; drawing the same IOSurface on the CPU avoids that fixed visible-state cost.
   CGContextSetBlendMode(context, kCGBlendModeCopy);
   CGContextSetRGBFillColor(context, red / 255.0, green / 255.0, blue / 255.0, alpha / 255.0);
-  CGContextFillRect(context, CGRectMake(0.0, 0.0, pixel_width, pixel_height));
+  if (effective_full) {
+    CGContextFillRect(context, CGRectMake(0.0, 0.0, logical_width, logical_height));
+  } else {
+    CGContextSaveGState(context);
+    CGContextClipToRect(context, effective_damage);
+    CGContextFillRect(context, effective_damage);
+  }
   CGContextSetBlendMode(context, kCGBlendModeNormal);
-  CGContextTranslateCTM(context, 0.0, pixel_height);
-  CGContextScaleCTM(context, scale, -scale);
   CGContextSetShouldAntialias(context, true);
   CGContextSetInterpolationQuality(context, kCGInterpolationHigh);
 
@@ -2836,8 +2873,12 @@ int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_wid
   renderer->viewport_size = CGSizeMake(logical_width, logical_height);
   renderer->scale = scale;
   renderer->frame_generation = atomic_load_explicit(&window->presentation_generation, memory_order_relaxed);
+  renderer->frame_sequence = frame_sequence;
+  renderer->frame_requested_damage = requested_damage;
+  renderer->frame_requested_full = requested_full;
   renderer->frame_open = true;
   renderer->clip_active = false;
+  renderer->damage_clip_active = !effective_full;
   return 0;
 }
 
@@ -3087,6 +3128,10 @@ int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transaction
     CGContextRestoreGState(renderer->context);
     renderer->clip_active = false;
   }
+  if (renderer->damage_clip_active) {
+    CGContextRestoreGState(renderer->context);
+    renderer->damage_clip_active = false;
+  }
   CGContextFlush(renderer->context);
   CGContextRelease(renderer->context);
   renderer->context = NULL;
@@ -3095,7 +3140,12 @@ int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transaction
   renderer->frame_surface = nil;
   renderer->frame_open = false;
 
-  uint64_t sequence = ++renderer->submission_sequence;
+  uint64_t sequence = renderer->frame_sequence;
+  renderer->submission_sequence = sequence;
+  renderer->damage_history[sequence % 64].sequence = sequence;
+  renderer->damage_history[sequence % 64].damage = renderer->frame_requested_damage;
+  renderer->damage_history[sequence % 64].full = renderer->frame_requested_full;
+  surface->content_sequence = sequence;
   uint64_t generation = renderer->frame_generation;
   atomic_fetch_add_explicit(&surface->presentation_references, 1, memory_order_relaxed);
   if ([NSThread isMainThread]) {

@@ -47,3 +47,9 @@ func TestLauncherGridImageUsesFlutterFit(t *testing.T) {
 		})
 	}
 }
+
+func TestLauncherGridBoundaryEqualCoversAllFields(t *testing.T) {
+	woxwidget.AssertEqualCoversAllFields(t, LauncherGridResult{})
+	woxwidget.AssertEqualCoversAllFields(t, LauncherGridProps{})
+	woxwidget.AssertEqualCoversAllFields(t, launcherGridResultProps{})
+}

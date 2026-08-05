@@ -25,7 +25,7 @@ func TestLauncherResultGroupUsesFlutterTitleTypography(t *testing.T) {
 	stack := scrollGesture.Child.(woxwidget.Stack)
 	scroll := stack.Children[0].Child.(woxwidget.ScrollView)
 	content := scroll.Child.(woxwidget.Container)
-	row := content.Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
+	row := buildLauncherResultBoundary(content.Child.(woxwidget.Flex).Children[0]).(woxwidget.Container)
 	label := row.Child.(woxwidget.Text)
 
 	if label.Color != titleColor {
@@ -53,7 +53,7 @@ func TestLauncherResultTailsScrollHorizontallyWhenClipped(t *testing.T) {
 		}},
 	}).(woxwidget.Semantics)
 	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	row := buildLauncherResultBoundary(listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0]).(woxwidget.Semantics)
 	tailContainer := row.Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
 	tails := tailContainer.Child.(woxwidget.ScrollView)
 
@@ -63,6 +63,48 @@ func TestLauncherResultTailsScrollHorizontallyWhenClipped(t *testing.T) {
 	if tails.Width != 80 || tails.ContentWidth != 120 {
 		t.Fatalf("tail scroll geometry = viewport %.0f content %.0f, want 80/120", tails.Width, tails.ContentWidth)
 	}
+}
+
+func TestLauncherResultBoundaryEqualCoversAllFields(t *testing.T) {
+	woxwidget.AssertEqualCoversAllFields(t, LauncherResultItem{})
+	woxwidget.AssertEqualCoversAllFields(t, launcherResultRowProps{})
+	woxwidget.AssertEqualCoversAllFields(t, LauncherResultsProps{})
+}
+
+func TestLauncherResultHoverRebuildsOnlyChangedRows(t *testing.T) {
+	hovered := 0
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		items := []LauncherResultItem{
+			{ID: "first", Revision: 1, Title: "First", Hovered: hovered == 0},
+			{ID: "second", Revision: 2, Title: "Second", Hovered: hovered == 1},
+			{ID: "third", Revision: 3, Title: "Third", Hovered: hovered == 2},
+		}
+		return LauncherResultsBoundary(LauncherResultsProps{
+			Width: 320, Height: 150, ContentHeight: 150, RowHeight: 50, Items: items,
+			Theme: woxcomponent.Theme{ResultTitle: woxui.Color{A: 255}, SelectedBackground: woxui.Color{R: 50, G: 100, B: 200, A: 255}},
+		})
+	})
+	host.AttachServices(settingsWindowHostServices{})
+	if err := host.SetRepaintDebugMode(woxwidget.RepaintDebugRainbow); err != nil {
+		t.Fatal(err)
+	}
+	render := func() int {
+		displayList := &woxui.DisplayList{}
+		host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 320, Height: 150}, PixelSize: woxui.PixelSize{Width: 320, Height: 150}, Scale: 1})
+		return displayList.CommandCount()
+	}
+	render()
+	stableCommands := render()
+	hovered = 1
+	movedCommands := render()
+	if movedCommands != stableCommands+3 {
+		t.Fatalf("hover move commands = %d, stable = %d; want three repaint outlines for section and two changed rows", movedCommands, stableCommands)
+	}
+}
+
+func buildLauncherResultBoundary(value woxwidget.Widget) woxwidget.Widget {
+	boundary := value.(woxwidget.Boundary[launcherResultRowProps])
+	return boundary.Build(boundary.Props)
 }
 
 func TestLauncherResultImageTailOverlaysCenteredSVGText(t *testing.T) {

@@ -67,6 +67,7 @@ func run(caseSelector string) (int, error) {
 			fmt.Sprintf("WOX_TEST_SERVER_PORT=%d", port),
 			"WOX_TEST_DISABLE_TELEMETRY=true",
 			"WOX_TEST_SKIP_ONBOARDING=true",
+			"WOX_DEBUG_REPAINT=verify",
 		},
 		StartupTimeout: 45 * time.Second,
 	})

@@ -24,8 +24,22 @@ type ActionItem struct {
 	HotkeyLabels []string
 }
 
+// Equal compares every prepared visual field for one action item.
+func (i ActionItem) Equal(other ActionItem) bool {
+	if i.Index != other.Index || i.ID != other.ID || i.Label != other.Label || i.Icon != other.Icon || len(i.HotkeyLabels) != len(other.HotkeyLabels) {
+		return false
+	}
+	for index := range i.HotkeyLabels {
+		if i.HotkeyLabels[index] != other.HotkeyLabels[index] {
+			return false
+		}
+	}
+	return true
+}
+
 // ActionsProps contains the action panel state and callbacks.
 type ActionsProps struct {
+	Revision              uint64
 	Window                *woxui.Window
 	WindowWidth           float32
 	WindowHeight          float32
@@ -46,10 +60,23 @@ type ActionsProps struct {
 	Items                 []ActionItem
 	Selected              int
 	Filter                string
-	OnSelect              func(int)
-	OnActivate            func()
-	OnFilterChanged       func(string)
-	OnFilterKey           func(woxui.KeyEvent) bool
+	OnSelect              func(int)                 `boundary:"stable"`
+	OnActivate            func()                    `boundary:"stable"`
+	OnFilterChanged       func(string)              `boundary:"stable"`
+	OnFilterKey           func(woxui.KeyEvent) bool `boundary:"stable"`
+}
+
+// Equal compares every render dependency for the floating action panel.
+func (p ActionsProps) Equal(other ActionsProps) bool {
+	if p.Revision != other.Revision || p.Window != other.Window || p.WindowWidth != other.WindowWidth || p.WindowHeight != other.WindowHeight || p.QueryHeight != other.QueryHeight || p.ToolbarHeight != other.ToolbarHeight || p.DensityScale != other.DensityScale || p.Theme != other.Theme || p.ActionHeader != other.ActionHeader || p.ActionQueryBackground != other.ActionQueryBackground || p.ActionQueryText != other.ActionQueryText || p.ResultTail != other.ResultTail || p.SelectedTail != other.SelectedTail || p.ResultItemRadius != other.ResultItemRadius || p.ActionQueryRadius != other.ActionQueryRadius || p.ActionPadding != other.ActionPadding || p.HeaderLabel != other.HeaderLabel || p.NoMatchesLabel != other.NoMatchesLabel || p.Selected != other.Selected || p.Filter != other.Filter || len(p.Items) != len(other.Items) {
+		return false
+	}
+	for index := range p.Items {
+		if !p.Items[index].Equal(other.Items[index]) {
+			return false
+		}
+	}
+	return true
 }
 
 // ActionPanelBaseHeight returns the non-list height used by launcher window sizing.
@@ -69,6 +96,18 @@ func ActionsView(props ActionsProps) (woxwidget.Widget, float32, float32) {
 		CreateState: func() woxwidget.State { return &actionsViewState{} },
 	}
 	return view, panelWidth, panelHeight
+}
+
+// ActionsBoundary retains the action panel while its prepared props and retained state are unchanged.
+func ActionsBoundary(props ActionsProps) (woxwidget.Widget, float32, float32) {
+	panelWidth, _, panelHeight, _ := actionPanelGeometry(props)
+	return woxwidget.Boundary[ActionsProps]{
+		Key: "launcher-actions-boundary", Label: "actions", Props: props,
+		Build: func(props ActionsProps) woxwidget.Widget {
+			view, _, _ := ActionsView(props)
+			return view
+		},
+	}, panelWidth, panelHeight
 }
 
 // InitState creates the action list controller when the panel enters the Host tree.

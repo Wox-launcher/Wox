@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -73,6 +74,8 @@ type FrameInfo struct {
 	Size      Size
 	PixelSize PixelSize
 	Scale     float32
+	// Damage is the logical region requiring redraw; the zero value means the complete frame.
+	Damage Rect
 }
 
 // FocusEvent reports whether this window's focus domain owns keyboard input.
@@ -107,11 +110,13 @@ type WindowOptions struct {
 	OnWebViewTooltip       func(event WebViewTooltipEvent)
 	OnCloseRequested       func()
 	OnClosed               func()
+	frameMetrics           *frameMetricsRecorder
 }
 
 // Window wraps the native implementation selected for the current platform.
 type Window struct {
 	native     *platformWindow
+	metrics    *frameMetricsRecorder
 	fontFamily atomic.Value // string; last successfully applied SetFontFamily value
 	lifecycle  atomic.Uint32
 	// measureTextFn overrides the native measurer for tests; production leaves it nil.
@@ -134,8 +139,9 @@ func Open(options WindowOptions) (*Window, error) {
 		options.Size.Height = defaultWindowHeight
 	}
 
-	window := &Window{userOnClosed: options.OnClosed}
+	window := &Window{userOnClosed: options.OnClosed, metrics: newFrameMetricsRecorder()}
 	window.lifecycle.Store(uint32(windowLifecycleOpen))
+	options.frameMetrics = window.metrics
 	// Bind closed state to the real native teardown callback, including external destroys.
 	options.OnClosed = window.handleNativeClosed
 	native, err := openPlatformWindow(options)
@@ -144,6 +150,38 @@ func Open(options WindowOptions) (*Window, error) {
 	}
 	window.native = native
 	return window, nil
+}
+
+// FrameMetrics returns a detached snapshot of timings collected since the last reset.
+func (w *Window) FrameMetrics() FrameMetricsSnapshot {
+	if w == nil {
+		return FrameMetricsSnapshot{}
+	}
+	return w.metrics.current()
+}
+
+// ResetFrameMetrics starts a fresh measurement interval without disturbing in-flight rendering.
+func (w *Window) ResetFrameMetrics() {
+	if w == nil {
+		return
+	}
+	w.metrics.reset()
+}
+
+// RecordFramePhase attaches a portable Host phase to the native frame that owns the display list.
+func (w *Window) RecordFramePhase(frameID uint64, phase FrameMetricPhase, duration time.Duration) {
+	if w == nil {
+		return
+	}
+	w.metrics.recordPhase(frameID, phase, duration)
+}
+
+// RecordFrameCounts stores retained tree and display-list sizes for one frame.
+func (w *Window) RecordFrameCounts(frameID uint64, nodes, commands, accessibilityNodes int) {
+	if w == nil {
+		return
+	}
+	w.metrics.recordCounts(frameID, nodes, commands, accessibilityNodes)
 }
 
 // Show begins a new focus lifetime and requests platform activation.
@@ -262,6 +300,22 @@ func (w *Window) Invalidate() error {
 		return errors.New("window is not initialized")
 	}
 	return w.native.invalidate()
+}
+
+// InvalidateRect requests another frame for one logical client region.
+func (w *Window) InvalidateRect(rect Rect) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	if rect.Width <= 0 || rect.Height <= 0 {
+		return w.native.invalidate()
+	}
+	return w.native.invalidateRect(rect)
+}
+
+// DisplayListDamageCullingEnabled reports whether the native renderer can preserve every pixel outside Damage.
+func (w *Window) DisplayListDamageCullingEnabled() bool {
+	return w != nil && w.native != nil && w.native.displayListDamageCullingEnabled()
 }
 
 // DispatchPointer sends portable input directly to an independently managed raw window.

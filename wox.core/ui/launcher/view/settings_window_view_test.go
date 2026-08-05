@@ -12,7 +12,8 @@ type settingsWindowHostServices struct{}
 func (settingsWindowHostServices) MeasureText(string, woxui.TextStyle) (woxui.TextMetrics, error) {
 	return woxui.TextMetrics{}, nil
 }
-func (settingsWindowHostServices) Invalidate() error { return nil }
+func (settingsWindowHostServices) Invalidate() error               { return nil }
+func (settingsWindowHostServices) InvalidateRect(woxui.Rect) error { return nil }
 func (settingsWindowHostServices) SetTextInputState(woxui.TextInputState) error {
 	return nil
 }

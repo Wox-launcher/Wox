@@ -80,6 +80,10 @@ func TestLauncherHeaderExposesQueryLoadingProgress(t *testing.T) {
 	}
 }
 
+func TestLauncherQueryBoundaryEqualCoversAllFields(t *testing.T) {
+	woxwidget.AssertEqualCoversAllFields(t, LauncherQueryProps{})
+}
+
 func launcherQueryEditable(widget woxwidget.Widget) woxwidget.EditableText {
 	if stack, ok := widget.(woxwidget.Stack); ok {
 		widget = stack.Children[0].Child

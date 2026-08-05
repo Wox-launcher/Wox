@@ -28,9 +28,19 @@ type AutomationSnapshot struct {
 type HostServices interface {
 	MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error)
 	Invalidate() error
+	InvalidateRect(rect woxui.Rect) error
 	SetTextInputState(state woxui.TextInputState) error
 	SetPointerCursor(cursor woxui.PointerCursor) error
 	UpdateAccessibility(tree woxui.AccessibilityTree, handler woxui.AccessibilityActionHandler) error
+}
+
+type frameMetricsHostServices interface {
+	RecordFramePhase(frameID uint64, phase woxui.FrameMetricPhase, duration time.Duration)
+	RecordFrameCounts(frameID uint64, nodes, commands, accessibilityNodes int)
+}
+
+type displayListDamageHostServices interface {
+	DisplayListDamageCullingEnabled() bool
 }
 
 // Host reconciles, lays out, paints, and routes input for one retained widget tree.
@@ -78,19 +88,26 @@ type Host struct {
 	elements             *elementTree
 	postFrame            []func()
 	disposed             bool
+	activeFrameMetricsID uint64
+	repaintDebugMode     RepaintDebugMode
+	damageMu             sync.Mutex
+	pendingDamage        woxui.Rect
+	fullDamage           bool
+	caretDamage          woxui.Rect
 }
 
 // NewHost creates a retained host whose builder runs once per invalidated frame.
 func NewHost(build func(frame woxui.FrameInfo) Widget) *Host {
 	host := &Host{
-		build:         build,
-		identities:    map[string]woxui.AccessibilityNodeID{},
-		nodes:         map[woxui.AccessibilityNodeID]*node{},
-		scopeRestore:  map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID{},
-		change:        make(chan struct{}),
-		reported:      map[string]bool{},
-		caretVisible:  true,
-		windowFocused: true,
+		build:            build,
+		identities:       map[string]woxui.AccessibilityNodeID{},
+		nodes:            map[woxui.AccessibilityNodeID]*node{},
+		scopeRestore:     map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID{},
+		change:           make(chan struct{}),
+		reported:         map[string]bool{},
+		caretVisible:     true,
+		windowFocused:    true,
+		repaintDebugMode: repaintDebugModeFromEnvironment(),
 	}
 	host.snapshot.Store(AutomationSnapshot{})
 	host.elements = newElementTree(host)
@@ -105,6 +122,28 @@ func (h *Host) Attach(window *woxui.Window) {
 // AttachServices connects a virtual or native host surface using the same widget execution path.
 func (h *Host) AttachServices(services HostServices) {
 	h.window = services
+}
+
+// SetRepaintDebugMode changes Boundary diagnostics for subsequent frames.
+func (h *Host) SetRepaintDebugMode(mode RepaintDebugMode) error {
+	parsed, err := parseRepaintDebugMode(string(mode))
+	if err != nil {
+		return err
+	}
+	if h.repaintDebugMode == parsed {
+		return nil
+	}
+	h.repaintDebugMode = parsed
+	h.invalidate()
+	return nil
+}
+
+// RepaintDebugMode returns the active Boundary diagnostic mode.
+func (h *Host) RepaintDebugMode() RepaintDebugMode {
+	if h == nil {
+		return RepaintDebugOff
+	}
+	return h.repaintDebugMode
 }
 
 // SetWindowFocused keeps the retained editor focus while suspending its caret and IME when the native window is inactive.
@@ -135,10 +174,17 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 		h.animations.reset()
 		return
 	}
+	frameID := displayList.FrameMetricsID()
+	h.activeFrameMetricsID = frameID
+	defer func() { h.activeFrameMetricsID = 0 }()
+	buildLayoutStart := time.Now()
+	damage := h.consumeFrameDamage(frame.Damage, frame.Size)
 	h.elements.beginFrame()
 	widget := h.build(frame)
 	if widget == nil {
 		h.elements.endFrame()
+		h.recordFramePhase(frameID, woxui.FrameMetricBuildLayout, time.Since(buildLayoutStart))
+		h.recordFrameCounts(frameID, 0, displayList.CommandCount(), 0)
 		h.updateCaretBlink(false)
 		h.animations.reset()
 		return
@@ -146,33 +192,94 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 
 	oldNodes := h.nodes
 	animation := h.animations.beginFrame(h.window)
-	root := widget.layout(context{window: h.window, caretVisible: h.caretVisibleForFrame(), animation: animation, elements: h.elements, element: h.elements.root}, constraints{width: frame.Size.Width, height: frame.Size.Height})
+	var debugFrame *repaintDebugFrame
+	if h.repaintDebugMode != RepaintDebugOff {
+		debugFrame = &repaintDebugFrame{
+			mode: h.repaintDebugMode, now: time.Now(),
+		}
+	}
+	damageTracker := &frameDamageTracker{}
+	root := widget.layout(context{window: h.window, caretVisible: h.caretVisibleForFrame(), animation: animation, damage: damageTracker, debug: debugFrame, elements: h.elements, element: h.elements.root}, constraints{width: frame.Size.Width, height: frame.Size.Height})
+	damage = damageTracker.resolve(damage)
+	if damage.Width > 0 && damage.Height > 0 {
+		damage = expandDamageRect(damage, 4)
+	}
+	damage = clipDamageRect(damage, frame.Size)
+	if incrementalDisabled() {
+		damage = woxui.Rect{}
+	}
+	if h.repaintDebugMode != RepaintDebugOff {
+		debugFrame.damage = damage
+		if damage.Width <= 0 || damage.Height <= 0 {
+			debugFrame.damage = woxui.Rect{Width: frame.Size.Width, Height: frame.Size.Height}
+		}
+		damage = woxui.Rect{}
+	}
+	displayList.SetNativeDamage(damage)
+	if services, ok := h.window.(displayListDamageHostServices); ok && services.DisplayListDamageCullingEnabled() {
+		displayList.SetDamage(damage)
+	}
 	h.animations.endFrame(animation)
 	identities := map[string]woxui.AccessibilityNodeID{}
 	nodes := map[woxui.AccessibilityNodeID]*node{}
 	diagnostics := h.elements.endFrame()
-	h.assignIdentities(root, nil, "root", 0, h.identities, identities, nodes, &diagnostics)
+	h.assignIdentities(root, nil, "root", 0, h.identities, identities, nodes, &diagnostics, nil)
 	h.root = root
 	h.identities = identities
 	h.nodes = nodes
 	h.reconcileTransientState(oldNodes)
 	h.reconcileFocus()
 	h.updateCaretBlink(nodeHasActiveCaret(root, h.focused, false, false))
+	h.setCaretDamage(boundaryCaretDamage(root))
+	h.recordFramePhase(frameID, woxui.FrameMetricBuildLayout, time.Since(buildLayoutStart))
 
+	drawStart := time.Now()
 	displayList.Clear(woxui.Color{})
 	focusRingTarget := h.focused
 	if !h.focusVisible {
 		focusRingTarget = 0
 	}
 	h.root.draw(displayList, h.focused, focusRingTarget, false, false)
+	debugFrame.draw(displayList)
+	h.recordFramePhase(frameID, woxui.FrameMetricDrawRecord, time.Since(drawStart))
+
+	accessibilityStart := time.Now()
 	h.generation++
 	tree, diagnostics := h.buildAccessibilityTree(diagnostics)
 	h.publishSnapshot(tree, diagnostics)
 	if err := h.window.UpdateAccessibility(tree, h.dispatchAccessibilityAction); err != nil {
 		h.reportDiagnostic(fmt.Sprintf("publish accessibility tree: %v", err))
 	}
+	h.recordFramePhase(frameID, woxui.FrameMetricAccessibility, time.Since(accessibilityStart))
+	h.recordFrameCounts(frameID, len(nodes), displayList.CommandCount(), len(tree.Nodes))
 	h.syncTextInput()
 	h.runPostFrameCallbacks()
+}
+
+// RecordSnapshotDuration records launcher-specific snapshot preparation inside the active Host frame.
+func (h *Host) RecordSnapshotDuration(duration time.Duration) {
+	if h == nil || h.activeFrameMetricsID == 0 {
+		return
+	}
+	h.recordFramePhase(h.activeFrameMetricsID, woxui.FrameMetricSnapshot, duration)
+}
+
+func (h *Host) recordFramePhase(frameID uint64, phase woxui.FrameMetricPhase, duration time.Duration) {
+	if frameID == 0 {
+		return
+	}
+	if services, ok := h.window.(frameMetricsHostServices); ok {
+		services.RecordFramePhase(frameID, phase, duration)
+	}
+}
+
+func (h *Host) recordFrameCounts(frameID uint64, nodes, commands, accessibilityNodes int) {
+	if frameID == 0 {
+		return
+	}
+	if services, ok := h.window.(frameMetricsHostServices); ok {
+		services.RecordFrameCounts(frameID, nodes, commands, accessibilityNodes)
+	}
 }
 
 // runPostFrameCallbacks executes retained lifecycle work after the current node tree is addressable.
@@ -201,7 +308,7 @@ func (h *Host) Dispose() {
 	h.identities = map[string]woxui.AccessibilityNodeID{}
 }
 
-func (h *Host) assignIdentities(current *node, parent *node, parentPath string, index int, previous, identities map[string]woxui.AccessibilityNodeID, nodes map[woxui.AccessibilityNodeID]*node, diagnostics *[]string) {
+func (h *Host) assignIdentities(current *node, parent *node, parentPath string, index int, previous, identities map[string]woxui.AccessibilityNodeID, nodes map[woxui.AccessibilityNodeID]*node, diagnostics *[]string, collectors []*boundaryCache) {
 	if current == nil {
 		return
 	}
@@ -216,6 +323,30 @@ func (h *Host) assignIdentities(current *node, parent *node, parentPath string, 
 		segment = fmt.Sprintf("%s{%s}", kind, current.key)
 	}
 	path := parentPath + "/" + segment
+	cache := current.boundary
+	if cache != nil && cache.hit && cache.identityValid && cache.identityRootPath == path {
+		cache.identityReuses++
+		*diagnostics = append(*diagnostics, cache.identityDiagnostics...)
+		for entryIndex, entry := range cache.identityEntries {
+			entryParent := entry.parent
+			if entryIndex == 0 {
+				entryParent = parent
+			}
+			entry.node.parent = entryParent
+			entry.node.id = entry.id
+			identities[entry.path] = entry.id
+			nodes[entry.id] = entry.node
+			for _, collector := range collectors {
+				collector.identityEntries = append(collector.identityEntries, boundaryIdentityEntry{path: entry.path, node: entry.node, parent: entryParent, id: entry.id})
+			}
+		}
+		return
+	}
+	diagnosticStart := len(*diagnostics)
+	if cache != nil {
+		cache.identityEntries = cache.identityEntries[:0]
+		collectors = append(collectors, cache)
+	}
 	if id, ok := previous[path]; ok {
 		current.id = id
 	} else {
@@ -224,6 +355,10 @@ func (h *Host) assignIdentities(current *node, parent *node, parentPath string, 
 	}
 	identities[path] = current.id
 	nodes[current.id] = current
+	entry := boundaryIdentityEntry{path: path, node: current, parent: parent, id: current.id}
+	for _, collector := range collectors {
+		collector.identityEntries = append(collector.identityEntries, entry)
+	}
 
 	siblingKeys := map[string]int{}
 	for childIndex, child := range current.children {
@@ -240,7 +375,12 @@ func (h *Host) assignIdentities(current *node, parent *node, parentPath string, 
 				siblingKeys[identity] = childIndex
 			}
 		}
-		h.assignIdentities(child, current, childPath, childIndex, previous, identities, nodes, diagnostics)
+		h.assignIdentities(child, current, childPath, childIndex, previous, identities, nodes, diagnostics, collectors)
+	}
+	if cache != nil {
+		cache.identityRootPath = path
+		cache.identityDiagnostics = append(cache.identityDiagnostics[:0], (*diagnostics)[diagnosticStart:]...)
+		cache.identityValid = true
 	}
 }
 
@@ -854,11 +994,8 @@ func (h *Host) scheduleCaretBlinkLocked() {
 		}
 		h.caretVisible = !h.caretVisible
 		h.caretBlinkTimer = nil
-		window := h.window
 		h.caretBlinkMu.Unlock()
-		if window != nil {
-			_ = window.Invalidate()
-		}
+		h.invalidateCaret()
 	})
 }
 
@@ -877,10 +1014,9 @@ func (h *Host) resetCaretBlink() {
 		h.caretBlinkTimer = nil
 	}
 	h.scheduleCaretBlinkLocked()
-	window := h.window
 	h.caretBlinkMu.Unlock()
-	if wasHidden && window != nil {
-		_ = window.Invalidate()
+	if wasHidden {
+		h.invalidateCaret()
 	}
 }
 
@@ -987,11 +1123,57 @@ func (h *Host) buildAccessibilityTree(diagnostics []string) (woxui.Accessibility
 	nodes := []woxui.AccessibilityNode{}
 	indexByID := map[woxui.AccessibilityNodeID]int{}
 	automationIDs := map[string]woxui.AccessibilityNodeID{}
+	appendNode := func(nativeNode woxui.AccessibilityNode) {
+		if nativeNode.AutomationID != "" {
+			if previous, exists := automationIDs[nativeNode.AutomationID]; exists {
+				diagnostics = append(diagnostics, fmt.Sprintf("duplicate automation id %q on nodes %d and %d", nativeNode.AutomationID, previous, nativeNode.ID))
+			} else {
+				automationIDs[nativeNode.AutomationID] = nativeNode.ID
+			}
+		}
+		if (nativeNode.Focusable || len(nativeNode.Actions) > 0) && (nativeNode.Role == "" || strings.TrimSpace(nativeNode.Label) == "" || nativeNode.AutomationID == "") {
+			diagnostics = append(diagnostics, fmt.Sprintf("interactive node %d requires role, label, and automation id", nativeNode.ID))
+		}
+		indexByID[nativeNode.ID] = len(nodes)
+		nodes = append(nodes, nativeNode)
+		if nativeNode.ParentID != 0 {
+			if parentIndex, found := indexByID[nativeNode.ParentID]; found {
+				nodes[parentIndex].Children = append(nodes[parentIndex].Children, nativeNode.ID)
+			}
+		}
+	}
 	var visit func(current *node, semanticParent woxui.AccessibilityNodeID)
 	visit = func(current *node, semanticParent woxui.AccessibilityNodeID) {
 		if current == nil {
 			return
 		}
+		cache := current.boundary
+		if cache != nil && cache.hit && cache.a11yValid && cache.a11yRootID == current.id {
+			cache.a11yReuses++
+			rootIDs := make(map[woxui.AccessibilityNodeID]struct{}, len(cache.a11yRootIDs))
+			for _, id := range cache.a11yRootIDs {
+				rootIDs[id] = struct{}{}
+			}
+			deltaX := current.bounds.X - cache.a11yOrigin.X
+			deltaY := current.bounds.Y - cache.a11yOrigin.Y
+			for _, cachedNode := range cache.a11yNodes {
+				nativeNode := cachedNode
+				nativeNode.Children = nil
+				nativeNode.Actions = append([]woxui.AccessibilityAction(nil), cachedNode.Actions...)
+				if _, root := rootIDs[nativeNode.ID]; root {
+					nativeNode.ParentID = semanticParent
+				}
+				nativeNode.Bounds.X += deltaX
+				nativeNode.Bounds.Y += deltaY
+				currentNode := h.nodes[nativeNode.ID]
+				nativeNode.Focusable = currentNode != nil && h.isFocusable(currentNode)
+				nativeNode.Focused = nativeNode.ID == h.focused
+				nativeNode.Actions = accessibilityActionsForFocusability(nativeNode.Actions, nativeNode.Focusable)
+				appendNode(nativeNode)
+			}
+			return
+		}
+		cacheStart := len(nodes)
 		nextParent := semanticParent
 		if current.semantic != nil && !current.semantic.hidden {
 			semantic := current.semantic
@@ -1024,26 +1206,18 @@ func (h *Host) buildAccessibilityTree(diagnostics []string) (woxui.Accessibility
 				Protected:      semantic.protected,
 				NativeBoundary: semantic.nativeBoundary,
 			}
-			if nativeNode.AutomationID != "" {
-				if previous, exists := automationIDs[nativeNode.AutomationID]; exists {
-					diagnostics = append(diagnostics, fmt.Sprintf("duplicate automation id %q on nodes %d and %d", nativeNode.AutomationID, previous, nativeNode.ID))
-				} else {
-					automationIDs[nativeNode.AutomationID] = nativeNode.ID
-				}
-			}
-			if (nativeNode.Focusable || len(nativeNode.Actions) > 0) && (nativeNode.Role == "" || strings.TrimSpace(nativeNode.Label) == "" || nativeNode.AutomationID == "") {
-				diagnostics = append(diagnostics, fmt.Sprintf("interactive node %d requires role, label, and automation id", nativeNode.ID))
-			}
-			indexByID[nativeNode.ID] = len(nodes)
-			nodes = append(nodes, nativeNode)
-			if semanticParent != 0 {
-				parentIndex := indexByID[semanticParent]
-				nodes[parentIndex].Children = append(nodes[parentIndex].Children, nativeNode.ID)
-			}
+			appendNode(nativeNode)
 			nextParent = nativeNode.ID
 		}
 		for _, child := range current.children {
 			visit(child, nextParent)
+		}
+		if cache != nil {
+			cache.a11yOrigin = woxui.Point{X: current.bounds.X, Y: current.bounds.Y}
+			cache.a11yRootID = current.id
+			cache.a11yNodes = cloneAccessibilityNodes(nodes[cacheStart:])
+			cache.a11yRootIDs = accessibilitySegmentRootIDs(cache.a11yNodes)
+			cache.a11yValid = true
 		}
 	}
 	visit(h.root, 0)
@@ -1057,6 +1231,42 @@ func (h *Host) buildAccessibilityTree(diagnostics []string) (woxui.Accessibility
 		h.reportDiagnostic(diagnostic)
 	}
 	return woxui.AccessibilityTree{Generation: h.generation, RootIDs: roots, Nodes: nodes}, diagnostics
+}
+
+func accessibilityActionsForFocusability(actions []woxui.AccessibilityAction, focusable bool) []woxui.AccessibilityAction {
+	result := actions[:0]
+	for _, action := range actions {
+		if action != woxui.AccessibilityActionFocus {
+			result = append(result, action)
+		}
+	}
+	if focusable {
+		result = append(result, woxui.AccessibilityActionFocus)
+	}
+	return result
+}
+
+func cloneAccessibilityNodes(nodes []woxui.AccessibilityNode) []woxui.AccessibilityNode {
+	clone := append([]woxui.AccessibilityNode(nil), nodes...)
+	for index := range clone {
+		clone[index].Children = append([]woxui.AccessibilityNodeID(nil), nodes[index].Children...)
+		clone[index].Actions = append([]woxui.AccessibilityAction(nil), nodes[index].Actions...)
+	}
+	return clone
+}
+
+func accessibilitySegmentRootIDs(nodes []woxui.AccessibilityNode) []woxui.AccessibilityNodeID {
+	ids := make(map[woxui.AccessibilityNodeID]struct{}, len(nodes))
+	for _, node := range nodes {
+		ids[node.ID] = struct{}{}
+	}
+	roots := make([]woxui.AccessibilityNodeID, 0, 1)
+	for _, node := range nodes {
+		if _, internal := ids[node.ParentID]; !internal {
+			roots = append(roots, node.ID)
+		}
+	}
+	return roots
 }
 
 func containsAction(actions []woxui.AccessibilityAction, expected woxui.AccessibilityAction) bool {
@@ -1168,7 +1378,60 @@ func (h *Host) reportDiagnostic(message string) {
 }
 
 func (h *Host) invalidate() {
+	h.damageMu.Lock()
+	h.fullDamage = true
+	h.pendingDamage = woxui.Rect{}
+	h.damageMu.Unlock()
 	if h.window != nil {
 		_ = h.window.Invalidate()
 	}
+}
+
+// invalidateRect accumulates a logical redraw region until the native surface requests a frame.
+func (h *Host) invalidateRect(rect woxui.Rect) {
+	if rect.Width <= 0 || rect.Height <= 0 {
+		h.invalidate()
+		return
+	}
+	h.damageMu.Lock()
+	if !h.fullDamage {
+		h.pendingDamage = unionDamageRects(h.pendingDamage, rect)
+	}
+	h.damageMu.Unlock()
+	if h.window != nil {
+		_ = h.window.InvalidateRect(rect)
+	}
+}
+
+// consumeFrameDamage combines platform damage with retained invalidations and resets the pending region.
+func (h *Host) consumeFrameDamage(native woxui.Rect, size woxui.Size) woxui.Rect {
+	h.damageMu.Lock()
+	pending := h.pendingDamage
+	full := h.fullDamage
+	h.pendingDamage = woxui.Rect{}
+	h.fullDamage = false
+	h.damageMu.Unlock()
+	// A zero native region is the portable contract for a complete frame. This also keeps
+	// platforms without persistent back buffers correct while their damage path is disabled.
+	if native.Width <= 0 || native.Height <= 0 || full {
+		return woxui.Rect{}
+	}
+	return clipDamageRect(unionDamageRects(native, pending), size)
+}
+
+func (h *Host) setCaretDamage(rect woxui.Rect) {
+	h.damageMu.Lock()
+	h.caretDamage = rect
+	h.damageMu.Unlock()
+}
+
+func (h *Host) invalidateCaret() {
+	h.damageMu.Lock()
+	damage := h.caretDamage
+	h.damageMu.Unlock()
+	if damage.Width > 0 && damage.Height > 0 {
+		h.invalidateRect(damage)
+		return
+	}
+	h.invalidate()
 }

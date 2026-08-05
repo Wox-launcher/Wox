@@ -72,6 +72,7 @@ type View interface {
 	UpdateResult(ctx context.Context, result plugin.UpdatableResult) (bool, error)
 	PushResults(ctx context.Context, payload plugin.PushResultsPayload) (bool, error)
 	ToggleRecordingMode(ctx context.Context) (bool, error)
+	ToggleRepaintDebugMode(ctx context.Context) (string, error)
 	PickFiles(ctx context.Context, params common.PickFilesParams) ([]string, error)
 	CaptureScreenshot(ctx context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error)
 	WriteClipboardImageFile(ctx context.Context, filePath string) error

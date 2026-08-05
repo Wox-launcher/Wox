@@ -12,18 +12,25 @@ import (
 // LauncherGridResult contains one resolved grid result and its controller callbacks.
 type LauncherGridResult struct {
 	ID         string
+	Revision   uint64
 	Title      string
 	Group      bool
 	Selected   bool
 	Hovered    bool
 	Icon       *woxui.Image
-	OnHover    func(bool)
-	OnSelect   func()
-	OnActivate func()
+	OnHover    func(bool) `boundary:"stable"`
+	OnSelect   func()     `boundary:"stable"`
+	OnActivate func()     `boundary:"stable"`
+}
+
+// Equal compares every visual dependency for one prepared grid result.
+func (r LauncherGridResult) Equal(other LauncherGridResult) bool {
+	return r.ID == other.ID && r.Revision == other.Revision && r.Title == other.Title && r.Group == other.Group && r.Selected == other.Selected && r.Hovered == other.Hovered && r.Icon == other.Icon
 }
 
 // LauncherGridProps contains the normalized grid geometry and resolved result visuals.
 type LauncherGridProps struct {
+	Revision          uint64
 	Width             float32
 	Height            float32
 	ContentHeight     float32
@@ -40,8 +47,48 @@ type LauncherGridProps struct {
 	TitleHeight       float32
 	DensityScale      float32
 	Theme             woxcomponent.Theme
+	ScrollDetached    bool
 	Results           []LauncherGridResult
-	OnScroll          func(float32)
+	OnScroll          func(float32) `boundary:"stable"`
+}
+
+// Equal compares every render dependency for the grid result section.
+func (p LauncherGridProps) Equal(other LauncherGridProps) bool {
+	if p.Revision != other.Revision || p.Width != other.Width || p.Height != other.Height || p.ContentHeight != other.ContentHeight || p.Offset != other.Offset || p.Columns != other.Columns || p.ItemPadding != other.ItemPadding || p.ItemMargin != other.ItemMargin || p.ShowTitle != other.ShowTitle || p.CellWidth != other.CellWidth || p.CellHeight != other.CellHeight || p.VisualWidth != other.VisualWidth || p.VisualHeight != other.VisualHeight || p.GroupHeaderHeight != other.GroupHeaderHeight || p.TitleHeight != other.TitleHeight || p.DensityScale != other.DensityScale || p.Theme != other.Theme || p.ScrollDetached != other.ScrollDetached || len(p.Results) != len(other.Results) {
+		return false
+	}
+	for index := range p.Results {
+		if !p.Results[index].Equal(other.Results[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+type launcherGridResultProps struct {
+	Result       LauncherGridResult
+	ItemPadding  float32
+	ItemMargin   float32
+	ShowTitle    bool
+	CellWidth    float32
+	CellHeight   float32
+	VisualWidth  float32
+	VisualHeight float32
+	TitleHeight  float32
+	DensityScale float32
+	Theme        woxcomponent.Theme
+}
+
+func (p launcherGridResultProps) Equal(other launcherGridResultProps) bool {
+	return p.Result.Equal(other.Result) && p.ItemPadding == other.ItemPadding && p.ItemMargin == other.ItemMargin && p.ShowTitle == other.ShowTitle && p.CellWidth == other.CellWidth && p.CellHeight == other.CellHeight && p.VisualWidth == other.VisualWidth && p.VisualHeight == other.VisualHeight && p.TitleHeight == other.TitleHeight && p.DensityScale == other.DensityScale && p.Theme == other.Theme
+}
+
+// LauncherGridBoundary retains the complete grid section when its prepared props are unchanged.
+func LauncherGridBoundary(props LauncherGridProps) woxwidget.Widget {
+	return woxwidget.Boundary[LauncherGridProps]{
+		Key: "launcher-grid-boundary", Label: "results:grid", Props: props,
+		Build: func(props LauncherGridProps) woxwidget.Widget { return LauncherGridView(props) },
+	}
 }
 
 // LauncherGridView builds wrapped grid rows and group headers.
@@ -59,7 +106,23 @@ func LauncherGridView(props LauncherGridProps) woxwidget.Widget {
 		}
 		cells := make([]woxwidget.Widget, 0, props.Columns)
 		for len(cells) < props.Columns && index < len(props.Results) && !props.Results[index].Group {
-			cells = append(cells, launcherGridResultView(props.Results[index], props))
+			result := props.Results[index]
+			cellProps := launcherGridResultProps{
+				Result: result, ItemPadding: props.ItemPadding, ItemMargin: props.ItemMargin, ShowTitle: props.ShowTitle,
+				CellWidth: props.CellWidth, CellHeight: props.CellHeight, VisualWidth: props.VisualWidth, VisualHeight: props.VisualHeight,
+				TitleHeight: props.TitleHeight, DensityScale: props.DensityScale, Theme: props.Theme,
+			}
+			cells = append(cells, woxwidget.Boundary[launcherGridResultProps]{
+				Key: woxwidget.Key("launcher-grid-result-boundary-" + result.ID), Label: "grid-result:" + result.ID, Props: cellProps,
+				Build: func(cellProps launcherGridResultProps) woxwidget.Widget {
+					return launcherGridResultView(cellProps.Result, LauncherGridProps{
+						Revision:    cellProps.Result.Revision,
+						ItemPadding: cellProps.ItemPadding, ItemMargin: cellProps.ItemMargin, ShowTitle: cellProps.ShowTitle,
+						CellWidth: cellProps.CellWidth, CellHeight: cellProps.CellHeight, VisualWidth: cellProps.VisualWidth, VisualHeight: cellProps.VisualHeight,
+						TitleHeight: cellProps.TitleHeight, DensityScale: cellProps.DensityScale, Theme: cellProps.Theme,
+					})
+				},
+			})
 			index++
 		}
 		for len(cells) < props.Columns {

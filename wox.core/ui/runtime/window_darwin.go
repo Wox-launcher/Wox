@@ -49,6 +49,9 @@ type platformWindow struct {
 	renderDone    chan struct{}
 	renderStopped bool
 	pendingFrame  *darwinRenderFrame
+	pendingDamage Rect
+	damagePending bool
+	fullDamage    bool
 }
 
 type darwinRenderFrame struct {
@@ -170,8 +173,12 @@ func (w *platformWindow) hide() error {
 		return errors.New("woxui: failed to hide macOS window")
 	}
 	w.mu.Lock()
+	dropped := w.pendingFrame
 	w.pendingFrame = nil
 	w.mu.Unlock()
+	if dropped != nil && w.options.frameMetrics != nil {
+		w.options.frameMetrics.dropFrame(dropped.displayList.frameID)
+	}
 	return nil
 }
 
@@ -408,6 +415,9 @@ func (w *platformWindow) invalidate() error {
 		w.mu.Unlock()
 		return err
 	}
+	w.fullDamage = true
+	w.pendingDamage = Rect{}
+	w.damagePending = true
 	w.mu.Unlock()
 
 	native, err := w.openNative()
@@ -419,6 +429,30 @@ func (w *platformWindow) invalidate() error {
 	}
 	return nil
 }
+
+func (w *platformWindow) invalidateRect(rect Rect) error {
+	w.mu.Lock()
+	if w.renderErr != nil {
+		err := w.renderErr
+		w.mu.Unlock()
+		return err
+	}
+	if !w.fullDamage {
+		w.pendingDamage = unionRects(w.pendingDamage, rect)
+	}
+	w.damagePending = true
+	w.mu.Unlock()
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_invalidate(native) != 0 {
+		return errors.New("woxui: failed to invalidate macOS window rectangle")
+	}
+	return nil
+}
+
+func (*platformWindow) displayListDamageCullingEnabled() bool { return false }
 
 // setTextInputState updates NSTextInputClient activation and candidate geometry on the AppKit thread.
 func (w *platformWindow) setTextInputState(state TextInputState) error {
@@ -558,7 +592,11 @@ func (w *platformWindow) stopRenderWorkerLocked() {
 		return
 	}
 	w.renderStopped = true
+	dropped := w.pendingFrame
 	w.pendingFrame = nil
+	if dropped != nil && w.options.frameMetrics != nil {
+		w.options.frameMetrics.dropFrame(dropped.displayList.frameID)
+	}
 	close(w.renderStop)
 }
 
@@ -625,11 +663,21 @@ func (w *platformWindow) queueFrame(frame *darwinRenderFrame) {
 	w.mu.Lock()
 	if w.closed || w.closing || w.renderStopped {
 		w.mu.Unlock()
+		if w.options.frameMetrics != nil {
+			w.options.frameMetrics.dropFrame(frame.displayList.frameID)
+		}
 		return
+	}
+	replaced := w.pendingFrame
+	if replaced != nil {
+		frame.frame.Damage = mergeFrameDamage(frame.frame.Damage, replaced.frame.Damage)
 	}
 	w.pendingFrame = frame
 	wake := w.renderWake
 	w.mu.Unlock()
+	if replaced != nil && w.options.frameMetrics != nil {
+		w.options.frameMetrics.dropFrame(replaced.displayList.frameID)
+	}
 	signalRenderWake(wake)
 }
 
@@ -642,8 +690,12 @@ func signalRenderWake(wake chan struct{}) {
 }
 
 func (w *platformWindow) drawFrame(frame FrameInfo) {
+	frame.Damage = w.consumePendingDamage()
 	frameStart := time.Now()
 	displayList := &DisplayList{}
+	if w.options.frameMetrics != nil {
+		displayList.frameID = w.options.frameMetrics.beginFrame()
+	}
 	if w.options.OnFrame != nil {
 		w.options.OnFrame(displayList, frame)
 	}
@@ -656,8 +708,12 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 
 // drawFrameSync keeps resize and capture frames ordered with their native window operation.
 func (w *platformWindow) drawFrameSync(frame FrameInfo, transactional bool) {
+	frame.Damage = w.consumePendingDamage()
 	frameStart := time.Now()
 	displayList := &DisplayList{}
+	if w.options.frameMetrics != nil {
+		displayList.frameID = w.options.frameMetrics.beginFrame()
+	}
 	if w.options.OnFrame != nil {
 		w.options.OnFrame(displayList, frame)
 	}
@@ -665,11 +721,40 @@ func (w *platformWindow) drawFrameSync(frame FrameInfo, transactional bool) {
 	w.mu.Lock()
 	fontFamily := w.fontFamily
 	// The synchronous frame is newer than every ordinary frame still waiting to encode.
+	replaced := w.pendingFrame
 	w.pendingFrame = nil
 	wake := w.renderWake
 	w.mu.Unlock()
+	if replaced != nil {
+		frame.Damage = mergeFrameDamage(frame.Damage, replaced.frame.Damage)
+	}
+	if replaced != nil && w.options.frameMetrics != nil {
+		w.options.frameMetrics.dropFrame(replaced.displayList.frameID)
+	}
 	w.encodeFrameLocked(&darwinRenderFrame{frame: frame, displayList: displayList, fontFamily: fontFamily, buildCost: buildCost}, transactional)
 	signalRenderWake(wake)
+}
+
+func (w *platformWindow) consumePendingDamage() Rect {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.damagePending || w.fullDamage {
+		w.pendingDamage = Rect{}
+		w.damagePending = false
+		w.fullDamage = false
+		return Rect{}
+	}
+	damage := w.pendingDamage
+	w.pendingDamage = Rect{}
+	w.damagePending = false
+	return damage
+}
+
+func mergeFrameDamage(current, replaced Rect) Rect {
+	if current.Width <= 0 || current.Height <= 0 || replaced.Width <= 0 || replaced.Height <= 0 {
+		return Rect{}
+	}
+	return unionRects(current, replaced)
 }
 
 // encodeFrame records and submits one display list while holding exclusive renderer ownership.
@@ -681,8 +766,12 @@ func (w *platformWindow) encodeFrame(renderFrame *darwinRenderFrame, transaction
 
 // encodeFrameLocked records a frame for callers that already own the renderer transaction.
 func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, transactional bool) {
+	nativeStart := time.Now()
 	native, err := w.openNative()
 	if err != nil {
+		if w.options.frameMetrics != nil {
+			w.options.frameMetrics.dropFrame(renderFrame.displayList.frameID)
+		}
 		return
 	}
 	pool := C.wox_darwin_autorelease_pool_push()
@@ -690,6 +779,7 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	frameStart := time.Now()
 	frame := renderFrame.frame
 	displayList := renderFrame.displayList
+	nativeDamage := displayList.NativeDamage()
 	transactionalFrame := C.int32_t(0)
 	if transactional {
 		transactionalFrame = 1
@@ -702,6 +792,10 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 		C.float(frame.Size.Width),
 		C.float(frame.Size.Height),
 		C.float(frame.Scale),
+		C.float(nativeDamage.X),
+		C.float(nativeDamage.Y),
+		C.float(nativeDamage.Width),
+		C.float(nativeDamage.Height),
 		C.uint8_t(displayList.clearColor.R),
 		C.uint8_t(displayList.clearColor.G),
 		C.uint8_t(displayList.clearColor.B),
@@ -709,9 +803,15 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	)
 	beginCost := time.Since(beginStart)
 	if result > 0 {
+		if w.options.frameMetrics != nil {
+			w.options.frameMetrics.dropFrame(displayList.frameID)
+		}
 		return
 	}
 	if result < 0 {
+		if w.options.frameMetrics != nil {
+			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
+		}
 		w.recordRenderError("begin macOS frame", result)
 		return
 	}
@@ -806,6 +906,9 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 		}
 		if result != 0 {
 			_ = C.wox_darwin_window_end_frame(native, transactionalFrame)
+			if w.options.frameMetrics != nil {
+				w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
+			}
 			w.recordRenderError("encode macOS frame", result)
 			return
 		}
@@ -813,10 +916,14 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	encodeCost := time.Since(encodeStart)
 
 	endStart := time.Now()
-	if result = C.wox_darwin_window_end_frame(native, transactionalFrame); result != 0 {
+	result = C.wox_darwin_window_end_frame(native, transactionalFrame)
+	if result != 0 {
 		w.recordRenderError("present macOS frame", result)
 	}
 	endCost := time.Since(endStart)
+	if w.options.frameMetrics != nil {
+		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart)-endCost, endCost, result == 0)
+	}
 	totalCost := renderFrame.buildCost + time.Since(frameStart)
 	if totalCost >= 16*time.Millisecond {
 		log.Printf("darwin frame timing: totalUs=%d buildUs=%d beginUs=%d encodeUs=%d textUs=%d imageUs=%d endUs=%d commands=%d text=%d image=%d size=%.0fx%.0f scale=%.2f transactional=%t",

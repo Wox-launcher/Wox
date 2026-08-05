@@ -986,6 +986,19 @@ func (m *Manager) ToggleRecordingMode(ctx context.Context) (bool, error) {
 	return impl.ToggleRecordingMode(ctx)
 }
 
+// ToggleRepaintDebugMode cycles partial-refresh visualization in development builds.
+func (m *Manager) ToggleRepaintDebugMode(ctx context.Context) (string, error) {
+	if !util.IsDev() {
+		return "", errors.New("repaint debug is only available in dev builds")
+	}
+
+	impl, ok := m.GetUI(ctx).(*uiImpl)
+	if !ok {
+		return "", errors.New("UI does not support repaint debug")
+	}
+	return impl.ToggleRepaintDebugMode(ctx)
+}
+
 // called after UI is ready to show, and will execute only once
 func (m *Manager) PostUIReady(ctx context.Context) {
 	logger.Info(ctx, "app is ready to show")

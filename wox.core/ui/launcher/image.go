@@ -266,6 +266,7 @@ func (a *App) storeImage(key string, image *woxui.Image) {
 			a.evictOldestImage(key)
 		}
 		a.images[key] = image
+		a.imagesRevision.Add(1)
 		delete(a.imageErrors, key)
 		a.invalidateAllWindows()
 	}); err != nil {

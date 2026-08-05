@@ -120,6 +120,23 @@ func (c *Client) Snapshot(ctx context.Context) (woxwidget.AutomationSnapshot, er
 	return call[woxwidget.AutomationSnapshot](ctx, c, "semantics.snapshot", nil)
 }
 
+// FrameMetrics returns correlated Host and native frame timings for the active window.
+func (c *Client) FrameMetrics(ctx context.Context) (woxui.FrameMetricsSnapshot, error) {
+	return call[woxui.FrameMetricsSnapshot](ctx, c, "render.metrics", nil)
+}
+
+// ResetFrameMetrics starts a fresh frame measurement interval for the active window.
+func (c *Client) ResetFrameMetrics(ctx context.Context) error {
+	_, err := call[bool](ctx, c, "render.metrics.reset", nil)
+	return err
+}
+
+// SetRepaintDebugMode changes incremental-rendering diagnostics in the active surface.
+func (c *Client) SetRepaintDebugMode(ctx context.Context, mode woxwidget.RepaintDebugMode) error {
+	_, err := call[bool](ctx, c, "render.repaint_debug", map[string]any{"mode": mode})
+	return err
+}
+
 // WaitForChange waits for a generation newer than afterGeneration.
 func (c *Client) WaitForChange(ctx context.Context, afterGeneration uint64) (woxwidget.AutomationSnapshot, error) {
 	deadline, hasDeadline := ctx.Deadline()

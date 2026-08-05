@@ -72,102 +72,109 @@ type App struct {
 	canRecallHistory  bool
 	editor            *woxui.TextEditor
 	// selectionAnchor holds the rune offset captured at query drag-selection start so extend updates only the focus.
-	selectionAnchor        int
-	results                []queryResult
-	resultsQueryID         string
-	queryComplete          bool
-	queryTransitionTimer   *time.Timer
-	queryLoading           bool
-	queryLoadingTimer      *time.Timer
-	queryResizeTimer       *time.Timer
-	queryResizeRevision    uint64
-	webViewTooltipRevision atomic.Uint64
-	previewTooltipRevision atomic.Uint64
-	selected               int
-	hoveredResult          int
-	pendingSelection       *pendingResultSelection
-	resultScroll           scrollController
-	resultScrollDetached   bool
-	layout                 queryLayout
-	refinements            []queryRefinement
-	refinementOpen         bool
-	refinementScope        string
-	completionHint         *queryCompletionHint
-	toolbarMsg             *toolbarMessage
-	toolbarRevision        uint64
-	form                   *formState
-	requirementForm        *requirementFormState
-	launcherTableEditor    *formTableEditorState
-	triggerConflict        *triggerConflictPreviewState
-	chatPreview            *chatPreviewState
-	webViewPreviewData     string
-	webViewPreviewError    string
-	chatFullscreen         bool
-	terminalFullscreen     bool
-	actionPanel            bool
-	actionSelected         int
-	actionSelectionKey     string
-	actionFilter           *woxui.TextEditor
-	visible                bool
-	show                   showAppParams
-	settingsOpen           bool
-	onboardingOpen         bool
-	onboardingStep         int
-	onboardingChoice       string
-	onboardingChoiceAnchor woxui.Rect
-	onboardingPermission   contract.MacOSPermissionStatus
-	onboardingLoading      bool
-	onboardingError        string
-	settingsCtx            settingWindowContext
-	settingTab             string
-	settingRow             int
-	settingSaving          bool
-	settingFlash           string
-	settingFlashTimer      *time.Timer
-	cloudPlanTooltip       *cloudPlanTooltipState
-	settingsDemo           *settingsDemoState
-	settingsDemoRevision   atomic.Uint64
-	choiceTooltipRevision  atomic.Uint64
-	settingsTableEditor    *formTableEditorState
-	glanceItem             *glanceItem
-	glanceLoading          bool
-	glanceRevision         uint64
-	glanceTooltipRevision  atomic.Uint64
-	glanceTimer            *time.Timer
+	selectionAnchor            int
+	results                    []queryResult
+	resultRevision             uint64
+	resultsSectionRevision     uint64
+	resultsQueryID             string
+	queryComplete              bool
+	queryTransitionTimer       *time.Timer
+	queryLoading               bool
+	queryLoadingTimer          *time.Timer
+	queryResizeTimer           *time.Timer
+	queryResizeRevision        uint64
+	webViewTooltipRevision     atomic.Uint64
+	previewTooltipRevision     atomic.Uint64
+	selected                   int
+	hoveredResult              int
+	pendingSelection           *pendingResultSelection
+	resultScroll               scrollController
+	resultScrollDetached       bool
+	layout                     queryLayout
+	refinements                []queryRefinement
+	refinementsSectionRevision uint64
+	refinementOpen             bool
+	refinementScope            string
+	completionHint             *queryCompletionHint
+	toolbarMsg                 *toolbarMessage
+	toolbarRevision            uint64
+	form                       *formState
+	requirementForm            *requirementFormState
+	launcherTableEditor        *formTableEditorState
+	triggerConflict            *triggerConflictPreviewState
+	chatPreview                *chatPreviewState
+	webViewPreviewData         string
+	webViewPreviewError        string
+	chatFullscreen             bool
+	terminalFullscreen         bool
+	actionPanel                bool
+	actionSelected             int
+	actionSelectionKey         string
+	actionsSectionRevision     uint64
+	actionSectionState         actionSectionRevisionState
+	actionFilter               *woxui.TextEditor
+	visible                    bool
+	show                       showAppParams
+	settingsOpen               bool
+	onboardingOpen             bool
+	onboardingStep             int
+	onboardingChoice           string
+	onboardingChoiceAnchor     woxui.Rect
+	onboardingPermission       contract.MacOSPermissionStatus
+	onboardingLoading          bool
+	onboardingError            string
+	settingsCtx                settingWindowContext
+	settingTab                 string
+	settingRow                 int
+	settingSaving              bool
+	settingFlash               string
+	settingFlashTimer          *time.Timer
+	cloudPlanTooltip           *cloudPlanTooltipState
+	settingsDemo               *settingsDemoState
+	settingsDemoRevision       atomic.Uint64
+	choiceTooltipRevision      atomic.Uint64
+	settingsTableEditor        *formTableEditorState
+	glanceItem                 *glanceItem
+	glanceLoading              bool
+	glanceRevision             uint64
+	glanceTooltipRevision      atomic.Uint64
+	glanceTimer                *time.Timer
 	// Settings controllers (zero App back-dependency; populated by newApp).
-	generalSettings    *generalSettingsController
-	appearanceSettings *appearanceSettingsController
-	networkSettings    *networkSettingsController
-	dataSettings       *dataSettingsController
-	cloudSettings      *cloudSettingsController
-	runtimeSettings    *runtimeSettingsController
-	themeSettings      *themeSettingsController
-	pluginSettings     *pluginSettingsController
-	aiSettings         *aiSettingsController
-	usageSettings      *usageSettingsController
-	updateSettings     *updateSettingsController
-	privacySettings    *privacySettingsController
-	aboutSettings      *aboutSettingsController
-	hotkeySettings     *hotkeySettingsController
-	settingsSearch     *settingsSearchController
-	sharedEdit         *sharedEditState
-	palette            uiPalette
-	densityMetrics     launcherDensityMetrics
-	translations       map[string]string
-	images             map[string]*woxui.Image
-	imageRequested     map[string]string
-	imageLastUsed      map[string]uint64
-	imageUseSequence   uint64
-	imageErrors        map[string]string
-	lottieImages       *lottieImageCache
-	remotePreviews     map[string]queryPreview
-	previewRequests    map[string]bool
-	filePreviews       map[string]filePreviewContent
-	fileRequests       map[string]bool
-	mdDocs             map[string]woxcomponent.MarkdownDocument
-	previewLayouts     map[string]woxwidget.TextBlockLayout
-	dictationAudio     *dictationPreviewAudioState
-	terminalPreview    *terminalPreviewState
+	generalSettings      *generalSettingsController
+	appearanceSettings   *appearanceSettingsController
+	networkSettings      *networkSettingsController
+	dataSettings         *dataSettingsController
+	cloudSettings        *cloudSettingsController
+	runtimeSettings      *runtimeSettingsController
+	themeSettings        *themeSettingsController
+	pluginSettings       *pluginSettingsController
+	aiSettings           *aiSettingsController
+	usageSettings        *usageSettingsController
+	updateSettings       *updateSettingsController
+	privacySettings      *privacySettingsController
+	aboutSettings        *aboutSettingsController
+	hotkeySettings       *hotkeySettingsController
+	settingsSearch       *settingsSearchController
+	sharedEdit           *sharedEditState
+	palette              uiPalette
+	densityMetrics       launcherDensityMetrics
+	translations         map[string]string
+	translationsRevision atomic.Uint64
+	images               map[string]*woxui.Image
+	imagesRevision       atomic.Uint64
+	imageRequested       map[string]string
+	imageLastUsed        map[string]uint64
+	imageUseSequence     uint64
+	imageErrors          map[string]string
+	lottieImages         *lottieImageCache
+	remotePreviews       map[string]queryPreview
+	previewRequests      map[string]bool
+	filePreviews         map[string]filePreviewContent
+	fileRequests         map[string]bool
+	mdDocs               map[string]woxcomponent.MarkdownDocument
+	previewLayouts       map[string]woxwidget.TextBlockLayout
+	dictationAudio       *dictationPreviewAudioState
+	terminalPreview      *terminalPreviewState
 }
 
 // New creates a launcher whose typed core services are supplied by the process composition root.
@@ -577,6 +584,7 @@ func (a *App) setQuery(query plainQuery) {
 	a.resetQueryTransitionLocked()
 	a.resetQueryLoadingLocked()
 	a.results = nil
+	a.resultsSectionRevision++
 	a.resultsQueryID = ""
 	a.queryComplete = false
 	a.selected = -1
@@ -586,6 +594,7 @@ func (a *App) setQuery(query plainQuery) {
 	a.layout = queryLayout{}
 	a.stopGlanceLocked(true)
 	a.refinements = nil
+	a.refinementsSectionRevision++
 	a.refinementOpen = false
 	a.refinementScope = ""
 	a.completionHint = nil
@@ -642,6 +651,7 @@ func (a *App) requestMRU() error {
 		a.resetQueryTransitionLocked()
 		a.resetQueryLoadingLocked()
 		a.results = nil
+		a.resultsSectionRevision++
 		a.resultsQueryID = ""
 		a.queryComplete = false
 		a.selected = -1
@@ -652,6 +662,7 @@ func (a *App) requestMRU() error {
 		// MRU only replaces query results; the window-shown path owns the Glance refresh.
 		a.stopGlanceLocked(false)
 		a.refinements = nil
+		a.refinementsSectionRevision++
 		a.refinementOpen = false
 		a.refinementScope = ""
 		a.completionHint = nil
@@ -690,7 +701,12 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		a.resetQueryLoadingLocked()
 	}
 	a.resetQueryTransitionLocked()
+	for index := range results {
+		a.resultRevision++
+		results[index].Revision = a.resultRevision
+	}
 	a.results = results
+	a.resultsSectionRevision++
 	a.resultsQueryID = queryID
 	a.queryComplete = complete
 	a.hoveredResult = -1
@@ -1419,6 +1435,7 @@ type queryResult struct {
 	Tails    []resultTail   `json:"Tails"`
 	Actions  []resultAction `json:"Actions"`
 	IsGroup  bool           `json:"IsGroup"`
+	Revision uint64         `json:"-"`
 }
 
 type resultTail struct {

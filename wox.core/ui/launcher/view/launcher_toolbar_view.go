@@ -11,7 +11,20 @@ type LauncherToolbarAction struct {
 	ID           string
 	Label        string
 	HotkeyLabels []string
-	OnTap        func()
+	OnTap        func() `boundary:"stable"`
+}
+
+// Equal compares every visual dependency for one prepared toolbar action.
+func (a LauncherToolbarAction) Equal(other LauncherToolbarAction) bool {
+	if a.ID != other.ID || a.Label != other.Label || len(a.HotkeyLabels) != len(other.HotkeyLabels) {
+		return false
+	}
+	for index := range a.HotkeyLabels {
+		if a.HotkeyLabels[index] != other.HotkeyLabels[index] {
+			return false
+		}
+	}
+	return true
 }
 
 // LauncherToolbarProps contains the launcher status and available result actions.
@@ -26,6 +39,27 @@ type LauncherToolbarProps struct {
 	Icon          *woxui.Image
 	ProgressLabel string
 	Actions       []LauncherToolbarAction
+}
+
+// Equal compares every render dependency for the launcher toolbar section.
+func (p LauncherToolbarProps) Equal(other LauncherToolbarProps) bool {
+	if p.Width != other.Width || p.Height != other.Height || p.Padding != other.Padding || p.Theme != other.Theme || p.Window != other.Window || p.DensityScale != other.DensityScale || p.Label != other.Label || p.Icon != other.Icon || p.ProgressLabel != other.ProgressLabel || len(p.Actions) != len(other.Actions) {
+		return false
+	}
+	for index := range p.Actions {
+		if !p.Actions[index].Equal(other.Actions[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+// LauncherToolbarBoundary retains the toolbar while its prepared props are unchanged.
+func LauncherToolbarBoundary(props LauncherToolbarProps) woxwidget.Widget {
+	return woxwidget.Boundary[LauncherToolbarProps]{
+		Key: "launcher-toolbar-boundary", Label: "toolbar", Props: props,
+		Build: func(props LauncherToolbarProps) woxwidget.Widget { return LauncherToolbarView(props) },
+	}
 }
 
 type measuredLauncherToolbarAction struct {
