@@ -979,6 +979,14 @@ func woxGoDarwinStart(context C.uintptr_t) C.int32_t {
 	return 0
 }
 
+//export woxGoDarwinProtocolURL
+func woxGoDarwinProtocolURL(_ C.uintptr_t, rawURL *C.char) {
+	if rawURL == nil {
+		return
+	}
+	dispatchProtocolURL(C.GoString(rawURL))
+}
+
 //export woxGoDarwinCall
 func woxGoDarwinCall(context C.uintptr_t) {
 	cgo.Handle(context).Value().(func())()

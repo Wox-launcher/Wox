@@ -201,6 +201,9 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 			a.beginCloneFormTableRowDirect()
 		},
 		OnDeleteRow: func(rowIndex int) {
+			if rowIndex < 0 || rowIndex >= len(rows) || formTableSkillRowReadOnly(definition, rows[rowIndex]) {
+				return
+			}
 			openTable()
 			a.selectFormTableRow(rowIndex)
 			a.beginDeleteFormTableRowDirect()
@@ -269,20 +272,23 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 		return cell
 	}
 	if column.Type == "woxImage" {
+		cell.Text = ""
+		cell.IconSize = 24
 		encoded, _ := json.Marshal(row[column.Key])
 		var icon woxImage
 		if json.Unmarshal(encoded, &icon) == nil {
-			cell.Icon = a.imageFor(icon)
-			if icon.ImageType == "emoji" {
-				cell.Text = icon.ImageData
-			}
+			cell.Icon = a.imageForSize(icon, physicalImageSize(24, imageScale))
 		}
+		return cell
 	}
 	return cell
 }
 
 // buildFormTableOverlay maps table editor state into the shared modal view.
 func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+	if snapshot.skillAdd != nil {
+		return a.buildFormTableSkillAddDialog(snapshot.skillAdd, palette, width, height, imageScale)
+	}
 	if snapshot.deletePending >= 0 && snapshot.deleteDirect {
 		return a.buildFormTableDeleteDialog(palette, width, height)
 	}
@@ -307,11 +313,7 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 		if snapshot.status != "" {
 			statusHeight = 28
 		}
-		titleHeight := float32(0)
-		if snapshot.skillClone {
-			titleHeight = 32
-		}
-		panelHeight = max(float32(0), min(contentHeight+titleHeight+62+statusHeight+48, height-56))
+		panelHeight = max(float32(0), min(contentHeight+62+statusHeight+48, height-56))
 		if snapshot.definition.Value.Key == "QueryHotkeys" {
 			panelHeight = max(float32(0), min(float32(632), height-56))
 		}
@@ -333,6 +335,9 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 	}
 	if snapshot.choicePicker != nil {
 		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableChoicePicker(snapshot.choicePicker, palette, width, height)})
+	}
+	if snapshot.emojiPicker != nil {
+		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableEmojiPicker(snapshot.emojiPicker, palette, width, height)})
 	}
 	if snapshot.queryVariable != nil {
 		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableQueryVariablePicker(snapshot.queryVariable, palette, width, height, imageScale)})
@@ -421,16 +426,18 @@ func (a *App) buildFormTableList(snapshot *formTableEditorSnapshot, palette uiPa
 	canEdit := !snapshot.invalid && !snapshot.saving && snapshot.selected >= 0 && snapshot.definition.Value.Key != "AISkills" && !selectedReadOnly
 	canDelete := !snapshot.invalid && !snapshot.saving && snapshot.selected >= 0 && !selectedReadOnly
 	addLabel := "Add row"
-	showClone := snapshot.definition.Value.Key == "AISkills"
-	if showClone {
-		addLabel = "Add local"
+	onAdd := a.beginAddFormTableRow
+	if snapshot.definition.Value.Key == "AISkills" {
+		// The skills list shares Flutter's tabbed local/remote add dialog.
+		addLabel = a.translate("i18n:ui_ai_skill_add")
+		onAdd = a.openFormTableSkillAdd
 	}
 	return launcherview.FormTableList(launcherview.FormTableListProps{
 		Width: width, Height: height, Rows: rows, Selected: snapshot.selected,
 		Status: snapshot.status, StatusError: snapshot.invalid, AddLabel: addLabel, DeleteLabel: a.translate("i18n:ui_delete"), CloseLabel: a.translate("i18n:ui_close"),
-		CanAdd: !snapshot.invalid && !snapshot.saving, CanEdit: canEdit, CanDelete: canDelete, ShowClone: showClone, Theme: palette.componentTheme(),
+		CanAdd: !snapshot.invalid && !snapshot.saving, CanEdit: canEdit, CanDelete: canDelete, Theme: palette.componentTheme(),
 		OnSelect: a.selectFormTableRow,
-		OnAdd:    a.beginAddFormTableRow, OnEdit: a.beginEditFormTableRow, OnDelete: a.deleteFormTableRow, OnClone: a.beginCloneRemoteAISkill, OnClose: a.closeFormTableEditor,
+		OnAdd:    onAdd, OnEdit: a.beginEditFormTableRow, OnDelete: a.deleteFormTableRow, OnClose: a.closeFormTableEditor,
 	})
 }
 
@@ -464,18 +471,13 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 		rows = append(rows, a.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth))
 	}
 	title := ""
-	if snapshot.skillClone {
-		title = "Clone remote skills"
-	} else if snapshot.definition.Value.Key == "QueryHotkeys" {
+	if snapshot.definition.Value.Key == "QueryHotkeys" {
 		title = a.translate("i18n:ui_query_hotkeys_dialog_create_title")
 		if snapshot.rowIndex >= 0 {
 			title = a.translate("i18n:ui_query_hotkeys_dialog_edit_title")
 		}
 	}
 	saveLabel := a.translate("i18n:ui_save")
-	if snapshot.skillClone {
-		saveLabel = "Clone"
-	}
 	props := launcherview.FormTableRowEditorProps{
 		Width: width, Height: height, Title: title, Rows: rows, ContentHeight: contentHeight, KeepVisible: keepVisible,
 		Status: snapshot.status, CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: saveLabel, Theme: palette.componentTheme(),
@@ -622,7 +624,7 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		props.UploadIcon = a.imageForTint(settingControlIconSource("upload"), &iconTint, physicalImageSize(16, callbacks.imageScale))
 		props.EmojiWidth = a.formTableImageButtonWidth(props.EmojiLabel)
 		props.UploadWidth = a.formTableImageButtonWidth(props.UploadLabel)
-		props.OnEmoji = func() { a.beginFormTableRowEmojiEdit(index) }
+		props.OnEmoji = func() { a.openFormTableEmojiPicker(index) }
 		props.OnUpload = func() { a.pickFormTableRowImage(index) }
 	case "label":
 		props.Value = a.translate(value.Content)

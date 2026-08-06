@@ -31,7 +31,6 @@ type formTableEditorState struct {
 	rowBase    map[string]any
 	// rowEditorOnly closes the whole overlay when a row opened directly from an inline table exits.
 	rowEditorOnly     bool
-	skillClone        bool
 	status            string
 	invalid           bool
 	saving            bool
@@ -40,6 +39,8 @@ type formTableEditorState struct {
 	appPicker         *formTableAppPickerState
 	choicePicker      *formTableChoicePickerState
 	queryVariable     *formTableQueryVariablePickerState
+	emojiPicker       *formTableEmojiPickerState
+	skillAdd          *formTableSkillAddState
 	queryPreset       queryHotkeyPreset
 	windowGroupEditor *windowGroupEditorState
 }
@@ -50,7 +51,6 @@ type formTableEditorSnapshot struct {
 	selected          int
 	rowForm           *formFieldsSnapshot
 	rowIndex          int
-	skillClone        bool
 	status            string
 	invalid           bool
 	saving            bool
@@ -59,6 +59,8 @@ type formTableEditorSnapshot struct {
 	appPicker         *formTableAppPickerSnapshot
 	choicePicker      *formTableChoicePickerSnapshot
 	queryVariable     *formTableQueryVariablePickerSnapshot
+	emojiPicker       *formTableEmojiPickerSnapshot
+	skillAdd          *formTableSkillAddSnapshot
 	queryPreset       queryHotkeyPreset
 	windowGroupEditor *windowGroupEditorSnapshot
 }
@@ -100,6 +102,16 @@ type formTableQueryVariablePickerState struct {
 	anchor       woxui.Rect
 	triggerStart int
 	selected     int
+}
+
+type formTableEmojiPickerState struct {
+	fieldIndex   int
+	initialEmoji string
+}
+
+type formTableEmojiPickerSnapshot struct {
+	fieldIndex   int
+	initialEmoji string
 }
 
 type formTableQueryVariablePickerSnapshot struct {
@@ -199,13 +211,21 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		}
 		queryVariable = &formTableQueryVariablePickerSnapshot{fieldIndex: picker.fieldIndex, anchor: picker.anchor, query: query, selected: picker.selected}
 	}
+	var emojiPicker *formTableEmojiPickerSnapshot
+	if picker := state.emojiPicker; picker != nil {
+		emojiPicker = &formTableEmojiPickerSnapshot{fieldIndex: picker.fieldIndex, initialEmoji: picker.initialEmoji}
+	}
+	var skillAdd *formTableSkillAddSnapshot
+	if state.skillAdd != nil {
+		fields := snapshotFormFieldsLocked(state.skillAdd.fields)
+		skillAdd = &formTableSkillAddSnapshot{tab: state.skillAdd.tab, fields: &fields, error: state.skillAdd.error, cloning: state.skillAdd.cloning}
+	}
 	return &formTableEditorSnapshot{
 		definition:        state.definition,
 		rows:              cloneFormTableRows(state.rows),
 		selected:          state.selected,
 		rowForm:           rowForm,
 		rowIndex:          state.rowIndex,
-		skillClone:        state.skillClone,
 		status:            state.status,
 		invalid:           state.invalid,
 		saving:            state.saving,
@@ -214,6 +234,8 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		appPicker:         appPicker,
 		choicePicker:      choicePicker,
 		queryVariable:     queryVariable,
+		emojiPicker:       emojiPicker,
+		skillAdd:          skillAdd,
 		queryPreset:       state.queryPreset,
 		windowGroupEditor: snapshotWindowGroupEditorLocked(state.windowGroupEditor),
 	}
@@ -525,7 +547,6 @@ func (a *App) beginFormTableRowEdit(index int, rowEditorOnly, cloneRow bool) {
 	state.rowIndex = index
 	state.rowBase = base
 	state.rowEditorOnly = rowEditorOnly
-	state.skillClone = false
 	state.status = ""
 	state.deletePending = -1
 	state.deleteDirect = false
@@ -626,7 +647,6 @@ func (a *App) cancelFormTableRowEdit() {
 		state.rowEditorOnly = false
 		state.appPicker = nil
 		state.queryVariable = nil
-		state.skillClone = false
 		state.status = ""
 	}
 	a.updateFormTableTextInput(false)
@@ -804,31 +824,6 @@ func (a *App) saveFormTableRowEdit() {
 		return
 	}
 	syncFormFieldsEditorLocked(state.rowForm)
-	if state.skillClone {
-		if validationKey := validateFormFields(state.rowForm.definitions, state.rowForm.values); validationKey != "" {
-			message := a.translate(validationKey)
-			if a.activeFormTableEditor() == state {
-				state.status = message
-			}
-			a.invalidateFormTableWindow()
-			return
-		}
-		url := strings.TrimSpace(state.rowForm.values["SourceUrl"])
-		previousValue := state.target.values[state.definition.Value.Key]
-		state.rowForm = nil
-		state.rowIndex = -1
-		state.rowBase = nil
-		state.skillClone = false
-		state.saving = true
-		state.status = "Cloning remote skills…"
-		a.settingSaving = true
-		a.updateFormTableTextInput(false)
-		a.invalidateFormTableWindow()
-		util.Go(a.lifecycleCtx, "clone remote AI skills", func() {
-			a.cloneRemoteAISkills(state, url, previousValue)
-		})
-		return
-	}
 	if validationMessage := a.validatePluginTriggerKeywordTableRow(state); validationMessage != "" {
 		state.status = validationMessage
 		a.invalidateFormTableWindow()
@@ -1253,19 +1248,6 @@ func (a *App) moveFormTableQueryVariableSelection(delta int) {
 	a.invalidateFormTableWindow()
 }
 
-// beginFormTableRowEmojiEdit selects the current icon value so the next emoji input replaces it.
-func (a *App) beginFormTableRowEmojiEdit(index int) {
-	state := a.activeFormTableEditor()
-	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "woxImage" {
-		return
-	}
-	setFormFieldsFocusLocked(state.rowForm, index)
-	state.rowForm.editor.SelectAll()
-	state.status = ""
-	a.updateFormTableTextInput(true)
-	a.invalidateFormTableWindow()
-}
-
 // pickFormTableRowImage stores an uploaded image in the same portable WoxImage shape used by Flutter.
 func (a *App) pickFormTableRowImage(index int) {
 	state := a.activeFormTableEditor()
@@ -1303,9 +1285,7 @@ func (a *App) pickFormTableRowImage(index int) {
 		if encodeErr != nil {
 			state.status = encodeErr.Error()
 		} else {
-			setFormFieldsFocusLocked(rowForm, index)
-			rowForm.editor.SetText(string(encoded), false)
-			syncFormFieldsEditorLocked(rowForm)
+			rowForm.values[rowForm.definitions[index].Value.Key] = string(encoded)
 			state.status = ""
 		}
 	}
@@ -1375,6 +1355,21 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 	if event.Composing {
 		return false
 	}
+	if state.skillAdd != nil {
+		// The add-skill dialog owns Enter and Escape; printable keys continue into
+		// the focused text field for normal editing.
+		if event.Down {
+			switch event.Key {
+			case woxui.KeyEscape:
+				a.cancelFormTableSkillAdd()
+				return true
+			case woxui.KeyEnter:
+				a.addFormTableSkill()
+				return true
+			}
+		}
+		return false
+	}
 	if editor := state.windowGroupEditor; editor != nil {
 		if event.Key == woxui.KeyEscape {
 			if editor.appPickerSlot != "" {
@@ -1417,6 +1412,11 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 		if event.Key == woxui.KeyEscape {
 			a.closeFormTableChoicePicker()
 		}
+		return true
+	}
+	if state.emojiPicker != nil {
+		// The emoji dialog owns every key while it is open; Escape is already
+		// consumed by its modal focus scope before reaching this handler.
 		return true
 	}
 	if appPicker != nil {
@@ -1532,5 +1532,5 @@ func (a *App) onFormTableTextInput(_ woxui.TextInputEvent) bool {
 	if state == nil || !a.formTableTargetCurrentLocked(state.target) {
 		return false
 	}
-	return state.appPicker == nil
+	return state.appPicker == nil && state.emojiPicker == nil
 }

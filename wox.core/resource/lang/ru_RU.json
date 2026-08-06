@@ -258,6 +258,7 @@
   "ui_autostart_tips": "При выборе Wox будет запускаться автоматически при старте компьютера",
   "ui_tray_toggle_app": "Переключить Wox",
   "ui_tray_open_setting_window": "Настройки",
+  "ui_tray_edit_query": "Изменить запрос",
   "ui_tray_quit": "Выйти",
   "ui_proxy_enabled": "Включить прокси",
   "ui_proxy_url": "URL прокси",

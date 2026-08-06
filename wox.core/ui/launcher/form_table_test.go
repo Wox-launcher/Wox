@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -60,6 +61,29 @@ func TestFormTableTabIncludesFooterButtons(t *testing.T) {
 	}
 	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Modifiers: woxui.KeyModifierShift, Down: true}) || !host.HasFocus("form-table-row-save") {
 		t.Fatal("Shift+Tab from the first field should focus Save")
+	}
+}
+
+func TestFormTableWoxImageCellDoesNotRepeatEmojiAsText(t *testing.T) {
+	icon := woxImage{ImageType: "emoji", ImageData: "🤖"}
+	cacheKey := imageKey(icon) + "-svg-24"
+	app := &App{
+		images:         map[string]*woxui.Image{cacheKey: {Width: 1, Height: 1}},
+		imageRequested: map[string]string{},
+		imageLastUsed:  map[string]uint64{},
+		imageErrors:    map[string]string{},
+	}
+
+	cell := app.formTableViewCell(formTableColumn{Key: "Icon", Type: "woxImage"}, map[string]any{"Icon": icon}, woxcomponent.Theme{}, 1)
+
+	if cell.Icon == nil {
+		t.Fatal("woxImage cell should render its image")
+	}
+	if cell.Text != "" {
+		t.Fatalf("woxImage cell text = %q, want empty so emoji is not rendered twice", cell.Text)
+	}
+	if cell.IconSize != 24 {
+		t.Fatalf("woxImage cell icon size = %v, want Flutter's 24", cell.IconSize)
 	}
 }
 
@@ -469,5 +493,109 @@ func TestOpenFormTableKeepsWindowOwnedEditorStateSeparate(t *testing.T) {
 	app.openFormTableLocked(&launcherForm.formFieldsState, 0)
 	if app.launcherTableEditor == nil || app.settingsTableEditor != nil {
 		t.Fatal("launcher table editor leaked into settings-owned state")
+	}
+}
+
+func TestAISkillsDirectDeleteAllowsReadOnlyDiscoveredSkill(t *testing.T) {
+	definition := formDefinition{Type: "table", Value: formDefinitionValue{
+		Key: "AISkills", SortColumnKey: "Name", InlineTable: true,
+		Columns: []formTableColumn{{Key: "Name", Label: "Name", Width: 200, Type: "text"}, {Key: "Source", Label: "Source", Width: 100, Type: "aiSkillSource"}},
+	}}
+	aiForm := newFormFieldsState([]formDefinition{definition}, map[string]string{
+		"AISkills": `[{"Name":"DiscoveredSkill","Source":"local","ReadOnly":true}]`,
+	}, true)
+	deps := CommonDeps{}
+	ai := newAISettingsController(deps)
+	ai.SetForm(&aiForm)
+	app := &App{
+		settingsOpen:   true,
+		settingTab:     "ai",
+		aiSettings:     ai,
+		pluginSettings: newPluginSettingsController(deps),
+		hotkeySettings: newHotkeySettingsController(deps),
+	}
+
+	app.openFormTableLocked(&aiForm, 0)
+	app.selectFormTableRow(0)
+	app.beginDeleteFormTableRowDirect()
+
+	if app.settingsTableEditor == nil {
+		t.Fatal("expected the table editor to be open")
+	}
+	// A discovered skill marked ReadOnly but not Builtin is removable, matching the
+	// Flutter skills table. The direct delete opens only the confirmation dialog.
+	if app.settingsTableEditor.deletePending != 0 || !app.settingsTableEditor.deleteDirect {
+		t.Fatalf("read-only discovered skill direct delete = pending %d, direct %v, want pending 0 direct true", app.settingsTableEditor.deletePending, app.settingsTableEditor.deleteDirect)
+	}
+}
+
+func TestAISkillsDirectDeleteBlocksBuiltinRow(t *testing.T) {
+	definition := formDefinition{Type: "table", Value: formDefinitionValue{
+		Key: "AISkills", SortColumnKey: "Name", InlineTable: true,
+		Columns: []formTableColumn{{Key: "Name", Label: "Name", Width: 200, Type: "text"}, {Key: "Source", Label: "Source", Width: 100, Type: "aiSkillSource"}},
+	}}
+	aiForm := newFormFieldsState([]formDefinition{definition}, map[string]string{
+		"AISkills": `[{"Name":"BuiltinSkill","Source":"local","ReadOnly":true,"Builtin":true}]`,
+	}, true)
+	deps := CommonDeps{}
+	ai := newAISettingsController(deps)
+	ai.SetForm(&aiForm)
+	app := &App{
+		settingsOpen:   true,
+		settingTab:     "ai",
+		aiSettings:     ai,
+		pluginSettings: newPluginSettingsController(deps),
+		hotkeySettings: newHotkeySettingsController(deps),
+	}
+
+	app.openFormTableLocked(&aiForm, 0)
+	app.selectFormTableRow(0)
+	app.beginDeleteFormTableRowDirect()
+
+	// A built-in skill must not start a delete. With no deletePending the editor
+	// would render as a row list, so the inline delete path guards read-only rows
+	// before opening the table at all.
+	if app.settingsTableEditor == nil {
+		t.Fatal("expected the table editor to be open")
+	}
+	if app.settingsTableEditor.deletePending >= 0 || app.settingsTableEditor.deleteDirect {
+		t.Fatalf("built-in skill direct delete = pending %d, direct %v, want no delete started", app.settingsTableEditor.deletePending, app.settingsTableEditor.deleteDirect)
+	}
+}
+
+func TestAISkillsDirectDeleteRendersConfirmationNotList(t *testing.T) {
+	definition := formDefinition{Type: "table", Value: formDefinitionValue{
+		Key: "AISkills", SortColumnKey: "Name", InlineTable: true,
+		Columns: []formTableColumn{{Key: "Name", Label: "Name", Width: 200, Type: "text"}, {Key: "Source", Label: "Source", Width: 100, Type: "aiSkillSource"}},
+	}}
+	aiForm := newFormFieldsState([]formDefinition{definition}, map[string]string{
+		"AISkills": `[{"Name":"DiscoveredSkill","Source":"local","ReadOnly":true}]`,
+	}, true)
+	deps := CommonDeps{}
+	ai := newAISettingsController(deps)
+	ai.SetForm(&aiForm)
+	app := &App{
+		settingsOpen: true, settingTab: "ai", aiSettings: ai,
+		pluginSettings: newPluginSettingsController(deps), hotkeySettings: newHotkeySettingsController(deps),
+		images: map[string]*woxui.Image{}, imageRequested: map[string]string{}, imageLastUsed: map[string]uint64{}, imageErrors: map[string]string{},
+	}
+
+	app.openFormTableLocked(&aiForm, 0)
+	app.selectFormTableRow(0)
+	app.beginDeleteFormTableRowDirect()
+
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsTableEditor), uiPalette{}, 900, 700, 1)
+	})
+	host.AttachServices(formTableHostServices{})
+	displayList := woxui.DisplayList{}
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 900, Height: 700}, PixelSize: woxui.PixelSize{Width: 900, Height: 700}, Scale: 1}
+	host.Frame(&displayList, frame)
+
+	if _, ok := host.BoundsForKey("form-table-delete-confirm"); !ok {
+		t.Fatal("direct delete must render the delete confirmation, not the row list")
+	}
+	if _, ok := host.BoundsForKey("form-table-row-0"); ok {
+		t.Fatal("direct delete must not render the row list behind the confirmation")
 	}
 }

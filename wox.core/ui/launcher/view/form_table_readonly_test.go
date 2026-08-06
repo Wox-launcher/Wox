@@ -34,3 +34,13 @@ func TestFormTableCellSupportsCustomContent(t *testing.T) {
 		t.Fatal("custom table cell should render its child with control padding")
 	}
 }
+
+func TestFormTableCellUsesRequestedIconSize(t *testing.T) {
+	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.Theme{}}, FormTableCell{Icon: &woxui.Image{}, IconSize: 24}, 120).(woxwidget.Container)
+	content := cell.Child.(woxwidget.Flex)
+	icon := content.Children[0].(woxwidget.Image)
+
+	if icon.Width != 24 || icon.Height != 24 || cell.Padding.Top != 6 {
+		t.Fatalf("24px table icon geometry = %vx%v with top padding %v", icon.Width, icon.Height, cell.Padding.Top)
+	}
+}

@@ -91,9 +91,10 @@ type mediaPreviewData struct {
 }
 
 type mediaTrackedResult struct {
-	playbackState       PlaybackState
-	artworkFingerprint  [sha256.Size]byte
-	showOpenMediaAction bool
+	playbackState          PlaybackState
+	artworkFingerprint     [sha256.Size]byte
+	showOpenMediaAction    bool
+	preferredDefaultAction string
 }
 
 func (m *MediaPlayerPlugin) GetMetadata() plugin.Metadata {
@@ -198,7 +199,7 @@ func (m *MediaPlayerPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		return plugin.NewQueryResponse(results)
 	}
 
-	result := m.buildMediaResult(mediaInfo, false)
+	result := m.buildMediaResult(mediaInfo, false, "")
 
 	results = append(results, result)
 	response := plugin.NewQueryResponse(results)
@@ -219,9 +220,34 @@ func (m *MediaPlayerPlugin) queryGlobalControls(ctx context.Context, query plugi
 		return nil
 	}
 
-	result := m.buildMediaResult(mediaInfo, true)
+	// When the user types a specific command (e.g. "next"/"prev"), the result's
+	// default action should be that command instead of the state-aware play/pause.
+	preferredDefault := resolvePreferredDefaultCommand(query.RawQuery, actions)
+	result := m.buildMediaResult(mediaInfo, true, preferredDefault)
 	result.Score = mediaControlGlobalResultScore
 	return []plugin.QueryResult{result}
+}
+
+// resolvePreferredDefaultCommand picks the most specific matched command so a
+// global query's default action mirrors what the user asked for (exact over prefix).
+func resolvePreferredDefaultCommand(search string, actions []mediaControlAction) string {
+	normalized := strings.ToLower(strings.TrimSpace(search))
+	for _, action := range actions {
+		if action.command == normalized {
+			return action.command
+		}
+		for _, alias := range action.aliases {
+			if alias == normalized {
+				return action.command
+			}
+		}
+	}
+	for _, action := range actions {
+		if strings.HasPrefix(action.command, normalized) {
+			return action.command
+		}
+	}
+	return ""
 }
 
 // matchMediaControlActions resolves short command prefixes without making one-letter global input noisy.
@@ -255,8 +281,8 @@ func (a mediaControlAction) matches(search string) bool {
 }
 
 // buildMediaResult creates the shared media status result used by both the media keyword and global commands.
-func (m *MediaPlayerPlugin) buildMediaResult(mediaInfo *MediaInfo, showOpenMediaAction bool) plugin.QueryResult {
-	actions := m.buildMediaActions(mediaInfo)
+func (m *MediaPlayerPlugin) buildMediaResult(mediaInfo *MediaInfo, showOpenMediaAction bool, preferredDefaultCommand string) plugin.QueryResult {
+	actions := m.buildMediaActions(mediaInfo, preferredDefaultCommand)
 	if showOpenMediaAction {
 		actions = append(actions, m.buildOpenMediaAction())
 	}
@@ -271,9 +297,10 @@ func (m *MediaPlayerPlugin) buildMediaResult(mediaInfo *MediaInfo, showOpenMedia
 		Actions:  actions,
 	}
 	m.trackMediaResult(result.Id, mediaTrackedResult{
-		playbackState:       mediaInfo.State,
-		artworkFingerprint:  sha256.Sum256(mediaInfo.Artwork),
-		showOpenMediaAction: showOpenMediaAction,
+		playbackState:          mediaInfo.State,
+		artworkFingerprint:     sha256.Sum256(mediaInfo.Artwork),
+		showOpenMediaAction:    showOpenMediaAction,
+		preferredDefaultAction: preferredDefaultCommand,
 	})
 	return result
 }
@@ -287,12 +314,29 @@ func (m *MediaPlayerPlugin) trackMediaResult(resultId string, tracked mediaTrack
 }
 
 // buildMediaActions exposes one state-aware default action plus track navigation commands.
-func (m *MediaPlayerPlugin) buildMediaActions(mediaInfo *MediaInfo) []plugin.QueryResultAction {
-	defaultCommand := mediaControlPlay
-	defaultName := "i18n:plugin_mediaplayer_play"
-	if mediaInfo.State == PlaybackStatePlaying {
-		defaultCommand = mediaControlPause
+// preferredDefaultCommand overrides the state-aware default when the user typed a
+// specific media command (e.g. "next"/"prev" should default to the matching action).
+func (m *MediaPlayerPlugin) buildMediaActions(mediaInfo *MediaInfo, preferredDefaultCommand string) []plugin.QueryResultAction {
+	defaultCommand := preferredDefaultCommand
+	defaultName := ""
+	switch preferredDefaultCommand {
+	case mediaControlPlay:
+		defaultName = "i18n:plugin_mediaplayer_play"
+	case mediaControlPause:
 		defaultName = "i18n:plugin_mediaplayer_pause"
+	case mediaControlNext:
+		defaultName = "i18n:plugin_mediaplayer_next"
+	case mediaControlPrevious:
+		defaultName = "i18n:plugin_mediaplayer_previous"
+	}
+
+	if defaultCommand == "" {
+		defaultCommand = mediaControlPlay
+		defaultName = "i18n:plugin_mediaplayer_play"
+		if mediaInfo.State == PlaybackStatePlaying {
+			defaultCommand = mediaControlPause
+			defaultName = "i18n:plugin_mediaplayer_pause"
+		}
 	}
 
 	return []plugin.QueryResultAction{
@@ -550,7 +594,7 @@ func (m *MediaPlayerPlugin) refreshMediaPlayer(ctx context.Context) {
 		subTitle := m.formatSubTitle(mediaInfo)
 		preview := m.formatPreview(mediaInfo)
 		tails := plugin.NewQueryResultTailTexts(m.formatProgress(mediaInfo))
-		actions := m.buildMediaActions(mediaInfo)
+		actions := m.buildMediaActions(mediaInfo, tracked.preferredDefaultAction)
 		if tracked.showOpenMediaAction {
 			actions = append(actions, m.buildOpenMediaAction())
 		}
@@ -563,9 +607,10 @@ func (m *MediaPlayerPlugin) refreshMediaPlayer(ctx context.Context) {
 			icon := m.formatIcon(mediaInfo)
 			updatableResult.Icon = &icon
 			updatedTracked := mediaTrackedResult{
-				playbackState:       mediaInfo.State,
-				artworkFingerprint:  nextArtworkFingerprint,
-				showOpenMediaAction: tracked.showOpenMediaAction,
+				playbackState:          mediaInfo.State,
+				artworkFingerprint:     nextArtworkFingerprint,
+				showOpenMediaAction:    tracked.showOpenMediaAction,
+				preferredDefaultAction: tracked.preferredDefaultAction,
 			}
 			nextTracked = &updatedTracked
 		}

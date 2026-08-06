@@ -1,18 +1,21 @@
 package tray
 
 // #cgo CFLAGS: -x objective-c
-// #cgo LDFLAGS: -framework Cocoa
+// #cgo LDFLAGS: -framework Cocoa -framework ImageIO
 // #include <stdlib.h>
 // void createTray(const char *iconBytes, int length);
 // void addMenuItem(const char *title, int tag);
-// void addQueryTray(const char *iconBytes, int length, int tag, const char *tooltip, int menuTag, const char *menuTitle);
+// int addQueryTray(const char *iconBytes, int length, int tag, const char *identifier, const char *tooltip, int menuTag, const char *menuTitle);
 // void clearQueryTrayIcons();
 // void removeTray();
 import "C"
 import (
+	"context"
+	"fmt"
 	"sync"
 	"unsafe"
 
+	"wox/util"
 	"wox/util/mainthread"
 )
 
@@ -34,6 +37,11 @@ func reportLeftClick() {
 	if callback != nil {
 		callback()
 	}
+}
+
+//export reportQueryTrayFallback
+func reportQueryTrayFallback(tag C.int) {
+	util.GetLogger().Info(context.Background(), fmt.Sprintf("macOS placed query tray icon outside the reliably renderable menu bar area; reused the main tray slot: tag=%d", int(tag)))
 }
 
 //export GoMenuItemCallback
@@ -147,8 +155,8 @@ func SetQueryIcons(items []QueryIconItem) {
 		}
 
 		mainthread.Call(func() {
-			iconBytesC := C.CBytes(item.Icon)
-			defer C.free(iconBytesC)
+			identifierC := C.CString(item.Identifier)
+			defer C.free(unsafe.Pointer(identifierC))
 
 			tooltipC := C.CString(item.Tooltip)
 			defer C.free(unsafe.Pointer(tooltipC))
@@ -156,7 +164,13 @@ func SetQueryIcons(items []QueryIconItem) {
 			menuTitleC := C.CString(item.ContextMenuTitle)
 			defer C.free(unsafe.Pointer(menuTitleC))
 
-			C.addQueryTray((*C.char)(iconBytesC), C.int(len(item.Icon)), C.int(tag), tooltipC, C.int(menuTag), menuTitleC)
+			iconBytesC := C.CBytes(item.Icon)
+			defer C.free(iconBytesC)
+
+			result := C.addQueryTray((*C.char)(iconBytesC), C.int(len(item.Icon)), C.int(tag), identifierC, tooltipC, C.int(menuTag), menuTitleC)
+			if result <= 0 {
+				util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to create macOS tray query icon: tag=%d iconBytes=%d nativeResult=%d", tag, len(item.Icon), int(result)))
+			}
 		})
 	}
 }

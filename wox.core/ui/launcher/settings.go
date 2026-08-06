@@ -438,6 +438,13 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 			}
 		})
 	}
+	if rowIndex, ok := trayQueryRowIndexFromParam(windowContext.Param); ok {
+		if err := a.runOnUI("open tray query editor", func() {
+			a.openTrayQueryEditor(rowIndex)
+		}); err != nil {
+			return err
+		}
+	}
 	return settingsWindow.Invalidate()
 }
 

@@ -276,6 +276,7 @@
   "ui_autostart_tips": "选中后，Wox将在电脑开机时自动启动",
   "ui_tray_toggle_app": "显示/隐藏Wox",
   "ui_tray_open_setting_window": "设置",
+  "ui_tray_edit_query": "修改查询",
   "ui_tray_quit": "退出",
   "ui_proxy_enabled": "启用代理",
   "ui_proxy_url": "代理地址",

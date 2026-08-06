@@ -210,7 +210,7 @@ func formDefinitionFocusable(definition formDefinition) bool {
 }
 
 func formDefinitionTextEditable(definition formDefinition) bool {
-	return definition.Type == "textbox" || definition.Type == "password" || definition.Type == "dirPath" || definition.Type == "woxImage"
+	return definition.Type == "textbox" || definition.Type == "password" || definition.Type == "dirPath"
 }
 
 func syncFormFieldsEditorLocked(fields *formFieldsState) {

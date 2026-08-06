@@ -32,6 +32,7 @@ type FormTableCell struct {
 	Text           string
 	Tooltip        string
 	Icon           *woxui.Image
+	IconSize       float32
 	IndicatorColor *woxui.Color
 	Child          woxwidget.Widget
 }
@@ -551,11 +552,16 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 	} else if cell.IndicatorColor != nil {
 		content = woxwidget.Container{Width: 16, Height: 16, Radius: 8, Color: *cell.IndicatorColor}
 	} else if cell.Icon != nil {
-		children := []woxwidget.Widget{woxwidget.Image{Source: cell.Icon, Width: 16, Height: 16}}
+		iconSize := cell.IconSize
+		if iconSize <= 0 {
+			iconSize = 16
+		}
+		children := []woxwidget.Widget{woxwidget.Image{Source: cell.Icon, Width: iconSize, Height: iconSize}}
 		if cell.Text != "" {
-			children = append(children, woxwidget.TextBlock{Value: cell.Text, Width: max(float32(0), contentWidth-22), Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle})
+			children = append(children, woxwidget.TextBlock{Value: cell.Text, Width: max(float32(0), contentWidth-iconSize-6), Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle})
 		}
 		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: children}
+		paddingTop = max(float32(0), (tableSurfaceRowHeight-iconSize)/2)
 	}
 	if cell.Tooltip != "" && props.InfoIcon != nil {
 		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, Children: []woxwidget.Widget{
@@ -686,13 +692,11 @@ type FormTableListProps struct {
 	CanAdd      bool
 	CanEdit     bool
 	CanDelete   bool
-	ShowClone   bool
 	Theme       woxcomponent.Theme
 	OnSelect    func(int)
 	OnAdd       func()
 	OnEdit      func()
 	OnDelete    func()
-	OnClone     func()
 	OnClose     func()
 }
 
@@ -752,10 +756,6 @@ func FormTableList(props FormTableListProps) woxwidget.Widget {
 		formTableButton("form-table-delete", props.DeleteLabel, 86, props.CanDelete, false, props.OnDelete, props.Theme),
 	}
 	fixedWidth := float32(104 + 86 + 86 + 104)
-	if props.ShowClone {
-		leftButtons = append(leftButtons, formTableButton("form-table-clone", "Clone remote", 112, props.CanAdd, false, props.OnClone, props.Theme))
-		fixedWidth += 112
-	}
 	buttonChildren := append([]woxwidget.Widget(nil), leftButtons...)
 	buttonChildren = append(buttonChildren, woxwidget.Painter{Width: max(float32(0), props.Width-fixedWidth-float32(len(leftButtons)+1)*8), Height: 38})
 	buttonChildren = append(buttonChildren, formTableButton("form-table-close", props.CloseLabel, 104, true, true, props.OnClose, props.Theme))
@@ -1010,28 +1010,16 @@ func formTableRowCheckboxControl(props FormTableRowFieldProps) woxwidget.Widget 
 }
 
 // formTableRowImageControl restores Flutter's preview plus emoji and upload actions.
+// The icon is a display surface (like Flutter's WoxImageSelector preview); it never
+// becomes a text field, so no caret can appear inside it.
 func formTableRowImageControl(props FormTableRowFieldProps, height float32) woxwidget.Widget {
 	var preview woxwidget.Widget
 	if props.Image != nil {
 		preview = woxwidget.Align{Width: 80, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: props.Image, Width: 64, Height: 64}}
 	} else if props.ImageEmoji != "" {
-		if props.Focused {
-			preview = woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
-				ID: props.ID + "-emoji-input", Label: props.Label, Width: 78, Height: height - 2, Radius: 7,
-				Padding: woxwidget.Insets{Left: 27, Top: 28, Right: 20, Bottom: 28}, Transparent: true,
-				Style: woxui.TextStyle{Size: 18}, Value: props.State.Text, Focused: true, MaxLines: 1,
-				Window: props.Window, Theme: props.Theme, OnChanged: props.OnChanged, OnKey: props.OnKey,
-				OnFocusChange: func(focused bool) {
-					if focused && props.OnFocus != nil {
-						props.OnFocus()
-					}
-				},
-			})
-		} else {
-			preview = woxwidget.Align{Width: 80, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.ImageEmoji, Style: woxui.TextStyle{Size: 58}, Color: props.Theme.ActionText,
-			}}
-		}
+		preview = woxwidget.Align{Width: 80, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
+			Value: props.ImageEmoji, Style: woxui.TextStyle{Size: 58}, Color: props.Theme.ActionText,
+		}}
 	} else {
 		preview = woxwidget.Container{Width: 80, Height: height}
 	}

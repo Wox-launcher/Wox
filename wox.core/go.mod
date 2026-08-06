@@ -7,7 +7,6 @@ require (
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/cdfmlr/ellipsis v0.0.1
 	github.com/disintegration/imaging v1.6.2
-	github.com/forPelevin/gomoji v1.4.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gen2brain/malgo v0.11.25
 	github.com/go-ole/go-ole v1.3.0

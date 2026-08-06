@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -235,6 +237,49 @@ func (a *App) openHotkeySettingsTable(index int) {
 		a.openFormTableLocked(form, index)
 	}
 	a.finishOpeningFormTable()
+}
+
+// trayQueryRowIndexFromParam extracts a tray query row index from an open-settings param
+// like "tray_queries:2", matching the tray icon context menu's edit target.
+func trayQueryRowIndexFromParam(param string) (int, bool) {
+	param = strings.TrimSpace(param)
+	if !strings.HasPrefix(param, "tray_queries:") {
+		return 0, false
+	}
+	index, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(param, "tray_queries:")))
+	if err != nil || index < 0 {
+		return 0, false
+	}
+	return index, true
+}
+
+// openTrayQueryEditor opens the settings form table and starts editing one tray query row,
+// mirroring the inline table's edit button flow.
+func (a *App) openTrayQueryEditor(rowIndex int) {
+	fields := a.hotkeySettings.Form()
+	if !a.settingsOpen || a.settingTab != "general" || fields == nil || rowIndex < 0 {
+		return
+	}
+	index := -1
+	for candidate, definition := range fields.definitions {
+		if definition.Value.Key == "TrayQueries" {
+			index = candidate
+			break
+		}
+	}
+	if index < 0 {
+		return
+	}
+	// Focus the field first so the settings page keeps the TrayQueries table visible
+	// while the row editor opens, mirroring the inline table's edit button flow.
+	a.focusHotkeySettingsField(index)
+	a.openHotkeySettingsTable(index)
+	state := a.activeFormTableEditor()
+	if state == nil || state.invalid || rowIndex >= len(state.rows) {
+		return
+	}
+	a.selectFormTableRow(rowIndex)
+	a.beginEditFormTableRowDirect()
 }
 
 func (a *App) applyHotkeySettingsRawLocked(key, value string) {

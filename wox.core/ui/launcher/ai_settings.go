@@ -303,12 +303,15 @@ func (a *App) openAISettingsTable(index int) {
 	a.finishOpeningFormTable()
 }
 
-// addAISettingsTableRow opens the shared editor directly at its create flow while preserving the skills source chooser.
+// addAISettingsTableRow opens the shared editor directly at its create flow. The
+// skills table uses Flutter's tabbed add dialog instead of the generic row editor.
 func (a *App) addAISettingsTableRow(index int) {
 	a.openAISettingsTable(index)
 	if index < 2 {
 		a.beginAddFormTableRowDirect()
+		return
 	}
+	a.openFormTableSkillAdd()
 }
 
 // openAISettingsTableRow carries the inline row selection into the shared table editor.
@@ -324,79 +327,6 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 	a.finishOpeningFormTable()
 	if tableIndex < 2 {
 		a.beginEditFormTableRowDirect()
-	}
-}
-
-// beginCloneRemoteAISkill reuses the row form surface for the one URL needed by core's clone operation.
-func (a *App) beginCloneRemoteAISkill() {
-	state := a.settingsTableEditor
-	if state == nil || state.definition.Value.Key != "AISkills" || state.invalid || state.saving || state.rowForm != nil || state.target != a.aiSettings.Form() {
-		return
-	}
-	fields := newFormFieldsState([]formDefinition{{
-		Type: "textbox",
-		Value: formDefinitionValue{
-			Key: "SourceUrl", Label: "Repository URL", MaxLines: 1,
-			Validators: []formValidator{{Type: "not_empty"}},
-		},
-	}}, nil, true)
-	state.rowForm = &fields
-	state.rowIndex = -1
-	state.rowBase = nil
-	state.skillClone = true
-	state.status = ""
-	state.deletePending = -1
-	state.deleteDirect = false
-	a.updateSettingsTextInput(true)
-	a.invalidateSettingsWindow()
-}
-
-// cloneRemoteAISkills discovers repository skills, appends them atomically, then saves the combined setting.
-func (a *App) cloneRemoteAISkills(state *formTableEditorState, url, previousValue string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	loaded, err := a.services.CloneAISkills(ctx, a.sessionID, url)
-	cancel()
-	skills := make([]map[string]any, len(loaded))
-	for index, skill := range loaded {
-		skills[index] = map[string]any{
-			"Path": skill.Path, "ManifestPath": skill.ManifestPath, "Name": skill.Name, "Description": skill.Description,
-			"Error": skill.Error, "Source": skill.Source, "SourceName": skill.SourceName, "SourceUrl": skill.SourceURL, "Enabled": skill.Enabled,
-		}
-	}
-	if err == nil && len(skills) == 0 {
-		err = fmt.Errorf("the repository did not contain any skills")
-	}
-
-	var value string
-	save := false
-	_ = a.runOnUI("apply cloned AI skills", func() {
-		if err != nil {
-			a.settingSaving = false
-			if a.settingsTableEditor == state {
-				state.saving = false
-				state.status = "Could not clone: " + err.Error()
-			}
-			a.invalidateSettingsWindow()
-			return
-		}
-		state.rows = append(state.rows, cloneFormTableRows(skills)...)
-		state.selected = len(state.rows) - 1
-		if commitErr := a.commitFormTableRowsLocked(state); commitErr != nil {
-			a.settingSaving = false
-			state.rows, _ = decodeFormTableRows(previousValue)
-			state.target.values[state.definition.Value.Key] = previousValue
-			if a.settingsTableEditor == state {
-				state.saving = false
-				state.status = commitErr.Error()
-			}
-			a.invalidateSettingsWindow()
-			return
-		}
-		value = state.target.values[state.definition.Value.Key]
-		save = true
-	})
-	if save {
-		a.saveSettingsTable(state, "AISkills", value, previousValue)
 	}
 }
 
@@ -487,12 +417,14 @@ func (a *App) applyAISettingsRawLocked(key, value string) {
 	}
 }
 
-// formTableSkillRowReadOnly prevents built-in and discovered read-only skills from being removed locally.
+// formTableSkillRowReadOnly protects only built-in skills from removal.
+// User-discovered skills are deletable, matching the Flutter skills table which
+// allows deleting any row; the blanket ReadOnly flag set by skill discovery is
+// not a local removal restriction.
 func formTableSkillRowReadOnly(definition formDefinition, row map[string]any) bool {
 	if definition.Value.Key != "AISkills" {
 		return false
 	}
-	readOnly, _ := row["ReadOnly"].(bool)
 	builtin, _ := row["Builtin"].(bool)
-	return readOnly || builtin
+	return builtin
 }

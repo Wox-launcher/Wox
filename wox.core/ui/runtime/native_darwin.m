@@ -21,6 +21,7 @@
 
 extern int32_t woxGoDarwinStart(uintptr_t context);
 extern void woxGoDarwinCloseRequested(uintptr_t context);
+extern void woxGoDarwinProtocolURL(uintptr_t context, const char *url);
 extern void woxGoDarwinWebViewHideRequested(uintptr_t context);
 extern void woxGoDarwinWebViewTooltip(uintptr_t context, int32_t visible, const char *text, float x, float y, float width, float height);
 extern void woxGoDarwinCall(uintptr_t context);
@@ -154,6 +155,35 @@ static CGImageRef capture_display_image(CGDirectDisplayID display_id) {
 
 - (BOOL)canBecomeMainWindow {
   return YES;
+}
+@end
+
+@interface WoxApplicationDelegate : NSObject <NSApplicationDelegate> {
+  uintptr_t _context;
+}
+- (instancetype)initWithContext:(uintptr_t)context;
+@end
+
+@implementation WoxApplicationDelegate
+- (instancetype)initWithContext:(uintptr_t)context {
+  self = [super init];
+  if (self != nil) {
+    _context = context;
+  }
+  return self;
+}
+
+- (void)application:(NSApplication *)application openURLs:(NSArray<NSURL *> *)urls {
+  (void)application;
+  for (NSURL *url in urls) {
+    if (![[url.scheme lowercaseString] isEqualToString:@"wox"]) {
+      continue;
+    }
+    NSString *absolute_string = url.absoluteString;
+    if (absolute_string.length > 0) {
+      woxGoDarwinProtocolURL(_context, absolute_string.UTF8String);
+    }
+  }
 }
 @end
 
@@ -1752,14 +1782,22 @@ int32_t wox_darwin_run(uintptr_t context) {
   @autoreleasepool {
     NSApplication *application = [NSApplication sharedApplication];
     [application setActivationPolicy:NSApplicationActivationPolicyAccessory];
+    WoxApplicationDelegate *application_delegate = [[WoxApplicationDelegate alloc] initWithContext:context];
+    [application setDelegate:application_delegate];
     [application finishLaunching];
     if (woxGoDarwinStart(context) != 0) {
+      [application setDelegate:nil];
+      [application_delegate release];
       return -1;
     }
     if (wox_open_window_count == 0) {
+      [application setDelegate:nil];
+      [application_delegate release];
       return 0;
     }
     [application run];
+    [application setDelegate:nil];
+    [application_delegate release];
   }
   return 0;
 }

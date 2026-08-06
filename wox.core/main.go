@@ -155,6 +155,13 @@ func run() {
 	} else {
 		util.GetLogger().Info(ctx, fmt.Sprintf("startup pid: %d, executable: <error>, args: %v", os.Getpid(), os.Args))
 	}
+	// Keep cold-start protocol URLs until the embedded UI is ready; forwarded URLs already have a receiver.
+	startupDeepLinks := make([]string, 0, 1)
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "wox://") {
+			startupDeepLinks = append(startupDeepLinks, arg)
+		}
+	}
 
 	// Check for an existing instance BEFORE doing any heavy initialization (database, analytics,
 	// migrations). When this process is launched as a one-shot deeplink forwarder (e.g. via the
@@ -176,19 +183,17 @@ func run() {
 		}
 
 		// if args has deeplink, post it to the existing instance and exit immediately
-		for _, arg := range os.Args[1:] {
-			if strings.HasPrefix(arg, "wox://") {
-				_, postDeepLinkErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/deeplink", existingPort), map[string]string{
-					"deeplink": arg,
-				})
-				if postDeepLinkErr != nil {
-					util.GetLogger().Error(ctx, fmt.Sprintf("failed to post deeplink to existing instance: %s", postDeepLinkErr.Error()))
-				} else {
-					util.GetLogger().Info(ctx, "post deeplink to existing instance successfully, bye~")
-				}
-				// Exit regardless of success/failure: this process has no further role.
-				os.Exit(0)
+		for _, deeplink := range startupDeepLinks {
+			_, postDeepLinkErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/deeplink", existingPort), map[string]string{
+				"deeplink": deeplink,
+			})
+			if postDeepLinkErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to post deeplink to existing instance: %s", postDeepLinkErr.Error()))
+			} else {
+				util.GetLogger().Info(ctx, "post deeplink to existing instance successfully, bye~")
 			}
+			// Exit regardless of success/failure: this process has no further role.
+			os.Exit(0)
 		}
 
 		// show existing instance if no deeplink is provided
@@ -396,6 +401,12 @@ func run() {
 		coreServices.AttachView(nil)
 		embeddedGoUIApp = nil
 		return
+	}
+	woxui.SetProtocolURLHandler(func(deeplink string) {
+		ui.GetUIManager().ProcessDeeplink(util.NewTraceContext(), deeplink)
+	})
+	for _, deeplink := range startupDeepLinks {
+		ui.GetUIManager().ProcessDeeplink(ctx, deeplink)
 	}
 	automationInfo, automationErr := automation.Start(ctx, embeddedGoUIApp)
 	if automationErr != nil {

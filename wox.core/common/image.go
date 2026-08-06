@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 	"wox/util"
 	"wox/util/fileicon"
 	"wox/util/imagecache"
@@ -28,7 +29,6 @@ import (
 	"wox/util/timetracking"
 
 	"github.com/disintegration/imaging"
-	"github.com/forPelevin/gomoji"
 )
 
 type WoxImageType = string
@@ -55,6 +55,7 @@ const (
 	ResultGridIconSize     = util.ResultGridIconSize
 	resizeImageCachePrefix = "resize_v2_"
 	pngCropLargeDimension  = 1024
+	twemojiPNGBaseURL      = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72"
 )
 
 var (
@@ -323,7 +324,7 @@ func (w *WoxImage) downloadEmojiImage(ctx context.Context, emoji string, dest st
 
 	var lastErr error
 	for _, codePoint := range codePoints {
-		url := fmt.Sprintf("https://cdn.jsdelivr.net/gh/twitter/twemoji@v11.0.0/36x36/%s.png", codePoint)
+		url := fmt.Sprintf("%s/%s.png", twemojiPNGBaseURL, codePoint)
 		if downloadErr := util.HttpDownload(ctx, url, dest); downloadErr == nil {
 			return nil
 		} else {
@@ -336,12 +337,17 @@ func (w *WoxImage) downloadEmojiImage(ctx context.Context, emoji string, dest st
 
 // emojiImageCodePointCandidates returns Twemoji asset names from most specific to fallback-compatible.
 func (w *WoxImage) emojiImageCodePointCandidates(emoji string) ([]string, error) {
-	emojiInfo, err := gomoji.GetInfo(emoji)
-	if err != nil {
-		return nil, err
+	if emoji == "" {
+		return nil, fmt.Errorf("emoji is empty")
+	}
+	if !utf8.ValidString(emoji) {
+		return nil, fmt.Errorf("emoji is not valid UTF-8")
 	}
 
-	parts := strings.Fields(strings.ToLower(emojiInfo.CodePoint))
+	parts := make([]string, 0, utf8.RuneCountInString(emoji))
+	for _, codePoint := range emoji {
+		parts = append(parts, fmt.Sprintf("%x", codePoint))
+	}
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("empty emoji codepoint: %s", emoji)
 	}

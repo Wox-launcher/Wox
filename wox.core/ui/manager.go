@@ -1347,7 +1347,8 @@ func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	queryItems := make([]tray.QueryIconItem, 0, len(woxSetting.TrayQueries.Get()))
-	settingMenuTitle := i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_open_setting_window")
+	logger.Debug(ctx, fmt.Sprintf("refresh tray query icons: entries=%d", len(woxSetting.TrayQueries.Get())))
+	settingMenuTitle := i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_edit_query")
 	for trayQueryIndex, trayQuery := range woxSetting.TrayQueries.Get() {
 		if trayQuery.Disabled {
 			continue
@@ -1359,12 +1360,14 @@ func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
 		}
 
 		iconBytes := m.toTrayIconBytes(ctx, trayQuery.Icon)
+		logger.Debug(ctx, fmt.Sprintf("prepared tray query icon: index=%d type=%s iconBytes=%d", trayQueryIndex, trayQuery.Icon.ImageType, len(iconBytes)))
 		tooltip := query
 		if len(tooltip) > 80 {
 			tooltip = tooltip[:80]
 		}
 
 		queryItems = append(queryItems, tray.QueryIconItem{
+			Identifier:       fmt.Sprintf("%d", trayQueryIndex),
 			Icon:             iconBytes,
 			Tooltip:          tooltip,
 			ContextMenuTitle: settingMenuTitle,
@@ -1670,10 +1673,6 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 		return resource.GetAppIcon()
 	}
 
-	if svgBytes, ok := m.toMacOSTrayVectorBytes(ctx, icon); ok {
-		return svgBytes
-	}
-
 	img, err := icon.ToImageWithoutRemoteFetch()
 	if err != nil {
 		if icon.ImageType == common.WoxImageTypeEmoji {
@@ -1703,6 +1702,7 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 
 // warmTrayEmojiIconCache keeps tray refresh local-first while still allowing emoji icons to resolve after the Twemoji PNG cache is ready.
 func (m *Manager) warmTrayEmojiIconCache(ctx context.Context, icon common.WoxImage) {
+	warmParentCtx := context.WithoutCancel(ctx)
 	iconKey := icon.String()
 	m.trayEmojiWarmMu.Lock()
 	if m.trayEmojiWarmInFlight == nil {
@@ -1715,52 +1715,26 @@ func (m *Manager) warmTrayEmojiIconCache(ctx context.Context, icon common.WoxIma
 	m.trayEmojiWarmInFlight[iconKey] = struct{}{}
 	m.trayEmojiWarmMu.Unlock()
 
-	util.Go(ctx, "warm tray query emoji icon cache", func() {
+	util.Go(warmParentCtx, "warm tray query emoji icon cache", func() {
 		defer func() {
 			m.trayEmojiWarmMu.Lock()
 			delete(m.trayEmojiWarmInFlight, iconKey)
 			m.trayEmojiWarmMu.Unlock()
 		}()
 
-		warmCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		warmCtx, cancel := context.WithTimeout(warmParentCtx, 15*time.Second)
 		defer cancel()
 
 		if _, err := icon.ToImageWithContext(warmCtx); err != nil {
-			logger.Warn(ctx, fmt.Sprintf("failed to warm tray query emoji icon cache: %s", err.Error()))
+			logger.Warn(warmParentCtx, fmt.Sprintf("failed to warm tray query emoji icon cache: %s", err.Error()))
 			return
 		}
 
-		if setting.GetSettingManager().GetWoxSetting(ctx).ShowTray.Get() {
-			logger.Info(ctx, fmt.Sprintf("warmed tray query emoji icon cache, refreshing tray query icons: %s", icon.ImageData))
-			m.refreshTrayQueryIcons(ctx)
+		if setting.GetSettingManager().GetWoxSetting(warmParentCtx).ShowTray.Get() {
+			logger.Info(warmParentCtx, fmt.Sprintf("warmed tray query emoji icon cache, refreshing tray query icons: %s", icon.ImageData))
+			m.refreshTrayQueryIcons(warmParentCtx)
 		}
 	})
-}
-
-func (m *Manager) toMacOSTrayVectorBytes(ctx context.Context, icon common.WoxImage) ([]byte, bool) {
-	if !util.IsMacOS() {
-		return nil, false
-	}
-
-	if icon.ImageType == common.WoxImageTypeSvg {
-		svgData := strings.TrimSpace(icon.ImageData)
-		if svgData == "" {
-			return nil, false
-		}
-		return []byte(svgData), true
-	}
-
-	if icon.ImageType == common.WoxImageTypeAbsolutePath && strings.EqualFold(filepath.Ext(icon.ImageData), ".svg") {
-		svgData, err := os.ReadFile(icon.ImageData)
-		if err != nil {
-			logger.Warn(ctx, fmt.Sprintf("failed to read tray query svg icon, fallback to raster path: %s", err.Error()))
-			return nil, false
-		}
-
-		return svgData, true
-	}
-
-	return nil, false
 }
 
 func wrapPNGAsICO(pngData []byte, width int, height int) ([]byte, error) {
