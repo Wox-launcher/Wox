@@ -11,18 +11,29 @@ package woxui
 import "C"
 
 import (
+	"context"
 	"fmt"
 	"unsafe"
+
+	"wox/util"
 )
 
 type nativeRenderer struct {
 	handle *C.WoxRenderer
 }
 
+func traceNativeCall(format string, args ...any) {
+	if util.IsDev() {
+		util.GetLogger().Debug(context.Background(), fmt.Sprintf("native crash trace: "+format, args...))
+	}
+}
+
 // newNativeRenderer attaches a DirectComposition swap chain to windowHandle.
 func newNativeRenderer(windowHandle uintptr, width, height int) (*nativeRenderer, error) {
 	var handle *C.WoxRenderer
+	traceNativeCall("renderer create enter hwnd=%#x size=%dx%d", windowHandle, width, height)
 	result := C.wox_renderer_create(C.uintptr_t(windowHandle), C.uint32_t(width), C.uint32_t(height), &handle)
+	traceNativeCall("renderer create exit hwnd=%#x handle=%p result=%d", windowHandle, handle, result)
 	if result < 0 {
 		return nil, hresultError("create renderer", result)
 	}
@@ -30,7 +41,9 @@ func newNativeRenderer(windowHandle uintptr, width, height int) (*nativeRenderer
 }
 
 func (r *nativeRenderer) resize(width, height int) error {
+	traceNativeCall("renderer resize enter handle=%p size=%dx%d", r.handle, width, height)
 	result := C.wox_renderer_resize(r.handle, C.uint32_t(width), C.uint32_t(height))
+	traceNativeCall("renderer resize exit handle=%p result=%d", r.handle, result)
 	if result < 0 {
 		return hresultError("resize renderer", result)
 	}
@@ -40,7 +53,9 @@ func (r *nativeRenderer) resize(width, height int) error {
 func (r *nativeRenderer) setFontFamily(family string) error {
 	nativeFamily := C.CString(family)
 	defer C.free(unsafe.Pointer(nativeFamily))
+	traceNativeCall("renderer font enter handle=%p family=%q", r.handle, family)
 	result := C.wox_renderer_set_font_family(r.handle, nativeFamily)
+	traceNativeCall("renderer font exit handle=%p result=%d", r.handle, result)
 	if result < 0 {
 		return hresultError("set font family", result)
 	}
@@ -54,7 +69,9 @@ func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics,
 	var width C.float
 	var height C.float
 	var baseline C.float
+	traceNativeCall("renderer measure enter handle=%p textLen=%d size=%.2f weight=%d", r.handle, len(text), style.Size, style.Weight)
 	result := C.wox_renderer_measure_text(r.handle, nativeText, C.float(style.Size), C.uint8_t(style.Weight), &width, &height, &baseline)
+	traceNativeCall("renderer measure exit handle=%p result=%d", r.handle, result)
 	if result < 0 {
 		return TextMetrics{}, hresultError("measure text", result)
 	}
@@ -64,12 +81,15 @@ func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics,
 // render replays one logical display list into the physical DirectComposition surface.
 func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 	damage := displayList.NativeDamage()
+	traceNativeCall("renderer frame begin frameId=%d handle=%p commands=%d scale=%.2f damage=%+v", displayList.FrameMetricsID(), r.handle, len(displayList.commands), scale, damage)
 	result := C.wox_renderer_begin_frame(r.handle, C.float(scale), C.float(damage.X), C.float(damage.Y), C.float(damage.Width), C.float(damage.Height), C.uint8_t(displayList.clearColor.R), C.uint8_t(displayList.clearColor.G), C.uint8_t(displayList.clearColor.B), C.uint8_t(displayList.clearColor.A))
+	traceNativeCall("renderer begin_frame exit frameId=%d handle=%p result=%d", displayList.FrameMetricsID(), r.handle, result)
 	if result < 0 {
 		return hresultError("begin frame", result)
 	}
 
-	for _, command := range displayList.commands {
+	for index, command := range displayList.commands {
+		traceNativeCall("renderer command enter frameId=%d handle=%p index=%d kind=%d", displayList.FrameMetricsID(), r.handle, index, command.kind)
 		var commandResult C.int32_t
 		switch command.kind {
 		case displayCommandFillRoundedRect:
@@ -151,7 +171,10 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 		}
 	}
 
-	return r.endFrame()
+	traceNativeCall("renderer end_frame enter frameId=%d handle=%p", displayList.FrameMetricsID(), r.handle)
+	err := r.endFrame()
+	traceNativeCall("renderer frame exit frameId=%d handle=%p err=%v", displayList.FrameMetricsID(), r.handle, err)
+	return err
 }
 
 func (r *nativeRenderer) endFrame() error {
@@ -164,7 +187,9 @@ func (r *nativeRenderer) endFrame() error {
 
 func (r *nativeRenderer) destroy() {
 	if r.handle != nil {
+		traceNativeCall("renderer destroy enter handle=%p", r.handle)
 		C.wox_renderer_destroy(r.handle)
+		traceNativeCall("renderer destroy exit handle=%p", r.handle)
 		r.handle = nil
 	}
 }

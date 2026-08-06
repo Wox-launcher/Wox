@@ -252,7 +252,27 @@ struct WoxWindowsWebViewSession {
 
 struct WoxWindowsWebView;
 
-class WoxEnvironmentCompletedHandler final : public IUnknown {
+struct WoxWebViewEnvironmentCompletedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, IUnknown *environment) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewEnvironmentCompletedCallback, 0x4e8a3389, 0xc9d8, 0x4bd2, 0xb6, 0xb5, 0x12, 0x4f, 0xee, 0x6c, 0xc1, 0x4d)
+
+struct WoxWebViewControllerCompletedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, IUnknown *controller) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewControllerCompletedCallback, 0x6c4819f3, 0xc9b7, 0x4260, 0x81, 0x27, 0xc9, 0xf5, 0xbd, 0xe7, 0xf6, 0x8c)
+
+struct WoxWebViewScriptCompletedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, const wchar_t *script_id) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewScriptCompletedCallback, 0xb99369f3, 0x9b11, 0x47b5, 0xbc, 0x6f, 0x8e, 0x78, 0x95, 0xfc, 0xea, 0x17)
+
+struct WoxWebViewMessageCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewMessageCallback, 0x57213f19, 0x00e6, 0x49fa, 0x8e, 0x07, 0x89, 0x8e, 0xa0, 0x1e, 0xcb, 0xd2)
+
+class WoxEnvironmentCompletedHandler final : public WoxWebViewEnvironmentCompletedCallback {
 public:
   explicit WoxEnvironmentCompletedHandler(WoxWindowsWebView *owner);
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
@@ -266,7 +286,7 @@ private:
   WoxWindowsWebView *owner_;
 };
 
-class WoxControllerCompletedHandler final : public IUnknown {
+class WoxControllerCompletedHandler final : public WoxWebViewControllerCompletedCallback {
 public:
   WoxControllerCompletedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session);
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
@@ -281,7 +301,7 @@ private:
   WoxWindowsWebViewSession *session_;
 };
 
-class WoxScriptCompletedHandler final : public IUnknown {
+class WoxScriptCompletedHandler final : public WoxWebViewScriptCompletedCallback {
 public:
   WoxScriptCompletedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session);
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
@@ -296,7 +316,7 @@ private:
   WoxWindowsWebViewSession *session_;
 };
 
-class WoxWebMessageHandler final : public IUnknown {
+class WoxWebMessageHandler final : public WoxWebViewMessageCallback {
 public:
   explicit WoxWebMessageHandler(WoxWindowsWebView *owner);
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
@@ -637,9 +657,13 @@ struct WoxWindowsWebView {
   bool closing = false;
 };
 
-static HRESULT callback_query_interface(IUnknown *self, void **object) {
+static HRESULT callback_query_interface(IUnknown *self, REFIID iid, REFIID supported_iid, void **object) {
   if (object == nullptr) {
     return E_POINTER;
+  }
+  *object = nullptr;
+  if (!IsEqualIID(iid, IID_IUnknown) && !IsEqualIID(iid, supported_iid)) {
+    return E_NOINTERFACE;
   }
   *object = self;
   webview_add_ref(self);
@@ -647,7 +671,7 @@ static HRESULT callback_query_interface(IUnknown *self, void **object) {
 }
 
 WoxEnvironmentCompletedHandler::WoxEnvironmentCompletedHandler(WoxWindowsWebView *owner) : owner_(owner) { owner_->retain(); }
-HRESULT WoxEnvironmentCompletedHandler::QueryInterface(REFIID, void **object) { return callback_query_interface(this, object); }
+HRESULT WoxEnvironmentCompletedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewEnvironmentCompletedCallback), object); }
 ULONG WoxEnvironmentCompletedHandler::AddRef() { return references_.fetch_add(1) + 1; }
 ULONG WoxEnvironmentCompletedHandler::Release() {
   ULONG remaining = references_.fetch_sub(1) - 1;
@@ -663,7 +687,7 @@ HRESULT WoxEnvironmentCompletedHandler::Invoke(HRESULT error, IUnknown *environm
 }
 
 WoxControllerCompletedHandler::WoxControllerCompletedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session) : owner_(owner), session_(session) { owner_->retain(); }
-HRESULT WoxControllerCompletedHandler::QueryInterface(REFIID, void **object) { return callback_query_interface(this, object); }
+HRESULT WoxControllerCompletedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewControllerCompletedCallback), object); }
 ULONG WoxControllerCompletedHandler::AddRef() { return references_.fetch_add(1) + 1; }
 ULONG WoxControllerCompletedHandler::Release() {
   ULONG remaining = references_.fetch_sub(1) - 1;
@@ -679,7 +703,7 @@ HRESULT WoxControllerCompletedHandler::Invoke(HRESULT error, IUnknown *controlle
 }
 
 WoxScriptCompletedHandler::WoxScriptCompletedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session) : owner_(owner), session_(session) { owner_->retain(); }
-HRESULT WoxScriptCompletedHandler::QueryInterface(REFIID, void **object) { return callback_query_interface(this, object); }
+HRESULT WoxScriptCompletedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewScriptCompletedCallback), object); }
 ULONG WoxScriptCompletedHandler::AddRef() { return references_.fetch_add(1) + 1; }
 ULONG WoxScriptCompletedHandler::Release() {
   ULONG remaining = references_.fetch_sub(1) - 1;
@@ -695,7 +719,7 @@ HRESULT WoxScriptCompletedHandler::Invoke(HRESULT error, const wchar_t *) {
 }
 
 WoxWebMessageHandler::WoxWebMessageHandler(WoxWindowsWebView *owner) : owner_(owner) { owner_->retain(); }
-HRESULT WoxWebMessageHandler::QueryInterface(REFIID, void **object) { return callback_query_interface(this, object); }
+HRESULT WoxWebMessageHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewMessageCallback), object); }
 ULONG WoxWebMessageHandler::AddRef() { return references_.fetch_add(1) + 1; }
 ULONG WoxWebMessageHandler::Release() {
   ULONG remaining = references_.fetch_sub(1) - 1;

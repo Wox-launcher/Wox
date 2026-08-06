@@ -11,6 +11,7 @@ import (
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/ui/contract"
+	"wox/util"
 	utilselection "wox/util/selection"
 )
 
@@ -45,6 +46,9 @@ func toCorePlainQuery(query plainQuery) common.PlainQuery {
 
 // ApplyQueryResponse updates launcher rendering from one typed core snapshot.
 func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryResponse) {
+	if util.IsDev() {
+		util.GetLogger().Debug(context.Background(), fmt.Sprintf("native crash trace: query response enter queryId=%s results=%d final=%t", response.QueryID, len(response.Response.Results), response.IsFinal))
+	}
 	results := make([]queryResult, len(response.Response.Results))
 	for index := range response.Response.Results {
 		results[index] = fromCoreQueryResult(response.Response.Results[index])
@@ -53,11 +57,20 @@ func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryRespo
 	refinements := fromCoreQueryRefinements(response.Response.Refinements)
 	queryContext := queryContext{IsGlobalQuery: response.Response.Context.IsGlobalQuery, PluginID: response.Response.Context.PluginId}
 	if err := a.runOnUI("apply query response", func() {
+		if util.IsDev() {
+			util.GetLogger().Debug(context.Background(), fmt.Sprintf("native crash trace: query response ui enter queryId=%s results=%d final=%t", response.QueryID, len(results), response.IsFinal))
+		}
 		if !a.isDestroyed() {
 			a.applyResults(response.QueryID, results, &layout, &refinements, &queryContext, response.Response.QueryStartTimestamp, response.IsFinal)
 		}
+		if util.IsDev() {
+			util.GetLogger().Debug(context.Background(), fmt.Sprintf("native crash trace: query response ui exit queryId=%s", response.QueryID))
+		}
 	}); err != nil {
 		log.Printf("dispatch query response: %v", err)
+	}
+	if util.IsDev() {
+		util.GetLogger().Debug(context.Background(), fmt.Sprintf("native crash trace: query response exit queryId=%s", response.QueryID))
 	}
 }
 

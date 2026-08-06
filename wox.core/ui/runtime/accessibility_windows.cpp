@@ -59,12 +59,17 @@ struct Snapshot {
   std::vector<uint64_t> roots;
 };
 
+class Provider;
+
 struct TreeState {
   std::mutex mutex;
   Snapshot current;
   Snapshot pending;
+  std::unordered_map<uint64_t, Provider *> providers;
   bool building = false;
 };
+
+Provider *retain_provider(HWND hwnd, const std::shared_ptr<TreeState> &state, uint64_t node_id);
 
 std::mutex states_mutex;
 std::unordered_map<HWND, std::shared_ptr<TreeState>> states;
@@ -271,9 +276,9 @@ class Provider final : public IRawElementProviderSimple,
       }
     }
     if (direction == NavigateDirection_Parent && node_id_ != 0 && target == 0) {
-      *provider = new Provider(hwnd_, state_, 0);
+      *provider = retain_provider(hwnd_, state_, 0);
     } else if (target != 0) {
-      *provider = new Provider(hwnd_, state_, target);
+      *provider = retain_provider(hwnd_, state_, target);
     }
     return S_OK;
   }
@@ -308,7 +313,7 @@ class Provider final : public IRawElementProviderSimple,
 
   HRESULT STDMETHODCALLTYPE get_FragmentRoot(IRawElementProviderFragmentRoot **root) override {
     if (root == nullptr) return E_POINTER;
-    *root = new Provider(hwnd_, state_, 0);
+    *root = retain_provider(hwnd_, state_, 0);
     return S_OK;
   }
 
@@ -326,7 +331,7 @@ class Provider final : public IRawElementProviderSimple,
         }
       }
     }
-    *provider = new Provider(hwnd_, state_, hit);
+    *provider = retain_provider(hwnd_, state_, hit);
     return S_OK;
   }
 
@@ -343,7 +348,7 @@ class Provider final : public IRawElementProviderSimple,
         }
       }
     }
-    *provider = new Provider(hwnd_, state_, focused);
+    *provider = retain_provider(hwnd_, state_, focused);
     return S_OK;
   }
 
@@ -433,6 +438,20 @@ class Provider final : public IRawElementProviderSimple,
   uint64_t node_id_;
 };
 
+// Reuse COM identity because UI Automation retains providers that raise events.
+Provider *retain_provider(HWND hwnd, const std::shared_ptr<TreeState> &state, uint64_t node_id) {
+  std::lock_guard<std::mutex> lock(state->mutex);
+  auto found = state->providers.find(node_id);
+  if (found != state->providers.end()) {
+    found->second->AddRef();
+    return found->second;
+  }
+  Provider *provider = new Provider(hwnd, state, node_id);
+  provider->AddRef();
+  state->providers.emplace(node_id, provider);
+  return provider;
+}
+
 }  // namespace
 
 extern "C" int32_t wox_windows_accessibility_begin(uintptr_t owner, uint64_t generation) {
@@ -476,11 +495,20 @@ extern "C" int32_t wox_windows_accessibility_end(uintptr_t owner) {
   auto state = state_for(hwnd, false);
   if (!state) return -1;
   uint64_t focused = 0;
+  std::vector<Provider *> stale_providers;
   {
     std::lock_guard<std::mutex> lock(state->mutex);
     if (!state->building) return -1;
     state->current = std::move(state->pending);
     state->building = false;
+    for (auto provider = state->providers.begin(); provider != state->providers.end();) {
+      if (provider->first != 0 && state->current.nodes.find(provider->first) == state->current.nodes.end()) {
+        stale_providers.push_back(provider->second);
+        provider = state->providers.erase(provider);
+      } else {
+        ++provider;
+      }
+    }
     for (const auto &entry : state->current.nodes) {
       if ((entry.second.state_flags & state_focused) != 0) {
         focused = entry.first;
@@ -488,11 +516,12 @@ extern "C" int32_t wox_windows_accessibility_end(uintptr_t owner) {
       }
     }
   }
-  Provider *root = new Provider(hwnd, state, 0);
+  for (Provider *provider : stale_providers) provider->Release();
+  Provider *root = retain_provider(hwnd, state, 0);
   UiaRaiseStructureChangedEvent(root, StructureChangeType_ChildrenInvalidated, nullptr, 0);
   root->Release();
   if (focused != 0) {
-    Provider *focus = new Provider(hwnd, state, focused);
+    Provider *focus = retain_provider(hwnd, state, focused);
     UiaRaiseAutomationEvent(focus, UIA_AutomationFocusChangedEventId);
     focus->Release();
   }
@@ -504,13 +533,30 @@ extern "C" uintptr_t wox_windows_accessibility_get_object(uintptr_t owner, uintp
   if (static_cast<LONG>(lparam) != UiaRootObjectId) return 0;
   auto state = state_for(hwnd, false);
   if (!state) return 0;
-  Provider *root = new Provider(hwnd, state, 0);
+  Provider *root = retain_provider(hwnd, state, 0);
   LRESULT result = UiaReturnRawElementProvider(hwnd, static_cast<WPARAM>(wparam), static_cast<LPARAM>(lparam), root);
   root->Release();
   return static_cast<uintptr_t>(result);
 }
 
 extern "C" void wox_windows_accessibility_remove(uintptr_t owner) {
-  std::lock_guard<std::mutex> lock(states_mutex);
-  states.erase(reinterpret_cast<HWND>(owner));
+  HWND hwnd = reinterpret_cast<HWND>(owner);
+  UiaReturnRawElementProvider(hwnd, 0, 0, nullptr);
+
+  std::shared_ptr<TreeState> state;
+  {
+    std::lock_guard<std::mutex> lock(states_mutex);
+    auto found = states.find(hwnd);
+    if (found == states.end()) return;
+    state = found->second;
+    states.erase(found);
+  }
+
+  std::vector<Provider *> providers;
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    for (const auto &entry : state->providers) providers.push_back(entry.second);
+    state->providers.clear();
+  }
+  for (Provider *provider : providers) provider->Release();
 }

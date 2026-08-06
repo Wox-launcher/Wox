@@ -27,10 +27,13 @@ func updateWindowsAccessibility(window *platformWindow, tree AccessibilityTree) 
 		return errors.New("woxui: Windows window is closed")
 	}
 	owner := C.uintptr_t(hwnd)
-	if C.wox_windows_accessibility_begin(owner, C.uint64_t(tree.Generation)) != 0 {
+	traceNativeCall("accessibility begin enter hwnd=%#x generation=%d nodes=%d", hwnd, tree.Generation, len(tree.Nodes))
+	beginResult := C.wox_windows_accessibility_begin(owner, C.uint64_t(tree.Generation))
+	traceNativeCall("accessibility begin exit hwnd=%#x generation=%d result=%d", hwnd, tree.Generation, beginResult)
+	if beginResult != 0 {
 		return errors.New("woxui: failed to begin Windows accessibility update")
 	}
-	for _, node := range tree.Nodes {
+	for index, node := range tree.Nodes {
 		children := make([]C.uint64_t, len(node.Children))
 		for index := range node.Children {
 			children[index] = C.uint64_t(node.Children[index])
@@ -50,6 +53,7 @@ func updateWindowsAccessibility(window *platformWindow, tree AccessibilityTree) 
 		} else if node.LiveRegion == AccessibilityLiveRegionAssertive {
 			liveRegion = 2
 		}
+		traceNativeCall("accessibility node enter hwnd=%#x generation=%d index=%d id=%d role=%s children=%d", hwnd, tree.Generation, index, node.ID, node.Role, len(node.Children))
 		result := C.wox_windows_accessibility_add_node(
 			owner,
 			C.uint64_t(node.ID),
@@ -78,18 +82,26 @@ func updateWindowsAccessibility(window *platformWindow, tree AccessibilityTree) 
 			return errors.New("woxui: failed to add Windows accessibility node")
 		}
 	}
-	if C.wox_windows_accessibility_end(owner) != 0 {
+	traceNativeCall("accessibility commit enter hwnd=%#x generation=%d", hwnd, tree.Generation)
+	endResult := C.wox_windows_accessibility_end(owner)
+	traceNativeCall("accessibility commit exit hwnd=%#x generation=%d result=%d", hwnd, tree.Generation, endResult)
+	if endResult != 0 {
 		return errors.New("woxui: failed to commit Windows accessibility update")
 	}
 	return nil
 }
 
 func windowsAccessibilityObject(hwnd uintptr, wParam uintptr, lParam uintptr) uintptr {
-	return uintptr(C.wox_windows_accessibility_get_object(C.uintptr_t(hwnd), C.uintptr_t(wParam), C.uintptr_t(lParam)))
+	traceNativeCall("accessibility get_object enter hwnd=%#x wParam=%#x lParam=%#x", hwnd, wParam, lParam)
+	result := uintptr(C.wox_windows_accessibility_get_object(C.uintptr_t(hwnd), C.uintptr_t(wParam), C.uintptr_t(lParam)))
+	traceNativeCall("accessibility get_object exit hwnd=%#x result=%#x", hwnd, result)
+	return result
 }
 
 func removeWindowsAccessibility(hwnd uintptr) {
+	traceNativeCall("accessibility remove enter hwnd=%#x", hwnd)
 	C.wox_windows_accessibility_remove(C.uintptr_t(hwnd))
+	traceNativeCall("accessibility remove exit hwnd=%#x", hwnd)
 }
 
 //export woxGoWindowsAccessibilityAction
