@@ -1291,6 +1291,14 @@ func (w *platformWindow) setBoundsNative(bounds Rect) error {
 	if scale <= 0 {
 		scale = primaryDisplayScale()
 	}
+	// Keep w.scale in sync with the target monitor before SetWindowPos. Windows
+	// sends WM_DPICHANGED synchronously while the window lands on a differently
+	// scaled monitor, and that handler derives the logical size from w.scale. A
+	// stale w.scale would make it back-compute a doubled or halved logical size
+	// and rescale the window again, corrupting the first show on the new screen.
+	w.mu.Lock()
+	w.scale = scale
+	w.mu.Unlock()
 	x := int32(math.Round(float64(bounds.X * scale)))
 	y := int32(math.Round(float64(bounds.Y * scale)))
 	width := int32(logicalToPhysical(bounds.Width, scale))
@@ -1340,6 +1348,12 @@ func (w *platformWindow) centerNative(size Size) error {
 		return errors.New("failed to read Windows monitor work area")
 	}
 	scale := monitorScale(monitor)
+	// Keep w.scale consistent with the monitor the window is centered on, so a
+	// later move to a differently scaled monitor (or a synchronous WM_DPICHANGED)
+	// does not back-compute the logical size from the previous monitor's scale.
+	w.mu.Lock()
+	w.scale = scale
+	w.mu.Unlock()
 	width := int32(logicalToPhysical(size.Width, scale))
 	height := int32(logicalToPhysical(size.Height, scale))
 	width = min(width, info.RcWork.Right-info.RcWork.Left)
