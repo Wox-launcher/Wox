@@ -530,6 +530,7 @@
   "ui_plugin_tab_description": "Описание",
   "ui_plugin_tab_privacy": "Конфиденциальность",
   "ui_plugin_no_trigger_keywords": "Этот плагин не имеет ключевых слов",
+  "ui_plugin_no_trigger_keywords_subtitle": "Этот плагин не объявляет ключевые слова запуска в своём манифесте.",
   "ui_plugin_no_commands": "Этот плагин не имеет команд",
   "ui_plugin_no_commands_subtitle": "Этот плагин не предоставляет подкоманды после ключевого слова. Используйте ключевое слово напрямую.",
   "ui_plugin_no_data_access": "Этот плагин не требует доступа к данным",

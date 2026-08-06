@@ -549,6 +549,7 @@
   "ui_plugin_tab_description": "描述",
   "ui_plugin_tab_privacy": "隐私",
   "ui_plugin_no_trigger_keywords": "此插件没有触发关键词",
+  "ui_plugin_no_trigger_keywords_subtitle": "此插件未在清单中声明触发关键词。",
   "ui_plugin_no_commands": "此插件没有命令",
   "ui_plugin_no_commands_subtitle": "此插件没有提供触发关键词后的子命令，可以直接通过触发关键词使用。",
   "ui_plugin_no_data_access": "此插件不需要任何数据访问权限",

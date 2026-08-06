@@ -352,10 +352,12 @@ func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot, imageSca
 		if strings.TrimSpace(name) == "" {
 			name = pluginID + " (" + a.translate("i18n:ui_cloud_sync_plugin_exclusions_uninstalled") + ")"
 		}
+		var icon *woxui.Image
+		if plugin.Icon.ImageType != "" {
+			icon = a.imageForSize(plugin.Icon, physicalImageSize(18, imageScale))
+		}
 		items = append(items, launcherview.CloudPluginExclusionProps{
-			ID:       fmt.Sprintf("cloud-plugin-%d", index),
-			Name:     name,
-			PluginID: pluginID,
+			ID: fmt.Sprintf("cloud-plugin-%d", index), Name: name, PluginID: pluginID, Icon: icon,
 			OnDelete: func() { a.toggleCloudPluginExclusion(pluginID) },
 		})
 	}
@@ -371,8 +373,38 @@ func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot, imageSca
 		AddIcon:        a.imageForTint(settingControlIconSource("add"), &foreground, physicalImageSize(15, imageScale)),
 		DeleteIcon:     a.imageForTint(settingControlIconSource("delete"), &foreground, physicalImageSize(16, imageScale)),
 		EmptyIcon:      a.imageForTint(settingControlIconSource("inbox"), &foreground, physicalImageSize(24, imageScale)),
-		OnAdd:          func() { a.toggleCloudActionMenu("plugins") },
+		OnAdd:          a.openCloudPluginExclusionDialog,
 	}
+}
+
+// buildCloudPluginExclusionOverlay maps the transient row editor onto the Flutter-style dialog shell.
+func (a *App) buildCloudPluginExclusionOverlay(dialog *cloudPluginExclusionDialogSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+	plugins := a.cloudPluginExclusionPlugins()
+	choices := make([]launcherview.SettingsChoice, 0, len(plugins))
+	selectedName := dialog.Selected
+	var selectedIcon *woxui.Image
+	for _, plugin := range plugins {
+		label := plugin.Name
+		if strings.TrimSpace(label) == "" {
+			label = plugin.ID
+		}
+		leading := (*woxui.Image)(nil)
+		if plugin.Icon.ImageType != "" {
+			leading = a.imageForSize(plugin.Icon, physicalImageSize(18, imageScale))
+		}
+		choices = append(choices, launcherview.SettingsChoice{Value: plugin.ID, Label: label, Leading: leading})
+		if plugin.ID == dialog.Selected {
+			selectedName = label
+			selectedIcon = leading
+		}
+	}
+	return launcherview.CloudPluginExclusionDialog(launcherview.CloudPluginExclusionDialogProps{
+		Width: width, Height: height, PanelWidth: 648, PanelHeight: 170,
+		FieldLabel: a.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin"), Description: a.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin_tips"),
+		Selected: dialog.Selected, SelectedName: selectedName, SelectedIcon: selectedIcon, Choices: choices, ChoiceAnchor: dialog.ChoiceAnchor, ChoiceOpen: dialog.ChoiceOpen,
+		CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: a.translate("i18n:ui_save"), Window: a.settingsNativeWindow(), Theme: palette.componentTheme(),
+		OnChoiceTap: a.openCloudPluginExclusionChoice, OnChoose: a.chooseCloudPluginExclusion, OnCancel: a.closeCloudPluginExclusionDialog, OnSave: a.saveCloudPluginExclusion,
+	})
 }
 
 // cloudConfigNotesViewProps translates platform-aware sync caveats for the view.

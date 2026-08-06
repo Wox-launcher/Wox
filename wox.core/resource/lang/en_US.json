@@ -549,6 +549,7 @@
   "ui_plugin_tab_description": "Description",
   "ui_plugin_tab_privacy": "Privacy",
   "ui_plugin_no_trigger_keywords": "This plugin has no trigger keywords",
+  "ui_plugin_no_trigger_keywords_subtitle": "This plugin does not declare trigger keywords in its manifest.",
   "ui_plugin_no_commands": "This plugin has no command",
   "ui_plugin_no_commands_subtitle": "This plugin does not provide subcommands after its trigger keyword. Use the trigger keyword directly.",
   "ui_plugin_no_data_access": "This plugin requires no data access",

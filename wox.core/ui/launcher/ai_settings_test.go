@@ -1,6 +1,11 @@
 package launcher
 
-import "testing"
+import (
+	"testing"
+
+	"wox/common"
+	"wox/setting/definition"
+)
 
 func TestNewAISettingsFormMatchesFlutterTableDefinitions(t *testing.T) {
 	form := newAISettingsForm(settingsData{})
@@ -39,5 +44,50 @@ func assertFormTableColumnWidths(t *testing.T, columns []formTableColumn, want [
 		if columns[index].Width != width {
 			t.Fatalf("column %d width = %d, want %d", index, columns[index].Width, width)
 		}
+	}
+}
+
+// TestApplyAIProviderCatalogLockedCarriesIcons guards the Flutter contract that the AI
+// provider name dropdown shows each provider icon next to its label.
+func TestApplyAIProviderCatalogLockedCarriesIcons(t *testing.T) {
+	form := newAISettingsForm(settingsData{})
+	providers := []aiProviderInfo{
+		{Name: "openai", Icon: woxImage{ImageType: "url", ImageData: "https://example.com/openai.svg"}, DefaultHost: "https://api.openai.com"},
+		{Name: "ollama", DefaultHost: "http://localhost:11434"},
+	}
+	applyAIProviderCatalogLocked(&form, providers)
+
+	var options []formOption
+	for _, column := range form.definitions[0].Value.Columns {
+		if column.Key == "Name" {
+			options = column.SelectOptions
+		}
+	}
+	if len(options) != 2 {
+		t.Fatalf("provider options = %d, want 2", len(options))
+	}
+	if options[0].Value != "openai" || options[0].Icon.ImageType != "url" || options[0].Icon.ImageData != "https://example.com/openai.svg" {
+		t.Fatalf("openai option icon not carried: %+v", options[0])
+	}
+	if options[1].Value != "ollama" || options[1].Icon.ImageType != "" {
+		t.Fatalf("ollama option should have an empty icon: %+v", options[1])
+	}
+}
+
+// TestFromCoreSelectOptionsCarriesIcons keeps plugin select options on the same
+// icon contract as the built-in AI provider dropdown.
+func TestFromCoreSelectOptionsCarriesIcons(t *testing.T) {
+	converted := fromCoreSelectOptions([]definition.PluginSettingValueSelectOption{
+		{Label: "OpenAI", Value: "openai", Icon: common.WoxImage{ImageType: "url", ImageData: "https://example.com/openai.svg"}},
+		{Label: "Local", Value: "local"},
+	})
+	if len(converted) != 2 {
+		t.Fatalf("converted options = %d, want 2", len(converted))
+	}
+	if converted[0].Icon.ImageType != "url" || converted[0].Icon.ImageData != "https://example.com/openai.svg" {
+		t.Fatalf("first option icon not carried: %+v", converted[0])
+	}
+	if converted[1].Icon.ImageType != "" {
+		t.Fatalf("second option should have an empty icon: %+v", converted[1])
 	}
 }

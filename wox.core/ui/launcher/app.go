@@ -1547,18 +1547,19 @@ type formTableColumn struct {
 }
 
 type formOption struct {
-	Label            string `json:"Label"`
-	Value            string `json:"Value"`
-	ID               string `json:"ID"`
-	DisplayName      string `json:"DisplayName"`
-	Description      string `json:"Description"`
-	Languages        string `json:"Languages"`
-	Recommended      bool   `json:"Recommended"`
-	Available        bool   `json:"Available"`
-	Status           string `json:"Status"`
-	DownloadProgress int    `json:"DownloadProgress"`
-	SizeMB           int    `json:"SizeMB"`
-	Error            string `json:"Error"`
+	Label            string   `json:"Label"`
+	Value            string   `json:"Value"`
+	Icon             woxImage `json:"Icon"`
+	ID               string   `json:"ID"`
+	DisplayName      string   `json:"DisplayName"`
+	Description      string   `json:"Description"`
+	Languages        string   `json:"Languages"`
+	Recommended      bool     `json:"Recommended"`
+	Available        bool     `json:"Available"`
+	Status           string   `json:"Status"`
+	DownloadProgress int      `json:"DownloadProgress"`
+	SizeMB           int      `json:"SizeMB"`
+	Error            string   `json:"Error"`
 }
 
 type formValidator struct {

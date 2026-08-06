@@ -9,14 +9,18 @@ import (
 )
 
 // buildFormTableChoicePicker adapts one table select field to the shared Flutter-style anchored menu.
-func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	choices := make([]launcherview.SettingsChoice, len(snapshot.options))
 	for index, option := range snapshot.options {
 		label := a.translate(option.Label)
 		if label == "" {
 			label = option.Value
 		}
-		choices[index] = launcherview.SettingsChoice{Value: option.Value, Label: label}
+		choice := launcherview.SettingsChoice{Value: option.Value, Label: label}
+		if option.Icon.ImageType != "" {
+			choice.Leading = a.imageForSize(option.Icon, physicalImageSize(18, imageScale))
+		}
+		choices[index] = choice
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
 		ID: "form-table-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Theme: palette.componentTheme(), Window: a.formTableNativeWindow(), Title: a.translate(snapshot.title),

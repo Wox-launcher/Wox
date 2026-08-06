@@ -130,3 +130,53 @@ func TestCloudPlanTooltipOverlayOccupiesOnlyItsVisiblePanel(t *testing.T) {
 		t.Fatal("tooltip must not add a full-window hit-test layer above its hover anchor")
 	}
 }
+
+func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
+	selectedIcon := &woxui.Image{}
+	dialog := CloudPluginExclusionDialog(CloudPluginExclusionDialogProps{
+		Width: 1200, Height: 800, PanelWidth: 648, PanelHeight: 170, FieldLabel: "Plugin", Selected: "plugin-a", SelectedName: "Plugin A",
+		SelectedIcon: selectedIcon, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.Theme{}, OnCancel: func() {}, OnSave: func() {},
+	}).(woxwidget.Stateful)
+	props := dialog.Widget.(woxcomponent.DialogProps)
+	if props.Width != 648 || props.Height != 170 || props.Radius != 20 {
+		t.Fatalf("dialog geometry = %vx%v radius %v, want 648x170 radius 20", props.Width, props.Height, props.Radius)
+	}
+	if props.Padding != (woxwidget.Insets{Left: 24, Top: 24, Right: 24, Bottom: 24}) {
+		t.Fatalf("dialog padding = %+v, want 24px all around", props.Padding)
+	}
+	child := props.Child.(woxwidget.Flex)
+	if len(child.Children) != 2 || child.Gap != 12 {
+		t.Fatalf("dialog content = %d children gap %v, want field/actions with 12px gap", len(child.Children), child.Gap)
+	}
+	field := child.Children[0].(woxwidget.Container)
+	fieldLayout := field.Child.(woxwidget.Flex)
+	selectSemantics := fieldLayout.Children[1].(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	selectFocus := selectSemantics.Child.(woxwidget.Focusable)
+	selectTrigger := selectFocus.Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	selectContent := selectTrigger.Child.(woxwidget.Flex)
+	if selectContent.Children[0].(woxwidget.Align).Child.(woxwidget.Image).Source != selectedIcon {
+		t.Fatal("selected plugin icon is not forwarded to the closed dropdown")
+	}
+
+	rowIcon := &woxui.Image{}
+	card := cloudPluginExclusionsCard(CloudPluginExclusionsProps{
+		SectionLabel: "Exclusions", ColumnLabel: "Plugin", Tips: "Tips", Items: []CloudPluginExclusionProps{{Name: "Plugin A", Icon: rowIcon}},
+	}, 700, 140, woxcomponent.Theme{}).(woxwidget.Container)
+	cardFlex := card.Child.(woxwidget.Flex)
+	grid := cardFlex.Children[1].(woxwidget.Stateful).Widget.(formTableGridProps)
+	if grid.field.Rows[0].Cells[0].Icon != rowIcon || grid.field.Rows[0].Cells[0].IconSize != 18 {
+		t.Fatal("plugin table row does not preserve the 18px plugin icon")
+	}
+
+	choiceDialog := CloudPluginExclusionDialog(CloudPluginExclusionDialogProps{
+		Width: 1200, Height: 800, PanelWidth: 648, PanelHeight: 170, FieldLabel: "Plugin", Selected: "plugin-a", SelectedName: "Plugin A", ChoiceOpen: true,
+		Choices: []SettingsChoice{{Value: "plugin-a", Label: "Plugin A"}}, Theme: woxcomponent.Theme{}, OnCancel: func() {}, OnSave: func() {},
+	}).(woxwidget.Stack)
+	if len(choiceDialog.Children) != 2 {
+		t.Fatalf("choice dialog layers = %d, want dialog and anchored choice menu", len(choiceDialog.Children))
+	}
+	choice := choiceDialog.Children[1].Child.(woxwidget.Stateful).Widget.(SettingsChoiceProps)
+	if choice.ID != "cloud-plugin-exclusion-choice" || choice.CurrentValue != "plugin-a" {
+		t.Fatalf("choice props = %+v, want cloud plugin selector with current value", choice)
+	}
+}

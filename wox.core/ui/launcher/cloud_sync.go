@@ -272,6 +272,88 @@ func (a *App) closeCloudActionMenu() {
 	a.invalidateSettingsWindow()
 }
 
+// openCloudPluginExclusionDialog opens Flutter's single-row editor with the first available plugin selected.
+func (a *App) openCloudPluginExclusionDialog() {
+	excluded := make(map[string]bool, len(a.generalSettings.Data().CloudSyncDisabledPlugins))
+	for _, pluginID := range a.generalSettings.Data().CloudSyncDisabledPlugins {
+		excluded[strings.TrimSpace(pluginID)] = true
+	}
+	selected := ""
+	for _, plugin := range a.cloudSettings.Plugins() {
+		pluginID := strings.TrimSpace(plugin.ID)
+		if pluginID != "" && !excluded[pluginID] {
+			selected = pluginID
+			break
+		}
+	}
+	if selected == "" {
+		return
+	}
+	a.cloudSettings.SetActionMenu("")
+	a.cloudSettings.SetPluginDialog(&cloudPluginExclusionDialogState{selected: selected})
+	a.invalidateSettingsWindow()
+}
+
+// closeCloudPluginExclusionDialog dismisses the add-exclusion row editor and its choice menu.
+func (a *App) closeCloudPluginExclusionDialog() {
+	a.cloudSettings.SetPluginDialog(nil)
+	a.invalidateSettingsWindow()
+}
+
+// openCloudPluginExclusionChoice opens the field-anchored plugin selector inside the row editor.
+func (a *App) openCloudPluginExclusionChoice(anchor woxui.Rect) {
+	state := a.cloudSettings.PluginDialog()
+	if state == nil {
+		return
+	}
+	state.choiceOpen = true
+	state.choiceAnchor = anchor
+	a.cloudSettings.SetPluginDialog(state)
+	a.invalidateSettingsWindow()
+}
+
+// chooseCloudPluginExclusion updates the uncommitted plugin selection in the row editor.
+func (a *App) chooseCloudPluginExclusion(index int) {
+	state := a.cloudSettings.PluginDialog()
+	if state == nil {
+		return
+	}
+	choices := a.cloudPluginExclusionPlugins()
+	if index < 0 || index >= len(choices) {
+		return
+	}
+	state.selected = choices[index].ID
+	state.choiceOpen = false
+	a.cloudSettings.SetPluginDialog(state)
+	a.invalidateSettingsWindow()
+}
+
+// saveCloudPluginExclusion commits the selected plugin using the existing cloud setting update path.
+func (a *App) saveCloudPluginExclusion() {
+	state := a.cloudSettings.PluginDialog()
+	if state == nil || strings.TrimSpace(state.selected) == "" {
+		return
+	}
+	pluginID := state.selected
+	a.closeCloudPluginExclusionDialog()
+	a.toggleCloudPluginExclusion(pluginID)
+}
+
+// cloudPluginExclusionPlugins returns installed plugins that are not already excluded.
+func (a *App) cloudPluginExclusionPlugins() []pluginSettingsPlugin {
+	excluded := make(map[string]bool, len(a.generalSettings.Data().CloudSyncDisabledPlugins))
+	for _, pluginID := range a.generalSettings.Data().CloudSyncDisabledPlugins {
+		excluded[strings.TrimSpace(pluginID)] = true
+	}
+	plugins := make([]pluginSettingsPlugin, 0, len(a.cloudSettings.Plugins()))
+	for _, plugin := range a.cloudSettings.Plugins() {
+		if pluginID := strings.TrimSpace(plugin.ID); pluginID != "" && !excluded[pluginID] {
+			plugins = append(plugins, plugin)
+		}
+	}
+	return plugins
+}
+
 // runCloudMenuAction preserves Flutter's account and subscription actions behind compact row menus.
 func (a *App) runCloudMenuAction(action string) {
 	a.cloudSettings.SetActionMenu("")
@@ -531,6 +613,20 @@ func (a *App) moveCloudFormFocus(delta int) {
 
 // onCloudSettingsKey gives the active account/bootstrap modal exclusive keyboard ownership.
 func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
+	pluginDialog := a.settingsOpen && a.cloudSettings.PluginDialog() != nil
+	if pluginDialog {
+		if event.Key == woxui.KeyEscape {
+			state := a.cloudSettings.PluginDialog()
+			if state != nil && state.choiceOpen {
+				state.choiceOpen = false
+				a.cloudSettings.SetPluginDialog(state)
+				a.invalidateSettingsWindow()
+			} else {
+				a.closeCloudPluginExclusionDialog()
+			}
+		}
+		return true
+	}
 	menuActive := a.settingsOpen && a.cloudSettings.ActionMenu() != ""
 	form := a.cloudSettings.Form()
 	active := a.settingsOpen && form != nil

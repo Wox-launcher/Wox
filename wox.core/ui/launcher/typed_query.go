@@ -287,7 +287,10 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 func fromCoreSelectOptions(options []definition.PluginSettingValueSelectOption) []formOption {
 	converted := make([]formOption, len(options))
 	for index, option := range options {
-		converted[index] = formOption{Label: option.Label, Value: option.Value}
+		converted[index] = formOption{
+			Label: option.Label, Value: option.Value,
+			Icon: woxImage{ImageType: option.Icon.ImageType, ImageData: option.Icon.ImageData},
+		}
 	}
 	return converted
 }

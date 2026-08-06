@@ -103,7 +103,7 @@ var uiIcons = map[string]WoxImage{
 	"control.remove":             newMonochromeUIIcon(`<path d="M5 12h14"/>`),
 	"control.undo":               newMonochromeUIIcon(`<path d="M9 7 5 11l4 4"/><path d="M5 11h8a6 6 0 0 1 6 6v1"/>`),
 	"control.save":               newMonochromeUIIcon(`<path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/>`),
-	"control.save-edit":          newMonochromeUIIcon(`<path d="M5 4h12l2 2v6M8 4v6h8V4"/><path d="m13 19 6-6 2 2-6 6h-2z"/>`),
+	"control.overwrite":          newMonochromeUIIcon(`<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M12 10v7"/><path d="m9 13.5 3 3.5 3-3.5"/>`),
 	"control.search":             newMonochromeUIIcon(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>`),
 	"control.fullscreen":         newMonochromeUIIcon(`<path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>`),
 	"control.fullscreen-exit":    newMonochromeUIIcon(`<path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/>`),

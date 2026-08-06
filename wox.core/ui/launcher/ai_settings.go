@@ -190,7 +190,7 @@ func applyAIProviderCatalogLocked(fields *formFieldsState, providers []aiProvide
 			continue
 		}
 		seen[name] = true
-		options = append(options, formOption{Label: name, Value: name})
+		options = append(options, formOption{Label: name, Value: name, Icon: provider.Icon})
 	}
 	if rows, err := decodeFormTableRows(fields.values["AIProviders"]); err == nil {
 		for _, row := range rows {

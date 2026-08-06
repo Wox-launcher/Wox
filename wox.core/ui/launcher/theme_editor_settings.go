@@ -56,7 +56,7 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 	primaryForeground := palette.actionSelectedText
 	locateIcon := a.imageForTint(settingControlIconSource("locate"), &foreground, physicalImageSize(18, imageScale))
 	discardIcon := a.imageForTint(settingControlIconSource("undo"), &foreground, physicalImageSize(18, imageScale))
-	overwriteIcon := a.imageForTint(settingControlIconSource("save-edit"), &foreground, physicalImageSize(18, imageScale))
+	overwriteIcon := a.imageForTint(settingControlIconSource("overwrite"), &foreground, physicalImageSize(18, imageScale))
 	saveAsIcon := a.imageForTint(settingControlIconSource("save"), &primaryForeground, physicalImageSize(18, imageScale))
 	wallpaperImage := a.themeSettings.ThemeWallpaperImage()
 	wallpaperBlurred := a.themeSettings.ThemeWallpaperBlurred()

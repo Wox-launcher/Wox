@@ -322,6 +322,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.settingsDemo = nil
 		a.settingsDemoRevision.Add(1)
 		a.cloudSettings.SetActionMenu("")
+		a.cloudSettings.SetPluginDialog(nil)
 		a.form = nil
 		a.requirementForm = nil
 		a.launcherTableEditor = nil
@@ -796,6 +797,7 @@ func (a *App) selectSettingTab(tab string) {
 		a.settingRow = 0
 		a.generalSettings.EndEdit()
 		a.cloudSettings.SetForm(nil)
+		a.cloudSettings.SetPluginDialog(nil)
 		a.cloudPlanTooltip = nil
 		a.settingsDemo = nil
 		a.settingsDemoRevision.Add(1)

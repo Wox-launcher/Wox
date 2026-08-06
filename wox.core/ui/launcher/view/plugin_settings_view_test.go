@@ -234,6 +234,131 @@ func TestPluginStoreChipCentersContentVertically(t *testing.T) {
 	}
 }
 
+func TestPluginStoreDetailTabsMatchInstalledEditorMetrics(t *testing.T) {
+	tabs := []PluginTab{{ID: "description", Label: "Description", Width: 96}, {ID: "keywords", Label: "Keywords", Width: 88}}
+	store := pluginStoreDetail(PluginStoreDetailProps{
+		Name: "Shell", Version: "1.0.0", Author: "Wox", Runtime: "Go", ActiveTab: "description", Tabs: tabs,
+	}, 800, 600, woxcomponent.Theme{})
+
+	container := store.(woxwidget.Container)
+	if container.Padding.Left != 16 || container.Padding.Right != 16 {
+		t.Fatalf("store detail padding = %+v, want the installed editor's 16px inset", container.Padding)
+	}
+	storeTabs := container.Child.(woxwidget.Flex).Children[1].(woxwidget.Container)
+
+	editor := pluginEditor(PluginEditorProps{
+		ActiveTab: "settings",
+		Tabs:      []PluginTab{{ID: "settings", Label: "Settings", Width: 80}, {ID: "keywords", Label: "Keywords", Width: 88}},
+	}, 800, 600, woxcomponent.Theme{})
+	editorTabs := editor.(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Container)
+
+	if storeTabs.Height != editorTabs.Height || storeTabs.Width != editorTabs.Width {
+		t.Fatalf("store tab strip %vx%v != installed %vx%v", storeTabs.Width, storeTabs.Height, editorTabs.Width, editorTabs.Height)
+	}
+	if storeTabs.Height != 44 {
+		t.Fatalf("store detail tab strip height = %v, want the installed editor's 44", storeTabs.Height)
+	}
+}
+
+func TestPluginStoreKeywordsUseSharedFormTabBody(t *testing.T) {
+	accent := woxui.Color{R: 33, G: 150, B: 243, A: 255}
+	table := FormTableField(FormTableFieldProps{
+		ID: "plugin-keywords", Width: 720, MaxHeight: 300, InlineTitle: true, ReadOnly: true,
+		Columns: []FormTableColumn{{Label: "Keyword", Tooltip: "The keyword that triggers this plugin."}},
+		Rows:    []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "awake"}}}},
+		Theme:   woxcomponent.Theme{},
+	})
+	store := pluginStoreDetail(PluginStoreDetailProps{
+		Name: "Awake", Version: "0.0.4", Author: "qianlifeng", Runtime: "NodeJS", ActiveTab: "keywords",
+		Tabs: []PluginTab{{ID: "keywords", Label: "Keywords", Width: 88}},
+		TabForm: &PluginFormProps{
+			Intro:       "Trigger keywords are prefixes you type in Wox to activate this plugin.",
+			Rows:        []woxwidget.Widget{table},
+			IntroAccent: accent,
+		},
+	}, 800, 600, woxcomponent.Theme{Background: woxui.Color{R: 30, G: 30, B: 30, A: 255}})
+
+	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.ScrollView)
+	rows := body.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	if len(rows) != 3 {
+		t.Fatalf("store keyword body rows = %d, want hint box, spacer, and keyword table", len(rows))
+	}
+	if _, ok := rows[0].(woxwidget.Container); !ok {
+		t.Fatalf("store keyword intro = %T, want hint box container", rows[0])
+	}
+	if _, ok := rows[2].(woxwidget.Container); !ok {
+		t.Fatalf("store keyword table = %T, want readonly form table", rows[2])
+	}
+}
+
+func TestPluginStoreCommandsUseSharedFormTabBody(t *testing.T) {
+	table := FormTableField(FormTableFieldProps{
+		ID: "plugin-commands", Width: 720, MaxHeight: 300, InlineTitle: true, ReadOnly: true,
+		Columns: []FormTableColumn{{Label: "Name", Width: 120}, {Label: "Description"}},
+		Rows:    []FormTableRow{{Index: 0, Cells: []FormTableCell{{Text: "fix"}, {Text: "Fix selection"}}}},
+		Theme:   woxcomponent.Theme{},
+	})
+	store := pluginStoreDetail(PluginStoreDetailProps{
+		Name: "Example", Version: "1.0.0", Author: "Wox", Runtime: "Go", ActiveTab: "commands",
+		Tabs:    []PluginTab{{ID: "commands", Label: "Commands", Width: 96}},
+		TabForm: &PluginFormProps{Intro: "Commands are subcommands after the trigger keyword.", Rows: []woxwidget.Widget{table}},
+	}, 800, 600, woxcomponent.Theme{})
+
+	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.ScrollView)
+	if got := body.ID; got != "plugin-detail-commands" {
+		t.Fatalf("store commands scroll id = %q, want shared plugin detail body id", got)
+	}
+}
+
+func TestPluginStorePrivacyUsesSharedMetadataTabBody(t *testing.T) {
+	metadata := PluginMetadataProps{
+		Header: "Data Access",
+		Items: []PluginMetadataItem{
+			{Title: "Active window name", Description: "Reads the active window title."},
+		},
+	}
+	store := pluginStoreDetail(PluginStoreDetailProps{
+		Name: "Example", Version: "1.0.0", Author: "Wox", Runtime: "Go", ActiveTab: "privacy",
+		Tabs: []PluginTab{{ID: "privacy", Label: "Privacy", Width: 80}}, Metadata: &metadata,
+	}, 800, 600, woxcomponent.Theme{})
+
+	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
+	if body.Padding.Top != 18 {
+		t.Fatalf("store privacy body padding = %+v, want metadata tab top inset", body.Padding)
+	}
+}
+
+func TestPluginDetailEmptyStateUsesCenteredTitleAndSubtitle(t *testing.T) {
+	body := pluginMetadataTab(PluginMetadataProps{
+		EmptyTitle:       "This plugin requires no data access",
+		EmptyDescription: "This plugin does not request sensitive data such as the active window, browser URL, or AI model access.",
+	}, 600, 400, "plugin-detail-privacy", woxcomponent.Theme{}).(woxwidget.Align)
+
+	content := body.Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	title := content.Children[0].(woxwidget.Align).Child.(woxwidget.Text)
+	description := content.Children[1].(woxwidget.TextBlock)
+	if body.Vertical != 0.45 || title.Style.Size != 18 || description.Style.Size != 12 || !description.Centered {
+		t.Fatalf("empty privacy body = vertical %v title %v subtitle %v centered %v, want centered 18px/12px copy", body.Vertical, title.Style.Size, description.Style.Size, description.Centered)
+	}
+}
+
+func TestPluginStoreCommandsEmptyStateUsesCenteredCopy(t *testing.T) {
+	store := pluginStoreDetail(PluginStoreDetailProps{
+		Name: "Example", Version: "1.0.0", Author: "Wox", Runtime: "Go", ActiveTab: "commands",
+		Tabs: []PluginTab{{ID: "commands", Label: "Commands", Width: 96}},
+		TabForm: &PluginFormProps{
+			EmptyTitle:       "This plugin has no command",
+			EmptyDescription: "This plugin does not provide subcommands after its trigger keyword. Use the trigger keyword directly.",
+		},
+	}, 800, 600, woxcomponent.Theme{})
+
+	body := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Align)
+	title := body.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Text)
+	if title.Value != "This plugin has no command" {
+		t.Fatalf("empty commands title = %q", title.Value)
+	}
+}
+
 func TestPluginEditorAutoSavingFormHasNoFooter(t *testing.T) {
 	editor := pluginEditor(PluginEditorProps{
 		Header:    PluginHeaderProps{},

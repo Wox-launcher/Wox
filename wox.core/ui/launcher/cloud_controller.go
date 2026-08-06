@@ -9,6 +9,7 @@ import (
 	"wox/account"
 	"wox/cloudsync"
 	"wox/ui/contract"
+	woxui "wox/ui/runtime"
 )
 
 // cloudSettingsSnapshot is the immutable Cloud tab state consumed by the view layer.
@@ -26,11 +27,26 @@ type cloudSettingsSnapshot struct {
 	Error         string
 	Form          *cloudFormSnapshot
 	ActionMenu    string
+	PluginDialog  *cloudPluginExclusionDialogSnapshot
 	Plugins       []pluginSettingsPlugin
 }
 
+// cloudPluginExclusionDialogState keeps selection state separate from the persisted settings value.
+type cloudPluginExclusionDialogState struct {
+	selected     string
+	choiceOpen   bool
+	choiceAnchor woxui.Rect
+}
+
+// cloudPluginExclusionDialogSnapshot is the immutable copy rendered by the settings overlay.
+type cloudPluginExclusionDialogSnapshot struct {
+	Selected     string
+	ChoiceOpen   bool
+	ChoiceAnchor woxui.Rect
+}
+
 // cloudSettingsController owns the Cloud tab state (account, sync, billing plan,
-// devices, plugins, loading flags, busy/error, form, action menu). All 13 fields
+// devices, plugins, loading flags, busy/error, form, action menu, plugin dialog). All 13 fields
 // that used to live on App are held here; App methods became thin wrappers that call
 // the controller's getters/setters while coordinating cross-domain state on the UI thread.
 type cloudSettingsController struct {
@@ -48,6 +64,7 @@ type cloudSettingsController struct {
 	revision      uint64
 	form          *cloudFormState
 	actionMenu    string
+	pluginDialog  *cloudPluginExclusionDialogState
 	plugins       []pluginSettingsPlugin
 }
 
@@ -182,6 +199,27 @@ func (c *cloudSettingsController) ActionMenu() string {
 func (c *cloudSettingsController) SetActionMenu(menu string) {
 	c.deps.OnUI("set cloud action menu", func() {
 		c.actionMenu = menu
+	})
+}
+
+// PluginDialog returns the transient add-exclusion dialog state.
+func (c *cloudSettingsController) PluginDialog() *cloudPluginExclusionDialogState {
+	if c.pluginDialog == nil {
+		return nil
+	}
+	copy := *c.pluginDialog
+	return &copy
+}
+
+// SetPluginDialog updates the transient add-exclusion dialog state on the UI thread.
+func (c *cloudSettingsController) SetPluginDialog(state *cloudPluginExclusionDialogState) {
+	c.deps.OnUI("set cloud plugin exclusion dialog", func() {
+		if state == nil {
+			c.pluginDialog = nil
+			return
+		}
+		copy := *state
+		c.pluginDialog = &copy
 	})
 }
 
@@ -385,6 +423,12 @@ func (c *cloudSettingsController) Snapshot() cloudSettingsSnapshot {
 		Error:         c.errMsg,
 		Form:          snapshotCloudFormLocked(c.form),
 		ActionMenu:    c.actionMenu,
-		Plugins:       append([]pluginSettingsPlugin(nil), c.plugins...),
+		PluginDialog: func() *cloudPluginExclusionDialogSnapshot {
+			if c.pluginDialog == nil {
+				return nil
+			}
+			return &cloudPluginExclusionDialogSnapshot{Selected: c.pluginDialog.selected, ChoiceOpen: c.pluginDialog.choiceOpen, ChoiceAnchor: c.pluginDialog.choiceAnchor}
+		}(),
+		Plugins: append([]pluginSettingsPlugin(nil), c.plugins...),
 	}
 }

@@ -59,6 +59,8 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildModelManagerOverlay(snapshot.ai.ModelManager, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.general.ChoicePicker != nil {
 		overlay = a.buildSettingChoicePickerOverlay(snapshot.general.ChoicePicker, snapshot.palette, width, height, frame.Scale)
+	} else if snapshot.cloud.PluginDialog != nil {
+		overlay = a.buildCloudPluginExclusionOverlay(snapshot.cloud.PluginDialog, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.cloud.Form != nil {
 		overlay = a.buildCloudFormOverlay(snapshot.cloud.Form, snapshot.palette, width, height)
 	} else if snapshot.privacy.Sample != "" {

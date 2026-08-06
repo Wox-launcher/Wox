@@ -10,6 +10,7 @@ import (
 	"wox/account"
 	"wox/cloudsync"
 	"wox/ui/contract"
+	woxui "wox/ui/runtime"
 )
 
 // cloudFakeService serves typed cloud operations with optional blocking.
@@ -109,6 +110,30 @@ func TestCloudControllerForm(t *testing.T) {
 	c.SetForm(form)
 	if got := c.Form(); got != form {
 		t.Fatalf("Form mismatch: got %v, want %v", got, form)
+	}
+}
+
+func TestCloudControllerPluginDialogCopiesTransientState(t *testing.T) {
+	deps, _ := newCloudControllerDeps()
+	c := newCloudSettingsController(deps)
+	want := &cloudPluginExclusionDialogState{selected: "plugin-a", choiceOpen: true, choiceAnchor: woxui.Rect{X: 10, Y: 20, Width: 300, Height: 34}}
+	c.SetPluginDialog(want)
+
+	got := c.PluginDialog()
+	if got == nil || got.selected != "plugin-a" || !got.choiceOpen || got.choiceAnchor != want.choiceAnchor {
+		t.Fatalf("PluginDialog = %+v, want copied dialog state", got)
+	}
+	got.selected = "mutated"
+	if c.PluginDialog().selected != "plugin-a" {
+		t.Fatal("PluginDialog should return a copy")
+	}
+	snapshot := c.Snapshot()
+	if snapshot.PluginDialog == nil || snapshot.PluginDialog.Selected != "plugin-a" || !snapshot.PluginDialog.ChoiceOpen {
+		t.Fatalf("snapshot plugin dialog = %+v, want selected/open state", snapshot.PluginDialog)
+	}
+	c.SetPluginDialog(nil)
+	if c.PluginDialog() != nil || c.Snapshot().PluginDialog != nil {
+		t.Fatal("SetPluginDialog(nil) should dismiss the dialog")
 	}
 }
 

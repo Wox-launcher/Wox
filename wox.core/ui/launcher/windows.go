@@ -446,6 +446,7 @@ func (a *App) onSettingsWindowClosed() {
 	a.generalSettings.SetChoicePicker(nil)
 	a.cloudSettings.SetForm(nil)
 	a.cloudSettings.SetActionMenu("")
+	a.cloudSettings.SetPluginDialog(nil)
 	a.settingsTableEditor = nil
 	a.aiSettings.SetModelManager(nil)
 	if !a.onboardingOpen {

@@ -138,6 +138,7 @@ type CloudPluginExclusionProps struct {
 	ID       string
 	Name     string
 	PluginID string
+	Icon     *woxui.Image
 	OnDelete func()
 }
 
@@ -171,6 +172,30 @@ type CloudActionMenuItemProps struct {
 	ID    string
 	Label string
 	OnTap func()
+}
+
+// CloudPluginExclusionDialogProps contains the temporary row editor used to add one excluded plugin.
+type CloudPluginExclusionDialogProps struct {
+	Width        float32
+	Height       float32
+	PanelWidth   float32
+	PanelHeight  float32
+	FieldLabel   string
+	Description  string
+	Selected     string
+	SelectedName string
+	SelectedIcon *woxui.Image
+	Choices      []SettingsChoice
+	ChoiceAnchor woxui.Rect
+	ChoiceOpen   bool
+	CancelLabel  string
+	SaveLabel    string
+	Window       *woxui.Window
+	Theme        woxcomponent.Theme
+	OnChoiceTap  func(woxui.Rect)
+	OnChoose     func(int)
+	OnCancel     func()
+	OnSave       func()
 }
 
 const cloudSyncCardHeight = float32(66)
@@ -616,7 +641,7 @@ func cloudDeviceCard(props CloudDevicesProps, width, height float32, theme woxco
 func cloudPluginExclusionsCard(props CloudPluginExclusionsProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	rows := make([]FormTableRow, 0, len(props.Items))
 	for index, item := range props.Items {
-		rows = append(rows, FormTableRow{Index: index, Cells: []FormTableCell{{Text: item.Name}}})
+		rows = append(rows, FormTableRow{Index: index, Cells: []FormTableCell{{Text: item.Name, Icon: item.Icon, IconSize: 18}}})
 	}
 	return FormTableField(FormTableFieldProps{
 		ID: "cloud-plugin-exclusions", Title: props.SectionLabel, Description: props.Tips, Width: width, Height: height, MaxHeight: 260, InlineTitle: true,
@@ -660,6 +685,55 @@ func cloudActionMenu(props CloudActionMenuProps, width float32, theme woxcompone
 		Key: "cloud-action-menu-scroll", Width: width - 12, Height: bodyHeight, ContentHeight: contentHeight,
 		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: theme.ResultSubtitle,
 	})}
+}
+
+// CloudPluginExclusionDialog mirrors Flutter's generic table-row update dialog for one select column.
+func CloudPluginExclusionDialog(props CloudPluginExclusionDialogProps) woxwidget.Widget {
+	panelWidth := props.PanelWidth
+	if panelWidth <= 0 {
+		panelWidth = 648
+	}
+	panelHeight := props.PanelHeight
+	if panelHeight <= 0 {
+		panelHeight = 170
+	}
+	contentWidth := max(float32(0), panelWidth-48)
+	field := FormTableRowField(FormTableRowFieldProps{
+		ID: "cloud-plugin-exclusion-field", Kind: "select", Label: props.FieldLabel, Description: props.Description,
+		DescriptionMarkdown: true, Value: props.SelectedName, Width: contentWidth, Height: 60, LabelWidth: 60, Focused: true,
+		SelectIcon: props.SelectedIcon, Theme: props.Theme, Window: props.Window,
+		OnTap: func() {
+			if props.OnChoiceTap != nil {
+				props.OnChoiceTap(props.ChoiceAnchor)
+			}
+		},
+		OnChoiceTap: props.OnChoiceTap,
+	})
+	actionsWidth := float32(84 + 12 + 84)
+	actions := woxwidget.Container{Width: contentWidth, Height: 36, Padding: woxwidget.Insets{Left: max(float32(0), contentWidth-actionsWidth)}, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-plugin-exclusion-cancel", Label: props.CancelLabel, Width: 84, Height: 36, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-plugin-exclusion-save", Label: props.SaveLabel, Width: 84, Height: 36, Variant: woxcomponent.ButtonPrimary, Disabled: props.Selected == "", OnTap: props.OnSave, Theme: props.Theme}),
+		},
+	}}
+	dialog := woxcomponent.WoxDialog(woxcomponent.DialogProps{
+		ID: "cloud-plugin-exclusion-dialog", Label: props.FieldLabel, Width: panelWidth, Height: panelHeight,
+		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "cloud-plugin-exclusion-backdrop", BackdropAlpha: 205,
+		Padding: woxwidget.Insets{Left: 24, Top: 24, Right: 24, Bottom: 24}, Radius: 20,
+		BorderColor: cloudAlpha(props.Theme.ResultSubtitle, 104), BorderWidth: 0.75, InitialFocus: woxwidget.Key("cloud-plugin-exclusion-field"), OnEscape: props.OnCancel, Theme: props.Theme,
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: []woxwidget.Widget{field, actions}},
+	})
+	if !props.ChoiceOpen {
+		return dialog
+	}
+	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+		{Child: dialog},
+		{Child: SettingsChoiceView(SettingsChoiceProps{
+			ID: "cloud-plugin-exclusion-choice", Width: props.Width, Height: props.Height, Anchor: props.ChoiceAnchor,
+			Theme: props.Theme, Window: props.Window, CurrentValue: props.Selected, Choices: props.Choices,
+			OnChoose: props.OnChoose, OnCancel: props.OnCancel,
+		})},
+	}}
 }
 
 // CloudFormOverlayProps contains cloud account form data and actions.

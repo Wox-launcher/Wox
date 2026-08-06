@@ -560,9 +560,9 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 		}
 		children := []woxwidget.Widget{woxwidget.Image{Source: cell.Icon, Width: iconSize, Height: iconSize}}
 		if cell.Text != "" {
-			children = append(children, woxwidget.TextBlock{Value: cell.Text, Width: max(float32(0), contentWidth-iconSize-6), Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle})
+			children = append(children, woxwidget.TextBlock{Value: cell.Text, Width: max(float32(0), contentWidth-iconSize-8), Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle})
 		}
-		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: children}
+		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: children}
 		paddingTop = max(float32(0), (tableSurfaceRowHeight-iconSize)/2)
 	}
 	if cell.Tooltip != "" && props.InfoIcon != nil {
@@ -793,6 +793,7 @@ type FormTableRowFieldProps struct {
 	Protected           bool
 	MaxLines            int
 	Image               *woxui.Image
+	SelectIcon          *woxui.Image
 	ImageEmoji          string
 	EmojiLabel          string
 	UploadLabel         string
@@ -1084,6 +1085,7 @@ func formTableRowSelectControl(props FormTableRowFieldProps, width, height float
 	return woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: props.ID, Label: props.Label, Value: props.Value, Width: width, Height: height, Outline: formTableRowOutline(props.Theme, props.Focused),
 		Foreground: foreground, Secondary: props.Theme.ActionHeader, Theme: props.Theme, Focused: props.Focused, OnKey: props.OnKey,
+		Leading: props.SelectIcon,
 		OnFocusChange: func(focused bool) {
 			if focused && props.OnFocus != nil {
 				props.OnFocus()

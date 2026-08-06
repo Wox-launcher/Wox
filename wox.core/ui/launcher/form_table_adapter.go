@@ -259,6 +259,17 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 		cell.Icon = a.imageForTint(settingControlIconSource(iconName), &iconTint, physicalImageSize(16, imageScale))
 		return cell
 	}
+	if column.Type == "select" {
+		value := formTableColumnValue(column, row)
+		for _, option := range column.SelectOptions {
+			if option.Value == value && option.Icon.ImageType != "" {
+				cell.IconSize = 18
+				cell.Icon = a.imageForSize(option.Icon, physicalImageSize(18, imageScale))
+				break
+			}
+		}
+		return cell
+	}
 	if column.Type == "app" {
 		encoded, _ := json.Marshal(row[column.Key])
 		var app ignoredHotkeyApp
@@ -334,7 +345,7 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableDeleteDialog(palette, width, height)})
 	}
 	if snapshot.choicePicker != nil {
-		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableChoicePicker(snapshot.choicePicker, palette, width, height)})
+		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableChoicePicker(snapshot.choicePicker, palette, width, height, imageScale)})
 	}
 	if snapshot.emojiPicker != nil {
 		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableEmojiPicker(snapshot.emojiPicker, palette, width, height)})
@@ -556,13 +567,18 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		}
 	case "select", "selectAIModel":
 		selectedLabel := fieldValue
+		var selectedIcon woxImage
 		for _, option := range value.Options {
 			if option.Value == fieldValue {
 				selectedLabel = a.translate(option.Label)
+				selectedIcon = option.Icon
 				break
 			}
 		}
 		props.Value = selectedLabel
+		if selectedIcon.ImageType != "" {
+			props.SelectIcon = a.imageForSize(selectedIcon, physicalImageSize(18, callbacks.imageScale))
+		}
 		props.OnChoiceTap = func(anchor woxui.Rect) { callbacks.openChoice(index, anchor) }
 	case "hotkey", "dictationHotkey":
 		presentation := a.hotkeyRecordingFieldStatus("form-table-row", index)

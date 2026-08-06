@@ -555,6 +555,7 @@ type TextBlock struct {
 	Height     float32
 	LineHeight float32
 	MaxLines   int
+	Centered   bool
 	Layout     *TextBlockLayout
 }
 
@@ -658,6 +659,7 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 	if w.Height > 0 {
 		height = heightLimit
 	}
+	window := ctx.window
 	return &node{
 		bounds: woxui.Rect{Width: width, Height: height},
 		paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
@@ -678,7 +680,13 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 				if y+lineHeight > bounds.Y+bounds.Height+0.5 {
 					break
 				}
-				displayList.DrawText(line, woxui.Rect{X: bounds.X, Y: y, Width: bounds.Width, Height: lineHeight}, w.Style, w.Color)
+				lineBounds := woxui.Rect{X: bounds.X, Y: y, Width: bounds.Width, Height: lineHeight}
+				if w.Centered {
+					metrics, _ := window.MeasureText(line, w.Style)
+					lineWidth := min(metrics.Size.Width, bounds.Width)
+					lineBounds = woxui.Rect{X: bounds.X + (bounds.Width-lineWidth)/2, Y: y, Width: lineWidth, Height: lineHeight}
+				}
+				displayList.DrawText(line, lineBounds, w.Style, w.Color)
 			}
 		},
 	}
