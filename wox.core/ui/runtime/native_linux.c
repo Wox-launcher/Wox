@@ -1249,6 +1249,8 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_widget_set_hexpand(window->gl_area, TRUE);
   gtk_widget_set_vexpand(window->gl_area, TRUE);
   gtk_widget_add_events(window->gl_area, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
+  // Some Wayland backends deliver wheel events to the top-level GdkWindow instead of GtkGLArea.
+  gtk_widget_add_events(window->window, GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
   gtk_container_add(GTK_CONTAINER(window->window), window->overlay);
   gtk_container_add(GTK_CONTAINER(window->overlay), window->gl_area);
   gtk_overlay_add_overlay(GTK_OVERLAY(window->overlay), window->accessibility_layer);
@@ -1270,6 +1272,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   g_signal_connect(window->gl_area, "button-press-event", G_CALLBACK(on_pointer_button), window);
   g_signal_connect(window->gl_area, "button-release-event", G_CALLBACK(on_pointer_button), window);
   g_signal_connect(window->gl_area, "scroll-event", G_CALLBACK(on_pointer_scroll), window);
+  g_signal_connect(window->window, "scroll-event", G_CALLBACK(on_pointer_scroll), window);
   g_signal_connect(window->window, "focus-in-event", G_CALLBACK(on_focus_in), window);
   g_signal_connect(window->window, "focus-out-event", G_CALLBACK(on_focus_out), window);
   g_signal_connect(window->window, "key-press-event", G_CALLBACK(on_key_press), window);
