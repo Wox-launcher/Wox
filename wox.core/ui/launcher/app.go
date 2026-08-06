@@ -834,11 +834,21 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	resultRowHeight := int(densityMetrics.resultRowHeight(palette))
 	resultVerticalPadding := int(palette.resultContainerPadding.Top + palette.resultContainerPadding.Bottom)
 	queryAreaHeight := int(densityMetrics.queryBoxHeightForText(queryText) + palette.appPadding.Top + palette.appPadding.Bottom)
+	// With the query box hidden, buildResults folds appPadding.Bottom into the
+	// result list content, so the window height must reserve that margin too.
+	// Otherwise the list overflows by it and a scrollbar appears even when every
+	// result fits.
+	resultBottomInset := 0
+	if params.HideQueryBox {
+		resultBottomInset = int(palette.appPadding.Bottom)
+	}
 	toolbarHasContent := resultCount > 0 || toolbarMessageVisible
 	toolbarHeightIncluded := launcherToolbarHeightIncluded(params.HideToolbar, toolbarHasContent, previewFullscreen, chatFullscreen)
 	height := 0
 	if !params.HideQueryBox {
 		height += queryAreaHeight
+	} else {
+		height += resultBottomInset
 	}
 	if refinementVisible {
 		height += int(densityMetrics.refinementBarHeight)
@@ -856,6 +866,8 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	maximumResultWindowHeight := resultVerticalPadding + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
 	if !params.HideQueryBox {
 		maximumResultWindowHeight += queryAreaHeight
+	} else {
+		maximumResultWindowHeight += resultBottomInset
 	}
 	if refinementVisible {
 		maximumResultWindowHeight += int(densityMetrics.refinementBarHeight)
@@ -870,6 +882,8 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		minimumHeight := 360
 		if !params.HideQueryBox {
 			minimumHeight += queryAreaHeight
+		} else {
+			minimumHeight += resultBottomInset
 		}
 		if refinementVisible {
 			minimumHeight += int(densityMetrics.refinementBarHeight)
@@ -883,6 +897,8 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		actionHeight := int(actionPanelBaseHeightForPalette(palette)) + max(1, min(actionCount, maxVisibleActions))*actionRowHeight
 		if !params.HideQueryBox {
 			actionHeight += queryAreaHeight
+		} else {
+			actionHeight += resultBottomInset
 		}
 		if refinementVisible {
 			actionHeight += int(densityMetrics.refinementBarHeight)
@@ -897,6 +913,8 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		formWindowHeight := formHeight + 20
 		if !params.HideQueryBox {
 			formWindowHeight += queryAreaHeight
+		} else {
+			formWindowHeight += resultBottomInset
 		}
 		if refinementVisible {
 			formWindowHeight += int(densityMetrics.refinementBarHeight)

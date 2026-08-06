@@ -310,6 +310,11 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 				keepVisibleKey = formFieldRowKey("settings-hotkey", index)
 			}
 			field := a.buildFormField(hotkeyForm, callbacks, snapshot.palette, index, definition, contentWidth, 0)
+			if definition.Type == "table" {
+				// Flutter wraps built-in setting tables in a 24px outer bottom gap so
+				// adjacent tables keep the same breathing room as the settings form.
+				field = woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Bottom: 24}, Child: field}
+			}
 			target := woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
 				Width: contentWidth, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key, Child: field, Theme: snapshot.palette.componentTheme(),
 			})

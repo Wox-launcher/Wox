@@ -100,7 +100,7 @@ func FormTableFieldHeight(inlineTitle bool, description string, rowCount, maximu
 	if inlineTitle {
 		headerHeight := float32(30)
 		if description != "" {
-			headerHeight = 60
+			headerHeight = 54
 		}
 		return 6 + headerHeight + 8 + gridHeight + 34
 	}
@@ -130,11 +130,7 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 	if props.InlineTitle {
 		children := make([]woxwidget.Widget, 0, 2)
 		if props.Title != "" || props.Description != "" || props.SecondaryLabel != "" || !props.ReadOnly {
-			headerHeight := float32(30)
-			if props.Description != "" {
-				headerHeight = 60
-			}
-			children = append(children, formTableInlineHeader(props, props.Width, headerHeight))
+			children = append(children, formTableInlineHeader(props, props.Width))
 		}
 		children = append(children, formTableGrid(props, props.Width, gridHeight))
 		padding := woxwidget.Insets{Top: 6}
@@ -181,7 +177,7 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: padding, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{label, field}}}
 }
 
-func formTableInlineHeader(props FormTableFieldProps, width, height float32) woxwidget.Widget {
+func formTableInlineHeader(props FormTableFieldProps, width float32) woxwidget.Widget {
 	actionsWidth := float32(0)
 	if props.SecondaryLabel != "" {
 		actionsWidth += 130
@@ -209,19 +205,25 @@ func formTableInlineHeader(props FormTableFieldProps, width, height float32) wox
 			},
 		}}
 	}
-	children := []woxwidget.StackChild{
-		{Child: woxwidget.Container{Width: titleWidth, Height: 22, Child: title}},
-	}
-	if actionsWidth > 0 {
-		children = append(children, woxwidget.StackChild{Left: max(float32(0), width-actionsWidth), Top: max(float32(0), height-30), Child: formTableHeaderActions(props)})
+	leftChildren := make([]woxwidget.Widget, 0, 2)
+	if props.Title != "" || (props.DemoKind != "" && props.DemoIcon != nil) {
+		leftChildren = append(leftChildren, woxwidget.Container{Width: titleWidth, Height: 22, Child: title})
 	}
 	if props.Description != "" {
-		children = append(children, woxwidget.StackChild{Top: 22, Child: woxwidget.TextBlock{
-			Value: props.Description, Width: titleWidth, Height: 34, MaxLines: 2, LineHeight: 16,
+		leftChildren = append(leftChildren, woxwidget.TextBlock{
+			Value: props.Description, Width: titleWidth, MaxLines: 2, LineHeight: 16,
 			Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle,
-		}})
+		})
 	}
-	return woxwidget.Stack{Width: width, Height: height, Children: children}
+	children := []woxwidget.Widget{
+		woxwidget.Container{Width: titleWidth, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: leftChildren}},
+	}
+	gap := float32(0)
+	if actionsWidth > 0 {
+		gap = 16
+		children = append(children, formTableHeaderActions(props))
+	}
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisEnd, Children: children}
 }
 
 // formTableHeaderActions keeps specialized secondary actions aligned with the

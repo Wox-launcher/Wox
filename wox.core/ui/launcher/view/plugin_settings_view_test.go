@@ -320,10 +320,32 @@ func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 
 	container := field.(woxwidget.Container)
 	column := container.Child.(woxwidget.Flex)
-	header := column.Children[0].(woxwidget.Stack)
-	actions := header.Children[1].Child.(woxwidget.Flex)
+	header := column.Children[0].(woxwidget.Flex)
+	actions := header.Children[1].(woxwidget.Flex)
 	if len(actions.Children) != 2 {
 		t.Fatalf("header action count = %d, want template and add", len(actions.Children))
+	}
+}
+
+func TestFormTableInlineHeaderKeepsActionsNearTableWhenDescriptionIsPresent(t *testing.T) {
+	field := FormTableField(FormTableFieldProps{
+		ID: "tray-queries", Title: "Tray Queries", Description: "Open a configured query from the tray.",
+		Width: 720, Height: 220, InlineTitle: true, AddLabel: "Add", Theme: woxcomponent.Theme{},
+	})
+
+	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
+	if header.CrossAxisAlignment != woxwidget.CrossAxisEnd || header.Gap != 16 {
+		t.Fatalf("header alignment/gap = %v/%v, want bottom alignment with 16px action gap", header.CrossAxisAlignment, header.Gap)
+	}
+	left := header.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	description := left.Children[1].(woxwidget.TextBlock)
+	if description.Height != 0 || description.MaxLines != 2 || description.LineHeight != 16 {
+		t.Fatalf("description geometry = height %v, lines %d, line height %v; want intrinsic height up to two 16px lines", description.Height, description.MaxLines, description.LineHeight)
+	}
+	withoutDescription := FormTableFieldHeight(true, "", 1, 0)
+	withDescription := FormTableFieldHeight(true, "Open a configured query from the tray.", 1, 0)
+	if withDescription-withoutDescription != 24 {
+		t.Fatalf("inline description height delta = %v, want 24px for the two-line header maximum", withDescription-withoutDescription)
 	}
 }
 
@@ -358,8 +380,8 @@ func TestFormTableInlineHeaderForwardsDemoHover(t *testing.T) {
 		},
 	})
 
-	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
-	title := header.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
+	title := header.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
 	trigger := title.Children[1].(woxwidget.Semantics)
 	if trigger.AutomationID != "settings-demo-query-hotkeys" {
 		t.Fatalf("demo automation ID = %q", trigger.AutomationID)

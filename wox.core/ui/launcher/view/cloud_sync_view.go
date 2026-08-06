@@ -214,7 +214,9 @@ func CloudSettingsPage(props CloudSettingsPageProps) woxwidget.Widget {
 		}
 		appendChild(cloudDeviceCard(props.Devices, contentWidth, deviceHeight, props.Theme), deviceHeight)
 		pluginHeight := FormTableFieldHeight(true, props.Plugins.Tips, len(props.Plugins.Items), 260)
-		appendChild(cloudPluginExclusionsCard(props.Plugins, contentWidth, pluginHeight, props.Theme), pluginHeight)
+		// Flutter wraps built-in setting tables in a 24px outer bottom gap so
+		// adjacent tables keep the same breathing room as the settings form.
+		appendChild(woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Bottom: 24}, Child: cloudPluginExclusionsCard(props.Plugins, contentWidth, pluginHeight, props.Theme)}, pluginHeight+24)
 		configHeight := FormTableFieldHeight(true, props.ConfigNotes.Tips, len(props.ConfigNotes.Items), 720)
 		appendChild(cloudConfigNotesCard(props.ConfigNotes, contentWidth, configHeight, props.Theme), configHeight)
 	}

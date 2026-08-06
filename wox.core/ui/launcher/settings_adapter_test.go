@@ -87,3 +87,45 @@ func TestSettingsSectionLabelMatchesFlutterGrouping(t *testing.T) {
 		t.Fatalf("updates section label = %q, want %q", got, "Updates")
 	}
 }
+
+func TestGeneralSettingsTablesKeepFlutterOuterGap(t *testing.T) {
+	windows := woxui.NewWindowManager()
+	app := newApp(false, nil, windows, newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer app.cancel()
+	app.uiCall = func(callback func()) error {
+		callback()
+		return nil
+	}
+	form := newHotkeySettingsForm(settingsData{MainHotkey: "Alt+Space", SelectionHotkey: "Alt+Shift+Space", IsLinuxWaylandSession: false})
+	app.hotkeySettings.SetForm(&form)
+
+	page := app.buildSettingsPage(settingsSnapshot{tab: "general", hotkey: app.hotkeySettings.Snapshot(), palette: defaultPalette()}, nil, 800, 600, 1)
+	container := page.(woxwidget.Container)
+	scroll := container.Child.(woxwidget.ScrollView)
+	rows := scroll.Child.(woxwidget.Flex).Children
+
+	tableSpacers := 0
+	var lastTableSpacer woxwidget.Container
+	for _, row := range rows {
+		keyed, ok := row.(woxwidget.Keyed)
+		if !ok {
+			continue
+		}
+		target, ok := keyed.Child.(woxwidget.Container)
+		if !ok {
+			continue
+		}
+		spacer, ok := target.Child.(woxwidget.Container)
+		if !ok || spacer.Padding.Bottom != 24 {
+			continue
+		}
+		tableSpacers++
+		lastTableSpacer = spacer
+	}
+	if tableSpacers != 4 {
+		t.Fatalf("general table spacers = %d, want IgnoredHotkeyApps, QueryHotkeys, QueryShortcuts, TrayQueries", tableSpacers)
+	}
+	if lastTableSpacer.Padding.Bottom != 24 {
+		t.Fatalf("last table outer bottom gap = %v, want Flutter's 24px", lastTableSpacer.Padding.Bottom)
+	}
+}

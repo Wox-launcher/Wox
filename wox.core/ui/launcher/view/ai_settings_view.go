@@ -51,7 +51,10 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 		target := woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
 			Width: table.Field.Width, Highlighted: table.Highlighted, Child: FormTableField(table.Field), Theme: props.Theme,
 		})
-		children = append(children, woxwidget.Keyed{Key: woxwidget.Key(fmt.Sprintf("ai-settings-table-%d", table.Index)), Child: target})
+		// Flutter wraps built-in setting tables in a 24px outer bottom gap so
+		// adjacent tables keep the same breathing room as the settings form.
+		tableRow := woxwidget.Container{Width: table.Field.Width, Padding: woxwidget.Insets{Bottom: 24}, Child: target}
+		children = append(children, woxwidget.Keyed{Key: woxwidget.Key(fmt.Sprintf("ai-settings-table-%d", table.Index)), Child: tableRow})
 	}
 	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
