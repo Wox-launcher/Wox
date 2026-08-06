@@ -69,6 +69,26 @@
 			"ms-vscode.makefile-tools"
 		]
 	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "Configure Wox crash dumps",
+				"type": "process",
+				"command": "powershell.exe",
+				"args": [
+					"-NoProfile",
+					"-Command",
+					"$dumpDir = Join-Path $env:USERPROFILE '.wox\\diagnostics\\dumps'; $key = 'HKCU:\\Software\\Microsoft\\Windows\\Windows Error Reporting\\LocalDumps\\__debug_bin_wox.exe'; New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null; New-Item -Path $key -Force | Out-Null; New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dumpDir -Force | Out-Null; New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 2 -Force | Out-Null; New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 5 -Force | Out-Null; Write-Host \"Wox crash dumps: $dumpDir\""
+				],
+				"problemMatcher": [],
+				"presentation": {
+					"reveal": "silent",
+					"panel": "shared"
+				}
+			}
+		]
+	},
 	"launch": {
 		"version": "0.2.0",
 		"configurations": [
@@ -84,6 +104,9 @@
 				"buildFlags": "-tags=sqlite_fts5",
 				"env": {
 					"CGO_ENABLED": "1"
+				},
+				"windows": {
+					"preLaunchTask": "Configure Wox crash dumps"
 				}
 			}
 		]
