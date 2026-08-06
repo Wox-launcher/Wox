@@ -154,6 +154,7 @@ func newQueryResultSet(query Query) *QueryResultSet {
 
 type Manager struct {
 	instances          []*Instance
+	instancesMu        sync.RWMutex
 	systemPluginsReady chan struct{}
 	ui                 common.UI
 
@@ -185,6 +186,19 @@ type Manager struct {
 	// Plugins still return ordinary WoxImage values; manager creates these tokens
 	// only after result IDs, query IDs, and surface sizes are known.
 	lazyResultIcons *util.HashMap[string, *lazyResultIconEntry]
+
+	// hostRestartMu serializes shared runtime host restarts (settings/uninstall
+	// and the host watchdog) so a dead host can never be restarted concurrently.
+	hostRestartMu sync.Mutex
+	// hostWatchdogStates tracks watchdog restart attempts per runtime, guarded by
+	// hostRestartMu, so a plugin that keeps crashing the shared host backs off.
+	hostWatchdogStates map[string]*hostWatchdogState
+	// hostWatchdogStop is closed to stop the health monitor during shutdown.
+	hostWatchdogStop chan struct{}
+	// hostWatchdogDone is closed after the monitor has fully exited.
+	hostWatchdogDone      chan struct{}
+	hostWatchdogLifecycle sync.Mutex
+	hostWatchdogStarted   bool
 }
 
 const (
@@ -207,6 +221,9 @@ func GetPluginManager() *Manager {
 			glanceActions:               util.NewHashMap[string, GlanceAction](),
 			sessionPluginQueries:        util.NewHashMap[string, *sessionPluginQueryState](),
 			lazyResultIcons:             util.NewHashMap[string, *lazyResultIconEntry](),
+			hostWatchdogStates:          map[string]*hostWatchdogState{},
+			hostWatchdogStop:            make(chan struct{}),
+			hostWatchdogDone:            make(chan struct{}),
 		}
 		logger = util.GetLogger()
 	})
@@ -226,6 +243,9 @@ func (m *Manager) Start(ctx context.Context, ui common.UI) error {
 		m.startScriptPluginMonitoring(util.NewTraceContext())
 	})
 
+	// Start shared runtime host health monitoring
+	m.startHostWatchdog(ctx)
+
 	util.Go(ctx, "start store manager", func() {
 		GetStoreManager().Start(util.NewTraceContext())
 	})
@@ -234,6 +254,10 @@ func (m *Manager) Start(ctx context.Context, ui common.UI) error {
 }
 
 func (m *Manager) Stop(ctx context.Context) {
+	// Stop host health monitoring before tearing down hosts so the watchdog
+	// cannot mistake an intentional shutdown for a dead host.
+	m.stopHostWatchdog()
+
 	// Stop script plugin monitoring
 	if m.scriptPluginWatcher != nil {
 		m.scriptPluginWatcher.Close()
@@ -242,6 +266,33 @@ func (m *Manager) Stop(ctx context.Context) {
 	for _, host := range AllHosts {
 		host.Stop(ctx)
 	}
+}
+
+// pluginInstancesSnapshot returns a stable slice for concurrent readers.
+func (m *Manager) pluginInstancesSnapshot() []*Instance {
+	m.instancesMu.RLock()
+	defer m.instancesMu.RUnlock()
+	return append([]*Instance(nil), m.instances...)
+}
+
+func (m *Manager) appendPluginInstance(instance *Instance) {
+	m.instancesMu.Lock()
+	defer m.instancesMu.Unlock()
+	m.instances = append(m.instances, instance)
+}
+
+// removePluginInstances updates the shared instance list without racing readers.
+func (m *Manager) removePluginInstances(shouldRemove func(*Instance) bool) {
+	m.instancesMu.Lock()
+	defer m.instancesMu.Unlock()
+
+	remaining := m.instances[:0]
+	for _, instance := range m.instances {
+		if !shouldRemove(instance) {
+			remaining = append(remaining, instance)
+		}
+	}
+	m.instances = remaining
 }
 
 func (m *Manager) SetActiveBrowserUrl(url string) {
@@ -384,7 +435,7 @@ func (m *Manager) ReloadPlugin(ctx context.Context, metadata Metadata) error {
 		return fmt.Errorf("unsupported runtime: %s", metadata.Runtime)
 	}
 
-	pluginInstance, pluginInstanceExist := lo.Find(m.instances, func(item *Instance) bool {
+	pluginInstance, pluginInstanceExist := lo.Find(m.pluginInstancesSnapshot(), func(item *Instance) bool {
 		return item.Metadata.Id == metadata.Id
 	})
 	if pluginInstanceExist {
@@ -437,7 +488,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 	}
 	instance.Setting = pluginSetting
 
-	m.instances = append(m.instances, instance)
+	m.appendPluginInstance(instance)
 
 	if pluginSetting.Disabled.Get() {
 		logger.Info(ctx, fmt.Errorf("[%s HOST] plugin is disabled by user, skip init: %s", host.GetRuntime(ctx), metadata.GetName(ctx)).Error())
@@ -483,13 +534,9 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
 	m.deactivatePlugin(ctx, pluginInstance)
 
-	var newInstances []*Instance
-	for _, instance := range m.instances {
-		if instance.Metadata.Id != pluginInstance.Metadata.Id {
-			newInstances = append(newInstances, instance)
-		}
-	}
-	m.instances = newInstances
+	m.removePluginInstances(func(instance *Instance) bool {
+		return instance.Metadata.Id == pluginInstance.Metadata.Id
+	})
 }
 
 // DisablePlugin marks a plugin disabled and releases its runtime resources
@@ -588,6 +635,11 @@ func (m *Manager) clearRuntimeCallbacks(pluginInstance *Instance) {
 }
 
 func (m *Manager) RestartHostForRuntime(ctx context.Context, runtime Runtime, skipPluginIDs []string, progressCallback UninstallProgressCallback) error {
+	// Serialize with the host watchdog so a dead host is never restarted twice
+	// concurrently (watchdog + settings/uninstall).
+	m.hostRestartMu.Lock()
+	defer m.hostRestartMu.Unlock()
+
 	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
 		return strings.EqualFold(string(item.GetRuntime(ctx)), string(runtime))
 	})
@@ -595,16 +647,24 @@ func (m *Manager) RestartHostForRuntime(ctx context.Context, runtime Runtime, sk
 		return fmt.Errorf("unsupported runtime: %s", runtime)
 	}
 
+	return m.restartHostInternal(ctx, pluginHost, skipPluginIDs, progressCallback)
+}
+
+// restartHostInternal stops and restarts a shared runtime host process, then
+// reloads every plugin of that runtime so the shared process returns to a
+// consistent state. It is shared by user-triggered restarts (settings/uninstall)
+// and the host watchdog, so it must be called with m.hostRestartMu held.
+func (m *Manager) restartHostInternal(ctx context.Context, pluginHost Host, skipPluginIDs []string, progressCallback UninstallProgressCallback) error {
+	runtime := pluginHost.GetRuntime(ctx)
+
 	skipPluginIDSet := make(map[string]struct{}, len(skipPluginIDs))
 	for _, pluginID := range skipPluginIDs {
 		skipPluginIDSet[pluginID] = struct{}{}
 	}
 
 	var reloadMetadataList []Metadata
-	var nextInstances []*Instance
-	for _, instance := range m.instances {
+	for _, instance := range m.pluginInstancesSnapshot() {
 		if !strings.EqualFold(instance.Metadata.Runtime, string(runtime)) {
-			nextInstances = append(nextInstances, instance)
 			continue
 		}
 		if _, shouldSkip := skipPluginIDSet[instance.Metadata.Id]; shouldSkip {
@@ -626,7 +686,9 @@ func (m *Manager) RestartHostForRuntime(ctx context.Context, runtime Runtime, sk
 
 	// Replace stale runtime instances only after the new host is available, then rebuild the
 	// remaining plugins from metadata so the shared runtime returns to a consistent state.
-	m.instances = nextInstances
+	m.removePluginInstances(func(instance *Instance) bool {
+		return strings.EqualFold(instance.Metadata.Runtime, string(runtime))
+	})
 
 	if len(reloadMetadataList) == 0 {
 		return nil
@@ -692,14 +754,14 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 		if pluginSetting.Disabled.Get() {
 			logger.Info(ctx, fmt.Sprintf("system plugin is disabled by user, skip init: %s", metadata.GetName(ctx)))
 			// Keep the instance discoverable so EnablePlugin can initialize it later.
-			m.instances = append(m.instances, instance)
+			m.appendPluginInstance(instance)
 			continue
 		}
 
 		// Init plugin BEFORE adding to instances list
 		// This ensures the plugin is fully initialized before it can be queried
 		m.initPlugin(util.NewTraceContext(), instance)
-		m.instances = append(m.instances, instance)
+		m.appendPluginInstance(instance)
 	}
 	close(m.systemPluginsReady)
 
@@ -990,7 +1052,7 @@ func (m *Manager) reloadScriptPlugin(ctx context.Context, scriptPath, reason str
 	}
 
 	// Find and unload existing plugin instance if any
-	existingInstance, exists := lo.Find(m.instances, func(instance *Instance) bool {
+	existingInstance, exists := lo.Find(m.pluginInstancesSnapshot(), func(instance *Instance) bool {
 		return instance.Metadata.Id == metadata.Id
 	})
 	if exists {
@@ -1024,7 +1086,7 @@ func (m *Manager) unloadScriptPluginByPath(ctx context.Context, scriptPath strin
 
 	// Find plugin instance by script file name
 	var pluginToUnload *Instance
-	for _, instance := range m.instances {
+	for _, instance := range m.pluginInstancesSnapshot() {
 		if instance.Metadata.Runtime == string(PLUGIN_RUNTIME_SCRIPT) && instance.Metadata.Entry == fileName {
 			pluginToUnload = instance
 			break
@@ -1046,11 +1108,11 @@ func (m *Manager) WaitForSystemPlugins() {
 }
 
 func (m *Manager) GetPluginInstances() []*Instance {
-	return m.instances
+	return m.pluginInstancesSnapshot()
 }
 
 func (m *Manager) GetPluginInstanceById(pluginId string) *Instance {
-	for _, instance := range m.instances {
+	for _, instance := range m.pluginInstancesSnapshot() {
 		if instance.Metadata.Id == pluginId {
 			return instance
 		}
@@ -3462,8 +3524,9 @@ func (m *Manager) buildQueryPlan(ctx context.Context, query Query) (jobs []query
 	planStart := time.Now()
 	maxCheckUs := int64(0)
 	maxCheckPlugin := ""
-	jobs = make([]queryPluginJob, 0, len(m.instances))
-	for _, pluginInstance := range m.instances {
+	instances := m.pluginInstancesSnapshot()
+	jobs = make([]queryPluginJob, 0, len(instances))
+	for _, pluginInstance := range instances {
 		checkStart := time.Now()
 		canOperate := m.canOperateQuery(ctx, pluginInstance, query)
 		checkUs := time.Since(checkStart).Microseconds()
@@ -3498,7 +3561,7 @@ func (m *Manager) buildQueryPlan(ctx context.Context, query Query) (jobs []query
 	if tracker := timetracking.New("query_plan"); tracker.Enabled() {
 		tracker.SetRawString("queryId", query.Id)
 		tracker.SetRawString("query", query.String())
-		tracker.SetInt("checked", len(m.instances))
+		tracker.SetInt("checked", len(instances))
 		tracker.SetInt("scheduled", len(jobs))
 		tracker.SetInt("immediate", immediateCount)
 		tracker.SetInt("debounced", debouncedCount)
@@ -3701,7 +3764,7 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 
 	var queryResults []QueryResult
 	if query.IsGlobalQuery() {
-		for _, pluginInstance := range m.instances {
+		for _, pluginInstance := range m.pluginInstancesSnapshot() {
 			if v, ok := pluginInstance.Plugin.(FallbackSearcher); ok {
 				fallbackResults := v.QueryFallback(ctx, query)
 				for _, fallbackResult := range fallbackResults {
@@ -4345,7 +4408,7 @@ func (m *Manager) GetAIProvider(ctx context.Context, provider common.ProviderNam
 }
 
 func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, arguments map[string]string) {
-	pluginInstance, exist := lo.Find(m.instances, func(item *Instance) bool {
+	pluginInstance, exist := lo.Find(m.pluginInstancesSnapshot(), func(item *Instance) bool {
 		return item.Metadata.Id == pluginId
 	})
 	if !exist {
@@ -4447,7 +4510,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 
 // getPluginInstance finds a plugin instance by ID
 func (m *Manager) getPluginInstance(pluginID string) *Instance {
-	pluginInstance, found := lo.Find(m.instances, func(item *Instance) bool {
+	pluginInstance, found := lo.Find(m.pluginInstancesSnapshot(), func(item *Instance) bool {
 		return item.Metadata.Id == pluginID
 	})
 	if found {

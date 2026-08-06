@@ -62,7 +62,7 @@ func (m *Manager) findTriggerKeywordConflict(keyword string) (TriggerKeywordConf
 func (m *Manager) findTriggerKeywordConflicts(targetKeyword string) []TriggerKeywordConflict {
 	ownersByKeyword := map[string][]*Instance{}
 
-	for _, pluginInstance := range m.instances {
+	for _, pluginInstance := range m.pluginInstancesSnapshot() {
 		if pluginInstance == nil || pluginInstance.Setting == nil || pluginInstance.Setting.Disabled.Get() {
 			continue
 		}
