@@ -9,7 +9,7 @@ import (
 
 // hotkeyMatches compares a configured normal hotkey with one physical key-down event.
 func hotkeyMatches(hotkey string, event woxui.KeyEvent) bool {
-	if !event.Down || event.Composing {
+	if !event.Down || event.Composing || event.Key == woxui.KeyUnknown || strings.TrimSpace(hotkey) == "" {
 		return false
 	}
 	parts := strings.Split(strings.ToLower(strings.TrimSpace(hotkey)), "+")

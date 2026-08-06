@@ -208,6 +208,9 @@ func TestMoveSelectionWrapsPastLeadingGroup(t *testing.T) {
 }
 
 func TestHotkeyMatchesOnlyKeyDown(t *testing.T) {
+	if hotkeyMatches("", woxui.KeyEvent{Key: woxui.KeyUnknown, Down: true}) {
+		t.Fatal("unknown key unexpectedly matched an empty hotkey")
+	}
 	event := woxui.KeyEvent{Key: "j", Modifiers: woxui.KeyModifierControl}
 	if hotkeyMatches("ctrl+j", event) {
 		t.Fatal("key-up unexpectedly matched Ctrl+J")
