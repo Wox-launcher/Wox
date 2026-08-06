@@ -192,6 +192,8 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	defer func() { h.activeFrameMetricsID = 0 }()
 	buildLayoutStart := time.Now()
 	damage := h.consumeFrameDamage(frame.Damage, frame.Size)
+	// Preserve the zero-rectangle full-frame sentinel instead of narrowing it to rebuilt Boundary bounds.
+	fullDamage := damage.Width <= 0 || damage.Height <= 0
 	h.elements.beginFrame()
 	widget := h.build(frame)
 	if widget == nil {
@@ -216,8 +218,10 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	root := widget.layout(context{window: h.window, animation: animation, damage: damageTracker, debug: debugFrame, elements: h.elements, element: h.elements.root}, constraints{width: frame.Size.Width, height: frame.Size.Height})
 	diagnostics, removedDamage := h.elements.endFrame()
 	boundaryDamage := damageTracker.resolve(woxui.Rect{})
-	damage = unionDamageRects(damage, boundaryDamage)
-	damage = unionDamageRects(damage, removedDamage)
+	if !fullDamage {
+		damage = unionDamageRects(damage, boundaryDamage)
+		damage = unionDamageRects(damage, removedDamage)
+	}
 	if damage.Width > 0 && damage.Height > 0 {
 		damage = expandDamageRect(damage, 4)
 	}

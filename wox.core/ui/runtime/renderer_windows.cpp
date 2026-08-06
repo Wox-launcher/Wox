@@ -33,6 +33,8 @@ struct WoxRenderer {
   bool frame_open = false;
   bool clip_active = false;
   bool damage_clip_active = false;
+  RECT present_dirty_rect = {};
+  bool present_dirty = false;
 };
 
 template <typename T>
@@ -374,10 +376,20 @@ extern "C" int32_t wox_renderer_begin_frame(WoxRenderer *renderer, float scale, 
   renderer->d2d_context->BeginDraw();
   renderer->frame_open = true;
   renderer->scale = scale;
+  renderer->present_dirty = false;
   renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
   const D2D1_COLOR_F color = make_color(red, green, blue, alpha);
   if (damage_width > 0.0f && damage_height > 0.0f) {
     const D2D1_RECT_F damage = {damage_x, damage_y, damage_x + damage_width, damage_y + damage_height};
+    const D2D1_SIZE_U target_size = renderer->target_bitmap->GetPixelSize();
+    // Present1 dirty rectangles use physical pixels while Direct2D draws in logical coordinates.
+    renderer->present_dirty_rect = {
+        std::max<LONG>(0, static_cast<LONG>(std::floor(damage_x * scale))),
+        std::max<LONG>(0, static_cast<LONG>(std::floor(damage_y * scale))),
+        std::min<LONG>(static_cast<LONG>(target_size.width), static_cast<LONG>(std::ceil((damage_x + damage_width) * scale))),
+        std::min<LONG>(static_cast<LONG>(target_size.height), static_cast<LONG>(std::ceil((damage_y + damage_height) * scale))),
+    };
+    renderer->present_dirty = renderer->present_dirty_rect.right > renderer->present_dirty_rect.left && renderer->present_dirty_rect.bottom > renderer->present_dirty_rect.top;
     renderer->d2d_context->PushAxisAlignedClip(damage, D2D1_ANTIALIAS_MODE_ALIASED);
     renderer->damage_clip_active = true;
     renderer->brush->SetColor(color);
@@ -616,7 +628,12 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
   if (FAILED(result)) {
     return result;
   }
-  return renderer->swap_chain->Present(1, 0);
+  DXGI_PRESENT_PARAMETERS parameters = {};
+  if (renderer->present_dirty) {
+    parameters.DirtyRectsCount = 1;
+    parameters.pDirtyRects = &renderer->present_dirty_rect;
+  }
+  return renderer->swap_chain->Present1(1, 0, &parameters);
 }
 
 extern "C" void wox_renderer_destroy(WoxRenderer *renderer) {

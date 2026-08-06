@@ -54,6 +54,7 @@ var (
 	setProcessDPIAwarenessContext        = syscall.NewLazyDLL("user32.dll").NewProc("SetProcessDpiAwarenessContext")
 	setThreadDPIAwarenessContext         = syscall.NewLazyDLL("user32.dll").NewProc("SetThreadDpiAwarenessContext")
 	setProcessDPIAware                   = syscall.NewLazyDLL("user32.dll").NewProc("SetProcessDPIAware")
+	getUpdateRect                        = syscall.NewLazyDLL("user32.dll").NewProc("GetUpdateRect")
 	enumDisplayMonitors                  = syscall.NewLazyDLL("user32.dll").NewProc("EnumDisplayMonitors")
 	getDPIForMonitor                     = syscall.NewLazyDLL("shcore.dll").NewProc("GetDpiForMonitor")
 	monitorBoundsCallback                = syscall.NewCallback(findMonitorForLogicalBounds)
@@ -772,9 +773,12 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		win.InvalidateRect(hwnd, nil, false)
 		return 0
 	case win.WM_PAINT:
+		updateRect, hasUpdate := windowsUpdateRect(hwnd)
 		var paint win.PAINTSTRUCT
 		win.BeginPaint(hwnd, &paint)
-		window.drawFrame(hwnd, paint.RcPaint)
+		if hasUpdate {
+			window.drawFrame(hwnd, updateRect)
+		}
 		win.EndPaint(hwnd, &paint)
 		return 0
 	case win.WM_ERASEBKGND:
@@ -1565,6 +1569,13 @@ func windowsPaintDamage(paint, client win.RECT, scale float32) (Rect, bool) {
 		return Rect{}, true
 	}
 	return Rect{X: float32(paint.Left) / scale, Y: float32(paint.Top) / scale, Width: float32(paint.Right-paint.Left) / scale, Height: float32(paint.Bottom-paint.Top) / scale}, false
+}
+
+// windowsUpdateRect reads the update region before BeginPaint validates it.
+func windowsUpdateRect(hwnd win.HWND) (win.RECT, bool) {
+	var rect win.RECT
+	result, _, _ := getUpdateRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&rect)), 0)
+	return rect, result != 0
 }
 
 // destroyNativeResources releases GPU state before invalidating the HWND-backed command queue.

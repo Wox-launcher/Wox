@@ -56,6 +56,23 @@ func TestHostExpandsPartialDamageForPaintOutsets(t *testing.T) {
 	}
 }
 
+func TestHostKeepsFullFrameDamageWhenBoundaryBuilds(t *testing.T) {
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Boundary[boundaryTestProps]{Key: "full-frame", Props: boundaryTestProps{}, Build: func(boundaryTestProps) Widget {
+			return Container{Width: 100, Height: 100}
+		}}
+	})
+	host.AttachServices(&fakeHostServices{})
+	displayList := &woxui.DisplayList{}
+	host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}})
+	if got := displayList.Damage(); got != (woxui.Rect{}) {
+		t.Fatalf("display-list damage = %+v, want full frame", got)
+	}
+	if got := displayList.NativeDamage(); got != (woxui.Rect{}) {
+		t.Fatalf("native damage = %+v, want full frame", got)
+	}
+}
+
 func TestDisableIncrementalForcesFullFrameDamage(t *testing.T) {
 	t.Setenv(DisableIncrementalEnvironment, "1")
 	host := NewHost(func(woxui.FrameInfo) Widget { return Container{Width: 100, Height: 100} })
@@ -200,7 +217,7 @@ func TestHostIncludesRemovedBoundaryInDamage(t *testing.T) {
 
 	show = false
 	displayList := &woxui.DisplayList{}
-	host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, PixelSize: woxui.PixelSize{Width: 100, Height: 100}, Scale: 1})
+	host.Frame(displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}, PixelSize: woxui.PixelSize{Width: 100, Height: 100}, Scale: 1, Damage: woxui.Rect{X: 15, Y: 25, Width: 1, Height: 1}})
 	if got, want := displayList.NativeDamage(), (woxui.Rect{X: 6, Y: 16, Width: 28, Height: 38}); got != want {
 		t.Fatalf("removed Boundary damage = %+v, want old bounds with paint outset %+v", got, want)
 	}

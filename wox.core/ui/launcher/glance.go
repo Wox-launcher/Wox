@@ -241,7 +241,6 @@ func (a *App) loadGlanceCatalog() {
 		if a.settingsOpen || a.onboardingOpen {
 			util.Go(a.lifecycleCtx, "load glance picker previews", a.loadGlancePickerPreviews)
 		}
-		_ = a.window.Invalidate()
 	})
 }
 
