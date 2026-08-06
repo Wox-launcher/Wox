@@ -1424,6 +1424,13 @@ func (w *platformWindow) showNative() FocusEpoch {
 	if win.IsIconic(w.hwnd) {
 		showCommand = win.SW_RESTORE
 	}
+	if w.options.Role == WindowRoleApplication {
+		var client win.RECT
+		if win.GetClientRect(w.hwnd, &client) {
+			// Large management windows can spend several refresh intervals on their first frame, so render it before DWM exposes the backdrop.
+			w.drawFrame(w.hwnd, client)
+		}
+	}
 	win.ShowWindow(w.hwnd, showCommand)
 	activateWindow(w.hwnd)
 	if w.isWithinFocusDomain(win.GetForegroundWindow()) {
