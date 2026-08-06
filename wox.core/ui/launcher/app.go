@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"wox/common"
 	"wox/ui/contract"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -394,6 +395,17 @@ func (a *App) showWindow(params showAppParams) error {
 		}
 		a.show = params
 		a.queryHistories = append(a.queryHistories[:0], params.QueryHistories...)
+		// A selection query on the primary launcher is always transient (Space Quick
+		// Look preview or a selection-bearing query hotkey). Reopening through the
+		// main hotkey must start fresh; otherwise the stale selection context keeps
+		// every keystroke pinned to the previous selection query.
+		if params.ShowSource == string(common.ShowSourceDefault) && a.query.QueryType == "selection" {
+			a.query = newInputQuery("")
+			a.queryContext = queryContext{IsGlobalQuery: true}
+			a.queryContextKnown = true
+			a.editor.SetText("", false)
+			a.beginQueryTransitionLocked()
+		}
 		a.canRecallHistory = a.query.QueryType == "input"
 		if params.LaunchMode == "continue" {
 			// The newest history is the current continued query, so the first Up recalls the entry before it.
