@@ -29,7 +29,7 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 		}
 		host := woxwidget.NewHost(a.buildSettings)
 		managed, _, openErr = a.windows.Open(settingsWindowID, woxui.WindowOptions{
-			Title:     a.translate("i18n:ui_tray_open_setting_window"),
+			Title:     a.settingsWindowTitle(),
 			Size:      woxui.Size{Width: settingsWindowWidth, Height: settingsWindowHeight},
 			Role:      woxui.WindowRoleApplication,
 			OnFrame:   host.Frame,

@@ -135,7 +135,7 @@ func TestSettingsTitleBarUsesFixedWindowTitle(t *testing.T) {
 	windows := woxui.NewWindowManager()
 	app := newApp(false, nil, windows, newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.translations["ui_tray_open_setting_window"] = "Wox Settings"
+	app.translations["ui_settings_window_title"] = "Wox Settings"
 	titleBar := app.buildSettingsTitleBar(settingsSnapshot{tab: "general"}, 1200, 240).(woxwidget.Stateful)
 	props := titleBar.Widget.(launcherview.SettingsTitleBarProps)
 

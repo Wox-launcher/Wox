@@ -276,6 +276,7 @@
   "ui_autostart_tips": "When selected, Wox will start automatically when the computer starts",
   "ui_tray_toggle_app": "Toggle Wox",
   "ui_tray_open_setting_window": "Settings",
+  "ui_settings_window_title": "Wox Settings",
   "ui_tray_edit_query": "Edit Query",
   "ui_tray_quit": "Quit",
   "ui_proxy_enabled": "Enable Proxy",

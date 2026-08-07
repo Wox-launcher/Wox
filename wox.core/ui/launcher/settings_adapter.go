@@ -104,11 +104,16 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	})
 }
 
-func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth float32) woxwidget.Widget {
-	title := a.translate("i18n:ui_tray_open_setting_window")
+func (a *App) settingsWindowTitle() string {
+	title := a.translate("i18n:ui_settings_window_title")
 	if title == "" {
-		title = "Wox Settings"
+		return "Wox Settings"
 	}
+	return title
+}
+
+func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth float32) woxwidget.Widget {
+	title := a.settingsWindowTitle()
 	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
 	titleWidth := float32(160)
 	if window := a.settingsNativeWindow(); window != nil {

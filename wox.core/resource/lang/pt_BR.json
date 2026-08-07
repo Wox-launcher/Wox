@@ -258,6 +258,7 @@
   "ui_autostart_tips": "Quando selecionado, o Wox ser iniciado automaticamente quando o computador for ligado",
   "ui_tray_toggle_app": "Alternar Wox",
   "ui_tray_open_setting_window": "Configurações",
+  "ui_settings_window_title": "Configurações do Wox",
   "ui_tray_edit_query": "Editar Consulta",
   "ui_tray_quit": "Sair",
   "ui_proxy_enabled": "Habilitar Proxy",
