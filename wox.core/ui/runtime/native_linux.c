@@ -1249,8 +1249,8 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_widget_set_hexpand(window->gl_area, TRUE);
   gtk_widget_set_vexpand(window->gl_area, TRUE);
   gtk_widget_add_events(window->gl_area, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
-  // Some Wayland backends deliver wheel events to the top-level GdkWindow instead of GtkGLArea.
-  gtk_widget_add_events(window->window, GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
+  // Some Wayland backends deliver pointer events to the top-level GdkWindow instead of GtkGLArea.
+  gtk_widget_add_events(window->window, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
   gtk_container_add(GTK_CONTAINER(window->window), window->overlay);
   gtk_container_add(GTK_CONTAINER(window->overlay), window->gl_area);
   gtk_overlay_add_overlay(GTK_OVERLAY(window->overlay), window->accessibility_layer);
@@ -1272,6 +1272,11 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   g_signal_connect(window->gl_area, "button-press-event", G_CALLBACK(on_pointer_button), window);
   g_signal_connect(window->gl_area, "button-release-event", G_CALLBACK(on_pointer_button), window);
   g_signal_connect(window->gl_area, "scroll-event", G_CALLBACK(on_pointer_scroll), window);
+  g_signal_connect(window->window, "motion-notify-event", G_CALLBACK(on_pointer_motion), window);
+  g_signal_connect(window->window, "enter-notify-event", G_CALLBACK(on_pointer_crossing), window);
+  g_signal_connect(window->window, "leave-notify-event", G_CALLBACK(on_pointer_crossing), window);
+  g_signal_connect(window->window, "button-press-event", G_CALLBACK(on_pointer_button), window);
+  g_signal_connect(window->window, "button-release-event", G_CALLBACK(on_pointer_button), window);
   g_signal_connect(window->window, "scroll-event", G_CALLBACK(on_pointer_scroll), window);
   g_signal_connect(window->window, "focus-in-event", G_CALLBACK(on_focus_in), window);
   g_signal_connect(window->window, "focus-out-event", G_CALLBACK(on_focus_out), window);
@@ -2057,16 +2062,26 @@ int32_t wox_linux_window_set_pointer_cursor(WoxLinuxWindow *window, uint8_t curs
   if (window == NULL || window->closed) {
     return -1;
   }
-  GdkWindow *native_window = gtk_widget_get_window(window->gl_area);
-  GdkDisplay *display = native_window != NULL ? gdk_window_get_display(native_window) : NULL;
-  if (native_window == NULL || display == NULL) {
+  GdkWindow *content_window = gtk_widget_get_window(window->gl_area);
+  GdkWindow *top_level_window = gtk_widget_get_window(window->window);
+  GdkDisplay *display = content_window != NULL ? gdk_window_get_display(content_window) : NULL;
+  if (content_window == NULL || top_level_window == NULL || display == NULL) {
     return -1;
   }
-  GdkCursor *native_cursor = cursor == 1 ? gdk_cursor_new_from_name(display, "text") : NULL;
-  gdk_window_set_cursor(native_window, native_cursor);
-  if (native_cursor != NULL) {
-    g_object_unref(native_cursor);
+  const char *cursor_name = cursor == 1 ? "text" : "default";
+  GdkCursor *native_cursor = gdk_cursor_new_from_name(display, cursor_name);
+  if (native_cursor == NULL) {
+    native_cursor = gdk_cursor_new_for_display(display, cursor == 1 ? GDK_XTERM : GDK_LEFT_PTR);
   }
+  if (native_cursor == NULL) {
+    return -1;
+  }
+  // Wayland may route pointer events through either surface, so both must expose the same cursor.
+  gdk_window_set_cursor(content_window, native_cursor);
+  if (top_level_window != content_window) {
+    gdk_window_set_cursor(top_level_window, native_cursor);
+  }
+  g_object_unref(native_cursor);
   return 0;
 }
 
