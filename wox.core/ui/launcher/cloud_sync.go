@@ -412,13 +412,13 @@ func cloudSyncNeedsBootstrap(snapshot cloudSettingsSnapshot) bool {
 }
 
 func newCloudBootstrapForm(status contract.CloudBootstrapStatus) *cloudFormState {
-	definitions := []formDefinition{{Type: "password", Value: formDefinitionValue{Key: "RecoveryCode", Label: "Encryption password", MaxLines: 1}}}
+	definitions := []formDefinition{{Type: "password", Value: formDefinitionValue{Key: "RecoveryCode", Label: "i18n:ui_cloud_sync_recovery_code", MaxLines: 1}}}
 	if !status.HasRemoteData {
-		definitions = append(definitions, formDefinition{Type: "password", Value: formDefinitionValue{Key: "ConfirmRecoveryCode", Label: "Confirm password", MaxLines: 1}})
+		definitions = append(definitions, formDefinition{Type: "password", Value: formDefinitionValue{Key: "ConfirmRecoveryCode", Label: "i18n:ui_cloud_sync_recovery_code_confirm", MaxLines: 1}})
 	}
-	title := "Enable Cloud Sync"
+	title := "i18n:ui_cloud_sync_bootstrap_start_title"
 	if status.HasRemoteData {
-		title = "Restore Cloud Sync"
+		title = "i18n:ui_cloud_sync_bootstrap_restore_title"
 	}
 	fields := newFormFieldsState(definitions, nil, true)
 	state := newCloudFormState(fields, "bootstrap", title)
@@ -790,10 +790,15 @@ func validateCloudForm(kind string, values map[string]string, hasRemoteData bool
 		}
 	case "bootstrap":
 		if values["RecoveryCode"] == "" {
-			return "Encryption password is required."
+			return "i18n:ui_cloud_sync_recovery_code_required"
 		}
-		if !hasRemoteData && values["RecoveryCode"] != values["ConfirmRecoveryCode"] {
-			return "Encryption passwords do not match."
+		if !hasRemoteData {
+			if values["ConfirmRecoveryCode"] == "" {
+				return "i18n:ui_cloud_sync_recovery_code_confirm_required"
+			}
+			if values["RecoveryCode"] != values["ConfirmRecoveryCode"] {
+				return "i18n:ui_cloud_sync_recovery_code_mismatch"
+			}
 		}
 	}
 	return ""

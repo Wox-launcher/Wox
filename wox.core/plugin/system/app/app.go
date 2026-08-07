@@ -342,9 +342,14 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 
 	a.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == "AppDirectories" {
+			// Full app rescans (especially UWP) are expensive side effects of a
+			// settings write. Keep them off the caller so cloud-sync apply and the
+			// settings UI do not stay blocked in a "syncing/restoring" state.
 			a.stopAppChangeWatcher()
-			a.indexApps(callbackCtx)
-			a.startAppChangeWatcher()
+			util.Go(a.runtimeCtx, "reindex apps after AppDirectories change", func() {
+				a.indexApps(a.runtimeCtx)
+				a.startAppChangeWatcher()
+			})
 			return
 		}
 		if key == "IgnoreRules" {

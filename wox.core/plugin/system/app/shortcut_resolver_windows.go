@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/go-ole/go-ole"
@@ -22,10 +24,60 @@ const (
 var (
 	shortcutNativeSuccessCount atomic.Int64
 	shortcutFallbackCount      atomic.Int64
+	shortcutTargets            = newShortcutTargetResolver()
 )
 
-// resolveShortcutTarget resolves a Windows shortcut (.lnk) to its target path using in-process COM APIs.
+type shortcutTargetCacheEntry struct {
+	targetPath       string
+	modifiedUnixNano int64
+	size             int64
+}
+
+type shortcutTargetResolver struct {
+	mutex   sync.RWMutex
+	entries map[string]shortcutTargetCacheEntry
+}
+
+func newShortcutTargetResolver() *shortcutTargetResolver {
+	return &shortcutTargetResolver{entries: make(map[string]shortcutTargetCacheEntry)}
+}
+
+// resolveShortcutTarget reuses the target until the shortcut file changes.
 func resolveShortcutTarget(ctx context.Context, shortcutPath string) (string, error) {
+	return shortcutTargets.resolve(ctx, shortcutPath, resolveShortcutTargetUncached)
+}
+
+// resolve avoids recreating WScript.Shell during the per-second running-app refresh.
+func (r *shortcutTargetResolver) resolve(ctx context.Context, shortcutPath string, load func(context.Context, string) (string, error)) (string, error) {
+	fileInfo, statErr := os.Stat(shortcutPath)
+	if statErr != nil {
+		return load(ctx, shortcutPath)
+	}
+
+	cacheKey := strings.ToLower(filepath.Clean(shortcutPath))
+	r.mutex.RLock()
+	entry, cached := r.entries[cacheKey]
+	r.mutex.RUnlock()
+	if cached && entry.modifiedUnixNano == fileInfo.ModTime().UnixNano() && entry.size == fileInfo.Size() {
+		return entry.targetPath, nil
+	}
+
+	targetPath, err := load(ctx, shortcutPath)
+	if err != nil {
+		return "", err
+	}
+	r.mutex.Lock()
+	r.entries[cacheKey] = shortcutTargetCacheEntry{
+		targetPath:       targetPath,
+		modifiedUnixNano: fileInfo.ModTime().UnixNano(),
+		size:             fileInfo.Size(),
+	}
+	r.mutex.Unlock()
+	return targetPath, nil
+}
+
+// resolveShortcutTargetUncached resolves a Windows shortcut using in-process COM APIs.
+func resolveShortcutTargetUncached(ctx context.Context, shortcutPath string) (string, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 

@@ -501,11 +501,15 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 		}
 
 		if len(resp.Records) > 0 {
-			m.setProgressFromRecord(CloudSyncProgressOperationPull, resp.Records[0], pulled, 0)
+			progressBase := pulled
 			pulled += len(resp.Records)
 			addCloudSyncRecordEntityCounts(entityCounts, resp.Records)
 			historyKeys = append(historyKeys, cloudSyncRecordKeys(resp.Records)...)
-			applyResult := m.applyRecordsWithDetails(ctx, resp.Records)
+			applyResult := m.applyRecordsWithDetails(ctx, resp.Records, &cloudSyncApplyProgress{
+				Operation: CloudSyncProgressOperationPull,
+				Base:      progressBase,
+				Total:     0,
+			})
 			applied += applyResult.Succeeded
 			failed += applyResult.Failed
 			historyDetails = append(historyDetails, applyResult.Details...)
@@ -599,8 +603,12 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 			return fmt.Errorf("cloud sync snapshot failed: %w", err)
 		}
 		if len(resp.Records) > 0 {
-			m.setProgressFromRecord(CloudSyncProgressOperationRestore, resp.Records[0], restored, 0)
-			if err := m.applyRecords(ctx, resp.Records); err != nil {
+			progressBase := restored
+			if err := m.applyRecordsWithProgress(ctx, resp.Records, &cloudSyncApplyProgress{
+				Operation: CloudSyncProgressOperationRestore,
+				Base:      progressBase,
+				Total:     0,
+			}); err != nil {
 				return fmt.Errorf("failed to apply remote snapshot: %w", err)
 			}
 			restored += len(resp.Records)
@@ -626,7 +634,19 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 }
 
 func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSyncRecord) error {
-	return m.applyRecordsWithDetails(ctx, records).Err()
+	return m.applyRecordsWithProgress(ctx, records, nil)
+}
+
+// applyRecordsWithProgress applies remote records and optionally reports per-record UI progress.
+func (m *CloudSyncManager) applyRecordsWithProgress(ctx context.Context, records []CloudSyncRecord, progress *cloudSyncApplyProgress) error {
+	return m.applyRecordsWithDetails(ctx, records, progress).Err()
+}
+
+// cloudSyncApplyProgress reports which remote record is currently being applied.
+type cloudSyncApplyProgress struct {
+	Operation string
+	Base      int
+	Total     int
 }
 
 // cloudSyncApplyRecordsResult tracks per-item outcomes for one local apply batch.
@@ -656,7 +676,7 @@ func (r *cloudSyncApplyRecordsResult) addFailed(record CloudSyncRecord, err erro
 }
 
 // applyRecordsWithDetails keeps applying independent remote records after one item fails.
-func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records []CloudSyncRecord) cloudSyncApplyRecordsResult {
+func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records []CloudSyncRecord, progress *cloudSyncApplyProgress) cloudSyncApplyRecordsResult {
 	disabled := m.disabledPluginSet(ctx)
 	appliedWoxSetting := false
 	appliedPluginSetting := false
@@ -664,7 +684,11 @@ func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records 
 	appliedInstalledTheme := false
 	themeSettingChanged := false
 	result := cloudSyncApplyRecordsResult{}
-	for _, record := range records {
+	for index, record := range records {
+		if progress != nil {
+			// Include the current item in the count so long installs still show movement.
+			m.setProgressFromRecord(progress.Operation, record, progress.Base+index+1, progress.Total)
+		}
 		if record.EntityType == EntityPluginSetting || record.EntityType == EntityInstalledPlugin {
 			pluginID := record.PluginID
 			if record.EntityType == EntityInstalledPlugin && pluginID == "" {
@@ -1091,7 +1115,7 @@ func (m *CloudSyncManager) clearProgress(operation string) {
 
 func (m *CloudSyncManager) setProgressFromOplog(operation string, oplog database.Oplog, current int, total int) {
 	pluginId := ""
-	if oplog.EntityType == EntityPluginSetting {
+	if oplog.EntityType == EntityPluginSetting || oplog.EntityType == EntityInstalledPlugin {
 		pluginId = oplog.EntityID
 	}
 	m.setProgress(CloudSyncProgress{
@@ -1105,10 +1129,14 @@ func (m *CloudSyncManager) setProgressFromOplog(operation string, oplog database
 }
 
 func (m *CloudSyncManager) setProgressFromRecord(operation string, record CloudSyncRecord, current int, total int) {
+	pluginID := record.PluginID
+	if pluginID == "" && record.EntityType == EntityInstalledPlugin {
+		pluginID = record.Key
+	}
 	m.setProgress(CloudSyncProgress{
 		Operation:  operation,
 		EntityType: record.EntityType,
-		PluginID:   record.PluginID,
+		PluginID:   pluginID,
 		Key:        record.Key,
 		Current:    current,
 		Total:      total,

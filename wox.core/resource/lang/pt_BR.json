@@ -607,7 +607,7 @@
   "ui_cloud_sync_progress_count": " ({count} itens processados)",
   "ui_cloud_sync_progress_uploading": "Enviando {target}{count}",
   "ui_cloud_sync_progress_downloading": "Baixando {target}{count}",
-  "ui_cloud_sync_progress_restoring": "Restaurando dados da nuvem{count}",
+  "ui_cloud_sync_progress_restoring": "Restaurando {target}{count}",
   "ui_cloud_sync_progress_wox_setting": "configurações do Wox",
   "ui_cloud_sync_progress_plugin": "plugin {plugin}",
   "ui_cloud_sync_progress_data": "dados de sincronização",

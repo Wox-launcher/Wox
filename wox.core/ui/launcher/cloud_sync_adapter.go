@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/cloudsync"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -204,13 +205,7 @@ func (a *App) cloudSyncPresentation(snapshot settingsSnapshot) (string, string, 
 		return a.translate("i18n:ui_cloud_sync_sync_error"), snapshot.cloud.Error, errorColor
 	}
 	if progress := snapshot.cloud.Sync.Progress; progress != nil && progress.Active {
-		detail := strings.Title(progress.Operation)
-		if progress.Total > 0 {
-			detail = fmt.Sprintf("%s · %d / %d", detail, progress.Current, progress.Total)
-		} else if progress.Current > 0 {
-			detail = fmt.Sprintf("%s · %d", detail, progress.Current)
-		}
-		return a.translate("i18n:ui_cloud_sync_syncing"), detail, muted
+		return a.translate("i18n:ui_cloud_sync_syncing"), a.formatCloudSyncProgress(progress, snapshot.cloud.Busy == "sync"), muted
 	}
 	if snapshot.cloud.Busy == "sync" {
 		return a.translate("i18n:ui_cloud_sync_syncing"), a.translate("i18n:ui_cloud_sync_progress_starting"), muted
@@ -233,6 +228,83 @@ func (a *App) cloudSyncPresentation(snapshot settingsSnapshot) (string, string, 
 
 func cloudSyncReady(snapshot settingsSnapshot) bool {
 	return snapshot.cloud.Sync.KeyStatus.Available && snapshot.cloud.Sync.State != nil && snapshot.cloud.Sync.State.Bootstrapped
+}
+
+// formatCloudSyncProgress mirrors the Flutter cloud-sync progress copy so users see the active stage and item count.
+func (a *App) formatCloudSyncProgress(progress *cloudSyncProgress, isBusy bool) string {
+	if progress == nil || !progress.Active || strings.TrimSpace(progress.Operation) == "" {
+		if isBusy {
+			return a.translate("i18n:ui_cloud_sync_progress_starting")
+		}
+		return ""
+	}
+
+	countSuffix := ""
+	if progress.Current > 0 || progress.Total > 0 {
+		countText := fmt.Sprintf("%d", progress.Current)
+		if progress.Total > 0 {
+			countText = fmt.Sprintf("%d/%d", progress.Current, progress.Total)
+		}
+		countSuffix = strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_progress_count"), "{count}", countText)
+	}
+
+	switch progress.Operation {
+	case cloudsync.CloudSyncProgressOperationSnapshot:
+		return a.translate("i18n:ui_cloud_sync_progress_snapshot")
+	case cloudsync.CloudSyncProgressOperationPush:
+		return strings.ReplaceAll(strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_progress_uploading"), "{target}", a.cloudSyncProgressTarget(progress)), "{count}", countSuffix)
+	case cloudsync.CloudSyncProgressOperationPull:
+		return strings.ReplaceAll(strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_progress_downloading"), "{target}", a.cloudSyncProgressTarget(progress)), "{count}", countSuffix)
+	case cloudsync.CloudSyncProgressOperationRestore:
+		return strings.ReplaceAll(strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_progress_restoring"), "{target}", a.cloudSyncProgressTarget(progress)), "{count}", countSuffix)
+	default:
+		return a.translate("i18n:ui_cloud_sync_progress_starting")
+	}
+}
+
+// cloudSyncProgressTarget resolves the current sync item into a short localized label.
+func (a *App) cloudSyncProgressTarget(progress *cloudSyncProgress) string {
+	if progress == nil {
+		return a.translate("i18n:ui_cloud_sync_progress_data")
+	}
+	switch progress.EntityType {
+	case cloudsync.EntityWoxSetting:
+		return a.translate("i18n:ui_cloud_sync_progress_wox_setting")
+	case cloudsync.EntityPluginSetting, cloudsync.EntityInstalledPlugin:
+		pluginName := a.cloudSyncProgressPluginName(progress.PluginID)
+		if pluginName == "" {
+			pluginName = a.cloudSyncProgressPluginName(progress.Key)
+		}
+		if pluginName == "" {
+			pluginName = a.translate("i18n:ui_cloud_sync_progress_data")
+		}
+		return strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_progress_plugin"), "{plugin}", pluginName)
+	default:
+		return a.translate("i18n:ui_cloud_sync_progress_data")
+	}
+}
+
+// cloudSyncProgressPluginName prefers installed/store display names over raw plugin IDs.
+func (a *App) cloudSyncProgressPluginName(pluginID string) string {
+	pluginID = strings.TrimSpace(pluginID)
+	if pluginID == "" {
+		return ""
+	}
+	if a.pluginSettings == nil {
+		return pluginID
+	}
+	for _, catalog := range []bool{false, true} {
+		plugins, _ := a.pluginSettings.CachedPlugins(catalog)
+		for _, plugin := range plugins {
+			if plugin.ID != pluginID {
+				continue
+			}
+			if name := strings.TrimSpace(plugin.Name); name != "" {
+				return name
+			}
+		}
+	}
+	return pluginID
 }
 
 func cloudStateTimestamp(state *cloudSyncState, pull bool) int64 {
@@ -562,11 +634,11 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalet
 		links = append(links, launcherview.CloudFormLinkProps{ID: "cloud-resend-code", Label: "Resend code", Width: 112, OnTap: a.resendCloudVerification})
 	}
 
-	feedback := snapshot.notice
+	feedback := a.translate(snapshot.notice)
 	feedbackColor := palette.actionHeader
 	theme := palette.componentTheme()
 	if snapshot.error != "" {
-		feedback = snapshot.error
+		feedback = a.translate(snapshot.error)
 		feedbackColor = theme.ErrorText
 	}
 	submitLabel := a.translate("i18n:ui_cloud_sync_confirm")
@@ -581,8 +653,8 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette uiPalet
 		Width:         width,
 		Height:        height,
 		PanelWidth:    panelWidth,
-		Title:         snapshot.title,
-		Description:   cloudFormDescription(snapshot),
+		Title:         a.translate(snapshot.title),
+		Description:   a.translate(cloudFormDescription(snapshot)),
 		Fields:        fields,
 		LinkPrefix:    linkPrefix,
 		Links:         links,
@@ -613,9 +685,9 @@ func cloudFormDescription(snapshot *cloudFormSnapshot) string {
 		return "Confirm the current password before setting a new 12-character password."
 	case "bootstrap":
 		if snapshot.hasRemoteData {
-			return "A cloud backup exists. Enter its encryption password to restore this device."
+			return "i18n:ui_cloud_sync_bootstrap_restore_description"
 		}
-		return "Choose an encryption password. It cannot be recovered, so store it safely."
+		return "i18n:ui_cloud_sync_bootstrap_start_description"
 	default:
 		return "Use your Wox account credentials to continue."
 	}
