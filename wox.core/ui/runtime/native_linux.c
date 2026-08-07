@@ -732,9 +732,30 @@ static uint8_t portable_pointer_button(guint button) {
   }
 }
 
-static void emit_pointer(WoxLinuxWindow *window, uint8_t kind, double x, double y, uint8_t button, double scroll_x, double scroll_y, GdkModifierType state) {
+// pointer_client_position translates child-surface coordinates into the shared window client space.
+static void pointer_client_position(WoxLinuxWindow *window, GdkWindow *event_window, double x, double y, double *client_x, double *client_y) {
+  *client_x = x;
+  *client_y = y;
+  GdkWindow *top_level_window = gtk_widget_get_window(window->window);
+  if (event_window == NULL || top_level_window == NULL || event_window == top_level_window) {
+    return;
+  }
+  gint event_origin_x = 0;
+  gint event_origin_y = 0;
+  gint top_level_origin_x = 0;
+  gint top_level_origin_y = 0;
+  gdk_window_get_origin(event_window, &event_origin_x, &event_origin_y);
+  gdk_window_get_origin(top_level_window, &top_level_origin_x, &top_level_origin_y);
+  *client_x = x + (double)(event_origin_x - top_level_origin_x);
+  *client_y = y + (double)(event_origin_y - top_level_origin_y);
+}
+
+static void emit_pointer(WoxLinuxWindow *window, uint8_t kind, double x, double y, uint8_t button, double scroll_x, double scroll_y, GdkModifierType state, GdkWindow *event_window) {
   if (!window->closed && window->context != 0) {
-    woxGoLinuxPointer(window->context, kind, (float)x, (float)y, button, (float)scroll_x, (float)scroll_y, portable_modifiers(state));
+    double client_x = x;
+    double client_y = y;
+    pointer_client_position(window, event_window, x, y, &client_x, &client_y);
+    woxGoLinuxPointer(window->context, kind, (float)client_x, (float)client_y, button, (float)scroll_x, (float)scroll_y, portable_modifiers(state));
   }
 }
 
@@ -744,27 +765,28 @@ static gboolean on_pointer_motion(GtkWidget *widget, GdkEventMotion *event, gpoi
   window->pointer_root_x = event->x_root;
   window->pointer_root_y = event->y_root;
   window->pointer_time = event->time;
-  emit_pointer(window, WOX_POINTER_MOVE, event->x, event->y, 0, 0.0, 0.0, event->state);
+  emit_pointer(window, WOX_POINTER_MOVE, event->x, event->y, 0, 0.0, 0.0, event->state, event->window);
   return TRUE;
 }
 
 static gboolean on_pointer_crossing(GtkWidget *widget, GdkEventCrossing *event, gpointer data) {
   (void)widget;
   uint8_t kind = event->type == GDK_ENTER_NOTIFY ? WOX_POINTER_ENTER : WOX_POINTER_LEAVE;
-  emit_pointer(data, kind, event->x, event->y, 0, 0.0, 0.0, event->state);
+  emit_pointer(data, kind, event->x, event->y, 0, 0.0, 0.0, event->state, event->window);
   return TRUE;
 }
 
 static gboolean on_pointer_button(GtkWidget *widget, GdkEventButton *event, gpointer data) {
+  (void)widget;
   WoxLinuxWindow *window = data;
   window->pointer_root_x = event->x_root;
   window->pointer_root_y = event->y_root;
   window->pointer_time = event->time;
   if (event->type == GDK_BUTTON_PRESS) {
-    gtk_widget_grab_focus(widget);
+    gtk_widget_grab_focus(window->gl_area);
   }
   uint8_t kind = event->type == GDK_BUTTON_RELEASE ? WOX_POINTER_UP : WOX_POINTER_DOWN;
-  emit_pointer(window, kind, event->x, event->y, portable_pointer_button(event->button), 0.0, 0.0, event->state);
+  emit_pointer(window, kind, event->x, event->y, portable_pointer_button(event->button), 0.0, 0.0, event->state, event->window);
   return TRUE;
 }
 
@@ -795,7 +817,7 @@ static gboolean on_pointer_scroll(GtkWidget *widget, GdkEventScroll *event, gpoi
       break;
     }
   }
-  emit_pointer(data, WOX_POINTER_SCROLL, event->x, event->y, 0, scroll_x, scroll_y, event->state);
+  emit_pointer(data, WOX_POINTER_SCROLL, event->x, event->y, 0, scroll_x, scroll_y, event->state, event->window);
   return TRUE;
 }
 
@@ -1248,8 +1270,8 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_widget_set_can_focus(window->gl_area, TRUE);
   gtk_widget_set_hexpand(window->gl_area, TRUE);
   gtk_widget_set_vexpand(window->gl_area, TRUE);
-  gtk_widget_add_events(window->gl_area, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
-  // Some Wayland backends deliver pointer events to the top-level GdkWindow instead of GtkGLArea.
+  // GTK bubbles child input to the top level, while Wayland may target the top-level surface
+  // directly. Use one handler set there so a gesture cannot switch dispatch paths mid-stream.
   gtk_widget_add_events(window->window, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
   gtk_container_add(GTK_CONTAINER(window->window), window->overlay);
   gtk_container_add(GTK_CONTAINER(window->overlay), window->gl_area);
@@ -1266,12 +1288,6 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   g_signal_connect(window->gl_area, "unrealize", G_CALLBACK(on_gl_unrealize), window);
   g_signal_connect(window->gl_area, "render", G_CALLBACK(on_gl_render), window);
   g_signal_connect(window->gl_area, "notify::scale-factor", G_CALLBACK(on_scale_changed), window);
-  g_signal_connect(window->gl_area, "motion-notify-event", G_CALLBACK(on_pointer_motion), window);
-  g_signal_connect(window->gl_area, "enter-notify-event", G_CALLBACK(on_pointer_crossing), window);
-  g_signal_connect(window->gl_area, "leave-notify-event", G_CALLBACK(on_pointer_crossing), window);
-  g_signal_connect(window->gl_area, "button-press-event", G_CALLBACK(on_pointer_button), window);
-  g_signal_connect(window->gl_area, "button-release-event", G_CALLBACK(on_pointer_button), window);
-  g_signal_connect(window->gl_area, "scroll-event", G_CALLBACK(on_pointer_scroll), window);
   g_signal_connect(window->window, "motion-notify-event", G_CALLBACK(on_pointer_motion), window);
   g_signal_connect(window->window, "enter-notify-event", G_CALLBACK(on_pointer_crossing), window);
   g_signal_connect(window->window, "leave-notify-event", G_CALLBACK(on_pointer_crossing), window);
@@ -2212,6 +2228,15 @@ int32_t wox_linux_accessibility_add_node(WoxLinuxWindow *window, uint64_t id, ui
   if ((state_flags & WOX_ACCESSIBILITY_STATE_HIDDEN) == 0) {
     gtk_widget_show(widget);
   }
+  // Native accessibility widgets mirror the GPU tree but must not consume visual pointer input.
+  // Forward their events through the same portable Host path before GTK button defaults run.
+  gtk_widget_add_events(widget, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
+  g_signal_connect(widget, "motion-notify-event", G_CALLBACK(on_pointer_motion), window);
+  g_signal_connect(widget, "enter-notify-event", G_CALLBACK(on_pointer_crossing), window);
+  g_signal_connect(widget, "leave-notify-event", G_CALLBACK(on_pointer_crossing), window);
+  g_signal_connect(widget, "button-press-event", G_CALLBACK(on_pointer_button), window);
+  g_signal_connect(widget, "button-release-event", G_CALLBACK(on_pointer_button), window);
+  g_signal_connect(widget, "scroll-event", G_CALLBACK(on_pointer_scroll), window);
   return 0;
 }
 
