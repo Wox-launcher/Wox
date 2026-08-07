@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/lxn/win"
+	"wox/util/osvariant"
 )
 
 const (
@@ -43,7 +44,10 @@ const (
 	dwmWindowCornerRound    = 2
 	dwmSystemBackdropMica   = 3
 	wcaAccentPolicy         = 19
+	accentBlurBehind        = 3
 	accentAcrylicBlurBehind = 4
+	win10DarkAcrylicTint    = 0xCC202020
+	win10LightAcrylicTint   = 0xCCF5F5F5
 )
 
 var (
@@ -615,38 +619,64 @@ func (w *platformWindow) createNativeWindow() error {
 	return nil
 }
 
-// applyWindowsBackdrop uses Mica on Windows 11 and the existing Acrylic fallback on older systems.
+// applyWindowsBackdrop uses the supported DWM system backdrop on Windows 11 and the legacy
+// SetWindowCompositionAttribute Acrylic path on Windows 10, matching Flutter's Win32 runner.
 func applyWindowsBackdrop(hwnd win.HWND, isDark bool) {
 	dark := int32(0)
 	if isDark {
 		dark = 1
 	}
+	if dwmSetWindowAttribute.Find() == nil {
+		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaUseImmersiveDark, uintptr(unsafe.Pointer(&dark)), unsafe.Sizeof(dark))
+	}
+	if osvariant.GetCurrentPlatformVariant() == "win11" {
+		applyWindows11Backdrop(hwnd)
+		return
+	}
+	applyWindows10AcrylicBackdrop(hwnd, isDark)
+}
+
+func applyWindows11Backdrop(hwnd win.HWND) {
 	corner := int32(dwmWindowCornerRound)
 	backdrop := int32(dwmSystemBackdropMica)
 	margins := windowsMargins{left: -1, right: -1, top: -1, bottom: -1}
-	if dwmSetWindowAttribute.Find() == nil {
-		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaUseImmersiveDark, uintptr(unsafe.Pointer(&dark)), unsafe.Sizeof(dark))
-		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaWindowCorner, uintptr(unsafe.Pointer(&corner)), unsafe.Sizeof(corner))
-	}
 	if dwmExtendFrameIntoClientArea.Find() == nil {
 		_, _, _ = dwmExtendFrameIntoClientArea.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&margins)))
 	}
 	if dwmSetWindowAttribute.Find() == nil {
-		result, _, _ := dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaSystemBackdrop, uintptr(unsafe.Pointer(&backdrop)), unsafe.Sizeof(backdrop))
-		if int32(result) >= 0 {
-			return
-		}
+		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaWindowCorner, uintptr(unsafe.Pointer(&corner)), unsafe.Sizeof(corner))
+		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaSystemBackdrop, uintptr(unsafe.Pointer(&backdrop)), unsafe.Sizeof(backdrop))
 	}
-	if setWindowCompositionAttribute.Find() != nil {
+}
+
+func applyWindows10AcrylicBackdrop(hwnd win.HWND, isDark bool) {
+	if osvariant.GetCurrentPlatformVariant() == "win11" {
 		return
 	}
-	tint := uint32(0xCCF5F5F5)
-	if isDark {
-		tint = 0xCC202020
+	if tryApplyWindowsAccent(hwnd, accentAcrylicBlurBehind, windows10AcrylicTint(isDark), 2) ||
+		tryApplyWindowsAccent(hwnd, accentBlurBehind, windows10AcrylicTint(isDark), 0) {
+		margins := windowsMargins{left: -1, right: -1, top: -1, bottom: -1}
+		if dwmExtendFrameIntoClientArea.Find() == nil {
+			_, _, _ = dwmExtendFrameIntoClientArea.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&margins)))
+		}
 	}
-	policy := windowsAccentPolicy{state: accentAcrylicBlurBehind, flags: 2, gradientColor: tint}
+}
+
+func windows10AcrylicTint(isDark bool) uint32 {
+	if isDark {
+		return win10DarkAcrylicTint
+	}
+	return win10LightAcrylicTint
+}
+
+func tryApplyWindowsAccent(hwnd win.HWND, state, gradientColor, flags uint32) bool {
+	if setWindowCompositionAttribute.Find() != nil {
+		return false
+	}
+	policy := windowsAccentPolicy{state: state, flags: flags, gradientColor: gradientColor}
 	data := windowsCompositionAttributeData{attribute: wcaAccentPolicy, data: uintptr(unsafe.Pointer(&policy)), size: unsafe.Sizeof(policy)}
-	_, _, _ = setWindowCompositionAttribute.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&data)))
+	result, _, _ := setWindowCompositionAttribute.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&data)))
+	return result != 0
 }
 
 // enablePerMonitorDPIAwareness keeps native sizes in physical pixels while the public API stays logical.
