@@ -1,10 +1,39 @@
 package launcher
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	woxui "wox/ui/runtime"
 )
+
+func TestImageCacheConcurrentStoresAreSerialized(t *testing.T) {
+	app := &App{
+		images:         map[string]*woxui.Image{},
+		imageRequested: map[string]string{},
+		imageLastUsed:  map[string]uint64{},
+		imageErrors:    map[string]string{},
+	}
+	image := &woxui.Image{Width: 1, Height: 1}
+
+	var waitGroup sync.WaitGroup
+	for worker := 0; worker < 8; worker++ {
+		worker := worker
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			for index := 0; index < 128; index++ {
+				app.storeImage(fmt.Sprintf("image-%d-%d", worker, index), image)
+			}
+		}()
+	}
+	waitGroup.Wait()
+
+	if len(app.images) > launcherImageCacheLimit {
+		t.Fatalf("image cache size = %d, want at most %d", len(app.images), launcherImageCacheLimit)
+	}
+}
 
 func TestEmbeddedAppIconUsesHighResolutionPNG(t *testing.T) {
 	image, err := decodeWoxImageWithTint(appIconImageSource, nil, 256)

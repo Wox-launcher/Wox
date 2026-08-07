@@ -78,12 +78,6 @@ type hotkeyOverviewPreviewData struct {
 	Search string `json:"search"`
 }
 
-type hotkeyOverviewEntry struct {
-	shortcut string
-	action   string
-	detail   string
-}
-
 func decodeStructuredPreview[T any](value string) (T, error) {
 	var data T
 	if err := json.Unmarshal([]byte(value), &data); err != nil {
@@ -129,7 +123,7 @@ func (a *App) buildUpdatePreview(id string, data updatePreviewData, palette uiPa
 		if latest == "" {
 			latest = unknown
 		}
-		status = current + " → " + latest
+		status = current + "\u2192" + latest
 		statusColor = woxui.Color{R: 255, G: 152, B: 0, A: 255}
 	}
 	if data.AutoUpdateEnabled {
@@ -182,51 +176,52 @@ func formatAIStreamPreview(data aiStreamPreviewData) string {
 		answer = strings.TrimSpace(data.StatusLabel)
 	}
 	if answer == "" {
-		answer = "Waiting for answer…"
+		answer = "Waiting for answer\u2026"
 	}
 	if data.AnswerTitle != "" && len(parts) > 0 {
 		answer = data.AnswerTitle + "\n\n" + answer
 	}
 	parts = append(parts, answer)
-	return strings.Join(parts, "\n\n────────\n\n")
+	return strings.Join(parts, "\n\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n")
 }
 
-func hotkeyOverviewEntryMatches(entry hotkeyOverviewEntry, search string) bool {
-	search = strings.ToLower(strings.TrimSpace(search))
-	if search == "" {
-		return true
-	}
-	return strings.Contains(strings.ToLower(entry.shortcut), search) || strings.Contains(strings.ToLower(entry.action), search) || strings.Contains(strings.ToLower(entry.detail), search)
-}
-
-// formatHotkeyOverview renders current settings and portable launcher commands instead of treating the preview's search-only payload as content.
-func (a *App) formatHotkeyOverview(data hotkeyOverviewPreviewData) string {
+// buildHotkeyOverviewPreview prepares the live settings and built-in shortcuts for the pure preview view.
+func (a *App) buildHotkeyOverviewPreview(data hotkeyOverviewPreviewData, palette uiPalette, width, height float32) woxwidget.Widget {
 	settings := a.generalSettings.Data()
-	type section struct {
-		title   string
-		entries []hotkeyOverviewEntry
+	entry := func(shortcut, action, scope, source, detail string, keyboard bool) previewview.HotkeyOverviewPreviewEntry {
+		labels := []string{strings.TrimSpace(shortcut)}
+		if keyboard {
+			labels = formatHotkeyLabels(shortcut)
+		}
+		return previewview.HotkeyOverviewPreviewEntry{RawShortcut: strings.TrimSpace(shortcut), Labels: labels, Action: action, Detail: detail, Scope: scope, Source: source}
 	}
-	sections := []section{
-		{title: a.translate("i18n:ui_hotkey_overview_global"), entries: []hotkeyOverviewEntry{
-			{shortcut: settings.MainHotkey, action: a.translate("i18n:ui_hotkey_overview_open_wox")},
-			{shortcut: settings.SelectionHotkey, action: a.translate("i18n:ui_hotkey_overview_search_selection")},
+	globalScope := a.translate("i18n:ui_hotkey_overview_global")
+	launcherScope := a.translate("i18n:ui_hotkey_overview_launcher")
+	previewScope := a.translate("i18n:ui_hotkey_overview_preview")
+	settingSource := a.translate("i18n:ui_hotkey_overview_source_setting")
+	builtinSource := a.translate("i18n:ui_hotkey_overview_source_builtin")
+	userSource := a.translate("i18n:ui_hotkey_overview_source_user")
+	sections := []previewview.HotkeyOverviewPreviewSection{
+		{Title: globalScope, Entries: []previewview.HotkeyOverviewPreviewEntry{
+			entry(settings.MainHotkey, a.translate("i18n:ui_hotkey_overview_open_wox"), globalScope, settingSource, "", true),
+			entry(settings.SelectionHotkey, a.translate("i18n:ui_hotkey_overview_search_selection"), globalScope, settingSource, "", true),
 		}},
-		{title: a.translate("i18n:ui_hotkey_overview_launcher"), entries: []hotkeyOverviewEntry{
-			{shortcut: "Ctrl/Cmd+J", action: a.translate("i18n:ui_hotkey_overview_more_actions")},
-			{shortcut: "Ctrl/Cmd+F", action: a.translate("i18n:ui_hotkey_overview_filters")},
-			{shortcut: "Ctrl/Cmd+U", action: a.translate("i18n:ui_hotkey_overview_attention")},
+		{Title: launcherScope, Entries: []previewview.HotkeyOverviewPreviewEntry{
+			entry(primaryHotkey("j"), a.translate("i18n:ui_hotkey_overview_more_actions"), launcherScope, builtinSource, "", true),
+			entry(primaryHotkey("f"), a.translate("i18n:ui_hotkey_overview_filters"), launcherScope, builtinSource, "", true),
+			entry(primaryHotkey("u"), a.translate("i18n:ui_hotkey_overview_attention"), launcherScope, builtinSource, "", true),
 		}},
-		{title: a.translate("i18n:ui_hotkey_overview_preview"), entries: []hotkeyOverviewEntry{
-			{shortcut: "Ctrl/Cmd+B", action: a.translate("i18n:ui_hotkey_overview_preview_fullscreen")},
-			{shortcut: "Ctrl/Cmd+Shift+F", action: a.translate("i18n:ui_hotkey_overview_preview_search")},
-			{shortcut: "Ctrl/Cmd+L", action: a.translate("i18n:ui_hotkey_overview_file_preview_load")},
-			{shortcut: "Ctrl/Cmd+R", action: a.translate("i18n:ui_hotkey_overview_webview_refresh")},
-			{shortcut: "Ctrl/Cmd+[", action: a.translate("i18n:ui_hotkey_overview_webview_back")},
-			{shortcut: "Ctrl/Cmd+]", action: a.translate("i18n:ui_hotkey_overview_webview_forward")},
-			{shortcut: "Ctrl/Cmd+Alt+I", action: a.translate("i18n:ui_hotkey_overview_webview_inspector")},
+		{Title: previewScope, Entries: []previewview.HotkeyOverviewPreviewEntry{
+			entry(primaryHotkey("b"), a.translate("i18n:ui_hotkey_overview_preview_fullscreen"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("shift+f"), a.translate("i18n:ui_hotkey_overview_preview_search"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("l"), a.translate("i18n:ui_hotkey_overview_file_preview_load"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("r"), a.translate("i18n:ui_hotkey_overview_webview_refresh"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("["), a.translate("i18n:ui_hotkey_overview_webview_back"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("]"), a.translate("i18n:ui_hotkey_overview_webview_forward"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("alt+i"), a.translate("i18n:ui_hotkey_overview_webview_inspector"), previewScope, builtinSource, "", true),
 		}},
 	}
-	queryHotkeys := section{title: a.translate("i18n:ui_hotkey_overview_query_hotkeys")}
+	queryHotkeys := previewview.HotkeyOverviewPreviewSection{Title: a.translate("i18n:ui_hotkey_overview_query_hotkeys")}
 	for _, item := range settings.QueryHotkeys {
 		if item.Disabled || strings.TrimSpace(item.Hotkey) == "" || strings.TrimSpace(item.Query) == "" {
 			continue
@@ -239,35 +234,19 @@ func (a *App) formatHotkeyOverview(data hotkeyOverviewPreviewData) string {
 		if strings.TrimSpace(item.Query) != strings.TrimSpace(action) {
 			detail = item.Query
 		}
-		queryHotkeys.entries = append(queryHotkeys.entries, hotkeyOverviewEntry{shortcut: item.Hotkey, action: action, detail: detail})
+		queryHotkeys.Entries = append(queryHotkeys.Entries, entry(item.Hotkey, action, queryHotkeys.Title, userSource, detail, true))
 	}
 	sections = append(sections, queryHotkeys)
-	queryShortcuts := section{title: a.translate("i18n:ui_hotkey_overview_query_shortcuts")}
+	queryShortcuts := previewview.HotkeyOverviewPreviewSection{Title: a.translate("i18n:ui_hotkey_overview_query_shortcuts")}
 	for _, item := range settings.QueryShortcuts {
 		if !item.Disabled && strings.TrimSpace(item.Shortcut) != "" && strings.TrimSpace(item.Query) != "" {
-			queryShortcuts.entries = append(queryShortcuts.entries, hotkeyOverviewEntry{shortcut: item.Shortcut, action: item.Query})
+			queryShortcuts.Entries = append(queryShortcuts.Entries, entry(item.Shortcut, item.Query, queryShortcuts.Title, userSource, "", false))
 		}
 	}
 	sections = append(sections, queryShortcuts)
-	blocks := make([]string, 0, len(sections))
-	for _, section := range sections {
-		lines := make([]string, 0, len(section.entries)+1)
-		for _, entry := range section.entries {
-			if strings.TrimSpace(entry.shortcut) == "" || !hotkeyOverviewEntryMatches(entry, data.Search) {
-				continue
-			}
-			line := entry.shortcut + "    " + entry.action
-			if entry.detail != "" {
-				line += "\n    " + entry.detail
-			}
-			lines = append(lines, line)
-		}
-		if len(lines) > 0 {
-			blocks = append(blocks, section.title+"\n\n"+strings.Join(lines, "\n\n"))
-		}
-	}
-	if len(blocks) == 0 {
-		return "No shortcuts match the current search."
-	}
-	return strings.Join(blocks, "\n\n────────\n\n")
+	return previewview.HotkeyOverviewPreviewView(previewview.HotkeyOverviewPreviewProps{
+		Width: width, Height: height, Scale: a.densityMetrics.normalized().scale, Search: data.Search,
+		Title: a.translate("i18n:ui_hotkey_overview_title"), Subtitle: a.translate("i18n:ui_hotkey_overview_subtitle"),
+		Count: a.translate("i18n:ui_hotkey_overview_count"), Empty: a.translate("i18n:ui_hotkey_overview_empty"), Sections: sections, Theme: palette.componentTheme(),
+	})
 }

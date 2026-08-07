@@ -159,20 +159,22 @@ type App struct {
 	densityMetrics       launcherDensityMetrics
 	translations         map[string]string
 	translationsRevision atomic.Uint64
-	images               map[string]*woxui.Image
-	imagesRevision       atomic.Uint64
-	imageRequested       map[string]string
-	imageLastUsed        map[string]uint64
-	imageUseSequence     uint64
-	imageErrors          map[string]string
-	remotePreviews       map[string]queryPreview
-	previewRequests      map[string]bool
-	filePreviews         map[string]filePreviewContent
-	fileRequests         map[string]bool
-	mdDocs               map[string]woxcomponent.MarkdownDocument
-	previewLayouts       map[string]woxwidget.TextBlockLayout
-	dictationAudio       *dictationPreviewAudioState
-	terminalPreview      *terminalPreviewState
+	// imageMu protects the image cache because image decoding completes on background goroutines.
+	imageMu          sync.RWMutex
+	images           map[string]*woxui.Image
+	imagesRevision   atomic.Uint64
+	imageRequested   map[string]string
+	imageLastUsed    map[string]uint64
+	imageUseSequence uint64
+	imageErrors      map[string]string
+	remotePreviews   map[string]queryPreview
+	previewRequests  map[string]bool
+	filePreviews     map[string]filePreviewContent
+	fileRequests     map[string]bool
+	mdDocs           map[string]woxcomponent.MarkdownDocument
+	previewLayouts   map[string]woxwidget.TextBlockLayout
+	dictationAudio   *dictationPreviewAudioState
+	terminalPreview  *terminalPreviewState
 }
 
 // New creates a launcher whose typed core services are supplied by the process composition root.

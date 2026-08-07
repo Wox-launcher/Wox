@@ -178,15 +178,18 @@ func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidt
 	if tint != nil {
 		key += fmt.Sprintf("-tint-%02x%02x%02x%02x", tint.R, tint.G, tint.B, tint.A)
 	}
+	a.imageMu.Lock()
 	a.imageUseSequence++
 	a.imageLastUsed[key] = a.imageUseSequence
 	image := a.images[key]
 	requestedSource, requested := a.imageRequested[key]
 	if image != nil || requested && requestedSource == source.ImageData {
+		a.imageMu.Unlock()
 		return image
 	}
 	a.imageRequested[key] = source.ImageData
 	delete(a.imageErrors, key)
+	a.imageMu.Unlock()
 	util.Go(a.lifecycleCtx, "load launcher image", func() {
 		a.loadImage(key, source, tint, svgWidth, svgHeight)
 	})
@@ -259,12 +262,14 @@ func (a *App) storeImage(key string, image *woxui.Image) {
 		return
 	}
 	if err := a.runOnUI("store launcher image", func() {
+		a.imageMu.Lock()
 		if _, exists := a.images[key]; !exists && len(a.images) >= launcherImageCacheLimit {
 			a.evictOldestImage(key)
 		}
 		a.images[key] = image
 		a.imagesRevision.Add(1)
 		delete(a.imageErrors, key)
+		a.imageMu.Unlock()
 		a.invalidateAllWindows()
 	}); err != nil {
 		log.Printf("dispatch launcher image: %v", err)
@@ -273,7 +278,9 @@ func (a *App) storeImage(key string, image *woxui.Image) {
 
 func (a *App) storeImageError(key string, err error) {
 	if dispatchErr := a.runOnUI("store launcher image error", func() {
+		a.imageMu.Lock()
 		a.imageErrors[key] = err.Error()
+		a.imageMu.Unlock()
 		a.invalidateAllWindows()
 	}); dispatchErr != nil {
 		log.Printf("dispatch launcher image error: %v", dispatchErr)
@@ -334,6 +341,8 @@ func (a *App) evictOldestImage(keepKey string) {
 
 func (a *App) imageErrorFor(source woxImage) string {
 	key := imageKey(source)
+	a.imageMu.RLock()
+	defer a.imageMu.RUnlock()
 	return a.imageErrors[key]
 }
 

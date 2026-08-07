@@ -12,6 +12,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type launcherPreparedSectionProps struct {
@@ -797,6 +798,10 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 	}
 	return launcherview.LauncherToolbarBoundary(launcherview.LauncherToolbarProps{
 		Width: width, Height: height, Padding: snapshot.palette.toolbarPadding, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
-		Label: leftLabel, Icon: leftIcon, Progress: progress, HasProgress: hasProgress, Indeterminate: indeterminate, Actions: actions,
+		Label: leftLabel, Icon: leftIcon, Progress: progress, HasProgress: hasProgress, Indeterminate: indeterminate, Actions: actions, OnDragStart: func() {
+			if err := a.window.StartDragging(); err != nil {
+				util.GetLogger().Error(util.NewTraceContext(), fmt.Sprintf("start launcher toolbar window drag: %v", err))
+			}
+		},
 	})
 }

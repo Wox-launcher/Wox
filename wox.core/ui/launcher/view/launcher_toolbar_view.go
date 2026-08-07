@@ -43,6 +43,7 @@ type LauncherToolbarProps struct {
 	HasProgress   bool
 	Indeterminate bool
 	Actions       []LauncherToolbarAction
+	OnDragStart   func() `boundary:"stable"`
 }
 
 // Equal compares every render dependency for the launcher toolbar section.
@@ -157,7 +158,9 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 		Padding: woxwidget.Insets{Left: props.Padding.Left, Top: verticalPadding, Right: props.Padding.Right, Bottom: verticalPadding},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: leftWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(8, props.DensityScale), Children: leftWidgets}},
-			woxwidget.Painter{Width: max(float32(0), contentWidth-leftWidth-rightWidth), Height: 1},
+			woxwidget.Gesture{ID: "launcher-toolbar-drag-area", OnDragStart: props.OnDragStart, Child: woxwidget.Container{
+				Width: max(float32(0), contentWidth-leftWidth-rightWidth), Height: contentHeight,
+			}},
 			woxwidget.Container{Width: rightWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: actionGap, Children: rightChildren}},
 		}},
 	}

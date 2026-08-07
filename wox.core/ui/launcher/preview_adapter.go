@@ -128,7 +128,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 		if err != nil {
 			data = hotkeyOverviewPreviewData{}
 		}
-		return content(a.formatHotkeyOverview(data), palette.previewText)
+		return a.buildHotkeyOverviewPreview(data, palette, width, height)
 	case "url":
 		return content("URL preview\n\n"+preview.PreviewData+"\n\nThe embedded browser surface will be attached through the platform preview host.", palette.previewText)
 	case "webview":

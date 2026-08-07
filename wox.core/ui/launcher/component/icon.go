@@ -132,6 +132,14 @@ func CopyGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.copy", size, color)
 }
 
+// KeyboardGlyph returns the shared keyboard icon used by shortcut overviews.
+func KeyboardGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 20
+	}
+	return svgIcon("control.keyboard", size, color)
+}
+
 // EditGlyph returns the shared SVG edit icon.
 func EditGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	if size <= 0 {
