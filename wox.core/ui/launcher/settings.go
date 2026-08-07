@@ -1172,6 +1172,7 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 	}
 	restoreTextInput := false
 	refreshGlance := false
+	reloadGlanceCatalog := false
 	_ = a.runOnUI("apply general setting save", func() {
 		a.settingSaving = false
 		if a.generalSettings.EditKey() == item.key {
@@ -1189,9 +1190,15 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 			a.stopGlanceLocked(true)
 			refreshGlance = a.glanceEligibleLocked()
 		}
+		if err == nil && item.key == "LangCode" {
+			reloadGlanceCatalog = true
+		}
 		a.updateSettingsTextInput(restoreTextInput)
 		a.invalidateSettingsWindow()
 	})
+	if reloadGlanceCatalog {
+		util.Go(a.lifecycleCtx, "reload glance catalog after language change", a.reloadGlanceCatalogFromCore)
+	}
 	if refreshGlance {
 		util.Go(a.lifecycleCtx, "refresh glance after settings change", func() {
 			a.refreshGlance("settingsChanged", "", nil)

@@ -391,8 +391,10 @@ func cloudPlanHeader(props CloudIntroProps, width float32, compact bool, theme w
 	badgeWidth := max(float32(54), float32(len([]rune(props.RecommendedLabel)))*7+16)
 	pro := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxwidget.Text{Value: props.ProLabel, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-		woxwidget.Container{Width: badgeWidth, Height: 18, Radius: 9, Color: woxui.Color{R: 11, G: 107, B: 211, A: 255}, Padding: woxwidget.Insets{Left: 8, Top: 3, Right: 8}, Child: woxwidget.Text{
-			Value: props.RecommendedLabel, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255},
+		woxwidget.Container{Width: badgeWidth, Height: 18, Radius: 9, Color: woxui.Color{R: 11, G: 107, B: 211, A: 255}, Child: woxwidget.Align{
+			Width: badgeWidth, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
+				Value: props.RecommendedLabel, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255},
+			},
 		}},
 	}}
 	return woxwidget.Container{Width: width, Height: headerHeight, Padding: woxwidget.Insets{Left: horizontalPadding, Top: topPadding, Right: horizontalPadding}, Child: woxwidget.Flex{
@@ -554,7 +556,7 @@ func cloudValueAction(id, value string, width float32, onTap func(), theme woxco
 // cloudSyncCard renders current sync state and its primary action.
 func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
 	const labelGap = float32(32)
-	const buttonWidth = float32(64)
+	buttonWidth := cloudFormButtonWidth(props.ButtonLabel)
 	availableWidth := max(float32(0), width)
 	labelWidth := min(props.LabelWidth, max(float32(220), availableWidth-labelGap-buttonWidth))
 	if labelWidth <= 0 {
@@ -580,7 +582,7 @@ func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Theme
 // cloudDeviceHeader renders the Flutter form row above the device list.
 func cloudDeviceHeader(props CloudDevicesProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
 	const labelGap = float32(32)
-	const buttonWidth = float32(88)
+	buttonWidth := cloudFormButtonWidth(props.RefreshLabel)
 	availableWidth := max(float32(0), width)
 	labelWidth := min(props.LabelWidth, max(float32(220), availableWidth-labelGap-buttonWidth))
 	valueWidth := max(buttonWidth, availableWidth-labelWidth-labelGap)

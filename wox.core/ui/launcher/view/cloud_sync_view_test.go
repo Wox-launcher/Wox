@@ -58,21 +58,23 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	syncCard := cloudSyncCard(CloudSyncProps{LabelWidth: labelWidth, ButtonLabel: "Sync"}, width, buttonTheme).(woxwidget.Container)
 	syncRow := syncCard.Child.(woxwidget.Flex)
 	syncValue := syncRow.Children[1].(woxwidget.Container)
+	syncButtonWidth := cloudFormButtonWidth("Sync")
 	if got := labelWidth + gap + syncValue.Width; got != width {
 		t.Fatalf("sync row width = %v, want %v", got, width)
 	}
-	if got := syncValue.Padding.Left; got+64 != syncValue.Width {
-		t.Fatalf("sync button right edge = %v, want %v", got+64, syncValue.Width)
+	if got := syncValue.Padding.Left; got+syncButtonWidth != syncValue.Width {
+		t.Fatalf("sync button right edge = %v, want %v", got+syncButtonWidth, syncValue.Width)
 	}
 
 	deviceHeader := cloudDeviceHeader(CloudDevicesProps{LabelWidth: labelWidth, RefreshLabel: "Refresh"}, width, buttonTheme).(woxwidget.Container)
 	deviceRow := deviceHeader.Child.(woxwidget.Flex)
 	refreshValue := deviceRow.Children[1].(woxwidget.Container)
+	refreshButtonWidth := cloudFormButtonWidth("Refresh")
 	if got := labelWidth + gap + refreshValue.Width; got != width {
 		t.Fatalf("device row width = %v, want %v", got, width)
 	}
-	if got := refreshValue.Padding.Left; got+88 != refreshValue.Width {
-		t.Fatalf("refresh button right edge = %v, want %v", got+88, refreshValue.Width)
+	if got := refreshValue.Padding.Left; got+refreshButtonWidth != refreshValue.Width {
+		t.Fatalf("refresh button right edge = %v, want %v", got+refreshButtonWidth, refreshValue.Width)
 	}
 	syncButton := syncValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	refreshButton := refreshValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
