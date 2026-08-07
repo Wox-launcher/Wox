@@ -147,12 +147,31 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 			woxwidget.StackChild{Left: max(float32(0), props.Width-46), Child: settingsWindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)},
 		)
 	default:
+		closeButton := settingsWindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)
+		if props.Platform == "linux" {
+			closeButton = settingsLinuxTitleBarCloseButton("settings-window-close", hovered == "close", props.Theme, props.OnClose, onHover)
+		}
 		children = append(children,
 			woxwidget.StackChild{Left: max(float32(0), (props.Width-props.TitleWidth)/2), Top: 9, Child: woxwidget.Container{Width: props.TitleWidth, Height: 24, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
-			woxwidget.StackChild{Left: max(float32(0), props.Width-46), Child: settingsWindowsTitleBarButton("settings-window-close", "×", false, hovered == "close", props.Theme, props.OnClose, onHover)},
+			woxwidget.StackChild{Left: max(float32(0), props.Width-46), Child: closeButton},
 		)
 	}
 	return woxwidget.Stack{Width: props.Width, Height: height, Children: children}
+}
+
+// settingsLinuxTitleBarCloseButton uses a compact circular hover highlight to match common Linux chrome conventions.
+func settingsLinuxTitleBarCloseButton(id string, hovered bool, theme woxcomponent.Theme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
+	foreground := settingsTitleBarAlpha(theme.ToolbarText, 230)
+	circleColor := woxui.Color{}
+	if hovered {
+		circleColor = woxui.Color{R: 232, G: 17, B: 35, A: 255}
+		foreground = woxui.Color{R: 255, G: 255, B: 255, A: 255}
+	}
+	return woxwidget.Gesture{ID: id, OnTap: onTap, OnHover: func(inside bool) {
+		if onHover != nil {
+			onHover("close", inside)
+		}
+	}, Child: woxwidget.Container{Width: 46, Height: SettingsTitleBarHeight, Child: woxwidget.Align{Width: 46, Height: SettingsTitleBarHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Container{Width: 24, Height: 24, Radius: 12, Color: circleColor, Child: woxwidget.Align{Width: 24, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.CloseGlyph(16, foreground)}}}}}
 }
 
 // settingsWindowsTitleBarButton matches the compact native hover treatment while keeping the frameless window fully custom-drawn.

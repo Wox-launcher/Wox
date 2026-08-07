@@ -3,6 +3,8 @@ package view
 import (
 	"fmt"
 
+	"wox/util"
+
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -76,6 +78,10 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 		stackChildren = append(stackChildren, woxwidget.StackChild{Child: props.SearchPanel})
 	}
 	railColor := settingsColorAlpha(props.Theme.ToolbarText, 9)
+	if util.IsLinux() {
+		// Linux settings windows are fully opaque, so keep the rail background flush with the page surface.
+		railColor = props.Theme.Background
+	}
 	rail := woxwidget.Container{Width: props.Width, Height: props.Height, Color: railColor, Padding: woxwidget.Insets{Left: 14, Top: 14, Right: 14, Bottom: 14}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 		props.SearchBox,
 		woxwidget.Stack{Width: innerWidth, Height: viewportHeight, Children: stackChildren},

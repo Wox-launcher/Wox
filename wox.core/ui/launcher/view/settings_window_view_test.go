@@ -93,6 +93,27 @@ func TestSettingsMacTrafficLightDarkensItsNativeColorWhilePressed(t *testing.T) 
 	}
 }
 
+func TestSettingsTitleBarLinuxCloseHoverUsesDangerHighlight(t *testing.T) {
+	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{Width: 1200, Title: "Wox Settings", TitleWidth: 160, Platform: "linux"}, "close", "", nil, nil).(woxwidget.Stack)
+	closeButton := titleBar.Children[2].Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	circle := closeButton.Child.(woxwidget.Align).Child.(woxwidget.Container)
+	closeGlyph := circle.Child.(woxwidget.Align).Child.(woxwidget.Image)
+
+	if circle.Width != 24 || circle.Height != 24 || circle.Radius != 12 {
+		t.Fatalf("linux close hover geometry = %vx%v radius %v, want 24x24 circle", circle.Width, circle.Height, circle.Radius)
+	}
+	if closeButton.Color != (woxui.Color{}) {
+		t.Fatalf("linux close button container color = %#v, want transparent", closeButton.Color)
+	}
+
+	if circle.Color != (woxui.Color{R: 232, G: 17, B: 35, A: 255}) {
+		t.Fatalf("linux close button hover circle color = %#v, want danger red highlight", circle.Color)
+	}
+	if closeGlyph.Width != 16 || closeGlyph.Height != 16 {
+		t.Fatalf("linux close glyph size = %vx%v, want 16x16", closeGlyph.Width, closeGlyph.Height)
+	}
+}
+
 func TestSettingsWindowOverlayPreservesHoveredIdentity(t *testing.T) {
 	var overlayVisible bool
 	var hoverStates []bool

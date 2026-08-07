@@ -105,7 +105,10 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 }
 
 func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth float32) woxwidget.Widget {
-	title := a.activeSettingsNavLabel(snapshot)
+	title := a.translate("i18n:ui_tray_open_setting_window")
+	if title == "" {
+		title = "Wox Settings"
+	}
 	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
 	titleWidth := float32(160)
 	if window := a.settingsNativeWindow(); window != nil {

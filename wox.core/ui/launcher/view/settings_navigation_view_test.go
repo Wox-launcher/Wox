@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -48,6 +49,20 @@ func TestSettingsRailUsesSharedScrollWithoutScrollbar(t *testing.T) {
 
 	if !props.HideScrollbar {
 		t.Fatal("settings rail should keep shared scrolling while hiding its scrollbar")
+	}
+}
+
+func TestSettingsRailLinuxUsesPageBackground(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux-specific rail background behavior")
+	}
+	background := woxui.Color{R: 248, G: 248, B: 248, A: 255}
+	rail := SettingsRail(SettingsRailProps{
+		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.Theme{Background: background},
+	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+
+	if rail.Color != background {
+		t.Fatalf("linux settings rail background = %#v, want page background %#v", rail.Color, background)
 	}
 }
 

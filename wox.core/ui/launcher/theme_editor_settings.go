@@ -3,12 +3,14 @@ package launcher
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"image"
 	"image/png"
 	"io"
 	"log"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -146,7 +148,7 @@ func (a *App) loadDemoWallpaper(loadID uint64, path string, includeBlurred bool)
 		}
 	})
 	if err != nil {
-		log.Printf("load theme editor wallpaper: %v", err)
+		util.GetLogger().Error(a.lifecycleCtx, "load theme editor wallpaper: "+err.Error())
 		return
 	}
 }
@@ -175,6 +177,11 @@ func decodeDemoWallpaperWithCache(path string, includeBlurred bool, cacheDirecto
 	blurredCachePath := filepath.Join(cacheDirectory, "demo_wallpaper_blurred_"+cacheKey+".png")
 	if wallpaperImage, wallpaperBlurred, ok := loadDemoWallpaperCache(wallpaperCachePath, blurredCachePath, includeBlurred); ok {
 		return wallpaperImage, wallpaperBlurred, nil
+	}
+
+	path, err = prepareWallpaperDecodePath(path, cacheDirectory, cacheKey)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	file, err := os.Open(path)
@@ -211,6 +218,47 @@ func decodeDemoWallpaperWithCache(path string, includeBlurred bool, cacheDirecto
 	persistDemoWallpaperCache(cacheDirectory, wallpaperCachePath, stage)
 	persistDemoWallpaperCache(cacheDirectory, blurredCachePath, blurredWindow)
 	return wallpaperImage, wallpaperBlurred, nil
+}
+
+// prepareWallpaperDecodePath converts wallpaper formats that Go cannot decode directly into a cached PNG.
+func prepareWallpaperDecodePath(path, cacheDirectory, cacheKey string) (string, error) {
+	if !strings.EqualFold(filepath.Ext(path), ".jxl") {
+		return path, nil
+	}
+
+	transcodedPath := filepath.Join(cacheDirectory, "demo_wallpaper_source_"+cacheKey+".png")
+	if _, err := os.Stat(transcodedPath); err == nil {
+		return transcodedPath, nil
+	}
+	if err := os.MkdirAll(cacheDirectory, 0755); err != nil {
+		return "", err
+	}
+
+	if err := transcodeWallpaperToPNG(path, transcodedPath); err != nil {
+		return "", err
+	}
+	return transcodedPath, nil
+}
+
+// transcodeWallpaperToPNG uses a local JXL decoder when the wallpaper format is not supported by image.Decode.
+func transcodeWallpaperToPNG(sourcePath, targetPath string) error {
+	if err := runWallpaperTranscoder("djxl", sourcePath, targetPath); err == nil {
+		return nil
+	}
+	_ = os.Remove(targetPath)
+	if err := runWallpaperTranscoder("magick", sourcePath, targetPath); err == nil {
+		return nil
+	}
+	_ = os.Remove(targetPath)
+	return errors.New("desktop wallpaper is in a format that could not be transcoded")
+}
+
+func runWallpaperTranscoder(command, sourcePath, targetPath string) error {
+	if _, err := exec.LookPath(command); err != nil {
+		return err
+	}
+	cmd := exec.Command(command, sourcePath, targetPath)
+	return cmd.Run()
 }
 
 // demoWallpaperCacheKey invalidates processed previews when the source or rendering contract changes.

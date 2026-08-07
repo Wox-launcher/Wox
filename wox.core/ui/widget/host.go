@@ -832,7 +832,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		return
 	}
 	target := h.root.hitTest(event.Position)
-	if event.Kind == woxui.PointerMove || event.Kind == woxui.PointerLeave {
+	if event.Kind == woxui.PointerMove || event.Kind == woxui.PointerEnter || event.Kind == woxui.PointerLeave {
 		if event.Kind == woxui.PointerLeave {
 			target = nil
 		}

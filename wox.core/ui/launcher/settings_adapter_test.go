@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -127,5 +128,18 @@ func TestGeneralSettingsTablesKeepFlutterOuterGap(t *testing.T) {
 	}
 	if lastTableSpacer.Padding.Bottom != 24 {
 		t.Fatalf("last table outer bottom gap = %v, want Flutter's 24px", lastTableSpacer.Padding.Bottom)
+	}
+}
+
+func TestSettingsTitleBarUsesFixedWindowTitle(t *testing.T) {
+	windows := woxui.NewWindowManager()
+	app := newApp(false, nil, windows, newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer app.cancel()
+	app.translations["ui_tray_open_setting_window"] = "Wox Settings"
+	titleBar := app.buildSettingsTitleBar(settingsSnapshot{tab: "general"}, 1200, 240).(woxwidget.Stateful)
+	props := titleBar.Widget.(launcherview.SettingsTitleBarProps)
+
+	if props.Title != "Wox Settings" {
+		t.Fatalf("settings title bar title = %q, want fixed window title", props.Title)
 	}
 }

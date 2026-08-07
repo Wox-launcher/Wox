@@ -734,7 +734,7 @@ func TestHostMultiTapRequiresNearbyClicks(t *testing.T) {
 	}
 }
 
-func TestHostRequiresPointerMoveBeforeHover(t *testing.T) {
+func TestHostPointerEnterTriggersHover(t *testing.T) {
 	var hoverStates []bool
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
 		return Gesture{
@@ -749,12 +749,12 @@ func TestHostRequiresPointerMoveBeforeHover(t *testing.T) {
 
 	position := woxui.Point{X: 5, Y: 5}
 	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerEnter, Position: position})
-	if len(hoverStates) != 0 {
-		t.Fatalf("pointer enter hover states = %v, want none", hoverStates)
+	if len(hoverStates) != 1 || !hoverStates[0] {
+		t.Fatalf("pointer enter hover states = %v, want [true]", hoverStates)
 	}
 	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: position})
 	if len(hoverStates) != 1 || !hoverStates[0] {
-		t.Fatalf("pointer move hover states = %v, want [true]", hoverStates)
+		t.Fatalf("pointer move hover states = %v, want unchanged [true]", hoverStates)
 	}
 	if services.invalidations != 1 || services.invalidatedRect != (woxui.Rect{Width: 100, Height: 20}) {
 		t.Fatalf("Host hover damage = %d %#v, want one row-local invalidation", services.invalidations, services.invalidatedRect)
