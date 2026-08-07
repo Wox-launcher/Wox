@@ -127,6 +127,7 @@ type App struct {
 	settingSaving              bool
 	settingFlash               string
 	settingFlashTimer          *time.Timer
+	settingsInlineTooltip      *settingsInlineTooltipState
 	cloudPlanTooltip           *cloudPlanTooltipState
 	settingsDemo               *settingsDemoState
 	settingsDemoRevision       atomic.Uint64

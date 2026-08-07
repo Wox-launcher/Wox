@@ -25,6 +25,18 @@ type settingWindowContext struct {
 	Source string `json:"Source"`
 }
 
+type settingsInlineTooltipState struct {
+	Text   string
+	Side   string
+	Anchor woxui.Rect
+}
+
+type settingsInlineTooltipSnapshot struct {
+	Text   string
+	Side   string
+	Anchor woxui.Rect
+}
+
 type settingsData struct {
 	EnableAutostart                    bool
 	LogLevel                           string
@@ -122,6 +134,7 @@ type settingsSnapshot struct {
 	row         int
 	saving      bool
 	highlight   string
+	tooltip     *settingsInlineTooltipSnapshot
 	search      settingsSearchSnapshot
 	update      updateSettingsSnapshot
 	palette     uiPalette
@@ -719,6 +732,11 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	runtime := a.runtimeSettings.Snapshot()
 	cloud := a.cloudSettings.Snapshot()
 	general := a.generalSettings.Snapshot()
+	var tooltip *settingsInlineTooltipSnapshot
+	if current := a.settingsInlineTooltip; current != nil {
+		copy := *current
+		tooltip = &settingsInlineTooltipSnapshot{Text: copy.Text, Side: copy.Side, Anchor: copy.Anchor}
+	}
 
 	// Resolve controller-owned form pointers in the same UI-thread snapshot transaction.
 	pluginForm := a.pluginSettings.Form()
@@ -735,6 +753,7 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		row:         a.settingRow,
 		saving:      a.settingSaving,
 		highlight:   a.settingFlash,
+		tooltip:     tooltip,
 		search:      search,
 		update:      update,
 		palette:     a.palette,
@@ -799,6 +818,7 @@ func (a *App) selectSettingTab(tab string) {
 		a.cloudSettings.SetForm(nil)
 		a.cloudSettings.SetPluginDialog(nil)
 		a.cloudPlanTooltip = nil
+		a.settingsInlineTooltip = nil
 		a.settingsDemo = nil
 		a.settingsDemoRevision.Add(1)
 		if tab != "plugins" {

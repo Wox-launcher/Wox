@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"log"
+	"strings"
 	"time"
 
 	"wox/ui/contract"
@@ -138,6 +139,31 @@ func (a *App) chooseSettingChoice(index int) {
 }
 
 func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rect) {
+	if util.IsLinux() {
+		if !a.settingsOpen {
+			if a.settingsInlineTooltip != nil {
+				a.settingsInlineTooltip = nil
+				a.invalidateSettingsWindow()
+			}
+			return
+		}
+		message := strings.TrimSpace(text)
+		if !inside || message == "" || anchor.Width <= 0 || anchor.Height <= 0 {
+			if a.settingsInlineTooltip != nil {
+				a.settingsInlineTooltip = nil
+				a.invalidateSettingsWindow()
+			}
+			return
+		}
+		next := settingsInlineTooltipState{Text: message, Side: "left", Anchor: anchor}
+		if current := a.settingsInlineTooltip; current != nil && current.Text == next.Text && current.Side == next.Side && current.Anchor == next.Anchor {
+			return
+		}
+		a.settingsInlineTooltip = &next
+		a.invalidateSettingsWindow()
+		return
+	}
+
 	revision := a.choiceTooltipRevision.Add(1)
 
 	util.Go(a.lifecycleCtx, "update setting choice tooltip", func() {

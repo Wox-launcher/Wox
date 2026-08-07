@@ -454,6 +454,7 @@ func (a *App) onSettingsWindowClosed() {
 		a.hotkeySettings.SetFocused(false)
 	}
 	a.cloudPlanTooltip = nil
+	a.settingsInlineTooltip = nil
 	a.settingsDemo = nil
 	a.settingsDemoRevision.Add(1)
 	if form := a.pluginSettings.Form(); form != nil {

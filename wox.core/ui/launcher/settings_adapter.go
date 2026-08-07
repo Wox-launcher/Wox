@@ -78,6 +78,25 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		}}
 		overlayLeft, overlayTop = 0, 0
 	}
+	if snapshot.tooltip != nil {
+		tooltip, left, top := launcherview.SettingsInlineTooltipOverlay(launcherview.SettingsInlineTooltipProps{
+			Width: width, Height: height, Anchor: snapshot.tooltip.Anchor, Message: snapshot.tooltip.Text, Side: snapshot.tooltip.Side, Theme: snapshot.palette.componentTheme(),
+		})
+		if tooltip != nil {
+			if overlay == nil {
+				overlay = tooltip
+				overlayLeft = left
+				overlayTop = top
+			} else {
+				overlay = woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+					{Left: overlayLeft, Top: overlayTop, Child: overlay},
+					{Left: left, Top: top, Child: tooltip},
+				}}
+				overlayLeft = 0
+				overlayTop = 0
+			}
+		}
+	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
 		Width: width, Height: height, PageID: snapshot.tab, Platform: runtime.GOOS, RailWidth: railWidth, Theme: snapshot.palette.componentTheme(),
 		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight, frame.Scale), Page: page,
