@@ -19,9 +19,6 @@ func TestHandlerExposesOnlyProcessControlRoutes(t *testing.T) {
 		DeepLink: func(context.Context, string) error {
 			return nil
 		},
-		EnableDiagnosticsAndRestart: func(context.Context) (any, error) {
-			return map[string]bool{"Enabled": true}, nil
-		},
 	})
 
 	for _, testCase := range []struct {
@@ -32,7 +29,6 @@ func TestHandlerExposesOnlyProcessControlRoutes(t *testing.T) {
 		{name: "ping", path: "/ping"},
 		{name: "show", path: "/show"},
 		{name: "deeplink", path: "/deeplink", body: `{"deeplink":"wox://setting"}`},
-		{name: "diagnostics", path: "/diagnostics/monitor/enable-restart"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, testCase.path, strings.NewReader(testCase.body))

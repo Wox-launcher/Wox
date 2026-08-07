@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -17,19 +18,16 @@ import (
 )
 
 const (
-	ArgBugReport  = "--bug-report"
 	ArgSupervisor = "--bug-aware-supervisor"
 	ArgChild      = "--bug-aware-child"
 	ArgWaitParent = "--bug-aware-wait-parent"
 )
 
 type State struct {
-	Enabled          bool   `json:"enabled"`
 	RunId            string `json:"runId"`
 	StartedAt        int64  `json:"startedAt"`
 	LastHeartbeatAt  int64  `json:"lastHeartbeatAt"`
 	LastCleanExit    bool   `json:"lastCleanExit"`
-	PreviousLogLevel string `json:"previousLogLevel"`
 	CorePid          int    `json:"corePid"`
 	UIPid            int    `json:"uiPid"`
 	ChildPid         int    `json:"childPid"`
@@ -46,6 +44,19 @@ type Breadcrumb struct {
 	Data      map[string]any `json:"data,omitempty"`
 }
 
+// CrashIncident records one abnormal exit and its locally generated report.
+type CrashIncident struct {
+	ID         string `json:"id"`
+	DetectedAt int64  `json:"detectedAt"`
+	PID        int    `json:"pid"`
+	ExitCode   int    `json:"exitCode"`
+	Signal     string `json:"signal,omitempty"`
+	DurationMs int64  `json:"durationMs"`
+	ReportPath string `json:"reportPath"`
+	Version    string `json:"version"`
+	Prompted   bool   `json:"prompted"`
+}
+
 type Manager struct {
 	mu sync.Mutex
 }
@@ -54,10 +65,6 @@ var manager = &Manager{}
 
 func GetManager() *Manager {
 	return manager
-}
-
-func (m *Manager) IsBugReportArg(args []string) bool {
-	return hasArg(args, ArgBugReport)
 }
 
 func (m *Manager) IsSupervisorArg(args []string) bool {
@@ -88,8 +95,29 @@ func (m *Manager) ExportsDirectory() string {
 	return filepath.Join(m.DiagnosticsDirectory(), "exports")
 }
 
+func (m *Manager) CrashDirectory() string {
+	return filepath.Join(m.DiagnosticsDirectory(), "crashes")
+}
+
+func (m *Manager) CrashDumpsDirectory() string {
+	return filepath.Join(m.CrashDirectory(), "dumps")
+}
+
+func (m *Manager) CrashReportsDirectory() string {
+	return filepath.Join(m.CrashDirectory(), "reports")
+}
+
+// CrashIncidentsDirectory stores one metadata file for each retained crash event.
+func (m *Manager) CrashIncidentsDirectory() string {
+	return filepath.Join(m.CrashDirectory(), "incidents")
+}
+
+func (m *Manager) CrashIncidentPath() string {
+	return filepath.Join(m.CrashDirectory(), "latest.json")
+}
+
 func (m *Manager) EnsureDirectories() error {
-	for _, dir := range []string{m.DiagnosticsDirectory(), m.ExportsDirectory()} {
+	for _, dir := range []string{m.DiagnosticsDirectory(), m.ExportsDirectory(), m.CrashDumpsDirectory(), m.CrashReportsDirectory(), m.CrashIncidentsDirectory()} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
@@ -120,70 +148,7 @@ func (m *Manager) SaveState(state State) error {
 	return os.WriteFile(m.StatePath(), data, 0644)
 }
 
-func (m *Manager) IsEnabled() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.LoadState().Enabled
-}
-
-func (m *Manager) Enable(ctx context.Context, previousLogLevel string) (State, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Feature update: each bug aware session should start with an empty
-	// diagnostics directory, otherwise old state, breadcrumbs, and exports can
-	// be mistaken for the reproduction that the user is about to capture.
-	if err := os.RemoveAll(m.DiagnosticsDirectory()); err != nil {
-		return State{}, err
-	}
-	if err := m.EnsureDirectories(); err != nil {
-		return State{}, err
-	}
-	if err := m.clearSessionLogs(); err != nil {
-		return State{}, err
-	}
-
-	state := m.LoadState()
-	state.Enabled = true
-	state.PreviousLogLevel = previousLogLevel
-	state.LastCleanExit = true
-	state.LastUIExitCode = -1
-	state.LastCoreExitCode = -1
-	state.LastUIExitSignal = ""
-	state.LastCoreSignal = ""
-	state.LastExportPath = ""
-	state.StartedAt = util.GetSystemTimestamp()
-	state.LastHeartbeatAt = state.StartedAt
-	state.CorePid = os.Getpid()
-	state.UIPid = 0
-	state.ChildPid = 0
-	state.RunId = fmt.Sprintf("%d-%d", state.StartedAt, os.Getpid())
-	if err := m.SaveState(state); err != nil {
-		return State{}, err
-	}
-	// New feature: enabling bug aware mode starts from a clean log boundary so
-	// exported reports are focused on the reproduction session instead of old noise.
-	m.AppendBreadcrumb(ctx, "bug_aware_enabled", map[string]any{"previousLogLevel": previousLogLevel})
-	return state, nil
-}
-
-func (m *Manager) Disable(ctx context.Context) (State, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	state := m.LoadState()
-	state.Enabled = false
-	if err := m.SaveState(state); err != nil {
-		return State{}, err
-	}
-	m.AppendBreadcrumb(ctx, "bug_aware_disabled", nil)
-	return state, nil
-}
-
 func (m *Manager) RecordRunStart(ctx context.Context, child bool) {
-	if !m.IsEnabled() {
-		return
-	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -202,9 +167,6 @@ func (m *Manager) RecordRunStart(ctx context.Context, child bool) {
 }
 
 func (m *Manager) MarkCleanExit(ctx context.Context) {
-	if !m.IsEnabled() {
-		return
-	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -216,9 +178,6 @@ func (m *Manager) MarkCleanExit(ctx context.Context) {
 }
 
 func (m *Manager) RecordUIExit(ctx context.Context, pid int, waitErr error, expected bool) {
-	if !m.IsEnabled() {
-		return
-	}
 	exitCode, signalName := ResolveProcessExit(waitErr)
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -271,6 +230,28 @@ func (m *Manager) Export(ctx context.Context) (string, error) {
 		return "", err
 	}
 	exportPath := filepath.Join(m.ExportsDirectory(), fmt.Sprintf("wox-diagnostics-%s.zip", time.Now().Format("20060102-150405")))
+	return m.exportLocked(ctx, exportPath)
+}
+
+// ExportCrash writes an automatic report outside the manually reset diagnostics session.
+func (m *Manager) ExportCrash(ctx context.Context) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if err := m.EnsureDirectories(); err != nil {
+		return "", err
+	}
+	exportPath := filepath.Join(m.CrashReportsDirectory(), fmt.Sprintf("wox-crash-%s.zip", time.Now().Format("20060102-150405.000")))
+	for suffix := 1; ; suffix++ {
+		if _, statErr := os.Stat(exportPath); statErr != nil {
+			break
+		}
+		exportPath = filepath.Join(m.CrashReportsDirectory(), fmt.Sprintf("wox-crash-%s-%d.zip", time.Now().Format("20060102-150405.000"), suffix))
+	}
+	return m.exportLocked(ctx, exportPath)
+}
+
+func (m *Manager) exportLocked(ctx context.Context, exportPath string) (string, error) {
 	file, err := os.Create(exportPath)
 	if err != nil {
 		return "", err
@@ -289,6 +270,7 @@ func (m *Manager) Export(ctx context.Context) (string, error) {
 	addExistingFile(zipWriter, m.BreadcrumbPath(), "diagnostics/breadcrumbs.jsonl")
 	m.addMetadata(zipWriter)
 	m.addMacOSCrashReports(zipWriter)
+	m.addWindowsCrashDumps(zipWriter)
 
 	state := m.LoadState()
 	state.LastExportPath = exportPath
@@ -297,20 +279,111 @@ func (m *Manager) Export(ctx context.Context) (string, error) {
 	return exportPath, nil
 }
 
-func (m *Manager) clearSessionLogs() error {
-	if err := util.GetLogger().ClearHistory(); err != nil {
+// SaveCrashIncident persists an abnormal exit in the history and updates the startup pointer.
+func (m *Manager) SaveCrashIncident(incident CrashIncident) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if incident.ID == "" || filepath.Base(incident.ID) != incident.ID || strings.ContainsAny(incident.ID, `\/:*?"<>|`) {
+		return fmt.Errorf("crash incident ID must be a safe file name")
+	}
+	if err := m.EnsureDirectories(); err != nil {
 		return err
 	}
-	for _, filePath := range []string{
-		filepath.Join(util.GetLocation().GetLogDirectory(), "ui.log"),
-		m.SupervisorLogPath(),
-		m.BreadcrumbPath(),
-	} {
-		if err := os.WriteFile(filePath, []byte{}, 0644); err != nil {
-			return err
+	data, err := json.MarshalIndent(incident, "", "  ")
+	if err != nil {
+		return err
+	}
+	incidentPath := filepath.Join(m.CrashIncidentsDirectory(), incident.ID+".json")
+	if err := writeCrashIncidentFile(incidentPath, data); err != nil {
+		return err
+	}
+	return writeCrashIncidentFile(m.CrashIncidentPath(), data)
+}
+
+// writeCrashIncidentFile updates an incident file without exposing partial JSON.
+func writeCrashIncidentFile(path string, data []byte) error {
+	temporaryPath := path + ".tmp"
+	if err := os.WriteFile(temporaryPath, data, 0644); err != nil {
+		return err
+	}
+	// Windows cannot atomically replace an existing file with os.Rename.
+	_ = os.Remove(path)
+	return os.Rename(temporaryPath, path)
+}
+
+// ListCrashIncidents returns retained crash events from newest to oldest.
+func (m *Manager) ListCrashIncidents() []CrashIncident {
+	entries, err := os.ReadDir(m.CrashIncidentsDirectory())
+	if err != nil {
+		if incident, ok := m.LatestCrashIncident(); ok {
+			return []CrashIncident{incident}
+		}
+		return nil
+	}
+
+	incidents := make([]CrashIncident, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || strings.ToLower(filepath.Ext(entry.Name())) != ".json" {
+			continue
+		}
+		data, readErr := os.ReadFile(filepath.Join(m.CrashIncidentsDirectory(), entry.Name()))
+		if readErr != nil {
+			continue
+		}
+		var incident CrashIncident
+		if json.Unmarshal(data, &incident) == nil && incident.ID != "" {
+			incidents = append(incidents, incident)
 		}
 	}
-	return nil
+
+	// Include an incident written by an older build until it is superseded by a
+	// new event in the per-incident history directory.
+	if latest, ok := m.LatestCrashIncident(); ok {
+		found := false
+		for _, incident := range incidents {
+			if incident.ID == latest.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			incidents = append(incidents, latest)
+		}
+	}
+
+	sort.SliceStable(incidents, func(i, j int) bool {
+		if incidents[i].DetectedAt == incidents[j].DetectedAt {
+			return incidents[i].ID > incidents[j].ID
+		}
+		return incidents[i].DetectedAt > incidents[j].DetectedAt
+	})
+	return incidents
+}
+
+// LatestCrashIncident returns the most recently captured abnormal exit.
+func (m *Manager) LatestCrashIncident() (CrashIncident, bool) {
+	data, err := os.ReadFile(m.CrashIncidentPath())
+	if err != nil {
+		return CrashIncident{}, false
+	}
+	var incident CrashIncident
+	if err := json.Unmarshal(data, &incident); err != nil {
+		return CrashIncident{}, false
+	}
+	return incident, true
+}
+
+// TakePendingCrashIncident marks an incident as prompted while retaining its report path.
+func (m *Manager) TakePendingCrashIncident() (CrashIncident, bool) {
+	incident, ok := m.LatestCrashIncident()
+	if !ok || incident.Prompted {
+		return CrashIncident{}, false
+	}
+	incident.Prompted = true
+	if err := m.SaveCrashIncident(incident); err != nil {
+		return CrashIncident{}, false
+	}
+	return incident, true
 }
 
 func (m *Manager) addMetadata(zipWriter *zip.Writer) {

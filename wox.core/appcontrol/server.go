@@ -14,9 +14,8 @@ import (
 
 // Handlers contains the small set of cross-process controls exposed by the primary Wox instance.
 type Handlers struct {
-	Show                        func(ctx context.Context) error
-	DeepLink                    func(ctx context.Context, deepLink string) error
-	EnableDiagnosticsAndRestart func(ctx context.Context) (any, error)
+	Show     func(ctx context.Context) error
+	DeepLink func(ctx context.Context, deepLink string) error
 }
 
 type response struct {
@@ -64,18 +63,6 @@ func NewHandler(handlers Handlers) http.Handler {
 			return
 		}
 		writeSuccess(writer, "")
-	})
-	mux.HandleFunc("/diagnostics/monitor/enable-restart", func(writer http.ResponseWriter, request *http.Request) {
-		if handlers.EnableDiagnosticsAndRestart == nil {
-			writeError(writer, "diagnostics handler is unavailable")
-			return
-		}
-		state, err := handlers.EnableDiagnosticsAndRestart(traceContext(request))
-		if err != nil {
-			writeError(writer, err.Error())
-			return
-		}
-		writeSuccess(writer, state)
 	})
 	return mux
 }

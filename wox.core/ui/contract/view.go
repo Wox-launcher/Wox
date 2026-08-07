@@ -50,7 +50,6 @@ type View interface {
 	ChangeQuery(ctx context.Context, query common.PlainQuery) error
 	RefreshQuery(ctx context.Context, preserveSelectedIndex bool) error
 	RefreshGlance(ctx context.Context, pluginID string, ids []string) error
-	UpdateDiagnosticStatus(ctx context.Context, enabled bool) error
 	RecordHotkey(ctx context.Context, hotkey string, kind string) error
 	ChangeTheme(ctx context.Context, theme common.Theme) error
 	OpenSetting(ctx context.Context, windowContext common.SettingWindowContext) error

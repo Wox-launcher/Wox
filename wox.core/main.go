@@ -141,10 +141,6 @@ func run() {
 	})
 
 	ctx := util.NewTraceContext()
-	bugReportArg := diagnostic.GetManager().IsBugReportArg(os.Args)
-	if diagnostic.GetManager().IsEnabled() {
-		util.GetLogger().SetLevel(setting.LogLevelDebug)
-	}
 	util.GetLogger().Info(ctx, "------------------------------")
 	util.GetLogger().Info(ctx, fmt.Sprintf("Wox starting: %s", updater.CURRENT_VERSION))
 	util.GetLogger().Info(ctx, fmt.Sprintf("golang version: %s", strings.ReplaceAll(runtime.Version(), "go", "")))
@@ -172,16 +168,6 @@ func run() {
 	if existingPort := getExistingInstancePort(ctx); existingPort > 0 {
 		util.GetLogger().Info(ctx, fmt.Sprintf("there is existing instance running, port: %d", existingPort))
 
-		if bugReportArg {
-			_, postBugReportErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/diagnostics/monitor/enable-restart", existingPort), "")
-			if postBugReportErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to enable bug aware mode in existing instance: %s", postBugReportErr.Error()))
-			} else {
-				util.GetLogger().Info(ctx, "enabled bug aware mode in existing instance, bye~")
-			}
-			os.Exit(0)
-		}
-
 		// if args has deeplink, post it to the existing instance and exit immediately
 		for _, deeplink := range startupDeepLinks {
 			_, postDeepLinkErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/deeplink", existingPort), map[string]string{
@@ -208,29 +194,18 @@ func run() {
 		os.Exit(0)
 	}
 
-	if bugReportArg && !diagnostic.GetManager().IsChildArg(os.Args) {
-		if _, enableErr := diagnostic.GetManager().Enable(ctx, ""); enableErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to enable bug aware mode from startup arg: %s", enableErr.Error()))
-		} else {
-			util.GetLogger().SetLevel(setting.LogLevelDebug)
-			if supervisorErr := diagnostic.GetManager().StartSupervisorDetached(ctx, true); supervisorErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to start bug aware supervisor from startup arg: %s", supervisorErr.Error()))
-			} else {
-				util.GetLogger().Info(ctx, "bug aware supervisor started from startup arg, exiting current process")
-				diagnostic.GetManager().MarkCleanExit(ctx)
-				os.Exit(0)
-			}
+	if util.IsProd() {
+		if captureErr := diagnostic.GetManager().ConfigureCrashCapture(ctx); captureErr != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to configure crash capture: %s", captureErr.Error()))
 		}
 	}
-
-	// User may launch Wox manually (not from bugreport) with the intent to enable bug aware mode
-	// In this case, we should relaunch the supervisor and enable bug aware mode before the main instance starts.
-	if diagnostic.GetManager().IsEnabled() && !diagnostic.GetManager().IsChildArg(os.Args) {
+	// Production launches run under a small external supervisor so native crashes
+	// can still be recorded after the Go process is no longer able to write logs.
+	if util.IsProd() && !diagnostic.GetManager().IsChildArg(os.Args) {
 		if supervisorErr := diagnostic.GetManager().StartSupervisorDetached(ctx, true); supervisorErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start bug aware supervisor: %s", supervisorErr.Error()))
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start crash supervisor; continuing without supervision: %s", supervisorErr.Error()))
 		} else {
-			util.GetLogger().Info(ctx, "bug aware supervisor started, exiting current process")
-			diagnostic.GetManager().MarkCleanExit(ctx)
+			util.GetLogger().Info(ctx, "crash supervisor started, exiting bootstrap process")
 			os.Exit(0)
 		}
 	}
@@ -296,9 +271,6 @@ func run() {
 		return
 	}
 	util.GetLogger().SetLevel(woxSetting.LogLevel.Get())
-	if diagnostic.GetManager().IsEnabled() {
-		util.GetLogger().SetLevel(setting.LogLevelDebug)
-	}
 
 	// update proxy
 	if woxSetting.HttpProxyEnabled.Get() {
@@ -325,6 +297,13 @@ func run() {
 			})
 			break
 		}
+	}
+	if incident, ok := diagnostic.GetManager().TakePendingCrashIncident(); ok {
+		ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
+			Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_previous_crash_github_issue"),
+			DisplaySeconds: 0,
+		})
+		util.GetLogger().Info(ctx, fmt.Sprintf("pending crash report is ready for a GitHub issue: %s", incident.ReportPath))
 	}
 
 	themeErr := ui.GetUIManager().Start(ctx)
@@ -423,9 +402,6 @@ func run() {
 			DeepLink: func(requestCtx context.Context, deepLink string) error {
 				ui.GetUIManager().ProcessDeeplink(requestCtx, deepLink)
 				return nil
-			},
-			EnableDiagnosticsAndRestart: func(requestCtx context.Context) (any, error) {
-				return ui.EnableDiagnosticsMonitorAndRestart(requestCtx)
 			},
 		})
 		if err != nil {

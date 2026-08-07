@@ -124,11 +124,6 @@ func (a *App) RefreshGlance(_ context.Context, pluginID string, ids []string) er
 	return nil
 }
 
-// UpdateDiagnosticStatus is reserved for the launcher-wide diagnostics decoration.
-func (a *App) UpdateDiagnosticStatus(_ context.Context, _ bool) error {
-	return nil
-}
-
 // RecordHotkey applies a raw core recorder result to the active settings field.
 func (a *App) RecordHotkey(_ context.Context, hotkey string, kind string) error {
 	var applyErr error

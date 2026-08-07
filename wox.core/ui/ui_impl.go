@@ -39,13 +39,6 @@ func (u *uiImpl) RefreshGlance(ctx context.Context, pluginId string, ids []strin
 	u.applyView(ctx, "refresh glance", func(view contract.View) error { return view.RefreshGlance(ctx, pluginId, ids) })
 }
 
-func (u *uiImpl) UpdateDiagnosticStatus(ctx context.Context, enabled bool) {
-	// New feature: bug aware status is a global launcher decoration, so core
-	// pushes it separately from plugin toolbar messages to avoid ownership
-	// conflicts with normal plugin status updates.
-	u.applyView(ctx, "update diagnostic status", func(view contract.View) error { return view.UpdateDiagnosticStatus(ctx, enabled) })
-}
-
 func (u *uiImpl) HideApp(ctx context.Context) {
 	u.applyView(ctx, "hide app", func(view contract.View) error { return view.Hide(ctx) })
 }

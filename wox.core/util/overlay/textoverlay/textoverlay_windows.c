@@ -220,23 +220,52 @@ static BOOL TextOverlayCursorInsideWindow(HWND hwnd)
     return PtInRect(&windowRect, screenPt);
 }
 
+// Native attachment sizes are reported in logical units, while this child paints in physical pixels.
+static RECT TextOverlayClientRect(TextOverlayState *state)
+{
+    RECT client = {0, 0, state ? state->contentWidth : 0, state ? state->contentHeight : 0};
+    RECT measured;
+    if (state && state->hwnd && GetClientRect(state->hwnd, &measured) && measured.right > 0 && measured.bottom > 0)
+        client = measured;
+    return client;
+}
+
 static RECT TextOverlayCopyButtonRect(TextOverlayState *state, UINT dpi)
 {
+    RECT client = TextOverlayClientRect(state);
+
     int size = TextOverlayDip(TEXT_OVERLAY_COPY_SIZE_DIP, dpi);
-    RECT rc = {state->contentWidth - size, state->contentHeight - size, state->contentWidth, state->contentHeight};
+    RECT rc = {client.right - size, client.bottom - size, client.right, client.bottom};
     return rc;
 }
 
 static RECT TextOverlayCloseButtonRect(TextOverlayState *state, UINT dpi)
 {
     int size = TextOverlayDip(TEXT_OVERLAY_CLOSE_SIZE_DIP, dpi);
+    RECT client = TextOverlayClientRect(state);
     if (state->closeRect.right > state->closeRect.left && state->closeRect.bottom > state->closeRect.top)
-        return state->closeRect;
+    {
+        RECT closeRect = state->closeRect;
+        closeRect.left = client.right - size;
+        closeRect.right = client.right;
+        if (closeRect.bottom > client.bottom)
+        {
+            closeRect.bottom = client.bottom;
+            closeRect.top = closeRect.bottom - size;
+        }
+        if (closeRect.top < 0)
+            closeRect.top = 0;
+        return closeRect;
+    }
 
-    int top = (state->contentHeight - size) / 2;
+    int top = (client.bottom - size) / 2;
     if (top < 0)
         top = 0;
-    RECT rc = {state->contentWidth - size, top, state->contentWidth, top + size};
+    if (top + size > client.bottom)
+        top = client.bottom - size;
+    if (top < 0)
+        top = 0;
+    RECT rc = {client.right - size, top, client.right, top + size};
     return rc;
 }
 
@@ -520,13 +549,13 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
         int closeTop = multiline ? textY + (lineHeight - closeSize) / 2 : rowY + (rowHeight - closeSize) / 2;
         if (closeTop < 0)
             closeTop = 0;
-        if (closeTop + closeSize > state->contentHeight)
-            closeTop = state->contentHeight - closeSize;
+        if (closeTop + closeSize > rc.bottom)
+            closeTop = rc.bottom - closeSize;
         if (closeTop < 0)
             closeTop = 0;
-        state->closeRect.left = state->contentWidth - closeSize;
+        state->closeRect.left = rc.right - closeSize;
         state->closeRect.top = closeTop;
-        state->closeRect.right = state->contentWidth;
+        state->closeRect.right = rc.right;
         state->closeRect.bottom = closeTop + closeSize;
 
         RECT closeRc = state->closeRect;

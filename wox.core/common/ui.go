@@ -91,7 +91,6 @@ type UI interface {
 	UpdateAttentionUnreadCount(ctx context.Context, unreadCount int)
 	ShowToolbarMsg(ctx context.Context, msg interface{})
 	ClearToolbarMsg(ctx context.Context, toolbarMsgId string)
-	UpdateDiagnosticStatus(ctx context.Context, enabled bool)
 	// UpdateResult updates a result that is currently displayed in the UI.
 	// Returns true if the result was successfully updated (still visible in UI).
 	// Returns false if the result is no longer visible (caller should stop updating).
