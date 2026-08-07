@@ -180,8 +180,9 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	height := frame.Size.Height
 	queryHeight := float32(0)
 	previewFullscreen := snapshot.chatFullscreen || snapshot.terminalFullscreen
+	queryLineHeight := a.queryLineHeight(snapshot.densityMetrics)
 	if !snapshot.show.HideQueryBox && !previewFullscreen {
-		queryHeight = snapshot.densityMetrics.queryBoxHeightForText(snapshot.editing.Text) + snapshot.palette.appPadding.Top
+		queryHeight = snapshot.densityMetrics.queryBoxHeightForText(snapshot.editing.Text, queryLineHeight) + snapshot.palette.appPadding.Top
 	}
 	toolbarHeight := float32(0)
 	if !snapshot.show.HideToolbar && !previewFullscreen && (len(snapshot.results) > 0 || snapshot.toolbarMsg != nil) {
@@ -195,7 +196,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	content := a.buildContent(snapshot, width, contentHeight, frame.Scale)
 	var header woxwidget.Widget
 	if queryHeight > 0 {
-		header = a.buildHeader(snapshot, width, queryHeight, frame.Scale)
+		header = a.buildHeader(snapshot, width, queryHeight, queryLineHeight, frame.Scale)
 	}
 	var refinements woxwidget.Widget
 	if refinementHeight > 0 {
@@ -230,10 +231,17 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	})
 }
 
-func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) woxwidget.Widget {
+// queryLineHeight includes the configured font's native line box so glyphs are not clipped.
+func (a *App) queryLineHeight(densityMetrics launcherDensityMetrics) float32 {
+	style := woxui.TextStyle{Size: densityMetrics.scaled(woxcomponent.QueryFontSize)}
+	metrics, _ := a.window.MeasureText("Ag国", style)
+	return densityMetrics.queryLineHeight(metrics.Size.Height)
+}
+
+func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight, scale float32) woxwidget.Widget {
 	queryLineCount := launcherQueryLineCount(snapshot.editing.Text)
-	queryBoxHeight := snapshot.densityMetrics.queryBoxHeightForText(snapshot.editing.Text)
-	queryEditorHeight := snapshot.densityMetrics.queryEditorHeight + float32(queryLineCount-1)*snapshot.densityMetrics.queryLineHeight()
+	queryBoxHeight := snapshot.densityMetrics.queryBoxHeightForText(snapshot.editing.Text, queryLineHeight)
+	queryEditorHeight := queryLineHeight + snapshot.densityMetrics.scaled(4) + float32(queryLineCount-1)*queryLineHeight
 	queryLeftPadding := snapshot.densityMetrics.scaled(8)
 	accessoryGap := snapshot.densityMetrics.scaled(12)
 	horizontalPadding := snapshot.palette.appPadding.Left + snapshot.palette.appPadding.Right
@@ -283,7 +291,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 	return launcherview.LauncherHeaderView(launcherview.LauncherHeaderProps{
 		Width: width, Height: height, QueryBoxHeight: queryBoxHeight, QueryEditorHeight: queryEditorHeight, DensityScale: snapshot.densityMetrics.scale,
 		QueryWidth: queryWidth, QueryRadius: snapshot.palette.queryRadius, AppPadding: snapshot.palette.appPadding, Theme: snapshot.palette.componentTheme(),
-		Query: a.queryViewProps(snapshot, queryWidth, queryEditorHeight), Refinement: refinement, RefinementWidth: refinementWidth,
+		Query: a.queryViewProps(snapshot, queryWidth, queryEditorHeight, queryLineHeight), Refinement: refinement, RefinementWidth: refinementWidth,
 		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon,
 		Loading: loading, LoadingWidth: loadingWidth, LoadingSize: loadingSize, LoadingColor: snapshot.palette.cursor,
 		OnDragStart: func() {
@@ -295,9 +303,8 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, scale float32) w
 }
 
 // queryViewProps prepares text slices and measurements without exposing controller state to the view.
-func (a *App) queryViewProps(snapshot viewSnapshot, width, height float32) launcherview.LauncherQueryProps {
+func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight float32) launcherview.LauncherQueryProps {
 	caretHeight := snapshot.densityMetrics.scaled(34)
-	lineHeight := snapshot.densityMetrics.queryLineHeight()
 	style := woxui.TextStyle{Size: snapshot.densityMetrics.scaled(woxcomponent.QueryFontSize)}
 	queryFocused := snapshot.queryFocused
 	state := snapshot.editing

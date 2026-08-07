@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"math"
-	"runtime"
 	"strings"
 
 	"wox/setting"
@@ -14,7 +13,6 @@ const launcherQueryMaxLines = 4
 type launcherDensityMetrics struct {
 	scale               float32
 	queryBoxHeight      float32
-	queryEditorHeight   float32
 	resultRowBaseHeight float32
 	toolbarHeight       float32
 	refinementBarHeight float32
@@ -31,7 +29,6 @@ func launcherDensityMetricsFor(value string) launcherDensityMetrics {
 	}
 	metrics := launcherDensityMetrics{scale: scale}
 	metrics.queryBoxHeight = metrics.scaled(55)
-	metrics.queryEditorHeight = metrics.queryLineHeight() + metrics.scaled(4)
 	metrics.resultRowBaseHeight = metrics.scaled(50)
 	metrics.toolbarHeight = metrics.scaled(40)
 	metrics.refinementBarHeight = metrics.scaled(44)
@@ -57,16 +54,14 @@ func (metrics launcherDensityMetrics) resultRowHeight(palette uiPalette) float32
 	return metrics.resultRowBaseHeight + palette.resultItemPadding.Top + palette.resultItemPadding.Bottom
 }
 
-func (metrics launcherDensityMetrics) queryLineHeight() float32 {
-	// DirectWrite needs the full Segoe UI line box to avoid clipping descenders.
-	if runtime.GOOS == "windows" {
-		return metrics.scaled(38)
-	}
-	return metrics.scaled(34)
+func (metrics launcherDensityMetrics) queryLineHeight(measuredHeight float32) float32 {
+	// Native text renderers clip to the supplied line rectangle, so configured
+	// fonts with a taller line box must expand it to preserve descenders.
+	return max(metrics.scaled(34), float32(math.Ceil(float64(measuredHeight))))
 }
 
-func (metrics launcherDensityMetrics) queryBoxHeightForText(text string) float32 {
-	return metrics.queryBoxHeight + float32(launcherQueryLineCount(text)-1)*metrics.queryLineHeight()
+func (metrics launcherDensityMetrics) queryBoxHeightForText(text string, lineHeight float32) float32 {
+	return metrics.queryBoxHeight + float32(launcherQueryLineCount(text)-1)*lineHeight
 }
 
 func launcherQueryLineCount(text string) int {

@@ -845,7 +845,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	visibleResults := min(resultCount, maxResults)
 	resultRowHeight := int(densityMetrics.resultRowHeight(palette))
 	resultVerticalPadding := int(palette.resultContainerPadding.Top + palette.resultContainerPadding.Bottom)
-	queryAreaHeight := int(densityMetrics.queryBoxHeightForText(queryText) + palette.appPadding.Top + palette.appPadding.Bottom)
+	queryAreaHeight := int(densityMetrics.queryBoxHeightForText(queryText, a.queryLineHeight(densityMetrics)) + palette.appPadding.Top + palette.appPadding.Bottom)
 	// With the query box hidden, buildResults folds appPadding.Bottom into the
 	// result list content, so the window height must reserve that margin too.
 	// Otherwise the list overflows by it and a scrollbar appears even when every
