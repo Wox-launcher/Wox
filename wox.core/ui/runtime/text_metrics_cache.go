@@ -103,6 +103,22 @@ func (c *textMetricsCache) put(key textMetricsCacheKey, value TextMetrics) {
 	}
 }
 
+// ReleaseIdleTextMetricsCache drops all cached MeasureText results while every
+// window is hidden. The hot set is re-measured lazily on the first frame after
+// show, which costs far less than keeping the strings resident while idle.
+func ReleaseIdleTextMetricsCache() {
+	globalTextMetricsCache.clear()
+}
+
+func (c *textMetricsCache) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries = make(map[textMetricsCacheKey]*textMetricsCacheEntry, c.capacity)
+	c.head = nil
+	c.tail = nil
+	c.bytes = 0
+}
+
 func (c *textMetricsCache) len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()

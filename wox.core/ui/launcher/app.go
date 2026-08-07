@@ -497,6 +497,19 @@ func (a *App) hideWindow(notify bool) error {
 	if err := launcher.Hide(); err != nil {
 		return err
 	}
+	// Quick re-shows keep their warm icon cache; only trim decoded images after
+	// the launcher stays hidden long enough to be considered idle.
+	util.Go(a.lifecycleCtx, "trim hidden launcher image cache", func() {
+		time.Sleep(10 * time.Second)
+		if err := a.runOnUI("trim hidden launcher image cache", func() {
+			if a.visible {
+				return
+			}
+			a.trimIdleImageCache()
+		}); err != nil {
+			log.Printf("trim hidden launcher image cache: %v", err)
+		}
+	})
 	if notify {
 		return a.notifyHidden()
 	}

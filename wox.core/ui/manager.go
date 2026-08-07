@@ -31,10 +31,12 @@ import (
 	"wox/resource"
 	"wox/setting"
 	"wox/ui/contract"
+	woxui "wox/ui/runtime"
 	"wox/updater"
 	"wox/util"
 	"wox/util/appearance"
 	"wox/util/autostart"
+	"wox/util/fuzzymatch"
 	utilhotkey "wox/util/hotkey"
 	"wox/util/ime"
 	"wox/util/keyboard"
@@ -1108,6 +1110,10 @@ func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
 			return
 		}
 
+		// Drop process-wide memoization caches before returning heap pages so their
+		// backing memory is included in the release. Both rebuild lazily after show.
+		fuzzymatch.ReleaseIdleCaches()
+		woxui.ReleaseIdleTextMetricsCache()
 		debug.FreeOSMemory()
 	})
 }

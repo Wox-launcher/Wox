@@ -162,37 +162,57 @@ func (w *platformWindow) show() (FocusEpoch, error) {
 	return FocusEpoch(epoch), nil
 }
 
+// runLockedOnMain runs op with renderMu held on the AppKit main thread.
+// Deadlock fix: these operations dispatch to the main thread synchronously
+// inside their native calls while holding renderMu. Acquiring the lock off the
+// main thread could deadlock against a main-thread UI callback that also takes
+// renderMu (for example a query response applying window bounds while a hide
+// that owns the lock waits for the main queue). Hopping to the main thread
+// before locking keeps one lock order: renderMu is only held by the main
+// thread or by the render worker, which never blocks on the main queue.
+func (w *platformWindow) runLockedOnMain(op func() error) error {
+	var err error
+	if callErr := platformCall(func() {
+		w.renderMu.Lock()
+		defer w.renderMu.Unlock()
+		err = op()
+	}); callErr != nil {
+		return callErr
+	}
+	return err
+}
+
 func (w *platformWindow) hide() error {
-	w.renderMu.Lock()
-	defer w.renderMu.Unlock()
-	native, err := w.openNative()
-	if err != nil {
-		return err
-	}
-	if C.wox_darwin_window_hide(native) != 0 {
-		return errors.New("woxui: failed to hide macOS window")
-	}
-	w.mu.Lock()
-	dropped := w.pendingFrame
-	w.pendingFrame = nil
-	w.mu.Unlock()
-	if dropped != nil && w.options.frameMetrics != nil {
-		w.options.frameMetrics.dropFrame(dropped.displayList.frameID)
-	}
-	return nil
+	return w.runLockedOnMain(func() error {
+		native, err := w.openNative()
+		if err != nil {
+			return err
+		}
+		if C.wox_darwin_window_hide(native) != 0 {
+			return errors.New("woxui: failed to hide macOS window")
+		}
+		w.mu.Lock()
+		dropped := w.pendingFrame
+		w.pendingFrame = nil
+		w.mu.Unlock()
+		if dropped != nil && w.options.frameMetrics != nil {
+			w.options.frameMetrics.dropFrame(dropped.displayList.frameID)
+		}
+		return nil
+	})
 }
 
 func (w *platformWindow) setBounds(bounds Rect) error {
-	w.renderMu.Lock()
-	defer w.renderMu.Unlock()
-	native, err := w.openNative()
-	if err != nil {
-		return err
-	}
-	if C.wox_darwin_window_set_bounds(native, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
-		return errors.New("woxui: failed to set macOS window bounds")
-	}
-	return nil
+	return w.runLockedOnMain(func() error {
+		native, err := w.openNative()
+		if err != nil {
+			return err
+		}
+		if C.wox_darwin_window_set_bounds(native, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
+			return errors.New("woxui: failed to set macOS window bounds")
+		}
+		return nil
+	})
 }
 
 func (w *platformWindow) bounds() (Rect, error) {
@@ -208,31 +228,31 @@ func (w *platformWindow) bounds() (Rect, error) {
 }
 
 func (w *platformWindow) capturePNG(path string) error {
-	w.renderMu.Lock()
-	defer w.renderMu.Unlock()
-	native, err := w.openNative()
-	if err != nil {
-		return err
-	}
-	nativePath := C.CString(path)
-	defer C.free(unsafe.Pointer(nativePath))
-	if C.wox_darwin_window_capture_png(native, nativePath) != 0 {
-		return errors.New("woxui: failed to capture macOS window")
-	}
-	return nil
+	return w.runLockedOnMain(func() error {
+		native, err := w.openNative()
+		if err != nil {
+			return err
+		}
+		nativePath := C.CString(path)
+		defer C.free(unsafe.Pointer(nativePath))
+		if C.wox_darwin_window_capture_png(native, nativePath) != 0 {
+			return errors.New("woxui: failed to capture macOS window")
+		}
+		return nil
+	})
 }
 
 func (w *platformWindow) center(size Size) error {
-	w.renderMu.Lock()
-	defer w.renderMu.Unlock()
-	native, err := w.openNative()
-	if err != nil {
-		return err
-	}
-	if C.wox_darwin_window_center(native, C.float(size.Width), C.float(size.Height)) != 0 {
-		return errors.New("woxui: failed to center macOS window")
-	}
-	return nil
+	return w.runLockedOnMain(func() error {
+		native, err := w.openNative()
+		if err != nil {
+			return err
+		}
+		if C.wox_darwin_window_center(native, C.float(size.Width), C.float(size.Height)) != 0 {
+			return errors.New("woxui: failed to center macOS window")
+		}
+		return nil
+	})
 }
 
 func (w *platformWindow) startDragging() error {

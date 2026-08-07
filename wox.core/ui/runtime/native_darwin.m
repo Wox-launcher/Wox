@@ -705,8 +705,18 @@ static void clear_renderer_surfaces(WoxDarwinRenderer *renderer) {
 static void hide_window_and_release_surfaces(WoxDarwinWindow *window) {
   window->visible = false;
   atomic_fetch_add_explicit(&window->presentation_generation, 1, memory_order_relaxed);
-  [window->window orderOut:nil];
+  // Detach the presented IOSurfaces inside an explicitly flushed transaction
+  // before ordering the window out. The window server keeps referencing the
+  // surfaces that are still attached at orderOut time for the whole hidden
+  // period, which pins two window-sized buffers even though the pool itself
+  // is released. Flushing the cleared contents first drops that reference;
+  // both messages land within one compositor frame, so no blank flash shows.
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
   clear_renderer_surfaces(window->renderer);
+  [CATransaction commit];
+  [CATransaction flush];
+  [window->window orderOut:nil];
 }
 
 // acquire_render_surface returns a retained backing store no longer owned by Core Animation.

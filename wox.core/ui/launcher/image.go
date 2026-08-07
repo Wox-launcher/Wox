@@ -15,6 +15,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -277,6 +278,35 @@ func (a *App) storeImageError(key string, err error) {
 	}); dispatchErr != nil {
 		log.Printf("dispatch launcher image error: %v", dispatchErr)
 	}
+}
+
+// hiddenImageCacheKeepCount bounds decoded images retained while the launcher stays hidden.
+// The most recently used entries cover redrawing the preserved query instantly on the next
+// show; evicted entries reload asynchronously like any cold icon.
+const hiddenImageCacheKeepCount = 64
+
+// trimIdleImageCache evicts cold decoded images while the launcher stays hidden.
+// Must run on the UI thread like every other access to the image maps.
+func (a *App) trimIdleImageCache() {
+	if len(a.images) <= hiddenImageCacheKeepCount {
+		return
+	}
+	type imageUse struct {
+		key  string
+		used uint64
+	}
+	uses := make([]imageUse, 0, len(a.images))
+	for key := range a.images {
+		uses = append(uses, imageUse{key: key, used: a.imageLastUsed[key]})
+	}
+	sort.Slice(uses, func(i, j int) bool { return uses[i].used > uses[j].used })
+	for _, use := range uses[hiddenImageCacheKeepCount:] {
+		delete(a.images, use.key)
+		delete(a.imageRequested, use.key)
+		delete(a.imageLastUsed, use.key)
+		delete(a.imageErrors, use.key)
+	}
+	a.imagesRevision.Add(1)
 }
 
 // evictOldestImage removes one cold image without invalidating the rest of the decoded cache.
