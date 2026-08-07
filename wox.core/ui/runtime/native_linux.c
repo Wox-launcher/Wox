@@ -1411,7 +1411,15 @@ static void set_bounds_main(void *data) {
   window->preferred_width = call->width;
   window->preferred_height = call->height;
   window->has_preferred_position = true;
-  gtk_window_resize(GTK_WINDOW(window->window), (int)ceilf(call->width), (int)ceilf(call->height));
+  int width = (int)ceilf(call->width);
+  int height = (int)ceilf(call->height);
+  if (window->layer_shell_enabled) {
+    // Layer-shell size negotiation needs all GTK size hints to agree; a resize request
+    // alone can leave the widget allocation on its pre-map size and suppress rendering.
+    gtk_window_set_default_size(GTK_WINDOW(window->window), width, height);
+    gtk_widget_set_size_request(window->window, width, height);
+  }
+  gtk_window_resize(GTK_WINDOW(window->window), width, height);
   place_window(window);
   if (window->visible) {
     gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
@@ -1437,7 +1445,14 @@ static void get_bounds_main(void *data) {
   int y = 0;
   int width = 0;
   int height = 0;
-  gtk_window_get_position(GTK_WINDOW(window->window), &x, &y);
+  if (window->layer_shell_enabled && window->has_preferred_position) {
+    // Wayland does not expose global top-level coordinates. Preserve the logical position
+    // used for layer-shell margins so a resize does not move the launcher to the origin.
+    x = (int)window->preferred_x;
+    y = (int)window->preferred_y;
+  } else {
+    gtk_window_get_position(GTK_WINDOW(window->window), &x, &y);
+  }
   gtk_window_get_size(GTK_WINDOW(window->window), &width, &height);
   call->x = (float)x;
   call->y = (float)y;
