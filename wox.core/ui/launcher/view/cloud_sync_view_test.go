@@ -58,7 +58,7 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	syncCard := cloudSyncCard(CloudSyncProps{LabelWidth: labelWidth, ButtonLabel: "Sync"}, width, buttonTheme).(woxwidget.Container)
 	syncRow := syncCard.Child.(woxwidget.Flex)
 	syncValue := syncRow.Children[1].(woxwidget.Container)
-	syncButtonWidth := cloudFormButtonWidth("Sync")
+	syncButtonWidth := cloudFormButtonWidth("Sync", false)
 	if got := labelWidth + gap + syncValue.Width; got != width {
 		t.Fatalf("sync row width = %v, want %v", got, width)
 	}
@@ -69,7 +69,7 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	deviceHeader := cloudDeviceHeader(CloudDevicesProps{LabelWidth: labelWidth, RefreshLabel: "Refresh"}, width, buttonTheme).(woxwidget.Container)
 	deviceRow := deviceHeader.Child.(woxwidget.Flex)
 	refreshValue := deviceRow.Children[1].(woxwidget.Container)
-	refreshButtonWidth := cloudFormButtonWidth("Refresh")
+	refreshButtonWidth := cloudFormButtonWidth("Refresh", true)
 	if got := labelWidth + gap + refreshValue.Width; got != width {
 		t.Fatalf("device row width = %v, want %v", got, width)
 	}
@@ -80,6 +80,21 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	refreshButton := refreshValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	if syncButton.Color != refreshButton.Color || syncButton.BorderColor != refreshButton.BorderColor || syncButton.BorderWidth != refreshButton.BorderWidth {
 		t.Fatalf("sync button surface = %+v, want refresh surface %+v", syncButton, refreshButton)
+	}
+}
+
+func TestCloudRefreshButtonWidthIncludesLeadingIcon(t *testing.T) {
+	plain := cloudFormButtonWidth("Refresh", false)
+	withIcon := cloudFormButtonWidth("Refresh", true)
+	if withIcon <= plain {
+		t.Fatalf("refresh width with icon = %v, want greater than plain width %v", withIcon, plain)
+	}
+	if withIcon-plain != 24 {
+		t.Fatalf("refresh width delta = %v, want 24", withIcon-plain)
+	}
+	cjkWithIcon := cloudFormButtonWidth("刷新", true)
+	if cjkWithIcon < 80 {
+		t.Fatalf("CJK refresh width with icon = %v, want at least 80", cjkWithIcon)
 	}
 }
 

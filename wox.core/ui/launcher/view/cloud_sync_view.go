@@ -556,7 +556,7 @@ func cloudValueAction(id, value string, width float32, onTap func(), theme woxco
 // cloudSyncCard renders current sync state and its primary action.
 func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
 	const labelGap = float32(32)
-	buttonWidth := cloudFormButtonWidth(props.ButtonLabel)
+	buttonWidth := cloudFormButtonWidth(props.ButtonLabel, false)
 	availableWidth := max(float32(0), width)
 	labelWidth := min(props.LabelWidth, max(float32(220), availableWidth-labelGap-buttonWidth))
 	if labelWidth <= 0 {
@@ -582,7 +582,7 @@ func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Theme
 // cloudDeviceHeader renders the Flutter form row above the device list.
 func cloudDeviceHeader(props CloudDevicesProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
 	const labelGap = float32(32)
-	buttonWidth := cloudFormButtonWidth(props.RefreshLabel)
+	buttonWidth := cloudFormButtonWidth(props.RefreshLabel, true)
 	availableWidth := max(float32(0), width)
 	labelWidth := min(props.LabelWidth, max(float32(220), availableWidth-labelGap-buttonWidth))
 	valueWidth := max(buttonWidth, availableWidth-labelWidth-labelGap)
@@ -847,8 +847,8 @@ func CloudFormOverlay(props CloudFormOverlayProps) woxwidget.Widget {
 		appendContent(woxwidget.TextBlock{Value: props.Feedback, Width: innerWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: props.FeedbackColor}, 34, 10)
 	}
 
-	cancelWidth := cloudFormButtonWidth(props.CancelLabel)
-	submitWidth := cloudFormButtonWidth(props.SubmitLabel)
+	cancelWidth := cloudFormButtonWidth(props.CancelLabel, false)
+	submitWidth := cloudFormButtonWidth(props.SubmitLabel, false)
 	actions := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 		woxwidget.Painter{Width: max(float32(0), innerWidth-cancelWidth-submitWidth-8), Height: 36},
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-form-cancel", Label: props.CancelLabel, Width: cancelWidth, Height: 36, Radius: 4, FontSize: 13, Disabled: props.Saving, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
@@ -922,6 +922,10 @@ func cloudFormHasCheckbox(fields []CloudFormFieldProps) bool {
 	return false
 }
 
-func cloudFormButtonWidth(label string) float32 {
-	return max(float32(66), float32(len([]rune(label)))*8+40)
+func cloudFormButtonWidth(label string, hasLeadingIcon bool) float32 {
+	base := float32(len([]rune(label)))*8 + 40
+	if hasLeadingIcon {
+		base += 24
+	}
+	return max(float32(66), base)
 }

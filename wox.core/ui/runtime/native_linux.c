@@ -6,6 +6,10 @@
 #include <epoxy/gl.h>
 #include <pango/pangocairo.h>
 
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
+#endif
+
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #include <X11/Xatom.h>
@@ -1242,6 +1246,15 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   window->accessibility_layer = gtk_fixed_new();
   gtk_window_set_title(GTK_WINDOW(window->window), title != NULL ? title : "Wox Go UI");
   gtk_window_set_default_size(GTK_WINDOW(window->window), (int)ceilf(width), (int)ceilf(height));
+#ifdef GDK_WINDOWING_WAYLAND
+  GdkDisplay *window_display = gtk_widget_get_display(window->window);
+  if (window_display != NULL && GDK_IS_WAYLAND_DISPLAY(window_display)) {
+    // Force CSD negotiation before disabling it so SSD-preferring compositors do not add a title bar.
+    GtkWidget *empty_titlebar = gtk_fixed_new();
+    gtk_widget_set_size_request(empty_titlebar, 0, 0);
+    gtk_window_set_titlebar(GTK_WINDOW(window->window), empty_titlebar);
+  }
+#endif
   gtk_window_set_decorated(GTK_WINDOW(window->window), FALSE);
   // Application windows must stay visible to the desktop shell instead of using launcher-only utility hints.
   if (application_window != 0) {
