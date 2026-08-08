@@ -114,9 +114,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            clang \
-            cmake \
-            ninja-build \
             pkg-config \
             libgtk-3-dev \
             libblkid-dev \
@@ -150,8 +147,6 @@ jobs:
           go-version-file: wox.core/go.mod
           cache: true
           cache-dependency-path: wox.core/go.sum
-      - name: Install ThorVG build tools
-        run: python -m pip install meson==1.8.3 ninja==1.13.0
       - name: Test
         run: xvfb-run -a make test
 
@@ -184,8 +179,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Install ThorVG build tools
-        run: python -m pip install meson==1.8.3 ninja==1.13.0
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
@@ -303,8 +296,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Install ThorVG build tools
-        run: python -m pip install meson==1.8.3 ninja==1.13.0
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
@@ -445,9 +436,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Install ThorVG build tools
-        run: python -m pip install meson==1.8.3 ninja==1.13.0
-
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
@@ -526,9 +514,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            clang \
-            cmake \
-            ninja-build \
             pkg-config \
             libgtk-3-dev \
             libblkid-dev \
@@ -573,8 +558,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Install ThorVG build tools
-        run: python -m pip install meson==1.8.3 ninja==1.13.0
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
