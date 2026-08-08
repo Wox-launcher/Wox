@@ -95,3 +95,18 @@ func TestMarkdownLinkOpensFromPointerAction(t *testing.T) {
 		t.Fatalf("link style = %#v, want Flutter preview size 12 with underline", text)
 	}
 }
+
+func TestMarkdownLinkCanExcludeKeyboardFocus(t *testing.T) {
+	document := ParseMarkdown(`[Install](https://wox.one)`)
+	widget := renderMarkdownBlock(document.blocks[0], MarkdownProps{
+		ID: "form-help", ExcludeLinkFocus: true, Theme: Theme{Cursor: woxui.Color{A: 255}}, OnOpenLink: func(string) {},
+	}, 300, new(int))
+	wrap := widget.(woxwidget.Wrap)
+	semantics := wrap.Children[0].(woxwidget.Semantics)
+	if _, ok := semantics.Child.(woxwidget.Focusable); ok {
+		t.Fatal("form help markdown links should match Flutter ExcludeFocus")
+	}
+	if _, ok := semantics.Child.(woxwidget.Gesture); !ok {
+		t.Fatalf("excluded link child = %T, want pointer Gesture", semantics.Child)
+	}
+}

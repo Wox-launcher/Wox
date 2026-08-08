@@ -160,14 +160,15 @@ type API interface {
 	// Returns true if results were accepted by UI (query still active), false otherwise.
 	PushResults(ctx context.Context, query Query, results []QueryResult) bool
 
-	// IsVisible returns true if the Wox window is currently visible.
-	// This is useful for plugins that perform periodic updates (e.g., CPU/memory monitoring)
-	// to avoid wasting resources when the window is hidden.
+	// IsVisible returns whether the primary launcher is currently visible.
+	// Intended for periodic result refresh (CPU/memory, timer, media) and
+	// in-app notification routing — not for suppressing secondary flows.
+	// Without a session id this is primary-only; secondary panels do not count.
 	//
 	// Example:
 	//   func (p *Plugin) refreshData(ctx context.Context) {
 	//       if !p.api.IsVisible(ctx) {
-	//           return // Window is hidden, skip update
+	//           return // Primary launcher is hidden, skip update
 	//       }
 	//       // ... update data ...
 	//   }

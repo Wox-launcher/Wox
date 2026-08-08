@@ -41,17 +41,20 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	const labelWidth = float32(520)
 	const gap = float32(32)
 
-	accountCard := cloudAccountCard(CloudAccountProps{LoggedIn: true, LabelWidth: labelWidth, SupportLabel: "Support"}, width, 162, woxcomponent.Theme{}).(woxwidget.Container)
+	accountCard := cloudAccountCard(CloudAccountProps{LoggedIn: true, LabelWidth: labelWidth, SupportLabel: "Contact Support", SupportIcon: &woxui.Image{}}, width, 162, woxcomponent.Theme{}).(woxwidget.Container)
 	accountColumn := accountCard.Child.(woxwidget.Flex)
 	billingRow := accountColumn.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
 	supportValue := billingRow.Children[1].(woxwidget.Container)
-	supportRow := supportValue.Child.(woxwidget.Flex)
-	supportSpacer := supportRow.Children[0].(woxwidget.Painter)
+	supportButtonWidth := cloudFormButtonWidth("Contact Support", true)
 	if got := labelWidth + gap + supportValue.Width; got != width {
 		t.Fatalf("billing row width = %v, want %v", got, width)
 	}
-	if got := supportSpacer.Width; got+112 != supportValue.Width {
-		t.Fatalf("support button right edge = %v, want %v", got+112, supportValue.Width)
+	if got := supportValue.Padding.Left; got+supportButtonWidth != supportValue.Width {
+		t.Fatalf("support button right edge = %v, want %v", got+supportButtonWidth, supportValue.Width)
+	}
+	supportButton := supportValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	if supportButton.Width != supportButtonWidth {
+		t.Fatalf("support button width = %v, want content-sized %v", supportButton.Width, supportButtonWidth)
 	}
 
 	buttonTheme := woxcomponent.Theme{ActionSelected: woxui.Color{R: 1, A: 255}, ResultSubtitle: woxui.Color{R: 2, A: 255}}

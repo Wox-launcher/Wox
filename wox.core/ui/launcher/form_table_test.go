@@ -296,8 +296,8 @@ func TestQueryHotkeyRowNormalizesNumericFieldsForCore(t *testing.T) {
 		t.Fatalf("numeric query hotkey row = %#v", row)
 	}
 	fields.values["MaxResultCount"] = "16"
-	if got := validateFormTableRow(definition, &fields, nil, -1); got != "i18n:ui_query_hotkeys_max_result_count_range_error" {
-		t.Fatalf("range validation = %q", got)
+	if got := validateFormTableRow(definition, &fields, nil, -1); got["MaxResultCount"] != "i18n:ui_query_hotkeys_max_result_count_range_error" {
+		t.Fatalf("range validation = %#v", got)
 	}
 }
 
@@ -320,12 +320,12 @@ func TestQueryHotkeyOptionalMaxResultCountZeroIsValid(t *testing.T) {
 	if got := inferQueryHotkeyPreset(fields.values); got != queryHotkeyPresetSilent {
 		t.Fatalf("preset = %q, want silent", got)
 	}
-	if got := validateFormTableRow(definition, &fields, nil, 0); got != "" {
-		t.Fatalf("zero max results should mean global default, got %q", got)
+	if got := validateFormTableRow(definition, &fields, nil, 0); len(got) != 0 {
+		t.Fatalf("zero max results should mean global default, got %#v", got)
 	}
 	fields.values["MaxResultCount"] = "0"
-	if got := validateFormTableRow(definition, &fields, nil, 0); got != "" {
-		t.Fatalf("explicit zero should still mean global default, got %q", got)
+	if got := validateFormTableRow(definition, &fields, nil, 0); len(got) != 0 {
+		t.Fatalf("explicit zero should still mean global default, got %#v", got)
 	}
 	row := formTableRowFromFields(definition, &fields, nil)
 	if row["Width"] != 0 || row["MaxResultCount"] != 0 {
@@ -368,14 +368,58 @@ func TestPluginTriggerKeywordRowAcceptsTextInput(t *testing.T) {
 	if got := app.settingsTableEditor.rowForm.values["keyword"]; got != "chat" {
 		t.Fatalf("trigger keyword = %q, want committed input", got)
 	}
-	app.settingsTableEditor.status = "duplicate keyword"
+	app.settingsTableEditor.fieldErrors = map[string]string{"keyword": "duplicate keyword"}
 	app.focusFormTableRowField(0)
-	if got := app.settingsTableEditor.status; got != "duplicate keyword" {
-		t.Fatalf("validation status = %q after refocus, want it preserved", got)
+	if got := app.settingsTableEditor.fieldErrors["keyword"]; got != "duplicate keyword" {
+		t.Fatalf("validation field error = %q after refocus, want it preserved", got)
 	}
 	app.setFormTableRowText(0, "chat2")
+	if got := app.settingsTableEditor.fieldErrors["keyword"]; got != "" {
+		t.Fatalf("validation field error = %q after changing text, want it cleared", got)
+	}
+}
+
+func TestSaveFormTableRowEditSurfacesFieldErrorsInline(t *testing.T) {
+	definition := formDefinition{
+		Type: "table",
+		Value: formDefinitionValue{
+			Key: "WebViews",
+			Columns: []formTableColumn{
+				{Key: "Keyword", Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
+				{Key: "Url", Type: "text", Validators: []formValidator{{Type: "not_empty"}}},
+			},
+		},
+	}
+	target := newFormFieldsState([]formDefinition{definition}, map[string]string{"WebViews": "[]"}, true)
+	deps := CommonDeps{}
+	plugins := newPluginSettingsController(deps)
+	plugins.SetForm(&pluginSettingsFormState{formFieldsState: target})
+	rowForm := newFormFieldsState([]formDefinition{
+		{Type: "textbox", Value: formDefinitionValue{Key: "Keyword", Validators: []formValidator{{Type: "not_empty"}}}},
+		{Type: "textbox", Value: formDefinitionValue{Key: "Url", Validators: []formValidator{{Type: "not_empty"}}}},
+	}, map[string]string{"Keyword": "", "Url": "https://example.com"}, true)
+	app := &App{
+		settingsOpen: true, settingTab: "plugins", pluginSettings: plugins,
+		aiSettings: newAISettingsController(deps), hotkeySettings: newHotkeySettingsController(deps),
+		settingsTableEditor: &formTableEditorState{
+			target: &plugins.Form().formFieldsState, definition: definition, rows: nil, rowForm: &rowForm, rowIndex: -1, deletePending: -1,
+		},
+		translations: map[string]string{"ui_validator_value_can_not_be_empty": "Value cannot be empty"},
+	}
+
+	app.saveFormTableRowEdit()
+
 	if got := app.settingsTableEditor.status; got != "" {
-		t.Fatalf("validation status = %q after changing text, want it cleared", got)
+		t.Fatalf("dialog status = %q, want field-level errors only", got)
+	}
+	if got := app.settingsTableEditor.fieldErrors["Keyword"]; got != "Value cannot be empty" {
+		t.Fatalf("Keyword field error = %q", got)
+	}
+	if _, exists := app.settingsTableEditor.fieldErrors["Url"]; exists {
+		t.Fatalf("Url should not have a field error, got %#v", app.settingsTableEditor.fieldErrors)
+	}
+	if app.settingsTableEditor.rowForm == nil {
+		t.Fatal("invalid save should keep the row editor open")
 	}
 }
 

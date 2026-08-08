@@ -436,8 +436,9 @@ func (a *App) deactivateRequirementForm() {
 	_ = a.window.Invalidate()
 }
 
-// validateFormFields implements the validator subset shared by core query requirements.
-func validateFormFields(definitions []formDefinition, values map[string]string) string {
+// validateFormFieldErrors returns the first failing validator message for each field key.
+func validateFormFieldErrors(definitions []formDefinition, values map[string]string) map[string]string {
+	errors := map[string]string{}
 	for _, definition := range definitions {
 		key := definition.Value.Key
 		if key == "" {
@@ -448,13 +449,30 @@ func validateFormFields(definitions []formDefinition, values map[string]string) 
 			switch validator.Type {
 			case "not_empty":
 				if strings.TrimSpace(value) == "" {
-					return "i18n:ui_validator_value_can_not_be_empty"
+					errors[key] = "i18n:ui_validator_value_can_not_be_empty"
 				}
 			case "is_number":
 				if message := validateFormNumber(value, validator.Value); message != "" {
-					return message
+					errors[key] = message
 				}
 			}
+			if _, exists := errors[key]; exists {
+				break
+			}
+		}
+	}
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
+}
+
+// validateFormFields implements the validator subset shared by core query requirements.
+func validateFormFields(definitions []formDefinition, values map[string]string) string {
+	errors := validateFormFieldErrors(definitions, values)
+	for _, definition := range definitions {
+		if message := errors[definition.Value.Key]; message != "" {
+			return message
 		}
 	}
 	return ""

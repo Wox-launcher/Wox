@@ -231,11 +231,6 @@ func (s *selectionSpaceQuickLookState) handleRawKey(event keyboard.RawKeyEvent) 
 		s.mu.Unlock()
 		return false
 	}
-	if s.plugin.api.IsVisible(context.Background()) {
-		s.spaceConsumed = false
-		s.mu.Unlock()
-		return false
-	}
 	s.spaceConsumed = true
 	s.mu.Unlock()
 
@@ -277,10 +272,9 @@ func isSpaceQuickLookModifierKey(key keyboard.Key) bool {
 }
 
 // triggerSpaceQuickLook opens the existing preview-only Selection query for a
-// single selected file. It runs in a transient secondary launcher session so the
-// preview never overwrites the primary launcher's query state: the secondary
-// window is destroyed on close, leaving the main launcher fresh for the next
-// hotkey open.
+// single selected file. It runs in a named secondary launcher session so the
+// preview never overwrites the primary launcher's query state. Closing destroys
+// that secondary; the next quick look opens a fresh window for the new selection.
 func (i *SelectionPlugin) triggerSpaceQuickLook() {
 	ctx := util.NewTraceContext()
 	ctx = util.WithCoreSessionContext(ctx)

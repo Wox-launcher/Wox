@@ -183,12 +183,34 @@ func TestLauncherPreviewTitleBarRequiresOptInFullPreview(t *testing.T) {
 	}
 }
 
-func TestSecondaryLauncherHideClosesInstance(t *testing.T) {
-	app := &App{}
-	// Keep the test scoped to hide routing; native-close cleanup is covered by the instance lifecycle.
+func TestSecondaryLauncherHideClosesWithoutWebViewCache(t *testing.T) {
+	app := &App{isPrimary: false}
 	app.destroyOnce.Do(func() {})
 	if err := app.hideWindow(false); err != nil {
-		t.Fatalf("secondary launcher hide should close the instance: %v", err)
+		t.Fatalf("non-WebView secondary hide should close the instance: %v", err)
+	}
+}
+
+func TestSecondaryLauncherHideRetainsCacheableWebView(t *testing.T) {
+	// WebView secondaries are independent named windows; only they hide-and-retain
+	// so browsing position survives reopen. Selection/explorer/tray still destroy.
+	app := &App{
+		isPrimary:          false,
+		visible:            false,
+		webViewPreviewData: `{"url":"https://example.com","cacheDisabled":false}`,
+	}
+	if err := app.hideWindow(false); err != nil {
+		t.Fatalf("cacheable WebView secondary hide should preserve the instance: %v", err)
+	}
+	if app.destroyed.Load() {
+		t.Fatal("cacheable WebView secondary must stay alive so navigation can resume")
+	}
+}
+
+func TestHasCacheableWebViewPreviewIgnoresDisabledCache(t *testing.T) {
+	app := &App{webViewPreviewData: `{"url":"https://example.com","cacheDisabled":true}`}
+	if app.hasCacheableWebViewPreviewLocked() {
+		t.Fatal("cache-disabled WebView previews must not retain secondary windows")
 	}
 }
 

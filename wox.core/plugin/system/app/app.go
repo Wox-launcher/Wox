@@ -2024,8 +2024,8 @@ func (a *ApplicationPlugin) handleMRURestore(ctx context.Context, mruData plugin
 }
 
 func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
-	// Skip refresh if window is hidden (for periodic updates like CPU/memory)
-	if !a.api.IsVisible(ctx) {
+	// Skip refresh unless the primary launcher is visible.
+	if !a.api.IsVisible(context.Background()) {
 		return
 	}
 

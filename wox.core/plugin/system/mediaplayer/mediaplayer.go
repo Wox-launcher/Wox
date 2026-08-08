@@ -565,8 +565,8 @@ func (m *MediaPlayerPlugin) refreshMediaPlayer(ctx context.Context) {
 		return
 	}
 
-	// Skip refresh if window is hidden (for periodic updates like media player status)
-	if !m.api.IsVisible(ctx) {
+	// Skip refresh unless the primary launcher is visible.
+	if !m.api.IsVisible(context.Background()) {
 		return
 	}
 

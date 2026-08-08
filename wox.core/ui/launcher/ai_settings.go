@@ -331,25 +331,25 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 }
 
 // validateAISettingsTableRow enforces the transport-specific requirements that the generic schema cannot express.
-func validateAISettingsTableRow(definition formDefinition, fields *formFieldsState) string {
+func validateAISettingsTableRow(definition formDefinition, fields *formFieldsState) map[string]string {
 	switch definition.Value.Key {
 	case "AIProviders":
 		if fields.values["Name"] != "ollama" && strings.TrimSpace(fields.values["ApiKey"]) == "" {
-			return "API key is required for this provider."
+			return map[string]string{"ApiKey": "API key is required for this provider."}
 		}
 	case "AIMCPServers":
 		switch fields.values["Type"] {
 		case "stdio":
 			if strings.TrimSpace(fields.values["Command"]) == "" {
-				return "Command is required for a STDIO server."
+				return map[string]string{"Command": "Command is required for a STDIO server."}
 			}
 		case "streamable-http":
 			if strings.TrimSpace(fields.values["Url"]) == "" {
-				return "URL is required for a Streamable HTTP server."
+				return map[string]string{"Url": "URL is required for a Streamable HTTP server."}
 			}
 		}
 	}
-	return ""
+	return nil
 }
 
 // saveSettingsTable persists one settings-owned table and rolls the editor back if core rejects it.

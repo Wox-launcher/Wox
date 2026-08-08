@@ -80,6 +80,68 @@ func (w *windowsWebView) hide() error {
 	return nil
 }
 
+func (w *windowsWebView) goBack() error {
+	if w == nil || w.handle == nil {
+		return ErrWebViewUnavailable
+	}
+	result := C.wox_windows_webview_go_back(w.handle)
+	if result < 0 {
+		return webViewHRESULT("webview go back", result)
+	}
+	return nil
+}
+
+func (w *windowsWebView) goForward() error {
+	if w == nil || w.handle == nil {
+		return ErrWebViewUnavailable
+	}
+	result := C.wox_windows_webview_go_forward(w.handle)
+	if result < 0 {
+		return webViewHRESULT("webview go forward", result)
+	}
+	return nil
+}
+
+func (w *windowsWebView) reload() error {
+	if w == nil || w.handle == nil {
+		return ErrWebViewUnavailable
+	}
+	result := C.wox_windows_webview_reload(w.handle)
+	if result < 0 {
+		return webViewHRESULT("webview reload", result)
+	}
+	return nil
+}
+
+func (w *windowsWebView) openInBrowser() error {
+	if w == nil || w.handle == nil {
+		return ErrWebViewUnavailable
+	}
+	result := C.wox_windows_webview_open_in_browser(w.handle)
+	if result < 0 {
+		return webViewHRESULT("webview open in browser", result)
+	}
+	return nil
+}
+
+func (w *windowsWebView) navigationState() (WebViewNavigationState, error) {
+	if w == nil || w.handle == nil {
+		return WebViewNavigationState{}, ErrWebViewUnavailable
+	}
+	var url *C.char
+	var canGoBack, canGoForward C.int32_t
+	result := C.wox_windows_webview_navigation_state(w.handle, &url, &canGoBack, &canGoForward)
+	if result < 0 {
+		return WebViewNavigationState{}, webViewHRESULT("webview navigation state", result)
+	}
+	state := WebViewNavigationState{CanGoBack: canGoBack != 0, CanGoForward: canGoForward != 0}
+	if url != nil {
+		state.URL = C.GoString(url)
+		C.wox_windows_free_string(url)
+	}
+	return state, nil
+}
+
 func (w *windowsWebView) destroy() {
 	if w != nil && w.handle != nil {
 		C.wox_windows_webview_destroy(w.handle)
@@ -104,4 +166,23 @@ func woxGoWindowsWebViewEscape(owner C.uintptr_t) C.int32_t {
 		return 1
 	}
 	return 0
+}
+
+// woxGoWindowsWebViewNavigationChanged pushes live browser chrome into the Go UI title bar.
+//
+//export woxGoWindowsWebViewNavigationChanged
+func woxGoWindowsWebViewNavigationChanged(owner C.uintptr_t, url *C.char, canGoBack, canGoForward C.int32_t) {
+	value, ok := nativeWindows.Load(uintptr(owner))
+	if !ok {
+		return
+	}
+	window := value.(*platformWindow)
+	if window.options.OnWebViewNavigationChanged == nil {
+		return
+	}
+	state := WebViewNavigationState{CanGoBack: canGoBack != 0, CanGoForward: canGoForward != 0}
+	if url != nil {
+		state.URL = C.GoString(url)
+	}
+	window.options.OnWebViewNavigationChanged(state)
 }

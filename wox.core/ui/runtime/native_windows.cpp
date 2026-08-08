@@ -5,6 +5,7 @@
 
 #include <shobjidl.h>
 #include <shlobj.h>
+#include <shellapi.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -21,6 +22,7 @@
 #include "native_windows.h"
 
 extern "C" int32_t woxGoWindowsWebViewEscape(uintptr_t owner);
+extern "C" void woxGoWindowsWebViewNavigationChanged(uintptr_t owner, const char *url, int32_t can_go_back, int32_t can_go_forward);
 
 static void webview_debug(const char *format, ...) {
   static const bool enabled = [] {
@@ -588,6 +590,10 @@ struct WoxWindowsWebViewSession {
   bool retired = false;
   int64_t web_message_token = 0;
   bool web_message_registered = false;
+  int64_t history_token = 0;
+  bool history_registered = false;
+  int64_t source_token = 0;
+  bool source_registered = false;
   std::wstring loaded_content_key;
 };
 
@@ -612,6 +618,16 @@ struct WoxWebViewMessageCallback : public IUnknown {
   virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
 };
 __CRT_UUID_DECL(WoxWebViewMessageCallback, 0x57213f19, 0x00e6, 0x49fa, 0x8e, 0x07, 0x89, 0x8e, 0xa0, 0x1e, 0xcb, 0xd2)
+
+struct WoxWebViewHistoryChangedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewHistoryChangedCallback, 0xc79a420c, 0xefd9, 0x4058, 0x92, 0x95, 0x3e, 0x8b, 0x4b, 0xc8, 0x6a, 0xfe)
+
+struct WoxWebViewSourceChangedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewSourceChangedCallback, 0x3c067f9f, 0x5388, 0x4772, 0x8b, 0x48, 0x67, 0xed, 0x72, 0xc6, 0xbe, 0xcd)
 
 class WoxEnvironmentCompletedHandler final : public WoxWebViewEnvironmentCompletedCallback {
 public:
@@ -667,6 +683,34 @@ public:
 
 private:
   ~WoxWebMessageHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+};
+
+class WoxHistoryChangedHandler final : public WoxWebViewHistoryChangedCallback {
+public:
+  explicit WoxHistoryChangedHandler(WoxWindowsWebView *owner);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args);
+
+private:
+  ~WoxHistoryChangedHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+};
+
+class WoxSourceChangedHandler final : public WoxWebViewSourceChangedCallback {
+public:
+  explicit WoxSourceChangedHandler(WoxWindowsWebView *owner);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args);
+
+private:
+  ~WoxSourceChangedHandler() = default;
   std::atomic<ULONG> references_{1};
   WoxWindowsWebView *owner_;
 };
@@ -767,6 +811,7 @@ struct WoxWindowsWebView {
       return;
     }
     register_message_handler(session);
+    register_navigation_handlers(session);
     if (!session->retired) {
       configure_script(session);
     }
@@ -785,6 +830,132 @@ struct WoxWindowsWebView {
       return;
     }
     session->web_message_registered = true;
+  }
+
+  void register_navigation_handlers(WoxWindowsWebViewSession *session) {
+    if (session == nullptr || session->core == nullptr || session->retired) {
+      return;
+    }
+    using AddHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *, int64_t *);
+    if (!session->history_registered) {
+      auto *handler = new WoxHistoryChangedHandler(this);
+      HRESULT result = webview_method<AddHandler>(session->core, 13)(session->core, handler, &session->history_token);
+      webview_debug("add history changed handler returned 0x%08X", static_cast<unsigned int>(result));
+      handler->Release();
+      if (SUCCEEDED(result)) {
+        session->history_registered = true;
+      }
+    }
+    if (!session->source_registered) {
+      auto *handler = new WoxSourceChangedHandler(this);
+      HRESULT result = webview_method<AddHandler>(session->core, 11)(session->core, handler, &session->source_token);
+      webview_debug("add source changed handler returned 0x%08X", static_cast<unsigned int>(result));
+      handler->Release();
+      if (SUCCEEDED(result)) {
+        session->source_registered = true;
+      }
+    }
+    notify_navigation_changed(session);
+  }
+
+  void notify_navigation_changed(WoxWindowsWebViewSession *session) {
+    if (closing || session == nullptr || session->core == nullptr || session != active) {
+      return;
+    }
+    wchar_t *source = nullptr;
+    using GetSource = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, wchar_t **);
+    webview_method<GetSource>(session->core, 4)(session->core, &source);
+    BOOL can_go_back = FALSE;
+    BOOL can_go_forward = FALSE;
+    using GetBool = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL *);
+    webview_method<GetBool>(session->core, 38)(session->core, &can_go_back);
+    webview_method<GetBool>(session->core, 39)(session->core, &can_go_forward);
+    std::string utf8 = wide_to_utf8(source != nullptr ? source : L"");
+    if (source != nullptr) {
+      CoTaskMemFree(source);
+    }
+    woxGoWindowsWebViewNavigationChanged(reinterpret_cast<uintptr_t>(owner), utf8.c_str(), can_go_back ? 1 : 0, can_go_forward ? 1 : 0);
+  }
+
+  HRESULT go_back() {
+    if (active == nullptr || active->core == nullptr) {
+      return E_FAIL;
+    }
+    using GoBack = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
+    return webview_method<GoBack>(active->core, 40)(active->core);
+  }
+
+  HRESULT go_forward() {
+    if (active == nullptr || active->core == nullptr) {
+      return E_FAIL;
+    }
+    using GoForward = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
+    return webview_method<GoForward>(active->core, 41)(active->core);
+  }
+
+  HRESULT reload() {
+    if (active == nullptr || active->core == nullptr) {
+      return E_FAIL;
+    }
+    using Reload = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
+    return webview_method<Reload>(active->core, 31)(active->core);
+  }
+
+  HRESULT open_in_browser() {
+    if (active == nullptr || active->core == nullptr) {
+      return E_FAIL;
+    }
+    wchar_t *source = nullptr;
+    using GetSource = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, wchar_t **);
+    HRESULT result = webview_method<GetSource>(active->core, 4)(active->core, &source);
+    if (FAILED(result) || source == nullptr) {
+      if (source != nullptr) {
+        CoTaskMemFree(source);
+      }
+      return FAILED(result) ? result : E_FAIL;
+    }
+    std::wstring url(source);
+    CoTaskMemFree(source);
+    if (url.rfind(L"http://", 0) != 0 && url.rfind(L"https://", 0) != 0) {
+      return E_FAIL;
+    }
+    HINSTANCE launched = ShellExecuteW(owner, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    return reinterpret_cast<intptr_t>(launched) > 32 ? S_OK : E_FAIL;
+  }
+
+  HRESULT navigation_state(char **url, int32_t *can_go_back, int32_t *can_go_forward) {
+    if (url == nullptr || can_go_back == nullptr || can_go_forward == nullptr) {
+      return E_INVALIDARG;
+    }
+    *url = nullptr;
+    *can_go_back = 0;
+    *can_go_forward = 0;
+    if (active == nullptr || active->core == nullptr) {
+      return E_FAIL;
+    }
+    wchar_t *source = nullptr;
+    using GetSource = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, wchar_t **);
+    HRESULT result = webview_method<GetSource>(active->core, 4)(active->core, &source);
+    if (FAILED(result)) {
+      return result;
+    }
+    std::string utf8 = wide_to_utf8(source != nullptr ? source : L"");
+    if (source != nullptr) {
+      CoTaskMemFree(source);
+    }
+    *url = static_cast<char *>(std::malloc(utf8.size() + 1));
+    if (*url == nullptr) {
+      return E_OUTOFMEMORY;
+    }
+    std::memcpy(*url, utf8.c_str(), utf8.size() + 1);
+    BOOL back = FALSE;
+    BOOL forward = FALSE;
+    using GetBool = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL *);
+    webview_method<GetBool>(active->core, 38)(active->core, &back);
+    webview_method<GetBool>(active->core, 39)(active->core, &forward);
+    *can_go_back = back ? 1 : 0;
+    *can_go_forward = forward ? 1 : 0;
+    return S_OK;
   }
 
   void web_message_received(IUnknown *args) {
@@ -863,6 +1034,7 @@ struct WoxWindowsWebView {
     }
     if (SUCCEEDED(result)) {
       session->loaded_content_key = session->content_key;
+      notify_navigation_changed(session);
     } else {
       error = result;
     }
@@ -882,6 +1054,21 @@ struct WoxWindowsWebView {
     }
     session->retired = true;
     session->visible = false;
+    if (session->core != nullptr) {
+      using RemoveHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int64_t);
+      if (session->history_registered) {
+        webview_method<RemoveHandler>(session->core, 14)(session->core, session->history_token);
+        session->history_registered = false;
+      }
+      if (session->source_registered) {
+        webview_method<RemoveHandler>(session->core, 12)(session->core, session->source_token);
+        session->source_registered = false;
+      }
+      if (session->web_message_registered) {
+        webview_method<RemoveHandler>(session->core, 35)(session->core, session->web_message_token);
+        session->web_message_registered = false;
+      }
+    }
     if (session->controller != nullptr) {
       using PutVisible = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL);
       using Close = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
@@ -1075,6 +1262,42 @@ HRESULT WoxWebMessageHandler::Invoke(IUnknown *, IUnknown *args) {
   return S_OK;
 }
 
+WoxHistoryChangedHandler::WoxHistoryChangedHandler(WoxWindowsWebView *owner) : owner_(owner) { owner_->retain(); }
+HRESULT WoxHistoryChangedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewHistoryChangedCallback), object); }
+ULONG WoxHistoryChangedHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxHistoryChangedHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxHistoryChangedHandler::Invoke(IUnknown *, IUnknown *) {
+  if (owner_->active != nullptr) {
+    owner_->notify_navigation_changed(owner_->active);
+  }
+  return S_OK;
+}
+
+WoxSourceChangedHandler::WoxSourceChangedHandler(WoxWindowsWebView *owner) : owner_(owner) { owner_->retain(); }
+HRESULT WoxSourceChangedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewSourceChangedCallback), object); }
+ULONG WoxSourceChangedHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxSourceChangedHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxSourceChangedHandler::Invoke(IUnknown *, IUnknown *) {
+  if (owner_->active != nullptr) {
+    owner_->notify_navigation_changed(owner_->active);
+  }
+  return S_OK;
+}
+
 extern "C" int32_t wox_windows_webview_create(uintptr_t owner, WoxWindowsWebView **webview) {
   if (owner == 0 || webview == nullptr) {
     return E_INVALIDARG;
@@ -1098,6 +1321,26 @@ extern "C" int32_t wox_windows_webview_show(WoxWindowsWebView *webview, const ch
 
 extern "C" int32_t wox_windows_webview_hide(WoxWindowsWebView *webview) {
   return webview != nullptr ? webview->hide() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_go_back(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->go_back() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_go_forward(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->go_forward() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_reload(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->reload() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_open_in_browser(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->open_in_browser() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_navigation_state(WoxWindowsWebView *webview, char **url, int32_t *can_go_back, int32_t *can_go_forward) {
+  return webview != nullptr ? webview->navigation_state(url, can_go_back, can_go_forward) : E_INVALIDARG;
 }
 
 extern "C" void wox_windows_webview_destroy(WoxWindowsWebView *webview) {

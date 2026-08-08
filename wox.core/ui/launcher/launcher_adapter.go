@@ -84,6 +84,9 @@ type viewSnapshot struct {
 	show                  showAppParams
 	palette               uiPalette
 	densityMetrics        launcherDensityMetrics
+	selectedPreviewType   string
+	selectedFileKind      string
+	webViewNavigation     woxui.WebViewNavigationState
 }
 
 type actionSectionRevisionState struct {
@@ -133,6 +136,15 @@ func (a *App) snapshot() viewSnapshot {
 		a.actionSectionState = actionState
 		a.actionsSectionRevision++
 	}
+	selectedPreviewType := ""
+	selectedFileKind := ""
+	if a.selected >= 0 && a.selected < len(a.results) {
+		preview := a.resolvePreview(a.results[a.selected].Preview)
+		selectedPreviewType = preview.PreviewType
+		if preview.PreviewType == "file" {
+			selectedFileKind = a.filePreviewFor(preview.PreviewData).Kind
+		}
+	}
 	return viewSnapshot{
 		editing:               a.editor.State(),
 		results:               a.results,
@@ -169,6 +181,9 @@ func (a *App) snapshot() viewSnapshot {
 		show:                  a.show,
 		palette:               a.palette,
 		densityMetrics:        a.densityMetrics.normalized(),
+		selectedPreviewType:   selectedPreviewType,
+		selectedFileKind:      selectedFileKind,
+		webViewNavigation:     a.webViewNavigation,
 	}
 }
 
@@ -246,7 +261,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	})
 }
 
-// buildPreviewTitleBar reuses the settings chrome so full previews expose consistent window actions.
+// buildPreviewTitleBar selects browser chrome for WebViews and native title chrome for other full previews.
 func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32) woxwidget.Widget {
 	title := "Wox"
 	if snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) {
@@ -257,6 +272,44 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32) woxwidg
 		if title == "" {
 			title = "Wox"
 		}
+	}
+	if launcherPreviewUsesWebView(snapshot) {
+		url := strings.TrimSpace(snapshot.webViewNavigation.URL)
+		if url == "" || url == "about:blank" {
+			url = title
+		}
+		return launcherview.WebViewTitleBar(launcherview.WebViewTitleBarProps{
+			Width: width, Platform: runtime.GOOS, AppIcon: a.appIcon, Theme: snapshot.palette.componentTheme(),
+			URL: url, CanGoBack: snapshot.webViewNavigation.CanGoBack, CanGoForward: snapshot.webViewNavigation.CanGoForward,
+			GoBackLabel: a.translate("i18n:ui_action_webview_go_back"), RefreshLabel: a.translate("i18n:ui_action_webview_refresh"),
+			GoForwardLabel: a.translate("i18n:ui_action_webview_go_forward"), OpenInBrowserLabel: a.translate("i18n:ui_action_webview_open_in_browser"),
+			OnDrag: func() {
+				if a.window != nil {
+					_ = a.window.StartDragging()
+				}
+			},
+			OnClose: a.closePreviewWindow,
+			OnGoBack: func() {
+				if a.window != nil {
+					_ = a.window.WebViewGoBack()
+				}
+			},
+			OnGoForward: func() {
+				if a.window != nil {
+					_ = a.window.WebViewGoForward()
+				}
+			},
+			OnRefresh: func() {
+				if a.window != nil {
+					_ = a.window.WebViewReload()
+				}
+			},
+			OnOpenInBrowser: func() {
+				if a.window != nil {
+					_ = a.window.WebViewOpenInBrowser()
+				}
+			},
+		})
 	}
 	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
 	titleWidth := float32(160)
@@ -280,6 +333,18 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32) woxwidg
 		},
 		OnClose: a.closePreviewWindow,
 	})
+}
+
+// launcherPreviewUsesWebView identifies direct and file-backed WebView previews.
+func launcherPreviewUsesWebView(snapshot viewSnapshot) bool {
+	if snapshot.selected < 0 || snapshot.selected >= len(snapshot.results) {
+		return false
+	}
+	previewType := snapshot.selectedPreviewType
+	if previewType == "" {
+		previewType = snapshot.results[snapshot.selected].Preview.PreviewType
+	}
+	return previewType == "webview" || previewType == "file" && snapshot.selectedFileKind == "webview"
 }
 
 // launcherPreviewOnly identifies the chrome-free layout that needs edge drag hit areas.

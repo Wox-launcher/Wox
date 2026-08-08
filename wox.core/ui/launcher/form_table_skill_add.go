@@ -255,10 +255,10 @@ func (a *App) buildFormTableSkillAddDialog(snapshot *formTableSkillAddSnapshot, 
 	addLabel := a.translate("i18n:ui_add")
 	fieldWidth := max(float32(0), min(float32(480), width-140))
 	definition := fields.definitions[snapshot.tab]
-	field := a.buildFormTableRowField(*fields, callbacks, palette, snapshot.tab, definition, fieldWidth, a.formTableRowLabelWidth(fields.definitions))
+	field := a.buildFormTableRowField(*fields, callbacks, palette, snapshot.tab, definition, fieldWidth, a.formTableRowLabelWidth(fields.definitions), "")
 	return launcherview.FormTableSkillAddDialog(launcherview.FormTableSkillAddDialogProps{
 		Width: width, Height: height,
-		Title: a.translate("i18n:ui_ai_skill_add"),
+		Title:      a.translate("i18n:ui_ai_skill_add"),
 		LocalLabel: a.translate("i18n:ui_ai_skill_add_local"), RemoteLabel: a.translate("i18n:ui_ai_skill_add_remote"),
 		LocalHint: a.translate("i18n:ui_ai_skill_add_local_hint"), RemoteHint: a.translate("i18n:ui_ai_skill_add_remote_hint"),
 		Tab: snapshot.tab, Error: snapshot.error, Cloning: snapshot.cloning, CloningLabel: a.translate("i18n:ui_ai_skill_cloning"),

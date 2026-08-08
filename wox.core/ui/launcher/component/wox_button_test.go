@@ -41,3 +41,17 @@ func TestWoxButtonCentersIntrinsicContentVertically(t *testing.T) {
 		t.Fatalf("intrinsic button = width %v top padding %v, want natural width and centered content", container.Width, container.Padding.Top)
 	}
 }
+
+func TestWoxButtonUsesContentWidthWhenWidthOmitted(t *testing.T) {
+	button := WoxButton(ButtonProps{ID: "cancel", Label: "Cancel", Height: 36})
+	container := button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	if container.Width != 0 {
+		t.Fatalf("omitted width = %v, want content-sized button like Flutter WoxButton", container.Width)
+	}
+	if _, isAlign := container.Child.(woxwidget.Align); isAlign {
+		t.Fatal("content-sized buttons must not wrap labels in an expanding Align")
+	}
+	if label, ok := container.Child.(woxwidget.Text); !ok || label.Value != "Cancel" {
+		t.Fatalf("content-sized label = %#v", container.Child)
+	}
+}

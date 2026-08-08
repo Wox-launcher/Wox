@@ -381,28 +381,80 @@ func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error 
 	html := C.CString(content.HTML)
 	css := C.CString(content.InjectCSS)
 	cacheKey := C.CString(content.CacheKey)
-	goBackLabel := C.CString(content.ToolbarLabels.GoBack)
-	refreshLabel := C.CString(content.ToolbarLabels.Refresh)
-	goForwardLabel := C.CString(content.ToolbarLabels.GoForward)
-	openInBrowserLabel := C.CString(content.ToolbarLabels.OpenInBrowser)
-	hideWoxLabel := C.CString(content.ToolbarLabels.HideWox)
 	defer C.free(unsafe.Pointer(url))
 	defer C.free(unsafe.Pointer(html))
 	defer C.free(unsafe.Pointer(css))
 	defer C.free(unsafe.Pointer(cacheKey))
-	defer C.free(unsafe.Pointer(goBackLabel))
-	defer C.free(unsafe.Pointer(refreshLabel))
-	defer C.free(unsafe.Pointer(goForwardLabel))
-	defer C.free(unsafe.Pointer(openInBrowserLabel))
-	defer C.free(unsafe.Pointer(hideWoxLabel))
 	cacheDisabled := C.int32_t(0)
 	if content.CacheDisabled {
 		cacheDisabled = 1
 	}
-	if C.wox_darwin_window_show_webview(native, url, html, css, cacheDisabled, cacheKey, goBackLabel, refreshLabel, goForwardLabel, openInBrowserLabel, hideWoxLabel, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
+	if C.wox_darwin_window_show_webview(native, url, html, css, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
 		return errors.New("woxui: failed to show macOS WebView")
 	}
 	return nil
+}
+
+func (w *platformWindow) webViewGoBack() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_webview_go_back(native) != 0 {
+		return errors.New("woxui: failed to go back in macOS WebView")
+	}
+	return nil
+}
+
+func (w *platformWindow) webViewGoForward() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_webview_go_forward(native) != 0 {
+		return errors.New("woxui: failed to go forward in macOS WebView")
+	}
+	return nil
+}
+
+func (w *platformWindow) webViewReload() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_webview_reload(native) != 0 {
+		return errors.New("woxui: failed to reload macOS WebView")
+	}
+	return nil
+}
+
+func (w *platformWindow) webViewOpenInBrowser() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_webview_open_in_browser(native) != 0 {
+		return errors.New("woxui: failed to open macOS WebView in browser")
+	}
+	return nil
+}
+
+func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return WebViewNavigationState{}, err
+	}
+	var url *C.char
+	var canGoBack, canGoForward C.int32_t
+	if C.wox_darwin_window_webview_navigation_state(native, &url, &canGoBack, &canGoForward) != 0 {
+		return WebViewNavigationState{}, errors.New("woxui: failed to read macOS WebView navigation state")
+	}
+	state := WebViewNavigationState{CanGoBack: canGoBack != 0, CanGoForward: canGoForward != 0}
+	if url != nil {
+		state.URL = C.GoString(url)
+		C.free(unsafe.Pointer(url))
+	}
+	return state, nil
 }
 
 func (w *platformWindow) hideWebView() error {
@@ -1066,6 +1118,19 @@ func woxGoDarwinWebViewTooltip(context C.uintptr_t, visible C.int32_t, text *C.c
 		Text:    C.GoString(text),
 		Bounds:  Rect{X: float32(x), Y: float32(y), Width: float32(width), Height: float32(height)},
 	})
+}
+
+//export woxGoDarwinWebViewNavigationChanged
+func woxGoDarwinWebViewNavigationChanged(context C.uintptr_t, url *C.char, canGoBack, canGoForward C.int32_t) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnWebViewNavigationChanged == nil {
+		return
+	}
+	state := WebViewNavigationState{CanGoBack: canGoBack != 0, CanGoForward: canGoForward != 0}
+	if url != nil {
+		state.URL = C.GoString(url)
+	}
+	window.options.OnWebViewNavigationChanged(state)
 }
 
 //export woxGoDarwinFrame

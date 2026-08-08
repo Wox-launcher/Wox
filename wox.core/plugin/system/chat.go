@@ -147,6 +147,9 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		r.chats = chats
 	}
 
+	// Providers may have been removed while Wox was closed; drop stale defaults now.
+	r.EnsureDefaultModelValid(ctx)
+
 	util.Go(ctx, "reload AI skills", func() {
 		// Skill discovery can touch remote cache paths. Keep it off the startup path so UI readiness
 		// is not blocked by stale or relocated skill directories.
@@ -217,28 +220,74 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 }
 
 func (r *AIChatPlugin) GetDefaultModel(ctx context.Context) common.Model {
-	model := r.api.GetSetting(context.Background(), "default_model")
+	model := r.api.GetSetting(ctx, "default_model")
 	if model != "" {
 		var m common.Model
 		err := json.Unmarshal([]byte(model), &m)
-		if err == nil {
+		if err != nil {
+			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to unmarshal default model: %s", err.Error()))
+		} else if isAIModelProviderConfigured(ctx, m) {
 			return m
-		} else {
-			r.api.Log(context.Background(), plugin.LogLevelError, fmt.Sprintf("AI: Failed to unmarshal default model: %s", err.Error()))
 		}
 	}
 
-	// get last chat model
-	if len(r.chats) > 0 {
-		lastChat := r.chats[0]
-		return common.Model{
-			Name:          lastChat.Model.Name,
-			Provider:      lastChat.Model.Provider,
-			ProviderAlias: lastChat.Model.ProviderAlias,
+	// Prefer the most recently updated chat whose provider still exists.
+	for _, chat := range r.chats {
+		if isAIModelProviderConfigured(ctx, chat.Model) {
+			return common.Model{
+				Name:          chat.Model.Name,
+				Provider:      chat.Model.Provider,
+				ProviderAlias: chat.Model.ProviderAlias,
+			}
 		}
 	}
 
 	return common.Model{}
+}
+
+// SetDefaultModel persists the chat-picker / last-used model when its provider is still configured.
+func (r *AIChatPlugin) SetDefaultModel(ctx context.Context, model common.Model) {
+	if model.Name != "" && !isAIModelProviderConfigured(ctx, model) {
+		return
+	}
+	r.writeDefaultModel(ctx, model)
+}
+
+// EnsureDefaultModelValid rewrites persisted default_model to a still-configured model (or clears it).
+func (r *AIChatPlugin) EnsureDefaultModelValid(ctx context.Context) {
+	r.writeDefaultModel(ctx, r.GetDefaultModel(ctx))
+}
+
+// writeDefaultModel stores default_model, including an empty value that clears a stale selection.
+func (r *AIChatPlugin) writeDefaultModel(ctx context.Context, model common.Model) {
+	value := ""
+	if model.Name != "" {
+		encoded, err := json.Marshal(model)
+		if err != nil {
+			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to marshal default model: %s", err.Error()))
+			return
+		}
+		value = string(encoded)
+	}
+
+	current := r.api.GetSetting(ctx, "default_model")
+	if current == value {
+		return
+	}
+	r.api.SaveSetting(ctx, "default_model", value, false)
+}
+
+// isAIModelProviderConfigured reports whether the model points at a still-configured AI provider.
+func isAIModelProviderConfigured(ctx context.Context, model common.Model) bool {
+	if model.Name == "" || model.Provider == "" {
+		return false
+	}
+	for _, provider := range setting.GetSettingManager().GetWoxSetting(ctx).AIProviders.Get() {
+		if provider.Name == model.Provider && provider.Alias == model.ProviderAlias {
+			return true
+		}
+	}
+	return false
 }
 
 // ReloadMCPServers reloads global MCP server settings into the active tool registry.
@@ -363,6 +412,9 @@ func (r *AIChatPlugin) GetAllSkills(ctx context.Context) []common.Skill {
 
 func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, chatLoopCount int) {
 	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Starting chat with ID: %s, loop: %d, title: %s, model: %s, conversations: %d", aiChatData.Id, chatLoopCount, aiChatData.Title, aiChatData.Model.Name, len(aiChatData.Conversations)))
+
+	// Remember the model used for this send so the next new chat opens with it.
+	r.SetDefaultModel(ctx, aiChatData.Model)
 
 	r.appendOrUpdateChatData(aiChatData)
 	r.saveChats(ctx)

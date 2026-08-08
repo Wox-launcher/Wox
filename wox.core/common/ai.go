@@ -360,6 +360,9 @@ type AIChater interface {
 	ReloadMCPServers(ctx context.Context, notifyUI bool)
 	ReloadSkills(ctx context.Context) error
 	GetDefaultModel(ctx context.Context) Model
+	SetDefaultModel(ctx context.Context, model Model)
+	// EnsureDefaultModelValid clears or rewrites persisted default_model when its provider was removed.
+	EnsureDefaultModelValid(ctx context.Context)
 }
 
 var EmptyChatOptions = ChatOptions{}

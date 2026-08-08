@@ -67,6 +67,7 @@ struct TreeState {
   Snapshot pending;
   std::unordered_map<uint64_t, Provider *> providers;
   bool building = false;
+  bool closing = false;
 };
 
 Provider *retain_provider(HWND hwnd, const std::shared_ptr<TreeState> &state, uint64_t node_id);
@@ -233,6 +234,7 @@ class Provider final : public IRawElementProviderSimple,
   HRESULT STDMETHODCALLTYPE get_HostRawElementProvider(IRawElementProviderSimple **provider) override {
     if (provider == nullptr) return E_POINTER;
     *provider = nullptr;
+    if (!available()) return UIA_E_ELEMENTNOTAVAILABLE;
     return node_id_ == 0 ? UiaHostProviderFromHwnd(hwnd_, provider) : S_OK;
   }
 
@@ -242,6 +244,7 @@ class Provider final : public IRawElementProviderSimple,
     uint64_t target = 0;
     {
       std::lock_guard<std::mutex> lock(state_->mutex);
+      if (state_->closing) return UIA_E_ELEMENTNOTAVAILABLE;
       const Snapshot &snapshot = state_->current;
       if (direction == NavigateDirection_Parent) {
         if (node_id_ == 0) return S_OK;
@@ -280,11 +283,15 @@ class Provider final : public IRawElementProviderSimple,
     } else if (target != 0) {
       *provider = retain_provider(hwnd_, state_, target);
     }
+    if ((direction == NavigateDirection_Parent && node_id_ != 0 || target != 0) && *provider == nullptr) {
+      return UIA_E_ELEMENTNOTAVAILABLE;
+    }
     return S_OK;
   }
 
   HRESULT STDMETHODCALLTYPE GetRuntimeId(SAFEARRAY **runtime_id) override {
     if (runtime_id == nullptr) return E_POINTER;
+    if (!available()) return UIA_E_ELEMENTNOTAVAILABLE;
     int values[] = {UiaAppendRuntimeId, static_cast<int>(node_id_ & 0x7fffffff), static_cast<int>((node_id_ >> 31) & 0x7fffffff)};
     SAFEARRAY *array = SafeArrayCreateVector(VT_I4, 0, 3);
     if (array == nullptr) return E_OUTOFMEMORY;
@@ -304,6 +311,7 @@ class Provider final : public IRawElementProviderSimple,
   HRESULT STDMETHODCALLTYPE GetEmbeddedFragmentRoots(SAFEARRAY **roots) override {
     if (roots == nullptr) return E_POINTER;
     *roots = nullptr;
+    if (!available()) return UIA_E_ELEMENTNOTAVAILABLE;
     return S_OK;
   }
 
@@ -314,25 +322,30 @@ class Provider final : public IRawElementProviderSimple,
   HRESULT STDMETHODCALLTYPE get_FragmentRoot(IRawElementProviderFragmentRoot **root) override {
     if (root == nullptr) return E_POINTER;
     *root = retain_provider(hwnd_, state_, 0);
-    return S_OK;
+    return *root != nullptr ? S_OK : UIA_E_ELEMENTNOTAVAILABLE;
   }
 
   HRESULT STDMETHODCALLTYPE ElementProviderFromPoint(double x, double y, IRawElementProviderFragment **provider) override {
     if (provider == nullptr) return E_POINTER;
     *provider = nullptr;
     uint64_t hit = 0;
+    std::vector<Node> nodes;
     {
       std::lock_guard<std::mutex> lock(state_->mutex);
+      if (state_->closing) return UIA_E_ELEMENTNOTAVAILABLE;
+      nodes.reserve(state_->current.nodes.size());
       for (const auto &entry : state_->current.nodes) {
-        const Node &node = entry.second;
-        UiaRect bounds = screen_bounds(node);
-        if ((node.state_flags & state_hidden) == 0 && x >= bounds.left && y >= bounds.top && x <= bounds.left + bounds.width && y <= bounds.top + bounds.height) {
-          hit = node.id;
-        }
+        nodes.push_back(entry.second);
+      }
+    }
+    for (const Node &node : nodes) {
+      UiaRect bounds = screen_bounds(node);
+      if ((node.state_flags & state_hidden) == 0 && x >= bounds.left && y >= bounds.top && x <= bounds.left + bounds.width && y <= bounds.top + bounds.height) {
+        hit = node.id;
       }
     }
     *provider = retain_provider(hwnd_, state_, hit);
-    return S_OK;
+    return *provider != nullptr ? S_OK : UIA_E_ELEMENTNOTAVAILABLE;
   }
 
   HRESULT STDMETHODCALLTYPE GetFocus(IRawElementProviderFragment **provider) override {
@@ -341,6 +354,7 @@ class Provider final : public IRawElementProviderSimple,
     uint64_t focused = 0;
     {
       std::lock_guard<std::mutex> lock(state_->mutex);
+      if (state_->closing) return UIA_E_ELEMENTNOTAVAILABLE;
       for (const auto &entry : state_->current.nodes) {
         if ((entry.second.state_flags & state_focused) != 0) {
           focused = entry.first;
@@ -349,7 +363,7 @@ class Provider final : public IRawElementProviderSimple,
       }
     }
     *provider = retain_provider(hwnd_, state_, focused);
-    return S_OK;
+    return *provider != nullptr ? S_OK : UIA_E_ELEMENTNOTAVAILABLE;
   }
 
   HRESULT STDMETHODCALLTYPE Invoke() override {
@@ -391,17 +405,22 @@ class Provider final : public IRawElementProviderSimple,
  private:
   ~Provider() = default;
 
+  bool available() const {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    return !state_->closing;
+  }
+
   bool node_copy(Node &node) const {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    if (state_->closing) return false;
     if (node_id_ == 0) {
       node.id = 0;
       node.role = "window";
       node.label = L"Wox";
       node.state_flags = state_enabled | state_focusable;
-      std::lock_guard<std::mutex> lock(state_->mutex);
       node.children = state_->current.roots;
       return true;
     }
-    std::lock_guard<std::mutex> lock(state_->mutex);
     auto found = state_->current.nodes.find(node_id_);
     if (found == state_->current.nodes.end()) return false;
     node = found->second;
@@ -441,6 +460,7 @@ class Provider final : public IRawElementProviderSimple,
 // Reuse COM identity because UI Automation retains providers that raise events.
 Provider *retain_provider(HWND hwnd, const std::shared_ptr<TreeState> &state, uint64_t node_id) {
   std::lock_guard<std::mutex> lock(state->mutex);
+  if (state->closing) return nullptr;
   auto found = state->providers.find(node_id);
   if (found != state->providers.end()) {
     found->second->AddRef();
@@ -517,13 +537,17 @@ extern "C" int32_t wox_windows_accessibility_end(uintptr_t owner) {
     }
   }
   for (Provider *provider : stale_providers) provider->Release();
+  if (!UiaClientsAreListening()) return 0;
   Provider *root = retain_provider(hwnd, state, 0);
+  if (root == nullptr) return UIA_E_ELEMENTNOTAVAILABLE;
   UiaRaiseStructureChangedEvent(root, StructureChangeType_ChildrenInvalidated, nullptr, 0);
   root->Release();
   if (focused != 0) {
     Provider *focus = retain_provider(hwnd, state, focused);
-    UiaRaiseAutomationEvent(focus, UIA_AutomationFocusChangedEventId);
-    focus->Release();
+    if (focus != nullptr) {
+      UiaRaiseAutomationEvent(focus, UIA_AutomationFocusChangedEventId);
+      focus->Release();
+    }
   }
   return 0;
 }
@@ -534,6 +558,7 @@ extern "C" uintptr_t wox_windows_accessibility_get_object(uintptr_t owner, uintp
   auto state = state_for(hwnd, false);
   if (!state) return 0;
   Provider *root = retain_provider(hwnd, state, 0);
+  if (root == nullptr) return 0;
   LRESULT result = UiaReturnRawElementProvider(hwnd, static_cast<WPARAM>(wparam), static_cast<LPARAM>(lparam), root);
   root->Release();
   return static_cast<uintptr_t>(result);
@@ -550,15 +575,22 @@ extern "C" void wox_windows_accessibility_remove(uintptr_t owner) {
     states.erase(found);
   }
 
-  // Remove the state before notifying UI Automation. The notification can
-  // re-enter WM_GETOBJECT, which must not return the provider being removed.
-  UiaReturnRawElementProvider(hwnd, 0, 0, nullptr);
-
   std::vector<Provider *> providers;
   {
     std::lock_guard<std::mutex> lock(state->mutex);
+    // Existing providers can be called re-entrantly while UI Automation drops
+    // its event map, so make the whole tree unavailable before that call.
+    state->closing = true;
+    state->building = false;
+    state->current = Snapshot{};
+    state->pending = Snapshot{};
     for (const auto &entry : state->providers) providers.push_back(entry.second);
     state->providers.clear();
   }
+
+  // The state is absent from the HWND map and closed before this re-entrant
+  // call, so WM_GETOBJECT and retained providers cannot revive the tree.
+  UiaReturnRawElementProvider(hwnd, 0, 0, nullptr);
+
   for (Provider *provider : providers) provider->Release();
 }

@@ -557,7 +557,7 @@ func (t *TimerPlugin) tick(ctx context.Context) {
 
 	t.refreshOverlays(ctx)
 
-	if t.api == nil || !t.api.IsVisible(ctx) || t.trackedResults == nil {
+	if t.api == nil || !t.api.IsVisible(context.Background()) || t.trackedResults == nil {
 		return
 	}
 

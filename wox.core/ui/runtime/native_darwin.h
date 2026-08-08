@@ -29,8 +29,13 @@ int32_t wox_darwin_window_set_hide_on_blur(WoxDarwinWindow *window, int32_t enab
 int32_t wox_darwin_window_set_appearance(WoxDarwinWindow *window, int32_t is_dark);
 int32_t wox_darwin_window_pick_file(WoxDarwinWindow *window, int32_t directory, char **path);
 int32_t wox_darwin_window_open_external_url(WoxDarwinWindow *window, const char *url);
-int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, const char *go_back_label, const char *refresh_label, const char *go_forward_label, const char *open_in_browser_label, const char *hide_wox_label, float x, float y, float width, float height);
+int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height);
 int32_t wox_darwin_window_hide_webview(WoxDarwinWindow *window);
+int32_t wox_darwin_window_webview_go_back(WoxDarwinWindow *window);
+int32_t wox_darwin_window_webview_go_forward(WoxDarwinWindow *window);
+int32_t wox_darwin_window_webview_reload(WoxDarwinWindow *window);
+int32_t wox_darwin_window_webview_open_in_browser(WoxDarwinWindow *window);
+int32_t wox_darwin_window_webview_navigation_state(WoxDarwinWindow *window, char **url, int32_t *can_go_back, int32_t *can_go_forward);
 int32_t wox_darwin_window_write_clipboard_text(WoxDarwinWindow *window, const char *text);
 int32_t wox_darwin_window_write_clipboard_image(WoxDarwinWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);
 int32_t wox_darwin_window_invalidate(WoxDarwinWindow *window);

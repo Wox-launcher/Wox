@@ -34,6 +34,7 @@ type formTableEditorState struct {
 	// rowEditorOnly closes the whole overlay when a row opened directly from an inline table exits.
 	rowEditorOnly     bool
 	status            string
+	fieldErrors       map[string]string
 	invalid           bool
 	saving            bool
 	deletePending     int
@@ -54,6 +55,7 @@ type formTableEditorSnapshot struct {
 	rowForm           *formFieldsSnapshot
 	rowIndex          int
 	status            string
+	fieldErrors       map[string]string
 	invalid           bool
 	saving            bool
 	deletePending     int
@@ -286,6 +288,7 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		rowForm:           rowForm,
 		rowIndex:          state.rowIndex,
 		status:            state.status,
+		fieldErrors:       cloneFormTableFieldErrors(state.fieldErrors),
 		invalid:           state.invalid,
 		saving:            state.saving,
 		deletePending:     state.deletePending,
@@ -618,7 +621,7 @@ func (a *App) beginFormTableRowEdit(index int, rowEditorOnly, cloneRow bool) {
 	state.rowIndex = index
 	state.rowBase = base
 	state.rowEditorOnly = rowEditorOnly
-	state.status = ""
+	clearFormTableRowValidationLocked(state)
 	state.deletePending = -1
 	state.deleteDirect = false
 	applyAIProviderDefaultHostLocked(state, false, a.aiSettings.ProviderCatalog())
@@ -780,20 +783,57 @@ func normalizeEmptyAsZeroFieldValues(definition formDefinition, values map[strin
 	}
 }
 
-func validateFormTableRow(definition formDefinition, fields *formFieldsState, rows []map[string]any, editingIndex int) string {
+func cloneFormTableFieldErrors(errors map[string]string) map[string]string {
+	if len(errors) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(errors))
+	for key, message := range errors {
+		cloned[key] = message
+	}
+	return cloned
+}
+
+// clearFormTableRowValidationLocked clears dialog-level and per-field validation after the user edits again.
+func clearFormTableRowValidationLocked(state *formTableEditorState) {
+	if state == nil {
+		return
+	}
+	state.status = ""
+	state.fieldErrors = nil
+}
+
+func (a *App) translateFormTableFieldErrors(errors map[string]string) map[string]string {
+	if len(errors) == 0 {
+		return nil
+	}
+	translated := make(map[string]string, len(errors))
+	for key, message := range errors {
+		translated[key] = a.translate(message)
+	}
+	return translated
+}
+
+func validateFormTableRow(definition formDefinition, fields *formFieldsState, rows []map[string]any, editingIndex int) map[string]string {
 	normalizeEmptyAsZeroFieldValues(definition, fields.values)
-	if validationKey := validateFormFields(fields.definitions, fields.values); validationKey != "" {
-		return validationKey
+	errors := validateFormFieldErrors(fields.definitions, fields.values)
+	if errors == nil {
+		errors = map[string]string{}
 	}
 	for _, column := range definition.Value.Columns {
+		if errors[column.Key] != "" {
+			continue
+		}
 		if column.Type == "woxImage" {
 			if _, err := parseFormTableWoxImage(fields.values[column.Key]); err != nil {
-				return err.Error()
+				errors[column.Key] = err.Error()
+				continue
 			}
 		}
 		if column.Type == "app" {
 			if _, err := parseFormTableApp(fields.values[column.Key]); err != nil {
-				return err.Error()
+				errors[column.Key] = err.Error()
+				continue
 			}
 		}
 		unique := false
@@ -809,11 +849,15 @@ func validateFormTableRow(definition formDefinition, fields *formFieldsState, ro
 		candidate := fields.values[column.Key]
 		for index, row := range rows {
 			if index != editingIndex && formTableColumnValue(column, row) == candidate {
-				return "i18n:ui_validator_value_must_be_unique"
+				errors[column.Key] = "i18n:ui_validator_value_must_be_unique"
+				break
 			}
 		}
 	}
-	return ""
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
 }
 
 // formTableWoxImageValue presents the common emoji case compactly while preserving every structured image type as JSON.
@@ -888,21 +932,21 @@ func (a *App) saveFormTableRowEdit() {
 		return
 	}
 	syncFormFieldsEditorLocked(state.rowForm)
+	clearFormTableRowValidationLocked(state)
 	if validationMessage := a.validatePluginTriggerKeywordTableRow(state); validationMessage != "" {
-		state.status = validationMessage
+		state.fieldErrors = map[string]string{"keyword": validationMessage}
 		a.invalidateFormTableWindow()
 		return
 	}
-	if validationKey := validateFormTableRow(state.definition, state.rowForm, state.rows, state.rowIndex); validationKey != "" {
-		message := a.translate(validationKey)
+	if fieldErrors := validateFormTableRow(state.definition, state.rowForm, state.rows, state.rowIndex); len(fieldErrors) > 0 {
 		if a.activeFormTableEditor() == state {
-			state.status = message
+			state.fieldErrors = a.translateFormTableFieldErrors(fieldErrors)
 		}
 		a.invalidateFormTableWindow()
 		return
 	}
-	if validationMessage := validateAISettingsTableRow(state.definition, state.rowForm); validationMessage != "" {
-		state.status = validationMessage
+	if fieldErrors := validateAISettingsTableRow(state.definition, state.rowForm); len(fieldErrors) > 0 {
+		state.fieldErrors = fieldErrors
 		a.invalidateFormTableWindow()
 		return
 	}
@@ -930,7 +974,7 @@ func (a *App) saveFormTableRowEdit() {
 	state.rowIndex = -1
 	state.rowBase = nil
 	state.rowEditorOnly = false
-	state.status = ""
+	clearFormTableRowValidationLocked(state)
 	if persist {
 		state.saving = true
 		a.settingSaving = true
@@ -1139,7 +1183,7 @@ func (a *App) changeFormTableRowChoice(index, delta int) {
 		if index >= 0 && index < len(state.rowForm.definitions) && state.rowForm.definitions[index].Value.Key == "Name" {
 			applyAIProviderDefaultHostLocked(state, true, a.aiSettings.ProviderCatalog())
 		}
-		state.status = ""
+		clearFormTableRowValidationLocked(state)
 	}
 	a.updateFormTableTextInput(false)
 	a.invalidateFormTableWindow()
@@ -1151,7 +1195,7 @@ func (a *App) editFormTableRowKey(event woxui.KeyEvent) {
 		_, changed := handleFormEditorKey(state.rowForm.editor, state.rowForm.definitions[state.rowForm.focused], event)
 		if changed {
 			syncFormFieldsEditorLocked(state.rowForm)
-			state.status = ""
+			clearFormTableRowValidationLocked(state)
 		}
 	}
 	a.invalidateFormTableWindow()
@@ -1161,7 +1205,7 @@ func (a *App) setFormTableRowText(index int, value string) {
 	state := a.activeFormTableEditor()
 	changed := state != nil && state.rowForm != nil && !state.saving && setFormFieldsTextLocked(state.rowForm, index, value)
 	if changed {
-		state.status = ""
+		clearFormTableRowValidationLocked(state)
 		if state.definition.Value.Key == "QueryHotkeys" && index >= 0 && index < len(state.rowForm.definitions) && state.rowForm.definitions[index].Value.Key == "Query" {
 			a.updateFormTableQueryVariableTrigger(index)
 		}

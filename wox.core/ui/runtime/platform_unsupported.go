@@ -80,6 +80,26 @@ func (w *platformWindow) hideWebView() error {
 	return ErrPlatformUnsupported
 }
 
+func (w *platformWindow) webViewGoBack() error {
+	return ErrPlatformUnsupported
+}
+
+func (w *platformWindow) webViewGoForward() error {
+	return ErrPlatformUnsupported
+}
+
+func (w *platformWindow) webViewReload() error {
+	return ErrPlatformUnsupported
+}
+
+func (w *platformWindow) webViewOpenInBrowser() error {
+	return ErrPlatformUnsupported
+}
+
+func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error) {
+	return WebViewNavigationState{}, ErrPlatformUnsupported
+}
+
 func (w *platformWindow) writeClipboardText(text string) error {
 	return ErrPlatformUnsupported
 }

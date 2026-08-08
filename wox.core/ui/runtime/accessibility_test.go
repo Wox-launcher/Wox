@@ -56,3 +56,28 @@ func TestAccessibilityTreeContentHashCoversEveryNodeField(t *testing.T) {
 		})
 	}
 }
+
+func TestClearAccessibilityDoesNotPublishEmptyNativeTree(t *testing.T) {
+	window := &platformWindow{}
+	accessibilityWindows.Store(window, accessibilityWindowState{tree: AccessibilityTree{Generation: 1}})
+
+	originalUpdate := updateNativeAccessibility
+	nativeUpdateCalled := false
+	updateNativeAccessibility = func(*platformWindow, AccessibilityTree) error {
+		nativeUpdateCalled = true
+		return nil
+	}
+	defer func() {
+		updateNativeAccessibility = originalUpdate
+		accessibilityWindows.Delete(window)
+	}()
+
+	clearAccessibility(window)
+
+	if nativeUpdateCalled {
+		t.Fatal("closing a window must not publish an empty accessibility tree")
+	}
+	if _, ok := accessibilityWindows.Load(window); ok {
+		t.Fatal("closing a window must remove its accessibility action state")
+	}
+}

@@ -81,7 +81,6 @@ type App struct {
 	queryTransitionTimer       *time.Timer
 	queryLoading               bool
 	queryLoadingTimer          *time.Timer
-	webViewTooltipRevision     atomic.Uint64
 	previewTooltipRevision     atomic.Uint64
 	selected                   int
 	hoveredResult              int
@@ -103,6 +102,7 @@ type App struct {
 	chatPreview                *chatPreviewState
 	webViewPreviewData         string
 	webViewPreviewError        string
+	webViewNavigation          woxui.WebViewNavigationState
 	// Native Office preview state separates selected, delayed, and reported handler generations.
 	nativeFilePreviewPath        string
 	nativeFilePreviewPendingPath string
@@ -350,7 +350,15 @@ func (a *App) start() error {
 				}
 			})
 		},
-		OnWebViewTooltip: a.setWebViewToolbarTooltip,
+		OnWebViewNavigationChanged: func(state woxui.WebViewNavigationState) {
+			if a.webViewPreviewData == "" {
+				return
+			}
+			a.webViewNavigation = state
+			if a.window != nil {
+				_ = a.window.Invalidate()
+			}
+		},
 		OnClosed: func() {
 			host.Dispose()
 			a.onLauncherWindowClosed()
@@ -489,9 +497,10 @@ func (a *App) showWindow(params showAppParams) error {
 }
 
 func (a *App) hideWindow(notify bool) error {
-	// Secondary launchers are transient query-owned windows. Match Flutter's
-	// multiple-window driver by destroying them instead of retaining them hidden.
-	if !a.isPrimary {
+	// Secondaries are named and can coexist (selection, explorer, tray, webview).
+	// Only cacheable WebView panels hide-and-retain so navigation can resume;
+	// every other secondary still destroys on dismiss.
+	if !a.isPrimary && !a.shouldRetainSecondaryOnHide() {
 		return a.Close()
 	}
 
@@ -546,6 +555,29 @@ func (a *App) hideWindow(notify bool) error {
 	return nil
 }
 
+// shouldRetainSecondaryOnHide keeps only cacheable WebView secondaries alive across hide.
+func (a *App) shouldRetainSecondaryOnHide() bool {
+	retain := false
+	if err := a.runOnUI("inspect secondary webview retain", func() {
+		retain = a.hasCacheableWebViewPreviewLocked()
+	}); err != nil {
+		return false
+	}
+	return retain
+}
+
+// hasCacheableWebViewPreviewLocked reports an active WebView preview that opted into session reuse.
+func (a *App) hasCacheableWebViewPreviewLocked() bool {
+	if strings.TrimSpace(a.webViewPreviewData) == "" {
+		return false
+	}
+	data, err := decodeWebViewPreview(a.webViewPreviewData)
+	if err != nil || data.CacheDisabled {
+		return false
+	}
+	return true
+}
+
 // closePreviewWindow dismisses only the launcher instance that owns the preview.
 func (a *App) closePreviewWindow() {
 	util.Go(a.lifecycleCtx, "close launcher from preview close", func() {
@@ -566,11 +598,20 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 	}
 	hideOnBlur := a.show.HideOnBlur
 	launcher := a.launcher
+	retainSecondary := a.isPrimary || a.hasCacheableWebViewPreviewLocked()
 	if hideOnBlur {
 		a.visible = false
 		a.stopGlanceLocked(false)
 	}
 	if hideOnBlur {
+		if !retainSecondary {
+			util.Go(a.lifecycleCtx, "close secondary launcher after blur", func() {
+				if err := a.Close(); err != nil {
+					log.Printf("close secondary launcher after blur: %v", err)
+				}
+			})
+			return
+		}
 		a.reconcileSelectedPreview()
 		if launcher != nil {
 			_ = launcher.Hide()

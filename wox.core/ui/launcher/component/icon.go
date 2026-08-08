@@ -196,6 +196,30 @@ func RefreshGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.refresh", size, color)
 }
 
+// ArrowLeftGlyph returns the shared SVG back-navigation icon.
+func ArrowLeftGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return svgIcon("control.arrow-left", size, color)
+}
+
+// ArrowRightGlyph returns the shared SVG forward-navigation icon.
+func ArrowRightGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 16
+	}
+	return svgIcon("control.arrow-right", size, color)
+}
+
+// ExternalGlyph returns the shared SVG open-in-browser icon.
+func ExternalGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 14
+	}
+	return svgIcon("control.external", size, color)
+}
+
 // DebugGlyph returns the shared SVG debug icon.
 func DebugGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	if size <= 0 {

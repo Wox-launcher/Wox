@@ -534,7 +534,9 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 	if position, ok := m.getQueryHotkeyWindowPosition(queryCtx, queryHotkey); ok {
 		showContext.WindowPosition = &position
 	}
+	// Preview-only hotkeys (e.g. webview panels) reuse the same chrome as selection quick look.
 	if queryHotkey.HideQueryBox && queryHotkey.HideToolbar {
+		showContext.ShowPreviewTitleBar = true
 		m.openSecondaryInstance(queryCtx, "query-hotkey:"+normalizeHotkeyForCompare(queryHotkey.Hotkey), plainQuery, showContext)
 		return nil
 	}
@@ -1106,7 +1108,7 @@ func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
 	util.Go(ctx, "release hidden core memory", func() {
 		time.Sleep(10 * time.Second)
 
-		if impl, ok := m.ui.(*uiImpl); ok && impl.IsVisible(ctx) {
+		if impl, ok := m.ui.(*uiImpl); ok && impl.hasAnyVisibleSession() {
 			return
 		}
 
@@ -1324,6 +1326,9 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 		})
 	case "AIProviders":
 		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "models")
+		if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
+			chater.EnsureDefaultModelValid(ctx)
+		}
 	case "AIMCPServers":
 		if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
 			chater.ReloadMCPServers(ctx, true)

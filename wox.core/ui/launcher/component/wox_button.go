@@ -29,14 +29,16 @@ const (
 
 // ButtonProps describes one themed, focusable Wox button.
 type ButtonProps struct {
-	ID                string
-	Label             string
-	Icon              *woxui.Image
-	TrailingIcon      *woxui.Image
-	TrailingLabel     string
-	IconSize          float32
-	TrailingIconSize  float32
-	IconGap           float32
+	ID               string
+	Label            string
+	Icon             *woxui.Image
+	TrailingIcon     *woxui.Image
+	TrailingLabel    string
+	IconSize         float32
+	TrailingIconSize float32
+	IconGap          float32
+	// IntrinsicWidth sizes the button to its label/icon content. Omitted Width already does this;
+	// keep the flag for call sites that want the intent to be explicit.
 	IntrinsicWidth    bool
 	Width             float32
 	Height            float32
@@ -150,16 +152,21 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 			woxwidget.Semantics{AutomationID: props.ID + "-trailing", Role: woxui.AccessibilityRoleButton, Label: trailingLabel, Child: icon},
 		}}
 	}
+	// Match Flutter WoxButton: omitted width follows label/icon content. A zero-width Align child
+	// would otherwise expand to the Flex parent's full available width and clip or stretch labels.
+	intrinsicWidth := props.IntrinsicWidth || props.Width <= 0
 	var alignedChild woxwidget.Widget = woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: child}
-	if props.IntrinsicWidth {
+	buttonWidth := props.Width
+	if intrinsicWidth {
 		if padding.Top == 0 && padding.Bottom == 0 {
 			padding.Top = max(float32(0), (height-fontSize*1.35)/2)
 		}
 		alignedChild = child
+		buttonWidth = 0
 	}
 	// Center measured text and icon content inside symmetric padding instead of relying on font-specific offsets.
 	content := woxwidget.Gesture{ID: props.ID, OnTap: onTap, Child: woxwidget.Container{
-		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: border, BorderWidth: boolFloat(border.A != 0), Padding: padding,
+		Width: buttonWidth, Height: height, Radius: radius, Color: background, BorderColor: border, BorderWidth: boolFloat(border.A != 0), Padding: padding,
 		Child: alignedChild,
 	}}
 	return woxwidget.Semantics{

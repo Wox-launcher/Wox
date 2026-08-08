@@ -845,6 +845,15 @@ func (a *App) selectChatModel(index int) {
 	state.active = true
 	a.updateChatTextInput(true)
 	_ = a.window.Invalidate()
+	// Persist outside the draft so the next chat reopen keeps this selection.
+	persisted := common.Model{Name: model.Name, Provider: common.ProviderName(model.Provider), ProviderAlias: model.ProviderAlias}
+	util.Go(a.lifecycleCtx, "persist selected chat model", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := a.services.SetDefaultChatModel(ctx, a.sessionID, persisted); err != nil {
+			log.Printf("persist selected chat model: %v", err)
+		}
+	})
 }
 
 // insertChatSkill adds the stable inline tag that core expands through SkillRefs.

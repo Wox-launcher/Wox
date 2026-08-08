@@ -65,7 +65,7 @@ func (a *App) openFormTableAppPicker(index int) {
 	var current ignoredHotkeyApp
 	_ = json.Unmarshal([]byte(state.rowForm.values[state.rowForm.definitions[index].Value.Key]), &current)
 	state.appPicker = &formTableAppPickerState{fieldIndex: index, current: current}
-	state.status = ""
+	clearFormTableRowValidationLocked(state)
 	a.updateFormTableTextInput(true)
 	if !a.hotkeySettings.AppsLoaded() && !a.hotkeySettings.AppsLoading() {
 		util.Go(a.lifecycleCtx, "load hotkey app candidates", a.loadHotkeyAppCandidates)
@@ -78,7 +78,7 @@ func (a *App) closeFormTableAppPicker() {
 	textInput := false
 	if state != nil && state.appPicker != nil {
 		state.appPicker = nil
-		state.status = ""
+		clearFormTableRowValidationLocked(state)
 		textInput = state.rowForm != nil && state.rowForm.editor != nil
 	}
 	a.updateFormTableTextInput(textInput)
@@ -102,7 +102,7 @@ func (a *App) chooseFormTableAppCandidate(candidate ignoredHotkeyApp) {
 	}
 	state.rowForm.values[state.rowForm.definitions[fieldIndex].Value.Key] = string(encoded)
 	state.appPicker = nil
-	state.status = ""
+	clearFormTableRowValidationLocked(state)
 	setFormFieldsFocusLocked(state.rowForm, fieldIndex)
 	a.updateFormTableTextInput(false)
 	a.invalidateFormTableWindow()

@@ -36,6 +36,7 @@ type InteractionServices interface {
 	Chat(ctx context.Context, sessionID string, chat common.AIChatData) error
 	ChatByID(ctx context.Context, sessionID string, chatID string) (common.AIChatData, error)
 	DefaultChatModel(ctx context.Context, sessionID string) (common.Model, error)
+	SetDefaultChatModel(ctx context.Context, sessionID string, model common.Model) error
 	DeleteChat(ctx context.Context, sessionID string, chatID string) error
 	StopChat(ctx context.Context, sessionID string, chatID string) (bool, error)
 	AnswerAIQuestion(ctx context.Context, sessionID string, questionID string, answer string) error

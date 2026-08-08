@@ -215,8 +215,9 @@ func clearAccessibility(window *platformWindow) {
 	if window == nil {
 		return
 	}
+	// Window teardown disconnects the native provider in WM_DESTROY. Publishing
+	// an empty tree here raises one last UIA event that can race that disconnect.
 	accessibilityWindows.Delete(window)
-	_ = updateNativeAccessibility(window, AccessibilityTree{})
 }
 
 const (

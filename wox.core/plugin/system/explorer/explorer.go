@@ -975,25 +975,30 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 
 	go func() {
 		var (
-			active         bool
-			activePid      int
-			waitingVisible bool
-			waitingSince   time.Time
-			handoffUntil   time.Time
-			pending        string
-			pendingCtx     context.Context
-			pendingHintPid int
-			pendingHintEnd time.Time
-			explorerShow   *common.ShowContext
+			active       bool
+			activePid    int
+			handoffUntil time.Time
+			pending      string
+			pendingCtx   context.Context
+			explorerShow *common.ShowContext
 		)
 
 		resetState := func() {
-			waitingVisible = false
-			waitingSince = time.Time{}
 			handoffUntil = time.Time{}
 			pending = ""
 			pendingCtx = nil
 			explorerShow = nil
+		}
+
+		inHandoff := func() bool {
+			return !handoffUntil.IsZero() && time.Now().Before(handoffUntil)
+		}
+
+		beginHandoff := func() {
+			// Brief raw-key capture window after opening the explorer secondary.
+			// Focus handoff is not atomic, so fast typing can still arrive here
+			// before the launcher text input is ready.
+			handoffUntil = time.Now().Add(350 * time.Millisecond)
 		}
 
 		changeExplorerQuery := func(localCtx context.Context) {
@@ -1067,7 +1072,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 		// The dialog hint is passive: it advertises Wox search without turning
 		// ordinary filename typing into an Explorer query.
 		showDialogHint := func(localCtx context.Context, pid int) {
-			if pid <= 0 || c.api.IsVisible(localCtx) {
+			if pid <= 0 {
 				return
 			}
 			messageKey := "plugin_explorer_hint_message_dialog"
@@ -1142,40 +1147,25 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			case ev := <-events:
 				switch ev.eventType {
 				case overlayEventActivate:
-					c.typeToSearchDebugLog(ctx, "event activate active=%v waitingVisible=%v pending=%q", active, waitingVisible, pending)
+					c.typeToSearchDebugLog(ctx, "event activate active=%v handoff=%v pending=%q", active, inHandoff(), pending)
 					active = true
 					activePid = ev.pid
 					if ev.isDialog {
-						if c.api.IsVisible(ctx) {
-							// The dialog can regain foreground before UI posts /on/hide. Retry after
-							// the cached visibility state catches up instead of waiting for a key event.
-							pendingHintPid = ev.pid
-							pendingHintEnd = time.Now().Add(2 * time.Second)
-						} else {
-							pendingHintPid = 0
-							pendingHintEnd = time.Time{}
-							showDialogHint(ctx, ev.pid)
-						}
+						showDialogHint(ctx, ev.pid)
 					} else {
-						pendingHintPid = 0
-						pendingHintEnd = time.Time{}
 						overlay.Close(explorerDialogHintOverlayName)
 					}
-					// Bug fix: keep pending keys while waiting for visible and during the handoff
-					// grace window. ShowApp can trigger activation churn before all fast-typed
-					// keys have either been pushed through ChangeQuery or handed to UI's
-					// EditableText, so the old eager reset still dropped early characters.
-					if !waitingVisible && handoffUntil.IsZero() {
+					// Keep pending keys during focus handoff; ShowApp can churn
+					// activation before fast-typed keys are pushed to the UI.
+					if !inHandoff() {
 						resetState()
 					}
 				case overlayEventDeactivate:
-					c.typeToSearchDebugLog(ctx, "event deactivate active=%v waitingVisible=%v pending=%q", active, waitingVisible, pending)
+					c.typeToSearchDebugLog(ctx, "event deactivate active=%v handoff=%v pending=%q", active, inHandoff(), pending)
 					active = false
 					activePid = 0
-					pendingHintPid = 0
-					pendingHintEnd = time.Time{}
 					overlay.Close(explorerDialogHintOverlayName)
-					if !waitingVisible && handoffUntil.IsZero() {
+					if !inHandoff() {
 						resetState()
 					}
 				case overlayEventOpenDialogSearch:
@@ -1183,9 +1173,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					if localCtx == nil {
 						localCtx = ctx
 					}
-					if active && activePid > 0 && !c.api.IsVisible(localCtx) {
-						pendingHintPid = 0
-						pendingHintEnd = time.Time{}
+					if active && activePid > 0 {
 						openDialogQuery(localCtx, activePid)
 					}
 				case overlayEventKey:
@@ -1193,29 +1181,10 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					if localCtx == nil {
 						localCtx = ctx
 					}
-					visible := c.api.IsVisible(localCtx)
-					c.typeToSearchDebugLog(localCtx, "event key=%q active=%v visible=%v waitingVisible=%v pending=%q", ev.key, active, visible, waitingVisible, pending)
-					inHandoff := !handoffUntil.IsZero() && time.Now().Before(handoffUntil)
-					canCaptureHandoffKey := waitingVisible || inHandoff
-					if (!active && !canCaptureHandoffKey) || ev.key == "" {
-						c.typeToSearchDebugLog(localCtx, "ignore key=%q active=%v waitingVisible=%v handoff=%v", ev.key, active, waitingVisible, inHandoff)
-						continue
-					}
-					if visible {
-						if !canCaptureHandoffKey {
-							c.typeToSearchDebugLog(localCtx, "ignore key=%q (wox visible)", ev.key)
-							continue
-						}
-						// Bug fix: Finder-to-Wox focus handoff is not atomic on macOS. Wox can
-						// become visible before the ticker starts the grace window and before
-						// UI's EditableText is ready, so fast typing after the first key was
-						// ignored here and also missed by UI. Treat waitingVisible as part of
-						// the handoff and push the full query immediately.
-						pending += strings.ToLower(ev.key)
-						changeExplorerQuery(localCtx)
-						waitingVisible = false
-						waitingSince = time.Time{}
-						handoffUntil = time.Now().Add(350 * time.Millisecond)
+					handoff := inHandoff()
+					c.typeToSearchDebugLog(localCtx, "event key=%q active=%v handoff=%v pending=%q", ev.key, active, handoff, pending)
+					if (!active && !handoff) || ev.key == "" {
+						c.typeToSearchDebugLog(localCtx, "ignore key=%q active=%v handoff=%v", ev.key, active, handoff)
 						continue
 					}
 					if pendingCtx == nil {
@@ -1224,52 +1193,20 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					}
 					pending += strings.ToLower(ev.key)
 					c.typeToSearchDebugLog(pendingCtx, "pending=%q", pending)
-					if !waitingVisible {
-						if !showOverlay(pendingCtx) {
-							c.typeToSearchDebugLog(pendingCtx, "showOverlay failed")
-							resetState()
-							continue
-						}
-						waitingVisible = true
-						waitingSince = time.Now()
+					if handoff {
+						changeExplorerQuery(localCtx)
+						beginHandoff()
+						continue
 					}
+					if !showOverlay(pendingCtx) {
+						c.typeToSearchDebugLog(pendingCtx, "showOverlay failed")
+						resetState()
+						continue
+					}
+					beginHandoff()
 				}
 			case <-ticker.C:
 				if !handoffUntil.IsZero() && time.Now().After(handoffUntil) {
-					resetState()
-				}
-				if pendingHintPid > 0 {
-					if time.Now().After(pendingHintEnd) {
-						pendingHintPid = 0
-						pendingHintEnd = time.Time{}
-					} else if active && activePid == pendingHintPid && !c.api.IsVisible(ctx) {
-						showDialogHint(ctx, pendingHintPid)
-						pendingHintPid = 0
-						pendingHintEnd = time.Time{}
-					}
-				}
-				if !waitingVisible {
-					continue
-				}
-				tickCtx := pendingCtx
-				if tickCtx == nil {
-					tickCtx = ctx
-				}
-				visible := c.api.IsVisible(tickCtx)
-				c.typeToSearchDebugLog(tickCtx, "ticker waitingVisible=%v visible=%v pending=%q active=%v", waitingVisible, visible, pending, active)
-				if visible {
-					changeExplorerQuery(tickCtx)
-					// Keep a short raw-key capture window after the first ChangeQuery. The
-					// previous immediate reset assumed UI had already taken keyboard focus,
-					// but macOS can still deliver the next few Finder key events before the
-					// launcher text input is ready, which dropped characters in fast typing.
-					waitingVisible = false
-					waitingSince = time.Time{}
-					handoffUntil = time.Now().Add(350 * time.Millisecond)
-					continue
-				}
-				if !waitingSince.IsZero() && time.Since(waitingSince) > 2*time.Second {
-					c.typeToSearchDebugLog(tickCtx, "timeout waiting for wox visible")
 					resetState()
 				}
 			}

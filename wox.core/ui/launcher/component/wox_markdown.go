@@ -79,15 +79,21 @@ type MarkdownDocument struct {
 
 // MarkdownProps describes one native Markdown document and its external actions.
 type MarkdownProps struct {
-	ID           string
-	Document     MarkdownDocument
-	Width        float32
-	FontSize     float32
-	Theme        Theme
-	Window       *woxui.Window
-	ResolveImage func(source string) (*woxui.Image, string)
-	OnOpenImage  func(source string)
-	OnOpenLink   func(target string)
+	ID       string
+	Document MarkdownDocument
+	Width    float32
+	FontSize float32
+	// BlockGap overrides the default 12px preview spacing between top-level blocks.
+	// Compact form help text should pass a smaller gap so multi-paragraph tips stay dense.
+	BlockGap float32
+	// ExcludeLinkFocus keeps pointer-activated links out of the keyboard focus chain.
+	// Flutter wraps form-table tooltips in ExcludeFocus for the same reason.
+	ExcludeLinkFocus bool
+	Theme            Theme
+	Window           *woxui.Window
+	ResolveImage     func(source string) (*woxui.Image, string)
+	OnOpenImage      func(source string)
+	OnOpenLink       func(target string)
 }
 
 // ParseMarkdown parses CommonMark with the GitHub-flavored extensions used by Wox previews.
@@ -101,7 +107,11 @@ func ParseMarkdown(value string) MarkdownDocument {
 func WoxMarkdown(props MarkdownProps) woxwidget.Widget {
 	width := max(float32(0), props.Width)
 	linkIndex := 0
-	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: renderMarkdownBlocks(props.Document.blocks, props, width, &linkIndex)}
+	blockGap := props.BlockGap
+	if blockGap <= 0 {
+		blockGap = 12
+	}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: blockGap, Children: renderMarkdownBlocks(props.Document.blocks, props, width, &linkIndex)}
 }
 
 // normalizeMarkdownImages preserves Wox's wiki-image shorthand before CommonMark parsing.
@@ -439,7 +449,7 @@ func markdownRunsWidget(runs []markdownRun, props MarkdownProps, width, fontSize
 				continue
 			}
 			link := woxwidget.Gesture{ID: id, OnTap: func() { props.OnOpenLink(target) }, Child: woxwidget.Text{Value: label, Style: style, Color: props.Theme.Cursor, Underline: true}}
-			children = append(children, woxwidget.Semantics{
+			semantics := woxwidget.Semantics{
 				Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleLink, Label: label, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 				OnAction: func(action woxui.AccessibilityAction, _ string) error {
 					if action == woxui.AccessibilityActionActivate {
@@ -447,7 +457,10 @@ func markdownRunsWidget(runs []markdownRun, props MarkdownProps, width, fontSize
 					}
 					return nil
 				},
-				Child: woxwidget.Focusable{Key: woxwidget.Key(id), FocusRingColor: props.Theme.Cursor, FocusRingRadius: 2, OnKey: func(event woxui.KeyEvent) bool {
+				Child: link,
+			}
+			if !props.ExcludeLinkFocus {
+				semantics.Child = woxwidget.Focusable{Key: woxwidget.Key(id), FocusRingColor: props.Theme.Cursor, FocusRingRadius: 2, OnKey: func(event woxui.KeyEvent) bool {
 					if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 						return false
 					}
@@ -455,8 +468,9 @@ func markdownRunsWidget(runs []markdownRun, props MarkdownProps, width, fontSize
 						props.OnOpenLink(target)
 					}
 					return true
-				}, Child: link},
-			})
+				}, Child: link}
+			}
+			children = append(children, semantics)
 			continue
 		}
 		for _, token := range markdownTokens(run.text) {

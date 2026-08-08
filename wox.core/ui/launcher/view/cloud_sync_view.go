@@ -479,6 +479,7 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 		labelWidth = max(float32(220), width-390)
 	}
 	valueWidth := max(float32(220), availableWidth-labelWidth-labelGap)
+	supportWidth := cloudFormButtonWidth(props.SupportLabel, props.SupportIcon != nil)
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: availableWidth, Height: 34, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 34, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Text{Value: props.EmailLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
@@ -506,10 +507,10 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 				woxwidget.Text{Value: props.BillingLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
 				woxwidget.Text{Value: props.BillingTips, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle},
 			}}},
-			woxwidget.Container{Width: valueWidth, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-				woxwidget.Painter{Width: max(float32(0), valueWidth-112), Height: 38},
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-support", Label: props.SupportLabel, Icon: props.SupportIcon, IconSize: 16, Width: 112, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnSupport, Theme: theme}),
-			}}},
+			woxwidget.Container{Width: valueWidth, Height: 57, Padding: woxwidget.Insets{Left: max(float32(0), valueWidth-supportWidth)}, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: "cloud-support", Label: props.SupportLabel, Icon: props.SupportIcon, IconSize: 16, Width: supportWidth,
+				Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnSupport, Theme: theme,
+			})},
 		}}},
 	}}}
 }

@@ -335,6 +335,26 @@ func (w *platformWindow) hideWebView() error {
 	return nil
 }
 
+func (w *platformWindow) webViewGoBack() error {
+	return errors.New("woxui: linux WebView navigation is not implemented")
+}
+
+func (w *platformWindow) webViewGoForward() error {
+	return errors.New("woxui: linux WebView navigation is not implemented")
+}
+
+func (w *platformWindow) webViewReload() error {
+	return errors.New("woxui: linux WebView navigation is not implemented")
+}
+
+func (w *platformWindow) webViewOpenInBrowser() error {
+	return errors.New("woxui: linux WebView navigation is not implemented")
+}
+
+func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error) {
+	return WebViewNavigationState{}, errors.New("woxui: linux WebView navigation is not implemented")
+}
+
 func (w *platformWindow) writeClipboardText(text string) error {
 	native, err := w.openNative()
 	if err != nil {

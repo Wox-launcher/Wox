@@ -109,22 +109,23 @@ const (
 // WindowOptions configures a launcher window using platform-neutral units and behavior.
 // Size is the preferred initial logical client size; FrameInfo reports the actual drawable size.
 type WindowOptions struct {
-	Title                  string
-	Size                   Size
-	Role                   WindowRole
-	HideOnBlur             bool
-	OnFrame                func(displayList *DisplayList, frame FrameInfo)
-	OnFocus                func(event FocusEvent)
-	OnKey                  func(event KeyEvent) bool
-	OnTextInput            func(event TextInputEvent)
-	OnPointer              func(event PointerEvent)
-	OnFileDrop             func(paths []string)
-	OnFileDragEnded        func(status FileDragStatus)
-	OnWebViewHideRequested func()
-	OnWebViewTooltip       func(event WebViewTooltipEvent)
-	OnCloseRequested       func()
-	OnClosed               func()
-	frameMetrics           *frameMetricsRecorder
+	Title                      string
+	Size                       Size
+	Role                       WindowRole
+	HideOnBlur                 bool
+	OnFrame                    func(displayList *DisplayList, frame FrameInfo)
+	OnFocus                    func(event FocusEvent)
+	OnKey                      func(event KeyEvent) bool
+	OnTextInput                func(event TextInputEvent)
+	OnPointer                  func(event PointerEvent)
+	OnFileDrop                 func(paths []string)
+	OnFileDragEnded            func(status FileDragStatus)
+	OnWebViewHideRequested     func()
+	OnWebViewTooltip           func(event WebViewTooltipEvent)
+	OnWebViewNavigationChanged func(state WebViewNavigationState)
+	OnCloseRequested           func()
+	OnClosed                   func()
+	frameMetrics               *frameMetricsRecorder
 }
 
 // Window wraps the native implementation selected for the current platform.

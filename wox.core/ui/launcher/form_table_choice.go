@@ -56,7 +56,7 @@ func (a *App) openFormTableRowChoice(index int, anchor woxui.Rect) {
 	setFormFieldsFocusLocked(state.rowForm, index)
 	state.appPicker = nil
 	state.choicePicker = &formTableChoicePickerState{fieldIndex: index, anchor: anchor}
-	state.status = ""
+	clearFormTableRowValidationLocked(state)
 	a.updateFormTableTextInput(false)
 	a.invalidateFormTableWindow()
 }
@@ -67,7 +67,7 @@ func (a *App) closeFormTableChoicePicker() {
 	textInput := false
 	if state != nil && state.choicePicker != nil {
 		state.choicePicker = nil
-		state.status = ""
+		clearFormTableRowValidationLocked(state)
 		textInput = state.rowForm != nil && state.rowForm.editor != nil
 	}
 	a.updateFormTableTextInput(textInput)
@@ -94,7 +94,7 @@ func (a *App) chooseFormTableChoice(index int) {
 		applyAIProviderDefaultHostLocked(state, true, a.aiSettings.ProviderCatalog())
 	}
 	state.choicePicker = nil
-	state.status = ""
+	clearFormTableRowValidationLocked(state)
 	a.updateFormTableTextInput(false)
 	a.invalidateFormTableWindow()
 }

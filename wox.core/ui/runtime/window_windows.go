@@ -111,6 +111,11 @@ const (
 	windowCommandWriteClipboardImage
 	windowCommandShowWebView
 	windowCommandHideWebView
+	windowCommandWebViewGoBack
+	windowCommandWebViewGoForward
+	windowCommandWebViewReload
+	windowCommandWebViewOpenInBrowser
+	windowCommandWebViewNavigationState
 	windowCommandShowNativeFilePreview
 	windowCommandHideNativeFilePreview
 	windowCommandClose
@@ -136,10 +141,11 @@ type windowCommand struct {
 }
 
 type windowCommandResult struct {
-	epoch  FocusEpoch
-	bounds Rect
-	path   string
-	err    error
+	epoch      FocusEpoch
+	bounds     Rect
+	path       string
+	navigation WebViewNavigationState
+	err        error
 }
 
 type focusRuntime struct {
@@ -277,7 +283,9 @@ func platformRun(start func() error) (runErr error) {
 		platformRuntime.calls = nil
 		platformRuntime.Unlock()
 		for _, call := range pendingCalls {
-			call.done <- errors.New("window runtime stopped before UI callback ran")
+			if call.done != nil {
+				call.done <- errors.New("window runtime stopped before UI callback ran")
+			}
 		}
 	}()
 
@@ -334,20 +342,35 @@ func platformRun(start func() error) (runErr error) {
 }
 
 func platformCall(fn func()) error {
+	done := make(chan error, 1)
+	queued, err := queuePlatformCall(fn, done)
+	if err != nil || !queued {
+		return err
+	}
+	return <-done
+}
+
+// platformPost schedules fn on the native UI thread without making a COM callback wait for it.
+func platformPost(fn func()) error {
+	_, err := queuePlatformCall(fn, nil)
+	return err
+}
+
+// queuePlatformCall executes directly on the UI thread or posts one runtime callback.
+func queuePlatformCall(fn func(), done chan error) (bool, error) {
 	platformRuntime.Lock()
 	if !platformRuntime.running {
 		platformRuntime.Unlock()
-		return errors.New("window runtime is not running")
+		return false, errors.New("window runtime is not running")
 	}
 	uiThreadID := platformRuntime.uiThreadID
 	if uiThreadID == win.GetCurrentThreadId() {
 		platformRuntime.Unlock()
 		fn()
-		return nil
+		return false, nil
 	}
 	platformRuntime.nextCallID++
 	callID := platformRuntime.nextCallID
-	done := make(chan error, 1)
 	platformRuntime.calls[callID] = windowsRuntimeCall{fn: fn, done: done}
 	platformRuntime.Unlock()
 
@@ -356,9 +379,9 @@ func platformCall(fn func()) error {
 		platformRuntime.Lock()
 		delete(platformRuntime.calls, callID)
 		platformRuntime.Unlock()
-		return fmt.Errorf("post UI callback: %w", postErr)
+		return false, fmt.Errorf("post UI callback: %w", postErr)
 	}
-	return <-done
+	return true, nil
 }
 
 func runWindowsRuntimeCall(callID uintptr) {
@@ -372,7 +395,9 @@ func runWindowsRuntimeCall(callID uintptr) {
 		return
 	}
 	call.fn()
-	call.done <- nil
+	if call.done != nil {
+		call.done <- nil
+	}
 }
 
 // openPlatformWindow creates a hidden window on the runtime thread.
@@ -463,6 +488,27 @@ func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error 
 
 func (w *platformWindow) hideWebView() error {
 	return w.call(windowCommand{kind: windowCommandHideWebView}).err
+}
+
+func (w *platformWindow) webViewGoBack() error {
+	return w.call(windowCommand{kind: windowCommandWebViewGoBack}).err
+}
+
+func (w *platformWindow) webViewGoForward() error {
+	return w.call(windowCommand{kind: windowCommandWebViewGoForward}).err
+}
+
+func (w *platformWindow) webViewReload() error {
+	return w.call(windowCommand{kind: windowCommandWebViewReload}).err
+}
+
+func (w *platformWindow) webViewOpenInBrowser() error {
+	return w.call(windowCommand{kind: windowCommandWebViewOpenInBrowser}).err
+}
+
+func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error) {
+	result := w.call(windowCommand{kind: windowCommandWebViewNavigationState})
+	return result.navigation, result.err
 }
 
 func (w *platformWindow) showNativeFilePreview(path string, bounds Rect, generation uint64) error {
@@ -1348,6 +1394,32 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 			return windowCommandResult{}
 		}
 		return windowCommandResult{err: w.webView.hide()}
+	case windowCommandWebViewGoBack:
+		if w.webView == nil {
+			return windowCommandResult{err: ErrWebViewUnavailable}
+		}
+		return windowCommandResult{err: w.webView.goBack()}
+	case windowCommandWebViewGoForward:
+		if w.webView == nil {
+			return windowCommandResult{err: ErrWebViewUnavailable}
+		}
+		return windowCommandResult{err: w.webView.goForward()}
+	case windowCommandWebViewReload:
+		if w.webView == nil {
+			return windowCommandResult{err: ErrWebViewUnavailable}
+		}
+		return windowCommandResult{err: w.webView.reload()}
+	case windowCommandWebViewOpenInBrowser:
+		if w.webView == nil {
+			return windowCommandResult{err: ErrWebViewUnavailable}
+		}
+		return windowCommandResult{err: w.webView.openInBrowser()}
+	case windowCommandWebViewNavigationState:
+		if w.webView == nil {
+			return windowCommandResult{err: ErrWebViewUnavailable}
+		}
+		state, err := w.webView.navigationState()
+		return windowCommandResult{navigation: state, err: err}
 	case windowCommandShowNativeFilePreview:
 		if command.nativeFilePreviewGeneration < w.nativeFilePreviewGeneration {
 			return windowCommandResult{}

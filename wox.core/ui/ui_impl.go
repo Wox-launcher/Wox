@@ -141,7 +141,9 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 }
 
 func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
-	if u.IsVisible(ctx) && !u.IsInManagementView() && !plugin.GetPluginManager().HasVisibleToolbarMsg(ctx) {
+	// In-app notifications only when the primary launcher is showing; secondary
+	// panels should not swallow system notifications.
+	if u.IsVisible(context.Background()) && !u.IsInManagementView() && !plugin.GetPluginManager().HasVisibleToolbarMsg(ctx) {
 		u.applyView(ctx, "show notification message", func(view contract.View) error { return view.ShowNotificationMessage(ctx, msg) })
 	} else {
 		var icon image.Image
@@ -274,7 +276,10 @@ func (u *uiImpl) PushResults(ctx context.Context, payload interface{}) bool {
 
 func (u *uiImpl) IsVisible(ctx context.Context) bool {
 	// Return cached visibility state instead of querying the UI.
-	// The state is updated by PostOnShow/PostOnHide callbacks
+	// The state is updated by PostOnShow/PostOnHide callbacks.
+	// With a session id, report that session. Without one, report the primary
+	// launcher only — secondary panels (WebView preview, Space Quick Look, etc.)
+	// must not make plugins believe the main window is open.
 	sessionID := util.GetContextSessionId(ctx)
 	u.sessionMu.RLock()
 	defer u.sessionMu.RUnlock()
@@ -283,12 +288,24 @@ func (u *uiImpl) IsVisible(ctx context.Context) bool {
 			return visible
 		}
 	}
+	return u.isVisible
+}
+
+// hasAnyVisibleSession reports whether any primary or secondary UI session is
+// currently marked visible. Used for process-wide cleanup that must wait until
+// every window is gone, not just the primary launcher.
+func (u *uiImpl) hasAnyVisibleSession() bool {
+	u.sessionMu.RLock()
+	defer u.sessionMu.RUnlock()
+	if u.isVisible {
+		return true
+	}
 	for _, visible := range u.sessionVisible {
 		if visible {
 			return true
 		}
 	}
-	return u.isVisible
+	return false
 }
 
 // ToggleRecordingMode asks the macOS UI to switch between launcher and capture-friendly window levels.

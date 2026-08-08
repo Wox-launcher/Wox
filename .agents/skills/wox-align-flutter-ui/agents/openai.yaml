@@ -1,0 +1,4 @@
+interface:
+  display_name: "Align Flutter UI"
+  short_description: "Source-first Flutter contract to Go UI alignment"
+  default_prompt: "Use $wox-align-flutter-ui to align a Wox Go UI screen from the archived Flutter UI at dc1b4a0d9, escalating to runtime UI comparison only when needed."

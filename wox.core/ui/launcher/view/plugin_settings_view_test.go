@@ -736,8 +736,18 @@ func TestFormTableDeleteDialogMatchesFlutterActions(t *testing.T) {
 		t.Fatalf("delete dialog geometry = %vx%v radius %v, want 270x110 radius 20", panel.Width, panel.Height, panel.Radius)
 	}
 	content := panel.Child.(woxwidget.Flex)
-	actions := content.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
-	if len(actions.Children) != 2 {
-		t.Fatalf("delete dialog action count = %d, want cancel and delete", len(actions.Children))
+	actions := content.Children[1].(woxwidget.Align)
+	if actions.Horizontal != 1 {
+		t.Fatal("delete actions should stay right-aligned")
+	}
+	buttons := actions.Child.(woxwidget.Flex)
+	if len(buttons.Children) != 2 {
+		t.Fatalf("delete dialog action count = %d, want cancel and delete", len(buttons.Children))
+	}
+	for _, child := range buttons.Children {
+		container := child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+		if container.Width != 0 {
+			t.Fatalf("delete action width = %v, want content-sized Cancel/Delete labels", container.Width)
+		}
 	}
 }

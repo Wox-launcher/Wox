@@ -2,7 +2,9 @@ package view
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -12,13 +14,19 @@ import (
 const formTableListRowHeight = float32(48)
 
 const (
-	formTableDefaultMaxHeight    = float32(300)
-	formTableOperationWidth      = float32(120)
-	formTableColumnSpacing       = float32(10)
-	formTableColumnTooltipWidth  = float32(20)
-	formTableHorizontalMargin    = float32(5)
-	formTableFlexibleColumnWidth = float32(100)
+	formTableDefaultMaxHeight          = float32(300)
+	formTableOperationWidth            = float32(120)
+	formTableColumnSpacing             = float32(10)
+	formTableColumnTooltipWidth        = float32(20)
+	formTableHorizontalMargin          = float32(5)
+	formTableFlexibleColumnWidth       = float32(100)
+	formTableRowFieldGap               = float32(10)
+	formTableMarkdownDescriptionGap    = float32(4)
+	formTableMarkdownDescriptionLine   = float32(15)
+	formTableMarkdownDescriptionRunGap = float32(3)
 )
+
+var formTableMarkdownLinkPattern = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
 
 // FormTableColumn describes one visible inline table column.
 type FormTableColumn struct {
@@ -651,18 +659,15 @@ func FormTableDeleteDialog(props FormTableDeleteDialogProps) woxwidget.Widget {
 	panelWidth := min(float32(270), max(float32(0), props.Width-56))
 	panelHeight := min(float32(110), max(float32(0), props.Height-56))
 	innerWidth := max(float32(0), panelWidth-48)
-	const buttonWidth = float32(64)
-	const buttonGap = float32(16)
-	actionsWidth := buttonWidth*2 + buttonGap
-	actions := woxwidget.Container{
-		Width: innerWidth, Height: 34, Padding: woxwidget.Insets{Left: max(float32(0), innerWidth-actionsWidth)},
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: buttonGap, Children: []woxwidget.Widget{
+	actions := woxwidget.Align{
+		Width: innerWidth, Height: 34, Horizontal: 1, Vertical: 0.5,
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: []woxwidget.Widget{
 			woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "form-table-delete-cancel", Label: props.CancelLabel, Width: buttonWidth, Height: 34,
+				ID: "form-table-delete-cancel", Label: props.CancelLabel, Height: 34,
 				Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme,
 			}),
 			woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "form-table-delete-confirm", Label: props.DeleteLabel, Width: buttonWidth, Height: 34,
+				ID: "form-table-delete-confirm", Label: props.DeleteLabel, Height: 34,
 				Variant: woxcomponent.ButtonPrimary, OnTap: props.OnDelete, Theme: props.Theme,
 			}),
 		}},
@@ -775,6 +780,7 @@ type FormTableRowFieldProps struct {
 	Label               string
 	Description         string
 	DescriptionMarkdown bool
+	Error               string
 	Value               string
 	Detail              string
 	HotkeyLabels        []string
@@ -827,28 +833,108 @@ type FormTableRowFieldProps struct {
 
 // FormTableRowFieldHeight returns the compact split-row height used by Flutter's table editor.
 func FormTableRowFieldHeight(kind, description string, maxLines int) float32 {
-	descriptionHeight := float32(0)
-	if description != "" {
-		descriptionHeight = 22 + float32(strings.Count(description, "\n"))*18
+	return FormTableRowFieldHeightWithError(kind, description, "", maxLines)
+}
+
+// FormTableRowFieldHeightWithError includes inline validation text under a field.
+func FormTableRowFieldHeightWithError(kind, description, errorMessage string, maxLines int) float32 {
+	return FormTableRowFieldHeightFor(kind, description, errorMessage, maxLines, false, 0)
+}
+
+// FormTableRowFieldHeightFor sizes one row field, including wrapped markdown help text.
+func FormTableRowFieldHeightFor(kind, description, errorMessage string, maxLines int, markdown bool, controlWidth float32) float32 {
+	descriptionHeight := formTableRowDescriptionHeight(description, markdown, controlWidth)
+	errorHeight := float32(0)
+	if errorMessage != "" {
+		if description != "" {
+			errorHeight = 22
+		} else {
+			errorHeight = 20
+		}
 	}
 	switch kind {
 	case "label":
 		return 34
 	case "woxImage":
-		return 88 + descriptionHeight
+		return 88 + descriptionHeight + errorHeight
 	case "checkbox":
-		return 32 + descriptionHeight
+		return 32 + descriptionHeight + errorHeight
 	case "app":
-		return 46 + descriptionHeight
+		return 46 + descriptionHeight + errorHeight
 	case "textbox", "password", "dirPath":
 		controlHeight := float32(34)
 		if maxLines > 1 {
 			controlHeight = 14 + float32(min(maxLines, 8))*20
 		}
-		return controlHeight + 4 + descriptionHeight
+		return controlHeight + 4 + descriptionHeight + errorHeight
 	default:
-		return 38 + descriptionHeight
+		return 38 + descriptionHeight + errorHeight
 	}
+}
+
+// formTableRowDescriptionHeight mirrors Flutter's intrinsic help-text sizing for plain and markdown tips.
+func formTableRowDescriptionHeight(description string, markdown bool, controlWidth float32) float32 {
+	if description == "" {
+		return 0
+	}
+	if !markdown {
+		return 22 + float32(strings.Count(description, "\n"))*18
+	}
+	plain := formTableMarkdownPlainText(description)
+	paragraphs := strings.Split(plain, "\n\n")
+	height := float32(0)
+	for index, paragraph := range paragraphs {
+		if index > 0 {
+			height += formTableMarkdownDescriptionGap
+		}
+		lines := formTableEstimateWrappedLines(strings.TrimSpace(paragraph), controlWidth)
+		height += float32(lines)*formTableMarkdownDescriptionLine + float32(max(0, lines-1))*formTableMarkdownDescriptionRunGap
+	}
+	// Keep the same trailing slack plain TextBlock descriptions reserve under the control gap.
+	return height + 4
+}
+
+// formTableMarkdownPlainText keeps link labels so wrap estimates match the rendered tip.
+func formTableMarkdownPlainText(value string) string {
+	return formTableMarkdownLinkPattern.ReplaceAllString(value, "$1")
+}
+
+// formTableEstimateWrappedLines approximates Flutter markdown wrapping without a native text measurer.
+func formTableEstimateWrappedLines(value string, width float32) int {
+	if value == "" {
+		return 1
+	}
+	if width <= 0 {
+		return strings.Count(value, "\n") + 1
+	}
+	charWidth := float32(7)
+	maxChars := max(1, int(width/charWidth))
+	lines := 0
+	for _, paragraph := range strings.Split(value, "\n") {
+		if strings.TrimSpace(paragraph) == "" {
+			lines++
+			continue
+		}
+		current := 0
+		lines++
+		for _, word := range strings.Fields(paragraph) {
+			need := utf8.RuneCountInString(word)
+			if current == 0 {
+				current = need
+			} else if current+1+need <= maxChars {
+				current += 1 + need
+				continue
+			} else {
+				lines++
+				current = need
+			}
+			for current > maxChars {
+				lines++
+				current -= maxChars
+			}
+		}
+	}
+	return max(1, lines)
 }
 
 // FormTableRowField renders labels, controls, and help text with the same split layout as Flutter.
@@ -859,19 +945,27 @@ func FormTableRowField(props FormTableRowFieldProps) woxwidget.Widget {
 	control := formTableRowControl(props, controlWidth, controlHeight)
 	rightChildren := []woxwidget.Widget{control}
 	if props.Description != "" {
-		descriptionLines := strings.Count(props.Description, "\n") + 1
+		descriptionHeight := formTableRowDescriptionHeight(props.Description, props.DescriptionMarkdown, controlWidth)
+		// DescriptionHeight includes trailing slack used by the row height formula; the widget itself should not.
+		widgetHeight := max(float32(18), descriptionHeight-4)
 		var description woxwidget.Widget = woxwidget.TextBlock{
-			Value: props.Description, Width: controlWidth, Height: float32(descriptionLines) * 18, MaxLines: descriptionLines, LineHeight: 18,
+			Value: props.Description, Width: controlWidth, Height: widgetHeight, MaxLines: max(1, strings.Count(props.Description, "\n")+1), LineHeight: 18,
 			Style: woxui.TextStyle{Size: 12}, Color: formTableAlpha(props.Theme.ActionText, 154),
 		}
 		if props.DescriptionMarkdown {
 			description = woxcomponent.WoxMarkdown(woxcomponent.MarkdownProps{
 				ID: props.ID + "-description", Document: woxcomponent.ParseMarkdown(props.Description), Width: controlWidth,
-				Theme: props.Theme, Window: props.Window, OnOpenLink: props.OnOpenLink,
+				FontSize: 12, BlockGap: formTableMarkdownDescriptionGap, ExcludeLinkFocus: true, Theme: props.Theme, Window: props.Window, OnOpenLink: props.OnOpenLink,
 			})
-			description = woxwidget.Container{Width: controlWidth, Height: float32(descriptionLines) * 18, Child: description}
+			description = woxwidget.Container{Width: controlWidth, Height: widgetHeight, Child: description}
 		}
 		rightChildren = append(rightChildren, description)
+	}
+	if props.Error != "" {
+		rightChildren = append(rightChildren, woxwidget.TextBlock{
+			Value: props.Error, Width: controlWidth, Height: 16, MaxLines: 1, LineHeight: 16,
+			Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ErrorText,
+		})
 	}
 	labelTop := float32(8)
 	if props.Kind == "checkbox" {
@@ -1184,7 +1278,8 @@ func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 	body := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "form-table-row-scroll", Width: props.Width, Height: bodyHeight,
 		ContentHeight: max(bodyHeight, props.ContentHeight), KeepVisible: props.KeepVisible,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: props.Rows}, ThumbColor: props.Theme.ResultSubtitle,
+		// Flutter's table update dialog pads each field with bottom: 10.
+		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: formTableRowFieldGap, Children: props.Rows}, ThumbColor: props.Theme.ResultSubtitle,
 	})
 	children := make([]woxwidget.Widget, 0, 4)
 	if props.Header != nil {
@@ -1200,11 +1295,14 @@ func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 			Value: props.Status, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ErrorText,
 		}})
 	}
-	buttons := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 28, Children: []woxwidget.Widget{
-		woxwidget.Painter{Width: max(float32(0), props.Width-208), Height: 36},
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-row-cancel", Label: props.CancelLabel, Width: 70, Height: 36, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-row-save", Label: props.SaveLabel, Width: 82, Height: 36, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
-	}}
+	// Flutter sizes Cancel/Save from translated labels; keep them right-aligned without fixed widths.
+	buttons := woxwidget.Align{
+		Width: props.Width, Height: 36, Horizontal: 1, Vertical: 0.5,
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-row-cancel", Label: props.CancelLabel, Height: 36, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-row-save", Label: props.SaveLabel, Height: 36, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
+		}},
+	}
 	children = append(children, woxwidget.Container{Width: props.Width, Height: footerHeight, Padding: woxwidget.Insets{Top: 8}, Child: buttons})
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}
 }

@@ -15,19 +15,17 @@ type WebViewContent struct {
 	InjectCSS     string
 	CacheDisabled bool
 	CacheKey      string
-	ToolbarLabels WebViewToolbarLabels
 }
 
-// WebViewToolbarLabels contains localized native toolbar help text.
-type WebViewToolbarLabels struct {
-	GoBack        string
-	Refresh       string
-	GoForward     string
-	OpenInBrowser string
-	HideWox       string
+// WebViewNavigationState mirrors the live browser chrome for an attached WebView.
+type WebViewNavigationState struct {
+	URL          string
+	CanGoBack    bool
+	CanGoForward bool
 }
 
 // WebViewTooltipEvent reports native toolbar hover in virtual desktop coordinates.
+// Deprecated: floating WebView toolbars are replaced by the Go UI title bar.
 type WebViewTooltipEvent struct {
 	Visible bool
 	Text    string
@@ -56,4 +54,44 @@ func (w *Window) HideWebView() error {
 		return errors.New("window is not initialized")
 	}
 	return w.native.hideWebView()
+}
+
+// WebViewGoBack navigates the active WebView to the previous history entry when available.
+func (w *Window) WebViewGoBack() error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.webViewGoBack()
+}
+
+// WebViewGoForward navigates the active WebView to the next history entry when available.
+func (w *Window) WebViewGoForward() error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.webViewGoForward()
+}
+
+// WebViewReload reloads the active WebView document.
+func (w *Window) WebViewReload() error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.webViewReload()
+}
+
+// WebViewOpenInBrowser opens the active WebView's http(s) URL in the system browser.
+func (w *Window) WebViewOpenInBrowser() error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.webViewOpenInBrowser()
+}
+
+// WebViewNavigationState returns the latest known navigation chrome for the active WebView.
+func (w *Window) WebViewNavigationState() (WebViewNavigationState, error) {
+	if w == nil || w.native == nil {
+		return WebViewNavigationState{}, errors.New("window is not initialized")
+	}
+	return w.native.webViewNavigationState()
 }

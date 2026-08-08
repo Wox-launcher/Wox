@@ -319,7 +319,7 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 		contentWidth := a.formTableRowEditorContentWidth(snapshot.definition, labelWidth)
 		panelWidth = max(float32(0), min(contentWidth+48, width-64))
 		innerWidth = max(float32(0), panelWidth-48)
-		contentHeight := a.formTableRowContentHeight(snapshot.rowForm.definitions)
+		contentHeight := a.formTableRowContentHeightForWidth(snapshot.rowForm.definitions, snapshot.fieldErrors, max(float32(0), innerWidth-20), labelWidth)
 		statusHeight := float32(0)
 		if snapshot.status != "" {
 			statusHeight = 28
@@ -420,12 +420,29 @@ func (a *App) formTableRowEditorContentWidth(definition formDefinition, labelWid
 	return max(float32(600), labelWidth+max(float32(320), maxColumnWidth))
 }
 
-func (a *App) formTableRowContentHeight(definitions []formDefinition) float32 {
+func (a *App) formTableRowContentHeight(definitions []formDefinition, fieldErrors map[string]string) float32 {
+	return a.formTableRowContentHeightForWidth(definitions, fieldErrors, 0, 0)
+}
+
+// formTableRowContentHeightForWidth sizes the scroll content with Flutter's field gap and wrapped markdown tips.
+func (a *App) formTableRowContentHeightForWidth(definitions []formDefinition, fieldErrors map[string]string, fieldWidth, labelWidth float32) float32 {
 	height := float32(0)
+	visible := 0
+	controlWidth := max(float32(0), fieldWidth-labelWidth-10)
 	for _, definition := range definitions {
-		height += launcherview.FormTableRowFieldHeight(definition.Type, a.translate(definition.Value.Tooltip), definition.Value.MaxLines)
+		visible++
+		markdown := formTableRowFieldMarkdown(definition)
+		height += launcherview.FormTableRowFieldHeightFor(definition.Type, a.translate(definition.Value.Tooltip), fieldErrors[definition.Value.Key], definition.Value.MaxLines, markdown, controlWidth)
+	}
+	if visible > 1 {
+		height += float32(visible-1) * 10
 	}
 	return height
+}
+
+// formTableRowFieldMarkdown matches Flutter tooltips that render as markdown in the row editor.
+func formTableRowFieldMarkdown(definition formDefinition) bool {
+	return definition.Value.Tooltip == "i18n:ui_query_hotkeys_query_tooltip"
 }
 
 func (a *App) buildFormTableList(snapshot *formTableEditorSnapshot, palette uiPalette, width, height float32) woxwidget.Widget {
@@ -467,6 +484,7 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 	}
 	labelWidth := a.formTableRowLabelWidth(definitions)
 	fieldWidth := max(float32(0), width-20)
+	controlWidth := max(float32(0), fieldWidth-labelWidth-10)
 	rows := make([]woxwidget.Widget, 0, len(rowForm.definitions))
 	contentHeight := float32(0)
 	var keepVisible *woxwidget.ScrollRange
@@ -474,12 +492,17 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 		if snapshot.definition.Value.Key == "QueryHotkeys" && !queryHotkeyFieldVisible(snapshot.queryPreset, definition.Value.Key, snapshot.rowIndex >= 0) {
 			continue
 		}
-		fieldHeight := launcherview.FormTableRowFieldHeight(definition.Type, a.translate(definition.Value.Tooltip), definition.Value.MaxLines)
+		fieldError := snapshot.fieldErrors[definition.Value.Key]
+		markdown := formTableRowFieldMarkdown(definition)
+		fieldHeight := launcherview.FormTableRowFieldHeightFor(definition.Type, a.translate(definition.Value.Tooltip), fieldError, definition.Value.MaxLines, markdown, controlWidth)
+		if len(rows) > 0 {
+			contentHeight += 10
+		}
 		if rowForm.focused == index {
 			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + fieldHeight}
 		}
 		contentHeight += fieldHeight
-		rows = append(rows, a.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth))
+		rows = append(rows, a.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth, fieldError))
 	}
 	title := ""
 	if snapshot.definition.Value.Key == "QueryHotkeys" {
@@ -511,7 +534,7 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 }
 
 // buildFormTableRowField maps the portable field definition onto the compact table-editor controls.
-func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, labelWidth float32) woxwidget.Widget {
+func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, labelWidth float32, fieldError string) woxwidget.Widget {
 	value := definition.Value
 	fieldValue := fields.values[value.Key]
 	focused := fields.active && fields.focused == index
@@ -519,10 +542,12 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 	if !focused {
 		state = woxui.TextEditingState{Text: fieldValue}
 	}
-	height := launcherview.FormTableRowFieldHeight(definition.Type, a.translate(value.Tooltip), value.MaxLines)
+	markdown := formTableRowFieldMarkdown(definition)
+	controlWidth := max(float32(0), width-labelWidth-10)
+	height := launcherview.FormTableRowFieldHeightFor(definition.Type, a.translate(value.Tooltip), fieldError, value.MaxLines, markdown, controlWidth)
 	props := launcherview.FormTableRowFieldProps{
 		ID: fmt.Sprintf("form-table-row-field-%d", index), Kind: definition.Type, Label: a.translate(value.Label), Description: a.translate(value.Tooltip),
-		Value: fieldValue, Width: width, Height: height, LabelWidth: labelWidth, State: state, Focused: focused, Protected: definition.Type == "password",
+		DescriptionMarkdown: markdown, Error: fieldError, Value: fieldValue, Width: width, Height: height, LabelWidth: labelWidth, State: state, Focused: focused, Protected: definition.Type == "password",
 		MaxLines: max(1, value.MaxLines), Window: a.formTableNativeWindow(), Theme: palette.componentTheme(),
 		EmojiLabel: a.translate("i18n:ui_image_editor_emoji"), UploadLabel: a.translate("i18n:ui_image_editor_upload_image"), BrowseLabel: a.translate("i18n:ui_runtime_browse"),
 		SelectLabel: a.translate("i18n:ui_hotkey_ignore_apps_select"),
@@ -552,8 +577,7 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		},
 		OnKey: callbacks.onKey,
 	}
-	if value.Tooltip == "i18n:ui_query_hotkeys_query_tooltip" {
-		props.DescriptionMarkdown = true
+	if markdown {
 		props.TrailingLabel = "{}"
 		props.OnTrailingTap = func(anchor woxui.Rect) { a.openFormTableQueryVariablePicker(index, anchor) }
 		props.OnOpenLink = a.openAboutLink

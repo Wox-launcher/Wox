@@ -24,6 +24,7 @@ extern void woxGoDarwinCloseRequested(uintptr_t context);
 extern void woxGoDarwinProtocolURL(uintptr_t context, const char *url);
 extern void woxGoDarwinWebViewHideRequested(uintptr_t context);
 extern void woxGoDarwinWebViewTooltip(uintptr_t context, int32_t visible, const char *text, float x, float y, float width, float height);
+extern void woxGoDarwinWebViewNavigationChanged(uintptr_t context, const char *url, int32_t can_go_back, int32_t can_go_forward);
 extern void woxGoDarwinCall(uintptr_t context);
 extern void woxGoDarwinFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
 extern void woxGoDarwinFrameSync(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale, int32_t transactional);
@@ -1253,6 +1254,8 @@ static void *wox_web_view_toolbar_forward_context = &wox_web_view_toolbar_forwar
 }
 @end
 
+static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView *web_view);
+
 @interface WoxWebViewMessageHandler : NSObject <WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate> {
 @public
   WoxDarwinWindow *_owner;
@@ -1292,6 +1295,16 @@ static void *wox_web_view_toolbar_forward_context = &wox_web_view_toolbar_forwar
     return;
   }
   decisionHandler(WKNavigationActionPolicyAllow);
+}
+
+- (void)webView:(WKWebView *)webView didCommitNavigation:(WKNavigation *)navigation {
+  (void)navigation;
+  notify_darwin_webview_navigation(_owner, webView);
+}
+
+- (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
+  (void)navigation;
+  notify_darwin_webview_navigation(_owner, webView);
 }
 @end
 
@@ -2460,7 +2473,9 @@ int32_t wox_darwin_window_open_external_url(WoxDarwinWindow *window, const char 
   return result;
 }
 
-int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, const char *go_back_label, const char *refresh_label, const char *go_forward_label, const char *open_in_browser_label, const char *hide_wox_label, float x, float y, float width, float height) {
+static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView *web_view);
+
+int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height) {
   if (window == NULL || url == NULL || html == NULL || inject_css == NULL || cache_key == NULL || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
@@ -2474,11 +2489,6 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
     NSString *html_value = web_view_string(html);
     NSString *css_value = web_view_string(inject_css);
     NSString *key_value = web_view_string(cache_key);
-    NSString *go_back_value = web_view_string(go_back_label);
-    NSString *refresh_value = web_view_string(refresh_label);
-    NSString *go_forward_value = web_view_string(go_forward_label);
-    NSString *open_in_browser_value = web_view_string(open_in_browser_label);
-    NSString *hide_wox_value = web_view_string(hide_wox_label);
     bool use_cache = cache_disabled == 0 && key_value.length > 0;
     NSString *signature = css_value;
     NSString *content_key = html_value.length > 0 ? [@"html|" stringByAppendingString:html_value] : [@"url|" stringByAppendingString:url_value];
@@ -2526,23 +2536,12 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
     }
     web_view.frame = NSMakeRect(x, y, width, height);
     web_view.hidden = NO;
-    bool toolbar_attached = window->web_view_toolbar.superview != nil;
-    if (window->web_view_toolbar == nil) {
-      window->web_view_toolbar = [[WoxWebViewToolbar alloc] initWithOwner:window];
+    // Floating overlay toolbar is replaced by the Go UI WebView title bar.
+    if (window->web_view_toolbar != nil) {
+      [window->web_view_toolbar setWebView:nil];
+      [window->web_view_toolbar removeFromSuperview];
     }
-    [window->web_view_toolbar setWebView:web_view];
-    [window->web_view_toolbar setLabelsBack:go_back_value
-                                    refresh:refresh_value
-                                    forward:go_forward_value
-                              openInBrowser:open_in_browser_value
-                                    hideWox:hide_wox_value];
-    [window->web_view_toolbar positionOverWebViewFrame:web_view.frame];
-    if (!toolbar_attached) {
-      [window->view addSubview:window->web_view_toolbar positioned:NSWindowAbove relativeTo:web_view];
-    }
-    if (!same_active || !toolbar_attached || should_load) {
-      [window->web_view_toolbar showTemporarily];
-    }
+    notify_darwin_webview_navigation(window, web_view);
 
     if (!should_load) {
       return;
@@ -2557,6 +2556,106 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
       return;
     }
     [web_view loadRequest:[NSURLRequest requestWithURL:target]];
+  });
+  return result;
+}
+
+
+static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView *web_view) {
+  if (window == NULL || window->closed || window->context == 0 || web_view == nil) {
+    return;
+  }
+  NSString *url = web_view.URL.absoluteString ?: @"";
+  woxGoDarwinWebViewNavigationChanged(window->context, url.UTF8String, web_view.canGoBack ? 1 : 0, web_view.canGoForward ? 1 : 0);
+}
+
+int32_t wox_darwin_window_webview_go_back(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed || window->active_web_view == nil) {
+      result = -1;
+      return;
+    }
+    if (window->active_web_view.canGoBack) {
+      [window->active_web_view goBack];
+    }
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_webview_go_forward(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed || window->active_web_view == nil) {
+      result = -1;
+      return;
+    }
+    if (window->active_web_view.canGoForward) {
+      [window->active_web_view goForward];
+    }
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_webview_reload(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed || window->active_web_view == nil) {
+      result = -1;
+      return;
+    }
+    [window->active_web_view reload];
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_webview_open_in_browser(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed || window->active_web_view == nil) {
+      result = -1;
+      return;
+    }
+    NSURL *url = window->active_web_view.URL;
+    NSString *scheme = url.scheme.lowercaseString;
+    if (url.host.length > 0 && ([scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"])) {
+      [[NSWorkspace sharedWorkspace] openURL:url];
+      return;
+    }
+    result = -1;
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_webview_navigation_state(WoxDarwinWindow *window, char **url, int32_t *can_go_back, int32_t *can_go_forward) {
+  if (window == NULL || url == NULL || can_go_back == NULL || can_go_forward == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    *url = NULL;
+    *can_go_back = 0;
+    *can_go_forward = 0;
+    if (window->closed || window->active_web_view == nil) {
+      result = -1;
+      return;
+    }
+    NSString *value = window->active_web_view.URL.absoluteString ?: @"";
+    *url = strdup(value.UTF8String);
+    *can_go_back = window->active_web_view.canGoBack ? 1 : 0;
+    *can_go_forward = window->active_web_view.canGoForward ? 1 : 0;
   });
   return result;
 }

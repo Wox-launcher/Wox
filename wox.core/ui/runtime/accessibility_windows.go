@@ -20,6 +20,18 @@ func init() {
 }
 
 func updateWindowsAccessibility(window *platformWindow, tree AccessibilityTree) error {
+	var updateErr error
+	callErr := platformCall(func() {
+		updateErr = updateWindowsAccessibilityOnUI(window, tree)
+	})
+	if callErr != nil {
+		return callErr
+	}
+	return updateErr
+}
+
+// updateWindowsAccessibilityOnUI keeps provider creation and UIA events on the window's COM STA.
+func updateWindowsAccessibilityOnUI(window *platformWindow, tree AccessibilityTree) error {
 	window.mu.Lock()
 	hwnd := window.hwnd
 	window.mu.Unlock()
@@ -111,11 +123,12 @@ func woxGoWindowsAccessibilityAction(owner C.uintptr_t, nodeID C.uint64_t, actio
 		return 0
 	}
 	window := windowValue.(*platformWindow)
-	var actionErr error
-	callErr := platformCall(func() {
-		actionErr = performNativeAccessibilityAction(window, AccessibilityNodeID(nodeID), AccessibilityAction(C.GoString(action)), C.GoString(value))
+	actionValue := AccessibilityAction(C.GoString(action))
+	textValue := C.GoString(value)
+	postErr := platformPost(func() {
+		_ = performNativeAccessibilityAction(window, AccessibilityNodeID(nodeID), actionValue, textValue)
 	})
-	if callErr != nil || actionErr != nil {
+	if postErr != nil {
 		return 0
 	}
 	return 1

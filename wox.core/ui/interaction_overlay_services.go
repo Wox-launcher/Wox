@@ -156,6 +156,17 @@ func (s *CoreServices) DefaultChatModel(ctx context.Context, sessionID string) (
 	return chater.GetDefaultModel(ctx), nil
 }
 
+// SetDefaultChatModel persists the chat UI model selection for the next new chat draft.
+func (s *CoreServices) SetDefaultChatModel(ctx context.Context, sessionID string, model common.Model) error {
+	ctx = uiServiceContext(ctx, sessionID)
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		return errors.New("ai chat plugin not found")
+	}
+	chater.SetDefaultModel(ctx, model)
+	return nil
+}
+
 // DeleteChat removes one persisted chat.
 func (s *CoreServices) DeleteChat(ctx context.Context, sessionID string, chatID string) error {
 	ctx = uiServiceContext(ctx, sessionID)

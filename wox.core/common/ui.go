@@ -100,7 +100,9 @@ type UI interface {
 	// Returns true if results were accepted by UI, false if query is no longer active.
 	// The payload should be plugin.PushResultsPayload, but we use interface{} to avoid circular dependency.
 	PushResults(ctx context.Context, payload interface{}) bool
-	// IsVisible returns true if the Wox window is currently visible
+	// IsVisible reports primary-launcher visibility when session id is empty,
+	// or the named session when one is present. Used for refresh gating and
+	// in-app notification routing.
 	IsVisible(ctx context.Context) bool
 
 	// AI chat plugin related methods

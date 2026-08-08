@@ -118,6 +118,27 @@ func TestFormTableRowAppControlMatchesFlutterSelectorLayout(t *testing.T) {
 	}
 }
 
+func TestFormTableRowEditorActionsSizeToTranslatedLabels(t *testing.T) {
+	editor := FormTableRowEditor(FormTableRowEditorProps{
+		Width: 700, Height: 400, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.Theme{},
+	}).(woxwidget.Flex)
+	footer := editor.Children[len(editor.Children)-1].(woxwidget.Container)
+	actions := footer.Child.(woxwidget.Align)
+	if actions.Horizontal != 1 || actions.Width != 700 {
+		t.Fatalf("row editor actions alignment = horizontal %v width %v", actions.Horizontal, actions.Width)
+	}
+	buttons := actions.Child.(woxwidget.Flex)
+	if len(buttons.Children) != 2 || buttons.Gap != 12 {
+		t.Fatalf("row editor actions = %d gap %.0f", len(buttons.Children), buttons.Gap)
+	}
+	for _, child := range buttons.Children {
+		container := child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+		if container.Width != 0 {
+			t.Fatalf("action button width = %v, want content-sized Cancel/Save like Flutter", container.Width)
+		}
+	}
+}
+
 func TestQueryHotkeyEditorHeaderUsesFourEqualPresets(t *testing.T) {
 	selected := ""
 	demoKind := ""
@@ -161,5 +182,60 @@ func TestFormTableRowDescriptionPreservesFlutterParagraphs(t *testing.T) {
 	help := right.Children[1].(woxwidget.TextBlock)
 	if help.MaxLines != 3 || help.Height != 54 {
 		t.Fatalf("description lines = %d height %.0f", help.MaxLines, help.Height)
+	}
+}
+
+func TestFormTableRowMarkdownDescriptionReservesWrappedHeight(t *testing.T) {
+	description := "The query when the hotkey is triggered. Type { to insert dynamic variables.\n\nUsing the active browser URL variable requires the Wox Chrome extension: [Install Wox Chrome extension](https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh)"
+	plainHeight := FormTableRowFieldHeight("textbox", description, 1)
+	markdownHeight := FormTableRowFieldHeightFor("textbox", description, "", 1, true, 500)
+	if markdownHeight <= plainHeight {
+		t.Fatalf("markdown height = %.0f, want more than newline-only height %.0f so the tip cannot overlap the next field", markdownHeight, plainHeight)
+	}
+	row := FormTableRowField(FormTableRowFieldProps{
+		Kind: "textbox", Description: description, DescriptionMarkdown: true, Width: 580, Height: markdownHeight, LabelWidth: 80, MaxLines: 1, Theme: woxcomponent.Theme{},
+	}).(woxwidget.Container)
+	right := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
+	help := right.Children[1].(woxwidget.Container)
+	if help.Height < 54 {
+		t.Fatalf("markdown help height = %.0f, want room for wrapped chrome-extension tip", help.Height)
+	}
+	markdown := help.Child.(woxwidget.Flex)
+	if markdown.Gap != formTableMarkdownDescriptionGap {
+		t.Fatalf("markdown block gap = %.0f, want compact form gap %.0f", markdown.Gap, formTableMarkdownDescriptionGap)
+	}
+}
+
+func TestFormTableRowEditorUsesFlutterFieldGap(t *testing.T) {
+	editor := FormTableRowEditor(FormTableRowEditorProps{
+		Width: 500, Height: 320, Title: "Add",
+		Rows:          []woxwidget.Widget{woxwidget.Container{Height: 40}, woxwidget.Container{Height: 40}},
+		ContentHeight: 400, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.Theme{},
+	}).(woxwidget.Flex)
+	body := editor.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	content := body.Content.(woxwidget.Flex)
+	if content.Gap != formTableRowFieldGap {
+		t.Fatalf("row gap = %.0f, want Flutter bottom padding %.0f", content.Gap, formTableRowFieldGap)
+	}
+}
+
+func TestFormTableRowFieldRendersInlineValidationError(t *testing.T) {
+	errorMessage := "Value cannot be empty"
+	height := FormTableRowFieldHeightWithError("textbox", "Website keyword.", errorMessage, 1)
+	withoutError := FormTableRowFieldHeight("textbox", "Website keyword.", 1)
+	if height <= withoutError {
+		t.Fatalf("error height = %.0f, want more than %.0f without error", height, withoutError)
+	}
+	row := FormTableRowField(FormTableRowFieldProps{
+		Kind: "textbox", Label: "Keyword", Description: "Website keyword.", Error: errorMessage,
+		Width: 500, Height: height, LabelWidth: 80, MaxLines: 1, Theme: woxcomponent.Theme{ErrorText: woxui.Color{R: 255, A: 255}},
+	}).(woxwidget.Container)
+	right := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
+	if len(right.Children) != 3 {
+		t.Fatalf("right children = %d, want control, description, and error", len(right.Children))
+	}
+	errorText := right.Children[2].(woxwidget.TextBlock)
+	if errorText.Value != errorMessage || errorText.Color.R != 255 {
+		t.Fatalf("inline error = %#v", errorText)
 	}
 }

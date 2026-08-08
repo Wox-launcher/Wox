@@ -395,7 +395,7 @@ func (a *App) openFormTableEmojiPicker(index int) {
 		fieldIndex:   index,
 		initialEmoji: strings.TrimSpace(state.rowForm.values[state.rowForm.definitions[index].Value.Key]),
 	}
-	state.status = ""
+	clearFormTableRowValidationLocked(state)
 	a.updateFormTableTextInput(false)
 	a.invalidateFormTableWindow()
 }
@@ -405,7 +405,7 @@ func (a *App) closeFormTableEmojiPicker() {
 	textInput := false
 	if state != nil && state.emojiPicker != nil {
 		state.emojiPicker = nil
-		state.status = ""
+		clearFormTableRowValidationLocked(state)
 		textInput = state.rowForm != nil && state.rowForm.editor != nil
 	}
 	a.updateFormTableTextInput(textInput)
@@ -424,7 +424,7 @@ func (a *App) chooseFormTableEmoji(emoji string) {
 	}
 	state.rowForm.values[state.rowForm.definitions[fieldIndex].Value.Key] = emoji
 	state.emojiPicker = nil
-	state.status = ""
+	clearFormTableRowValidationLocked(state)
 	setFormFieldsFocusLocked(state.rowForm, fieldIndex)
 	a.updateFormTableTextInput(false)
 	a.invalidateFormTableWindow()
