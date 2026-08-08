@@ -20,4 +20,6 @@ func (m *Manager) ConfigureCrashCapture(ctx context.Context) error {
 
 func (m *Manager) addWindowsCrashDumps(zipWriter *zip.Writer) {}
 
-func (m *Manager) waitForCrashArtifacts(runStartedAt time.Time) {}
+func (m *Manager) waitForCrashArtifacts(pid int, runStartedAt time.Time) string {
+	return ""
+}

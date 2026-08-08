@@ -433,7 +433,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if err := settingsWindow.SetTextInputState(woxui.TextInputState{}); err != nil {
 		return err
 	}
-	if err := settingsWindow.Center(woxui.Size{Width: settingsWindowWidth, Height: settingsWindowHeight}); err != nil {
+	if err := settingsWindow.CenterOnMouseScreen(woxui.Size{Width: settingsWindowWidth, Height: settingsWindowHeight}); err != nil {
 		return err
 	}
 	if err := a.notifySettingViewChanged(true); err != nil {

@@ -220,23 +220,16 @@ func onboardingRailStep(step OnboardingStep, index, active int, width float32, o
 func onboardingPage(props OnboardingProps, step OnboardingStep, height float32) woxwidget.Widget {
 	width := max(float32(0), props.Width-OnboardingSidebarWidth)
 	innerWidth := max(float32(0), width-76)
-	contentHeight := float32(136)
-	if step.ID == "welcome" {
-		contentHeight = 138
-	}
-	if step.ID == "permissions" {
-		contentHeight = 172
-	}
-	if step.ID == "glance" {
-		contentHeight = 154
-	}
+	contentHeight := onboardingPageContentHeight(props, step, innerWidth)
 	content := onboardingStepContent(props, step, innerWidth, contentHeight)
 	previewHeight := max(float32(120), height-30-44-16-contentHeight-18-20)
 	return woxwidget.Container{
 		Width: width, Height: height, Padding: woxwidget.Insets{Left: 38, Top: 30, Right: 38, Bottom: 20},
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 16, Children: []woxwidget.Widget{
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 			woxwidget.TextBlock{Value: step.Title, Width: innerWidth, Height: 44, MaxLines: 1, Style: woxui.TextStyle{Size: 32, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
+			woxwidget.Container{Width: innerWidth, Height: 16},
 			content,
+			woxwidget.Container{Width: innerWidth, Height: 18},
 			woxwidget.Container{
 				Width: innerWidth, Height: previewHeight, Radius: 8, Color: settingsColorAlpha(props.Theme.ResultTitle, 13),
 				BorderColor: settingsColorAlpha(props.Theme.ResultTitle, 28), BorderWidth: 1, Padding: woxwidget.UniformInsets(10),
@@ -246,6 +239,27 @@ func onboardingPage(props OnboardingProps, step OnboardingStep, height float32) 
 	}
 }
 
+// onboardingPageContentHeight keeps control-heavy steps stable while matching Flutter's intrinsic info-panel height for text-only steps.
+func onboardingPageContentHeight(props OnboardingProps, step OnboardingStep, width float32) float32 {
+	switch step.ID {
+	case "welcome":
+		return 138
+	case "permissions":
+		return 172
+	case "glance":
+		return 154
+	case "mainHotkey", "selectionHotkey":
+		return 90
+	}
+
+	textHeight := float32(21)
+	if props.Window != nil {
+		layout := woxwidget.LayoutTextBlock(props.Window, props.Labels[step.ID+".body"], woxui.TextStyle{Size: 14}, max(float32(0), width-44), 4, 21)
+		textHeight = layout.Size.Height
+	}
+	return 22 + textHeight + 22
+}
+
 func onboardingStepContent(props OnboardingProps, step OnboardingStep, width, height float32) woxwidget.Widget {
 	if step.ID == "permissions" {
 		return onboardingPermissions(props, width, height)
@@ -253,7 +267,7 @@ func onboardingStepContent(props OnboardingProps, step OnboardingStep, width, he
 	if step.ID == "mainHotkey" || step.ID == "selectionHotkey" {
 		return woxcomponent.WoxPanel(woxcomponent.PanelProps{
 			Width: width, Height: height, Padding: woxwidget.Insets{Left: 18, Top: 16, Right: 18, Bottom: 12},
-			BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 46), Theme: props.Theme,
+			Color: settingsColorAlpha(props.Theme.ResultTitle, 10), BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 46), Theme: props.Theme,
 			Child: props.Hotkey,
 		})
 	}
@@ -265,10 +279,10 @@ func onboardingStepContent(props OnboardingProps, step OnboardingStep, width, he
 		return onboardingWelcome(props, width, height, description)
 	}
 	return woxcomponent.WoxPanel(woxcomponent.PanelProps{
-		Width: width, Height: height, Padding: woxwidget.Insets{Left: 22, Top: 22, Right: 22, Bottom: 18},
-		BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 40), Theme: props.Theme,
+		Width: width, Height: height, Padding: woxwidget.UniformInsets(22),
+		Color: settingsColorAlpha(props.Theme.ResultTitle, 14), BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 40), Theme: props.Theme,
 		Child: woxwidget.TextBlock{
-			Value: description, Width: width - 44, Height: height - 40, MaxLines: 4,
+			Value: description, Width: width - 44, MaxLines: 4,
 			Style: woxui.TextStyle{Size: 14}, LineHeight: 21, Color: props.Theme.ResultTitle,
 		},
 	})
@@ -386,7 +400,7 @@ func onboardingGlance(props OnboardingProps, width, height float32) woxwidget.Wi
 	}
 	return woxcomponent.WoxPanel(woxcomponent.PanelProps{
 		Width: width, Height: height, Padding: woxwidget.Insets{Left: 22, Top: 18, Right: 22, Bottom: 14},
-		BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 40), Theme: props.Theme,
+		Color: settingsColorAlpha(props.Theme.ResultTitle, 14), BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 40), Theme: props.Theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: children},
 	})
 }

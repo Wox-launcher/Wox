@@ -77,6 +77,46 @@ func SearchGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.search", size, color)
 }
 
+// WindowsGlyph returns the four-pane Windows logo used by simulated desktop chrome.
+func WindowsGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("system.windows", size, color)
+}
+
+// BrowserGlyph returns the compact browser icon used by simulated pinned apps.
+func BrowserGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("system.browser", size, color)
+}
+
+// CodeGlyph returns the compact editor icon used by simulated pinned apps.
+func CodeGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("system.code", size, color)
+}
+
+// WifiGlyph returns the compact wireless indicator used by system chrome.
+func WifiGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("system.wifi", size, color)
+}
+
+// VolumeGlyph returns the compact speaker indicator used by system chrome.
+func VolumeGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("system.volume", size, color)
+}
+
+// BluetoothGlyph returns the compact Bluetooth indicator used by system chrome.
+func BluetoothGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("system.bluetooth", size, color)
+}
+
+// AppsGlyph returns the launcher grid icon used by simulated Windows chrome.
+func AppsGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("usage.apps", size, color)
+}
+
+// FolderGlyph returns the outlined folder icon used by simulated pinned apps.
+func FolderGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.folder-open", size, color)
+}
+
 // AddGlyph returns the shared add icon.
 func AddGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.add", size, color)

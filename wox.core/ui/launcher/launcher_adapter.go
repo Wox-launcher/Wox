@@ -226,10 +226,27 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale)
 		overlay = launcherPreparedSection("launcher-table-overlay-section", "table-overlay", launcherPreparedSectionProps{Signature: launcherSectionSignature(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale), Width: width, Height: height, Child: overlay})
 	}
+	previewOnly := launcherPreviewOnly(snapshot)
 	return launcherview.LauncherView(launcherview.LauncherViewProps{
 		Width: width, Height: height, Header: header, Refinements: refinements, Content: content, Footer: footer,
 		QueryAtBottom: snapshot.show.QueryBoxAtBottom, Floating: floating, Overlay: overlay, Theme: snapshot.palette.componentTheme(),
+		PreviewOnly: previewOnly, BorderWidth: snapshot.palette.appPadding.Top, OnDragStart: func() {
+			if err := a.window.StartDragging(); err != nil {
+				log.Printf("start preview-only window drag: %v", err)
+			}
+		},
 	})
+}
+
+// launcherPreviewOnly identifies the chrome-free layout that needs edge drag hit areas.
+func launcherPreviewOnly(snapshot viewSnapshot) bool {
+	if snapshot.selected < 0 || snapshot.selected >= len(snapshot.results) {
+		return false
+	}
+	preview := snapshot.results[snapshot.selected].Preview
+	return (launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) || snapshot.terminalFullscreen) &&
+		launcherPreviewVisible(snapshot.layout, preview) &&
+		launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.terminalFullscreen) == 0
 }
 
 // queryLineHeight includes the configured font's native line box so glyphs are not clipped.
@@ -495,7 +512,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 	if ratio <= 0 {
 		result := snapshot.results[snapshot.selected]
 		preview := a.buildPreviewSection(result, snapshot, width, height, imageScale)
-		if launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) && a.resolvePreview(result.Preview).PreviewType != "chat" {
+		if launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) && a.resolvePreview(result.Preview).PreviewType != "chat" && !a.shouldUseNativePreviewClose(result.Preview) {
 			label := a.translate("i18n:ui_close")
 			if strings.TrimSpace(label) == "" || label == "i18n:ui_close" {
 				label = "Close"
@@ -549,7 +566,15 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 			state = append(state, a.dictationAudio.revision, a.dictationAudio.path, a.dictationAudio.snapshot)
 		}
 	case "file":
-		state = append(state, a.filePreviewFor(resolved.PreviewData))
+		filePreview := a.filePreviewFor(resolved.PreviewData)
+		state = append(state, filePreview)
+		// Native surfaces report initialization failures after paint; include their controller state so the retained section can replace its placeholder.
+		if filePreview.Kind == "native_file" {
+			state = append(state, a.nativeFilePreviewPath, a.nativeFilePreviewError)
+		}
+		if filePreview.Kind == "webview" {
+			state = append(state, a.webViewPreviewData, a.webViewPreviewError)
+		}
 	}
 	return launcherPreparedSection("launcher-preview-section", "preview", launcherPreparedSectionProps{Signature: launcherSectionSignature(state...), Width: width, Height: height, Child: child})
 }

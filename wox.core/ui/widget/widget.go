@@ -581,6 +581,7 @@ type Image struct {
 	Width  float32
 	Height float32
 	Fit    ImageFit
+	Radius float32
 }
 
 func (w Image) layout(ctx context, available constraints) *node {
@@ -594,7 +595,12 @@ func (w Image) layout(ctx context, available constraints) *node {
 				displayList.PushClipRect(bounds)
 				defer displayList.PopClipRect()
 			}
-			displayList.DrawImage(w.Source, fittedImageBounds(w.Source, bounds, w.Fit))
+			imageBounds := fittedImageBounds(w.Source, bounds, w.Fit)
+			if w.Radius > 0 {
+				displayList.DrawRotatedRoundedImage(w.Source, imageBounds, 0, w.Radius)
+				return
+			}
+			displayList.DrawImage(w.Source, imageBounds)
 		},
 	}
 }

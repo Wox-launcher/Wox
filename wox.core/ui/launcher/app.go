@@ -103,6 +103,8 @@ type App struct {
 	chatPreview                *chatPreviewState
 	webViewPreviewData         string
 	webViewPreviewError        string
+	nativeFilePreviewPath      string
+	nativeFilePreviewError     string
 	chatFullscreen             bool
 	terminalFullscreen         bool
 	actionPanel                bool

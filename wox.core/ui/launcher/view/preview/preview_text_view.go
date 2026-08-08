@@ -19,13 +19,17 @@ type ScrollablePreviewTextProps struct {
 	InitialOffset float32
 }
 
+// ScrollablePreviewTextHorizontalPadding keeps adapter text measurement aligned with the viewport.
+const ScrollablePreviewTextHorizontalPadding = float32(14)
+
 // ScrollablePreviewText builds a scrollable generic text preview.
 func ScrollablePreviewText(props ScrollablePreviewTextProps) woxwidget.Widget {
-	innerWidth := max(float32(0), props.Width-48)
-	innerHeight := max(float32(0), props.Height-48)
+	const verticalPadding = float32(24)
+	innerWidth := max(float32(0), props.Width-ScrollablePreviewTextHorizontalPadding*2)
+	innerHeight := max(float32(0), props.Height-verticalPadding*2)
 	contentHeight := max(innerHeight, props.Layout.Size.Height)
 	return woxwidget.Container{
-		Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(24),
+		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: ScrollablePreviewTextHorizontalPadding, Top: verticalPadding, Right: ScrollablePreviewTextHorizontalPadding, Bottom: verticalPadding},
 		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: woxwidget.Key("preview-scroll-" + props.ID), Offset: props.InitialOffset, Width: innerWidth, Height: innerHeight, ContentHeight: contentHeight,
 			Content:    woxwidget.TextBlock{Value: props.Value, Width: innerWidth, Height: contentHeight, Style: woxui.TextStyle{Size: props.FontSize}, LineHeight: props.LineHeight, Color: props.Color, Layout: &props.Layout},

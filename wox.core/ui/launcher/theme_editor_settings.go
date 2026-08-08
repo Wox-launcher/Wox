@@ -26,11 +26,12 @@ import (
 )
 
 const (
-	demoWallpaperCacheVersion  = "v3-rounded-stage-1440x672-702x344"
+	demoWallpaperCacheVersion  = "v4-rounded-stage-1440x672-702x344"
 	demoWallpaperWidth         = 1440
 	demoWallpaperHeight        = 672
 	demoWallpaperBlurredWidth  = 702
 	demoWallpaperBlurredHeight = 344
+	demoWallpaperCornerRadius  = 8
 )
 
 // buildThemeEditorSettingsSurface adapts the shared draft controller to Flutter's settings-only editor layout.
@@ -198,7 +199,7 @@ func decodeDemoWallpaperWithCache(path string, includeBlurred bool, cacheDirecto
 		source = imaging.Resize(source, 2048, 0, imaging.CatmullRom)
 	}
 	stage := imaging.Fill(source, demoWallpaperWidth, demoWallpaperHeight, imaging.Center, imaging.Lanczos)
-	maskDemoWallpaperRoundedCorners(stage, 29)
+	maskDemoWallpaperRoundedCorners(stage, demoWallpaperCornerRadius)
 	wallpaperImage, err := woxui.NewImage(stage)
 	if err != nil {
 		return nil, nil, err
@@ -210,7 +211,7 @@ func decodeDemoWallpaperWithCache(path string, includeBlurred bool, cacheDirecto
 	logicalStage := imaging.Resize(stage, 900, 420, imaging.Lanczos)
 	blurredStage := imaging.Blur(logicalStage, 24)
 	blurredWindow := imaging.CropCenter(blurredStage, demoWallpaperBlurredWidth, demoWallpaperBlurredHeight)
-	maskDemoWallpaperRoundedCorners(blurredWindow, 12)
+	maskDemoWallpaperRoundedCorners(blurredWindow, demoWallpaperCornerRadius)
 	wallpaperBlurred, err := woxui.NewImage(blurredWindow)
 	if err != nil {
 		return nil, nil, err

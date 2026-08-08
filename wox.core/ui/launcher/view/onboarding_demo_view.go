@@ -134,11 +134,11 @@ func DemoPreview(props OnboardingProps, step OnboardingStep, width, height float
 
 // onboardingDemoDesktop reproduces the simulated desktop chrome shared by Flutter demos.
 func onboardingDemoDesktop(props OnboardingProps, step OnboardingStep, width, height float32, showDefaultIcons bool, foreground []woxwidget.StackChild) woxwidget.Widget {
-	children := []woxwidget.StackChild{{Child: woxwidget.Container{Width: width, Height: height, Color: woxui.Color{A: 255}}}}
+	children := []woxwidget.StackChild{{Child: woxwidget.Container{Width: width, Height: height, Radius: 8, Color: onboardingDemoDesktopBaseColor(props.Theme.Background)}}}
 	if props.Wallpaper != nil {
 		children = append(children,
-			woxwidget.StackChild{Child: woxwidget.Image{Source: props.Wallpaper, Width: width, Height: height}},
-			woxwidget.StackChild{Child: woxwidget.Container{Width: width, Height: height, Color: woxui.Color{A: 87}}},
+			woxwidget.StackChild{Child: woxwidget.Image{Source: props.Wallpaper, Width: width, Height: height, Radius: 8}},
+			woxwidget.StackChild{Child: woxwidget.Container{Width: width, Height: height, Radius: 8, Color: woxui.Color{A: 87}}},
 		)
 	}
 	if showDefaultIcons {
@@ -150,7 +150,7 @@ func onboardingDemoDesktop(props OnboardingProps, step OnboardingStep, width, he
 	if runtime.GOOS == "darwin" {
 		menuWidth := width - 28
 		children = append(children, woxwidget.StackChild{Child: woxwidget.Container{
-			Width: width, Height: 28, Color: settingsColorAlpha(props.Theme.Background, 220),
+			Width: width, Height: 28, Radius: 8, Color: settingsColorAlpha(props.Theme.Background, 220),
 			Padding: woxwidget.Insets{Left: 14, Top: 7, Right: 14},
 			Child: woxwidget.Stack{Width: menuWidth, Height: 16, Children: []woxwidget.StackChild{
 				{Child: woxwidget.Text{Value: "   Finder     File", Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}},
@@ -159,17 +159,23 @@ func onboardingDemoDesktop(props OnboardingProps, step OnboardingStep, width, he
 			}},
 		}})
 	} else {
-		children = append(children, woxwidget.StackChild{Top: height - 42, Child: woxwidget.Container{
-			Width: width, Height: 42, Color: settingsColorAlpha(props.Theme.Background, 224),
-			Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 12},
-			Child: woxwidget.Stack{Width: width - 24, Height: 24, Children: []woxwidget.StackChild{
-				{Child: woxwidget.Text{Value: "▦    ⌕  Search", Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultTitle}},
-				{Left: max(float32(0), width-118), Child: woxwidget.Text{Value: "⌁   09:41", Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultSubtitle}},
-			}},
-		}})
+		children = append(children, woxwidget.StackChild{Top: height - 42, Child: onboardingDemoWindowsTaskbar(props, width)})
 	}
 	children = append(children, foreground...)
 	return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Stack{Width: width, Height: height, Children: children}}
+}
+
+// onboardingDemoDesktopBaseColor matches Flutter's darkened fallback surface under the wallpaper.
+func onboardingDemoDesktopBaseColor(background woxui.Color) woxui.Color {
+	if background.A == 0 {
+		return woxui.Color{A: 255}
+	}
+	const backgroundDarkening = float32(.38)
+	background.R = uint8(float32(background.R) * (1 - backgroundDarkening))
+	background.G = uint8(float32(background.G) * (1 - backgroundDarkening))
+	background.B = uint8(float32(background.B) * (1 - backgroundDarkening))
+	background.A = demoScaledAlpha(.88, background.A)
+	return background
 }
 
 // onboardingDemoSearchIcon reuses the shared SVG search icon.
@@ -180,6 +186,68 @@ func onboardingDemoSearchIcon(color woxui.Color) woxwidget.Widget {
 // onboardingDemoClockIcon reuses the shared SVG clock icon.
 func onboardingDemoClockIcon(color woxui.Color) woxwidget.Widget {
 	return woxcomponent.ClockGlyph(16, color)
+}
+
+// onboardingDemoWindowsTaskbar mirrors the centered app strip and right system tray of Windows 11.
+func onboardingDemoWindowsTaskbar(props OnboardingProps, width float32) woxwidget.Widget {
+	const (
+		taskbarHeight = float32(42)
+		contentInset  = float32(12)
+		iconSize      = float32(24)
+		iconGap       = float32(6)
+		trayWidth     = float32(180)
+	)
+	textColor := settingsColorAlpha(props.Theme.ResultTitle, 212)
+	mutedColor := settingsColorAlpha(props.Theme.ResultTitle, 176)
+	appIcon := func(glyph string, background, color woxui.Color) woxwidget.Widget {
+		return onboardingDemoWindowsTaskbarIcon(woxwidget.Text{Value: glyph, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: color}, background)
+	}
+	apps := []woxwidget.Widget{
+		onboardingDemoWindowsTaskbarIcon(woxcomponent.WindowsGlyph(16, woxui.Color{R: 77, G: 190, B: 245, A: 255}), woxui.Color{}),
+		onboardingDemoWindowsTaskbarIcon(woxcomponent.FolderGlyph(16, woxui.Color{R: 247, G: 190, B: 46, A: 255}), woxui.Color{}),
+		onboardingDemoWindowsTaskbarIcon(woxcomponent.BrowserGlyph(16, woxui.Color{R: 50, G: 145, B: 235, A: 255}), woxui.Color{}),
+		onboardingDemoWindowsTaskbarIcon(woxcomponent.TerminalGlyph(15, woxui.Color{R: 232, G: 235, B: 238, A: 255}), woxui.Color{}),
+		onboardingDemoWindowsTaskbarIcon(woxcomponent.SparklesGlyph(15, woxui.Color{R: 240, G: 240, B: 240, A: 255}), woxui.Color{R: 45, G: 45, B: 50, A: 255}),
+		onboardingDemoWindowsTaskbarIcon(woxcomponent.CodeGlyph(16, woxui.Color{R: 55, G: 165, B: 240, A: 255}), woxui.Color{}),
+	}
+	if props.AppIcon != nil {
+		apps = append(apps, onboardingDemoWindowsTaskbarIcon(woxwidget.Image{Source: props.AppIcon, Width: 18, Height: 18, Radius: 4}, woxui.Color{R: 245, G: 245, B: 245, A: 255}))
+	} else {
+		apps = append(apps, appIcon("W", woxui.Color{R: 45, G: 45, B: 50, A: 255}, woxui.Color{R: 245, G: 245, B: 245, A: 255}))
+	}
+	centerWidth := float32(len(apps))*iconSize + float32(len(apps)-1)*iconGap
+	center := woxwidget.Container{
+		Width: centerWidth, Height: iconSize,
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: iconGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: apps},
+	}
+	tray := woxwidget.Align{
+		Width: trayWidth, Height: iconSize, Horizontal: 1, Vertical: .5,
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxcomponent.WifiGlyph(13, mutedColor),
+			woxcomponent.VolumeGlyph(13, mutedColor),
+			woxcomponent.BluetoothGlyph(13, mutedColor),
+			woxwidget.Text{Value: "ENG", Style: woxui.TextStyle{Size: 9, Weight: woxui.FontWeightSemibold}, Color: textColor},
+			woxwidget.Container{Width: 48, Height: iconSize, Child: woxwidget.Flex{Axis: woxwidget.Vertical, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+				woxwidget.Text{Value: "09:41", Style: woxui.TextStyle{Size: 9, Weight: woxui.FontWeightSemibold}, Color: textColor},
+				woxwidget.Text{Value: "2026/8/8", Style: woxui.TextStyle{Size: 7}, Color: mutedColor},
+			}}},
+		}},
+	}
+	contentWidth := max(float32(0), width-contentInset*2)
+	return woxwidget.Container{
+		Width: width, Height: taskbarHeight, Radius: 8, Color: settingsColorAlpha(props.Theme.Background, 198),
+		BorderColor: settingsColorAlpha(props.Theme.ResultTitle, 16), BorderWidth: 1,
+		Padding: woxwidget.Insets{Left: contentInset, Top: 9, Right: contentInset, Bottom: 9},
+		Child: woxwidget.Stack{Width: contentWidth, Height: iconSize, Children: []woxwidget.StackChild{
+			{Left: max(float32(0), (contentWidth-centerWidth)/2), Child: center},
+			{Right: 0, AnchorRight: true, Child: tray},
+		}},
+	}
+}
+
+// onboardingDemoWindowsTaskbarIcon gives simulated pinned apps the compact square silhouette used by Windows.
+func onboardingDemoWindowsTaskbarIcon(child woxwidget.Widget, background woxui.Color) woxwidget.Widget {
+	return woxwidget.Container{Width: 24, Height: 24, Radius: 5, Color: background, Child: woxwidget.Align{Width: 24, Height: 24, Horizontal: .5, Vertical: .5, Child: child}}
 }
 
 // onboardingDemoCursor draws the outlined arrow used by the macOS pointer.

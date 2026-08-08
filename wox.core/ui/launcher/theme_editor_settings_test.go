@@ -100,6 +100,9 @@ func TestDecodeDemoWallpaperCreatesAndReusesProcessedCache(t *testing.T) {
 		if alpha := color.NRGBAModel.Convert(cached.At(0, 0)).(color.NRGBA).A; alpha != 0 {
 			t.Fatalf("wallpaper corner alpha = %d, want rounded transparent corner", alpha)
 		}
+		if alpha := color.NRGBAModel.Convert(cached.At(12, 0)).(color.NRGBA).A; alpha == 0 {
+			t.Fatalf("wallpaper top edge alpha = %d, want the 8px corner radius to end before x=12", alpha)
+		}
 	}
 	old := time.Now().Add(-time.Hour)
 	for _, entry := range entries {

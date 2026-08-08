@@ -96,6 +96,14 @@ var uiIcons = map[string]WoxImage{
 	"settings.privacy":           newMonochromeUIIcon(`<path d="M12 3 5 6v5c0 4.8 2.9 8.2 7 10 4.1-1.8 7-5.2 7-10V6z"/>`),
 	"settings.about":             newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>`),
 
+	// Windows taskbar and system-tray chrome.
+	"system.windows":   newMonochromeUIIcon(`<path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/>`),
+	"system.browser":   newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M21 12h-6M12 21v-6M3 12h6"/>`),
+	"system.code":      newMonochromeUIIcon(`<path d="m8 6-6 6 6 6M16 6l6 6-6 6M14 3l-4 18"/>`),
+	"system.wifi":      newMonochromeUIIcon(`<path d="M2 8a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1"/>`),
+	"system.volume":    newMonochromeUIIcon(`<path d="M4 10v4h3l4 3V7l-4 3zM15 9a4 4 0 0 1 0 6M17.5 6.5a8 8 0 0 1 0 11"/>`),
+	"system.bluetooth": newMonochromeUIIcon(`<path d="m12 3 5 5-5 4 5 4-5 5V3zM4 8l12 8M4 16l12-8"/>`),
+
 	// Reusable controls.
 	"control.add":                newMonochromeUIIcon(`<path d="M12 5v14M5 12h14"/>`),
 	"control.chat-bubble":        NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M4 4h16v13H8l-4 4z"/></svg>`),

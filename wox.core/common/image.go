@@ -1361,3 +1361,8 @@ func ConvertFileIconToAbsolutePathWithSize(ctx context.Context, image WoxImage, 
 func SetServerPort(port int) {
 	serverPort = port
 }
+
+// GetServerPort returns the loopback port used by Wox's local HTTP services.
+func GetServerPort() int {
+	return serverPort
+}

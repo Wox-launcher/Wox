@@ -1,4 +1,4 @@
-.PHONY: clean build help ui-resources window-hook-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
+.PHONY: clean build help ui-resources window-hook-build crash-handler-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 FILESEARCH_REAL_INDEX_ROOT ?= ~/
@@ -91,6 +91,7 @@ endif
 build: clean
 	$(MAKE) woxmr-build
 	$(MAKE) window-hook-build
+	$(MAKE) crash-handler-build
 ifeq ($(PLATFORM),windows)
 	# Generate Windows VERSIONINFO using the version from updater.CURRENT_VERSION
 	cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0 \
@@ -124,6 +125,20 @@ ifeq ($(PLATFORM),windows)
 	gcc -shared -O2 -s -o $(WINDOW_HOOK_DLL) $(WINDOW_HOOK_SOURCE) -lole32 -lshell32 -luuid -lcomctl32
 else
 	@echo "Window hook is only supported on Windows"
+endif
+
+CRASH_HANDLER_SOURCE := diagnostic/native/wox_crash_handler.c
+CRASH_HANDLER_DIR := resource/others/crash_handler
+CRASH_HANDLER_DLL := $(CRASH_HANDLER_DIR)/WoxCrashHandler64.dll
+
+# WER loads this module in its own process after Wox has crashed.
+crash-handler-build:
+	rm -rf $(CRASH_HANDLER_DIR)
+ifeq ($(PLATFORM),windows)
+	mkdir -p $(CRASH_HANDLER_DIR)
+	gcc -shared -O2 -s -o $(CRASH_HANDLER_DLL) $(CRASH_HANDLER_SOURCE) -ldbghelp -ladvapi32
+else
+	@echo "Crash handler is only supported on Windows"
 endif
 
 # Feature addition: real-root filesearch comparisons are intentionally exposed

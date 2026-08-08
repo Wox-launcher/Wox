@@ -14,8 +14,9 @@ import (
 
 // Handlers contains the small set of cross-process controls exposed by the primary Wox instance.
 type Handlers struct {
-	Show     func(ctx context.Context) error
-	DeepLink func(ctx context.Context, deepLink string) error
+	Show             func(ctx context.Context) error
+	DeepLink         func(ctx context.Context, deepLink string) error
+	PreviewFileMedia http.Handler
 }
 
 type response struct {
@@ -27,6 +28,9 @@ type response struct {
 // NewHandler creates the loopback-only process-control API.
 func NewHandler(handlers Handlers) http.Handler {
 	mux := http.NewServeMux()
+	if handlers.PreviewFileMedia != nil {
+		mux.Handle("/preview/file/media", handlers.PreviewFileMedia)
+	}
 	mux.HandleFunc("/ping", func(writer http.ResponseWriter, request *http.Request) {
 		writeSuccess(writer, "pong")
 	})

@@ -128,6 +128,24 @@ func TestFormHotkeyFieldStartsAtMeasuredControlColumn(t *testing.T) {
 	}
 }
 
+func TestFormHotkeyFieldCanAlignRecorderToTheRightOfItsControlColumn(t *testing.T) {
+	field := FormHotkeyField(FormHotkeyFieldProps{
+		ID: "onboarding-hotkey", Label: "Hotkey", Description: "Show or hide Wox", Labels: []string{"Alt", "Space"},
+		Width: 720, Height: 62, LabelWidth: 132, AlignRecorderRight: true, Theme: woxcomponent.Theme{},
+	})
+	container := field.(woxwidget.Container)
+	row := container.Child.(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Flex)
+	control := controlColumn.Children[0].(woxwidget.Stack)
+	if !control.Children[0].AnchorRight || control.Children[0].Right != 0 {
+		t.Fatalf("hotkey recorder geometry = %#v, want right-anchored control", control.Children[0])
+	}
+	description := controlColumn.Children[1].(woxwidget.TextBlock)
+	if description.Value != "Show or hide Wox" {
+		t.Fatalf("hotkey description = %q, want description below right control", description.Value)
+	}
+}
+
 func TestFormHotkeyFieldUsesFlutterSettingsLayout(t *testing.T) {
 	field := FormHotkeyField(FormHotkeyFieldProps{
 		ID: "main-hotkey", Label: "Hotkey", Description: "Show or hide Wox",

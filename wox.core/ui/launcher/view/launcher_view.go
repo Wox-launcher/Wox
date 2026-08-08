@@ -37,6 +37,27 @@ type LauncherViewProps struct {
 	Floating      *LauncherFloatingView
 	Overlay       woxwidget.Widget
 	Theme         woxcomponent.Theme
+	PreviewOnly   bool
+	BorderWidth   float32
+	OnDragStart   func()
+}
+
+// BorderDragMoveArea keeps preview-only launcher surfaces movable from every outer edge.
+func BorderDragMoveArea(width, height, borderWidth float32, child woxwidget.Widget, onDragStart func()) woxwidget.Widget {
+	if width <= 0 || height <= 0 || borderWidth <= 0 {
+		return child
+	}
+	borderWidth = min(max(0, borderWidth), min(width/2, height/2))
+	if borderWidth <= 0 {
+		return child
+	}
+	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
+		{Child: child},
+		{Top: 0, Child: woxwidget.Gesture{ID: "launcher-border-drag-top", OnDragStart: onDragStart, Child: woxwidget.Container{Width: width, Height: borderWidth}}},
+		{Top: max(0, height-borderWidth), Child: woxwidget.Gesture{ID: "launcher-border-drag-bottom", OnDragStart: onDragStart, Child: woxwidget.Container{Width: width, Height: borderWidth}}},
+		{Left: 0, Top: borderWidth, Child: woxwidget.Gesture{ID: "launcher-border-drag-left", OnDragStart: onDragStart, Child: woxwidget.Container{Width: borderWidth, Height: max(0, height-borderWidth*2)}}},
+		{Left: max(0, width-borderWidth), Top: borderWidth, Child: woxwidget.Gesture{ID: "launcher-border-drag-right", OnDragStart: onDragStart, Child: woxwidget.Container{Width: borderWidth, Height: max(0, height-borderWidth*2)}}},
+	}}
 }
 
 // PreviewHoverCloseProps describes the fallback close affordance for preview-only launcher layouts.
@@ -131,8 +152,12 @@ func LauncherView(props LauncherViewProps) woxwidget.Widget {
 	if props.Overlay != nil {
 		body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: body}, {Child: props.Overlay}}}
 	}
+	window := woxwidget.Widget(woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Radius: props.Radius, Child: body})
+	if props.PreviewOnly {
+		window = BorderDragMoveArea(props.Width, props.Height, props.BorderWidth, window, props.OnDragStart)
+	}
 	return woxwidget.Semantics{
 		Key: "launcher-window-key", AutomationID: "launcher.window", Role: woxui.AccessibilityRoleWindow, Label: "Wox",
-		Child: woxwidget.Container{Width: props.Width, Height: props.Height, Color: props.Theme.Background, Radius: props.Radius, Child: body},
+		Child: window,
 	}
 }

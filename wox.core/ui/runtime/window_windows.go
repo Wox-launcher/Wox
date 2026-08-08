@@ -110,23 +110,27 @@ const (
 	windowCommandWriteClipboardImage
 	windowCommandShowWebView
 	windowCommandHideWebView
+	windowCommandShowNativeFilePreview
+	windowCommandHideNativeFilePreview
 	windowCommandClose
 )
 
 type windowCommand struct {
-	kind           windowCommandKind
-	bounds         Rect
-	size           Size
-	hideOnBlur     bool
-	darkAppearance bool
-	fontFamily     string
-	fileDialog     FileDialogOptions
-	externalURL    string
-	clipboardText  string
-	clipboard      *clipboardImage
-	webView        WebViewContent
-	webViewBounds  Rect
-	reply          chan windowCommandResult
+	kind             windowCommandKind
+	bounds           Rect
+	size             Size
+	hideOnBlur       bool
+	darkAppearance   bool
+	fontFamily       string
+	fileDialog       FileDialogOptions
+	externalURL      string
+	clipboardText    string
+	clipboard        *clipboardImage
+	webView          WebViewContent
+	webViewBounds    Rect
+	nativeFilePath   string
+	nativeFileBounds Rect
+	reply            chan windowCommandResult
 }
 
 type windowCommandResult struct {
@@ -157,10 +161,11 @@ type platformWindow struct {
 	pending    []windowCommand
 	done       chan struct{}
 
-	renderer *nativeRenderer
-	webView  *windowsWebView
-	focus    focusRuntime
-	scale    float32
+	renderer          *nativeRenderer
+	webView           *windowsWebView
+	nativeFilePreview *windowsFilePreview
+	focus             focusRuntime
+	scale             float32
 	// suppressDPIBounds keeps explicit programmatic bounds from being replaced by
 	// Windows' drag-oriented WM_DPICHANGED suggestion during SetWindowPos.
 	suppressDPIBounds bool
@@ -450,6 +455,14 @@ func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error 
 
 func (w *platformWindow) hideWebView() error {
 	return w.call(windowCommand{kind: windowCommandHideWebView}).err
+}
+
+func (w *platformWindow) showNativeFilePreview(path string, bounds Rect) error {
+	return w.call(windowCommand{kind: windowCommandShowNativeFilePreview, nativeFilePath: path, nativeFileBounds: bounds}).err
+}
+
+func (w *platformWindow) hideNativeFilePreview() error {
+	return w.call(windowCommand{kind: windowCommandHideNativeFilePreview}).err
 }
 
 func (w *platformWindow) writeClipboardText(text string) error {
@@ -931,9 +944,14 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		window.hideNative()
 		win.DestroyWindow(hwnd)
 		return 0
+	case win.WM_DESTROY:
+		// UI Automation requires its provider map to be disconnected while the
+		// HWND is still in WM_DESTROY. Waiting until WM_NCDESTROY can block the
+		// only message-pump thread after native teardown has already started.
+		removeWindowsAccessibility(uintptr(hwnd))
+		return win.DefWindowProc(hwnd, message, wParam, lParam)
 	case win.WM_NCDESTROY:
 		result := win.DefWindowProc(hwnd, message, wParam, lParam)
-		removeWindowsAccessibility(uintptr(hwnd))
 		window.destroyNativeResources()
 		nativeWindows.Delete(uintptr(hwnd))
 		platformRuntime.Lock()
@@ -1291,6 +1309,27 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 			return windowCommandResult{}
 		}
 		return windowCommandResult{err: w.webView.hide()}
+	case windowCommandShowNativeFilePreview:
+		if w.nativeFilePreview == nil || w.nativeFilePreview.path != command.nativeFilePath {
+			if w.nativeFilePreview != nil {
+				w.nativeFilePreview.destroy()
+			}
+			preview, err := newWindowsFilePreview(uintptr(w.hwnd), command.nativeFilePath, command.nativeFileBounds, w.scale)
+			if err != nil {
+				w.nativeFilePreview = nil
+				return windowCommandResult{err: err}
+			}
+			w.nativeFilePreview = preview
+		}
+		return windowCommandResult{err: w.nativeFilePreview.show(command.nativeFileBounds, w.scale)}
+	case windowCommandHideNativeFilePreview:
+		if w.nativeFilePreview == nil {
+			return windowCommandResult{}
+		}
+		err := w.nativeFilePreview.hide()
+		w.nativeFilePreview.destroy()
+		w.nativeFilePreview = nil
+		return windowCommandResult{err: err}
 	case windowCommandClose:
 		w.hideNative()
 		win.DestroyWindow(w.hwnd)
@@ -1674,6 +1713,10 @@ func windowsUpdateRect(hwnd win.HWND) (win.RECT, bool) {
 
 // destroyNativeResources releases GPU state before invalidating the HWND-backed command queue.
 func (w *platformWindow) destroyNativeResources() {
+	if w.nativeFilePreview != nil {
+		w.nativeFilePreview.destroy()
+		w.nativeFilePreview = nil
+	}
 	if w.webView != nil {
 		w.webView.destroy()
 		w.webView = nil

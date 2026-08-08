@@ -101,6 +101,11 @@ func main() {
 	if os.Getenv("GOGC") == "" {
 		debug.SetGCPercent(50)
 	}
+	if util.IsProd() && util.IsWindows() {
+		// Let Windows Error Reporting observe fatal Go runtime failures so the
+		// registered out-of-process crash module can preserve a minidump.
+		debug.SetTraceback("wer")
+	}
 	mainthread.SetDispatcher(func(fn func()) {
 		if err := woxui.Call(fn); err != nil {
 			panic(err)
@@ -395,6 +400,7 @@ func run() {
 	}
 	util.Go(ctx, "start primary instance control server", func() {
 		err := appcontrol.ServeAndWait(ctx, serverPort, appcontrol.Handlers{
+			PreviewFileMedia: appcontrol.NewFileMediaHandler(),
 			Show: func(requestCtx context.Context) error {
 				ui.GetUIManager().GetUI(requestCtx).ShowApp(requestCtx, common.ShowContext{SelectAll: true})
 				return nil

@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -119,6 +120,60 @@ func TestLauncherChromeHiddenForPreviewOnlyModes(t *testing.T) {
 	}
 	if launcherChromeHidden(showAppParams{HideQueryBox: true}, false) {
 		t.Fatal("partially hidden launcher chrome should keep normal navigation behavior")
+	}
+}
+
+func TestLauncherPreviewOnlyRequiresChromeFreeZeroRatioPreview(t *testing.T) {
+	ratio := 0.0
+	snapshot := viewSnapshot{
+		selected: 0,
+		results:  []queryResult{{Preview: queryPreview{PreviewType: "file", PreviewData: "report.xlsx"}}},
+		layout:   queryLayout{ResultPreviewWidthRatio: &ratio},
+		show:     showAppParams{HideQueryBox: true, HideToolbar: true},
+	}
+	if !launcherPreviewOnly(snapshot) {
+		t.Fatal("chrome-free zero-ratio preview should enable border dragging")
+	}
+
+	snapshot.show.HideToolbar = false
+	if launcherPreviewOnly(snapshot) {
+		t.Fatal("visible launcher chrome should not enable preview-only border dragging")
+	}
+	snapshot.show.HideToolbar = true
+	ratio = 0.4
+	if launcherPreviewOnly(snapshot) {
+		t.Fatal("split preview layout should not enable preview-only border dragging")
+	}
+}
+
+func TestNativePreviewCloseIsOptInForActiveOfficePreview(t *testing.T) {
+	app := &App{
+		sessionID:             "test-session",
+		show:                  showAppParams{HideQueryBox: true, HideToolbar: true},
+		nativeFilePreviewPath: `C:\document.docx`,
+	}
+	preview := queryPreview{PreviewType: "file", PreviewData: `C:\document.docx`}
+	if runtime.GOOS == "windows" {
+		if !app.shouldUseNativePreviewClose(preview) {
+			t.Fatal("active Office preview should opt into the native close affordance")
+		}
+	} else if app.shouldUseNativePreviewClose(preview) {
+		t.Fatal("native file close affordance should remain disabled on unsupported platforms")
+	}
+
+	app.nativeFilePreviewPath = ""
+	if app.shouldUseNativePreviewClose(preview) {
+		t.Fatal("inactive Office preview should keep the default close affordance")
+	}
+}
+
+func TestNativePreviewCloseDoesNotChangeChatBehavior(t *testing.T) {
+	app := &App{
+		show:                  showAppParams{HideQueryBox: true, HideToolbar: true},
+		nativeFilePreviewPath: `C:\document.docx`,
+	}
+	if app.shouldUseNativePreviewClose(queryPreview{PreviewType: "chat", PreviewData: "chat"}) {
+		t.Fatal("chat preview should keep the in-process close affordance")
 	}
 }
 

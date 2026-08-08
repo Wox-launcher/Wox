@@ -23,6 +23,12 @@ int32_t wox_windows_webview_hide(WoxWindowsWebView *webview);
 void wox_windows_webview_destroy(WoxWindowsWebView *webview);
 void wox_windows_free_string(char *value);
 
+typedef struct WoxWindowsFilePreview WoxWindowsFilePreview;
+int32_t wox_windows_file_preview_create(uintptr_t owner, const char *path, int32_t x, int32_t y, int32_t width, int32_t height, WoxWindowsFilePreview **preview);
+int32_t wox_windows_file_preview_show(WoxWindowsFilePreview *preview, int32_t x, int32_t y, int32_t width, int32_t height);
+int32_t wox_windows_file_preview_hide(WoxWindowsFilePreview *preview);
+void wox_windows_file_preview_destroy(WoxWindowsFilePreview *preview);
+
 #ifdef __cplusplus
 }
 #endif

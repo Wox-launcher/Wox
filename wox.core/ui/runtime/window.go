@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"wox/util/screen"
 )
 
 const (
@@ -242,6 +244,30 @@ func (w *Window) Center(size Size) error {
 		return errors.New("window size must be positive")
 	}
 	return w.native.center(size)
+}
+
+// CenterOnMouseScreen resizes and centers the window in the work area under the pointer.
+func (w *Window) CenterOnMouseScreen(size Size) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	if size.Width <= 0 || size.Height <= 0 {
+		return errors.New("window size must be positive")
+	}
+
+	mouseScreen := screen.GetMouseScreen()
+	if mouseScreen.Width <= 0 || mouseScreen.Height <= 0 {
+		return w.Center(size)
+	}
+
+	width := min(size.Width, float32(mouseScreen.Width))
+	height := min(size.Height, float32(mouseScreen.Height))
+	return w.SetBounds(Rect{
+		X:      float32(mouseScreen.X) + (float32(mouseScreen.Width)-width)/2,
+		Y:      float32(mouseScreen.Y) + (float32(mouseScreen.Height)-height)/2,
+		Width:  width,
+		Height: height,
+	})
 }
 
 // StartDragging hands the active primary-pointer gesture to the native window manager.

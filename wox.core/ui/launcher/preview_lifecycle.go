@@ -17,6 +17,7 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	result, preview, visible := a.selectedPreviewForLifecycle()
 	if !visible {
 		hideWebView := a.deactivatePreviewTypes("")
+		a.closeNativePreviewCloseOverlay()
 		if hideWebView {
 			a.hideWebView()
 		}
@@ -24,11 +25,27 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	}
 	a.prepareRemotePreview(preview)
 	preview = a.resolvePreview(preview)
+	fileWebViewData := ""
+	nativeFilePath := ""
 	if preview.PreviewType == "file" {
 		a.prepareFilePreview(preview.PreviewData)
+		filePreview := a.filePreviewFor(preview.PreviewData)
+		if filePreview.Kind == "webview" {
+			fileWebViewData = filePreview.WebViewData
+		}
+		if filePreview.Kind == "native_file" {
+			nativeFilePath = filePreview.NativeFilePath
+		}
 	}
 
-	hideWebView := a.deactivatePreviewTypes(preview.PreviewType)
+	previewType := preview.PreviewType
+	if fileWebViewData != "" {
+		previewType = "webview"
+	}
+	if nativeFilePath != "" {
+		previewType = "native_file"
+	}
+	hideWebView := a.deactivatePreviewTypes(previewType)
 	switch preview.PreviewType {
 	case "query_requirement_settings":
 		if a.activateRequirementPreview(result, preview) != nil {
@@ -53,9 +70,16 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	case "webview":
 		hideWebView = a.activateWebViewPreview(preview.PreviewData) || hideWebView
 	}
+	if fileWebViewData != "" {
+		hideWebView = a.activateWebViewPreview(fileWebViewData) || hideWebView
+	}
+	if nativeFilePath != "" {
+		hideWebView = a.activateNativeFilePreview(nativeFilePath) || hideWebView
+	}
 	if hideWebView {
 		a.hideWebView()
 	}
+	a.reconcileNativePreviewCloseOverlay(preview)
 }
 
 // selectedPreviewForLifecycle excludes stale query results and layouts that do not render a preview.
@@ -102,7 +126,14 @@ func (a *App) deactivatePreviewTypes(keep string) bool {
 		a.deactivateDictationAudio()
 	}
 	if keep != "webview" {
-		return a.deactivateWebViewPreview()
+		hideWebView := a.deactivateWebViewPreview()
+		if keep != "native_file" {
+			a.deactivateNativeFilePreview()
+		}
+		return hideWebView
+	}
+	if keep != "native_file" {
+		a.deactivateNativeFilePreview()
 	}
 	return false
 }

@@ -53,6 +53,7 @@ type CrashIncident struct {
 	Signal     string `json:"signal,omitempty"`
 	DurationMs int64  `json:"durationMs"`
 	ReportPath string `json:"reportPath"`
+	DumpPath   string `json:"dumpPath,omitempty"`
 	Version    string `json:"version"`
 	Prompted   bool   `json:"prompted"`
 }

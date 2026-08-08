@@ -137,24 +137,25 @@ func FormAppField(props FormAppFieldProps) woxwidget.Widget {
 
 // FormHotkeyFieldProps contains one Flutter-parity hotkey recorder row.
 type FormHotkeyFieldProps struct {
-	ID             string
-	Label          string
-	Description    string
-	Labels         []string
-	Placeholder    string
-	Status         string
-	Width          float32
-	Height         float32
-	LabelWidth     float32
-	SettingsLayout bool
-	Recording      bool
-	Error          bool
-	Hold           bool
-	HoldPrefix     string
-	Window         *woxui.Window
-	Theme          woxcomponent.Theme
-	OnTap          func()
-	OnFocusChange  func(bool)
+	ID                 string
+	Label              string
+	Description        string
+	Labels             []string
+	Placeholder        string
+	Status             string
+	Width              float32
+	Height             float32
+	LabelWidth         float32
+	SettingsLayout     bool
+	AlignRecorderRight bool
+	Recording          bool
+	Error              bool
+	Hold               bool
+	HoldPrefix         string
+	Window             *woxui.Window
+	Theme              woxcomponent.Theme
+	OnTap              func()
+	OnFocusChange      func(bool)
 }
 
 // FormHotkeyField builds the shared recorder row for form and built-in settings layouts.
@@ -176,7 +177,11 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 	}
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
 	statusGap := float32(12)
-	controlChildren := []woxwidget.StackChild{{Top: 2, Child: recorder}}
+	recorderChild := woxwidget.StackChild{Top: 2, Child: recorder}
+	if props.AlignRecorderRight {
+		recorderChild = woxwidget.StackChild{Top: 2, Right: 0, AnchorRight: true, Child: recorder}
+	}
+	controlChildren := []woxwidget.StackChild{recorderChild}
 	if props.SettingsLayout {
 		const (
 			gap       = float32(32)
@@ -200,6 +205,11 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 				Width: hintWidth, Height: 22, Child: woxwidget.Align{Width: hintWidth, Height: 22, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{
 					Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
 				}},
+			}})
+		} else if props.AlignRecorderRight {
+			hintWidth := max(float32(0), controlWidth-recorderWidth-statusGap)
+			controlChildren = append(controlChildren, woxwidget.StackChild{Left: 0, Top: 8, Child: woxwidget.Clip{
+				Width: hintWidth, Height: 22, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor},
 			}})
 		} else {
 			controlChildren = append(controlChildren, woxwidget.StackChild{Left: recorderWidth + statusGap, Top: 8, Child: woxwidget.Text{

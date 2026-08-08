@@ -101,6 +101,8 @@ func (p *BugReportPlugin) buildCrashIncidentResult(ctx context.Context, incident
 		Title:    title,
 		SubTitle: subtitle,
 		Icon:     common.PluginBugReportIcon,
+		// The launcher re-sorts cached results by score, so preserve newest-first event ordering here.
+		Score: incident.DetectedAt,
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeMarkdown,
 			PreviewData: preview,

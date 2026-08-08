@@ -96,8 +96,13 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 			return content(file.Text, errorText)
 		case "markdown":
 			return a.buildMarkdownPreview(scrollKey, file.Text, filepath.Dir(preview.PreviewData), preview.ScrollPosition, palette, width, height, imageScale)
+		case "webview":
+			return a.buildWebViewPreview(file.WebViewData, palette, width, height)
+		case "native_file":
+			return a.buildNativeFilePreview(file.NativeFilePath, palette, width, height)
 		default:
-			return a.buildTextPreview(scrollKey, file.Text, preview.ScrollPosition, palette, width, height)
+			// File contents are structured reader data, so keep them top-left aligned instead of using the centered quote treatment for standalone text previews.
+			return content(file.Text, previewColorWithOpacity(palette.previewText, 0.86))
 		}
 	case "list":
 		data, err := decodePreviewList(preview.PreviewData)
@@ -259,7 +264,7 @@ func (a *App) buildDictationHistoryPreview(scrollKey string, data dictationHisto
 }
 
 func (a *App) buildScrollablePreviewText(scrollKey, value string, color woxui.Color, scrollPosition string, width, height float32) woxwidget.Widget {
-	innerWidth := max(float32(0), width-48)
+	innerWidth := max(float32(0), width-previewview.ScrollablePreviewTextHorizontalPadding*2)
 	fontSize := a.densityMetrics.scaled(woxcomponent.PreviewBodyFontSize)
 	lineHeight := a.densityMetrics.scaled(23)
 	style := woxui.TextStyle{Size: fontSize}

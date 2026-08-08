@@ -402,6 +402,7 @@ func (a *App) onOnboardingWindowKey(event woxui.KeyEvent) bool {
 
 func (a *App) onLauncherWindowClosed() {
 	wasVisible := a.visible
+	a.closeNativePreviewCloseOverlay()
 	a.deactivateDictationAudio()
 	a.launcher = nil
 	a.host = nil

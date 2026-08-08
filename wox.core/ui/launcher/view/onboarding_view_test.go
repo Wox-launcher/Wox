@@ -36,6 +36,56 @@ func TestOnboardingViewExposesWindowAndChoiceOverlay(t *testing.T) {
 	}
 }
 
+func TestOnboardingInfoPanelUsesIntrinsicDescriptionHeight(t *testing.T) {
+	page := onboardingPage(OnboardingProps{
+		Width: 1040, Height: 800,
+		Labels: map[string]string{"trayQueries.body": "把常用查询钉到系统托盘，点一下就能直接触发，不用先唤起 Wox。"},
+		Theme:  woxcomponent.Theme{},
+	}, OnboardingStep{ID: "trayQueries", Title: "Tray Queries"}, 728).(woxwidget.Container)
+
+	content := page.Child.(woxwidget.Flex)
+	panel := content.Children[2].(woxwidget.Container)
+	if panel.Height != 65 || panel.Color != settingsColorAlpha(woxui.Color{}, 14) {
+		t.Fatalf("info panel = %#v, want one-line intrinsic height 65 with translucent surface", panel)
+	}
+	if description := panel.Child.(woxwidget.TextBlock); description.Height != 0 {
+		t.Fatalf("description height = %v, want natural text height", description.Height)
+	}
+	preview := content.Children[4].(woxwidget.Container)
+	if preview.Height != 535 {
+		t.Fatalf("preview height = %v, want remaining height after intrinsic panel", preview.Height)
+	}
+}
+
+func TestOnboardingContentCardsUseSurfaceColors(t *testing.T) {
+	theme := woxcomponent.Theme{ResultTitle: woxui.Color{R: 240, G: 240, B: 240, A: 255}, ResultSubtitle: woxui.Color{R: 160, G: 160, B: 160, A: 255}}
+	for _, test := range []struct {
+		id     string
+		height float32
+		alpha  uint8
+	}{
+		{id: "welcome", height: 138, alpha: 14},
+		{id: "permissions", height: 172, alpha: 10},
+		{id: "mainHotkey", height: 90, alpha: 10},
+		{id: "selectionHotkey", height: 90, alpha: 10},
+		{id: "glance", height: 154, alpha: 14},
+		{id: "queryHotkeys", height: 65, alpha: 14},
+		{id: "trayQueries", height: 65, alpha: 14},
+		{id: "wpmInstall", height: 65, alpha: 14},
+		{id: "themeInstall", height: 65, alpha: 14},
+		{id: "finish", height: 65, alpha: 14},
+	} {
+		props := OnboardingProps{Theme: theme}
+		if test.id == "mainHotkey" || test.id == "selectionHotkey" {
+			props.Hotkey = woxwidget.Container{Width: 400, Height: 62}
+		}
+		card := onboardingStepContent(props, OnboardingStep{ID: test.id}, 720, test.height).(woxwidget.Container)
+		if card.Color != settingsColorAlpha(theme.ResultTitle, test.alpha) {
+			t.Fatalf("%s card color = %#v, want translucent surface", test.id, card.Color)
+		}
+	}
+}
+
 func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
 	props := OnboardingProps{
 		Width: 1040, Height: 800, ActiveStep: 0,
@@ -94,9 +144,20 @@ func TestOnboardingDemoDesktopUsesLoadedWallpaper(t *testing.T) {
 	desktop := onboardingDemoDesktop(OnboardingProps{Wallpaper: wallpaper}, OnboardingStep{}, 640, 360, false, nil)
 	clip := desktop.(woxwidget.Clip)
 	stack := clip.Child.(woxwidget.Stack)
+	if clip.Width != 640 || clip.Height != 360 {
+		t.Fatalf("desktop clip = %v x %v, want demo bounds", clip.Width, clip.Height)
+	}
+	background := stack.Children[0].Child.(woxwidget.Container)
+	if background.Radius != 8 {
+		t.Fatalf("desktop base radius = %v, want 8", background.Radius)
+	}
 	image, ok := stack.Children[1].Child.(woxwidget.Image)
-	if !ok || image.Source != wallpaper {
+	if !ok || image.Source != wallpaper || image.Radius != 8 {
 		t.Fatalf("desktop wallpaper = %#v, want loaded image", stack.Children[1].Child)
+	}
+	overlay := stack.Children[2].Child.(woxwidget.Container)
+	if overlay.Radius != 8 {
+		t.Fatalf("desktop wallpaper overlay radius = %v, want 8", overlay.Radius)
 	}
 }
 
@@ -105,8 +166,36 @@ func TestOnboardingDemoDesktopUsesBlackBeforeWallpaperLoads(t *testing.T) {
 	clip := desktop.(woxwidget.Clip)
 	stack := clip.Child.(woxwidget.Stack)
 	background, ok := stack.Children[0].Child.(woxwidget.Container)
-	if !ok || background.Color != (woxui.Color{A: 255}) {
+	if !ok || background.Color != (woxui.Color{A: 255}) || background.Radius != 8 {
 		t.Fatalf("desktop background = %#v, want opaque black", stack.Children[0].Child)
+	}
+	chrome := stack.Children[len(stack.Children)-1].Child.(woxwidget.Container)
+	if chrome.Radius != 8 {
+		t.Fatalf("desktop chrome radius = %v, want 8 to match wallpaper corners", chrome.Radius)
+	}
+}
+
+func TestOnboardingWindowsTaskbarUsesCenteredAppsAndSystemTray(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("Windows taskbar only")
+	}
+	desktop := onboardingDemoDesktop(OnboardingProps{}, OnboardingStep{}, 640, 360, false, nil).(woxwidget.Clip)
+	stack := desktop.Child.(woxwidget.Stack)
+	taskbar := stack.Children[len(stack.Children)-1].Child.(woxwidget.Container)
+	if taskbar.Height != 42 || taskbar.Radius != 8 || taskbar.Color.A != 198 {
+		t.Fatalf("taskbar surface = %#v, want translucent 42px rounded bar", taskbar)
+	}
+	content := taskbar.Child.(woxwidget.Stack)
+	if len(content.Children) != 2 || !content.Children[1].AnchorRight {
+		t.Fatalf("taskbar layout = %#v, want centered apps plus right tray", content.Children)
+	}
+	center := content.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(center.Children) != 7 || content.Children[0].Left <= 0 {
+		t.Fatalf("centered taskbar apps = %d at left %v, want seven centered icons", len(center.Children), content.Children[0].Left)
+	}
+	tray := content.Children[1].Child.(woxwidget.Align)
+	if tray.Width != 180 || tray.Horizontal != 1 {
+		t.Fatalf("system tray = %#v, want right-aligned 180px tray", tray)
 	}
 }
 

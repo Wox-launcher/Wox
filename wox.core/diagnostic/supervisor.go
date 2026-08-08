@@ -118,7 +118,7 @@ func (m *Manager) startSupervisedChild(ctx context.Context, logFile io.Writer, e
 
 // captureCrash persists diagnostics before any replacement Wox process starts.
 func (m *Manager) captureCrash(ctx context.Context, logFile io.Writer, pid int, waitErr error, startedAt time.Time, durationMs int64) {
-	m.waitForCrashArtifacts(startedAt)
+	dumpPath := m.waitForCrashArtifacts(pid, startedAt)
 	exportPath, exportErr := m.ExportCrash(ctx)
 	if exportErr != nil {
 		_, _ = fmt.Fprintf(logFile, "[%s] crash report export failed: %v\n", time.Now().Format(time.RFC3339), exportErr)
@@ -134,10 +134,14 @@ func (m *Manager) captureCrash(ctx context.Context, logFile io.Writer, pid int, 
 		Signal:     signalName,
 		DurationMs: durationMs,
 		ReportPath: exportPath,
+		DumpPath:   dumpPath,
 		Version:    updater.CURRENT_VERSION,
 	}
 	if saveErr := m.SaveCrashIncident(incident); saveErr != nil {
 		_, _ = fmt.Fprintf(logFile, "[%s] failed to persist crash incident: %v\n", time.Now().Format(time.RFC3339), saveErr)
+	}
+	if dumpPath != "" {
+		_, _ = fmt.Fprintf(logFile, "[%s] crash dump captured: %s\n", time.Now().Format(time.RFC3339), dumpPath)
 	}
 	_, _ = fmt.Fprintf(logFile, "[%s] crash report exported: %s\n", time.Now().Format(time.RFC3339), exportPath)
 }

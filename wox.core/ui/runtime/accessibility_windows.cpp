@@ -541,8 +541,6 @@ extern "C" uintptr_t wox_windows_accessibility_get_object(uintptr_t owner, uintp
 
 extern "C" void wox_windows_accessibility_remove(uintptr_t owner) {
   HWND hwnd = reinterpret_cast<HWND>(owner);
-  UiaReturnRawElementProvider(hwnd, 0, 0, nullptr);
-
   std::shared_ptr<TreeState> state;
   {
     std::lock_guard<std::mutex> lock(states_mutex);
@@ -551,6 +549,10 @@ extern "C" void wox_windows_accessibility_remove(uintptr_t owner) {
     state = found->second;
     states.erase(found);
   }
+
+  // Remove the state before notifying UI Automation. The notification can
+  // re-enter WM_GETOBJECT, which must not return the provider being removed.
+  UiaReturnRawElementProvider(hwnd, 0, 0, nullptr);
 
   std::vector<Provider *> providers;
   {
