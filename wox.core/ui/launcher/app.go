@@ -1614,6 +1614,8 @@ type formTableColumn struct {
 	HideInTable        bool            `json:"HideInTable"`
 	HideInUpdate       bool            `json:"HideInUpdate"`
 	AllowedHotkeyKinds []string        `json:"AllowedHotkeyKinds"`
+	// EmptyAsZero maps blank editor text to persisted integer 0 (and the reverse on load).
+	EmptyAsZero bool `json:"EmptyAsZero"`
 }
 
 type formOption struct {
@@ -1638,6 +1640,11 @@ type formValidator struct {
 }
 
 type formValidatorValue struct {
-	IsInteger bool `json:"IsInteger"`
-	IsFloat   bool `json:"IsFloat"`
+	IsInteger bool   `json:"IsInteger"`
+	IsFloat   bool   `json:"IsFloat"`
+	Optional  bool   `json:"Optional"`
+	HasRange  bool   `json:"HasRange"`
+	Min       int    `json:"Min"`
+	Max       int    `json:"Max"`
+	ErrorKey  string `json:"ErrorKey"`
 }

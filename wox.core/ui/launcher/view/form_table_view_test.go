@@ -54,6 +54,28 @@ func TestFormTableRowTextControlLeavesCaretFocusToHost(t *testing.T) {
 	}
 }
 
+func TestFormTableRowTextControlPlacesActionBesideInput(t *testing.T) {
+	tapped := false
+	control := formTableRowTextControl(FormTableRowFieldProps{
+		ID: "query", State: woxui.TextEditingState{Text: "ai translate {wox:selected_text}"}, Theme: woxcomponent.Theme{},
+		ActionIcon: &woxui.Image{}, ActionLabel: "Test this query", OnActionTap: func() { tapped = true },
+	}, 420, 34).(woxwidget.Flex)
+	if control.Gap != 8 || len(control.Children) != 2 {
+		t.Fatalf("query action layout = children %d gap %.0f, want input plus outside action icon", len(control.Children), control.Gap)
+	}
+	input := control.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if input.Width != 378 {
+		t.Fatalf("input width = %.0f, want room reserved for the outside action icon", input.Width)
+	}
+	action := control.Children[1].(woxwidget.Semantics)
+	if action.AutomationID != "query-action" || action.Label != "Test this query" || action.Role != woxui.AccessibilityRoleButton {
+		t.Fatalf("action semantics = %#v", action)
+	}
+	if err := action.OnAction(woxui.AccessibilityActionActivate, ""); err != nil || !tapped {
+		t.Fatalf("action activate err = %v tapped = %v", err, tapped)
+	}
+}
+
 func TestFormTableRowAppControlMatchesFlutterSelectorLayout(t *testing.T) {
 	theme := woxcomponent.Theme{
 		ActionSelected: woxui.Color{R: 20, G: 80, B: 140, A: 255},

@@ -430,6 +430,7 @@
   "ui_query_hotkeys_name_tooltip": "Opcional. Um nome personalizado para ajudar a reconhecer este atalho de consulta.",
   "ui_query_hotkeys_query": "Consulta",
   "ui_query_hotkeys_query_tooltip": "A consulta quando a tecla de atalho é acionada. Digite { para inserir variáveis dinâmicas.\n\nUsar a variável de URL do navegador ativo requer a extensão Wox para Chrome: [Instalar extensão Wox para Chrome](https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh)",
+  "ui_query_hotkeys_test_query": "Testar esta consulta",
   "ui_query_variable_picker_insert": "Inserir placeholder dinâmico",
   "ui_query_variable_input_text": "Texto de entrada do comando AI",
   "ui_query_variable_input_text_tooltip": "Insere o texto enviado para este comando AI.",

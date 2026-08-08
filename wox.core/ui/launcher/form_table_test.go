@@ -164,6 +164,18 @@ func TestQueryHotkeyVariablePickerTriggersAndReplacesText(t *testing.T) {
 	}
 }
 
+func TestReplaceQueryHotkeyVariablesForTestUsesSampleValues(t *testing.T) {
+	query := "ai translate {wox:selected_text} from {wox:active_browser_url} in {wox:file_explorer_path} file {wox:selected_file}"
+	got := replaceQueryHotkeyVariablesForTest(query)
+	want := "ai translate test text from https://example.com in /path/to/folder file /path/to/test.txt"
+	if got != want {
+		t.Fatalf("test query = %q, want %q", got, want)
+	}
+	if got := replaceQueryHotkeyVariablesForTest("webview x "); got != "webview x " {
+		t.Fatalf("trailing spaces must stay intact for query tests, got %q", got)
+	}
+}
+
 func TestQueryHotkeyVariablePickerEnterUsesFocusedHost(t *testing.T) {
 	target := newHotkeySettingsForm(settingsData{})
 	definition := formDefinition{}
@@ -275,10 +287,10 @@ func TestQueryHotkeyVariablePickerEnterUsesFocusedHost(t *testing.T) {
 
 func TestQueryHotkeyRowNormalizesNumericFieldsForCore(t *testing.T) {
 	definition := formDefinition{Value: formDefinitionValue{Key: "QueryHotkeys", Columns: []formTableColumn{
-		{Key: "Width", Type: "text"}, {Key: "MaxResultCount", Type: "text"},
+		{Key: "Width", Type: "text", EmptyAsZero: true, Validators: optionalIntegerValidators(false, 0, 0, "")},
+		{Key: "MaxResultCount", Type: "text", EmptyAsZero: true, Validators: optionalIntegerValidators(true, 5, 15, "i18n:ui_query_hotkeys_max_result_count_range_error")},
 	}}}
-	fields := newFormFieldsState(nil, map[string]string{"Width": "500", "MaxResultCount": "12"}, true)
-	fields.values = map[string]string{"Width": "500", "MaxResultCount": "12"}
+	fields, _ := formTableRowFields(definition, map[string]any{"Width": 500, "MaxResultCount": 12})
 	row := formTableRowFromFields(definition, &fields, nil)
 	if row["Width"] != 500 || row["MaxResultCount"] != 12 {
 		t.Fatalf("numeric query hotkey row = %#v", row)
@@ -286,6 +298,38 @@ func TestQueryHotkeyRowNormalizesNumericFieldsForCore(t *testing.T) {
 	fields.values["MaxResultCount"] = "16"
 	if got := validateFormTableRow(definition, &fields, nil, -1); got != "i18n:ui_query_hotkeys_max_result_count_range_error" {
 		t.Fatalf("range validation = %q", got)
+	}
+}
+
+func TestQueryHotkeyOptionalMaxResultCountZeroIsValid(t *testing.T) {
+	definition := formDefinition{Value: formDefinitionValue{Key: "QueryHotkeys", Columns: []formTableColumn{
+		{Key: "Name", Type: "text"},
+		{Key: "Hotkey", Type: "hotkey"},
+		{Key: "Query", Type: "queryHotkeyQuery"},
+		{Key: "Width", Type: "text", EmptyAsZero: true, Validators: optionalIntegerValidators(false, 0, 0, "")},
+		{Key: "MaxResultCount", Type: "text", EmptyAsZero: true, Validators: optionalIntegerValidators(true, 5, 15, "i18n:ui_query_hotkeys_max_result_count_range_error")},
+		{Key: "IsSilentExecution", Type: "checkbox"},
+	}}}
+	fields, _ := formTableRowFields(definition, map[string]any{
+		"Name": "翻译并显示", "Hotkey": "CapsLock+K", "Query": "ai translate-display {wox:selected_text}",
+		"Width": 0, "MaxResultCount": 0, "IsSilentExecution": true,
+	})
+	if fields.values["Width"] != "" || fields.values["MaxResultCount"] != "" {
+		t.Fatalf("optional sizing zeros should load blank, got width=%q max=%q", fields.values["Width"], fields.values["MaxResultCount"])
+	}
+	if got := inferQueryHotkeyPreset(fields.values); got != queryHotkeyPresetSilent {
+		t.Fatalf("preset = %q, want silent", got)
+	}
+	if got := validateFormTableRow(definition, &fields, nil, 0); got != "" {
+		t.Fatalf("zero max results should mean global default, got %q", got)
+	}
+	fields.values["MaxResultCount"] = "0"
+	if got := validateFormTableRow(definition, &fields, nil, 0); got != "" {
+		t.Fatalf("explicit zero should still mean global default, got %q", got)
+	}
+	row := formTableRowFromFields(definition, &fields, nil)
+	if row["Width"] != 0 || row["MaxResultCount"] != 0 {
+		t.Fatalf("empty optional ints should persist as 0, got %#v", row)
 	}
 }
 

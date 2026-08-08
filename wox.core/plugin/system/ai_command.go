@@ -44,6 +44,7 @@ const (
 	aiCommandLoadingOverlayOffsetY    = 18
 	aiCommandLoadingOverlayMinWidth   = 128
 	aiCommandLoadingOverlayMaxWidth   = 220
+	aiCommandLoadingOverlayIconSize   = 16
 	aiCommandResultOverlayMinWidth    = 220
 	aiCommandResultOverlayMaxWidth    = 420
 	aiCommandResultOverlayMaxHeight   = 600
@@ -377,6 +378,7 @@ func buildAICommandLoadingOptions(name string, position mouse.Point, message str
 		Message:  message,
 		Loading:  true,
 		FontSize: 12,
+		IconSize: aiCommandLoadingOverlayIconSize,
 	}
 }
 
@@ -392,7 +394,7 @@ func estimateAICommandLoadingOverlayWidth(message string) float64 {
 			textWidth += 12
 		}
 	}
-	width := 12 + 16 + 8 + textWidth + 12
+	width := 12 + float64(aiCommandLoadingOverlayIconSize) + 8 + textWidth + 12
 	if width < aiCommandLoadingOverlayMinWidth {
 		return aiCommandLoadingOverlayMinWidth
 	}
@@ -445,6 +447,7 @@ func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, po
 		Message:      message,
 		Loading:      streamResult.Status == common.ChatStreamStatusStreaming && copyText == "",
 		FontSize:     12,
+		IconSize:     aiCommandLoadingOverlayIconSize,
 		FollowScroll: true,
 	}
 	if position != nil {

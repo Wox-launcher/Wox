@@ -804,6 +804,8 @@ type FormTableRowFieldProps struct {
 	SelectWidth         float32
 	EmojiIcon           *woxui.Image
 	UploadIcon          *woxui.Image
+	ActionIcon          *woxui.Image
+	ActionLabel         string
 	TrailingLabel       string
 	Window              *woxui.Window
 	Theme               woxcomponent.Theme
@@ -811,6 +813,8 @@ type FormTableRowFieldProps struct {
 	OnFocusChange       func(bool)
 	OnChoiceTap         func(woxui.Rect)
 	OnTrailingTap       func(woxui.Rect)
+	OnActionTap         func()
+	OnActionHover       func(bool, woxui.Rect)
 	OnFocus             func()
 	OnChanged           func(string)
 	OnSelectionChanged  func(woxui.TextSelection)
@@ -942,11 +946,37 @@ func formTableRowControl(props FormTableRowFieldProps, width, height float32) wo
 	}
 }
 
-// formTableRowTextControl keeps directory browsing beside the same outlined text control.
+// formTableRowTextControl keeps directory browsing and query-test actions beside the same outlined text control.
 func formTableRowTextControl(props FormTableRowFieldProps, width, height float32) woxwidget.Widget {
 	inputWidth := width
+	sideActions := make([]woxwidget.Widget, 0, 2)
 	if props.OnBrowse != nil {
-		inputWidth = max(float32(100), width-90)
+		inputWidth = max(float32(100), inputWidth-90)
+		sideActions = append(sideActions, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-browse", Label: props.BrowseLabel, Width: 82, Height: height, Radius: 4, Variant: woxcomponent.ButtonOutline, OnTap: props.OnBrowse, Theme: props.Theme}))
+	}
+	if props.ActionIcon != nil && props.OnActionTap != nil {
+		inputWidth = max(float32(100), inputWidth-42)
+		action := woxwidget.Semantics{
+			AutomationID: props.ID + "-action", Role: woxui.AccessibilityRoleButton, Label: props.ActionLabel,
+			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+			OnAction: func(action woxui.AccessibilityAction, _ string) error {
+				if action != woxui.AccessibilityActionActivate {
+					return fmt.Errorf("unsupported action %q", action)
+				}
+				props.OnActionTap()
+				return nil
+			},
+			Child: woxwidget.Gesture{
+				ID: props.ID + "-action", OnTap: props.OnActionTap,
+				OnHoverAt: func(inside bool, bounds woxui.Rect) {
+					if props.OnActionHover != nil {
+						props.OnActionHover(inside, bounds)
+					}
+				},
+				Child: woxwidget.Align{Width: 34, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: props.ActionIcon, Width: 18, Height: 18}},
+			},
+		}
+		sideActions = append(sideActions, action)
 	}
 	padding := woxwidget.Insets{Left: 10, Top: 7, Right: 9, Bottom: 6}
 	if props.TrailingLabel != "" {
@@ -977,13 +1007,10 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 			{Left: max(float32(0), inputWidth-34), Child: trailing},
 		}}
 	}
-	if props.OnBrowse == nil {
+	if len(sideActions) == 0 {
 		return input
 	}
-	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		input,
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-browse", Label: props.BrowseLabel, Width: 82, Height: height, Radius: 4, Variant: woxcomponent.ButtonOutline, OnTap: props.OnBrowse, Theme: props.Theme}),
-	}}
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: append([]woxwidget.Widget{input}, sideActions...)}
 }
 
 func formTableRowCheckboxControl(props FormTableRowFieldProps) woxwidget.Widget {

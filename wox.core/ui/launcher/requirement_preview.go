@@ -451,16 +451,37 @@ func validateFormFields(definitions []formDefinition, values map[string]string) 
 					return "i18n:ui_validator_value_can_not_be_empty"
 				}
 			case "is_number":
-				if validator.Value.IsInteger {
-					if _, err := strconv.Atoi(value); err != nil {
-						return "i18n:ui_validator_must_be_integer"
-					}
-				} else if validator.Value.IsFloat {
-					if _, err := strconv.ParseFloat(value, 64); err != nil {
-						return "i18n:ui_validator_must_be_number"
-					}
+				if message := validateFormNumber(value, validator.Value); message != "" {
+					return message
 				}
 			}
+		}
+	}
+	return ""
+}
+
+// validateFormNumber checks optional/required numeric fields and optional inclusive ranges.
+func validateFormNumber(value string, rule formValidatorValue) string {
+	trimmed := strings.TrimSpace(value)
+	if rule.Optional && trimmed == "" {
+		return ""
+	}
+	if rule.IsInteger {
+		parsed, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return "i18n:ui_validator_must_be_integer"
+		}
+		if rule.HasRange && (parsed < rule.Min || parsed > rule.Max) {
+			if rule.ErrorKey != "" {
+				return rule.ErrorKey
+			}
+			return "i18n:ui_validator_must_be_number"
+		}
+		return ""
+	}
+	if rule.IsFloat {
+		if _, err := strconv.ParseFloat(trimmed, 64); err != nil {
+			return "i18n:ui_validator_must_be_number"
 		}
 	}
 	return ""

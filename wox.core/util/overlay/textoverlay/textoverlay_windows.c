@@ -589,9 +589,29 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
     int x = state->centerContent ? (contentAreaWidth - groupWidth) / 2 : 0;
     if (x < 0)
         x = 0;
+
+    int textY = rowY + (rowHeight - textHeight) / 2;
     if (state->loading)
     {
+        // DrawText top-aligns glyphs inside the measured line box. Center the spinner on the
+        // first-line ascent/ink so it lines up with visible text instead of unused descent.
         int y = rowY + (rowHeight - iconSize) / 2;
+        TEXTMETRICW metrics;
+        if (GetTextMetricsW(hdc, &metrics) && metrics.tmAscent > 0)
+        {
+            int inkTop = textY + metrics.tmInternalLeading;
+            int inkHeight = metrics.tmAscent - metrics.tmInternalLeading;
+            if (inkHeight < 1)
+                inkHeight = metrics.tmAscent;
+            y = inkTop + (inkHeight - iconSize) / 2;
+        }
+        if (y < 0)
+            y = 0;
+        if (y + iconSize > rc.bottom - copyReserve)
+            y = rc.bottom - copyReserve - iconSize;
+        if (y < 0)
+            y = 0;
+
         state->loadingRect.left = x;
         state->loadingRect.top = y;
         state->loadingRect.right = x + iconSize;
@@ -605,7 +625,6 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
         state->loadingRect = empty;
     }
 
-    int textY = rowY + (rowHeight - textHeight) / 2;
     RECT textRc = {x, textY, x + textLayoutWidth, textY + textHeight};
     TextOverlayDrawTextAlpha(hdc, font, state->message, textRc, DT_WORDBREAK | DT_NOPREFIX, textColor);
 

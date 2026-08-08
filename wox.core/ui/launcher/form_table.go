@@ -13,6 +13,8 @@ import (
 	"strings"
 	"unicode"
 
+	"wox/common"
+	"wox/plugin"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
@@ -130,6 +132,63 @@ var queryHotkeyVariables = []queryHotkeyVariable{
 	{"{wox:selected_file}", "i18n:ui_query_variable_selected_file", "i18n:ui_query_variable_selected_file_tooltip", "document"},
 	{"{wox:active_browser_url}", "i18n:ui_query_variable_active_browser_url", "i18n:ui_query_variable_active_browser_url_tooltip", "external"},
 	{"{wox:file_explorer_path}", "i18n:ui_query_variable_file_explorer_path", "i18n:ui_query_variable_file_explorer_path_tooltip", "folder-open"},
+}
+
+const (
+	queryHotkeyTestSelectedText = "test text"
+	queryHotkeyTestSelectedFile = "/path/to/test.txt"
+	queryHotkeyTestBrowserURL   = "https://example.com"
+	queryHotkeyTestExplorerPath = "/path/to/folder"
+)
+
+// replaceQueryHotkeyVariablesForTest swaps runtime placeholders for stable sample values so the query can be previewed.
+func replaceQueryHotkeyVariablesForTest(query string) string {
+	replaced := query
+	replaced = strings.ReplaceAll(replaced, plugin.QueryVariableSelectedText, queryHotkeyTestSelectedText)
+	replaced = strings.ReplaceAll(replaced, plugin.QueryVariableSelectedFile, queryHotkeyTestSelectedFile)
+	replaced = strings.ReplaceAll(replaced, plugin.QueryVariableActiveBrowserUrl, queryHotkeyTestBrowserURL)
+	replaced = strings.ReplaceAll(replaced, plugin.QueryVariableFileExplorerPath, queryHotkeyTestExplorerPath)
+	return replaced
+}
+
+// runFormTableQueryHotkeyTest opens the launcher with the editor query, substituting variables with sample values.
+func (a *App) runFormTableQueryHotkeyTest() {
+	state := a.activeFormTableEditor()
+	if state == nil || state.rowForm == nil || state.definition.Value.Key != "QueryHotkeys" {
+		return
+	}
+	if state.rowForm.editor != nil {
+		syncFormFieldsEditorLocked(state.rowForm)
+	}
+	// Keep leading/trailing spaces from the editor; only reject blank-only queries.
+	queryText := state.rowForm.values["Query"]
+	if strings.TrimSpace(queryText) == "" {
+		return
+	}
+	resolved := replaceQueryHotkeyVariablesForTest(queryText)
+	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
+	a.closeFormTableQueryVariablePicker()
+
+	params := a.show
+	params.SelectAll = false
+	params.HideQueryBox = false
+	params.HideToolbar = false
+	params.ShowSource = string(common.ShowSourceDefault)
+	if params.Position.Type == "" && a.window != nil {
+		if bounds, err := a.window.Bounds(); err == nil {
+			params.Position = position{Type: "last_location", X: int(bounds.X), Y: int(bounds.Y)}
+		}
+	}
+	a.setQuery(newInputQuery(resolved))
+	util.Go(a.lifecycleCtx, "show launcher for query hotkey test", func() {
+		if err := a.showWindow(params); err != nil {
+			util.GetLogger().Error(a.lifecycleCtx, "show launcher for query hotkey test: "+err.Error())
+			return
+		}
+		if err := a.sendCurrentQuery(); err != nil {
+			util.GetLogger().Error(a.lifecycleCtx, "send query hotkey test: "+err.Error())
+		}
+	})
 }
 
 // decodeFormTableRows preserves JSON numbers and unknown row fields so the shared editor can round-trip future column types safely.
@@ -463,11 +522,23 @@ func formTableRowFields(definition formDefinition, row map[string]any) (formFiel
 		} else {
 			values[column.Key] = formTableColumnValue(column, map[string]any{column.Key: value})
 		}
+		if column.EmptyAsZero {
+			values[column.Key] = normalizeEmptyAsZeroFormValue(values[column.Key])
+		}
 		if column.Type == "textList" {
 			textLists[column.Key] = true
 		}
 	}
 	return newFormFieldsState(definitions, values, true), textLists
+}
+
+// normalizeEmptyAsZeroFormValue maps blank and zero to an empty editor value for EmptyAsZero columns.
+func normalizeEmptyAsZeroFormValue(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || trimmed == "0" {
+		return ""
+	}
+	return trimmed
 }
 
 func (a *App) beginAddFormTableRow() {
@@ -691,35 +762,28 @@ func formTableRowFromFields(definition formDefinition, fields *formFieldsState, 
 			row[column.Key] = app
 		}
 	}
-	if definition.Value.Key == "QueryHotkeys" {
-		for _, key := range []string{"Width", "MaxResultCount"} {
-			row[key], _ = strconv.Atoi(strings.TrimSpace(fields.values[key]))
+	normalizeEmptyAsZeroFieldValues(definition, fields.values)
+	for _, column := range definition.Value.Columns {
+		if column.EmptyAsZero {
+			row[column.Key], _ = strconv.Atoi(strings.TrimSpace(fields.values[column.Key]))
 		}
 	}
 	return row
 }
 
+// normalizeEmptyAsZeroFieldValues keeps editor values blank when EmptyAsZero columns still contain a stored 0.
+func normalizeEmptyAsZeroFieldValues(definition formDefinition, values map[string]string) {
+	for _, column := range definition.Value.Columns {
+		if column.EmptyAsZero {
+			values[column.Key] = normalizeEmptyAsZeroFormValue(values[column.Key])
+		}
+	}
+}
+
 func validateFormTableRow(definition formDefinition, fields *formFieldsState, rows []map[string]any, editingIndex int) string {
+	normalizeEmptyAsZeroFieldValues(definition, fields.values)
 	if validationKey := validateFormFields(fields.definitions, fields.values); validationKey != "" {
 		return validationKey
-	}
-	if definition.Value.Key == "QueryHotkeys" {
-		width := strings.TrimSpace(fields.values["Width"])
-		if width != "" {
-			if _, err := strconv.Atoi(width); err != nil {
-				return "i18n:ui_validator_must_be_number"
-			}
-		}
-		maxResults := strings.TrimSpace(fields.values["MaxResultCount"])
-		if maxResults != "" {
-			value, err := strconv.Atoi(maxResults)
-			if err != nil {
-				return "i18n:ui_validator_must_be_number"
-			}
-			if value < 5 || value > 15 {
-				return "i18n:ui_query_hotkeys_max_result_count_range_error"
-			}
-		}
 	}
 	for _, column := range definition.Value.Columns {
 		if column.Type == "woxImage" {
