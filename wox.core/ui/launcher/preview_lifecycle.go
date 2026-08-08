@@ -17,7 +17,6 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	result, preview, visible := a.selectedPreviewForLifecycle()
 	if !visible {
 		hideWebView := a.deactivatePreviewTypes("")
-		a.closeNativePreviewCloseOverlay()
 		if hideWebView {
 			a.hideWebView()
 		}
@@ -79,7 +78,6 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	if hideWebView {
 		a.hideWebView()
 	}
-	a.reconcileNativePreviewCloseOverlay(preview)
 }
 
 // selectedPreviewForLifecycle excludes stale query results and layouts that do not render a preview.

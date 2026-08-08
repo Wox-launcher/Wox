@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"runtime"
 	"strings"
 	"time"
 
@@ -193,7 +194,15 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	if queryHeight > 0 && snapshot.refinementOpen && len(snapshot.refinements) > 0 {
 		refinementHeight = snapshot.densityMetrics.refinementBarHeight
 	}
-	contentHeight := max(0, height-queryHeight-refinementHeight-toolbarHeight)
+	previewOnly := launcherPreviewOnly(snapshot)
+	showTitleBar := launcherPreviewTitleBarVisible(snapshot)
+	var titleBar woxwidget.Widget
+	titleBarHeight := float32(0)
+	if showTitleBar {
+		titleBarHeight = launcherview.SettingsTitleBarHeight
+		titleBar = a.buildPreviewTitleBar(snapshot, width)
+	}
+	contentHeight := max(0, height-queryHeight-refinementHeight-toolbarHeight-titleBarHeight)
 	content := a.buildContent(snapshot, width, contentHeight, frame.Scale)
 	var header woxwidget.Widget
 	if queryHeight > 0 {
@@ -226,15 +235,50 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale)
 		overlay = launcherPreparedSection("launcher-table-overlay-section", "table-overlay", launcherPreparedSectionProps{Signature: launcherSectionSignature(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale), Width: width, Height: height, Child: overlay})
 	}
-	previewOnly := launcherPreviewOnly(snapshot)
 	return launcherview.LauncherView(launcherview.LauncherViewProps{
-		Width: width, Height: height, Header: header, Refinements: refinements, Content: content, Footer: footer,
+		Width: width, Height: height, TitleBar: titleBar, Header: header, Refinements: refinements, Content: content, Footer: footer,
 		QueryAtBottom: snapshot.show.QueryBoxAtBottom, Floating: floating, Overlay: overlay, Theme: snapshot.palette.componentTheme(),
 		PreviewOnly: previewOnly, BorderWidth: snapshot.palette.appPadding.Top, OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {
 				log.Printf("start preview-only window drag: %v", err)
 			}
 		},
+	})
+}
+
+// buildPreviewTitleBar reuses the settings chrome so full previews expose consistent window actions.
+func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32) woxwidget.Widget {
+	title := "Wox"
+	if snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) {
+		title = strings.TrimSpace(snapshot.results[snapshot.selected].Title)
+		if title == "" {
+			title = strings.TrimSpace(snapshot.results[snapshot.selected].SubTitle)
+		}
+		if title == "" {
+			title = "Wox"
+		}
+	}
+	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
+	titleWidth := float32(160)
+	if a.window != nil {
+		if metrics, err := a.window.MeasureText(title, titleStyle); err == nil {
+			titleWidth = metrics.Size.Width + 24
+		}
+	}
+	return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
+		Width: width, CloseOnly: true, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.appIcon,
+		Theme: snapshot.palette.componentTheme(),
+		OnDrag: func() {
+			if a.window != nil {
+				_ = a.window.StartDragging()
+			}
+		},
+		OnMinimize: func() {
+			if a.window != nil {
+				_ = a.window.Minimize()
+			}
+		},
+		OnClose: a.closePreviewWindow,
 	})
 }
 
@@ -247,6 +291,14 @@ func launcherPreviewOnly(snapshot viewSnapshot) bool {
 	return (launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) || snapshot.terminalFullscreen) &&
 		launcherPreviewVisible(snapshot.layout, preview) &&
 		launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.terminalFullscreen) == 0
+}
+
+// launcherPreviewTitleBarVisible limits the opt-in title bar to chrome-free non-chat previews.
+func launcherPreviewTitleBarVisible(snapshot viewSnapshot) bool {
+	if !snapshot.show.ShowPreviewTitleBar || !launcherPreviewOnly(snapshot) {
+		return false
+	}
+	return snapshot.results[snapshot.selected].Preview.PreviewType != "chat"
 }
 
 // queryLineHeight includes the configured font's native line box so glyphs are not clipped.
@@ -512,7 +564,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 	if ratio <= 0 {
 		result := snapshot.results[snapshot.selected]
 		preview := a.buildPreviewSection(result, snapshot, width, height, imageScale)
-		if launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) && a.resolvePreview(result.Preview).PreviewType != "chat" && !a.shouldUseNativePreviewClose(result.Preview) {
+		if launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) && a.resolvePreview(result.Preview).PreviewType != "chat" && !launcherPreviewTitleBarVisible(snapshot) {
 			label := a.translate("i18n:ui_close")
 			if strings.TrimSpace(label) == "" || label == "i18n:ui_close" {
 				label = "Close"

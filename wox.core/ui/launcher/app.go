@@ -162,7 +162,9 @@ type App struct {
 	translations         map[string]string
 	translationsRevision atomic.Uint64
 	// imageMu protects the image cache because image decoding completes on background goroutines.
-	imageMu          sync.RWMutex
+	imageMu sync.RWMutex
+	// appIcon is decoded during app construction so native title bars never start without their icon.
+	appIcon          *woxui.Image
 	images           map[string]*woxui.Image
 	imagesRevision   atomic.Uint64
 	imageRequested   map[string]string
@@ -198,6 +200,7 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	if windowID == "" {
 		windowID = woxui.WindowID("wox.instance." + sessionID)
 	}
+	appIcon, _ := decodeWoxImageWithTint(appIconImageSource, nil, 256)
 	app := &App{
 		isDev:            isDev,
 		isPrimary:        isPrimary,
@@ -211,6 +214,7 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 		primary:          primary,
 		lifecycleCtx:     lifecycleCtx,
 		cancel:           cancel,
+		appIcon:          appIcon,
 		query:            newInputQuery(""),
 		editor:           woxui.NewTextEditor(""),
 		selected:         -1,
@@ -1385,18 +1389,20 @@ func newInputQuery(text string) plainQuery {
 }
 
 type showAppParams struct {
-	SelectAll        bool         `json:"SelectAll"`
-	Position         position     `json:"Position"`
-	WindowWidth      int          `json:"WindowWidth"`
-	MaxResultCount   int          `json:"MaxResultCount"`
-	QueryHistories   []plainQuery `json:"QueryHistories"`
-	LaunchMode       string       `json:"LaunchMode"`
-	StartPage        string       `json:"StartPage"`
-	HideQueryBox     bool         `json:"HideQueryBox"`
-	HideToolbar      bool         `json:"HideToolbar"`
-	QueryBoxAtBottom bool         `json:"QueryBoxAtBottom"`
-	HideOnBlur       bool         `json:"HideOnBlur"`
-	ShowSource       string       `json:"ShowSource"`
+	// ShowPreviewTitleBar is an internal launcher control for full preview windows.
+	ShowPreviewTitleBar bool         `json:"-"`
+	SelectAll           bool         `json:"SelectAll"`
+	Position            position     `json:"Position"`
+	WindowWidth         int          `json:"WindowWidth"`
+	MaxResultCount      int          `json:"MaxResultCount"`
+	QueryHistories      []plainQuery `json:"QueryHistories"`
+	LaunchMode          string       `json:"LaunchMode"`
+	StartPage           string       `json:"StartPage"`
+	HideQueryBox        bool         `json:"HideQueryBox"`
+	HideToolbar         bool         `json:"HideToolbar"`
+	QueryBoxAtBottom    bool         `json:"QueryBoxAtBottom"`
+	HideOnBlur          bool         `json:"HideOnBlur"`
+	ShowSource          string       `json:"ShowSource"`
 }
 
 type position struct {

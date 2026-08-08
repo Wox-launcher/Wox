@@ -114,6 +114,17 @@ func TestSettingsTitleBarLinuxCloseHoverUsesDangerHighlight(t *testing.T) {
 	}
 }
 
+func TestSettingsTitleBarCloseOnlyOmitsWindowsMinimize(t *testing.T) {
+	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{Width: 1200, Platform: "windows", CloseOnly: true}, "", "", nil, nil).(woxwidget.Stack)
+	if len(titleBar.Children) != 4 {
+		t.Fatalf("close-only Windows title-bar child count = %d, want drag, title, border, and close", len(titleBar.Children))
+	}
+	closeButton, ok := titleBar.Children[3].Child.(woxwidget.Gesture)
+	if !ok || closeButton.ID != "settings-window-close" {
+		t.Fatalf("close-only Windows last control = %#v, want close button", titleBar.Children[3].Child)
+	}
+}
+
 func TestSettingsWindowOverlayPreservesHoveredIdentity(t *testing.T) {
 	var overlayVisible bool
 	var hoverStates []bool

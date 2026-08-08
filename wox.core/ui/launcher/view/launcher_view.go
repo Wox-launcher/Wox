@@ -29,6 +29,7 @@ type LauncherViewProps struct {
 	Width         float32
 	Height        float32
 	Radius        float32
+	TitleBar      woxwidget.Widget
 	Header        woxwidget.Widget
 	Refinements   woxwidget.Widget
 	Content       woxwidget.Widget
@@ -119,7 +120,10 @@ func (s *previewHoverCloseState) Dispose() {}
 
 // LauncherView builds the accessible launcher window and its overlay layers.
 func LauncherView(props LauncherViewProps) woxwidget.Widget {
-	sections := make([]woxwidget.Widget, 0, 4)
+	sections := make([]woxwidget.Widget, 0, 5)
+	if props.TitleBar != nil {
+		sections = append(sections, props.TitleBar)
+	}
 	if !props.QueryAtBottom {
 		if props.Header != nil {
 			sections = append(sections, props.Header)

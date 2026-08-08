@@ -307,11 +307,12 @@ func (i *SelectionPlugin) triggerSpaceQuickLook() {
 			QuerySelection: selected,
 		},
 		ShowApp: common.ShowContext{
-			HideQueryBox:   true,
-			HideToolbar:    true,
-			ShowSource:     common.ShowSourceSelection,
-			WindowWidth:    1000,
-			MaxResultCount: 12,
+			HideQueryBox:        true,
+			HideToolbar:         true,
+			ShowPreviewTitleBar: true,
+			ShowSource:          common.ShowSourceSelection,
+			WindowWidth:         1000,
+			MaxResultCount:      12,
 		},
 	})
 }

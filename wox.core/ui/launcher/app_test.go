@@ -3,7 +3,6 @@ package launcher
 import (
 	"context"
 	"errors"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -146,34 +145,31 @@ func TestLauncherPreviewOnlyRequiresChromeFreeZeroRatioPreview(t *testing.T) {
 	}
 }
 
-func TestNativePreviewCloseIsOptInForActiveOfficePreview(t *testing.T) {
-	app := &App{
-		sessionID:             "test-session",
-		show:                  showAppParams{HideQueryBox: true, HideToolbar: true},
-		nativeFilePreviewPath: `C:\document.docx`,
+func TestLauncherPreviewTitleBarRequiresOptInFullPreview(t *testing.T) {
+	ratio := 0.0
+	snapshot := viewSnapshot{
+		selected: 0,
+		results:  []queryResult{{Title: "Document", Preview: queryPreview{PreviewType: "file", PreviewData: "report.docx"}}},
+		layout:   queryLayout{ResultPreviewWidthRatio: &ratio},
+		show:     showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
 	}
-	preview := queryPreview{PreviewType: "file", PreviewData: `C:\document.docx`}
-	if runtime.GOOS == "windows" {
-		if !app.shouldUseNativePreviewClose(preview) {
-			t.Fatal("active Office preview should opt into the native close affordance")
-		}
-	} else if app.shouldUseNativePreviewClose(preview) {
-		t.Fatal("native file close affordance should remain disabled on unsupported platforms")
+	if !launcherPreviewTitleBarVisible(snapshot) {
+		t.Fatal("opt-in full preview should show the title bar")
 	}
 
-	app.nativeFilePreviewPath = ""
-	if app.shouldUseNativePreviewClose(preview) {
-		t.Fatal("inactive Office preview should keep the default close affordance")
+	snapshot.show.ShowPreviewTitleBar = false
+	if launcherPreviewTitleBarVisible(snapshot) {
+		t.Fatal("title bar should remain hidden by default")
 	}
-}
-
-func TestNativePreviewCloseDoesNotChangeChatBehavior(t *testing.T) {
-	app := &App{
-		show:                  showAppParams{HideQueryBox: true, HideToolbar: true},
-		nativeFilePreviewPath: `C:\document.docx`,
+	snapshot.show.ShowPreviewTitleBar = true
+	snapshot.results[0].Preview.PreviewType = "chat"
+	if launcherPreviewTitleBarVisible(snapshot) {
+		t.Fatal("chat preview should keep its existing header")
 	}
-	if app.shouldUseNativePreviewClose(queryPreview{PreviewType: "chat", PreviewData: "chat"}) {
-		t.Fatal("chat preview should keep the in-process close affordance")
+	snapshot.results[0].Preview.PreviewType = "file"
+	ratio = 0.4
+	if launcherPreviewTitleBarVisible(snapshot) {
+		t.Fatal("split preview should not show the full-preview title bar")
 	}
 }
 
@@ -596,12 +592,15 @@ func TestQueryDisplayProvidesAllLinesToSharedViewport(t *testing.T) {
 }
 
 func TestFromCoreShowOptionsPreservesQueryHistoryOrderAndPayload(t *testing.T) {
-	options := contract.ShowOptions{QueryHistories: []common.PlainQuery{
+	options := contract.ShowOptions{ShowPreviewTitleBar: true, QueryHistories: []common.PlainQuery{
 		{QueryId: "latest-id", QueryType: "input", QueryText: "latest", QueryRefinements: map[string]string{"scope": "recent"}, ContextData: common.ContextData{"token": "latest"}},
 		{QueryId: "older-id", QueryType: "selection", QueryText: "older", QuerySelection: utilselection.Selection{Text: "selected"}},
 	}}
 
 	params := fromCoreShowOptions(options)
+	if !params.ShowPreviewTitleBar {
+		t.Fatal("preview title-bar control was not preserved")
+	}
 	if len(params.QueryHistories) != 2 {
 		t.Fatalf("query history count = %d, want 2", len(params.QueryHistories))
 	}

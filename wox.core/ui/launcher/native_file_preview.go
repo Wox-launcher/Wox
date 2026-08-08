@@ -48,7 +48,6 @@ func (a *App) activateNativeFilePreview(path string) bool {
 
 // deactivateNativeFilePreview releases the platform child window and clears its controller state.
 func (a *App) deactivateNativeFilePreview() {
-	a.closeNativePreviewCloseOverlay()
 	wasActive := a.nativeFilePreviewPath != "" || a.nativeFilePreviewError != ""
 	a.nativeFilePreviewPath = ""
 	a.nativeFilePreviewError = ""
@@ -73,7 +72,6 @@ func (a *App) setNativeFilePreviewError(err error) {
 		return
 	}
 	a.nativeFilePreviewError = message
-	a.closeNativePreviewCloseOverlay()
 	if a.window != nil {
 		if err := woxui.Call(func() { _ = a.window.HideNativeFilePreview() }); err != nil {
 			util.GetLogger().Error(a.lifecycleCtx, "hide native file preview after error: "+err.Error())

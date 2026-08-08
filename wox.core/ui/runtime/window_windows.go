@@ -287,8 +287,13 @@ func platformRun(start func() error) (runErr error) {
 	if err := ensureWindowClass(); err != nil {
 		return err
 	}
-	var queueMessage win.MSG
-	win.PeekMessage(&queueMessage, 0, 0, 0, win.PM_NOREMOVE)
+	message := new(win.MSG)
+	var messagePinner runtime.Pinner
+	// DispatchMessageW can re-enter Go and grow the goroutine stack while User32 still holds MSG's address.
+	// Pin the shared message so User32 never writes back through a stale stack pointer after the callback.
+	messagePinner.Pin(message)
+	defer messagePinner.Unpin()
+	win.PeekMessage(message, 0, 0, 0, win.PM_NOREMOVE)
 	if start == nil {
 		return errors.New("window runtime start callback is nil")
 	}
@@ -307,9 +312,8 @@ func platformRun(start func() error) (runErr error) {
 	}
 	platformRuntime.messageLoopActive = true
 	platformRuntime.Unlock()
-	var message win.MSG
 	for {
-		result := win.GetMessage(&message, 0, 0, 0)
+		result := win.GetMessage(message, 0, 0, 0)
 		if result == 0 {
 			return nil
 		}
@@ -320,8 +324,8 @@ func platformRun(start func() error) (runErr error) {
 			runWindowsRuntimeCall(message.WParam)
 			continue
 		}
-		win.TranslateMessage(&message)
-		win.DispatchMessage(&message)
+		win.TranslateMessage(message)
+		win.DispatchMessage(message)
 	}
 }
 

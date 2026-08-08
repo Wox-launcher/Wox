@@ -137,12 +137,14 @@ type ActiveWindowSnapshot struct {
 }
 
 type ShowContext struct {
-	SelectAll        bool
-	HideQueryBox     bool
-	HideToolbar      bool
-	QueryBoxAtBottom bool
-	HideOnBlur       bool
-	ShowSource       ShowSource
+	SelectAll    bool
+	HideQueryBox bool
+	HideToolbar  bool
+	// ShowPreviewTitleBar is an internal launcher control for full preview windows.
+	ShowPreviewTitleBar bool
+	QueryBoxAtBottom    bool
+	HideOnBlur          bool
+	ShowSource          ShowSource
 	// ActivationStartedAt carries the original hotkey callback timestamp to the
 	// UI. The bridge acknowledgement arrives before the native window is visible,
 	// so visibility diagnostics must finish in the UI.

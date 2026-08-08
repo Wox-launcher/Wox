@@ -154,7 +154,8 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 			fields.active = true
 			fields.focused = index
 			hotkey = a.buildFormHotkey(fields, formFieldCallbacks{
-				idPrefix: "hotkey-settings", imageScale: frame.Scale, alignHotkeyRight: true, focus: a.focusOnboardingHotkey, recordKey: a.recordHotkeySettingsField,
+				idPrefix: "hotkey-settings", labelWidth: 280, settingsLayout: true, alignHotkeyRight: true, imageScale: frame.Scale,
+				focus: a.focusOnboardingHotkey, recordKey: a.recordHotkeySettingsField,
 			}, snapshot.palette, index, fields.definitions[index], max(float32(0), frame.Size.Width-launcherview.OnboardingSidebarWidth-112), 62)
 		}
 	}

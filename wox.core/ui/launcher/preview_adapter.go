@@ -311,7 +311,7 @@ func (a *App) previewTextLayout(scrollKey, value string, style woxui.TextStyle, 
 }
 
 func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, width, height float32) woxwidget.Widget {
-	image := a.imageFor(source)
+	image := a.imageForSize(source, previewImageRequestSize(width, height))
 	message := "Loading image preview…"
 	color := palette.resultSubtitle
 	if image == nil {

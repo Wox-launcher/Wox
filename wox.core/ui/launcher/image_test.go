@@ -92,6 +92,27 @@ func TestPhysicalImageSizeUsesBackingScale(t *testing.T) {
 	}
 }
 
+func TestPreviewImageRequestSizeUsesPreviewSurfaceDimensions(t *testing.T) {
+	tests := []struct {
+		name   string
+		width  float32
+		height float32
+		want   int
+	}{
+		{name: "wide preview", width: 400, height: 180, want: 800},
+		{name: "tall preview", width: 320, height: 700, want: 1400},
+		{name: "minimum resolution", width: 120, height: 80, want: 512},
+		{name: "maximum resolution", width: 1400, height: 1200, want: 2048},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := previewImageRequestSize(test.width, test.height); got != test.want {
+				t.Fatalf("previewImageRequestSize(%v, %v) = %d, want %d", test.width, test.height, got, test.want)
+			}
+		})
+	}
+}
+
 func TestImageForSizeKeepsPreviousResolutionWhileLoadingNewOne(t *testing.T) {
 	source := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#ffffff"/></svg>`}
 	variantKey := imageVariantKey(source, nil)

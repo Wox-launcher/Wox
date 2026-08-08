@@ -113,6 +113,12 @@ func physicalImageSize(logicalSize int, scale float32) int {
 	return max(1, int(math.Ceil(float64(float32(logicalSize)*scale))))
 }
 
+// previewImageRequestSize returns a bounded raster size for images displayed in a preview surface.
+func previewImageRequestSize(width, height float32) int {
+	maxDimension := max(width, height)
+	return int(min(float32(2048), max(float32(512), float32(math.Ceil(float64(maxDimension*2))))))
+}
+
 // centeredSVGText extracts a single centered label so the native text renderer can cover SVG text unsupported by the rasterizer.
 func centeredSVGText(source woxImage, targetWidth, targetHeight float32) (svgCenteredText, bool) {
 	if source.ImageType != "svg" || source.ImageData == "" || targetWidth <= 0 || targetHeight <= 0 {

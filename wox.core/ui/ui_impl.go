@@ -430,7 +430,7 @@ func getShowOptions(ctx context.Context, showContext common.ShowContext) contrac
 	}
 
 	return contract.ShowOptions{
-		SelectAll: showContext.SelectAll, HideQueryBox: showContext.HideQueryBox, HideToolbar: hideToolbar,
+		SelectAll: showContext.SelectAll, HideQueryBox: showContext.HideQueryBox, HideToolbar: hideToolbar, ShowPreviewTitleBar: showContext.ShowPreviewTitleBar,
 		QueryBoxAtBottom: showContext.QueryBoxAtBottom, HideOnBlur: showContext.HideOnBlur,
 		Position:    contract.Position{Type: string(position.Type), X: position.X, Y: position.Y},
 		WindowWidth: windowWidth, MaxResultCount: maxResultCount, QueryHistories: queryHistories, LaunchMode: woxSetting.LaunchMode.Get(),

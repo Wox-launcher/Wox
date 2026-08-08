@@ -18,18 +18,20 @@ type Position struct {
 
 // ShowOptions contains the launch-time state and window behavior consumed by the Go UI.
 type ShowOptions struct {
-	SelectAll        bool
-	Position         Position
-	WindowWidth      int
-	MaxResultCount   int
-	QueryHistories   []common.PlainQuery
-	LaunchMode       string
-	StartPage        string
-	HideQueryBox     bool
-	HideToolbar      bool
-	QueryBoxAtBottom bool
-	HideOnBlur       bool
-	ShowSource       string
+	SelectAll      bool
+	Position       Position
+	WindowWidth    int
+	MaxResultCount int
+	QueryHistories []common.PlainQuery
+	LaunchMode     string
+	StartPage      string
+	HideQueryBox   bool
+	HideToolbar    bool
+	// ShowPreviewTitleBar is an internal launcher control and is not part of plugin query responses.
+	ShowPreviewTitleBar bool
+	QueryBoxAtBottom    bool
+	HideOnBlur          bool
+	ShowSource          string
 }
 
 // OpenInstanceOptions describes a primary handoff or an independently hosted secondary launcher.

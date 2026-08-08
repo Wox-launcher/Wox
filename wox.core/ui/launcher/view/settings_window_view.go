@@ -56,8 +56,11 @@ func SettingsWindow(props SettingsWindowProps) woxwidget.Widget {
 
 // SettingsTitleBarProps contains the title and native window actions.
 type SettingsTitleBarProps struct {
-	Width      float32
-	RailWidth  float32
+	Width float32
+	// RailWidth reserves the macOS settings rail; zero makes the title bar span the full window.
+	RailWidth float32
+	// CloseOnly hides platform minimize and zoom controls for preview title bars.
+	CloseOnly  bool
 	Title      string
 	TitleWidth float32
 	Platform   string
@@ -119,17 +122,24 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 	height := SettingsTitleBarHeight
 	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
 	dragWidth := props.Width
-	if props.Platform == "darwin" {
+	if props.Platform == "darwin" && props.RailWidth > 0 {
 		dragWidth = props.RailWidth
 	}
 	dragArea := woxwidget.Gesture{ID: "settings-title-drag", OnDragStart: props.OnDrag, Child: woxwidget.Container{Width: dragWidth, Height: height}}
 	children := make([]woxwidget.StackChild, 0, 7)
-	if props.Platform == "darwin" {
+	if props.Platform == "darwin" && props.RailWidth > 0 {
 		children = append(children, woxwidget.StackChild{Child: woxwidget.Container{Width: props.RailWidth, Height: height, Color: settingsTitleBarAlpha(props.Theme.ToolbarText, 9)}})
 	}
 	children = append(children, woxwidget.StackChild{Child: dragArea})
 	switch props.Platform {
 	case "darwin":
+		if props.CloseOnly {
+			if props.RailWidth > 0 {
+				children = append(children, woxwidget.StackChild{Left: props.RailWidth - 1, Child: woxwidget.Container{Width: 1, Height: height, Color: settingsTitleBarAlpha(props.Theme.ToolbarText, 26)}})
+			}
+			children = append(children, woxwidget.StackChild{Left: 13, Child: settingsMacTrafficLight("settings-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", pressed == "settings-window-close", props.OnClose, onHover, onPress)})
+			break
+		}
 		children = append(children,
 			woxwidget.StackChild{Left: max(float32(0), props.RailWidth-1), Child: woxwidget.Container{Width: 1, Height: height, Color: settingsTitleBarAlpha(props.Theme.ToolbarText, 26)}},
 			woxwidget.StackChild{Left: 13, Child: settingsMacTrafficLight("settings-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", pressed == "settings-window-close", props.OnClose, onHover, onPress)},
@@ -137,6 +147,17 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 			woxwidget.StackChild{Left: 59, Child: settingsMacTrafficLight("settings-window-zoom", woxui.Color{R: 142, G: 142, B: 147, A: 255}, "", woxui.Color{}, false, false, nil, nil, nil)},
 		)
 	case "windows":
+		if props.CloseOnly {
+			if props.AppIcon != nil {
+				children = append(children, woxwidget.StackChild{Left: 12, Top: 10, Child: woxwidget.Image{Source: props.AppIcon, Width: 20, Height: 20}})
+			}
+			children = append(children,
+				woxwidget.StackChild{Left: 40, Top: 9, Child: woxwidget.Container{Width: max(float32(0), props.Width-86), Height: 24, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
+				woxwidget.StackChild{Top: height - 1, Child: woxwidget.Container{Width: props.Width, Height: 1, Color: settingsTitleBarAlpha(props.Theme.PreviewSplit, 76)}},
+				woxwidget.StackChild{Left: max(float32(0), props.Width-46), Child: settingsWindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)},
+			)
+			break
+		}
 		if props.AppIcon != nil {
 			children = append(children, woxwidget.StackChild{Left: 12, Top: 10, Child: woxwidget.Image{Source: props.AppIcon, Width: 20, Height: 20}})
 		}
