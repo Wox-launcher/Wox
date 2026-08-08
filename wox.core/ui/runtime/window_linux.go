@@ -789,3 +789,15 @@ func woxGoLinuxPointer(context C.uintptr_t, kind C.uint8_t, x C.float, y C.float
 		})
 	}
 }
+
+//export woxGoLinuxFileDrop
+func woxGoLinuxFileDrop(context C.uintptr_t, paths *C.char) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnFileDrop == nil || paths == nil {
+		return
+	}
+	values := splitFileDropPayload(C.GoString(paths))
+	if len(values) > 0 {
+		window.options.OnFileDrop(values)
+	}
+}
