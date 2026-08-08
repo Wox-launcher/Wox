@@ -12,13 +12,24 @@
 
 You already know what you want to do. Wox helps you get there: open an app, find a file, run an action — then get out of the way.
 
-Wox is an open-source launcher for macOS, Linux, and Windows. It keeps local search, keyboard-first actions, and an extensible plugin system in one focused input.
+Wox is a **fully native**, open-source launcher for macOS, Linux, and Windows — with GPU rendering on every platform. Everyday use typically stays around **~150 MB of memory**, so it can live in the background without feeling like another heavy desktop app.
+
+Local search, keyboard-first actions, and an extensible plugin system stay in one focused input.
 
 [Download Wox](https://github.com/Wox-launcher/Wox/releases) · [Browse plugins](https://wox-launcher.github.io/Wox/store/plugins.html) · [Read the docs](https://wox-launcher.github.io/Wox/)
 
 > Press <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>Space</kbd>, type what you need, and press <kbd>Enter</kbd>.
 
 https://github.com/user-attachments/assets/1b282fde-c1c5-426a-b45d-cd0aa329386a
+
+## Why Wox
+
+| | |
+| --- | --- |
+| **Fully native** | Full native GPU rendering on macOS, Linux, and Windows — not Electron, not a browser shell. |
+| **~150 MB memory** | Built to stay light while idle and during everyday queries, so the launcher can stay resident without taxing the machine. |
+| **Keyboard-first** | Open apps, find files, run actions, and finish the next step without leaving the input. |
+| **Plugin-driven** | Start with built-ins, then extend with Node.js, Python, or script plugins from the store. |
 
 ## Install
 
