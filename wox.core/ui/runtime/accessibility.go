@@ -29,7 +29,6 @@ const (
 	AccessibilityRoleMenu        AccessibilityRole = "menu"
 	AccessibilityRoleMenuItem    AccessibilityRole = "menu_item"
 	AccessibilityRoleDialog      AccessibilityRole = "dialog"
-	AccessibilityRoleWebView     AccessibilityRole = "web_view"
 )
 
 // AccessibilityAction identifies an operation exposed to assistive technology or automation.

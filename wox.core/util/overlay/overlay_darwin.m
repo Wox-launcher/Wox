@@ -371,7 +371,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         (edges & (OverlayResizeEdgeTop | OverlayResizeEdgeBottom))) {
         // Feature change: AppKit only exposes diagonal frame cursors on newer macOS versions.
         // A tiny custom cursor keeps the borderless overlay resize affordance consistent with the
-        // hand-written borderless resize logic while preserving the 10.15 deployment target.
+        // hand-written borderless resize logic while preserving the 12.0 deployment target.
         return [self diagonalResizeCursorForEdges:edges];
     }
     if (edges & (OverlayResizeEdgeLeft | OverlayResizeEdgeRight)) return [NSCursor resizeLeftRightCursor];

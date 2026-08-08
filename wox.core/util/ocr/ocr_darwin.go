@@ -161,7 +161,7 @@ static NSArray<NSString *> *woxOCRSupportedVisionLanguages(id request, NSArray<N
 
 static char* woxOCRRecognizeVisionText(const char *path, const char *languages, char **errorOut) {
     @autoreleasepool {
-        if (@available(macOS 10.15, *)) {
+        if (@available(macOS 12.0, *)) {
             if (!woxOCRLoadVisionFramework()) {
                 if (errorOut != NULL) {
                     *errorOut = woxOCRDuplicateString(woxOCRVisionFrameworkError);
@@ -217,7 +217,7 @@ static char* woxOCRRecognizeVisionText(const char *path, const char *languages, 
 					}
 				}
 			}];
-            // VNRequestTextRecognitionLevelAccurate is the stable enum value 1 on macOS 10.15+.
+            // VNRequestTextRecognitionLevelAccurate is the stable enum value 1 on macOS 12+.
             [request setRecognitionLevel:1];
             [request setUsesLanguageCorrection:YES];
             NSArray<NSString *> *candidateLanguages = woxOCRVisionLanguageCandidates(languages);
@@ -244,7 +244,7 @@ static char* woxOCRRecognizeVisionText(const char *path, const char *languages, 
         }
 
         if (errorOut != NULL) {
-            *errorOut = strdup("Vision text recognition requires macOS 10.15 or later");
+            *errorOut = strdup("Vision text recognition requires macOS 12.0 or later");
         }
         return NULL;
     }

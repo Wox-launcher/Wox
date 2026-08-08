@@ -2157,7 +2157,7 @@ int32_t wox_darwin_select_screenshot_region(
       selection_x == NULL || selection_y == NULL || selection_width == NULL || selection_height == NULL || [NSThread isMainThread]) {
     return -1;
   }
-  if (@available(macOS 10.15, *)) {
+  if (@available(macOS 12.0, *)) {
     if (!CGPreflightScreenCaptureAccess()) {
       return -2;
     }
@@ -2711,7 +2711,6 @@ static NSString *accessibility_role(const char *role) {
   if ([value isEqualToString:@"link"]) return NSAccessibilityLinkRole;
   if ([value isEqualToString:@"menu"]) return NSAccessibilityMenuRole;
   if ([value isEqualToString:@"menu_item"]) return NSAccessibilityMenuItemRole;
-  if ([value isEqualToString:@"web_view"]) return NSAccessibilityWebAreaRole;
   return NSAccessibilityGroupRole;
 }
 
