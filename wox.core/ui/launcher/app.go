@@ -194,6 +194,10 @@ type App struct {
 	previewLayouts                            map[string]woxwidget.TextBlockLayout
 	dictationAudio                            *dictationPreviewAudioState
 	terminalPreview                           *terminalPreviewState
+
+	// queryFocusNotifiedInActiveWindow prevents the initial native activation
+	// from duplicating the query-focus notification already sent while laying out.
+	queryFocusNotifiedInActiveWindow bool
 }
 
 // New creates a launcher whose typed core services are supplied by the process composition root.
@@ -553,8 +557,10 @@ func (a *App) closePreviewWindow() {
 
 func (a *App) onFocus(event woxui.FocusEvent) {
 	if event.Active {
+		a.notifyQueryBoxFocusOnWindowActivation()
 		return
 	}
+	a.queryFocusNotifiedInActiveWindow = false
 	if !a.visible {
 		return
 	}

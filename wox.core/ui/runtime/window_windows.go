@@ -15,6 +15,7 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
+	"wox/util/ime"
 	"wox/util/osvariant"
 
 	"github.com/lxn/win"
@@ -1574,6 +1575,7 @@ func (w *platformWindow) showNative() FocusEpoch {
 
 	foreground := win.GetForegroundWindow()
 	if foreground != 0 && !w.isWithinFocusDomain(foreground) {
+		ime.CaptureInputMethodBeforeActivation()
 		w.focus.previousForeground = normalizeRootWindow(foreground)
 		w.focus.restorePreviousOnHide = true
 	}

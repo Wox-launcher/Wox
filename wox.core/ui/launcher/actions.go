@@ -451,6 +451,21 @@ func (a *App) onQueryFocusChanged(focused bool) {
 		return
 	}
 	a.hideActionPanel()
+	a.queryFocusNotifiedInActiveWindow = true
+	a.notifyQueryBoxFocus()
+}
+
+// notifyQueryBoxFocusOnWindowActivation covers reactivation when Host retains logical query focus.
+func (a *App) notifyQueryBoxFocusOnWindowActivation() {
+	if !a.visible || a.queryFocusNotifiedInActiveWindow || a.host == nil || !a.queryCanFocus() || !a.host.HasFocus(launcherview.LauncherQueryInputKey) {
+		return
+	}
+	a.queryFocusNotifiedInActiveWindow = true
+	a.notifyQueryBoxFocus()
+}
+
+// notifyQueryBoxFocus sends the core lifecycle event that applies the input-method setting.
+func (a *App) notifyQueryBoxFocus() {
 	util.Go(a.lifecycleCtx, "notify query box focus", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

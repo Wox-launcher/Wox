@@ -198,6 +198,57 @@ func TestSecondaryLauncherIgnoresGlobalFocusLoss(t *testing.T) {
 	}
 }
 
+type queryFocusLifecycleTestServices struct {
+	contract.Services
+	calls chan struct{}
+}
+
+func (s *queryFocusLifecycleTestServices) QueryBoxFocused(context.Context, string) error {
+	s.calls <- struct{}{}
+	return nil
+}
+
+func TestLauncherReactivationNotifiesRetainedQueryFocus(t *testing.T) {
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return woxwidget.EditableText{
+			Key:       launcherview.LauncherQueryInputKey,
+			Autofocus: true,
+			Child:     woxwidget.Container{Width: 100, Height: 30},
+		}
+	})
+	host.AttachServices(formTableHostServices{})
+	defer host.Dispose()
+	var displayList woxui.DisplayList
+	host.Frame(&displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 30}, PixelSize: woxui.PixelSize{Width: 100, Height: 30}, Scale: 1})
+	if !host.HasFocus(launcherview.LauncherQueryInputKey) {
+		t.Fatal("query input should retain logical focus")
+	}
+
+	services := &queryFocusLifecycleTestServices{calls: make(chan struct{}, 2)}
+	app := &App{visible: true, host: host, services: services}
+	app.onFocus(woxui.FocusEvent{Active: true})
+	select {
+	case <-services.calls:
+	case <-time.After(time.Second):
+		t.Fatal("window activation did not notify retained query focus")
+	}
+
+	app.onFocus(woxui.FocusEvent{Active: true})
+	select {
+	case <-services.calls:
+		t.Fatal("repeated active event duplicated query focus notification")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	app.onFocus(woxui.FocusEvent{Active: false})
+	app.onFocus(woxui.FocusEvent{Active: true})
+	select {
+	case <-services.calls:
+	case <-time.After(time.Second):
+		t.Fatal("reactivation after blur did not notify retained query focus")
+	}
+}
+
 func TestQueryCanFocusWhileChatPreviewIsActive(t *testing.T) {
 	app := &App{}
 	if !app.queryCanFocus() {
