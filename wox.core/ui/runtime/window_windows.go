@@ -15,8 +15,9 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
-	"github.com/lxn/win"
 	"wox/util/osvariant"
+
+	"github.com/lxn/win"
 )
 
 const (
@@ -160,6 +161,9 @@ type platformWindow struct {
 	webView  *windowsWebView
 	focus    focusRuntime
 	scale    float32
+	// suppressDPIBounds keeps explicit programmatic bounds from being replaced by
+	// Windows' drag-oriented WM_DPICHANGED suggestion during SetWindowPos.
+	suppressDPIBounds bool
 
 	inputState         TextInputState
 	pointerCursor      PointerCursor
@@ -712,6 +716,15 @@ func logicalToPhysical(value, scale float32) int {
 	return max(1, int(value*scale+0.5))
 }
 
+// windowsSuggestedDPIBounds validates the rectangle supplied by WM_DPICHANGED.
+func windowsSuggestedDPIBounds(parameter uintptr) (win.RECT, bool) {
+	if parameter == 0 {
+		return win.RECT{}, false
+	}
+	bounds := *(*win.RECT)(unsafe.Pointer(parameter))
+	return bounds, bounds.Right > bounds.Left && bounds.Bottom > bounds.Top
+}
+
 // redrawWindowAfterResize presents the target-size swap chain before the bounds command returns.
 func redrawWindowAfterResize(hwnd win.HWND) {
 	win.RedrawWindow(hwnd, nil, 0, win.RDW_INVALIDATE|win.RDW_UPDATENOW)
@@ -781,24 +794,22 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		if dpi == 0 {
 			dpi = 96
 		}
-		oldScale := window.scale
-		if oldScale <= 0 {
-			oldScale = 1
-		}
+		// Windows supplies a DPI-correct rectangle for the in-progress move. Using
+		// it avoids deriving a second size from GetWindowRect while the drag is crossing monitors.
+		window.mu.Lock()
 		window.scale = float32(dpi) / 96
-		var bounds win.RECT
-		if win.GetWindowRect(hwnd, &bounds) {
-			logicalWidth := float32(bounds.Right-bounds.Left) / oldScale
-			logicalHeight := float32(bounds.Bottom-bounds.Top) / oldScale
-			win.SetWindowPos(
-				hwnd,
-				0,
-				bounds.Left,
-				bounds.Top,
-				int32(logicalToPhysical(logicalWidth, window.scale)),
-				int32(logicalToPhysical(logicalHeight, window.scale)),
-				win.SWP_NOACTIVATE|win.SWP_NOZORDER,
-			)
+		suppressDPIBounds := window.suppressDPIBounds
+		window.mu.Unlock()
+		if !suppressDPIBounds {
+			if bounds, ok := windowsSuggestedDPIBounds(lParam); ok {
+				win.SetWindowPos(
+					hwnd,
+					0,
+					bounds.Left, bounds.Top,
+					bounds.Right-bounds.Left, bounds.Bottom-bounds.Top,
+					win.SWP_NOACTIVATE|win.SWP_NOZORDER,
+				)
+			}
 		}
 		win.InvalidateRect(hwnd, nil, false)
 		return 0
@@ -1323,12 +1334,16 @@ func (w *platformWindow) setBoundsNative(bounds Rect) error {
 	}
 	// Keep w.scale in sync with the target monitor before SetWindowPos. Windows
 	// sends WM_DPICHANGED synchronously while the window lands on a differently
-	// scaled monitor, and that handler derives the logical size from w.scale. A
-	// stale w.scale would make it back-compute a doubled or halved logical size
-	// and rescale the window again, corrupting the first show on the new screen.
+	// scaled monitor; preserve the explicit bounds while that message is handled.
 	w.mu.Lock()
 	w.scale = scale
+	w.suppressDPIBounds = true
 	w.mu.Unlock()
+	defer func() {
+		w.mu.Lock()
+		w.suppressDPIBounds = false
+		w.mu.Unlock()
+	}()
 	x := int32(math.Round(float64(bounds.X * scale)))
 	y := int32(math.Round(float64(bounds.Y * scale)))
 	width := int32(logicalToPhysical(bounds.Width, scale))
@@ -1336,14 +1351,24 @@ func (w *platformWindow) setBoundsNative(bounds Rect) error {
 	if !win.SetWindowPos(w.hwnd, 0, x, y, width, height, win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
 		return errors.New("failed to set Windows window bounds")
 	}
+	w.syncScaleFromNativeWindow()
 	redrawWindowAfterResize(w.hwnd)
 	return nil
 }
 
 func (w *platformWindow) setPhysicalBoundsNative(bounds Rect) error {
+	w.mu.Lock()
+	w.suppressDPIBounds = true
+	w.mu.Unlock()
+	defer func() {
+		w.mu.Lock()
+		w.suppressDPIBounds = false
+		w.mu.Unlock()
+	}()
 	if !win.SetWindowPos(w.hwnd, 0, int32(math.Round(float64(bounds.X))), int32(math.Round(float64(bounds.Y))), int32(math.Round(float64(bounds.Width))), int32(math.Round(float64(bounds.Height))), win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
 		return errors.New("failed to set physical Windows window bounds")
 	}
+	w.syncScaleFromNativeWindow()
 	redrawWindowAfterResize(w.hwnd)
 	return nil
 }
@@ -1383,7 +1408,13 @@ func (w *platformWindow) centerNative(size Size) error {
 	// does not back-compute the logical size from the previous monitor's scale.
 	w.mu.Lock()
 	w.scale = scale
+	w.suppressDPIBounds = true
 	w.mu.Unlock()
+	defer func() {
+		w.mu.Lock()
+		w.suppressDPIBounds = false
+		w.mu.Unlock()
+	}()
 	width := int32(logicalToPhysical(size.Width, scale))
 	height := int32(logicalToPhysical(size.Height, scale))
 	width = min(width, info.RcWork.Right-info.RcWork.Left)
@@ -1393,8 +1424,20 @@ func (w *platformWindow) centerNative(size Size) error {
 	if !win.SetWindowPos(w.hwnd, 0, x, y, width, height, win.SWP_NOACTIVATE|win.SWP_NOZORDER) {
 		return errors.New("failed to center Windows window")
 	}
+	w.syncScaleFromNativeWindow()
 	redrawWindowAfterResize(w.hwnd)
 	return nil
+}
+
+// syncScaleFromNativeWindow refreshes the render scale before a programmatic frame.
+func (w *platformWindow) syncScaleFromNativeWindow() {
+	dpi := win.GetDpiForWindow(w.hwnd)
+	if dpi == 0 {
+		return
+	}
+	w.mu.Lock()
+	w.scale = float32(dpi) / 96
+	w.mu.Unlock()
 }
 
 // findMonitorForLogicalBounds mirrors the logical monitor selection used by Wox core and the UI runner.
@@ -1454,12 +1497,12 @@ func (w *platformWindow) showNative() FocusEpoch {
 	if win.IsIconic(w.hwnd) {
 		showCommand = win.SW_RESTORE
 	}
-	if w.options.Role == WindowRoleApplication {
-		var client win.RECT
-		if win.GetClientRect(w.hwnd, &client) {
-			// Large management windows can spend several refresh intervals on their first frame, so render it before DWM exposes the backdrop.
-			w.drawFrame(w.hwnd, client)
-		}
+	w.syncScaleFromNativeWindow()
+	var client win.RECT
+	if win.GetClientRect(w.hwnd, &client) {
+		// A monitor move can recreate the swap chain before this call. Render every
+		// window before DWM exposes it so the launcher does not reveal an empty frame.
+		w.drawFrame(w.hwnd, client)
 	}
 	win.ShowWindow(w.hwnd, showCommand)
 	activateWindow(w.hwnd)

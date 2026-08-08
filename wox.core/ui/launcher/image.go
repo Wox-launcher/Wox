@@ -169,6 +169,7 @@ func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidt
 	}
 	svgWidth = max(1, svgWidth)
 	svgHeight = max(1, svgHeight)
+	variantKey := imageVariantKey(source, tint)
 	key := imageKey(source)
 	if svgWidth == svgHeight {
 		key += fmt.Sprintf("-svg-%d", svgWidth)
@@ -179,11 +180,22 @@ func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidt
 		key += fmt.Sprintf("-tint-%02x%02x%02x%02x", tint.R, tint.G, tint.B, tint.A)
 	}
 	a.imageMu.Lock()
+	if a.imageVariants == nil {
+		a.imageVariants = map[string]string{}
+	}
+	if a.imageVariantKeys == nil {
+		a.imageVariantKeys = map[string]string{}
+	}
 	a.imageUseSequence++
 	a.imageLastUsed[key] = a.imageUseSequence
-	image := a.images[key]
+	a.imageVariantKeys[key] = variantKey
+	cachedImage := a.images[key]
+	image := cachedImage
+	if cachedImage == nil {
+		image = a.images[a.imageVariants[variantKey]]
+	}
 	requestedSource, requested := a.imageRequested[key]
-	if image != nil || requested && requestedSource == source.ImageData {
+	if cachedImage != nil || requested && requestedSource == source.ImageData {
 		a.imageMu.Unlock()
 		return image
 	}
@@ -267,6 +279,12 @@ func (a *App) storeImage(key string, image *woxui.Image) {
 			a.evictOldestImage(key)
 		}
 		a.images[key] = image
+		if variantKey := a.imageVariantKeys[key]; variantKey != "" {
+			if a.imageVariants == nil {
+				a.imageVariants = map[string]string{}
+			}
+			a.imageVariants[variantKey] = key
+		}
 		a.imagesRevision.Add(1)
 		delete(a.imageErrors, key)
 		a.imageMu.Unlock()
@@ -309,6 +327,10 @@ func (a *App) trimIdleImageCache() {
 	sort.Slice(uses, func(i, j int) bool { return uses[i].used > uses[j].used })
 	for _, use := range uses[hiddenImageCacheKeepCount:] {
 		delete(a.images, use.key)
+		if variantKey := a.imageVariantKeys[use.key]; variantKey != "" && a.imageVariants[variantKey] == use.key {
+			delete(a.imageVariants, variantKey)
+		}
+		delete(a.imageVariantKeys, use.key)
 		delete(a.imageRequested, use.key)
 		delete(a.imageLastUsed, use.key)
 		delete(a.imageErrors, use.key)
@@ -334,6 +356,10 @@ func (a *App) evictOldestImage(keepKey string) {
 		return
 	}
 	delete(a.images, oldestKey)
+	if variantKey := a.imageVariantKeys[oldestKey]; variantKey != "" && a.imageVariants[variantKey] == oldestKey {
+		delete(a.imageVariants, variantKey)
+	}
+	delete(a.imageVariantKeys, oldestKey)
 	delete(a.imageRequested, oldestKey)
 	delete(a.imageLastUsed, oldestKey)
 	delete(a.imageErrors, oldestKey)
@@ -446,4 +472,13 @@ func imageKey(source woxImage) string {
 	}
 	hash := sha256.Sum256([]byte(source.ImageType + "\x00" + source.ImageData))
 	return fmt.Sprintf("%x", hash[:])
+}
+
+// imageVariantKey identifies an image source and tint independently of its raster size.
+func imageVariantKey(source woxImage, tint *woxui.Color) string {
+	key := imageKey(source)
+	if tint != nil {
+		key += fmt.Sprintf("-tint-%02x%02x%02x%02x", tint.R, tint.G, tint.B, tint.A)
+	}
+	return key
 }

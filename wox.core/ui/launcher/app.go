@@ -164,6 +164,8 @@ type App struct {
 	images           map[string]*woxui.Image
 	imagesRevision   atomic.Uint64
 	imageRequested   map[string]string
+	imageVariants    map[string]string
+	imageVariantKeys map[string]string
 	imageLastUsed    map[string]uint64
 	imageUseSequence uint64
 	imageErrors      map[string]string
@@ -195,36 +197,38 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 		windowID = woxui.WindowID("wox.instance." + sessionID)
 	}
 	app := &App{
-		isDev:           isDev,
-		isPrimary:       isPrimary,
-		instanceName:    instanceName,
-		sessionID:       sessionID,
-		windowID:        windowID,
-		services:        services,
-		uiCall:          woxui.Call,
-		windows:         windows,
-		instances:       instances,
-		primary:         primary,
-		lifecycleCtx:    lifecycleCtx,
-		cancel:          cancel,
-		query:           newInputQuery(""),
-		editor:          woxui.NewTextEditor(""),
-		selected:        -1,
-		hoveredResult:   -1,
-		settingTab:      "general",
-		palette:         defaultPalette(),
-		densityMetrics:  launcherDensityMetricsFor(""),
-		translations:    map[string]string{},
-		images:          map[string]*woxui.Image{},
-		imageRequested:  map[string]string{},
-		imageLastUsed:   map[string]uint64{},
-		imageErrors:     map[string]string{},
-		remotePreviews:  map[string]queryPreview{},
-		previewRequests: map[string]bool{},
-		filePreviews:    map[string]filePreviewContent{},
-		fileRequests:    map[string]bool{},
-		mdDocs:          map[string]woxcomponent.MarkdownDocument{},
-		previewLayouts:  map[string]woxwidget.TextBlockLayout{},
+		isDev:            isDev,
+		isPrimary:        isPrimary,
+		instanceName:     instanceName,
+		sessionID:        sessionID,
+		windowID:         windowID,
+		services:         services,
+		uiCall:           woxui.Call,
+		windows:          windows,
+		instances:        instances,
+		primary:          primary,
+		lifecycleCtx:     lifecycleCtx,
+		cancel:           cancel,
+		query:            newInputQuery(""),
+		editor:           woxui.NewTextEditor(""),
+		selected:         -1,
+		hoveredResult:    -1,
+		settingTab:       "general",
+		palette:          defaultPalette(),
+		densityMetrics:   launcherDensityMetricsFor(""),
+		translations:     map[string]string{},
+		images:           map[string]*woxui.Image{},
+		imageRequested:   map[string]string{},
+		imageVariants:    map[string]string{},
+		imageVariantKeys: map[string]string{},
+		imageLastUsed:    map[string]uint64{},
+		imageErrors:      map[string]string{},
+		remotePreviews:   map[string]queryPreview{},
+		previewRequests:  map[string]bool{},
+		filePreviews:     map[string]filePreviewContent{},
+		fileRequests:     map[string]bool{},
+		mdDocs:           map[string]woxcomponent.MarkdownDocument{},
+		previewLayouts:   map[string]woxwidget.TextBlockLayout{},
 		show: showAppParams{
 			WindowWidth:    defaultWidth,
 			MaxResultCount: defaultMaxResult,
@@ -436,7 +440,6 @@ func (a *App) showWindow(params showAppParams) error {
 	if launcher == nil {
 		return errors.New("launcher window is not initialized")
 	}
-
 	if err := a.window.SetHideOnBlur(params.HideOnBlur); err != nil {
 		return err
 	}

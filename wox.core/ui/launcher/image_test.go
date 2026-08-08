@@ -91,3 +91,23 @@ func TestPhysicalImageSizeUsesBackingScale(t *testing.T) {
 		})
 	}
 }
+
+func TestImageForSizeKeepsPreviousResolutionWhileLoadingNewOne(t *testing.T) {
+	source := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#ffffff"/></svg>`}
+	variantKey := imageVariantKey(source, nil)
+	oldKey := variantKey + "-svg-32"
+	newKey := variantKey + "-svg-48"
+	oldImage := &woxui.Image{Width: 32, Height: 32}
+	app := &App{
+		images:           map[string]*woxui.Image{oldKey: oldImage},
+		imageRequested:   map[string]string{newKey: source.ImageData},
+		imageVariants:    map[string]string{variantKey: oldKey},
+		imageVariantKeys: map[string]string{},
+		imageLastUsed:    map[string]uint64{},
+		imageErrors:      map[string]string{},
+	}
+
+	if got := app.imageForSize(source, 48); got != oldImage {
+		t.Fatalf("imageForSize returned %p, want cached image %p while new resolution loads", got, oldImage)
+	}
+}
