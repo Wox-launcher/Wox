@@ -44,6 +44,38 @@ func TestLauncherResultsExposeCompletionState(t *testing.T) {
 	}
 }
 
+func TestLauncherResultWithoutSubtitleCentersTitleVertically(t *testing.T) {
+	result := LauncherResultsView(LauncherResultsProps{
+		Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
+		Items: []LauncherResultItem{{ID: "no-subtitle", Title: "Everything"}},
+	}).(woxwidget.Semantics)
+	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	labelViewport := launcherResultRowContent(row).Children[1].(woxwidget.Clip)
+	label := labelViewport.Child.(woxwidget.Container).Child.(woxwidget.Align)
+
+	if label.Vertical != 0.5 || label.Height != 50 {
+		t.Fatalf("title alignment = vertical %.1f height %.0f, want 0.5/50", label.Vertical, label.Height)
+	}
+}
+
+func TestLauncherResultMultilineSubtitleUsesSingleLineCenteredGroup(t *testing.T) {
+	result := LauncherResultsView(LauncherResultsProps{
+		Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
+		Items: []LauncherResultItem{{ID: "multiline-subtitle", Title: "Reinstall plugin", Subtitle: "Version: 1.0\nDescription: details"}},
+	}).(woxwidget.Semantics)
+	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	labelContainer := launcherResultRowContent(row).Children[1].(woxwidget.Clip).Child.(woxwidget.Container)
+	label := labelContainer.Child.(woxwidget.Align)
+	labels := label.Child.(woxwidget.Flex)
+	subtitle := labels.Children[1].(woxwidget.Boundary[launcherResultTextProps])
+
+	if label.Vertical != 0.5 || subtitle.Props.Value != "Version: 1.0" {
+		t.Fatalf("multiline subtitle layout = vertical %.1f value %q, want 0.5/first line", label.Vertical, subtitle.Props.Value)
+	}
+}
+
 func TestLauncherResultTailsScrollHorizontallyWhenClipped(t *testing.T) {
 	result := LauncherResultsView(LauncherResultsProps{
 		Width: 300, Height: 50, ContentHeight: 50, RowHeight: 50,
@@ -90,7 +122,7 @@ func TestLauncherResultUsesIndependentUpdateBoundaries(t *testing.T) {
 	content := launcherResultRowContent(row)
 	icon := content.Children[0].(woxwidget.Container).Child.(woxwidget.Boundary[launcherResultIconProps])
 	labelViewport := content.Children[1].(woxwidget.Clip)
-	labels := labelViewport.Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	labels := labelViewport.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	title := labels.Children[0].(woxwidget.Boundary[launcherResultTextProps])
 	subtitle := labels.Children[1].(woxwidget.Boundary[launcherResultTextProps])
 	tails := content.Children[2].(woxwidget.Container).Child.(woxwidget.Boundary[launcherResultTailsProps])

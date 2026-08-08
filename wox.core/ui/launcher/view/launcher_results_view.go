@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"strings"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -56,13 +57,13 @@ type LauncherResultItem struct {
 	Selected    bool
 	Hovered     bool
 	Icon        *woxui.Image
-	TitleHeight float32
 	Tails       []LauncherResultTail
 	TailWidth   float32
 	TailHeight  float32
 	OnHover     func(bool) `boundary:"stable"`
 	OnSelect    func()     `boundary:"stable"`
 	OnActivate  func()     `boundary:"stable"`
+	OnDragStart func()     `boundary:"stable"`
 }
 
 // LauncherResultsProps contains the prepared viewport slice and result-list geometry.
@@ -133,6 +134,15 @@ type launcherResultTextProps struct {
 
 func (p launcherResultTextProps) Equal(other launcherResultTextProps) bool {
 	return p == other
+}
+
+// launcherResultSingleLineText matches Flutter's one-line result labels by discarding later lines.
+func launcherResultSingleLineText(value string) string {
+	value = strings.ReplaceAll(value, "\r\n", "\n")
+	if index := strings.IndexByte(value, '\n'); index >= 0 {
+		value = value[:index]
+	}
+	return strings.TrimSpace(value)
 }
 
 type launcherResultTailsProps struct {
@@ -264,15 +274,14 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	labelWidth := max(props.BaseHeight, labelContentWidth-item.TailWidth)
 	titleProps := launcherResultTextProps{Value: item.Title, Style: props.TitleStyle, Color: title}
 	labelChildren := []woxwidget.Widget{launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps)}
-	labelTop := scaledLauncherSize(7, props.DensityScale)
+	subtitleValue := launcherResultSingleLineText(item.Subtitle)
 	labelGap := float32(0)
-	if item.Subtitle != "" {
-		subtitleProps := launcherResultTextProps{Value: item.Subtitle, Style: props.SubtitleStyle, Color: subtitle}
+	if subtitleValue != "" {
+		subtitleProps := launcherResultTextProps{Value: subtitleValue, Style: props.SubtitleStyle, Color: subtitle}
 		labelChildren = append(labelChildren, launcherResultTextBoundary(LauncherResultSubtitleBoundaryKey(item.ID), "result-subtitle:"+item.ID, subtitleProps))
 		labelGap = scaledLauncherSize(2, props.DensityScale)
-	} else {
-		labelTop = max(float32(0), (props.BaseHeight-item.TitleHeight)/2)
 	}
+	labelContent := woxwidget.Container{Width: labelContentWidth, Height: props.BaseHeight, Child: woxwidget.Align{Width: labelContentWidth, Height: props.BaseHeight, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: labelGap, Children: labelChildren}}}
 	backgroundProps := launcherResultBackgroundProps{Width: props.RowWidth, Height: props.RowHeight, Radius: props.ItemRadius, Color: background}
 	backgroundLayer := woxwidget.Boundary[launcherResultBackgroundProps]{
 		Key: LauncherResultBackgroundBoundaryKey(item.ID), Label: "result-background:" + item.ID, Props: backgroundProps,
@@ -284,7 +293,7 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 		Width: props.RowWidth, Height: props.RowHeight, Padding: props.ItemPadding,
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: props.IconGap, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: props.IconSize, Height: props.BaseHeight, Padding: woxwidget.Insets{Top: max(float32(0), (props.BaseHeight-props.IconSize)/2)}, Child: icon},
-			woxwidget.Clip{Width: labelWidth, Height: props.BaseHeight, Child: woxwidget.Container{Width: labelContentWidth, Height: props.BaseHeight, Padding: woxwidget.Insets{Top: labelTop}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: labelGap, Children: labelChildren}}},
+			woxwidget.Clip{Width: labelWidth, Height: props.BaseHeight, Child: labelContent},
 			woxwidget.Container{Width: item.TailWidth, Height: props.BaseHeight, Padding: woxwidget.Insets{Top: max(float32(0), (props.BaseHeight-item.TailHeight)/2)}, Child: tail},
 		}},
 	}
@@ -295,7 +304,8 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 				item.OnHover(inside)
 			}
 		},
-		OnTap: item.OnSelect,
+		OnTap:       item.OnSelect,
+		OnDragStart: item.OnDragStart,
 		OnDoubleTap: func() {
 			if item.OnSelect != nil {
 				item.OnSelect()
@@ -308,7 +318,7 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	}
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(fmt.Sprintf("launcher-result-key-%s", item.ID)), AutomationID: "launcher.result." + item.ID, Role: woxui.AccessibilityRoleListItem,
-		Label: item.Title, Description: item.Subtitle, Selected: item.Selected,
+		Label: item.Title, Description: subtitleValue, Selected: item.Selected,
 		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		OnAction: func(action woxui.AccessibilityAction, _ string) error {
 			if action == woxui.AccessibilityActionActivate {

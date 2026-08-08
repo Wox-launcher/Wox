@@ -119,4 +119,26 @@ func TestInspectPreviewFileUsesNativeHandlerForOffice(t *testing.T) {
 	if content.NativeFilePath != filePath {
 		t.Fatalf("native Office preview path = %q, want %q", content.NativeFilePath, filePath)
 	}
+	if !content.NativeFileAutoLoad {
+		t.Fatal("small Office preview should start automatically after the deferred delay")
+	}
+}
+
+func TestInspectPreviewFileDefersLargeOfficeHandlerUntilRequested(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "large-document.docx")
+	if err := os.WriteFile(filePath, nil, 0o600); err != nil {
+		t.Fatalf("failed to create large Office file: %v", err)
+	}
+	if err := os.Truncate(filePath, int64(officePreviewManualLoadBytes+1)); err != nil {
+		t.Fatalf("failed to size large Office file: %v", err)
+	}
+
+	content := inspectPreviewFile(filePath, ".docx")
+	if content.Kind != "native_file" {
+		t.Fatalf("large Office preview kind = %q, want native_file", content.Kind)
+	}
+	if content.NativeFileAutoLoad {
+		t.Fatal("large Office preview should wait for an explicit load request")
+	}
 }

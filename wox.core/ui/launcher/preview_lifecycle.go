@@ -26,6 +26,7 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	preview = a.resolvePreview(preview)
 	fileWebViewData := ""
 	nativeFilePath := ""
+	nativeFileAutoLoad := false
 	if preview.PreviewType == "file" {
 		a.prepareFilePreview(preview.PreviewData)
 		filePreview := a.filePreviewFor(preview.PreviewData)
@@ -34,6 +35,7 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 		}
 		if filePreview.Kind == "native_file" {
 			nativeFilePath = filePreview.NativeFilePath
+			nativeFileAutoLoad = filePreview.NativeFileAutoLoad
 		}
 	}
 
@@ -43,6 +45,10 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	}
 	if nativeFilePath != "" {
 		previewType = "native_file"
+	}
+	if nativeFilePath != "" && a.nativeFilePreviewTargetPath() != "" && a.nativeFilePreviewTargetPath() != nativeFilePath {
+		// The native preview is an external child window, so replacing its controller path is not enough to remove the old HWND.
+		a.deactivateNativeFilePreview()
 	}
 	hideWebView := a.deactivatePreviewTypes(previewType)
 	switch preview.PreviewType {
@@ -73,7 +79,9 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 		hideWebView = a.activateWebViewPreview(fileWebViewData) || hideWebView
 	}
 	if nativeFilePath != "" {
-		hideWebView = a.activateNativeFilePreview(nativeFilePath) || hideWebView
+		if nativeFileAutoLoad || a.nativeFilePreviewManualPath == nativeFilePath {
+			a.scheduleNativeFilePreview(nativeFilePath)
+		}
 	}
 	if hideWebView {
 		a.hideWebView()

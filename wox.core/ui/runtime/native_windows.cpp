@@ -4,15 +4,18 @@
 #include <windows.h>
 
 #include <shobjidl.h>
+#include <shlobj.h>
 
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
 #include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "native_windows.h"
@@ -117,6 +120,344 @@ extern "C" int32_t wox_windows_pick_file(uintptr_t owner, int32_t directory, cha
 
 extern "C" void wox_windows_free_string(char *value) {
   std::free(value);
+}
+
+static std::wstring utf8_to_wide(const char *value);
+
+namespace {
+
+static HGLOBAL create_file_drop_global(const std::vector<std::wstring> &files) {
+  size_t path_char_count = 1;
+  for (const auto &file : files) {
+    path_char_count += file.size() + 1;
+  }
+
+  const SIZE_T data_size = sizeof(DROPFILES) + path_char_count * sizeof(wchar_t);
+  HGLOBAL memory = ::GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, data_size);
+  if (memory == nullptr) {
+    return nullptr;
+  }
+
+  auto *drop_files = static_cast<DROPFILES *>(::GlobalLock(memory));
+  if (drop_files == nullptr) {
+    ::GlobalFree(memory);
+    return nullptr;
+  }
+
+  drop_files->pFiles = sizeof(DROPFILES);
+  drop_files->fWide = TRUE;
+  auto *cursor = reinterpret_cast<wchar_t *>(reinterpret_cast<BYTE *>(drop_files) + sizeof(DROPFILES));
+  for (const auto &file : files) {
+    std::copy(file.begin(), file.end(), cursor);
+    cursor += file.size();
+    *cursor++ = L'\0';
+  }
+  *cursor = L'\0';
+  ::GlobalUnlock(memory);
+  return memory;
+}
+
+static HGLOBAL duplicate_global_memory(HGLOBAL source) {
+  const SIZE_T size = ::GlobalSize(source);
+  if (size == 0) {
+    return nullptr;
+  }
+
+  HGLOBAL target = ::GlobalAlloc(GMEM_MOVEABLE, size);
+  if (target == nullptr) {
+    return nullptr;
+  }
+
+  void *source_ptr = ::GlobalLock(source);
+  void *target_ptr = ::GlobalLock(target);
+  if (source_ptr == nullptr || target_ptr == nullptr) {
+    if (source_ptr != nullptr) {
+      ::GlobalUnlock(source);
+    }
+    if (target_ptr != nullptr) {
+      ::GlobalUnlock(target);
+    }
+    ::GlobalFree(target);
+    return nullptr;
+  }
+
+  std::memcpy(target_ptr, source_ptr, size);
+  ::GlobalUnlock(source);
+  ::GlobalUnlock(target);
+  return target;
+}
+
+static bool is_file_format(const FORMATETC *format) {
+  return format != nullptr && format->cfFormat == CF_HDROP && (format->tymed & TYMED_HGLOBAL) != 0 && format->dwAspect == DVASPECT_CONTENT;
+}
+
+class WoxFormatEtcEnumerator final : public IEnumFORMATETC {
+ public:
+  explicit WoxFormatEtcEnumerator(const FORMATETC &format) : format_(format) {}
+
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **object) override {
+    if (object == nullptr) {
+      return E_POINTER;
+    }
+    if (riid == IID_IUnknown || riid == IID_IEnumFORMATETC) {
+      *object = static_cast<IEnumFORMATETC *>(this);
+      AddRef();
+      return S_OK;
+    }
+    *object = nullptr;
+    return E_NOINTERFACE;
+  }
+
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+
+  ULONG STDMETHODCALLTYPE Release() override {
+    ULONG count = --references_;
+    if (count == 0) {
+      delete this;
+    }
+    return count;
+  }
+
+  HRESULT STDMETHODCALLTYPE Next(ULONG count, FORMATETC *formats, ULONG *fetched) override {
+    if (formats == nullptr) {
+      return E_POINTER;
+    }
+    if (fetched != nullptr) {
+      *fetched = 0;
+    }
+    if (index_ > 0 || count == 0) {
+      return S_FALSE;
+    }
+
+    formats[0] = format_;
+    index_ = 1;
+    if (fetched != nullptr) {
+      *fetched = 1;
+    }
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE Skip(ULONG count) override {
+    if (count == 0 || index_ > 0) {
+      return S_FALSE;
+    }
+    index_ = 1;
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE Reset() override {
+    index_ = 0;
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE Clone(IEnumFORMATETC **result) override {
+    if (result == nullptr) {
+      return E_POINTER;
+    }
+    auto *clone = new WoxFormatEtcEnumerator(format_);
+    clone->index_ = index_;
+    *result = clone;
+    return S_OK;
+  }
+
+ private:
+  std::atomic<ULONG> references_{1};
+  FORMATETC format_{};
+  ULONG index_ = 0;
+};
+
+class WoxFileDataObject final : public IDataObject {
+ public:
+  explicit WoxFileDataObject(HGLOBAL hdrop) : hdrop_(hdrop) {
+    format_.cfFormat = CF_HDROP;
+    format_.dwAspect = DVASPECT_CONTENT;
+    format_.lindex = -1;
+    format_.tymed = TYMED_HGLOBAL;
+  }
+
+  ~WoxFileDataObject() {
+    if (hdrop_ != nullptr) {
+      ::GlobalFree(hdrop_);
+    }
+  }
+
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **object) override {
+    if (object == nullptr) {
+      return E_POINTER;
+    }
+    if (riid == IID_IUnknown || riid == IID_IDataObject) {
+      *object = static_cast<IDataObject *>(this);
+      AddRef();
+      return S_OK;
+    }
+    *object = nullptr;
+    return E_NOINTERFACE;
+  }
+
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+
+  ULONG STDMETHODCALLTYPE Release() override {
+    ULONG count = --references_;
+    if (count == 0) {
+      delete this;
+    }
+    return count;
+  }
+
+  HRESULT STDMETHODCALLTYPE GetData(FORMATETC *format, STGMEDIUM *medium) override {
+    if (!is_file_format(format) || medium == nullptr) {
+      return DV_E_FORMATETC;
+    }
+    HGLOBAL copy = duplicate_global_memory(hdrop_);
+    if (copy == nullptr) {
+      return STG_E_MEDIUMFULL;
+    }
+    medium->tymed = TYMED_HGLOBAL;
+    medium->hGlobal = copy;
+    medium->pUnkForRelease = nullptr;
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE GetDataHere(FORMATETC *, STGMEDIUM *) override { return DATA_E_FORMATETC; }
+
+  HRESULT STDMETHODCALLTYPE QueryGetData(FORMATETC *format) override { return is_file_format(format) ? S_OK : DV_E_FORMATETC; }
+
+  HRESULT STDMETHODCALLTYPE GetCanonicalFormatEtc(FORMATETC *, FORMATETC *format) override {
+    if (format != nullptr) {
+      format->ptd = nullptr;
+    }
+    return DATA_S_SAMEFORMATETC;
+  }
+
+  HRESULT STDMETHODCALLTYPE SetData(FORMATETC *, STGMEDIUM *, BOOL) override { return E_NOTIMPL; }
+
+  HRESULT STDMETHODCALLTYPE EnumFormatEtc(DWORD direction, IEnumFORMATETC **result) override {
+    if (result == nullptr) {
+      return E_POINTER;
+    }
+    if (direction != DATADIR_GET) {
+      *result = nullptr;
+      return E_NOTIMPL;
+    }
+    *result = new WoxFormatEtcEnumerator(format_);
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE DAdvise(FORMATETC *, DWORD, IAdviseSink *, DWORD *) override { return OLE_E_ADVISENOTSUPPORTED; }
+
+  HRESULT STDMETHODCALLTYPE DUnadvise(DWORD) override { return OLE_E_ADVISENOTSUPPORTED; }
+
+  HRESULT STDMETHODCALLTYPE EnumDAdvise(IEnumSTATDATA **) override { return OLE_E_ADVISENOTSUPPORTED; }
+
+ private:
+  std::atomic<ULONG> references_{1};
+  HGLOBAL hdrop_ = nullptr;
+  FORMATETC format_{};
+};
+
+class WoxFileDragSource final : public IDropSource {
+ public:
+  explicit WoxFileDragSource(HWND owner) : owner_(owner) {}
+
+  bool released_in_source() const { return released_in_source_; }
+
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **object) override {
+    if (object == nullptr) {
+      return E_POINTER;
+    }
+    if (riid == IID_IUnknown || riid == IID_IDropSource) {
+      *object = static_cast<IDropSource *>(this);
+      AddRef();
+      return S_OK;
+    }
+    *object = nullptr;
+    return E_NOINTERFACE;
+  }
+
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+
+  ULONG STDMETHODCALLTYPE Release() override {
+    ULONG count = --references_;
+    if (count == 0) {
+      delete this;
+    }
+    return count;
+  }
+
+  HRESULT STDMETHODCALLTYPE QueryContinueDrag(BOOL escape_pressed, DWORD key_state) override {
+    if (escape_pressed) {
+      return DRAGDROP_S_CANCEL;
+    }
+    if ((key_state & MK_LBUTTON) == 0) {
+      POINT cursor{};
+      RECT source_rect{};
+      if (owner_ != nullptr && ::GetCursorPos(&cursor) && ::GetWindowRect(owner_, &source_rect) && ::PtInRect(&source_rect, cursor)) {
+        released_in_source_ = true;
+        return DRAGDROP_S_CANCEL;
+      }
+      if (owner_ != nullptr) {
+        // Hide before the target processes the drop so a late overwrite or permission dialog owns the foreground UI.
+        ::ShowWindow(owner_, SW_HIDE);
+      }
+      return DRAGDROP_S_DROP;
+    }
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE GiveFeedback(DWORD) override { return DRAGDROP_S_USEDEFAULTCURSORS; }
+
+ private:
+  std::atomic<ULONG> references_{1};
+  HWND owner_ = nullptr;
+  bool released_in_source_ = false;
+};
+
+}  // namespace
+
+extern "C" int32_t wox_windows_start_file_drag(uintptr_t owner, const char *const *paths, int32_t path_count) {
+  if (paths == nullptr || path_count <= 0) {
+    return -1;
+  }
+
+  std::vector<std::wstring> files;
+  files.reserve(static_cast<size_t>(path_count));
+  for (int32_t index = 0; index < path_count; ++index) {
+    std::wstring path = utf8_to_wide(paths[index]);
+    if (path.empty() || ::GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+      continue;
+    }
+    files.push_back(std::move(path));
+  }
+  if (files.empty()) {
+    return -1;
+  }
+
+  HGLOBAL hdrop = create_file_drop_global(files);
+  if (hdrop == nullptr) {
+    return -1;
+  }
+
+  auto *data_object = new WoxFileDataObject(hdrop);
+  auto *drop_source = new WoxFileDragSource(reinterpret_cast<HWND>(owner));
+  if (owner != 0) {
+    ::ReleaseCapture();
+  }
+  DWORD effect = DROPEFFECT_NONE;
+  HRESULT result = ::DoDragDrop(data_object, drop_source, DROPEFFECT_COPY, &effect);
+  bool released_in_source = drop_source->released_in_source();
+  data_object->Release();
+  drop_source->Release();
+
+  if (result == DRAGDROP_S_DROP && (effect & DROPEFFECT_COPY) != 0) {
+    return 0;
+  }
+  if (released_in_source) {
+    return 2;
+  }
+  if (result == DRAGDROP_S_CANCEL) {
+    return 1;
+  }
+  return -1;
 }
 
 template <typename Function>

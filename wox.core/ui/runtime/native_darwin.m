@@ -31,6 +31,8 @@ extern void woxGoDarwinFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoDarwinKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
 extern void woxGoDarwinTextInput(uintptr_t context, uint8_t kind, const char *text);
 extern void woxGoDarwinPointer(uintptr_t context, uint8_t kind, float x, float y, uint8_t button, float scroll_x, float scroll_y, uint8_t modifiers);
+extern void woxGoDarwinFileDrop(uintptr_t context, const char *paths);
+extern void woxGoDarwinFileDragEnded(uintptr_t context, int32_t status);
 extern int32_t woxGoDarwinAccessibilityAction(uintptr_t context, uint64_t node_id, const char *action, const char *value);
 
 enum {
@@ -70,6 +72,7 @@ typedef struct WoxDarwinRenderer WoxDarwinRenderer;
 @class WoxRenderView;
 @class WoxWindowDelegate;
 @class WoxWebViewToolbar;
+@class WoxResultDragSource;
 
 struct WoxDarwinWindow {
   NSWindow *window;
@@ -104,6 +107,7 @@ struct WoxDarwinWindow {
   NSMutableDictionary *accessibility_child_ids;
   NSMutableArray *accessibility_roots;
   uint64_t accessibility_generation;
+  WoxResultDragSource *result_drag_source;
 };
 
 typedef struct {
@@ -600,7 +604,7 @@ static CGImageRef capture_display_image(CGDirectDisplayID display_id) {
 }
 @end
 
-@interface WoxRenderView : NSView <NSTextInputClient> {
+@interface WoxRenderView : NSView <NSTextInputClient, NSDraggingDestination> {
 @public
   WoxDarwinWindow *_owner;
   NSString *_marked_text;
@@ -612,6 +616,45 @@ static CGImageRef capture_display_image(CGDirectDisplayID display_id) {
 - (void)renderFrame;
 - (void)renderFrameSynchronously:(BOOL)transactional;
 - (void)setWoxAccessibilityChildren:(NSArray *)children;
+@end
+
+@interface WoxResultDragSource : NSObject <NSDraggingSource> {
+@public
+  WoxDarwinWindow *_owner;
+}
+- (instancetype)initWithOwner:(WoxDarwinWindow *)owner;
+@end
+
+@implementation WoxResultDragSource
+- (instancetype)initWithOwner:(WoxDarwinWindow *)owner {
+  self = [super init];
+  if (self != nil) {
+    _owner = owner;
+  }
+  return self;
+}
+
+- (NSDragOperation)draggingSession:(NSDraggingSession *)session sourceOperationMaskForDraggingContext:(NSDraggingContext)context {
+  (void)session;
+  (void)context;
+  return NSDragOperationCopy;
+}
+
+- (void)draggingSession:(NSDraggingSession *)session endedAtPoint:(NSPoint)screenPoint operation:(NSDragOperation)operation {
+  (void)session;
+  if (_owner == NULL || _owner->closed) {
+    [self release];
+    return;
+  }
+  NSRect source_frame = _owner->window.frame;
+  int32_t status = NSPointInRect(screenPoint, source_frame) ? 2 : (operation & NSDragOperationCopy) != 0 ? 0 : 1;
+  if (status != 2) {
+    [_owner->window orderOut:nil];
+  }
+  woxGoDarwinFileDragEnded(_owner->context, status);
+  _owner->result_drag_source = NULL;
+  [self release];
+}
 @end
 
 @interface WoxAccessibilityElement : NSAccessibilityElement {
@@ -1444,6 +1487,30 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 }
 
 @implementation WoxRenderView
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender {
+  NSArray *urls = [sender.draggingPasteboard readObjectsForClasses:@[[NSURL class]] options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
+  return urls.count > 0 ? NSDragOperationCopy : NSDragOperationNone;
+}
+
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
+  NSArray *urls = [sender.draggingPasteboard readObjectsForClasses:@[[NSURL class]] options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
+  NSMutableString *paths = [NSMutableString string];
+  for (NSURL *url in urls) {
+    if (!url.isFileURL || url.path.length == 0) {
+      continue;
+    }
+    if (paths.length > 0) {
+      [paths appendString:@"\n"];
+    }
+    [paths appendString:url.path];
+  }
+  if (paths.length == 0 || _owner == NULL || _owner->context == 0) {
+    return NO;
+  }
+  woxGoDarwinFileDrop(_owner->context, paths.UTF8String);
+  return YES;
+}
+
 - (void)resetCursorRects {
   [super resetCursorRects];
   NSCursor *cursor = _owner != NULL && _owner->pointer_cursor == 1 ? [NSCursor IBeamCursor] : [NSCursor arrowCursor];
@@ -1915,6 +1982,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     native_window.contentView = effect_view;
     [effect_view release];
     native_window.delegate = delegate;
+    [view registerForDraggedTypes:@[NSPasteboardTypeFileURL]];
     [native_window center];
     [view updateBackingScale];
     wox_open_window_count++;
@@ -2224,6 +2292,57 @@ int32_t wox_darwin_window_start_dragging(WoxDarwinWindow *window) {
       return;
     }
     [window->window performWindowDragWithEvent:event];
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_start_file_drag(WoxDarwinWindow *window, const char *paths) {
+  if (window == NULL || paths == NULL || window->closed || window->result_drag_source != NULL) {
+    return -1;
+  }
+  __block int32_t result = -1;
+  run_on_main_sync(^{
+    if (window->closed || window->result_drag_source != NULL) {
+      return;
+    }
+    NSEvent *event = window->window.currentEvent != nil ? window->window.currentEvent : NSApp.currentEvent;
+    NSString *payload = [NSString stringWithUTF8String:paths];
+    if (event == nil || payload == nil) {
+      return;
+    }
+    NSArray *raw_paths = [payload componentsSeparatedByString:@"\n"];
+    NSMutableArray *items = [NSMutableArray arrayWithCapacity:raw_paths.count];
+    for (NSString *raw_path in raw_paths) {
+      NSString *path = [raw_path stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+      if (path.length == 0 || ![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+        continue;
+      }
+      NSURL *url = [NSURL fileURLWithPath:path];
+      NSDraggingItem *item = [[NSDraggingItem alloc] initWithPasteboardWriter:url];
+      NSImage *icon = [[NSWorkspace sharedWorkspace] iconForFile:path];
+      icon = [icon copy];
+      icon.size = NSMakeSize(40.0, 40.0);
+      CGFloat offset = (CGFloat)items.count * 4.0;
+      NSPoint point = [window->view convertPoint:event.locationInWindow fromView:nil];
+      [item setDraggingFrame:NSMakeRect(point.x - 20.0 + offset, point.y - 20.0 - offset, 40.0, 40.0) contents:icon];
+      [icon release];
+      [items addObject:item];
+      [item release];
+    }
+    if (items.count == 0) {
+      return;
+    }
+    WoxResultDragSource *source = [[WoxResultDragSource alloc] initWithOwner:window];
+    window->result_drag_source = source;
+    NSDraggingSession *session = [window->view beginDraggingSessionWithItems:items event:event source:source];
+    if (session == nil) {
+      window->result_drag_source = NULL;
+      [source release];
+      return;
+    }
+    session.draggingFormation = NSDraggingFormationPile;
+    session.animatesToStartingPositionsOnCancelOrFail = YES;
+    result = 3;
   });
   return result;
 }

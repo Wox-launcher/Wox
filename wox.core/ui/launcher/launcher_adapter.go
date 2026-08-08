@@ -622,7 +622,7 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 		state = append(state, filePreview)
 		// Native surfaces report initialization failures after paint; include their controller state so the retained section can replace its placeholder.
 		if filePreview.Kind == "native_file" {
-			state = append(state, a.nativeFilePreviewPath, a.nativeFilePreviewError)
+			state = append(state, a.nativeFilePreviewPath, a.nativeFilePreviewPendingPath, a.nativeFilePreviewManualPath, a.nativeFilePreviewError, a.nativeFilePreviewGeneration)
 		}
 		if filePreview.Kind == "webview" {
 			state = append(state, a.webViewPreviewData, a.webViewPreviewError)
@@ -692,15 +692,11 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 			continue
 		}
 		tails, tailWidth, tailHeight := a.resultTailViewProps(result.Tails, tailLayoutWidth, densityMetrics, imageScale)
-		titleHeight := float32(0)
-		if result.SubTitle == "" {
-			metrics, _ := a.window.MeasureText(result.Title, woxui.TextStyle{Size: densityMetrics.scaled(woxcomponent.ResultTitleFontSize)})
-			titleHeight = metrics.Size.Height
-		}
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
-			Icon: a.imageForSize(result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale)), TitleHeight: titleHeight, Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
+			Icon: a.imageForSize(result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale)), Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnActivate: func() { a.activateResult(index) },
+			OnDragStart: func() { a.startResultDrag(index) },
 		})
 	}
 	return launcherview.LauncherResultsView(launcherview.LauncherResultsProps{

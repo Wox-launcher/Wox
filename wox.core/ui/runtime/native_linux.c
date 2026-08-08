@@ -32,6 +32,7 @@ extern void woxGoLinuxDestroyed(uintptr_t context, uint64_t epoch, int32_t activ
 extern int32_t woxGoLinuxKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
 extern void woxGoLinuxTextInput(uintptr_t context, uint8_t kind, const char *text);
 extern void woxGoLinuxPointer(uintptr_t context, uint8_t kind, float x, float y, uint8_t button, float scroll_x, float scroll_y, uint8_t modifiers);
+extern void woxGoLinuxFileDrop(uintptr_t context, const char *paths);
 extern int32_t woxGoLinuxAccessibilityAction(uintptr_t context, uint64_t node_id, const char *action, const char *value);
 
 enum {
@@ -825,6 +826,36 @@ static gboolean on_pointer_scroll(GtkWidget *widget, GdkEventScroll *event, gpoi
   return TRUE;
 }
 
+static void on_drag_data_received(GtkWidget *widget, GdkDragContext *context, gint x, gint y, GtkSelectionData *data, guint info, guint time, gpointer user_data) {
+  (void)widget;
+  (void)x;
+  (void)y;
+  (void)info;
+  WoxLinuxWindow *window = user_data;
+  gchar **uris = gtk_selection_data_get_uris(data);
+  GString *paths = g_string_new(NULL);
+  if (uris != NULL) {
+    for (guint index = 0; uris[index] != NULL; index++) {
+      gchar *path = g_filename_from_uri(uris[index], NULL, NULL);
+      if (path == NULL || path[0] == '\0') {
+        g_free(path);
+        continue;
+      }
+      if (paths->len > 0) {
+        g_string_append_c(paths, '\n');
+      }
+      g_string_append(paths, path);
+      g_free(path);
+    }
+    g_strfreev(uris);
+  }
+  if (paths->len > 0 && window != NULL && window->context != 0) {
+    woxGoLinuxFileDrop(window->context, paths->str);
+  }
+  g_string_free(paths, TRUE);
+  gtk_drag_finish(context, TRUE, FALSE, time);
+}
+
 typedef enum {
   WOX_LAYER_BACKGROUND = 0,
   WOX_LAYER_BOTTOM = 1,
@@ -1270,6 +1301,8 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   gtk_window_set_focus_on_map(GTK_WINDOW(window->window), TRUE);
   gtk_window_set_position(GTK_WINDOW(window->window), GTK_WIN_POS_CENTER);
   gtk_widget_set_app_paintable(window->window, TRUE);
+  GtkTargetEntry file_drop_target = {(gchar *)"text/uri-list", 0, 0};
+  gtk_drag_dest_set(window->window, GTK_DEST_DEFAULT_ALL, &file_drop_target, 1, GDK_ACTION_COPY);
 
   window->layer_shell_enabled = application_window == 0 && enable_layer_shell(GTK_WINDOW(window->window));
 
@@ -1307,6 +1340,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   g_signal_connect(window->window, "button-press-event", G_CALLBACK(on_pointer_button), window);
   g_signal_connect(window->window, "button-release-event", G_CALLBACK(on_pointer_button), window);
   g_signal_connect(window->window, "scroll-event", G_CALLBACK(on_pointer_scroll), window);
+  g_signal_connect(window->window, "drag-data-received", G_CALLBACK(on_drag_data_received), window);
   g_signal_connect(window->window, "focus-in-event", G_CALLBACK(on_focus_in), window);
   g_signal_connect(window->window, "focus-out-event", G_CALLBACK(on_focus_out), window);
   g_signal_connect(window->window, "key-press-event", G_CALLBACK(on_key_press), window);

@@ -52,8 +52,6 @@ func (a *App) prepareRemotePreview(preview queryPreview) {
 	requested := a.previewRequests[key]
 	if !loaded && !requested {
 		a.previewRequests[key] = true
-	}
-	if !loaded && !requested {
 		util.Go(a.lifecycleCtx, "load remote preview", func() {
 			a.loadRemotePreview(key, preview)
 		})

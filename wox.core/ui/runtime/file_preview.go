@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// ShowNativeFilePreview attaches a platform file preview handler to the given client rectangle.
-func (w *Window) ShowNativeFilePreview(path string, bounds Rect) error {
+// ShowNativeFilePreview attaches a platform file preview handler for the latest lifecycle generation.
+func (w *Window) ShowNativeFilePreview(path string, bounds Rect, generation uint64) error {
 	if w == nil || w.native == nil {
 		return errors.New("window is not initialized")
 	}
@@ -17,13 +17,13 @@ func (w *Window) ShowNativeFilePreview(path string, bounds Rect) error {
 	if bounds.Width <= 0 || bounds.Height <= 0 {
 		return errors.New("native file preview bounds must have a positive size")
 	}
-	return w.native.showNativeFilePreview(path, bounds)
+	return w.native.showNativeFilePreview(path, bounds, generation)
 }
 
-// HideNativeFilePreview removes the platform file preview handler from the visible client area.
-func (w *Window) HideNativeFilePreview() error {
+// HideNativeFilePreview removes the platform file preview handler if this generation is still current.
+func (w *Window) HideNativeFilePreview(generation uint64) error {
 	if w == nil || w.native == nil {
 		return errors.New("window is not initialized")
 	}
-	return w.native.hideNativeFilePreview()
+	return w.native.hideNativeFilePreview(generation)
 }

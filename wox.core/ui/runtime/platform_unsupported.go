@@ -44,6 +44,10 @@ func (w *platformWindow) startDragging() error {
 	return ErrPlatformUnsupported
 }
 
+func (w *platformWindow) startFileDrag(paths []string) (FileDragStatus, error) {
+	return FileDragStatusCancel, ErrPlatformUnsupported
+}
+
 func (w *platformWindow) minimize() error {
 	return ErrPlatformUnsupported
 }

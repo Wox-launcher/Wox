@@ -96,6 +96,16 @@ const (
 	WindowRoleScreenshot
 )
 
+// FileDragStatus reports how a native file drag ended.
+type FileDragStatus uint8
+
+const (
+	FileDragStatusSuccess FileDragStatus = iota
+	FileDragStatusCancel
+	FileDragStatusCancelInSource
+	FileDragStatusPending
+)
+
 // WindowOptions configures a launcher window using platform-neutral units and behavior.
 // Size is the preferred initial logical client size; FrameInfo reports the actual drawable size.
 type WindowOptions struct {
@@ -108,6 +118,8 @@ type WindowOptions struct {
 	OnKey                  func(event KeyEvent) bool
 	OnTextInput            func(event TextInputEvent)
 	OnPointer              func(event PointerEvent)
+	OnFileDrop             func(paths []string)
+	OnFileDragEnded        func(status FileDragStatus)
 	OnWebViewHideRequested func()
 	OnWebViewTooltip       func(event WebViewTooltipEvent)
 	OnCloseRequested       func()
@@ -276,6 +288,14 @@ func (w *Window) StartDragging() error {
 		return errors.New("window is not initialized")
 	}
 	return w.native.startDragging()
+}
+
+// StartFileDrag exports existing files through the platform's native drag session.
+func (w *Window) StartFileDrag(paths []string) (FileDragStatus, error) {
+	if w == nil || w.native == nil {
+		return FileDragStatusCancel, errors.New("window is not initialized")
+	}
+	return w.native.startFileDrag(paths)
 }
 
 // Minimize sends the window to the platform taskbar or dock.
@@ -471,6 +491,17 @@ func parseExternalURL(rawURL string) (*url.URL, error) {
 		return parsed, nil
 	}
 	return nil, errors.New("unsupported external URL")
+}
+
+func splitFileDropPayload(payload string) []string {
+	parts := strings.Split(payload, "\n")
+	paths := make([]string, 0, len(parts))
+	for _, path := range parts {
+		if path = strings.TrimSpace(path); path != "" {
+			paths = append(paths, path)
+		}
+	}
+	return paths
 }
 
 // Close releases the native window. Run returns after the final window closes.

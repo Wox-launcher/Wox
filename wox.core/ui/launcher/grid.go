@@ -83,6 +83,7 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 			item.OnHover = func(inside bool) { a.hoverResult(index, inside) }
 			item.OnSelect = func() { a.selectResult(index) }
 			item.OnActivate = func() { a.activateResult(index) }
+			item.OnDragStart = func() { a.startResultDrag(index) }
 		}
 		results = append(results, item)
 	}

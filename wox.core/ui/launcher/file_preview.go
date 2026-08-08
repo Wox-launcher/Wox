@@ -19,15 +19,19 @@ import (
 	"wox/util"
 )
 
-const maxPreviewFileBytes = 512 * 1024
+const (
+	maxPreviewFileBytes          = 512 * 1024
+	officePreviewManualLoadBytes = 5 * 1024 * 1024
+)
 
 type filePreviewContent struct {
-	Kind           string
-	Text           string
-	Image          woxImage
-	WebViewData    string
-	NativeFilePath string
-	Tags           []previewTag
+	Kind               string
+	Text               string
+	Image              woxImage
+	WebViewData        string
+	NativeFilePath     string
+	NativeFileAutoLoad bool
+	Tags               []previewTag
 }
 
 // filePreviewFor returns cached file content without starting I/O from the frame builder.
@@ -124,7 +128,7 @@ func inspectPreviewFile(path, extension string) filePreviewContent {
 		return filePreviewContent{Kind: "webview", WebViewData: webViewData, Tags: tags}
 	}
 	if isOfficePreviewExtension(extension) {
-		return filePreviewContent{Kind: "native_file", NativeFilePath: path, Tags: tags}
+		return filePreviewContent{Kind: "native_file", NativeFilePath: path, NativeFileAutoLoad: info.Size() <= officePreviewManualLoadBytes, Tags: tags}
 	}
 	file, err := os.Open(path)
 	if err != nil {

@@ -23,6 +23,7 @@ void wox_darwin_dismiss_screenshot_selection(uintptr_t session_handle);
 int32_t wox_darwin_capture_display_png(uint32_t display_id, const char *path);
 int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float height);
 int32_t wox_darwin_window_start_dragging(WoxDarwinWindow *window);
+int32_t wox_darwin_window_start_file_drag(WoxDarwinWindow *window, const char *paths);
 int32_t wox_darwin_window_minimize(WoxDarwinWindow *window);
 int32_t wox_darwin_window_set_hide_on_blur(WoxDarwinWindow *window, int32_t enabled);
 int32_t wox_darwin_window_set_appearance(WoxDarwinWindow *window, int32_t is_dark);

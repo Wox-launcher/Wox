@@ -116,21 +116,22 @@ const (
 )
 
 type windowCommand struct {
-	kind             windowCommandKind
-	bounds           Rect
-	size             Size
-	hideOnBlur       bool
-	darkAppearance   bool
-	fontFamily       string
-	fileDialog       FileDialogOptions
-	externalURL      string
-	clipboardText    string
-	clipboard        *clipboardImage
-	webView          WebViewContent
-	webViewBounds    Rect
-	nativeFilePath   string
-	nativeFileBounds Rect
-	reply            chan windowCommandResult
+	kind                        windowCommandKind
+	bounds                      Rect
+	size                        Size
+	hideOnBlur                  bool
+	darkAppearance              bool
+	fontFamily                  string
+	fileDialog                  FileDialogOptions
+	externalURL                 string
+	clipboardText               string
+	clipboard                   *clipboardImage
+	webView                     WebViewContent
+	webViewBounds               Rect
+	nativeFilePath              string
+	nativeFileBounds            Rect
+	nativeFilePreviewGeneration uint64
+	reply                       chan windowCommandResult
 }
 
 type windowCommandResult struct {
@@ -161,11 +162,12 @@ type platformWindow struct {
 	pending    []windowCommand
 	done       chan struct{}
 
-	renderer          *nativeRenderer
-	webView           *windowsWebView
-	nativeFilePreview *windowsFilePreview
-	focus             focusRuntime
-	scale             float32
+	renderer                    *nativeRenderer
+	webView                     *windowsWebView
+	nativeFilePreview           *windowsFilePreview
+	nativeFilePreviewGeneration uint64
+	focus                       focusRuntime
+	scale                       float32
 	// suppressDPIBounds keeps explicit programmatic bounds from being replaced by
 	// Windows' drag-oriented WM_DPICHANGED suggestion during SetWindowPos.
 	suppressDPIBounds bool
@@ -278,11 +280,12 @@ func platformRun(start func() error) (runErr error) {
 		}
 	}()
 
-	comResult := win.CoInitializeEx(nil, win.COINIT_APARTMENTTHREADED)
+	// DoDragDrop requires OLE initialization in addition to the COM apartment.
+	comResult := win.OleInitialize()
 	if !win.SUCCEEDED(comResult) {
-		return fmt.Errorf("initialize COM failed with HRESULT 0x%08X", uint32(comResult))
+		return fmt.Errorf("initialize OLE failed with HRESULT 0x%08X", uint32(comResult))
 	}
-	defer win.CoUninitialize()
+	defer win.OleUninitialize()
 
 	if err := ensureWindowClass(); err != nil {
 		return err
@@ -461,12 +464,12 @@ func (w *platformWindow) hideWebView() error {
 	return w.call(windowCommand{kind: windowCommandHideWebView}).err
 }
 
-func (w *platformWindow) showNativeFilePreview(path string, bounds Rect) error {
-	return w.call(windowCommand{kind: windowCommandShowNativeFilePreview, nativeFilePath: path, nativeFileBounds: bounds}).err
+func (w *platformWindow) showNativeFilePreview(path string, bounds Rect, generation uint64) error {
+	return w.call(windowCommand{kind: windowCommandShowNativeFilePreview, nativeFilePath: path, nativeFileBounds: bounds, nativeFilePreviewGeneration: generation}).err
 }
 
-func (w *platformWindow) hideNativeFilePreview() error {
-	return w.call(windowCommand{kind: windowCommandHideNativeFilePreview}).err
+func (w *platformWindow) hideNativeFilePreview(generation uint64) error {
+	return w.call(windowCommand{kind: windowCommandHideNativeFilePreview, nativeFilePreviewGeneration: generation}).err
 }
 
 func (w *platformWindow) writeClipboardText(text string) error {
@@ -606,6 +609,7 @@ func (w *platformWindow) createNativeWindow() error {
 	if hwnd == 0 {
 		return fmt.Errorf("create native window failed: %w", syscall.GetLastError())
 	}
+	win.DragAcceptFiles(hwnd, true)
 	applyWindowsBackdrop(hwnd, true)
 	w.mu.Lock()
 	w.hwnd = hwnd
@@ -795,6 +799,9 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 			window.updateIMECandidatePosition(hwnd)
 		}
 		return 0
+	case win.WM_DROPFILES:
+		window.handleFileDrop(win.HDROP(wParam))
+		return 0
 	case win.WM_SIZE:
 		if window.renderer != nil {
 			window.damageHistory.reset()
@@ -971,6 +978,33 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 	}
 
 	return win.DefWindowProc(hwnd, message, wParam, lParam)
+}
+
+// handleFileDrop converts the Windows HDROP payload before handing it to the portable window contract.
+func (w *platformWindow) handleFileDrop(drop win.HDROP) {
+	if drop == 0 {
+		return
+	}
+	defer win.DragFinish(drop)
+	count := win.DragQueryFile(drop, ^uint(0), nil, 0)
+	if count == 0 || w.options.OnFileDrop == nil {
+		return
+	}
+	paths := make([]string, 0, count)
+	for index := uint(0); index < count; index++ {
+		length := win.DragQueryFile(drop, index, nil, 0)
+		if length == 0 {
+			continue
+		}
+		buffer := make([]uint16, length+1)
+		if win.DragQueryFile(drop, index, &buffer[0], length+1) == 0 {
+			continue
+		}
+		paths = append(paths, syscall.UTF16ToString(buffer))
+	}
+	if len(paths) > 0 {
+		w.options.OnFileDrop(paths)
+	}
 }
 
 func (w *platformWindow) textInputEnabled() bool {
@@ -1314,6 +1348,10 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		}
 		return windowCommandResult{err: w.webView.hide()}
 	case windowCommandShowNativeFilePreview:
+		if command.nativeFilePreviewGeneration < w.nativeFilePreviewGeneration {
+			return windowCommandResult{}
+		}
+		w.nativeFilePreviewGeneration = command.nativeFilePreviewGeneration
 		if w.nativeFilePreview == nil || w.nativeFilePreview.path != command.nativeFilePath {
 			if w.nativeFilePreview != nil {
 				w.nativeFilePreview.destroy()
@@ -1327,6 +1365,10 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		}
 		return windowCommandResult{err: w.nativeFilePreview.show(command.nativeFileBounds, w.scale)}
 	case windowCommandHideNativeFilePreview:
+		if command.nativeFilePreviewGeneration < w.nativeFilePreviewGeneration {
+			return windowCommandResult{}
+		}
+		w.nativeFilePreviewGeneration = command.nativeFilePreviewGeneration
 		if w.nativeFilePreview == nil {
 			return windowCommandResult{}
 		}

@@ -182,6 +182,12 @@ func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {
 		},
 		Tails:   tails,
 		Actions: actions,
+		DragData: func() *queryResultDragData {
+			if result.DragData == nil {
+				return nil
+			}
+			return &queryResultDragData{Type: result.DragData.Type, Files: append([]string(nil), result.DragData.Files...)}
+		}(),
 		IsGroup: result.IsGroup,
 	}
 }

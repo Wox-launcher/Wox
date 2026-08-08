@@ -219,6 +219,10 @@ func (w *platformWindow) startDragging() error {
 	return nil
 }
 
+func (w *platformWindow) startFileDrag(paths []string) (FileDragStatus, error) {
+	return FileDragStatusCancel, ErrPlatformUnsupported
+}
+
 func (w *platformWindow) minimize() error {
 	native, err := w.openNative()
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"log"
 	"runtime"
 	"runtime/cgo"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -264,6 +265,26 @@ func (w *platformWindow) startDragging() error {
 		return errors.New("woxui: failed to start macOS window drag")
 	}
 	return nil
+}
+
+func (w *platformWindow) startFileDrag(paths []string) (FileDragStatus, error) {
+	if len(paths) == 0 {
+		return FileDragStatusCancel, errors.New("file drag has no paths")
+	}
+	native, err := w.openNative()
+	if err != nil {
+		return FileDragStatusCancel, err
+	}
+	payload := C.CString(strings.Join(paths, "\n"))
+	defer C.free(unsafe.Pointer(payload))
+	result := C.wox_darwin_window_start_file_drag(native, payload)
+	if result < 0 {
+		return FileDragStatusCancel, errors.New("native macOS file drag failed")
+	}
+	if result == 3 {
+		return FileDragStatusPending, nil
+	}
+	return FileDragStatus(result), nil
 }
 
 func (w *platformWindow) minimize() error {
@@ -1119,5 +1140,25 @@ func woxGoDarwinPointer(context C.uintptr_t, kind C.uint8_t, x C.float, y C.floa
 			Scroll:    Point{X: float32(scrollX), Y: float32(scrollY)},
 			Modifiers: KeyModifiers(modifiers),
 		})
+	}
+}
+
+//export woxGoDarwinFileDrop
+func woxGoDarwinFileDrop(context C.uintptr_t, paths *C.char) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnFileDrop == nil || paths == nil {
+		return
+	}
+	values := splitFileDropPayload(C.GoString(paths))
+	if len(values) > 0 {
+		window.options.OnFileDrop(values)
+	}
+}
+
+//export woxGoDarwinFileDragEnded
+func woxGoDarwinFileDragEnded(context C.uintptr_t, status C.int32_t) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnFileDragEnded != nil {
+		window.options.OnFileDragEnded(FileDragStatus(status))
 	}
 }

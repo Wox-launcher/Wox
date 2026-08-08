@@ -534,6 +534,9 @@ func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 			}
 			a.results[index].Actions = actions
 		}
+		if result.DragData != nil {
+			a.results[index].DragData = &queryResultDragData{Type: result.DragData.Type, Files: append([]string(nil), result.DragData.Files...)}
+		}
 		updated = true
 		updatedIndex = index
 		break

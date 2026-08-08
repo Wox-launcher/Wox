@@ -99,7 +99,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 		case "webview":
 			return a.buildWebViewPreview(file.WebViewData, palette, width, height)
 		case "native_file":
-			return a.buildNativeFilePreview(file.NativeFilePath, palette, width, height)
+			return a.buildNativeFilePreview(file.NativeFilePath, file.NativeFileAutoLoad, palette, width, height)
 		default:
 			// File contents are structured reader data, so keep them top-left aligned instead of using the centered quote treatment for standalone text previews.
 			return content(file.Text, previewColorWithOpacity(palette.previewText, 0.86))

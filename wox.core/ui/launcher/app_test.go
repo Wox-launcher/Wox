@@ -32,6 +32,16 @@ func (mruResultsTestServices) QueryMRU(context.Context, string, string) ([]plugi
 	return []plugin.QueryResultUI{{Id: "mru"}}, nil
 }
 
+type remotePreviewTestServices struct {
+	contract.Services
+	called chan struct{}
+}
+
+func (s *remotePreviewTestServices) ResultPreview(context.Context, string, string, string, string) (plugin.WoxPreview, error) {
+	close(s.called)
+	return plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: "loaded"}, nil
+}
+
 func TestLauncherWindowOriginPreservesDraggedPosition(t *testing.T) {
 	params := showAppParams{Position: position{X: 400, Y: 300}}
 	current := woxui.Rect{X: 92, Y: 74, Width: 760, Height: 420}
@@ -548,6 +558,27 @@ func TestUnresolvedRemotePreviewRendersBlank(t *testing.T) {
 	blank, ok := widget.(woxwidget.Container)
 	if !ok || blank.Child != nil || blank.Width != 700 || blank.Height != 400 {
 		t.Fatalf("unresolved remote preview = %#v, want blank 700x400 container", widget)
+	}
+}
+
+func TestPrepareRemotePreviewStartsDeferredRequest(t *testing.T) {
+	path := "/preview?sessionId=session&queryId=query&id=result"
+	services := &remotePreviewTestServices{called: make(chan struct{})}
+	app := &App{
+		services:        services,
+		lifecycleCtx:    context.Background(),
+		remotePreviews:  map[string]queryPreview{},
+		previewRequests: map[string]bool{},
+	}
+
+	app.prepareRemotePreview(queryPreview{PreviewType: "remote", PreviewData: path})
+	select {
+	case <-services.called:
+	case <-time.After(time.Second):
+		t.Fatal("deferred remote preview request did not start")
+	}
+	if !app.previewRequests[path] {
+		t.Fatal("remote preview request was not marked as pending")
 	}
 }
 

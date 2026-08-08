@@ -103,43 +103,46 @@ type App struct {
 	chatPreview                *chatPreviewState
 	webViewPreviewData         string
 	webViewPreviewError        string
-	nativeFilePreviewPath      string
-	nativeFilePreviewError     string
-	chatFullscreen             bool
-	terminalFullscreen         bool
-	actionPanel                bool
-	actionSelected             int
-	actionSelectionKey         string
-	actionsSectionRevision     uint64
-	actionSectionState         actionSectionRevisionState
-	actionFilter               *woxui.TextEditor
-	visible                    bool
-	show                       showAppParams
-	settingsOpen               bool
-	onboardingOpen             bool
-	onboardingStep             int
-	onboardingChoice           string
-	onboardingChoiceAnchor     woxui.Rect
-	onboardingPermission       contract.MacOSPermissionStatus
-	onboardingLoading          bool
-	onboardingError            string
-	settingsCtx                settingWindowContext
-	settingTab                 string
-	settingRow                 int
-	settingSaving              bool
-	settingFlash               string
-	settingFlashTimer          *time.Timer
-	settingsInlineTooltip      *settingsInlineTooltipState
-	cloudPlanTooltip           *cloudPlanTooltipState
-	settingsDemo               *settingsDemoState
-	settingsDemoRevision       atomic.Uint64
-	choiceTooltipRevision      atomic.Uint64
-	settingsTableEditor        *formTableEditorState
-	glanceItem                 *glanceItem
-	glanceLoading              bool
-	glanceRevision             uint64
-	glanceTooltipRevision      atomic.Uint64
-	glanceTimer                *time.Timer
+	// Native Office preview state separates selected, delayed, and reported handler generations.
+	nativeFilePreviewPath        string
+	nativeFilePreviewPendingPath string
+	nativeFilePreviewManualPath  string
+	nativeFilePreviewError       string
+	chatFullscreen               bool
+	terminalFullscreen           bool
+	actionPanel                  bool
+	actionSelected               int
+	actionSelectionKey           string
+	actionsSectionRevision       uint64
+	actionSectionState           actionSectionRevisionState
+	actionFilter                 *woxui.TextEditor
+	visible                      bool
+	show                         showAppParams
+	settingsOpen                 bool
+	onboardingOpen               bool
+	onboardingStep               int
+	onboardingChoice             string
+	onboardingChoiceAnchor       woxui.Rect
+	onboardingPermission         contract.MacOSPermissionStatus
+	onboardingLoading            bool
+	onboardingError              string
+	settingsCtx                  settingWindowContext
+	settingTab                   string
+	settingRow                   int
+	settingSaving                bool
+	settingFlash                 string
+	settingFlashTimer            *time.Timer
+	settingsInlineTooltip        *settingsInlineTooltipState
+	cloudPlanTooltip             *cloudPlanTooltipState
+	settingsDemo                 *settingsDemoState
+	settingsDemoRevision         atomic.Uint64
+	choiceTooltipRevision        atomic.Uint64
+	settingsTableEditor          *formTableEditorState
+	glanceItem                   *glanceItem
+	glanceLoading                bool
+	glanceRevision               uint64
+	glanceTooltipRevision        atomic.Uint64
+	glanceTimer                  *time.Timer
 	// Settings controllers (zero App back-dependency; populated by newApp).
 	generalSettings      *generalSettingsController
 	appearanceSettings   *appearanceSettingsController
@@ -164,23 +167,33 @@ type App struct {
 	// imageMu protects the image cache because image decoding completes on background goroutines.
 	imageMu sync.RWMutex
 	// appIcon is decoded during app construction so native title bars never start without their icon.
-	appIcon          *woxui.Image
-	images           map[string]*woxui.Image
-	imagesRevision   atomic.Uint64
-	imageRequested   map[string]string
-	imageVariants    map[string]string
-	imageVariantKeys map[string]string
-	imageLastUsed    map[string]uint64
-	imageUseSequence uint64
-	imageErrors      map[string]string
-	remotePreviews   map[string]queryPreview
-	previewRequests  map[string]bool
-	filePreviews     map[string]filePreviewContent
-	fileRequests     map[string]bool
-	mdDocs           map[string]woxcomponent.MarkdownDocument
-	previewLayouts   map[string]woxwidget.TextBlockLayout
-	dictationAudio   *dictationPreviewAudioState
-	terminalPreview  *terminalPreviewState
+	appIcon                                   *woxui.Image
+	images                                    map[string]*woxui.Image
+	imagesRevision                            atomic.Uint64
+	imageRequested                            map[string]string
+	imageVariants                             map[string]string
+	imageVariantKeys                          map[string]string
+	imageLastUsed                             map[string]uint64
+	imageUseSequence                          uint64
+	imageErrors                               map[string]string
+	remotePreviews                            map[string]queryPreview
+	previewRequests                           map[string]bool
+	filePreviews                              map[string]filePreviewContent
+	fileRequests                              map[string]bool
+	nativeFilePreviewGeneration               uint64
+	nativeFilePreviewTimer                    *time.Timer
+	nativeFilePreviewBoundsTimer              *time.Timer
+	nativeFilePreviewBounds                   woxui.Rect
+	nativeFilePreviewBoundsPath               string
+	nativeFilePreviewBoundsGeneration         uint64
+	nativeFilePreviewReportedBounds           woxui.Rect
+	nativeFilePreviewReportedBoundsPath       string
+	nativeFilePreviewReportedBoundsGeneration uint64
+	nativeFilePreviewHasReportedBounds        bool
+	mdDocs                                    map[string]woxcomponent.MarkdownDocument
+	previewLayouts                            map[string]woxwidget.TextBlockLayout
+	dictationAudio                            *dictationPreviewAudioState
+	terminalPreview                           *terminalPreviewState
 }
 
 // New creates a launcher whose typed core services are supplied by the process composition root.
@@ -305,10 +318,12 @@ func (a *App) start() error {
 
 	host := woxwidget.NewHost(a.buildLauncher)
 	launcher, _, err := a.windows.Open(a.windowID, woxui.WindowOptions{
-		Title:     "Wox",
-		Size:      woxui.Size{Width: float32(a.show.WindowWidth), Height: a.densityMetrics.queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom + a.densityMetrics.toolbarHeight},
-		OnFrame:   host.Frame,
-		OnPointer: host.Pointer,
+		Title:           "Wox",
+		Size:            woxui.Size{Width: float32(a.show.WindowWidth), Height: a.densityMetrics.queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom + a.densityMetrics.toolbarHeight},
+		OnFrame:         host.Frame,
+		OnPointer:       host.Pointer,
+		OnFileDrop:      a.handleFileDrop,
+		OnFileDragEnded: a.handleResultDragEnded,
 		OnKey: func(event woxui.KeyEvent) bool {
 			if host.Key(event) {
 				return true
@@ -1477,16 +1492,26 @@ type queryRefinementOption struct {
 }
 
 type queryResult struct {
-	QueryID  string         `json:"QueryId"`
-	ID       string         `json:"Id"`
-	Title    string         `json:"Title"`
-	SubTitle string         `json:"SubTitle"`
-	Icon     woxImage       `json:"Icon"`
-	Preview  queryPreview   `json:"Preview"`
-	Tails    []resultTail   `json:"Tails"`
-	Actions  []resultAction `json:"Actions"`
-	IsGroup  bool           `json:"IsGroup"`
-	Revision uint64         `json:"-"`
+	QueryID  string               `json:"QueryId"`
+	ID       string               `json:"Id"`
+	Title    string               `json:"Title"`
+	SubTitle string               `json:"SubTitle"`
+	Icon     woxImage             `json:"Icon"`
+	Preview  queryPreview         `json:"Preview"`
+	Tails    []resultTail         `json:"Tails"`
+	Actions  []resultAction       `json:"Actions"`
+	DragData *queryResultDragData `json:"DragData"`
+	IsGroup  bool                 `json:"IsGroup"`
+	Revision uint64               `json:"-"`
+}
+
+type queryResultDragData struct {
+	Type  string   `json:"Type"`
+	Files []string `json:"Files"`
+}
+
+func (d *queryResultDragData) isFiles() bool {
+	return d != nil && d.Type == "files" && len(d.Files) > 0
 }
 
 type resultTail struct {

@@ -30,3 +30,10 @@ func WebViewPreviewMessage(message string, color woxui.Color, theme woxcomponent
 		Value: message, Width: max(float32(0), width-28), Height: max(float32(0), height-28), Style: woxui.TextStyle{Size: 13}, Color: color,
 	}}
 }
+
+// WebViewPreviewLoading mirrors Flutter's centered deferred-preview indicator without exposing implementation text.
+func WebViewPreviewLoading(theme woxcomponent.Theme, width, height float32) woxwidget.Widget {
+	return woxwidget.Container{Width: width, Height: height, Radius: 10, Color: theme.QueryBackground, Child: woxwidget.Align{
+		Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.WoxLoadingIndicator(20, theme.PreviewText),
+	}}
+}
