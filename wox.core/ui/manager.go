@@ -30,18 +30,19 @@ import (
 	"wox/privacy"
 	"wox/resource"
 	"wox/setting"
+	"wox/ui/contract"
+	woxui "wox/ui/runtime"
 	"wox/updater"
 	"wox/util"
 	"wox/util/appearance"
 	"wox/util/autostart"
+	"wox/util/fuzzymatch"
 	utilhotkey "wox/util/hotkey"
 	"wox/util/ime"
 	"wox/util/keyboard"
 	"wox/util/osvariant"
-	"wox/util/processmemory"
 	"wox/util/screen"
 	"wox/util/selection"
-	"wox/util/shell"
 	"wox/util/tray"
 	"wox/util/window"
 
@@ -57,23 +58,13 @@ var managerInstance *Manager
 var managerOnce sync.Once
 var logger *util.Log
 
-const uiReadyTimeout = 10 * time.Second
-
-// uiLaunchConfig describes one concrete Flutter UI backend launch attempt.
-type uiLaunchConfig struct {
-	Backend string
-	Env     []string
-	Mode    string
-	Reason  string
-}
-
 type Manager struct {
 	hotkeyService      *corehotkey.Service
 	ui                 common.UI
+	viewMu             sync.RWMutex
+	primaryView        contract.View
+	views              map[string]contract.View
 	serverPort         int
-	uiProcess          *os.Process
-	uiStopRequested    atomic.Bool
-	uiReadyAt          atomic.Int64
 	themes             *util.HashMap[string, common.Theme]
 	systemThemeIds     []string
 	isUIReadyHandled   bool
@@ -115,19 +106,16 @@ func GetUIManager() *Manager {
 			},
 		})
 		managerInstance.ui = &uiImpl{
-			requestMap:      util.NewHashMap[string, chan WebsocketMsg](),
 			isVisible:       false, // Initially hidden
 			isInSettingView: false,
 		}
-		terminal.GetSessionManager().SetEmitter(func(ctx context.Context, uiSessionID string, method string, data any) {
-			responseUI(ctx, WebsocketMsg{
-				RequestId: uuid.NewString(),
-				TraceId:   util.GetContextTraceId(ctx),
-				SessionId: uiSessionID,
-				Method:    method,
-				Success:   true,
-				Data:      data,
-			})
+		terminal.GetSessionManager().SetEmitter(terminal.EventEmitter{
+			Chunk: func(ctx context.Context, uiSessionID string, chunk terminal.TerminalChunk) {
+				managerInstance.applyTerminalChunk(ctx, uiSessionID, chunk)
+			},
+			State: func(ctx context.Context, uiSessionID string, state terminal.SessionState) {
+				managerInstance.applyTerminalState(ctx, uiSessionID, state)
+			},
 		})
 		managerInstance.themes = util.NewHashMap[string, common.Theme]()
 		logger = util.GetLogger()
@@ -136,6 +124,81 @@ func GetUIManager() *Manager {
 		dictationplugin.SetHotkeyRegistrar(managerInstance)
 	})
 	return managerInstance
+}
+
+// AttachView replaces the primary process-local UI target used by core push updates.
+func (m *Manager) AttachView(view contract.View) {
+	m.viewMu.Lock()
+	m.primaryView = view
+	m.views = map[string]contract.View{}
+	if view != nil && view.SessionID() != "" {
+		m.views[view.SessionID()] = view
+	}
+	m.viewMu.Unlock()
+}
+
+func (m *Manager) getView() contract.View {
+	m.viewMu.RLock()
+	defer m.viewMu.RUnlock()
+	return m.primaryView
+}
+
+// RegisterView adds one secondary launcher without changing the primary command target.
+func (m *Manager) RegisterView(view contract.View) {
+	if view == nil || view.SessionID() == "" {
+		return
+	}
+	m.viewMu.Lock()
+	if m.views == nil {
+		m.views = map[string]contract.View{}
+	}
+	m.views[view.SessionID()] = view
+	m.viewMu.Unlock()
+}
+
+// UnregisterView removes one secondary launcher from session-routed core pushes.
+func (m *Manager) UnregisterView(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	m.viewMu.Lock()
+	if m.primaryView == nil || m.primaryView.SessionID() != sessionID {
+		delete(m.views, sessionID)
+	}
+	m.viewMu.Unlock()
+}
+
+func (m *Manager) getViewForSession(sessionID string) contract.View {
+	m.viewMu.RLock()
+	defer m.viewMu.RUnlock()
+	if sessionID != "" {
+		if view := m.views[sessionID]; view != nil {
+			return view
+		}
+	}
+	return m.primaryView
+}
+
+func (m *Manager) applyTerminalChunk(ctx context.Context, uiSessionID string, chunk terminal.TerminalChunk) {
+	view := m.getViewForSession(uiSessionID)
+	if view == nil {
+		logger.Warn(ctx, "UI view not ready, skipping terminal chunk")
+		return
+	}
+	if err := view.ApplyTerminalChunk(ctx, uiSessionID, chunk); err != nil {
+		logger.Error(ctx, fmt.Sprintf("apply terminal UI chunk failed: %v", err))
+	}
+}
+
+func (m *Manager) applyTerminalState(ctx context.Context, uiSessionID string, state terminal.SessionState) {
+	view := m.getViewForSession(uiSessionID)
+	if view == nil {
+		logger.Warn(ctx, "UI view not ready, skipping terminal state")
+		return
+	}
+	if err := view.ApplyTerminalState(ctx, uiSessionID, state); err != nil {
+		logger.Error(ctx, fmt.Sprintf("apply terminal UI state failed: %v", err))
+	}
 }
 
 // CollectDictationHotkeys implements the dictation.HotkeyRegistrar interface.
@@ -262,27 +325,6 @@ func (m *Manager) Start(ctx context.Context) error {
 	})
 
 	return nil
-}
-
-func (m *Manager) Stop(ctx context.Context) {
-	if util.IsDev() {
-		logger.Info(ctx, "skip stopping ui app in dev mode")
-		return
-	}
-	if m.uiProcess == nil {
-		logger.Info(ctx, "skip stopping ui app because no ui process is tracked")
-		return
-	}
-
-	logger.Info(ctx, "start stopping ui app")
-	m.uiStopRequested.Store(true)
-	var pid = m.uiProcess.Pid
-	killErr := m.uiProcess.Kill()
-	if killErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to kill ui process(%d): %s", pid, killErr))
-	} else {
-		util.GetLogger().Info(ctx, fmt.Sprintf("killed ui process(%d)", pid))
-	}
 }
 
 // RegisterMainHotkey updates the main hotkey in the hotkey service and re-registers
@@ -440,14 +482,23 @@ func (m *Manager) triggerSelectionQuery(ctx context.Context, selected selection.
 	}
 
 	m.RefreshActiveWindowSnapshot(ctx)
-	m.ui.ChangeQuery(ctx, common.PlainQuery{
+	m.openSecondaryInstance(ctx, string(common.ShowSourceSelection), common.PlainQuery{
 		QueryType:      plugin.QueryTypeSelection,
 		QuerySelection: selected,
-	})
-	m.ui.ShowApp(ctx, common.ShowContext{
+	}, common.ShowContext{
 		ShowSource: common.ShowSourceSelection,
 	})
 	return nil
+}
+
+// openSecondaryInstance preserves the primary launcher while opening a session-owned query window.
+func (m *Manager) openSecondaryInstance(ctx context.Context, instanceName string, query common.PlainQuery, showContext common.ShowContext) {
+	if query.QueryId == "" {
+		query.QueryId = uuid.NewString()
+	}
+	m.ui.OpenWoxInstance(ctx, common.OpenWoxInstanceRequest{
+		Role: common.WoxInstanceRoleSecondary, InstanceName: instanceName, Query: query, ShowApp: showContext,
+	})
 }
 
 // triggerQueryHotkey builds and executes a query hotkey action.
@@ -472,8 +523,6 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 		return nil
 	}
 
-	m.ui.ChangeQuery(queryCtx, plainQuery)
-
 	showContext := common.ShowContext{
 		SelectAll:      false,
 		HideQueryBox:   queryHotkey.HideQueryBox,
@@ -485,7 +534,12 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 	if position, ok := m.getQueryHotkeyWindowPosition(queryCtx, queryHotkey); ok {
 		showContext.WindowPosition = &position
 	}
+	if queryHotkey.HideQueryBox && queryHotkey.HideToolbar {
+		m.openSecondaryInstance(queryCtx, "query-hotkey:"+normalizeHotkeyForCompare(queryHotkey.Hotkey), plainQuery, showContext)
+		return nil
+	}
 
+	m.ui.ChangeQuery(queryCtx, plainQuery)
 	m.ui.ShowApp(queryCtx, showContext)
 	return nil
 }
@@ -663,255 +717,8 @@ func isHotkeyModifierToken(token string) bool {
 	return token == "ctrl" || token == "shift" || token == "alt" || token == "meta"
 }
 
-func (m *Manager) StartWebsocketAndWait(ctx context.Context) {
-	serveAndWait(ctx, m.serverPort)
-}
-
 func (m *Manager) UpdateServerPort(port int) {
 	m.serverPort = port
-}
-
-// getUILaunchConfig chooses the GTK backend for the Flutter UI and records why it was selected.
-// Linux effectively has X11, native Wayland, and XWayland, but Wox keeps its default
-// policy to two stable modes: use real X11 when the desktop is X11, and inherit native
-// Wayland when the desktop is Wayland. Wox should not force XWayland itself: it can
-// make absolute moves possible in some setups, but its pointer and monitor view can
-// disagree with the Wayland compositor that actually places the window.
-func (m *Manager) getUILaunchConfig(ctx context.Context) (uiLaunchConfig, *uiLaunchConfig) {
-	config := uiLaunchConfig{
-		Backend: "system",
-		Mode:    "system",
-		Reason:  "non-linux platform uses the inherited desktop backend",
-	}
-	if !util.IsLinux() {
-		return config, nil
-	}
-
-	hasWayland := os.Getenv("WAYLAND_DISPLAY") != "" || strings.EqualFold(os.Getenv("XDG_SESSION_TYPE"), "wayland")
-	config.Mode = "auto"
-	if hasWayland {
-		config.Reason = "Wayland session detected, so Wox inherits the desktop backend instead of forcing XWayland"
-	} else if os.Getenv("GDK_BACKEND") != "" {
-		config.Reason = "non-Wayland session already defines GDK_BACKEND, so Wox inherits it"
-	} else {
-		config.Reason = "non-Wayland session uses the inherited desktop backend"
-	}
-	return config, nil
-}
-
-// linuxDesktopDiagnostics returns Linux session details that are useful when GTK backend selection fails.
-func linuxDesktopDiagnostics() string {
-	keys := []string{
-		"XDG_SESSION_TYPE",
-		"XDG_CURRENT_DESKTOP",
-		"XDG_SESSION_DESKTOP",
-		"DESKTOP_SESSION",
-		"GDMSESSION",
-		"WAYLAND_DISPLAY",
-		"DISPLAY",
-		"GDK_BACKEND",
-		"QT_QPA_PLATFORM",
-		"XDG_SESSION_CLASS",
-		"XDG_SESSION_ID",
-	}
-	parts := []string{fmt.Sprintf("goos=%s", runtime.GOOS), fmt.Sprintf("goarch=%s", runtime.GOARCH)}
-	for _, key := range keys {
-		parts = append(parts, fmt.Sprintf("%s=%q", key, os.Getenv(key)))
-	}
-	parts = append(parts, fmt.Sprintf("isHyprland=%v", util.IsHyprlandSession()))
-
-	if data, err := os.ReadFile("/etc/os-release"); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
-			if strings.HasPrefix(line, "PRETTY_NAME=") || strings.HasPrefix(line, "ID=") || strings.HasPrefix(line, "VERSION_ID=") {
-				parts = append(parts, strings.TrimSpace(line))
-			}
-		}
-	}
-
-	return strings.Join(parts, " ")
-}
-
-// logUILaunchConfig records the selected UI backend together with the desktop state that led to it.
-func logUILaunchConfig(ctx context.Context, config uiLaunchConfig, fallback *uiLaunchConfig) {
-	fallbackBackend := "none"
-	if fallback != nil {
-		fallbackBackend = fallback.Backend
-	}
-	logger.Info(ctx, fmt.Sprintf("ui launch backend selected: mode=%s backend=%s env=%v fallback=%s reason=%s", config.Mode, config.Backend, config.Env, fallbackBackend, config.Reason))
-	if util.IsLinux() {
-		logger.Info(ctx, "linux desktop environment: "+linuxDesktopDiagnostics())
-	}
-}
-
-func (m *Manager) StartUIApp(ctx context.Context) error {
-	var appPath = util.GetLocation().GetUIAppPath()
-	if fileInfo, statErr := os.Stat(appPath); os.IsNotExist(statErr) {
-		logger.Info(ctx, "UI app not exist: "+appPath)
-		return errors.New("UI app not exist")
-	} else {
-		if !util.IsFileExecAny(fileInfo.Mode()) {
-			// add execute permission
-			chmodErr := os.Chmod(appPath, 0755)
-			if chmodErr != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to add execute permission to ui app: %s", chmodErr.Error()))
-				return chmodErr
-			} else {
-				logger.Info(ctx, "added execute permission to ui app")
-			}
-		}
-	}
-
-	m.uiReadyAt.Store(0)
-	m.isUIReadyHandled = false
-	config, fallback := m.getUILaunchConfig(ctx)
-	logUILaunchConfig(ctx, config, fallback)
-	return m.startUIAppWithConfig(ctx, appPath, config, fallback)
-}
-
-// startUIAppWithConfig launches the Flutter UI with one selected GTK backend and wires exit/ready monitoring.
-func (m *Manager) startUIAppWithConfig(ctx context.Context, appPath string, config uiLaunchConfig, fallback *uiLaunchConfig) error {
-	// Bug fix: on a fresh Windows 10 install the Flutter runner can fail before
-	// Dart code starts if the MSVC runtime is absent. Check the native runtime
-	// dependencies while the Go backend can still explain the cause and direct
-	// the user to Microsoft's installer instead of launching an opaque failing
-	// child process.
-	if dependencyErr := ensureUIRuntimeDependencies(ctx, appPath); dependencyErr != nil {
-		m.ExitApp(ctx)
-		return dependencyErr
-	}
-
-	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d, backend=%s, env=%v", appPath, m.serverPort, os.Getpid(), config.Backend, config.Env))
-	cmd, cmdErr := shell.RunWithEnv(appPath, config.Env,
-		fmt.Sprintf("%d", m.serverPort),
-		fmt.Sprintf("%d", os.Getpid()),
-		fmt.Sprintf("%t", util.IsDev()),
-	)
-	if cmdErr != nil {
-		return cmdErr
-	}
-
-	m.uiProcess = cmd.Process
-	m.uiStopRequested.Store(false)
-	pid := cmd.Process.Pid
-	// Debug Glance reads this PID to report combined core + Flutter memory.
-	// Prod launches the UI from core, while dev mode can later replace it with
-	// the PID reported by Flutter's ready callback.
-	processmemory.SetWoxUIProcessPid(pid)
-	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", pid))
-
-	processDone := make(chan struct{})
-	util.Go(ctx, "watch ui app", func() {
-		defer close(processDone)
-		waitErr := cmd.Wait()
-		// Clear only this exited process so a restarted UI keeps its newer PID.
-		processmemory.ClearWoxUIProcessPid(pid)
-		waitCtx := util.NewTraceContext()
-
-		stopRequested := m.uiStopRequested.Load()
-		diagnostic.GetManager().RecordUIExit(waitCtx, pid, waitErr, stopRequested)
-
-		markerPath := filepath.Join(filepath.Dir(util.GetLocation().GetUIAppPath()), "gpu_recovery.marker")
-		gpuRecovery := false
-		if util.IsFileExists(markerPath) {
-			gpuRecovery = true
-			logger.Info(waitCtx, "detected GPU recovery marker, will restart UI instead of quitting")
-			if removeErr := os.Remove(markerPath); removeErr != nil {
-				logger.Warn(waitCtx, fmt.Sprintf("failed to remove GPU recovery marker: %s", removeErr.Error()))
-			}
-		}
-
-		if stopRequested {
-			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited after stop request", pid))
-			return
-		}
-
-		if fallback != nil && m.uiReadyAt.Load() == 0 {
-			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited before ready with backend=%s, retrying with backend=%s", pid, config.Backend, fallback.Backend))
-			logUILaunchConfig(waitCtx, *fallback, nil)
-			if fallbackErr := m.startUIAppWithConfig(waitCtx, appPath, *fallback, nil); fallbackErr != nil {
-				logger.Error(waitCtx, fmt.Sprintf("failed to start fallback ui backend %s: %s", fallback.Backend, fallbackErr.Error()))
-				m.ExitApp(waitCtx)
-			}
-			return
-		}
-
-		if waitErr != nil {
-			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited with error: %s", pid, waitErr.Error()))
-			if !gpuRecovery {
-				handleUIRuntimeLaunchFailure(waitCtx, waitErr)
-			}
-		} else {
-			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited", pid))
-		}
-
-		if gpuRecovery {
-			// This is a GPU recovery, restart the UI instead of quitting
-			logger.Info(waitCtx, "restarting UI after GPU recovery")
-			// Wait a bit for GPU to stabilize
-			time.Sleep(500 * time.Millisecond)
-			restartErr := m.StartUIApp(waitCtx)
-			if restartErr != nil {
-				logger.Error(waitCtx, fmt.Sprintf("failed to restart UI after GPU recovery: %s", restartErr.Error()))
-				m.ExitApp(waitCtx)
-			}
-		} else if !m.uiStopRequested.Load() {
-			// Normal exit, quit the backend
-			logger.Warn(waitCtx, "ui app exited, quitting backend")
-			m.ExitApp(waitCtx)
-		}
-	})
-
-	m.scheduleUIReadyMonitor(ctx, appPath, pid, config, fallback, processDone)
-	return nil
-}
-
-// scheduleUIReadyMonitor retries the UI once in auto mode and otherwise leaves a detailed diagnostic trail.
-func (m *Manager) scheduleUIReadyMonitor(ctx context.Context, appPath string, pid int, config uiLaunchConfig, fallback *uiLaunchConfig, processDone <-chan struct{}) {
-	util.Go(ctx, "monitor ui ready", func() {
-		timer := time.NewTimer(uiReadyTimeout)
-		defer timer.Stop()
-
-		select {
-		case <-processDone:
-			return
-		case <-timer.C:
-		}
-
-		if m.uiReadyAt.Load() > 0 {
-			return
-		}
-		if m.uiProcess == nil || m.uiProcess.Pid != pid {
-			return
-		}
-
-		monitorCtx := util.NewTraceContext()
-		logger.Warn(monitorCtx, fmt.Sprintf("ui app did not become ready within %s, backend=%s, mode=%s, env=%v, reason=%s", uiReadyTimeout, config.Backend, config.Mode, config.Env, config.Reason))
-		if util.IsLinux() {
-			logger.Warn(monitorCtx, "linux desktop environment when ui ready timed out: "+linuxDesktopDiagnostics())
-		}
-		if fallback == nil {
-			return
-		}
-
-		logger.Warn(monitorCtx, fmt.Sprintf("restart ui with fallback backend=%s", fallback.Backend))
-		m.uiStopRequested.Store(true)
-		killErr := m.uiProcess.Kill()
-		if killErr != nil {
-			logger.Error(monitorCtx, fmt.Sprintf("failed to kill ui process(%d) before fallback: %s", pid, killErr.Error()))
-			return
-		}
-		select {
-		case <-processDone:
-		case <-time.After(2 * time.Second):
-			logger.Warn(monitorCtx, fmt.Sprintf("ui process(%d) did not exit within fallback wait window", pid))
-		}
-
-		logUILaunchConfig(monitorCtx, *fallback, nil)
-		if fallbackErr := m.startUIAppWithConfig(monitorCtx, appPath, *fallback, nil); fallbackErr != nil {
-			logger.Error(monitorCtx, fmt.Sprintf("failed to start fallback ui backend %s: %s", fallback.Backend, fallbackErr.Error()))
-			m.ExitApp(monitorCtx)
-		}
-	})
 }
 
 func (m *Manager) GetCurrentTheme(ctx context.Context) common.Theme {
@@ -1013,7 +820,7 @@ func resolvePlatformThemeForTarget(ctx context.Context, theme common.Theme, plat
 		return clearThemePlatformOverrides(theme)
 	}
 
-	// New feature: platform nodes are preserved on the stored Theme, but Flutter
+	// New feature: platform nodes are preserved on the stored Theme, but UI
 	// still expects the old flat payload. Merge the current OS override here so
 	// every caller receives the same effective style without teaching the UI about
 	// platform-specific schema details.
@@ -1148,7 +955,7 @@ func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 	}
 }
 
-// ApplyCurrentTheme pushes the currently configured theme to Flutter without writing ThemeId again.
+// ApplyCurrentTheme pushes the currently configured theme to UI without writing ThemeId again.
 func (m *Manager) ApplyCurrentTheme(ctx context.Context) {
 	theme := m.GetCurrentTheme(ctx)
 	if theme.ThemeId == "" {
@@ -1181,21 +988,43 @@ func (m *Manager) ToggleRecordingMode(ctx context.Context) (bool, error) {
 	return impl.ToggleRecordingMode(ctx)
 }
 
+// ToggleRepaintDebugMode cycles partial-refresh visualization in development builds.
+func (m *Manager) ToggleRepaintDebugMode(ctx context.Context) (string, error) {
+	if !util.IsDev() {
+		return "", errors.New("repaint debug is only available in dev builds")
+	}
+
+	impl, ok := m.GetUI(ctx).(*uiImpl)
+	if !ok {
+		return "", errors.New("UI does not support repaint debug")
+	}
+	return impl.ToggleRepaintDebugMode(ctx)
+}
+
 // called after UI is ready to show, and will execute only once
 func (m *Manager) PostUIReady(ctx context.Context) {
 	logger.Info(ctx, "app is ready to show")
-	m.uiReadyAt.Store(util.GetSystemTimestamp())
 	if m.isUIReadyHandled {
 		logger.Warn(ctx, "app is already handled ready to show event")
 		return
 	}
 	m.isUIReadyHandled = true
+	if impl, ok := m.ui.(*uiImpl); ok {
+		sessionID := util.GetContextSessionId(ctx)
+		impl.sessionMu.Lock()
+		impl.primarySessionID = sessionID
+		if impl.sessionVisible == nil {
+			impl.sessionVisible = map[string]bool{}
+		}
+		impl.sessionVisible[sessionID] = false
+		impl.sessionMu.Unlock()
+	}
 
 	// Apply auto appearance theme on startup
 	m.applyAutoAppearanceThemeIfNeed(ctx)
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if !woxSetting.OnboardingFinished.Get() {
+	if !woxSetting.OnboardingFinished.Get() && !util.ShouldSkipOnboardingForTest() {
 		// The first-run guide must win over HideOnStart so every user data
 		// directory gets one skippable setup pass before normal launcher startup.
 		m.ui.OpenOnboardingWindow(ctx)
@@ -1210,10 +1039,20 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 func (m *Manager) PostOnShow(ctx context.Context) {
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
-		impl.isVisible = true
-		impl.isInSettingView = false
-		impl.isInOnboardingView = false
-		impl.isRecordingHotkey = false
+		sessionID := util.GetContextSessionId(ctx)
+		impl.sessionMu.Lock()
+		if impl.sessionVisible == nil {
+			impl.sessionVisible = map[string]bool{}
+		}
+		impl.sessionVisible[sessionID] = true
+		isPrimary := sessionID == "" || sessionID == impl.primarySessionID
+		impl.sessionMu.Unlock()
+		if isPrimary {
+			impl.isVisible = true
+			impl.isInSettingView = false
+			impl.isInOnboardingView = false
+			impl.isRecordingHotkey = false
+		}
 	}
 
 	analytics.TrackUIOpened(ctx)
@@ -1244,10 +1083,20 @@ func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
 func (m *Manager) PostOnHide(ctx context.Context) {
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
-		impl.isVisible = false
-		impl.isInSettingView = false
-		impl.isInOnboardingView = false
-		impl.isRecordingHotkey = false
+		sessionID := util.GetContextSessionId(ctx)
+		impl.sessionMu.Lock()
+		if impl.sessionVisible == nil {
+			impl.sessionVisible = map[string]bool{}
+		}
+		impl.sessionVisible[sessionID] = false
+		isPrimary := sessionID == "" || sessionID == impl.primarySessionID
+		impl.sessionMu.Unlock()
+		if isPrimary {
+			impl.isVisible = false
+			impl.isInSettingView = false
+			impl.isInOnboardingView = false
+			impl.isRecordingHotkey = false
+		}
 	}
 	m.releaseHiddenCoreMemory(ctx)
 }
@@ -1261,6 +1110,10 @@ func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
 			return
 		}
 
+		// Drop process-wide memoization caches before returning heap pages so their
+		// backing memory is included in the release. Both rebuild lazily after show.
+		fuzzymatch.ReleaseIdleCaches()
+		woxui.ReleaseIdleTextMetricsCache()
 		debug.FreeOSMemory()
 	})
 }
@@ -1273,18 +1126,38 @@ func (m *Manager) PostOnSetting(ctx context.Context, isInSettingView bool) {
 		}
 		if isInSettingView {
 			// Settings can be opened while the launcher is hidden. Marking the
-			// shared window visible here keeps backend notification routing in
+			// application visible here keeps backend notification routing in
 			// sync without waiting for launcher-specific onShow.
 			impl.isVisible = true
 			impl.isInOnboardingView = false
+			impl.sessionMu.Lock()
+			if impl.sessionVisible == nil {
+				impl.sessionVisible = map[string]bool{}
+			}
+			impl.sessionVisible[util.GetContextSessionId(ctx)] = true
+			impl.sessionMu.Unlock()
 		}
 	}
+}
+
+// PostOnInstanceDestroyed forgets visibility and query caches owned by a secondary launcher.
+func (m *Manager) PostOnInstanceDestroyed(ctx context.Context) {
+	sessionID := util.GetContextSessionId(ctx)
+	if sessionID == "" {
+		return
+	}
+	if impl, ok := m.ui.(*uiImpl); ok {
+		impl.sessionMu.Lock()
+		delete(impl.sessionVisible, sessionID)
+		impl.sessionMu.Unlock()
+	}
+	plugin.GetPluginManager().ClearSessionState(ctx, sessionID)
 }
 
 func (m *Manager) PostOnOnboarding(ctx context.Context, isInOnboardingView bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		// Onboarding is a management surface like settings, but it needs its own
-		// state so Flutter can keep isInSettingView false while backend routing
+		// state so UI can keep isInSettingView false while backend routing
 		// still suppresses toolbar notifications over the guide.
 		impl.isInOnboardingView = isInOnboardingView
 		if !isInOnboardingView {
@@ -1480,7 +1353,8 @@ func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	queryItems := make([]tray.QueryIconItem, 0, len(woxSetting.TrayQueries.Get()))
-	settingMenuTitle := i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_open_setting_window")
+	logger.Debug(ctx, fmt.Sprintf("refresh tray query icons: entries=%d", len(woxSetting.TrayQueries.Get())))
+	settingMenuTitle := i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_edit_query")
 	for trayQueryIndex, trayQuery := range woxSetting.TrayQueries.Get() {
 		if trayQuery.Disabled {
 			continue
@@ -1492,12 +1366,14 @@ func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
 		}
 
 		iconBytes := m.toTrayIconBytes(ctx, trayQuery.Icon)
+		logger.Debug(ctx, fmt.Sprintf("prepared tray query icon: index=%d type=%s iconBytes=%d", trayQueryIndex, trayQuery.Icon.ImageType, len(iconBytes)))
 		tooltip := query
 		if len(tooltip) > 80 {
 			tooltip = tooltip[:80]
 		}
 
 		queryItems = append(queryItems, tray.QueryIconItem{
+			Identifier:       fmt.Sprintf("%d", trayQueryIndex),
 			Icon:             iconBytes,
 			Tooltip:          tooltip,
 			ContextMenuTitle: settingMenuTitle,
@@ -1559,8 +1435,7 @@ func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQu
 		}
 		logger.Debug(queryCtx, fmt.Sprintf("tray query anchor resolved: windowX=%d bottom=%d screen=(x=%d y=%d w=%d h=%d)", trayAnchor.WindowX, trayAnchor.Bottom, trayAnchor.ScreenRect.X, trayAnchor.ScreenRect.Y, trayAnchor.ScreenRect.Width, trayAnchor.ScreenRect.Height))
 	}
-	m.ui.ChangeQuery(queryCtx, plainQuery)
-	m.ui.ShowApp(queryCtx, common.ShowContext{
+	m.openSecondaryInstance(queryCtx, "tray-query:"+strings.TrimSpace(trayQuery.Query), plainQuery, common.ShowContext{
 		SelectAll:        false,
 		HideQueryBox:     trayQuery.HideQueryBox,
 		HideToolbar:      trayQuery.HideToolbar,
@@ -1634,7 +1509,7 @@ func (m *Manager) getTrayQueryWindowAnchorBottom(rect tray.ClickRect, screenRect
 
 func (m *Manager) getTrayQueryInitialWindowHeight(ctx context.Context, trayQuery setting.TrayQuery) int {
 	theme := m.GetCurrentTheme(ctx)
-	// Tray query popups start before Flutter has measured content, so backend
+	// Tray query popups start before UI has measured content, so backend
 	// positioning must use the same density-scaled base heights as the launcher
 	// render path while leaving theme padding untouched.
 	queryBoxHeight := DensityQueryBoxBaseHeight(ctx) + theme.AppPaddingTop + theme.AppPaddingBottom
@@ -1804,10 +1679,6 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 		return resource.GetAppIcon()
 	}
 
-	if svgBytes, ok := m.toMacOSTrayVectorBytes(ctx, icon); ok {
-		return svgBytes
-	}
-
 	img, err := icon.ToImageWithoutRemoteFetch()
 	if err != nil {
 		if icon.ImageType == common.WoxImageTypeEmoji {
@@ -1837,6 +1708,7 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 
 // warmTrayEmojiIconCache keeps tray refresh local-first while still allowing emoji icons to resolve after the Twemoji PNG cache is ready.
 func (m *Manager) warmTrayEmojiIconCache(ctx context.Context, icon common.WoxImage) {
+	warmParentCtx := context.WithoutCancel(ctx)
 	iconKey := icon.String()
 	m.trayEmojiWarmMu.Lock()
 	if m.trayEmojiWarmInFlight == nil {
@@ -1849,52 +1721,26 @@ func (m *Manager) warmTrayEmojiIconCache(ctx context.Context, icon common.WoxIma
 	m.trayEmojiWarmInFlight[iconKey] = struct{}{}
 	m.trayEmojiWarmMu.Unlock()
 
-	util.Go(ctx, "warm tray query emoji icon cache", func() {
+	util.Go(warmParentCtx, "warm tray query emoji icon cache", func() {
 		defer func() {
 			m.trayEmojiWarmMu.Lock()
 			delete(m.trayEmojiWarmInFlight, iconKey)
 			m.trayEmojiWarmMu.Unlock()
 		}()
 
-		warmCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		warmCtx, cancel := context.WithTimeout(warmParentCtx, 15*time.Second)
 		defer cancel()
 
 		if _, err := icon.ToImageWithContext(warmCtx); err != nil {
-			logger.Warn(ctx, fmt.Sprintf("failed to warm tray query emoji icon cache: %s", err.Error()))
+			logger.Warn(warmParentCtx, fmt.Sprintf("failed to warm tray query emoji icon cache: %s", err.Error()))
 			return
 		}
 
-		if setting.GetSettingManager().GetWoxSetting(ctx).ShowTray.Get() {
-			logger.Info(ctx, fmt.Sprintf("warmed tray query emoji icon cache, refreshing tray query icons: %s", icon.ImageData))
-			m.refreshTrayQueryIcons(ctx)
+		if setting.GetSettingManager().GetWoxSetting(warmParentCtx).ShowTray.Get() {
+			logger.Info(warmParentCtx, fmt.Sprintf("warmed tray query emoji icon cache, refreshing tray query icons: %s", icon.ImageData))
+			m.refreshTrayQueryIcons(warmParentCtx)
 		}
 	})
-}
-
-func (m *Manager) toMacOSTrayVectorBytes(ctx context.Context, icon common.WoxImage) ([]byte, bool) {
-	if !util.IsMacOS() {
-		return nil, false
-	}
-
-	if icon.ImageType == common.WoxImageTypeSvg {
-		svgData := strings.TrimSpace(icon.ImageData)
-		if svgData == "" {
-			return nil, false
-		}
-		return []byte(svgData), true
-	}
-
-	if icon.ImageType == common.WoxImageTypeAbsolutePath && strings.EqualFold(filepath.Ext(icon.ImageData), ".svg") {
-		svgData, err := os.ReadFile(icon.ImageData)
-		if err != nil {
-			logger.Warn(ctx, fmt.Sprintf("failed to read tray query svg icon, fallback to raster path: %s", err.Error()))
-			return nil, false
-		}
-
-		return svgData, true
-	}
-
-	return nil, false
 }
 
 func wrapPNGAsICO(pngData []byte, width int, height int) ([]byte, error) {
@@ -1952,7 +1798,6 @@ func (m *Manager) ExitApp(ctx context.Context) {
 	m.exitOnce.Do(func() {
 		util.GetLogger().Info(ctx, "start quitting")
 		plugin.GetPluginManager().Stop(ctx)
-		m.Stop(ctx)
 		diagnostic.GetManager().MarkCleanExit(ctx)
 		util.GetLogger().Info(ctx, "bye~")
 		if err := privacy.StartExitCleanup(setting.GetSettingManager().GetWoxSetting(ctx)); err != nil {
@@ -2006,7 +1851,7 @@ func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetail
 		return
 	}
 
-	if m.isUIWindow("", activeWindowPid) {
+	if m.isUIWindow(activeWindowPid) {
 		return
 	}
 
@@ -2079,7 +1924,7 @@ func (m *Manager) shouldIgnoreHotkeyTrigger(ctx context.Context) bool {
 
 	activeWindowName := window.GetActiveWindowName()
 	activeWindowPid := window.GetActiveWindowPid()
-	if m.isUIWindow(activeWindowName, activeWindowPid) {
+	if m.isUIWindow(activeWindowPid) {
 		return false
 	}
 
@@ -2139,11 +1984,8 @@ func (m *Manager) isOnboardingViewActive() bool {
 	return false
 }
 
-func (m *Manager) isUIWindow(activeWindowName string, activeWindowPid int) bool {
-	if m.uiProcess != nil && activeWindowPid != 0 && m.uiProcess.Pid == activeWindowPid {
-		return true
-	}
-	return strings.EqualFold(activeWindowName, "wox-ui")
+func (m *Manager) isUIWindow(activeWindowPid int) bool {
+	return activeWindowPid == os.Getpid()
 }
 
 func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {

@@ -280,19 +280,6 @@ func (l *Location) GetFileSearchDirectory() string {
 	return path.Join(l.woxDataDirectory, "filesearch")
 }
 
-func (l *Location) GetUIAppPath() string {
-	if IsWindows() {
-		return path.Join(l.GetUIDirectory(), "flutter", "wox", "wox-ui.exe")
-	}
-	if IsLinux() {
-		return path.Join(l.GetUIDirectory(), "flutter", "wox", "wox-ui")
-	}
-	if IsMacOS() {
-		return path.Join(l.GetUIDirectory(), "flutter", "wox-ui.app", "Contents", "MacOS", "wox-ui")
-	}
-	return ""
-}
-
 func (l *Location) GetAppLockPath() string {
 	return path.Join(l.GetWoxDataDirectory(), "wox.lock")
 }

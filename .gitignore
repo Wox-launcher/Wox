@@ -7,7 +7,6 @@ wox.core/resource/hosts/
 wox.plugin.host.python/python-host/
 wox.plugin.host.python/python-host.pyz
 *.pyz
-wox.core/resource/ui/flutter/
 node_modules/
 __pycache__/
 Release/
@@ -20,6 +19,7 @@ wox.plugin.python/wox_plugin.egg-info/
 .mypy_cache/
 wox.core/resource/others/woxmr
 wox.core/resource/others/window_hook
+wox.core/resource/others/crash_handler
 wox.exe
 wox.core/wox
 www/docs/.vitepress/cache
@@ -33,15 +33,16 @@ wox.ui.macos/.build/
 wox.ui.macos/.swiftpm/
 wox.ui.windows/bin/
 wox.ui.windows/obj/
-wox.test/artifacts
 .tmp
 .worktrees/
 .tmp-*
-.superpowers
+superpowers
+.superpowers/*
 log
 docs
 !www/docs/
 !www/docs/**
 www/docs/.vitepress/cache
 www/docs/.vitepress/dist
-superpowers
+.deps
+wox.ui.flutter/

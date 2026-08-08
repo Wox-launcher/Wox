@@ -9,12 +9,6 @@ import (
 // This prevents stale generation values from causing incorrect matches when buffers are reused.
 var globalGeneration atomic.Uint32
 
-//////////////////////////////////////////////////////////////////////////////////
-///
-///   SHOULD KEEP THIS FILE IN SYNC WITH wox_fuzzy_match_util.dart IN wox.ui.flutter
-///
-/////////////////////////////////////////////////////////////////////////////////////
-
 // FuzzyMatchResult represents the result of a fuzzy match operation
 type FuzzyMatchResult struct {
 	IsMatch bool  // Whether the pattern matches the text

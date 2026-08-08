@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
 	"wox/plugin"
+	"wox/ui/contract"
 	"wox/util"
 	"wox/util/timetracking"
 )
@@ -14,13 +16,13 @@ import (
 // cause constant window resizing and flickering. 32ms is roughly 30fps.
 const resultDebounceIntervalMs = 32
 
-// queryRun owns the per-query execution state that used to live in
-// handleWebsocketQuery. Keeping this state together makes it clear that result
+// queryRun owns the per-query execution state. Keeping this state together makes it clear that result
 // batching, fallback, and final response delivery are scoped by query id, not by
 // the session's latest visible query.
 type queryRun struct {
 	ctx     context.Context
-	request WebsocketMsg
+	request contract.QueryRequest
+	view    contract.QueryView
 	// sessionId scopes the query result cache to the launcher window session.
 	sessionId string
 	// queryId scopes result snapshots so concurrent queries in the same session do not overwrite each other.
@@ -30,7 +32,7 @@ type queryRun struct {
 	// ownerPlugin is set for plugin-scoped queries and nil for global queries.
 	ownerPlugin *plugin.Instance
 	// startTimestamp records the end-to-end query start time for elapsed metrics and debug tails.
-	// Prefer the Flutter request send timestamp; fall back to backend start for non-UI callers.
+	// Prefer the UI request send timestamp; fall back to backend start for non-UI callers.
 	startTimestamp int64
 	// firstFlushDeadlineMs is the end-to-end deadline for the first visible snapshot.
 	firstFlushDeadlineMs int64
@@ -50,15 +52,16 @@ type queryRun struct {
 	latestResponse plugin.QueryResponseUI
 	// fallbackHandled prevents duplicate fallback checks after fallbackReady and done both fire.
 	fallbackHandled bool
-	// resultDebouncer batches plugin results before flushing snapshots back to Flutter.
+	// resultDebouncer batches plugin results before flushing snapshots back to UI.
 	resultDebouncer *util.Debouncer[plugin.QueryResultUI]
 }
 
-func newQueryRun(ctx context.Context, request WebsocketMsg, query plugin.Query, ownerPlugin *plugin.Instance) *queryRun {
+func newQueryRun(ctx context.Context, request contract.QueryRequest, view contract.QueryView, query plugin.Query, ownerPlugin *plugin.Instance) *queryRun {
 	return &queryRun{
 		ctx:                 ctx,
 		request:             request,
-		sessionId:           request.SessionId,
+		view:                view,
+		sessionId:           request.SessionID,
 		queryId:             query.Id,
 		query:               query,
 		ownerPlugin:         ownerPlugin,
@@ -71,7 +74,7 @@ func newQueryRun(ctx context.Context, request WebsocketMsg, query plugin.Query, 
 
 func (r *queryRun) start() {
 	backendStartTimestamp := util.GetSystemTimestamp()
-	r.startTimestamp = r.request.SendTimestamp
+	r.startTimestamp = r.request.SentTimestamp
 	if r.startTimestamp <= 0 {
 		r.startTimestamp = backendStartTimestamp
 	}
@@ -101,7 +104,7 @@ func (r *queryRun) start() {
 	if tracker := timetracking.New("query_run_start"); tracker.Enabled() {
 		tracker.SetRawString("queryId", r.queryId)
 		tracker.SetRawString("query", r.query.String())
-		tracker.SetBool("usesClientStartTimestamp", r.request.SendTimestamp > 0)
+		tracker.SetBool("usesClientStartTimestamp", r.request.SentTimestamp > 0)
 		tracker.SetInt64("clientToBackendStartMs", backendStartTimestamp-r.startTimestamp)
 		tracker.SetInt64("firstFlushDeadlineMs", r.firstFlushDeadlineMs)
 		tracker.SetInt64("firstFlushRemainingMs", firstFlushRemainingMs)
@@ -149,9 +152,9 @@ func (r *queryRun) start() {
 			r.finish(execution.Results)
 			return
 		case <-time.After(time.Minute):
-			logger.Info(r.ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", r.query.String(), r.request.RequestId))
+			logger.Info(r.ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", r.query.String(), r.request.RequestID))
 			r.resultDebouncer.Done(r.ctx)
-			responseUIError(r.ctx, r.request, fmt.Sprintf("query timeout, query: %s, request id: %s", r.query.String(), r.request.RequestId))
+			r.view.ApplyQueryError(r.ctx, r.queryId, fmt.Errorf("query timeout, query: %s, request id: %s", r.query.String(), r.request.RequestID))
 			return
 		}
 	}
@@ -335,7 +338,7 @@ func (r *queryRun) flush(results []plugin.QueryResultUI, reason string) {
 
 	// Bug fix: core query pipelines are concurrent, so backend "current query"
 	// state can move while an older or newer pipeline is still flushing. Send
-	// the queryId-specific snapshot and let Flutter decide whether it is still
+	// the queryId-specific snapshot and let UI decide whether it is still
 	// the visible query; otherwise the current query can miss its final response
 	// and keep the loading indicator alive.
 	//
@@ -366,13 +369,13 @@ func (r *queryRun) flush(results []plugin.QueryResultUI, reason string) {
 		}
 	}
 	sendStart := util.GetSystemTimestamp()
-	responseUIQueryResponse(r.ctx, r.request, r.queryId, plugin.QueryResponseUI{
+	r.view.ApplyQueryResponse(r.ctx, contract.QueryResponse{QueryID: r.queryId, Response: plugin.QueryResponseUI{
 		Results:             responseSnapshot,
 		Refinements:         r.latestResponse.Refinements,
 		Layout:              r.latestResponse.Layout,
 		Context:             r.latestResponse.Context,
 		QueryStartTimestamp: r.startTimestamp,
-	}, isFinal)
+	}, IsFinal: isFinal})
 	if tracker := timetracking.New("send_ui_response"); tracker.Enabled() {
 		tracker.SetRawString("queryId", r.queryId)
 		tracker.SetInt("responseCount", len(responseSnapshot))

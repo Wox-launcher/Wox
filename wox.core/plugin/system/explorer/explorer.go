@@ -984,6 +984,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			pendingCtx     context.Context
 			pendingHintPid int
 			pendingHintEnd time.Time
+			explorerShow   *common.ShowContext
 		)
 
 		resetState := func() {
@@ -992,6 +993,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			handoffUntil = time.Time{}
 			pending = ""
 			pendingCtx = nil
+			explorerShow = nil
 		}
 
 		changeExplorerQuery := func(localCtx context.Context) {
@@ -999,10 +1001,19 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				return
 			}
 			queryText := "explorer " + pending
-			c.typeToSearchDebugLog(localCtx, "changeQuery %q", queryText)
-			c.api.ChangeQuery(localCtx, common.PlainQuery{
-				QueryType: plugin.QueryTypeInput,
-				QueryText: queryText,
+			if explorerShow == nil {
+				return
+			}
+			c.typeToSearchDebugLog(localCtx, "openExplorerInstance %q", queryText)
+			plugin.GetPluginManager().GetUI().OpenWoxInstance(localCtx, common.OpenWoxInstanceRequest{
+				Role:         common.WoxInstanceRoleSecondary,
+				InstanceName: string(common.ShowSourceExplorer),
+				Query: common.PlainQuery{
+					QueryId:   uuid.NewString(),
+					QueryType: plugin.QueryTypeInput,
+					QueryText: queryText,
+				},
+				ShowApp: *explorerShow,
 			})
 		}
 
@@ -1026,25 +1037,30 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx)
 			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
 			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
-			plugin.GetPluginManager().GetUI().ShowApp(localCtx, common.ShowContext{
+			showContext := common.ShowContext{
 				HideToolbar:      true,
 				QueryBoxAtBottom: true,
 				HideOnBlur:       true,
 				ShowSource:       common.ShowSourceExplorer,
 				WindowPosition:   &position,
 				WindowWidth:      woxSetting.AppWidth.Get() / 2,
-			})
-			// ShowApp refreshes foreground state, so seed the dialog owner after
-			// Wox is visible and before ChangeQuery builds the plugin QueryEnv.
+			}
+			// Seed the owner before the new session query builds its QueryEnv.
 			ui.GetUIManager().SeedActiveWindowSnapshotForQuery(common.ActiveWindowSnapshot{
 				Name:             window.GetWindowNameByPid(pid),
 				Pid:              pid,
 				WindowId:         dialogWindowId,
 				IsOpenSaveDialog: true,
 			})
-			c.api.ChangeQuery(localCtx, common.PlainQuery{
-				QueryType: plugin.QueryTypeInput,
-				QueryText: explorerDialogHintQueryText,
+			plugin.GetPluginManager().GetUI().OpenWoxInstance(localCtx, common.OpenWoxInstanceRequest{
+				Role:         common.WoxInstanceRoleSecondary,
+				InstanceName: string(common.ShowSourceExplorer),
+				Query: common.PlainQuery{
+					QueryId:   uuid.NewString(),
+					QueryType: plugin.QueryTypeInput,
+					QueryText: explorerDialogHintQueryText,
+				},
+				ShowApp: showContext,
 			})
 		}
 
@@ -1103,14 +1119,16 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx)
 			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
 			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
-			plugin.GetPluginManager().GetUI().ShowApp(localCtx, common.ShowContext{
+			showContext := common.ShowContext{
 				HideToolbar:      true,
 				QueryBoxAtBottom: true,
 				HideOnBlur:       true,
 				ShowSource:       common.ShowSourceExplorer,
 				WindowPosition:   &position,
 				WindowWidth:      woxSetting.AppWidth.Get() / 2,
-			})
+			}
+			explorerShow = &showContext
+			changeExplorerQuery(localCtx)
 			return true
 		}
 
@@ -1145,7 +1163,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					}
 					// Bug fix: keep pending keys while waiting for visible and during the handoff
 					// grace window. ShowApp can trigger activation churn before all fast-typed
-					// keys have either been pushed through ChangeQuery or handed to Flutter's
+					// keys have either been pushed through ChangeQuery or handed to UI's
 					// EditableText, so the old eager reset still dropped early characters.
 					if !waitingVisible && handoffUntil.IsZero() {
 						resetState()
@@ -1190,8 +1208,8 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 						}
 						// Bug fix: Finder-to-Wox focus handoff is not atomic on macOS. Wox can
 						// become visible before the ticker starts the grace window and before
-						// Flutter's EditableText is ready, so fast typing after the first key was
-						// ignored here and also missed by Flutter. Treat waitingVisible as part of
+						// UI's EditableText is ready, so fast typing after the first key was
+						// ignored here and also missed by UI. Treat waitingVisible as part of
 						// the handoff and push the full query immediately.
 						pending += strings.ToLower(ev.key)
 						changeExplorerQuery(localCtx)
@@ -1242,7 +1260,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				if visible {
 					changeExplorerQuery(tickCtx)
 					// Keep a short raw-key capture window after the first ChangeQuery. The
-					// previous immediate reset assumed Flutter had already taken keyboard focus,
+					// previous immediate reset assumed UI had already taken keyboard focus,
 					// but macOS can still deliver the next few Finder key events before the
 					// launcher text input is ready, which dropped characters in fast typing.
 					waitingVisible = false
@@ -1267,7 +1285,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 
 func getExplorerInitialWindowHeight(ctx context.Context) int {
 	theme := ui.GetUIManager().GetCurrentTheme(ctx)
-	// Explorer overlays position Wox before Flutter paints the query box. Using
+	// Explorer overlays position Wox before UI paints the query box. Using
 	// the shared density helper keeps compact and comfortable launcher sizes from
 	// appearing offset while preserving theme padding exactly as before.
 	queryBoxHeight := ui.DensityQueryBoxBaseHeight(ctx) + theme.AppPaddingTop + theme.AppPaddingBottom

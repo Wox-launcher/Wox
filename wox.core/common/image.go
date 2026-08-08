@@ -18,19 +18,17 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 	"wox/util"
 	"wox/util/fileicon"
 	"wox/util/imagecache"
+	woxsvg "wox/util/svg"
 	"wox/util/timetracking"
 
 	"github.com/disintegration/imaging"
-	"github.com/forPelevin/gomoji"
-	"github.com/srwiley/oksvg"
-	"github.com/srwiley/rasterx"
 )
 
 type WoxImageType = string
@@ -57,9 +55,8 @@ const (
 	ResultGridIconSize     = util.ResultGridIconSize
 	resizeImageCachePrefix = "resize_v2_"
 	pngCropLargeDimension  = 1024
+	twemojiPNGBaseURL      = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72"
 )
-
-var svgRootEmDimensionPattern = regexp.MustCompile(`\s(?:width|height)=["'][^"']*em["']`)
 
 var (
 	pngFileSignature = [8]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
@@ -121,7 +118,6 @@ const (
 	WoxImageTypeRelativePath = "relative"
 	WoxImageTypeBase64       = "base64"
 	WoxImageTypeSvg          = "svg"
-	WoxImageTypeLottie       = "lottie" // only support lottie json data
 	WoxImageTypeEmoji        = "emoji"
 	WoxImageTypeUrl          = "url"
 	WoxImageTypeTheme        = "theme"
@@ -136,10 +132,11 @@ type WoxImage struct {
 
 // WoxLazyLoadImagePayload is an internal payload created by core after a plugin
 // has already returned a normal WoxImage. Source is used only inside core before
-// manager token registration; Flutter receives the token form and asks core for
+// manager token registration; UI receives the token form and asks core for
 // the real resized icon only after the result image widget is built.
 type WoxLazyLoadImagePayload struct {
 	Token       string    `json:"token,omitempty"`
+	CacheKey    string    `json:"cacheKey,omitempty"`
 	Placeholder WoxImage  `json:"placeholder"`
 	TargetSize  int       `json:"targetSize"`
 	Source      *WoxImage `json:"source,omitempty"`
@@ -327,7 +324,7 @@ func (w *WoxImage) downloadEmojiImage(ctx context.Context, emoji string, dest st
 
 	var lastErr error
 	for _, codePoint := range codePoints {
-		url := fmt.Sprintf("https://cdn.jsdelivr.net/gh/twitter/twemoji@v11.0.0/36x36/%s.png", codePoint)
+		url := fmt.Sprintf("%s/%s.png", twemojiPNGBaseURL, codePoint)
 		if downloadErr := util.HttpDownload(ctx, url, dest); downloadErr == nil {
 			return nil
 		} else {
@@ -340,12 +337,17 @@ func (w *WoxImage) downloadEmojiImage(ctx context.Context, emoji string, dest st
 
 // emojiImageCodePointCandidates returns Twemoji asset names from most specific to fallback-compatible.
 func (w *WoxImage) emojiImageCodePointCandidates(emoji string) ([]string, error) {
-	emojiInfo, err := gomoji.GetInfo(emoji)
-	if err != nil {
-		return nil, err
+	if emoji == "" {
+		return nil, fmt.Errorf("emoji is empty")
+	}
+	if !utf8.ValidString(emoji) {
+		return nil, fmt.Errorf("emoji is not valid UTF-8")
 	}
 
-	parts := strings.Fields(strings.ToLower(emojiInfo.CodePoint))
+	parts := make([]string, 0, utf8.RuneCountInString(emoji))
+	for _, codePoint := range emoji {
+		parts = append(parts, fmt.Sprintf("%x", codePoint))
+	}
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("empty emoji codepoint: %s", emoji)
 	}
@@ -434,27 +436,7 @@ func isSvgFilePath(filePath string) bool {
 }
 
 func renderSvgImage(svg string) (image.Image, error) {
-	width, height := 32, 32
-	icon, err := oksvg.ReadIconStream(strings.NewReader(normalizeSvgForRasterizer(svg)), oksvg.WarnErrorMode)
-	if err != nil {
-		return nil, err
-	}
-	icon.SetTarget(0, 0, float64(width), float64(height))
-
-	rgba := image.NewRGBA(image.Rect(0, 0, width, height))
-	icon.Draw(rasterx.NewDasher(width, height, rasterx.NewScannerGV(width, height, rgba, rgba.Bounds())), 1)
-	return rgba, nil
-}
-
-// normalizeSvgForRasterizer removes CSS-relative root dimensions that oksvg cannot parse.
-func normalizeSvgForRasterizer(svg string) string {
-	rootEnd := strings.Index(svg, ">")
-	if rootEnd < 0 || !strings.Contains(svg[:rootEnd], "<svg") {
-		return svg
-	}
-
-	root := svgRootEmDimensionPattern.ReplaceAllString(svg[:rootEnd], "")
-	return root + svg[rootEnd:]
+	return woxsvg.Render(svg, 32, 32)
 }
 
 func (w *WoxImage) IsValid() bool {
@@ -585,13 +567,6 @@ func NewWoxImageEmoji(emoji string) WoxImage {
 	}
 }
 
-func NewWoxImageLottie(lottieJson string) WoxImage {
-	return WoxImage{
-		ImageType: WoxImageTypeLottie,
-		ImageData: lottieJson,
-	}
-}
-
 func NewWoxImageTheme(theme Theme) WoxImage {
 	themeJson, err := json.Marshal(theme)
 	if err != nil {
@@ -604,12 +579,13 @@ func NewWoxImageTheme(theme Theme) WoxImage {
 	}
 }
 
-func NewWoxImageLazyLoad(token string, placeholder WoxImage, targetSize int) WoxImage {
+func NewWoxImageLazyLoad(token string, cacheKey string, placeholder WoxImage, targetSize int) WoxImage {
 	// LazyLoad is an internal image type: core serializes the placeholder and
-	// token together so Flutter can render immediately, then ask core for the
+	// token together so UI can render immediately, then ask core for the
 	// resized raster only when the image widget is built.
 	payload, _ := json.Marshal(WoxLazyLoadImagePayload{
 		Token:       token,
+		CacheKey:    cacheKey,
 		Placeholder: placeholder,
 		TargetSize:  targetSize,
 	})
@@ -689,9 +665,6 @@ func ParseWoxImage(image string) (WoxImage, error) {
 	if imageType == WoxImageTypeEmoji {
 		return NewWoxImageEmoji(imageData), nil
 	}
-	if imageType == WoxImageTypeLottie {
-		return NewWoxImageLottie(imageData), nil
-	}
 	if imageType == WoxImageTypeFileIcon {
 		return NewWoxImageFileIcon(imageData), nil
 	}
@@ -716,7 +689,7 @@ func ConvertIconWithSizeWithDiagnostics(ctx context.Context, image WoxImage, plu
 }
 
 // Converted icons can be large and expensive to prepare, so this variant allows the manager to return a lazy load marker for large icons instead of blocking on conversion.
-// The manager replaces the marker with the real resized icon later after it has registered the result in its cache and received the surface size from Flutter.
+// The manager replaces the marker with the real resized icon later after it has registered the result in its cache and received the surface size from UI.
 func ConvertIconWithSizeMaybeLazy(ctx context.Context, image WoxImage, pluginDirectory string, size int) (newImage WoxImage) {
 	return convertIconWithSize(ctx, image, pluginDirectory, size, true, timetracking.IconConversionDiagnostics{})
 }
@@ -850,7 +823,7 @@ func convertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory st
 	timing.RelativeCostUs = time.Since(relativeTimingStart).Microseconds()
 	timing.NormalizedType = newImage.ImageType
 
-	// Keep SVG data and SVG files as-is so Flutter can render vectors directly.
+	// Keep SVG data and SVG files as-is so UI can render vectors directly.
 	svgCheckStart := util.GetSystemTimestamp()
 	svgCheckTimingStart := time.Now()
 	if newImage.ImageType == WoxImageTypeSvg || (newImage.ImageType == WoxImageTypeAbsolutePath && isSvgFilePath(newImage.ImageData)) {
@@ -910,7 +883,7 @@ func convertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory st
 	if allowLazy && lazy {
 		// Optimization: large local raster icons are expensive because the old
 		// polish path decoded, optionally cropped, resized, and wrote every image
-		// before the query response reached Flutter. Return a source-bearing marker
+		// before the query response reached UI. Return a source-bearing marker
 		// here and let the manager decide whether to register it as a token, which
 		// keeps cache ownership out of common image conversion.
 		lazyImage := NewWoxImageLazyLoadCandidate(newImage, size)
@@ -1387,4 +1360,9 @@ func ConvertFileIconToAbsolutePathWithSize(ctx context.Context, image WoxImage, 
 
 func SetServerPort(port int) {
 	serverPort = port
+}
+
+// GetServerPort returns the loopback port used by Wox's local HTTP services.
+func GetServerPort() int {
+	return serverPort
 }

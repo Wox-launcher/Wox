@@ -45,15 +45,11 @@ typedef struct {
     int primary;
 } ScreenDisplayInfo;
 
-// Bug fix: keep the Go core in the same PerMonitorV2 coordinate space as the
-// Flutter Windows runner. The previous core process could stay DPI-unaware in
-// development builds, so Windows virtualized GetMonitorInfo/GetCursorPos while
-// the UI runner used DPI-aware coordinates; a left high-DPI monitor could be
-// reported near -5120 here and then fail Flutter's -2560 logical monitor match.
-// Requesting process DPI awareness before any screen query makes the monitor
-// bounds passed over the websocket compatible with setBounds. The manifest added
-// to release builds makes packaged startup deterministic, while this runtime
-// path covers go run/go test and old launchers that do not carry that manifest.
+// Keep the combined core and Go UI process in PerMonitorV2 coordinates. Without
+// this, Windows can virtualize GetMonitorInfo/GetCursorPos in development builds
+// and make negative high-DPI monitor bounds disagree with native window placement.
+// The release manifest applies the same policy before Go code starts; this path
+// covers go run and go test binaries that do not carry that manifest.
 void enableProcessPerMonitorDpiAwareness() {
     HMODULE user32 = LoadLibraryA("user32.dll");
     if (user32) {
@@ -95,7 +91,7 @@ void enableProcessPerMonitorDpiAwareness() {
 //
 // Why we need this distinction:
 //   - Windows API (GetMonitorInfo, SetWindowPos) uses physical coordinates
-//   - Flutter/UI frameworks typically use logical coordinates for cross-platform consistency
+//   - Cross-platform UI layouts use logical coordinates for consistent sizing
 //   - Without conversion, a window positioned at logical (100,100) on a 200% DPI monitor
 //     would appear at physical (100,100) instead of physical (200,200), causing misalignment
 //
@@ -106,7 +102,7 @@ void enableProcessPerMonitorDpiAwareness() {
 //   If we want to show a window at the center of Monitor 2:
 //   - Physical calculation: x = 2560 + 1920/2 = 3520, y = 360 + 1080/2 = 900
 //   - Logical calculation: x = 1706 + 1920/2 = 2666, y = 360 + 1080/2 = 900
-//   - We return logical coordinates to Flutter, Flutter converts back to physical using correct DPI
+//   - We return logical coordinates and the native window converts them with the monitor DPI
 
 // Get DPI for a monitor
 UINT GetDpiForMonitorCompat(HMONITOR hMonitor) {

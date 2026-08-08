@@ -836,7 +836,7 @@ func (p *DictationPlugin) preloadSelectedModel(ctx context.Context, modelID stri
 
 // buildModelSetting returns the model manager setting as a dictationModel
 // definition, populated with recommended models and their current download
-// status. The Flutter side renders this as a dropdown where not-downloaded
+// status. The UI side renders this as a dropdown where not-downloaded
 // models show a download button and downloading models show a progress bar.
 func (p *DictationPlugin) buildModelSetting(ctx context.Context) definition.PluginSettingDefinitionItem {
 	options := p.buildModelOptions(ctx)
@@ -1013,18 +1013,20 @@ func (p *DictationPlugin) StartModelDownload(ctx context.Context, modelID string
 		return nil
 	}
 
-	util.Go(ctx, "download dictation model", func() {
+	// Downloads outlive the initiating UI or HTTP request and report their lifecycle through model status polling.
+	downloadCtx := context.WithoutCancel(ctx)
+	util.Go(downloadCtx, "download dictation model", func() {
 		// Ensure native libraries are downloaded before the model so the
 		// model can be used immediately after download.
 		if p.nativeLibManager != nil && !p.nativeLibManager.IsReady() {
-			if err := p.nativeLibManager.EnsureLibraries(ctx); err != nil {
-				p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to download native libs for model %s: %s", modelID, err.Error()))
+			if err := p.nativeLibManager.EnsureLibraries(downloadCtx); err != nil {
+				p.api.Log(downloadCtx, plugin.LogLevelError, fmt.Sprintf("failed to download native libs for model %s: %s", modelID, err.Error()))
 				return
 			}
 		}
-		err := p.modelManager.DownloadModel(ctx, *info, nil)
+		err := p.modelManager.DownloadModel(downloadCtx, *info, nil)
 		if err != nil {
-			p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to download model %s: %s", modelID, err.Error()))
+			p.api.Log(downloadCtx, plugin.LogLevelError, fmt.Sprintf("failed to download model %s: %s", modelID, err.Error()))
 		}
 	})
 
@@ -1043,9 +1045,9 @@ func (p *DictationPlugin) DeleteModel(ctx context.Context, modelID string) error
 	return p.modelManager.DeleteModel(modelID)
 }
 
-// ModelStatusInfo is the JSON-serializable model status sent to the Flutter side.
+// ModelStatusInfo is the JSON-serializable model status sent to the UI side.
 // The JSON tags use the same PascalCase keys as DictationModelOption.fromJson
-// expects so the Flutter entity can parse status refreshes without dropping
+// expects so the UI entity can parse status refreshes without dropping
 // static model metadata such as description, languages, and recommendation.
 type ModelStatusInfo struct {
 	ID               string `json:"ID"`
@@ -1081,7 +1083,7 @@ func (p *DictationPlugin) GetModelStatuses(ctx context.Context) []ModelStatusInf
 }
 
 // NativeLibStatusInfo is the JSON-serializable native library status sent to
-// the Flutter side for rendering download progress in the dictation settings.
+// the UI side for rendering download progress in the dictation settings.
 type NativeLibStatusInfo struct {
 	State    string `json:"State"`
 	Progress int    `json:"Progress"`
@@ -1113,10 +1115,11 @@ func (p *DictationPlugin) StartNativeLibDownload(ctx context.Context) error {
 	if p.nativeLibManager.IsReady() {
 		return nil
 	}
-	util.Go(ctx, "download dictation native libs", func() {
-		err := p.nativeLibManager.EnsureLibraries(ctx)
+	downloadCtx := context.WithoutCancel(ctx)
+	util.Go(downloadCtx, "download dictation native libs", func() {
+		err := p.nativeLibManager.EnsureLibraries(downloadCtx)
 		if err != nil {
-			p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to download native libs: %s", err.Error()))
+			p.api.Log(downloadCtx, plugin.LogLevelError, fmt.Sprintf("failed to download native libs: %s", err.Error()))
 		}
 	})
 	return nil

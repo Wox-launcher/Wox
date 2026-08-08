@@ -947,7 +947,6 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, show
 
 	var results []plugin.QueryResult
 	for _, history := range histories {
-		history := history
 		s.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("History: %s, created_at:%s", history.Command, history.CreatedAt.String()))
 
 		runtimeSessionID := history.SessionID
@@ -1505,7 +1504,6 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 
 	tracker := newShellHistoryTracker(s.historyManager, historyID, state, session.OutputPath)
 	tracker.start(ctx)
-	_ = updateUI()
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -1552,6 +1550,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		s.notifyCommandFinished(ctx, data, "failed", 1)
 		return
 	}
+	_ = updateUI()
 
 	stopUpdater := make(chan struct{})
 	util.Go(ctx, "shell command metadata updater", func() {
@@ -1581,8 +1580,9 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		s.pipeOutputToSession(ctx, stderr, state)
 	}()
 
-	waitErr := cmd.Wait()
+	// Drain both pipes before Wait closes them so fast commands cannot lose their final output.
 	wg.Wait()
+	waitErr := cmd.Wait()
 	close(stopUpdater)
 
 	state.mutex.Lock()

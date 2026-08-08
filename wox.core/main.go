@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"wox/ai"
 	"wox/analytics"
+	"wox/appcontrol"
 	"wox/database"
 	"wox/diagnostic"
 	"wox/migration"
@@ -16,13 +19,13 @@ import (
 
 	"runtime"
 	"strings"
-	"time"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting"
 	"wox/ui"
+	"wox/ui/automation"
 	"wox/updater"
 	"wox/util"
 	"wox/util/clipboard"
@@ -30,6 +33,9 @@ import (
 	"wox/util/mainthread"
 	"wox/util/permission"
 	"wox/util/selection"
+
+	golauncher "wox/ui/launcher"
+	woxui "wox/ui/runtime"
 
 	_ "wox/plugin/host"
 
@@ -67,6 +73,8 @@ import (
 	_ "wox/plugin/system/dictation"
 )
 
+var embeddedGoUIApp *golauncher.App
+
 func main() {
 	if privacy.IsCleanupProcess(os.Args) {
 		os.Exit(privacy.RunCleanupProcess(os.Args))
@@ -88,7 +96,36 @@ func main() {
 		}
 		os.Exit(diagnostic.GetManager().RunSupervisor(ctx, os.Args))
 	}
-	mainthread.Init(run)
+	// Query workloads have a small live Go heap but high allocation churn.
+	// Keep the default heap growth bounded while preserving GOGC as a diagnostic override.
+	if os.Getenv("GOGC") == "" {
+		debug.SetGCPercent(50)
+	}
+	if util.IsProd() && util.IsWindows() {
+		// Let Windows Error Reporting observe fatal Go runtime failures so the
+		// registered out-of-process crash module can preserve a minidump.
+		debug.SetTraceback("wer")
+	}
+	mainthread.SetDispatcher(func(fn func()) {
+		if err := woxui.Call(fn); err != nil {
+			panic(err)
+		}
+	})
+	err := woxui.Run(func() error {
+		run()
+		if embeddedGoUIApp == nil {
+			return fmt.Errorf("embedded Go UI did not start")
+		}
+		return nil
+	})
+	mainthread.SetDispatcher(nil)
+	if embeddedGoUIApp != nil {
+		_ = embeddedGoUIApp.Close()
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
 func run() {
@@ -109,10 +146,6 @@ func run() {
 	})
 
 	ctx := util.NewTraceContext()
-	bugReportArg := diagnostic.GetManager().IsBugReportArg(os.Args)
-	if diagnostic.GetManager().IsEnabled() {
-		util.GetLogger().SetLevel(setting.LogLevelDebug)
-	}
 	util.GetLogger().Info(ctx, "------------------------------")
 	util.GetLogger().Info(ctx, fmt.Sprintf("Wox starting: %s", updater.CURRENT_VERSION))
 	util.GetLogger().Info(ctx, fmt.Sprintf("golang version: %s", strings.ReplaceAll(runtime.Version(), "go", "")))
@@ -123,40 +156,35 @@ func run() {
 	} else {
 		util.GetLogger().Info(ctx, fmt.Sprintf("startup pid: %d, executable: <error>, args: %v", os.Getpid(), os.Args))
 	}
+	// Keep cold-start protocol URLs until the embedded UI is ready; forwarded URLs already have a receiver.
+	startupDeepLinks := make([]string, 0, 1)
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "wox://") {
+			startupDeepLinks = append(startupDeepLinks, arg)
+		}
+	}
 
 	// Check for an existing instance BEFORE doing any heavy initialization (database, analytics,
 	// migrations). When this process is launched as a one-shot deeplink forwarder (e.g. via the
 	// desktop URL-scheme handler on Linux), we just need to forward the request and exit.
 	// Running the full startup sequence in that case wastes time and leaves an orphan process,
-	// because mainthread.Init keeps the main goroutine alive in its event loop even after run()
+	// because the native UI event loop keeps the main goroutine alive even after run()
 	// returns. Using os.Exit(0) is the only reliable way to terminate cleanly here.
 	if existingPort := getExistingInstancePort(ctx); existingPort > 0 {
 		util.GetLogger().Info(ctx, fmt.Sprintf("there is existing instance running, port: %d", existingPort))
 
-		if bugReportArg {
-			_, postBugReportErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/diagnostics/monitor/enable-restart", existingPort), "")
-			if postBugReportErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to enable bug aware mode in existing instance: %s", postBugReportErr.Error()))
-			} else {
-				util.GetLogger().Info(ctx, "enabled bug aware mode in existing instance, bye~")
-			}
-			os.Exit(0)
-		}
-
 		// if args has deeplink, post it to the existing instance and exit immediately
-		for _, arg := range os.Args[1:] {
-			if strings.HasPrefix(arg, "wox://") {
-				_, postDeepLinkErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/deeplink", existingPort), map[string]string{
-					"deeplink": arg,
-				})
-				if postDeepLinkErr != nil {
-					util.GetLogger().Error(ctx, fmt.Sprintf("failed to post deeplink to existing instance: %s", postDeepLinkErr.Error()))
-				} else {
-					util.GetLogger().Info(ctx, "post deeplink to existing instance successfully, bye~")
-				}
-				// Exit regardless of success/failure: this process has no further role.
-				os.Exit(0)
+		for _, deeplink := range startupDeepLinks {
+			_, postDeepLinkErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/deeplink", existingPort), map[string]string{
+				"deeplink": deeplink,
+			})
+			if postDeepLinkErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to post deeplink to existing instance: %s", postDeepLinkErr.Error()))
+			} else {
+				util.GetLogger().Info(ctx, "post deeplink to existing instance successfully, bye~")
 			}
+			// Exit regardless of success/failure: this process has no further role.
+			os.Exit(0)
 		}
 
 		// show existing instance if no deeplink is provided
@@ -171,29 +199,18 @@ func run() {
 		os.Exit(0)
 	}
 
-	if bugReportArg && !diagnostic.GetManager().IsChildArg(os.Args) {
-		if _, enableErr := diagnostic.GetManager().Enable(ctx, ""); enableErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to enable bug aware mode from startup arg: %s", enableErr.Error()))
-		} else {
-			util.GetLogger().SetLevel(setting.LogLevelDebug)
-			if supervisorErr := diagnostic.GetManager().StartSupervisorDetached(ctx, true); supervisorErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to start bug aware supervisor from startup arg: %s", supervisorErr.Error()))
-			} else {
-				util.GetLogger().Info(ctx, "bug aware supervisor started from startup arg, exiting current process")
-				diagnostic.GetManager().MarkCleanExit(ctx)
-				os.Exit(0)
-			}
+	if util.IsProd() {
+		if captureErr := diagnostic.GetManager().ConfigureCrashCapture(ctx); captureErr != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to configure crash capture: %s", captureErr.Error()))
 		}
 	}
-
-	// User may launch Wox manually (not from bugreport) with the intent to enable bug aware mode
-	// In this case, we should relaunch the supervisor and enable bug aware mode before the main instance starts.
-	if diagnostic.GetManager().IsEnabled() && !diagnostic.GetManager().IsChildArg(os.Args) {
+	// Production launches run under a small external supervisor so native crashes
+	// can still be recorded after the Go process is no longer able to write logs.
+	if util.IsProd() && !diagnostic.GetManager().IsChildArg(os.Args) {
 		if supervisorErr := diagnostic.GetManager().StartSupervisorDetached(ctx, true); supervisorErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start bug aware supervisor: %s", supervisorErr.Error()))
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start crash supervisor; continuing without supervision: %s", supervisorErr.Error()))
 		} else {
-			util.GetLogger().Info(ctx, "bug aware supervisor started, exiting current process")
-			diagnostic.GetManager().MarkCleanExit(ctx)
+			util.GetLogger().Info(ctx, "crash supervisor started, exiting bootstrap process")
 			os.Exit(0)
 		}
 	}
@@ -259,9 +276,6 @@ func run() {
 		return
 	}
 	util.GetLogger().SetLevel(woxSetting.LogLevel.Get())
-	if diagnostic.GetManager().IsEnabled() {
-		util.GetLogger().SetLevel(setting.LogLevelDebug)
-	}
 
 	// update proxy
 	if woxSetting.HttpProxyEnabled.Get() {
@@ -288,6 +302,13 @@ func run() {
 			})
 			break
 		}
+	}
+	if incident, ok := diagnostic.GetManager().TakePendingCrashIncident(); ok {
+		ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
+			Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_previous_crash_github_issue"),
+			DisplaySeconds: 0,
+		})
+		util.GetLogger().Info(ctx, fmt.Sprintf("pending crash report is ready for a GitHub issue: %s", incident.ReportPath))
 	}
 
 	themeErr := ui.GetUIManager().Start(ctx)
@@ -346,18 +367,53 @@ func run() {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to register hotkeys: %s", registerErr.Error()))
 	}
 
-	if util.IsProd() {
-		util.Go(ctx, "start ui", func() {
-			time.Sleep(time.Millisecond * 200) // wait websocket server start
-			appErr := ui.GetUIManager().StartUIApp(ctx)
-			if appErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to start ui app: %s", appErr.Error()))
-				return
+	if util.IsWindows() {
+		loaderPath := filepath.Join(util.GetLocation().GetOthersDirectory(), "webview", "WebView2Loader.dll")
+		if util.IsFileExists(loaderPath) {
+			if err := os.Setenv("WOX_WEBVIEW2_LOADER_PATH", loaderPath); err != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("failed to configure embedded WebView2 loader: %s", err.Error()))
 			}
-		})
+		}
 	}
-
-	ui.GetUIManager().StartWebsocketAndWait(ctx)
+	coreServices := ui.NewCoreServices()
+	embeddedGoUIApp = golauncher.New(util.IsDev(), coreServices)
+	coreServices.AttachView(embeddedGoUIApp)
+	// Wire text-field copy/cut/paste to the cross-platform clipboard backend.
+	golauncher.SetClipboardProvider(golauncher.NewUtilClipboardProvider())
+	if err := embeddedGoUIApp.Start(); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to start embedded Go UI: %s", err.Error()))
+		coreServices.AttachView(nil)
+		embeddedGoUIApp = nil
+		return
+	}
+	woxui.SetProtocolURLHandler(func(deeplink string) {
+		ui.GetUIManager().ProcessDeeplink(util.NewTraceContext(), deeplink)
+	})
+	for _, deeplink := range startupDeepLinks {
+		ui.GetUIManager().ProcessDeeplink(ctx, deeplink)
+	}
+	automationInfo, automationErr := automation.Start(ctx, embeddedGoUIApp)
+	if automationErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to start test automation: %s", automationErr.Error()))
+	} else if automationInfo.Address != "" {
+		util.GetLogger().Info(ctx, fmt.Sprintf("test automation listening on %s", automationInfo.Address))
+	}
+	util.Go(ctx, "start primary instance control server", func() {
+		err := appcontrol.ServeAndWait(ctx, serverPort, appcontrol.Handlers{
+			PreviewFileMedia: appcontrol.NewFileMediaHandler(),
+			Show: func(requestCtx context.Context) error {
+				ui.GetUIManager().GetUI(requestCtx).ShowApp(requestCtx, common.ShowContext{SelectAll: true})
+				return nil
+			},
+			DeepLink: func(requestCtx context.Context, deepLink string) error {
+				ui.GetUIManager().ProcessDeeplink(requestCtx, deepLink)
+				return nil
+			},
+		})
+		if err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("primary instance control server stopped: %s", err.Error()))
+		}
+	})
 }
 
 func resolveServerPort(ctx context.Context) (int, error) {

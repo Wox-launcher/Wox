@@ -73,10 +73,9 @@ func runRelease() {
 	fmt.Println("\nThis will:")
 	fmt.Println("  1. Update wox.core/updater/version.go")
 	fmt.Println("  2. Refresh update-channel manifest(s)")
-	fmt.Println("  3. Update wox.ui.flutter/wox/pubspec.yaml")
-	fmt.Println("  4. Update assets/mac/Info.plist")
-	fmt.Println("  5. Commit changes and create tag v" + info.Version)
-	fmt.Println("  6. Push to trigger release workflow")
+	fmt.Println("  3. Update assets/mac/Info.plist")
+	fmt.Println("  4. Commit changes and create tag v" + info.Version)
+	fmt.Println("  5. Push to trigger release workflow")
 	fmt.Println(strings.Repeat("=", 60))
 
 	fmt.Print("\nProceed with release? (yes/no): ")
@@ -105,28 +104,21 @@ func runRelease() {
 	}
 	fmt.Println("✓ Refreshed update-channel manifest(s)")
 
-	// Step 3: Update pubspec.yaml
-	if err := updatePubspecYaml(info.Version); err != nil {
-		fmt.Printf("Error updating pubspec.yaml: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println("✓ Updated wox.ui.flutter/wox/pubspec.yaml")
-
-	// Step 4: Update Info.plist
+	// Step 3: Update Info.plist
 	if err := updateInfoPlist(info.Version); err != nil {
 		fmt.Printf("Error updating Info.plist: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("✓ Updated assets/mac/Info.plist")
 
-	// Step 5: Git commit and tag
+	// Step 4: Git commit and tag
 	if err := gitCommitAndTag(info.Version); err != nil {
 		fmt.Printf("Error in git operations: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("✓ Created commit and tag v" + info.Version)
 
-	// Step 6: Push
+	// Step 5: Push
 	if err := gitPush(info.Version); err != nil {
 		fmt.Printf("Error pushing to remote: %v\n", err)
 		os.Exit(1)
@@ -318,7 +310,6 @@ func gitCommitAndTag(version string) error {
 	// Add all changed files
 	files := []string{
 		"wox.core/updater/version.go",
-		"wox.ui.flutter/wox/pubspec.yaml",
 		"assets/mac/Info.plist",
 		"CHANGELOG.md",
 		"updater.json",
@@ -369,30 +360,6 @@ func gitPush(version string) error {
 	}
 
 	return nil
-}
-
-func updatePubspecYaml(version string) error {
-	path := "../wox.ui.flutter/wox/pubspec.yaml"
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("failed to read pubspec.yaml: %w", err)
-	}
-
-	lines := strings.Split(string(content), "\n")
-	found := false
-	for i, line := range lines {
-		if strings.HasPrefix(line, "version: ") {
-			lines[i] = fmt.Sprintf("version: %s+1", version)
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return fmt.Errorf("version key not found in pubspec.yaml")
-	}
-
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644)
 }
 
 func updateInfoPlist(version string) error {

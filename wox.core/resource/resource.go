@@ -18,8 +18,8 @@ var HostFS embed.FS
 //go:embed lang
 var LangFS embed.FS
 
-//go:embed ui
-var UIFS embed.FS
+//go:embed themes
+var ThemeFS embed.FS
 
 //go:embed app.png
 var appIcon []byte
@@ -46,19 +46,6 @@ func Extract(ctx context.Context) error {
 	extractHostErr := extractFiles(ctx, HostFS, hostDirectory, "hosts", false)
 	if extractHostErr != nil {
 		return extractHostErr
-	}
-
-	// ui
-	uiDiretory := util.GetLocation().GetUIDirectory()
-	if util.IsDirExists(uiDiretory) {
-		rmErr := os.RemoveAll(uiDiretory)
-		if rmErr != nil {
-			return rmErr
-		}
-	}
-	flutterErr := extractFiles(ctx, UIFS, uiDiretory, "ui/flutter", true)
-	if flutterErr != nil {
-		return flutterErr
 	}
 
 	// others
@@ -125,7 +112,7 @@ func extractFiles(ctx context.Context, fs embed.FS, extractDirectory string, fil
 }
 
 func parseThemes(ctx context.Context) error {
-	dir, err := UIFS.ReadDir(path.Join("ui", "themes"))
+	dir, err := ThemeFS.ReadDir("themes")
 	if err != nil {
 		return err
 	}
@@ -139,7 +126,7 @@ func parseThemes(ctx context.Context) error {
 		}
 
 		start := util.GetSystemTimestamp()
-		themeData, readErr := UIFS.ReadFile("ui/themes/" + entry.Name())
+		themeData, readErr := ThemeFS.ReadFile("themes/" + entry.Name())
 		if readErr != nil {
 			return readErr
 		}
@@ -175,6 +162,11 @@ func GetAppIcon() []byte {
 		return appIconWindows
 	}
 
+	return appIcon
+}
+
+// GetAppIconPNG returns the cross-platform PNG used by application UI surfaces.
+func GetAppIconPNG() []byte {
 	return appIcon
 }
 

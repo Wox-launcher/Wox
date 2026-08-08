@@ -1,6 +1,22 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage smoke www
+.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
 
-SMOKE_FILTER := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+ifeq ($(firstword $(MAKECMDGOALS)),smoke)
+SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+SMOKE_CASE_TARGET := $(firstword $(filter-out slow,$(SMOKE_ARGUMENTS)))
+SMOKE_CASE := $(if $(strip $(CASE)),$(strip $(CASE)),$(SMOKE_CASE_TARGET))
+SMOKE_STEP_DELAY ?= $(if $(filter slow,$(SMOKE_ARGUMENTS)),500ms,)
+ifneq ($(SMOKE_CASE_TARGET),)
+.PHONY: $(SMOKE_CASE_TARGET)
+$(SMOKE_CASE_TARGET):
+	@:
+endif
+ifneq ($(filter slow,$(SMOKE_ARGUMENTS)),)
+.PHONY: slow
+slow:
+	@:
+endif
+endif
+
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 
 # GNU Make on Windows may choose Git's sh.exe without exposing Git usr/bin to
@@ -68,8 +84,10 @@ help:
 	@echo "  help       Show this help message"
 	@echo "  dev        Setup development environment"
 	@echo "  test       Run tests"
+	@echo "  test-go-ui-unit  Run retained-widget, automation-contract, and driver tests"
+	@echo "  smoke      Run all native smoke cases, or one with: make smoke launcher/query/plugin/calculator/001"
+	@echo "             Add slow to pause 500ms after visible steps; override with SMOKE_STEP_DELAY=1s"
 	@echo "  build      Build all components"
-	@echo "  smoke      Run the desktop smoke E2E flow"
 	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
 	@echo "  appimage   Build Linux AppImage"
 	@echo "  plugins    Update plugin store"
@@ -82,7 +100,6 @@ help:
 _check_deps:
 	@echo "Checking required dependencies..."
 	@command -v go >/dev/null 2>&1 || { echo "go is required but not installed. Visit https://golang.org/doc/install" >&2; exit 1; }
-	@command -v flutter >/dev/null 2>&1 || { echo "flutter is required but not installed. Visit https://flutter.dev/docs/get-started/install" >&2; exit 1; }
 	@command -v node >/dev/null 2>&1 || { echo "nodejs is required but not installed. Visit https://nodejs.org/" >&2; exit 1; }
 	@$(PNPM) --version >/dev/null 2>&1 || { echo "pnpm is required but unavailable. Install pnpm globally or enable Corepack for this Node.js installation." >&2; exit 1; }
 	@command -v uv >/dev/null 2>&1 || { echo "uv is required but not installed. Visit https://github.com/astral-sh/uv" >&2; exit 1; }
@@ -141,17 +158,14 @@ _sync_sdk_versions:
 # Ensure required resource directories exist with dummy files for go:embed
 ensure-resources:
 	@echo "Ensuring required resource directories exist..."
-	@mkdir -p wox.core/resource/ui/flutter
-	@touch wox.core/resource/ui/flutter/placeholder
 	@mkdir -p wox.core/resource/hosts
 	@touch wox.core/resource/hosts/placeholder
 	@mkdir -p wox.core/resource/others
 	@touch wox.core/resource/others/placeholder
 
 # Bug fix: keep the tracked others placeholder because go:embed rejects an
-# empty directory, and deleting it after tests makes the next smoke build fail.
+# empty directory, and deleting it after tests makes the next Go build fail.
 clean-resources:
-	@rm -f wox.core/resource/ui/flutter/placeholder
 	@rm -f wox.core/resource/hosts/placeholder
 
 appimage:
@@ -187,6 +201,28 @@ test: ensure-resources
 test-isolated:
 	cd wox.core && WOX_TEST_CLEANUP=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
+# The fast Go UI layer runs on every relevant change and never opens a native window.
+test-go-ui-unit: ensure-resources
+	cd wox.core && go test -tags "wox_automation" ./appcontrol ./ui/automation ./ui/runtime ./ui/widget ./ui/launcher ./test/automationdriver -count=1
+
+GO_UI_SMOKE_BINARY_NAME := wox-go-ui-smoke$(if $(filter windows,$(PLATFORM)),.exe,)
+GO_UI_SMOKE_BINARY := $(CURDIR)/wox.core/.tmp/$(GO_UI_SMOKE_BINARY_NAME)
+GO_UI_SMOKE_RUNNER ?=
+
+# Keep the smoke binary build reusable by CI, make, and editor launch configurations.
+build-go-ui-smoke: ensure-resources
+	@mkdir -p wox.core/.tmp
+	cd wox.core && go build -tags "$(SQLITE_BUILD_TAGS) wox_automation" -o "$(GO_UI_SMOKE_BINARY)" .
+
+clean-go-ui-smoke:
+	@rm -f "$(GO_UI_SMOKE_BINARY)"
+
+# The suite runner owns one Wox process shared by every serial smoke package.
+smoke: build-go-ui-smoke
+	@trap 'rm -f "$(GO_UI_SMOKE_BINARY)"' EXIT; \
+		cd wox.core && \
+		WOX_GO_UI_SMOKE_BINARY="$(GO_UI_SMOKE_BINARY)" WOX_GO_UI_SMOKE_STEP_DELAY="$(SMOKE_STEP_DELAY)" $(GO_UI_SMOKE_RUNNER) go run ./test/smokerunner -case "$(SMOKE_CASE)"
+
 # Test without network dependencies
 test-offline:
 	cd wox.core && WOX_TEST_ENABLE_NETWORK=false go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
@@ -198,16 +234,12 @@ test-verbose:
 test-debug:
 	cd wox.core && WOX_TEST_DATA_DIR=/tmp/wox-test-debug WOX_TEST_CLEANUP=false WOX_TEST_VERBOSE=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
-smoke: ensure-resources
-	@trap '$(MAKE) clean-resources' EXIT; $(MAKE) -C wox.test smoke SMOKE_FILTER="$(SMOKE_FILTER)"
-
 %:
 	@:
 
 
 build: clean dev
-	    $(MAKE) -C wox.ui.flutter/wox build
-		$(MAKE) -C wox.core build
+	$(MAKE) -C wox.core build
 
 ifeq ($(PLATFORM),linux)
 		$(MAKE) appimage

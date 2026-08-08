@@ -71,7 +71,7 @@ func getProcessMemoryBytes(pid int) (uint64, error) {
 		// Bug fix: Task Manager's default Processes > Memory column is closer to
 		// private working set than total working set. The previous Windows fix
 		// returned WorkingSetSize, which included shared DLL and mapped pages and
-		// made Flutter look much larger than Task Manager for the same PID.
+		// made the process look much larger than Task Manager for the same PID.
 		return uint64(privateWorkingSet), nil
 	}
 	if counters.pagefileUsage > 0 {
@@ -95,8 +95,8 @@ func openProcessForMemory(pid int) (uintptr, error) {
 	}
 
 	// Some processes deny VM_READ even though their memory counters are still
-	// queryable. Limited information keeps the diagnostic useful for the Flutter
-	// process without broadening the rest of the Glance flow.
+	// queryable. Limited information keeps the diagnostic useful without
+	// broadening the rest of the Glance flow.
 	handle, _, callErr := processMemoryOpenProcess.Call(
 		uintptr(processMemoryQueryLimitedInformation),
 		0,

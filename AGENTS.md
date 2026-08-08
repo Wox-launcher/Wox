@@ -1,23 +1,24 @@
 ## Architecture
 
-- `wox.core/`: Go backend and app core. Provides HTTP/WebSocket bridge to the UI, manages settings, plugins, database, i18n, and updates. Tests live under `wox.core/test/`.
-- `wox.ui.flutter/wox/`: Flutter desktop UI (macOS/Linux/Windows). Talks to `wox.core` via WebSocket/HTTP. Build output is embedded under `wox.core/resource/ui/flutter/`.
+- `wox.core/`: Go backend and app core. It also owns the embedded Go UI under `wox.core/ui`, including native windows, focus lifecycle, widgets, and GPU rendering. Tests live under `wox.core/test/`.
 - `wox.plugin.host.*/`: Runtime hosts for plugins (`wox.plugin.host.python`, `wox.plugin.host.nodejs`). They connect to `wox.core` (WebSocket/JSON-RPC), load plugin processes, and proxy plugin API calls.
 - `wox.plugin.*/`: SDKs for third‑party plugins (`wox.plugin.python`, `wox.plugin.nodejs`) – provide typed APIs, models, and helper logic for plugin authors.
 
 ## Rules
 
 - **Comments**: English only. Add intent-level comments only where they are necessary, such as complex logic, counterintuitive behavior, important state transitions, or code whose purpose is not obvious from the implementation.
+- **Logging**: Use `util.GetLogger()` for new runtime and diagnostic logs so entries use Wox's configured output and formatting. Do not add `fmt.Print*`, standard-library `log.Print*`, or native stderr logging for application diagnostics.
+- **Icons**: When adding or using UI icons, prefer an existing categorized SVG from `wox.core/common/icons.go` over font glyphs. Add reusable icons there before introducing local assets.
 - **New Functions**: Add a short comment for new functions unless the function is trivial, such as 2-4 straightforward lines whose purpose is obvious from the name and body.
 - **Change Comments**: For optimizations, bug fixes, and new features, add comments near the relevant code only when they clarify a non-obvious reason, previous limitation, or implementation choice. Avoid boilerplate comments for obvious changes.
 - **Readability First**: Favor the simplest control flow that keeps behavior correct. Avoid clever abstractions, layered state handling, or indirection that make the execution path harder to follow.
+- **Layout Alignment**: Prefer built-in horizontal and vertical alignment primitives for centering. Do not manually calculate padding or offsets when the layout system can express the intended alignment directly.
 - **Inline Small Logic**: Prefer keeping very small, single-use logic inline. Do not extract a 3-4 line block into a helper unless it is reused, clarifies a meaningful boundary, or clearly reduces complexity.
 - **Explain Structures And Logic**: Add comments for complex structs, state transitions, control-flow branches, and non-obvious or counterintuitive logic. Do not comment obvious code just to satisfy a rule.
 - **Refactors**: Scan `AGENTS.md` and `README.md` files first
-- **Verification**: After code changes, run code formatting according to the project style. Go build may be run for Go/backend changes. Do not run Flutter build; for Flutter changes, only check syntax/static errors. Do not run smoke test unless the user explicitly asks; the user will verify behavior.
-- **Unit Tests**: Do not write unit tests unless the user requests them
-- **Smoke Tests**: Do not add or run smoke tests unless the user explicitly asks for them.
+- **Verification**: After code changes, run code formatting according to the project style. Go build may be run for Go/backend changes.
 - **Format**: When formatting code, you must adhere to the coding style guidelines specified in Wox.code-workspace file.
+- **Boundary Purity**: `widget.Boundary.Build` must derive its widget tree only from `Props` and stable callbacks carried by `Props`. It must not capture mutable application, controller, collection, or view state outside `Props`, because cache hits intentionally skip `Build`.
 
 ## User Coding Style Preferences
 

@@ -220,23 +220,52 @@ static BOOL TextOverlayCursorInsideWindow(HWND hwnd)
     return PtInRect(&windowRect, screenPt);
 }
 
+// Native attachment sizes are reported in logical units, while this child paints in physical pixels.
+static RECT TextOverlayClientRect(TextOverlayState *state)
+{
+    RECT client = {0, 0, state ? state->contentWidth : 0, state ? state->contentHeight : 0};
+    RECT measured;
+    if (state && state->hwnd && GetClientRect(state->hwnd, &measured) && measured.right > 0 && measured.bottom > 0)
+        client = measured;
+    return client;
+}
+
 static RECT TextOverlayCopyButtonRect(TextOverlayState *state, UINT dpi)
 {
+    RECT client = TextOverlayClientRect(state);
+
     int size = TextOverlayDip(TEXT_OVERLAY_COPY_SIZE_DIP, dpi);
-    RECT rc = {state->contentWidth - size, state->contentHeight - size, state->contentWidth, state->contentHeight};
+    RECT rc = {client.right - size, client.bottom - size, client.right, client.bottom};
     return rc;
 }
 
 static RECT TextOverlayCloseButtonRect(TextOverlayState *state, UINT dpi)
 {
     int size = TextOverlayDip(TEXT_OVERLAY_CLOSE_SIZE_DIP, dpi);
+    RECT client = TextOverlayClientRect(state);
     if (state->closeRect.right > state->closeRect.left && state->closeRect.bottom > state->closeRect.top)
-        return state->closeRect;
+    {
+        RECT closeRect = state->closeRect;
+        closeRect.left = client.right - size;
+        closeRect.right = client.right;
+        if (closeRect.bottom > client.bottom)
+        {
+            closeRect.bottom = client.bottom;
+            closeRect.top = closeRect.bottom - size;
+        }
+        if (closeRect.top < 0)
+            closeRect.top = 0;
+        return closeRect;
+    }
 
-    int top = (state->contentHeight - size) / 2;
+    int top = (client.bottom - size) / 2;
     if (top < 0)
         top = 0;
-    RECT rc = {state->contentWidth - size, top, state->contentWidth, top + size};
+    if (top + size > client.bottom)
+        top = client.bottom - size;
+    if (top < 0)
+        top = 0;
+    RECT rc = {client.right - size, top, client.right, top + size};
     return rc;
 }
 
@@ -442,6 +471,76 @@ static void TextOverlayDrawLoadingSpinner(HDC hdc, int x, int y, int size, int p
     DeleteObject(dib);
 }
 
+// TextOverlayDrawCopyGlyph keeps the copy action readable at high DPI without reusing the
+// message font, which is too large for the compact 28 DIP button.
+static void TextOverlayDrawCopyGlyph(HDC hdc, RECT rc, UINT dpi, BOOL copied)
+{
+    int width = rc.right - rc.left;
+    int height = rc.bottom - rc.top;
+    int iconWidth = TextOverlayDip(14, dpi);
+    int iconHeight = TextOverlayDip(14, dpi);
+    int left = rc.left + (width - iconWidth) / 2;
+    int top = rc.top + (height - iconHeight) / 2;
+    int stroke = TextOverlayDip(1, dpi);
+    if (stroke < 1)
+        stroke = 1;
+
+    HPEN pen = CreatePen(PS_SOLID, stroke, RGB(245, 245, 245));
+    HGDIOBJ oldPen = SelectObject(hdc, pen);
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+
+    if (copied)
+    {
+        MoveToEx(hdc, left + TextOverlayDip(2, dpi), top + TextOverlayDip(7, dpi), NULL);
+        LineTo(hdc, left + TextOverlayDip(5, dpi), top + TextOverlayDip(10, dpi));
+        LineTo(hdc, left + TextOverlayDip(12, dpi), top + TextOverlayDip(3, dpi));
+    }
+    else
+    {
+        int backLeft = left + TextOverlayDip(4, dpi);
+        int backTop = top + TextOverlayDip(1, dpi);
+        int backRight = left + TextOverlayDip(12, dpi);
+        int backBottom = top + TextOverlayDip(10, dpi);
+        int frontLeft = left + TextOverlayDip(2, dpi);
+        int frontTop = top + TextOverlayDip(4, dpi);
+        int frontRight = left + TextOverlayDip(10, dpi);
+        int frontBottom = top + TextOverlayDip(13, dpi);
+        RoundRect(hdc, backLeft, backTop, backRight, backBottom, TextOverlayDip(2, dpi), TextOverlayDip(2, dpi));
+        RoundRect(hdc, frontLeft, frontTop, frontRight, frontBottom, TextOverlayDip(2, dpi), TextOverlayDip(2, dpi));
+    }
+
+    if (oldBrush)
+        SelectObject(hdc, oldBrush);
+    if (oldPen)
+        SelectObject(hdc, oldPen);
+    DeleteObject(pen);
+}
+
+// TextOverlayDrawCopyButton matches the native overlay button treatment across platforms.
+static void TextOverlayDrawCopyButton(HDC hdc, RECT rc, UINT dpi, BOOL copied)
+{
+    COLORREF background = copied ? RGB(46, 112, 82) : RGB(66, 66, 66);
+    COLORREF border = copied ? RGB(92, 158, 125) : RGB(105, 105, 105);
+    int radius = TextOverlayDip(6, dpi);
+    int stroke = TextOverlayDip(1, dpi);
+    if (stroke < 1)
+        stroke = 1;
+
+    HBRUSH brush = CreateSolidBrush(background);
+    HPEN pen = CreatePen(PS_SOLID, stroke, border);
+    HGDIOBJ oldBrush = SelectObject(hdc, brush);
+    HGDIOBJ oldPen = SelectObject(hdc, pen);
+    RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, radius, radius);
+    if (oldPen)
+        SelectObject(hdc, oldPen);
+    if (oldBrush)
+        SelectObject(hdc, oldBrush);
+    DeleteObject(pen);
+    DeleteObject(brush);
+
+    TextOverlayDrawCopyGlyph(hdc, rc, dpi, copied);
+}
+
 static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
@@ -482,9 +581,9 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
     int closeSize = TextOverlayDip(TEXT_OVERLAY_CLOSE_SIZE_DIP, dpi);
     if (state->closable && rowHeight < closeSize)
         rowHeight = closeSize;
-    int rowY = copyReserve + ((rc.bottom - rc.top - copyReserve - rowHeight) / 2);
-    if (rowY < copyReserve)
-        rowY = copyReserve;
+    int rowY = (rc.bottom - rc.top - copyReserve - rowHeight) / 2;
+    if (rowY < 0)
+        rowY = 0;
 
     int groupWidth = leadingWidth + leadingGap + textLayoutWidth;
     int x = state->centerContent ? (contentAreaWidth - groupWidth) / 2 : 0;
@@ -520,13 +619,13 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
         int closeTop = multiline ? textY + (lineHeight - closeSize) / 2 : rowY + (rowHeight - closeSize) / 2;
         if (closeTop < 0)
             closeTop = 0;
-        if (closeTop + closeSize > state->contentHeight)
-            closeTop = state->contentHeight - closeSize;
+        if (closeTop + closeSize > rc.bottom)
+            closeTop = rc.bottom - closeSize;
         if (closeTop < 0)
             closeTop = 0;
-        state->closeRect.left = state->contentWidth - closeSize;
+        state->closeRect.left = rc.right - closeSize;
         state->closeRect.top = closeTop;
-        state->closeRect.right = state->contentWidth;
+        state->closeRect.right = rc.right;
         state->closeRect.bottom = closeTop + closeSize;
 
         RECT closeRc = state->closeRect;
@@ -564,11 +663,7 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
     if (state->showCopyButton)
     {
         RECT copyRc = TextOverlayCopyButtonRect(state, dpi);
-        HBRUSH brush = CreateSolidBrush(state->copied ? RGB(46, 112, 82) : RGB(70, 70, 70));
-        FillRect(hdc, &copyRc, brush);
-        DeleteObject(brush);
-        SetTextColor(hdc, RGB(255, 255, 255));
-        DrawTextW(hdc, state->copied ? L"OK" : L"Copy", -1, &copyRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        TextOverlayDrawCopyButton(hdc, copyRc, dpi, state->copied);
     }
 
     if (oldFont)

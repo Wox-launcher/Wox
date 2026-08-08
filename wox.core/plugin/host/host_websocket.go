@@ -93,6 +93,11 @@ func (w *WebsocketHost) StopHost(ctx context.Context) {
 			util.GetLogger().Info(ctx, fmt.Sprintf("<%s> killed host process(%d)", w.getHostName(ctx), pid))
 		}
 	}
+	// Close the websocket client so its receive goroutine and reconnect loop give
+	// up instead of retrying a dead or replaced host process forever.
+	if w.ws != nil {
+		w.ws.Close(ctx)
+	}
 	// Bug fix: StopHost used to leave the websocket client object in place, so
 	// status checks could briefly report a killed host as still connected. Clear
 	// local process state immediately; a fresh StartHost creates a new client.

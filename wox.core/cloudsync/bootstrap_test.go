@@ -209,7 +209,9 @@ func TestCloudSyncStartUpdatesCurrentDeviceMetadata(t *testing.T) {
 	ctx := context.Background()
 	initCloudSyncTestDatabase(t)
 
-	client := &testCloudSyncClient{}
+	deviceUpdateStarted := make(chan CloudSyncDeviceUpdateRequest, 1)
+	deviceUpdateRelease := make(chan struct{})
+	client := &testCloudSyncClient{deviceUpdateStarted: deviceUpdateStarted, deviceUpdateRelease: deviceUpdateRelease}
 	manager := NewCloudSyncManager(DefaultCloudSyncConfig(), CloudSyncDependencies{
 		Client:         client,
 		Crypto:         testCloudSyncCrypto{},
@@ -219,13 +221,27 @@ func TestCloudSyncStartUpdatesCurrentDeviceMetadata(t *testing.T) {
 		Applier:        &testCloudSyncApplier{},
 	})
 
-	manager.Start(ctx)
+	startReturned := make(chan struct{})
+	go func() {
+		manager.Start(ctx)
+		close(startReturned)
+	}()
 	defer manager.Stop(ctx)
 
-	if len(client.deviceUpdateRequests) != 1 {
-		t.Fatalf("device update calls = %d, want 1", len(client.deviceUpdateRequests))
+	select {
+	case <-startReturned:
+	case <-time.After(time.Second):
+		close(deviceUpdateRelease)
+		t.Fatal("Start blocked on device metadata update")
 	}
-	got := client.deviceUpdateRequests[0]
+	var got CloudSyncDeviceUpdateRequest
+	select {
+	case got = <-deviceUpdateStarted:
+	case <-time.After(time.Second):
+		close(deviceUpdateRelease)
+		t.Fatal("device metadata update did not start")
+	}
+	close(deviceUpdateRelease)
 	if got.DeviceID != "device-a" {
 		t.Fatalf("device update id = %q, want device-a", got.DeviceID)
 	}
@@ -394,6 +410,8 @@ type testCloudSyncClient struct {
 	pullRequests         []CloudSyncPullRequest
 	recordKeyRequests    []CloudSyncRecordKeyListRequest
 	deviceUpdateRequests []CloudSyncDeviceUpdateRequest
+	deviceUpdateStarted  chan CloudSyncDeviceUpdateRequest
+	deviceUpdateRelease  <-chan struct{}
 }
 
 func (c *testCloudSyncClient) Push(ctx context.Context, req CloudSyncPushRequest) (*CloudSyncPushResponse, error) {
@@ -430,7 +448,16 @@ func (c *testCloudSyncClient) ListRecordKeys(ctx context.Context, req CloudSyncR
 }
 
 func (c *testCloudSyncClient) UpdateDevice(ctx context.Context, req CloudSyncDeviceUpdateRequest) (*CloudSyncDeviceUpdateResponse, error) {
-	_ = ctx
+	if c.deviceUpdateStarted != nil {
+		c.deviceUpdateStarted <- req
+	}
+	if c.deviceUpdateRelease != nil {
+		select {
+		case <-c.deviceUpdateRelease:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	c.deviceUpdateRequests = append(c.deviceUpdateRequests, req)
 	return &CloudSyncDeviceUpdateResponse{DeviceID: req.DeviceID, DeviceName: req.DeviceName, Platform: req.Platform}, nil
 }

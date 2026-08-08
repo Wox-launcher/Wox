@@ -2,7 +2,6 @@ package tray
 
 /*
 #cgo pkg-config: gtk+-3.0 ayatana-appindicator3-0.1
-#cgo LDFLAGS: -pthread
 
 #include <gtk/gtk.h>
 #include <libayatana-appindicator/app-indicator.h>
@@ -26,6 +25,7 @@ import (
 	"sync"
 	"unsafe"
 	"wox/util"
+	"wox/util/mainthread"
 )
 
 var (
@@ -68,46 +68,49 @@ func goTrayMenuItemActivated(tag C.int) {
 }
 
 func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
-	trayMu.Lock()
-	leftClickCallback = onClick
-	callbacks = make(map[int]func(), len(items))
-	nextTag = 0
-	trayMu.Unlock()
-
-	trayIcon = C.create_tray()
-	if trayIcon == nil {
-		return
-	}
-
-	// Set icon if provided
-	if len(appIcon) > 0 {
-		iconData := C.CBytes(appIcon)
-		defer C.free(iconData)
-		C.set_tray_icon(trayIcon, (*C.char)(iconData), C.gsize(len(appIcon)))
-	}
-
-	// Add menu items
-	for _, item := range items {
+	// The tray shares GTK's default context with the embedded UI, so all GTK work must stay on its thread.
+	mainthread.Call(func() {
 		trayMu.Lock()
-		tag := nextTag
-		nextTag++
-		callbacks[tag] = item.Callback
+		leftClickCallback = onClick
+		callbacks = make(map[int]func(), len(items))
+		nextTag = 0
 		trayMu.Unlock()
 
-		cTitle := C.CString(item.Title)
-		defer C.free(unsafe.Pointer(cTitle))
+		trayIcon = C.create_tray()
+		if trayIcon == nil {
+			return
+		}
 
-		C.add_menu_item(trayIcon, cTitle, C.int(tag))
-	}
+		if len(appIcon) > 0 {
+			iconData := C.CBytes(appIcon)
+			defer C.free(iconData)
+			C.set_tray_icon(trayIcon, (*C.char)(iconData), C.gsize(len(appIcon)))
+		}
 
-	C.show_tray(trayIcon)
+		for _, item := range items {
+			trayMu.Lock()
+			tag := nextTag
+			nextTag++
+			callbacks[tag] = item.Callback
+			trayMu.Unlock()
+
+			cTitle := C.CString(item.Title)
+			C.add_menu_item(trayIcon, cTitle, C.int(tag))
+			C.free(unsafe.Pointer(cTitle))
+		}
+
+		C.show_tray(trayIcon)
+	})
 }
 
 func RemoveTray() {
-	if trayIcon != nil {
-		C.cleanup_tray(trayIcon)
-		trayIcon = nil
-	}
+	mainthread.Call(func() {
+		if trayIcon != nil {
+			C.cleanup_tray(trayIcon)
+			trayIcon = nil
+		}
+	})
+
 	trayMu.Lock()
 	callbacks = make(map[int]func())
 	leftClickCallback = nil

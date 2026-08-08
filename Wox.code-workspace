@@ -23,14 +23,6 @@
 		{
 			"name": "wox.plugin.host.nodejs",
 			"path": "wox.plugin.host.nodejs"
-		},
-		{
-			"name": "wox.test",
-			"path": "wox.test"
-		},
-		{
-			"name": "wox.ui.flutter",
-			"path": "wox.ui.flutter/wox"
 		}
 	],
 	"settings": {
@@ -40,14 +32,11 @@
 				"text": "Use conventional commit message format. Use english language."
 			}
 		],
-		"dart.lineLength": 180,
 		"files.exclude": {
 			"wox.plugin.host.nodejs": true,
 			"wox.plugin.host.python": true,
 			"wox.plugin.nodejs": true,
 			"wox.plugin.python": true,
-			"wox.ui.flutter": true,
-			"wox.test": true,
 			"wox.core": true
 		},
 		"[python]": {
@@ -73,8 +62,6 @@
 			"ms-python.python",
 			"charliermarsh.ruff",
 			"ms-python.mypy-type-checker",
-			// for flutter
-			"dart-code.flutter",
 			// for js
 			"dbaeumer.vscode-eslint",
 			"esbenp.prettier-vscode",
@@ -82,81 +69,45 @@
 			"ms-vscode.makefile-tools"
 		]
 	},
-	"launch": {
-		"version": "0.2.0",
-		"configurations": [
-			{
-				"name": "Run Go",
-				"type": "go",
-				"request": "launch",
-				"mode": "auto",
-				"program": "${workspaceFolder:wox.core}",
-				// Filesearch's SQLite-first index requires FTS5 support at runtime.
-				// Keep the development launch configuration aligned with Makefile builds
-				// so VS Code runs do not start a backend that silently lacks the search schema.
-				"buildFlags": "-tags=sqlite_fts5",
-				"env": {
-					"CGO_ENABLED": "1"
-				}
-			},
-			{
-				"name": "Run Flutter",
-				"cwd": "${workspaceFolder:wox.ui.flutter}",
-				"request": "launch",
-				"type": "dart",
-				// Bug fix: VS Code compounds start debug configurations in parallel, so Flutter
-				// waits for the shared core readiness task before it starts loading theme/settings.
-				"preLaunchTask": "Wait Core Dev Server",
-				// "flutterMode": "profile"
-			},
-			{
-				"name": "Run CI",
-				"type": "go",
-				"request": "launch",
-				"mode": "auto",
-				"program": "${workspaceFolder:wox}/ci",
-				"args": [
-					"plugin"
-				]
-			}
-		],
-		"compounds": [
-			{
-				"name": "Run Wox",
-				"configurations": [
-					"Run Go",
-					"Run Flutter"
-				],
-				"stopAll": true
-			}
-		]
-	},
 	"tasks": {
 		"version": "2.0.0",
 		"tasks": [
 			{
-				"label": "Wait Core Dev Server",
+				"label": "Configure Wox crash dumps",
 				"type": "process",
-				// Bug fix: Flutter launch must wait for the backend socket instead of assuming
-				// compound launch order. Polling /ping keeps the task independent from Go log
-				// formatting and avoids platform-specific shells so Windows VS Code uses the same
-				// readiness gate as macOS/Linux.
-				"command": "node",
+				"command": "powershell.exe",
 				"args": [
-					"-e",
-					"const http=require('http');let attempts=0;const max=600;function check(){attempts++;const req=http.get('http://127.0.0.1:34987/ping',res=>{res.resume();if(res.statusCode>=200&&res.statusCode<300){console.log('core ready');process.exit(0);}retry();});req.on('error',retry);req.setTimeout(1000,()=>{req.destroy();retry();});}function retry(){if(attempts>=max){console.error('core did not become ready on http://127.0.0.1:34987/ping');process.exit(1);}setTimeout(check,200);}check();"
+					"-NoProfile",
+					"-Command",
+					"$dumpDir = Join-Path $env:USERPROFILE '.wox\\diagnostics\\dumps'; $key = 'HKCU:\\Software\\Microsoft\\Windows\\Windows Error Reporting\\LocalDumps\\__debug_bin_wox.exe'; New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null; New-Item -Path $key -Force | Out-Null; New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dumpDir -Force | Out-Null; New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 2 -Force | Out-Null; New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 5 -Force | Out-Null; Write-Host \"Wox crash dumps: $dumpDir\""
 				],
-				// UX fix: this readiness probe is expected to run on every Flutter debug
-				// launch, so keep its terminal hidden unless VS Code needs to report a
-				// task failure. Reusing a dedicated panel also prevents utility output
-				// from interleaving with developer terminals.
+				"problemMatcher": [],
 				"presentation": {
-					"reveal": "never",
-					"panel": "dedicated",
-					"clear": true,
-					"showReuseMessage": false
+					"reveal": "silent",
+					"panel": "shared"
+				}
+			}
+		]
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "Run Wox",
+				"type": "go",
+				"request": "launch",
+				"mode": "auto",
+				"program": "${workspaceFolder:wox.core}",
+				"cwd": "${workspaceFolder:wox.core}",
+				// Keep the macOS process identity stable so AppKit can reuse tray positions between debug builds.
+				"output": "${workspaceFolder:wox.core}/__debug_bin_wox",
+				"buildFlags": "-tags=sqlite_fts5",
+				"env": {
+					"CGO_ENABLED": "1"
 				},
-				"problemMatcher": []
+				"windows": {
+					"preLaunchTask": "Configure Wox crash dumps"
+				}
 			}
 		]
 	}

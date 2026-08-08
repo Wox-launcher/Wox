@@ -1,4 +1,4 @@
-﻿#define _WIN32_WINNT 0x0600
+#define _WIN32_WINNT 0x0600
 #include <windows.h>
 #include <shellscalingapi.h>
 #include <wchar.h>
@@ -258,7 +258,7 @@ uintptr_t getOpenSaveDialogHwndByPid(int pid)
 	return (uintptr_t)findOpenSaveDialogByPid(pid);
 }
 
-// getOpenSaveDialogRectByPid returns the dialog bounds in the same logical coordinate space used by Flutter window placement.
+// getOpenSaveDialogRectByPid returns the dialog bounds in the same logical coordinate space used by UI window placement.
 int getOpenSaveDialogRectByPid(int pid, int *outX, int *outY, int *outW, int *outH)
 {
 	if (pid <= 0 || !outX || !outY || !outW || !outH)
@@ -560,8 +560,8 @@ static void triggerActivation(HWND hwnd, DWORD pid, int isDialog)
         int physW = rect.right - rect.left;
         int physH = rect.bottom - rect.top;
 
-        // Convert physical coordinates to logical coordinates for Flutter.
-        // GetWindowRect returns physical pixels, but Flutter's windowManager.setPosition
+        // Convert physical coordinates to logical coordinates for UI.
+        // GetWindowRect returns physical pixels, but UI's windowManager.setPosition
         // expects logical (DPI-scaled) coordinates.
         UINT dpi = getDpiForWindowMonitor(hwnd);
         float scale = (float)dpi / 96.0f;

@@ -14,6 +14,7 @@ import (
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/emojiimage"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -382,7 +383,7 @@ func (e *EmojiPlugin) createAIPlaceholderResult() plugin.QueryResult {
 		Id:         uuid.New().String(),
 		Title:      "i18n:plugin_emoji_ai_matching",
 		SubTitle:   "i18n:plugin_emoji_ai_matching_subtitle",
-		Icon:       common.AnimatedLoadingIcon,
+		Icon:       common.LoadingIcon,
 		Group:      "i18n:plugin_emoji_ai_group",
 		GroupScore: 90,
 		Score:      90,
@@ -462,7 +463,7 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, is
 				Icon:   common.NewWoxImageEmoji("🖼️"),
 				Hotkey: util.PrimaryHotkey("enter"),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					img, err := getNativeEmojiImage(emoji, 200)
+					img, err := emojiimage.Render(emoji, 200)
 					if err != nil {
 						e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to build emoji image: %v", err))
 						e.api.Notify(ctx, fmt.Sprintf("Failed to build emoji image: %v", err))
@@ -495,7 +496,6 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, is
 					Label:        "i18n:plugin_emoji_add_keyword_label",
 					DefaultValue: existingDescriptions,
 					Tooltip:      "i18n:plugin_emoji_add_keyword_hint",
-					MaxLines:     2,
 				},
 			},
 		},

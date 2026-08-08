@@ -1,0 +1,185 @@
+package component
+
+import (
+	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
+)
+
+// ButtonVariant selects one of the shared Wox button treatments.
+type ButtonVariant uint8
+
+const (
+	ButtonSecondary ButtonVariant = iota
+	ButtonPrimary
+	ButtonOutline
+	ButtonMuted
+	ButtonSelected
+	ButtonSurface
+	ButtonText
+	ButtonOutlinedSurface
+)
+
+// ButtonSize selects the standard geometry for a Wox button.
+type ButtonSize uint8
+
+const (
+	ButtonNormal ButtonSize = iota
+	ButtonCompact
+)
+
+// ButtonProps describes one themed, focusable Wox button.
+type ButtonProps struct {
+	ID                string
+	Label             string
+	Icon              *woxui.Image
+	TrailingIcon      *woxui.Image
+	TrailingLabel     string
+	IconSize          float32
+	TrailingIconSize  float32
+	IconGap           float32
+	IntrinsicWidth    bool
+	Width             float32
+	Height            float32
+	Radius            float32
+	Padding           woxwidget.Insets
+	FontSize          float32
+	Disabled          bool
+	Variant           ButtonVariant
+	Size              ButtonSize
+	OnTap             func()
+	OnTrailingHoverAt func(bool, woxui.Rect)
+	OnFocusChange     func(bool)
+	Theme             Theme
+}
+
+// WoxButton builds a button with shared visuals, keyboard activation, and accessibility semantics.
+func WoxButton(props ButtonProps) woxwidget.Widget {
+	height := float32(38)
+	radius := float32(4)
+	padding := woxwidget.Insets{Left: 20, Right: 20}
+	fontSize := ButtonFontSize
+	fontWeight := woxui.FontWeightRegular
+	if props.Size == ButtonCompact {
+		height = 30
+		radius = 4
+		padding = woxwidget.Insets{Left: 12, Right: 12}
+		fontSize = CompactButtonFontSize
+		fontWeight = woxui.FontWeightSemibold
+	}
+	if props.Height > 0 {
+		height = props.Height
+	}
+	if props.Radius > 0 {
+		radius = props.Radius
+	}
+	if props.Padding != (woxwidget.Insets{}) {
+		padding = props.Padding
+	}
+	if props.FontSize > 0 {
+		fontSize = props.FontSize
+	}
+
+	background := props.Theme.QueryBackground
+	foreground := props.Theme.ActionText
+	border := woxui.Color{}
+	switch props.Variant {
+	case ButtonPrimary:
+		background = props.Theme.ActionSelected
+		foreground = props.Theme.ActionSelectedText
+	case ButtonOutline:
+		background = woxui.Color{}
+		foreground = props.Theme.ResultTitle
+		border = props.Theme.ResultSubtitle
+	case ButtonMuted:
+		background = withAlpha(props.Theme.ResultSubtitle, 72)
+		foreground = props.Theme.ResultTitle
+	case ButtonSelected:
+		background = props.Theme.SelectedBackground
+		foreground = props.Theme.SelectedTitle
+	case ButtonSurface:
+		background = props.Theme.ActionBackground
+		foreground = props.Theme.PreviewText
+	case ButtonText:
+		background = woxui.Color{}
+		foreground = props.Theme.ResultTitle
+	case ButtonOutlinedSurface:
+		background = props.Theme.QueryBackground
+		foreground = props.Theme.ResultTitle
+		border = props.Theme.ResultSubtitle
+	}
+
+	onTap := props.OnTap
+	if props.Disabled {
+		foreground = withAlpha(foreground, 88)
+		border = withAlpha(border, 88)
+		onTap = nil
+	}
+	actions := []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}
+	if props.Disabled {
+		actions = nil
+	}
+	key := woxwidget.Key(props.ID)
+	var child woxwidget.Widget = woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: fontWeight}, Color: foreground}
+	if props.Icon != nil {
+		iconSize := props.IconSize
+		if iconSize <= 0 {
+			iconSize = 16
+		}
+		iconGap := props.IconGap
+		if iconGap <= 0 {
+			iconGap = 8
+		}
+		child = woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize}
+		child = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: iconGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			child,
+			woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize, Weight: fontWeight}, Color: foreground},
+		}}
+	}
+	if props.TrailingIcon != nil {
+		iconSize := props.TrailingIconSize
+		if iconSize <= 0 {
+			iconSize = 15
+		}
+		icon := woxwidget.Gesture{ID: props.ID + "-trailing", OnHoverAt: props.OnTrailingHoverAt, Child: woxwidget.Image{Source: props.TrailingIcon, Width: iconSize, Height: iconSize}}
+		trailingLabel := props.TrailingLabel
+		if trailingLabel == "" {
+			trailingLabel = props.Label
+		}
+		child = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			child,
+			woxwidget.Semantics{AutomationID: props.ID + "-trailing", Role: woxui.AccessibilityRoleButton, Label: trailingLabel, Child: icon},
+		}}
+	}
+	var alignedChild woxwidget.Widget = woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: child}
+	if props.IntrinsicWidth {
+		if padding.Top == 0 && padding.Bottom == 0 {
+			padding.Top = max(float32(0), (height-fontSize*1.35)/2)
+		}
+		alignedChild = child
+	}
+	// Center measured text and icon content inside symmetric padding instead of relying on font-specific offsets.
+	content := woxwidget.Gesture{ID: props.ID, OnTap: onTap, Child: woxwidget.Container{
+		Width: props.Width, Height: height, Radius: radius, Color: background, BorderColor: border, BorderWidth: boolFloat(border.A != 0), Padding: padding,
+		Child: alignedChild,
+	}}
+	return woxwidget.Semantics{
+		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,
+		Actions: actions, Disabled: props.Disabled,
+		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: radius, OnKey: func(event woxui.KeyEvent) bool {
+			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
+				return false
+			}
+			if event.Down && onTap != nil {
+				onTap()
+			}
+			return true
+		}, OnFocusChange: props.OnFocusChange, Child: content},
+	}
+}
+
+func boolFloat(enabled bool) float32 {
+	if enabled {
+		return 1
+	}
+	return 0
+}

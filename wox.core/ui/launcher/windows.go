@@ -1,0 +1,506 @@
+package launcher
+
+import (
+	"log"
+	"strings"
+
+	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
+	"wox/util"
+)
+
+const settingsChangedTopic = "settings.changed"
+
+// ensureSettingsWindow creates the independent settings host once per native lifetime.
+func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
+	if !a.isPrimary && a.primary != nil {
+		return a.primary.ensureSettingsWindow()
+	}
+
+	var managed *woxui.ManagedWindow
+	var openErr error
+	var fontFamily string
+	var isDark bool
+	created := false
+	if err := woxui.Call(func() {
+		if existing := a.settingsView; existing != nil && existing.Lifecycle() != woxui.WindowLifecycleClosed {
+			managed = existing
+			return
+		}
+		host := woxwidget.NewHost(a.buildSettings)
+		managed, _, openErr = a.windows.Open(settingsWindowID, woxui.WindowOptions{
+			Title:     a.settingsWindowTitle(),
+			Size:      woxui.Size{Width: settingsWindowWidth, Height: settingsWindowHeight},
+			Role:      woxui.WindowRoleApplication,
+			OnFrame:   host.Frame,
+			OnPointer: host.Pointer,
+			OnFocus: func(event woxui.FocusEvent) {
+				host.SetWindowFocused(event.Active)
+			},
+			OnKey: func(event woxui.KeyEvent) bool {
+				if host.Key(event) {
+					return true
+				}
+				return a.onSettingsWindowKey(event)
+			},
+			OnTextInput: func(event woxui.TextInputEvent) {
+				if !host.TextInput(event) {
+					a.onSettingsWindowTextInput(event)
+				}
+			},
+			OnCloseRequested: func() {
+				util.Go(a.lifecycleCtx, "close requested settings window", func() {
+					if err := a.closeSettings(); err != nil {
+						log.Printf("close requested settings window: %v", err)
+					}
+				})
+			},
+			OnClosed: func() {
+				host.Dispose()
+				a.onSettingsWindowClosed()
+			},
+		})
+		if openErr == nil {
+			host.Attach(managed.Window())
+			a.settingsView = managed
+			a.settingsHost = host
+			a.settingsOpen = true
+			fontFamily = a.generalSettings.Data().AppFontFamily
+			isDark = themeColorIsDark(a.palette.background)
+			created = true
+		}
+	}); err != nil {
+		return nil, err
+	}
+	if openErr != nil {
+		return nil, openErr
+	}
+	if !created {
+		return managed, nil
+	}
+	if err := managed.Window().SetAppearance(isDark); err != nil {
+		_ = managed.Close()
+		return nil, err
+	}
+	if err := managed.Window().SetFontFamily(fontFamily); err != nil {
+		_ = managed.Close()
+		return nil, err
+	}
+	return managed, nil
+}
+
+// ensureOnboardingWindow creates the first-run guide as its own managed window.
+func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
+	if !a.isPrimary && a.primary != nil {
+		return a.primary.ensureOnboardingWindow()
+	}
+
+	var managed *woxui.ManagedWindow
+	var openErr error
+	var fontFamily string
+	var isDark bool
+	created := false
+	if err := woxui.Call(func() {
+		if existing := a.onboardingView; existing != nil && existing.Lifecycle() != woxui.WindowLifecycleClosed {
+			managed = existing
+			return
+		}
+		host := woxwidget.NewHost(a.buildOnboarding)
+		managed, _, openErr = a.windows.Open(onboardingWindowID, woxui.WindowOptions{
+			Title:     a.translate("i18n:onboarding_title"),
+			Size:      woxui.Size{Width: onboardingWindowWidth, Height: onboardingWindowHeight},
+			Role:      woxui.WindowRoleApplication,
+			OnFrame:   host.Frame,
+			OnPointer: host.Pointer,
+			OnFocus: func(event woxui.FocusEvent) {
+				host.SetWindowFocused(event.Active)
+				a.onOnboardingWindowFocus(event)
+			},
+			OnKey: func(event woxui.KeyEvent) bool {
+				if host.Key(event) {
+					return true
+				}
+				return a.onOnboardingWindowKey(event)
+			},
+			OnCloseRequested: a.finishOnboarding,
+			OnClosed: func() {
+				host.Dispose()
+				a.onOnboardingWindowClosed()
+			},
+		})
+		if openErr == nil {
+			host.Attach(managed.Window())
+			a.onboardingView = managed
+			a.onboardingHost = host
+			fontFamily = a.generalSettings.Data().AppFontFamily
+			isDark = themeColorIsDark(a.palette.background)
+			created = true
+		}
+	}); err != nil {
+		return nil, err
+	}
+	if openErr != nil {
+		return nil, openErr
+	}
+	if !created {
+		return managed, nil
+	}
+	if err := managed.Window().SetAppearance(isDark); err != nil {
+		_ = managed.Close()
+		return nil, err
+	}
+	if err := managed.Window().SetFontFamily(fontFamily); err != nil {
+		_ = managed.Close()
+		return nil, err
+	}
+	return managed, nil
+}
+
+func (a *App) settingsNativeWindow() *woxui.Window {
+	var managed *woxui.ManagedWindow
+	if err := a.runOnUI("resolve settings native window", func() {
+		managed = a.settingsView
+	}); err != nil {
+		log.Printf("resolve settings native window: %v", err)
+		return a.window
+	}
+	if managed == nil {
+		return a.window
+	}
+	return managed.Window()
+}
+
+func (a *App) onboardingNativeWindow() *woxui.Window {
+	var managed *woxui.ManagedWindow
+	if err := a.runOnUI("resolve onboarding native window", func() {
+		managed = a.onboardingView
+	}); err != nil {
+		log.Printf("resolve onboarding native window: %v", err)
+		return a.window
+	}
+	if managed == nil {
+		return a.window
+	}
+	return managed.Window()
+}
+
+func (a *App) invalidateSettingsWindow() {
+	if window := a.settingsNativeWindow(); window != nil {
+		_ = window.Invalidate()
+	}
+}
+
+func (a *App) invalidateOnboardingWindow() {
+	if window := a.onboardingNativeWindow(); window != nil {
+		_ = window.Invalidate()
+	}
+}
+
+// invalidateLauncherBoundary uses retained geometry for controller-driven local updates.
+func (a *App) invalidateLauncherBoundary(key woxwidget.Key) {
+	if a.host != nil && a.host.InvalidateBoundary(key) {
+		return
+	}
+	if a.window != nil {
+		_ = a.window.Invalidate()
+	}
+}
+
+func (a *App) invalidateAllWindows() {
+	if a.window != nil {
+		_ = a.window.Invalidate()
+	}
+	if settingsWindow := a.settingsNativeWindow(); settingsWindow != nil && settingsWindow != a.window {
+		_ = settingsWindow.Invalidate()
+	}
+	if onboardingWindow := a.onboardingNativeWindow(); onboardingWindow != nil && onboardingWindow != a.window {
+		_ = onboardingWindow.Invalidate()
+	}
+}
+
+func (a *App) updateSettingsTextInput(enabled bool) {
+	window := a.settingsNativeWindow()
+	if window == nil {
+		return
+	}
+	state := woxui.TextInputState{}
+	searchFocused := a.settingsSearch.Focused() || a.pluginSettings.SearchFocused()
+	if enabled || searchFocused {
+		state = woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: 240, Y: 180, Width: 1, Height: 24}}
+	}
+	_ = window.SetTextInputState(state)
+}
+
+func (a *App) themeEditorUsesSettingsWindow() bool {
+	editor := a.themeSettings.ThemeEditor()
+	return editor != nil && strings.HasPrefix(editor.key, "settings-theme|")
+}
+
+func (a *App) themeEditorNativeWindow() *woxui.Window {
+	if a.themeEditorUsesSettingsWindow() {
+		return a.settingsNativeWindow()
+	}
+	return a.window
+}
+
+func (a *App) invalidateThemeEditorWindow() {
+	if window := a.themeEditorNativeWindow(); window != nil {
+		_ = window.Invalidate()
+	}
+}
+
+func (a *App) updateThemeEditorTextInput(enabled bool) {
+	if a.themeEditorUsesSettingsWindow() {
+		a.updateSettingsTextInput(enabled)
+		return
+	}
+	a.updateFormTextInput(enabled)
+}
+
+func (a *App) restoreThemeEditorTextInput() {
+	if a.themeEditorUsesSettingsWindow() {
+		a.updateSettingsTextInput(false)
+		return
+	}
+	a.restoreQueryTextInput()
+}
+
+func (a *App) formTableUsesSettingsWindow() bool {
+	return a.settingsTableEditor != nil
+}
+
+func (a *App) formTableTargetUsesSettingsLocked(target *formFieldsState) bool {
+	pluginForm := a.pluginSettings.Form()
+	return target != nil && ((pluginForm != nil && target == &pluginForm.formFieldsState) || target == a.aiSettings.Form() || target == a.hotkeySettings.Form())
+}
+
+func (a *App) formTableNativeWindow() *woxui.Window {
+	if a.formTableUsesSettingsWindow() {
+		return a.settingsNativeWindow()
+	}
+	return a.window
+}
+
+func (a *App) invalidateFormTableWindow() {
+	if window := a.formTableNativeWindow(); window != nil {
+		_ = window.Invalidate()
+	}
+}
+
+func (a *App) updateFormTableTextInput(enabled bool) {
+	if a.formTableUsesSettingsWindow() {
+		a.updateSettingsTextInput(enabled)
+		return
+	}
+	a.updateFormTextInput(enabled)
+}
+
+func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
+	state := a.hotkeySettings.Recording()
+	usesSettings := false
+	if state != nil {
+		pluginForm := a.pluginSettings.Form()
+		usesSettings = (!a.onboardingOpen && state.target == a.hotkeySettings.Form()) || (pluginForm != nil && state.target == &pluginForm.formFieldsState)
+		if !usesSettings && a.settingsTableEditor != nil && a.settingsTableEditor.rowForm == state.target {
+			usesSettings = true
+		}
+	}
+	return usesSettings
+}
+
+func (a *App) hotkeyRecordingUsesOnboardingWindow() bool {
+	state := a.hotkeySettings.Recording()
+	return a.onboardingOpen && state != nil && state.target == a.hotkeySettings.Form()
+}
+
+func (a *App) hotkeyRecordingNativeWindow() *woxui.Window {
+	if a.hotkeyRecordingUsesOnboardingWindow() {
+		return a.onboardingNativeWindow()
+	}
+	if a.hotkeyRecordingUsesSettingsWindow() {
+		return a.settingsNativeWindow()
+	}
+	return a.window
+}
+
+func (a *App) invalidateHotkeyWindows() {
+	a.invalidateAllWindows()
+}
+
+func (a *App) formFieldNativeWindow(idPrefix string) *woxui.Window {
+	switch idPrefix {
+	case "hotkey-settings":
+		if a.onboardingOpen {
+			return a.onboardingNativeWindow()
+		}
+		return a.settingsNativeWindow()
+	case "plugin-settings", "ai-settings", "cloud-form":
+		return a.settingsNativeWindow()
+	case "theme-editor":
+		return a.themeEditorNativeWindow()
+	case "form-table-row":
+		return a.formTableNativeWindow()
+	default:
+		return a.window
+	}
+}
+
+// publishSettingsChanged keeps every top-level surface on the same shared settings snapshot.
+func (a *App) publishSettingsChanged(payload any) {
+	if a.windows == nil {
+		return
+	}
+	if err := a.windows.Publish(woxui.WindowMessage{Source: settingsWindowID, Topic: settingsChangedTopic, Payload: payload}); err != nil {
+		log.Printf("publish settings change: %v", err)
+	}
+}
+
+func (a *App) onSettingsWindowKey(event woxui.KeyEvent) bool {
+	if !event.Down || event.Composing {
+		return false
+	}
+	if a.hotkeyRecordingUsesSettingsWindow() && a.onHotkeyRecordingKey(event) {
+		return true
+	}
+	if a.formTableUsesSettingsWindow() {
+		return a.onFormTableKey(event)
+	}
+	return a.onSettingsKey(event)
+}
+
+func (a *App) onSettingsWindowTextInput(event woxui.TextInputEvent) {
+	if a.formTableUsesSettingsWindow() && a.onFormTableTextInput(event) {
+		return
+	}
+	if a.onPluginSearchTextInput(event) {
+		return
+	}
+	if a.onSettingsSearchTextInput(event) {
+		return
+	}
+	if a.onThemeEditorPreviewTextInput(event) {
+		return
+	}
+	if a.onCloudFormTextInput(event) {
+		return
+	}
+	if a.onBuiltInSettingsTextInput(event) {
+		return
+	}
+	a.onPluginSettingsTextInput(event)
+}
+
+func (a *App) onOnboardingWindowKey(event woxui.KeyEvent) bool {
+	if !event.Down || event.Composing {
+		return false
+	}
+	if a.hotkeyRecordingUsesOnboardingWindow() && a.onHotkeyRecordingKey(event) {
+		return true
+	}
+	return a.onOnboardingKey(event)
+}
+
+func (a *App) onLauncherWindowClosed() {
+	wasVisible := a.visible
+	a.deactivateDictationAudio()
+	a.launcher = nil
+	a.host = nil
+	a.visible = false
+	isPrimary := a.isPrimary
+	if !isPrimary {
+		a.destroyed.Store(true)
+	}
+	if !isPrimary {
+		util.Go(a.lifecycleCtx, "destroy secondary launcher after close", func() {
+			if wasVisible {
+				if err := a.notifyHidden(); err != nil {
+					log.Printf("notify Wox core after secondary close: %v", err)
+				}
+			}
+			a.destroySecondary()
+		})
+	}
+}
+
+// onSettingsWindowClosed releases window-owned interaction state before notifying core.
+func (a *App) onSettingsWindowClosed() {
+	wasOpen := a.settingsOpen
+	wasRecording := a.hotkeyRecordingUsesSettingsWindow()
+	a.settingsOpen = false
+	a.settingsView = nil
+	a.settingsHost = nil
+	a.settingSaving = false
+	a.generalSettings.EndEdit()
+	a.settingsSearch.SetEditor(nil)
+	a.settingsSearch.SetFocused(false)
+	a.settingsSearch.SetPanel(false)
+	a.settingsSearch.SetSelected(0)
+	a.clearSettingsSearchHighlight()
+	a.pluginSettings.SetSearchEditor(nil)
+	a.pluginSettings.SetSearchFocused(false)
+	a.pluginSettings.SetDetailTab("settings")
+	a.themeSettings.SetThemeSearchEditor(nil)
+	a.themeSettings.SetThemeSearchFocused(false)
+	a.themeSettings.SetThemeDetailTab("preview")
+	a.releaseDemoWallpaperLocked()
+	a.generalSettings.SetChoicePicker(nil)
+	a.cloudSettings.SetForm(nil)
+	a.cloudSettings.SetActionMenu("")
+	a.cloudSettings.SetPluginDialog(nil)
+	a.settingsTableEditor = nil
+	a.aiSettings.SetModelManager(nil)
+	if !a.onboardingOpen {
+		a.hotkeySettings.ClearRecording()
+		a.hotkeySettings.SetFocused(false)
+	}
+	a.cloudPlanTooltip = nil
+	a.settingsInlineTooltip = nil
+	a.settingsDemo = nil
+	a.settingsDemoRevision.Add(1)
+	if form := a.pluginSettings.Form(); form != nil {
+		syncFormFieldsEditorLocked(&form.formFieldsState)
+		form.active = false
+	}
+	if themeEditor := a.themeSettings.ThemeEditor(); themeEditor != nil {
+		themeEditor.active = false
+	}
+	launcherVisible := a.visible
+	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
+
+	if wasRecording {
+		a.postHotkeyRecordingStopped()
+	}
+	if wasOpen {
+		if err := a.notifySettingViewChanged(false); err != nil {
+			log.Printf("notify Wox core after settings close: %v", err)
+		}
+		if !launcherVisible {
+			if err := a.notifyHidden(); err != nil {
+				log.Printf("notify Wox core after final window hide: %v", err)
+			}
+		}
+	}
+	util.Go(a.lifecycleCtx, "refresh glance after settings close", func() {
+		a.refreshGlance("settingsChanged", "", nil)
+	})
+}
+
+func (a *App) onOnboardingWindowClosed() {
+	wasOpen := a.onboardingOpen
+	wasRecording := a.hotkeyRecordingUsesOnboardingWindow()
+	a.onboardingOpen = false
+	a.onboardingChoice = ""
+	a.onboardingChoiceAnchor = woxui.Rect{}
+	a.releaseDemoWallpaperLocked()
+	a.onboardingView = nil
+	a.onboardingHost = nil
+	if wasRecording {
+		a.hotkeySettings.ClearRecording()
+		a.postHotkeyRecordingStopped()
+	}
+	if wasOpen {
+		if err := a.notifyOnboardingViewChanged(false); err != nil {
+			log.Printf("notify Wox core after onboarding close: %v", err)
+		}
+	}
+}

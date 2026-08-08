@@ -16,7 +16,7 @@ type PluginSettingValueDictationModel struct {
 	Tooltip      string
 	DefaultValue string
 	// Options lists all available model choices, including their download
-	// status. The Flutter side uses Status to render the appropriate UI
+	// status. The UI side uses Status to render the appropriate UI
 	// (greyed-out + download button for not-downloaded, progress bar for
 	// downloading, selectable for downloaded).
 	Options []DictationModelOption

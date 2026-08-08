@@ -1,4 +1,4 @@
-.PHONY: clean build help window-hook-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
+.PHONY: clean build help ui-resources window-hook-build crash-handler-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 FILESEARCH_REAL_INDEX_ROOT ?= ~/
@@ -69,7 +69,8 @@ VERSION := $(shell sed -n 's/^const CURRENT_VERSION = "\(.*\)"/\1/p' updater/ver
 help:
 	@echo "Available commands:"
 	@echo "  make clean         - Clean build artifacts"
-	@echo "  make build         - Build Flutter UI for current platform ($(PLATFORM))"
+	@echo "  make build         - Build Wox with the embedded Go UI for current platform ($(PLATFORM))"
+	@echo "  make ui-resources  - Prepare platform resources used by the embedded Go UI"
 	@echo "  make filesearch-real-index - Capture debugger-aligned filesearch/fd/rg comparison for $(FILESEARCH_REAL_INDEX_ROOT), keyword $(FILESEARCH_REAL_INDEX_KEYWORD)"
 	@echo "  make filesearch-real-index-release - Capture optimized filesearch/fd/rg comparison for $(FILESEARCH_REAL_INDEX_ROOT), keyword $(FILESEARCH_REAL_INDEX_KEYWORD)"
 	@echo "  make filesearch-content-real-index - Capture debugger-aligned content indexing and rg comparison for $(FILESEARCH_CONTENT_REAL_INDEX_ROOT), keyword $(FILESEARCH_CONTENT_REAL_INDEX_KEYWORD)"
@@ -80,9 +81,17 @@ clean:
 	rm -rf $(RELEASE_DIR)
 	rm -f resource_windows.syso rsrc_windows.syso
 
+ui-resources:
+ifeq ($(PLATFORM),windows)
+	@echo "WebView2Loader.dll is managed under resource/others/webview for Windows builds"
+else
+	@echo "The embedded Go UI does not require staged resources on $(PLATFORM)"
+endif
+
 build: clean
 	$(MAKE) woxmr-build
 	$(MAKE) window-hook-build
+	$(MAKE) crash-handler-build
 ifeq ($(PLATFORM),windows)
 	# Generate Windows VERSIONINFO using the version from updater.CURRENT_VERSION
 	cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0 \
@@ -91,14 +100,17 @@ ifeq ($(PLATFORM),windows)
 		-product-name "Wox" -description "Wox" -internal-name "Wox" -original-name "wox-windows-$(GOARCH).exe" \
 		-product-version "$(VERSION)" -file-version "$(VERSION)" \
 		-propagate-ver-strings
-	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
+	# Keep Go symbols and DWARF data so crash minidumps can be symbolized against the exact release executable.
+	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-H windowsgui -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
 endif
 
 ifeq ($(PLATFORM),linux)
-	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-$(GOARCH)
+	# Keep symbols in release binaries so native crash reports retain actionable stack information.
+	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-$(GOARCH)
 endif
 ifeq ($(PLATFORM),macos)
-	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15 -Wl,-no_warn_duplicate_libraries" go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(GOARCH)
+	# Keep symbols in release binaries so macOS diagnostic reports can be symbolized with the shipped executable.
+	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15 -Wl,-no_warn_duplicate_libraries" go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(GOARCH)
 endif
 
 WINDOW_HOOK_SOURCE := util/windowhook/hook/window_hook.c
@@ -113,6 +125,20 @@ ifeq ($(PLATFORM),windows)
 	gcc -shared -O2 -s -o $(WINDOW_HOOK_DLL) $(WINDOW_HOOK_SOURCE) -lole32 -lshell32 -luuid -lcomctl32
 else
 	@echo "Window hook is only supported on Windows"
+endif
+
+CRASH_HANDLER_SOURCE := diagnostic/native/wox_crash_handler.c
+CRASH_HANDLER_DIR := resource/others/crash_handler
+CRASH_HANDLER_DLL := $(CRASH_HANDLER_DIR)/WoxCrashHandler64.dll
+
+# WER loads this module in its own process after Wox has crashed.
+crash-handler-build:
+	rm -rf $(CRASH_HANDLER_DIR)
+ifeq ($(PLATFORM),windows)
+	mkdir -p $(CRASH_HANDLER_DIR)
+	gcc -shared -O2 -s -o $(CRASH_HANDLER_DLL) $(CRASH_HANDLER_SOURCE) -ldbghelp -ladvapi32
+else
+	@echo "Crash handler is only supported on Windows"
 endif
 
 # Feature addition: real-root filesearch comparisons are intentionally exposed

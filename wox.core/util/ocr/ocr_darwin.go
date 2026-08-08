@@ -4,12 +4,43 @@ package ocr
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Foundation -framework Vision -framework ImageIO -framework CoreGraphics
+#cgo LDFLAGS: -framework Foundation -framework ImageIO -framework CoreGraphics
 #include <stdlib.h>
 #include <stdbool.h>
+#include <dlfcn.h>
 #import <Foundation/Foundation.h>
-#import <Vision/Vision.h>
 #import <ImageIO/ImageIO.h>
+
+// Declare only the selectors used below. Vision itself is loaded on the first OCR request so its
+// CoreML dependency graph does not become part of the launcher's hidden startup footprint.
+@interface NSObject (WoxDynamicVision)
+- (instancetype)initWithCompletionHandler:(void (^)(id request, NSError *error))completionHandler;
+- (instancetype)initWithCGImage:(CGImageRef)image options:(NSDictionary *)options;
+- (NSArray *)results;
+- (NSArray *)topCandidates:(NSUInteger)candidateCount;
+- (NSString *)string;
+- (void)setRecognitionLevel:(NSInteger)recognitionLevel;
+- (void)setUsesLanguageCorrection:(BOOL)usesLanguageCorrection;
+- (void)setRecognitionLanguages:(NSArray<NSString *> *)recognitionLanguages;
+- (NSArray<NSString *> *)supportedRecognitionLanguagesAndReturnError:(NSError **)error;
+- (BOOL)performRequests:(NSArray *)requests error:(NSError **)error;
+@end
+
+static void *woxOCRVisionFrameworkHandle = NULL;
+static NSString *woxOCRVisionFrameworkError = nil;
+
+static BOOL woxOCRLoadVisionFramework(void) {
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		woxOCRVisionFrameworkHandle = dlopen("/System/Library/Frameworks/Vision.framework/Vision", RTLD_LAZY | RTLD_LOCAL);
+        if (woxOCRVisionFrameworkHandle == NULL) {
+            const char *loadError = dlerror();
+            NSString *detail = loadError == NULL ? @"unknown error" : [NSString stringWithUTF8String:loadError];
+            woxOCRVisionFrameworkError = [[NSString alloc] initWithFormat:@"failed to load Vision.framework: %@", detail];
+        }
+    });
+    return woxOCRVisionFrameworkHandle != NULL;
+}
 
 static char* woxOCRDuplicateString(NSString *value) {
     if (value == nil) {
@@ -94,7 +125,7 @@ static NSString *woxOCRCanonicalSupportedLanguage(NSString *candidate, NSArray<N
     return nil;
 }
 
-static NSArray<NSString *> *woxOCRSupportedVisionLanguages(VNRecognizeTextRequest *request, NSArray<NSString *> *candidates) {
+static NSArray<NSString *> *woxOCRSupportedVisionLanguages(id request, NSArray<NSString *> *candidates) {
     if ([candidates count] == 0) {
         return candidates;
     }
@@ -131,6 +162,22 @@ static NSArray<NSString *> *woxOCRSupportedVisionLanguages(VNRecognizeTextReques
 static char* woxOCRRecognizeVisionText(const char *path, const char *languages, char **errorOut) {
     @autoreleasepool {
         if (@available(macOS 10.15, *)) {
+            if (!woxOCRLoadVisionFramework()) {
+                if (errorOut != NULL) {
+                    *errorOut = woxOCRDuplicateString(woxOCRVisionFrameworkError);
+                }
+                return NULL;
+            }
+
+            Class recognizeTextRequestClass = NSClassFromString(@"VNRecognizeTextRequest");
+            Class imageRequestHandlerClass = NSClassFromString(@"VNImageRequestHandler");
+            if (recognizeTextRequestClass == Nil || imageRequestHandlerClass == Nil) {
+                if (errorOut != NULL) {
+                    *errorOut = strdup("Vision OCR classes are unavailable");
+                }
+                return NULL;
+            }
+
             NSString *pathString = [NSString stringWithUTF8String:path];
             if (pathString == nil || [pathString length] == 0) {
                 if (errorOut != NULL) {
@@ -157,29 +204,33 @@ static char* woxOCRRecognizeVisionText(const char *path, const char *languages, 
             }
 
             __block NSMutableArray<NSString *> *recognizedLines = [NSMutableArray array];
-            VNRecognizeTextRequest *request = [[VNRecognizeTextRequest alloc] initWithCompletionHandler:^(VNRequest *request, NSError *error) {
+            id request = [[recognizeTextRequestClass alloc] initWithCompletionHandler:^(id completedRequest, NSError *error) {
                 if (error != nil) {
                     return;
                 }
-                NSArray<VNRecognizedTextObservation *> *observations = request.results;
-                for (VNRecognizedTextObservation *observation in observations) {
-                    VNRecognizedText *candidate = [[observation topCandidates:1] firstObject];
-                    if (candidate != nil && candidate.string != nil && candidate.string.length > 0) {
-                        [recognizedLines addObject:candidate.string];
-                    }
-                }
-            }];
-            request.recognitionLevel = VNRequestTextRecognitionLevelAccurate;
-            request.usesLanguageCorrection = YES;
+				NSArray *observations = [completedRequest results];
+				for (id observation in observations) {
+					id candidate = [[observation topCandidates:1] firstObject];
+					NSString *candidateText = [candidate string];
+					if (candidateText != nil && [candidateText length] > 0) {
+						[recognizedLines addObject:candidateText];
+					}
+				}
+			}];
+            // VNRequestTextRecognitionLevelAccurate is the stable enum value 1 on macOS 10.15+.
+            [request setRecognitionLevel:1];
+            [request setUsesLanguageCorrection:YES];
             NSArray<NSString *> *candidateLanguages = woxOCRVisionLanguageCandidates(languages);
             NSArray<NSString *> *supportedLanguages = woxOCRSupportedVisionLanguages(request, candidateLanguages);
             if ([supportedLanguages count] > 0) {
-                request.recognitionLanguages = supportedLanguages;
+                [request setRecognitionLanguages:supportedLanguages];
             }
 
-            VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:image options:@{}];
+            id handler = [[imageRequestHandlerClass alloc] initWithCGImage:image options:@{}];
             NSError *performError = nil;
             BOOL ok = [handler performRequests:@[request] error:&performError];
+            [handler release];
+            [request release];
             CGImageRelease(image);
             if (!ok) {
                 if (errorOut != NULL) {

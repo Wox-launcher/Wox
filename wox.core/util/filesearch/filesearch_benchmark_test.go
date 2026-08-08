@@ -140,10 +140,8 @@ func BenchmarkFileSearchFreshBulkLoadVariants(b *testing.B) {
 	}
 
 	for _, entryCount := range []int{50000, 200000} {
-		entryCount := entryCount
 		b.Run(fmt.Sprintf("entries_%d", entryCount), func(b *testing.B) {
 			for _, variant := range variants {
-				variant := variant
 				b.Run(variant.name, func(b *testing.B) {
 					var totals freshBulkBenchmarkTotals
 					b.ReportAllocs()

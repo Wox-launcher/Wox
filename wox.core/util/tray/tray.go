@@ -13,6 +13,7 @@ type ClickRect struct {
 }
 
 type QueryIconItem struct {
+	Identifier          string
 	Icon                []byte
 	Tooltip             string
 	Callback            func(ClickRect)

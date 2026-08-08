@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wox Generate Smoke Test Case"
+  short_description: "Analyze and generate focused Wox smoke cases"
+  default_prompt: "Use $wox-generate-smoke-test-case to analyze this Wox feature, recommend valuable smoke flows, and generate the selected case."

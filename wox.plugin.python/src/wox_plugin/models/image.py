@@ -5,7 +5,7 @@ This module provides image models for Wox plugins. Images are used to display
 icons, thumbnails, and other visual elements in search results and previews.
 
 The WoxImage model supports multiple image types including absolute paths,
-relative paths, base64 encoded images, SVG, Lottie animations, emoji, URLs,
+relative paths, base64 encoded images, SVG, emoji, URLs,
 theme icons, and system file icons.
 """
 
@@ -23,7 +23,6 @@ class WoxImageType(str, Enum):
     - RELATIVE: Path relative to the plugin directory
     - BASE64: Base64 encoded image data (e.g., "iVBORw0KGgo...")
     - SVG: Inline SVG markup
-    - LOTTIE: Lottie animation JSON data
     - EMOJI: Unicode emoji character
     - URL: HTTP/HTTPS URL to an image
     - THEME: Built-in theme icon name
@@ -52,17 +51,6 @@ class WoxImageType(str, Enum):
 
     SVG = "svg"
     """Inline SVG markup (e.g., "<svg>...</svg>")"""
-
-    LOTTIE = "lottie"
-    """
-    Lottie animation file format (JSON string).
-
-    Lottie is a JSON-based animation file format that enables
-    high-quality animations to be easily shared and integrated
-    into any platform. Use this for animated icons and illustrations.
-
-    Example: You can provide Lottie JSON data directly as a string.
-    """
 
     EMOJI = "emoji"
     """Unicode emoji character (e.g., "🔍", "⭐", "🎯")"""
@@ -239,25 +227,6 @@ class WoxImage:
             icon = WoxImage.new_svg("<svg viewBox='0 0 24 24'><path d='M12 2L2 22h20L12 2z'/></svg>")
         """
         return cls(image_type=WoxImageType.SVG, image_data=data)
-
-    @classmethod
-    def new_lottie(cls, data: str) -> "WoxImage":
-        """
-        Create a Lottie animation image.
-
-        Use this for animated icons and illustrations. Lottie is a
-        JSON-based animation format.
-
-        Args:
-            data: Lottie animation JSON string
-
-        Returns:
-            A new WoxImage instance with type LOTTIE
-
-        Example:
-            animation = WoxImage.new_lottie('{"v":"5.5.7","fr":60,"ip":0,"op":60,"w":100,"h":100,...}')
-        """
-        return cls(image_type=WoxImageType.LOTTIE, image_data=data)
 
     @classmethod
     def new_emoji(cls, data: str) -> "WoxImage":

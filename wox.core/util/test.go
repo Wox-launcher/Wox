@@ -12,6 +12,7 @@ const (
 	TestUserDataDirEnv      = "WOX_TEST_USER_DIR"
 	TestServerPortEnv       = "WOX_TEST_SERVER_PORT"
 	TestDisableTelemetryEnv = "WOX_TEST_DISABLE_TELEMETRY"
+	TestSkipOnboardingEnv   = "WOX_TEST_SKIP_ONBOARDING"
 )
 
 func GetTestWoxDataDirectoryOverride() string {
@@ -44,4 +45,13 @@ func ShouldDisableTelemetryForTest() bool {
 	}
 
 	return strings.EqualFold(strings.TrimSpace(os.Getenv(TestDisableTelemetryEnv)), "true")
+}
+
+// ShouldSkipOnboardingForTest keeps the bypass scoped to explicitly isolated test processes.
+func ShouldSkipOnboardingForTest() bool {
+	if !IsTestMode() {
+		return false
+	}
+
+	return strings.EqualFold(strings.TrimSpace(os.Getenv(TestSkipOnboardingEnv)), "true")
 }

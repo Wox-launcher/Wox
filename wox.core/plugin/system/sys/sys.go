@@ -455,6 +455,26 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 			},
 		},
 		{
+			ID:                     "toggle_repaint_debug",
+			Title:                  "Toggle repaint highlights",
+			SubTitle:               "Show rainbow outlines around repainted regions",
+			Icon:                   common.CPUProfileIcon,
+			Aliases:                []string{"highlight repaints", "repaint debug", "rainbow repaint", "partial refresh", "damage debug", "局部刷新", "重绘调试"},
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				mode, err := ui.GetUIManager().ToggleRepaintDebugMode(ctx)
+				if err != nil {
+					subtitle := "Failed to toggle repaint highlights: " + err.Error()
+					r.api.UpdateResult(ctx, plugin.UpdatableResult{Id: actionContext.ResultId, SubTitle: &subtitle})
+					return
+				}
+
+				title := "Toggle repaint highlights"
+				subtitle := repaintDebugModeSubtitle(mode)
+				r.api.UpdateResult(ctx, plugin.UpdatableResult{Id: actionContext.ResultId, Title: &title, SubTitle: &subtitle})
+			},
+		},
+		{
 			Title: "test notification long",
 			Icon:  common.CPUProfileIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -495,47 +515,38 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 		},
 
 		{
-			Title:                  "test toolbar msg",
+			ID:                     "test_toolbar_progress",
+			Title:                  "test toolbar progress",
+			SubTitle:               "Preview indeterminate and determinate toolbar progress",
 			Icon:                   common.CPUProfileIcon,
+			Aliases:                []string{"toolbar progress", "progress animation", "loading animation"},
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				var progress int = 0
+				toolbarMsgId := uuid.New().String()
+				toolbarUI := plugin.GetPluginManager().GetUI()
+				// Global sys results do not own the wildcard query, so the dev preview targets the action's session directly.
+				toolbarUI.ShowToolbarMsg(ctx, plugin.ToolbarMsgUI{
+					Id:            toolbarMsgId,
+					Title:         "Testing indeterminate toolbar progress",
+					Icon:          sysIcon,
+					Indeterminate: true,
+				})
+				util.Go(ctx, "test toolbar progress", func() {
+					time.Sleep(2 * time.Second)
 
-				util.Go(ctx, "test toolbar msg", func() {
-					toolbarMsgId := uuid.New().String()
-					for progress <= 100 {
-						time.Sleep(500 * time.Millisecond)
-						r.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
+					for progress := 0; progress <= 100; progress += 10 {
+						current := progress
+						toolbarUI.ShowToolbarMsg(ctx, plugin.ToolbarMsgUI{
 							Id:       toolbarMsgId,
-							Title:    fmt.Sprintf("Progress: %d%%", progress),
+							Title:    "Testing determinate toolbar progress",
 							Icon:     sysIcon,
-							Progress: &progress,
-							Actions: []plugin.ToolbarMsgAction{
-								{
-									Name:                   "Action1",
-									Icon:                   common.ExecuteRunIcon,
-									Hotkey:                 util.PrimaryHotkey("1"),
-									PreventHideAfterAction: true,
-									Action: func(ctx context.Context, actionContext plugin.ToolbarMsgActionContext) {
-										r.api.Notify(ctx, "Action 1 executed")
-									},
-								},
-								{
-									Name:                   "Stop and Clear",
-									Icon:                   common.ExecuteRunIcon,
-									Hotkey:                 util.PrimaryHotkey("enter"),
-									PreventHideAfterAction: true,
-									Action: func(ctx context.Context, actionContext plugin.ToolbarMsgActionContext) {
-										progress = 200
-										r.api.ClearToolbarMsg(ctx, toolbarMsgId)
-									},
-								},
-							},
+							Progress: &current,
 						})
-						progress += 10
+						time.Sleep(300 * time.Millisecond)
 					}
 
-					r.api.ClearToolbarMsg(ctx, toolbarMsgId)
+					time.Sleep(500 * time.Millisecond)
+					toolbarUI.ClearToolbarMsg(ctx, toolbarMsgId)
 				})
 			},
 		},
@@ -966,4 +977,13 @@ func runShutdownCommand() (*exec.Cmd, error) {
 
 func runRestartCommand() (*exec.Cmd, error) {
 	return runPlatformRestartCommand()
+}
+
+func repaintDebugModeSubtitle(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "rainbow":
+		return "Repaint highlights: rainbow outlines show repainted regions"
+	default:
+		return "Repaint highlights: off"
+	}
 }

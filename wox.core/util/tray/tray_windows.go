@@ -1,7 +1,7 @@
 package tray
 
 /*
-#cgo LDFLAGS: -lshell32
+#cgo LDFLAGS: -lshell32 -lole32 -luuid
 #include <windows.h>
 
 extern void init(char *iconPath, char *tooltip);

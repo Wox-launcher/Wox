@@ -31,7 +31,7 @@ typedef struct {
 } ScreenDisplayInfo;
 
 // desktopTopForScreens anchors all macOS screen metrics to the same virtual
-// desktop top-left space consumed by the Flutter runner.
+// desktop top-left space consumed by the UI runner.
 static CGFloat desktopTopForScreens(NSArray<NSScreen *> *screens) {
   CGFloat desktopTop = 0;
   for (NSScreen *screen in screens) {

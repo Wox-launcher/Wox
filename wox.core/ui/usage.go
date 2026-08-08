@@ -2,24 +2,18 @@ package ui
 
 import (
 	"context"
-	"encoding/json"
-	"io"
-	"net/http"
+	"errors"
 	"time"
+
 	"wox/analytics"
 	"wox/common"
 	"wox/database"
 	appplugin "wox/plugin/system/app"
-	"wox/util"
 
 	"gorm.io/gorm"
 )
 
 const defaultUsageStatsPeriod = "30d"
-
-type usageStatsRequest struct {
-	Period string `json:"Period"`
-}
 
 type usageStatsItem struct {
 	Id    string `json:"Id"`
@@ -74,17 +68,15 @@ type usageStatsResponse struct {
 	previousPeriodEndUnixMs   int64
 }
 
-func handleUsageStats(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+// getUsageStats builds one usage report for typed services.
+func getUsageStats(ctx context.Context, period string) (usageStatsResponse, error) {
 	db := database.GetDB()
 	if db == nil {
-		writeErrorResponse(w, "db not initialized")
-		return
+		return usageStatsResponse{}, errors.New("db not initialized")
 	}
 
 	var resp usageStatsResponse
-	req := readUsageStatsRequest(r)
-	configureUsageStatsPeriod(&resp, req.Period)
+	configureUsageStatsPeriod(&resp, period)
 	resp.OpenedByHour = make([]int, 24)
 	resp.OpenedByWeekday = make([]int, 7)
 
@@ -101,16 +93,7 @@ func handleUsageStats(w http.ResponseWriter, r *http.Request) {
 	fillOpenedBuckets(ctx, &resp)
 	fillOpenedByDay(ctx, &resp)
 	fillTopItems(ctx, &resp)
-
-	writeSuccessResponse(w, resp)
-}
-
-func readUsageStatsRequest(r *http.Request) usageStatsRequest {
-	var req usageStatsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
-		return usageStatsRequest{Period: defaultUsageStatsPeriod}
-	}
-	return req
+	return resp, nil
 }
 
 func configureUsageStatsPeriod(resp *usageStatsResponse, requestedPeriod string) {

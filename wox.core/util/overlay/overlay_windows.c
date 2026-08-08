@@ -928,6 +928,98 @@ static void ApplyCornerRadius(HWND hwnd, UINT dpi, int width, int height)
     }
 }
 
+// ComputeOverlayPhysicalSize converts stored DIP metrics into physical pixels for the
+// window's current DPI and updates the native attachment client rect.
+static void ComputeOverlayPhysicalSize(OverlayWindow *ow, int *outWidth, int *outHeight)
+{
+    if (!ow || !outWidth || !outHeight)
+        return;
+
+    ow->dpi = GetWindowDpiSafe(ow->hwnd, ow->dpi ? ow->dpi : GetSystemDpiSafe());
+
+    int minWidth = MulDiv(MIN_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
+    if (ow->minWidth > 0.0f)
+        minWidth = (int)roundf(ow->minWidth * (float)ow->dpi / 96.0f);
+    int width = (ow->width > 0.0f) ? (int)roundf(ow->width * (float)ow->dpi / 96.0f) : MulDiv(DEFAULT_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
+    int height = (ow->height > 0.0f) ? (int)roundf(ow->height * (float)ow->dpi / 96.0f) : MulDiv(DEFAULT_WINDOW_HEIGHT_DIP, (int)ow->dpi, 96);
+
+    if (ow->nativeAttachment && ow->nativeAttachmentKind == NATIVE_ATTACHMENT_KIND_WINDOW && ow->nativeAttachmentHwnd)
+    {
+        BOOL transparentAttachment = ow->transparent;
+        int attachmentWidth = (ow->nativeAttachmentWidth > 0.0f) ? (int)roundf(ow->nativeAttachmentWidth * (float)ow->dpi / 96.0f) : MulDiv(132, (int)ow->dpi, 96);
+        int attachmentHeight = (ow->nativeAttachmentHeight > 0.0f) ? (int)roundf(ow->nativeAttachmentHeight * (float)ow->dpi / 96.0f) : MulDiv(24, (int)ow->dpi, 96);
+        // Native attachments report their content size; base window chrome must be added around it.
+        width = (ow->width > 0.0f) ? (int)roundf(ow->width * (float)ow->dpi / 96.0f) : attachmentWidth + (transparentAttachment ? 0 : MulDiv(36, (int)ow->dpi, 96));
+        height = (ow->height > 0.0f) ? (int)roundf(ow->height * (float)ow->dpi / 96.0f) : attachmentHeight + (transparentAttachment ? 0 : MulDiv(24, (int)ow->dpi, 96));
+        if (!transparentAttachment && width < minWidth)
+            width = minWidth;
+        if (width < 1)
+            width = 1;
+        if (height < 1)
+            height = 1;
+
+        if (transparentAttachment)
+        {
+            SetRect(&ow->nativeAttachmentRect, 0, 0, width, height);
+        }
+        else
+        {
+            int attachmentPad = MulDiv(18, (int)ow->dpi, 96);
+            int attachmentLeft = attachmentPad;
+            int attachmentRight = width - attachmentPad;
+            if (attachmentRight - attachmentLeft < MulDiv(48, (int)ow->dpi, 96))
+                attachmentRight = attachmentLeft + MulDiv(48, (int)ow->dpi, 96);
+            int attachmentTop = (height - attachmentHeight) / 2;
+            SetRect(&ow->nativeAttachmentRect, attachmentLeft, attachmentTop, attachmentRight, attachmentTop + attachmentHeight);
+        }
+    }
+    else
+    {
+        RECT empty = {0, 0, 0, 0};
+        ow->nativeAttachmentRect = empty;
+    }
+    if (!ow->transparent && width < minWidth)
+        width = minWidth;
+    if (width < 1)
+        width = 1;
+    if (height < 1)
+        height = 1;
+
+    *outWidth = width;
+    *outHeight = height;
+}
+
+// ResyncOverlaySizeAtCurrentPosition fixes physical size after a DPI change without
+// re-anchoring, which would snap a dragged overlay back to the primary work area.
+static void ResyncOverlaySizeAtCurrentPosition(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd)
+        return;
+
+    int width = 0;
+    int height = 0;
+    ComputeOverlayPhysicalSize(ow, &width, &height);
+
+    RECT current;
+    if (!GetWindowRect(ow->hwnd, &current))
+        return;
+
+    ow->layoutSizeChanged = (current.right - current.left) != width || (current.bottom - current.top) != height;
+    SetWindowPos(ow->hwnd, NULL, current.left, current.top, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
+    LayoutNativeAttachment(ow);
+    if (ow->transparent)
+    {
+        SetWindowRgn(ow->hwnd, NULL, TRUE);
+        UINT pref = DWMWCP_DONOTROUND;
+        DwmSetWindowAttribute(ow->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
+    }
+    else
+    {
+        ApplyCornerRadius(ow->hwnd, ow->dpi, width, height);
+    }
+    InvalidateRect(ow->hwnd, NULL, TRUE);
+}
+
 static void ApplyAspectRatioToSizingRect(OverlayWindow *ow, WPARAM edge, RECT *rect)
 {
     if (!ow || !rect || ow->aspectRatio <= 0.0f)
@@ -1007,55 +1099,9 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     if (!ow || !ow->hwnd)
         return;
 
-    ow->dpi = GetWindowDpiSafe(ow->hwnd, ow->dpi ? ow->dpi : GetSystemDpiSafe());
-
-    int minWidth = MulDiv(MIN_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
-    if (ow->minWidth > 0.0f)
-        minWidth = (int)roundf(ow->minWidth * (float)ow->dpi / 96.0f);
-    int width = (ow->width > 0.0f) ? (int)roundf(ow->width * (float)ow->dpi / 96.0f) : MulDiv(DEFAULT_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
-    int height = (ow->height > 0.0f) ? (int)roundf(ow->height * (float)ow->dpi / 96.0f) : MulDiv(DEFAULT_WINDOW_HEIGHT_DIP, (int)ow->dpi, 96);
-
-    if (ow->nativeAttachment && ow->nativeAttachmentKind == NATIVE_ATTACHMENT_KIND_WINDOW && ow->nativeAttachmentHwnd)
-    {
-        BOOL transparentAttachment = ow->transparent;
-        int attachmentWidth = (ow->nativeAttachmentWidth > 0.0f) ? (int)roundf(ow->nativeAttachmentWidth * (float)ow->dpi / 96.0f) : MulDiv(132, (int)ow->dpi, 96);
-        int attachmentHeight = (ow->nativeAttachmentHeight > 0.0f) ? (int)roundf(ow->nativeAttachmentHeight * (float)ow->dpi / 96.0f) : MulDiv(24, (int)ow->dpi, 96);
-        // Native attachments report their content size; base window chrome must be added around it.
-        width = (ow->width > 0.0f) ? (int)roundf(ow->width * (float)ow->dpi / 96.0f) : attachmentWidth + (transparentAttachment ? 0 : MulDiv(36, (int)ow->dpi, 96));
-        height = (ow->height > 0.0f) ? (int)roundf(ow->height * (float)ow->dpi / 96.0f) : attachmentHeight + (transparentAttachment ? 0 : MulDiv(24, (int)ow->dpi, 96));
-        if (!transparentAttachment && width < minWidth)
-            width = minWidth;
-        if (width < 1)
-            width = 1;
-        if (height < 1)
-            height = 1;
-
-        if (transparentAttachment)
-        {
-            SetRect(&ow->nativeAttachmentRect, 0, 0, width, height);
-        }
-        else
-        {
-            int attachmentPad = MulDiv(18, (int)ow->dpi, 96);
-            int attachmentLeft = attachmentPad;
-            int attachmentRight = width - attachmentPad;
-            if (attachmentRight - attachmentLeft < MulDiv(48, (int)ow->dpi, 96))
-                attachmentRight = attachmentLeft + MulDiv(48, (int)ow->dpi, 96);
-            int attachmentTop = (height - attachmentHeight) / 2;
-            SetRect(&ow->nativeAttachmentRect, attachmentLeft, attachmentTop, attachmentRight, attachmentTop + attachmentHeight);
-        }
-    }
-    else
-    {
-        RECT empty = {0, 0, 0, 0};
-        ow->nativeAttachmentRect = empty;
-    }
-    if (!ow->transparent && width < minWidth)
-        width = minWidth;
-    if (width < 1)
-        width = 1;
-    if (height < 1)
-        height = 1;
+    int width = 0;
+    int height = 0;
+    ComputeOverlayPhysicalSize(ow, &width, &height);
 
     RECT targetRect;
     BOOL targetFound = FALSE;
@@ -1275,6 +1321,12 @@ static BOOL OverlayPayloadMatchesCurrent(OverlayWindow *ow, OverlayPayload *payl
     if (!ow || !payload)
         return FALSE;
 
+    // Bug fix: after a cross-monitor DPI change the payload DIP metrics can stay identical
+    // while the physical window size is stale. Force a layout pass when DPI drifted.
+    UINT currentDpi = GetWindowDpiSafe(ow->hwnd, ow->dpi ? ow->dpi : 96);
+    if (ow->dpi != currentDpi)
+        return FALSE;
+
     return ow->transparent == payload->transparent &&
            ow->hitTestIconOnly == payload->hitTestIconOnly &&
            ow->closeOnEscape == payload->closeOnEscape &&
@@ -1397,6 +1449,8 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             // Bug fix: crossing monitors with different DPI sends WM_DPICHANGED while the custom
             // drag loop is still positioning the overlay from raw screen pixels. Re-running the
             // normal anchor layout here can snap borderless overlays back to the primary work area.
+            // Still resync physical size from DIP metrics so paint and window bounds stay matched.
+            ResyncOverlaySizeAtCurrentPosition(ow);
             return 0;
         }
         RECT *suggested = (RECT *)lParam;
@@ -1595,8 +1649,15 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             ReleaseCapture();
         InvalidateRect(hwnd, NULL, FALSE);
 
-        if (!wasDragging)
+        if (wasDragging)
+        {
+            // Heal any DPI mismatch that arrived during drag or right after release.
+            ResyncOverlaySizeAtCurrentPosition(ow);
+        }
+        else
+        {
             HandleOverlayClick(ow);
+        }
         return 0;
     }
     case WM_KEYDOWN:

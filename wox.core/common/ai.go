@@ -279,7 +279,7 @@ func (t *AIChatDebugTrace) SetEstimatedPersistedTokens(persistedTokens int) {
 	t.EstimatedPersistedTokens = persistedTokens
 }
 
-// Snapshot returns a detached copy that can be sent to Flutter safely.
+// Snapshot returns a detached copy that can be sent to UI safely.
 func (t *AIChatDebugTrace) Snapshot() AIChatDebugTrace {
 	if t == nil {
 		return AIChatDebugTrace{}

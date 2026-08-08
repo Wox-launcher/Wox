@@ -3,10 +3,7 @@
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
       <!--
-        Bug fix: keep wox.core in the same PerMonitorV2 coordinate space as
-        wox-ui.exe. Without this manifest Windows can virtualize monitor bounds
-        for the core process while the Flutter runner receives DPI-aware bounds,
-        which places negative high-DPI displays outside the expected desktop.
+        Keep the combined core and Go UI process in PerMonitorV2 coordinates.
         The runtime screen init covers development binaries; this manifest makes
         release startup use the correct coordinate contract before Go code runs.
       -->

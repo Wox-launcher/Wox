@@ -222,27 +222,8 @@ func (p *GlancePlugin) woxMemoryGlance(ctx context.Context) (plugin.GlanceItem, 
 		return plugin.GlanceItem{}, false
 	}
 
-	totalBytes := coreBytes
-	parts := []string{fmt.Sprintf("Core %s (PID %d)", formatGlanceBytes(coreBytes), corePid)}
-	uiPid := processmemory.GetWoxUIProcessPid()
-	if uiPid > 0 {
-		if uiBytes, uiErr := processmemory.GetProcessMemoryBytes(uiPid); uiErr == nil {
-			totalBytes += uiBytes
-			parts = append(parts, fmt.Sprintf("Flutter %s (PID %d)", formatGlanceBytes(uiBytes), uiPid))
-		} else {
-			// Debug feature: keep the total useful even when a dev Flutter process
-			// exits before core sees its next ready callback.
-			parts = append(parts, fmt.Sprintf("Flutter unavailable (PID %d)", uiPid))
-		}
-	} else {
-		parts = append(parts, "Flutter unavailable")
-	}
-
-	// Feature change: Wox Memory follows Activity Monitor's Memory column on
-	// macOS by using process footprint instead of RSS/Real Mem. The text stays a
-	// combined number, while the tooltip keeps component attribution for leaks.
-	text := formatGlanceBytes(totalBytes)
-	return plugin.GlanceItem{Id: woxMemoryGlanceId, Text: text, Icon: common.NewWoxImageSvg(glanceMemorySvg), Tooltip: strings.Join(parts, " - ")}, true
+	text := formatGlanceBytes(coreBytes)
+	return plugin.GlanceItem{Id: woxMemoryGlanceId, Text: text, Icon: common.NewWoxImageSvg(glanceMemorySvg), Tooltip: fmt.Sprintf("Wox %s (PID %d)", text, corePid)}, true
 }
 
 func formatGlancePercent(percent float64) string {

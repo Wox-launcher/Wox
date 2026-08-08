@@ -120,6 +120,14 @@ func getPinYin(term string) []PinyinSegment {
 	return segments
 }
 
+// ReleaseIdleCaches drops the pinyin memoization table while the UI is hidden.
+// Entries are cheap to recompute per term, so trading a cold lookup after the
+// next show for a smaller idle footprint is worthwhile.
+func ReleaseIdleCaches() {
+	pinyinCache.Clear()
+	pinyinCacheSize.Store(0)
+}
+
 func hasChinese(str string) bool {
 	for _, runeValue := range str {
 		if unicode.Is(unicode.Han, runeValue) {

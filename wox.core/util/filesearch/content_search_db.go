@@ -31,7 +31,7 @@ func NewContentSearchDB(ctx context.Context) (*ContentSearchDB, error) {
 	dsn := dbPath + "?" +
 		"_journal_mode=WAL&" +
 		"_synchronous=NORMAL&" +
-		"_cache_size=2000&" +
+		"_cache_size=-4000&" +
 		"_foreign_keys=true&" +
 		"_busy_timeout=5000"
 
@@ -40,7 +40,7 @@ func NewContentSearchDB(ctx context.Context) (*ContentSearchDB, error) {
 		return nil, fmt.Errorf("failed to open content search database: %w", err)
 	}
 	db.SetMaxOpenConns(4)
-	db.SetMaxIdleConns(4)
+	db.SetMaxIdleConns(2)
 	db.SetConnMaxLifetime(time.Hour)
 
 	contentDB := &ContentSearchDB{db: db, dbPath: dbPath}

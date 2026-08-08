@@ -31,6 +31,10 @@ const (
 	// The trailing space makes Wox parse "preview" as a command instead of a
 	// search term for selection queries.
 	selectionQuickLookQueryText = "selection " + selectionCommandPreview + " "
+	// quickLookInstanceName is the named secondary launcher session owned by the
+	// Space Quick Look preview. It stays distinct from the selection hotkey
+	// session so the two never replace each other's window.
+	quickLookInstanceName = "selection-quicklook"
 )
 
 func init() {
@@ -273,7 +277,10 @@ func isSpaceQuickLookModifierKey(key keyboard.Key) bool {
 }
 
 // triggerSpaceQuickLook opens the existing preview-only Selection query for a
-// single selected file.
+// single selected file. It runs in a transient secondary launcher session so the
+// preview never overwrites the primary launcher's query state: the secondary
+// window is destroyed on close, leaving the main launcher fresh for the next
+// hotkey open.
 func (i *SelectionPlugin) triggerSpaceQuickLook() {
 	ctx := util.NewTraceContext()
 	ctx = util.WithCoreSessionContext(ctx)
@@ -290,18 +297,23 @@ func (i *SelectionPlugin) triggerSpaceQuickLook() {
 		return
 	}
 
-	plugin.GetPluginManager().GetUI().ChangeQuery(ctx, common.PlainQuery{
-		QueryId:        uuid.NewString(),
-		QueryType:      plugin.QueryTypeSelection,
-		QueryText:      selectionQuickLookQueryText,
-		QuerySelection: selected,
-	})
-	plugin.GetPluginManager().GetUI().ShowApp(ctx, common.ShowContext{
-		HideQueryBox:   true,
-		HideToolbar:    true,
-		ShowSource:     common.ShowSourceSelection,
-		WindowWidth:    1000,
-		MaxResultCount: 12,
+	plugin.GetPluginManager().GetUI().OpenWoxInstance(ctx, common.OpenWoxInstanceRequest{
+		Role:         common.WoxInstanceRoleSecondary,
+		InstanceName: quickLookInstanceName,
+		Query: common.PlainQuery{
+			QueryId:        uuid.NewString(),
+			QueryType:      plugin.QueryTypeSelection,
+			QueryText:      selectionQuickLookQueryText,
+			QuerySelection: selected,
+		},
+		ShowApp: common.ShowContext{
+			HideQueryBox:        true,
+			HideToolbar:         true,
+			ShowPreviewTitleBar: true,
+			ShowSource:          common.ShowSourceSelection,
+			WindowWidth:         1000,
+			MaxResultCount:      12,
+		},
 	})
 }
 

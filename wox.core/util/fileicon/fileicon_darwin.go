@@ -225,7 +225,7 @@ func boundedMacIconRenderSize(iconPath string, requestedSize int) int {
 
 	// Do not upscale small native icon assets. Terminal.app, for example, only
 	// exposes a 256px icns; forcing sips to create a 512px PNG makes Wox cache
-	// a pre-blurred image before Flutter has a chance to downsample it.
+	// a pre-blurred image before UI has a chance to downsample it.
 	return maxSourceSize
 }
 

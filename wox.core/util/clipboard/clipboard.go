@@ -30,6 +30,9 @@ var nativeImageFileWriter func(context.Context, string) error
 // Used to prevent the polling loop from self-triggering on our own writes.
 var lastWriteTimestamp atomic.Int64
 
+// NoDataErr returns the sentinel error reported when the clipboard contains no recognizable data.
+func NoDataErr() error { return noDataErr }
+
 // SetNativeImageFileWriter registers a UI-owned image clipboard writer for platforms where
 // background clipboard ownership is restricted by the compositor.
 func SetNativeImageFileWriter(writer func(context.Context, string) error) {
@@ -281,6 +284,23 @@ func WriteText(text string) error {
 	return Write(&TextData{
 		Text: text,
 	})
+}
+
+// ReadText returns the current clipboard text and a nil error when the clipboard holds text.
+// An empty clipboard (no recognizable data) returns "" + nil. Non-text data returns "" + nil
+// so callers that only care about text can treat it as "nothing to paste".
+func ReadText() (string, error) {
+	data, err := Read()
+	if err != nil {
+		if errors.Is(err, noDataErr) {
+			return "", nil
+		}
+		return "", err
+	}
+	if text, ok := data.(*TextData); ok {
+		return text.Text, nil
+	}
+	return "", nil
 }
 
 type TextData struct {

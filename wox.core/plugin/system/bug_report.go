@@ -3,11 +3,12 @@ package system
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"os"
+	"time"
 	"wox/common"
 	"wox/diagnostic"
 	"wox/plugin"
-	"wox/setting"
-	"wox/ui"
 	"wox/util"
 	"wox/util/shell"
 )
@@ -21,8 +22,6 @@ type BugReportPlugin struct {
 }
 
 const bugReportIssueURL = "https://github.com/Wox-launcher/Wox/issues/new?template=bug_report.yml"
-
-var bugReportDisabledIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><path fill="#8A8A8A" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12c5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>`)
 
 func (p *BugReportPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
@@ -46,74 +45,114 @@ func (p *BugReportPlugin) Init(ctx context.Context, initParams plugin.InitParams
 }
 
 func (p *BugReportPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
-	enabled := diagnostic.GetManager().IsEnabled()
-	title := "i18n:plugin_bug_report_title_off"
-	subtitle := "i18n:plugin_bug_report_subtitle_off"
-	if enabled {
-		title = "i18n:plugin_bug_report_title_on"
-		subtitle = "i18n:plugin_bug_report_subtitle_on"
+	incidents := diagnostic.GetManager().ListCrashIncidents()
+	if len(incidents) == 0 {
+		return plugin.NewQueryResponse([]plugin.QueryResult{p.buildNoCrashResult()})
 	}
 
-	result := plugin.QueryResult{
-		Title:    title,
-		SubTitle: subtitle,
-		Icon:     p.iconForState(enabled),
+	results := make([]plugin.QueryResult, 0, len(incidents))
+	for _, incident := range incidents {
+		results = append(results, p.buildCrashIncidentResult(ctx, incident))
+	}
+	return plugin.NewQueryResponse(results)
+}
+
+// buildNoCrashResult keeps manual diagnostics export available for a clean history.
+func (p *BugReportPlugin) buildNoCrashResult() plugin.QueryResult {
+	return plugin.QueryResult{
+		Title:    "i18n:plugin_bug_report_no_crashes_title",
+		SubTitle: "i18n:plugin_bug_report_no_crashes_description",
+		Icon:     common.PluginBugReportIcon,
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeMarkdown,
-			PreviewData: "i18n:plugin_bug_report_preview",
+			PreviewData: "i18n:plugin_bug_report_no_crashes_preview",
 		},
-		Actions: p.buildActions(enabled),
 	}
-	return plugin.NewQueryResponse([]plugin.QueryResult{result})
 }
 
-func (p *BugReportPlugin) iconForState(enabled bool) common.WoxImage {
-	if enabled {
-		return common.PermissionIcon
+// buildCrashIncidentResult creates one actionable result for a retained crash event.
+func (p *BugReportPlugin) buildCrashIncidentResult(ctx context.Context, incident diagnostic.CrashIncident) plugin.QueryResult {
+	signal := incident.Signal
+	if signal == "" {
+		signal = p.api.GetTranslation(ctx, "plugin_bug_report_crash_signal_none")
 	}
-	return bugReportDisabledIcon
+	title := fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_bug_report_crash_title"), incident.ID)
+	subtitle := fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_bug_report_crash_subtitle"), util.FormatTimestampWithMs(incident.DetectedAt))
+	preview := fmt.Sprintf(
+		"## %s\n\n%s\n\n- %s: `%d`\n- %s: `%d`\n- %s: `%s`\n- %s: `%s`\n- %s: `%s`\n- %s: `%s`\n- %s: `%s`",
+		title,
+		subtitle,
+		p.api.GetTranslation(ctx, "plugin_bug_report_crash_pid"),
+		incident.PID,
+		p.api.GetTranslation(ctx, "plugin_bug_report_crash_exit_code"),
+		incident.ExitCode,
+		p.api.GetTranslation(ctx, "plugin_bug_report_crash_signal"),
+		signal,
+		p.api.GetTranslation(ctx, "plugin_bug_report_crash_duration"),
+		formatCrashDuration(incident.DurationMs),
+		p.api.GetTranslation(ctx, "plugin_bug_report_crash_version"),
+		incident.Version,
+		p.api.GetTranslation(ctx, "plugin_bug_report_crash_id"),
+		incident.ID,
+		p.api.GetTranslation(ctx, "plugin_bug_report_crash_package"),
+		incident.ReportPath,
+	)
+	return plugin.QueryResult{
+		Title:    title,
+		SubTitle: subtitle,
+		Icon:     common.PluginBugReportIcon,
+		// The launcher re-sorts cached results by score, so preserve newest-first event ordering here.
+		Score: incident.DetectedAt,
+		Preview: plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeMarkdown,
+			PreviewData: preview,
+		},
+		Actions: p.buildCrashIncidentActions(incident),
+	}
 }
 
-func (p *BugReportPlugin) buildActions(enabled bool) []plugin.QueryResultAction {
+// buildCrashIncidentActions provides event-scoped packaging and issue actions.
+func (p *BugReportPlugin) buildCrashIncidentActions(incident diagnostic.CrashIncident) []plugin.QueryResultAction {
+	return []plugin.QueryResultAction{
+		{
+			Name:                   "i18n:plugin_bug_report_action_package_issue",
+			Icon:                   common.OpenContainingFolderIcon,
+			IsDefault:              true,
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				p.openCrashIssue(ctx, incident)
+			},
+		},
+		{
+			Name:                   "i18n:plugin_bug_report_action_open_package",
+			Icon:                   common.OpenContainingFolderIcon,
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				reportPath, _, err := p.ensureCrashReport(ctx, incident)
+				if err != nil {
+					p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_bug_report_notify_export_failed"), err.Error()))
+					return
+				}
+				if err := shell.OpenFileInFolder(reportPath); err != nil {
+					util.GetLogger().Warn(ctx, fmt.Sprintf("failed to open crash report package: %s", err.Error()))
+				}
+			},
+		},
+	}
+}
+
+// buildActions provides actions that are not tied to one crash event.
+func (p *BugReportPlugin) buildActions() []plugin.QueryResultAction {
 	actions := []plugin.QueryResultAction{}
-	if !enabled {
-		actions = append(actions, plugin.QueryResultAction{
-			Name:                   "i18n:plugin_bug_report_action_enable_restart",
-			Icon:                   common.ExecuteRunIcon,
-			IsDefault:              true,
-			PreventHideAfterAction: true,
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				p.enableAndRestart(ctx)
-			},
-		})
-		actions = append(actions, plugin.QueryResultAction{
-			Name:                   "i18n:plugin_bug_report_action_export_now",
-			Icon:                   common.PluginInstalledIcon,
-			PreventHideAfterAction: true,
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				p.exportDiagnostics(ctx)
-			},
-		})
-	} else {
-		actions = append(actions, plugin.QueryResultAction{
-			Name:                   "i18n:plugin_bug_report_action_export",
-			Icon:                   common.PluginInstalledIcon,
-			IsDefault:              true,
-			PreventHideAfterAction: true,
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				p.exportDiagnostics(ctx)
-			},
-		})
-		actions = append(actions, plugin.QueryResultAction{
-			Name:                   "i18n:plugin_bug_report_action_disable",
-			Icon:                   common.TrashIcon,
-			Hotkey:                 util.PrimaryHotkey("enter"),
-			PreventHideAfterAction: true,
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				p.disable(ctx)
-			},
-		})
-	}
+	actions = append(actions, plugin.QueryResultAction{
+		Name:                   "i18n:plugin_bug_report_action_export",
+		Icon:                   common.PluginInstalledIcon,
+		IsDefault:              true,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			p.exportDiagnostics(ctx)
+		},
+	})
 
 	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_bug_report_action_open_logs",
@@ -126,39 +165,65 @@ func (p *BugReportPlugin) buildActions(enabled bool) []plugin.QueryResultAction 
 	return actions
 }
 
-func (p *BugReportPlugin) enableAndRestart(ctx context.Context) {
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	previousLogLevel := util.NormalizeLogLevel(woxSetting.LogLevel.Get())
-	if _, err := diagnostic.GetManager().Enable(ctx, previousLogLevel); err != nil {
-		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_bug_report_notify_enable_failed"), err.Error()))
+// openCrashIssue prepares the selected package and opens its GitHub issue form.
+func (p *BugReportPlugin) openCrashIssue(ctx context.Context, incident diagnostic.CrashIncident) {
+	reportPath, created, err := p.ensureCrashReport(ctx, incident)
+	if err != nil {
+		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_bug_report_notify_export_failed"), err.Error()))
 		return
 	}
-	// New feature: bug aware mode trades log volume for crash observability, so
-	// it explicitly switches to DEBUG and remembers the user's prior level for
-	// disable-time restoration.
-	woxSetting.LogLevel.Set(setting.LogLevelDebug)
-	util.GetLogger().SetLevel(setting.LogLevelDebug)
-	plugin.GetPluginManager().GetUI().UpdateDiagnosticStatus(ctx, true)
-	if err := diagnostic.GetManager().StartSupervisorDetached(ctx, true); err != nil {
-		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_bug_report_notify_supervisor_failed"), err.Error()))
-		return
+	if err := shell.OpenFileInFolder(reportPath); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to open crash report package: %s", err.Error()))
 	}
-	p.api.Notify(ctx, "i18n:plugin_bug_report_notify_enabled")
-	ui.GetUIManager().ExitApp(ctx)
+	if err := shell.Open(crashIssueURL(incident)); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to open GitHub issue page for crash report: %s", err.Error()))
+	}
+	if created {
+		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_bug_report_notify_exported"), reportPath))
+	}
 }
 
-func (p *BugReportPlugin) disable(ctx context.Context) {
-	state, err := diagnostic.GetManager().Disable(ctx)
+// ensureCrashReport reuses an automatic package or creates one if it was removed.
+func (p *BugReportPlugin) ensureCrashReport(ctx context.Context, incident diagnostic.CrashIncident) (string, bool, error) {
+	if info, err := os.Stat(incident.ReportPath); err == nil && !info.IsDir() {
+		return incident.ReportPath, false, nil
+	}
+	reportPath, err := diagnostic.GetManager().ExportCrash(ctx)
 	if err != nil {
-		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_bug_report_notify_disable_failed"), err.Error()))
-		return
+		return "", false, err
 	}
-	if state.PreviousLogLevel != "" {
-		setting.GetSettingManager().GetWoxSetting(ctx).LogLevel.Set(state.PreviousLogLevel)
-		util.GetLogger().SetLevel(state.PreviousLogLevel)
+	incident.ReportPath = reportPath
+	if err := diagnostic.GetManager().SaveCrashIncident(incident); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to update crash incident package path: %s", err.Error()))
 	}
-	plugin.GetPluginManager().GetUI().UpdateDiagnosticStatus(ctx, false)
-	p.api.Notify(ctx, "i18n:plugin_bug_report_notify_disabled")
+	return reportPath, true, nil
+}
+
+// crashIssueURL pre-fills the GitHub issue title with the selected event time.
+func crashIssueURL(incident diagnostic.CrashIncident) string {
+	query := url.Values{}
+	query.Set("template", "bug_report.yml")
+	query.Set("title", fmt.Sprintf("[Crash] %s", util.FormatTimestampWithMs(incident.DetectedAt)))
+	return bugReportIssueURL[:len(bugReportIssueURL)-len("?template=bug_report.yml")] + "?" + query.Encode()
+}
+
+// formatCrashDuration keeps short startup crashes readable in result subtitles.
+func formatCrashDuration(durationMs int64) string {
+	if durationMs < 1000 {
+		return fmt.Sprintf("%d ms", durationMs)
+	}
+	return (time.Duration(durationMs) * time.Millisecond).Round(time.Millisecond).String()
+}
+
+// crashPackageStatus describes whether the event package can currently be opened.
+func crashPackageStatus(reportPath string) string {
+	if reportPath == "" {
+		return "not generated"
+	}
+	if _, err := os.Stat(reportPath); err != nil {
+		return "not found"
+	}
+	return reportPath
 }
 
 func (p *BugReportPlugin) exportDiagnostics(ctx context.Context) {

@@ -1,4 +1,4 @@
 interface:
   display_name: "Wox Memory Debug"
-  short_description: "Debug hidden Wox memory on Windows/macOS"
-  default_prompt: "Use $wox-memory-debug to diagnose hidden Wox core and Flutter memory usage on Windows or macOS."
+  short_description: "Check Go UI query and settings memory growth"
+  default_prompt: "Use $wox-memory-debug to run the Wox Go UI automation debug build, replay searches and settings open/close cycles, and diagnose retained memory growth."

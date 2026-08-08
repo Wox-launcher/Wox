@@ -4,12 +4,12 @@ This guide explains how Wox is split across the repository and how data moves th
 
 ## The big picture
 
-Wox is a desktop launcher with a Go core and a Flutter desktop UI. Third-party plugins do not run inside the Go process directly. They run inside dedicated language hosts and communicate with the core over WebSocket-based JSON-RPC.
+Wox is a desktop launcher whose Go core and native Go UI run in one process. Third-party plugins run inside dedicated language hosts and communicate with the core over WebSocket-based JSON-RPC.
 
 At a high level:
 
 ```text
-Flutter UI  <->  wox.core  <->  plugin hosts  <->  plugins
+Go UI + wox.core  <->  plugin hosts  <->  plugins
 ```
 
 ## Main components
@@ -22,7 +22,7 @@ Flutter UI  <->  wox.core  <->  plugin hosts  <->  plugins
 - built-in plugin execution
 - third-party plugin lifecycle and metadata loading
 - settings and data storage
-- WebSocket and HTTP endpoints used by the UI
+- the in-process UI contract and the small primary-instance control endpoint
 - packaging the final desktop runtime assets
 
 Areas worth knowing early:
@@ -30,9 +30,11 @@ Areas worth knowing early:
 - `wox.core/plugin/`: plugin contracts, manager, query/result models, host bridge
 - `wox.core/common/`: shared UI payloads and common runtime types
 - `wox.core/setting/`: setting definitions and persistence
+- `wox.core/appcontrol/`: the loopback-only `/ping`, `/show`, deeplink, and diagnostic restart controls
+- `wox.core/ui/`: launcher, retained widgets, automation contract, and native platform runtime
 - `wox.core/resource/`: embedded UI, host binaries, translations, other runtime resources
 
-### `wox.ui.flutter/wox`
+### `wox.core/ui`
 
 This is the desktop UI that users see. It renders:
 
@@ -42,7 +44,9 @@ This is the desktop UI that users see. It renders:
 - screenshot flows
 - webview previews and related native bridges
 
-The UI talks to `wox.core` over WebSocket and HTTP. It does not own plugin execution. Its job is to render state, send user intent back to the core, and host platform-specific presentation logic.
+The UI is compiled in the `wox.core` Go module and runs in the same process. It does not own plugin execution. Its job is to render state, send user intent back to the core, and host platform-specific presentation logic.
+
+Lifecycle, query/action execution, terminal subscriptions, and every core-to-UI update cross typed `Services`/`View` interfaces. Settings and catalog screens still have a transitional in-process adapter over the old router while those domains are migrated; it opens no listener. The only production loopback HTTP surface is `appcontrol`, and test automation is compiled only with the `wox_automation` build tag.
 
 ### `wox.plugin.host.nodejs` and `wox.plugin.host.python`
 
@@ -69,7 +73,7 @@ These are the SDKs used by third-party plugin authors. They provide:
 
 When a user types in Wox:
 
-1. the Flutter UI sends the query to `wox.core`
+1. the Go UI calls the typed query service in `wox.core`
 2. `wox.core` decides which built-in plugins and third-party plugins should run
 3. built-in plugins execute directly in Go
 4. third-party plugins are invoked through the matching plugin host
@@ -102,7 +106,7 @@ The plugin calls the SDK API, the host forwards the request to `wox.core`, and t
 Understanding the ownership boundary saves a lot of debugging time:
 
 - If the problem is about query routing, plugin metadata, settings persistence, or runtime contracts, start in `wox.core`.
-- If the problem is visual or input-related, start in `wox.ui.flutter/wox`.
+- If the problem is visual or input-related, start in `wox.core/ui`.
 - If a third-party plugin API works in one language but not another, inspect the host and SDK layers together.
 
 ## Repository workflow
@@ -111,7 +115,8 @@ The top-level `Makefile` is the entrypoint for cross-project development:
 
 - `make dev`: prepare shared resources and build plugin hosts
 - `make test`: run the Go test suite under `wox.core/test`
-- `make smoke`: run desktop smoke tests from `wox.test`
+- `make test-go-ui-unit`: run retained-widget and automation contract tests
+- `make test-go-ui-smoke`: run the authenticated native launcher smoke and visual golden
 - `make build`: build the full application and packaging outputs
 
 For changes that touch shared contracts, `make build` is the verification step that matters most.

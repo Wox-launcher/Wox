@@ -60,7 +60,7 @@ func NewFileSearchDB(ctx context.Context) (*FileSearchDB, error) {
 	dsn := dbPath + "?" +
 		"_journal_mode=WAL&" +
 		"_synchronous=NORMAL&" +
-		"_cache_size=2000&" +
+		"_cache_size=-4000&" +
 		"_foreign_keys=true&" +
 		"_busy_timeout=5000"
 
@@ -73,7 +73,7 @@ func NewFileSearchDB(ctx context.Context) (*FileSearchDB, error) {
 	// connections so queries and status polling can keep using the last
 	// committed snapshot instead of blocking behind the writer.
 	db.SetMaxOpenConns(4)
-	db.SetMaxIdleConns(4)
+	db.SetMaxIdleConns(2)
 	db.SetConnMaxLifetime(time.Hour)
 
 	fileSearchDB := &FileSearchDB{db: db, dbPath: dbPath}

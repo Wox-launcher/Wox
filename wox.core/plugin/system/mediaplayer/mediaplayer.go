@@ -78,7 +78,7 @@ type mediaContextData struct {
 	AppBundleID string `json:"appBundleId"`
 }
 
-// mediaPreviewData is the internal payload for Flutter's dedicated now-playing surface.
+// mediaPreviewData is the internal payload for UI's dedicated now-playing surface.
 type mediaPreviewData struct {
 	Title     string `json:"title"`
 	Artist    string `json:"artist"`
@@ -91,10 +91,10 @@ type mediaPreviewData struct {
 }
 
 type mediaTrackedResult struct {
-	playbackState       PlaybackState
-	artworkFingerprint  [sha256.Size]byte
-	trackFingerprint    [sha256.Size]byte
-	showOpenMediaAction bool
+	playbackState          PlaybackState
+	artworkFingerprint     [sha256.Size]byte
+	showOpenMediaAction    bool
+	preferredDefaultAction string
 }
 
 func (m *MediaPlayerPlugin) GetMetadata() plugin.Metadata {
@@ -199,7 +199,7 @@ func (m *MediaPlayerPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		return plugin.NewQueryResponse(results)
 	}
 
-	result := m.buildMediaResult(mediaInfo, false)
+	result := m.buildMediaResult(mediaInfo, false, "")
 
 	results = append(results, result)
 	response := plugin.NewQueryResponse(results)
@@ -220,9 +220,34 @@ func (m *MediaPlayerPlugin) queryGlobalControls(ctx context.Context, query plugi
 		return nil
 	}
 
-	result := m.buildMediaResult(mediaInfo, true)
+	// When the user types a specific command (e.g. "next"/"prev"), the result's
+	// default action should be that command instead of the state-aware play/pause.
+	preferredDefault := resolvePreferredDefaultCommand(query.RawQuery, actions)
+	result := m.buildMediaResult(mediaInfo, true, preferredDefault)
 	result.Score = mediaControlGlobalResultScore
 	return []plugin.QueryResult{result}
+}
+
+// resolvePreferredDefaultCommand picks the most specific matched command so a
+// global query's default action mirrors what the user asked for (exact over prefix).
+func resolvePreferredDefaultCommand(search string, actions []mediaControlAction) string {
+	normalized := strings.ToLower(strings.TrimSpace(search))
+	for _, action := range actions {
+		if action.command == normalized {
+			return action.command
+		}
+		for _, alias := range action.aliases {
+			if alias == normalized {
+				return action.command
+			}
+		}
+	}
+	for _, action := range actions {
+		if strings.HasPrefix(action.command, normalized) {
+			return action.command
+		}
+	}
+	return ""
 }
 
 // matchMediaControlActions resolves short command prefixes without making one-letter global input noisy.
@@ -256,8 +281,8 @@ func (a mediaControlAction) matches(search string) bool {
 }
 
 // buildMediaResult creates the shared media status result used by both the media keyword and global commands.
-func (m *MediaPlayerPlugin) buildMediaResult(mediaInfo *MediaInfo, showOpenMediaAction bool) plugin.QueryResult {
-	actions := m.buildMediaActions(mediaInfo)
+func (m *MediaPlayerPlugin) buildMediaResult(mediaInfo *MediaInfo, showOpenMediaAction bool, preferredDefaultCommand string) plugin.QueryResult {
+	actions := m.buildMediaActions(mediaInfo, preferredDefaultCommand)
 	if showOpenMediaAction {
 		actions = append(actions, m.buildOpenMediaAction())
 	}
@@ -266,23 +291,18 @@ func (m *MediaPlayerPlugin) buildMediaResult(mediaInfo *MediaInfo, showOpenMedia
 		Id:       uuid.NewString(),
 		Title:    mediaInfo.Title,
 		SubTitle: m.formatSubTitle(mediaInfo),
-		Icon:     m.formatIcon(mediaInfo, false),
+		Icon:     m.formatIcon(mediaInfo),
 		Preview:  m.formatPreview(mediaInfo),
 		Tails:    plugin.NewQueryResultTailTexts(m.formatProgress(mediaInfo)),
 		Actions:  actions,
 	}
 	m.trackMediaResult(result.Id, mediaTrackedResult{
-		playbackState:       mediaInfo.State,
-		artworkFingerprint:  sha256.Sum256(mediaInfo.Artwork),
-		trackFingerprint:    buildMediaTrackFingerprint(mediaInfo),
-		showOpenMediaAction: showOpenMediaAction,
+		playbackState:          mediaInfo.State,
+		artworkFingerprint:     sha256.Sum256(mediaInfo.Artwork),
+		showOpenMediaAction:    showOpenMediaAction,
+		preferredDefaultAction: preferredDefaultCommand,
 	})
 	return result
-}
-
-// buildMediaTrackFingerprint detects track changes even when consecutive items reuse the same artwork.
-func buildMediaTrackFingerprint(mediaInfo *MediaInfo) [sha256.Size]byte {
-	return sha256.Sum256([]byte(mediaInfo.Title + "\x00" + mediaInfo.Artist + "\x00" + mediaInfo.Album))
 }
 
 // trackMediaResult is nil-safe so tests and direct plugin construction still get refresh behavior.
@@ -294,12 +314,29 @@ func (m *MediaPlayerPlugin) trackMediaResult(resultId string, tracked mediaTrack
 }
 
 // buildMediaActions exposes one state-aware default action plus track navigation commands.
-func (m *MediaPlayerPlugin) buildMediaActions(mediaInfo *MediaInfo) []plugin.QueryResultAction {
-	defaultCommand := mediaControlPlay
-	defaultName := "i18n:plugin_mediaplayer_play"
-	if mediaInfo.State == PlaybackStatePlaying {
-		defaultCommand = mediaControlPause
+// preferredDefaultCommand overrides the state-aware default when the user typed a
+// specific media command (e.g. "next"/"prev" should default to the matching action).
+func (m *MediaPlayerPlugin) buildMediaActions(mediaInfo *MediaInfo, preferredDefaultCommand string) []plugin.QueryResultAction {
+	defaultCommand := preferredDefaultCommand
+	defaultName := ""
+	switch preferredDefaultCommand {
+	case mediaControlPlay:
+		defaultName = "i18n:plugin_mediaplayer_play"
+	case mediaControlPause:
 		defaultName = "i18n:plugin_mediaplayer_pause"
+	case mediaControlNext:
+		defaultName = "i18n:plugin_mediaplayer_next"
+	case mediaControlPrevious:
+		defaultName = "i18n:plugin_mediaplayer_previous"
+	}
+
+	if defaultCommand == "" {
+		defaultCommand = mediaControlPlay
+		defaultName = "i18n:plugin_mediaplayer_play"
+		if mediaInfo.State == PlaybackStatePlaying {
+			defaultCommand = mediaControlPause
+			defaultName = "i18n:plugin_mediaplayer_pause"
+		}
 	}
 
 	return []plugin.QueryResultAction{
@@ -361,7 +398,7 @@ func (m *MediaPlayerPlugin) formatSubTitle(mediaInfo *MediaInfo) string {
 	return newSubtitle
 }
 
-func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo, animateRecordChange bool) common.WoxImage {
+func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo) common.WoxImage {
 	if len(mediaInfo.Artwork) == 0 {
 		if mediaInfo.State == PlaybackStatePlaying {
 			return common.MediaPlayingIcon
@@ -376,10 +413,10 @@ func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo, animateRecordChange
 		}
 		return mediaIcon
 	}
-	return common.NewWoxImageLottie(buildRecordLottie(coverDataURI, mediaInfo.State == PlaybackStatePlaying, animateRecordChange))
+	return common.NewWoxImageBase64(coverDataURI)
 }
 
-// formatRecordArtworkDataURI keeps the animated result icon small and gives its center artwork a clean circular edge.
+// formatRecordArtworkDataURI keeps the result icon small and gives its artwork a clean circular edge.
 func formatRecordArtworkDataURI(artwork []byte) (string, bool) {
 	decodedArtwork, err := decodeArtworkImageData(artwork)
 	if err != nil {
@@ -399,30 +436,6 @@ func formatRecordArtworkDataURI(artwork []byte) (string, bool) {
 		return "", false
 	}
 	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(output.Bytes()), true
-}
-
-// buildRecordLottie mirrors the native media preview as a compact vinyl, artwork, and tonearm composition.
-func buildRecordLottie(coverDataURI string, isPlaying bool, animateRecordChange bool) string {
-	// A long composition keeps the one-shot tonearm cue from replaying on each 12-second record rotation.
-	rotation := `{"a":0,"k":0}`
-	tonearmPath := `{"a":1,"k":[{"t":0,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[69,34]]}]},{"t":15,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[84,33]]}]},{"t":107999,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[84,33]]}]}]}`
-	if isPlaying {
-		rotation = `{"a":1,"k":[{"t":0,"s":[0]},{"t":107999,"s":[108000]}]}`
-		tonearmPath = `{"a":1,"k":[{"t":0,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[84,33]]}]},{"t":15,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[69,34]]}]},{"t":107999,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[69,34]]}]}]}`
-	}
-	artworkScale := `{"a":0,"k":[43,43,100]}`
-	vinylScale := `{"a":0,"k":[100,100,100]}`
-	recordOpacity := `{"a":0,"k":100}`
-	if animateRecordChange {
-		artworkScale = `{"a":1,"k":[{"t":0,"s":[30,30,100]},{"t":18,"s":[43,43,100]}]}`
-		vinylScale = `{"a":1,"k":[{"t":0,"s":[72,72,100]},{"t":18,"s":[100,100,100]}]}`
-		recordOpacity = `{"a":1,"k":[{"t":0,"s":[0]},{"t":18,"s":[100]}]}`
-		if isPlaying {
-			tonearmPath = `{"a":1,"k":[{"t":0,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[84,33]]}]},{"t":18,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[84,33]]}]},{"t":33,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[69,34]]}]},{"t":107999,"s":[{"c":false,"i":[[0,0],[0,0]],"o":[[0,0],[0,0]],"v":[[80,14],[69,34]]}]}]}`
-		}
-	}
-
-	return fmt.Sprintf(`{"v":"5.7.4","fr":30,"ip":0,"op":108000,"w":100,"h":100,"nm":"Media Record","ddd":0,"assets":[{"id":"cover","w":96,"h":96,"u":"","p":%q,"e":1}],"layers":[{"ddd":0,"ind":1,"ty":4,"nm":"Spindle","ks":{"a":{"a":0,"k":[50,50,0]},"p":{"a":0,"k":[50,50,0]},"s":{"a":0,"k":[100,100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}},"ip":0,"op":108000,"st":0,"shapes":[{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[6,6]}},{"ty":"fl","c":{"a":0,"k":[0.90,0.84,0.75,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]}]},{"ddd":0,"ind":2,"ty":4,"nm":"Tonearm","ks":{"a":{"a":0,"k":[0,0,0]},"p":{"a":0,"k":[0,0,0]},"s":{"a":0,"k":[100,100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}},"ip":0,"op":108000,"st":0,"shapes":[{"ty":"gr","it":[{"ty":"sh","ks":%s},{"ty":"st","c":{"a":0,"k":[0.72,0.70,0.67,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":1.8},"lc":2,"lj":2},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[80,14]},"s":{"a":0,"k":[9,9]}},{"ty":"fl","c":{"a":0,"k":[0.30,0.28,0.26,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]}]},{"ddd":0,"ind":3,"ty":2,"nm":"Artwork","refId":"cover","ks":{"a":{"a":0,"k":[48,48,0]},"p":{"a":0,"k":[50,50,0]},"s":%s,"r":%s,"o":%s},"ip":0,"op":108000,"st":0},{"ddd":0,"ind":4,"ty":4,"nm":"Vinyl","ks":{"a":{"a":0,"k":[50,50,0]},"p":{"a":0,"k":[50,50,0]},"s":%s,"r":%s,"o":%s},"ip":0,"op":108000,"st":0,"shapes":[{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[88,88]}},{"ty":"fl","c":{"a":0,"k":[0.035,0.035,0.043,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[82,82]}},{"ty":"st","c":{"a":0,"k":[0.20,0.20,0.22,1]},"o":{"a":0,"k":65},"w":{"a":0,"k":1.1},"lc":1,"lj":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[70,70]}},{"ty":"st","c":{"a":0,"k":[0.15,0.15,0.17,1]},"o":{"a":0,"k":55},"w":{"a":0,"k":1},"lc":1,"lj":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]},{"ty":"gr","it":[{"ty":"el","p":{"a":0,"k":[50,50]},"s":{"a":0,"k":[58,58]}},{"ty":"st","c":{"a":0,"k":[0.11,0.11,0.13,1]},"o":{"a":0,"k":50},"w":{"a":0,"k":0.9},"lc":1,"lj":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}]}]}]}`, coverDataURI, tonearmPath, artworkScale, rotation, recordOpacity, vinylScale, rotation, recordOpacity)
 }
 
 // decodeArtworkImageData accepts the macOS base64 payload and Windows raw image bytes.
@@ -581,7 +594,7 @@ func (m *MediaPlayerPlugin) refreshMediaPlayer(ctx context.Context) {
 		subTitle := m.formatSubTitle(mediaInfo)
 		preview := m.formatPreview(mediaInfo)
 		tails := plugin.NewQueryResultTailTexts(m.formatProgress(mediaInfo))
-		actions := m.buildMediaActions(mediaInfo)
+		actions := m.buildMediaActions(mediaInfo, tracked.preferredDefaultAction)
 		if tracked.showOpenMediaAction {
 			actions = append(actions, m.buildOpenMediaAction())
 		}
@@ -589,19 +602,15 @@ func (m *MediaPlayerPlugin) refreshMediaPlayer(ctx context.Context) {
 		updatableResult.Title = &title
 		updatableResult.SubTitle = &subTitle
 		nextArtworkFingerprint := sha256.Sum256(mediaInfo.Artwork)
-		nextTrackFingerprint := buildMediaTrackFingerprint(mediaInfo)
-		trackChanged := tracked.trackFingerprint != nextTrackFingerprint
-		recordChanged := trackChanged || tracked.artworkFingerprint != nextArtworkFingerprint
 		var nextTracked *mediaTrackedResult
-		// Progress changes every second; leave the icon untouched so its tonearm transition only runs on meaningful state changes.
-		if tracked.playbackState != mediaInfo.State || recordChanged {
-			icon := m.formatIcon(mediaInfo, recordChanged)
+		if tracked.playbackState != mediaInfo.State || tracked.artworkFingerprint != nextArtworkFingerprint {
+			icon := m.formatIcon(mediaInfo)
 			updatableResult.Icon = &icon
 			updatedTracked := mediaTrackedResult{
-				playbackState:       mediaInfo.State,
-				artworkFingerprint:  nextArtworkFingerprint,
-				trackFingerprint:    nextTrackFingerprint,
-				showOpenMediaAction: tracked.showOpenMediaAction,
+				playbackState:          mediaInfo.State,
+				artworkFingerprint:     nextArtworkFingerprint,
+				showOpenMediaAction:    tracked.showOpenMediaAction,
+				preferredDefaultAction: tracked.preferredDefaultAction,
 			}
 			nextTracked = &updatedTracked
 		}

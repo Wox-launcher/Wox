@@ -38,7 +38,7 @@ type triggerKeywordConflictPreviewPlugin struct {
 	PluginId   string
 	PluginName string
 	// The preview now renders each conflicted plugin with its real icon. Carrying
-	// the normalized WoxImage here keeps Flutter on the same image contract as
+	// the normalized WoxImage here keeps UI on the same image contract as
 	// plugin settings instead of inventing a preview-only icon fallback.
 	Icon            common.WoxImage
 	TriggerKeywords []string
@@ -62,7 +62,7 @@ func (m *Manager) findTriggerKeywordConflict(keyword string) (TriggerKeywordConf
 func (m *Manager) findTriggerKeywordConflicts(targetKeyword string) []TriggerKeywordConflict {
 	ownersByKeyword := map[string][]*Instance{}
 
-	for _, pluginInstance := range m.instances {
+	for _, pluginInstance := range m.pluginInstancesSnapshot() {
 		if pluginInstance == nil || pluginInstance.Setting == nil || pluginInstance.Setting.Disabled.Get() {
 			continue
 		}

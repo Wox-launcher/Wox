@@ -3,9 +3,8 @@ set -euo pipefail
 
 samples=1
 interval_seconds=10
-budget_mb=200
 json=0
-process_names=("wox" "wox-ui" "wox-darwin-amd64" "wox-darwin-arm64")
+process_names=("wox" "wox-darwin-amd64" "wox-darwin-arm64")
 pids=()
 
 usage() {
@@ -15,7 +14,6 @@ Usage: sample-wox-memory-macos.sh [options]
 Options:
   --samples N       Number of samples to capture. Default: 1
   --interval N      Seconds between samples. Default: 10
-  --budget N        Budget in MB shown in output. Default: 200
   --pid PID         Include an explicit process id. May be repeated.
   --process NAME    Include an additional process executable name. May be repeated.
   --json            Emit JSON instead of a text table.
@@ -31,10 +29,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --interval|-i)
       interval_seconds="$2"
-      shift 2
-      ;;
-    --budget|-b)
-      budget_mb="$2"
       shift 2
       ;;
     --pid|-p)
@@ -86,19 +80,6 @@ contains() {
   return 1
 }
 
-role_for_process() {
-  local comm="$1"
-  local command="$2"
-  local name
-  name="${comm##*/}"
-
-  if [[ "$name" == "wox-ui" || "$command" == *"wox.ui.flutter"* || "$command" == *"/wox-ui"* ]]; then
-    echo "Flutter"
-  else
-    echo "Core"
-  fi
-}
-
 size_to_mb() {
   local value="$1"
   local number unit
@@ -142,21 +123,21 @@ json_escape() {
 }
 
 collect_process_rows() {
-  local pid comm command name explicit_match name_match path_match role memory_mb
+  local pid comm command name name_match path_match memory_mb
   while read -r pid comm; do
     [[ -z "${pid:-}" || -z "${comm:-}" ]] && continue
-    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
 
     if [[ "${#pids[@]}" -gt 0 ]]; then
       contains "$pid" "${pids[@]}" || continue
     else
+      command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
       name="${comm##*/}"
       name_match=1
       path_match=1
       if contains "$name" "${process_names[@]}"; then
         name_match=0
       fi
-      if [[ "$command" == *"/Wox/wox.core/"* || "$command" == *"/Wox/wox.ui.flutter/"* ]]; then
+      if [[ "$command" == *"/Wox/wox.core/"* ]]; then
         path_match=0
       fi
       if [[ "$name_match" -ne 0 && "$path_match" -ne 0 ]]; then
@@ -169,8 +150,7 @@ collect_process_rows() {
       continue
     fi
 
-    role="$(role_for_process "$comm" "$command")"
-    printf '%s\t%s\t%s\t%s\t%s\n' "$role" "$pid" "$name" "$memory_mb" "$comm"
+    printf '%s\t%s\t%s\t%s\t%s\n' "Wox" "$pid" "$name" "$memory_mb" "$comm"
   done < <(ps -axo pid=,comm=)
 }
 
@@ -178,10 +158,8 @@ emit_text_sample() {
   local sample="$1"
   local total="$2"
   local rows="$3"
-  local over_budget="False"
-  awk -v total="$total" -v budget="$budget_mb" 'BEGIN { exit !(total > budget) }' && over_budget="True"
 
-  printf 'Sample %s: TotalMB=%s BudgetMB=%s OverBudget=%s\n' "$sample" "$total" "$budget_mb" "$over_budget"
+  printf 'Sample %s: TotalMB=%s\n' "$sample" "$total"
   printf '%-8s %-8s %-24s %-24s %s\n' "Role" "Pid" "Name" "PhysicalFootprintMB" "Path"
   printf '%s\n' "$rows" | awk -F '\t' '{ printf "%-8s %-8s %-24s %-24s %s\n", $1, $2, $3, $4, $5 }'
 }
@@ -192,10 +170,8 @@ emit_json_sample() {
   local rows="$3"
   local first=1
   local role pid name memory path
-  local over_budget="false"
-  awk -v total="$total" -v budget="$budget_mb" 'BEGIN { exit !(total > budget) }' && over_budget="true"
 
-  printf '{"Sample":%s,"TotalMB":%s,"BudgetMB":%s,"OverBudget":%s,"Processes":[' "$sample" "$total" "$budget_mb" "$over_budget"
+  printf '{"Sample":%s,"TotalMB":%s,"Processes":[' "$sample" "$total"
   while IFS=$'\t' read -r role pid name memory path; do
     [[ -z "${role:-}" ]] && continue
     if [[ "$first" -eq 0 ]]; then
@@ -215,7 +191,7 @@ fi
 for ((sample = 1; sample <= samples; sample++)); do
   rows="$(collect_process_rows)"
   if [[ -z "$rows" ]]; then
-    echo "No Wox core or wox-ui process found. Pass --pid for debugger-launched processes with temporary names." >&2
+    echo "No Wox process found. Pass --pid for debugger-launched processes with temporary names." >&2
     exit 1
   fi
 

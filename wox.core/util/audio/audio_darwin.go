@@ -2,7 +2,7 @@ package audio
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework AVFoundation
+#cgo LDFLAGS: -framework AVFoundation -framework Foundation
 #include <stdlib.h>
 
 // prepareSoundFileMac loads and prepares an audio file. Returns 1 on success.

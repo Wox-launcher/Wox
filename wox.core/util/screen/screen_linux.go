@@ -93,6 +93,30 @@ void closeDisplay(Display* display) {
 */
 import "C"
 
+// getScreenGtkAtPoint maps a compositor coordinate to its monitor workarea.
+func getScreenGtkAtPoint(x, y int) (Size, error) {
+	if err := gtk.InitCheck(nil); err != nil {
+		return Size{}, err
+	}
+	defaultGDKDisplay, err := gdk.DisplayGetDefault()
+	if err != nil {
+		return Size{}, err
+	}
+
+	monitor, err := defaultGDKDisplay.GetMonitorAtPoint(x, y)
+	if err != nil {
+		return Size{}, err
+	}
+
+	area := monitor.GetWorkarea()
+	return Size{
+		X:      int(area.GetX()),
+		Y:      int(area.GetY()),
+		Width:  int(area.GetWidth()),
+		Height: int(area.GetHeight()),
+	}, nil
+}
+
 func getMouseScreenGtkPointer() (Size, int, int, error) {
 	err := gtk.InitCheck(nil)
 	if err != nil {
@@ -119,18 +143,8 @@ func getMouseScreenGtkPointer() (Size, int, int, error) {
 		return Size{}, 0, 0, err
 	}
 
-	monitor, err := defaultGDKDisplay.GetMonitorAtPoint(x, y)
-	if err != nil {
-		return Size{}, 0, 0, err
-	}
-
-	area := monitor.GetWorkarea()
-	return Size{
-		X:      int(area.GetX()),
-		Y:      int(area.GetY()),
-		Width:  int(area.GetWidth()),
-		Height: int(area.GetHeight()),
-	}, x, y, nil
+	size, err := getScreenGtkAtPoint(x, y)
+	return size, x, y, err
 }
 
 func GetMouseScreenGtk() (Size, error) {
@@ -154,6 +168,32 @@ func getPrimaryScreenGtk() (Size, error) {
 	}
 
 	monitor, err := defaultGDKDisplay.GetPrimaryMonitor()
+	if err != nil {
+		return Size{}, err
+	}
+	area := monitor.GetWorkarea()
+	return Size{
+		X:      int(area.GetX()),
+		Y:      int(area.GetY()),
+		Width:  int(area.GetWidth()),
+		Height: int(area.GetHeight()),
+	}, nil
+}
+
+// getStableScreenGtk returns a deterministic monitor when the desktop does not expose a primary monitor.
+func getStableScreenGtk() (Size, error) {
+	if size, err := getPrimaryScreenGtk(); err == nil {
+		return size, nil
+	}
+
+	if err := gtk.InitCheck(nil); err != nil {
+		return Size{}, err
+	}
+	defaultGDKDisplay, err := gdk.DisplayGetDefault()
+	if err != nil {
+		return Size{}, err
+	}
+	monitor, err := defaultGDKDisplay.GetMonitor(0)
 	if err != nil {
 		return Size{}, err
 	}
@@ -193,18 +233,32 @@ func getMouseScreenX11WithPointer() (Size, int, int, error) {
 
 func GetMouseScreen() Size {
 	if isWaylandSession() {
+		fallbackReason := "wayland-no-global-pointer"
+		if isHyprlandSession() {
+			pointerX, pointerY, pointerErr := getHyprlandCursorPosition()
+			if pointerErr == nil {
+				size, screenErr := getScreenGtkAtPoint(pointerX, pointerY)
+				if screenErr == nil {
+					setLastMouseScreenDebug(fmt.Sprintf("source=hyprland-ipc pointer=%d,%d screen=%d,%d %dx%d", pointerX, pointerY, size.X, size.Y, size.Width, size.Height))
+					return size
+				}
+				fallbackReason = fmt.Sprintf("hyprland-ipc-screen-failed pointer=%d,%d err=%v", pointerX, pointerY, screenErr)
+			} else {
+				fallbackReason = fmt.Sprintf("hyprland-ipc-failed err=%v", pointerErr)
+			}
+		}
+
 		// Wayland does not expose a trusted global pointer to regular clients.
 		// Do not fall back to X11/XRandR while the session is Wayland: DISPLAY may
 		// only describe the XWayland compatibility server, whose pointer and monitor
 		// state can disagree with the compositor that actually places the window.
-		// Return a neutral monitor only for sizing/logging; Flutter skips absolute
-		// placement on native Wayland and lets the compositor choose the screen.
-		size, err := getPrimaryScreenGtk()
+		size, err := getStableScreenGtk()
 		if err == nil {
-			setLastMouseScreenDebug(fmt.Sprintf("source=gtk-wayland-primary screen=%d,%d %dx%d reason=wayland-no-global-pointer", size.X, size.Y, size.Width, size.Height))
+			setLastMouseScreenDebug(fmt.Sprintf("source=gtk-wayland-stable screen=%d,%d %dx%d reason=%s", size.X, size.Y, size.Width, size.Height, fallbackReason))
 			return size
 		}
-		setLastMouseScreenDebug(fmt.Sprintf("source=wayland-primary-failed err=%v", err))
+		setLastMouseScreenDebug(fmt.Sprintf("source=wayland-stable-failed err=%v", err))
+		return Size{}
 	} else {
 		size, pointerX, pointerY, err := getMouseScreenX11WithPointer()
 		if err == nil {

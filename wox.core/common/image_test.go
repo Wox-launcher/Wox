@@ -38,6 +38,12 @@ func TestConvertIconWithSizeMaybeLazyDefersLargeRasterIcon(t *testing.T) {
 	}
 }
 
+func TestParseWoxImageRejectsRemovedLottieType(t *testing.T) {
+	if _, err := ParseWoxImage("lottie:{}"); err == nil {
+		t.Fatal("expected removed lottie image type to be rejected")
+	}
+}
+
 func TestConvertIconWithSizeMaybeLazyKeepsSmallRasterSynchronous(t *testing.T) {
 	initConvertIconTestLocation(t)
 	sourcePath := writeTestImage(t, 64, 64)
@@ -97,6 +103,31 @@ func TestWoxImage_Emoji(t *testing.T) {
 	path := fmt.Sprintf("%s/%s.png", util.GetLocation().GetImageCacheDirectory(), uuid.NewString())
 	imaging.Save(img, path)
 	t.Log(path)
+}
+
+func TestWoxImageEmojiCodePointCandidates(t *testing.T) {
+	tests := []struct {
+		name  string
+		emoji string
+		want  []string
+	}{
+		{name: "variation selector fallback", emoji: "⚙️", want: []string{"2699-fe0f", "2699"}},
+		{name: "single code point", emoji: "😀", want: []string{"1f600"}},
+		{name: "ZWJ sequence", emoji: "👨‍👩‍👧‍👦", want: []string{"1f468-200d-1f469-200d-1f467-200d-1f466"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			icon := NewWoxImageEmoji(tt.emoji)
+			got, err := icon.emojiImageCodePointCandidates(tt.emoji)
+			if err != nil {
+				t.Fatalf("emojiImageCodePointCandidates(%q): %v", tt.emoji, err)
+			}
+			if fmt.Sprint(got) != fmt.Sprint(tt.want) {
+				t.Fatalf("emojiImageCodePointCandidates(%q) = %v, want %v", tt.emoji, got, tt.want)
+			}
+		})
+	}
 }
 
 func TestWoxImage_ToImage_Base64JPEG(t *testing.T) {

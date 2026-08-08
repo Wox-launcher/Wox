@@ -1,13 +1,12 @@
 module wox
 
-go 1.26
+go 1.26.5
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/cdfmlr/ellipsis v0.0.1
 	github.com/disintegration/imaging v1.6.2
-	github.com/forPelevin/gomoji v1.4.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gen2brain/malgo v0.11.25
 	github.com/go-ole/go-ole v1.3.0
@@ -31,7 +30,6 @@ require (
 	github.com/samber/lo v1.52.0
 	github.com/saracen/fastzip v0.2.0
 	github.com/shopspring/decimal v1.4.0
-	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/stretchr/testify v1.11.1
 	github.com/struCoder/pidusage v0.2.1
@@ -40,6 +38,7 @@ require (
 	github.com/tmc/langchaingo v0.1.14
 	github.com/wissance/stringFormatter v1.6.1
 	github.com/yalue/onnxruntime_go v1.27.0
+	github.com/yuin/goldmark v1.7.13
 	github.com/zalando/go-keyring v0.2.1
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.44.0

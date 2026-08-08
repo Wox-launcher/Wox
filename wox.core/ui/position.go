@@ -12,7 +12,7 @@ import (
 //
 // IMPORTANT: We use logical coordinates throughout the system for consistency.
 // The screen package returns logical coordinates (DPI-adjusted), and we calculate
-// window positions in logical space. The Flutter frontend will convert these back
+// window positions in logical space. The UI frontend will convert these back
 // to physical coordinates using the correct monitor's DPI.
 //
 // Window positioning strategy:
@@ -23,7 +23,7 @@ import (
 //   The window height is calculated based on:
 //   1. User's configured maximum result count (MaxResultCount)
 //   2. Theme padding values (AppPadding, ResultContainerPadding, ResultItemPadding)
-//   3. Base heights from Flutter UI constants (QueryBoxBaseHeight, ResultItemBaseHeight)
+//   3. Base heights shared with the Go UI (QueryBoxBaseHeight, ResultItemBaseHeight)
 //
 //   Formula:
 //   - QueryBoxHeight = QueryBoxBaseHeight + AppPaddingTop + AppPaddingBottom

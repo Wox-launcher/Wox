@@ -22,7 +22,7 @@ const (
 	PluginSettingDefinitionTypeTable         PluginSettingDefinitionType = "table"
 
 	// Wox-internal setting types used by system plugins. These are not part
-	// of the public plugin API and are rendered by dedicated Flutter widgets.
+	// of the public plugin API and are rendered by dedicated UI widgets.
 	PluginSettingDefinitionTypeDictationHotkey PluginSettingDefinitionType = "dictationHotkey"
 	PluginSettingDefinitionTypeDictationModel  PluginSettingDefinitionType = "dictationModel"
 	PluginSettingDefinitionTypeOCRModel        PluginSettingDefinitionType = "ocrModel"

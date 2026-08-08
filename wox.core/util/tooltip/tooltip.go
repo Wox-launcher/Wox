@@ -52,7 +52,7 @@ type Options struct {
 	AnchorHeight  float64
 }
 
-// Show renders a native tooltip window that is independent of the Flutter
+// Show renders a native tooltip window that is independent of the UI
 // launcher surface, so it can extend beyond the launcher bounds.
 func Show(ctx context.Context, opts Options) {
 	if opts.Text == "" {
@@ -139,7 +139,7 @@ type tooltipPlacement struct {
 }
 
 // computePlacement keeps side-specific tooltip positioning in the native tooltip
-// layer so Flutter only needs to report the anchor bounds.
+// layer so UI only needs to report the anchor bounds.
 func computePlacement(opts Options, width float64, height float64) tooltipPlacement {
 	anchor := tooltipRect{
 		X:      opts.AnchorX,
@@ -246,7 +246,7 @@ func normalizeSide(side string) (string, bool) {
 }
 
 // resolveTooltipWorkArea returns the logical work area for the display that owns
-// the anchor, matching the coordinate space reported by the Flutter launcher.
+// the anchor, matching the coordinate space reported by the UI launcher.
 func resolveTooltipWorkArea(anchor tooltipRect) tooltipRect {
 	displays, err := screen.ListDisplays()
 	if err != nil || len(displays) == 0 {

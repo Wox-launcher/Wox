@@ -55,7 +55,7 @@ type WoxSetting struct {
 	MaxResultCount *WoxSettingValue[int]
 	// UiDensity keeps launcher text and control sizing in one user preference.
 	// The setting is stored as an enum instead of individual dimensions so Go
-	// window estimates and Flutter rendering can derive the same compact,
+	// window estimates and UI rendering can derive the same compact,
 	// normal, and comfortable sizes without expanding the settings DTO.
 	UiDensity                 *WoxSettingValue[UiDensity]
 	ThemeId                   *WoxSettingValue[string]

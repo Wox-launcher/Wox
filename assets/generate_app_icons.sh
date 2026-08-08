@@ -350,17 +350,11 @@ def save_icns(path):
 
 
 ico_sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
-mac_iconset_dir = os.path.join(repo_root, "wox.ui.flutter", "wox", "macos", "Runner", "Assets.xcassets", "AppIcon.appiconset")
-
 save_ico(os.path.join(assets_dir, "app.ico"), ico_sizes)
 save_icns(os.path.join(assets_dir, "mac", "app.icns"))
 
 save_png(os.path.join(repo_root, "wox.core", "resource", "app.png"), 512)
 save_ico(os.path.join(repo_root, "wox.core", "resource", "app.ico"), ico_sizes)
-save_ico(os.path.join(repo_root, "wox.ui.flutter", "wox", "windows", "runner", "resources", "app_icon.ico"), ico_sizes)
-
-for icon_size in [16, 32, 64, 128, 256, 512, 1024]:
-    save_png(os.path.join(mac_iconset_dir, f"app_icon_{icon_size}.png"), icon_size)
 
 log("image resources complete")
 PY

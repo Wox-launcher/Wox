@@ -1656,7 +1656,6 @@ export interface PublicAPI {
  * - `svg`: SVG string content
  * - `url`: HTTP/HTTPS URL to an image
  * - `emoji`: Emoji character
- * - `lottie`: Lottie animation JSON URL or data
  *
  * @example
  * ```typescript
@@ -1676,7 +1675,7 @@ export interface PublicAPI {
  * { ImageType: "url", ImageData: "https://example.com/icon.png" }
  * ```
  */
-export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji" | "lottie"
+export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji"
 
 /**
  * Image representation in Wox.
@@ -1719,7 +1718,6 @@ export interface WoxImage {
    * - `svg`: SVG string content
    * - `url`: HTTP/HTTPS URL
    * - `emoji`: Single emoji character
-   * - `lottie`: Lottie JSON URL or data
    */
   ImageData: string
 }

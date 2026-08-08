@@ -99,7 +99,7 @@ type pluginQueryInput struct {
 	query Query
 	// metadataLayout is the layout derived from plugin metadata before Plugin.Query runs.
 	metadataLayout QueryLayout
-	// queryContext is the backend-owned query classification returned to Flutter.
+	// queryContext is the backend-owned query classification returned to UI.
 	queryContext QueryContext
 	// blocked means query requirements produced a settings row instead of calling Plugin.Query.
 	blocked bool
@@ -153,11 +153,12 @@ func newQueryResultSet(query Query) *QueryResultSet {
 }
 
 type Manager struct {
-	instances       []*Instance
-	systemPluginsWg sync.WaitGroup // waits for all system plugins to finish loading
-	ui              common.UI
+	instances          []*Instance
+	instancesMu        sync.RWMutex
+	systemPluginsReady chan struct{}
+	ui                 common.UI
 
-	// Query pipelines are concurrent in core even though Flutter displays only
+	// Query pipelines are concurrent in core even though UI displays only
 	// one active query. Key by session and query id so a late pipeline cannot
 	// overwrite the result snapshot needed by another query's final response.
 	sessionQueryResultCache *util.HashMap[string, *util.HashMap[string, *QueryResultSet]]
@@ -185,6 +186,19 @@ type Manager struct {
 	// Plugins still return ordinary WoxImage values; manager creates these tokens
 	// only after result IDs, query IDs, and surface sizes are known.
 	lazyResultIcons *util.HashMap[string, *lazyResultIconEntry]
+
+	// hostRestartMu serializes shared runtime host restarts (settings/uninstall
+	// and the host watchdog) so a dead host can never be restarted concurrently.
+	hostRestartMu sync.Mutex
+	// hostWatchdogStates tracks watchdog restart attempts per runtime, guarded by
+	// hostRestartMu, so a plugin that keeps crashing the shared host backs off.
+	hostWatchdogStates map[string]*hostWatchdogState
+	// hostWatchdogStop is closed to stop the health monitor during shutdown.
+	hostWatchdogStop chan struct{}
+	// hostWatchdogDone is closed after the monitor has fully exited.
+	hostWatchdogDone      chan struct{}
+	hostWatchdogLifecycle sync.Mutex
+	hostWatchdogStarted   bool
 }
 
 const (
@@ -196,6 +210,7 @@ const (
 func GetPluginManager() *Manager {
 	managerOnce.Do(func() {
 		managerInstance = &Manager{
+			systemPluginsReady:          make(chan struct{}),
 			sessionQueryResultCache:     util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
 			debounceQueryTimer:          util.NewHashMap[string, *debounceTimer](),
 			aiProviders:                 util.NewHashMap[string, ai.Provider](),
@@ -206,6 +221,9 @@ func GetPluginManager() *Manager {
 			glanceActions:               util.NewHashMap[string, GlanceAction](),
 			sessionPluginQueries:        util.NewHashMap[string, *sessionPluginQueryState](),
 			lazyResultIcons:             util.NewHashMap[string, *lazyResultIconEntry](),
+			hostWatchdogStates:          map[string]*hostWatchdogState{},
+			hostWatchdogStop:            make(chan struct{}),
+			hostWatchdogDone:            make(chan struct{}),
 		}
 		logger = util.GetLogger()
 	})
@@ -225,6 +243,9 @@ func (m *Manager) Start(ctx context.Context, ui common.UI) error {
 		m.startScriptPluginMonitoring(util.NewTraceContext())
 	})
 
+	// Start shared runtime host health monitoring
+	m.startHostWatchdog(ctx)
+
 	util.Go(ctx, "start store manager", func() {
 		GetStoreManager().Start(util.NewTraceContext())
 	})
@@ -233,6 +254,10 @@ func (m *Manager) Start(ctx context.Context, ui common.UI) error {
 }
 
 func (m *Manager) Stop(ctx context.Context) {
+	// Stop host health monitoring before tearing down hosts so the watchdog
+	// cannot mistake an intentional shutdown for a dead host.
+	m.stopHostWatchdog()
+
 	// Stop script plugin monitoring
 	if m.scriptPluginWatcher != nil {
 		m.scriptPluginWatcher.Close()
@@ -241,6 +266,33 @@ func (m *Manager) Stop(ctx context.Context) {
 	for _, host := range AllHosts {
 		host.Stop(ctx)
 	}
+}
+
+// pluginInstancesSnapshot returns a stable slice for concurrent readers.
+func (m *Manager) pluginInstancesSnapshot() []*Instance {
+	m.instancesMu.RLock()
+	defer m.instancesMu.RUnlock()
+	return append([]*Instance(nil), m.instances...)
+}
+
+func (m *Manager) appendPluginInstance(instance *Instance) {
+	m.instancesMu.Lock()
+	defer m.instancesMu.Unlock()
+	m.instances = append(m.instances, instance)
+}
+
+// removePluginInstances updates the shared instance list without racing readers.
+func (m *Manager) removePluginInstances(shouldRemove func(*Instance) bool) {
+	m.instancesMu.Lock()
+	defer m.instancesMu.Unlock()
+
+	remaining := m.instances[:0]
+	for _, instance := range m.instances {
+		if !shouldRemove(instance) {
+			remaining = append(remaining, instance)
+		}
+	}
+	m.instances = remaining
 }
 
 func (m *Manager) SetActiveBrowserUrl(url string) {
@@ -383,7 +435,7 @@ func (m *Manager) ReloadPlugin(ctx context.Context, metadata Metadata) error {
 		return fmt.Errorf("unsupported runtime: %s", metadata.Runtime)
 	}
 
-	pluginInstance, pluginInstanceExist := lo.Find(m.instances, func(item *Instance) bool {
+	pluginInstance, pluginInstanceExist := lo.Find(m.pluginInstancesSnapshot(), func(item *Instance) bool {
 		return item.Metadata.Id == metadata.Id
 	})
 	if pluginInstanceExist {
@@ -436,7 +488,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 	}
 	instance.Setting = pluginSetting
 
-	m.instances = append(m.instances, instance)
+	m.appendPluginInstance(instance)
 
 	if pluginSetting.Disabled.Get() {
 		logger.Info(ctx, fmt.Errorf("[%s HOST] plugin is disabled by user, skip init: %s", host.GetRuntime(ctx), metadata.GetName(ctx)).Error())
@@ -482,13 +534,9 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
 	m.deactivatePlugin(ctx, pluginInstance)
 
-	var newInstances []*Instance
-	for _, instance := range m.instances {
-		if instance.Metadata.Id != pluginInstance.Metadata.Id {
-			newInstances = append(newInstances, instance)
-		}
-	}
-	m.instances = newInstances
+	m.removePluginInstances(func(instance *Instance) bool {
+		return instance.Metadata.Id == pluginInstance.Metadata.Id
+	})
 }
 
 // DisablePlugin marks a plugin disabled and releases its runtime resources
@@ -587,6 +635,11 @@ func (m *Manager) clearRuntimeCallbacks(pluginInstance *Instance) {
 }
 
 func (m *Manager) RestartHostForRuntime(ctx context.Context, runtime Runtime, skipPluginIDs []string, progressCallback UninstallProgressCallback) error {
+	// Serialize with the host watchdog so a dead host is never restarted twice
+	// concurrently (watchdog + settings/uninstall).
+	m.hostRestartMu.Lock()
+	defer m.hostRestartMu.Unlock()
+
 	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
 		return strings.EqualFold(string(item.GetRuntime(ctx)), string(runtime))
 	})
@@ -594,16 +647,24 @@ func (m *Manager) RestartHostForRuntime(ctx context.Context, runtime Runtime, sk
 		return fmt.Errorf("unsupported runtime: %s", runtime)
 	}
 
+	return m.restartHostInternal(ctx, pluginHost, skipPluginIDs, progressCallback)
+}
+
+// restartHostInternal stops and restarts a shared runtime host process, then
+// reloads every plugin of that runtime so the shared process returns to a
+// consistent state. It is shared by user-triggered restarts (settings/uninstall)
+// and the host watchdog, so it must be called with m.hostRestartMu held.
+func (m *Manager) restartHostInternal(ctx context.Context, pluginHost Host, skipPluginIDs []string, progressCallback UninstallProgressCallback) error {
+	runtime := pluginHost.GetRuntime(ctx)
+
 	skipPluginIDSet := make(map[string]struct{}, len(skipPluginIDs))
 	for _, pluginID := range skipPluginIDs {
 		skipPluginIDSet[pluginID] = struct{}{}
 	}
 
 	var reloadMetadataList []Metadata
-	var nextInstances []*Instance
-	for _, instance := range m.instances {
+	for _, instance := range m.pluginInstancesSnapshot() {
 		if !strings.EqualFold(instance.Metadata.Runtime, string(runtime)) {
-			nextInstances = append(nextInstances, instance)
 			continue
 		}
 		if _, shouldSkip := skipPluginIDSet[instance.Metadata.Id]; shouldSkip {
@@ -625,7 +686,9 @@ func (m *Manager) RestartHostForRuntime(ctx context.Context, runtime Runtime, sk
 
 	// Replace stale runtime instances only after the new host is available, then rebuild the
 	// remaining plugins from metadata so the shared runtime returns to a consistent state.
-	m.instances = nextInstances
+	m.removePluginInstances(func(instance *Instance) bool {
+		return strings.EqualFold(instance.Metadata.Runtime, string(runtime))
+	})
 
 	if len(reloadMetadataList) == 0 {
 		return nil
@@ -653,75 +716,54 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 	start := util.GetSystemTimestamp()
 	logger.Info(ctx, fmt.Sprintf("start loading system plugins, found %d system plugins", len(AllSystemPlugin)))
 
-	// Add all plugins to wait group before starting goroutines
-	m.systemPluginsWg.Add(len(AllSystemPlugin))
-
-	loadedInstances := make([]*Instance, len(AllSystemPlugin))
-	for i, p := range AllSystemPlugin {
-		index := i
-		plugin := p
+	// Native startup invokes plugin loading on the UI thread before the platform
+	// event loop begins. Keep system plugin initialization on that thread because
+	// plugins may synchronously call mainthread; waiting here for parallel plugin
+	// goroutines would deadlock with their dispatch to the blocked UI thread.
+	for _, plugin := range AllSystemPlugin {
 		metadata := plugin.GetMetadata()
-		pluginName := metadata.GetName(ctx)
-
-		util.Go(ctx, fmt.Sprintf("load system plugin <%s>", pluginName), func() {
-			defer m.systemPluginsWg.Done()
-
-			metadata := plugin.GetMetadata()
-			// System plugins use Wox's central i18n keys directly. The old path
-			// flattened every central language file into every system plugin metadata,
-			// which duplicated the same translation maps across all system plugins.
-			// Metadata.translate already falls back to TranslateWox, so keeping the
-			// central translations owned by the i18n manager preserves behavior while
-			// avoiding the per-plugin live heap copy.
-			instance := &Instance{
-				Metadata:              metadata,
-				Plugin:                plugin,
-				Host:                  nil,
-				IsSystemPlugin:        true,
-				RuntimeLoaded:         true,
-				PluginDirectory:       metadata.Directory,
-				LoadStartTimestamp:    util.GetSystemTimestamp(),
-				LoadFinishedTimestamp: util.GetSystemTimestamp(),
-			}
-			instance.API = NewAPI(instance)
-
-			startTimestamp := util.GetSystemTimestamp()
-			pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions.ToMap())
-			if settingErr != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.GetName(ctx), settingErr.Error()))
-				return
-			}
-
-			instance.Setting = pluginSetting
-			if util.GetSystemTimestamp()-startTimestamp > 100 {
-				logger.Warn(ctx, fmt.Sprintf("load system plugin[%s] setting too slow, cost %d ms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
-			}
-
-			if pluginSetting.Disabled.Get() {
-				logger.Info(ctx, fmt.Sprintf("system plugin is disabled by user, skip init: %s", metadata.GetName(ctx)))
-				loadedInstances[index] = instance
-				return
-			}
-
-			// Init plugin BEFORE adding to instances list
-			// This ensures the plugin is fully initialized before it can be queried
-			m.initPlugin(util.NewTraceContext(), instance)
-
-			// Bug fix: system plugins initialize in parallel, but appending to the
-			// shared manager slice from those goroutines races and can drop a
-			// plugin from one CI run. Store each initialized instance in a stable
-			// slot, then publish the slice on this goroutine after the wait so
-			// global queries always see the full system plugin set.
-			loadedInstances[index] = instance
-		})
-	}
-
-	m.systemPluginsWg.Wait()
-	for _, instance := range loadedInstances {
-		if instance != nil {
-			m.instances = append(m.instances, instance)
+		// System plugins use Wox's central i18n keys directly. The old path
+		// flattened every central language file into every system plugin metadata,
+		// which duplicated the same translation maps across all system plugins.
+		// Metadata.translate already falls back to TranslateWox, so keeping the
+		// central translations owned by the i18n manager preserves behavior while
+		// avoiding the per-plugin live heap copy.
+		instance := &Instance{
+			Metadata:              metadata,
+			Plugin:                plugin,
+			Host:                  nil,
+			IsSystemPlugin:        true,
+			RuntimeLoaded:         true,
+			PluginDirectory:       metadata.Directory,
+			LoadStartTimestamp:    util.GetSystemTimestamp(),
+			LoadFinishedTimestamp: util.GetSystemTimestamp(),
 		}
+		instance.API = NewAPI(instance)
+
+		startTimestamp := util.GetSystemTimestamp()
+		pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions.ToMap())
+		if settingErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.GetName(ctx), settingErr.Error()))
+			continue
+		}
+
+		instance.Setting = pluginSetting
+		if util.GetSystemTimestamp()-startTimestamp > 100 {
+			logger.Warn(ctx, fmt.Sprintf("load system plugin[%s] setting too slow, cost %d ms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
+		}
+		if pluginSetting.Disabled.Get() {
+			logger.Info(ctx, fmt.Sprintf("system plugin is disabled by user, skip init: %s", metadata.GetName(ctx)))
+			// Keep the instance discoverable so EnablePlugin can initialize it later.
+			m.appendPluginInstance(instance)
+			continue
+		}
+
+		// Init plugin BEFORE adding to instances list
+		// This ensures the plugin is fully initialized before it can be queried
+		m.initPlugin(util.NewTraceContext(), instance)
+		m.appendPluginInstance(instance)
 	}
+	close(m.systemPluginsReady)
 
 	logger.Debug(ctx, fmt.Sprintf("finish loading system plugins, cost %d ms", util.GetSystemTimestamp()-start))
 }
@@ -1010,7 +1052,7 @@ func (m *Manager) reloadScriptPlugin(ctx context.Context, scriptPath, reason str
 	}
 
 	// Find and unload existing plugin instance if any
-	existingInstance, exists := lo.Find(m.instances, func(instance *Instance) bool {
+	existingInstance, exists := lo.Find(m.pluginInstancesSnapshot(), func(instance *Instance) bool {
 		return instance.Metadata.Id == metadata.Id
 	})
 	if exists {
@@ -1044,7 +1086,7 @@ func (m *Manager) unloadScriptPluginByPath(ctx context.Context, scriptPath strin
 
 	// Find plugin instance by script file name
 	var pluginToUnload *Instance
-	for _, instance := range m.instances {
+	for _, instance := range m.pluginInstancesSnapshot() {
 		if instance.Metadata.Runtime == string(PLUGIN_RUNTIME_SCRIPT) && instance.Metadata.Entry == fileName {
 			pluginToUnload = instance
 			break
@@ -1062,15 +1104,15 @@ func (m *Manager) unloadScriptPluginByPath(ctx context.Context, scriptPath strin
 // WaitForSystemPlugins blocks until all system plugins have finished loading and initializing.
 // This is useful for tests or callers that need to ensure all plugins are ready before querying.
 func (m *Manager) WaitForSystemPlugins() {
-	m.systemPluginsWg.Wait()
+	<-m.systemPluginsReady
 }
 
 func (m *Manager) GetPluginInstances() []*Instance {
-	return m.instances
+	return m.pluginInstancesSnapshot()
 }
 
 func (m *Manager) GetPluginInstanceById(pluginId string) *Instance {
-	for _, instance := range m.instances {
+	for _, instance := range m.pluginInstancesSnapshot() {
 		if instance.Metadata.Id == pluginId {
 			return instance
 		}
@@ -1769,7 +1811,7 @@ func (m *Manager) normalizeListPreviewData(ctx context.Context, pluginInstance *
 
 func (m *Manager) normalizePreviewMetadata(ctx context.Context, pluginInstance *Instance, preview WoxPreview) WoxPreview {
 	// PreviewTags are the UI-facing metadata contract. Translate them in core so
-	// Flutter only consumes one tag list and does not need to know about the
+	// UI only consumes one tag list and does not need to know about the
 	// deprecated key/value PreviewProperties compatibility shape.
 	for i := range preview.PreviewTags {
 		preview.PreviewTags[i].Label = m.translatePlugin(ctx, pluginInstance, preview.PreviewTags[i].Label)
@@ -1882,8 +1924,8 @@ func (m *Manager) startSessionQueryCache(query Query) {
 
 	sessionQueries, _ := m.sessionQueryResultCache.LoadOrStore(query.SessionId, util.NewHashMap[string, *QueryResultSet]())
 
-	// Bug fix: a UI session can have multiple backend query pipelines in flight
-	// because WebSocket requests and plugin responses are handled concurrently.
+	// A UI session can have multiple backend query pipelines in flight because UI
+	// requests and plugin responses are handled concurrently.
 	// Store every query under its own query id so a late old query cannot erase
 	// the result cache required to send the newer query's final response.
 	sessionQueries.Store(query.Id, newQueryResultSet(query))
@@ -1915,7 +1957,7 @@ func (m *Manager) pruneSessionQueryCache(sessionQueries *util.HashMap[string, *Q
 	// Query caches are now keyed by query id, so without a small cap every typed
 	// character would leave a completed result set behind. Keep the newest sets
 	// plus the query that was just started; old non-current responses are still
-	// safe to drop because Flutter ignores them by query id.
+	// safe to drop because UI ignores them by query id.
 	for sessionQueries.Len() > maxCachedQueriesPerSession && len(entries) > 0 {
 		if entries[0].queryId == keepQueryId {
 			entries = entries[1:]
@@ -1972,7 +2014,7 @@ func (m *Manager) clearLazyResultIconsForSessionExcept(sessionId string, keepQue
 
 	// Lazy image tokens are scoped to the polished query result that created them.
 	// When the same launcher session starts a newer query, old tokens should stop
-	// resolving so a late Flutter image request cannot hydrate an icon for stale UI.
+	// resolving so a late UI image request cannot hydrate an icon for stale UI.
 	var tokensToDelete []string
 	m.lazyResultIcons.Range(func(token string, entry *lazyResultIconEntry) bool {
 		if entry != nil && entry.SessionId == sessionId && entry.QueryId != keepQueryId {
@@ -1983,6 +2025,17 @@ func (m *Manager) clearLazyResultIconsForSessionExcept(sessionId string, keepQue
 	for _, token := range tokensToDelete {
 		m.lazyResultIcons.Delete(token)
 	}
+}
+
+// ClearSessionState drops query-owned caches after an independent UI session is destroyed.
+func (m *Manager) ClearSessionState(ctx context.Context, sessionId string) {
+	if sessionId == "" {
+		return
+	}
+	m.sessionQueryResultCache.Delete(sessionId)
+	m.sessionPluginQueries.Delete(sessionId)
+	m.clearLazyResultIconsForSessionExcept(sessionId, "")
+	logger.Info(ctx, fmt.Sprintf("cleared plugin session state: %s", sessionId))
 }
 
 func (m *Manager) convertResultIcon(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultId string, resultTitle string, icon common.WoxImage) common.WoxImage {
@@ -2013,7 +2066,9 @@ func (m *Manager) convertResultIconWithRecorder(ctx context.Context, pluginInsta
 		return convertedIcon
 	}
 
-	// Lazy load markers are returned when the plugin-provided icon is too large to send directly through the WebSocket. They contain the original source plus a token that can be used to retrieve the converted thumbnail later. If parsing fails, fall back to returning the lazy marker itself so at least some icon gets to Flutter instead of nothing.
+	// Lazy load markers keep large plugin icons out of every result payload. They
+	// contain the original source plus a token used to retrieve the converted
+	// thumbnail later. If parsing fails, return the marker so UI still receives an icon.
 	payload, payloadErr := common.ParseWoxLazyLoadImagePayload(convertedIcon)
 	if payloadErr != nil || payload.Source == nil || payload.Source.IsEmpty() {
 		return convertedIcon
@@ -2032,7 +2087,7 @@ func (m *Manager) convertResultIconWithRecorder(ctx context.Context, pluginInsta
 	}
 
 	// If a result cannot be tokenized, keep old behavior instead of leaking an
-	// unregistered lazy marker to Flutter.
+	// unregistered lazy marker to UI.
 	if recorder != nil {
 		diagnostics.Purpose = "result_icon_lazy_fallback"
 		return common.ConvertIconWithSizeWithDiagnostics(ctx, *payload.Source, pluginDirectory, targetSize, diagnostics)
@@ -2046,7 +2101,7 @@ func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *In
 	}
 
 	// Store the original normalized image, not a pre-decoded bitmap. The expensive
-	// decode/crop/resize work is intentionally deferred until Flutter asks for this
+	// decode/crop/resize work is intentionally deferred until UI asks for this
 	// token from a visible result image widget.
 	token := uuid.NewString()
 	m.lazyResultIcons.Store(token, &lazyResultIconEntry{
@@ -2064,7 +2119,10 @@ func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *In
 		pluginName = pluginInstance.GetName(ctx)
 	}
 	logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) icon deferred as lazyloadimage, size: %d", pluginName, resultId, size))
-	return common.NewWoxImageLazyLoad(token, common.ImageThumbnailPlaceholderIcon, size)
+	// The authorization token is query-scoped, while the source hash is stable
+	// across queries so UI can reuse an already decoded icon.
+	cacheKey := fmt.Sprintf("%s-%d", normalized.Hash(), size)
+	return common.NewWoxImageLazyLoad(token, cacheKey, common.ImageThumbnailPlaceholderIcon, size)
 }
 
 func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.WoxImage, error) {
@@ -2105,7 +2163,7 @@ func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.
 
 	startedAt := util.GetSystemTimestamp()
 	// Lazy load requests intentionally use the original synchronous converter
-	// because this path runs after Flutter has built an image widget for the
+	// because this path runs after UI has built an image widget for the
 	// result. That keeps the query response fast while still reusing the existing
 	// crop/resize/cache behavior for the actual thumbnail artifact.
 	converted := common.ConvertIconWithSize(ctx, entry.OriginalIcon, entry.PluginDirectory, entry.TargetSize)
@@ -2346,17 +2404,25 @@ func (m *Manager) GetQueryInfoByResultId(resultId string) (string, string) {
 	return resultCache.Query.SessionId, resultCache.Query.Id
 }
 
+// shouldWrapRemotePreview keeps previews that need their concrete type on the initial UI response inline.
+func shouldWrapRemotePreview(preview WoxPreview) bool {
+	if preview.IsEmpty() || len(preview.PreviewData) <= previewDataMaxSize {
+		return false
+	}
+	switch preview.PreviewType {
+	case WoxPreviewTypeRemote, WoxPreviewTypeQueryRequirementSettings, WoxPreviewTypeThemeEdit, WoxPreviewTypeTriggerKeywordConflict, WoxPreviewTypeMedia:
+		return false
+	default:
+		return true
+	}
+}
+
 func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) QueryResultUI {
 	uiResult := resultCache.Result
 	// Core-owned interactive previews must keep their concrete preview type in the
-	// result payload. If they were wrapped as remote previews, Flutter could not
+	// result payload. If they were wrapped as remote previews, UI could not
 	// choose the dedicated fullscreen/editing surface before loading the preview.
-	if !uiResult.Preview.IsEmpty() &&
-		uiResult.Preview.PreviewType != WoxPreviewTypeRemote &&
-		uiResult.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
-		uiResult.Preview.PreviewType != WoxPreviewTypeThemeEdit &&
-		uiResult.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict &&
-		len(uiResult.Preview.PreviewData) > previewDataMaxSize {
+	if shouldWrapRemotePreview(uiResult.Preview) {
 		uiResult.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
 			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", resultCache.Query.SessionId, queryId, uiResult.Id),
@@ -2459,7 +2525,7 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 	}
 	// Bug fix: snapshot lookup must use the query id, not the session's latest
 	// query. Multiple backend query pipelines can finish out of order, while
-	// Flutter filters visibility by QueryId after the response is delivered.
+	// UI filters visibility by QueryId after the response is delivered.
 	set, found := m.getQueryResultSet(sessionId, queryId)
 	if !found {
 		return []QueryResultUI{}
@@ -2800,12 +2866,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	previewWrapTimingStart := time.Now()
 	// Core-owned interactive previews intentionally bypass remote wrapping so the UI
 	// can detect the type before deciding whether grid previews are allowed.
-	if !result.Preview.IsEmpty() &&
-		result.Preview.PreviewType != WoxPreviewTypeRemote &&
-		result.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
-		result.Preview.PreviewType != WoxPreviewTypeThemeEdit &&
-		result.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict &&
-		len(result.Preview.PreviewData) > previewDataMaxSize {
+	if shouldWrapRemotePreview(result.Preview) {
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
 			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", query.SessionId, query.Id, result.Id),
@@ -3064,7 +3125,7 @@ func (m *Manager) getResultIconSizeForQuery(pluginInstance *Instance, query Quer
 
 	// QueryResponse layout is now the preferred grid source. The previous check
 	// only read deprecated metadata, which made plugins that migrated to
-	// QueryResponse render grid images at list size before Flutter placed them
+	// QueryResponse render grid images at list size before UI placed them
 	// into grid cells.
 	if layout.GridLayout != nil {
 		return common.ResultGridIconSize
@@ -3463,8 +3524,9 @@ func (m *Manager) buildQueryPlan(ctx context.Context, query Query) (jobs []query
 	planStart := time.Now()
 	maxCheckUs := int64(0)
 	maxCheckPlugin := ""
-	jobs = make([]queryPluginJob, 0, len(m.instances))
-	for _, pluginInstance := range m.instances {
+	instances := m.pluginInstancesSnapshot()
+	jobs = make([]queryPluginJob, 0, len(instances))
+	for _, pluginInstance := range instances {
 		checkStart := time.Now()
 		canOperate := m.canOperateQuery(ctx, pluginInstance, query)
 		checkUs := time.Since(checkStart).Microseconds()
@@ -3499,7 +3561,7 @@ func (m *Manager) buildQueryPlan(ctx context.Context, query Query) (jobs []query
 	if tracker := timetracking.New("query_plan"); tracker.Enabled() {
 		tracker.SetRawString("queryId", query.Id)
 		tracker.SetRawString("query", query.String())
-		tracker.SetInt("checked", len(m.instances))
+		tracker.SetInt("checked", len(instances))
 		tracker.SetInt("scheduled", len(jobs))
 		tracker.SetInt("immediate", immediateCount)
 		tracker.SetInt("debounced", debouncedCount)
@@ -3702,7 +3764,7 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 
 	var queryResults []QueryResult
 	if query.IsGlobalQuery() {
-		for _, pluginInstance := range m.instances {
+		for _, pluginInstance := range m.pluginInstancesSnapshot() {
 			if v, ok := pluginInstance.Plugin.(FallbackSearcher); ok {
 				fallbackResults := v.QueryFallback(ctx, query)
 				for _, fallbackResult := range fallbackResults {
@@ -4346,7 +4408,7 @@ func (m *Manager) GetAIProvider(ctx context.Context, provider common.ProviderNam
 }
 
 func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, arguments map[string]string) {
-	pluginInstance, exist := lo.Find(m.instances, func(item *Instance) bool {
+	pluginInstance, exist := lo.Find(m.pluginInstancesSnapshot(), func(item *Instance) bool {
 		return item.Metadata.Id == pluginId
 	})
 	if !exist {
@@ -4448,7 +4510,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 
 // getPluginInstance finds a plugin instance by ID
 func (m *Manager) getPluginInstance(pluginID string) *Instance {
-	pluginInstance, found := lo.Find(m.instances, func(item *Instance) bool {
+	pluginInstance, found := lo.Find(m.pluginInstancesSnapshot(), func(item *Instance) bool {
 		return item.Metadata.Id == pluginID
 	})
 	if found {

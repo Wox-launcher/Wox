@@ -19,7 +19,11 @@ const (
 	defaultInitialSnapshotByte = 64 * 1024
 )
 
-type EventEmitter func(ctx context.Context, uiSessionID string, method string, data any)
+// EventEmitter keeps terminal UI events typed without coupling the shell package to a UI transport.
+type EventEmitter struct {
+	Chunk func(ctx context.Context, uiSessionID string, chunk TerminalChunk)
+	State func(ctx context.Context, uiSessionID string, state SessionState)
+}
 
 type Config struct {
 	MaxBufferBytes       int
@@ -169,7 +173,7 @@ func (m *Manager) SetState(ctx context.Context, sessionID string, status Session
 	session.mu.Unlock()
 
 	for _, uiSessionID := range subscriberIDs {
-		m.emit(ctx, uiSessionID, "TerminalState", state)
+		m.emitState(ctx, uiSessionID, state)
 	}
 }
 
@@ -221,7 +225,7 @@ func (m *Manager) AppendChunk(ctx context.Context, sessionID string, content str
 	session.mu.Unlock()
 
 	for _, event := range events {
-		m.emit(ctx, event.uiSessionID, "TerminalChunk", event.chunk)
+		m.emitChunk(ctx, event.uiSessionID, event.chunk)
 	}
 }
 
@@ -245,7 +249,7 @@ func (m *Manager) Subscribe(ctx context.Context, uiSessionID string, sessionID s
 	session.mu.Unlock()
 
 	m.flushSubscriber(ctx, session, uiSessionID)
-	m.emit(ctx, uiSessionID, "TerminalState", state)
+	m.emitState(ctx, uiSessionID, state)
 
 	return state, nil
 }
@@ -353,14 +357,23 @@ func (m *Manager) ensureSession(sessionID string) (*Session, error) {
 	return session, nil
 }
 
-func (m *Manager) emit(ctx context.Context, uiSessionID string, method string, data any) {
+func (m *Manager) currentEmitter() EventEmitter {
 	m.mu.RLock()
 	emitter := m.emitter
 	m.mu.RUnlock()
-	if emitter == nil {
-		return
+	return emitter
+}
+
+func (m *Manager) emitChunk(ctx context.Context, uiSessionID string, chunk TerminalChunk) {
+	if emitter := m.currentEmitter(); emitter.Chunk != nil {
+		emitter.Chunk(ctx, uiSessionID, chunk)
 	}
-	emitter(ctx, uiSessionID, method, data)
+}
+
+func (m *Manager) emitState(ctx context.Context, uiSessionID string, state SessionState) {
+	if emitter := m.currentEmitter(); emitter.State != nil {
+		emitter.State(ctx, uiSessionID, state)
+	}
 }
 
 func (m *Manager) flushSubscriber(ctx context.Context, session *Session, uiSessionID string) {
@@ -385,7 +398,7 @@ func (m *Manager) flushSubscriber(ctx context.Context, session *Session, uiSessi
 		}
 		session.mu.Unlock()
 
-		m.emit(ctx, uiSessionID, "TerminalChunk", TerminalChunk{
+		m.emitChunk(ctx, uiSessionID, TerminalChunk{
 			SessionID:   session.ID,
 			CursorStart: nextCursor - int64(len(chunk)),
 			CursorEnd:   nextCursor,
