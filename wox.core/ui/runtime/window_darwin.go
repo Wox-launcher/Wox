@@ -399,6 +399,11 @@ func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error 
 	return nil
 }
 
+func (w *platformWindow) forwardEmbeddedSurfacePointer(event PointerEvent) bool {
+	native, err := w.openNative()
+	return err == nil && C.wox_darwin_window_forward_embedded_surface_pointer(native) == 0
+}
+
 func (w *platformWindow) webViewGoBack() error {
 	native, err := w.openNative()
 	if err != nil {
@@ -1025,8 +1030,8 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 			)
 			imageCost += time.Since(commandStart)
 			imageCount++
-		case displayCommandDrawWebView:
-			continue
+		case displayCommandBeginEmbeddedSurfaceOverlay:
+			result = C.wox_darwin_window_begin_embedded_surface_overlay(native)
 		case displayCommandSetClipRect:
 			result = C.wox_darwin_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		case displayCommandClearClip:

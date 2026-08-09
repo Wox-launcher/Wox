@@ -153,6 +153,7 @@ const (
 	displayCommandStrokeRoundedRect
 	displayCommandDrawText
 	displayCommandDrawImage
+	displayCommandBeginEmbeddedSurfaceOverlay
 	displayCommandSetClipRect
 	displayCommandClearClip
 )
@@ -168,6 +169,14 @@ type displayCommand struct {
 	image    *Image
 	rotation float32
 	points   []Point
+}
+
+// BeginEmbeddedSurfaceOverlay splits portable drawing around a platform-owned composition surface.
+func (d *DisplayList) BeginEmbeddedSurfaceOverlay(rect Rect) {
+	if rect.Width <= 0 || rect.Height <= 0 {
+		return
+	}
+	d.commands = append(d.commands, displayCommand{kind: displayCommandBeginEmbeddedSurfaceOverlay, rect: rect})
 }
 
 // FillConvexPolygon fills 3 to MaxConvexPolygonPoints ordered vertices with portable edge antialiasing.

@@ -520,6 +520,10 @@ func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error
 	return result.navigation, result.err
 }
 
+func (w *platformWindow) forwardEmbeddedSurfacePointer(event PointerEvent) bool {
+	return w.webView != nil && w.webView.pointer(event)
+}
+
 func (w *platformWindow) showNativeFilePreview(path string, bounds Rect, generation uint64) error {
 	return w.call(windowCommand{kind: windowCommandShowNativeFilePreview, nativeFilePath: path, nativeFileBounds: bounds, nativeFilePreviewGeneration: generation}).err
 }
@@ -573,7 +577,9 @@ func (w *platformWindow) invalidateRect(rect Rect) error {
 	return nil
 }
 
-func (*platformWindow) displayListDamageCullingEnabled() bool { return true }
+func (w *platformWindow) displayListDamageCullingEnabled() bool {
+	return w.webView == nil || !w.webView.visible
+}
 
 // setTextInputState stores logical editor geometry for the next native IME interaction.
 func (w *platformWindow) setTextInputState(state TextInputState) error {
@@ -931,6 +937,8 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		window.emitPointer(PointerEvent{Kind: PointerLeave, Position: window.pointerPosition, Modifiers: windowsKeyModifiers()})
 		return 0
 	case win.WM_LBUTTONDOWN, win.WM_RBUTTONDOWN, win.WM_MBUTTONDOWN:
+		// Reclaim native focus before Host routing; embedded surfaces transfer it back when they handle the press.
+		win.SetFocus(hwnd)
 		win.SetCapture(hwnd)
 		window.emitPointer(PointerEvent{Kind: PointerDown, Position: window.logicalPointerPosition(lParam), Button: windowsPointerButton(message), Modifiers: windowsKeyModifiers()})
 		return 0
@@ -1394,7 +1402,7 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		return windowCommandResult{err: writeClipboardImageNative(uintptr(w.hwnd), command.clipboard)}
 	case windowCommandShowWebView:
 		if w.webView == nil {
-			webView, err := newWindowsWebView(uintptr(w.hwnd))
+			webView, err := newWindowsWebView(uintptr(w.hwnd), w.renderer)
 			if err != nil {
 				return windowCommandResult{err: err}
 			}

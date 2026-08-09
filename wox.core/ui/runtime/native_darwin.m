@@ -80,6 +80,8 @@ struct WoxDarwinWindow {
   WoxRenderView *view;
   WoxWindowDelegate *delegate;
   WoxDarwinRenderer *renderer;
+  WoxDarwinRenderer *overlay_renderer;
+  WoxDarwinRenderer *active_renderer;
   NSMutableDictionary *web_view_cache;
   NSMutableDictionary *web_view_signatures;
   NSMutableDictionary *web_view_content_keys;
@@ -102,6 +104,7 @@ struct WoxDarwinWindow {
   bool render_scheduled;
   bool suppress_resize_render;
   bool synchronous_frame;
+  bool embedded_surface_overlay_active;
   atomic_uint_fast64_t presentation_generation;
   NSRect input_cursor_rect;
   NSMutableDictionary *accessibility_elements;
@@ -135,6 +138,7 @@ struct WoxDarwinRenderer {
   WoxDarwinDamageRecord damage_history[64];
   bool frame_open;
   bool clip_active;
+  CGRect clip_rect;
   bool damage_clip_active;
 };
 
@@ -758,6 +762,7 @@ static void hide_window_and_release_surfaces(WoxDarwinWindow *window) {
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
   clear_renderer_surfaces(window->renderer);
+  clear_renderer_surfaces(window->overlay_renderer);
   [CATransaction commit];
   [CATransaction flush];
   [window->window orderOut:nil];
@@ -794,7 +799,7 @@ static WoxDarwinSurface *acquire_render_surface(WoxDarwinRenderer *renderer, NSU
 
 // present_render_surface joins resize frames to the caller's transaction and owns ordinary frame transactions.
 static void present_render_surface(WoxDarwinWindow *window, WoxDarwinRenderer *renderer, WoxDarwinSurface *surface, uint64_t sequence, uint64_t generation, bool transactional) {
-  if (window->closed || !window->visible || window->renderer != renderer ||
+  if (window->closed || !window->visible || (window->renderer != renderer && window->overlay_renderer != renderer) ||
       atomic_load_explicit(&window->presentation_generation, memory_order_relaxed) != generation ||
       sequence <= renderer->presented_sequence) {
     atomic_fetch_sub_explicit(&surface->presentation_references, 1, memory_order_relaxed);
@@ -1272,6 +1277,7 @@ static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView 
   if ([message.name isEqualToString:@"woxWebViewPreview"]) {
     woxGoDarwinKey(owner->context, "escape", 0, 1, 0, 0);
   } else if ([message.name isEqualToString:@"woxWebViewActionPanel"]) {
+    [owner->window makeFirstResponder:owner->view];
     woxGoDarwinKey(owner->context, "j", WOX_KEY_MODIFIER_META, 1, 0, 0);
   }
 }
@@ -1507,6 +1513,13 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 }
 
 @implementation WoxRenderView
+- (NSView *)hitTest:(NSPoint)point {
+  if (_owner != NULL && !_owner->closed && _owner->active_web_view != nil && !_owner->active_web_view.hidden && NSPointInRect(point, _owner->active_web_view.frame)) {
+    return self;
+  }
+  return [super hitTest:point];
+}
+
 - (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender {
   NSArray *urls = [sender.draggingPasteboard readObjectsForClasses:@[[NSURL class]] options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
   return urls.count > 0 ? NSDragOperationCopy : NSDragOperationNone;
@@ -1976,6 +1989,17 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
       free(window);
       return NULL;
     }
+    WoxDarwinRenderer *overlay_renderer = create_renderer(layer);
+    if (overlay_renderer == NULL) {
+      destroy_renderer(renderer);
+      view->_owner = NULL;
+      [view release];
+      [native_window release];
+      free(window);
+      return NULL;
+    }
+    renderer->content_layer.zPosition = 0.0;
+    overlay_renderer->content_layer.zPosition = 2.0;
 
     WoxWindowDelegate *delegate = [[WoxWindowDelegate alloc] init];
     delegate->_owner = window;
@@ -1983,6 +2007,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->view = view;
     window->delegate = delegate;
     window->renderer = renderer;
+    window->overlay_renderer = overlay_renderer;
     window->web_view_cache = [[NSMutableDictionary alloc] init];
     window->web_view_signatures = [[NSMutableDictionary alloc] init];
     window->web_view_content_keys = [[NSMutableDictionary alloc] init];
@@ -2542,6 +2567,8 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
       [window->view addSubview:web_view positioned:NSWindowAbove relativeTo:nil];
     }
     web_view.frame = NSMakeRect(x, y, width, height);
+    web_view.wantsLayer = YES;
+    web_view.layer.zPosition = 1.0;
     web_view.hidden = NO;
     // Floating overlay toolbar is replaced by the Go UI WebView title bar.
     if (window->web_view_toolbar != nil) {
@@ -2702,6 +2729,51 @@ int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window) {
     [window->web_view_content_keys removeAllObjects];
   });
   return result;
+}
+
+int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *window) {
+  if (window == NULL || window->closed || window->active_web_view == nil) {
+    return -1;
+  }
+  NSEvent *event = NSApp.currentEvent;
+  if (event == nil) {
+    return -1;
+  }
+  NSPoint local = [window->active_web_view convertPoint:event.locationInWindow fromView:nil];
+  NSView *target = [window->active_web_view hitTest:local];
+  if (target == nil) {
+    return -1;
+  }
+  switch (event.type) {
+  case NSEventTypeLeftMouseDown:
+    [window->window makeFirstResponder:window->active_web_view];
+    [target mouseDown:event];
+    break;
+  case NSEventTypeRightMouseDown:
+    [window->window makeFirstResponder:window->active_web_view];
+    [target rightMouseDown:event];
+    break;
+  case NSEventTypeOtherMouseDown:
+    [window->window makeFirstResponder:window->active_web_view];
+    [target otherMouseDown:event];
+    break;
+  case NSEventTypeLeftMouseUp:
+    [target mouseUp:event];
+    break;
+  case NSEventTypeRightMouseUp:
+    [target rightMouseUp:event];
+    break;
+  case NSEventTypeOtherMouseUp:
+    [target otherMouseUp:event];
+    break;
+  case NSEventTypeScrollWheel:
+    [target scrollWheel:event];
+    break;
+  default:
+    [target mouseMoved:event];
+    break;
+  }
+  return 0;
 }
 
 int32_t wox_darwin_window_write_clipboard_text(WoxDarwinWindow *window, const char *text) {
@@ -3053,7 +3125,9 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
     window->window.delegate = nil;
     [window->window close];
     destroy_renderer(window->renderer);
+    destroy_renderer(window->overlay_renderer);
     window->renderer = NULL;
+    window->overlay_renderer = NULL;
     [window->delegate autorelease];
     [window->view autorelease];
     [window->window autorelease];
@@ -3090,8 +3164,8 @@ void wox_darwin_autorelease_pool_pop(void *pool) {
   [(NSAutoreleasePool *)pool drain];
 }
 
-int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
-  if (window == NULL || window->closed || window->renderer == NULL || logical_width <= 0.0f || logical_height <= 0.0f || scale <= 0.0f) {
+static int32_t begin_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRenderer *renderer, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  if (window == NULL || window->closed || renderer == NULL || logical_width <= 0.0f || logical_height <= 0.0f || scale <= 0.0f) {
     return -1;
   }
   // A queued frame can reach the renderer after AppKit hides on blur without crossing Go's hide
@@ -3099,7 +3173,6 @@ int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_wid
   if (!window->visible) {
     return WOX_DARWIN_FRAME_SKIPPED;
   }
-  WoxDarwinRenderer *renderer = window->renderer;
   if (renderer->frame_open) {
     return -1;
   }
@@ -3185,6 +3258,15 @@ int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_wid
   return 0;
 }
 
+int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  if (window == NULL || window->renderer == NULL || window->overlay_renderer == NULL) {
+    return -1;
+  }
+  window->embedded_surface_overlay_active = false;
+  window->active_renderer = window->renderer;
+  return begin_darwin_renderer_frame(window, window->renderer, logical_width, logical_height, scale, damage_x, damage_y, damage_width, damage_height, red, green, blue, alpha);
+}
+
 // wox_darwin_window_trim_render_surfaces keeps the front buffer and one reusable current-size back buffer.
 int32_t wox_darwin_window_trim_render_surfaces(WoxDarwinWindow *window, int32_t max_surfaces) {
   if (window == NULL || window->closed || window->renderer == NULL || max_surfaces < 1) {
@@ -3225,14 +3307,14 @@ int32_t wox_darwin_window_trim_render_surfaces(WoxDarwinWindow *window, int32_t 
 }
 
 int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
-  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
     return -1;
   }
   if (width <= 0.0f || height <= 0.0f) {
     return 0;
   }
 
-  WoxDarwinRenderer *renderer = window->renderer;
+  WoxDarwinRenderer *renderer = window->active_renderer;
   CGFloat clamped_radius = fmaxf(0.0f, fminf(radius, fminf(width, height) / 2.0f));
   CGPathRef path = CGPathCreateWithRoundedRect(CGRectMake(x, y, width, height), clamped_radius, clamped_radius, NULL);
   CGContextSetRGBFillColor(renderer->context, red / 255.0, green / 255.0, blue / 255.0, alpha / 255.0);
@@ -3243,14 +3325,14 @@ int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, fl
 }
 
 int32_t wox_darwin_window_fill_convex_polygon(WoxDarwinWindow *window, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
-  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
     return -1;
   }
   if (points == NULL || point_count < 3 || point_count > 16) {
     return -1;
   }
 
-  WoxDarwinRenderer *renderer = window->renderer;
+  WoxDarwinRenderer *renderer = window->active_renderer;
   CGContextBeginPath(renderer->context);
   CGContextMoveToPoint(renderer->context, points[0], points[1]);
   for (int32_t index = 1; index < point_count; index++) {
@@ -3277,14 +3359,14 @@ int32_t wox_darwin_call(uintptr_t context) {
 }
 
 int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, float stroke_width, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
-  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
     return -1;
   }
   if (width <= 0.0f || height <= 0.0f || stroke_width <= 0.0f) {
     return 0;
   }
 
-  WoxDarwinRenderer *renderer = window->renderer;
+  WoxDarwinRenderer *renderer = window->active_renderer;
   CGFloat inset = stroke_width / 2.0f;
   if (width <= stroke_width || height <= stroke_width) {
     return 0;
@@ -3301,10 +3383,10 @@ int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, 
 }
 
 int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, const char *font_family, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
-  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open || text == NULL) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open || text == NULL) {
     return -1;
   }
-  WoxDarwinRenderer *renderer = window->renderer;
+  WoxDarwinRenderer *renderer = window->active_renderer;
   if (text[0] == '\0' || width <= 0.0f || height <= 0.0f || font_size <= 0.0f || !isfinite(width) || !isfinite(height) || !isfinite(font_size)) {
     return 0;
   }
@@ -3337,10 +3419,10 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
 }
 
 int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
-  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open || image_id == 0 || pixels == NULL || image_width <= 0 || image_height <= 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open || image_id == 0 || pixels == NULL || image_width <= 0 || image_height <= 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
-  WoxDarwinRenderer *renderer = window->renderer;
+  WoxDarwinRenderer *renderer = window->active_renderer;
   size_t data_size = (size_t)row_stride * (size_t)image_height;
   CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, pixels, data_size, NULL);
   if (provider == NULL) {
@@ -3387,10 +3469,10 @@ int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id,
 }
 
 int32_t wox_darwin_window_set_clip_rect(WoxDarwinWindow *window, float x, float y, float width, float height) {
-  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
     return -1;
   }
-  WoxDarwinRenderer *renderer = window->renderer;
+  WoxDarwinRenderer *renderer = window->active_renderer;
   float max_width = renderer->viewport_size.width;
   float max_height = renderer->viewport_size.height;
   float left = fmaxf(0.0f, fminf(max_width, x));
@@ -3407,14 +3489,15 @@ int32_t wox_darwin_window_set_clip_rect(WoxDarwinWindow *window, float x, float 
   CGContextSaveGState(renderer->context);
   CGContextClipToRect(renderer->context, CGRectMake(left, top, right - left, bottom - top));
   renderer->clip_active = true;
+  renderer->clip_rect = CGRectMake(left, top, right - left, bottom - top);
   return 0;
 }
 
 int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window) {
-  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
     return -1;
   }
-  WoxDarwinRenderer *renderer = window->renderer;
+  WoxDarwinRenderer *renderer = window->active_renderer;
   if (renderer->clip_active) {
     CGContextRestoreGState(renderer->context);
     renderer->clip_active = false;
@@ -3422,11 +3505,10 @@ int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window) {
   return 0;
 }
 
-int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transactional) {
-  if (window == NULL || window->renderer == NULL || !window->renderer->frame_open) {
+static int32_t finish_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRenderer *renderer, int32_t transactional) {
+  if (window == NULL || renderer == NULL || !renderer->frame_open) {
     return -1;
   }
-  WoxDarwinRenderer *renderer = window->renderer;
   if (renderer->clip_active) {
     CGContextRestoreGState(renderer->context);
     renderer->clip_active = false;
@@ -3462,4 +3544,47 @@ int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transaction
   }
   [surface release];
   return 0;
+}
+
+int32_t wox_darwin_window_begin_embedded_surface_overlay(WoxDarwinWindow *window) {
+  if (window == NULL || window->active_renderer != window->renderer || !window->renderer->frame_open) {
+    return -1;
+  }
+  WoxDarwinRenderer *background = window->renderer;
+  bool restore_clip = background->clip_active;
+  CGRect clip_rect = background->clip_rect;
+  CGSize viewport = background->viewport_size;
+  float scale = background->scale;
+  int32_t result = finish_darwin_renderer_frame(window, background, 0);
+  if (result != 0) {
+    return result;
+  }
+  result = begin_darwin_renderer_frame(window, window->overlay_renderer, viewport.width, viewport.height, scale, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0);
+  if (result != 0) {
+    return result;
+  }
+  window->active_renderer = window->overlay_renderer;
+  window->embedded_surface_overlay_active = true;
+  if (restore_clip) {
+    return wox_darwin_window_set_clip_rect(window, clip_rect.origin.x, clip_rect.origin.y, clip_rect.size.width, clip_rect.size.height);
+  }
+  return 0;
+}
+
+int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transactional) {
+  if (window == NULL || window->active_renderer == NULL) {
+    return -1;
+  }
+  int32_t result = finish_darwin_renderer_frame(window, window->active_renderer, transactional);
+  if (result != 0 || window->embedded_surface_overlay_active) {
+    window->active_renderer = NULL;
+    return result;
+  }
+  WoxDarwinRenderer *background = window->renderer;
+  result = begin_darwin_renderer_frame(window, window->overlay_renderer, background->viewport_size.width, background->viewport_size.height, background->scale, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0);
+  if (result == 0) {
+    result = finish_darwin_renderer_frame(window, window->overlay_renderer, transactional);
+  }
+  window->active_renderer = NULL;
+  return result;
 }

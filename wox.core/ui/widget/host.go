@@ -53,10 +53,12 @@ type Host struct {
 	identities map[string]woxui.AccessibilityNodeID
 	nodes      map[woxui.AccessibilityNodeID]*node
 
-	hovered   woxui.AccessibilityNodeID
-	pressed   woxui.AccessibilityNodeID
-	pressedAt woxui.Point
-	dragging  bool
+	hovered    woxui.AccessibilityNodeID
+	rawHovered woxui.AccessibilityNodeID
+	rawPressed woxui.AccessibilityNodeID
+	pressed    woxui.AccessibilityNodeID
+	pressedAt  woxui.Point
+	dragging   bool
 	// selecting tracks the gesture node that started a drag-based selection, so subsequent
 	// pointer-move events extend its selection until the pointer is released.
 	selecting          woxui.AccessibilityNodeID
@@ -574,7 +576,7 @@ func (h *Host) focusOrder() []*node {
 		if current == nil {
 			return
 		}
-		if h.isFocusable(current) {
+		if h.isFocusable(current) && !current.focus.skipTraversal {
 			result = append(result, current)
 		}
 		for _, child := range current.children {
@@ -819,6 +821,9 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 	if h.root == nil {
 		return
 	}
+	if h.dispatchRawPointer(event) {
+		return
+	}
 	if event.Kind == woxui.PointerScroll {
 		target := h.root.hitTestScroll(event.Position)
 		for current := target; current != nil; current = current.parent {
@@ -851,11 +856,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		}
 	}
 	if event.Kind == woxui.PointerDown && event.Button == woxui.PointerButtonPrimary {
-		if h.focusVisible {
-			h.focusVisible = false
-			h.invalidate()
-		}
-		h.resetCaretBlink()
+		h.updatePointerFocus(target)
 		h.pressed = nodeID(target)
 		h.pressedAt = event.Position
 		h.dragging = false
@@ -864,19 +865,6 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		if target != nil && target.gesture != nil && target.gesture.onPressChange != nil {
 			target.gesture.onPressChange(true)
 			h.invalidate()
-		}
-		focused := h.nodes[h.focused]
-		var pointerFocusTarget *node
-		for focusTarget := target; focusTarget != nil; focusTarget = focusTarget.parent {
-			if h.isFocusable(focusTarget) {
-				pointerFocusTarget = focusTarget
-				break
-			}
-		}
-		if pointerFocusTarget != nil {
-			h.setFocus(pointerFocusTarget.id)
-		} else if focused != nil && focused.focus != nil && focused.focus.unfocusOnPointerOutside && (target == nil || !h.isDescendantOf(target, focused.id)) {
-			h.setFocus(0)
 		}
 		// A selection gesture captures the press to begin a drag-based selection. Tap dispatch is
 		// deferred to PointerUp; if the pointer moves meaningfully we keep the selection and skip tap.
@@ -976,6 +964,62 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		}
 		h.pressed = 0
 	}
+}
+
+// updatePointerFocus keeps Host focus ownership aligned even when a raw native surface consumes the press.
+func (h *Host) updatePointerFocus(target *node) {
+	if h.focusVisible {
+		h.focusVisible = false
+		h.invalidate()
+	}
+	h.resetCaretBlink()
+	focused := h.nodes[h.focused]
+	for current := target; current != nil; current = current.parent {
+		if h.isFocusable(current) {
+			h.setFocus(current.id)
+			return
+		}
+	}
+	if focused != nil && focused.focus != nil && focused.focus.unfocusOnPointerOutside && (target == nil || !h.isDescendantOf(target, focused.id)) {
+		h.setFocus(0)
+	}
+}
+
+func (h *Host) dispatchRawPointer(event woxui.PointerEvent) bool {
+	var target *node
+	if h.rawPressed != 0 && (event.Kind == woxui.PointerMove || event.Kind == woxui.PointerUp) {
+		target = h.nodes[h.rawPressed]
+	} else if event.Kind != woxui.PointerLeave {
+		target = h.root.hitTest(event.Position)
+	}
+	if event.Kind == woxui.PointerMove || event.Kind == woxui.PointerEnter || event.Kind == woxui.PointerLeave {
+		targetID := nodeID(target)
+		if h.rawHovered != 0 && h.rawHovered != targetID {
+			if previous := h.nodes[h.rawHovered]; previous != nil && previous.gesture != nil && previous.gesture.onPointer != nil {
+				leave := event
+				leave.Kind = woxui.PointerLeave
+				leave.Position = woxui.Point{X: event.Position.X - previous.bounds.X, Y: event.Position.Y - previous.bounds.Y}
+				previous.gesture.onPointer(leave)
+			}
+		}
+		h.rawHovered = targetID
+	}
+	if target == nil || target.gesture == nil || target.gesture.onPointer == nil {
+		return false
+	}
+	local := event
+	local.Position = woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y}
+	if !target.gesture.onPointer(local) {
+		return false
+	}
+	if event.Kind == woxui.PointerDown {
+		// Native surfaces take platform focus for every mouse-button press, so Host ownership must follow too.
+		h.updatePointerFocus(target)
+		h.rawPressed = target.id
+	} else if event.Kind == woxui.PointerUp {
+		h.rawPressed = 0
+	}
+	return true
 }
 
 func (h *Host) gestureNodeByID(id string) *node {

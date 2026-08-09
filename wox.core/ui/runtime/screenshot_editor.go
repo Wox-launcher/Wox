@@ -49,6 +49,18 @@ type screenshotEditorIconCacheKey struct {
 
 var screenshotEditorIconCache sync.Map
 
+const (
+	screenshotEditorCursorWidth    = float32(28)
+	screenshotEditorCursorHeight   = float32(36)
+	screenshotEditorCursorHotspotX = float32(5.25)
+	screenshotEditorCursorHotspotY = float32(3.75)
+)
+
+var (
+	screenshotEditorCursorPreviewOnce  sync.Once
+	screenshotEditorCursorPreviewImage *Image
+)
+
 type screenshotEditorEditMode uint8
 
 const (
@@ -88,6 +100,7 @@ type screenshotEditorOverlayState struct {
 	pinRect            Rect
 	undoRect           Rect
 	scrollRect         Rect
+	cursorRect         Rect
 	toolbarRect        Rect
 	toolRects          [6]Rect
 	editBarRect        Rect
@@ -126,6 +139,8 @@ type screenshotEditorOverlayState struct {
 	annotationColor    Color
 	mosaicRadius       float32
 	textFontSize       float32
+	cursorPixel        *Point
+	showCursor         bool
 	result             chan screenshotEditorOverlayOutcome
 }
 
@@ -135,6 +150,7 @@ type screenshotEditorPlatform struct {
 	captureDesktop   func() (image.Image, error)
 	frameSize        Size
 	initialSelection *Rect
+	cursorPixel      *Point
 	afterShow        func()
 }
 
@@ -148,6 +164,7 @@ func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, 
 		annotationColor: screenshotEditorAnnotationColor,
 		mosaicRadius:    screenshotEditorMosaicRadius,
 		textFontSize:    screenshotEditorTextFontSize,
+		cursorPixel:     platform.cursorPixel,
 		result:          make(chan screenshotEditorOverlayOutcome, 1),
 		scrollingStop:   make(chan struct{}),
 	}
@@ -249,6 +266,8 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	annotations := append([]screenshotEditorAnnotation(nil), state.annotations...)
 	scrolling := state.scrolling
 	scrollingFrames := append([]screenshotScrollingFrame(nil), state.scrollingFrames...)
+	cursorPixel := state.cursorPixel
+	showCursor := state.showCursor
 	state.mu.Unlock()
 	if scrolling {
 		stitched, stitchErr := stitchScreenshotScrollingFrames(scrollingFrames)
@@ -266,6 +285,11 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		composited, err := renderScreenshotEditorAnnotations(source, annotations, selection, frameSize)
 		if err != nil {
 			return ScreenshotResult{}, err
+		}
+		if showCursor && cursorPixel != nil {
+			if err := renderScreenshotEditorCursor(composited, *cursorPixel, selection, frameSize); err != nil {
+				return ScreenshotResult{}, err
+			}
 		}
 		if err := writeScreenshotEditorPNG(options.ExportFilePath, composited, pixelSelection); err != nil {
 			return ScreenshotResult{}, err
@@ -352,6 +376,8 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	mosaicRadius := state.mosaicRadius
 	textFontSize := state.textFontSize
 	scrollingStarting := state.scrollingStarting
+	cursorPixel := state.cursorPixel
+	showCursor := state.showCursor
 	annotations := append([]screenshotEditorAnnotation(nil), state.annotations...)
 	selectedAnnotation := state.selectedAnnotation
 	hasSelectedMark := state.hasSelectedMark && selectedAnnotation >= 0 && selectedAnnotation < len(state.annotations)
@@ -369,6 +395,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.pinRect = Rect{}
 	state.undoRect = Rect{}
 	state.scrollRect = Rect{}
+	state.cursorRect = Rect{}
 	state.toolbarRect = Rect{}
 	state.toolRects = [6]Rect{}
 	state.editBarRect = Rect{}
@@ -393,6 +420,9 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 
 	displayList.PushClipRect(selection)
 	drawScreenshotEditorAnnotations(displayList, annotations, state.image, frame.Size)
+	if showCursor && cursorPixel != nil {
+		drawScreenshotEditorCursor(displayList, screenshotEditorCursorLogicalPoint(*cursorPixel, state.image, frame.Size))
+	}
 	if hasSelectedMark {
 		drawScreenshotEditorAnnotationHandles(displayList, annotations[selectedAnnotation])
 	}
@@ -413,7 +443,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 
 	toolbarWidth := float32(128)
 	if !hideTools {
-		toolbarWidth = 578
+		toolbarWidth = 632
 	}
 	toolbarHeight := float32(60)
 	toolbarLeft := min(max(float32(24), selection.X+selection.Width-toolbarWidth), max(float32(24), frame.Size.Width-toolbarWidth-24))
@@ -427,6 +457,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	pinRect := Rect{}
 	undoRect := Rect{}
 	scrollRect := Rect{}
+	cursorRect := Rect{}
 	if !hideTools {
 		for index := range toolRects {
 			toolRects[index] = Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
@@ -436,6 +467,8 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		undoRect = Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
 		slotLeft += 48 + 6
 		scrollRect = Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
+		slotLeft += 48 + 6
+		cursorRect = Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
 		slotLeft += 48 + 6
 		pinRect = Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
 		slotLeft += 48
@@ -449,6 +482,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.pinRect = pinRect
 	state.undoRect = undoRect
 	state.scrollRect = scrollRect
+	state.cursorRect = cursorRect
 	state.cancelRect = cancelRect
 	state.confirmRect = confirmRect
 	state.mu.Unlock()
@@ -474,6 +508,14 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			scrollColor = green
 		}
 		drawScreenshotEditorToolbarIcon(displayList, "screenshot.scrolling-capture", scrollRect, scrollColor)
+		cursorColor := Color{R: 255, G: 255, B: 255, A: 255}
+		if cursorPixel == nil {
+			cursorColor.A = 97
+		} else if showCursor {
+			displayList.FillRoundedRect(cursorRect, 10, Color{R: 41, G: 255, B: 114, A: 51})
+			cursorColor = green
+		}
+		drawScreenshotEditorToolbarIcon(displayList, "screenshot.cursor", cursorRect, cursorColor)
 		drawScreenshotEditorToolbarIcon(displayList, "screenshot.pin", pinRect, Color{R: 255, G: 255, B: 255, A: 255})
 	}
 	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancelRect, Color{R: 255, G: 107, B: 107, A: 255})
@@ -625,6 +667,58 @@ func drawScreenshotEditorToolbarIcon(displayList *DisplayList, name string, rect
 	displayList.DrawImage(actual.(*Image), Rect{X: rect.X + 8, Y: rect.Y + 8, Width: 24, Height: 24})
 }
 
+// drawScreenshotEditorCursor previews the captured pointer with the same marker exported to PNG.
+func drawScreenshotEditorCursor(displayList *DisplayList, hotspot Point) {
+	screenshotEditorCursorPreviewOnce.Do(func() {
+		rgba, err := renderScreenshotEditorCursorImage(56, 72)
+		if err != nil {
+			return
+		}
+		screenshotEditorCursorPreviewImage, _ = NewImage(rgba)
+	})
+	if screenshotEditorCursorPreviewImage == nil {
+		return
+	}
+	displayList.DrawImage(screenshotEditorCursorPreviewImage, Rect{
+		X: hotspot.X - screenshotEditorCursorHotspotX, Y: hotspot.Y - screenshotEditorCursorHotspotY,
+		Width: screenshotEditorCursorWidth, Height: screenshotEditorCursorHeight,
+	})
+}
+
+// renderScreenshotEditorCursorImage rasterizes the shared cursor marker at the requested export scale.
+func renderScreenshotEditorCursorImage(width, height int) (*image.RGBA, error) {
+	icon := common.UIIcon("screenshot.cursor")
+	if icon.ImageType != common.WoxImageTypeSvg || icon.ImageData == "" {
+		return nil, errors.New("screenshot cursor icon is unavailable")
+	}
+	return woxsvg.Render(icon.ImageData, width, height)
+}
+
+// screenshotEditorCursorLogicalPoint maps source pixels into the current editor frame.
+func screenshotEditorCursorLogicalPoint(pixel Point, source *Image, frame Size) Point {
+	if source == nil || source.Width <= 0 || source.Height <= 0 || frame.Width <= 0 || frame.Height <= 0 {
+		return Point{}
+	}
+	return Point{
+		X: pixel.X * frame.Width / float32(source.Width),
+		Y: pixel.Y * frame.Height / float32(source.Height),
+	}
+}
+
+// screenshotEditorCursorPixelFromDesktop maps a desktop coordinate into the captured source image.
+func screenshotEditorCursorPixelFromDesktop(cursor Point, bounds Rect, source image.Image) *Point {
+	if source == nil || bounds.Width <= 0 || bounds.Height <= 0 {
+		return nil
+	}
+	if cursor.X < bounds.X || cursor.X >= bounds.X+bounds.Width || cursor.Y < bounds.Y || cursor.Y >= bounds.Y+bounds.Height {
+		return nil
+	}
+	return &Point{
+		X: (cursor.X - bounds.X) * float32(source.Bounds().Dx()) / bounds.Width,
+		Y: (cursor.Y - bounds.Y) * float32(source.Bounds().Dy()) / bounds.Height,
+	}
+}
+
 func drawScreenshotEditorHandles(displayList *DisplayList, selection Rect, color Color) {
 	for _, point := range screenshotEditorRectHandlePoints(selection) {
 		displayList.FillRoundedRect(Rect{X: point.X - 7, Y: point.Y - 7, Width: 14, Height: 14}, 4, Color{A: 115})
@@ -656,6 +750,10 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		cancel := state.hasSelection && screenshotEditorRectContains(state.cancelRect, event.Position)
 		pin := state.hasSelection && screenshotEditorRectContains(state.pinRect, event.Position)
 		scroll := state.hasSelection && !state.scrolling && !state.scrollingStarting && screenshotEditorRectContains(state.scrollRect, event.Position)
+		cursor := state.hasSelection && state.cursorPixel != nil && screenshotEditorRectContains(state.cursorRect, event.Position)
+		if cursor {
+			state.showCursor = !state.showCursor
+		}
 		if scroll {
 			state.scrollingStarting = true
 			state.scrollingDone = make(chan struct{})
@@ -768,7 +866,7 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		} else if pin {
 			state.commitText()
 			state.completePin()
-		} else if editChanged || toolChanged || undo || (!toolbar && !editBar) {
+		} else if cursor || editChanged || toolChanged || undo || (!toolbar && !editBar) {
 			state.setTextInputEnabled(textEditing)
 			state.invalidate()
 		}

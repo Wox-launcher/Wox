@@ -6,22 +6,30 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// WebViewPreviewFocusKey identifies the native browser as a Host focus owner.
+const WebViewPreviewFocusKey woxwidget.Key = "webview-preview-focus"
+
 // WebViewPreviewProps contains the native surface placement callback.
 type WebViewPreviewProps struct {
-	Width    float32
-	Height   float32
-	Theme    woxcomponent.Theme
-	OnBounds func(woxui.Rect)
+	Width     float32
+	Height    float32
+	Theme     woxcomponent.Theme
+	OnBounds  func(woxui.Rect)
+	OnPointer func(woxui.PointerEvent) bool
 }
 
 // WebViewPreview paints the portable backdrop and reports native content bounds.
 func WebViewPreview(props WebViewPreviewProps) woxwidget.Widget {
-	return woxwidget.Painter{Width: props.Width, Height: props.Height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		displayList.FillRoundedRect(bounds, 10, props.Theme.QueryBackground)
-		if props.OnBounds != nil && bounds.Width > 0 && bounds.Height > 0 {
-			props.OnBounds(bounds)
-		}
-	}}
+	return woxwidget.Focusable{
+		Key: WebViewPreviewFocusKey, SkipTraversal: true,
+		Child: woxwidget.Gesture{ID: "webview-preview-input", OnPointer: props.OnPointer, Child: woxwidget.Painter{Width: props.Width, Height: props.Height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+			displayList.FillRoundedRect(bounds, 10, props.Theme.QueryBackground)
+			displayList.BeginEmbeddedSurfaceOverlay(bounds)
+			if props.OnBounds != nil && bounds.Width > 0 && bounds.Height > 0 {
+				props.OnBounds(bounds)
+			}
+		}}},
+	}
 }
 
 // WebViewPreviewMessage builds a portable WebView error or loading surface.

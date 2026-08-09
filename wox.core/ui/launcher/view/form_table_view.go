@@ -174,7 +174,9 @@ func FormTableField(props FormTableFieldProps) woxwidget.Widget {
 	table := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: tableChildren}
 	fieldChildren := []woxwidget.Widget{table}
 	if !props.ReadOnly {
-		actions := woxwidget.Container{Width: fieldWidth, Height: 36, Padding: woxwidget.Insets{Left: max(float32(0), fieldWidth-74)}, Child: formTableAddButton(props)}
+		actions := woxwidget.Container{Width: fieldWidth, Height: 36, Child: woxwidget.Align{
+			Width: fieldWidth, Height: 36, Horizontal: 1, Vertical: 0.5, Child: formTableAddButton(props),
+		}}
 		fieldChildren = append([]woxwidget.Widget{actions}, fieldChildren...)
 	}
 	field := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: fieldChildren}
@@ -229,7 +231,9 @@ func formTableInlineHeader(props FormTableFieldProps, width float32) woxwidget.W
 	gap := float32(0)
 	if actionsWidth > 0 {
 		gap = 16
-		children = append(children, formTableHeaderActions(props))
+		children = append(children, woxwidget.Align{
+			Width: actionsWidth, Height: 30, Horizontal: 1, Child: formTableHeaderActions(props),
+		})
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisEnd, Children: children}
 }
@@ -554,7 +558,10 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 	if cell.Tooltip != "" && props.InfoIcon != nil {
 		contentWidth = max(float32(0), contentWidth-20)
 	}
-	var content woxwidget.Widget = woxwidget.TextBlock{Value: cell.Text, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle}
+	var content woxwidget.Widget = woxwidget.TextBlock{
+		Value: cell.Text, Width: contentWidth, Height: 18, MaxLines: 1, ShrinkWrap: cell.Tooltip != "",
+		Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle,
+	}
 	paddingTop := float32(10)
 	if cell.Child != nil {
 		content = cell.Child

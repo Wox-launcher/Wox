@@ -66,6 +66,8 @@ func (r *SoftwareRenderer) Render(displayList *DisplayList) error {
 			r.drawReferenceText(command, damage, clip)
 		case displayCommandDrawImage:
 			r.drawImage(command, damage, clip)
+		case displayCommandBeginEmbeddedSurfaceOverlay:
+			// Native composition surfaces are not part of deterministic software output.
 		default:
 			return fmt.Errorf("unsupported display command kind %d", command.kind)
 		}

@@ -27,6 +27,7 @@ type semanticBehavior struct {
 type focusBehavior struct {
 	autofocus               bool
 	disabled                bool
+	skipTraversal           bool
 	focusRingColor          woxui.Color
 	focusRingRadius         float32
 	focusRingOutsets        Insets
@@ -114,9 +115,11 @@ func (w Semantics) layout(ctx context, available constraints) *node {
 
 // Focusable lets one retained element own keyboard focus and input callbacks.
 type Focusable struct {
-	Key              Key
-	Autofocus        bool
-	Disabled         bool
+	Key       Key
+	Autofocus bool
+	Disabled  bool
+	// SkipTraversal allows pointer or programmatic focus without adding the control to the Tab order.
+	SkipTraversal    bool
 	FocusRingColor   woxui.Color
 	FocusRingRadius  float32
 	FocusRingOutsets Insets
@@ -141,6 +144,7 @@ func (w Focusable) layout(ctx context, available constraints) *node {
 	child.focus = &focusBehavior{
 		autofocus:               w.Autofocus,
 		disabled:                w.Disabled,
+		skipTraversal:           w.SkipTraversal,
 		focusRingColor:          w.FocusRingColor,
 		focusRingRadius:         w.FocusRingRadius,
 		focusRingOutsets:        w.FocusRingOutsets,

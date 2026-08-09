@@ -331,6 +331,11 @@ func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error 
 	return nil
 }
 
+func (w *platformWindow) forwardEmbeddedSurfacePointer(event PointerEvent) bool {
+	native, err := w.openNative()
+	return err == nil && C.wox_linux_window_forward_embedded_surface_pointer(native, C.float(event.Position.X), C.float(event.Position.Y)) == 0
+}
+
 func (w *platformWindow) hideWebView() error {
 	native, err := w.openNative()
 	if err != nil {
@@ -691,8 +696,8 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 				C.float(command.rotation),
 				C.float(command.radius),
 			)
-		case displayCommandDrawWebView:
-			continue
+		case displayCommandBeginEmbeddedSurfaceOverlay:
+			result = C.wox_linux_window_begin_embedded_surface_overlay(native)
 		case displayCommandSetClipRect:
 			result = C.wox_linux_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		case displayCommandClearClip:

@@ -49,7 +49,7 @@ func (d webViewPreviewData) content() woxui.WebViewContent {
 	return woxui.WebViewContent{URL: d.URL, HTML: d.HTML, InjectCSS: d.InjectCSS, CacheDisabled: d.CacheDisabled, CacheKey: cacheKey}
 }
 
-func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, height, maxRight float32) woxwidget.Widget {
+func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, height float32) woxwidget.Widget {
 	theme := palette.componentTheme()
 	data, err := decodeWebViewPreview(previewData)
 	if err != nil {
@@ -67,26 +67,14 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 		return previewview.WebViewPreviewMessage("Loading WebView preview…", theme.PreviewText, theme, width, height)
 	}
 	content := data.content()
-	return previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnBounds: func(bounds woxui.Rect) {
+	return previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnPointer: a.window.ForwardEmbeddedSurfacePointer, OnBounds: func(bounds woxui.Rect) {
 		if a.webViewPreviewData != previewData || a.webViewPreviewError != "" {
-			return
-		}
-		bounds, visible := webViewPreviewVisibleBounds(bounds, maxRight)
-		if !visible {
-			a.hideWebView()
 			return
 		}
 		if err := a.window.ShowWebView(content, bounds); err != nil {
 			a.setWebViewPreviewError(err)
 		}
 	}})
-}
-
-func webViewPreviewVisibleBounds(bounds woxui.Rect, maxRight float32) (woxui.Rect, bool) {
-	if maxRight > 0 && bounds.X+bounds.Width > maxRight {
-		bounds.Width = max(float32(0), maxRight-bounds.X)
-	}
-	return bounds, bounds.Width > 0 && bounds.Height > 0
 }
 
 func (a *App) setWebViewPreviewError(err error) {

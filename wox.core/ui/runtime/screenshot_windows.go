@@ -20,11 +20,13 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	}
 	// Give DWM one frame to remove the launcher before copying the desktop pixels.
 	time.Sleep(80 * time.Millisecond)
+	var capturedCursor win.POINT
+	hasCapturedCursor := win.GetCursorPos(&capturedCursor)
 	source, virtualBounds, err := captureWindowsVirtualDesktop()
 	if err != nil {
 		return ScreenshotResult{}, err
 	}
-	return runScreenshotEditor(options, source, screenshotEditorPlatform{
+	platform := screenshotEditorPlatform{
 		setWindowBounds: func(window *Window) error {
 			return window.native.setPhysicalBounds(Rect{
 				X:      float32(virtualBounds.Min.X),
@@ -47,7 +49,15 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 			captured, _, captureErr := captureWindowsVirtualDesktop()
 			return captured, captureErr
 		},
-	})
+	}
+	if hasCapturedCursor {
+		platform.cursorPixel = screenshotEditorCursorPixelFromDesktop(
+			Point{X: float32(capturedCursor.X), Y: float32(capturedCursor.Y)},
+			Rect{X: float32(virtualBounds.Min.X), Y: float32(virtualBounds.Min.Y), Width: float32(virtualBounds.Dx()), Height: float32(virtualBounds.Dy())},
+			source,
+		)
+	}
+	return runScreenshotEditor(options, source, platform)
 }
 
 func captureWindowsVirtualDesktop() (*image.RGBA, image.Rectangle, error) {

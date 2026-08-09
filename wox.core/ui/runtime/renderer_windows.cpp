@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <new>
 #include <string>
 
 #include "renderer_windows.h"
@@ -18,23 +19,35 @@ struct WoxRenderer {
   ID3D11Device *device = nullptr;
   ID3D11DeviceContext *context = nullptr;
   IDXGISwapChain1 *swap_chain = nullptr;
+  IDXGISwapChain1 *overlay_swap_chain = nullptr;
   IDCompositionDevice *composition_device = nullptr;
   IDCompositionTarget *composition_target = nullptr;
+  IDCompositionVisual *composition_root = nullptr;
   IDCompositionVisual *composition_visual = nullptr;
+  IDCompositionVisual *overlay_visual = nullptr;
   ID2D1Factory1 *d2d_factory = nullptr;
   ID2D1Device *d2d_device = nullptr;
   ID2D1DeviceContext *d2d_context = nullptr;
   ID2D1Bitmap1 *target_bitmap = nullptr;
+  ID2D1Bitmap1 *overlay_target_bitmap = nullptr;
   ID2D1SolidColorBrush *brush = nullptr;
   IDWriteFactory *dwrite_factory = nullptr;
 	std::wstring font_family = L"Segoe UI";
   bool uses_default_font_family = true;
   float scale = 1.0f;
   bool frame_open = false;
+  bool overlay_active = false;
   bool clip_active = false;
+  D2D1_RECT_F clip_rect = {};
   bool damage_clip_active = false;
   RECT present_dirty_rect = {};
   bool present_dirty = false;
+};
+
+// WoxWebViewVisual keeps host placement separate from the visual subtree owned by WebView2.
+struct WoxWebViewVisual {
+  IDCompositionVisual *host = nullptr;
+  IDCompositionVisual *target = nullptr;
 };
 
 template <typename T>
@@ -54,9 +67,9 @@ static D2D1_COLOR_F make_color(uint8_t red, uint8_t green, uint8_t blue, uint8_t
   };
 }
 
-static HRESULT create_target_bitmap(WoxRenderer *renderer) {
+static HRESULT create_target_bitmap(WoxRenderer *renderer, IDXGISwapChain1 *swap_chain, ID2D1Bitmap1 **bitmap) {
   IDXGISurface *surface = nullptr;
-  HRESULT result = renderer->swap_chain->GetBuffer(0, IID_IDXGISurface, reinterpret_cast<void **>(&surface));
+  HRESULT result = swap_chain->GetBuffer(0, IID_IDXGISurface, reinterpret_cast<void **>(&surface));
   if (FAILED(result)) {
     return result;
   }
@@ -68,13 +81,12 @@ static HRESULT create_target_bitmap(WoxRenderer *renderer) {
   properties.dpiY = 96.0f;
   properties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
 
-  result = renderer->d2d_context->CreateBitmapFromDxgiSurface(surface, &properties, &renderer->target_bitmap);
+  result = renderer->d2d_context->CreateBitmapFromDxgiSurface(surface, &properties, bitmap);
   surface->Release();
   if (FAILED(result)) {
     return result;
   }
 
-  renderer->d2d_context->SetTarget(renderer->target_bitmap);
   return S_OK;
 }
 
@@ -215,14 +227,18 @@ static void destroy_renderer(WoxRenderer *renderer) {
     renderer->context->ClearState();
   }
   release_com(&renderer->brush);
+  release_com(&renderer->overlay_target_bitmap);
   release_com(&renderer->target_bitmap);
   release_com(&renderer->d2d_context);
   release_com(&renderer->d2d_device);
   release_com(&renderer->d2d_factory);
   release_com(&renderer->dwrite_factory);
+  release_com(&renderer->overlay_visual);
   release_com(&renderer->composition_visual);
+  release_com(&renderer->composition_root);
   release_com(&renderer->composition_target);
   release_com(&renderer->composition_device);
+  release_com(&renderer->overlay_swap_chain);
   release_com(&renderer->swap_chain);
   release_com(&renderer->context);
   release_com(&renderer->device);
@@ -307,26 +323,46 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
     result = dxgi_factory->CreateSwapChainForComposition(renderer->device, &swap_chain_description, nullptr, &renderer->swap_chain);
   }
   if (SUCCEEDED(result)) {
+    result = dxgi_factory->CreateSwapChainForComposition(renderer->device, &swap_chain_description, nullptr, &renderer->overlay_swap_chain);
+  }
+  if (SUCCEEDED(result)) {
     result = DCompositionCreateDevice(dxgi_device, __uuidof(IDCompositionDevice), reinterpret_cast<void **>(&renderer->composition_device));
   }
   if (SUCCEEDED(result)) {
-    // Keep HWND-hosted controls such as WebView2 above the DirectComposition surface.
     result = renderer->composition_device->CreateTargetForHwnd(reinterpret_cast<HWND>(window_handle), FALSE, &renderer->composition_target);
+  }
+  if (SUCCEEDED(result)) {
+    result = renderer->composition_device->CreateVisual(&renderer->composition_root);
   }
   if (SUCCEEDED(result)) {
     result = renderer->composition_device->CreateVisual(&renderer->composition_visual);
   }
   if (SUCCEEDED(result)) {
+    result = renderer->composition_device->CreateVisual(&renderer->overlay_visual);
+  }
+  if (SUCCEEDED(result)) {
     result = renderer->composition_visual->SetContent(renderer->swap_chain);
   }
   if (SUCCEEDED(result)) {
-    result = renderer->composition_target->SetRoot(renderer->composition_visual);
+    result = renderer->overlay_visual->SetContent(renderer->overlay_swap_chain);
+  }
+  if (SUCCEEDED(result)) {
+    result = renderer->composition_root->AddVisual(renderer->composition_visual, FALSE, nullptr);
+  }
+  if (SUCCEEDED(result)) {
+    result = renderer->composition_root->AddVisual(renderer->overlay_visual, TRUE, renderer->composition_visual);
+  }
+  if (SUCCEEDED(result)) {
+    result = renderer->composition_target->SetRoot(renderer->composition_root);
   }
   if (SUCCEEDED(result)) {
     result = renderer->composition_device->Commit();
   }
   if (SUCCEEDED(result)) {
-    result = create_target_bitmap(renderer);
+    result = create_target_bitmap(renderer, renderer->swap_chain, &renderer->target_bitmap);
+  }
+  if (SUCCEEDED(result)) {
+    result = create_target_bitmap(renderer, renderer->overlay_swap_chain, &renderer->overlay_target_bitmap);
   }
   if (SUCCEEDED(result)) {
     const D2D1_COLOR_F initial_color = make_color(255, 255, 255, 255);
@@ -357,12 +393,20 @@ extern "C" int32_t wox_renderer_resize(WoxRenderer *renderer, uint32_t width, ui
 
   renderer->d2d_context->SetTarget(nullptr);
   release_com(&renderer->target_bitmap);
+  release_com(&renderer->overlay_target_bitmap);
 
   HRESULT result = renderer->swap_chain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+  if (SUCCEEDED(result)) {
+    result = renderer->overlay_swap_chain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+  }
   if (FAILED(result)) {
     return result;
   }
-  return create_target_bitmap(renderer);
+  result = create_target_bitmap(renderer, renderer->swap_chain, &renderer->target_bitmap);
+  if (SUCCEEDED(result)) {
+    result = create_target_bitmap(renderer, renderer->overlay_swap_chain, &renderer->overlay_target_bitmap);
+  }
+  return result;
 }
 
 extern "C" int32_t wox_renderer_begin_frame(WoxRenderer *renderer, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
@@ -373,8 +417,10 @@ extern "C" int32_t wox_renderer_begin_frame(WoxRenderer *renderer, float scale, 
   if (scale <= 0.0f) {
     return E_INVALIDARG;
   }
+  renderer->d2d_context->SetTarget(renderer->target_bitmap);
   renderer->d2d_context->BeginDraw();
   renderer->frame_open = true;
+  renderer->overlay_active = false;
   renderer->scale = scale;
   renderer->present_dirty = false;
   renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
@@ -545,6 +591,111 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, const uint8_t 
   return S_OK;
 }
 
+extern "C" int32_t wox_renderer_begin_embedded_surface_overlay(WoxRenderer *renderer) {
+  if (renderer == nullptr || !renderer->frame_open || renderer->overlay_active) {
+    return E_UNEXPECTED;
+  }
+  const bool restore_clip = renderer->clip_active;
+  const D2D1_RECT_F clip_rect = renderer->clip_rect;
+  if (renderer->clip_active) {
+    renderer->d2d_context->PopAxisAlignedClip();
+    renderer->clip_active = false;
+  }
+  if (renderer->damage_clip_active) {
+    renderer->d2d_context->PopAxisAlignedClip();
+    renderer->damage_clip_active = false;
+  }
+  HRESULT result = renderer->d2d_context->EndDraw();
+  if (FAILED(result)) {
+    return result;
+  }
+  renderer->d2d_context->SetTarget(renderer->overlay_target_bitmap);
+  renderer->d2d_context->BeginDraw();
+  const D2D1_COLOR_F transparent = D2D1::ColorF(0, 0.0f);
+  renderer->d2d_context->Clear(&transparent);
+  renderer->overlay_active = true;
+  if (restore_clip) {
+    renderer->d2d_context->PushAxisAlignedClip(clip_rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    renderer->clip_active = true;
+    renderer->clip_rect = clip_rect;
+  }
+  return S_OK;
+}
+
+extern "C" int32_t wox_renderer_create_webview_visual(WoxRenderer *renderer, void **visual, void **root_visual_target) {
+  if (renderer == nullptr || visual == nullptr || root_visual_target == nullptr) {
+    return E_INVALIDARG;
+  }
+  *visual = nullptr;
+  *root_visual_target = nullptr;
+  WoxWebViewVisual *webview_visual = new (std::nothrow) WoxWebViewVisual();
+  if (webview_visual == nullptr) {
+    return E_OUTOFMEMORY;
+  }
+  HRESULT result = renderer->composition_device->CreateVisual(&webview_visual->host);
+  if (SUCCEEDED(result)) {
+    result = renderer->composition_device->CreateVisual(&webview_visual->target);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->host->AddVisual(webview_visual->target, TRUE, nullptr);
+  }
+  if (SUCCEEDED(result)) {
+    // Insert the WebView between the application background and its overlay UI.
+    result = renderer->composition_root->AddVisual(webview_visual->host, FALSE, renderer->overlay_visual);
+  }
+  if (SUCCEEDED(result)) {
+    result = renderer->composition_device->Commit();
+  }
+  if (FAILED(result)) {
+    release_com(&webview_visual->target);
+    release_com(&webview_visual->host);
+    delete webview_visual;
+    return result;
+  }
+  *visual = webview_visual;
+  *root_visual_target = webview_visual->target;
+  return S_OK;
+}
+
+extern "C" int32_t wox_renderer_set_webview_visual_bounds(WoxRenderer *renderer, void *visual, float x, float y, float width, float height) {
+  if (renderer == nullptr || visual == nullptr) {
+    return E_INVALIDARG;
+  }
+  WoxWebViewVisual *webview_visual = static_cast<WoxWebViewVisual *>(visual);
+  HRESULT result = webview_visual->host->SetOffsetX(x);
+  if (SUCCEEDED(result)) {
+    result = webview_visual->host->SetOffsetY(y);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->host->SetClip({0, 0, width, height});
+  }
+  if (SUCCEEDED(result)) {
+    result = renderer->composition_device->Commit();
+  }
+  return result;
+}
+
+extern "C" int32_t wox_renderer_remove_webview_visual(WoxRenderer *renderer, void *visual) {
+  if (renderer == nullptr || visual == nullptr) {
+    return E_INVALIDARG;
+  }
+  WoxWebViewVisual *webview_visual = static_cast<WoxWebViewVisual *>(visual);
+  HRESULT result = renderer->composition_root->RemoveVisual(webview_visual->host);
+  if (webview_visual->host != nullptr) {
+    HRESULT remove_children_result = webview_visual->host->RemoveAllVisuals();
+    if (SUCCEEDED(result)) {
+      result = remove_children_result;
+    }
+  }
+  if (SUCCEEDED(result)) {
+    result = renderer->composition_device->Commit();
+  }
+  release_com(&webview_visual->target);
+  release_com(&webview_visual->host);
+  delete webview_visual;
+  return result;
+}
+
 extern "C" int32_t wox_renderer_set_clip_rect(WoxRenderer *renderer, float x, float y, float width, float height) {
   if (renderer == nullptr || !renderer->frame_open) {
     return E_UNEXPECTED;
@@ -557,6 +708,7 @@ extern "C" int32_t wox_renderer_set_clip_rect(WoxRenderer *renderer, float x, fl
   const D2D1_RECT_F rect = {x, y, x + clipped_width, y + clipped_height};
   renderer->d2d_context->PushAxisAlignedClip(rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
   renderer->clip_active = true;
+  renderer->clip_rect = rect;
   return S_OK;
 }
 
@@ -619,11 +771,23 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     renderer->damage_clip_active = false;
   }
   HRESULT result = renderer->d2d_context->EndDraw();
+  if (SUCCEEDED(result) && !renderer->overlay_active) {
+    renderer->d2d_context->SetTarget(renderer->overlay_target_bitmap);
+    renderer->d2d_context->BeginDraw();
+    const D2D1_COLOR_F transparent = D2D1::ColorF(0, 0.0f);
+    renderer->d2d_context->Clear(&transparent);
+    result = renderer->d2d_context->EndDraw();
+  }
   renderer->frame_open = false;
   if (result == static_cast<HRESULT>(D2DERR_RECREATE_TARGET)) {
     renderer->d2d_context->SetTarget(nullptr);
     release_com(&renderer->target_bitmap);
-    return create_target_bitmap(renderer);
+    release_com(&renderer->overlay_target_bitmap);
+    result = create_target_bitmap(renderer, renderer->swap_chain, &renderer->target_bitmap);
+    if (SUCCEEDED(result)) {
+      result = create_target_bitmap(renderer, renderer->overlay_swap_chain, &renderer->overlay_target_bitmap);
+    }
+    return result;
   }
   if (FAILED(result)) {
     return result;
@@ -633,7 +797,11 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     parameters.DirtyRectsCount = 1;
     parameters.pDirtyRects = &renderer->present_dirty_rect;
   }
-  return renderer->swap_chain->Present1(1, 0, &parameters);
+  result = renderer->swap_chain->Present1(1, 0, &parameters);
+  if (FAILED(result)) {
+    return result;
+  }
+  return renderer->overlay_swap_chain->Present1(1, 0, &parameters);
 }
 
 extern "C" void wox_renderer_destroy(WoxRenderer *renderer) {

@@ -116,3 +116,11 @@ func (w *Window) WebViewNavigationState() (WebViewNavigationState, error) {
 	}
 	return w.native.webViewNavigationState()
 }
+
+// ForwardEmbeddedSurfacePointer routes host-tested, surface-local input to the active platform composition surface.
+func (w *Window) ForwardEmbeddedSurfacePointer(event PointerEvent) bool {
+	if w == nil || w.native == nil {
+		return false
+	}
+	return w.native.forwardEmbeddedSurfacePointer(event)
+}

@@ -5,6 +5,7 @@ package woxui
 /*
 #include <stdlib.h>
 #include "native_linux.h"
+int32_t wox_screenshot_cursor_position(float *x, float *y);
 */
 import "C"
 
@@ -24,11 +25,13 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	}
 	// Give the compositor one frame to remove the launcher before copying desktop pixels.
 	time.Sleep(80 * time.Millisecond)
+	var cursorX, cursorY C.float
+	hasCapturedCursor := C.wox_screenshot_cursor_position(&cursorX, &cursorY) == 0
 	source, bounds, err := captureLinuxDesktop()
 	if err != nil {
 		return ScreenshotResult{}, err
 	}
-	return runScreenshotEditor(options, source, screenshotEditorPlatform{
+	platform := screenshotEditorPlatform{
 		setWindowBounds: func(window *Window) error {
 			return window.SetBounds(bounds)
 		},
@@ -44,7 +47,11 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 			captured, _, captureErr := captureLinuxDesktop()
 			return captured, captureErr
 		},
-	})
+	}
+	if hasCapturedCursor {
+		platform.cursorPixel = screenshotEditorCursorPixelFromDesktop(Point{X: float32(cursorX), Y: float32(cursorY)}, bounds, source)
+	}
+	return runScreenshotEditor(options, source, platform)
 }
 
 // captureLinuxDesktop captures the X11 root window and its logical workspace bounds.

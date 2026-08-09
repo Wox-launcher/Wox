@@ -437,6 +437,102 @@ func TestHostShowsFocusRingOnlyForKeyboardTraversal(t *testing.T) {
 	}
 }
 
+func TestHostRawPointerRespectsOverlayHitTesting(t *testing.T) {
+	var webViewEvents []woxui.PointerEvent
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Stack{Width: 100, Height: 100, Children: []StackChild{
+			{Child: Gesture{ID: "webview", OnPointer: func(event woxui.PointerEvent) bool {
+				webViewEvents = append(webViewEvents, event)
+				return true
+			}, Child: Container{Width: 100, Height: 100}}},
+			{Left: 50, Child: Gesture{ID: "overlay", OnTap: func() {}, Child: Container{Width: 50, Height: 100}}},
+		}}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 75, Y: 10}})
+	if len(webViewEvents) != 0 {
+		t.Fatal("overlay pointer input leaked through to the raw WebView target")
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 25, Y: 10}})
+	if len(webViewEvents) != 1 || webViewEvents[0].Position != (woxui.Point{X: 25, Y: 10}) {
+		t.Fatalf("WebView events = %+v, want one local pointer event", webViewEvents)
+	}
+}
+
+func TestHostRawPointerUsesLocalCoordinatesForScroll(t *testing.T) {
+	var events []woxui.PointerEvent
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Stack{Width: 200, Height: 200, Children: []StackChild{{
+			Left: 30, Top: 50, Child: Gesture{ID: "webview", OnPointer: func(event woxui.PointerEvent) bool {
+				events = append(events, event)
+				return true
+			}, Child: Container{Width: 100, Height: 100}},
+		}}}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 42, Y: 73}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: 45, Y: 90}, Scroll: woxui.Point{Y: -40}})
+
+	if len(events) != 2 {
+		t.Fatalf("raw pointer events = %+v, want move and scroll", events)
+	}
+	if events[0].Position != (woxui.Point{X: 12, Y: 23}) {
+		t.Fatalf("move position = %+v, want surface-local (12, 23)", events[0].Position)
+	}
+	if events[1].Position != (woxui.Point{X: 15, Y: 40}) || events[1].Scroll != (woxui.Point{Y: -40}) {
+		t.Fatalf("scroll event = %+v, want local position and unchanged delta", events[1])
+	}
+}
+
+func TestHostRawPointerTransfersFocusWithoutJoiningTabOrder(t *testing.T) {
+	var queryFocusChanges []bool
+	var webViewFocusChanges []bool
+	services := &fakeHostServices{}
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Flex{Axis: Horizontal, Children: []Widget{
+			Focusable{
+				Key: "query", Autofocus: true,
+				OnFocusChange: func(focused bool) { queryFocusChanges = append(queryFocusChanges, focused) },
+				TextInput: func(bounds woxui.Rect) woxui.TextInputState {
+					return woxui.TextInputState{Enabled: true, CursorRect: bounds}
+				},
+				Child: Gesture{ID: "query", Child: Container{Width: 20, Height: 20}},
+			},
+			Focusable{
+				Key: "webview", SkipTraversal: true,
+				OnFocusChange: func(focused bool) { webViewFocusChanges = append(webViewFocusChanges, focused) },
+				Child:         Gesture{ID: "webview", OnPointer: func(event woxui.PointerEvent) bool { return true }, Child: Container{Width: 20, Height: 20}},
+			},
+			testButton("next", nil),
+		}}
+	})
+	host.AttachServices(services)
+	renderTestFrame(host)
+
+	if !host.isFocusedKey("query") || !services.textInput.Enabled {
+		t.Fatal("autofocused query did not own logical and native text input")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.isFocusedKey("next") {
+		t.Fatal("Tab should skip the pointer-only WebView focus target")
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 25, Y: 5}})
+	if !host.isFocusedKey("webview") || services.textInput.Enabled {
+		t.Fatal("raw WebView press did not take Host focus and disable query text input")
+	}
+	if len(queryFocusChanges) != 2 || queryFocusChanges[0] != true || queryFocusChanges[1] != false || len(webViewFocusChanges) != 1 || !webViewFocusChanges[0] {
+		t.Fatalf("focus changes = query %v webview %v", queryFocusChanges, webViewFocusChanges)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	if !host.isFocusedKey("query") || !services.textInput.Enabled {
+		focused := host.nodes[host.focused]
+		t.Fatalf("query press focus = key %q text input enabled %v; changes query %v webview %v", focused.key, services.textInput.Enabled, queryFocusChanges, webViewFocusChanges)
+	}
+}
+
 func TestHostSemanticsProtectsValuesAndReportsDuplicateAutomationIDs(t *testing.T) {
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
 		return Flex{Children: []Widget{

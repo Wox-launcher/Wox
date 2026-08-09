@@ -626,15 +626,9 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 		return a.buildResults(snapshot, width, height, imageScale)
 	}
 	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.terminalFullscreen)
-	webViewMaxRight := float32(0)
-	if snapshot.actionPanel {
-		panelWidth := launcherview.ActionPanelWidth(snapshot.palette.actionPadding, width)
-		rightOffset := snapshot.palette.appPadding.Right + 10
-		webViewMaxRight = max(rightOffset, width-panelWidth-rightOffset) - 8
-	}
 	if ratio <= 0 {
 		result := snapshot.results[snapshot.selected]
-		preview := a.buildPreviewSection(result, snapshot, width, height, imageScale, webViewMaxRight)
+		preview := a.buildPreviewSection(result, snapshot, width, height, imageScale)
 		if launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) && a.resolvePreview(result.Preview).PreviewType != "chat" && !launcherPreviewTitleBarVisible(snapshot) {
 			label := a.translate("i18n:ui_close")
 			if strings.TrimSpace(label) == "" || label == "i18n:ui_close" {
@@ -653,12 +647,12 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 	splitX := width * ratio
 	return launcherview.LauncherSplitContentView(
 		a.buildResults(snapshot, splitX, height, imageScale),
-		a.buildPreviewSection(snapshot.results[snapshot.selected], snapshot, width-splitX, height, imageScale, webViewMaxRight),
+		a.buildPreviewSection(snapshot.results[snapshot.selected], snapshot, width-splitX, height, imageScale),
 	)
 }
 
-func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, width, height, imageScale, webViewMaxRight float32) woxwidget.Widget {
-	child := a.buildPreview(result, snapshot.palette, width, height, imageScale, webViewMaxRight)
+func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
+	child := a.buildPreview(result, snapshot.palette, width, height, imageScale)
 	resolved := a.resolvePreview(result.Preview)
 	// Media owns smaller animation and live-data boundaries; an enclosing section boundary would promote every update to the full preview.
 	if resolved.PreviewType == "media" {
@@ -696,10 +690,10 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 			state = append(state, a.nativeFilePreviewPath, a.nativeFilePreviewPendingPath, a.nativeFilePreviewManualPath, a.nativeFilePreviewError, a.nativeFilePreviewGeneration)
 		}
 		if filePreview.Kind == "webview" {
-			state = append(state, a.webViewPreviewData, a.webViewPreviewError, webViewMaxRight)
+			state = append(state, a.webViewPreviewData, a.webViewPreviewError)
 		}
 	case "webview":
-		state = append(state, a.webViewPreviewData, a.webViewPreviewError, webViewMaxRight)
+		state = append(state, a.webViewPreviewData, a.webViewPreviewError)
 	}
 	return launcherPreparedSection("launcher-preview-section", "preview", launcherPreparedSectionProps{Signature: launcherSectionSignature(state...), Width: width, Height: height, Child: child})
 }

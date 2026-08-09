@@ -7,6 +7,7 @@ package woxui
 #cgo LDFLAGS: -framework Cocoa -framework QuartzCore -framework CoreText -framework CoreGraphics -framework CoreVideo -framework IOSurface -framework WebKit
 #include <stdlib.h>
 #include "native_darwin.h"
+int32_t wox_screenshot_cursor_position(float *x, float *y);
 */
 import "C"
 
@@ -27,6 +28,8 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	}
 	// Give WindowServer one frame to remove the launcher before the native selector caches display pixels.
 	time.Sleep(80 * time.Millisecond)
+	var cursorX, cursorY C.float
+	hasCapturedCursor := C.wox_screenshot_cursor_position(&cursorX, &cursorY) == 0
 	source, sessionHandle, displayID, bounds, selection, cancelled, err := selectDarwinScreenshotRegion()
 	if err != nil {
 		return ScreenshotResult{}, err
@@ -41,7 +44,7 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		})
 	}
 	defer dismissSelection()
-	return runScreenshotEditor(options, source, screenshotEditorPlatform{
+	platform := screenshotEditorPlatform{
 		setWindowBounds: func(window *Window) error {
 			return window.SetBounds(bounds)
 		},
@@ -60,7 +63,11 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		frameSize:        Size{Width: bounds.Width, Height: bounds.Height},
 		initialSelection: &selection,
 		afterShow:        dismissSelection,
-	})
+	}
+	if hasCapturedCursor {
+		platform.cursorPixel = screenshotEditorCursorPixelFromDesktop(Point{X: float32(cursorX), Y: float32(cursorY)}, bounds, source)
+	}
+	return runScreenshotEditor(options, source, platform)
 }
 
 // selectDarwinScreenshotRegion keeps one cached native image and overlay window per display until the user finishes selecting.

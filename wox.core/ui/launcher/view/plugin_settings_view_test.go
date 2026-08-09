@@ -446,9 +446,26 @@ func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 	container := field.(woxwidget.Container)
 	column := container.Child.(woxwidget.Flex)
 	header := column.Children[0].(woxwidget.Flex)
-	actions := header.Children[1].(woxwidget.Flex)
+	actionSlot := header.Children[1].(woxwidget.Align)
+	if actionSlot.Width != 204 || actionSlot.Height != 30 || actionSlot.Horizontal != 1 {
+		t.Fatalf("header action slot = %vx%v alignment %v, want a compact slot right-aligned to the table edge", actionSlot.Width, actionSlot.Height, actionSlot.Horizontal)
+	}
+	actions := actionSlot.Child.(woxwidget.Flex)
 	if len(actions.Children) != 2 {
 		t.Fatalf("header action count = %d, want template and add", len(actions.Children))
+	}
+}
+
+func TestFormTableInlineHeaderAlignsAddButtonWithTableRightEdge(t *testing.T) {
+	field := FormTableField(FormTableFieldProps{
+		ID: "query-hotkeys", Title: "Query Hotkeys", Width: 720, Height: 220, InlineTitle: true,
+		AddLabel: "Add", Theme: woxcomponent.Theme{},
+	})
+
+	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
+	actionSlot := header.Children[1].(woxwidget.Align)
+	if actionSlot.Width != 74 || actionSlot.Height != 30 || actionSlot.Horizontal != 1 {
+		t.Fatalf("add action slot = %vx%v alignment %v, want compact height and its right edge aligned with the table", actionSlot.Width, actionSlot.Height, actionSlot.Horizontal)
 	}
 }
 
@@ -537,6 +554,10 @@ func TestFormTableMixedLayoutUsesMeasuredLabelWidth(t *testing.T) {
 	actions := fieldColumn.Children[0].(woxwidget.Container)
 	if actions.Width != 624 {
 		t.Fatalf("field width = %v, want 720 - 84 - 12 = 624", actions.Width)
+	}
+	actionAlignment := actions.Child.(woxwidget.Align)
+	if actionAlignment.Width != 624 || actionAlignment.Horizontal != 1 {
+		t.Fatalf("mixed-layout add alignment = width %v alignment %v, want the table's right edge", actionAlignment.Width, actionAlignment.Horizontal)
 	}
 }
 

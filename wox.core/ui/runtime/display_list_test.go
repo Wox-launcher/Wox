@@ -85,6 +85,15 @@ func TestDisplayListDamageCullsNonIntersectingCommands(t *testing.T) {
 	}
 }
 
+func TestEmbeddedSurfaceOverlayAlwaysRecordsSceneBoundary(t *testing.T) {
+	displayList := &DisplayList{}
+	displayList.SetDamage(Rect{X: 200, Y: 200, Width: 10, Height: 10})
+	displayList.BeginEmbeddedSurfaceOverlay(Rect{Width: 100, Height: 100})
+	if len(displayList.commands) != 1 || displayList.commands[0].kind != displayCommandBeginEmbeddedSurfaceOverlay {
+		t.Fatalf("commands = %+v, want WebView scene boundary despite non-intersecting damage", displayList.commands)
+	}
+}
+
 func TestDisplayListDamageHonorsCurrentClip(t *testing.T) {
 	displayList := &DisplayList{}
 	displayList.SetDamage(Rect{Width: 100, Height: 100})

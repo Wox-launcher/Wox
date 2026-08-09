@@ -21,6 +21,10 @@ func TestReadonlyFormTableUsesFullWidthAndCellTooltip(t *testing.T) {
 	if len(content.Children) != 2 {
 		t.Fatalf("tooltip cell children = %d, want text and shared tooltip trigger", len(content.Children))
 	}
+	text := content.Children[0].(woxwidget.TextBlock)
+	if !text.ShrinkWrap {
+		t.Fatal("tooltip cell text should shrink to its content so the trigger stays adjacent")
+	}
 	tooltip := content.Children[1].(woxwidget.Gesture)
 	if tooltip.ID != "notes-row-2-cell-1-tooltip" || tooltip.OnHoverAt == nil {
 		t.Fatal("readonly cell should expose the shared table tooltip contract")

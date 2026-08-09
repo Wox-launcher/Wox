@@ -146,7 +146,7 @@ func (n *node) hitTestScroll(point woxui.Point) *node {
 			return hit
 		}
 	}
-	if n.gesture != nil && (n.gesture.onScroll != nil || n.gesture.onScrollHandled != nil) {
+	if n.gesture != nil && (n.gesture.onScroll != nil || n.gesture.onScrollHandled != nil || n.gesture.onPointer != nil) {
 		return n
 	}
 	return nil
@@ -556,6 +556,8 @@ type TextBlock struct {
 	LineHeight float32
 	MaxLines   int
 	Centered   bool
+	// ShrinkWrap keeps short text at its measured width while preserving Width as the truncation limit.
+	ShrinkWrap bool
 	Layout     *TextBlockLayout
 }
 
@@ -638,6 +640,10 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 	width := available.width
 	if w.Width > 0 {
 		width = min(width, w.Width)
+	}
+	if w.ShrinkWrap {
+		metrics, _ := ctx.window.MeasureText(w.Value, w.Style)
+		width = min(width, metrics.Size.Width)
 	}
 	heightLimit := available.height
 	if w.Height > 0 {
@@ -824,6 +830,7 @@ type gesture struct {
 	onPanUpdate   func(woxui.Point)
 	onPanEnd      func()
 	onScroll      func(woxui.Point)
+	onPointer     func(woxui.PointerEvent) bool
 	// onScrollHandled reports whether this gesture consumed the delta so an
 	// ancestor scroll view can continue at nested-scroll boundaries.
 	onScrollHandled func(woxui.Point) bool
@@ -853,6 +860,8 @@ type Gesture struct {
 	OnPanUpdate   func(position woxui.Point)
 	OnPanEnd      func()
 	OnScroll      func(delta woxui.Point)
+	// OnPointer handles the complete pointer stream in local coordinates.
+	OnPointer func(event woxui.PointerEvent) bool
 	// OnScrollHandled returns false to pass an unconsumed delta to the nearest
 	// ancestor scroll gesture.
 	OnScrollHandled func(delta woxui.Point) bool
@@ -881,7 +890,7 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 		id: w.ID, cursor: w.Cursor, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onPressChange: w.OnPressChange, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap,
 		onDoubleTapAt: w.OnDoubleTapAt, onTripleTapAt: w.OnTripleTapAt, onTapAt: w.OnTapAt,
 		onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onPanStart: w.OnPanStart, onPanUpdate: w.OnPanUpdate, onPanEnd: w.OnPanEnd,
-		onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled,
+		onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled, onPointer: w.OnPointer,
 		onSelectionStart: w.OnSelectionStart, onSelectionExtend: w.OnSelectionExtend,
 	}
 	return target

@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "native_windows.h"
+#include "renderer_windows.h"
 
 extern "C" int32_t woxGoWindowsWebViewEscape(uintptr_t owner);
 extern "C" int32_t woxGoWindowsWebViewActionPanel(uintptr_t owner);
@@ -468,6 +469,16 @@ static Function webview_method(IUnknown *object, size_t index) {
   return reinterpret_cast<Function>((*reinterpret_cast<void ***>(object))[index]);
 }
 
+// These slots include inherited methods from the corresponding WebView2 interfaces.
+static constexpr size_t kEnvironment3CreateCompositionControllerMethod = 9;
+static constexpr size_t kCompositionControllerPutRootVisualTargetMethod = 4;
+static constexpr size_t kCompositionControllerSendMouseInputMethod = 5;
+static constexpr size_t kControllerMoveFocusMethod = 12;
+
+static const GUID kCoreWebView2Environment3Iid = {0x80a22ae3, 0xbe7c, 0x4ce2, {0xaf, 0xe1, 0x5a, 0x50, 0x05, 0x6c, 0xde, 0xeb}};
+static const GUID kCoreWebView2ControllerIid = {0x4d00c0d1, 0x9434, 0x4eb6, {0x80, 0x78, 0x86, 0x97, 0xa5, 0x60, 0x33, 0x4f}};
+static const GUID kCoreWebView2CompositionControllerIid = {0x3df9b733, 0xb9ae, 0x4a15, {0x86, 0xb4, 0xeb, 0x9e, 0xe9, 0x82, 0x64, 0x69}};
+
 static void webview_add_ref(IUnknown *object) {
   if (object != nullptr) {
     webview_method<ULONG(STDMETHODCALLTYPE *)(IUnknown *)>(object, 1)(object);
@@ -581,6 +592,8 @@ struct WoxWindowsWebViewSession {
   std::wstring url;
   std::wstring html;
   IUnknown *controller = nullptr;
+  IUnknown *composition_controller = nullptr;
+  void *composition_visual = nullptr;
   IUnknown *core = nullptr;
   RECT bounds = {};
   bool transient = false;
@@ -611,7 +624,7 @@ __CRT_UUID_DECL(WoxWebViewEnvironmentCompletedCallback, 0x4e8a3389, 0xc9d8, 0x4b
 struct WoxWebViewControllerCompletedCallback : public IUnknown {
   virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, IUnknown *controller) = 0;
 };
-__CRT_UUID_DECL(WoxWebViewControllerCompletedCallback, 0x6c4819f3, 0xc9b7, 0x4260, 0x81, 0x27, 0xc9, 0xf5, 0xbd, 0xe7, 0xf6, 0x8c)
+__CRT_UUID_DECL(WoxWebViewControllerCompletedCallback, 0x02fab84b, 0x1428, 0x4fb7, 0xad, 0x45, 0x1b, 0x2e, 0x64, 0x73, 0x61, 0x84)
 
 struct WoxWebViewScriptCompletedCallback : public IUnknown {
   virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, const wchar_t *script_id) = 0;
@@ -741,7 +754,7 @@ private:
 struct WoxWindowsWebView {
   using CreateEnvironment = HRESULT(STDAPICALLTYPE *)(const wchar_t *, const wchar_t *, IUnknown *, IUnknown *);
 
-  explicit WoxWindowsWebView(HWND owner_window) : owner(owner_window) {}
+  WoxWindowsWebView(HWND owner_window, WoxRenderer *renderer_handle) : owner(owner_window), renderer(renderer_handle) {}
 
   void retain() { references.fetch_add(1, std::memory_order_relaxed); }
 
@@ -784,6 +797,12 @@ struct WoxWindowsWebView {
     }
     environment = created_environment;
     webview_add_ref(environment);
+    result = environment->QueryInterface(kCoreWebView2Environment3Iid, reinterpret_cast<void **>(&environment3));
+    if (FAILED(result) || environment3 == nullptr) {
+      fatal_error = FAILED(result) ? result : E_NOINTERFACE;
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
     if (active != nullptr) {
       create_controller(active);
     }
@@ -791,14 +810,14 @@ struct WoxWindowsWebView {
   }
 
   void create_controller(WoxWindowsWebViewSession *session) {
-    if (environment == nullptr || session == nullptr || session->controller != nullptr || session->controller_pending || session->retired) {
+    if (environment3 == nullptr || session == nullptr || session->controller != nullptr || session->controller_pending || session->retired) {
       return;
     }
     session->controller_pending = true;
     auto *handler = new WoxControllerCompletedHandler(this, session);
     using CreateController = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, HWND, IUnknown *);
-    HRESULT result = webview_method<CreateController>(environment, 3)(environment, owner, handler);
-    webview_debug("create controller returned 0x%08X session=%p", static_cast<unsigned int>(result), session);
+    HRESULT result = webview_method<CreateController>(environment3, kEnvironment3CreateCompositionControllerMethod)(environment3, owner, handler);
+    webview_debug("create composition controller returned 0x%08X session=%p", static_cast<unsigned int>(result), session);
     handler->Release();
     if (FAILED(result)) {
       session->controller_pending = false;
@@ -812,8 +831,12 @@ struct WoxWindowsWebView {
     session->controller_pending = false;
     if (closing || session->retired) {
       if (created_controller != nullptr) {
+        IUnknown *controller = nullptr;
         using Close = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
-        webview_method<Close>(created_controller, 24)(created_controller);
+        if (SUCCEEDED(created_controller->QueryInterface(kCoreWebView2ControllerIid, reinterpret_cast<void **>(&controller))) && controller != nullptr) {
+          webview_method<Close>(controller, 24)(controller);
+          controller->Release();
+        }
       }
       return;
     }
@@ -822,8 +845,32 @@ struct WoxWindowsWebView {
       InvalidateRect(owner, nullptr, FALSE);
       return;
     }
-    session->controller = created_controller;
-    webview_add_ref(session->controller);
+    result = created_controller->QueryInterface(kCoreWebView2CompositionControllerIid, reinterpret_cast<void **>(&session->composition_controller));
+    if (FAILED(result) || session->composition_controller == nullptr) {
+      session->error = FAILED(result) ? result : E_NOINTERFACE;
+      dispose_session(session);
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    result = session->composition_controller->QueryInterface(kCoreWebView2ControllerIid, reinterpret_cast<void **>(&session->controller));
+    if (FAILED(result) || session->controller == nullptr) {
+      session->error = FAILED(result) ? result : E_NOINTERFACE;
+      dispose_session(session);
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    void *root_visual_target = nullptr;
+    result = wox_renderer_create_webview_visual(renderer, &session->composition_visual, &root_visual_target);
+    if (SUCCEEDED(result)) {
+      using PutRootVisualTarget = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *);
+      result = webview_method<PutRootVisualTarget>(session->composition_controller, kCompositionControllerPutRootVisualTargetMethod)(session->composition_controller, static_cast<IUnknown *>(root_visual_target));
+    }
+    if (FAILED(result)) {
+      session->error = result;
+      dispose_session(session);
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
     using GetCore = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown **);
     result = webview_method<GetCore>(session->controller, 25)(session->controller, &session->core);
     webview_debug("get core returned 0x%08X core=%p", static_cast<unsigned int>(result), session->core);
@@ -913,6 +960,7 @@ struct WoxWindowsWebView {
     }
     using PutHandled = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL);
     webview_method<PutHandled>(args, 8)(args, TRUE);
+    SetFocus(owner);
     woxGoWindowsWebViewActionPanel(reinterpret_cast<uintptr_t>(owner));
   }
 
@@ -1016,6 +1064,43 @@ struct WoxWindowsWebView {
     return S_OK;
   }
 
+  HRESULT pointer(int32_t kind, POINT point, int32_t button, int32_t scroll_x, int32_t scroll_y, uint32_t modifiers) {
+    if (active == nullptr || active->controller == nullptr || active->composition_controller == nullptr || !active->visible) {
+      return E_FAIL;
+    }
+    uint32_t virtual_keys = 0;
+    if ((modifiers & 1) != 0) virtual_keys |= 0x0004;
+    if ((modifiers & 2) != 0) virtual_keys |= 0x0008;
+    if ((GetKeyState(VK_LBUTTON) & 0x8000) != 0) virtual_keys |= 0x0001;
+    if ((GetKeyState(VK_RBUTTON) & 0x8000) != 0) virtual_keys |= 0x0002;
+    if ((GetKeyState(VK_MBUTTON) & 0x8000) != 0) virtual_keys |= 0x0010;
+
+    uint32_t event_kind = 0x0200;
+    uint32_t mouse_data = 0;
+    if (kind == 2) {
+      event_kind = 0x02A3;
+      virtual_keys = 0;
+      point = {};
+    } else if (kind == 3 || kind == 4) {
+      const bool down = kind == 3;
+      if (button == 1) event_kind = down ? 0x0201 : 0x0202;
+      if (button == 2) event_kind = down ? 0x0204 : 0x0205;
+      if (button == 3) event_kind = down ? 0x0207 : 0x0208;
+      if (down) {
+        // Focus belongs to ICoreWebView2Controller; the composition interface only accepts visual and pointer input.
+        using MoveFocus = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int32_t);
+        webview_method<MoveFocus>(active->controller, kControllerMoveFocusMethod)(active->controller, 0);
+      }
+    } else if (kind == 5) {
+      event_kind = scroll_x != 0 ? 0x020E : 0x020A;
+      const int32_t wheel_delta = scroll_x != 0 ? scroll_x : scroll_y;
+      // SendMouseInput takes the signed wheel delta itself, not WM_MOUSEWHEEL's packed wParam.
+      mouse_data = static_cast<uint32_t>(wheel_delta);
+    }
+    using SendMouseInput = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, uint32_t, uint32_t, uint32_t, POINT);
+    return webview_method<SendMouseInput>(active->composition_controller, kCompositionControllerSendMouseInputMethod)(active->composition_controller, event_kind, virtual_keys, mouse_data, point);
+  }
+
   void web_message_received(IUnknown *args) {
     if (closing || args == nullptr) {
       return;
@@ -1070,7 +1155,11 @@ struct WoxWindowsWebView {
     }
     using PutBounds = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, RECT);
     using PutVisible = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL);
-    HRESULT result = webview_method<PutBounds>(session->controller, 6)(session->controller, session->bounds);
+    RECT local_bounds = {0, 0, session->bounds.right - session->bounds.left, session->bounds.bottom - session->bounds.top};
+    HRESULT result = webview_method<PutBounds>(session->controller, 6)(session->controller, local_bounds);
+    if (SUCCEEDED(result)) {
+      result = wox_renderer_set_webview_visual_bounds(renderer, session->composition_visual, static_cast<float>(session->bounds.left), static_cast<float>(session->bounds.top), static_cast<float>(local_bounds.right), static_cast<float>(local_bounds.bottom));
+    }
     if (SUCCEEDED(result)) {
       result = webview_method<PutVisible>(session->controller, 4)(session->controller, session->visible ? TRUE : FALSE);
     }
@@ -1138,8 +1227,17 @@ struct WoxWindowsWebView {
       webview_method<PutVisible>(session->controller, 4)(session->controller, FALSE);
       webview_method<Close>(session->controller, 24)(session->controller);
     }
+    if (session->composition_controller != nullptr) {
+      using PutRootVisualTarget = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *);
+      webview_method<PutRootVisualTarget>(session->composition_controller, kCompositionControllerPutRootVisualTargetMethod)(session->composition_controller, nullptr);
+    }
+    if (session->composition_visual != nullptr) {
+      wox_renderer_remove_webview_visual(renderer, session->composition_visual);
+      session->composition_visual = nullptr;
+    }
     webview_release(session->core);
     webview_release(session->controller);
+    webview_release(session->composition_controller);
   }
 
   HRESULT show(const char *url, const char *html, const char *inject_css, bool cache_disabled, const char *cache_key, RECT bounds) {
@@ -1221,6 +1319,7 @@ struct WoxWindowsWebView {
       dispose_session(session.get());
     }
     cache.clear();
+    webview_release(environment3);
     webview_release(environment);
   }
 
@@ -1243,8 +1342,10 @@ struct WoxWindowsWebView {
 
   std::atomic<ULONG> references{1};
   HWND owner;
+  WoxRenderer *renderer;
   HMODULE loader = nullptr;
   IUnknown *environment = nullptr;
+  IUnknown *environment3 = nullptr;
   std::vector<std::unique_ptr<WoxWindowsWebViewSession>> sessions;
   std::unordered_map<std::string, WoxWindowsWebViewSession *> cache;
   WoxWindowsWebViewSession *active = nullptr;
@@ -1381,11 +1482,11 @@ HRESULT WoxAcceleratorKeyPressedHandler::Invoke(IUnknown *, IUnknown *args) {
   return S_OK;
 }
 
-extern "C" int32_t wox_windows_webview_create(uintptr_t owner, WoxWindowsWebView **webview) {
-  if (owner == 0 || webview == nullptr) {
+extern "C" int32_t wox_windows_webview_create(uintptr_t owner, WoxRenderer *renderer, WoxWindowsWebView **webview) {
+  if (owner == 0 || renderer == nullptr || webview == nullptr) {
     return E_INVALIDARG;
   }
-  *webview = new WoxWindowsWebView(reinterpret_cast<HWND>(owner));
+  *webview = new WoxWindowsWebView(reinterpret_cast<HWND>(owner), renderer);
   HRESULT result = (*webview)->initialize();
   if (FAILED(result)) {
     (*webview)->release();
@@ -1424,6 +1525,13 @@ extern "C" int32_t wox_windows_webview_open_in_browser(WoxWindowsWebView *webvie
 
 extern "C" int32_t wox_windows_webview_navigation_state(WoxWindowsWebView *webview, char **url, int32_t *can_go_back, int32_t *can_go_forward) {
   return webview != nullptr ? webview->navigation_state(url, can_go_back, can_go_forward) : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_pointer(WoxWindowsWebView *webview, int32_t kind, int32_t x, int32_t y, int32_t button, int32_t scroll_x, int32_t scroll_y, uint32_t modifiers) {
+  if (webview == nullptr) {
+    return E_INVALIDARG;
+  }
+  return webview->pointer(kind, POINT{x, y}, button, scroll_x, scroll_y, modifiers);
 }
 
 extern "C" void wox_windows_webview_destroy(WoxWindowsWebView *webview) {

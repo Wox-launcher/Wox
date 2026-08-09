@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -194,6 +195,108 @@ func HasLauncherResultLabel(snapshot woxwidget.AutomationSnapshot, label string)
 		}
 	}
 	return false
+}
+
+// FindLauncherResult returns the current dynamic result ID for an exact visible label.
+func FindLauncherResult(snapshot woxwidget.AutomationSnapshot, label string) (string, bool) {
+	for _, node := range snapshot.Tree.Nodes {
+		if strings.HasPrefix(node.AutomationID, "launcher.result.") && strings.TrimSpace(node.Label) == label {
+			return node.AutomationID, true
+		}
+	}
+	return "", false
+}
+
+// SelectLauncherResult moves native keyboard selection to a current dynamic result ID.
+func SelectLauncherResult(t *testing.T, ctx context.Context, client *automationdriver.Client, resultID string) woxwidget.AutomationSnapshot {
+	t.Helper()
+	snapshot, err := client.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("read launcher results before selecting %q: %v", resultID, err)
+	}
+	resultIDs := make([]string, 0)
+	selectedIndex := -1
+	targetIndex := -1
+	for _, node := range snapshot.Tree.Nodes {
+		if !strings.HasPrefix(node.AutomationID, "launcher.result.") {
+			continue
+		}
+		index := len(resultIDs)
+		resultIDs = append(resultIDs, node.AutomationID)
+		if node.Selected {
+			selectedIndex = index
+		}
+		if node.AutomationID == resultID {
+			targetIndex = index
+		}
+	}
+	if targetIndex < 0 || selectedIndex < 0 {
+		t.Fatalf("select launcher result %q: target index %d, selected index %d", resultID, targetIndex, selectedIndex)
+	}
+	if targetIndex == selectedIndex {
+		return snapshot
+	}
+	key := woxui.KeyArrowDown
+	if targetIndex < selectedIndex {
+		key = woxui.KeyArrowUp
+	}
+	for range resultIDs {
+		if err := client.PressKey(ctx, key, 0); err != nil {
+			t.Fatalf("navigate to launcher result %q: %v", resultID, err)
+		}
+		snapshot, err = client.Snapshot(ctx)
+		if err != nil {
+			t.Fatalf("read launcher results while selecting %q: %v", resultID, err)
+		}
+		target, found := automationdriver.Find(snapshot, resultID)
+		if found && target.Selected {
+			return snapshot
+		}
+	}
+	t.Fatalf("launcher result %q was not selected after keyboard navigation", resultID)
+	return woxwidget.AutomationSnapshot{}
+}
+
+// ActivateSelectedResultAction opens the action panel and invokes the current action matching a stable prefix.
+func ActivateSelectedResultAction(t *testing.T, ctx context.Context, client *automationdriver.Client, actionPrefix string) {
+	t.Helper()
+	modifier := woxui.KeyModifierControl
+	if runtime.GOOS == "darwin" {
+		modifier = woxui.KeyModifierMeta
+	}
+	if err := client.PressKey(ctx, woxui.Key("j"), modifier); err != nil {
+		t.Fatalf("open launcher result actions: %v", err)
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var actionID string
+	if _, err := client.WaitFor(waitCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		node, found := automationdriver.FindByAutomationIDPrefix(snapshot, actionPrefix)
+		if found {
+			actionID = node.AutomationID
+		}
+		return found
+	}); err != nil {
+		t.Fatalf("wait for launcher result action %q: %v", actionPrefix, err)
+	}
+	if err := client.Perform(ctx, actionID, woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("activate launcher result action %q: %v", actionPrefix, err)
+	}
+}
+
+// WaitForResultActionsClosed waits until the action panel has left the semantic tree.
+func WaitForResultActionsClosed(t *testing.T, ctx context.Context, client *automationdriver.Client) {
+	t.Helper()
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		for _, node := range snapshot.Tree.Nodes {
+			if strings.HasPrefix(node.AutomationID, "action-result-") {
+				return false
+			}
+		}
+		return true
+	}); err != nil {
+		t.Fatalf("wait for launcher result actions to close: %v", err)
+	}
 }
 
 // OpenInstalledPluginSettings opens one installed plugin through the shared settings route.

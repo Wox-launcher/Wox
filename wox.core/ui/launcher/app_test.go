@@ -682,7 +682,7 @@ func TestResultPreviewBecameVisible(t *testing.T) {
 func TestMediaPreviewBypassesPreparedSectionBoundary(t *testing.T) {
 	app := &App{}
 	result := queryResult{Preview: queryPreview{PreviewType: "media", PreviewData: `{"title":"Track"}`}}
-	widget := app.buildPreviewSection(result, viewSnapshot{palette: defaultPalette()}, 700, 400, 1, 0)
+	widget := app.buildPreviewSection(result, viewSnapshot{palette: defaultPalette()}, 700, 400, 1)
 	if _, wrapped := widget.(woxwidget.Boundary[launcherPreparedSectionProps]); wrapped {
 		t.Fatal("media preview retained the full-section boundary")
 	}
@@ -690,7 +690,7 @@ func TestMediaPreviewBypassesPreparedSectionBoundary(t *testing.T) {
 
 func TestUnresolvedRemotePreviewRendersBlank(t *testing.T) {
 	app := &App{remotePreviews: map[string]queryPreview{}}
-	widget := app.buildPreview(queryResult{Preview: queryPreview{PreviewType: "remote", PreviewData: "/preview?id=result"}}, defaultPalette(), 700, 400, 1, 0)
+	widget := app.buildPreview(queryResult{Preview: queryPreview{PreviewType: "remote", PreviewData: "/preview?id=result"}}, defaultPalette(), 700, 400, 1)
 	blank, ok := widget.(woxwidget.Container)
 	if !ok || blank.Child != nil || blank.Width != 700 || blank.Height != 400 {
 		t.Fatalf("unresolved remote preview = %#v, want blank 700x400 container", widget)

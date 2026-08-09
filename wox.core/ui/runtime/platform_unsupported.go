@@ -80,6 +80,10 @@ func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error 
 	return ErrPlatformUnsupported
 }
 
+func (w *platformWindow) forwardEmbeddedSurfacePointer(event PointerEvent) bool {
+	return false
+}
+
 func (w *platformWindow) hideWebView() error {
 	return ErrPlatformUnsupported
 }

@@ -15,13 +15,18 @@ import (
 )
 
 type windowsWebView struct {
-	handle *C.WoxWindowsWebView
+	handle  *C.WoxWindowsWebView
+	scale   float32
+	visible bool
 }
 
 // newWindowsWebView starts the asynchronous WebView2 environment on the window UI thread.
-func newWindowsWebView(owner uintptr) (*windowsWebView, error) {
+func newWindowsWebView(owner uintptr, renderer *nativeRenderer) (*windowsWebView, error) {
 	var handle *C.WoxWindowsWebView
-	result := C.wox_windows_webview_create(C.uintptr_t(owner), &handle)
+	if renderer == nil || renderer.handle == nil {
+		return nil, ErrWebViewUnavailable
+	}
+	result := C.wox_windows_webview_create(C.uintptr_t(owner), (*C.WoxRenderer)(renderer.handle), &handle)
 	if result < 0 {
 		code := uint32(result)
 		if code == 0x8007007E || code == 0x8007007F {
@@ -39,6 +44,7 @@ func (w *windowsWebView) show(content WebViewContent, bounds Rect, scale float32
 	if scale <= 0 {
 		scale = 1
 	}
+	w.scale = scale
 	url := C.CString(content.URL)
 	html := C.CString(content.HTML)
 	css := C.CString(content.InjectCSS)
@@ -66,7 +72,29 @@ func (w *windowsWebView) show(content WebViewContent, bounds Rect, scale float32
 	if result < 0 {
 		return webViewHRESULT("show WebView2", result)
 	}
+	w.visible = true
 	return nil
+}
+
+func (w *windowsWebView) pointer(event PointerEvent) bool {
+	if w == nil || w.handle == nil {
+		return false
+	}
+	scale := w.scale
+	if scale <= 0 {
+		scale = 1
+	}
+	result := C.wox_windows_webview_pointer(
+		w.handle,
+		C.int32_t(event.Kind),
+		C.int32_t(event.Position.X*scale+0.5),
+		C.int32_t(event.Position.Y*scale+0.5),
+		C.int32_t(event.Button),
+		C.int32_t(event.Scroll.X/pointerScrollLine*120),
+		C.int32_t(event.Scroll.Y/pointerScrollLine*120),
+		C.uint32_t(event.Modifiers),
+	)
+	return result >= 0
 }
 
 func (w *windowsWebView) hide() error {
@@ -77,6 +105,7 @@ func (w *windowsWebView) hide() error {
 	if result < 0 {
 		return webViewHRESULT("hide WebView2", result)
 	}
+	w.visible = false
 	return nil
 }
 
@@ -146,6 +175,7 @@ func (w *windowsWebView) destroy() {
 	if w != nil && w.handle != nil {
 		C.wox_windows_webview_destroy(w.handle)
 		w.handle = nil
+		w.visible = false
 	}
 }
 

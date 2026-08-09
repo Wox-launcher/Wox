@@ -238,7 +238,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		Style: woxui.TextStyle{Size: actionFilterFontSize}, TextColor: props.ActionQueryText, Value: props.Filter, Focused: true, Autofocus: true,
 		MaxLines: 1, Window: props.Window, Theme: props.Theme, OnChanged: props.OnFilterChanged, OnKey: props.OnFilterKey,
 	})
-	return woxwidget.Container{
+	panel := woxwidget.Container{
 		Width: panelWidth, Height: panelHeight, Radius: props.ActionQueryRadius, Color: props.Theme.ActionBackground,
 		Padding: props.ActionPadding,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
@@ -248,4 +248,6 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 			woxwidget.Container{Width: innerWidth, Height: ActionSearchHeight, Padding: woxwidget.Insets{Top: 6}, Child: search},
 		}},
 	}
+	// Keep non-interactive panel chrome opaque to pointer hit testing so native composition content cannot receive clicks through it.
+	return woxwidget.Gesture{ID: "action-panel-surface", OnTap: func() {}, Child: panel}
 }

@@ -260,6 +260,33 @@ func renderScreenshotEditorAnnotations(source image.Image, annotations []screens
 	return output, nil
 }
 
+// renderScreenshotEditorCursor composites the capture-time pointer at its source-pixel hotspot.
+func renderScreenshotEditorCursor(target *image.RGBA, cursorPixel Point, selection Rect, frame Size) error {
+	if target == nil || frame.Width <= 0 || frame.Height <= 0 {
+		return nil
+	}
+	scaleX := float32(target.Bounds().Dx()) / frame.Width
+	scaleY := float32(target.Bounds().Dy()) / frame.Height
+	clip, err := screenshotEditorPixelSelection(target.Bounds(), selection, frame)
+	if err != nil {
+		return err
+	}
+	width := max(1, int(math.Round(float64(screenshotEditorCursorWidth*scaleX))))
+	height := max(1, int(math.Round(float64(screenshotEditorCursorHeight*scaleY))))
+	cursor, err := renderScreenshotEditorCursorImage(width, height)
+	if err != nil {
+		return err
+	}
+	left := int(math.Round(float64(cursorPixel.X - screenshotEditorCursorHotspotX*scaleX)))
+	top := int(math.Round(float64(cursorPixel.Y - screenshotEditorCursorHotspotY*scaleY)))
+	destination := image.Rect(left, top, left+width, top+height).Intersect(clip).Intersect(target.Bounds())
+	if destination.Empty() {
+		return nil
+	}
+	draw.Draw(target, destination, cursor, image.Pt(destination.Min.X-left, destination.Min.Y-top), draw.Over)
+	return nil
+}
+
 func screenshotEditorScalePoint(point Point, scaleX, scaleY float32) image.Point {
 	return image.Pt(int(math.Round(float64(point.X*scaleX))), int(math.Round(float64(point.Y*scaleY))))
 }

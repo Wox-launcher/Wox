@@ -306,7 +306,7 @@ func run() {
 	if incident, ok := diagnostic.GetManager().TakePendingCrashIncident(); ok {
 		ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
 			Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_previous_crash_github_issue"),
-			DisplaySeconds: 0,
+			DisplaySeconds: 60,
 		})
 		util.GetLogger().Info(ctx, fmt.Sprintf("pending crash report is ready for a GitHub issue: %s", incident.ReportPath))
 	}

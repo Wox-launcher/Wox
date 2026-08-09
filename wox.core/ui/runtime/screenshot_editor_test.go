@@ -61,8 +61,8 @@ func TestScreenshotEditorToolbarMatchesFlutterGeometry(t *testing.T) {
 	}
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
 
-	if state.toolbarRect.Width != 578 || state.toolbarRect.Height != 60 {
-		t.Fatalf("toolbar bounds = %+v, want 578x60", state.toolbarRect)
+	if state.toolbarRect.Width != 632 || state.toolbarRect.Height != 60 {
+		t.Fatalf("toolbar bounds = %+v, want 632x60", state.toolbarRect)
 	}
 	if state.toolbarRect.X != state.selection.X+state.selection.Width-state.toolbarRect.Width {
 		t.Fatalf("toolbar left = %v, want right-aligned to selection", state.toolbarRect.X)
@@ -80,6 +80,7 @@ func TestScreenshotEditorToolbarIconsRenderFromSharedSVGs(t *testing.T) {
 	names := append(screenshotEditorToolIconNames[:],
 		"control.undo",
 		"screenshot.scrolling-capture",
+		"screenshot.cursor",
 		"screenshot.pin",
 		"control.close",
 		"control.check",
@@ -93,6 +94,50 @@ func TestScreenshotEditorToolbarIconsRenderFromSharedSVGs(t *testing.T) {
 		if len(displayList.commands) != 1 || displayList.commands[0].kind != displayCommandDrawImage {
 			t.Fatalf("toolbar icon %q did not render as an SVG image", name)
 		}
+	}
+}
+
+func TestScreenshotEditorCursorToggleAndExport(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 400, 200))
+	mapped := screenshotEditorCursorPixelFromDesktop(Point{X: -50, Y: 25}, Rect{X: -100, Width: 200, Height: 100}, source)
+	if mapped == nil || *mapped != (Point{X: 100, Y: 50}) {
+		t.Fatalf("mapped cursor = %+v, want source pixel 100,50", mapped)
+	}
+	if outside := screenshotEditorCursorPixelFromDesktop(Point{X: 100, Y: 25}, Rect{X: -100, Width: 200, Height: 100}, source); outside != nil {
+		t.Fatalf("outside cursor should be unavailable, got %+v", outside)
+	}
+
+	cursorPixel := Point{X: 80, Y: 60}
+	state := &screenshotEditorOverlayState{
+		image:        &Image{Width: 200, Height: 120, pixels: make([]byte, 200*120*4)},
+		frameSize:    Size{Width: 200, Height: 120},
+		selection:    Rect{X: 20, Y: 20, Width: 140, Height: 80},
+		hasSelection: true,
+		cursorPixel:  &cursorPixel,
+	}
+	state.draw(&DisplayList{}, FrameInfo{Size: state.frameSize})
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: state.cursorRect.X + 20, Y: state.cursorRect.Y + 20}})
+	if !state.showCursor {
+		t.Fatal("cursor toolbar action did not enable the captured pointer")
+	}
+
+	target := image.NewRGBA(image.Rect(0, 0, 200, 120))
+	draw.Draw(target, target.Bounds(), image.NewUniform(color.RGBA{R: 255, G: 255, B: 255, A: 255}), image.Point{}, draw.Src)
+	if err := renderScreenshotEditorCursor(target, cursorPixel, state.selection, state.frameSize); err != nil {
+		t.Fatalf("render cursor: %v", err)
+	}
+	foundDarkPixel := false
+	for y := 55; y < 90 && !foundDarkPixel; y++ {
+		for x := 75; x < 115; x++ {
+			pixel := target.RGBAAt(x, y)
+			if pixel.R < 80 && pixel.G < 80 && pixel.B < 80 && pixel.A > 0 {
+				foundDarkPixel = true
+				break
+			}
+		}
+	}
+	if !foundDarkPixel {
+		t.Fatal("exported cursor marker did not contain its dark outline")
 	}
 }
 

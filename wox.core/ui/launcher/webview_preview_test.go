@@ -2,19 +2,7 @@ package launcher
 
 import (
 	"testing"
-
-	woxui "wox/ui/runtime"
 )
-
-func TestWebViewPreviewRemainsVisibleBesideActionPanel(t *testing.T) {
-	bounds, visible := webViewPreviewVisibleBounds(woxui.Rect{X: 300, Y: 100, Width: 900, Height: 600}, 850)
-	if !visible {
-		t.Fatal("WebView should remain visible beside the action panel")
-	}
-	if bounds.Width != 550 {
-		t.Fatalf("WebView width = %v, want 550", bounds.Width)
-	}
-}
 
 func TestWebViewPreviewURLChanged(t *testing.T) {
 	if webViewPreviewURLChanged("", `{"url":"https://example.com"}`) {
