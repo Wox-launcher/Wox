@@ -315,6 +315,11 @@ func (w *Window) SetHideOnBlur(enabled bool) error {
 	return w.native.setHideOnBlur(enabled)
 }
 
+// FocusReadyForBlur reports whether a newly shown window can accept an external focus transition.
+func (w *Window) FocusReadyForBlur() bool {
+	return w != nil && w.native != nil && w.native.focusReadyForBlur()
+}
+
 // SetAppearance updates native window materials to match the active light or dark theme.
 func (w *Window) SetAppearance(isDark bool) error {
 	if w == nil || w.native == nil {

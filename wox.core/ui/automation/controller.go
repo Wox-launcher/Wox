@@ -13,6 +13,14 @@ type Info struct {
 	Token   string `json:"token"`
 }
 
+// WindowState describes one real managed window exposed to lifecycle smoke tests.
+type WindowState struct {
+	Exists    bool   `json:"exists"`
+	Visible   bool   `json:"visible"`
+	BlurReady bool   `json:"blurReady"`
+	Lifecycle string `json:"lifecycle"`
+}
+
 // Controller exposes product behavior to the test-only automation transport.
 type Controller interface {
 	AutomationSnapshot() woxwidget.AutomationSnapshot
@@ -26,8 +34,10 @@ type Controller interface {
 	EnterAutomationText(text string) error
 	ResetAutomationState() error
 	ShowAutomationWindow() error
+	OpenAutomationSelectionQuery(text string) error
 	OpenAutomationSettings(path string) error
 	HideAutomationWindow() error
+	AutomationWindowState(instanceName string) (WindowState, error)
 	AutomationWindowBounds() (woxui.Rect, error)
 	SetAutomationWindowBounds(bounds woxui.Rect) error
 	CaptureAutomationWindow(path string) error

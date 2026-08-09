@@ -481,14 +481,17 @@ func (m *Manager) triggerSelectionQuery(ctx context.Context, selected selection.
 		return errors.New("selection is empty")
 	}
 
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	m.RefreshActiveWindowSnapshot(ctx)
 	m.openSecondaryInstance(ctx, string(common.ShowSourceSelection), common.PlainQuery{
 		QueryType:      plugin.QueryTypeSelection,
 		QuerySelection: selected,
-	}, common.ShowContext{
-		ShowSource: common.ShowSourceSelection,
-	})
+	}, selectionShowContext(woxSetting.HideOnLostFocus.Get()))
 	return nil
+}
+
+func selectionShowContext(hideOnLostFocus bool) common.ShowContext {
+	return common.ShowContext{ShowSource: common.ShowSourceSelection, HideOnBlur: hideOnLostFocus}
 }
 
 // openSecondaryInstance preserves the primary launcher while opening a session-owned query window.

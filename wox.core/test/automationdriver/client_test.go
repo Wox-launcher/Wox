@@ -179,6 +179,50 @@ func TestClientOpensSettingsRoute(t *testing.T) {
 	}
 }
 
+func TestClientOpensSelectionQueryAndReadsWindowState(t *testing.T) {
+	t.Parallel()
+
+	var methods []string
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		var requestPayload struct {
+			ID     uint64 `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		methods = append(methods, requestPayload.Method)
+		result := any(true)
+		if requestPayload.Method == "window.state" {
+			result = automation.WindowState{Exists: true, Visible: true, BlurReady: true, Lifecycle: "visible"}
+		}
+		body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": requestPayload.ID, "result": result})
+		if err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})
+
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	client.http.Transport = transport
+	if err := client.OpenSelectionQuery(context.Background(), "selected text"); err != nil {
+		t.Fatalf("open selection query: %v", err)
+	}
+	state, err := client.WindowState(context.Background(), "selection")
+	if err != nil {
+		t.Fatalf("read selection window state: %v", err)
+	}
+	if !state.Exists || !state.Visible || !state.BlurReady || state.Lifecycle != "visible" {
+		t.Fatalf("unexpected selection window state: %+v", state)
+	}
+	if len(methods) != 2 || methods[0] != "window.open_selection_query" || methods[1] != "window.state" {
+		t.Fatalf("unexpected methods: %v", methods)
+	}
+}
+
 func TestClientMovesPointerToSemanticsNodeCenter(t *testing.T) {
 	t.Parallel()
 

@@ -197,6 +197,17 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 		return resultOrError(true, controller.ResetAutomationState())
 	case "window.show":
 		return resultOrError(true, controller.ShowAutomationWindow())
+	case "window.open_selection_query":
+		var params struct {
+			Text string `json:"text"`
+		}
+		if err := decodeParams(rawParams, &params); err != nil {
+			return nil, invalidParams(err)
+		}
+		if strings.TrimSpace(params.Text) == "" {
+			return nil, invalidParams(errors.New("selection text is required"))
+		}
+		return resultOrError(true, controller.OpenAutomationSelectionQuery(params.Text))
 	case "window.open_settings":
 		var params struct {
 			Path string `json:"path"`
@@ -207,6 +218,18 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 		return resultOrError(true, controller.OpenAutomationSettings(params.Path))
 	case "window.hide":
 		return resultOrError(true, controller.HideAutomationWindow())
+	case "window.state":
+		var params struct {
+			InstanceName string `json:"instanceName"`
+		}
+		if err := decodeParams(rawParams, &params); err != nil {
+			return nil, invalidParams(err)
+		}
+		if strings.TrimSpace(params.InstanceName) == "" {
+			return nil, invalidParams(errors.New("instanceName is required"))
+		}
+		state, err := controller.AutomationWindowState(params.InstanceName)
+		return resultOrError(state, err)
 	case "window.bounds":
 		bounds, err := controller.AutomationWindowBounds()
 		return resultOrError(bounds, err)

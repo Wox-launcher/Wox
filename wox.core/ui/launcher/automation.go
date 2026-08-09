@@ -3,8 +3,10 @@ package launcher
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
+	"wox/ui/automation"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -275,6 +277,72 @@ func (a *App) ShowAutomationWindow() error {
 		return err
 	}
 	return actionErr
+}
+
+// OpenAutomationSelectionQuery enters the production selection-query flow after deterministic selection capture.
+func (a *App) OpenAutomationSelectionQuery(text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return errors.New("selection text is required")
+	}
+	provider, ok := a.services.(interface {
+		AutomationOpenSelectionQuery(context.Context, string, string) error
+	})
+	if !ok {
+		return errors.New("selection query automation is unavailable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return provider.AutomationOpenSelectionQuery(ctx, a.sessionID, text)
+}
+
+// AutomationWindowState returns the real managed lifecycle for the primary or a named secondary launcher.
+func (a *App) AutomationWindowState(instanceName string) (automation.WindowState, error) {
+	instanceName = strings.TrimSpace(instanceName)
+	var target *App
+	if instanceName == "primary" {
+		target = a
+	} else if a.instances != nil {
+		a.instances.mu.Lock()
+		sessionID := a.instances.sessionByName[instanceName]
+		target = a.instances.bySessionID[sessionID]
+		a.instances.mu.Unlock()
+	}
+	if target == nil {
+		return automation.WindowState{}, nil
+	}
+
+	state := automation.WindowState{Exists: true, Lifecycle: "closed"}
+	if err := target.runOnUI("read automation window state", func() {
+		state.Visible = target.visible
+		if target.launcher != nil {
+			state.Lifecycle = automationWindowLifecycle(target.launcher.Lifecycle())
+			state.BlurReady = target.launcher.Window().FocusReadyForBlur()
+		}
+	}); err != nil {
+		if target.destroyed.Load() {
+			return automation.WindowState{}, nil
+		}
+		return automation.WindowState{}, err
+	}
+	return state, nil
+}
+
+func automationWindowLifecycle(lifecycle woxui.WindowLifecycle) string {
+	switch lifecycle {
+	case woxui.WindowLifecycleCreated:
+		return "created"
+	case woxui.WindowLifecyclePresenting:
+		return "presenting"
+	case woxui.WindowLifecycleVisible:
+		return "visible"
+	case woxui.WindowLifecycleHidden:
+		return "hidden"
+	case woxui.WindowLifecycleClosing:
+		return "closing"
+	default:
+		return "closed"
+	}
 }
 
 // OpenAutomationSettings opens a settings route through the normal independent-window lifecycle.

@@ -3,6 +3,7 @@ package smoke
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -11,7 +12,163 @@ import (
 	"wox/test/automationdriver"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util/clipboard"
 )
+
+// OpenGeneralSettingsAndReadChoice opens General settings and returns one persisted choice label.
+func OpenGeneralSettingsAndReadChoice(t *testing.T, ctx context.Context, client *automationdriver.Client, settingKey string) string {
+	t.Helper()
+	if err := client.OpenSettings(ctx, "/general"); err != nil {
+		t.Fatalf("open General settings: %v", err)
+	}
+	controlID := "setting-choice-" + settingKey
+	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, pageFound := automationdriver.Find(snapshot, "settings.page.general")
+		_, choiceFound := automationdriver.Find(snapshot, controlID)
+		return pageFound && choiceFound
+	})
+	if err != nil {
+		t.Fatalf("wait for General setting %q: %v", settingKey, err)
+	}
+	choice, _ := automationdriver.Find(snapshot, controlID)
+	return choice.Value
+}
+
+// OpenGeneralSettingsAndReadSwitch opens General settings and returns one persisted boolean value.
+func OpenGeneralSettingsAndReadSwitch(t *testing.T, ctx context.Context, client *automationdriver.Client, settingKey string) bool {
+	t.Helper()
+	if err := client.OpenSettings(ctx, "/general"); err != nil {
+		t.Fatalf("open General settings: %v", err)
+	}
+	controlID := "setting-switch-" + settingKey
+	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, pageFound := automationdriver.Find(snapshot, "settings.page.general")
+		_, switchFound := automationdriver.Find(snapshot, controlID)
+		return pageFound && switchFound
+	})
+	if err != nil {
+		t.Fatalf("wait for General switch %q: %v", settingKey, err)
+	}
+	control, _ := automationdriver.Find(snapshot, controlID)
+	return control.Checked
+}
+
+// SetSettingSwitch toggles one visible boolean setting only when its persisted value differs.
+func SetSettingSwitch(t *testing.T, ctx context.Context, client *automationdriver.Client, settingKey string, expected bool) {
+	t.Helper()
+	controlID := "setting-switch-" + settingKey
+	snapshot, err := client.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("read setting switch %q: %v", settingKey, err)
+	}
+	control, found := automationdriver.Find(snapshot, controlID)
+	if !found {
+		t.Fatalf("setting switch %q was not found", settingKey)
+	}
+	if control.Checked != expected {
+		if err := client.Perform(ctx, controlID, woxui.AccessibilityActionToggle, ""); err != nil {
+			t.Fatalf("toggle setting switch %q: %v", settingKey, err)
+		}
+	}
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		control, found := automationdriver.Find(snapshot, controlID)
+		return found && control.Checked == expected
+	}); err != nil {
+		t.Fatalf("wait for setting switch %q to become %t: %v", settingKey, expected, err)
+	}
+}
+
+// SelectSettingChoiceByIndex activates one product-defined option and waits for persistence.
+func SelectSettingChoiceByIndex(t *testing.T, ctx context.Context, client *automationdriver.Client, settingKey string, optionIndex int) string {
+	t.Helper()
+	controlID := "setting-choice-" + settingKey
+	optionID := fmt.Sprintf("setting-choice-%d", optionIndex)
+	if err := client.Perform(ctx, controlID, woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("open setting %q choices: %v", settingKey, err)
+	}
+	var optionLabel string
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		choice, choiceFound := automationdriver.Find(snapshot, optionID)
+		_, menuFound := automationdriver.Find(snapshot, "setting-choice-menu")
+		if choiceFound {
+			optionLabel = choice.Label
+		}
+		return menuFound && choiceFound && optionLabel != ""
+	}); err != nil {
+		t.Fatalf("wait for setting %q choice %d: %v", settingKey, optionIndex, err)
+	}
+	if err := client.Perform(ctx, optionID, woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("select setting %q choice %d: %v", settingKey, optionIndex, err)
+	}
+	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		control, found := automationdriver.Find(snapshot, controlID)
+		_, menuFound := automationdriver.Find(snapshot, "setting-choice-menu")
+		return found && control.Value == optionLabel && !menuFound
+	}); err != nil {
+		t.Fatalf("wait for setting %q choice %d to persist: %v", settingKey, optionIndex, err)
+	}
+	return optionLabel
+}
+
+// RestoreGeneralSettingChoice returns one shared General setting to its previous value.
+func RestoreGeneralSettingChoice(t *testing.T, client *automationdriver.Client, settingKey, previousValue string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := client.Hide(ctx); err != nil {
+		t.Errorf("hide active window before restoring General setting %q: %v", settingKey, err)
+	}
+	OpenGeneralSettingsAndReadChoice(t, ctx, client, settingKey)
+	SelectSettingChoiceByLabel(t, ctx, client, "setting-choice-"+settingKey, previousValue)
+	if err := client.Hide(ctx); err != nil {
+		t.Errorf("close General settings after restoring %q: %v", settingKey, err)
+	}
+}
+
+// RestoreGeneralSettingSwitch returns one shared General switch to its previous value.
+func RestoreGeneralSettingSwitch(t *testing.T, client *automationdriver.Client, settingKey string, previousValue bool) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := client.Hide(ctx); err != nil {
+		t.Errorf("hide active window before restoring General switch %q: %v", settingKey, err)
+	}
+	OpenGeneralSettingsAndReadSwitch(t, ctx, client, settingKey)
+	SetSettingSwitch(t, ctx, client, settingKey, previousValue)
+	if err := client.Hide(ctx); err != nil {
+		t.Errorf("close General settings after restoring switch %q: %v", settingKey, err)
+	}
+}
+
+// PreserveClipboard restores the platform clipboard after a smoke case changes it.
+func PreserveClipboard(t *testing.T) {
+	t.Helper()
+	previousClipboard, err := clipboard.Read()
+	if err != nil && !errors.Is(err, clipboard.NoDataErr()) {
+		t.Fatalf("read clipboard before smoke case: %v", err)
+	}
+	t.Cleanup(func() {
+		if previousClipboard != nil {
+			if restoreErr := clipboard.Write(previousClipboard); restoreErr != nil {
+				t.Errorf("restore clipboard after smoke case: %v", restoreErr)
+			}
+			return
+		}
+		if restoreErr := clipboard.WriteText(""); restoreErr != nil {
+			t.Errorf("clear clipboard after smoke case: %v", restoreErr)
+		}
+	})
+}
+
+// HasLauncherResultLabel reports whether the current launcher generation exposes one matching result.
+func HasLauncherResultLabel(snapshot woxwidget.AutomationSnapshot, label string) bool {
+	for _, node := range snapshot.Tree.Nodes {
+		if strings.HasPrefix(node.AutomationID, "launcher.result.") && node.Label == label {
+			return true
+		}
+	}
+	return false
+}
 
 // OpenInstalledPluginSettings opens one installed plugin through the shared settings route.
 func OpenInstalledPluginSettings(t *testing.T, ctx context.Context, client *automationdriver.Client, pluginID string) {

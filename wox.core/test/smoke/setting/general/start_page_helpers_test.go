@@ -1,6 +1,6 @@
 //go:build wox_ui_smoke
 
-package query
+package general
 
 import (
 	"context"
@@ -27,16 +27,16 @@ const (
 // configureStartPage selects fresh launch behavior and one Start Page option, restoring both settings after the case.
 func configureStartPage(t *testing.T, ctx context.Context, client *automationdriver.Client, startPageOption int) {
 	t.Helper()
-	previousLaunchMode := openGeneralSettingsAndReadChoice(t, ctx, client, "LaunchMode")
-	freshMode := selectGeneralSettingChoice(t, ctx, client, "LaunchMode", 0)
+	previousLaunchMode := smoke.OpenGeneralSettingsAndReadChoice(t, ctx, client, "LaunchMode")
+	freshMode := smoke.SelectSettingChoiceByIndex(t, ctx, client, "LaunchMode", 0)
 	if previousLaunchMode != freshMode {
-		t.Cleanup(func() { restoreGeneralSettingChoice(t, client, "LaunchMode", previousLaunchMode) })
+		t.Cleanup(func() { smoke.RestoreGeneralSettingChoice(t, client, "LaunchMode", previousLaunchMode) })
 	}
 
-	previousStartPage := openGeneralSettingsAndReadChoice(t, ctx, client, "StartPage")
-	selectedStartPage := selectGeneralSettingChoice(t, ctx, client, "StartPage", startPageOption)
+	previousStartPage := smoke.OpenGeneralSettingsAndReadChoice(t, ctx, client, "StartPage")
+	selectedStartPage := smoke.SelectSettingChoiceByIndex(t, ctx, client, "StartPage", startPageOption)
 	if previousStartPage != selectedStartPage {
-		t.Cleanup(func() { restoreGeneralSettingChoice(t, client, "StartPage", previousStartPage) })
+		t.Cleanup(func() { smoke.RestoreGeneralSettingChoice(t, client, "StartPage", previousStartPage) })
 	}
 	if err := client.Hide(ctx); err != nil {
 		t.Fatalf("close General settings after configuring Start Page: %v", err)
@@ -46,7 +46,7 @@ func configureStartPage(t *testing.T, ctx context.Context, client *automationdri
 // seedConverterMRU executes one deterministic conversion enough times to cross the product's MRU eligibility threshold.
 func seedConverterMRU(t *testing.T, ctx context.Context, client *automationdriver.Client) string {
 	t.Helper()
-	preserveClipboard(t)
+	smoke.PreserveClipboard(t)
 	resultLabel := ""
 	for useCount := 0; useCount < 3; useCount++ {
 		smoke.ShowLauncher(t, ctx, client)

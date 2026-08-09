@@ -313,6 +313,10 @@ func (w *platformWindow) setHideOnBlur(enabled bool) error {
 	return nil
 }
 
+func (w *platformWindow) focusReadyForBlur() bool {
+	return true
+}
+
 func (w *platformWindow) setAppearance(isDark bool) error {
 	native, err := w.openNative()
 	if err != nil {

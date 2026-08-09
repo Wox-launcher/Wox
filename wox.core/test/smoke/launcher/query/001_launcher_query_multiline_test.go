@@ -20,7 +20,7 @@ import (
 // Evidence: the query semantics preserve normalized line breaks and move vertically after the wheel event without changing their value.
 func Test001LauncherQueryMultiline(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
-		preserveClipboard(t)
+		smoke.PreserveClipboard(t)
 
 		smoke.ShowLauncher(t, ctx, client)
 		if err := client.EnterText(ctx, "one"); err != nil {

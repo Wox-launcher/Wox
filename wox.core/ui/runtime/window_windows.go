@@ -465,6 +465,10 @@ func (w *platformWindow) setHideOnBlur(enabled bool) error {
 	return w.call(windowCommand{kind: windowCommandSetHideOnBlur, hideOnBlur: enabled}).err
 }
 
+func (w *platformWindow) focusReadyForBlur() bool {
+	return w.focus.visible && w.focus.activationConfirmed && !time.Now().Before(w.focus.blurGuardUntil)
+}
+
 func (w *platformWindow) setAppearance(isDark bool) error {
 	return w.call(windowCommand{kind: windowCommandSetAppearance, darkAppearance: isDark}).err
 }

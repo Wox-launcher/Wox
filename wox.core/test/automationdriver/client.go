@@ -26,6 +26,9 @@ type Client struct {
 	stepDelay time.Duration
 }
 
+// WindowState is the driver's public view of one managed Wox window.
+type WindowState = automation.WindowState
+
 const (
 	// SharedInfoFileEnvironment points smoke clients at the suite-owned automation endpoint.
 	SharedInfoFileEnvironment = "WOX_GO_UI_AUTOMATION_INFO_FILE"
@@ -257,6 +260,12 @@ func (c *Client) Show(ctx context.Context) error {
 	return c.pauseAfterStep(ctx, err)
 }
 
+// OpenSelectionQuery opens a real selection-query secondary after the OS selection-capture boundary.
+func (c *Client) OpenSelectionQuery(ctx context.Context, text string) error {
+	_, err := call[bool](ctx, c, "window.open_selection_query", map[string]string{"text": text})
+	return c.pauseAfterStep(ctx, err)
+}
+
 // OpenSettings opens one settings route through the product window lifecycle.
 func (c *Client) OpenSettings(ctx context.Context, path string) error {
 	_, err := call[bool](ctx, c, "window.open_settings", map[string]string{"path": path})
@@ -270,6 +279,33 @@ func (c *Client) Hide(ctx context.Context) error {
 	}
 	_, err := call[bool](ctx, c, "window.hide", nil)
 	return err
+}
+
+// WindowState returns the current managed lifecycle state for one launcher instance.
+func (c *Client) WindowState(ctx context.Context, instanceName string) (automation.WindowState, error) {
+	return call[automation.WindowState](ctx, c, "window.state", map[string]string{"instanceName": instanceName})
+}
+
+// WaitForWindowState polls real managed-window state until predicate accepts it.
+func (c *Client) WaitForWindowState(ctx context.Context, instanceName string, predicate func(automation.WindowState) bool) (automation.WindowState, error) {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	var last automation.WindowState
+	for {
+		state, err := c.WindowState(ctx, instanceName)
+		if err != nil {
+			return last, err
+		}
+		last = state
+		if predicate(state) {
+			return state, nil
+		}
+		select {
+		case <-ctx.Done():
+			return last, fmt.Errorf("wait for window %q state: %w; last state: %+v", instanceName, ctx.Err(), last)
+		case <-ticker.C:
+		}
+	}
 }
 
 // Bounds returns logical native window geometry.

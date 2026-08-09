@@ -15,14 +15,15 @@ import (
 )
 
 type fakeController struct {
-	actionID     string
-	action       woxui.AccessibilityAction
-	actionValue  string
-	pointer      woxui.PointerEvent
-	settingsPath string
-	reset        bool
-	metricsReset bool
-	repaintMode  woxwidget.RepaintDebugMode
+	actionID      string
+	action        woxui.AccessibilityAction
+	actionValue   string
+	pointer       woxui.PointerEvent
+	settingsPath  string
+	selectionText string
+	reset         bool
+	metricsReset  bool
+	repaintMode   woxwidget.RepaintDebugMode
 }
 
 func (*fakeController) AutomationFrameMetrics() (woxui.FrameMetricsSnapshot, error) {
@@ -72,11 +73,18 @@ func (f *fakeController) ResetAutomationState() error {
 	return nil
 }
 func (*fakeController) ShowAutomationWindow() error { return nil }
+func (f *fakeController) OpenAutomationSelectionQuery(text string) error {
+	f.selectionText = text
+	return nil
+}
 func (f *fakeController) OpenAutomationSettings(path string) error {
 	f.settingsPath = path
 	return nil
 }
 func (*fakeController) HideAutomationWindow() error { return nil }
+func (*fakeController) AutomationWindowState(instanceName string) (WindowState, error) {
+	return WindowState{Exists: instanceName == "selection", Visible: true, BlurReady: true, Lifecycle: "visible"}, nil
+}
 func (*fakeController) AutomationWindowBounds() (woxui.Rect, error) {
 	return woxui.Rect{X: 10, Y: 20, Width: 760, Height: 480}, nil
 }
@@ -151,6 +159,20 @@ func TestHandlerDispatchesSemanticActionAndRejectsUnknownMethod(t *testing.T) {
 	}
 	if controller.settingsPath != "/appearance" {
 		t.Fatalf("unexpected settings path %q", controller.settingsPath)
+	}
+	selectionResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"selection","method":"window.open_selection_query","params":{"text":"selected text"}}`)
+	if selectionResponse.Code != http.StatusOK || controller.selectionText != "selected text" {
+		t.Fatalf("selection query was not dispatched: status=%d text=%q", selectionResponse.Code, controller.selectionText)
+	}
+	stateResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"state","method":"window.state","params":{"instanceName":"selection"}}`)
+	var stateResult struct {
+		Result WindowState `json:"result"`
+	}
+	if err := json.Unmarshal(stateResponse.Body.Bytes(), &stateResult); err != nil {
+		t.Fatalf("decode window state response: %v", err)
+	}
+	if stateResponse.Code != http.StatusOK || !stateResult.Result.Exists || !stateResult.Result.BlurReady || stateResult.Result.Lifecycle != "visible" {
+		t.Fatalf("unexpected selection window state: status=%d state=%+v", stateResponse.Code, stateResult.Result)
 	}
 
 	resetResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"reset","method":"suite.reset"}`)
