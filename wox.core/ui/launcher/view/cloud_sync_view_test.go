@@ -44,45 +44,45 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	accountCard := cloudAccountCard(CloudAccountProps{LoggedIn: true, LabelWidth: labelWidth, SupportLabel: "Contact Support", SupportIcon: &woxui.Image{}}, width, 162, woxcomponent.Theme{}).(woxwidget.Container)
 	accountColumn := accountCard.Child.(woxwidget.Flex)
 	billingRow := accountColumn.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
-	supportValue := billingRow.Children[1].(woxwidget.Container)
-	supportButtonWidth := cloudFormButtonWidth("Contact Support", true)
+	supportValue := billingRow.Children[1].(woxwidget.Align)
 	if got := labelWidth + gap + supportValue.Width; got != width {
 		t.Fatalf("billing row width = %v, want %v", got, width)
 	}
-	if got := supportValue.Padding.Left; got+supportButtonWidth != supportValue.Width {
-		t.Fatalf("support button right edge = %v, want %v", got+supportButtonWidth, supportValue.Width)
+	if supportValue.Horizontal != 1 {
+		t.Fatal("support button should stay right-aligned")
 	}
 	supportButton := supportValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
-	if supportButton.Width != supportButtonWidth {
-		t.Fatalf("support button width = %v, want content-sized %v", supportButton.Width, supportButtonWidth)
+	if supportButton.Width != 0 {
+		t.Fatalf("support button width = %v, want content-sized", supportButton.Width)
 	}
 
 	buttonTheme := woxcomponent.Theme{ActionSelected: woxui.Color{R: 1, A: 255}, ResultSubtitle: woxui.Color{R: 2, A: 255}}
 	syncCard := cloudSyncCard(CloudSyncProps{LabelWidth: labelWidth, ButtonLabel: "Sync"}, width, buttonTheme).(woxwidget.Container)
 	syncRow := syncCard.Child.(woxwidget.Flex)
-	syncValue := syncRow.Children[1].(woxwidget.Container)
-	syncButtonWidth := cloudFormButtonWidth("Sync", false)
+	syncValue := syncRow.Children[1].(woxwidget.Align)
 	if got := labelWidth + gap + syncValue.Width; got != width {
 		t.Fatalf("sync row width = %v, want %v", got, width)
 	}
-	if got := syncValue.Padding.Left; got+syncButtonWidth != syncValue.Width {
-		t.Fatalf("sync button right edge = %v, want %v", got+syncButtonWidth, syncValue.Width)
+	if syncValue.Horizontal != 1 {
+		t.Fatal("sync button should stay right-aligned")
 	}
 
 	deviceHeader := cloudDeviceHeader(CloudDevicesProps{LabelWidth: labelWidth, RefreshLabel: "Refresh"}, width, buttonTheme).(woxwidget.Container)
 	deviceRow := deviceHeader.Child.(woxwidget.Flex)
-	refreshValue := deviceRow.Children[1].(woxwidget.Container)
-	refreshButtonWidth := cloudFormButtonWidth("Refresh", true)
+	refreshValue := deviceRow.Children[1].(woxwidget.Align)
 	if got := labelWidth + gap + refreshValue.Width; got != width {
 		t.Fatalf("device row width = %v, want %v", got, width)
 	}
-	if got := refreshValue.Padding.Left; got+refreshButtonWidth != refreshValue.Width {
-		t.Fatalf("refresh button right edge = %v, want %v", got+refreshButtonWidth, refreshValue.Width)
+	if refreshValue.Horizontal != 1 {
+		t.Fatal("refresh button should stay right-aligned")
 	}
 	syncButton := syncValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	refreshButton := refreshValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	if syncButton.Color != refreshButton.Color || syncButton.BorderColor != refreshButton.BorderColor || syncButton.BorderWidth != refreshButton.BorderWidth {
 		t.Fatalf("sync button surface = %+v, want refresh surface %+v", syncButton, refreshButton)
+	}
+	if syncButton.Width != 0 || refreshButton.Width != 0 {
+		t.Fatalf("sync/refresh widths = %v/%v, want content-sized", syncButton.Width, refreshButton.Width)
 	}
 }
 

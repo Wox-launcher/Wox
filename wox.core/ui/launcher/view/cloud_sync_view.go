@@ -459,15 +459,14 @@ func cloudAlpha(color woxui.Color, alpha uint8) woxui.Color {
 // cloudAccountCard switches between account entry points and signed-in details.
 func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	if !props.LoggedIn {
-		const actionsWidth = float32(184)
 		return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 2, Top: 10, Right: 2, Bottom: 10}, Child: woxwidget.Flex{
 			Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-				woxwidget.Container{Width: max(float32(0), width-actionsWidth-4), Height: 42, Padding: woxwidget.Insets{Top: 10}, Child: woxwidget.Text{
+				woxwidget.Container{Width: max(float32(0), width-200), Height: 42, Padding: woxwidget.Insets{Top: 10}, Child: woxwidget.Text{
 					Value: props.SectionLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle,
 				}},
-				woxwidget.Container{Width: actionsWidth, Height: 42, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-					woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-login", Label: props.LoginLabel, Width: 88, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnLogin, Theme: theme}),
-					woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-register", Label: props.RegisterLabel, Width: 88, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnRegister, Theme: theme}),
+				woxwidget.Align{Width: max(float32(0), min(float32(200), width)), Height: 42, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
+					woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-login", Label: props.LoginLabel, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnLogin, Theme: theme}),
+					woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-register", Label: props.RegisterLabel, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnRegister, Theme: theme}),
 				}}},
 			},
 		}}
@@ -479,7 +478,6 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 		labelWidth = max(float32(220), width-390)
 	}
 	valueWidth := max(float32(220), availableWidth-labelWidth-labelGap)
-	supportWidth := cloudFormButtonWidth(props.SupportLabel, props.SupportIcon != nil)
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: availableWidth, Height: 34, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: labelGap, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: labelWidth, Height: 34, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Text{Value: props.EmailLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}},
@@ -507,8 +505,8 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 				woxwidget.Text{Value: props.BillingLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
 				woxwidget.Text{Value: props.BillingTips, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle},
 			}}},
-			woxwidget.Container{Width: valueWidth, Height: 57, Padding: woxwidget.Insets{Left: max(float32(0), valueWidth-supportWidth)}, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "cloud-support", Label: props.SupportLabel, Icon: props.SupportIcon, IconSize: 16, Width: supportWidth,
+			woxwidget.Align{Width: valueWidth, Height: 57, Horizontal: 1, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: "cloud-support", Label: props.SupportLabel, Icon: props.SupportIcon, IconSize: 16,
 				Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnSupport, Theme: theme,
 			})},
 		}}},
@@ -557,6 +555,7 @@ func cloudValueAction(id, value string, width float32, onTap func(), theme woxco
 // cloudSyncCard renders current sync state and its primary action.
 func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
 	const labelGap = float32(32)
+	// Reserve label space from an estimate only; the button itself sizes to its label.
 	buttonWidth := cloudFormButtonWidth(props.ButtonLabel, false)
 	availableWidth := max(float32(0), width)
 	labelWidth := min(props.LabelWidth, max(float32(220), availableWidth-labelGap-buttonWidth))
@@ -564,7 +563,7 @@ func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Theme
 		labelWidth = max(float32(220), width-260)
 	}
 	valueWidth := max(buttonWidth, availableWidth-labelWidth-labelGap)
-	button := woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-sync", Label: props.ButtonLabel, Width: buttonWidth, Disabled: !props.ButtonEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnSync, Theme: theme})
+	button := woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-sync", Label: props.ButtonLabel, Disabled: !props.ButtonEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnSync, Theme: theme})
 	statusLine := props.Label
 	if props.Detail != "" {
 		statusLine += ", " + props.Detail
@@ -575,7 +574,7 @@ func cloudSyncCard(props CloudSyncProps, width float32, theme woxcomponent.Theme
 				woxwidget.Text{Value: props.StatusLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
 				woxwidget.TextBlock{Value: statusLine, Width: labelWidth, Height: 24, MaxLines: 1, Style: woxui.TextStyle{Size: 12}, LineHeight: 17, Color: props.Color},
 			}}},
-			woxwidget.Container{Width: valueWidth, Height: 57, Padding: woxwidget.Insets{Left: max(float32(0), valueWidth-buttonWidth)}, Child: button},
+			woxwidget.Align{Width: valueWidth, Height: 57, Horizontal: 1, Child: button},
 		},
 	}}
 }
@@ -588,7 +587,7 @@ func cloudDeviceHeader(props CloudDevicesProps, width float32, theme woxcomponen
 	labelWidth := min(props.LabelWidth, max(float32(220), availableWidth-labelGap-buttonWidth))
 	valueWidth := max(buttonWidth, availableWidth-labelWidth-labelGap)
 	refresh := woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: "cloud-refresh", Label: props.RefreshLabel, Icon: props.RefreshIcon, IconSize: 16, Width: buttonWidth,
+		ID: "cloud-refresh", Label: props.RefreshLabel, Icon: props.RefreshIcon, IconSize: 16,
 		Disabled: !props.RefreshEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnRefresh, Theme: theme,
 	})
 	return woxwidget.Container{Width: width, Height: 50, Child: woxwidget.Flex{
@@ -597,7 +596,7 @@ func cloudDeviceHeader(props CloudDevicesProps, width float32, theme woxcomponen
 				woxwidget.Text{Value: props.SectionLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
 				woxwidget.TextBlock{Value: props.Tips, Width: labelWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: theme.ResultSubtitle},
 			}}},
-			woxwidget.Container{Width: valueWidth, Height: 50, Padding: woxwidget.Insets{Left: max(float32(0), valueWidth-buttonWidth)}, Child: refresh},
+			woxwidget.Align{Width: valueWidth, Height: 50, Horizontal: 1, Child: refresh},
 		},
 	}}
 }
@@ -609,8 +608,8 @@ func cloudDeviceCard(props CloudDevicesProps, width, height float32, theme woxco
 		actionWidth := float32(0)
 		var action woxwidget.Widget
 		if item.ShowRevoke {
-			actionWidth = 96
-			action = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: item.ID, Label: item.RevokeLabel, Width: 96, Disabled: !item.RevokeEnabled, Variant: woxcomponent.ButtonSecondary, OnTap: item.OnRevoke, Theme: theme})
+			actionWidth = cloudFormButtonWidth(item.RevokeLabel, false)
+			action = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: item.ID, Label: item.RevokeLabel, Disabled: !item.RevokeEnabled, Variant: woxcomponent.ButtonSecondary, OnTap: item.OnRevoke, Theme: theme})
 		}
 		gapWidth := float32(18)
 		if actionWidth > 0 {
@@ -712,11 +711,10 @@ func CloudPluginExclusionDialog(props CloudPluginExclusionDialogProps) woxwidget
 		},
 		OnChoiceTap: props.OnChoiceTap,
 	})
-	actionsWidth := float32(84 + 12 + 84)
-	actions := woxwidget.Container{Width: contentWidth, Height: 36, Padding: woxwidget.Insets{Left: max(float32(0), contentWidth-actionsWidth)}, Child: woxwidget.Flex{
+	actions := woxwidget.Align{Width: contentWidth, Height: 36, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-plugin-exclusion-cancel", Label: props.CancelLabel, Width: 84, Height: 36, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-plugin-exclusion-save", Label: props.SaveLabel, Width: 84, Height: 36, Variant: woxcomponent.ButtonPrimary, Disabled: props.Selected == "", OnTap: props.OnSave, Theme: props.Theme}),
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-plugin-exclusion-cancel", Label: props.CancelLabel, Height: 36, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-plugin-exclusion-save", Label: props.SaveLabel, Height: 36, Variant: woxcomponent.ButtonPrimary, Disabled: props.Selected == "", OnTap: props.OnSave, Theme: props.Theme}),
 		},
 	}}
 	dialog := woxcomponent.WoxDialog(woxcomponent.DialogProps{
@@ -848,13 +846,10 @@ func CloudFormOverlay(props CloudFormOverlayProps) woxwidget.Widget {
 		appendContent(woxwidget.TextBlock{Value: props.Feedback, Width: innerWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: props.FeedbackColor}, 34, 10)
 	}
 
-	cancelWidth := cloudFormButtonWidth(props.CancelLabel, false)
-	submitWidth := cloudFormButtonWidth(props.SubmitLabel, false)
-	actions := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		woxwidget.Painter{Width: max(float32(0), innerWidth-cancelWidth-submitWidth-8), Height: 36},
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-form-cancel", Label: props.CancelLabel, Width: cancelWidth, Height: 36, Radius: 4, FontSize: 13, Disabled: props.Saving, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-form-submit", Label: props.SubmitLabel, Width: submitWidth, Height: 36, Radius: 4, FontSize: 13, Disabled: !props.SubmitEnabled, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSubmit, Theme: props.Theme}),
-	}}
+	actions := woxwidget.Align{Width: innerWidth, Height: 36, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-form-cancel", Label: props.CancelLabel, Height: 36, Radius: 4, FontSize: 13, Disabled: props.Saving, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-form-submit", Label: props.SubmitLabel, Height: 36, Radius: 4, FontSize: 13, Disabled: !props.SubmitEnabled, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSubmit, Theme: props.Theme}),
+	}}}
 	appendContent(actions, 36, 12)
 
 	panelHeight := min(contentHeight+48, props.Height-56)
@@ -883,11 +878,13 @@ func cloudFormTextField(field CloudFormFieldProps, trailingLink *CloudFormLinkPr
 	})
 	var label woxwidget.Widget = woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText}
 	if trailingLink != nil {
-		linkWidth := min(trailingLink.Width, max(float32(0), width-100))
-		label = woxwidget.Container{Width: width, Height: 17, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: max(float32(0), width-linkWidth), Height: 17, Child: label},
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: trailingLink.ID, Label: trailingLink.Label, Width: linkWidth, Height: 17, Radius: 4, Padding: woxwidget.Insets{Left: 1, Right: 1}, FontSize: 11, Disabled: disabled, Variant: woxcomponent.ButtonText, OnTap: trailingLink.OnTap, Theme: theme}),
-		}}}
+		label = woxwidget.Stack{Width: width, Height: 17, Children: []woxwidget.StackChild{
+			{Child: woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText}},
+			{AnchorRight: true, Right: 0, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: trailingLink.ID, Label: trailingLink.Label, Height: 17, Radius: 4, Padding: woxwidget.Insets{Left: 1, Right: 1}, FontSize: 11,
+				Disabled: disabled, Variant: woxcomponent.ButtonText, OnTap: trailingLink.OnTap, Theme: theme,
+			})},
+		}}
 	}
 	return woxwidget.Container{Width: width, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
 		label,

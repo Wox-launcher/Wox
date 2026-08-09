@@ -170,16 +170,10 @@ func WindowGroupEditor(props WindowGroupEditorProps) woxwidget.Widget {
 		windowGroupEditorHeader(props, innerWidth),
 		windowGroupEditorBody(props, innerWidth, bodyHeight),
 	}}
-	cancelWidth := float32(88)
-	saveWidth := float32(88)
-	actionsWidth := cancelWidth + saveWidth + 12
-	actions := woxwidget.Container{
-		Width: innerWidth, Height: 38, Padding: woxwidget.Insets{Left: max(float32(0), innerWidth-actionsWidth)},
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-cancel", Label: props.CancelLabel, Width: cancelWidth, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-save", Label: props.SaveLabel, Width: saveWidth, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
-		}},
-	}
+	actions := woxwidget.Align{Width: innerWidth, Height: 38, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-cancel", Label: props.CancelLabel, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-save", Label: props.SaveLabel, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
+	}}}
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 16, Children: []woxwidget.Widget{
 		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 16}, Color: props.Theme.ResultTitle},
 		body,
@@ -592,11 +586,10 @@ func (s *windowGroupURLState) buildDialog(context woxwidget.StateContext, props 
 			}
 		},
 	})
-	actionsWidth := float32(188)
-	actions := woxwidget.Container{Width: innerWidth, Height: 38, Padding: woxwidget.Insets{Left: max(float32(0), innerWidth-actionsWidth)}, Child: woxwidget.Flex{
+	actions := woxwidget.Align{Width: innerWidth, Height: 38, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-cancel", Label: props.CancelLabel, Width: 88, Height: 38, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-save", Label: props.SaveLabel, Width: 88, Height: 38, Variant: woxcomponent.ButtonPrimary, OnTap: func() {
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-cancel", Label: props.CancelLabel, Height: 38, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-save", Label: props.SaveLabel, Height: 38, Variant: woxcomponent.ButtonPrimary, OnTap: func() {
 				if props.OnSave == nil {
 					return
 				}
@@ -640,10 +633,10 @@ func (s *windowGroupURLState) buildRowEditor(context woxwidget.StateContext, pro
 		Value: s.draft, Window: props.Window, Theme: props.Theme,
 		OnChanged: func(value string) { context.SetState(func() { s.draft = value; s.draftError = "" }) },
 	})
-	actions := woxwidget.Container{Width: innerWidth, Height: 38, Padding: woxwidget.Insets{Left: max(float32(0), innerWidth-188)}, Child: woxwidget.Flex{
+	actions := woxwidget.Align{Width: innerWidth, Height: 38, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-row-cancel", Label: props.CancelLabel, Width: 88, Height: 38, Variant: woxcomponent.ButtonOutline, OnTap: func() { context.SetState(func() { s.rowEditor = -2; s.draftError = "" }) }, Theme: props.Theme}),
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-row-save", Label: props.SaveLabel, Width: 88, Height: 38, Variant: woxcomponent.ButtonPrimary, OnTap: func() {
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-row-cancel", Label: props.CancelLabel, Height: 38, Variant: woxcomponent.ButtonOutline, OnTap: func() { context.SetState(func() { s.rowEditor = -2; s.draftError = "" }) }, Theme: props.Theme}),
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-row-save", Label: props.SaveLabel, Height: 38, Variant: woxcomponent.ButtonPrimary, OnTap: func() {
 				value := strings.TrimSpace(s.draft)
 				if value == "" {
 					context.SetState(func() { s.draftError = props.RequiredLabel })

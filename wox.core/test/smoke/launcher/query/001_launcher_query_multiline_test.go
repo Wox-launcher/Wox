@@ -4,7 +4,6 @@ package query
 
 import (
 	"context"
-	"errors"
 	"runtime"
 	"testing"
 	"time"
@@ -21,21 +20,7 @@ import (
 // Evidence: the query semantics preserve normalized line breaks and move vertically after the wheel event without changing their value.
 func Test001LauncherQueryMultiline(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
-		previousClipboard, err := clipboard.Read()
-		if err != nil && !errors.Is(err, clipboard.NoDataErr()) {
-			t.Fatalf("read clipboard before multiline query case: %v", err)
-		}
-		t.Cleanup(func() {
-			if previousClipboard != nil {
-				if restoreErr := clipboard.Write(previousClipboard); restoreErr != nil {
-					t.Errorf("restore clipboard after multiline query case: %v", restoreErr)
-				}
-				return
-			}
-			if restoreErr := clipboard.WriteText(""); restoreErr != nil {
-				t.Errorf("clear clipboard after multiline query case: %v", restoreErr)
-			}
-		})
+		preserveClipboard(t)
 
 		smoke.ShowLauncher(t, ctx, client)
 		if err := client.EnterText(ctx, "one"); err != nil {

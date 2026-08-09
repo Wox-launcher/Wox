@@ -225,13 +225,13 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 		if status.OnInstall != nil {
 			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "runtime-install-" + status.Runtime, Label: status.InstallLabel, Icon: status.InstallIcon, IconSize: 14,
-				Width: runtimeLabelWidth(status.InstallLabel, 82, 132), Height: 38, Radius: 4, Disabled: props.Restarting, Variant: woxcomponent.ButtonOutline, OnTap: status.OnInstall, Theme: theme,
+				Height: 38, Radius: 4, Disabled: props.Restarting, Variant: woxcomponent.ButtonOutline, OnTap: status.OnInstall, Theme: theme,
 			}))
 		}
 		if status.OnRestart != nil {
 			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: "runtime-restart-" + status.Runtime, Label: status.RestartLabel, Icon: status.RestartIcon, IconSize: 14,
-				Width: runtimeLabelWidth(status.RestartLabel, 92, 132), Height: 38, Radius: 4, Disabled: props.Restarting, Variant: woxcomponent.ButtonOutline, OnTap: status.OnRestart, Theme: theme,
+				Height: 38, Radius: 4, Disabled: props.Restarting, Variant: woxcomponent.ButtonOutline, OnTap: status.OnRestart, Theme: theme,
 			}))
 		}
 		children = append(children,
@@ -264,8 +264,8 @@ func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingR
 	})
 	controls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		input,
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-browse", Label: props.Labels.Browse, Width: browseWidth, Height: 38, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonOutline, OnTap: row.OnBrowse, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-clear", Label: props.Labels.Clear, Width: clearWidth, Height: 38, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonOutline, OnTap: row.OnClear, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-browse", Label: props.Labels.Browse, Height: 38, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonOutline, OnTap: row.OnBrowse, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-clear", Label: props.Labels.Clear, Height: 38, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonOutline, OnTap: row.OnClear, Theme: props.Theme}),
 	}}
 	field := woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: row.Title, Description: row.Description, Width: width, Height: height, LabelWidth: labelWidth, Gap: 32,

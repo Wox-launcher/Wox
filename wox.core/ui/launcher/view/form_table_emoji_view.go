@@ -117,12 +117,9 @@ func (s *formTableEmojiPickerState) buildDialog(context woxwidget.StateContext, 
 		Content: woxwidget.Container{Width: gridWidth, Child: woxwidget.Wrap{Gap: formTableEmojiCellGap, RunGap: formTableEmojiCellGap, Children: cells}},
 	})
 
-	actions := woxwidget.Container{
-		Width: innerWidth, Height: formTableEmojiActionsHeight, Padding: woxwidget.Insets{Top: 3},
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: max(float32(0), innerWidth-props.CancelWidth), Height: 38},
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-emoji-cancel", Label: props.CancelLabel, Width: props.CancelWidth, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-		}},
+	actions := woxwidget.Align{
+		Width: innerWidth, Height: formTableEmojiActionsHeight, Horizontal: 1, Vertical: 0.5,
+		Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-emoji-cancel", Label: props.CancelLabel, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
 	}
 
 	body := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{title, tabs, grid, actions}}

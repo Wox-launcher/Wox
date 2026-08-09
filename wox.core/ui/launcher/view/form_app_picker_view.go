@@ -149,13 +149,11 @@ func buildFormAppPickerDialog(context woxwidget.StateContext, props FormAppPicke
 	}
 	content = append(content, woxwidget.Container{Width: innerWidth, Height: 12}, formAppPickerList(context, props, state, visible, innerWidth, listHeight))
 
-	actionsWidth := props.CancelWidth + props.ConfirmWidth + 12
 	confirm := func() { state.confirm(props) }
-	actions := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: max(float32(0), innerWidth-actionsWidth), Height: 38},
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-app-cancel", Label: props.CancelLabel, Width: props.CancelWidth, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-app-confirm", Label: props.ConfirmLabel, Width: props.ConfirmWidth, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonPrimary, OnTap: confirm, Theme: props.Theme}),
-	}}
+	actions := woxwidget.Align{Width: innerWidth, Height: 38, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-app-cancel", Label: props.CancelLabel, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-app-confirm", Label: props.ConfirmLabel, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonPrimary, OnTap: confirm, Theme: props.Theme}),
+	}}}
 	content = append(content, woxwidget.Container{Width: innerWidth, Height: actionsHeight, Padding: woxwidget.Insets{Top: 12}, Child: actions})
 	border := formAppPickerAlpha(props.Theme.PreviewSplit, 230)
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{

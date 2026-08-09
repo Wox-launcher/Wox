@@ -102,11 +102,14 @@ func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
 		t.Fatalf("footer = %#v, want content plus top divider", footer)
 	}
 	content := footer.Children[0].Child.(woxwidget.Container)
-	buttons := content.Child.(woxwidget.Flex)
-	skip := buttons.Children[0].(woxwidget.Semantics)
+	actions := content.Child.(woxwidget.Stack)
+	skip := actions.Children[0].Child.(woxwidget.Semantics)
 	focusable := skip.Child.(woxwidget.Focusable)
 	gesture := focusable.Child.(woxwidget.Gesture)
 	button := gesture.Child.(woxwidget.Container)
+	if button.Width != 0 {
+		t.Fatalf("skip width = %v, want content-sized", button.Width)
+	}
 	if button.Padding.Left != 8 || button.Padding.Right != 8 {
 		t.Fatalf("skip padding = %#v, want room for two CJK glyphs", button.Padding)
 	}

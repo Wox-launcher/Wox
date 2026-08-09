@@ -59,6 +59,6 @@ func TriggerConflictPreviewView(props TriggerConflictPreviewProps) woxwidget.Wid
 		BeforeBody: beforeBody, BeforeBodyHeight: titleHeight + messageHeight, MinimumBodyHeight: 56,
 		Rows: props.Rows, ScrollID: "trigger-conflict-scroll", KeepVisibleKey: props.KeepVisibleKey,
 		Error: props.Error, ShowError: props.Error != "",
-		SaveButton: woxcomponent.ButtonProps{ID: "trigger-conflict-save", Label: saveLabel, Width: 112, Variant: variant, OnTap: props.OnSubmit, Theme: props.Theme},
+		SaveButton: woxcomponent.ButtonProps{ID: "trigger-conflict-save", Label: saveLabel, Variant: variant, OnTap: props.OnSubmit, Theme: props.Theme},
 	})
 }

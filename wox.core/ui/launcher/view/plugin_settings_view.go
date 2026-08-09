@@ -680,7 +680,7 @@ func pluginTextActions(actions []PluginAction, theme woxcomponent.Theme) woxwidg
 	buttons := make([]woxwidget.Widget, 0, len(actions))
 	for _, action := range actions {
 		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: action.ID, Label: action.Label, Icon: action.Icon, IconSize: 13, IconGap: 6, Width: action.Width, Height: 30, FontSize: 12,
+			ID: action.ID, Label: action.Label, Icon: action.Icon, IconSize: 13, IconGap: 6, Height: 30, FontSize: 12,
 			Padding: woxwidget.Insets{Left: 6, Right: 4}, Disabled: !action.Enabled, Variant: woxcomponent.ButtonText, OnTap: action.OnTap, Theme: theme,
 		}))
 	}
@@ -695,7 +695,7 @@ func pluginActions(actions []PluginAction, theme woxcomponent.Theme) woxwidget.W
 			variant = woxcomponent.ButtonPrimary
 		}
 		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: action.ID, Label: action.Label, Icon: action.Icon, Width: action.Width, Disabled: !action.Enabled, Variant: variant, OnTap: action.OnTap, Theme: theme,
+			ID: action.ID, Label: action.Label, Icon: action.Icon, Disabled: !action.Enabled, Variant: variant, OnTap: action.OnTap, Theme: theme,
 		}))
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttons}

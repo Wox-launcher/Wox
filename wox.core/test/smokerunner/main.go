@@ -60,10 +60,11 @@ func run(caseSelector string) (int, error) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	woxDataDirectory := filepath.Join(suiteDirectory, "wox-data")
+	userDataDirectory := filepath.Join(suiteDirectory, "user-data")
 	process, err := automationdriver.Launch(ctx, absoluteExecutable, automationdriver.LaunchOptions{
 		Environment: []string{
 			"WOX_TEST_DATA_DIR=" + woxDataDirectory,
-			"WOX_TEST_USER_DIR=" + filepath.Join(suiteDirectory, "user-data"),
+			"WOX_TEST_USER_DIR=" + userDataDirectory,
 			fmt.Sprintf("WOX_TEST_SERVER_PORT=%d", port),
 			"WOX_TEST_DISABLE_TELEMETRY=true",
 			"WOX_TEST_SKIP_ONBOARDING=true",
@@ -78,6 +79,7 @@ func run(caseSelector string) (int, error) {
 
 	testEnvironment := replaceEnvironment(os.Environ(), automationdriver.SharedInfoFileEnvironment, process.InfoFile())
 	testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedDataDirectoryEnvironment, woxDataDirectory)
+	testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedUserDataDirectoryEnvironment, userDataDirectory)
 	for _, testArgs := range testCommands {
 		command := exec.CommandContext(ctx, "go", testArgs...)
 		command.Env = testEnvironment

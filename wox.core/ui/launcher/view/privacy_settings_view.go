@@ -34,7 +34,7 @@ func PrivacySettingsView(props PrivacySettingsProps) woxwidget.Widget {
 	controlAreaWidth := max(controlWidth, contentWidth-labelWidth-32)
 	telemetryControls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: "privacy-view-sample", Label: props.ViewSampleLabel, Width: 126, Height: 30, FontSize: 12,
+			ID: "privacy-view-sample", Label: props.ViewSampleLabel, Height: 30, FontSize: 12,
 			Padding: woxwidget.Insets{Right: 8}, Variant: woxcomponent.ButtonText, OnTap: props.OnViewSample, Theme: props.Theme,
 		}),
 		woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
@@ -120,10 +120,9 @@ func PrivacySampleDialog(props PrivacySampleDialogProps) woxwidget.Widget {
 			Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText,
 		})
 	}
-	children = append(children, woxwidget.Container{Width: innerWidth, Height: 38, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-		woxwidget.Painter{Width: max(float32(0), innerWidth-190), Height: 38},
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "privacy-sample-copy", Label: props.CopyLabel, Width: 92, OnTap: props.OnCopy, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "privacy-sample-close", Label: props.ConfirmLabel, Width: 88, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnClose, Theme: props.Theme}),
+	children = append(children, woxwidget.Align{Width: innerWidth, Height: 38, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "privacy-sample-copy", Label: props.CopyLabel, OnTap: props.OnCopy, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "privacy-sample-close", Label: props.ConfirmLabel, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnClose, Theme: props.Theme}),
 	}}})
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "privacy-sample-dialog", Label: props.Title, Width: dialogWidth, Height: dialogHeight,

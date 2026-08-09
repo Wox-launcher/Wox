@@ -102,7 +102,7 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 		}
 		if props.EngineEnabled {
 			engineChildren = append(engineChildren, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "model-manager-engine", Label: props.EngineButtonLabel, Width: 132, Height: 34, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnEngine, Theme: props.Theme,
+				ID: "model-manager-engine", Label: props.EngineButtonLabel, Height: 34, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnEngine, Theme: props.Theme,
 			}))
 		}
 		children = append(children, woxwidget.Container{Width: menuWidth, Height: engineHeight, Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: engineChildren}})
@@ -149,7 +149,7 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 				buttonTheme := props.Theme
 				buttonTheme.ResultTitle = props.Theme.ResultSubtitle
 				trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{
-					ID: fmt.Sprintf("model-delete-%d", index), Label: props.DeleteLabel, Width: 34, Height: 34,
+					ID: fmt.Sprintf("model-delete-%d", index), Label: props.DeleteLabel, Height: 34,
 					Variant: woxcomponent.ButtonText, FontSize: 10, Disabled: props.Busy || props.Loading, OnTap: option.OnDelete, Theme: buttonTheme,
 				})
 			}
@@ -162,7 +162,7 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 			} else if option.State == "failed" {
 				icon = props.ErrorIcon
 			}
-			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-action-%d", index), Label: option.ActionLabel, Icon: icon, IconSize: 14, IconGap: 6, Width: trailingWidth, Height: 34, Padding: woxwidget.Insets{Left: 10, Right: 10}, FontSize: 11, Disabled: !option.ActionEnabled, Variant: woxcomponent.ButtonOutline, OnTap: option.OnAction, Theme: props.Theme})
+			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-action-%d", index), Label: option.ActionLabel, Icon: icon, IconSize: 14, IconGap: 6, Height: 34, Padding: woxwidget.Insets{Left: 10, Right: 10}, FontSize: 11, Disabled: !option.ActionEnabled, Variant: woxcomponent.ButtonOutline, OnTap: option.OnAction, Theme: props.Theme})
 		}
 		activate := option.OnSelect
 		if option.OnChoose != nil {
@@ -230,7 +230,7 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 			woxwidget.Text{Value: "Runtime engine", Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
 			woxwidget.TextBlock{Value: props.EngineLabel, Width: max(float32(100), innerWidth-156), Height: 22, MaxLines: 1, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.ActionHeader},
 		}}},
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "model-manager-engine", Label: props.EngineButtonLabel, Width: 132, Disabled: !props.EngineEnabled, OnTap: props.OnEngine, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "model-manager-engine", Label: props.EngineButtonLabel, Disabled: !props.EngineEnabled, OnTap: props.OnEngine, Theme: props.Theme}),
 	}}}
 	rows := make([]woxwidget.Widget, 0, len(props.Options))
 	for index, option := range props.Options {
@@ -241,21 +241,15 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 			foreground = props.Theme.SelectedTitle
 		}
 		buttons := make([]woxwidget.Widget, 0, 2)
-		deleteWidth := float32(0)
 		if option.OnDelete != nil {
-			deleteWidth = 76
-			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-delete-%d", index), Label: "Delete", Width: deleteWidth, Disabled: props.Busy || props.Loading, OnTap: option.OnDelete, Theme: props.Theme}))
+			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-delete-%d", index), Label: "Delete", Disabled: props.Busy || props.Loading, OnTap: option.OnDelete, Theme: props.Theme}))
 		}
 		variant := woxcomponent.ButtonSecondary
 		if option.PrimaryAction {
 			variant = woxcomponent.ButtonPrimary
 		}
-		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-action-%d", index), Label: option.ActionLabel, Width: 96, Disabled: !option.ActionEnabled, Variant: variant, OnTap: option.OnAction, Theme: props.Theme}))
-		buttonWidth := float32(96) + deleteWidth
-		if deleteWidth > 0 {
-			buttonWidth += 8
-		}
-		detailWidth := max(float32(120), innerWidth-buttonWidth-42)
+		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-action-%d", index), Label: option.ActionLabel, Disabled: !option.ActionEnabled, Variant: variant, OnTap: option.OnAction, Theme: props.Theme}))
+		detailWidth := max(float32(120), innerWidth*0.58)
 		radius := float32(7)
 		rows = append(rows, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
 			ID: fmt.Sprintf("model-row-%d", index), Label: option.Name, Width: innerWidth, Height: ModelManagerRowHeight, Radius: &radius,
@@ -266,7 +260,7 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 					woxwidget.TextBlock{Value: option.Detail, Width: detailWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.ActionHeader},
 					woxwidget.TextBlock{Value: option.Status, Width: detailWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 9, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Cursor},
 				}}},
-				woxwidget.Container{Width: buttonWidth, Height: 48, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttons}},
+				woxwidget.Align{Width: max(float32(0), innerWidth-detailWidth-42), Height: 48, Horizontal: 1, Child: woxwidget.Container{Height: 48, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttons}}},
 			}},
 		}))
 	}
@@ -298,11 +292,10 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 	if props.Error != "" {
 		statusColor = props.Theme.ErrorText
 	}
-	footer := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		woxwidget.Painter{Width: max(float32(0), innerWidth-216), Height: 40},
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "model-manager-refresh", Label: "Refresh", Width: 104, Disabled: props.Loading || props.Busy, OnTap: props.OnRefresh, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "model-manager-close", Label: "Close", Width: 104, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnClose, Theme: props.Theme}),
-	}}
+	footer := woxwidget.Align{Width: innerWidth, Height: 40, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "model-manager-refresh", Label: "Refresh", Disabled: props.Loading || props.Busy, OnTap: props.OnRefresh, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "model-manager-close", Label: "Close", Variant: woxcomponent.ButtonPrimary, OnTap: props.OnClose, Theme: props.Theme}),
+	}}}
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "model-manager-dialog", Label: props.Title, Width: width, Height: height,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "model-manager-shade",

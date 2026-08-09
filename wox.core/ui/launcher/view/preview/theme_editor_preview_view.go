@@ -48,7 +48,7 @@ func ThemeEditorPreviewView(props ThemeEditorPreviewProps) woxwidget.Widget {
 		BeforeBody: beforeBody, BeforeBodyHeight: headerHeight + sampleHeight, MinimumBodyHeight: 72,
 		Rows: props.Rows, ScrollID: "theme-editor-scroll", KeepVisibleKey: props.KeepVisibleKey,
 		Error: props.Error, ShowError: props.Error != "",
-		SaveButton: woxcomponent.ButtonProps{ID: "theme-editor-save", Label: saveLabel, Width: 116, Variant: variant, OnTap: props.OnSubmit, Theme: props.Theme},
+		SaveButton: woxcomponent.ButtonProps{ID: "theme-editor-save", Label: saveLabel, Variant: variant, OnTap: props.OnSubmit, Theme: props.Theme},
 	})
 }
 

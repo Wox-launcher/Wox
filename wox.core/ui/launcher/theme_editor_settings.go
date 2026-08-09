@@ -533,11 +533,10 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 			OnHueSaturation: a.setThemeEditorDialogHueSaturation, OnBrightnessChange: a.setThemeEditorDialogBrightness, OnOpacityChange: a.setThemeEditorDialogOpacity,
 		})
 	}
-	footer := woxwidget.Container{Width: panelWidth - 32, Height: 46, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: max(float32(0), panelWidth-32-210), Height: 38},
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-cancel", Label: a.translate("i18n:ui_cancel"), Width: 96, Height: 36, Variant: woxcomponent.ButtonOutline, OnTap: a.cancelThemeEditorDialog, Theme: palette.componentTheme()}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-confirm", Label: confirmLabel, Width: 104, Height: 36, Variant: woxcomponent.ButtonPrimary, OnTap: a.confirmThemeEditorDialog, Theme: palette.componentTheme()}),
-	}}}
+	footer := woxwidget.Align{Width: panelWidth - 32, Height: 46, Horizontal: 1, Child: woxwidget.Container{Height: 46, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-cancel", Label: a.translate("i18n:ui_cancel"), Height: 36, Variant: woxcomponent.ButtonOutline, OnTap: a.cancelThemeEditorDialog, Theme: palette.componentTheme()}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-confirm", Label: confirmLabel, Height: 36, Variant: woxcomponent.ButtonPrimary, OnTap: a.confirmThemeEditorDialog, Theme: palette.componentTheme()}),
+	}}}}
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "theme-editor-dialog", Label: title, Width: panelWidth, Height: panelHeight, OverlayWidth: width, OverlayHeight: height,
 		BackdropID: "theme-editor-dialog-backdrop", BackdropAlpha: 190, Padding: woxwidget.UniformInsets(16), Theme: palette.componentTheme(), OnEscape: a.cancelThemeEditorDialog,

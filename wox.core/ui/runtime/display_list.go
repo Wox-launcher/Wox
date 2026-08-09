@@ -36,6 +36,8 @@ type DisplayList struct {
 	nativeDamage Rect
 }
 
+const displayListFloatTolerance = float32(1e-4)
+
 // FrameMetricsID identifies this display list in its window's frame metrics stream.
 func (d *DisplayList) FrameMetricsID() uint64 {
 	if d == nil {
@@ -106,18 +108,31 @@ func (d *DisplayList) Compare(other *DisplayList) error {
 }
 
 func displayCommandsEqual(left, right displayCommand) bool {
-	if left.kind != right.kind || left.rect != right.rect || left.radius != right.radius || left.stroke != right.stroke || left.color != right.color || left.text != right.text || left.style != right.style || left.rotation != right.rotation {
+	if left.kind != right.kind || !displayListRectsEqual(left.rect, right.rect) ||
+		!displayListFloatsEqual(left.radius, right.radius) || !displayListFloatsEqual(left.stroke, right.stroke) ||
+		left.color != right.color || left.text != right.text || left.style.Weight != right.style.Weight ||
+		!displayListFloatsEqual(left.style.Size, right.style.Size) || !displayListFloatsEqual(left.rotation, right.rotation) {
 		return false
 	}
 	if len(left.points) != len(right.points) {
 		return false
 	}
 	for index := range left.points {
-		if left.points[index] != right.points[index] {
+		if !displayListFloatsEqual(left.points[index].X, right.points[index].X) || !displayListFloatsEqual(left.points[index].Y, right.points[index].Y) {
 			return false
 		}
 	}
 	return imagesRenderEqual(left.image, right.image)
+}
+
+// displayListRectsEqual ignores sub-pixel float32 drift that cannot affect rendered output.
+func displayListRectsEqual(left, right Rect) bool {
+	return displayListFloatsEqual(left.X, right.X) && displayListFloatsEqual(left.Y, right.Y) &&
+		displayListFloatsEqual(left.Width, right.Width) && displayListFloatsEqual(left.Height, right.Height)
+}
+
+func displayListFloatsEqual(left, right float32) bool {
+	return float32(math.Abs(float64(left-right))) <= displayListFloatTolerance
 }
 
 func imagesRenderEqual(left, right *Image) bool {

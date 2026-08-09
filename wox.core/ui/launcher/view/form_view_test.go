@@ -24,11 +24,17 @@ func TestFormPanelUsesIntrinsicHeightUpToMaximum(t *testing.T) {
 	if body.Width != 360 || body.Height != 0 || body.MaxHeight != 354 {
 		t.Fatalf("form body constraints = width %.0f height %.0f max %.0f, want Flutter 360 wide and intrinsic up to 354", body.Width, body.Height, body.MaxHeight)
 	}
-	buttons := column.Children[1].(woxwidget.Flex)
-	cancel := buttons.Children[1].(woxwidget.Semantics)
-	save := buttons.Children[2].(woxwidget.Semantics)
+	buttons := column.Children[1].(woxwidget.Align).Child.(woxwidget.Flex)
+	cancel := buttons.Children[0].(woxwidget.Semantics)
+	save := buttons.Children[1].(woxwidget.Semantics)
 	if cancel.Label != "Cancel (Esc)" || save.Label != "Save (Cmd+Enter)" {
 		t.Fatalf("form action labels = %q / %q", cancel.Label, save.Label)
+	}
+	for _, child := range buttons.Children {
+		container := child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+		if container.Width != 0 {
+			t.Fatalf("form action width = %v, want content-sized", container.Width)
+		}
 	}
 }
 

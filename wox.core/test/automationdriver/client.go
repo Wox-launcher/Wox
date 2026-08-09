@@ -31,6 +31,8 @@ const (
 	SharedInfoFileEnvironment = "WOX_GO_UI_AUTOMATION_INFO_FILE"
 	// SharedDataDirectoryEnvironment points smoke cases at the isolated Wox data directory.
 	SharedDataDirectoryEnvironment = "WOX_GO_UI_SMOKE_DATA_DIR"
+	// SharedUserDataDirectoryEnvironment points smoke cases at the isolated persisted user data directory.
+	SharedUserDataDirectoryEnvironment = "WOX_GO_UI_SMOKE_USER_DATA_DIR"
 	// SmokeStepDelayEnvironment slows visible automation steps for interactive observation.
 	SmokeStepDelayEnvironment = "WOX_GO_UI_SMOKE_STEP_DELAY"
 )

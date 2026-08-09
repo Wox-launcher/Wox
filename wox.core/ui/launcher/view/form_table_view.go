@@ -240,7 +240,7 @@ func formTableHeaderActions(props FormTableFieldProps) woxwidget.Widget {
 	actions := make([]woxwidget.Widget, 0, 2)
 	if props.SecondaryLabel != "" {
 		actions = append(actions, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: props.ID + "-secondary", Label: props.SecondaryLabel, Icon: props.SecondaryIcon, IconSize: 15, IconGap: 5, Width: 122,
+			ID: props.ID + "-secondary", Label: props.SecondaryLabel, Icon: props.SecondaryIcon, IconSize: 15, IconGap: 5,
 			Size: woxcomponent.ButtonCompact, Variant: woxcomponent.ButtonOutline, Padding: woxwidget.Insets{Left: 9, Right: 7},
 			Disabled: props.Invalid, OnTap: props.OnSecondary, Theme: props.Theme,
 		}))
@@ -253,7 +253,7 @@ func formTableHeaderActions(props FormTableFieldProps) woxwidget.Widget {
 
 func formTableAddButton(props FormTableFieldProps) woxwidget.Widget {
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: props.ID + "-add", Label: props.AddLabel, Icon: props.AddIcon, IconSize: 15, IconGap: 5, Width: 74,
+		ID: props.ID + "-add", Label: props.AddLabel, Icon: props.AddIcon, IconSize: 15, IconGap: 5,
 		Size: woxcomponent.ButtonCompact, Variant: woxcomponent.ButtonOutline, Padding: woxwidget.Insets{Left: 9, Right: 7},
 		Disabled: props.Invalid, OnTap: props.OnAdd, Theme: props.Theme,
 	})
@@ -538,7 +538,7 @@ func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxu
 	theme := props.Theme
 	theme.ResultTitle = props.Theme.ResultSubtitle
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: id, Label: label, Width: 26, Height: 24,
+		ID: id, Label: label, Height: 24,
 		Variant: woxcomponent.ButtonText, FontSize: 10, OnTap: onTap, Theme: theme,
 	})
 }
@@ -758,18 +758,17 @@ func FormTableList(props FormTableListProps) woxwidget.Widget {
 		statusColor = props.Theme.ErrorText
 	}
 	leftButtons := []woxwidget.Widget{
-		formTableButton("form-table-add", props.AddLabel, 104, props.CanAdd, false, props.OnAdd, props.Theme),
-		formTableButton("form-table-edit", "Edit", 86, props.CanEdit, false, props.OnEdit, props.Theme),
-		formTableButton("form-table-delete", props.DeleteLabel, 86, props.CanDelete, false, props.OnDelete, props.Theme),
+		formTableButton("form-table-add", props.AddLabel, props.CanAdd, false, props.OnAdd, props.Theme),
+		formTableButton("form-table-edit", "Edit", props.CanEdit, false, props.OnEdit, props.Theme),
+		formTableButton("form-table-delete", props.DeleteLabel, props.CanDelete, false, props.OnDelete, props.Theme),
 	}
-	fixedWidth := float32(104 + 86 + 86 + 104)
-	buttonChildren := append([]woxwidget.Widget(nil), leftButtons...)
-	buttonChildren = append(buttonChildren, woxwidget.Painter{Width: max(float32(0), props.Width-fixedWidth-float32(len(leftButtons)+1)*8), Height: 38})
-	buttonChildren = append(buttonChildren, formTableButton("form-table-close", props.CloseLabel, 104, true, true, props.OnClose, props.Theme))
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		list,
 		woxwidget.Container{Width: props.Width, Height: statusHeight, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 10}, Color: statusColor}},
-		woxwidget.Container{Width: props.Width, Height: footerHeight, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttonChildren}},
+		woxwidget.Container{Width: props.Width, Height: footerHeight, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Stack{Width: props.Width, Height: 38, Children: []woxwidget.StackChild{
+			{Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: leftButtons}},
+			{AnchorRight: true, Right: 0, Child: formTableButton("form-table-close", props.CloseLabel, true, true, props.OnClose, props.Theme)},
+		}}},
 	}}
 }
 
@@ -1046,7 +1045,7 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 	sideActions := make([]woxwidget.Widget, 0, 2)
 	if props.OnBrowse != nil {
 		inputWidth = max(float32(100), inputWidth-90)
-		sideActions = append(sideActions, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-browse", Label: props.BrowseLabel, Width: 82, Height: height, Radius: 4, Variant: woxcomponent.ButtonOutline, OnTap: props.OnBrowse, Theme: props.Theme}))
+		sideActions = append(sideActions, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-browse", Label: props.BrowseLabel, Height: height, Radius: 4, Variant: woxcomponent.ButtonOutline, OnTap: props.OnBrowse, Theme: props.Theme}))
 	}
 	if props.ActionIcon != nil && props.OnActionTap != nil {
 		inputWidth = max(float32(100), inputWidth-42)
@@ -1158,8 +1157,8 @@ func formTableRowImageControl(props FormTableRowFieldProps, height float32) woxw
 		woxwidget.Container{
 			Width: buttonsWidth, Height: height, Padding: woxwidget.Insets{Top: 27},
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-emoji", Label: props.EmojiLabel, Icon: props.EmojiIcon, IconSize: 14, IconGap: 6, Width: buttonWidth, Height: 28, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonOutline, Padding: woxwidget.Insets{Left: 11, Right: 7}, OnTap: props.OnEmoji, Theme: props.Theme}),
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-upload", Label: props.UploadLabel, Icon: props.UploadIcon, IconSize: 14, IconGap: 6, Width: uploadWidth, Height: 28, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonOutline, Padding: woxwidget.Insets{Left: 11, Right: 7}, OnTap: props.OnUpload, Theme: props.Theme}),
+				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-emoji", Label: props.EmojiLabel, Icon: props.EmojiIcon, IconSize: 14, IconGap: 6, Height: 28, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonOutline, Padding: woxwidget.Insets{Left: 11, Right: 7}, OnTap: props.OnEmoji, Theme: props.Theme}),
+				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: props.ID + "-upload", Label: props.UploadLabel, Icon: props.UploadIcon, IconSize: 14, IconGap: 6, Height: 28, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonOutline, Padding: woxwidget.Insets{Left: 11, Right: 7}, OnTap: props.OnUpload, Theme: props.Theme}),
 			}},
 		},
 	}}
@@ -1186,7 +1185,7 @@ func formTableRowAppControl(props FormTableRowFieldProps, width, height float32)
 		Padding: woxwidget.Insets{Left: 12, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: previewChildren},
 	}
 	selectButton := woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: props.ID, Label: props.SelectLabel, Width: buttonWidth, Height: height, Radius: 4, FontSize: 13,
+		ID: props.ID, Label: props.SelectLabel, Height: height, Radius: 4, FontSize: 13,
 		Variant: woxcomponent.ButtonPrimary, OnTap: props.OnTap, Theme: props.Theme,
 		OnFocusChange: func(focused bool) {
 			if focused && props.OnFocus != nil {
@@ -1438,10 +1437,10 @@ func QueryVariablePicker(props QueryVariablePickerProps) woxwidget.Widget {
 	}}
 }
 
-func formTableButton(id, label string, width float32, enabled, primary bool, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {
+func formTableButton(id, label string, enabled, primary bool, onTap func(), theme woxcomponent.Theme) woxwidget.Widget {
 	variant := woxcomponent.ButtonSecondary
 	if primary {
 		variant = woxcomponent.ButtonPrimary
 	}
-	return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, Width: width, Disabled: !enabled, Variant: variant, OnTap: onTap, Theme: theme})
+	return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, Disabled: !enabled, Variant: variant, OnTap: onTap, Theme: theme})
 }

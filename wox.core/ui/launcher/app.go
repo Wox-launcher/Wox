@@ -446,6 +446,7 @@ func (a *App) showWindow(params showAppParams) error {
 			a.editor.SetText("", false)
 			a.beginQueryTransitionLocked()
 		}
+		preserveQuery = a.applyLaunchModeOnShowLocked()
 		a.canRecallHistory = a.query.QueryType == "input"
 		if params.LaunchMode == "continue" {
 			// The newest history is the current continued query, so the first Up recalls the entry before it.
@@ -463,7 +464,6 @@ func (a *App) showWindow(params showAppParams) error {
 		a.form = nil
 		a.visible = true
 		queryEmpty = a.query.QueryText == ""
-		preserveQuery = a.shouldPreserveQueryOnShowLocked()
 		launcher = a.launcher
 		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
@@ -726,6 +726,15 @@ func (a *App) sendCurrentQuery() error {
 		return a.requestMRU()
 	}
 	return nil
+}
+
+// applyLaunchModeOnShowLocked resets stale launcher state unless this show action carries an explicit query.
+func (a *App) applyLaunchModeOnShowLocked() bool {
+	preserveQuery := a.shouldPreserveQueryOnShowLocked()
+	if a.show.LaunchMode == "fresh" && !preserveQuery {
+		a.setQuery(newInputQuery(""))
+	}
+	return preserveQuery
 }
 
 // shouldPreserveQueryOnShowLocked mirrors Flutter's incoming-query preservation:

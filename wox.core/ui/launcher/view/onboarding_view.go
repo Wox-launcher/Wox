@@ -418,20 +418,20 @@ func onboardingFooter(props OnboardingProps, active int) woxwidget.Widget {
 	content := woxwidget.Container{
 		Width: props.Width, Height: OnboardingFooterHeight, Color: settingsColorAlpha(props.Theme.Background, 245),
 		Padding: woxwidget.Insets{Left: 28, Top: 17, Right: 28, Bottom: 17},
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "onboarding-skip", Label: props.Labels["skip"], Width: 60, Height: 38, Padding: woxwidget.Insets{Left: 8, Right: 8},
+		Child: woxwidget.Stack{Width: max(float32(0), props.Width-56), Height: 38, Children: []woxwidget.StackChild{
+			{Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+				ID: "onboarding-skip", Label: props.Labels["skip"], Height: 38, Padding: woxwidget.Insets{Left: 8, Right: 8},
 				Variant: woxcomponent.ButtonText, Theme: props.Theme, OnTap: props.OnSkip,
-			}),
-			woxwidget.Container{Width: max(float32(0), props.Width-292)},
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "onboarding-back", Label: props.Labels["back"], Width: 82, Height: 38, Disabled: active == 0,
-				Variant: woxcomponent.ButtonOutline, Theme: props.Theme, OnTap: props.OnBack,
-			}),
-			woxwidget.Container{Width: 12},
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: nextID, Label: nextLabel, Width: 82, Height: 38, Variant: woxcomponent.ButtonPrimary, Theme: props.Theme, OnTap: nextAction,
-			}),
+			})},
+			{AnchorRight: true, Right: 0, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
+				woxcomponent.WoxButton(woxcomponent.ButtonProps{
+					ID: "onboarding-back", Label: props.Labels["back"], Height: 38, Disabled: active == 0,
+					Variant: woxcomponent.ButtonOutline, Theme: props.Theme, OnTap: props.OnBack,
+				}),
+				woxcomponent.WoxButton(woxcomponent.ButtonProps{
+					ID: nextID, Label: nextLabel, Height: 38, Variant: woxcomponent.ButtonPrimary, Theme: props.Theme, OnTap: nextAction,
+				}),
+			}}},
 		}},
 	}
 	return woxwidget.Stack{Width: props.Width, Height: OnboardingFooterHeight, Children: []woxwidget.StackChild{

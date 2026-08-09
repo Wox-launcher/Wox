@@ -53,6 +53,25 @@ func TestDisplayListCompareUsesRenderedImageContent(t *testing.T) {
 	}
 }
 
+func TestDisplayListCompareToleratesSubpixelFloatDrift(t *testing.T) {
+	left := &DisplayList{commands: []displayCommand{{
+		kind: displayCommandDrawText, rect: Rect{X: 37, Y: 18, Width: 172.104, Height: 17.291016}, radius: 4, stroke: 1,
+		text: "echo command", style: TextStyle{Size: 13, Weight: FontWeightSemibold}, rotation: 0.25, points: []Point{{X: 10, Y: 20}},
+	}}}
+	right := &DisplayList{commands: []displayCommand{{
+		kind: displayCommandDrawText, rect: Rect{X: 36.999985, Y: 18.000015, Width: 172.104, Height: 17.291016}, radius: 4.000015, stroke: 0.999985,
+		text: "echo command", style: TextStyle{Size: 13.000015, Weight: FontWeightSemibold}, rotation: 0.250015, points: []Point{{X: 10.000015, Y: 19.999985}},
+	}}}
+	if err := left.Compare(right); err != nil {
+		t.Fatalf("subpixel-equivalent command streams differ: %v", err)
+	}
+
+	right.commands[0].rect.X = 36.99
+	if err := left.Compare(right); err == nil {
+		t.Fatal("out-of-tolerance command geometry compared equal")
+	}
+}
+
 func TestDisplayListDamageCullsNonIntersectingCommands(t *testing.T) {
 	displayList := &DisplayList{}
 	displayList.SetDamage(Rect{X: 10, Y: 10, Width: 20, Height: 20})

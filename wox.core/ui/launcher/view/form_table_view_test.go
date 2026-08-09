@@ -100,8 +100,8 @@ func TestFormTableRowAppControlMatchesFlutterSelectorLayout(t *testing.T) {
 		t.Fatal("app selector button should keep table-row focus synchronized")
 	}
 	button := buttonFocus.Child.(woxwidget.Gesture).Child.(woxwidget.Container)
-	if button.Width != 104 || button.Height != 42 || button.Color != theme.ActionSelected {
-		t.Fatal("app selector action should use the Flutter-style primary button")
+	if button.Width != 0 || button.Height != 42 || button.Color != theme.ActionSelected {
+		t.Fatal("app selector action should use a content-sized Flutter-style primary button")
 	}
 	selected := formTableRowAppControl(FormTableRowFieldProps{
 		ID: "selected-app", Value: "Lightroom Classic", Detail: "/Applications/Lightroom Classic.app", Image: &woxui.Image{},

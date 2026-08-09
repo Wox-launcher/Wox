@@ -47,10 +47,7 @@ func editorPreviewShell(props editorPreviewShellProps) woxwidget.Widget {
 		}
 	}
 	button := woxcomponent.WoxButton(props.SaveButton)
-	footer := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-		woxwidget.Painter{Width: max(float32(0), innerWidth-props.SaveButton.Width), Height: footerHeight},
-		button,
-	}}
+	footer := woxwidget.Align{Width: innerWidth, Height: footerHeight, Horizontal: 1, Vertical: 0.5, Child: button}
 	children := make([]woxwidget.Widget, 0, len(props.BeforeBody)+3)
 	children = append(children, props.BeforeBody...)
 	children = append(children, body)

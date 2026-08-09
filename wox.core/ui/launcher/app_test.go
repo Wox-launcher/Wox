@@ -577,6 +577,56 @@ func TestShouldPreserveQueryOnShowLocked(t *testing.T) {
 	}
 }
 
+// TestApplyLaunchModeOnShowLocked covers fresh reset and explicit incoming-query preservation.
+func TestApplyLaunchModeOnShowLocked(t *testing.T) {
+	tests := []struct {
+		name            string
+		show            showAppParams
+		wantPreserved   bool
+		wantQueryText   string
+		wantResultCount int
+	}{
+		{name: "fresh clears stale default query", show: showAppParams{LaunchMode: "fresh", ShowSource: "default"}, wantQueryText: "", wantResultCount: 0},
+		{name: "fresh preserves injected query", show: showAppParams{LaunchMode: "fresh", ShowSource: "query_hotkey"}, wantPreserved: true, wantQueryText: "stale", wantResultCount: 1},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			app := newSendQueryTestApp(&sendQueryRecorderServices{}, newInputQuery("stale"), test.show)
+			app.results = []queryResult{{ID: "stale-result"}}
+
+			if got := app.applyLaunchModeOnShowLocked(); got != test.wantPreserved {
+				t.Fatalf("applyLaunchModeOnShowLocked() = %v, want %v", got, test.wantPreserved)
+			}
+			if app.query.QueryText != test.wantQueryText || app.editor.State().Text != test.wantQueryText {
+				t.Fatalf("query text = %q editor text = %q, want %q", app.query.QueryText, app.editor.State().Text, test.wantQueryText)
+			}
+			if len(app.results) != test.wantResultCount {
+				t.Fatalf("result count = %d, want %d", len(app.results), test.wantResultCount)
+			}
+		})
+	}
+}
+
+// TestApplyLaunchModeOnShowLockedContinuesPreviousQuery verifies continue mode retains the complete visible query state.
+func TestApplyLaunchModeOnShowLockedContinuesPreviousQuery(t *testing.T) {
+	query := newInputQuery("continued query")
+	query.QueryID = "continued-query-id"
+	app := newSendQueryTestApp(&sendQueryRecorderServices{}, query, showAppParams{LaunchMode: "continue", ShowSource: "default"})
+	app.results = []queryResult{{ID: "continued-result", QueryID: query.QueryID}}
+	app.resultsQueryID = query.QueryID
+	app.selected = 0
+
+	if !app.applyLaunchModeOnShowLocked() {
+		t.Fatal("continue mode should preserve the previous query")
+	}
+	if app.query.QueryID != query.QueryID || app.query.QueryText != query.QueryText || app.editor.State().Text != query.QueryText {
+		t.Fatalf("continued query state = id %q query %q editor %q, want id %q text %q", app.query.QueryID, app.query.QueryText, app.editor.State().Text, query.QueryID, query.QueryText)
+	}
+	if len(app.results) != 1 || app.results[0].ID != "continued-result" || app.resultsQueryID != query.QueryID || app.selected != 0 {
+		t.Fatalf("continued result state = results %#v query id %q selected %d", app.results, app.resultsQueryID, app.selected)
+	}
+}
+
 func TestInformationalGlanceCanBeTapped(t *testing.T) {
 	app := &App{}
 	widget := app.buildGlance(glanceItem{Text: "100 MB"}, true, defaultPalette(), 100, 1, launcherDensityMetricsFor(""))

@@ -87,14 +87,10 @@ func FormTableSkillAddDialog(props FormTableSkillAddDialogProps) woxwidget.Widge
 		children = append(children, status)
 	}
 
-	actions := woxwidget.Container{
-		Width: innerWidth, Height: actionsHeight,
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: max(float32(0), innerWidth-props.CancelWidth-props.AddWidth-16), Height: actionsHeight},
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-skill-add-cancel", Label: props.CancelLabel, Width: props.CancelWidth, Height: actionsHeight, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-skill-add-confirm", Label: props.AddLabel, Width: props.AddWidth, Height: actionsHeight, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonPrimary, Disabled: props.Cloning, OnTap: props.OnAdd, Theme: props.Theme}),
-		}},
-	}
+	actions := woxwidget.Align{Width: innerWidth, Height: actionsHeight, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-skill-add-cancel", Label: props.CancelLabel, Height: actionsHeight, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-skill-add-confirm", Label: props.AddLabel, Height: actionsHeight, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonPrimary, Disabled: props.Cloning, OnTap: props.OnAdd, Theme: props.Theme}),
+	}}}
 	children = append(children, actions)
 
 	body := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: children}

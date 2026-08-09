@@ -50,6 +50,6 @@ func RequirementPreviewView(props RequirementPreviewProps) woxwidget.Widget {
 		Rows: props.Rows, EmptyMessage: fmt.Sprintf("No editable settings were provided for %s.", props.PluginName),
 		ScrollID: "requirement-form-scroll", KeepVisibleKey: props.KeepVisibleKey,
 		Error: props.Error, ShowError: strings.TrimSpace(props.Error) != "",
-		SaveButton: woxcomponent.ButtonProps{ID: "requirement-form-save", Label: saveLabel, Width: 104, Variant: variant, OnTap: props.OnSubmit, Theme: props.Theme},
+		SaveButton: woxcomponent.ButtonProps{ID: "requirement-form-save", Label: saveLabel, Variant: variant, OnTap: props.OnSubmit, Theme: props.Theme},
 	})
 }
