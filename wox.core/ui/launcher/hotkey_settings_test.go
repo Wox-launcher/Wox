@@ -3,7 +3,40 @@ package launcher
 import (
 	"encoding/json"
 	"testing"
+
+	"wox/setting"
 )
+
+func TestQueryHotkeyPositionOptionsUseLocalizedNineGridWithIcons(t *testing.T) {
+	options := queryHotkeyPositionOptions()
+	want := []struct {
+		value setting.QueryHotkeyPosition
+		label string
+	}{
+		{setting.QueryHotkeyPositionSystemDefault, "i18n:ui_query_position_system_default"},
+		{setting.QueryHotkeyPositionTopLeft, "i18n:ui_query_position_top_left"},
+		{setting.QueryHotkeyPositionTopCenter, "i18n:ui_query_position_top_center"},
+		{setting.QueryHotkeyPositionTopRight, "i18n:ui_query_position_top_right"},
+		{setting.QueryHotkeyPositionMiddleLeft, "i18n:ui_query_position_middle_left"},
+		{setting.QueryHotkeyPositionCenter, "i18n:ui_query_position_center"},
+		{setting.QueryHotkeyPositionMiddleRight, "i18n:ui_query_position_middle_right"},
+		{setting.QueryHotkeyPositionBottomLeft, "i18n:ui_query_position_bottom_left"},
+		{setting.QueryHotkeyPositionBottomCenter, "i18n:ui_query_position_bottom_center"},
+		{setting.QueryHotkeyPositionBottomRight, "i18n:ui_query_position_bottom_right"},
+	}
+	if len(options) != len(want) {
+		t.Fatalf("position option count = %d, want %d", len(options), len(want))
+	}
+	for index, expected := range want {
+		option := options[index]
+		if option.Value != string(expected.value) || option.Label != expected.label {
+			t.Fatalf("position option %d = (%q, %q), want (%q, %q)", index, option.Value, option.Label, expected.value, expected.label)
+		}
+		if option.Icon.ImageType == "" || option.Icon.ImageData == "" {
+			t.Fatalf("position option %q has no visual icon", option.Value)
+		}
+	}
+}
 
 func TestTrayQueryRowIndexFromParam(t *testing.T) {
 	if index, ok := trayQueryRowIndexFromParam("tray_queries:2"); !ok || index != 2 {

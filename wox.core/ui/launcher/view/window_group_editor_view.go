@@ -279,7 +279,7 @@ func windowGroupDisplayTile(props WindowGroupEditorProps, tile WindowGroupDispla
 	content := woxwidget.Stack{Width: width, Height: height, Children: slotChildren}
 	if tile.IsPrimary {
 		content.Children = append(content.Children, woxwidget.StackChild{
-			Left: width - 56, Top: 6, Child: woxwidget.Text{Value: props.PrimaryDisplayLabel, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultSubtitle},
+			Top: 6, Right: 6, AnchorRight: true, Child: woxwidget.Text{Value: props.PrimaryDisplayLabel, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultSubtitle},
 		})
 	}
 	tileSurface := woxwidget.Widget(woxwidget.Container{
@@ -353,7 +353,7 @@ func windowGroupLayoutCard(props WindowGroupEditorProps, layout WindowGroupLayou
 		Padding: woxwidget.UniformInsets(7),
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
 			windowGroupMiniLayout(props, layout.Slots, windowGroupLayoutCardWidth-14, miniHeight),
-			woxwidget.Align{Width: windowGroupLayoutCardWidth - 14, Height: 12, Horizontal: 0.5, Child: woxwidget.Text{Value: layout.Label, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultTitle}},
+			woxwidget.Constrained{FillWidth: true, Child: woxwidget.Align{Height: 12, Horizontal: 0.5, Child: woxwidget.Text{Value: layout.Label, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ResultTitle}}},
 		}},
 	})
 	if selected {
@@ -428,7 +428,7 @@ func windowGroupSlotTile(props WindowGroupEditorProps, slot WindowGroupSlotProps
 	}
 	tile := woxwidget.Container{
 		Width: width, Height: height, Radius: 4, Color: background, BorderColor: border, BorderWidth: 1,
-		Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{Width: width - 16, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: content},
+		Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Align{Height: height, Horizontal: 0.5, Vertical: 0.5, Child: content}},
 	}
 	slotID := slot.ID
 	onTap := func() {
@@ -686,22 +686,21 @@ func windowGroupExtensionStatus(props WindowGroupUrlEditorProps, width float32) 
 		content = append(content, woxwidget.Image{Source: icon, Width: 14, Height: 14})
 	}
 	if !props.ExtensionChecking && !props.ExtensionConnected {
-		textWidth := max(float32(0), width-52)
 		installChildren := []woxwidget.Widget{}
 		if props.ExtensionExternalIcon != nil {
 			installChildren = append(installChildren, woxwidget.Image{Source: props.ExtensionExternalIcon, Width: 11, Height: 11})
 		}
 		installChildren = append(installChildren, woxwidget.Text{Value: props.ExtensionInstallLabel, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: accent})
-		content = append(content, woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
-			woxwidget.TextBlock{Value: label, Width: textWidth, Height: 16, MaxLines: 1, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: accent},
+		content = append(content, woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
+			woxwidget.TextBlock{Value: label, Height: 16, MaxLines: 1, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: accent},
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 3, Children: installChildren},
-		}})
+		}}})
 	} else {
-		content = append(content, woxwidget.TextBlock{Value: label, Width: max(float32(0), width-42), Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ActionText})
+		content = append(content, woxwidget.Expanded{Child: woxwidget.TextBlock{Value: label, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ActionText}})
 	}
 	statusRow := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: content}
 	box := woxwidget.Container{Width: width, Height: 40, Radius: 4, Color: background, BorderColor: border, BorderWidth: 1,
-		Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{Width: max(float32(0), width-16), Height: 40, Vertical: 0.5, Child: statusRow}}
+		Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Align{Height: 40, Vertical: 0.5, Child: statusRow}}}
 	if !props.ExtensionChecking && !props.ExtensionConnected {
 		return woxwidget.Gesture{ID: "window-group-url-extension-install", OnTap: props.OnOpenExtensionStore, Child: box}
 	}

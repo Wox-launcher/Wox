@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/lxn/win"
+
 	webviewruntime "wox/ui/runtime/internal/webview"
 )
 
@@ -54,7 +56,12 @@ func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error
 }
 
 func (w *platformWindow) forwardEmbeddedSurfacePointer(event PointerEvent) bool {
-	return w.webView != nil && w.webView.Pointer(toWebViewPointerEvent(event))
+	if w.webView == nil {
+		return false
+	}
+	// Raw surface hit testing decides whether WM_SETCURSOR should use WebView2 or Go UI state.
+	w.webViewPointerOver = event.Kind != PointerLeave
+	return w.webView.Pointer(toWebViewPointerEvent(event))
 }
 
 // executeWebViewCommand keeps WebView lifecycle out of the general Win32 command switch.
@@ -70,11 +77,13 @@ func (w *platformWindow) executeWebViewCommand(command windowCommand) (windowCom
 		}
 		return windowCommandResult{err: w.webView.Show(toWebViewContent(command.webView), toWebViewRect(command.webViewBounds), w.scale)}, true
 	case windowCommandHideWebView:
+		w.clearWebViewPointerState()
 		if w.webView == nil {
 			return windowCommandResult{}, true
 		}
 		return windowCommandResult{err: w.webView.Hide()}, true
 	case windowCommandResetWebView:
+		w.clearWebViewPointerState()
 		if w.webView == nil {
 			return windowCommandResult{}, true
 		}
@@ -316,6 +325,12 @@ func (w *windowsWebViewDriver) destroy() {
 	}
 }
 
+func (w *platformWindow) clearWebViewPointerState() {
+	w.webViewPointerOver = false
+	w.webViewCursor = 0
+	w.webViewCursorKnown = false
+}
+
 func webViewHRESULT(operation string, result C.int32_t) error {
 	return fmt.Errorf("woxui: %s failed with HRESULT 0x%08X", operation, uint32(result))
 }
@@ -378,4 +393,20 @@ func woxGoWindowsWebViewNavigationChanged(owner C.uintptr_t, url *C.char, canGoB
 		state.URL = C.GoString(url)
 	}
 	window.options.OnWebViewNavigationChanged(state)
+}
+
+// woxGoWindowsWebViewCursorChanged applies the cursor chosen by WebView2's page hit testing.
+//
+//export woxGoWindowsWebViewCursorChanged
+func woxGoWindowsWebViewCursorChanged(owner, cursor C.uintptr_t) {
+	value, ok := nativeWindows.Load(uintptr(owner))
+	if !ok {
+		return
+	}
+	window := value.(*platformWindow)
+	window.webViewCursor = win.HCURSOR(cursor)
+	window.webViewCursorKnown = true
+	if window.webViewPointerOver {
+		win.SetCursor(window.webViewCursor)
+	}
 }

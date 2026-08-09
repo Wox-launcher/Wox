@@ -182,8 +182,12 @@ type platformWindow struct {
 	// Windows' drag-oriented WM_DPICHANGED suggestion during SetWindowPos.
 	suppressDPIBounds bool
 
-	inputState         TextInputState
-	pointerCursor      PointerCursor
+	inputState    TextInputState
+	pointerCursor PointerCursor
+	// webViewCursorKnown distinguishes an intentional CSS cursor:none from a cursor not reported yet.
+	webViewCursor      win.HCURSOR
+	webViewCursorKnown bool
+	webViewPointerOver bool
 	inputHighSurrogate uint16
 	inputComposing     bool
 	pointerInside      bool
@@ -876,7 +880,7 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 	case win.WM_ERASEBKGND:
 		return 1
 	case win.WM_SETCURSOR:
-		win.SetCursor(windowsPointerCursor(window.pointerCursor))
+		win.SetCursor(window.resolvedPointerCursor())
 		return 1
 	case win.WM_MOUSEMOVE:
 		var screenPosition win.POINT
@@ -1007,6 +1011,13 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 	}
 
 	return win.DefWindowProc(hwnd, message, wParam, lParam)
+}
+
+func (w *platformWindow) resolvedPointerCursor() win.HCURSOR {
+	if w.webViewPointerOver && w.webViewCursorKnown {
+		return w.webViewCursor
+	}
+	return windowsPointerCursor(w.pointerCursor)
 }
 
 // handleFileDrop converts the Windows HDROP payload before handing it to the portable window contract.
@@ -1786,6 +1797,7 @@ func (w *platformWindow) destroyNativeResources() {
 		w.nativeFilePreview = nil
 	}
 	if w.webView != nil {
+		w.clearWebViewPointerState()
 		w.webView.Close()
 		w.webView = nil
 	}

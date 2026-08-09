@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"wox/common"
+	"wox/setting"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -150,14 +152,16 @@ func settingsRowsJSON(value any) string {
 
 func queryHotkeyPositionOptions() []formOption {
 	return []formOption{
-		{Label: "System default", Value: "system_default"},
-		{Label: "Top left", Value: "top_left"},
-		{Label: "Top center", Value: "top_center"},
-		{Label: "Top right", Value: "top_right"},
-		{Label: "Center", Value: "center"},
-		{Label: "Bottom left", Value: "bottom_left"},
-		{Label: "Bottom center", Value: "bottom_center"},
-		{Label: "Bottom right", Value: "bottom_right"},
+		{Label: "i18n:ui_query_position_system_default", Value: string(setting.QueryHotkeyPositionSystemDefault), Icon: fromCoreImage(common.UIIcon("position.system-default"))},
+		{Label: "i18n:ui_query_position_top_left", Value: string(setting.QueryHotkeyPositionTopLeft), Icon: fromCoreImage(common.UIIcon("position.top-left"))},
+		{Label: "i18n:ui_query_position_top_center", Value: string(setting.QueryHotkeyPositionTopCenter), Icon: fromCoreImage(common.UIIcon("position.top-center"))},
+		{Label: "i18n:ui_query_position_top_right", Value: string(setting.QueryHotkeyPositionTopRight), Icon: fromCoreImage(common.UIIcon("position.top-right"))},
+		{Label: "i18n:ui_query_position_middle_left", Value: string(setting.QueryHotkeyPositionMiddleLeft), Icon: fromCoreImage(common.UIIcon("position.middle-left"))},
+		{Label: "i18n:ui_query_position_center", Value: string(setting.QueryHotkeyPositionCenter), Icon: fromCoreImage(common.UIIcon("position.center"))},
+		{Label: "i18n:ui_query_position_middle_right", Value: string(setting.QueryHotkeyPositionMiddleRight), Icon: fromCoreImage(common.UIIcon("position.middle-right"))},
+		{Label: "i18n:ui_query_position_bottom_left", Value: string(setting.QueryHotkeyPositionBottomLeft), Icon: fromCoreImage(common.UIIcon("position.bottom-left"))},
+		{Label: "i18n:ui_query_position_bottom_center", Value: string(setting.QueryHotkeyPositionBottomCenter), Icon: fromCoreImage(common.UIIcon("position.bottom-center"))},
+		{Label: "i18n:ui_query_position_bottom_right", Value: string(setting.QueryHotkeyPositionBottomRight), Icon: fromCoreImage(common.UIIcon("position.bottom-right"))},
 	}
 }
 

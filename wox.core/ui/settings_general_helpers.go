@@ -197,7 +197,9 @@ func normalizeQueryHotkeyPosition(value string) setting.QueryHotkeyPosition {
 	case setting.QueryHotkeyPositionTopLeft,
 		setting.QueryHotkeyPositionTopCenter,
 		setting.QueryHotkeyPositionTopRight,
+		setting.QueryHotkeyPositionMiddleLeft,
 		setting.QueryHotkeyPositionCenter,
+		setting.QueryHotkeyPositionMiddleRight,
 		setting.QueryHotkeyPositionBottomLeft,
 		setting.QueryHotkeyPositionBottomCenter,
 		setting.QueryHotkeyPositionBottomRight:

@@ -1568,32 +1568,8 @@ func (m *Manager) getQueryHotkeyWindowPosition(ctx context.Context, queryHotkey 
 		bottom = top
 	}
 
-	x := centerX
-	y := centerY
-
-	switch positionType {
-	case setting.QueryHotkeyPositionTopLeft:
-		x = left
-		y = top
-	case setting.QueryHotkeyPositionTopCenter:
-		x = centerX
-		y = top
-	case setting.QueryHotkeyPositionTopRight:
-		x = right
-		y = top
-	case setting.QueryHotkeyPositionCenter:
-		x = centerX
-		y = centerY
-	case setting.QueryHotkeyPositionBottomLeft:
-		x = left
-		y = bottom
-	case setting.QueryHotkeyPositionBottomCenter:
-		x = centerX
-		y = bottom
-	case setting.QueryHotkeyPositionBottomRight:
-		x = right
-		y = bottom
-	default:
+	x, y, ok := resolveQueryHotkeyWindowPosition(positionType, left, centerX, right, top, centerY, bottom)
+	if !ok {
 		return common.WindowPosition{}, false
 	}
 
@@ -1602,6 +1578,32 @@ func (m *Manager) getQueryHotkeyWindowPosition(ctx context.Context, queryHotkey 
 	}
 
 	return common.WindowPosition{X: x, Y: y}, true
+}
+
+// resolveQueryHotkeyWindowPosition maps the nine-grid setting onto precomputed screen anchors.
+func resolveQueryHotkeyWindowPosition(positionType setting.QueryHotkeyPosition, left, centerX, right, top, centerY, bottom int) (int, int, bool) {
+	switch positionType {
+	case setting.QueryHotkeyPositionTopLeft:
+		return left, top, true
+	case setting.QueryHotkeyPositionTopCenter:
+		return centerX, top, true
+	case setting.QueryHotkeyPositionTopRight:
+		return right, top, true
+	case setting.QueryHotkeyPositionMiddleLeft:
+		return left, centerY, true
+	case setting.QueryHotkeyPositionCenter:
+		return centerX, centerY, true
+	case setting.QueryHotkeyPositionMiddleRight:
+		return right, centerY, true
+	case setting.QueryHotkeyPositionBottomLeft:
+		return left, bottom, true
+	case setting.QueryHotkeyPositionBottomCenter:
+		return centerX, bottom, true
+	case setting.QueryHotkeyPositionBottomRight:
+		return right, bottom, true
+	default:
+		return 0, 0, false
+	}
 }
 
 func (m *Manager) getResolvedQueryHotkeyWindowWidth(ctx context.Context, queryHotkey setting.QueryHotkey) int {

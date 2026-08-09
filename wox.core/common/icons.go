@@ -96,6 +96,18 @@ var uiIcons = map[string]WoxImage{
 	"settings.privacy":           newMonochromeUIIcon(`<path d="M12 3 5 6v5c0 4.8 2.9 8.2 7 10 4.1-1.8 7-5.2 7-10V6z"/>`),
 	"settings.about":             newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>`),
 
+	// Query hotkey window positions.
+	"position.system-default": newSystemDefaultPositionUIIcon(),
+	"position.top-left":       newPositionUIIcon("7", "7"),
+	"position.top-center":     newPositionUIIcon("12", "7"),
+	"position.top-right":      newPositionUIIcon("17", "7"),
+	"position.middle-left":    newPositionUIIcon("7", "12"),
+	"position.center":         newPositionUIIcon("12", "12"),
+	"position.middle-right":   newPositionUIIcon("17", "12"),
+	"position.bottom-left":    newPositionUIIcon("7", "17"),
+	"position.bottom-center":  newPositionUIIcon("12", "17"),
+	"position.bottom-right":   newPositionUIIcon("17", "17"),
+
 	// Windows taskbar and system-tray chrome.
 	"system.windows":   newMonochromeUIIcon(`<path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/>`),
 	"system.browser":   newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M21 12h-6M12 21v-6M3 12h6"/>`),
@@ -201,6 +213,14 @@ var uiIcons = map[string]WoxImage{
 
 func newMonochromeUIIcon(paths string) WoxImage {
 	return NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">` + paths + `</svg>`)
+}
+
+func newPositionUIIcon(x, y string) WoxImage {
+	return NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="#8a8f98" stroke-width="1.5"/><circle cx="` + x + `" cy="` + y + `" r="2.7" fill="#5da3ef"/></svg>`)
+}
+
+func newSystemDefaultPositionUIIcon() WoxImage {
+	return NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2" fill="none" stroke="#8a8f98" stroke-width="1.5"/><path d="M8 21h8M12 18v3" fill="none" stroke="#8a8f98" stroke-width="1.5" stroke-linecap="round"/><path d="m12 7 .8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z" fill="#5da3ef"/></svg>`)
 }
 
 // UIIcon returns a reusable SVG icon by its categorized semantic name.

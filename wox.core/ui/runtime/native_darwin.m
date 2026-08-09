@@ -101,6 +101,8 @@ struct WoxDarwinWindow {
   bool native_dialog_active;
   bool input_enabled;
   uint8_t pointer_cursor;
+  NSCursor *web_view_cursor;
+  bool pointer_over_web_view;
   bool closed;
   bool render_scheduled;
   bool suppress_resize_render;
@@ -1265,6 +1267,53 @@ static void *wox_web_view_toolbar_forward_context = &wox_web_view_toolbar_forwar
 
 static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView *web_view);
 
+// darwin_web_view_cursor maps the page's normalized CSS cursor to the closest AppKit cursor.
+static NSCursor *darwin_web_view_cursor(NSString *value) {
+  if ([value isEqualToString:@"text"]) return [NSCursor IBeamCursor];
+  if ([value isEqualToString:@"vertical-text"]) return [NSCursor IBeamCursorForVerticalLayout];
+  if ([value isEqualToString:@"pointer"]) return [NSCursor pointingHandCursor];
+  if ([value isEqualToString:@"crosshair"] || [value isEqualToString:@"cell"]) return [NSCursor crosshairCursor];
+  if ([value isEqualToString:@"alias"] || [value isEqualToString:@"context-menu"] || [value isEqualToString:@"help"]) return [NSCursor contextualMenuCursor];
+  if ([value isEqualToString:@"copy"]) return [NSCursor dragCopyCursor];
+  if ([value isEqualToString:@"grab"] || [value isEqualToString:@"move"] || [value isEqualToString:@"all-scroll"]) return [NSCursor openHandCursor];
+  if ([value isEqualToString:@"grabbing"]) return [NSCursor closedHandCursor];
+  if ([value isEqualToString:@"not-allowed"] || [value isEqualToString:@"no-drop"]) return [NSCursor operationNotAllowedCursor];
+  if ([value isEqualToString:@"col-resize"] || [value isEqualToString:@"e-resize"] || [value isEqualToString:@"w-resize"] || [value isEqualToString:@"ew-resize"]) return [NSCursor resizeLeftRightCursor];
+  if ([value isEqualToString:@"row-resize"] || [value isEqualToString:@"n-resize"] || [value isEqualToString:@"s-resize"] || [value isEqualToString:@"ns-resize"]) return [NSCursor resizeUpDownCursor];
+  if ([value isEqualToString:@"zoom-in"]) return [NSCursor zoomInCursor];
+  if ([value isEqualToString:@"zoom-out"]) return [NSCursor zoomOutCursor];
+  if ([value isEqualToString:@"none"]) {
+    static NSCursor *hidden_cursor = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+      NSImage *image = [[[NSImage alloc] initWithSize:NSMakeSize(1.0, 1.0)] autorelease];
+      hidden_cursor = [[NSCursor alloc] initWithImage:image hotSpot:NSZeroPoint];
+    });
+    return hidden_cursor;
+  }
+  return [NSCursor arrowCursor];
+}
+
+// apply_darwin_pointer_cursor lets the active page cursor override the Go-rendered host cursor.
+static void apply_darwin_pointer_cursor(WoxDarwinWindow *window) {
+  if (window == NULL || window->closed) {
+    return;
+  }
+  NSCursor *cursor = window->pointer_over_web_view && window->web_view_cursor != nil
+                         ? window->web_view_cursor
+                         : (window->pointer_cursor == 1 ? [NSCursor IBeamCursor] : [NSCursor arrowCursor]);
+  [cursor set];
+  [window->window invalidateCursorRectsForView:window->view];
+}
+
+// web_view_cursor_script reports computed CSS cursors because WoxRenderView owns native hit testing above WKWebView.
+static NSString *web_view_cursor_script(void) {
+  return @"(()=>{if(window.__woxCursorBridgeInstalled__)return;window.__woxCursorBridgeInstalled__=true;let last='';"
+          "const allowed=new Set(['auto','default','none','context-menu','help','pointer','progress','wait','cell','crosshair','text','vertical-text','alias','copy','move','no-drop','not-allowed','grab','grabbing','all-scroll','col-resize','row-resize','n-resize','e-resize','s-resize','w-resize','ne-resize','nw-resize','se-resize','sw-resize','ew-resize','ns-resize','nesw-resize','nwse-resize','zoom-in','zoom-out']);"
+          "const publish=e=>{const n=e.target&&e.target.nodeType===1?e.target:document.documentElement;if(!n)return;const raw=getComputedStyle(n).cursor||'auto';const fallback=raw.split(',').pop().trim();const value=allowed.has(fallback)?fallback:'default';if(value===last)return;last=value;window.webkit.messageHandlers.woxWebViewCursor.postMessage(value)};"
+          "document.addEventListener('mousemove',publish,true);document.addEventListener('mouseover',publish,true)})()";
+}
+
 @interface WoxWebViewMessageHandler : NSObject <WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate> {
 @public
   WoxDarwinWindow *_owner;
@@ -1289,6 +1338,16 @@ static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView 
   } else if ([message.name isEqualToString:@"woxWebViewActionPanel"]) {
     [owner->window makeFirstResponder:owner->view];
     woxGoDarwinKey(owner->context, "j", WOX_KEY_MODIFIER_META, 1, 0, 0);
+  } else if ([message.name isEqualToString:@"woxWebViewCursor"] && message.webView == owner->active_web_view && [message.body isKindOfClass:[NSString class]]) {
+    NSCursor *cursor = darwin_web_view_cursor(message.body);
+    if (cursor != owner->web_view_cursor) {
+      [cursor retain];
+      [owner->web_view_cursor release];
+      owner->web_view_cursor = cursor;
+    }
+    if (owner->pointer_over_web_view) {
+      apply_darwin_pointer_cursor(owner);
+    }
   }
 }
 
@@ -1347,8 +1406,11 @@ static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css,
   [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewEscapeDiagnostic"];
   [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewPreview"];
   [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewActionPanel"];
+  [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewCursor"];
   WKUserScript *shortcut_script = [[[WKUserScript alloc] initWithSource:web_view_shortcut_script() injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES] autorelease];
   [configuration.userContentController addUserScript:shortcut_script];
+  WKUserScript *cursor_script = [[[WKUserScript alloc] initWithSource:web_view_cursor_script() injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:NO] autorelease];
+  [configuration.userContentController addUserScript:cursor_script];
   NSString *script = web_view_css_script(inject_css);
   if (script != nil) {
     // The CSS script waits for the root node, so document-start injection avoids a visible unstyled frame.
@@ -1392,6 +1454,10 @@ static void clear_active_web_view(WoxDarwinWindow *window, bool discard_transien
   window->active_web_view_key = nil;
   window->active_web_view_signature = nil;
   window->active_web_view_content_key = nil;
+  window->pointer_over_web_view = false;
+  [window->web_view_cursor release];
+  window->web_view_cursor = nil;
+  apply_darwin_pointer_cursor(window);
 }
 
 // desktop_top returns the AppKit Y coordinate used to map Wox's top-left virtual desktop space.
@@ -1563,7 +1629,9 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 
 - (void)resetCursorRects {
   [super resetCursorRects];
-  NSCursor *cursor = _owner != NULL && _owner->pointer_cursor == 1 ? [NSCursor IBeamCursor] : [NSCursor arrowCursor];
+  NSCursor *cursor = _owner != NULL && _owner->pointer_over_web_view && _owner->web_view_cursor != nil
+                         ? _owner->web_view_cursor
+                         : (_owner != NULL && _owner->pointer_cursor == 1 ? [NSCursor IBeamCursor] : [NSCursor arrowCursor]);
   [self addCursorRect:self.bounds cursor:cursor];
 }
 
@@ -2785,9 +2853,14 @@ int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window) {
   return result;
 }
 
-int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *window) {
+int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *window, uint8_t kind) {
   if (window == NULL || window->closed || window->active_web_view == nil || window->forwarding_embedded_pointer) {
     return -1;
+  }
+  window->pointer_over_web_view = kind != WOX_POINTER_LEAVE;
+  if (kind == WOX_POINTER_LEAVE) {
+    apply_darwin_pointer_cursor(window);
+    return 0;
   }
   NSEvent *event = NSApp.currentEvent;
   if (event == nil) {
@@ -2846,6 +2919,7 @@ int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *wind
     break;
   }
   window->forwarding_embedded_pointer = false;
+  apply_darwin_pointer_cursor(window);
   return result;
 }
 
@@ -2964,7 +3038,7 @@ int32_t wox_darwin_window_set_pointer_cursor(WoxDarwinWindow *window, uint8_t cu
       return;
     }
     window->pointer_cursor = cursor;
-    [window->window invalidateCursorRectsForView:window->view];
+    apply_darwin_pointer_cursor(window);
   });
   return result;
 }

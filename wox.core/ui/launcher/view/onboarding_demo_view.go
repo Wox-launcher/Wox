@@ -49,7 +49,6 @@ type onboardingDemoWindowProps struct {
 	Preview        woxwidget.Widget
 	PrimaryAction  string
 	QueryAccessory woxwidget.Widget
-	AccessoryWidth float32
 }
 
 // onboardingPreview selects the Flutter-equivalent scene instead of reusing one generic launcher mock.
@@ -331,11 +330,6 @@ func onboardingDemoWindow(window onboardingDemoWindowProps) woxwidget.Widget {
 	}
 	if window.ShowQuery {
 		var query woxwidget.Widget
-		queryContentWidth := window.Width - 40
-		queryWidth := queryContentWidth
-		if window.QueryAccessory != nil && window.AccessoryWidth > 0 {
-			queryWidth = max(float32(0), queryContentWidth-window.AccessoryWidth-10)
-		}
 		if len(window.QueryParts) > 0 {
 			parts := make([]woxwidget.Widget, 0, len(window.QueryParts))
 			for _, part := range window.QueryParts {
@@ -343,15 +337,15 @@ func onboardingDemoWindow(window onboardingDemoWindowProps) woxwidget.Widget {
 			}
 			query = woxwidget.Flex{Axis: woxwidget.Horizontal, Children: parts}
 		} else {
-			query = woxwidget.TextBlock{Value: window.Query, Width: queryWidth, Height: 32, MaxLines: 1, LineHeight: 32, Style: woxui.TextStyle{Size: 25}, Color: settingsColorAlpha(window.Theme.QueryText, alpha)}
+			query = woxwidget.TextBlock{Value: window.Query, Height: 32, MaxLines: 1, LineHeight: 32, Style: woxui.TextStyle{Size: 25}, Color: settingsColorAlpha(window.Theme.QueryText, alpha)}
 		}
-		queryChildren := []woxwidget.StackChild{{Child: woxwidget.Align{Width: queryWidth, Height: 32, Vertical: .5, Child: query}}}
+		queryChildren := []woxwidget.Widget{woxwidget.Expanded{Child: woxwidget.Align{Height: 32, Vertical: .5, Child: query}}}
 		if window.QueryAccessory != nil {
-			queryChildren = append(queryChildren, woxwidget.StackChild{Left: queryWidth + 10, Top: 1, Child: window.QueryAccessory})
+			queryChildren = append(queryChildren, window.QueryAccessory)
 		}
-		children = append(children, woxwidget.StackChild{Left: 12, Top: queryTop, Child: woxwidget.Container{
-			Width: window.Width - 24, Height: queryBoxHeight, Radius: 8, Color: demoColorOpacity(window.Theme.QueryBackground, opacity),
-			Padding: woxwidget.Insets{Left: 8, Top: 9, Right: 8}, Child: woxwidget.Stack{Width: queryContentWidth, Height: 32, Children: queryChildren},
+		children = append(children, woxwidget.StackChild{Left: 12, Top: queryTop, Right: 12, StretchWidth: true, Child: woxwidget.Container{
+			Height: queryBoxHeight, Radius: 8, Color: demoColorOpacity(window.Theme.QueryBackground, opacity),
+			Padding: woxwidget.Insets{Left: 8, Top: 9, Right: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: queryChildren},
 		}})
 	}
 	for index, result := range window.Results {
@@ -360,7 +354,7 @@ func onboardingDemoWindow(window onboardingDemoWindowProps) woxwidget.Widget {
 		if window.FadeResults {
 			resultAlpha = demoScaledAlpha(opacity*window.ResultsOpacity, 255)
 		}
-		children = append(children, woxwidget.StackChild{Left: 12, Top: top, Child: onboardingDemoResultRow(resultWindow, result, resultRowHeight, resultAlpha)})
+		children = append(children, woxwidget.StackChild{Left: 12, Top: top, Right: 12, StretchWidth: true, Child: onboardingDemoResultRow(resultWindow, result, resultRowHeight, resultAlpha)})
 	}
 	if window.Preview != nil {
 		children = append(children, woxwidget.StackChild{Left: resultWidth + 2, Top: resultTop + 4, Child: window.Preview})
@@ -389,18 +383,17 @@ func onboardingDemoResultRow(window onboardingDemoWindowProps, result onboarding
 	if result.Tail != "" {
 		tailWidth = min(float32(120), float32(len([]rune(result.Tail)))*7+18)
 	}
-	textWidth := max(float32(40), window.Width-90-tailWidth)
 	textHeight := max(float32(28), height-10)
 	return woxwidget.Container{
-		Width: window.Width - 24, Height: height, Radius: 6, Color: background, Padding: woxwidget.Insets{Left: 10, Top: 6, Right: 10, Bottom: 4},
+		Height: height, Radius: 6, Color: background, Padding: woxwidget.Insets{Left: 10, Top: 6, Right: 10, Bottom: 4},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 9, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: 28, Height: 28, Radius: 7, Color: settingsColorAlpha(result.GlyphColor, demoScaledAlpha(float32(alpha)/255, 54)), Child: woxwidget.Align{
 				Width: 28, Height: 28, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: result.Glyph, Style: woxui.TextStyle{Size: 15}, Color: settingsColorAlpha(result.GlyphColor, alpha)},
 			}},
-			woxwidget.Align{Width: textWidth, Height: textHeight, Vertical: .5, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
-				woxwidget.TextBlock{Value: result.Title, Width: textWidth, Height: 19, MaxLines: 1, LineHeight: 19, Style: woxui.TextStyle{Size: 14}, Color: settingsColorAlpha(boolColor(result.Selected, window.Theme.SelectedTitle, window.Theme.ResultTitle), alpha)},
-				woxwidget.TextBlock{Value: result.Subtitle, Width: textWidth, Height: 15, MaxLines: 1, LineHeight: 15, Style: woxui.TextStyle{Size: 11}, Color: settingsColorAlpha(boolColor(result.Selected, window.Theme.SelectedSubtitle, window.Theme.ResultSubtitle), alpha)},
-			}}},
+			woxwidget.Expanded{Child: woxwidget.Align{Height: textHeight, Vertical: .5, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
+				woxwidget.TextBlock{Value: result.Title, Height: 19, MaxLines: 1, LineHeight: 19, Style: woxui.TextStyle{Size: 14}, Color: settingsColorAlpha(boolColor(result.Selected, window.Theme.SelectedTitle, window.Theme.ResultTitle), alpha)},
+				woxwidget.TextBlock{Value: result.Subtitle, Height: 15, MaxLines: 1, LineHeight: 15, Style: woxui.TextStyle{Size: 11}, Color: settingsColorAlpha(boolColor(result.Selected, window.Theme.SelectedSubtitle, window.Theme.ResultSubtitle), alpha)},
+			}}}},
 			woxwidget.Container{Width: tailWidth, Height: 24, Radius: 12, BorderColor: settingsColorAlpha(window.Theme.ResultSubtitle, demoScaledAlpha(float32(alpha)/255, 90)), BorderWidth: boolFloat(result.Tail != ""),
 				Child: woxwidget.Align{Width: tailWidth, Height: 24, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: result.Tail, Style: woxui.TextStyle{Size: 9}, Color: settingsColorAlpha(window.Theme.ResultSubtitle, alpha)}}},
 		}},
@@ -434,7 +427,6 @@ func onboardingDemoToolbar(window onboardingDemoWindowProps, height float32, alp
 	if runtime.GOOS == "darwin" {
 		actionModifier = "Cmd"
 	}
-	contentWidth := float32(264)
 	content := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxwidget.Text{Value: primaryAction, Style: woxui.TextStyle{Size: 10}, Color: settingsColorAlpha(window.Theme.ResultTitle, alpha)},
 		keycap("Enter", 40, false),
@@ -446,8 +438,10 @@ func onboardingDemoToolbar(window onboardingDemoWindowProps, height float32, alp
 	return woxwidget.Container{
 		Width: window.Width, Height: height, Color: settingsColorAlpha(window.Theme.ResultTitle, demoScaledAlpha(float32(alpha)/255, 9)),
 		BorderColor: settingsColorAlpha(window.Theme.ResultTitle, demoScaledAlpha(float32(alpha)/255, 18)), BorderWidth: 1,
-		Padding: woxwidget.Insets{Left: max(float32(12), window.Width-contentWidth-12), Top: 7, Right: 12},
-		Child:   content,
+		Padding: woxwidget.Insets{Left: 12, Top: 7, Right: 12},
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisEnd, Children: []woxwidget.Widget{
+			content,
+		}},
 	}
 }
 
@@ -466,17 +460,17 @@ func onboardingDemoActionPanel(window onboardingDemoWindowProps, width, height f
 	}{{"▶", "Execute"}, {"⌖", copyLabel}, {"•••", moreLabel}}
 	children := []woxwidget.Widget{
 		woxwidget.Text{Value: "Actions", Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(window.Theme.ResultTitle, alpha)},
-		woxwidget.Container{Width: width - 24, Height: 1, Color: settingsColorAlpha(window.Theme.ResultTitle, demoScaledAlpha(float32(alpha)/255, 138))},
+		woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 1, Color: settingsColorAlpha(window.Theme.ResultTitle, demoScaledAlpha(float32(alpha)/255, 138))}},
 	}
 	for index, row := range rows {
 		color := settingsColorAlpha(window.Theme.ResultTitle, demoScaledAlpha(float32(alpha)/255, 14))
 		if index == 0 {
 			color = settingsColorAlpha(window.Accent, demoScaledAlpha(float32(alpha)/255, 210))
 		}
-		children = append(children, woxwidget.Container{
-			Width: width - 24, Height: 32, Radius: 7, Color: color, Padding: woxwidget.Insets{Left: 9, Top: 8},
+		children = append(children, woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{
+			Height: 32, Radius: 7, Color: color, Padding: woxwidget.Insets{Left: 9, Top: 8},
 			Child: woxwidget.Text{Value: row.glyph + "   " + row.title, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(window.Theme.ResultTitle, alpha)},
-		})
+		}})
 	}
 	return woxwidget.Container{
 		Width: width, Height: height, Radius: 8, Color: settingsColorAlpha(window.Theme.Background, demoScaledAlpha(float32(alpha)/255, 240)),
@@ -491,10 +485,10 @@ func onboardingDemoHintCard(props OnboardingProps, step OnboardingStep, title, f
 		Width: width, Height: 58, Radius: 8, Color: settingsColorAlpha(props.Theme.Background, demoScaledAlpha(float32(alpha)/255, 238)),
 		BorderColor: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(float32(alpha)/255, 26)), BorderWidth: 1,
 		Padding: woxwidget.Insets{Left: 14, Top: 11, Right: 12},
-		Child: woxwidget.Stack{Width: width - 26, Height: 36, Children: []woxwidget.StackChild{
-			{Child: woxwidget.Align{Width: width - badgeWidth - 42, Height: 36, Vertical: .5, Child: woxwidget.TextBlock{Value: "⌘  " + title, Width: width - badgeWidth - 42, MaxLines: 1, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultTitle, alpha)}}},
-			{Left: width - badgeWidth - 26, Child: woxwidget.Container{Width: badgeWidth, Height: 36, Radius: 8, BorderColor: settingsColorAlpha(step.Accent, demoScaledAlpha(float32(alpha)/255, 82)), BorderWidth: 1,
-				Padding: woxwidget.Insets{Left: 10, Right: 10}, Child: woxwidget.Align{Width: badgeWidth - 20, Height: 36, Vertical: .5, Child: woxwidget.TextBlock{Value: from + "   →   " + to, Width: badgeWidth - 20, MaxLines: 1, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(step.Accent, alpha)}}}},
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxwidget.Expanded{Child: woxwidget.Align{Height: 36, Vertical: .5, Child: woxwidget.TextBlock{Value: "⌘  " + title, MaxLines: 1, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultTitle, alpha)}}},
+			woxwidget.Container{Width: badgeWidth, Height: 36, Radius: 8, BorderColor: settingsColorAlpha(step.Accent, demoScaledAlpha(float32(alpha)/255, 82)), BorderWidth: 1,
+				Padding: woxwidget.Insets{Left: 10, Right: 10}, Child: woxwidget.Align{Height: 36, Vertical: .5, Child: woxwidget.TextBlock{Value: from + "   →   " + to, MaxLines: 1, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(step.Accent, alpha)}}},
 		}},
 	}
 }
@@ -760,11 +754,11 @@ func onboardingSelectionWindow(props OnboardingProps, step OnboardingStep, width
 	preview := woxwidget.Container{
 		Width: previewWidth, Height: previewHeight, Radius: 8, BorderColor: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 76)), BorderWidth: 1,
 		Padding: woxwidget.UniformInsets(14), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: previewWidth - 28, Height: 6, Radius: 3, Color: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 24))},
+			woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: 6, Radius: 3, Color: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 24))}},
 			woxwidget.Container{Width: previewWidth - 96, Height: 6, Radius: 3, Color: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 24))},
-			woxwidget.Container{Width: previewWidth - 28, Height: max(float32(40), previewHeight-62), Radius: 6, Color: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 18)), Child: woxwidget.Align{
-				Width: previewWidth - 28, Height: max(float32(40), previewHeight-62), Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: "▧", Style: woxui.TextStyle{Size: 28}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, demoScaledAlpha(opacity, 120))},
-			}},
+			woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: max(float32(40), previewHeight-62), Radius: 6, Color: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 18)), Child: woxwidget.Align{
+				Height: max(float32(40), previewHeight-62), Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: "▧", Style: woxui.TextStyle{Size: 28}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, demoScaledAlpha(opacity, 120))},
+			}}},
 		}},
 	}
 	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
@@ -817,7 +811,7 @@ func onboardingGlanceDemo(props OnboardingProps, step OnboardingStep, width, hei
 	windowWidth := width - 100
 	windowHeight := height - 88
 	window := onboardingDemoWindow(onboardingDemoWindowProps{
-		Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: "wox", QueryAccessory: accessory, AccessoryWidth: accessoryWidth,
+		Width: windowWidth, Height: windowHeight, Backdrop: props.WallpaperBlurred, Query: "wox", QueryAccessory: accessory,
 		Accent: step.Accent, Theme: props.Theme, Opacity: 1, ShowQuery: true, ShowToolbar: true,
 		Results: []onboardingDemoResult{
 			{Title: title, Subtitle: props.Labels["glance.body"], Tail: tail, Glyph: "◉", GlyphColor: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Selected: true},
@@ -1101,11 +1095,11 @@ func onboardingPluginStoreWindow(props OnboardingProps, step OnboardingStep, wid
 		Width: detailWidth, Height: detailHeight, Radius: 8, Color: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 14)), BorderColor: settingsColorAlpha(props.Theme.ResultTitle, demoScaledAlpha(opacity, 26)), BorderWidth: 1,
 		Padding: woxwidget.Insets{Left: 16, Top: 14, Right: 16, Bottom: 12}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: "▧   RImage", Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultTitle, alpha)},
-			woxwidget.TextBlock{Value: "使用 rimage 压缩选中的图片 · qianlifeng", Width: detailWidth - 32, Height: 18, MaxLines: 1, LineHeight: 18, Style: woxui.TextStyle{Size: 9}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, alpha)},
+			woxwidget.TextBlock{Value: "使用 rimage 压缩选中的图片 · qianlifeng", Height: 18, MaxLines: 1, LineHeight: 18, Style: woxui.TextStyle{Size: 9}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, alpha)},
 			woxwidget.Text{Value: "v0.0.1     NodeJS     GitHub ↗", Style: woxui.TextStyle{Size: 9, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.Theme.ResultSubtitle, alpha)},
-			woxwidget.Container{Width: detailWidth - 32, Height: max(float32(40), detailHeight-86), Radius: 7, Color: settingsColorAlpha(woxui.Color{A: 255}, demoScaledAlpha(opacity, 58)), Child: woxwidget.Align{
-				Width: detailWidth - 32, Height: max(float32(40), detailHeight-86), Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: "RImage", Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(step.Accent, alpha)},
-			}},
+			woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Height: max(float32(40), detailHeight-86), Radius: 7, Color: settingsColorAlpha(woxui.Color{A: 255}, demoScaledAlpha(opacity, 58)), Child: woxwidget.Align{
+				Height: max(float32(40), detailHeight-86), Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: "RImage", Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(step.Accent, alpha)},
+			}}},
 		}},
 	}
 	return onboardingDemoWindow(onboardingDemoWindowProps{

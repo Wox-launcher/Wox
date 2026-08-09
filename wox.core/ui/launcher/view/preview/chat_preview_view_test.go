@@ -133,8 +133,9 @@ func TestChatDebugUsesMeasuredControlledScrollGeometry(t *testing.T) {
 		Width: 500, Height: 300, Key: "debug", Value: "trace", Layout: woxwidget.TextBlockLayout{Size: woxui.Size{Width: 400, Height: 180}},
 		OnScroll: func(float32) {}, OnGeometryChanged: func(float32, float32) {},
 	}).(woxwidget.Container)
-	body := view.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	content := body.Content.(woxwidget.Container)
+	bodyWidget := view.Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child
+	body := resolvedScrollViewProps(bodyWidget, woxui.Size{Width: 480, Height: 258})
+	content := body.Content.(woxwidget.Constrained).Child.(woxwidget.Container)
 
 	if body.ContentHeight != 0 || body.OnGeometryChanged == nil || content.Height != 0 {
 		t.Fatalf("debug scroll = content hint %.0f callback %v container height %.0f, want measured controlled geometry", body.ContentHeight, body.OnGeometryChanged != nil, content.Height)

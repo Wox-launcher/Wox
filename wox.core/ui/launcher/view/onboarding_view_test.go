@@ -238,16 +238,12 @@ func TestOnboardingDemoResultTextIsVerticallyCentered(t *testing.T) {
 		Theme: woxcomponent.Theme{},
 	}, onboardingDemoResult{Title: "Everything", Subtitle: "Search Everything files", Tail: "Current time"}, 51, 255).(woxwidget.Container)
 	content := row.Child.(woxwidget.Flex)
-	text := content.Children[1].(woxwidget.Align)
+	text := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.Align)
 	column := text.Child.(woxwidget.Flex)
 	title := column.Children[0].(woxwidget.TextBlock)
-	icon := content.Children[0].(woxwidget.Container)
-	tail := content.Children[2].(woxwidget.Container)
-	usedWidth := icon.Width + text.Width + tail.Width + content.Gap*2
-	availableWidth := row.Width - row.Padding.Left - row.Padding.Right
 
-	if text.Vertical != .5 || title.Height < title.LineHeight || usedWidth > availableWidth {
-		t.Fatalf("result text = %#v, title = %#v, used width = %v, available width = %v", text, title, usedWidth, availableWidth)
+	if text.Vertical != .5 || title.Height < title.LineHeight {
+		t.Fatalf("result text = %#v, title = %#v, want expanded vertically centered text", text, title)
 	}
 }
 
@@ -261,9 +257,9 @@ func TestOnboardingDemoHintCardTextIsVerticallyCentered(t *testing.T) {
 		580,
 		255,
 	).(woxwidget.Container)
-	content := card.Child.(woxwidget.Stack)
-	title := content.Children[0].Child.(woxwidget.Align)
-	badge := content.Children[1].Child.(woxwidget.Container)
+	content := card.Child.(woxwidget.Flex)
+	title := content.Children[0].(woxwidget.Expanded).Child.(woxwidget.Align)
+	badge := content.Children[1].(woxwidget.Container)
 	expansion := badge.Child.(woxwidget.Align)
 
 	if title.Vertical != .5 || expansion.Vertical != .5 || badge.Padding.Top != 0 {
@@ -307,12 +303,12 @@ func TestOnboardingGlanceRendersQueryAccessoryWhenEnabled(t *testing.T) {
 	}, OnboardingStep{}, 640, 360).(woxwidget.Clip)
 	desktop := demo.Child.(woxwidget.Stack)
 	window := desktop.Children[len(desktop.Children)-1].Child.(woxwidget.Clip).Child.(woxwidget.Stack)
-	query := window.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Stack)
+	query := window.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex)
 
 	if len(query.Children) != 2 {
 		t.Fatalf("glance query children = %d, want query text plus accessory", len(query.Children))
 	}
-	accessory := query.Children[1].Child.(woxwidget.Align)
+	accessory := query.Children[1].(woxwidget.Align)
 	if accessory.Horizontal != .5 || accessory.Vertical != .5 {
 		t.Fatalf("glance accessory alignment = (%v, %v), want centered", accessory.Horizontal, accessory.Vertical)
 	}

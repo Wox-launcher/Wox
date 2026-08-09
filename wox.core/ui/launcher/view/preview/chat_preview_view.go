@@ -212,7 +212,7 @@ func ChatCatalog(props ChatCatalogProps) woxwidget.Widget {
 		rows = append(rows, ChatCatalogItem(item, innerWidth, rowHeight, props.Theme))
 	}
 	if len(rows) == 0 {
-		rows = append(rows, woxwidget.Container{Width: innerWidth, Height: viewportHeight, Padding: woxwidget.Insets{Left: 10, Top: 18}, Child: woxwidget.TextBlock{Value: props.EmptyMessage, Width: max(float32(0), innerWidth-20), Height: 48, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: props.Theme.ResultSubtitle}})
+		rows = append(rows, woxwidget.Container{Width: innerWidth, Height: viewportHeight, Padding: woxwidget.Insets{Left: 10, Top: 18, Right: 10}, Child: woxwidget.TextBlock{Value: props.EmptyMessage, Height: 48, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: props.Theme.ResultSubtitle}})
 	}
 	border := props.Theme.ResultSubtitle
 	border.A = uint8(float32(border.A) * 0.14)
@@ -302,11 +302,9 @@ func chatCatalogItem(item ChatCatalogItemProps, width, height float32, theme wox
 	}
 	mainWidth := width
 	rightPadding := float32(10)
-	textInset := float32(20)
 	if item.OnDelete != nil {
 		mainWidth = max(float32(80), width-44)
 		rightPadding = 8
-		textInset = 18
 	}
 	if item.OnDelete == nil {
 		checkWidth := float32(0)
@@ -332,9 +330,9 @@ func chatCatalogItem(item ChatCatalogItemProps, width, height float32, theme wox
 		}}
 	}
 	main := woxwidget.Gesture{ID: item.SelectID, OnTap: item.OnSelect, Child: woxwidget.Container{
-		Width: mainWidth, Height: height - 4, Radius: 7, Color: background, Padding: woxwidget.Insets{Left: 10, Top: 5, Right: rightPadding}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: max(float32(0), mainWidth-textInset), Height: 16, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: theme.PreviewText}},
-			woxwidget.Container{Width: max(float32(0), mainWidth-textInset), Height: 14, Child: woxwidget.Text{Value: item.Subtitle, Style: woxui.TextStyle{Size: 9}, Color: theme.ResultSubtitle}},
+		Width: mainWidth, Height: height - 4, Radius: 7, Color: background, Padding: woxwidget.Insets{Left: 10, Top: 5, Right: rightPadding}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, CrossAxisAlignment: woxwidget.CrossAxisStretch, Children: []woxwidget.Widget{
+			woxwidget.Container{Height: 16, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: theme.PreviewText}},
+			woxwidget.Container{Height: 14, Child: woxwidget.Text{Value: item.Subtitle, Style: woxui.TextStyle{Size: 9}, Color: theme.ResultSubtitle}},
 		}},
 	}}
 	children := []woxwidget.Widget{main}
@@ -399,21 +397,21 @@ type ChatDebugProps struct {
 
 // ChatDebug builds the portable JSON trace panel.
 func ChatDebug(props ChatDebugProps) woxwidget.Widget {
-	innerWidth := max(float32(0), props.Width-20)
-	viewportHeight := max(float32(40), props.Height-42)
-	header := woxwidget.Stack{Width: innerWidth, Height: 24, Children: []woxwidget.StackChild{
+	header := woxwidget.Stack{Height: 24, Children: []woxwidget.StackChild{
 		{Right: 54, StretchWidth: true, Child: woxwidget.Container{Height: 24, Child: woxwidget.Text{Value: props.Summary, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionHeader}}},
 		{AnchorRight: true, Right: 0, Child: chatHeaderButton("chat-debug-copy-"+props.Key, "Copy", false, props.Theme, props.OnCopy)},
 	}}
 	body := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: woxwidget.Key("chat-debug-scroll-" + props.Key), Width: innerWidth, Height: viewportHeight,
+		Key: woxwidget.Key("chat-debug-scroll-" + props.Key), FillWidth: true, FillHeight: true,
 		Offset: props.Scroll, ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll, OnGeometryChanged: props.OnGeometryChanged,
-		Content: woxwidget.Container{
-			Width: innerWidth, Radius: 7, Color: props.Theme.QueryBackground, Padding: woxwidget.Insets{Left: 8, Top: 8, Right: 8, Bottom: 8},
-			Child: woxwidget.TextBlock{Value: props.Value, Width: max(float32(20), innerWidth-16), Height: props.Layout.Size.Height, Style: woxui.TextStyle{Size: 10}, LineHeight: 16, Color: props.Theme.PreviewText, Layout: &props.Layout},
-		},
+		Content: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{
+			Radius: 7, Color: props.Theme.QueryBackground, Padding: woxwidget.Insets{Left: 8, Top: 8, Right: 8, Bottom: 8},
+			Child: woxwidget.TextBlock{Value: props.Value, Height: props.Layout.Size.Height, Style: woxui.TextStyle{Size: 10}, LineHeight: 16, Color: props.Theme.PreviewText, Layout: &props.Layout},
+		}},
 	})
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 9, Color: props.Theme.ActionBackground, Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 10, Bottom: 7}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{header, body}}}
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 9, Color: props.Theme.ActionBackground, Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 10, Bottom: 7}, Child: woxwidget.Flex{
+		Axis: woxwidget.Vertical, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisStretch, Children: []woxwidget.Widget{header, woxwidget.Expanded{Child: body}},
+	}}
 }
 
 // ChatToolDetailProps contains one labeled tool-call detail value.
@@ -603,7 +601,7 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 	}
 
 	innerWidth := max(float32(24), cardWidth-24)
-	actions, actionWidth := chatMessageActions(props, hovered, onHover)
+	actions, _ := chatMessageActions(props, hovered, onHover)
 	hasActions := len(actions) > 0
 	showRoleHeader := props.Role == "tool" || props.Role == "system" || props.ToolText != ""
 	children := make([]woxwidget.Widget, 0, 6)
@@ -613,15 +611,11 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 		meta += "  " + props.Timestamp
 	}
 	if showRoleHeader {
-		metaWidth := innerWidth
+		headerChildren := []woxwidget.Widget{woxwidget.Expanded{Child: woxwidget.Container{Height: 18, Child: woxwidget.Text{Value: meta, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}}}}
 		if hasActions {
-			metaWidth = max(float32(0), innerWidth-actionWidth-8)
+			headerChildren = append(headerChildren, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: actions})
 		}
-		headerChildren := []woxwidget.StackChild{{Child: woxwidget.Container{Width: metaWidth, Height: 18, Child: woxwidget.Text{Value: meta, Style: woxui.TextStyle{Size: 10, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}}}}
-		if hasActions {
-			headerChildren = append(headerChildren, woxwidget.StackChild{Left: innerWidth - actionWidth, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: actions}})
-		}
-		children = append(children, woxwidget.Stack{Width: innerWidth, Height: 18, Children: headerChildren})
+		children = append(children, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: headerChildren})
 	}
 	if props.ToolText != "" {
 		children = append(children, woxwidget.TextBlock{Value: props.ToolText, Width: innerWidth, Height: props.ToolLayout.Size.Height, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: textColor, Layout: &props.ToolLayout})
@@ -788,16 +782,15 @@ func chatToolDetails(tool ChatToolCallProps, width float32, theme woxcomponent.T
 	panelColor.A = 15
 	borderColor := theme.ActionBackground
 	borderColor.A = 40
-	innerWidth := max(float32(0), width-16)
 	children := make([]woxwidget.Widget, 0, len(tool.Details))
 	for _, detail := range tool.Details {
 		valueHeight := detail.Layout.Size.Height + 12
-		children = append(children, woxwidget.Container{Width: innerWidth, Height: detail.Layout.Size.Height + 40, Padding: woxwidget.Insets{Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: innerWidth, Height: 16, Child: woxwidget.Text{Value: detail.Label, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle}},
-			woxwidget.Container{Width: innerWidth, Height: valueHeight, Color: woxui.Color{A: 20}, BorderColor: woxui.Color{A: 10}, BorderWidth: 1, Padding: woxwidget.Insets{Left: 6, Top: 6, Right: 6, Bottom: 6}, Child: woxwidget.TextBlock{Value: detail.Value, Width: max(float32(0), innerWidth-12), Height: detail.Layout.Size.Height, Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: theme.PreviewText, Layout: &detail.Layout}},
+		children = append(children, woxwidget.Container{Height: detail.Layout.Size.Height + 40, Padding: woxwidget.Insets{Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisStretch, Children: []woxwidget.Widget{
+			woxwidget.Container{Height: 16, Child: woxwidget.Text{Value: detail.Label, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle}},
+			woxwidget.Container{Height: valueHeight, Color: woxui.Color{A: 20}, BorderColor: woxui.Color{A: 10}, BorderWidth: 1, Padding: woxwidget.Insets{Left: 6, Top: 6, Right: 6, Bottom: 6}, Child: woxwidget.TextBlock{Value: detail.Value, Height: detail.Layout.Size.Height, Style: woxui.TextStyle{Size: 11}, LineHeight: 16, Color: theme.PreviewText, Layout: &detail.Layout}},
 		}}})
 	}
-	return woxwidget.Container{Width: width, Height: tool.DetailsHeight, Radius: 8, Color: panelColor, BorderColor: borderColor, BorderWidth: 1, Padding: woxwidget.Insets{Left: 8, Top: 8, Right: 8, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}}
+	return woxwidget.Container{Width: width, Height: tool.DetailsHeight, Radius: 8, Color: panelColor, BorderColor: borderColor, BorderWidth: 1, Padding: woxwidget.Insets{Left: 8, Top: 8, Right: 8, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, CrossAxisAlignment: woxwidget.CrossAxisStretch, Children: children}}
 }
 
 func chatToolStatusGlyph(status string, color woxui.Color) woxwidget.Widget {
@@ -982,12 +975,11 @@ func (s *chatModelSelectorState) Build(context woxwidget.StateContext, widget an
 	iconColor.A = 180
 	arrowColor := props.Theme.ResultTitle
 	arrowColor.A = 140
-	contentWidth := max(float32(0), props.ModelWidth-8)
 	child := woxwidget.Container{Width: props.ModelWidth, Height: 20, Radius: 4, Color: background, Padding: woxwidget.Insets{Left: 4, Right: 4}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 0, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxcomponent.ModelTrainingGlyph(16, iconColor),
 			woxwidget.Container{Width: 5},
-			woxwidget.Align{Width: max(float32(0), contentWidth-39), Height: 20, Vertical: 0.5, Child: woxwidget.Text{Value: props.Model, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle}},
+			woxwidget.Expanded{Child: woxwidget.Align{Height: 20, Vertical: 0.5, Child: woxwidget.Text{Value: props.Model, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultTitle}}},
 			woxwidget.Container{Width: 4},
 			woxcomponent.KeyboardArrowDownGlyph(14, arrowColor),
 		},

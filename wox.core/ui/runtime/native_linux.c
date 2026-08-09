@@ -143,6 +143,9 @@ struct WoxLinuxWindow {
   bool input_enabled;
   bool input_composing;
   bool active_web_view_transient;
+  bool pointer_over_web_view;
+  uint8_t pointer_cursor;
+  char *web_view_cursor_name;
   bool has_preferred_position;
   bool closed;
   GdkRectangle input_cursor_rect;
@@ -166,7 +169,10 @@ typedef gboolean (*WoxWebKitRegisterScriptMessageHandler)(gpointer manager, cons
 typedef void (*WoxWebKitViewLoadURI)(gpointer web_view, const gchar *uri);
 typedef void (*WoxWebKitViewLoadHTML)(gpointer web_view, const gchar *content, const gchar *base_uri);
 typedef gpointer (*WoxWebKitViewGetSettings)(gpointer web_view);
+typedef gpointer (*WoxWebKitViewGetUserContentManager)(gpointer web_view);
 typedef void (*WoxWebKitSettingsSetUserAgent)(gpointer settings, const gchar *user_agent);
+typedef gpointer (*WoxWebKitJavascriptResultGetJSValue)(gpointer javascript_result);
+typedef gchar *(*WoxJSCValueToString)(gpointer value);
 
 typedef struct {
   void *library;
@@ -183,7 +189,10 @@ typedef struct {
   WoxWebKitViewLoadURI load_uri;
   WoxWebKitViewLoadHTML load_html;
   WoxWebKitViewGetSettings get_settings;
+  WoxWebKitViewGetUserContentManager get_user_content_manager;
   WoxWebKitSettingsSetUserAgent set_user_agent;
+  WoxWebKitJavascriptResultGetJSValue javascript_result_get_js_value;
+  WoxJSCValueToString jsc_value_to_string;
   bool initialized;
   bool available;
 } WoxWebKitRuntime;
@@ -220,7 +229,10 @@ static bool ensure_webkit(void) {
   wox_webkit.load_uri = (WoxWebKitViewLoadURI)load_webkit_symbol("webkit_web_view_load_uri");
   wox_webkit.load_html = (WoxWebKitViewLoadHTML)load_webkit_symbol("webkit_web_view_load_html");
   wox_webkit.get_settings = (WoxWebKitViewGetSettings)load_webkit_symbol("webkit_web_view_get_settings");
+  wox_webkit.get_user_content_manager = (WoxWebKitViewGetUserContentManager)load_webkit_symbol("webkit_web_view_get_user_content_manager");
   wox_webkit.set_user_agent = (WoxWebKitSettingsSetUserAgent)load_webkit_symbol("webkit_settings_set_user_agent");
+  wox_webkit.javascript_result_get_js_value = (WoxWebKitJavascriptResultGetJSValue)load_webkit_symbol("webkit_javascript_result_get_js_value");
+  wox_webkit.jsc_value_to_string = (WoxJSCValueToString)load_webkit_symbol("jsc_value_to_string");
   wox_webkit.available = wox_webkit.view_new != NULL && wox_webkit.load_uri != NULL && wox_webkit.load_html != NULL &&
                          wox_webkit.get_settings != NULL && wox_webkit.set_user_agent != NULL;
   if (!wox_webkit.available) {
@@ -229,6 +241,78 @@ static bool ensure_webkit(void) {
     wox_webkit.initialized = true;
   }
   return wox_webkit.available;
+}
+
+// apply_linux_cursor_name mirrors one cursor across every GDK window that may own pointer input.
+static int32_t apply_linux_cursor_name(WoxLinuxWindow *window, const char *cursor_name) {
+  if (window == NULL || window->closed) {
+    return -1;
+  }
+  GdkWindow *content_window = gtk_widget_get_window(window->gl_area);
+  GdkWindow *overlay_window = gtk_widget_get_window(window->overlay_gl_area);
+  GdkWindow *top_level_window = gtk_widget_get_window(window->window);
+  GdkDisplay *display = top_level_window != NULL ? gdk_window_get_display(top_level_window) : NULL;
+  if (content_window == NULL || top_level_window == NULL || display == NULL) {
+    return -1;
+  }
+  GdkCursor *native_cursor = NULL;
+  if (g_strcmp0(cursor_name, "none") == 0) {
+    native_cursor = gdk_cursor_new_for_display(display, GDK_BLANK_CURSOR);
+  } else {
+    native_cursor = gdk_cursor_new_from_name(display, cursor_name != NULL ? cursor_name : "default");
+  }
+  if (native_cursor == NULL) {
+    native_cursor = gdk_cursor_new_for_display(display, g_strcmp0(cursor_name, "text") == 0 ? GDK_XTERM : GDK_LEFT_PTR);
+  }
+  if (native_cursor == NULL) {
+    return -1;
+  }
+  // The transparent overlay owns real pointer input, so every possible GDK target mirrors the page cursor.
+  gdk_window_set_cursor(content_window, native_cursor);
+  if (overlay_window != NULL && overlay_window != content_window) {
+    gdk_window_set_cursor(overlay_window, native_cursor);
+  }
+  if (top_level_window != content_window && top_level_window != overlay_window) {
+    gdk_window_set_cursor(top_level_window, native_cursor);
+  }
+  g_object_unref(native_cursor);
+  return 0;
+}
+
+// apply_linux_pointer_cursor lets the active page cursor override the Go-rendered host cursor.
+static int32_t apply_linux_pointer_cursor(WoxLinuxWindow *window) {
+  const char *cursor_name = window->pointer_over_web_view && window->web_view_cursor_name != NULL
+                                ? window->web_view_cursor_name
+                                : (window->pointer_cursor == 1 ? "text" : "default");
+  return apply_linux_cursor_name(window, cursor_name);
+}
+
+// web_view_cursor_script reports computed CSS cursors because the transparent overlay owns native hit testing.
+static const char *web_view_cursor_script(void) {
+  return "(()=>{if(window.__woxCursorBridgeInstalled__)return;window.__woxCursorBridgeInstalled__=true;let last='';"
+         "const allowed=new Set(['auto','default','none','context-menu','help','pointer','progress','wait','cell','crosshair','text','vertical-text','alias','copy','move','no-drop','not-allowed','grab','grabbing','all-scroll','col-resize','row-resize','n-resize','e-resize','s-resize','w-resize','ne-resize','nw-resize','se-resize','sw-resize','ew-resize','ns-resize','nesw-resize','nwse-resize','zoom-in','zoom-out']);"
+         "const publish=e=>{const n=e.target&&e.target.nodeType===1?e.target:document.documentElement;if(!n)return;const raw=getComputedStyle(n).cursor||'auto';const fallback=raw.split(',').pop().trim();const value=allowed.has(fallback)?fallback:'default';if(value===last)return;last=value;window.webkit.messageHandlers.woxWebViewCursor.postMessage(value)};"
+         "document.addEventListener('mousemove',publish,true);document.addEventListener('mouseover',publish,true)})()";
+}
+
+// on_webview_cursor_message ignores cached views and applies cursor updates only from the active WebView.
+static void on_webview_cursor_message(gpointer manager, gpointer javascript_result, gpointer data) {
+  WoxLinuxWindow *window = data;
+  if (window == NULL || window->closed || window->active_web_view == NULL || wox_webkit.get_user_content_manager == NULL ||
+      wox_webkit.get_user_content_manager(window->active_web_view) != manager ||
+      wox_webkit.javascript_result_get_js_value == NULL || wox_webkit.jsc_value_to_string == NULL) {
+    return;
+  }
+  gpointer value = wox_webkit.javascript_result_get_js_value(javascript_result);
+  gchar *cursor_name = value != NULL ? wox_webkit.jsc_value_to_string(value) : NULL;
+  if (cursor_name == NULL) {
+    return;
+  }
+  g_free(window->web_view_cursor_name);
+  window->web_view_cursor_name = cursor_name;
+  if (window->pointer_over_web_view) {
+    apply_linux_pointer_cursor(window);
+  }
 }
 
 static void on_webview_script_message(gpointer manager, gpointer javascript_result, gpointer data) {
@@ -304,6 +388,8 @@ static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css
         }
       }
       bool supports_scripts = wox_webkit.script_new != NULL && wox_webkit.manager_add_script != NULL && wox_webkit.script_unref != NULL && wox_webkit.register_script_message_handler != NULL;
+      bool cursor_handler_registered = supports_scripts && wox_webkit.get_user_content_manager != NULL && wox_webkit.javascript_result_get_js_value != NULL && wox_webkit.jsc_value_to_string != NULL &&
+                                       wox_webkit.register_script_message_handler(manager, "woxWebViewCursor");
       bool handlers_registered = supports_scripts &&
                                  wox_webkit.register_script_message_handler(manager, "woxWebViewPreview") &&
                                  wox_webkit.register_script_message_handler(manager, "woxWebViewActionPanel") &&
@@ -324,6 +410,14 @@ static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css
           g_signal_connect(manager, "script-message-received::woxWebViewEscapeDomChanged", G_CALLBACK(on_webview_escape_dom_changed_message), window);
           g_signal_connect(manager, "script-message-received::woxWebViewEscapePreventedNoChangeForwarded", G_CALLBACK(on_webview_escape_prevented_no_change_forwarded_message), window);
           g_signal_connect(manager, "script-message-received::woxWebViewEscapeForwarded", G_CALLBACK(on_webview_escape_forwarded_message), window);
+        }
+      }
+      if (cursor_handler_registered) {
+        gpointer cursor_script = wox_webkit.script_new(web_view_cursor_script(), 0, 0, NULL, NULL);
+        if (cursor_script != NULL) {
+          wox_webkit.manager_add_script(manager, cursor_script);
+          wox_webkit.script_unref(cursor_script);
+          g_signal_connect(manager, "script-message-received::woxWebViewCursor", G_CALLBACK(on_webview_cursor_message), window);
         }
       }
       web_view = wox_webkit.view_new_with_manager(manager);
@@ -364,6 +458,9 @@ static void clear_active_web_view(WoxLinuxWindow *window, bool remove_from_paren
   g_clear_pointer(&window->active_web_view_key, g_free);
   g_clear_pointer(&window->active_web_view_signature, g_free);
   g_clear_pointer(&window->active_web_view_content_key, g_free);
+  window->pointer_over_web_view = false;
+  g_clear_pointer(&window->web_view_cursor_name, g_free);
+  apply_linux_pointer_cursor(window);
 }
 
 static const char *const rect_vertex_source =
@@ -2147,9 +2244,14 @@ int32_t wox_linux_window_reset_webview(WoxLinuxWindow *window) {
   return run_on_main_sync(reset_webview_main, &call) ? call.result : -1;
 }
 
-int32_t wox_linux_window_forward_embedded_surface_pointer(WoxLinuxWindow *window, float x, float y) {
+int32_t wox_linux_window_forward_embedded_surface_pointer(WoxLinuxWindow *window, uint8_t kind, float x, float y) {
   if (window == NULL || window->closed || window->active_web_view == NULL || window->dispatching_pointer_event == NULL) {
     return -1;
+  }
+  window->pointer_over_web_view = kind != WOX_POINTER_LEAVE;
+  if (kind == WOX_POINTER_LEAVE) {
+    apply_linux_pointer_cursor(window);
+    return 0;
   }
   GdkEvent *event = gdk_event_copy(window->dispatching_pointer_event);
   GdkWindow *target_window = gtk_widget_get_window(window->active_web_view);
@@ -2199,6 +2301,7 @@ int32_t wox_linux_window_forward_embedded_surface_pointer(WoxLinuxWindow *window
   window->forwarding_embedded_pointer = true;
   gtk_widget_event(window->active_web_view, event);
   window->forwarding_embedded_pointer = false;
+  apply_linux_pointer_cursor(window);
   gdk_event_free(event);
   return 0;
 }
@@ -2373,27 +2476,8 @@ int32_t wox_linux_window_set_pointer_cursor(WoxLinuxWindow *window, uint8_t curs
   if (window == NULL || window->closed) {
     return -1;
   }
-  GdkWindow *content_window = gtk_widget_get_window(window->gl_area);
-  GdkWindow *top_level_window = gtk_widget_get_window(window->window);
-  GdkDisplay *display = content_window != NULL ? gdk_window_get_display(content_window) : NULL;
-  if (content_window == NULL || top_level_window == NULL || display == NULL) {
-    return -1;
-  }
-  const char *cursor_name = cursor == 1 ? "text" : "default";
-  GdkCursor *native_cursor = gdk_cursor_new_from_name(display, cursor_name);
-  if (native_cursor == NULL) {
-    native_cursor = gdk_cursor_new_for_display(display, cursor == 1 ? GDK_XTERM : GDK_LEFT_PTR);
-  }
-  if (native_cursor == NULL) {
-    return -1;
-  }
-  // Wayland may route pointer events through either surface, so both must expose the same cursor.
-  gdk_window_set_cursor(content_window, native_cursor);
-  if (top_level_window != content_window) {
-    gdk_window_set_cursor(top_level_window, native_cursor);
-  }
-  g_object_unref(native_cursor);
-  return 0;
+  window->pointer_cursor = cursor;
+  return apply_linux_pointer_cursor(window);
 }
 
 typedef struct {

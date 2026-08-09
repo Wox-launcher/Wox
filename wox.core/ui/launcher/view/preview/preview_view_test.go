@@ -163,7 +163,7 @@ func TestChatModelSelectorUsesFlutterIconsAndHoverSurface(t *testing.T) {
 		t.Fatalf("model chip = height %.0f radius %.0f color %#v; want Flutter compact hover surface", chip.Height, chip.Radius, chip.Color)
 	}
 	modelIcon := row.Children[0].(woxwidget.Image)
-	modelText := row.Children[2].(woxwidget.Align)
+	modelText := row.Children[2].(woxwidget.Expanded).Child.(woxwidget.Align)
 	arrowIcon := row.Children[4].(woxwidget.Image)
 	if modelIcon.Source == nil || modelIcon.Width != 16 || modelText.Height != 20 || modelText.Vertical != 0.5 || arrowIcon.Source == nil || arrowIcon.Width != 14 {
 		t.Fatalf("model chip icons = model %.0f arrow %.0f; want Flutter 16px and 14px SVGs", modelIcon.Width, arrowIcon.Width)

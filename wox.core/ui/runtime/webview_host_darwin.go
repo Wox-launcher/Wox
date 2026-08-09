@@ -145,7 +145,7 @@ func (d *darwinWebViewDriver) NavigationState() (webviewruntime.NavigationState,
 
 func (d *darwinWebViewDriver) Pointer(event webviewruntime.PointerEvent) bool {
 	native, err := d.window.openNative()
-	return err == nil && C.wox_darwin_window_forward_embedded_surface_pointer(native) == 0
+	return err == nil && C.wox_darwin_window_forward_embedded_surface_pointer(native, C.uint8_t(event.Kind)) == 0
 }
 
 func (*darwinWebViewDriver) Close() {}

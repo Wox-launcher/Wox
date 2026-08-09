@@ -51,9 +51,13 @@ func TestWindowGroupExtensionStatusOnlyLinksWhenDisconnected(t *testing.T) {
 
 func TestWindowGroupExtensionStatusVerticallyCentersContent(t *testing.T) {
 	status := windowGroupExtensionStatus(WindowGroupUrlEditorProps{ExtensionConnected: true, ExtensionConnectedLabel: "Connected", Theme: woxcomponent.Theme{}}, 480).(woxwidget.Container)
-	align, ok := status.Child.(woxwidget.Align)
+	fill, ok := status.Child.(woxwidget.Constrained)
+	if !ok || !fill.FillWidth {
+		t.Fatalf("extension status fill = %#v, want parent-width constraint", status.Child)
+	}
+	align, ok := fill.Child.(woxwidget.Align)
 	if !ok || align.Vertical != 0.5 || align.Height != status.Height {
-		t.Fatalf("extension status alignment = %#v, want full-height vertical center", status.Child)
+		t.Fatalf("extension status alignment = %#v, want full-height vertical center", fill.Child)
 	}
 }
 

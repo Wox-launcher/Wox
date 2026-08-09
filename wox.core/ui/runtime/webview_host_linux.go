@@ -100,7 +100,7 @@ func (*linuxWebViewDriver) NavigationState() (webviewruntime.NavigationState, er
 
 func (d *linuxWebViewDriver) Pointer(event webviewruntime.PointerEvent) bool {
 	native, err := d.window.openNative()
-	return err == nil && C.wox_linux_window_forward_embedded_surface_pointer(native, C.float(event.Position.X), C.float(event.Position.Y)) == 0
+	return err == nil && C.wox_linux_window_forward_embedded_surface_pointer(native, C.uint8_t(event.Kind), C.float(event.Position.X), C.float(event.Position.Y)) == 0
 }
 
 func (*linuxWebViewDriver) Close() {}

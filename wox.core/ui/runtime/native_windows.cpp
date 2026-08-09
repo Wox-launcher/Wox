@@ -26,6 +26,7 @@ extern "C" int32_t woxGoWindowsWebViewEscape(uintptr_t owner);
 extern "C" void woxGoWindowsWebViewEscapeDiagnostic(uintptr_t owner, const char *detail);
 extern "C" int32_t woxGoWindowsWebViewActionPanel(uintptr_t owner);
 extern "C" void woxGoWindowsWebViewNavigationChanged(uintptr_t owner, const char *url, int32_t can_go_back, int32_t can_go_forward);
+extern "C" void woxGoWindowsWebViewCursorChanged(uintptr_t owner, uintptr_t cursor);
 
 static void webview_debug(const char *format, ...) {
   static const bool enabled = [] {
@@ -474,6 +475,9 @@ static Function webview_method(IUnknown *object, size_t index) {
 static constexpr size_t kEnvironment3CreateCompositionControllerMethod = 9;
 static constexpr size_t kCompositionControllerPutRootVisualTargetMethod = 4;
 static constexpr size_t kCompositionControllerSendMouseInputMethod = 5;
+static constexpr size_t kCompositionControllerGetCursorMethod = 7;
+static constexpr size_t kCompositionControllerAddCursorChangedMethod = 9;
+static constexpr size_t kCompositionControllerRemoveCursorChangedMethod = 10;
 static constexpr size_t kControllerMoveFocusMethod = 12;
 static constexpr size_t kSettings2PutUserAgentMethod = 22;
 
@@ -614,6 +618,8 @@ struct WoxWindowsWebViewSession {
   bool source_registered = false;
   int64_t accelerator_token = 0;
   bool accelerator_registered = false;
+  int64_t cursor_changed_token = 0;
+  bool cursor_changed_registered = false;
   std::wstring loaded_content_key;
   HRESULT error = S_OK;
 };
@@ -654,6 +660,11 @@ struct WoxWebViewAcceleratorKeyPressedCallback : public IUnknown {
   virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
 };
 __CRT_UUID_DECL(WoxWebViewAcceleratorKeyPressedCallback, 0xb29c7e28, 0xfa79, 0x41a8, 0x8e, 0x44, 0x65, 0x81, 0x1c, 0x76, 0xdc, 0xb2)
+
+struct WoxWebViewCursorChangedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewCursorChangedCallback, 0x9da43ccc, 0x26e1, 0x4dad, 0xb5, 0x6c, 0xd8, 0x96, 0x1c, 0x94, 0xc5, 0x71)
 
 class WoxEnvironmentCompletedHandler final : public WoxWebViewEnvironmentCompletedCallback {
 public:
@@ -753,6 +764,21 @@ private:
   ~WoxAcceleratorKeyPressedHandler() = default;
   std::atomic<ULONG> references_{1};
   WoxWindowsWebView *owner_;
+};
+
+class WoxCursorChangedHandler final : public WoxWebViewCursorChangedCallback {
+public:
+  WoxCursorChangedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args);
+
+private:
+  ~WoxCursorChangedHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+  WoxWindowsWebViewSession *session_;
 };
 
 struct WoxWindowsWebView {
@@ -863,6 +889,7 @@ struct WoxWindowsWebView {
       InvalidateRect(owner, nullptr, FALSE);
       return;
     }
+    register_cursor_changed_handler(session);
     void *root_visual_target = nullptr;
     result = wox_renderer_create_webview_visual(renderer, &session->composition_visual, &root_visual_target);
     if (SUCCEEDED(result)) {
@@ -976,6 +1003,34 @@ struct WoxWindowsWebView {
     handler->Release();
     if (SUCCEEDED(result)) {
       session->accelerator_registered = true;
+    }
+  }
+
+  // Composition-hosted WebView2 surfaces rely on the owner HWND to apply the cursor selected by page hit testing.
+  void register_cursor_changed_handler(WoxWindowsWebViewSession *session) {
+    if (session == nullptr || session->composition_controller == nullptr || session->retired || session->cursor_changed_registered) {
+      return;
+    }
+    auto *handler = new WoxCursorChangedHandler(this, session);
+    using AddHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *, int64_t *);
+    HRESULT result = webview_method<AddHandler>(session->composition_controller, kCompositionControllerAddCursorChangedMethod)(session->composition_controller, handler, &session->cursor_changed_token);
+    webview_debug("add cursor changed handler returned 0x%08X", static_cast<unsigned int>(result));
+    handler->Release();
+    if (SUCCEEDED(result)) {
+      session->cursor_changed_registered = true;
+    }
+  }
+
+  // cursor_changed preserves WebView2's HCURSOR, including custom CSS cursors, for subsequent WM_SETCURSOR messages.
+  void cursor_changed(WoxWindowsWebViewSession *session, IUnknown *composition_controller) {
+    if (closing || session == nullptr || active != session || !session->visible || composition_controller == nullptr) {
+      return;
+    }
+    HCURSOR cursor = nullptr;
+    using GetCursor = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, HCURSOR *);
+    HRESULT result = webview_method<GetCursor>(composition_controller, kCompositionControllerGetCursorMethod)(composition_controller, &cursor);
+    if (SUCCEEDED(result)) {
+      woxGoWindowsWebViewCursorChanged(reinterpret_cast<uintptr_t>(owner), reinterpret_cast<uintptr_t>(cursor));
     }
   }
 
@@ -1283,6 +1338,11 @@ struct WoxWindowsWebView {
       webview_method<Close>(session->controller, 24)(session->controller);
     }
     if (session->composition_controller != nullptr) {
+      if (session->cursor_changed_registered) {
+        using RemoveHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int64_t);
+        webview_method<RemoveHandler>(session->composition_controller, kCompositionControllerRemoveCursorChangedMethod)(session->composition_controller, session->cursor_changed_token);
+        session->cursor_changed_registered = false;
+      }
       using PutRootVisualTarget = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *);
       webview_method<PutRootVisualTarget>(session->composition_controller, kCompositionControllerPutRootVisualTargetMethod)(session->composition_controller, nullptr);
     }
@@ -1536,6 +1596,22 @@ ULONG WoxAcceleratorKeyPressedHandler::Release() {
 }
 HRESULT WoxAcceleratorKeyPressedHandler::Invoke(IUnknown *, IUnknown *args) {
   owner_->accelerator_key_pressed(args);
+  return S_OK;
+}
+
+WoxCursorChangedHandler::WoxCursorChangedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session) : owner_(owner), session_(session) { owner_->retain(); }
+HRESULT WoxCursorChangedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewCursorChangedCallback), object); }
+ULONG WoxCursorChangedHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxCursorChangedHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxCursorChangedHandler::Invoke(IUnknown *sender, IUnknown *) {
+  owner_->cursor_changed(session_, sender);
   return S_OK;
 }
 
