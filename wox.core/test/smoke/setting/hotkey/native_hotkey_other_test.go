@@ -6,5 +6,5 @@ import "testing"
 
 func sendNativeHotkey(t *testing.T, _ string) {
 	t.Helper()
-	t.Skip("main hotkey global registration smoke coverage requires Windows keyboard injection")
+	t.Skip("main hotkey global registration smoke coverage requires native keyboard injection")
 }
