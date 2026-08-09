@@ -1221,6 +1221,12 @@ int32_t wox_linux_run(uintptr_t context) {
   if (context == 0 || g_atomic_int_get(&wox_linux_runtime_running) != 0) {
     return -1;
   }
+#ifdef GDK_WINDOWING_X11
+  // GTK may call Xlib during initialization, so thread support must be enabled first.
+  if (XInitThreads() == 0) {
+    return -3;
+  }
+#endif
   if (!gtk_init_check(NULL, NULL)) {
     return -2;
   }

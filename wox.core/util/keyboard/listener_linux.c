@@ -291,7 +291,6 @@ int woxLinuxEnsureKeyboardReady(char **errorOut) {
         return 1;
     }
 
-    XInitThreads();
     gDisplay = XOpenDisplay(NULL);
     if (!gDisplay) {
         if (errorOut) {

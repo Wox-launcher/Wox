@@ -77,6 +77,9 @@ func platformRun(start func() error) error {
 	if result == -2 {
 		return errors.New("woxui: GTK could not connect to a Linux display")
 	}
+	if result == -3 {
+		return errors.New("woxui: failed to initialize Xlib thread support")
+	}
 	if result != 0 {
 		return fmt.Errorf("woxui: GTK event loop failed with status %d", int32(result))
 	}
