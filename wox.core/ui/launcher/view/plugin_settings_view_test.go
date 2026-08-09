@@ -418,7 +418,8 @@ func TestPluginEditorDescriptionUsesSharedDetailView(t *testing.T) {
 	if body.Padding.Left != 24 || body.Padding.Right != 24 {
 		t.Fatalf("description padding = %+v, want Flutter's 24px detail inset", body.Padding)
 	}
-	props := body.Child.(woxwidget.Container).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	description := body.Child.(woxwidget.Container)
+	props := description.Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: description.Width, Height: description.Height - description.Padding.Top}).(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	detail := props.Content.(woxwidget.Flex)
 	name := detail.Children[0].(woxwidget.Container).Child.(woxwidget.Text)
 	metadata := detail.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)

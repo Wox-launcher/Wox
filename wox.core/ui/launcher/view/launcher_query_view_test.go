@@ -85,7 +85,7 @@ func TestLauncherHeaderExposesQueryLoadingProgress(t *testing.T) {
 		Width: 500, Height: 50, QueryBoxHeight: 50, QueryEditorHeight: 34, QueryWidth: 400,
 		Loading: true, LoadingWidth: 49, LoadingSize: 20,
 	}).(woxwidget.Container)
-	row := header.Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	row := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	loading := row.Children[1].(woxwidget.Semantics)
 	if loading.AutomationID != "launcher.query.loading" || loading.Role != woxui.AccessibilityRoleProgressBar || loading.Value != "loading" || !loading.ReadOnly {
 		t.Fatalf("query loading semantics = id %q role %q value %q readonly %v", loading.AutomationID, loading.Role, loading.Value, loading.ReadOnly)
@@ -107,7 +107,7 @@ func TestLauncherHeaderUsesAlignmentForVerticalAccessoryPlacement(t *testing.T) 
 		Glance: woxwidget.Container{Width: 30, Height: 30}, GlanceWidth: 30,
 		Icon: &woxui.Image{},
 	}).(woxwidget.Container)
-	row := header.Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	row := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 
 	for index, child := range row.Children[:4] {
 		alignment, ok := child.(woxwidget.Align)

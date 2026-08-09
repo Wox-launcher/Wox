@@ -10,9 +10,12 @@ import (
 
 // ScrollViewProps contains the geometry and optional controlled state for a vertical Wox scroll surface.
 type ScrollViewProps struct {
-	Key                 woxwidget.Key
-	Content             woxwidget.Widget
-	Width               float32
+	Key     woxwidget.Key
+	Content woxwidget.Widget
+	Width   float32
+	// FillWidth and FillHeight adopt dimensions resolved by the parent layout.
+	FillWidth           bool
+	FillHeight          bool
 	Height              float32
 	ContentHeight       float32
 	Offset              float32
@@ -47,6 +50,21 @@ type scrollViewState struct {
 func WoxScrollView(props ScrollViewProps) woxwidget.Widget {
 	if props.Key == "" {
 		props.Key = "wox-scroll"
+	}
+	if props.FillWidth || props.FillHeight {
+		fillWidth := props.FillWidth
+		fillHeight := props.FillHeight
+		props.FillWidth = false
+		props.FillHeight = false
+		return woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+			if fillWidth {
+				props.Width = size.Width
+			}
+			if fillHeight {
+				props.Height = size.Height
+			}
+			return WoxScrollView(props)
+		}}
 	}
 	if (props.ContentHeight > 0 && props.ContentHeight <= props.Height) || props.Height <= 0 {
 		return buildWoxScrollView(woxwidget.StateContext{}, props, nil)

@@ -160,15 +160,14 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 			},
 		})
 	}
-	horizontalPadding := props.AppPadding.Left + props.AppPadding.Right
 	header := woxwidget.Widget(woxwidget.Container{
 		Width: props.Width, Height: props.Height,
 		Padding: woxwidget.Insets{Left: props.AppPadding.Left, Top: props.AppPadding.Top, Right: props.AppPadding.Right},
-		Child: woxwidget.Container{
-			Width: props.Width - horizontalPadding, Height: props.QueryBoxHeight, Radius: props.QueryRadius, Color: props.Theme.QueryBackground,
+		Child: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{
+			Height: props.QueryBoxHeight, Radius: props.QueryRadius, Color: props.Theme.QueryBackground,
 			Padding: woxwidget.Insets{Left: queryLeftPadding, Right: scaledLauncherSize(6, props.DensityScale)},
 			Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: accessoryGap, Children: children},
-		},
+		}},
 	})
 	if props.OnDragStart == nil {
 		return header

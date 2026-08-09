@@ -7,6 +7,20 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestWoxScrollViewCanFillResolvedParentSize(t *testing.T) {
+	view := WoxScrollView(ScrollViewProps{Key: "fill-size", FillWidth: true, FillHeight: true, Content: woxwidget.Container{Height: 160}})
+	builder, ok := view.(woxwidget.LayoutBuilder)
+	if !ok {
+		t.Fatalf("fill-size scroll = %T, want LayoutBuilder", view)
+	}
+
+	resolved := builder.Build(woxui.Size{Width: 188, Height: 68}).(woxwidget.Stateful)
+	props := resolved.Widget.(ScrollViewProps)
+	if props.Width != 188 || props.Height != 68 || props.FillWidth || props.FillHeight {
+		t.Fatalf("resolved scroll size = %.0fx%.0f fill %v/%v, want 188x68/false/false", props.Width, props.Height, props.FillWidth, props.FillHeight)
+	}
+}
+
 func TestWoxScrollViewOpacityFollowsScrollActivity(t *testing.T) {
 	props := ScrollViewProps{Key: "test-scroll", Width: 100, Height: 80, ContentHeight: 160, ThumbColor: woxui.Color{A: 255}}
 	state := &scrollViewState{}

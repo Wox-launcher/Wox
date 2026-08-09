@@ -26,11 +26,10 @@ const ScrollablePreviewTextHorizontalPadding = float32(14)
 func ScrollablePreviewText(props ScrollablePreviewTextProps) woxwidget.Widget {
 	const verticalPadding = float32(24)
 	innerWidth := max(float32(0), props.Width-ScrollablePreviewTextHorizontalPadding*2)
-	innerHeight := max(float32(0), props.Height-verticalPadding*2)
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: ScrollablePreviewTextHorizontalPadding, Top: verticalPadding, Right: ScrollablePreviewTextHorizontalPadding, Bottom: verticalPadding},
 		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: woxwidget.Key("preview-scroll-" + props.ID), Offset: props.InitialOffset, Width: innerWidth, Height: innerHeight,
+			Key: woxwidget.Key("preview-scroll-" + props.ID), Offset: props.InitialOffset, FillWidth: true, FillHeight: true,
 			Content:    woxwidget.TextBlock{Value: props.Value, Width: innerWidth, Height: props.Layout.Size.Height, Style: woxui.TextStyle{Size: props.FontSize}, LineHeight: props.LineHeight, Color: props.Color, Layout: &props.Layout},
 			ThumbColor: props.Color,
 		}),

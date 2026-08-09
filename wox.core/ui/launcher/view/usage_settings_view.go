@@ -86,7 +86,6 @@ type UsageSettingsProps struct {
 // UsageSettingsView builds the responsive dashboard used by the Usage settings route.
 func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 	contentWidth := max(float32(0), props.Width-usagePageHorizontalInset-usagePageRightInset)
-	viewportHeight := max(float32(1), props.Height-usagePageTopInset-usagePageBottomInset)
 	header, _ := usageSummaryHeader(props, contentWidth)
 	kpiGrid, _ := usageKPIGrid(props, contentWidth)
 	rankings, _ := usageRankings(props, contentWidth)
@@ -101,7 +100,7 @@ func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 		Width: props.Width, Height: props.Height,
 		Padding: woxwidget.Insets{Left: usagePageHorizontalInset, Top: usagePageTopInset, Right: usagePageRightInset, Bottom: usagePageBottomInset},
 		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: "usage-page-scroll", Width: contentWidth, Height: viewportHeight,
+			Key: "usage-page-scroll", FillWidth: true, FillHeight: true,
 			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: usageSectionGap, Children: children}, ThumbColor: props.Theme.ResultSubtitle,
 		}),
 	}

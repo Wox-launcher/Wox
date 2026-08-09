@@ -315,13 +315,12 @@ func windowGroupLayoutPanel(props WindowGroupEditorProps, width, height float32)
 		groups = append(groups, windowGroupLayoutGroup(props, group))
 	}
 	scrollContent := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: append([]woxwidget.Widget{header}, groups...)}
-	innerHeight := max(float32(0), height-2)
 	scroll := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "window-group-layout-scroll", Width: width - 2, Height: innerHeight,
-		Content: woxwidget.Container{Width: width - 2, Padding: woxwidget.UniformInsets(12), Child: scrollContent}, ThumbColor: props.Theme.ResultSubtitle,
+		Key: "window-group-layout-scroll", FillWidth: true, FillHeight: true,
+		Content: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{Padding: woxwidget.UniformInsets(12), Child: scrollContent}}, ThumbColor: props.Theme.ResultSubtitle,
 	})
 	return woxwidget.Container{
-		Width: width, Height: height, Radius: 6, BorderColor: windowGroupFadeColor(props.Theme.ResultSubtitle, 0.35), BorderWidth: 1, Child: scroll,
+		Width: width, Height: height, Padding: woxwidget.UniformInsets(1), Radius: 6, BorderColor: windowGroupFadeColor(props.Theme.ResultSubtitle, 0.35), BorderWidth: 1, Child: scroll,
 	}
 }
 

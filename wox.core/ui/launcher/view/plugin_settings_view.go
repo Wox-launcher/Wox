@@ -551,7 +551,7 @@ func pluginMetadataTab(props PluginMetadataProps, width, height float32, scrollI
 		}
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 18}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: woxwidget.Key(scrollID), Width: width, Height: max(float32(1), height-18),
+		Key: woxwidget.Key(scrollID), FillWidth: true, FillHeight: true,
 		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: theme.ResultSubtitle,
 	})}
 }
@@ -638,7 +638,7 @@ func pluginStoreDescription(props PluginStoreDetailProps, width, height float32,
 		}})
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: topPadding}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "plugin-store-description-scroll", Width: width, Height: max(float32(1), height-topPadding),
+		Key: "plugin-store-description-scroll", FillWidth: true, FillHeight: true,
 		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}, ThumbColor: theme.ResultSubtitle,
 	})}
 }

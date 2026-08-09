@@ -23,7 +23,7 @@ func TestDictationHistoryPreviewMatchesFlutterComparisonStructure(t *testing.T) 
 	if view.Padding != (woxwidget.Insets{Left: 26, Top: 26, Right: 26, Bottom: 32}) {
 		t.Fatalf("preview padding = %#v, want Flutter 26/26/26/32", view.Padding)
 	}
-	scroll := view.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	scroll := resolvedScrollViewProps(view.Child, woxui.Size{Width: 448, Height: 122})
 	content := scroll.Content.(woxwidget.Flex)
 	if len(content.Children) != 7 {
 		t.Fatalf("comparison children = %d, want refined header/text plus divider and original section", len(content.Children))
@@ -46,7 +46,7 @@ func TestDictationHistoryPreviewRequiresCompleteDiagnosticAudioPair(t *testing.T
 		RefinedLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Width: 400, Height: 28}}, RawAudioPath: "/tmp/raw.wav", RawAudioLabel: "Raw",
 		OnPlayDiagnosticAudio: func(path string) { playedPath = path },
 	}
-	incomplete := DictationHistoryPreviewView(base).(woxwidget.Container).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex)
+	incomplete := resolvedScrollViewProps(DictationHistoryPreviewView(base).(woxwidget.Container).Child, woxui.Size{Width: 448, Height: 42}).Content.(woxwidget.Flex)
 	if len(incomplete.Children) != 3 {
 		t.Fatalf("incomplete audio children = %d, want diagnostics hidden like Flutter", len(incomplete.Children))
 	}
@@ -54,7 +54,7 @@ func TestDictationHistoryPreviewRequiresCompleteDiagnosticAudioPair(t *testing.T
 	base.ProcessedAudioPath = "/tmp/processed.wav"
 	base.ProcessedAudioLabel = "Processed"
 	base.RawPlayback = DictationAudioPlayback{Playing: true, Position: time.Second, Duration: 4 * time.Second}
-	complete := DictationHistoryPreviewView(base).(woxwidget.Container).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex)
+	complete := resolvedScrollViewProps(DictationHistoryPreviewView(base).(woxwidget.Container).Child, woxui.Size{Width: 448, Height: 42}).Content.(woxwidget.Flex)
 	if len(complete.Children) != 9 {
 		t.Fatalf("complete audio children = %d, want diagnostic header and two tracks", len(complete.Children))
 	}

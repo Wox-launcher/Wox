@@ -53,7 +53,6 @@ func DictationHistoryPreviewView(props DictationHistoryPreviewProps) woxwidget.W
 	}
 	scaled := func(value float32) float32 { return float32(int(value*scale + 0.5)) }
 	innerWidth := max(float32(0), props.Width-scaled(52))
-	viewportHeight := max(float32(0), props.Height-scaled(58))
 	muted := props.Theme.PreviewPropertyContent
 	if muted.A == 0 {
 		muted = props.Theme.PreviewText
@@ -94,7 +93,7 @@ func DictationHistoryPreviewView(props DictationHistoryPreviewProps) woxwidget.W
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: scaled(26), Top: scaled(26), Right: scaled(26), Bottom: scaled(32)},
 		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: woxwidget.Key("dictation-history-preview-" + props.ID), Width: innerWidth, Height: viewportHeight, Content: content,
+			Key: woxwidget.Key("dictation-history-preview-" + props.ID), FillWidth: true, FillHeight: true, Content: content,
 			ThumbColor: dictationColorAlpha(muted, 0.58),
 		}),
 	}
