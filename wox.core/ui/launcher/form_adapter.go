@@ -293,8 +293,11 @@ func (a *App) buildFormChoice(fields formFieldsSnapshot, callbacks formFieldCall
 func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette uiPalette, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	focused := fields.active && fields.focused == index
 	state := fields.editing
+	var controller *woxwidget.TextEditingController
 	if !focused {
 		state = woxui.TextEditingState{Text: fields.values[definition.Value.Key]}
+	} else {
+		controller = fields.editor
 	}
 	maxLines := min(8, max(1, definition.Value.MaxLines))
 	var onBrowse func()
@@ -308,7 +311,7 @@ func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCal
 	return launcherview.FormTextField(launcherview.FormTextFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip), Suffix: a.translate(definition.Value.Suffix),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth,
-		State: state, Focused: focused, Protected: definition.Type == "password", MaxLines: maxLines,
+		State: state, Controller: controller, Focused: focused, Protected: definition.Type == "password", MaxLines: maxLines,
 		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(), OnBrowse: onBrowse,
 		OnFocus: func() { callbacks.focus(index) },
 		OnChanged: func(value string) {

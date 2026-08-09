@@ -2,6 +2,8 @@ package woxui
 
 import "unicode"
 
+const textEditorHistoryLimit = 100
+
 // TextSelection stores anchor and focus as rune offsets so UTF-8 editing stays deterministic.
 type TextSelection struct {
 	Anchor int
@@ -33,6 +35,8 @@ type TextEditingState struct {
 // TextEditor applies portable key and IME events to one UTF-8 value.
 type TextEditor struct {
 	state TextEditingState
+	undo  []TextEditingState
+	redo  []TextEditingState
 }
 
 // NewTextEditor creates an editor with its caret at the end of text.
@@ -58,6 +62,8 @@ func (e *TextEditor) SetText(text string, selectAll bool) {
 		selection.Anchor = 0
 	}
 	e.state = TextEditingState{Text: text, Selection: selection}
+	e.undo = nil
+	e.redo = nil
 }
 
 // SelectAll selects the complete committed value.
@@ -130,6 +136,7 @@ func (e *TextEditor) InsertText(text string) bool {
 	next = append(next, inserted...)
 	next = append(next, runes[end:]...)
 	caret := start + len(inserted)
+	e.rememberUndoState()
 	e.state = TextEditingState{Text: string(next), Selection: TextSelection{Anchor: caret, Focus: caret}}
 	return true
 }
@@ -146,7 +153,34 @@ func (e *TextEditor) DeleteSelection() bool {
 		return false
 	}
 	next := append(append(make([]rune, 0, len(runes)-(end-start)), runes[:start]...), runes[end:]...)
+	e.rememberUndoState()
 	e.state = TextEditingState{Text: string(next), Selection: TextSelection{Anchor: start, Focus: start}}
+	return true
+}
+
+// Undo restores the previous committed text and selection state.
+func (e *TextEditor) Undo() bool {
+	if e == nil || len(e.undo) == 0 {
+		return false
+	}
+	previous := e.undo[len(e.undo)-1]
+	e.undo = e.undo[:len(e.undo)-1]
+	e.redo = appendTextEditorHistory(e.redo, e.state)
+	e.state = previous
+	e.state.Composition = ""
+	return true
+}
+
+// Redo reapplies the most recently undone committed text and selection state.
+func (e *TextEditor) Redo() bool {
+	if e == nil || len(e.redo) == 0 {
+		return false
+	}
+	next := e.redo[len(e.redo)-1]
+	e.redo = e.redo[:len(e.redo)-1]
+	e.undo = appendTextEditorHistory(e.undo, e.state)
+	e.state = next
+	e.state.Composition = ""
 	return true
 }
 
@@ -168,9 +202,19 @@ func (e *TextEditor) HandleKey(event KeyEvent) (handled bool, textChanged bool) 
 	if e == nil || !event.Down || event.Composing {
 		return false, false
 	}
-	if event.Key == Key("a") && event.Modifiers.HasPrimary() {
-		e.SelectAll()
-		return true, false
+	if event.Modifiers.HasPrimary() {
+		switch event.Key {
+		case Key("a"):
+			e.SelectAll()
+			return true, false
+		case Key("z"):
+			if event.Modifiers&KeyModifierShift != 0 {
+				return true, e.Redo()
+			}
+			return true, e.Undo()
+		case Key("y"):
+			return true, e.Redo()
+		}
 	}
 	extend := event.Modifiers&KeyModifierShift != 0
 	switch event.Key {
@@ -239,7 +283,25 @@ func (e *TextEditor) deleteForward() bool {
 
 func (e *TextEditor) replaceRange(runes []rune, start, end int) {
 	next := append(append(make([]rune, 0, len(runes)-(end-start)), runes[:start]...), runes[end:]...)
+	e.rememberUndoState()
 	e.state = TextEditingState{Text: string(next), Selection: TextSelection{Anchor: start, Focus: start}}
+}
+
+func (e *TextEditor) rememberUndoState() {
+	if e == nil {
+		return
+	}
+	e.undo = appendTextEditorHistory(e.undo, e.state)
+	e.redo = nil
+}
+
+func appendTextEditorHistory(history []TextEditingState, state TextEditingState) []TextEditingState {
+	state.Composition = ""
+	if len(history) == textEditorHistoryLimit {
+		copy(history, history[1:])
+		history = history[:textEditorHistoryLimit-1]
+	}
+	return append(history, state)
 }
 
 func (e *TextEditor) moveCaret(delta int, extend bool) {

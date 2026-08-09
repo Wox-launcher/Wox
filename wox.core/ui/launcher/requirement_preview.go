@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -455,6 +456,10 @@ func validateFormFieldErrors(definitions []formDefinition, values map[string]str
 				if message := validateFormNumber(value, validator.Value); message != "" {
 					errors[key] = message
 				}
+			case "is_url":
+				if !isAbsoluteHTTPURL(value) {
+					errors[key] = "i18n:ui_validator_must_be_url"
+				}
 			}
 			if _, exists := errors[key]; exists {
 				break
@@ -465,6 +470,14 @@ func validateFormFieldErrors(definitions []formDefinition, values map[string]str
 		return nil
 	}
 	return errors
+}
+
+func isAbsoluteHTTPURL(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	return strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")
 }
 
 // validateFormFields implements the validator subset shared by core query requirements.

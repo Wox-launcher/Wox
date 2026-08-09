@@ -59,12 +59,13 @@ type Host struct {
 	dragging  bool
 	// selecting tracks the gesture node that started a drag-based selection, so subsequent
 	// pointer-move events extend its selection until the pointer is released.
-	selecting       woxui.AccessibilityNodeID
-	panning         woxui.AccessibilityNodeID
-	lastTapID       woxui.AccessibilityNodeID
-	lastTapAt       time.Time
-	lastTapPosition woxui.Point
-	lastTapCount    int
+	selecting          woxui.AccessibilityNodeID
+	selectingGestureID string
+	panning            woxui.AccessibilityNodeID
+	lastTapID          woxui.AccessibilityNodeID
+	lastTapAt          time.Time
+	lastTapPosition    woxui.Point
+	lastTapCount       int
 
 	focused woxui.AccessibilityNodeID
 	// focusVisible mirrors :focus-visible so pointer focus keeps keyboard behavior without painting a ring.
@@ -440,14 +441,22 @@ func (h *Host) reconcileTransientState(oldNodes map[woxui.AccessibilityNodeID]*n
 			_ = h.window.SetPointerCursor(woxui.PointerCursorDefault)
 		}
 	}
+	// Form rebuilds may move a focused editor under a different retained path. Preserve pointer
+	// capture by remapping the active selection through its stable gesture ID.
+	if h.selecting != 0 && h.nodes[h.selecting] == nil {
+		if replacement := h.gestureNodeByID(h.selectingGestureID); replacement != nil {
+			h.selecting = replacement.id
+			if h.pressed != 0 && h.nodes[h.pressed] == nil {
+				h.pressed = replacement.id
+			}
+		} else {
+			h.selecting = 0
+			h.selectingGestureID = ""
+			h.dragging = false
+		}
+	}
 	if h.pressed != 0 && h.nodes[h.pressed] == nil {
 		h.pressed = 0
-		h.dragging = false
-	}
-	// A widget rebuild can drop the node that started a drag selection; clear the state so a
-	// later PointerUp does not dispatch a tap onto a stale selector.
-	if h.selecting != 0 && h.nodes[h.selecting] == nil {
-		h.selecting = 0
 		h.dragging = false
 	}
 	if h.lastTapID != 0 && h.nodes[h.lastTapID] == nil {
@@ -850,6 +859,8 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		h.pressed = nodeID(target)
 		h.pressedAt = event.Position
 		h.dragging = false
+		h.selecting = 0
+		h.selectingGestureID = ""
 		if target != nil && target.gesture != nil && target.gesture.onPressChange != nil {
 			target.gesture.onPressChange(true)
 			h.invalidate()
@@ -874,6 +885,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 			((h.lastTapCount == 1 && target.gesture.onDoubleTapAt != nil) || (h.lastTapCount == 2 && target.gesture.onTripleTapAt != nil))
 		if target != nil && target.gesture != nil && target.gesture.onSelectionStart != nil && !multiTap {
 			h.selecting = h.pressed
+			h.selectingGestureID = target.gesture.id
 			target.gesture.onSelectionStart(woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y})
 			h.invalidate()
 		} else if target != nil && target.gesture != nil && target.gesture.onPanStart != nil {
@@ -935,8 +947,18 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		// Finalize a drag selection: if movement occurred keep the selection and skip tap dispatch;
 		// otherwise fall through so a plain click still triggers tap (e.g. place caret).
 		if h.selecting != 0 {
+			selector := h.nodes[h.selecting]
+			deltaX := event.Position.X - h.pressedAt.X
+			deltaY := event.Position.Y - h.pressedAt.Y
+			// Native backends may coalesce pointer moves while a complex form is rebuilding. Always
+			// apply the release position so the final drag range is not mistaken for a plain click.
+			if selector != nil && selector.gesture != nil && selector.gesture.onSelectionExtend != nil && deltaX*deltaX+deltaY*deltaY >= 1 {
+				selector.gesture.onSelectionExtend(woxui.Point{X: event.Position.X - selector.bounds.X, Y: event.Position.Y - selector.bounds.Y})
+				h.dragging = true
+			}
 			selectingMoved := h.dragging
 			h.selecting = 0
+			h.selectingGestureID = ""
 			h.dragging = false
 			if selectingMoved {
 				h.pressed = 0
@@ -954,6 +976,18 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		}
 		h.pressed = 0
 	}
+}
+
+func (h *Host) gestureNodeByID(id string) *node {
+	if id == "" {
+		return nil
+	}
+	for _, current := range h.nodes {
+		if current != nil && current.gesture != nil && current.gesture.id == id {
+			return current
+		}
+	}
+	return nil
 }
 
 // nodeHasActiveCaret reports whether the current retained tree contains an active editor caret.

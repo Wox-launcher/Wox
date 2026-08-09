@@ -43,8 +43,14 @@ func TestValidateQueryRequirementValue(t *testing.T) {
 			IsInteger: true,
 		},
 	}
+	absoluteURL := validator.PluginSettingValidator{
+		Type:  validator.PluginSettingValidatorTypeIsURL,
+		Value: &validator.PluginSettingValidatorIsURL{},
+	}
 
 	assert.Equal(t, "i18n:ui_validator_value_can_not_be_empty", validateQueryRequirementValue(" ", []validator.PluginSettingValidator{notEmpty}))
 	assert.Equal(t, "i18n:ui_validator_must_be_integer", validateQueryRequirementValue("1.2", []validator.PluginSettingValidator{integer}))
 	assert.Empty(t, validateQueryRequirementValue("12", []validator.PluginSettingValidator{notEmpty, integer}))
+	assert.Equal(t, "i18n:ui_validator_must_be_url", validateQueryRequirementValue("example.com", []validator.PluginSettingValidator{absoluteURL}))
+	assert.Empty(t, validateQueryRequirementValue("https://example.com", []validator.PluginSettingValidator{absoluteURL}))
 }

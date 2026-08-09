@@ -220,6 +220,15 @@ static void on_webview_script_message(gpointer manager, gpointer javascript_resu
   }
 }
 
+static void on_webview_action_panel_message(gpointer manager, gpointer javascript_result, gpointer data) {
+  (void)manager;
+  (void)javascript_result;
+  WoxLinuxWindow *window = data;
+  if (window != NULL && !window->closed && window->context != 0) {
+    woxGoLinuxKey(window->context, "j", WOX_KEY_MODIFIER_CONTROL, 1, 0, 0);
+  }
+}
+
 static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css) {
   GtkWidget *web_view = NULL;
   bool supports_manager = wox_webkit.manager_new != NULL && wox_webkit.view_new_with_manager != NULL;
@@ -235,13 +244,15 @@ static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css
         }
       }
       bool supports_scripts = wox_webkit.script_new != NULL && wox_webkit.manager_add_script != NULL && wox_webkit.script_unref != NULL && wox_webkit.register_script_message_handler != NULL;
-      if (supports_scripts && wox_webkit.register_script_message_handler(manager, "woxWebViewPreview")) {
-        const char *escape_script = "(()=>{if(window.__woxUnhandledEscapeInstalled__)return;window.__woxUnhandledEscapeInstalled__=true;document.addEventListener('keydown',e=>{if(e.key!=='Escape'||e.repeat)return;setTimeout(()=>{if(e.defaultPrevented||e.cancelBubble)return;window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
-        gpointer script = wox_webkit.script_new(escape_script, 0, 0, NULL, NULL);
+      bool handlers_registered = supports_scripts && wox_webkit.register_script_message_handler(manager, "woxWebViewPreview") && wox_webkit.register_script_message_handler(manager, "woxWebViewActionPanel");
+      if (handlers_registered) {
+        const char *shortcut_script = "(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;document.addEventListener('keydown',e=>{if(e.repeat)return;if(e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='j'){e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage('action-panel');return}if(e.key!=='Escape')return;setTimeout(()=>{if(e.defaultPrevented||e.cancelBubble)return;window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
+        gpointer script = wox_webkit.script_new(shortcut_script, 0, 0, NULL, NULL);
         if (script != NULL) {
           wox_webkit.manager_add_script(manager, script);
           wox_webkit.script_unref(script);
           g_signal_connect(manager, "script-message-received::woxWebViewPreview", G_CALLBACK(on_webview_script_message), window);
+          g_signal_connect(manager, "script-message-received::woxWebViewActionPanel", G_CALLBACK(on_webview_action_panel_message), window);
         }
       }
       web_view = wox_webkit.view_new_with_manager(manager);
@@ -1974,6 +1985,26 @@ int32_t wox_linux_window_hide_webview(WoxLinuxWindow *window) {
   }
   WoxWindowCall call = {.window = window};
   return run_on_main_sync(hide_webview_main, &call) ? call.result : -1;
+}
+
+static void reset_webview_main(void *data) {
+  WoxWindowCall *call = data;
+  if (call->window->closed) {
+    call->result = -1;
+    return;
+  }
+  clear_active_web_view(call->window, true);
+  g_hash_table_remove_all(call->window->web_view_cache);
+  g_hash_table_remove_all(call->window->web_view_signatures);
+  g_hash_table_remove_all(call->window->web_view_content_keys);
+}
+
+int32_t wox_linux_window_reset_webview(WoxLinuxWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxWindowCall call = {.window = window};
+  return run_on_main_sync(reset_webview_main, &call) ? call.result : -1;
 }
 
 void wox_linux_free_string(char *value) {

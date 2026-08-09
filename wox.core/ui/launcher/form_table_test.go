@@ -87,6 +87,39 @@ func TestFormTableWoxImageCellDoesNotRepeatEmojiAsText(t *testing.T) {
 	}
 }
 
+func TestFormTableMultilineFieldUsesRowFormEditingController(t *testing.T) {
+	definition := formDefinition{Type: "textbox", Value: formDefinitionValue{Key: "InjectCss", Label: "Inject CSS", MaxLines: 12}}
+	fields := newFormFieldsState([]formDefinition{definition}, map[string]string{"InjectCss": "header {\n  display: none;\n}"}, true)
+	snapshot := snapshotFormFieldsLocked(&fields)
+	app := &App{}
+
+	row := app.buildFormTableRowField(snapshot, formFieldCallbacks{}, uiPalette{}, 0, definition, 600, 120, "")
+	rowContainer := row.(woxwidget.Container)
+	columns := rowContainer.Child.(woxwidget.Flex)
+	rightColumn := columns.Children[1].(woxwidget.Flex)
+	field := rightColumn.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+
+	if snapshot.editor == nil || field.Controller != snapshot.editor || field.Controller != fields.editor {
+		t.Fatal("focused multiline table field must share the row form editing controller")
+	}
+	field.Controller.SelectAll()
+	selection := fields.editor.State().Selection
+	if selection.Anchor != 0 || selection.Focus != len([]rune(fields.values["InjectCss"])) {
+		t.Fatalf("shared Ctrl+A selection = %#v, want complete InjectCss value", selection)
+	}
+
+	field.Controller.SetCaret(len([]rune(field.Controller.Text())))
+	field.Controller.InsertText("\nfooter { display: none; }")
+	setFormFieldsTextLocked(&fields, 0, field.Controller.Text())
+	if !field.Controller.Undo() {
+		t.Fatal("shared row form controller should retain undo history after value synchronization")
+	}
+	setFormFieldsTextLocked(&fields, 0, field.Controller.Text())
+	if !field.Controller.Redo() {
+		t.Fatal("shared row form controller should retain redo history after undo synchronization")
+	}
+}
+
 func TestFormTableAppPickerLeavesSearchInputToHost(t *testing.T) {
 	definition := formDefinition{Type: "table", Value: formDefinitionValue{Key: "Apps"}}
 	form := &formState{formFieldsState: newFormFieldsState([]formDefinition{definition}, map[string]string{"Apps": "[]"}, true)}

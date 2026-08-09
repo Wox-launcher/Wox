@@ -403,6 +403,7 @@ type FormTextFieldProps struct {
 	Height      float32
 	LabelWidth  float32
 	State       woxui.TextEditingState
+	Controller  *woxwidget.TextEditingController
 	Focused     bool
 	Protected   bool
 	MaxLines    int
@@ -434,7 +435,7 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 		ID: props.ID, Label: props.Label, Width: inputWidth, Height: fieldHeight, Radius: 4,
 		Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 9, Bottom: 6}, Transparent: true,
 		BorderColor: formFieldOutline(props.Focused, props.Theme), BorderWidth: 1,
-		Style: woxui.TextStyle{Size: 13}, Value: props.State.Text, Focused: props.Focused, Protected: props.Protected,
+		Style: woxui.TextStyle{Size: 13}, Value: props.State.Text, Controller: props.Controller, Focused: props.Focused, Protected: props.Protected,
 		MaxLines: props.MaxLines, Window: props.Window, Theme: props.Theme, OnChanged: props.OnChanged, OnKey: props.OnKey,
 		OnFocusChange: func(focused bool) {
 			if focused && props.OnFocus != nil {

@@ -84,6 +84,10 @@ func (w *platformWindow) hideWebView() error {
 	return ErrPlatformUnsupported
 }
 
+func (w *platformWindow) resetWebView() error {
+	return ErrPlatformUnsupported
+}
+
 func (w *platformWindow) webViewGoBack() error {
 	return ErrPlatformUnsupported
 }

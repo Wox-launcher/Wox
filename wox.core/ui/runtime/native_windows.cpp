@@ -22,6 +22,7 @@
 #include "native_windows.h"
 
 extern "C" int32_t woxGoWindowsWebViewEscape(uintptr_t owner);
+extern "C" int32_t woxGoWindowsWebViewActionPanel(uintptr_t owner);
 extern "C" void woxGoWindowsWebViewNavigationChanged(uintptr_t owner, const char *url, int32_t can_go_back, int32_t can_go_forward);
 
 static void webview_debug(const char *format, ...) {
@@ -594,7 +595,10 @@ struct WoxWindowsWebViewSession {
   bool history_registered = false;
   int64_t source_token = 0;
   bool source_registered = false;
+  int64_t accelerator_token = 0;
+  bool accelerator_registered = false;
   std::wstring loaded_content_key;
+  HRESULT error = S_OK;
 };
 
 struct WoxWindowsWebView;
@@ -628,6 +632,11 @@ struct WoxWebViewSourceChangedCallback : public IUnknown {
   virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
 };
 __CRT_UUID_DECL(WoxWebViewSourceChangedCallback, 0x3c067f9f, 0x5388, 0x4772, 0x8b, 0x48, 0x67, 0xed, 0x72, 0xc6, 0xbe, 0xcd)
+
+struct WoxWebViewAcceleratorKeyPressedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewAcceleratorKeyPressedCallback, 0xb29c7e28, 0xfa79, 0x41a8, 0x8e, 0x44, 0x65, 0x81, 0x1c, 0x76, 0xdc, 0xb2)
 
 class WoxEnvironmentCompletedHandler final : public WoxWebViewEnvironmentCompletedCallback {
 public:
@@ -715,6 +724,20 @@ private:
   WoxWindowsWebView *owner_;
 };
 
+class WoxAcceleratorKeyPressedHandler final : public WoxWebViewAcceleratorKeyPressedCallback {
+public:
+  explicit WoxAcceleratorKeyPressedHandler(WoxWindowsWebView *owner);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args);
+
+private:
+  ~WoxAcceleratorKeyPressedHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+};
+
 struct WoxWindowsWebView {
   using CreateEnvironment = HRESULT(STDAPICALLTYPE *)(const wchar_t *, const wchar_t *, IUnknown *, IUnknown *);
 
@@ -755,7 +778,7 @@ struct WoxWindowsWebView {
       return;
     }
     if (FAILED(result) || created_environment == nullptr) {
-      error = FAILED(result) ? result : E_FAIL;
+      fatal_error = FAILED(result) ? result : E_FAIL;
       InvalidateRect(owner, nullptr, FALSE);
       return;
     }
@@ -779,7 +802,7 @@ struct WoxWindowsWebView {
     handler->Release();
     if (FAILED(result)) {
       session->controller_pending = false;
-      error = result;
+      session->error = result;
       InvalidateRect(owner, nullptr, FALSE);
     }
   }
@@ -795,7 +818,7 @@ struct WoxWindowsWebView {
       return;
     }
     if (FAILED(result) || created_controller == nullptr) {
-      error = FAILED(result) ? result : E_FAIL;
+      session->error = FAILED(result) ? result : E_FAIL;
       InvalidateRect(owner, nullptr, FALSE);
       return;
     }
@@ -805,13 +828,14 @@ struct WoxWindowsWebView {
     result = webview_method<GetCore>(session->controller, 25)(session->controller, &session->core);
     webview_debug("get core returned 0x%08X core=%p", static_cast<unsigned int>(result), session->core);
     if (FAILED(result) || session->core == nullptr) {
-      error = FAILED(result) ? result : E_FAIL;
+      session->error = FAILED(result) ? result : E_FAIL;
       dispose_session(session);
       InvalidateRect(owner, nullptr, FALSE);
       return;
     }
     register_message_handler(session);
     register_navigation_handlers(session);
+    register_accelerator_handler(session);
     if (!session->retired) {
       configure_script(session);
     }
@@ -824,7 +848,7 @@ struct WoxWindowsWebView {
     webview_debug("add web message handler returned 0x%08X token=%lld", static_cast<unsigned int>(result), static_cast<long long>(session->web_message_token));
     handler->Release();
     if (FAILED(result)) {
-      error = result;
+      session->error = result;
       dispose_session(session);
       InvalidateRect(owner, nullptr, FALSE);
       return;
@@ -856,6 +880,40 @@ struct WoxWindowsWebView {
       }
     }
     notify_navigation_changed(session);
+  }
+
+  void register_accelerator_handler(WoxWindowsWebViewSession *session) {
+    if (session == nullptr || session->controller == nullptr || session->retired || session->accelerator_registered) {
+      return;
+    }
+    auto *handler = new WoxAcceleratorKeyPressedHandler(this);
+    using AddHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *, int64_t *);
+    HRESULT result = webview_method<AddHandler>(session->controller, 19)(session->controller, handler, &session->accelerator_token);
+    webview_debug("add accelerator handler returned 0x%08X", static_cast<unsigned int>(result));
+    handler->Release();
+    if (SUCCEEDED(result)) {
+      session->accelerator_registered = true;
+    }
+  }
+
+  void accelerator_key_pressed(IUnknown *args) {
+    if (closing || args == nullptr) {
+      return;
+    }
+    int32_t kind = 0;
+    uint32_t virtual_key = 0;
+    using GetInt32 = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int32_t *);
+    using GetUInt32 = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, uint32_t *);
+    HRESULT kind_result = webview_method<GetInt32>(args, 3)(args, &kind);
+    HRESULT key_result = webview_method<GetUInt32>(args, 4)(args, &virtual_key);
+    bool primary_j = SUCCEEDED(kind_result) && SUCCEEDED(key_result) && kind == 0 && virtual_key == 'J' &&
+                     (GetKeyState(VK_CONTROL) & 0x8000) != 0 && (GetKeyState(VK_MENU) & 0x8000) == 0 && (GetKeyState(VK_SHIFT) & 0x8000) == 0;
+    if (!primary_j) {
+      return;
+    }
+    using PutHandled = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL);
+    webview_method<PutHandled>(args, 8)(args, TRUE);
+    woxGoWindowsWebViewActionPanel(reinterpret_cast<uintptr_t>(owner));
   }
 
   void notify_navigation_changed(WoxWindowsWebViewSession *session) {
@@ -986,7 +1044,7 @@ struct WoxWindowsWebView {
     handler->Release();
     if (FAILED(result)) {
       session->script_pending = false;
-      error = result;
+      session->error = result;
       InvalidateRect(owner, nullptr, FALSE);
     }
   }
@@ -998,7 +1056,7 @@ struct WoxWindowsWebView {
       return;
     }
     if (FAILED(result)) {
-      error = result;
+      session->error = result;
       InvalidateRect(owner, nullptr, FALSE);
       return;
     }
@@ -1007,7 +1065,7 @@ struct WoxWindowsWebView {
   }
 
   void apply_session(WoxWindowsWebViewSession *session) {
-    if (session == nullptr || session->controller == nullptr || session->core == nullptr || !session->script_ready || session->retired) {
+    if (session == nullptr || session->controller == nullptr || session->core == nullptr || !session->script_ready || session->retired || FAILED(session->error)) {
       return;
     }
     using PutBounds = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, RECT);
@@ -1018,7 +1076,7 @@ struct WoxWindowsWebView {
     }
     webview_debug("apply bounds/visibility returned 0x%08X visible=%d", static_cast<unsigned int>(result), session->visible ? 1 : 0);
     if (FAILED(result)) {
-      error = result;
+      session->error = result;
       return;
     }
     if (!session->visible || session->loaded_content_key == session->content_key) {
@@ -1036,7 +1094,7 @@ struct WoxWindowsWebView {
       session->loaded_content_key = session->content_key;
       notify_navigation_changed(session);
     } else {
-      error = result;
+      session->error = result;
     }
   }
 
@@ -1072,6 +1130,11 @@ struct WoxWindowsWebView {
     if (session->controller != nullptr) {
       using PutVisible = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL);
       using Close = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
+      if (session->accelerator_registered) {
+        using RemoveHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int64_t);
+        webview_method<RemoveHandler>(session->controller, 20)(session->controller, session->accelerator_token);
+        session->accelerator_registered = false;
+      }
       webview_method<PutVisible>(session->controller, 4)(session->controller, FALSE);
       webview_method<Close>(session->controller, 24)(session->controller);
     }
@@ -1083,8 +1146,8 @@ struct WoxWindowsWebView {
     if (closing) {
       return E_FAIL;
     }
-    if (FAILED(error)) {
-      return error;
+    if (FAILED(fatal_error)) {
+      return fatal_error;
     }
     std::wstring wide_url = utf8_to_wide(url);
     std::wstring wide_html = utf8_to_wide(html);
@@ -1121,6 +1184,10 @@ struct WoxWindowsWebView {
     }
     session->url = std::move(wide_url);
     session->html = std::move(wide_html);
+    if (session->content_key != content_key) {
+      // A changed document gets a fresh navigation attempt even if the previous one failed.
+      session->error = S_OK;
+    }
     session->content_key = std::move(content_key);
     session->bounds = bounds;
     session->visible = true;
@@ -1128,7 +1195,7 @@ struct WoxWindowsWebView {
       create_controller(session);
       apply_session(session);
     }
-    return error;
+    return session->error;
   }
 
   HRESULT hide() {
@@ -1181,7 +1248,7 @@ struct WoxWindowsWebView {
   std::vector<std::unique_ptr<WoxWindowsWebViewSession>> sessions;
   std::unordered_map<std::string, WoxWindowsWebViewSession *> cache;
   WoxWindowsWebViewSession *active = nullptr;
-  HRESULT error = S_OK;
+  HRESULT fatal_error = S_OK;
   bool closing = false;
 };
 
@@ -1295,6 +1362,22 @@ HRESULT WoxSourceChangedHandler::Invoke(IUnknown *, IUnknown *) {
   if (owner_->active != nullptr) {
     owner_->notify_navigation_changed(owner_->active);
   }
+  return S_OK;
+}
+
+WoxAcceleratorKeyPressedHandler::WoxAcceleratorKeyPressedHandler(WoxWindowsWebView *owner) : owner_(owner) { owner_->retain(); }
+HRESULT WoxAcceleratorKeyPressedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewAcceleratorKeyPressedCallback), object); }
+ULONG WoxAcceleratorKeyPressedHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxAcceleratorKeyPressedHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxAcceleratorKeyPressedHandler::Invoke(IUnknown *, IUnknown *args) {
+  owner_->accelerator_key_pressed(args);
   return S_OK;
 }
 

@@ -342,6 +342,17 @@ func (w *platformWindow) hideWebView() error {
 	return nil
 }
 
+func (w *platformWindow) resetWebView() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_reset_webview(native) != 0 {
+		return errors.New("woxui: failed to reset Linux WebView")
+	}
+	return nil
+}
+
 func (w *platformWindow) webViewGoBack() error {
 	return errors.New("woxui: linux WebView navigation is not implemented")
 }
@@ -680,6 +691,8 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 				C.float(command.rotation),
 				C.float(command.radius),
 			)
+		case displayCommandDrawWebView:
+			continue
 		case displayCommandSetClipRect:
 			result = C.wox_linux_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		case displayCommandClearClip:

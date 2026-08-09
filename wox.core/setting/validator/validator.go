@@ -10,6 +10,7 @@ type PluginSettingValidatorType string
 
 const (
 	PluginSettingValidatorTypeIsNumber PluginSettingValidatorType = "is_number"
+	PluginSettingValidatorTypeIsURL    PluginSettingValidatorType = "is_url"
 	PluginSettingValidatorTypeNotEmpty PluginSettingValidatorType = "not_empty"
 	PluginSettingValidatorTypeUnique   PluginSettingValidatorType = "unique"
 )
@@ -54,6 +55,14 @@ func (p *PluginSettingValidator) UnmarshalJSON(b []byte) error {
 		if len(raw.Value) != 0 && string(raw.Value) != "null" {
 			if err := json.Unmarshal(raw.Value, value); err != nil {
 				return fmt.Errorf("failed to parse not_empty validator value: %w", err)
+			}
+		}
+		p.Value = value
+	case PluginSettingValidatorTypeIsURL:
+		value := &PluginSettingValidatorIsURL{}
+		if len(raw.Value) != 0 && string(raw.Value) != "null" {
+			if err := json.Unmarshal(raw.Value, value); err != nil {
+				return fmt.Errorf("failed to parse is_url validator value: %w", err)
 			}
 		}
 		p.Value = value

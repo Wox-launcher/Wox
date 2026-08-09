@@ -51,6 +51,7 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 		a.deactivateNativeFilePreview()
 	}
 	hideWebView := a.deactivatePreviewTypes(previewType)
+	resetWebView := false
 	switch preview.PreviewType {
 	case "query_requirement_settings":
 		if a.activateRequirementPreview(result, preview) != nil {
@@ -73,17 +74,19 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	case "dictation_history":
 		a.reconcileDictationAudioPreview(preview)
 	case "webview":
-		hideWebView = a.activateWebViewPreview(preview.PreviewData) || hideWebView
+		resetWebView = a.activateWebViewPreview(preview.PreviewData)
 	}
 	if fileWebViewData != "" {
-		hideWebView = a.activateWebViewPreview(fileWebViewData) || hideWebView
+		resetWebView = a.activateWebViewPreview(fileWebViewData)
 	}
 	if nativeFilePath != "" {
 		if nativeFileAutoLoad || a.nativeFilePreviewManualPath == nativeFilePath {
 			a.scheduleNativeFilePreview(nativeFilePath)
 		}
 	}
-	if hideWebView {
+	if resetWebView {
+		a.resetWebView()
+	} else if hideWebView {
 		a.hideWebView()
 	}
 }

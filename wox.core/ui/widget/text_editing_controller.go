@@ -62,6 +62,16 @@ func (c *TextEditingController) SetSelection(anchor, focus int) {
 	c.mu.Unlock()
 }
 
+// SelectAll selects the controller's complete committed value.
+func (c *TextEditingController) SelectAll() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.editor.SelectAll()
+	c.mu.Unlock()
+}
+
 // SelectWordAt selects the Unicode word containing the rune offset.
 func (c *TextEditingController) SelectWordAt(offset int) {
 	if c == nil {
@@ -100,6 +110,26 @@ func (c *TextEditingController) DeleteSelection() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.editor.DeleteSelection()
+}
+
+// Undo restores the controller's previous committed editing state.
+func (c *TextEditingController) Undo() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.editor.Undo()
+}
+
+// Redo reapplies the controller's most recently undone editing state.
+func (c *TextEditingController) Redo() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.editor.Redo()
 }
 
 // SelectedText returns the currently selected substring, or empty when collapsed.

@@ -2,6 +2,8 @@ package woxui
 
 import (
 	"errors"
+	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -42,10 +44,21 @@ func (w *Window) ShowWebView(content WebViewContent, bounds Rect) error {
 	if content.URL == "" && content.HTML == "" {
 		return errors.New("webview content requires a URL or HTML")
 	}
+	if content.HTML == "" && !isAbsoluteWebViewURL(content.URL) {
+		return fmt.Errorf("webview URL must be an absolute http(s) URL: %q", content.URL)
+	}
 	if bounds.Width <= 0 || bounds.Height <= 0 {
 		return errors.New("webview bounds must have a positive size")
 	}
 	return w.native.showWebView(content, bounds)
+}
+
+func isAbsoluteWebViewURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	return strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")
 }
 
 // HideWebView removes the embedded browser from the visible focus domain without discarding cached state.
@@ -54,6 +67,14 @@ func (w *Window) HideWebView() error {
 		return errors.New("window is not initialized")
 	}
 	return w.native.hideWebView()
+}
+
+// ResetWebView destroys the current native browser and its cached sessions.
+func (w *Window) ResetWebView() error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.resetWebView()
 }
 
 // WebViewGoBack navigates the active WebView to the previous history entry when available.

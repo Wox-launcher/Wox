@@ -1266,10 +1266,14 @@ static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView 
 - (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message {
   (void)userContentController;
   WoxDarwinWindow *owner = _owner;
-  if (![message.name isEqualToString:@"woxWebViewPreview"] || owner == NULL || owner->closed || owner->context == 0) {
+  if (owner == NULL || owner->closed || owner->context == 0) {
     return;
   }
-  woxGoDarwinKey(owner->context, "escape", 0, 1, 0, 0);
+  if ([message.name isEqualToString:@"woxWebViewPreview"]) {
+    woxGoDarwinKey(owner->context, "escape", 0, 1, 0, 0);
+  } else if ([message.name isEqualToString:@"woxWebViewActionPanel"]) {
+    woxGoDarwinKey(owner->context, "j", WOX_KEY_MODIFIER_META, 1, 0, 0);
+  }
 }
 
 - (WKWebView *)webView:(WKWebView *)webView
@@ -1308,10 +1312,12 @@ static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView 
 }
 @end
 
-static NSString *web_view_escape_script(void) {
-  return @"(()=>{if(window.__woxUnhandledEscapeInstalled__)return;window.__woxUnhandledEscapeInstalled__=true;"
-          "document.addEventListener('keydown',e=>{if(e.key!=='Escape'||e.repeat)return;setTimeout(()=>{"
-          "if(e.defaultPrevented||e.cancelBubble)return;window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
+static NSString *web_view_shortcut_script(void) {
+  return @"(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;"
+          "document.addEventListener('keydown',e=>{if(e.repeat)return;if(e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='j'){"
+          "e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage('action-panel');return}"
+          "if(e.key!=='Escape')return;setTimeout(()=>{if(e.defaultPrevented||e.cancelBubble)return;"
+          "window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
 }
 
 static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css) {
@@ -1320,8 +1326,9 @@ static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css)
   WoxWebViewMessageHandler *message_handler = [[WoxWebViewMessageHandler alloc] init];
   message_handler->_owner = window;
   [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewPreview"];
-  WKUserScript *escape_script = [[[WKUserScript alloc] initWithSource:web_view_escape_script() injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES] autorelease];
-  [configuration.userContentController addUserScript:escape_script];
+  [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewActionPanel"];
+  WKUserScript *shortcut_script = [[[WKUserScript alloc] initWithSource:web_view_shortcut_script() injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES] autorelease];
+  [configuration.userContentController addUserScript:shortcut_script];
   NSString *script = web_view_css_script(inject_css);
   if (script != nil) {
     WKUserScript *user_script = [[[WKUserScript alloc] initWithSource:script injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES] autorelease];
@@ -2671,6 +2678,28 @@ int32_t wox_darwin_window_hide_webview(WoxDarwinWindow *window) {
       return;
     }
     clear_active_web_view(window, true);
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    clear_active_web_view(window, true);
+    for (WKWebView *web_view in [window->web_view_cache allValues]) {
+      [web_view stopLoading];
+      [web_view removeFromSuperview];
+    }
+    [window->web_view_cache removeAllObjects];
+    [window->web_view_signatures removeAllObjects];
+    [window->web_view_content_keys removeAllObjects];
   });
   return result;
 }

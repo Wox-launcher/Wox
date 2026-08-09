@@ -111,6 +111,7 @@ const (
 	windowCommandWriteClipboardImage
 	windowCommandShowWebView
 	windowCommandHideWebView
+	windowCommandResetWebView
 	windowCommandWebViewGoBack
 	windowCommandWebViewGoForward
 	windowCommandWebViewReload
@@ -492,6 +493,10 @@ func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error 
 
 func (w *platformWindow) hideWebView() error {
 	return w.call(windowCommand{kind: windowCommandHideWebView}).err
+}
+
+func (w *platformWindow) resetWebView() error {
+	return w.call(windowCommand{kind: windowCommandResetWebView}).err
 }
 
 func (w *platformWindow) webViewGoBack() error {
@@ -1401,6 +1406,12 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 			return windowCommandResult{}
 		}
 		return windowCommandResult{err: w.webView.hide()}
+	case windowCommandResetWebView:
+		if w.webView != nil {
+			w.webView.destroy()
+			w.webView = nil
+		}
+		return windowCommandResult{}
 	case windowCommandWebViewGoBack:
 		if w.webView == nil {
 			return windowCommandResult{err: ErrWebViewUnavailable}

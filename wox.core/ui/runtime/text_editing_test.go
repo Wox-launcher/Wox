@@ -57,3 +57,34 @@ func TestTextEditorMultiClickSelections(t *testing.T) {
 		t.Fatalf("line selection = %q, want %q", selected, "second line")
 	}
 }
+
+func TestTextEditorSelectAllUndoAndRedoShortcuts(t *testing.T) {
+	editor := NewTextEditor("first\nsecond")
+	editor.SetCaret(5)
+	if !editor.InsertText(" changed") {
+		t.Fatal("insert should change text")
+	}
+	changedText := editor.State().Text
+	primary := KeyModifierControl | KeyModifierMeta
+
+	handled, changed := editor.HandleKey(KeyEvent{Key: Key("a"), Modifiers: primary, Down: true})
+	if !handled || changed || editor.SelectedText() != changedText {
+		t.Fatalf("select all = handled %v changed %v selected %q", handled, changed, editor.SelectedText())
+	}
+
+	handled, changed = editor.HandleKey(KeyEvent{Key: Key("z"), Modifiers: primary, Down: true})
+	if !handled || !changed || editor.State().Text != "first\nsecond" {
+		t.Fatalf("undo = handled %v changed %v text %q", handled, changed, editor.State().Text)
+	}
+
+	handled, changed = editor.HandleKey(KeyEvent{Key: Key("z"), Modifiers: primary | KeyModifierShift, Down: true})
+	if !handled || !changed || editor.State().Text != changedText {
+		t.Fatalf("shift redo = handled %v changed %v text %q", handled, changed, editor.State().Text)
+	}
+
+	editor.HandleKey(KeyEvent{Key: Key("z"), Modifiers: primary, Down: true})
+	handled, changed = editor.HandleKey(KeyEvent{Key: Key("y"), Modifiers: primary, Down: true})
+	if !handled || !changed || editor.State().Text != changedText {
+		t.Fatalf("ctrl+y redo = handled %v changed %v text %q", handled, changed, editor.State().Text)
+	}
+}

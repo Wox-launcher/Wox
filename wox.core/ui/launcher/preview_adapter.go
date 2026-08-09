@@ -21,7 +21,7 @@ import (
 )
 
 // buildPreview resolves controller-owned preview state into a pure preview view.
-func (a *App) buildPreview(result queryResult, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildPreview(result queryResult, palette uiPalette, width, height, imageScale, webViewMaxRight float32) woxwidget.Widget {
 	preview := a.resolvePreview(result.Preview)
 	if preview.PreviewType == "remote" {
 		return woxwidget.Container{Width: width, Height: height}
@@ -58,13 +58,13 @@ func (a *App) buildPreview(result queryResult, palette uiPalette, width, height,
 		return a.buildTerminalPreview(a.terminalPreviewSnapshotFor(preview), palette, width, height, tags)
 	}
 	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0)
-	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight, imageScale)
+	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight, imageScale, webViewMaxRight)
 	return previewview.PreviewView(previewview.PreviewProps{
 		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window, OnTagHover: a.setPreviewTooltip,
 	})
 }
 
-func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette uiPalette, width, height, imageScale, webViewMaxRight float32) woxwidget.Widget {
 	content := func(value string, color woxui.Color) woxwidget.Widget {
 		if strings.TrimSpace(value) == "" {
 			value = "No preview available"
@@ -97,7 +97,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 		case "markdown":
 			return a.buildMarkdownPreview(scrollKey, file.Text, filepath.Dir(preview.PreviewData), preview.ScrollPosition, palette, width, height, imageScale)
 		case "webview":
-			return a.buildWebViewPreview(file.WebViewData, palette, width, height)
+			return a.buildWebViewPreview(file.WebViewData, palette, width, height, webViewMaxRight)
 		case "native_file":
 			return a.buildNativeFilePreview(file.NativeFilePath, file.NativeFileAutoLoad, palette, width, height)
 		default:
@@ -137,7 +137,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 	case "url":
 		return content("URL preview\n\n"+preview.PreviewData+"\n\nThe embedded browser surface will be attached through the platform preview host.", palette.previewText)
 	case "webview":
-		return a.buildWebViewPreview(preview.PreviewData, palette, width, height)
+		return a.buildWebViewPreview(preview.PreviewData, palette, width, height, webViewMaxRight)
 	default:
 		return content(preview.PreviewData, palette.previewText)
 	}

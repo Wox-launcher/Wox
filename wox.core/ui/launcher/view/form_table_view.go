@@ -789,6 +789,7 @@ type FormTableRowFieldProps struct {
 	Height              float32
 	LabelWidth          float32
 	State               woxui.TextEditingState
+	Controller          *woxwidget.TextEditingController
 	Focused             bool
 	Recording           bool
 	RecordingError      bool
@@ -1079,7 +1080,7 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 		ID: props.ID, Label: props.Label, Width: inputWidth, Height: height, Radius: 4,
 		Padding: padding, Transparent: true,
 		BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1,
-		Style: woxui.TextStyle{Size: 13}, Value: props.State.Text, Protected: props.Protected,
+		Style: woxui.TextStyle{Size: 13}, Value: props.State.Text, Controller: props.Controller, Protected: props.Protected,
 		MaxLines: max(1, props.MaxLines), Window: props.Window, Theme: props.Theme, OnChanged: props.OnChanged, OnKey: props.OnKey,
 		OnSelectionChanged: props.OnSelectionChanged,
 		OnFocusChange: func(focused bool) {

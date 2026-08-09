@@ -688,6 +688,52 @@ func TestHostDragSelectionExtendsAndClickCollapses(t *testing.T) {
 	if tapCalls != 1 {
 		t.Fatalf("click without drag should dispatch tap, got %d taps", tapCalls)
 	}
+
+	// Native input may coalesce all intermediate moves. The release position must still finalize
+	// the selection instead of treating a down/up pair at different points as a click.
+	extendCalls = 0
+	tapCalls = 0
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 70, Y: 5}})
+	if extendCalls != 1 || lastExtend.X != 70 {
+		t.Fatalf("coalesced drag release = %d extends at %v, want one extend at X 70", extendCalls, lastExtend.X)
+	}
+	if tapCalls != 0 {
+		t.Fatalf("coalesced drag should not dispatch tap, got %d taps", tapCalls)
+	}
+}
+
+func TestHostSelectionCaptureSurvivesRetainedPathChange(t *testing.T) {
+	wrapped := false
+	var startCalls, extendCalls, tapCalls int
+	selection := func() Widget {
+		return Gesture{
+			ID: "moving-editor", OnTap: func() { tapCalls++ },
+			OnSelectionStart: func(woxui.Point) { startCalls++ }, OnSelectionExtend: func(woxui.Point) { extendCalls++ },
+			Child: Container{Width: 100, Height: 40},
+		}
+	}
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		if wrapped {
+			return Container{Width: 100, Height: 40, Child: Container{Width: 100, Height: 40, Child: selection()}}
+		}
+		return Container{Width: 100, Height: 40, Child: selection()}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	wrapped = true
+	renderTestFrame(host)
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 50, Y: 25}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 50, Y: 25}})
+
+	if startCalls != 1 || extendCalls == 0 {
+		t.Fatalf("selection callbacks after rebuild = start %d extend %d, want 1 and at least 1", startCalls, extendCalls)
+	}
+	if tapCalls != 0 {
+		t.Fatalf("rebuilt drag selection collapsed through tap %d times", tapCalls)
+	}
 }
 
 func TestHostDispatchesPositionedDoubleAndTripleTap(t *testing.T) {

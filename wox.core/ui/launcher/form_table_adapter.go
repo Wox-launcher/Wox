@@ -539,8 +539,11 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 	fieldValue := fields.values[value.Key]
 	focused := fields.active && fields.focused == index
 	state := fields.editing
+	var controller *woxwidget.TextEditingController
 	if !focused {
 		state = woxui.TextEditingState{Text: fieldValue}
+	} else {
+		controller = fields.editor
 	}
 	markdown := formTableRowFieldMarkdown(definition)
 	controlWidth := max(float32(0), width-labelWidth-10)
@@ -548,7 +551,7 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 	props := launcherview.FormTableRowFieldProps{
 		ID: fmt.Sprintf("form-table-row-field-%d", index), Kind: definition.Type, Label: a.translate(value.Label), Description: a.translate(value.Tooltip),
 		DescriptionMarkdown: markdown, Error: fieldError, Value: fieldValue, Width: width, Height: height, LabelWidth: labelWidth, State: state, Focused: focused, Protected: definition.Type == "password",
-		MaxLines: max(1, value.MaxLines), Window: a.formTableNativeWindow(), Theme: palette.componentTheme(),
+		Controller: controller, MaxLines: max(1, value.MaxLines), Window: a.formTableNativeWindow(), Theme: palette.componentTheme(),
 		EmojiLabel: a.translate("i18n:ui_image_editor_emoji"), UploadLabel: a.translate("i18n:ui_image_editor_upload_image"), BrowseLabel: a.translate("i18n:ui_runtime_browse"),
 		SelectLabel: a.translate("i18n:ui_hotkey_ignore_apps_select"),
 		OnFocus:     func() { callbacks.focus(index) },

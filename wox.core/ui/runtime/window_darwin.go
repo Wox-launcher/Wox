@@ -472,6 +472,17 @@ func (w *platformWindow) hideWebView() error {
 	return nil
 }
 
+func (w *platformWindow) resetWebView() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_reset_webview(native) != 0 {
+		return errors.New("woxui: failed to reset macOS WebView")
+	}
+	return nil
+}
+
 func (w *platformWindow) writeClipboardText(text string) error {
 	native, err := w.openNative()
 	if err != nil {
@@ -1014,6 +1025,8 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 			)
 			imageCost += time.Since(commandStart)
 			imageCount++
+		case displayCommandDrawWebView:
+			continue
 		case displayCommandSetClipRect:
 			result = C.wox_darwin_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		case displayCommandClearClip:

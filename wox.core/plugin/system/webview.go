@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"wox/common"
 	"wox/plugin"
@@ -102,6 +103,10 @@ func (p *WebViewPlugin) GetMetadata() plugin.Metadata {
 									Type:  validator.PluginSettingValidatorTypeNotEmpty,
 									Value: &validator.PluginSettingValidatorNotEmpty{},
 								},
+								{
+									Type:  validator.PluginSettingValidatorTypeIsURL,
+									Value: &validator.PluginSettingValidatorIsURL{},
+								},
 							},
 						},
 						{
@@ -166,6 +171,10 @@ func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 		}
 
 		currentSite := site
+		if !isWebViewURL(site.Url) {
+			p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("invalid webview URL for %s: %s", site.Keyword, site.Url))
+			continue
+		}
 		previewPayload, marshalErr := json.Marshal(plugin.WoxPreviewWebviewData{
 			Url:           site.Url,
 			InjectCss:     currentSite.InjectCss,
@@ -200,6 +209,15 @@ func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 	}
 
 	return plugin.NewQueryResponse(results)
+}
+
+// isWebViewURL accepts only absolute website URLs supported by the WebView plugin.
+func isWebViewURL(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	return strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")
 }
 
 func (p *WebViewPlugin) registerSiteCommands(ctx context.Context) {

@@ -104,7 +104,7 @@ func (s *textFieldState) DidUpdateWidget(context woxwidget.StateContext, oldWidg
 	oldProps := oldWidget.(TextFieldProps)
 	newProps := newWidget.(TextFieldProps)
 	s.updateBindings(context, newProps)
-	if newProps.Controller == nil && oldProps.Value != newProps.Value && s.controller.Text() != newProps.Value {
+	if newProps.Controller == nil && (oldProps.Controller != nil || oldProps.Value != newProps.Value) && s.controller.Text() != newProps.Value {
 		s.controller.SetText(newProps.Value, false)
 	}
 	if newProps.Focused != oldProps.Focused {
@@ -195,18 +195,25 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		if original.Disabled || original.ReadOnly {
 			return false
 		}
-		if original.OnKey != nil && original.OnKey(event) {
-			return true
-		}
-		// Copy/cut/paste use the primary modifier (Cmd on macOS, Ctrl elsewhere) and require a
-		// registered clipboard provider; without one the keys fall through to normal editing.
-		if event.Down && !event.Composing && event.Modifiers.HasPrimary() && (event.Key == woxui.Key("c") || event.Key == woxui.Key("x") || event.Key == woxui.Key("v")) {
-			provider := currentClipboard()
-			if provider == nil {
-				return false
-			}
+		// Standard editing shortcuts belong to the focused editor and must run before form-level
+		// handlers that may use the same primary-modifier combinations for global actions.
+		if event.Down && !event.Composing && event.Modifiers.HasPrimary() {
 			switch event.Key {
+			case woxui.Key("a"), woxui.Key("z"), woxui.Key("y"):
+				handled, changed := s.controller.HandleKey(event)
+				if changed {
+					notifyTextFieldChanged(original, s.controller.Text())
+				}
+				if handled {
+					notifyTextFieldSelectionChanged(original, s.controller.State().Selection)
+					context.Invalidate()
+				}
+				return handled
 			case woxui.Key("c"):
+				provider := currentClipboard()
+				if provider == nil {
+					break
+				}
 				if selected := s.controller.SelectedText(); selected != "" {
 					if err := provider.WriteText(selected); err != nil {
 						return false
@@ -214,6 +221,10 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 				}
 				return true
 			case woxui.Key("x"):
+				provider := currentClipboard()
+				if provider == nil {
+					break
+				}
 				if selected := s.controller.SelectedText(); selected != "" {
 					if err := provider.WriteText(selected); err != nil {
 						return false
@@ -226,6 +237,10 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 				context.Invalidate()
 				return true
 			case woxui.Key("v"):
+				provider := currentClipboard()
+				if provider == nil {
+					break
+				}
 				text, err := provider.ReadText()
 				if err != nil || text == "" {
 					return true
@@ -237,6 +252,9 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 				context.Invalidate()
 				return true
 			}
+		}
+		if original.OnKey != nil && original.OnKey(event) {
+			return true
 		}
 		handled, changed := handleTextFieldControllerKey(s.controller, max(1, original.MaxLines), event)
 		if handled {

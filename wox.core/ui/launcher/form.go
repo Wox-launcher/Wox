@@ -21,7 +21,7 @@ type formFieldsState struct {
 	definitions []formDefinition
 	values      map[string]string
 	focused     int
-	editor      *woxui.TextEditor
+	editor      *woxwidget.TextEditingController
 	active      bool
 }
 
@@ -30,6 +30,7 @@ type formFieldsSnapshot struct {
 	values      map[string]string
 	focused     int
 	editing     woxui.TextEditingState
+	editor      *woxwidget.TextEditingController
 	active      bool
 }
 
@@ -67,7 +68,7 @@ func newFormFieldsState(definitions []formDefinition, initialValues map[string]s
 	}
 	fields := formFieldsState{definitions: append([]formDefinition(nil), definitions...), values: values, focused: focused, active: active}
 	if focused >= 0 && formDefinitionTextEditable(definitions[focused]) {
-		fields.editor = woxui.NewTextEditor(values[definitions[focused].Value.Key])
+		fields.editor = woxwidget.NewTextEditingController(values[definitions[focused].Value.Key])
 	}
 	return fields
 }
@@ -88,6 +89,7 @@ func snapshotFormFieldsLocked(state *formFieldsState) formFieldsSnapshot {
 	}
 	if state.editor != nil {
 		snapshot.editing = state.editor.State()
+		snapshot.editor = state.editor
 	}
 	return snapshot
 }
@@ -104,8 +106,8 @@ func setFormFieldsTextLocked(state *formFieldsState, index int, value string) bo
 	state.values[key] = value
 	if state.focused == index {
 		if state.editor == nil {
-			state.editor = woxui.NewTextEditor(value)
-		} else {
+			state.editor = woxwidget.NewTextEditingController(value)
+		} else if state.editor.Text() != value {
 			state.editor.SetText(value, false)
 		}
 	}
@@ -161,7 +163,15 @@ func formTextLineIndex(lines []formTextLine, offset int) int {
 	return 0
 }
 
-func handleFormEditorKey(editor *woxui.TextEditor, definition formDefinition, event woxui.KeyEvent) (bool, bool) {
+type formEditingController interface {
+	State() woxui.TextEditingState
+	SetCaret(int)
+	SetSelection(int, int)
+	InsertText(string) bool
+	HandleKey(woxui.KeyEvent) (bool, bool)
+}
+
+func handleFormEditorKey(editor formEditingController, definition formDefinition, event woxui.KeyEvent) (bool, bool) {
 	if editor == nil {
 		return false, false
 	}
@@ -231,7 +241,7 @@ func setFormFieldsFocusLocked(fields *formFieldsState, index int) {
 	fields.active = true
 	definition := fields.definitions[index]
 	if formDefinitionTextEditable(definition) {
-		fields.editor = woxui.NewTextEditor(fields.values[definition.Value.Key])
+		fields.editor = woxwidget.NewTextEditingController(fields.values[definition.Value.Key])
 	} else {
 		fields.editor = nil
 	}

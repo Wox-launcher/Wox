@@ -2347,6 +2347,7 @@
   "ui_validator_invalid_value": "无效的值",
   "ui_validator_must_be_integer": "值必须是整数",
   "ui_validator_must_be_number": "值必须是数字",
+  "ui_validator_must_be_url": "值必须是完整的 http(s) URL",
   "ui_validator_value_can_not_be_empty": "值不能为空",
   "ui_validator_value_must_be_unique": "值不能重复",
   "ui_screenshot_tool_select": "选择",

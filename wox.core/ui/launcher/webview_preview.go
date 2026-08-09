@@ -49,7 +49,7 @@ func (d webViewPreviewData) content() woxui.WebViewContent {
 	return woxui.WebViewContent{URL: d.URL, HTML: d.HTML, InjectCSS: d.InjectCSS, CacheDisabled: d.CacheDisabled, CacheKey: cacheKey}
 }
 
-func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, height, maxRight float32) woxwidget.Widget {
 	theme := palette.componentTheme()
 	data, err := decodeWebViewPreview(previewData)
 	if err != nil {
@@ -68,14 +68,25 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 	}
 	content := data.content()
 	return previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnBounds: func(bounds woxui.Rect) {
-		current := a.webViewPreviewData == previewData && a.webViewPreviewError == ""
-		if !current {
+		if a.webViewPreviewData != previewData || a.webViewPreviewError != "" {
+			return
+		}
+		bounds, visible := webViewPreviewVisibleBounds(bounds, maxRight)
+		if !visible {
+			a.hideWebView()
 			return
 		}
 		if err := a.window.ShowWebView(content, bounds); err != nil {
 			a.setWebViewPreviewError(err)
 		}
 	}})
+}
+
+func webViewPreviewVisibleBounds(bounds woxui.Rect, maxRight float32) (woxui.Rect, bool) {
+	if maxRight > 0 && bounds.X+bounds.Width > maxRight {
+		bounds.Width = max(float32(0), maxRight-bounds.X)
+	}
+	return bounds, bounds.Width > 0 && bounds.Height > 0
 }
 
 func (a *App) setWebViewPreviewError(err error) {
@@ -87,9 +98,10 @@ func (a *App) setWebViewPreviewError(err error) {
 	_ = a.window.Invalidate()
 }
 
-// activateWebViewPreview prepares controller state and reports whether native content is stale.
+// activateWebViewPreview prepares controller state and reports whether the active URL changed.
 func (a *App) activateWebViewPreview(previewData string) bool {
 	changed := a.webViewPreviewData != previewData
+	urlChanged := changed && webViewPreviewURLChanged(a.webViewPreviewData, previewData)
 	if changed {
 		a.webViewPreviewData = previewData
 		a.webViewPreviewError = ""
@@ -100,7 +112,19 @@ func (a *App) activateWebViewPreview(previewData string) bool {
 			a.webViewNavigation.URL = strings.TrimSpace(data.URL)
 		}
 	}
-	return changed
+	return urlChanged
+}
+
+func webViewPreviewURLChanged(previousData, nextData string) bool {
+	if strings.TrimSpace(previousData) == "" {
+		return false
+	}
+	previous, previousErr := decodeWebViewPreview(previousData)
+	next, nextErr := decodeWebViewPreview(nextData)
+	if previousErr != nil || nextErr != nil {
+		return previousData != nextData
+	}
+	return strings.TrimSpace(previous.URL) != strings.TrimSpace(next.URL)
 }
 
 // deactivateWebViewPreview clears controller ownership and reports whether native content was attached.
@@ -119,5 +143,15 @@ func (a *App) hideWebView() {
 	}
 	_ = woxui.Call(func() {
 		_ = a.window.HideWebView()
+	})
+}
+
+// resetWebView drops the native instance so changed URLs cannot reuse failed or stale state.
+func (a *App) resetWebView() {
+	if a.window == nil {
+		return
+	}
+	_ = woxui.Call(func() {
+		_ = a.window.ResetWebView()
 	})
 }

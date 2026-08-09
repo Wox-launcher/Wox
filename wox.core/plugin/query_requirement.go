@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"wox/common"
@@ -241,6 +242,11 @@ func validateQueryRequirementValue(value string, validators []validator.PluginSe
 				if _, err := strconv.ParseFloat(value, 64); err != nil {
 					return "i18n:ui_validator_must_be_number"
 				}
+			}
+		case validator.PluginSettingValidatorTypeIsURL:
+			parsed, err := url.Parse(strings.TrimSpace(value))
+			if err != nil || parsed.Host == "" || !strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https") {
+				return "i18n:ui_validator_must_be_url"
 			}
 		}
 	}

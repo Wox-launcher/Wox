@@ -84,6 +84,11 @@ func ActionPanelBaseHeight(padding woxwidget.Insets) float32 {
 	return ActionHeaderHeight + ActionDividerHeight + ActionSearchHeight + padding.Top + padding.Bottom
 }
 
+// ActionPanelWidth returns the floating panel width for the current launcher geometry.
+func ActionPanelWidth(padding woxwidget.Insets, windowWidth float32) float32 {
+	return min(float32(ActionPanelContentWidth)+padding.Left+padding.Right, max(float32(240), windowWidth-28))
+}
+
 type actionsViewState struct {
 	scrollController *woxwidget.ScrollController
 }
@@ -128,7 +133,7 @@ func (s *actionsViewState) Dispose() {}
 
 // actionPanelGeometry calculates the stable panel and list extents used by both the adapter and retained State.
 func actionPanelGeometry(props ActionsProps) (panelWidth, innerWidth, panelHeight float32, visibleRows int) {
-	panelWidth = min(float32(ActionPanelContentWidth)+props.ActionPadding.Left+props.ActionPadding.Right, max(float32(240), props.WindowWidth-28))
+	panelWidth = ActionPanelWidth(props.ActionPadding, props.WindowWidth)
 	innerWidth = max(float32(0), panelWidth-props.ActionPadding.Left-props.ActionPadding.Right)
 	visibleRows = max(1, min(len(props.Items), MaxVisibleActions))
 	panelHeight = ActionPanelBaseHeight(props.ActionPadding) + float32(visibleRows*ActionRowHeight)

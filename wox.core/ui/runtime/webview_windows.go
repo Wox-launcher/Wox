@@ -168,6 +168,21 @@ func woxGoWindowsWebViewEscape(owner C.uintptr_t) C.int32_t {
 	return 0
 }
 
+// woxGoWindowsWebViewActionPanel forwards the launcher-reserved shortcut from focused WebView content.
+//
+//export woxGoWindowsWebViewActionPanel
+func woxGoWindowsWebViewActionPanel(owner C.uintptr_t) C.int32_t {
+	value, ok := nativeWindows.Load(uintptr(owner))
+	if !ok {
+		return 0
+	}
+	window := value.(*platformWindow)
+	if window.options.OnKey != nil && window.options.OnKey(KeyEvent{Key: Key("j"), Modifiers: KeyModifierControl, Down: true}) {
+		return 1
+	}
+	return 0
+}
+
 // woxGoWindowsWebViewNavigationChanged pushes live browser chrome into the Go UI title bar.
 //
 //export woxGoWindowsWebViewNavigationChanged

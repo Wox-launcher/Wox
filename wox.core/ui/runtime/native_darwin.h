@@ -31,6 +31,7 @@ int32_t wox_darwin_window_pick_file(WoxDarwinWindow *window, int32_t directory, 
 int32_t wox_darwin_window_open_external_url(WoxDarwinWindow *window, const char *url);
 int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height);
 int32_t wox_darwin_window_hide_webview(WoxDarwinWindow *window);
+int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_go_back(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_go_forward(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_reload(WoxDarwinWindow *window);
