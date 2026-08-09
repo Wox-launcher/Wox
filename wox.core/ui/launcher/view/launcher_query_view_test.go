@@ -68,6 +68,18 @@ func TestLauncherQueryLeavesSharedScrollbarGutterOutsideDragOverlay(t *testing.T
 	}
 }
 
+func TestLauncherQueryExposesInlineCompletionSuffix(t *testing.T) {
+	query := LauncherQueryView(LauncherQueryProps{Width: 500, Height: 40, CompletionSuffix: "pleted", Enabled: true}).(woxwidget.Stack)
+	scrollSemantic := query.Children[0].Child.(woxwidget.Semantics)
+	scrollStack := scrollSemantic.Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+	scroll := scrollStack.Children[0].Child.(woxwidget.ScrollView)
+	content := scroll.Child.(woxwidget.Stack)
+	completion := content.Children[1].Child.(woxwidget.Semantics)
+	if completion.AutomationID != "launcher.query.completion" || completion.Role != woxui.AccessibilityRoleText || completion.Value != "pleted" || !completion.ReadOnly || completion.LiveRegion != woxui.AccessibilityLiveRegionPolite {
+		t.Fatalf("query completion semantics = %#v", completion)
+	}
+}
+
 func TestLauncherHeaderExposesQueryLoadingProgress(t *testing.T) {
 	header := LauncherHeaderView(LauncherHeaderProps{
 		Width: 500, Height: 50, QueryBoxHeight: 50, QueryEditorHeight: 34, QueryWidth: 400,

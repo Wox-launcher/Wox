@@ -18,6 +18,16 @@ Understand the feature before choosing coverage. Recommend the smallest high-val
    - The UI code that owns the relevant automation IDs and actions
 4. Identify the main functional points, platform branches, important state transitions, failure recovery, and existing unit or smoke coverage. Base the list on concrete code paths, not UI labels or assumptions.
 
+### Interpret Settings Semantics
+
+For every settings smoke case, determine why the setting exists and trace the runtime path that consumes it before writing the test.
+
+1. State a **setting semantic contract** in user terms: changing the setting from a chosen value to another must alter a specific real product behavior, not merely the displayed or persisted control value.
+2. Build deterministic preconditions that make that behavior observable. Ensure the input data crosses the relevant boundary; for example, a maximum-result setting needs more available results than the tested cap.
+3. Drive the setting through its owning Settings section, then exercise the actual user flow that consumes it. Assert the live UI, runtime artifact, platform effect, or persisted product output that proves the semantic contract.
+4. Do not treat a selected value, a reopened control, or persistence alone as sufficient smoke evidence. Those checks may support the flow, but the final assertion must cover the setting's real user-visible effect.
+5. Account for implementation details that can distort naive evidence, such as virtual-list overscan, pagination, debouncing, asynchronous saves, or cached results. Measure the actual user-visible viewport or outcome rather than incidental semantic-tree node counts when they differ.
+
 ### Inspect Plugin Settings
 
 When the target is a plugin:
@@ -52,7 +62,7 @@ If the user asked only for design, stop after the recommendation. If the user al
 1. State one observable behavior contract for the selected flow.
 2. Search all smoke packages for an existing helper before adding a local one. Promote a helper to `automationdriver` or `smoke` when a second consumer uses the same interaction contract; keep plugin-specific behavior in the leaf package. Avoid page-object layers or table-editor DSLs until repeated cases justify them.
 3. Reuse existing automation IDs, actions, `smoke.Case`, and helpers. Before driving a control, confirm its semantics expose a stable ID, role, label, current value or checked state, selected state when relevant, and the correct action. If that contract is missing, modify the smallest shared owning UI component to add a stable automation ID or semantic action, then add a focused component test for that contract. The semantic action must follow the real user interaction path; do not add a test-only bypass around product behavior.
-4. Add the case under a functional path such as `wox.core/test/smoke/launcher/query/plugin/calculator/`. Use the next unused three-digit number without renumbering existing cases:
+4. Add the case under a functional path such as `wox.core/test/smoke/launcher/query/plugin/calculator/`. Settings cases must live under the product-facing Settings section that owns the control, for example `wox.core/test/smoke/setting/ui/` for controls in the UI section; do not place them under a generic or backend/controller-derived path just because they share persisted settings code. Use the next unused three-digit number without renumbering existing cases:
    - File: `NNN_descriptive_name_test.go`
    - Function: `TestNNNDescriptiveName`
    - Build constraint: `//go:build wox_ui_smoke`

@@ -280,6 +280,16 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 		},
 		Child: editor,
 	}
+	if props.CompletionSuffix != "" {
+		editor = woxwidget.Stack{Width: props.Width, Height: contentHeight, Children: []woxwidget.StackChild{
+			{Child: editor},
+			{Child: woxwidget.Semantics{
+				Key: "launcher-query-completion-key", AutomationID: "launcher.query.completion", Role: woxui.AccessibilityRoleText,
+				Label: "Query completion", Value: props.CompletionSuffix, ReadOnly: true, LiveRegion: woxui.AccessibilityLiveRegionPolite,
+				Child: woxwidget.Container{},
+			}},
+		}}
+	}
 	keepVisible := &woxwidget.ScrollRange{Start: float32(props.CaretLine) * lineHeight, End: float32(props.CaretLine)*lineHeight + props.CaretHeight}
 	editor = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "launcher-query-scroll", Content: editor, Width: props.Width, Height: props.Height, ContentHeight: contentHeight,

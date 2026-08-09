@@ -18,17 +18,24 @@ import (
 // OpenGeneralSettingsAndReadChoice opens General settings and returns one persisted choice label.
 func OpenGeneralSettingsAndReadChoice(t *testing.T, ctx context.Context, client *automationdriver.Client, settingKey string) string {
 	t.Helper()
-	if err := client.OpenSettings(ctx, "/general"); err != nil {
-		t.Fatalf("open General settings: %v", err)
+	return OpenSettingsAndReadChoice(t, ctx, client, "/general", settingKey)
+}
+
+// OpenSettingsAndReadChoice opens a Settings section and returns one persisted choice label.
+func OpenSettingsAndReadChoice(t *testing.T, ctx context.Context, client *automationdriver.Client, path, settingKey string) string {
+	t.Helper()
+	if err := client.OpenSettings(ctx, path); err != nil {
+		t.Fatalf("open settings %q: %v", path, err)
 	}
 	controlID := "setting-choice-" + settingKey
+	pageID := "settings.page." + strings.TrimPrefix(path, "/")
 	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, pageFound := automationdriver.Find(snapshot, "settings.page.general")
+		_, pageFound := automationdriver.Find(snapshot, pageID)
 		_, choiceFound := automationdriver.Find(snapshot, controlID)
 		return pageFound && choiceFound
 	})
 	if err != nil {
-		t.Fatalf("wait for General setting %q: %v", settingKey, err)
+		t.Fatalf("wait for setting %q on %q: %v", settingKey, path, err)
 	}
 	choice, _ := automationdriver.Find(snapshot, controlID)
 	return choice.Value
@@ -37,17 +44,24 @@ func OpenGeneralSettingsAndReadChoice(t *testing.T, ctx context.Context, client 
 // OpenGeneralSettingsAndReadSwitch opens General settings and returns one persisted boolean value.
 func OpenGeneralSettingsAndReadSwitch(t *testing.T, ctx context.Context, client *automationdriver.Client, settingKey string) bool {
 	t.Helper()
-	if err := client.OpenSettings(ctx, "/general"); err != nil {
-		t.Fatalf("open General settings: %v", err)
+	return OpenSettingsAndReadSwitch(t, ctx, client, "/general", settingKey)
+}
+
+// OpenSettingsAndReadSwitch opens a Settings section and returns one persisted switch value.
+func OpenSettingsAndReadSwitch(t *testing.T, ctx context.Context, client *automationdriver.Client, path, settingKey string) bool {
+	t.Helper()
+	if err := client.OpenSettings(ctx, path); err != nil {
+		t.Fatalf("open settings %q: %v", path, err)
 	}
 	controlID := "setting-switch-" + settingKey
+	pageID := "settings.page." + strings.TrimPrefix(path, "/")
 	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-		_, pageFound := automationdriver.Find(snapshot, "settings.page.general")
+		_, pageFound := automationdriver.Find(snapshot, pageID)
 		_, switchFound := automationdriver.Find(snapshot, controlID)
 		return pageFound && switchFound
 	})
 	if err != nil {
-		t.Fatalf("wait for General switch %q: %v", settingKey, err)
+		t.Fatalf("wait for switch %q on %q: %v", settingKey, path, err)
 	}
 	control, _ := automationdriver.Find(snapshot, controlID)
 	return control.Checked
@@ -113,30 +127,42 @@ func SelectSettingChoiceByIndex(t *testing.T, ctx context.Context, client *autom
 // RestoreGeneralSettingChoice returns one shared General setting to its previous value.
 func RestoreGeneralSettingChoice(t *testing.T, client *automationdriver.Client, settingKey, previousValue string) {
 	t.Helper()
+	RestoreSettingChoice(t, client, "/general", settingKey, previousValue)
+}
+
+// RestoreSettingChoice restores one shared Settings choice through its owning section.
+func RestoreSettingChoice(t *testing.T, client *automationdriver.Client, path, settingKey, previousValue string) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := client.Hide(ctx); err != nil {
-		t.Errorf("hide active window before restoring General setting %q: %v", settingKey, err)
+		t.Errorf("hide active window before restoring setting %q: %v", settingKey, err)
 	}
-	OpenGeneralSettingsAndReadChoice(t, ctx, client, settingKey)
+	OpenSettingsAndReadChoice(t, ctx, client, path, settingKey)
 	SelectSettingChoiceByLabel(t, ctx, client, "setting-choice-"+settingKey, previousValue)
 	if err := client.Hide(ctx); err != nil {
-		t.Errorf("close General settings after restoring %q: %v", settingKey, err)
+		t.Errorf("close settings after restoring %q: %v", settingKey, err)
 	}
 }
 
 // RestoreGeneralSettingSwitch returns one shared General switch to its previous value.
 func RestoreGeneralSettingSwitch(t *testing.T, client *automationdriver.Client, settingKey string, previousValue bool) {
 	t.Helper()
+	RestoreSettingSwitch(t, client, "/general", settingKey, previousValue)
+}
+
+// RestoreSettingSwitch restores one shared Settings switch through its owning section.
+func RestoreSettingSwitch(t *testing.T, client *automationdriver.Client, path, settingKey string, previousValue bool) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := client.Hide(ctx); err != nil {
-		t.Errorf("hide active window before restoring General switch %q: %v", settingKey, err)
+		t.Errorf("hide active window before restoring switch %q: %v", settingKey, err)
 	}
-	OpenGeneralSettingsAndReadSwitch(t, ctx, client, settingKey)
+	OpenSettingsAndReadSwitch(t, ctx, client, path, settingKey)
 	SetSettingSwitch(t, ctx, client, settingKey, previousValue)
 	if err := client.Hide(ctx); err != nil {
-		t.Errorf("close General settings after restoring switch %q: %v", settingKey, err)
+		t.Errorf("close settings after restoring switch %q: %v", settingKey, err)
 	}
 }
 
