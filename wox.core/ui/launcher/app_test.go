@@ -666,6 +666,19 @@ func TestUpdatedResultBoundaryKeysFollowFieldUpdates(t *testing.T) {
 	}
 }
 
+func TestResultPreviewBecameVisible(t *testing.T) {
+	preview := &plugin.WoxPreview{PreviewType: "markdown", PreviewData: "translated text"}
+	if !resultPreviewBecameVisible(queryPreview{}, preview) {
+		t.Fatal("empty preview should require bounds refresh when content first arrives")
+	}
+	if resultPreviewBecameVisible(queryPreview{PreviewData: "first chunk"}, preview) {
+		t.Fatal("subsequent streaming preview updates should not recalculate window bounds")
+	}
+	if resultPreviewBecameVisible(queryPreview{}, nil) {
+		t.Fatal("missing preview update should not recalculate window bounds")
+	}
+}
+
 func TestMediaPreviewBypassesPreparedSectionBoundary(t *testing.T) {
 	app := &App{}
 	result := queryResult{Preview: queryPreview{PreviewType: "media", PreviewData: `{"title":"Track"}`}}

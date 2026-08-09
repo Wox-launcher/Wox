@@ -291,9 +291,19 @@ func (a *App) RefreshAccountStatus(_ context.Context) error {
 // UpdateResult patches the visible result with one already-polished core snapshot.
 func (a *App) UpdateResult(_ context.Context, result plugin.UpdatableResult) (bool, error) {
 	updated := false
+	previewBecameVisible := false
 	err := a.runOnUI("apply result update", func() {
+		for index := range a.results {
+			if a.results[index].ID == result.Id {
+				previewBecameVisible = index == a.selected && resultPreviewBecameVisible(a.results[index].Preview, result.Preview)
+				break
+			}
+		}
 		updated = a.applyTypedResultUpdate(result)
 	})
+	if err == nil && updated && previewBecameVisible {
+		err = a.applyWindowBounds()
+	}
 	return updated, err
 }
 
@@ -501,6 +511,11 @@ func (a *App) applyTypedCloudSyncProgress(progress cloudsync.CloudSyncProgress) 
 	if !progress.Active {
 		util.Go(a.lifecycleCtx, "reload cloud sync after progress", a.reloadCloudSyncSilently)
 	}
+}
+
+// resultPreviewBecameVisible identifies the one layout-affecting transition in a streaming preview.
+func resultPreviewBecameVisible(previous queryPreview, update *plugin.WoxPreview) bool {
+	return update != nil && previous.PreviewData == "" && update.PreviewData != ""
 }
 
 func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
