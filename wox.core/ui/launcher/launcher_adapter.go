@@ -915,21 +915,11 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 	}
 	actions := make([]launcherview.LauncherToolbarAction, 0)
 	entries := unifiedActionPanelEntries(snapshot.results, snapshot.selected, snapshot.toolbarMsg)
-	for _, source := range []actionPanelSource{actionPanelSourceResult, actionPanelSourceToolbar} {
-		for _, entry := range entries {
-			if entry.Source != source || strings.TrimSpace(entry.Hotkey) == "" {
-				continue
-			}
-			actions = append(actions, launcherview.LauncherToolbarAction{
-				ID: "toolbar-action-" + entry.ID, Label: a.translate(entry.Name), HotkeyLabels: formatHotkeyLabels(entry.Hotkey), OnTap: func() {
-					if entry.Source == actionPanelSourceToolbar {
-						a.activateToolbarActionForMessage(entry.ToolbarMessageID, entry.ToolbarMessageAction)
-						return
-					}
-					a.activateAction(entry.ResultIndex, entry.ActionIndex)
-				},
-			})
-		}
+	for _, entry := range toolbarActionEntries(entries, snapshot.toolbarMsg != nil) {
+		actions = append(actions, launcherview.LauncherToolbarAction{
+			ID: "toolbar-action-" + entry.ID, Label: a.translate(entry.Name), HotkeyLabels: formatHotkeyLabels(entry.Hotkey),
+			OnTap: func() { a.activateActionPanelEntry(entry) },
+		})
 	}
 	if len(entries) > 0 {
 		actions = append(actions, launcherview.LauncherToolbarAction{

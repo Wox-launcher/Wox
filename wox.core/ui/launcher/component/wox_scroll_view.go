@@ -24,6 +24,8 @@ type ScrollViewProps struct {
 	AutomationID        string
 	Label               string
 	OnScroll            func(float32)
+	// OnOffsetChanged reports absolute offset changes made through a retained scroll controller.
+	OnOffsetChanged func(float32)
 	// OnGeometryChanged reports measured geometry when ContentHeight is omitted.
 	OnGeometryChanged func(viewport, content float32)
 }
@@ -174,9 +176,12 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 		scroll.Key = viewportKey
 		scroll.ID = string(viewportKey)
 		scroll.Controller = props.Controller
-		scroll.OnOffsetChanged = func(float32) {
+		scroll.OnOffsetChanged = func(offset float32) {
 			if state != nil && !props.HideScrollbar {
 				state.show(context)
+			}
+			if props.OnOffsetChanged != nil {
+				props.OnOffsetChanged(offset)
 			}
 		}
 	}
@@ -222,7 +227,7 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 				context.Invalidate()
 			}, Child: thumb}
 		}
-		children = append(children, woxwidget.StackChild{Left: max(float32(0), props.Width-14), Top: thumbTop, Child: thumb})
+		children = append(children, woxwidget.StackChild{Top: thumbTop, Right: 2, AnchorRight: true, Child: thumb})
 	}
 	var result woxwidget.Widget = woxwidget.Gesture{ID: string(props.Key), OnScrollHandled: func(delta woxui.Point) bool {
 		scrollDelta := -delta.Y

@@ -38,7 +38,10 @@ func TestSettingsRailKeepsCachedIconWhileSelectedTintLoads(t *testing.T) {
 
 	rail := app.buildSettingsRail(settingsSnapshot{tab: "appearance", palette: palette}, 260, 600, 1).(woxwidget.Stack)
 	railContainer := rail.Children[0].Child.(woxwidget.Container)
-	navigation := railContainer.Child.(woxwidget.Flex).Children[1].(woxwidget.Stack)
+	railContent := railContainer.Child.(woxwidget.LayoutBuilder).Build(woxui.Size{
+		Width: railContainer.Width - railContainer.Padding.Left - railContainer.Padding.Right, Height: railContainer.Height - railContainer.Padding.Top - railContainer.Padding.Bottom,
+	}).(woxwidget.Flex)
+	navigation := railContent.Children[1].(woxwidget.Stack)
 	scroll := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	rows := scroll.Content.(woxwidget.Flex)
 	row := rows.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
@@ -66,7 +69,9 @@ func TestSettingsSearchSelectedBuiltInIconUsesSelectedTextColor(t *testing.T) {
 	snapshot := settingsSnapshot{palette: palette, search: settingsSearchSnapshot{Query: woxui.TextEditingState{Text: "font"}}}
 
 	panel := app.buildSettingsSearchResultPanel(snapshot, 240, 200, 1).(woxwidget.Container)
-	props := panel.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	props := panel.Child.(woxwidget.LayoutBuilder).Build(woxui.Size{
+		Width: panel.Width - panel.Padding.Left - panel.Padding.Right, Height: panel.Height - panel.Padding.Top - panel.Padding.Bottom,
+	}).(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
 	icon := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Image)
 

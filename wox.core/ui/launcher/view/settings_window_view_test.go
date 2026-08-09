@@ -125,6 +125,21 @@ func TestSettingsTitleBarCloseOnlyOmitsWindowsMinimize(t *testing.T) {
 	}
 }
 
+func TestSettingsTitleBarWindowsUsesInsetStretchAndRightAnchors(t *testing.T) {
+	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{Width: 1200, Platform: "windows"}, "", "", nil, nil).(woxwidget.Stack)
+	title := titleBar.Children[1]
+	border := titleBar.Children[2]
+	minimize := titleBar.Children[3]
+	closeButton := titleBar.Children[4]
+
+	if title.Left != 40 || title.Right != 92 || !title.StretchWidth {
+		t.Fatalf("Windows title slot = left %.0f right %.0f stretch %v, want 40/92/true", title.Left, title.Right, title.StretchWidth)
+	}
+	if !border.StretchWidth || !border.AnchorBottom || !minimize.AnchorRight || minimize.Right != 46 || !closeButton.AnchorRight {
+		t.Fatalf("Windows chrome anchors = border %v/%v minimize %v/%.0f close %v, want true/true true/46 true", border.StretchWidth, border.AnchorBottom, minimize.AnchorRight, minimize.Right, closeButton.AnchorRight)
+	}
+}
+
 func TestSettingsWindowOverlayPreservesHoveredIdentity(t *testing.T) {
 	var overlayVisible bool
 	var hoverStates []bool

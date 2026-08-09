@@ -57,6 +57,7 @@ type Driver interface {
 	GoBack() error
 	GoForward() error
 	Reload() error
+	OpenDevTools() error
 	OpenInBrowser() error
 	NavigationState() (NavigationState, error)
 	Pointer(event PointerEvent) bool
@@ -161,6 +162,14 @@ func (c *Controller) Reload() error {
 		return ErrUnavailable
 	}
 	return c.driver.Reload()
+}
+
+// OpenDevTools opens the platform inspector for the active document.
+func (c *Controller) OpenDevTools() error {
+	if c == nil || c.driver == nil {
+		return ErrUnavailable
+	}
+	return c.driver.OpenDevTools()
 }
 
 // OpenInBrowser opens the active document in the system browser.

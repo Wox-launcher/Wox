@@ -128,7 +128,7 @@ func usageSummaryHeader(props UsageSettingsProps, width float32) (woxwidget.Widg
 		woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 21, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
 		woxwidget.Clip{Width: titleWidth, Height: 20, Child: woxwidget.Text{Value: props.Overview, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle}},
 	}}}
-	children := []woxwidget.StackChild{{Child: titleBlock}, {Left: max(float32(0), width-shareWidth), Child: share}}
+	children := []woxwidget.StackChild{{Child: titleBlock}, {AnchorRight: true, Child: share}}
 	selectorTop := float32(0)
 	if !wide {
 		selectorTop = 70

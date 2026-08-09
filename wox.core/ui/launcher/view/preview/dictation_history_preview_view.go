@@ -68,7 +68,6 @@ func DictationHistoryPreviewView(props DictationHistoryPreviewProps) woxwidget.W
 		woxwidget.Container{Width: innerWidth, Height: scaled(16)},
 		dictationRefinedText(props, innerWidth, scaled, accent),
 	}
-	contentHeight := scaled(18+16) + props.RefinedLayout.Size.Height
 
 	if strings.TrimSpace(props.OriginalText) != "" {
 		children = append(children,
@@ -77,7 +76,6 @@ func DictationHistoryPreviewView(props DictationHistoryPreviewProps) woxwidget.W
 			woxwidget.Container{Width: innerWidth, Height: scaled(12)},
 			woxwidget.TextBlock{Value: props.OriginalText, Width: innerWidth, Height: props.OriginalLayout.Size.Height, Style: woxui.TextStyle{Size: scaled(14)}, LineHeight: scaled(22), Color: dictationColorAlpha(props.Theme.PreviewText, dictationOriginalTextOpacity(props.IsChanged)), Layout: &props.OriginalLayout},
 		)
-		contentHeight += scaled(49+18+12) + props.OriginalLayout.Size.Height
 	}
 
 	// Flutter only exposes diagnostics for a complete raw/processed pair.
@@ -90,15 +88,13 @@ func DictationHistoryPreviewView(props DictationHistoryPreviewProps) woxwidget.W
 			woxwidget.Container{Width: innerWidth, Height: scaled(12)},
 			dictationAudioTrack("processed", props.ProcessedAudioLabel, props.ProcessedAudioPath, props.PlayLabel, props.PauseLabel, props.ProcessedPlayback, innerWidth, scaled, props.Theme, muted, props.OnPlayDiagnosticAudio),
 		)
-		contentHeight += scaled(49 + 18 + 14 + 102 + 12 + 102)
 	}
 
-	contentHeight = max(viewportHeight, contentHeight)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: scaled(26), Top: scaled(26), Right: scaled(26), Bottom: scaled(32)},
 		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: woxwidget.Key("dictation-history-preview-" + props.ID), Width: innerWidth, Height: viewportHeight, ContentHeight: contentHeight, Content: content,
+			Key: woxwidget.Key("dictation-history-preview-" + props.ID), Width: innerWidth, Height: viewportHeight, Content: content,
 			ThumbColor: dictationColorAlpha(muted, 0.58),
 		}),
 	}

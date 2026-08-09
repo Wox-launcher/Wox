@@ -155,14 +155,14 @@ func onboardingRail(props OnboardingProps, active int, height float32) woxwidget
 				Style: woxui.TextStyle{Size: 13}, LineHeight: 19, Color: props.Theme.ResultSubtitle,
 			},
 			woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-				Key: "onboarding-rail-scroll", Width: innerWidth, Height: listHeight, ContentHeight: max(listHeight, float32(len(rows))*58),
+				Key: "onboarding-rail-scroll", Width: innerWidth, Height: listHeight,
 				Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
 			}),
 		}},
 	}
 	return woxwidget.Stack{Width: OnboardingSidebarWidth, Height: height, Children: []woxwidget.StackChild{
 		{Child: content},
-		{Left: OnboardingSidebarWidth - 1, Child: woxwidget.Container{Width: 1, Height: height, Color: settingsColorAlpha(props.Theme.PreviewSplit, 128)}},
+		{AnchorRight: true, StretchHeight: true, Child: woxwidget.Container{Width: 1, Color: settingsColorAlpha(props.Theme.PreviewSplit, 128)}},
 	}}
 }
 
@@ -203,11 +203,11 @@ func onboardingRailStep(step OnboardingStep, index, active int, width float32, o
 	}
 	content := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxwidget.Align{Width: 30, Height: 58, Horizontal: 0.5, Vertical: 0.5, Child: node},
-		woxwidget.Container{
-			Width: width - 40, Height: 38, Radius: 8, Color: rowColor, BorderColor: border, BorderWidth: 1,
+		woxwidget.Expanded{Child: woxwidget.Container{
+			Height: 38, Radius: 8, Color: rowColor, BorderColor: border, BorderWidth: 1,
 			Padding: woxwidget.Insets{Left: 10, Top: 11, Right: 8},
-			Child:   woxwidget.TextBlock{Value: step.Title, Width: width - 58, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13, Weight: weight}, Color: labelColor},
-		},
+			Child:   woxwidget.TextBlock{Value: step.Title, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13, Weight: weight}, Color: labelColor},
+		}},
 	}}
 	id := "onboarding-step-" + step.ID
 	return woxwidget.Semantics{
@@ -282,7 +282,7 @@ func onboardingStepContent(props OnboardingProps, step OnboardingStep, width, he
 		Width: width, Height: height, Padding: woxwidget.UniformInsets(22),
 		Color: settingsColorAlpha(props.Theme.ResultTitle, 14), BorderColor: settingsColorAlpha(props.Theme.ResultSubtitle, 40), Theme: props.Theme,
 		Child: woxwidget.TextBlock{
-			Value: description, Width: width - 44, MaxLines: 4,
+			Value: description, MaxLines: 4,
 			Style: woxui.TextStyle{Size: 14}, LineHeight: 21, Color: props.Theme.ResultTitle,
 		},
 	})
@@ -353,10 +353,10 @@ func onboardingPermissions(props OnboardingProps, width, height float32) woxwidg
 						Value: permissionGlyph(permission.ID), Style: woxui.TextStyle{Size: 19}, Color: permissionColor(permission.Ready),
 					}},
 				},
-				woxwidget.Container{Width: max(float32(0), width-230), Height: rowHeight - 26, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
+				woxwidget.Expanded{Child: woxwidget.Container{Height: rowHeight - 26, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
 					woxwidget.Text{Value: permission.Title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
-					woxwidget.TextBlock{Value: permission.Description, Width: max(float32(0), width-230), Height: 38, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: props.Theme.ResultSubtitle},
-				}}},
+					woxwidget.TextBlock{Value: permission.Description, Height: 38, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: props.Theme.ResultSubtitle},
+				}}}},
 				woxwidget.Align{Width: 110, Height: rowHeight - 26, Horizontal: 1, Vertical: 0.5, Child: action},
 			}},
 		})
@@ -373,10 +373,10 @@ func onboardingGlance(props OnboardingProps, width, height float32) woxwidget.Wi
 	})
 	children := []woxwidget.Widget{
 		woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: width - 86, Height: 64, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 7, Children: []woxwidget.Widget{
+			woxwidget.Expanded{Child: woxwidget.Container{Height: 64, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 7, Children: []woxwidget.Widget{
 				woxwidget.Text{Value: props.Labels["glance.enable"], Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
-				woxwidget.TextBlock{Value: props.Labels["glance.enable.body"], Width: width - 86, Height: 38, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: props.Theme.ResultSubtitle},
-			}}},
+				woxwidget.TextBlock{Value: props.Labels["glance.enable.body"], Height: 38, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: props.Theme.ResultSubtitle},
+			}}}},
 			switchControl,
 		}},
 	}
@@ -395,7 +395,7 @@ func onboardingGlance(props OnboardingProps, width, height float32) woxwidget.Wi
 		})
 		children = append(children, woxwidget.Stack{Width: contentWidth, Height: 34, Children: []woxwidget.StackChild{
 			{Top: 7, Child: woxwidget.Text{Value: props.Labels["glance.primary"], Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}},
-			{Left: contentWidth - choiceWidth, Child: dropdown},
+			{AnchorRight: true, Child: dropdown},
 		}})
 	}
 	return woxcomponent.WoxPanel(woxcomponent.PanelProps{

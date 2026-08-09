@@ -30,6 +30,10 @@ func (w *platformWindow) webViewReload() error {
 	return w.webView.Reload()
 }
 
+func (w *platformWindow) webViewOpenDevTools() error {
+	return w.webView.OpenDevTools()
+}
+
 func (w *platformWindow) webViewOpenInBrowser() error {
 	return w.webView.OpenInBrowser()
 }

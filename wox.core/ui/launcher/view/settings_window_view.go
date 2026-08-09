@@ -152,9 +152,9 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 				children = append(children, woxwidget.StackChild{Left: 12, Top: 10, Child: woxwidget.Image{Source: props.AppIcon, Width: 20, Height: 20}})
 			}
 			children = append(children,
-				woxwidget.StackChild{Left: 40, Top: 9, Child: woxwidget.Container{Width: max(float32(0), props.Width-86), Height: 24, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
-				woxwidget.StackChild{Top: height - 1, Child: woxwidget.Container{Width: props.Width, Height: 1, Color: settingsTitleBarAlpha(props.Theme.PreviewSplit, 76)}},
-				woxwidget.StackChild{Left: max(float32(0), props.Width-46), Child: settingsWindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)},
+				woxwidget.StackChild{Left: 40, Top: 9, Right: 46, StretchWidth: true, Child: woxwidget.Container{Height: 24, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
+				woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: settingsTitleBarAlpha(props.Theme.PreviewSplit, 76)}},
+				woxwidget.StackChild{AnchorRight: true, Child: settingsWindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)},
 			)
 			break
 		}
@@ -162,10 +162,10 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 			children = append(children, woxwidget.StackChild{Left: 12, Top: 10, Child: woxwidget.Image{Source: props.AppIcon, Width: 20, Height: 20}})
 		}
 		children = append(children,
-			woxwidget.StackChild{Left: 40, Top: 9, Child: woxwidget.Container{Width: max(float32(0), props.Width-132), Height: 24, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
-			woxwidget.StackChild{Top: height - 1, Child: woxwidget.Container{Width: props.Width, Height: 1, Color: settingsTitleBarAlpha(props.Theme.PreviewSplit, 76)}},
-			woxwidget.StackChild{Left: max(float32(0), props.Width-92), Child: settingsWindowsTitleBarButton("settings-window-minimize", "−", false, hovered == "minimize", props.Theme, props.OnMinimize, onHover)},
-			woxwidget.StackChild{Left: max(float32(0), props.Width-46), Child: settingsWindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)},
+			woxwidget.StackChild{Left: 40, Top: 9, Right: 92, StretchWidth: true, Child: woxwidget.Container{Height: 24, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
+			woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: settingsTitleBarAlpha(props.Theme.PreviewSplit, 76)}},
+			woxwidget.StackChild{Right: 46, AnchorRight: true, Child: settingsWindowsTitleBarButton("settings-window-minimize", "−", false, hovered == "minimize", props.Theme, props.OnMinimize, onHover)},
+			woxwidget.StackChild{AnchorRight: true, Child: settingsWindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)},
 		)
 	default:
 		closeButton := settingsWindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)
@@ -174,7 +174,7 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 		}
 		children = append(children,
 			woxwidget.StackChild{Left: max(float32(0), (props.Width-props.TitleWidth)/2), Top: 9, Child: woxwidget.Container{Width: props.TitleWidth, Height: 24, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
-			woxwidget.StackChild{Left: max(float32(0), props.Width-46), Child: closeButton},
+			woxwidget.StackChild{AnchorRight: true, Child: closeButton},
 		)
 	}
 	return woxwidget.Stack{Width: props.Width, Height: height, Children: children}

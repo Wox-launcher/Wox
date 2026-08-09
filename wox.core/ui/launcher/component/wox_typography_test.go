@@ -16,3 +16,11 @@ func TestSettingFieldUsesSharedTypography(t *testing.T) {
 		t.Fatalf("setting typography = %v/%v, want %v/%v", labelText.Style.Size, description.Style.Size, SettingsLabelFontSize, SettingsHelpFontSize)
 	}
 }
+
+func TestSettingFieldCanAllocateRemainingWidthToLabel(t *testing.T) {
+	field := WoxSettingField(SettingFieldProps{Label: "Backups", Width: 400, Child: woxwidget.Container{Width: 80}}).(woxwidget.Container)
+	row := field.Child.(woxwidget.Flex)
+	if _, ok := row.Children[0].(woxwidget.Expanded); !ok {
+		t.Fatalf("automatic setting label slot = %T, want Expanded", row.Children[0])
+	}
+}

@@ -11,7 +11,11 @@ func TestWoxScrollViewOpacityFollowsScrollActivity(t *testing.T) {
 	props := ScrollViewProps{Key: "test-scroll", Width: 100, Height: 80, ContentHeight: 160, ThumbColor: woxui.Color{A: 255}}
 	state := &scrollViewState{}
 	stack := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture).Child.(woxwidget.Stack)
-	animation := stack.Children[1].Child.(woxwidget.AnimatedFloat)
+	scrollbar := stack.Children[1]
+	if !scrollbar.AnchorRight || scrollbar.Right != 2 {
+		t.Fatalf("scrollbar anchor = %v right %.0f, want true/2", scrollbar.AnchorRight, scrollbar.Right)
+	}
+	animation := scrollbar.Child.(woxwidget.AnimatedFloat)
 	if animation.Target != 0 {
 		t.Fatalf("idle scrollbar opacity target = %.0f, want 0", animation.Target)
 	}
@@ -110,7 +114,11 @@ func TestWoxScrollViewOwnsUncontrolledScrollController(t *testing.T) {
 
 func TestWoxScrollViewAcceptsRetainedScrollController(t *testing.T) {
 	controller := woxwidget.NewScrollController(0)
-	props := ScrollViewProps{Key: "controlled", Width: 100, Height: 80, ContentHeight: 160, Controller: controller}
+	reportedOffset := float32(0)
+	props := ScrollViewProps{
+		Key: "controlled", Width: 100, Height: 80, ContentHeight: 160, Controller: controller,
+		OnOffsetChanged: func(offset float32) { reportedOffset = offset },
+	}
 	state := &scrollViewState{}
 	stack := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture).Child.(woxwidget.Stack)
 	scroll := stack.Children[0].Child.(woxwidget.ScrollView)
@@ -119,8 +127,8 @@ func TestWoxScrollViewAcceptsRetainedScrollController(t *testing.T) {
 		t.Fatalf("retained controller = %p callback %v, want %p/non-nil", scroll.Controller, scroll.OnOffsetChanged != nil, controller)
 	}
 	scroll.OnOffsetChanged(20)
-	if !state.visible || state.hideTimer == nil {
-		t.Fatalf("controller activity = visible %v timer %v, want true/non-nil", state.visible, state.hideTimer)
+	if !state.visible || state.hideTimer == nil || reportedOffset != 20 {
+		t.Fatalf("controller activity = visible %v timer %v offset %.0f, want true/non-nil/20", state.visible, state.hideTimer, reportedOffset)
 	}
 	state.Dispose()
 }

@@ -147,7 +147,7 @@ func TestChatHistoryCatalogUsesFullHeightDrawerGeometry(t *testing.T) {
 		Width: 260, Height: 600, Key: "history", ShowNew: true, NewLabel: "New Chat", ContentHeight: 576, Theme: theme,
 		Items: []ChatCatalogItemProps{{SelectID: "chat", DeleteID: "delete", Kind: "history", Title: "Suzhou", GroupLabel: "Today", Selected: true, OnSelect: func() {}, OnDelete: func() {}}},
 	}).(woxwidget.Stack)
-	if drawer.Width != 260 || drawer.Height != 600 || len(drawer.Children) != 2 || drawer.Children[1].Left != 259 {
+	if drawer.Width != 260 || drawer.Height != 600 || len(drawer.Children) != 2 || !drawer.Children[1].AnchorRight {
 		t.Fatalf("history drawer = width %.0f, height %.0f, children %+v", drawer.Width, drawer.Height, drawer.Children)
 	}
 	panel := drawer.Children[0].Child.(woxwidget.Container)

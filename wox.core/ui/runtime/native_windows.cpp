@@ -1008,6 +1008,15 @@ struct WoxWindowsWebView {
     return webview_method<Reload>(active->core, 31)(active->core);
   }
 
+  HRESULT open_dev_tools() {
+    if (active == nullptr || active->core == nullptr) {
+      return E_FAIL;
+    }
+    // OpenDevToolsWindow is slot 51 on the stable base ICoreWebView2 interface.
+    using OpenDevToolsWindow = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
+    return webview_method<OpenDevToolsWindow>(active->core, 51)(active->core);
+  }
+
   HRESULT open_in_browser() {
     if (active == nullptr || active->core == nullptr) {
       return E_FAIL;
@@ -1127,9 +1136,10 @@ struct WoxWindowsWebView {
   }
 
   void configure_script(WoxWindowsWebViewSession *session) {
+    // WebView2 runs document-created scripts before HTML parsing, so attach CSS as soon as the parser creates a root node.
     // Global page routers may always prevent Escape, so only an observable page transition claims it.
     std::wstring script = L"(()=>{const c=" + javascript_string(session->signature) +
-                          L";if(c){let s=document.getElementById('wox-webview-preview-style');if(!s){s=document.createElement('style');s.id='wox-webview-preview-style';(document.head||document.documentElement).appendChild(s)}s.textContent=c}"
+                          L";if(c){const apply=()=>{const root=document.head||document.documentElement;if(!root)return false;let s=document.getElementById('wox-webview-preview-style');if(!s){s=document.createElement('style');s.id='wox-webview-preview-style';root.appendChild(s)}s.textContent=c;return true};if(!apply()){const observer=new MutationObserver(()=>{if(apply())observer.disconnect()});observer.observe(document,{childList:true})}}"
                           L"if(window.__woxUnhandledEscapeInstalled__)return;window.__woxUnhandledEscapeInstalled__=true;document.addEventListener('keydown',e=>{if(e.key!=='Escape'||e.repeat)return;const f=document.activeElement;const d=n=>!n?'none':(n.tagName||'node').toLowerCase()+(n.type?'[type='+n.type+']':'');let m=false;const o=new MutationObserver(()=>{m=true});if(document.documentElement)o.observe(document.documentElement,{attributes:true,childList:true,characterData:true,subtree:true});setTimeout(()=>{o.disconnect();const a=document.activeElement;const r=(f&&f!==a)?'page-focus-changed':m?'page-dom-changed':e.defaultPrevented?'page-prevented-no-change-forwarded':'page-forwarded';window.chrome.webview.postMessage('wox-escape-diagnostic:'+r+' before='+d(f)+' after='+d(a));if(r==='page-forwarded'||r==='page-prevented-no-change-forwarded')window.chrome.webview.postMessage('wox-unhandled-escape')},0)},true)})()";
     session->script_pending = true;
     auto *handler = new WoxScriptCompletedHandler(this, session);
@@ -1527,6 +1537,10 @@ extern "C" int32_t wox_windows_webview_go_forward(WoxWindowsWebView *webview) {
 
 extern "C" int32_t wox_windows_webview_reload(WoxWindowsWebView *webview) {
   return webview != nullptr ? webview->reload() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_open_dev_tools(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->open_dev_tools() : E_INVALIDARG;
 }
 
 extern "C" int32_t wox_windows_webview_open_in_browser(WoxWindowsWebView *webview) {

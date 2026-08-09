@@ -328,7 +328,7 @@ func themeEditorPreviewWindow(props ThemeEditorSettingsProps, width, height floa
 		woxwidget.StackChild{Left: props.PreviewGeometry.AppPadding.Left, Top: props.PreviewGeometry.AppPadding.Top, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 			themeEditorPreviewQuery(props, contentWidth, queryHeight), body,
 		}}},
-		woxwidget.StackChild{Top: height - toolbarHeight, Child: themeEditorPreviewToolbar(props, width, toolbarHeight)},
+		woxwidget.StackChild{AnchorBottom: true, Child: themeEditorPreviewToolbar(props, width, toolbarHeight)},
 		woxwidget.StackChild{Child: woxwidget.Container{Width: width, Height: height, Radius: 12, BorderColor: borderColor, BorderWidth: borderWidth}},
 	)
 	return woxwidget.Stack{Width: width, Height: height, Children: children}
@@ -454,7 +454,7 @@ func themeEditorPreviewWithTextPanel(props ThemeEditorSettingsProps, width, heig
 		{Child: woxwidget.Container{Width: 1, Height: height, Color: props.DraftTheme.PreviewSplit}},
 	}
 	if props.FlashToken == "PreviewPropertyTitleColor" || props.FlashToken == "PreviewPropertyContentColor" {
-		panelChildren = append(panelChildren, woxwidget.StackChild{Left: 14, Top: height - 34, Child: themeEditorFlashOverlay(woxwidget.Container{Width: layout.InnerWidth, Height: 26}, layout.InnerWidth, 26, 8, true)})
+		panelChildren = append(panelChildren, woxwidget.StackChild{Left: 14, Bottom: 8, AnchorBottom: true, Child: themeEditorFlashOverlay(woxwidget.Container{Width: layout.InnerWidth, Height: 26}, layout.InnerWidth, 26, 8, true)})
 	}
 	if props.FlashToken == "PreviewSplitLineColor" {
 		panelChildren = append(panelChildren, woxwidget.StackChild{Child: themeEditorFlashOverlay(woxwidget.Container{Width: 3, Height: height, Color: props.DraftTheme.PreviewSplit}, 3, height, 0, true)})

@@ -131,10 +131,9 @@ func dataStorageField(props DataSettingsProps, width float32) woxwidget.Widget {
 			dataButton(props, "data-location-confirm", props.Labels.LocationChangeConfirm, woxcomponent.ButtonMuted, props.OnConfirmLocation),
 		}
 	}
-	labelWidth := max(float32(220), width-buttonsWidth-10)
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LocationTitle, Description: props.Labels.LocationDescription,
-		Width: width, Height: 78, LabelWidth: labelWidth, Gap: 10, Padding: woxwidget.Insets{Top: 5}, DescriptionMaxLines: 2, Theme: props.Theme,
+		Width: width, Height: 78, Gap: 10, Padding: woxwidget.Insets{Top: 5}, DescriptionMaxLines: 2, Theme: props.Theme,
 		Child: woxwidget.Container{Width: buttonsWidth, Height: 60, Padding: woxwidget.Insets{Top: 3}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: buttons}},
 	})
 }
@@ -143,7 +142,7 @@ func dataAutoBackupField(props DataSettingsProps, width float32) woxwidget.Widge
 	label := props.Labels.AutoBackupTitle
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: label, Description: props.Labels.AutoBackupDescription, Width: width, Height: 66,
-		LabelWidth: max(float32(220), width-54), Gap: 12, Padding: woxwidget.Insets{Top: 5}, Theme: props.Theme,
+		Gap: 12, Padding: woxwidget.Insets{Top: 5}, Theme: props.Theme,
 		Child: woxwidget.Container{Width: 42, Height: 48, Padding: woxwidget.Insets{Top: 4}, Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
 			ID: "data-auto-backup-switch", Label: label, Value: props.AutoBackup, OnChange: func(bool) {
 				if props.OnToggleAutoBackup != nil {
@@ -210,14 +209,13 @@ func dataLogLevelField(props DataSettingsProps, width float32) woxwidget.Widget 
 		level = "INFO"
 	}
 	controlWidth := min(float32(280), width*0.34)
-	labelWidth := max(float32(220), width-controlWidth-32)
 	choice := woxwidget.Keyed{Key: SettingChoiceAnchorKey("LogLevel"), Child: woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 		ID: "data-log-level", Label: props.Labels.LogLevelTitle, Value: level, Width: controlWidth, Height: 34,
 		Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140), Foreground: props.Theme.ResultTitle, Theme: props.Theme, OnTapBounds: props.OnOpenLogLevel,
 	})}
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LogLevelTitle, Description: props.Labels.LogLevelDescription,
-		Width: width, Height: 66, LabelWidth: labelWidth, Gap: 32, Padding: woxwidget.Insets{Top: 5}, Child: choice, Theme: props.Theme,
+		Width: width, Height: 66, Gap: 32, Padding: woxwidget.Insets{Top: 5}, Child: choice, Theme: props.Theme,
 	})
 }
 
@@ -231,7 +229,7 @@ func dataLogActionsField(props DataSettingsProps, width float32) woxwidget.Widge
 	actionsWidth := clearWidth + 10 + openWidth
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LogClearTitle, Description: props.Labels.LogClearDescription,
-		Width: width, Height: 66, LabelWidth: max(float32(220), width-actionsWidth-10), Gap: 10, Padding: woxwidget.Insets{Top: 5}, Theme: props.Theme,
+		Width: width, Height: 66, Gap: 10, Padding: woxwidget.Insets{Top: 5}, Theme: props.Theme,
 		Child: woxwidget.Container{Width: actionsWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 			dataButton(props, "data-log-clear", clearLabel, woxcomponent.ButtonOutline, props.OnClearLogs),
 			dataButton(props, "data-log-open", props.Labels.LogOpenButton, woxcomponent.ButtonOutline, props.OnOpenLog),

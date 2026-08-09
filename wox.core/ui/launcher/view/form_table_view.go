@@ -195,7 +195,6 @@ func formTableInlineHeader(props FormTableFieldProps, width float32) woxwidget.W
 	if !props.ReadOnly {
 		actionsWidth += 74
 	}
-	titleWidth := max(float32(0), width-actionsWidth-16)
 	var title woxwidget.Widget = woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle}
 	if props.DemoKind != "" && props.DemoIcon != nil {
 		title = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
@@ -217,17 +216,15 @@ func formTableInlineHeader(props FormTableFieldProps, width float32) woxwidget.W
 	}
 	leftChildren := make([]woxwidget.Widget, 0, 2)
 	if props.Title != "" || (props.DemoKind != "" && props.DemoIcon != nil) {
-		leftChildren = append(leftChildren, woxwidget.Container{Width: titleWidth, Height: 22, Child: title})
+		leftChildren = append(leftChildren, woxwidget.Container{Height: 22, Child: title})
 	}
 	if props.Description != "" {
 		leftChildren = append(leftChildren, woxwidget.TextBlock{
-			Value: props.Description, Width: titleWidth, MaxLines: 2, LineHeight: 16,
+			Value: props.Description, MaxLines: 2, LineHeight: 16,
 			Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle,
 		})
 	}
-	children := []woxwidget.Widget{
-		woxwidget.Container{Width: titleWidth, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: leftChildren}},
-	}
+	children := []woxwidget.Widget{woxwidget.Expanded{Child: woxwidget.Container{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: leftChildren}}}}
 	gap := float32(0)
 	if actionsWidth > 0 {
 		gap = 16
@@ -752,8 +749,8 @@ func FormTableList(props FormTableListProps) woxwidget.Widget {
 		}
 		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "form-table-list-scroll", Width: props.Width, Height: viewportHeight,
-			ContentHeight: max(viewportHeight, float32(len(rows))*formTableListRowHeight), KeepVisible: keepVisible,
-			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+			KeepVisible: keepVisible,
+			Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
 		})
 	}
 	status := props.Status
@@ -1036,9 +1033,9 @@ func formTableRowControl(props FormTableRowFieldProps, width, height float32) wo
 		}
 		return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 			recorder,
-			woxwidget.Align{Width: max(float32(0), width-recorderWidth-8), Height: height, Vertical: 0.5, Child: woxwidget.Text{
+			woxwidget.Expanded{Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{
 				Value: props.RecordingStatus, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
-			}},
+			}}},
 		}}
 	case "label":
 		return woxwidget.TextBlock{Value: props.Value, Width: width, Height: height, MaxLines: 1, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ActionHeader}
@@ -1239,7 +1236,7 @@ func formTableRowFocusableControl(props FormTableRowFieldProps, child woxwidget.
 func formTableRowValueControl(props FormTableRowFieldProps, width, height float32) woxwidget.Widget {
 	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
 		Width: width, Height: height, Radius: 4, BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1, Padding: woxwidget.Insets{Left: 10, Top: 8, Right: 9},
-		Child: woxwidget.TextBlock{Value: props.Value, Width: width - 19, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ActionText},
+		Child: woxwidget.TextBlock{Value: props.Value, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ActionText},
 	}}
 }
 

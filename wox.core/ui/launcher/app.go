@@ -1418,14 +1418,24 @@ func (a *App) activateResult(index int) {
 	if len(entries) == 0 {
 		return
 	}
-	entry := entries[0]
+	var entry actionPanelEntry
+	found := false
 	for _, candidate := range entries {
+		if candidate.Source == actionPanelSourceLocal {
+			continue
+		}
+		if !found {
+			entry = candidate
+			found = true
+		}
 		if candidate.IsDefault {
 			entry = candidate
 			break
 		}
 	}
-	a.activateActionPanelEntry(entry)
+	if found {
+		a.activateActionPanelEntry(entry)
+	}
 }
 
 func selectableIndex(results []queryResult) int {

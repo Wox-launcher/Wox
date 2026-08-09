@@ -65,17 +65,11 @@ func HotkeyOverviewPreviewView(props HotkeyOverviewPreviewProps) woxwidget.Widge
 		content = woxwidget.Align{Width: innerWidth, Height: bodyHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: props.Empty, Style: woxui.TextStyle{Size: scaled(12)}, Color: mutedColor}}
 	} else {
 		sections := make([]woxwidget.Widget, 0, len(filtered))
-		contentHeight := float32(0)
-		for index, section := range filtered {
-			sectionWidget, sectionHeight := hotkeyOverviewSection(section, innerWidth, scale, textColor, mutedColor, borderColor)
-			sections = append(sections, sectionWidget)
-			contentHeight += sectionHeight
-			if index < len(filtered)-1 {
-				contentHeight += scaled(14)
-			}
+		for _, section := range filtered {
+			sections = append(sections, hotkeyOverviewSection(section, innerWidth, scale, textColor, mutedColor, borderColor))
 		}
 		content = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: "hotkey-overview-scroll", Width: innerWidth, Height: bodyHeight, ContentHeight: contentHeight,
+			Key: "hotkey-overview-scroll", Width: innerWidth, Height: bodyHeight,
 			ThumbColor: mutedColor, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: scaled(14), Children: sections},
 		})
 	}
@@ -123,7 +117,7 @@ func hotkeyOverviewCountTag(text string, width, scale float32, accent woxui.Colo
 	}
 }
 
-func hotkeyOverviewSection(section HotkeyOverviewPreviewSection, width, scale float32, textColor, mutedColor, borderColor woxui.Color) (woxwidget.Widget, float32) {
+func hotkeyOverviewSection(section HotkeyOverviewPreviewSection, width, scale float32, textColor, mutedColor, borderColor woxui.Color) woxwidget.Widget {
 	rows := make([]woxwidget.Widget, 0, len(section.Entries)*2)
 	cardHeight := float32(0)
 	for index, entry := range section.Entries {
@@ -139,8 +133,7 @@ func hotkeyOverviewSection(section HotkeyOverviewPreviewSection, width, scale fl
 		}
 	}
 	card := woxwidget.Container{Width: width, Height: cardHeight, Radius: 8 * scale, BorderColor: borderColor, BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}}
-	sectionHeight := 17*scale + 7*scale + cardHeight
-	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 7 * scale, Children: []woxwidget.Widget{woxwidget.Container{Width: width, Height: 17 * scale, Child: woxwidget.Text{Value: section.Title, Style: woxui.TextStyle{Size: 12 * scale, Weight: woxui.FontWeightSemibold}, Color: textColor}}, card}}, sectionHeight
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 7 * scale, Children: []woxwidget.Widget{woxwidget.Container{Width: width, Height: 17 * scale, Child: woxwidget.Text{Value: section.Title, Style: woxui.TextStyle{Size: 12 * scale, Weight: woxui.FontWeightSemibold}, Color: textColor}}, card}}
 }
 
 func hotkeyOverviewEntryRow(entry HotkeyOverviewPreviewEntry, width, height, scale float32, textColor, mutedColor woxui.Color) woxwidget.Widget {

@@ -218,7 +218,6 @@ func (a *App) buildHotkeyOverviewPreview(data hotkeyOverviewPreviewData, palette
 			entry(primaryHotkey("r"), a.translate("i18n:ui_hotkey_overview_webview_refresh"), previewScope, builtinSource, "", true),
 			entry(primaryHotkey("["), a.translate("i18n:ui_hotkey_overview_webview_back"), previewScope, builtinSource, "", true),
 			entry(primaryHotkey("]"), a.translate("i18n:ui_hotkey_overview_webview_forward"), previewScope, builtinSource, "", true),
-			entry(primaryHotkey("alt+i"), a.translate("i18n:ui_hotkey_overview_webview_inspector"), previewScope, builtinSource, "", true),
 		}},
 	}
 	queryHotkeys := previewview.HotkeyOverviewPreviewSection{Title: a.translate("i18n:ui_hotkey_overview_query_hotkeys")}

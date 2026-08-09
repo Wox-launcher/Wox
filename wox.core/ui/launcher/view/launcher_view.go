@@ -54,10 +54,10 @@ func BorderDragMoveArea(width, height, borderWidth float32, child woxwidget.Widg
 	}
 	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 		{Child: child},
-		{Top: 0, Child: woxwidget.Gesture{ID: "launcher-border-drag-top", OnDragStart: onDragStart, Child: woxwidget.Container{Width: width, Height: borderWidth}}},
-		{Top: max(0, height-borderWidth), Child: woxwidget.Gesture{ID: "launcher-border-drag-bottom", OnDragStart: onDragStart, Child: woxwidget.Container{Width: width, Height: borderWidth}}},
-		{Left: 0, Top: borderWidth, Child: woxwidget.Gesture{ID: "launcher-border-drag-left", OnDragStart: onDragStart, Child: woxwidget.Container{Width: borderWidth, Height: max(0, height-borderWidth*2)}}},
-		{Left: max(0, width-borderWidth), Top: borderWidth, Child: woxwidget.Gesture{ID: "launcher-border-drag-right", OnDragStart: onDragStart, Child: woxwidget.Container{Width: borderWidth, Height: max(0, height-borderWidth*2)}}},
+		{StretchWidth: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-top", OnDragStart: onDragStart, Child: woxwidget.Container{Height: borderWidth}}},
+		{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-bottom", OnDragStart: onDragStart, Child: woxwidget.Container{Height: borderWidth}}},
+		{Top: borderWidth, Bottom: borderWidth, StretchHeight: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-left", OnDragStart: onDragStart, Child: woxwidget.Container{Width: borderWidth}}},
+		{Top: borderWidth, Right: 0, Bottom: borderWidth, AnchorRight: true, StretchHeight: true, Child: woxwidget.Gesture{ID: "launcher-border-drag-right", OnDragStart: onDragStart, Child: woxwidget.Container{Width: borderWidth}}},
 	}}
 }
 
@@ -107,7 +107,7 @@ func (s *previewHoverCloseState) Build(context woxwidget.StateContext, widget an
 				}
 			},
 		})
-		layers = append(layers, woxwidget.StackChild{Left: max(float32(0), props.Width-48), Top: 20, Child: button})
+		layers = append(layers, woxwidget.StackChild{Top: 20, Right: 20, AnchorRight: true, Child: button})
 	}
 	return woxwidget.Gesture{ID: "launcher-preview-hover", OnHover: func(inside bool) {
 		if inside != s.hovered {

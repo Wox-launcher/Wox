@@ -368,15 +368,17 @@ func (w Expanded) layout(ctx context, available constraints) *node {
 	return w.Child.layout(ctx, available)
 }
 
-// StackChild positions one child relative to its stack's top-left corner.
+// StackChild positions one child by insets; stretch fills between opposite insets and takes precedence over anchoring.
 type StackChild struct {
-	Left         float32
-	Top          float32
-	Right        float32
-	Bottom       float32
-	AnchorRight  bool
-	AnchorBottom bool
-	Child        Widget
+	Left          float32
+	Top           float32
+	Right         float32
+	Bottom        float32
+	AnchorRight   bool
+	AnchorBottom  bool
+	StretchWidth  bool
+	StretchHeight bool
+	Child         Widget
 }
 
 // Stack overlays children in declaration order; later children receive pointer events first.
@@ -545,13 +547,25 @@ func (w Stack) layout(ctx context, available constraints) *node {
 		if positioned.Child == nil {
 			continue
 		}
-		child := positioned.Child.layout(ctx, constraints{width: max(0, width-positioned.Left), height: max(0, height-positioned.Top)})
+		childWidth := max(float32(0), width-positioned.Left)
+		if positioned.StretchWidth {
+			childWidth = max(float32(0), childWidth-positioned.Right)
+		}
+		childHeight := max(float32(0), height-positioned.Top)
+		if positioned.StretchHeight {
+			childHeight = max(float32(0), childHeight-positioned.Bottom)
+		}
+		child := positioned.Child.layout(ctx, constraints{width: childWidth, height: childHeight})
 		x := positioned.Left
 		y := positioned.Top
-		if positioned.AnchorRight {
+		if positioned.StretchWidth {
+			child.bounds.Width = childWidth
+		} else if positioned.AnchorRight {
 			x = max(float32(0), width-positioned.Right-child.bounds.Width)
 		}
-		if positioned.AnchorBottom {
+		if positioned.StretchHeight {
+			child.bounds.Height = childHeight
+		} else if positioned.AnchorBottom {
 			y = max(float32(0), height-positioned.Bottom-child.bounds.Height)
 		}
 		child.place(x, y)

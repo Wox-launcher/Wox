@@ -10,11 +10,26 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func settingsRailContent(rail woxwidget.Container) woxwidget.Flex {
+	builder := rail.Child.(woxwidget.LayoutBuilder)
+	return builder.Build(woxui.Size{
+		Width: rail.Width - rail.Padding.Left - rail.Padding.Right, Height: rail.Height - rail.Padding.Top - rail.Padding.Bottom,
+	}).(woxwidget.Flex)
+}
+
+func settingsSearchScroll(panel woxwidget.Container) woxcomponent.ScrollViewProps {
+	builder := panel.Child.(woxwidget.LayoutBuilder)
+	built := builder.Build(woxui.Size{
+		Width: panel.Width - panel.Padding.Left - panel.Padding.Right, Height: panel.Height - panel.Padding.Top - panel.Padding.Bottom,
+	}).(woxwidget.Stateful)
+	return built.Widget.(woxcomponent.ScrollViewProps)
+}
+
 func TestSettingsRailMatchesFlutterSearchToNavigationGap(t *testing.T) {
 	rail := SettingsRail(SettingsRailProps{
 		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.Theme{},
 	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
-	content := rail.Child.(woxwidget.Flex)
+	content := settingsRailContent(rail)
 
 	if content.Gap != 4 {
 		t.Fatalf("settings rail search-to-navigation gap = %v, want Flutter's 4px navigation inset", content.Gap)
@@ -27,7 +42,7 @@ func TestSettingsRailSelectedItemUsesThemeHighlight(t *testing.T) {
 		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.Theme{SelectedBackground: highlight},
 		Items: []SettingsNavItem{{ID: "themes.installed", Label: "Installed Themes", Selected: true}},
 	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
-	navigation := rail.Child.(woxwidget.Flex).Children[1].(woxwidget.Stack)
+	navigation := settingsRailContent(rail).Children[1].(woxwidget.Stack)
 	props := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 
@@ -44,7 +59,7 @@ func TestSettingsRailUsesSharedScrollWithoutScrollbar(t *testing.T) {
 	rail := SettingsRail(SettingsRailProps{
 		Width: 260, Height: 300, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Items: items, Theme: woxcomponent.Theme{},
 	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
-	navigation := rail.Child.(woxwidget.Flex).Children[1].(woxwidget.Stack)
+	navigation := settingsRailContent(rail).Children[1].(woxwidget.Stack)
 	props := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 
 	if !props.HideScrollbar {
@@ -76,7 +91,7 @@ func TestSettingsSearchResultsShowFlutterLeadingIconLayout(t *testing.T) {
 	if panel.Radius != 6 || panel.BorderColor != border || panel.BorderWidth != 1 {
 		t.Fatalf("search panel geometry = radius %.0f border %#v/%.0f, want Flutter 6px radius with theme divider", panel.Radius, panel.BorderColor, panel.BorderWidth)
 	}
-	props := panel.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	props := settingsSearchScroll(panel)
 	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
 	content := row.Child.(woxwidget.Flex)
 
@@ -102,7 +117,7 @@ func TestSettingsSearchResultsUseSelectedTextColors(t *testing.T) {
 		Theme:   woxcomponent.Theme{SelectedTitle: titleColor, SelectedSubtitle: subtitleColor},
 		Results: []SettingsSearchResult{{Title: "AI", Subtitle: "Settings section"}},
 	}).(woxwidget.Container)
-	props := panel.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	props := settingsSearchScroll(panel)
 	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
 	text := row.Child.(woxwidget.Flex)
 
@@ -119,7 +134,7 @@ func TestSettingsSearchResultsHideIconInNarrowPanel(t *testing.T) {
 		Width: 96, AvailableHeight: 200, Theme: woxcomponent.Theme{},
 		Results: []SettingsSearchResult{{Title: "General", Subtitle: "Setting", Icon: &woxui.Image{}}},
 	}).(woxwidget.Container)
-	props := panel.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	props := settingsSearchScroll(panel)
 	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
 
 	if content, ok := row.Child.(woxwidget.Flex); !ok || content.Axis != woxwidget.Vertical {
@@ -135,8 +150,7 @@ func TestSettingsSearchResultsUseSharedScrollbarWhenOverflowing(t *testing.T) {
 	panel := SettingsSearchResults(SettingsSearchResultsProps{
 		Width: 240, AvailableHeight: 200, Selected: 7, Theme: woxcomponent.Theme{}, Results: results,
 	}).(woxwidget.Container)
-	scrollbar := panel.Child.(woxwidget.Stateful)
-	props := scrollbar.Widget.(woxcomponent.ScrollViewProps)
+	props := settingsSearchScroll(panel)
 
 	if props.Key != "settings-search-results" || props.ContentHeight != 0 || props.KeepVisible == nil {
 		t.Fatalf("settings search scrollbar = key %q content hint %.0f keep visible %v, want measured shared overflow surface", props.Key, props.ContentHeight, props.KeepVisible)

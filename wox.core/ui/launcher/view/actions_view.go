@@ -219,7 +219,6 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		}})
 	}
 	listHeight := float32(visibleRows * ActionRowHeight)
-	listContentHeight := float32(len(rows) * ActionRowHeight)
 	var keepVisible *woxwidget.ScrollRange
 	for position, item := range props.Items {
 		if item.Index == props.Selected {
@@ -229,7 +228,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		}
 	}
 	actionList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "action-scroll", Controller: scrollController, KeepVisible: keepVisible, Width: innerWidth, Height: listHeight, ContentHeight: listContentHeight,
+		Key: "action-scroll", Controller: scrollController, KeepVisible: keepVisible, Width: innerWidth, Height: listHeight,
 		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.ActionHeader,
 	})
 	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{

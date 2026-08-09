@@ -179,9 +179,8 @@ func formAppPickerList(context woxwidget.StateContext, props FormAppPickerProps,
 				rows = append(rows, woxwidget.Container{Width: width, Height: 1, Color: formAppPickerAlpha(props.Theme.PreviewSplit, 128)})
 			}
 		}
-		contentHeight := float32(len(visible))*formAppPickerRowHeight + float32(len(visible)-1)
 		body = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: "form-table-app-scroll", Width: width, Height: height, ContentHeight: max(height, contentHeight), Controller: state.scrollController,
+			Key: "form-table-app-scroll", Width: width, Height: height, Controller: state.scrollController,
 			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
 		})
 	}

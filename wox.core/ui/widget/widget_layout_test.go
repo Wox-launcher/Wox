@@ -34,6 +34,22 @@ func TestUnretainedScrollViewReportsMeasuredGeometry(t *testing.T) {
 	}
 }
 
+func TestStackChildStretchesBetweenInsets(t *testing.T) {
+	builtWith := woxui.Size{}
+	root := (Stack{Width: 200, Height: 100, Children: []StackChild{{
+		Left: 20, Right: 30, Top: 10, Bottom: 15, StretchWidth: true, StretchHeight: true,
+		Child: LayoutBuilder{Build: func(size woxui.Size) Widget {
+			builtWith = size
+			return Container{Color: woxui.Color{A: 255}}
+		}},
+	}}}).layout(context{window: &fakeHostServices{}}, constraints{width: 200, height: 100})
+
+	child := root.children[0].bounds
+	if builtWith.Width != 150 || builtWith.Height != 75 || child.X != 20 || child.Y != 10 || child.Width != 150 || child.Height != 75 {
+		t.Fatalf("stretched stack child = constraints %+v bounds %+v, want 150x75 at 20,10", builtWith, child)
+	}
+}
+
 func TestFlexExpandedUsesRemainingMainAxisExtent(t *testing.T) {
 	root := (Flex{Axis: Horizontal, Gap: 10, Children: []Widget{
 		Container{Width: 20, Height: 12},

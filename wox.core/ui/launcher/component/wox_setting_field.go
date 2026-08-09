@@ -49,7 +49,11 @@ func WoxSettingField(props SettingFieldProps) woxwidget.Widget {
 			description,
 		}}}
 	}
+	labelSlot := label
+	if props.LabelWidth <= 0 {
+		labelSlot = woxwidget.Expanded{Child: label}
+	}
 	return woxwidget.Container{Width: props.Width, Height: height, Radius: props.Radius, Color: props.Background, Padding: props.Padding, Child: woxwidget.Flex{
-		Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{label, props.Child},
+		Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{labelSlot, props.Child},
 	}}
 }

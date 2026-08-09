@@ -32,7 +32,7 @@ func MarkdownPreviewView(props MarkdownPreviewProps) woxwidget.Widget {
 		Width: props.Width, Height: props.Height, Padding: woxwidget.UniformInsets(20),
 		Child: woxwidget.ScrollView{
 			Key: woxwidget.Key("markdown-scroll-" + props.ID), ID: "markdown-scroll-" + props.ID, InitialOffset: props.InitialOffset,
-			Width: innerWidth, Height: innerHeight, ContentHeight: innerHeight, Child: content,
+			Width: innerWidth, Height: innerHeight, Child: content,
 		},
 	}
 }

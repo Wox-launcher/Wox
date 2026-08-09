@@ -185,6 +185,15 @@ func TestFormTableRowDescriptionPreservesFlutterParagraphs(t *testing.T) {
 	}
 }
 
+func TestFormTableHotkeyStatusUsesRemainingControlWidth(t *testing.T) {
+	control := formTableRowControl(FormTableRowFieldProps{
+		ID: "hotkey", Kind: "hotkey", Recording: true, RecordingStatus: "Press a key", Theme: woxcomponent.Theme{},
+	}, 400, 40).(woxwidget.Flex)
+	if _, ok := control.Children[1].(woxwidget.Expanded); !ok {
+		t.Fatalf("hotkey recording status slot = %T, want Expanded", control.Children[1])
+	}
+}
+
 func TestFormTableRowMarkdownDescriptionReservesWrappedHeight(t *testing.T) {
 	description := "The query when the hotkey is triggered. Type { to insert dynamic variables.\n\nUsing the active browser URL variable requires the Wox Chrome extension: [Install Wox Chrome extension](https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh)"
 	plainHeight := FormTableRowFieldHeight("textbox", description, 1)

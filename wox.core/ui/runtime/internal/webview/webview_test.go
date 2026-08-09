@@ -9,6 +9,7 @@ type fakeDriver struct {
 	shown      []Content
 	hideCalls  int
 	resetCalls int
+	devTools   int
 	closeCalls int
 	showErr    error
 }
@@ -23,6 +24,7 @@ func (d *fakeDriver) Reset() error                              { d.resetCalls++
 func (d *fakeDriver) GoBack() error                             { return nil }
 func (d *fakeDriver) GoForward() error                          { return nil }
 func (d *fakeDriver) Reload() error                             { return nil }
+func (d *fakeDriver) OpenDevTools() error                       { d.devTools++; return nil }
 func (d *fakeDriver) OpenInBrowser() error                      { return nil }
 func (d *fakeDriver) NavigationState() (NavigationState, error) { return NavigationState{}, nil }
 func (d *fakeDriver) Pointer(event PointerEvent) bool           { return true }
@@ -45,6 +47,9 @@ func TestControllerOwnsVisibleLifecycle(t *testing.T) {
 	}
 	if err := controller.Reset(); err != nil || controller.Visible() || driver.resetCalls != 1 {
 		t.Fatalf("reset state = visible %v calls %d err %v", controller.Visible(), driver.resetCalls, err)
+	}
+	if err := controller.OpenDevTools(); err != nil || driver.devTools != 1 {
+		t.Fatalf("open developer tools calls = %d err %v", driver.devTools, err)
 	}
 	controller.Close()
 	if driver.closeCalls != 1 || controller.Visible() {

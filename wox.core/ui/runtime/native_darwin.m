@@ -881,9 +881,11 @@ static NSString *web_view_css_script(NSString *css) {
   }
   NSString *json = [[[NSString alloc] initWithData:json_data encoding:NSUTF8StringEncoding] autorelease];
   return [NSString stringWithFormat:
-                       @"(()=>{const c=%@[0];let s=document.getElementById('wox-webview-preview-style');"
-                        "if(!s){s=document.createElement('style');s.id='wox-webview-preview-style';"
-                        "(document.head||document.documentElement).appendChild(s)}s.textContent=c})()",
+                       @"(()=>{const c=%@[0];const apply=()=>{const root=document.head||document.documentElement;"
+                        "if(!root)return false;let s=document.getElementById('wox-webview-preview-style');"
+                        "if(!s){s=document.createElement('style');s.id='wox-webview-preview-style';root.appendChild(s)}"
+                        "s.textContent=c;return true};if(!apply()){const observer=new MutationObserver(()=>{"
+                        "if(apply())observer.disconnect()});observer.observe(document,{childList:true})}})()",
                        json];
 }
 
@@ -1348,7 +1350,8 @@ static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css)
   [configuration.userContentController addUserScript:shortcut_script];
   NSString *script = web_view_css_script(inject_css);
   if (script != nil) {
-    WKUserScript *user_script = [[[WKUserScript alloc] initWithSource:script injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES] autorelease];
+    // The CSS script waits for the root node, so document-start injection avoids a visible unstyled frame.
+    WKUserScript *user_script = [[[WKUserScript alloc] initWithSource:script injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES] autorelease];
     [configuration.userContentController addUserScript:user_script];
   }
   WKWebView *web_view = [[WKWebView alloc] initWithFrame:NSZeroRect configuration:configuration];
@@ -2659,6 +2662,42 @@ int32_t wox_darwin_window_webview_reload(WoxDarwinWindow *window) {
       return;
     }
     [window->active_web_view reload];
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_webview_open_dev_tools(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    WKWebView *web_view = window->active_web_view;
+    if (window->closed || web_view == nil) {
+      result = -1;
+      return;
+    }
+    if (@available(macOS 13.3, *)) {
+      web_view.inspectable = YES;
+    }
+    // isInspectable only exposes Safari's Develop menu; Wox's action must open the inspector directly.
+    [web_view.configuration.preferences setValue:@YES forKey:@"developerExtrasEnabled"];
+    id inspector = [web_view valueForKey:@"_inspector"];
+    SEL show_selector = NSSelectorFromString(@"show");
+    if (inspector != nil && [inspector respondsToSelector:show_selector]) {
+      [inspector performSelector:show_selector];
+      SEL detach_selector = NSSelectorFromString(@"detach");
+      if ([inspector respondsToSelector:detach_selector]) {
+        [inspector performSelector:detach_selector];
+      }
+      return;
+    }
+    SEL fallback_selector = NSSelectorFromString(@"_showWebInspector");
+    if ([web_view respondsToSelector:fallback_selector]) {
+      [web_view performSelector:fallback_selector];
+      return;
+    }
+    result = -1;
   });
   return result;
 }

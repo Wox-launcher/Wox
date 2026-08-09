@@ -401,7 +401,7 @@ func TestPluginEditorIntroUsesFlutterHintBoxStyle(t *testing.T) {
 	if len(content.Children) != 2 || content.Children[0].(woxwidget.Image).Source != icon {
 		t.Fatal("hint box should show the tinted info icon before its text")
 	}
-	if text := content.Children[1].(woxwidget.TextBlock); text.Style.Size != 13 {
+	if text := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.TextBlock); text.Style.Size != 13 {
 		t.Fatalf("hint text size = %v, want Flutter 13px", text.Style.Size)
 	}
 }
@@ -481,7 +481,7 @@ func TestFormTableInlineHeaderKeepsActionsNearTableWhenDescriptionIsPresent(t *t
 	if header.CrossAxisAlignment != woxwidget.CrossAxisEnd || header.Gap != 16 {
 		t.Fatalf("header alignment/gap = %v/%v, want bottom alignment with 16px action gap", header.CrossAxisAlignment, header.Gap)
 	}
-	left := header.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	left := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	description := left.Children[1].(woxwidget.TextBlock)
 	if description.Height != 0 || description.MaxLines != 2 || description.LineHeight != 16 {
 		t.Fatalf("description geometry = height %v, lines %d, line height %v; want intrinsic height up to two 16px lines", description.Height, description.MaxLines, description.LineHeight)
@@ -525,7 +525,7 @@ func TestFormTableInlineHeaderForwardsDemoHover(t *testing.T) {
 	})
 
 	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
-	title := header.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	title := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
 	trigger := title.Children[1].(woxwidget.Semantics)
 	if trigger.AutomationID != "settings-demo-query-hotkeys" {
 		t.Fatalf("demo automation ID = %q", trigger.AutomationID)

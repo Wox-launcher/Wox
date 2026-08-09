@@ -451,17 +451,21 @@ func pluginDetailHeader(props PluginHeaderProps, width, height float32, theme wo
 			actionsWidth += 4
 		}
 	}
-	identityWidth := max(float32(120), width-32-8)
-	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			icon,
-			woxwidget.Container{Width: identityWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 20, Weight: woxui.FontWeightSemibold}, Color: theme.QueryText},
-				woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle},
-			}}},
+	identity := woxwidget.Expanded{Child: woxwidget.Container{
+		Height: 40,
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 20, Weight: woxui.FontWeightSemibold}, Color: theme.QueryText},
+			woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle},
 		}},
+	}}
+	author := woxwidget.Expanded{Child: woxwidget.Container{
+		Height: 30, Padding: woxwidget.Insets{Left: 8, Top: 7},
+		Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle},
+	}}
+	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{icon, identity}},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: max(float32(0), width-actionsWidth), Height: 30, Padding: woxwidget.Insets{Left: 8, Top: 7}, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultSubtitle}},
+			author,
 			woxwidget.Container{Width: actionsWidth, Height: 30, Child: pluginTextActions(props.MetadataActions, theme)},
 		}},
 		woxwidget.Container{Width: width, Height: 42, Padding: woxwidget.Insets{Left: 8, Top: 3}, Child: pluginOutlineActions(props.Management, theme)},

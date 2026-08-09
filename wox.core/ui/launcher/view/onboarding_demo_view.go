@@ -159,7 +159,7 @@ func onboardingDemoDesktop(props OnboardingProps, step OnboardingStep, width, he
 			}},
 		}})
 	} else {
-		children = append(children, woxwidget.StackChild{Top: height - 42, Child: onboardingDemoWindowsTaskbar(props, width)})
+		children = append(children, woxwidget.StackChild{AnchorBottom: true, Child: onboardingDemoWindowsTaskbar(props, width)})
 	}
 	children = append(children, foreground...)
 	return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Stack{Width: width, Height: height, Children: children}}

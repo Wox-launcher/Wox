@@ -101,6 +101,17 @@ func (d *darwinWebViewDriver) Reload() error {
 	return nil
 }
 
+func (d *darwinWebViewDriver) OpenDevTools() error {
+	native, err := d.window.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_darwin_window_webview_open_dev_tools(native) != 0 {
+		return errors.New("woxui: failed to open macOS WebView developer tools")
+	}
+	return nil
+}
+
 func (d *darwinWebViewDriver) OpenInBrowser() error {
 	native, err := d.window.openNative()
 	if err != nil {

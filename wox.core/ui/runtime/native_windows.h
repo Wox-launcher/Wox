@@ -25,6 +25,7 @@ int32_t wox_windows_webview_hide(WoxWindowsWebView *webview);
 int32_t wox_windows_webview_go_back(WoxWindowsWebView *webview);
 int32_t wox_windows_webview_go_forward(WoxWindowsWebView *webview);
 int32_t wox_windows_webview_reload(WoxWindowsWebView *webview);
+int32_t wox_windows_webview_open_dev_tools(WoxWindowsWebView *webview);
 int32_t wox_windows_webview_open_in_browser(WoxWindowsWebView *webview);
 int32_t wox_windows_webview_navigation_state(WoxWindowsWebView *webview, char **url, int32_t *can_go_back, int32_t *can_go_forward);
 int32_t wox_windows_webview_pointer(WoxWindowsWebView *webview, int32_t kind, int32_t x, int32_t y, int32_t button, int32_t scroll_x, int32_t scroll_y, uint32_t modifiers);

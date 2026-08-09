@@ -1,10 +1,59 @@
 package launcher
 
 import (
+	"runtime"
 	"testing"
 
 	woxui "wox/ui/runtime"
 )
+
+func TestWebViewLocalActionPanelEntries(t *testing.T) {
+	results := []queryResult{{ID: "webview", Preview: queryPreview{PreviewType: "webview"}}}
+	entries := webViewLocalActionPanelEntries(results, 0, "windows")
+	if len(entries) != 2 {
+		t.Fatalf("webview local actions = %d, want 2", len(entries))
+	}
+	if entries[0].ID != localActionWebViewReloadID || entries[0].Hotkey != primaryHotkey("r") {
+		t.Fatalf("reload action = %+v", entries[0])
+	}
+	if entries[1].ID != localActionWebViewOpenDevToolsID || entries[1].Hotkey != "" {
+		t.Fatalf("developer tools action = %+v", entries[1])
+	}
+	if unsupported := webViewLocalActionPanelEntries(results, 0, "linux"); len(unsupported) != 0 {
+		t.Fatalf("linux webview local actions = %d, want 0", len(unsupported))
+	}
+}
+
+func TestUnifiedActionsReserveWebViewReloadHotkey(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		t.Skip("webview local actions are available on macOS and Windows")
+	}
+	results := []queryResult{{
+		ID: "webview", Preview: queryPreview{PreviewType: "webview"},
+		Actions: []resultAction{{ID: "plugin-reload", Hotkey: primaryHotkey("r")}},
+	}}
+	entries := unifiedActionPanelEntries(results, 0, nil)
+	if len(entries) != 3 || entries[0].ID != localActionWebViewReloadID || entries[2].Hotkey != "" {
+		t.Fatalf("unified webview actions = %+v", entries)
+	}
+}
+
+func TestToolbarActionEntriesIncludesShortcutLocalActions(t *testing.T) {
+	entries := []actionPanelEntry{
+		{ID: localActionWebViewReloadID, Hotkey: "control+r", Source: actionPanelSourceLocal},
+		{ID: localActionWebViewOpenDevToolsID, Source: actionPanelSourceLocal},
+		{ID: "open", Hotkey: "enter", Source: actionPanelSourceResult},
+		{ID: "message", Hotkey: "control+m", Source: actionPanelSourceToolbar},
+	}
+	withoutMessage := toolbarActionEntries(entries, false)
+	if len(withoutMessage) != 2 || withoutMessage[0].ID != localActionWebViewReloadID || withoutMessage[1].ID != "open" {
+		t.Fatalf("toolbar actions without message = %+v", withoutMessage)
+	}
+	withMessage := toolbarActionEntries(entries, true)
+	if len(withMessage) != 3 || withMessage[0].ID != "open" || withMessage[1].ID != localActionWebViewReloadID || withMessage[2].ID != "message" {
+		t.Fatalf("toolbar actions with message = %+v", withMessage)
+	}
+}
 
 func TestActionPanelEntryForHotkeyMatchesSelectedResultAction(t *testing.T) {
 	results := []queryResult{{ID: "selected", Actions: []resultAction{{ID: "delete", Hotkey: "cmd+d"}}}}

@@ -40,9 +40,23 @@ func TestThemeDetailKeepsVersionBesideTitle(t *testing.T) {
 	view := themeDetail(ThemeSettingsProps{Detail: &detail}, 600, 700).(woxwidget.Flex)
 	header := view.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
 	titleRow := header.Children[0].(woxwidget.Container).Child.(woxwidget.Clip).Child.(woxwidget.Flex)
+	author := header.Children[1].(woxwidget.Flex).Children[0]
 
 	if titleRow.Gap != 10 || titleRow.CrossAxisAlignment != woxwidget.CrossAxisCenter || titleRow.Children[0].(woxwidget.Text).Value != "Aquarium" || titleRow.Children[1].(woxwidget.Text).Value != "1.1.0" {
 		t.Fatal("theme version should follow the title with the same alignment as plugin details")
+	}
+	if _, ok := author.(woxwidget.Expanded); !ok {
+		t.Fatalf("theme author slot = %T, want Expanded", author)
+	}
+}
+
+func TestThemeDetailAnchorsErrorToBodyBottom(t *testing.T) {
+	detail := ThemeCatalogItem{Name: "Aquarium"}
+	view := themeDetail(ThemeSettingsProps{Detail: &detail, Error: "Unable to load preview"}, 600, 700).(woxwidget.Flex)
+	body := view.Children[2].(woxwidget.Stack)
+	errorLayer := body.Children[1]
+	if !errorLayer.AnchorBottom || !errorLayer.StretchWidth || errorLayer.Left != 16 || errorLayer.Right != 16 || errorLayer.Bottom != 4 {
+		t.Fatalf("theme error layout = %+v, want bottom-anchored 16px insets", errorLayer)
 	}
 }
 
@@ -143,10 +157,10 @@ func TestThemeSystemTagCentersLabel(t *testing.T) {
 	scrollProps := list.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	row := scrollProps.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	content := row.Child.(woxwidget.Flex)
-	textWidth := content.Children[1].(woxwidget.Container).Width
+	_, textExpanded := content.Children[1].(woxwidget.Expanded)
 	tagSlot := content.Children[2].(woxwidget.Align)
-	if contentWidth := float32(32+10) + textWidth + float32(10) + tagSlot.Width; contentWidth != row.Width-row.Padding.Left-row.Padding.Right {
-		t.Fatalf("theme row content width = %v, want inner width %v so the tag keeps the 6px trailing padding", contentWidth, row.Width-row.Padding.Left-row.Padding.Right)
+	if !textExpanded || tagSlot.Width != 44 {
+		t.Fatalf("theme row slots = text expanded %v tag %.0f, want true/44", textExpanded, tagSlot.Width)
 	}
 }
 

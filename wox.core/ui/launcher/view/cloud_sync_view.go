@@ -431,13 +431,12 @@ func cloudPlanWideRow(row CloudPlanRowProps, width float32, theme woxcomponent.T
 // cloudPlanCompactRow moves the row label above the two plan values on narrow pages.
 func cloudPlanCompactRow(row CloudPlanRowProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
 	const horizontalPadding = float32(12)
-	valueWidth := max(float32(0), (width-horizontalPadding*2-10)/2)
 	return woxwidget.Container{Width: width, Height: 69, Padding: woxwidget.Insets{Left: horizontalPadding, Top: 9, Right: horizontalPadding}, Child: woxwidget.Flex{
 		Axis: woxwidget.Vertical, Gap: 7, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: row.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle},
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-				woxwidget.TextBlock{Value: row.FreeValue, Width: valueWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 16, Color: theme.ResultTitle},
-				woxwidget.TextBlock{Value: row.ProValue, Width: valueWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, LineHeight: 16, Color: theme.ResultTitle},
+				woxwidget.Expanded{Child: woxwidget.TextBlock{Value: row.FreeValue, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 13}, LineHeight: 16, Color: theme.ResultTitle}},
+				woxwidget.Expanded{Child: woxwidget.TextBlock{Value: row.ProValue, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, LineHeight: 16, Color: theme.ResultTitle}},
 			}},
 		},
 	}}
@@ -453,10 +452,10 @@ func cloudAccountCard(props CloudAccountProps, width, height float32, theme woxc
 	if !props.LoggedIn {
 		return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 2, Top: 10, Right: 2, Bottom: 10}, Child: woxwidget.Flex{
 			Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-				woxwidget.Container{Width: max(float32(0), width-200), Height: 42, Padding: woxwidget.Insets{Top: 10}, Child: woxwidget.Text{
+				woxwidget.Expanded{Child: woxwidget.Container{Height: 42, Padding: woxwidget.Insets{Top: 10}, Child: woxwidget.Text{
 					Value: props.SectionLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle,
-				}},
-				woxwidget.Align{Width: max(float32(0), min(float32(200), width)), Height: 42, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
+				}}},
+				woxwidget.Align{Width: 200, Height: 42, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 					woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-login", Label: props.LoginLabel, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnLogin, Theme: theme}),
 					woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-register", Label: props.RegisterLabel, Disabled: !props.ActionsEnabled, Variant: woxcomponent.ButtonOutline, OnTap: props.OnRegister, Theme: theme}),
 				}}},
@@ -665,20 +664,21 @@ func cloudConfigNotesCard(props CloudConfigNotesProps, width, height float32, th
 
 // cloudActionMenu renders the active account or subscription menu.
 func cloudActionMenu(props CloudActionMenuProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
-	rows := make([]woxwidget.Widget, 0, len(props.Items))
-	for _, item := range props.Items {
-		rows = append(rows, woxwidget.Gesture{ID: item.ID, OnTap: item.OnTap, Child: woxwidget.Container{
-			Width: width - 12, Height: 40, Radius: 5, Color: theme.ActionBackground, Padding: woxwidget.Insets{Left: 12, Top: 11, Right: 12},
-			Child: woxwidget.Text{Value: item.Label, Style: woxui.TextStyle{Size: 12}, Color: theme.ActionText},
-		}})
-	}
-	contentHeight := float32(len(rows)) * 40
+	contentHeight := float32(len(props.Items)) * 40
 	height := min(float32(420), contentHeight+12)
-	bodyHeight := max(float32(0), height-12)
-	return woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.ActionBackground, Padding: woxwidget.UniformInsets(6), Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "cloud-action-menu-scroll", Width: width - 12, Height: bodyHeight, ContentHeight: contentHeight,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: theme.ResultSubtitle,
-	})}
+	return woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.ActionBackground, Padding: woxwidget.UniformInsets(6), Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+		rows := make([]woxwidget.Widget, 0, len(props.Items))
+		for _, item := range props.Items {
+			rows = append(rows, woxwidget.Gesture{ID: item.ID, OnTap: item.OnTap, Child: woxwidget.Container{
+				Width: size.Width, Height: 40, Radius: 5, Color: theme.ActionBackground, Padding: woxwidget.Insets{Left: 12, Top: 11, Right: 12},
+				Child: woxwidget.Text{Value: item.Label, Style: woxui.TextStyle{Size: 12}, Color: theme.ActionText},
+			}})
+		}
+		return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+			Key: "cloud-action-menu-scroll", Width: size.Width, Height: size.Height,
+			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: theme.ResultSubtitle,
+		})
+	}}}
 }
 
 // CloudPluginExclusionDialog mirrors Flutter's generic table-row update dialog for one select column.
@@ -899,7 +899,7 @@ func cloudFormCheckbox(field CloudFormFieldProps, width float32, theme woxcompon
 	checkbox := woxwidget.Container{Width: 18, Height: 18, Radius: 3, BorderColor: outline, BorderWidth: 1, Padding: woxwidget.UniformInsets(1), Child: mark}
 	return woxwidget.Gesture{ID: field.ID, OnTap: field.OnTap, Child: woxwidget.Container{Width: width, Height: 24, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 		checkbox,
-		woxwidget.Container{Width: max(float32(0), width-26), Height: 20, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12}, Color: theme.ActionText}},
+		woxwidget.Expanded{Child: woxwidget.Container{Height: 20, Padding: woxwidget.Insets{Top: 2}, Child: woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12}, Color: theme.ActionText}}},
 	}}}}
 }
 

@@ -40,6 +40,10 @@ func (w *platformWindow) webViewReload() error {
 	return w.call(windowCommand{kind: windowCommandWebViewReload}).err
 }
 
+func (w *platformWindow) webViewOpenDevTools() error {
+	return w.call(windowCommand{kind: windowCommandWebViewOpenDevTools}).err
+}
+
 func (w *platformWindow) webViewOpenInBrowser() error {
 	return w.call(windowCommand{kind: windowCommandWebViewOpenInBrowser}).err
 }
@@ -90,6 +94,11 @@ func (w *platformWindow) executeWebViewCommand(command windowCommand) (windowCom
 			return windowCommandResult{err: ErrWebViewUnavailable}, true
 		}
 		return windowCommandResult{err: w.webView.Reload()}, true
+	case windowCommandWebViewOpenDevTools:
+		if w.webView == nil {
+			return windowCommandResult{err: ErrWebViewUnavailable}, true
+		}
+		return windowCommandResult{err: w.webView.OpenDevTools()}, true
 	case windowCommandWebViewOpenInBrowser:
 		if w.webView == nil {
 			return windowCommandResult{err: ErrWebViewUnavailable}, true
@@ -244,6 +253,17 @@ func (w *windowsWebViewDriver) Reload() error {
 	result := C.wox_windows_webview_reload(w.handle)
 	if result < 0 {
 		return webViewHRESULT("webview reload", result)
+	}
+	return nil
+}
+
+func (w *windowsWebViewDriver) OpenDevTools() error {
+	if w == nil || w.handle == nil {
+		return webviewruntime.ErrUnavailable
+	}
+	result := C.wox_windows_webview_open_dev_tools(w.handle)
+	if result < 0 {
+		return webViewHRESULT("webview open developer tools", result)
 	}
 	return nil
 }

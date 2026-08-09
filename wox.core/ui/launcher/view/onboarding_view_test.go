@@ -94,7 +94,7 @@ func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
 		Theme:  woxcomponent.Theme{},
 	}
 	rail, ok := onboardingRail(props, 0, 728).(woxwidget.Stack)
-	if !ok || len(rail.Children) != 2 || rail.Children[1].Left != OnboardingSidebarWidth-1 {
+	if !ok || len(rail.Children) != 2 || !rail.Children[1].AnchorRight || !rail.Children[1].StretchHeight {
 		t.Fatalf("rail = %#v, want content plus right divider", rail)
 	}
 	footer, ok := onboardingFooter(props, 0).(woxwidget.Stack)
@@ -332,8 +332,8 @@ func TestOnboardingGlanceUsesSharedRichDropdown(t *testing.T) {
 	trigger := semantics.Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	content := trigger.Child.(woxwidget.Flex)
 
-	if trigger.Width != 300 || selectorSlot.Left+trigger.Width > selectorRow.Width || len(content.Children) != 6 {
-		t.Fatalf("glance dropdown = left %v, width %v, row width %v, children %d", selectorSlot.Left, trigger.Width, selectorRow.Width, len(content.Children))
+	if trigger.Width != 300 || !selectorSlot.AnchorRight || len(content.Children) != 6 {
+		t.Fatalf("glance dropdown = anchor %v, width %v, children %d", selectorSlot.AnchorRight, trigger.Width, len(content.Children))
 	}
 	leading := content.Children[0].(woxwidget.Align).Child.(woxwidget.Image)
 	trailingSlot := content.Children[4].(woxwidget.Align)

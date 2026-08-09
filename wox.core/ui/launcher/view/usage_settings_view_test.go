@@ -23,3 +23,11 @@ func TestUsageShareButtonCentersIconAndLabel(t *testing.T) {
 		t.Fatal("share button icon and label should share the vertical center line")
 	}
 }
+
+func TestUsageSummaryHeaderAnchorsShareActionToRight(t *testing.T) {
+	header, _ := usageSummaryHeader(UsageSettingsProps{ShareLabel: "Share"}, 600)
+	share := header.(woxwidget.Stack).Children[1]
+	if !share.AnchorRight || share.Right != 0 {
+		t.Fatalf("usage share anchor = %v right %.0f, want true/0", share.AnchorRight, share.Right)
+	}
+}

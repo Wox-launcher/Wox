@@ -65,7 +65,14 @@ func TestTerminalPreviewUsesFramelessFlutterSurface(t *testing.T) {
 		t.Fatalf("terminal header = border %.0f fill %#v; want framed status bar", header.BorderWidth, header.Color)
 	}
 	headerStack := header.Child.(woxwidget.Stack)
+	command := headerStack.Children[1]
+	if command.Left != 17 || command.Right != 79 || !command.StretchWidth {
+		t.Fatalf("terminal command layout = left/right %.0f/%.0f stretch %v, want 17/79/true", command.Left, command.Right, command.StretchWidth)
+	}
 	find := headerStack.Children[2].Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	if !headerStack.Children[2].AnchorRight || headerStack.Children[2].Right != 34 || !headerStack.Children[3].AnchorRight {
+		t.Fatalf("terminal action anchors = find %v/%.0f fullscreen %v, want true/34/true", headerStack.Children[2].AnchorRight, headerStack.Children[2].Right, headerStack.Children[3].AnchorRight)
+	}
 	if find.Label != "Find" || find.Icon == nil || find.OnHoverAt == nil {
 		t.Fatalf("terminal find action = %+v; want shared icon button", find)
 	}
@@ -108,8 +115,8 @@ func TestChatHeaderExitKeepsGlyphVisible(t *testing.T) {
 	header := ChatHeader(ChatHeaderProps{Width: 500, Height: 48, Key: "test", ShowExit: true, ExitLabel: "Close", Theme: theme, OnExit: func() {}, OnDrag: func() { dragged = true }}).(woxwidget.Container)
 	stack := header.Child.(woxwidget.Stack)
 	title := stack.Children[1]
-	if title.Top != 5 {
-		t.Fatalf("chat title top = %v, want 5 to share the icon center line", title.Top)
+	if title.Top != 5 || title.Right != 44 || !title.StretchWidth {
+		t.Fatalf("chat title layout = top/right %.0f/%.0f stretch %v, want 5/44/true", title.Top, title.Right, title.StretchWidth)
 	}
 	titleDrag := title.Child.(woxwidget.Gesture)
 	titleDrag.OnDragStart()
@@ -124,8 +131,8 @@ func TestChatHeaderExitKeepsGlyphVisible(t *testing.T) {
 		t.Fatalf("chat menu glyph = %vx%v, want centered 22x22", glyph.Width, glyph.Height)
 	}
 	exitChild := stack.Children[len(stack.Children)-1]
-	if exitChild.Top != 9 {
-		t.Fatalf("chat exit top = %v, want 9", exitChild.Top)
+	if exitChild.Top != 9 || exitChild.Right != 6 || !exitChild.AnchorRight {
+		t.Fatalf("chat exit layout = top/right %.0f/%.0f anchor %v, want 9/6/true", exitChild.Top, exitChild.Right, exitChild.AnchorRight)
 	}
 	exit := exitChild.Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	if exit.OnHoverAt == nil || exit.OnTap == nil || exit.Width != 28 || exit.Height != 28 {

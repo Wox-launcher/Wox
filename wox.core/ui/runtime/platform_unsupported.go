@@ -104,6 +104,10 @@ func (w *platformWindow) webViewReload() error {
 	return ErrPlatformUnsupported
 }
 
+func (w *platformWindow) webViewOpenDevTools() error {
+	return ErrPlatformUnsupported
+}
+
 func (w *platformWindow) webViewOpenInBrowser() error {
 	return ErrPlatformUnsupported
 }

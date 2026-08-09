@@ -49,7 +49,7 @@ func TestDataStorageFieldButtonsExpandForLongLocalizedLabels(t *testing.T) {
 	}, 820).(woxwidget.Container)
 
 	row := field.Child.(woxwidget.Flex)
-	label := row.Children[0].(woxwidget.Container)
+	label := row.Children[0].(woxwidget.Expanded)
 	actionsContainer := row.Children[1].(woxwidget.Container)
 	actions := actionsContainer.Child.(woxwidget.Flex)
 	changeButton := actions.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
@@ -61,7 +61,7 @@ func TestDataStorageFieldButtonsExpandForLongLocalizedLabels(t *testing.T) {
 	if actionsContainer.Width != expectedActionsWidth {
 		t.Fatalf("actions width = %v, want reserved %v", actionsContainer.Width, expectedActionsWidth)
 	}
-	if label.Width+10+actionsContainer.Width > 820 {
-		t.Fatalf("storage field overflows: label %v + gap + actions %v > width 820", label.Width, actionsContainer.Width)
+	if label.Child.(woxwidget.Container).Width != 0 {
+		t.Fatal("storage label should use the remaining field width")
 	}
 }

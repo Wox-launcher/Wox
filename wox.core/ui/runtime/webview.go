@@ -118,6 +118,14 @@ func (w *Window) WebViewReload() error {
 	return w.native.webViewReload()
 }
 
+// WebViewOpenDevTools opens the developer tools for the active WebView document.
+func (w *Window) WebViewOpenDevTools() error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.webViewOpenDevTools()
+}
+
 // WebViewOpenInBrowser opens the active WebView's http(s) URL in the system browser.
 func (w *Window) WebViewOpenInBrowser() error {
 	if w == nil || w.native == nil {

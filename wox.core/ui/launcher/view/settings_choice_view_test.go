@@ -86,9 +86,8 @@ func TestSettingsChoiceSelectedItemUsesThemeHighlight(t *testing.T) {
 	menuScope := stack.Children[1].Child.(woxwidget.FocusScope)
 	menuStack := menuScope.Child.(woxwidget.Semantics).Child.(woxwidget.Stack)
 	menuContent := menuStack.Children[0].Child.(woxwidget.Container)
-	scrollSurface := menuContent.Child.(woxwidget.Flex).Children[1].(woxwidget.Gesture)
-	list := scrollSurface.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-	rowStack := list.Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+	scrollProps := menuContent.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	rowStack := scrollProps.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
 	row := rowStack.Children[0].Child.(woxwidget.Container)
 
 	if row.Color != highlight {
@@ -112,9 +111,8 @@ func TestSettingsChoiceHighlightsHoveredItemLikeLauncherResult(t *testing.T) {
 	menuScope := stack.Children[1].Child.(woxwidget.FocusScope)
 	menuStack := menuScope.Child.(woxwidget.Semantics).Child.(woxwidget.Stack)
 	menuContent := menuStack.Children[0].Child.(woxwidget.Container)
-	scrollSurface := menuContent.Child.(woxwidget.Flex).Children[1].(woxwidget.Gesture)
-	list := scrollSurface.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-	rowStack := list.Child.(woxwidget.Flex).Children[1].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+	scrollProps := menuContent.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	rowStack := scrollProps.Content.(woxwidget.Flex).Children[1].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
 	row := rowStack.Children[0].Child.(woxwidget.Container)
 
 	if row.Color.A != 50 || row.Color.R != highlight.R || row.Color.G != highlight.G || row.Color.B != highlight.B {
@@ -145,8 +143,8 @@ func TestFilterableSettingsChoiceUsesSharedScrollbarAndRoundedEnds(t *testing.T)
 	}
 	scrollbar := children[1].(woxwidget.Stateful)
 	scrollProps := scrollbar.Widget.(woxcomponent.ScrollViewProps)
-	if scrollProps.Controller != state.scrollController || scrollProps.ContentHeight <= scrollProps.Height {
-		t.Fatalf("choice scrollbar = controller %p geometry %.0f/%.0f, want shared controller with overflow", scrollProps.Controller, scrollProps.ContentHeight, scrollProps.Height)
+	if scrollProps.Controller != state.scrollController || scrollProps.ContentHeight != 0 {
+		t.Fatalf("choice scrollbar = controller %p content hint %.0f, want measured shared controller", scrollProps.Controller, scrollProps.ContentHeight)
 	}
 	lastRow := scrollProps.Content.(woxwidget.Flex).Children[len(choices)-1].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
 	if _, ok := lastRow.Children[0].Child.(woxwidget.Painter); !ok {

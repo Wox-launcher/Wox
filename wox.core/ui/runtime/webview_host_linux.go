@@ -84,6 +84,10 @@ func (*linuxWebViewDriver) Reload() error {
 	return errors.New("woxui: linux WebView navigation is not implemented")
 }
 
+func (*linuxWebViewDriver) OpenDevTools() error {
+	return errors.New("woxui: linux WebView developer tools are not implemented")
+}
+
 func (*linuxWebViewDriver) OpenInBrowser() error {
 	return errors.New("woxui: linux WebView navigation is not implemented")
 }

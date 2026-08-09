@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"runtime"
 	"strings"
 	"time"
 
@@ -23,6 +24,12 @@ type actionPanelSource uint8
 const (
 	actionPanelSourceResult actionPanelSource = iota
 	actionPanelSourceToolbar
+	actionPanelSourceLocal
+)
+
+const (
+	localActionWebViewReloadID       = "webview-reload"
+	localActionWebViewOpenDevToolsID = "webview-open-dev-tools"
 )
 
 // actionPanelEntry keeps the unified picker presentation tied to its original execution target.
@@ -44,8 +51,43 @@ func actionPanelBaseHeightForPalette(palette uiPalette) float32 {
 	return launcherview.ActionPanelBaseHeight(palette.actionPadding)
 }
 
-// unifiedActionPanelEntries mirrors Flutter's toolbar-before-plugin action ordering and hotkey conflict handling.
+// webViewLocalActionPanelEntries exposes preview-owned browser commands without adding them to plugin results.
+func webViewLocalActionPanelEntries(results []queryResult, selected int, goos string) []actionPanelEntry {
+	if (goos != "darwin" && goos != "windows") || selected < 0 || selected >= len(results) || results[selected].IsGroup || results[selected].Preview.PreviewType != "webview" {
+		return nil
+	}
+	return []actionPanelEntry{
+		{
+			Key: "local:webview:reload", ID: localActionWebViewReloadID, Name: "i18n:ui_action_webview_refresh",
+			Icon: settingControlIconSource("refresh"), Hotkey: primaryHotkey("r"), Source: actionPanelSourceLocal,
+		},
+		{
+			Key: "local:webview:open-dev-tools", ID: localActionWebViewOpenDevToolsID, Name: "i18n:ui_action_webview_open_inspector",
+			Icon: settingControlIconSource("build"), Source: actionPanelSourceLocal,
+		},
+	}
+}
+
+// toolbarActionEntries preserves Flutter's source ordering while omitting actions without shortcuts.
+func toolbarActionEntries(entries []actionPanelEntry, toolbarMessageVisible bool) []actionPanelEntry {
+	sources := []actionPanelSource{actionPanelSourceLocal, actionPanelSourceResult}
+	if toolbarMessageVisible {
+		sources = []actionPanelSource{actionPanelSourceResult, actionPanelSourceLocal, actionPanelSourceToolbar}
+	}
+	ordered := make([]actionPanelEntry, 0, len(entries))
+	for _, source := range sources {
+		for _, entry := range entries {
+			if entry.Source == source && strings.TrimSpace(entry.Hotkey) != "" {
+				ordered = append(ordered, entry)
+			}
+		}
+	}
+	return ordered
+}
+
+// unifiedActionPanelEntries mirrors Flutter's local-and-toolbar-before-plugin ordering and hotkey conflict handling.
 func unifiedActionPanelEntries(results []queryResult, selected int, message *toolbarMessage) []actionPanelEntry {
+	localEntries := webViewLocalActionPanelEntries(results, selected, runtime.GOOS)
 	toolbarCount := 0
 	if message != nil {
 		toolbarCount = len(message.Actions)
@@ -54,8 +96,12 @@ func unifiedActionPanelEntries(results []queryResult, selected int, message *too
 	if selected >= 0 && selected < len(results) && !results[selected].IsGroup {
 		resultCount = len(results[selected].Actions)
 	}
-	entries := make([]actionPanelEntry, 0, toolbarCount+resultCount)
-	reservedHotkeys := make(map[string]struct{}, toolbarCount)
+	entries := make([]actionPanelEntry, 0, len(localEntries)+toolbarCount+resultCount)
+	entries = append(entries, localEntries...)
+	reservedHotkeys := make(map[string]struct{}, len(localEntries)+toolbarCount)
+	for _, action := range localEntries {
+		reservedHotkeys[normalizeToolbarHotkey(action.Hotkey)] = struct{}{}
+	}
 	if message != nil {
 		for index, action := range message.Actions {
 			entries = append(entries, actionPanelEntry{
@@ -97,8 +143,13 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 			continue
 		}
 		action := snapshot.actionEntries[index]
+		iconSize := physicalImageSize(22, imageScale)
+		icon := a.imageForSize(action.Icon, iconSize)
+		if action.Source == actionPanelSourceLocal {
+			icon = a.imageForTint(action.Icon, &snapshot.palette.actionText, iconSize)
+		}
 		items = append(items, launcherview.ActionItem{
-			Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: a.imageForSize(action.Icon, physicalImageSize(22, imageScale)), HotkeyLabels: formatHotkeyLabels(action.Hotkey),
+			Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: icon, HotkeyLabels: formatHotkeyLabels(action.Hotkey),
 		})
 	}
 	return launcherview.ActionsBoundary(launcherview.ActionsProps{
@@ -372,11 +423,35 @@ func (a *App) activateSelectedAction() {
 }
 
 func (a *App) activateActionPanelEntry(entry actionPanelEntry) {
+	if entry.Source == actionPanelSourceLocal {
+		a.activateLocalActionPanelEntry(entry)
+		return
+	}
 	if entry.Source == actionPanelSourceToolbar {
 		a.activateToolbarActionForMessage(entry.ToolbarMessageID, entry.ToolbarMessageAction)
 		return
 	}
 	a.activateAction(entry.ResultIndex, entry.ActionIndex)
+}
+
+// activateLocalActionPanelEntry dispatches preview-owned actions without crossing the plugin action API.
+func (a *App) activateLocalActionPanelEntry(entry actionPanelEntry) {
+	if a.window == nil {
+		return
+	}
+	var err error
+	switch entry.ID {
+	case localActionWebViewReloadID:
+		err = a.window.WebViewReload()
+	case localActionWebViewOpenDevToolsID:
+		err = a.window.WebViewOpenDevTools()
+	default:
+		return
+	}
+	if err != nil {
+		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("execute local action %s: %v", entry.ID, err))
+	}
+	a.hideActionPanel()
 }
 
 // activateResultActionByID resolves preview-owned controls against the latest result snapshot.

@@ -101,6 +101,16 @@ func TestCloudRefreshButtonWidthIncludesLeadingIcon(t *testing.T) {
 	}
 }
 
+func TestCloudActionMenuUsesPaddedContentSize(t *testing.T) {
+	menu := cloudActionMenu(CloudActionMenuProps{Items: []CloudActionMenuItemProps{{ID: "account", Label: "Account"}, {ID: "logout", Label: "Log out"}}}, 200, woxcomponent.Theme{}).(woxwidget.Container)
+	builder := menu.Child.(woxwidget.LayoutBuilder)
+	scroll := builder.Build(woxui.Size{Width: 188, Height: 80}).(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
+	if scroll.Width != 188 || scroll.Height != 80 || row.Width != 188 {
+		t.Fatalf("cloud action content = scroll %.0fx%.0f row %.0f, want 188x80/188", scroll.Width, scroll.Height, row.Width)
+	}
+}
+
 func TestCloudAccountActionsUseCenteredSharedDropdownIndicator(t *testing.T) {
 	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 255}}
 	action := cloudValueAction("cloud-account-action", "account@example.com", 260, func() {}, theme).(woxwidget.Align)

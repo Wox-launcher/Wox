@@ -116,6 +116,7 @@ const (
 	windowCommandWebViewGoBack
 	windowCommandWebViewGoForward
 	windowCommandWebViewReload
+	windowCommandWebViewOpenDevTools
 	windowCommandWebViewOpenInBrowser
 	windowCommandWebViewNavigationState
 	windowCommandShowNativeFilePreview

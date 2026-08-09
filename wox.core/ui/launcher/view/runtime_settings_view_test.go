@@ -33,3 +33,14 @@ func TestRuntimeLoadingDoesNotAddStatusText(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimeStatusCardUsesRemainingHeaderWidth(t *testing.T) {
+	card := runtimeStatusCard(RuntimeSettingsProps{}, RuntimeStatus{DisplayName: "Python", Version: "3.13"}, 360, 168).(woxwidget.Container)
+	column := card.Child.(woxwidget.Flex)
+	header := column.Children[0].(woxwidget.Flex)
+	title := header.Children[1].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	name := title.Children[0].(woxwidget.Flex).Children[0]
+	if _, ok := name.(woxwidget.Expanded); !ok {
+		t.Fatalf("runtime name slot = %T, want Expanded", name)
+	}
+}

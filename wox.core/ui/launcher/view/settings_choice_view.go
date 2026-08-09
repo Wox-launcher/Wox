@@ -311,9 +311,8 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 		}})
 	}
 	if len(rows) > 0 {
-		contentHeight := max(listHeight, float32(len(rows))*settingsChoiceRowHeight)
 		children = append(children, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: woxwidget.Key(props.ID + "-scroll"), Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Width: width, Height: listHeight, ContentHeight: contentHeight,
+			Key: woxwidget.Key(props.ID + "-scroll"), Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Width: width, Height: listHeight,
 			Controller: state.scrollController, ThumbColor: props.Theme.ResultSubtitle,
 		}))
 	}

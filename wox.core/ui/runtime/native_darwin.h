@@ -35,6 +35,7 @@ int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_go_back(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_go_forward(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_reload(WoxDarwinWindow *window);
+int32_t wox_darwin_window_webview_open_dev_tools(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_open_in_browser(WoxDarwinWindow *window);
 int32_t wox_darwin_window_webview_navigation_state(WoxDarwinWindow *window, char **url, int32_t *can_go_back, int32_t *can_go_forward);
 int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *window);

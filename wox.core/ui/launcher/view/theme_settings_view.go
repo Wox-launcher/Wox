@@ -113,11 +113,7 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 			titleColor = props.Theme.ActionSelectedText
 			subtitleColor = props.Theme.ActionSelectedText
 		}
-		trailing, trailingWidth := themeListTrailing(props, item, subtitleColor)
-		textWidth := max(float32(0), width-12-32-10)
-		if trailing != nil {
-			textWidth = max(float32(0), textWidth-10-trailingWidth)
-		}
+		trailing, _ := themeListTrailing(props, item, subtitleColor)
 		status := strings.TrimSpace(item.Version + "  " + item.Author)
 		var swatch woxwidget.Widget = themeSwatch(item.PreviewTheme, 32)
 		if item.IsAuto {
@@ -125,10 +121,12 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 		}
 		rowChildren := []woxwidget.Widget{
 			swatch,
-			woxwidget.Container{Width: textWidth, Height: 44, Child: woxwidget.Clip{Width: textWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor},
-				woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
-			}}}},
+			woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+				return woxwidget.Clip{Width: size.Width, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+					woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: 15}, Color: titleColor},
+					woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: 12}, Color: subtitleColor},
+				}}}
+			}}},
 		}
 		if trailing != nil {
 			rowChildren = append(rowChildren, trailing)
@@ -233,7 +231,7 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 			woxwidget.Text{Value: theme.Version, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle},
 		}}}},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: max(float32(0), innerWidth-104), Height: 28, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}},
+			woxwidget.Expanded{Child: woxwidget.Container{Height: 28, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}},
 			website,
 		}},
 		woxwidget.Container{Width: innerWidth, Height: 52, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: themeActions(props, theme)}},
@@ -252,7 +250,7 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 	if props.Error != "" {
 		body = woxwidget.Stack{Width: width, Height: bodyHeight, Children: []woxwidget.StackChild{
 			{Child: body},
-			{Left: 16, Top: max(float32(0), bodyHeight-48), Child: woxwidget.TextBlock{Value: props.Error, Width: max(float32(0), width-32), Height: 44, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText}},
+			{Left: 16, Right: 16, Bottom: 4, AnchorBottom: true, StretchWidth: true, Child: woxwidget.TextBlock{Value: props.Error, Height: 44, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText}},
 		}}
 	}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, tabs, body}}
@@ -264,7 +262,7 @@ func themeDescriptionTab(theme ThemeCatalogItem, width, height float32, colors w
 		description = "—"
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.UniformInsets(16), Child: woxwidget.TextBlock{
-		Value: description, Width: max(float32(0), width-32), Height: max(float32(0), height-32), MaxLines: 30, Style: woxui.TextStyle{Size: 13}, LineHeight: 21, Color: colors.ResultTitle,
+		Value: description, MaxLines: 30, Style: woxui.TextStyle{Size: 13}, LineHeight: 21, Color: colors.ResultTitle,
 	}}
 }
 
@@ -335,10 +333,12 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 		rowWidgets = append(rowWidgets, woxwidget.Container{Width: max(float32(0), width-20), Height: 60, Color: background, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 10}, Child: woxwidget.Flex{
 			Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 				woxwidget.Align{Width: 30, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: "📁", Style: woxui.TextStyle{Size: 22}, Color: titleColor}},
-				woxwidget.Container{Width: max(float32(0), width-84), Height: 42, Child: woxwidget.Clip{Width: max(float32(0), width-84), Height: 42, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-					woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 13}, Color: titleColor},
-					woxwidget.Text{Value: subtitle, Style: woxui.TextStyle{Size: 11}, Color: subtitleColor},
-				}}}},
+				woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+					return woxwidget.Clip{Width: size.Width, Height: 42, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+						woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 13}, Color: titleColor},
+						woxwidget.Text{Value: subtitle, Style: woxui.TextStyle{Size: 11}, Color: subtitleColor},
+					}}}
+				}}},
 			},
 		}})
 	}
@@ -399,10 +399,12 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 		rows = append(rows, woxwidget.Container{Width: max(float32(0), width-20), Height: 60, Padding: woxwidget.Insets{Left: 12, Top: 9, Right: 10}, Child: woxwidget.Flex{
 			Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 				woxwidget.Align{Width: 30, Height: 42, Vertical: 0.5, Child: woxwidget.Text{Value: "📁", Style: woxui.TextStyle{Size: 22}, Color: titleColor}},
-				woxwidget.Container{Width: max(float32(0), width-84), Height: 42, Child: woxwidget.Clip{Width: max(float32(0), width-84), Height: 42, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-					woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 13}, Color: titleColor},
-					woxwidget.Text{Value: subtitle, Style: woxui.TextStyle{Size: 11}, Color: subtitleColor},
-				}}}},
+				woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+					return woxwidget.Clip{Width: size.Width, Height: 42, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+						woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 13}, Color: titleColor},
+						woxwidget.Text{Value: subtitle, Style: woxui.TextStyle{Size: 11}, Color: subtitleColor},
+					}}}
+				}}},
 			},
 		}})
 	}

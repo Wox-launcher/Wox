@@ -15,18 +15,22 @@ func TestBorderDragMoveAreaProvidesFourEdgeDragGestures(t *testing.T) {
 	}
 
 	wantPositions := []struct {
-		left float32
-		top  float32
+		top           float32
+		bottom        float32
+		anchorRight   bool
+		anchorBottom  bool
+		stretchWidth  bool
+		stretchHeight bool
 	}{
-		{left: 0, top: 0},
-		{left: 0, top: 75},
-		{left: 0, top: 5},
-		{left: 95, top: 5},
+		{stretchWidth: true},
+		{anchorBottom: true, stretchWidth: true},
+		{top: 5, bottom: 5, stretchHeight: true},
+		{top: 5, bottom: 5, anchorRight: true, stretchHeight: true},
 	}
 	for index, want := range wantPositions {
 		child := area.Children[index+1]
-		if child.Left != want.left || child.Top != want.top {
-			t.Fatalf("edge %d position = (%v, %v), want (%v, %v)", index, child.Left, child.Top, want.left, want.top)
+		if child.Top != want.top || child.Bottom != want.bottom || child.AnchorRight != want.anchorRight || child.AnchorBottom != want.anchorBottom || child.StretchWidth != want.stretchWidth || child.StretchHeight != want.stretchHeight {
+			t.Fatalf("edge %d layout = %+v, want top/bottom %.0f/%.0f anchors %v/%v stretch %v/%v", index, child, want.top, want.bottom, want.anchorRight, want.anchorBottom, want.stretchWidth, want.stretchHeight)
 		}
 		gesture, ok := child.Child.(woxwidget.Gesture)
 		if !ok || gesture.OnDragStart == nil {
@@ -50,7 +54,7 @@ func TestPreviewHoverCloseRevealsCloseButton(t *testing.T) {
 
 	state.hovered = true
 	shown := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture).Child.(woxwidget.Stack)
-	if len(shown.Children) != 2 || shown.Children[1].Left != 452 || shown.Children[1].Top != 20 {
+	if len(shown.Children) != 2 || !shown.Children[1].AnchorRight || shown.Children[1].Right != 20 || shown.Children[1].Top != 20 {
 		t.Fatalf("shown close placement = %#v", shown.Children)
 	}
 	button := shown.Children[1].Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)

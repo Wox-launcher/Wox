@@ -148,26 +148,25 @@ func terminalHeader(props TerminalPreviewProps) woxwidget.Widget {
 		loadingWidth = 20
 	}
 	contentWidth := max(float32(0), props.Width-20)
-	commandWidth := max(float32(40), contentWidth-96-loadingWidth)
 	hoverBackground := previewColorWithOpacity(props.Theme.PreviewText, 0.1)
 	children := []woxwidget.StackChild{
 		{Top: 13, Child: woxwidget.Semantics{
 			AutomationID: "launcher.preview.terminal.status", Role: woxui.AccessibilityRoleText, Label: "Terminal status", Value: status, LiveRegion: woxui.AccessibilityLiveRegionPolite,
 			Child: woxwidget.Container{Width: 8, Height: 8, Radius: 4, Color: statusColor},
 		}},
-		{Left: 17, Top: 8, Child: woxwidget.Container{Width: commandWidth, Height: 20, Child: woxwidget.Text{Value: command, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText}}},
+		{Left: 17, Top: 8, Right: 79 + loadingWidth, StretchWidth: true, Child: woxwidget.Container{Height: 20, Child: woxwidget.Text{Value: command, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText}}},
 	}
 	if props.LoadingHistory {
-		children = append(children, woxwidget.StackChild{Left: contentWidth - 82, Top: 7, Child: woxwidget.Text{Value: "…", Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText}})
+		children = append(children, woxwidget.StackChild{Top: 7, Right: 62, AnchorRight: true, Child: woxwidget.Align{Width: 20, Height: 20, Horizontal: 0, Child: woxwidget.Text{Value: "…", Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText}}})
 	}
-	children = append(children, woxwidget.StackChild{Left: contentWidth - 62, Top: 3, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+	children = append(children, woxwidget.StackChild{Top: 3, Right: 34, AnchorRight: true, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 		ID: "terminal-search-open-" + props.SessionID, Label: "Find", Icon: woxcomponent.SearchGlyph(18, props.Theme.PreviewText), Width: 28, Height: 28, Radius: 14,
 		HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: props.OnOpenSearch, OnHoverAt: func(inside bool, bounds woxui.Rect) {
 			if props.OnTagHover != nil {
 				props.OnTagHover(inside, props.SearchHotkey, bounds)
 			}
 		},
-	})}, woxwidget.StackChild{Left: contentWidth - 28, Top: 3, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+	})}, woxwidget.StackChild{Top: 3, AnchorRight: true, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 		ID: "terminal-fullscreen-" + props.SessionID, Label: "Toggle fullscreen", Icon: woxcomponent.FullscreenGlyph(18, props.Theme.PreviewText, props.Fullscreen), Width: 28, Height: 28, Radius: 14,
 		HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: props.OnToggleFullscreen, OnHoverAt: func(inside bool, bounds woxui.Rect) {
 			if props.OnTagHover != nil {
