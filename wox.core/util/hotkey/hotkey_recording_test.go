@@ -87,6 +87,55 @@ func TestRecordingSessionCapturesRawModifierPressWhenAvailable(t *testing.T) {
 	}
 }
 
+func TestRecordingSessionCapturesModifiedFunctionKeys(t *testing.T) {
+	var rawHandler keyboard.RawKeyHandler
+	restore := replaceRawKeyListenerForTest(t, func(handler keyboard.RawKeyHandler) (keyboard.RawKeySubscription, error) {
+		rawHandler = handler
+		return noopRawKeySubscription{}, nil
+	})
+	defer restore()
+
+	recorded := make(chan recordedHotkey, 1)
+	manager := newHotkeyRecordingSessionManager()
+	if _, err := manager.Start(recordingSessionOptions{
+		allowedKinds: []hotkeyKind{hotkeyKindNormalCombo},
+		onRecorded:   func(result recordedHotkey) { recorded <- result },
+	}); err != nil {
+		t.Fatalf("start recording session: %v", err)
+	}
+	defer manager.Stop()
+
+	rawHandler(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyLeftCtrl))
+	if consumed := rawHandler(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyF12)); !consumed {
+		t.Fatal("recorded Ctrl+F12 should be consumed")
+	}
+	assertRecordedHotkey(t, recorded, recordedHotkey{Hotkey: "ctrl+f12", Kind: hotkeyKindNormalCombo})
+}
+
+func TestRecordingSessionCapturesStandaloneFunctionKeys(t *testing.T) {
+	var rawHandler keyboard.RawKeyHandler
+	restore := replaceRawKeyListenerForTest(t, func(handler keyboard.RawKeyHandler) (keyboard.RawKeySubscription, error) {
+		rawHandler = handler
+		return noopRawKeySubscription{}, nil
+	})
+	defer restore()
+
+	recorded := make(chan recordedHotkey, 1)
+	manager := newHotkeyRecordingSessionManager()
+	if _, err := manager.Start(recordingSessionOptions{
+		allowedKinds: []hotkeyKind{hotkeyKindNormalCombo},
+		onRecorded:   func(result recordedHotkey) { recorded <- result },
+	}); err != nil {
+		t.Fatalf("start recording session: %v", err)
+	}
+	defer manager.Stop()
+
+	if consumed := rawHandler(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyF12)); !consumed {
+		t.Fatal("recorded standalone F12 should be consumed")
+	}
+	assertRecordedHotkey(t, recorded, recordedHotkey{Hotkey: "f12", Kind: hotkeyKindNormalCombo})
+}
+
 func TestRecordingSessionCapturesHoldWithoutTrailingPressWhenBothModifierKindsAllowed(t *testing.T) {
 	var rawHandler keyboard.RawKeyHandler
 	restore := replaceRawKeyListenerForTest(t, func(handler keyboard.RawKeyHandler) (keyboard.RawKeySubscription, error) {

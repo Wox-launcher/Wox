@@ -87,6 +87,18 @@ const (
 	KeyF10
 	KeyF11
 	KeyF12
+	KeyF13
+	KeyF14
+	KeyF15
+	KeyF16
+	KeyF17
+	KeyF18
+	KeyF19
+	KeyF20
+	KeyF21
+	KeyF22
+	KeyF23
+	KeyF24
 	KeyCapsLock
 	// KeyBackquote represents the backquote/tilde key (` ~).
 	KeyBackquote
@@ -227,6 +239,30 @@ func ParseKey(token string) (Key, error) {
 		return KeyF11, nil
 	case "f12":
 		return KeyF12, nil
+	case "f13":
+		return KeyF13, nil
+	case "f14":
+		return KeyF14, nil
+	case "f15":
+		return KeyF15, nil
+	case "f16":
+		return KeyF16, nil
+	case "f17":
+		return KeyF17, nil
+	case "f18":
+		return KeyF18, nil
+	case "f19":
+		return KeyF19, nil
+	case "f20":
+		return KeyF20, nil
+	case "f21":
+		return KeyF21, nil
+	case "f22":
+		return KeyF22, nil
+	case "f23":
+		return KeyF23, nil
+	case "f24":
+		return KeyF24, nil
 	case "capslock", "caps_lock", "caps lock":
 		return KeyCapsLock, nil
 	case "backquote", "tilde", "~", "`":
@@ -326,6 +362,54 @@ func (k Key) Character() string {
 		return "8"
 	case Key9:
 		return "9"
+	case KeyF1:
+		return "f1"
+	case KeyF2:
+		return "f2"
+	case KeyF3:
+		return "f3"
+	case KeyF4:
+		return "f4"
+	case KeyF5:
+		return "f5"
+	case KeyF6:
+		return "f6"
+	case KeyF7:
+		return "f7"
+	case KeyF8:
+		return "f8"
+	case KeyF9:
+		return "f9"
+	case KeyF10:
+		return "f10"
+	case KeyF11:
+		return "f11"
+	case KeyF12:
+		return "f12"
+	case KeyF13:
+		return "f13"
+	case KeyF14:
+		return "f14"
+	case KeyF15:
+		return "f15"
+	case KeyF16:
+		return "f16"
+	case KeyF17:
+		return "f17"
+	case KeyF18:
+		return "f18"
+	case KeyF19:
+		return "f19"
+	case KeyF20:
+		return "f20"
+	case KeyF21:
+		return "f21"
+	case KeyF22:
+		return "f22"
+	case KeyF23:
+		return "f23"
+	case KeyF24:
+		return "f24"
 	case KeyBackquote:
 		return "~"
 	case KeyLeftCtrl:

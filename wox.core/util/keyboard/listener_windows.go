@@ -13,12 +13,17 @@ import "C"
 import (
 	"fmt"
 	"sync"
+	"time"
 	"wox/util"
 )
 
 const (
 	rawEventKeyDown = 0
 	rawEventKeyUp   = 1
+
+	hotkeyRegistrationMaxAttempts       = 10
+	hotkeyRegistrationRetryDelay        = 75 * time.Millisecond
+	windowsErrorHotkeyAlreadyRegistered = 1409
 )
 
 type hotkeyRegistration struct {
@@ -56,8 +61,21 @@ func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyR
 	}
 
 	var errCode C.ulong
-	ok := C.woxKeyboardRegisterHotkey(C.int(id), C.uint(modifiers), C.uint(vkCode), &errCode)
-	if ok == 0 {
+	registered := false
+	for attempt := 1; attempt <= hotkeyRegistrationMaxAttempts; attempt++ {
+		ok := C.woxKeyboardRegisterHotkey(C.int(id), C.uint(modifiers), C.uint(vkCode), &errCode)
+		if ok != 0 {
+			registered = true
+			break
+		}
+		// A preceding availability probe can have just released this key. Windows
+		// may briefly report it as still registered before completing that release.
+		if uint32(errCode) != windowsErrorHotkeyAlreadyRegistered || attempt == hotkeyRegistrationMaxAttempts {
+			break
+		}
+		time.Sleep(hotkeyRegistrationRetryDelay)
+	}
+	if !registered {
 		return nil, fmt.Errorf("failed to register hotkey (err=%d)", uint32(errCode))
 	}
 
@@ -325,6 +343,30 @@ func keyToWindowsVK(key Key) (uint32, error) {
 		return 0x7A, nil
 	case KeyF12:
 		return 0x7B, nil
+	case KeyF13:
+		return 0x7C, nil
+	case KeyF14:
+		return 0x7D, nil
+	case KeyF15:
+		return 0x7E, nil
+	case KeyF16:
+		return 0x7F, nil
+	case KeyF17:
+		return 0x80, nil
+	case KeyF18:
+		return 0x81, nil
+	case KeyF19:
+		return 0x82, nil
+	case KeyF20:
+		return 0x83, nil
+	case KeyF21:
+		return 0x84, nil
+	case KeyF22:
+		return 0x85, nil
+	case KeyF23:
+		return 0x86, nil
+	case KeyF24:
+		return 0x87, nil
 	case KeyCapsLock:
 		return 0x14, nil
 	case KeyBackquote:
@@ -450,6 +492,30 @@ func windowsVKToKey(vkCode uint32) Key {
 		return KeyF11
 	case 0x7B:
 		return KeyF12
+	case 0x7C:
+		return KeyF13
+	case 0x7D:
+		return KeyF14
+	case 0x7E:
+		return KeyF15
+	case 0x7F:
+		return KeyF16
+	case 0x80:
+		return KeyF17
+	case 0x81:
+		return KeyF18
+	case 0x82:
+		return KeyF19
+	case 0x83:
+		return KeyF20
+	case 0x84:
+		return KeyF21
+	case 0x85:
+		return KeyF22
+	case 0x86:
+		return KeyF23
+	case 0x87:
+		return KeyF24
 	case 0x14:
 		return KeyCapsLock
 	case 0xA2:

@@ -61,3 +61,12 @@ func TestHotkeyRecordingFocusKeysMatchFlutter(t *testing.T) {
 		t.Fatal("Shift+Enter should remain available as a shortcut candidate")
 	}
 }
+
+func TestFallbackHotkeyStringAllowsStandaloneFunctionKeys(t *testing.T) {
+	if got := fallbackHotkeyString(woxui.KeyEvent{Key: woxui.Key("f12"), Down: true}); got != "f12" {
+		t.Fatalf("standalone F12 = %q, want f12", got)
+	}
+	if got := fallbackHotkeyString(woxui.KeyEvent{Key: woxui.Key("a"), Down: true}); got != "" {
+		t.Fatalf("standalone letter = %q, want empty", got)
+	}
+}

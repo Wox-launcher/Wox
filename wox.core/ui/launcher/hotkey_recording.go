@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -276,6 +277,9 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 			if state.target != nil {
 				state.target.values[key] = previous
 			}
+			state.display = previous
+			state.status = err.Error()
+			state.statusError = true
 			log.Printf("save recorded hotkey setting %s: %v", state.persistKey, err)
 		} else {
 			switch state.persistKey {
@@ -338,7 +342,7 @@ func hotkeyRecordingStops(event woxui.KeyEvent) bool {
 }
 
 func fallbackHotkeyString(event woxui.KeyEvent) string {
-	if !event.Down || event.Repeat || event.Key == woxui.KeyUnknown || event.Modifiers == 0 {
+	if !event.Down || event.Repeat || event.Key == woxui.KeyUnknown || (event.Modifiers == 0 && !isFunctionKeyEvent(event.Key)) {
 		return ""
 	}
 	parts := make([]string, 0, 5)
@@ -380,6 +384,16 @@ func fallbackHotkeyString(event woxui.KeyEvent) string {
 		key = "~"
 	}
 	return strings.Join(append(parts, key), "+")
+}
+
+// isFunctionKeyEvent limits modifier-free fallback candidates to function keys.
+func isFunctionKeyEvent(key woxui.Key) bool {
+	value := strings.TrimPrefix(string(key), "f")
+	if len(value) == len(key) {
+		return false
+	}
+	number, err := strconv.Atoi(value)
+	return err == nil && number >= 1 && number <= 24
 }
 
 // recordFormTableRowHotkey starts recording for a specialized hotkey column in the shared table row editor.

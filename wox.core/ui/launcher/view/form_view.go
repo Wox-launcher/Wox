@@ -1,6 +1,8 @@
 package view
 
 import (
+	"strings"
+
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -139,6 +141,7 @@ type FormHotkeyFieldProps struct {
 	ID                 string
 	Label              string
 	Description        string
+	Value              string
 	Labels             []string
 	Placeholder        string
 	Status             string
@@ -159,12 +162,17 @@ type FormHotkeyFieldProps struct {
 
 // FormHotkeyField builds the shared recorder row for form and built-in settings layouts.
 func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
+	description := props.Description
+	if props.Recording && props.Status != "" {
+		description = strings.TrimSpace(description + " " + props.Status)
+	}
 	recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
 		ID: props.ID, Labels: props.Labels, Placeholder: props.Placeholder, Focused: props.Recording, Error: props.Error, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
 		Window: props.Window, Theme: props.Theme, OnFocusChange: props.OnFocusChange,
 	})
 	recorder = woxwidget.Semantics{
-		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,
+		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label, Description: description,
+		Value:   props.Value,
 		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		OnAction: func(action woxui.AccessibilityAction, _ string) error {
 			if action == woxui.AccessibilityActionActivate && props.OnTap != nil {

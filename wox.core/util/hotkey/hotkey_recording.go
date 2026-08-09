@@ -333,6 +333,7 @@ func (s *recordingRawState) HandleEvent(event keyboard.RawKeyEvent) bool {
 	if s.allowed[hotkeyKindNormalCombo] && event.Type == keyboard.EventTypeKeyDown && !isSpecificModifierKey(event.Key) {
 		if hotkeyStr := s.normalComboStringLocked(event.Key); hotkeyStr != "" {
 			recorded = append(recorded, recordedHotkey{Hotkey: hotkeyStr, Kind: hotkeyKindNormalCombo})
+			consume = true
 		}
 	}
 	s.mu.Unlock()
@@ -486,7 +487,7 @@ func (s *recordingRawState) normalComboStringLocked(key keyboard.Key) string {
 	}
 
 	modifiers := s.currentGenericModifiersLocked()
-	if len(modifiers) == 0 {
+	if len(modifiers) == 0 && !isFunctionKey(key) {
 		return ""
 	}
 
@@ -496,6 +497,10 @@ func (s *recordingRawState) normalComboStringLocked(key keyboard.Key) string {
 	}
 	parts = append(parts, keyStr)
 	return joinHotkeyParts(parts)
+}
+
+func isFunctionKey(key keyboard.Key) bool {
+	return key >= keyboard.KeyF1 && key <= keyboard.KeyF24
 }
 
 func (s *recordingRawState) currentGenericModifiersLocked() []keyboard.Key {

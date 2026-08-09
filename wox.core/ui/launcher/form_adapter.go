@@ -239,7 +239,7 @@ func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCall
 	}
 	return launcherview.FormHotkeyField(launcherview.FormHotkeyFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.translate(definition.Value.Label), Description: a.translate(definition.Value.Tooltip),
-		Labels: formatHotkeyLabels(value), Placeholder: placeholder, Status: presentation.Status, Recording: presentation.Active, Error: presentation.Error,
+		Value: value, Labels: formatHotkeyLabels(value), Placeholder: placeholder, Status: presentation.Status, Recording: presentation.Active, Error: presentation.Error,
 		Hold: hold, HoldPrefix: a.translate("i18n:ui_hotkey_hold_prefix"),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, SettingsLayout: callbacks.settingsLayout, AlignRecorderRight: callbacks.alignHotkeyRight,
 		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette.componentTheme(),

@@ -1197,6 +1197,9 @@ func windowsKey(virtualKey uintptr) Key {
 	if virtualKey >= '0' && virtualKey <= '9' {
 		return Key(string(rune(virtualKey)))
 	}
+	if virtualKey >= 0x70 && virtualKey <= 0x87 {
+		return Key(fmt.Sprintf("f%d", virtualKey-0x70+1))
+	}
 	switch virtualKey {
 	case win.VK_BACK:
 		return KeyBackspace
