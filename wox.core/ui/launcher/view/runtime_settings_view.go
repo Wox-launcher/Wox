@@ -109,14 +109,13 @@ func buildRuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
 		children = append(children, runtimeExecutableSettingRow(props, row, contentWidth, settingRowHeight))
 	}
 	children = append(children, woxwidget.Container{Width: contentWidth, Height: 16})
-	contentHeight := rowsTop + float32(len(props.Settings))*settingRowHeight + 16
 	var keepVisible *woxwidget.ScrollRange
 	if props.Selected >= 0 && props.Selected < len(props.Settings) {
 		top := rowsTop + float32(props.Selected)*settingRowHeight
 		keepVisible = &woxwidget.ScrollRange{Start: top, End: top + settingRowHeight}
 	}
 	return SettingsPage(SettingsPageProps{
-		ID: "runtime-page-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight, KeepVisible: keepVisible,
+		ID: "runtime-page-scroll", Width: props.Width, Height: props.Height, Children: children, KeepVisible: keepVisible,
 	})
 }
 
@@ -166,22 +165,18 @@ func runtimeStatusGrid(props RuntimeSettingsProps, width, height float32) woxwid
 	}
 	columns := runtimeStatusColumns(width)
 	cardWidth := (width - float32(columns-1)*12) / float32(columns)
-	rows := make([]woxwidget.Widget, 0, (len(props.Statuses)+columns-1)/columns)
-	for start := 0; start < len(props.Statuses); start += columns {
-		end := min(start+columns, len(props.Statuses))
-		rowHeight := float32(168)
-		for _, status := range props.Statuses[start:end] {
-			if status.Actionable {
-				rowHeight = 224
-			}
+	cards := make([]woxwidget.Widget, 0, len(props.Statuses))
+	for _, status := range props.Statuses {
+		cardHeight := float32(168)
+		if status.Actionable {
+			cardHeight = 224
 		}
-		cards := make([]woxwidget.Widget, 0, end-start)
-		for _, status := range props.Statuses[start:end] {
-			cards = append(cards, runtimeStatusCard(props, status, cardWidth, rowHeight))
-		}
-		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: cards})
+		cards = append(cards, runtimeStatusCard(props, status, cardWidth, cardHeight))
 	}
-	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: rows}}
+	return woxwidget.Grid{
+		Width: width, Columns: columns, CellWidth: cardWidth, ColumnGap: 12, RowGap: 12,
+		CrossAxisAlignment: woxwidget.CrossAxisStretch, Children: cards,
+	}
 }
 
 // runtimeStatusCard preserves Flutter's reserved detail and plugin-count alignment.

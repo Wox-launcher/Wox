@@ -28,8 +28,8 @@ func TestSettingsRailSelectedItemUsesThemeHighlight(t *testing.T) {
 		Items: []SettingsNavItem{{ID: "themes.installed", Label: "Installed Themes", Selected: true}},
 	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
 	navigation := rail.Child.(woxwidget.Flex).Children[1].(woxwidget.Stack)
-	scroll := navigation.Children[0].Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-	row := scroll.Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	props := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 
 	if row.Color != highlight {
 		t.Fatalf("selected navigation fill = %#v, want theme highlight %#v", row.Color, highlight)
@@ -76,8 +76,8 @@ func TestSettingsSearchResultsShowFlutterLeadingIconLayout(t *testing.T) {
 	if panel.Radius != 6 || panel.BorderColor != border || panel.BorderWidth != 1 {
 		t.Fatalf("search panel geometry = radius %.0f border %#v/%.0f, want Flutter 6px radius with theme divider", panel.Radius, panel.BorderColor, panel.BorderWidth)
 	}
-	scroll := panel.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-	row := scroll.Child.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
+	props := panel.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
 	content := row.Child.(woxwidget.Flex)
 
 	if content.Axis != woxwidget.Horizontal || content.Gap != 8 || content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
@@ -88,7 +88,7 @@ func TestSettingsSearchResultsShowFlutterLeadingIconLayout(t *testing.T) {
 	if leading.Width != 24 || leading.Height != 38 || image.Source != icon || image.Width != 24 || image.Height != 24 {
 		t.Fatalf("search result leading icon = %#v / %#v, want 24px Flutter icon slot", leading, image)
 	}
-	text := content.Children[1].(woxwidget.Align).Child.(woxwidget.Flex)
+	text := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	if text.Axis != woxwidget.Vertical || len(text.Children) != 2 {
 		t.Fatalf("search result text column = %#v, want title and subtitle", text)
 	}
@@ -102,8 +102,8 @@ func TestSettingsSearchResultsUseSelectedTextColors(t *testing.T) {
 		Theme:   woxcomponent.Theme{SelectedTitle: titleColor, SelectedSubtitle: subtitleColor},
 		Results: []SettingsSearchResult{{Title: "AI", Subtitle: "Settings section"}},
 	}).(woxwidget.Container)
-	scroll := panel.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-	row := scroll.Child.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
+	props := panel.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
 	text := row.Child.(woxwidget.Flex)
 
 	if title := text.Children[0].(woxwidget.Text); title.Color != titleColor {
@@ -119,8 +119,8 @@ func TestSettingsSearchResultsHideIconInNarrowPanel(t *testing.T) {
 		Width: 96, AvailableHeight: 200, Theme: woxcomponent.Theme{},
 		Results: []SettingsSearchResult{{Title: "General", Subtitle: "Setting", Icon: &woxui.Image{}}},
 	}).(woxwidget.Container)
-	scroll := panel.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-	row := scroll.Child.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
+	props := panel.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
 
 	if content, ok := row.Child.(woxwidget.Flex); !ok || content.Axis != woxwidget.Vertical {
 		t.Fatalf("narrow search result content = %T %#v, want icon-free text column", row.Child, row.Child)
@@ -138,7 +138,7 @@ func TestSettingsSearchResultsUseSharedScrollbarWhenOverflowing(t *testing.T) {
 	scrollbar := panel.Child.(woxwidget.Stateful)
 	props := scrollbar.Widget.(woxcomponent.ScrollViewProps)
 
-	if props.Key != "settings-search-results" || props.ContentHeight <= props.Height || props.KeepVisible == nil {
-		t.Fatalf("settings search scrollbar = key %q geometry %.0f/%.0f keep visible %v, want shared overflow surface", props.Key, props.ContentHeight, props.Height, props.KeepVisible)
+	if props.Key != "settings-search-results" || props.ContentHeight != 0 || props.KeepVisible == nil {
+		t.Fatalf("settings search scrollbar = key %q content hint %.0f keep visible %v, want measured shared overflow surface", props.Key, props.ContentHeight, props.KeepVisible)
 	}
 }

@@ -186,6 +186,23 @@ type Align struct {
 	Child      Widget
 }
 
+// Constrained applies optional size bounds and fill behavior to one child.
+type Constrained struct {
+	MinWidth   float32
+	MaxWidth   float32
+	MinHeight  float32
+	MaxHeight  float32
+	FillWidth  bool
+	FillHeight bool
+	Child      Widget
+}
+
+// LayoutBuilder builds a child from the immutable size available during layout.
+// Build should only use that size and immutable values captured from parent props.
+type LayoutBuilder struct {
+	Build func(woxui.Size) Widget
+}
+
 func (w Align) layout(ctx context, available constraints) *node {
 	width := available.width
 	if w.Width > 0 {
@@ -205,6 +222,53 @@ func (w Align) layout(ctx context, available constraints) *node {
 	child.place(max(float32(0), width-child.bounds.Width)*horizontal, max(float32(0), height-child.bounds.Height)*vertical)
 	result.children = []*node{child}
 	return result
+}
+
+func (w Constrained) layout(ctx context, available constraints) *node {
+	maxWidth := available.width
+	if w.MaxWidth > 0 {
+		maxWidth = min(maxWidth, w.MaxWidth)
+	}
+	maxHeight := available.height
+	if w.MaxHeight > 0 {
+		maxHeight = min(maxHeight, w.MaxHeight)
+	}
+	minWidth := min(max(float32(0), w.MinWidth), maxWidth)
+	minHeight := min(max(float32(0), w.MinHeight), maxHeight)
+	if w.Child == nil {
+		width := minWidth
+		height := minHeight
+		if w.FillWidth && maxWidth < math.MaxFloat32 {
+			width = maxWidth
+		}
+		if w.FillHeight && maxHeight < math.MaxFloat32 {
+			height = maxHeight
+		}
+		return &node{bounds: woxui.Rect{Width: width, Height: height}}
+	}
+	child := w.Child.layout(ctx, constraints{width: maxWidth, height: maxHeight})
+	width := min(max(child.bounds.Width, minWidth), maxWidth)
+	height := min(max(child.bounds.Height, minHeight), maxHeight)
+	if w.FillWidth && maxWidth < math.MaxFloat32 {
+		width = maxWidth
+	}
+	if w.FillHeight && maxHeight < math.MaxFloat32 {
+		height = maxHeight
+	}
+	child.bounds.Width = width
+	child.bounds.Height = height
+	return child
+}
+
+func (w LayoutBuilder) layout(ctx context, available constraints) *node {
+	if w.Build == nil {
+		return &node{}
+	}
+	child := w.Build(woxui.Size{Width: available.width, Height: available.height})
+	if child == nil {
+		return &node{}
+	}
+	return child.layout(ctx, available)
 }
 
 func (w Container) layout(ctx context, available constraints) *node {
@@ -269,14 +333,39 @@ const (
 	CrossAxisStart CrossAxisAlignment = iota
 	CrossAxisCenter
 	CrossAxisEnd
+	CrossAxisStretch
+)
+
+// MainAxisAlignment positions Flex children when the main axis has unused space.
+type MainAxisAlignment uint8
+
+const (
+	MainAxisStart MainAxisAlignment = iota
+	MainAxisCenter
+	MainAxisEnd
+	MainAxisSpaceBetween
 )
 
 // Flex lays children out sequentially with a fixed gap.
 type Flex struct {
 	Axis               Axis
 	Gap                float32
+	MainAxisAlignment  MainAxisAlignment
 	CrossAxisAlignment CrossAxisAlignment
 	Children           []Widget
+}
+
+// Expanded gives its child a weighted share of the remaining Flex main-axis extent.
+type Expanded struct {
+	Flex  float32
+	Child Widget
+}
+
+func (w Expanded) layout(ctx context, available constraints) *node {
+	if w.Child == nil {
+		return &node{}
+	}
+	return w.Child.layout(ctx, available)
 }
 
 // StackChild positions one child relative to its stack's top-left corner.
@@ -319,6 +408,7 @@ type ScrollView struct {
 	KeepVisible       *ScrollRange
 	KeepVisibleKey    Key
 	OnOffsetChanged   func(float32)
+	OnGeometryChanged func(viewport, content float32)
 	Child             Widget
 	onGeometry        func(viewport, content float32, measuredKeepVisible *ScrollRange)
 	onEnsureVisible   func(start, end float32) bool
@@ -370,6 +460,8 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 		offset := min(max(float32(0), w.Offset), max(float32(0), contentWidth-width))
 		if w.onGeometry != nil {
 			w.onGeometry(width, contentWidth, scrollChildRange(child, w.KeepVisibleKey, true))
+		} else if w.OnGeometryChanged != nil {
+			w.OnGeometryChanged(width, contentWidth)
 		}
 		result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
 		if w.onEnsureVisible != nil {
@@ -395,6 +487,8 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 	offset := min(max(float32(0), w.Offset), max(float32(0), contentHeight-height))
 	if w.onGeometry != nil {
 		w.onGeometry(height, contentHeight, scrollChildRange(child, w.KeepVisibleKey, false))
+	} else if w.OnGeometryChanged != nil {
+		w.OnGeometryChanged(height, contentHeight)
 	}
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
 	if w.onEnsureVisible != nil {
@@ -467,6 +561,151 @@ func (w Stack) layout(ctx context, available constraints) *node {
 }
 
 func (w Flex) layout(ctx context, available constraints) *node {
+	enhanced := w.MainAxisAlignment != MainAxisStart || w.CrossAxisAlignment == CrossAxisStretch
+	if !enhanced {
+		for _, child := range w.Children {
+			if _, ok := child.(Expanded); ok {
+				enhanced = true
+				break
+			}
+		}
+	}
+	if !enhanced {
+		return w.layoutSequential(ctx, available)
+	}
+
+	type flexChild struct {
+		widget Widget
+		flex   float32
+		node   *node
+	}
+
+	children := make([]flexChild, 0, len(w.Children))
+	totalFlex := float32(0)
+	for _, childWidget := range w.Children {
+		if childWidget == nil {
+			continue
+		}
+		child := flexChild{widget: childWidget}
+		if expanded, ok := childWidget.(Expanded); ok {
+			child.widget = expanded.Child
+			child.flex = expanded.Flex
+			if child.flex <= 0 {
+				child.flex = 1
+			}
+			totalFlex += child.flex
+		}
+		if child.widget != nil {
+			children = append(children, child)
+		}
+	}
+
+	result := &node{}
+	if len(children) == 0 {
+		return result
+	}
+	mainAvailable := available.width
+	if w.Axis == Vertical {
+		mainAvailable = available.height
+	}
+	mainBounded := mainAvailable < math.MaxFloat32
+	totalGap := w.Gap * float32(len(children)-1)
+	fixedExtent := float32(0)
+	for index := range children {
+		if children[index].flex > 0 && mainBounded {
+			continue
+		}
+		children[index].node = children[index].widget.layout(ctx, available)
+		fixedExtent += flexMainExtent(children[index].node, w.Axis)
+	}
+	remaining := max(float32(0), mainAvailable-fixedExtent-totalGap)
+	for index := range children {
+		if children[index].flex <= 0 || !mainBounded {
+			continue
+		}
+		share := remaining * children[index].flex / totalFlex
+		childAvailable := available
+		if w.Axis == Horizontal {
+			childAvailable.width = share
+		} else {
+			childAvailable.height = share
+		}
+		child := children[index].widget.layout(ctx, childAvailable)
+		// Expanded is a tight main-axis slot even when its child naturally shrink-wraps.
+		if w.Axis == Horizontal {
+			child.bounds.Width = share
+		} else {
+			child.bounds.Height = share
+		}
+		children[index].node = child
+	}
+
+	contentExtent := totalGap
+	crossExtent := float32(0)
+	for _, child := range children {
+		contentExtent += flexMainExtent(child.node, w.Axis)
+		crossExtent = max(crossExtent, flexCrossExtent(child.node, w.Axis))
+	}
+	if w.CrossAxisAlignment == CrossAxisStretch {
+		if w.Axis == Horizontal {
+			if available.height < math.MaxFloat32 {
+				crossExtent = available.height
+			}
+		} else {
+			if available.width < math.MaxFloat32 {
+				crossExtent = available.width
+			}
+		}
+	}
+
+	mainExtent := contentExtent
+	freeExtent := max(float32(0), mainAvailable-contentExtent)
+	startOffset := float32(0)
+	gap := w.Gap
+	switch {
+	case !mainBounded:
+	case w.MainAxisAlignment == MainAxisCenter:
+		mainExtent = mainAvailable
+		startOffset = freeExtent / 2
+	case w.MainAxisAlignment == MainAxisEnd:
+		mainExtent = mainAvailable
+		startOffset = freeExtent
+	case w.MainAxisAlignment == MainAxisSpaceBetween:
+		mainExtent = mainAvailable
+		if len(children) > 1 {
+			gap += freeExtent / float32(len(children)-1)
+		}
+	}
+
+	cursor := startOffset
+	for _, child := range children {
+		if w.CrossAxisAlignment == CrossAxisStretch {
+			if w.Axis == Horizontal {
+				child.node.bounds.Height = crossExtent
+			} else {
+				child.node.bounds.Width = crossExtent
+			}
+		}
+		crossX, crossY := flexChildOffset(child.node, w.Axis, crossExtent, w.CrossAxisAlignment)
+		child.node.place(crossX, crossY)
+		if w.Axis == Horizontal {
+			child.node.place(cursor, 0)
+		} else {
+			child.node.place(0, cursor)
+		}
+		cursor += flexMainExtent(child.node, w.Axis) + gap
+		result.children = append(result.children, child.node)
+	}
+	if w.Axis == Horizontal {
+		result.bounds = woxui.Rect{Width: mainExtent, Height: crossExtent}
+	} else {
+		result.bounds = woxui.Rect{Width: crossExtent, Height: mainExtent}
+	}
+	return result
+}
+
+// layoutSequential preserves the original shrink-wrapped path for Flex trees that do not allocate free space.
+func (w Flex) layoutSequential(ctx context, available constraints) *node {
 	result := &node{}
 	var cursor float32
 	for _, childWidget := range w.Children {
@@ -506,11 +745,117 @@ func (w Flex) layout(ctx context, available constraints) *node {
 	return result
 }
 
+func flexMainExtent(child *node, axis Axis) float32 {
+	if axis == Horizontal {
+		return child.bounds.Width
+	}
+	return child.bounds.Height
+}
+
+func flexCrossExtent(child *node, axis Axis) float32 {
+	if axis == Horizontal {
+		return child.bounds.Height
+	}
+	return child.bounds.Width
+}
+
+func flexChildOffset(child *node, axis Axis, crossExtent float32, alignment CrossAxisAlignment) (float32, float32) {
+	crossAxisFactor := float32(0)
+	switch alignment {
+	case CrossAxisCenter:
+		crossAxisFactor = 0.5
+	case CrossAxisEnd:
+		crossAxisFactor = 1
+	}
+	if axis == Horizontal {
+		return 0, max(float32(0), crossExtent-child.bounds.Height) * crossAxisFactor
+	}
+	return max(float32(0), crossExtent-child.bounds.Width) * crossAxisFactor, 0
+}
+
 // Wrap lays children horizontally and starts a new run when width is exhausted.
 type Wrap struct {
 	Gap      float32
 	RunGap   float32
 	Children []Widget
+}
+
+// Grid lays children into equal-width columns and rows measured from their tallest cells.
+type Grid struct {
+	Width              float32
+	Columns            int
+	MinColumnWidth     float32
+	MaxColumns         int
+	CellWidth          float32
+	CellHeight         float32
+	ColumnGap          float32
+	RowGap             float32
+	CrossAxisAlignment CrossAxisAlignment
+	Children           []Widget
+}
+
+func (w Grid) layout(ctx context, available constraints) *node {
+	width := available.width
+	if w.Width > 0 {
+		width = min(w.Width, available.width)
+	}
+	columns := w.Columns
+	if columns <= 0 {
+		columnWidth := w.MinColumnWidth
+		if columnWidth <= 0 {
+			columnWidth = w.CellWidth
+		}
+		if columnWidth > 0 && width < math.MaxFloat32 {
+			columns = max(1, int((width+w.ColumnGap)/(columnWidth+w.ColumnGap)))
+		} else {
+			columns = 1
+		}
+	}
+	if w.MaxColumns > 0 {
+		columns = min(columns, w.MaxColumns)
+	}
+	columns = max(1, columns)
+	cellWidth := w.CellWidth
+	if cellWidth <= 0 {
+		cellWidth = max(float32(0), (width-float32(columns-1)*w.ColumnGap)/float32(columns))
+	}
+	result := &node{bounds: woxui.Rect{Width: width}}
+	for rowStart, y := 0, float32(0); rowStart < len(w.Children); rowStart += columns {
+		rowEnd := min(rowStart+columns, len(w.Children))
+		row := make([]*node, 0, rowEnd-rowStart)
+		rowHeight := w.CellHeight
+		for index := rowStart; index < rowEnd; index++ {
+			if w.Children[index] == nil {
+				row = append(row, nil)
+				continue
+			}
+			cellAvailable := constraints{width: cellWidth, height: available.height}
+			if w.CellHeight > 0 {
+				cellAvailable.height = min(w.CellHeight, available.height)
+			}
+			child := w.Children[index].layout(ctx, cellAvailable)
+			child.bounds.Width = cellWidth
+			rowHeight = max(rowHeight, child.bounds.Height)
+			row = append(row, child)
+		}
+		for column, child := range row {
+			if child == nil {
+				continue
+			}
+			if w.CrossAxisAlignment == CrossAxisStretch {
+				child.bounds.Height = rowHeight
+			}
+			_, offsetY := flexChildOffset(child, Horizontal, rowHeight, w.CrossAxisAlignment)
+			child.place(float32(column)*(cellWidth+w.ColumnGap), y+offsetY)
+			result.children = append(result.children, child)
+		}
+		y += rowHeight
+		if rowEnd < len(w.Children) {
+			y += w.RowGap
+		}
+		result.bounds.Height = y
+	}
+	return result
 }
 
 func (w Wrap) layout(ctx context, available constraints) *node {

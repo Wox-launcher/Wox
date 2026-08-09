@@ -124,8 +124,8 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 	})
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
-	scroll := column.Children[1].(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-	rows := scroll.Child.(woxwidget.Flex)
+	props := column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	rows := props.Content.(woxwidget.Flex)
 	row := rows.Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	rowContent := row.Child.(woxwidget.Flex)
 	status := rowContent.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
@@ -172,7 +172,8 @@ func TestPluginStoreInstalledIconUsesSelectionColor(t *testing.T) {
 	})
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
-	rows := column.Children[1].(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView).Child.(woxwidget.Flex)
+	props := column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	rows := props.Content.(woxwidget.Flex)
 	selectedRow := rows.Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	inactiveRow := rows.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	selected := selectedRow.Children[2].(woxwidget.Align).Child.(woxwidget.Image)
@@ -192,7 +193,8 @@ func TestPluginListSearchHighlightKeepsSelectedFillAndAddsBorder(t *testing.T) {
 	})
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
-	row := column.Children[1].(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	props := column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	if row.Color != selected {
 		t.Fatalf("selected plugin fill = %#v, want selected color %#v", row.Color, selected)
 	}
@@ -211,8 +213,8 @@ func TestPluginListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
 	scrollbar := column.Children[1].(woxwidget.Stateful)
 	props := scrollbar.Widget.(woxcomponent.ScrollViewProps)
 
-	if props.ContentHeight <= props.Height || props.ThumbColor.A != 255 {
-		t.Fatalf("plugin scrollbar geometry = %.0f/%.0f color alpha %d, want shared overflowing scrollbar", props.ContentHeight, props.Height, props.ThumbColor.A)
+	if props.ContentHeight != 0 || props.ThumbColor.A != 255 {
+		t.Fatalf("plugin scrollbar hint = %.0f color alpha %d, want measured shared scrollbar", props.ContentHeight, props.ThumbColor.A)
 	}
 }
 
@@ -416,8 +418,8 @@ func TestPluginEditorDescriptionUsesSharedDetailView(t *testing.T) {
 	if body.Padding.Left != 24 || body.Padding.Right != 24 {
 		t.Fatalf("description padding = %+v, want Flutter's 24px detail inset", body.Padding)
 	}
-	scroll := body.Child.(woxwidget.Container).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-	detail := scroll.Child.(woxwidget.Flex)
+	props := body.Child.(woxwidget.Container).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	detail := props.Content.(woxwidget.Flex)
 	name := detail.Children[0].(woxwidget.Container).Child.(woxwidget.Text)
 	metadata := detail.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
 	if name.Value != "Shell" || len(metadata.Children) != 3 {

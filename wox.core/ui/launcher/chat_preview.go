@@ -1091,10 +1091,10 @@ func (a *App) scrollChatPanel(delta float32) {
 	_ = a.window.Invalidate()
 }
 
-// clampChatDebugScroll records the JSON inspector extent derived by the shared text layout.
-func (a *App) clampChatDebugScroll(maxOffset float32) {
+// setChatDebugGeometry records the measured JSON inspector extent for controlled scrolling.
+func (a *App) setChatDebugGeometry(viewport, content float32) {
 	if state := a.chatPreview; state != nil && state.panel == "debug" {
-		state.panelMaxScroll = max(float32(0), maxOffset)
+		state.panelMaxScroll = max(float32(0), content-viewport)
 		state.panelScroll = min(max(float32(0), state.panelScroll), state.panelMaxScroll)
 	}
 }

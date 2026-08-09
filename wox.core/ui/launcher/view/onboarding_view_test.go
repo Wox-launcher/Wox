@@ -102,8 +102,8 @@ func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
 		t.Fatalf("footer = %#v, want content plus top divider", footer)
 	}
 	content := footer.Children[0].Child.(woxwidget.Container)
-	actions := content.Child.(woxwidget.Stack)
-	skip := actions.Children[0].Child.(woxwidget.Semantics)
+	actions := content.Child.(woxwidget.Flex)
+	skip := actions.Children[0].(woxwidget.Semantics)
 	focusable := skip.Child.(woxwidget.Focusable)
 	gesture := focusable.Child.(woxwidget.Gesture)
 	button := gesture.Child.(woxwidget.Container)
@@ -112,6 +112,9 @@ func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
 	}
 	if button.Padding.Left != 8 || button.Padding.Right != 8 {
 		t.Fatalf("skip padding = %#v, want room for two CJK glyphs", button.Padding)
+	}
+	if actions.MainAxisAlignment != woxwidget.MainAxisSpaceBetween {
+		t.Fatalf("footer alignment = %v, want space-between", actions.MainAxisAlignment)
 	}
 }
 

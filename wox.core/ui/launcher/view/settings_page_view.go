@@ -12,7 +12,6 @@ type SettingsPageProps struct {
 	Width          float32
 	Height         float32
 	Children       []woxwidget.Widget
-	ContentHeight  float32
 	Gap            float32
 	KeepVisible    *woxwidget.ScrollRange
 	KeepVisibleKey woxwidget.Key
@@ -33,7 +32,7 @@ func SettingsPage(props SettingsPageProps) woxwidget.Widget {
 	}
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 38, Top: 34, Right: 44, Bottom: 24}, Child: woxwidget.ScrollView{
 		Key: woxwidget.Key(id), ID: id, KeepVisible: props.KeepVisible, KeepVisibleKey: props.KeepVisibleKey,
-		Width: contentWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, props.ContentHeight),
+		Width: contentWidth, Height: viewportHeight,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.Gap, Children: props.Children},
 	}}
 }

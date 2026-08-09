@@ -301,18 +301,14 @@ func chatHistoryContentHeight(chats []chatData, now time.Time) float32 {
 // chatDebugProps prepares the copyable trace while the controller owns cached text measurement and scrolling.
 func (a *App) chatDebugProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatDebugProps {
 	innerWidth := max(float32(0), width-20)
-	viewportHeight := max(float32(40), height-42)
 	summary, value := formatChatDebugTrace(snapshot.chat.DebugTrace)
 	textWidth := max(float32(20), innerWidth-16)
 	hash := sha256.Sum256([]byte(value))
 	layout := a.previewTextLayout(fmt.Sprintf("chat-debug\x00%s\x00%x", snapshot.key, hash[:8]), value, woxui.TextStyle{Size: 10}, textWidth, 16)
-	contentHeight := max(viewportHeight, layout.Size.Height+16)
-	maxOffset := max(float32(0), contentHeight-viewportHeight)
-	offset := min(max(float32(0), snapshot.panelScroll), maxOffset)
-	a.clampChatDebugScroll(maxOffset)
 	return previewview.ChatDebugProps{
 		Width: width, Height: height, Key: snapshot.key, Summary: summary, Value: value, Layout: layout,
-		Scroll: offset, ContentHeight: contentHeight, Theme: palette.componentTheme(), OnScroll: a.scrollChatDebugPanel, OnCopy: func() { a.copyChatText(value) },
+		Scroll: snapshot.panelScroll, Theme: palette.componentTheme(), OnScroll: a.scrollChatDebugPanel, OnGeometryChanged: a.setChatDebugGeometry,
+		OnCopy: func() { a.copyChatText(value) },
 	}
 }
 

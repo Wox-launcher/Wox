@@ -201,13 +201,14 @@ func windowGroupEditorHeader(props WindowGroupEditorProps, width float32) woxwid
 	}
 	left := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: children}
 	right := woxwidget.Text{Value: props.SelectDisplayLabel, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}
-	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: []woxwidget.Widget{left, woxwidget.Container{Width: max(float32(0), width-376), Child: right}}}
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: []woxwidget.Widget{left, woxwidget.Expanded{Child: right}}}
 }
 
 func windowGroupEditorBody(props WindowGroupEditorProps, width, height float32) woxwidget.Widget {
-	leftWidth := max(float32(0), width-348)
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 18, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: leftWidth, Height: height, Child: windowGroupDisplayArrangement(props, leftWidth, height)},
+		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+			return windowGroupDisplayArrangement(props, size.Width, height)
+		}}},
 		woxwidget.Container{Width: 330, Height: height, Child: windowGroupLayoutPanel(props, 330, height)},
 	}}
 }
@@ -307,17 +308,16 @@ func windowGroupDisplayTile(props WindowGroupEditorProps, tile WindowGroupDispla
 func windowGroupLayoutPanel(props WindowGroupEditorProps, width, height float32) woxwidget.Widget {
 	header := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 		woxwidget.Text{Value: props.LayoutsLabel, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
-		woxwidget.TextBlock{Value: props.LayoutsDescription, Width: width - 24, MaxLines: 3, LineHeight: 15, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},
+		woxwidget.TextBlock{Value: props.LayoutsDescription, MaxLines: 3, LineHeight: 15, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},
 	}}
 	groups := make([]woxwidget.Widget, 0, len(props.LayoutGroups))
 	for _, group := range props.LayoutGroups {
 		groups = append(groups, windowGroupLayoutGroup(props, group))
 	}
 	scrollContent := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: append([]woxwidget.Widget{header}, groups...)}
-	contentHeight := windowGroupLayoutPanelContentHeight(props.LayoutGroups)
 	innerHeight := max(float32(0), height-2)
 	scroll := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "window-group-layout-scroll", Width: width - 2, Height: innerHeight, ContentHeight: max(innerHeight, contentHeight),
+		Key: "window-group-layout-scroll", Width: width - 2, Height: innerHeight,
 		Content: woxwidget.Container{Width: width - 2, Padding: woxwidget.UniformInsets(12), Child: scrollContent}, ThumbColor: props.Theme.ResultSubtitle,
 	})
 	return woxwidget.Container{
@@ -395,17 +395,6 @@ func windowGroupMiniLayout(props WindowGroupEditorProps, slots []WindowGroupSlot
 		Width: width, Height: height, Radius: 3, BorderColor: windowGroupFadeColor(props.Theme.ResultSubtitle, 0.45), BorderWidth: 1,
 		Child: woxwidget.Stack{Width: width, Height: height, Children: slotChildren},
 	}
-}
-
-func windowGroupLayoutPanelContentHeight(groups []WindowGroupLayoutGroupProps) float32 {
-	height := float32(24 + 50)
-	for _, group := range groups {
-		height += 20
-		rows := (len(group.Layouts) + 1) / 2
-		height += float32(rows)*windowGroupLayoutCardHeight + float32(max(0, rows-1))*windowGroupLayoutCardGap
-		height += 14
-	}
-	return height
 }
 
 func windowGroupSlotTile(props WindowGroupEditorProps, slot WindowGroupSlotProps, selectedDisplay bool, displayIndex int, width, height float32) woxwidget.Widget {

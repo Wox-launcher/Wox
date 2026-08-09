@@ -351,7 +351,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		}
 	}
 	return launcherview.SettingsPage(launcherview.SettingsPageProps{
-		ID: "settings-page-" + snapshot.tab, Width: width, Height: height, Children: children, ContentHeight: contentHeight, KeepVisible: keepVisible, KeepVisibleKey: keepVisibleKey,
+		ID: "settings-page-" + snapshot.tab, Width: width, Height: height, Children: children, KeepVisible: keepVisible, KeepVisibleKey: keepVisibleKey,
 	})
 }
 

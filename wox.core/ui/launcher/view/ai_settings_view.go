@@ -37,12 +37,11 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 			Value: "AI settings are unavailable.", Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle,
 		}}
 		return SettingsPage(SettingsPageProps{
-			ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: []woxwidget.Widget{header, message}, ContentHeight: woxcomponent.PageHeaderHeight + 30,
+			ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: []woxwidget.Widget{header, message},
 		})
 	}
 
 	children := []woxwidget.Widget{header}
-	contentHeight := woxcomponent.PageHeaderHeight
 	var keepVisibleKey woxwidget.Key
 	for _, table := range props.Tables {
 		if table.Index == props.Selected {
@@ -60,9 +59,8 @@ func AISettingsView(props AISettingsProps) woxwidget.Widget {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
 			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText,
 		}})
-		contentHeight += 30
 	}
 	return SettingsPage(SettingsPageProps{
-		ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight, KeepVisibleKey: keepVisibleKey,
+		ID: "ai-settings-scroll", Width: props.Width, Height: props.Height, Children: children, KeepVisibleKey: keepVisibleKey,
 	})
 }

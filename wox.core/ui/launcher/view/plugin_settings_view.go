@@ -186,7 +186,7 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 		}
 		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "plugin-list-scroll", Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Width: props.Width, Height: viewportHeight,
-			ContentHeight: max(viewportHeight, float32(len(rows))*rowHeight), KeepVisible: keepVisible, ThumbColor: props.Theme.ResultSubtitle,
+			KeepVisible: keepVisible, ThumbColor: props.Theme.ResultSubtitle,
 		})
 	}
 	searchFieldWidth := max(float32(80), props.Width)
@@ -534,24 +534,20 @@ func PluginTabs(props PluginTabsProps) woxwidget.Widget {
 // pluginMetadataTab renders description, empty, or tabular metadata in one scroll surface.
 func pluginMetadataTab(props PluginMetadataProps, width, height float32, scrollID string, theme woxcomponent.Theme) woxwidget.Widget {
 	rows := make([]woxwidget.Widget, 0, len(props.Items)+1)
-	contentHeight := float32(0)
 	if props.DescriptionOnly {
-		contentHeight = max(float32(100), height-30)
-		rows = append(rows, woxwidget.TextBlock{Value: props.Description, Width: width, Height: contentHeight, MaxLines: 20, Style: woxui.TextStyle{Size: 13}, LineHeight: 21, Color: theme.ResultSubtitle})
+		rows = append(rows, woxwidget.TextBlock{Value: props.Description, Width: width, Height: max(float32(100), height-30), MaxLines: 20, Style: woxui.TextStyle{Size: 13}, LineHeight: 21, Color: theme.ResultSubtitle})
 	} else if props.EmptyTitle != "" {
 		return pluginEmptySettings(props.EmptyTitle, props.EmptyDescription, width, height, theme)
 	} else {
 		if props.Header != "" {
-			contentHeight += 46
 			rows = append(rows, woxwidget.Container{Width: width, Height: 46, Padding: woxwidget.Insets{Top: 16}, Child: woxwidget.Text{Value: props.Header, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle}})
 		}
 		for _, item := range props.Items {
 			rows = append(rows, pluginMetadataRow(item, width, theme))
-			contentHeight += 62
 		}
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 18}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: woxwidget.Key(scrollID), Width: width, Height: max(float32(1), height-18), ContentHeight: max(height-24, contentHeight),
+		Key: woxwidget.Key(scrollID), Width: width, Height: max(float32(1), height-18),
 		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: theme.ResultSubtitle,
 	})}
 }
@@ -632,15 +628,13 @@ func pluginStoreDescription(props PluginStoreDetailProps, width, height float32,
 			pluginStoreChip(props.WebsiteChipLabel, props.WebsiteIcon, props.OnWebsite, theme),
 		}}},
 	}
-	contentHeight := float32(110)
 	if props.Screenshot != nil && props.ScreenshotHeight > 0 {
 		children = append(children, woxwidget.Gesture{ID: "plugin-store-screenshot", OnTap: props.OnScreenshot, Child: woxwidget.Container{
 			Width: width, Height: props.ScreenshotHeight, Radius: 8, Child: woxwidget.Image{Source: props.Screenshot, Width: width, Height: props.ScreenshotHeight},
 		}})
-		contentHeight += props.ScreenshotHeight
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: topPadding}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "plugin-store-description-scroll", Width: width, Height: max(float32(1), height-topPadding), ContentHeight: max(height-topPadding, contentHeight),
+		Key: "plugin-store-description-scroll", Width: width, Height: max(float32(1), height-topPadding),
 		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}, ThumbColor: theme.ResultSubtitle,
 	})}
 }

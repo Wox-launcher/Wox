@@ -87,23 +87,21 @@ type UsageSettingsProps struct {
 func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 	contentWidth := max(float32(0), props.Width-usagePageHorizontalInset-usagePageRightInset)
 	viewportHeight := max(float32(1), props.Height-usagePageTopInset-usagePageBottomInset)
-	header, headerHeight := usageSummaryHeader(props, contentWidth)
-	kpiGrid, kpiHeight := usageKPIGrid(props, contentWidth)
-	rankings, rankingsHeight := usageRankings(props, contentWidth)
+	header, _ := usageSummaryHeader(props, contentWidth)
+	kpiGrid, _ := usageKPIGrid(props, contentWidth)
+	rankings, _ := usageRankings(props, contentWidth)
 	children := []woxwidget.Widget{header}
-	contentHeight := headerHeight + kpiHeight + usageHeatmapPanelHeight + rankingsHeight + usageSectionGap*3
 	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.TextBlock{
 			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ErrorText,
 		}})
-		contentHeight += 30 + usageSectionGap
 	}
 	children = append(children, kpiGrid, usageActivityPanel(props, contentWidth), rankings)
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height,
 		Padding: woxwidget.Insets{Left: usagePageHorizontalInset, Top: usagePageTopInset, Right: usagePageRightInset, Bottom: usagePageBottomInset},
 		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: "usage-page-scroll", Width: contentWidth, Height: viewportHeight, ContentHeight: max(viewportHeight, contentHeight),
+			Key: "usage-page-scroll", Width: contentWidth, Height: viewportHeight,
 			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: usageSectionGap, Children: children}, ThumbColor: props.Theme.ResultSubtitle,
 		}),
 	}
@@ -209,13 +207,17 @@ func usageKPIGrid(props UsageSettingsProps, width float32) (woxwidget.Widget, fl
 	}
 	columns = min(columns, max(1, len(props.KPIs)))
 	rows := max(1, (len(props.KPIs)+columns-1)/columns)
-	cardWidth := max(float32(100), (width-float32(columns-1)*usageCardGap)/float32(columns))
 	cards := make([]woxwidget.Widget, 0, len(props.KPIs))
 	for _, item := range props.KPIs {
-		cards = append(cards, usageKPICard(item, cardWidth, props.Theme))
+		cards = append(cards, woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+			return usageKPICard(item, size.Width, props.Theme)
+		}})
 	}
 	height := float32(rows)*usageKPIHeight + float32(rows-1)*usageCardGap
-	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Wrap{Gap: usageCardGap, RunGap: usageCardGap, Children: cards}}, height
+	return woxwidget.Grid{
+		Width: width, Columns: columns, CellHeight: usageKPIHeight,
+		ColumnGap: usageCardGap, RowGap: usageCardGap, Children: cards,
+	}, height
 }
 
 func usageKPICard(item UsageKPI, width float32, theme woxcomponent.Theme) woxwidget.Widget {
@@ -224,15 +226,14 @@ func usageKPICard(item UsageKPI, width float32, theme woxcomponent.Theme) woxwid
 	if item.Icon != nil {
 		icon = woxwidget.Image{Source: item.Icon, Width: 22, Height: 22}
 	}
-	labelWidth := max(float32(20), width-98)
 	return woxcomponent.WoxPanel(woxcomponent.PanelProps{
 		Width: width, Height: usageKPIHeight, Padding: woxwidget.UniformInsets(14), BorderColor: usageOutlineColor(theme), Theme: theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: 46, Height: 46, Radius: 8, Color: iconBackground, Child: woxwidget.Align{Width: 46, Height: 46, Horizontal: 0.5, Vertical: 0.5, Child: icon}},
-			woxwidget.Container{Width: labelWidth, Height: 50, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-				woxwidget.Clip{Width: labelWidth, Height: 18, Child: woxwidget.Text{Value: item.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle}},
+			woxwidget.Expanded{Child: woxwidget.Container{Height: 50, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
+				woxwidget.TextBlock{Value: item.Label, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ResultSubtitle},
 				woxwidget.Text{Value: fmt.Sprintf("%d", item.Value), Style: woxui.TextStyle{Size: 22, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-			}}},
+			}}}},
 		}},
 	})
 }

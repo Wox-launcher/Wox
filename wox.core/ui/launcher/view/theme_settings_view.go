@@ -175,7 +175,7 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 		}
 		list = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "theme-list-scroll", Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: rows}, Width: width, Height: viewportHeight,
-			ContentHeight: max(viewportHeight, float32(len(rows))*ThemeListRowHeight), KeepVisible: keepVisible, ThumbColor: props.Theme.ResultSubtitle,
+			KeepVisible: keepVisible, ThumbColor: props.Theme.ResultSubtitle,
 		})
 	}
 
@@ -345,7 +345,7 @@ func themeCatalogPreview(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 	query := woxwidget.Container{Width: max(float32(0), width-20), Height: 40, Radius: 7, Color: theme.QueryBackground, Padding: woxwidget.Insets{Left: 10, Top: 11}, Child: woxwidget.Text{
 		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: 13}, Color: theme.QueryText,
 	}}
-	rows := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-preview-results", Width: max(float32(0), width-20), Height: rowsHeight, ContentHeight: max(rowsHeight, float32(len(rowWidgets))*60), Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rowWidgets}, ThumbColor: theme.ResultSubtitle})
+	rows := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-preview-results", Width: max(float32(0), width-20), Height: rowsHeight, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rowWidgets}, ThumbColor: theme.ResultSubtitle})
 	toolbar := themeCatalogToolbar(props, theme, width, true)
 	window := woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.Background, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: width, Height: queryAreaHeight, Padding: woxwidget.UniformInsets(10), Child: query},
@@ -409,7 +409,7 @@ func themeAutoCatalogPreview(props ThemeSettingsProps, light, dark woxcomponent.
 	query := woxwidget.Container{Width: max(float32(0), width-20), Height: 40, Padding: woxwidget.Insets{Left: 10, Top: 11}, Child: woxwidget.Text{
 		Value: props.PreviewTitle, Style: woxui.TextStyle{Size: 13}, Color: light.QueryText,
 	}}
-	rowList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-auto-preview-results", Width: max(float32(0), width-20), Height: rowsHeight, ContentHeight: max(rowsHeight, float32(len(rows))*60), Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: dark.ResultSubtitle})
+	rowList := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "theme-auto-preview-results", Width: max(float32(0), width-20), Height: rowsHeight, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: dark.ResultSubtitle})
 	toolbar := themeCatalogToolbar(props, dark, width, false)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: width, Height: queryAreaHeight, Padding: woxwidget.UniformInsets(10), Child: query},
@@ -429,14 +429,12 @@ func themeCatalogToolbar(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 	const height = float32(40)
 	const horizontalPadding = float32(10)
 	labelStyle := woxui.TextStyle{Size: 14}
-	labelMetrics, _ := props.Window.MeasureText(props.PreviewOpenLabel, labelStyle)
-	keycap, keycapWidth := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
+	keycap, _ := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
 		Labels: []string{"Enter"}, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground,
 		Border: theme.ToolbarText, FontSize: woxcomponent.TailFontSize, Window: props.Window,
 	})
-	actionWidth := labelMetrics.Size.Width + 8 + keycapWidth
-	action := woxwidget.Container{Width: actionWidth, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		woxwidget.Align{Width: labelMetrics.Size.Width, Height: 28, Vertical: 0.5, Child: woxwidget.Text{Value: props.PreviewOpenLabel, Style: labelStyle, Color: theme.ToolbarText}},
+	action := woxwidget.Container{Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		woxwidget.Text{Value: props.PreviewOpenLabel, Style: labelStyle, Color: theme.ToolbarText},
 		keycap,
 	}}}
 	background := woxui.Color{}
@@ -444,10 +442,7 @@ func themeCatalogToolbar(props ThemeSettingsProps, theme woxcomponent.Theme, wid
 		background = theme.ToolbarBackground
 	}
 	body := woxwidget.Container{Width: width, Height: height, Color: background, Padding: woxwidget.Insets{Left: horizontalPadding, Top: 6, Right: horizontalPadding, Bottom: 6}, Child: woxwidget.Flex{
-		Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: max(float32(0), width-horizontalPadding*2-actionWidth), Height: 28},
-			action,
-		},
+		Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisEnd, Children: []woxwidget.Widget{action},
 	}}
 	if !paintBackground {
 		return body

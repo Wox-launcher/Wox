@@ -209,6 +209,7 @@ func (s *scrollViewState) Build(context StateContext, widget any) Widget {
 	primitive.KeepVisible = nil
 	primitive.InitialOffset = 0
 	primitive.OnOffsetChanged = nil
+	primitive.OnGeometryChanged = nil
 	primitive.Offset = s.controller.Offset()
 	primitive.dynamicController = s.controller
 	primitive.onEnsureVisible = s.controller.EnsureVisible
@@ -225,6 +226,9 @@ func (s *scrollViewState) Build(context StateContext, widget any) Widget {
 		if keepVisible != nil && (s.keepVisiblePending || geometryChanged) {
 			s.keepVisiblePending = false
 			s.controller.EnsureVisible(keepVisible.Start, keepVisible.End)
+		}
+		if geometryChanged && props.OnGeometryChanged != nil {
+			props.OnGeometryChanged(viewport, content)
 		}
 	}
 	id := props.ID

@@ -128,6 +128,19 @@ func TestChatMessagesUsesSharedScrollView(t *testing.T) {
 	}
 }
 
+func TestChatDebugUsesMeasuredControlledScrollGeometry(t *testing.T) {
+	view := ChatDebug(ChatDebugProps{
+		Width: 500, Height: 300, Key: "debug", Value: "trace", Layout: woxwidget.TextBlockLayout{Size: woxui.Size{Width: 400, Height: 180}},
+		OnScroll: func(float32) {}, OnGeometryChanged: func(float32, float32) {},
+	}).(woxwidget.Container)
+	body := view.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	content := body.Content.(woxwidget.Container)
+
+	if body.ContentHeight != 0 || body.OnGeometryChanged == nil || content.Height != 0 {
+		t.Fatalf("debug scroll = content hint %.0f callback %v container height %.0f, want measured controlled geometry", body.ContentHeight, body.OnGeometryChanged != nil, content.Height)
+	}
+}
+
 func TestChatHistoryCatalogUsesFullHeightDrawerGeometry(t *testing.T) {
 	theme := woxcomponent.Theme{ActionBackground: woxui.Color{R: 20, G: 21, B: 22, A: 255}, PreviewText: woxui.Color{A: 255}}
 	drawer := ChatCatalog(ChatCatalogProps{

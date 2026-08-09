@@ -615,6 +615,33 @@ func TestScrollViewKeepsMeasuredKeyVisible(t *testing.T) {
 	}
 }
 
+func TestScrollViewPublishesMeasuredGeometry(t *testing.T) {
+	var viewport float32
+	var content float32
+	calls := 0
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return ScrollView{
+			Key: "geometry-scroll", Width: 100, Height: 40,
+			OnGeometryChanged: func(measuredViewport, measuredContent float32) {
+				calls++
+				viewport = measuredViewport
+				content = measuredContent
+			},
+			Child: Flex{Axis: Vertical, Children: []Widget{
+				Container{Width: 100, Height: 30},
+				Container{Width: 100, Height: 50},
+			}},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	renderTestFrame(host)
+
+	if viewport != 40 || content != 80 || calls != 1 {
+		t.Fatalf("measured scroll geometry = %.0f/%.0f calls %d, want 40/80 once", viewport, content, calls)
+	}
+}
+
 func TestHostKeepsTabFocusedControlVisibleInScrollView(t *testing.T) {
 	controller := NewScrollController(0)
 	host := NewHost(func(frame woxui.FrameInfo) Widget {

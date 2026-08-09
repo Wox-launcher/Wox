@@ -137,6 +137,18 @@ func TestWoxScrollViewShowsForControlledOffsetMovement(t *testing.T) {
 	state.Dispose()
 }
 
+func TestWoxScrollViewRemeasuresChangedViewport(t *testing.T) {
+	state := &scrollViewState{hasGeometry: true, viewportExtent: 80, contentExtent: 160}
+	oldProps := ScrollViewProps{Height: 80}
+	newProps := ScrollViewProps{Height: 100}
+
+	state.DidUpdateWidget(woxwidget.StateContext{}, oldProps, newProps)
+
+	if state.hasGeometry {
+		t.Fatal("changed viewport should discard measured scroll geometry")
+	}
+}
+
 func TestWoxScrollViewKeepsExternalOffsetDeclarative(t *testing.T) {
 	props := ScrollViewProps{Key: "launcher-results", Width: 100, Height: 80, ContentHeight: 160, Offset: 20, OnScroll: func(float32) {}}
 	state := &scrollViewState{}
@@ -178,6 +190,36 @@ func TestWoxScrollViewCanHideScrollbarWithoutDisablingScroll(t *testing.T) {
 
 	if state.controller.Offset() != 20 || len(stack.Children) != 1 || state.visible || state.hideTimer != nil {
 		t.Fatalf("hidden scrollbar = offset %.0f children %d visible %v timer %v, want 20/1/false/nil", state.controller.Offset(), len(stack.Children), state.visible, state.hideTimer)
+	}
+	state.Dispose()
+}
+
+func TestWoxScrollViewUsesMeasuredContentExtent(t *testing.T) {
+	geometryCalls := 0
+	measuredViewport := float32(0)
+	measuredContent := float32(0)
+	props := ScrollViewProps{Key: "measured-scroll", Width: 100, Height: 80, ThumbColor: woxui.Color{A: 255}, OnGeometryChanged: func(viewport, content float32) {
+		geometryCalls++
+		measuredViewport = viewport
+		measuredContent = content
+	}}
+	if _, ok := WoxScrollView(props).(woxwidget.Stateful); !ok {
+		t.Fatal("scroll view without a content-height hint should retain measured geometry")
+	}
+
+	state := &scrollViewState{}
+	state.InitState(woxwidget.StateContext{}, props)
+	initial := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture).Child.(woxwidget.Stack)
+	if len(initial.Children) != 1 {
+		t.Fatalf("initial measured scroll children = %d, want viewport only", len(initial.Children))
+	}
+	viewport := initial.Children[0].Child.(woxwidget.ScrollView)
+	viewport.OnGeometryChanged(80, 160)
+	viewport.OnGeometryChanged(80, 160)
+
+	measured := state.Build(woxwidget.StateContext{}, props).(woxwidget.Gesture).Child.(woxwidget.Stack)
+	if len(measured.Children) != 2 || geometryCalls != 1 || measuredViewport != 80 || measuredContent != 160 {
+		t.Fatalf("measured scroll = children %d calls %d geometry %.0f/%.0f, want 2/1/80/160", len(measured.Children), geometryCalls, measuredViewport, measuredContent)
 	}
 	state.Dispose()
 }

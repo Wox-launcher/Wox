@@ -24,16 +24,21 @@ type ScrollViewProps struct {
 	AutomationID        string
 	Label               string
 	OnScroll            func(float32)
+	// OnGeometryChanged reports measured geometry when ContentHeight is omitted.
+	OnGeometryChanged func(viewport, content float32)
 }
 
 type scrollViewState struct {
-	visible    bool
-	hovered    bool
-	dragging   bool
-	dragY      float32
-	hideAt     time.Time
-	hideTimer  *time.Timer
-	controller *woxwidget.ScrollController
+	visible        bool
+	hovered        bool
+	dragging       bool
+	dragY          float32
+	hideAt         time.Time
+	hideTimer      *time.Timer
+	controller     *woxwidget.ScrollController
+	hasGeometry    bool
+	viewportExtent float32
+	contentExtent  float32
 }
 
 // WoxScrollView builds a vertical scroll surface with the shared fading draggable scrollbar.
@@ -41,7 +46,7 @@ func WoxScrollView(props ScrollViewProps) woxwidget.Widget {
 	if props.Key == "" {
 		props.Key = "wox-scroll"
 	}
-	if props.ContentHeight <= props.Height || props.Height <= 0 {
+	if (props.ContentHeight > 0 && props.ContentHeight <= props.Height) || props.Height <= 0 {
 		return buildWoxScrollView(woxwidget.StateContext{}, props, nil)
 	}
 	return woxwidget.Stateful{
@@ -62,6 +67,9 @@ func (s *scrollViewState) InitState(_ woxwidget.StateContext, widget any) {
 func (s *scrollViewState) DidUpdateWidget(context woxwidget.StateContext, oldWidget, newWidget any) {
 	oldProps := oldWidget.(ScrollViewProps)
 	newProps := newWidget.(ScrollViewProps)
+	if newProps.Height != oldProps.Height || newProps.ContentHeight != oldProps.ContentHeight {
+		s.hasGeometry = false
+	}
 	if newProps.HideScrollbar {
 		s.visible = false
 		s.hideAt = time.Time{}
@@ -130,14 +138,37 @@ func (s *scrollViewState) setHovered(context woxwidget.StateContext, hovered boo
 }
 
 func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, state *scrollViewState) woxwidget.Widget {
+	contentHeightHint := props.ContentHeight
+	if state != nil && state.hasGeometry {
+		props.Height = state.viewportExtent
+		props.ContentHeight = state.contentExtent
+	}
+	props.ContentHeight = max(props.Height, props.ContentHeight)
 	offset := scrollCurrentOffset(props)
 	viewportKey := props.Key + "-viewport"
 	if viewportKey == "-viewport" {
 		viewportKey = "wox-scroll-viewport"
 	}
 	scroll := woxwidget.ScrollView{
-		Width: props.Width, Height: props.Height, ContentHeight: props.ContentHeight,
+		Width: props.Width, Height: props.Height, ContentHeight: contentHeightHint,
 		Offset: offset, KeepVisible: props.KeepVisible, Child: props.Content,
+	}
+	if contentHeightHint <= 0 {
+		scroll.OnGeometryChanged = func(viewport, content float32) {
+			geometryChanged := state == nil || !state.hasGeometry || state.viewportExtent != viewport || state.contentExtent != content
+			if !geometryChanged {
+				return
+			}
+			if state != nil {
+				state.hasGeometry = true
+				state.viewportExtent = viewport
+				state.contentExtent = content
+				context.Invalidate()
+			}
+			if props.OnGeometryChanged != nil {
+				props.OnGeometryChanged(viewport, content)
+			}
+		}
 	}
 	if props.Controller != nil {
 		scroll.Key = viewportKey

@@ -7,9 +7,10 @@ import (
 )
 
 func previewError(message string, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
-	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.UniformInsets(18), Child: woxwidget.TextBlock{
-		Value: message, Width: max(float32(0), width-36), Height: max(float32(0), height-36),
-		Style: woxui.TextStyle{Size: 13}, Color: theme.ErrorText,
+	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.UniformInsets(18), Child: woxwidget.Constrained{
+		FillWidth: true, FillHeight: true, Child: woxwidget.TextBlock{
+			Value: message, Style: woxui.TextStyle{Size: 13}, Color: theme.ErrorText,
+		},
 	}}
 }
 

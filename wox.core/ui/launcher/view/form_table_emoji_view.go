@@ -110,11 +110,13 @@ func (s *formTableEmojiPickerState) buildDialog(context woxwidget.StateContext, 
 	for index, emoji := range props.Groups[s.group].Emojis {
 		cells = append(cells, s.buildEmojiCell(context, props, index, emoji))
 	}
-	contentHeight := float32((len(cells)+columns-1)/columns)*(formTableEmojiCellSize+formTableEmojiCellGap) + formTableEmojiCellGap
 	grid := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "form-table-emoji-scroll", Width: gridWidth, Height: gridHeight, ContentHeight: max(gridHeight, contentHeight),
+		Key: "form-table-emoji-scroll", Width: gridWidth, Height: gridHeight,
 		Controller: s.scroll, ThumbColor: props.Theme.ResultSubtitle,
-		Content: woxwidget.Container{Width: gridWidth, Child: woxwidget.Wrap{Gap: formTableEmojiCellGap, RunGap: formTableEmojiCellGap, Children: cells}},
+		Content: woxwidget.Grid{
+			Width: gridWidth, Columns: columns, CellWidth: formTableEmojiCellSize, CellHeight: formTableEmojiCellSize,
+			ColumnGap: formTableEmojiCellGap, RowGap: formTableEmojiCellGap, Children: cells,
+		},
 	})
 
 	actions := woxwidget.Align{

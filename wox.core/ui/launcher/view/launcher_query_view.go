@@ -120,21 +120,18 @@ func (p launcherQueryLoadingProps) Equal(other launcherQueryLoadingProps) bool {
 func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 	queryLeftPadding := scaledLauncherSize(8, props.DensityScale)
 	accessoryGap := scaledLauncherSize(12, props.DensityScale)
-	queryVerticalPadding := (props.QueryBoxHeight - props.QueryEditorHeight) / 2
-	children := []woxwidget.Widget{woxwidget.Container{
-		Width: props.QueryWidth, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: queryVerticalPadding, Bottom: queryVerticalPadding},
+	children := []woxwidget.Widget{woxwidget.Align{
+		Width: props.QueryWidth, Height: props.QueryBoxHeight, Vertical: 0.5,
 		Child: LauncherQueryBoundary(props.Query),
 	}}
 	if props.Refinement != nil {
-		accessoryHeight := scaledLauncherSize(34, props.DensityScale)
-		children = append(children, woxwidget.Container{
-			Width: props.RefinementWidth, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: (props.QueryBoxHeight - accessoryHeight) / 2, Bottom: (props.QueryBoxHeight - accessoryHeight) / 2}, Child: props.Refinement,
+		children = append(children, woxwidget.Align{
+			Width: props.RefinementWidth, Height: props.QueryBoxHeight, Vertical: 0.5, Child: props.Refinement,
 		})
 	}
 	if props.Glance != nil {
-		glanceHeight := scaledLauncherSize(30, props.DensityScale)
-		children = append(children, woxwidget.Container{
-			Width: props.GlanceWidth, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: (props.QueryBoxHeight - glanceHeight) / 2, Bottom: (props.QueryBoxHeight - glanceHeight) / 2}, Child: props.Glance,
+		children = append(children, woxwidget.Align{
+			Width: props.GlanceWidth, Height: props.QueryBoxHeight, Vertical: 0.5, Child: props.Glance,
 		})
 	}
 	if props.Icon != nil {
@@ -142,8 +139,8 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 		// Flutter centers the icon in a 68px accessory slot, leaving 19px after it.
 		iconRightPadding := scaledLauncherSize(19, props.DensityScale)
 		iconContainerHeight := scaledLauncherSize(34, props.DensityScale)
-		children = append(children, woxwidget.Container{
-			Width: iconSize + iconRightPadding, Height: props.QueryBoxHeight, Padding: woxwidget.Insets{Top: (props.QueryBoxHeight - iconContainerHeight) / 2, Right: iconRightPadding, Bottom: (props.QueryBoxHeight - iconContainerHeight) / 2},
+		children = append(children, woxwidget.Align{
+			Width: iconSize + iconRightPadding, Height: props.QueryBoxHeight, Vertical: 0.5,
 			Child: woxwidget.Container{Width: iconSize, Height: iconContainerHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(2, props.DensityScale)}, Child: woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize}},
 		})
 	}
@@ -155,10 +152,9 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 			Child: woxwidget.Boundary[launcherQueryLoadingProps]{
 				Key: LauncherQueryLoadingBoundaryKey, Label: "header:loading", Props: loadingProps,
 				Build: func(props launcherQueryLoadingProps) woxwidget.Widget {
-					return woxwidget.Container{
-						Width: props.Width, Height: props.Height,
-						Padding: woxwidget.Insets{Left: (props.Width - props.Size) / 2, Top: (props.Height - props.Size) / 2, Right: (props.Width - props.Size) / 2, Bottom: (props.Height - props.Size) / 2},
-						Child:   woxcomponent.WoxLoadingIndicator(props.Size, props.Color),
+					return woxwidget.Align{
+						Width: props.Width, Height: props.Height, Horizontal: 0.5, Vertical: 0.5,
+						Child: woxcomponent.WoxLoadingIndicator(props.Size, props.Color),
 					}
 				},
 			},

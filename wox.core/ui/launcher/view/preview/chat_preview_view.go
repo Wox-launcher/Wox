@@ -385,17 +385,17 @@ func chatHistoryItem(item ChatCatalogItemProps, width, height float32, theme wox
 
 // ChatDebugProps contains the laid-out trace and copy action.
 type ChatDebugProps struct {
-	Width         float32
-	Height        float32
-	Key           string
-	Summary       string
-	Value         string
-	Layout        woxwidget.TextBlockLayout
-	Scroll        float32
-	ContentHeight float32
-	Theme         woxcomponent.Theme
-	OnScroll      func(float32)
-	OnCopy        func()
+	Width             float32
+	Height            float32
+	Key               string
+	Summary           string
+	Value             string
+	Layout            woxwidget.TextBlockLayout
+	Scroll            float32
+	Theme             woxcomponent.Theme
+	OnScroll          func(float32)
+	OnGeometryChanged func(viewport, content float32)
+	OnCopy            func()
 }
 
 // ChatDebug builds the portable JSON trace panel.
@@ -407,10 +407,10 @@ func ChatDebug(props ChatDebugProps) woxwidget.Widget {
 		{AnchorRight: true, Right: 0, Child: chatHeaderButton("chat-debug-copy-"+props.Key, "Copy", false, props.Theme, props.OnCopy)},
 	}}
 	body := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: woxwidget.Key("chat-debug-scroll-" + props.Key), Width: innerWidth, Height: viewportHeight, ContentHeight: props.ContentHeight,
-		Offset: props.Scroll, ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll,
+		Key: woxwidget.Key("chat-debug-scroll-" + props.Key), Width: innerWidth, Height: viewportHeight,
+		Offset: props.Scroll, ThumbColor: props.Theme.ResultSubtitle, OnScroll: props.OnScroll, OnGeometryChanged: props.OnGeometryChanged,
 		Content: woxwidget.Container{
-			Width: innerWidth, Height: props.ContentHeight, Radius: 7, Color: props.Theme.QueryBackground, Padding: woxwidget.Insets{Left: 8, Top: 8, Right: 8, Bottom: 8},
+			Width: innerWidth, Radius: 7, Color: props.Theme.QueryBackground, Padding: woxwidget.Insets{Left: 8, Top: 8, Right: 8, Bottom: 8},
 			Child: woxwidget.TextBlock{Value: props.Value, Width: max(float32(20), innerWidth-16), Height: props.Layout.Size.Height, Style: woxui.TextStyle{Size: 10}, LineHeight: 16, Color: props.Theme.PreviewText, Layout: &props.Layout},
 		},
 	})

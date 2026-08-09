@@ -61,7 +61,7 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 			Background: &color, BorderColor: border, BorderWidth: 1, Selected: item.Selected, SkipFocus: item.Parent, OnTap: item.OnTap, Theme: props.Theme,
 			Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 				woxwidget.Align{Width: 22, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
-				woxwidget.Align{Width: max(float32(0), props.Width-leftPadding-70), Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}},
+				woxwidget.Expanded{Child: woxwidget.Align{Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}}},
 			}},
 		}))
 	}
@@ -70,7 +70,7 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 	viewportHeight := max(float32(1), props.Height-searchAreaHeight-28)
 	nav := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "settings-rail-scroll", KeepVisible: props.KeepVisible, Width: innerWidth, Height: viewportHeight,
-		ContentHeight: max(viewportHeight, float32(len(items))*50), Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: items},
+		Content:    woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: items},
 		ThumbColor: props.Theme.ResultSubtitle, HideScrollbar: true,
 	})
 	stackChildren := []woxwidget.StackChild{{Child: nav}}
@@ -86,7 +86,7 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 		props.SearchBox,
 		woxwidget.Stack{Width: innerWidth, Height: viewportHeight, Children: stackChildren},
 	}}}
-	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: rail}, {Left: props.Width - 1, Child: woxwidget.Container{Width: 1, Height: props.Height, Color: settingsColorAlpha(props.Theme.ToolbarText, 26)}}}}
+	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: rail}, {AnchorRight: true, Child: woxwidget.Container{Width: 1, Height: props.Height, Color: settingsColorAlpha(props.Theme.ToolbarText, 26)}}}}
 }
 
 // SettingsSearchBoxProps contains the search editing state and actions.
@@ -175,7 +175,7 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 		if showIcons && result.Icon != nil {
 			content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 				woxwidget.Align{Width: 24, Height: 38, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: result.Icon, Width: 24, Height: 24}},
-				woxwidget.Align{Width: max(float32(0), props.Width-64), Height: 38, Vertical: 0.5, Child: textColumn},
+				woxwidget.Expanded{Child: woxwidget.Align{Height: 38, Vertical: 0.5, Child: textColumn}},
 			}}
 		}
 		rows = append(rows, woxwidget.Gesture{ID: fmt.Sprintf("settings-search-result-%d", index), OnHover: func(inside bool) {
@@ -187,8 +187,8 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 	start := float32(selected) * rowHeight
 	return woxwidget.Container{Width: props.Width, Height: panelHeight, Radius: panelRadius, Color: background, BorderColor: props.Theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(6), Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "settings-search-results", Width: props.Width - 12, Height: viewportHeight,
-		ContentHeight: max(viewportHeight, float32(len(props.Results))*rowHeight), KeepVisible: &woxwidget.ScrollRange{Start: start, End: start + rowHeight},
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
+		KeepVisible: &woxwidget.ScrollRange{Start: start, End: start + rowHeight},
+		Content:     woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, ThumbColor: props.Theme.ResultSubtitle,
 	})}
 }
 

@@ -157,6 +157,16 @@ func TestChatHistoryWheelScrollUsesDrawerContentHeight(t *testing.T) {
 	}
 }
 
+func TestChatDebugGeometryClampsControlledScroll(t *testing.T) {
+	app := &App{chatPreview: &chatPreviewState{panel: "debug", panelScroll: 500}}
+
+	app.setChatDebugGeometry(100, 260)
+
+	if app.chatPreview.panelMaxScroll != 160 || app.chatPreview.panelScroll != 160 {
+		t.Fatalf("debug geometry = max %.0f offset %.0f, want 160/160", app.chatPreview.panelMaxScroll, app.chatPreview.panelScroll)
+	}
+}
+
 func TestChatHistoryViewportUpdateKeepsWheelScroll(t *testing.T) {
 	now := time.Now()
 	chats := make([]chatData, 12)

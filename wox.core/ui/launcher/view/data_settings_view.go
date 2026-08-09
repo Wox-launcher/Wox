@@ -96,17 +96,13 @@ func DataSettingsView(props DataSettingsProps) woxwidget.Widget {
 		dataLogLevelField(props, contentWidth),
 		dataLogActionsField(props, contentWidth),
 	}
-	backupRows := min(5, len(props.Backups))
-	backupTableHeight := FormTableFieldHeight(true, "", backupRows, int(tableSurfaceHeaderHeight+tableSurfaceRowHeight*5))
-	contentHeight := woxcomponent.PageHeaderHeight + 43 + 78 + 43 + 66 + backupTableHeight + 43 + 66 + 66
 	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
 			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText,
 		}})
-		contentHeight += 30
 	}
 	return SettingsPage(SettingsPageProps{
-		ID: "data-settings-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight,
+		ID: "data-settings-scroll", Width: props.Width, Height: props.Height, Children: children,
 	})
 }
 

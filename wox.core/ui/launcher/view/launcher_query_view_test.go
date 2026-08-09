@@ -94,6 +94,27 @@ func TestLauncherHeaderExposesQueryLoadingProgress(t *testing.T) {
 	if boundary.Key != LauncherQueryLoadingBoundaryKey {
 		t.Fatalf("query loading boundary key = %q, want %q", boundary.Key, LauncherQueryLoadingBoundaryKey)
 	}
+	loadingIndicator := boundary.Build(boundary.Props).(woxwidget.Align)
+	if loadingIndicator.Horizontal != 0.5 || loadingIndicator.Vertical != 0.5 {
+		t.Fatalf("query loading alignment = %.1f/%.1f, want centered", loadingIndicator.Horizontal, loadingIndicator.Vertical)
+	}
+}
+
+func TestLauncherHeaderUsesAlignmentForVerticalAccessoryPlacement(t *testing.T) {
+	header := LauncherHeaderView(LauncherHeaderProps{
+		Width: 600, Height: 60, QueryBoxHeight: 50, QueryWidth: 400,
+		Refinement: woxwidget.Container{Width: 40, Height: 34}, RefinementWidth: 40,
+		Glance: woxwidget.Container{Width: 30, Height: 30}, GlanceWidth: 30,
+		Icon: &woxui.Image{},
+	}).(woxwidget.Container)
+	row := header.Child.(woxwidget.Container).Child.(woxwidget.Flex)
+
+	for index, child := range row.Children[:4] {
+		alignment, ok := child.(woxwidget.Align)
+		if !ok || alignment.Vertical != 0.5 {
+			t.Fatalf("header accessory %d = %T, want vertically centered Align", index, child)
+		}
+	}
 }
 
 func TestLauncherQueryBoundaryEqualCoversAllFields(t *testing.T) {

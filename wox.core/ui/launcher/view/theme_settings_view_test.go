@@ -66,7 +66,7 @@ func TestThemeCatalogToolbarMatchesFlutterGeometry(t *testing.T) {
 	toolbar := themeCatalogToolbar(ThemeSettingsProps{PreviewOpenLabel: "打开"}, woxcomponent.Theme{ToolbarText: woxui.Color{A: 255}}, 600, true).(woxwidget.Stack)
 	body := toolbar.Children[0].Child.(woxwidget.Container)
 	row := body.Child.(woxwidget.Flex)
-	action := row.Children[1].(woxwidget.Container)
+	action := row.Children[0].(woxwidget.Container)
 	keycaps := action.Child.(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
 	keyText := keycaps.Children[0].(woxwidget.Stack).Children[2].Child.(woxwidget.Text)
 	if body.Height != 40 || body.Padding.Top != 6 || toolbar.Children[1].Child.(woxwidget.Container).Height != 1 {
@@ -75,8 +75,8 @@ func TestThemeCatalogToolbarMatchesFlutterGeometry(t *testing.T) {
 	if keyText.Value != "Enter" || len(keycaps.Children) != 1 {
 		t.Fatalf("theme toolbar keycap = %q, want Flutter Enter key label", keyText.Value)
 	}
-	if row.Children[0].(woxwidget.Container).Width+action.Width != 580 {
-		t.Fatal("theme toolbar action is not aligned to the 10px trailing padding")
+	if row.MainAxisAlignment != woxwidget.MainAxisEnd {
+		t.Fatal("theme toolbar action does not use trailing main-axis alignment")
 	}
 }
 
@@ -140,7 +140,8 @@ func TestThemeSystemTagCentersLabel(t *testing.T) {
 		t.Fatalf("system tag colors = border %#v text %#v, want %#v", tag.BorderColor, label.Color, tagColor)
 	}
 	list := themeList(props, 260, 400).(woxwidget.Flex)
-	row := list.Children[1].(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	scrollProps := list.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := scrollProps.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	content := row.Child.(woxwidget.Flex)
 	textWidth := content.Children[1].(woxwidget.Container).Width
 	tagSlot := content.Children[2].(woxwidget.Align)
@@ -158,7 +159,7 @@ func TestThemeListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
 	scrollbar := list.Children[1].(woxwidget.Stateful)
 	props := scrollbar.Widget.(woxcomponent.ScrollViewProps)
 
-	if props.ContentHeight <= props.Height || props.ThumbColor.A != 255 {
-		t.Fatalf("theme scrollbar geometry = %.0f/%.0f color alpha %d, want shared overflowing scrollbar", props.ContentHeight, props.Height, props.ThumbColor.A)
+	if props.ContentHeight != 0 || props.ThumbColor.A != 255 {
+		t.Fatalf("theme scrollbar hint = %.0f color alpha %d, want measured shared scrollbar", props.ContentHeight, props.ThumbColor.A)
 	}
 }

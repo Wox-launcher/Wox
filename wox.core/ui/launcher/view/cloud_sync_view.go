@@ -204,55 +204,47 @@ const cloudSyncCardHeight = float32(66)
 func CloudSettingsPage(props CloudSettingsPageProps) woxwidget.Widget {
 	contentWidth := SettingsPageContentWidth(props.Width)
 	children := make([]woxwidget.Widget, 0, 12)
-	contentHeight := float32(0)
-	appendChild := func(widget woxwidget.Widget, height float32) {
-		if len(children) > 0 {
-			contentHeight += 4
-		}
-		children = append(children, widget)
-		contentHeight += height
-	}
+	appendChild := func(widget woxwidget.Widget) { children = append(children, widget) }
 
 	appendChild(woxcomponent.WoxPageHeader(woxcomponent.PageHeaderProps{
 		Title: props.Title, Description: props.Description, Width: contentWidth, Theme: props.Theme,
-	}), woxcomponent.PageHeaderHeight)
+	}))
 	if !props.Account.LoggedIn {
-		appendChild(woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Intro.SectionLabel, Width: contentWidth, Theme: props.Theme}), 43)
-		intro, introHeight := cloudIntro(props.Intro, contentWidth, props.Theme)
-		appendChild(intro, introHeight)
+		appendChild(woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Intro.SectionLabel, Width: contentWidth, Theme: props.Theme}))
+		appendChild(cloudIntro(props.Intro, contentWidth, props.Theme))
 	}
-	appendChild(woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Account.SectionLabel, Width: contentWidth, Theme: props.Theme}), 43)
+	appendChild(woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Account.SectionLabel, Width: contentWidth, Theme: props.Theme}))
 	accountHeight := float32(62)
 	if props.Account.LoggedIn {
 		accountHeight = 162
 	}
-	appendChild(cloudAccountCard(props.Account, contentWidth, accountHeight, props.Theme), accountHeight)
+	appendChild(cloudAccountCard(props.Account, contentWidth, accountHeight, props.Theme))
 
 	if props.Account.LoggedIn {
-		appendChild(woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Sync.SectionLabel, Width: contentWidth, Theme: props.Theme}), 43)
-		appendChild(cloudSyncCard(props.Sync, contentWidth, props.Theme), cloudSyncCardHeight)
-		appendChild(woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Devices.SectionLabel, Width: contentWidth, Theme: props.Theme}), 43)
-		appendChild(cloudDeviceHeader(props.Devices, contentWidth, props.Theme), 50)
+		appendChild(woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Sync.SectionLabel, Width: contentWidth, Theme: props.Theme}))
+		appendChild(cloudSyncCard(props.Sync, contentWidth, props.Theme))
+		appendChild(woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Devices.SectionLabel, Width: contentWidth, Theme: props.Theme}))
+		appendChild(cloudDeviceHeader(props.Devices, contentWidth, props.Theme))
 		deviceHeight := float32(len(props.Devices.Items)) * 56
 		if len(props.Devices.Items) == 0 {
 			deviceHeight = 72
 		}
-		appendChild(cloudDeviceCard(props.Devices, contentWidth, deviceHeight, props.Theme), deviceHeight)
+		appendChild(cloudDeviceCard(props.Devices, contentWidth, deviceHeight, props.Theme))
 		pluginHeight := FormTableFieldHeight(true, props.Plugins.Tips, len(props.Plugins.Items), 260)
 		// Flutter wraps built-in setting tables in a 24px outer bottom gap so
 		// adjacent tables keep the same breathing room as the settings form.
-		appendChild(woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Bottom: 24}, Child: cloudPluginExclusionsCard(props.Plugins, contentWidth, pluginHeight, props.Theme)}, pluginHeight+24)
+		appendChild(woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Bottom: 24}, Child: cloudPluginExclusionsCard(props.Plugins, contentWidth, pluginHeight, props.Theme)})
 		configHeight := FormTableFieldHeight(true, props.ConfigNotes.Tips, len(props.ConfigNotes.Items), 720)
-		appendChild(cloudConfigNotesCard(props.ConfigNotes, contentWidth, configHeight, props.Theme), configHeight)
+		appendChild(cloudConfigNotesCard(props.ConfigNotes, contentWidth, configHeight, props.Theme))
 	}
 	if props.Message != "" {
 		appendChild(woxwidget.Container{Width: contentWidth, Height: 34, Padding: woxwidget.Insets{Top: 9}, Child: woxwidget.TextBlock{
 			Value: props.Message, Width: contentWidth, Height: 22, MaxLines: 1, Style: woxui.TextStyle{Size: 10}, Color: props.MessageColor,
-		}}, 34)
+		}})
 	}
 
 	page := SettingsPage(SettingsPageProps{
-		ID: "cloud-page-scroll", Width: props.Width, Height: props.Height, Children: children, ContentHeight: contentHeight,
+		ID: "cloud-page-scroll", Width: props.Width, Height: props.Height, Children: children,
 		Gap: 4,
 	})
 	if props.ActionMenu == nil {
@@ -274,7 +266,7 @@ func CloudSettingsPage(props CloudSettingsPageProps) woxwidget.Widget {
 }
 
 // cloudIntro mirrors Flutter's signed-out hero, capability cards, and responsive plan table.
-func cloudIntro(props CloudIntroProps, width float32, theme woxcomponent.Theme) (woxwidget.Widget, float32) {
+func cloudIntro(props CloudIntroProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
 	stacked := width < 760
 	compactPlan := width < 620
 	heroHeight := float32(56)
@@ -300,7 +292,7 @@ func cloudIntro(props CloudIntroProps, width float32, theme woxcomponent.Theme) 
 			woxwidget.Painter{Width: width, Height: 20},
 			plans,
 		},
-	}}, contentHeight
+	}}
 }
 
 // cloudIntroHero keeps the cloud mark beside the copy when space permits and stacks it on narrow pages.
@@ -878,12 +870,12 @@ func cloudFormTextField(field CloudFormFieldProps, trailingLink *CloudFormLinkPr
 	})
 	var label woxwidget.Widget = woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText}
 	if trailingLink != nil {
-		label = woxwidget.Stack{Width: width, Height: 17, Children: []woxwidget.StackChild{
-			{Child: woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText}},
-			{AnchorRight: true, Right: 0, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		label = woxwidget.Flex{Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisSpaceBetween, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText},
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{
 				ID: trailingLink.ID, Label: trailingLink.Label, Height: 17, Radius: 4, Padding: woxwidget.Insets{Left: 1, Right: 1}, FontSize: 11,
 				Disabled: disabled, Variant: woxcomponent.ButtonText, OnTap: trailingLink.OnTap, Theme: theme,
-			})},
+			}),
 		}}
 	}
 	return woxwidget.Container{Width: width, Height: 57, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{

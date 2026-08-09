@@ -159,6 +159,33 @@ func TestBoundaryCachesByPropsAndConstraints(t *testing.T) {
 	}
 }
 
+func TestBoundaryCachesConstraintAwareLayoutBuilder(t *testing.T) {
+	boundaryBuilds := 0
+	layoutBuilds := 0
+	lastSize := woxui.Size{}
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		return Boundary[boundaryTestProps]{Key: "layout-builder-boundary", Props: boundaryTestProps{}, Build: func(boundaryTestProps) Widget {
+			boundaryBuilds++
+			return LayoutBuilder{Build: func(size woxui.Size) Widget {
+				layoutBuilds++
+				lastSize = size
+				return Container{Width: size.Width, Height: 20}
+			}}
+		}}
+	})
+	host.AttachServices(&fakeHostServices{})
+
+	renderBoundaryTestFrame(host, 100)
+	renderBoundaryTestFrame(host, 100)
+	if boundaryBuilds != 1 || layoutBuilds != 1 || lastSize.Width != 100 {
+		t.Fatalf("cached constraint-aware builds = boundary %d layout %d width %.0f, want 1/1/100", boundaryBuilds, layoutBuilds, lastSize.Width)
+	}
+	renderBoundaryTestFrame(host, 80)
+	if boundaryBuilds != 2 || layoutBuilds != 2 || lastSize.Width != 80 {
+		t.Fatalf("resized constraint-aware builds = boundary %d layout %d width %.0f, want 2/2/80", boundaryBuilds, layoutBuilds, lastSize.Width)
+	}
+}
+
 func TestHostInvalidatesRetainedBoundaryBounds(t *testing.T) {
 	host := NewHost(func(woxui.FrameInfo) Widget {
 		return Boundary[boundaryTestProps]{Key: "target-boundary", Props: boundaryTestProps{}, Build: func(boundaryTestProps) Widget {

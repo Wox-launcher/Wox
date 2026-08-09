@@ -66,8 +66,8 @@ func TestSettingsSearchSelectedBuiltInIconUsesSelectedTextColor(t *testing.T) {
 	snapshot := settingsSnapshot{palette: palette, search: settingsSearchSnapshot{Query: woxui.TextEditingState{Text: "font"}}}
 
 	panel := app.buildSettingsSearchResultPanel(snapshot, 240, 200, 1).(woxwidget.Container)
-	scroll := panel.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
-	row := scroll.Child.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
+	props := panel.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
 	icon := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Image)
 
 	if icon.Source != selectedIcon {
