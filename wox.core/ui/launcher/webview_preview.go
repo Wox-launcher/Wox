@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"strings"
 
+	launcherview "wox/ui/launcher/view"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 type webViewPreviewData struct {
@@ -67,7 +69,7 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 		return previewview.WebViewPreviewMessage("Loading WebView preview…", theme.PreviewText, theme, width, height)
 	}
 	content := data.content()
-	return previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnPointer: a.window.ForwardEmbeddedSurfacePointer, OnBounds: func(bounds woxui.Rect) {
+	return previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnPointer: a.window.ForwardEmbeddedSurfacePointer, OnEscape: a.handleWebViewFallbackEscape, OnBounds: func(bounds woxui.Rect) {
 		if a.webViewPreviewData != previewData || a.webViewPreviewError != "" {
 			return
 		}
@@ -75,6 +77,43 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 			a.setWebViewPreviewError(err)
 		}
 	}})
+}
+
+// handleWebViewFallbackEscape leaves browser focus before applying the launcher's outer Escape behavior.
+func (a *App) handleWebViewFallbackEscape() {
+	queryVisible := !a.show.HideQueryBox
+	queryCanFocus := a.queryCanFocus()
+	focusedKeyBefore := woxwidget.Key("")
+	if a.host != nil {
+		focusedKeyBefore = a.host.FocusedKey()
+	}
+	webViewFocusedBefore := a.host != nil && a.host.HasFocus(previewview.WebViewPreviewFocusKey)
+	queryFocusedBefore := a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey)
+	requested := queryVisible && a.host != nil && a.host.RequestFocus(launcherview.LauncherQueryInputKey)
+	focusedKeyAfter := woxwidget.Key("")
+	if a.host != nil {
+		focusedKeyAfter = a.host.FocusedKey()
+	}
+	queryFocusedAfter := a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey)
+	util.GetLogger().Info(a.lifecycleCtx, fmt.Sprintf(
+		"webview escape launcher focus transfer: queryVisible=%t queryCanFocus=%t focusedKeyBefore=%q webViewFocusedBefore=%t queryFocusedBefore=%t requestFocus=%t focusedKeyAfter=%q queryFocusedAfter=%t",
+		queryVisible,
+		queryCanFocus,
+		focusedKeyBefore,
+		webViewFocusedBefore,
+		queryFocusedBefore,
+		requested,
+		focusedKeyAfter,
+		queryFocusedAfter,
+	))
+	if requested && queryFocusedAfter {
+		return
+	}
+	util.Go(a.lifecycleCtx, "hide launcher from webview escape", func() {
+		if err := a.hideWindow(true); err != nil {
+			util.GetLogger().Error(a.lifecycleCtx, "hide launcher from webview escape: "+err.Error())
+		}
+	})
 }
 
 func (a *App) setWebViewPreviewError(err error) {

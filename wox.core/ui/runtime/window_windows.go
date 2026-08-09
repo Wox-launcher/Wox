@@ -15,6 +15,7 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
+	webviewruntime "wox/ui/runtime/internal/webview"
 	"wox/util/ime"
 	"wox/util/osvariant"
 
@@ -171,7 +172,7 @@ type platformWindow struct {
 	done       chan struct{}
 
 	renderer                    *nativeRenderer
-	webView                     *windowsWebView
+	webView                     *webviewruntime.Controller
 	nativeFilePreview           *windowsFilePreview
 	nativeFilePreviewGeneration uint64
 	focus                       focusRuntime
@@ -487,43 +488,6 @@ func (w *platformWindow) openExternalURL(rawURL string) error {
 	return w.call(windowCommand{kind: windowCommandOpenExternalURL, externalURL: rawURL}).err
 }
 
-func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error {
-	return w.call(windowCommand{kind: windowCommandShowWebView, webView: content, webViewBounds: bounds}).err
-}
-
-func (w *platformWindow) hideWebView() error {
-	return w.call(windowCommand{kind: windowCommandHideWebView}).err
-}
-
-func (w *platformWindow) resetWebView() error {
-	return w.call(windowCommand{kind: windowCommandResetWebView}).err
-}
-
-func (w *platformWindow) webViewGoBack() error {
-	return w.call(windowCommand{kind: windowCommandWebViewGoBack}).err
-}
-
-func (w *platformWindow) webViewGoForward() error {
-	return w.call(windowCommand{kind: windowCommandWebViewGoForward}).err
-}
-
-func (w *platformWindow) webViewReload() error {
-	return w.call(windowCommand{kind: windowCommandWebViewReload}).err
-}
-
-func (w *platformWindow) webViewOpenInBrowser() error {
-	return w.call(windowCommand{kind: windowCommandWebViewOpenInBrowser}).err
-}
-
-func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error) {
-	result := w.call(windowCommand{kind: windowCommandWebViewNavigationState})
-	return result.navigation, result.err
-}
-
-func (w *platformWindow) forwardEmbeddedSurfacePointer(event PointerEvent) bool {
-	return w.webView != nil && w.webView.pointer(event)
-}
-
 func (w *platformWindow) showNativeFilePreview(path string, bounds Rect, generation uint64) error {
 	return w.call(windowCommand{kind: windowCommandShowNativeFilePreview, nativeFilePath: path, nativeFileBounds: bounds, nativeFilePreviewGeneration: generation}).err
 }
@@ -578,7 +542,7 @@ func (w *platformWindow) invalidateRect(rect Rect) error {
 }
 
 func (w *platformWindow) displayListDamageCullingEnabled() bool {
-	return w.webView == nil || !w.webView.visible
+	return w.webView == nil || !w.webView.Visible()
 }
 
 // setTextInputState stores logical editor geometry for the next native IME interaction.
@@ -1354,6 +1318,9 @@ func (w *platformWindow) drainCommands() {
 }
 
 func (w *platformWindow) executeCommand(command windowCommand) windowCommandResult {
+	if result, handled := w.executeWebViewCommand(command); handled {
+		return result
+	}
 	switch command.kind {
 	case windowCommandShow:
 		return windowCommandResult{epoch: w.showNative()}
@@ -1400,52 +1367,6 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		return windowCommandResult{err: writeClipboardTextNative(uintptr(w.hwnd), command.clipboardText)}
 	case windowCommandWriteClipboardImage:
 		return windowCommandResult{err: writeClipboardImageNative(uintptr(w.hwnd), command.clipboard)}
-	case windowCommandShowWebView:
-		if w.webView == nil {
-			webView, err := newWindowsWebView(uintptr(w.hwnd), w.renderer)
-			if err != nil {
-				return windowCommandResult{err: err}
-			}
-			w.webView = webView
-		}
-		return windowCommandResult{err: w.webView.show(command.webView, command.webViewBounds, w.scale)}
-	case windowCommandHideWebView:
-		if w.webView == nil {
-			return windowCommandResult{}
-		}
-		return windowCommandResult{err: w.webView.hide()}
-	case windowCommandResetWebView:
-		if w.webView != nil {
-			w.webView.destroy()
-			w.webView = nil
-		}
-		return windowCommandResult{}
-	case windowCommandWebViewGoBack:
-		if w.webView == nil {
-			return windowCommandResult{err: ErrWebViewUnavailable}
-		}
-		return windowCommandResult{err: w.webView.goBack()}
-	case windowCommandWebViewGoForward:
-		if w.webView == nil {
-			return windowCommandResult{err: ErrWebViewUnavailable}
-		}
-		return windowCommandResult{err: w.webView.goForward()}
-	case windowCommandWebViewReload:
-		if w.webView == nil {
-			return windowCommandResult{err: ErrWebViewUnavailable}
-		}
-		return windowCommandResult{err: w.webView.reload()}
-	case windowCommandWebViewOpenInBrowser:
-		if w.webView == nil {
-			return windowCommandResult{err: ErrWebViewUnavailable}
-		}
-		return windowCommandResult{err: w.webView.openInBrowser()}
-	case windowCommandWebViewNavigationState:
-		if w.webView == nil {
-			return windowCommandResult{err: ErrWebViewUnavailable}
-		}
-		state, err := w.webView.navigationState()
-		return windowCommandResult{navigation: state, err: err}
 	case windowCommandShowNativeFilePreview:
 		if command.nativeFilePreviewGeneration < w.nativeFilePreviewGeneration {
 			return windowCommandResult{}
@@ -1864,7 +1785,7 @@ func (w *platformWindow) destroyNativeResources() {
 		w.nativeFilePreview = nil
 	}
 	if w.webView != nil {
-		w.webView.destroy()
+		w.webView.Close()
 		w.webView = nil
 	}
 	if w.renderer != nil {

@@ -19,6 +19,8 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+
+	webviewruntime "wox/ui/runtime/internal/webview"
 )
 
 type linuxRunState struct {
@@ -46,6 +48,7 @@ type platformWindow struct {
 	pendingDamage Rect
 	damagePending bool
 	fullDamage    bool
+	webView       *webviewruntime.Controller
 }
 
 // GTK and its OpenGL context stay on the process main thread for the runtime lifetime.
@@ -135,6 +138,7 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		window.handle.Delete()
 		return nil, errors.New("woxui: failed to create GTK window or OpenGL renderer")
 	}
+	window.webView = webviewruntime.New(&linuxWebViewDriver{window: window})
 	run.mu.Lock()
 	run.windows = append(run.windows, window)
 	run.mu.Unlock()
@@ -302,80 +306,6 @@ func (w *platformWindow) openExternalURL(rawURL string) error {
 		return errors.New("woxui: failed to open external URL on Linux")
 	}
 	return nil
-}
-
-func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error {
-	native, err := w.openNative()
-	if err != nil {
-		return err
-	}
-	url := C.CString(content.URL)
-	html := C.CString(content.HTML)
-	css := C.CString(content.InjectCSS)
-	cacheKey := C.CString(content.CacheKey)
-	defer C.free(unsafe.Pointer(url))
-	defer C.free(unsafe.Pointer(html))
-	defer C.free(unsafe.Pointer(css))
-	defer C.free(unsafe.Pointer(cacheKey))
-	cacheDisabled := C.int32_t(0)
-	if content.CacheDisabled {
-		cacheDisabled = 1
-	}
-	result := C.wox_linux_window_show_webview(native, url, html, css, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height))
-	if result == -2 {
-		return fmt.Errorf("%w: install WebKitGTK 4.1 or 4.0", ErrWebViewUnavailable)
-	}
-	if result != 0 {
-		return errors.New("woxui: failed to show Linux WebView")
-	}
-	return nil
-}
-
-func (w *platformWindow) forwardEmbeddedSurfacePointer(event PointerEvent) bool {
-	native, err := w.openNative()
-	return err == nil && C.wox_linux_window_forward_embedded_surface_pointer(native, C.float(event.Position.X), C.float(event.Position.Y)) == 0
-}
-
-func (w *platformWindow) hideWebView() error {
-	native, err := w.openNative()
-	if err != nil {
-		return err
-	}
-	if C.wox_linux_window_hide_webview(native) != 0 {
-		return errors.New("woxui: failed to hide Linux WebView")
-	}
-	return nil
-}
-
-func (w *platformWindow) resetWebView() error {
-	native, err := w.openNative()
-	if err != nil {
-		return err
-	}
-	if C.wox_linux_window_reset_webview(native) != 0 {
-		return errors.New("woxui: failed to reset Linux WebView")
-	}
-	return nil
-}
-
-func (w *platformWindow) webViewGoBack() error {
-	return errors.New("woxui: linux WebView navigation is not implemented")
-}
-
-func (w *platformWindow) webViewGoForward() error {
-	return errors.New("woxui: linux WebView navigation is not implemented")
-}
-
-func (w *platformWindow) webViewReload() error {
-	return errors.New("woxui: linux WebView navigation is not implemented")
-}
-
-func (w *platformWindow) webViewOpenInBrowser() error {
-	return errors.New("woxui: linux WebView navigation is not implemented")
-}
-
-func (w *platformWindow) webViewNavigationState() (WebViewNavigationState, error) {
-	return WebViewNavigationState{}, errors.New("woxui: linux WebView navigation is not implemented")
 }
 
 func (w *platformWindow) writeClipboardText(text string) error {
@@ -551,12 +481,17 @@ func (w *platformWindow) markClosed() {
 		return
 	}
 	w.native = nil
+	webView := w.webView
+	w.webView = nil
 	w.closing = false
 	w.closed = true
 	handle := w.handle
 	w.handle = 0
 	onClosed := w.options.OnClosed
 	w.mu.Unlock()
+	if webView != nil {
+		webView.Close()
+	}
 	if handle != 0 {
 		handle.Delete()
 	}

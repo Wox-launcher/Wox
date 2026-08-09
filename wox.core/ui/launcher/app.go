@@ -13,6 +13,7 @@ import (
 	"wox/common"
 	"wox/ui/contract"
 	woxcomponent "wox/ui/launcher/component"
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
@@ -482,6 +483,11 @@ func (a *App) showWindow(params showAppParams) error {
 	if _, err := launcher.Show(); err != nil {
 		return err
 	}
+	if err := a.runOnUI("restore launcher query focus after show", func() {
+		a.restoreQueryFocusAfterShow()
+	}); err != nil {
+		return err
+	}
 	if err := a.notifyShown(); err != nil {
 		return err
 	}
@@ -494,6 +500,19 @@ func (a *App) showWindow(params showAppParams) error {
 		a.refreshGlance("windowShown", "", nil)
 	})
 	return nil
+}
+
+// restoreQueryFocusAfterShow resets retained preview focus once the visible query tree is mounted.
+func (a *App) restoreQueryFocusAfterShow() bool {
+	if a.host == nil || !a.queryCanFocus() {
+		return false
+	}
+	a.host.RequestFocus(launcherview.LauncherQueryInputKey)
+	if !a.host.HasFocus(launcherview.LauncherQueryInputKey) {
+		return false
+	}
+	a.restoreQueryTextInput()
+	return true
 }
 
 func (a *App) hideWindow(notify bool) error {

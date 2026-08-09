@@ -2,13 +2,12 @@ package woxui
 
 import (
 	"errors"
-	"fmt"
-	"net/url"
-	"strings"
+
+	webviewruntime "wox/ui/runtime/internal/webview"
 )
 
 // ErrWebViewUnavailable reports that the current desktop is missing its system WebView runtime.
-var ErrWebViewUnavailable = errors.New("woxui: system WebView is unavailable")
+var ErrWebViewUnavailable = webviewruntime.ErrUnavailable
 
 // WebViewContent describes one embedded browser document while Rect is controlled separately by layout.
 type WebViewContent struct {
@@ -39,26 +38,44 @@ func (w *Window) ShowWebView(content WebViewContent, bounds Rect) error {
 	if w == nil || w.native == nil {
 		return errors.New("window is not initialized")
 	}
-	content.URL = strings.TrimSpace(content.URL)
-	content.CacheKey = strings.TrimSpace(content.CacheKey)
-	if content.URL == "" && content.HTML == "" {
-		return errors.New("webview content requires a URL or HTML")
+	normalized, err := webviewruntime.Normalize(toWebViewContent(content), toWebViewRect(bounds))
+	if err != nil {
+		return err
 	}
-	if content.HTML == "" && !isAbsoluteWebViewURL(content.URL) {
-		return fmt.Errorf("webview URL must be an absolute http(s) URL: %q", content.URL)
-	}
-	if bounds.Width <= 0 || bounds.Height <= 0 {
-		return errors.New("webview bounds must have a positive size")
-	}
-	return w.native.showWebView(content, bounds)
+	return w.native.showWebView(fromWebViewContent(normalized), bounds)
 }
 
 func isAbsoluteWebViewURL(rawURL string) bool {
-	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Host == "" {
-		return false
+	return webviewruntime.IsAbsoluteURL(rawURL)
+}
+
+func toWebViewRect(rect Rect) webviewruntime.Rect {
+	return webviewruntime.Rect{X: rect.X, Y: rect.Y, Width: rect.Width, Height: rect.Height}
+}
+
+func toWebViewContent(content WebViewContent) webviewruntime.Content {
+	return webviewruntime.Content{
+		URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS,
+		CacheDisabled: content.CacheDisabled, CacheKey: content.CacheKey,
 	}
-	return strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")
+}
+
+func fromWebViewContent(content webviewruntime.Content) WebViewContent {
+	return WebViewContent{
+		URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS,
+		CacheDisabled: content.CacheDisabled, CacheKey: content.CacheKey,
+	}
+}
+
+func fromWebViewNavigationState(state webviewruntime.NavigationState) WebViewNavigationState {
+	return WebViewNavigationState{URL: state.URL, CanGoBack: state.CanGoBack, CanGoForward: state.CanGoForward}
+}
+
+func toWebViewPointerEvent(event PointerEvent) webviewruntime.PointerEvent {
+	return webviewruntime.PointerEvent{
+		Kind: uint8(event.Kind), Position: webviewruntime.Point{X: event.Position.X, Y: event.Position.Y}, Button: uint8(event.Button),
+		Scroll: webviewruntime.Point{X: event.Scroll.X, Y: event.Scroll.Y}, Modifiers: uint8(event.Modifiers),
+	}
 }
 
 // HideWebView removes the embedded browser from the visible focus domain without discarding cached state.

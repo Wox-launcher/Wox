@@ -513,14 +513,14 @@ func TestHostRawPointerTransfersFocusWithoutJoiningTabOrder(t *testing.T) {
 	host.AttachServices(services)
 	renderTestFrame(host)
 
-	if !host.isFocusedKey("query") || !services.textInput.Enabled {
+	if !host.isFocusedKey("query") || host.FocusedKey() != "query" || !services.textInput.Enabled {
 		t.Fatal("autofocused query did not own logical and native text input")
 	}
 	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || !host.isFocusedKey("next") {
 		t.Fatal("Tab should skip the pointer-only WebView focus target")
 	}
 	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 25, Y: 5}})
-	if !host.isFocusedKey("webview") || services.textInput.Enabled {
+	if !host.isFocusedKey("webview") || host.FocusedKey() != "webview" || services.textInput.Enabled {
 		t.Fatal("raw WebView press did not take Host focus and disable query text input")
 	}
 	if len(queryFocusChanges) != 2 || queryFocusChanges[0] != true || queryFocusChanges[1] != false || len(webViewFocusChanges) != 1 || !webViewFocusChanges[0] {

@@ -30,6 +30,7 @@ extern void woxGoDarwinFrame(uintptr_t context, float width, float height, int32
 extern void woxGoDarwinFrameSync(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale, int32_t transactional);
 extern void woxGoDarwinFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoDarwinKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
+extern void woxGoDarwinWebViewEscapeDiagnostic(uintptr_t context, const char *detail);
 extern void woxGoDarwinTextInput(uintptr_t context, uint8_t kind, const char *text);
 extern void woxGoDarwinPointer(uintptr_t context, uint8_t kind, float x, float y, uint8_t button, float scroll_x, float scroll_y, uint8_t modifiers);
 extern void woxGoDarwinFileDrop(uintptr_t context, const char *paths);
@@ -1274,8 +1275,14 @@ static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView 
   if (owner == NULL || owner->closed || owner->context == 0) {
     return;
   }
-  if ([message.name isEqualToString:@"woxWebViewPreview"]) {
-    woxGoDarwinKey(owner->context, "escape", 0, 1, 0, 0);
+  if ([message.name isEqualToString:@"woxWebViewEscapeDiagnostic"]) {
+    NSString *detail = [message.body isKindOfClass:[NSString class]] ? message.body : @"page-unknown";
+    woxGoDarwinWebViewEscapeDiagnostic(owner->context, detail.UTF8String);
+  } else if ([message.name isEqualToString:@"woxWebViewPreview"]) {
+    BOOL focused = [owner->window makeFirstResponder:owner->view];
+    woxGoDarwinWebViewEscapeDiagnostic(owner->context, focused ? "native-focus-restored" : "native-focus-missing");
+    int32_t handled = woxGoDarwinKey(owner->context, "escape", 0, 1, 0, 0);
+    woxGoDarwinWebViewEscapeDiagnostic(owner->context, handled != 0 ? "host-dispatch handled=true" : "host-dispatch handled=false");
   } else if ([message.name isEqualToString:@"woxWebViewActionPanel"]) {
     [owner->window makeFirstResponder:owner->view];
     woxGoDarwinKey(owner->context, "j", WOX_KEY_MODIFIER_META, 1, 0, 0);
@@ -1319,11 +1326,14 @@ static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView 
 @end
 
 static NSString *web_view_shortcut_script(void) {
+  // Global page routers may always prevent Escape, so only an observable page transition claims it.
   return @"(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;"
           "document.addEventListener('keydown',e=>{if(e.repeat)return;if(e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='j'){"
           "e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage('action-panel');return}"
-          "if(e.key!=='Escape')return;setTimeout(()=>{if(e.defaultPrevented||e.cancelBubble)return;"
-          "window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
+          "if(e.key!=='Escape')return;const f=document.activeElement;const d=n=>!n?'none':(n.tagName||'node').toLowerCase()+(n.type?'[type='+n.type+']':'');let m=false;"
+          "const o=new MutationObserver(()=>{m=true});if(document.documentElement)o.observe(document.documentElement,{attributes:true,childList:true,characterData:true,subtree:true});setTimeout(()=>{o.disconnect();"
+          "const a=document.activeElement;const r=(f&&f!==a)?'page-focus-changed':m?'page-dom-changed':e.defaultPrevented?'page-prevented-no-change-forwarded':'page-forwarded';"
+          "window.webkit.messageHandlers.woxWebViewEscapeDiagnostic.postMessage(r+' before='+d(f)+' after='+d(a));if(r==='page-forwarded'||r==='page-prevented-no-change-forwarded')window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
 }
 
 static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css) {
@@ -1331,6 +1341,7 @@ static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css)
   configuration.websiteDataStore = [WKWebsiteDataStore defaultDataStore];
   WoxWebViewMessageHandler *message_handler = [[WoxWebViewMessageHandler alloc] init];
   message_handler->_owner = window;
+  [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewEscapeDiagnostic"];
   [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewPreview"];
   [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewActionPanel"];
   WKUserScript *shortcut_script = [[[WKUserScript alloc] initWithSource:web_view_shortcut_script() injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES] autorelease];

@@ -1,6 +1,21 @@
 package woxui
 
-import "testing"
+import (
+	"testing"
+
+	webviewruntime "wox/ui/runtime/internal/webview"
+)
+
+func TestWebViewContractConversionsPreserveFields(t *testing.T) {
+	content := WebViewContent{URL: "https://example.com", HTML: "<p>preview</p>", InjectCSS: "body{}", CacheDisabled: true, CacheKey: "preview"}
+	if roundTrip := fromWebViewContent(toWebViewContent(content)); roundTrip != content {
+		t.Fatalf("content round trip = %+v, want %+v", roundTrip, content)
+	}
+	state := fromWebViewNavigationState(webviewruntime.NavigationState{URL: "https://example.com", CanGoBack: true, CanGoForward: true})
+	if state != (WebViewNavigationState{URL: "https://example.com", CanGoBack: true, CanGoForward: true}) {
+		t.Fatalf("navigation state = %+v", state)
+	}
+}
 
 func TestIsAbsoluteWebViewURL(t *testing.T) {
 	for _, test := range []struct {

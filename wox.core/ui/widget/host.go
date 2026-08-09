@@ -711,6 +711,18 @@ func (h *Host) HasFocus(key Key) bool {
 	return h != nil && h.isFocusedKey(key)
 }
 
+// FocusedKey reports the stable key of the Host's current logical focus owner.
+func (h *Host) FocusedKey() Key {
+	if h == nil {
+		return ""
+	}
+	current := h.nodes[h.focused]
+	if current == nil {
+		return ""
+	}
+	return current.key
+}
+
 // BoundsForKey returns the latest laid-out bounds for a retained widget key.
 func (h *Host) BoundsForKey(key Key) (woxui.Rect, bool) {
 	for _, current := range h.nodes {

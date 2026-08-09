@@ -11,6 +11,7 @@ import (
 	"wox/plugin"
 	"wox/ui/contract"
 	launcherview "wox/ui/launcher/view"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	utilselection "wox/util/selection"
@@ -268,6 +269,59 @@ func TestLauncherReactivationNotifiesRetainedQueryFocus(t *testing.T) {
 	case <-services.calls:
 	case <-time.After(time.Second):
 		t.Fatal("reactivation after blur did not notify retained query focus")
+	}
+}
+
+func TestLauncherShowRestoresQueryFocusFromWebView(t *testing.T) {
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+			woxwidget.EditableText{
+				Key:       launcherview.LauncherQueryInputKey,
+				Autofocus: true,
+				Child:     woxwidget.Container{Width: 100, Height: 30},
+			},
+			woxwidget.Focusable{
+				Key:   previewview.WebViewPreviewFocusKey,
+				Child: woxwidget.Container{Width: 100, Height: 30},
+			},
+		}}
+	})
+	host.AttachServices(formTableHostServices{})
+	defer host.Dispose()
+	var displayList woxui.DisplayList
+	host.Frame(&displayList, woxui.FrameInfo{Size: woxui.Size{Width: 200, Height: 30}, PixelSize: woxui.PixelSize{Width: 200, Height: 30}, Scale: 1})
+	if !host.RequestFocus(previewview.WebViewPreviewFocusKey) {
+		t.Fatal("failed to focus WebView before launcher show")
+	}
+
+	app := &App{host: host}
+	if !app.restoreQueryFocusAfterShow() {
+		t.Fatal("launcher show did not restore query focus")
+	}
+	if !host.HasFocus(launcherview.LauncherQueryInputKey) {
+		t.Fatalf("focused key = %q, want query input", host.FocusedKey())
+	}
+}
+
+func TestLauncherShowPreservesPreviewFocusWithoutQueryBox(t *testing.T) {
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return woxwidget.Focusable{
+			Key:       previewview.WebViewPreviewFocusKey,
+			Autofocus: true,
+			Child:     woxwidget.Container{Width: 100, Height: 30},
+		}
+	})
+	host.AttachServices(formTableHostServices{})
+	defer host.Dispose()
+	var displayList woxui.DisplayList
+	host.Frame(&displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 30}, PixelSize: woxui.PixelSize{Width: 100, Height: 30}, Scale: 1})
+
+	app := &App{host: host, show: showAppParams{HideQueryBox: true}}
+	if app.restoreQueryFocusAfterShow() {
+		t.Fatal("launcher show restored a query focus target while the query box was hidden")
+	}
+	if !host.HasFocus(previewview.WebViewPreviewFocusKey) {
+		t.Fatalf("focused key = %q, want WebView preview", host.FocusedKey())
 	}
 }
 

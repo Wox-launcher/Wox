@@ -30,6 +30,7 @@ extern void woxGoLinuxFrame(uintptr_t context, float width, float height, int32_
 extern void woxGoLinuxFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern void woxGoLinuxDestroyed(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoLinuxKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
+extern void woxGoLinuxWebViewEscapeDiagnostic(uintptr_t context, const char *detail);
 extern void woxGoLinuxTextInput(uintptr_t context, uint8_t kind, const char *text);
 extern void woxGoLinuxPointer(uintptr_t context, uint8_t kind, float x, float y, uint8_t button, float scroll_x, float scroll_y, uint8_t modifiers);
 extern void woxGoLinuxFileDrop(uintptr_t context, const char *paths);
@@ -228,7 +229,46 @@ static void on_webview_script_message(gpointer manager, gpointer javascript_resu
   (void)javascript_result;
   WoxLinuxWindow *window = data;
   if (window != NULL && !window->closed && window->context != 0) {
-    woxGoLinuxKey(window->context, "escape", 0, 1, 0, 0);
+    gtk_widget_grab_focus(window->gl_area);
+    woxGoLinuxWebViewEscapeDiagnostic(window->context, gtk_widget_has_focus(window->gl_area) ? "native-focus-restored" : "native-focus-missing");
+    int32_t handled = woxGoLinuxKey(window->context, "escape", 0, 1, 0, 0);
+    woxGoLinuxWebViewEscapeDiagnostic(window->context, handled != 0 ? "host-dispatch handled=true" : "host-dispatch handled=false");
+  }
+}
+
+static void on_webview_escape_dom_changed_message(gpointer manager, gpointer javascript_result, gpointer data) {
+  (void)manager;
+  (void)javascript_result;
+  WoxLinuxWindow *window = data;
+  if (window != NULL && !window->closed && window->context != 0) {
+    woxGoLinuxWebViewEscapeDiagnostic(window->context, "page-dom-changed");
+  }
+}
+
+static void on_webview_escape_focus_changed_message(gpointer manager, gpointer javascript_result, gpointer data) {
+  (void)manager;
+  (void)javascript_result;
+  WoxLinuxWindow *window = data;
+  if (window != NULL && !window->closed && window->context != 0) {
+    woxGoLinuxWebViewEscapeDiagnostic(window->context, "page-focus-changed");
+  }
+}
+
+static void on_webview_escape_forwarded_message(gpointer manager, gpointer javascript_result, gpointer data) {
+  (void)manager;
+  (void)javascript_result;
+  WoxLinuxWindow *window = data;
+  if (window != NULL && !window->closed && window->context != 0) {
+    woxGoLinuxWebViewEscapeDiagnostic(window->context, "page-forwarded");
+  }
+}
+
+static void on_webview_escape_prevented_no_change_forwarded_message(gpointer manager, gpointer javascript_result, gpointer data) {
+  (void)manager;
+  (void)javascript_result;
+  WoxLinuxWindow *window = data;
+  if (window != NULL && !window->closed && window->context != 0) {
+    woxGoLinuxWebViewEscapeDiagnostic(window->context, "page-prevented-no-change-forwarded");
   }
 }
 
@@ -257,15 +297,26 @@ static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css
         }
       }
       bool supports_scripts = wox_webkit.script_new != NULL && wox_webkit.manager_add_script != NULL && wox_webkit.script_unref != NULL && wox_webkit.register_script_message_handler != NULL;
-      bool handlers_registered = supports_scripts && wox_webkit.register_script_message_handler(manager, "woxWebViewPreview") && wox_webkit.register_script_message_handler(manager, "woxWebViewActionPanel");
+      bool handlers_registered = supports_scripts &&
+                                 wox_webkit.register_script_message_handler(manager, "woxWebViewPreview") &&
+                                 wox_webkit.register_script_message_handler(manager, "woxWebViewActionPanel") &&
+                                 wox_webkit.register_script_message_handler(manager, "woxWebViewEscapeFocusChanged") &&
+                                 wox_webkit.register_script_message_handler(manager, "woxWebViewEscapeDomChanged") &&
+                                 wox_webkit.register_script_message_handler(manager, "woxWebViewEscapePreventedNoChangeForwarded") &&
+                                 wox_webkit.register_script_message_handler(manager, "woxWebViewEscapeForwarded");
       if (handlers_registered) {
-        const char *shortcut_script = "(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;document.addEventListener('keydown',e=>{if(e.repeat)return;if(e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='j'){e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage('action-panel');return}if(e.key!=='Escape')return;setTimeout(()=>{if(e.defaultPrevented||e.cancelBubble)return;window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
+        // Global page routers may always prevent Escape, so only an observable page transition claims it.
+        const char *shortcut_script = "(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;document.addEventListener('keydown',e=>{if(e.repeat)return;if(e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='j'){e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage('action-panel');return}if(e.key!=='Escape')return;const f=document.activeElement;let m=false;const o=new MutationObserver(()=>{m=true});if(document.documentElement)o.observe(document.documentElement,{attributes:true,childList:true,characterData:true,subtree:true});setTimeout(()=>{o.disconnect();const r=(f&&f!==document.activeElement)?'FocusChanged':m?'DomChanged':e.defaultPrevented?'PreventedNoChangeForwarded':'Forwarded';window.webkit.messageHandlers['woxWebViewEscape'+r].postMessage(r);if(r==='Forwarded'||r==='PreventedNoChangeForwarded')window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
         gpointer script = wox_webkit.script_new(shortcut_script, 0, 0, NULL, NULL);
         if (script != NULL) {
           wox_webkit.manager_add_script(manager, script);
           wox_webkit.script_unref(script);
           g_signal_connect(manager, "script-message-received::woxWebViewPreview", G_CALLBACK(on_webview_script_message), window);
           g_signal_connect(manager, "script-message-received::woxWebViewActionPanel", G_CALLBACK(on_webview_action_panel_message), window);
+          g_signal_connect(manager, "script-message-received::woxWebViewEscapeFocusChanged", G_CALLBACK(on_webview_escape_focus_changed_message), window);
+          g_signal_connect(manager, "script-message-received::woxWebViewEscapeDomChanged", G_CALLBACK(on_webview_escape_dom_changed_message), window);
+          g_signal_connect(manager, "script-message-received::woxWebViewEscapePreventedNoChangeForwarded", G_CALLBACK(on_webview_escape_prevented_no_change_forwarded_message), window);
+          g_signal_connect(manager, "script-message-received::woxWebViewEscapeForwarded", G_CALLBACK(on_webview_escape_forwarded_message), window);
         }
       }
       web_view = wox_webkit.view_new_with_manager(manager);

@@ -16,12 +16,23 @@ type WebViewPreviewProps struct {
 	Theme     woxcomponent.Theme
 	OnBounds  func(woxui.Rect)
 	OnPointer func(woxui.PointerEvent) bool
+	OnEscape  func()
 }
 
 // WebViewPreview paints the portable backdrop and reports native content bounds.
 func WebViewPreview(props WebViewPreviewProps) woxwidget.Widget {
 	return woxwidget.Focusable{
 		Key: WebViewPreviewFocusKey, SkipTraversal: true,
+		OnKey: func(event woxui.KeyEvent) bool {
+			if !event.Down || event.Repeat || event.Composing || event.Modifiers != 0 || event.Key != woxui.KeyEscape {
+				return false
+			}
+			if props.OnEscape == nil {
+				return false
+			}
+			props.OnEscape()
+			return true
+		},
 		Child: woxwidget.Gesture{ID: "webview-preview-input", OnPointer: props.OnPointer, Child: woxwidget.Painter{Width: props.Width, Height: props.Height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			displayList.FillRoundedRect(bounds, 10, props.Theme.QueryBackground)
 			displayList.BeginEmbeddedSurfaceOverlay(bounds)

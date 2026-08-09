@@ -23,6 +23,7 @@
 #include "renderer_windows.h"
 
 extern "C" int32_t woxGoWindowsWebViewEscape(uintptr_t owner);
+extern "C" void woxGoWindowsWebViewEscapeDiagnostic(uintptr_t owner, const char *detail);
 extern "C" int32_t woxGoWindowsWebViewActionPanel(uintptr_t owner);
 extern "C" void woxGoWindowsWebViewNavigationChanged(uintptr_t owner, const char *url, int32_t can_go_back, int32_t can_go_forward);
 
@@ -1109,7 +1110,15 @@ struct WoxWindowsWebView {
     using TryGetString = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, wchar_t **);
     HRESULT result = webview_method<TryGetString>(args, 5)(args, &message);
     webview_debug("web message received 0x%08X value=%ls", static_cast<unsigned int>(result), message != nullptr ? message : L"");
-    if (SUCCEEDED(result) && message != nullptr && wcscmp(message, L"wox-unhandled-escape") == 0) {
+    constexpr wchar_t escape_diagnostic_prefix[] = L"wox-escape-diagnostic:";
+    constexpr size_t escape_diagnostic_prefix_length = (sizeof(escape_diagnostic_prefix) / sizeof(wchar_t)) - 1;
+    if (SUCCEEDED(result) && message != nullptr && wcsncmp(message, escape_diagnostic_prefix, escape_diagnostic_prefix_length) == 0) {
+      std::string detail = wide_to_utf8(message + escape_diagnostic_prefix_length);
+      woxGoWindowsWebViewEscapeDiagnostic(reinterpret_cast<uintptr_t>(owner), detail.c_str());
+    } else if (SUCCEEDED(result) && message != nullptr && wcscmp(message, L"wox-unhandled-escape") == 0) {
+      // The Go Host can choose the next logical focus owner only after the native WebView releases keyboard focus.
+      SetFocus(owner);
+      woxGoWindowsWebViewEscapeDiagnostic(reinterpret_cast<uintptr_t>(owner), GetFocus() == owner ? "native-focus-restored" : "native-focus-missing");
       woxGoWindowsWebViewEscape(reinterpret_cast<uintptr_t>(owner));
     }
     if (message != nullptr) {
@@ -1118,9 +1127,10 @@ struct WoxWindowsWebView {
   }
 
   void configure_script(WoxWindowsWebViewSession *session) {
+    // Global page routers may always prevent Escape, so only an observable page transition claims it.
     std::wstring script = L"(()=>{const c=" + javascript_string(session->signature) +
                           L";if(c){let s=document.getElementById('wox-webview-preview-style');if(!s){s=document.createElement('style');s.id='wox-webview-preview-style';(document.head||document.documentElement).appendChild(s)}s.textContent=c}"
-                          L"if(window.__woxUnhandledEscapeInstalled__)return;window.__woxUnhandledEscapeInstalled__=true;document.addEventListener('keydown',e=>{if(e.key!=='Escape'||e.repeat)return;setTimeout(()=>{if(e.defaultPrevented||e.cancelBubble)return;window.chrome.webview.postMessage('wox-unhandled-escape')},0)},true)})()";
+                          L"if(window.__woxUnhandledEscapeInstalled__)return;window.__woxUnhandledEscapeInstalled__=true;document.addEventListener('keydown',e=>{if(e.key!=='Escape'||e.repeat)return;const f=document.activeElement;const d=n=>!n?'none':(n.tagName||'node').toLowerCase()+(n.type?'[type='+n.type+']':'');let m=false;const o=new MutationObserver(()=>{m=true});if(document.documentElement)o.observe(document.documentElement,{attributes:true,childList:true,characterData:true,subtree:true});setTimeout(()=>{o.disconnect();const a=document.activeElement;const r=(f&&f!==a)?'page-focus-changed':m?'page-dom-changed':e.defaultPrevented?'page-prevented-no-change-forwarded':'page-forwarded';window.chrome.webview.postMessage('wox-escape-diagnostic:'+r+' before='+d(f)+' after='+d(a));if(r==='page-forwarded'||r==='page-prevented-no-change-forwarded')window.chrome.webview.postMessage('wox-unhandled-escape')},0)},true)})()";
     session->script_pending = true;
     auto *handler = new WoxScriptCompletedHandler(this, session);
     using AddScript = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, const wchar_t *, IUnknown *);

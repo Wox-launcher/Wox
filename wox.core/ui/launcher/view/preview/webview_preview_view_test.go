@@ -27,3 +27,17 @@ func TestWebViewPreviewReportsOnlyPositiveBounds(t *testing.T) {
 		t.Fatalf("reported bounds = %v, want %v", reported, want)
 	}
 }
+
+func TestWebViewPreviewRoutesUnhandledEscape(t *testing.T) {
+	escapeCalls := 0
+	focusable := WebViewPreview(WebViewPreviewProps{Width: 100, Height: 100, OnEscape: func() { escapeCalls++ }}).(woxwidget.Focusable)
+	if focusable.OnKey == nil {
+		t.Fatal("WebView focus owner has no Escape handler")
+	}
+	if focusable.OnKey(woxui.KeyEvent{Key: woxui.KeyEscape}) || focusable.OnKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
+		t.Fatal("WebView Escape handler consumed an unrelated key transition")
+	}
+	if !focusable.OnKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || escapeCalls != 1 {
+		t.Fatalf("WebView Escape result = calls %d, want one handled callback", escapeCalls)
+	}
+}
