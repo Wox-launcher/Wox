@@ -7,7 +7,7 @@ import (
 )
 
 func TestWebViewContractConversionsPreserveFields(t *testing.T) {
-	content := WebViewContent{URL: "https://example.com", HTML: "<p>preview</p>", InjectCSS: "body{}", CacheDisabled: true, CacheKey: "preview"}
+	content := WebViewContent{URL: "https://example.com", HTML: "<p>preview</p>", InjectCSS: "body{}", UserAgent: "ExampleBrowser/1.0", CacheDisabled: true, CacheKey: "preview"}
 	if roundTrip := fromWebViewContent(toWebViewContent(content)); roundTrip != content {
 		t.Fatalf("content round trip = %+v, want %+v", roundTrip, content)
 	}

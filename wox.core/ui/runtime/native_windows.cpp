@@ -475,10 +475,12 @@ static constexpr size_t kEnvironment3CreateCompositionControllerMethod = 9;
 static constexpr size_t kCompositionControllerPutRootVisualTargetMethod = 4;
 static constexpr size_t kCompositionControllerSendMouseInputMethod = 5;
 static constexpr size_t kControllerMoveFocusMethod = 12;
+static constexpr size_t kSettings2PutUserAgentMethod = 22;
 
 static const GUID kCoreWebView2Environment3Iid = {0x80a22ae3, 0xbe7c, 0x4ce2, {0xaf, 0xe1, 0x5a, 0x50, 0x05, 0x6c, 0xde, 0xeb}};
 static const GUID kCoreWebView2ControllerIid = {0x4d00c0d1, 0x9434, 0x4eb6, {0x80, 0x78, 0x86, 0x97, 0xa5, 0x60, 0x33, 0x4f}};
 static const GUID kCoreWebView2CompositionControllerIid = {0x3df9b733, 0xb9ae, 0x4a15, {0x86, 0xb4, 0xeb, 0x9e, 0xe9, 0x82, 0x64, 0x69}};
+static const GUID kCoreWebView2Settings2Iid = {0xee9a0f68, 0xf46c, 0x4e32, {0xac, 0x23, 0xef, 0x8c, 0xac, 0x22, 0x4d, 0x2a}};
 
 static void webview_add_ref(IUnknown *object) {
   if (object != nullptr) {
@@ -592,6 +594,7 @@ struct WoxWindowsWebViewSession {
   std::wstring content_key;
   std::wstring url;
   std::wstring html;
+  std::wstring user_agent;
   IUnknown *controller = nullptr;
   IUnknown *composition_controller = nullptr;
   void *composition_visual = nullptr;
@@ -881,12 +884,44 @@ struct WoxWindowsWebView {
       InvalidateRect(owner, nullptr, FALSE);
       return;
     }
+    result = configure_user_agent(session);
+    if (FAILED(result)) {
+      session->error = result;
+      dispose_session(session);
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
     register_message_handler(session);
     register_navigation_handlers(session);
     register_accelerator_handler(session);
     if (!session->retired) {
       configure_script(session);
     }
+  }
+
+  // configure_user_agent applies only explicit overrides so WebView2 can keep its installed desktop identity by default.
+  HRESULT configure_user_agent(WoxWindowsWebViewSession *session) {
+    if (session == nullptr || session->core == nullptr || session->user_agent.empty()) {
+      return S_OK;
+    }
+    IUnknown *settings = nullptr;
+    using GetSettings = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown **);
+    HRESULT result = webview_method<GetSettings>(session->core, 3)(session->core, &settings);
+    if (FAILED(result) || settings == nullptr) {
+      webview_release(settings);
+      return FAILED(result) ? result : E_NOINTERFACE;
+    }
+    IUnknown *settings2 = nullptr;
+    result = settings->QueryInterface(kCoreWebView2Settings2Iid, reinterpret_cast<void **>(&settings2));
+    webview_release(settings);
+    if (FAILED(result) || settings2 == nullptr) {
+      webview_release(settings2);
+      return FAILED(result) ? result : E_NOINTERFACE;
+    }
+    using PutUserAgent = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, const wchar_t *);
+    result = webview_method<PutUserAgent>(settings2, kSettings2PutUserAgentMethod)(settings2, session->user_agent.c_str());
+    webview_release(settings2);
+    return result;
   }
 
   void register_message_handler(WoxWindowsWebViewSession *session) {
@@ -1260,7 +1295,7 @@ struct WoxWindowsWebView {
     webview_release(session->composition_controller);
   }
 
-  HRESULT show(const char *url, const char *html, const char *inject_css, bool cache_disabled, const char *cache_key, RECT bounds) {
+  HRESULT show(const char *url, const char *html, const char *inject_css, const char *user_agent, bool cache_disabled, const char *cache_key, RECT bounds) {
     if (closing) {
       return E_FAIL;
     }
@@ -1270,25 +1305,26 @@ struct WoxWindowsWebView {
     std::wstring wide_url = utf8_to_wide(url);
     std::wstring wide_html = utf8_to_wide(html);
     std::wstring signature = utf8_to_wide(inject_css);
+    std::wstring wide_user_agent = utf8_to_wide(user_agent);
     std::wstring content_key = (wide_html.empty() ? L"url|" + wide_url : L"html|" + wide_html);
     std::string key = cache_key != nullptr ? cache_key : "";
     bool use_cache = !cache_disabled && !key.empty();
     WoxWindowsWebViewSession *session = nullptr;
     if (use_cache) {
       auto cached = cache.find(key);
-      if (cached != cache.end() && !cached->second->retired && cached->second->signature == signature) {
+      if (cached != cache.end() && !cached->second->retired && cached->second->signature == signature && cached->second->user_agent == wide_user_agent) {
         session = cached->second;
       } else {
         if (cached != cache.end()) {
           dispose_session(cached->second);
         }
-        session = new_session(key, signature, false);
+        session = new_session(key, signature, wide_user_agent, false);
         cache[key] = session;
       }
-    } else if (active != nullptr && active->transient && !active->retired && active->signature == signature && active->content_key == content_key) {
+    } else if (active != nullptr && active->transient && !active->retired && active->signature == signature && active->user_agent == wide_user_agent && active->content_key == content_key) {
       session = active;
     } else {
-      session = new_session({}, signature, true);
+      session = new_session({}, signature, wide_user_agent, true);
     }
     if (active != session) {
       if (active != nullptr) {
@@ -1343,10 +1379,11 @@ struct WoxWindowsWebView {
     webview_release(environment);
   }
 
-  WoxWindowsWebViewSession *new_session(std::string key, std::wstring signature, bool transient) {
+  WoxWindowsWebViewSession *new_session(std::string key, std::wstring signature, std::wstring user_agent, bool transient) {
     auto session = std::make_unique<WoxWindowsWebViewSession>();
     session->cache_key = std::move(key);
     session->signature = std::move(signature);
+    session->user_agent = std::move(user_agent);
     session->transient = transient;
     WoxWindowsWebViewSession *value = session.get();
     sessions.push_back(std::move(session));
@@ -1515,12 +1552,12 @@ extern "C" int32_t wox_windows_webview_create(uintptr_t owner, WoxRenderer *rend
   return result;
 }
 
-extern "C" int32_t wox_windows_webview_show(WoxWindowsWebView *webview, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, int32_t x, int32_t y, int32_t width, int32_t height) {
-  if (webview == nullptr || url == nullptr || html == nullptr || inject_css == nullptr || cache_key == nullptr || width <= 0 || height <= 0) {
+extern "C" int32_t wox_windows_webview_show(WoxWindowsWebView *webview, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, int32_t x, int32_t y, int32_t width, int32_t height) {
+  if (webview == nullptr || url == nullptr || html == nullptr || inject_css == nullptr || user_agent == nullptr || cache_key == nullptr || width <= 0 || height <= 0) {
     return E_INVALIDARG;
   }
   RECT bounds = {x, y, x + width, y + height};
-  return webview->show(url, html, inject_css, cache_disabled != 0, cache_key, bounds);
+  return webview->show(url, html, inject_css, user_agent, cache_disabled != 0, cache_key, bounds);
 }
 
 extern "C" int32_t wox_windows_webview_hide(WoxWindowsWebView *webview) {

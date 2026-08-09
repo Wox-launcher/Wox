@@ -106,6 +106,7 @@ struct WoxDarwinWindow {
   bool suppress_resize_render;
   bool synchronous_frame;
   bool embedded_surface_overlay_active;
+  bool forwarding_embedded_pointer;
   atomic_uint_fast64_t presentation_generation;
   NSRect input_cursor_rect;
   NSMutableDictionary *accessibility_elements;
@@ -1338,7 +1339,7 @@ static NSString *web_view_shortcut_script(void) {
           "window.webkit.messageHandlers.woxWebViewEscapeDiagnostic.postMessage(r+' before='+d(f)+' after='+d(a));if(r==='page-forwarded'||r==='page-prevented-no-change-forwarded')window.webkit.messageHandlers.woxWebViewPreview.postMessage('escape')},0)},true)})()";
 }
 
-static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css) {
+static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css, NSString *user_agent) {
   WKWebViewConfiguration *configuration = [[[WKWebViewConfiguration alloc] init] autorelease];
   configuration.websiteDataStore = [WKWebsiteDataStore defaultDataStore];
   WoxWebViewMessageHandler *message_handler = [[WoxWebViewMessageHandler alloc] init];
@@ -1362,7 +1363,9 @@ static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css)
   web_view.wantsLayer = YES;
   web_view.layer.cornerRadius = wox_window_corner_radius;
   web_view.layer.masksToBounds = YES;
-  web_view.customUserAgent = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1";
+  if (user_agent.length > 0) {
+    web_view.customUserAgent = user_agent;
+  }
   if (@available(macOS 13.3, *)) {
     web_view.inspectable = YES;
   }
@@ -1627,7 +1630,7 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 
 - (void)emitPointer:(NSEvent *)event kind:(uint8_t)kind button:(uint8_t)button scrollX:(float)scroll_x scrollY:(float)scroll_y {
   WoxDarwinWindow *owner = _owner;
-  if (owner == NULL || owner->closed || owner->context == 0) {
+  if (owner == NULL || owner->closed || owner->context == 0 || owner->forwarding_embedded_pointer) {
     return;
   }
   NSPoint position = [self convertPoint:event.locationInWindow fromView:nil];
@@ -2521,8 +2524,8 @@ int32_t wox_darwin_window_open_external_url(WoxDarwinWindow *window, const char 
 
 static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView *web_view);
 
-int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height) {
-  if (window == NULL || url == NULL || html == NULL || inject_css == NULL || cache_key == NULL || width <= 0.0f || height <= 0.0f) {
+int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height) {
+  if (window == NULL || url == NULL || html == NULL || inject_css == NULL || user_agent == NULL || cache_key == NULL || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
   __block int32_t result = 0;
@@ -2534,9 +2537,10 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
     NSString *url_value = web_view_string(url);
     NSString *html_value = web_view_string(html);
     NSString *css_value = web_view_string(inject_css);
+    NSString *user_agent_value = web_view_string(user_agent);
     NSString *key_value = web_view_string(cache_key);
     bool use_cache = cache_disabled == 0 && key_value.length > 0;
-    NSString *signature = css_value;
+    NSString *signature = [NSString stringWithFormat:@"%@\nuser-agent|%@", css_value, user_agent_value];
     NSString *content_key = html_value.length > 0 ? [@"html|" stringByAppendingString:html_value] : [@"url|" stringByAppendingString:url_value];
 
     WKWebView *web_view = nil;
@@ -2555,7 +2559,7 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
         [window->web_view_content_keys removeObjectForKey:key_value];
       }
       if (web_view == nil) {
-        web_view = create_web_view(window, css_value);
+        web_view = create_web_view(window, css_value, user_agent_value);
         [window->web_view_cache setObject:web_view forKey:key_value];
         [window->web_view_signatures setObject:signature forKey:key_value];
         [web_view release];
@@ -2565,7 +2569,7 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
       web_view = window->active_web_view;
       should_load = false;
     } else {
-      web_view = create_web_view(window, css_value);
+      web_view = create_web_view(window, css_value, user_agent_value);
     }
 
     bool same_active = web_view == window->active_web_view;
@@ -2782,7 +2786,7 @@ int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window) {
 }
 
 int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *window) {
-  if (window == NULL || window->closed || window->active_web_view == nil) {
+  if (window == NULL || window->closed || window->active_web_view == nil || window->forwarding_embedded_pointer) {
     return -1;
   }
   NSEvent *event = NSApp.currentEvent;
@@ -2794,6 +2798,10 @@ int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *wind
   if (target == nil) {
     return -1;
   }
+  // WebKit can bubble an unhandled event back to WoxRenderView. Suppress that callback while
+  // delivering the current event so it cannot synchronously reenter this forwarding path.
+  window->forwarding_embedded_pointer = true;
+  int32_t result = 0;
   switch (event.type) {
   case NSEventTypeLeftMouseDown:
     [window->window makeFirstResponder:window->active_web_view];
@@ -2819,11 +2827,26 @@ int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *wind
   case NSEventTypeScrollWheel:
     [target scrollWheel:event];
     break;
-  default:
+  case NSEventTypeMouseMoved:
+  case NSEventTypeMouseEntered:
+  case NSEventTypeMouseExited:
     [target mouseMoved:event];
     break;
+  case NSEventTypeLeftMouseDragged:
+    [target mouseDragged:event];
+    break;
+  case NSEventTypeRightMouseDragged:
+    [target rightMouseDragged:event];
+    break;
+  case NSEventTypeOtherMouseDragged:
+    [target otherMouseDragged:event];
+    break;
+  default:
+    result = -1;
+    break;
   }
-  return 0;
+  window->forwarding_embedded_pointer = false;
+  return result;
 }
 
 int32_t wox_darwin_window_write_clipboard_text(WoxDarwinWindow *window, const char *text) {

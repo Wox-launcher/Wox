@@ -20,7 +20,7 @@ int32_t wox_linux_window_minimize(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_hide_on_blur(WoxLinuxWindow *window, int32_t enabled);
 int32_t wox_linux_window_pick_file(WoxLinuxWindow *window, int32_t directory, char **path);
 int32_t wox_linux_window_open_external_url(WoxLinuxWindow *window, const char *url);
-int32_t wox_linux_window_show_webview(WoxLinuxWindow *window, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height);
+int32_t wox_linux_window_show_webview(WoxLinuxWindow *window, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height);
 int32_t wox_linux_window_hide_webview(WoxLinuxWindow *window);
 int32_t wox_linux_window_reset_webview(WoxLinuxWindow *window);
 int32_t wox_linux_window_forward_embedded_surface_pointer(WoxLinuxWindow *window, float x, float y);

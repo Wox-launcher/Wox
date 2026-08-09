@@ -165,10 +165,12 @@ func (w *windowsWebViewDriver) Show(content webviewruntime.Content, bounds webvi
 	url := C.CString(content.URL)
 	html := C.CString(content.HTML)
 	css := C.CString(content.InjectCSS)
+	userAgent := C.CString(content.UserAgent)
 	cacheKey := C.CString(content.CacheKey)
 	defer C.free(unsafe.Pointer(url))
 	defer C.free(unsafe.Pointer(html))
 	defer C.free(unsafe.Pointer(css))
+	defer C.free(unsafe.Pointer(userAgent))
 	defer C.free(unsafe.Pointer(cacheKey))
 	cacheDisabled := C.int32_t(0)
 	if content.CacheDisabled {
@@ -179,6 +181,7 @@ func (w *windowsWebViewDriver) Show(content webviewruntime.Content, bounds webvi
 		url,
 		html,
 		css,
+		userAgent,
 		cacheDisabled,
 		cacheKey,
 		C.int32_t(bounds.X*scale+0.5),

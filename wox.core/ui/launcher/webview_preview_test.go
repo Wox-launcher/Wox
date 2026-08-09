@@ -26,6 +26,16 @@ func TestActivateWebViewPreviewReportsURLChange(t *testing.T) {
 	}
 }
 
+func TestWebViewPreviewContentPreservesUserAgent(t *testing.T) {
+	data, err := decodeWebViewPreview(`{"url":"https://example.com","userAgent":"ExampleBrowser/1.0"}`)
+	if err != nil {
+		t.Fatalf("decode WebView preview: %v", err)
+	}
+	if content := data.content(); content.UserAgent != "ExampleBrowser/1.0" {
+		t.Fatalf("WebView User-Agent = %q", content.UserAgent)
+	}
+}
+
 func TestWebViewURLFormValidation(t *testing.T) {
 	definitions := []formDefinition{{Value: formDefinitionValue{
 		Key: "Url", Validators: []formValidator{{Type: "is_url"}},

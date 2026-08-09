@@ -165,6 +165,8 @@ typedef void (*WoxWebKitUserScriptUnref)(gpointer script);
 typedef gboolean (*WoxWebKitRegisterScriptMessageHandler)(gpointer manager, const gchar *name);
 typedef void (*WoxWebKitViewLoadURI)(gpointer web_view, const gchar *uri);
 typedef void (*WoxWebKitViewLoadHTML)(gpointer web_view, const gchar *content, const gchar *base_uri);
+typedef gpointer (*WoxWebKitViewGetSettings)(gpointer web_view);
+typedef void (*WoxWebKitSettingsSetUserAgent)(gpointer settings, const gchar *user_agent);
 
 typedef struct {
   void *library;
@@ -180,6 +182,8 @@ typedef struct {
   WoxWebKitRegisterScriptMessageHandler register_script_message_handler;
   WoxWebKitViewLoadURI load_uri;
   WoxWebKitViewLoadHTML load_html;
+  WoxWebKitViewGetSettings get_settings;
+  WoxWebKitSettingsSetUserAgent set_user_agent;
   bool initialized;
   bool available;
 } WoxWebKitRuntime;
@@ -215,7 +219,10 @@ static bool ensure_webkit(void) {
   wox_webkit.register_script_message_handler = (WoxWebKitRegisterScriptMessageHandler)load_webkit_symbol("webkit_user_content_manager_register_script_message_handler");
   wox_webkit.load_uri = (WoxWebKitViewLoadURI)load_webkit_symbol("webkit_web_view_load_uri");
   wox_webkit.load_html = (WoxWebKitViewLoadHTML)load_webkit_symbol("webkit_web_view_load_html");
-  wox_webkit.available = wox_webkit.view_new != NULL && wox_webkit.load_uri != NULL && wox_webkit.load_html != NULL;
+  wox_webkit.get_settings = (WoxWebKitViewGetSettings)load_webkit_symbol("webkit_web_view_get_settings");
+  wox_webkit.set_user_agent = (WoxWebKitSettingsSetUserAgent)load_webkit_symbol("webkit_settings_set_user_agent");
+  wox_webkit.available = wox_webkit.view_new != NULL && wox_webkit.load_uri != NULL && wox_webkit.load_html != NULL &&
+                         wox_webkit.get_settings != NULL && wox_webkit.set_user_agent != NULL;
   if (!wox_webkit.available) {
     dlclose(wox_webkit.library);
     memset(&wox_webkit, 0, sizeof(wox_webkit));
@@ -282,7 +289,7 @@ static void on_webview_action_panel_message(gpointer manager, gpointer javascrip
   }
 }
 
-static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css) {
+static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css, const char *user_agent) {
   GtkWidget *web_view = NULL;
   bool supports_manager = wox_webkit.manager_new != NULL && wox_webkit.view_new_with_manager != NULL;
   if (supports_manager) {
@@ -327,6 +334,14 @@ static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css
     web_view = wox_webkit.view_new();
   }
   if (web_view != NULL) {
+    if (user_agent[0] != '\0') {
+      gpointer settings = wox_webkit.get_settings(web_view);
+      if (settings == NULL) {
+        gtk_widget_destroy(web_view);
+        return NULL;
+      }
+      wox_webkit.set_user_agent(settings, user_agent);
+    }
     g_object_ref_sink(web_view);
     gtk_widget_set_no_show_all(web_view, TRUE);
     gtk_widget_set_halign(web_view, GTK_ALIGN_START);
@@ -1974,6 +1989,7 @@ typedef struct {
   const char *url;
   const char *html;
   const char *inject_css;
+  const char *user_agent;
   const char *cache_key;
   float x;
   float y;
@@ -1996,11 +2012,12 @@ static void show_webview_main(void *data) {
   }
   bool use_cache = !call->cache_disabled && call->cache_key[0] != '\0';
   char *content_key = g_strconcat(call->html[0] != '\0' ? "html|" : "url|", call->html[0] != '\0' ? call->html : call->url, NULL);
+  char *signature = g_strconcat(call->inject_css, "\nuser-agent|", call->user_agent, NULL);
   GtkWidget *web_view = NULL;
   bool should_load = true;
   if (use_cache) {
     const char *cached_signature = g_hash_table_lookup(window->web_view_signatures, call->cache_key);
-    if (g_strcmp0(cached_signature, call->inject_css) == 0) {
+    if (g_strcmp0(cached_signature, signature) == 0) {
       web_view = g_hash_table_lookup(window->web_view_cache, call->cache_key);
       should_load = g_strcmp0(g_hash_table_lookup(window->web_view_content_keys, call->cache_key), content_key) != 0;
     } else {
@@ -2020,23 +2037,25 @@ static void show_webview_main(void *data) {
       }
     }
     if (web_view == NULL) {
-      web_view = create_web_view(window, call->inject_css);
+      web_view = create_web_view(window, call->inject_css, call->user_agent);
       if (web_view == NULL) {
         g_free(content_key);
+        g_free(signature);
         call->result = -1;
         return;
       }
       g_hash_table_replace(window->web_view_cache, g_strdup(call->cache_key), web_view);
-      g_hash_table_replace(window->web_view_signatures, g_strdup(call->cache_key), g_strdup(call->inject_css));
+      g_hash_table_replace(window->web_view_signatures, g_strdup(call->cache_key), g_strdup(signature));
     }
     g_hash_table_replace(window->web_view_content_keys, g_strdup(call->cache_key), g_strdup(content_key));
-  } else if (window->active_web_view_transient && g_strcmp0(window->active_web_view_signature, call->inject_css) == 0 && g_strcmp0(window->active_web_view_content_key, content_key) == 0) {
+  } else if (window->active_web_view_transient && g_strcmp0(window->active_web_view_signature, signature) == 0 && g_strcmp0(window->active_web_view_content_key, content_key) == 0) {
     web_view = window->active_web_view;
     should_load = false;
   } else {
-    web_view = create_web_view(window, call->inject_css);
+    web_view = create_web_view(window, call->inject_css, call->user_agent);
     if (web_view == NULL) {
       g_free(content_key);
+      g_free(signature);
       call->result = -1;
       return;
     }
@@ -2047,7 +2066,7 @@ static void show_webview_main(void *data) {
     window->active_web_view = web_view;
     window->active_web_view_transient = !use_cache;
     window->active_web_view_key = g_strdup(call->cache_key);
-    window->active_web_view_signature = g_strdup(call->inject_css);
+    window->active_web_view_signature = g_strdup(signature);
     window->active_web_view_content_key = g_strdup(content_key);
   }
   if (gtk_widget_get_parent(web_view) == NULL) {
@@ -2068,10 +2087,11 @@ static void show_webview_main(void *data) {
     }
   }
   g_free(content_key);
+  g_free(signature);
 }
 
-int32_t wox_linux_window_show_webview(WoxLinuxWindow *window, const char *url, const char *html, const char *inject_css, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height) {
-  if (window == NULL || url == NULL || html == NULL || inject_css == NULL || cache_key == NULL || width <= 0.0f || height <= 0.0f) {
+int32_t wox_linux_window_show_webview(WoxLinuxWindow *window, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height) {
+  if (window == NULL || url == NULL || html == NULL || inject_css == NULL || user_agent == NULL || cache_key == NULL || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
   WoxWebViewCall call = {
@@ -2079,6 +2099,7 @@ int32_t wox_linux_window_show_webview(WoxLinuxWindow *window, const char *url, c
       .url = url,
       .html = html,
       .inject_css = inject_css,
+      .user_agent = user_agent,
       .cache_key = cache_key,
       .x = x,
       .y = y,

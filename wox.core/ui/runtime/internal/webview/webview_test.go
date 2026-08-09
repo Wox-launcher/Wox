@@ -33,10 +33,10 @@ func (d *fakeDriver) Close()                                    { d.closeCalls++
 func TestControllerOwnsVisibleLifecycle(t *testing.T) {
 	driver := &fakeDriver{}
 	controller := New(driver)
-	if err := controller.Show(Content{URL: " https://example.com ", CacheKey: " cache "}, Rect{Width: 100, Height: 80}, 1); err != nil {
+	if err := controller.Show(Content{URL: " https://example.com ", UserAgent: " ExampleBrowser/1.0 ", CacheKey: " cache "}, Rect{Width: 100, Height: 80}, 1); err != nil {
 		t.Fatalf("show WebView: %v", err)
 	}
-	if !controller.Visible() || len(driver.shown) != 1 || driver.shown[0].URL != "https://example.com" || driver.shown[0].CacheKey != "cache" {
+	if !controller.Visible() || len(driver.shown) != 1 || driver.shown[0].URL != "https://example.com" || driver.shown[0].UserAgent != "ExampleBrowser/1.0" || driver.shown[0].CacheKey != "cache" {
 		t.Fatalf("show state = visible %v content %+v", controller.Visible(), driver.shown)
 	}
 	if err := controller.Hide(); err != nil || controller.Visible() || driver.hideCalls != 1 {

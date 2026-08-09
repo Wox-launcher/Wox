@@ -40,3 +40,34 @@ func TestWebViewURLValidatorIsBoundToURLColumn(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveWebviewUserAgent(t *testing.T) {
+	for _, test := range []struct {
+		value string
+		want  string
+	}{
+		{value: "", want: ""},
+		{value: "auto", want: ""},
+		{value: webviewUserAgentDesktopSafari, want: ""},
+		{value: webviewUserAgentMobileSafari, want: webviewMobileSafariUserAgent},
+		{value: " custom-agent ", want: "custom-agent"},
+	} {
+		if got := resolveWebviewUserAgent(test.value); got != test.want {
+			t.Fatalf("resolveWebviewUserAgent(%q) = %q, want %q", test.value, got, test.want)
+		}
+	}
+}
+
+func TestWebViewUserAgentSettingIsAvailable(t *testing.T) {
+	metadata := (&WebViewPlugin{}).GetMetadata()
+	table := metadata.SettingDefinitions[0].Value.(*definition.PluginSettingValueTable)
+	for _, column := range table.Columns {
+		if column.Key == "UserAgent" {
+			if column.Type != definition.PluginSettingValueTableColumnTypeSelect || len(column.SelectOptions) < 3 {
+				t.Fatalf("UserAgent column = %+v", column)
+			}
+			return
+		}
+	}
+	t.Fatal("UserAgent setting column is missing")
+}

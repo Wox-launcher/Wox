@@ -17,6 +17,7 @@ type webViewPreviewData struct {
 	URL           string `json:"url"`
 	HTML          string `json:"html"`
 	InjectCSS     string `json:"injectCss"`
+	UserAgent     string `json:"userAgent"`
 	CacheDisabled bool   `json:"cacheDisabled"`
 	CacheKey      string `json:"cacheKey"`
 }
@@ -48,7 +49,7 @@ func (d webViewPreviewData) content() woxui.WebViewContent {
 			cacheKey = strings.TrimSpace(d.HTML)
 		}
 	}
-	return woxui.WebViewContent{URL: d.URL, HTML: d.HTML, InjectCSS: d.InjectCSS, CacheDisabled: d.CacheDisabled, CacheKey: cacheKey}
+	return woxui.WebViewContent{URL: d.URL, HTML: d.HTML, InjectCSS: d.InjectCSS, UserAgent: d.UserAgent, CacheDisabled: d.CacheDisabled, CacheKey: cacheKey}
 }
 
 func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, height float32) woxwidget.Widget {

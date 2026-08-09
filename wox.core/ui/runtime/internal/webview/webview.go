@@ -15,6 +15,7 @@ type Content struct {
 	URL           string
 	HTML          string
 	InjectCSS     string
+	UserAgent     string
 	CacheDisabled bool
 	CacheKey      string
 }
@@ -78,6 +79,7 @@ func New(driver Driver) *Controller {
 // Normalize validates content and placement before native work begins.
 func Normalize(content Content, bounds Rect) (Content, error) {
 	content.URL = strings.TrimSpace(content.URL)
+	content.UserAgent = strings.TrimSpace(content.UserAgent)
 	content.CacheKey = strings.TrimSpace(content.CacheKey)
 	if content.URL == "" && content.HTML == "" {
 		return Content{}, errors.New("webview content requires a URL or HTML")

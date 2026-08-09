@@ -14,6 +14,7 @@ type WebViewContent struct {
 	URL           string
 	HTML          string
 	InjectCSS     string
+	UserAgent     string
 	CacheDisabled bool
 	CacheKey      string
 }
@@ -55,14 +56,14 @@ func toWebViewRect(rect Rect) webviewruntime.Rect {
 
 func toWebViewContent(content WebViewContent) webviewruntime.Content {
 	return webviewruntime.Content{
-		URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS,
+		URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS, UserAgent: content.UserAgent,
 		CacheDisabled: content.CacheDisabled, CacheKey: content.CacheKey,
 	}
 }
 
 func fromWebViewContent(content webviewruntime.Content) WebViewContent {
 	return WebViewContent{
-		URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS,
+		URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS, UserAgent: content.UserAgent,
 		CacheDisabled: content.CacheDisabled, CacheKey: content.CacheKey,
 	}
 }

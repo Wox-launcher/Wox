@@ -31,16 +31,18 @@ func (d *linuxWebViewDriver) Show(content webviewruntime.Content, bounds webview
 	url := C.CString(content.URL)
 	html := C.CString(content.HTML)
 	css := C.CString(content.InjectCSS)
+	userAgent := C.CString(content.UserAgent)
 	cacheKey := C.CString(content.CacheKey)
 	defer C.free(unsafe.Pointer(url))
 	defer C.free(unsafe.Pointer(html))
 	defer C.free(unsafe.Pointer(css))
+	defer C.free(unsafe.Pointer(userAgent))
 	defer C.free(unsafe.Pointer(cacheKey))
 	cacheDisabled := C.int32_t(0)
 	if content.CacheDisabled {
 		cacheDisabled = 1
 	}
-	result := C.wox_linux_window_show_webview(native, url, html, css, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height))
+	result := C.wox_linux_window_show_webview(native, url, html, css, userAgent, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height))
 	if result == -2 {
 		return fmt.Errorf("%w: install WebKitGTK 4.1 or 4.0", webviewruntime.ErrUnavailable)
 	}

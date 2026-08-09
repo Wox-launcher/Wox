@@ -31,16 +31,18 @@ func (d *darwinWebViewDriver) Show(content webviewruntime.Content, bounds webvie
 	url := C.CString(content.URL)
 	html := C.CString(content.HTML)
 	css := C.CString(content.InjectCSS)
+	userAgent := C.CString(content.UserAgent)
 	cacheKey := C.CString(content.CacheKey)
 	defer C.free(unsafe.Pointer(url))
 	defer C.free(unsafe.Pointer(html))
 	defer C.free(unsafe.Pointer(css))
+	defer C.free(unsafe.Pointer(userAgent))
 	defer C.free(unsafe.Pointer(cacheKey))
 	cacheDisabled := C.int32_t(0)
 	if content.CacheDisabled {
 		cacheDisabled = 1
 	}
-	if C.wox_darwin_window_show_webview(native, url, html, css, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
+	if C.wox_darwin_window_show_webview(native, url, html, css, userAgent, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
 		return errors.New("woxui: failed to show macOS WebView")
 	}
 	return nil
