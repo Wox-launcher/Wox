@@ -26,12 +26,6 @@
 		}
 	],
 	"settings": {
-		"python.languageServer": "Default",
-		"github.copilot.chat.commitMessageGeneration.instructions": [
-			{
-				"text": "Use conventional commit message format. Use english language."
-			}
-		],
 		"files.exclude": {
 			"wox.plugin.host.nodejs": true,
 			"wox.plugin.host.python": true,
@@ -50,7 +44,6 @@
 		"[swift]": {
 			"editor.defaultFormatter": "swiftlang.swift-vscode"
 		},
-		"makefile.configureOnOpen": false,
 		"editor.formatOnSave": true,
 		"go.lintOnSave": "off"
 	},
