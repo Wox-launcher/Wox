@@ -56,9 +56,9 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 				Height: selection.Height,
 			}
 		},
-		captureDesktop: func() (image.Image, error) {
+		captureDesktop: func() (screenshotDesktopCapture, error) {
 			captured, captureErr := captureDarwinDisplay(displayID)
-			return captured, captureErr
+			return screenshotDesktopCapture{source: captured}, captureErr
 		},
 		frameSize:        Size{Width: bounds.Width, Height: bounds.Height},
 		initialSelection: &selection,

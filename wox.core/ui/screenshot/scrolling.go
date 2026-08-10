@@ -368,14 +368,15 @@ func (state *screenshotEditorOverlayState) pollScrollingCapture(platform screens
 			case <-time.After(40 * time.Millisecond):
 			}
 		}
-		source, err := platform.captureDesktop()
+		captured, err := platform.captureDesktop()
 		if overlaps {
 			_, _ = state.window.Show()
 		}
 		if err != nil {
 			continue
 		}
-		next, err := cropScreenshotScrollingFrame(source, selection, workspace)
+		next, err := cropScreenshotScrollingFrame(captured.source, selection, workspace)
+		captured.close()
 		if err != nil {
 			continue
 		}

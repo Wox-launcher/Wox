@@ -43,9 +43,9 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 				Height: selection.Height,
 			}
 		},
-		captureDesktop: func() (image.Image, error) {
+		captureDesktop: func() (screenshotDesktopCapture, error) {
 			captured, _, captureErr := captureLinuxDesktop()
-			return captured, captureErr
+			return screenshotDesktopCapture{source: captured}, captureErr
 		},
 	}
 	if hasCapturedCursor {

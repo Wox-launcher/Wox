@@ -149,7 +149,7 @@ type screenshotEditorOverlayState struct {
 type screenshotEditorPlatform struct {
 	setWindowBounds  func(window *Window) error
 	logicalSelection func(selection Rect, frameSize Size) Rect
-	captureDesktop   func() (image.Image, error)
+	captureDesktop   func() (screenshotDesktopCapture, error)
 	frameSize        Size
 	initialSelection *Rect
 	cursorPixel      *Point
@@ -157,6 +157,17 @@ type screenshotEditorPlatform struct {
 	chromeScale      func(selection Rect) float32
 	preparedWindow   *ManagedWindow
 	windowHost       *screenshotEditorWindowHost
+}
+
+type screenshotDesktopCapture struct {
+	source  image.Image
+	release func()
+}
+
+func (capture screenshotDesktopCapture) close() {
+	if capture.release != nil {
+		capture.release()
+	}
 }
 
 // newScreenshotEditorOverlayState applies an optional native selection before the portable editor is shown.

@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"image"
 	"time"
 
 	"github.com/lxn/win"
@@ -22,17 +21,19 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	var capturedCursor win.POINT
 	hasCapturedCursor := win.GetCursorPos(&capturedCursor)
 	type desktopCapture struct {
-		source   image.Image
-		bounds   image.Rectangle
-		duration time.Duration
-		err      error
+		capture      *woxui.WindowsDesktopCapture
+		flush        time.Duration
+		captureTotal time.Duration
+		err          error
 	}
 	captureDone := make(chan desktopCapture, 1)
 	go func() {
-		captureStartedAt := time.Now()
+		flushStartedAt := time.Now()
 		woxui.FlushWindowsDesktopComposition()
-		source, bounds, err := woxui.CaptureWindowsVirtualDesktop()
-		captureDone <- desktopCapture{source: source, bounds: bounds, duration: time.Since(captureStartedAt), err: err}
+		flushDuration := time.Since(flushStartedAt)
+		captureStartedAt := time.Now()
+		capture, err := woxui.CaptureWindowsVirtualDesktop()
+		captureDone <- desktopCapture{capture: capture, flush: flushDuration, captureTotal: flushDuration + time.Since(captureStartedAt), err: err}
 	}()
 
 	windowHost := &screenshotEditorWindowHost{}
@@ -46,10 +47,11 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		}
 		return ScreenshotResult{}, captured.err
 	}
+	defer captured.capture.Close()
 	if prepareErr != nil {
 		return ScreenshotResult{}, prepareErr
 	}
-	source, virtualBounds := captured.source, captured.bounds
+	source, virtualBounds := captured.capture.Image, captured.capture.Bounds
 	platform := screenshotEditorPlatform{
 		setWindowBounds: func(window *Window) error {
 			return window.SetPhysicalBounds(Rect{
@@ -75,16 +77,26 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 				Height: selection.Height,
 			})
 		},
-		captureDesktop: func() (image.Image, error) {
-			captured, _, captureErr := woxui.CaptureWindowsVirtualDesktop()
-			return captured, captureErr
+		captureDesktop: func() (screenshotDesktopCapture, error) {
+			capture, captureErr := woxui.CaptureWindowsVirtualDesktop()
+			if captureErr != nil {
+				return screenshotDesktopCapture{}, captureErr
+			}
+			return screenshotDesktopCapture{
+				source: capture.Image,
+				release: func() {
+					_ = capture.Close()
+				},
+			}, nil
 		},
 		preparedWindow: preparedWindow,
 		windowHost:     windowHost,
 		afterShow: func() {
 			util.GetLogger().Debug(context.Background(), fmt.Sprintf(
-				"screenshot overlay ready: total=%s capture=%s renderer=%s desktop=%dx%d",
-				time.Since(startedAt).Round(time.Millisecond), captured.duration.Round(time.Millisecond), prepareDuration.Round(time.Millisecond), virtualBounds.Dx(), virtualBounds.Dy(),
+				"screenshot overlay ready: total=%s capture=%s dwm=%s setup=%s bitblt=%s convert=%s renderer=%s desktop=%dx%d",
+				time.Since(startedAt).Round(time.Millisecond), captured.captureTotal.Round(time.Millisecond), captured.flush.Round(time.Millisecond),
+				captured.capture.Timings.Setup.Round(time.Millisecond), captured.capture.Timings.BitBlt.Round(time.Millisecond), captured.capture.Timings.Convert.Round(time.Millisecond),
+				prepareDuration.Round(time.Millisecond), virtualBounds.Dx(), virtualBounds.Dy(),
 			))
 		},
 	}

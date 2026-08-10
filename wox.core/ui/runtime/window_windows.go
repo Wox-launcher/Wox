@@ -237,24 +237,25 @@ func (w *platformWindow) capturePNG(path string) error {
 	if hwnd == 0 {
 		return errors.New("woxui: Windows window is not initialized")
 	}
-	desktop, virtualBounds, err := CaptureWindowsVirtualDesktop()
+	desktop, err := CaptureWindowsVirtualDesktop()
 	if err != nil {
 		return err
 	}
+	defer desktop.Close()
 	var nativeBounds win.RECT
 	if !win.GetWindowRect(hwnd, &nativeBounds) {
 		return errors.New("woxui: failed to read Windows capture bounds")
 	}
 	crop := image.Rect(
-		int(nativeBounds.Left)-virtualBounds.Min.X,
-		int(nativeBounds.Top)-virtualBounds.Min.Y,
-		int(nativeBounds.Right)-virtualBounds.Min.X,
-		int(nativeBounds.Bottom)-virtualBounds.Min.Y,
-	).Intersect(desktop.Bounds())
+		int(nativeBounds.Left)-desktop.Bounds.Min.X,
+		int(nativeBounds.Top)-desktop.Bounds.Min.Y,
+		int(nativeBounds.Right)-desktop.Bounds.Min.X,
+		int(nativeBounds.Bottom)-desktop.Bounds.Min.Y,
+	).Intersect(desktop.Image.Bounds())
 	if crop.Empty() {
 		return errors.New("woxui: Windows capture bounds are empty")
 	}
-	return writeWindowsCapturePNG(path, desktop.SubImage(crop))
+	return writeWindowsCapturePNG(path, desktop.Image.SubImage(crop))
 }
 
 // platformRun owns the Win32 message pump on the caller's OS main thread.
@@ -652,7 +653,9 @@ func (w *platformWindow) createNativeWindow() error {
 		return fmt.Errorf("create native window failed: %w", syscall.GetLastError())
 	}
 	win.DragAcceptFiles(hwnd, true)
-	applyWindowsBackdrop(hwnd, true)
+	if windowsWindowUsesSystemBackdrop(w.options.Role) {
+		applyWindowsBackdrop(hwnd, true)
+	}
 	w.mu.Lock()
 	w.hwnd = hwnd
 	w.mu.Unlock()
@@ -688,6 +691,13 @@ func (w *platformWindow) createNativeWindow() error {
 }
 
 func windowsRendererNeedsEmbeddedSurfaceOverlay(role WindowRole) bool {
+	return role != WindowRoleScreenshot
+}
+
+// Screenshot windows cover the desktop with captured pixels, so a system backdrop is unnecessary.
+// More importantly, DWM can expose that backdrop for one refresh while the first swap-chain frame
+// is still being composed, which appears as a full-screen gray flash when capture starts.
+func windowsWindowUsesSystemBackdrop(role WindowRole) bool {
 	return role != WindowRoleScreenshot
 }
 
@@ -1648,6 +1658,11 @@ func (w *platformWindow) showNative() FocusEpoch {
 		// A monitor move can recreate the swap chain before this call. Render every
 		// window before DWM exposes it so the launcher does not reveal an empty frame.
 		w.drawFrame(w.hwnd, client)
+	}
+	if w.options.Role == WindowRoleScreenshot && dwmFlush.Find() == nil {
+		// Present1 only queues the first frame. Waiting for DWM prevents the hidden
+		// composition surface from becoming visible one refresh before its content.
+		_, _, _ = dwmFlush.Call()
 	}
 	win.ShowWindow(w.hwnd, showCommand)
 	activateWindow(w.hwnd)

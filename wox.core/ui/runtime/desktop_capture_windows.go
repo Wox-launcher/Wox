@@ -9,7 +9,9 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/lxn/win"
@@ -20,6 +22,40 @@ const windowsCaptureBlt = uint32(0x40000000)
 var monitorFromRect = syscall.NewLazyDLL("user32.dll").NewProc("MonitorFromRect")
 var dwmFlush = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmFlush")
 
+// WindowsDesktopCaptureTimings separates the native capture stages for diagnostics.
+type WindowsDesktopCaptureTimings struct {
+	Setup   time.Duration
+	BitBlt  time.Duration
+	Convert time.Duration
+	Total   time.Duration
+}
+
+// WindowsDesktopCapture owns a top-down DIB and its mapped RGBA view.
+type WindowsDesktopCapture struct {
+	Image   *image.RGBA
+	Bounds  image.Rectangle
+	Timings WindowsDesktopCaptureTimings
+
+	bitmap    win.HBITMAP
+	closeOnce sync.Once
+	closeErr  error
+}
+
+// Close releases the DIB after every consumer has stopped reading Image.
+func (capture *WindowsDesktopCapture) Close() error {
+	if capture == nil {
+		return nil
+	}
+	capture.closeOnce.Do(func() {
+		if capture.bitmap != 0 && !win.DeleteObject(win.HGDIOBJ(capture.bitmap)) {
+			capture.closeErr = errors.New("failed to release the Windows screenshot DIB")
+		}
+		capture.bitmap = 0
+		capture.Image = nil
+	})
+	return capture.closeErr
+}
+
 // FlushWindowsDesktopComposition waits for pending DWM updates without an arbitrary sleep.
 func FlushWindowsDesktopComposition() {
 	if dwmFlush.Find() == nil {
@@ -27,58 +63,83 @@ func FlushWindowsDesktopComposition() {
 	}
 }
 
-// CaptureWindowsVirtualDesktop returns the virtual desktop in physical pixel coordinates.
-func CaptureWindowsVirtualDesktop() (*image.RGBA, image.Rectangle, error) {
+// CaptureWindowsVirtualDesktop captures directly into one mapped top-down DIB.
+func CaptureWindowsVirtualDesktop() (*WindowsDesktopCapture, error) {
+	startedAt := time.Now()
 	x := win.GetSystemMetrics(win.SM_XVIRTUALSCREEN)
 	y := win.GetSystemMetrics(win.SM_YVIRTUALSCREEN)
 	width := win.GetSystemMetrics(win.SM_CXVIRTUALSCREEN)
 	height := win.GetSystemMetrics(win.SM_CYVIRTUALSCREEN)
 	if width <= 0 || height <= 0 || width > 16384 || height > 16384 {
-		return nil, image.Rectangle{}, fmt.Errorf("invalid virtual desktop size: %dx%d", width, height)
+		return nil, fmt.Errorf("invalid virtual desktop size: %dx%d", width, height)
 	}
+
 	screenDC := win.GetDC(0)
 	if screenDC == 0 {
-		return nil, image.Rectangle{}, errors.New("failed to open the Windows desktop device context")
+		return nil, errors.New("failed to open the Windows desktop device context")
 	}
-	defer win.ReleaseDC(0, screenDC)
 	memoryDC := win.CreateCompatibleDC(screenDC)
 	if memoryDC == 0 {
-		return nil, image.Rectangle{}, errors.New("failed to create the screenshot memory device context")
+		win.ReleaseDC(0, screenDC)
+		return nil, errors.New("failed to create the screenshot memory device context")
 	}
-	defer win.DeleteDC(memoryDC)
-	bitmap := win.CreateCompatibleBitmap(screenDC, width, height)
-	if bitmap == 0 {
-		return nil, image.Rectangle{}, errors.New("failed to create the screenshot bitmap")
-	}
-	defer win.DeleteObject(win.HGDIOBJ(bitmap))
-	previous := win.SelectObject(memoryDC, win.HGDIOBJ(bitmap))
-	if previous == 0 {
-		return nil, image.Rectangle{}, errors.New("failed to select the screenshot bitmap")
-	}
-	if !win.BitBlt(memoryDC, 0, 0, width, height, screenDC, x, y, win.SRCCOPY|windowsCaptureBlt) {
-		win.SelectObject(memoryDC, previous)
-		return nil, image.Rectangle{}, errors.New("failed to copy Windows desktop pixels")
-	}
-	win.SelectObject(memoryDC, previous)
-
-	bitmapInfo := win.BITMAPINFO{BmiHeader: win.BITMAPINFOHEADER{
+	bitmapInfo := win.BITMAPINFOHEADER{
 		BiSize:        uint32(unsafe.Sizeof(win.BITMAPINFOHEADER{})),
 		BiWidth:       width,
 		BiHeight:      -height,
 		BiPlanes:      1,
 		BiBitCount:    32,
 		BiCompression: win.BI_RGB,
-	}}
-	rgba := image.NewRGBA(image.Rect(0, 0, int(width), int(height)))
-	if win.GetDIBits(memoryDC, bitmap, 0, uint32(height), &rgba.Pix[0], &bitmapInfo, win.DIB_RGB_COLORS) == 0 {
-		return nil, image.Rectangle{}, errors.New("failed to read Windows screenshot pixels")
 	}
-	// GetDIBits writes BGRA. Swap red and blue in place so capture keeps one desktop buffer.
-	for offset := 0; offset < len(rgba.Pix); offset += 4 {
-		rgba.Pix[offset], rgba.Pix[offset+2] = rgba.Pix[offset+2], rgba.Pix[offset]
-		rgba.Pix[offset+3] = 255
+	var bits unsafe.Pointer
+	bitmap := win.CreateDIBSection(screenDC, &bitmapInfo, win.DIB_RGB_COLORS, &bits, 0, 0)
+	if bitmap == 0 || bits == nil {
+		win.DeleteDC(memoryDC)
+		win.ReleaseDC(0, screenDC)
+		return nil, errors.New("failed to create the Windows screenshot DIB")
 	}
-	return rgba, image.Rect(int(x), int(y), int(x+width), int(y+height)), nil
+	previous := win.SelectObject(memoryDC, win.HGDIOBJ(bitmap))
+	if previous == 0 {
+		win.DeleteObject(win.HGDIOBJ(bitmap))
+		win.DeleteDC(memoryDC)
+		win.ReleaseDC(0, screenDC)
+		return nil, errors.New("failed to select the Windows screenshot DIB")
+	}
+	setupDuration := time.Since(startedAt)
+
+	bitBltStartedAt := time.Now()
+	copied := win.BitBlt(memoryDC, 0, 0, width, height, screenDC, x, y, win.SRCCOPY|windowsCaptureBlt)
+	bitBltDuration := time.Since(bitBltStartedAt)
+	win.SelectObject(memoryDC, previous)
+	win.DeleteDC(memoryDC)
+	win.ReleaseDC(0, screenDC)
+	if !copied {
+		win.DeleteObject(win.HGDIOBJ(bitmap))
+		return nil, errors.New("failed to copy Windows desktop pixels")
+	}
+
+	pixelBytes := int(width) * int(height) * 4
+	pixels := unsafe.Slice((*byte)(bits), pixelBytes)
+	convertStartedAt := time.Now()
+	windowsConvertDIBToRGBA(pixels)
+	convertDuration := time.Since(convertStartedAt)
+	capture := &WindowsDesktopCapture{
+		Image:  &image.RGBA{Pix: pixels, Stride: int(width) * 4, Rect: image.Rect(0, 0, int(width), int(height))},
+		Bounds: image.Rect(int(x), int(y), int(x+width), int(y+height)),
+		bitmap: bitmap,
+	}
+	capture.Timings = WindowsDesktopCaptureTimings{
+		Setup: setupDuration, BitBlt: bitBltDuration, Convert: convertDuration, Total: time.Since(startedAt),
+	}
+	return capture, nil
+}
+
+// windowsConvertDIBToRGBA converts GDI's BGRX bytes in place without another desktop buffer.
+func windowsConvertDIBToRGBA(pixels []byte) {
+	for offset := 0; offset+3 < len(pixels); offset += 4 {
+		pixels[offset], pixels[offset+2] = pixels[offset+2], pixels[offset]
+		pixels[offset+3] = 255
+	}
 }
 
 // WindowsLogicalRectFromPhysical converts a pixel rectangle using the DPI of its dominant monitor.

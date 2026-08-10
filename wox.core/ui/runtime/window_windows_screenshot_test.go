@@ -35,3 +35,25 @@ func TestWindowsScreenshotRendererSkipsEmbeddedSurfaceOverlay(t *testing.T) {
 		}
 	}
 }
+
+func TestWindowsScreenshotWindowSkipsSystemBackdrop(t *testing.T) {
+	if windowsWindowUsesSystemBackdrop(WindowRoleScreenshot) {
+		t.Fatal("screenshot window should not expose a system backdrop before its first frame")
+	}
+	for _, role := range []WindowRole{WindowRoleUtility, WindowRoleApplication} {
+		if !windowsWindowUsesSystemBackdrop(role) {
+			t.Fatalf("window role %d still requires its system backdrop", role)
+		}
+	}
+}
+
+func TestWindowsConvertDIBToRGBA(t *testing.T) {
+	pixels := []byte{30, 20, 10, 0, 90, 80, 70, 12}
+	windowsConvertDIBToRGBA(pixels)
+	want := []byte{10, 20, 30, 255, 70, 80, 90, 255}
+	for index := range want {
+		if pixels[index] != want[index] {
+			t.Fatalf("converted pixels = %v, want %v", pixels, want)
+		}
+	}
+}
