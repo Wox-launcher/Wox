@@ -1,4 +1,4 @@
-package woxui
+package screenshot
 
 import (
 	"image"
@@ -71,7 +71,7 @@ func drawScreenshotEditorAnnotations(displayList *DisplayList, annotations []scr
 	}
 }
 
-func drawScreenshotEditorAnnotationHandles(displayList *DisplayList, annotation screenshotEditorAnnotation) {
+func drawScreenshotEditorAnnotationHandles(displayList *DisplayList, annotation screenshotEditorAnnotation, uiScale float32) {
 	points := []Point{}
 	switch annotation.tool {
 	case screenshotEditorToolRect, screenshotEditorToolEllipse:
@@ -83,7 +83,7 @@ func drawScreenshotEditorAnnotationHandles(displayList *DisplayList, annotation 
 	}
 	color := screenshotEditorAnnotationDrawColor(annotation)
 	for _, point := range points {
-		displayList.FillRoundedRect(Rect{X: point.X - 6, Y: point.Y - 6, Width: 12, Height: 12}, 4, color)
+		displayList.FillRoundedRect(Rect{X: point.X - 6*uiScale, Y: point.Y - 6*uiScale, Width: 12 * uiScale, Height: 12 * uiScale}, 4*uiScale, color)
 	}
 }
 
@@ -211,8 +211,8 @@ func drawScreenshotEditorMosaicPreview(displayList *DisplayList, points []Point,
 				logicalY := point.Y + offsetY
 				pixelX := min(max(0, int(logicalX*scaleX)), source.Width-1)
 				pixelY := min(max(0, int(logicalY*scaleY)), source.Height-1)
-				pixelOffset := (pixelY*source.Width + pixelX) * 4
-				color := Color{R: source.pixels[pixelOffset], G: source.pixels[pixelOffset+1], B: source.pixels[pixelOffset+2], A: 255}
+				pixel := source.RGBAAt(pixelX, pixelY)
+				color := Color{R: pixel.R, G: pixel.G, B: pixel.B, A: 255}
 				displayList.FillRect(Rect{
 					X:     logicalX - screenshotEditorMosaicBlockSize/2,
 					Y:     logicalY - screenshotEditorMosaicBlockSize/2,

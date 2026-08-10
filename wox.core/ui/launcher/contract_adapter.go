@@ -13,6 +13,7 @@ import (
 	"wox/ui/contract"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxscreenshot "wox/ui/screenshot"
 	woxwidget "wox/ui/widget"
 	"wox/util"
 )
@@ -342,7 +343,7 @@ func (a *App) PickFiles(_ context.Context, params common.PickFilesParams) ([]str
 
 // CaptureScreenshot starts the native capture session without changing launcher visibility.
 func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error) {
-	result, err := woxui.CaptureScreenshot(woxui.ScreenshotOptions{
+	result, err := woxscreenshot.CaptureScreenshot(woxscreenshot.ScreenshotOptions{
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, WindowManager: a.windows,
 	})

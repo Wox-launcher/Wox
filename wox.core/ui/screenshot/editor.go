@@ -1,4 +1,4 @@
-package woxui
+package screenshot
 
 import (
 	"errors"
@@ -141,6 +141,8 @@ type screenshotEditorOverlayState struct {
 	textFontSize       float32
 	cursorPixel        *Point
 	showCursor         bool
+	uiScale            float32
+	chromeScale        func(selection Rect) float32
 	result             chan screenshotEditorOverlayOutcome
 }
 
@@ -152,6 +154,9 @@ type screenshotEditorPlatform struct {
 	initialSelection *Rect
 	cursorPixel      *Point
 	afterShow        func()
+	chromeScale      func(selection Rect) float32
+	preparedWindow   *ManagedWindow
+	windowHost       *screenshotEditorWindowHost
 }
 
 // newScreenshotEditorOverlayState applies an optional native selection before the portable editor is shown.
@@ -165,6 +170,8 @@ func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, 
 		mosaicRadius:    screenshotEditorMosaicRadius,
 		textFontSize:    screenshotEditorTextFontSize,
 		cursorPixel:     platform.cursorPixel,
+		uiScale:         1,
+		chromeScale:     platform.chromeScale,
 		result:          make(chan screenshotEditorOverlayOutcome, 1),
 		scrollingStop:   make(chan struct{}),
 	}
@@ -176,13 +183,19 @@ func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, 
 }
 
 func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform screenshotEditorPlatform) (ScreenshotResult, error) {
+	managed := platform.preparedWindow
+	defer func() {
+		if managed != nil {
+			_ = managed.Close()
+		}
+	}()
 	if options.ExportFilePath == "" {
 		return ScreenshotResult{}, errors.New("screenshot export file path is empty")
 	}
 	if source == nil || platform.setWindowBounds == nil || platform.logicalSelection == nil || platform.captureDesktop == nil {
 		return ScreenshotResult{}, errors.New("screenshot editor platform is incomplete")
 	}
-	uiImage, err := NewImage(source)
+	uiImage, err := newScreenshotEditorImage(source)
 	if err != nil {
 		return ScreenshotResult{}, fmt.Errorf("prepare screenshot overlay image: %w", err)
 	}
@@ -195,27 +208,21 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	if manager == nil {
 		manager = NewWindowManager()
 	}
-	var managed *ManagedWindow
-	var created bool
+	host := platform.windowHost
+	if host == nil {
+		host = &screenshotEditorWindowHost{}
+	}
+	if err := host.begin(state); err != nil {
+		return ScreenshotResult{}, err
+	}
+	defer host.end(state)
 	var openErr error
 	err = Call(func() {
-		managed, created, openErr = manager.Open(ScreenshotWindowID, WindowOptions{
-			Title:       "Wox Screenshot",
-			Size:        Size{Width: 100, Height: 100},
-			Role:        WindowRoleScreenshot,
-			HideOnBlur:  false,
-			OnFrame:     state.draw,
-			OnPointer:   state.pointer,
-			OnKey:       state.key,
-			OnTextInput: state.textInput,
-			OnClosed:    func() { state.complete(true) },
-		})
-		if openErr != nil {
-			return
-		}
-		if !created {
-			openErr = errors.New("a screenshot window is already active")
-			return
+		if managed == nil {
+			managed, openErr = prepareScreenshotEditorWindow(manager, host)
+			if openErr != nil {
+				return
+			}
 		}
 		overlay := managed.Window()
 		state.window = overlay
@@ -231,21 +238,13 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		}
 	})
 	if err != nil {
-		if created && managed != nil {
-			_ = managed.Close()
-		}
 		return ScreenshotResult{}, err
 	}
 	if openErr != nil {
-		if created && managed != nil {
-			_ = managed.Close()
-		}
 		return ScreenshotResult{}, openErr
 	}
 
 	overlay := managed.Window()
-	defer managed.Close()
-
 	var outcome screenshotEditorOverlayOutcome
 	select {
 	case outcome = <-state.result:
@@ -312,6 +311,15 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	return result, nil
 }
 
+// newScreenshotEditorImage shares a tightly packed RGBA capture because the editor keeps the
+// source immutable and both views have the same lifetime. Other image layouts use the normal copy.
+func newScreenshotEditorImage(source image.Image) (*Image, error) {
+	if rgba, ok := source.(*image.RGBA); ok && rgba.Stride == rgba.Rect.Dx()*4 {
+		return NewImageFromPackedRGBA(rgba)
+	}
+	return NewImage(source)
+}
+
 func screenshotEditorPixelSelection(sourceBounds image.Rectangle, selection Rect, frameSize Size) (image.Rectangle, error) {
 	if selection.Width <= 0 || selection.Height <= 0 || frameSize.Width <= 0 || frameSize.Height <= 0 {
 		return image.Rectangle{}, errors.New("screenshot selection is empty")
@@ -359,16 +367,23 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	if state.scrolling {
 		preview := state.scrollingPreview
 		frameCount := len(state.scrollingFrames)
-		state.confirmRect = Rect{X: frame.Size.Width - 64, Y: frame.Size.Height - 56, Width: 40, Height: 40}
-		state.cancelRect = Rect{X: 24, Y: frame.Size.Height - 56, Width: 40, Height: 40}
-		state.toolbarRect = Rect{Y: frame.Size.Height - 72, Width: frame.Size.Width, Height: 72}
+		uiScale := max(float32(1), state.uiScale)
+		state.confirmRect = Rect{X: frame.Size.Width - 64*uiScale, Y: frame.Size.Height - 56*uiScale, Width: 40 * uiScale, Height: 40 * uiScale}
+		state.cancelRect = Rect{X: 24 * uiScale, Y: frame.Size.Height - 56*uiScale, Width: 40 * uiScale, Height: 40 * uiScale}
+		state.toolbarRect = Rect{Y: frame.Size.Height - 72*uiScale, Width: frame.Size.Width, Height: 72 * uiScale}
 		state.mu.Unlock()
-		drawScreenshotScrollingControls(displayList, frame.Size, preview, frameCount)
+		drawScreenshotScrollingControls(displayList, frame.Size, preview, frameCount, uiScale)
 		return
 	}
 	state.frameSize = frame.Size
 	selection := normalizeScreenshotEditorRect(state.selection, frame.Size)
 	hasSelection := state.hasSelection || state.dragging
+	uiScale := float32(1)
+	if hasSelection && state.chromeScale != nil {
+		uiScale = max(float32(1), state.chromeScale(selection))
+	}
+	state.uiScale = uiScale
+	scaled := func(value float32) float32 { return value * uiScale }
 	dragging := state.dragging
 	activeTool := state.activeTool
 	hideTools := state.hideTools
@@ -424,35 +439,35 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		drawScreenshotEditorCursor(displayList, screenshotEditorCursorLogicalPoint(*cursorPixel, state.image, frame.Size))
 	}
 	if hasSelectedMark {
-		drawScreenshotEditorAnnotationHandles(displayList, annotations[selectedAnnotation])
+		drawScreenshotEditorAnnotationHandles(displayList, annotations[selectedAnnotation], uiScale)
 	}
 	displayList.PopClipRect()
 
 	green := Color{R: 41, G: 255, B: 114, A: 255}
-	displayList.StrokeRoundedRect(selection, 0, 2, green)
-	drawScreenshotEditorHandles(displayList, selection, green)
+	displayList.StrokeRoundedRect(selection, 0, scaled(2), green)
+	drawScreenshotEditorHandles(displayList, selection, green, uiScale)
 	label := fmt.Sprintf("%.0f x %.0f", selection.Width, selection.Height)
-	labelWidth := max(float32(80), float32(len(label))*8+16)
-	labelLeft := min(max(float32(8), selection.X+12), max(float32(8), frame.Size.Width-labelWidth-8))
-	labelTop := max(float32(8), selection.Y-32)
-	displayList.FillRoundedRect(Rect{X: labelLeft - 8, Y: labelTop, Width: labelWidth, Height: 26}, 10, Color{R: 23, G: 23, B: 23, A: 230})
-	displayList.DrawText(label, Rect{X: labelLeft, Y: labelTop + 5, Width: labelWidth - 16, Height: 18}, TextStyle{Size: 14, Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
+	labelWidth := max(scaled(80), float32(len(label))*scaled(8)+scaled(16))
+	labelLeft := min(max(scaled(8), selection.X+scaled(12)), max(scaled(8), frame.Size.Width-labelWidth-scaled(8)))
+	labelTop := max(scaled(8), selection.Y-scaled(32))
+	displayList.FillRoundedRect(Rect{X: labelLeft - scaled(8), Y: labelTop, Width: labelWidth, Height: scaled(26)}, scaled(10), Color{R: 23, G: 23, B: 23, A: 230})
+	displayList.DrawText(label, Rect{X: labelLeft, Y: labelTop + scaled(5), Width: labelWidth - scaled(16), Height: scaled(18)}, TextStyle{Size: scaled(14), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
 	if dragging || state.autoConfirm {
 		return
 	}
 
-	toolbarWidth := float32(128)
+	toolbarWidth := scaled(128)
 	if !hideTools {
-		toolbarWidth = 632
+		toolbarWidth = scaled(632)
 	}
-	toolbarHeight := float32(60)
-	toolbarLeft := min(max(float32(24), selection.X+selection.Width-toolbarWidth), max(float32(24), frame.Size.Width-toolbarWidth-24))
-	toolbarTop := selection.Y + selection.Height + 16
-	if toolbarTop+toolbarHeight > frame.Size.Height-24 {
-		toolbarTop = max(float32(24), selection.Y-toolbarHeight-16)
+	toolbarHeight := scaled(60)
+	toolbarLeft := min(max(scaled(24), selection.X+selection.Width-toolbarWidth), max(scaled(24), frame.Size.Width-toolbarWidth-scaled(24)))
+	toolbarTop := selection.Y + selection.Height + scaled(16)
+	if toolbarTop+toolbarHeight > frame.Size.Height-scaled(24) {
+		toolbarTop = max(scaled(24), selection.Y-toolbarHeight-scaled(16))
 	}
 	toolbarRect := Rect{X: toolbarLeft, Y: toolbarTop, Width: toolbarWidth, Height: toolbarHeight}
-	slotLeft := toolbarLeft + 16
+	slotLeft := toolbarLeft + scaled(16)
 	var toolRects [6]Rect
 	pinRect := Rect{}
 	undoRect := Rect{}
@@ -460,22 +475,22 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	cursorRect := Rect{}
 	if !hideTools {
 		for index := range toolRects {
-			toolRects[index] = Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
-			slotLeft += 48
+			toolRects[index] = Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
+			slotLeft += scaled(48)
 		}
-		slotLeft += 6
-		undoRect = Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
-		slotLeft += 48 + 6
-		scrollRect = Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
-		slotLeft += 48 + 6
-		cursorRect = Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
-		slotLeft += 48 + 6
-		pinRect = Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
-		slotLeft += 48
+		slotLeft += scaled(6)
+		undoRect = Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
+		slotLeft += scaled(54)
+		scrollRect = Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
+		slotLeft += scaled(54)
+		cursorRect = Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
+		slotLeft += scaled(54)
+		pinRect = Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
+		slotLeft += scaled(48)
 	}
-	cancelRect := Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
-	slotLeft += 48
-	confirmRect := Rect{X: slotLeft + 4, Y: toolbarTop + 10, Width: 40, Height: 40}
+	cancelRect := Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
+	slotLeft += scaled(48)
+	confirmRect := Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
 	state.mu.Lock()
 	state.toolbarRect = toolbarRect
 	state.toolRects = toolRects
@@ -487,45 +502,45 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.confirmRect = confirmRect
 	state.mu.Unlock()
 
-	displayList.FillRoundedRect(toolbarRect, 18, Color{R: 30, G: 26, B: 24, A: 204})
+	displayList.FillRoundedRect(toolbarRect, scaled(18), Color{R: 30, G: 26, B: 24, A: 204})
 	if !hideTools {
 		for index, rect := range toolRects {
 			selected := screenshotEditorTool(index) == activeTool
 			foreground := Color{R: 255, G: 255, B: 255, A: 255}
 			if selected {
-				displayList.FillRoundedRect(rect, 10, Color{R: 41, G: 255, B: 114, A: 51})
+				displayList.FillRoundedRect(rect, scaled(10), Color{R: 41, G: 255, B: 114, A: 51})
 				foreground = green
 			}
-			drawScreenshotEditorToolbarIcon(displayList, screenshotEditorToolIconNames[index], rect, foreground)
+			drawScreenshotEditorToolbarIcon(displayList, screenshotEditorToolIconNames[index], rect, foreground, uiScale)
 		}
 		undoColor := Color{R: 255, G: 255, B: 255, A: 97}
 		if len(annotations) > 0 {
 			undoColor.A = 255
 		}
-		drawScreenshotEditorToolbarIcon(displayList, "control.undo", undoRect, undoColor)
+		drawScreenshotEditorToolbarIcon(displayList, "control.undo", undoRect, undoColor, uiScale)
 		scrollColor := Color{R: 255, G: 255, B: 255, A: 255}
 		if scrollingStarting {
 			scrollColor = green
 		}
-		drawScreenshotEditorToolbarIcon(displayList, "screenshot.scrolling-capture", scrollRect, scrollColor)
+		drawScreenshotEditorToolbarIcon(displayList, "screenshot.scrolling-capture", scrollRect, scrollColor, uiScale)
 		cursorColor := Color{R: 255, G: 255, B: 255, A: 255}
 		if cursorPixel == nil {
 			cursorColor.A = 97
 		} else if showCursor {
-			displayList.FillRoundedRect(cursorRect, 10, Color{R: 41, G: 255, B: 114, A: 51})
+			displayList.FillRoundedRect(cursorRect, scaled(10), Color{R: 41, G: 255, B: 114, A: 51})
 			cursorColor = green
 		}
-		drawScreenshotEditorToolbarIcon(displayList, "screenshot.cursor", cursorRect, cursorColor)
-		drawScreenshotEditorToolbarIcon(displayList, "screenshot.pin", pinRect, Color{R: 255, G: 255, B: 255, A: 255})
+		drawScreenshotEditorToolbarIcon(displayList, "screenshot.cursor", cursorRect, cursorColor, uiScale)
+		drawScreenshotEditorToolbarIcon(displayList, "screenshot.pin", pinRect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
 	}
-	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancelRect, Color{R: 255, G: 107, B: 107, A: 255})
-	drawScreenshotEditorToolbarIcon(displayList, "control.check", confirmRect, Color{R: 48, G: 227, B: 122, A: 255})
+	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancelRect, Color{R: 255, G: 107, B: 107, A: 255}, uiScale)
+	drawScreenshotEditorToolbarIcon(displayList, "control.check", confirmRect, Color{R: 48, G: 227, B: 122, A: 255}, uiScale)
 	if !hideTools {
 		var selectedMark *screenshotEditorAnnotation
 		if hasSelectedMark {
 			selectedMark = &annotations[selectedAnnotation]
 		}
-		state.drawEditBar(displayList, frame.Size, selection, activeTool, selectedMark, annotationColor, mosaicRadius, textFontSize)
+		state.drawEditBar(displayList, frame.Size, selection, activeTool, selectedMark, annotationColor, mosaicRadius, textFontSize, uiScale)
 	}
 }
 
@@ -539,6 +554,7 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 	creationColor Color,
 	creationMosaicRadius float32,
 	creationTextSize float32,
+	uiScale float32,
 ) {
 	if selected == nil && activeTool == screenshotEditorToolSelect {
 		return
@@ -557,74 +573,75 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 		anchor = screenshotEditorAnnotationBounds(*selected)
 	}
 
-	width := float32(92)
-	height := float32(100)
+	scaled := func(value float32) float32 { return value * uiScale }
+	width := scaled(92)
+	height := scaled(100)
 	if isMosaic {
-		width, height = 116, 56
+		width, height = scaled(116), scaled(56)
 	}
 	if selected != nil {
-		height += 64
+		height += scaled(64)
 		if selected.tool == screenshotEditorToolText {
-			height += 106
+			height += scaled(106)
 		}
 	}
-	left := selection.X + selection.Width + 16
-	if left+width > frame.Width-24 {
-		left = max(float32(24), selection.X-width-16)
+	left := selection.X + selection.Width + scaled(16)
+	if left+width > frame.Width-scaled(24) {
+		left = max(scaled(24), selection.X-width-scaled(16))
 	}
-	top := min(max(float32(24), anchor.Y+anchor.Height/2-height/2), max(float32(24), frame.Height-height-24))
+	top := min(max(scaled(24), anchor.Y+anchor.Height/2-height/2), max(scaled(24), frame.Height-height-scaled(24)))
 	bar := Rect{X: left, Y: top, Width: width, Height: height}
-	displayList.FillRoundedRect(bar, 18, Color{R: 27, G: 23, B: 21, A: 217})
+	displayList.FillRoundedRect(bar, scaled(18), Color{R: 27, G: 23, B: 21, A: 217})
 
 	var colorRects [6]Rect
 	var sizeRects [3]Rect
 	decreaseRect, increaseRect, deleteRect := Rect{}, Rect{}, Rect{}
-	cursorY := top + 12
+	cursorY := top + scaled(12)
 	green := Color{R: 41, G: 255, B: 114, A: 255}
 	if isMosaic {
 		for index, radius := range screenshotEditorMosaicRadii {
-			rect := Rect{X: left + 10 + float32(index)*32, Y: cursorY, Width: 32, Height: 32}
+			rect := Rect{X: left + scaled(10+float32(index)*32), Y: cursorY, Width: scaled(32), Height: scaled(32)}
 			sizeRects[index] = rect
-			visualRadius := float32(4) + radius/screenshotEditorMosaicRadii[len(screenshotEditorMosaicRadii)-1]*6
+			visualRadius := scaled(4 + radius/screenshotEditorMosaicRadii[len(screenshotEditorMosaicRadii)-1]*6)
 			strokeColor := Color{R: 255, G: 255, B: 255, A: 179}
 			if math.Abs(float64(radius-mosaicRadius)) < 0.1 {
 				strokeColor = green
 			}
 			circle := Rect{X: rect.X + rect.Width/2 - visualRadius, Y: rect.Y + rect.Height/2 - visualRadius, Width: visualRadius * 2, Height: visualRadius * 2}
 			displayList.FillRoundedRect(circle, visualRadius, Color{R: strokeColor.R, G: strokeColor.G, B: strokeColor.B, A: 42})
-			displayList.StrokeRoundedRect(circle, visualRadius, 2, strokeColor)
+			displayList.StrokeRoundedRect(circle, visualRadius, scaled(2), strokeColor)
 		}
-		cursorY += 42
+		cursorY += scaled(42)
 	} else {
 		for index, swatch := range screenshotEditorPalette {
-			rect := Rect{X: left + 20 + float32(index%2)*32, Y: cursorY + float32(index/2)*28, Width: 20, Height: 20}
+			rect := Rect{X: left + scaled(20+float32(index%2)*32), Y: cursorY + scaled(float32(index/2)*28), Width: scaled(20), Height: scaled(20)}
 			colorRects[index] = rect
-			displayList.FillRoundedRect(rect, 10, swatch)
+			displayList.FillRoundedRect(rect, scaled(10), swatch)
 			outline := Color{R: 255, G: 255, B: 255, A: 61}
 			if swatch == color {
 				outline = green
 			}
-			displayList.StrokeRoundedRect(rect, 10, 2, outline)
+			displayList.StrokeRoundedRect(rect, scaled(10), scaled(2), outline)
 		}
-		cursorY += 88
+		cursorY += scaled(88)
 	}
 
 	if selected != nil && selected.tool == screenshotEditorToolText {
-		decreaseRect = Rect{X: left + (width-42)/2, Y: cursorY, Width: 42, Height: 42}
-		cursorY += 42
-		displayList.FillRoundedRect(decreaseRect, 10, Color{R: 255, G: 255, B: 255, A: 34})
-		drawScreenshotEditorToolbarIcon(displayList, "control.remove", decreaseRect, Color{R: 255, G: 255, B: 255, A: 255})
-		displayList.DrawText(fmt.Sprintf("%.0f", textSize), Rect{X: left, Y: cursorY + 2, Width: width, Height: 18}, TextStyle{Size: 12, Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
-		cursorY += 22
-		increaseRect = Rect{X: left + (width-42)/2, Y: cursorY, Width: 42, Height: 42}
-		cursorY += 52
-		displayList.FillRoundedRect(increaseRect, 10, Color{R: 255, G: 255, B: 255, A: 34})
-		drawScreenshotEditorToolbarIcon(displayList, "control.add", increaseRect, Color{R: 255, G: 255, B: 255, A: 255})
+		decreaseRect = Rect{X: left + (width-scaled(42))/2, Y: cursorY, Width: scaled(42), Height: scaled(42)}
+		cursorY += scaled(42)
+		displayList.FillRoundedRect(decreaseRect, scaled(10), Color{R: 255, G: 255, B: 255, A: 34})
+		drawScreenshotEditorToolbarIcon(displayList, "control.remove", decreaseRect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
+		displayList.DrawText(fmt.Sprintf("%.0f", textSize), Rect{X: left, Y: cursorY + scaled(2), Width: width, Height: scaled(18)}, TextStyle{Size: scaled(12), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
+		cursorY += scaled(22)
+		increaseRect = Rect{X: left + (width-scaled(42))/2, Y: cursorY, Width: scaled(42), Height: scaled(42)}
+		cursorY += scaled(52)
+		displayList.FillRoundedRect(increaseRect, scaled(10), Color{R: 255, G: 255, B: 255, A: 34})
+		drawScreenshotEditorToolbarIcon(displayList, "control.add", increaseRect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
 	}
 	if selected != nil {
-		deleteRect = Rect{X: left + (width-42)/2, Y: cursorY, Width: 42, Height: 42}
-		displayList.FillRoundedRect(deleteRect, 10, Color{R: 255, G: 255, B: 255, A: 34})
-		drawScreenshotEditorToolbarIcon(displayList, "control.delete", deleteRect, Color{R: 255, G: 107, B: 107, A: 255})
+		deleteRect = Rect{X: left + (width-scaled(42))/2, Y: cursorY, Width: scaled(42), Height: scaled(42)}
+		displayList.FillRoundedRect(deleteRect, scaled(10), Color{R: 255, G: 255, B: 255, A: 34})
+		drawScreenshotEditorToolbarIcon(displayList, "control.delete", deleteRect, Color{R: 255, G: 107, B: 107, A: 255}, uiScale)
 	}
 
 	state.mu.Lock()
@@ -638,10 +655,12 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 }
 
 // drawScreenshotEditorToolbarIcon renders the shared SVG at a consistent visual size.
-func drawScreenshotEditorToolbarIcon(displayList *DisplayList, name string, rect Rect, color Color) {
+func drawScreenshotEditorToolbarIcon(displayList *DisplayList, name string, rect Rect, color Color, uiScale float32) {
+	inset := 8 * uiScale
+	size := 24 * uiScale
 	key := screenshotEditorIconCacheKey{name: name, color: color}
 	if cached, ok := screenshotEditorIconCache.Load(key); ok {
-		displayList.DrawImage(cached.(*Image), Rect{X: rect.X + 8, Y: rect.Y + 8, Width: 24, Height: 24})
+		displayList.DrawImage(cached.(*Image), Rect{X: rect.X + inset, Y: rect.Y + inset, Width: size, Height: size})
 		return
 	}
 	icon := common.UIIcon(name)
@@ -664,7 +683,7 @@ func drawScreenshotEditorToolbarIcon(displayList *DisplayList, name string, rect
 		return
 	}
 	actual, _ := screenshotEditorIconCache.LoadOrStore(key, image)
-	displayList.DrawImage(actual.(*Image), Rect{X: rect.X + 8, Y: rect.Y + 8, Width: 24, Height: 24})
+	displayList.DrawImage(actual.(*Image), Rect{X: rect.X + inset, Y: rect.Y + inset, Width: size, Height: size})
 }
 
 // drawScreenshotEditorCursor previews the captured pointer with the same marker exported to PNG.
@@ -719,10 +738,10 @@ func screenshotEditorCursorPixelFromDesktop(cursor Point, bounds Rect, source im
 	}
 }
 
-func drawScreenshotEditorHandles(displayList *DisplayList, selection Rect, color Color) {
+func drawScreenshotEditorHandles(displayList *DisplayList, selection Rect, color Color, uiScale float32) {
 	for _, point := range screenshotEditorRectHandlePoints(selection) {
-		displayList.FillRoundedRect(Rect{X: point.X - 7, Y: point.Y - 7, Width: 14, Height: 14}, 4, Color{A: 115})
-		displayList.FillRoundedRect(Rect{X: point.X - 6, Y: point.Y - 6, Width: 12, Height: 12}, 4, color)
+		displayList.FillRoundedRect(Rect{X: point.X - 7*uiScale, Y: point.Y - 7*uiScale, Width: 14 * uiScale, Height: 14 * uiScale}, 4*uiScale, Color{A: 115})
+		displayList.FillRoundedRect(Rect{X: point.X - 6*uiScale, Y: point.Y - 6*uiScale, Width: 12 * uiScale, Height: 12 * uiScale}, 4*uiScale, color)
 	}
 }
 
@@ -1067,7 +1086,7 @@ func (state *screenshotEditorOverlayState) beginSelectEditLocked(point Point) bo
 		annotation := state.annotations[state.selectedAnnotation]
 		switch annotation.tool {
 		case screenshotEditorToolRect, screenshotEditorToolEllipse:
-			if handle, found := screenshotEditorHandleAt(annotation.rect, point); found {
+			if handle, found := screenshotEditorHandleAt(annotation.rect, point, state.uiScale); found {
 				state.editMode = screenshotEditorEditResizeAnnotation
 				state.editHandle = handle
 				state.editOriginalMark = annotation
@@ -1096,7 +1115,7 @@ func (state *screenshotEditorOverlayState) beginSelectEditLocked(point Point) bo
 		}
 	}
 	state.hasSelectedMark = false
-	if handle, found := screenshotEditorHandleAt(state.selection, point); found {
+	if handle, found := screenshotEditorHandleAt(state.selection, point, state.uiScale); found {
 		state.editMode = screenshotEditorEditResizeSelection
 		state.editHandle = handle
 		state.editOriginalRect = state.selection
@@ -1143,9 +1162,9 @@ func (state *screenshotEditorOverlayState) updateSelectEditLocked(point Point) {
 	}
 }
 
-func screenshotEditorHandleAt(rect Rect, point Point) (screenshotEditorHandle, bool) {
+func screenshotEditorHandleAt(rect Rect, point Point, uiScale float32) (screenshotEditorHandle, bool) {
 	for index, handlePoint := range screenshotEditorRectHandlePoints(rect) {
-		if screenshotEditorPointsNear(handlePoint, point, 12) {
+		if screenshotEditorPointsNear(handlePoint, point, 12*max(float32(1), uiScale)) {
 			return screenshotEditorHandle(index), true
 		}
 	}

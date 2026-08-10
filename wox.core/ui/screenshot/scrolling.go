@@ -1,4 +1,4 @@
-package woxui
+package screenshot
 
 import (
 	"errors"
@@ -456,23 +456,24 @@ func screenshotEditorRectsOverlap(left, right Rect) bool {
 		left.Y+left.Height > right.Y
 }
 
-func drawScreenshotScrollingControls(displayList *DisplayList, frame Size, preview *Image, frameCount int) {
+func drawScreenshotScrollingControls(displayList *DisplayList, frame Size, preview *Image, frameCount int, uiScale float32) {
+	scaled := func(value float32) float32 { return value * uiScale }
 	displayList.Clear(Color{})
 	panel := Rect{Width: frame.Width, Height: frame.Height}
-	displayList.FillRoundedRect(panel, 18, Color{R: 30, G: 26, B: 24, A: 235})
+	displayList.FillRoundedRect(panel, scaled(18), Color{R: 30, G: 26, B: 24, A: 235})
 	if preview != nil {
-		maxHeight := max(float32(1), frame.Height-72)
+		maxHeight := max(float32(1), frame.Height-scaled(72))
 		scale := min(frame.Width/float32(preview.Width), maxHeight/float32(preview.Height))
 		width, height := float32(preview.Width)*scale, float32(preview.Height)*scale
 		displayList.DrawImage(preview, Rect{X: (frame.Width - width) / 2, Width: width, Height: height})
 	}
-	displayList.FillRoundedRect(Rect{Y: frame.Height - 72, Width: frame.Width, Height: 72}, 18, Color{R: 25, G: 22, B: 20, A: 245})
+	displayList.FillRoundedRect(Rect{Y: frame.Height - scaled(72), Width: frame.Width, Height: scaled(72)}, scaled(18), Color{R: 25, G: 22, B: 20, A: 245})
 	displayList.DrawText(
 		fmt.Sprintf("%d", frameCount),
-		Rect{X: frame.Width/2 - 20, Y: frame.Height - 52, Width: 40, Height: 24},
-		TextStyle{Size: 13, Weight: FontWeightSemibold},
+		Rect{X: frame.Width/2 - scaled(20), Y: frame.Height - scaled(52), Width: scaled(40), Height: scaled(24)},
+		TextStyle{Size: scaled(13), Weight: FontWeightSemibold},
 		Color{R: 255, G: 255, B: 255, A: 153},
 	)
-	drawScreenshotEditorToolbarIcon(displayList, "control.close", Rect{X: 24, Y: frame.Height - 56, Width: 40, Height: 40}, Color{R: 255, G: 107, B: 107, A: 255})
-	drawScreenshotEditorToolbarIcon(displayList, "control.check", Rect{X: frame.Width - 64, Y: frame.Height - 56, Width: 40, Height: 40}, Color{R: 48, G: 227, B: 122, A: 255})
+	drawScreenshotEditorToolbarIcon(displayList, "control.close", Rect{X: scaled(24), Y: frame.Height - scaled(56), Width: scaled(40), Height: scaled(40)}, Color{R: 255, G: 107, B: 107, A: 255}, uiScale)
+	drawScreenshotEditorToolbarIcon(displayList, "control.check", Rect{X: frame.Width - scaled(64), Y: frame.Height - scaled(56), Width: scaled(40), Height: scaled(40)}, Color{R: 48, G: 227, B: 122, A: 255}, uiScale)
 }

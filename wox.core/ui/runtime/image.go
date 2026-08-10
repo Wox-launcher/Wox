@@ -3,6 +3,7 @@ package woxui
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"io"
 	"sync/atomic"
@@ -43,4 +44,29 @@ func NewImage(source image.Image) (*Image, error) {
 	rgba := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
 	draw.Draw(rgba, rgba.Bounds(), source, bounds.Min, draw.Src)
 	return &Image{Width: rgba.Rect.Dx(), Height: rgba.Rect.Dy(), id: nextImageID.Add(1), pixels: rgba.Pix}, nil
+}
+
+// NewImageFromPackedRGBA retains an immutable, tightly packed RGBA buffer without copying it.
+func NewImageFromPackedRGBA(source *image.RGBA) (*Image, error) {
+	if source == nil {
+		return nil, fmt.Errorf("image source is nil")
+	}
+	width, height := source.Rect.Dx(), source.Rect.Dy()
+	if width <= 0 || height <= 0 || width > 16384 || height > 16384 || source.Stride != width*4 {
+		return nil, fmt.Errorf("image dimensions or stride are invalid: %dx%d stride=%d", width, height, source.Stride)
+	}
+	pixelCount := width * height * 4
+	if len(source.Pix) < pixelCount {
+		return nil, fmt.Errorf("image pixel buffer is too small")
+	}
+	return &Image{Width: width, Height: height, id: nextImageID.Add(1), pixels: source.Pix[:pixelCount]}, nil
+}
+
+// RGBAAt returns one pixel from the image's zero-based renderer coordinate space.
+func (i *Image) RGBAAt(x, y int) color.RGBA {
+	if i == nil || x < 0 || y < 0 || x >= i.Width || y >= i.Height {
+		return color.RGBA{}
+	}
+	offset := (y*i.Width + x) * 4
+	return color.RGBA{R: i.pixels[offset], G: i.pixels[offset+1], B: i.pixels[offset+2], A: i.pixels[offset+3]}
 }

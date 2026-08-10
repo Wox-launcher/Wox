@@ -1,4 +1,4 @@
-package woxui
+package screenshot
 
 import (
 	"image"
@@ -6,6 +6,61 @@ import (
 	"image/draw"
 	"testing"
 )
+
+func TestNewScreenshotEditorImageSharesPackedRGBA(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 4, 2))
+	source.SetRGBA(1, 1, color.RGBA{R: 20, G: 40, B: 60, A: 255})
+
+	prepared, err := newScreenshotEditorImage(source)
+	if err != nil {
+		t.Fatalf("prepare screenshot image: %v", err)
+	}
+	source.SetRGBA(1, 1, color.RGBA{R: 80, G: 100, B: 120, A: 255})
+	if pixel := prepared.RGBAAt(1, 1); pixel.R != 80 || pixel.G != 100 || pixel.B != 120 {
+		t.Fatalf("packed screenshot pixels were copied: got %+v", pixel)
+	}
+	if prepared.Width != 4 || prepared.Height != 2 {
+		t.Fatalf("prepared size = %dx%d, want 4x2", prepared.Width, prepared.Height)
+	}
+}
+
+func TestScreenshotEditorWindowHostSerializesCallbacks(t *testing.T) {
+	host := &screenshotEditorWindowHost{}
+	first := &screenshotEditorOverlayState{}
+	second := &screenshotEditorOverlayState{}
+	if err := host.begin(first); err != nil {
+		t.Fatalf("begin first screenshot session: %v", err)
+	}
+	if err := host.begin(second); err == nil {
+		t.Fatal("second screenshot session should be rejected while the first is active")
+	}
+	host.end(second)
+	if host.current() != first {
+		t.Fatal("ending a different session cleared the active screenshot")
+	}
+	host.end(first)
+	if host.current() != nil {
+		t.Fatal("active screenshot session was not cleared")
+	}
+}
+
+func TestNewScreenshotEditorImageCopiesStridedRGBA(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 4, 2))
+	subImage := source.SubImage(image.Rect(1, 0, 3, 2)).(*image.RGBA)
+	subImage.SetRGBA(1, 0, color.RGBA{R: 10, G: 20, B: 30, A: 255})
+
+	prepared, err := newScreenshotEditorImage(subImage)
+	if err != nil {
+		t.Fatalf("prepare screenshot subimage: %v", err)
+	}
+	subImage.SetRGBA(1, 0, color.RGBA{R: 90, G: 100, B: 110, A: 255})
+	if pixel := prepared.RGBAAt(0, 0); pixel.R != 10 || pixel.G != 20 || pixel.B != 30 {
+		t.Fatalf("strided screenshot pixels did not use the normalized copy path: got %+v", pixel)
+	}
+	if prepared.Width != 2 || prepared.Height != 2 {
+		t.Fatalf("prepared size = %dx%d, want 2x2", prepared.Width, prepared.Height)
+	}
+}
 
 func TestScreenshotEditorSelectionMapsLogicalPointsToPixels(t *testing.T) {
 	state := &screenshotEditorOverlayState{frameSize: Size{Width: 1000, Height: 500}}
@@ -54,7 +109,7 @@ func TestNewScreenshotEditorOverlayStateAppliesNativeSelection(t *testing.T) {
 
 func TestScreenshotEditorToolbarMatchesFlutterGeometry(t *testing.T) {
 	state := &screenshotEditorOverlayState{
-		image:        &Image{Width: 1, Height: 1, pixels: []byte{0, 0, 0, 255}},
+		image:        testScreenshotImage(t, 1, 1),
 		selection:    Rect{X: 100, Y: 100, Width: 900, Height: 400},
 		hasSelection: true,
 		result:       make(chan screenshotEditorOverlayOutcome, 1),
@@ -90,10 +145,29 @@ func TestScreenshotEditorToolbarIconsRenderFromSharedSVGs(t *testing.T) {
 	)
 	for _, name := range names {
 		displayList := &DisplayList{}
-		drawScreenshotEditorToolbarIcon(displayList, name, Rect{Width: 40, Height: 40}, Color{R: 255, G: 255, B: 255, A: 255})
-		if len(displayList.commands) != 1 || displayList.commands[0].kind != displayCommandDrawImage {
+		drawScreenshotEditorToolbarIcon(displayList, name, Rect{Width: 40, Height: 40}, Color{R: 255, G: 255, B: 255, A: 255}, 1)
+		if displayList.CommandCount() != 1 {
 			t.Fatalf("toolbar icon %q did not render as an SVG image", name)
 		}
+	}
+}
+
+func TestScreenshotEditorChromeUsesSelectionMonitorScale(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image:        testScreenshotImage(t, 2000, 1200),
+		selection:    Rect{X: 200, Y: 100, Width: 1400, Height: 800},
+		hasSelection: true,
+		chromeScale:  func(Rect) float32 { return 1.5 },
+	}
+	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 2000, Height: 1200}})
+	if state.uiScale != 1.5 {
+		t.Fatalf("chrome scale = %.2f, want 1.5", state.uiScale)
+	}
+	if state.toolbarRect.Width != 948 || state.toolbarRect.Height != 90 {
+		t.Fatalf("scaled toolbar = %+v, want 948x90", state.toolbarRect)
+	}
+	if state.confirmRect.Width != 60 || state.confirmRect.Height != 60 {
+		t.Fatalf("scaled confirm action = %+v, want 60x60", state.confirmRect)
 	}
 }
 
@@ -109,7 +183,7 @@ func TestScreenshotEditorCursorToggleAndExport(t *testing.T) {
 
 	cursorPixel := Point{X: 80, Y: 60}
 	state := &screenshotEditorOverlayState{
-		image:        &Image{Width: 200, Height: 120, pixels: make([]byte, 200*120*4)},
+		image:        testScreenshotImage(t, 200, 120),
 		frameSize:    Size{Width: 200, Height: 120},
 		selection:    Rect{X: 20, Y: 20, Width: 140, Height: 80},
 		hasSelection: true,
@@ -143,7 +217,7 @@ func TestScreenshotEditorCursorToggleAndExport(t *testing.T) {
 
 func TestScreenshotEditorAnnotationDrawUndoAndExport(t *testing.T) {
 	state := &screenshotEditorOverlayState{
-		image:        &Image{Width: 1, Height: 1, pixels: []byte{0, 0, 0, 255}},
+		image:        testScreenshotImage(t, 1, 1),
 		frameSize:    Size{Width: 100, Height: 50},
 		selection:    Rect{Width: 100, Height: 50},
 		hasSelection: true,
@@ -249,7 +323,7 @@ func TestScreenshotEditorSelectMovesResizesAndDeletesAnnotation(t *testing.T) {
 
 func TestScreenshotEditorEditBarUpdatesCreationAndSelectedAnnotation(t *testing.T) {
 	state := &screenshotEditorOverlayState{
-		image:           &Image{Width: 1, Height: 1, pixels: []byte{0, 0, 0, 255}},
+		image:           testScreenshotImage(t, 1, 1),
 		frameSize:       Size{Width: 800, Height: 600},
 		selection:       Rect{X: 100, Y: 100, Width: 400, Height: 300},
 		hasSelection:    true,
@@ -288,6 +362,15 @@ func TestScreenshotEditorEditBarUpdatesCreationAndSelectedAnnotation(t *testing.
 	if len(state.annotations) != 0 {
 		t.Fatalf("delete left annotations = %+v", state.annotations)
 	}
+}
+
+func testScreenshotImage(t *testing.T, width, height int) *Image {
+	t.Helper()
+	prepared, err := NewImage(image.NewRGBA(image.Rect(0, 0, width, height)))
+	if err != nil {
+		t.Fatalf("prepare test screenshot image: %v", err)
+	}
+	return prepared
 }
 
 func TestScreenshotScrollingCaptureMatchesAndStitchesBothDirections(t *testing.T) {

@@ -237,7 +237,7 @@ func (w *platformWindow) capturePNG(path string) error {
 	if hwnd == 0 {
 		return errors.New("woxui: Windows window is not initialized")
 	}
-	desktop, virtualBounds, err := captureWindowsVirtualDesktop()
+	desktop, virtualBounds, err := CaptureWindowsVirtualDesktop()
 	if err != nil {
 		return err
 	}
@@ -254,7 +254,7 @@ func (w *platformWindow) capturePNG(path string) error {
 	if crop.Empty() {
 		return errors.New("woxui: Windows capture bounds are empty")
 	}
-	return writeScreenshotPNG(path, desktop.SubImage(crop))
+	return writeWindowsCapturePNG(path, desktop.SubImage(crop))
 }
 
 // platformRun owns the Win32 message pump on the caller's OS main thread.
@@ -449,6 +449,17 @@ func (w *platformWindow) setBounds(bounds Rect) error {
 
 func (w *platformWindow) setPhysicalBounds(bounds Rect) error {
 	return w.call(windowCommand{kind: windowCommandSetPhysicalBounds, bounds: bounds}).err
+}
+
+// SetPhysicalBounds positions a Windows-only pixel-coordinate surface such as the screenshot overlay.
+func (w *Window) SetPhysicalBounds(bounds Rect) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	if bounds.Width <= 0 || bounds.Height <= 0 {
+		return errors.New("window bounds must have a positive size")
+	}
+	return w.native.setPhysicalBounds(bounds)
 }
 
 func (w *platformWindow) bounds() (Rect, error) {
@@ -646,9 +657,7 @@ func (w *platformWindow) createNativeWindow() error {
 	w.hwnd = hwnd
 	w.mu.Unlock()
 	dpi := win.GetDpiForWindow(hwnd)
-	if dpi != 0 {
-		scale = float32(dpi) / 96
-	}
+	scale = windowsWindowScale(w.options.Role, dpi)
 	w.scale = scale
 	var client win.RECT
 	if !win.GetClientRect(hwnd, &client) {
@@ -658,7 +667,10 @@ func (w *platformWindow) createNativeWindow() error {
 		w.mu.Unlock()
 		return errors.New("get initial client size failed")
 	}
-	renderer, err := newNativeRenderer(uintptr(hwnd), int(client.Right-client.Left), int(client.Bottom-client.Top))
+	// Screenshot windows never host WebView or other embedded native surfaces, so their virtual-
+	// desktop-sized renderer does not need the second double-buffered composition swap chain.
+	enableEmbeddedSurfaceOverlay := windowsRendererNeedsEmbeddedSurfaceOverlay(w.options.Role)
+	renderer, err := newNativeRenderer(uintptr(hwnd), int(client.Right-client.Left), int(client.Bottom-client.Top), enableEmbeddedSurfaceOverlay)
 	if err != nil {
 		win.DestroyWindow(hwnd)
 		w.mu.Lock()
@@ -673,6 +685,10 @@ func (w *platformWindow) createNativeWindow() error {
 	platformRuntime.Unlock()
 	win.InvalidateRect(hwnd, nil, false)
 	return nil
+}
+
+func windowsRendererNeedsEmbeddedSurfaceOverlay(role WindowRole) bool {
+	return role != WindowRoleScreenshot
 }
 
 // applyWindowsBackdrop uses the supported DWM system backdrop on Windows 11 and the legacy
@@ -759,6 +775,17 @@ func primaryDisplayScale() float32 {
 	dpi := win.GetDeviceCaps(dc, win.LOGPIXELSX)
 	win.ReleaseDC(0, dc)
 	if dpi <= 0 {
+		return 1
+	}
+	return float32(dpi) / 96
+}
+
+// windowsWindowScale keeps virtual-desktop screenshot coordinates pixel-exact across monitors.
+func windowsWindowScale(role WindowRole, dpi uint32) float32 {
+	if role == WindowRoleScreenshot {
+		return 1
+	}
+	if dpi == 0 {
 		return 1
 	}
 	return float32(dpi) / 96
@@ -852,8 +879,8 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		// Windows supplies a DPI-correct rectangle for the in-progress move. Using
 		// it avoids deriving a second size from GetWindowRect while the drag is crossing monitors.
 		window.mu.Lock()
-		window.scale = float32(dpi) / 96
-		suppressDPIBounds := window.suppressDPIBounds
+		window.scale = windowsWindowScale(window.options.Role, dpi)
+		suppressDPIBounds := window.suppressDPIBounds || window.options.Role == WindowRoleScreenshot
 		window.mu.Unlock()
 		if !suppressDPIBounds {
 			if bounds, ok := windowsSuggestedDPIBounds(lParam); ok {
@@ -1549,11 +1576,11 @@ func (w *platformWindow) centerNative(size Size) error {
 // syncScaleFromNativeWindow refreshes the render scale before a programmatic frame.
 func (w *platformWindow) syncScaleFromNativeWindow() {
 	dpi := win.GetDpiForWindow(w.hwnd)
-	if dpi == 0 {
+	if dpi == 0 && w.options.Role != WindowRoleScreenshot {
 		return
 	}
 	w.mu.Lock()
-	w.scale = float32(dpi) / 96
+	w.scale = windowsWindowScale(w.options.Role, dpi)
 	w.mu.Unlock()
 }
 

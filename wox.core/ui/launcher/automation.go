@@ -9,6 +9,7 @@ import (
 	"wox/ui/automation"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
+	woxscreenshot "wox/ui/screenshot"
 	woxwidget "wox/ui/widget"
 )
 
@@ -49,7 +50,7 @@ func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, automationSur
 
 // independentAutomationWindow routes black-box input and capture to a live raw multi-window surface.
 func (a *App) independentAutomationWindow() *woxui.Window {
-	managed, found := a.windows.Get(woxui.ScreenshotWindowID)
+	managed, found := a.windows.Get(woxscreenshot.ScreenshotWindowID)
 	if !found {
 		return nil
 	}

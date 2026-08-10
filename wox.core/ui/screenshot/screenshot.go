@@ -1,4 +1,6 @@
-package woxui
+package screenshot
+
+import woxui "wox/ui/runtime"
 
 // ScreenshotOptions configures one interactive desktop-region capture.
 type ScreenshotOptions struct {
@@ -6,7 +8,7 @@ type ScreenshotOptions struct {
 	CopyToClipboard       bool
 	HideAnnotationToolbar bool
 	AutoConfirm           bool
-	WindowManager         *WindowManager
+	WindowManager         *woxui.WindowManager
 }
 
 const ScreenshotWindowID WindowID = "wox.screenshot"
@@ -16,7 +18,7 @@ type ScreenshotResult struct {
 	Cancelled               bool
 	PinToScreen             bool
 	ScreenshotPath          string
-	LogicalSelection        Rect
+	LogicalSelection        woxui.Rect
 	ClipboardWriteSucceeded bool
 	ClipboardWarningMessage string
 }

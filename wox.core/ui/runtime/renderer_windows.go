@@ -29,10 +29,14 @@ func traceNativeCall(format string, args ...any) {
 }
 
 // newNativeRenderer attaches a DirectComposition swap chain to windowHandle.
-func newNativeRenderer(windowHandle uintptr, width, height int) (*nativeRenderer, error) {
+func newNativeRenderer(windowHandle uintptr, width, height int, enableEmbeddedSurfaceOverlay bool) (*nativeRenderer, error) {
 	var handle *C.WoxRenderer
 	traceNativeCall("renderer create enter hwnd=%#x size=%dx%d", windowHandle, width, height)
-	result := C.wox_renderer_create(C.uintptr_t(windowHandle), C.uint32_t(width), C.uint32_t(height), &handle)
+	enableOverlay := C.int32_t(0)
+	if enableEmbeddedSurfaceOverlay {
+		enableOverlay = 1
+	}
+	result := C.wox_renderer_create(C.uintptr_t(windowHandle), C.uint32_t(width), C.uint32_t(height), enableOverlay, &handle)
 	traceNativeCall("renderer create exit hwnd=%#x handle=%p result=%d", windowHandle, handle, result)
 	if result < 0 {
 		return nil, hresultError("create renderer", result)
@@ -149,6 +153,7 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 		case displayCommandDrawImage:
 			commandResult = C.wox_renderer_draw_image(
 				r.handle,
+				C.uint64_t(command.image.id),
 				(*C.uint8_t)(unsafe.Pointer(&command.image.pixels[0])),
 				C.uint32_t(command.image.Width),
 				C.uint32_t(command.image.Height),

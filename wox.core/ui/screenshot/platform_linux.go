@@ -1,10 +1,10 @@
 //go:build linux
 
-package woxui
+package screenshot
 
 /*
 #include <stdlib.h>
-#include "native_linux.h"
+#include "../runtime/native_linux.h"
 int32_t wox_screenshot_cursor_position(float *x, float *y);
 */
 import "C"
