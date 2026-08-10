@@ -1295,13 +1295,27 @@ static NSCursor *darwin_web_view_cursor(NSString *value) {
 }
 
 // apply_darwin_pointer_cursor lets the active page cursor override the Go-rendered host cursor.
+static NSCursor *darwin_host_pointer_cursor(uint8_t cursor) {
+  switch (cursor) {
+    case 1: return [NSCursor IBeamCursor];
+    case 2: return [NSCursor openHandCursor];
+    case 3: return [NSCursor crosshairCursor];
+    case 4: return [NSCursor resizeLeftRightCursor];
+    case 5: return [NSCursor resizeUpDownCursor];
+    // AppKit has no public diagonal resize cursor, so use the precise crosshair fallback.
+    case 6:
+    case 7: return [NSCursor crosshairCursor];
+    default: return [NSCursor arrowCursor];
+  }
+}
+
 static void apply_darwin_pointer_cursor(WoxDarwinWindow *window) {
   if (window == NULL || window->closed) {
     return;
   }
   NSCursor *cursor = window->pointer_over_web_view && window->web_view_cursor != nil
                          ? window->web_view_cursor
-                         : (window->pointer_cursor == 1 ? [NSCursor IBeamCursor] : [NSCursor arrowCursor]);
+                         : darwin_host_pointer_cursor(window->pointer_cursor);
   [cursor set];
   [window->window invalidateCursorRectsForView:window->view];
 }
@@ -1631,7 +1645,7 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   [super resetCursorRects];
   NSCursor *cursor = _owner != NULL && _owner->pointer_over_web_view && _owner->web_view_cursor != nil
                          ? _owner->web_view_cursor
-                         : (_owner != NULL && _owner->pointer_cursor == 1 ? [NSCursor IBeamCursor] : [NSCursor arrowCursor]);
+                         : (_owner != NULL ? darwin_host_pointer_cursor(_owner->pointer_cursor) : [NSCursor arrowCursor]);
   [self addCursorRect:self.bounds cursor:cursor];
 }
 

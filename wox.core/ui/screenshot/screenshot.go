@@ -9,6 +9,28 @@ type ScreenshotOptions struct {
 	HideAnnotationToolbar bool
 	AutoConfirm           bool
 	WindowManager         *woxui.WindowManager
+	AnnotationTooltips    ScreenshotAnnotationTooltips
+	ActionTooltips        ScreenshotActionTooltips
+}
+
+// ScreenshotActionTooltips carries localized labels for screenshot-wide actions.
+type ScreenshotActionTooltips struct {
+	Undo             string
+	ScrollingCapture string
+	Cursor           string
+	Pin              string
+	Cancel           string
+	Confirm          string
+}
+
+// ScreenshotAnnotationTooltips carries localized labels for the annotation creation tools.
+type ScreenshotAnnotationTooltips struct {
+	Rectangle string
+	Ellipse   string
+	Text      string
+	Arrow     string
+	Number    string
+	Mosaic    string
 }
 
 const ScreenshotWindowID WindowID = "wox.screenshot"

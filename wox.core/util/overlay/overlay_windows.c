@@ -45,6 +45,7 @@
 typedef struct {
     char* name;
     bool transparent;
+    bool shadow;
     bool hitTestIconOnly;
     bool closeOnEscape;
     bool takeFocus;
@@ -290,6 +291,7 @@ typedef struct OverlayWindow
     HWND hwnd;
     WCHAR *name;
     BOOL transparent;
+    BOOL shadow;
     BOOL hitTestIconOnly;
     BOOL closeOnEscape;
     BOOL takeFocus;
@@ -347,6 +349,7 @@ typedef struct OverlayPayload
 {
     WCHAR *name;
     BOOL transparent;
+    BOOL shadow;
     BOOL hitTestIconOnly;
     BOOL closeOnEscape;
     BOOL takeFocus;
@@ -1257,6 +1260,7 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->absolutePosition = payload->absolutePosition;
     ow->preservePosition = payload->preservePosition;
     ow->transparent = payload->transparent;
+    ow->shadow = payload->shadow;
     ow->hitTestIconOnly = payload->hitTestIconOnly;
     ow->stickyWindowPid = payload->stickyWindowPid;
     ow->stickyWindowHwnd = payload->stickyWindowHwnd;
@@ -1276,6 +1280,12 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->hiddenForMove = FALSE;
     if (ow->hwnd)
     {
+        if (ow->transparent)
+        {
+            MARGINS margins = ow->shadow ? (MARGINS){1, 1, 1, 1} : (MARGINS){0, 0, 0, 0};
+            DwmExtendFrameIntoClientArea(ow->hwnd, &margins);
+        }
+
         LONG_PTR style = GetWindowLongPtrW(ow->hwnd, GWL_STYLE);
         LONG_PTR updatedStyle = (ow->resizable && !ow->transparent) ? (style | WS_THICKFRAME) : (style & ~WS_THICKFRAME);
         if (updatedStyle != style)
@@ -1328,6 +1338,7 @@ static BOOL OverlayPayloadMatchesCurrent(OverlayWindow *ow, OverlayPayload *payl
         return FALSE;
 
     return ow->transparent == payload->transparent &&
+           ow->shadow == payload->shadow &&
            ow->hitTestIconOnly == payload->hitTestIconOnly &&
            ow->closeOnEscape == payload->closeOnEscape &&
            ow->takeFocus == payload->takeFocus &&
@@ -1408,6 +1419,13 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
         UINT cornerPreference = (ow && ow->transparent) ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPreference, sizeof(cornerPreference));
+
+        if (ow && ow->transparent && ow->shadow)
+        {
+            // A one-pixel glass frame asks DWM to retain the normal outer shadow without adding visible chrome.
+            MARGINS shadowMargins = {1, 1, 1, 1};
+            DwmExtendFrameIntoClientArea(hwnd, &shadowMargins);
+        }
 
         if (!(ow && ow->transparent))
         {
@@ -2117,6 +2135,7 @@ void ShowOverlay(OverlayOptions opts)
 
     payload->name = DupUtf8ToWide(opts.name);
     payload->transparent = opts.transparent ? TRUE : FALSE;
+    payload->shadow = opts.shadow ? TRUE : FALSE;
     payload->hitTestIconOnly = opts.hitTestIconOnly ? TRUE : FALSE;
     payload->closeOnEscape = opts.closeOnEscape ? TRUE : FALSE;
     payload->takeFocus = opts.takeFocus ? TRUE : FALSE;

@@ -8,9 +8,10 @@ package overlay
 #include <stdint.h>
 
 typedef struct {
-    char* name;
-    bool transparent;
-    bool hitTestIconOnly;
+	char* name;
+	bool transparent;
+	bool shadow;
+	bool hitTestIconOnly;
     bool closeOnEscape;
     bool takeFocus;
     bool nativeAttachment;
@@ -71,6 +72,7 @@ func showWindow(opts WindowOptions) {
 	cOpts := C.OverlayOptions{
 		name:                   cName,
 		transparent:            C.bool(opts.Transparent),
+		shadow:                 C.bool(opts.Shadow),
 		hitTestIconOnly:        C.bool(opts.HitTestIconOnly),
 		closeOnEscape:          C.bool(opts.CloseOnEscape),
 		takeFocus:              C.bool(opts.TakeFocus),

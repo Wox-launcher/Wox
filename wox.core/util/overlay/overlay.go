@@ -41,6 +41,8 @@ type WindowOptions struct {
 	ID string
 	// Transparent makes the overlay a clear drawing surface instead of the default HUD background.
 	Transparent bool
+	// Shadow requests a native outer window shadow, including for transparent attachment overlays.
+	Shadow bool
 	// HitTestIconOnly lets transparent overlay whitespace pass through while keeping content interactive.
 	HitTestIconOnly bool
 	// CloseOnEscape lets a focused overlay close itself on Esc.

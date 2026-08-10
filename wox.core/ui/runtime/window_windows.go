@@ -598,8 +598,21 @@ func (w *platformWindow) setPointerCursor(cursor PointerCursor) error {
 }
 
 func windowsPointerCursor(cursor PointerCursor) win.HCURSOR {
-	if cursor == PointerCursorText {
+	switch cursor {
+	case PointerCursorText:
 		return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_IBEAM))
+	case PointerCursorMove:
+		return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_SIZEALL))
+	case PointerCursorCrosshair:
+		return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_CROSS))
+	case PointerCursorResizeHorizontal:
+		return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_SIZEWE))
+	case PointerCursorResizeVertical:
+		return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_SIZENS))
+	case PointerCursorResizeNWSE:
+		return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_SIZENWSE))
+	case PointerCursorResizeNESW:
+		return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_SIZENESW))
 	}
 	return win.LoadCursor(0, win.MAKEINTRESOURCE(win.IDC_ARROW))
 }

@@ -8,6 +8,7 @@ package screenshot
 #include <stdlib.h>
 #include "../runtime/native_darwin.h"
 int32_t wox_screenshot_cursor_position(float *x, float *y);
+int32_t wox_screenshot_cursor_png(const char *path, float *hotspot_x, float *hotspot_y);
 */
 import "C"
 
@@ -15,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/draw"
 	"image/png"
 	"os"
 	"sync"
@@ -30,6 +32,7 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	time.Sleep(80 * time.Millisecond)
 	var cursorX, cursorY C.float
 	hasCapturedCursor := C.wox_screenshot_cursor_position(&cursorX, &cursorY) == 0
+	capturedCursor := captureDarwinCursor()
 	source, sessionHandle, displayID, bounds, selection, cancelled, err := selectDarwinScreenshotRegion()
 	if err != nil {
 		return ScreenshotResult{}, err
@@ -66,8 +69,47 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	}
 	if hasCapturedCursor {
 		platform.cursorPixel = screenshotEditorCursorPixelFromDesktop(Point{X: float32(cursorX), Y: float32(cursorY)}, bounds, source)
+		platform.capturedCursor = capturedCursor
 	}
 	return runScreenshotEditor(options, source, platform)
+}
+
+// captureDarwinCursor snapshots the current AppKit cursor at its native representation scale.
+func captureDarwinCursor() *screenshotEditorCapturedCursor {
+	file, err := os.CreateTemp("", "wox-screenshot-cursor-*.png")
+	if err != nil {
+		return nil
+	}
+	path := file.Name()
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return nil
+	}
+	defer os.Remove(path)
+	nativePath := C.CString(path)
+	defer C.free(unsafe.Pointer(nativePath))
+	var hotspotX, hotspotY C.float
+	if C.wox_screenshot_cursor_png(nativePath, &hotspotX, &hotspotY) != 0 {
+		return nil
+	}
+	cursorFile, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer cursorFile.Close()
+	decoded, err := png.Decode(cursorFile)
+	if err != nil {
+		return nil
+	}
+	raster := image.NewRGBA(image.Rect(0, 0, decoded.Bounds().Dx(), decoded.Bounds().Dy()))
+	draw.Draw(raster, raster.Bounds(), decoded, decoded.Bounds().Min, draw.Src)
+	preview, err := NewImage(raster)
+	if err != nil {
+		return nil
+	}
+	return &screenshotEditorCapturedCursor{
+		raster: raster, preview: preview, hotspot: Point{X: float32(hotspotX), Y: float32(hotspotY)},
+	}
 }
 
 // selectDarwinScreenshotRegion keeps one cached native image and overlay window per display until the user finishes selecting.

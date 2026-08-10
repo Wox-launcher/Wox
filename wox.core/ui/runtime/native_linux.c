@@ -281,9 +281,21 @@ static int32_t apply_linux_cursor_name(WoxLinuxWindow *window, const char *curso
 
 // apply_linux_pointer_cursor lets the active page cursor override the Go-rendered host cursor.
 static int32_t apply_linux_pointer_cursor(WoxLinuxWindow *window) {
+  static const char *const host_cursor_names[] = {
+      "default",
+      "text",
+      "move",
+      "crosshair",
+      "ew-resize",
+      "ns-resize",
+      "nwse-resize",
+      "nesw-resize",
+  };
+  uint8_t host_cursor = window->pointer_cursor;
+  const char *host_cursor_name = host_cursor < sizeof(host_cursor_names) / sizeof(host_cursor_names[0]) ? host_cursor_names[host_cursor] : "default";
   const char *cursor_name = window->pointer_over_web_view && window->web_view_cursor_name != NULL
                                 ? window->web_view_cursor_name
-                                : (window->pointer_cursor == 1 ? "text" : "default");
+                                : host_cursor_name;
   return apply_linux_cursor_name(window, cursor_name);
 }
 

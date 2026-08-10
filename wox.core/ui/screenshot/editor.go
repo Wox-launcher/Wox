@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -30,7 +31,9 @@ const (
 	screenshotEditorToolEllipse
 	screenshotEditorToolText
 	screenshotEditorToolArrow
+	screenshotEditorToolNumber
 	screenshotEditorToolMosaic
+	screenshotEditorToolCount
 )
 
 var screenshotEditorToolIconNames = [...]string{
@@ -39,12 +42,43 @@ var screenshotEditorToolIconNames = [...]string{
 	"screenshot.ellipse",
 	"screenshot.text",
 	"screenshot.arrow",
+	"screenshot.number",
 	"screenshot.mosaic",
 }
+
+var screenshotEditorDefaultTooltips = [...]string{
+	"",
+	"Rectangle",
+	"Ellipse",
+	"Text",
+	"Arrow",
+	"Number",
+	"Mosaic",
+}
+
+var screenshotEditorToolShortcuts = [...]string{"", "R", "E", "T", "A", "N", "M"}
+
+type screenshotEditorAction uint8
+
+const (
+	screenshotEditorActionNone screenshotEditorAction = iota
+	screenshotEditorActionUndo
+	screenshotEditorActionScrollingCapture
+	screenshotEditorActionCursor
+	screenshotEditorActionPin
+	screenshotEditorActionCancel
+	screenshotEditorActionConfirm
+)
 
 type screenshotEditorIconCacheKey struct {
 	name  string
 	color Color
+}
+
+type screenshotEditorCapturedCursor struct {
+	raster  *image.RGBA
+	preview *Image
+	hotspot Point
 }
 
 var screenshotEditorIconCache sync.Map
@@ -102,7 +136,9 @@ type screenshotEditorOverlayState struct {
 	scrollRect         Rect
 	cursorRect         Rect
 	toolbarRect        Rect
-	toolRects          [6]Rect
+	toolRects          [screenshotEditorToolCount]Rect
+	tooltips           [screenshotEditorToolCount]string
+	actionTooltips     ScreenshotActionTooltips
 	editBarRect        Rect
 	editColorRects     [6]Rect
 	editSizeRects      [3]Rect
@@ -118,10 +154,24 @@ type screenshotEditorOverlayState struct {
 	editOriginalMark   screenshotEditorAnnotation
 	selectedAnnotation int
 	hasSelectedMark    bool
+	hoveredAnnotation  int
+	hasHoveredMark     bool
+	hoveredTool        int
+	hasHoveredTool     bool
+	hoveredAction      screenshotEditorAction
+	hasHoveredAction   bool
+	pointerCursor      PointerCursor
 	textPosition       Point
 	textDraft          string
 	textMarked         string
+	textCaret          int
 	textEditing        bool
+	editingTextIndex   int
+	hasEditingText     bool
+	caretVisible       bool
+	caretBlinkAt       time.Time
+	caretBlinkStop     chan struct{}
+	caretBlinkDone     chan struct{}
 	dragging           bool
 	annotationDragging bool
 	hasSelection       bool
@@ -139,7 +189,9 @@ type screenshotEditorOverlayState struct {
 	annotationColor    Color
 	mosaicRadius       float32
 	textFontSize       float32
+	nextNumber         int
 	cursorPixel        *Point
+	capturedCursor     *screenshotEditorCapturedCursor
 	showCursor         bool
 	uiScale            float32
 	chromeScale        func(selection Rect) float32
@@ -153,6 +205,7 @@ type screenshotEditorPlatform struct {
 	frameSize        Size
 	initialSelection *Rect
 	cursorPixel      *Point
+	capturedCursor   *screenshotEditorCapturedCursor
 	afterShow        func()
 	chromeScale      func(selection Rect) float32
 	preparedWindow   *ManagedWindow
@@ -180,12 +233,26 @@ func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, 
 		annotationColor: screenshotEditorAnnotationColor,
 		mosaicRadius:    screenshotEditorMosaicRadius,
 		textFontSize:    screenshotEditorTextFontSize,
+		nextNumber:      1,
 		cursorPixel:     platform.cursorPixel,
+		capturedCursor:  platform.capturedCursor,
 		uiScale:         1,
 		chromeScale:     platform.chromeScale,
 		result:          make(chan screenshotEditorOverlayOutcome, 1),
 		scrollingStop:   make(chan struct{}),
+		caretVisible:    true,
+		caretBlinkAt:    time.Now(),
 	}
+	state.tooltips = [screenshotEditorToolCount]string{
+		"",
+		options.AnnotationTooltips.Rectangle,
+		options.AnnotationTooltips.Ellipse,
+		options.AnnotationTooltips.Text,
+		options.AnnotationTooltips.Arrow,
+		options.AnnotationTooltips.Number,
+		options.AnnotationTooltips.Mosaic,
+	}
+	state.actionTooltips = options.ActionTooltips
 	if platform.initialSelection != nil {
 		state.selection = normalizeScreenshotEditorRect(*platform.initialSelection, platform.frameSize)
 		state.hasSelection = state.selection.Width >= 2 && state.selection.Height >= 2
@@ -254,6 +321,8 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	if openErr != nil {
 		return ScreenshotResult{}, openErr
 	}
+	state.startCaretBlink()
+	defer state.stopCaretBlink()
 
 	overlay := managed.Window()
 	var outcome screenshotEditorOverlayOutcome
@@ -278,6 +347,7 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	scrollingFrames := append([]screenshotScrollingFrame(nil), state.scrollingFrames...)
 	cursorPixel := state.cursorPixel
 	showCursor := state.showCursor
+	annotationScale := max(float32(1), state.uiScale)
 	state.mu.Unlock()
 	if scrolling {
 		stitched, stitchErr := stitchScreenshotScrollingFrames(scrollingFrames)
@@ -292,12 +362,12 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		if err != nil {
 			return ScreenshotResult{}, err
 		}
-		composited, err := renderScreenshotEditorAnnotations(source, annotations, selection, frameSize)
+		composited, err := renderScreenshotEditorAnnotations(source, annotations, selection, frameSize, annotationScale)
 		if err != nil {
 			return ScreenshotResult{}, err
 		}
 		if showCursor && cursorPixel != nil {
-			if err := renderScreenshotEditorCursor(composited, *cursorPixel, selection, frameSize); err != nil {
+			if err := renderScreenshotEditorCursor(composited, *cursorPixel, selection, frameSize, state.capturedCursor); err != nil {
 				return ScreenshotResult{}, err
 			}
 		}
@@ -395,26 +465,63 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	}
 	state.uiScale = uiScale
 	scaled := func(value float32) float32 { return value * uiScale }
+	for index := range state.annotations {
+		state.measureTextAnnotation(&state.annotations[index], uiScale)
+		state.measureNumberAnnotation(&state.annotations[index], uiScale)
+	}
 	dragging := state.dragging
 	activeTool := state.activeTool
 	hideTools := state.hideTools
 	annotationColor := state.annotationColor
 	mosaicRadius := state.mosaicRadius
 	textFontSize := state.textFontSize
+	textEditing := state.textEditing
+	caretVisible := state.caretVisible
+	editingTextIndex := state.editingTextIndex
+	hasEditingText := state.hasEditingText && editingTextIndex >= 0 && editingTextIndex < len(state.annotations)
+	textPosition := state.textPosition
+	textPreview, textCaretPrefix := screenshotEditorTextEditingValue(state.textDraft, state.textMarked, state.textCaret)
 	scrollingStarting := state.scrollingStarting
 	cursorPixel := state.cursorPixel
+	capturedCursor := state.capturedCursor
 	showCursor := state.showCursor
 	annotations := append([]screenshotEditorAnnotation(nil), state.annotations...)
+	if hasEditingText {
+		if annotations[editingTextIndex].text != textPreview {
+			annotations[editingTextIndex].textSize = Size{}
+			annotations[editingTextIndex].measuredSize = 0
+		}
+		annotations[editingTextIndex].text = textPreview
+		annotations[editingTextIndex].color = annotationColor
+		annotations[editingTextIndex].fontSize = textFontSize
+		state.measureTextAnnotation(&annotations[editingTextIndex], uiScale)
+	}
+	drawAnnotations := annotations
 	selectedAnnotation := state.selectedAnnotation
 	hasSelectedMark := state.hasSelectedMark && selectedAnnotation >= 0 && selectedAnnotation < len(state.annotations)
+	hoveredAnnotation := state.hoveredAnnotation
+	hasHoveredMark := state.hasHoveredMark && hoveredAnnotation >= 0 && hoveredAnnotation < len(state.annotations)
+	hoveredTool := state.hoveredTool
+	hasHoveredTool := state.hasHoveredTool && hoveredTool > int(screenshotEditorToolSelect) && hoveredTool < len(state.toolRects)
+	tooltips := state.tooltips
+	hoveredAction := state.hoveredAction
+	hasHoveredAction := state.hasHoveredAction
+	actionTooltips := state.actionTooltips
 	if state.draft != nil {
 		annotations = append(annotations, *state.draft)
+		drawAnnotations = annotations
 	}
-	if state.textEditing && state.textDraft+state.textMarked != "" {
-		annotations = append(annotations, screenshotEditorAnnotation{
-			tool: state.activeTool, start: state.textPosition, text: state.textDraft + state.textMarked,
+	if hasEditingText {
+		drawAnnotations = append([]screenshotEditorAnnotation(nil), annotations[:editingTextIndex]...)
+		drawAnnotations = append(drawAnnotations, annotations[editingTextIndex+1:]...)
+	}
+	if textEditing && textPreview != "" {
+		preview := screenshotEditorAnnotation{
+			tool: screenshotEditorToolText, start: textPosition, text: textPreview,
 			color: annotationColor, fontSize: textFontSize,
-		})
+		}
+		state.measureTextAnnotation(&preview, uiScale)
+		drawAnnotations = append(drawAnnotations, preview)
 	}
 	state.confirmRect = Rect{}
 	state.cancelRect = Rect{}
@@ -423,7 +530,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.scrollRect = Rect{}
 	state.cursorRect = Rect{}
 	state.toolbarRect = Rect{}
-	state.toolRects = [6]Rect{}
+	state.toolRects = [screenshotEditorToolCount]Rect{}
 	state.editBarRect = Rect{}
 	state.editColorRects = [6]Rect{}
 	state.editSizeRects = [3]Rect{}
@@ -445,11 +552,18 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	displayList.FillRect(Rect{X: selection.X + selection.Width, Y: selection.Y, Width: max(float32(0), frame.Size.Width-selection.X-selection.Width), Height: selection.Height}, dim)
 
 	displayList.PushClipRect(selection)
-	drawScreenshotEditorAnnotations(displayList, annotations, state.image, frame.Size)
-	if showCursor && cursorPixel != nil {
-		drawScreenshotEditorCursor(displayList, screenshotEditorCursorLogicalPoint(*cursorPixel, state.image, frame.Size))
+	drawScreenshotEditorAnnotations(displayList, drawAnnotations, state.image, frame.Size, uiScale)
+	if textEditing && caretVisible {
+		renderedTextSize := textFontSize * uiScale
+		caretX := textPosition.X + screenshotEditorEstimatedTextWidth(textCaretPrefix, renderedTextSize)
+		displayList.FillRect(Rect{X: caretX, Y: textPosition.Y, Width: max(float32(1), 1.5*uiScale), Height: renderedTextSize + 4*uiScale}, annotationColor)
 	}
-	if hasSelectedMark {
+	if showCursor && cursorPixel != nil {
+		drawScreenshotEditorCursor(displayList, screenshotEditorCursorLogicalPoint(*cursorPixel, state.image, frame.Size), capturedCursor, state.image, frame.Size)
+	}
+	if hasHoveredMark {
+		drawScreenshotEditorAnnotationHandles(displayList, annotations[hoveredAnnotation], uiScale)
+	} else if hasSelectedMark {
 		drawScreenshotEditorAnnotationHandles(displayList, annotations[selectedAnnotation], uiScale)
 	}
 	displayList.PopClipRect()
@@ -472,20 +586,24 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		toolbarWidth = scaled(632)
 	}
 	toolbarHeight := scaled(60)
+	toolbarStackHeight := toolbarHeight
+	if !hideTools {
+		toolbarStackHeight += scaled(64)
+	}
 	toolbarLeft := min(max(scaled(24), selection.X+selection.Width-toolbarWidth), max(scaled(24), frame.Size.Width-toolbarWidth-scaled(24)))
 	toolbarTop := selection.Y + selection.Height + scaled(16)
-	if toolbarTop+toolbarHeight > frame.Size.Height-scaled(24) {
-		toolbarTop = max(scaled(24), selection.Y-toolbarHeight-scaled(16))
+	if toolbarTop+toolbarStackHeight > frame.Size.Height-scaled(24) {
+		toolbarTop = max(scaled(24), selection.Y-toolbarStackHeight-scaled(16))
 	}
 	toolbarRect := Rect{X: toolbarLeft, Y: toolbarTop, Width: toolbarWidth, Height: toolbarHeight}
 	slotLeft := toolbarLeft + scaled(16)
-	var toolRects [6]Rect
+	var toolRects [screenshotEditorToolCount]Rect
 	pinRect := Rect{}
 	undoRect := Rect{}
 	scrollRect := Rect{}
 	cursorRect := Rect{}
 	if !hideTools {
-		for index := range toolRects {
+		for index := 1; index < len(toolRects); index++ {
 			toolRects[index] = Rect{X: slotLeft + scaled(4), Y: toolbarTop + scaled(10), Width: scaled(40), Height: scaled(40)}
 			slotLeft += scaled(48)
 		}
@@ -513,10 +631,15 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.confirmRect = confirmRect
 	state.mu.Unlock()
 
-	displayList.FillRoundedRect(toolbarRect, scaled(18), Color{R: 30, G: 26, B: 24, A: 204})
+	displayList.FillRoundedRect(toolbarRect, scaled(18), Color{R: 30, G: 26, B: 24, A: 255})
 	if !hideTools {
-		for index, rect := range toolRects {
-			selected := screenshotEditorTool(index) == activeTool
+		highlightedTool := activeTool
+		if hasSelectedMark {
+			highlightedTool = annotations[selectedAnnotation].tool
+		}
+		for index := 1; index < len(toolRects); index++ {
+			rect := toolRects[index]
+			selected := screenshotEditorTool(index) == highlightedTool
 			foreground := Color{R: 255, G: 255, B: 255, A: 255}
 			if selected {
 				displayList.FillRoundedRect(rect, scaled(10), Color{R: 41, G: 255, B: 114, A: 51})
@@ -541,25 +664,168 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			displayList.FillRoundedRect(cursorRect, scaled(10), Color{R: 41, G: 255, B: 114, A: 51})
 			cursorColor = green
 		}
-		drawScreenshotEditorToolbarIcon(displayList, "screenshot.cursor", cursorRect, cursorColor, uiScale)
+		drawScreenshotEditorToolbarIconSized(displayList, "screenshot.cursor", cursorRect, cursorColor, uiScale, 20)
 		drawScreenshotEditorToolbarIcon(displayList, "screenshot.pin", pinRect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
 	}
 	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancelRect, Color{R: 255, G: 107, B: 107, A: 255}, uiScale)
 	drawScreenshotEditorToolbarIcon(displayList, "control.check", confirmRect, Color{R: 48, G: 227, B: 122, A: 255}, uiScale)
+	if hasHoveredTool {
+		tooltip := screenshotEditorToolTooltip(hoveredTool, tooltips)
+		drawScreenshotEditorToolTooltip(displayList, frame.Size, toolRects[hoveredTool], tooltip, uiScale)
+	} else if hasHoveredAction {
+		anchor, tooltip := screenshotEditorActionTooltip(hoveredAction, actionTooltips, undoRect, scrollRect, cursorRect, pinRect, cancelRect, confirmRect)
+		drawScreenshotEditorToolTooltip(displayList, frame.Size, anchor, tooltip, uiScale)
+	}
 	if !hideTools {
 		var selectedMark *screenshotEditorAnnotation
 		if hasSelectedMark {
-			selectedMark = &annotations[selectedAnnotation]
+			selectedCopy := annotations[selectedAnnotation]
+			if hasEditingText && selectedAnnotation == editingTextIndex {
+				selectedCopy.color = annotationColor
+				selectedCopy.fontSize = textFontSize
+			}
+			selectedMark = &selectedCopy
 		}
-		state.drawEditBar(displayList, frame.Size, selection, activeTool, selectedMark, annotationColor, mosaicRadius, textFontSize, uiScale)
+		state.drawEditBar(displayList, frame.Size, toolbarRect, activeTool, selectedMark, annotationColor, mosaicRadius, textFontSize, uiScale)
 	}
 }
 
-// drawEditBar mirrors Flutter's creation settings and selected-annotation actions beside the selection.
+// measureTextAnnotation uses the same native font metrics as DrawText so selection frames track rendered glyph advances.
+func (state *screenshotEditorOverlayState) measureTextAnnotation(annotation *screenshotEditorAnnotation, uiScale float32) {
+	if annotation == nil || annotation.tool != screenshotEditorToolText || annotation.text == "" || state.window == nil {
+		return
+	}
+	renderedFontSize := screenshotEditorAnnotationRenderedFontSize(*annotation, uiScale)
+	if annotation.textSize.Width > 0 && annotation.textSize.Height > 0 && math.Abs(float64(annotation.measuredSize-renderedFontSize)) < 0.01 {
+		return
+	}
+	metrics, err := state.window.MeasureText(annotation.text, TextStyle{Size: renderedFontSize, Weight: FontWeightSemibold})
+	if err != nil {
+		return
+	}
+	annotation.textSize = Size{Width: max(float32(24), metrics.Size.Width), Height: max(renderedFontSize+4, metrics.Size.Height)}
+	annotation.measuredSize = renderedFontSize
+}
+
+// measureNumberAnnotation uses the platform font width and line height to center marker labels precisely.
+func (state *screenshotEditorOverlayState) measureNumberAnnotation(annotation *screenshotEditorAnnotation, uiScale float32) {
+	if annotation == nil || annotation.tool != screenshotEditorToolNumber || annotation.number < 1 || state.window == nil {
+		return
+	}
+	label, fontSize := screenshotEditorNumberLabel(*annotation, uiScale)
+	if annotation.textSize.Width > 0 && annotation.textSize.Height > 0 && math.Abs(float64(annotation.measuredSize-fontSize)) < 0.01 {
+		return
+	}
+	metrics, err := state.window.MeasureText(label, TextStyle{Size: fontSize, Weight: FontWeightSemibold})
+	if err != nil {
+		return
+	}
+	annotation.textSize = metrics.Size
+	annotation.measuredSize = fontSize
+}
+
+func screenshotEditorToolTooltip(tool int, configured [screenshotEditorToolCount]string) string {
+	if tool <= int(screenshotEditorToolSelect) || tool >= len(configured) {
+		return ""
+	}
+	label := configured[tool]
+	if label == "" {
+		label = screenshotEditorDefaultTooltips[tool]
+	}
+	return fmt.Sprintf("%s (%s)", label, screenshotEditorToolShortcuts[tool])
+}
+
+func screenshotEditorActionTooltip(action screenshotEditorAction, configured ScreenshotActionTooltips, undo, scroll, cursor, pin, cancel, confirm Rect) (Rect, string) {
+	switch action {
+	case screenshotEditorActionUndo:
+		return undo, screenshotEditorTooltipWithShortcut(configured.Undo, "Undo", "U")
+	case screenshotEditorActionScrollingCapture:
+		return scroll, screenshotEditorTooltipWithShortcut(configured.ScrollingCapture, "Long screenshot", "L")
+	case screenshotEditorActionCursor:
+		return cursor, screenshotEditorTooltipWithShortcut(configured.Cursor, "Show cursor", "C")
+	case screenshotEditorActionPin:
+		return pin, screenshotEditorTooltipWithShortcut(configured.Pin, "Pin to screen", "P")
+	case screenshotEditorActionCancel:
+		return cancel, screenshotEditorTooltipWithShortcut(configured.Cancel, "Cancel", "Esc")
+	case screenshotEditorActionConfirm:
+		return confirm, screenshotEditorTooltipWithShortcut(configured.Confirm, "Confirm", "Enter")
+	default:
+		return Rect{}, ""
+	}
+}
+
+func screenshotEditorTooltipWithShortcut(configured, fallback, shortcut string) string {
+	if configured == "" {
+		configured = fallback
+	}
+	return fmt.Sprintf("%s (%s)", configured, shortcut)
+}
+
+// drawScreenshotEditorToolTooltip renders one compact label above its annotation tool.
+func drawScreenshotEditorToolTooltip(displayList *DisplayList, frame Size, anchor Rect, text string, uiScale float32) {
+	if text == "" || anchor.Width <= 0 {
+		return
+	}
+	scaled := func(value float32) float32 { return value * uiScale }
+	width := max(scaled(72), screenshotEditorEstimatedTextWidth(text, scaled(12))+scaled(20))
+	left := min(max(scaled(8), anchor.X+anchor.Width/2-width/2), max(scaled(8), frame.Width-width-scaled(8)))
+	top := max(scaled(8), anchor.Y-scaled(36))
+	rect := Rect{X: left, Y: top, Width: width, Height: scaled(28)}
+	displayList.FillRoundedRect(rect, scaled(8), Color{R: 20, G: 18, B: 17, A: 240})
+	textWidth := min(width-scaled(20), screenshotEditorEstimatedTextWidth(text, scaled(12)))
+	displayList.DrawText(text, Rect{X: left + (width-textWidth)/2, Y: top + scaled(6), Width: textWidth, Height: scaled(18)}, TextStyle{Size: scaled(12), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
+}
+
+func screenshotEditorEstimatedTextWidth(text string, fontSize float32) float32 {
+	width := float32(0)
+	for _, character := range text {
+		switch {
+		case character > 0xFF:
+			width += fontSize
+		case character == ' ':
+			width += fontSize * 0.32
+		case strings.ContainsRune("ilI!.,':;|", character):
+			width += fontSize * 0.28
+		case strings.ContainsRune("mwMW@", character):
+			width += fontSize * 0.82
+		case character >= 'A' && character <= 'Z':
+			width += fontSize * 0.62
+		default:
+			width += fontSize * 0.52
+		}
+	}
+	return width
+}
+
+// screenshotEditorTextEditingValue inserts active IME composition at the retained rune caret.
+func screenshotEditorTextEditingValue(text, marked string, caret int) (string, string) {
+	runes := []rune(text)
+	caret = min(max(0, caret), len(runes))
+	prefix := string(runes[:caret]) + marked
+	return prefix + string(runes[caret:]), prefix
+}
+
+// screenshotEditorTextCaretIndex resolves a click to the closest boundary between rendered runes.
+func screenshotEditorTextCaretIndex(text string, offset, fontSize float32) int {
+	if offset <= 0 {
+		return 0
+	}
+	position := float32(0)
+	for index, character := range []rune(text) {
+		advance := screenshotEditorEstimatedTextWidth(string(character), fontSize)
+		if offset < position+advance/2 {
+			return index
+		}
+		position += advance
+	}
+	return utf8.RuneCountInString(text)
+}
+
+// drawEditBar places tool-specific creation and edit actions in a secondary row below the main toolbar.
 func (state *screenshotEditorOverlayState) drawEditBar(
 	displayList *DisplayList,
 	frame Size,
-	selection Rect,
+	toolbar Rect,
 	activeTool screenshotEditorTool,
 	selected *screenshotEditorAnnotation,
 	creationColor Color,
@@ -572,46 +838,42 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 	}
 
 	isMosaic := activeTool == screenshotEditorToolMosaic
+	isText := activeTool == screenshotEditorToolText
 	color := creationColor
 	mosaicRadius := creationMosaicRadius
 	textSize := creationTextSize
-	anchor := selection
 	if selected != nil {
 		isMosaic = selected.tool == screenshotEditorToolMosaic
+		isText = selected.tool == screenshotEditorToolText
 		color = screenshotEditorAnnotationDrawColor(*selected)
 		mosaicRadius = screenshotEditorAnnotationMosaicRadius(*selected)
 		textSize = screenshotEditorAnnotationFontSize(*selected)
-		anchor = screenshotEditorAnnotationBounds(*selected)
 	}
 
 	scaled := func(value float32) float32 { return value * uiScale }
-	width := scaled(92)
-	height := scaled(100)
+	width := scaled(192)
 	if isMosaic {
-		width, height = scaled(116), scaled(56)
+		width = scaled(120)
+	}
+	if isText {
+		width += scaled(136)
 	}
 	if selected != nil {
-		height += scaled(64)
-		if selected.tool == screenshotEditorToolText {
-			height += scaled(106)
-		}
+		width += scaled(54)
 	}
-	left := selection.X + selection.Width + scaled(16)
-	if left+width > frame.Width-scaled(24) {
-		left = max(scaled(24), selection.X-width-scaled(16))
-	}
-	top := min(max(scaled(24), anchor.Y+anchor.Height/2-height/2), max(scaled(24), frame.Height-height-scaled(24)))
-	bar := Rect{X: left, Y: top, Width: width, Height: height}
-	displayList.FillRoundedRect(bar, scaled(18), Color{R: 27, G: 23, B: 21, A: 217})
+	left := min(max(scaled(24), toolbar.X), max(scaled(24), frame.Width-width-scaled(24)))
+	top := toolbar.Y + toolbar.Height + scaled(8)
+	bar := Rect{X: left, Y: top, Width: width, Height: scaled(56)}
+	displayList.FillRoundedRect(bar, scaled(18), Color{R: 27, G: 23, B: 21, A: 255})
 
 	var colorRects [6]Rect
 	var sizeRects [3]Rect
 	decreaseRect, increaseRect, deleteRect := Rect{}, Rect{}, Rect{}
-	cursorY := top + scaled(12)
+	cursorX := left + scaled(12)
 	green := Color{R: 41, G: 255, B: 114, A: 255}
 	if isMosaic {
 		for index, radius := range screenshotEditorMosaicRadii {
-			rect := Rect{X: left + scaled(10+float32(index)*32), Y: cursorY, Width: scaled(32), Height: scaled(32)}
+			rect := Rect{X: cursorX, Y: top + scaled(12), Width: scaled(32), Height: scaled(32)}
 			sizeRects[index] = rect
 			visualRadius := scaled(4 + radius/screenshotEditorMosaicRadii[len(screenshotEditorMosaicRadii)-1]*6)
 			strokeColor := Color{R: 255, G: 255, B: 255, A: 179}
@@ -621,11 +883,11 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 			circle := Rect{X: rect.X + rect.Width/2 - visualRadius, Y: rect.Y + rect.Height/2 - visualRadius, Width: visualRadius * 2, Height: visualRadius * 2}
 			displayList.FillRoundedRect(circle, visualRadius, Color{R: strokeColor.R, G: strokeColor.G, B: strokeColor.B, A: 42})
 			displayList.StrokeRoundedRect(circle, visualRadius, scaled(2), strokeColor)
+			cursorX += scaled(32)
 		}
-		cursorY += scaled(42)
 	} else {
 		for index, swatch := range screenshotEditorPalette {
-			rect := Rect{X: left + scaled(20+float32(index%2)*32), Y: cursorY + scaled(float32(index/2)*28), Width: scaled(20), Height: scaled(20)}
+			rect := Rect{X: cursorX, Y: top + scaled(18), Width: scaled(20), Height: scaled(20)}
 			colorRects[index] = rect
 			displayList.FillRoundedRect(rect, scaled(10), swatch)
 			outline := Color{R: 255, G: 255, B: 255, A: 61}
@@ -633,26 +895,31 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 				outline = green
 			}
 			displayList.StrokeRoundedRect(rect, scaled(10), scaled(2), outline)
+			cursorX += scaled(28)
 		}
-		cursorY += scaled(88)
 	}
 
-	if selected != nil && selected.tool == screenshotEditorToolText {
-		decreaseRect = Rect{X: left + (width-scaled(42))/2, Y: cursorY, Width: scaled(42), Height: scaled(42)}
-		cursorY += scaled(42)
+	if isText {
+		cursorX += scaled(8)
+		displayList.FillRect(Rect{X: cursorX, Y: top + scaled(14), Width: scaled(1), Height: scaled(28)}, Color{R: 255, G: 255, B: 255, A: 34})
+		cursorX += scaled(9)
+		decreaseRect = Rect{X: cursorX, Y: top + scaled(7), Width: scaled(42), Height: scaled(42)}
 		displayList.FillRoundedRect(decreaseRect, scaled(10), Color{R: 255, G: 255, B: 255, A: 34})
 		drawScreenshotEditorToolbarIcon(displayList, "control.remove", decreaseRect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
-		displayList.DrawText(fmt.Sprintf("%.0f", textSize), Rect{X: left, Y: cursorY + scaled(2), Width: width, Height: scaled(18)}, TextStyle{Size: scaled(12), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
-		cursorY += scaled(22)
-		increaseRect = Rect{X: left + (width-scaled(42))/2, Y: cursorY, Width: scaled(42), Height: scaled(42)}
-		cursorY += scaled(52)
+		cursorX += scaled(42)
+		displayList.DrawText(fmt.Sprintf("%.0f", textSize), Rect{X: cursorX, Y: top + scaled(19), Width: scaled(40), Height: scaled(18)}, TextStyle{Size: scaled(12), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
+		cursorX += scaled(40)
+		increaseRect = Rect{X: cursorX, Y: top + scaled(7), Width: scaled(42), Height: scaled(42)}
 		displayList.FillRoundedRect(increaseRect, scaled(10), Color{R: 255, G: 255, B: 255, A: 34})
 		drawScreenshotEditorToolbarIcon(displayList, "control.add", increaseRect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
+		cursorX += scaled(42)
 	}
 	if selected != nil {
-		deleteRect = Rect{X: left + (width-scaled(42))/2, Y: cursorY, Width: scaled(42), Height: scaled(42)}
-		displayList.FillRoundedRect(deleteRect, scaled(10), Color{R: 255, G: 255, B: 255, A: 34})
-		drawScreenshotEditorToolbarIcon(displayList, "control.delete", deleteRect, Color{R: 255, G: 107, B: 107, A: 255}, uiScale)
+		cursorX += scaled(8)
+		displayList.FillRect(Rect{X: cursorX, Y: top + scaled(14), Width: scaled(1), Height: scaled(28)}, Color{R: 255, G: 255, B: 255, A: 34})
+		cursorX += scaled(3)
+		deleteRect = Rect{X: cursorX, Y: top + scaled(7), Width: scaled(42), Height: scaled(42)}
+		drawScreenshotEditorToolbarIconSized(displayList, "control.delete", deleteRect, Color{R: 255, G: 107, B: 107, A: 255}, uiScale, 20)
 	}
 
 	state.mu.Lock()
@@ -667,8 +934,12 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 
 // drawScreenshotEditorToolbarIcon renders the shared SVG at a consistent visual size.
 func drawScreenshotEditorToolbarIcon(displayList *DisplayList, name string, rect Rect, color Color, uiScale float32) {
-	inset := 8 * uiScale
-	size := 24 * uiScale
+	drawScreenshotEditorToolbarIconSized(displayList, name, rect, color, uiScale, 24)
+}
+
+func drawScreenshotEditorToolbarIconSized(displayList *DisplayList, name string, rect Rect, color Color, uiScale, logicalSize float32) {
+	size := logicalSize * uiScale
+	inset := (rect.Width - size) / 2
 	key := screenshotEditorIconCacheKey{name: name, color: color}
 	if cached, ok := screenshotEditorIconCache.Load(key); ok {
 		displayList.DrawImage(cached.(*Image), Rect{X: rect.X + inset, Y: rect.Y + inset, Width: size, Height: size})
@@ -698,7 +969,18 @@ func drawScreenshotEditorToolbarIcon(displayList *DisplayList, name string, rect
 }
 
 // drawScreenshotEditorCursor previews the captured pointer with the same marker exported to PNG.
-func drawScreenshotEditorCursor(displayList *DisplayList, hotspot Point) {
+func drawScreenshotEditorCursor(displayList *DisplayList, hotspot Point, captured *screenshotEditorCapturedCursor, source *Image, frame Size) {
+	if captured != nil && captured.preview != nil && source != nil && source.Width > 0 && source.Height > 0 {
+		scaleX := frame.Width / float32(source.Width)
+		scaleY := frame.Height / float32(source.Height)
+		displayList.DrawImage(captured.preview, Rect{
+			X:      hotspot.X - captured.hotspot.X*scaleX,
+			Y:      hotspot.Y - captured.hotspot.Y*scaleY,
+			Width:  float32(captured.preview.Width) * scaleX,
+			Height: float32(captured.preview.Height) * scaleY,
+		})
+		return
+	}
 	screenshotEditorCursorPreviewOnce.Do(func() {
 		rgba, err := renderScreenshotEditorCursorImage(56, 72)
 		if err != nil {
@@ -770,7 +1052,7 @@ func screenshotEditorRectHandlePoints(rect Rect) []Point {
 }
 
 func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
-	if event.Button != PointerButtonPrimary && event.Kind != PointerMove {
+	if event.Button != PointerButtonPrimary && event.Kind != PointerMove && event.Kind != PointerLeave {
 		return
 	}
 	switch event.Kind {
@@ -797,7 +1079,9 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 				continue
 			}
 			color := screenshotEditorPalette[index]
-			if state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
+			if state.textEditing && state.hasEditingText {
+				state.annotationColor = color
+			} else if state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
 				state.annotations[state.selectedAnnotation].color = color
 			} else {
 				state.annotationColor = color
@@ -818,14 +1102,26 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 			editChanged = true
 			break
 		}
-		if screenshotEditorRectContains(state.editDecreaseRect, event.Position) && state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
-			annotation := &state.annotations[state.selectedAnnotation]
-			annotation.fontSize = max(float32(12), screenshotEditorAnnotationFontSize(*annotation)-2)
+		if screenshotEditorRectContains(state.editDecreaseRect, event.Position) {
+			if state.textEditing && state.hasEditingText {
+				state.textFontSize = max(float32(12), state.textFontSize-2)
+			} else if state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) && state.annotations[state.selectedAnnotation].tool == screenshotEditorToolText {
+				annotation := &state.annotations[state.selectedAnnotation]
+				annotation.fontSize = max(float32(12), screenshotEditorAnnotationFontSize(*annotation)-2)
+			} else if state.activeTool == screenshotEditorToolText {
+				state.textFontSize = max(float32(12), state.textFontSize-2)
+			}
 			editChanged = true
 		}
-		if screenshotEditorRectContains(state.editIncreaseRect, event.Position) && state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
-			annotation := &state.annotations[state.selectedAnnotation]
-			annotation.fontSize = min(float32(48), screenshotEditorAnnotationFontSize(*annotation)+2)
+		if screenshotEditorRectContains(state.editIncreaseRect, event.Position) {
+			if state.textEditing && state.hasEditingText {
+				state.textFontSize = min(float32(48), state.textFontSize+2)
+			} else if state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) && state.annotations[state.selectedAnnotation].tool == screenshotEditorToolText {
+				annotation := &state.annotations[state.selectedAnnotation]
+				annotation.fontSize = min(float32(48), screenshotEditorAnnotationFontSize(*annotation)+2)
+			} else if state.activeTool == screenshotEditorToolText {
+				state.textFontSize = min(float32(48), state.textFontSize+2)
+			}
 			editChanged = true
 		}
 		if screenshotEditorRectContains(state.editDeleteRect, event.Position) && state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
@@ -848,43 +1144,63 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 				state.annotations = state.annotations[:len(state.annotations)-1]
 				state.hasSelectedMark = false
 			} else if !toolbar && !editBar {
-				switch state.activeTool {
-				case screenshotEditorToolSelect:
+				if state.textEditing {
 					state.commitTextLocked()
-					if !state.beginSelectEditLocked(event.Position) {
-						state.start = event.Position
-						state.selection = Rect{X: event.Position.X, Y: event.Position.Y}
-						state.dragging = true
-						state.hasSelection = false
-						state.annotations = nil
+				}
+				if state.activeTool == screenshotEditorToolText && screenshotEditorRectContains(state.selection, event.Position) {
+					if !state.beginTextAnnotationEditAtLocked(event.Position) {
 						state.hasSelectedMark = false
-					}
-				case screenshotEditorToolText:
-					if screenshotEditorRectContains(state.selection, event.Position) {
-						state.commitTextLocked()
+						state.hasHoveredMark = false
+						state.hasEditingText = false
+						state.textDraft = ""
+						state.textMarked = ""
+						state.textCaret = 0
 						state.textPosition = event.Position
 						state.textEditing = true
+						state.showCaretLocked()
+						state.pointerCursor = PointerCursorText
 					}
-				default:
-					if screenshotEditorRectContains(state.selection, event.Position) {
+				} else if state.beginAnnotationEditLocked(event.Position) {
+					state.activeTool = screenshotEditorToolSelect
+				} else {
+					switch state.activeTool {
+					case screenshotEditorToolSelect:
 						state.commitTextLocked()
-						state.start = event.Position
-						state.annotationDragging = true
-						state.draft = &screenshotEditorAnnotation{
-							tool:         state.activeTool,
-							rect:         Rect{X: event.Position.X, Y: event.Position.Y},
-							start:        event.Position,
-							end:          event.Position,
-							points:       []Point{event.Position},
-							color:        state.annotationColor,
-							mosaicRadius: state.mosaicRadius,
+						if !state.beginSelectionEditLocked(event.Position) {
+							state.start = event.Position
+							state.selection = Rect{X: event.Position.X, Y: event.Position.Y}
+							state.dragging = true
+							state.hasSelection = false
+							state.annotations = nil
+							state.hasSelectedMark = false
+						}
+					case screenshotEditorToolNumber:
+						if screenshotEditorRectContains(state.selection, event.Position) {
+							state.addNumberAnnotationLocked(event.Position)
+						}
+					default:
+						if screenshotEditorRectContains(state.selection, event.Position) {
+							state.commitTextLocked()
+							state.start = event.Position
+							state.annotationDragging = true
+							state.draft = &screenshotEditorAnnotation{
+								tool:         state.activeTool,
+								rect:         Rect{X: event.Position.X, Y: event.Position.Y},
+								start:        event.Position,
+								end:          event.Position,
+								points:       []Point{event.Position},
+								color:        state.annotationColor,
+								mosaicRadius: state.mosaicRadius,
+							}
 						}
 					}
 				}
 			}
 		}
 		textEditing := state.textEditing
+		pointerCursor := state.pointerCursor
 		state.mu.Unlock()
+		state.setPointerCursor(pointerCursor)
 		if scroll {
 			state.invalidate()
 			go state.startScrolling()
@@ -905,12 +1221,16 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		if state.dragging {
 			state.selection = Rect{X: state.start.X, Y: state.start.Y, Width: event.Position.X - state.start.X, Height: event.Position.Y - state.start.Y}
 		} else if state.editMode != screenshotEditorEditNone {
-			state.updateSelectEditLocked(event.Position)
+			state.updateSelectEditLocked(event.Position, event.Modifiers)
 		} else if state.annotationDragging && state.draft != nil {
 			position := clampScreenshotEditorPoint(event.Position, state.selection)
 			switch state.draft.tool {
 			case screenshotEditorToolRect, screenshotEditorToolEllipse:
-				state.draft.rect = normalizeScreenshotEditorRect(Rect{X: state.start.X, Y: state.start.Y, Width: position.X - state.start.X, Height: position.Y - state.start.Y}, state.frameSize)
+				if event.Modifiers&KeyModifierShift != 0 {
+					state.draft.rect = squareScreenshotEditorRectFromAnchor(state.start, position, state.selection)
+				} else {
+					state.draft.rect = normalizeScreenshotEditorRect(Rect{X: state.start.X, Y: state.start.Y, Width: position.X - state.start.X, Height: position.Y - state.start.Y}, state.frameSize)
+				}
 			case screenshotEditorToolArrow:
 				state.draft.end = position
 			case screenshotEditorToolMosaic:
@@ -921,11 +1241,29 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 				}
 			}
 		} else {
+			hoverChanged := state.updateHoverLocked(event.Position)
+			cursor := state.pointerCursor
 			state.mu.Unlock()
+			state.setPointerCursor(cursor)
+			if hoverChanged {
+				state.invalidate()
+			}
 			return
 		}
 		state.mu.Unlock()
 		state.invalidate()
+	case PointerLeave:
+		state.mu.Lock()
+		hoverChanged := state.hasHoveredMark || state.hasHoveredTool || state.hasHoveredAction || state.pointerCursor != PointerCursorDefault
+		state.hasHoveredMark = false
+		state.hasHoveredTool = false
+		state.hasHoveredAction = false
+		state.pointerCursor = PointerCursorDefault
+		state.mu.Unlock()
+		state.setPointerCursor(PointerCursorDefault)
+		if hoverChanged {
+			state.invalidate()
+		}
 	case PointerUp:
 		state.mu.Lock()
 		if state.dragging {
@@ -951,6 +1289,10 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		state.draft = nil
 		if screenshotEditorAnnotationIsVisible(draft) {
 			state.annotations = append(state.annotations, draft)
+			state.selectedAnnotation = len(state.annotations) - 1
+			state.hasSelectedMark = true
+			state.hasHoveredMark = false
+			state.activeTool = screenshotEditorToolSelect
 		}
 		state.mu.Unlock()
 		state.invalidate()
@@ -967,6 +1309,8 @@ func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
 			state.textEditing = false
 			state.textDraft = ""
 			state.textMarked = ""
+			state.textCaret = 0
+			state.hasEditingText = false
 			state.mu.Unlock()
 			state.setTextInputEnabled(false)
 			state.invalidate()
@@ -978,17 +1322,56 @@ func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
 	}
 	if event.Key == KeyBackspace || event.Key == KeyDelete {
 		state.mu.Lock()
-		if state.textEditing && state.textDraft != "" {
-			_, size := utf8.DecodeLastRuneInString(state.textDraft)
-			state.textDraft = state.textDraft[:len(state.textDraft)-size]
+		if state.textEditing {
+			runes := []rune(state.textDraft)
+			state.textCaret = min(max(0, state.textCaret), len(runes))
+			changed := false
+			if event.Key == KeyBackspace && state.textCaret > 0 {
+				runes = append(runes[:state.textCaret-1], runes[state.textCaret:]...)
+				state.textCaret--
+				changed = true
+			} else if event.Key == KeyDelete && state.textCaret < len(runes) {
+				runes = append(runes[:state.textCaret], runes[state.textCaret+1:]...)
+				changed = true
+			}
+			state.textDraft = string(runes)
+			state.textMarked = ""
+			state.showCaretLocked()
 			state.mu.Unlock()
-			state.invalidate()
-			return true
+			if changed {
+				state.setTextInputEnabled(true)
+				state.invalidate()
+			}
+			return changed
 		}
 		if !state.textEditing && state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
 			state.annotations = append(state.annotations[:state.selectedAnnotation], state.annotations[state.selectedAnnotation+1:]...)
 			state.hasSelectedMark = false
 			state.mu.Unlock()
+			state.invalidate()
+			return true
+		}
+		state.mu.Unlock()
+	}
+	if event.Key == KeyArrowLeft || event.Key == KeyArrowRight || event.Key == KeyHome || event.Key == KeyEnd {
+		state.mu.Lock()
+		if state.textEditing {
+			length := utf8.RuneCountInString(state.textDraft)
+			state.textCaret = min(max(0, state.textCaret), length)
+			switch event.Key {
+			case KeyArrowLeft:
+				state.textCaret = max(0, state.textCaret-1)
+			case KeyArrowRight:
+				state.textCaret = min(length, state.textCaret+1)
+			case KeyHome:
+				state.textCaret = 0
+			case KeyEnd:
+				state.textCaret = length
+			}
+			state.textMarked = ""
+			state.showCaretLocked()
+			state.mu.Unlock()
+			state.setTextInputEnabled(true)
 			state.invalidate()
 			return true
 		}
@@ -1010,7 +1393,89 @@ func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
 		}
 		return true
 	}
-	return false
+	if event.Composing || event.Modifiers&(KeyModifierControl|KeyModifierAlt|KeyModifierMeta) != 0 {
+		return false
+	}
+	state.mu.Lock()
+	if state.textEditing || state.hideTools || !state.hasSelection {
+		state.mu.Unlock()
+		return false
+	}
+	tool, toolShortcut := screenshotEditorToolSelect, true
+	switch event.Key {
+	case Key("r"):
+		tool = screenshotEditorToolRect
+	case Key("e"):
+		tool = screenshotEditorToolEllipse
+	case Key("t"):
+		tool = screenshotEditorToolText
+	case Key("a"):
+		tool = screenshotEditorToolArrow
+	case Key("n"):
+		tool = screenshotEditorToolNumber
+	case Key("m"):
+		tool = screenshotEditorToolMosaic
+	default:
+		toolShortcut = false
+	}
+	if toolShortcut {
+		state.activeTool = tool
+		state.hasSelectedMark = false
+		state.mu.Unlock()
+		state.invalidate()
+		return true
+	}
+	switch event.Key {
+	case Key("u"):
+		if len(state.annotations) > 0 {
+			state.annotations = state.annotations[:len(state.annotations)-1]
+			state.hasSelectedMark = false
+		}
+		state.mu.Unlock()
+		state.invalidate()
+		return true
+	case Key("c"):
+		if state.cursorPixel != nil {
+			state.showCursor = !state.showCursor
+		}
+		state.mu.Unlock()
+		state.invalidate()
+		return true
+	case Key("l"):
+		if state.scrolling || state.scrollingStarting {
+			state.mu.Unlock()
+			return true
+		}
+		state.scrollingStarting = true
+		state.scrollingDone = make(chan struct{})
+		state.mu.Unlock()
+		state.invalidate()
+		go state.startScrolling()
+		return true
+	case Key("p"):
+		state.mu.Unlock()
+		state.commitText()
+		state.completePin()
+		return true
+	default:
+		state.mu.Unlock()
+		return false
+	}
+}
+
+// addNumberAnnotationLocked places the next marker while keeping the number tool active for consecutive clicks.
+func (state *screenshotEditorOverlayState) addNumberAnnotationLocked(point Point) {
+	number := state.nextNumber
+	if number < 1 {
+		number = 1
+	}
+	state.annotations = append(state.annotations, screenshotEditorAnnotation{
+		tool: screenshotEditorToolNumber, start: point, number: number, color: state.annotationColor,
+	})
+	state.nextNumber = number + 1
+	state.selectedAnnotation = len(state.annotations) - 1
+	state.hasSelectedMark = true
+	state.hasHoveredMark = false
 }
 
 func (state *screenshotEditorOverlayState) textInput(event TextInputEvent) {
@@ -1022,10 +1487,20 @@ func (state *screenshotEditorOverlayState) textInput(event TextInputEvent) {
 	if event.Kind == TextInputCompose {
 		state.textMarked = event.Text
 	} else {
-		state.textDraft += event.Text
+		runes := []rune(state.textDraft)
+		state.textCaret = min(max(0, state.textCaret), len(runes))
+		inserted := []rune(event.Text)
+		updated := make([]rune, 0, len(runes)+len(inserted))
+		updated = append(updated, runes[:state.textCaret]...)
+		updated = append(updated, inserted...)
+		updated = append(updated, runes[state.textCaret:]...)
+		state.textDraft = string(updated)
+		state.textCaret += len(inserted)
 		state.textMarked = ""
 	}
+	state.showCaretLocked()
 	state.mu.Unlock()
+	state.setTextInputEnabled(true)
 	state.invalidate()
 }
 
@@ -1039,27 +1514,116 @@ func (state *screenshotEditorOverlayState) commitText() {
 
 func (state *screenshotEditorOverlayState) commitTextLocked() {
 	if state.textEditing && state.textDraft != "" {
-		state.annotations = append(state.annotations, screenshotEditorAnnotation{
-			tool: state.activeTool, start: state.textPosition, text: state.textDraft,
-			color: state.annotationColor, fontSize: state.textFontSize,
-		})
+		if state.hasEditingText && state.editingTextIndex >= 0 && state.editingTextIndex < len(state.annotations) {
+			annotation := &state.annotations[state.editingTextIndex]
+			if annotation.text != state.textDraft {
+				annotation.textSize = Size{}
+				annotation.measuredSize = 0
+			}
+			annotation.text = state.textDraft
+			annotation.start = state.textPosition
+			annotation.color = state.annotationColor
+			annotation.fontSize = state.textFontSize
+			state.selectedAnnotation = state.editingTextIndex
+		} else {
+			state.annotations = append(state.annotations, screenshotEditorAnnotation{
+				tool: screenshotEditorToolText, start: state.textPosition, text: state.textDraft,
+				color: state.annotationColor, fontSize: state.textFontSize,
+			})
+			state.selectedAnnotation = len(state.annotations) - 1
+		}
+		state.hasSelectedMark = true
+		state.hasHoveredMark = false
 	}
 	state.textEditing = false
+	state.hasEditingText = false
+	state.showCaretLocked()
 	state.textDraft = ""
 	state.textMarked = ""
+	state.textCaret = 0
 }
 
 func (state *screenshotEditorOverlayState) setTextInputEnabled(enabled bool) {
-	if state.window == nil {
+	state.mu.Lock()
+	window := state.window
+	textPosition := state.textPosition
+	textFontSize := state.textFontSize
+	uiScale := state.uiScale
+	_, caretPrefix := screenshotEditorTextEditingValue(state.textDraft, state.textMarked, state.textCaret)
+	state.mu.Unlock()
+	if window == nil {
 		return
 	}
-	cursor := Rect{X: state.textPosition.X, Y: state.textPosition.Y, Width: 1, Height: 24}
-	_ = state.window.SetTextInputState(TextInputState{Enabled: enabled, CursorRect: cursor})
+	renderedFontSize := textFontSize * max(float32(1), uiScale)
+	cursor := Rect{X: textPosition.X + screenshotEditorEstimatedTextWidth(caretPrefix, renderedFontSize), Y: textPosition.Y, Width: 1, Height: max(float32(24), renderedFontSize+4)}
+	_ = window.SetTextInputState(TextInputState{Enabled: enabled, CursorRect: cursor})
+}
+
+func (state *screenshotEditorOverlayState) setPointerCursor(cursor PointerCursor) {
+	if state.window != nil {
+		_ = state.window.SetPointerCursor(cursor)
+	}
 }
 
 func (state *screenshotEditorOverlayState) invalidate() {
 	if state.window != nil {
 		_ = state.window.Invalidate()
+	}
+}
+
+func (state *screenshotEditorOverlayState) showCaretLocked() {
+	state.caretVisible = true
+	state.caretBlinkAt = time.Now()
+}
+
+// startCaretBlink refreshes only while text input is active, keeping the static editor idle otherwise.
+func (state *screenshotEditorOverlayState) startCaretBlink() {
+	state.mu.Lock()
+	if state.caretBlinkStop != nil {
+		state.mu.Unlock()
+		return
+	}
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	state.caretBlinkStop = stop
+	state.caretBlinkDone = done
+	state.mu.Unlock()
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				state.mu.Lock()
+				editing := state.textEditing
+				if editing && time.Since(state.caretBlinkAt) >= 500*time.Millisecond {
+					state.caretVisible = !state.caretVisible
+					state.caretBlinkAt = time.Now()
+				} else {
+					editing = false
+				}
+				state.mu.Unlock()
+				if editing {
+					state.invalidate()
+				}
+			case <-stop:
+				return
+			}
+		}
+	}()
+}
+
+// stopCaretBlink terminates the session ticker before its window is released.
+func (state *screenshotEditorOverlayState) stopCaretBlink() {
+	state.mu.Lock()
+	stop, done := state.caretBlinkStop, state.caretBlinkDone
+	state.caretBlinkStop = nil
+	state.caretBlinkDone = nil
+	state.mu.Unlock()
+	if stop != nil {
+		close(stop)
+		<-done
 	}
 }
 
@@ -1087,60 +1651,264 @@ func normalizeScreenshotEditorRect(rect Rect, frame Size) Rect {
 	return Rect{X: left, Y: top, Width: max(float32(0), right-left), Height: max(float32(0), bottom-top)}
 }
 
+// squareScreenshotEditorRectFromAnchor constrains a shape to equal sides without crossing its selection bounds.
+func squareScreenshotEditorRectFromAnchor(anchor, point Point, bounds Rect) Rect {
+	deltaX, deltaY := point.X-anchor.X, point.Y-anchor.Y
+	directionX, directionY := float32(1), float32(1)
+	if deltaX < 0 {
+		directionX = -1
+	}
+	if deltaY < 0 {
+		directionY = -1
+	}
+	maxWidth := bounds.X + bounds.Width - anchor.X
+	if directionX < 0 {
+		maxWidth = anchor.X - bounds.X
+	}
+	maxHeight := bounds.Y + bounds.Height - anchor.Y
+	if directionY < 0 {
+		maxHeight = anchor.Y - bounds.Y
+	}
+	absX := float32(math.Abs(float64(deltaX)))
+	absY := float32(math.Abs(float64(deltaY)))
+	side := min(max(absX, absY), min(maxWidth, maxHeight))
+	end := Point{X: anchor.X + directionX*side, Y: anchor.Y + directionY*side}
+	return Rect{X: min(anchor.X, end.X), Y: min(anchor.Y, end.Y), Width: side, Height: side}
+}
+
 func screenshotEditorRectContains(rect Rect, point Point) bool {
 	return rect.Width > 0 && rect.Height > 0 && point.X >= rect.X && point.X < rect.X+rect.Width && point.Y >= rect.Y && point.Y < rect.Y+rect.Height
 }
 
-func (state *screenshotEditorOverlayState) beginSelectEditLocked(point Point) bool {
-	state.start = point
-	if state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
-		annotation := state.annotations[state.selectedAnnotation]
-		switch annotation.tool {
-		case screenshotEditorToolRect, screenshotEditorToolEllipse:
-			if handle, found := screenshotEditorHandleAt(annotation.rect, point, state.uiScale); found {
-				state.editMode = screenshotEditorEditResizeAnnotation
-				state.editHandle = handle
-				state.editOriginalMark = annotation
-				return true
-			}
-		case screenshotEditorToolArrow:
-			if screenshotEditorPointsNear(annotation.start, point, 12) {
-				state.editMode = screenshotEditorEditArrowStart
-				state.editOriginalMark = annotation
-				return true
-			}
-			if screenshotEditorPointsNear(annotation.end, point, 12) {
-				state.editMode = screenshotEditorEditArrowEnd
-				state.editOriginalMark = annotation
-				return true
-			}
-		}
-	}
-	for index := len(state.annotations) - 1; index >= 0; index-- {
-		if screenshotEditorAnnotationContains(state.annotations[index], point) {
-			state.selectedAnnotation = index
-			state.hasSelectedMark = true
-			state.editMode = screenshotEditorEditMoveAnnotation
-			state.editOriginalMark = state.annotations[index]
-			return true
-		}
-	}
-	state.hasSelectedMark = false
-	if handle, found := screenshotEditorHandleAt(state.selection, point, state.uiScale); found {
-		state.editMode = screenshotEditorEditResizeSelection
-		state.editHandle = handle
-		state.editOriginalRect = state.selection
-		return true
-	}
-	if screenshotEditorRectContains(state.selection, point) {
-		state.editMode = screenshotEditorEditMoveSelection
-		state.editOriginalRect = state.selection
+// startTextAnnotationEditLocked replaces a label in place while the shared text input handles new content.
+func (state *screenshotEditorOverlayState) startTextAnnotationEditLocked(index int, point Point) {
+	annotation := state.annotations[index]
+	state.selectedAnnotation = index
+	state.hasSelectedMark = true
+	state.hasHoveredMark = false
+	state.editMode = screenshotEditorEditNone
+	state.textPosition = annotation.start
+	state.textDraft = annotation.text
+	state.textMarked = ""
+	state.textCaret = screenshotEditorTextCaretIndex(annotation.text, point.X-annotation.start.X, screenshotEditorAnnotationRenderedFontSize(annotation, state.uiScale))
+	state.textFontSize = screenshotEditorAnnotationFontSize(annotation)
+	state.annotationColor = screenshotEditorAnnotationDrawColor(annotation)
+	state.textEditing = true
+	state.editingTextIndex = index
+	state.hasEditingText = true
+	state.showCaretLocked()
+	state.pointerCursor = PointerCursorText
+}
+
+// beginTextAnnotationEditAtLocked preserves direct editing of labels while the text tool owns other shape interiors.
+func (state *screenshotEditorOverlayState) beginTextAnnotationEditAtLocked(point Point) bool {
+	if index, found := screenshotEditorTextAnnotationAt(state.annotations, point, state.uiScale); found &&
+		screenshotEditorAnnotationContains(state.annotations[index], point, state.uiScale) {
+		state.startTextAnnotationEditLocked(index, point)
 		return true
 	}
 	return false
 }
 
-func (state *screenshotEditorOverlayState) updateSelectEditLocked(point Point) {
+// beginAnnotationEditLocked gives existing marks priority over the active creation tool.
+func (state *screenshotEditorOverlayState) beginAnnotationEditLocked(point Point) bool {
+	state.start = point
+	if state.hasHoveredMark && state.hoveredAnnotation >= 0 && state.hoveredAnnotation < len(state.annotations) {
+		annotation := state.annotations[state.hoveredAnnotation]
+		if handle, mode, found := screenshotEditorAnnotationHandleAt(annotation, point, state.uiScale); found {
+			state.selectedAnnotation = state.hoveredAnnotation
+			state.hasSelectedMark = true
+			state.editMode = mode
+			state.editHandle = handle
+			state.editOriginalMark = annotation
+			state.pointerCursor = screenshotEditorCursorForAnnotationHandle(handle, mode)
+			return true
+		}
+	}
+	if state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
+		annotation := state.annotations[state.selectedAnnotation]
+		if handle, mode, found := screenshotEditorAnnotationHandleAt(annotation, point, state.uiScale); found {
+			state.editMode = mode
+			state.editHandle = handle
+			state.editOriginalMark = annotation
+			state.pointerCursor = screenshotEditorCursorForAnnotationHandle(handle, mode)
+			return true
+		}
+	}
+	if index, found := screenshotEditorAnnotationAt(state.annotations, point, state.uiScale); found {
+		annotation := state.annotations[index]
+		if annotation.tool == screenshotEditorToolText && screenshotEditorAnnotationContains(annotation, point, state.uiScale) {
+			state.startTextAnnotationEditLocked(index, point)
+			return true
+		}
+		state.selectedAnnotation = index
+		state.hasSelectedMark = true
+		state.editMode = screenshotEditorEditMoveAnnotation
+		state.editOriginalMark = annotation
+		state.pointerCursor = PointerCursorMove
+		return true
+	}
+	state.hasSelectedMark = false
+	return false
+}
+
+// beginSelectionEditLocked starts moving or resizing the capture selection.
+func (state *screenshotEditorOverlayState) beginSelectionEditLocked(point Point) bool {
+	state.start = point
+	if handle, found := screenshotEditorHandleAt(state.selection, point, state.uiScale); found {
+		state.editMode = screenshotEditorEditResizeSelection
+		state.editHandle = handle
+		state.editOriginalRect = state.selection
+		state.pointerCursor = screenshotEditorCursorForHandle(handle)
+		return true
+	}
+	if screenshotEditorRectContains(state.selection, point) {
+		state.editMode = screenshotEditorEditMoveSelection
+		state.editOriginalRect = state.selection
+		state.pointerCursor = PointerCursorMove
+		return true
+	}
+	return false
+}
+
+// screenshotEditorAnnotationHandleAt resolves shape handles and arrow endpoints to their edit modes.
+func screenshotEditorAnnotationHandleAt(annotation screenshotEditorAnnotation, point Point, uiScale float32) (screenshotEditorHandle, screenshotEditorEditMode, bool) {
+	switch annotation.tool {
+	case screenshotEditorToolRect, screenshotEditorToolEllipse:
+		if handle, found := screenshotEditorHandleAt(annotation.rect, point, uiScale); found {
+			return handle, screenshotEditorEditResizeAnnotation, true
+		}
+	case screenshotEditorToolArrow:
+		if screenshotEditorPointsNear(annotation.start, point, 12*max(float32(1), uiScale)) {
+			return 0, screenshotEditorEditArrowStart, true
+		}
+		if screenshotEditorPointsNear(annotation.end, point, 12*max(float32(1), uiScale)) {
+			return 0, screenshotEditorEditArrowEnd, true
+		}
+	}
+	return 0, screenshotEditorEditNone, false
+}
+
+// updateHoverLocked keeps visible handles and the native cursor aligned with the topmost pointer target.
+func (state *screenshotEditorOverlayState) updateHoverLocked(point Point) bool {
+	previousAnnotation := state.hoveredAnnotation
+	previousHasHoveredMark := state.hasHoveredMark
+	previousHoveredTool := state.hoveredTool
+	previousHasHoveredTool := state.hasHoveredTool
+	previousHoveredAction := state.hoveredAction
+	previousHasHoveredAction := state.hasHoveredAction
+	previousCursor := state.pointerCursor
+	state.hasHoveredMark = false
+	state.hasHoveredTool = false
+	state.hasHoveredAction = false
+	state.pointerCursor = PointerCursorDefault
+	for index := 1; index < len(state.toolRects); index++ {
+		if screenshotEditorRectContains(state.toolRects[index], point) {
+			state.hoveredTool = index
+			state.hasHoveredTool = true
+			return previousHasHoveredMark || previousHasHoveredAction || !previousHasHoveredTool || previousHoveredTool != index || previousCursor != PointerCursorDefault
+		}
+	}
+	for _, target := range []struct {
+		action screenshotEditorAction
+		rect   Rect
+	}{
+		{screenshotEditorActionUndo, state.undoRect},
+		{screenshotEditorActionScrollingCapture, state.scrollRect},
+		{screenshotEditorActionCursor, state.cursorRect},
+		{screenshotEditorActionPin, state.pinRect},
+		{screenshotEditorActionCancel, state.cancelRect},
+		{screenshotEditorActionConfirm, state.confirmRect},
+	} {
+		if screenshotEditorRectContains(target.rect, point) {
+			state.hoveredAction = target.action
+			state.hasHoveredAction = true
+			return previousHasHoveredMark || previousHasHoveredTool || !previousHasHoveredAction || previousHoveredAction != target.action || previousCursor != PointerCursorDefault
+		}
+	}
+	toolHoverChanged := previousHasHoveredTool || previousHasHoveredAction
+	if state.activeTool == screenshotEditorToolText && screenshotEditorRectContains(state.selection, point) {
+		if index, found := screenshotEditorTextAnnotationAt(state.annotations, point, state.uiScale); found {
+			state.hoveredAnnotation = index
+			state.hasHoveredMark = true
+			if screenshotEditorTextFrameBorderContains(state.annotations[index], point, state.uiScale) {
+				state.pointerCursor = PointerCursorMove
+			} else {
+				state.pointerCursor = PointerCursorText
+			}
+			return toolHoverChanged || previousAnnotation != index || !previousHasHoveredMark || previousCursor != state.pointerCursor
+		}
+		state.pointerCursor = PointerCursorText
+		return toolHoverChanged || previousHasHoveredMark || previousCursor != state.pointerCursor
+	}
+
+	if state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
+		index := state.selectedAnnotation
+		if handle, mode, found := screenshotEditorAnnotationHandleAt(state.annotations[index], point, state.uiScale); found {
+			state.hoveredAnnotation = index
+			state.hasHoveredMark = true
+			state.pointerCursor = screenshotEditorCursorForAnnotationHandle(handle, mode)
+			return toolHoverChanged || previousAnnotation != index || !previousHasHoveredMark || previousCursor != state.pointerCursor
+		}
+	}
+	if previousHasHoveredMark && state.hoveredAnnotation >= 0 && state.hoveredAnnotation < len(state.annotations) &&
+		(!state.hasSelectedMark || state.hoveredAnnotation != state.selectedAnnotation) {
+		index := state.hoveredAnnotation
+		if handle, mode, found := screenshotEditorAnnotationHandleAt(state.annotations[index], point, state.uiScale); found {
+			state.hoveredAnnotation = index
+			state.hasHoveredMark = true
+			state.pointerCursor = screenshotEditorCursorForAnnotationHandle(handle, mode)
+			return toolHoverChanged || previousCursor != state.pointerCursor
+		}
+	}
+	if index, found := screenshotEditorAnnotationAt(state.annotations, point, state.uiScale); found {
+		annotation := state.annotations[index]
+		state.hoveredAnnotation = index
+		state.hasHoveredMark = true
+		if annotation.tool == screenshotEditorToolText && !screenshotEditorTextFrameBorderContains(annotation, point, state.uiScale) {
+			state.pointerCursor = PointerCursorText
+		} else {
+			state.pointerCursor = PointerCursorMove
+		}
+		return toolHoverChanged || previousAnnotation != index || !previousHasHoveredMark || previousCursor != state.pointerCursor
+	}
+	if (state.activeTool == screenshotEditorToolMosaic || state.activeTool == screenshotEditorToolNumber) && screenshotEditorRectContains(state.selection, point) {
+		state.pointerCursor = PointerCursorCrosshair
+	} else if state.activeTool == screenshotEditorToolText && screenshotEditorRectContains(state.selection, point) {
+		state.pointerCursor = PointerCursorText
+	} else if state.activeTool == screenshotEditorToolSelect {
+		if handle, found := screenshotEditorHandleAt(state.selection, point, state.uiScale); found {
+			state.pointerCursor = screenshotEditorCursorForHandle(handle)
+		}
+	}
+	return toolHoverChanged || previousHasHoveredMark || previousCursor != state.pointerCursor
+}
+
+// screenshotEditorCursorForAnnotationHandle maps annotation edit affordances to native cursors.
+func screenshotEditorCursorForAnnotationHandle(handle screenshotEditorHandle, mode screenshotEditorEditMode) PointerCursor {
+	if mode == screenshotEditorEditArrowStart || mode == screenshotEditorEditArrowEnd {
+		return PointerCursorCrosshair
+	}
+	return screenshotEditorCursorForHandle(handle)
+}
+
+// screenshotEditorCursorForHandle returns the directional cursor for one rectangular handle.
+func screenshotEditorCursorForHandle(handle screenshotEditorHandle) PointerCursor {
+	switch handle {
+	case screenshotEditorHandleTop, screenshotEditorHandleBottom:
+		return PointerCursorResizeVertical
+	case screenshotEditorHandleLeft, screenshotEditorHandleRight:
+		return PointerCursorResizeHorizontal
+	case screenshotEditorHandleTopLeft, screenshotEditorHandleBottomRight:
+		return PointerCursorResizeNWSE
+	case screenshotEditorHandleTopRight, screenshotEditorHandleBottomLeft:
+		return PointerCursorResizeNESW
+	default:
+		return PointerCursorDefault
+	}
+}
+
+func (state *screenshotEditorOverlayState) updateSelectEditLocked(point Point, modifiers KeyModifiers) {
 	delta := Point{X: point.X - state.start.X, Y: point.Y - state.start.Y}
 	frameBounds := Rect{Width: state.frameSize.Width, Height: state.frameSize.Height}
 	switch state.editMode {
@@ -1150,12 +1918,16 @@ func (state *screenshotEditorOverlayState) updateSelectEditLocked(point Point) {
 		state.selection = resizeScreenshotEditorRect(state.editOriginalRect, state.editHandle, point, frameBounds)
 	case screenshotEditorEditMoveAnnotation:
 		if state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
-			state.annotations[state.selectedAnnotation] = shiftScreenshotEditorAnnotationWithinBounds(state.editOriginalMark, delta, state.selection)
+			state.annotations[state.selectedAnnotation] = shiftScreenshotEditorAnnotationWithinBounds(state.editOriginalMark, delta, state.selection, state.uiScale)
 		}
 	case screenshotEditorEditResizeAnnotation:
 		if state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
 			annotation := state.editOriginalMark
-			annotation.rect = resizeScreenshotEditorRect(annotation.rect, state.editHandle, point, state.selection)
+			if modifiers&KeyModifierShift != 0 && (annotation.tool == screenshotEditorToolRect || annotation.tool == screenshotEditorToolEllipse) {
+				annotation.rect = resizeSquareScreenshotEditorRect(annotation.rect, state.editHandle, point, state.selection)
+			} else {
+				annotation.rect = resizeScreenshotEditorRect(annotation.rect, state.editHandle, point, state.selection)
+			}
 			state.annotations[state.selectedAnnotation] = annotation
 		}
 	case screenshotEditorEditArrowStart:
@@ -1170,6 +1942,51 @@ func (state *screenshotEditorOverlayState) updateSelectEditLocked(point Point) {
 			annotation.end = clampScreenshotEditorPoint(point, state.selection)
 			state.annotations[state.selectedAnnotation] = annotation
 		}
+	}
+}
+
+// resizeSquareScreenshotEditorRect constrains any shape handle to an equal-sided result.
+func resizeSquareScreenshotEditorRect(original Rect, handle screenshotEditorHandle, point Point, bounds Rect) Rect {
+	point = clampScreenshotEditorPoint(point, bounds)
+	left, top := original.X, original.Y
+	right, bottom := original.X+original.Width, original.Y+original.Height
+	switch handle {
+	case screenshotEditorHandleTopLeft:
+		return squareScreenshotEditorRectFromAnchor(Point{X: right, Y: bottom}, point, bounds)
+	case screenshotEditorHandleTopRight:
+		return squareScreenshotEditorRectFromAnchor(Point{X: left, Y: bottom}, point, bounds)
+	case screenshotEditorHandleBottomRight:
+		return squareScreenshotEditorRectFromAnchor(Point{X: left, Y: top}, point, bounds)
+	case screenshotEditorHandleBottomLeft:
+		return squareScreenshotEditorRectFromAnchor(Point{X: right, Y: top}, point, bounds)
+	case screenshotEditorHandleTop, screenshotEditorHandleBottom:
+		anchorY := top
+		if handle == screenshotEditorHandleTop {
+			anchorY = bottom
+		}
+		side := float32(math.Abs(float64(point.Y - anchorY)))
+		centerX := left + original.Width/2
+		side = min(side, 2*min(centerX-bounds.X, bounds.X+bounds.Width-centerX))
+		y := anchorY
+		if point.Y < anchorY {
+			y -= side
+		}
+		return Rect{X: centerX - side/2, Y: y, Width: side, Height: side}
+	case screenshotEditorHandleLeft, screenshotEditorHandleRight:
+		anchorX := left
+		if handle == screenshotEditorHandleLeft {
+			anchorX = right
+		}
+		side := float32(math.Abs(float64(point.X - anchorX)))
+		centerY := top + original.Height/2
+		side = min(side, 2*min(centerY-bounds.Y, bounds.Y+bounds.Height-centerY))
+		x := anchorX
+		if point.X < anchorX {
+			x -= side
+		}
+		return Rect{X: x, Y: centerY - side/2, Width: side, Height: side}
+	default:
+		return original
 	}
 }
 
@@ -1217,8 +2034,8 @@ func shiftScreenshotEditorRectWithinBounds(rect Rect, delta Point, bounds Rect) 
 	return Rect{X: x, Y: y, Width: rect.Width, Height: rect.Height}
 }
 
-func shiftScreenshotEditorAnnotationWithinBounds(annotation screenshotEditorAnnotation, delta Point, bounds Rect) screenshotEditorAnnotation {
-	annotationBounds := screenshotEditorAnnotationBounds(annotation)
+func shiftScreenshotEditorAnnotationWithinBounds(annotation screenshotEditorAnnotation, delta Point, bounds Rect, uiScale float32) screenshotEditorAnnotation {
+	annotationBounds := screenshotEditorAnnotationBounds(annotation, uiScale)
 	shiftedBounds := shiftScreenshotEditorRectWithinBounds(annotationBounds, delta, bounds)
 	clampedDelta := Point{X: shiftedBounds.X - annotationBounds.X, Y: shiftedBounds.Y - annotationBounds.Y}
 	annotation.points = append([]Point(nil), annotation.points...)
@@ -1250,6 +2067,8 @@ func screenshotEditorAnnotationIsVisible(annotation screenshotEditorAnnotation) 
 		return math.Hypot(float64(annotation.end.X-annotation.start.X), float64(annotation.end.Y-annotation.start.Y)) >= 2
 	case screenshotEditorToolMosaic:
 		return len(annotation.points) > 0
+	case screenshotEditorToolNumber:
+		return annotation.number > 0
 	case screenshotEditorToolText:
 		return annotation.text != ""
 	default:

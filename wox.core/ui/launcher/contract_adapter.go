@@ -346,6 +346,22 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 	result, err := woxscreenshot.CaptureScreenshot(woxscreenshot.ScreenshotOptions{
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, WindowManager: a.windows,
+		AnnotationTooltips: woxscreenshot.ScreenshotAnnotationTooltips{
+			Rectangle: a.translate("i18n:ui_screenshot_tool_rectangle"),
+			Ellipse:   a.translate("i18n:ui_screenshot_tool_ellipse"),
+			Text:      a.translate("i18n:ui_screenshot_tool_text"),
+			Arrow:     a.translate("i18n:ui_screenshot_tool_arrow"),
+			Number:    a.translate("i18n:ui_screenshot_tool_number"),
+			Mosaic:    a.translate("i18n:ui_screenshot_tool_mosaic"),
+		},
+		ActionTooltips: woxscreenshot.ScreenshotActionTooltips{
+			Undo:             a.translate("i18n:ui_screenshot_tool_undo"),
+			ScrollingCapture: a.translate("i18n:ui_screenshot_tool_scrolling_capture"),
+			Cursor:           a.translate("i18n:ui_screenshot_tool_cursor"),
+			Pin:              a.translate("i18n:ui_screenshot_tool_pin"),
+			Cancel:           a.translate("i18n:ui_screenshot_tool_cancel"),
+			Confirm:          a.translate("i18n:ui_screenshot_tool_confirm"),
+		},
 	})
 	if err != nil {
 		errorCode := "capture_failed"

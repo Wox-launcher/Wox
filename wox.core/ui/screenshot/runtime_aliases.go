@@ -7,10 +7,13 @@ type (
 	DisplayList    = woxui.DisplayList
 	FrameInfo      = woxui.FrameInfo
 	Image          = woxui.Image
+	Key            = woxui.Key
 	KeyEvent       = woxui.KeyEvent
+	KeyModifiers   = woxui.KeyModifiers
 	ManagedWindow  = woxui.ManagedWindow
 	Point          = woxui.Point
 	PointerEvent   = woxui.PointerEvent
+	PointerCursor  = woxui.PointerCursor
 	Rect           = woxui.Rect
 	Size           = woxui.Size
 	TextInputEvent = woxui.TextInputEvent
@@ -23,18 +26,35 @@ type (
 )
 
 const (
-	FontWeightSemibold   = woxui.FontWeightSemibold
-	KeyBackspace         = woxui.KeyBackspace
-	KeyDelete            = woxui.KeyDelete
-	KeyEnter             = woxui.KeyEnter
-	KeyEscape            = woxui.KeyEscape
-	PointerButtonPrimary = woxui.PointerButtonPrimary
-	PointerDown          = woxui.PointerDown
-	PointerMove          = woxui.PointerMove
-	PointerUp            = woxui.PointerUp
-	TextInputCommit      = woxui.TextInputCommit
-	TextInputCompose     = woxui.TextInputCompose
-	WindowRoleScreenshot = woxui.WindowRoleScreenshot
+	FontWeightSemibold            = woxui.FontWeightSemibold
+	KeyBackspace                  = woxui.KeyBackspace
+	KeyDelete                     = woxui.KeyDelete
+	KeyEnter                      = woxui.KeyEnter
+	KeyEscape                     = woxui.KeyEscape
+	KeyArrowLeft                  = woxui.KeyArrowLeft
+	KeyArrowRight                 = woxui.KeyArrowRight
+	KeyHome                       = woxui.KeyHome
+	KeyEnd                        = woxui.KeyEnd
+	KeyModifierShift              = woxui.KeyModifierShift
+	KeyModifierControl            = woxui.KeyModifierControl
+	KeyModifierAlt                = woxui.KeyModifierAlt
+	KeyModifierMeta               = woxui.KeyModifierMeta
+	PointerButtonPrimary          = woxui.PointerButtonPrimary
+	PointerCursorCrosshair        = woxui.PointerCursorCrosshair
+	PointerCursorDefault          = woxui.PointerCursorDefault
+	PointerCursorMove             = woxui.PointerCursorMove
+	PointerCursorResizeHorizontal = woxui.PointerCursorResizeHorizontal
+	PointerCursorResizeNESW       = woxui.PointerCursorResizeNESW
+	PointerCursorResizeNWSE       = woxui.PointerCursorResizeNWSE
+	PointerCursorResizeVertical   = woxui.PointerCursorResizeVertical
+	PointerCursorText             = woxui.PointerCursorText
+	PointerDown                   = woxui.PointerDown
+	PointerLeave                  = woxui.PointerLeave
+	PointerMove                   = woxui.PointerMove
+	PointerUp                     = woxui.PointerUp
+	TextInputCommit               = woxui.TextInputCommit
+	TextInputCompose              = woxui.TextInputCompose
+	WindowRoleScreenshot          = woxui.WindowRoleScreenshot
 )
 
 var (

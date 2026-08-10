@@ -10,6 +10,7 @@
 typedef struct {
     char* name;
     bool transparent;
+    bool shadow;
     bool hitTestIconOnly;
     bool closeOnEscape;
     bool takeFocus;
@@ -718,7 +719,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     self.transparentMode = opts.transparent;
     self.hitTestIconOnly = opts.hitTestIconOnly;
     self.backgroundView.hidden = opts.transparent;
-    [self setHasShadow:!opts.transparent];
+    [self setHasShadow:opts.shadow || !opts.transparent];
 
     if (opts.nativeAttachment && opts.nativeAttachmentKind == kNativeAttachmentKindView && opts.nativeAttachmentHandle) {
         BOOL transparentAttachment = opts.transparent;

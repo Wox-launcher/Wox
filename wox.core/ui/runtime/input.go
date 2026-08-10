@@ -100,6 +100,12 @@ type PointerCursor uint8
 const (
 	PointerCursorDefault PointerCursor = iota
 	PointerCursorText
+	PointerCursorMove
+	PointerCursorCrosshair
+	PointerCursorResizeHorizontal
+	PointerCursorResizeVertical
+	PointerCursorResizeNWSE
+	PointerCursorResizeNESW
 )
 
 // PointerEvent uses logical client coordinates; positive scroll Y means upward motion.

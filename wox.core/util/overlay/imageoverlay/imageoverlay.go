@@ -68,6 +68,7 @@ type Options struct {
 	FitToScreen      bool
 	Topmost          bool
 	Movable          bool
+	Shadow           bool
 	AbsolutePosition bool
 	CornerRadius     float64
 	CloseOnEscape    bool
@@ -107,6 +108,7 @@ func Show(ctx context.Context, opts Options) error {
 	window := overlay.WindowOptions{
 		ID:          opts.ID,
 		Transparent: true,
+		Shadow:      opts.Shadow,
 		Movable:     opts.Movable,
 		// Feature change: image overlays are user-managed reference surfaces. Making only this
 		// shared image path resizable keeps notification overlays fixed while preview and pinned
