@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"unsafe"
 	"wox/util"
@@ -18,6 +19,7 @@ const (
 	coInitializeAlreadyInitialized = syscall.Errno(1)
 	coInitializeChangedMode        = syscall.Errno(0x80010106)
 	seeMaskAsyncOK                 = 0x00100000
+	seeMaskInvokeIDList            = 0x0000000C
 	shellExecuteShowNormal         = 1
 	shellExecuteSuccessThreshold   = 32
 )
@@ -49,9 +51,19 @@ type shellExecuteInfo struct {
 }
 
 func Open(path string) error {
-	operationPtr, err := windows.UTF16PtrFromString("open")
+	return executeShellVerb(path, "open")
+}
+
+// OpenAsAdministrator launches an application through the Windows runas verb.
+func OpenAsAdministrator(path string) error {
+	return executeShellVerb(path, "runas")
+}
+
+// executeShellVerb keeps normal and elevated launches on the same ShellExecute path.
+func executeShellVerb(path string, verb string) error {
+	operationPtr, err := windows.UTF16PtrFromString(verb)
 	if err != nil {
-		return fmt.Errorf("encode ShellExecute operation: %w", err)
+		return fmt.Errorf("encode ShellExecute verb: %w", err)
 	}
 
 	pathPtr, err := windows.UTF16PtrFromString(path)
@@ -62,7 +74,7 @@ func Open(path string) error {
 	info := shellExecuteInfo{
 		cbSize: uint32(unsafe.Sizeof(shellExecuteInfo{})),
 		// Keep the direct Shell path handling but let Windows finish DDE/delegate launch work asynchronously.
-		fMask:  seeMaskAsyncOK,
+		fMask:  shellExecuteMask(path),
 		lpVerb: operationPtr,
 		lpFile: pathPtr,
 		nShow:  shellExecuteShowNormal,
@@ -71,15 +83,24 @@ func Open(path string) error {
 	ret, _, callErr := procShellExecuteExW.Call(uintptr(unsafe.Pointer(&info)))
 	if ret == 0 {
 		if callErr != syscall.Errno(0) {
-			return fmt.Errorf("ShellExecute open failed for %s: %w", path, callErr)
+			return fmt.Errorf("ShellExecute %s failed for %s: %w", verb, path, callErr)
 		}
-		return fmt.Errorf("ShellExecute open failed for %s", path)
+		return fmt.Errorf("ShellExecute %s failed for %s", verb, path)
 	}
 	if info.hInstApp <= shellExecuteSuccessThreshold {
-		return fmt.Errorf("ShellExecute open failed for %s with code %d", path, info.hInstApp)
+		return fmt.Errorf("ShellExecute %s failed for %s with code %d", verb, path, info.hInstApp)
 	}
 
 	return nil
+}
+
+// shellExecuteMask routes namespace objects through their context-menu handlers so registered verbs are available.
+func shellExecuteMask(path string) uint32 {
+	mask := uint32(seeMaskAsyncOK)
+	if strings.HasPrefix(strings.ToLower(path), "shell:") {
+		mask |= seeMaskInvokeIDList
+	}
+	return mask
 }
 
 func Run(name string, arg ...string) (*exec.Cmd, error) {

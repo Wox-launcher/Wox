@@ -3,8 +3,31 @@ package shell
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestOpenAsAdministratorRejectsInvalidPath(t *testing.T) {
+	err := OpenAsAdministrator("invalid\x00path.exe")
+	if err == nil {
+		t.Fatal("expected invalid path to fail")
+	}
+	if !strings.Contains(err.Error(), "encode ShellExecute path") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestShellExecuteMaskUsesContextMenuForNamespaceObjects(t *testing.T) {
+	mask := shellExecuteMask(`shell:AppsFolder\Example.App_123!App`)
+	if mask&seeMaskInvokeIDList == 0 {
+		t.Fatal("expected Shell namespace object to use SEE_MASK_INVOKEIDLIST")
+	}
+
+	fileMask := shellExecuteMask(`C:\Apps\Editor.exe`)
+	if fileMask&seeMaskInvokeIDList != 0 {
+		t.Fatal("expected filesystem path to preserve direct Shell execution")
+	}
+}
 
 func TestCreateShellItemIDListHandlesSpecialPathCharacters(t *testing.T) {
 	rootPath := t.TempDir()

@@ -1425,6 +1425,7 @@
   "plugin_wpm_plugin_name": "Wox 插件管理器",
   "plugin_wpm_plugin_description": "Wox 的插件管理器, 安装在线插件或创建新插件",
   "plugin_app_open": "打开",
+  "plugin_app_open_as_administrator": "以管理员身份打开",
   "plugin_app_open_containing_folder": "打开所在文件夹",
   "plugin_app_copy_path": "复制路径",
   "plugin_app_terminate": "终止",

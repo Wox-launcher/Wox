@@ -808,6 +808,7 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 			if metadata.Identity != "" {
 				app.Identity = metadata.Identity
 			}
+			app.CanRunAsAdministrator = metadata.CanRunAsAdministrator
 			if !metadata.Icon.IsEmpty() {
 				app.Icon = metadata.Icon
 				a.uwpIconCache.Store(appID, metadata.Icon.ImageData)
@@ -978,8 +979,9 @@ func (a *WindowsRetriever) getRunningProcesses(ctx context.Context) []processInf
 }
 
 type uwpAppMetadata struct {
-	Icon     common.WoxImage
-	Identity string
+	Icon                  common.WoxImage
+	Identity              string
+	CanRunAsAdministrator bool
 }
 
 // getUWPAppMetadata reads the manifest entry matching the AppID so selectors can match runtime processes.
@@ -1018,6 +1020,11 @@ func (a *WindowsRetriever) getUWPAppMetadata(ctx context.Context, appID string) 
 			if ($application -and $application.Executable) {
 				$executable = [string]$application.Executable
 			}
+			$entryPoint = ''
+			if ($application -and $application.EntryPoint) {
+				$entryPoint = [string]$application.EntryPoint
+			}
+			$canRunAsAdministrator = $entryPoint -eq 'Windows.FullTrustApplication'
 
 			$iconPath = ''
 			if (Test-Path $package.InstallLocation) {
@@ -1088,7 +1095,7 @@ func (a *WindowsRetriever) getUWPAppMetadata(ctx context.Context, appID string) 
 				}
 			}
 
-			[PSCustomObject]@{ IconPath = $iconPath; Executable = $executable } | ConvertTo-Csv -NoTypeInformation
+			[PSCustomObject]@{ IconPath = $iconPath; Executable = $executable; CanRunAsAdministrator = $canRunAsAdministrator } | ConvertTo-Csv -NoTypeInformation
 		} catch {
 			exit 1
 		}
@@ -1111,13 +1118,13 @@ func (a *WindowsRetriever) getUWPAppMetadata(ctx context.Context, appID string) 
 	if err != nil {
 		return uwpAppMetadata{}, fmt.Errorf("error parsing UWP metadata output: %w", err)
 	}
-	if len(records) < 2 || len(records[1]) < 2 {
+	if len(records) < 2 || len(records[1]) < 3 {
 		return uwpAppMetadata{}, fmt.Errorf("invalid UWP metadata output")
 	}
 
 	iconPath := strings.TrimSpace(records[1][0])
 	executable := strings.TrimSpace(records[1][1])
-	metadata := uwpAppMetadata{}
+	metadata := uwpAppMetadata{CanRunAsAdministrator: strings.EqualFold(strings.TrimSpace(records[1][2]), "true")}
 	if executable != "" {
 		metadata.Identity = strings.ToLower(filepath.Base(executable))
 	}

@@ -1319,6 +1319,7 @@
   "plugin_wpm_plugin_name": "Менеджер плагинов Wox",
   "plugin_wpm_plugin_description": "Менеджер плагинов для Wox",
   "plugin_app_open": "Открыть",
+  "plugin_app_open_as_administrator": "Запустить от имени администратора",
   "plugin_app_open_containing_folder": "Открыть содержащую папку",
   "plugin_app_copy_path": "Копировать путь",
   "plugin_app_terminate": "Завершить",

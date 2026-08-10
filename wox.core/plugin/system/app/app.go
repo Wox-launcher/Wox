@@ -62,6 +62,8 @@ type appInfo struct {
 	IconSourceModifiedUnix int64   `json:"icon_source_modified_unix,omitempty"`
 	Type                   AppType `json:"type,omitempty"`
 	LastModifiedUnix       int64   `json:"last_modified_unix,omitempty"`
+	// Packaged desktop apps share the UWP index path but can expose the Windows runas verb.
+	CanRunAsAdministrator bool `json:"can_run_as_administrator,omitempty"`
 
 	Pid int `json:"-"`
 	// IsDefaultIcon is persisted so launchpad can hide entries whose icon fell
@@ -76,7 +78,7 @@ type appCacheFile struct {
 }
 
 // Bump this when cached appInfo fields or preprocessed icon semantics change.
-const appCacheVersion = 13
+const appCacheVersion = 14
 
 const (
 	appCommandReindex   = "reindex"
@@ -831,6 +833,27 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 				}
 			},
 		},
+	}
+
+	if util.IsWindows() {
+		extension := strings.ToLower(filepath.Ext(info.Path))
+		canRunAsAdministrator := info.Type == AppTypeDesktop && (extension == ".exe" || extension == ".lnk")
+		canRunAsAdministrator = canRunAsAdministrator || info.Type == AppTypeUWP && info.CanRunAsAdministrator
+		if canRunAsAdministrator {
+			actions = append(actions, plugin.QueryResultAction{
+				Name:        "i18n:plugin_app_open_as_administrator",
+				Icon:        common.PermissionIcon,
+				ContextData: contextData,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					analytics.TrackAppLaunched(ctx, fmt.Sprintf("%s:%s", info.Type, info.Name), displayName)
+
+					if err := openAppAsAdministrator(info.Path); err != nil {
+						a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app as administrator %s: %s", info.Path, err.Error()))
+						a.api.Notify(ctx, fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
+					}
+				},
+			})
+		}
 	}
 
 	if info.Type != AppTypeWindowsSetting {
