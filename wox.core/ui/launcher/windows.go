@@ -431,14 +431,9 @@ func (a *App) onSettingsWindowClosed() {
 	a.settingsHost = nil
 	a.settingSaving = false
 	a.generalSettings.EndEdit()
-	a.settingsSearch.SetEditor(nil)
-	a.settingsSearch.SetFocused(false)
-	a.settingsSearch.SetPanel(false)
-	a.settingsSearch.SetSelected(0)
+	a.settingsSearch.ReleaseWindowMemory()
 	a.clearSettingsSearchHighlight()
-	a.pluginSettings.SetSearchEditor(nil)
-	a.pluginSettings.SetSearchFocused(false)
-	a.pluginSettings.SetDetailTab("settings")
+	a.pluginSettings.ReleaseWindowMemory()
 	a.themeSettings.SetThemeSearchEditor(nil)
 	a.themeSettings.SetThemeSearchFocused(false)
 	a.themeSettings.SetThemeDetailTab("preview")
@@ -448,8 +443,12 @@ func (a *App) onSettingsWindowClosed() {
 	a.cloudSettings.SetActionMenu("")
 	a.cloudSettings.SetPluginDialog(nil)
 	a.settingsTableEditor = nil
+	a.aiSettings.SetForm(nil)
 	a.aiSettings.SetModelManager(nil)
 	if !a.onboardingOpen {
+		a.hotkeySettings.ReleaseWindowMemory()
+	} else {
+		a.hotkeySettings.SetForm(nil)
 		a.hotkeySettings.ClearRecording()
 		a.hotkeySettings.SetFocused(false)
 	}

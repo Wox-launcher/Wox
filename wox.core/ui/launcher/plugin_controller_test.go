@@ -12,9 +12,20 @@ type pluginFakeService struct {
 	plugins  map[contract.PluginCatalog][]contract.PluginCatalogItem
 	storeErr error
 	instErr  error
+	started  chan struct{}
+	release  chan struct{}
 }
 
 func (f *pluginFakeService) Plugins(_ context.Context, _ string, catalog contract.PluginCatalog) ([]contract.PluginCatalogItem, error) {
+	if f.started != nil {
+		select {
+		case f.started <- struct{}{}:
+		default:
+		}
+	}
+	if f.release != nil {
+		<-f.release
+	}
 	switch catalog {
 	case contract.PluginCatalogStore:
 		if f.storeErr != nil {
@@ -167,6 +178,31 @@ func TestPluginControllerPreloadPluginsCachesWithoutReplacingActiveCatalog(t *te
 	cached, loaded := c.CachedPlugins(true)
 	if !loaded || len(cached) != 1 || cached[0].ID != "store" {
 		t.Fatalf("cached store plugins = %+v, loaded = %v", cached, loaded)
+	}
+}
+
+func TestPluginControllerReleaseWindowMemoryInvalidatesPreload(t *testing.T) {
+	deps, _ := newPluginControllerDeps()
+	c := newPluginSettingsController(deps)
+	service := &pluginFakeService{
+		plugins: map[contract.PluginCatalog][]contract.PluginCatalogItem{
+			contract.PluginCatalogStore: {{ID: "store", Name: "Store Plugin"}},
+		},
+		started: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- c.PreloadPlugins(context.Background(), service, "session", true)
+	}()
+	<-service.started
+	c.ReleaseWindowMemory()
+	close(service.release)
+	if err := <-done; err != nil {
+		t.Fatalf("PreloadPlugins error: %v", err)
+	}
+	if cached, loaded := c.CachedPlugins(true); loaded || len(cached) != 0 {
+		t.Fatalf("released store cache was repopulated: loaded=%v plugins=%+v", loaded, cached)
 	}
 }
 

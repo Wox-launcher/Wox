@@ -45,6 +45,7 @@ type settingsSearchController struct {
 	loading  bool
 	loaded   bool
 	errMsg   string
+	revision uint64
 }
 
 func newSettingsSearchController(deps CommonDeps) *settingsSearchController {
@@ -120,6 +121,19 @@ func (c *settingsSearchController) SetError(msg string) {
 	c.errMsg = msg
 }
 
+// ReleaseWindowMemory drops the plugin search index and invalidates an in-flight reload.
+func (c *settingsSearchController) ReleaseWindowMemory() {
+	c.revision++
+	c.editor = nil
+	c.focused = false
+	c.panel = false
+	c.selected = 0
+	c.plugins = nil
+	c.loading = false
+	c.loaded = false
+	c.errMsg = ""
+}
+
 // ReloadPlugins fetches the installed-plugin list that backs the search index. It is a no-op
 // if a load is already in flight or has already completed successfully, mirroring the original
 // load guard in loadSettingsSearchPlugins. On success Loaded becomes true, Loading false, and
@@ -128,10 +142,13 @@ func (c *settingsSearchController) SetError(msg string) {
 // around the loading-state transitions.
 func (c *settingsSearchController) ReloadPlugins(ctx context.Context, service contract.PluginCatalogSettingsServices, sessionID string) error {
 	shouldLoad := false
+	var revision uint64
 	if !c.deps.OnUI("start loading settings search plugins", func() {
 		if c.loading || c.loaded {
 			return
 		}
+		c.revision++
+		revision = c.revision
 		c.loading = true
 		c.errMsg = ""
 		shouldLoad = true
@@ -157,6 +174,9 @@ func (c *settingsSearchController) ReloadPlugins(ctx context.Context, service co
 	}
 
 	c.deps.OnUI("apply settings search plugins", func() {
+		if revision != c.revision {
+			return
+		}
 		c.loading = false
 		c.loaded = err == nil
 		if err != nil {

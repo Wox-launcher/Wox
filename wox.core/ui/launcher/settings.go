@@ -394,9 +394,6 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if tab == "ai" {
 		util.Go(a.lifecycleCtx, "load AI provider catalog", a.loadAIProviderCatalog)
 	}
-	if tab == "general" {
-		util.Go(a.lifecycleCtx, "load hotkey app candidates", a.loadHotkeyAppCandidates)
-	}
 	if tab == "appearance" {
 		util.Go(a.lifecycleCtx, "load glance catalog", a.loadGlanceCatalog)
 		util.Go(a.lifecycleCtx, "load system font families", a.loadSystemFontFamilies)
@@ -445,13 +442,6 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	}
 	a.updateSettingsTextInput(false)
 	util.Go(a.lifecycleCtx, "load settings search plugins", a.loadSettingsSearchPlugins)
-	if _, loaded := a.pluginSettings.CachedPlugins(true); !loaded {
-		util.Go(a.lifecycleCtx, "preload plugin store", func() {
-			if err := a.pluginSettings.PreloadPlugins(a.lifecycleCtx, a.services, a.sessionID, true); err != nil {
-				log.Printf("preload plugin store: %v", err)
-			}
-		})
-	}
 	if rowIndex, ok := trayQueryRowIndexFromParam(windowContext.Param); ok {
 		if err := a.runOnUI("open tray query editor", func() {
 			a.openTrayQueryEditor(rowIndex)
@@ -786,7 +776,6 @@ func (a *App) selectSettingTab(tab string) {
 	loadUsage := false
 	loadAbout := false
 	loadAIProviders := false
-	loadHotkeyApps := false
 	loadGlanceCatalog := false
 	loadSystemFonts := false
 	loadData := false
@@ -860,8 +849,6 @@ func (a *App) selectSettingTab(tab string) {
 	loadAbout = (tab == "about" || tab == "privacy") && !aboutSnap.Loaded && !aboutSnap.Loading
 	aiSnap := a.aiSettings.Snapshot()
 	loadAIProviders = tab == "ai" && !aiSnap.ProvidersLoaded && !aiSnap.ProvidersLoading
-	hotkeySnap := a.hotkeySettings.Snapshot()
-	loadHotkeyApps = tab == "general" && !hotkeySnap.AppsLoaded && !hotkeySnap.AppsLoading
 	appearanceSnap := a.appearanceSettings.Snapshot()
 	loadGlanceCatalog = tab == "appearance" && !appearanceSnap.GlanceCatalogLoaded && !appearanceSnap.GlanceCatalogLoading
 	loadSystemFonts = tab == "appearance" && !appearanceSnap.FontsLoaded && !appearanceSnap.FontsLoading
@@ -909,9 +896,6 @@ func (a *App) selectSettingTab(tab string) {
 	}
 	if loadAIProviders {
 		util.Go(a.lifecycleCtx, "load AI provider catalog", a.loadAIProviderCatalog)
-	}
-	if loadHotkeyApps {
-		util.Go(a.lifecycleCtx, "load hotkey app candidates", a.loadHotkeyAppCandidates)
 	}
 	if loadGlanceCatalog {
 		util.Go(a.lifecycleCtx, "load glance catalog", a.loadGlanceCatalog)

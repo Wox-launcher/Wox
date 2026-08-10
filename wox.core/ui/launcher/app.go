@@ -896,10 +896,12 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 			a.refreshGlance("manualRefresh", "", nil)
 		})
 	}
+	// Queue the state update before resizing so macOS can consume it in the
+	// synchronous target-size frame instead of rendering the same state twice.
+	_ = a.window.Invalidate()
 	if err := a.applyWindowBounds(); err != nil {
 		log.Printf("resize launcher for query results: %v", err)
 	}
-	_ = a.window.Invalidate()
 }
 
 func (a *App) applyWindowBounds() error {

@@ -3275,9 +3275,12 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
     destroy_renderer(window->overlay_renderer);
     window->renderer = NULL;
     window->overlay_renderer = NULL;
-    [window->delegate autorelease];
-    [window->view autorelease];
-    [window->window autorelease];
+    // The AppKit run loop is wrapped by one process-lifetime autorelease pool. Closed
+    // management windows must release their owned objects here or every reopen keeps a
+    // complete NSWindow hierarchy alive until the application exits.
+    [window->delegate release];
+    [window->view release];
+    [window->window release];
     window->delegate = nil;
     window->view = nil;
     window->window = nil;

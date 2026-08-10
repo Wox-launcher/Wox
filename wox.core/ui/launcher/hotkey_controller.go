@@ -51,6 +51,7 @@ type hotkeySettingsController struct {
 	appsLoading   bool
 	appsLoaded    bool
 	appsError     string
+	appsRevision  uint64
 }
 
 func newHotkeySettingsController(deps CommonDeps) *hotkeySettingsController {
@@ -144,15 +145,30 @@ func (c *hotkeySettingsController) SetAppsError(msg string) {
 	c.appsError = msg
 }
 
+// ReleaseWindowMemory drops settings-only form and application-picker state.
+func (c *hotkeySettingsController) ReleaseWindowMemory() {
+	c.form = nil
+	c.focused = false
+	c.recording = nil
+	c.appCandidates = nil
+	c.appsLoading = false
+	c.appsLoaded = false
+	c.appsError = ""
+	c.appsRevision++
+}
+
 // ReloadAppCandidates fetches the platform-specific ignored-app identities from core and
 // caches them. It is a no-op if a reload has already completed or is in flight. Mirrors the
 // old App.loadHotkeyAppCandidates behavior: dedupes by lowercased identity before storing.
 func (c *hotkeySettingsController) ReloadAppCandidates(ctx context.Context, service contract.HotkeySettingsServices, sessionID string) {
 	shouldLoad := false
+	var revision uint64
 	if !c.deps.OnUI("start loading hotkey app candidates", func() {
 		if c.appsLoading || c.appsLoaded {
 			return
 		}
+		c.appsRevision++
+		revision = c.appsRevision
 		c.appsLoading = true
 		c.appsError = ""
 		shouldLoad = true
@@ -173,6 +189,9 @@ func (c *hotkeySettingsController) ReloadAppCandidates(ctx context.Context, serv
 	}
 
 	c.deps.OnUI("apply hotkey app candidates", func() {
+		if revision != c.appsRevision {
+			return
+		}
 		c.appsLoading = false
 		if err != nil {
 			c.appsError = err.Error()

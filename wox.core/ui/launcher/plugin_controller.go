@@ -63,6 +63,7 @@ type pluginSettingsController struct {
 	pluginOperation      string
 	pluginOperationError string
 	pluginUninstallArmed string
+	memoryRevision       uint64
 }
 
 func newPluginSettingsController(deps CommonDeps) *pluginSettingsController {
@@ -223,6 +224,28 @@ func (c *pluginSettingsController) SetUninstallArmed(id string) {
 	c.pluginUninstallArmed = id
 }
 
+// ReleaseWindowMemory drops catalogs and interaction state owned only by Settings.
+func (c *pluginSettingsController) ReleaseWindowMemory() {
+	c.memoryRevision++
+	c.plugins = nil
+	c.installedPlugins = nil
+	c.storePlugins = nil
+	c.installedLoaded = false
+	c.storeLoaded = false
+	c.pluginsLoading = false
+	c.pluginsLoaded = false
+	c.pluginsError = ""
+	c.pluginSelected = -1
+	c.pluginSearchEditor = nil
+	c.pluginSearchFocused = false
+	c.pluginFilters = pluginFilterState{}
+	c.pluginFilterOpen = false
+	c.pluginDetailTab = "settings"
+	c.pluginForm = nil
+	c.pluginOperationError = ""
+	c.pluginUninstallArmed = ""
+}
+
 // ReloadPlugins fetches either the store or installed catalog from the shared core service.
 // store selects which catalog is loaded.
 // preferredID, when non-empty, selects which plugin becomes Selected after the load;
@@ -230,7 +253,9 @@ func (c *pluginSettingsController) SetUninstallArmed(id string) {
 // is retained. On success PluginsLoaded becomes true and PluginsError is cleared; on
 // failure PluginsLoaded becomes false and PluginsError records the message.
 func (c *pluginSettingsController) ReloadPlugins(ctx context.Context, service contract.PluginCatalogSettingsServices, sessionID string, store bool, preferredID string) error {
+	var revision uint64
 	if !c.deps.OnUI("start loading plugin catalog", func() {
+		revision = c.memoryRevision
 		c.pluginsLoading = true
 		c.pluginsError = ""
 		c.deps.Invalidate()
@@ -240,11 +265,14 @@ func (c *pluginSettingsController) ReloadPlugins(ctx context.Context, service co
 
 	plugins, err := loadPluginSettingsPlugins(ctx, service, sessionID, store)
 	if err != nil {
-		c.finishPluginLoadError(err)
+		c.finishPluginLoadError(err, revision)
 		return err
 	}
 
 	c.deps.OnUI("apply plugin catalog", func() {
+		if revision != c.memoryRevision {
+			return
+		}
 		if preferredID == "" && c.pluginSelected >= 0 && c.pluginSelected < len(c.plugins) {
 			preferredID = c.plugins[c.pluginSelected].ID
 		}
@@ -280,11 +308,20 @@ func (c *pluginSettingsController) ReloadPlugins(ctx context.Context, service co
 
 // PreloadPlugins fills one catalog cache without changing the visible plugin page.
 func (c *pluginSettingsController) PreloadPlugins(ctx context.Context, service contract.PluginCatalogSettingsServices, sessionID string, store bool) error {
+	var revision uint64
+	if !c.deps.OnUI("start preloading plugin catalog", func() {
+		revision = c.memoryRevision
+	}) {
+		return nil
+	}
 	plugins, err := loadPluginSettingsPlugins(ctx, service, sessionID, store)
 	if err != nil {
 		return err
 	}
 	c.deps.OnUI("cache plugin catalog", func() {
+		if revision != c.memoryRevision {
+			return
+		}
 		c.cachePlugins(store, plugins)
 	})
 	return nil
@@ -366,8 +403,11 @@ func pluginSettingsPluginsFromContract(items []contract.PluginCatalogItem) ([]pl
 // reload failed after the controller's ReloadPlugins already ran (e.g. when
 // the App's post-reload form rebuild fails). Kept here so all plugin load
 // error state stays in the controller.
-func (c *pluginSettingsController) finishPluginLoadError(err error) {
+func (c *pluginSettingsController) finishPluginLoadError(err error, revision uint64) {
 	c.deps.OnUI("apply plugin catalog error", func() {
+		if revision != c.memoryRevision {
+			return
+		}
 		c.pluginsLoading = false
 		c.pluginsLoaded = false
 		c.pluginsError = err.Error()

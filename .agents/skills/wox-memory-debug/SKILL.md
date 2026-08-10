@@ -98,6 +98,32 @@ go run ../.agents/skills/wox-memory-debug/scripts/run-query-workload.go -info /t
 
 The first settings open may retain shared fonts, icons, and reusable renderer caches. Do not require the process to return to its pre-first-open value. Window-scoped settings state and native resources must not accumulate across later cycles: after warm-up, closed-settings checkpoints should plateau within sampler jitter instead of growing with cumulative open/close count.
 
+## macOS Debug Reference
+
+Use the August 10, 2026 macOS arm64 run as a comparison point for the current settings cleanup behavior, not as an absolute budget. The run used macOS 26.5.2, Go 1.26.2, Delve 1.26.2, the `sqlite_fts5,wox_automation` build tags, real Wox data, one PID, a 10-second hidden/closed wait, and three `PhysicalFootprintMB` samples at two-second intervals.
+
+The query baseline was recorded after two 20-query warm-up blocks. The settings baseline was recorded after one complete warm-up open/close cycle:
+
+| Checkpoint | Median PhysicalFootprintMB | Change from closed-settings baseline |
+| --- | ---: | ---: |
+| Hidden after 40 warm-up queries | 89.1 MB | N/A |
+| Settings closed warm baseline | 99.5 MB | 0.0 MB |
+| 5 measured settings cycles | 100.9 MB | +1.4 MB |
+| 10 measured settings cycles | 101.4 MB | +1.9 MB |
+| 15 measured settings cycles | 101.7 MB | +2.2 MB |
+| 30-second idle confirmation | 102.3 MB | +2.8 MB |
+
+Classify this series as `no leak signal`: the closed-settings checkpoints remained around 100-102 MB, and the 30-second confirmation stayed within observed sampler and allocator variation. `vmmap` reported no resident IOSurface memory after close; CoreGraphics and IOAccelerator residency was negligible. A Go heap comparison captured during the investigation showed only about 15 KB of retained delta, which redirected attribution to native window ownership rather than Go settings state.
+
+Preserve these cleanup contracts when investigating a regression:
+
+- Keep at most one live `wox.settings` window, while still treating each close/reopen as a new native lifetime.
+- Release settings-only plugin catalogs, search indexes, forms, and application candidates on close, and invalidate in-flight loads so they cannot refill released caches.
+- Load the plugin store and application candidates only when their UI needs them.
+- Release the macOS `NSWindow`, view, and delegate hierarchy synchronously on close. Do not defer them to the application-lifetime autorelease pool.
+
+Before the native close fix, a separate same-shape debug run rose from 104.8 MB after the warm settings close to 112.8 MB after 15 measured cycles. Treat a return of that cumulative, window-count-scaled shape as a regression even when the absolute starting footprint differs.
+
 ## Decide Whether Memory Leaks
 
 Interpret the post-warm-up series, not a single number:

@@ -152,6 +152,31 @@ func TestSettingsSearchReloadPluginsSkipsWhenLoaded(t *testing.T) {
 	}
 }
 
+func TestSettingsSearchReleaseWindowMemoryInvalidatesReload(t *testing.T) {
+	deps, _ := newSearchControllerDeps()
+	c := newSettingsSearchController(deps)
+	service := &pluginFakeService{
+		plugins: map[contract.PluginCatalog][]contract.PluginCatalogItem{
+			contract.PluginCatalogInstalled: {{ID: "installed", Name: "Installed Plugin"}},
+		},
+		started: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- c.ReloadPlugins(context.Background(), service, "session")
+	}()
+	<-service.started
+	c.ReleaseWindowMemory()
+	close(service.release)
+	if err := <-done; err != nil {
+		t.Fatalf("ReloadPlugins error: %v", err)
+	}
+	if c.Loaded() || c.Loading() || len(c.Plugins()) != 0 {
+		t.Fatalf("released search index was repopulated: %+v", c.Snapshot())
+	}
+}
+
 func TestSettingsSearchSelected(t *testing.T) {
 	deps, _ := newSearchControllerDeps()
 	c := newSettingsSearchController(deps)

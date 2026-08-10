@@ -9,11 +9,19 @@ import (
 )
 
 type hotkeyFakeService struct {
-	apps []contract.HotkeyApp
-	err  error
+	apps    []contract.HotkeyApp
+	err     error
+	started chan struct{}
+	release chan struct{}
 }
 
 func (f *hotkeyFakeService) HotkeyAppCandidates(_ context.Context, _ string) ([]contract.HotkeyApp, error) {
+	if f.started != nil {
+		f.started <- struct{}{}
+	}
+	if f.release != nil {
+		<-f.release
+	}
 	return append([]contract.HotkeyApp(nil), f.apps...), f.err
 }
 
@@ -127,5 +135,33 @@ func TestHotkeyControllerReloadAppCandidatesError(t *testing.T) {
 	snap := c.Snapshot()
 	if snap.AppsLoaded || snap.AppsError == "" {
 		t.Fatalf("error should be recorded: %+v", snap)
+	}
+}
+
+func TestHotkeyControllerReleaseWindowMemoryInvalidatesReload(t *testing.T) {
+	deps, _ := newHotkeyDeps()
+	c := newHotkeySettingsController(deps)
+	form := newFormFieldsState(nil, nil, true)
+	c.SetForm(&form)
+	service := &hotkeyFakeService{
+		apps:    []contract.HotkeyApp{{Name: "Finder", Identity: "com.apple.finder"}},
+		started: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	done := make(chan struct{})
+	go func() {
+		c.ReloadAppCandidates(context.Background(), service, "session")
+		close(done)
+	}()
+	<-service.started
+	c.ReleaseWindowMemory()
+	close(service.release)
+	<-done
+	if c.Form() != nil {
+		t.Fatal("settings form should be released")
+	}
+	snapshot := c.Snapshot()
+	if snapshot.AppsLoaded || snapshot.AppsLoading || len(snapshot.AppCandidates) != 0 {
+		t.Fatalf("released app candidates were repopulated: %+v", snapshot)
 	}
 }
