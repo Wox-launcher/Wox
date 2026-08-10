@@ -82,6 +82,18 @@ func TestCalculatorBasic(t *testing.T) {
 			ExpectedAction: "Copy",
 		},
 		{
+			Name:           "Exact division followed by multiplication",
+			Query:          "2/3*6",
+			ExpectedTitle:  "4",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Exact reciprocal multiplication",
+			Query:          "1/3*3",
+			ExpectedTitle:  "1",
+			ExpectedAction: "Copy",
+		},
+		{
 			Name:           "Decimal result",
 			Query:          "10/3",
 			ExpectedTitle:  "3.3333333333333333",
