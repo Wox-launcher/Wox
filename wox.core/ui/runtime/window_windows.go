@@ -45,12 +45,17 @@ const (
 	dwmwaWindowCorner       = 33
 	dwmwaSystemBackdrop     = 38
 	dwmWindowCornerRound    = 2
-	dwmSystemBackdropMica   = 3
-	wcaAccentPolicy         = 19
-	accentBlurBehind        = 3
-	accentAcrylicBlurBehind = 4
-	win10DarkAcrylicTint    = 0xCC202020
-	win10LightAcrylicTint   = 0xCCF5F5F5
+	// DWM_SYSTEMBACKDROP_TYPE starts with AUTO=0 and NONE=1; keep these material values aligned with the Windows SDK.
+	dwmSystemBackdropNone    = 1
+	dwmSystemBackdropMica    = 2
+	dwmSystemBackdropAcrylic = 3
+	dwmSystemBackdropMicaAlt = 4
+	dwmSystemBackdropWox     = dwmSystemBackdropAcrylic
+	wcaAccentPolicy          = 19
+	accentBlurBehind         = 3
+	accentAcrylicBlurBehind  = 4
+	win10DarkAcrylicTint     = 0xCC202020
+	win10LightAcrylicTint    = 0xCCF5F5F5
 )
 
 var (
@@ -177,6 +182,7 @@ type platformWindow struct {
 	nativeFilePreview           *windowsFilePreview
 	nativeFilePreviewGeneration uint64
 	focus                       focusRuntime
+	darkAppearance              bool
 	scale                       float32
 	// suppressDPIBounds keeps explicit programmatic bounds from being replaced by
 	// Windows' drag-oriented WM_DPICHANGED suggestion during SetWindowPos.
@@ -419,9 +425,10 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	}
 
 	window := &platformWindow{
-		options:    options,
-		uiThreadID: uiThreadID,
-		done:       make(chan struct{}),
+		options:        options,
+		uiThreadID:     uiThreadID,
+		done:           make(chan struct{}),
+		darkAppearance: true,
 	}
 	var pointerScreen win.POINT
 	if win.GetCursorPos(&pointerScreen) {
@@ -653,9 +660,6 @@ func (w *platformWindow) createNativeWindow() error {
 		return fmt.Errorf("create native window failed: %w", syscall.GetLastError())
 	}
 	win.DragAcceptFiles(hwnd, true)
-	if windowsWindowUsesSystemBackdrop(w.options.Role) {
-		applyWindowsBackdrop(hwnd, true)
-	}
 	w.mu.Lock()
 	w.hwnd = hwnd
 	w.mu.Unlock()
@@ -682,6 +686,9 @@ func (w *platformWindow) createNativeWindow() error {
 		return err
 	}
 	w.renderer = renderer
+	if windowsWindowUsesSystemBackdrop(w.options.Role) {
+		applyWindowsBackdrop(hwnd, w.darkAppearance)
+	}
 	nativeWindows.Store(uintptr(hwnd), w)
 	platformRuntime.Lock()
 	platformRuntime.windowCount++
@@ -720,7 +727,8 @@ func applyWindowsBackdrop(hwnd win.HWND, isDark bool) {
 
 func applyWindows11Backdrop(hwnd win.HWND) {
 	corner := int32(dwmWindowCornerRound)
-	backdrop := int32(dwmSystemBackdropMica)
+	// The launcher needs live translucency over the windows behind it; standard Mica is a wallpaper-derived opaque material.
+	backdrop := int32(dwmSystemBackdropWox)
 	margins := windowsMargins{left: -1, right: -1, top: -1, bottom: -1}
 	if dwmExtendFrameIntoClientArea.Find() == nil {
 		_, _, _ = dwmExtendFrameIntoClientArea.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&margins)))
@@ -1396,6 +1404,7 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		w.options.HideOnBlur = command.hideOnBlur
 		return windowCommandResult{}
 	case windowCommandSetAppearance:
+		w.darkAppearance = command.darkAppearance
 		applyWindowsBackdrop(w.hwnd, command.darkAppearance)
 		return windowCommandResult{}
 	case windowCommandSetFontFamily:
@@ -1669,8 +1678,24 @@ func (w *platformWindow) showNative() FocusEpoch {
 	if w.isWithinFocusDomain(win.GetForegroundWindow()) {
 		w.confirmActivation()
 	}
+	w.synchronizeBackdropAfterShow()
 	win.InvalidateRect(w.hwnd, nil, false)
 	return w.focus.epoch
+}
+
+// synchronizeBackdropAfterShow replaces the backdrop policy cached while the HWND was hidden.
+func (w *platformWindow) synchronizeBackdropAfterShow() {
+	if !windowsWindowUsesSystemBackdrop(w.options.Role) {
+		return
+	}
+	if osvariant.GetCurrentPlatformVariant() == "win11" && dwmSetWindowAttribute.Find() == nil {
+		backdrop := int32(dwmSystemBackdropNone)
+		_, _, _ = dwmSetWindowAttribute.Call(uintptr(w.hwnd), dwmwaSystemBackdrop, uintptr(unsafe.Pointer(&backdrop)), unsafe.Sizeof(backdrop))
+	}
+	applyWindowsBackdrop(w.hwnd, w.darkAppearance)
+	if dwmFlush.Find() == nil {
+		_, _, _ = dwmFlush.Call()
+	}
 }
 
 // hideNative ends the current epoch and only restores a foreground window Wox still owns.
