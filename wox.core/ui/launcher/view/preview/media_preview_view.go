@@ -418,10 +418,9 @@ func mediaProgressBar(props MediaPreviewProps, width float32, secondary woxui.Co
 	bar := woxwidget.Container{Width: width, Height: 5, Radius: 3, Color: mediaColorAlpha(props.Theme.PreviewText, 0.12), Child: woxwidget.Container{Width: width * progress, Height: 5, Radius: 3, Color: mediaAccent}}
 	position := formatMediaDuration(props.Position)
 	duration := formatMediaDuration(props.Duration)
-	timeWidth := float32(utf8.RuneCountInString(position)+utf8.RuneCountInString(duration)) * 7
 	times := woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 		woxwidget.Text{Value: position, Style: woxui.TextStyle{Size: 12}, Color: secondary},
-		woxwidget.Painter{Width: max(float32(0), width-timeWidth), Height: 14},
+		woxwidget.Expanded{Child: woxwidget.Container{Height: 14}},
 		woxwidget.Text{Value: duration, Style: woxui.TextStyle{Size: 12}, Color: secondary},
 	}}
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{bar, times}}

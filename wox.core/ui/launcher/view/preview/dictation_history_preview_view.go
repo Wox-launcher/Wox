@@ -103,18 +103,17 @@ func DictationHistoryPreviewView(props DictationHistoryPreviewProps) woxwidget.W
 func dictationSectionHeader(label, status string, changed bool, icon woxwidget.Widget, width, statusWidth float32, scaled func(float32) float32, muted woxui.Color) woxwidget.Widget {
 	children := []woxwidget.StackChild{
 		{Top: scaled(1), Child: icon},
-		{Left: scaled(24), Child: woxwidget.Container{Width: max(float32(0), width-scaled(24)-statusWidth), Height: scaled(18), Child: woxwidget.TextBlock{Value: label, Width: max(float32(0), width-scaled(24)-statusWidth), Height: scaled(18), MaxLines: 1, Style: woxui.TextStyle{Size: scaled(11), Weight: woxui.FontWeightSemibold}, LineHeight: scaled(18), Color: dictationColorAlpha(muted, 0.82)}}},
+		{Left: scaled(24), Right: statusWidth, StretchWidth: true, Child: woxwidget.Container{Height: scaled(18), Child: woxwidget.TextBlock{Value: label, Height: scaled(18), MaxLines: 1, Style: woxui.TextStyle{Size: scaled(11), Weight: woxui.FontWeightSemibold}, LineHeight: scaled(18), Color: dictationColorAlpha(muted, 0.82)}}},
 	}
 	if strings.TrimSpace(status) != "" {
-		statusLeft := max(float32(0), width-statusWidth)
 		statusIcon := woxcomponent.CheckGlyph(scaled(13), dictationColorAlpha(muted, 0.58))
 		if changed {
 			statusIcon = woxcomponent.SparklesGlyph(scaled(13), dictationColorAlpha(muted, 0.58))
 		}
-		children = append(children,
-			woxwidget.StackChild{Left: statusLeft, Top: scaled(2), Child: statusIcon},
-			woxwidget.StackChild{Left: statusLeft + scaled(17), Child: woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: scaled(11)}, Color: dictationColorAlpha(muted, 0.62)}},
-		)
+		children = append(children, woxwidget.StackChild{AnchorRight: true, Child: woxwidget.Container{Width: statusWidth, Height: scaled(18), Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaled(4), Children: []woxwidget.Widget{
+			woxwidget.Container{Width: scaled(13), Height: scaled(18), Padding: woxwidget.Insets{Top: scaled(2)}, Child: statusIcon},
+			woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: scaled(11)}, Color: dictationColorAlpha(muted, 0.62)},
+		}}}})
 	}
 	return woxwidget.Stack{Width: width, Height: scaled(18), Children: children}
 }

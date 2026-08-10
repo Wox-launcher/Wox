@@ -41,7 +41,7 @@ func TestFormPanelUsesIntrinsicHeightUpToMaximum(t *testing.T) {
 func TestFormSwitchFieldUsesAccessibleSwitch(t *testing.T) {
 	field := FormSwitchField(FormSwitchFieldProps{ID: "history", Label: "History", Width: 400, Height: 40, LabelWidth: 100, Checked: true, Theme: woxcomponent.Theme{}, OnChange: func(bool) {}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
-	controlColumn := row.Children[1].(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	control := controlColumn.Children[0].(woxwidget.Semantics)
 	if control.Role != woxui.AccessibilityRoleCheckBox || !control.Checked {
 		t.Fatalf("switch semantics = role %q checked %v", control.Role, control.Checked)
@@ -51,7 +51,7 @@ func TestFormSwitchFieldUsesAccessibleSwitch(t *testing.T) {
 func TestFormSelectFieldUsesOutlinedDropdown(t *testing.T) {
 	field := FormSelectField(FormSelectFieldProps{ID: "action", Label: "Action", Value: "Paste", Width: 400, Height: 44, LabelWidth: 100, Theme: woxcomponent.Theme{}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
-	controlColumn := row.Children[1].(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	semantics := controlColumn.Children[0].(woxwidget.Semantics)
 	focusable := semantics.Child.(woxwidget.Focusable)
 	gesture := focusable.Child.(woxwidget.Gesture)
@@ -75,7 +75,7 @@ func TestFormFieldNaturalHeightMeasuresWrappedDescription(t *testing.T) {
 		t.Fatalf("natural row geometry = height %.0f bottom %.0f, want intrinsic height with 10px spacing", container.Height, container.Padding.Bottom)
 	}
 	row := container.Child.(woxwidget.Flex)
-	controlColumn := row.Children[1].(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	description := controlColumn.Children[1].(woxwidget.TextBlock)
 	if description.Height != 0 || description.MaxLines != 0 {
 		t.Fatalf("natural description limits = height %.0f lines %d, want measured wrapped content", description.Height, description.MaxLines)
@@ -89,7 +89,7 @@ func TestFormModelFieldUsesCompactAnchoredDropdown(t *testing.T) {
 		Width: 720, Height: 44, LabelWidth: 120, Theme: woxcomponent.Theme{}, OnTap: func(anchor woxui.Rect) { openedAt = anchor },
 	})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
-	controlColumn := row.Children[1].(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	semantics := controlColumn.Children[0].(woxwidget.Semantics)
 	gesture := semantics.Child.(woxwidget.Focusable).Child.(woxwidget.Gesture)
 	control := gesture.Child.(woxwidget.Container)
@@ -123,7 +123,7 @@ func TestFormHotkeyFieldStartsAtMeasuredControlColumn(t *testing.T) {
 	if label.Width != 120 {
 		t.Fatalf("hotkey label width = %.0f, want measured width 120", label.Width)
 	}
-	controlColumn := row.Children[1].(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	control := controlColumn.Children[0].(woxwidget.Stack)
 	if control.Children[0].Left != 0 {
 		t.Fatalf("hotkey recorder left = %.0f, want start of control column", control.Children[0].Left)
@@ -141,7 +141,7 @@ func TestFormHotkeyFieldCanAlignRecorderToTheRightOfItsControlColumn(t *testing.
 	})
 	container := field.(woxwidget.Container)
 	row := container.Child.(woxwidget.Flex)
-	controlColumn := row.Children[1].(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	control := controlColumn.Children[0].(woxwidget.Stack)
 	if !control.Children[0].AnchorRight || control.Children[0].Right != 0 {
 		t.Fatalf("hotkey recorder geometry = %#v, want right-anchored control", control.Children[0])
@@ -192,7 +192,7 @@ func TestFormAIModelFieldUsesFlutterProviderAndModelProportions(t *testing.T) {
 	state.InitState(woxwidget.StateContext{}, stateful.Widget)
 	built := state.Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Container)
 	row := built.Child.(woxwidget.Flex)
-	controlColumn := row.Children[1].(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	controls := controlColumn.Children[0].(woxwidget.Flex)
 	if len(controls.Children) != 3 {
 		t.Fatalf("AI model control count = %d, want provider, model, and edit", len(controls.Children))
@@ -210,7 +210,7 @@ func TestFormAIModelFieldUsesFlutterProviderAndModelProportions(t *testing.T) {
 func TestFormTextFieldKeepsSuffixOutsideInput(t *testing.T) {
 	field := FormTextField(FormTextFieldProps{ID: "days", Label: "Days", Suffix: "天", Width: 400, Height: 44, LabelWidth: 100, MaxLines: 1, Theme: woxcomponent.Theme{}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
-	controlColumn := row.Children[1].(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	valueRow := controlColumn.Children[0].(woxwidget.Flex)
 	suffix := valueRow.Children[1].(woxwidget.Align).Child.(woxwidget.Text)
 	if suffix.Value != "天" {
@@ -222,7 +222,7 @@ func TestFormTextFieldUsesMeasuredActionLabelWidth(t *testing.T) {
 	field := FormTextField(FormTextFieldProps{ID: "content", Label: "内容", Width: 360, LabelWidth: 60, MaxLines: 8, Theme: woxcomponent.Theme{}})
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	label := row.Children[0].(woxwidget.Container)
-	controlColumn := row.Children[1].(woxwidget.Flex)
+	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	input := controlColumn.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
 	if label.Width != 60 || input.Width != 288 {
 		t.Fatalf("form label/input widths = %.0f/%.0f, want measured 60 and expanded 288", label.Width, input.Width)

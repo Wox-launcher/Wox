@@ -578,16 +578,14 @@ func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, them
 	}
 	const headerHeight = float32(120)
 	const tabHeight = float32(44)
-	titleWidth := max(float32(100), innerWidth-52)
 	identity := woxwidget.Container{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		icon,
-		woxwidget.Container{Width: titleWidth, Height: 38, Padding: woxwidget.Insets{Top: 3}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		woxwidget.Expanded{Child: woxwidget.Container{Height: 38, Padding: woxwidget.Insets{Top: 3}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: props.Name, Style: woxui.TextStyle{Size: 20}, Color: theme.QueryText},
 			woxwidget.Container{Height: 25, Padding: woxwidget.Insets{Top: 5}, Child: woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle}},
-		}}},
+		}}}},
 	}}}
 	websiteWidth := float32(104)
-	authorWidth := max(float32(0), innerWidth-websiteWidth)
 	var website woxwidget.Widget = woxwidget.Container{Width: websiteWidth, Height: 28}
 	if props.WebsiteLabel != "" && props.OnWebsite != nil {
 		website = woxwidget.Gesture{ID: "plugin-website", OnTap: props.OnWebsite, Child: woxwidget.Align{Width: websiteWidth, Height: 28, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 7, Children: []woxwidget.Widget{
@@ -598,7 +596,7 @@ func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, them
 	header := woxwidget.Container{Width: innerWidth, Height: headerHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		identity,
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: authorWidth, Height: 28, Padding: woxwidget.Insets{Left: 6, Top: 6}, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle}},
+			woxwidget.Expanded{Child: woxwidget.Container{Height: 28, Padding: woxwidget.Insets{Left: 6, Top: 6}, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle}}},
 			website,
 		}},
 		woxwidget.Container{Width: innerWidth, Height: 52, Padding: woxwidget.Insets{Left: 6, Top: 6}, Child: pluginOutlineActions(props.Management, theme)},

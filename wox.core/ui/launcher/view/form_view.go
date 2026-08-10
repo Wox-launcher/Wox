@@ -464,11 +464,10 @@ func formFieldLayout(label, description string, width, height, labelWidth float3
 		labelWidth = 132
 	}
 	const gap = float32(12)
-	controlWidth := max(float32(0), width-labelWidth-gap)
 	rightChildren := []woxwidget.Widget{control}
 	if description != "" {
 		rightChildren = append(rightChildren, woxwidget.TextBlock{
-			Value: description, Width: controlWidth, LineHeight: 18,
+			Value: description, LineHeight: 18,
 			Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle,
 		})
 	}
@@ -478,7 +477,7 @@ func formFieldLayout(label, description string, width, height, labelWidth float3
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: padding, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{
 		formFieldLabel(label, labelWidth, controlHeight, 6, theme),
-		woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: rightChildren},
+		woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: rightChildren}},
 	}}}
 }
 

@@ -496,27 +496,16 @@ func themeEditorPreviewToolbar(props ThemeEditorSettingsProps, width, height flo
 		{Label: props.ToolbarCopyLabel, HotkeyLabels: []string{"Enter"}},
 		{Label: props.ToolbarMoreLabel, HotkeyLabels: []string{"Cmd", "J"}},
 	}
-	measured := make([]measuredLauncherToolbarAction, 0, len(actions))
-	actionsWidth := float32(0)
+	actionWidgets := make([]woxwidget.Widget, 0, len(actions))
 	for _, action := range actions {
 		widget, actionWidth := themeEditorToolbarActionView(action, props.DraftTheme, props.Window)
-		measured = append(measured, measuredLauncherToolbarAction{widget: widget, width: actionWidth})
-		actionsWidth += actionWidth
+		actionWidgets = append(actionWidgets, themeEditorFlashOverlay(widget, actionWidth, 28, 4, props.FlashToken == "ToolbarFontColor"))
 	}
 	const actionGap = float32(16)
-	actionsWidth += actionGap * float32(len(measured)-1)
 	padding := props.PreviewGeometry.ToolbarPadding
-	contentWidth := max(float32(0), width-padding.Left-padding.Right)
-	actionWidgets := make([]woxwidget.Widget, 0, len(measured))
-	for _, action := range measured {
-		actionWidgets = append(actionWidgets, themeEditorFlashOverlay(action.widget, action.width, 28, 4, props.FlashToken == "ToolbarFontColor"))
-	}
 	body := woxwidget.Container{Width: width, Height: height, Color: props.DraftTheme.ToolbarBackground, Padding: woxwidget.Insets{
 		Left: padding.Left, Top: max(float32(0), (height-28)/2), Right: padding.Right, Bottom: max(float32(0), (height-28)/2),
-	}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: max(float32(0), contentWidth-actionsWidth), Height: 28},
-		woxwidget.Container{Width: actionsWidth, Height: 28, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: actionGap, Children: actionWidgets}},
-	}}}
+	}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: actionGap, MainAxisAlignment: woxwidget.MainAxisEnd, Children: actionWidgets}}
 	toolbar := woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 		{Child: body},
 		{Child: woxwidget.Container{Width: width, Height: 1, Color: themeAlpha(props.DraftTheme.ToolbarText, 26)}},

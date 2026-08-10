@@ -74,7 +74,7 @@ func HotkeyOverviewPreviewView(props HotkeyOverviewPreviewProps) woxwidget.Widge
 		})
 	}
 
-	header := hotkeyOverviewHeader(props, innerWidth, headerHeight, scale, textColor, mutedColor, hotkeyOverviewAccent, count)
+	header := hotkeyOverviewHeader(props, headerHeight, scale, textColor, mutedColor, hotkeyOverviewAccent, count)
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height,
 		Padding: woxwidget.Insets{Left: scaled(18), Top: scaled(16), Right: scaled(16), Bottom: scaled(14)},
@@ -82,29 +82,26 @@ func HotkeyOverviewPreviewView(props HotkeyOverviewPreviewProps) woxwidget.Widge
 	}
 }
 
-func hotkeyOverviewHeader(props HotkeyOverviewPreviewProps, width, height, scale float32, textColor, mutedColor, accent woxui.Color, count int) woxwidget.Widget {
+func hotkeyOverviewHeader(props HotkeyOverviewPreviewProps, height, scale float32, textColor, mutedColor, accent woxui.Color, count int) woxwidget.Widget {
 	pillText := strings.ReplaceAll(props.Count, "{count}", formatHotkeyOverviewCount(count))
 	pillWidth := max(58*scale, float32(len([]rune(pillText))*7+20)*scale)
-	textWidth := max(float32(0), width-46*scale-pillWidth-10*scale)
 	icon := woxwidget.Container{Width: 34 * scale, Height: 34 * scale, Radius: 8 * scale, Color: accent, Child: woxwidget.Align{Width: 34 * scale, Height: 34 * scale, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.KeyboardGlyph(20*scale, woxui.Color{R: 255, G: 255, B: 255, A: 255})}}
-	title := woxwidget.Container{Width: textWidth, Height: 19 * scale, Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 14 * scale, Weight: woxui.FontWeightSemibold}, Color: textColor}}
-	subtitle := woxwidget.Container{Width: max(float32(0), width-46*scale), Height: 18 * scale, Child: woxwidget.TextBlock{Value: props.Subtitle, Width: max(float32(0), width-46*scale), Height: 18 * scale, MaxLines: 2, LineHeight: 15 * scale, Style: woxui.TextStyle{Size: 11 * scale}, Color: mutedColor}}
-	text := woxwidget.Container{
-		Width: max(float32(0), width-46*scale), Height: height,
+	text := woxwidget.Expanded{Child: woxwidget.Container{
+		Height: height,
 		Child: woxwidget.Flex{
 			Axis: woxwidget.Vertical, Gap: 3 * scale,
 			Children: []woxwidget.Widget{
 				woxwidget.Stack{
-					Width: max(float32(0), width-46*scale), Height: 19 * scale,
+					Height: 19 * scale,
 					Children: []woxwidget.StackChild{
-						{Child: title},
+						{Right: pillWidth + 10*scale, StretchWidth: true, Child: woxwidget.Container{Height: 19 * scale, Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 14 * scale, Weight: woxui.FontWeightSemibold}, Color: textColor}}},
 						{Right: 0, AnchorRight: true, Child: hotkeyOverviewCountTag(pillText, pillWidth, scale, accent)},
 					},
 				},
-				subtitle,
+				woxwidget.Container{Height: 18 * scale, Child: woxwidget.TextBlock{Value: props.Subtitle, Height: 18 * scale, MaxLines: 2, LineHeight: 15 * scale, Style: woxui.TextStyle{Size: 11 * scale}, Color: mutedColor}},
 			},
 		},
-	}
+	}}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12 * scale, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{icon, text}}
 }
 
@@ -139,15 +136,14 @@ func hotkeyOverviewSection(section HotkeyOverviewPreviewSection, width, scale fl
 func hotkeyOverviewEntryRow(entry HotkeyOverviewPreviewEntry, width, height, scale float32, textColor, mutedColor woxui.Color) woxwidget.Widget {
 	shortcutWidth := 220 * scale
 	sourceWidth := 64 * scale
-	actionWidth := max(float32(0), width-shortcutWidth-10*scale-sourceWidth-10*scale)
 	chips := hotkeyOverviewChips(entry.Labels, entry.RawShortcut, shortcutWidth-20*scale, scale, textColor)
-	actionChildren := []woxwidget.Widget{woxwidget.Container{Width: actionWidth, Height: 18 * scale, Child: woxwidget.Text{Value: entry.Action, Style: woxui.TextStyle{Size: 12 * scale, Weight: woxui.FontWeightSemibold}, Color: textColor}}}
+	actionChildren := []woxwidget.Widget{woxwidget.Container{Height: 18 * scale, Child: woxwidget.Text{Value: entry.Action, Style: woxui.TextStyle{Size: 12 * scale, Weight: woxui.FontWeightSemibold}, Color: textColor}}}
 	if strings.TrimSpace(entry.Detail) != "" {
-		actionChildren = append(actionChildren, woxwidget.Container{Width: actionWidth, Height: 16 * scale, Padding: woxwidget.Insets{Top: 2 * scale}, Child: woxwidget.Text{Value: entry.Detail, Style: woxui.TextStyle{Size: 10 * scale}, Color: mutedColor}})
+		actionChildren = append(actionChildren, woxwidget.Container{Height: 16 * scale, Padding: woxwidget.Insets{Top: 2 * scale}, Child: woxwidget.Text{Value: entry.Detail, Style: woxui.TextStyle{Size: 10 * scale}, Color: mutedColor}})
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 10 * scale, Top: 7 * scale, Right: 10 * scale, Bottom: 7 * scale}, Child: woxwidget.Stack{Width: max(float32(0), width-20*scale), Height: max(float32(0), height-14*scale), Children: []woxwidget.StackChild{
 		{Child: chips},
-		{Left: shortcutWidth + 10*scale, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 0, Children: actionChildren}},
+		{Left: shortcutWidth + 10*scale, Right: sourceWidth + 10*scale, StretchWidth: true, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: actionChildren}},
 		{Right: 0, AnchorRight: true, Child: woxwidget.Container{Width: sourceWidth, Height: 16 * scale, Child: woxwidget.Text{Value: entry.Source, Style: woxui.TextStyle{Size: 10 * scale, Weight: woxui.FontWeightSemibold}, Color: mutedColor}}},
 	}}}
 }

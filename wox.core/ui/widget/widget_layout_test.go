@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"strings"
 	"testing"
 
 	woxui "wox/ui/runtime"
@@ -38,10 +39,10 @@ func TestStackChildStretchesBetweenInsets(t *testing.T) {
 	builtWith := woxui.Size{}
 	root := (Stack{Width: 200, Height: 100, Children: []StackChild{{
 		Left: 20, Right: 30, Top: 10, Bottom: 15, StretchWidth: true, StretchHeight: true,
-		Child: LayoutBuilder{Build: func(size woxui.Size) Widget {
+		Child: Container{Width: 10, Height: 10, Child: LayoutBuilder{Build: func(size woxui.Size) Widget {
 			builtWith = size
-			return Container{Color: woxui.Color{A: 255}}
-		}},
+			return Container{Width: 10, Height: 10, Color: woxui.Color{A: 255}}
+		}}},
 	}}}).layout(context{window: &fakeHostServices{}}, constraints{width: 200, height: 100})
 
 	child := root.children[0].bounds
@@ -51,9 +52,13 @@ func TestStackChildStretchesBetweenInsets(t *testing.T) {
 }
 
 func TestFlexExpandedUsesRemainingMainAxisExtent(t *testing.T) {
+	builtWith := woxui.Size{}
 	root := (Flex{Axis: Horizontal, Gap: 10, Children: []Widget{
 		Container{Width: 20, Height: 12},
-		Expanded{Child: Container{Height: 12}},
+		Expanded{Child: Container{Width: 10, Height: 12, Child: LayoutBuilder{Build: func(size woxui.Size) Widget {
+			builtWith = size
+			return Container{Width: 10, Height: 12}
+		}}}},
 	}}).layout(context{window: &fakeHostServices{}}, constraints{width: 100, height: 30})
 
 	if root.bounds.Width != 100 || len(root.children) != 2 {
@@ -61,6 +66,9 @@ func TestFlexExpandedUsesRemainingMainAxisExtent(t *testing.T) {
 	}
 	if first, expanded := root.children[0].bounds, root.children[1].bounds; first.X != 0 || first.Width != 20 || expanded.X != 30 || expanded.Width != 70 {
 		t.Fatalf("expanded children = first %+v expanded %+v, want widths 20/70 at x 0/30", first, expanded)
+	}
+	if builtWith.Width != 70 {
+		t.Fatalf("expanded nested constraints = %+v, want tight width 70", builtWith)
 	}
 }
 
@@ -76,6 +84,59 @@ func TestFlexExpandedDistributesRemainingExtentByWeight(t *testing.T) {
 	}
 }
 
+func TestFlexFlexibleUsesLooseWeightedShare(t *testing.T) {
+	root := (Flex{Axis: Horizontal, Gap: 10, Children: []Widget{
+		Container{Width: 20, Height: 12},
+		Flexible{Child: Container{Width: 20, Height: 12}},
+		Expanded{Child: Container{Width: 10, Height: 12}},
+	}}).layout(context{window: &fakeHostServices{}}, constraints{width: 120, height: 30})
+
+	if root.bounds.Width != 120 {
+		t.Fatalf("flexible flex bounds = %+v, want width 120", root.bounds)
+	}
+	if flexible, expanded := root.children[1].bounds, root.children[2].bounds; flexible.X != 30 || flexible.Width != 20 || expanded.X != 60 || expanded.Width != 40 {
+		t.Fatalf("flexible children = loose %+v expanded %+v, want widths 20/40 at x 30/60", flexible, expanded)
+	}
+}
+
+func TestFlexFlexibleSupportsVerticalAxis(t *testing.T) {
+	root := (Flex{Axis: Vertical, Gap: 10, Children: []Widget{
+		Container{Width: 12, Height: 20},
+		Flexible{Child: Container{Width: 12, Height: 15}},
+	}}).layout(context{window: &fakeHostServices{}}, constraints{width: 30, height: 100})
+
+	if root.bounds.Height != 100 || root.children[1].bounds.Y != 30 || root.children[1].bounds.Height != 15 {
+		t.Fatalf("vertical flexible = root %+v child %+v, want height 100 and loose child height 15 at y 30", root.bounds, root.children[1].bounds)
+	}
+}
+
+func TestFlexNilFlexibleDoesNotConsumeRemainingShare(t *testing.T) {
+	root := (Flex{Axis: Horizontal, Children: []Widget{
+		Container{Width: 10, Height: 12},
+		Flexible{},
+		Expanded{Child: Container{Height: 12}},
+	}}).layout(context{window: &fakeHostServices{}}, constraints{width: 100, height: 30})
+
+	if len(root.children) != 2 || root.children[1].bounds.Width != 90 {
+		t.Fatalf("nil flexible children = %d expanded %+v, want two children and width 90", len(root.children), root.children[1].bounds)
+	}
+}
+
+func TestFlexOverflowReportsDebugDiagnostic(t *testing.T) {
+	tree := &elementTree{}
+	root := (Flex{Axis: Horizontal, Gap: 10, Children: []Widget{
+		Container{Width: 60, Height: 12},
+		Container{Width: 50, Height: 12},
+	}}).layout(context{window: &fakeHostServices{}, debug: &repaintDebugFrame{mode: RepaintDebugCounts}, elements: tree}, constraints{width: 100, height: 30})
+
+	if root.bounds.Width != 100 {
+		t.Fatalf("overflowing flex bounds = %+v, want constrained width 100", root.bounds)
+	}
+	if len(tree.diagnostics) != 1 || !strings.Contains(tree.diagnostics[0], "horizontal flex overflowed by 20.0") {
+		t.Fatalf("overflow diagnostics = %v", tree.diagnostics)
+	}
+}
+
 func TestFlexMainAxisSpaceBetweenUsesUnusedExtent(t *testing.T) {
 	root := (Flex{Axis: Horizontal, MainAxisAlignment: MainAxisSpaceBetween, Children: []Widget{
 		Container{Width: 20, Height: 10},
@@ -88,13 +149,20 @@ func TestFlexMainAxisSpaceBetweenUsesUnusedExtent(t *testing.T) {
 }
 
 func TestFlexCrossAxisStretchFillsAvailableExtent(t *testing.T) {
+	builtWith := woxui.Size{}
 	root := (Flex{Axis: Horizontal, CrossAxisAlignment: CrossAxisStretch, Children: []Widget{
-		Container{Width: 20, Height: 10},
+		Container{Width: 20, Height: 10, Child: LayoutBuilder{Build: func(size woxui.Size) Widget {
+			builtWith = size
+			return Container{Width: 20, Height: 10}
+		}}},
 		Container{Width: 30, Height: 15},
 	}}).layout(context{window: &fakeHostServices{}}, constraints{width: 100, height: 40})
 
 	if root.bounds.Height != 40 || root.children[0].bounds.Height != 40 || root.children[1].bounds.Height != 40 {
 		t.Fatalf("stretched flex = root %+v first %+v second %+v, want height 40", root.bounds, root.children[0].bounds, root.children[1].bounds)
+	}
+	if builtWith.Height != 40 {
+		t.Fatalf("stretched nested constraints = %+v, want tight height 40", builtWith)
 	}
 }
 
@@ -106,11 +174,32 @@ func TestConstrainedAppliesBoundsAndFill(t *testing.T) {
 		t.Fatalf("constrained bounds = %+v, want 30x20", bounded.bounds)
 	}
 
-	filled := (Constrained{FillWidth: true, FillHeight: true, Child: Container{Width: 10, Height: 10}}).layout(
+	builtWith := woxui.Size{}
+	filled := (Constrained{FillWidth: true, FillHeight: true, Child: Container{Width: 10, Height: 10, Child: LayoutBuilder{Build: func(size woxui.Size) Widget {
+		builtWith = size
+		return Container{Width: 10, Height: 10}
+	}}}}).layout(
 		context{window: &fakeHostServices{}}, constraints{width: 80, height: 50},
 	)
 	if filled.bounds.Width != 80 || filled.bounds.Height != 50 {
 		t.Fatalf("filled bounds = %+v, want 80x50", filled.bounds)
+	}
+	if builtWith != (woxui.Size{Width: 80, Height: 50}) {
+		t.Fatalf("filled nested constraints = %+v, want tight 80x50", builtWith)
+	}
+}
+
+func TestGridPassesTightCellWidthIntoNestedLayout(t *testing.T) {
+	builtWith := woxui.Size{}
+	(Grid{Columns: 2, ColumnGap: 8, Children: []Widget{
+		Container{Width: 10, Child: LayoutBuilder{Build: func(size woxui.Size) Widget {
+			builtWith = size
+			return Container{Width: 10, Height: 20}
+		}}},
+	}}).layout(context{window: &fakeHostServices{}}, constraints{width: 120, height: 200})
+
+	if builtWith.Width != 56 {
+		t.Fatalf("grid nested constraints = %+v, want tight cell width 56", builtWith)
 	}
 }
 
@@ -139,5 +228,34 @@ func TestGridPreservesFixedCellGeometry(t *testing.T) {
 
 	if root.bounds.Height != 94 || root.children[1].bounds.X != 52 || root.children[2].bounds.Y != 50 {
 		t.Fatalf("fixed grid = bounds %+v second %+v third %+v, want height 94 and offsets 52/50", root.bounds, root.children[1].bounds, root.children[2].bounds)
+	}
+}
+
+func TestGridAndWrapReportVerticalOverflowDiagnostics(t *testing.T) {
+	debug := &repaintDebugFrame{mode: RepaintDebugCounts}
+	sparseTree := &elementTree{}
+	(Grid{Columns: 4, CellWidth: 100, ColumnGap: 10, Children: []Widget{
+		Container{Height: 20},
+	}}).layout(context{window: &fakeHostServices{}, debug: debug, elements: sparseTree}, constraints{width: 320, height: 100})
+	if len(sparseTree.diagnostics) != 0 {
+		t.Fatalf("sparse grid overflow diagnostics = %v, want no warning for unused columns", sparseTree.diagnostics)
+	}
+
+	gridTree := &elementTree{}
+	(Grid{Columns: 1, RowGap: 10, Children: []Widget{
+		Container{Height: 60},
+		Container{Height: 60},
+	}}).layout(context{window: &fakeHostServices{}, debug: debug, elements: gridTree}, constraints{width: 100, height: 100})
+	if len(gridTree.diagnostics) != 1 || !strings.Contains(gridTree.diagnostics[0], "vertical grid overflowed by 30.0") {
+		t.Fatalf("grid overflow diagnostics = %v", gridTree.diagnostics)
+	}
+
+	wrapTree := &elementTree{}
+	(Wrap{RunGap: 10, Children: []Widget{
+		Container{Width: 60, Height: 60},
+		Container{Width: 60, Height: 60},
+	}}).layout(context{window: &fakeHostServices{}, debug: debug, elements: wrapTree}, constraints{width: 100, height: 100})
+	if len(wrapTree.diagnostics) != 1 || !strings.Contains(wrapTree.diagnostics[0], "vertical wrap overflowed by 30.0") {
+		t.Fatalf("wrap overflow diagnostics = %v", wrapTree.diagnostics)
 	}
 }

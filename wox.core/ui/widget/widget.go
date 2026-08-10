@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"unicode"
@@ -48,8 +49,48 @@ func (c context) useScroll(controller *ScrollController, offset float32) {
 }
 
 type constraints struct {
-	width  float32
-	height float32
+	// width and height are maximum extents; minWidth and minHeight make an axis tight when equal to its maximum.
+	minWidth  float32
+	width     float32
+	minHeight float32
+	height    float32
+}
+
+func (c constraints) constrainWidth(width float32) float32 {
+	return min(max(width, c.minWidth), c.width)
+}
+
+func (c constraints) constrainHeight(height float32) float32 {
+	return min(max(height, c.minHeight), c.height)
+}
+
+func (c constraints) loose() constraints {
+	c.minWidth = 0
+	c.minHeight = 0
+	return c
+}
+
+func (c constraints) tightWidth(width float32) constraints {
+	width = c.constrainWidth(width)
+	c.minWidth = width
+	c.width = width
+	return c
+}
+
+func (c constraints) tightHeight(height float32) constraints {
+	height = c.constrainHeight(height)
+	c.minHeight = height
+	c.height = height
+	return c
+}
+
+func (c constraints) constrainNode(result *node) *node {
+	if result == nil {
+		return &node{bounds: woxui.Rect{Width: c.minWidth, Height: c.minHeight}}
+	}
+	result.bounds.Width = c.constrainWidth(result.bounds.Width)
+	result.bounds.Height = c.constrainHeight(result.bounds.Height)
+	return result
 }
 
 type node struct {
@@ -206,12 +247,14 @@ type LayoutBuilder struct {
 func (w Align) layout(ctx context, available constraints) *node {
 	width := available.width
 	if w.Width > 0 {
-		width = min(w.Width, available.width)
+		width = available.constrainWidth(w.Width)
 	}
 	height := available.height
 	if w.Height > 0 {
-		height = min(w.Height, available.height)
+		height = available.constrainHeight(w.Height)
 	}
+	width = available.constrainWidth(width)
+	height = available.constrainHeight(height)
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}}
 	if w.Child == nil {
 		return result
@@ -227,37 +270,25 @@ func (w Align) layout(ctx context, available constraints) *node {
 func (w Constrained) layout(ctx context, available constraints) *node {
 	maxWidth := available.width
 	if w.MaxWidth > 0 {
-		maxWidth = min(maxWidth, w.MaxWidth)
+		maxWidth = max(available.minWidth, min(maxWidth, w.MaxWidth))
 	}
 	maxHeight := available.height
 	if w.MaxHeight > 0 {
-		maxHeight = min(maxHeight, w.MaxHeight)
+		maxHeight = max(available.minHeight, min(maxHeight, w.MaxHeight))
 	}
-	minWidth := min(max(float32(0), w.MinWidth), maxWidth)
-	minHeight := min(max(float32(0), w.MinHeight), maxHeight)
-	if w.Child == nil {
-		width := minWidth
-		height := minHeight
-		if w.FillWidth && maxWidth < math.MaxFloat32 {
-			width = maxWidth
-		}
-		if w.FillHeight && maxHeight < math.MaxFloat32 {
-			height = maxHeight
-		}
-		return &node{bounds: woxui.Rect{Width: width, Height: height}}
-	}
-	child := w.Child.layout(ctx, constraints{width: maxWidth, height: maxHeight})
-	width := min(max(child.bounds.Width, minWidth), maxWidth)
-	height := min(max(child.bounds.Height, minHeight), maxHeight)
+	minWidth := min(max(available.minWidth, w.MinWidth), maxWidth)
+	minHeight := min(max(available.minHeight, w.MinHeight), maxHeight)
 	if w.FillWidth && maxWidth < math.MaxFloat32 {
-		width = maxWidth
+		minWidth = maxWidth
 	}
 	if w.FillHeight && maxHeight < math.MaxFloat32 {
-		height = maxHeight
+		minHeight = maxHeight
 	}
-	child.bounds.Width = width
-	child.bounds.Height = height
-	return child
+	childConstraints := constraints{minWidth: minWidth, width: maxWidth, minHeight: minHeight, height: maxHeight}
+	if w.Child == nil {
+		return &node{bounds: woxui.Rect{Width: minWidth, Height: minHeight}}
+	}
+	return childConstraints.constrainNode(w.Child.layout(ctx, childConstraints))
 }
 
 func (w LayoutBuilder) layout(ctx context, available constraints) *node {
@@ -274,11 +305,11 @@ func (w LayoutBuilder) layout(ctx context, available constraints) *node {
 func (w Container) layout(ctx context, available constraints) *node {
 	contentWidth := available.width
 	if w.Width > 0 {
-		contentWidth = w.Width
+		contentWidth = available.constrainWidth(w.Width)
 	}
 	contentHeight := available.height
 	if w.Height > 0 {
-		contentHeight = w.Height
+		contentHeight = available.constrainHeight(w.Height)
 	}
 	contentWidth = max(0, contentWidth-w.Padding.Left-w.Padding.Right)
 	contentHeight = max(0, contentHeight-w.Padding.Top-w.Padding.Bottom)
@@ -301,6 +332,8 @@ func (w Container) layout(ctx context, available constraints) *node {
 			height += child.bounds.Height
 		}
 	}
+	width = available.constrainWidth(width)
+	height = available.constrainHeight(height)
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}}
 	if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) {
 		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
@@ -368,6 +401,19 @@ func (w Expanded) layout(ctx context, available constraints) *node {
 	return w.Child.layout(ctx, available)
 }
 
+// Flexible gives its child a weighted maximum share of the remaining Flex main-axis extent without forcing it to fill that share.
+type Flexible struct {
+	Flex  float32
+	Child Widget
+}
+
+func (w Flexible) layout(ctx context, available constraints) *node {
+	if w.Child == nil {
+		return &node{}
+	}
+	return w.Child.layout(ctx, available)
+}
+
 // StackChild positions one child by insets; stretch fills between opposite insets and takes precedence over anchoring.
 type StackChild struct {
 	Left          float32
@@ -425,8 +471,8 @@ type Clip struct {
 }
 
 func (w Clip) layout(ctx context, available constraints) *node {
-	width := min(w.Width, available.width)
-	height := min(w.Height, available.height)
+	width := available.constrainWidth(min(w.Width, available.width))
+	height := available.constrainHeight(min(w.Height, available.height))
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
 	if w.Child != nil {
 		result.children = []*node{w.Child.layout(ctx, constraints{width: width, height: height})}
@@ -444,19 +490,19 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 	ctx.useScroll(w.dynamicController, w.Offset)
 	width := available.width
 	if w.Width > 0 {
-		width = min(w.Width, available.width)
+		width = available.constrainWidth(w.Width)
 	}
 	height := available.height
 	if w.Height > 0 {
-		height = min(w.Height, available.height)
+		height = available.constrainHeight(w.Height)
 	} else if w.MaxHeight > 0 {
-		height = min(w.MaxHeight, available.height)
+		height = available.constrainHeight(w.MaxHeight)
 	}
 	if w.Horizontal {
 		contentWidth := max(width, w.ContentWidth)
 		var child *node
 		if w.Child != nil {
-			child = w.Child.layout(ctx, constraints{width: contentWidth, height: height})
+			child = w.Child.layout(ctx, constraints{width: math.MaxFloat32, height: height})
 			contentWidth = max(contentWidth, child.bounds.Width)
 		}
 		offset := min(max(float32(0), w.Offset), max(float32(0), contentWidth-width))
@@ -478,7 +524,7 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 	contentHeight := max(height, w.ContentHeight)
 	var child *node
 	if w.Child != nil {
-		child = w.Child.layout(ctx, constraints{width: width, height: contentHeight})
+		child = w.Child.layout(ctx, constraints{width: width, height: math.MaxFloat32})
 		// Flex children can legitimately exceed a caller's estimated extent. The measured height must remain scrollable.
 		contentHeight = max(contentHeight, child.bounds.Height)
 	}
@@ -537,11 +583,17 @@ func (w Stack) layout(ctx context, available constraints) *node {
 	width := w.Width
 	if width <= 0 {
 		width = available.width
+	} else {
+		width = available.constrainWidth(width)
 	}
 	height := w.Height
 	if height <= 0 {
 		height = available.height
+	} else {
+		height = available.constrainHeight(height)
 	}
+	width = available.constrainWidth(width)
+	height = available.constrainHeight(height)
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}}
 	for _, positioned := range w.Children {
 		if positioned.Child == nil {
@@ -555,17 +607,20 @@ func (w Stack) layout(ctx context, available constraints) *node {
 		if positioned.StretchHeight {
 			childHeight = max(float32(0), childHeight-positioned.Bottom)
 		}
-		child := positioned.Child.layout(ctx, constraints{width: childWidth, height: childHeight})
-		x := positioned.Left
-		y := positioned.Top
+		childConstraints := constraints{width: childWidth, height: childHeight}
 		if positioned.StretchWidth {
-			child.bounds.Width = childWidth
-		} else if positioned.AnchorRight {
-			x = max(float32(0), width-positioned.Right-child.bounds.Width)
+			childConstraints = childConstraints.tightWidth(childWidth)
 		}
 		if positioned.StretchHeight {
-			child.bounds.Height = childHeight
-		} else if positioned.AnchorBottom {
+			childConstraints = childConstraints.tightHeight(childHeight)
+		}
+		child := childConstraints.constrainNode(positioned.Child.layout(ctx, childConstraints))
+		x := positioned.Left
+		y := positioned.Top
+		if !positioned.StretchWidth && positioned.AnchorRight {
+			x = max(float32(0), width-positioned.Right-child.bounds.Width)
+		}
+		if !positioned.StretchHeight && positioned.AnchorBottom {
 			y = max(float32(0), height-positioned.Bottom-child.bounds.Height)
 		}
 		child.place(x, y)
@@ -578,8 +633,11 @@ func (w Flex) layout(ctx context, available constraints) *node {
 	enhanced := w.MainAxisAlignment != MainAxisStart || w.CrossAxisAlignment == CrossAxisStretch
 	if !enhanced {
 		for _, child := range w.Children {
-			if _, ok := child.(Expanded); ok {
+			switch child.(type) {
+			case Expanded, Flexible:
 				enhanced = true
+			}
+			if enhanced {
 				break
 			}
 		}
@@ -591,6 +649,8 @@ func (w Flex) layout(ctx context, available constraints) *node {
 	type flexChild struct {
 		widget Widget
 		flex   float32
+		flexed bool
+		tight  bool
 		node   *node
 	}
 
@@ -604,12 +664,23 @@ func (w Flex) layout(ctx context, available constraints) *node {
 		if expanded, ok := childWidget.(Expanded); ok {
 			child.widget = expanded.Child
 			child.flex = expanded.Flex
+			child.flexed = true
+			child.tight = true
+		}
+		if flexible, ok := childWidget.(Flexible); ok {
+			child.widget = flexible.Child
+			child.flex = flexible.Flex
+			child.flexed = true
+		}
+		if child.flexed {
 			if child.flex <= 0 {
 				child.flex = 1
 			}
-			totalFlex += child.flex
 		}
 		if child.widget != nil {
+			if child.flexed {
+				totalFlex += child.flex
+			}
 			children = append(children, child)
 		}
 	}
@@ -629,7 +700,15 @@ func (w Flex) layout(ctx context, available constraints) *node {
 		if children[index].flex > 0 && mainBounded {
 			continue
 		}
-		children[index].node = children[index].widget.layout(ctx, available)
+		childAvailable := available.loose()
+		if w.CrossAxisAlignment == CrossAxisStretch {
+			if w.Axis == Horizontal && available.height < math.MaxFloat32 {
+				childAvailable = childAvailable.tightHeight(available.height)
+			} else if w.Axis == Vertical && available.width < math.MaxFloat32 {
+				childAvailable = childAvailable.tightWidth(available.width)
+			}
+		}
+		children[index].node = childAvailable.constrainNode(children[index].widget.layout(ctx, childAvailable))
 		fixedExtent += flexMainExtent(children[index].node, w.Axis)
 	}
 	remaining := max(float32(0), mainAvailable-fixedExtent-totalGap)
@@ -638,20 +717,26 @@ func (w Flex) layout(ctx context, available constraints) *node {
 			continue
 		}
 		share := remaining * children[index].flex / totalFlex
-		childAvailable := available
+		childAvailable := available.loose()
 		if w.Axis == Horizontal {
 			childAvailable.width = share
+			if children[index].tight {
+				childAvailable = childAvailable.tightWidth(share)
+			}
 		} else {
 			childAvailable.height = share
+			if children[index].tight {
+				childAvailable = childAvailable.tightHeight(share)
+			}
 		}
-		child := children[index].widget.layout(ctx, childAvailable)
-		// Expanded is a tight main-axis slot even when its child naturally shrink-wraps.
-		if w.Axis == Horizontal {
-			child.bounds.Width = share
-		} else {
-			child.bounds.Height = share
+		if w.CrossAxisAlignment == CrossAxisStretch {
+			if w.Axis == Horizontal && available.height < math.MaxFloat32 {
+				childAvailable = childAvailable.tightHeight(available.height)
+			} else if w.Axis == Vertical && available.width < math.MaxFloat32 {
+				childAvailable = childAvailable.tightWidth(available.width)
+			}
 		}
-		children[index].node = child
+		children[index].node = childAvailable.constrainNode(children[index].widget.layout(ctx, childAvailable))
 	}
 
 	contentExtent := totalGap
@@ -673,16 +758,17 @@ func (w Flex) layout(ctx context, available constraints) *node {
 	}
 
 	mainExtent := contentExtent
+	if mainBounded && totalFlex > 0 {
+		mainExtent = mainAvailable
+	}
 	freeExtent := max(float32(0), mainAvailable-contentExtent)
 	startOffset := float32(0)
 	gap := w.Gap
 	switch {
 	case !mainBounded:
 	case w.MainAxisAlignment == MainAxisCenter:
-		mainExtent = mainAvailable
 		startOffset = freeExtent / 2
 	case w.MainAxisAlignment == MainAxisEnd:
-		mainExtent = mainAvailable
 		startOffset = freeExtent
 	case w.MainAxisAlignment == MainAxisSpaceBetween:
 		mainExtent = mainAvailable
@@ -693,13 +779,6 @@ func (w Flex) layout(ctx context, available constraints) *node {
 
 	cursor := startOffset
 	for _, child := range children {
-		if w.CrossAxisAlignment == CrossAxisStretch {
-			if w.Axis == Horizontal {
-				child.node.bounds.Height = crossExtent
-			} else {
-				child.node.bounds.Width = crossExtent
-			}
-		}
 		crossX, crossY := flexChildOffset(child.node, w.Axis, crossExtent, w.CrossAxisAlignment)
 		child.node.place(crossX, crossY)
 		if w.Axis == Horizontal {
@@ -715,7 +794,8 @@ func (w Flex) layout(ctx context, available constraints) *node {
 	} else {
 		result.bounds = woxui.Rect{Width: crossExtent, Height: mainExtent}
 	}
-	return result
+	recordLayoutOverflow(ctx, "flex", w.Axis, contentExtent, mainAvailable)
+	return available.constrainNode(result)
 }
 
 // layoutSequential preserves the original shrink-wrapped path for Flex trees that do not allocate free space.
@@ -726,7 +806,8 @@ func (w Flex) layoutSequential(ctx context, available constraints) *node {
 		if childWidget == nil {
 			continue
 		}
-		child := childWidget.layout(ctx, available)
+		childAvailable := available.loose()
+		child := childAvailable.constrainNode(childWidget.layout(ctx, childAvailable))
 		if w.Axis == Horizontal {
 			child.place(cursor, 0)
 			cursor += child.bounds.Width + w.Gap
@@ -756,7 +837,26 @@ func (w Flex) layoutSequential(ctx context, available constraints) *node {
 			}
 		}
 	}
-	return result
+	mainAvailable := available.width
+	contentExtent := result.bounds.Width
+	if w.Axis == Vertical {
+		mainAvailable = available.height
+		contentExtent = result.bounds.Height
+	}
+	recordLayoutOverflow(ctx, "flex", w.Axis, contentExtent, mainAvailable)
+	return available.constrainNode(result)
+}
+
+// recordLayoutOverflow exposes clipped content while repaint diagnostics are enabled.
+func recordLayoutOverflow(ctx context, layout string, axis Axis, contentExtent, availableExtent float32) {
+	if availableExtent >= math.MaxFloat32 || contentExtent <= availableExtent+0.5 || ctx.debug == nil || ctx.elements == nil {
+		return
+	}
+	axisLabel := "horizontal"
+	if axis == Vertical {
+		axisLabel = "vertical"
+	}
+	ctx.elements.diagnostics = append(ctx.elements.diagnostics, fmt.Sprintf("%s %s overflowed by %.1f logical pixels", axisLabel, layout, contentExtent-availableExtent))
 }
 
 func flexMainExtent(child *node, axis Axis) float32 {
@@ -811,8 +911,9 @@ type Grid struct {
 func (w Grid) layout(ctx context, available constraints) *node {
 	width := available.width
 	if w.Width > 0 {
-		width = min(w.Width, available.width)
+		width = available.constrainWidth(w.Width)
 	}
+	width = available.constrainWidth(width)
 	columns := w.Columns
 	if columns <= 0 {
 		columnWidth := w.MinColumnWidth
@@ -833,6 +934,12 @@ func (w Grid) layout(ctx context, available constraints) *node {
 	if cellWidth <= 0 {
 		cellWidth = max(float32(0), (width-float32(columns-1)*w.ColumnGap)/float32(columns))
 	}
+	usedColumns := min(columns, len(w.Children))
+	gridWidth := float32(usedColumns) * cellWidth
+	if usedColumns > 1 {
+		gridWidth += float32(usedColumns-1) * w.ColumnGap
+	}
+	recordLayoutOverflow(ctx, "grid", Horizontal, gridWidth, available.width)
 	result := &node{bounds: woxui.Rect{Width: width}}
 	for rowStart, y := 0, float32(0); rowStart < len(w.Children); rowStart += columns {
 		rowEnd := min(rowStart+columns, len(w.Children))
@@ -843,12 +950,11 @@ func (w Grid) layout(ctx context, available constraints) *node {
 				row = append(row, nil)
 				continue
 			}
-			cellAvailable := constraints{width: cellWidth, height: available.height}
+			cellAvailable := available.loose().tightWidth(cellWidth)
 			if w.CellHeight > 0 {
 				cellAvailable.height = min(w.CellHeight, available.height)
 			}
-			child := w.Children[index].layout(ctx, cellAvailable)
-			child.bounds.Width = cellWidth
+			child := cellAvailable.constrainNode(w.Children[index].layout(ctx, cellAvailable))
 			rowHeight = max(rowHeight, child.bounds.Height)
 			row = append(row, child)
 		}
@@ -857,6 +963,8 @@ func (w Grid) layout(ctx context, available constraints) *node {
 				continue
 			}
 			if w.CrossAxisAlignment == CrossAxisStretch {
+				// The tallest cell is only known after measuring the row. Re-layout would build stateful cells twice,
+				// so equal-height rows stretch the measured cell surface while cell width remains a true tight constraint.
 				child.bounds.Height = rowHeight
 			}
 			_, offsetY := flexChildOffset(child, Horizontal, rowHeight, w.CrossAxisAlignment)
@@ -869,7 +977,8 @@ func (w Grid) layout(ctx context, available constraints) *node {
 		}
 		result.bounds.Height = y
 	}
-	return result
+	recordLayoutOverflow(ctx, "grid", Vertical, result.bounds.Height, available.height)
+	return available.constrainNode(result)
 }
 
 func (w Wrap) layout(ctx context, available constraints) *node {
@@ -881,7 +990,8 @@ func (w Wrap) layout(ctx context, available constraints) *node {
 		if childWidget == nil {
 			continue
 		}
-		child := childWidget.layout(ctx, available)
+		childAvailable := available.loose()
+		child := childAvailable.constrainNode(childWidget.layout(ctx, childAvailable))
 		if x > 0 && x+child.bounds.Width > available.width {
 			x = 0
 			y += runHeight + w.RunGap
@@ -894,7 +1004,8 @@ func (w Wrap) layout(ctx context, available constraints) *node {
 		result.children = append(result.children, child)
 	}
 	result.bounds.Height = y + runHeight
-	return result
+	recordLayoutOverflow(ctx, "wrap", Vertical, result.bounds.Height, available.height)
+	return available.constrainNode(result)
 }
 
 // Text paints one measured line using the platform UI font.
@@ -922,9 +1033,11 @@ type TextBlock struct {
 
 // TextBlockLayout is the portable line layout used by TextBlock and scroll containers.
 type TextBlockLayout struct {
-	Lines      []string
-	Size       woxui.Size
-	LineHeight float32
+	Lines              []string
+	Size               woxui.Size
+	LineHeight         float32
+	ConstraintWidth    float32
+	HasConstraintWidth bool
 }
 
 // ImageFit controls how an image preserves its aspect ratio inside its bounds.
@@ -947,8 +1060,8 @@ type Image struct {
 
 func (w Image) layout(ctx context, available constraints) *node {
 	_ = ctx
-	width := min(w.Width, available.width)
-	height := min(w.Height, available.height)
+	width := available.constrainWidth(min(w.Width, available.width))
+	height := available.constrainHeight(min(w.Height, available.height))
 	return &node{
 		bounds: woxui.Rect{Width: width, Height: height},
 		paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
@@ -982,8 +1095,8 @@ func fittedImageBounds(source *woxui.Image, bounds woxui.Rect, fit ImageFit) wox
 
 func (w Text) layout(ctx context, available constraints) *node {
 	metrics, _ := ctx.window.MeasureText(w.Value, w.Style)
-	width := min(metrics.Size.Width, available.width)
-	height := min(metrics.Size.Height, available.height)
+	width := available.constrainWidth(metrics.Size.Width)
+	height := available.constrainHeight(metrics.Size.Height)
 	return &node{
 		bounds: woxui.Rect{Width: width, Height: height},
 		paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
@@ -998,15 +1111,16 @@ func (w Text) layout(ctx context, available constraints) *node {
 func (w TextBlock) layout(ctx context, available constraints) *node {
 	width := available.width
 	if w.Width > 0 {
-		width = min(width, w.Width)
+		width = available.constrainWidth(w.Width)
 	}
 	if w.ShrinkWrap {
 		metrics, _ := ctx.window.MeasureText(w.Value, w.Style)
-		width = min(width, metrics.Size.Width)
+		width = available.constrainWidth(min(width, metrics.Size.Width))
 	}
+	width = available.constrainWidth(width)
 	heightLimit := available.height
 	if w.Height > 0 {
-		heightLimit = min(heightLimit, w.Height)
+		heightLimit = available.constrainHeight(w.Height)
 	}
 	metrics, _ := ctx.window.MeasureText("Mg", w.Style)
 	lineHeight := w.LineHeight
@@ -1023,6 +1137,12 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 	textLayout := TextBlockLayout{}
 	if w.Layout != nil {
 		textLayout = *w.Layout
+		if textLayout.HasConstraintWidth && float32(math.Abs(float64(textLayout.ConstraintWidth-width))) > 0.5 {
+			if ctx.debug != nil && ctx.elements != nil {
+				ctx.elements.diagnostics = append(ctx.elements.diagnostics, fmt.Sprintf("text layout measured at width %.1f was reflowed for width %.1f", textLayout.ConstraintWidth, width))
+			}
+			textLayout = layoutTextBlock(ctx.window, w.Value, w.Style, width, maxLines, lineHeight)
+		}
 	} else {
 		textLayout = layoutTextBlock(ctx.window, w.Value, w.Style, width, maxLines, lineHeight)
 	}
@@ -1030,6 +1150,7 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 	if w.Height > 0 {
 		height = heightLimit
 	}
+	height = available.constrainHeight(height)
 	window := ctx.window
 	return &node{
 		bounds: woxui.Rect{Width: width, Height: height},
@@ -1074,7 +1195,7 @@ func layoutTextBlock(window textMeasurer, value string, style woxui.TextStyle, w
 		lineHeight = max(metrics.Size.Height, style.Size*1.35)
 	}
 	lines := wrapTextLines(window, value, style, width, maxLines)
-	return TextBlockLayout{Lines: lines, Size: woxui.Size{Width: width, Height: float32(len(lines)) * lineHeight}, LineHeight: lineHeight}
+	return TextBlockLayout{Lines: lines, Size: woxui.Size{Width: width, Height: float32(len(lines)) * lineHeight}, LineHeight: lineHeight, ConstraintWidth: width, HasConstraintWidth: true}
 }
 
 func wrapTextLines(window textMeasurer, value string, style woxui.TextStyle, width float32, maxLines int) []string {
@@ -1264,7 +1385,7 @@ type Painter struct {
 
 func (w Painter) layout(ctx context, available constraints) *node {
 	_ = ctx
-	return &node{bounds: woxui.Rect{Width: min(w.Width, available.width), Height: min(w.Height, available.height)}, paint: w.Paint}
+	return &node{bounds: woxui.Rect{Width: available.constrainWidth(w.Width), Height: available.constrainHeight(w.Height)}, paint: w.Paint}
 }
 
 // CaretPainter paints editor content with the host-managed caret blink phase.
@@ -1283,7 +1404,7 @@ func (w CaretPainter) layout(ctx context, available constraints) *node {
 		}
 	}
 	return &node{
-		bounds:     woxui.Rect{Width: min(w.Width, available.width), Height: min(w.Height, available.height)},
+		bounds:     woxui.Rect{Width: available.constrainWidth(w.Width), Height: available.constrainHeight(w.Height)},
 		caret:      w.Active,
 		caretPaint: paint,
 	}

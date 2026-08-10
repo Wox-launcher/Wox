@@ -333,14 +333,13 @@ func cloudIntroFeatures(features []CloudIntroFeatureProps, width, height float32
 
 // cloudIntroFeature builds one bordered capability summary.
 func cloudIntroFeature(feature CloudIntroFeatureProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
-	contentWidth := max(float32(0), width-68)
 	return woxwidget.Container{Width: width, Height: 76, Radius: 8, BorderColor: cloudAlpha(theme.PreviewSplit, 180), BorderWidth: 1, Padding: woxwidget.Insets{Left: 12, Top: 12, Right: 12, Bottom: 12}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 			cloudIntroIcon(feature.Icon, feature.FallbackIcon, 34, 17, theme),
-			woxwidget.Container{Width: contentWidth, Height: 52, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
+			woxwidget.Expanded{Child: woxwidget.Container{Height: 52, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
 				woxwidget.Text{Value: feature.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: theme.ResultTitle},
-				woxwidget.TextBlock{Value: feature.Description, Width: contentWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, LineHeight: 16, Color: theme.ResultSubtitle},
-			}}},
+				woxwidget.TextBlock{Value: feature.Description, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 12}, LineHeight: 16, Color: theme.ResultSubtitle},
+			}}}},
 		},
 	}}
 }

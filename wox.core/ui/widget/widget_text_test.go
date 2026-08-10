@@ -35,3 +35,40 @@ func TestTextBlockShrinkWrapUsesContentWidthUpToLimit(t *testing.T) {
 		t.Fatalf("long shrink-wrapped width = %v, want truncation limit 40", long.Width)
 	}
 }
+
+func TestTextBlockReflowsPrecomputedLayoutWhenWidthChanges(t *testing.T) {
+	measurer := &fakeHostServices{}
+	style := woxui.TextStyle{Size: 10}
+	value := "alpha beta gamma delta"
+	precomputed := layoutTextBlock(measurer, value, style, 100, 0, 10)
+	expected := layoutTextBlock(measurer, value, style, 25, 0, 10)
+	tree := &elementTree{}
+
+	root := (TextBlock{Value: value, Style: style, LineHeight: 10, Layout: &precomputed}).layout(
+		context{window: measurer, debug: &repaintDebugFrame{mode: RepaintDebugCounts}, elements: tree},
+		constraints{width: 25, height: 100},
+	)
+
+	if root.bounds.Height != expected.Size.Height || root.bounds.Height == precomputed.Size.Height {
+		t.Fatalf("reflowed height = %.0f, want %.0f instead of precomputed %.0f", root.bounds.Height, expected.Size.Height, precomputed.Size.Height)
+	}
+	if len(tree.diagnostics) != 1 || tree.diagnostics[0] != "text layout measured at width 100.0 was reflowed for width 25.0" {
+		t.Fatalf("text layout diagnostics = %v", tree.diagnostics)
+	}
+}
+
+func TestTextBlockReflowsLayoutMeasuredAtZeroWidth(t *testing.T) {
+	measurer := &fakeHostServices{}
+	style := woxui.TextStyle{Size: 10}
+	value := "alpha beta"
+	precomputed := layoutTextBlock(measurer, value, style, 0, 0, 10)
+	expected := layoutTextBlock(measurer, value, style, 25, 0, 10)
+
+	root := (TextBlock{Value: value, Style: style, LineHeight: 10, Layout: &precomputed}).layout(
+		context{window: measurer}, constraints{width: 25, height: 100},
+	)
+
+	if !precomputed.HasConstraintWidth || root.bounds.Height != expected.Size.Height {
+		t.Fatalf("zero-width layout contract = known %v height %.0f, want known width and height %.0f", precomputed.HasConstraintWidth, root.bounds.Height, expected.Size.Height)
+	}
+}
