@@ -9,6 +9,11 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+const (
+	previewSurfaceRadius      float32 = 8
+	previewSurfaceBorderWidth float32 = 1
+)
+
 // PreviewProps contains the content and metadata rendered by the generic preview shell.
 type PreviewProps struct {
 	Width      float32
@@ -63,8 +68,8 @@ func previewSurface(body woxwidget.Widget, theme woxcomponent.Theme, width, heig
 	contentWidth := max(float32(0), width-2)
 	contentHeight := max(float32(0), height-2)
 	return woxwidget.Container{
-		Width: width, Height: height, Radius: 8, Color: previewColorWithOpacity(theme.PreviewText, 0.035),
-		BorderColor: previewColorWithOpacity(theme.PreviewSplit, 0.45), BorderWidth: 1, Padding: woxwidget.UniformInsets(1),
+		Width: width, Height: height, Radius: previewSurfaceRadius, Color: previewColorWithOpacity(theme.PreviewText, 0.035),
+		BorderColor: previewColorWithOpacity(theme.PreviewSplit, 0.45), BorderWidth: previewSurfaceBorderWidth, Padding: woxwidget.UniformInsets(previewSurfaceBorderWidth),
 		Child: woxwidget.Clip{Width: contentWidth, Height: contentHeight, Child: body},
 	}
 }

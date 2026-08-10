@@ -17,6 +17,7 @@ type WebViewContent struct {
 	UserAgent     string
 	CacheDisabled bool
 	CacheKey      string
+	CornerRadius  float32
 }
 
 // WebViewNavigationState mirrors the live browser chrome for an attached WebView.
@@ -57,14 +58,14 @@ func toWebViewRect(rect Rect) webviewruntime.Rect {
 func toWebViewContent(content WebViewContent) webviewruntime.Content {
 	return webviewruntime.Content{
 		URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS, UserAgent: content.UserAgent,
-		CacheDisabled: content.CacheDisabled, CacheKey: content.CacheKey,
+		CacheDisabled: content.CacheDisabled, CacheKey: content.CacheKey, CornerRadius: content.CornerRadius,
 	}
 }
 
 func fromWebViewContent(content webviewruntime.Content) WebViewContent {
 	return WebViewContent{
 		URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS, UserAgent: content.UserAgent,
-		CacheDisabled: content.CacheDisabled, CacheKey: content.CacheKey,
+		CacheDisabled: content.CacheDisabled, CacheKey: content.CacheKey, CornerRadius: content.CornerRadius,
 	}
 }
 

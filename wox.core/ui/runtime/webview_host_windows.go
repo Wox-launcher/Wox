@@ -64,6 +64,26 @@ func (w *platformWindow) forwardEmbeddedSurfacePointer(event PointerEvent) bool 
 	return w.webView.Pointer(toWebViewPointerEvent(event))
 }
 
+// handleWebViewXButton keeps browser navigation scoped to the embedded surface under the pointer.
+func (w *platformWindow) handleWebViewXButton(button uint16, pressed bool) bool {
+	if !w.webViewPointerOver || w.webView == nil {
+		return false
+	}
+	switch button {
+	case win.XBUTTON1:
+		if pressed {
+			_ = w.webView.GoBack()
+		}
+	case win.XBUTTON2:
+		if pressed {
+			_ = w.webView.GoForward()
+		}
+	default:
+		return false
+	}
+	return true
+}
+
 // executeWebViewCommand keeps WebView lifecycle out of the general Win32 command switch.
 func (w *platformWindow) executeWebViewCommand(command windowCommand) (windowCommandResult, bool) {
 	switch command.kind {
@@ -197,6 +217,7 @@ func (w *windowsWebViewDriver) Show(content webviewruntime.Content, bounds webvi
 		C.int32_t(bounds.Y*scale+0.5),
 		C.int32_t(bounds.Width*scale+0.5),
 		C.int32_t(bounds.Height*scale+0.5),
+		C.float(content.CornerRadius*scale),
 	)
 	if result < 0 {
 		return webViewHRESULT("show WebView2", result)

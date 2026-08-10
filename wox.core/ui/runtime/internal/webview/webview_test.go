@@ -84,3 +84,21 @@ func TestIsAbsoluteURL(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeClampsCornerRadiusToBounds(t *testing.T) {
+	normalized, err := Normalize(Content{URL: "https://example.com", CornerRadius: 80}, Rect{Width: 100, Height: 40})
+	if err != nil {
+		t.Fatalf("normalize WebView: %v", err)
+	}
+	if normalized.CornerRadius != 20 {
+		t.Fatalf("corner radius = %v, want 20", normalized.CornerRadius)
+	}
+
+	normalized, err = Normalize(Content{URL: "https://example.com", CornerRadius: -1}, Rect{Width: 100, Height: 40})
+	if err != nil {
+		t.Fatalf("normalize WebView with negative radius: %v", err)
+	}
+	if normalized.CornerRadius != 0 {
+		t.Fatalf("negative corner radius normalized to %v, want 0", normalized.CornerRadius)
+	}
+}

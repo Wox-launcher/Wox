@@ -9,6 +9,9 @@ import (
 // WebViewPreviewFocusKey identifies the native browser as a Host focus owner.
 const WebViewPreviewFocusKey woxwidget.Key = "webview-preview-focus"
 
+// WebViewPreviewCornerRadius keeps the inset native surface concentric with the preview shell.
+const WebViewPreviewCornerRadius = previewSurfaceRadius - previewSurfaceBorderWidth
+
 // WebViewPreviewProps contains the native surface placement callback.
 type WebViewPreviewProps struct {
 	Width     float32
@@ -34,7 +37,7 @@ func WebViewPreview(props WebViewPreviewProps) woxwidget.Widget {
 			return true
 		},
 		Child: woxwidget.Gesture{ID: "webview-preview-input", OnPointer: props.OnPointer, Child: woxwidget.Painter{Width: props.Width, Height: props.Height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			displayList.FillRoundedRect(bounds, 10, props.Theme.QueryBackground)
+			displayList.FillRoundedRect(bounds, WebViewPreviewCornerRadius, props.Theme.QueryBackground)
 			displayList.BeginEmbeddedSurfaceOverlay(bounds)
 			if props.OnBounds != nil && bounds.Width > 0 && bounds.Height > 0 {
 				props.OnBounds(bounds)

@@ -20,7 +20,7 @@ int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *text, float x,
 int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image_id, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius);
 int32_t wox_renderer_begin_embedded_surface_overlay(WoxRenderer *renderer);
 int32_t wox_renderer_create_webview_visual(WoxRenderer *renderer, void **visual, void **root_visual_target);
-int32_t wox_renderer_set_webview_visual_bounds(WoxRenderer *renderer, void *visual, float x, float y, float width, float height);
+int32_t wox_renderer_set_webview_visual_bounds(WoxRenderer *renderer, void *visual, float x, float y, float width, float height, float corner_radius);
 int32_t wox_renderer_remove_webview_visual(WoxRenderer *renderer, void *visual);
 int32_t wox_renderer_set_clip_rect(WoxRenderer *renderer, float x, float y, float width, float height);
 int32_t wox_renderer_clear_clip(WoxRenderer *renderer);

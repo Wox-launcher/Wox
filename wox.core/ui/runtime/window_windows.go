@@ -973,6 +973,10 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		win.ReleaseCapture()
 		window.emitPointer(PointerEvent{Kind: PointerUp, Position: window.logicalPointerPosition(lParam), Button: windowsPointerButton(message), Modifiers: windowsKeyModifiers()})
 		return 0
+	case win.WM_XBUTTONDOWN, win.WM_XBUTTONUP:
+		if window.handleWebViewXButton(win.HIWORD(uint32(wParam)), message == win.WM_XBUTTONDOWN) {
+			return 1
+		}
 	case win.WM_MOUSEWHEEL, wmMouseHorizontalWheel:
 		position := win.POINT{X: win.GET_X_LPARAM(lParam), Y: win.GET_Y_LPARAM(lParam)}
 		win.ScreenToClient(hwnd, &position)

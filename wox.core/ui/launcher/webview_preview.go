@@ -70,6 +70,7 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 		return previewview.WebViewPreviewMessage("Loading WebView preview…", theme.PreviewText, theme, width, height)
 	}
 	content := data.content()
+	content.CornerRadius = previewview.WebViewPreviewCornerRadius
 	return previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnPointer: a.window.ForwardEmbeddedSurfacePointer, OnEscape: a.handleWebViewFallbackEscape, OnBounds: func(bounds woxui.Rect) {
 		if a.webViewPreviewData != previewData || a.webViewPreviewError != "" {
 			return

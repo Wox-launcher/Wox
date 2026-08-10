@@ -18,6 +18,7 @@ type Content struct {
 	UserAgent     string
 	CacheDisabled bool
 	CacheKey      string
+	CornerRadius  float32
 }
 
 // NavigationState mirrors the live browser chrome for an attached WebView.
@@ -90,6 +91,7 @@ func Normalize(content Content, bounds Rect) (Content, error) {
 	if bounds.Width <= 0 || bounds.Height <= 0 {
 		return Content{}, errors.New("webview bounds must have a positive size")
 	}
+	content.CornerRadius = min(max(content.CornerRadius, 0), min(bounds.Width, bounds.Height)/2)
 	return content, nil
 }
 

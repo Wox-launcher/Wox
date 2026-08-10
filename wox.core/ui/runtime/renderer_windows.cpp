@@ -99,6 +99,7 @@ static void release_shared_d3d_device(ID3D11Device **device) {
 struct WoxWebViewVisual {
   IDCompositionVisual *host = nullptr;
   IDCompositionVisual *target = nullptr;
+  IDCompositionRectangleClip *clip = nullptr;
 };
 
 template <typename T>
@@ -682,6 +683,9 @@ extern "C" int32_t wox_renderer_create_webview_visual(WoxRenderer *renderer, voi
     result = renderer->composition_device->CreateVisual(&webview_visual->target);
   }
   if (SUCCEEDED(result)) {
+    result = renderer->composition_device->CreateRectangleClip(&webview_visual->clip);
+  }
+  if (SUCCEEDED(result)) {
     result = webview_visual->host->AddVisual(webview_visual->target, TRUE, nullptr);
   }
   if (SUCCEEDED(result)) {
@@ -692,6 +696,7 @@ extern "C" int32_t wox_renderer_create_webview_visual(WoxRenderer *renderer, voi
     result = renderer->composition_device->Commit();
   }
   if (FAILED(result)) {
+    release_com(&webview_visual->clip);
     release_com(&webview_visual->target);
     release_com(&webview_visual->host);
     delete webview_visual;
@@ -702,7 +707,7 @@ extern "C" int32_t wox_renderer_create_webview_visual(WoxRenderer *renderer, voi
   return S_OK;
 }
 
-extern "C" int32_t wox_renderer_set_webview_visual_bounds(WoxRenderer *renderer, void *visual, float x, float y, float width, float height) {
+extern "C" int32_t wox_renderer_set_webview_visual_bounds(WoxRenderer *renderer, void *visual, float x, float y, float width, float height, float corner_radius) {
   if (renderer == nullptr || visual == nullptr) {
     return E_INVALIDARG;
   }
@@ -711,8 +716,45 @@ extern "C" int32_t wox_renderer_set_webview_visual_bounds(WoxRenderer *renderer,
   if (SUCCEEDED(result)) {
     result = webview_visual->host->SetOffsetY(y);
   }
+  const float radius = std::max(0.0f, std::min(corner_radius, std::min(width, height) * 0.5f));
   if (SUCCEEDED(result)) {
-    result = webview_visual->host->SetClip({0, 0, width, height});
+    result = webview_visual->clip->SetLeft(0.0f);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->clip->SetTop(0.0f);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->clip->SetRight(width);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->clip->SetBottom(height);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->clip->SetTopLeftRadiusX(radius);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->clip->SetTopLeftRadiusY(radius);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->clip->SetTopRightRadiusX(radius);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->clip->SetTopRightRadiusY(radius);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->clip->SetBottomLeftRadiusX(radius);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->clip->SetBottomLeftRadiusY(radius);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->clip->SetBottomRightRadiusX(radius);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->clip->SetBottomRightRadiusY(radius);
+  }
+  if (SUCCEEDED(result)) {
+    result = webview_visual->host->SetClip(webview_visual->clip);
   }
   if (SUCCEEDED(result)) {
     result = renderer->composition_device->Commit();
@@ -736,6 +778,7 @@ extern "C" int32_t wox_renderer_remove_webview_visual(WoxRenderer *renderer, voi
     result = renderer->composition_device->Commit();
   }
   release_com(&webview_visual->target);
+  release_com(&webview_visual->clip);
   release_com(&webview_visual->host);
   delete webview_visual;
   return result;

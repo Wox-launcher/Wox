@@ -604,6 +604,7 @@ struct WoxWindowsWebViewSession {
   void *composition_visual = nullptr;
   IUnknown *core = nullptr;
   RECT bounds = {};
+  float corner_radius = 0.0f;
   bool transient = false;
   bool controller_pending = false;
   bool script_pending = false;
@@ -1268,7 +1269,7 @@ struct WoxWindowsWebView {
     RECT local_bounds = {0, 0, session->bounds.right - session->bounds.left, session->bounds.bottom - session->bounds.top};
     HRESULT result = webview_method<PutBounds>(session->controller, 6)(session->controller, local_bounds);
     if (SUCCEEDED(result)) {
-      result = wox_renderer_set_webview_visual_bounds(renderer, session->composition_visual, static_cast<float>(session->bounds.left), static_cast<float>(session->bounds.top), static_cast<float>(local_bounds.right), static_cast<float>(local_bounds.bottom));
+      result = wox_renderer_set_webview_visual_bounds(renderer, session->composition_visual, static_cast<float>(session->bounds.left), static_cast<float>(session->bounds.top), static_cast<float>(local_bounds.right), static_cast<float>(local_bounds.bottom), session->corner_radius);
     }
     if (SUCCEEDED(result)) {
       result = webview_method<PutVisible>(session->controller, 4)(session->controller, session->visible ? TRUE : FALSE);
@@ -1355,7 +1356,7 @@ struct WoxWindowsWebView {
     webview_release(session->composition_controller);
   }
 
-  HRESULT show(const char *url, const char *html, const char *inject_css, const char *user_agent, bool cache_disabled, const char *cache_key, RECT bounds) {
+  HRESULT show(const char *url, const char *html, const char *inject_css, const char *user_agent, bool cache_disabled, const char *cache_key, RECT bounds, float corner_radius) {
     if (closing) {
       return E_FAIL;
     }
@@ -1404,6 +1405,7 @@ struct WoxWindowsWebView {
     }
     session->content_key = std::move(content_key);
     session->bounds = bounds;
+    session->corner_radius = corner_radius;
     session->visible = true;
     if (environment != nullptr) {
       create_controller(session);
@@ -1628,12 +1630,12 @@ extern "C" int32_t wox_windows_webview_create(uintptr_t owner, WoxRenderer *rend
   return result;
 }
 
-extern "C" int32_t wox_windows_webview_show(WoxWindowsWebView *webview, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, int32_t x, int32_t y, int32_t width, int32_t height) {
+extern "C" int32_t wox_windows_webview_show(WoxWindowsWebView *webview, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, int32_t x, int32_t y, int32_t width, int32_t height, float corner_radius) {
   if (webview == nullptr || url == nullptr || html == nullptr || inject_css == nullptr || user_agent == nullptr || cache_key == nullptr || width <= 0 || height <= 0) {
     return E_INVALIDARG;
   }
   RECT bounds = {x, y, x + width, y + height};
-  return webview->show(url, html, inject_css, user_agent, cache_disabled != 0, cache_key, bounds);
+  return webview->show(url, html, inject_css, user_agent, cache_disabled != 0, cache_key, bounds, corner_radius);
 }
 
 extern "C" int32_t wox_windows_webview_hide(WoxWindowsWebView *webview) {
