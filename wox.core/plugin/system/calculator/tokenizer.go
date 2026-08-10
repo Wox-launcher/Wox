@@ -2,7 +2,6 @@ package calculator
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -54,8 +53,8 @@ func isOperator(char rune) bool {
 	return false
 }
 
-// numberPrefix parses a number string with given separators
-func numberPrefix(chars []rune, i *int, n int, thousandsSep, decimalSep string) (float64, error) {
+// numberPrefix parses a number string with given separators.
+func numberPrefix(chars []rune, i *int, n int, thousandsSep, decimalSep string) (string, error) {
 	current := *i
 	seenDecimal := false
 	var sb strings.Builder
@@ -124,16 +123,11 @@ func numberPrefix(chars []rune, i *int, n int, thousandsSep, decimalSep string) 
 	}
 
 	if sb.Len() == 0 || (sb.Len() == 1 && sb.String() == ".") {
-		return 0, errors.New("expected a number")
-	}
-
-	val, err := strconv.ParseFloat(sb.String(), 64)
-	if err != nil {
-		return 0, err
+		return "", errors.New("expected a number")
 	}
 
 	*i = current
-	return val, nil
+	return sb.String(), nil
 }
 
 func isAlpha(char rune) bool {
@@ -168,8 +162,12 @@ func tokenize(input string, thousandsSep, decimalSep string) ([]token, error) {
 			continue
 		}
 
-		if val, err := numberPrefix(chars, &i, n, thousandsSep, decimalSep); err == nil {
-			tokens = append(tokens, token{kind: numberToken, val: decimal.NewFromFloat(val)})
+		if number, err := numberPrefix(chars, &i, n, thousandsSep, decimalSep); err == nil {
+			val, parseErr := decimal.NewFromString(number)
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			tokens = append(tokens, token{kind: numberToken, val: val})
 			continue
 		}
 

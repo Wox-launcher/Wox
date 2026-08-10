@@ -3,6 +3,8 @@ package calculator
 import (
 	"fmt"
 	"math"
+	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/shopspring/decimal"
@@ -60,17 +62,23 @@ var functions = map[string]interface{}{
 	"y1":          math.Y1,
 }
 
-func call(funcName string, args []decimal.Decimal) (decimal.Decimal, error) {
+const calculatorResultPrecision = 16
+
+func call(funcName string, args []*big.Rat) (*big.Rat, error) {
 	f, ok := functions[funcName]
 	if !ok {
-		return decimal.Zero, fmt.Errorf("unknown function %s", funcName)
+		return nil, fmt.Errorf("unknown function %s", funcName)
+	}
+	floatArgs := make([]float64, len(args))
+	for i, arg := range args {
+		floatArgs[i], _ = arg.Float64()
 	}
 	switch f := f.(type) {
 	case func() float64:
-		return decimal.NewFromFloat(f()), nil
+		return ratFromFloat(f())
 	case func(float64) float64:
 		if funcName == "tan" {
-			x := args[0].InexactFloat64()
+			x := floatArgs[0]
 			result := f(x)
 			if result == 1 || result == -1 {
 				result = f(math.Nextafter(x, 0))
@@ -80,86 +88,120 @@ func call(funcName string, args []decimal.Decimal) (decimal.Decimal, error) {
 			} else if math.Abs(result+1) < 1e-12 {
 				result = -1
 			}
-			return decimal.NewFromFloat(result), nil
+			return ratFromFloat(result)
 		}
-		return decimal.NewFromFloat(f(args[0].InexactFloat64())), nil
+		return ratFromFloat(f(floatArgs[0]))
 	case func(float64, float64) float64:
-		return decimal.NewFromFloat(f(args[0].InexactFloat64(), args[1].InexactFloat64())), nil
+		return ratFromFloat(f(floatArgs[0], floatArgs[1]))
 	case func(float64, float64, float64) float64:
-		return decimal.NewFromFloat(f(args[0].InexactFloat64(), args[1].InexactFloat64(), args[2].InexactFloat64())), nil
+		return ratFromFloat(f(floatArgs[0], floatArgs[1], floatArgs[2]))
 	default:
-		return decimal.Zero, fmt.Errorf("invalid function %s", funcName)
+		return nil, fmt.Errorf("invalid function %s", funcName)
 	}
 }
 
-func calculate(n *node) (decimal.Decimal, error) {
+func calculate(n *node) (*big.Rat, error) {
 	switch n.kind {
 	case addNode:
 		left, err := calculate(n.left)
 		if err != nil {
-			return decimal.Zero, err
+			return nil, err
 		}
 		right, err := calculate(n.right)
 		if err != nil {
-			return decimal.Zero, err
+			return nil, err
 		}
-		return left.Add(right), nil
+		return new(big.Rat).Add(left, right), nil
 	case subNode:
 		left, err := calculate(n.left)
 		if err != nil {
-			return decimal.Zero, err
+			return nil, err
 		}
 		right, err := calculate(n.right)
 		if err != nil {
-			return decimal.Zero, err
+			return nil, err
 		}
-		return left.Sub(right), nil
+		return new(big.Rat).Sub(left, right), nil
 	case mulNode:
 		left, err := calculate(n.left)
 		if err != nil {
-			return decimal.Zero, err
+			return nil, err
 		}
 		right, err := calculate(n.right)
 		if err != nil {
-			return decimal.Zero, err
+			return nil, err
 		}
-		return left.Mul(right), nil
+		return new(big.Rat).Mul(left, right), nil
 	case divNode:
 		left, err := calculate(n.left)
 		if err != nil {
-			return decimal.Zero, err
+			return nil, err
 		}
 		right, err := calculate(n.right)
 		if err != nil {
-			return decimal.Zero, err
+			return nil, err
 		}
-		return left.Div(right), nil
+		if right.Sign() == 0 {
+			return nil, fmt.Errorf("division by zero")
+		}
+		return new(big.Rat).Quo(left, right), nil
 	case powNode:
 		left, err := calculate(n.left)
 		if err != nil {
-			return decimal.Zero, err
+			return nil, err
 		}
 		right, err := calculate(n.right)
 		if err != nil {
-			return decimal.Zero, err
+			return nil, err
 		}
 		// Use math.Pow for power calculation
-		result := math.Pow(left.InexactFloat64(), right.InexactFloat64())
-		return decimal.NewFromFloat(result), nil
+		leftFloat, _ := left.Float64()
+		rightFloat, _ := right.Float64()
+		return ratFromFloat(math.Pow(leftFloat, rightFloat))
 	case numNode:
-		return n.val, nil
+		return ratFromDecimal(n.val)
 	case funcNode:
-		var args []decimal.Decimal
+		var args []*big.Rat
 		for _, arg := range n.args {
 			val, err := calculate(arg)
 			if err != nil {
-				return decimal.Zero, err
+				return nil, err
 			}
 			args = append(args, val)
 		}
 		return call(n.funcName, args)
 	}
-	return decimal.Zero, fmt.Errorf("unknown node type: %s", n.kind)
+	return nil, fmt.Errorf("unknown node type: %s", n.kind)
+}
+
+// ratFromDecimal converts a decimal value to an exact rational value.
+func ratFromDecimal(value decimal.Decimal) (*big.Rat, error) {
+	result, ok := new(big.Rat).SetString(value.String())
+	if !ok {
+		return nil, fmt.Errorf("invalid decimal value: %s", value)
+	}
+	return result, nil
+}
+
+// ratFromFloat converts an approximate function result into a rational value without adding another float conversion.
+func ratFromFloat(value float64) (*big.Rat, error) {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return nil, fmt.Errorf("invalid numeric result: %v", value)
+	}
+	result, ok := new(big.Rat).SetString(strconv.FormatFloat(value, 'f', -1, 64))
+	if !ok {
+		return nil, fmt.Errorf("invalid numeric result: %v", value)
+	}
+	return result, nil
+}
+
+// decimalFromRat applies the calculator's display precision only after exact arithmetic is complete.
+func decimalFromRat(value *big.Rat) (decimal.Decimal, error) {
+	result, err := decimal.NewFromString(value.FloatString(calculatorResultPrecision))
+	if err != nil {
+		return decimal.Zero, err
+	}
+	return result, nil
 }
 
 func Calculate(expr string, thousandsSep, decimalSep string) (decimal.Decimal, error) {
@@ -198,5 +240,9 @@ func Calculate(expr string, thousandsSep, decimalSep string) (decimal.Decimal, e
 	if err != nil {
 		return decimal.Zero, err
 	}
-	return calculate(n)
+	result, err := calculate(n)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	return decimalFromRat(result)
 }
