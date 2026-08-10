@@ -471,7 +471,7 @@ func (a *App) buildCloudPluginExclusionOverlay(dialog *cloudPluginExclusionDialo
 		}
 	}
 	return launcherview.CloudPluginExclusionDialog(launcherview.CloudPluginExclusionDialogProps{
-		Width: width, Height: height, PanelWidth: 648, PanelHeight: 170,
+		Width: width, Height: height, PanelWidth: 648, PanelHeight: launcherview.CloudPluginExclusionDialogHeight,
 		FieldLabel: a.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin"), Description: a.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin_tips"),
 		Selected: dialog.Selected, SelectedName: selectedName, SelectedIcon: selectedIcon, Choices: choices, ChoiceAnchor: dialog.ChoiceAnchor, ChoiceOpen: dialog.ChoiceOpen,
 		CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: a.translate("i18n:ui_save"), Window: a.settingsNativeWindow(), Theme: palette.componentTheme(),

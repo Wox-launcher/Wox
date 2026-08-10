@@ -242,7 +242,7 @@ func formTableHeaderActions(props FormTableFieldProps) woxwidget.Widget {
 	if props.SecondaryLabel != "" {
 		actions = append(actions, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: props.ID + "-secondary", Label: props.SecondaryLabel, Icon: props.SecondaryIcon, IconSize: 15, IconGap: 5,
-			Size: woxcomponent.ButtonCompact, Variant: woxcomponent.ButtonOutline, Padding: woxwidget.Insets{Left: 9, Right: 7},
+			Size: woxcomponent.ButtonCompact, Variant: woxcomponent.ButtonOutline,
 			Disabled: props.Invalid, OnTap: props.OnSecondary, Theme: props.Theme,
 		}))
 	}
@@ -255,7 +255,7 @@ func formTableHeaderActions(props FormTableFieldProps) woxwidget.Widget {
 func formTableAddButton(props FormTableFieldProps) woxwidget.Widget {
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
 		ID: props.ID + "-add", Label: props.AddLabel, Icon: props.AddIcon, IconSize: 15, IconGap: 5,
-		Size: woxcomponent.ButtonCompact, Variant: woxcomponent.ButtonOutline, Padding: woxwidget.Insets{Left: 9, Right: 7},
+		Size: woxcomponent.ButtonCompact, Variant: woxcomponent.ButtonOutline,
 		Disabled: props.Invalid, OnTap: props.OnAdd, Theme: props.Theme,
 	})
 }
@@ -1265,9 +1265,11 @@ type FormTableRowEditorProps struct {
 	OnSave        func()
 }
 
+// FormTableRowEditorFooterHeight reserves the action row without duplicating the dialog's bottom padding.
+const FormTableRowEditorFooterHeight = float32(44)
+
 // FormTableRowEditor builds the add, edit, or clone row form.
 func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
-	footerHeight := float32(62)
 	titleHeight := float32(0)
 	if props.Header != nil {
 		titleHeight = props.HeaderHeight
@@ -1278,7 +1280,7 @@ func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 	if props.Status != "" {
 		statusHeight = 28
 	}
-	bodyHeight := max(float32(48), props.Height-titleHeight-footerHeight-statusHeight)
+	bodyHeight := max(float32(48), props.Height-titleHeight-FormTableRowEditorFooterHeight-statusHeight)
 	body := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "form-table-row-scroll", Width: props.Width, Height: bodyHeight,
 		ContentHeight: max(bodyHeight, props.ContentHeight), KeepVisible: props.KeepVisible,
@@ -1307,7 +1309,7 @@ func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-row-save", Label: props.SaveLabel, Height: 36, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
 		}},
 	}
-	children = append(children, woxwidget.Container{Width: props.Width, Height: footerHeight, Padding: woxwidget.Insets{Top: 8}, Child: buttons})
+	children = append(children, woxwidget.Container{Width: props.Width, Height: FormTableRowEditorFooterHeight, Padding: woxwidget.Insets{Top: 8}, Child: buttons})
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}
 }
 

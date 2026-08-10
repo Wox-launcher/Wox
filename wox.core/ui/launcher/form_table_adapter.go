@@ -324,7 +324,7 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 		if snapshot.status != "" {
 			statusHeight = 28
 		}
-		panelHeight = max(float32(0), min(contentHeight+62+statusHeight+48, height-56))
+		panelHeight = max(float32(0), min(contentHeight+launcherview.FormTableRowEditorFooterHeight+statusHeight+48, height-56))
 		if snapshot.definition.Value.Key == "QueryHotkeys" {
 			panelHeight = max(float32(0), min(float32(632), height-56))
 		}
@@ -348,7 +348,7 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableChoicePicker(snapshot.choicePicker, palette, width, height, imageScale)})
 	}
 	if snapshot.emojiPicker != nil {
-		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableEmojiPicker(snapshot.emojiPicker, palette, width, height)})
+		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableEmojiPicker(snapshot.emojiPicker, palette, width, height, imageScale)})
 	}
 	if snapshot.queryVariable != nil {
 		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableQueryVariablePicker(snapshot.queryVariable, palette, width, height, imageScale)})

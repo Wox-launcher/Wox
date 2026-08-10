@@ -118,7 +118,7 @@ func buildFormAppPickerDialog(context woxwidget.StateContext, props FormAppPicke
 	innerHeight := max(float32(0), panelHeight-48)
 	const titleHeight = float32(36)
 	const searchHeight = float32(42)
-	const actionsHeight = float32(62)
+	const actionsHeight = float32(50)
 	errorHeight := float32(0)
 	if props.Error != "" {
 		errorHeight = 28

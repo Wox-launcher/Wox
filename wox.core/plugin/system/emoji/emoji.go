@@ -15,6 +15,7 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/emojiimage"
+	"wox/util/emojisearch"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -35,6 +36,73 @@ type EmojiData struct {
 	Categories  map[string]string // language code -> category name
 	Names       map[string]string // language code -> emoji name
 	SearchTerms []string
+}
+
+var (
+	emojiCatalogOnce sync.Once
+	emojiCatalog     []EmojiData
+	emojiCatalogErr  error
+)
+
+// LoadCatalog returns the immutable embedded emoji catalog shared by plugin and UI search.
+func LoadCatalog() ([]EmojiData, error) {
+	emojiCatalogOnce.Do(func() {
+		emojiCatalog, emojiCatalogErr = loadEmojiCatalog()
+	})
+	return emojiCatalog, emojiCatalogErr
+}
+
+// loadEmojiCatalog parses the embedded catalog once without plugin-specific user state.
+func loadEmojiCatalog() ([]EmojiData, error) {
+	data, err := emojiFS.ReadFile("emoji-data.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read emoji data: %w", err)
+	}
+
+	jsonResult := gjson.ParseBytes(data)
+	if !jsonResult.IsArray() {
+		return nil, fmt.Errorf("failed to parse emoji data: root is not array")
+	}
+
+	entries := make([]EmojiData, 0, 5000)
+	seen := make(map[string]bool)
+	jsonResult.ForEach(func(_, category gjson.Result) bool {
+		categoryNames := resultToStringMap(category.Get("name_i18n"))
+		if base := strings.TrimSpace(category.Get("name").String()); base != "" && categoryNames["en"] == "" {
+			categoryNames["en"] = base
+		}
+		category.Get("list").ForEach(func(_, subCategory gjson.Result) bool {
+			subCategory.Get("list").ForEach(func(_, emoji gjson.Result) bool {
+				char := emoji.Get("char").String()
+				if char == "" || seen[char] {
+					return true
+				}
+
+				names := make(map[string]string)
+				if base := strings.TrimSpace(emoji.Get("name").String()); base != "" {
+					names["en"] = base
+				}
+				for lang, name := range resultToStringMap(emoji.Get("name_i18n")) {
+					if strings.TrimSpace(name) != "" {
+						names[lang] = name
+					}
+				}
+
+				entries = append(entries, EmojiData{
+					Emoji:       char,
+					Codes:       emoji.Get("codes").String(),
+					Categories:  categoryNames,
+					Names:       names,
+					SearchTerms: emojisearch.BuildTerms(names, categoryNames),
+				})
+				seen[char] = true
+				return true
+			})
+			return true
+		})
+		return true
+	})
+	return entries, nil
 }
 
 type emojiUsage struct {
@@ -126,55 +194,15 @@ func (e *EmojiPlugin) ensureEmojisLoaded(ctx context.Context) bool {
 }
 
 func (e *EmojiPlugin) loadEmojis(ctx context.Context) error {
-	data, err := emojiFS.ReadFile("emoji-data.json")
+	catalog, err := LoadCatalog()
 	if err != nil {
-		return fmt.Errorf("failed to read emoji data: %w", err)
+		return err
 	}
-
-	jsonResult := gjson.ParseBytes(data)
-	if !jsonResult.IsArray() {
-		return fmt.Errorf("failed to parse emoji data: root is not array")
+	e.emojis = make([]EmojiData, len(catalog))
+	for index, entry := range catalog {
+		e.emojis[index] = entry
+		e.emojis[index].SearchTerms = append([]string(nil), entry.SearchTerms...)
 	}
-
-	seen := make(map[string]bool)
-	jsonResult.ForEach(func(_, category gjson.Result) bool {
-		categoryNames := resultToStringMap(category.Get("name_i18n"))
-		if base := strings.TrimSpace(category.Get("name").String()); base != "" && categoryNames["en"] == "" {
-			categoryNames["en"] = base
-		}
-		category.Get("list").ForEach(func(_, subCategory gjson.Result) bool {
-			subCategory.Get("list").ForEach(func(_, emoji gjson.Result) bool {
-				char := emoji.Get("char").String()
-				if char == "" || seen[char] {
-					return true
-				}
-
-				names := make(map[string]string)
-				if base := strings.TrimSpace(emoji.Get("name").String()); base != "" {
-					names["en"] = base
-				}
-				for lang, name := range resultToStringMap(emoji.Get("name_i18n")) {
-					if strings.TrimSpace(name) == "" {
-						continue
-					}
-					names[lang] = name
-				}
-
-				e.emojis = append(e.emojis, EmojiData{
-					Emoji:       char,
-					Codes:       emoji.Get("codes").String(),
-					Categories:  categoryNames,
-					Names:       names,
-					SearchTerms: buildSearchTerms(names, categoryNames),
-				})
-				seen[char] = true
-				return true
-			})
-			return true
-		})
-		return true
-	})
-
 	e.applyCustomDescriptions(ctx)
 	e.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Loaded %d emojis", len(e.emojis)))
 	return nil
@@ -625,23 +653,10 @@ func (e *EmojiPlugin) removeUsage(ctx context.Context, emoji string) {
 }
 
 func (e *EmojiPlugin) matchEmoji(entry EmojiData, search string) bool {
-	if search == "" {
+	if emojisearch.Match(emojisearch.Entry{Emoji: entry.Emoji, SearchTerms: entry.SearchTerms}, search) {
 		return true
 	}
 
-	// Match emoji character itself
-	if strings.Contains(entry.Emoji, search) {
-		return true
-	}
-
-	// Match any name across languages (pre-lowered)
-	for _, keyword := range entry.SearchTerms {
-		if strings.Contains(keyword, search) {
-			return true
-		}
-	}
-
-	// Match custom descriptions
 	if extras, ok := e.customDescriptions[entry.Emoji]; ok {
 		for _, desc := range extras {
 			if strings.Contains(strings.ToLower(desc), search) {
@@ -725,44 +740,8 @@ func (e *EmojiPlugin) applyCustomDescriptions(ctx context.Context) {
 		if extra, ok := custom[e.emojis[i].Emoji]; ok {
 			terms = append(terms, extra...)
 		}
-		e.emojis[i].SearchTerms = uniqueLower(terms)
+		e.emojis[i].SearchTerms = emojisearch.NormalizeTerms(terms)
 	}
-}
-
-func uniqueLower(inputs []string) []string {
-	seen := make(map[string]bool)
-	var out []string
-	for _, v := range inputs {
-		l := strings.ToLower(strings.TrimSpace(v))
-		if l == "" {
-			continue
-		}
-		if seen[l] {
-			continue
-		}
-		seen[l] = true
-		out = append(out, l)
-	}
-	return out
-}
-
-func buildSearchTerms(maps ...map[string]string) []string {
-	seen := make(map[string]bool)
-	var terms []string
-	for _, m := range maps {
-		for _, name := range m {
-			trimmed := strings.ToLower(strings.TrimSpace(name))
-			if trimmed == "" {
-				continue
-			}
-			if seen[trimmed] {
-				continue
-			}
-			seen[trimmed] = true
-			terms = append(terms, trimmed)
-		}
-	}
-	return terms
 }
 
 func resultToStringMap(result gjson.Result) map[string]string {

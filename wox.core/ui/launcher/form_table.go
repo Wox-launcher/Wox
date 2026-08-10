@@ -1523,9 +1523,12 @@ func (a *App) onFormTableKey(event woxui.KeyEvent) bool {
 		return true
 	}
 	if state.emojiPicker != nil {
-		// The emoji dialog owns every key while it is open; Escape is already
-		// consumed by its modal focus scope before reaching this handler.
-		return true
+		if event.Key == woxui.KeyEscape {
+			a.closeFormTableEmojiPicker()
+			return true
+		}
+		// Printable keys must continue into the focused search field's native text input client.
+		return false
 	}
 	if appPicker != nil {
 		if event.Key == woxui.KeyEscape {

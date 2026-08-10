@@ -42,6 +42,15 @@ func TestWoxButtonCentersIntrinsicContentVertically(t *testing.T) {
 	}
 }
 
+func TestWoxButtonUsesSharedCompactGeometry(t *testing.T) {
+	button := WoxButton(ButtonProps{ID: "add", Label: "Add", Size: ButtonCompact})
+	container := button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+
+	if container.Height != 30 || container.Padding.Left != 12 || container.Padding.Right != 12 {
+		t.Fatalf("compact button geometry = height %v padding %+v, want 30px height and symmetric 12px padding", container.Height, container.Padding)
+	}
+}
+
 func TestWoxButtonUsesContentWidthWhenWidthOmitted(t *testing.T) {
 	button := WoxButton(ButtonProps{ID: "cancel", Label: "Cancel", Height: 36})
 	container := button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)

@@ -18,6 +18,7 @@ import (
 	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/emojisearch"
 )
 
 const (
@@ -139,6 +140,9 @@ type App struct {
 	settingsDemoRevision         atomic.Uint64
 	choiceTooltipRevision        atomic.Uint64
 	settingsTableEditor          *formTableEditorState
+	recentFormTableEmojis        []string
+	formTableEmojiSearchOnce     sync.Once
+	formTableEmojiSearchEntries  []emojisearch.Entry
 	glanceItem                   *glanceItem
 	glanceLoading                bool
 	glanceRevision               uint64

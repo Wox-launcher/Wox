@@ -134,7 +134,9 @@ func dataStorageField(props DataSettingsProps, width float32) woxwidget.Widget {
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LocationTitle, Description: props.Labels.LocationDescription,
 		Width: width, Height: 78, Gap: 10, Padding: woxwidget.Insets{Top: 5}, DescriptionMaxLines: 2, Theme: props.Theme,
-		Child: woxwidget.Container{Width: buttonsWidth, Height: 60, Padding: woxwidget.Insets{Top: 3}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: buttons}},
+		Child: woxwidget.Container{Width: buttonsWidth, Height: 60, Padding: woxwidget.Insets{Top: 3}, Child: woxwidget.Flex{
+			Axis: woxwidget.Horizontal, Gap: 10, MainAxisAlignment: woxwidget.MainAxisEnd, Children: buttons,
+		}},
 	})
 }
 
@@ -230,7 +232,7 @@ func dataLogActionsField(props DataSettingsProps, width float32) woxwidget.Widge
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LogClearTitle, Description: props.Labels.LogClearDescription,
 		Width: width, Height: 66, Gap: 10, Padding: woxwidget.Insets{Top: 5}, Theme: props.Theme,
-		Child: woxwidget.Container{Width: actionsWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+		Child: woxwidget.Container{Width: actionsWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, MainAxisAlignment: woxwidget.MainAxisEnd, Children: []woxwidget.Widget{
 			dataButton(props, "data-log-clear", clearLabel, woxcomponent.ButtonOutline, props.OnClearLogs),
 			dataButton(props, "data-log-open", props.Labels.LogOpenButton, woxcomponent.ButtonOutline, props.OnOpenLog),
 		}}},

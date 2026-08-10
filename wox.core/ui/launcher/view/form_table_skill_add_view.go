@@ -44,7 +44,11 @@ func FormTableSkillAddDialog(props FormTableSkillAddDialogProps) woxwidget.Widge
 	}
 	hintHeight := float32(40)
 	actionsHeight := float32(38)
-	contentHeight := 28 + 12 + 32 + 12 + hintHeight + 12 + props.FieldHeight + 12 + statusHeight + 12 + actionsHeight
+	childCount := 5
+	if statusHeight > 0 {
+		childCount++
+	}
+	contentHeight := 28 + 32 + hintHeight + props.FieldHeight + statusHeight + actionsHeight + float32(childCount-1)*12
 	panelHeight := max(float32(260), min(float32(360), contentHeight+48))
 	panelHeight = max(float32(0), min(panelHeight, props.Height-56))
 

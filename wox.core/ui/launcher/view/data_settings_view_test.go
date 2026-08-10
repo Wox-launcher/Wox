@@ -54,6 +54,9 @@ func TestDataStorageFieldButtonsExpandForLongLocalizedLabels(t *testing.T) {
 	actions := actionsContainer.Child.(woxwidget.Flex)
 	changeButton := actions.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 
+	if actions.MainAxisAlignment != woxwidget.MainAxisEnd {
+		t.Fatalf("storage actions alignment = %v, want end", actions.MainAxisAlignment)
+	}
 	if changeButton.Width != 0 {
 		t.Fatalf("change button width = %v, want content-sized", changeButton.Width)
 	}
@@ -63,5 +66,22 @@ func TestDataStorageFieldButtonsExpandForLongLocalizedLabels(t *testing.T) {
 	}
 	if label.Child.(woxwidget.Container).Width != 0 {
 		t.Fatal("storage label should use the remaining field width")
+	}
+}
+
+func TestDataLogActionsAreRightAligned(t *testing.T) {
+	field := dataLogActionsField(DataSettingsProps{
+		Labels: DataSettingsLabels{
+			LogClearTitle:  "Clear logs",
+			LogClearButton: "Clear",
+			LogOpenButton:  "Open log file",
+		},
+	}, 820).(woxwidget.Container)
+
+	row := field.Child.(woxwidget.Flex)
+	actionsContainer := row.Children[1].(woxwidget.Container)
+	actions := actionsContainer.Child.(woxwidget.Flex)
+	if actions.MainAxisAlignment != woxwidget.MainAxisEnd {
+		t.Fatalf("log actions alignment = %v, want end", actions.MainAxisAlignment)
 	}
 }

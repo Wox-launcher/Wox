@@ -48,3 +48,22 @@ func TestDictationModelManagerHidesUnknownEngineStatus(t *testing.T) {
 		t.Fatalf("unknown engine menu height = %.0f, want model-only height %.0f", content.Height, ModelManagerRowHeight)
 	}
 }
+
+func TestModelManagerDialogDoesNotDuplicateBottomPadding(t *testing.T) {
+	dialog := ModelManagerView(ModelManagerProps{
+		Width: 1200, Height: 800, Title: "Models", Theme: woxcomponent.Theme{},
+		Options: []ModelManagerOption{{Name: "Model", ActionLabel: "Download", ActionEnabled: true}},
+	}).(woxwidget.Stateful)
+	props := dialog.Widget.(woxcomponent.DialogProps)
+	children := props.Child.(woxwidget.Flex).Children
+	list := children[2].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	footer := children[4].(woxwidget.Container)
+
+	usedHeight := children[0].(woxwidget.Container).Height + children[1].(woxwidget.Container).Height + list.Height + children[3].(woxwidget.Container).Height + footer.Height
+	if usedHeight+props.Padding.Top+props.Padding.Bottom != props.Height {
+		t.Fatal("model manager dialog should not reserve extra space below its footer")
+	}
+	if footer.Height != 50 || footer.Padding.Top != 10 {
+		t.Fatalf("model manager footer = height %v padding %+v, want action height plus top spacing only", footer.Height, footer.Padding)
+	}
+}

@@ -198,6 +198,9 @@ type CloudPluginExclusionDialogProps struct {
 	OnSave       func()
 }
 
+// CloudPluginExclusionDialogHeight fits the field and actions inside the shared 24px dialog padding.
+const CloudPluginExclusionDialogHeight = float32(156)
+
 const cloudSyncCardHeight = float32(66)
 
 // CloudSettingsPage builds the complete scrollable cloud settings route.
@@ -688,7 +691,7 @@ func CloudPluginExclusionDialog(props CloudPluginExclusionDialogProps) woxwidget
 	}
 	panelHeight := props.PanelHeight
 	if panelHeight <= 0 {
-		panelHeight = 170
+		panelHeight = CloudPluginExclusionDialogHeight
 	}
 	contentWidth := max(float32(0), panelWidth-48)
 	field := FormTableRowField(FormTableRowFieldProps{

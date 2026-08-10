@@ -123,6 +123,9 @@ func TestFormTableRowEditorActionsSizeToTranslatedLabels(t *testing.T) {
 		Width: 700, Height: 400, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.Theme{},
 	}).(woxwidget.Flex)
 	footer := editor.Children[len(editor.Children)-1].(woxwidget.Container)
+	if footer.Height != FormTableRowEditorFooterHeight || footer.Padding.Top != 8 {
+		t.Fatalf("row editor footer = height %v padding %+v, want action height plus top spacing only", footer.Height, footer.Padding)
+	}
 	actions := footer.Child.(woxwidget.Align)
 	if actions.Horizontal != 1 || actions.Width != 700 {
 		t.Fatalf("row editor actions alignment = horizontal %v width %v", actions.Horizontal, actions.Width)

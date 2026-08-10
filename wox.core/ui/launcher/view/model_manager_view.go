@@ -215,15 +215,15 @@ func modelManagerAlpha(color woxui.Color, alpha uint8) woxui.Color {
 func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget.Widget {
 	innerWidth := max(float32(0), width-32)
 	headerHeight := float32(54)
-	engineHeight := float32(72)
-	footerHeight := float32(58)
+	engineHeight := float32(64)
+	footerHeight := float32(50)
 	statusHeight := float32(28)
 	viewportHeight := max(float32(82), height-headerHeight-engineHeight-footerHeight-statusHeight-32)
 	header := woxwidget.Container{Width: innerWidth, Height: headerHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
 		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 20, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
 		woxwidget.Text{Value: "Core owns model files and downloads; this portable page owns selection and progress state.", Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ActionHeader},
 	}}}
-	engine := woxwidget.Container{Width: innerWidth, Height: engineHeight - 8, Radius: 8, Color: props.Theme.QueryBackground, Padding: woxwidget.Insets{Left: 14, Top: 10, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
+	engine := woxwidget.Container{Width: innerWidth, Height: engineHeight, Radius: 8, Color: props.Theme.QueryBackground, Padding: woxwidget.Insets{Left: 14, Top: 10, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		woxwidget.Expanded{Child: woxwidget.Container{Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 5, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: "Runtime engine", Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText},
 			woxwidget.TextBlock{Value: props.EngineLabel, Height: 22, MaxLines: 1, Style: woxui.TextStyle{Size: 9}, Color: props.Theme.ActionHeader},

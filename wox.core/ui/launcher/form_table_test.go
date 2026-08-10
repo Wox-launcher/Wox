@@ -140,6 +140,26 @@ func TestFormTableAppPickerLeavesSearchInputToHost(t *testing.T) {
 	}
 }
 
+func TestFormTableEmojiPickerLeavesSearchInputToHost(t *testing.T) {
+	definition := formDefinition{Type: "table", Value: formDefinitionValue{Key: "TrayQueries"}}
+	form := &formState{formFieldsState: newFormFieldsState([]formDefinition{definition}, map[string]string{"TrayQueries": "[]"}, true)}
+	deps := CommonDeps{}
+	app := &App{
+		form: form, aiSettings: newAISettingsController(deps), pluginSettings: newPluginSettingsController(deps), hotkeySettings: newHotkeySettingsController(deps),
+		launcherTableEditor: &formTableEditorState{target: &form.formFieldsState, emojiPicker: &formTableEmojiPickerState{}, deletePending: -1},
+	}
+	key := woxui.KeyEvent{Key: "a", Down: true}
+	if app.onFormTableKey(key) {
+		t.Fatal("printable keys should reach the emoji picker search field")
+	}
+	if app.onFormTableTextInput(woxui.TextInputEvent{Kind: woxui.TextInputCommit, Text: "emoji"}) {
+		t.Fatal("committed text should reach the emoji picker search field")
+	}
+	if !app.onFormTableKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.launcherTableEditor.emojiPicker != nil {
+		t.Fatal("Escape should close the emoji picker")
+	}
+}
+
 func TestQueryHotkeyPresetsMatchFlutterDefaults(t *testing.T) {
 	fields := newFormFieldsState([]formDefinition{
 		{Type: "textbox", Value: formDefinitionValue{Key: "Name"}},

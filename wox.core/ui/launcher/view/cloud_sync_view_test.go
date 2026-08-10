@@ -164,12 +164,12 @@ func TestCloudPlanTooltipOverlayOccupiesOnlyItsVisiblePanel(t *testing.T) {
 func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 	selectedIcon := &woxui.Image{}
 	dialog := CloudPluginExclusionDialog(CloudPluginExclusionDialogProps{
-		Width: 1200, Height: 800, PanelWidth: 648, PanelHeight: 170, FieldLabel: "Plugin", Selected: "plugin-a", SelectedName: "Plugin A",
+		Width: 1200, Height: 800, PanelWidth: 648, PanelHeight: CloudPluginExclusionDialogHeight, FieldLabel: "Plugin", Selected: "plugin-a", SelectedName: "Plugin A",
 		SelectedIcon: selectedIcon, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.Theme{}, OnCancel: func() {}, OnSave: func() {},
 	}).(woxwidget.Stateful)
 	props := dialog.Widget.(woxcomponent.DialogProps)
-	if props.Width != 648 || props.Height != 170 || props.Radius != 20 {
-		t.Fatalf("dialog geometry = %vx%v radius %v, want 648x170 radius 20", props.Width, props.Height, props.Radius)
+	if props.Width != 648 || props.Height != CloudPluginExclusionDialogHeight || props.Radius != 20 {
+		t.Fatalf("dialog geometry = %vx%v radius %v, want 648x%v radius 20", props.Width, props.Height, props.Radius, CloudPluginExclusionDialogHeight)
 	}
 	if props.Padding != (woxwidget.Insets{Left: 24, Top: 24, Right: 24, Bottom: 24}) {
 		t.Fatalf("dialog padding = %+v, want 24px all around", props.Padding)
@@ -179,6 +179,10 @@ func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 		t.Fatalf("dialog content = %d children gap %v, want field/actions with 12px gap", len(child.Children), child.Gap)
 	}
 	field := child.Children[0].(woxwidget.Container)
+	actions := child.Children[1].(woxwidget.Align)
+	if field.Height+child.Gap+actions.Height+props.Padding.Top+props.Padding.Bottom != props.Height {
+		t.Fatal("plugin exclusion dialog should not reserve extra space below its actions")
+	}
 	fieldLayout := field.Child.(woxwidget.Flex)
 	selectSemantics := fieldLayout.Children[1].(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	selectFocus := selectSemantics.Child.(woxwidget.Focusable)
@@ -199,7 +203,7 @@ func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 	}
 
 	choiceDialog := CloudPluginExclusionDialog(CloudPluginExclusionDialogProps{
-		Width: 1200, Height: 800, PanelWidth: 648, PanelHeight: 170, FieldLabel: "Plugin", Selected: "plugin-a", SelectedName: "Plugin A", ChoiceOpen: true,
+		Width: 1200, Height: 800, PanelWidth: 648, PanelHeight: CloudPluginExclusionDialogHeight, FieldLabel: "Plugin", Selected: "plugin-a", SelectedName: "Plugin A", ChoiceOpen: true,
 		Choices: []SettingsChoice{{Value: "plugin-a", Label: "Plugin A"}}, Theme: woxcomponent.Theme{}, OnCancel: func() {}, OnSave: func() {},
 	}).(woxwidget.Stack)
 	if len(choiceDialog.Children) != 2 {

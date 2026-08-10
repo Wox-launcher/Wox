@@ -457,6 +457,12 @@ func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 	if len(actions.Children) != 2 {
 		t.Fatalf("header action count = %d, want template and add", len(actions.Children))
 	}
+	for index, action := range actions.Children {
+		button := action.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+		if button.Padding.Left != 12 || button.Padding.Right != 12 {
+			t.Fatalf("header action %d horizontal padding = %+v, want shared compact padding", index, button.Padding)
+		}
+	}
 }
 
 func TestFormTableInlineHeaderAlignsAddButtonWithTableRightEdge(t *testing.T) {
