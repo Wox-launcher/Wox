@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wox CPU Debug"
+  short_description: "Measure CPU hotspots without memory regressions"
+  default_prompt: "Use $wox-cpu-debug to measure and optimize Wox CPU hotspots without materially increasing Go or native memory."
