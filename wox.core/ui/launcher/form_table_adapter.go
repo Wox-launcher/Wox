@@ -525,6 +525,7 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 			NormalLabel: a.translate("i18n:ui_query_hotkeys_preset_normal"), WebPanelLabel: a.translate("i18n:ui_query_hotkeys_preset_web_panel"),
 			SilentLabel: a.translate("i18n:ui_query_hotkeys_preset_silent"), CustomLabel: a.translate("i18n:ui_query_hotkeys_preset_custom"),
 			DemoIcon: demoIcon, DemoLabel: a.translate("i18n:ui_demo_preview"), Theme: palette.componentTheme(), OnSelect: a.applyQueryHotkeyPreset,
+			OnOpenLink: a.openAboutLink,
 			OnDemoHover: func(preset string, inside bool, anchor woxui.Rect) {
 				a.setSettingsDemoHover("query-hotkey-preset-"+preset, inside, anchor)
 			},

@@ -94,6 +94,8 @@ type MarkdownProps struct {
 	ResolveImage     func(source string) (*woxui.Image, string)
 	OnOpenImage      func(source string)
 	OnOpenLink       func(target string)
+	// InlineTrailing appends a control to the final top-level inline paragraph.
+	InlineTrailing woxwidget.Widget
 }
 
 // ParseMarkdown parses CommonMark with the GitHub-flavored extensions used by Wox previews.
@@ -111,7 +113,14 @@ func WoxMarkdown(props MarkdownProps) woxwidget.Widget {
 	if blockGap <= 0 {
 		blockGap = 12
 	}
-	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: blockGap, Children: renderMarkdownBlocks(props.Document.blocks, props, width, &linkIndex)}
+	blocks := renderMarkdownBlocks(props.Document.blocks, props, width, &linkIndex)
+	if props.InlineTrailing != nil && len(blocks) > 0 {
+		if paragraph, ok := blocks[len(blocks)-1].(woxwidget.Wrap); ok {
+			paragraph.Children = append(paragraph.Children, props.InlineTrailing)
+			blocks[len(blocks)-1] = paragraph
+		}
+	}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: blockGap, Children: blocks}
 }
 
 // normalizeMarkdownImages preserves Wox's wiki-image shorthand before CommonMark parsing.

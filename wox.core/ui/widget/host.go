@@ -894,6 +894,12 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 			h.invalidate()
 		}
 	}
+	if event.Kind == woxui.PointerDown && event.Button == woxui.PointerButtonSecondary {
+		if target != nil && target.gesture != nil && target.gesture.onSecondaryTapDown != nil {
+			target.gesture.onSecondaryTapDown()
+			h.invalidate()
+		}
+	}
 	pressed := h.nodes[h.pressed]
 	if event.Kind == woxui.PointerMove && pressed != nil && pressed.gesture != nil && pressed.gesture.onDragStart != nil && !h.dragging && h.selecting == 0 {
 		deltaX := event.Position.X - h.pressedAt.X

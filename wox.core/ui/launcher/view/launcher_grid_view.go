@@ -11,16 +11,17 @@ import (
 
 // LauncherGridResult contains one resolved grid result and its controller callbacks.
 type LauncherGridResult struct {
-	ID          string
-	Title       string
-	Group       bool
-	Selected    bool
-	Hovered     bool
-	Icon        *woxui.Image
-	OnHover     func(bool) `boundary:"stable"`
-	OnSelect    func()     `boundary:"stable"`
-	OnActivate  func()     `boundary:"stable"`
-	OnDragStart func()     `boundary:"stable"`
+	ID                 string
+	Title              string
+	Group              bool
+	Selected           bool
+	Hovered            bool
+	Icon               *woxui.Image
+	OnHover            func(bool) `boundary:"stable"`
+	OnSelect           func()     `boundary:"stable"`
+	OnSecondaryTapDown func()     `boundary:"stable"`
+	OnActivate         func()     `boundary:"stable"`
+	OnDragStart        func()     `boundary:"stable"`
 }
 
 // LauncherGridProps contains the normalized grid geometry and resolved result visuals.
@@ -149,8 +150,9 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 				result.OnHover(inside)
 			}
 		},
-		OnTap:       result.OnSelect,
-		OnDragStart: result.OnDragStart,
+		OnTap:              result.OnSelect,
+		OnSecondaryTapDown: result.OnSecondaryTapDown,
+		OnDragStart:        result.OnDragStart,
 		OnDoubleTap: func() {
 			if result.OnSelect != nil {
 				result.OnSelect()

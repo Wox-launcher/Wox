@@ -975,6 +975,24 @@ func TestHostReportsGesturePressWithoutChangingTap(t *testing.T) {
 	}
 }
 
+func TestHostSecondaryTapDownDoesNotActivatePrimaryTap(t *testing.T) {
+	secondaryTaps := 0
+	primaryTaps := 0
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return Gesture{
+			ID: "result", OnTap: func() { primaryTaps++ }, OnSecondaryTapDown: func() { secondaryTaps++ },
+			Child: Container{Width: 40, Height: 20},
+		}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonSecondary, Position: woxui.Point{X: 5, Y: 5}})
+	if secondaryTaps != 1 || primaryTaps != 0 {
+		t.Fatalf("secondary taps = %d, primary taps = %d, want 1/0", secondaryTaps, primaryTaps)
+	}
+}
+
 func TestHostUpdatesPointerCursorForHoveredGesture(t *testing.T) {
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
 		return Gesture{ID: "input", Cursor: woxui.PointerCursorText, Child: Container{Width: 100, Height: 20}}

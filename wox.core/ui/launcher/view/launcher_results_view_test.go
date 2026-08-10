@@ -44,6 +44,22 @@ func TestLauncherResultsExposeCompletionState(t *testing.T) {
 	}
 }
 
+func TestLauncherResultWiresSecondaryTap(t *testing.T) {
+	tapped := false
+	result := LauncherResultsView(LauncherResultsProps{
+		Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
+		Items: []LauncherResultItem{{ID: "result", Title: "Result", OnSecondaryTapDown: func() { tapped = true }}},
+	}).(woxwidget.Semantics)
+	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	gesture := row.Child.(woxwidget.Gesture)
+
+	gesture.OnSecondaryTapDown()
+	if !tapped {
+		t.Fatal("secondary tap callback was not wired to the result row")
+	}
+}
+
 func TestLauncherResultWithoutSubtitleCentersTitleVertically(t *testing.T) {
 	result := LauncherResultsView(LauncherResultsProps{
 		Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,

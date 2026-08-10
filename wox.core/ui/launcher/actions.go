@@ -274,6 +274,14 @@ func (a *App) toggleActionPanel() {
 	_ = a.window.Invalidate()
 }
 
+// openResultActionPanel selects the pointer target before opening its actions.
+func (a *App) openResultActionPanel(index int) {
+	a.selectResult(index)
+	if !a.actionPanel {
+		a.toggleActionPanel()
+	}
+}
+
 // hideActionPanel clears filter state and returns keyboard ownership to the query editor.
 func (a *App) hideActionPanel() bool {
 	changed := a.resetActionPanelLocked()

@@ -30,6 +30,18 @@ func TestLauncherGridSelectedResultUsesFlutterFocusFrame(t *testing.T) {
 	}
 }
 
+func TestLauncherGridResultWiresSecondaryTap(t *testing.T) {
+	tapped := false
+	result := launcherGridResultView(LauncherGridResult{ID: "wallpaper", OnSecondaryTapDown: func() { tapped = true }}, LauncherGridProps{
+		CellWidth: 120, CellHeight: 110, VisualWidth: 100, VisualHeight: 70,
+	}).(woxwidget.Gesture)
+
+	result.OnSecondaryTapDown()
+	if !tapped {
+		t.Fatal("secondary tap callback was not wired to the grid result")
+	}
+}
+
 func TestLauncherGridImageUsesFlutterFit(t *testing.T) {
 	icon, err := woxui.NewImage(image.NewRGBA(image.Rect(0, 0, 200, 100)))
 	if err != nil {

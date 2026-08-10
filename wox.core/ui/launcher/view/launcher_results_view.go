@@ -50,20 +50,21 @@ type LauncherResultTail struct {
 
 // LauncherResultItem contains one visible list result and its controller callbacks.
 type LauncherResultItem struct {
-	ID          string
-	Title       string
-	Subtitle    string
-	Group       bool
-	Selected    bool
-	Hovered     bool
-	Icon        *woxui.Image
-	Tails       []LauncherResultTail
-	TailWidth   float32
-	TailHeight  float32
-	OnHover     func(bool) `boundary:"stable"`
-	OnSelect    func()     `boundary:"stable"`
-	OnActivate  func()     `boundary:"stable"`
-	OnDragStart func()     `boundary:"stable"`
+	ID                 string
+	Title              string
+	Subtitle           string
+	Group              bool
+	Selected           bool
+	Hovered            bool
+	Icon               *woxui.Image
+	Tails              []LauncherResultTail
+	TailWidth          float32
+	TailHeight         float32
+	OnHover            func(bool) `boundary:"stable"`
+	OnSelect           func()     `boundary:"stable"`
+	OnSecondaryTapDown func()     `boundary:"stable"`
+	OnActivate         func()     `boundary:"stable"`
+	OnDragStart        func()     `boundary:"stable"`
 }
 
 // LauncherResultsProps contains the prepared viewport slice and result-list geometry.
@@ -304,8 +305,9 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 				item.OnHover(inside)
 			}
 		},
-		OnTap:       item.OnSelect,
-		OnDragStart: item.OnDragStart,
+		OnTap:              item.OnSelect,
+		OnSecondaryTapDown: item.OnSecondaryTapDown,
+		OnDragStart:        item.OnDragStart,
 		OnDoubleTap: func() {
 			if item.OnSelect != nil {
 				item.OnSelect()

@@ -1294,23 +1294,24 @@ func fittingRunePrefix(window textMeasurer, runes []rune, style woxui.TextStyle,
 }
 
 type gesture struct {
-	cursor        woxui.PointerCursor
-	id            string
-	onHover       func(bool)
-	onHoverAt     func(bool, woxui.Rect)
-	onPressChange func(bool)
-	onTap         func()
-	onDoubleTap   func()
-	onDoubleTapAt func(woxui.Point)
-	onTripleTapAt func(woxui.Point)
-	onTapAt       func(woxui.Point)
-	onTapBounds   func(woxui.Rect)
-	onDragStart   func()
-	onPanStart    func(woxui.Point)
-	onPanUpdate   func(woxui.Point)
-	onPanEnd      func()
-	onScroll      func(woxui.Point)
-	onPointer     func(woxui.PointerEvent) bool
+	cursor             woxui.PointerCursor
+	id                 string
+	onHover            func(bool)
+	onHoverAt          func(bool, woxui.Rect)
+	onPressChange      func(bool)
+	onTap              func()
+	onSecondaryTapDown func()
+	onDoubleTap        func()
+	onDoubleTapAt      func(woxui.Point)
+	onTripleTapAt      func(woxui.Point)
+	onTapAt            func(woxui.Point)
+	onTapBounds        func(woxui.Rect)
+	onDragStart        func()
+	onPanStart         func(woxui.Point)
+	onPanUpdate        func(woxui.Point)
+	onPanEnd           func()
+	onScroll           func(woxui.Point)
+	onPointer          func(woxui.PointerEvent) bool
 	// onScrollHandled reports whether this gesture consumed the delta so an
 	// ancestor scroll view can continue at nested-scroll boundaries.
 	onScrollHandled func(woxui.Point) bool
@@ -1330,16 +1331,18 @@ type Gesture struct {
 	// OnPressChange reports primary-button press and release without changing tap activation.
 	OnPressChange func(pressed bool)
 	OnTap         func()
-	OnDoubleTap   func()
-	OnDoubleTapAt func(position woxui.Point)
-	OnTripleTapAt func(position woxui.Point)
-	OnTapAt       func(position woxui.Point)
-	OnTapBounds   func(bounds woxui.Rect)
-	OnDragStart   func()
-	OnPanStart    func(position woxui.Point)
-	OnPanUpdate   func(position woxui.Point)
-	OnPanEnd      func()
-	OnScroll      func(delta woxui.Point)
+	// OnSecondaryTapDown reports a secondary-button press inside this gesture.
+	OnSecondaryTapDown func()
+	OnDoubleTap        func()
+	OnDoubleTapAt      func(position woxui.Point)
+	OnTripleTapAt      func(position woxui.Point)
+	OnTapAt            func(position woxui.Point)
+	OnTapBounds        func(bounds woxui.Rect)
+	OnDragStart        func()
+	OnPanStart         func(position woxui.Point)
+	OnPanUpdate        func(position woxui.Point)
+	OnPanEnd           func()
+	OnScroll           func(delta woxui.Point)
 	// OnPointer handles the complete pointer stream in local coordinates.
 	OnPointer func(event woxui.PointerEvent) bool
 	// OnScrollHandled returns false to pass an unconsumed delta to the nearest
@@ -1367,7 +1370,7 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 	}
 	target.kind = "gesture"
 	target.gesture = &gesture{
-		id: w.ID, cursor: w.Cursor, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onPressChange: w.OnPressChange, onTap: w.OnTap, onDoubleTap: w.OnDoubleTap,
+		id: w.ID, cursor: w.Cursor, onHover: w.OnHover, onHoverAt: w.OnHoverAt, onPressChange: w.OnPressChange, onTap: w.OnTap, onSecondaryTapDown: w.OnSecondaryTapDown, onDoubleTap: w.OnDoubleTap,
 		onDoubleTapAt: w.OnDoubleTapAt, onTripleTapAt: w.OnTripleTapAt, onTapAt: w.OnTapAt,
 		onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onPanStart: w.OnPanStart, onPanUpdate: w.OnPanUpdate, onPanEnd: w.OnPanEnd,
 		onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled, onPointer: w.OnPointer,

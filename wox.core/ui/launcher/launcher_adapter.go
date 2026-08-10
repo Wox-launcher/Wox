@@ -762,7 +762,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 			Icon: a.imageForSize(result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale)), Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
-			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnActivate: func() { a.activateResult(index) },
+			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnSecondaryTapDown: func() { a.openResultActionPanel(index) }, OnActivate: func() { a.activateResult(index) },
 			OnDragStart: func() { a.startResultDrag(index) },
 		})
 	}

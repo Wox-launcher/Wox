@@ -1328,6 +1328,7 @@ type QueryHotkeyEditorHeaderProps struct {
 	Theme         woxcomponent.Theme
 	OnSelect      func(string)
 	OnDemoHover   func(string, bool, woxui.Rect)
+	OnOpenLink    func(string)
 }
 
 // QueryHotkeyEditorHeader builds the dedicated title, preset selector, and active preset description.
@@ -1342,27 +1343,28 @@ func QueryHotkeyEditorHeader(props QueryHotkeyEditorHeaderProps) woxwidget.Widge
 		if item.id == props.Selected {
 			variant = woxcomponent.ButtonSelected
 		}
-		demoIcon := props.DemoIcon
-		if item.id == "custom" {
-			demoIcon = nil
-		}
 		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: "query-hotkey-preset-" + item.id, Label: item.label, Width: buttonWidth, Height: 38, Radius: 8, FontSize: 12,
 			Variant: variant, OnTap: func() { props.OnSelect(item.id) }, Theme: props.Theme,
-			TrailingIcon:  demoIcon,
-			TrailingLabel: props.DemoLabel,
-			OnTrailingHoverAt: func(inside bool, bounds woxui.Rect) {
-				if item.id != "custom" && props.OnDemoHover != nil {
-					props.OnDemoHover(item.id, inside, bounds)
-				}
-			},
 		}))
+	}
+	var demo woxwidget.Widget
+	if props.Selected != "custom" && props.DemoIcon != nil {
+		demo = woxwidget.Semantics{
+			AutomationID: "query-hotkey-preset-demo", Role: woxui.AccessibilityRoleButton, Label: props.DemoLabel,
+			Child: woxwidget.Gesture{ID: "query-hotkey-preset-demo", OnHoverAt: func(inside bool, bounds woxui.Rect) {
+				if props.OnDemoHover != nil {
+					props.OnDemoHover(props.Selected, inside, bounds)
+				}
+			}, Child: woxwidget.Container{Padding: woxwidget.Insets{Left: 6}, Child: woxwidget.Image{Source: props.DemoIcon, Width: 18, Height: 18}}},
+		}
 	}
 	return woxwidget.Container{Width: props.Width, Height: 122, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: props.Width, Height: 44, Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: formTableAlpha(props.Theme.ActionText, 240)}},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttons},
 		woxwidget.Container{Width: props.Width, Height: 40, Padding: woxwidget.Insets{Top: 9}, Child: woxcomponent.WoxMarkdown(woxcomponent.MarkdownProps{
 			ID: "query-hotkey-preset-description", Document: woxcomponent.ParseMarkdown(props.Description), Width: props.Width, Theme: props.Theme,
+			ExcludeLinkFocus: true, OnOpenLink: props.OnOpenLink, InlineTrailing: demo,
 		})},
 	}}}
 }

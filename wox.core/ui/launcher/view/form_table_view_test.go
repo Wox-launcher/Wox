@@ -145,10 +145,12 @@ func TestFormTableRowEditorActionsSizeToTranslatedLabels(t *testing.T) {
 func TestQueryHotkeyEditorHeaderUsesFourEqualPresets(t *testing.T) {
 	selected := ""
 	demoKind := ""
+	openedLink := ""
 	header := QueryHotkeyEditorHeader(QueryHotkeyEditorHeaderProps{
-		Width: 700, Title: "Add Query Hotkey", Selected: "normal", Description: "Open the launcher.",
+		Width: 700, Title: "Add Query Hotkey", Selected: "web-panel", Description: "Open the launcher. [Learn more](https://example.com)",
 		NormalLabel: "Normal", WebPanelLabel: "Preview", SilentLabel: "Silent", CustomLabel: "Custom",
 		DemoIcon: &woxui.Image{}, Theme: woxcomponent.Theme{}, OnSelect: func(value string) { selected = value },
+		OnOpenLink: func(target string) { openedLink = target },
 		OnDemoHover: func(value string, inside bool, _ woxui.Rect) {
 			if inside {
 				demoKind = value
@@ -165,15 +167,39 @@ func TestQueryHotkeyEditorHeaderUsesFourEqualPresets(t *testing.T) {
 	if selected != "web-panel" {
 		t.Fatalf("selected preset = %q", selected)
 	}
-	previewContent := preview.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
-	previewDemo := previewContent.Children[1].(woxwidget.Semantics).Child.(woxwidget.Gesture)
+	for _, button := range buttons.Children {
+		content := button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Align).Child
+		if _, hasTrailing := content.(woxwidget.Flex); hasTrailing {
+			t.Fatal("preset button should not contain a demo trigger")
+		}
+	}
+	description := content.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
+	paragraph := description.Children[0].(woxwidget.Wrap)
+	link := paragraph.Children[len(paragraph.Children)-2].(woxwidget.Semantics).Child.(woxwidget.Gesture)
+	link.OnTap()
+	if openedLink != "https://example.com" {
+		t.Fatalf("opened link = %q", openedLink)
+	}
+	previewDemo := paragraph.Children[len(paragraph.Children)-1].(woxwidget.Semantics).Child.(woxwidget.Gesture)
+	demoContainer := previewDemo.Child.(woxwidget.Container)
+	if demoContainer.Padding.Left != 6 {
+		t.Fatalf("demo leading gap = %.0f, want 6", demoContainer.Padding.Left)
+	}
 	previewDemo.OnHoverAt(true, woxui.Rect{})
 	if demoKind != "web-panel" {
 		t.Fatalf("demo preset = %q", demoKind)
 	}
-	custom := buttons.Children[3].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture)
-	if _, hasDemo := custom.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex); hasDemo {
-		t.Fatal("custom preset should not expose a demo trigger")
+}
+
+func TestQueryHotkeyEditorHeaderHidesDemoForCustomPreset(t *testing.T) {
+	header := QueryHotkeyEditorHeader(QueryHotkeyEditorHeaderProps{
+		Width: 700, Selected: "custom", Description: "Tune all options.", DemoIcon: &woxui.Image{}, Theme: woxcomponent.Theme{},
+	}).(woxwidget.Container)
+	content := header.Child.(woxwidget.Flex)
+	description := content.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
+	paragraph := description.Children[0].(woxwidget.Wrap)
+	if _, hasDemo := paragraph.Children[len(paragraph.Children)-1].(woxwidget.Semantics); hasDemo {
+		t.Fatal("custom preset should not append a demo trigger")
 	}
 }
 
