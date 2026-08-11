@@ -991,7 +991,7 @@ func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipClean
 				reportProgress("plugin_uninstall_progress_stopping_host")
 				plugin.Host.Stop(ctx)
 				reportProgress("plugin_uninstall_progress_retrying_removal")
-				removeErr = trash.MoveToTrash(plugin.PluginDirectory)
+				removeErr = moveToTrashWithRetry(ctx, plugin.PluginDirectory)
 				restartErr := GetPluginManager().RestartHostForRuntime(ctx, runtime, []string{plugin.Metadata.Id}, progressCallback)
 				if restartErr != nil {
 					logger.Error(ctx, fmt.Sprintf("failed to restart %s host while uninstalling plugin %s(%s): %s", runtime, plugin.Metadata.GetName(ctx), plugin.Metadata.Version, restartErr.Error()))
@@ -1028,4 +1028,36 @@ func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipClean
 	reportProgress("plugin_uninstall_progress_complete")
 
 	return nil
+}
+
+// moveToTrashWithRetry gives native runtime shutdown and Windows Shell time to release file handles.
+func moveToTrashWithRetry(ctx context.Context, pluginDirectory string) error {
+	const maxAttempts = 4
+	retryDelays := [...]time.Duration{
+		100 * time.Millisecond,
+		300 * time.Millisecond,
+		1 * time.Second,
+	}
+
+	var removeErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		removeErr = trash.MoveToTrash(pluginDirectory)
+		if removeErr == nil || attempt == maxAttempts {
+			return removeErr
+		}
+
+		delay := retryDelays[attempt-1]
+		logger.Warn(ctx, fmt.Sprintf("failed to move plugin directory %s to trash on attempt %d/%d: %s; retrying in %s", pluginDirectory, attempt, maxAttempts, removeErr, delay))
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return fmt.Errorf("trash retry canceled: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+
+	return removeErr
 }

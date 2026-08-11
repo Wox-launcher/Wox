@@ -69,9 +69,7 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 
 	time.Sleep(time.Second) // wait for host to start
 	if connectErr := w.startWebsocketServer(ctx, port); connectErr != nil {
-		if killErr := cmd.Process.Kill(); killErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to kill disconnected host process(%d): %s", w.getHostName(ctx), cmd.Process.Pid, killErr))
-		}
+		w.terminateHostProcess(ctx, cmd.Process)
 		startErr := fmt.Errorf("host process started but websocket connection failed: %w", connectErr)
 		w.setStartState(executablePath, startErr.Error())
 		return startErr
@@ -84,25 +82,38 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 
 func (w *WebsocketHost) StopHost(ctx context.Context) {
 	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> stopping host", w.getHostName(ctx)))
-	if w.hostProcess != nil {
-		var pid = w.hostProcess.Pid
-		killErr := w.hostProcess.Kill()
-		if killErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to kill host process(%d): %s", w.getHostName(ctx), pid, killErr))
-		} else {
-			util.GetLogger().Info(ctx, fmt.Sprintf("<%s> killed host process(%d)", w.getHostName(ctx), pid))
-		}
-	}
 	// Close the websocket client so its receive goroutine and reconnect loop give
 	// up instead of retrying a dead or replaced host process forever.
 	if w.ws != nil {
 		w.ws.Close(ctx)
+	}
+	if w.hostProcess != nil {
+		w.terminateHostProcess(ctx, w.hostProcess)
 	}
 	// Bug fix: StopHost used to leave the websocket client object in place, so
 	// status checks could briefly report a killed host as still connected. Clear
 	// local process state immediately; a fresh StartHost creates a new client.
 	w.hostProcess = nil
 	w.ws = nil
+}
+
+// terminateHostProcess kills a host and waits for Windows to release its file handles.
+func (w *WebsocketHost) terminateHostProcess(ctx context.Context, process *os.Process) {
+	if process == nil {
+		return
+	}
+
+	pid := process.Pid
+	killErr := process.Kill()
+	if killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+		util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to kill host process(%d): %s", w.getHostName(ctx), pid, killErr))
+		return
+	}
+	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> killed host process(%d)", w.getHostName(ctx), pid))
+
+	if _, waitErr := process.Wait(); waitErr != nil && !errors.Is(waitErr, os.ErrProcessDone) {
+		util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed waiting for host process(%d) to exit: %s", w.getHostName(ctx), pid, waitErr))
+	}
 }
 
 func (w *WebsocketHost) IsHostStarted(ctx context.Context) bool {

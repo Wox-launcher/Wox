@@ -4,6 +4,7 @@ package trash
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"unsafe"
 
@@ -39,6 +40,14 @@ func MoveToTrash(path string) error {
 	}
 
 	path = filepath.Clean(filepath.FromSlash(path))
+	absolutePath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("trash path resolve failed for %q: %w", path, err)
+	}
+	path = absolutePath
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("trash source %q is not accessible: %w", path, err)
+	}
 
 	pathUTF16, err := windows.UTF16FromString(path)
 	if err != nil {
@@ -53,9 +62,12 @@ func MoveToTrash(path string) error {
 		fFlags: fofAllowUndo | fofNoConfirmation | fofSilent,
 	}
 
+	if err := procSHFileOperationW.Find(); err != nil {
+		return fmt.Errorf("resolve SHFileOperationW: %w", err)
+	}
 	ret, _, _ := procSHFileOperationW.Call(uintptr(unsafe.Pointer(&op)))
 	if ret != 0 {
-		return fmt.Errorf("trash failed with code %d", ret)
+		return fmt.Errorf("trash failed for %q with SHFileOperationW code 0x%X", path, uint32(ret))
 	}
 	if op.fAnyOperationsAborted != 0 {
 		return fmt.Errorf("trash operation was aborted")
