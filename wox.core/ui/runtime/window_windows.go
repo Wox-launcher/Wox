@@ -23,28 +23,29 @@ import (
 )
 
 const (
-	windowClassName         = "WoxGoUIWindow"
-	windowCommandMessage    = win.WM_APP + 1
-	windowTextInputMessage  = win.WM_APP + 2
-	runtimeCallMessage      = win.WM_APP + 3
-	windowBlurGuardDuration = 300 * time.Millisecond
-	wsExNoRedirectionBitmap = 0x00200000
-	errorClassAlreadyExists = syscall.Errno(1410)
-	wmIMEStartComposition   = 0x010D
-	wmIMEEndComposition     = 0x010E
-	wmIMEComposition        = 0x010F
-	wmIMEChar               = 0x0286
-	wmGetObject             = 0x003D
-	gcsCompositionString    = 0x0008
-	gcsResultString         = 0x0800
-	cfsCandidatePosition    = 0x0040
-	unicodeNoCharacter      = 0xFFFF
-	wmMouseHorizontalWheel  = 0x020E
-	pointerScrollLine       = 40
-	dwmwaUseImmersiveDark   = 20
-	dwmwaWindowCorner       = 33
-	dwmwaSystemBackdrop     = 38
-	dwmWindowCornerRound    = 2
+	windowClassName          = "WoxGoUIWindow"
+	windowCommandMessage     = win.WM_APP + 1
+	windowTextInputMessage   = win.WM_APP + 2
+	runtimeCallMessage       = win.WM_APP + 3
+	windowBlurGuardDuration  = 300 * time.Millisecond
+	windowsRendererTrimDelay = 10 * time.Second
+	wsExNoRedirectionBitmap  = 0x00200000
+	errorClassAlreadyExists  = syscall.Errno(1410)
+	wmIMEStartComposition    = 0x010D
+	wmIMEEndComposition      = 0x010E
+	wmIMEComposition         = 0x010F
+	wmIMEChar                = 0x0286
+	wmGetObject              = 0x003D
+	gcsCompositionString     = 0x0008
+	gcsResultString          = 0x0800
+	cfsCandidatePosition     = 0x0040
+	unicodeNoCharacter       = 0xFFFF
+	wmMouseHorizontalWheel   = 0x020E
+	pointerScrollLine        = 40
+	dwmwaUseImmersiveDark    = 20
+	dwmwaWindowCorner        = 33
+	dwmwaSystemBackdrop      = 38
+	dwmWindowCornerRound     = 2
 	// DWM_SYSTEMBACKDROP_TYPE starts with AUTO=0 and NONE=1; keep these material values aligned with the Windows SDK.
 	dwmSystemBackdropNone    = 1
 	dwmSystemBackdropMica    = 2
@@ -126,6 +127,7 @@ const (
 	windowCommandWebViewNavigationState
 	windowCommandShowNativeFilePreview
 	windowCommandHideNativeFilePreview
+	windowCommandTrimRenderer
 	windowCommandClose
 )
 
@@ -178,6 +180,7 @@ type platformWindow struct {
 	done       chan struct{}
 
 	renderer                    *nativeRenderer
+	rendererTrimTimer           *time.Timer
 	webView                     *webviewruntime.Controller
 	nativeFilePreview           *windowsFilePreview
 	nativeFilePreviewGeneration uint64
@@ -1471,6 +1474,11 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		w.nativeFilePreview.destroy()
 		w.nativeFilePreview = nil
 		return windowCommandResult{err: err}
+	case windowCommandTrimRenderer:
+		if w.focus.visible || w.renderer == nil {
+			return windowCommandResult{}
+		}
+		return windowCommandResult{err: w.renderer.trim()}
 	case windowCommandClose:
 		w.hideNative()
 		win.DestroyWindow(w.hwnd)
@@ -1658,6 +1666,10 @@ func monitorScale(monitor win.HMONITOR) float32 {
 
 // showNative combines show, foreground activation, and keyboard focus into one epoch.
 func (w *platformWindow) showNative() FocusEpoch {
+	if w.rendererTrimTimer != nil {
+		w.rendererTrimTimer.Stop()
+		w.rendererTrimTimer = nil
+	}
 	if w.focus.active {
 		// Starting a new focus epoch is not a real focus loss.
 		w.focus.active = false
@@ -1729,6 +1741,13 @@ func (w *platformWindow) hideNative() {
 	w.focus.previousForeground = 0
 	w.setActive(false)
 	win.ShowWindow(w.hwnd, win.SW_HIDE)
+	_ = w.renderer.clearImageCache()
+	if w.rendererTrimTimer != nil {
+		w.rendererTrimTimer.Stop()
+	}
+	w.rendererTrimTimer = time.AfterFunc(windowsRendererTrimDelay, func() {
+		_ = w.call(windowCommand{kind: windowCommandTrimRenderer})
+	})
 
 	if shouldRestore && previous != 0 {
 		win.BringWindowToTop(previous)
@@ -1876,6 +1895,10 @@ func windowsUpdateRect(hwnd win.HWND) (win.RECT, bool) {
 
 // destroyNativeResources releases GPU state before invalidating the HWND-backed command queue.
 func (w *platformWindow) destroyNativeResources() {
+	if w.rendererTrimTimer != nil {
+		w.rendererTrimTimer.Stop()
+		w.rendererTrimTimer = nil
+	}
 	if w.nativeFilePreview != nil {
 		w.nativeFilePreview.destroy()
 		w.nativeFilePreview = nil

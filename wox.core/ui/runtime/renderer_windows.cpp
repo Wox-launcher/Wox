@@ -7,14 +7,23 @@
 #include <dcomp.h>
 #include <dwrite.h>
 #include <dxgi1_2.h>
+#include <dxgi1_3.h>
 
 #include <algorithm>
 #include <cmath>
 #include <new>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "renderer_windows.h"
+
+struct CachedImageBitmap {
+  uint64_t image_id = 0;
+  uint64_t byte_size = 0;
+  uint64_t last_used = 0;
+  ID2D1Bitmap1 *bitmap = nullptr;
+};
 
 struct WoxRenderer {
   ID3D11Device *device = nullptr;
@@ -32,6 +41,9 @@ struct WoxRenderer {
   ID2D1Bitmap1 *overlay_target_bitmap = nullptr;
   ID2D1Bitmap1 *cached_large_image_bitmap = nullptr;
   uint64_t cached_large_image_id = 0;
+  std::vector<CachedImageBitmap> cached_image_bitmaps;
+  uint64_t cached_image_bitmap_bytes = 0;
+  uint64_t cached_image_use_serial = 0;
   ID2D1SolidColorBrush *brush = nullptr;
   IDWriteFactory *dwrite_factory = nullptr;
 	std::wstring font_family = L"Segoe UI";
@@ -45,6 +57,9 @@ struct WoxRenderer {
   RECT present_dirty_rect = {};
   bool present_dirty = false;
   bool cache_large_images = false;
+  bool embedded_surface_overlay_enabled = false;
+  uint32_t width = 1;
+  uint32_t height = 1;
 };
 
 static std::mutex shared_d3d_device_mutex;
@@ -140,6 +155,120 @@ static HRESULT create_target_bitmap(WoxRenderer *renderer, IDXGISwapChain1 *swap
   }
 
   return S_OK;
+}
+
+static void clear_cached_image_bitmaps(WoxRenderer *renderer) {
+  for (CachedImageBitmap &entry : renderer->cached_image_bitmaps) {
+    release_com(&entry.bitmap);
+  }
+  renderer->cached_image_bitmaps.clear();
+  renderer->cached_image_bitmap_bytes = 0;
+}
+
+static ID2D1Bitmap1 *find_cached_image_bitmap(WoxRenderer *renderer, uint64_t image_id) {
+  for (CachedImageBitmap &entry : renderer->cached_image_bitmaps) {
+    if (entry.image_id == image_id) {
+      entry.last_used = ++renderer->cached_image_use_serial;
+      return entry.bitmap;
+    }
+  }
+  return nullptr;
+}
+
+// The launcher normally shows fewer than 16 icons. These limits absorb repaint bursts without
+// turning decoded source images into a second, unbounded GPU cache.
+static bool cache_image_bitmap(WoxRenderer *renderer, uint64_t image_id, uint64_t byte_size, ID2D1Bitmap1 *bitmap) {
+  constexpr size_t max_cached_image_count = 32;
+  constexpr uint64_t max_cached_image_entry_bytes = 1ULL * 1024ULL * 1024ULL;
+  constexpr uint64_t max_cached_image_bytes = 8ULL * 1024ULL * 1024ULL;
+  if (image_id == 0 || bitmap == nullptr || byte_size > max_cached_image_entry_bytes) {
+    return false;
+  }
+
+  while (!renderer->cached_image_bitmaps.empty() &&
+         (renderer->cached_image_bitmaps.size() >= max_cached_image_count ||
+          renderer->cached_image_bitmap_bytes + byte_size > max_cached_image_bytes)) {
+    auto oldest = std::min_element(
+        renderer->cached_image_bitmaps.begin(), renderer->cached_image_bitmaps.end(),
+        [](const CachedImageBitmap &left, const CachedImageBitmap &right) {
+          return left.last_used < right.last_used;
+        });
+    renderer->cached_image_bitmap_bytes -= oldest->byte_size;
+    release_com(&oldest->bitmap);
+    renderer->cached_image_bitmaps.erase(oldest);
+  }
+
+  if (renderer->cached_image_bitmap_bytes + byte_size > max_cached_image_bytes) {
+    return false;
+  }
+  renderer->cached_image_bitmaps.push_back(CachedImageBitmap{
+      image_id,
+      byte_size,
+      ++renderer->cached_image_use_serial,
+      bitmap,
+  });
+  renderer->cached_image_bitmap_bytes += byte_size;
+  return true;
+}
+
+static DXGI_SWAP_CHAIN_DESC1 composition_swap_chain_description(uint32_t width, uint32_t height) {
+  DXGI_SWAP_CHAIN_DESC1 description = {};
+  description.Width = width == 0 ? 1 : width;
+  description.Height = height == 0 ? 1 : height;
+  description.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  description.SampleDesc.Count = 1;
+  description.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+  description.BufferCount = 2;
+  description.Scaling = DXGI_SCALING_STRETCH;
+  description.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+  description.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+  return description;
+}
+
+// The overlay is uncommon, so keep its double-buffered surface lazy while preserving its visual layer.
+static HRESULT ensure_embedded_surface_overlay(WoxRenderer *renderer) {
+  if (!renderer->embedded_surface_overlay_enabled || renderer->overlay_visual == nullptr) {
+    return E_UNEXPECTED;
+  }
+  if (renderer->overlay_swap_chain != nullptr && renderer->overlay_target_bitmap != nullptr) {
+    return S_OK;
+  }
+
+  IDXGIDevice *dxgi_device = nullptr;
+  IDXGIAdapter *adapter = nullptr;
+  IDXGIFactory2 *factory = nullptr;
+  HRESULT result = renderer->device->QueryInterface(IID_IDXGIDevice, reinterpret_cast<void **>(&dxgi_device));
+  if (SUCCEEDED(result)) {
+    result = dxgi_device->GetAdapter(&adapter);
+  }
+  if (SUCCEEDED(result)) {
+    result = adapter->GetParent(IID_IDXGIFactory2, reinterpret_cast<void **>(&factory));
+  }
+  if (SUCCEEDED(result)) {
+    const DXGI_SWAP_CHAIN_DESC1 description = composition_swap_chain_description(renderer->width, renderer->height);
+    result = factory->CreateSwapChainForComposition(renderer->device, &description, nullptr, &renderer->overlay_swap_chain);
+  }
+  if (SUCCEEDED(result)) {
+    result = create_target_bitmap(renderer, renderer->overlay_swap_chain, &renderer->overlay_target_bitmap);
+  }
+  if (SUCCEEDED(result)) {
+    result = renderer->overlay_visual->SetContent(renderer->overlay_swap_chain);
+  }
+  if (SUCCEEDED(result)) {
+    result = renderer->composition_device->Commit();
+  }
+
+  release_com(&factory);
+  release_com(&adapter);
+  release_com(&dxgi_device);
+  if (FAILED(result)) {
+    if (renderer->overlay_visual != nullptr) {
+      renderer->overlay_visual->SetContent(nullptr);
+    }
+    release_com(&renderer->overlay_target_bitmap);
+    release_com(&renderer->overlay_swap_chain);
+  }
+  return result;
 }
 
 static std::wstring utf8_to_wide(const char *text) {
@@ -276,6 +405,7 @@ static void destroy_renderer(WoxRenderer *renderer) {
     renderer->d2d_context->SetTarget(nullptr);
   }
   release_com(&renderer->brush);
+  clear_cached_image_bitmaps(renderer);
   release_com(&renderer->cached_large_image_bitmap);
   release_com(&renderer->overlay_target_bitmap);
   release_com(&renderer->target_bitmap);
@@ -304,6 +434,9 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
   // Screenshot windows disable embedded surfaces and repeatedly draw one virtual-desktop image.
   // Retaining that large source bitmap avoids queuing another full GPU upload for every setup frame.
   renderer->cache_large_images = enable_embedded_surface_overlay == 0;
+  renderer->embedded_surface_overlay_enabled = enable_embedded_surface_overlay != 0;
+  renderer->width = width == 0 ? 1 : width;
+  renderer->height = height == 0 ? 1 : height;
 
   HRESULT result = acquire_shared_d3d_device(&renderer->device);
   if (FAILED(result)) {
@@ -335,22 +468,10 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
     result = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown **>(&renderer->dwrite_factory));
   }
 
-  DXGI_SWAP_CHAIN_DESC1 swap_chain_description = {};
-  swap_chain_description.Width = width == 0 ? 1 : width;
-  swap_chain_description.Height = height == 0 ? 1 : height;
-  swap_chain_description.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-  swap_chain_description.SampleDesc.Count = 1;
-  swap_chain_description.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-  swap_chain_description.BufferCount = 2;
-  swap_chain_description.Scaling = DXGI_SCALING_STRETCH;
-  swap_chain_description.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-  swap_chain_description.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+  const DXGI_SWAP_CHAIN_DESC1 swap_chain_description = composition_swap_chain_description(width, height);
 
   if (SUCCEEDED(result)) {
     result = dxgi_factory->CreateSwapChainForComposition(renderer->device, &swap_chain_description, nullptr, &renderer->swap_chain);
-  }
-  if (SUCCEEDED(result) && enable_embedded_surface_overlay != 0) {
-    result = dxgi_factory->CreateSwapChainForComposition(renderer->device, &swap_chain_description, nullptr, &renderer->overlay_swap_chain);
   }
   if (SUCCEEDED(result)) {
     result = DCompositionCreateDevice(dxgi_device, __uuidof(IDCompositionDevice), reinterpret_cast<void **>(&renderer->composition_device));
@@ -364,19 +485,16 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
   if (SUCCEEDED(result)) {
     result = renderer->composition_device->CreateVisual(&renderer->composition_visual);
   }
-  if (SUCCEEDED(result) && enable_embedded_surface_overlay != 0) {
+  if (SUCCEEDED(result) && renderer->embedded_surface_overlay_enabled) {
     result = renderer->composition_device->CreateVisual(&renderer->overlay_visual);
   }
   if (SUCCEEDED(result)) {
     result = renderer->composition_visual->SetContent(renderer->swap_chain);
   }
-  if (SUCCEEDED(result) && enable_embedded_surface_overlay != 0) {
-    result = renderer->overlay_visual->SetContent(renderer->overlay_swap_chain);
-  }
   if (SUCCEEDED(result)) {
     result = renderer->composition_root->AddVisual(renderer->composition_visual, FALSE, nullptr);
   }
-  if (SUCCEEDED(result) && enable_embedded_surface_overlay != 0) {
+  if (SUCCEEDED(result) && renderer->embedded_surface_overlay_enabled) {
     result = renderer->composition_root->AddVisual(renderer->overlay_visual, TRUE, renderer->composition_visual);
   }
   if (SUCCEEDED(result)) {
@@ -387,9 +505,6 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
   }
   if (SUCCEEDED(result)) {
     result = create_target_bitmap(renderer, renderer->swap_chain, &renderer->target_bitmap);
-  }
-  if (SUCCEEDED(result) && enable_embedded_surface_overlay != 0) {
-    result = create_target_bitmap(renderer, renderer->overlay_swap_chain, &renderer->overlay_target_bitmap);
   }
   if (SUCCEEDED(result)) {
     const D2D1_COLOR_F initial_color = make_color(255, 255, 255, 255);
@@ -433,7 +548,43 @@ extern "C" int32_t wox_renderer_resize(WoxRenderer *renderer, uint32_t width, ui
   if (SUCCEEDED(result) && renderer->overlay_swap_chain != nullptr) {
     result = create_target_bitmap(renderer, renderer->overlay_swap_chain, &renderer->overlay_target_bitmap);
   }
+  if (SUCCEEDED(result)) {
+    renderer->width = width;
+    renderer->height = height;
+  }
   return result;
+}
+
+extern "C" int32_t wox_renderer_trim(WoxRenderer *renderer) {
+  if (renderer == nullptr || renderer->device == nullptr || renderer->frame_open) {
+    return E_UNEXPECTED;
+  }
+  release_com(&renderer->cached_large_image_bitmap);
+  renderer->cached_large_image_id = 0;
+  clear_cached_image_bitmaps(renderer);
+
+  IDXGIDevice3 *dxgi_device = nullptr;
+  const HRESULT result = renderer->device->QueryInterface(__uuidof(IDXGIDevice3), reinterpret_cast<void **>(&dxgi_device));
+  if (result == E_NOINTERFACE) {
+    return S_OK;
+  }
+  if (FAILED(result)) {
+    return result;
+  }
+  dxgi_device->Trim();
+  dxgi_device->Release();
+  return S_OK;
+}
+
+extern "C" int32_t wox_renderer_clear_image_cache(WoxRenderer *renderer) {
+  if (renderer == nullptr || renderer->d2d_device == nullptr || renderer->frame_open) {
+    return E_UNEXPECTED;
+  }
+  clear_cached_image_bitmaps(renderer);
+  // Releasing our bitmap references is not enough: Direct2D keeps internal CPU-side resource
+  // caches after upload. A hidden window has no useful warm resources, so release them eagerly.
+  renderer->d2d_device->ClearResources(0);
+  return S_OK;
 }
 
 extern "C" int32_t wox_renderer_begin_frame(WoxRenderer *renderer, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
@@ -579,6 +730,8 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
   if (cache_bitmap && renderer->cached_large_image_id == image_id && renderer->cached_large_image_bitmap != nullptr) {
     bitmap = renderer->cached_large_image_bitmap;
     release_bitmap = false;
+  } else if (!cache_bitmap && image_id != 0 && (bitmap = find_cached_image_bitmap(renderer, image_id)) != nullptr) {
+    release_bitmap = false;
   } else {
     HRESULT result = renderer->d2d_context->CreateBitmap(D2D1::SizeU(image_width, image_height), pixels, row_stride, &properties, &bitmap);
     if (FAILED(result)) {
@@ -588,6 +741,8 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
       release_com(&renderer->cached_large_image_bitmap);
       renderer->cached_large_image_bitmap = bitmap;
       renderer->cached_large_image_id = image_id;
+      release_bitmap = false;
+    } else if (cache_image_bitmap(renderer, image_id, image_bytes, bitmap)) {
       release_bitmap = false;
     }
   }
@@ -638,8 +793,12 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
 }
 
 extern "C" int32_t wox_renderer_begin_embedded_surface_overlay(WoxRenderer *renderer) {
-  if (renderer == nullptr || !renderer->frame_open || renderer->overlay_active || renderer->overlay_target_bitmap == nullptr) {
+  if (renderer == nullptr || !renderer->frame_open || renderer->overlay_active) {
     return E_UNEXPECTED;
+  }
+  HRESULT result = ensure_embedded_surface_overlay(renderer);
+  if (FAILED(result)) {
+    return result;
   }
   const bool restore_clip = renderer->clip_active;
   const D2D1_RECT_F clip_rect = renderer->clip_rect;
@@ -651,7 +810,7 @@ extern "C" int32_t wox_renderer_begin_embedded_surface_overlay(WoxRenderer *rend
     renderer->d2d_context->PopAxisAlignedClip();
     renderer->damage_clip_active = false;
   }
-  HRESULT result = renderer->d2d_context->EndDraw();
+  result = renderer->d2d_context->EndDraw();
   if (FAILED(result)) {
     return result;
   }
@@ -871,6 +1030,7 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     renderer->d2d_context->SetTarget(nullptr);
     release_com(&renderer->target_bitmap);
     release_com(&renderer->overlay_target_bitmap);
+    clear_cached_image_bitmaps(renderer);
     release_com(&renderer->cached_large_image_bitmap);
     renderer->cached_large_image_id = 0;
     result = create_target_bitmap(renderer, renderer->swap_chain, &renderer->target_bitmap);

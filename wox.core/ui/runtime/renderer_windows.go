@@ -66,6 +66,28 @@ func (r *nativeRenderer) setFontFamily(family string) error {
 	return nil
 }
 
+// trim asks DXGI to discard driver-managed allocations that are no longer needed while hidden.
+func (r *nativeRenderer) trim() error {
+	traceNativeCall("renderer trim enter handle=%p", r.handle)
+	result := C.wox_renderer_trim(r.handle)
+	traceNativeCall("renderer trim exit handle=%p result=%d", r.handle, result)
+	if result < 0 {
+		return hresultError("trim renderer", result)
+	}
+	return nil
+}
+
+// clearImageCache releases transient icon textures and Direct2D's idle resource cache while hidden.
+func (r *nativeRenderer) clearImageCache() error {
+	traceNativeCall("renderer clear image cache enter handle=%p", r.handle)
+	result := C.wox_renderer_clear_image_cache(r.handle)
+	traceNativeCall("renderer clear image cache exit handle=%p result=%d", r.handle, result)
+	if result < 0 {
+		return hresultError("clear renderer image cache", result)
+	}
+	return nil
+}
+
 // measureText uses DirectWrite without opening a draw transaction.
 func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics, error) {
 	nativeText := C.CString(text)
