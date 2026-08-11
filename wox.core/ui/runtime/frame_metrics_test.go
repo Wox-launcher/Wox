@@ -12,7 +12,8 @@ func TestFrameMetricsRecorderCorrelatesPortableAndNativePhases(t *testing.T) {
 	recorder.recordPhase(frameID, FrameMetricBuildLayout, 800*time.Microsecond)
 	recorder.recordPhase(frameID, FrameMetricDrawRecord, 240*time.Microsecond)
 	recorder.recordPhase(frameID, FrameMetricAccessibility, 160*time.Microsecond)
-	recorder.recordCounts(frameID, 31, 18, 9)
+	logicalDamage := Rect{X: 10, Y: 12, Width: 120, Height: 40}
+	recorder.recordCounts(frameID, 31, 18, 9, logicalDamage)
 	recorder.finishNativeFrame(frameID, 900*time.Microsecond, 100*time.Microsecond, true)
 
 	snapshot := recorder.current()
@@ -26,7 +27,7 @@ func TestFrameMetricsRecorderCorrelatesPortableAndNativePhases(t *testing.T) {
 		t.Fatalf("recent sample count = %d, want 1", len(snapshot.Recent))
 	}
 	sample := snapshot.Recent[0]
-	if sample.FrameID != frameID || sample.SnapshotMicroseconds != 120 || sample.NodeCount != 31 || sample.DisplayCommandCount != 18 || sample.AccessibilityNodeCount != 9 || !sample.HostCompleted || !sample.Presented || sample.Dropped {
+	if sample.FrameID != frameID || sample.SnapshotMicroseconds != 120 || sample.NodeCount != 31 || sample.DisplayCommandCount != 18 || sample.AccessibilityNodeCount != 9 || sample.LogicalDamage != logicalDamage || !sample.HostCompleted || !sample.Presented || sample.Dropped {
 		t.Fatalf("unexpected correlated sample: %+v", sample)
 	}
 }

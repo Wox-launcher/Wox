@@ -191,12 +191,12 @@ func (w *Window) RecordFramePhase(frameID uint64, phase FrameMetricPhase, durati
 	w.metrics.recordPhase(frameID, phase, duration)
 }
 
-// RecordFrameCounts stores retained tree and display-list sizes for one frame.
-func (w *Window) RecordFrameCounts(frameID uint64, nodes, commands, accessibilityNodes int) {
+// RecordFrameCounts stores retained tree, display-list sizes, and pre-diagnostic logical damage for one frame.
+func (w *Window) RecordFrameCounts(frameID uint64, nodes, commands, accessibilityNodes int, logicalDamage Rect) {
 	if w == nil {
 		return
 	}
-	w.metrics.recordCounts(frameID, nodes, commands, accessibilityNodes)
+	w.metrics.recordCounts(frameID, nodes, commands, accessibilityNodes, logicalDamage)
 }
 
 // Show begins a new focus lifetime and requests platform activation.

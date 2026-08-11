@@ -36,7 +36,7 @@ type HostServices interface {
 
 type frameMetricsHostServices interface {
 	RecordFramePhase(frameID uint64, phase woxui.FrameMetricPhase, duration time.Duration)
-	RecordFrameCounts(frameID uint64, nodes, commands, accessibilityNodes int)
+	RecordFrameCounts(frameID uint64, nodes, commands, accessibilityNodes int, logicalDamage woxui.Rect)
 }
 
 type displayListDamageHostServices interface {
@@ -209,7 +209,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	if base == nil {
 		h.elements.endFrame()
 		h.recordFramePhase(frameID, woxui.FrameMetricBuildLayout, time.Since(buildLayoutStart))
-		h.recordFrameCounts(frameID, 0, displayList.CommandCount(), 0)
+		h.recordFrameCounts(frameID, 0, displayList.CommandCount(), 0, displayList.NativeDamage())
 		h.updateCaretBlink(false)
 		h.animations.reset()
 		return
@@ -255,6 +255,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	if incrementalDisabled() {
 		damage = woxui.Rect{}
 	}
+	logicalDamage := damage
 	if h.repaintDebugMode != RepaintDebugOff {
 		debugFrame.repaintRegion = damage
 		if damage.Width <= 0 || damage.Height <= 0 {
@@ -316,7 +317,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 		h.reportDiagnostic(fmt.Sprintf("publish accessibility tree: %v", err))
 	}
 	h.recordFramePhase(frameID, woxui.FrameMetricAccessibility, time.Since(accessibilityStart))
-	h.recordFrameCounts(frameID, len(nodes), displayList.CommandCount(), len(tree.Nodes))
+	h.recordFrameCounts(frameID, len(nodes), displayList.CommandCount(), len(tree.Nodes), logicalDamage)
 	h.syncTextInput()
 	h.runPostFrameCallbacks()
 }
@@ -338,12 +339,12 @@ func (h *Host) recordFramePhase(frameID uint64, phase woxui.FrameMetricPhase, du
 	}
 }
 
-func (h *Host) recordFrameCounts(frameID uint64, nodes, commands, accessibilityNodes int) {
+func (h *Host) recordFrameCounts(frameID uint64, nodes, commands, accessibilityNodes int, logicalDamage woxui.Rect) {
 	if frameID == 0 {
 		return
 	}
 	if services, ok := h.window.(frameMetricsHostServices); ok {
-		services.RecordFrameCounts(frameID, nodes, commands, accessibilityNodes)
+		services.RecordFrameCounts(frameID, nodes, commands, accessibilityNodes, logicalDamage)
 	}
 }
 

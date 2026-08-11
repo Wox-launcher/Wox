@@ -40,6 +40,7 @@ type FrameMetricsSample struct {
 	NodeCount                 int    `json:"nodeCount"`
 	DisplayCommandCount       int    `json:"displayCommandCount"`
 	AccessibilityNodeCount    int    `json:"accessibilityNodeCount"`
+	LogicalDamage             Rect   `json:"logicalDamage"`
 	HostCompleted             bool   `json:"hostCompleted"`
 	NativeEncodingCompleted   bool   `json:"nativeEncodingCompleted"`
 	Presented                 bool   `json:"presented"`
@@ -148,7 +149,7 @@ func (r *frameMetricsRecorder) phaseMetrics(phase FrameMetricPhase) *FramePhaseM
 	}
 }
 
-func (r *frameMetricsRecorder) recordCounts(frameID uint64, nodes, commands, accessibilityNodes int) {
+func (r *frameMetricsRecorder) recordCounts(frameID uint64, nodes, commands, accessibilityNodes int, logicalDamage Rect) {
 	if r == nil || frameID == 0 {
 		return
 	}
@@ -161,6 +162,7 @@ func (r *frameMetricsRecorder) recordCounts(frameID uint64, nodes, commands, acc
 		sample.NodeCount = nodes
 		sample.DisplayCommandCount = commands
 		sample.AccessibilityNodeCount = accessibilityNodes
+		sample.LogicalDamage = logicalDamage
 		sample.HostCompleted = true
 	}
 }
