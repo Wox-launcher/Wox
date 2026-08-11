@@ -50,7 +50,7 @@ func TestBeginQueryTransitionKeepsVisibleResultsDuringGracePeriod(t *testing.T) 
 		selected:       0,
 	}
 
-	app.beginQueryTransitionLocked()
+	app.beginQueryTransitionLocked(false)
 	timer := app.queryTransitionTimer
 	if timer == nil {
 		t.Fatal("query transition timer is nil, want stale-result grace period")
@@ -76,7 +76,7 @@ func TestBeginQueryTransitionKeepsVisibleResultsForMRU(t *testing.T) {
 		selected:       0,
 	}
 
-	app.beginQueryTransitionLocked()
+	app.beginQueryTransitionLocked(false)
 	timer := app.queryTransitionTimer
 	if timer == nil {
 		t.Fatal("MRU transition timer is nil, want stale-result grace period")
@@ -100,13 +100,44 @@ func TestBeginQueryTransitionClearsResultsWithoutVisibleGracePeriod(t *testing.T
 		selected:       0,
 	}
 
-	app.beginQueryTransitionLocked()
+	app.beginQueryTransitionLocked(false)
 
 	if app.queryTransitionTimer != nil {
 		t.Fatal("hidden query unexpectedly scheduled a stale-result grace period")
 	}
 	if len(app.results) != 0 || app.resultsQueryID != "" || app.selected != -1 {
 		t.Fatalf("hidden result state = results %#v query %q selected %d, want cleared", app.results, app.resultsQueryID, app.selected)
+	}
+}
+
+func TestQueryTextChangeKeepsConfirmedPluginLayoutWithinTriggerScope(t *testing.T) {
+	icon := woxImage{ImageType: "svg", ImageData: "everything-icon"}
+	app := &App{
+		query:             plainQuery{QueryID: "old-query", QueryType: "input", QueryText: "e main.go"},
+		queryContext:      queryContext{PluginID: "everything"},
+		queryContextKnown: true,
+		layout:            queryLayout{Icon: icon, GridLayout: &gridLayout{Columns: 4}},
+	}
+
+	app.applyQueryTextChangeLocked("e main.go;d")
+
+	if app.layout.Icon != icon || app.layout.GridLayout == nil || app.layout.GridLayout.Columns != 4 {
+		t.Fatalf("plugin layout = %#v, want previous confirmed layout", app.layout)
+	}
+}
+
+func TestQueryTextChangeClearsPluginLayoutWhenTriggerScopeChanges(t *testing.T) {
+	app := &App{
+		query:             plainQuery{QueryID: "old-query", QueryType: "input", QueryText: "e main.go"},
+		queryContext:      queryContext{PluginID: "everything"},
+		queryContextKnown: true,
+		layout:            queryLayout{Icon: woxImage{ImageType: "svg", ImageData: "everything-icon"}},
+	}
+
+	app.applyQueryTextChangeLocked("main.go")
+
+	if app.layout.Icon.ImageData != "" {
+		t.Fatalf("layout icon = %q, want cleared after leaving plugin trigger scope", app.layout.Icon.ImageData)
 	}
 }
 

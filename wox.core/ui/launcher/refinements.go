@@ -140,6 +140,7 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	a.canRecallHistory = false
 	a.reuseCompletionHintLocked(text)
 	nextScope := refinementQueryScope(text)
+	preservePluginLayout := a.shouldPreservePluginLayoutLocked(text)
 	if a.refinementScope != "" && nextScope != a.refinementScope {
 		a.refinements = nil
 		a.refinementsSectionRevision++
@@ -152,7 +153,7 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
 	a.resultScrollDetached = false
-	a.beginQueryTransitionLocked()
+	a.beginQueryTransitionLocked(preservePluginLayout)
 	// Preserve the visible global accessory until the backend classifies the new query.
 	a.stopGlanceLocked(false)
 	a.actionPanel = false
@@ -162,15 +163,21 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	a.chatFullscreen = false
 }
 
+// shouldPreservePluginLayoutLocked keeps confirmed plugin chrome stable while the same trigger remains active.
+func (a *App) shouldPreservePluginLayoutLocked(nextText string) bool {
+	return a.query.QueryType == "input" && a.queryContextKnown && !a.queryContext.IsGlobalQuery && a.queryContext.PluginID != "" &&
+		refinementQueryScope(a.query.QueryText) == refinementQueryScope(nextText)
+}
+
 // beginQueryTransitionLocked gives fast query responses time to replace the visible snapshot without an empty frame.
-func (a *App) beginQueryTransitionLocked() {
+func (a *App) beginQueryTransitionLocked(preservePluginLayout bool) {
 	a.resetQueryTransitionLocked()
 	a.resetQueryLoadingLocked()
 	if a.visible && len(a.results) > 0 && (a.query.QueryText != "" || a.show.StartPage == "mru") {
 		queryID := a.query.QueryID
 		a.queryTransitionTimer = time.AfterFunc(staleQueryResultsDuration, func() {
 			if err := a.runOnUI("show pending query results", func() {
-				a.showPendingQueryResults(queryID)
+				a.showPendingQueryResults(queryID, preservePluginLayout)
 			}); err != nil {
 				log.Printf("dispatch pending query results: %v", err)
 			}
@@ -180,7 +187,9 @@ func (a *App) beginQueryTransitionLocked() {
 		a.resultsSectionRevision++
 		a.resultsQueryID = ""
 		a.selected = -1
-		a.layout = queryLayout{}
+		if !preservePluginLayout {
+			a.layout = queryLayout{}
+		}
 	}
 }
 
@@ -232,7 +241,7 @@ func (a *App) resetQueryTransitionLocked() {
 }
 
 // showPendingQueryResults clears stale content without shrinking the window while the current query is still waiting.
-func (a *App) showPendingQueryResults(queryID string) {
+func (a *App) showPendingQueryResults(queryID string, preservePluginLayout bool) {
 	if a.query.QueryID != queryID || a.resultsQueryID == queryID {
 		return
 	}
@@ -242,7 +251,9 @@ func (a *App) showPendingQueryResults(queryID string) {
 	a.resultsQueryID = ""
 	a.selected = -1
 	a.resultScrollDetached = false
-	a.layout = queryLayout{}
+	if !preservePluginLayout {
+		a.layout = queryLayout{}
+	}
 	a.reconcileSelectedPreview()
 	_ = a.window.Invalidate()
 }
@@ -358,6 +369,7 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 
 // updateRefinementSelection routes keyboard and pointer changes through the same query refresh path.
 func (a *App) updateRefinementSelection(refinement *queryRefinement, selected []string) {
+	preservePluginLayout := a.shouldPreservePluginLayoutLocked(a.query.QueryText)
 	selected = normalizeRefinementValues(*refinement, selected)
 	if len(selected) == 0 {
 		delete(a.query.QueryRefinements, refinement.ID)
@@ -369,7 +381,7 @@ func (a *App) updateRefinementSelection(refinement *queryRefinement, selected []
 	a.queryContextKnown = false
 	a.completionHint = nil
 	a.resultScrollDetached = false
-	a.beginQueryTransitionLocked()
+	a.beginQueryTransitionLocked(preservePluginLayout)
 	a.stopGlanceLocked(true)
 	a.actionPanel = false
 	a.actionSelected = 0

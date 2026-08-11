@@ -453,7 +453,7 @@ func (a *App) showWindow(params showAppParams) error {
 			a.queryContext = queryContext{IsGlobalQuery: true}
 			a.queryContextKnown = true
 			a.editor.SetText("", false)
-			a.beginQueryTransitionLocked()
+			a.beginQueryTransitionLocked(false)
 		}
 		preserveQuery = a.applyLaunchModeOnShowLocked()
 		a.canRecallHistory = a.query.QueryType == "input"
@@ -797,7 +797,7 @@ func (a *App) requestMRU() error {
 		a.editor.SetText("", false)
 		queryID = a.query.QueryID
 		a.queryComplete = false
-		a.beginQueryTransitionLocked()
+		a.beginQueryTransitionLocked(false)
 		// MRU only replaces query results; the window-shown path owns the Glance refresh.
 		a.stopGlanceLocked(false)
 		a.refinements = nil
