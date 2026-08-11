@@ -43,6 +43,10 @@ const (
 	AccessibilityActionDecrement AccessibilityAction = "decrement"
 	AccessibilityActionScroll    AccessibilityAction = "scroll"
 	AccessibilityActionDismiss   AccessibilityAction = "dismiss"
+	AccessibilityActionSelectAll AccessibilityAction = "select_all"
+	AccessibilityActionCopy      AccessibilityAction = "copy"
+	AccessibilityActionCut       AccessibilityAction = "cut"
+	AccessibilityActionPaste     AccessibilityAction = "paste"
 )
 
 // AccessibilityLiveRegion controls how value changes are announced.
@@ -77,6 +81,11 @@ type AccessibilityNode struct {
 	Protected      bool
 	Hidden         bool
 	NativeBoundary bool
+	// SelectionStart/SelectionEnd are rune offsets for text fields; equal values mean a caret.
+	SelectionStart int
+	SelectionEnd   int
+	// HasTextSelection marks that SelectionStart/SelectionEnd are meaningful for this node.
+	HasTextSelection bool
 }
 
 // AccessibilityTree is the versioned snapshot consumed by native bridges and test automation.
@@ -144,6 +153,13 @@ func accessibilityTreeContentHash(tree AccessibilityTree) uint64 {
 		hash = accessibilityHashUint64(hash, uint64(accessibilityNodeStateFlags(node)))
 		if node.NativeBoundary {
 			hash = accessibilityHashByte(hash, 1)
+		} else {
+			hash = accessibilityHashByte(hash, 0)
+		}
+		if node.HasTextSelection {
+			hash = accessibilityHashByte(hash, 1)
+			hash = accessibilityHashUint64(hash, uint64(node.SelectionStart))
+			hash = accessibilityHashUint64(hash, uint64(node.SelectionEnd))
 		} else {
 			hash = accessibilityHashByte(hash, 0)
 		}
@@ -241,6 +257,10 @@ const (
 	accessibilityActionDecrementFlag
 	accessibilityActionScrollFlag
 	accessibilityActionDismissFlag
+	accessibilityActionSelectAllFlag
+	accessibilityActionCopyFlag
+	accessibilityActionCutFlag
+	accessibilityActionPasteFlag
 )
 
 func accessibilityNodeStateFlags(node AccessibilityNode) uint32 {
@@ -295,6 +315,14 @@ func accessibilityNodeActionFlags(node AccessibilityNode) uint32 {
 			flags |= accessibilityActionScrollFlag
 		case AccessibilityActionDismiss:
 			flags |= accessibilityActionDismissFlag
+		case AccessibilityActionSelectAll:
+			flags |= accessibilityActionSelectAllFlag
+		case AccessibilityActionCopy:
+			flags |= accessibilityActionCopyFlag
+		case AccessibilityActionCut:
+			flags |= accessibilityActionCutFlag
+		case AccessibilityActionPaste:
+			flags |= accessibilityActionPasteFlag
 		}
 	}
 	return flags

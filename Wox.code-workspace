@@ -94,9 +94,10 @@
 				"cwd": "${workspaceFolder:wox.core}",
 				// Keep the macOS process identity stable so AppKit can reuse tray positions between debug builds.
 				"output": "${workspaceFolder:wox.core}/__debug_bin_wox",
-				"buildFlags": "-tags=sqlite_fts5",
+				"buildFlags": "-tags=sqlite_fts5,wox_automation",
 				"env": {
-					"CGO_ENABLED": "1"
+					"CGO_ENABLED": "1",
+					"WOX_AUTOMATION_INFO_FILE": "${workspaceFolder:wox.core}/.wox-automation.json"
 				},
 				"windows": {
 					"preLaunchTask": "Configure Wox crash dumps"

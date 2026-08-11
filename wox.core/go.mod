@@ -26,6 +26,7 @@ require (
 	github.com/openai/openai-go/v3 v3.11.0
 	github.com/otiai10/copy v1.14.1
 	github.com/petermattis/goid v0.0.0-20251121121749-a11dd1a45f9a
+	github.com/rivo/uniseg v0.4.7
 	github.com/rs/cors v1.11.1
 	github.com/samber/lo v1.52.0
 	github.com/saracen/fastzip v0.2.0
@@ -65,7 +66,6 @@ require (
 	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/saracen/zipextra v0.0.0-20250129175152-f1aa42d25216 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect

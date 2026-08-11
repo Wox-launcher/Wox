@@ -6,22 +6,25 @@ import woxui "wox/ui/runtime"
 type Key string
 
 type semanticBehavior struct {
-	automationID   string
-	role           woxui.AccessibilityRole
-	label          string
-	description    string
-	value          string
-	actions        []woxui.AccessibilityAction
-	liveRegion     woxui.AccessibilityLiveRegion
-	enabled        bool
-	selected       bool
-	checked        bool
-	expanded       bool
-	readOnly       bool
-	protected      bool
-	hidden         bool
-	nativeBoundary bool
-	onAction       func(action woxui.AccessibilityAction, value string) error
+	automationID     string
+	role             woxui.AccessibilityRole
+	label            string
+	description      string
+	value            string
+	actions          []woxui.AccessibilityAction
+	liveRegion       woxui.AccessibilityLiveRegion
+	enabled          bool
+	selected         bool
+	checked          bool
+	expanded         bool
+	readOnly         bool
+	protected        bool
+	hidden           bool
+	nativeBoundary   bool
+	hasTextSelection bool
+	selectionStart   int
+	selectionEnd     int
+	onAction         func(action woxui.AccessibilityAction, value string) error
 }
 
 type focusBehavior struct {
@@ -188,6 +191,9 @@ type EditableText struct {
 	Protected        bool
 	Autofocus        bool
 	Disabled         bool
+	SelectionStart   int
+	SelectionEnd     int
+	HasTextSelection bool
 	FocusRingColor   woxui.Color
 	FocusRingRadius  float32
 	FocusRingOutsets Insets
@@ -195,14 +201,34 @@ type EditableText struct {
 	OnTextInput      func(event woxui.TextInputEvent) bool
 	OnFocusChange    func(focused bool)
 	OnSetValue       func(value string) error
+	OnSelectAll      func() error
+	OnCopy           func() error
+	OnCut            func() error
+	OnPaste          func() error
 	TextInput        func(bounds woxui.Rect) woxui.TextInputState
 	Child            Widget
 }
 
 func (w EditableText) layout(ctx context, available constraints) *node {
 	actions := []woxui.AccessibilityAction{woxui.AccessibilityActionFocus}
-	if !w.ReadOnly && !w.Disabled {
-		actions = append(actions, woxui.AccessibilityActionSetValue)
+	if !w.Disabled {
+		if w.OnSelectAll != nil {
+			actions = append(actions, woxui.AccessibilityActionSelectAll)
+		}
+		if w.OnCopy != nil && !w.Protected {
+			actions = append(actions, woxui.AccessibilityActionCopy)
+		}
+		if !w.ReadOnly {
+			if w.OnSetValue != nil {
+				actions = append(actions, woxui.AccessibilityActionSetValue)
+			}
+			if w.OnCut != nil && !w.Protected {
+				actions = append(actions, woxui.AccessibilityActionCut)
+			}
+			if w.OnPaste != nil {
+				actions = append(actions, woxui.AccessibilityActionPaste)
+			}
+		}
 	}
 	child := Focusable{
 		Key:              w.Key,
@@ -227,11 +253,35 @@ func (w EditableText) layout(ctx context, available constraints) *node {
 		readOnly:     w.ReadOnly,
 		protected:    w.Protected,
 		onAction: func(action woxui.AccessibilityAction, value string) error {
-			if action == woxui.AccessibilityActionSetValue && w.OnSetValue != nil {
-				return w.OnSetValue(value)
+			switch action {
+			case woxui.AccessibilityActionSetValue:
+				if w.OnSetValue != nil {
+					return w.OnSetValue(value)
+				}
+			case woxui.AccessibilityActionSelectAll:
+				if w.OnSelectAll != nil {
+					return w.OnSelectAll()
+				}
+			case woxui.AccessibilityActionCopy:
+				if w.OnCopy != nil {
+					return w.OnCopy()
+				}
+			case woxui.AccessibilityActionCut:
+				if w.OnCut != nil {
+					return w.OnCut()
+				}
+			case woxui.AccessibilityActionPaste:
+				if w.OnPaste != nil {
+					return w.OnPaste()
+				}
 			}
 			return nil
 		},
+	}
+	if w.HasTextSelection {
+		child.semantic.hasTextSelection = true
+		child.semantic.selectionStart = w.SelectionStart
+		child.semantic.selectionEnd = w.SelectionEnd
 	}
 	return child
 }

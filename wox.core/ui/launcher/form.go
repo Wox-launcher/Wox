@@ -139,7 +139,8 @@ type formTextLine struct {
 	text  string
 }
 
-// ponytail: Multiline fields wrap only at explicit newlines; add soft-wrap offsets when a real setting needs paragraph editing.
+// formTextLines splits requirement-form values on explicit newlines.
+// Soft wrapping for editable paragraph fields lives in WoxTextField.
 func formTextLines(value string) []formTextLine {
 	runes := []rune(value)
 	lines := make([]formTextLine, 0, strings.Count(value, "\n")+1)

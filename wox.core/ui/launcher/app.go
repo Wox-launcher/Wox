@@ -74,7 +74,11 @@ type App struct {
 	canRecallHistory  bool
 	editor            *woxui.TextEditor
 	// selectionAnchor holds the rune offset captured at query drag-selection start so extend updates only the focus.
-	selectionAnchor            int
+	selectionAnchor int
+	// queryMenu* retains the open query context-menu enablement snapshot for refresh/revalidation.
+	queryMenuAnchor            woxui.Point
+	queryMenuEnablement        queryMenuEnablement
+	queryMenuTheme             woxcomponent.Theme
 	results                    []queryResult
 	resultRevision             uint64
 	resultsSectionRevision     uint64
@@ -1187,7 +1191,7 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 				return true
 			}
 			previousText := a.editor.State().Text
-			if a.editor.InsertText(normalizeQueryNewlines(text)) {
+			if a.editor.InsertTextSeparate(normalizeQueryNewlines(text)) {
 				a.applyQueryTextChangeLocked(a.editor.State().Text)
 			}
 			_ = a.window.Invalidate()
@@ -1242,6 +1246,10 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 		a.activateSelected()
 		return true
 	case woxui.KeyEscape:
+		if a.host != nil && a.host.HasOverlay() && a.host.OverlayOwner() == launcherview.LauncherQueryInputKey {
+			a.host.ClearOverlay(launcherview.LauncherQueryInputKey, 0)
+			return true
+		}
 		util.Go(a.lifecycleCtx, "hide launcher from escape", func() {
 			if err := a.hideWindow(true); err != nil {
 				log.Printf("hide launcher: %v", err)

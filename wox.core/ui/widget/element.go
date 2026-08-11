@@ -72,6 +72,45 @@ func (c StateContext) BindFocusNode(node *FocusNode, key Key) *FocusAttachment {
 	return &FocusAttachment{node: node, host: host, key: key}
 }
 
+// SetHostOverlay places a window-level overlay above the current Host build tree.
+// ownerKey must remain mounted or the overlay is cleared on the next frame.
+func (c StateContext) SetHostOverlay(ownerKey Key, widget Widget) uint64 {
+	if !c.Mounted() || c.element.tree == nil || c.element.tree.host == nil {
+		return 0
+	}
+	return c.element.tree.host.SetOverlay(ownerKey, widget)
+}
+
+// ClearHostOverlay removes the Host overlay when it is still owned by ownerKey.
+// Pass token 0 to ignore token matching.
+func (c StateContext) ClearHostOverlay(ownerKey Key, token uint64) {
+	if !c.Mounted() || c.element.tree == nil || c.element.tree.host == nil {
+		return
+	}
+	c.element.tree.host.ClearOverlay(ownerKey, token)
+}
+
+// HasHostOverlay reports whether the Host currently has a window-level overlay.
+func (c StateContext) HasHostOverlay() bool {
+	return c.Mounted() && c.element.tree != nil && c.element.tree.host != nil && c.element.tree.host.HasOverlay()
+}
+
+// HostOverlayOwner returns the stable key that owns the current Host overlay, if any.
+func (c StateContext) HostOverlayOwner() Key {
+	if !c.Mounted() || c.element.tree == nil || c.element.tree.host == nil {
+		return ""
+	}
+	return c.element.tree.host.OverlayOwner()
+}
+
+// HostFrameSize returns the Host's most recent frame size.
+func (c StateContext) HostFrameSize() woxui.Size {
+	if !c.Mounted() || c.element.tree == nil || c.element.tree.host == nil {
+		return woxui.Size{}
+	}
+	return c.element.tree.host.FrameSize()
+}
+
 // RequestFocus asks the owning Host to focus a laid-out descendant by stable key.
 func (c StateContext) RequestFocus(key Key) bool {
 	return c.Mounted() && c.element.tree != nil && c.element.tree.host != nil && c.element.tree.host.RequestFocus(key)

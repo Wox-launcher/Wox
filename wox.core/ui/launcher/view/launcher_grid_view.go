@@ -150,9 +150,13 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 				result.OnHover(inside)
 			}
 		},
-		OnTap:              result.OnSelect,
-		OnSecondaryTapDown: result.OnSecondaryTapDown,
-		OnDragStart:        result.OnDragStart,
+		OnTap: result.OnSelect,
+		OnSecondaryTapDown: func(woxui.Point) {
+			if result.OnSecondaryTapDown != nil {
+				result.OnSecondaryTapDown()
+			}
+		},
+		OnDragStart: result.OnDragStart,
 		OnDoubleTap: func() {
 			if result.OnSelect != nil {
 				result.OnSelect()

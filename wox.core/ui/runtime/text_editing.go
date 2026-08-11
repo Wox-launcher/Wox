@@ -1,10 +1,26 @@
 package woxui
 
-import "unicode"
+import (
+	"runtime"
+	"time"
+)
 
-const textEditorHistoryLimit = 100
+const (
+	textEditorHistoryLimit    = 100
+	textEditorUndoMergeWindow = time.Second
+)
+
+type textEditorUndoKind uint8
+
+const (
+	textEditorUndoNone textEditorUndoKind = iota
+	textEditorUndoInsert
+	textEditorUndoDelete
+	textEditorUndoReplace
+)
 
 // TextSelection stores anchor and focus as rune offsets so UTF-8 editing stays deterministic.
+// Movement and deletion snap those offsets onto Unicode grapheme boundaries.
 type TextSelection struct {
 	Anchor int
 	Focus  int
@@ -34,9 +50,16 @@ type TextEditingState struct {
 
 // TextEditor applies portable key and IME events to one UTF-8 value.
 type TextEditor struct {
-	state TextEditingState
-	undo  []TextEditingState
-	redo  []TextEditingState
+	state        TextEditingState
+	undo         []TextEditingState
+	redo         []TextEditingState
+	lastUndoKind textEditorUndoKind
+	lastUndoAt   time.Time
+	// mergeInsertAt is the caret offset expected for the next typing insert that may merge.
+	mergeInsertAt      int
+	hasMergeInsert     bool
+	preferredX         float32
+	hasPreferredColumn bool
 }
 
 // NewTextEditor creates an editor with its caret at the end of text.
@@ -64,26 +87,35 @@ func (e *TextEditor) SetText(text string, selectAll bool) {
 	e.state = TextEditingState{Text: text, Selection: selection}
 	e.undo = nil
 	e.redo = nil
+	e.endUndoMerge()
+	e.clearPreferredColumn()
 }
 
 // SelectAll selects the complete committed value.
 func (e *TextEditor) SelectAll() {
 	e.state.Selection = TextSelection{Anchor: 0, Focus: len([]rune(e.state.Text))}
 	e.state.Composition = ""
+	e.clearPreferredColumn()
 }
 
-// SetCaret moves the caret to a clamped rune offset.
+// SetCaret moves the caret to a clamped grapheme-safe rune offset.
 func (e *TextEditor) SetCaret(offset int) {
-	offset = max(0, min(len([]rune(e.state.Text)), offset))
+	offset = e.clampGraphemeOffset(offset, true)
 	e.state.Selection = TextSelection{Anchor: offset, Focus: offset}
 	e.state.Composition = ""
+	e.endUndoMerge()
+	e.clearPreferredColumn()
 }
 
-// SetSelection replaces the current anchor and focus with clamped rune offsets.
+// SetSelection replaces the current anchor and focus with clamped grapheme-safe rune offsets.
 func (e *TextEditor) SetSelection(anchor, focus int) {
-	length := len([]rune(e.state.Text))
-	e.state.Selection = TextSelection{Anchor: max(0, min(length, anchor)), Focus: max(0, min(length, focus))}
+	e.state.Selection = TextSelection{
+		Anchor: e.clampGraphemeOffset(anchor, true),
+		Focus:  e.clampGraphemeOffset(focus, true),
+	}
 	e.state.Composition = ""
+	e.endUndoMerge()
+	e.clearPreferredColumn()
 }
 
 // SelectWordAt selects the Unicode word containing the rune offset.
@@ -93,14 +125,17 @@ func (e *TextEditor) SelectWordAt(offset int) {
 		e.SetCaret(0)
 		return
 	}
-	offset = min(max(0, offset), len(runes)-1)
-	start, end := offset, offset+1
+	offset = e.clampGraphemeOffset(min(max(0, offset), len(runes)-1), true)
+	if offset >= len(runes) {
+		offset = len(runes) - 1
+	}
+	start, end := offset, nextGraphemeBoundary(e.state.Text, offset)
 	if isTextWordRune(runes[offset]) {
 		for start > 0 && isTextWordRune(runes[start-1]) {
-			start--
+			start = previousGraphemeBoundary(e.state.Text, start)
 		}
 		for end < len(runes) && isTextWordRune(runes[end]) {
-			end++
+			end = nextGraphemeBoundary(e.state.Text, end)
 		}
 	}
 	e.SetSelection(start, end)
@@ -120,8 +155,17 @@ func (e *TextEditor) SelectLineAt(offset int) {
 	e.SetSelection(start, end)
 }
 
-// InsertText replaces the current selection with committed text.
+// InsertText replaces the current selection with committed text and merges adjacent typing undos.
 func (e *TextEditor) InsertText(text string) bool {
+	return e.insertText(text, true)
+}
+
+// InsertTextSeparate replaces the selection without merging into the previous typing undo batch.
+func (e *TextEditor) InsertTextSeparate(text string) bool {
+	return e.insertText(text, false)
+}
+
+func (e *TextEditor) insertText(text string, mergeTyping bool) bool {
 	if e == nil || text == "" {
 		return false
 	}
@@ -133,8 +177,23 @@ func (e *TextEditor) InsertText(text string) bool {
 	next = append(next, inserted...)
 	next = append(next, runes[end:]...)
 	caret := start + len(inserted)
-	e.rememberUndoState()
+	collapsedInsert := start == end
+	// Merge only contiguous collapsed typing at the expected caret; cursor moves break the batch.
+	canMerge := mergeTyping && collapsedInsert && e.lastUndoKind == textEditorUndoInsert && e.hasMergeInsert &&
+		start == e.mergeInsertAt && time.Since(e.lastUndoAt) <= textEditorUndoMergeWindow
+	if canMerge {
+		e.lastUndoAt = time.Now()
+		e.mergeInsertAt = caret
+	} else if collapsedInsert && mergeTyping {
+		e.rememberUndoState(textEditorUndoInsert)
+		e.mergeInsertAt = caret
+		e.hasMergeInsert = true
+	} else {
+		e.rememberUndoState(textEditorUndoReplace)
+		e.endUndoMerge()
+	}
 	e.state = TextEditingState{Text: string(next), Selection: TextSelection{Anchor: caret, Focus: caret}}
+	e.clearPreferredColumn()
 	return true
 }
 
@@ -150,8 +209,10 @@ func (e *TextEditor) DeleteSelection() bool {
 		return false
 	}
 	next := append(append(make([]rune, 0, len(runes)-(end-start)), runes[:start]...), runes[end:]...)
-	e.rememberUndoState()
+	e.rememberUndoState(textEditorUndoDelete)
+	e.endUndoMerge()
 	e.state = TextEditingState{Text: string(next), Selection: TextSelection{Anchor: start, Focus: start}}
+	e.clearPreferredColumn()
 	return true
 }
 
@@ -165,6 +226,8 @@ func (e *TextEditor) Undo() bool {
 	e.redo = appendTextEditorHistory(e.redo, e.state)
 	e.state = previous
 	e.state.Composition = ""
+	e.endUndoMerge()
+	e.clearPreferredColumn()
 	return true
 }
 
@@ -178,6 +241,8 @@ func (e *TextEditor) Redo() bool {
 	e.undo = appendTextEditorHistory(e.undo, e.state)
 	e.state = next
 	e.state.Composition = ""
+	e.endUndoMerge()
+	e.clearPreferredColumn()
 	return true
 }
 
@@ -194,15 +259,43 @@ func (e *TextEditor) SelectedText() string {
 	return string(runes[start:end])
 }
 
+// PreferredX returns the sticky measured horizontal caret X used by vertical navigation, when set.
+func (e *TextEditor) PreferredX() (float32, bool) {
+	if e == nil || !e.hasPreferredColumn {
+		return 0, false
+	}
+	return e.preferredX, true
+}
+
+// SetPreferredX remembers the measured horizontal caret X for up/down and page navigation.
+func (e *TextEditor) SetPreferredX(x float32) {
+	if e == nil {
+		return
+	}
+	e.preferredX = max(float32(0), x)
+	e.hasPreferredColumn = true
+}
+
+// ClearPreferredColumn drops any sticky vertical-navigation column.
+func (e *TextEditor) ClearPreferredColumn() {
+	if e == nil {
+		return
+	}
+	e.clearPreferredColumn()
+}
+
 // HandleKey applies editing commands and reports whether the event was handled and changed text.
 func (e *TextEditor) HandleKey(event KeyEvent) (handled bool, textChanged bool) {
 	if e == nil || !event.Down || event.Composing {
 		return false, false
 	}
-	if event.Modifiers.HasPrimary() {
+	extend := event.Modifiers&KeyModifierShift != 0
+	word := event.Modifiers.HasWordModifier()
+	line := event.Modifiers.HasLineModifier()
+	primary := event.Modifiers.HasPrimary()
+
+	if primary {
 		switch event.Key {
-		case KeyBackspace:
-			return true, e.deleteWordBackward()
 		case Key("a"):
 			e.SelectAll()
 			return true, false
@@ -213,21 +306,73 @@ func (e *TextEditor) HandleKey(event KeyEvent) (handled bool, textChanged bool) 
 			return true, e.Undo()
 		case Key("y"):
 			return true, e.Redo()
+		case KeyBackspace:
+			// macOS Cmd+Backspace deletes to the start of the current hard line.
+			if runtime.GOOS == "darwin" {
+				return true, e.deleteToLineStart()
+			}
+		case KeyArrowLeft:
+			if runtime.GOOS == "darwin" {
+				e.moveToLineBoundary(true, extend)
+				return true, false
+			}
+		case KeyArrowRight:
+			if runtime.GOOS == "darwin" {
+				e.moveToLineBoundary(false, extend)
+				return true, false
+			}
+		case KeyArrowUp:
+			if runtime.GOOS == "darwin" {
+				e.moveCaretTo(0, extend)
+				return true, false
+			}
+		case KeyArrowDown:
+			if runtime.GOOS == "darwin" {
+				e.moveCaretTo(len([]rune(e.state.Text)), extend)
+				return true, false
+			}
 		}
 	}
-	extend := event.Modifiers&KeyModifierShift != 0
+
+	if word {
+		switch event.Key {
+		case KeyBackspace:
+			return true, e.deleteWordBackward()
+		case KeyDelete:
+			return true, e.deleteWordForward()
+		case KeyArrowLeft:
+			e.moveCaretByWord(-1, extend)
+			return true, false
+		case KeyArrowRight:
+			e.moveCaretByWord(1, extend)
+			return true, false
+		}
+	}
+
+	if line {
+		switch event.Key {
+		case KeyArrowLeft, KeyHome:
+			e.moveToLineBoundary(true, extend)
+			return true, false
+		case KeyArrowRight, KeyEnd:
+			e.moveToLineBoundary(false, extend)
+			return true, false
+		}
+	}
+
 	switch event.Key {
 	case KeyBackspace:
 		return true, e.deleteBackward()
 	case KeyDelete:
 		return true, e.deleteForward()
 	case KeyArrowLeft:
-		e.moveCaret(-1, extend)
+		e.moveCaretByGrapheme(-1, extend)
 		return true, false
 	case KeyArrowRight:
-		e.moveCaret(1, extend)
+		e.moveCaretByGrapheme(1, extend)
 		return true, false
 	case KeyHome:
+		// Document start/end; multiline visual-line Home/End is handled by WoxTextField.
 		e.moveCaretTo(0, extend)
 		return true, false
 	case KeyEnd:
@@ -261,9 +406,9 @@ func (e *TextEditor) deleteBackward() bool {
 		if start == 0 {
 			return false
 		}
-		start--
+		start = previousGraphemeBoundary(e.state.Text, start)
 	}
-	e.replaceRange(runes, start, end)
+	e.replaceRange(runes, start, end, textEditorUndoDelete)
 	return true
 }
 
@@ -272,23 +417,30 @@ func (e *TextEditor) deleteWordBackward() bool {
 	runes := []rune(e.state.Text)
 	start, end := e.selectionBounds(len(runes))
 	if start != end {
-		e.replaceRange(runes, start, end)
+		e.replaceRange(runes, start, end, textEditorUndoDelete)
 		return true
 	}
 	if start == 0 {
 		return false
 	}
+	start = wordBoundaryBefore(e.state.Text, start)
+	e.replaceRange(runes, start, end, textEditorUndoDelete)
+	return true
+}
 
-	for start > 0 && unicode.IsSpace(runes[start-1]) {
-		start--
+// deleteWordForward removes the selection or the text segment after the caret.
+func (e *TextEditor) deleteWordForward() bool {
+	runes := []rune(e.state.Text)
+	start, end := e.selectionBounds(len(runes))
+	if start != end {
+		e.replaceRange(runes, start, end, textEditorUndoDelete)
+		return true
 	}
-	if start > 0 {
-		word := isTextWordRune(runes[start-1])
-		for start > 0 && !unicode.IsSpace(runes[start-1]) && isTextWordRune(runes[start-1]) == word {
-			start--
-		}
+	if end == len(runes) {
+		return false
 	}
-	e.replaceRange(runes, start, end)
+	end = wordBoundaryAfter(e.state.Text, end)
+	e.replaceRange(runes, start, end, textEditorUndoDelete)
 	return true
 }
 
@@ -299,24 +451,49 @@ func (e *TextEditor) deleteForward() bool {
 		if end == len(runes) {
 			return false
 		}
-		end++
+		end = nextGraphemeBoundary(e.state.Text, end)
 	}
-	e.replaceRange(runes, start, end)
+	e.replaceRange(runes, start, end, textEditorUndoDelete)
 	return true
 }
 
-func (e *TextEditor) replaceRange(runes []rune, start, end int) {
-	next := append(append(make([]rune, 0, len(runes)-(end-start)), runes[:start]...), runes[end:]...)
-	e.rememberUndoState()
-	e.state = TextEditingState{Text: string(next), Selection: TextSelection{Anchor: start, Focus: start}}
+func (e *TextEditor) deleteToLineStart() bool {
+	runes := []rune(e.state.Text)
+	start, end := e.selectionBounds(len(runes))
+	if start != end {
+		e.replaceRange(runes, start, end, textEditorUndoDelete)
+		return true
+	}
+	lineStart := hardLineStart(runes, start)
+	if lineStart == start {
+		return false
+	}
+	e.replaceRange(runes, lineStart, start, textEditorUndoDelete)
+	return true
 }
 
-func (e *TextEditor) rememberUndoState() {
+func (e *TextEditor) replaceRange(runes []rune, start, end int, kind textEditorUndoKind) {
+	next := append(append(make([]rune, 0, len(runes)-(end-start)), runes[:start]...), runes[end:]...)
+	e.rememberUndoState(kind)
+	e.endUndoMerge()
+	e.state = TextEditingState{Text: string(next), Selection: TextSelection{Anchor: start, Focus: start}}
+	e.clearPreferredColumn()
+}
+
+func (e *TextEditor) rememberUndoState(kind textEditorUndoKind) {
 	if e == nil {
 		return
 	}
 	e.undo = appendTextEditorHistory(e.undo, e.state)
 	e.redo = nil
+	e.lastUndoKind = kind
+	e.lastUndoAt = time.Now()
+}
+
+func (e *TextEditor) endUndoMerge() {
+	e.lastUndoKind = textEditorUndoNone
+	e.hasMergeInsert = false
+	e.mergeInsertAt = 0
 }
 
 func appendTextEditorHistory(history []TextEditingState, state TextEditingState) []TextEditingState {
@@ -328,7 +505,7 @@ func appendTextEditorHistory(history []TextEditingState, state TextEditingState)
 	return append(history, state)
 }
 
-func (e *TextEditor) moveCaret(delta int, extend bool) {
+func (e *TextEditor) moveCaretByGrapheme(delta int, extend bool) {
 	selection := e.state.Selection
 	if !extend && !selection.Collapsed() {
 		if delta < 0 {
@@ -338,18 +515,54 @@ func (e *TextEditor) moveCaret(delta int, extend bool) {
 		}
 		return
 	}
-	e.moveCaretTo(selection.Focus+delta, extend)
+	focus := selection.Focus
+	if delta < 0 {
+		focus = previousGraphemeBoundary(e.state.Text, focus)
+	} else {
+		focus = nextGraphemeBoundary(e.state.Text, focus)
+	}
+	e.moveCaretTo(focus, extend)
+}
+
+func (e *TextEditor) moveCaretByWord(delta int, extend bool) {
+	selection := e.state.Selection
+	if !extend && !selection.Collapsed() {
+		if delta < 0 {
+			e.moveCaretTo(selection.Start(), false)
+		} else {
+			e.moveCaretTo(selection.End(), false)
+		}
+		return
+	}
+	focus := selection.Focus
+	if delta < 0 {
+		focus = wordMoveBefore(e.state.Text, focus)
+	} else {
+		focus = wordMoveAfter(e.state.Text, focus)
+	}
+	e.moveCaretTo(focus, extend)
+}
+
+func (e *TextEditor) moveToLineBoundary(toStart, extend bool) {
+	runes := []rune(e.state.Text)
+	focus := e.state.Selection.Focus
+	if toStart {
+		e.moveCaretTo(hardLineStart(runes, focus), extend)
+		return
+	}
+	e.moveCaretTo(hardLineEnd(runes, focus), extend)
 }
 
 func (e *TextEditor) moveCaretTo(offset int, extend bool) {
-	length := len([]rune(e.state.Text))
-	offset = max(0, min(length, offset))
+	offset = e.clampGraphemeOffset(offset, true)
 	if extend {
 		e.state.Selection.Focus = offset
 	} else {
 		e.state.Selection = TextSelection{Anchor: offset, Focus: offset}
 	}
 	e.state.Composition = ""
+	e.endUndoMerge()
+	e.clearPreferredColumn()
 }
 
 func (e *TextEditor) selectionBounds(length int) (int, int) {
@@ -358,6 +571,74 @@ func (e *TextEditor) selectionBounds(length int) (int, int) {
 	return start, end
 }
 
-func isTextWordRune(current rune) bool {
-	return unicode.IsLetter(current) || unicode.IsDigit(current) || unicode.IsMark(current) || current == '_'
+func (e *TextEditor) clampGraphemeOffset(offset int, biasBackward bool) int {
+	return snapGraphemeBoundary(graphemeBoundaries(e.state.Text), offset, biasBackward)
+}
+
+func (e *TextEditor) clearPreferredColumn() {
+	e.hasPreferredColumn = false
+	e.preferredX = 0
+}
+
+func hardLineStart(runes []rune, offset int) int {
+	offset = max(0, min(len(runes), offset))
+	for offset > 0 && runes[offset-1] != '\n' {
+		offset--
+	}
+	return offset
+}
+
+func hardLineEnd(runes []rune, offset int) int {
+	offset = max(0, min(len(runes), offset))
+	for offset < len(runes) && runes[offset] != '\n' {
+		offset++
+	}
+	return offset
+}
+
+// FilterSingleLineNewlines strips carriage returns and newlines for single-line editors.
+func FilterSingleLineNewlines(text string) string {
+	if text == "" {
+		return text
+	}
+	buf := make([]rune, 0, len([]rune(text)))
+	for _, current := range text {
+		if current == '\n' || current == '\r' {
+			continue
+		}
+		buf = append(buf, current)
+	}
+	return string(buf)
+}
+
+// MaskProtectedText replaces each user-perceived character with a bullet for password display.
+func MaskProtectedText(text string) string {
+	if text == "" {
+		return ""
+	}
+	return repeatBullets(graphemeCount(text))
+}
+
+// MapSelectionToProtectedDisplay remaps rune selection offsets onto the bullet-masked display.
+func MapSelectionToProtectedDisplay(text string, selection TextSelection) TextSelection {
+	return TextSelection{
+		Anchor: runeOffsetToGraphemeIndex(text, selection.Anchor),
+		Focus:  runeOffsetToGraphemeIndex(text, selection.Focus),
+	}
+}
+
+// MapProtectedDisplayOffsetToRune maps a bullet-display grapheme index back onto the real text.
+func MapProtectedDisplayOffsetToRune(text string, displayOffset int) int {
+	return graphemeIndexToRuneOffset(text, displayOffset)
+}
+
+func repeatBullets(count int) string {
+	if count <= 0 {
+		return ""
+	}
+	bullets := make([]rune, count)
+	for index := range bullets {
+		bullets[index] = '•'
+	}
+	return string(bullets)
 }

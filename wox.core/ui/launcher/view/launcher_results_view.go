@@ -305,9 +305,13 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 				item.OnHover(inside)
 			}
 		},
-		OnTap:              item.OnSelect,
-		OnSecondaryTapDown: item.OnSecondaryTapDown,
-		OnDragStart:        item.OnDragStart,
+		OnTap: item.OnSelect,
+		OnSecondaryTapDown: func(woxui.Point) {
+			if item.OnSecondaryTapDown != nil {
+				item.OnSecondaryTapDown()
+			}
+		},
+		OnDragStart: item.OnDragStart,
 		OnDoubleTap: func() {
 			if item.OnSelect != nil {
 				item.OnSelect()

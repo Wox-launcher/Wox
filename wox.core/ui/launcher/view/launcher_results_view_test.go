@@ -54,7 +54,7 @@ func TestLauncherResultWiresSecondaryTap(t *testing.T) {
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	gesture := row.Child.(woxwidget.Gesture)
 
-	gesture.OnSecondaryTapDown()
+	gesture.OnSecondaryTapDown(woxui.Point{})
 	if !tapped {
 		t.Fatal("secondary tap callback was not wired to the result row")
 	}

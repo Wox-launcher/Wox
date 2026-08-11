@@ -39,14 +39,20 @@ type LauncherQueryProps struct {
 	OnTapEnd         func()            `boundary:"stable"`
 	OnDragStart      func()            `boundary:"stable"`
 	// OnSelectionStart begins a drag selection at the given editor-local point.
-	OnSelectionStart func(woxui.Point) `boundary:"stable"`
+	OnSelectionStart func(woxui.Point, woxui.KeyModifiers) `boundary:"stable"`
 	// OnSelectionExtend updates the active drag selection focus to the given editor-local point.
-	OnSelectionExtend func(woxui.Point)               `boundary:"stable"`
-	OnKey             func(woxui.KeyEvent) bool       `boundary:"stable"`
-	OnTextInput       func(woxui.TextInputEvent) bool `boundary:"stable"`
-	OnFocusChange     func(bool)                      `boundary:"stable"`
-	OnSetValue        func(string) error              `boundary:"stable"`
-	OnTextInputState  func(woxui.TextInputState)      `boundary:"stable"`
+	OnSelectionExtend func(woxui.Point) `boundary:"stable"`
+	// OnSecondaryTapDown opens the query context menu at window/client coordinates.
+	OnSecondaryTapDown func(woxui.Point)               `boundary:"stable"`
+	OnKey              func(woxui.KeyEvent) bool       `boundary:"stable"`
+	OnTextInput        func(woxui.TextInputEvent) bool `boundary:"stable"`
+	OnFocusChange      func(bool)                      `boundary:"stable"`
+	OnSetValue         func(string) error              `boundary:"stable"`
+	OnTextInputState   func(woxui.TextInputState)      `boundary:"stable"`
+	OnSelectAll        func() error                    `boundary:"stable"`
+	OnCopy             func() error                    `boundary:"stable"`
+	OnCut              func() error                    `boundary:"stable"`
+	OnPaste            func() error                    `boundary:"stable"`
 }
 
 // Equal compares every prepared rendering dependency for the launcher query editor.
@@ -212,14 +218,19 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 				props.OnTripleTapAt(position)
 			}
 		},
-		OnSelectionStart: func(position woxui.Point) {
+		OnSelectionStart: func(position woxui.Point, modifiers woxui.KeyModifiers) {
 			if props.OnSelectionStart != nil {
-				props.OnSelectionStart(position)
+				props.OnSelectionStart(position, modifiers)
 			}
 		},
 		OnSelectionExtend: func(position woxui.Point) {
 			if props.OnSelectionExtend != nil {
 				props.OnSelectionExtend(position)
+			}
+		},
+		OnSecondaryTapDown: func(position woxui.Point) {
+			if props.OnSecondaryTapDown != nil {
+				props.OnSecondaryTapDown(position)
 			}
 		},
 		Child: woxwidget.CaretPainter{Width: props.Width, Height: contentHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
@@ -259,16 +270,23 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 		}},
 	}
 	editor = woxwidget.EditableText{
-		Key:           LauncherQueryInputKey,
-		AutomationID:  "launcher.query.input",
-		Label:         "Search Wox",
-		Value:         props.State.Text,
-		Autofocus:     true,
-		Disabled:      !props.Enabled,
-		OnKey:         props.OnKey,
-		OnTextInput:   props.OnTextInput,
-		OnFocusChange: props.OnFocusChange,
-		OnSetValue:    props.OnSetValue,
+		Key:              LauncherQueryInputKey,
+		AutomationID:     "launcher.query.input",
+		Label:            "Search Wox",
+		Value:            props.State.Text,
+		Autofocus:        true,
+		Disabled:         !props.Enabled,
+		OnKey:            props.OnKey,
+		OnTextInput:      props.OnTextInput,
+		OnFocusChange:    props.OnFocusChange,
+		OnSetValue:       props.OnSetValue,
+		HasTextSelection: true,
+		SelectionStart:   props.State.Selection.Start(),
+		SelectionEnd:     props.State.Selection.End(),
+		OnSelectAll:      props.OnSelectAll,
+		OnCopy:           props.OnCopy,
+		OnCut:            props.OnCut,
+		OnPaste:          props.OnPaste,
 		TextInput: func(bounds woxui.Rect) woxui.TextInputState {
 			textTop := max(float32(0), bounds.Height-float32(len(lines))*lineHeight) / 2
 			return woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X + props.CaretWidth, Y: bounds.Y + textTop + float32(props.CaretLine)*lineHeight, Width: cursorWidth, Height: props.CaretHeight}}

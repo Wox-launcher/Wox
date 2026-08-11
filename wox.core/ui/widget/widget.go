@@ -1300,7 +1300,7 @@ type gesture struct {
 	onHoverAt          func(bool, woxui.Rect)
 	onPressChange      func(bool)
 	onTap              func()
-	onSecondaryTapDown func()
+	onSecondaryTapDown func(position woxui.Point)
 	onDoubleTap        func()
 	onDoubleTapAt      func(woxui.Point)
 	onTripleTapAt      func(woxui.Point)
@@ -1316,9 +1316,11 @@ type gesture struct {
 	// ancestor scroll view can continue at nested-scroll boundaries.
 	onScrollHandled func(woxui.Point) bool
 	// onSelectionStart begins a drag-based text selection anchored at the given local point.
-	onSelectionStart func(woxui.Point)
+	onSelectionStart func(position woxui.Point, modifiers woxui.KeyModifiers)
 	// onSelectionExtend updates the selection focus to the given local point while dragging.
-	onSelectionExtend func(woxui.Point)
+	onSelectionExtend func(position woxui.Point)
+	// onSelectionEnd reports that an active drag selection finished (pointer up/cancel).
+	onSelectionEnd func()
 }
 
 // Gesture adds pointer behavior without changing its child's layout or paint.
@@ -1331,8 +1333,8 @@ type Gesture struct {
 	// OnPressChange reports primary-button press and release without changing tap activation.
 	OnPressChange func(pressed bool)
 	OnTap         func()
-	// OnSecondaryTapDown reports a secondary-button press inside this gesture.
-	OnSecondaryTapDown func()
+	// OnSecondaryTapDown reports a secondary-button press with window/client coordinates.
+	OnSecondaryTapDown func(position woxui.Point)
 	OnDoubleTap        func()
 	OnDoubleTapAt      func(position woxui.Point)
 	OnTripleTapAt      func(position woxui.Point)
@@ -1351,9 +1353,12 @@ type Gesture struct {
 	// OnSelectionStart begins a drag-based selection (e.g. text drag-select) anchored at the local point.
 	// When set, pointer-down on this gesture starts a selection drag instead of a tap, so OnTap/OnTapAt
 	// are skipped until the pointer is released without significant movement.
-	OnSelectionStart func(position woxui.Point)
+	// Modifiers let callers implement Shift+click selection extension.
+	OnSelectionStart func(position woxui.Point, modifiers woxui.KeyModifiers)
 	// OnSelectionExtend updates the active selection drag to the given local point.
 	OnSelectionExtend func(position woxui.Point)
+	// OnSelectionEnd reports that an active drag selection finished (pointer up/cancel).
+	OnSelectionEnd func()
 }
 
 func (w Gesture) layout(ctx context, available constraints) *node {
@@ -1374,7 +1379,7 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 		onDoubleTapAt: w.OnDoubleTapAt, onTripleTapAt: w.OnTripleTapAt, onTapAt: w.OnTapAt,
 		onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onPanStart: w.OnPanStart, onPanUpdate: w.OnPanUpdate, onPanEnd: w.OnPanEnd,
 		onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled, onPointer: w.OnPointer,
-		onSelectionStart: w.OnSelectionStart, onSelectionExtend: w.OnSelectionExtend,
+		onSelectionStart: w.OnSelectionStart, onSelectionExtend: w.OnSelectionExtend, onSelectionEnd: w.OnSelectionEnd,
 	}
 	return target
 }

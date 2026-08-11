@@ -75,6 +75,12 @@ type Host struct {
 	modalScopes  []woxui.AccessibilityNodeID
 	scopeRestore map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID
 
+	// overlay is painted above the build result in window coordinates (context menus, etc.).
+	overlay       Widget
+	overlayOwner  Key
+	overlayToken  uint64
+	lastFrameSize woxui.Size
+
 	generation uint64
 	snapshot   atomic.Value
 	changeMu   sync.Mutex
@@ -198,8 +204,9 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	// Preserve the zero-rectangle full-frame sentinel instead of narrowing it to rebuilt Boundary bounds.
 	fullDamage := damage.Width <= 0 || damage.Height <= 0
 	h.elements.beginFrame()
-	widget := h.build(frame)
-	if widget == nil {
+	base := h.build(frame)
+	h.lastFrameSize = frame.Size
+	if base == nil {
 		h.elements.endFrame()
 		h.recordFramePhase(frameID, woxui.FrameMetricBuildLayout, time.Since(buildLayoutStart))
 		h.recordFrameCounts(frameID, 0, displayList.CommandCount(), 0)
@@ -209,6 +216,10 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	}
 
 	oldNodes := h.nodes
+	focusedKey := Key("")
+	if old := oldNodes[h.focused]; old != nil {
+		focusedKey = old.key
+	}
 	animation := h.animations.beginFrame()
 	var debugFrame *repaintDebugFrame
 	if h.repaintDebugMode != RepaintDebugOff {
@@ -218,7 +229,19 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	}
 	caretVisible := h.caretVisibleForFrame()
 	damageTracker := &frameDamageTracker{}
-	root := widget.layout(context{window: h.window, animation: animation, damage: damageTracker, debug: debugFrame, elements: h.elements, element: h.elements.root}, constraints{width: frame.Size.Width, height: frame.Size.Height})
+	layoutCtx := context{window: h.window, animation: animation, damage: damageTracker, debug: debugFrame, elements: h.elements, element: h.elements.root}
+	layoutConstraints := constraints{width: frame.Size.Width, height: frame.Size.Height}
+	// Layout the base tree once so overlay ownership can be validated against this frame's keys
+	// before composing the already-built base node with a separately laid-out overlay.
+	root := base.layout(layoutCtx, layoutConstraints)
+	if h.overlay != nil && h.overlayOwner != "" && !nodeTreeHasKey(root, h.overlayOwner) {
+		h.overlay = nil
+		h.overlayOwner = ""
+	}
+	if overlay := h.overlay; overlay != nil {
+		overlayNode := overlay.layout(layoutCtx, layoutConstraints)
+		root = composeOverlayRoot(root, overlayNode, frame.Size)
+	}
 	diagnostics, removedDamage := h.elements.endFrame()
 	boundaryDamage := damageTracker.resolve(woxui.Rect{})
 	if !fullDamage {
@@ -257,6 +280,19 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	h.identities = identities
 	h.nodes = nodes
 	h.reconcileTransientState(oldNodes)
+	h.reconcileOverlayOwner()
+	// Remap focus by stable key before reconcileFocus so autofocus never wins and
+	// pure ID remapping does not fire blur/focus or SetTextInputState.
+	if focusedKey != "" {
+		if current := h.nodes[h.focused]; current == nil || !h.isFocusable(current) || current.key != focusedKey {
+			for _, node := range h.nodes {
+				if node.key == focusedKey && h.isFocusable(node) {
+					h.focused = node.id
+					break
+				}
+			}
+		}
+	}
 	h.reconcileFocus()
 	h.updateCaretBlink(nodeHasActiveCaret(root, h.focused, false, false))
 	h.setCaretDamage(activeCaretDamage(root, h.focused, false, false))
@@ -333,6 +369,8 @@ func (h *Host) Dispose() {
 	}
 	h.root = nil
 	h.postFrame = nil
+	h.overlay = nil
+	h.overlayOwner = ""
 	h.nodes = map[woxui.AccessibilityNodeID]*node{}
 	h.identities = map[string]woxui.AccessibilityNodeID{}
 }
@@ -678,6 +716,108 @@ func (h *Host) ensureFocusedVisible() {
 	}
 }
 
+// SetOverlay places a window-coordinate widget above the retained build tree.
+// ownerKey identifies the widget that owns the overlay; when that key leaves the
+// tree the overlay is cleared automatically so stale menus cannot outlive their field.
+func (h *Host) SetOverlay(ownerKey Key, widget Widget) uint64 {
+	if h == nil {
+		return 0
+	}
+	h.overlayOwner = ownerKey
+	h.overlayToken++
+	h.overlay = widget
+	h.invalidate()
+	return h.overlayToken
+}
+
+// ClearOverlay removes the Host overlay layer when ownerKey and token still match.
+// Pass token 0 to clear any overlay owned by ownerKey regardless of token.
+func (h *Host) ClearOverlay(ownerKey Key, token uint64) {
+	if h == nil {
+		return
+	}
+	if h.overlay == nil {
+		return
+	}
+	if ownerKey != "" && h.overlayOwner != ownerKey {
+		return
+	}
+	if token != 0 && h.overlayToken != token {
+		return
+	}
+	h.overlay = nil
+	h.overlayOwner = ""
+	h.invalidate()
+}
+
+// HasOverlay reports whether a window-level overlay is currently set.
+func (h *Host) HasOverlay() bool {
+	return h != nil && h.overlay != nil
+}
+
+// OverlayOwner returns the stable key that currently owns the Host overlay, if any.
+func (h *Host) OverlayOwner() Key {
+	if h == nil || h.overlay == nil {
+		return ""
+	}
+	return h.overlayOwner
+}
+
+func (h *Host) reconcileOverlayOwner() {
+	if h == nil || h.overlay == nil || h.overlayOwner == "" {
+		return
+	}
+	for _, node := range h.nodes {
+		if node.key == h.overlayOwner {
+			return
+		}
+	}
+	h.overlay = nil
+	h.overlayOwner = ""
+	// Root was built without this overlay already when ownership is checked pre-compose;
+	// still invalidate so any dependent UI settles on the cleared state.
+	h.invalidate()
+}
+
+func nodeTreeHasKey(root *node, key Key) bool {
+	if root == nil || key == "" {
+		return false
+	}
+	if root.key == key {
+		return true
+	}
+	for _, child := range root.children {
+		if nodeTreeHasKey(child, key) {
+			return true
+		}
+	}
+	return false
+}
+
+// composeOverlayRoot stacks an already-laid-out base tree under a separately laid-out overlay
+// without invoking base.layout a second time.
+func composeOverlayRoot(base, overlay *node, size woxui.Size) *node {
+	if base == nil {
+		return overlay
+	}
+	if overlay == nil {
+		return base
+	}
+	return &node{
+		kind:     "overlay-stack",
+		bounds:   woxui.Rect{Width: size.Width, Height: size.Height},
+		children: []*node{base, overlay},
+	}
+}
+
+// FrameSize returns the most recent Frame logical size.
+func (h *Host) FrameSize() woxui.Size {
+	if h == nil {
+		return woxui.Size{}
+	}
+	return h.lastFrameSize
+}
+
 // RequestFocus focuses the retained element with the matching widget key.
 func (h *Host) RequestFocus(key Key) bool {
 	for _, current := range h.nodes {
@@ -886,7 +1026,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		if target != nil && target.gesture != nil && target.gesture.onSelectionStart != nil && !multiTap {
 			h.selecting = h.pressed
 			h.selectingGestureID = target.gesture.id
-			target.gesture.onSelectionStart(woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y})
+			target.gesture.onSelectionStart(woxui.Point{X: event.Position.X - target.bounds.X, Y: event.Position.Y - target.bounds.Y}, event.Modifiers)
 			h.invalidate()
 		} else if target != nil && target.gesture != nil && target.gesture.onPanStart != nil {
 			h.panning = h.pressed
@@ -896,7 +1036,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 	}
 	if event.Kind == woxui.PointerDown && event.Button == woxui.PointerButtonSecondary {
 		if target != nil && target.gesture != nil && target.gesture.onSecondaryTapDown != nil {
-			target.gesture.onSecondaryTapDown()
+			target.gesture.onSecondaryTapDown(event.Position)
 			h.invalidate()
 		}
 	}
@@ -963,6 +1103,9 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 				h.dragging = true
 			}
 			selectingMoved := h.dragging
+			if selector != nil && selector.gesture != nil && selector.gesture.onSelectionEnd != nil {
+				selector.gesture.onSelectionEnd()
+			}
 			h.selecting = 0
 			h.selectingGestureID = ""
 			h.dragging = false
@@ -1314,25 +1457,28 @@ func (h *Host) buildAccessibilityTree(diagnostics []string) (woxui.Accessibility
 				actions = append(actions, woxui.AccessibilityActionFocus)
 			}
 			nativeNode := woxui.AccessibilityNode{
-				ID:             current.id,
-				ParentID:       semanticParent,
-				AutomationID:   semantic.automationID,
-				Role:           semantic.role,
-				Label:          semantic.label,
-				Description:    semantic.description,
-				Value:          value,
-				Bounds:         current.bounds,
-				Actions:        actions,
-				LiveRegion:     semantic.liveRegion,
-				Enabled:        semantic.enabled,
-				Focusable:      h.isFocusable(current),
-				Focused:        current.id == h.focused,
-				Selected:       semantic.selected,
-				Checked:        semantic.checked,
-				Expanded:       semantic.expanded,
-				ReadOnly:       semantic.readOnly,
-				Protected:      semantic.protected,
-				NativeBoundary: semantic.nativeBoundary,
+				ID:               current.id,
+				ParentID:         semanticParent,
+				AutomationID:     semantic.automationID,
+				Role:             semantic.role,
+				Label:            semantic.label,
+				Description:      semantic.description,
+				Value:            value,
+				Bounds:           current.bounds,
+				Actions:          actions,
+				LiveRegion:       semantic.liveRegion,
+				Enabled:          semantic.enabled,
+				Focusable:        h.isFocusable(current),
+				Focused:          current.id == h.focused,
+				Selected:         semantic.selected,
+				Checked:          semantic.checked,
+				Expanded:         semantic.expanded,
+				ReadOnly:         semantic.readOnly,
+				Protected:        semantic.protected,
+				NativeBoundary:   semantic.nativeBoundary,
+				HasTextSelection: semantic.hasTextSelection,
+				SelectionStart:   semantic.selectionStart,
+				SelectionEnd:     semantic.selectionEnd,
 			}
 			appendNode(nativeNode)
 			nextParent = nativeNode.ID

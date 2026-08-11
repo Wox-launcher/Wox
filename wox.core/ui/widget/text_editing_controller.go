@@ -102,6 +102,16 @@ func (c *TextEditingController) InsertText(text string) bool {
 	return c.editor.InsertText(text)
 }
 
+// InsertTextSeparate replaces the selection without merging into the previous typing undo batch.
+func (c *TextEditingController) InsertTextSeparate(text string) bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.editor.InsertTextSeparate(text)
+}
+
 // DeleteSelection removes the active selection range and collapses the caret to its start.
 func (c *TextEditingController) DeleteSelection() bool {
 	if c == nil {
@@ -160,4 +170,34 @@ func (c *TextEditingController) HandleTextInput(event woxui.TextInputEvent) bool
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.editor.HandleTextInput(event)
+}
+
+// PreferredX returns the sticky measured horizontal caret X used by vertical navigation, when set.
+func (c *TextEditingController) PreferredX() (float32, bool) {
+	if c == nil {
+		return 0, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.editor.PreferredX()
+}
+
+// SetPreferredX remembers the measured horizontal caret X for up/down and page navigation.
+func (c *TextEditingController) SetPreferredX(x float32) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.editor.SetPreferredX(x)
+	c.mu.Unlock()
+}
+
+// ClearPreferredColumn drops any sticky vertical-navigation column.
+func (c *TextEditingController) ClearPreferredColumn() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.editor.ClearPreferredColumn()
+	c.mu.Unlock()
 }

@@ -14,6 +14,7 @@ import (
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
+	"wox/util/clipboard"
 )
 
 type launcherPreparedSectionProps struct {
@@ -192,6 +193,14 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	snapshot := a.snapshot()
 	if a.host != nil {
 		a.host.RecordSnapshotDuration(time.Since(snapshotStart))
+		// Drop or rebuild the query context menu when enablement is stale or the editor is inactive.
+		if a.host.OverlayOwner() == launcherview.LauncherQueryInputKey {
+			if !snapshot.queryEnabled {
+				a.host.ClearOverlay(launcherview.LauncherQueryInputKey, 0)
+			} else {
+				a.refreshQueryContextMenuIfStale(snapshot.palette.componentTheme())
+			}
+		}
 	}
 	width := frame.Size.Width
 	height := frame.Size.Height
@@ -497,13 +506,19 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 			}
 			focusQuery()
 		},
-		OnSelectionStart: func(point woxui.Point) {
+		OnSelectionStart: func(point woxui.Point, modifiers woxui.KeyModifiers) {
 			a.hideActionPanel()
 			a.deactivateRequirementForm()
 			text := a.editor.State().Text
-			anchor := a.queryOffsetAt(text, point, style, lineHeight)
-			a.selectionAnchor = anchor
-			a.editor.SetCaret(anchor)
+			focus := a.queryOffsetAt(text, point, style, lineHeight)
+			if modifiers&woxui.KeyModifierShift != 0 {
+				anchor := a.editor.State().Selection.Anchor
+				a.selectionAnchor = anchor
+				a.editor.SetSelection(anchor, focus)
+			} else {
+				a.selectionAnchor = focus
+				a.editor.SetCaret(focus)
+			}
 			_ = a.window.Invalidate()
 		},
 		OnSelectionExtend: func(point woxui.Point) {
@@ -512,9 +527,154 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 			a.editor.SetSelection(a.selectionAnchor, focus)
 			_ = a.window.Invalidate()
 		},
+		OnSecondaryTapDown: func(point woxui.Point) {
+			if !snapshot.queryEnabled {
+				return
+			}
+			a.openQueryContextMenu(point, snapshot.palette.componentTheme())
+		},
 		OnKey: a.onKey, OnTextInput: func(event woxui.TextInputEvent) bool { a.onTextInput(event); return true }, OnFocusChange: a.onQueryFocusChanged, OnSetValue: a.setQueryText,
 		OnTextInputState: func(state woxui.TextInputState) { _ = a.window.SetTextInputState(state) },
+		OnSelectAll: func() error {
+			a.editor.SelectAll()
+			_ = a.window.Invalidate()
+			return nil
+		},
+		OnCopy: func() error {
+			if selected := a.editor.SelectedText(); selected != "" {
+				_ = clipboard.WriteText(selected)
+			}
+			return nil
+		},
+		OnCut:   a.queryViewClipboardCut,
+		OnPaste: a.queryViewClipboardPaste,
 	}
+}
+
+// queryMenuEnablement is the Cut/Copy/Paste/Select All snapshot for the launcher query menu.
+type queryMenuEnablement struct {
+	canCut, canCopy, canPaste, canSelectAll bool
+}
+
+func computeQueryMenuEnablement(state woxui.TextEditingState, canFocus bool) queryMenuEnablement {
+	hasSelection := !state.Selection.Collapsed()
+	return queryMenuEnablement{
+		canCut: hasSelection && canFocus, canCopy: hasSelection && canFocus,
+		canPaste: canFocus, canSelectAll: state.Text != "" && canFocus,
+	}
+}
+
+// openQueryContextMenu shows Cut/Copy/Paste/Select All above the launcher query editor.
+func (a *App) openQueryContextMenu(windowPos woxui.Point, theme woxcomponent.Theme) {
+	if a == nil || a.host == nil || !a.queryCanFocus() {
+		return
+	}
+	state := a.editor.State()
+	en := computeQueryMenuEnablement(state, true)
+	owner := launcherview.LauncherQueryInputKey
+	var token uint64
+	clear := func() {
+		a.host.ClearOverlay(owner, token)
+	}
+	menu := woxcomponent.BuildTextEditContextMenu(woxcomponent.TextEditContextMenuProps{
+		ID: "launcher.query.menu", Theme: theme,
+		CanCut: en.canCut, CanCopy: en.canCopy, CanPaste: en.canPaste, CanSelectAll: en.canSelectAll,
+		OnAction: func(action woxcomponent.TextEditContextAction) {
+			clear()
+			live := computeQueryMenuEnablement(a.editor.State(), a.queryCanFocus())
+			switch action {
+			case woxcomponent.TextEditContextCut:
+				if !live.canCut {
+					return
+				}
+				_ = a.queryViewClipboardCut()
+			case woxcomponent.TextEditContextCopy:
+				if !live.canCopy {
+					return
+				}
+				if selected := a.editor.SelectedText(); selected != "" {
+					_ = clipboard.WriteText(selected)
+				}
+			case woxcomponent.TextEditContextPaste:
+				if !live.canPaste {
+					return
+				}
+				_ = a.queryViewClipboardPaste()
+			case woxcomponent.TextEditContextSelectAll:
+				if !live.canSelectAll {
+					return
+				}
+				a.editor.SelectAll()
+				a.refreshQueryContextMenuIfStale(theme)
+				_ = a.window.Invalidate()
+			}
+		},
+	})
+	token = a.host.SetOverlay(owner, woxcomponent.PlaceTextEditContextMenu(a.host.FrameSize(), windowPos, string(owner), menu, clear))
+	a.queryMenuAnchor = windowPos
+	a.queryMenuEnablement = en
+	a.queryMenuTheme = theme
+}
+
+// refreshQueryContextMenuIfStale rebuilds the query menu when selection or focus enablement changed.
+func (a *App) refreshQueryContextMenuIfStale(theme woxcomponent.Theme) {
+	if a == nil || a.host == nil || a.host.OverlayOwner() != launcherview.LauncherQueryInputKey {
+		return
+	}
+	if !a.queryCanFocus() {
+		a.host.ClearOverlay(launcherview.LauncherQueryInputKey, 0)
+		return
+	}
+	if theme == (woxcomponent.Theme{}) {
+		theme = a.queryMenuTheme
+	}
+	next := computeQueryMenuEnablement(a.editor.State(), true)
+	if next == a.queryMenuEnablement && theme == a.queryMenuTheme {
+		return
+	}
+	a.openQueryContextMenu(a.queryMenuAnchor, theme)
+}
+
+func (a *App) queryViewClipboardCut() error {
+	if a == nil || !a.queryCanFocus() {
+		return nil
+	}
+	previousText := a.editor.State().Text
+	selected := a.editor.SelectedText()
+	if selected != "" {
+		_ = clipboard.WriteText(selected)
+		if a.editor.DeleteSelection() {
+			a.applyQueryTextChangeLocked(a.editor.State().Text)
+		}
+	}
+	_ = a.window.Invalidate()
+	a.reconcileSelectedPreview()
+	if err := a.sendCurrentQuery(); err != nil {
+		log.Printf("send query after cut: %v", err)
+	}
+	a.resizeLauncherForQueryLineChange(previousText)
+	return nil
+}
+
+func (a *App) queryViewClipboardPaste() error {
+	if a == nil || !a.queryCanFocus() {
+		return nil
+	}
+	text, err := clipboard.ReadText()
+	if err != nil || text == "" {
+		return nil
+	}
+	previousText := a.editor.State().Text
+	if a.editor.InsertTextSeparate(normalizeQueryNewlines(text)) {
+		a.applyQueryTextChangeLocked(a.editor.State().Text)
+	}
+	_ = a.window.Invalidate()
+	a.reconcileSelectedPreview()
+	if err := a.sendCurrentQuery(); err != nil {
+		log.Printf("send query after paste: %v", err)
+	}
+	a.resizeLauncherForQueryLineChange(previousText)
+	return nil
 }
 
 // setQueryText applies an accessibility or automation value through the normal query pipeline.

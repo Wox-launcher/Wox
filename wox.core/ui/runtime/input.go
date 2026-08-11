@@ -32,6 +32,23 @@ func (m KeyModifiers) HasPrimary() bool {
 	return m&KeyModifierControl != 0
 }
 
+// HasWordModifier reports Option on macOS and Control elsewhere for word-wise editing.
+func (m KeyModifiers) HasWordModifier() bool {
+	if runtime.GOOS == "darwin" {
+		return m&KeyModifierAlt != 0
+	}
+	return m&KeyModifierControl != 0
+}
+
+// HasLineModifier reports Command on macOS for line-boundary navigation.
+// Other platforms use Home/End (and multiline soft-line Home/End) instead.
+func (m KeyModifiers) HasLineModifier() bool {
+	if runtime.GOOS == "darwin" {
+		return m&KeyModifierMeta != 0
+	}
+	return false
+}
+
 // KeyModifiers is a platform-neutral modifier bit set.
 type KeyModifiers uint8
 

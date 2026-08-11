@@ -8,6 +8,27 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestLauncherQueryWiresClipboardAccessibilityActions(t *testing.T) {
+	selectAll, copy, cut, paste := false, false, false, false
+	query := launcherQueryEditable(LauncherQueryView(LauncherQueryProps{
+		Height: 40, Enabled: true, State: woxui.TextEditingState{Text: "query"},
+		OnSelectAll: func() error { selectAll = true; return nil },
+		OnCopy:      func() error { copy = true; return nil },
+		OnCut:       func() error { cut = true; return nil },
+		OnPaste:     func() error { paste = true; return nil },
+	}))
+	if query.OnSelectAll == nil || query.OnCopy == nil || query.OnCut == nil || query.OnPaste == nil {
+		t.Fatal("launcher query should expose clipboard handlers when wired")
+	}
+	_ = query.OnSelectAll()
+	_ = query.OnCopy()
+	_ = query.OnCut()
+	_ = query.OnPaste()
+	if !selectAll || !copy || !cut || !paste {
+		t.Fatalf("clipboard handlers not invoked: selectAll=%v copy=%v cut=%v paste=%v", selectAll, copy, cut, paste)
+	}
+}
+
 func TestLauncherQueryRemainsFocusableWithoutOwningFocus(t *testing.T) {
 	query := launcherQueryEditable(LauncherQueryView(LauncherQueryProps{Height: 40, Focused: false, Enabled: true}))
 	if query.Disabled {

@@ -36,7 +36,7 @@ func TestLauncherGridResultWiresSecondaryTap(t *testing.T) {
 		CellWidth: 120, CellHeight: 110, VisualWidth: 100, VisualHeight: 70,
 	}).(woxwidget.Gesture)
 
-	result.OnSecondaryTapDown()
+	result.OnSecondaryTapDown(woxui.Point{})
 	if !tapped {
 		t.Fatal("secondary tap callback was not wired to the grid result")
 	}

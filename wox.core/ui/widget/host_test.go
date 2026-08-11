@@ -775,7 +775,7 @@ func TestHostDragSelectionExtendsAndClickCollapses(t *testing.T) {
 		return Gesture{
 			ID:                "select",
 			OnTap:             func() { tapCalls++ },
-			OnSelectionStart:  func(p woxui.Point) { startCalls++ },
+			OnSelectionStart:  func(p woxui.Point, _ woxui.KeyModifiers) { startCalls++ },
 			OnSelectionExtend: func(p woxui.Point) { extendCalls++; lastExtend = p },
 			Child:             Container{Width: 100, Height: 20},
 		}
@@ -832,7 +832,7 @@ func TestHostSelectionCaptureSurvivesRetainedPathChange(t *testing.T) {
 	selection := func() Widget {
 		return Gesture{
 			ID: "moving-editor", OnTap: func() { tapCalls++ },
-			OnSelectionStart: func(woxui.Point) { startCalls++ }, OnSelectionExtend: func(woxui.Point) { extendCalls++ },
+			OnSelectionStart: func(woxui.Point, woxui.KeyModifiers) { startCalls++ }, OnSelectionExtend: func(woxui.Point) { extendCalls++ },
 			Child: Container{Width: 100, Height: 40},
 		}
 	}
@@ -864,7 +864,7 @@ func TestHostDispatchesPositionedDoubleAndTripleTap(t *testing.T) {
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
 		return Gesture{
 			ID: "multi-tap", OnTapAt: func(woxui.Point) { taps++ }, OnDoubleTapAt: func(woxui.Point) { doubleTaps++ }, OnTripleTapAt: func(woxui.Point) { tripleTaps++ },
-			OnSelectionStart: func(woxui.Point) { selectionStarts++ },
+			OnSelectionStart: func(woxui.Point, woxui.KeyModifiers) { selectionStarts++ },
 			Child:            Container{Width: 100, Height: 20},
 		}
 	})
@@ -980,7 +980,7 @@ func TestHostSecondaryTapDownDoesNotActivatePrimaryTap(t *testing.T) {
 	primaryTaps := 0
 	host := NewHost(func(frame woxui.FrameInfo) Widget {
 		return Gesture{
-			ID: "result", OnTap: func() { primaryTaps++ }, OnSecondaryTapDown: func() { secondaryTaps++ },
+			ID: "result", OnTap: func() { primaryTaps++ }, OnSecondaryTapDown: func(woxui.Point) { secondaryTaps++ },
 			Child: Container{Width: 40, Height: 20},
 		}
 	})
@@ -1057,5 +1057,52 @@ func TestHostPanTracksPointerOutsideBounds(t *testing.T) {
 
 	if len(points) != 2 || points[0].X != 5 || points[1].X != 120 || !ended {
 		t.Fatalf("pan = points %#v ended %v, want local X positions 5/120 and ended", points, ended)
+	}
+}
+
+func TestHostOverlayClearsWhenOwnerUnmounts(t *testing.T) {
+	showOwner := true
+	overlayTaps := 0
+	baseTaps := 0
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		if !showOwner {
+			return Gesture{
+				ID: "base", OnTap: func() { baseTaps++ },
+				Child: Container{Width: 100, Height: 40},
+			}
+		}
+		return Focusable{Key: "owner-field", Child: Container{Width: 100, Height: 40}}
+	})
+	host.AttachServices(&fakeHostServices{})
+	renderTestFrame(host)
+	token := host.SetOverlay("owner-field", Gesture{
+		ID: "menu", OnTap: func() { overlayTaps++ },
+		Child: Container{Width: 100, Height: 40},
+	})
+	renderTestFrame(host)
+	if !host.HasOverlay() || host.OverlayOwner() != "owner-field" {
+		t.Fatal("overlay should be owned by owner-field")
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 10, Y: 10}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 10, Y: 10}})
+	if overlayTaps != 1 {
+		t.Fatalf("overlay taps = %d, want 1 while owner is mounted", overlayTaps)
+	}
+	host.ClearOverlay("other", token)
+	if !host.HasOverlay() {
+		t.Fatal("clear with mismatched owner must keep overlay")
+	}
+	showOwner = false
+	renderTestFrame(host)
+	if host.HasOverlay() {
+		t.Fatal("overlay should clear when owner key leaves the tree")
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 10, Y: 10}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 10, Y: 10}})
+	if overlayTaps != 1 {
+		t.Fatalf("cleared overlay still received taps: overlayTaps=%d", overlayTaps)
+	}
+	if baseTaps != 1 {
+		t.Fatalf("base taps = %d, want 1 after overlay cleared from the hit-test tree", baseTaps)
 	}
 }
