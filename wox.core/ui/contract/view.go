@@ -18,8 +18,11 @@ type Position struct {
 
 // ShowOptions contains the launch-time state and window behavior consumed by the Go UI.
 type ShowOptions struct {
-	SelectAll      bool
-	Position       Position
+	SelectAll bool
+	Position  Position
+	// PositionHeight is the height WindowPosition was computed for. When
+	// QueryBoxAtBottom is set, the launcher keeps that implied bottom edge fixed.
+	PositionHeight int
 	WindowWidth    int
 	MaxResultCount int
 	QueryHistories []common.PlainQuery

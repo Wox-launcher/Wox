@@ -1444,16 +1444,17 @@ func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQu
 		logger.Debug(queryCtx, fmt.Sprintf("tray query anchor resolved: windowX=%d bottom=%d screen=(x=%d y=%d w=%d h=%d)", trayAnchor.WindowX, trayAnchor.Bottom, trayAnchor.ScreenRect.X, trayAnchor.ScreenRect.Y, trayAnchor.ScreenRect.Width, trayAnchor.ScreenRect.Height))
 	}
 	m.openSecondaryInstance(queryCtx, "tray-query:"+strings.TrimSpace(trayQuery.Query), plainQuery, common.ShowContext{
-		SelectAll:        false,
-		HideQueryBox:     trayQuery.HideQueryBox,
-		HideToolbar:      trayQuery.HideToolbar,
-		QueryBoxAtBottom: runtime.GOOS == "windows",
-		HideOnBlur:       true,
-		ShowSource:       common.ShowSourceTrayQuery,
-		WindowPosition:   &position,
-		TrayAnchor:       trayAnchor,
-		WindowWidth:      windowWidth,
-		MaxResultCount:   trayQuery.MaxResultCount,
+		SelectAll:            false,
+		HideQueryBox:         trayQuery.HideQueryBox,
+		HideToolbar:          trayQuery.HideToolbar,
+		QueryBoxAtBottom:     runtime.GOOS == "windows",
+		HideOnBlur:           true,
+		ShowSource:           common.ShowSourceTrayQuery,
+		WindowPosition:       &position,
+		WindowPositionHeight: windowHeight,
+		TrayAnchor:           trayAnchor,
+		WindowWidth:          windowWidth,
+		MaxResultCount:       trayQuery.MaxResultCount,
 	})
 }
 

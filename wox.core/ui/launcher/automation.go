@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/common"
 	"wox/ui/automation"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
@@ -26,26 +27,48 @@ const (
 )
 
 func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, automationSurfaceKind) {
+	target := a.resolveAutomationTarget()
 	var host *woxwidget.Host
 	var window *woxui.Window
 	kind := automationSurfaceLauncher
-	_ = a.runOnUI("resolve automation surface", func() {
-		if a.onboardingOpen && a.onboardingHost != nil && a.onboardingView != nil {
-			host = a.onboardingHost
-			window = a.onboardingView.Window()
-			kind = automationSurfaceOnboarding
-			return
+	_ = target.runOnUI("resolve automation surface", func() {
+		if target == a {
+			if a.onboardingOpen && a.onboardingHost != nil && a.onboardingView != nil {
+				host = a.onboardingHost
+				window = a.onboardingView.Window()
+				kind = automationSurfaceOnboarding
+				return
+			}
+			if a.settingsOpen && a.settingsHost != nil && a.settingsView != nil {
+				host = a.settingsHost
+				window = a.settingsView.Window()
+				kind = automationSurfaceSettings
+				return
+			}
 		}
-		if a.settingsOpen && a.settingsHost != nil && a.settingsView != nil {
-			host = a.settingsHost
-			window = a.settingsView.Window()
-			kind = automationSurfaceSettings
-			return
-		}
-		host = a.host
-		window = a.window
+		host = target.host
+		window = target.window
 	})
 	return host, window, kind
+}
+
+// resolveAutomationTarget returns the primary or focused secondary smoke target.
+func (a *App) resolveAutomationTarget() *App {
+	var focus string
+	_ = a.runOnUI("read automation focus instance", func() {
+		focus = strings.TrimSpace(a.automationFocusInstance)
+	})
+	if focus == "" || focus == "primary" || a.instances == nil {
+		return a
+	}
+	a.instances.mu.Lock()
+	sessionID := a.instances.sessionByName[focus]
+	target := a.instances.bySessionID[sessionID]
+	a.instances.mu.Unlock()
+	if target == nil || !target.isLive() {
+		return a
+	}
+	return target
 }
 
 // independentAutomationWindow routes black-box input and capture to a live raw multi-window surface.
@@ -172,6 +195,7 @@ func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) er
 		_, err := window.DispatchKey(woxui.KeyEvent{Key: key, Modifiers: modifiers})
 		return err
 	}
+	target := a.resolveAutomationTarget()
 	host, _, kind := a.automationSurface()
 	if host == nil {
 		return errors.New("active widget host is not initialized")
@@ -185,7 +209,7 @@ func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) er
 			case automationSurfaceSettings:
 				a.onSettingsWindowKey(down)
 			default:
-				a.onKey(down)
+				target.onKey(down)
 			}
 		}
 		up := woxui.KeyEvent{Key: key, Modifiers: modifiers}
@@ -196,7 +220,7 @@ func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) er
 			case automationSurfaceSettings:
 				a.onSettingsWindowKey(up)
 			default:
-				a.onKey(up)
+				target.onKey(up)
 			}
 		}
 	})
@@ -204,6 +228,7 @@ func (a *App) PressAutomationKey(key woxui.Key, modifiers woxui.KeyModifiers) er
 
 // EnterAutomationText commits UTF-8 text through the active text-input owner.
 func (a *App) EnterAutomationText(text string) error {
+	target := a.resolveAutomationTarget()
 	host, _, kind := a.automationSurface()
 	if host == nil {
 		return errors.New("active widget host is not initialized")
@@ -214,7 +239,7 @@ func (a *App) EnterAutomationText(text string) error {
 			if kind == automationSurfaceSettings {
 				a.onSettingsWindowTextInput(event)
 			} else if kind == automationSurfaceLauncher {
-				a.onTextInput(event)
+				target.onTextInput(event)
 			}
 		}
 	})
@@ -227,6 +252,7 @@ func (a *App) ResetAutomationState() error {
 	}
 	var resetErr error
 	if err := woxui.Call(func() {
+		a.automationFocusInstance = ""
 		if err := a.windows.CloseAllExcept(a.windowID); err != nil {
 			resetErr = err
 			return
@@ -295,6 +321,46 @@ func (a *App) OpenAutomationSelectionQuery(text string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return provider.AutomationOpenSelectionQuery(ctx, a.sessionID, text)
+}
+
+// OpenAutomationExplorerQuery opens the File Explorer Search secondary with bottom-anchored chrome.
+func (a *App) OpenAutomationExplorerQuery(query string) error {
+	provider, ok := a.services.(interface {
+		AutomationOpenExplorerQuery(context.Context, string, string) error
+	})
+	if !ok {
+		return errors.New("explorer query automation is unavailable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := provider.AutomationOpenExplorerQuery(ctx, a.sessionID, query); err != nil {
+		return err
+	}
+	return a.SetAutomationFocusInstance(string(common.ShowSourceExplorer))
+}
+
+// SetAutomationFocusInstance routes later smoke Snapshot/Bounds/Perform calls to one launcher instance.
+func (a *App) SetAutomationFocusInstance(instanceName string) error {
+	instanceName = strings.TrimSpace(instanceName)
+	if instanceName == "" {
+		instanceName = "primary"
+	}
+	if instanceName != "primary" {
+		state, err := a.AutomationWindowState(instanceName)
+		if err != nil {
+			return err
+		}
+		if !state.Exists {
+			return errors.New("automation focus instance does not exist")
+		}
+	}
+	return a.runOnUI("set automation focus instance", func() {
+		if instanceName == "primary" {
+			a.automationFocusInstance = ""
+			return
+		}
+		a.automationFocusInstance = instanceName
+	})
 }
 
 // AutomationWindowState returns the real managed lifecycle for the primary or a named secondary launcher.

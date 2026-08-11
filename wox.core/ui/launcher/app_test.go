@@ -47,9 +47,9 @@ func TestLauncherWindowOriginPreservesDraggedPosition(t *testing.T) {
 	params := showAppParams{Position: position{X: 400, Y: 300}}
 	current := woxui.Rect{X: 92, Y: 74, Width: 760, Height: 420}
 
-	x, y := launcherWindowOrigin(params, current, 620, false)
-	if x != current.X || y != current.Y {
-		t.Fatalf("preserved origin = %.0f,%.0f, want %.0f,%.0f", x, y, current.X, current.Y)
+	x, y, anchor := launcherWindowOrigin(params, current, 620, false, 0)
+	if x != current.X || y != current.Y || anchor != 0 {
+		t.Fatalf("preserved origin = %.0f,%.0f anchor %.0f, want %.0f,%.0f anchor 0", x, y, anchor, current.X, current.Y)
 	}
 }
 
@@ -370,9 +370,9 @@ func TestLauncherWindowOriginKeepsBottomQueryBoxAnchored(t *testing.T) {
 	params := showAppParams{QueryBoxAtBottom: true}
 	current := woxui.Rect{X: 92, Y: 200, Width: 760, Height: 420}
 
-	x, y := launcherWindowOrigin(params, current, 620, false)
-	if x != current.X || y != 0 {
-		t.Fatalf("bottom-anchored origin = %.0f,%.0f, want %.0f,0", x, y, current.X)
+	x, y, anchor := launcherWindowOrigin(params, current, 620, false, 0)
+	if x != current.X || y != 0 || anchor != 620 {
+		t.Fatalf("bottom-anchored origin = %.0f,%.0f anchor %.0f, want %.0f,0 anchor 620", x, y, anchor, current.X)
 	}
 }
 
@@ -380,9 +380,40 @@ func TestLauncherWindowOriginUsesShowPositionWhenRequested(t *testing.T) {
 	params := showAppParams{Position: position{X: 400, Y: 300}}
 	current := woxui.Rect{X: 92, Y: 74, Width: 760, Height: 420}
 
-	x, y := launcherWindowOrigin(params, current, 620, true)
-	if x != 400 || y != 300 {
-		t.Fatalf("show origin = %.0f,%.0f, want 400,300", x, y)
+	x, y, anchor := launcherWindowOrigin(params, current, 620, true, 0)
+	if x != 400 || y != 300 || anchor != 0 {
+		t.Fatalf("show origin = %.0f,%.0f anchor %.0f, want 400,300 anchor 0", x, y, anchor)
+	}
+}
+
+func TestLauncherWindowOriginBottomQueryKeepsShowBottomFixed(t *testing.T) {
+	params := showAppParams{
+		QueryBoxAtBottom: true,
+		Position:         position{X: 100, Y: 500},
+		PositionHeight:   80,
+	}
+
+	x, y, anchor := launcherWindowOrigin(params, woxui.Rect{}, 200, true, 0)
+	if x != 100 || y != 380 || anchor != 580 {
+		t.Fatalf("bottom-anchored show origin = %.0f,%.0f anchor %.0f, want 100,380 anchor 580", x, y, anchor)
+	}
+
+	x, y, anchor = launcherWindowOrigin(params, woxui.Rect{Y: 381, Height: 200.4}, 200, false, anchor)
+	if x != 0 || y != 380 || anchor != 580 {
+		t.Fatalf("stable bottom-anchored resize = %.0f,%.0f anchor %.0f, want 0,380 anchor 580", x, y, anchor)
+	}
+
+	x, y, anchor = launcherWindowOrigin(params, woxui.Rect{}, 80, true, anchor)
+	if x != 100 || y != 500 || anchor != 580 {
+		t.Fatalf("initial-height show origin = %.0f,%.0f anchor %.0f, want 100,500 anchor 580", x, y, anchor)
+	}
+}
+
+func TestLauncherBoundsEffectivelyEqualToleratesDPIRoundTrip(t *testing.T) {
+	current := woxui.Rect{X: 10, Y: 20.2, Width: 400.2, Height: 75.2}
+	target := woxui.Rect{X: 10, Y: 20, Width: 400, Height: 75}
+	if !launcherBoundsEffectivelyEqual(current, target) {
+		t.Fatal("expected DPI round-trip bounds to compare equal")
 	}
 }
 

@@ -207,8 +207,14 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	queryHeight := float32(0)
 	previewFullscreen := snapshot.chatFullscreen || snapshot.terminalFullscreen
 	queryLineHeight := a.queryLineHeight(snapshot.densityMetrics)
+	queryAtBottom := snapshot.show.QueryBoxAtBottom
 	if !snapshot.show.HideQueryBox && !previewFullscreen {
-		queryHeight = snapshot.densityMetrics.queryBoxHeightForText(snapshot.editing.Text, queryLineHeight) + snapshot.palette.appPadding.Top
+		queryBoxHeight := snapshot.densityMetrics.queryBoxHeightForText(snapshot.editing.Text, queryLineHeight)
+		// Flutter kept app padding around the launcher column. With a bottom
+		// query box that means bottom padding stays under the query chrome;
+		// otherwise empty explorer dialogs leave AppPaddingBottom as a blank
+		// strip above the caret.
+		queryHeight, _ = launcherQueryChromeMetrics(queryBoxHeight, snapshot.palette.appPadding, queryAtBottom)
 	}
 	toolbarHeight := float32(0)
 	if !snapshot.show.HideToolbar && !previewFullscreen && (len(snapshot.results) > 0 || snapshot.toolbarMsg != nil) {
@@ -432,9 +438,10 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 		queryWidth -= loadingWidth + accessoryGap
 	}
 	queryWidth = max(snapshot.densityMetrics.scaled(140), queryWidth)
+	_, headerPadding := launcherQueryChromeMetrics(queryBoxHeight, snapshot.palette.appPadding, snapshot.show.QueryBoxAtBottom)
 	return launcherview.LauncherHeaderView(launcherview.LauncherHeaderProps{
 		Width: width, Height: height, QueryBoxHeight: queryBoxHeight, QueryEditorHeight: queryEditorHeight, DensityScale: snapshot.densityMetrics.scale,
-		QueryWidth: queryWidth, QueryRadius: snapshot.palette.queryRadius, AppPadding: snapshot.palette.appPadding, Theme: snapshot.palette.componentTheme(),
+		QueryWidth: queryWidth, QueryRadius: snapshot.palette.queryRadius, AppPadding: headerPadding, Theme: snapshot.palette.componentTheme(),
 		Query: a.queryViewProps(snapshot, queryWidth, queryEditorHeight, queryLineHeight), Refinement: refinement, RefinementWidth: refinementWidth,
 		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon,
 		Loading: loading, LoadingWidth: loadingWidth, LoadingSize: loadingSize, LoadingColor: snapshot.palette.cursor,
@@ -444,6 +451,18 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 			}
 		},
 	})
+}
+
+// launcherQueryChromeMetrics assigns theme app padding to the query chrome the
+// same way Flutter did for top vs bottom query layouts.
+func launcherQueryChromeMetrics(queryBoxHeight float32, appPadding woxwidget.Insets, queryAtBottom bool) (height float32, headerPadding woxwidget.Insets) {
+	headerPadding = appPadding
+	if queryAtBottom {
+		headerPadding.Top = 0
+		return queryBoxHeight + appPadding.Bottom, headerPadding
+	}
+	headerPadding.Bottom = 0
+	return queryBoxHeight + appPadding.Top, headerPadding
 }
 
 // queryViewProps prepares text slices and measurements without exposing controller state to the view.
@@ -899,13 +918,20 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale floa
 	containerPadding := snapshot.palette.resultContainerPadding
 	containerPadding.Left += snapshot.palette.appPadding.Left
 	containerPadding.Right += snapshot.palette.appPadding.Right
-	containerPadding.Bottom += snapshot.palette.appPadding.Bottom
+	// Bottom-anchored query boxes already own AppPaddingBottom under the query
+	// chrome, so move AppPaddingTop onto the result list instead of leaving it
+	// between the results and the query pill.
+	if snapshot.show.QueryBoxAtBottom {
+		containerPadding.Top += snapshot.palette.appPadding.Top
+	} else {
+		containerPadding.Bottom += snapshot.palette.appPadding.Bottom
+	}
 	rowPadding := snapshot.palette.resultItemPadding
 	rowPadding.Left += densityMetrics.scaled(5)
 	rowPadding.Right += densityMetrics.scaled(5)
 	tailLayoutWidth := max(float32(0), width-containerPadding.Left-containerPadding.Right-snapshot.palette.resultItemPadding.Left-snapshot.palette.resultItemPadding.Right)
 	contentHeight := containerPadding.Top + containerPadding.Bottom + float32(len(snapshot.results))*rowHeight + float32(max(0, len(snapshot.results)-1)*resultRowGap)
-	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics)
+	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics, containerPadding.Top)
 	a.rememberResolvedResultScroll(snapshot, scroll)
 	offset := scroll.offset
 	start, end := visibleResultRange(len(snapshot.results), offset, height, containerPadding.Top, rowHeight, resultRowGap)
@@ -1010,13 +1036,13 @@ func visibleResultRange(count int, offset, viewport, topPadding, rowHeight, gap 
 }
 
 // resolveResultScroll follows keyboard selection until pointer scrolling takes ownership of the viewport.
-func resolveResultScroll(results []queryResult, layout *gridLayout, selected int, width, viewport, content float32, current scrollController, detached bool, palette uiPalette, densityMetrics launcherDensityMetrics) scrollController {
+func resolveResultScroll(results []queryResult, layout *gridLayout, selected int, width, viewport, content float32, current scrollController, detached bool, palette uiPalette, densityMetrics launcherDensityMetrics, listTopPadding float32) scrollController {
 	scroll := current.withGeometry(viewport, content)
 	if detached || selected < 0 || selected >= len(results) || viewport <= 0 || content <= viewport {
 		return scroll
 	}
 	rowHeight := densityMetrics.normalized().resultRowHeight(palette)
-	top := palette.resultContainerPadding.Top + float32(selected)*(rowHeight+resultRowGap)
+	top := listTopPadding + float32(selected)*(rowHeight+resultRowGap)
 	bottom := top + rowHeight
 	if layout != nil {
 		top, bottom = gridResultVerticalBounds(results, selected, width, layout)
@@ -1024,7 +1050,7 @@ func resolveResultScroll(results []queryResult, layout *gridLayout, selected int
 		for index := selected - 1; index >= 0; index-- {
 			if results[index].IsGroup {
 				if selected-index <= 2 {
-					top = palette.resultContainerPadding.Top + float32(index)*(rowHeight+resultRowGap)
+					top = listTopPadding + float32(index)*(rowHeight+resultRowGap)
 				}
 				break
 			}

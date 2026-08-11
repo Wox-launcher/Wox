@@ -138,6 +138,39 @@ func TestLauncherHeaderUsesAlignmentForVerticalAccessoryPlacement(t *testing.T) 
 	}
 }
 
+func TestLauncherHeaderAppliesBottomAppPaddingForBottomQueryChrome(t *testing.T) {
+	header := LauncherHeaderView(LauncherHeaderProps{
+		Width: 400, Height: 65, QueryBoxHeight: 55, QueryWidth: 300,
+		AppPadding: woxwidget.Insets{Left: 8, Bottom: 10, Right: 8},
+	}).(woxwidget.Container)
+	if header.Padding.Top != 0 || header.Padding.Bottom != 10 || header.Padding.Left != 8 || header.Padding.Right != 8 {
+		t.Fatalf("header padding = %+v, want bottom app padding under the query pill", header.Padding)
+	}
+	pill := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container)
+	if pill.Height != 55 {
+		t.Fatalf("query pill height = %.0f, want 55", pill.Height)
+	}
+}
+
+func TestLauncherViewPutsEmptyLeadingSpaceAboveBottomQuery(t *testing.T) {
+	view := LauncherView(LauncherViewProps{
+		Width: 400, Height: 75, QueryAtBottom: true,
+		Content: woxwidget.Container{Width: 400, Height: 10},
+		Header:  woxwidget.Container{Width: 400, Height: 65},
+	}).(woxwidget.Semantics).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(view.Children) != 2 {
+		t.Fatalf("section count = %d, want leading space then query chrome", len(view.Children))
+	}
+	leading, ok := view.Children[0].(woxwidget.Container)
+	if !ok || leading.Height != 10 {
+		t.Fatalf("leading section = %#v, want 10px top app padding", view.Children[0])
+	}
+	header, ok := view.Children[1].(woxwidget.Container)
+	if !ok || header.Height != 65 {
+		t.Fatalf("query section = %#v, want bottom-anchored query chrome", view.Children[1])
+	}
+}
+
 func TestLauncherQueryBoundaryEqualCoversAllFields(t *testing.T) {
 	woxwidget.AssertEqualCoversAllFields(t, LauncherQueryProps{})
 	woxwidget.AssertEqualCoversAllFields(t, launcherQueryLoadingProps{})

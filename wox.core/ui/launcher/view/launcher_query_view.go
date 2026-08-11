@@ -168,7 +168,10 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 	}
 	header := woxwidget.Widget(woxwidget.Container{
 		Width: props.Width, Height: props.Height,
-		Padding: woxwidget.Insets{Left: props.AppPadding.Left, Top: props.AppPadding.Top, Right: props.AppPadding.Right},
+		// Bottom padding is used when the query box is anchored at the bottom so
+		// explorer/dialog overlays keep symmetric chrome instead of leaving the
+		// theme inset as empty space above the query pill.
+		Padding: woxwidget.Insets{Left: props.AppPadding.Left, Top: props.AppPadding.Top, Right: props.AppPadding.Right, Bottom: props.AppPadding.Bottom},
 		Child: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{
 			Height: props.QueryBoxHeight, Radius: props.QueryRadius, Color: props.Theme.QueryBackground,
 			Padding: woxwidget.Insets{Left: queryLeftPadding, Right: scaledLauncherSize(6, props.DensityScale)},

@@ -153,9 +153,13 @@ type ShowContext struct {
 	ActivationStartedAt int64
 
 	WindowPosition *WindowPosition
-	TrayAnchor     *TrayAnchor
-	WindowWidth    int
-	MaxResultCount int
+	// WindowPositionHeight is the window height used when WindowPosition was
+	// computed. Bottom-anchored launchers (explorer/tray) need it so later shows
+	// can keep the same bottom edge while result height changes.
+	WindowPositionHeight int
+	TrayAnchor           *TrayAnchor
+	WindowWidth          int
+	MaxResultCount       int
 }
 
 type WoxInstanceRole string

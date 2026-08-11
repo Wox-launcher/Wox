@@ -124,34 +124,41 @@ type App struct {
 	actionFilter                 *woxui.TextEditor
 	visible                      bool
 	show                         showAppParams
-	settingsOpen                 bool
-	onboardingOpen               bool
-	onboardingStep               int
-	onboardingChoice             string
-	onboardingChoiceAnchor       woxui.Rect
-	onboardingPermission         contract.MacOSPermissionStatus
-	onboardingLoading            bool
-	onboardingError              string
-	settingsCtx                  settingWindowContext
-	settingTab                   string
-	settingRow                   int
-	settingSaving                bool
-	settingFlash                 string
-	settingFlashTimer            *time.Timer
-	settingsInlineTooltip        *settingsInlineTooltipState
-	cloudPlanTooltip             *cloudPlanTooltipState
-	settingsDemo                 *settingsDemoState
-	settingsDemoRevision         atomic.Uint64
-	choiceTooltipRevision        atomic.Uint64
-	settingsTableEditor          *formTableEditorState
-	recentFormTableEmojis        []string
-	formTableEmojiSearchOnce     sync.Once
-	formTableEmojiSearchEntries  []emojisearch.Entry
-	glanceItem                   *glanceItem
-	glanceLoading                bool
-	glanceRevision               uint64
-	glanceTooltipRevision        atomic.Uint64
-	glanceTimer                  *time.Timer
+	// bottomAnchorY keeps QueryBoxAtBottom windows from drifting when DPI
+	// round-trips make Bounds().Height slightly larger than the logical height
+	// we last requested.
+	bottomAnchorY float32
+	// automationFocusInstance routes smoke Snapshot/Bounds/Perform to a named
+	// secondary when set; empty keeps the primary launcher surface.
+	automationFocusInstance     string
+	settingsOpen                bool
+	onboardingOpen              bool
+	onboardingStep              int
+	onboardingChoice            string
+	onboardingChoiceAnchor      woxui.Rect
+	onboardingPermission        contract.MacOSPermissionStatus
+	onboardingLoading           bool
+	onboardingError             string
+	settingsCtx                 settingWindowContext
+	settingTab                  string
+	settingRow                  int
+	settingSaving               bool
+	settingFlash                string
+	settingFlashTimer           *time.Timer
+	settingsInlineTooltip       *settingsInlineTooltipState
+	cloudPlanTooltip            *cloudPlanTooltipState
+	settingsDemo                *settingsDemoState
+	settingsDemoRevision        atomic.Uint64
+	choiceTooltipRevision       atomic.Uint64
+	settingsTableEditor         *formTableEditorState
+	recentFormTableEmojis       []string
+	formTableEmojiSearchOnce    sync.Once
+	formTableEmojiSearchEntries []emojisearch.Entry
+	glanceItem                  *glanceItem
+	glanceLoading               bool
+	glanceRevision              uint64
+	glanceTooltipRevision       atomic.Uint64
+	glanceTimer                 *time.Timer
 	// Settings controllers (zero App back-dependency; populated by newApp).
 	generalSettings      *generalSettingsController
 	appearanceSettings   *appearanceSettingsController
@@ -435,6 +442,7 @@ func (a *App) showWindow(params showAppParams) error {
 	var launcher *woxui.ManagedWindow
 	queryEmpty := false
 	preserveQuery := false
+	wasVisible := false
 	if err := a.runOnUI("prepare launcher show", func() {
 		if params.WindowWidth <= 0 {
 			params.WindowWidth = defaultWidth
@@ -442,6 +450,7 @@ func (a *App) showWindow(params showAppParams) error {
 		if params.MaxResultCount <= 0 {
 			params.MaxResultCount = defaultMaxResult
 		}
+		wasVisible = a.visible
 		a.show = params
 		a.queryHistories = append(a.queryHistories[:0], params.QueryHistories...)
 		// A selection query on the primary launcher is always transient (Space Quick
@@ -485,7 +494,13 @@ func (a *App) showWindow(params showAppParams) error {
 	if err := a.window.SetHideOnBlur(params.HideOnBlur); err != nil {
 		return err
 	}
-	if err := a.applyWindowBoundsAtShowPosition(); err != nil {
+	// Explorer type-to-search re-Shows the same secondary on every key. Re-applying
+	// the initial show position would fight the bottom anchor; keep resizing in place.
+	if wasVisible && params.QueryBoxAtBottom {
+		if err := a.applyWindowBounds(); err != nil {
+			return err
+		}
+	} else if err := a.applyWindowBoundsAtShowPosition(); err != nil {
 		return err
 	}
 	if _, err := launcher.Show(); err != nil {
@@ -544,6 +559,7 @@ func (a *App) hideWindow(notify bool) error {
 		a.actionFilter = nil
 		a.form = nil
 		a.visible = false
+		a.bottomAnchorY = 0
 		a.stopGlanceLocked(false)
 		launcher = a.launcher
 		a.reconcileSelectedPreview()
@@ -628,6 +644,7 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 	retainSecondary := a.isPrimary || a.hasCacheableWebViewPreviewLocked()
 	if hideOnBlur {
 		a.visible = false
+		a.bottomAnchorY = 0
 		a.stopGlanceLocked(false)
 	}
 	if hideOnBlur {
@@ -1068,15 +1085,29 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	if err != nil {
 		return err
 	}
-	x, y := launcherWindowOrigin(params, current, float32(height), useShowPosition)
+	var bottomAnchor float32
+	if err := a.runOnUI("read launcher bottom anchor", func() {
+		bottomAnchor = a.bottomAnchorY
+	}); err != nil {
+		return err
+	}
+	x, y, nextAnchor := launcherWindowOrigin(params, current, float32(height), useShowPosition, bottomAnchor)
 	target := woxui.Rect{
 		X:      x,
 		Y:      y,
 		Width:  float32(width),
 		Height: float32(height),
 	}
-	if current == target {
+	if launcherBoundsEffectivelyEqual(current, target) {
+		if params.QueryBoxAtBottom && nextAnchor != bottomAnchor {
+			_ = a.runOnUI("store launcher bottom anchor", func() { a.bottomAnchorY = nextAnchor })
+		}
 		return nil
+	}
+	if params.QueryBoxAtBottom {
+		if err := a.runOnUI("store launcher bottom anchor", func() { a.bottomAnchorY = nextAnchor }); err != nil {
+			return err
+		}
 	}
 	return a.window.SetBounds(target)
 }
@@ -1091,15 +1122,44 @@ func launcherToolbarHeightIncluded(hideToolbar, hasContent, previewFullscreen, c
 }
 
 // launcherWindowOrigin keeps user-moved windows in place while preserving a bottom query box during height changes.
-func launcherWindowOrigin(params showAppParams, current woxui.Rect, targetHeight float32, useShowPosition bool) (float32, float32) {
+func launcherWindowOrigin(params showAppParams, current woxui.Rect, targetHeight float32, useShowPosition bool, bottomAnchor float32) (x, y, nextAnchor float32) {
+	if !params.QueryBoxAtBottom {
+		if useShowPosition {
+			return float32(params.Position.X), float32(params.Position.Y), 0
+		}
+		return current.X, current.Y, 0
+	}
+
+	x = current.X
 	if useShowPosition {
-		return float32(params.Position.X), float32(params.Position.Y)
+		x = float32(params.Position.X)
 	}
-	x, y := current.X, current.Y
-	if params.QueryBoxAtBottom {
-		y += current.Height - targetHeight
+	nextAnchor = bottomAnchor
+	switch {
+	case useShowPosition && params.PositionHeight > 0:
+		// Explorer/tray compute Position for an initial short height; remember the
+		// implied bottom edge so later shows and result-driven resizes stay put.
+		nextAnchor = float32(params.Position.Y + params.PositionHeight)
+	case useShowPosition:
+		nextAnchor = float32(params.Position.Y) + targetHeight
+	case nextAnchor == 0:
+		// Prefer the last requested logical height over Bounds() round-trip noise.
+		nextAnchor = current.Y + current.Height
 	}
-	return x, y
+	return x, nextAnchor - targetHeight, nextAnchor
+}
+
+// launcherBoundsEffectivelyEqual tolerates DPI round-trip noise from SetBounds/Bounds.
+func launcherBoundsEffectivelyEqual(current, target woxui.Rect) bool {
+	const epsilon = float32(0.75)
+	return absFloat32(current.X-target.X) < epsilon && absFloat32(current.Y-target.Y) < epsilon && absFloat32(current.Width-target.Width) < epsilon && absFloat32(current.Height-target.Height) < epsilon
+}
+
+func absFloat32(value float32) float32 {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func (a *App) onKey(event woxui.KeyEvent) bool {
@@ -1511,6 +1571,7 @@ type showAppParams struct {
 	ShowPreviewTitleBar bool         `json:"-"`
 	SelectAll           bool         `json:"SelectAll"`
 	Position            position     `json:"Position"`
+	PositionHeight      int          `json:"PositionHeight"`
 	WindowWidth         int          `json:"WindowWidth"`
 	MaxResultCount      int          `json:"MaxResultCount"`
 	QueryHistories      []plainQuery `json:"QueryHistories"`

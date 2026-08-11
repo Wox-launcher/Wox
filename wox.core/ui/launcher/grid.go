@@ -69,7 +69,7 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale 
 	layout := normalizedGridLayout(snapshot.layout.GridLayout)
 	cellWidth, cellHeight, visualWidth, visualHeight := gridCellMetrics(width, layout)
 	contentHeight := float32(gridResultsHeight(snapshot.results, width, snapshot.layout.GridLayout))
-	scroll := resolveResultScroll(snapshot.results, snapshot.layout.GridLayout, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics)
+	scroll := resolveResultScroll(snapshot.results, snapshot.layout.GridLayout, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics, 0)
 	visible := visibleGridResults(snapshot.results, layout.Columns, cellHeight, scroll.offset, height)
 	results := make([]launcherview.LauncherGridResult, 0, len(snapshot.results))
 	for index, result := range snapshot.results {

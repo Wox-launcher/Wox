@@ -1043,12 +1043,13 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
 			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
 			showContext := common.ShowContext{
-				HideToolbar:      true,
-				QueryBoxAtBottom: true,
-				HideOnBlur:       true,
-				ShowSource:       common.ShowSourceExplorer,
-				WindowPosition:   &position,
-				WindowWidth:      woxSetting.AppWidth.Get() / 2,
+				HideToolbar:          true,
+				QueryBoxAtBottom:     true,
+				HideOnBlur:           true,
+				ShowSource:           common.ShowSourceExplorer,
+				WindowPosition:       &position,
+				WindowPositionHeight: initialWindowHeight,
+				WindowWidth:          woxSetting.AppWidth.Get() / 2,
 			}
 			// Seed the owner before the new session query builds its QueryEnv.
 			ui.GetUIManager().SeedActiveWindowSnapshotForQuery(common.ActiveWindowSnapshot{
@@ -1125,12 +1126,13 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
 			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
 			showContext := common.ShowContext{
-				HideToolbar:      true,
-				QueryBoxAtBottom: true,
-				HideOnBlur:       true,
-				ShowSource:       common.ShowSourceExplorer,
-				WindowPosition:   &position,
-				WindowWidth:      woxSetting.AppWidth.Get() / 2,
+				HideToolbar:          true,
+				QueryBoxAtBottom:     true,
+				HideOnBlur:           true,
+				ShowSource:           common.ShowSourceExplorer,
+				WindowPosition:       &position,
+				WindowPositionHeight: initialWindowHeight,
+				WindowWidth:          woxSetting.AppWidth.Get() / 2,
 			}
 			explorerShow = &showContext
 			changeExplorerQuery(localCtx)

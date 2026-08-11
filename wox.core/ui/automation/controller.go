@@ -35,6 +35,8 @@ type Controller interface {
 	ResetAutomationState() error
 	ShowAutomationWindow() error
 	OpenAutomationSelectionQuery(text string) error
+	OpenAutomationExplorerQuery(query string) error
+	SetAutomationFocusInstance(instanceName string) error
 	OpenAutomationSettings(path string) error
 	HideAutomationWindow() error
 	AutomationWindowState(instanceName string) (WindowState, error)

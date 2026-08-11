@@ -266,6 +266,18 @@ func (c *Client) OpenSelectionQuery(ctx context.Context, text string) error {
 	return c.pauseAfterStep(ctx, err)
 }
 
+// OpenExplorerQuery opens the File Explorer Search secondary with bottom-anchored chrome.
+func (c *Client) OpenExplorerQuery(ctx context.Context, query string) error {
+	_, err := call[bool](ctx, c, "window.open_explorer_query", map[string]string{"query": query})
+	return c.pauseAfterStep(ctx, err)
+}
+
+// FocusInstance routes later Snapshot/Bounds/Perform calls to one launcher instance.
+func (c *Client) FocusInstance(ctx context.Context, instanceName string) error {
+	_, err := call[bool](ctx, c, "window.focus_instance", map[string]string{"instanceName": instanceName})
+	return err
+}
+
 // OpenSettings opens one settings route through the product window lifecycle.
 func (c *Client) OpenSettings(ctx context.Context, path string) error {
 	_, err := call[bool](ctx, c, "window.open_settings", map[string]string{"path": path})

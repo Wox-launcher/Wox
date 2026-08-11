@@ -77,6 +77,8 @@ func (f *fakeController) OpenAutomationSelectionQuery(text string) error {
 	f.selectionText = text
 	return nil
 }
+func (*fakeController) OpenAutomationExplorerQuery(string) error { return nil }
+func (*fakeController) SetAutomationFocusInstance(string) error  { return nil }
 func (f *fakeController) OpenAutomationSettings(path string) error {
 	f.settingsPath = path
 	return nil
