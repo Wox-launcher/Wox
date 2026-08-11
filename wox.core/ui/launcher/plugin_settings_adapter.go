@@ -479,18 +479,16 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 		runtimeIcon = a.imageFor(source)
 	}
 	var screenshot *woxui.Image
-	var screenshotHeight float32
+	screenshotLoading := false
 	var onScreenshot func()
 	if activeTab == "description" && len(plugin.ScreenshotURLs) > 0 {
 		source := woxImage{ImageType: "url", ImageData: plugin.ScreenshotURLs[0]}
-		// width is the description content width; the screenshot must be sized to it
-		// so the fetched image and aspect ratio match the rendered surface.
+		// Request a high-res decode from the detail width. Display height is derived later from
+		// the description content width so store padding cannot stretch the aspect ratio.
 		screenshotWidth := max(float32(1), width)
 		requestSize := int(min(float32(2048), max(float32(512), screenshotWidth*2)))
 		screenshot = a.imageForSize(source, requestSize)
-		if screenshot != nil && screenshot.Width > 0 {
-			screenshotHeight = screenshotWidth * float32(screenshot.Height) / float32(screenshot.Width)
-		}
+		screenshotLoading = screenshot == nil
 		onScreenshot = func() { a.openPreviewImageOverlay(source) }
 	}
 	contentWidth := max(float32(0), width-32)
@@ -509,7 +507,7 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 		Icon: a.imageFor(plugin.Icon), ExternalIcon: externalIcon, RuntimeIcon: runtimeIcon, WebsiteIcon: websiteIcon,
 		FallbackColor: resultColors[plugins.PluginSelected%len(resultColors)], Management: a.pluginManagementActions(snapshot, plugin),
 		ActiveTab: activeTab, Tabs: a.pluginStoreDetailTabs(), TabForm: tabForm, Metadata: metadata,
-		Screenshot: screenshot, ScreenshotHeight: screenshotHeight, Error: plugins.PluginOperationError, OnWebsite: onWebsite, OnScreenshot: onScreenshot, OnSelectTab: a.selectPluginDetailTab,
+		Screenshot: screenshot, ScreenshotLoading: screenshotLoading, Error: plugins.PluginOperationError, OnWebsite: onWebsite, OnScreenshot: onScreenshot, OnSelectTab: a.selectPluginDetailTab,
 	}
 }
 

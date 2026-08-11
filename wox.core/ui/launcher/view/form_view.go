@@ -194,7 +194,9 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 			gap       = float32(32)
 			edgeInset = float32(2)
 		)
-		controlWidth = max(float32(0), props.Width-props.LabelWidth-gap)
+		// The settings field reserves a 2px inset on both sides, so keep the
+		// label, gap, and recorder column inside the field's content width.
+		controlWidth = max(float32(0), props.Width-props.LabelWidth-gap-edgeInset*2)
 		controlChildren[0] = woxwidget.StackChild{Top: 2, Right: edgeInset, AnchorRight: true, Child: recorder}
 	}
 	if props.Recording && props.Status != "" && controlWidth > recorderWidth+statusGap {

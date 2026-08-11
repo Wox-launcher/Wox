@@ -169,15 +169,15 @@ func TestFormHotkeyFieldUsesFlutterSettingsLayout(t *testing.T) {
 		t.Fatalf("settings description = %q, want it below the label", description.Value)
 	}
 	controlArea := row.Children[1].(woxwidget.Stack)
-	if controlArea.Width != 538 || !controlArea.Children[0].AnchorRight || controlArea.Children[0].Right != 2 {
-		t.Fatalf("settings recorder geometry = width %.0f right anchored %v inset %.0f, want 538/true/2", controlArea.Width, controlArea.Children[0].AnchorRight, controlArea.Children[0].Right)
+	if controlArea.Width != 534 || !controlArea.Children[0].AnchorRight || controlArea.Children[0].Right != 2 {
+		t.Fatalf("settings recorder geometry = width %.0f right anchored %v inset %.0f, want 534/true/2", controlArea.Width, controlArea.Children[0].AnchorRight, controlArea.Children[0].Right)
 	}
 	hint := controlArea.Children[1]
 	if hint.Left != -582 {
 		t.Fatalf("settings hint left = %.0f, want Flutter-style overflow to page edge at -582", hint.Left)
 	}
 	hintClip := hint.Child.(woxwidget.Clip)
-	if hintClip.Width != 1010 {
+	if hintClip.Width != 1006 {
 		t.Fatalf("settings hint clip width = %.0f, want the same 12px gap used by right-side hints", hintClip.Width)
 	}
 }

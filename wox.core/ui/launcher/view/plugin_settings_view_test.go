@@ -415,11 +415,13 @@ func TestPluginEditorDescriptionUsesSharedDetailView(t *testing.T) {
 	}, 800, 600, woxcomponent.Theme{})
 
 	body := editor.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
-	if body.Padding.Left != 24 || body.Padding.Right != 24 {
-		t.Fatalf("description padding = %+v, want Flutter's 24px detail inset", body.Padding)
+	if body.Padding.Left != 0 || body.Padding.Right != 0 {
+		t.Fatalf("description padding = %+v, want flush alignment with trigger-keyword/form tabs", body.Padding)
 	}
-	description := body.Child.(woxwidget.Container)
-	props := description.Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: description.Width, Height: description.Height - description.Padding.Top}).(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	if body.Width != 768 {
+		t.Fatalf("description width = %v, want the shared inner detail width without an extra inset", body.Width)
+	}
+	props := body.Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: body.Width, Height: body.Height - body.Padding.Top}).(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	detail := props.Content.(woxwidget.Flex)
 	name := detail.Children[0].(woxwidget.Container).Child.(woxwidget.Text)
 	metadata := detail.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
@@ -779,5 +781,58 @@ func TestFormTableDeleteDialogMatchesFlutterActions(t *testing.T) {
 		if container.Width != 0 {
 			t.Fatalf("delete action width = %v, want content-sized Cancel/Delete labels", container.Width)
 		}
+	}
+}
+
+func TestPluginStoreScreenshotPreservesAspectRatioFromContentWidth(t *testing.T) {
+	screenshot := &woxui.Image{Width: 1600, Height: 900}
+	widget := pluginStoreScreenshot(PluginStoreDetailProps{Screenshot: screenshot}, 580, woxcomponent.Theme{})
+	frame := widget.(woxwidget.Gesture).Child.(woxwidget.Container)
+	image := frame.Child.(woxwidget.Image)
+	wantHeight := float32(580) * 900 / 1600
+
+	if frame.Width != 580 || frame.Height != wantHeight {
+		t.Fatalf("screenshot frame = %vx%v, want content-width aspect ratio 580x%v", frame.Width, frame.Height, wantHeight)
+	}
+	if image.Fit != woxwidget.ImageFitContain || image.Width != frame.Width || image.Height != frame.Height {
+		t.Fatalf("screenshot image = %#v, want contain fit matching the frame", image)
+	}
+}
+
+func TestPluginStoreScreenshotShowsLoadingIndicatorBeforeImageArrives(t *testing.T) {
+	widget := pluginStoreScreenshot(PluginStoreDetailProps{ScreenshotLoading: true}, 580, woxcomponent.Theme{Cursor: woxui.Color{R: 1, G: 2, B: 3, A: 255}})
+	loading := widget.(woxwidget.Align)
+	if loading.Width != 580 || loading.Height != 48 || loading.Horizontal != 0.5 || loading.Vertical != 0.5 {
+		t.Fatalf("screenshot loading align = %#v, want a compact centered placeholder", loading)
+	}
+	indicator := loading.Child.(woxwidget.LoopAnimation)
+	if indicator.Key != "wox-loading-indicator" {
+		t.Fatalf("screenshot loading child = %#v, want WoxLoadingIndicator", indicator)
+	}
+}
+
+func TestPluginStoreDescriptionUsesLoadingPlaceholderWithoutBlankPanel(t *testing.T) {
+	body := pluginStoreDescription(PluginStoreDetailProps{
+		Name: "Strava", Description: "Workouts", Author: "Wox-launcher", Version: "0.0.1", Runtime: "Python",
+		ScreenshotLoading: true,
+	}, 580, 400, woxcomponent.Theme{Cursor: woxui.Color{A: 255}}).(woxwidget.Container)
+
+	scroll := body.Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 580, Height: 400})
+	var children []woxwidget.Widget
+	switch content := scroll.(type) {
+	case woxwidget.Stateful:
+		children = content.Widget.(woxcomponent.ScrollViewProps).Content.(woxwidget.Flex).Children
+	default:
+		// Non-overflowing content may collapse to a plain scroll body without state.
+		t.Fatalf("description scroll = %T, want resolved WoxScrollView", scroll)
+	}
+	if len(children) != 5 {
+		t.Fatalf("description children = %d, want title, subtitle, chips, screenshot gap, and loading placeholder", len(children))
+	}
+	if gap := children[3].(woxwidget.Container); gap.Height != 24 {
+		t.Fatalf("screenshot gap height = %v, want Flutter's 24px spacing above the preview", gap.Height)
+	}
+	if _, ok := children[4].(woxwidget.Align); !ok {
+		t.Fatalf("description trailing child = %T, want compact screenshot loading align", children[4])
 	}
 }

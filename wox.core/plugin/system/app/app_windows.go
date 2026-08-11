@@ -787,6 +787,11 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 	}
 
 	// Skip header row
+	metadataByAppID, metadataErr := a.getUWPAppMetadataBatch(ctx)
+	if metadataErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Error getting UWP app metadata in batch: %v", metadataErr))
+	}
+
 	for i := 1; i < len(records); i++ {
 		record := records[i]
 		if len(record) < 2 {
@@ -804,7 +809,7 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 				Type: AppTypeUWP,
 			}
 
-			metadata, err := a.getUWPAppMetadata(ctx, appID)
+			metadata := metadataByAppID[appID]
 			if metadata.Identity != "" {
 				app.Identity = metadata.Identity
 			}
@@ -812,9 +817,6 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 			if !metadata.Icon.IsEmpty() {
 				app.Icon = metadata.Icon
 				a.uwpIconCache.Store(appID, metadata.Icon.ImageData)
-			}
-			if err != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("Error getting UWP metadata for %s (%s), using available defaults: %s", name, appID, err.Error()))
 			}
 
 			apps = append(apps, app)
@@ -840,6 +842,174 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d UWP apps", len(apps)))
 	return apps
+}
+
+// getUWPAppMetadataBatch retrieves package metadata once for all Start menu UWP entries.
+func (a *WindowsRetriever) getUWPAppMetadataBatch(ctx context.Context) (map[string]uwpAppMetadata, error) {
+	powershellCmd := `
+		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+		$packages = @{}
+		foreach ($package in @(Get-AppxPackage)) {
+			$packages[$package.PackageFamilyName] = $package
+		}
+		$manifests = @{}
+
+		Get-StartApps | Where-Object { $_.AppID -like '*!*' } | ForEach-Object {
+			$record = $_
+			$parts = $record.AppID -split '!', 2
+			if ($parts.Count -lt 2) {
+				return
+			}
+
+			$packageFamilyName = $parts[0]
+			$package = $packages[$packageFamilyName]
+			if (!$package) {
+				return
+			}
+
+			if (!$manifests.ContainsKey($packageFamilyName)) {
+				$manifests[$packageFamilyName] = Get-AppxPackageManifest $package
+			}
+			$manifest = $manifests[$packageFamilyName]
+			$applications = @($manifest.Package.Applications.Application)
+			$application = $applications | Where-Object { $_.Id -eq $parts[1] } | Select-Object -First 1
+			if (!$application) {
+				$application = $applications | Select-Object -First 1
+			}
+
+			$executable = ''
+			if ($application -and $application.Executable) {
+				$executable = [string]$application.Executable
+			}
+			$entryPoint = ''
+			if ($application -and $application.EntryPoint) {
+				$entryPoint = [string]$application.EntryPoint
+			}
+			$canRunAsAdministrator = $entryPoint -eq 'Windows.FullTrustApplication'
+
+			$iconPath = ''
+			if (Test-Path $package.InstallLocation) {
+				$logo = ''
+				$visual = if ($application) { $application.VisualElements } else { $null }
+				if ($visual) {
+					if ($visual.Square44x44Logo) {
+						$logo = $visual.Square44x44Logo
+					} elseif ($visual.Square150x150Logo) {
+						$logo = $visual.Square150x150Logo
+					} elseif ($visual.Logo) {
+						$logo = $visual.Logo
+					}
+				}
+				if (!$logo) {
+					$logo = $manifest.Package.Properties.Logo
+				}
+
+				if ($logo) {
+					$logoPath = Join-Path $package.InstallLocation $logo
+					$directory = Split-Path $logoPath
+					$filename = Split-Path $logoPath -Leaf
+					$baseFilename = [System.IO.Path]::GetFileNameWithoutExtension($filename)
+					$extension = [System.IO.Path]::GetExtension($filename)
+					$scales = @('scale-200', 'scale-400', 'scale-150', 'scale-125', 'scale-100', '')
+					$targetSizes = @('256', '64', '48', '44', '32', '24', '16')
+
+					foreach ($size in $targetSizes) {
+						foreach ($scale in $scales) {
+							$targetPath = if ($scale) {
+								Join-Path $directory "$baseFilename.targetsize-$size.$scale$extension"
+							} else {
+								Join-Path $directory "$baseFilename.targetsize-$size$extension"
+							}
+							if (Test-Path $targetPath) {
+								$iconPath = $targetPath
+								break
+							}
+						}
+						if ($iconPath) {
+							break
+						}
+					}
+
+					if (!$iconPath) {
+						foreach ($scale in $scales) {
+							$scaledPath = if ($scale) {
+								Join-Path $directory "$baseFilename.$scale$extension"
+							} else {
+								$logoPath
+							}
+							if (Test-Path $scaledPath) {
+								$iconPath = $scaledPath
+								break
+							}
+						}
+					}
+
+					if (!$iconPath -and (Test-Path $logoPath)) {
+						$iconPath = $logoPath
+					}
+				}
+			}
+
+			[PSCustomObject]@{
+				AppID = [string]$record.AppID
+				IconPath = $iconPath
+				Executable = $executable
+				CanRunAsAdministrator = $canRunAsAdministrator
+			}
+		} | ConvertTo-Csv -NoTypeInformation
+	`
+
+	output, err := shell.RunOutput("powershell", "-Command", powershellCmd)
+	if err != nil {
+		return nil, fmt.Errorf("PowerShell execution failed: %w", err)
+	}
+
+	records, err := csv.NewReader(strings.NewReader(strings.TrimSpace(string(output)))).ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing UWP metadata output: %w", err)
+	}
+	if len(records) < 2 {
+		return map[string]uwpAppMetadata{}, nil
+	}
+
+	metadataByAppID := make(map[string]uwpAppMetadata, len(records)-1)
+	for i := 1; i < len(records); i++ {
+		record := records[i]
+		if len(record) < 4 {
+			continue
+		}
+
+		appID := strings.TrimSpace(record[0])
+		if appID == "" {
+			continue
+		}
+		metadata := uwpAppMetadata{
+			CanRunAsAdministrator: strings.EqualFold(strings.TrimSpace(record[3]), "true"),
+		}
+		if executable := strings.TrimSpace(record[2]); executable != "" {
+			metadata.Identity = strings.ToLower(filepath.Base(executable))
+		}
+
+		iconPath := strings.TrimSpace(record[1])
+		if iconPath == "" {
+			if value, ok := a.uwpIconCache.Load(appID); ok {
+				cachedPath := value.(string)
+				if _, statErr := os.Stat(cachedPath); statErr == nil {
+					iconPath = cachedPath
+				} else {
+					a.uwpIconCache.Delete(appID)
+				}
+			}
+		}
+		if iconPath != "" {
+			if _, statErr := os.Stat(iconPath); statErr == nil {
+				metadata.Icon = common.NewWoxImageAbsolutePath(iconPath)
+			}
+		}
+
+		metadataByAppID[appID] = metadata
+	}
+	return metadataByAppID, nil
 }
 
 func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {

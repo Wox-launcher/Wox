@@ -127,7 +127,7 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 		}
 		var icon woxwidget.Widget = woxwidget.Container{Width: 32, Height: 32, Radius: 7, Color: item.FallbackColor}
 		if item.Icon != nil {
-			icon = woxwidget.Image{Source: item.Icon, Width: 32, Height: 32}
+			icon = woxwidget.Image{Source: item.Icon, Width: 32, Height: 32, Fit: woxwidget.ImageFitContain}
 		}
 		textWidth := max(float32(0), props.Width-12-32-10)
 		rowChildren := []woxwidget.Widget{icon}
@@ -325,29 +325,29 @@ type PluginEditorProps struct {
 
 // PluginStoreDetailProps contains the store-only plugin detail page.
 type PluginStoreDetailProps struct {
-	Name             string
-	Version          string
-	Author           string
-	Description      string
-	Runtime          string
-	WebsiteLabel     string
-	WebsiteChipLabel string
-	Icon             *woxui.Image
-	ExternalIcon     *woxui.Image
-	RuntimeIcon      *woxui.Image
-	WebsiteIcon      *woxui.Image
-	FallbackColor    woxui.Color
-	Management       []PluginAction
-	ActiveTab        string
-	Tabs             []PluginTab
-	TabForm          *PluginFormProps
-	Metadata         *PluginMetadataProps
-	Screenshot       *woxui.Image
-	ScreenshotHeight float32
-	Error            string
-	OnWebsite        func()
-	OnScreenshot     func()
-	OnSelectTab      func(string)
+	Name              string
+	Version           string
+	Author            string
+	Description       string
+	Runtime           string
+	WebsiteLabel      string
+	WebsiteChipLabel  string
+	Icon              *woxui.Image
+	ExternalIcon      *woxui.Image
+	RuntimeIcon       *woxui.Image
+	WebsiteIcon       *woxui.Image
+	FallbackColor     woxui.Color
+	Management        []PluginAction
+	ActiveTab         string
+	Tabs              []PluginTab
+	TabForm           *PluginFormProps
+	Metadata          *PluginMetadataProps
+	Screenshot        *woxui.Image
+	ScreenshotLoading bool
+	Error             string
+	OnWebsite         func()
+	OnScreenshot      func()
+	OnSelectTab       func(string)
 }
 
 // PluginDetailProps selects the empty, store, or editable detail view.
@@ -388,8 +388,9 @@ type PluginDetailTabBodyProps struct {
 // pluginDetailTabBody renders one plugin detail tab through the shared form or metadata surfaces.
 func pluginDetailTabBody(props PluginDetailTabBodyProps) woxwidget.Widget {
 	if props.ActiveTab == "description" && props.Description != nil {
-		contentWidth := max(float32(0), props.Width-48)
-		return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 24, Right: 24}, Child: pluginStoreDescription(*props.Description, contentWidth, props.Height, props.Theme)}
+		// Keep description flush with trigger-keyword/form tabs; the outer plugin detail
+		// already owns the shared 16px inset, so an extra 24px horizontal pad only skewed this tab.
+		return pluginStoreDescription(*props.Description, props.Width, props.Height, props.Theme)
 	}
 	if props.Form != nil {
 		return pluginFormTabBody(props.Form, props.Width, props.Height, props.ScrollID, props.Theme)
@@ -442,7 +443,7 @@ func pluginFormTabBody(form *PluginFormProps, width, height float32, scrollID st
 func pluginDetailHeader(props PluginHeaderProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	var icon woxwidget.Widget = woxwidget.Container{Width: 32, Height: 32, Radius: 7, Color: props.FallbackColor}
 	if props.Icon != nil {
-		icon = woxwidget.Image{Source: props.Icon, Width: 32, Height: 32}
+		icon = woxwidget.Image{Source: props.Icon, Width: 32, Height: 32, Fit: woxwidget.ImageFitContain}
 	}
 	actionsWidth := float32(0)
 	for index, action := range props.MetadataActions {
@@ -574,7 +575,7 @@ func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, them
 	innerHeight := max(float32(0), height-24)
 	var icon woxwidget.Widget = woxwidget.Container{Width: 32, Height: 32, Radius: 7, Color: props.FallbackColor}
 	if props.Icon != nil {
-		icon = woxwidget.Image{Source: props.Icon, Width: 32, Height: 32}
+		icon = woxwidget.Image{Source: props.Icon, Width: 32, Height: 32, Fit: woxwidget.ImageFitContain}
 	}
 	const headerHeight = float32(120)
 	const tabHeight = float32(44)
@@ -630,15 +631,33 @@ func pluginStoreDescription(props PluginStoreDetailProps, width, height float32,
 			pluginStoreChip(props.WebsiteChipLabel, props.WebsiteIcon, props.OnWebsite, theme),
 		}}},
 	}
-	if props.Screenshot != nil && props.ScreenshotHeight > 0 {
-		children = append(children, woxwidget.Gesture{ID: "plugin-store-screenshot", OnTap: props.OnScreenshot, Child: woxwidget.Container{
-			Width: width, Height: props.ScreenshotHeight, Radius: 8, Child: woxwidget.Image{Source: props.Screenshot, Width: width, Height: props.ScreenshotHeight},
-		}})
+	if shot := pluginStoreScreenshot(props, width, theme); shot != nil {
+		// Match Flutter's SizedBox(height: 24) between metadata chips and the screenshot.
+		children = append(children, woxwidget.Container{Height: 24}, shot)
 	}
 	return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: topPadding}, Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "plugin-store-description-scroll", FillWidth: true, FillHeight: true,
 		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}, ThumbColor: theme.ResultSubtitle,
 	})}
+}
+
+// pluginStoreScreenshot sizes the manifest preview to the description width so URL images keep their aspect ratio.
+// While the URL is still resolving, Flutter only shows a compact spinner instead of a blank panel that later pops in.
+func pluginStoreScreenshot(props PluginStoreDetailProps, width float32, theme woxcomponent.Theme) woxwidget.Widget {
+	if props.Screenshot != nil && props.Screenshot.Width > 0 && props.Screenshot.Height > 0 {
+		screenshotHeight := width * float32(props.Screenshot.Height) / float32(props.Screenshot.Width)
+		return woxwidget.Gesture{ID: "plugin-store-screenshot", OnTap: props.OnScreenshot, Child: woxwidget.Container{
+			Width: width, Height: screenshotHeight, Radius: 8,
+			Child: woxwidget.Image{Source: props.Screenshot, Width: width, Height: screenshotHeight, Fit: woxwidget.ImageFitContain},
+		}}
+	}
+	if !props.ScreenshotLoading {
+		return nil
+	}
+	return woxwidget.Align{
+		Width: width, Height: 48, Horizontal: 0.5, Vertical: 0.5,
+		Child: woxcomponent.WoxLoadingIndicator(24, theme.Cursor),
+	}
 }
 
 // pluginStoreChip keeps version, runtime, and source metadata visually consistent.
@@ -649,7 +668,7 @@ func pluginStoreChip(label string, icon *woxui.Image, onTap func(), theme woxcom
 	width := max(float32(58), float32(len([]rune(label)))*7+24)
 	children := make([]woxwidget.Widget, 0, 2)
 	if icon != nil {
-		children = append(children, woxwidget.Image{Source: icon, Width: 14, Height: 14})
+		children = append(children, woxwidget.Image{Source: icon, Width: 14, Height: 14, Fit: woxwidget.ImageFitContain})
 		width += 18
 	}
 	children = append(children, woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultTitle})

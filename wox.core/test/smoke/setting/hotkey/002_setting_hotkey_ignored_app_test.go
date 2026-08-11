@@ -58,7 +58,8 @@ func waitForApplicationIndex(t *testing.T, ctx context.Context, path string) {
 	t.Helper()
 	smoke.WaitForFile(t, ctx, path, func(data []byte) bool {
 		logs := string(data)
-		return strings.Contains(logs, "[Apps] indexed ") && strings.Contains(logs, " apps, cost ")
+		// The plugin name in the log prefix is localized, while the indexing message is stable.
+		return strings.Contains(logs, " indexed ") && strings.Contains(logs, " apps, cost ")
 	})
 }
 
