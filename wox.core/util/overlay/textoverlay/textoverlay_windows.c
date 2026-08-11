@@ -1,5 +1,9 @@
+#define WIN32_LEAN_AND_MEAN
+#define COBJMACROS
 #include <windows.h>
 #include <windowsx.h>
+#include <wincodec.h>
+#include <objbase.h>
 #include <uxtheme.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -43,6 +47,7 @@ typedef struct {
     int loadingPhase;
     RECT loadingRect;
     RECT closeRect;
+    HBITMAP iconBitmap;
     int autoCloseSeconds;
     float fontSize;
     float iconSize;
@@ -58,6 +63,7 @@ typedef struct {
     BOOL closable;
     BOOL centerContent;
     BOOL showCopyButton;
+    HBITMAP iconBitmap;
     BOOL hasIcon;
     BOOL hasTooltip;
     int autoCloseSeconds;
@@ -101,6 +107,139 @@ static WCHAR *TextOverlayUtf8ToWide(const char *text)
         return NULL;
     MultiByteToWideChar(CP_UTF8, 0, text, -1, wide, count);
     return wide;
+}
+
+// TextOverlayCreate32BitDIBSection allocates a top-down premultiplied-alpha surface for WIC pixels.
+static HBITMAP TextOverlayCreate32BitDIBSection(HDC hdc, int width, int height, void **bits)
+{
+    if (bits)
+        *bits = NULL;
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    return CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, bits, NULL, 0);
+}
+
+// TextOverlayCreateBitmapFromWicDecoder converts one WIC frame into a GDI bitmap usable by AlphaBlend.
+static HBITMAP TextOverlayCreateBitmapFromWicDecoder(IWICImagingFactory *factory, IWICBitmapDecoder *decoder)
+{
+    if (!factory || !decoder)
+        return NULL;
+
+    IWICBitmapFrameDecode *frame = NULL;
+    HRESULT hr = IWICBitmapDecoder_GetFrame(decoder, 0, &frame);
+    if (FAILED(hr) || !frame)
+        return NULL;
+
+    IWICFormatConverter *converter = NULL;
+    hr = IWICImagingFactory_CreateFormatConverter(factory, &converter);
+    if (FAILED(hr) || !converter)
+    {
+        IWICBitmapFrameDecode_Release(frame);
+        return NULL;
+    }
+
+    hr = IWICFormatConverter_Initialize(converter, (IWICBitmapSource *)frame,
+                                        &GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone,
+                                        NULL, 0.0, WICBitmapPaletteTypeCustom);
+    if (FAILED(hr))
+    {
+        IWICFormatConverter_Release(converter);
+        IWICBitmapFrameDecode_Release(frame);
+        return NULL;
+    }
+
+    UINT width = 0;
+    UINT height = 0;
+    IWICBitmapSource_GetSize((IWICBitmapSource *)converter, &width, &height);
+    if (width == 0 || height == 0)
+    {
+        IWICFormatConverter_Release(converter);
+        IWICBitmapFrameDecode_Release(frame);
+        return NULL;
+    }
+
+    HDC hdc = GetDC(NULL);
+    void *bits = NULL;
+    HBITMAP bitmap = TextOverlayCreate32BitDIBSection(hdc, (int)width, (int)height, &bits);
+    ReleaseDC(NULL, hdc);
+    if (!bitmap || !bits)
+    {
+        if (bitmap)
+            DeleteObject(bitmap);
+        IWICFormatConverter_Release(converter);
+        IWICBitmapFrameDecode_Release(frame);
+        return NULL;
+    }
+
+    WICRect rect = {0, 0, (INT)width, (INT)height};
+    hr = IWICBitmapSource_CopyPixels((IWICBitmapSource *)converter, &rect, width * 4, width * height * 4, (BYTE *)bits);
+    if (FAILED(hr))
+    {
+        DeleteObject(bitmap);
+        bitmap = NULL;
+    }
+
+    IWICFormatConverter_Release(converter);
+    IWICBitmapFrameDecode_Release(frame);
+    return bitmap;
+}
+
+// TextOverlayCreateBitmapFromBytes decodes the PNG payload produced by the Go renderer.
+static HBITMAP TextOverlayCreateBitmapFromBytes(const unsigned char *data, int len)
+{
+    if (!data || len <= 0)
+        return NULL;
+
+    IWICImagingFactory *factory = NULL;
+    HRESULT hr = CoCreateInstance(&CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER, &IID_IWICImagingFactory, (LPVOID *)&factory);
+    if (FAILED(hr) || !factory)
+        return NULL;
+
+    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)len);
+    if (!memory)
+    {
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+    void *lockedMemory = GlobalLock(memory);
+    if (!lockedMemory)
+    {
+        GlobalFree(memory);
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+    memcpy(lockedMemory, data, (SIZE_T)len);
+    GlobalUnlock(memory);
+
+    IStream *stream = NULL;
+    hr = CreateStreamOnHGlobal(memory, TRUE, &stream);
+    if (FAILED(hr) || !stream)
+    {
+        GlobalFree(memory);
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+
+    IWICBitmapDecoder *decoder = NULL;
+    hr = IWICImagingFactory_CreateDecoderFromStream(factory, stream, NULL, WICDecodeMetadataCacheOnLoad, &decoder);
+    if (FAILED(hr) || !decoder)
+    {
+        IStream_Release(stream);
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+
+    HBITMAP bitmap = TextOverlayCreateBitmapFromWicDecoder(factory, decoder);
+    IWICBitmapDecoder_Release(decoder);
+    IStream_Release(stream);
+    IWICImagingFactory_Release(factory);
+    return bitmap;
 }
 
 static UINT TextOverlayGetDpi(HWND hwnd)
@@ -471,6 +610,33 @@ static void TextOverlayDrawLoadingSpinner(HDC hdc, int x, int y, int size, int p
     DeleteObject(dib);
 }
 
+// TextOverlayDrawIcon paints the decoded plugin icon with alpha preservation on the buffered surface.
+static void TextOverlayDrawIcon(HDC hdc, HBITMAP bitmap, int x, int y, int size)
+{
+    if (!bitmap || size <= 0)
+        return;
+
+    BITMAP source;
+    ZeroMemory(&source, sizeof(source));
+    if (GetObject(bitmap, sizeof(source), &source) == 0 || source.bmWidth <= 0)
+        return;
+    if (source.bmHeight < 0)
+        source.bmHeight = -source.bmHeight;
+    if (source.bmHeight <= 0)
+        return;
+
+    HDC sourceDC = CreateCompatibleDC(hdc);
+    if (!sourceDC)
+        return;
+    HGDIOBJ oldBitmap = SelectObject(sourceDC, bitmap);
+    SetStretchBltMode(hdc, HALFTONE);
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    AlphaBlend(hdc, x, y, size, size, sourceDC, 0, 0, source.bmWidth, source.bmHeight, blend);
+    if (oldBitmap)
+        SelectObject(sourceDC, oldBitmap);
+    DeleteDC(sourceDC);
+}
+
 // TextOverlayDrawCopyGlyph keeps the copy action readable at high DPI without reusing the
 // message font, which is too large for the compact 28 DIP button.
 static void TextOverlayDrawCopyGlyph(HDC hdc, RECT rc, UINT dpi, BOOL copied)
@@ -554,7 +720,7 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
     HGDIOBJ oldFont = SelectObject(hdc, font);
 
     int iconSize = TextOverlayDip(state->iconSize > 0 ? state->iconSize : 24.0f, dpi);
-    int leadingWidth = state->loading ? iconSize : 0;
+    int leadingWidth = (state->loading || state->iconBitmap) ? iconSize : 0;
     int leadingGap = leadingWidth > 0 ? TextOverlayDip(8, dpi) : 0;
     int copyReserve = state->showCopyButton ? TextOverlayDip(TEXT_OVERLAY_COPY_SIZE_DIP + TEXT_OVERLAY_COPY_GAP_DIP, dpi) : 0;
     int closeReserve = state->closable ? TextOverlayDip(TEXT_OVERLAY_CLOSE_SIZE_DIP + TEXT_OVERLAY_CLOSE_GAP_DIP, dpi) : 0;
@@ -576,7 +742,7 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
     if (textHeight < 1)
         textHeight = 1;
     int textLayoutWidth = state->centerContent ? renderedTextWidth : maxTextWidth;
-    int leadingHeight = state->loading ? iconSize : 0;
+    int leadingHeight = (state->loading || state->iconBitmap) ? iconSize : 0;
     int rowHeight = textHeight > leadingHeight ? textHeight : leadingHeight;
     int closeSize = TextOverlayDip(TEXT_OVERLAY_CLOSE_SIZE_DIP, dpi);
     if (state->closable && rowHeight < closeSize)
@@ -617,6 +783,12 @@ static void TextOverlayDraw(HDC hdc, RECT rc, TextOverlayState *state)
         state->loadingRect.right = x + iconSize;
         state->loadingRect.bottom = y + iconSize;
         TextOverlayDrawLoadingSpinner(hdc, x, y, iconSize, state->loadingPhase);
+        x += leadingWidth + leadingGap;
+    }
+    else if (state->iconBitmap)
+    {
+        int y = rowY + (rowHeight - iconSize) / 2;
+        TextOverlayDrawIcon(hdc, state->iconBitmap, x, y, iconSize);
         x += leadingWidth + leadingGap;
     }
     else
@@ -744,6 +916,7 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                              state->closable != payload->closable ||
                              state->centerContent != payload->centerContent ||
                              state->showCopyButton != payload->showCopyButton ||
+                             state->iconBitmap != payload->iconBitmap ||
                              state->fontSize != resolvedFontSize ||
                              state->iconSize != resolvedIconSize ||
                              state->tooltipIconSize != resolvedTooltipIconSize ||
@@ -756,6 +929,10 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         state->closable = payload->closable;
         state->centerContent = payload->centerContent;
         state->showCopyButton = payload->showCopyButton;
+        if (state->iconBitmap)
+            DeleteObject(state->iconBitmap);
+        state->iconBitmap = payload->iconBitmap;
+        payload->iconBitmap = NULL;
         state->autoCloseSeconds = payload->autoCloseSeconds;
         state->fontSize = resolvedFontSize;
         state->iconSize = resolvedIconSize;
@@ -953,6 +1130,8 @@ static LRESULT CALLBACK TextOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         KillTimer(hwnd, TEXT_OVERLAY_TIMER_LOADING);
         if (state)
         {
+            if (state->iconBitmap)
+                DeleteObject(state->iconBitmap);
             free(state->nameUtf8);
             free(state->message);
             free(state);
@@ -1035,8 +1214,6 @@ TextOverlayAttachment TextOverlayCreateWindow(char *name,
                                               float maxWindowHeight)
 {
     TextOverlayAttachment result = {0};
-    (void)iconData;
-    (void)iconLen;
     (void)tooltip;
     (void)tooltipIconData;
     (void)tooltipIconLen;
@@ -1045,25 +1222,37 @@ TextOverlayAttachment TextOverlayCreateWindow(char *name,
     if (!TextOverlayEnsureClass())
         return result;
 
+    HRESULT coResult = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    HBITMAP iconBitmap = TextOverlayCreateBitmapFromBytes(iconData, iconLen);
+    if (SUCCEEDED(coResult))
+        CoUninitialize();
+
     TextOverlayState *state = (TextOverlayState *)calloc(1, sizeof(TextOverlayState));
     if (!state)
+    {
+        if (iconBitmap)
+            DeleteObject(iconBitmap);
         return result;
+    }
     state->nameUtf8 = TextOverlayCopyUtf8(name);
     state->message = TextOverlayUtf8ToWide(message);
     state->loading = loading ? TRUE : FALSE;
     state->closable = closable ? TRUE : FALSE;
     state->centerContent = centerContent ? TRUE : FALSE;
     state->showCopyButton = showCopyButton ? TRUE : FALSE;
+    state->iconBitmap = iconBitmap;
     state->autoCloseSeconds = autoCloseSeconds;
     state->fontSize = fontSize > 0 ? fontSize : TEXT_OVERLAY_DEFAULT_FONT_SIZE;
     state->iconSize = iconSize > 0 ? iconSize : 24.0f;
     state->tooltipIconSize = tooltipIconSize > 0 ? tooltipIconSize : 18.0f;
-    SIZE size = TextOverlayMeasure(state->message, state->loading, iconLen > 0, tooltipIconLen > 0, state->showCopyButton, closable, state->fontSize, state->iconSize, state->tooltipIconSize, windowWidth, minWindowWidth, maxWindowWidth, windowHeight, maxWindowHeight);
+    SIZE size = TextOverlayMeasure(state->message, state->loading, iconBitmap != NULL, tooltipIconLen > 0, state->showCopyButton, closable, state->fontSize, state->iconSize, state->tooltipIconSize, windowWidth, minWindowWidth, maxWindowWidth, windowHeight, maxWindowHeight);
     state->contentWidth = size.cx;
     state->contentHeight = size.cy;
     state->readyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!state->readyEvent)
     {
+        if (state->iconBitmap)
+            DeleteObject(state->iconBitmap);
         free(state->nameUtf8);
         free(state->message);
         free(state);
@@ -1074,6 +1263,8 @@ TextOverlayAttachment TextOverlayCreateWindow(char *name,
     if (!thread)
     {
         CloseHandle(state->readyEvent);
+        if (state->iconBitmap)
+            DeleteObject(state->iconBitmap);
         free(state->nameUtf8);
         free(state->message);
         free(state);
@@ -1086,6 +1277,8 @@ TextOverlayAttachment TextOverlayCreateWindow(char *name,
 
     if (!state->createOk || !state->hwnd)
     {
+        if (state->iconBitmap)
+            DeleteObject(state->iconBitmap);
         free(state->nameUtf8);
         free(state->message);
         free(state);
@@ -1101,6 +1294,7 @@ TextOverlayAttachment TextOverlayCreateWindow(char *name,
 // TextOverlayUpdateWindow updates an existing renderer without replacing its HWND.
 TextOverlayAttachment TextOverlayUpdateWindow(void *rawHwnd,
                                               char *message,
+                                              unsigned char *iconData,
                                               int iconLen,
                                               bool loading,
                                               bool centerContent,
@@ -1130,7 +1324,11 @@ TextOverlayAttachment TextOverlayUpdateWindow(void *rawHwnd,
     payload.closable = closable ? TRUE : FALSE;
     payload.centerContent = centerContent ? TRUE : FALSE;
     payload.showCopyButton = showCopyButton ? TRUE : FALSE;
-    payload.hasIcon = iconLen > 0 ? TRUE : FALSE;
+    HRESULT coResult = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    payload.iconBitmap = TextOverlayCreateBitmapFromBytes(iconData, iconLen);
+    if (SUCCEEDED(coResult))
+        CoUninitialize();
+    payload.hasIcon = payload.iconBitmap != NULL;
     payload.hasTooltip = tooltipIconLen > 0 ? TRUE : FALSE;
     payload.autoCloseSeconds = autoCloseSeconds;
     payload.fontSize = fontSize;
@@ -1146,7 +1344,11 @@ TextOverlayAttachment TextOverlayUpdateWindow(void *rawHwnd,
     if (payload.message)
         free(payload.message);
     if (!payload.success)
+    {
+        if (payload.iconBitmap)
+            DeleteObject(payload.iconBitmap);
         return result;
+    }
 
     result.handle = hwnd;
     result.width = (float)payload.contentWidth;

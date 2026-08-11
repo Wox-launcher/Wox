@@ -185,6 +185,7 @@ type screenshotEditorOverlayState struct {
 	scrollingDone      chan struct{}
 	scrollingStopOnce  sync.Once
 	scrollingOverlaps  bool
+	scrollBorderClose  func()
 	startScrolling     func()
 	annotationColor    Color
 	mosaicRadius       float32
@@ -202,6 +203,8 @@ type screenshotEditorPlatform struct {
 	setWindowBounds  func(window *Window) error
 	logicalSelection func(selection Rect, frameSize Size) Rect
 	captureDesktop   func() (screenshotDesktopCapture, error)
+	setScrollBounds  func(window *Window, controls Rect, frameSize Size) error
+	showScrollBorder func(selection Rect, frameSize Size) (func(), error)
 	frameSize        Size
 	initialSelection *Rect
 	cursorPixel      *Point
@@ -447,13 +450,13 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.mu.Lock()
 	if state.scrolling {
 		preview := state.scrollingPreview
-		frameCount := len(state.scrollingFrames)
 		uiScale := max(float32(1), state.uiScale)
-		state.confirmRect = Rect{X: frame.Size.Width - 64*uiScale, Y: frame.Size.Height - 56*uiScale, Width: 40 * uiScale, Height: 40 * uiScale}
-		state.cancelRect = Rect{X: 24 * uiScale, Y: frame.Size.Height - 56*uiScale, Width: 40 * uiScale, Height: 40 * uiScale}
-		state.toolbarRect = Rect{Y: frame.Size.Height - 72*uiScale, Width: frame.Size.Width, Height: 72 * uiScale}
+		toolbar, cancel, confirm := screenshotScrollingControlLayout(frame.Size, uiScale)
+		state.confirmRect = confirm
+		state.cancelRect = cancel
+		state.toolbarRect = toolbar
 		state.mu.Unlock()
-		drawScreenshotScrollingControls(displayList, frame.Size, preview, frameCount, uiScale)
+		drawScreenshotScrollingControls(displayList, frame.Size, preview, uiScale)
 		return
 	}
 	state.frameSize = frame.Size
@@ -903,14 +906,20 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 		cursorX += scaled(8)
 		displayList.FillRect(Rect{X: cursorX, Y: top + scaled(14), Width: scaled(1), Height: scaled(28)}, Color{R: 255, G: 255, B: 255, A: 34})
 		cursorX += scaled(9)
+		// Match the delete control: icon-only hit targets without a filled chip background.
 		decreaseRect = Rect{X: cursorX, Y: top + scaled(7), Width: scaled(42), Height: scaled(42)}
-		displayList.FillRoundedRect(decreaseRect, scaled(10), Color{R: 255, G: 255, B: 255, A: 34})
 		drawScreenshotEditorToolbarIcon(displayList, "control.remove", decreaseRect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
 		cursorX += scaled(42)
-		displayList.DrawText(fmt.Sprintf("%.0f", textSize), Rect{X: cursorX, Y: top + scaled(19), Width: scaled(40), Height: scaled(18)}, TextStyle{Size: scaled(12), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
-		cursorX += scaled(40)
+		sizeLabel := fmt.Sprintf("%.0f", textSize)
+		sizeLabelWidth := scaled(40)
+		sizeLabelHeight := scaled(18)
+		sizeTextWidth := min(sizeLabelWidth, screenshotEditorEstimatedTextWidth(sizeLabel, scaled(12)))
+		displayList.DrawText(sizeLabel, Rect{
+			X: cursorX + (sizeLabelWidth-sizeTextWidth)/2, Y: top + (bar.Height-sizeLabelHeight)/2,
+			Width: sizeTextWidth, Height: sizeLabelHeight,
+		}, TextStyle{Size: scaled(12), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
+		cursorX += sizeLabelWidth
 		increaseRect = Rect{X: cursorX, Y: top + scaled(7), Width: scaled(42), Height: scaled(42)}
-		displayList.FillRoundedRect(increaseRect, scaled(10), Color{R: 255, G: 255, B: 255, A: 34})
 		drawScreenshotEditorToolbarIcon(displayList, "control.add", increaseRect, Color{R: 255, G: 255, B: 255, A: 255}, uiScale)
 		cursorX += scaled(42)
 	}

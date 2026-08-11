@@ -2,7 +2,6 @@ package screenshot
 
 import (
 	"errors"
-	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -265,9 +264,9 @@ func cropScreenshotScrollingFrame(source image.Image, selection Rect, frameSize 
 	return cropped, nil
 }
 
-func newScreenshotScrollingPreview(source image.Image) (*Image, error) {
+func newScreenshotScrollingPreview(source image.Image, uiScale float32) (*Image, error) {
 	bounds := source.Bounds()
-	scale := min(float64(1), min(320/float64(bounds.Dx()), 4096/float64(bounds.Dy())))
+	scale := min(float64(1), min(float64(320*uiScale)/float64(bounds.Dx()), 4096/float64(bounds.Dy())))
 	width := max(1, int(math.Round(float64(bounds.Dx())*scale)))
 	height := max(1, int(math.Round(float64(bounds.Dy())*scale)))
 	preview := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -294,6 +293,10 @@ func (state *screenshotEditorOverlayState) beginScrollingCapture(source image.Im
 	state.mu.Lock()
 	selection, workspace := state.selection, state.frameSize
 	state.mu.Unlock()
+	uiScale := float32(1)
+	if platform.chromeScale != nil {
+		uiScale = max(float32(1), platform.chromeScale(selection))
+	}
 
 	first, err := cropScreenshotScrollingFrame(source, selection, workspace)
 	if err != nil {
@@ -306,13 +309,20 @@ func (state *screenshotEditorOverlayState) beginScrollingCapture(source image.Im
 		state.failScrollingStart(done)
 		return
 	}
-	preview, err := newScreenshotScrollingPreview(stitched)
+	preview, err := newScreenshotScrollingPreview(stitched, uiScale)
 	if err != nil {
 		state.failScrollingStart(done)
 		return
 	}
-	controls := screenshotScrollingControlsRect(selection, workspace, stitched.Bounds().Dx(), stitched.Bounds().Dy())
-	globalControls := platform.logicalSelection(controls, workspace)
+	controls := screenshotScrollingControlsRect(selection, workspace, stitched.Bounds().Dx(), stitched.Bounds().Dy(), uiScale)
+	var closeBorder func()
+	if platform.showScrollBorder != nil {
+		closeBorder, err = platform.showScrollBorder(selection, workspace)
+		if err != nil {
+			state.failScrollingStart(done)
+			return
+		}
+	}
 
 	state.mu.Lock()
 	state.workspaceSize = workspace
@@ -321,11 +331,17 @@ func (state *screenshotEditorOverlayState) beginScrollingCapture(source image.Im
 	state.scrolling = true
 	state.scrollingStarting = false
 	state.scrollingOverlaps = screenshotEditorRectsOverlap(controls, selection)
+	state.scrollBorderClose = closeBorder
+	state.uiScale = uiScale
 	state.mu.Unlock()
-	if err := state.window.SetBounds(globalControls); err != nil {
+	if err := setScreenshotScrollingWindowBounds(state.window, platform, controls, workspace); err != nil {
+		if closeBorder != nil {
+			closeBorder()
+		}
 		state.mu.Lock()
 		state.scrolling = false
 		state.scrollingStarting = false
+		state.scrollBorderClose = nil
 		state.mu.Unlock()
 		close(done)
 		state.invalidate()
@@ -348,6 +364,10 @@ func (state *screenshotEditorOverlayState) failScrollingStart(done chan struct{}
 // the polling only if idle capture cost becomes measurable.
 func (state *screenshotEditorOverlayState) pollScrollingCapture(platform screenshotEditorPlatform, selection Rect, workspace Size, done chan struct{}) {
 	defer close(done)
+	uiScale := float32(1)
+	if platform.chromeScale != nil {
+		uiScale = max(float32(1), platform.chromeScale(selection))
+	}
 	ticker := time.NewTicker(220 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -393,16 +413,16 @@ func (state *screenshotEditorOverlayState) pollScrollingCapture(platform screens
 		if err != nil {
 			continue
 		}
-		preview, err := newScreenshotScrollingPreview(stitched)
+		preview, err := newScreenshotScrollingPreview(stitched, uiScale)
 		if err != nil {
 			continue
 		}
-		controls := screenshotScrollingControlsRect(selection, workspace, stitched.Bounds().Dx(), stitched.Bounds().Dy())
+		controls := screenshotScrollingControlsRect(selection, workspace, stitched.Bounds().Dx(), stitched.Bounds().Dy(), uiScale)
 		state.mu.Lock()
 		state.scrollingPreview = preview
 		state.scrollingOverlaps = screenshotEditorRectsOverlap(controls, selection)
 		state.mu.Unlock()
-		_ = state.window.SetBounds(platform.logicalSelection(controls, workspace))
+		_ = setScreenshotScrollingWindowBounds(state.window, platform, controls, workspace)
 		state.invalidate()
 	}
 }
@@ -413,13 +433,26 @@ func (state *screenshotEditorOverlayState) stopScrollingCapture() {
 	})
 	state.mu.Lock()
 	done := state.scrollingDone
+	closeBorder := state.scrollBorderClose
+	state.scrollBorderClose = nil
 	state.mu.Unlock()
 	if done != nil {
 		<-done
 	}
+	if closeBorder != nil {
+		closeBorder()
+	}
 }
 
-func screenshotScrollingControlsRect(selection Rect, workspace Size, contentWidth, contentHeight int) Rect {
+// setScreenshotScrollingWindowBounds keeps Windows in physical pixels and other platforms logical.
+func setScreenshotScrollingWindowBounds(window *Window, platform screenshotEditorPlatform, controls Rect, workspace Size) error {
+	if platform.setScrollBounds != nil {
+		return platform.setScrollBounds(window, controls, workspace)
+	}
+	return window.SetBounds(platform.logicalSelection(controls, workspace))
+}
+
+func screenshotScrollingControlsRect(selection Rect, workspace Size, contentWidth, contentHeight int, uiScale float32) Rect {
 	const (
 		margin         = float32(24)
 		toolbarHeight  = float32(72)
@@ -428,25 +461,31 @@ func screenshotScrollingControlsRect(selection Rect, workspace Size, contentWidt
 		selectionGap   = float32(20)
 		availableInset = float32(44)
 	)
-	rightAvailable := max(float32(0), workspace.Width-selection.X-selection.Width-availableInset)
-	leftAvailable := max(float32(0), selection.X-availableInset)
-	maxPreviewWidth := min(max(rightAvailable, leftAvailable), maximumWidth)
-	maxPreviewHeight := max(float32(1), workspace.Height-margin*2-toolbarHeight)
+	marginPx := margin * uiScale
+	toolbarHeightPx := toolbarHeight * uiScale
+	minimumWidthPx := minimumWidth * uiScale
+	maximumWidthPx := maximumWidth * uiScale
+	selectionGapPx := selectionGap * uiScale
+	availableInsetPx := availableInset * uiScale
+	rightAvailable := max(float32(0), workspace.Width-selection.X-selection.Width-availableInsetPx)
+	leftAvailable := max(float32(0), selection.X-availableInsetPx)
+	maxPreviewWidth := min(max(rightAvailable, leftAvailable), maximumWidthPx)
+	maxPreviewHeight := max(float32(1), workspace.Height-marginPx*2-toolbarHeightPx)
 	scale := min(
 		max(float32(1), maxPreviewWidth)/max(float32(1), float32(contentWidth)),
 		maxPreviewHeight/max(float32(1), float32(contentHeight)),
 	)
 	previewWidth := max(float32(1), float32(contentWidth)*scale)
 	previewHeight := max(float32(1), float32(contentHeight)*scale)
-	controlsWidth := max(previewWidth, minimumWidth)
-	controlsHeight := previewHeight + toolbarHeight
-	useRight := selection.X+selection.Width+selectionGap+controlsWidth <= workspace.Width-margin || rightAvailable >= leftAvailable
-	left := selection.X + selection.Width + selectionGap
+	controlsWidth := max(previewWidth, minimumWidthPx)
+	controlsHeight := previewHeight + toolbarHeightPx
+	useRight := selection.X+selection.Width+selectionGapPx+controlsWidth <= workspace.Width-marginPx || rightAvailable >= leftAvailable
+	left := selection.X + selection.Width + selectionGapPx
 	if !useRight {
-		left = max(margin, selection.X-controlsWidth-selectionGap)
+		left = max(marginPx, selection.X-controlsWidth-selectionGapPx)
 	}
 	left = min(max(float32(0), left), max(float32(0), workspace.Width-controlsWidth))
-	top := min(max(margin, selection.Y), max(margin, workspace.Height-controlsHeight-margin))
+	top := min(max(marginPx, selection.Y), max(marginPx, workspace.Height-controlsHeight-marginPx))
 	return Rect{X: left, Y: top, Width: controlsWidth, Height: controlsHeight}
 }
 
@@ -457,24 +496,29 @@ func screenshotEditorRectsOverlap(left, right Rect) bool {
 		left.Y+left.Height > right.Y
 }
 
-func drawScreenshotScrollingControls(displayList *DisplayList, frame Size, preview *Image, frameCount int, uiScale float32) {
-	scaled := func(value float32) float32 { return value * uiScale }
+// screenshotScrollingControlLayout matches Flutter's centered 124x56 action capsule.
+func screenshotScrollingControlLayout(frame Size, uiScale float32) (Rect, Rect, Rect) {
+	toolbarWidth, toolbarHeight := 124*uiScale, 56*uiScale
+	toolbar := Rect{X: (frame.Width - toolbarWidth) / 2, Y: frame.Height - toolbarHeight, Width: toolbarWidth, Height: toolbarHeight}
+	cancel := Rect{X: toolbar.X + 18*uiScale, Y: toolbar.Y + 8*uiScale, Width: 40 * uiScale, Height: 40 * uiScale}
+	confirm := Rect{X: toolbar.X + 66*uiScale, Y: toolbar.Y + 8*uiScale, Width: 40 * uiScale, Height: 40 * uiScale}
+	return toolbar, cancel, confirm
+}
+
+func drawScreenshotScrollingControls(displayList *DisplayList, frame Size, preview *Image, uiScale float32) {
 	displayList.Clear(Color{})
-	panel := Rect{Width: frame.Width, Height: frame.Height}
-	displayList.FillRoundedRect(panel, scaled(18), Color{R: 30, G: 26, B: 24, A: 235})
 	if preview != nil {
-		maxHeight := max(float32(1), frame.Height-scaled(72))
+		maxHeight := max(float32(1), frame.Height-72*uiScale)
 		scale := min(frame.Width/float32(preview.Width), maxHeight/float32(preview.Height))
 		width, height := float32(preview.Width)*scale, float32(preview.Height)*scale
-		displayList.DrawImage(preview, Rect{X: (frame.Width - width) / 2, Width: width, Height: height})
+		previewRect := Rect{X: (frame.Width - width) / 2, Width: width, Height: height}
+		// Keep the thumbnail opaque even when image sampling leaves fractional edge pixels.
+		displayList.FillRoundedRect(previewRect, 0, Color{R: 30, G: 26, B: 24, A: 255})
+		displayList.DrawImage(preview, previewRect)
+		displayList.StrokeRoundedRect(previewRect, 0, 2*uiScale, Color{R: 255, G: 255, B: 255, A: 204})
 	}
-	displayList.FillRoundedRect(Rect{Y: frame.Height - scaled(72), Width: frame.Width, Height: scaled(72)}, scaled(18), Color{R: 25, G: 22, B: 20, A: 245})
-	displayList.DrawText(
-		fmt.Sprintf("%d", frameCount),
-		Rect{X: frame.Width/2 - scaled(20), Y: frame.Height - scaled(52), Width: scaled(40), Height: scaled(24)},
-		TextStyle{Size: scaled(13), Weight: FontWeightSemibold},
-		Color{R: 255, G: 255, B: 255, A: 153},
-	)
-	drawScreenshotEditorToolbarIcon(displayList, "control.close", Rect{X: scaled(24), Y: frame.Height - scaled(56), Width: scaled(40), Height: scaled(40)}, Color{R: 255, G: 107, B: 107, A: 255}, uiScale)
-	drawScreenshotEditorToolbarIcon(displayList, "control.check", Rect{X: frame.Width - scaled(64), Y: frame.Height - scaled(56), Width: scaled(40), Height: scaled(40)}, Color{R: 48, G: 227, B: 122, A: 255}, uiScale)
+	toolbar, cancel, confirm := screenshotScrollingControlLayout(frame, uiScale)
+	displayList.FillRoundedRect(toolbar, 18*uiScale, Color{R: 30, G: 26, B: 24, A: 230})
+	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancel, Color{R: 255, G: 107, B: 107, A: 255}, uiScale)
+	drawScreenshotEditorToolbarIcon(displayList, "control.check", confirm, Color{R: 48, G: 227, B: 122, A: 255}, uiScale)
 }

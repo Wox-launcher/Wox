@@ -994,18 +994,41 @@ static void ComputeOverlayPhysicalSize(OverlayWindow *ow, int *outWidth, int *ou
 
 // ResyncOverlaySizeAtCurrentPosition fixes physical size after a DPI change without
 // re-anchoring, which would snap a dragged overlay back to the primary work area.
-static void ResyncOverlaySizeAtCurrentPosition(OverlayWindow *ow)
+static void ResyncOverlaySizeAtCurrentPosition(OverlayWindow *ow, const RECT *dpiSuggested)
 {
     if (!ow || !ow->hwnd)
         return;
 
-    int width = 0;
-    int height = 0;
-    ComputeOverlayPhysicalSize(ow, &width, &height);
-
     RECT current;
     if (!GetWindowRect(ow->hwnd, &current))
         return;
+
+    int width = current.right - current.left;
+    int height = current.bottom - current.top;
+    ow->dpi = GetWindowDpiSafe(ow->hwnd, ow->dpi ? ow->dpi : GetSystemDpiSafe());
+    if (!ow->resizable || !ow->transparent)
+    {
+        // Fixed overlays use their requested DIP dimensions. Resizable transparent overlays are
+        // different: their current bounds may have been changed by image zoom or an edge drag,
+        // so recalculating from the original payload would discard that user state.
+        ComputeOverlayPhysicalSize(ow, &width, &height);
+    }
+    else if (ow->nativeAttachment && ow->nativeAttachmentKind == NATIVE_ATTACHMENT_KIND_WINDOW)
+    {
+        if (dpiSuggested)
+        {
+            // Windows supplies the correctly scaled physical bounds for the destination monitor.
+            // Apply only its size here; the drag loop owns the position and must not snap to the
+            // suggested top-left while the pointer is still moving the overlay.
+            width = dpiSuggested->right - dpiSuggested->left;
+            height = dpiSuggested->bottom - dpiSuggested->top;
+            if (width < 1)
+                width = 1;
+            if (height < 1)
+                height = 1;
+        }
+        SetRect(&ow->nativeAttachmentRect, 0, 0, width, height);
+    }
 
     ow->layoutSizeChanged = (current.right - current.left) != width || (current.bottom - current.top) != height;
     SetWindowPos(ow->hwnd, NULL, current.left, current.top, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
@@ -1462,22 +1485,30 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         if (!ow)
             return 0;
         ow->dpi = HIWORD(wParam);
+        RECT *suggested = (RECT *)lParam;
         if (ow->dragging)
         {
             // Bug fix: crossing monitors with different DPI sends WM_DPICHANGED while the custom
             // drag loop is still positioning the overlay from raw screen pixels. Re-running the
             // normal anchor layout here can snap borderless overlays back to the primary work area.
-            // Still resync physical size from DIP metrics so paint and window bounds stay matched.
-            ResyncOverlaySizeAtCurrentPosition(ow);
+            // Keep the current position, but use Windows' suggested size so a zoomed image scales
+            // with the destination monitor instead of retaining the source monitor's pixel size.
+            ResyncOverlaySizeAtCurrentPosition(ow, suggested);
             return 0;
         }
-        RECT *suggested = (RECT *)lParam;
         if (suggested)
         {
             SetWindowPos(hwnd, NULL, suggested->left, suggested->top,
                          suggested->right - suggested->left,
                          suggested->bottom - suggested->top,
                          SWP_NOACTIVATE | SWP_NOZORDER);
+        }
+        if (ow->resizable && ow->transparent)
+        {
+            // A DPI move may deliver this message just after a drag ends. Preserve the suggested
+            // position and the user's current zoomed size instead of reapplying the initial payload.
+            ResyncOverlaySizeAtCurrentPosition(ow, NULL);
+            return 0;
         }
         ApplyOverlayLayout(ow);
         InvalidateRect(hwnd, NULL, TRUE);
@@ -1670,7 +1701,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         if (wasDragging)
         {
             // Heal any DPI mismatch that arrived during drag or right after release.
-            ResyncOverlaySizeAtCurrentPosition(ow);
+            ResyncOverlaySizeAtCurrentPosition(ow, NULL);
         }
         else
         {

@@ -192,7 +192,7 @@ var uiIcons = map[string]WoxImage{
 	"screenshot.mosaic":            newMonochromeUIIcon(`<rect x="3.5" y="3.5" width="17" height="17" rx=".75"/><path d="M4 4h4v4H4zM12 4h4v4h-4zM8 8h4v4H8zM16 8h4v4h-4zM4 12h4v4H4zM12 12h4v4h-4zM8 16h4v4H8zM16 16h4v4h-4z" fill="#fff" stroke="none"/>`),
 	"screenshot.scrolling-capture": newMonochromeUIIcon(`<path d="m8 7 4-4 4 4M12 3v18M8 17l4 4 4-4"/>`),
 	"screenshot.cursor":            NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M4.5 2.5v16.2l4.1-4 3.4 7.1 3.8-1.8-3.3-6.8h6.1L4.5 2.5Z" fill="#fff" stroke="#171717" stroke-width="1.6" stroke-linejoin="round"/></svg>`),
-	"screenshot.pin":               newMonochromeUIIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v8"/>`),
+	"screenshot.pin":               newMonochromeUIIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6"/>`),
 
 	// Usage dashboard.
 	"usage.share":      NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M6 22q-.825 0-1.412-.587T4 20V10q0-.825.588-1.412T6 8h2q.425 0 .713.288T9 9t-.288.713T8 10H6v10h12V10h-2q-.425 0-.712-.288T15 9t.288-.712T16 8h2q.825 0 1.413.588T20 10v10q0 .825-.587 1.413T18 22zm5.288-6.288Q11 15.425 11 15V4.825l-.9.9q-.3.3-.7.288T8.7 5.7q-.275-.3-.287-.7t.287-.7l2.6-2.6q.15-.15.325-.212T12 1.425t.375.063t.325.212l2.6 2.6q.275.275.275.688T15.3 5.7q-.3.3-.712.3t-.713-.3L13 4.825V15q0 .425-.288.713T12 16t-.712-.288"/></svg>`),

@@ -169,3 +169,21 @@ func TestChatHistoryItemOmitsBubbleIcon(t *testing.T) {
 		t.Fatalf("history title left = %.0f, want indented 12", row.Children[0].Left)
 	}
 }
+
+func TestChatCatalogItemOnlyShowsCheckForCurrentModel(t *testing.T) {
+	theme := woxcomponent.Theme{PreviewText: woxui.Color{A: 255}}
+
+	notCurrent := chatCatalogItem(ChatCatalogItemProps{SelectID: "flash", Kind: "models", Title: "flash", Selected: true}, 400, 38, theme, false, func(bool) {}).(woxwidget.Gesture)
+	notCurrentStack := notCurrent.Child.(woxwidget.Container).Child.(woxwidget.Stack)
+	notCurrentCheck := notCurrentStack.Children[3].Child.(woxwidget.Container)
+	if notCurrentCheck.Width != 0 || notCurrentCheck.Child != nil {
+		t.Fatalf("non-current model check slot = width %.0f, child %#v; want empty", notCurrentCheck.Width, notCurrentCheck.Child)
+	}
+
+	current := chatCatalogItem(ChatCatalogItemProps{SelectID: "flash", Kind: "models", Title: "flash", Current: true}, 400, 38, theme, false, func(bool) {}).(woxwidget.Gesture)
+	currentStack := current.Child.(woxwidget.Container).Child.(woxwidget.Stack)
+	currentCheck := currentStack.Children[3].Child.(woxwidget.Container)
+	if currentCheck.Width != 28 || currentCheck.Child == nil {
+		t.Fatalf("current model check slot = width %.0f, child %#v; want check glyph", currentCheck.Width, currentCheck.Child)
+	}
+}

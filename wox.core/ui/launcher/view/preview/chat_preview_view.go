@@ -307,15 +307,17 @@ func chatCatalogItem(item ChatCatalogItemProps, width, height float32, theme wox
 		rightPadding = 8
 	}
 	if item.OnDelete == nil {
-		checkWidth := float32(0)
-		if item.Current {
-			checkWidth = 28
-		}
-		titleWidth := min(float32(220), max(float32(100), width*0.42))
 		iconColor := theme.PreviewText
 		if item.Selected {
 			iconColor = theme.SelectedTitle
 		}
+		checkWidth := float32(0)
+		check := woxwidget.Widget(nil)
+		if item.Current {
+			checkWidth = 28
+			check = woxcomponent.CheckGlyph(18, iconColor)
+		}
+		titleWidth := min(float32(220), max(float32(100), width*0.42))
 		icon := woxcomponent.ModelTrainingGlyph(18, iconColor)
 		if item.Kind == "skills" {
 			icon = woxcomponent.ExtensionGlyph(18, iconColor)
@@ -325,7 +327,7 @@ func chatCatalogItem(item ChatCatalogItemProps, width, height float32, theme wox
 				{Left: 14, Top: 10, Child: icon},
 				{Left: 42, Top: 11, Child: woxwidget.Container{Width: titleWidth, Height: 18, Child: woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: iconColor}}},
 				{Left: 50 + titleWidth, Top: 11, Right: checkWidth + 8, StretchWidth: true, Child: woxwidget.Container{Height: 18, Child: woxwidget.Text{Value: item.Subtitle, Style: woxui.TextStyle{Size: 11}, Color: theme.ResultSubtitle}}},
-				{Top: 10, AnchorRight: true, Child: woxwidget.Container{Width: checkWidth, Height: 18, Child: woxcomponent.CheckGlyph(18, iconColor)}},
+				{Top: 10, AnchorRight: true, Child: woxwidget.Container{Width: checkWidth, Height: 18, Child: check}},
 			}},
 		}}
 	}

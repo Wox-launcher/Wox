@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -18,7 +20,15 @@ import (
 
 const windowsCursorShowing = uint32(1)
 
-var getCursorInfo = syscall.NewLazyDLL("user32.dll").NewProc("GetCursorInfo")
+const windowsScrollingBorderClassName = "WoxScrollingCaptureBorder"
+
+var (
+	getCursorInfo                         = syscall.NewLazyDLL("user32.dll").NewProc("GetCursorInfo")
+	createSolidBrush                      = syscall.NewLazyDLL("gdi32.dll").NewProc("CreateSolidBrush")
+	windowsScrollingBorderClassOnce       sync.Once
+	windowsScrollingBorderClassErr        error
+	windowsScrollingBorderWindowProcedure = syscall.NewCallback(windowsScrollingBorderWindowProc)
+)
 
 type windowsCursorInfo struct {
 	size     uint32
@@ -102,6 +112,24 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 				},
 			}, nil
 		},
+		setScrollBounds: func(window *Window, controls Rect, _ Size) error {
+			return window.SetPhysicalBounds(Rect{
+				X:      float32(virtualBounds.Min.X) + controls.X,
+				Y:      float32(virtualBounds.Min.Y) + controls.Y,
+				Width:  controls.Width,
+				Height: controls.Height,
+			})
+		},
+		showScrollBorder: func(selection Rect, _ Size) (func(), error) {
+			globalSelection := Rect{
+				X:      float32(virtualBounds.Min.X) + selection.X,
+				Y:      float32(virtualBounds.Min.Y) + selection.Y,
+				Width:  selection.Width,
+				Height: selection.Height,
+			}
+			thickness := int32(math.Round(float64(2 * woxui.WindowsPhysicalRectScale(globalSelection))))
+			return showWindowsScrollingCaptureBorder(globalSelection, max(int32(2), thickness))
+		},
 		preparedWindow: preparedWindow,
 		windowHost:     windowHost,
 		afterShow: func() {
@@ -122,6 +150,122 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		platform.capturedCursor = capturedCursor
 	}
 	return runScreenshotEditor(options, source, platform)
+}
+
+// showWindowsScrollingCaptureBorder keeps the selected viewport visible without covering it.
+func showWindowsScrollingCaptureBorder(selection Rect, thickness int32) (func(), error) {
+	var windows []win.HWND
+	var createErr error
+	if err := Call(func() {
+		windows, createErr = createWindowsScrollingCaptureBorder(selection, thickness)
+	}); err != nil {
+		return nil, err
+	}
+	if createErr != nil {
+		return nil, createErr
+	}
+	var closeOnce sync.Once
+	return func() {
+		closeOnce.Do(func() {
+			_ = Call(func() {
+				for _, window := range windows {
+					if window != 0 {
+						win.DestroyWindow(window)
+					}
+				}
+			})
+		})
+	}, nil
+}
+
+// createWindowsScrollingCaptureBorder creates passive topmost edges around the live viewport.
+func createWindowsScrollingCaptureBorder(selection Rect, thickness int32) ([]win.HWND, error) {
+	if err := ensureWindowsScrollingBorderClass(); err != nil {
+		return nil, err
+	}
+	className, err := syscall.UTF16PtrFromString(windowsScrollingBorderClassName)
+	if err != nil {
+		return nil, err
+	}
+	title, err := syscall.UTF16PtrFromString("")
+	if err != nil {
+		return nil, err
+	}
+	instance := win.GetModuleHandle(nil)
+	rects := windowsScrollingCaptureBorderRects(selection, thickness)
+	windows := make([]win.HWND, 0, len(rects))
+	for _, rect := range rects {
+		window := win.CreateWindowEx(
+			uint32(win.WS_EX_TOPMOST|win.WS_EX_TOOLWINDOW|win.WS_EX_TRANSPARENT|win.WS_EX_NOACTIVATE),
+			className,
+			title,
+			win.WS_POPUP,
+			int32(math.Round(float64(rect.X))),
+			int32(math.Round(float64(rect.Y))),
+			int32(math.Round(float64(rect.Width))),
+			int32(math.Round(float64(rect.Height))),
+			0,
+			0,
+			instance,
+			nil,
+		)
+		if window == 0 {
+			for _, created := range windows {
+				win.DestroyWindow(created)
+			}
+			return nil, fmt.Errorf("create scrolling capture border window: %w", syscall.GetLastError())
+		}
+		windows = append(windows, window)
+		win.ShowWindow(window, win.SW_SHOWNOACTIVATE)
+		win.RedrawWindow(window, nil, 0, win.RDW_INVALIDATE|win.RDW_ERASE|win.RDW_UPDATENOW)
+	}
+	return windows, nil
+}
+
+// windowsScrollingCaptureBorderRects places every border pixel outside the captured viewport.
+func windowsScrollingCaptureBorderRects(selection Rect, thickness int32) [4]Rect {
+	border := float32(max(int32(1), thickness))
+	return [4]Rect{
+		{X: selection.X - border, Y: selection.Y - border, Width: selection.Width + border*2, Height: border},
+		{X: selection.X + selection.Width, Y: selection.Y, Width: border, Height: selection.Height},
+		{X: selection.X - border, Y: selection.Y + selection.Height, Width: selection.Width + border*2, Height: border},
+		{X: selection.X - border, Y: selection.Y, Width: border, Height: selection.Height},
+	}
+}
+
+// ensureWindowsScrollingBorderClass registers the process-wide class with the Flutter border color.
+func ensureWindowsScrollingBorderClass() error {
+	windowsScrollingBorderClassOnce.Do(func() {
+		className, err := syscall.UTF16PtrFromString(windowsScrollingBorderClassName)
+		if err != nil {
+			windowsScrollingBorderClassErr = err
+			return
+		}
+		brush, _, _ := createSolidBrush.Call(uintptr(win.RGB(41, 255, 114)))
+		if brush == 0 {
+			windowsScrollingBorderClassErr = errors.New("create scrolling capture border brush")
+			return
+		}
+		windowClass := win.WNDCLASSEX{
+			CbSize:        uint32(unsafe.Sizeof(win.WNDCLASSEX{})),
+			LpfnWndProc:   windowsScrollingBorderWindowProcedure,
+			HInstance:     win.GetModuleHandle(nil),
+			HbrBackground: win.HBRUSH(brush),
+			LpszClassName: className,
+		}
+		if win.RegisterClassEx(&windowClass) == 0 {
+			windowsScrollingBorderClassErr = fmt.Errorf("register scrolling capture border class: %w", syscall.GetLastError())
+		}
+	})
+	return windowsScrollingBorderClassErr
+}
+
+func windowsScrollingBorderWindowProc(hwnd win.HWND, message uint32, wParam, lParam uintptr) uintptr {
+	if message == win.WM_NCHITTEST {
+		result := int32(win.HTTRANSPARENT)
+		return uintptr(result)
+	}
+	return win.DefWindowProc(hwnd, message, wParam, lParam)
 }
 
 // captureWindowsCursor preserves the visible native cursor image and its hotspot at capture time.

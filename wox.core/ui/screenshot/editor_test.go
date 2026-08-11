@@ -956,3 +956,27 @@ func TestScreenshotScrollingCaptureMatchesAndStitchesBothDirections(t *testing.T
 		}
 	}
 }
+
+func TestScreenshotScrollingControlLayoutMatchesFlutter(t *testing.T) {
+	toolbar, cancel, confirm := screenshotScrollingControlLayout(Size{Width: 168, Height: 300}, 1)
+	if toolbar != (Rect{X: 22, Y: 244, Width: 124, Height: 56}) {
+		t.Fatalf("toolbar = %+v", toolbar)
+	}
+	if cancel != (Rect{X: 40, Y: 252, Width: 40, Height: 40}) {
+		t.Fatalf("cancel = %+v", cancel)
+	}
+	if confirm != (Rect{X: 88, Y: 252, Width: 40, Height: 40}) {
+		t.Fatalf("confirm = %+v", confirm)
+	}
+
+	toolbar, cancel, confirm = screenshotScrollingControlLayout(Size{Width: 252, Height: 450}, 1.5)
+	if toolbar != (Rect{X: 33, Y: 366, Width: 186, Height: 84}) {
+		t.Fatalf("scaled toolbar = %+v", toolbar)
+	}
+	if cancel != (Rect{X: 60, Y: 378, Width: 60, Height: 60}) {
+		t.Fatalf("scaled cancel = %+v", cancel)
+	}
+	if confirm != (Rect{X: 132, Y: 378, Width: 60, Height: 60}) {
+		t.Fatalf("scaled confirm = %+v", confirm)
+	}
+}

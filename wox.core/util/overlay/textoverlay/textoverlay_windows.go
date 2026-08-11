@@ -2,7 +2,7 @@ package textoverlay
 
 /*
 #cgo CFLAGS: -DUNICODE -D_UNICODE
-#cgo LDFLAGS: -lgdi32 -luser32 -lmsimg32 -luxtheme
+#cgo LDFLAGS: -lgdi32 -luser32 -lmsimg32 -luxtheme -lole32 -lwindowscodecs
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -39,6 +39,7 @@ TextOverlayAttachment TextOverlayCreateWindow(
 TextOverlayAttachment TextOverlayUpdateWindow(
     void* hwnd,
     char* message,
+    unsigned char* iconData,
     int iconLen,
     bool loading,
     bool centerContent,
@@ -114,6 +115,7 @@ func newTextRenderer(opts Options) (*textRenderer, bool) {
 		result := C.TextOverlayUpdateWindow(
 			unsafe.Pointer(existing.handle),
 			cMessage,
+			cIconData,
 			cIconLen,
 			C.bool(opts.Loading),
 			C.bool(opts.CenterContent),
