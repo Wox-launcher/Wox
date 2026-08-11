@@ -6,6 +6,7 @@ package screenshot
 #include <stdlib.h>
 #include "../runtime/native_linux.h"
 int32_t wox_screenshot_cursor_position(float *x, float *y);
+int32_t wox_screenshot_set_cursor_position(int32_t x, int32_t y);
 */
 import "C"
 
@@ -14,6 +15,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"math"
 	"os"
 	"time"
 	"unsafe"
@@ -46,6 +48,15 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		captureDesktop: func() (screenshotDesktopCapture, error) {
 			captured, _, captureErr := captureLinuxDesktop()
 			return screenshotDesktopCapture{source: captured}, captureErr
+		},
+		desktopPixelOrigin: screenshotEditorDesktopPixelOrigin(bounds, source),
+		setPointerPosition: func(point Point) error {
+			x := int32(math.Round(float64(bounds.X + point.X)))
+			y := int32(math.Round(float64(bounds.Y + point.Y)))
+			if C.wox_screenshot_set_cursor_position(C.int32_t(x), C.int32_t(y)) != 0 {
+				return errors.New("failed to set Linux screenshot cursor position")
+			}
+			return nil
 		},
 	}
 	if hasCapturedCursor {

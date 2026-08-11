@@ -2,6 +2,9 @@ package plugin
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -121,6 +124,85 @@ func TestNormalizeToolbarMsgUsesPluginIconWhenMsgIconMissing(t *testing.T) {
 	normalized := manager.normalizeToolbarMsg(context.Background(), pluginInstance, ToolbarMsg{Id: "status", Title: "working"})
 
 	assert.Equal(t, pluginIcon, normalized.Icon)
+}
+
+func TestConvertResultIconDefersRemoteURLWithoutRequest(t *testing.T) {
+	initPluginImageTestLocation(t)
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requestCount++
+	}))
+	defer server.Close()
+	manager := &Manager{lazyResultIcons: util.NewHashMap[string, *lazyResultIconEntry]()}
+	query := Query{Id: "query-remote-icon", SessionId: "session-remote-icon"}
+
+	converted := manager.convertResultIcon(context.Background(), nil, query, QueryLayout{}, "result-remote-icon", "Remote", common.NewWoxImageUrl(server.URL+"/icon.png"))
+
+	if requestCount != 0 {
+		t.Fatalf("result polish made %d synchronous remote icon requests", requestCount)
+	}
+	payload, err := common.ParseWoxLazyLoadImagePayload(converted)
+	if err != nil {
+		t.Fatalf("parse registered lazy icon: %v", err)
+	}
+	if payload.Token == "" {
+		t.Fatal("manager did not register a lazy remote icon token")
+	}
+	if _, found := manager.lazyResultIcons.Load(payload.Token); !found {
+		t.Fatal("registered lazy remote icon token is missing from manager cache")
+	}
+}
+
+func TestLoadLazyResultIconFallsBackWhenRemoteURLFails(t *testing.T) {
+	initPluginImageTestLocation(t)
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		requestCount++
+		http.Error(response, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	query := Query{Id: "query-remote-icon", SessionId: "session-remote-icon"}
+	result := QueryResult{Id: "result-remote-icon"}
+	manager, _ := newTestManagerWithCachedResult(query, result)
+	manager.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
+	token := "remote-icon-token"
+	source := common.NewWoxImageUrl(server.URL + "/icon.png")
+	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), common.ImageThumbnailPlaceholderIcon, common.ResultListIconSize)
+	cachedResult, found := manager.findResultCacheInSession(query.SessionId, query.Id, result.Id)
+	if !found {
+		t.Fatal("expected cached result")
+	}
+	cachedResult.Result.Icon = lazyIcon
+	manager.lazyResultIcons.Store(token, &lazyResultIconEntry{
+		SessionId: query.SessionId, QueryId: query.Id, ResultId: result.Id,
+		OriginalIcon: source, TargetSize: common.ResultListIconSize,
+	})
+
+	loaded, err := manager.LoadLazyResultIcon(context.Background(), token)
+	if err != nil {
+		t.Fatalf("load lazy remote icon: %v", err)
+	}
+	if loaded != common.ImageThumbnailPlaceholderIcon {
+		t.Fatalf("failed remote URL should resolve to placeholder, got %+v", loaded)
+	}
+	if cachedResult.Result.Icon != common.ImageThumbnailPlaceholderIcon {
+		t.Fatalf("cached failed remote URL should be placeholder, got %+v", cachedResult.Result.Icon)
+	}
+	if requestCount != 1 {
+		t.Fatalf("failed remote URL made %d requests, want 1", requestCount)
+	}
+}
+
+func initPluginImageTestLocation(t *testing.T) {
+	t.Helper()
+	dataDir := t.TempDir()
+	t.Setenv(util.TestWoxDataDirEnv, dataDir)
+	t.Setenv(util.TestUserDataDirEnv, filepath.Join(dataDir, "user"))
+	if err := util.GetLocation().Init(); err != nil {
+		t.Fatalf("init test location: %v", err)
+	}
+	common.ClearConvertIconPathExistenceCache()
 }
 
 func newTestManagerWithCachedResult(query Query, result QueryResult) (*Manager, *Instance) {

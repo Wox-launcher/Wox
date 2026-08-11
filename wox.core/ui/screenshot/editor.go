@@ -1,9 +1,11 @@
 package screenshot
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"image/png"
 	"math"
@@ -15,12 +17,14 @@ import (
 	"unicode/utf8"
 
 	"wox/common"
+	"wox/util"
 	woxsvg "wox/util/svg"
 )
 
 type screenshotEditorOverlayOutcome struct {
-	cancelled bool
-	pinned    bool
+	cancelled   bool
+	pinned      bool
+	copiedColor string
 }
 
 type screenshotEditorTool uint8
@@ -121,98 +125,106 @@ const (
 )
 
 type screenshotEditorOverlayState struct {
-	mu                 sync.Mutex
-	once               sync.Once
-	window             *Window
-	image              *Image
-	frameSize          Size
-	workspaceSize      Size
-	start              Point
-	selection          Rect
-	confirmRect        Rect
-	cancelRect         Rect
-	pinRect            Rect
-	undoRect           Rect
-	scrollRect         Rect
-	cursorRect         Rect
-	toolbarRect        Rect
-	toolRects          [screenshotEditorToolCount]Rect
-	tooltips           [screenshotEditorToolCount]string
-	actionTooltips     ScreenshotActionTooltips
-	editBarRect        Rect
-	editColorRects     [6]Rect
-	editSizeRects      [3]Rect
-	editDecreaseRect   Rect
-	editIncreaseRect   Rect
-	editDeleteRect     Rect
-	activeTool         screenshotEditorTool
-	annotations        []screenshotEditorAnnotation
-	draft              *screenshotEditorAnnotation
-	editMode           screenshotEditorEditMode
-	editHandle         screenshotEditorHandle
-	editOriginalRect   Rect
-	editOriginalMark   screenshotEditorAnnotation
-	selectedAnnotation int
-	hasSelectedMark    bool
-	hoveredAnnotation  int
-	hasHoveredMark     bool
-	hoveredTool        int
-	hasHoveredTool     bool
-	hoveredAction      screenshotEditorAction
-	hasHoveredAction   bool
-	pointerCursor      PointerCursor
-	textPosition       Point
-	textDraft          string
-	textMarked         string
-	textCaret          int
-	textEditing        bool
-	editingTextIndex   int
-	hasEditingText     bool
-	caretVisible       bool
-	caretBlinkAt       time.Time
-	caretBlinkStop     chan struct{}
-	caretBlinkDone     chan struct{}
-	dragging           bool
-	annotationDragging bool
-	hasSelection       bool
-	autoConfirm        bool
-	hideTools          bool
-	scrolling          bool
-	scrollingStarting  bool
-	scrollingFrames    []screenshotScrollingFrame
-	scrollingPreview   *Image
-	scrollingStop      chan struct{}
-	scrollingDone      chan struct{}
-	scrollingStopOnce  sync.Once
-	scrollingOverlaps  bool
-	scrollBorderClose  func()
-	startScrolling     func()
-	annotationColor    Color
-	mosaicRadius       float32
-	textFontSize       float32
-	nextNumber         int
-	cursorPixel        *Point
-	capturedCursor     *screenshotEditorCapturedCursor
-	showCursor         bool
-	uiScale            float32
-	chromeScale        func(selection Rect) float32
-	result             chan screenshotEditorOverlayOutcome
+	mu                      sync.Mutex
+	once                    sync.Once
+	window                  *Window
+	image                   *Image
+	frameSize               Size
+	workspaceSize           Size
+	start                   Point
+	selection               Rect
+	confirmRect             Rect
+	cancelRect              Rect
+	pinRect                 Rect
+	undoRect                Rect
+	scrollRect              Rect
+	cursorRect              Rect
+	toolbarRect             Rect
+	toolRects               [screenshotEditorToolCount]Rect
+	tooltips                [screenshotEditorToolCount]string
+	actionTooltips          ScreenshotActionTooltips
+	editBarRect             Rect
+	editColorRects          [6]Rect
+	editSizeRects           [3]Rect
+	editDecreaseRect        Rect
+	editIncreaseRect        Rect
+	editDeleteRect          Rect
+	activeTool              screenshotEditorTool
+	annotations             []screenshotEditorAnnotation
+	draft                   *screenshotEditorAnnotation
+	editMode                screenshotEditorEditMode
+	editHandle              screenshotEditorHandle
+	editOriginalRect        Rect
+	editOriginalMark        screenshotEditorAnnotation
+	selectedAnnotation      int
+	hasSelectedMark         bool
+	hoveredAnnotation       int
+	hasHoveredMark          bool
+	hoveredTool             int
+	hasHoveredTool          bool
+	hoveredAction           screenshotEditorAction
+	hasHoveredAction        bool
+	pointerCursor           PointerCursor
+	pointerPosition         Point
+	pointerInside           bool
+	colorInspectorDismissed bool
+	writeClipboardText      func(string) error
+	setPointerPosition      func(Point) error
+	textPosition            Point
+	textDraft               string
+	textMarked              string
+	textCaret               int
+	textEditing             bool
+	editingTextIndex        int
+	hasEditingText          bool
+	caretVisible            bool
+	caretBlinkAt            time.Time
+	caretBlinkStop          chan struct{}
+	caretBlinkDone          chan struct{}
+	dragging                bool
+	annotationDragging      bool
+	hasSelection            bool
+	autoConfirm             bool
+	hideTools               bool
+	scrolling               bool
+	scrollingStarting       bool
+	scrollingFrames         []screenshotScrollingFrame
+	scrollingPreview        *Image
+	scrollingStop           chan struct{}
+	scrollingDone           chan struct{}
+	scrollingStopOnce       sync.Once
+	scrollingOverlaps       bool
+	scrollBorderClose       func()
+	startScrolling          func()
+	annotationColor         Color
+	mosaicRadius            float32
+	textFontSize            float32
+	nextNumber              int
+	cursorPixel             *Point
+	capturedCursor          *screenshotEditorCapturedCursor
+	showCursor              bool
+	uiScale                 float32
+	chromeScale             func(selection Rect) float32
+	desktopPixelOrigin      Point
+	result                  chan screenshotEditorOverlayOutcome
 }
 
 type screenshotEditorPlatform struct {
-	setWindowBounds  func(window *Window) error
-	logicalSelection func(selection Rect, frameSize Size) Rect
-	captureDesktop   func() (screenshotDesktopCapture, error)
-	setScrollBounds  func(window *Window, controls Rect, frameSize Size) error
-	showScrollBorder func(selection Rect, frameSize Size) (func(), error)
-	frameSize        Size
-	initialSelection *Rect
-	cursorPixel      *Point
-	capturedCursor   *screenshotEditorCapturedCursor
-	afterShow        func()
-	chromeScale      func(selection Rect) float32
-	preparedWindow   *ManagedWindow
-	windowHost       *screenshotEditorWindowHost
+	setWindowBounds    func(window *Window) error
+	logicalSelection   func(selection Rect, frameSize Size) Rect
+	captureDesktop     func() (screenshotDesktopCapture, error)
+	setScrollBounds    func(window *Window, controls Rect, frameSize Size) error
+	showScrollBorder   func(selection Rect, frameSize Size) (func(), error)
+	frameSize          Size
+	initialSelection   *Rect
+	cursorPixel        *Point
+	capturedCursor     *screenshotEditorCapturedCursor
+	afterShow          func()
+	chromeScale        func(selection Rect) float32
+	desktopPixelOrigin Point
+	setPointerPosition func(Point) error
+	preparedWindow     *ManagedWindow
+	windowHost         *screenshotEditorWindowHost
 }
 
 type screenshotDesktopCapture struct {
@@ -229,22 +241,24 @@ func (capture screenshotDesktopCapture) close() {
 // newScreenshotEditorOverlayState applies an optional native selection before the portable editor is shown.
 func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, platform screenshotEditorPlatform) *screenshotEditorOverlayState {
 	state := &screenshotEditorOverlayState{
-		image:           uiImage,
-		frameSize:       platform.frameSize,
-		autoConfirm:     options.AutoConfirm,
-		hideTools:       options.HideAnnotationToolbar,
-		annotationColor: screenshotEditorAnnotationColor,
-		mosaicRadius:    screenshotEditorMosaicRadius,
-		textFontSize:    screenshotEditorTextFontSize,
-		nextNumber:      1,
-		cursorPixel:     platform.cursorPixel,
-		capturedCursor:  platform.capturedCursor,
-		uiScale:         1,
-		chromeScale:     platform.chromeScale,
-		result:          make(chan screenshotEditorOverlayOutcome, 1),
-		scrollingStop:   make(chan struct{}),
-		caretVisible:    true,
-		caretBlinkAt:    time.Now(),
+		image:              uiImage,
+		frameSize:          platform.frameSize,
+		autoConfirm:        options.AutoConfirm,
+		hideTools:          options.HideAnnotationToolbar,
+		annotationColor:    screenshotEditorAnnotationColor,
+		mosaicRadius:       screenshotEditorMosaicRadius,
+		textFontSize:       screenshotEditorTextFontSize,
+		nextNumber:         1,
+		cursorPixel:        platform.cursorPixel,
+		capturedCursor:     platform.capturedCursor,
+		uiScale:            1,
+		chromeScale:        platform.chromeScale,
+		desktopPixelOrigin: platform.desktopPixelOrigin,
+		setPointerPosition: platform.setPointerPosition,
+		result:             make(chan screenshotEditorOverlayOutcome, 1),
+		scrollingStop:      make(chan struct{}),
+		caretVisible:       true,
+		caretBlinkAt:       time.Now(),
 	}
 	state.tooltips = [screenshotEditorToolCount]string{
 		"",
@@ -259,6 +273,7 @@ func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, 
 	if platform.initialSelection != nil {
 		state.selection = normalizeScreenshotEditorRect(*platform.initialSelection, platform.frameSize)
 		state.hasSelection = state.selection.Width >= 2 && state.selection.Height >= 2
+		state.colorInspectorDismissed = true
 	}
 	return state
 }
@@ -306,7 +321,10 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 			}
 		}
 		overlay := managed.Window()
+		state.mu.Lock()
 		state.window = overlay
+		state.writeClipboardText = overlay.WriteClipboardText
+		state.mu.Unlock()
 		openErr = platform.setWindowBounds(overlay)
 		if openErr == nil {
 			_, openErr = managed.Show()
@@ -337,6 +355,9 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	state.stopScrollingCapture()
 	if outcome.cancelled {
 		return ScreenshotResult{Cancelled: true}, nil
+	}
+	if outcome.copiedColor != "" {
+		return ScreenshotResult{CopiedColor: outcome.copiedColor}, nil
 	}
 
 	state.mu.Lock()
@@ -462,9 +483,22 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.frameSize = frame.Size
 	selection := normalizeScreenshotEditorRect(state.selection, frame.Size)
 	hasSelection := state.hasSelection || state.dragging
+	pointerPosition := state.pointerPosition
+	pointerInside := state.pointerInside
+	colorInspectorDismissed := state.colorInspectorDismissed
 	uiScale := float32(1)
-	if hasSelection && state.chromeScale != nil {
-		uiScale = max(float32(1), state.chromeScale(selection))
+	if state.chromeScale != nil {
+		scaleRect := selection
+		if !hasSelection && pointerInside {
+			scaleRect = Rect{X: pointerPosition.X, Y: pointerPosition.Y, Width: 1, Height: 1}
+		}
+		if scaleRect.Width > 0 && scaleRect.Height > 0 {
+			uiScale = max(float32(1), state.chromeScale(scaleRect))
+		}
+	}
+	inspectorScale := uiScale
+	if pointerInside && state.chromeScale != nil {
+		inspectorScale = max(float32(1), state.chromeScale(Rect{X: pointerPosition.X, Y: pointerPosition.Y, Width: 1, Height: 1}))
 	}
 	state.uiScale = uiScale
 	scaled := func(value float32) float32 { return value * uiScale }
@@ -488,6 +522,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	cursorPixel := state.cursorPixel
 	capturedCursor := state.capturedCursor
 	showCursor := state.showCursor
+	desktopPixelOrigin := state.desktopPixelOrigin
 	annotations := append([]screenshotEditorAnnotation(nil), state.annotations...)
 	if hasEditingText {
 		if annotations[editingTextIndex].text != textPreview {
@@ -547,6 +582,9 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	dim := Color{A: 119}
 	if !hasSelection || selection.Width <= 0 || selection.Height <= 0 {
 		displayList.FillRect(Rect{Width: frame.Size.Width, Height: frame.Size.Height}, dim)
+		if pointerInside && !colorInspectorDismissed {
+			drawScreenshotEditorColorInspector(displayList, state.image, frame.Size, pointerPosition, desktopPixelOrigin, inspectorScale)
+		}
 		return
 	}
 	displayList.FillRect(Rect{Width: frame.Size.Width, Height: selection.Y}, dim)
@@ -690,6 +728,139 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			selectedMark = &selectedCopy
 		}
 		state.drawEditBar(displayList, frame.Size, toolbarRect, activeTool, selectedMark, annotationColor, mosaicRadius, textFontSize, uiScale)
+	}
+	if pointerInside && !colorInspectorDismissed {
+		drawScreenshotEditorColorInspector(displayList, state.image, frame.Size, pointerPosition, desktopPixelOrigin, inspectorScale)
+	}
+}
+
+const (
+	screenshotEditorInspectorColumns = 17
+	screenshotEditorInspectorRows    = 9
+)
+
+// drawScreenshotEditorColorInspector shows the exact captured pixel under the pointer and its surrounding pixels.
+func drawScreenshotEditorColorInspector(displayList *DisplayList, source *Image, frame Size, pointer, desktopPixelOrigin Point, uiScale float32) {
+	pixelX, pixelY, pixel, ok := screenshotEditorPixelAtPoint(source, frame, pointer)
+	if !ok {
+		return
+	}
+	uiScale = max(float32(1), uiScale)
+	scaled := func(value float32) float32 { return value * uiScale }
+	cellSize := scaled(12)
+	previewWidth := cellSize * screenshotEditorInspectorColumns
+	previewHeight := cellSize * screenshotEditorInspectorRows
+	panelSize := Size{Width: previewWidth, Height: previewHeight + scaled(104)}
+	panel := screenshotEditorInspectorRect(frame, pointer, panelSize, uiScale)
+
+	displayList.FillRoundedRect(panel, scaled(10), Color{R: 20, G: 18, B: 17, A: 248})
+	halfColumns := screenshotEditorInspectorColumns / 2
+	halfRows := screenshotEditorInspectorRows / 2
+	gridColor := Color{R: 0, G: 0, B: 0, A: 55}
+	for row := 0; row < screenshotEditorInspectorRows; row++ {
+		for column := 0; column < screenshotEditorInspectorColumns; column++ {
+			sampleX := min(max(0, pixelX+column-halfColumns), source.Width-1)
+			sampleY := min(max(0, pixelY+row-halfRows), source.Height-1)
+			sample := source.RGBAAt(sampleX, sampleY)
+			cell := Rect{
+				X:      panel.X + float32(column)*cellSize,
+				Y:      panel.Y + float32(row)*cellSize,
+				Width:  cellSize,
+				Height: cellSize,
+			}
+			displayList.FillRect(cell, Color{R: sample.R, G: sample.G, B: sample.B, A: 255})
+			displayList.StrokeRoundedRect(cell, 0, max(float32(0.5), scaled(0.5)), gridColor)
+		}
+	}
+	center := Rect{
+		X:      panel.X + float32(halfColumns)*cellSize,
+		Y:      panel.Y + float32(halfRows)*cellSize,
+		Width:  cellSize,
+		Height: cellSize,
+	}
+	displayList.StrokeRoundedRect(center, 0, scaled(2), Color{R: 41, G: 255, B: 114, A: 255})
+
+	displayList.FillRect(Rect{X: panel.X, Y: panel.Y + previewHeight, Width: panel.Width, Height: scaled(1)}, Color{R: 255, G: 255, B: 255, A: 35})
+	textColor := Color{R: 255, G: 255, B: 255, A: 255}
+	secondaryTextColor := Color{R: 255, G: 255, B: 255, A: 165}
+	infoTop := panel.Y + previewHeight
+	globalX := int(math.Round(float64(desktopPixelOrigin.X))) + pixelX
+	globalY := int(math.Round(float64(desktopPixelOrigin.Y))) + pixelY
+	coordinate := fmt.Sprintf("%d, %d", globalX, globalY)
+	coordinateWidth := screenshotEditorEstimatedTextWidth(coordinate, scaled(12))
+	displayList.DrawText(coordinate, Rect{
+		X: panel.X + (panel.Width-coordinateWidth)/2, Y: infoTop + scaled(9), Width: coordinateWidth, Height: scaled(18),
+	}, TextStyle{Size: scaled(12), Weight: FontWeightSemibold}, secondaryTextColor)
+
+	swatch := Rect{X: panel.X + scaled(12), Y: infoTop + scaled(38), Width: scaled(52), Height: scaled(52)}
+	displayList.FillRoundedRect(swatch, scaled(8), Color{R: pixel.R, G: pixel.G, B: pixel.B, A: 255})
+	displayList.StrokeRoundedRect(swatch, scaled(8), scaled(1), Color{R: 255, G: 255, B: 255, A: 190})
+	drawColorRow := func(label, value, shortcut string, top float32) {
+		labelLeft := panel.X + scaled(72)
+		badge := Rect{X: panel.X + panel.Width - scaled(30), Y: top, Width: scaled(18), Height: scaled(18)}
+		valueLeft := labelLeft + scaled(32)
+		displayList.DrawText(label, Rect{X: labelLeft, Y: top + scaled(1), Width: scaled(28), Height: scaled(18)}, TextStyle{Size: scaled(11), Weight: FontWeightSemibold}, secondaryTextColor)
+		displayList.DrawText(value, Rect{X: valueLeft, Y: top + scaled(1), Width: badge.X - valueLeft - scaled(4), Height: scaled(18)}, TextStyle{Size: scaled(11), Weight: FontWeightSemibold}, textColor)
+		displayList.FillRoundedRect(badge, scaled(5), Color{R: 255, G: 255, B: 255, A: 25})
+		displayList.DrawText(shortcut, Rect{X: badge.X + scaled(5), Y: badge.Y + scaled(1), Width: scaled(8), Height: scaled(16)}, TextStyle{Size: scaled(11), Weight: FontWeightSemibold}, secondaryTextColor)
+	}
+	drawColorRow("RGB", fmt.Sprintf("%d, %d, %d", pixel.R, pixel.G, pixel.B), "G", infoTop+scaled(40))
+	drawColorRow("HEX", screenshotEditorColorText(pixel, screenshotEditorColorFormatHEX), "H", infoTop+scaled(69))
+}
+
+type screenshotEditorColorFormat uint8
+
+const (
+	screenshotEditorColorFormatRGB screenshotEditorColorFormat = iota
+	screenshotEditorColorFormatHEX
+)
+
+func screenshotEditorColorText(pixel color.RGBA, format screenshotEditorColorFormat) string {
+	if format == screenshotEditorColorFormatHEX {
+		return fmt.Sprintf("#%02X%02X%02X", pixel.R, pixel.G, pixel.B)
+	}
+	return fmt.Sprintf("rgb(%d, %d, %d)", pixel.R, pixel.G, pixel.B)
+}
+
+// screenshotEditorPixelAtPoint maps the editor frame to the immutable desktop capture.
+func screenshotEditorPixelAtPoint(source *Image, frame Size, point Point) (int, int, color.RGBA, bool) {
+	if source == nil || source.Width <= 0 || source.Height <= 0 || frame.Width <= 0 || frame.Height <= 0 ||
+		point.X < 0 || point.Y < 0 || point.X >= frame.Width || point.Y >= frame.Height {
+		return 0, 0, color.RGBA{}, false
+	}
+	x := min(source.Width-1, int(math.Floor(float64(point.X*float32(source.Width)/frame.Width))))
+	y := min(source.Height-1, int(math.Floor(float64(point.Y*float32(source.Height)/frame.Height))))
+	return x, y, source.RGBAAt(x, y), true
+}
+
+// screenshotEditorInspectorRect keeps the floating inspector visible while preferring the pointer's lower-right side.
+func screenshotEditorInspectorRect(frame Size, pointer Point, panel Size, uiScale float32) Rect {
+	margin := 8 * uiScale
+	offset := 20 * uiScale
+	left := pointer.X + offset
+	top := pointer.Y + offset
+	if left+panel.Width > frame.Width-margin {
+		left = pointer.X - offset - panel.Width
+	}
+	if top+panel.Height > frame.Height-margin {
+		top = pointer.Y - offset - panel.Height
+	}
+	return Rect{
+		X:      min(max(margin, left), max(margin, frame.Width-panel.Width-margin)),
+		Y:      min(max(margin, top), max(margin, frame.Height-panel.Height-margin)),
+		Width:  panel.Width,
+		Height: panel.Height,
+	}
+}
+
+// screenshotEditorDesktopPixelOrigin maps a logical desktop origin to the captured image's pixel coordinates.
+func screenshotEditorDesktopPixelOrigin(bounds Rect, source image.Image) Point {
+	if source == nil || bounds.Width <= 0 || bounds.Height <= 0 {
+		return Point{}
+	}
+	return Point{
+		X: bounds.X * float32(source.Bounds().Dx()) / bounds.Width,
+		Y: bounds.Y * float32(source.Bounds().Dy()) / bounds.Height,
 	}
 }
 
@@ -1067,6 +1238,8 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 	switch event.Kind {
 	case PointerDown:
 		state.mu.Lock()
+		state.pointerPosition = event.Position
+		state.pointerInside = true
 		confirm := state.hasSelection && screenshotEditorRectContains(state.confirmRect, event.Position)
 		cancel := state.hasSelection && screenshotEditorRectContains(state.cancelRect, event.Position)
 		pin := state.hasSelection && screenshotEditorRectContains(state.pinRect, event.Position)
@@ -1179,6 +1352,7 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 							state.start = event.Position
 							state.selection = Rect{X: event.Position.X, Y: event.Position.Y}
 							state.dragging = true
+							state.colorInspectorDismissed = true
 							state.hasSelection = false
 							state.annotations = nil
 							state.hasSelectedMark = false
@@ -1227,6 +1401,9 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		}
 	case PointerMove:
 		state.mu.Lock()
+		pointerChanged := !state.pointerInside || state.pointerPosition != event.Position
+		state.pointerPosition = event.Position
+		state.pointerInside = true
 		if state.dragging {
 			state.selection = Rect{X: state.start.X, Y: state.start.Y, Width: event.Position.X - state.start.X, Height: event.Position.Y - state.start.Y}
 		} else if state.editMode != screenshotEditorEditNone {
@@ -1250,7 +1427,7 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 				}
 			}
 		} else {
-			hoverChanged := state.updateHoverLocked(event.Position)
+			hoverChanged := state.updateHoverLocked(event.Position) || pointerChanged
 			cursor := state.pointerCursor
 			state.mu.Unlock()
 			state.setPointerCursor(cursor)
@@ -1263,7 +1440,8 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		state.invalidate()
 	case PointerLeave:
 		state.mu.Lock()
-		hoverChanged := state.hasHoveredMark || state.hasHoveredTool || state.hasHoveredAction || state.pointerCursor != PointerCursorDefault
+		hoverChanged := state.pointerInside || state.hasHoveredMark || state.hasHoveredTool || state.hasHoveredAction || state.pointerCursor != PointerCursorDefault
+		state.pointerInside = false
 		state.hasHoveredMark = false
 		state.hasHoveredTool = false
 		state.hasHoveredAction = false
@@ -1362,9 +1540,13 @@ func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
 		}
 		state.mu.Unlock()
 	}
-	if event.Key == KeyArrowLeft || event.Key == KeyArrowRight || event.Key == KeyHome || event.Key == KeyEnd {
+	if event.Key == KeyArrowLeft || event.Key == KeyArrowUp || event.Key == KeyArrowRight || event.Key == KeyArrowDown || event.Key == KeyHome || event.Key == KeyEnd {
 		state.mu.Lock()
 		if state.textEditing {
+			if event.Key == KeyArrowUp || event.Key == KeyArrowDown {
+				state.mu.Unlock()
+				return false
+			}
 			length := utf8.RuneCountInString(state.textDraft)
 			state.textCaret = min(max(0, state.textCaret), length)
 			switch event.Key {
@@ -1384,7 +1566,40 @@ func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
 			state.invalidate()
 			return true
 		}
+		if event.Key == KeyArrowLeft || event.Key == KeyArrowUp || event.Key == KeyArrowRight || event.Key == KeyArrowDown {
+			point, ok := screenshotEditorNudgedPoint(state.image, state.frameSize, state.pointerPosition, event.Key)
+			setPointerPosition := state.setPointerPosition
+			if ok && state.pointerInside && !state.colorInspectorDismissed {
+				state.pointerPosition = point
+			} else {
+				ok = false
+			}
+			state.mu.Unlock()
+			if !ok {
+				return false
+			}
+			if setPointerPosition != nil {
+				if err := setPointerPosition(point); err != nil {
+					util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to nudge screenshot color pointer: %s", err.Error()))
+				}
+			}
+			state.invalidate()
+			return true
+		}
 		state.mu.Unlock()
+	}
+	if !event.Composing && event.Modifiers&(KeyModifierControl|KeyModifierAlt|KeyModifierMeta) == 0 {
+		format, colorShortcut := screenshotEditorColorFormatRGB, true
+		switch event.Key {
+		case Key("g"):
+		case Key("h"):
+			format = screenshotEditorColorFormatHEX
+		default:
+			colorShortcut = false
+		}
+		if colorShortcut && state.copyInspectedColor(format) {
+			return true
+		}
 	}
 	if event.Key == KeyEnter {
 		state.mu.Lock()
@@ -1469,6 +1684,52 @@ func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
 	default:
 		state.mu.Unlock()
 		return false
+	}
+}
+
+// copyInspectedColor writes the currently sampled color without changing the screenshot selection.
+func (state *screenshotEditorOverlayState) copyInspectedColor(format screenshotEditorColorFormat) bool {
+	state.mu.Lock()
+	if state.textEditing || state.colorInspectorDismissed || !state.pointerInside || state.writeClipboardText == nil {
+		state.mu.Unlock()
+		return false
+	}
+	_, _, pixel, ok := screenshotEditorPixelAtPoint(state.image, state.frameSize, state.pointerPosition)
+	writeClipboardText := state.writeClipboardText
+	state.mu.Unlock()
+	if !ok {
+		return false
+	}
+	value := screenshotEditorColorText(pixel, format)
+	if err := writeClipboardText(value); err != nil {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to copy screenshot color: %s", err.Error()))
+		return true
+	}
+	state.completeColorCopy(value)
+	return true
+}
+
+// screenshotEditorNudgedPoint moves the sampling point to the center of one adjacent captured pixel.
+func screenshotEditorNudgedPoint(source *Image, frame Size, point Point, key Key) (Point, bool) {
+	x, y, _, ok := screenshotEditorPixelAtPoint(source, frame, point)
+	if !ok {
+		return Point{}, false
+	}
+	switch key {
+	case KeyArrowLeft:
+		x = max(0, x-1)
+		return Point{X: (float32(x) + 0.5) * frame.Width / float32(source.Width), Y: point.Y}, true
+	case KeyArrowUp:
+		y = max(0, y-1)
+		return Point{X: point.X, Y: (float32(y) + 0.5) * frame.Height / float32(source.Height)}, true
+	case KeyArrowRight:
+		x = min(source.Width-1, x+1)
+		return Point{X: (float32(x) + 0.5) * frame.Width / float32(source.Width), Y: point.Y}, true
+	case KeyArrowDown:
+		y = min(source.Height-1, y+1)
+		return Point{X: point.X, Y: (float32(y) + 0.5) * frame.Height / float32(source.Height)}, true
+	default:
+		return Point{}, false
 	}
 }
 
@@ -1645,6 +1906,12 @@ func (state *screenshotEditorOverlayState) complete(cancelled bool) {
 func (state *screenshotEditorOverlayState) completePin() {
 	state.once.Do(func() {
 		state.result <- screenshotEditorOverlayOutcome{pinned: true}
+	})
+}
+
+func (state *screenshotEditorOverlayState) completeColorCopy(value string) {
+	state.once.Do(func() {
+		state.result <- screenshotEditorOverlayOutcome{copiedColor: value}
 	})
 }
 

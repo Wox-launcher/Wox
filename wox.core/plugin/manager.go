@@ -183,7 +183,8 @@ type Manager struct {
 	// sessionPluginQueries tracks which plugin query is currently active for each UI session (sessionId -> state)
 	sessionPluginQueries *util.HashMap[string, *sessionPluginQueryState]
 
-	// lazyResultIcons keeps core-owned icon tokens for large raster result icons.
+	// lazyResultIcons keeps core-owned tokens for result icons deferred because
+	// they require remote I/O or expensive raster work.
 	// Plugins still return ordinary WoxImage values; manager creates these tokens
 	// only after result IDs, query IDs, and surface sizes are known.
 	lazyResultIcons *util.HashMap[string, *lazyResultIconEntry]
@@ -2171,7 +2172,7 @@ func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.
 	// result. That keeps the query response fast while still reusing the existing
 	// crop/resize/cache behavior for the actual thumbnail artifact.
 	converted := common.ConvertIconWithSize(ctx, entry.OriginalIcon, entry.PluginDirectory, entry.TargetSize)
-	if converted.IsEmpty() || converted.ImageType == common.WoxImageTypeLazyLoad {
+	if converted.IsEmpty() || converted.ImageType == common.WoxImageTypeLazyLoad || converted.ImageType == common.WoxImageTypeUrl {
 		converted = common.ImageThumbnailPlaceholderIcon
 	}
 

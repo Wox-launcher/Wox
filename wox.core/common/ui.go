@@ -265,8 +265,10 @@ type CaptureScreenshotResult struct {
 	// clipboard-failure can still return a completed screenshot together with a warning.
 	ClipboardWriteSucceeded bool   `json:"clipboardWriteSucceeded"`
 	ClipboardWarningMessage string `json:"clipboardWarningMessage,omitempty"`
-	ErrorCode               string `json:"errorCode,omitempty"`
-	ErrorMessage            string `json:"errorMessage,omitempty"`
+	// CopiedColor is set when the screenshot color inspector copied a value and closed without exporting an image.
+	CopiedColor  string `json:"copiedColor,omitempty"`
+	ErrorCode    string `json:"errorCode,omitempty"`
+	ErrorMessage string `json:"errorMessage,omitempty"`
 }
 
 func DefaultCaptureScreenshotRequest() CaptureScreenshotRequest {

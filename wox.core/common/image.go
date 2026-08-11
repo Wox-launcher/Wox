@@ -688,7 +688,7 @@ func ConvertIconWithSizeWithDiagnostics(ctx context.Context, image WoxImage, plu
 	return convertIconWithSize(ctx, image, pluginDirectory, size, false, diagnostics)
 }
 
-// Converted icons can be large and expensive to prepare, so this variant allows the manager to return a lazy load marker for large icons instead of blocking on conversion.
+// Converted icons can require remote I/O or expensive raster work, so this variant allows the manager to return a lazy load marker instead of blocking on conversion.
 // The manager replaces the marker with the real resized icon later after it has registered the result in its cache and received the surface size from UI.
 func ConvertIconWithSizeMaybeLazy(ctx context.Context, image WoxImage, pluginDirectory string, size int) (newImage WoxImage) {
 	return convertIconWithSize(ctx, image, pluginDirectory, size, true, timetracking.IconConversionDiagnostics{})
@@ -951,6 +951,11 @@ func shouldLazyLoadImageIcon(ctx context.Context, woxImage WoxImage, size int) b
 }
 
 func shouldLazyLoadImageIconDetailed(ctx context.Context, woxImage WoxImage, size int) (bool, string, int, int) {
+	// A warm final resize cache returned before this probe. Any remaining URL
+	// source may require network I/O and must stay off the query polish path.
+	if woxImage.ImageType == WoxImageTypeUrl {
+		return true, "remote_url", 0, 0
+	}
 	if woxImage.ImageType != WoxImageTypeAbsolutePath || woxImage.IsGif() || isSvgFilePath(woxImage.ImageData) {
 		return false, "not_absolute_raster", 0, 0
 	}

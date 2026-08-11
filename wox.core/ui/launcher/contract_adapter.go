@@ -370,6 +370,9 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 		}
 		return common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusFailed, ErrorCode: errorCode, ErrorMessage: err.Error()}, nil
 	}
+	if result.CopiedColor != "" {
+		return common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusCancelled, CopiedColor: result.CopiedColor}, nil
+	}
 	if result.Cancelled {
 		return common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusCancelled}, nil
 	}

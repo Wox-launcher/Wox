@@ -8,6 +8,7 @@ package screenshot
 #include <stdlib.h>
 #include "../runtime/native_darwin.h"
 int32_t wox_screenshot_cursor_position(float *x, float *y);
+int32_t wox_screenshot_set_cursor_position(float x, float y);
 int32_t wox_screenshot_cursor_png(const char *path, float *hotspot_x, float *hotspot_y);
 */
 import "C"
@@ -62,6 +63,13 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		captureDesktop: func() (screenshotDesktopCapture, error) {
 			captured, captureErr := captureDarwinDisplay(displayID)
 			return screenshotDesktopCapture{source: captured}, captureErr
+		},
+		desktopPixelOrigin: screenshotEditorDesktopPixelOrigin(bounds, source),
+		setPointerPosition: func(point Point) error {
+			if C.wox_screenshot_set_cursor_position(C.float(bounds.X+point.X), C.float(bounds.Y+point.Y)) != 0 {
+				return errors.New("failed to set macOS screenshot cursor position")
+			}
+			return nil
 		},
 		frameSize:        Size{Width: bounds.Width, Height: bounds.Height},
 		initialSelection: &selection,

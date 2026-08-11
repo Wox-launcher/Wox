@@ -38,6 +38,7 @@ const ScreenshotWindowID WindowID = "wox.screenshot"
 // ScreenshotResult reports the exported image and its logical desktop selection.
 type ScreenshotResult struct {
 	Cancelled               bool
+	CopiedColor             string
 	PinToScreen             bool
 	ScreenshotPath          string
 	LogicalSelection        woxui.Rect

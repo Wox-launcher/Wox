@@ -184,6 +184,22 @@ func TestLauncherPreviewTitleBarRequiresOptInFullPreview(t *testing.T) {
 	}
 }
 
+func TestLauncherReservesFullPreviewHeightBeforeResultsArrive(t *testing.T) {
+	previewOnly := showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true}
+	if !launcherReservesFullPreviewHeight(previewOnly, false) {
+		t.Fatal("preview-only launch should reserve full height before its result arrives")
+	}
+	if !launcherReservesFullPreviewHeight(showAppParams{}, true) {
+		t.Fatal("a visible preview should reserve full height")
+	}
+	if launcherReservesFullPreviewHeight(showAppParams{HideQueryBox: true, HideToolbar: true}, false) {
+		t.Fatal("chrome-free queries without preview-only opt-in should remain compact")
+	}
+	if launcherReservesFullPreviewHeight(showAppParams{HideQueryBox: true, ShowPreviewTitleBar: true}, false) {
+		t.Fatal("partial launcher chrome should not reserve full preview height")
+	}
+}
+
 func TestSecondaryLauncherHideClosesWithoutWebViewCache(t *testing.T) {
 	app := &App{isPrimary: false}
 	app.destroyOnce.Do(func() {})

@@ -32,7 +32,9 @@ const (
 	KeyEnter                      = woxui.KeyEnter
 	KeyEscape                     = woxui.KeyEscape
 	KeyArrowLeft                  = woxui.KeyArrowLeft
+	KeyArrowUp                    = woxui.KeyArrowUp
 	KeyArrowRight                 = woxui.KeyArrowRight
+	KeyArrowDown                  = woxui.KeyArrowDown
 	KeyHome                       = woxui.KeyHome
 	KeyEnd                        = woxui.KeyEnd
 	KeyModifierShift              = woxui.KeyModifierShift

@@ -932,6 +932,9 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 		p.api.Log(ctx, plugin.LogLevelError, errText)
 		p.notifyCaptureFailure(ctx, result.ErrorCode, errText)
 	case common.CaptureScreenshotStatusCancelled:
+		if result.CopiedColor != "" {
+			p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_screenshot_color_copy_success"), result.CopiedColor))
+		}
 		return
 	default:
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("unexpected screenshot status: %s", result.Status))

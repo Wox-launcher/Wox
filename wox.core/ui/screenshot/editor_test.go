@@ -65,6 +65,9 @@ func TestNewScreenshotEditorImageCopiesStridedRGBA(t *testing.T) {
 func TestScreenshotEditorSelectionMapsLogicalPointsToPixels(t *testing.T) {
 	state := &screenshotEditorOverlayState{frameSize: Size{Width: 1000, Height: 500}}
 	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: 400, Y: 300}})
+	if !state.colorInspectorDismissed {
+		t.Fatal("starting a screenshot selection should permanently dismiss the color inspector")
+	}
 	state.pointer(PointerEvent{Kind: PointerMove, Position: Point{X: 100, Y: 50}})
 	state.pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: Point{X: 100, Y: 50}})
 
@@ -79,6 +82,147 @@ func TestScreenshotEditorSelectionMapsLogicalPointsToPixels(t *testing.T) {
 	wantPixels := image.Rect(200, 100, 800, 600)
 	if pixels != wantPixels {
 		t.Fatalf("pixels = %v, want %v", pixels, wantPixels)
+	}
+}
+
+func TestScreenshotEditorColorInspectorMapsPointerToCapturedPixel(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 4, 2))
+	source.SetRGBA(1, 1, color.RGBA{R: 203, G: 174, B: 140, A: 255})
+	prepared, err := NewImage(source)
+	if err != nil {
+		t.Fatalf("prepare color inspector image: %v", err)
+	}
+
+	x, y, pixel, ok := screenshotEditorPixelAtPoint(prepared, Size{Width: 100, Height: 100}, Point{X: 25, Y: 50})
+	if !ok || x != 1 || y != 1 {
+		t.Fatalf("mapped pixel = (%d, %d, %t), want (1, 1, true)", x, y, ok)
+	}
+	if pixel != (color.RGBA{R: 203, G: 174, B: 140, A: 255}) {
+		t.Fatalf("sampled color = %+v", pixel)
+	}
+	if _, _, _, ok := screenshotEditorPixelAtPoint(prepared, Size{Width: 100, Height: 100}, Point{X: 100, Y: 50}); ok {
+		t.Fatal("point outside the frame should not resolve a pixel")
+	}
+}
+
+func TestScreenshotEditorColorInspectorLayoutAvoidsFrameEdges(t *testing.T) {
+	panel := Size{Width: 150, Height: 138}
+	if got := screenshotEditorInspectorRect(Size{Width: 800, Height: 600}, Point{X: 100, Y: 100}, panel, 1); got != (Rect{X: 120, Y: 120, Width: 150, Height: 138}) {
+		t.Fatalf("lower-right inspector = %+v", got)
+	}
+	if got := screenshotEditorInspectorRect(Size{Width: 800, Height: 600}, Point{X: 790, Y: 590}, panel, 1); got != (Rect{X: 620, Y: 432, Width: 150, Height: 138}) {
+		t.Fatalf("flipped inspector = %+v", got)
+	}
+}
+
+func TestScreenshotEditorDesktopPixelOriginUsesCaptureScale(t *testing.T) {
+	origin := screenshotEditorDesktopPixelOrigin(Rect{X: -100, Y: 50, Width: 1000, Height: 500}, image.NewRGBA(image.Rect(0, 0, 2000, 1000)))
+	if origin != (Point{X: -200, Y: 100}) {
+		t.Fatalf("desktop pixel origin = %+v", origin)
+	}
+}
+
+func TestScreenshotEditorPointerMovementTracksColorInspector(t *testing.T) {
+	state := &screenshotEditorOverlayState{}
+	state.pointer(PointerEvent{Kind: PointerMove, Position: Point{X: 45, Y: 67}})
+	if !state.pointerInside || state.pointerPosition != (Point{X: 45, Y: 67}) {
+		t.Fatalf("tracked pointer = %+v inside=%t", state.pointerPosition, state.pointerInside)
+	}
+	state.pointer(PointerEvent{Kind: PointerLeave})
+	if state.pointerInside {
+		t.Fatal("pointer leave should hide the color inspector")
+	}
+}
+
+func TestScreenshotEditorColorInspectorUsesPointerDisplayScaleBeforeSelection(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image:           testScreenshotImage(t, 10, 10),
+		pointerInside:   true,
+		pointerPosition: Point{X: 500, Y: 300},
+		chromeScale: func(rect Rect) float32 {
+			if rect != (Rect{X: 500, Y: 300, Width: 1, Height: 1}) {
+				t.Fatalf("scale rect = %+v, want pointer display probe", rect)
+			}
+			return 2
+		},
+	}
+	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1000, Height: 600}})
+	if state.uiScale != 2 {
+		t.Fatalf("pre-selection UI scale = %v, want 2", state.uiScale)
+	}
+}
+
+func TestScreenshotEditorColorShortcutsCopyIndependentFormats(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	source.SetRGBA(1, 1, color.RGBA{R: 203, G: 174, B: 140, A: 255})
+	prepared, err := NewImage(source)
+	if err != nil {
+		t.Fatalf("prepare shortcut image: %v", err)
+	}
+	for _, testCase := range []struct {
+		key  Key
+		want string
+	}{
+		{key: Key("g"), want: "rgb(203, 174, 140)"},
+		{key: Key("h"), want: "#CBAE8C"},
+	} {
+		var copied string
+		state := &screenshotEditorOverlayState{
+			image: prepared, frameSize: Size{Width: 2, Height: 2}, pointerInside: true, pointerPosition: Point{X: 1, Y: 1},
+			result: make(chan screenshotEditorOverlayOutcome, 1),
+			writeClipboardText: func(text string) error {
+				copied = text
+				return nil
+			},
+		}
+		if !state.key(KeyEvent{Key: testCase.key, Down: true}) {
+			t.Fatalf("color copy shortcut %q was not handled", testCase.key)
+		}
+		outcome := <-state.result
+		if copied != testCase.want || outcome.copiedColor != testCase.want {
+			t.Fatalf("shortcut %q copied=%q outcome=%q, want %q", testCase.key, copied, outcome.copiedColor, testCase.want)
+		}
+	}
+}
+
+func TestScreenshotEditorSelectionDisablesColorInteraction(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image: testScreenshotImage(t, 2, 2), frameSize: Size{Width: 2, Height: 2},
+		pointerInside: true, pointerPosition: Point{X: 1, Y: 1}, colorInspectorDismissed: true,
+		writeClipboardText: func(string) error {
+			t.Fatal("dismissed color inspector should not write to the clipboard")
+			return nil
+		},
+	}
+	if state.key(KeyEvent{Key: Key("h"), Down: true}) {
+		t.Fatal("color shortcut should not be handled after selection starts")
+	}
+	if state.key(KeyEvent{Key: KeyArrowDown, Down: true}) {
+		t.Fatal("color nudge should not be handled after selection starts")
+	}
+}
+
+func TestScreenshotEditorArrowKeysNudgeOneCapturedPixel(t *testing.T) {
+	prepared := testScreenshotImage(t, 4, 4)
+	var moved Point
+	state := &screenshotEditorOverlayState{
+		image: prepared, frameSize: Size{Width: 8, Height: 8}, pointerInside: true, pointerPosition: Point{X: 3.25, Y: 3.75},
+		setPointerPosition: func(point Point) error {
+			moved = point
+			return nil
+		},
+	}
+	if !state.key(KeyEvent{Key: KeyArrowDown, Down: true}) {
+		t.Fatal("down arrow nudge was not handled")
+	}
+	if moved != (Point{X: 3.25, Y: 5}) || state.pointerPosition != moved {
+		t.Fatalf("down nudge = %+v pointer=%+v, want only Y to move one source pixel", moved, state.pointerPosition)
+	}
+	if !state.key(KeyEvent{Key: KeyArrowLeft, Down: true}) {
+		t.Fatal("left arrow nudge was not handled")
+	}
+	if moved != (Point{X: 1, Y: 5}) {
+		t.Fatalf("left nudge = %+v, want only X to move one source pixel", moved)
 	}
 }
 
@@ -98,6 +242,9 @@ func TestNewScreenshotEditorOverlayStateAppliesNativeSelection(t *testing.T) {
 	}
 	if !state.hasSelection {
 		t.Fatal("native selection should be active")
+	}
+	if !state.colorInspectorDismissed {
+		t.Fatal("a native selection should start with the color inspector dismissed")
 	}
 	if !state.autoConfirm || !state.hideTools {
 		t.Fatalf("options were not preserved: autoConfirm=%t hideTools=%t", state.autoConfirm, state.hideTools)

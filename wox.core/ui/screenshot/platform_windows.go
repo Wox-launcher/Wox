@@ -24,6 +24,7 @@ const windowsScrollingBorderClassName = "WoxScrollingCaptureBorder"
 
 var (
 	getCursorInfo                         = syscall.NewLazyDLL("user32.dll").NewProc("GetCursorInfo")
+	setCursorPos                          = syscall.NewLazyDLL("user32.dll").NewProc("SetCursorPos")
 	createSolidBrush                      = syscall.NewLazyDLL("gdi32.dll").NewProc("CreateSolidBrush")
 	windowsScrollingBorderClassOnce       sync.Once
 	windowsScrollingBorderClassErr        error
@@ -100,6 +101,16 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 				Height: selection.Height,
 			})
 		},
+		desktopPixelOrigin: Point{X: float32(virtualBounds.Min.X), Y: float32(virtualBounds.Min.Y)},
+		setPointerPosition: func(point Point) error {
+			x := windowsScreenshotPointerCoordinate(virtualBounds.Min.X, point.X)
+			y := windowsScreenshotPointerCoordinate(virtualBounds.Min.Y, point.Y)
+			result, _, callErr := setCursorPos.Call(uintptr(uint32(x)), uintptr(uint32(y)))
+			if result == 0 {
+				return fmt.Errorf("set Windows cursor position: %w", callErr)
+			}
+			return nil
+		},
 		captureDesktop: func() (screenshotDesktopCapture, error) {
 			capture, captureErr := woxui.CaptureWindowsVirtualDesktop()
 			if captureErr != nil {
@@ -150,6 +161,11 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		platform.capturedCursor = capturedCursor
 	}
 	return runScreenshotEditor(options, source, platform)
+}
+
+// windowsScreenshotPointerCoordinate keeps a sampled pixel center inside that pixel when converting to SetCursorPos integers.
+func windowsScreenshotPointerCoordinate(origin int, point float32) int32 {
+	return int32(math.Floor(float64(float32(origin) + point)))
 }
 
 // showWindowsScrollingCaptureBorder keeps the selected viewport visible without covering it.

@@ -1012,7 +1012,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 	if toolbarHeightIncluded {
 		maximumResultWindowHeight += int(densityMetrics.toolbarHeight)
 	}
-	if previewVisible {
+	if launcherReservesFullPreviewHeight(params, previewVisible) {
 		height = max(height, maximumResultWindowHeight)
 	}
 	if requirementPreview {
@@ -1079,6 +1079,10 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		return nil
 	}
 	return a.window.SetBounds(target)
+}
+
+func launcherReservesFullPreviewHeight(params showAppParams, previewVisible bool) bool {
+	return previewVisible || params.ShowPreviewTitleBar && params.HideQueryBox && params.HideToolbar
 }
 
 // launcherToolbarHeightIncluded preserves the hidden toolbar's space only in Flutter's chat mode.

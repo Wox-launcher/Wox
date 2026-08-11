@@ -8,6 +8,9 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"image/png"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,6 +74,61 @@ func TestConvertIconWithSizeMaybeLazyUsesWarmResizeCacheForLargeRaster(t *testin
 	}
 	if converted.ImageData != warmConverted.ImageData {
 		t.Fatalf("expected warm resize cache path %q, got %q", warmConverted.ImageData, converted.ImageData)
+	}
+}
+
+func TestConvertIconWithSizeMaybeLazyDefersRemoteURLWithoutRequest(t *testing.T) {
+	initConvertIconTestLocation(t)
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requestCount++
+	}))
+	defer server.Close()
+
+	converted := ConvertIconWithSizeMaybeLazy(context.Background(), NewWoxImageUrl(server.URL+"/icon.png"), "", ResultListIconSize)
+
+	if requestCount != 0 {
+		t.Fatalf("remote URL conversion made %d synchronous requests", requestCount)
+	}
+	if converted.ImageType != WoxImageTypeLazyLoad {
+		t.Fatalf("expected remote URL lazy marker, got %+v", converted)
+	}
+	payload, err := ParseWoxLazyLoadImagePayload(converted)
+	if err != nil {
+		t.Fatalf("parse lazy payload: %v", err)
+	}
+	if payload.Source == nil || payload.Source.ImageType != WoxImageTypeUrl || payload.Source.ImageData != server.URL+"/icon.png" {
+		t.Fatalf("unexpected lazy URL source: %+v", payload.Source)
+	}
+}
+
+func TestConvertIconWithSizeMaybeLazyUsesWarmResizeCacheForRemoteURL(t *testing.T) {
+	initConvertIconTestLocation(t)
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		requestCount++
+		response.Header().Set("Content-Type", "image/png")
+		if err := png.Encode(response, image.NewRGBA(image.Rect(0, 0, 64, 64))); err != nil {
+			t.Errorf("encode remote image: %v", err)
+		}
+	}))
+	defer server.Close()
+	source := NewWoxImageUrl(server.URL + "/icon.png")
+
+	warmConverted := ConvertIconWithSize(context.Background(), source, "", ResultListIconSize)
+	if warmConverted.ImageType != WoxImageTypeAbsolutePath {
+		t.Fatalf("failed to warm remote resize cache: %+v", warmConverted)
+	}
+	converted := ConvertIconWithSizeMaybeLazy(context.Background(), source, "", ResultListIconSize)
+
+	if converted.ImageType == WoxImageTypeLazyLoad {
+		t.Fatal("warm remote resize cache should bypass lazy loading")
+	}
+	if converted.ImageData != warmConverted.ImageData {
+		t.Fatalf("expected warm resize cache path %q, got %q", warmConverted.ImageData, converted.ImageData)
+	}
+	if requestCount != 1 {
+		t.Fatalf("warm remote URL made %d requests, want 1", requestCount)
 	}
 }
 

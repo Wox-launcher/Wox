@@ -29,3 +29,15 @@ int32_t wox_screenshot_cursor_position(float *x, float *y) {
   *y = (float)root_y;
   return 0;
 }
+
+// Move the X11 pointer in root coordinates so keyboard nudging stays aligned with the visible cursor.
+int32_t wox_screenshot_set_cursor_position(int32_t x, int32_t y) {
+  Display *display = XOpenDisplay(NULL);
+  if (display == NULL) {
+    return -1;
+  }
+  XWarpPointer(display, None, DefaultRootWindow(display), 0, 0, 0, 0, x, y);
+  XFlush(display);
+  XCloseDisplay(display);
+  return 0;
+}

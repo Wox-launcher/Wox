@@ -30,6 +30,11 @@ int32_t wox_screenshot_cursor_position(float *x, float *y) {
   }
 }
 
+// Move the pointer in the same top-left desktop coordinate space returned above.
+int32_t wox_screenshot_set_cursor_position(float x, float y) {
+  return CGWarpMouseCursorPosition(CGPointMake(x, y)) == kCGErrorSuccess ? 0 : -1;
+}
+
 // Export the currently visible system cursor while preserving its pixel hotspot.
 int32_t wox_screenshot_cursor_png(const char *path, float *hotspot_x, float *hotspot_y) {
   if (path == NULL || hotspot_x == NULL || hotspot_y == NULL) {
