@@ -1,12 +1,24 @@
 package plugin
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"wox/common"
 	"wox/setting"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestQueryResponseAutoRecordQueryHistoryStaysInsideCore(t *testing.T) {
+	data, err := json.Marshal(QueryResponse{AutoRecordQueryHistory: true})
+	assert.NoError(t, err)
+	assert.False(t, strings.Contains(string(data), "AutoRecordQueryHistory"))
+
+	var response QueryResponse
+	assert.NoError(t, json.Unmarshal([]byte(`{"AutoRecordQueryHistory":true}`), &response))
+	assert.False(t, response.AutoRecordQueryHistory)
+}
 
 func getFakePluginInstances() []*Instance {
 	return []*Instance{

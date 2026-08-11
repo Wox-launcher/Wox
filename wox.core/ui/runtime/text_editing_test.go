@@ -88,3 +88,59 @@ func TestTextEditorSelectAllUndoAndRedoShortcuts(t *testing.T) {
 		t.Fatalf("ctrl+y redo = handled %v changed %v text %q", handled, changed, editor.State().Text)
 	}
 }
+
+func TestTextEditorPrimaryBackspaceDeletesPreviousWord(t *testing.T) {
+	primary := KeyModifierControl | KeyModifierMeta
+	tests := []struct {
+		name   string
+		text   string
+		caret  int
+		want   string
+		cursor int
+	}{
+		{name: "word at end", text: "color asdf", caret: 10, want: "color ", cursor: 6},
+		{name: "word before suffix", text: "color asdf", caret: 5, want: " asdf", cursor: 0},
+		{name: "unicode word", text: "颜色 测试", caret: 5, want: "颜色 ", cursor: 3},
+		{name: "trailing whitespace", text: "color   ", caret: 8, want: "", cursor: 0},
+		{name: "punctuation boundary", text: "alpha-beta", caret: 10, want: "alpha-", cursor: 6},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			editor := NewTextEditor(test.text)
+			editor.SetCaret(test.caret)
+			handled, changed := editor.HandleKey(KeyEvent{Key: KeyBackspace, Modifiers: primary, Down: true})
+			if !handled || !changed {
+				t.Fatalf("primary+backspace = handled %v changed %v", handled, changed)
+			}
+			state := editor.State()
+			if state.Text != test.want || state.Selection != (TextSelection{Anchor: test.cursor, Focus: test.cursor}) {
+				t.Fatalf("state = %#v, want text %q caret %d", state, test.want, test.cursor)
+			}
+		})
+	}
+}
+
+func TestTextEditorPrimaryBackspaceDeletesSelectionAndSupportsUndo(t *testing.T) {
+	editor := NewTextEditor("color asdf")
+	editor.SetSelection(2, 8)
+	primary := KeyModifierControl | KeyModifierMeta
+
+	handled, changed := editor.HandleKey(KeyEvent{Key: KeyBackspace, Modifiers: primary, Down: true})
+	if !handled || !changed || editor.State().Text != "codf" {
+		t.Fatalf("primary+backspace = handled %v changed %v state %#v", handled, changed, editor.State())
+	}
+	handled, changed = editor.HandleKey(KeyEvent{Key: Key("z"), Modifiers: primary, Down: true})
+	if !handled || !changed || editor.State().Text != "color asdf" {
+		t.Fatalf("undo = handled %v changed %v state %#v", handled, changed, editor.State())
+	}
+}
+
+func TestTextEditorPrimaryBackspaceAtStartIsHandledWithoutChange(t *testing.T) {
+	editor := NewTextEditor("color")
+	editor.SetCaret(0)
+	handled, changed := editor.HandleKey(KeyEvent{Key: KeyBackspace, Modifiers: KeyModifierControl | KeyModifierMeta, Down: true})
+	if !handled || changed || editor.State().Text != "color" {
+		t.Fatalf("primary+backspace = handled %v changed %v state %#v", handled, changed, editor.State())
+	}
+}

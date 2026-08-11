@@ -31,7 +31,7 @@ func TestTextFieldScrolledOffsetConsumesOnlyMovableWheelDeltas(t *testing.T) {
 	}
 }
 
-func TestMultilineTextFieldOwnsSelectAllAndUndoBeforeParentShortcuts(t *testing.T) {
+func TestMultilineTextFieldOwnsStandardEditingShortcutsBeforeParent(t *testing.T) {
 	controller := woxwidget.NewTextEditingController("alpha\nbeta")
 	controller.SetCaret(5)
 	controller.InsertText(" changed")
@@ -56,6 +56,9 @@ func TestMultilineTextFieldOwnsSelectAllAndUndoBeforeParentShortcuts(t *testing.
 	}
 	if !host.Key(woxui.KeyEvent{Key: woxui.Key("z"), Modifiers: primary, Down: true}) || controller.Text() != "alpha\nbeta" {
 		t.Fatalf("Ctrl+Z text = %q, want original multiline value", controller.Text())
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyBackspace, Modifiers: primary, Down: true}) || controller.Text() != "\nbeta" {
+		t.Fatalf("primary+Backspace text = %q, want previous word deleted", controller.Text())
 	}
 	if parentCalls != 0 {
 		t.Fatalf("parent shortcut handler called %d times, want standard editing shortcuts retained by the field", parentCalls)

@@ -94,15 +94,12 @@ func (e *TextEditor) SelectWordAt(offset int) {
 		return
 	}
 	offset = min(max(0, offset), len(runes)-1)
-	isWord := func(current rune) bool {
-		return unicode.IsLetter(current) || unicode.IsDigit(current) || unicode.IsMark(current) || current == '_'
-	}
 	start, end := offset, offset+1
-	if isWord(runes[offset]) {
-		for start > 0 && isWord(runes[start-1]) {
+	if isTextWordRune(runes[offset]) {
+		for start > 0 && isTextWordRune(runes[start-1]) {
 			start--
 		}
-		for end < len(runes) && isWord(runes[end]) {
+		for end < len(runes) && isTextWordRune(runes[end]) {
 			end++
 		}
 	}
@@ -204,6 +201,8 @@ func (e *TextEditor) HandleKey(event KeyEvent) (handled bool, textChanged bool) 
 	}
 	if event.Modifiers.HasPrimary() {
 		switch event.Key {
+		case KeyBackspace:
+			return true, e.deleteWordBackward()
 		case Key("a"):
 			e.SelectAll()
 			return true, false
@@ -263,6 +262,31 @@ func (e *TextEditor) deleteBackward() bool {
 			return false
 		}
 		start--
+	}
+	e.replaceRange(runes, start, end)
+	return true
+}
+
+// deleteWordBackward removes the selection or the text segment before the caret.
+func (e *TextEditor) deleteWordBackward() bool {
+	runes := []rune(e.state.Text)
+	start, end := e.selectionBounds(len(runes))
+	if start != end {
+		e.replaceRange(runes, start, end)
+		return true
+	}
+	if start == 0 {
+		return false
+	}
+
+	for start > 0 && unicode.IsSpace(runes[start-1]) {
+		start--
+	}
+	if start > 0 {
+		word := isTextWordRune(runes[start-1])
+		for start > 0 && !unicode.IsSpace(runes[start-1]) && isTextWordRune(runes[start-1]) == word {
+			start--
+		}
 	}
 	e.replaceRange(runes, start, end)
 	return true
@@ -332,4 +356,8 @@ func (e *TextEditor) selectionBounds(length int) (int, int) {
 	start := max(0, min(length, e.state.Selection.Start()))
 	end := max(start, min(length, e.state.Selection.End()))
 	return start, end
+}
+
+func isTextWordRune(current rune) bool {
+	return unicode.IsLetter(current) || unicode.IsDigit(current) || unicode.IsMark(current) || current == '_'
 }

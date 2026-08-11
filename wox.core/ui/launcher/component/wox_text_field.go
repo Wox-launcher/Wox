@@ -199,7 +199,7 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		// handlers that may use the same primary-modifier combinations for global actions.
 		if event.Down && !event.Composing && event.Modifiers.HasPrimary() {
 			switch event.Key {
-			case woxui.Key("a"), woxui.Key("z"), woxui.Key("y"):
+			case woxui.KeyBackspace, woxui.Key("a"), woxui.Key("z"), woxui.Key("y"):
 				handled, changed := s.controller.HandleKey(event)
 				if changed {
 					notifyTextFieldChanged(original, s.controller.Text())

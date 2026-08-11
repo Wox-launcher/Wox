@@ -146,6 +146,9 @@ type QueryResponse struct {
 	Refinements []QueryRefinement
 	Layout      QueryLayout
 	Context     QueryContext
+	// AutoRecordQueryHistory lets built-in Go plugins mark a successful display-only query as completed.
+	// It stays inside core so external plugin protocols do not gain a new compatibility contract.
+	AutoRecordQueryHistory bool `json:"-"`
 }
 
 func NewQueryResponse(results []QueryResult) QueryResponse {

@@ -399,8 +399,9 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculation result: displayValue=%s, rawValue=%s, unit=%s", result.DisplayValue, result.RawValue.String(), result.Unit.Name))
 	}
 
-	return plugin.NewQueryResponse([]plugin.QueryResult{
-		{
+	return plugin.QueryResponse{
+		AutoRecordQueryHistory: true,
+		Results: []plugin.QueryResult{{
 			Title: result.DisplayValue,
 			Icon:  common.PluginConverterIcon,
 			Tails: c.buildResultTails(ctx, result),
@@ -413,8 +414,8 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 					},
 				},
 			},
-		},
-	})
+		}},
+	}
 }
 
 // usesCryptoModule identifies queries that would consume live CoinGecko prices.

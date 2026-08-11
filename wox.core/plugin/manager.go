@@ -164,6 +164,7 @@ type Manager struct {
 	sessionQueryResultCache *util.HashMap[string, *util.HashMap[string, *QueryResultSet]]
 
 	debounceQueryTimer *util.HashMap[string, *debounceTimer]
+	autoQueryHistory   *autoQueryHistoryRecorder
 	aiProviders        *util.HashMap[string, ai.Provider]
 
 	activeBrowserUrl string //active browser url before wox is activated
@@ -210,9 +211,12 @@ const (
 func GetPluginManager() *Manager {
 	managerOnce.Do(func() {
 		managerInstance = &Manager{
-			systemPluginsReady:          make(chan struct{}),
-			sessionQueryResultCache:     util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
-			debounceQueryTimer:          util.NewHashMap[string, *debounceTimer](),
+			systemPluginsReady:      make(chan struct{}),
+			sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
+			debounceQueryTimer:      util.NewHashMap[string, *debounceTimer](),
+			autoQueryHistory: newAutoQueryHistoryRecorder(autoRecordQueryHistoryDelay, func(ctx context.Context, query common.PlainQuery) {
+				setting.GetSettingManager().AddQueryHistory(ctx, query)
+			}),
 			aiProviders:                 util.NewHashMap[string, ai.Provider](),
 			scriptReloadTimers:          util.NewHashMap[string, *time.Timer](),
 			pluginResultDeliveryLatency: util.NewHashMap[string, *util.EWMA](),
@@ -3450,6 +3454,9 @@ func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *Upda
 
 func (m *Manager) Query(ctx context.Context, query Query) QueryExecution {
 	queryStart := util.GetSystemTimestamp()
+	if m.autoQueryHistory != nil {
+		m.autoQueryHistory.beginQuery(query)
+	}
 	if tracker := timetracking.New("manager_query_enter"); tracker.Enabled() {
 		tracker.SetRawString("queryId", query.Id)
 		tracker.SetRawString("query", query.String())
@@ -3646,6 +3653,9 @@ func (e *queryExecution) runPluginJob(job queryPluginJob) {
 		queryForPluginStart := util.GetSystemTimestamp()
 		queryResponse := e.manager.queryForPlugin(e.ctx, pluginInstance, e.query)
 		queryForPluginCost := util.GetSystemTimestamp() - queryForPluginStart
+		if e.manager.autoQueryHistory != nil {
+			e.manager.autoQueryHistory.schedule(e.ctx, e.query, queryResponse)
+		}
 		if tracker := timetracking.New("query_for_plugin_done"); tracker.Enabled() && (len(queryResponse.Results) > 0 || queryForPluginCost >= 5) {
 			tracker.SetRawString("queryId", e.query.Id)
 			tracker.SetRawString("plugin", pluginLabel)

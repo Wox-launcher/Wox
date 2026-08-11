@@ -9,7 +9,6 @@ import (
 	"unicode"
 	"wox/common"
 	"wox/plugin"
-	"wox/setting"
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
@@ -136,6 +135,7 @@ func (c *CalculatorPlugin) Init(ctx context.Context, initParams plugin.InitParam
 
 func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	var results []plugin.QueryResult
+	autoRecordQueryHistory := false
 
 	if query.TriggerKeyword == "" {
 		if !c.hasOperator(query.Search) {
@@ -152,8 +152,8 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		result := val.String()
 		formattedResult := c.formatWithSeparators(val, thousandsSep, decimalSep)
 
-		// Add to query history with debounce when calculation is successful
-		c.addQueryHistoryDebounced(ctx, query.Search, result)
+		c.addCalculatorHistoryDebounced(ctx, query.Search, result)
+		autoRecordQueryHistory = true
 
 		results = append(results, plugin.QueryResult{
 			Title:    formattedResult,
@@ -200,8 +200,8 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 			result := val.String()
 			formattedResult := c.formatWithSeparators(val, thousandsSep, decimalSep)
 
-			// Add to query history with debounce when calculation is successful
-			c.addQueryHistoryDebounced(ctx, query.Search, result)
+			c.addCalculatorHistoryDebounced(ctx, query.Search, result)
+			autoRecordQueryHistory = true
 
 			results = append(results, plugin.QueryResult{
 				Title:    formattedResult,
@@ -290,7 +290,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		}
 	}
 
-	return plugin.NewQueryResponse(results)
+	return plugin.QueryResponse{Results: results, AutoRecordQueryHistory: autoRecordQueryHistory}
 }
 
 func calculatorExpressionScoreKey(expression string) string {
@@ -423,9 +423,8 @@ func (c *CalculatorPlugin) loadHistories(ctx context.Context) []CalculatorHistor
 	return trimmedHistories
 }
 
-// addQueryHistoryDebounced adds query to history with debounce mechanism
-// Only records the last valid calculation when user stops typing
-func (c *CalculatorPlugin) addQueryHistoryDebounced(ctx context.Context, queryText string, result string) {
+// addCalculatorHistoryDebounced records the last stable calculation in the plugin's private history.
+func (c *CalculatorPlugin) addCalculatorHistoryDebounced(ctx context.Context, queryText string, result string) {
 	if !c.hasOperator(queryText) {
 		return
 	}
@@ -440,23 +439,10 @@ func (c *CalculatorPlugin) addQueryHistoryDebounced(ctx context.Context, queryTe
 
 	// Create new timer that will execute after debounce interval
 	c.debounceTimer = time.AfterFunc(c.debounceInterval, func() {
-		// Only add to history if this is still the latest query
 		if c.lastQueryText == queryText {
-			// Check if this query is the same as the last query in global history
-			settingManager := setting.GetSettingManager()
-			latestHistories := settingManager.GetLatestQueryHistory(ctx, 1)
-
-			// Skip if the query is the same as the most recent one
-			if len(latestHistories) > 0 && latestHistories[0].Query.QueryText == queryText {
+			if len(c.histories) > 0 && c.histories[len(c.histories)-1].Expression == queryText {
 				return
 			}
-
-			plainQuery := common.PlainQuery{
-				QueryType: plugin.QueryTypeInput,
-				QueryText: queryText,
-			}
-			settingManager.AddQueryHistory(ctx, plainQuery)
-
 			c.histories = append(c.histories, CalculatorHistory{
 				Expression: queryText,
 				Result:     result,
