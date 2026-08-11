@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.4.0-beta.2 - 2026-08-11
+
+This beta replaces the Flutter UI with an embedded native UI for a single-process launcher and settings experience, cutting typical memory use roughly in half to about 150 MB in daily use, and adds countdown timers plus Private Mode for temporary sessions.  
+
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/timer.png)
+
+- Add
+  - [`UI`] Replace the Flutter UI with an embedded native UI that owns windows, focus, widgets, and GPU rendering in-process, removing the separate Flutter process, cutting typical memory use roughly in half to about 150 MB in daily use, and keeping launcher and settings workflows aligned across Windows, macOS, and Linux.
+  - [`Timer`] Add built-in countdown timers with pause/resume, optional notes, desktop overlays, and persistence across restarts so users can start timers like `timer 5m` or `timer 1h meeting` from the launcher. #4495
+  - [`Privacy`] Add Private Mode for temporary use on shared computers: when enabled, Wox clears local data after exit while preserving non-sensitive settings such as language and hotkeys.
+
+- Improve
+  - [`OCR`] Support downloadable offline PaddleOCR models alongside system OCR, with per-feature model selection for Screenshot and Clipboard.
+  - [`Screenshot`] Improve capture and annotation with cursor inclusion, numbered markers, and shadowed pinned overlays across platforms.
+  - [`Preview`] Improve native file previews, WebView previews with title-bar controls, user-agent presets, URL validation, corner radius, and mouse-button navigation, plus Markdown and scrollable metadata.
+  - [`Dictation`] Improve history previews with audio playback controls.
+  - [`Launcher`] Improve query editing with multiline input, clipboard actions, context menus, secondary-tap actions, and a loading indicator for slow queries.
+  - [`Query`] Automatically record successful display-only queries, such as Calculator and Converter results, into query history.
+  - [`Hotkey`] Support F-keys when registering hotkeys and add middle-left/right recorder tip positions #4496
+  - [`App`] Support running Windows apps as administrator from launcher results #4498
+  - [`Converter`] Prompt before fetching crypto prices so users can confirm the network request #4480
+  - [`Diagnostic`] Capture crash incidents for bug reports with more reliable Windows crash artifacts.
+  - [`Plugin`] Improve plugin-host reliability with a watchdog that recovers unhealthy host processes.
+  - [`Linux`] Improve Hyprland layer-shell launcher rendering, pointer and scroll capture, in-window tooltips, and Cloud Sync/settings chrome alignment.
+  - [`Windows`] Improve CJK text rendering, Task Manager Apps grouping, backdrop and dark-appearance sync, and DPI transition stability.
+  - [`macOS`] Improve hidden-window memory release and keep management windows available across Spaces.
+
+- Fix
+  - [`Calculator`] Fix floating-point display artifacts by preserving exact arithmetic in expressions #4497
+  - [`Input`] Fix IME mode being reset when opening the launcher #4493
+  - [`Linux`] Fix startup crashes by initializing Xlib thread support before GTK #4481
+  - [`Launcher`] Fix preview panel sizing and query state when switching launch modes #4474
+  - [`Settings`] Fix memory accumulation after closing the settings window on macOS
+  - [`Cloud Sync`] Fix update checks blocking restore flows
+  - [`Plugin`] Fix disabled system plugins still appearing in results
+
 ## v2.4.0-beta.1 - 2026-07-14
 
 This beta introduces local, offline Dictation for fast voice-to-text workflows, alongside file content search and a more capable AI Chat experience.
