@@ -1,3 +1,5 @@
+//go:build linux
+
 #include "clipboard_linux_data_control.h"
 
 #include <errno.h>
