@@ -10,7 +10,7 @@ dependencies = ["loguru", "websockets", "wox-plugin"]
 
 [tool.uv.sources]
 # Host builds must use the in-repo SDK so protocol and model changes are validated before SDK releases.
-wox-plugin = { path = "../wox.plugin.python" }
+wox-plugin = { path = "../wox.plugin.python", editable = true }
 
 [project.scripts]
 run = "wox_plugin_host.__main__:run"
