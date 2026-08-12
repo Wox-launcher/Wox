@@ -1,6 +1,10 @@
 package contract
 
-import "context"
+import (
+	"context"
+
+	"wox/common"
+)
 
 // LifecycleServices exposes core-owned lifecycle behavior to the embedded UI.
 type LifecycleServices interface {
@@ -9,6 +13,7 @@ type LifecycleServices interface {
 	DestroyInstance(ctx context.Context, sessionID string) error
 	Shown(ctx context.Context, sessionID string) error
 	Hidden(ctx context.Context, sessionID string) error
+	RestoreActiveWindow(ctx context.Context, sessionID string, snapshot common.ActiveWindowSnapshot) error
 	FocusLost(ctx context.Context, sessionID string) error
 	SettingViewChanged(ctx context.Context, sessionID string, inSettingView bool) error
 	OnboardingViewChanged(ctx context.Context, sessionID string, inOnboardingView bool) error

@@ -12,6 +12,7 @@ import (
 	"wox/ui/contract"
 	"wox/updater"
 	"wox/util"
+	"wox/util/window"
 )
 
 // CoreServices implements the typed services consumed by the embedded UI.
@@ -131,6 +132,20 @@ func (s *CoreServices) Shown(ctx context.Context, sessionID string) error {
 func (s *CoreServices) Hidden(ctx context.Context, sessionID string) error {
 	GetUIManager().PostOnHide(uiServiceContext(ctx, sessionID))
 	return nil
+}
+
+// RestoreActiveWindow reactivates the exact source window captured for a transient launcher.
+func (s *CoreServices) RestoreActiveWindow(_ context.Context, _ string, snapshot common.ActiveWindowSnapshot) error {
+	if snapshot.WindowId != "" {
+		managedWindow, err := window.GetManagedWindow(snapshot.WindowId, snapshot.Pid, snapshot.Name)
+		if err == nil && window.ActivateWindow(managedWindow) {
+			return nil
+		}
+	}
+	if snapshot.Pid > 0 && window.ActivateWindowByPid(snapshot.Pid) {
+		return nil
+	}
+	return fmt.Errorf("source window could not be activated: windowId=%q pid=%d", snapshot.WindowId, snapshot.Pid)
 }
 
 // FocusLost applies the core setting that controls focus-loss dismissal.

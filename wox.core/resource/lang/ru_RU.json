@@ -551,6 +551,8 @@
   "ui_plugin_privacy_window_icon_desc": "Например, вы активируете Wox из приложения, и этот плагин получит иконку активного окна для отображения.",
   "ui_plugin_privacy_open_save_dialog": "Состояние диалога открытия/сохранения",
   "ui_plugin_privacy_open_save_dialog_desc": "Например, вы активируете Wox из диалога открытия или сохранения, и этот плагин узнает, что активное окно является файловым диалогом.",
+  "ui_plugin_privacy_open_save_dialog_select_folder": "Состояние диалога выбора папки",
+  "ui_plugin_privacy_open_save_dialog_select_folder_desc": "Например, этот плагин может узнать, что диалог открытия или сохранения позволяет выбирать только папки.",
   "ui_plugin_privacy_browser_url": "URL активного браузера",
   "ui_plugin_privacy_browser_url_desc": "Например, вы используете google chrome для просмотра веб-страниц, вы активируете Wox и этот плагин получит URL активной вкладки, которую вы просматриваете",
   "ui_plugin_privacy_llm": "Большая языковая модель (LLM)",

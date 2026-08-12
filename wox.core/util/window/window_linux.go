@@ -93,6 +93,16 @@ func IsOpenSaveDialogByPid(pid int) (bool, error) {
 	return false, nil
 }
 
+// IsOpenSaveDialogSelectFolder is not implemented on Linux yet.
+func IsOpenSaveDialogSelectFolder() (bool, error) {
+	return false, nil
+}
+
+// IsOpenSaveDialogSelectFolderByPid is not implemented on Linux yet.
+func IsOpenSaveDialogSelectFolderByPid(pid int) (bool, error) {
+	return false, nil
+}
+
 func NavigateActiveFileDialog(targetPath string) bool {
 	return false
 }

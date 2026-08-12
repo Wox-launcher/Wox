@@ -34,6 +34,8 @@ const (
 	PluginID                       = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
 	PluginCommandSearch            = "search"
 	PluginCommandDataQuery         = "query"
+	PluginCommandDataEntryType     = "entry_type"
+	PluginCommandEntryTypeFolder   = "folder"
 	PluginCommandResultDataResults = "results"
 )
 
@@ -668,9 +670,20 @@ func (c *FileSearchPlugin) handlePluginCommand(ctx context.Context, request plug
 		return plugin.PluginCommandResult{Handled: true, Message: "query is required"}
 	}
 
-	results, err := c.search(ctx, raw, fileSearchResultLimit)
+	// Folder-only callers (open/save "select folder") need enough directory hits
+	// after filtering; widen the candidate window before trimming to the limit.
+	entryType := strings.ToLower(strings.TrimSpace(request.Data[PluginCommandDataEntryType]))
+	searchLimit := fileSearchResultLimit
+	if entryType == PluginCommandEntryTypeFolder {
+		searchLimit = fileSearchRefinedCandidateLimit
+	}
+
+	results, err := c.search(ctx, raw, searchLimit)
 	if err != nil {
 		return plugin.PluginCommandResult{Handled: true, Message: err.Error()}
+	}
+	if entryType == PluginCommandEntryTypeFolder {
+		results = refineFileSearchResults(results, fileSearchTypeRefinementFolder, fileSearchSortRefinementRelevance, fileSearchResultLimit)
 	}
 	payload, err := json.Marshal(results)
 	if err != nil {

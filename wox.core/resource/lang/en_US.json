@@ -569,6 +569,8 @@
   "ui_plugin_privacy_window_icon_desc": "E.g. you activate Wox from an app and this plugin will get the active window icon for display.",
   "ui_plugin_privacy_open_save_dialog": "Open/save dialog state",
   "ui_plugin_privacy_open_save_dialog_desc": "E.g. you activate Wox from an open or save dialog and this plugin will know that the active window is a file dialog.",
+  "ui_plugin_privacy_open_save_dialog_select_folder": "Folder-only dialog state",
+  "ui_plugin_privacy_open_save_dialog_select_folder_desc": "E.g. this plugin can know that an open/save dialog only allows selecting folders.",
   "ui_plugin_privacy_browser_url": "Active browser URL",
   "ui_plugin_privacy_browser_url_desc": "E.g. you are using google chrome to view webpages, you activate Wox and this plugin will get the url of active tab you are viewing",
   "ui_plugin_privacy_llm": "Large Language Model (LLM)",

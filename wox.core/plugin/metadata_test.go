@@ -72,6 +72,24 @@ func TestGetFeatureParamsForDebounceParsesJSONNumbers(t *testing.T) {
 	assert.Equal(t, 200, params.IntervalMs)
 }
 
+func TestGetFeatureParamsForQueryEnvParsesFolderOnlyRequirement(t *testing.T) {
+	metadata := Metadata{
+		Features: []MetadataFeature{
+			{
+				Name: MetadataFeatureQueryEnv,
+				Params: map[string]any{
+					"requireActiveWindowIsOpenSaveDialogSelectFolder": true,
+				},
+			},
+		},
+	}
+
+	params, err := metadata.GetFeatureParamsForQueryEnv()
+
+	require.NoError(t, err)
+	assert.True(t, params.RequireActiveWindowIsOpenSaveDialogSelectFolder)
+}
+
 func TestValidateGlancesRejectsDuplicateIds(t *testing.T) {
 	metadata := Metadata{
 		Glances: []MetadataGlance{

@@ -569,6 +569,8 @@
   "ui_plugin_privacy_window_icon_desc": "例如：当你从某个应用激活 Wox 时，此插件将获取活动窗口图标用于显示。",
   "ui_plugin_privacy_open_save_dialog": "打开/保存对话框状态",
   "ui_plugin_privacy_open_save_dialog_desc": "例如：当你从打开或保存对话框激活 Wox 时，此插件将知道活动窗口是文件对话框。",
+  "ui_plugin_privacy_open_save_dialog_select_folder": "仅选择文件夹对话框状态",
+  "ui_plugin_privacy_open_save_dialog_select_folder_desc": "例如：此插件可以知道打开/保存对话框是否仅允许选择文件夹。",
   "ui_plugin_privacy_browser_url": "活动浏览器URL",
   "ui_plugin_privacy_browser_url_desc": "例如：当你使用谷歌浏览器浏览网页时，激活 Wox，此插件将获取你正在查看的标签页的URL",
   "ui_plugin_privacy_llm": "大语言模型 (LLM)",

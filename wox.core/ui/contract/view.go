@@ -35,6 +35,9 @@ type ShowOptions struct {
 	QueryBoxAtBottom    bool
 	HideOnBlur          bool
 	ShowSource          string
+	// RestoreWindow identifies the source window that should regain focus after
+	// this transient launcher instance is hidden.
+	RestoreWindow *common.ActiveWindowSnapshot
 }
 
 // OpenInstanceOptions describes a primary handoff or an independently hosted secondary launcher.

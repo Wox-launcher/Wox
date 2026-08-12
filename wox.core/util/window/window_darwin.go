@@ -48,6 +48,8 @@ int minimizeWindowForManagement(const char* windowId, int pid);
 int activateWindowByPid(int pid);
 int isOpenSaveDialog();
 int isOpenSaveDialogByPid(int pid);
+int isOpenSaveDialogSelectFolder();
+int isOpenSaveDialogSelectFolderByPid(int pid);
 int navigateActiveFileDialog(const char* path);
 int selectInActiveFileDialog(const char* path);
 char* getActiveFileDialogPath();
@@ -374,6 +376,19 @@ func IsOpenSaveDialogByPid(pid int) (bool, error) {
 		return false, nil
 	}
 	return int(C.isOpenSaveDialogByPid(C.int(pid))) == 1, nil
+}
+
+// IsOpenSaveDialogSelectFolder reports whether the frontmost open/save panel is folder-only.
+func IsOpenSaveDialogSelectFolder() (bool, error) {
+	return int(C.isOpenSaveDialogSelectFolder()) == 1, nil
+}
+
+// IsOpenSaveDialogSelectFolderByPid checks folder-only panels owned by the captured process.
+func IsOpenSaveDialogSelectFolderByPid(pid int) (bool, error) {
+	if pid <= 0 {
+		return false, nil
+	}
+	return int(C.isOpenSaveDialogSelectFolderByPid(C.int(pid))) == 1, nil
 }
 
 func NavigateActiveFileDialog(targetPath string) bool {

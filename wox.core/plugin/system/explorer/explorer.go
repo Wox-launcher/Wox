@@ -143,10 +143,11 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureQueryEnv,
 				Params: map[string]any{
-					"requireActiveWindowName":             true,
-					"requireActiveWindowPid":              true,
-					"requireActiveWindowId":               true,
-					"requireActiveWindowIsOpenSaveDialog": true,
+					"requireActiveWindowName":                         true,
+					"requireActiveWindowPid":                          true,
+					"requireActiveWindowId":                           true,
+					"requireActiveWindowIsOpenSaveDialog":             true,
+					"requireActiveWindowIsOpenSaveDialogSelectFolder": true,
 				},
 			},
 		},
@@ -226,12 +227,19 @@ func (c *ExplorerPlugin) queryExplorerResults(ctx context.Context, query plugin.
 
 // queryFileSearchResults converts global indexed results into Explorer-specific actions.
 func (c *ExplorerPlugin) queryFileSearchResults(ctx context.Context, query plugin.Query, search string) ([]plugin.QueryResult, bool) {
+	folderOnly := query.Env.ActiveWindowIsOpenSaveDialogSelectFolder
+	commandData := common.ContextData{
+		filesearchplugin.PluginCommandDataQuery: search,
+	}
+	// Prefer source-side filtering so folder-only dialogs do not pull file hits.
+	if folderOnly {
+		commandData[filesearchplugin.PluginCommandDataEntryType] = filesearchplugin.PluginCommandEntryTypeFolder
+	}
+	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer global file search: search=%q isOpenSaveDialogSelectFolder=%v", search, folderOnly))
 	commandResult, err := c.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
 		PluginId: filesearchplugin.PluginID,
 		Command:  filesearchplugin.PluginCommandSearch,
-		Data: common.ContextData{
-			filesearchplugin.PluginCommandDataQuery: search,
-		},
+		Data:     commandData,
 	})
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelWarning, "Explorer global file search failed: "+err.Error())
@@ -252,6 +260,9 @@ func (c *ExplorerPlugin) queryFileSearchResults(ctx context.Context, query plugi
 
 	results := make([]plugin.QueryResult, 0, len(indexedResults))
 	for _, item := range indexedResults {
+		if folderOnly && !item.IsDir {
+			continue
+		}
 		icon := common.NewWoxImageLazyLoadCandidate(common.NewWoxImageFileIcon(item.Path), common.ResultListIconSize)
 		if item.IsDir {
 			icon = common.FolderIcon
@@ -267,7 +278,7 @@ func (c *ExplorerPlugin) queryFileSearchResults(ctx context.Context, query plugi
 func (c *ExplorerPlugin) queryAddQuickJumpPath(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	path := c.resolveAddPath(ctx, query)
 	if path == "" {
-		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer add skipped: no resolvable path (pid=%d, title=%q, isOpenSaveDialog=%v)", query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle, query.Env.ActiveWindowIsOpenSaveDialog))
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer add skipped: no resolvable path (pid=%d, title=%q, isOpenSaveDialog=%v, isOpenSaveDialogSelectFolder=%v)", query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle, query.Env.ActiveWindowIsOpenSaveDialog, query.Env.ActiveWindowIsOpenSaveDialogSelectFolder))
 		return []plugin.QueryResult{}
 	}
 
@@ -310,7 +321,7 @@ func (c *ExplorerPlugin) resolveAddPath(ctx context.Context, query plugin.Query)
 func (c *ExplorerPlugin) queryCurrentDirectoryEntries(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	currentPath := c.getCurrentFileExplorerPath(ctx, query.Env)
 	if currentPath == "" {
-		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer current directory query skipped: path not found (search=%q, pid=%d, title=%q, isOpenSaveDialog=%v)", query.Search, query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle, query.Env.ActiveWindowIsOpenSaveDialog))
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer current directory query skipped: path not found (search=%q, pid=%d, title=%q, isOpenSaveDialog=%v, isOpenSaveDialogSelectFolder=%v)", query.Search, query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle, query.Env.ActiveWindowIsOpenSaveDialog, query.Env.ActiveWindowIsOpenSaveDialogSelectFolder))
 		return []plugin.QueryResult{}
 	}
 	return c.queryDirectoryEntriesAtPath(ctx, query, currentPath, strings.TrimSpace(query.Search))
@@ -323,8 +334,15 @@ func (c *ExplorerPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query 
 		return []plugin.QueryResult{}
 	}
 
+	folderOnly := query.Env.ActiveWindowIsOpenSaveDialogSelectFolder
 	results := make([]plugin.QueryResult, 0, len(entries))
 	for _, entry := range entries {
+		isDir := entry.IsDir()
+		// Folder-pick dialogs only need directories; skip files at the source.
+		if folderOnly && !isDir {
+			continue
+		}
+
 		isMatch := true
 		var matchScore int64
 
@@ -337,7 +355,6 @@ func (c *ExplorerPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query 
 		}
 
 		fullPath := filepath.Join(dirPath, entry.Name())
-		isDir := entry.IsDir()
 		var icon common.WoxImage
 		if isDir {
 			icon = common.FolderIcon
@@ -1054,12 +1071,20 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				WindowWidth:          woxSetting.AppWidth.Get() / 2,
 			}
 			// Seed the owner before the new session query builds its QueryEnv.
-			ui.GetUIManager().SeedActiveWindowSnapshotForQuery(common.ActiveWindowSnapshot{
-				Name:             window.GetWindowNameByPid(pid),
-				Pid:              pid,
-				WindowId:         dialogWindowId,
-				IsOpenSaveDialog: true,
-			})
+			// Re-probe folder-only so Explorer can filter before async snapshot details finish.
+			selectFolder := false
+			if isSelectFolder, err := window.IsOpenSaveDialogSelectFolderByPid(pid); err == nil {
+				selectFolder = isSelectFolder
+			}
+			sourceWindow := common.ActiveWindowSnapshot{
+				Name:                         window.GetWindowNameByPid(pid),
+				Pid:                          pid,
+				WindowId:                     dialogWindowId,
+				IsOpenSaveDialog:             true,
+				IsOpenSaveDialogSelectFolder: selectFolder,
+			}
+			ui.GetUIManager().SeedActiveWindowSnapshotForQuery(sourceWindow)
+			showContext.RestoreWindow = &sourceWindow
 			plugin.GetPluginManager().GetUI().OpenWoxInstance(localCtx, common.OpenWoxInstanceRequest{
 				Role:         common.WoxInstanceRoleSecondary,
 				InstanceName: string(common.ShowSourceExplorer),

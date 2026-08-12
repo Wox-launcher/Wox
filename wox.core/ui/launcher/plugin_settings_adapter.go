@@ -393,7 +393,7 @@ func pluginPrivacyAccesses(features []pluginFeature) []string {
 			accessSet["llm"] = true
 		}
 	}
-	order := []string{"requireActiveWindowName", "requireActiveWindowPid", "requireActiveWindowId", "requireActiveWindowIcon", "requireActiveWindowIsOpenSaveDialog", "requireActiveBrowserUrl", "llm"}
+	order := []string{"requireActiveWindowName", "requireActiveWindowPid", "requireActiveWindowId", "requireActiveWindowIcon", "requireActiveWindowIsOpenSaveDialog", "requireActiveWindowIsOpenSaveDialogSelectFolder", "requireActiveBrowserUrl", "llm"}
 	accesses := make([]string, 0, len(accessSet))
 	for _, access := range order {
 		if accessSet[access] {
@@ -421,6 +421,8 @@ func pluginPrivacyDescription(a *App, access string) string {
 		return a.translate("i18n:ui_plugin_privacy_window_icon_desc")
 	case "requireActiveWindowIsOpenSaveDialog":
 		return a.translate("i18n:ui_plugin_privacy_open_save_dialog_desc")
+	case "requireActiveWindowIsOpenSaveDialogSelectFolder":
+		return a.translate("i18n:ui_plugin_privacy_open_save_dialog_select_folder_desc")
 	case "requireActiveBrowserUrl":
 		return a.translate("i18n:ui_plugin_privacy_browser_url_desc")
 	case "llm":
@@ -442,6 +444,8 @@ func pluginPrivacyTitle(a *App, access string) string {
 		return a.translate("i18n:ui_plugin_privacy_window_icon")
 	case "requireActiveWindowIsOpenSaveDialog":
 		return a.translate("i18n:ui_plugin_privacy_open_save_dialog")
+	case "requireActiveWindowIsOpenSaveDialogSelectFolder":
+		return a.translate("i18n:ui_plugin_privacy_open_save_dialog_select_folder")
 	case "requireActiveBrowserUrl":
 		return a.translate("i18n:ui_plugin_privacy_browser_url")
 	case "llm":

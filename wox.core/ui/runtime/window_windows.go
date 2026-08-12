@@ -23,29 +23,31 @@ import (
 )
 
 const (
-	windowClassName          = "WoxGoUIWindow"
-	windowCommandMessage     = win.WM_APP + 1
-	windowTextInputMessage   = win.WM_APP + 2
-	runtimeCallMessage       = win.WM_APP + 3
-	windowBlurGuardDuration  = 300 * time.Millisecond
-	windowsRendererTrimDelay = 10 * time.Second
-	wsExNoRedirectionBitmap  = 0x00200000
-	errorClassAlreadyExists  = syscall.Errno(1410)
-	wmIMEStartComposition    = 0x010D
-	wmIMEEndComposition      = 0x010E
-	wmIMEComposition         = 0x010F
-	wmIMEChar                = 0x0286
-	wmGetObject              = 0x003D
-	gcsCompositionString     = 0x0008
-	gcsResultString          = 0x0800
-	cfsCandidatePosition     = 0x0040
-	unicodeNoCharacter       = 0xFFFF
-	wmMouseHorizontalWheel   = 0x020E
-	pointerScrollLine        = 40
-	dwmwaUseImmersiveDark    = 20
-	dwmwaWindowCorner        = 33
-	dwmwaSystemBackdrop      = 38
-	dwmWindowCornerRound     = 2
+	windowClassName                = "WoxGoUIWindow"
+	windowCommandMessage           = win.WM_APP + 1
+	windowTextInputMessage         = win.WM_APP + 2
+	runtimeCallMessage             = win.WM_APP + 3
+	windowBlurGuardDuration        = 300 * time.Millisecond
+	windowsRendererTrimDelay       = 10 * time.Second
+	windowsForegroundRestoreDelay1 = 30 * time.Millisecond
+	windowsForegroundRestoreDelay2 = 200 * time.Millisecond
+	wsExNoRedirectionBitmap        = 0x00200000
+	errorClassAlreadyExists        = syscall.Errno(1410)
+	wmIMEStartComposition          = 0x010D
+	wmIMEEndComposition            = 0x010E
+	wmIMEComposition               = 0x010F
+	wmIMEChar                      = 0x0286
+	wmGetObject                    = 0x003D
+	gcsCompositionString           = 0x0008
+	gcsResultString                = 0x0800
+	cfsCandidatePosition           = 0x0040
+	unicodeNoCharacter             = 0xFFFF
+	wmMouseHorizontalWheel         = 0x020E
+	pointerScrollLine              = 40
+	dwmwaUseImmersiveDark          = 20
+	dwmwaWindowCorner              = 33
+	dwmwaSystemBackdrop            = 38
+	dwmWindowCornerRound           = 2
 	// DWM_SYSTEMBACKDROP_TYPE starts with AUTO=0 and NONE=1; keep these material values aligned with the Windows SDK.
 	dwmSystemBackdropNone    = 1
 	dwmSystemBackdropMica    = 2
@@ -79,6 +81,8 @@ var (
 	dwmSetWindowAttribute                = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmSetWindowAttribute")
 	dwmExtendFrameIntoClientArea         = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmExtendFrameIntoClientArea")
 	setWindowCompositionAttribute        = syscall.NewLazyDLL("user32.dll").NewProc("SetWindowCompositionAttribute")
+	isWindowProc                         = syscall.NewLazyDLL("user32.dll").NewProc("IsWindow")
+	allowSetForegroundWindow             = syscall.NewLazyDLL("user32.dll").NewProc("AllowSetForegroundWindow")
 	postThreadMessageW                   = syscall.NewLazyDLL("user32.dll").NewProc("PostThreadMessageW")
 	dpiAwarenessContextPerMonitorAwareV2 = ^uintptr(3)
 	platformRuntime                      struct {
@@ -128,6 +132,7 @@ const (
 	windowCommandShowNativeFilePreview
 	windowCommandHideNativeFilePreview
 	windowCommandTrimRenderer
+	windowCommandRestoreForeground
 	windowCommandClose
 )
 
@@ -147,6 +152,7 @@ type windowCommand struct {
 	nativeFilePath              string
 	nativeFileBounds            Rect
 	nativeFilePreviewGeneration uint64
+	restoreForeground           win.HWND
 	reply                       chan windowCommandResult
 }
 
@@ -181,6 +187,7 @@ type platformWindow struct {
 
 	renderer                    *nativeRenderer
 	rendererTrimTimer           *time.Timer
+	foregroundRestoreTimers     [2]*time.Timer
 	webView                     *webviewruntime.Controller
 	nativeFilePreview           *windowsFilePreview
 	nativeFilePreviewGeneration uint64
@@ -1479,6 +1486,15 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 			return windowCommandResult{}
 		}
 		return windowCommandResult{err: w.renderer.trim()}
+	case windowCommandRestoreForeground:
+		if w.focus.visible || !isRestorableForegroundWindow(command.restoreForeground) {
+			return windowCommandResult{}
+		}
+		if normalizeRootWindow(win.GetForegroundWindow()) == normalizeRootWindow(command.restoreForeground) {
+			return windowCommandResult{}
+		}
+		activateWindow(command.restoreForeground)
+		return windowCommandResult{}
 	case windowCommandClose:
 		w.hideNative()
 		win.DestroyWindow(w.hwnd)
@@ -1666,6 +1682,7 @@ func monitorScale(monitor win.HMONITOR) float32 {
 
 // showNative combines show, foreground activation, and keyboard focus into one epoch.
 func (w *platformWindow) showNative() FocusEpoch {
+	w.stopForegroundRestoreTimers()
 	if w.rendererTrimTimer != nil {
 		w.rendererTrimTimer.Stop()
 		w.rendererTrimTimer = nil
@@ -1735,6 +1752,7 @@ func (w *platformWindow) hideNative() {
 
 	shouldRestore := w.focus.restorePreviousOnHide && w.isWithinFocusDomain(win.GetForegroundWindow())
 	previous := w.focus.previousForeground
+	w.stopForegroundRestoreTimers()
 	w.focus.visible = false
 	w.focus.activationConfirmed = false
 	w.focus.restorePreviousOnHide = false
@@ -1749,9 +1767,29 @@ func (w *platformWindow) hideNative() {
 		_ = w.call(windowCommand{kind: windowCommandTrimRenderer})
 	})
 
-	if shouldRestore && previous != 0 {
-		win.BringWindowToTop(previous)
-		win.SetForegroundWindow(previous)
+	if shouldRestore && isRestorableForegroundWindow(previous) {
+		activateWindow(previous)
+		w.scheduleForegroundRestore(previous)
+	}
+}
+
+// stopForegroundRestoreTimers cancels retries from an earlier hide before a new focus epoch starts.
+func (w *platformWindow) stopForegroundRestoreTimers() {
+	for index, timer := range w.foregroundRestoreTimers {
+		if timer != nil {
+			timer.Stop()
+			w.foregroundRestoreTimers[index] = nil
+		}
+	}
+}
+
+// scheduleForegroundRestore retries activation after Windows finishes processing the hide transition.
+func (w *platformWindow) scheduleForegroundRestore(hwnd win.HWND) {
+	delays := [...]time.Duration{windowsForegroundRestoreDelay1, windowsForegroundRestoreDelay2}
+	for index, delay := range delays {
+		w.foregroundRestoreTimers[index] = time.AfterFunc(delay, func() {
+			_ = w.call(windowCommand{kind: windowCommandRestoreForeground, restoreForeground: hwnd})
+		})
 	}
 }
 
@@ -1812,25 +1850,44 @@ func normalizeRootWindow(hwnd win.HWND) win.HWND {
 	return root
 }
 
-// activateWindow uses thread-input attachment only after the cheap foreground request fails.
+// isRestorableForegroundWindow rejects stale or minimized targets captured before Wox was shown.
+func isRestorableForegroundWindow(hwnd win.HWND) bool {
+	if hwnd == 0 {
+		return false
+	}
+	result, _, _ := isWindowProc.Call(uintptr(hwnd))
+	return result != 0 && !win.IsIconic(hwnd)
+}
+
+// activateWindow mirrors the old Flutter focus handoff with direct, thread-input, and permission fallbacks.
 func activateWindow(hwnd win.HWND) bool {
+	if hwnd == 0 {
+		return false
+	}
 	if win.SetForegroundWindow(hwnd) {
 		win.SetFocus(hwnd)
 		win.BringWindowToTop(hwnd)
 		return true
 	}
 
-	foreground := win.GetForegroundWindow()
 	currentThread := win.GetCurrentThreadId()
-	foregroundThread := win.GetWindowThreadProcessId(foreground, nil)
-	attached := foreground != 0 && foregroundThread != 0 && foregroundThread != currentThread && win.AttachThreadInput(int32(foregroundThread), int32(currentThread), true)
+	targetThread := win.GetWindowThreadProcessId(hwnd, nil)
+	attached := targetThread != 0 && targetThread != currentThread && win.AttachThreadInput(int32(targetThread), int32(currentThread), true)
 	win.SetForegroundWindow(hwnd)
 	win.SetFocus(hwnd)
 	win.BringWindowToTop(hwnd)
 	if attached {
-		win.AttachThreadInput(int32(foregroundThread), int32(currentThread), false)
+		win.AttachThreadInput(int32(targetThread), int32(currentThread), false)
 	}
-	return win.GetForegroundWindow() == hwnd
+	if normalizeRootWindow(win.GetForegroundWindow()) == normalizeRootWindow(hwnd) {
+		return true
+	}
+
+	// Windows can still reject the request while the hide/show activation transition is settling.
+	_, _, _ = allowSetForegroundWindow.Call(uintptr(^uint32(0)))
+	win.SetForegroundWindow(hwnd)
+	win.BringWindowToTop(hwnd)
+	return normalizeRootWindow(win.GetForegroundWindow()) == normalizeRootWindow(hwnd)
 }
 
 // drawFrame rebuilds the minimal display list only when Windows requests a paint.
@@ -1895,6 +1952,7 @@ func windowsUpdateRect(hwnd win.HWND) (win.RECT, bool) {
 
 // destroyNativeResources releases GPU state before invalidating the HWND-backed command queue.
 func (w *platformWindow) destroyNativeResources() {
+	w.stopForegroundRestoreTimers()
 	if w.rendererTrimTimer != nil {
 		w.rendererTrimTimer.Stop()
 		w.rendererTrimTimer = nil

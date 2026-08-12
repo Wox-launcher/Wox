@@ -551,6 +551,8 @@
   "ui_plugin_privacy_window_icon_desc": "Por exemplo, você ativa o Wox a partir de um aplicativo, e este plugin obterá o ícone da janela ativa para exibição.",
   "ui_plugin_privacy_open_save_dialog": "Estado do diálogo abrir/salvar",
   "ui_plugin_privacy_open_save_dialog_desc": "Por exemplo, você ativa o Wox a partir de um diálogo de abrir ou salvar, e este plugin saberá que a janela ativa é um diálogo de arquivo.",
+  "ui_plugin_privacy_open_save_dialog_select_folder": "Estado do diálogo somente para pastas",
+  "ui_plugin_privacy_open_save_dialog_select_folder_desc": "Por exemplo, este plugin poderá saber que o diálogo de abrir ou salvar permite selecionar apenas pastas.",
   "ui_plugin_privacy_browser_url": "Active browser URL",
   "ui_plugin_privacy_browser_url_desc": "E.g. you are using google chrome to view webpages, you activate Wox and this plugin will get the url of active tab you are viewing",
   "ui_plugin_privacy_llm": "Large Language Model (LLM)",

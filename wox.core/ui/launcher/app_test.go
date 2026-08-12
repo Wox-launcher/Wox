@@ -879,3 +879,14 @@ func TestFromCoreShowOptionsPreservesQueryHistoryOrderAndPayload(t *testing.T) {
 		t.Fatalf("older query history = %#v, want complete older payload", got)
 	}
 }
+
+func TestFromCoreShowOptionsPreservesRestoreWindow(t *testing.T) {
+	source := &common.ActiveWindowSnapshot{Pid: 42, WindowId: "99", Name: "Open Folder", IsOpenSaveDialog: true}
+	params := fromCoreShowOptions(contract.ShowOptions{RestoreWindow: source})
+	if params.RestoreWindow == nil {
+		t.Fatal("restore window was dropped while adapting show options")
+	}
+	if params.RestoreWindow.Pid != source.Pid || params.RestoreWindow.WindowId != source.WindowId || params.RestoreWindow.Name != source.Name || !params.RestoreWindow.IsOpenSaveDialog {
+		t.Fatalf("restore window = %#v, want %#v", params.RestoreWindow, source)
+	}
+}

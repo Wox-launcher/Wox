@@ -146,6 +146,9 @@ type ActiveWindowSnapshot struct {
 	WindowId         string
 	Icon             WoxImage // active window icon before wox is activated
 	IsOpenSaveDialog bool     // is active window open/save dialog before wox is activated
+	// IsOpenSaveDialogSelectFolder is true only when the dialog is folder-only.
+	// It implies IsOpenSaveDialog; uncertain dialogs stay false to avoid hiding files.
+	IsOpenSaveDialogSelectFolder bool
 }
 
 type ShowContext struct {
@@ -157,6 +160,9 @@ type ShowContext struct {
 	QueryBoxAtBottom    bool
 	HideOnBlur          bool
 	ShowSource          ShowSource
+	// RestoreWindow identifies the source window that should regain focus after
+	// this transient launcher instance is hidden.
+	RestoreWindow *ActiveWindowSnapshot
 	// ActivationStartedAt carries the original hotkey callback timestamp to the
 	// UI. The bridge acknowledgement arrives before the native window is visible,
 	// so visibility diagnostics must finish in the UI.

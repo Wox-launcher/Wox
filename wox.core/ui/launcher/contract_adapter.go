@@ -64,7 +64,8 @@ func fromCoreShowOptions(options contract.ShowOptions) showAppParams {
 		LaunchMode: options.LaunchMode, StartPage: options.StartPage,
 		HideQueryBox: options.HideQueryBox, HideToolbar: options.HideToolbar, ShowPreviewTitleBar: options.ShowPreviewTitleBar,
 		QueryBoxAtBottom: options.QueryBoxAtBottom, HideOnBlur: options.HideOnBlur,
-		ShowSource: options.ShowSource,
+		RestoreWindow: options.RestoreWindow,
+		ShowSource:    options.ShowSource,
 	}
 }
 

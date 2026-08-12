@@ -858,6 +858,138 @@ int isOpenSaveDialogByPid(int pid)
     return data.found;
 }
 
+// wideContainsInsensitive reports whether haystack contains needle ignoring case.
+static int wideContainsInsensitive(const WCHAR *haystack, const WCHAR *needle)
+{
+    if (!haystack || !needle || needle[0] == L'\0')
+    {
+        return 0;
+    }
+
+    size_t hayLen = wcslen(haystack);
+    size_t needleLen = wcslen(needle);
+    if (needleLen > hayLen)
+    {
+        return 0;
+    }
+
+    for (size_t i = 0; i + needleLen <= hayLen; i++)
+    {
+        if (_wcsnicmp(haystack + i, needle, needleLen) == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// dialogLooksLikeSelectFolder uses title/default-button heuristics when no filename edit exists.
+// Uncertain dialogs return false so ordinary Open/Save keep showing files.
+static int dialogLooksLikeSelectFolder(HWND hwnd)
+{
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    WCHAR title[512];
+    ZeroMemory(title, sizeof(title));
+    GetWindowTextW(hwnd, title, sizeof(title) / sizeof(title[0]));
+
+    WCHAR buttonText[256];
+    ZeroMemory(buttonText, sizeof(buttonText));
+    HWND hOk = GetDlgItem(hwnd, IDOK);
+    if (hOk)
+    {
+        GetWindowTextW(hOk, buttonText, sizeof(buttonText) / sizeof(buttonText[0]));
+    }
+
+    // Match localized and English folder-picker chrome without treating "Open File" as folder-only.
+    // Require stronger phrases than a bare "Open" so uncertain dialogs stay false.
+    static const WCHAR *folderHints[] = {
+        L"open folder",
+        L"open directory",
+        L"select folder",
+        L"choose folder",
+        L"browse for folder",
+        L"select directory",
+        L"choose directory",
+        L"\x6253\x5f00\x6587\x4ef6\x5939", // Simplified Chinese: Open Folder
+        L"\x6253\x5f00\x76ee\x5f55", // Simplified Chinese: Open Directory
+        L"\x9009\x62e9\x6587\x4ef6\x5939", // Simplified Chinese: Select Folder
+        L"\x9009\x62e9\x76ee\x5f55", // Simplified Chinese: Select Directory
+        L"\x30d5\x30a9\x30eb\x30c0\x3092\x9078\x629e", // Japanese: Select Folder
+        L"\x30d5\x30a9\x30eb\x30c0\x3092\x958b\x304f", // Japanese: Open Folder
+    };
+
+    for (size_t i = 0; i < sizeof(folderHints) / sizeof(folderHints[0]); i++)
+    {
+        if (wideContainsInsensitive(title, folderHints[i]) || wideContainsInsensitive(buttonText, folderHints[i]))
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// isOpenSaveDialogSelectFolderWindow is true only for confirmed folder-only dialogs.
+static int isOpenSaveDialogSelectFolderWindow(HWND hwnd)
+{
+    if (!isOpenSaveDialogWindow(hwnd))
+    {
+        return 0;
+    }
+
+    // Folder-picker chrome takes precedence because Windows folder dialogs can
+    // expose the selected folder path through the same edit control as filenames.
+    return dialogLooksLikeSelectFolder(hwnd);
+}
+
+typedef struct
+{
+    DWORD pid;
+    int found;
+} OpenSaveDialogSelectFolderByPidData;
+
+static BOOL CALLBACK EnumOpenSaveDialogSelectFolderByPidProc(HWND hwnd, LPARAM lParam)
+{
+    OpenSaveDialogSelectFolderByPidData *data = (OpenSaveDialogSelectFolderByPidData *)lParam;
+    DWORD windowPid = 0;
+    GetWindowThreadProcessId(hwnd, &windowPid);
+    if (windowPid != data->pid)
+    {
+        return TRUE;
+    }
+
+    if (isOpenSaveDialogSelectFolderWindow(hwnd))
+    {
+        data->found = 1;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+int isOpenSaveDialogSelectFolder()
+{
+    HWND hwnd = GetForegroundWindow();
+    return isOpenSaveDialogSelectFolderWindow(hwnd);
+}
+
+int isOpenSaveDialogSelectFolderByPid(int pid)
+{
+    if (pid <= 0)
+    {
+        return 0;
+    }
+
+    OpenSaveDialogSelectFolderByPidData data;
+    data.pid = (DWORD)pid;
+    data.found = 0;
+    EnumWindows(EnumOpenSaveDialogSelectFolderByPidProc, (LPARAM)&data);
+    return data.found;
+}
+
 static int activateWindowForManagementHwnd(HWND hwnd);
 
 // Resolves the captured dialog HWND and rejects stale or cross-process handles.

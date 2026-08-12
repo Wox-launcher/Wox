@@ -74,6 +74,8 @@ int activateWindowByPid(int pid);
 int focusFileExplorerContentByHwnd(uintptr_t hwnd);
 int isOpenSaveDialog();
 int isOpenSaveDialogByPid(int pid);
+int isOpenSaveDialogSelectFolder();
+int isOpenSaveDialogSelectFolderByPid(int pid);
 int navigateActiveFileDialog(const char* path);
 int navigateFileDialogByWindowId(const char* windowId, int pid, const char* path, FileDialogNavigationDiagnosticC* diagnostic);
 int selectInActiveFileDialog(const char* path);
@@ -412,6 +414,21 @@ func IsOpenSaveDialogByPid(pid int) (bool, error) {
 		return false, nil
 	}
 	result := C.isOpenSaveDialogByPid(C.int(pid))
+	return int(result) == 1, nil
+}
+
+// IsOpenSaveDialogSelectFolder reports whether the foreground open/save dialog is folder-only.
+func IsOpenSaveDialogSelectFolder() (bool, error) {
+	result := C.isOpenSaveDialogSelectFolder()
+	return int(result) == 1, nil
+}
+
+// IsOpenSaveDialogSelectFolderByPid checks folder-only dialogs owned by the captured process.
+func IsOpenSaveDialogSelectFolderByPid(pid int) (bool, error) {
+	if pid <= 0 {
+		return false, nil
+	}
+	result := C.isOpenSaveDialogSelectFolderByPid(C.int(pid))
 	return int(result) == 1, nil
 }
 

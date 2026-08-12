@@ -543,7 +543,22 @@ func (a *App) hideWindow(notify bool) error {
 	// Only cacheable WebView panels hide-and-retain so navigation can resume;
 	// every other secondary still destroys on dismiss.
 	if !a.isPrimary && !a.shouldRetainSecondaryOnHide() {
-		return a.Close()
+		var restoreWindow *common.ActiveWindowSnapshot
+		if err := a.runOnUI("capture launcher source window", func() {
+			if a.show.RestoreWindow != nil {
+				snapshot := *a.show.RestoreWindow
+				restoreWindow = &snapshot
+			}
+		}); err != nil {
+			return err
+		}
+		closeErr := a.Close()
+		if restoreWindow != nil && a.services != nil {
+			if err := a.services.RestoreActiveWindow(context.Background(), a.sessionID, *restoreWindow); err != nil {
+				util.GetLogger().Warn(context.Background(), fmt.Sprintf("restore launcher source window after hide: %v", err))
+			}
+		}
+		return closeErr
 	}
 
 	var launcher *woxui.ManagedWindow
@@ -1605,20 +1620,21 @@ func newInputQuery(text string) plainQuery {
 
 type showAppParams struct {
 	// ShowPreviewTitleBar is an internal launcher control for full preview windows.
-	ShowPreviewTitleBar bool         `json:"-"`
-	SelectAll           bool         `json:"SelectAll"`
-	Position            position     `json:"Position"`
-	PositionHeight      int          `json:"PositionHeight"`
-	WindowWidth         int          `json:"WindowWidth"`
-	MaxResultCount      int          `json:"MaxResultCount"`
-	QueryHistories      []plainQuery `json:"QueryHistories"`
-	LaunchMode          string       `json:"LaunchMode"`
-	StartPage           string       `json:"StartPage"`
-	HideQueryBox        bool         `json:"HideQueryBox"`
-	HideToolbar         bool         `json:"HideToolbar"`
-	QueryBoxAtBottom    bool         `json:"QueryBoxAtBottom"`
-	HideOnBlur          bool         `json:"HideOnBlur"`
-	ShowSource          string       `json:"ShowSource"`
+	ShowPreviewTitleBar bool                         `json:"-"`
+	SelectAll           bool                         `json:"SelectAll"`
+	Position            position                     `json:"Position"`
+	PositionHeight      int                          `json:"PositionHeight"`
+	WindowWidth         int                          `json:"WindowWidth"`
+	MaxResultCount      int                          `json:"MaxResultCount"`
+	QueryHistories      []plainQuery                 `json:"QueryHistories"`
+	LaunchMode          string                       `json:"LaunchMode"`
+	StartPage           string                       `json:"StartPage"`
+	HideQueryBox        bool                         `json:"HideQueryBox"`
+	HideToolbar         bool                         `json:"HideToolbar"`
+	QueryBoxAtBottom    bool                         `json:"QueryBoxAtBottom"`
+	HideOnBlur          bool                         `json:"HideOnBlur"`
+	ShowSource          string                       `json:"ShowSource"`
+	RestoreWindow       *common.ActiveWindowSnapshot `json:"-"`
 }
 
 type position struct {

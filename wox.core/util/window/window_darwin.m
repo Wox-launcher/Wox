@@ -1435,6 +1435,153 @@ int isOpenSaveDialogByPid(int pid) {
     }
 }
 
+// getAXStringAttribute reads a string attribute used by folder-only heuristics.
+static NSString* getAXStringAttribute(AXUIElementRef element, CFStringRef attr) {
+    if (!element || !attr) {
+        return nil;
+    }
+
+    CFTypeRef value = NULL;
+    if (AXUIElementCopyAttributeValue(element, attr, &value) != kAXErrorSuccess || !value) {
+        if (value) {
+            CFRelease(value);
+        }
+        return nil;
+    }
+
+    NSString *result = nil;
+    if (CFGetTypeID(value) == CFStringGetTypeID()) {
+        // Return an autoreleased Foundation copy because this file is built without ARC.
+        result = [NSString stringWithString:(__bridge NSString *)value];
+    }
+    CFRelease(value);
+    return result;
+}
+
+// axStringLooksLikeSelectFolder matches localized Choose Folder chrome.
+// Prefer multi-word / localized folder-pick phrases so ordinary Open/Save titles
+// that merely mention "folder" are not treated as folder-only.
+static BOOL axStringLooksLikeSelectFolder(NSString *text) {
+    if (!text || [text length] == 0) {
+        return NO;
+    }
+
+    NSString *lower = [text lowercaseString];
+    NSArray<NSString *> *hints = @[
+        @"choose folder",
+        @"select folder",
+        @"pick folder",
+        @"browse for folder",
+        @"选择文件夹",
+        @"选取文件夹",
+        @"选择目录",
+        @"フォルダを選択"
+    ];
+    for (NSString *hint in hints) {
+        if ([lower containsString:[hint lowercaseString]]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+// collectButtonTitlesRecursive gathers default/action button labels for heuristics.
+static void collectButtonTitlesRecursive(AXUIElementRef element, NSMutableArray<NSString *> *titles, int depth) {
+    if (!element || !titles || depth > 8) {
+        return;
+    }
+
+    if (elementMatchesRole(element, kAXButtonRole) || elementMatchesRole(element, CFSTR("AXDefaultButton"))) {
+        NSString *title = getAXStringAttribute(element, kAXTitleAttribute);
+        if (title.length > 0) {
+            [titles addObject:title];
+        }
+    }
+
+    CFArrayRef children = NULL;
+    if (AXUIElementCopyAttributeValue(element, kAXChildrenAttribute, (CFTypeRef *)&children) != kAXErrorSuccess || !children) {
+        if (children) {
+            CFRelease(children);
+        }
+        return;
+    }
+
+    CFIndex count = CFArrayGetCount(children);
+    for (CFIndex i = 0; i < count; i++) {
+        AXUIElementRef child = (AXUIElementRef)CFArrayGetValueAtIndex(children, i);
+        if (!child || CFGetTypeID(child) != AXUIElementGetTypeID()) {
+            continue;
+        }
+        collectButtonTitlesRecursive(child, titles, depth + 1);
+    }
+    CFRelease(children);
+}
+
+// isOpenSaveDialogSelectFolderWindow is true only for confirmed folder-only panels.
+// Uncertain open/save sheets stay false so ordinary Open/Save still show files.
+static int isOpenSaveDialogSelectFolderWindow(AXUIElementRef dialogWindow) {
+    if (!dialogWindow) {
+        return 0;
+    }
+
+    BOOL hasFileList =
+        elementOrDescendantMatchesRole(dialogWindow, CFSTR("AXOutline"), 0) ||
+        elementOrDescendantMatchesRole(dialogWindow, CFSTR("AXBrowser"), 0) ||
+        elementOrDescendantMatchesRole(dialogWindow, CFSTR("AXTable"), 0);
+    if (!hasFileList) {
+        return 0;
+    }
+
+    NSString *title = getAXStringAttribute(dialogWindow, kAXTitleAttribute);
+    BOOL chromeLooksLikeFolder = axStringLooksLikeSelectFolder(title);
+    if (!chromeLooksLikeFolder) {
+        NSMutableArray<NSString *> *buttonTitles = [NSMutableArray array];
+        collectButtonTitlesRecursive(dialogWindow, buttonTitles, 0);
+        for (NSString *buttonTitle in buttonTitles) {
+            if (axStringLooksLikeSelectFolder(buttonTitle)) {
+                chromeLooksLikeFolder = YES;
+                break;
+            }
+        }
+    }
+
+    // AX trees can omit controls while a normal Open/Save panel is loading. Only
+    // explicit folder-picker chrome is strong enough to hide file results.
+    return chromeLooksLikeFolder ? 1 : 0;
+}
+
+int isOpenSaveDialogSelectFolder() {
+    @autoreleasepool {
+        NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        if (!activeApp) {
+            return 0;
+        }
+        return isOpenSaveDialogSelectFolderByPid((int)[activeApp processIdentifier]);
+    }
+}
+
+int isOpenSaveDialogSelectFolderByPid(int pid) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted() || pid <= 0) {
+            return 0;
+        }
+
+        AXUIElementRef appElement = AXUIElementCreateApplication(pid);
+        if (!appElement) {
+            return 0;
+        }
+
+        AXUIElementRef dialogWindow = copyOpenSaveDialogWindowForActiveApp(appElement);
+        int result = 0;
+        if (dialogWindow) {
+            result = isOpenSaveDialogSelectFolderWindow(dialogWindow);
+            CFRelease(dialogWindow);
+        }
+        CFRelease(appElement);
+        return result;
+    }
+}
+
 static AXUIElementRef findTextFieldRecursive(AXUIElementRef element, int depth) {
     if (!element || depth > 6) {
         return NULL;

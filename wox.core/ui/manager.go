@@ -1900,6 +1900,13 @@ func (m *Manager) refreshActiveWindowSnapshotDetails(activeWindowPid int, snapsh
 	if isDialog, err := window.IsOpenSaveDialogByPid(activeWindowPid); err == nil {
 		activeWindowIsOpenSaveDialog = isDialog
 	}
+	// Folder-only is a stricter subset of open/save; keep false when uncertain.
+	activeWindowIsOpenSaveDialogSelectFolder := false
+	if activeWindowIsOpenSaveDialog {
+		if isSelectFolder, err := window.IsOpenSaveDialogSelectFolderByPid(activeWindowPid); err == nil {
+			activeWindowIsOpenSaveDialogSelectFolder = isSelectFolder
+		}
+	}
 
 	m.activeWindowSnapshotMu.Lock()
 	if m.activeWindowSnapshotSeq != snapshotSeq || m.activeWindowSnapshot.Pid != activeWindowPid {
@@ -1909,6 +1916,7 @@ func (m *Manager) refreshActiveWindowSnapshotDetails(activeWindowPid int, snapsh
 	m.activeWindowSnapshot.Name = activeWindowName
 	m.activeWindowSnapshot.Icon = activeWindowIcon
 	m.activeWindowSnapshot.IsOpenSaveDialog = activeWindowIsOpenSaveDialog
+	m.activeWindowSnapshot.IsOpenSaveDialogSelectFolder = activeWindowIsOpenSaveDialogSelectFolder
 	m.activeWindowSnapshotMu.Unlock()
 }
 

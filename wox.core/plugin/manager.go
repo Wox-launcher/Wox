@@ -1446,6 +1446,12 @@ func (m *Manager) buildPluginQueryEnv(ctx context.Context, pluginInstance *Insta
 	if queryEnvParams.RequireActiveWindowIsOpenSaveDialog {
 		query.Env.ActiveWindowIsOpenSaveDialog = currentEnv.ActiveWindowIsOpenSaveDialog
 	}
+	if queryEnvParams.RequireActiveWindowIsOpenSaveDialogSelectFolder {
+		query.Env.ActiveWindowIsOpenSaveDialogSelectFolder = currentEnv.ActiveWindowIsOpenSaveDialogSelectFolder
+		// Folder-only is a stricter open/save-dialog state. Preserve the parent
+		// flag even when a plugin requests only the stricter field.
+		query.Env.ActiveWindowIsOpenSaveDialog = currentEnv.ActiveWindowIsOpenSaveDialog
+	}
 	if queryEnvParams.RequireActiveBrowserUrl {
 		query.Env.ActiveBrowserUrl = currentEnv.ActiveBrowserUrl
 	}
@@ -4000,6 +4006,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
 		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
 		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
+		query.Env.ActiveWindowIsOpenSaveDialogSelectFolder = activeWindowSnapshot.IsOpenSaveDialogSelectFolder
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 	}
 
@@ -4515,6 +4522,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 	query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
 	query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
 	query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
+	query.Env.ActiveWindowIsOpenSaveDialogSelectFolder = activeWindowSnapshot.IsOpenSaveDialogSelectFolder
 	query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 	query.Env.IsMRU = true
 	m.startSessionQueryCache(query)

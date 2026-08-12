@@ -307,12 +307,13 @@ func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv,
 	for _, feature := range m.Features {
 		if strings.EqualFold(feature.Name, MetadataFeatureQueryEnv) {
 			params := MetadataFeatureParamsQueryEnv{
-				RequireActiveWindowName:             false,
-				RequireActiveWindowPid:              false,
-				RequireActiveWindowId:               false,
-				RequireActiveWindowIcon:             false,
-				RequireActiveWindowIsOpenSaveDialog: false,
-				RequireActiveBrowserUrl:             false,
+				RequireActiveWindowName:                         false,
+				RequireActiveWindowPid:                          false,
+				RequireActiveWindowId:                           false,
+				RequireActiveWindowIcon:                         false,
+				RequireActiveWindowIsOpenSaveDialog:             false,
+				RequireActiveWindowIsOpenSaveDialogSelectFolder: false,
+				RequireActiveBrowserUrl:                         false,
 			}
 
 			if v, ok := feature.Params["requireActiveWindowName"]; ok {
@@ -367,6 +368,17 @@ func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv,
 				}
 				if vBool, ok := v.(bool); ok {
 					params.RequireActiveWindowIsOpenSaveDialog = vBool
+				}
+			}
+
+			if v, ok := feature.Params["requireActiveWindowIsOpenSaveDialogSelectFolder"]; ok {
+				if vString, ok := v.(string); ok {
+					if vString == "true" {
+						params.RequireActiveWindowIsOpenSaveDialogSelectFolder = true
+					}
+				}
+				if vBool, ok := v.(bool); ok {
+					params.RequireActiveWindowIsOpenSaveDialogSelectFolder = vBool
 				}
 			}
 
@@ -470,12 +482,13 @@ type MetadataFeatureParamsDebounce struct {
 }
 
 type MetadataFeatureParamsQueryEnv struct {
-	RequireActiveWindowName             bool
-	RequireActiveWindowPid              bool
-	RequireActiveWindowId               bool
-	RequireActiveWindowIcon             bool
-	RequireActiveWindowIsOpenSaveDialog bool
-	RequireActiveBrowserUrl             bool
+	RequireActiveWindowName                         bool
+	RequireActiveWindowPid                          bool
+	RequireActiveWindowId                           bool
+	RequireActiveWindowIcon                         bool
+	RequireActiveWindowIsOpenSaveDialog             bool
+	RequireActiveWindowIsOpenSaveDialogSelectFolder bool
+	RequireActiveBrowserUrl                         bool
 }
 
 // MetadataFeatureParamsResultPreviewWidthRatio keeps compatibility with the

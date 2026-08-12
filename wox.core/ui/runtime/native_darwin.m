@@ -96,6 +96,8 @@ struct WoxDarwinWindow {
   uint64_t epoch;
   bool visible;
   bool active;
+  NSRunningApplication *previous_active_app;
+  bool restore_previous_app_on_hide;
   bool hide_on_blur;
   bool screenshot_window;
   bool native_dialog_active;
@@ -149,6 +151,56 @@ struct WoxDarwinRenderer {
 static NSInteger wox_open_window_count = 0;
 static const CGFloat wox_window_corner_radius = 14.0;
 static CGFloat desktop_top(void);
+
+// save_previous_active_app_if_needed keeps the app-level focus target used by the legacy Flutter launcher.
+static void save_previous_active_app_if_needed(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return;
+  }
+
+  NSRunningApplication *front_app = [[NSWorkspace sharedWorkspace] frontmostApplication];
+  NSRunningApplication *current_app = [NSRunningApplication currentApplication];
+  if (front_app == nil || front_app == current_app || front_app.isTerminated) {
+    return;
+  }
+
+  [window->previous_active_app release];
+  window->previous_active_app = [front_app retain];
+  window->restore_previous_app_on_hide = true;
+}
+
+// clear_previous_active_app releases a saved app when its restore lifetime ends.
+static void clear_previous_active_app(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return;
+  }
+  [window->previous_active_app release];
+  window->previous_active_app = nil;
+  window->restore_previous_app_on_hide = false;
+}
+
+// restore_previous_active_app returns focus to the app that was frontmost before Wox was shown.
+static void restore_previous_active_app(WoxDarwinWindow *window, BOOL was_wox_frontmost) {
+  if (window == NULL) {
+    return;
+  }
+
+  if (was_wox_frontmost && window->restore_previous_app_on_hide) {
+    NSRunningApplication *previous_app = window->previous_active_app;
+    NSRunningApplication *current_app = [NSRunningApplication currentApplication];
+    if (previous_app != nil && previous_app != current_app && !previous_app.isTerminated) {
+      if (@available(macOS 14.0, *)) {
+        [previous_app activateWithOptions:0];
+      } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        [previous_app activateWithOptions:NSApplicationActivateIgnoringOtherApps];
+#pragma clang diagnostic pop
+      }
+    }
+  }
+  clear_previous_active_app(window);
+}
 
 // Resolve the compositor capture entry point dynamically because newer SDKs hide the declaration
 // even though supported Wox targets still expose it at runtime.
@@ -2147,6 +2199,7 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
       // Starting a new focus epoch is not a real focus loss.
       window->active = false;
     }
+    save_previous_active_app_if_needed(window);
     window->epoch++;
     atomic_fetch_add_explicit(&window->presentation_generation, 1, memory_order_relaxed);
     epoch = window->epoch;
@@ -2183,9 +2236,11 @@ int32_t wox_darwin_window_hide(WoxDarwinWindow *window) {
       result = -1;
       return;
     }
+    BOOL was_wox_frontmost = [NSApp isActive] || [[NSWorkspace sharedWorkspace] frontmostApplication] == [NSRunningApplication currentApplication];
     emit_focus(window, false);
     if (!window->closed) {
       hide_window_and_release_surfaces(window);
+      restore_previous_active_app(window, was_wox_frontmost);
     }
   });
   return result;
@@ -3258,6 +3313,7 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
     window->visible = false;
     window->active = false;
     window->context = 0;
+    clear_previous_active_app(window);
     if (was_active && context != 0) {
       woxGoDarwinFocus(context, epoch, 0);
     }
