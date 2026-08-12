@@ -413,8 +413,18 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 		queryWidth -= refinementWidth + accessoryGap
 	}
 	var queryIcon *woxui.Image
+	var queryIcons []*woxui.Image
 	if !snapshot.queryLoading && snapshot.glance == nil {
-		if image := a.imageForSize(snapshot.layout.Icon, physicalImageSize(int(snapshot.densityMetrics.scaled(32)), scale)); image != nil {
+		if len(snapshot.layout.ScopeIcons) > 0 {
+			for _, icon := range snapshot.layout.ScopeIcons {
+				if image := a.imageForSize(icon, physicalImageSize(int(snapshot.densityMetrics.scaled(32)), scale)); image != nil {
+					queryIcons = append(queryIcons, image)
+				}
+			}
+			if len(queryIcons) > 0 {
+				queryWidth -= launcherview.LauncherScopeIconsWidth(len(queryIcons), snapshot.densityMetrics.scale) + accessoryGap
+			}
+		} else if image := a.imageForSize(snapshot.layout.Icon, physicalImageSize(int(snapshot.densityMetrics.scaled(32)), scale)); image != nil {
 			queryIcon = image
 			queryWidth -= snapshot.densityMetrics.scaled(49) + accessoryGap
 		}
@@ -443,7 +453,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 		Width: width, Height: height, QueryBoxHeight: queryBoxHeight, QueryEditorHeight: queryEditorHeight, DensityScale: snapshot.densityMetrics.scale,
 		QueryWidth: queryWidth, QueryRadius: snapshot.palette.queryRadius, AppPadding: headerPadding, Theme: snapshot.palette.componentTheme(),
 		Query: a.queryViewProps(snapshot, queryWidth, queryEditorHeight, queryLineHeight), Refinement: refinement, RefinementWidth: refinementWidth,
-		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon,
+		Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon, Icons: queryIcons,
 		Loading: loading, LoadingWidth: loadingWidth, LoadingSize: loadingSize, LoadingColor: snapshot.palette.cursor,
 		OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {

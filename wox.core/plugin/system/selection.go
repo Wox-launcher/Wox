@@ -28,9 +28,7 @@ const selectionCommandPreview = "preview"
 
 const (
 	enableSpaceQuickLookSettingKey = "enableSpaceQuickLook"
-	// The trailing space makes Wox parse "preview" as a command instead of a
-	// search term for selection queries.
-	selectionQuickLookQueryText = "selection " + selectionCommandPreview + " "
+	selectionPluginID              = "d9e557ed-89bd-4b8b-bd64-2a7632cf3483"
 	// quickLookInstanceName is the named secondary launcher session owned by the
 	// Space Quick Look preview. It stays distinct from the selection hotkey
 	// session so the two never replace each other's window.
@@ -297,8 +295,13 @@ func (i *SelectionPlugin) triggerSpaceQuickLook() {
 		Query: common.PlainQuery{
 			QueryId:        uuid.NewString(),
 			QueryType:      plugin.QueryTypeSelection,
-			QueryText:      selectionQuickLookQueryText,
 			QuerySelection: selected,
+			QueryScope: common.QueryScope{
+				Plugins: []common.QueryScopePlugin{{
+					PluginID: selectionPluginID,
+					Command:  selectionCommandPreview,
+				}},
+			},
 		},
 		ShowApp: common.ShowContext{
 			HideQueryBox:        true,

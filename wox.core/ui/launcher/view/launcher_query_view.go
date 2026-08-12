@@ -1,6 +1,8 @@
 package view
 
 import (
+	"strconv"
+
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -102,10 +104,12 @@ type LauncherHeaderProps struct {
 	Glance            woxwidget.Widget
 	GlanceWidth       float32
 	Icon              *woxui.Image
-	Loading           bool
-	LoadingWidth      float32
-	LoadingSize       float32
-	LoadingColor      woxui.Color
+	// Icons stacks Scope plugin icons (usually 1-3). When set, Icon is unused.
+	Icons        []*woxui.Image
+	Loading      bool
+	LoadingWidth float32
+	LoadingSize  float32
+	LoadingColor woxui.Color
 	// OnDragStart starts a window drag when the pointer presses the header's
 	// empty padding around the query pill (e.g. above the input box).
 	OnDragStart func()
@@ -116,6 +120,17 @@ type launcherQueryLoadingProps struct {
 	Height float32
 	Size   float32
 	Color  woxui.Color
+}
+
+// LauncherScopeIconsWidth returns the full accessory slot used by a stacked scope icon group.
+func LauncherScopeIconsWidth(iconCount int, densityScale float32) float32 {
+	if iconCount <= 0 {
+		return 0
+	}
+	iconSize := scaledLauncherSize(30, densityScale)
+	overlap := scaledLauncherSize(14, densityScale)
+	rightPadding := scaledLauncherSize(19, densityScale)
+	return iconSize + float32(iconCount-1)*overlap + rightPadding
 }
 
 func (p launcherQueryLoadingProps) Equal(other launcherQueryLoadingProps) bool {
@@ -140,7 +155,35 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 			Width: props.GlanceWidth, Height: props.QueryBoxHeight, Vertical: 0.5, Child: props.Glance,
 		})
 	}
-	if props.Icon != nil {
+	if len(props.Icons) > 0 {
+		iconSize := scaledLauncherSize(30, props.DensityScale)
+		overlap := scaledLauncherSize(14, props.DensityScale)
+		iconRightPadding := scaledLauncherSize(19, props.DensityScale)
+		accessoryWidth := LauncherScopeIconsWidth(len(props.Icons), props.DensityScale)
+		stackWidth := accessoryWidth - iconRightPadding
+		iconContainerHeight := scaledLauncherSize(34, props.DensityScale)
+		stackChildren := make([]woxwidget.StackChild, 0, len(props.Icons))
+		for index, icon := range props.Icons {
+			if icon == nil {
+				continue
+			}
+			stackChildren = append(stackChildren, woxwidget.StackChild{
+				Left: float32(index) * overlap, Top: 0,
+				Child: woxwidget.Image{Source: icon, Width: iconSize, Height: iconSize},
+			})
+		}
+		children = append(children, woxwidget.Semantics{
+			Key: "launcher-query-scope-icons-key", AutomationID: "launcher.query.scope-icons", Role: woxui.AccessibilityRoleGroup,
+			Label: "Scoped plugins", Value: strconv.Itoa(len(stackChildren)), ReadOnly: true,
+			Child: woxwidget.Align{
+				Width: accessoryWidth, Height: props.QueryBoxHeight, Vertical: 0.5,
+				Child: woxwidget.Container{
+					Width: stackWidth, Height: iconContainerHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(2, props.DensityScale)},
+					Child: woxwidget.Stack{Width: stackWidth, Height: iconSize, Children: stackChildren},
+				},
+			},
+		})
+	} else if props.Icon != nil {
 		iconSize := scaledLauncherSize(30, props.DensityScale)
 		// Flutter centers the icon in a 68px accessory slot, leaving 19px after it.
 		iconRightPadding := scaledLauncherSize(19, props.DensityScale)

@@ -766,7 +766,7 @@ func (a *App) sendCurrentQuery() error {
 		_ = a.runOnUI("stop query loading after start failure", a.resetQueryLoadingLocked)
 		return err
 	}
-	if !preserveQuery && query.QueryText == "" && startPage == "mru" {
+	if !preserveQuery && query.QueryText == "" && len(query.QueryScope.Plugins) == 0 && startPage == "mru" {
 		return a.requestMRU()
 	}
 	return nil
@@ -794,7 +794,7 @@ func (a *App) shouldPreserveQueryOnShowLocked() bool {
 		if a.query.QueryType == "selection" {
 			return true
 		}
-		return a.query.QueryType == "input" && a.query.QueryText != ""
+		return a.query.QueryType == "input" && (a.query.QueryText != "" || len(a.query.QueryScope.Plugins) > 0)
 	}
 	return false
 }
@@ -1268,6 +1268,16 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 		}
 	}
 	previousText := a.editor.State().Text
+	if event.Down && !event.Composing && event.Key == woxui.KeyBackspace && event.Modifiers == 0 &&
+		a.isPrimary && !a.show.HideQueryBox && previousText == "" && len(a.query.QueryScope.Plugins) > 0 {
+		a.clearQueryScopeLocked()
+		_ = a.window.Invalidate()
+		a.reconcileSelectedPreview()
+		if err := a.sendCurrentQuery(); err != nil {
+			log.Printf("send query after clearing scope: %v", err)
+		}
+		return true
+	}
 	textHandled, textChanged := handleQueryEditorKey(a.editor, event)
 	if textChanged {
 		a.applyQueryTextChangeLocked(a.editor.State().Text)
@@ -1324,6 +1334,22 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 		return false
 	}
 	return false
+}
+
+// clearQueryScopeLocked exits plugin-scoped query mode on the primary launcher.
+func (a *App) clearQueryScopeLocked() {
+	a.query.QueryScope = queryScope{}
+	a.query.QueryRefinements = map[string]string{}
+	a.refinements = nil
+	a.refinementsSectionRevision++
+	a.refinementOpen = false
+	a.refinementScope = ""
+	a.layout = queryLayout{}
+	a.query.QueryID = newID()
+	a.queryContext = queryContext{}
+	a.queryContextKnown = false
+	a.beginQueryTransitionLocked(false)
+	a.stopGlanceLocked(false)
 }
 
 func handleQueryEditorKey(editor *woxui.TextEditor, event woxui.KeyEvent) (bool, bool) {
@@ -1545,8 +1571,18 @@ type plainQuery struct {
 	QueryType        string            `json:"QueryType"`
 	QueryText        string            `json:"QueryText"`
 	QuerySelection   selection         `json:"QuerySelection"`
+	QueryScope       queryScope        `json:"QueryScope"`
 	QueryRefinements map[string]string `json:"QueryRefinements"`
 	ContextData      map[string]string `json:"ContextData"`
+}
+
+type queryScope struct {
+	Plugins []queryScopePlugin `json:"Plugins,omitempty"`
+}
+
+type queryScopePlugin struct {
+	PluginID string `json:"PluginId"`
+	Command  string `json:"Command,omitempty"`
 }
 
 type selection struct {
@@ -1561,6 +1597,7 @@ func newInputQuery(text string) plainQuery {
 		QueryType:        "input",
 		QueryText:        text,
 		QuerySelection:   selection{FilePaths: []string{}},
+		QueryScope:       queryScope{},
 		QueryRefinements: map[string]string{},
 		ContextData:      map[string]string{},
 	}
@@ -1623,6 +1660,7 @@ type queryContext struct {
 
 type queryLayout struct {
 	Icon                    woxImage    `json:"Icon"`
+	ScopeIcons              []woxImage  `json:"ScopeIcons,omitempty"`
 	ResultPreviewWidthRatio *float64    `json:"ResultPreviewWidthRatio"`
 	GridLayout              *gridLayout `json:"GridLayout"`
 	ChatMode                bool        `json:"ChatMode"`

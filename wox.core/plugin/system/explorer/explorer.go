@@ -51,9 +51,9 @@ const (
 	enableTypeToSearchSettingKey = "enableTypeToSearch"
 	quickJumpPathsSettingKey     = "quickJumpPaths"
 
+	explorerPluginID                = "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e"
 	explorerCommandAdd              = "add"
 	explorerDialogHintOverlayName   = "explorer_dialog_hint"
-	explorerDialogHintQueryText     = "explorer "
 	explorerDialogHintVerticalInset = 40
 	explorerDialogPathCacheDuration = 30 * time.Second
 )
@@ -1005,18 +1005,20 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			if pending == "" {
 				return
 			}
-			queryText := "explorer " + pending
 			if explorerShow == nil {
 				return
 			}
-			c.typeToSearchDebugLog(localCtx, "openExplorerInstance %q", queryText)
+			c.typeToSearchDebugLog(localCtx, "openExplorerInstance %q", pending)
 			plugin.GetPluginManager().GetUI().OpenWoxInstance(localCtx, common.OpenWoxInstanceRequest{
 				Role:         common.WoxInstanceRoleSecondary,
 				InstanceName: string(common.ShowSourceExplorer),
 				Query: common.PlainQuery{
 					QueryId:   uuid.NewString(),
 					QueryType: plugin.QueryTypeInput,
-					QueryText: queryText,
+					QueryText: pending,
+					QueryScope: common.QueryScope{
+						Plugins: []common.QueryScopePlugin{{PluginID: explorerPluginID}},
+					},
 				},
 				ShowApp: *explorerShow,
 			})
@@ -1064,7 +1066,9 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				Query: common.PlainQuery{
 					QueryId:   uuid.NewString(),
 					QueryType: plugin.QueryTypeInput,
-					QueryText: explorerDialogHintQueryText,
+					QueryScope: common.QueryScope{
+						Plugins: []common.QueryScopePlugin{{PluginID: explorerPluginID}},
+					},
 				},
 				ShowApp: showContext,
 			})

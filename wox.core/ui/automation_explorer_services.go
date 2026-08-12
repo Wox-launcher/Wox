@@ -19,9 +19,8 @@ import (
 func (s *CoreServices) AutomationOpenExplorerQuery(ctx context.Context, sessionID, query string) error {
 	ctx = uiServiceContext(ctx, sessionID)
 	query = strings.TrimSpace(query)
-	if query == "" {
-		query = "explorer "
-	}
+	query = strings.TrimPrefix(query, "explorer ")
+	query = strings.TrimSpace(query)
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	theme := GetUIManager().GetCurrentTheme(ctx)
@@ -46,6 +45,7 @@ func (s *CoreServices) AutomationOpenExplorerQuery(ctx context.Context, sessionI
 		WindowPositionHeight: initialWindowHeight,
 		WindowWidth:          windowWidth,
 	}
+	const explorerPluginID = "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e"
 	plugin.GetPluginManager().GetUI().OpenWoxInstance(ctx, common.OpenWoxInstanceRequest{
 		Role:         common.WoxInstanceRoleSecondary,
 		InstanceName: string(common.ShowSourceExplorer),
@@ -53,6 +53,9 @@ func (s *CoreServices) AutomationOpenExplorerQuery(ctx context.Context, sessionI
 			QueryId:   uuid.NewString(),
 			QueryType: plugin.QueryTypeInput,
 			QueryText: query,
+			QueryScope: common.QueryScope{
+				Plugins: []common.QueryScopePlugin{{PluginID: explorerPluginID}},
+			},
 		},
 		ShowApp: showContext,
 	})

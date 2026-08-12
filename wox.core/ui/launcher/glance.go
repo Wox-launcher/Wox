@@ -73,7 +73,10 @@ func (a *App) glanceEligibleLocked() bool {
 	if !a.visible || !a.generalSettings.Data().EnableGlance || primary.PluginID == "" || primary.GlanceID == "" {
 		return false
 	}
-	if a.query.QueryType != "input" || a.layout.Icon.ImageData != "" {
+	if a.query.QueryType != "input" || a.layout.Icon.ImageData != "" || len(a.layout.ScopeIcons) > 0 {
+		return false
+	}
+	if len(a.query.QueryScope.Plugins) > 0 {
 		return false
 	}
 	if a.query.QueryText == "" {

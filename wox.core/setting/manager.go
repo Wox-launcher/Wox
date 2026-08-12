@@ -158,9 +158,12 @@ func (m *Manager) AddQueryHistory(ctx context.Context, query common.PlainQuery) 
 		Timestamp: util.GetSystemTimestamp(),
 	}
 
-	// Remove duplicate if exists (same query text)
+	// Remove duplicate if exists (same type/text/selection/scope identity)
 	histories = lo.Filter(histories, func(item QueryHistory, index int) bool {
-		return !item.Query.IsEmpty() && item.Query.QueryText != query.QueryText
+		if item.Query.IsEmpty() {
+			return false
+		}
+		return !plainQueryHistoryEqual(item.Query, query)
 	})
 
 	// Add new history at the end
@@ -172,6 +175,16 @@ func (m *Manager) AddQueryHistory(ctx context.Context, query common.PlainQuery) 
 	}
 
 	m.woxSetting.QueryHistories.Set(histories)
+}
+
+func plainQueryHistoryEqual(left, right common.PlainQuery) bool {
+	if left.QueryType != right.QueryType || left.QueryText != right.QueryText {
+		return false
+	}
+	if left.QuerySelection.String() != right.QuerySelection.String() {
+		return false
+	}
+	return left.QueryScope.Identity() == right.QueryScope.Identity()
 }
 
 // GetQueryCompletionFeedbacks returns accepted inline completion feedback for ranking.

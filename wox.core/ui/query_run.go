@@ -57,6 +57,10 @@ type queryRun struct {
 }
 
 func newQueryRun(ctx context.Context, request contract.QueryRequest, view contract.QueryView, query plugin.Query, ownerPlugin *plugin.Instance) *queryRun {
+	latest := plugin.QueryResponseUI{
+		Context:    plugin.BuildQueryContext(query, ownerPlugin),
+		ScopeIcons: plugin.GetPluginManager().BuildScopeIcons(ctx, query),
+	}
 	return &queryRun{
 		ctx:                 ctx,
 		request:             request,
@@ -66,9 +70,7 @@ func newQueryRun(ctx context.Context, request contract.QueryRequest, view contra
 		query:               query,
 		ownerPlugin:         ownerPlugin,
 		acceptedResultIdSet: map[string]struct{}{},
-		latestResponse: plugin.QueryResponseUI{
-			Context: plugin.BuildQueryContext(query, ownerPlugin),
-		},
+		latestResponse:      latest,
 	}
 }
 
@@ -183,15 +185,16 @@ func (r *queryRun) addResponse(response plugin.QueryResponseUI) {
 		tracker.Log(r.ctx)
 	}
 
-	// QueryContext is backend-owned and remains valid for both global and plugin
-	// queries. Refinements and layout stay single-plugin only because global
-	// queries aggregate many plugins and one plugin should not control the whole
-	// result surface.
-	r.latestResponse.Context = response.Context
+	// QueryContext and ScopeIcons are run-owned because per-plugin responses must
+	// not turn a multi-plugin scope into whichever plugin happened to reply last.
+	// Refinements and layout stay single-plugin only because global or multi-scope
+	// queries aggregate many plugins and one plugin should not control the surface.
+	scopeIcons := r.latestResponse.ScopeIcons
 	if r.ownerPlugin != nil {
 		r.latestResponse.Refinements = response.Refinements
 		r.latestResponse.Layout = response.Layout
 	}
+	r.latestResponse.ScopeIcons = scopeIcons
 	if len(response.Results) == 0 {
 		return
 	}
@@ -374,6 +377,7 @@ func (r *queryRun) flush(results []plugin.QueryResultUI, reason string) {
 		Refinements:         r.latestResponse.Refinements,
 		Layout:              r.latestResponse.Layout,
 		Context:             r.latestResponse.Context,
+		ScopeIcons:          r.latestResponse.ScopeIcons,
 		QueryStartTimestamp: r.startTimestamp,
 	}, IsFinal: isFinal})
 	if tracker := timetracking.New("send_ui_response"); tracker.Enabled() {

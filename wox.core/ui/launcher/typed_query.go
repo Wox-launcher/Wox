@@ -39,9 +39,33 @@ func toCorePlainQuery(query plainQuery) common.PlainQuery {
 			Text:      query.QuerySelection.Text,
 			FilePaths: append([]string(nil), query.QuerySelection.FilePaths...),
 		},
+		QueryScope:       toCoreQueryScope(query.QueryScope),
 		QueryRefinements: cloneStringMap(query.QueryRefinements),
 		ContextData:      common.ContextData(cloneStringMap(query.ContextData)),
 	}
+}
+
+func toCoreQueryScope(scope queryScope) common.QueryScope {
+	if len(scope.Plugins) == 0 {
+		return common.QueryScope{}
+	}
+	plugins := make([]common.QueryScopePlugin, len(scope.Plugins))
+	for index, item := range scope.Plugins {
+		plugins[index] = common.QueryScopePlugin{PluginID: item.PluginID, Command: item.Command}
+	}
+	return common.QueryScope{Plugins: plugins}
+}
+
+func fromCoreQueryScope(scope common.QueryScope) queryScope {
+	cloned := scope.Clone()
+	if len(cloned.Plugins) == 0 {
+		return queryScope{}
+	}
+	plugins := make([]queryScopePlugin, len(cloned.Plugins))
+	for index, item := range cloned.Plugins {
+		plugins[index] = queryScopePlugin{PluginID: item.PluginID, Command: item.Command}
+	}
+	return queryScope{Plugins: plugins}
 }
 
 // ApplyQueryResponse updates launcher rendering from one typed core snapshot.
@@ -54,6 +78,12 @@ func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryRespo
 		results[index] = fromCoreQueryResult(response.Response.Results[index])
 	}
 	layout := fromCoreQueryLayout(response.Response.Layout)
+	if len(response.Response.ScopeIcons) > 0 {
+		layout.ScopeIcons = make([]woxImage, 0, len(response.Response.ScopeIcons))
+		for _, icon := range response.Response.ScopeIcons {
+			layout.ScopeIcons = append(layout.ScopeIcons, fromCoreImage(icon))
+		}
+	}
 	refinements := fromCoreQueryRefinements(response.Response.Refinements)
 	queryContext := queryContext{IsGlobalQuery: response.Response.Context.IsGlobalQuery, PluginID: response.Response.Context.PluginId}
 	if err := a.runOnUI("apply query response", func() {

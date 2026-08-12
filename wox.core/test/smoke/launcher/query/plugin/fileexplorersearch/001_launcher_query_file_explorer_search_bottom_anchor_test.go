@@ -24,7 +24,7 @@ const explorerInstance = string(common.ShowSourceExplorer)
 // Evidence: native window bottom (Y+Height) stays within 1px across resizes and re-shows.
 func Test001LauncherQueryFileExplorerSearchBottomAnchor(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
-		if err := client.OpenExplorerQuery(ctx, "explorer a"); err != nil {
+		if err := client.OpenExplorerQuery(ctx, "a"); err != nil {
 			t.Fatalf("open explorer query: %v", err)
 		}
 		if _, err := client.WaitForWindowState(ctx, explorerInstance, func(state automationdriver.WindowState) bool {
@@ -36,8 +36,9 @@ func Test001LauncherQueryFileExplorerSearchBottomAnchor(t *testing.T) {
 			t.Fatalf("focus explorer instance: %v", err)
 		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			node, found := automationdriver.Find(snapshot, "launcher.query.input")
-			return found && node.Value == "explorer a"
+			input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
+			scopeIcons, scopeFound := automationdriver.Find(snapshot, "launcher.query.scope-icons")
+			return inputFound && input.Value == "a" && scopeFound && scopeIcons.Value == "1"
 		}); err != nil {
 			t.Fatalf("wait for explorer query input: %v", err)
 		}
@@ -48,26 +49,28 @@ func Test001LauncherQueryFileExplorerSearchBottomAnchor(t *testing.T) {
 		}
 		initialBottom := initialBounds.Y + initialBounds.Height
 
-		for _, query := range []string{"explorer ab", "explorer abc", "1+1", "explorer a", "a", "explorer smoke"} {
+		for _, query := range []string{"ab", "abc", "1+1", "a", "smoke"} {
 			if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, query); err != nil {
 				t.Fatalf("enter explorer query %q: %v", query, err)
 			}
 			if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-				input, found := automationdriver.Find(snapshot, "launcher.query.input")
+				input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
+				scopeIcons, scopeFound := automationdriver.Find(snapshot, "launcher.query.scope-icons")
 				results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
-				return found && input.Value == query && (!resultsFound || results.Value == "complete")
+				return inputFound && input.Value == query && scopeFound && scopeIcons.Value == "1" && (!resultsFound || results.Value == "complete")
 			}); err != nil {
 				t.Fatalf("wait for explorer query %q: %v", query, err)
 			}
 			assertBottomEdgeStable(t, ctx, client, initialBottom)
 		}
 
-		if err := client.OpenExplorerQuery(ctx, "explorer reanchor"); err != nil {
+		if err := client.OpenExplorerQuery(ctx, "reanchor"); err != nil {
 			t.Fatalf("reopen explorer query: %v", err)
 		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			node, found := automationdriver.Find(snapshot, "launcher.query.input")
-			return found && node.Value == "explorer reanchor"
+			input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
+			scopeIcons, scopeFound := automationdriver.Find(snapshot, "launcher.query.scope-icons")
+			return inputFound && input.Value == "reanchor" && scopeFound && scopeIcons.Value == "1"
 		}); err != nil {
 			t.Fatalf("wait for reopened explorer query: %v", err)
 		}

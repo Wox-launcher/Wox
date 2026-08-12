@@ -1177,6 +1177,16 @@ func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance,
 		return false
 	}
 
+	if query.HasScope() {
+		if _, ok := query.Scope.Find(pluginInstance.Metadata.Id); !ok {
+			return false
+		}
+		if query.Type == QueryTypeSelection {
+			return pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQuerySelection)
+		}
+		return query.Type == QueryTypeInput
+	}
+
 	if query.Type == QueryTypeSelection {
 		// If the selection query carries a trigger keyword (parsed from QueryText),
 		// only route it to the plugin that owns that keyword, so users can configure
@@ -1196,6 +1206,20 @@ func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance,
 	}
 
 	return true
+}
+
+// applyScopeForPlugin returns a per-plugin query copy with Command/TriggerKeyword from Scope.
+func (m *Manager) applyScopeForPlugin(query Query, pluginInstance *Instance) Query {
+	if !query.HasScope() || pluginInstance == nil {
+		return query
+	}
+	pluginQuery := query
+	pluginQuery.Scope = query.Scope.Clone()
+	if scoped, ok := query.Scope.Find(pluginInstance.Metadata.Id); ok {
+		pluginQuery.Command = scoped.Command
+	}
+	pluginQuery.TriggerKeyword = pluginInstance.PrimaryTriggerKeyword()
+	return pluginQuery
 }
 
 // buildMetadataBackedQueryLayout converts the static plugin metadata that used
@@ -1262,6 +1286,7 @@ func (m *Manager) mergeQueryLayouts(metadataLayout QueryLayout, responseLayout Q
 }
 
 func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) (response QueryResponse) {
+	query = m.applyScopeForPlugin(query, pluginInstance)
 	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
 	queryForPluginStart := util.GetSystemTimestamp()
 	queryForPluginTimingStart := time.Now()
@@ -3532,9 +3557,8 @@ func (m *Manager) buildQueryPlan(ctx context.Context, query Query) (jobs []query
 	planStart := time.Now()
 	maxCheckUs := int64(0)
 	maxCheckPlugin := ""
-	instances := m.pluginInstancesSnapshot()
-	jobs = make([]queryPluginJob, 0, len(instances))
-	for _, pluginInstance := range instances {
+
+	appendJob := func(pluginInstance *Instance) {
 		checkStart := time.Now()
 		canOperate := m.canOperateQuery(ctx, pluginInstance, query)
 		checkUs := time.Since(checkStart).Microseconds()
@@ -3543,7 +3567,7 @@ func (m *Manager) buildQueryPlan(ctx context.Context, query Query) (jobs []query
 			maxCheckPlugin = queryDiagnosticPluginLabel(pluginInstance)
 		}
 		if !canOperate {
-			continue
+			return
 		}
 
 		supportsDebounce := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureDebounce)
@@ -3566,10 +3590,31 @@ func (m *Manager) buildQueryPlan(ctx context.Context, query Query) (jobs []query
 		jobs = append(jobs, job)
 	}
 
+	checkedCount := 0
+	if query.HasScope() {
+		deduped := query.Scope.Deduplicate()
+		jobs = make([]queryPluginJob, 0, len(deduped.Plugins))
+		checkedCount = len(deduped.Plugins)
+		for _, item := range deduped.Plugins {
+			pluginInstance := m.getPluginInstance(item.PluginID)
+			if pluginInstance == nil {
+				continue
+			}
+			appendJob(pluginInstance)
+		}
+	} else {
+		instances := m.pluginInstancesSnapshot()
+		jobs = make([]queryPluginJob, 0, len(instances))
+		checkedCount = len(instances)
+		for _, pluginInstance := range instances {
+			appendJob(pluginInstance)
+		}
+	}
+
 	if tracker := timetracking.New("query_plan"); tracker.Enabled() {
 		tracker.SetRawString("queryId", query.Id)
 		tracker.SetRawString("query", query.String())
-		tracker.SetInt("checked", len(instances))
+		tracker.SetInt("checked", checkedCount)
 		tracker.SetInt("scheduled", len(jobs))
 		tracker.SetInt("immediate", immediateCount)
 		tracker.SetInt("debounced", debouncedCount)
@@ -3946,6 +3991,45 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 	if contextData == nil {
 		contextData = common.ContextData{}
 	}
+	scope := plainQuery.QueryScope.NormalizeForRouting()
+
+	attachEnv := func(query *Query) {
+		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
+		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
+		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
+		query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
+		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
+		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
+		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
+	}
+
+	resolveScopedOwner := func(query Query) *Instance {
+		owner := ScopeOwnerPlugin(query, m.getPluginInstance)
+		if owner == nil || !m.canOperateQuery(ctx, owner, query) {
+			return nil
+		}
+		return owner
+	}
+
+	if !scope.IsEmpty() {
+		query := Query{
+			Id:          plainQuery.QueryId,
+			SessionId:   util.GetContextSessionId(ctx),
+			Type:        plainQuery.QueryType,
+			RawQuery:    plainQuery.QueryText,
+			Search:      plainQuery.QueryText,
+			Selection:   plainQuery.QuerySelection,
+			Refinements: refinements,
+			ContextData: contextData,
+			Scope:       scope,
+		}
+		if query.Type == "" {
+			query.Type = QueryTypeInput
+		}
+		attachEnv(&query)
+		owner := resolveScopedOwner(query)
+		return query, owner, nil
+	}
 
 	if plainQuery.QueryType == QueryTypeInput {
 		newQuery := plainQuery.QueryText
@@ -3966,13 +4050,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		if conflictErr := m.newTriggerKeywordConflictErrorIfNeeded(ctx, query); conflictErr != nil {
 			return query, nil, conflictErr
 		}
-		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
-		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
-		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
-		query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
-		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
-		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
-		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
+		attachEnv(&query)
 		return query, instance, nil
 	}
 
@@ -3995,14 +4073,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		if conflictErr := m.newTriggerKeywordConflictErrorIfNeeded(ctx, query); conflictErr != nil {
 			return query, nil, conflictErr
 		}
-		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
-		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
-		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
-		query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
-		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
-		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
-		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
-
+		attachEnv(&query)
 		return query, instance, nil
 	}
 
@@ -4205,11 +4276,7 @@ func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResul
 
 	// Add to query history only if query is not empty (skip empty queries like MRU)
 	if resultCache.Query.RawQuery != "" {
-		plainQuery := common.PlainQuery{
-			QueryType: resultCache.Query.Type,
-			QueryText: resultCache.Query.RawQuery,
-		}
-		setting.GetSettingManager().AddQueryHistory(ctx, plainQuery)
+		setting.GetSettingManager().AddQueryHistory(ctx, plainQueryForHistory(resultCache.Query))
 	}
 }
 
@@ -4517,6 +4584,32 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 	}
 
 	return m.BuildQueryResultsSnapshot(query.SessionId, query.Id)
+}
+
+// BuildScopeIcons resolves core-owned query-box icons from QueryScope order.
+// Missing or unloadable plugins are skipped so a partial allowlist still shows icons.
+func (m *Manager) BuildScopeIcons(ctx context.Context, query Query) []common.WoxImage {
+	if !query.HasScope() {
+		return nil
+	}
+	deduped := query.Scope.Deduplicate()
+	icons := make([]common.WoxImage, 0, len(deduped.Plugins))
+	for _, item := range deduped.Plugins {
+		pluginInstance := m.getPluginInstance(item.PluginID)
+		if pluginInstance == nil {
+			continue
+		}
+		iconImg, parseErr := common.ParseWoxImage(pluginInstance.Metadata.Icon)
+		if parseErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to parse scope icon for %s: %s", pluginInstance.Metadata.Id, parseErr.Error()))
+			continue
+		}
+		icons = append(icons, common.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory))
+		if len(icons) >= 3 {
+			break
+		}
+	}
+	return icons
 }
 
 // getPluginInstance finds a plugin instance by ID
@@ -4951,7 +5044,9 @@ func (m *Manager) HandleQueryLifecycle(ctx context.Context, query Query, pluginI
 	}
 
 	nextPluginId := ""
-	if pluginInstance != nil && query.Type == QueryTypeInput && query.TriggerKeyword != "" {
+	singleScopeOwner := query.HasScope() && len(query.Scope.Deduplicate().Plugins) == 1
+	traditionalKeywordOwner := query.Type == QueryTypeInput && query.TriggerKeyword != ""
+	if pluginInstance != nil && (singleScopeOwner || traditionalKeywordOwner) {
 		nextPluginId = pluginInstance.Metadata.Id
 	}
 

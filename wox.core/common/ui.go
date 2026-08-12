@@ -20,6 +20,10 @@ type PlainQuery struct {
 	QueryType      string // see plugin.QueryType
 	QueryText      string
 	QuerySelection selection.Selection
+	// QueryScope pins routing to an allowlist of plugins. Empty means default
+	// keyword / selection-feature routing. Orthogonal to QueryType.
+	// Core-internal only; not exposed through the public plugin SDK.
+	QueryScope QueryScope
 	// QueryRefinements carries selected secondary controls from the UI. The
 	// public transport stays a simple string map; multi-select refinements use a
 	// comma-separated value that plugins can decode with shared helpers.
@@ -52,15 +56,21 @@ type SettingWindowContext struct {
 }
 
 func (c PlainQuery) IsEmpty() bool {
-	return c.QueryText == "" && c.QuerySelection.String() == ""
+	return c.QueryText == "" && c.QuerySelection.String() == "" && c.QueryScope.IsEmpty()
 }
 
 func (c PlainQuery) String() string {
 	if c.QueryText != "" {
 		return c.QueryText
 	}
-
-	return c.QuerySelection.String()
+	if selectionText := c.QuerySelection.String(); selectionText != "" {
+		return selectionText
+	}
+	// Empty-text scoped input still needs a history/display identity.
+	if !c.QueryScope.IsEmpty() {
+		return c.QueryScope.Identity()
+	}
+	return ""
 }
 
 // ui methods that can be invoked by plugins

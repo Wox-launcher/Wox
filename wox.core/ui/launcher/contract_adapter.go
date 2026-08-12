@@ -89,6 +89,7 @@ func fromCorePlainQuery(query common.PlainQuery) plainQuery {
 			Text:      query.QuerySelection.Text,
 			FilePaths: append([]string(nil), query.QuerySelection.FilePaths...),
 		},
+		QueryScope:       fromCoreQueryScope(query.QueryScope),
 		QueryRefinements: cloneStringMap(query.QueryRefinements),
 		ContextData:      cloneStringMap(map[string]string(query.ContextData)),
 	}

@@ -45,6 +45,35 @@ func TestAutoQueryHistoryRecorderRecordsStableQueryForCompletion(t *testing.T) {
 	}
 }
 
+func TestAutoQueryHistoryRecorderPreservesScope(t *testing.T) {
+	recorded := make(chan common.PlainQuery, 1)
+	recorder := newAutoQueryHistoryRecorder(10*time.Millisecond, func(ctx context.Context, query common.PlainQuery) {
+		recorded <- query
+	})
+	query := Query{
+		Id:        "scoped",
+		SessionId: "session",
+		Type:      QueryTypeInput,
+		RawQuery:  "desktop",
+		Scope:     common.QueryScope{Plugins: []common.QueryScopePlugin{{PluginID: "explorer"}}},
+	}
+	recorder.beginQuery(query)
+	recorder.schedule(context.Background(), query, QueryResponse{
+		Results:                []QueryResult{{Title: "Desktop"}},
+		AutoRecordQueryHistory: true,
+	})
+
+	var history common.PlainQuery
+	select {
+	case history = <-recorded:
+	case <-time.After(time.Second):
+		t.Fatal("scoped display query was not recorded")
+	}
+	if history.QueryScope.Identity() != "explorer" {
+		t.Fatalf("recorded scope = %#v", history.QueryScope)
+	}
+}
+
 func TestAutoQueryHistoryRecorderCancelsOlderQuery(t *testing.T) {
 	recorded := make(chan common.PlainQuery, 1)
 	recorder := newAutoQueryHistoryRecorder(20*time.Millisecond, func(ctx context.Context, query common.PlainQuery) {

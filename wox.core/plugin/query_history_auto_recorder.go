@@ -62,7 +62,7 @@ func (r *autoQueryHistoryRecorder) schedule(ctx context.Context, query Query, re
 		current.timer.Stop()
 	}
 
-	plainQuery := common.PlainQuery{QueryType: query.Type, QueryText: query.RawQuery}
+	plainQuery := plainQueryForHistory(query)
 	var timer *time.Timer
 	timer = time.AfterFunc(r.delay, func() {
 		r.mu.Lock()
@@ -80,4 +80,13 @@ func (r *autoQueryHistoryRecorder) schedule(ctx context.Context, query Query, re
 	})
 	current.timer = timer
 	r.mu.Unlock()
+}
+
+// plainQueryForHistory preserves the routing identity needed to restore a query.
+func plainQueryForHistory(query Query) common.PlainQuery {
+	return common.PlainQuery{
+		QueryType:  query.Type,
+		QueryText:  query.RawQuery,
+		QueryScope: query.Scope.Clone(),
+	}
 }

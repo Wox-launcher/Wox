@@ -138,6 +138,31 @@ func TestLauncherHeaderUsesAlignmentForVerticalAccessoryPlacement(t *testing.T) 
 	}
 }
 
+func TestLauncherScopeIconsWidthIncludesRightPadding(t *testing.T) {
+	if got := LauncherScopeIconsWidth(1, 1); got != 49 {
+		t.Fatalf("single scope icon width = %.0f, want 49", got)
+	}
+	if got := LauncherScopeIconsWidth(3, 1); got != 77 {
+		t.Fatalf("three scope icons width = %.0f, want 77", got)
+	}
+}
+
+func TestLauncherHeaderExposesScopeIconGroup(t *testing.T) {
+	header := LauncherHeaderView(LauncherHeaderProps{
+		Width: 500, Height: 50, QueryBoxHeight: 50, QueryWidth: 400,
+		Icons: []*woxui.Image{{}, {}},
+	}).(woxwidget.Container)
+	row := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	scopeIcons := row.Children[1].(woxwidget.Semantics)
+	if scopeIcons.AutomationID != "launcher.query.scope-icons" || scopeIcons.Role != woxui.AccessibilityRoleGroup || scopeIcons.Value != "2" || !scopeIcons.ReadOnly {
+		t.Fatalf("scope icon semantics = id %q role %q value %q readonly %v", scopeIcons.AutomationID, scopeIcons.Role, scopeIcons.Value, scopeIcons.ReadOnly)
+	}
+	alignment := scopeIcons.Child.(woxwidget.Align)
+	if alignment.Width != LauncherScopeIconsWidth(2, 1) || alignment.Vertical != 0.5 {
+		t.Fatalf("scope icon alignment = width %.0f vertical %.1f", alignment.Width, alignment.Vertical)
+	}
+}
+
 func TestLauncherHeaderAppliesBottomAppPaddingForBottomQueryChrome(t *testing.T) {
 	header := LauncherHeaderView(LauncherHeaderProps{
 		Width: 400, Height: 65, QueryBoxHeight: 55, QueryWidth: 300,

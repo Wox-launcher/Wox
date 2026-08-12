@@ -105,10 +105,21 @@ type Query struct {
 	// not rendered by the UI and is intended for plugin handoffs such as a shell
 	// working directory.
 	ContextData common.ContextData
+
+	// Scope pins routing to an allowlist of plugins. Empty means default routing.
+	// Orthogonal to Type; when set, Search is the visible QueryText without a
+	// trigger-keyword prefix.
+	// Core-internal only; not forwarded to Node/Python plugin hosts or SDKs.
+	Scope common.QueryScope
 }
 
 func (q *Query) IsGlobalQuery() bool {
-	return q.Type == QueryTypeInput && q.TriggerKeyword == ""
+	return q.Type == QueryTypeInput && q.TriggerKeyword == "" && q.Scope.IsEmpty()
+}
+
+// HasScope reports whether this query carries an explicit plugin allowlist.
+func (q *Query) HasScope() bool {
+	return !q.Scope.IsEmpty()
 }
 
 func (q *Query) String() string {
@@ -185,6 +196,18 @@ func BuildQueryContext(query Query, queryPlugin *Instance) QueryContext {
 		queryContext.PluginId = queryPlugin.Metadata.Id
 	}
 	return queryContext
+}
+
+// ScopeOwnerPlugin returns the scoped plugin instance when exactly one allowlist entry exists.
+func ScopeOwnerPlugin(query Query, resolve func(pluginID string) *Instance) *Instance {
+	deduped := query.Scope.Deduplicate()
+	if len(deduped.Plugins) != 1 {
+		return nil
+	}
+	if resolve == nil {
+		return nil
+	}
+	return resolve(deduped.Plugins[0].PluginID)
 }
 
 // QueryRefinement describes one query-scoped control such as type filters or
@@ -403,10 +426,13 @@ type QueryResultUI struct {
 }
 
 type QueryResponseUI struct {
-	Results             []QueryResultUI
-	Refinements         []QueryRefinement
-	Layout              QueryLayout
-	Context             QueryContext
+	Results     []QueryResultUI
+	Refinements []QueryRefinement
+	Layout      QueryLayout
+	Context     QueryContext
+	// ScopeIcons is core-owned and set from QueryScope before plugin responses.
+	// It is not part of the public plugin QueryLayout API.
+	ScopeIcons          []common.WoxImage
 	QueryStartTimestamp int64 // end-to-end query start timestamp, preferably from UI request send time
 }
 

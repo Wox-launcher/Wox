@@ -109,6 +109,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 
 	// Send both Id and QueryId while hosts move to QueryResponse. Older host
 	// code looked for QueryId, while the Go model field is Id.
+	// QueryScope stays core-internal and is not forwarded to external plugin hosts.
 	rawResults, queryErr := w.websocketHost.invokeMethod(ctx, w.metadata, "query", map[string]string{
 		"Id":             query.Id,
 		"QueryId":        query.Id,

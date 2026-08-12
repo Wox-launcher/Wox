@@ -466,7 +466,7 @@ func runUIQuery(ctx context.Context, request contract.QueryRequest, view contrac
 
 	logger.Info(ctx, fmt.Sprintf("start to handle query changed: %s, queryId: %s", changedQuery.String(), queryId))
 
-	if changedQuery.QueryType == plugin.QueryTypeInput && changedQuery.QueryText == "" {
+	if changedQuery.QueryType == plugin.QueryTypeInput && changedQuery.QueryText == "" && changedQuery.QueryScope.IsEmpty() {
 		emptyInputQuery := plugin.Query{
 			Id:        queryId,
 			SessionId: sessionId,
@@ -484,7 +484,7 @@ func runUIQuery(ctx context.Context, request contract.QueryRequest, view contrac
 		}, IsFinal: true})
 		return
 	}
-	if changedQuery.QueryType == plugin.QueryTypeSelection && changedQuery.QuerySelection.String() == "" {
+	if changedQuery.QueryType == plugin.QueryTypeSelection && changedQuery.QuerySelection.String() == "" && changedQuery.QueryScope.IsEmpty() {
 		plugin.GetPluginManager().HandleQueryLifecycle(ctx, plugin.Query{
 			Id:        queryId,
 			SessionId: sessionId,
@@ -517,7 +517,7 @@ func runUIQuery(ctx context.Context, request contract.QueryRequest, view contrac
 
 	completionHintScheduleStart := util.GetSystemTimestamp()
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if !request.SkipCompletionHint && woxSetting.EnableQueryCompletionHint.Get() {
+	if !request.SkipCompletionHint && woxSetting.EnableQueryCompletionHint.Get() && changedQuery.QueryScope.IsEmpty() {
 		util.Go(ctx, "query completion hint", func() {
 			view.ApplyQueryCompletionHint(
 				ctx,

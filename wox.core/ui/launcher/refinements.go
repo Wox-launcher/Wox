@@ -129,7 +129,7 @@ func (a *App) applyRefinementsLocked(refinements []queryRefinement) {
 	a.refinements = valid
 	a.refinementsSectionRevision++
 	a.query.QueryRefinements = values
-	a.refinementScope = refinementQueryScope(a.query.QueryText)
+	a.refinementScope = a.queryScopeIdentityLocked(a.query.QueryText)
 	if len(valid) == 0 {
 		a.refinementOpen = false
 	}
@@ -139,7 +139,7 @@ func (a *App) applyRefinementsLocked(refinements []queryRefinement) {
 func (a *App) applyQueryTextChangeLocked(text string) {
 	a.canRecallHistory = false
 	a.reuseCompletionHintLocked(text)
-	nextScope := refinementQueryScope(text)
+	nextScope := a.queryScopeIdentityLocked(text)
 	preservePluginLayout := a.shouldPreservePluginLayoutLocked(text)
 	if a.refinementScope != "" && nextScope != a.refinementScope {
 		a.refinements = nil
@@ -163,17 +163,31 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	a.chatFullscreen = false
 }
 
-// shouldPreservePluginLayoutLocked keeps confirmed plugin chrome stable while the same trigger remains active.
+// shouldPreservePluginLayoutLocked keeps confirmed plugin chrome stable while the same scope remains active.
 func (a *App) shouldPreservePluginLayoutLocked(nextText string) bool {
-	return a.query.QueryType == "input" && a.queryContextKnown && !a.queryContext.IsGlobalQuery && a.queryContext.PluginID != "" &&
+	if a.query.QueryType != "input" || !a.queryContextKnown || a.queryContext.IsGlobalQuery {
+		return false
+	}
+	if len(a.query.QueryScope.Plugins) > 0 {
+		return a.queryScopeIdentityLocked(a.query.QueryText) == a.queryScopeIdentityLocked(nextText)
+	}
+	return a.queryContext.PluginID != "" &&
 		refinementQueryScope(a.query.QueryText) == refinementQueryScope(nextText)
+}
+
+// queryScopeIdentityLocked returns the stable scope key for refinements and layout retention.
+func (a *App) queryScopeIdentityLocked(text string) string {
+	if len(a.query.QueryScope.Plugins) > 0 {
+		return toCoreQueryScope(a.query.QueryScope).Identity()
+	}
+	return refinementQueryScope(text)
 }
 
 // beginQueryTransitionLocked gives fast query responses time to replace the visible snapshot without an empty frame.
 func (a *App) beginQueryTransitionLocked(preservePluginLayout bool) {
 	a.resetQueryTransitionLocked()
 	a.resetQueryLoadingLocked()
-	if a.visible && len(a.results) > 0 && (a.query.QueryText != "" || a.show.StartPage == "mru") {
+	if a.visible && len(a.results) > 0 && (a.query.QueryText != "" || len(a.query.QueryScope.Plugins) > 0 || a.show.StartPage == "mru") {
 		queryID := a.query.QueryID
 		a.queryTransitionTimer = time.AfterFunc(staleQueryResultsDuration, func() {
 			if err := a.runOnUI("show pending query results", func() {
@@ -196,7 +210,7 @@ func (a *App) beginQueryTransitionLocked(preservePluginLayout bool) {
 // startQueryLoadingLocked starts Flutter's delay for every shared query entry point.
 func (a *App) startQueryLoadingLocked() {
 	a.resetQueryLoadingLocked()
-	if a.query.QueryText == "" {
+	if a.query.QueryText == "" && len(a.query.QueryScope.Plugins) == 0 {
 		return
 	}
 	queryID := a.query.QueryID

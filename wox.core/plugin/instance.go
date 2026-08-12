@@ -65,6 +65,17 @@ func (i *Instance) GetTriggerKeywords() []string {
 	return i.Metadata.TriggerKeywords
 }
 
+// PrimaryTriggerKeyword returns the first non-global ("*") trigger keyword.
+// Scoped queries must not use GetTriggerKeywords()[0] because "*" often comes first.
+func (i *Instance) PrimaryTriggerKeyword() string {
+	for _, keyword := range i.GetTriggerKeywords() {
+		if keyword != "" && keyword != "*" {
+			return keyword
+		}
+	}
+	return ""
+}
+
 // query commands to query this plugin. Commands come from plugin metadata and runtime registration only.
 func (i *Instance) GetQueryCommands() []MetadataCommand {
 	commands := make([]MetadataCommand, 0, len(i.Metadata.Commands)+len(i.RuntimeQueryCommands))
