@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage www
+.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage deb www
 
 ifeq ($(firstword $(MAKECMDGOALS)),smoke)
 SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -66,6 +66,8 @@ else
 endif
 
 RELEASE_DIR := release
+# Keep package version in sync with the embedded updater constant used by release binaries.
+VERSION := $(shell sed -n 's/^const CURRENT_VERSION = "\(.*\)"/\1/p' wox.core/updater/version.go)
 APPIMAGE_TOOL ?= appimagetool.AppImage
 APPIMAGE_DIR := $(RELEASE_DIR)/wox.AppDir
 APPIMAGE_NAME := wox-linux-$(ARCH).AppImage
@@ -76,6 +78,13 @@ ifeq ($(ARCH),amd64)
 else
 	APPIMAGE_ARCH := $(ARCH)
 endif
+# Debian sorts ~ before the final release, so 2.4.0-beta.2 becomes 2.4.0~beta.2.
+DEB_VERSION := $(shell printf '%s' '$(VERSION)' | sed 's/-/~/')
+DEB_DIR := $(RELEASE_DIR)/wox.debroot
+DEB_NAME := wox-linux-$(ARCH).deb
+DEB_ARCH := $(ARCH)
+DEB_DESKTOP_FILE := $(APPIMAGE_DESKTOP_FILE)
+DEB_ICON_FILE := $(APPIMAGE_ICON_FILE)
 
 help:
 	@echo "Usage: make [target]"
@@ -90,6 +99,7 @@ help:
 	@echo "  build      Build all components"
 	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
 	@echo "  appimage   Build Linux AppImage"
+	@echo "  deb        Build Linux .deb package"
 	@echo "  plugins    Update plugin store"
 	@echo "  www        Run docs dev server"
 	@echo "  clean      Clean release directory"
@@ -108,6 +118,7 @@ ifeq ($(PLATFORM),linux)
 		echo "appimagetool is required but not installed. Install from https://github.com/AppImage/AppImageKit/releases or set APPIMAGE_TOOL to its path." >&2; \
 		exit 1; \
 	fi
+	@command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb is required on Linux to build .deb packages. Install dpkg-dev." >&2; exit 1; }
 	@command -v patchelf >/dev/null 2>&1 || { echo "patchelf is required on Linux to fix bundled shared library rpath." >&2; exit 1; }
 endif
 ifeq ($(PLATFORM),macos)
@@ -189,6 +200,55 @@ else
 	@echo "appimage target is only supported on Linux"
 endif
 
+deb:
+ifeq ($(PLATFORM),linux)
+	@echo "Building .deb package..."
+	@test -n "$(VERSION)" || { echo "Unable to read CURRENT_VERSION from wox.core/updater/version.go" >&2; exit 1; }
+	@test -f "$(RELEASE_DIR)/wox-linux-$(ARCH)" || { echo "Missing $(RELEASE_DIR)/wox-linux-$(ARCH). Run make build first." >&2; exit 1; }
+	rm -rf $(DEB_DIR)
+	mkdir -p $(DEB_DIR)/DEBIAN
+	mkdir -p $(DEB_DIR)/usr/bin
+	mkdir -p $(DEB_DIR)/usr/share/applications
+	mkdir -p $(DEB_DIR)/usr/share/icons/hicolor/256x256/apps
+	cp $(RELEASE_DIR)/wox-linux-$(ARCH) $(DEB_DIR)/usr/bin/wox
+	chmod 755 $(DEB_DIR)/usr/bin/wox
+	cp assets/linux/wox.desktop $(DEB_DIR)/usr/share/applications/$(DEB_DESKTOP_FILE)
+	cp assets/app.png $(DEB_DIR)/usr/share/icons/hicolor/256x256/apps/$(DEB_ICON_FILE)
+	# Hard-linked GTK/X11 libs are required at process start; optional features stay in Recommends.
+	@{ \
+		installed_size=$$(du -sk $(DEB_DIR)/usr | awk '{print $$1}'); \
+		printf '%s\n' \
+			'Package: wox' \
+			'Version: $(DEB_VERSION)' \
+			'Architecture: $(DEB_ARCH)' \
+			'Section: utils' \
+			'Priority: optional' \
+			'Maintainer: Wox Contributors <wox-launcher@users.noreply.github.com>' \
+			'Homepage: https://github.com/Wox-launcher/Wox' \
+			"Installed-Size: $$installed_size" \
+			'Depends: libgtk-3-0, libepoxy0, libx11-6, libxtst6, libayatana-appindicator3-1' \
+			'Recommends: libgtk-layer-shell0, libpipewire-0.3-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37' \
+			'Description: A launcher that stays out of your way' \
+			' Wox is a fully native open-source launcher for Linux with GPU rendering,' \
+			' local search, keyboard-first actions, and an extensible plugin system.' \
+			> $(DEB_DIR)/DEBIAN/control; \
+	}
+	printf '%s\n' \
+		'#!/bin/sh' \
+		'set -e' \
+		'if command -v update-desktop-database >/dev/null 2>&1; then' \
+		'  update-desktop-database -q /usr/share/applications || true' \
+		'fi' \
+		'if command -v gtk-update-icon-cache >/dev/null 2>&1; then' \
+		'  gtk-update-icon-cache -q /usr/share/icons/hicolor || true' \
+		'fi' \
+		> $(DEB_DIR)/DEBIAN/postinst
+	chmod 755 $(DEB_DIR)/DEBIAN/postinst
+	dpkg-deb --build --root-owner-group $(DEB_DIR) $(RELEASE_DIR)/$(DEB_NAME)
+else
+	@echo "deb target is only supported on Linux"
+endif
+
 # Test without rebuilding dependencies (fast)
 test: ensure-resources
 	@trap '$(MAKE) clean-resources' EXIT; $(MAKE) test-isolated
@@ -243,6 +303,7 @@ build: clean dev
 
 ifeq ($(PLATFORM),linux)
 		$(MAKE) appimage
+		$(MAKE) deb
 endif
 
 ifeq ($(PLATFORM),macos)

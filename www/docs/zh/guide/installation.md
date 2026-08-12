@@ -10,6 +10,7 @@
 | Windows | Winget | `winget install -e --id Wox.Wox` |
 | Windows | Scoop | `scoop install extras/wox` |
 | Arch Linux | AUR | `yay -S wox-bin` |
+| Debian / Ubuntu | `.deb` | 从 [Releases](https://github.com/Wox-launcher/Wox/releases) 下载 `wox-linux-amd64.deb`，然后执行 `sudo apt install ./wox-linux-amd64.deb` |
 
 安装完成后，从应用启动器打开 Wox，或运行一次已安装的可执行文件。首次启动时 Wox 会创建用户数据目录。
 
@@ -39,14 +40,18 @@ Wox 默认检查稳定版通道。如需接收测试版预发布版，打开 **�
 
 ### Linux
 
-1. 从 Releases 下载 Linux 压缩包。
-2. 解压到稳定目录，例如 `~/Applications/wox`。
-3. 运行 `./wox`。
+1. 优先使用安装包：
+   - Debian / Ubuntu：从 Releases 下载 `.deb`，执行 `sudo apt install ./wox-linux-amd64.deb`
+   - Arch Linux：从 AUR 安装 `wox-bin`
+   - AppImage：下载 `wox-linux-amd64.AppImage`，赋予执行权限后直接运行
+2. 也可以从 Releases 下载 Linux 二进制，解压到稳定目录（例如 `~/Applications/wox`），再运行 `./wox`。
 
-如果解压后没有执行权限：
+如果二进制或 AppImage 没有执行权限：
 
 ```bash
 chmod +x ./wox
+# 或
+chmod +x ./wox-linux-amd64.AppImage
 ```
 
 ## 用户数据
@@ -81,5 +86,6 @@ Wox 会把设置、插件数据、缓存和日志放在应用目录之外：
 ### Linux
 
 - AUR：用你的 AUR helper 或包管理器移除 `wox-bin`
-- 手动安装：删除解压目录
+- Debian / Ubuntu：`sudo apt remove wox`
+- 手动或 AppImage 安装：删除解压出的二进制或 AppImage 文件
 - 完全重置：删除 `~/.wox`

@@ -580,6 +580,10 @@ jobs:
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: ./release/wox-linux-amd64.AppImage
+      - name: Attest deb provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ./release/wox-linux-amd64.deb
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -591,4 +595,10 @@ jobs:
         with:
           name: wox-linux-amd64.AppImage
           path: ./release/wox-linux-amd64.AppImage
+          retention-days: ${{ inputs.artifact_retention_days }}
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wox-linux-amd64.deb
+          path: ./release/wox-linux-amd64.deb
           retention-days: ${{ inputs.artifact_retention_days }}

@@ -41,6 +41,7 @@
 
 - 安装 `patchelf`
 - 安装 `appimagetool`，或者把 `APPIMAGE_TOOL` 指向本地二进制路径
+- 构建 `.deb` 包时安装 `dpkg-dev`（提供 `dpkg-deb`）
 
 ## 初始化开发环境
 
@@ -161,6 +162,6 @@ Wox 会把运行时数据存到用户主目录下：
 - 先确认 `go`、`node`、`pnpm`、`uv` 都在 `PATH` 里
 - Windows 上还要确认 `nuget` 在 `PATH` 里
 - Windows 上确认你在 `MINGW64` shell，而不是 PowerShell 或 CMD
-- Linux 打包时确认 `patchelf` 和 `appimagetool` 已安装
+- Linux 打包时确认 `patchelf`、`appimagetool` 和 `dpkg-deb` 已安装
 
 如果某个子项目单独能编译，但 Wox 整体还是跑不起来，回到仓库根目录执行 `make build`。这是发现 `wox.core`、Go UI、插件宿主之间契约漂移的最快办法。

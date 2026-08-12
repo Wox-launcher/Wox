@@ -10,6 +10,7 @@ Choose the installer that matches how you normally manage desktop apps. Package 
 | Windows | Winget | `winget install -e --id Wox.Wox` |
 | Windows | Scoop | `scoop install extras/wox` |
 | Arch Linux | AUR | `yay -S wox-bin` |
+| Debian / Ubuntu | `.deb` | Download `wox-linux-amd64.deb` from [Releases](https://github.com/Wox-launcher/Wox/releases), then `sudo apt install ./wox-linux-amd64.deb` |
 
 After installation, start Wox from your app launcher or run the installed executable once. Wox creates its data directory on first launch.
 
@@ -39,14 +40,18 @@ If macOS blocks the first launch, open Wox from Finder once and choose **Open** 
 
 ### Linux
 
-1. Download the Linux archive from Releases.
-2. Extract it to a stable location, such as `~/Applications/wox`.
-3. Run `./wox`.
+1. Prefer a package when available:
+   - Debian / Ubuntu: install the `.deb` from Releases with `sudo apt install ./wox-linux-amd64.deb`
+   - Arch Linux: install `wox-bin` from the AUR
+   - AppImage: download `wox-linux-amd64.AppImage`, mark it executable, and run it
+2. Or download the Linux binary from Releases, extract it to a stable location such as `~/Applications/wox`, and run `./wox`.
 
-If the binary is not executable after extraction, run:
+If the binary or AppImage is not executable after download, run:
 
 ```bash
 chmod +x ./wox
+# or
+chmod +x ./wox-linux-amd64.AppImage
 ```
 
 ## User Data
@@ -81,5 +86,6 @@ Remove the application first, then decide whether to keep user data.
 ### Linux
 
 - AUR: remove `wox-bin` with your AUR helper or package manager
-- Manual install: delete the extracted Wox directory
+- Debian / Ubuntu: `sudo apt remove wox`
+- Manual or AppImage install: delete the extracted binary or AppImage file
 - Full reset: remove `~/.wox`

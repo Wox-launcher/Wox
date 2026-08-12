@@ -38,6 +38,8 @@ https://github.com/user-attachments/assets/1b282fde-c1c5-426a-b45d-cd0aa329386a
 | macOS | Homebrew | `brew install --cask wox` |
 | Windows | Winget | `winget install -e --id Wox.Wox` |
 | Windows | Scoop | `scoop install extras/wox` |
+| Arch Linux | AUR | `yay -S wox-bin` |
+| Debian / Ubuntu | `.deb` | Download `wox-linux-amd64.deb` from [Releases](https://github.com/Wox-launcher/Wox/releases), then `sudo apt install ./wox-linux-amd64.deb` |
 | macOS / Linux / Windows | Manual | Download the latest stable package from [Releases](https://github.com/Wox-launcher/Wox/releases) and run it directly |
 
 ## Documentation

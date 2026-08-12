@@ -41,6 +41,7 @@ Recommended editor:
 
 - Install `patchelf`
 - Install `appimagetool`, or point `APPIMAGE_TOOL` at a local binary when building AppImage packages
+- Install `dpkg-dev` (provides `dpkg-deb`) when building `.deb` packages
 
 ## Bootstrap the workspace
 
@@ -161,6 +162,6 @@ If `make dev` fails early:
 - confirm `go`, `node`, `pnpm`, and `uv` are all on `PATH`
 - on Windows, confirm `nuget` is also on `PATH`
 - on Windows, confirm you are in a `MINGW64` shell instead of PowerShell or CMD
-- on Linux packaging builds, confirm `patchelf` and `appimagetool` are installed
+- on Linux packaging builds, confirm `patchelf`, `appimagetool`, and `dpkg-deb` are installed
 
 If a change compiles in one subproject but Wox still breaks end to end, run `make build` from the repository root. That is the fastest way to catch contract mismatches between `wox.core`, the Go UI, and the plugin hosts.
