@@ -15,34 +15,59 @@ func TestHyprlandBindScriptReplacesPreviousGroup(t *testing.T) {
 
 	script := hyprlandBindScript(bindings, "/opt/Wox Launcher/wox")
 
-	cleanup := "for _, key in ipairs(wox_bound_keys) do hl.unbind(key) end"
+	cleanup := "for _, bind in ipairs(wox_bind_handles) do bind:set_enabled(false) end"
 	if !strings.Contains(script, cleanup) {
-		t.Fatalf("bind script does not remove the previous group:\n%s", script)
+		t.Fatalf("bind script does not disable the previous owned group:\n%s", script)
 	}
-	if strings.Contains(script, "wox_binds_loaded") {
-		t.Fatalf("bind script still contains the process-lifetime registration guard:\n%s", script)
+	if strings.Contains(script, "hl.unbind") {
+		t.Fatalf("bind script globally unbinds user-owned keys:\n%s", script)
 	}
 	for _, luaKey := range []string{"ALT + SPACE", "CTRL + SHIFT + S"} {
-		if !strings.Contains(script, "hl.bind(\""+luaKey+"\"") {
+		if !strings.Contains(script, "table.insert(wox_bind_handles, hl.bind(\""+luaKey+"\"") {
 			t.Fatalf("bind script does not register %q:\n%s", luaKey, script)
 		}
-		if !strings.Contains(script, "table.insert(wox_bound_keys, \""+luaKey+"\")") {
-			t.Fatalf("bind script does not track %q:\n%s", luaKey, script)
-		}
+	}
+	if !strings.Contains(script, `description = "Wox global hotkey"`) {
+		t.Fatalf("bind script does not identify Wox-owned handles:\n%s", script)
 	}
 }
 
-func TestHyprlandUnbindScriptUsesRegistrationKeysAsFallback(t *testing.T) {
-	script := hyprlandUnbindScript([]string{"SUPER + SPACE", "CTRL + SHIFT + S"})
+func TestHyprlandDisableScriptOnlyDisablesOwnedHandles(t *testing.T) {
+	script := hyprlandDisableScript()
 
-	if !strings.Contains(script, "local keys = wox_bound_keys or {\"SUPER + SPACE\", \"CTRL + SHIFT + S\"}") {
-		t.Fatalf("unbind script does not preserve the registration keys:\n%s", script)
+	if !strings.Contains(script, "for _, bind in ipairs(wox_bind_handles) do bind:set_enabled(false) end") {
+		t.Fatalf("disable script does not disable owned handles:\n%s", script)
 	}
-	if !strings.Contains(script, "for _, key in ipairs(keys) do hl.unbind(key) end") {
-		t.Fatalf("unbind script does not call hl.unbind:\n%s", script)
+	if strings.Contains(script, "hl.unbind") {
+		t.Fatalf("disable script globally unbinds user-owned keys:\n%s", script)
 	}
-	if !strings.Contains(script, "wox_bound_keys = nil") {
+	if !strings.Contains(script, "wox_bind_handles = nil") {
 		t.Fatalf("unbind script does not clear compositor state:\n%s", script)
+	}
+}
+
+func TestHyprlandBindingConflictsIgnoreWoxAndSubmaps(t *testing.T) {
+	binds := []hyprlandConfiguredBind{
+		{ModMask: 64, Key: "left"},
+		{ModMask: 8, Key: "SPACE", Description: hyprlandBindDescription},
+		{ModMask: 4, Key: "K", Submap: "resize"},
+	}
+
+	if !hyprlandBindingConflicts(binds, 64, "LEFT") {
+		t.Fatal("user-owned SUPER + LEFT should conflict")
+	}
+	if hyprlandBindingConflicts(binds, 8, "space") {
+		t.Fatal("Wox-owned ALT + SPACE should not conflict")
+	}
+	if hyprlandBindingConflicts(binds, 4, "K") {
+		t.Fatal("a non-default-submap binding should not conflict")
+	}
+}
+
+func TestHyprlandKeyToModMask(t *testing.T) {
+	modifiers := ModifierCtrl | ModifierAlt | ModifierShift | ModifierSuper
+	if got := hyprlandKeyToModMask(modifiers); got != 77 {
+		t.Fatalf("Hyprland modifier mask = %d, want 77", got)
 	}
 }
 

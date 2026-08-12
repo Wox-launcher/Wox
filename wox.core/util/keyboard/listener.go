@@ -495,6 +495,7 @@ type GlobalHotkeySpec struct {
 
 var registerGlobalHotkeysPlatform func(specs []GlobalHotkeySpec) (registration HotkeyRegistration, handled bool, err error)
 var isWaylandGlobalShortcutsPortalAvailablePlatform func() bool
+var isHyprlandGlobalHotkeyAvailablePlatform func(modifiers Modifier, key Key) (bool, error)
 
 type globalHotkeyGroupRegistration struct {
 	registrations []HotkeyRegistration
@@ -507,6 +508,15 @@ func IsWaylandGlobalShortcutsPortalAvailable() bool {
 		return false
 	}
 	return isWaylandGlobalShortcutsPortalAvailablePlatform()
+}
+
+// IsHyprlandGlobalHotkeyAvailable reports whether the active Hyprland config
+// already owns the requested key combination.
+func IsHyprlandGlobalHotkeyAvailable(modifiers Modifier, key Key) (bool, error) {
+	if isHyprlandGlobalHotkeyAvailablePlatform == nil {
+		return true, nil
+	}
+	return isHyprlandGlobalHotkeyAvailablePlatform(modifiers, key)
 }
 
 func RegisterGlobalHotkeys(specs []GlobalHotkeySpec) (HotkeyRegistration, error) {

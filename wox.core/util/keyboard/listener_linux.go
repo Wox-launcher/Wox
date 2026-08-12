@@ -10,6 +10,7 @@ import (
 func init() {
 	registerGlobalHotkeysPlatform = registerGlobalHotkeysLinux
 	isWaylandGlobalShortcutsPortalAvailablePlatform = isWaylandGlobalShortcutsPortalAvailableLinux
+	isHyprlandGlobalHotkeyAvailablePlatform = isHyprlandGlobalHotkeyAvailableLinux
 }
 
 func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {

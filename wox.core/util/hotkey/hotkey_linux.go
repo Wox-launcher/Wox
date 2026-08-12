@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"wox/util"
 	"wox/util/keyboard"
 )
 
@@ -71,8 +72,9 @@ func init() {
 	//   2. Even when the portal is available, creating a session only to destroy
 	//      it immediately can trigger DE confirmation dialogs or cause spurious
 	//      D-Bus errors.
-	// Instead, on Wayland we only validate the spec itself and always return true
-	// for well-formed hotkeys.
+	// Portal-backed Wayland sessions only validate the spec itself. Hyprland has
+	// an inspectable compositor bind registry, so it additionally rejects keys
+	// already owned by the user's default submap.
 	platformHotkeyAvailableCheck = func(_ context.Context, hotkeyStr string) (bool, bool) {
 		if !keyboard.IsWaylandSession() {
 			// Not a Wayland session; fall through to the standard X11 check.
@@ -86,6 +88,14 @@ func init() {
 		}
 		if validateErr := validateHotkeySpec(spec); validateErr != nil {
 			return false, true
+		}
+		if util.IsHyprlandSession() && !spec.isDoubleModifier() && !spec.isCapsLockKey() && !spec.isModifierChord() {
+			available, err := keyboard.IsHyprlandGlobalHotkeyAvailable(spec.modifiers, spec.key)
+			if err != nil {
+				util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("failed to check Hyprland hotkey availability: hotkey=%s err=%s", hotkeyStr, err.Error()))
+				return false, true
+			}
+			return available, true
 		}
 		return true, true
 	}
