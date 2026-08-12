@@ -40,6 +40,7 @@ const (
 	portalClipboardRequestTimeout       = 30 * time.Second
 	portalClipboardNoDataLogInterval    = 30 * time.Second
 	portalClipboardUnsupportedLogPrefix = "clipboard: Linux portal"
+	dataControlCacheDuration            = 100 * time.Millisecond
 )
 
 type linuxPortalClipboard struct {
@@ -64,6 +65,13 @@ var (
 	linuxClipboardMu     sync.Mutex
 	linuxClipboardPortal linuxPortalClipboard
 	linuxPortalCounter   uint64
+	linuxDataControl     struct {
+		latest      dataControlSelection
+		fingerprint string
+		capturedAt  time.Time
+		lastNoData  time.Time
+		activeLog   bool
+	}
 )
 
 // readClipboardContentType returns the latest type advertised by the portal.
@@ -72,7 +80,11 @@ func readClipboardContentType() Type {
 	defer linuxClipboardMu.Unlock()
 
 	if err := ensureLinuxPortalClipboardLocked(); err != nil {
-		return ""
+		selection, dataControlErr := readDataControlSelectionLocked(false)
+		if dataControlErr != nil {
+			return ""
+		}
+		return dataControlSelectionContentType(selection)
 	}
 	return linuxClipboardPortal.latest.contentType
 }
@@ -82,7 +94,18 @@ func readText() (string, error) {
 	defer linuxClipboardMu.Unlock()
 
 	if err := ensureLinuxPortalClipboardLocked(); err != nil {
-		return "", err
+		selection, dataControlErr := readDataControlSelectionLocked(false)
+		if dataControlErr != nil {
+			return "", dataControlErr
+		}
+		if dataControlSelectionContentType(selection) != ClipboardTypeText {
+			return "", noDataErr
+		}
+		text := strings.TrimRight(string(selection.data), "\x00")
+		if text == "" {
+			return "", noDataErr
+		}
+		return text, nil
 	}
 	mimeType := choosePortalMimeType(linuxClipboardPortal.latest.mimeTypes, portalMimeTextUTF8, portalMimeTextPlain)
 	if mimeType == "" {
@@ -105,7 +128,18 @@ func readFilePaths() ([]string, error) {
 	defer linuxClipboardMu.Unlock()
 
 	if err := ensureLinuxPortalClipboardLocked(); err != nil {
-		return nil, err
+		selection, dataControlErr := readDataControlSelectionLocked(false)
+		if dataControlErr != nil {
+			return nil, dataControlErr
+		}
+		if dataControlSelectionContentType(selection) != ClipboardTypeFile {
+			return nil, noDataErr
+		}
+		paths := parsePortalURIList(string(selection.data))
+		if len(paths) == 0 {
+			return nil, noDataErr
+		}
+		return paths, nil
 	}
 	if !portalMimeTypesContain(linuxClipboardPortal.latest.mimeTypes, portalMimeURIList) {
 		return nil, noDataErr
@@ -128,7 +162,18 @@ func readImage() (image.Image, error) {
 	defer linuxClipboardMu.Unlock()
 
 	if err := ensureLinuxPortalClipboardLocked(); err != nil {
-		return nil, err
+		selection, dataControlErr := readDataControlSelectionLocked(false)
+		if dataControlErr != nil {
+			return nil, dataControlErr
+		}
+		if dataControlSelectionContentType(selection) != ClipboardTypeImage {
+			return nil, noDataErr
+		}
+		img, decodeErr := png.Decode(bytes.NewReader(selection.data))
+		if decodeErr != nil {
+			return nil, fmt.Errorf("clipboard: failed to decode data-control PNG: %w", decodeErr)
+		}
+		return img, nil
 	}
 	if !portalMimeTypesContain(linuxClipboardPortal.latest.mimeTypes, portalMimePNG) {
 		return nil, noDataErr
@@ -266,8 +311,21 @@ func isClipboardChanged() bool {
 	defer linuxClipboardMu.Unlock()
 
 	if err := ensureLinuxPortalClipboardLocked(); err != nil {
-		logLinuxPortalNoDataLocked(err)
-		return false
+		selection, dataControlErr := readDataControlSelectionLocked(true)
+		if dataControlErr != nil {
+			logLinuxDataControlNoDataLocked(dataControlErr)
+			return false
+		}
+		fingerprint := selection.mimeType + ":" + hashLinuxClipboardBytes(selection.data)
+		if fingerprint == linuxDataControl.fingerprint {
+			return false
+		}
+		linuxDataControl.fingerprint = fingerprint
+		if !linuxDataControl.activeLog {
+			linuxDataControl.activeLog = true
+			util.GetLogger().Info(util.NewTraceContext(), "clipboard: Linux ext-data-control-v1 backend active")
+		}
+		return dataControlSelectionContentType(selection) != ""
 	}
 
 	return drainLinuxPortalClipboardSignalsLocked()
@@ -278,7 +336,16 @@ func buildWatchSnapshot() string {
 	defer linuxClipboardMu.Unlock()
 
 	if err := ensureLinuxPortalClipboardLocked(); err != nil {
-		return fmt.Sprintf("portal_error=%s", err.Error())
+		selection, dataControlErr := readDataControlSelectionLocked(false)
+		if dataControlErr != nil {
+			return fmt.Sprintf("portal_error=%s data_control_error=%s", err.Error(), dataControlErr.Error())
+		}
+		return fmt.Sprintf(
+			"backend=ext-data-control-v1 type=%s mime=%s bytes=%d",
+			dataControlSelectionContentType(selection),
+			selection.mimeType,
+			len(selection.data),
+		)
 	}
 	return fmt.Sprintf("type=%s mimes=%s", linuxClipboardPortal.latest.contentType, strings.Join(linuxClipboardPortal.latest.mimeTypes, ","))
 }
@@ -788,6 +855,50 @@ func logLinuxPortalNoDataLocked(err error) {
 	}
 	linuxClipboardPortal.lastNoData = now
 	util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("clipboard: Linux portal watcher sees no readable clipboard content: %v", err))
+}
+
+// readDataControlSelectionLocked caches one short-lived snapshot so Read can inspect
+// its type and payload without opening two independent Wayland selections.
+func readDataControlSelectionLocked(force bool) (dataControlSelection, error) {
+	if !force && !linuxDataControl.capturedAt.IsZero() && time.Since(linuxDataControl.capturedAt) < dataControlCacheDuration {
+		if linuxDataControl.latest.mimeType == "" {
+			return dataControlSelection{}, noDataErr
+		}
+		return linuxDataControl.latest, nil
+	}
+
+	selection, err := readDataControlSelection()
+	linuxDataControl.capturedAt = time.Now()
+	if err != nil {
+		linuxDataControl.latest = dataControlSelection{}
+		return dataControlSelection{}, err
+	}
+	linuxDataControl.latest = selection
+	return selection, nil
+}
+
+func logLinuxDataControlNoDataLocked(err error) {
+	now := time.Now()
+	if !linuxDataControl.lastNoData.IsZero() && now.Sub(linuxDataControl.lastNoData) < portalClipboardNoDataLogInterval {
+		return
+	}
+	linuxDataControl.lastNoData = now
+	util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("clipboard: Linux data-control watcher sees no readable clipboard content: %v", err))
+}
+
+func dataControlSelectionContentType(selection dataControlSelection) Type {
+	switch {
+	case strings.EqualFold(selection.mimeType, portalMimeURIList):
+		return ClipboardTypeFile
+	case strings.EqualFold(selection.mimeType, portalMimePNG):
+		return ClipboardTypeImage
+	case strings.EqualFold(selection.mimeType, portalMimeTextUTF8),
+		strings.EqualFold(selection.mimeType, portalMimeTextPlain),
+		strings.EqualFold(selection.mimeType, "UTF8_STRING"):
+		return ClipboardTypeText
+	default:
+		return ""
+	}
 }
 
 func portalMimeTypesContentType(mimeTypes []string) Type {
