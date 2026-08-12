@@ -51,6 +51,17 @@ type linuxKWinDisplayGeometry struct {
 	PixelHeight int
 }
 
+func init() {
+	registerLinuxWaylandCaptureBackend(linuxWaylandCaptureBackend{
+		name:     "plasma-kwin",
+		priority: 100,
+		matches:  util.IsKDEWayland,
+		open: func() (linuxDesktopCapture, error) {
+			return newLinuxKWinDesktopCapture()
+		},
+	})
+}
+
 // newLinuxKWinDesktopCapture fixes the output at the compositor's active screen before capture begins.
 func newLinuxKWinDesktopCapture() (*linuxKWinDesktopCapture, error) {
 	screen, err := linuxKWinActiveScreenIdentity()
@@ -227,6 +238,15 @@ func (capture *linuxKWinDesktopCapture) close() {
 	if capture.conn != nil {
 		capture.conn.Close()
 		capture.conn = nil
+	}
+}
+
+func (capture *linuxKWinDesktopCapture) logicalBounds() Rect {
+	return Rect{
+		X:      float32(capture.screen.Logical.X),
+		Y:      float32(capture.screen.Logical.Y),
+		Width:  float32(capture.screen.Logical.Width),
+		Height: float32(capture.screen.Logical.Height),
 	}
 }
 

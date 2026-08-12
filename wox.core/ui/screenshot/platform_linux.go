@@ -19,7 +19,6 @@ import (
 	"os"
 	"time"
 	"unsafe"
-	"wox/util"
 )
 
 var errLinuxPortalCaptureRequired = errors.New("Wayland requires Portal desktop capture")
@@ -33,26 +32,13 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	var cursorX, cursorY C.float
 	hasCapturedCursor := C.wox_screenshot_cursor_position(&cursorX, &cursorY) == 0
 	source, bounds, err := captureLinuxX11Desktop()
-	var portalCapture *linuxPortalDesktopCapture
-	var kwinCapture *linuxKWinDesktopCapture
+	var waylandCapture linuxDesktopCapture
 	if errors.Is(err, errLinuxPortalCaptureRequired) {
-		if util.IsKDEWayland() {
-			kwinCapture, err = newLinuxKWinDesktopCapture()
-			if err == nil {
-				defer kwinCapture.close()
-				bounds = Rect{
-					X: float32(kwinCapture.screen.Logical.X), Y: float32(kwinCapture.screen.Logical.Y),
-					Width: float32(kwinCapture.screen.Logical.Width), Height: float32(kwinCapture.screen.Logical.Height),
-				}
-				source, err = kwinCapture.capture()
-			}
-		} else {
-			portalCapture, err = newLinuxPortalDesktopCapture()
-			if err == nil {
-				defer portalCapture.close()
-				bounds = portalCapture.bounds
-				source, err = portalCapture.capture()
-			}
+		waylandCapture, err = newLinuxWaylandDesktopCapture()
+		if err == nil {
+			defer waylandCapture.close()
+			source, err = waylandCapture.capture()
+			bounds = waylandCapture.logicalBounds()
 		}
 	}
 	if err != nil {
@@ -71,12 +57,8 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 			}
 		},
 		captureDesktop: func() (screenshotDesktopCapture, error) {
-			if kwinCapture != nil {
-				captured, captureErr := kwinCapture.capture()
-				return screenshotDesktopCapture{source: captured}, captureErr
-			}
-			if portalCapture != nil {
-				captured, captureErr := portalCapture.capture()
+			if waylandCapture != nil {
+				captured, captureErr := waylandCapture.capture()
 				return screenshotDesktopCapture{source: captured}, captureErr
 			}
 			captured, _, captureErr := captureLinuxX11Desktop()

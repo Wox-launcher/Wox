@@ -14,6 +14,7 @@ typedef struct WoxPipeWireCapture WoxPipeWireCapture;
 
 WoxPipeWireCapture *wox_screenshot_pipewire_create(int32_t remote_fd, const uint32_t *node_ids, int32_t node_count);
 int32_t wox_screenshot_pipewire_capture(WoxPipeWireCapture *capture, WoxPipeWireFrame *frames, int32_t frame_count, int32_t timeout_seconds);
+int32_t wox_screenshot_pipewire_capture_latest(WoxPipeWireCapture *capture, WoxPipeWireFrame *frames, int32_t frame_count, int32_t duration_milliseconds);
 void wox_screenshot_pipewire_destroy(WoxPipeWireCapture *capture);
 void wox_screenshot_pipewire_free_frames(WoxPipeWireFrame *frames, int32_t frame_count);
 

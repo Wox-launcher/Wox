@@ -25,6 +25,8 @@ typedef struct {
   __typeof__(&pw_thread_loop_lock) thread_loop_lock;
   __typeof__(&pw_thread_loop_unlock) thread_loop_unlock;
   __typeof__(&pw_thread_loop_timed_wait) thread_loop_timed_wait;
+  __typeof__(&pw_thread_loop_get_time) thread_loop_get_time;
+  __typeof__(&pw_thread_loop_timed_wait_full) thread_loop_timed_wait_full;
   __typeof__(&pw_thread_loop_signal) thread_loop_signal;
   __typeof__(&pw_context_new) context_new;
   __typeof__(&pw_context_destroy) context_destroy;
@@ -57,6 +59,8 @@ static void load_pipewire_api(void) {
   LOAD_PIPEWIRE_SYMBOL(thread_loop_lock, "pw_thread_loop_lock");
   LOAD_PIPEWIRE_SYMBOL(thread_loop_unlock, "pw_thread_loop_unlock");
   LOAD_PIPEWIRE_SYMBOL(thread_loop_timed_wait, "pw_thread_loop_timed_wait");
+  LOAD_PIPEWIRE_SYMBOL(thread_loop_get_time, "pw_thread_loop_get_time");
+  LOAD_PIPEWIRE_SYMBOL(thread_loop_timed_wait_full, "pw_thread_loop_timed_wait_full");
   LOAD_PIPEWIRE_SYMBOL(thread_loop_signal, "pw_thread_loop_signal");
   LOAD_PIPEWIRE_SYMBOL(context_new, "pw_context_new");
   LOAD_PIPEWIRE_SYMBOL(context_destroy, "pw_context_destroy");
@@ -94,6 +98,8 @@ static void load_pipewire_api(void) {
 #define pw_thread_loop_lock pipewire_api.thread_loop_lock
 #define pw_thread_loop_unlock pipewire_api.thread_loop_unlock
 #define pw_thread_loop_timed_wait pipewire_api.thread_loop_timed_wait
+#define pw_thread_loop_get_time pipewire_api.thread_loop_get_time
+#define pw_thread_loop_timed_wait_full pipewire_api.thread_loop_timed_wait_full
 #define pw_thread_loop_signal pipewire_api.thread_loop_signal
 #define pw_context_new pipewire_api.context_new
 #define pw_context_destroy pipewire_api.context_destroy
@@ -123,6 +129,7 @@ struct WoxPipeWireCapture {
   WoxPipeWireStream *streams;
   int32_t stream_count;
   int32_t ready_count;
+  bool replace_output;
   bool failed;
 };
 
@@ -237,7 +244,7 @@ static void pipewire_stream_process(void *data) {
   }
 
   struct spa_buffer *buffer = pipewire_buffer->buffer;
-  if (stream->output != NULL && stream->output->pixels == NULL && !stream->failed && buffer != NULL && buffer->n_datas > 0) {
+  if (stream->output != NULL && (stream->output->pixels == NULL || stream->capture->replace_output) && !stream->failed && buffer != NULL && buffer->n_datas > 0) {
     struct spa_data *plane = &buffer->datas[0];
     struct spa_chunk *chunk = plane->chunk;
     const int32_t pixel_size = pipewire_pixel_size(stream->format.format);
@@ -267,11 +274,15 @@ static void pipewire_stream_process(void *data) {
             pipewire_copy_pixel(stream->format.format, source_row + (size_t)x * (uint32_t)pixel_size, target_row + (size_t)x * 4);
           }
         }
+        const bool first_frame = stream->output->pixels == NULL;
+        free(stream->output->pixels);
         stream->output->width = width;
         stream->output->height = height;
         stream->output->stride = target_stride;
         stream->output->pixels = pixels;
-        stream->capture->ready_count++;
+        if (first_frame) {
+          stream->capture->ready_count++;
+        }
         pw_thread_loop_signal(stream->capture->loop, false);
       }
     }
@@ -412,6 +423,7 @@ int32_t wox_screenshot_pipewire_capture(WoxPipeWireCapture *capture, WoxPipeWire
     pw_thread_loop_unlock(capture->loop);
     return -2;
   }
+  capture->replace_output = false;
   capture->ready_count = 0;
   for (int32_t index = 0; index < frame_count; index++) {
     memset(&frames[index], 0, sizeof(WoxPipeWireFrame));
@@ -433,6 +445,61 @@ int32_t wox_screenshot_pipewire_capture(WoxPipeWireCapture *capture, WoxPipeWire
   if (capture->failed && result == 0) {
     result = -6;
   }
+  for (int32_t index = 0; index < frame_count; index++) {
+    capture->streams[index].output = NULL;
+  }
+  pw_thread_loop_unlock(capture->loop);
+
+  if (result != 0) {
+    wox_screenshot_pipewire_free_frames(frames, frame_count);
+  }
+  return result;
+}
+
+// Keep replacing each output during the bounded window so a compositor redraw cannot be missed.
+int32_t wox_screenshot_pipewire_capture_latest(WoxPipeWireCapture *capture, WoxPipeWireFrame *frames, int32_t frame_count, int32_t duration_milliseconds) {
+  if (capture == NULL || frames == NULL || frame_count != capture->stream_count || duration_milliseconds <= 0) {
+    return -1;
+  }
+  if (pipewire_api.thread_loop_get_time == NULL || pipewire_api.thread_loop_timed_wait_full == NULL) {
+    return -7;
+  }
+
+  struct timespec deadline;
+  if (pw_thread_loop_get_time(capture->loop, &deadline, (int64_t)duration_milliseconds * 1000000) < 0) {
+    return -7;
+  }
+
+  pw_thread_loop_lock(capture->loop);
+  if (capture->failed) {
+    pw_thread_loop_unlock(capture->loop);
+    return -2;
+  }
+  capture->replace_output = true;
+  capture->ready_count = 0;
+  for (int32_t index = 0; index < frame_count; index++) {
+    memset(&frames[index], 0, sizeof(WoxPipeWireFrame));
+    capture->streams[index].output = &frames[index];
+  }
+
+  int32_t result = 0;
+  while (!capture->failed) {
+    int wait_result = pw_thread_loop_timed_wait_full(capture->loop, &deadline);
+    if (wait_result == -ETIMEDOUT) {
+      if (capture->ready_count < frame_count) {
+        result = -4;
+      }
+      break;
+    }
+    if (wait_result < 0) {
+      result = -5;
+      break;
+    }
+  }
+  if (capture->failed && result == 0) {
+    result = -6;
+  }
+  capture->replace_output = false;
   for (int32_t index = 0; index < frame_count; index++) {
     capture->streams[index].output = NULL;
   }

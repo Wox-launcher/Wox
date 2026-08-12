@@ -81,6 +81,18 @@ type linuxPortalDisplayGeometry struct {
 	PixelHeight int
 }
 
+// linuxPortalCaptureConfig keeps compositor policy out of the shared Portal transport.
+type linuxPortalCaptureConfig struct {
+	backend               string
+	multiple              bool
+	cursorMode            uint32
+	initialLatestFrameFor time.Duration
+	disableRestore        bool
+	screenSpecificRestore bool
+	restoreTokenFile      string
+	displayGeometries     func() []linuxPortalDisplayGeometry
+}
+
 type linuxPortalIntPair struct {
 	First  int32
 	Second int32
@@ -89,21 +101,35 @@ type linuxPortalIntPair struct {
 var linuxPortalTokenCounter atomic.Uint64
 
 type linuxPortalDesktopCapture struct {
-	mu          sync.Mutex
-	conn        *dbus.Conn
-	sessionPath dbus.ObjectPath
-	monitors    []linuxPortalMonitor
-	bounds      Rect
-	pipewire    *C.WoxPipeWireCapture
-	closed      bool
+	mu                    sync.Mutex
+	conn                  *dbus.Conn
+	sessionPath           dbus.ObjectPath
+	monitors              []linuxPortalMonitor
+	bounds                Rect
+	pipewire              *C.WoxPipeWireCapture
+	backend               string
+	initialLatestFrameFor time.Duration
+	closed                bool
 }
 
-func newLinuxPortalDesktopCapture() (*linuxPortalDesktopCapture, error) {
+func newLinuxPortalDesktopCapture(config linuxPortalCaptureConfig) (*linuxPortalDesktopCapture, error) {
+	if config.backend == "" {
+		config.backend = "portal"
+	}
+	if config.cursorMode == 0 {
+		config.cursorMode = 1
+	}
+	displays := linuxScreenshotPortalGTKDisplayGeometries()
+	if config.displayGeometries != nil {
+		if configured := config.displayGeometries(); len(configured) > 0 {
+			displays = configured
+		}
+	}
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return nil, fmt.Errorf("connect to screenshot portal: %w", err)
 	}
-	sessionPath, monitors, err := startLinuxPortalCaptureSession(conn)
+	sessionPath, monitors, err := startLinuxPortalCaptureSession(conn, config, displays)
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -139,11 +165,13 @@ func newLinuxPortalDesktopCapture() (*linuxPortalDesktopCapture, error) {
 		return nil, errors.New("connect to ScreenCast PipeWire streams")
 	}
 	return &linuxPortalDesktopCapture{
-		conn:        conn,
-		sessionPath: sessionPath,
-		monitors:    monitors,
-		bounds:      bounds,
-		pipewire:    pipewire,
+		conn:                  conn,
+		sessionPath:           sessionPath,
+		monitors:              monitors,
+		bounds:                bounds,
+		pipewire:              pipewire,
+		backend:               config.backend,
+		initialLatestFrameFor: config.initialLatestFrameFor,
 	}, nil
 }
 
@@ -153,12 +181,15 @@ func (capture *linuxPortalDesktopCapture) capture() (image.Image, error) {
 	if capture.closed || capture.pipewire == nil {
 		return nil, errors.New("ScreenCast PipeWire session is closed")
 	}
-	source, err := captureLinuxPipeWireFrames(capture.pipewire, capture.monitors)
+	startedAt := time.Now()
+	source, err := captureLinuxPipeWireFrames(capture.pipewire, capture.monitors, capture.initialLatestFrameFor)
+	capture.initialLatestFrameFor = 0
 	if err != nil {
 		return nil, err
 	}
 	util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf(
-		"[screenshot] captured Wayland desktop source=portal-pipewire streams=%d logical=%.0f,%.0f %.0fx%.0f pixels=%dx%d",
+		"[screenshot] captured Wayland desktop source=portal-pipewire backend=%s streams=%d logical=%.0f,%.0f %.0fx%.0f pixels=%dx%d elapsed=%s",
+		capture.backend,
 		len(capture.monitors),
 		capture.bounds.X,
 		capture.bounds.Y,
@@ -166,8 +197,13 @@ func (capture *linuxPortalDesktopCapture) capture() (image.Image, error) {
 		capture.bounds.Height,
 		source.Bounds().Dx(),
 		source.Bounds().Dy(),
+		time.Since(startedAt).Round(time.Millisecond),
 	))
 	return source, nil
+}
+
+func (capture *linuxPortalDesktopCapture) logicalBounds() Rect {
+	return capture.bounds
 }
 
 func (capture *linuxPortalDesktopCapture) close() {
@@ -191,32 +227,36 @@ func (capture *linuxPortalDesktopCapture) close() {
 	capture.mu.Unlock()
 }
 
-func startLinuxPortalCaptureSession(conn *dbus.Conn) (dbus.ObjectPath, []linuxPortalMonitor, error) {
-	restoreTokenPath := linuxScreenshotPortalRestoreTokenPath()
-	restoreStore, loadErr := loadLinuxScreenshotPortalRestoreStore(restoreTokenPath)
-	if loadErr != nil {
-		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("[screenshot] failed to load portal restore token: %v", loadErr))
-		_ = removeLinuxScreenshotPortalRestoreToken(restoreTokenPath)
+func startLinuxPortalCaptureSession(conn *dbus.Conn, config linuxPortalCaptureConfig, displays []linuxPortalDisplayGeometry) (dbus.ObjectPath, []linuxPortalMonitor, error) {
+	restoreTokenPath := ""
+	restoreStore := linuxPortalRestoreStore{Version: 2}
+	if !config.disableRestore {
+		restoreTokenFile := config.restoreTokenFile
+		if restoreTokenFile == "" {
+			restoreTokenFile = linuxPortalRestoreTokenFile
+		}
+		restoreTokenPath = linuxScreenshotPortalRestoreTokenPath(restoreTokenFile)
+		var loadErr error
+		restoreStore, loadErr = loadLinuxScreenshotPortalRestoreStore(restoreTokenPath)
+		if loadErr != nil {
+			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("[screenshot] failed to load portal restore token: %v", loadErr))
+			_ = removeLinuxScreenshotPortalRestoreToken(restoreTokenPath)
+		}
 	}
 	restoreEntryIndex := -1
 	var restoreEntry linuxPortalRestoreEntry
-	currentScreen := linuxScreenshotPortalCurrentScreenIdentity()
-	if util.IsHyprlandSession() {
-		validEntries := restoreStore.Entries[:0]
-		for _, entry := range restoreStore.Entries {
-			if entry.Token != "" && len(entry.Monitors) > 0 {
-				validEntries = append(validEntries, entry)
-			}
-		}
-		if len(validEntries) != len(restoreStore.Entries) {
-			restoreStore.Entries = validEntries
+	currentScreen := linuxScreenshotPortalCurrentScreenIdentity(displays)
+	if config.screenSpecificRestore {
+		cleanedStore := linuxScreenshotPortalCleanRestoreStore(restoreStore)
+		if len(cleanedStore.Entries) != len(restoreStore.Entries) {
+			restoreStore = cleanedStore
 			if saveErr := saveLinuxScreenshotPortalRestoreStore(restoreTokenPath, restoreStore); saveErr != nil {
 				util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("[screenshot] failed to clean legacy portal restore tokens: %v", saveErr))
 			}
 		}
 	}
 	if len(restoreStore.Entries) > 0 {
-		if util.IsHyprlandSession() {
+		if config.screenSpecificRestore {
 			restoreEntryIndex, restoreEntry = linuxScreenshotPortalRestoreEntryForScreen(restoreStore, currentScreen)
 			if restoreEntryIndex < 0 {
 				util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf(
@@ -265,7 +305,7 @@ func startLinuxPortalCaptureSession(conn *dbus.Conn) (dbus.ObjectPath, []linuxPo
 
 	selectToken := nextLinuxScreenshotPortalToken("select")
 	responseCode, _, err = callLinuxScreenshotPortalRequest(conn, selectToken, func() (dbus.ObjectPath, error) {
-		options := linuxScreenshotPortalSelectSourcesOptions(selectToken, restoreToken)
+		options := linuxScreenshotPortalSelectSourcesOptions(selectToken, restoreToken, config.multiple, config.cursorMode)
 		return callLinuxPortalObjectPathMethod(conn, linuxPortalScreenCastInterface+".SelectSources", sessionPath, options)
 	})
 	if err != nil {
@@ -275,7 +315,7 @@ func startLinuxPortalCaptureSession(conn *dbus.Conn) (dbus.ObjectPath, []linuxPo
 		return "", nil, fmt.Errorf("ScreenCast monitor selection failed with response code %d", responseCode)
 	}
 	// Remove only the token sent for this session. Tokens for other monitors remain valid,
-	// allowing each Hyprland output to be authorized once and then selected by pointer location.
+	// allowing each compositor output to be authorized once and then selected by pointer location.
 	if restoreEntryIndex >= 0 {
 		restoreStore.Entries = append(restoreStore.Entries[:restoreEntryIndex], restoreStore.Entries[restoreEntryIndex+1:]...)
 		if saveErr := saveLinuxScreenshotPortalRestoreStore(restoreTokenPath, restoreStore); saveErr != nil {
@@ -298,8 +338,8 @@ func startLinuxPortalCaptureSession(conn *dbus.Conn) (dbus.ObjectPath, []linuxPo
 	if err != nil {
 		return "", nil, err
 	}
-	monitors = normalizeLinuxPortalMonitors(monitors, currentScreen)
-	if nextRestoreToken := linuxScreenshotPortalRestoreToken(results); nextRestoreToken != "" {
+	monitors = normalizeLinuxPortalMonitors(monitors, currentScreen, displays)
+	if nextRestoreToken := linuxScreenshotPortalRestoreToken(results); !config.disableRestore && nextRestoreToken != "" {
 		restoreStore = linuxScreenshotPortalUpsertRestoreEntry(restoreStore, linuxPortalRestoreEntry{Token: nextRestoreToken, Monitors: monitors})
 		if saveErr := saveLinuxScreenshotPortalRestoreStore(restoreTokenPath, restoreStore); saveErr != nil {
 			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("[screenshot] failed to save portal restore token: %v", saveErr))
@@ -314,20 +354,33 @@ func startLinuxPortalCaptureSession(conn *dbus.Conn) (dbus.ObjectPath, []linuxPo
 	return sessionPath, monitors, nil
 }
 
-func linuxScreenshotPortalSelectSourcesOptions(handleToken string, restoreToken string) map[string]dbus.Variant {
+func linuxScreenshotPortalSelectSourcesOptions(handleToken string, restoreToken string, multiple bool, cursorMode uint32) map[string]dbus.Variant {
 	// Keep these optional vardict fields capability-driven by the backend. Current XDPH
 	// stacks can implement restore data while the public ScreenCast version still reports 3.
 	options := map[string]dbus.Variant{
 		"handle_token": dbus.MakeVariant(handleToken),
 		"types":        dbus.MakeVariant(uint32(1)),
-		"multiple":     dbus.MakeVariant(true),
-		"cursor_mode":  dbus.MakeVariant(uint32(1)),
+		"multiple":     dbus.MakeVariant(multiple),
+		"cursor_mode":  dbus.MakeVariant(cursorMode),
 		"persist_mode": dbus.MakeVariant(uint32(linuxPortalPersistUntilRevoked)),
 	}
 	if restoreToken != "" {
 		options["restore_token"] = dbus.MakeVariant(restoreToken)
 	}
 	return options
+}
+
+// linuxScreenshotPortalCleanRestoreStore removes entries without monitor ownership metadata.
+func linuxScreenshotPortalCleanRestoreStore(store linuxPortalRestoreStore) linuxPortalRestoreStore {
+	validEntries := make([]linuxPortalRestoreEntry, 0, len(store.Entries))
+	for _, entry := range store.Entries {
+		if entry.Token == "" || len(entry.Monitors) == 0 {
+			continue
+		}
+		validEntries = append(validEntries, entry)
+	}
+	store.Entries = validEntries
+	return store
 }
 
 func linuxScreenshotPortalRestoreToken(results map[string]dbus.Variant) string {
@@ -342,8 +395,8 @@ func linuxScreenshotPortalRestoreToken(results map[string]dbus.Variant) string {
 	return token
 }
 
-func linuxScreenshotPortalRestoreTokenPath() string {
-	return filepath.Join(util.GetLocation().GetCacheDirectory(), linuxPortalRestoreTokenFile)
+func linuxScreenshotPortalRestoreTokenPath(fileName string) string {
+	return filepath.Join(util.GetLocation().GetCacheDirectory(), fileName)
 }
 
 func loadLinuxScreenshotPortalRestoreStore(path string) (linuxPortalRestoreStore, error) {
@@ -441,10 +494,9 @@ func linuxScreenshotPortalRestoreEntryForScreen(store linuxPortalRestoreStore, s
 	return -1, linuxPortalRestoreEntry{}
 }
 
-func linuxScreenshotPortalCurrentScreenIdentity() linuxPortalScreenIdentity {
+func linuxScreenshotPortalCurrentScreenIdentity(displays []linuxPortalDisplayGeometry) linuxPortalScreenIdentity {
 	logical := utilscreen.GetMouseScreen()
 	identity := linuxPortalScreenIdentity{Logical: logical}
-	displays := linuxScreenshotPortalDisplayGeometries()
 	for _, display := range displays {
 		if display.Logical.X == logical.X && display.Logical.Y == logical.Y &&
 			display.Logical.Width == logical.Width && display.Logical.Height == logical.Height {
@@ -456,8 +508,7 @@ func linuxScreenshotPortalCurrentScreenIdentity() linuxPortalScreenIdentity {
 	return identity
 }
 
-func normalizeLinuxPortalMonitors(monitors []linuxPortalMonitor, current linuxPortalScreenIdentity) []linuxPortalMonitor {
-	displays := linuxScreenshotPortalDisplayGeometries()
+func normalizeLinuxPortalMonitors(monitors []linuxPortalMonitor, current linuxPortalScreenIdentity, displays []linuxPortalDisplayGeometry) []linuxPortalMonitor {
 	if len(displays) == 0 {
 		return monitors
 	}
@@ -525,25 +576,7 @@ func linuxScreenshotPortalDisplayIndex(bounds Rect, displays []linuxPortalDispla
 	return -1
 }
 
-func linuxScreenshotPortalDisplayGeometries() []linuxPortalDisplayGeometry {
-	if util.IsHyprlandSession() {
-		if monitors, err := utilscreen.GetHyprlandMonitors(); err == nil {
-			displays := make([]linuxPortalDisplayGeometry, 0, len(monitors))
-			for _, monitor := range monitors {
-				logical := monitor.LogicalSize()
-				pixels := monitor.PixelSize()
-				displays = append(displays, linuxPortalDisplayGeometry{
-					Name:        monitor.Name,
-					Logical:     utilscreen.Rect{X: logical.X, Y: logical.Y, Width: logical.Width, Height: logical.Height},
-					PixelWidth:  pixels.Width,
-					PixelHeight: pixels.Height,
-				})
-			}
-			return displays
-		} else {
-			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("[screenshot] failed to query Hyprland monitor geometry, using GTK fallback: %v", err))
-		}
-	}
+func linuxScreenshotPortalGTKDisplayGeometries() []linuxPortalDisplayGeometry {
 	displays, err := utilscreen.ListDisplays()
 	if err != nil {
 		return nil
@@ -793,7 +826,7 @@ func linuxPortalMonitorUnion(monitors []linuxPortalMonitor) (Rect, error) {
 	return Rect{X: left, Y: top, Width: right - left, Height: bottom - top}, nil
 }
 
-func captureLinuxPipeWireFrames(pipewire *C.WoxPipeWireCapture, monitors []linuxPortalMonitor) (image.Image, error) {
+func captureLinuxPipeWireFrames(pipewire *C.WoxPipeWireCapture, monitors []linuxPortalMonitor, latestFor time.Duration) (image.Image, error) {
 	if pipewire == nil || len(monitors) == 0 {
 		return nil, errors.New("ScreenCast PipeWire capture has no streams")
 	}
@@ -805,12 +838,23 @@ func captureLinuxPipeWireFrames(pipewire *C.WoxPipeWireCapture, monitors []linux
 	defer C.free(frameMemory)
 	frames := unsafe.Slice((*C.WoxPipeWireFrame)(frameMemory), len(monitors))
 
-	result := C.wox_screenshot_pipewire_capture(
-		pipewire,
-		(*C.WoxPipeWireFrame)(frameMemory),
-		C.int32_t(len(monitors)),
-		C.int32_t(10),
-	)
+	var result C.int32_t
+	if latestFor > 0 {
+		durationMilliseconds := max(int64(1), latestFor.Milliseconds())
+		result = C.wox_screenshot_pipewire_capture_latest(
+			pipewire,
+			(*C.WoxPipeWireFrame)(frameMemory),
+			C.int32_t(len(monitors)),
+			C.int32_t(durationMilliseconds),
+		)
+	} else {
+		result = C.wox_screenshot_pipewire_capture(
+			pipewire,
+			(*C.WoxPipeWireFrame)(frameMemory),
+			C.int32_t(len(monitors)),
+			C.int32_t(10),
+		)
+	}
 	defer C.wox_screenshot_pipewire_free_frames((*C.WoxPipeWireFrame)(frameMemory), C.int32_t(len(monitors)))
 	if result != 0 {
 		return nil, fmt.Errorf("capture ScreenCast PipeWire frame failed with status %d", int32(result))

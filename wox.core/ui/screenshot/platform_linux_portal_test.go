@@ -6,26 +6,52 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 	utilscreen "wox/util/screen"
 
 	"github.com/godbus/dbus/v5"
 )
 
 func TestLinuxScreenshotPortalSelectSourcesOptions(t *testing.T) {
-	withoutRestore := linuxScreenshotPortalSelectSourcesOptions("select", "")
+	withoutRestore := linuxScreenshotPortalSelectSourcesOptions("select", "", false, 1)
 	if _, ok := withoutRestore["restore_token"]; ok {
 		t.Fatal("empty restore_token must not be sent")
+	}
+	if got := withoutRestore["multiple"].Value(); got != false {
+		t.Fatalf("multiple = %#v", got)
+	}
+	if got := withoutRestore["cursor_mode"].Value(); got != uint32(1) {
+		t.Fatalf("cursor_mode = %#v", got)
 	}
 	if got := withoutRestore["persist_mode"].Value(); got != uint32(linuxPortalPersistUntilRevoked) {
 		t.Fatalf("persist_mode = %#v", got)
 	}
 
-	withRestore := linuxScreenshotPortalSelectSourcesOptions("select", "saved-token")
+	withRestore := linuxScreenshotPortalSelectSourcesOptions("select", "saved-token", true, 4)
 	if got := withRestore["restore_token"].Value(); got != "saved-token" {
 		t.Fatalf("restore_token = %#v", got)
+	}
+	if got := withRestore["multiple"].Value(); got != true {
+		t.Fatalf("multiple = %#v", got)
+	}
+	if got := withRestore["cursor_mode"].Value(); got != uint32(4) {
+		t.Fatalf("cursor_mode = %#v", got)
+	}
+}
+
+func TestLinuxScreenshotPortalCleanRestoreStore(t *testing.T) {
+	single := linuxPortalRestoreEntry{Token: "single-token", Monitors: []linuxPortalMonitor{{ID: "DP-1"}}}
+	multiple := linuxPortalRestoreEntry{Token: "multiple-token", Monitors: []linuxPortalMonitor{{ID: "DP-1"}, {ID: "HDMI-A-1"}}}
+	legacy := linuxPortalRestoreEntry{Token: "legacy-token"}
+	store := linuxPortalRestoreStore{Version: 2, Entries: []linuxPortalRestoreEntry{single, multiple, legacy}}
+
+	cleaned := linuxScreenshotPortalCleanRestoreStore(store)
+	if len(cleaned.Entries) != 2 || cleaned.Entries[0].Token != "single-token" || cleaned.Entries[1].Token != "multiple-token" {
+		t.Fatalf("multi-source restore store = %#v", cleaned)
 	}
 }
 
@@ -160,16 +186,30 @@ func TestLinuxPortalLiveCapture(t *testing.T) {
 	if os.Getenv("WOX_LIVE_PORTAL_SCREENSHOT") != "1" {
 		t.Skip("set WOX_LIVE_PORTAL_SCREENSHOT=1 to exercise the desktop portal")
 	}
-	capture, err := newLinuxPortalDesktopCapture()
+	capture, err := newLinuxWaylandDesktopCapture()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer capture.close()
+	captureStartedAt := time.Now()
 	frame, err := capture.capture()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("captured portal frame %v", frame.Bounds())
+	if outputPath := os.Getenv("WOX_LIVE_PORTAL_SCREENSHOT_OUTPUT"); outputPath != "" {
+		file, createErr := os.Create(outputPath)
+		if createErr != nil {
+			t.Fatal(createErr)
+		}
+		if encodeErr := png.Encode(file, frame); encodeErr != nil {
+			file.Close()
+			t.Fatal(encodeErr)
+		}
+		if closeErr := file.Close(); closeErr != nil {
+			t.Fatal(closeErr)
+		}
+	}
+	t.Logf("captured portal frame=%v logical=%+v elapsed=%s", frame.Bounds(), capture.logicalBounds(), time.Since(captureStartedAt).Round(time.Millisecond))
 }
 
 func TestComposeLinuxPortalFramesNormalizesMixedDPI(t *testing.T) {
