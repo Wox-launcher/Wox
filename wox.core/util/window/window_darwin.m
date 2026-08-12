@@ -34,6 +34,7 @@ extern AXError _AXUIElementGetWindow(AXUIElementRef element, CGWindowID *identif
 static char* copyPathFromAXValue(CFTypeRef value);
 char* getFinderWindowPathByPid(int pid);
 int isOpenSaveDialogByPid(int pid);
+int isOpenSaveDialogSelectFolderByPid(int pid);
 
 static CFStringRef const woxAXFullScreenAttribute = CFSTR("AXFullScreen");
 
