@@ -530,7 +530,8 @@ func themeEditorToolbarActionView(action LauncherToolbarAction, theme woxcompone
 
 func themeEditorControlPane(props ThemeEditorSettingsProps, width, height float32) woxwidget.Widget {
 	innerWidth := max(float32(0), width-36)
-	actionsWidth := min(float32(370), innerWidth*0.42)
+	minimumActionsWidth := min(float32(320), max(float32(0), innerWidth-14))
+	actionsWidth := min(float32(370), max(minimumActionsWidth, innerWidth*0.42))
 	groupsWidth := max(float32(0), innerWidth-actionsWidth-14)
 	groups := themeEditorGroupSelector(props, groupsWidth, 40)
 	actions := themeEditorActions(props, actionsWidth, 40)
@@ -552,6 +553,7 @@ func themeEditorControlPane(props ThemeEditorSettingsProps, width, height float3
 
 func themeEditorGroupSelector(props ThemeEditorSettingsProps, width, height float32) woxwidget.Widget {
 	chips := make([]woxwidget.Widget, 0, len(props.Groups))
+	contentWidth := float32(0)
 	for index, group := range props.Groups {
 		chipWidth := max(float32(54), group.LabelWidth+24)
 		if group.LabelWidth <= 0 {
@@ -584,21 +586,29 @@ func themeEditorGroupSelector(props ThemeEditorSettingsProps, width, height floa
 			},
 			Child: chip,
 		})
+		contentWidth += chipWidth
 	}
-	return woxwidget.Clip{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: chips}}
+	if len(chips) > 1 {
+		contentWidth += float32(len(chips)-1) * 8
+	}
+	return woxwidget.ScrollView{
+		Key: "theme-editor-group-scroll", Width: width, Height: height, ContentWidth: max(width, contentWidth), Horizontal: true,
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: chips},
+	}
 }
 
 func themeEditorActions(props ThemeEditorSettingsProps, width, height float32) woxwidget.Widget {
 	gap := float32(10)
 	buttonWidth := max(float32(74), (width-gap*2)/3)
+	buttonPadding := woxwidget.Insets{Left: 10, Right: 10}
 	saveLabel := props.SaveAsLabel
 	if props.Saving {
 		saveLabel = props.SavingLabel
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-discard", Label: props.DiscardLabel, Icon: props.DiscardIcon, Width: buttonWidth, Height: height, Radius: 5, FontSize: 11, Disabled: props.Saving || !props.Dirty, Variant: woxcomponent.ButtonOutline, OnTap: props.OnDiscard, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-overwrite", Label: props.OverwriteLabel, Icon: props.OverwriteIcon, Width: buttonWidth, Height: height, Radius: 5, FontSize: 11, Disabled: props.Saving || !props.Dirty || !props.CanOverwrite, Variant: woxcomponent.ButtonOutline, OnTap: props.OnOverwrite, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-save-as", Label: saveLabel, Icon: props.SaveAsIcon, Width: buttonWidth, Height: height, Radius: 5, FontSize: 11, Disabled: props.Saving, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSaveAs, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-discard", Label: props.DiscardLabel, Icon: props.DiscardIcon, IconSize: 14, IconGap: 6, Width: buttonWidth, Height: height, Radius: 5, Padding: buttonPadding, FontSize: 11, Disabled: props.Saving || !props.Dirty, Variant: woxcomponent.ButtonOutline, OnTap: props.OnDiscard, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-overwrite", Label: props.OverwriteLabel, Icon: props.OverwriteIcon, IconSize: 14, IconGap: 6, Width: buttonWidth, Height: height, Radius: 5, Padding: buttonPadding, FontSize: 11, Disabled: props.Saving || !props.Dirty || !props.CanOverwrite, Variant: woxcomponent.ButtonOutline, OnTap: props.OnOverwrite, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-save-as", Label: saveLabel, Icon: props.SaveAsIcon, IconSize: 14, IconGap: 6, Width: buttonWidth, Height: height, Radius: 5, Padding: buttonPadding, FontSize: 11, Disabled: props.Saving, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSaveAs, Theme: props.Theme}),
 	}}
 }
 

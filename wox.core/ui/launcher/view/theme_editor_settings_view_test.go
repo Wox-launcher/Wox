@@ -39,7 +39,7 @@ func TestThemeEditorGroupUsesMeasuredFlutterWidth(t *testing.T) {
 	selector := themeEditorGroupSelector(ThemeEditorSettingsProps{
 		ActiveGroup: 0,
 		Groups:      []ThemeEditorColorGroup{{Label: "操作面板", LabelWidth: 48}},
-	}, 500, 40).(woxwidget.Clip)
+	}, 500, 40).(woxwidget.ScrollView)
 	semantic := selector.Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	chip := semantic.Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 	if chip.Width != 72 {
@@ -47,6 +47,29 @@ func TestThemeEditorGroupUsesMeasuredFlutterWidth(t *testing.T) {
 	}
 	if !semantic.Selected {
 		t.Fatal("active theme group is not exposed as selected")
+	}
+}
+
+func TestThemeEditorGroupSelectorScrollsNarrowViewport(t *testing.T) {
+	groups := make([]ThemeEditorColorGroup, 5)
+	for index := range groups {
+		groups[index] = ThemeEditorColorGroup{Label: "Group", LabelWidth: 54}
+	}
+	selector := themeEditorGroupSelector(ThemeEditorSettingsProps{Groups: groups}, 300, 40).(woxwidget.ScrollView)
+	if !selector.Horizontal || selector.ContentWidth <= selector.Width {
+		t.Fatalf("theme group selector = %#v, want horizontal overflow", selector)
+	}
+}
+
+func TestThemeEditorControlPaneReservesActionButtonWidth(t *testing.T) {
+	pane := themeEditorControlPane(ThemeEditorSettingsProps{
+		DiscardLabel: "Discard", OverwriteLabel: "Overwrite", SaveAsLabel: "Save as",
+		DiscardIcon: &woxui.Image{}, OverwriteIcon: &woxui.Image{}, SaveAsIcon: &woxui.Image{},
+	}, 716, themeEditorControlPaneHeight).(woxwidget.Stack)
+	actions := pane.Children[2].Child.(woxwidget.Flex)
+	button := actions.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	if button.Width != 100 || button.Padding.Left != 10 || button.Padding.Right != 10 {
+		t.Fatalf("narrow theme action button width/padding = %.0f/%v, want 100/10px horizontal", button.Width, button.Padding)
 	}
 }
 

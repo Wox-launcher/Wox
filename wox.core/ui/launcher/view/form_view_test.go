@@ -182,6 +182,23 @@ func TestFormHotkeyFieldUsesFlutterSettingsLayout(t *testing.T) {
 	}
 }
 
+func TestFormHotkeyFieldShrinksSettingsLabelToKeepRecorderVisible(t *testing.T) {
+	field := FormHotkeyField(FormHotkeyFieldProps{
+		ID: "main-hotkey", Label: "Hotkey", Description: "Show or hide Wox", Labels: []string{"Super", "Space"},
+		Width: 676, LabelWidth: 550, SettingsLayout: true, Theme: woxcomponent.Theme{},
+	})
+	container := field.(woxwidget.Container)
+	row := container.Child.(woxwidget.Flex)
+	label := row.Children[0].(woxwidget.Container)
+	controlArea := row.Children[1].(woxwidget.Stack)
+	if label.Width != 360 || controlArea.Width != 280 {
+		t.Fatalf("narrow settings label/control widths = %.0f/%.0f, want 360/280", label.Width, controlArea.Width)
+	}
+	if !controlArea.Children[0].AnchorRight || controlArea.Children[0].Right != 2 {
+		t.Fatalf("narrow settings recorder geometry = %#v, want right anchored with 2px inset", controlArea.Children[0])
+	}
+}
+
 func TestFormAIModelFieldUsesFlutterProviderAndModelProportions(t *testing.T) {
 	field := FormAIModelField(FormAIModelFieldProps{
 		ID: "default-model", Label: "Default model", Provider: "deepseek", Model: "deepseek-v4-flash",

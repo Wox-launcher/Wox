@@ -189,14 +189,23 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 		recorderChild = woxwidget.StackChild{Top: 2, Right: 0, AnchorRight: true, Child: recorder}
 	}
 	controlChildren := []woxwidget.StackChild{recorderChild}
+	settingsLabelWidth := props.LabelWidth
 	if props.SettingsLayout {
 		const (
-			gap       = float32(32)
-			edgeInset = float32(2)
+			gap                   = float32(32)
+			edgeInset             = float32(2)
+			minimumLabelWidth     = float32(180)
+			preferredControlWidth = float32(280)
 		)
+		availableWidth := max(float32(0), props.Width-gap-edgeInset*2)
+		if availableWidth < minimumLabelWidth {
+			settingsLabelWidth = availableWidth
+		} else {
+			settingsLabelWidth = min(props.LabelWidth, max(minimumLabelWidth, availableWidth-preferredControlWidth))
+		}
 		// The settings field reserves a 2px inset on both sides, so keep the
-		// label, gap, and recorder column inside the field's content width.
-		controlWidth = max(float32(0), props.Width-props.LabelWidth-gap-edgeInset*2)
+		// responsive label, gap, and recorder column inside the field's content width.
+		controlWidth = max(float32(0), props.Width-settingsLabelWidth-gap-edgeInset*2)
 		controlChildren[0] = woxwidget.StackChild{Top: 2, Right: edgeInset, AnchorRight: true, Child: recorder}
 	}
 	if props.Recording && props.Status != "" && controlWidth > recorderWidth+statusGap {
@@ -207,7 +216,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 		if props.SettingsLayout {
 			const labelGap = float32(32)
 			recorderLeft := controlWidth - 2 - recorderWidth
-			hintLeft := -props.LabelWidth - labelGap
+			hintLeft := -settingsLabelWidth - labelGap
 			hintWidth := max(float32(0), recorderLeft-statusGap-hintLeft)
 			// Flutter positions the hint from its actual render box. Clip Go's wider overflow area before the recorder so fallback glyphs cannot outpaint measured text bounds.
 			controlChildren = append(controlChildren, woxwidget.StackChild{Left: hintLeft, Top: 6, Child: woxwidget.Clip{
@@ -230,7 +239,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 	if props.SettingsLayout {
 		const gap = float32(32)
 		return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
-			Label: props.Label, Description: props.Description, Width: props.Width, Height: 62, LabelWidth: props.LabelWidth, Gap: gap,
+			Label: props.Label, Description: props.Description, Width: props.Width, Height: 62, LabelWidth: settingsLabelWidth, Gap: gap,
 			Padding: woxwidget.Insets{Left: 2, Top: 5, Right: 2, Bottom: 5},
 			Child:   control, Theme: props.Theme,
 		})
