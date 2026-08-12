@@ -29,3 +29,13 @@ func TestScreenshotHistoryThumbnailHasWidth(t *testing.T) {
 		t.Fatal("stale thumbnail width must be invalidated")
 	}
 }
+
+func TestNewScreenshotActionAllowsLauncherHide(t *testing.T) {
+	result := (&ScreenshotPlugin{}).newScreenshotResult()
+	if len(result.Actions) != 1 {
+		t.Fatalf("screenshot action count = %d", len(result.Actions))
+	}
+	if result.Actions[0].PreventHideAfterAction {
+		t.Fatal("new screenshot action must allow the launcher to hide")
+	}
+}

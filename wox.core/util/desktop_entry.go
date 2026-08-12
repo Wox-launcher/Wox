@@ -77,6 +77,7 @@ func BuildLinuxDesktopEntry(includeURLField bool, autostart bool) (string, error
 		"MimeType=x-scheme-handler/wox;",
 		"Terminal=false",
 		"StartupWMClass=wox",
+		"X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2",
 	}
 
 	if autostart {

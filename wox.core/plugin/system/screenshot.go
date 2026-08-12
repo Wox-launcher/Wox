@@ -242,10 +242,9 @@ func (p *ScreenshotPlugin) newScreenshotResult() plugin.QueryResult {
 		Icon:     screenshotIcon,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name:                   "i18n:plugin_screenshot_capture_action",
-				IsDefault:              true,
-				PreventHideAfterAction: true,
-				Action:                 p.captureScreenshot,
+				Name:      "i18n:plugin_screenshot_capture_action",
+				IsDefault: true,
+				Action:    p.captureScreenshot,
 			},
 		},
 	}
