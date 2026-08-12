@@ -21,6 +21,8 @@ import (
 	"unsafe"
 )
 
+var errLinuxPortalCaptureRequired = errors.New("Wayland requires Portal desktop capture")
+
 func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, error) {
 	if options.ExportFilePath == "" {
 		return ScreenshotResult{}, errors.New("screenshot export file path is empty")
@@ -29,7 +31,16 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	time.Sleep(80 * time.Millisecond)
 	var cursorX, cursorY C.float
 	hasCapturedCursor := C.wox_screenshot_cursor_position(&cursorX, &cursorY) == 0
-	source, bounds, err := captureLinuxDesktop()
+	source, bounds, err := captureLinuxX11Desktop()
+	var portalCapture *linuxPortalDesktopCapture
+	if errors.Is(err, errLinuxPortalCaptureRequired) {
+		portalCapture, err = newLinuxPortalDesktopCapture()
+		if err == nil {
+			defer portalCapture.close()
+			bounds = portalCapture.bounds
+			source, err = portalCapture.capture()
+		}
+	}
 	if err != nil {
 		return ScreenshotResult{}, err
 	}
@@ -46,7 +57,11 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 			}
 		},
 		captureDesktop: func() (screenshotDesktopCapture, error) {
-			captured, _, captureErr := captureLinuxDesktop()
+			if portalCapture != nil {
+				captured, captureErr := portalCapture.capture()
+				return screenshotDesktopCapture{source: captured}, captureErr
+			}
+			captured, _, captureErr := captureLinuxX11Desktop()
 			return screenshotDesktopCapture{source: captured}, captureErr
 		},
 		desktopPixelOrigin: screenshotEditorDesktopPixelOrigin(bounds, source),
@@ -65,8 +80,8 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	return runScreenshotEditor(options, source, platform)
 }
 
-// captureLinuxDesktop captures the X11 root window and its logical workspace bounds.
-func captureLinuxDesktop() (image.Image, Rect, error) {
+// captureLinuxX11Desktop captures the root window or reports that Wayland needs the Portal path.
+func captureLinuxX11Desktop() (image.Image, Rect, error) {
 	file, err := os.CreateTemp("", "wox-screenshot-*.png")
 	if err != nil {
 		return nil, Rect{}, fmt.Errorf("create screenshot capture file: %w", err)
@@ -83,7 +98,7 @@ func captureLinuxDesktop() (image.Image, Rect, error) {
 	switch result := C.wox_linux_capture_desktop_png(nativePath, &x, &y, &width, &height); result {
 	case 0:
 	case -2:
-		return nil, Rect{}, fmt.Errorf("Wayland desktop capture requires a portal-owned flow: %w", ErrPlatformUnsupported)
+		return nil, Rect{}, errLinuxPortalCaptureRequired
 	default:
 		return nil, Rect{}, errors.New("failed to capture the Linux desktop")
 	}
