@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 
 	"wox/cloudsync"
@@ -345,11 +344,8 @@ func (a *App) PickFiles(_ context.Context, params common.PickFilesParams) ([]str
 	return []string{path}, nil
 }
 
-// CaptureScreenshot hides the launcher before desktop pixels are acquired so Wox is not included in the capture.
+// CaptureScreenshot starts the native capture session without changing launcher visibility.
 func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error) {
-	if err := a.hideWindow(true); err != nil {
-		return common.CaptureScreenshotResult{}, fmt.Errorf("hide launcher before screenshot: %w", err)
-	}
 	result, err := woxscreenshot.CaptureScreenshot(woxscreenshot.ScreenshotOptions{
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, WindowManager: a.windows,
