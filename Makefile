@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage deb www
+.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage deb rpm www
 
 ifeq ($(firstword $(MAKECMDGOALS)),smoke)
 SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -78,13 +78,28 @@ ifeq ($(ARCH),amd64)
 else
 	APPIMAGE_ARCH := $(ARCH)
 endif
-# Debian sorts ~ before the final release, so 2.4.0-beta.2 becomes 2.4.0~beta.2.
+# Debian and RPM both sort ~ before the final release, so 2.4.0-beta.2 becomes 2.4.0~beta.2.
 DEB_VERSION := $(shell printf '%s' '$(VERSION)' | sed 's/-/~/')
 DEB_DIR := $(RELEASE_DIR)/wox.debroot
 DEB_NAME := wox-linux-$(ARCH).deb
 DEB_ARCH := $(ARCH)
 DEB_DESKTOP_FILE := $(APPIMAGE_DESKTOP_FILE)
 DEB_ICON_FILE := $(APPIMAGE_ICON_FILE)
+RPM_VERSION := $(DEB_VERSION)
+RPM_TOPDIR := $(RELEASE_DIR)/wox.rpmbuild
+RPM_SPEC := $(RPM_TOPDIR)/SPECS/wox.spec
+RPM_NAME := wox-linux-$(ARCH).rpm
+RPM_DESKTOP_FILE := $(APPIMAGE_DESKTOP_FILE)
+RPM_ICON_FILE := $(APPIMAGE_ICON_FILE)
+ifeq ($(ARCH),amd64)
+	RPM_ARCH := x86_64
+else
+ifeq ($(ARCH),arm64)
+	RPM_ARCH := aarch64
+else
+	RPM_ARCH := $(ARCH)
+endif
+endif
 
 help:
 	@echo "Usage: make [target]"
@@ -100,6 +115,7 @@ help:
 	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
 	@echo "  appimage   Build Linux AppImage"
 	@echo "  deb        Build Linux .deb package"
+	@echo "  rpm        Build Linux .rpm package"
 	@echo "  plugins    Update plugin store"
 	@echo "  www        Run docs dev server"
 	@echo "  clean      Clean release directory"
@@ -119,6 +135,7 @@ ifeq ($(PLATFORM),linux)
 		exit 1; \
 	fi
 	@command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb is required on Linux to build .deb packages. Install dpkg-dev." >&2; exit 1; }
+	@command -v rpmbuild >/dev/null 2>&1 || { echo "rpmbuild is required on Linux to build .rpm packages. Install rpm." >&2; exit 1; }
 	@command -v patchelf >/dev/null 2>&1 || { echo "patchelf is required on Linux to fix bundled shared library rpath." >&2; exit 1; }
 endif
 ifeq ($(PLATFORM),macos)
@@ -249,6 +266,80 @@ else
 	@echo "deb target is only supported on Linux"
 endif
 
+rpm:
+ifeq ($(PLATFORM),linux)
+	@echo "Building .rpm package..."
+	@test -n "$(VERSION)" || { echo "Unable to read CURRENT_VERSION from wox.core/updater/version.go" >&2; exit 1; }
+	@test -f "$(RELEASE_DIR)/wox-linux-$(ARCH)" || { echo "Missing $(RELEASE_DIR)/wox-linux-$(ARCH). Run make build first." >&2; exit 1; }
+	rm -rf $(RPM_TOPDIR)
+	mkdir -p $(RPM_TOPDIR)/BUILD $(RPM_TOPDIR)/RPMS $(RPM_TOPDIR)/SOURCES $(RPM_TOPDIR)/SPECS $(RPM_TOPDIR)/SRPMS
+	# Keep the binary as-is and list only hard-linked GTK/X11 libs; optional dlopen features stay in Recommends.
+	@{ \
+		printf '%s\n' \
+			'%global debug_package %{nil}' \
+			'%global __os_install_post %{nil}' \
+			'%global _build_id_links none' \
+			'%define _binary_payload w2.xzdio' \
+			'' \
+			'Name: wox' \
+			'Version: $(RPM_VERSION)' \
+			'Release: 1' \
+			'Summary: A launcher that stays out of your way' \
+			'License: GPL-3.0-or-later' \
+			'URL: https://github.com/Wox-launcher/Wox' \
+			'BuildArch: $(RPM_ARCH)' \
+			'AutoReqProv: no' \
+			'' \
+			'Requires: libgtk-3.so.0()(64bit)' \
+			'Requires: libepoxy.so.0()(64bit)' \
+			'Requires: libX11.so.6()(64bit)' \
+			'Requires: libXtst.so.6()(64bit)' \
+			'Requires: libayatana-appindicator3.so.1()(64bit)' \
+			'Recommends: libgtk-layer-shell.so.0()(64bit)' \
+			'Recommends: libpipewire-0.3.so.0()(64bit)' \
+			'Recommends: libwebkit2gtk-4.1.so.0()(64bit)' \
+			'' \
+			'%description' \
+			'Wox is a fully native open-source launcher for Linux with GPU rendering,' \
+			'local search, keyboard-first actions, and an extensible plugin system.' \
+			'' \
+			'%prep' \
+			'%build' \
+			'%install' \
+			'install -D -m 755 $(abspath $(RELEASE_DIR)/wox-linux-$(ARCH)) %{buildroot}/usr/bin/wox' \
+			'install -D -m 644 $(abspath assets/linux/wox.desktop) %{buildroot}/usr/share/applications/$(RPM_DESKTOP_FILE)' \
+			'install -D -m 644 $(abspath assets/app.png) %{buildroot}/usr/share/icons/hicolor/256x256/apps/$(RPM_ICON_FILE)' \
+			'' \
+			'%files' \
+			'%attr(0755,root,root) /usr/bin/wox' \
+			'%attr(0644,root,root) /usr/share/applications/$(RPM_DESKTOP_FILE)' \
+			'%attr(0644,root,root) /usr/share/icons/hicolor/256x256/apps/$(RPM_ICON_FILE)' \
+			'' \
+			'%post' \
+			'if command -v update-desktop-database >/dev/null 2>&1; then' \
+			'  update-desktop-database -q /usr/share/applications || true' \
+			'fi' \
+			'if command -v gtk-update-icon-cache >/dev/null 2>&1; then' \
+			'  gtk-update-icon-cache -q /usr/share/icons/hicolor || true' \
+			'fi' \
+			'' \
+			'%postun' \
+			'if command -v update-desktop-database >/dev/null 2>&1; then' \
+			'  update-desktop-database -q /usr/share/applications || true' \
+			'fi' \
+			'if command -v gtk-update-icon-cache >/dev/null 2>&1; then' \
+			'  gtk-update-icon-cache -q /usr/share/icons/hicolor || true' \
+			'fi' \
+			> $(RPM_SPEC); \
+	}
+	rpmbuild -bb --define '_topdir $(abspath $(RPM_TOPDIR))' $(RPM_SPEC)
+	@rpm_path=$$(find $(RPM_TOPDIR)/RPMS -name '*.rpm' | head -n 1); \
+		test -n "$$rpm_path" || { echo "rpmbuild did not produce an RPM" >&2; exit 1; }; \
+		mv "$$rpm_path" $(RELEASE_DIR)/$(RPM_NAME)
+else
+	@echo "rpm target is only supported on Linux"
+endif
+
 # Test without rebuilding dependencies (fast)
 test: ensure-resources
 	@trap '$(MAKE) clean-resources' EXIT; $(MAKE) test-isolated
@@ -304,6 +395,7 @@ build: clean dev
 ifeq ($(PLATFORM),linux)
 		$(MAKE) appimage
 		$(MAKE) deb
+		$(MAKE) rpm
 endif
 
 ifeq ($(PLATFORM),macos)

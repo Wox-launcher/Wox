@@ -538,6 +538,7 @@ jobs:
             libkeybinder-3.0-dev \
             libgtk-layer-shell0 \
             libfuse2 \
+            rpm \
             xvfb
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -584,6 +585,10 @@ jobs:
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: ./release/wox-linux-amd64.deb
+      - name: Attest rpm provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ./release/wox-linux-amd64.rpm
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -601,4 +606,10 @@ jobs:
         with:
           name: wox-linux-amd64.deb
           path: ./release/wox-linux-amd64.deb
+          retention-days: ${{ inputs.artifact_retention_days }}
+      - name: Upload rpm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wox-linux-amd64.rpm
+          path: ./release/wox-linux-amd64.rpm
           retention-days: ${{ inputs.artifact_retention_days }}

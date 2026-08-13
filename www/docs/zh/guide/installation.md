@@ -11,6 +11,8 @@
 | Windows | Scoop | `scoop install extras/wox` |
 | Arch Linux | AUR | `yay -S wox-bin` |
 | Debian / Ubuntu | `.deb` | 从 [Releases](https://github.com/Wox-launcher/Wox/releases) 下载 `wox-linux-amd64.deb`，然后执行 `sudo apt install ./wox-linux-amd64.deb` |
+| Fedora / RHEL | `.rpm` | 从 [Releases](https://github.com/Wox-launcher/Wox/releases) 下载 `wox-linux-amd64.rpm`，然后执行 `sudo dnf install ./wox-linux-amd64.rpm` |
+| openSUSE | `.rpm` | 从 [Releases](https://github.com/Wox-launcher/Wox/releases) 下载 `wox-linux-amd64.rpm`，然后执行 `sudo zypper install ./wox-linux-amd64.rpm` |
 
 安装完成后，从应用启动器打开 Wox，或运行一次已安装的可执行文件。首次启动时 Wox 会创建用户数据目录。
 
@@ -42,6 +44,8 @@ Wox 默认检查稳定版通道。如需接收测试版预发布版，打开 **�
 
 1. 优先使用安装包：
    - Debian / Ubuntu：从 Releases 下载 `.deb`，执行 `sudo apt install ./wox-linux-amd64.deb`
+   - Fedora / RHEL：从 Releases 下载 `.rpm`，执行 `sudo dnf install ./wox-linux-amd64.rpm`
+   - openSUSE：从 Releases 下载 `.rpm`，执行 `sudo zypper install ./wox-linux-amd64.rpm`
    - Arch Linux：从 AUR 安装 `wox-bin`
    - AppImage：下载 `wox-linux-amd64.AppImage`，赋予执行权限后直接运行
 2. 也可以从 Releases 下载 Linux 二进制，解压到稳定目录（例如 `~/Applications/wox`），再运行 `./wox`。
@@ -87,5 +91,7 @@ Wox 会把设置、插件数据、缓存和日志放在应用目录之外：
 
 - AUR：用你的 AUR helper 或包管理器移除 `wox-bin`
 - Debian / Ubuntu：`sudo apt remove wox`
+- Fedora / RHEL：`sudo dnf remove wox`
+- openSUSE：`sudo zypper remove wox`
 - 手动或 AppImage 安装：删除解压出的二进制或 AppImage 文件
 - 完全重置：删除 `~/.wox`

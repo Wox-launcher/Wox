@@ -11,6 +11,8 @@ Choose the installer that matches how you normally manage desktop apps. Package 
 | Windows | Scoop | `scoop install extras/wox` |
 | Arch Linux | AUR | `yay -S wox-bin` |
 | Debian / Ubuntu | `.deb` | Download `wox-linux-amd64.deb` from [Releases](https://github.com/Wox-launcher/Wox/releases), then `sudo apt install ./wox-linux-amd64.deb` |
+| Fedora / RHEL | `.rpm` | Download `wox-linux-amd64.rpm` from [Releases](https://github.com/Wox-launcher/Wox/releases), then `sudo dnf install ./wox-linux-amd64.rpm` |
+| openSUSE | `.rpm` | Download `wox-linux-amd64.rpm` from [Releases](https://github.com/Wox-launcher/Wox/releases), then `sudo zypper install ./wox-linux-amd64.rpm` |
 
 After installation, start Wox from your app launcher or run the installed executable once. Wox creates its data directory on first launch.
 
@@ -42,6 +44,8 @@ If macOS blocks the first launch, open Wox from Finder once and choose **Open** 
 
 1. Prefer a package when available:
    - Debian / Ubuntu: install the `.deb` from Releases with `sudo apt install ./wox-linux-amd64.deb`
+   - Fedora / RHEL: install the `.rpm` from Releases with `sudo dnf install ./wox-linux-amd64.rpm`
+   - openSUSE: install the `.rpm` from Releases with `sudo zypper install ./wox-linux-amd64.rpm`
    - Arch Linux: install `wox-bin` from the AUR
    - AppImage: download `wox-linux-amd64.AppImage`, mark it executable, and run it
 2. Or download the Linux binary from Releases, extract it to a stable location such as `~/Applications/wox`, and run `./wox`.
@@ -87,5 +91,7 @@ Remove the application first, then decide whether to keep user data.
 
 - AUR: remove `wox-bin` with your AUR helper or package manager
 - Debian / Ubuntu: `sudo apt remove wox`
+- Fedora / RHEL: `sudo dnf remove wox`
+- openSUSE: `sudo zypper remove wox`
 - Manual or AppImage install: delete the extracted binary or AppImage file
 - Full reset: remove `~/.wox`
