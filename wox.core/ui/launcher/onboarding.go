@@ -230,9 +230,11 @@ func (a *App) onboardingSteps() []launcherview.OnboardingStep {
 	if runtime.GOOS == "darwin" {
 		specs = append(specs, onboardingStepSpec{"permissions", "onboarding_permissions_title", woxui.Color{R: 249, G: 115, B: 22, A: 255}})
 	}
+	specs = append(specs, onboardingStepSpec{"mainHotkey", "onboarding_main_hotkey_title", woxui.Color{R: 249, G: 115, B: 22, A: 255}})
+	if includeOnboardingSelectionHotkey(runtime.GOOS) {
+		specs = append(specs, onboardingStepSpec{"selectionHotkey", "onboarding_selection_hotkey_title", woxui.Color{R: 96, G: 165, B: 250, A: 255}})
+	}
 	specs = append(specs,
-		onboardingStepSpec{"mainHotkey", "onboarding_main_hotkey_title", woxui.Color{R: 249, G: 115, B: 22, A: 255}},
-		onboardingStepSpec{"selectionHotkey", "onboarding_selection_hotkey_title", woxui.Color{R: 96, G: 165, B: 250, A: 255}},
 		onboardingStepSpec{"glance", "onboarding_glance_title", woxui.Color{R: 250, G: 204, B: 21, A: 255}},
 		onboardingStepSpec{"queryHotkeys", "onboarding_query_hotkeys_title", woxui.Color{R: 244, G: 63, B: 94, A: 255}},
 		onboardingStepSpec{"trayQueries", "onboarding_tray_queries_title", woxui.Color{R: 34, G: 197, B: 94, A: 255}},
@@ -245,6 +247,13 @@ func (a *App) onboardingSteps() []launcherview.OnboardingStep {
 		steps[index] = launcherview.OnboardingStep{ID: spec.id, Title: a.translate("i18n:" + spec.key), Accent: spec.accent}
 	}
 	return steps
+}
+
+// includeOnboardingSelectionHotkey reports whether the selection-query setup
+// step should appear. Linux cannot capture the current selection, so that
+// first-run page is omitted there.
+func includeOnboardingSelectionHotkey(goos string) bool {
+	return goos != "linux"
 }
 
 func (a *App) onboardingLabels() map[string]string {

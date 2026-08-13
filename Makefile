@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage deb rpm www
+.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage deb rpm www
 
 ifeq ($(firstword $(MAKECMDGOALS)),smoke)
 SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -91,6 +91,8 @@ RPM_SPEC := $(RPM_TOPDIR)/SPECS/wox.spec
 RPM_NAME := wox-linux-$(ARCH).rpm
 RPM_DESKTOP_FILE := $(APPIMAGE_DESKTOP_FILE)
 RPM_ICON_FILE := $(APPIMAGE_ICON_FILE)
+LINUX_METAINFO_FILE := io.github.WoxLauncher.Wox.metainfo.xml
+LINUX_ICON_STAGING := $(RELEASE_DIR)/linux-icons
 ifeq ($(ARCH),amd64)
 	RPM_ARCH := x86_64
 else
@@ -136,6 +138,7 @@ ifeq ($(PLATFORM),linux)
 	fi
 	@command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb is required on Linux to build .deb packages. Install dpkg-dev." >&2; exit 1; }
 	@command -v rpmbuild >/dev/null 2>&1 || { echo "rpmbuild is required on Linux to build .rpm packages. Install rpm." >&2; exit 1; }
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 is required on Linux to generate software-center icon sizes." >&2; exit 1; }
 	@command -v patchelf >/dev/null 2>&1 || { echo "patchelf is required on Linux to fix bundled shared library rpath." >&2; exit 1; }
 endif
 ifeq ($(PLATFORM),macos)
@@ -196,22 +199,36 @@ ensure-resources:
 clean-resources:
 	@rm -f wox.core/resource/hosts/placeholder
 
+# GNOME Software and Discover read AppStream metadata plus 64/128/256 hicolor icons from the package itself.
+_linux_package_icons:
+	@test -f assets/app.png || { echo "Missing assets/app.png" >&2; exit 1; }
+	@test -f assets/linux/$(LINUX_METAINFO_FILE) || { echo "Missing assets/linux/$(LINUX_METAINFO_FILE)" >&2; exit 1; }
+	rm -rf $(LINUX_ICON_STAGING)
+	python3 assets/linux/write_hicolor_icons.py assets/app.png $(LINUX_ICON_STAGING) $(APPIMAGE_ICON_FILE)
+
 appimage:
 ifeq ($(PLATFORM),linux)
 	@echo "Building AppImage..."
+	$(MAKE) _linux_package_icons
 	rm -rf $(APPIMAGE_DIR)
 	mkdir -p $(APPIMAGE_DIR)/usr/bin
-	mkdir -p $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps
 	mkdir -p $(APPIMAGE_DIR)/usr/share/applications
+	mkdir -p $(APPIMAGE_DIR)/usr/share/metainfo
+	mkdir -p $(APPIMAGE_DIR)/usr/share/icons/hicolor/64x64/apps
+	mkdir -p $(APPIMAGE_DIR)/usr/share/icons/hicolor/128x128/apps
+	mkdir -p $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps
 	cp $(RELEASE_DIR)/wox-linux-$(ARCH) $(APPIMAGE_DIR)/usr/bin/wox
 	chmod +x $(APPIMAGE_DIR)/usr/bin/wox
 	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/$(APPIMAGE_DESKTOP_FILE)
 	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/usr/share/applications/$(APPIMAGE_DESKTOP_FILE)
+	cp assets/linux/$(LINUX_METAINFO_FILE) $(APPIMAGE_DIR)/usr/share/metainfo/$(LINUX_METAINFO_FILE)
 	cp assets/linux/AppRun $(APPIMAGE_DIR)/AppRun
 	chmod +x $(APPIMAGE_DIR)/AppRun
-	cp assets/app.png $(APPIMAGE_DIR)/$(APPIMAGE_ICON_FILE)
-	cp assets/app.png $(APPIMAGE_DIR)/.DirIcon
-	cp assets/app.png $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps/$(APPIMAGE_ICON_FILE)
+	cp $(LINUX_ICON_STAGING)/256x256/$(APPIMAGE_ICON_FILE) $(APPIMAGE_DIR)/$(APPIMAGE_ICON_FILE)
+	cp $(LINUX_ICON_STAGING)/256x256/$(APPIMAGE_ICON_FILE) $(APPIMAGE_DIR)/.DirIcon
+	cp $(LINUX_ICON_STAGING)/64x64/$(APPIMAGE_ICON_FILE) $(APPIMAGE_DIR)/usr/share/icons/hicolor/64x64/apps/$(APPIMAGE_ICON_FILE)
+	cp $(LINUX_ICON_STAGING)/128x128/$(APPIMAGE_ICON_FILE) $(APPIMAGE_DIR)/usr/share/icons/hicolor/128x128/apps/$(APPIMAGE_ICON_FILE)
+	cp $(LINUX_ICON_STAGING)/256x256/$(APPIMAGE_ICON_FILE) $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps/$(APPIMAGE_ICON_FILE)
 	ARCH=$(APPIMAGE_ARCH) $(APPIMAGE_TOOL) $(APPIMAGE_DIR) $(RELEASE_DIR)/$(APPIMAGE_NAME)
 else
 	@echo "appimage target is only supported on Linux"
@@ -222,15 +239,24 @@ ifeq ($(PLATFORM),linux)
 	@echo "Building .deb package..."
 	@test -n "$(VERSION)" || { echo "Unable to read CURRENT_VERSION from wox.core/updater/version.go" >&2; exit 1; }
 	@test -f "$(RELEASE_DIR)/wox-linux-$(ARCH)" || { echo "Missing $(RELEASE_DIR)/wox-linux-$(ARCH). Run make build first." >&2; exit 1; }
+	$(MAKE) _linux_package_icons
 	rm -rf $(DEB_DIR)
 	mkdir -p $(DEB_DIR)/DEBIAN
 	mkdir -p $(DEB_DIR)/usr/bin
 	mkdir -p $(DEB_DIR)/usr/share/applications
+	mkdir -p $(DEB_DIR)/usr/share/metainfo
+	mkdir -p $(DEB_DIR)/usr/share/pixmaps
+	mkdir -p $(DEB_DIR)/usr/share/icons/hicolor/64x64/apps
+	mkdir -p $(DEB_DIR)/usr/share/icons/hicolor/128x128/apps
 	mkdir -p $(DEB_DIR)/usr/share/icons/hicolor/256x256/apps
 	cp $(RELEASE_DIR)/wox-linux-$(ARCH) $(DEB_DIR)/usr/bin/wox
 	chmod 755 $(DEB_DIR)/usr/bin/wox
 	cp assets/linux/wox.desktop $(DEB_DIR)/usr/share/applications/$(DEB_DESKTOP_FILE)
-	cp assets/app.png $(DEB_DIR)/usr/share/icons/hicolor/256x256/apps/$(DEB_ICON_FILE)
+	cp assets/linux/$(LINUX_METAINFO_FILE) $(DEB_DIR)/usr/share/metainfo/$(LINUX_METAINFO_FILE)
+	cp $(LINUX_ICON_STAGING)/64x64/$(DEB_ICON_FILE) $(DEB_DIR)/usr/share/icons/hicolor/64x64/apps/$(DEB_ICON_FILE)
+	cp $(LINUX_ICON_STAGING)/128x128/$(DEB_ICON_FILE) $(DEB_DIR)/usr/share/icons/hicolor/128x128/apps/$(DEB_ICON_FILE)
+	cp $(LINUX_ICON_STAGING)/256x256/$(DEB_ICON_FILE) $(DEB_DIR)/usr/share/icons/hicolor/256x256/apps/$(DEB_ICON_FILE)
+	cp $(LINUX_ICON_STAGING)/128x128/$(DEB_ICON_FILE) $(DEB_DIR)/usr/share/pixmaps/$(DEB_ICON_FILE)
 	# Hard-linked GTK/X11 libs are required at process start; optional features stay in Recommends.
 	@{ \
 		installed_size=$$(du -sk $(DEB_DIR)/usr | awk '{print $$1}'); \
@@ -271,6 +297,7 @@ ifeq ($(PLATFORM),linux)
 	@echo "Building .rpm package..."
 	@test -n "$(VERSION)" || { echo "Unable to read CURRENT_VERSION from wox.core/updater/version.go" >&2; exit 1; }
 	@test -f "$(RELEASE_DIR)/wox-linux-$(ARCH)" || { echo "Missing $(RELEASE_DIR)/wox-linux-$(ARCH). Run make build first." >&2; exit 1; }
+	$(MAKE) _linux_package_icons
 	rm -rf $(RPM_TOPDIR)
 	mkdir -p $(RPM_TOPDIR)/BUILD $(RPM_TOPDIR)/RPMS $(RPM_TOPDIR)/SOURCES $(RPM_TOPDIR)/SPECS $(RPM_TOPDIR)/SRPMS
 	# Keep the binary as-is and list only hard-linked GTK/X11 libs; optional dlopen features stay in Recommends.
@@ -307,12 +334,20 @@ ifeq ($(PLATFORM),linux)
 			'%install' \
 			'install -D -m 755 $(abspath $(RELEASE_DIR)/wox-linux-$(ARCH)) %{buildroot}/usr/bin/wox' \
 			'install -D -m 644 $(abspath assets/linux/wox.desktop) %{buildroot}/usr/share/applications/$(RPM_DESKTOP_FILE)' \
-			'install -D -m 644 $(abspath assets/app.png) %{buildroot}/usr/share/icons/hicolor/256x256/apps/$(RPM_ICON_FILE)' \
+			'install -D -m 644 $(abspath assets/linux/$(LINUX_METAINFO_FILE)) %{buildroot}/usr/share/metainfo/$(LINUX_METAINFO_FILE)' \
+			'install -D -m 644 $(abspath $(LINUX_ICON_STAGING)/64x64/$(RPM_ICON_FILE)) %{buildroot}/usr/share/icons/hicolor/64x64/apps/$(RPM_ICON_FILE)' \
+			'install -D -m 644 $(abspath $(LINUX_ICON_STAGING)/128x128/$(RPM_ICON_FILE)) %{buildroot}/usr/share/icons/hicolor/128x128/apps/$(RPM_ICON_FILE)' \
+			'install -D -m 644 $(abspath $(LINUX_ICON_STAGING)/256x256/$(RPM_ICON_FILE)) %{buildroot}/usr/share/icons/hicolor/256x256/apps/$(RPM_ICON_FILE)' \
+			'install -D -m 644 $(abspath $(LINUX_ICON_STAGING)/128x128/$(RPM_ICON_FILE)) %{buildroot}/usr/share/pixmaps/$(RPM_ICON_FILE)' \
 			'' \
 			'%files' \
 			'%attr(0755,root,root) /usr/bin/wox' \
 			'%attr(0644,root,root) /usr/share/applications/$(RPM_DESKTOP_FILE)' \
+			'%attr(0644,root,root) /usr/share/metainfo/$(LINUX_METAINFO_FILE)' \
+			'%attr(0644,root,root) /usr/share/icons/hicolor/64x64/apps/$(RPM_ICON_FILE)' \
+			'%attr(0644,root,root) /usr/share/icons/hicolor/128x128/apps/$(RPM_ICON_FILE)' \
 			'%attr(0644,root,root) /usr/share/icons/hicolor/256x256/apps/$(RPM_ICON_FILE)' \
+			'%attr(0644,root,root) /usr/share/pixmaps/$(RPM_ICON_FILE)' \
 			'' \
 			'%post' \
 			'if command -v update-desktop-database >/dev/null 2>&1; then' \

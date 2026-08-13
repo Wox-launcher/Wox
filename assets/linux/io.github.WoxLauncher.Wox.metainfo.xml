@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.WoxLauncher.Wox</id>
+  <launchable type="desktop-id">io.github.WoxLauncher.Wox.desktop</launchable>
+  <metadata_license>FSFAP</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Wox</name>
+  <summary>A launcher that stays out of your way</summary>
+  <description>
+    <p>
+      Wox is a fully native open-source launcher with GPU rendering,
+      local search, keyboard-first actions, and an extensible plugin system.
+    </p>
+  </description>
+  <icon type="stock">io.github.WoxLauncher.Wox</icon>
+  <url type="homepage">https://github.com/Wox-launcher/Wox</url>
+  <url type="bugtracker">https://github.com/Wox-launcher/Wox/issues</url>
+  <developer id="io.github.WoxLauncher">
+    <name>Wox Contributors</name>
+  </developer>
+  <provides>
+    <binary>wox</binary>
+  </provides>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+</component>
