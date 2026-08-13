@@ -3,26 +3,28 @@ package screenshot
 import woxui "wox/ui/runtime"
 
 type (
-	Color          = woxui.Color
-	DisplayList    = woxui.DisplayList
-	FrameInfo      = woxui.FrameInfo
-	Image          = woxui.Image
-	Key            = woxui.Key
-	KeyEvent       = woxui.KeyEvent
-	KeyModifiers   = woxui.KeyModifiers
-	ManagedWindow  = woxui.ManagedWindow
-	Point          = woxui.Point
-	PointerEvent   = woxui.PointerEvent
-	PointerCursor  = woxui.PointerCursor
-	Rect           = woxui.Rect
-	Size           = woxui.Size
-	TextInputEvent = woxui.TextInputEvent
-	TextInputState = woxui.TextInputState
-	TextStyle      = woxui.TextStyle
-	Window         = woxui.Window
-	WindowID       = woxui.WindowID
-	WindowManager  = woxui.WindowManager
-	WindowOptions  = woxui.WindowOptions
+	Color           = woxui.Color
+	DisplayList     = woxui.DisplayList
+	FrameInfo       = woxui.FrameInfo
+	Image           = woxui.Image
+	Key             = woxui.Key
+	KeyEvent        = woxui.KeyEvent
+	KeyModifiers    = woxui.KeyModifiers
+	ManagedWindow   = woxui.ManagedWindow
+	Point           = woxui.Point
+	PointerEvent    = woxui.PointerEvent
+	PointerCursor   = woxui.PointerCursor
+	Rect            = woxui.Rect
+	SaveFileOptions = woxui.SaveFileOptions
+	Size            = woxui.Size
+	TextInputEvent  = woxui.TextInputEvent
+	TextInputState  = woxui.TextInputState
+	TextStyle       = woxui.TextStyle
+	Window          = woxui.Window
+	WindowID        = woxui.WindowID
+	WindowLifecycle = woxui.WindowLifecycle
+	WindowManager   = woxui.WindowManager
+	WindowOptions   = woxui.WindowOptions
 )
 
 const (
@@ -56,7 +58,10 @@ const (
 	PointerUp                     = woxui.PointerUp
 	TextInputCommit               = woxui.TextInputCommit
 	TextInputCompose              = woxui.TextInputCompose
+	WindowLifecyclePresenting     = woxui.WindowLifecyclePresenting
+	WindowLifecycleVisible        = woxui.WindowLifecycleVisible
 	WindowRoleScreenshot          = woxui.WindowRoleScreenshot
+	WindowRoleUtility             = woxui.WindowRoleUtility
 )
 
 var (

@@ -37,6 +37,10 @@ func (host *screenshotEditorWindowHost) current() *screenshotEditorOverlayState 
 
 func (host *screenshotEditorWindowHost) draw(displayList *DisplayList, frame FrameInfo) {
 	if state := host.current(); state != nil {
+		if recording := state.activeRecordingUI(); recording != nil {
+			recording.drawToolbar(displayList, frame)
+			return
+		}
 		state.draw(displayList, frame)
 	} else {
 		displayList.Clear(Color{})
@@ -45,12 +49,23 @@ func (host *screenshotEditorWindowHost) draw(displayList *DisplayList, frame Fra
 
 func (host *screenshotEditorWindowHost) pointer(event PointerEvent) {
 	if state := host.current(); state != nil {
+		if recording := state.activeRecordingUI(); recording != nil {
+			recording.toolbarPointer(event)
+			return
+		}
 		state.pointer(event)
 	}
 }
 
 func (host *screenshotEditorWindowHost) key(event KeyEvent) bool {
 	if state := host.current(); state != nil {
+		if recording := state.activeRecordingUI(); recording != nil {
+			if event.Down && event.Key == KeyEscape {
+				recording.cancel()
+				return true
+			}
+			return false
+		}
 		return state.key(event)
 	}
 	return false
@@ -64,7 +79,11 @@ func (host *screenshotEditorWindowHost) textInput(event TextInputEvent) {
 
 func (host *screenshotEditorWindowHost) closed() {
 	if state := host.current(); state != nil {
-		state.complete(true)
+		if recording := state.activeRecordingUI(); recording != nil {
+			recording.closed()
+		} else {
+			state.complete(true)
+		}
 	}
 	host.mu.Lock()
 	host.state = nil

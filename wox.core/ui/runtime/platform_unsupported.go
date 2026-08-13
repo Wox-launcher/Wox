@@ -72,6 +72,14 @@ func (w *platformWindow) pickFile(options FileDialogOptions) (string, error) {
 	return "", ErrPlatformUnsupported
 }
 
+func (w *platformWindow) saveFile(options SaveFileOptions) (string, error) {
+	return "", ErrPlatformUnsupported
+}
+
+func (w *platformWindow) setPointerPassthrough(enabled bool) error {
+	return ErrPlatformUnsupported
+}
+
 func (w *platformWindow) openExternalURL(rawURL string) error {
 	return ErrPlatformUnsupported
 }

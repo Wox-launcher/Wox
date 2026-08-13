@@ -251,11 +251,22 @@ type CaptureScreenshotRequest struct {
 	// It reuses the normal confirm/export path so file output, clipboard behavior, and cleanup stay
 	// identical to an explicit confirm button press.
 	AutoConfirm bool `json:"autoConfirm"`
+	// AllowVideoRecording exposes the recording workflow only to trusted Wox-owned callers. The
+	// zero value deliberately preserves the image-only contract used by third-party plugins.
+	AllowVideoRecording bool `json:"allowVideoRecording"`
 	// CallerIcon is set only by plugin-originated screenshot API calls. The previous request did not
 	// carry caller identity, so UI could not visually distinguish a third-party capture from the
 	// built-in Wox screenshot flow; passing the already-resolved icon keeps that decision in Go.
 	CallerIcon *WoxImage `json:"callerIcon,omitempty"`
 }
+
+// CaptureArtifactKind distinguishes the image compatibility path from saved video artifacts.
+type CaptureArtifactKind string
+
+const (
+	CaptureArtifactKindImage CaptureArtifactKind = "image"
+	CaptureArtifactKindVideo CaptureArtifactKind = "video"
+)
 
 // DisplaySnapshot describes one native capture surface that UI can render and crop from.
 // The platform bridge must provide both image bytes and geometry from the same native source
@@ -275,6 +286,8 @@ type DisplaySnapshot struct {
 // bytes back through the bridge.
 type CaptureScreenshotResult struct {
 	Status               CaptureScreenshotStatus `json:"status"`
+	ArtifactKind         CaptureArtifactKind     `json:"artifactKind,omitempty"`
+	ArtifactPath         string                  `json:"artifactPath,omitempty"`
 	ScreenshotPath       string                  `json:"screenshotPath,omitempty"`
 	LogicalSelectionRect *ScreenshotRect         `json:"logicalSelectionRect,omitempty"`
 	// PinToScreen tells the Go screenshot plugin that UI exported the image for a pinned

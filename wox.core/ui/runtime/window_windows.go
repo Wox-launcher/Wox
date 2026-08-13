@@ -44,6 +44,7 @@ const (
 	unicodeNoCharacter             = 0xFFFF
 	wmMouseHorizontalWheel         = 0x020E
 	pointerScrollLine              = 40
+	windowsMouseActivateNoActivate = 3
 	dwmwaUseImmersiveDark          = 20
 	dwmwaWindowCorner              = 33
 	dwmwaSystemBackdrop            = 38
@@ -117,6 +118,8 @@ const (
 	windowCommandSetAppearance
 	windowCommandSetFontFamily
 	windowCommandPickFile
+	windowCommandSaveFile
+	windowCommandSetPointerPassthrough
 	windowCommandOpenExternalURL
 	windowCommandWriteClipboardText
 	windowCommandWriteClipboardImage
@@ -144,6 +147,8 @@ type windowCommand struct {
 	darkAppearance              bool
 	fontFamily                  string
 	fileDialog                  FileDialogOptions
+	saveFile                    SaveFileOptions
+	pointerPassthrough          bool
 	externalURL                 string
 	clipboardText               string
 	clipboard                   *clipboardImage
@@ -198,8 +203,9 @@ type platformWindow struct {
 	// Windows' drag-oriented WM_DPICHANGED suggestion during SetWindowPos.
 	suppressDPIBounds bool
 
-	inputState    TextInputState
-	pointerCursor PointerCursor
+	inputState         TextInputState
+	pointerCursor      PointerCursor
+	pointerPassthrough bool
 	// webViewCursorKnown distinguishes an intentional CSS cursor:none from a cursor not reported yet.
 	webViewCursor      win.HCURSOR
 	webViewCursorKnown bool
@@ -518,6 +524,15 @@ func (w *platformWindow) pickFile(options FileDialogOptions) (string, error) {
 	return result.path, result.err
 }
 
+func (w *platformWindow) saveFile(options SaveFileOptions) (string, error) {
+	result := w.call(windowCommand{kind: windowCommandSaveFile, saveFile: options})
+	return result.path, result.err
+}
+
+func (w *platformWindow) setPointerPassthrough(enabled bool) error {
+	return w.call(windowCommand{kind: windowCommandSetPointerPassthrough, pointerPassthrough: enabled}).err
+}
+
 func (w *platformWindow) openExternalURL(rawURL string) error {
 	return w.call(windowCommand{kind: windowCommandOpenExternalURL, externalURL: rawURL}).err
 }
@@ -661,6 +676,9 @@ func (w *platformWindow) createNativeWindow() error {
 	x := (win.GetSystemMetrics(win.SM_CXSCREEN) - int32(width)) / 2
 	y := (win.GetSystemMetrics(win.SM_CYSCREEN) - int32(height)) / 3
 	exStyle := uint32(win.WS_EX_TOPMOST | win.WS_EX_TOOLWINDOW | wsExNoRedirectionBitmap)
+	if w.options.Nonactivating {
+		exStyle |= win.WS_EX_NOACTIVATE
+	}
 	// Normal management windows use the taskbar; transient launcher surfaces keep utility/topmost semantics.
 	if w.options.Role == WindowRoleApplication {
 		exStyle = uint32(win.WS_EX_APPWINDOW | wsExNoRedirectionBitmap)
@@ -699,7 +717,7 @@ func (w *platformWindow) createNativeWindow() error {
 	}
 	// Screenshot windows never host WebView or other embedded native surfaces, so their virtual-
 	// desktop-sized renderer does not need the second double-buffered composition swap chain.
-	enableEmbeddedSurfaceOverlay := windowsRendererNeedsEmbeddedSurfaceOverlay(w.options.Role)
+	enableEmbeddedSurfaceOverlay := windowsRendererNeedsEmbeddedSurfaceOverlay(w.options.Role) && !w.options.Nonactivating
 	renderer, err := newNativeRenderer(uintptr(hwnd), int(client.Right-client.Left), int(client.Bottom-client.Top), enableEmbeddedSurfaceOverlay)
 	if err != nil {
 		win.DestroyWindow(hwnd)
@@ -709,7 +727,7 @@ func (w *platformWindow) createNativeWindow() error {
 		return err
 	}
 	w.renderer = renderer
-	if windowsWindowUsesSystemBackdrop(w.options.Role) {
+	if windowsWindowUsesSystemBackdrop(w.options.Role) && !w.options.Nonactivating {
 		applyWindowsBackdrop(hwnd, w.darkAppearance)
 	}
 	nativeWindows.Store(uintptr(hwnd), w)
@@ -947,6 +965,14 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		return 0
 	case win.WM_ERASEBKGND:
 		return 1
+	case win.WM_NCHITTEST:
+		if window.pointerPassthrough {
+			return ^uintptr(0)
+		}
+	case win.WM_MOUSEACTIVATE:
+		if window.options.Nonactivating {
+			return windowsMouseActivateNoActivate
+		}
 	case win.WM_SETCURSOR:
 		win.SetCursor(window.resolvedPointerCursor())
 		return 1
@@ -975,7 +1001,9 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		return 0
 	case win.WM_LBUTTONDOWN, win.WM_RBUTTONDOWN, win.WM_MBUTTONDOWN:
 		// Reclaim native focus before Host routing; embedded surfaces transfer it back when they handle the press.
-		win.SetFocus(hwnd)
+		if !window.options.Nonactivating {
+			win.SetFocus(hwnd)
+		}
 		win.SetCapture(hwnd)
 		window.emitPointer(PointerEvent{Kind: PointerDown, Position: window.logicalPointerPosition(lParam), Button: windowsPointerButton(message), Modifiers: windowsKeyModifiers()})
 		return 0
@@ -1446,6 +1474,20 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 	case windowCommandPickFile:
 		path, err := pickFileNative(uintptr(w.hwnd), command.fileDialog)
 		return windowCommandResult{path: path, err: err}
+	case windowCommandSaveFile:
+		path, err := saveFileNative(uintptr(w.hwnd), command.saveFile)
+		return windowCommandResult{path: path, err: err}
+	case windowCommandSetPointerPassthrough:
+		w.pointerPassthrough = command.pointerPassthrough
+		exStyle := win.GetWindowLong(w.hwnd, win.GWL_EXSTYLE)
+		if command.pointerPassthrough {
+			exStyle |= win.WS_EX_LAYERED | win.WS_EX_TRANSPARENT
+		} else {
+			exStyle &^= win.WS_EX_TRANSPARENT
+		}
+		win.SetWindowLong(w.hwnd, win.GWL_EXSTYLE, exStyle)
+		win.SetWindowPos(w.hwnd, 0, 0, 0, 0, 0, win.SWP_NOMOVE|win.SWP_NOSIZE|win.SWP_NOZORDER|win.SWP_NOACTIVATE|win.SWP_FRAMECHANGED)
+		return windowCommandResult{}
 	case windowCommandOpenExternalURL:
 		return windowCommandResult{err: openExternalURLNative(w.hwnd, command.externalURL)}
 	case windowCommandWriteClipboardText:
@@ -1719,8 +1761,12 @@ func (w *platformWindow) showNative() FocusEpoch {
 		// composition surface from becoming visible one refresh before its content.
 		_, _, _ = dwmFlush.Call()
 	}
-	win.ShowWindow(w.hwnd, showCommand)
-	activateWindow(w.hwnd)
+	if w.options.Nonactivating {
+		win.ShowWindow(w.hwnd, win.SW_SHOWNOACTIVATE)
+	} else {
+		win.ShowWindow(w.hwnd, showCommand)
+		activateWindow(w.hwnd)
+	}
 	if w.isWithinFocusDomain(win.GetForegroundWindow()) {
 		w.confirmActivation()
 	}
@@ -1731,7 +1777,7 @@ func (w *platformWindow) showNative() FocusEpoch {
 
 // synchronizeBackdropAfterShow replaces the backdrop policy cached while the HWND was hidden.
 func (w *platformWindow) synchronizeBackdropAfterShow() {
-	if !windowsWindowUsesSystemBackdrop(w.options.Role) {
+	if !windowsWindowUsesSystemBackdrop(w.options.Role) || w.options.Nonactivating {
 		return
 	}
 	if osvariant.GetCurrentPlatformVariant() == "win11" && dwmSetWindowAttribute.Find() == nil {

@@ -472,7 +472,7 @@ func renderScreenshotEditorCursor(target *image.RGBA, cursorPixel Point, selecti
 		hotspotX = captured.hotspot.X
 		hotspotY = captured.hotspot.Y
 	} else {
-		fallback, renderErr := renderScreenshotEditorCursorImage(width, height)
+		fallback, renderErr := screenshotEditorCursorRaster(width, height)
 		if renderErr != nil {
 			return renderErr
 		}

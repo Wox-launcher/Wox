@@ -352,7 +352,8 @@ func (a *App) PickFiles(_ context.Context, params common.PickFilesParams) ([]str
 func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error) {
 	result, err := woxscreenshot.CaptureScreenshot(woxscreenshot.ScreenshotOptions{
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
-		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, WindowManager: a.windows,
+		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, AllowVideoRecording: request.AllowVideoRecording,
+		RecordingDefaults: woxscreenshot.RecordingDefaults{FPS: 30, ShowPointer: true}, WindowManager: a.windows,
 		AnnotationTooltips: woxscreenshot.ScreenshotAnnotationTooltips{
 			Rectangle: a.translate("i18n:ui_screenshot_tool_rectangle"),
 			Ellipse:   a.translate("i18n:ui_screenshot_tool_ellipse"),
@@ -366,8 +367,17 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 			ScrollingCapture: a.translate("i18n:ui_screenshot_tool_scrolling_capture"),
 			Cursor:           a.translate("i18n:ui_screenshot_tool_cursor"),
 			Pin:              a.translate("i18n:ui_screenshot_tool_pin"),
+			Record:           a.translate("i18n:ui_screenshot_record_enter"),
 			Cancel:           a.translate("i18n:ui_screenshot_tool_cancel"),
 			Confirm:          a.translate("i18n:ui_screenshot_tool_confirm"),
+		},
+		RecordingTooltips: woxscreenshot.RecordingTooltips{
+			Enter: a.translate("i18n:ui_screenshot_record_enter"), Start: a.translate("i18n:ui_screenshot_record_start"),
+			Pause: a.translate("i18n:ui_screenshot_record_pause"), Resume: a.translate("i18n:ui_screenshot_record_resume"),
+			Restart: a.translate("i18n:ui_screenshot_record_restart"), ShowPointer: a.translate("i18n:ui_screenshot_record_pointer"),
+			ShowKeypress: a.translate("i18n:ui_screenshot_record_keypress"), Finish: a.translate("i18n:ui_screenshot_record_finish"),
+			Save: a.translate("i18n:ui_screenshot_record_save"), Play: a.translate("i18n:ui_screenshot_record_play"),
+			Cancel: a.translate("i18n:ui_screenshot_record_cancel"), PrivacyWarning: a.translate("i18n:ui_screenshot_record_privacy"),
 		},
 	})
 	if err != nil {
@@ -384,8 +394,17 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 		return common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusCancelled}, nil
 	}
 	selection := common.ScreenshotRect{X: float64(result.LogicalSelection.X), Y: float64(result.LogicalSelection.Y), Width: float64(result.LogicalSelection.Width), Height: float64(result.LogicalSelection.Height)}
+	artifactKind := common.CaptureArtifactKind(result.ArtifactKind)
+	if artifactKind == "" {
+		artifactKind = common.CaptureArtifactKindImage
+	}
+	artifactPath := result.ArtifactPath
+	if artifactPath == "" {
+		artifactPath = result.ScreenshotPath
+	}
 	return common.CaptureScreenshotResult{
-		Status: common.CaptureScreenshotStatusCompleted, ScreenshotPath: result.ScreenshotPath, LogicalSelectionRect: &selection,
+		Status: common.CaptureScreenshotStatusCompleted, ArtifactKind: artifactKind, ArtifactPath: artifactPath,
+		ScreenshotPath: result.ScreenshotPath, LogicalSelectionRect: &selection,
 		PinToScreen: result.PinToScreen, ClipboardWriteSucceeded: result.ClipboardWriteSucceeded, ClipboardWarningMessage: result.ClipboardWarningMessage,
 	}, nil
 }

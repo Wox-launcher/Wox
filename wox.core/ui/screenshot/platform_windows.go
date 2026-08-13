@@ -40,9 +40,6 @@ type windowsCursorInfo struct {
 
 func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, error) {
 	startedAt := time.Now()
-	if options.ExportFilePath == "" {
-		return ScreenshotResult{}, errors.New("screenshot export file path is empty")
-	}
 	capturedCursorPosition, capturedCursor := captureWindowsCursor()
 	type desktopCapture struct {
 		capture      *woxui.WindowsDesktopCapture
@@ -111,6 +108,19 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 			}
 			return nil
 		},
+		cursorPosition: func() *Point {
+			var position win.POINT
+			if !win.GetCursorPos(&position) {
+				return nil
+			}
+			return &Point{X: float32(position.X - int32(virtualBounds.Min.X)), Y: float32(position.Y - int32(virtualBounds.Min.Y))}
+		},
+		setRecordingBounds: func(window *Window, selection Rect, _ Size, margin float32) error {
+			return window.SetPhysicalBounds(Rect{
+				X: float32(virtualBounds.Min.X) + selection.X - margin, Y: float32(virtualBounds.Min.Y) + selection.Y - margin,
+				Width: selection.Width + margin*2, Height: selection.Height + margin*2,
+			})
+		},
 		captureDesktop: func() (screenshotDesktopCapture, error) {
 			capture, captureErr := woxui.CaptureWindowsVirtualDesktop()
 			if captureErr != nil {
@@ -122,6 +132,18 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 					_ = capture.Close()
 				},
 			}, nil
+		},
+		captureDesktopRect: func(pixelBounds image.Rectangle) (*image.RGBA, error) {
+			screen := pixelBounds.Add(image.Pt(virtualBounds.Min.X, virtualBounds.Min.Y))
+			return woxui.CaptureWindowsRect(screen)
+		},
+		openRecordingCapture: func(pixelBounds image.Rectangle) (func() (*image.RGBA, error), func(), error) {
+			screen := pixelBounds.Add(image.Pt(virtualBounds.Min.X, virtualBounds.Min.Y))
+			capturer, err := woxui.NewWindowsRectCapturer(screen)
+			if err != nil {
+				return nil, nil, err
+			}
+			return capturer.Capture, func() { _ = capturer.Close() }, nil
 		},
 		setScrollBounds: func(window *Window, controls Rect, _ Size) error {
 			return window.SetPhysicalBounds(Rect{

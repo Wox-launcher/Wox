@@ -1601,6 +1601,80 @@ HRESULT WoxAcceleratorKeyPressedHandler::Invoke(IUnknown *, IUnknown *args) {
   return S_OK;
 }
 
+extern "C" int32_t wox_windows_save_file(uintptr_t owner, const char *title, const char *default_name, const char *extension, char **path) {
+  if (owner == 0 || path == nullptr) {
+    return E_INVALIDARG;
+  }
+  *path = nullptr;
+
+  IFileSaveDialog *dialog = nullptr;
+  HRESULT result = CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog));
+  if (FAILED(result)) {
+    return result;
+  }
+  FILEOPENDIALOGOPTIONS options = 0;
+  if (SUCCEEDED(dialog->GetOptions(&options))) {
+    result = dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_NOCHANGEDIR | FOS_OVERWRITEPROMPT);
+  }
+  const std::wstring native_title = utf8_to_wide(title);
+  const std::wstring native_name = utf8_to_wide(default_name);
+  const std::wstring native_extension = utf8_to_wide(extension);
+  if (SUCCEEDED(result) && !native_title.empty()) {
+    result = dialog->SetTitle(native_title.c_str());
+  }
+  if (SUCCEEDED(result) && !native_name.empty()) {
+    result = dialog->SetFileName(native_name.c_str());
+  }
+  if (SUCCEEDED(result) && !native_extension.empty()) {
+    const std::wstring filter_name = native_extension + L" file";
+    const std::wstring filter_pattern = L"*." + native_extension;
+    COMDLG_FILTERSPEC filter = {filter_name.c_str(), filter_pattern.c_str()};
+    result = dialog->SetFileTypes(1, &filter);
+    if (SUCCEEDED(result)) {
+      result = dialog->SetDefaultExtension(native_extension.c_str());
+    }
+  }
+  if (SUCCEEDED(result)) {
+    result = dialog->Show(reinterpret_cast<HWND>(owner));
+  }
+  if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+    dialog->Release();
+    return 1;
+  }
+
+  IShellItem *item = nullptr;
+  if (SUCCEEDED(result)) {
+    result = dialog->GetResult(&item);
+  }
+  PWSTR native_path = nullptr;
+  if (SUCCEEDED(result)) {
+    result = item->GetDisplayName(SIGDN_FILESYSPATH, &native_path);
+  }
+  std::string utf8_path;
+  if (SUCCEEDED(result)) {
+    utf8_path = wide_to_utf8(native_path);
+    if (utf8_path.empty()) {
+      result = E_FAIL;
+    }
+  }
+  if (native_path != nullptr) {
+    CoTaskMemFree(native_path);
+  }
+  if (item != nullptr) {
+    item->Release();
+  }
+  dialog->Release();
+  if (FAILED(result)) {
+    return result;
+  }
+  *path = static_cast<char *>(std::malloc(utf8_path.size() + 1));
+  if (*path == nullptr) {
+    return E_OUTOFMEMORY;
+  }
+  std::memcpy(*path, utf8_path.c_str(), utf8_path.size() + 1);
+  return 0;
+}
+
 WoxCursorChangedHandler::WoxCursorChangedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session) : owner_(owner), session_(session) { owner_->retain(); }
 HRESULT WoxCursorChangedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewCursorChangedCallback), object); }
 ULONG WoxCursorChangedHandler::AddRef() { return references_.fetch_add(1) + 1; }

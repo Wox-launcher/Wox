@@ -138,6 +138,7 @@ struct WoxLinuxWindow {
   bool active;
   bool hide_on_blur;
   bool native_dialog_active;
+  bool nonactivating;
   bool restore_previous_on_hide;
   bool layer_shell_enabled;
   bool input_enabled;
@@ -1478,7 +1479,7 @@ int32_t wox_linux_run(uintptr_t context) {
   return start_result == 0 ? 0 : -1;
 }
 
-WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t application_window, uintptr_t context) {
+WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, uintptr_t context) {
   if (!is_main_thread() || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
   }
@@ -1489,6 +1490,8 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   window->preferred_width = width;
   window->preferred_height = height;
   window->hide_on_blur = hide_on_blur != 0;
+  bool application_window = window_role == 1;
+  window->nonactivating = nonactivating != 0;
   window->im_context = gtk_im_multicontext_new();
   window->pressed_keys = g_hash_table_new(g_direct_hash, g_direct_equal);
   window->web_view_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_object_unref);
@@ -1531,7 +1534,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
 #endif
   gtk_window_set_decorated(GTK_WINDOW(window->window), FALSE);
   // Application windows must stay visible to the desktop shell instead of using launcher-only utility hints.
-  if (application_window != 0) {
+  if (application_window) {
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window->window), FALSE);
     gtk_window_set_type_hint(GTK_WINDOW(window->window), GDK_WINDOW_TYPE_HINT_NORMAL);
     gtk_window_set_keep_above(GTK_WINDOW(window->window), FALSE);
@@ -1540,19 +1543,19 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
     gtk_window_set_type_hint(GTK_WINDOW(window->window), GDK_WINDOW_TYPE_HINT_UTILITY);
     gtk_window_set_keep_above(GTK_WINDOW(window->window), TRUE);
   }
-  gtk_window_set_accept_focus(GTK_WINDOW(window->window), TRUE);
-  gtk_window_set_focus_on_map(GTK_WINDOW(window->window), TRUE);
+  gtk_window_set_accept_focus(GTK_WINDOW(window->window), !window->nonactivating);
+  gtk_window_set_focus_on_map(GTK_WINDOW(window->window), !window->nonactivating);
   gtk_window_set_position(GTK_WINDOW(window->window), GTK_WIN_POS_CENTER);
   gtk_widget_set_app_paintable(window->window, TRUE);
   GtkTargetEntry file_drop_target = {(gchar *)"text/uri-list", 0, 0};
   gtk_drag_dest_set(window->window, GTK_DEST_DEFAULT_ALL, &file_drop_target, 1, GDK_ACTION_COPY);
 
-  window->layer_shell_enabled = application_window == 0 && enable_layer_shell(GTK_WINDOW(window->window));
+  window->layer_shell_enabled = !application_window && enable_layer_shell(GTK_WINDOW(window->window));
 
   gtk_gl_area_set_required_version(GTK_GL_AREA(window->gl_area), 3, 3);
   gtk_gl_area_set_use_es(GTK_GL_AREA(window->gl_area), FALSE);
-  // Linux compositors do not provide a consistent backdrop blur, so use an opaque surface.
-  gtk_gl_area_set_has_alpha(GTK_GL_AREA(window->gl_area), FALSE);
+  // Recording surfaces need real alpha; ordinary Linux windows remain opaque because compositor blur is inconsistent.
+  gtk_gl_area_set_has_alpha(GTK_GL_AREA(window->gl_area), window->nonactivating);
   gtk_gl_area_set_has_depth_buffer(GTK_GL_AREA(window->gl_area), FALSE);
   gtk_gl_area_set_has_stencil_buffer(GTK_GL_AREA(window->gl_area), FALSE);
   gtk_gl_area_set_auto_render(GTK_GL_AREA(window->gl_area), FALSE);
@@ -1648,11 +1651,15 @@ static void show_main(void *data) {
   GdkWindow *gdk_window = gtk_widget_get_window(window->window);
   if (gdk_window != NULL) {
     gdk_window_raise(gdk_window);
-    gdk_window_focus(gdk_window, GDK_CURRENT_TIME);
+    if (!window->nonactivating) {
+      gdk_window_focus(gdk_window, GDK_CURRENT_TIME);
+    }
   }
-  request_x11_activation(window);
-  gtk_window_present(GTK_WINDOW(window->window));
-  gtk_widget_grab_focus(window->gl_area);
+  if (!window->nonactivating) {
+    request_x11_activation(window);
+    gtk_window_present(GTK_WINDOW(window->window));
+    gtk_widget_grab_focus(window->gl_area);
+  }
 }
 
 uint64_t wox_linux_window_show(WoxLinuxWindow *window) {
@@ -2490,6 +2497,86 @@ int32_t wox_linux_window_set_pointer_cursor(WoxLinuxWindow *window, uint8_t curs
   }
   window->pointer_cursor = cursor;
   return apply_linux_pointer_cursor(window);
+}
+
+typedef struct {
+  WoxLinuxWindow *window;
+  const char *title;
+  const char *default_name;
+  const char *extension;
+  char *path;
+  int32_t result;
+} WoxSaveFileDialogCall;
+
+static void save_file_main(void *data) {
+  WoxSaveFileDialogCall *call = data;
+  WoxLinuxWindow *window = call->window;
+  if (window->closed) {
+    call->result = -1;
+    return;
+  }
+  const char *title = call->title != NULL && call->title[0] != '\0' ? call->title : "Save recording";
+  GtkFileChooserNative *dialog = gtk_file_chooser_native_new(title, GTK_WINDOW(window->window), GTK_FILE_CHOOSER_ACTION_SAVE, "_Save", "_Cancel");
+  if (dialog == NULL) {
+    call->result = -1;
+    return;
+  }
+  gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog), TRUE);
+  if (call->default_name != NULL && call->default_name[0] != '\0') {
+    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), call->default_name);
+  }
+  if (call->extension != NULL && call->extension[0] != '\0') {
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gchar *filter_name = g_strdup_printf("%s file", call->extension);
+    gchar *filter_pattern = g_strdup_printf("*.%s", call->extension);
+    gtk_file_filter_set_name(filter, filter_name);
+    gtk_file_filter_add_pattern(filter, filter_pattern);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    g_free(filter_pattern);
+    g_free(filter_name);
+  }
+  window->native_dialog_active = true;
+  gint response = gtk_native_dialog_run(GTK_NATIVE_DIALOG(dialog));
+  window->native_dialog_active = false;
+  if (response == GTK_RESPONSE_ACCEPT) {
+    call->path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+    if (call->path == NULL) {
+      call->result = -1;
+    }
+  } else {
+    call->result = 1;
+  }
+  g_object_unref(dialog);
+}
+
+int32_t wox_linux_window_save_file(WoxLinuxWindow *window, const char *title, const char *default_name, const char *extension, char **path) {
+  if (window == NULL || path == NULL) {
+    return -1;
+  }
+  WoxSaveFileDialogCall call = {.window = window, .title = title, .default_name = default_name, .extension = extension};
+  if (!run_on_main_sync(save_file_main, &call)) {
+    return -1;
+  }
+  *path = call.path;
+  return call.result;
+}
+
+static void set_pointer_passthrough_main(void *data) {
+  WoxBoolCall *call = data;
+  GdkWindow *native = gtk_widget_get_window(call->window->window);
+  if (native == NULL) {
+    call->result = -1;
+    return;
+  }
+  gdk_window_set_pass_through(native, call->enabled);
+}
+
+int32_t wox_linux_window_set_pointer_passthrough(WoxLinuxWindow *window, int32_t enabled) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxBoolCall call = {.window = window, .enabled = enabled != 0};
+  return run_on_main_sync(set_pointer_passthrough_main, &call) ? call.result : -1;
 }
 
 typedef struct {

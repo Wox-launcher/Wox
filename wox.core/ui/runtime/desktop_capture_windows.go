@@ -134,6 +134,103 @@ func CaptureWindowsVirtualDesktop() (*WindowsDesktopCapture, error) {
 	return capture, nil
 }
 
+// WindowsRectCapturer reuses one DIB so recording can copy a fixed rectangle every frame.
+type WindowsRectCapturer struct {
+	bounds   image.Rectangle
+	width    int
+	height   int
+	screenDC win.HDC
+	memoryDC win.HDC
+	bitmap   win.HBITMAP
+	previous win.HGDIOBJ
+	bits     unsafe.Pointer
+}
+
+// NewWindowsRectCapturer prepares a reusable GDI capture surface for one physical rectangle.
+func NewWindowsRectCapturer(bounds image.Rectangle) (*WindowsRectCapturer, error) {
+	width := bounds.Dx()
+	height := bounds.Dy()
+	if width <= 0 || height <= 0 || width > 16384 || height > 16384 {
+		return nil, fmt.Errorf("invalid capture rectangle: %dx%d", width, height)
+	}
+	screenDC := win.GetDC(0)
+	if screenDC == 0 {
+		return nil, errors.New("failed to open the Windows desktop device context")
+	}
+	memoryDC := win.CreateCompatibleDC(screenDC)
+	if memoryDC == 0 {
+		win.ReleaseDC(0, screenDC)
+		return nil, errors.New("failed to create the screenshot memory device context")
+	}
+	bitmapInfo := win.BITMAPINFOHEADER{
+		BiSize:        uint32(unsafe.Sizeof(win.BITMAPINFOHEADER{})),
+		BiWidth:       int32(width),
+		BiHeight:      -int32(height),
+		BiPlanes:      1,
+		BiBitCount:    32,
+		BiCompression: win.BI_RGB,
+	}
+	var bits unsafe.Pointer
+	bitmap := win.CreateDIBSection(screenDC, &bitmapInfo, win.DIB_RGB_COLORS, &bits, 0, 0)
+	if bitmap == 0 || bits == nil {
+		win.DeleteDC(memoryDC)
+		win.ReleaseDC(0, screenDC)
+		return nil, errors.New("failed to create the Windows screenshot DIB")
+	}
+	previous := win.SelectObject(memoryDC, win.HGDIOBJ(bitmap))
+	if previous == 0 {
+		win.DeleteObject(win.HGDIOBJ(bitmap))
+		win.DeleteDC(memoryDC)
+		win.ReleaseDC(0, screenDC)
+		return nil, errors.New("failed to select the Windows screenshot DIB")
+	}
+	return &WindowsRectCapturer{
+		bounds: bounds, width: width, height: height,
+		screenDC: screenDC, memoryDC: memoryDC, bitmap: bitmap, previous: previous, bits: bits,
+	}, nil
+}
+
+// Capture copies the current rectangle into an owned BGR0 buffer without a per-pixel channel swap.
+func (capturer *WindowsRectCapturer) Capture() (*image.RGBA, error) {
+	if capturer == nil || capturer.bitmap == 0 || capturer.bits == nil {
+		return nil, errors.New("recording capture surface is closed")
+	}
+	if !win.BitBlt(capturer.memoryDC, 0, 0, int32(capturer.width), int32(capturer.height), capturer.screenDC, int32(capturer.bounds.Min.X), int32(capturer.bounds.Min.Y), win.SRCCOPY|windowsCaptureBlt) {
+		return nil, errors.New("failed to copy Windows desktop pixels")
+	}
+	pixelBytes := capturer.width * capturer.height * 4
+	pixels := unsafe.Slice((*byte)(capturer.bits), pixelBytes)
+	output := image.NewRGBA(image.Rect(0, 0, capturer.width, capturer.height))
+	copy(output.Pix, pixels)
+	return output, nil
+}
+
+// Close releases the reusable GDI capture surface.
+func (capturer *WindowsRectCapturer) Close() error {
+	if capturer == nil || capturer.bitmap == 0 {
+		return nil
+	}
+	win.SelectObject(capturer.memoryDC, capturer.previous)
+	win.DeleteObject(win.HGDIOBJ(capturer.bitmap))
+	win.DeleteDC(capturer.memoryDC)
+	win.ReleaseDC(0, capturer.screenDC)
+	capturer.bitmap = 0
+	capturer.memoryDC = 0
+	capturer.screenDC = 0
+	capturer.bits = nil
+	return nil
+}
+
+// CaptureWindowsRect copies one physical pixel rectangle into an owned BGR0 image.
+func CaptureWindowsRect(bounds image.Rectangle) (*image.RGBA, error) {
+	capturer, err := NewWindowsRectCapturer(bounds)
+	if err != nil {
+		return nil, err
+	}
+	defer capturer.Close()
+	return capturer.Capture()
+}
+
 // windowsConvertDIBToRGBA converts GDI's BGRX bytes in place without another desktop buffer.
 func windowsConvertDIBToRGBA(pixels []byte) {
 	for offset := 0; offset+3 < len(pixels); offset += 4 {

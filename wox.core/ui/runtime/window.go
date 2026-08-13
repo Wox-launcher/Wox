@@ -71,6 +71,13 @@ type FileDialogOptions struct {
 	Directory bool
 }
 
+// SaveFileOptions configures a platform-native save dialog with overwrite confirmation.
+type SaveFileOptions struct {
+	Title           string
+	DefaultFileName string
+	Extension       string
+}
+
 // FrameInfo describes both the logical layout space and its backing surface.
 type FrameInfo struct {
 	Size      Size
@@ -87,7 +94,7 @@ type FocusEvent struct {
 	Active bool
 }
 
-// WindowRole controls whether a window behaves like a transient utility surface or a normal application window.
+// WindowRole selects the native chrome and coordinate space for a window.
 type WindowRole uint8
 
 const (
@@ -109,9 +116,11 @@ const (
 // WindowOptions configures a launcher window using platform-neutral units and behavior.
 // Size is the preferred initial logical client size; FrameInfo reports the actual drawable size.
 type WindowOptions struct {
-	Title                      string
-	Size                       Size
-	Role                       WindowRole
+	Title string
+	Size  Size
+	Role  WindowRole
+	// Nonactivating keeps recording chrome visible without stealing focus from the captured app.
+	Nonactivating              bool
 	HideOnBlur                 bool
 	OnFrame                    func(displayList *DisplayList, frame FrameInfo)
 	OnFocus                    func(event FocusEvent)
@@ -470,6 +479,25 @@ func (w *Window) PickFile(options FileDialogOptions) (string, error) {
 		return "", errors.New("window is not initialized")
 	}
 	return w.native.pickFile(options)
+}
+
+// SaveFile opens the platform save picker. An empty path means the user cancelled.
+func (w *Window) SaveFile(options SaveFileOptions) (string, error) {
+	if w == nil || w.native == nil {
+		return "", errors.New("window is not initialized")
+	}
+	options.Title = strings.TrimSpace(options.Title)
+	options.DefaultFileName = filepath.Base(strings.TrimSpace(options.DefaultFileName))
+	options.Extension = strings.TrimPrefix(strings.TrimSpace(options.Extension), ".")
+	return w.native.saveFile(options)
+}
+
+// SetPointerPassthrough controls whether pointer input reaches windows below this surface.
+func (w *Window) SetPointerPassthrough(enabled bool) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	return w.native.setPointerPassthrough(enabled)
 }
 
 // OpenExternalURL asks the desktop to open a web URL or email draft in the user's default application.

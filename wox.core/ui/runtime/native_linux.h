@@ -7,7 +7,7 @@ typedef struct WoxLinuxWindow WoxLinuxWindow;
 
 int32_t wox_linux_run(uintptr_t context);
 int32_t wox_linux_call(uintptr_t context);
-WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t application_window, uintptr_t context);
+WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, uintptr_t context);
 uint64_t wox_linux_window_show(WoxLinuxWindow *window);
 int32_t wox_linux_window_hide(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_bounds(WoxLinuxWindow *window, float x, float y, float width, float height);
@@ -19,6 +19,8 @@ int32_t wox_linux_window_start_dragging(WoxLinuxWindow *window);
 int32_t wox_linux_window_minimize(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_hide_on_blur(WoxLinuxWindow *window, int32_t enabled);
 int32_t wox_linux_window_pick_file(WoxLinuxWindow *window, int32_t directory, char **path);
+int32_t wox_linux_window_save_file(WoxLinuxWindow *window, const char *title, const char *default_name, const char *extension, char **path);
+int32_t wox_linux_window_set_pointer_passthrough(WoxLinuxWindow *window, int32_t enabled);
 int32_t wox_linux_window_open_external_url(WoxLinuxWindow *window, const char *url);
 int32_t wox_linux_window_show_webview(WoxLinuxWindow *window, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height);
 int32_t wox_linux_window_hide_webview(WoxLinuxWindow *window);

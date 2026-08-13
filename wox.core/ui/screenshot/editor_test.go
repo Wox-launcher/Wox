@@ -306,6 +306,24 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	}
 }
 
+func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
+	state := newScreenshotEditorOverlayState(ScreenshotOptions{AllowVideoRecording: true}, testScreenshotImage(t, 10, 10), screenshotEditorPlatform{})
+	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
+	state.hasSelection = true
+	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
+	if state.toolbarRect.Width != 686 || state.recordRect.Width != 40 {
+		t.Fatalf("recording toolbar=%+v button=%+v", state.toolbarRect, state.recordRect)
+	}
+
+	imageOnly := newScreenshotEditorOverlayState(ScreenshotOptions{}, testScreenshotImage(t, 10, 10), screenshotEditorPlatform{})
+	imageOnly.selection = state.selection
+	imageOnly.hasSelection = true
+	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
+	if imageOnly.toolbarRect.Width != 632 || imageOnly.recordRect != (Rect{}) {
+		t.Fatalf("image-only toolbar=%+v button=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
+	}
+}
+
 func TestScreenshotEditorToolbarReservesPropertyBarSpaceBeforeToolSelection(t *testing.T) {
 	state := &screenshotEditorOverlayState{
 		image:        testScreenshotImage(t, 1, 1),
@@ -362,7 +380,7 @@ func TestScreenshotEditorAnnotationToolsHaveTooltips(t *testing.T) {
 	if got := screenshotEditorToolTooltip(int(screenshotEditorToolRect), configured); got != "Localized rectangle (R)" {
 		t.Fatalf("configured tooltip = %q", got)
 	}
-	anchor, actionTooltip := screenshotEditorActionTooltip(screenshotEditorActionCursor, ScreenshotActionTooltips{Cursor: "Localized cursor"}, Rect{}, Rect{}, Rect{X: 10, Y: 20, Width: 40, Height: 40}, Rect{}, Rect{}, Rect{})
+	anchor, actionTooltip := screenshotEditorActionTooltip(screenshotEditorActionCursor, ScreenshotActionTooltips{Cursor: "Localized cursor"}, Rect{}, Rect{}, Rect{X: 10, Y: 20, Width: 40, Height: 40}, Rect{}, Rect{}, Rect{}, Rect{})
 	if anchor.X != 10 || actionTooltip != "Localized cursor (C)" {
 		t.Fatalf("cursor tooltip = anchor:%+v text:%q", anchor, actionTooltip)
 	}

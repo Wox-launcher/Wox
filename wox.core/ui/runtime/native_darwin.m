@@ -100,6 +100,7 @@ struct WoxDarwinWindow {
   bool restore_previous_app_on_hide;
   bool hide_on_blur;
   bool screenshot_window;
+  bool nonactivating;
   bool native_dialog_active;
   bool input_enabled;
   uint8_t pointer_cursor;
@@ -211,15 +212,16 @@ static CGImageRef capture_display_image(CGDirectDisplayID display_id) {
 }
 
 @interface WoxNativeWindow : NSWindow
+@property(nonatomic, assign) BOOL woxNonactivating;
 @end
 
 @implementation WoxNativeWindow
 - (BOOL)canBecomeKeyWindow {
-  return YES;
+  return !self.woxNonactivating;
 }
 
 - (BOOL)canBecomeMainWindow {
-  return YES;
+  return !self.woxNonactivating;
 }
 @end
 
@@ -2063,7 +2065,7 @@ int32_t wox_darwin_run(uintptr_t context) {
   return 0;
 }
 
-WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, uintptr_t context) {
+WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, uintptr_t context) {
   if (![NSThread isMainThread] || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
   }
@@ -2072,8 +2074,10 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     NSRect frame = NSMakeRect(0.0, 0.0, width, height);
     bool is_application_window = window_role == 1;
     bool is_screenshot_window = window_role == 2;
+    bool is_nonactivating = nonactivating != 0;
+    bool is_overlay_style = is_screenshot_window || is_nonactivating;
     NSWindowStyleMask style_mask = NSWindowStyleMaskBorderless;
-    if (!is_screenshot_window) {
+    if (!is_overlay_style) {
       style_mask = NSWindowStyleMaskTitled | NSWindowStyleMaskFullSizeContentView;
       if (is_application_window) {
         style_mask |= NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
@@ -2085,11 +2089,12 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
                     backing:NSBackingStoreBuffered
                       defer:NO];
     native_window.releasedWhenClosed = NO;
+    native_window.woxNonactivating = is_nonactivating;
     native_window.opaque = NO;
     native_window.backgroundColor = [NSColor clearColor];
-    native_window.hasShadow = !is_screenshot_window;
+    native_window.hasShadow = !is_overlay_style;
     native_window.acceptsMouseMovedEvents = YES;
-    if (!is_screenshot_window) {
+    if (!is_overlay_style) {
       native_window.titlebarAppearsTransparent = YES;
       native_window.titleVisibility = NSWindowTitleHidden;
       [[native_window standardWindowButton:NSWindowCloseButton] setHidden:YES];
@@ -2100,7 +2105,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     if (is_application_window) {
       native_window.level = NSNormalWindowLevel;
       native_window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
-    } else if (is_screenshot_window) {
+    } else if (is_overlay_style) {
       NSWindowCollectionBehavior behavior =
           NSWindowCollectionBehaviorCanJoinAllSpaces |
           NSWindowCollectionBehaviorFullScreenAuxiliary |
@@ -2124,6 +2129,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     }
 
     WoxDarwinWindow *window = calloc(1, sizeof(WoxDarwinWindow));
+    window->nonactivating = is_nonactivating;
     atomic_init(&window->presentation_generation, 0);
     WoxRenderView *view = [[WoxRenderView alloc] initWithFrame:frame];
     view->_owner = window;
@@ -2199,18 +2205,24 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
       // Starting a new focus epoch is not a real focus loss.
       window->active = false;
     }
-    save_previous_active_app_if_needed(window);
+    if (!window->nonactivating) {
+      save_previous_active_app_if_needed(window);
+    }
     window->epoch++;
     atomic_fetch_add_explicit(&window->presentation_generation, 1, memory_order_relaxed);
     epoch = window->epoch;
     window->visible = true;
     [window->view updateBackingScale];
-    [NSApp activateIgnoringOtherApps:YES];
     if (window->window.isMiniaturized) {
       [window->window deminiaturize:nil];
     }
-    [window->window makeKeyAndOrderFront:nil];
-    [window->window makeFirstResponder:window->view];
+    if (window->nonactivating) {
+      [window->window orderFrontRegardless];
+    } else {
+      [NSApp activateIgnoringOtherApps:YES];
+      [window->window makeKeyAndOrderFront:nil];
+      [window->window makeFirstResponder:window->view];
+    }
     if (!window->closed && window->window.isKeyWindow) {
       emit_focus(window, true);
     }
@@ -2636,6 +2648,63 @@ int32_t wox_darwin_window_pick_file(WoxDarwinWindow *window, int32_t directory, 
       [window->window makeKeyAndOrderFront:nil];
       [window->window makeFirstResponder:window->view];
     }
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_save_file(WoxDarwinWindow *window, const char *title, const char *default_name, const char *extension, char **path) {
+  if (window == NULL || path == NULL) {
+    return -1;
+  }
+  *path = NULL;
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    NSSavePanel *panel = [NSSavePanel savePanel];
+    if (title != NULL && title[0] != '\0') {
+      panel.title = [NSString stringWithUTF8String:title];
+    }
+    if (default_name != NULL && default_name[0] != '\0') {
+      panel.nameFieldStringValue = [NSString stringWithUTF8String:default_name];
+    }
+    if (extension != NULL && extension[0] != '\0') {
+      panel.allowedFileTypes = @[[NSString stringWithUTF8String:extension]];
+      panel.allowsOtherFileTypes = NO;
+    }
+    window->native_dialog_active = true;
+    NSInteger response = [panel runModal];
+    window->native_dialog_active = false;
+    if (response == NSModalResponseOK) {
+      const char *selected_path = panel.URL.path.fileSystemRepresentation;
+      if (selected_path == NULL) {
+        result = -1;
+      } else {
+        *path = strdup(selected_path);
+        if (*path == NULL) {
+          result = -1;
+        }
+      }
+    } else {
+      result = 1;
+    }
+  });
+  return result;
+}
+
+int32_t wox_darwin_window_set_pointer_passthrough(WoxDarwinWindow *window, int32_t enabled) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed) {
+      result = -1;
+      return;
+    }
+    window->window.ignoresMouseEvents = enabled != 0;
   });
   return result;
 }

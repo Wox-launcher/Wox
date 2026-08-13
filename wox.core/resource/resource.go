@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"wox/util"
 )
@@ -102,7 +103,11 @@ func extractFiles(ctx context.Context, fs embed.FS, extractDirectory string, fil
 		}
 
 		var subFilePath = path.Join(extractDirectoryPath, entry.Name())
-		writeErr := os.WriteFile(subFilePath, fileData, 0644)
+		mode := os.FileMode(0644)
+		if runtime.GOOS != "windows" && strings.HasPrefix(filepath.ToSlash(filePath), "others/recording/") && (entry.Name() == "ffmpeg" || entry.Name() == "gst-launch-1.0") {
+			mode = 0755
+		}
+		writeErr := os.WriteFile(subFilePath, fileData, mode)
 		if writeErr != nil {
 			return writeErr
 		}

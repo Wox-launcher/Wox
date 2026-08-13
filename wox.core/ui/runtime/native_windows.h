@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 int32_t wox_windows_pick_file(uintptr_t owner, int32_t directory, char **path);
+int32_t wox_windows_save_file(uintptr_t owner, const char *title, const char *default_name, const char *extension, char **path);
 int32_t wox_windows_start_file_drag(uintptr_t owner, const char *const *paths, int32_t path_count);
 int32_t wox_windows_write_clipboard_text(uintptr_t owner, const char *text);
 int32_t wox_windows_write_clipboard_image(uintptr_t owner, const uint8_t *pixels, uint32_t width, uint32_t height, uint32_t row_stride, const uint8_t *png, uint32_t png_size);

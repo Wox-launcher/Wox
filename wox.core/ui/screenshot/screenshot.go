@@ -8,9 +8,35 @@ type ScreenshotOptions struct {
 	CopyToClipboard       bool
 	HideAnnotationToolbar bool
 	AutoConfirm           bool
+	AllowVideoRecording   bool
+	RecordingDefaults     RecordingDefaults
 	WindowManager         *woxui.WindowManager
 	AnnotationTooltips    ScreenshotAnnotationTooltips
 	ActionTooltips        ScreenshotActionTooltips
+	RecordingTooltips     RecordingTooltips
+}
+
+// RecordingDefaults configures the options shown before the countdown begins.
+type RecordingDefaults struct {
+	FPS          int
+	ShowPointer  bool
+	ShowKeypress bool
+}
+
+// RecordingTooltips carries localized labels for recording controls and privacy guidance.
+type RecordingTooltips struct {
+	Enter          string
+	Start          string
+	Pause          string
+	Resume         string
+	Restart        string
+	ShowPointer    string
+	ShowKeypress   string
+	Finish         string
+	Save           string
+	Play           string
+	Cancel         string
+	PrivacyWarning string
 }
 
 // ScreenshotActionTooltips carries localized labels for screenshot-wide actions.
@@ -19,6 +45,7 @@ type ScreenshotActionTooltips struct {
 	ScrollingCapture string
 	Cursor           string
 	Pin              string
+	Record           string
 	Cancel           string
 	Confirm          string
 }
@@ -38,6 +65,8 @@ const ScreenshotWindowID WindowID = "wox.screenshot"
 // ScreenshotResult reports the exported image and its logical desktop selection.
 type ScreenshotResult struct {
 	Cancelled               bool
+	ArtifactKind            string
+	ArtifactPath            string
 	CopiedColor             string
 	PinToScreen             bool
 	ScreenshotPath          string

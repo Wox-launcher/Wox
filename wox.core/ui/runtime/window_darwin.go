@@ -135,12 +135,17 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	if options.HideOnBlur {
 		hideOnBlur = 1
 	}
+	nonactivating := C.int32_t(0)
+	if options.Nonactivating {
+		nonactivating = 1
+	}
 	window.native = C.wox_darwin_window_create(
 		title,
 		C.float(options.Size.Width),
 		C.float(options.Size.Height),
 		hideOnBlur,
 		C.int32_t(options.Role),
+		nonactivating,
 		C.uintptr_t(window.handle),
 	)
 	if window.native == nil {
@@ -365,6 +370,44 @@ func (w *platformWindow) pickFile(options FileDialogOptions) (string, error) {
 	}
 	defer C.free(unsafe.Pointer(path))
 	return C.GoString(path), nil
+}
+
+func (w *platformWindow) saveFile(options SaveFileOptions) (string, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return "", err
+	}
+	title := C.CString(options.Title)
+	defaultName := C.CString(options.DefaultFileName)
+	extension := C.CString(options.Extension)
+	defer C.free(unsafe.Pointer(title))
+	defer C.free(unsafe.Pointer(defaultName))
+	defer C.free(unsafe.Pointer(extension))
+	var path *C.char
+	result := C.wox_darwin_window_save_file(native, title, defaultName, extension, &path)
+	if result == 1 {
+		return "", nil
+	}
+	if result != 0 || path == nil {
+		return "", errors.New("woxui: failed to open macOS save dialog")
+	}
+	defer C.free(unsafe.Pointer(path))
+	return C.GoString(path), nil
+}
+
+func (w *platformWindow) setPointerPassthrough(enabled bool) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	nativeEnabled := C.int32_t(0)
+	if enabled {
+		nativeEnabled = 1
+	}
+	if C.wox_darwin_window_set_pointer_passthrough(native, nativeEnabled) != 0 {
+		return errors.New("woxui: failed to update macOS pointer passthrough")
+	}
+	return nil
 }
 
 func (w *platformWindow) openExternalURL(rawURL string) error {

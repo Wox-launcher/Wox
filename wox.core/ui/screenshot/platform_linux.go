@@ -24,9 +24,6 @@ import (
 var errLinuxPortalCaptureRequired = errors.New("Wayland requires Portal desktop capture")
 
 func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, error) {
-	if options.ExportFilePath == "" {
-		return ScreenshotResult{}, errors.New("screenshot export file path is empty")
-	}
 	// Give the compositor one frame to remove the launcher before copying desktop pixels.
 	time.Sleep(80 * time.Millisecond)
 	var cursorX, cursorY C.float
@@ -72,6 +69,19 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 				return errors.New("failed to set Linux screenshot cursor position")
 			}
 			return nil
+		},
+		cursorPosition: func() *Point {
+			var x, y C.float
+			if C.wox_screenshot_cursor_position(&x, &y) != 0 {
+				return nil
+			}
+			return &Point{X: float32(x) - bounds.X, Y: float32(y) - bounds.Y}
+		},
+		setRecordingBounds: func(window *Window, selection Rect, _ Size, margin float32) error {
+			return window.SetBounds(Rect{
+				X: bounds.X + selection.X - margin, Y: bounds.Y + selection.Y - margin,
+				Width: selection.Width + margin*2, Height: selection.Height + margin*2,
+			})
 		},
 	}
 	if hasCapturedCursor {

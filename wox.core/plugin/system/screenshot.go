@@ -882,6 +882,7 @@ func (p *ScreenshotPlugin) notifyCaptureFailure(ctx context.Context, errorCode s
 
 func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext plugin.ActionContext) {
 	request := common.DefaultCaptureScreenshotRequest()
+	request.AllowVideoRecording = true
 	result, err := plugin.GetPluginManager().GetUI().CaptureScreenshot(ctx, request)
 	if err != nil {
 		// The screenshot session spans Go, UI, and the native bridge, so transport failures need a local
@@ -893,6 +894,15 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 
 	switch result.Status {
 	case common.CaptureScreenshotStatusCompleted:
+		if result.ArtifactKind == common.CaptureArtifactKindVideo {
+			if result.ArtifactPath == "" {
+				p.api.Log(ctx, plugin.LogLevelError, "video recording completed without an artifact path")
+				p.notifyCaptureFailure(ctx, "", "")
+				return
+			}
+			p.api.Notify(ctx, result.ArtifactPath)
+			return
+		}
 		// Screenshot export and clipboard write now complete inside UI plus the platform runner.
 		// Go treats a completed export as success and only surfaces clipboard warnings separately.
 		if result.ScreenshotPath == "" {

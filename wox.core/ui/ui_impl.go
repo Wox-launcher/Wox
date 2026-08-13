@@ -345,16 +345,6 @@ func (u *uiImpl) CaptureScreenshot(ctx context.Context, request common.CaptureSc
 		// screenshot session with the same window instance that owns the current query/action context.
 		request.SessionId = util.GetContextSessionId(ctx)
 	}
-	if request.ExportFilePath == "" {
-		// Screenshot export now depends on a backend-owned file target so UI writes into the
-		// same woxDataDirectory policy regardless of which Go caller initiated the session.
-		exportFilePath, err := reserveScreenshotExportFilePath()
-		if err != nil {
-			return common.CaptureScreenshotResult{}, err
-		}
-		request.ExportFilePath = exportFilePath
-	}
-
 	view, err := u.getView(ctx)
 	if err != nil {
 		return common.CaptureScreenshotResult{}, err
