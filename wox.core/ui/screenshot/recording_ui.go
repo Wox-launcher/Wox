@@ -18,10 +18,17 @@ import (
 const (
 	recordingOverlayWindowID WindowID = "wox.screenshot.recording.overlay"
 	recordingBorderWindowID  WindowID = "wox.screenshot.recording.border"
-	recordingToolbarWidth             = float32(456)
-	recordingToolbarHeight            = float32(96)
-	recordingToolbarPanelTop          = float32(36)
-	recordingBorderMargin             = float32(32)
+	// Match screenshot toolbar slots: 16px pad, 40px buttons, 8px gaps (48px stride).
+	recordingToolbarPad          = float32(16)
+	recordingToolbarGap          = float32(8)
+	recordingToolbarButton       = float32(40)
+	recordingToolbarSlot         = float32(48)
+	recordingToolbarTimeWidth    = float32(56)
+	recordingToolbarFPSWidth     = float32(54)
+	recordingToolbarWidth        = float32(442)
+	recordingToolbarHeight       = float32(60) // Same bar height as the screenshot toolbar.
+	recordingToolbarSelectionGap = float32(16) // Same selection-to-toolbar gap as the screenshot toolbar.
+	recordingBorderMargin        = float32(40)
 )
 
 type recordingKeycap struct {
@@ -47,13 +54,10 @@ type recordingToolbarState struct {
 	showKeypress         bool
 	keyboardUnavailable  string
 	keycaps              []recordingKeycap
-	discardArmed         bool
 	finishing            bool
 	lastError            string
-	notice               string
 	hoverTooltip         string
 	hoverTooltipRect     Rect
-	privacyNoticeShown   bool
 	result               chan recordingUIResult
 	timeRect             Rect
 	fpsRect              Rect
@@ -68,8 +72,10 @@ type recordingToolbarState struct {
 	expandedBounds       Rect
 	collapsedBounds      Rect
 	borderOrigin         Point
+	borderMargin         float32
 	borderInteractive    bool
 	borderMonitorStop    chan struct{}
+	durationTickerStop   chan struct{}
 	scrollBorderClose    func()
 	keyboardSubscription keyboard.RawKeySubscription
 	previewPoster        *Image
@@ -103,7 +109,7 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 	state := &recordingToolbarState{
 		editor: editor, options: options, platform: platform, selection: selection, frameSize: frameSize, fps: fps,
 		showPointer: options.RecordingDefaults.ShowPointer, showKeypress: options.RecordingDefaults.ShowKeypress,
-		result: make(chan recordingUIResult, 1), borderMonitorStop: make(chan struct{}),
+		result: make(chan recordingUIResult, 1), borderMonitorStop: make(chan struct{}), durationTickerStop: make(chan struct{}),
 	}
 	editor.mu.Lock()
 	editor.activeTool = screenshotEditorToolSelect
@@ -199,6 +205,8 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 	defer borderManaged.Close()
 	state.startBorderMonitor()
 	defer state.stopBorderMonitor()
+	state.startDurationTicker()
+	defer state.stopDurationTicker()
 	state.probeKeyboard()
 	defer state.closeKeyboard()
 
@@ -228,6 +236,39 @@ func (state *recordingToolbarState) stopBorderMonitor() {
 	case <-state.borderMonitorStop:
 	default:
 		close(state.borderMonitorStop)
+	}
+}
+
+// startDurationTicker redraws the toolbar once a second so the timer advances without pointer motion.
+func (state *recordingToolbarState) startDurationTicker() {
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if state.recordingStatus() != recordingStateRecording {
+					continue
+				}
+				state.mu.Lock()
+				collapsed := state.collapsed
+				window := state.window
+				state.mu.Unlock()
+				if !collapsed && window != nil {
+					_ = window.Invalidate()
+				}
+			case <-state.durationTickerStop:
+				return
+			}
+		}
+	}()
+}
+
+func (state *recordingToolbarState) stopDurationTicker() {
+	select {
+	case <-state.durationTickerStop:
+	default:
+		close(state.durationTickerStop)
 	}
 }
 
@@ -335,9 +376,11 @@ func (state *recordingToolbarState) positionOverlay() error {
 
 // positionBorder limits the interactive ready-state surface to the selection and its resize handles.
 func (state *recordingToolbarState) positionBorder() error {
+	margin := state.scaledBorderMargin()
 	state.mu.Lock()
 	selection := state.selection
-	state.borderOrigin = Point{X: selection.X - recordingBorderMargin, Y: selection.Y - recordingBorderMargin}
+	state.borderOrigin = Point{X: selection.X - margin, Y: selection.Y - margin}
+	state.borderMargin = margin
 	border := state.border
 	state.mu.Unlock()
 	if border == nil {
@@ -346,18 +389,23 @@ func (state *recordingToolbarState) positionBorder() error {
 	if state.platform.setRecordingBounds == nil {
 		return errors.New("recording selection bounds are unavailable")
 	}
-	return state.platform.setRecordingBounds(border, selection, state.frameSize, recordingBorderMargin)
+	return state.platform.setRecordingBounds(border, selection, state.frameSize, margin)
+}
+
+// scaledBorderMargin leaves room above the selection for the DPI-scaled size chip.
+func (state *recordingToolbarState) scaledBorderMargin() float32 {
+	return recordingBorderMargin * state.toolbarChromeScale()
 }
 
 // recordingToolbarLayout prefers bottom, top, left, and right before using an edge hotspot.
 func recordingToolbarLayout(globalFrame, globalSelection Rect, width, height float32) (Rect, Rect, bool) {
-	const gap = float32(12)
 	if width <= 0 {
 		width = recordingToolbarWidth
 	}
 	if height <= 0 {
 		height = recordingToolbarHeight
 	}
+	gap := recordingToolbarSelectionGap * height / recordingToolbarHeight
 	frameRight, frameBottom := globalFrame.X+globalFrame.Width, globalFrame.Y+globalFrame.Height
 	left := min(max(globalFrame.X+8, globalSelection.X+globalSelection.Width-width), frameRight-width-8)
 	candidates := []Rect{
@@ -377,7 +425,7 @@ func recordingToolbarLayout(globalFrame, globalSelection Rect, width, height flo
 		Width: width, Height: height,
 	}
 	hotspotWidth := 18 * width / recordingToolbarWidth
-	hotspotHeight := 60 * height / recordingToolbarHeight
+	hotspotHeight := height
 	collapsed := Rect{X: globalSelection.X + globalSelection.Width - hotspotWidth, Y: globalSelection.Y + globalSelection.Height/2 - hotspotHeight/2, Width: hotspotWidth, Height: hotspotHeight}
 	return expanded, collapsed, true
 }
@@ -681,9 +729,13 @@ func (state *recordingToolbarState) drawBorder(displayList *DisplayList, frame F
 	state.mu.Lock()
 	session := state.session
 	selection := state.selection
+	margin := state.borderMargin
 	state.mu.Unlock()
 	displayList.Clear(Color{})
-	localSelection := Rect{X: recordingBorderMargin, Y: recordingBorderMargin, Width: selection.Width, Height: selection.Height}
+	if margin <= 0 {
+		margin = recordingBorderMargin * uiScale
+	}
+	localSelection := Rect{X: margin, Y: margin, Width: selection.Width, Height: selection.Height}
 	blue := Color{R: 47, G: 128, B: 237, A: 255}
 	thickness := max(float32(2), 2*uiScale)
 	displayList.FillRect(Rect{X: localSelection.X - thickness, Y: localSelection.Y - thickness, Width: localSelection.Width + thickness*2, Height: thickness}, blue)
@@ -694,8 +746,7 @@ func (state *recordingToolbarState) drawBorder(displayList *DisplayList, frame F
 		drawScreenshotEditorHandles(displayList, localSelection, blue, uiScale)
 	}
 	label := fmt.Sprintf("%d x %d", sessionPixelWidth(session, source, selection, state.frameSize), sessionPixelHeight(session, source, selection, state.frameSize))
-	displayList.FillRoundedRect(Rect{X: localSelection.X + 8, Y: 4, Width: 96, Height: 24}, 8, Color{R: 23, G: 23, B: 23, A: 220})
-	displayList.DrawText(label, Rect{X: localSelection.X + 16, Y: 8, Width: 82, Height: 18}, TextStyle{Size: 12, Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
+	drawScreenshotEditorSizeLabel(displayList, label, localSelection, frame.Size, uiScale)
 }
 
 func sessionPixelWidth(session *recordingSession, source *Image, selection Rect, frame Size) int {
@@ -779,6 +830,32 @@ func renderRecordingKeycaps(target *image.RGBA, selection Rect, frame Size, keyc
 	return nil
 }
 
+// recordingToolbarControlLayout uses the same 16px pad, 40px buttons, and 48px stride as the screenshot toolbar.
+func recordingToolbarControlLayout(scale float32) (panel, timeRect, fpsRect, primary, restart, pointer, keypress, finish, cancel Rect) {
+	if scale <= 0 {
+		scale = 1
+	}
+	panel = Rect{Y: 0, Width: recordingToolbarWidth * scale, Height: recordingToolbarHeight * scale}
+	controlTop := 10 * scale
+	slotLeft := recordingToolbarPad * scale
+	timeRect = Rect{X: slotLeft, Y: controlTop, Width: recordingToolbarTimeWidth * scale, Height: recordingToolbarButton * scale}
+	slotLeft += (recordingToolbarTimeWidth + recordingToolbarGap) * scale
+	fpsRect = Rect{X: slotLeft, Y: controlTop, Width: recordingToolbarFPSWidth * scale, Height: recordingToolbarButton * scale}
+	slotLeft += (recordingToolbarFPSWidth + recordingToolbarGap) * scale
+	button := func() Rect {
+		rect := Rect{X: slotLeft + 4*scale, Y: controlTop, Width: recordingToolbarButton * scale, Height: recordingToolbarButton * scale}
+		slotLeft += recordingToolbarSlot * scale
+		return rect
+	}
+	primary = button()
+	restart = button()
+	pointer = button()
+	keypress = button()
+	finish = button()
+	cancel = button()
+	return panel, timeRect, fpsRect, primary, restart, pointer, keypress, finish, cancel
+}
+
 // drawToolbar renders controls from a locked snapshot so callbacks never retain mutable state.
 func (state *recordingToolbarState) drawToolbar(displayList *DisplayList, frame FrameInfo) {
 	state.mu.Lock()
@@ -794,8 +871,6 @@ func (state *recordingToolbarState) drawToolbar(displayList *DisplayList, frame 
 	keyboardAvailable := state.keyboardUnavailable == ""
 	finishing := state.finishing
 	previewPlaying := state.previewPlaying
-	lastError := state.lastError
-	notice := state.notice
 	hoverTooltip := state.hoverTooltip
 	hoverTooltipRect := state.hoverTooltipRect
 	state.mu.Unlock()
@@ -811,62 +886,49 @@ func (state *recordingToolbarState) drawToolbar(displayList *DisplayList, frame 
 	}
 
 	displayList.Clear(Color{})
-	panel := Rect{Y: recordingToolbarPanelTop * scale, Width: frame.Size.Width, Height: 60 * scale}
-	displayList.FillRoundedRect(panel, 16*scale, Color{R: 30, G: 26, B: 24, A: 248})
-	left := 12 * scale
-	controlTop := recordingToolbarPanelTop*scale + 10*scale
-	state.timeRect = Rect{X: left, Y: controlTop, Width: 62 * scale, Height: 40 * scale}
-	displayList.DrawText(formatRecordingDuration(duration), Rect{X: left, Y: controlTop + 10*scale, Width: 62 * scale, Height: 20 * scale}, TextStyle{Size: 14 * scale, Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
-	left += 66 * scale
-	state.fpsRect = Rect{X: left, Y: controlTop, Width: 54 * scale, Height: 40 * scale}
-	displayList.DrawText(fmt.Sprintf("%d FPS", fps), Rect{X: left + 4*scale, Y: controlTop + 10*scale, Width: 50 * scale, Height: 20 * scale}, TextStyle{Size: 13 * scale, Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 235})
-	left += 58 * scale
-	state.primaryRect = Rect{X: left, Y: controlTop, Width: 40 * scale, Height: 40 * scale}
+	panel, timeRect, fpsRect, primaryRect, restartRect, pointerRect, keypressRect, finishRect, cancelRect := recordingToolbarControlLayout(scale)
+	panel.Width = frame.Size.Width
+	state.timeRect = timeRect
+	state.fpsRect = fpsRect
+	state.primaryRect = primaryRect
+	state.restartRect = restartRect
+	state.pointerRect = pointerRect
+	state.keypressRect = keypressRect
+	state.finishRect = finishRect
+	state.cancelRect = cancelRect
+	white := Color{R: 255, G: 255, B: 255, A: 255}
+	displayList.FillRoundedRect(panel, 18*scale, Color{R: 30, G: 26, B: 24, A: 248})
+	displayList.DrawText(formatRecordingDuration(duration), Rect{X: timeRect.X, Y: timeRect.Y + 10*scale, Width: timeRect.Width, Height: 20 * scale}, TextStyle{Size: 14 * scale, Weight: FontWeightSemibold}, white)
+	displayList.DrawText(fmt.Sprintf("%d FPS", fps), Rect{X: fpsRect.X, Y: fpsRect.Y + 10*scale, Width: fpsRect.Width, Height: 20 * scale}, TextStyle{Size: 13 * scale, Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 235})
 	primaryIcon := "control.record"
 	primaryColor := Color{R: 255, G: 75, B: 75, A: 255}
 	if recordingStatus == recordingStateRecording {
 		primaryIcon = "control.pause"
-		primaryColor = Color{R: 255, G: 255, B: 255, A: 255}
+		primaryColor = white
 	} else if recordingStatus == recordingStatePaused {
 		primaryIcon = "control.play-circle"
-		primaryColor = Color{R: 47, G: 128, B: 237, A: 255}
+		primaryColor = white
 	} else if recordingStatus == recordingStateSave {
 		primaryIcon = "control.play-circle"
-		primaryColor = Color{R: 47, G: 128, B: 237, A: 255}
+		primaryColor = white
 		if previewPlaying {
 			primaryIcon = "control.pause"
-			primaryColor = Color{R: 255, G: 255, B: 255, A: 255}
 		}
 	}
-	drawScreenshotEditorToolbarIcon(displayList, primaryIcon, state.primaryRect, primaryColor, scale)
-	left += 44 * scale
-	state.restartRect = Rect{X: left, Y: controlTop, Width: 40 * scale, Height: 40 * scale}
-	drawScreenshotEditorToolbarIcon(displayList, "control.refresh", state.restartRect, Color{R: 255, G: 255, B: 255, A: 255}, scale)
-	left += 44 * scale
-	state.pointerRect = Rect{X: left, Y: controlTop, Width: 40 * scale, Height: 40 * scale}
-	state.drawToggle(displayList, state.pointerRect, "screenshot.cursor", showPointer, true, scale)
-	left += 44 * scale
-	state.keypressRect = Rect{X: left, Y: controlTop, Width: 40 * scale, Height: 40 * scale}
-	state.drawToggle(displayList, state.keypressRect, "control.keyboard", showKeypress, keyboardAvailable, scale)
-	left += 44 * scale
-	state.finishRect = Rect{X: left, Y: controlTop, Width: 40 * scale, Height: 40 * scale}
+	drawScreenshotEditorToolbarIcon(displayList, primaryIcon, primaryRect, primaryColor, scale)
+	drawScreenshotEditorToolbarIcon(displayList, "control.refresh", restartRect, white, scale)
+	state.drawToggle(displayList, pointerRect, "screenshot.cursor", showPointer, true, scale)
+	state.drawToggle(displayList, keypressRect, "control.keyboard", showKeypress, keyboardAvailable, scale)
 	finishIcon := "control.stop"
 	if recordingStatus == recordingStateSave {
 		finishIcon = "control.download"
 	}
-	finishColor := Color{R: 48, G: 227, B: 122, A: 255}
+	finishColor := Color{R: 255, G: 107, B: 107, A: 255}
 	if finishing {
 		finishColor.A = 100
 	}
-	drawScreenshotEditorToolbarIcon(displayList, finishIcon, state.finishRect, finishColor, scale)
-	left += 44 * scale
-	state.cancelRect = Rect{X: left, Y: controlTop, Width: 40 * scale, Height: 40 * scale}
-	drawScreenshotEditorToolbarIcon(displayList, "control.close", state.cancelRect, Color{R: 255, G: 107, B: 107, A: 255}, scale)
-	if lastError != "" {
-		displayList.DrawText(lastError, Rect{X: 12 * scale, Y: recordingToolbarPanelTop*scale + 42*scale, Width: frame.Size.Width - 24*scale, Height: 16 * scale}, TextStyle{Size: 10 * scale}, Color{R: 255, G: 107, B: 107, A: 255})
-	} else if notice != "" {
-		displayList.DrawText(notice, Rect{X: 12 * scale, Y: recordingToolbarPanelTop*scale + 42*scale, Width: frame.Size.Width - 24*scale, Height: 16 * scale}, TextStyle{Size: 10 * scale}, Color{R: 255, G: 211, B: 107, A: 255})
-	}
+	drawScreenshotEditorToolbarIcon(displayList, finishIcon, finishRect, finishColor, scale)
+	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancelRect, Color{R: 255, G: 107, B: 107, A: 255}, scale)
 	drawScreenshotEditorToolTooltip(displayList, frame.Size, hoverTooltipRect, hoverTooltip, scale)
 }
 
@@ -878,8 +940,7 @@ func (state *recordingToolbarState) drawToggle(displayList *DisplayList, rect Re
 	if !available {
 		color.A = 80
 	} else if enabled {
-		displayList.FillRoundedRect(rect, 10*scale, Color{R: 47, G: 128, B: 237, A: 64})
-		color = Color{R: 47, G: 128, B: 237, A: 255}
+		displayList.FillRoundedRect(rect, 10*scale, Color{R: 255, G: 255, B: 255, A: 40})
 	}
 	drawScreenshotEditorToolbarIconSized(displayList, icon, rect, color, scale, 20)
 }
@@ -943,14 +1004,8 @@ func (state *recordingToolbarState) toolbarPointer(event PointerEvent) {
 	case screenshotEditorRectContains(state.pointerRect, event.Position) && !locked:
 		state.showPointer = !state.showPointer
 	case screenshotEditorRectContains(state.keypressRect, event.Position) && !locked:
-		if state.keyboardUnavailable != "" {
-			state.notice = state.keyboardUnavailable
-		} else {
+		if state.keyboardUnavailable == "" {
 			state.showKeypress = !state.showKeypress
-			if state.showKeypress && !state.privacyNoticeShown {
-				state.privacyNoticeShown = true
-				state.notice = state.options.RecordingTooltips.PrivacyWarning
-			}
 		}
 	case screenshotEditorRectContains(state.primaryRect, event.Position):
 		state.mu.Unlock()
@@ -965,14 +1020,9 @@ func (state *recordingToolbarState) toolbarPointer(event PointerEvent) {
 		state.finish()
 		return
 	case screenshotEditorRectContains(state.cancelRect, event.Position):
-		if session != nil && !state.discardArmed && current != recordingStateReady {
-			state.discardArmed = true
-			state.lastError = "Click cancel again to discard the recording"
-		} else {
-			state.mu.Unlock()
-			state.cancel()
-			return
-		}
+		state.mu.Unlock()
+		state.cancel()
+		return
 	}
 	window := state.window
 	state.mu.Unlock()
@@ -1132,9 +1182,7 @@ func (state *recordingToolbarState) start() {
 	if err == nil {
 		state.mu.Lock()
 		state.session = session
-		state.discardArmed = false
 		state.lastError = ""
-		state.notice = ""
 		state.mu.Unlock()
 		err = session.Start(context.Background())
 		if err == nil {

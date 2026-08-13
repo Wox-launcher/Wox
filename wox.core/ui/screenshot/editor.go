@@ -644,12 +644,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	green := Color{R: 41, G: 255, B: 114, A: 255}
 	displayList.StrokeRoundedRect(selection, 0, scaled(2), green)
 	drawScreenshotEditorHandles(displayList, selection, green, uiScale)
-	label := fmt.Sprintf("%.0f x %.0f", selection.Width, selection.Height)
-	labelWidth := max(scaled(80), float32(len(label))*scaled(8)+scaled(16))
-	labelLeft := min(max(scaled(8), selection.X+scaled(12)), max(scaled(8), frame.Size.Width-labelWidth-scaled(8)))
-	labelTop := max(scaled(8), selection.Y-scaled(32))
-	displayList.FillRoundedRect(Rect{X: labelLeft - scaled(8), Y: labelTop, Width: labelWidth, Height: scaled(26)}, scaled(10), Color{R: 23, G: 23, B: 23, A: 230})
-	displayList.DrawText(label, Rect{X: labelLeft, Y: labelTop + scaled(5), Width: labelWidth - scaled(16), Height: scaled(18)}, TextStyle{Size: scaled(14), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
+	drawScreenshotEditorSizeLabel(displayList, fmt.Sprintf("%.0f x %.0f", selection.Width, selection.Height), selection, frame.Size, uiScale)
 	if dragging || state.autoConfirm {
 		return
 	}
@@ -1156,6 +1151,16 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 	state.editIncreaseRect = increaseRect
 	state.editDeleteRect = deleteRect
 	state.mu.Unlock()
+}
+
+// drawScreenshotEditorSizeLabel places a DPI-scaled dimension chip above the selection.
+func drawScreenshotEditorSizeLabel(displayList *DisplayList, label string, selection Rect, frame Size, uiScale float32) {
+	scaled := func(value float32) float32 { return value * max(float32(1), uiScale) }
+	labelWidth := max(scaled(80), float32(len(label))*scaled(8)+scaled(16))
+	labelLeft := min(max(scaled(8), selection.X+scaled(12)), max(scaled(8), frame.Width-labelWidth-scaled(8)))
+	labelTop := max(scaled(8), selection.Y-scaled(32))
+	displayList.FillRoundedRect(Rect{X: labelLeft - scaled(8), Y: labelTop, Width: labelWidth, Height: scaled(26)}, scaled(10), Color{R: 23, G: 23, B: 23, A: 230})
+	displayList.DrawText(label, Rect{X: labelLeft, Y: labelTop + scaled(5), Width: labelWidth - scaled(16), Height: scaled(18)}, TextStyle{Size: scaled(14), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
 }
 
 // drawScreenshotEditorToolbarIcon renders the shared SVG at a consistent visual size.

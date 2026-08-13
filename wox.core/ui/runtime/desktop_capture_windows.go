@@ -3,6 +3,7 @@
 package woxui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -15,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/lxn/win"
+	"wox/util"
 )
 
 const windowsCaptureBlt = uint32(0x40000000)
@@ -139,6 +141,7 @@ type WindowsRectCapturer struct {
 	bounds   image.Rectangle
 	width    int
 	height   int
+	dxgi     *windowsDXGIRectCapturer
 	screenDC win.HDC
 	memoryDC win.HDC
 	bitmap   win.HBITMAP
@@ -146,13 +149,25 @@ type WindowsRectCapturer struct {
 	bits     unsafe.Pointer
 }
 
-// NewWindowsRectCapturer prepares a reusable GDI capture surface for one physical rectangle.
+// NewWindowsRectCapturer prepares a reusable capture surface for one physical rectangle.
+// DXGI desktop duplication is preferred because GDI BitBlt hides the cursor inside the captured region.
 func NewWindowsRectCapturer(bounds image.Rectangle) (*WindowsRectCapturer, error) {
 	width := bounds.Dx()
 	height := bounds.Dy()
 	if width <= 0 || height <= 0 || width > 16384 || height > 16384 {
 		return nil, fmt.Errorf("invalid capture rectangle: %dx%d", width, height)
 	}
+	capturer := &WindowsRectCapturer{bounds: bounds, width: width, height: height}
+	dxgi, err := newWindowsDXGIRectCapturer(bounds)
+	if err == nil {
+		capturer.dxgi = dxgi
+		return capturer, nil
+	}
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf("recording DXGI capture unavailable, using GDI: %v", err))
+	return newGDIWindowsRectCapturer(capturer)
+}
+
+func newGDIWindowsRectCapturer(capturer *WindowsRectCapturer) (*WindowsRectCapturer, error) {
 	screenDC := win.GetDC(0)
 	if screenDC == 0 {
 		return nil, errors.New("failed to open the Windows desktop device context")
@@ -164,8 +179,8 @@ func NewWindowsRectCapturer(bounds image.Rectangle) (*WindowsRectCapturer, error
 	}
 	bitmapInfo := win.BITMAPINFOHEADER{
 		BiSize:        uint32(unsafe.Sizeof(win.BITMAPINFOHEADER{})),
-		BiWidth:       int32(width),
-		BiHeight:      -int32(height),
+		BiWidth:       int32(capturer.width),
+		BiHeight:      -int32(capturer.height),
 		BiPlanes:      1,
 		BiBitCount:    32,
 		BiCompression: win.BI_RGB,
@@ -184,15 +199,23 @@ func NewWindowsRectCapturer(bounds image.Rectangle) (*WindowsRectCapturer, error
 		win.ReleaseDC(0, screenDC)
 		return nil, errors.New("failed to select the Windows screenshot DIB")
 	}
-	return &WindowsRectCapturer{
-		bounds: bounds, width: width, height: height,
-		screenDC: screenDC, memoryDC: memoryDC, bitmap: bitmap, previous: previous, bits: bits,
-	}, nil
+	capturer.screenDC = screenDC
+	capturer.memoryDC = memoryDC
+	capturer.bitmap = bitmap
+	capturer.previous = previous
+	capturer.bits = bits
+	return capturer, nil
 }
 
 // Capture copies the current rectangle into an owned BGR0 buffer without a per-pixel channel swap.
 func (capturer *WindowsRectCapturer) Capture() (*image.RGBA, error) {
-	if capturer == nil || capturer.bitmap == 0 || capturer.bits == nil {
+	if capturer == nil {
+		return nil, errors.New("recording capture surface is closed")
+	}
+	if capturer.dxgi != nil {
+		return capturer.dxgi.Capture()
+	}
+	if capturer.bitmap == 0 || capturer.bits == nil {
 		return nil, errors.New("recording capture surface is closed")
 	}
 	if !win.BitBlt(capturer.memoryDC, 0, 0, int32(capturer.width), int32(capturer.height), capturer.screenDC, int32(capturer.bounds.Min.X), int32(capturer.bounds.Min.Y), win.SRCCOPY|windowsCaptureBlt) {
@@ -205,9 +228,17 @@ func (capturer *WindowsRectCapturer) Capture() (*image.RGBA, error) {
 	return output, nil
 }
 
-// Close releases the reusable GDI capture surface.
+// Close releases the reusable capture surface.
 func (capturer *WindowsRectCapturer) Close() error {
-	if capturer == nil || capturer.bitmap == 0 {
+	if capturer == nil {
+		return nil
+	}
+	if capturer.dxgi != nil {
+		capturer.dxgi.Close()
+		capturer.dxgi = nil
+		return nil
+	}
+	if capturer.bitmap == 0 {
 		return nil
 	}
 	win.SelectObject(capturer.memoryDC, capturer.previous)

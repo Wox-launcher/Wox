@@ -141,7 +141,7 @@ var uiIcons = map[string]WoxImage{
 	"control.waveform":           newMonochromeUIIcon(`<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10v4"/>`),
 	"control.multitrack-audio":   newMonochromeUIIcon(`<path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/>`),
 	"control.play-circle":        newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>`),
-	"control.record":             newMonochromeUIIcon(`<circle cx="12" cy="12" r="7" fill="currentColor" stroke="none"/>`),
+	"control.record":             newMonochromeUIIcon(`<circle cx="12" cy="12" r="8.25"/><circle cx="12" cy="12" r="4.75" fill="currentColor" stroke="none"/>`),
 	"control.stop":               newMonochromeUIIcon(`<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>`),
 	"screenshot.video-camera":    newMonochromeUIIcon(`<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/>`),
 	"control.pause":              newMonochromeUIIcon(`<path d="M9 7v10M15 7v10"/>`),

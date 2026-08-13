@@ -9,10 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"wox/common"
 	"wox/util/keyboard"
 )
 
@@ -277,7 +279,7 @@ func TestRecordingToolbarLayoutUsesEveryOutsideEdgeAndCollapsesForFullscreen(t *
 		})
 	}
 	_, hotspot, collapsed := recordingToolbarLayout(frame, frame, recordingToolbarWidth, recordingToolbarHeight)
-	if !collapsed || hotspot.Width != 18 || hotspot.Height != 60 {
+	if !collapsed || hotspot.Width != 18 || hotspot.Height != recordingToolbarHeight {
 		t.Fatalf("fullscreen hotspot = %+v collapsed=%t", hotspot, collapsed)
 	}
 }
@@ -294,6 +296,131 @@ func TestRecordingToolbarLayoutScalesOutsideTheSelection(t *testing.T) {
 	}
 	if screenshotEditorRectsOverlap(expanded, selection) {
 		t.Fatalf("scaled toolbar overlaps selection: toolbar=%+v selection=%+v", expanded, selection)
+	}
+}
+
+func TestRecordingToolbarControlLayoutMatchesScreenshotSlots(t *testing.T) {
+	panel, timeRect, fpsRect, primary, restart, pointer, keypress, finish, cancel := recordingToolbarControlLayout(1)
+	if panel.Y != 0 || panel.Height != recordingToolbarHeight {
+		t.Fatalf("toolbar panel = %+v, want y=0 height=%v", panel, recordingToolbarHeight)
+	}
+	if timeRect.X != recordingToolbarPad {
+		t.Fatalf("time control left = %v, want %v", timeRect.X, recordingToolbarPad)
+	}
+	if gap := fpsRect.X - (timeRect.X + timeRect.Width); gap != recordingToolbarGap {
+		t.Fatalf("time to FPS gap = %v, want %v", gap, recordingToolbarGap)
+	}
+	buttons := []Rect{primary, restart, pointer, keypress, finish, cancel}
+	for index := 1; index < len(buttons); index++ {
+		if gap := buttons[index].X - buttons[index-1].X; gap != recordingToolbarSlot {
+			t.Fatalf("button %d slot gap = %v, want %v", index, gap, recordingToolbarSlot)
+		}
+	}
+	if got := cancel.X + cancel.Width + recordingToolbarPad; got != recordingToolbarWidth {
+		t.Fatalf("toolbar width = %v, want %v", got, recordingToolbarWidth)
+	}
+
+	state := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, fps: 30}
+	state.drawToolbar(&DisplayList{}, FrameInfo{Size: Size{Width: recordingToolbarWidth, Height: recordingToolbarHeight}})
+	if state.restartRect.X-state.primaryRect.X != recordingToolbarSlot || state.cancelRect.X-state.finishRect.X != recordingToolbarSlot {
+		t.Fatalf("drawn button slots primary=%+v restart=%+v finish=%+v cancel=%+v", state.primaryRect, state.restartRect, state.finishRect, state.cancelRect)
+	}
+}
+
+func TestRecordingToolbarLayoutMatchesScreenshotSelectionGap(t *testing.T) {
+	frame := Rect{Width: 1920, Height: 1080}
+	selection := Rect{X: 200, Y: 200, Width: 800, Height: 400}
+	expanded, _, collapsed := recordingToolbarLayout(frame, selection, recordingToolbarWidth, recordingToolbarHeight)
+	if collapsed {
+		t.Fatalf("toolbar collapsed: %+v", expanded)
+	}
+	if expanded.Height != recordingToolbarHeight {
+		t.Fatalf("toolbar height = %v, want %v", expanded.Height, recordingToolbarHeight)
+	}
+	if got := expanded.Y - (selection.Y + selection.Height); got != recordingToolbarSelectionGap {
+		t.Fatalf("selection to toolbar gap = %v, want %v", got, recordingToolbarSelectionGap)
+	}
+
+	topSelection := Rect{X: 200, Y: 700, Width: 800, Height: 300}
+	topBar, _, topCollapsed := recordingToolbarLayout(frame, topSelection, recordingToolbarWidth, recordingToolbarHeight)
+	if topCollapsed {
+		t.Fatalf("top toolbar collapsed: %+v", topBar)
+	}
+	if got := topSelection.Y - (topBar.Y + topBar.Height); got != recordingToolbarSelectionGap {
+		t.Fatalf("top selection to toolbar gap = %v, want %v", got, recordingToolbarSelectionGap)
+	}
+}
+
+func TestRecordingToolbarOmitsPrivacyAndDiscardBanners(t *testing.T) {
+	frame := FrameInfo{Size: Size{Width: recordingToolbarWidth, Height: recordingToolbarHeight}}
+	withError := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, fps: 30, lastError: "Click cancel again to discard the recording"}
+	withErrorList := &DisplayList{}
+	withError.drawToolbar(withErrorList, frame)
+	clean := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, fps: 30}
+	cleanList := &DisplayList{}
+	clean.drawToolbar(cleanList, frame)
+	if err := withErrorList.Compare(cleanList); err != nil {
+		t.Fatalf("toolbar should not render a discard banner: %v", err)
+	}
+
+	state := &recordingToolbarState{
+		editor:  &screenshotEditorOverlayState{},
+		fps:     30,
+		options: ScreenshotOptions{RecordingTooltips: RecordingTooltips{PrivacyWarning: "yellow privacy warning"}},
+	}
+	state.drawToolbar(&DisplayList{}, frame)
+	state.toolbarPointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: state.keypressRect.X + 8, Y: state.keypressRect.Y + 8}})
+	if !state.showKeypress {
+		t.Fatal("keyboard capture should toggle on")
+	}
+	afterToggle := &DisplayList{}
+	state.drawToolbar(afterToggle, frame)
+	expected := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, fps: 30, showKeypress: true}
+	expectedList := &DisplayList{}
+	expected.drawToolbar(expectedList, frame)
+	if err := afterToggle.Compare(expectedList); err != nil {
+		t.Fatalf("enabling keyboard capture should not add a privacy banner: %v", err)
+	}
+
+	state.toolbarPointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: state.cancelRect.X + 8, Y: state.cancelRect.Y + 8}})
+	if state.lastError != "" {
+		t.Fatalf("cancel should not arm a discard warning, lastError=%q", state.lastError)
+	}
+}
+
+func TestRecordingSizeLabelAndBorderMarginScaleWithDPI(t *testing.T) {
+	state := &recordingToolbarState{
+		selection: Rect{X: 80, Y: 80, Width: 200, Height: 100},
+		frameSize: Size{Width: 400, Height: 300},
+		editor: &screenshotEditorOverlayState{
+			image: testScreenshotImage(t, 400, 300), uiScale: 2,
+			chromeScale: func(Rect) float32 { return 2 },
+		},
+	}
+	if got := state.scaledBorderMargin(); got != 80 {
+		t.Fatalf("scaled border margin = %v, want 80", got)
+	}
+	label := &DisplayList{}
+	drawScreenshotEditorSizeLabel(label, "200 x 100", Rect{X: 80, Y: 80, Width: 200, Height: 100}, Size{Width: 360, Height: 260}, 2)
+	expected := &DisplayList{}
+	expected.FillRoundedRect(Rect{X: 88, Y: 16, Width: 176, Height: 52}, 20, Color{R: 23, G: 23, B: 23, A: 230})
+	expected.DrawText("200 x 100", Rect{X: 104, Y: 26, Width: 144, Height: 36}, TextStyle{Size: 28, Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
+	if err := label.Compare(expected); err != nil {
+		t.Fatalf("scaled size label: %v", err)
+	}
+}
+
+func TestRecordingDurationTickerStopsSafely(t *testing.T) {
+	state := &recordingToolbarState{durationTickerStop: make(chan struct{})}
+	state.startDurationTicker()
+	state.stopDurationTicker()
+	state.stopDurationTicker()
+}
+
+func TestRecordingRecordIconUsesRingAndDot(t *testing.T) {
+	icon := common.UIIcon("control.record")
+	if !strings.Contains(icon.ImageData, `r="8.25"`) || !strings.Contains(icon.ImageData, `r="4.75"`) {
+		t.Fatalf("record icon should be a solid circle inside a ring")
 	}
 }
 
