@@ -237,7 +237,11 @@ func (a *App) onboardingSteps() []launcherview.OnboardingStep {
 	specs = append(specs,
 		onboardingStepSpec{"glance", "onboarding_glance_title", woxui.Color{R: 250, G: 204, B: 21, A: 255}},
 		onboardingStepSpec{"queryHotkeys", "onboarding_query_hotkeys_title", woxui.Color{R: 244, G: 63, B: 94, A: 255}},
-		onboardingStepSpec{"trayQueries", "onboarding_tray_queries_title", woxui.Color{R: 34, G: 197, B: 94, A: 255}},
+	)
+	if includeOnboardingTrayQueries(runtime.GOOS) {
+		specs = append(specs, onboardingStepSpec{"trayQueries", "onboarding_tray_queries_title", woxui.Color{R: 34, G: 197, B: 94, A: 255}})
+	}
+	specs = append(specs,
 		onboardingStepSpec{"wpmInstall", "onboarding_wpm_install_title", woxui.Color{R: 56, G: 189, B: 248, A: 255}},
 		onboardingStepSpec{"themeInstall", "onboarding_theme_install_title", woxui.Color{R: 232, G: 121, B: 249, A: 255}},
 		onboardingStepSpec{"finish", "onboarding_finish_title", woxui.Color{R: 45, G: 212, B: 191, A: 255}},
@@ -253,6 +257,13 @@ func (a *App) onboardingSteps() []launcherview.OnboardingStep {
 // step should appear. Linux cannot capture the current selection, so that
 // first-run page is omitted there.
 func includeOnboardingSelectionHotkey(goos string) bool {
+	return goos != "linux"
+}
+
+// includeOnboardingTrayQueries reports whether the tray-query setup step
+// should appear. Linux does not host extra tray query icons yet, so that
+// first-run page is omitted there.
+func includeOnboardingTrayQueries(goos string) bool {
 	return goos != "linux"
 }
 
