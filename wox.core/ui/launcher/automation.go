@@ -260,6 +260,7 @@ func (a *App) ResetAutomationState() error {
 		a.setQuery(plainQuery{})
 		a.queryHistories = nil
 		a.toolbarMsg = nil
+		a.toolbarFallbackMsg = nil
 		a.toolbarRevision++
 		resetErr = a.hideWindow(true)
 	}); err != nil {

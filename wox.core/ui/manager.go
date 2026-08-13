@@ -58,6 +58,8 @@ var managerInstance *Manager
 var managerOnce sync.Once
 var logger *util.Log
 
+const mainHotkeyRegistrationToolbarMessageID = "wox-main-hotkey-registration-failed"
+
 type Manager struct {
 	hotkeyService      *corehotkey.Service
 	ui                 common.UI
@@ -77,6 +79,8 @@ type Manager struct {
 	activeWindowSnapshotMu  sync.RWMutex
 	activeWindowSnapshotSeq uint64
 	pendingStartupNotify    *common.NotifyMsg
+	mainHotkeyWarningMu     sync.RWMutex
+	mainHotkeyWarning       string
 	trayHiddenForOnboarding atomic.Bool
 	trayEmojiWarmMu         sync.Mutex
 	trayEmojiWarmInFlight   map[string]struct{}
@@ -217,7 +221,10 @@ func (m *Manager) CollectWoxSettingHotkeys(ctx context.Context, woxSetting *sett
 // hotkeys. This is the registration-phase entry point called after all sources
 // (Wox settings + dictation plugin) have populated the collector.
 func (m *Manager) RegisterAllHotkeys(ctx context.Context) error {
-	return m.hotkeyService.RegisterAll(ctx)
+	err := m.hotkeyService.RegisterAll(ctx)
+	mainHotkey := setting.GetSettingManager().GetWoxSetting(ctx).MainHotkey.Get()
+	m.syncMainHotkeyToolbarWarning(ctx, mainHotkey)
+	return err
 }
 
 func (m *Manager) Start(ctx context.Context) error {
@@ -332,9 +339,21 @@ func (m *Manager) Start(ctx context.Context) error {
 // paths: the service holds the current definition, RegisterAll binds it.
 func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) error {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	config := corehotkey.WoxConfigFromSetting(woxSetting)
+	previousConfig := corehotkey.WoxConfigFromSetting(woxSetting)
+	config := previousConfig
 	config.MainHotkey = combineKey
-	return m.registerWoxHotkeys(ctx, config, true)
+	if err := m.registerWoxHotkeys(ctx, config, true); err != nil {
+		return err
+	}
+	if strings.TrimSpace(combineKey) == "" || m.hotkeyService.IsRegistered(corehotkey.SourceMain, "main") {
+		return nil
+	}
+
+	registerErr := fmt.Errorf("failed to register main hotkey: %s", combineKey)
+	if restoreErr := m.registerWoxHotkeys(ctx, previousConfig, false); restoreErr != nil {
+		return fmt.Errorf("%w; failed to restore previous hotkeys: %v", registerErr, restoreErr)
+	}
+	return registerErr
 }
 
 // RegisterSelectionHotkey updates the selection hotkey in the hotkey service and
@@ -550,7 +569,59 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 }
 
 func (m *Manager) registerWoxHotkeys(ctx context.Context, config corehotkey.WoxConfig, restoreCollectorOnFailure bool) error {
-	return m.hotkeyService.UpdateWoxConfig(ctx, config, restoreCollectorOnFailure)
+	err := m.hotkeyService.UpdateWoxConfig(ctx, config, restoreCollectorOnFailure)
+	mainHotkey := config.MainHotkey
+	if err != nil {
+		mainHotkey = setting.GetSettingManager().GetWoxSetting(ctx).MainHotkey.Get()
+	}
+	m.syncMainHotkeyToolbarWarning(ctx, mainHotkey)
+	return err
+}
+
+// syncMainHotkeyToolbarWarning tracks registration health and updates an attached launcher immediately.
+func (m *Manager) syncMainHotkeyToolbarWarning(ctx context.Context, mainHotkey string) {
+	mainHotkey = strings.TrimSpace(mainHotkey)
+	if mainHotkey != "" && m.hotkeyService.IsRegistered(corehotkey.SourceMain, "main") {
+		mainHotkey = ""
+	}
+
+	m.mainHotkeyWarningMu.Lock()
+	m.mainHotkeyWarning = mainHotkey
+	m.mainHotkeyWarningMu.Unlock()
+
+	if m.getView() == nil {
+		return
+	}
+	if mainHotkey == "" {
+		m.ui.ClearToolbarMsg(ctx, mainHotkeyRegistrationToolbarMessageID)
+		return
+	}
+	m.showMainHotkeyToolbarWarning(ctx)
+}
+
+// showMainHotkeyToolbarWarning presents the current non-expiring launcher fallback, if any.
+func (m *Manager) showMainHotkeyToolbarWarning(ctx context.Context) {
+	m.mainHotkeyWarningMu.RLock()
+	mainHotkey := m.mainHotkeyWarning
+	m.mainHotkeyWarningMu.RUnlock()
+	if mainHotkey == "" {
+		return
+	}
+
+	title := i18n.GetI18nManager().TranslateWox(ctx, "i18n:ui_main_hotkey_registration_failed")
+	title = strings.ReplaceAll(title, "{hotkey}", mainHotkey)
+	m.ui.ShowToolbarMsg(ctx, plugin.ToolbarMsgUI{
+		Id:       mainHotkeyRegistrationToolbarMessageID,
+		Title:    title,
+		Icon:     common.ErrorIcon,
+		Fallback: true,
+	})
+}
+
+func (m *Manager) hasMainHotkeyToolbarWarning() bool {
+	m.mainHotkeyWarningMu.RLock()
+	defer m.mainHotkeyWarningMu.RUnlock()
+	return m.mainHotkeyWarning != ""
 }
 
 type HotkeyAvailability struct {
@@ -1061,6 +1132,7 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 	}
 
 	analytics.TrackUIOpened(ctx)
+	m.showMainHotkeyToolbarWarning(ctx)
 
 	if m.pendingStartupNotify != nil {
 		logger.Info(ctx, "showing pending startup notify")

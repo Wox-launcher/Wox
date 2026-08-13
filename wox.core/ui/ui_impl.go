@@ -143,7 +143,7 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 	// In-app notifications only when the primary launcher is showing; secondary
 	// panels should not swallow system notifications.
-	if u.IsVisible(context.Background()) && !u.IsInManagementView() && !plugin.GetPluginManager().HasVisibleToolbarMsg(ctx) {
+	if u.IsVisible(context.Background()) && !u.IsInManagementView() && !plugin.GetPluginManager().HasVisibleToolbarMsg(ctx) && !GetUIManager().hasMainHotkeyToolbarWarning() {
 		u.applyView(ctx, "show notification message", func(view contract.View) error { return view.ShowNotificationMessage(ctx, msg) })
 	} else {
 		var icon image.Image

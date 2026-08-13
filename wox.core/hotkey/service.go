@@ -41,6 +41,7 @@ type Service struct {
 	mu              sync.Mutex
 	group           *utilhotkey.Group
 	registeredSpecs []utilhotkey.Spec
+	registered      []Entry
 }
 
 // NewService creates a Wox hotkey service with the given trigger callbacks.
@@ -125,6 +126,19 @@ func (s *Service) Snapshot() []Entry {
 	return s.collector.snapshot()
 }
 
+// IsRegistered reports whether one collected hotkey entry currently owns a platform registration.
+func (s *Service) IsRegistered(source EntrySource, id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, entry := range s.registered {
+		if entry.Source == source && entry.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // EffectiveSelectionHotkeyForRuntime returns the runtime selection hotkey.
 func EffectiveSelectionHotkeyForRuntime(selectionHotkey string) string {
 	if util.IsLinuxWaylandSession() {
@@ -145,7 +159,7 @@ func (s *Service) registerAllLocked(ctx context.Context) error {
 		return nil
 	}
 
-	return s.registerSpecsLocked(ctx, specs)
+	return s.registerSpecsLocked(ctx, entries, specs)
 }
 
 func buildHotkeySpecs(entries []Entry) ([]utilhotkey.Spec, error) {
@@ -181,12 +195,14 @@ func buildHotkeySpecs(entries []Entry) ([]utilhotkey.Spec, error) {
 	return specs, nil
 }
 
-func (s *Service) registerSpecsLocked(ctx context.Context, specs []utilhotkey.Spec) error {
+func (s *Service) registerSpecsLocked(ctx context.Context, entries []Entry, specs []utilhotkey.Spec) error {
 	previousSpecs := cloneHotkeySpecs(s.registeredSpecs)
+	previousRegistered := cloneEntries(s.registered)
 	if s.group != nil {
 		s.group.Unregister(ctx)
 		s.group = nil
 		s.registeredSpecs = nil
+		s.registered = nil
 	}
 
 	group, err := utilhotkey.RegisterGroup(ctx, specs)
@@ -197,13 +213,13 @@ func (s *Service) registerSpecsLocked(ctx context.Context, specs []utilhotkey.Sp
 				return fmt.Errorf("failed to register hotkeys: %w; failed to restore previous hotkeys: %v", err, restoreErr)
 			}
 			s.group = restoreGroup
-			s.registeredSpecs = previousSpecs
+			s.registeredSpecs, s.registered = registeredHotkeyState(previousSpecs, previousRegistered, restoreGroup.RegisteredCombineKeys())
 		}
 		return err
 	}
 
 	s.group = group
-	s.registeredSpecs = cloneHotkeySpecs(specs)
+	s.registeredSpecs, s.registered = registeredHotkeyState(specs, entries, group.RegisteredCombineKeys())
 	return nil
 }
 
@@ -213,6 +229,27 @@ func (s *Service) unregisterLocked(ctx context.Context) {
 		s.group = nil
 	}
 	s.registeredSpecs = nil
+	s.registered = nil
+}
+
+// registeredHotkeyState reconciles partial non-Linux registrations with their owning entries.
+func registeredHotkeyState(specs []utilhotkey.Spec, entries []Entry, registeredCombineKeys []string) ([]utilhotkey.Spec, []Entry) {
+	remaining := make(map[string]int, len(registeredCombineKeys))
+	for _, combineKey := range registeredCombineKeys {
+		remaining[combineKey]++
+	}
+
+	registeredSpecs := make([]utilhotkey.Spec, 0, len(registeredCombineKeys))
+	registeredEntries := make([]Entry, 0, len(registeredCombineKeys))
+	for index, entry := range entries {
+		if remaining[entry.CombineKey] == 0 {
+			continue
+		}
+		remaining[entry.CombineKey]--
+		registeredSpecs = append(registeredSpecs, specs[index])
+		registeredEntries = append(registeredEntries, entry)
+	}
+	return registeredSpecs, registeredEntries
 }
 
 func cloneHotkeySpecs(specs []utilhotkey.Spec) []utilhotkey.Spec {
@@ -220,6 +257,13 @@ func cloneHotkeySpecs(specs []utilhotkey.Spec) []utilhotkey.Spec {
 		return nil
 	}
 	return append([]utilhotkey.Spec(nil), specs...)
+}
+
+func cloneEntries(entries []Entry) []Entry {
+	if len(entries) == 0 {
+		return nil
+	}
+	return append([]Entry(nil), entries...)
 }
 
 func (s *Service) collectWoxConfig(ctx context.Context, config WoxConfig) {

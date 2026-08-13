@@ -110,9 +110,9 @@ func (a *App) snapshot() viewSnapshot {
 		completionHint = &copy
 	}
 	var toolbarMsg *toolbarMessage
-	if a.toolbarMsg != nil {
-		copy := *a.toolbarMsg
-		copy.Actions = append([]toolbarMessageAction(nil), a.toolbarMsg.Actions...)
+	if effectiveToolbarMsg := a.effectiveToolbarMessage(); effectiveToolbarMsg != nil {
+		copy := *effectiveToolbarMsg
+		copy.Actions = append([]toolbarMessageAction(nil), effectiveToolbarMsg.Actions...)
 		toolbarMsg = &copy
 	}
 	var glance *glanceItem

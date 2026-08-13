@@ -100,6 +100,7 @@ type App struct {
 	refinementScope            string
 	completionHint             *queryCompletionHint
 	toolbarMsg                 *toolbarMessage
+	toolbarFallbackMsg         *toolbarMessage
 	toolbarRevision            uint64
 	form                       *formState
 	requirementForm            *requirementFormState
@@ -978,7 +979,7 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 		if a.form != nil {
 			formHeight = int(densityMetrics.scaled(formContentMaximumHeight) + 2*densityMetrics.scaled(10))
 		}
-		toolbarMessageVisible = a.toolbarMsg != nil
+		toolbarMessageVisible = a.effectiveToolbarMessage() != nil
 		chatFullscreen = a.chatFullscreen
 		previewFullscreen = chatFullscreen || a.terminalFullscreen
 		if actionPanel && a.actionFilter != nil {

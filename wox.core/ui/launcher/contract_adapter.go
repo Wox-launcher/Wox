@@ -194,6 +194,10 @@ func (a *App) OpenMacOSPermissionFlow(ctx context.Context, permissionType string
 func (a *App) ShowToolbarMessage(_ context.Context, message plugin.ToolbarMsgUI) error {
 	converted := fromCoreToolbarMessage(message)
 	return a.runOnUI("show toolbar message", func() {
+		if message.Fallback {
+			a.applyToolbarFallbackMessage(converted)
+			return
+		}
 		a.applyToolbarMessage(converted)
 	})
 }

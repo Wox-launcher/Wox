@@ -54,8 +54,23 @@ func (m toolbarMessage) displayText() string {
 	return m.Text
 }
 
+func (a *App) effectiveToolbarMessage() *toolbarMessage {
+	if a.toolbarMsg != nil {
+		return a.toolbarMsg
+	}
+	return a.toolbarFallbackMsg
+}
+
+// applyToolbarFallbackMessage keeps a launcher-wide warning behind query-owned toolbar state.
+func (a *App) applyToolbarFallbackMessage(message toolbarMessage) {
+	a.toolbarFallbackMsg = &message
+	a.toolbarRevision++
+	_ = a.applyWindowBounds()
+	_ = a.window.Invalidate()
+}
+
 func (a *App) applyToolbarMessage(message toolbarMessage) {
-	if !message.persistent() && a.toolbarMsg != nil && a.toolbarMsg.persistent() {
+	if !message.persistent() && a.effectiveToolbarMessage() != nil && a.effectiveToolbarMessage().persistent() {
 		return
 	}
 	a.toolbarRevision++
@@ -109,6 +124,11 @@ func (a *App) clearToolbarMessageByID(toolbarMessageID string) {
 				a.normalizeActionSelectionLocked()
 			}
 		}
+	}
+	if a.toolbarFallbackMsg != nil && a.toolbarFallbackMsg.ID == toolbarMessageID {
+		a.toolbarFallbackMsg = nil
+		a.toolbarRevision++
+		changed = true
 	}
 	if changed {
 		_ = a.applyWindowBounds()

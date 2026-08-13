@@ -54,4 +54,5 @@ type ToolbarMsgUI struct {
 	Progress      *int
 	Indeterminate bool
 	Actions       []ToolbarMsgActionUI
+	Fallback      bool // Fallback messages reappear after query-owned toolbar messages clear.
 }

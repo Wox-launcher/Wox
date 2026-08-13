@@ -19,6 +19,7 @@ var (
 	platformHotkeyAvailableCheck func(ctx context.Context, hotkeyStr string) (available bool, handled bool)
 	availabilityProbeMu          sync.Mutex
 	addRawKeyListener            = keyboard.AddRawKeyListener
+	registerGlobalHotkey         = keyboard.RegisterGlobalHotkey
 )
 
 const (
@@ -127,7 +128,7 @@ func (h *Hotkey) register(ctx context.Context, combineKey string, onPress func()
 		return registerCapsLockComboHotKey(spec.key, onPress)
 	}
 
-	registration, err := keyboard.RegisterGlobalHotkey(spec.modifiers, spec.key, onPress)
+	registration, err := registerGlobalHotkey(spec.modifiers, spec.key, onPress)
 	if err != nil {
 		return err
 	}
@@ -137,9 +138,9 @@ func (h *Hotkey) register(ctx context.Context, combineKey string, onPress func()
 	return nil
 }
 
-// RegisterGroup registers multiple normal hotkeys as one native registration
-// when the platform supports it. It falls back to individual registrations when
-// a shortcut uses a special Wox-only mode such as double modifier keys.
+// RegisterGroup registers Linux normal hotkeys as one platform group. On other
+// platforms, normal hotkeys are registered independently so one unavailable
+// shortcut does not disable unrelated shortcuts.
 //
 // Special hotkeys (double-modifier and CapsLock combos) are registered
 // individually and isolated from the rest of the group: if one of them fails to
@@ -197,12 +198,24 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 			continue
 		}
 
-		keyboardSpecs = append(keyboardSpecs, keyboard.GlobalHotkeySpec{
-			Modifiers: parsed.modifiers,
-			Key:       parsed.key,
-			Callback:  spec.Callback,
-		})
-		group.combineKeys = append(group.combineKeys, spec.CombineKey)
+		if util.IsLinux() {
+			keyboardSpecs = append(keyboardSpecs, keyboard.GlobalHotkeySpec{
+				Modifiers: parsed.modifiers,
+				Key:       parsed.key,
+				Callback:  spec.Callback,
+			})
+			group.combineKeys = append(group.combineKeys, spec.CombineKey)
+			continue
+		}
+
+		// Windows and macOS expose independent native registrations. Preserve
+		// successful shortcuts when another application owns one of the others.
+		hk := &Hotkey{}
+		if err := hk.Register(ctx, spec.CombineKey, spec.Callback); err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("skip unavailable normal hotkey in group: %s: %s", spec.CombineKey, err.Error()))
+			continue
+		}
+		group.hotkeys = append(group.hotkeys, hk)
 	}
 
 	if len(keyboardSpecs) > 0 {

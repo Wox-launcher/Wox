@@ -29,6 +29,7 @@
   "ui_hotkey_conflict_query": "该快捷键已被 Query Hotkey 使用：{query}",
   "ui_hotkey_conflict_system": "该快捷键已被其他应用或系统占用。",
   "ui_hotkey_unavailable": "该快捷键不可用。",
+  "ui_main_hotkey_registration_failed": "主快捷键 {hotkey} 注册失败，请在设置中更换。",
   "ui_hotkey_wayland_evdev_hint": "双修饰键热键（如双击 Ctrl）和 CapsLock 组合键在 Wayland 下需要额外配置才能使用，请查看指南。",
   "ui_hotkey_wayland_evdev_learn_more": "了解更多",
   "ui_attention_unread_tooltip": "关注事项",

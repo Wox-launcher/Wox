@@ -19,6 +19,7 @@
   "ui_hotkey_conflict_query": "Эта горячая клавиша уже используется Query Hotkey: {query}",
   "ui_hotkey_conflict_system": "Эта горячая клавиша уже используется другим приложением или системой.",
   "ui_hotkey_unavailable": "Эта горячая клавиша недоступна.",
+  "ui_main_hotkey_registration_failed": "Не удалось зарегистрировать основную горячую клавишу {hotkey}. Измените её в настройках.",
   "ui_hotkey_wayland_evdev_hint": "Горячие клавиши с двойным модификатором (например, двойной Ctrl) и комбинации CapsLock требуют дополнительной настройки в Wayland. См. руководство.",
   "ui_hotkey_wayland_evdev_learn_more": "Подробнее",
   "ui_attention_unread_tooltip": "Элементы внимания",
