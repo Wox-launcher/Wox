@@ -351,6 +351,22 @@ func TestRecordingToolbarLayoutMatchesScreenshotSelectionGap(t *testing.T) {
 	}
 }
 
+func TestRecordingToolbarLayoutAvoidsShortSelectionLikeScreenshot(t *testing.T) {
+	frame := Rect{Width: 1920, Height: 1080}
+	selection := Rect{X: 360, Y: 820, Width: 1203, Height: 113}
+	want := screenshotEditorToolbarPlacement(selection, frame, recordingToolbarWidth, recordingToolbarHeight, recordingToolbarHeight, 1)
+	expanded, _, collapsed := recordingToolbarLayout(frame, selection, recordingToolbarWidth, recordingToolbarHeight)
+	if collapsed {
+		t.Fatalf("short selection collapsed: %+v", expanded)
+	}
+	if expanded != want {
+		t.Fatalf("recording toolbar = %+v, want screenshot placement %+v", expanded, want)
+	}
+	if screenshotEditorRectsOverlap(expanded, selection) {
+		t.Fatalf("toolbar overlaps short selection: toolbar=%+v selection=%+v", expanded, selection)
+	}
+}
+
 func TestRecordingToolbarOmitsPrivacyAndDiscardBanners(t *testing.T) {
 	frame := FrameInfo{Size: Size{Width: recordingToolbarWidth, Height: recordingToolbarHeight}}
 	withError := &recordingToolbarState{editor: &screenshotEditorOverlayState{}, fps: 30, lastError: "Click cancel again to discard the recording"}
@@ -390,23 +406,33 @@ func TestRecordingToolbarOmitsPrivacyAndDiscardBanners(t *testing.T) {
 
 func TestRecordingSizeLabelAndBorderMarginScaleWithDPI(t *testing.T) {
 	state := &recordingToolbarState{
-		selection: Rect{X: 80, Y: 80, Width: 200, Height: 100},
-		frameSize: Size{Width: 400, Height: 300},
+		selection:    Rect{X: 80, Y: 80, Width: 200, Height: 100},
+		frameSize:    Size{Width: 400, Height: 300},
+		borderOrigin: Point{X: 40, Y: 40},
 		editor: &screenshotEditorOverlayState{
-			image: testScreenshotImage(t, 400, 300), uiScale: 2,
+			image:       testScreenshotImage(t, 400, 300),
+			uiScale:     1,
 			chromeScale: func(Rect) float32 { return 2 },
 		},
 	}
 	if got := state.scaledBorderMargin(); got != 80 {
 		t.Fatalf("scaled border margin = %v, want 80", got)
 	}
-	label := &DisplayList{}
-	drawScreenshotEditorSizeLabel(label, "200 x 100", Rect{X: 80, Y: 80, Width: 200, Height: 100}, Size{Width: 360, Height: 260}, 2)
-	expected := &DisplayList{}
-	expected.FillRoundedRect(Rect{X: 88, Y: 16, Width: 176, Height: 52}, 20, Color{R: 23, G: 23, B: 23, A: 230})
-	expected.DrawText("200 x 100", Rect{X: 104, Y: 26, Width: 144, Height: 36}, TextStyle{Size: 28, Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
-	if err := label.Compare(expected); err != nil {
-		t.Fatalf("scaled size label: %v", err)
+
+	frame := FrameInfo{Size: Size{Width: 280, Height: 180}}
+	got := &DisplayList{}
+	state.drawBorder(got, frame)
+	local := recordingBorderLocalSelection(state.selection, state.borderOrigin)
+	want := &DisplayList{}
+	want.Clear(Color{})
+	want.StrokeRoundedRect(local, 0, 4, Color{R: 47, G: 128, B: 237, A: 255})
+	drawScreenshotEditorHandles(want, local, Color{R: 47, G: 128, B: 237, A: 255}, 2)
+	drawScreenshotEditorSizeLabel(want, "200 x 100", local, frame.Size, 2)
+	if err := got.Compare(want); err != nil {
+		t.Fatalf("recording border should use live chrome scale, not stale editor.uiScale: %v", err)
+	}
+	if state.editor.uiScale != 2 {
+		t.Fatalf("editor uiScale = %v, want 2 so handle hit-testing matches the drawn chrome", state.editor.uiScale)
 	}
 }
 
@@ -449,6 +475,120 @@ func TestRecordingBorderPointerMovesAndResizesReadySelection(t *testing.T) {
 	if resizing.selection.X != 110 || resizing.selection.Y != 110 || resizing.selection.Width != 390 || resizing.selection.Height != 290 {
 		t.Fatalf("resized selection = %+v", resizing.selection)
 	}
+
+	offsetGrip := newState()
+	offsetGrip.borderPointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: recordingBorderMargin + 8, Y: recordingBorderMargin + 6}})
+	offsetGrip.borderPointer(PointerEvent{Kind: PointerMove, Button: PointerButtonPrimary, Position: Point{X: recordingBorderMargin + 8, Y: recordingBorderMargin + 6}})
+	if offsetGrip.selection != (Rect{X: 100, Y: 100, Width: 400, Height: 300}) {
+		t.Fatalf("off-center handle press jumped selection to %+v", offsetGrip.selection)
+	}
+	offsetGrip.borderPointer(PointerEvent{Kind: PointerMove, Button: PointerButtonPrimary, Position: Point{X: recordingBorderMargin + 18, Y: recordingBorderMargin + 16}})
+	if offsetGrip.selection != (Rect{X: 110, Y: 110, Width: 390, Height: 290}) {
+		t.Fatalf("off-center handle drag = %+v", offsetGrip.selection)
+	}
+
+	windowCoordinates := newState()
+	windowCoordinates.borderOrigin = Point{}
+	windowCoordinates.platform.cursorPosition = func() *Point {
+		return &Point{X: 20, Y: 20}
+	}
+	windowCoordinates.borderPointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: 500, Y: 400}})
+	windowCoordinates.borderPointer(PointerEvent{Kind: PointerMove, Button: PointerButtonPrimary, Position: Point{X: 520, Y: 420}})
+	if windowCoordinates.selection != (Rect{X: 100, Y: 100, Width: 420, Height: 320}) {
+		t.Fatalf("window-local drag used conflicting global cursor coordinates: %+v", windowCoordinates.selection)
+	}
+
+	scaled := newState()
+	scaled.editor.uiScale = 2
+	scaled.editor.chromeScale = func(Rect) float32 { return 2 }
+	scaled.borderPointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: recordingBorderMargin - 20, Y: recordingBorderMargin}})
+	scaled.borderPointer(PointerEvent{Kind: PointerMove, Button: PointerButtonPrimary, Position: Point{X: recordingBorderMargin - 10, Y: recordingBorderMargin}})
+	if scaled.selection.X != 110 || scaled.selection.Y != 100 || scaled.selection.Width != 390 || scaled.selection.Height != 300 {
+		t.Fatalf("DPI-scaled handle resize = %+v", scaled.selection)
+	}
+
+	ignored := newState()
+	original := ignored.selection
+	ignored.borderPointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: 4, Y: 4}})
+	ignored.borderPointer(PointerEvent{Kind: PointerMove, Button: PointerButtonPrimary, Position: Point{X: 24, Y: 24}})
+	if ignored.selection != original || ignored.editor.dragging || ignored.editor.hasSelection != true {
+		t.Fatalf("margin click should not start a new selection, got %+v dragging=%t hasSelection=%t", ignored.selection, ignored.editor.dragging, ignored.editor.hasSelection)
+	}
+}
+
+func TestRecordingBorderFollowsDraggedHandleInsteadOfPinningTopLeft(t *testing.T) {
+	origin := Point{X: 60, Y: 60}
+	original := recordingBorderLocalSelection(Rect{X: 100, Y: 100, Width: 400, Height: 300}, origin)
+	if original.X != 40 || original.Y != 40 {
+		t.Fatalf("idle local selection = %+v, want origin at margin", original)
+	}
+	shrunkFromTopLeft := recordingBorderLocalSelection(Rect{X: 110, Y: 110, Width: 390, Height: 290}, origin)
+	if shrunkFromTopLeft.X != 50 || shrunkFromTopLeft.Y != 50 || shrunkFromTopLeft.Width != 390 || shrunkFromTopLeft.Height != 290 {
+		t.Fatalf("top-left shrink local selection = %+v, want 50,50 390x290", shrunkFromTopLeft)
+	}
+	if shrunkFromTopLeft.X+shrunkFromTopLeft.Width != original.X+original.Width || shrunkFromTopLeft.Y+shrunkFromTopLeft.Height != original.Y+original.Height {
+		t.Fatalf("bottom-right should stay put: original=%+v shrunk=%+v", original, shrunkFromTopLeft)
+	}
+	movedLeft := recordingBorderLocalSelection(Rect{X: 20, Y: 100, Width: 400, Height: 300}, Point{})
+	if movedLeft.X != 20 || movedLeft.Y != 100 {
+		t.Fatalf("frame-covering local selection = %+v, want the desktop selection", movedLeft)
+	}
+}
+
+func TestRecordingBorderUsesStableFrameBounds(t *testing.T) {
+	var bounds Rect
+	var margin float32
+	setBoundsCalls := 0
+	selection := Rect{X: 100, Y: 100, Width: 400, Height: 300}
+	state := &recordingToolbarState{
+		selection:    selection,
+		frameSize:    Size{Width: 1000, Height: 800},
+		borderOrigin: Point{X: 60, Y: 60},
+		border:       &Window{},
+		editor: &screenshotEditorOverlayState{
+			selection: selection, frameSize: Size{Width: 1000, Height: 800}, hasSelection: true,
+			activeTool: screenshotEditorToolSelect, uiScale: 1,
+		},
+		platform: screenshotEditorPlatform{
+			setRecordingBounds: func(_ *Window, selection Rect, _ Size, boundsMargin float32) error {
+				setBoundsCalls++
+				bounds = selection
+				margin = boundsMargin
+				return nil
+			},
+		},
+	}
+	if err := state.positionBorder(); err != nil {
+		t.Fatal(err)
+	}
+	if state.borderOrigin != (Point{}) {
+		t.Fatalf("border origin = %+v, want stable desktop origin", state.borderOrigin)
+	}
+	if bounds != (Rect{Width: 1000, Height: 800}) || margin != 0 {
+		t.Fatalf("border bounds = %+v margin=%v", bounds, margin)
+	}
+	state.borderPointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: 500, Y: 250}})
+	state.borderPointer(PointerEvent{Kind: PointerMove, Button: PointerButtonPrimary, Position: Point{X: 520, Y: 250}})
+	state.borderPointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: Point{X: 520, Y: 250}})
+	if setBoundsCalls != 1 {
+		t.Fatalf("drag changed border window bounds %d times, want only initial placement", setBoundsCalls)
+	}
+}
+
+func TestRecordingToolbarTooltipSitsInSelectionGapLikeScreenshot(t *testing.T) {
+	selection := Rect{X: 200, Y: 200, Width: 800, Height: 400}
+	toolbar := Rect{X: selection.X + selection.Width - recordingToolbarWidth, Y: selection.Y + selection.Height + recordingToolbarSelectionGap, Width: recordingToolbarWidth, Height: recordingToolbarHeight}
+	anchor := Rect{X: 300, Y: 10, Width: 40, Height: 40}
+	origin := Point{X: selection.X - recordingBorderMargin, Y: selection.Y - recordingBorderMargin}
+	local := recordingToolbarTooltipLocalRect(Size{Width: 1920, Height: 1080}, toolbar, anchor, origin, "Show keystrokes", 1)
+	globalY := local.Y + origin.Y
+	if globalY != toolbar.Y+anchor.Y-36 {
+		t.Fatalf("tooltip top = %v, want screenshot offset above the icon %v", globalY, toolbar.Y+anchor.Y-36)
+	}
+	selectionBottom := selection.Y + selection.Height
+	if globalY >= selectionBottom || globalY+local.Height <= selectionBottom {
+		t.Fatalf("tooltip should occupy the screenshot gap overlapping the selection edge, tooltip=%+v selectionBottom=%v", Rect{X: local.X + origin.X, Y: globalY, Width: local.Width, Height: local.Height}, selectionBottom)
+	}
 }
 
 func TestRecordingSelectionEdgeContainsLeavesInteriorClickable(t *testing.T) {
@@ -462,6 +602,13 @@ func TestRecordingSelectionEdgeContainsLeavesInteriorClickable(t *testing.T) {
 		if recordingSelectionEdgeContains(selection, point, 14) {
 			t.Fatalf("non-border point %+v should pass through", point)
 		}
+	}
+	outerHandle := Point{X: 80, Y: 100}
+	if recordingSelectionEdgeContains(selection, outerHandle, 14) {
+		t.Fatal("unscaled 14px slop should not claim a 2x handle's outer edge")
+	}
+	if !recordingSelectionEdgeContains(selection, outerHandle, recordingSelectionInteractiveTolerance(2)) {
+		t.Fatal("DPI-scaled handle chrome should stay interactive")
 	}
 }
 
@@ -518,26 +665,49 @@ func TestRecordingKeycapsExpireWithoutPersistence(t *testing.T) {
 func TestRenderRecordingKeycapsCompositesOnlyInsideSelection(t *testing.T) {
 	target := image.NewRGBA(image.Rect(0, 0, 200, 120))
 	for index := 0; index < len(target.Pix); index += 4 {
-		target.Pix[index], target.Pix[index+1], target.Pix[index+2], target.Pix[index+3] = 255, 255, 255, 255
+		target.Pix[index], target.Pix[index+1], target.Pix[index+2], target.Pix[index+3] = 80, 80, 80, 255
 	}
 	selection := Rect{X: 30, Y: 20, Width: 140, Height: 90}
 	if err := renderRecordingKeycaps(target, selection, Size{Width: 200, Height: 120}, []recordingKeycap{{label: "Ctrl+K", expiresAt: time.Now().Add(time.Second)}}, time.Now(), 1); err != nil {
 		t.Fatalf("render keycaps: %v", err)
 	}
-	if outside := target.RGBAAt(5, 5); outside != (color.RGBA{R: 255, G: 255, B: 255, A: 255}) {
+	if outside := target.RGBAAt(5, 5); outside != (color.RGBA{R: 80, G: 80, B: 80, A: 255}) {
 		t.Fatalf("outside selection pixel changed: %+v", outside)
 	}
-	changed := false
-	for y := 58; y < 110 && !changed; y++ {
+	dark, bright := false, false
+	for y := 58; y < 110; y++ {
 		for x := 30; x < 170; x++ {
-			if pixel := target.RGBAAt(x, y); pixel.R < 200 {
-				changed = true
-				break
-			}
+			pixel := target.RGBAAt(x, y)
+			dark = dark || pixel.R < 40
+			bright = bright || pixel.R > 200
 		}
 	}
-	if !changed {
-		t.Fatal("keycap was not composited into the selected recording pixels")
+	if !dark || !bright {
+		t.Fatalf("keycap contrast dark=%t bright=%t, want a dark cap with legible text", dark, bright)
+	}
+}
+
+func TestRenderRecordingKeycapsScalesWithActiveDisplayDPI(t *testing.T) {
+	changedHeight := func(scale float32) int {
+		target := image.NewRGBA(image.Rect(0, 0, 400, 240))
+		for index := 0; index < len(target.Pix); index += 4 {
+			target.Pix[index], target.Pix[index+1], target.Pix[index+2], target.Pix[index+3] = 80, 80, 80, 255
+		}
+		if err := renderRecordingKeycaps(target, Rect{Width: 400, Height: 240}, Size{Width: 400, Height: 240}, []recordingKeycap{{label: "Ctrl+K", expiresAt: time.Now().Add(time.Second)}}, time.Now(), scale); err != nil {
+			t.Fatal(err)
+		}
+		minY, maxY := target.Bounds().Max.Y, target.Bounds().Min.Y
+		for y := target.Bounds().Min.Y; y < target.Bounds().Max.Y; y++ {
+			for x := target.Bounds().Min.X; x < target.Bounds().Max.X; x++ {
+				if target.RGBAAt(x, y).R != 80 {
+					minY, maxY = min(minY, y), max(maxY, y+1)
+				}
+			}
+		}
+		return maxY - minY
+	}
+	if at100, at150 := changedHeight(1), changedHeight(1.5); at150 < int(float32(at100)*1.4) {
+		t.Fatalf("keycap heights at 100%%=%d and 150%%=%d, want physical DPI scaling", at100, at150)
 	}
 }
 

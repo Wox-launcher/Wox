@@ -44,6 +44,41 @@ func TestScreenshotEditorWindowHostSerializesCallbacks(t *testing.T) {
 	}
 }
 
+func TestScreenshotHostKeepsScreenshotChromeUntilRecordingToolbarFits(t *testing.T) {
+	host := &screenshotEditorWindowHost{}
+	state := &screenshotEditorOverlayState{
+		image:        testScreenshotImage(t, 400, 300),
+		selection:    Rect{X: 40, Y: 40, Width: 200, Height: 120},
+		hasSelection: true,
+		frameSize:    Size{Width: 400, Height: 300},
+		result:       make(chan screenshotEditorOverlayOutcome, 1),
+	}
+	if err := host.begin(state); err != nil {
+		t.Fatal(err)
+	}
+	defer host.end(state)
+	state.recordingUI = &recordingToolbarState{editor: state}
+
+	fullscreen := &DisplayList{}
+	host.draw(fullscreen, FrameInfo{Size: Size{Width: 400, Height: 300}})
+	screenshotOnly := &DisplayList{}
+	state.recordingUI = nil
+	host.draw(screenshotOnly, FrameInfo{Size: Size{Width: 400, Height: 300}})
+	if err := fullscreen.Compare(screenshotOnly); err != nil {
+		t.Fatalf("fullscreen recording transition should keep screenshot chrome: %v", err)
+	}
+
+	state.recordingUI = &recordingToolbarState{editor: state}
+	toolbar := &DisplayList{}
+	host.draw(toolbar, FrameInfo{Size: Size{Width: recordingToolbarWidth, Height: recordingToolbarHeight}})
+	if state.frameSize != (Size{Width: 400, Height: 300}) {
+		t.Fatalf("recording toolbar frame replaced desktop frame size: %+v", state.frameSize)
+	}
+	if err := toolbar.Compare(screenshotOnly); err == nil {
+		t.Fatal("toolbar-sized frame should draw recording chrome instead of screenshot overlay")
+	}
+}
+
 func TestNewScreenshotEditorImageCopiesStridedRGBA(t *testing.T) {
 	source := image.NewRGBA(image.Rect(0, 0, 4, 2))
 	subImage := source.SubImage(image.Rect(1, 0, 3, 2)).(*image.RGBA)
@@ -268,6 +303,9 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	}
 	if state.toolbarRect.X != state.selection.X+state.selection.Width-state.toolbarRect.Width {
 		t.Fatalf("toolbar left = %v, want right-aligned to selection", state.toolbarRect.X)
+	}
+	if state.toolbarRect.Y != state.selection.Y+state.selection.Height+16 {
+		t.Fatalf("toolbar top = %v, want 16px below selection", state.toolbarRect.Y)
 	}
 	if state.pinRect.Width != 40 || state.cancelRect.Width != 40 || state.confirmRect.Width != 40 {
 		t.Fatalf("action bounds = pin %+v cancel %+v confirm %+v", state.pinRect, state.cancelRect, state.confirmRect)

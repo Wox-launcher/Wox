@@ -72,7 +72,6 @@ type recordingToolbarState struct {
 	expandedBounds       Rect
 	collapsedBounds      Rect
 	borderOrigin         Point
-	borderMargin         float32
 	borderInteractive    bool
 	borderMonitorStop    chan struct{}
 	durationTickerStop   chan struct{}
@@ -115,6 +114,7 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 	editor.activeTool = screenshotEditorToolSelect
 	editor.hasSelectedMark = false
 	editor.selection = selection
+	editor.hasSelection = true
 	editor.annotations = nil
 	editor.toolbarRect = Rect{}
 	editor.toolRects = [screenshotEditorToolCount]Rect{}
@@ -129,7 +129,6 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 	if editor.chromeScale != nil {
 		editor.uiScale = max(float32(1), editor.chromeScale(selection))
 	}
-	editor.recordingUI = state
 	state.window = editor.window
 	editor.mu.Unlock()
 	defer func() {
@@ -181,13 +180,21 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 			openErr = state.border.SetPointerPassthrough(true)
 		}
 		if openErr == nil {
+			_, openErr = borderManaged.Show()
+		}
+		// Keep the fullscreen screenshot overlay until the recording border is on screen,
+		// then shrink it to the toolbar. Switching drawToolbar first would clear the
+		// overlay to transparent and flash the live desktop.
+		if openErr == nil {
+			editor.mu.Lock()
+			editor.recordingUI = state
+			editor.mu.Unlock()
 			openErr = state.positionToolbar()
 		}
 		if openErr == nil {
-			_, openErr = borderManaged.Show()
-		}
-		if openErr == nil && state.window != nil {
-			openErr = state.window.Invalidate()
+			if state.window != nil {
+				openErr = state.window.Invalidate()
+			}
 		}
 	}); err != nil {
 		openErr = err
@@ -297,7 +304,7 @@ func (state *recordingToolbarState) updateBorderPassthrough() {
 	shouldIntercept := false
 	if state.platform.cursorPosition != nil {
 		if pointer := state.platform.cursorPosition(); pointer != nil {
-			shouldIntercept = editing || recordingSelectionEdgeContains(selection, *pointer, 14)
+			shouldIntercept = editing || recordingSelectionEdgeContains(selection, *pointer, recordingSelectionInteractiveTolerance(state.toolbarChromeScale()))
 		}
 	}
 	if interactive == shouldIntercept {
@@ -311,6 +318,12 @@ func (state *recordingToolbarState) updateBorderPassthrough() {
 	state.mu.Unlock()
 }
 
+// recordingSelectionInteractiveTolerance matches screenshot handle hit-testing so DPI-scaled knobs stay clickable.
+func recordingSelectionInteractiveTolerance(uiScale float32) float32 {
+	return max(float32(14), 12*max(float32(1), uiScale))
+}
+
+// recordingSelectionEdgeContains is true on the capture stroke or a resize knob, not the interior.
 func recordingSelectionEdgeContains(selection Rect, point Point, tolerance float32) bool {
 	inner := Rect{X: selection.X + tolerance, Y: selection.Y + tolerance, Width: max(float32(0), selection.Width-tolerance*2), Height: max(float32(0), selection.Height-tolerance*2)}
 	if screenshotEditorRectContains(selection, point) && !screenshotEditorRectContains(inner, point) {
@@ -355,6 +368,18 @@ func (state *recordingToolbarState) positionToolbar() error {
 	return setScreenshotScrollingWindowBounds(state.window, state.platform, expanded, state.frameSize)
 }
 
+// usesToolbarSurface is true when this window has already been resized to recording chrome.
+func (state *recordingToolbarState) usesToolbarSurface(frame FrameInfo) bool {
+	if state == nil {
+		return false
+	}
+	scale := state.toolbarChromeScale()
+	if scale <= 0 {
+		scale = 1
+	}
+	return frame.Size.Height > 0 && frame.Size.Height <= recordingToolbarHeight*scale*1.5
+}
+
 // toolbarChromeScale sizes recording controls with the same DPI used by screenshot chrome.
 func (state *recordingToolbarState) toolbarChromeScale() float32 {
 	if state.editor != nil && state.editor.chromeScale != nil {
@@ -374,14 +399,12 @@ func (state *recordingToolbarState) positionOverlay() error {
 	return state.platform.setRecordingBounds(state.overlay, state.selection, state.frameSize, 0)
 }
 
-// positionBorder limits the interactive ready-state surface to the selection and its resize handles.
+// positionBorder keeps one stable coordinate space for drawing and dragging the selection.
 func (state *recordingToolbarState) positionBorder() error {
-	margin := state.scaledBorderMargin()
 	state.mu.Lock()
-	selection := state.selection
-	state.borderOrigin = Point{X: selection.X - margin, Y: selection.Y - margin}
-	state.borderMargin = margin
+	frameSize := state.frameSize
 	border := state.border
+	state.borderOrigin = Point{}
 	state.mu.Unlock()
 	if border == nil {
 		return nil
@@ -389,7 +412,7 @@ func (state *recordingToolbarState) positionBorder() error {
 	if state.platform.setRecordingBounds == nil {
 		return errors.New("recording selection bounds are unavailable")
 	}
-	return state.platform.setRecordingBounds(border, selection, state.frameSize, margin)
+	return state.platform.setRecordingBounds(border, Rect{Width: frameSize.Width, Height: frameSize.Height}, frameSize, 0)
 }
 
 // scaledBorderMargin leaves room above the selection for the DPI-scaled size chip.
@@ -397,7 +420,7 @@ func (state *recordingToolbarState) scaledBorderMargin() float32 {
 	return recordingBorderMargin * state.toolbarChromeScale()
 }
 
-// recordingToolbarLayout prefers bottom, top, left, and right before using an edge hotspot.
+// recordingToolbarLayout reuses screenshot placement, then left/right, then a fullscreen hotspot.
 func recordingToolbarLayout(globalFrame, globalSelection Rect, width, height float32) (Rect, Rect, bool) {
 	if width <= 0 {
 		width = recordingToolbarWidth
@@ -405,29 +428,28 @@ func recordingToolbarLayout(globalFrame, globalSelection Rect, width, height flo
 	if height <= 0 {
 		height = recordingToolbarHeight
 	}
-	gap := recordingToolbarSelectionGap * height / recordingToolbarHeight
-	frameRight, frameBottom := globalFrame.X+globalFrame.Width, globalFrame.Y+globalFrame.Height
-	left := min(max(globalFrame.X+8, globalSelection.X+globalSelection.Width-width), frameRight-width-8)
-	candidates := []Rect{
-		{X: left, Y: globalSelection.Y + globalSelection.Height + gap, Width: width, Height: height},
-		{X: left, Y: globalSelection.Y - height - gap, Width: width, Height: height},
-		{X: globalSelection.X - width - gap, Y: min(max(globalFrame.Y+8, globalSelection.Y), frameBottom-height-8), Width: width, Height: height},
-		{X: globalSelection.X + globalSelection.Width + gap, Y: min(max(globalFrame.Y+8, globalSelection.Y), frameBottom-height-8), Width: width, Height: height},
+	scale := height / recordingToolbarHeight
+	if scale <= 0 {
+		scale = 1
 	}
-	for _, candidate := range candidates {
-		if candidate.X >= globalFrame.X+8 && candidate.Y >= globalFrame.Y+8 && candidate.X+candidate.Width <= frameRight-8 && candidate.Y+candidate.Height <= frameBottom-8 {
+	hotspotWidth := 18 * width / recordingToolbarWidth
+	hotspot := Rect{X: globalSelection.X + globalSelection.Width - hotspotWidth, Y: globalSelection.Y + globalSelection.Height/2 - height/2, Width: hotspotWidth, Height: height}
+	placement := screenshotEditorToolbarPlacement(globalSelection, globalFrame, width, height, height, scale)
+	if !screenshotEditorRectsOverlap(placement, globalSelection) {
+		return placement, Rect{}, false
+	}
+	gap := recordingToolbarSelectionGap * scale
+	frameRight, frameBottom := globalFrame.X+globalFrame.Width, globalFrame.Y+globalFrame.Height
+	sideY := min(max(globalFrame.Y+8, globalSelection.Y), frameBottom-height-8)
+	for _, candidate := range []Rect{
+		{X: globalSelection.X - width - gap, Y: sideY, Width: width, Height: height},
+		{X: globalSelection.X + globalSelection.Width + gap, Y: sideY, Width: width, Height: height},
+	} {
+		if candidate.X >= globalFrame.X+8 && candidate.Y >= globalFrame.Y+8 && candidate.X+candidate.Width <= frameRight-8 && candidate.Y+candidate.Height <= frameBottom-8 && !screenshotEditorRectsOverlap(candidate, globalSelection) {
 			return candidate, Rect{}, false
 		}
 	}
-	expanded := Rect{
-		X:     min(max(globalFrame.X+8, globalSelection.X+(globalSelection.Width-width)/2), frameRight-width-8),
-		Y:     min(max(globalFrame.Y+8, globalSelection.Y+globalSelection.Height-height-16), frameBottom-height-8),
-		Width: width, Height: height,
-	}
-	hotspotWidth := 18 * width / recordingToolbarWidth
-	hotspotHeight := height
-	collapsed := Rect{X: globalSelection.X + globalSelection.Width - hotspotWidth, Y: globalSelection.Y + globalSelection.Height/2 - hotspotHeight/2, Width: hotspotWidth, Height: hotspotHeight}
-	return expanded, collapsed, true
+	return placement, hotspot, true
 }
 
 // recordingStatus is ready until a session exists, then follows that session.
@@ -656,9 +678,12 @@ func recordingFunctionalKeyName(key keyboard.Key) string {
 
 // drawOverlay renders only capture chrome, live annotations, countdown, and key hints over the desktop.
 func (state *recordingToolbarState) drawOverlay(displayList *DisplayList, frame FrameInfo) {
-	state.editor.mu.Lock()
-	uiScale := max(float32(1), state.editor.uiScale)
-	state.editor.mu.Unlock()
+	uiScale := max(float32(1), state.toolbarChromeScale())
+	if state.editor != nil {
+		state.editor.mu.Lock()
+		state.editor.uiScale = uiScale
+		state.editor.mu.Unlock()
+	}
 	state.mu.Lock()
 	now := time.Now()
 	keycaps := make([]recordingKeycap, 0, len(state.keycaps))
@@ -722,31 +747,51 @@ func (state *recordingToolbarState) drawPreview(displayList *DisplayList, select
 
 // drawBorder keeps passive blue chrome outside the exact encoded pixel rectangle.
 func (state *recordingToolbarState) drawBorder(displayList *DisplayList, frame FrameInfo) {
-	state.editor.mu.Lock()
-	uiScale := max(float32(1), state.editor.uiScale)
-	source := state.editor.image
-	state.editor.mu.Unlock()
+	uiScale := max(float32(1), state.toolbarChromeScale())
+	var source *Image
+	if state.editor != nil {
+		state.editor.mu.Lock()
+		state.editor.uiScale = uiScale
+		source = state.editor.image
+		state.editor.mu.Unlock()
+	}
 	state.mu.Lock()
 	session := state.session
 	selection := state.selection
-	margin := state.borderMargin
+	origin := state.borderOrigin
+	toolbarBounds := state.expandedBounds
+	hoverTooltip := state.hoverTooltip
+	hoverTooltipRect := state.hoverTooltipRect
+	collapsed := state.collapsed
+	frameSize := state.frameSize
 	state.mu.Unlock()
 	displayList.Clear(Color{})
-	if margin <= 0 {
-		margin = recordingBorderMargin * uiScale
-	}
-	localSelection := Rect{X: margin, Y: margin, Width: selection.Width, Height: selection.Height}
+	localSelection := recordingBorderLocalSelection(selection, origin)
 	blue := Color{R: 47, G: 128, B: 237, A: 255}
-	thickness := max(float32(2), 2*uiScale)
-	displayList.FillRect(Rect{X: localSelection.X - thickness, Y: localSelection.Y - thickness, Width: localSelection.Width + thickness*2, Height: thickness}, blue)
-	displayList.FillRect(Rect{X: localSelection.X - thickness, Y: localSelection.Y + localSelection.Height, Width: localSelection.Width + thickness*2, Height: thickness}, blue)
-	displayList.FillRect(Rect{X: localSelection.X - thickness, Y: localSelection.Y, Width: thickness, Height: localSelection.Height}, blue)
-	displayList.FillRect(Rect{X: localSelection.X + localSelection.Width, Y: localSelection.Y, Width: thickness, Height: localSelection.Height}, blue)
+	displayList.StrokeRoundedRect(localSelection, 0, 2*uiScale, blue)
 	if session == nil || session.currentState() == recordingStateReady {
 		drawScreenshotEditorHandles(displayList, localSelection, blue, uiScale)
 	}
-	label := fmt.Sprintf("%d x %d", sessionPixelWidth(session, source, selection, state.frameSize), sessionPixelHeight(session, source, selection, state.frameSize))
+	label := fmt.Sprintf("%d x %d", sessionPixelWidth(session, source, selection, frameSize), sessionPixelHeight(session, source, selection, frameSize))
 	drawScreenshotEditorSizeLabel(displayList, label, localSelection, frame.Size, uiScale)
+	if !collapsed {
+		drawScreenshotEditorToolTooltipAt(displayList, recordingToolbarTooltipLocalRect(frameSize, toolbarBounds, hoverTooltipRect, origin, hoverTooltip, uiScale), hoverTooltip, uiScale)
+	}
+}
+
+// recordingBorderLocalSelection maps the desktop selection into the current border window.
+func recordingBorderLocalSelection(selection Rect, origin Point) Rect {
+	return Rect{X: selection.X - origin.X, Y: selection.Y - origin.Y, Width: selection.Width, Height: selection.Height}
+}
+
+// recordingToolbarTooltipLocalRect places the toolbar hint in the screenshot 16px gap, using border-local coordinates.
+func recordingToolbarTooltipLocalRect(frame Size, toolbarBounds, anchor Rect, origin Point, text string, scale float32) Rect {
+	globalAnchor := Rect{X: toolbarBounds.X + anchor.X, Y: toolbarBounds.Y + anchor.Y, Width: anchor.Width, Height: anchor.Height}
+	global := screenshotEditorToolTooltipRect(frame, globalAnchor, text, scale)
+	if global.Width <= 0 {
+		return Rect{}
+	}
+	return Rect{X: global.X - origin.X, Y: global.Y - origin.Y, Width: global.Width, Height: global.Height}
 }
 
 func sessionPixelWidth(session *recordingSession, source *Image, selection Rect, frame Size) int {
@@ -787,7 +832,8 @@ func (state *recordingToolbarState) drawKeycaps(displayList *DisplayList, select
 	}
 }
 
-// renderRecordingKeycaps composites ephemeral key hints into the encoded frame independently of overlay capture.
+// renderRecordingKeycaps composites ephemeral key hints in capture pixels. scale is the active
+// display's physical-to-logical ratio; scaleX and scaleY only map the capture into the target image.
 func renderRecordingKeycaps(target *image.RGBA, selection Rect, frame Size, keycaps []recordingKeycap, now time.Time, scale float32) error {
 	if target == nil || len(keycaps) == 0 {
 		return nil
@@ -821,9 +867,10 @@ func renderRecordingKeycaps(target *image.RGBA, selection Rect, frame Size, keyc
 		rect := screenshotEditorScaleRect(Rect{X: left, Y: top, Width: widths[index], Height: 36 * scale}, scaleX, scaleY)
 		centerY := (rect.Min.Y + rect.Max.Y) / 2
 		radius := float32(rect.Dy())
-		drawScreenshotEditorPixelLine(overlay, clip, image.Pt(rect.Min.X+rect.Dy()/2, centerY), image.Pt(rect.Max.X-rect.Dy()/2, centerY), radius, color.RGBA{R: 24, G: 24, B: 24, A: alpha})
+		background := uint8(uint16(24) * uint16(alpha) / 255)
+		drawScreenshotEditorPixelLine(overlay, clip, image.Pt(rect.Min.X+rect.Dy()/2, centerY), image.Pt(rect.Max.X-rect.Dy()/2, centerY), radius, color.RGBA{R: background, G: background, B: background, A: alpha})
 		textPoint := screenshotEditorScalePoint(Point{X: left + 10*scale, Y: top + 8*scale}, scaleX, scaleY)
-		drawScreenshotEditorPixelText(overlay, clip, keycap.label, textPoint, 14*scale*scaleY, color.RGBA{R: 255, G: 255, B: 255, A: alpha})
+		drawScreenshotEditorPixelTextWithFont(overlay, clip, keycap.label, textPoint, 14*scale*scaleY, color.RGBA{R: alpha, G: alpha, B: alpha, A: alpha}, recordingKeycapExportFont())
 		left += widths[index] + 6*scale
 	}
 	draw.Draw(target, clip, overlay, clip.Min, draw.Over)
@@ -929,7 +976,9 @@ func (state *recordingToolbarState) drawToolbar(displayList *DisplayList, frame 
 	}
 	drawScreenshotEditorToolbarIcon(displayList, finishIcon, finishRect, finishColor, scale)
 	drawScreenshotEditorToolbarIcon(displayList, "control.close", cancelRect, Color{R: 255, G: 107, B: 107, A: 255}, scale)
-	drawScreenshotEditorToolTooltip(displayList, frame.Size, hoverTooltipRect, hoverTooltip, scale)
+	if recordingStatus != recordingStateReady {
+		drawScreenshotEditorToolTooltip(displayList, frame.Size, hoverTooltipRect, hoverTooltip, scale)
+	}
 }
 
 func (state *recordingToolbarState) drawToggle(displayList *DisplayList, rect Rect, icon string, enabled, available bool, scale float32) {
@@ -965,9 +1014,13 @@ func (state *recordingToolbarState) toolbarPointer(event PointerEvent) {
 			state.hoverTooltipRect, state.hoverTooltip = state.tooltipAt(event.Position, current)
 		}
 		window := state.window
+		border := state.border
 		state.mu.Unlock()
 		if window != nil {
 			_ = window.Invalidate()
+		}
+		if border != nil {
+			_ = border.Invalidate()
 		}
 		return
 	}
@@ -1493,7 +1546,7 @@ func (state *recordingToolbarState) closed() {
 	state.cancel()
 }
 
-// borderPointer reuses screenshot selection editing while translating the small border-local surface to desktop coordinates.
+// borderPointer moves and resizes the ready selection without the screenshot "draw a new region" path.
 func (state *recordingToolbarState) borderPointer(event PointerEvent) {
 	state.mu.Lock()
 	session := state.session
@@ -1513,15 +1566,60 @@ func (state *recordingToolbarState) borderPointer(event PointerEvent) {
 	}
 	origin := state.borderOrigin
 	state.mu.Unlock()
-	event.Position.X += origin.X
-	event.Position.Y += origin.Y
-	state.editor.pointer(event)
+	if state.editor == nil {
+		return
+	}
+	point := Point{X: event.Position.X + origin.X, Y: event.Position.Y + origin.Y}
+	switch event.Kind {
+	case PointerDown:
+		if event.Button != PointerButtonPrimary {
+			return
+		}
+		state.editor.mu.Lock()
+		started := state.editor.beginSelectionEditLocked(point)
+		state.editor.mu.Unlock()
+		if !started {
+			return
+		}
+		state.syncSelectionFromEditor()
+		state.hideToolbarForSelectionEdit()
+	case PointerMove:
+		state.editor.mu.Lock()
+		editing := state.editor.editMode != screenshotEditorEditNone
+		if editing {
+			state.editor.updateSelectEditLocked(point, event.Modifiers)
+		}
+		state.editor.mu.Unlock()
+		if editing {
+			state.syncSelectionFromEditor()
+		}
+	case PointerUp:
+		state.finishRecordingSelectionEdit()
+	}
+}
+
+// syncSelectionFromEditor copies the live screenshot rect onto the recording chrome.
+func (state *recordingToolbarState) syncSelectionFromEditor() {
 	state.editor.mu.Lock()
 	selection := state.editor.selection
 	state.editor.mu.Unlock()
-	if event.Kind == PointerUp {
-		normalized, err := normalizeRecordingLogicalSelection(image.Rect(0, 0, state.editor.image.Width, state.editor.image.Height), selection, state.frameSize)
-		if err == nil {
+	state.mu.Lock()
+	state.selection = selection
+	state.mu.Unlock()
+	if state.border != nil {
+		_ = state.border.Invalidate()
+	}
+}
+
+// finishRecordingSelectionEdit snaps the even H.264 crop and restores idle chrome.
+func (state *recordingToolbarState) finishRecordingSelectionEdit() {
+	state.editor.mu.Lock()
+	state.editor.editMode = screenshotEditorEditNone
+	selection := state.editor.selection
+	source := state.editor.image
+	state.editor.mu.Unlock()
+	if source != nil {
+		if normalized, err := normalizeRecordingLogicalSelection(image.Rect(0, 0, source.Width, source.Height), selection, state.frameSize); err == nil {
 			selection = normalized
 			state.editor.mu.Lock()
 			state.editor.selection = normalized
@@ -1534,13 +1632,23 @@ func (state *recordingToolbarState) borderPointer(event PointerEvent) {
 	if state.border != nil {
 		_ = state.border.Invalidate()
 	}
-	if event.Kind == PointerUp {
-		if state.border != nil {
-			_ = state.positionBorder()
-		}
-		if state.window != nil {
-			_ = state.positionToolbar()
-		}
-		_ = state.positionOverlay()
+	state.showToolbarAfterSelectionEdit()
+	_ = state.positionOverlay()
+}
+
+// hideToolbarForSelectionEdit parks the bar off-screen. Hide() would restore the screenshot
+// window's previous foreground and drop mouse capture mid-drag.
+func (state *recordingToolbarState) hideToolbarForSelectionEdit() {
+	if state.window == nil {
+		return
 	}
+	_ = setScreenshotScrollingWindowBounds(state.window, state.platform, Rect{X: -10000, Y: -10000, Width: 1, Height: 1}, state.frameSize)
+}
+
+// showToolbarAfterSelectionEdit restores the bar using the shared screenshot placement.
+func (state *recordingToolbarState) showToolbarAfterSelectionEdit() {
+	if state.window == nil {
+		return
+	}
+	_ = state.positionToolbar()
 }

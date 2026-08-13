@@ -661,12 +661,9 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	if !hideTools {
 		toolbarStackHeight += scaled(64)
 	}
-	toolbarLeft := min(max(scaled(24), selection.X+selection.Width-toolbarWidth), max(scaled(24), frame.Size.Width-toolbarWidth-scaled(24)))
-	toolbarTop := selection.Y + selection.Height + scaled(16)
-	if toolbarTop+toolbarStackHeight > frame.Size.Height-scaled(24) {
-		toolbarTop = max(scaled(24), selection.Y-toolbarStackHeight-scaled(16))
-	}
-	toolbarRect := Rect{X: toolbarLeft, Y: toolbarTop, Width: toolbarWidth, Height: toolbarHeight}
+	toolbarRect := screenshotEditorToolbarPlacement(selection, Rect{Width: frame.Size.Width, Height: frame.Size.Height}, toolbarWidth, toolbarHeight, toolbarStackHeight, uiScale)
+	toolbarLeft := toolbarRect.X
+	toolbarTop := toolbarRect.Y
 	slotLeft := toolbarLeft + scaled(16)
 	var toolRects [screenshotEditorToolCount]Rect
 	pinRect := Rect{}
@@ -976,19 +973,32 @@ func screenshotEditorTooltipWithShortcut(configured, fallback, shortcut string) 
 	return fmt.Sprintf("%s (%s)", configured, shortcut)
 }
 
-// drawScreenshotEditorToolTooltip renders one compact label above its annotation tool.
-func drawScreenshotEditorToolTooltip(displayList *DisplayList, frame Size, anchor Rect, text string, uiScale float32) {
+// screenshotEditorToolTooltipRect places a compact label 8px above its tool, matching screenshot chrome.
+func screenshotEditorToolTooltipRect(frame Size, anchor Rect, text string, uiScale float32) Rect {
 	if text == "" || anchor.Width <= 0 {
-		return
+		return Rect{}
 	}
 	scaled := func(value float32) float32 { return value * uiScale }
 	width := max(scaled(72), screenshotEditorEstimatedTextWidth(text, scaled(12))+scaled(20))
 	left := min(max(scaled(8), anchor.X+anchor.Width/2-width/2), max(scaled(8), frame.Width-width-scaled(8)))
 	top := max(scaled(8), anchor.Y-scaled(36))
-	rect := Rect{X: left, Y: top, Width: width, Height: scaled(28)}
+	return Rect{X: left, Y: top, Width: width, Height: scaled(28)}
+}
+
+// drawScreenshotEditorToolTooltip renders one compact label above its annotation tool.
+func drawScreenshotEditorToolTooltip(displayList *DisplayList, frame Size, anchor Rect, text string, uiScale float32) {
+	drawScreenshotEditorToolTooltipAt(displayList, screenshotEditorToolTooltipRect(frame, anchor, text, uiScale), text, uiScale)
+}
+
+// drawScreenshotEditorToolTooltipAt paints an already-placed toolbar hint.
+func drawScreenshotEditorToolTooltipAt(displayList *DisplayList, rect Rect, text string, uiScale float32) {
+	if text == "" || rect.Width <= 0 || rect.Height <= 0 {
+		return
+	}
+	scaled := func(value float32) float32 { return value * uiScale }
 	displayList.FillRoundedRect(rect, scaled(8), Color{R: 20, G: 18, B: 17, A: 240})
-	textWidth := min(width-scaled(20), screenshotEditorEstimatedTextWidth(text, scaled(12)))
-	displayList.DrawText(text, Rect{X: left + (width-textWidth)/2, Y: top + scaled(6), Width: textWidth, Height: scaled(18)}, TextStyle{Size: scaled(12), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
+	textWidth := min(rect.Width-scaled(20), screenshotEditorEstimatedTextWidth(text, scaled(12)))
+	displayList.DrawText(text, Rect{X: rect.X + (rect.Width-textWidth)/2, Y: rect.Y + scaled(6), Width: textWidth, Height: scaled(18)}, TextStyle{Size: scaled(12), Weight: FontWeightSemibold}, Color{R: 255, G: 255, B: 255, A: 255})
 }
 
 func screenshotEditorEstimatedTextWidth(text string, fontSize float32) float32 {
@@ -1284,6 +1294,26 @@ func screenshotEditorCursorPixelFromDesktop(cursor Point, bounds Rect, source im
 		X: (cursor.X - bounds.X) * float32(source.Bounds().Dx()) / bounds.Width,
 		Y: (cursor.Y - bounds.Y) * float32(source.Bounds().Dy()) / bounds.Height,
 	}
+}
+
+// screenshotEditorToolbarPlacement right-aligns the bar to the selection and prefers a 16px gap below, then above.
+func screenshotEditorToolbarPlacement(selection, frame Rect, toolbarWidth, toolbarHeight, stackHeight, uiScale float32) Rect {
+	if uiScale <= 0 {
+		uiScale = 1
+	}
+	if stackHeight <= 0 {
+		stackHeight = toolbarHeight
+	}
+	inset := 24 * uiScale
+	gap := 16 * uiScale
+	frameRight := frame.X + frame.Width
+	frameBottom := frame.Y + frame.Height
+	left := min(max(frame.X+inset, selection.X+selection.Width-toolbarWidth), max(frame.X+inset, frameRight-toolbarWidth-inset))
+	top := selection.Y + selection.Height + gap
+	if top+stackHeight > frameBottom-inset {
+		top = max(frame.Y+inset, selection.Y-stackHeight-gap)
+	}
+	return Rect{X: left, Y: top, Width: toolbarWidth, Height: toolbarHeight}
 }
 
 func drawScreenshotEditorHandles(displayList *DisplayList, selection Rect, color Color, uiScale float32) {
@@ -2286,7 +2316,7 @@ func (state *screenshotEditorOverlayState) updateSelectEditLocked(point Point, m
 	case screenshotEditorEditMoveSelection:
 		state.selection = shiftScreenshotEditorRectWithinBounds(state.editOriginalRect, delta, frameBounds)
 	case screenshotEditorEditResizeSelection:
-		state.selection = resizeScreenshotEditorRect(state.editOriginalRect, state.editHandle, point, frameBounds)
+		state.selection = resizeScreenshotEditorRect(state.editOriginalRect, state.editHandle, screenshotEditorDraggedHandlePoint(state.editOriginalRect, state.editHandle, delta), frameBounds)
 	case screenshotEditorEditMoveAnnotation:
 		if state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
 			state.annotations[state.selectedAnnotation] = shiftScreenshotEditorAnnotationWithinBounds(state.editOriginalMark, delta, state.selection, state.uiScale)
@@ -2294,6 +2324,7 @@ func (state *screenshotEditorOverlayState) updateSelectEditLocked(point Point, m
 	case screenshotEditorEditResizeAnnotation:
 		if state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations) {
 			annotation := state.editOriginalMark
+			point := screenshotEditorDraggedHandlePoint(annotation.rect, state.editHandle, delta)
 			if modifiers&KeyModifierShift != 0 && (annotation.tool == screenshotEditorToolRect || annotation.tool == screenshotEditorToolEllipse) {
 				annotation.rect = resizeSquareScreenshotEditorRect(annotation.rect, state.editHandle, point, state.selection)
 			} else {
@@ -2314,6 +2345,12 @@ func (state *screenshotEditorOverlayState) updateSelectEditLocked(point Point, m
 			state.annotations[state.selectedAnnotation] = annotation
 		}
 	}
+}
+
+// screenshotEditorDraggedHandlePoint preserves where inside a resize handle the pointer was pressed.
+func screenshotEditorDraggedHandlePoint(rect Rect, handle screenshotEditorHandle, delta Point) Point {
+	point := screenshotEditorRectHandlePoints(rect)[int(handle)]
+	return Point{X: point.X + delta.X, Y: point.Y + delta.Y}
 }
 
 // resizeSquareScreenshotEditorRect constrains any shape handle to an equal-sided result.

@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"golang.org/x/image/font"
+	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
@@ -41,6 +42,8 @@ var (
 var (
 	screenshotEditorFontOnce sync.Once
 	screenshotEditorFont     *opentype.Font
+	recordingKeycapFontOnce  sync.Once
+	recordingKeycapFont      *opentype.Font
 )
 
 type screenshotEditorAnnotation struct {
@@ -565,10 +568,14 @@ func drawScreenshotEditorPixelTriangle(target *image.RGBA, clip image.Rectangle,
 }
 
 func drawScreenshotEditorPixelText(target *image.RGBA, clip image.Rectangle, text string, position image.Point, size float32, color color.RGBA) {
+	drawScreenshotEditorPixelTextWithFont(target, clip, text, position, size, color, screenshotEditorExportFont())
+}
+
+// drawScreenshotEditorPixelTextWithFont lets encoded overlays choose a video-friendly weight.
+func drawScreenshotEditorPixelTextWithFont(target *image.RGBA, clip image.Rectangle, text string, position image.Point, size float32, color color.RGBA, parsed *opentype.Font) {
 	if text == "" {
 		return
 	}
-	parsed := screenshotEditorExportFont()
 	if parsed == nil {
 		return
 	}
@@ -580,6 +587,14 @@ func drawScreenshotEditorPixelText(target *image.RGBA, clip image.Rectangle, tex
 	clipped := target.SubImage(clip.Intersect(target.Bounds())).(*image.RGBA)
 	drawer := font.Drawer{Dst: clipped, Src: image.NewUniform(color), Face: face, Dot: fixed.P(position.X, position.Y+int(size))}
 	drawer.DrawString(text)
+}
+
+// recordingKeycapExportFont returns the cached bold face used only by encoded key hints.
+func recordingKeycapExportFont() *opentype.Font {
+	recordingKeycapFontOnce.Do(func() {
+		recordingKeycapFont, _ = opentype.Parse(gobold.TTF)
+	})
+	return recordingKeycapFont
 }
 
 func screenshotEditorExportFont() *opentype.Font {

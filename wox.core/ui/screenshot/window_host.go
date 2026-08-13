@@ -37,7 +37,7 @@ func (host *screenshotEditorWindowHost) current() *screenshotEditorOverlayState 
 
 func (host *screenshotEditorWindowHost) draw(displayList *DisplayList, frame FrameInfo) {
 	if state := host.current(); state != nil {
-		if recording := state.activeRecordingUI(); recording != nil {
+		if recording := state.activeRecordingUI(); recording != nil && recording.usesToolbarSurface(frame) {
 			recording.drawToolbar(displayList, frame)
 			return
 		}
