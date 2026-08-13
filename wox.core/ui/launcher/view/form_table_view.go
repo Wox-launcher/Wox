@@ -439,11 +439,11 @@ func formTableHeaderCell(props FormTableFieldProps, column FormTableColumn, widt
 	style := newTableSurfaceStyle(props.Theme)
 	contentWidth := max(float32(0), width-16)
 	children := []woxwidget.Widget{woxwidget.TextBlock{
-		Value: column.Label, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText,
+		Value: column.Label, Width: contentWidth, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText,
 	}}
 	if column.Tooltip != "" {
 		contentWidth = max(float32(0), contentWidth-20)
-		children[0] = woxwidget.TextBlock{Value: column.Label, Width: contentWidth, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText}
+		children[0] = woxwidget.TextBlock{Value: column.Label, Width: contentWidth, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableHeaderFontSize, Weight: woxui.FontWeightSemibold}, Color: style.headerText}
 		var icon woxwidget.Widget = woxwidget.Container{Width: 14, Height: 14}
 		if props.InfoIcon != nil {
 			icon = woxwidget.Image{Source: props.InfoIcon, Width: 14, Height: 14}

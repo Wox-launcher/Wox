@@ -57,6 +57,45 @@ func TestTextBlockReflowsPrecomputedLayoutWhenWidthChanges(t *testing.T) {
 	}
 }
 
+func TestTextBlockPaintsWhenFontLineHeightExceedsBox(t *testing.T) {
+	style := woxui.TextStyle{Size: 13}
+	color := woxui.Color{R: 240, G: 240, B: 240, A: 255}
+	value := "继续上次查询"
+	root := (TextBlock{Value: value, Style: style, Width: 120, Height: 18, MaxLines: 1, Color: color}).layout(
+		context{window: tallLineMeasurer{height: 22}}, constraints{width: 120, height: 18},
+	)
+
+	actual := &woxui.DisplayList{}
+	root.draw(actual, 0, 0, false, false, false)
+
+	expected := &woxui.DisplayList{}
+	expected.DrawText(value, woxui.Rect{Width: 120, Height: 18}, style, color)
+	if err := actual.Compare(expected); err != nil {
+		t.Fatalf("tall CJK line in 18px slot: %v", err)
+	}
+}
+
+func TestTextBlockSkipsLinesThatStartPastTheBox(t *testing.T) {
+	style := woxui.TextStyle{Size: 10}
+	color := woxui.Color{A: 255}
+	layout := TextBlockLayout{
+		Lines: []string{"alpha", "beta"}, Size: woxui.Size{Width: 30, Height: 36},
+		LineHeight: 18, ConstraintWidth: 30, HasConstraintWidth: true,
+	}
+	root := (TextBlock{Value: "alpha beta", Style: style, Width: 30, Height: 18, LineHeight: 18, MaxLines: 2, Color: color, Layout: &layout}).layout(
+		context{window: &fakeHostServices{}}, constraints{width: 30, height: 18},
+	)
+
+	actual := &woxui.DisplayList{}
+	root.draw(actual, 0, 0, false, false, false)
+
+	expected := &woxui.DisplayList{}
+	expected.DrawText("alpha", woxui.Rect{Width: 30, Height: 18}, style, color)
+	if err := actual.Compare(expected); err != nil {
+		t.Fatalf("overflowing second line: %v", err)
+	}
+}
+
 func TestTextBlockReflowsLayoutMeasuredAtZeroWidth(t *testing.T) {
 	measurer := &fakeHostServices{}
 	style := woxui.TextStyle{Size: 10}
@@ -71,4 +110,12 @@ func TestTextBlockReflowsLayoutMeasuredAtZeroWidth(t *testing.T) {
 	if !precomputed.HasConstraintWidth || root.bounds.Height != expected.Size.Height {
 		t.Fatalf("zero-width layout contract = known %v height %.0f, want known width and height %.0f", precomputed.HasConstraintWidth, root.bounds.Height, expected.Size.Height)
 	}
+}
+
+type tallLineMeasurer struct {
+	height float32
+}
+
+func (m tallLineMeasurer) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
+	return woxui.TextMetrics{Size: woxui.Size{Width: float32(len([]rune(text))) * max(style.Size/2, 1), Height: m.height}}, nil
 }

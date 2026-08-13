@@ -732,6 +732,9 @@ func TestFormTableTypographyMatchesSharedTokens(t *testing.T) {
 	if header.Style.Size != woxcomponent.TableHeaderFontSize || body.Style.Size != woxcomponent.TableBodyFontSize || empty.Style.Size != woxcomponent.TableEmptyFontSize {
 		t.Fatalf("table typography = %v/%v/%v, want %v/%v/%v", header.Style.Size, body.Style.Size, empty.Style.Size, woxcomponent.TableHeaderFontSize, woxcomponent.TableBodyFontSize, woxcomponent.TableEmptyFontSize)
 	}
+	if header.Height != 18 || header.LineHeight != 18 {
+		t.Fatalf("table header slot = height %v line height %v, want 18/18", header.Height, header.LineHeight)
+	}
 }
 
 func TestFormTableOperationIncludesEditCloneAndDelete(t *testing.T) {

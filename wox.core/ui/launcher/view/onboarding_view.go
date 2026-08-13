@@ -206,7 +206,7 @@ func onboardingRailStep(step OnboardingStep, index, active int, width float32, o
 		woxwidget.Expanded{Child: woxwidget.Container{
 			Height: 38, Radius: 8, Color: rowColor, BorderColor: border, BorderWidth: 1,
 			Padding: woxwidget.Insets{Left: 10, Top: 11, Right: 8},
-			Child:   woxwidget.TextBlock{Value: step.Title, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13, Weight: weight}, Color: labelColor},
+			Child:   woxwidget.TextBlock{Value: step.Title, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13, Weight: weight}, Color: labelColor},
 		}},
 	}}
 	id := "onboarding-step-" + step.ID
@@ -226,7 +226,7 @@ func onboardingPage(props OnboardingProps, step OnboardingStep, height float32) 
 	return woxwidget.Container{
 		Width: width, Height: height, Padding: woxwidget.Insets{Left: 38, Top: 30, Right: 38, Bottom: 20},
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-			woxwidget.TextBlock{Value: step.Title, Width: innerWidth, Height: 44, MaxLines: 1, Style: woxui.TextStyle{Size: 32, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
+			woxwidget.TextBlock{Value: step.Title, Width: innerWidth, Height: 44, LineHeight: 44, MaxLines: 1, Style: woxui.TextStyle{Size: 32, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle},
 			woxwidget.Container{Width: innerWidth, Height: 16},
 			content,
 			woxwidget.Container{Width: innerWidth, Height: 18},

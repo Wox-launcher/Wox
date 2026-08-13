@@ -26,4 +26,7 @@ func TestSettingRowDropdownUsesThemeTextColor(t *testing.T) {
 	if value.Color != want {
 		t.Fatalf("dropdown value color = %#v, want theme result title %#v", value.Color, want)
 	}
+	if value.Height != 18 || value.LineHeight != 18 {
+		t.Fatalf("dropdown value slot = height %v line height %v, want 18/18", value.Height, value.LineHeight)
+	}
 }

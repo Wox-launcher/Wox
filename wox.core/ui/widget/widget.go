@@ -1169,14 +1169,17 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 			for index := start; index < end; index++ {
 				line := textLayout.Lines[index]
 				y := bounds.Y + float32(index)*lineHeight
-				if y+lineHeight > bounds.Y+bounds.Height+0.5 {
+				remaining := bounds.Y + bounds.Height - y
+				if remaining <= 0 {
 					break
 				}
-				lineBounds := woxui.Rect{X: bounds.X, Y: y, Width: bounds.Width, Height: lineHeight}
+				// CJK fonts can report a taller line box than a single-line slot.
+				// Clip the draw rect instead of skipping the only visible line.
+				lineBounds := woxui.Rect{X: bounds.X, Y: y, Width: bounds.Width, Height: min(lineHeight, remaining)}
 				if w.Centered {
 					metrics, _ := window.MeasureText(line, w.Style)
 					lineWidth := min(metrics.Size.Width, bounds.Width)
-					lineBounds = woxui.Rect{X: bounds.X + (bounds.Width-lineWidth)/2, Y: y, Width: lineWidth, Height: lineHeight}
+					lineBounds = woxui.Rect{X: bounds.X + (bounds.Width-lineWidth)/2, Y: y, Width: lineWidth, Height: lineBounds.Height}
 				}
 				displayList.DrawText(line, lineBounds, w.Style, w.Color)
 			}

@@ -57,6 +57,20 @@ func TestOnboardingInfoPanelUsesIntrinsicDescriptionHeight(t *testing.T) {
 	}
 }
 
+func TestOnboardingSingleLineTextSlotsAlignLineHeight(t *testing.T) {
+	page := onboardingPage(OnboardingProps{Width: 1040, Height: 800, Theme: woxcomponent.Theme{}}, OnboardingStep{ID: "welcome", Title: "Welcome"}, 728).(woxwidget.Container)
+	title := page.Child.(woxwidget.Flex).Children[0].(woxwidget.TextBlock)
+	if title.Height != 44 || title.LineHeight != 44 {
+		t.Fatalf("page title slot = height %v line height %v, want 44/44", title.Height, title.LineHeight)
+	}
+
+	step := onboardingRailStep(OnboardingStep{ID: "welcome", Title: "Welcome"}, 0, 0, 214, nil, woxcomponent.Theme{})
+	label := step.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.TextBlock)
+	if label.Height != 18 || label.LineHeight != 18 {
+		t.Fatalf("rail step slot = height %v line height %v, want 18/18", label.Height, label.LineHeight)
+	}
+}
+
 func TestOnboardingContentCardsUseSurfaceColors(t *testing.T) {
 	theme := woxcomponent.Theme{ResultTitle: woxui.Color{R: 240, G: 240, B: 240, A: 255}, ResultSubtitle: woxui.Color{R: 160, G: 160, B: 160, A: 255}}
 	for _, test := range []struct {

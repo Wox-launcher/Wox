@@ -2971,8 +2971,10 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   pango_layout_set_font_description(layout, font);
   pango_layout_set_text(layout, text, -1);
   pango_layout_set_width(layout, pixel_width * PANGO_SCALE);
-  pango_layout_set_height(layout, pixel_height * PANGO_SCALE);
   pango_layout_set_single_paragraph_mode(layout, TRUE);
+  // Do not set a positive layout height. CJK fonts can report a line box taller
+  // than the destination slot, and Pango then omits the only line. The cairo
+  // image already clips overflow to pixel_height.
   pango_cairo_show_layout(cairo, layout);
   cairo_surface_flush(surface);
 
