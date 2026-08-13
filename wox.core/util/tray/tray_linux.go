@@ -1,5 +1,9 @@
 package tray
 
+// Linux implements the tray through StatusNotifierItem and dbusmenu over D-Bus.
+// Linking libayatana-appindicator3 would make Wox fail at process start on
+// distros such as Fedora that do not ship that library, including AppImage.
+
 import (
 	"context"
 	"fmt"
@@ -15,18 +19,18 @@ import (
 )
 
 const (
-	sniInterface     = "org.kde.StatusNotifierItem"
-	sniItemPath      = "/StatusNotifierItem"
-	sniMenuPath      = "/StatusNotifierItem/Menu"
+	sniInterface      = "org.kde.StatusNotifierItem"
+	sniItemPath       = "/StatusNotifierItem"
+	sniMenuPath       = "/StatusNotifierItem/Menu"
 	dbusMenuInterface = "com.canonical.dbusmenu"
 
-	kdeStatusNotifierWatcher = "org.kde.StatusNotifierWatcher"
-	fdoStatusNotifierWatcher = "org.freedesktop.StatusNotifierWatcher"
+	kdeStatusNotifierWatcher  = "org.kde.StatusNotifierWatcher"
+	fdoStatusNotifierWatcher  = "org.freedesktop.StatusNotifierWatcher"
 	statusNotifierWatcherPath = "/StatusNotifierWatcher"
 )
 
 var (
-	trayMu   sync.Mutex
+	trayMu    sync.Mutex
 	linuxHost *linuxTray
 )
 
@@ -37,9 +41,9 @@ type sniIconPixmap struct {
 }
 
 type sniToolTip struct {
-	IconName   string
-	IconPixmap []sniIconPixmap
-	Title      string
+	IconName    string
+	IconPixmap  []sniIconPixmap
+	Title       string
 	Description string
 }
 
@@ -125,30 +129,32 @@ func startLinuxTray(appIcon []byte, onClick func(), items []MenuItem) (*linuxTra
 	pixmaps, iconName, iconThemePath, iconFile := prepareTrayIcon(appIcon)
 	host.iconFile = iconFile
 
-	propsSpec := map[string]map[string]*prop.Prop{
+	sniProps := map[string]map[string]*prop.Prop{
 		sniInterface: {
-			"Category":       {Value: "ApplicationStatus", Writable: false, Emit: prop.EmitTrue},
-			"Id":             {Value: util.LinuxDesktopAppID, Writable: false, Emit: prop.EmitTrue},
-			"Title":          {Value: "Wox", Writable: false, Emit: prop.EmitTrue},
-			"Status":         {Value: "Active", Writable: false, Emit: prop.EmitTrue},
-			"WindowId":       {Value: int32(0), Writable: false, Emit: prop.EmitTrue},
-			"IconName":       {Value: iconName, Writable: false, Emit: prop.EmitTrue},
-			"IconPixmap":     {Value: pixmaps, Writable: false, Emit: prop.EmitTrue},
-			"OverlayIconName": {Value: "", Writable: false, Emit: prop.EmitTrue},
-			"OverlayIconPixmap": {Value: []sniIconPixmap{}, Writable: false, Emit: prop.EmitTrue},
-			"AttentionIconName": {Value: "", Writable: false, Emit: prop.EmitTrue},
+			"Category":            {Value: "ApplicationStatus", Writable: false, Emit: prop.EmitTrue},
+			"Id":                  {Value: util.LinuxDesktopAppID, Writable: false, Emit: prop.EmitTrue},
+			"Title":               {Value: "Wox", Writable: false, Emit: prop.EmitTrue},
+			"Status":              {Value: "Active", Writable: false, Emit: prop.EmitTrue},
+			"WindowId":            {Value: int32(0), Writable: false, Emit: prop.EmitTrue},
+			"IconName":            {Value: iconName, Writable: false, Emit: prop.EmitTrue},
+			"IconPixmap":          {Value: pixmaps, Writable: false, Emit: prop.EmitTrue},
+			"OverlayIconName":     {Value: "", Writable: false, Emit: prop.EmitTrue},
+			"OverlayIconPixmap":   {Value: []sniIconPixmap{}, Writable: false, Emit: prop.EmitTrue},
+			"AttentionIconName":   {Value: "", Writable: false, Emit: prop.EmitTrue},
 			"AttentionIconPixmap": {Value: []sniIconPixmap{}, Writable: false, Emit: prop.EmitTrue},
-			"AttentionMovieName": {Value: "", Writable: false, Emit: prop.EmitTrue},
-			"ToolTip":        {Value: sniToolTip{IconName: iconName, IconPixmap: pixmaps, Title: "Wox"}, Writable: false, Emit: prop.EmitTrue},
-			"ItemIsMenu":     {Value: false, Writable: false, Emit: prop.EmitTrue},
-			"Menu":           {Value: dbus.ObjectPath(sniMenuPath), Writable: false, Emit: prop.EmitTrue},
-			"IconThemePath":  {Value: iconThemePath, Writable: false, Emit: prop.EmitTrue},
+			"AttentionMovieName":  {Value: "", Writable: false, Emit: prop.EmitTrue},
+			"ToolTip":             {Value: sniToolTip{IconName: iconName, IconPixmap: pixmaps, Title: "Wox"}, Writable: false, Emit: prop.EmitTrue},
+			"ItemIsMenu":          {Value: false, Writable: false, Emit: prop.EmitTrue},
+			"Menu":                {Value: dbus.ObjectPath(sniMenuPath), Writable: false, Emit: prop.EmitTrue},
+			"IconThemePath":       {Value: iconThemePath, Writable: false, Emit: prop.EmitTrue},
 		},
+	}
+	menuProps := map[string]map[string]*prop.Prop{
 		dbusMenuInterface: {
-			"Version":        {Value: uint32(3), Writable: false, Emit: prop.EmitTrue},
-			"TextDirection":  {Value: "ltr", Writable: false, Emit: prop.EmitTrue},
-			"Status":         {Value: "normal", Writable: false, Emit: prop.EmitTrue},
-			"IconThemePath":  {Value: []string{}, Writable: false, Emit: prop.EmitTrue},
+			"Version":       {Value: uint32(3), Writable: false, Emit: prop.EmitTrue},
+			"TextDirection": {Value: "ltr", Writable: false, Emit: prop.EmitTrue},
+			"Status":        {Value: "normal", Writable: false, Emit: prop.EmitTrue},
+			"IconThemePath": {Value: []string{}, Writable: false, Emit: prop.EmitTrue},
 		},
 	}
 
@@ -158,7 +164,7 @@ func startLinuxTray(appIcon []byte, onClick func(), items []MenuItem) (*linuxTra
 		host.close()
 		return nil, fmt.Errorf("export StatusNotifierItem: %w", err)
 	}
-	if _, err := prop.Export(conn, sniItemPath, propsSpec); err != nil {
+	if _, err := prop.Export(conn, sniItemPath, sniProps); err != nil {
 		host.close()
 		return nil, fmt.Errorf("export StatusNotifierItem properties: %w", err)
 	}
@@ -170,7 +176,7 @@ func startLinuxTray(appIcon []byte, onClick func(), items []MenuItem) (*linuxTra
 		host.close()
 		return nil, fmt.Errorf("export tray dbusmenu: %w", err)
 	}
-	if _, err := prop.Export(conn, sniMenuPath, map[string]map[string]*prop.Prop{dbusMenuInterface: propsSpec[dbusMenuInterface]}); err != nil {
+	if _, err := prop.Export(conn, sniMenuPath, menuProps); err != nil {
 		host.close()
 		return nil, fmt.Errorf("export tray dbusmenu properties: %w", err)
 	}
@@ -217,11 +223,18 @@ func (h *linuxTray) register() bool {
 		return false
 	}
 
+	services := []string{sniItemPath}
+	if names := h.conn.Names(); len(names) > 0 {
+		services = append(services, names[0])
+	}
+
 	for _, dest := range []string{kdeStatusNotifierWatcher, fdoStatusNotifierWatcher} {
 		for _, iface := range []string{kdeStatusNotifierWatcher, dest} {
-			call := h.conn.Object(dest, statusNotifierWatcherPath).Call(iface+".RegisterStatusNotifierItem", 0, sniItemPath)
-			if call.Err == nil {
-				return true
+			for _, service := range services {
+				call := h.conn.Object(dest, statusNotifierWatcherPath).Call(iface+".RegisterStatusNotifierItem", 0, service)
+				if call.Err == nil {
+					return true
+				}
 			}
 		}
 	}

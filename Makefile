@@ -243,7 +243,7 @@ ifeq ($(PLATFORM),linux)
 			'Maintainer: Wox Contributors <wox-launcher@users.noreply.github.com>' \
 			'Homepage: https://github.com/Wox-launcher/Wox' \
 			"Installed-Size: $$installed_size" \
-			'Depends: libgtk-3-0, libepoxy0, libx11-6, libxtst6, libayatana-appindicator3-1' \
+			'Depends: libgtk-3-0, libepoxy0, libx11-6, libxtst6' \
 			'Recommends: libgtk-layer-shell0, libpipewire-0.3-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37' \
 			'Description: A launcher that stays out of your way' \
 			' Wox is a fully native open-source launcher for Linux with GPU rendering,' \
@@ -294,7 +294,6 @@ ifeq ($(PLATFORM),linux)
 			'Requires: libepoxy.so.0()(64bit)' \
 			'Requires: libX11.so.6()(64bit)' \
 			'Requires: libXtst.so.6()(64bit)' \
-			'Requires: libayatana-appindicator3.so.1()(64bit)' \
 			'Recommends: libgtk-layer-shell.so.0()(64bit)' \
 			'Recommends: libpipewire-0.3.so.0()(64bit)' \
 			'Recommends: libwebkit2gtk-4.1.so.0()(64bit)' \

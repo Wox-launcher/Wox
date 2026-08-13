@@ -133,7 +133,6 @@ jobs:
             libxkbcommon-x11-dev \
             libxcursor-dev \
             libxtst-dev \
-            libayatana-appindicator3-dev \
             libkeybinder-3.0-dev \
             libgtk-layer-shell0 \
             patchelf \
@@ -534,7 +533,6 @@ jobs:
             libxkbcommon-x11-dev \
             libxcursor-dev \
             libxtst-dev \
-            libayatana-appindicator3-dev \
             libkeybinder-3.0-dev \
             libgtk-layer-shell0 \
             libfuse2 \

@@ -40,7 +40,6 @@ jobs:
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libxtst-dev \
-            libayatana-appindicator3-dev \
             libkeybinder-3.0-dev
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -96,7 +95,6 @@ jobs:
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libxtst-dev \
-            libayatana-appindicator3-dev \
             libkeybinder-3.0-dev \
             xvfb
       - name: Setup Go
@@ -144,7 +142,6 @@ jobs:
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libxtst-dev \
-            libayatana-appindicator3-dev \
             libkeybinder-3.0-dev \
             xvfb
       - name: Install make on Windows
