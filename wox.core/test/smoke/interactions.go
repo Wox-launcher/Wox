@@ -257,8 +257,8 @@ func SelectLauncherResult(t *testing.T, ctx context.Context, client *automationd
 	return woxwidget.AutomationSnapshot{}
 }
 
-// ActivateSelectedResultAction opens the action panel and invokes the current action matching a stable prefix.
-func ActivateSelectedResultAction(t *testing.T, ctx context.Context, client *automationdriver.Client, actionPrefix string) {
+// OpenResultActionPanel opens the action panel through its platform shortcut and waits for the focused filter.
+func OpenResultActionPanel(t *testing.T, ctx context.Context, client *automationdriver.Client) woxwidget.AutomationSnapshot {
 	t.Helper()
 	modifier := woxui.KeyModifierControl
 	if runtime.GOOS == "darwin" {
@@ -267,6 +267,20 @@ func ActivateSelectedResultAction(t *testing.T, ctx context.Context, client *aut
 	if err := client.PressKey(ctx, woxui.Key("j"), modifier); err != nil {
 		t.Fatalf("open launcher result actions: %v", err)
 	}
+	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		input, found := automationdriver.Find(snapshot, "action-search")
+		return found && input.Focused
+	})
+	if err != nil {
+		t.Fatalf("wait for launcher action panel: %v", err)
+	}
+	return snapshot
+}
+
+// ActivateSelectedResultAction opens the action panel and invokes the current action matching a stable prefix.
+func ActivateSelectedResultAction(t *testing.T, ctx context.Context, client *automationdriver.Client, actionPrefix string) {
+	t.Helper()
+	OpenResultActionPanel(t, ctx, client)
 	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var actionID string
