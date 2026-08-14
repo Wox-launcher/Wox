@@ -87,6 +87,23 @@ func TestFormTableWoxImageCellDoesNotRepeatEmojiAsText(t *testing.T) {
 	}
 }
 
+func TestFormTableCheckboxCellShowsLocalizedDisabledText(t *testing.T) {
+	app := &App{
+		translations: map[string]string{"ui_disabled": "Disabled"},
+	}
+	column := formTableColumn{Key: "Disabled", Type: "checkbox"}
+
+	unchecked := app.formTableViewCell(column, map[string]any{"Disabled": false}, woxcomponent.Theme{}, 1)
+	if unchecked.Text != "" || unchecked.Icon != nil {
+		t.Fatalf("unchecked cell = %#v, want no text or icon", unchecked)
+	}
+
+	checked := app.formTableViewCell(column, map[string]any{"Disabled": true}, woxcomponent.Theme{}, 1)
+	if checked.Text != "Disabled" || checked.Icon != nil {
+		t.Fatalf("checked cell = %#v, want localized text without an icon", checked)
+	}
+}
+
 func TestFormTableMultilineFieldUsesRowFormEditingController(t *testing.T) {
 	definition := formDefinition{Type: "textbox", Value: formDefinitionValue{Key: "InjectCss", Label: "Inject CSS", MaxLines: 12}}
 	fields := newFormFieldsState([]formDefinition{definition}, map[string]string{"InjectCss": "header {\n  display: none;\n}"}, true)

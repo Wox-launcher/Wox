@@ -243,7 +243,6 @@ func (a *App) formTableViewRows(definition formDefinition, columns []formTableCo
 
 func (a *App) formTableViewCell(column formTableColumn, row map[string]any, theme woxcomponent.Theme, imageScale float32) launcherview.FormTableCell {
 	cell := launcherview.FormTableCell{Text: compactFormTableText(a.formTableDisplayValue(column, row), 80)}
-	iconTint := theme.ResultTitle
 	if column.Type == "aiModelStatus" {
 		statusColor := woxui.Color{R: 69, G: 184, B: 88, A: 255}
 		cell.Text = ""
@@ -251,12 +250,10 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 		return cell
 	}
 	if column.Type == "checkbox" {
-		iconName := "checkbox.unchecked"
-		if formTableColumnValue(column, row) == "true" {
-			iconName = "checkbox.checked"
-		}
 		cell.Text = ""
-		cell.Icon = a.imageForTint(settingControlIconSource(iconName), &iconTint, physicalImageSize(16, imageScale))
+		if formTableColumnValue(column, row) == "true" {
+			cell.Text = a.translate("i18n:ui_disabled")
+		}
 		return cell
 	}
 	if column.Type == "select" {
