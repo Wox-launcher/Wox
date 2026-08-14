@@ -1532,7 +1532,13 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		if w.focus.visible || !isRestorableForegroundWindow(command.restoreForeground) {
 			return windowCommandResult{}
 		}
-		if normalizeRootWindow(win.GetForegroundWindow()) == normalizeRootWindow(command.restoreForeground) {
+		foreground := win.GetForegroundWindow()
+		// A different Wox window may have taken focus during the hide transition. Do not
+		// let a stale retry pull focus away from that window or from a user's new app.
+		if foreground != 0 && !w.isWithinFocusDomain(foreground) {
+			return windowCommandResult{}
+		}
+		if normalizeRootWindow(foreground) == normalizeRootWindow(command.restoreForeground) {
 			return windowCommandResult{}
 		}
 		activateWindow(command.restoreForeground)

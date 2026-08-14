@@ -15,6 +15,11 @@ import (
 
 var chromeBookmarkProfiles = []string{"Default", "Profile 1", "Profile 2", "Profile 3"}
 
+// chromiumBookmarkFileNames are the plaintext JSON files Chromium browsers write in a profile.
+// Chrome 146+ with account bookmark sync stores the real bookmarks in AccountBookmarks and
+// leaves Bookmarks as an empty skeleton. EncryptedBookmarks is OS-encrypted and is not readable here.
+var chromiumBookmarkFileNames = []string{"Bookmarks", "AccountBookmarks"}
+
 func init() {
 	registerBrowserBookmarkLoader(browser.BrowserIDChrome, func(c *BrowserBookmarkPlugin, ctx context.Context) []Bookmark {
 		var bookmarks []Bookmark
@@ -39,17 +44,26 @@ func (c *BrowserBookmarkPlugin) loadChromeBookmark(ctx context.Context, profile 
 }
 
 func (c *BrowserBookmarkPlugin) loadChromeBookmarkInMacos(ctx context.Context, profile string) []Bookmark {
-	return c.loadBookmarkFromFile(ctx, fmt.Sprintf("~/Library/Application Support/Google/Chrome/%s/Bookmarks", profile), "Chrome")
+	return c.loadChromiumBookmarkFiles(ctx, fmt.Sprintf("~/Library/Application Support/Google/Chrome/%s", profile), "/", "Chrome")
 }
 
 func (c *BrowserBookmarkPlugin) loadChromeBookmarkInWindows(ctx context.Context, profile string) []Bookmark {
 	// Use a different approach to avoid fmt.Sprintf converting %% to %
-	path := "%%LOCALAPPDATA%%\\Google\\Chrome\\User Data\\" + profile + "\\Bookmarks"
-	return c.loadBookmarkFromFile(ctx, path, "Chrome")
+	profileDir := "%%LOCALAPPDATA%%\\Google\\Chrome\\User Data\\" + profile
+	return c.loadChromiumBookmarkFiles(ctx, profileDir, "\\", "Chrome")
 }
 
 func (c *BrowserBookmarkPlugin) loadChromeBookmarkInLinux(ctx context.Context, profile string) []Bookmark {
-	return c.loadBookmarkFromFile(ctx, fmt.Sprintf("~/.config/google-chrome/%s/Bookmarks", profile), "Chrome")
+	return c.loadChromiumBookmarkFiles(ctx, fmt.Sprintf("~/.config/google-chrome/%s", profile), "/", "Chrome")
+}
+
+// loadChromiumBookmarkFiles reads plaintext Chromium bookmark JSON files from a profile directory.
+func (c *BrowserBookmarkPlugin) loadChromiumBookmarkFiles(ctx context.Context, profileDir string, separator string, browserName string) []Bookmark {
+	var bookmarks []Bookmark
+	for _, fileName := range chromiumBookmarkFileNames {
+		bookmarks = append(bookmarks, c.loadBookmarkFromFile(ctx, profileDir+separator+fileName, browserName)...)
+	}
+	return bookmarks
 }
 
 func (c *BrowserBookmarkPlugin) loadBookmarkFromFile(ctx context.Context, bookmarkPath string, browserName string) []Bookmark {

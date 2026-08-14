@@ -33,15 +33,15 @@ func (c *BrowserBookmarkPlugin) loadEdgeBookmark(ctx context.Context, profile st
 }
 
 func (c *BrowserBookmarkPlugin) loadEdgeBookmarkInMacos(ctx context.Context, profile string) []Bookmark {
-	return c.loadBookmarkFromFile(ctx, fmt.Sprintf("~/Library/Application Support/Microsoft Edge/%s/Bookmarks", profile), "Edge")
+	return c.loadChromiumBookmarkFiles(ctx, fmt.Sprintf("~/Library/Application Support/Microsoft Edge/%s", profile), "/", "Edge")
 }
 
 func (c *BrowserBookmarkPlugin) loadEdgeBookmarkInWindows(ctx context.Context, profile string) []Bookmark {
 	// Use a different approach to avoid fmt.Sprintf converting %% to %
-	path := "%%LOCALAPPDATA%%\\Microsoft\\Edge\\User Data\\" + profile + "\\Bookmarks"
-	return c.loadBookmarkFromFile(ctx, path, "Edge")
+	profileDir := "%%LOCALAPPDATA%%\\Microsoft\\Edge\\User Data\\" + profile
+	return c.loadChromiumBookmarkFiles(ctx, profileDir, "\\", "Edge")
 }
 
 func (c *BrowserBookmarkPlugin) loadEdgeBookmarkInLinux(ctx context.Context, profile string) []Bookmark {
-	return c.loadBookmarkFromFile(ctx, fmt.Sprintf("~/.config/microsoft-edge/%s/Bookmarks", profile), "Edge")
+	return c.loadChromiumBookmarkFiles(ctx, fmt.Sprintf("~/.config/microsoft-edge/%s", profile), "/", "Edge")
 }
