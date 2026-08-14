@@ -175,3 +175,26 @@ jobs:
           git add updater.json updater.beta.json
           git commit -m "chore: update release manifests for ${TAG}"
           git push origin master
+
+  winget:
+    name: Submit WinGet manifest
+    needs: release
+    if: ${{ github.event_name == 'push' && !contains(github.ref_name, '-') }}
+    runs-on: windows-latest
+    steps:
+      - name: Install wingetcreate
+        shell: pwsh
+        run: Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+
+      - name: Submit package update
+        shell: pwsh
+        env:
+          WINGETCREATE_GITHUB_TOKEN: ${{ secrets.WINGETCREATE_GITHUB_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINGETCREATE_GITHUB_TOKEN)) {
+            throw "WINGETCREATE_GITHUB_TOKEN repository secret is required to submit the WinGet update."
+          }
+
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $url = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/wox-windows-amd64.exe"
+          .\wingetcreate.exe update Wox.Wox -u $url -v $version -t $env:WINGETCREATE_GITHUB_TOKEN --submit
