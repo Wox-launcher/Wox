@@ -33,6 +33,10 @@ type IUIAutomationElement struct {
 	IUnknown
 }
 
+type IUIAutomationTreeWalker struct {
+	IUnknown
+}
+
 type IUIAutomationTextPattern struct {
 	IUnknown
 }
@@ -117,6 +121,38 @@ func (v *IUIAutomation) GetFocusedElement(element **IUIAutomationElement) error 
 		v.VTable().GetFocusedElement,
 		uintptr(unsafe.Pointer(v)),
 		uintptr(unsafe.Pointer(element)))
+	if hr != 0 {
+		return ole.NewError(hr)
+	}
+	return nil
+}
+
+func (v *IUIAutomation) GetRawViewWalker(walker **IUIAutomationTreeWalker) error {
+	hr, _, _ := syscall.SyscallN(
+		v.VTable().Get_RawViewWalker,
+		uintptr(unsafe.Pointer(v)),
+		uintptr(unsafe.Pointer(walker)))
+	if hr != 0 {
+		return ole.NewError(hr)
+	}
+	return nil
+}
+
+func (v *IUIAutomationTreeWalker) VTable() *IUIAutomationTreeWalkerVtbl {
+	return (*IUIAutomationTreeWalkerVtbl)(unsafe.Pointer(v.RawVTable))
+}
+
+type IUIAutomationTreeWalkerVtbl struct {
+	ole.IUnknownVtbl
+	GetParentElement uintptr
+}
+
+func (v *IUIAutomationTreeWalker) GetParentElement(element *IUIAutomationElement, parent **IUIAutomationElement) error {
+	hr, _, _ := syscall.SyscallN(
+		v.VTable().GetParentElement,
+		uintptr(unsafe.Pointer(v)),
+		uintptr(unsafe.Pointer(element)),
+		uintptr(unsafe.Pointer(parent)))
 	if hr != 0 {
 		return ole.NewError(hr)
 	}
@@ -380,20 +416,11 @@ func getSelectedByUIA() (string, error) {
 	}
 	defer focusedElement.Release()
 
-	// Check if the element supports TextPattern
-	var patternUnknown *IUnknown
-	if err := focusedElement.GetCurrentPattern(UIA_TextPatternId, &patternUnknown); err != nil {
-		return "", fmt.Errorf("GetCurrentPattern failed: %w", err)
+	textPattern, err := findTextPattern(automation, focusedElement)
+	if err != nil {
+		return "", err
 	}
-	if patternUnknown == nil {
-		return "", fmt.Errorf("TextPattern not supported")
-	}
-	// We manually release patternUnknown as we cast it to IUIAutomationTextPattern which shares the same Release
-	defer func() {
-		(*ole.IUnknown)(unsafe.Pointer(patternUnknown)).Release()
-	}()
-
-	textPattern := (*IUIAutomationTextPattern)(unsafe.Pointer(patternUnknown))
+	defer textPattern.Release()
 
 	// Get Selection
 	var selectionRanges *IUIAutomationTextRangeArray
@@ -428,4 +455,47 @@ func getSelectedByUIA() (string, error) {
 	}
 
 	return text, nil
+}
+
+// findTextPattern walks from the focused node to its text container because browser focus often lands on a child that does not expose TextPattern itself.
+func findTextPattern(automation *IUIAutomation, focusedElement *IUIAutomationElement) (*IUIAutomationTextPattern, error) {
+	var walker *IUIAutomationTreeWalker
+	if err := automation.GetRawViewWalker(&walker); err != nil {
+		return nil, fmt.Errorf("GetRawViewWalker failed: %w", err)
+	}
+	if walker == nil {
+		return nil, fmt.Errorf("RawViewWalker unavailable")
+	}
+	defer walker.Release()
+
+	current := focusedElement
+	currentOwned := false
+	for current != nil {
+		var patternUnknown *IUnknown
+		patternErr := current.GetCurrentPattern(UIA_TextPatternId, &patternUnknown)
+		if patternErr == nil && patternUnknown != nil {
+			if currentOwned {
+				current.Release()
+			}
+			return (*IUIAutomationTextPattern)(unsafe.Pointer(patternUnknown)), nil
+		}
+		if patternUnknown != nil {
+			patternUnknown.Release()
+		}
+
+		var parent *IUIAutomationElement
+		if err := walker.GetParentElement(current, &parent); err != nil {
+			if currentOwned {
+				current.Release()
+			}
+			return nil, fmt.Errorf("GetParentElement failed: %w", err)
+		}
+		if currentOwned {
+			current.Release()
+		}
+		current = parent
+		currentOwned = true
+	}
+
+	return nil, fmt.Errorf("TextPattern not supported by focused element or its ancestors")
 }
