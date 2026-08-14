@@ -1,0 +1,151 @@
+//go:build wox_automation
+
+package system
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"wox/common"
+	"wox/plugin"
+	"wox/util"
+
+	"github.com/google/uuid"
+)
+
+const (
+	smokeAutomationTrigger          = "wox-smoke"
+	smokeAutomationSlowCommand      = "slow"
+	smokeAutomationStreamingCommand = "streaming-preview"
+	smokeAutomationToolbarCommand   = "toolbar"
+	smokeAutomationToolbarMessageID = "wox-smoke-toolbar-message"
+	smokeAutomationKeepOpenAction   = "keep-open"
+	smokeAutomationClearAction      = "clear"
+	smokeAutomationResultAction     = "hide-launcher"
+	smokeStepDelayEnvironment       = "WOX_GO_UI_SMOKE_STEP_DELAY"
+)
+
+func init() {
+	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &smokeAutomationPlugin{})
+}
+
+type smokeAutomationPlugin struct {
+	api plugin.API
+}
+
+// GetMetadata exposes one explicit smoke trigger with command-scoped fixture behaviors.
+func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
+	return plugin.Metadata{
+		Id: "0cb0d21c-45ce-4fe0-987e-24d645eca58c", Name: "Smoke Test Fixture", Runtime: "Go", Version: "1.0.0",
+		TriggerKeywords: []string{smokeAutomationTrigger},
+		Commands: []plugin.MetadataCommand{
+			{Command: smokeAutomationSlowCommand, Description: "Delayed query loading fixture"},
+			{Command: smokeAutomationStreamingCommand, Description: "Streaming preview fixture"},
+			{Command: smokeAutomationToolbarCommand, Description: "Toolbar message fixture"},
+		},
+		SupportedOS: []string{util.PlatformMacOS, util.PlatformWindows, util.PlatformLinux},
+	}
+}
+
+func (p *smokeAutomationPlugin) Init(_ context.Context, initParams plugin.InitParams) {
+	p.api = initParams.API
+}
+
+// Query dispatches the deterministic native smoke behaviors by metadata command.
+func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	switch query.Command {
+	case smokeAutomationSlowCommand:
+		return p.querySlow(ctx)
+	case smokeAutomationStreamingCommand:
+		return p.queryStreamingPreview()
+	case smokeAutomationToolbarCommand:
+		return p.queryToolbar(ctx)
+	default:
+		return plugin.QueryResponse{}
+	}
+}
+
+// querySlow delays a real plugin response long enough for smoke tests to observe query loading.
+func (*smokeAutomationPlugin) querySlow(ctx context.Context) plugin.QueryResponse {
+	timer := time.NewTimer(1500 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return plugin.QueryResponse{}
+	case <-timer.C:
+		return plugin.NewQueryResponse([]plugin.QueryResult{{Title: "Slow query completed", Icon: common.PluginAppIcon}})
+	}
+}
+
+// queryStreamingPreview returns a compact result before publishing its first preview chunk.
+func (p *smokeAutomationPlugin) queryStreamingPreview() plugin.QueryResponse {
+	resultID := uuid.NewString()
+	api := p.api
+	time.AfterFunc(streamingPreviewUpdateDelay(), func() {
+		title := "Streaming preview received"
+		api.UpdateResult(context.Background(), plugin.UpdatableResult{
+			Id: resultID, Title: &title,
+			Preview: &plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "# Streaming preview\n\nFirst preview chunk"},
+		})
+	})
+	return plugin.NewQueryResponse([]plugin.QueryResult{{Id: resultID, Title: "Streaming preview pending", Icon: common.PluginAppIcon}})
+}
+
+// queryToolbar publishes a persistent toolbar message through the real plugin API boundary.
+func (p *smokeAutomationPlugin) queryToolbar(ctx context.Context) plugin.QueryResponse {
+	p.showToolbarMessage(ctx, "Toolbar fixture ready")
+	return plugin.NewQueryResponse([]plugin.QueryResult{{
+		Title: "Toolbar smoke fixture", Icon: common.PluginAppIcon,
+		Actions: []plugin.QueryResultAction{{
+			Id:                     smokeAutomationResultAction,
+			Name:                   "Hide launcher",
+			Hotkey:                 util.PrimaryHotkey("enter"),
+			PreventHideAfterAction: false,
+			Action: func(callbackCtx context.Context, _ plugin.ActionContext) {
+				p.api.Log(callbackCtx, plugin.LogLevelInfo, "Toolbar fixture result action executed")
+			},
+		}},
+	}})
+}
+
+// showToolbarMessage publishes the current toolbar state and keeps its callbacks deterministic.
+func (p *smokeAutomationPlugin) showToolbarMessage(ctx context.Context, title string) {
+	p.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
+		Id:            smokeAutomationToolbarMessageID,
+		Title:         title,
+		Icon:          common.PluginAppIcon,
+		Indeterminate: true,
+		Actions: []plugin.ToolbarMsgAction{
+			{
+				Id:                     smokeAutomationKeepOpenAction,
+				Name:                   "Keep open",
+				Hotkey:                 util.PrimaryHotkey("k"),
+				PreventHideAfterAction: true,
+				ContextData:            common.ContextData{"marker": "context-round-trip"},
+				Action: func(callbackCtx context.Context, actionContext plugin.ToolbarMsgActionContext) {
+					p.showToolbarMessage(callbackCtx, fmt.Sprintf("Toolbar fixture keep-open: %s", actionContext.ContextData["marker"]))
+				},
+			},
+			{
+				Id:                     smokeAutomationClearAction,
+				Name:                   "Clear",
+				Hotkey:                 util.PrimaryHotkey("l"),
+				PreventHideAfterAction: true,
+				Action: func(callbackCtx context.Context, _ plugin.ToolbarMsgActionContext) {
+					p.api.ClearToolbarMsg(callbackCtx, smokeAutomationToolbarMessageID)
+				},
+			},
+		},
+	})
+}
+
+// streamingPreviewUpdateDelay leaves the compact result observable after an optional smoke step pause.
+func streamingPreviewUpdateDelay() time.Duration {
+	delay := 250 * time.Millisecond
+	if stepDelay, err := time.ParseDuration(os.Getenv(smokeStepDelayEnvironment)); err == nil && stepDelay > 0 {
+		delay += stepDelay
+	}
+	return delay
+}

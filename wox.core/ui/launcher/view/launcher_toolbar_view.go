@@ -152,6 +152,13 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 			Child: woxwidget.Align{Width: progressSize, Height: contentHeight, Vertical: 0.5, Child: woxcomponent.WoxProgressIndicator(progressSize, props.Progress, props.Indeterminate, props.Theme.ToolbarText)},
 		})
 	}
+	if props.Label != "" {
+		leftWidgets = []woxwidget.Widget{woxwidget.Semantics{
+			Key: "launcher-toolbar-status-key", AutomationID: "launcher.toolbar.status", Role: woxui.AccessibilityRoleGroup,
+			Label: props.Label, Value: props.Label, LiveRegion: woxui.AccessibilityLiveRegionPolite,
+			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(8, props.DensityScale), Children: leftWidgets},
+		}}
+	}
 	verticalPadding := max(float32(0), (props.Height-contentHeight)/2)
 	body := woxwidget.Container{
 		Width: props.Width, Height: props.Height, Color: props.Theme.ToolbarBackground,
@@ -189,5 +196,17 @@ func launcherToolbarActionView(action LauncherToolbarAction, theme woxcomponent.
 		woxwidget.Container{Width: labelMetrics.Size.Width, Height: contentHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(7, densityScale)}, Child: woxwidget.Text{Value: action.Label, Style: labelStyle, Color: theme.ToolbarText}},
 		chip,
 	}}}
-	return woxwidget.Gesture{ID: action.ID, OnTap: action.OnTap, Child: content}, width
+	return woxwidget.Semantics{
+		Key: woxwidget.Key(action.ID + "-semantics"), AutomationID: action.ID, Role: woxui.AccessibilityRoleButton, Label: action.Label,
+		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}, OnAction: func(semanticAction woxui.AccessibilityAction, _ string) error {
+			if semanticAction != woxui.AccessibilityActionActivate {
+				return fmt.Errorf("unsupported toolbar action %q", semanticAction)
+			}
+			if action.OnTap != nil {
+				action.OnTap()
+			}
+			return nil
+		},
+		Child: woxwidget.Gesture{ID: action.ID, OnTap: action.OnTap, Child: content},
+	}, width
 }

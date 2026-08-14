@@ -1,6 +1,6 @@
 //go:build wox_ui_smoke
 
-package loading
+package query
 
 import (
 	"context"
@@ -13,13 +13,13 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-// Test001LauncherQueryLoadingIndicator verifies delayed plugin queries expose progress without leaving stale loading UI.
+// Test012LauncherQueryLoadingIndicator verifies delayed plugin queries expose progress without leaving stale loading UI.
 // Flow: enter the slow plugin query -> observe querybox loading -> receive the plugin result.
 // Evidence: the progress-bar semantics appears while waiting, then disappears when the completed result generation arrives.
-func Test001LauncherQueryLoadingIndicator(t *testing.T) {
+func Test012LauncherQueryLoadingIndicator(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.ShowLauncher(t, ctx, client)
-		const query = "wox-smoke-slow wait"
+		const query = "wox-smoke slow wait"
 		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, query); err != nil {
 			t.Fatalf("enter slow plugin query: %v", err)
 		}

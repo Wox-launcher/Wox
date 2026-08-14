@@ -19,7 +19,7 @@ import (
 func Test002LauncherQueryStreamingPreviewResize(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.ShowLauncher(t, ctx, client)
-		const query = "wox-smoke-streaming-preview translate"
+		const query = "wox-smoke streaming-preview translate"
 		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, query); err != nil {
 			t.Fatalf("enter streaming preview query: %v", err)
 		}

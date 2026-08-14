@@ -24,7 +24,7 @@ var caseSelectorPattern = regexp.MustCompile(`^[a-z0-9_-]+(?:/[a-z0-9_-]+)*/[0-9
 var caseFilePattern = regexp.MustCompile(`^[0-9]{3}_.+_test\.go$`)
 
 func main() {
-	caseSelector := flag.String("case", "", "functional path and case number, for example launcher/query/plugin/calculator/001")
+	caseSelector := flag.String("case", "", "functional path and case number, for example launcher/plugin/calculator/001")
 	flag.Parse()
 	code, err := run(strings.TrimSpace(*caseSelector))
 	if err != nil {
@@ -131,7 +131,7 @@ func smokeTestCommands(caseSelector string) ([][]string, error) {
 		return commands, nil
 	}
 	if !caseSelectorPattern.MatchString(caseSelector) {
-		return nil, fmt.Errorf("invalid smoke CASE %q; expected a path like launcher/query/plugin/calculator/001", caseSelector)
+		return nil, fmt.Errorf("invalid smoke CASE %q; expected a path like launcher/plugin/calculator/001", caseSelector)
 	}
 	matches, err := filepath.Glob(filepath.FromSlash("test/smoke/" + caseSelector + "_*_test.go"))
 	if err != nil {

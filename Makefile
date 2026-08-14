@@ -111,7 +111,7 @@ help:
 	@echo "  dev        Setup development environment"
 	@echo "  test       Run tests"
 	@echo "  test-go-ui-unit  Run retained-widget, automation-contract, and driver tests"
-	@echo "  smoke      Run all native smoke cases, or one with: make smoke launcher/query/plugin/calculator/001"
+	@echo "  smoke      Run all native smoke cases, or one with: make smoke launcher/plugin/calculator/001"
 	@echo "             Add slow to pause 500ms after visible steps; override with SMOKE_STEP_DELAY=1s"
 	@echo "  build      Build all components"
 	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
