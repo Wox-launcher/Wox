@@ -24,6 +24,7 @@ type fakeController struct {
 	reset         bool
 	metricsReset  bool
 	repaintMode   woxwidget.RepaintDebugMode
+	deviceRemoved bool
 }
 
 func (*fakeController) AutomationFrameMetrics() (woxui.FrameMetricsSnapshot, error) {
@@ -37,6 +38,11 @@ func (f *fakeController) ResetAutomationFrameMetrics() error {
 
 func (f *fakeController) SetAutomationRepaintDebugMode(mode woxwidget.RepaintDebugMode) error {
 	f.repaintMode = mode
+	return nil
+}
+
+func (f *fakeController) SimulateAutomationRendererDeviceRemoved() error {
+	f.deviceRemoved = true
 	return nil
 }
 
@@ -138,6 +144,10 @@ func TestHandlerDispatchesSemanticActionAndRejectsUnknownMethod(t *testing.T) {
 	repaintResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"repaint","method":"render.repaint_debug","params":{"mode":"verify"}}`)
 	if repaintResponse.Code != http.StatusOK || controller.repaintMode != woxwidget.RepaintDebugVerify {
 		t.Fatalf("repaint mode was not dispatched: status=%d mode=%q", repaintResponse.Code, controller.repaintMode)
+	}
+	deviceRemovedResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"device-removed","method":"render.simulate_device_removed"}`)
+	if deviceRemovedResponse.Code != http.StatusOK || !controller.deviceRemoved {
+		t.Fatalf("renderer device removal was not dispatched: status=%d simulated=%v", deviceRemovedResponse.Code, controller.deviceRemoved)
 	}
 	actionResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"action","method":"semantics.perform","params":{"automationId":"launcher.query","action":"set_value","value":"hello"}}`)
 	if actionResponse.Code != http.StatusOK {

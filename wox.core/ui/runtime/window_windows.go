@@ -3,6 +3,7 @@
 package woxui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -16,6 +17,7 @@ import (
 	"unsafe"
 
 	webviewruntime "wox/ui/runtime/internal/webview"
+	"wox/util"
 	"wox/util/ime"
 	"wox/util/osvariant"
 
@@ -1009,7 +1011,14 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 			window.damageHistory.reset()
 			width := int(win.LOWORD(uint32(lParam)))
 			height := int(win.HIWORD(uint32(lParam)))
-			if err := window.renderer.resize(width, height); err != nil {
+			err := window.renderer.resize(width, height)
+			if isRecoverableRendererError(err) {
+				err = window.recoverWindowsRenderer(err)
+				if err == nil {
+					win.InvalidateRect(hwnd, nil, false)
+				}
+			}
+			if err != nil {
 				window.setRunError(err)
 				win.PostMessage(hwnd, win.WM_CLOSE, 0, 0)
 			}
@@ -2072,10 +2081,6 @@ func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) {
 	if !win.GetClientRect(hwnd, &client) {
 		return
 	}
-	displayList := DisplayList{}
-	if w.options.frameMetrics != nil {
-		displayList.frameID = w.options.frameMetrics.beginFrame()
-	}
 	pixelSize := PixelSize{
 		Width:  int(client.Right - client.Left),
 		Height: int(client.Bottom - client.Top),
@@ -2086,6 +2091,41 @@ func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) {
 	}
 	currentDamage, currentFull := windowsPaintDamage(paint, client, scale)
 	damage := w.damageHistory.accumulate(currentDamage, currentFull)
+	displayList := w.buildWindowsDisplayList(pixelSize, scale, damage)
+	err := w.renderWindowsDisplayList(&displayList, scale)
+	if isRecoverableRendererError(err) {
+		if err = w.recoverWindowsRenderer(err); err == nil {
+			displayList = w.buildWindowsDisplayList(pixelSize, scale, Rect{})
+			err = w.renderWindowsDisplayList(&displayList, scale)
+		}
+	}
+	if err != nil {
+		w.setRunError(err)
+		win.PostMessage(hwnd, win.WM_CLOSE, 0, 0)
+	}
+}
+
+// recoverWindowsRenderer replaces device-bound resources after a recoverable GPU failure.
+func (w *platformWindow) recoverWindowsRenderer(cause error) error {
+	util.GetLogger().Warn(context.Background(), fmt.Sprintf("recovering Windows renderer after device loss: %s", cause.Error()))
+	if w.webView != nil {
+		w.clearWebViewPointerState()
+		w.webView.Close()
+		w.webView = nil
+	}
+	if err := w.renderer.recreate(); err != nil {
+		return fmt.Errorf("%v; recreate renderer: %w", cause, err)
+	}
+	w.damageHistory.reset()
+	return nil
+}
+
+// buildWindowsDisplayList rebuilds a frame so device recovery can retry with full damage.
+func (w *platformWindow) buildWindowsDisplayList(pixelSize PixelSize, scale float32, damage Rect) DisplayList {
+	displayList := DisplayList{}
+	if w.options.frameMetrics != nil {
+		displayList.frameID = w.options.frameMetrics.beginFrame()
+	}
 	if w.options.OnFrame != nil {
 		w.options.OnFrame(&displayList, FrameInfo{
 			Size: Size{
@@ -2097,15 +2137,16 @@ func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) {
 			Damage:    damage,
 		})
 	}
+	return displayList
+}
+
+func (w *platformWindow) renderWindowsDisplayList(displayList *DisplayList, scale float32) error {
 	nativeStart := time.Now()
-	err := w.renderer.render(&displayList, scale)
+	err := w.renderer.render(displayList, scale)
 	if w.options.frameMetrics != nil {
 		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, err == nil)
 	}
-	if err != nil {
-		w.setRunError(err)
-		win.PostMessage(hwnd, win.WM_CLOSE, 0, 0)
-	}
+	return err
 }
 
 func windowsPaintDamage(paint, client win.RECT, scale float32) (Rect, bool) {

@@ -12,6 +12,7 @@ import "C"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"unsafe"
 
@@ -19,7 +20,29 @@ import (
 )
 
 type nativeRenderer struct {
-	handle *C.WoxRenderer
+	handle                       *C.WoxRenderer
+	windowHandle                 uintptr
+	width                        int
+	height                       int
+	enableEmbeddedSurfaceOverlay bool
+	fontFamily                   string
+}
+
+const (
+	d2dErrRecreateTarget       = uint32(0x8899000C)
+	dxgiErrDeviceRemoved       = uint32(0x887A0005)
+	dxgiErrDeviceHung          = uint32(0x887A0006)
+	dxgiErrDeviceReset         = uint32(0x887A0007)
+	dxgiErrDriverInternalError = uint32(0x887A0020)
+)
+
+type windowsRendererError struct {
+	operation string
+	code      uint32
+}
+
+func (e *windowsRendererError) Error() string {
+	return fmt.Sprintf("%s failed with HRESULT 0x%08X", e.operation, e.code)
 }
 
 func traceNativeCall(format string, args ...any) {
@@ -41,10 +64,21 @@ func newNativeRenderer(windowHandle uintptr, width, height int, enableEmbeddedSu
 	if result < 0 {
 		return nil, hresultError("create renderer", result)
 	}
-	return &nativeRenderer{handle: handle}, nil
+	return &nativeRenderer{
+		handle:                       handle,
+		windowHandle:                 windowHandle,
+		width:                        width,
+		height:                       height,
+		enableEmbeddedSurfaceOverlay: enableEmbeddedSurfaceOverlay,
+	}, nil
 }
 
 func (r *nativeRenderer) resize(width, height int) error {
+	if width > 0 && height > 0 {
+		// Preserve the requested size when ResizeBuffers reports device loss so recreation uses the new bounds.
+		r.width = width
+		r.height = height
+	}
 	traceNativeCall("renderer resize enter handle=%p size=%dx%d", r.handle, width, height)
 	result := C.wox_renderer_resize(r.handle, C.uint32_t(width), C.uint32_t(height))
 	traceNativeCall("renderer resize exit handle=%p result=%d", r.handle, result)
@@ -63,6 +97,25 @@ func (r *nativeRenderer) setFontFamily(family string) error {
 	if result < 0 {
 		return hresultError("set font family", result)
 	}
+	r.fontFamily = family
+	return nil
+}
+
+// recreate replaces all resources tied to a lost Direct3D device while keeping the Go renderer identity stable.
+func (r *nativeRenderer) recreate() error {
+	fontFamily := r.fontFamily
+	r.destroy()
+	replacement, err := newNativeRenderer(r.windowHandle, r.width, r.height, r.enableEmbeddedSurfaceOverlay)
+	if err != nil {
+		return err
+	}
+	if fontFamily != "" {
+		if err := replacement.setFontFamily(fontFamily); err != nil {
+			replacement.destroy()
+			return err
+		}
+	}
+	*r = *replacement
 	return nil
 }
 
@@ -224,5 +277,18 @@ func (r *nativeRenderer) destroy() {
 }
 
 func hresultError(operation string, result C.int32_t) error {
-	return fmt.Errorf("%s failed with HRESULT 0x%08X", operation, uint32(result))
+	return &windowsRendererError{operation: operation, code: uint32(result)}
+}
+
+func isRecoverableRendererError(err error) bool {
+	var rendererErr *windowsRendererError
+	if !errors.As(err, &rendererErr) {
+		return false
+	}
+	switch rendererErr.code {
+	case d2dErrRecreateTarget, dxgiErrDeviceRemoved, dxgiErrDeviceHung, dxgiErrDeviceReset, dxgiErrDriverInternalError:
+		return true
+	default:
+		return false
+	}
 }

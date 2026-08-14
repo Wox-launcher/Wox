@@ -46,6 +46,10 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
+type rendererDeviceRemovalSimulator interface {
+	SimulateAutomationRendererDeviceRemoved() error
+}
+
 // Start runs the authenticated automation server for wox_automation builds.
 func Start(ctx context.Context, controller Controller) (Info, error) {
 	if controller == nil {
@@ -131,6 +135,12 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 			return nil, invalidParams(err)
 		}
 		return resultOrError(true, controller.SetAutomationRepaintDebugMode(params.Mode))
+	case "render.simulate_device_removed":
+		simulator, ok := controller.(rendererDeviceRemovalSimulator)
+		if !ok {
+			return resultOrError(true, errors.New("renderer device removal simulation is unavailable"))
+		}
+		return resultOrError(true, simulator.SimulateAutomationRendererDeviceRemoved())
 	case "semantics.snapshot":
 		return controller.AutomationSnapshot(), nil
 	case "semantics.wait":

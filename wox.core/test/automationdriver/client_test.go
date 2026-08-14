@@ -128,7 +128,10 @@ func TestClientReadsAndResetsFrameMetrics(t *testing.T) {
 	if err := client.SetRepaintDebugMode(context.Background(), woxwidget.RepaintDebugVerify); err != nil {
 		t.Fatalf("set repaint debug mode: %v", err)
 	}
-	if len(methods) != 3 || methods[0] != "render.metrics" || methods[1] != "render.metrics.reset" || methods[2] != "render.repaint_debug" {
+	if err := client.SimulateRendererDeviceRemoved(context.Background()); err != nil {
+		t.Fatalf("simulate renderer device removal: %v", err)
+	}
+	if len(methods) != 4 || methods[0] != "render.metrics" || methods[1] != "render.metrics.reset" || methods[2] != "render.repaint_debug" || methods[3] != "render.simulate_device_removed" {
 		t.Fatalf("unexpected methods: %v", methods)
 	}
 }

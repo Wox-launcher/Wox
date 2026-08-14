@@ -58,6 +58,7 @@ struct WoxRenderer {
   bool present_dirty = false;
   bool cache_large_images = false;
   bool embedded_surface_overlay_enabled = false;
+  bool simulate_device_removed = false;
   uint32_t width = 1;
   uint32_t height = 1;
 };
@@ -73,6 +74,12 @@ static HRESULT acquire_shared_d3d_device(ID3D11Device **device_out) {
     return E_INVALIDARG;
   }
   std::lock_guard<std::mutex> lock(shared_d3d_device_mutex);
+  // Existing renderers keep their own COM references, but new renderers must move to a fresh generation.
+  if (shared_d3d_device != nullptr && FAILED(shared_d3d_device->GetDeviceRemovedReason())) {
+    shared_d3d_device->Release();
+    shared_d3d_device = nullptr;
+    shared_d3d_device_users = 0;
+  }
   if (shared_d3d_device == nullptr) {
     const UINT device_flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
     HRESULT result = D3D11CreateDevice(
@@ -99,8 +106,13 @@ static void release_shared_d3d_device(ID3D11Device **device) {
     return;
   }
   std::lock_guard<std::mutex> lock(shared_d3d_device_mutex);
-  (*device)->Release();
+  ID3D11Device *released_device = *device;
+  released_device->Release();
   *device = nullptr;
+  // A removed shared device can be replaced while another window still owns its old generation.
+  if (released_device != shared_d3d_device) {
+    return;
+  }
   if (shared_d3d_device_users > 0) {
     shared_d3d_device_users--;
   }
@@ -1029,18 +1041,9 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     result = renderer->d2d_context->EndDraw();
   }
   renderer->frame_open = false;
-  if (result == static_cast<HRESULT>(D2DERR_RECREATE_TARGET)) {
-    renderer->d2d_context->SetTarget(nullptr);
-    release_com(&renderer->target_bitmap);
-    release_com(&renderer->overlay_target_bitmap);
-    clear_cached_image_bitmaps(renderer);
-    release_com(&renderer->cached_large_image_bitmap);
-    renderer->cached_large_image_id = 0;
-    result = create_target_bitmap(renderer, renderer->swap_chain, &renderer->target_bitmap);
-    if (SUCCEEDED(result) && renderer->overlay_swap_chain != nullptr) {
-      result = create_target_bitmap(renderer, renderer->overlay_swap_chain, &renderer->overlay_target_bitmap);
-    }
-    return result;
+  if (renderer->simulate_device_removed) {
+    renderer->simulate_device_removed = false;
+    result = DXGI_ERROR_DEVICE_REMOVED;
   }
   if (FAILED(result)) {
     return result;
@@ -1057,6 +1060,15 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
   if (renderer->overlay_swap_chain != nullptr) {
     return renderer->overlay_swap_chain->Present1(1, 0, &parameters);
   }
+  return S_OK;
+}
+
+extern "C" int32_t wox_renderer_simulate_device_removed(WoxRenderer *renderer) {
+  if (renderer == nullptr) {
+    return E_INVALIDARG;
+  }
+  // Automation injects the HRESULT at EndDraw so the normal Go recovery and retry path remains intact.
+  renderer->simulate_device_removed = true;
   return S_OK;
 }
 

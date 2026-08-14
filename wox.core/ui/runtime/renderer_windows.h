@@ -28,6 +28,7 @@ int32_t wox_renderer_set_clip_rect(WoxRenderer *renderer, float x, float y, floa
 int32_t wox_renderer_clear_clip(WoxRenderer *renderer);
 int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, float *width, float *height, float *baseline);
 int32_t wox_renderer_end_frame(WoxRenderer *renderer);
+int32_t wox_renderer_simulate_device_removed(WoxRenderer *renderer);
 void wox_renderer_destroy(WoxRenderer *renderer);
 
 #ifdef __cplusplus
