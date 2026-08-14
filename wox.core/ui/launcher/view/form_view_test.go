@@ -31,7 +31,7 @@ func TestFormPanelUsesIntrinsicHeightUpToMaximum(t *testing.T) {
 		t.Fatalf("form action labels = %q / %q", cancel.Label, save.Label)
 	}
 	for _, child := range buttons.Children {
-		container := child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+		container := focusedControlGesture(child).Child.(woxwidget.Container)
 		if container.Width != 0 {
 			t.Fatalf("form action width = %v, want content-sized", container.Width)
 		}
@@ -53,8 +53,7 @@ func TestFormSelectFieldUsesOutlinedDropdown(t *testing.T) {
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	semantics := controlColumn.Children[0].(woxwidget.Semantics)
-	focusable := semantics.Child.(woxwidget.Focusable)
-	gesture := focusable.Child.(woxwidget.Gesture)
+	gesture := focusedControlGesture(semantics)
 	control := gesture.Child.(woxwidget.Container)
 	if control.BorderWidth != 1 {
 		t.Fatalf("dropdown border width = %.0f, want 1", control.BorderWidth)
@@ -91,7 +90,7 @@ func TestFormModelFieldUsesCompactAnchoredDropdown(t *testing.T) {
 	row := field.(woxwidget.Container).Child.(woxwidget.Flex)
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	semantics := controlColumn.Children[0].(woxwidget.Semantics)
-	gesture := semantics.Child.(woxwidget.Focusable).Child.(woxwidget.Gesture)
+	gesture := focusedControlGesture(semantics)
 	control := gesture.Child.(woxwidget.Container)
 	if control.Height != 34 || control.BorderWidth != 1 {
 		t.Fatalf("model trigger geometry = height %.0f border %.0f, want Flutter 34/1", control.Height, control.BorderWidth)
@@ -214,8 +213,8 @@ func TestFormAIModelFieldUsesFlutterProviderAndModelProportions(t *testing.T) {
 	if len(controls.Children) != 3 {
 		t.Fatalf("AI model control count = %d, want provider, model, and edit", len(controls.Children))
 	}
-	provider := controls.Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
-	model := controls.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	provider := focusedControlGesture(controls.Children[0]).Child.(woxwidget.Container)
+	model := focusedControlGesture(controls.Children[1]).Child.(woxwidget.Container)
 	if model.Width < provider.Width*1.9 || model.Width > provider.Width*2.1 {
 		t.Fatalf("AI model widths provider/model = %.0f/%.0f, want Flutter 1:2 proportions", provider.Width, model.Width)
 	}

@@ -118,8 +118,7 @@ func TestOnboardingChromeUsesOnlyInteriorDividers(t *testing.T) {
 	content := footer.Children[0].Child.(woxwidget.Container)
 	actions := content.Child.(woxwidget.Flex)
 	skip := actions.Children[0].(woxwidget.Semantics)
-	focusable := skip.Child.(woxwidget.Focusable)
-	gesture := focusable.Child.(woxwidget.Gesture)
+	gesture := focusedControlGesture(skip)
 	button := gesture.Child.(woxwidget.Container)
 	if button.Width != 0 {
 		t.Fatalf("skip width = %v, want content-sized", button.Width)
@@ -339,7 +338,7 @@ func TestOnboardingGlanceUsesSharedRichDropdown(t *testing.T) {
 	selectorRow := rows.Children[1].(woxwidget.Stack)
 	selectorSlot := selectorRow.Children[1]
 	semantics := selectorSlot.Child.(woxwidget.Semantics)
-	trigger := semantics.Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	trigger := focusedControlGesture(semantics).Child.(woxwidget.Container)
 	content := trigger.Child.(woxwidget.Flex)
 
 	if trigger.Width != 300 || !selectorSlot.AnchorRight || len(content.Children) != 6 {

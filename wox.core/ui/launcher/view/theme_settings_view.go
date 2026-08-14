@@ -216,14 +216,11 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 	innerWidth := max(float32(0), width-32)
 	var website woxwidget.Widget = woxwidget.Container{Width: 104, Height: 28}
 	if strings.TrimSpace(theme.URL) != "" && props.OnOpenWebsite != nil {
-		websiteChildren := make([]woxwidget.Widget, 0, 2)
-		if props.ExternalIcon != nil {
-			websiteChildren = append(websiteChildren, woxwidget.Image{Source: props.ExternalIcon, Width: 13, Height: 13})
-		}
-		websiteChildren = append(websiteChildren, woxwidget.Text{Value: props.WebsiteLabel, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultTitle})
-		website = woxwidget.Gesture{ID: "theme-website", OnTap: props.OnOpenWebsite, Child: woxwidget.Align{Width: 104, Height: 28, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
-			Axis: woxwidget.Horizontal, Gap: 7, Children: websiteChildren,
-		}}}
+		website = woxwidget.Align{Width: 104, Height: 28, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: "theme-website", Label: props.WebsiteLabel, Icon: props.ExternalIcon, IconSize: 13, IconGap: 7,
+			Height: 28, FontSize: 11, Size: woxcomponent.ButtonCompact, Padding: woxwidget.Insets{Left: 6, Right: 4},
+			Variant: woxcomponent.ButtonText, OnTap: props.OnOpenWebsite, Theme: props.Theme,
+		})}
 	}
 	header := woxwidget.Container{Width: width, Height: headerHeight, Padding: woxwidget.Insets{Left: 16, Right: 16}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: innerWidth, Height: 40, Padding: woxwidget.Insets{Left: 2}, Child: woxwidget.Clip{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{

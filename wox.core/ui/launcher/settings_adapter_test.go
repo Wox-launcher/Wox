@@ -44,7 +44,8 @@ func TestSettingsRailKeepsCachedIconWhileSelectedTintLoads(t *testing.T) {
 	navigation := railContent.Children[1].(woxwidget.Stack)
 	scroll := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	rows := scroll.Content.(woxwidget.Flex)
-	row := rows.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	stateful := rows.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Stateful)
+	row := stateful.CreateState().Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture).Child.(woxwidget.Container)
 	icon := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Align).Child.(woxwidget.Image)
 
 	if icon.Source != normalIcon {

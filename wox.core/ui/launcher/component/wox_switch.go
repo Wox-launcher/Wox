@@ -30,18 +30,24 @@ func WoxSwitch(props SwitchProps) woxwidget.Widget {
 	if props.Value {
 		target = 1
 	}
-	visual := woxwidget.AnimatedFloat{Key: key, Target: target, Duration: 300 * time.Millisecond, Curve: woxwidget.AnimationEaseOutBack, Builder: func(position float32) woxwidget.Widget {
-		colorPosition := min(max(position, float32(0)), float32(1))
-		trackColor := lerpColor(withAlpha(props.Theme.ResultTitle, 77), props.Theme.ActionSelected, colorPosition)
-		thumbSize := 9.6 + 4.8*colorPosition
-		return woxwidget.Stack{Width: 36, Height: 24, Children: []woxwidget.StackChild{
-			{Left: 2.4, Top: 2.4, Child: woxwidget.Container{Width: 31.2, Height: 19.2, Radius: 9.6, Color: trackColor}},
-			{Left: 12 + 12*position - thumbSize/2, Top: 12 - thumbSize/2, Child: woxwidget.Container{Width: thumbSize, Height: thumbSize, Radius: thumbSize / 2, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255}}},
+	buildVisual := func(hoverPosition float32) woxwidget.Widget {
+		return woxwidget.AnimatedFloat{Key: key, Target: target, Duration: 300 * time.Millisecond, Curve: woxwidget.AnimationEaseOutBack, Builder: func(position float32) woxwidget.Widget {
+			colorPosition := min(max(position, float32(0)), float32(1))
+			trackColor := lerpColor(withAlpha(props.Theme.ResultTitle, 77), props.Theme.ActionSelected, colorPosition)
+			hoverForeground := props.Theme.ResultTitle
+			if props.Value {
+				hoverForeground = props.Theme.ActionSelectedText
+			}
+			trackColor = lerpColor(trackColor, controlHoverColor(trackColor, hoverForeground), hoverPosition)
+			thumbSize := 9.6 + 4.8*colorPosition + 1.6*hoverPosition
+			return woxwidget.Stack{Width: 36, Height: 24, Children: []woxwidget.StackChild{
+				{Left: 2.4, Top: 2.4, Child: woxwidget.Container{Width: 31.2, Height: 19.2, Radius: 9.6, Color: trackColor}},
+				{Left: 12 + 12*position - thumbSize/2, Top: 12 - thumbSize/2, Child: woxwidget.Container{Width: thumbSize, Height: thumbSize, Radius: thumbSize / 2, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255}}},
+			}}
 		}}
-	}}
-	content := woxwidget.Gesture{ID: props.ID, OnTap: toggle, Child: visual}
+	}
 	if props.ID == "" || props.OnChange == nil {
-		return content.Child
+		return buildVisual(0)
 	}
 	actions := []woxui.AccessibilityAction{woxui.AccessibilityActionToggle}
 	if props.Disabled {
@@ -65,7 +71,17 @@ func WoxSwitch(props SwitchProps) woxwidget.Widget {
 				toggle()
 			}
 			return true
-		}, Child: content},
+		}, Child: hoverable(key, props.Disabled, func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
+			hoverTarget := float32(0)
+			if hovered {
+				hoverTarget = 1
+			}
+			hoverAnimation := woxwidget.AnimatedFloat{
+				Key: woxwidget.Key(props.ID + "-hover"), Target: hoverTarget, Duration: 120 * time.Millisecond, Curve: woxwidget.AnimationEaseInOutCubic,
+				Builder: buildVisual,
+			}
+			return woxwidget.Gesture{ID: props.ID, OnTap: toggle, OnHoverAt: onHoverAt, Child: hoverAnimation}
+		})},
 	}
 }
 

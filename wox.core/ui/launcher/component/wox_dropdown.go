@@ -27,8 +27,11 @@ type DropdownProps struct {
 
 // WoxDropdown builds a focusable dropdown trigger with shared visuals and accessibility semantics.
 func WoxDropdown(props DropdownProps) woxwidget.Widget {
-	trigger := woxDropdownTrigger(props)
 	disabled := props.OnTap == nil && props.OnTapBounds == nil
+	key := woxwidget.Key(props.ID)
+	trigger := hoverable(key, disabled, func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
+		return woxDropdownTrigger(props, hovered, onHoverAt)
+	})
 	actions := []woxui.AccessibilityAction(nil)
 	if !disabled {
 		actions = []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}
@@ -38,15 +41,15 @@ func WoxDropdown(props DropdownProps) woxwidget.Widget {
 		label = props.Value
 	}
 	return woxwidget.Semantics{
-		Key: woxwidget.Key(props.ID), AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: label, Value: props.Value,
+		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: label, Value: props.Value,
 		Actions: actions, Disabled: disabled, Child: woxwidget.Focusable{
-			Key: woxwidget.Key(props.ID), Autofocus: props.Focused, Disabled: disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 4,
+			Key: key, Autofocus: props.Focused, Disabled: disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 4,
 			OnKey: props.OnKey, OnFocusChange: props.OnFocusChange, Child: trigger,
 		},
 	}
 }
 
-func woxDropdownTrigger(props DropdownProps) woxwidget.Widget {
+func woxDropdownTrigger(props DropdownProps, hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
 	const horizontalPadding = float32(8)
 	const indicatorWidth = float32(24)
 	contentWidth := max(float32(0), props.Width-horizontalPadding*2-indicatorWidth)
@@ -79,8 +82,12 @@ func woxDropdownTrigger(props DropdownProps) woxwidget.Widget {
 		)
 	}
 	children = append(children, WoxDropdownIndicator(indicatorWidth, props.Height, props.Foreground))
-	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnTapBounds: props.OnTapBounds, Child: woxwidget.Container{
-		Width: props.Width, Height: props.Height, Radius: 4, BorderColor: props.Outline, BorderWidth: 1,
+	background := woxui.Color{}
+	if hovered {
+		background = controlHoverColor(background, props.Foreground)
+	}
+	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnTapBounds: props.OnTapBounds, OnHoverAt: onHoverAt, Child: woxwidget.Container{
+		Width: props.Width, Height: props.Height, Radius: 4, Color: background, BorderColor: props.Outline, BorderWidth: 1,
 		Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding},
 		Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children},
 	}}

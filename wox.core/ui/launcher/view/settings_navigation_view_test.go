@@ -44,10 +44,40 @@ func TestSettingsRailSelectedItemUsesThemeHighlight(t *testing.T) {
 	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
 	navigation := settingsRailContent(rail).Children[1].(woxwidget.Stack)
 	props := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	row := focusedControlGesture(props.Content.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
 
 	if row.Color != highlight {
 		t.Fatalf("selected navigation fill = %#v, want theme highlight %#v", row.Color, highlight)
+	}
+}
+
+func TestSettingsRailHoversDestinationsButNotGroupHeaders(t *testing.T) {
+	text := woxui.Color{R: 180, G: 190, B: 200, A: 255}
+	clicked := 0
+	rail := SettingsRail(SettingsRailProps{
+		Width: 260, Height: 600, SearchBox: woxwidget.Container{Width: 232, Height: 50}, Theme: woxcomponent.Theme{ToolbarText: text},
+		Items: []SettingsNavItem{
+			{ID: "general", Label: "General", OnTap: func() { clicked++ }},
+			{ID: "plugins", Label: "Plugins", Parent: true, OnTap: func() { clicked++ }},
+		},
+	}).(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
+	navigation := settingsRailContent(rail).Children[1].(woxwidget.Stack)
+	props := navigation.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	rows := props.Content.(woxwidget.Flex).Children
+
+	destination := rows[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Stateful)
+	destinationGesture := destination.CreateState().Build(woxwidget.StateContext{}, destination.Widget).(woxwidget.Gesture)
+	if destinationGesture.OnTap == nil || destinationGesture.OnHoverAt == nil {
+		t.Fatal("settings destination should be clickable and hoverable")
+	}
+	destinationGesture.OnTap()
+
+	group := rows[1].(woxwidget.Semantics).Child.(woxwidget.Gesture)
+	if group.OnTap != nil || group.OnHoverAt != nil {
+		t.Fatal("settings group header should not be clickable or hoverable")
+	}
+	if clicked != 1 {
+		t.Fatalf("settings destination taps = %d, want only the clickable item", clicked)
 	}
 }
 

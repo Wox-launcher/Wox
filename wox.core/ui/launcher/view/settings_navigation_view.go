@@ -64,9 +64,14 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 					icon = woxwidget.Image{Source: item.Icon, Width: 18, Height: 18}
 				}
 				radius := float32(6)
+				onTap := item.OnTap
+				if item.Parent {
+					onTap = nil
+				}
+				hoverBackground := settingsColorAlpha(props.Theme.ToolbarText, 25)
 				items = append(items, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
 					ID: "settings-nav-" + item.ID, Label: item.Label, Width: size.Width, Height: 46, Radius: &radius,
-					Background: &color, BorderColor: border, BorderWidth: 1, Selected: item.Selected, SkipFocus: item.Parent, OnTap: item.OnTap, Theme: props.Theme,
+					Background: &color, HoverBackground: &hoverBackground, BorderColor: border, BorderWidth: 1, Selected: item.Selected, SkipFocus: item.Parent, OnTap: onTap, Theme: props.Theme,
 					Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: 10}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 						woxwidget.Align{Width: 22, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
 						woxwidget.Expanded{Child: woxwidget.Align{Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}}},

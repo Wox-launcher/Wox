@@ -70,6 +70,31 @@ func TestPluginSettingsFilterPanelUsesAvailableFlutterWidth(t *testing.T) {
 	}
 }
 
+func TestPluginTabsProvideHoverFeedback(t *testing.T) {
+	theme := woxcomponent.Theme{Cursor: woxui.Color{R: 80, G: 90, B: 100, A: 255}, ResultTitle: woxui.Color{A: 255}}
+	tabs := PluginTabs(PluginTabsProps{
+		Width: 240, Height: 44, Active: "description", Theme: theme,
+		Tabs: []PluginTab{{ID: "description", Label: "Description", Width: 120}, {ID: "commands", Label: "Commands", Width: 96}},
+	}).(woxwidget.Container)
+	row := tabs.Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
+	stateful := row.Children[1].(woxwidget.Stateful)
+	state := stateful.CreateState().(*pluginDetailTabState)
+	gesture := state.Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
+	state.hovered = true
+	hovered := state.Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
+	wantHover := theme.Cursor
+	wantHover.A /= 2
+
+	if gesture.ID != "plugin-detail-tab-commands" || gesture.OnTap == nil || gesture.OnHoverAt == nil {
+		t.Fatalf("tab gesture = id %q tap %v hover %v, want hoverable tab", gesture.ID, gesture.OnTap != nil, gesture.OnHoverAt != nil)
+	}
+	hoveredContainer := hovered.Child.(woxwidget.Container)
+	hoveredIndicator := hoveredContainer.Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Container)
+	if hoveredContainer.Color != (woxui.Color{}) || hoveredIndicator.Color != wantHover {
+		t.Fatalf("hovered tab = background %#v underline %#v, want no background and underline %#v", hoveredContainer.Color, hoveredIndicator.Color, wantHover)
+	}
+}
+
 func TestPluginListMessageKeepsSettingsBackground(t *testing.T) {
 	list := PluginList(PluginListProps{
 		Width: 260, Height: 660, Message: "Loading", Theme: woxcomponent.Theme{QueryBackground: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
@@ -126,13 +151,13 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
 	props := column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	rows := props.Content.(woxwidget.Flex)
-	row := rows.Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	row := focusedControlGesture(rows.Children[0]).Child.(woxwidget.Container)
 	rowContent := row.Child.(woxwidget.Flex)
 	status := rowContent.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
 	if status.Color != activeColor {
 		t.Fatalf("selected plugin subtitle color = %#v, want %#v", status.Color, activeColor)
 	}
-	inactiveRow := rows.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	inactiveRow := focusedControlGesture(rows.Children[1]).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	inactiveStatus := inactiveRow.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
 	if inactiveStatus.Color != inactiveColor {
 		t.Fatalf("unselected plugin subtitle color = %#v, want %#v", inactiveStatus.Color, inactiveColor)
@@ -174,8 +199,8 @@ func TestPluginStoreInstalledIconUsesSelectionColor(t *testing.T) {
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
 	props := column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	rows := props.Content.(woxwidget.Flex)
-	selectedRow := rows.Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	inactiveRow := rows.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	selectedRow := focusedControlGesture(rows.Children[0]).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	inactiveRow := focusedControlGesture(rows.Children[1]).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	selected := selectedRow.Children[2].(woxwidget.Align).Child.(woxwidget.Image)
 	inactive := inactiveRow.Children[2].(woxwidget.Align).Child.(woxwidget.Image)
 
@@ -194,7 +219,7 @@ func TestPluginListSearchHighlightKeepsSelectedFillAndAddsBorder(t *testing.T) {
 
 	column := list.(woxwidget.Container).Child.(woxwidget.Flex)
 	props := column.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	row := props.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	row := focusedControlGesture(props.Content.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
 	if row.Color != selected {
 		t.Fatalf("selected plugin fill = %#v, want selected color %#v", row.Color, selected)
 	}
@@ -220,19 +245,33 @@ func TestPluginListUsesSharedScrollbarWhenOverflowing(t *testing.T) {
 
 func TestPluginManagementButtonsUseIntrinsicWidth(t *testing.T) {
 	actions := pluginOutlineActions([]PluginAction{{ID: "plugin-uninstall", Label: "Uninstall", Width: 124, Enabled: true}}, woxcomponent.Theme{})
-	button := actions.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	button := focusedControlGesture(actions.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
 
 	if button.Width != 0 {
 		t.Fatalf("plugin management button width = %v, want intrinsic width", button.Width)
 	}
 }
 
-func TestPluginStoreChipCentersContentVertically(t *testing.T) {
+func TestPluginStoreChipCentersContent(t *testing.T) {
 	chip := pluginStoreChip("v0.2.3", nil, nil, woxcomponent.Theme{}).(woxwidget.Gesture).Child.(woxwidget.Container)
 	content := chip.Child.(woxwidget.Align)
 
-	if content.Vertical != 0.5 {
-		t.Fatalf("plugin store chip vertical alignment = %v, want centered", content.Vertical)
+	if content.Horizontal != 0.5 || content.Vertical != 0.5 {
+		t.Fatalf("plugin store chip alignment = (%v, %v), want centered", content.Horizontal, content.Vertical)
+	}
+}
+
+func TestPluginStoreWebsiteUsesSharedButtonHover(t *testing.T) {
+	store := pluginStoreDetail(PluginStoreDetailProps{
+		WebsiteLabel: "Website", ExternalIcon: &woxui.Image{}, OnWebsite: func() {},
+	}, 800, 600, woxcomponent.Theme{})
+	header := store.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
+	websiteRow := header.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
+	website := websiteRow.Children[1].(woxwidget.Align)
+	button := focusedControlGesture(website.Child)
+
+	if button.ID != "plugin-website" || button.OnTap == nil || button.OnHoverAt == nil {
+		t.Fatalf("website control = id %q tap %v hover %v, want shared hoverable button", button.ID, button.OnTap != nil, button.OnHoverAt != nil)
 	}
 }
 
@@ -460,7 +499,7 @@ func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 		t.Fatalf("header action count = %d, want template and add", len(actions.Children))
 	}
 	for index, action := range actions.Children {
-		button := action.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+		button := focusedControlGesture(action).Child.(woxwidget.Container)
 		if button.Padding.Left != 12 || button.Padding.Right != 12 {
 			t.Fatalf("header action %d horizontal padding = %+v, want shared compact padding", index, button.Padding)
 		}
@@ -784,7 +823,7 @@ func TestFormTableDeleteDialogMatchesFlutterActions(t *testing.T) {
 		t.Fatalf("delete dialog action count = %d, want cancel and delete", len(buttons.Children))
 	}
 	for _, child := range buttons.Children {
-		container := child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+		container := focusedControlGesture(child).Child.(woxwidget.Container)
 		if container.Width != 0 {
 			t.Fatalf("delete action width = %v, want content-sized Cancel/Delete labels", container.Width)
 		}

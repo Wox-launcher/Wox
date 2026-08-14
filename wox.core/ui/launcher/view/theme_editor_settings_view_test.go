@@ -41,12 +41,30 @@ func TestThemeEditorGroupUsesMeasuredFlutterWidth(t *testing.T) {
 		Groups:      []ThemeEditorColorGroup{{Label: "操作面板", LabelWidth: 48}},
 	}, 500, 40).(woxwidget.ScrollView)
 	semantic := selector.Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
-	chip := semantic.Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	stateful := semantic.Child.(woxwidget.Stateful)
+	chip := (&themeEditorGroupChipState{}).Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture).Child.(woxwidget.Container)
 	if chip.Width != 72 {
 		t.Fatalf("theme group width = %v, want measured label width plus Flutter padding 72", chip.Width)
 	}
 	if !semantic.Selected {
 		t.Fatal("active theme group is not exposed as selected")
+	}
+}
+
+func TestThemeEditorGroupAddsHoverSurface(t *testing.T) {
+	selector := themeEditorGroupSelector(ThemeEditorSettingsProps{
+		Groups: []ThemeEditorColorGroup{{Label: "Window"}, {Label: "Query box"}},
+	}, 500, 40).(woxwidget.ScrollView)
+	semantic := selector.Child.(woxwidget.Flex).Children[1].(woxwidget.Semantics)
+	stateful := semantic.Child.(woxwidget.Stateful)
+	normal := (&themeEditorGroupChipState{}).Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
+	hovered := (&themeEditorGroupChipState{hovered: true}).Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Gesture)
+
+	if normal.OnHoverAt == nil {
+		t.Fatal("theme editor group does not retain hover input")
+	}
+	if normal.Child.(woxwidget.Container).Color.A != 0 || hovered.Child.(woxwidget.Container).Color.A == 0 {
+		t.Fatalf("theme editor group hover colors = %#v/%#v, want transparent/visible", normal.Child.(woxwidget.Container).Color, hovered.Child.(woxwidget.Container).Color)
 	}
 }
 
@@ -67,7 +85,7 @@ func TestThemeEditorControlPaneReservesActionButtonWidth(t *testing.T) {
 		DiscardIcon: &woxui.Image{}, OverwriteIcon: &woxui.Image{}, SaveAsIcon: &woxui.Image{},
 	}, 716, themeEditorControlPaneHeight).(woxwidget.Stack)
 	actions := pane.Children[2].Child.(woxwidget.Flex)
-	button := actions.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	button := focusedControlGesture(actions.Children[1]).Child.(woxwidget.Container)
 	if button.Width != 100 || button.Padding.Left != 10 || button.Padding.Right != 10 {
 		t.Fatalf("narrow theme action button width/padding = %.0f/%v, want 100/10px horizontal", button.Width, button.Padding)
 	}

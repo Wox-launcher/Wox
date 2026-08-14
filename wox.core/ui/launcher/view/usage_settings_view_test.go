@@ -10,7 +10,7 @@ import (
 func TestUsageShareButtonCentersIconAndLabel(t *testing.T) {
 	icon := &woxui.Image{}
 	button, _ := usageShareButton(UsageSettingsProps{ShareLabel: "Share to X", ShareIcon: icon})
-	container := button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	container := focusedControlGesture(button).Child.(woxwidget.Container)
 	if container.Padding.Top != container.Padding.Bottom {
 		t.Fatalf("share button vertical padding = %v/%v, want centered content", container.Padding.Top, container.Padding.Bottom)
 	}

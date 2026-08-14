@@ -28,7 +28,7 @@ func TestDataLogLevelUsesSharedAnchoredDropdown(t *testing.T) {
 	if semantics.AutomationID != "data-log-level" || semantics.Role != woxui.AccessibilityRoleButton {
 		t.Fatalf("dropdown semantics = %#v, want standard button", semantics)
 	}
-	trigger := semantics.Child.(woxwidget.Focusable).Child.(woxwidget.Gesture)
+	trigger := focusedControlGesture(semantics)
 	if trigger.OnTap != nil || trigger.OnTapBounds == nil {
 		t.Fatal("log level should open an anchored dropdown instead of changing directly")
 	}
@@ -52,7 +52,7 @@ func TestDataStorageFieldUsesIntrinsicButtonWidths(t *testing.T) {
 	label := row.Children[0].(woxwidget.Expanded)
 	actionsContainer := row.Children[1].(woxwidget.Container)
 	actions := actionsContainer.Child.(woxwidget.Flex)
-	changeButton := actions.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	changeButton := focusedControlGesture(actions.Children[1]).Child.(woxwidget.Container)
 
 	if actions.MainAxisAlignment != woxwidget.MainAxisStart {
 		t.Fatalf("storage actions alignment = %v, want intrinsic start", actions.MainAxisAlignment)
@@ -80,8 +80,8 @@ func TestDataLogActionsAreRightAligned(t *testing.T) {
 	if actions.MainAxisAlignment != woxwidget.MainAxisStart {
 		t.Fatalf("log actions alignment = %v, want intrinsic start", actions.MainAxisAlignment)
 	}
-	clearButton := actions.Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
-	openButton := actions.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	clearButton := focusedControlGesture(actions.Children[0]).Child.(woxwidget.Container)
+	openButton := focusedControlGesture(actions.Children[1]).Child.(woxwidget.Container)
 	if clearButton.Width != 0 || openButton.Width != 0 || actionsContainer.Width != 0 {
 		t.Fatalf("log widths = %.0f/%.0f/container %.0f, want intrinsic sizing", clearButton.Width, openButton.Width, actionsContainer.Width)
 	}

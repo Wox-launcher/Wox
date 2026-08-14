@@ -235,7 +235,7 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		ID: "action-search", Label: "Filter actions", Width: innerWidth, Height: 40, Radius: props.ActionQueryRadius,
 		Padding: woxwidget.Insets{Left: 8, Top: 10, Right: 8, Bottom: 8}, Background: props.ActionQueryBackground,
 		Style: woxui.TextStyle{Size: actionFilterFontSize}, TextColor: props.ActionQueryText, Value: props.Filter, Focused: true, Autofocus: true,
-		MaxLines: 1, Window: props.Window, Theme: props.Theme, OnChanged: props.OnFilterChanged, OnKey: props.OnFilterKey,
+		DisableHover: true, MaxLines: 1, Window: props.Window, Theme: props.Theme, OnChanged: props.OnFilterChanged, OnKey: props.OnFilterKey,
 	})
 	panel := woxwidget.Container{
 		Width: panelWidth, Height: panelHeight, Radius: props.ActionQueryRadius, Color: props.Theme.ActionBackground,

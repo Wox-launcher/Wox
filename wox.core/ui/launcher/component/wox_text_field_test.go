@@ -20,6 +20,36 @@ func TestSingleLineTextFieldDefaultsToVerticalCenter(t *testing.T) {
 	}
 }
 
+func TestTextFieldHoverUsesSharedOverlayAndSkipsDisabledFields(t *testing.T) {
+	base := woxui.Color{R: 20, G: 30, B: 40, A: 255}
+	foreground := woxui.Color{R: 220, G: 230, B: 240, A: 255}
+	build := func(disabled, disableHover, focused bool) woxwidget.Gesture {
+		field := WoxTextField(TextFieldProps{ID: "hover", Width: 200, Height: 40, Background: base, Disabled: disabled, DisableHover: disableHover, Theme: Theme{ResultTitle: foreground}}).(woxwidget.Stateful)
+		state := field.CreateState().(*textFieldState)
+		state.InitState(woxwidget.StateContext{}, field.Widget)
+		state.hovered = true
+		state.focusNode.UpdateFocus(focused)
+		return state.Build(woxwidget.StateContext{}, field.Widget).(woxwidget.EditableText).Child.(woxwidget.Gesture)
+	}
+
+	hovered := build(false, false, false)
+	if hovered.OnHoverAt == nil || hovered.Child.(woxwidget.Container).Color != controlHoverColor(base, foreground) {
+		t.Fatal("enabled text field did not expose the shared hover treatment")
+	}
+	disabled := build(true, false, false)
+	if disabled.OnHoverAt != nil || disabled.Child.(woxwidget.Container).Color != base {
+		t.Fatal("disabled text field should not react to hover")
+	}
+	optedOut := build(false, true, false)
+	if optedOut.OnHoverAt != nil || optedOut.Child.(woxwidget.Container).Color != base {
+		t.Fatal("text field with hover disabled should not react to hover")
+	}
+	focused := build(false, false, true)
+	if focused.Child.(woxwidget.Container).Color != base {
+		t.Fatal("focused text field should not draw its hover treatment")
+	}
+}
+
 func TestTextFieldScrolledOffsetConsumesOnlyMovableWheelDeltas(t *testing.T) {
 	if next, changed := textFieldScrolledOffset(0, 240, -40); next != 40 || !changed {
 		t.Fatalf("scroll down = %.0f, %v, want 40, true", next, changed)

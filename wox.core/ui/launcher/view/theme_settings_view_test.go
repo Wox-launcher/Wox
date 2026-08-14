@@ -28,7 +28,7 @@ func TestThemeListUsesSharedSearchFieldGeometry(t *testing.T) {
 
 func TestThemeApplyUsesIntrinsicOutlinedButton(t *testing.T) {
 	actions := themeActions(ThemeSettingsProps{ApplyLabel: "应用", Theme: woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 255}}}, ThemeCatalogItem{IsInstalled: true, IsSystem: true})
-	button := actions[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	button := focusedControlGesture(actions[0]).Child.(woxwidget.Container)
 
 	if button.Width != 0 || button.Height != 36 || button.Color.A != 0 || button.BorderWidth != 1 {
 		t.Fatalf("apply button = width %v height %v background alpha %v border %v, want intrinsic 36px outlined button", button.Width, button.Height, button.Color.A, button.BorderWidth)
@@ -47,6 +47,20 @@ func TestThemeDetailKeepsVersionBesideTitle(t *testing.T) {
 	}
 	if _, ok := author.(woxwidget.Expanded); !ok {
 		t.Fatalf("theme author slot = %T, want Expanded", author)
+	}
+}
+
+func TestThemeDetailWebsiteUsesSharedButtonHover(t *testing.T) {
+	detail := ThemeCatalogItem{Name: "Aquarium", URL: "https://example.com"}
+	view := themeDetail(ThemeSettingsProps{
+		Detail: &detail, WebsiteLabel: "Website", ExternalIcon: &woxui.Image{}, OnOpenWebsite: func() {},
+	}, 600, 700).(woxwidget.Flex)
+	header := view.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	website := header.Children[1].(woxwidget.Flex).Children[1].(woxwidget.Align)
+	button := focusedControlGesture(website.Child)
+
+	if button.ID != "theme-website" || button.OnTap == nil || button.OnHoverAt == nil {
+		t.Fatalf("theme website control = id %q tap %v hover %v, want shared hoverable button", button.ID, button.OnTap != nil, button.OnHoverAt != nil)
 	}
 }
 
@@ -155,7 +169,7 @@ func TestThemeSystemTagCentersLabel(t *testing.T) {
 	}
 	list := themeList(props, 260, 400).(woxwidget.Flex)
 	scrollProps := list.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	row := scrollProps.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	row := focusedControlGesture(scrollProps.Content.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)
 	content := row.Child.(woxwidget.Flex)
 	_, textExpanded := content.Children[1].(woxwidget.Expanded)
 	tagSlot := content.Children[2].(woxwidget.Align)

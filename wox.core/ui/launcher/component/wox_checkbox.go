@@ -32,11 +32,25 @@ func WoxCheckbox(props CheckboxProps) woxwidget.Widget {
 		background = props.Theme.ActionSelected
 		mark = woxwidget.Align{Width: 18, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: CheckGlyph(12, props.Theme.ActionSelectedText)}
 	}
-	visual := woxwidget.Gesture{ID: props.ID, OnTap: toggle, Child: woxwidget.Container{
-		Width: 18, Height: 18, Radius: 4, Color: background, BorderColor: border, BorderWidth: 1, Child: mark,
-	}}
+	buildVisual := func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
+		visualBackground := background
+		visualBorder := border
+		if hovered {
+			hoverForeground := props.Theme.ActionSelected
+			if props.Value {
+				hoverForeground = props.Theme.ActionSelectedText
+			}
+			visualBackground = controlHoverColor(background, hoverForeground)
+			if !props.Value {
+				visualBorder = props.Theme.ActionSelected
+			}
+		}
+		return woxwidget.Gesture{ID: props.ID, OnTap: toggle, OnHoverAt: onHoverAt, Child: woxwidget.Container{
+			Width: 18, Height: 18, Radius: 4, Color: visualBackground, BorderColor: visualBorder, BorderWidth: 1, Child: mark,
+		}}
+	}
 	if props.ID == "" || props.OnChange == nil {
-		return visual.Child
+		return buildVisual(false, nil).(woxwidget.Gesture).Child
 	}
 	actions := []woxui.AccessibilityAction{woxui.AccessibilityActionToggle}
 	if props.Disabled {
@@ -61,6 +75,6 @@ func WoxCheckbox(props CheckboxProps) woxwidget.Widget {
 				toggle()
 			}
 			return true
-		}, Child: visual},
+		}, Child: hoverable(key, props.Disabled, buildVisual)},
 	}
 }

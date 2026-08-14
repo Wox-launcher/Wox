@@ -510,6 +510,53 @@ type PluginTabsProps struct {
 	OnSelect func(string)
 }
 
+type pluginDetailTabProps struct {
+	ID             string
+	Label          string
+	Width          float32
+	Height         float32
+	IndicatorWidth float32
+	TextColor      woxui.Color
+	Underline      woxui.Color
+	HoverUnderline woxui.Color
+	Selected       bool
+	OnTap          func()
+}
+
+type pluginDetailTabState struct {
+	hovered bool
+}
+
+// pluginDetailTab builds one tab with retained hover state.
+func pluginDetailTab(props pluginDetailTabProps) woxwidget.Widget {
+	return woxwidget.Stateful{
+		Key: woxwidget.Key(props.ID), Type: (*pluginDetailTabState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &pluginDetailTabState{} },
+	}
+}
+
+func (s *pluginDetailTabState) InitState(_ woxwidget.StateContext, _ any) {}
+
+func (s *pluginDetailTabState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
+
+func (s *pluginDetailTabState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(pluginDetailTabProps)
+	underline := props.Underline
+	if s.hovered && !props.Selected {
+		underline = props.HoverUnderline
+	}
+	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnHoverAt: func(inside bool, _ woxui.Rect) {
+		if inside != s.hovered {
+			context.SetState(func() { s.hovered = inside })
+		}
+	}, Child: woxwidget.Container{Width: props.Width, Height: props.Height - 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
+		woxwidget.Align{Width: props.Width, Height: props.Height - 3, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.TextColor}},
+		woxwidget.Align{Width: props.Width, Height: 2, Horizontal: 0.5, Child: woxwidget.Container{Width: props.IndicatorWidth, Height: 2, Color: underline}},
+	}}}}
+}
+
+func (s *pluginDetailTabState) Dispose() {}
+
 // PluginTabs builds the plugin detail tab strip.
 func PluginTabs(props PluginTabsProps) woxwidget.Widget {
 	children := make([]woxwidget.Widget, 0, len(props.Tabs))
@@ -521,14 +568,19 @@ func PluginTabs(props PluginTabsProps) woxwidget.Widget {
 			color = props.Theme.QueryText
 		}
 		indicatorWidth := max(float32(32), tab.Width-24)
-		children = append(children, woxwidget.Gesture{ID: "plugin-detail-tab-" + tab.ID, OnTap: func() {
-			if props.OnSelect != nil {
-				props.OnSelect(tab.ID)
-			}
-		}, Child: woxwidget.Container{Width: tab.Width, Height: props.Height - 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-			woxwidget.Align{Width: tab.Width, Height: props.Height - 3, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: tab.Label, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: color}},
-			woxwidget.Align{Width: tab.Width, Height: 2, Horizontal: 0.5, Child: woxwidget.Container{Width: indicatorWidth, Height: 2, Color: underline}},
-		}}}})
+		hoverUnderline := props.Theme.Cursor
+		hoverUnderline.A /= 2
+		tabID := tab.ID
+		children = append(children, pluginDetailTab(pluginDetailTabProps{
+			ID: "plugin-detail-tab-" + tab.ID, Label: tab.Label, Width: tab.Width, Height: props.Height,
+			IndicatorWidth: indicatorWidth, TextColor: color, Underline: underline,
+			HoverUnderline: hoverUnderline, Selected: tab.ID == props.Active,
+			OnTap: func() {
+				if props.OnSelect != nil {
+					props.OnSelect(tabID)
+				}
+			},
+		}))
 	}
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children},
@@ -589,10 +641,11 @@ func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, them
 	websiteWidth := float32(104)
 	var website woxwidget.Widget = woxwidget.Container{Width: websiteWidth, Height: 28}
 	if props.WebsiteLabel != "" && props.OnWebsite != nil {
-		website = woxwidget.Gesture{ID: "plugin-website", OnTap: props.OnWebsite, Child: woxwidget.Align{Width: websiteWidth, Height: 28, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 7, Children: []woxwidget.Widget{
-			woxwidget.Image{Source: props.ExternalIcon, Width: 13, Height: 13},
-			woxwidget.Text{Value: props.WebsiteLabel, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultTitle},
-		}}}}
+		website = woxwidget.Align{Width: websiteWidth, Height: 28, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: "plugin-website", Label: props.WebsiteLabel, Icon: props.ExternalIcon, IconSize: 13, IconGap: 7,
+			Height: 28, FontSize: 13, Padding: woxwidget.Insets{Left: 6, Right: 4}, Variant: woxcomponent.ButtonText,
+			OnTap: props.OnWebsite, Theme: theme,
+		})}
 	}
 	header := woxwidget.Container{Width: innerWidth, Height: headerHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		identity,
@@ -674,7 +727,7 @@ func pluginStoreChip(label string, icon *woxui.Image, onTap func(), theme woxcom
 	children = append(children, woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.ResultTitle})
 	return woxwidget.Gesture{ID: "plugin-store-chip-" + label, OnTap: onTap, Child: woxwidget.Container{
 		Width: width, Height: 28, Radius: 7, Color: theme.ActionBackground, BorderColor: theme.ResultSubtitle, BorderWidth: 1,
-		Padding: woxwidget.Insets{Left: 10, Right: 8}, Child: woxwidget.Align{Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}},
+		Padding: woxwidget.Insets{Left: 10, Right: 8}, Child: woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}},
 	}}
 }
 

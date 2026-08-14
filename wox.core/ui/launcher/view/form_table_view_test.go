@@ -99,7 +99,7 @@ func TestFormTableRowAppControlMatchesFlutterSelectorLayout(t *testing.T) {
 	if buttonFocus.OnFocusChange == nil {
 		t.Fatal("app selector button should keep table-row focus synchronized")
 	}
-	button := buttonFocus.Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	button := focusedControlGesture(control.Children[1]).Child.(woxwidget.Container)
 	if button.Width != 0 || button.Height != 42 || button.Color != theme.ActionSelected {
 		t.Fatal("app selector action should use a content-sized Flutter-style primary button")
 	}
@@ -135,7 +135,7 @@ func TestFormTableRowEditorActionsSizeToTranslatedLabels(t *testing.T) {
 		t.Fatalf("row editor actions = %d gap %.0f", len(buttons.Children), buttons.Gap)
 	}
 	for _, child := range buttons.Children {
-		container := child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+		container := focusedControlGesture(child).Child.(woxwidget.Container)
 		if container.Width != 0 {
 			t.Fatalf("action button width = %v, want content-sized Cancel/Save like Flutter", container.Width)
 		}
@@ -162,13 +162,13 @@ func TestQueryHotkeyEditorHeaderUsesFourEqualPresets(t *testing.T) {
 	if len(buttons.Children) != 4 || buttons.Gap != 8 {
 		t.Fatalf("preset buttons = %d gap %.0f", len(buttons.Children), buttons.Gap)
 	}
-	preview := buttons.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture)
+	preview := focusedControlGesture(buttons.Children[1])
 	preview.OnTap()
 	if selected != "web-panel" {
 		t.Fatalf("selected preset = %q", selected)
 	}
 	for _, button := range buttons.Children {
-		content := button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Align).Child
+		content := focusedControlGesture(button).Child.(woxwidget.Container).Child.(woxwidget.Align).Child
 		if _, hasTrailing := content.(woxwidget.Flex); hasTrailing {
 			t.Fatal("preset button should not contain a demo trigger")
 		}

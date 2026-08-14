@@ -73,6 +73,7 @@ type hotkeyRecorderFocusState struct {
 	focusNode  *woxwidget.FocusNode
 	attachment *woxwidget.FocusAttachment
 	key        woxwidget.Key
+	hovered    bool
 }
 
 func (s *hotkeyRecorderFocusState) InitState(context woxwidget.StateContext, widget any) {
@@ -100,6 +101,13 @@ func (s *hotkeyRecorderFocusState) DidUpdateWidget(context woxwidget.StateContex
 func (s *hotkeyRecorderFocusState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
 	config := widget.(hotkeyRecorderFocusWidget)
 	s.updateBinding(context, config.Props.ID)
+	contentBox := config.Child.(woxwidget.Container)
+	if s.hovered {
+		contentBox.Color = controlHoverColor(contentBox.Color, config.Props.Theme.ResultTitle)
+		if !config.Props.Error {
+			contentBox.BorderColor = withAlpha(config.Props.Theme.ResultSubtitle, 200)
+		}
+	}
 	return woxwidget.Focusable{
 		Key: s.key, Autofocus: config.Props.Focused, UnfocusOnPointerOutside: true, FocusRingColor: config.Props.Theme.Cursor, FocusRingRadius: 4,
 		// Keep recorder navigation local so Enter and Escape cannot fall through to page actions.
@@ -117,7 +125,11 @@ func (s *hotkeyRecorderFocusState) Build(context woxwidget.StateContext, widget 
 			}
 			context.Invalidate()
 		},
-		Child: woxwidget.Gesture{ID: config.Props.ID, OnTap: func() { s.focusNode.RequestFocus() }, Child: config.Child},
+		Child: woxwidget.Gesture{ID: config.Props.ID, OnTap: func() { s.focusNode.RequestFocus() }, OnHoverAt: func(inside bool, _ woxui.Rect) {
+			if inside != s.hovered {
+				context.SetState(func() { s.hovered = inside })
+			}
+		}, Child: contentBox},
 	}
 }
 

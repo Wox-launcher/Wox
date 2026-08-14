@@ -51,7 +51,7 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	if supportValue.Horizontal != 1 {
 		t.Fatal("support button should stay right-aligned")
 	}
-	supportButton := supportValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	supportButton := focusedControlGesture(supportValue.Child).Child.(woxwidget.Container)
 	if supportButton.Width != 0 {
 		t.Fatalf("support button width = %v, want content-sized", supportButton.Width)
 	}
@@ -76,8 +76,8 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	if refreshValue.Horizontal != 1 {
 		t.Fatal("refresh button should stay right-aligned")
 	}
-	syncButton := syncValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
-	refreshButton := refreshValue.Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	syncButton := focusedControlGesture(syncValue.Child).Child.(woxwidget.Container)
+	refreshButton := focusedControlGesture(refreshValue.Child).Child.(woxwidget.Container)
 	if syncButton.Color != refreshButton.Color || syncButton.BorderColor != refreshButton.BorderColor || syncButton.BorderWidth != refreshButton.BorderWidth {
 		t.Fatalf("sync button surface = %+v, want refresh surface %+v", syncButton, refreshButton)
 	}
@@ -102,12 +102,17 @@ func TestCloudRefreshButtonWidthIncludesLeadingIcon(t *testing.T) {
 }
 
 func TestCloudActionMenuUsesPaddedContentSize(t *testing.T) {
-	menu := cloudActionMenu(CloudActionMenuProps{Items: []CloudActionMenuItemProps{{ID: "account", Label: "Account"}, {ID: "logout", Label: "Log out"}}}, 200, woxcomponent.Theme{}).(woxwidget.Container)
+	menu := cloudActionMenu(CloudActionMenuProps{Items: []CloudActionMenuItemProps{{ID: "account", Label: "Account", OnTap: func() {}}, {ID: "logout", Label: "Log out", OnTap: func() {}}}}, 200, woxcomponent.Theme{}).(woxwidget.Container)
 	builder := menu.Child.(woxwidget.LayoutBuilder)
 	scroll := builder.Build(woxui.Size{Width: 188, Height: 80}).(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Gesture).Child.(woxwidget.Container)
+	rowWidget := scroll.Content.(woxwidget.Flex).Children[0]
+	gesture := focusedControlGesture(rowWidget)
+	row := gesture.Child.(woxwidget.Container)
 	if scroll.Width != 188 || scroll.Height != 80 || row.Width != 188 {
 		t.Fatalf("cloud action content = scroll %.0fx%.0f row %.0f, want 188x80/188", scroll.Width, scroll.Height, row.Width)
+	}
+	if gesture.OnHoverAt == nil {
+		t.Fatal("cloud action menu item should expose hover feedback")
 	}
 }
 
@@ -192,8 +197,7 @@ func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 	}
 	fieldLayout := field.Child.(woxwidget.Flex)
 	selectSemantics := fieldLayout.Children[1].(woxwidget.Flex).Children[0].(woxwidget.Semantics)
-	selectFocus := selectSemantics.Child.(woxwidget.Focusable)
-	selectTrigger := selectFocus.Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	selectTrigger := focusedControlGesture(selectSemantics).Child.(woxwidget.Container)
 	selectContent := selectTrigger.Child.(woxwidget.Flex)
 	if selectContent.Children[0].(woxwidget.Align).Child.(woxwidget.Image).Source != selectedIcon {
 		t.Fatal("selected plugin icon is not forwarded to the closed dropdown")

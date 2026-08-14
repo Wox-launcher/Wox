@@ -38,3 +38,19 @@ func TestWoxListItemCanSkipKeyboardFocus(t *testing.T) {
 		t.Fatalf("skip-focus child = %T, want pointer gesture without focusable wrapper", semantics.Child)
 	}
 }
+
+func TestWoxListItemHoversOnlyWhenClickable(t *testing.T) {
+	hover := woxui.Color{R: 30, G: 40, B: 50, A: 25}
+	clickable := WoxListItem(ListItemProps{ID: "page", Label: "Page", HoverBackground: &hover, OnTap: func() {}, Theme: Theme{}}).(woxwidget.Semantics)
+	stateful := clickable.Child.(woxwidget.Focusable).Child
+	hovered := buildHoverable(stateful, true).(woxwidget.Gesture).Child.(woxwidget.Container)
+	if hovered.Color != hover {
+		t.Fatalf("clickable list item hover = %#v, want %#v", hovered.Color, hover)
+	}
+
+	group := WoxListItem(ListItemProps{ID: "group", Label: "Group", SkipFocus: true, HoverBackground: &hover, Theme: Theme{}}).(woxwidget.Semantics)
+	gesture := group.Child.(woxwidget.Gesture)
+	if gesture.OnHoverAt != nil || gesture.Child.(woxwidget.Container).Color == hover {
+		t.Fatal("non-clickable list item should remain static")
+	}
+}

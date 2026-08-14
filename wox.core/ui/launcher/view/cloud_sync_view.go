@@ -671,10 +671,15 @@ func cloudActionMenu(props CloudActionMenuProps, width float32, theme woxcompone
 	return woxwidget.Container{Width: width, Height: height, Radius: 8, Color: theme.ActionBackground, Padding: woxwidget.UniformInsets(6), Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
 		rows := make([]woxwidget.Widget, 0, len(props.Items))
 		for _, item := range props.Items {
-			rows = append(rows, woxwidget.Gesture{ID: item.ID, OnTap: item.OnTap, Child: woxwidget.Container{
-				Width: size.Width, Height: 40, Radius: 5, Color: theme.ActionBackground, Padding: woxwidget.Insets{Left: 12, Top: 11, Right: 12},
-				Child: woxwidget.Text{Value: item.Label, Style: woxui.TextStyle{Size: 12}, Color: theme.ActionText},
-			}})
+			radius := float32(5)
+			background := theme.ActionBackground
+			hoverBackground := cloudAlpha(theme.ResultSubtitle, 25)
+			rows = append(rows, woxcomponent.WoxListItem(woxcomponent.ListItemProps{
+				ID: item.ID, Label: item.Label, Width: size.Width, Height: 40, Radius: &radius,
+				Background: &background, HoverBackground: &hoverBackground, OnTap: item.OnTap, Theme: theme,
+				Padding: woxwidget.Insets{Left: 12, Top: 11, Right: 12},
+				Child:   woxwidget.Text{Value: item.Label, Style: woxui.TextStyle{Size: 12}, Color: theme.ActionText},
+			}))
 		}
 		return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "cloud-action-menu-scroll", Width: size.Width, Height: size.Height,

@@ -568,13 +568,14 @@ func themeEditorGroupSelector(props ThemeEditorSettingsProps, width, height floa
 			foreground = props.Theme.ResultTitle
 		}
 		id := "theme-editor-group-" + strconv.Itoa(index)
-		chip := woxwidget.Gesture{ID: id + "-pointer", OnTap: func() {
-			if props.OnSelectGroup != nil {
-				props.OnSelectGroup(index)
-			}
-		}, Child: woxwidget.Container{Width: chipWidth, Height: 34, Radius: 6, Color: background, BorderColor: border, BorderWidth: themeBoolFloat(border.A != 0), Padding: woxwidget.Insets{Left: 12, Top: 8}, Child: woxwidget.Text{
-			Value: group.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: foreground,
-		}}}
+		chip := themeEditorGroupChip(themeEditorGroupChipProps{
+			ID: id, Label: group.Label, Width: chipWidth, Height: 34, Background: background, HoverBackground: themeAlpha(props.Theme.ResultTitle, 25),
+			BorderColor: border, BorderWidth: themeBoolFloat(border.A != 0), Foreground: foreground, Selected: index == props.ActiveGroup, OnTap: func() {
+				if props.OnSelectGroup != nil {
+					props.OnSelectGroup(index)
+				}
+			},
+		})
 		chips = append(chips, woxwidget.Semantics{
 			Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleButton, Label: group.Label, Selected: index == props.ActiveGroup,
 			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
@@ -596,6 +597,55 @@ func themeEditorGroupSelector(props ThemeEditorSettingsProps, width, height floa
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: chips},
 	}
 }
+
+// themeEditorGroupChipProps contains one theme editor group tab and its hover colors.
+type themeEditorGroupChipProps struct {
+	ID              string
+	Label           string
+	Width           float32
+	Height          float32
+	Background      woxui.Color
+	HoverBackground woxui.Color
+	BorderColor     woxui.Color
+	BorderWidth     float32
+	Foreground      woxui.Color
+	Selected        bool
+	OnTap           func()
+}
+
+type themeEditorGroupChipState struct {
+	hovered bool
+}
+
+// themeEditorGroupChip builds a selectable group tab with retained pointer hover state.
+func themeEditorGroupChip(props themeEditorGroupChipProps) woxwidget.Widget {
+	return woxwidget.Stateful{
+		Key: woxwidget.Key(props.ID), Type: (*themeEditorGroupChipState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &themeEditorGroupChipState{} },
+	}
+}
+
+func (s *themeEditorGroupChipState) InitState(_ woxwidget.StateContext, _ any) {}
+
+func (s *themeEditorGroupChipState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
+
+func (s *themeEditorGroupChipState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(themeEditorGroupChipProps)
+	background := props.Background
+	if s.hovered && !props.Selected {
+		background = props.HoverBackground
+	}
+	return woxwidget.Gesture{ID: props.ID + "-pointer", OnTap: props.OnTap, OnHoverAt: func(inside bool, _ woxui.Rect) {
+		if inside != s.hovered {
+			context.SetState(func() { s.hovered = inside })
+		}
+	}, Child: woxwidget.Container{
+		Width: props.Width, Height: props.Height, Radius: 6, Color: background, BorderColor: props.BorderColor, BorderWidth: props.BorderWidth,
+		Padding: woxwidget.Insets{Left: 12, Top: 8}, Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Foreground},
+	}}
+}
+
+func (s *themeEditorGroupChipState) Dispose() {}
 
 func themeEditorActions(props ThemeEditorSettingsProps, width, height float32) woxwidget.Widget {
 	gap := float32(10)

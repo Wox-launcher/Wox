@@ -69,6 +69,7 @@ type TextFieldProps struct {
 	Controller         *woxwidget.TextEditingController
 	FocusNode          *woxwidget.FocusNode
 	Disabled           bool
+	DisableHover       bool
 	ReadOnly           bool
 	Protected          bool
 	MaxLines           int
@@ -90,6 +91,8 @@ type TextFieldProps struct {
 	// onSelectionEnd stops continuous edge auto-scroll when the drag selection finishes.
 	onSelectionEnd func()
 	onSecondaryTap func(woxui.Point) // window/client coordinates for the context menu anchor
+	onHoverAt      func(bool, woxui.Rect)
+	hovered        bool
 	onScroll       func(woxui.Point) bool
 	onTextInput    func(woxui.TextInputEvent) bool
 	verticalOffset float32
@@ -107,6 +110,7 @@ func WoxTextField(props TextFieldProps) woxwidget.Widget {
 }
 
 type textFieldState struct {
+	hovered            bool
 	controller         *woxwidget.TextEditingController
 	internalController *woxwidget.TextEditingController
 	focusNode          *woxwidget.FocusNode
@@ -550,6 +554,15 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		}
 		return nil
 	}
+	hoverEnabled := !props.Disabled && !props.DisableHover
+	props.hovered = s.hovered && hoverEnabled && !props.Focused
+	if hoverEnabled {
+		props.onHoverAt = func(inside bool, _ woxui.Rect) {
+			if inside != s.hovered {
+				context.SetState(func() { s.hovered = inside })
+			}
+		}
+	}
 	field := buildWoxTextField(props, realState, copySelection, cutSelection, pasteClipboard, runContextAction)
 	return field
 }
@@ -795,6 +808,9 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 	if background.A == 0 && !props.Transparent {
 		background = props.Theme.QueryBackground
 	}
+	if props.hovered {
+		background = controlHoverColor(background, props.Theme.ResultTitle)
+	}
 	style := props.Style
 	if style.Size <= 0 {
 		style = woxui.TextStyle{Size: SettingsControlFontSize}
@@ -816,7 +832,7 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 		point := woxui.Point{X: max(float32(0), position.X-padding.Left), Y: max(float32(0), position.Y-padding.Top)}
 		return textFieldOffsetAt(state, props.Window, style, maxLines, props.verticalOffset, innerWidth, softWrap, point)
 	}
-	content := woxwidget.Gesture{ID: props.ID, Cursor: pointerCursor, OnScrollHandled: props.onScroll, OnTapAt: func(position woxui.Point) {
+	content := woxwidget.Gesture{ID: props.ID, Cursor: pointerCursor, OnHoverAt: props.onHoverAt, OnScrollHandled: props.onScroll, OnTapAt: func(position woxui.Point) {
 		if props.Disabled || props.Window == nil || props.onCaret == nil {
 			return
 		}

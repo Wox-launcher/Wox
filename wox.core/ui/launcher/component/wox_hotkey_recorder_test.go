@@ -42,6 +42,24 @@ func TestWoxHotkeyRecorderUsesKeyboardOnlyFocusRing(t *testing.T) {
 	}
 }
 
+func TestWoxHotkeyRecorderAddsHoverSurface(t *testing.T) {
+	subtitle := woxui.Color{R: 80, G: 90, B: 100, A: 255}
+	foreground := woxui.Color{R: 210, G: 220, B: 230, A: 255}
+	recorder, _ := WoxHotkeyRecorder(HotkeyRecorderProps{ID: "hotkey", Theme: Theme{ResultSubtitle: subtitle, ResultTitle: foreground}})
+	stateful := recorder.(woxwidget.Stateful)
+	state := &hotkeyRecorderFocusState{hovered: true}
+	state.InitState(woxwidget.StateContext{}, stateful.Widget)
+	gesture := state.Build(woxwidget.StateContext{}, stateful.Widget).(woxwidget.Focusable).Child.(woxwidget.Gesture)
+	container := gesture.Child.(woxwidget.Container)
+
+	if gesture.OnHoverAt == nil {
+		t.Fatal("hotkey recorder does not retain hover input")
+	}
+	if container.Color != controlHoverColor(woxui.Color{}, foreground) || container.BorderColor != withAlpha(subtitle, 200) {
+		t.Fatalf("hotkey recorder hover = background %#v border %#v", container.Color, container.BorderColor)
+	}
+}
+
 func TestWoxHotkeyRecorderFocusNodeOwnsRecordingLifecycle(t *testing.T) {
 	var focusChanges []bool
 	host := woxwidget.NewHost(func(frame woxui.FrameInfo) woxwidget.Widget {

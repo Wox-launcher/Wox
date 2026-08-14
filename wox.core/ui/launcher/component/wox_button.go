@@ -165,10 +165,16 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		buttonWidth = 0
 	}
 	// Center measured text and icon content inside symmetric padding instead of relying on font-specific offsets.
-	content := woxwidget.Gesture{ID: props.ID, OnTap: onTap, Child: woxwidget.Container{
-		Width: buttonWidth, Height: height, Radius: radius, Color: background, BorderColor: border, BorderWidth: boolFloat(border.A != 0), Padding: padding,
-		Child: alignedChild,
-	}}
+	content := hoverable(key, props.Disabled, func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
+		buttonBackground := background
+		if hovered {
+			buttonBackground = controlHoverColor(background, foreground)
+		}
+		return woxwidget.Gesture{ID: props.ID, OnTap: onTap, OnHoverAt: onHoverAt, Child: woxwidget.Container{
+			Width: buttonWidth, Height: height, Radius: radius, Color: buttonBackground, BorderColor: border, BorderWidth: boolFloat(border.A != 0), Padding: padding,
+			Child: alignedChild,
+		}}
+	})
 	return woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,
 		Actions: actions, Disabled: props.Disabled,
