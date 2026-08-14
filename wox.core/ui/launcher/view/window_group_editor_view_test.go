@@ -65,7 +65,7 @@ func TestWindowGroupURLDialogUsesCompactScrollableHeight(t *testing.T) {
 	state := &windowGroupURLState{rowEditor: -2, deletePending: -1}
 	dialog := state.buildDialog(woxwidget.StateContext{}, WindowGroupUrlEditorProps{Width: 1200, Height: 800, Theme: woxcomponent.Theme{}}).(woxwidget.Stateful)
 	props := dialog.Widget.(woxcomponent.DialogProps)
-	if props.Height != 340 {
-		t.Fatalf("URL dialog height = %.0f, want compact 340", props.Height)
+	if props.Height != 344 {
+		t.Fatalf("URL dialog height = %.0f, want compact 344", props.Height)
 	}
 }

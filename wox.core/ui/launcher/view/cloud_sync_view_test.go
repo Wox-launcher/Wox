@@ -179,8 +179,15 @@ func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 		t.Fatalf("dialog content = %d children gap %v, want field/actions with 12px gap", len(child.Children), child.Gap)
 	}
 	field := child.Children[0].(woxwidget.Container)
-	actions := child.Children[1].(woxwidget.Align)
-	if field.Height+child.Gap+actions.Height+props.Padding.Top+props.Padding.Bottom != props.Height {
+	actionsFooter := child.Children[1].(woxwidget.Container)
+	if actionsFooter.Height != SettingsDialogActionsHeight || actionsFooter.Padding.Top != 12 {
+		t.Fatalf("plugin exclusion footer = height %v padding %+v, want shared settings actions", actionsFooter.Height, actionsFooter.Padding)
+	}
+	actions := actionsFooter.Child.(woxwidget.Align)
+	if actions.Horizontal != 1 || actions.Height != 36 {
+		t.Fatalf("plugin exclusion actions = height %v alignment %v, want right-aligned 36px row", actions.Height, actions.Horizontal)
+	}
+	if field.Height+child.Gap+actionsFooter.Height+props.Padding.Top+props.Padding.Bottom != props.Height {
 		t.Fatal("plugin exclusion dialog should not reserve extra space below its actions")
 	}
 	fieldLayout := field.Child.(woxwidget.Flex)

@@ -25,6 +25,9 @@ func TestReadonlyFormTableUsesFullWidthAndCellTooltip(t *testing.T) {
 	if !text.ShrinkWrap {
 		t.Fatal("tooltip cell text should shrink to its content so the trigger stays adjacent")
 	}
+	if content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+		t.Fatalf("tooltip cell alignment = %v, want vertical center", content.CrossAxisAlignment)
+	}
 	tooltip := content.Children[1].(woxwidget.Gesture)
 	if tooltip.ID != "notes-row-2-cell-1-tooltip" || tooltip.OnHoverAt == nil {
 		t.Fatal("readonly cell should expose the shared table tooltip contract")

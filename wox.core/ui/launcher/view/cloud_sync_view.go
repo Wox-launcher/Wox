@@ -198,8 +198,8 @@ type CloudPluginExclusionDialogProps struct {
 	OnSave       func()
 }
 
-// CloudPluginExclusionDialogHeight fits the field and actions inside the shared 24px dialog padding.
-const CloudPluginExclusionDialogHeight = float32(156)
+// CloudPluginExclusionDialogHeight fits the field and shared actions inside the dialog padding.
+const CloudPluginExclusionDialogHeight = float32(168)
 
 const cloudSyncCardHeight = float32(66)
 
@@ -705,12 +705,10 @@ func CloudPluginExclusionDialog(props CloudPluginExclusionDialogProps) woxwidget
 		},
 		OnChoiceTap: props.OnChoiceTap,
 	})
-	actions := woxwidget.Align{Width: contentWidth, Height: 36, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
-		Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-plugin-exclusion-cancel", Label: props.CancelLabel, Height: 36, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-plugin-exclusion-save", Label: props.SaveLabel, Height: 36, Variant: woxcomponent.ButtonPrimary, Disabled: props.Selected == "", OnTap: props.OnSave, Theme: props.Theme}),
-		},
-	}}
+	actions := settingsDialogActions(contentWidth, props.Theme,
+		settingsDialogAction{ID: "cloud-plugin-exclusion-cancel", Label: props.CancelLabel, OnTap: props.OnCancel},
+		settingsDialogAction{ID: "cloud-plugin-exclusion-save", Label: props.SaveLabel, Disabled: props.Selected == "", OnTap: props.OnSave},
+	)
 	dialog := woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "cloud-plugin-exclusion-dialog", Label: props.FieldLabel, Width: panelWidth, Height: panelHeight,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "cloud-plugin-exclusion-backdrop", BackdropAlpha: 205,
@@ -840,11 +838,11 @@ func CloudFormOverlay(props CloudFormOverlayProps) woxwidget.Widget {
 		appendContent(woxwidget.TextBlock{Value: props.Feedback, Width: innerWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: 11}, LineHeight: 17, Color: props.FeedbackColor}, 34, 10)
 	}
 
-	actions := woxwidget.Align{Width: innerWidth, Height: 36, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-form-cancel", Label: props.CancelLabel, Height: 36, Radius: 4, FontSize: 13, Disabled: props.Saving, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "cloud-form-submit", Label: props.SubmitLabel, Height: 36, Radius: 4, FontSize: 13, Disabled: !props.SubmitEnabled, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSubmit, Theme: props.Theme}),
-	}}}
-	appendContent(actions, 36, 12)
+	actions := settingsDialogActions(innerWidth, props.Theme,
+		settingsDialogAction{ID: "cloud-form-cancel", Label: props.CancelLabel, Disabled: props.Saving, OnTap: props.OnCancel},
+		settingsDialogAction{ID: "cloud-form-submit", Label: props.SubmitLabel, Disabled: !props.SubmitEnabled, OnTap: props.OnSubmit},
+	)
+	appendContent(actions, SettingsDialogActionsHeight, 12)
 
 	panelHeight := min(contentHeight+48, props.Height-56)
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{

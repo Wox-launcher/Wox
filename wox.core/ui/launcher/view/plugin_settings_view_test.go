@@ -767,11 +767,15 @@ func TestFormTableDeleteDialogMatchesFlutterActions(t *testing.T) {
 	state.InitState(woxwidget.StateContext{}, dialog.Widget)
 	stack := state.Build(woxwidget.StateContext{}, dialog.Widget).(woxwidget.Stack)
 	panel := stack.Children[1].Child.(woxwidget.FocusScope).Child.(woxwidget.Semantics).Child.(woxwidget.Container)
-	if panel.Width != 270 || panel.Height != 110 || panel.Radius != 20 {
-		t.Fatalf("delete dialog geometry = %vx%v radius %v, want 270x110 radius 20", panel.Width, panel.Height, panel.Radius)
+	if panel.Width != 270 || panel.Height != 120 || panel.Radius != 20 {
+		t.Fatalf("delete dialog geometry = %vx%v radius %v, want 270x120 radius 20", panel.Width, panel.Height, panel.Radius)
 	}
 	content := panel.Child.(woxwidget.Flex)
-	actions := content.Children[1].(woxwidget.Align)
+	actionsFooter := content.Children[1].(woxwidget.Container)
+	if actionsFooter.Height != SettingsDialogActionsHeight || actionsFooter.Padding.Top != 12 {
+		t.Fatalf("delete footer = height %v padding %+v, want shared settings actions", actionsFooter.Height, actionsFooter.Padding)
+	}
+	actions := actionsFooter.Child.(woxwidget.Align)
 	if actions.Horizontal != 1 {
 		t.Fatal("delete actions should stay right-aligned")
 	}

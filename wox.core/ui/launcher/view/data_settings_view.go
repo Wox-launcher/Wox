@@ -111,9 +111,6 @@ func dataSectionHeader(props DataSettingsProps, label string, width float32) wox
 }
 
 func dataStorageField(props DataSettingsProps, width float32) woxwidget.Widget {
-	openWidth := dataCompactButtonWidth(props.Labels.Open, 76)
-	changeWidth := dataCompactButtonWidth(props.Labels.LocationChange, 112)
-	buttonsWidth := openWidth + 10 + changeWidth
 	buttons := []woxwidget.Widget{
 		dataButton(props, "data-location-open", props.Labels.Open, woxcomponent.ButtonOutline, func() {
 			if props.OnOpenPath != nil {
@@ -123,9 +120,6 @@ func dataStorageField(props DataSettingsProps, width float32) woxwidget.Widget {
 		dataButton(props, "data-location-change", props.Labels.LocationChange, woxcomponent.ButtonOutline, props.OnChooseLocation),
 	}
 	if props.PendingLocation != "" {
-		cancelWidth := dataCompactButtonWidth(props.Labels.Cancel, 76)
-		confirmWidth := dataCompactButtonWidth(props.Labels.LocationChangeConfirm, 112)
-		buttonsWidth = cancelWidth + 10 + confirmWidth
 		buttons = []woxwidget.Widget{
 			dataButton(props, "data-location-cancel", props.Labels.Cancel, woxcomponent.ButtonOutline, props.OnCancelLocation),
 			dataButton(props, "data-location-confirm", props.Labels.LocationChangeConfirm, woxcomponent.ButtonMuted, props.OnConfirmLocation),
@@ -134,8 +128,8 @@ func dataStorageField(props DataSettingsProps, width float32) woxwidget.Widget {
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LocationTitle, Description: props.Labels.LocationDescription,
 		Width: width, Height: 78, Gap: 10, Padding: woxwidget.Insets{Top: 5}, DescriptionMaxLines: 2, Theme: props.Theme,
-		Child: woxwidget.Container{Width: buttonsWidth, Height: 60, Padding: woxwidget.Insets{Top: 3}, Child: woxwidget.Flex{
-			Axis: woxwidget.Horizontal, Gap: 10, MainAxisAlignment: woxwidget.MainAxisEnd, Children: buttons,
+		Child: woxwidget.Container{Height: 60, Padding: woxwidget.Insets{Top: 3}, Child: woxwidget.Flex{
+			Axis: woxwidget.Horizontal, Gap: 10, Children: buttons,
 		}},
 	})
 }
@@ -226,21 +220,14 @@ func dataLogActionsField(props DataSettingsProps, width float32) woxwidget.Widge
 	if props.ClearLogsArmed {
 		clearLabel = props.Labels.LogClearConfirm
 	}
-	clearWidth := dataCompactButtonWidth(clearLabel, 104)
-	openWidth := dataCompactButtonWidth(props.Labels.LogOpenButton, 112)
-	actionsWidth := clearWidth + 10 + openWidth
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LogClearTitle, Description: props.Labels.LogClearDescription,
 		Width: width, Height: 66, Gap: 10, Padding: woxwidget.Insets{Top: 5}, Theme: props.Theme,
-		Child: woxwidget.Container{Width: actionsWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, MainAxisAlignment: woxwidget.MainAxisEnd, Children: []woxwidget.Widget{
+		Child: woxwidget.Container{Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 			dataButton(props, "data-log-clear", clearLabel, woxcomponent.ButtonOutline, props.OnClearLogs),
 			dataButton(props, "data-log-open", props.Labels.LogOpenButton, woxcomponent.ButtonOutline, props.OnOpenLog),
 		}}},
 	})
-}
-
-func dataCompactButtonWidth(label string, minWidth float32) float32 {
-	return max(minWidth, float32(len([]rune(strings.TrimSpace(label))))*7+24)
 }
 
 func dataButton(props DataSettingsProps, id, label string, variant woxcomponent.ButtonVariant, onTap func()) woxwidget.Widget {

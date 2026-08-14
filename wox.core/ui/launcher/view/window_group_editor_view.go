@@ -157,7 +157,7 @@ func WindowGroupEditor(props WindowGroupEditorProps) woxwidget.Widget {
 	if props.NameError != "" {
 		headerHeight = 58
 	}
-	fixedHeight := float32(48+20+16+14+16+38) + headerHeight
+	fixedHeight := float32(48+20+16+14+16+48) + headerHeight
 	bodyHeight := windowGroupDialogBodyHeight
 	if props.Height > 0 {
 		if maxBody := props.Height - 48 - fixedHeight; maxBody > 0 && maxBody < bodyHeight {
@@ -170,10 +170,10 @@ func WindowGroupEditor(props WindowGroupEditorProps) woxwidget.Widget {
 		windowGroupEditorHeader(props, innerWidth),
 		windowGroupEditorBody(props, innerWidth, bodyHeight),
 	}}
-	actions := woxwidget.Align{Width: innerWidth, Height: 38, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-cancel", Label: props.CancelLabel, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-save", Label: props.SaveLabel, Height: 38, Radius: 4, FontSize: 13, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
-	}}}
+	actions := settingsDialogActions(innerWidth, props.Theme,
+		settingsDialogAction{ID: "window-group-cancel", Label: props.CancelLabel, OnTap: props.OnCancel},
+		settingsDialogAction{ID: "window-group-save", Label: props.SaveLabel, OnTap: props.OnSave},
+	)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 16, Children: []woxwidget.Widget{
 		woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 16}, Color: props.Theme.ResultTitle},
 		body,
@@ -541,7 +541,7 @@ func (s *windowGroupURLState) buildDialog(context woxwidget.StateContext, props 
 	const tableHeight = float32(164)
 	panelWidth := min(contentWidth+48, max(float32(360), props.Width-56))
 	innerWidth := max(float32(0), panelWidth-48)
-	panelHeight := min(props.Height-48, tableHeight+176)
+	panelHeight := min(props.Height-48, tableHeight+180)
 	rows := make([]FormTableRow, len(s.urls))
 	for index, value := range s.urls {
 		rows[index] = FormTableRow{Index: index, Cells: []FormTableCell{{Text: value}}}
@@ -574,29 +574,27 @@ func (s *windowGroupURLState) buildDialog(context woxwidget.StateContext, props 
 			}
 		},
 	})
-	actions := woxwidget.Align{Width: innerWidth, Height: 38, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
-		Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-cancel", Label: props.CancelLabel, Height: 38, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-save", Label: props.SaveLabel, Height: 38, Variant: woxcomponent.ButtonPrimary, OnTap: func() {
-				if props.OnSave == nil {
-					return
+	actions := settingsDialogActions(innerWidth, props.Theme,
+		settingsDialogAction{ID: "window-group-url-cancel", Label: props.CancelLabel, OnTap: props.OnCancel},
+		settingsDialogAction{ID: "window-group-url-save", Label: props.SaveLabel, OnTap: func() {
+			if props.OnSave == nil {
+				return
+			}
+			urls := make([]string, 0, len(s.urls))
+			for _, value := range s.urls {
+				if normalized := normalizeWindowGroupURL(value); normalized != "" {
+					urls = append(urls, normalized)
 				}
-				urls := make([]string, 0, len(s.urls))
-				for _, value := range s.urls {
-					if normalized := normalizeWindowGroupURL(value); normalized != "" {
-						urls = append(urls, normalized)
-					}
-				}
-				props.OnSave(urls)
-			}, Theme: props.Theme}),
-		},
-	}}
+			}
+			props.OnSave(urls)
+		}},
+	)
 	content := woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: innerWidth, Height: 28, Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 16}, Color: props.Theme.ResultTitle}},
 		woxwidget.Container{Width: innerWidth, Height: 22, Child: woxwidget.Text{Value: props.Description, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}},
 		table,
 		woxwidget.Container{Width: innerWidth, Height: 50, Padding: woxwidget.Insets{Top: 6}, Child: windowGroupExtensionStatus(props, innerWidth)},
-		woxwidget.Container{Width: innerWidth, Height: 44, Padding: woxwidget.Insets{Top: 6}, Child: actions},
+		actions,
 	}}
 	border := windowGroupFadeColor(props.Theme.PreviewSplit, 0.9)
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
@@ -621,27 +619,25 @@ func (s *windowGroupURLState) buildRowEditor(context woxwidget.StateContext, pro
 		Value: s.draft, Window: props.Window, Theme: props.Theme,
 		OnChanged: func(value string) { context.SetState(func() { s.draft = value; s.draftError = "" }) },
 	})
-	actions := woxwidget.Align{Width: innerWidth, Height: 38, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{
-		Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-row-cancel", Label: props.CancelLabel, Height: 38, Variant: woxcomponent.ButtonOutline, OnTap: func() { context.SetState(func() { s.rowEditor = -2; s.draftError = "" }) }, Theme: props.Theme}),
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "window-group-url-row-save", Label: props.SaveLabel, Height: 38, Variant: woxcomponent.ButtonPrimary, OnTap: func() {
-				value := strings.TrimSpace(s.draft)
-				if value == "" {
-					context.SetState(func() { s.draftError = props.RequiredLabel })
-					return
+	actions := settingsDialogActions(innerWidth, props.Theme,
+		settingsDialogAction{ID: "window-group-url-row-cancel", Label: props.CancelLabel, OnTap: func() { context.SetState(func() { s.rowEditor = -2; s.draftError = "" }) }},
+		settingsDialogAction{ID: "window-group-url-row-save", Label: props.SaveLabel, OnTap: func() {
+			value := strings.TrimSpace(s.draft)
+			if value == "" {
+				context.SetState(func() { s.draftError = props.RequiredLabel })
+				return
+			}
+			context.SetState(func() {
+				if s.rowEditor >= 0 && s.rowEditor < len(s.urls) {
+					s.urls[s.rowEditor] = value
+				} else {
+					s.urls = append(s.urls, value)
 				}
-				context.SetState(func() {
-					if s.rowEditor >= 0 && s.rowEditor < len(s.urls) {
-						s.urls[s.rowEditor] = value
-					} else {
-						s.urls = append(s.urls, value)
-					}
-					s.rowEditor = -2
-					s.draftError = ""
-				})
-			}, Theme: props.Theme}),
-		},
-	}}
+				s.rowEditor = -2
+				s.draftError = ""
+			})
+		}},
+	)
 	children := []woxwidget.Widget{
 		woxwidget.Container{Width: innerWidth, Height: 30, Child: woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText}},
 		field,
@@ -649,8 +645,8 @@ func (s *windowGroupURLState) buildRowEditor(context woxwidget.StateContext, pro
 	if s.draftError != "" {
 		children = append(children, woxwidget.Container{Width: innerWidth, Height: 22, Padding: woxwidget.Insets{Top: 4}, Child: woxwidget.Text{Value: s.draftError, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText}})
 	}
-	children = append(children, woxwidget.Container{Width: innerWidth, Height: 54, Padding: woxwidget.Insets{Top: 16}, Child: actions})
-	panelHeight := float32(176)
+	children = append(children, actions)
+	panelHeight := float32(166)
 	if s.draftError != "" {
 		panelHeight += 22
 	}

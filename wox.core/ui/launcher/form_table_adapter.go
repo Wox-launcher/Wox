@@ -324,11 +324,11 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette u
 		if snapshot.status != "" {
 			statusHeight = 28
 		}
-		panelHeight = max(float32(0), min(contentHeight+launcherview.FormTableRowEditorFooterHeight+statusHeight+48, height-56))
+		panelHeight = max(float32(0), min(max(float32(48), contentHeight)+launcherview.FormTableRowEditorFooterHeight+statusHeight+48, height-56))
 		if snapshot.definition.Value.Key == "QueryHotkeys" {
 			panelHeight = max(float32(0), min(float32(632), height-56))
 		}
-		bodyHeight = max(float32(120), panelHeight-48)
+		bodyHeight = max(float32(48), panelHeight-48)
 	}
 	var body woxwidget.Widget
 	if snapshot.rowForm != nil {

@@ -50,8 +50,8 @@ func TestWindowGroupEditorBuildsDialog(t *testing.T) {
 	if props.OnEscape == nil {
 		t.Fatal("workspace editor should expose its cancel action to Escape")
 	}
-	if props.Height != 712 {
-		t.Fatalf("workspace editor height = %.0f, want 712", props.Height)
+	if props.Height != 722 {
+		t.Fatalf("workspace editor height = %.0f, want 722", props.Height)
 	}
 }
 

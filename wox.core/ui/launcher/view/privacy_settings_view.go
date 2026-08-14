@@ -100,9 +100,9 @@ func PrivacySampleDialog(props PrivacySampleDialogProps) woxwidget.Widget {
 	dialogHeight := max(float32(0), min(float32(370), props.Height-40))
 	innerWidth := max(float32(0), dialogWidth-40)
 	innerHeight := max(float32(0), dialogHeight-40)
-	fixedHeight := float32(90)
+	fixedHeight := float32(100)
 	if props.Error != "" {
-		fixedHeight = 122
+		fixedHeight = 132
 	}
 	sampleHeight := max(float32(100), innerHeight-fixedHeight)
 	children := []woxwidget.Widget{
@@ -120,10 +120,10 @@ func PrivacySampleDialog(props PrivacySampleDialogProps) woxwidget.Widget {
 			Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ErrorText,
 		})
 	}
-	children = append(children, woxwidget.Align{Width: innerWidth, Height: 38, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "privacy-sample-copy", Label: props.CopyLabel, OnTap: props.OnCopy, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "privacy-sample-close", Label: props.ConfirmLabel, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnClose, Theme: props.Theme}),
-	}}})
+	children = append(children, settingsDialogActions(innerWidth, props.Theme,
+		settingsDialogAction{ID: "privacy-sample-copy", Label: props.CopyLabel, OnTap: props.OnCopy},
+		settingsDialogAction{ID: "privacy-sample-close", Label: props.ConfirmLabel, OnTap: props.OnClose},
+	))
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "privacy-sample-dialog", Label: props.Title, Width: dialogWidth, Height: dialogHeight,
 		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "privacy-sample-backdrop", BackdropColor: woxui.Color{R: 0, G: 0, B: 0, A: 112},

@@ -578,7 +578,7 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 		paddingTop = max(float32(0), (tableSurfaceRowHeight-iconSize)/2)
 	}
 	if cell.Tooltip != "" && props.InfoIcon != nil {
-		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, Children: []woxwidget.Widget{
+		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			content,
 			woxwidget.Gesture{ID: fmt.Sprintf("%s-row-%d-cell-%d-tooltip", props.ID, rowIndex, columnIndex), OnHoverAt: func(inside bool, bounds woxui.Rect) {
 				if props.OnTooltip != nil {
@@ -661,21 +661,12 @@ type FormTableDeleteDialogProps struct {
 // FormTableDeleteDialog builds the compact confirmation shown before deleting one row.
 func FormTableDeleteDialog(props FormTableDeleteDialogProps) woxwidget.Widget {
 	panelWidth := min(float32(270), max(float32(0), props.Width-56))
-	panelHeight := min(float32(110), max(float32(0), props.Height-56))
+	panelHeight := min(float32(120), max(float32(0), props.Height-56))
 	innerWidth := max(float32(0), panelWidth-48)
-	actions := woxwidget.Align{
-		Width: innerWidth, Height: 34, Horizontal: 1, Vertical: 0.5,
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: []woxwidget.Widget{
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "form-table-delete-cancel", Label: props.CancelLabel, Height: 34,
-				Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme,
-			}),
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "form-table-delete-confirm", Label: props.DeleteLabel, Height: 34,
-				Variant: woxcomponent.ButtonPrimary, OnTap: props.OnDelete, Theme: props.Theme,
-			}),
-		}},
-	}
+	actions := settingsDialogActions(innerWidth, props.Theme,
+		settingsDialogAction{ID: "form-table-delete-cancel", Label: props.CancelLabel, OnTap: props.OnCancel},
+		settingsDialogAction{ID: "form-table-delete-confirm", Label: props.DeleteLabel, OnTap: props.OnDelete},
+	)
 	border := formTableAlpha(props.Theme.ResultSubtitle, 104)
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "form-table-delete-dialog", Label: props.Message, Width: panelWidth, Height: panelHeight,
@@ -1265,8 +1256,8 @@ type FormTableRowEditorProps struct {
 	OnSave        func()
 }
 
-// FormTableRowEditorFooterHeight reserves the action row without duplicating the dialog's bottom padding.
-const FormTableRowEditorFooterHeight = float32(44)
+// FormTableRowEditorFooterHeight reserves the shared action row without duplicating the dialog's bottom padding.
+const FormTableRowEditorFooterHeight = SettingsDialogActionsHeight
 
 // FormTableRowEditor builds the add, edit, or clone row form.
 func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
@@ -1301,15 +1292,10 @@ func FormTableRowEditor(props FormTableRowEditorProps) woxwidget.Widget {
 			Value: props.Status, Style: woxui.TextStyle{Size: 10}, Color: props.Theme.ErrorText,
 		}})
 	}
-	// Flutter sizes Cancel/Save from translated labels; keep them right-aligned without fixed widths.
-	buttons := woxwidget.Align{
-		Width: props.Width, Height: 36, Horizontal: 1, Vertical: 0.5,
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-row-cancel", Label: props.CancelLabel, Height: 36, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonOutline, OnTap: props.OnCancel, Theme: props.Theme}),
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-row-save", Label: props.SaveLabel, Height: 36, Radius: 4, FontSize: 12, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSave, Theme: props.Theme}),
-		}},
-	}
-	children = append(children, woxwidget.Container{Width: props.Width, Height: FormTableRowEditorFooterHeight, Padding: woxwidget.Insets{Top: 8}, Child: buttons})
+	children = append(children, settingsDialogActions(props.Width, props.Theme,
+		settingsDialogAction{ID: "form-table-row-cancel", Label: props.CancelLabel, OnTap: props.OnCancel},
+		settingsDialogAction{ID: "form-table-row-save", Label: props.SaveLabel, OnTap: props.OnSave},
+	))
 	return woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}
 }
 

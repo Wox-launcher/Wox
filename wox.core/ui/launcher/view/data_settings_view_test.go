@@ -39,7 +39,7 @@ func TestDataLogLevelUsesSharedAnchoredDropdown(t *testing.T) {
 	}
 }
 
-func TestDataStorageFieldButtonsExpandForLongLocalizedLabels(t *testing.T) {
+func TestDataStorageFieldUsesIntrinsicButtonWidths(t *testing.T) {
 	field := dataStorageField(DataSettingsProps{
 		Labels: DataSettingsLabels{
 			Open:           "Open",
@@ -54,15 +54,11 @@ func TestDataStorageFieldButtonsExpandForLongLocalizedLabels(t *testing.T) {
 	actions := actionsContainer.Child.(woxwidget.Flex)
 	changeButton := actions.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
 
-	if actions.MainAxisAlignment != woxwidget.MainAxisEnd {
-		t.Fatalf("storage actions alignment = %v, want end", actions.MainAxisAlignment)
+	if actions.MainAxisAlignment != woxwidget.MainAxisStart {
+		t.Fatalf("storage actions alignment = %v, want intrinsic start", actions.MainAxisAlignment)
 	}
-	if changeButton.Width != 0 {
-		t.Fatalf("change button width = %v, want content-sized", changeButton.Width)
-	}
-	expectedActionsWidth := dataCompactButtonWidth("Open", 76) + 10 + dataCompactButtonWidth("Change Location Path", 112)
-	if actionsContainer.Width != expectedActionsWidth {
-		t.Fatalf("actions width = %v, want reserved %v", actionsContainer.Width, expectedActionsWidth)
+	if changeButton.Width != 0 || actionsContainer.Width != 0 {
+		t.Fatalf("storage widths = button %.0f/container %.0f, want intrinsic sizing", changeButton.Width, actionsContainer.Width)
 	}
 	if label.Child.(woxwidget.Container).Width != 0 {
 		t.Fatal("storage label should use the remaining field width")
@@ -81,7 +77,36 @@ func TestDataLogActionsAreRightAligned(t *testing.T) {
 	row := field.Child.(woxwidget.Flex)
 	actionsContainer := row.Children[1].(woxwidget.Container)
 	actions := actionsContainer.Child.(woxwidget.Flex)
-	if actions.MainAxisAlignment != woxwidget.MainAxisEnd {
-		t.Fatalf("log actions alignment = %v, want end", actions.MainAxisAlignment)
+	if actions.MainAxisAlignment != woxwidget.MainAxisStart {
+		t.Fatalf("log actions alignment = %v, want intrinsic start", actions.MainAxisAlignment)
+	}
+	clearButton := actions.Children[0].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	openButton := actions.Children[1].(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+	if clearButton.Width != 0 || openButton.Width != 0 || actionsContainer.Width != 0 {
+		t.Fatalf("log widths = %.0f/%.0f/container %.0f, want intrinsic sizing", clearButton.Width, openButton.Width, actionsContainer.Width)
+	}
+}
+
+func TestDataLogOpenButtonAcceptsClicksAcrossIntrinsicBounds(t *testing.T) {
+	openTaps := 0
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return dataLogActionsField(DataSettingsProps{
+			Labels:    DataSettingsLabels{LogClearTitle: "Clear logs", LogClearButton: "Clear", LogOpenButton: "Open log file"},
+			OnOpenLog: func() { openTaps++ },
+		}, 820)
+	})
+	host.AttachServices(settingsWindowHostServices{})
+	defer host.Dispose()
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 820, Height: 66}, PixelSize: woxui.PixelSize{Width: 820, Height: 66}, Scale: 1})
+
+	bounds, ok := host.BoundsForKey(woxwidget.Key("data-log-open"))
+	if !ok || bounds.Width <= 2 {
+		t.Fatalf("open button bounds = %+v, want an intrinsic clickable area", bounds)
+	}
+	point := woxui.Point{X: bounds.X + 1, Y: bounds.Y + bounds.Height/2}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+	if openTaps != 1 {
+		t.Fatalf("open button taps = %d at %+v, want 1 from its padding area", openTaps, bounds)
 	}
 }
