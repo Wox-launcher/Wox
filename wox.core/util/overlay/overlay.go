@@ -1,5 +1,17 @@
 package overlay
 
+import (
+	"math"
+	"runtime"
+	"sync"
+	"time"
+
+	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
+	"wox/util/screen"
+	"wox/util/window"
+)
+
 const (
 	AnchorTopLeft      = 0
 	AnchorTopCenter    = 1
@@ -12,92 +24,457 @@ const (
 	AnchorBottomRight  = 8
 )
 
-// NativeAttachmentKind identifies the platform handle type embedded inside an overlay.
-type NativeAttachmentKind int
-
-const (
-	NativeAttachmentKindNone NativeAttachmentKind = iota
-	NativeAttachmentKindView
-	NativeAttachmentKindWindow
-)
-
-// NativeAttachment lets overlay subpackages attach platform-owned content
-// without adding business-specific fields to the base overlay API.
-type NativeAttachment struct {
-	Kind      NativeAttachmentKind
-	Handle    uintptr
-	Width     float64
-	Height    float64
-	OnRelease func()
-}
-
-func (attachment NativeAttachment) active() bool {
-	return attachment.Kind != NativeAttachmentKindNone && attachment.Handle != 0
-}
-
-// WindowOptions defines only the window-level behavior of an overlay.
+// WindowOptions defines the window-level behavior shared by runtime overlays.
 type WindowOptions struct {
-	// ID is a unique identifier for the overlay. Reusing the same ID updates the existing overlay.
-	ID string
-	// Transparent makes the overlay a clear drawing surface instead of the default HUD background.
-	Transparent bool
-	// Shadow requests a native outer window shadow, including for transparent attachment overlays.
-	Shadow bool
-	// HitTestIconOnly lets transparent overlay whitespace pass through while keeping content interactive.
-	HitTestIconOnly bool
-	// CloseOnEscape lets a focused overlay close itself on Esc.
-	CloseOnEscape bool
-	// TakeFocus makes the overlay steal keyboard focus when it appears so Esc
-	// works without an extra click. Only meaningful on Windows; macOS already
-	// focuses CloseOnEscape overlays via NonactivatingPanel. Use this only for
-	// overlays that need immediate keyboard dismissal (e.g. dictation recording).
-	TakeFocus bool
-	// NativeAttachment embeds platform-native content supplied by overlay subpackages.
-	NativeAttachment NativeAttachment
-	// Topmost puts the overlay above Wox's launcher window instead of using the default notification level.
-	Topmost bool
-	// AbsolutePosition treats OffsetX/OffsetY as desktop-absolute coordinates for AnchorTopLeft.
+	ID               string
+	CloseOnEscape    bool
+	TakeFocus        bool
+	Topmost          bool
 	AbsolutePosition bool
-	// PreservePosition keeps an existing overlay at its current window position during content updates.
 	PreservePosition bool
-	// StickyWindowPid determines the positioning context. If 0, the overlay is positioned relative to the screen.
-	StickyWindowPid int
-	// StickyWindowId optionally identifies the exact native target window on platforms that support it.
-	StickyWindowId string
-	// Anchor defines the reference point on the target and the overlay itself.
-	Anchor int
-	// OffsetX moves the overlay horizontally from the anchor point.
-	OffsetX float64
-	// OffsetY moves the overlay vertically from the anchor point.
-	OffsetY float64
-	// Movable determines if the overlay can be dragged by the user.
-	Movable bool
-	// Resizable lets native overlay windows be resized by dragging their edges.
-	Resizable bool
-	// CornerRadius controls the overlay window corner radius in DIP/pt.
-	CornerRadius float64
-	// AspectRatio keeps a resizable overlay at width/height while the user resizes it.
-	AspectRatio float64
-	// Width of the overlay. If 0, it auto-sizes based on content/default.
-	Width float64
-	// MinWidth overrides the platform default minimum width when auto-sizing overlays.
-	MinWidth float64
-	// MaxWidth caps auto-sized overlays.
-	MaxWidth float64
-	// Height of the overlay. If 0, it auto-sizes based on content.
-	Height float64
-	// MaxHeight caps auto-sized overlays.
-	MaxHeight float64
-	// OnClose is invoked when the overlay is closed by the user.
-	OnClose func()
+	StickyWindowPid  int
+	StickyWindowId   string
+	Anchor           int
+	OffsetX          float64
+	OffsetY          float64
+	Movable          bool
+	Resizable        bool
+	CornerRadius     float64
+	AspectRatio      float64
+	Width            float64
+	MinWidth         float64
+	MaxWidth         float64
+	Height           float64
+	MaxHeight        float64
+	OnClose          func()
 }
 
-// ShowWindow displays an overlay using only window-level configuration.
-func ShowWindow(opts WindowOptions) {
-	RegisterCloseCallback(opts.ID, opts.OnClose)
-	releaseOldAttachment := RegisterNativeAttachment(opts.ID, opts.NativeAttachment)
-	showWindow(opts)
-	if releaseOldAttachment != nil {
-		releaseOldAttachment()
+// View supplies one overlay's portable measurement, widget tree, and interaction state.
+type View struct {
+	Kind      string
+	Measure   func(window *woxui.Window, workArea woxui.Rect) woxui.Size
+	Build     func(window *woxui.Window, frame woxui.FrameInfo) woxwidget.Widget
+	OnPointer func(event woxui.PointerEvent)
+	OnKey     func(event woxui.KeyEvent) bool
+	OnFocus   func(event woxui.FocusEvent)
+	OnDispose func()
+}
+
+type runtimeOverlay struct {
+	id      string
+	options WindowOptions
+	view    View
+	managed *woxui.ManagedWindow
+	window  *woxui.Window
+	host    *woxwidget.Host
+
+	stickyStop chan struct{}
+}
+
+var runtimeOverlays = struct {
+	sync.Mutex
+	manager *woxui.WindowManager
+	byID    map[string]*runtimeOverlay
+}{byID: map[string]*runtimeOverlay{}}
+
+// SetWindowManager attaches overlays to the process-local Go UI window registry.
+func SetWindowManager(manager *woxui.WindowManager) {
+	runtimeOverlays.Lock()
+	runtimeOverlays.manager = manager
+	runtimeOverlays.Unlock()
+}
+
+// ShowWindow creates or updates one runtime-rendered overlay.
+func ShowWindow(options WindowOptions, view View) bool {
+	if options.ID == "" || view.Build == nil {
+		return false
 	}
+	shown := false
+	if err := woxui.Call(func() { shown = showWindowOnUI(options, view) }); err != nil {
+		return false
+	}
+	if shown {
+		RegisterCloseCallback(options.ID, options.OnClose)
+	}
+	return shown
+}
+
+func showWindowOnUI(options WindowOptions, view View) bool {
+	runtimeOverlays.Lock()
+	manager := runtimeOverlays.manager
+	instance := runtimeOverlays.byID[options.ID]
+	runtimeOverlays.Unlock()
+	if manager == nil {
+		return false
+	}
+	if instance != nil && instance.view.Kind != view.Kind && windowCreationOptionsChanged(instance.options, options) {
+		_ = instance.managed.Close()
+		instance = nil
+	}
+
+	created := instance == nil
+	if created {
+		instance = &runtimeOverlay{id: options.ID}
+		instance.host = woxwidget.NewHost(func(frame woxui.FrameInfo) woxwidget.Widget {
+			content := instance.view.Build(instance.window, frame)
+			if !instance.options.Movable {
+				return content
+			}
+			return woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: []woxwidget.StackChild{
+				{Child: woxwidget.Gesture{ID: "overlay-drag", OnDragStart: func() { _ = instance.window.StartDragging() }, Child: woxwidget.Container{Width: frame.Size.Width, Height: frame.Size.Height}}},
+				{Child: content},
+			}}
+		})
+		initialWidth := float32(options.Width)
+		if initialWidth <= 0 {
+			initialWidth = 100
+		}
+		initialHeight := float32(options.Height)
+		if initialHeight <= 0 {
+			initialHeight = 80
+		}
+		managed, _, err := manager.Open(woxui.WindowID("overlay."+options.ID), woxui.WindowOptions{
+			Title:         "Wox Overlay",
+			Size:          woxui.Size{Width: initialWidth, Height: initialHeight},
+			Role:          woxui.WindowRoleUtility,
+			Resizable:     options.Resizable,
+			AspectRatio:   float32(options.AspectRatio),
+			Nonactivating: !(options.TakeFocus || options.CloseOnEscape),
+			OnFrame:       instance.host.Frame,
+			OnPointer: func(event woxui.PointerEvent) {
+				if instance.view.OnPointer != nil {
+					instance.view.OnPointer(event)
+				}
+				instance.host.Pointer(event)
+			},
+			OnKey: func(event woxui.KeyEvent) bool {
+				if event.Down && event.Key == woxui.KeyEscape && instance.options.CloseOnEscape {
+					RequestClose(instance.id)
+					return true
+				}
+				if instance.view.OnKey != nil && instance.view.OnKey(event) {
+					return true
+				}
+				return instance.host.Key(event)
+			},
+			OnTextInput: func(event woxui.TextInputEvent) { instance.host.TextInput(event) },
+			OnFocus: func(event woxui.FocusEvent) {
+				instance.host.SetWindowFocused(event.Active)
+				if instance.view.OnFocus != nil {
+					instance.view.OnFocus(event)
+				}
+			},
+			OnCloseRequested: func() { RequestClose(instance.id) },
+			OnClosed:         instance.dispose,
+		})
+		if err != nil {
+			instance.host.Dispose()
+			return false
+		}
+		instance.managed = managed
+		instance.window = managed.Window()
+		instance.host.Attach(instance.window)
+		_ = instance.window.SetAppearance(true)
+		runtimeOverlays.Lock()
+		runtimeOverlays.byID[instance.id] = instance
+		runtimeOverlays.Unlock()
+	}
+
+	if !created && instance.view.Kind != view.Kind && instance.view.OnDispose != nil {
+		instance.view.OnDispose()
+	}
+	stickyChanged := instance.options.StickyWindowPid != options.StickyWindowPid || instance.options.StickyWindowId != options.StickyWindowId
+	instance.options = options
+	instance.view = view
+	instance.applyLayout(false)
+	if created {
+		if _, err := instance.managed.Show(); err != nil {
+			_ = instance.managed.Close()
+			return false
+		}
+	}
+	if stickyChanged || created {
+		instance.restartStickyTracking()
+	}
+	return true
+}
+
+// Relayout remeasures an existing overlay while preserving its current origin.
+func Relayout(id string) {
+	_ = woxui.Call(func() {
+		if instance := runtimeOverlayByID(id); instance != nil {
+			instance.applyLayout(true)
+		}
+	})
+}
+
+// ScaleWindow resizes an overlay around its center while preserving its configured aspect ratio.
+func ScaleWindow(id string, factor, minWidth, minHeight float32) {
+	if factor <= 0 {
+		return
+	}
+	_ = woxui.Call(func() {
+		instance := runtimeOverlayByID(id)
+		if instance == nil {
+			return
+		}
+		current, err := instance.window.Bounds()
+		if err != nil {
+			return
+		}
+		target := scaledBounds(current, WorkArea(instance.options, current), factor, float32(instance.options.AspectRatio), woxui.Size{Width: minWidth, Height: minHeight})
+		instance.options.Width = float64(target.Width)
+		instance.options.Height = float64(target.Height)
+		_ = instance.window.SetBounds(target)
+		_ = instance.window.Invalidate()
+	})
+}
+
+func scaledBounds(current, workArea woxui.Rect, factor, ratio float32, minimum woxui.Size) woxui.Rect {
+	width := max(minimum.Width, current.Width*factor)
+	height := max(minimum.Height, current.Height*factor)
+	if ratio > 0 {
+		height = width / ratio
+		if height < minimum.Height {
+			height = minimum.Height
+			width = height * ratio
+		}
+	}
+	if width > workArea.Width {
+		width = workArea.Width
+		if ratio > 0 {
+			height = width / ratio
+		}
+	}
+	if height > workArea.Height {
+		height = workArea.Height
+		if ratio > 0 {
+			width = height * ratio
+		}
+	}
+	target := woxui.Rect{X: current.X + (current.Width-width)/2, Y: current.Y + (current.Height-height)/2, Width: width, Height: height}
+	return clampBounds(target, workArea)
+}
+
+// Invalidate requests a new frame for an existing overlay.
+func Invalidate(id string) {
+	_ = woxui.Call(func() {
+		if instance := runtimeOverlayByID(id); instance != nil {
+			_ = instance.window.Invalidate()
+		}
+	})
+}
+
+// Close removes one overlay without firing its user-close callback.
+func Close(id string) {
+	RegisterCloseCallback(id, nil)
+	_ = woxui.Call(func() {
+		if instance := runtimeOverlayByID(id); instance != nil {
+			_ = instance.managed.Close()
+		}
+	})
+}
+
+func runtimeOverlayByID(id string) *runtimeOverlay {
+	runtimeOverlays.Lock()
+	instance := runtimeOverlays.byID[id]
+	runtimeOverlays.Unlock()
+	return instance
+}
+
+func (instance *runtimeOverlay) dispose() {
+	if instance.stickyStop != nil {
+		close(instance.stickyStop)
+		instance.stickyStop = nil
+	}
+	if instance.view.OnDispose != nil {
+		instance.view.OnDispose()
+	}
+	instance.host.Dispose()
+	RegisterCloseCallback(instance.id, nil)
+	runtimeOverlays.Lock()
+	if runtimeOverlays.byID[instance.id] == instance {
+		delete(runtimeOverlays.byID, instance.id)
+	}
+	runtimeOverlays.Unlock()
+}
+
+// windowCreationOptionsChanged identifies native flags that cannot be updated in place.
+func windowCreationOptionsChanged(current, next WindowOptions) bool {
+	return current.Resizable != next.Resizable ||
+		current.AspectRatio != next.AspectRatio ||
+		(current.TakeFocus || current.CloseOnEscape) != (next.TakeFocus || next.CloseOnEscape)
+}
+
+// applyLayout resolves content size and clamps the native window to its logical work area.
+func (instance *runtimeOverlay) applyLayout(preserveOrigin bool) {
+	current, _ := instance.window.Bounds()
+	workArea := WorkArea(instance.options, current)
+	size := woxui.Size{Width: float32(instance.options.Width), Height: float32(instance.options.Height)}
+	if instance.view.Measure != nil {
+		size = instance.view.Measure(instance.window, workArea)
+	}
+	if instance.options.Width > 0 {
+		size.Width = float32(instance.options.Width)
+	}
+	if instance.options.Height > 0 {
+		size.Height = float32(instance.options.Height)
+	}
+	if size.Width <= 0 {
+		size.Width = max(float32(1), current.Width)
+	}
+	if size.Height <= 0 {
+		size.Height = max(float32(1), current.Height)
+	}
+	if instance.options.MinWidth > 0 {
+		size.Width = max(size.Width, float32(instance.options.MinWidth))
+	}
+	if instance.options.MaxWidth > 0 {
+		size.Width = min(size.Width, float32(instance.options.MaxWidth))
+	}
+	if instance.options.MaxHeight > 0 {
+		size.Height = min(size.Height, float32(instance.options.MaxHeight))
+	}
+	size.Width = min(size.Width, workArea.Width)
+	size.Height = min(size.Height, workArea.Height)
+	options := instance.options
+	options.PreservePosition = options.PreservePosition || preserveOrigin
+	target := Bounds(options, current, workArea, size)
+	if !sameBounds(current, target) {
+		_ = instance.window.SetBounds(target)
+	}
+	_ = instance.window.Invalidate()
+}
+
+func (instance *runtimeOverlay) restartStickyTracking() {
+	if instance.stickyStop != nil {
+		close(instance.stickyStop)
+		instance.stickyStop = nil
+	}
+	if instance.options.StickyWindowPid <= 0 {
+		return
+	}
+	stop := make(chan struct{})
+	instance.stickyStop = stop
+	// ponytail: 100ms polling replaces three native window-hook implementations; add event hooks only if measured lag matters.
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				_ = woxui.Call(func() {
+					if runtimeOverlayByID(instance.id) == instance {
+						instance.applyLayout(false)
+					}
+				})
+			case <-stop:
+				return
+			}
+		}
+	}()
+}
+
+// WorkArea resolves the logical display work area used for sizing and clamping.
+func WorkArea(options WindowOptions, current woxui.Rect) woxui.Rect {
+	displays, err := screen.ListDisplays()
+	if err != nil || len(displays) == 0 {
+		active := screen.GetActiveScreen()
+		return woxui.Rect{X: float32(active.X), Y: float32(active.Y), Width: float32(active.Width), Height: float32(active.Height)}
+	}
+	pointX, pointY := float32(options.OffsetX), float32(options.OffsetY)
+	if options.PreservePosition && current.Width > 0 {
+		pointX, pointY = current.X, current.Y
+	}
+	if sticky, ok := stickyBounds(options, displays); ok {
+		pointX, pointY = sticky.X+sticky.Width/2, sticky.Y+sticky.Height/2
+	}
+	if !options.AbsolutePosition && options.StickyWindowPid <= 0 && !(options.PreservePosition && current.Width > 0) {
+		for _, display := range displays {
+			if display.Primary {
+				return screenRect(display.WorkArea)
+			}
+		}
+		return screenRect(displays[0].WorkArea)
+	}
+	for _, display := range displays {
+		work := screenRect(display.WorkArea)
+		if pointX >= work.X && pointX < work.X+work.Width && pointY >= work.Y && pointY < work.Y+work.Height {
+			return work
+		}
+	}
+	return screenRect(displays[0].WorkArea)
+}
+
+// Bounds positions an overlay in logical virtual-desktop coordinates.
+func Bounds(options WindowOptions, current, workArea woxui.Rect, size woxui.Size) woxui.Rect {
+	if options.PreservePosition && current.Width > 0 {
+		return clampBounds(woxui.Rect{X: current.X, Y: current.Y, Width: size.Width, Height: size.Height}, workArea)
+	}
+	target := workArea
+	if sticky, ok := stickyBounds(options, nil); ok {
+		target = sticky
+	} else if options.AbsolutePosition {
+		target = woxui.Rect{}
+	}
+	column := options.Anchor % 3
+	row := options.Anchor / 3
+	x, y := target.X, target.Y
+	if column == 1 {
+		x += target.Width/2 - size.Width/2
+	} else if column == 2 {
+		x += target.Width - size.Width
+	}
+	if row == 1 {
+		y += target.Height/2 - size.Height/2
+	} else if row == 2 {
+		y += target.Height - size.Height
+	}
+	x += float32(options.OffsetX)
+	y += float32(options.OffsetY)
+	return clampBounds(woxui.Rect{X: x, Y: y, Width: size.Width, Height: size.Height}, workArea)
+}
+
+// stickyBounds converts a tracked native window into runtime logical coordinates.
+func stickyBounds(options WindowOptions, displays []screen.Display) (woxui.Rect, bool) {
+	if options.StickyWindowPid <= 0 {
+		return woxui.Rect{}, false
+	}
+	target, err := window.GetManagedWindow(options.StickyWindowId, options.StickyWindowPid, "")
+	if err != nil || target.Bounds.Width <= 0 || target.Bounds.Height <= 0 {
+		return woxui.Rect{}, false
+	}
+	bounds := woxui.Rect{X: float32(target.Bounds.X), Y: float32(target.Bounds.Y), Width: float32(target.Bounds.Width), Height: float32(target.Bounds.Height)}
+	if runtime.GOOS != "windows" {
+		return bounds, true
+	}
+	if displays == nil {
+		displays, _ = screen.ListDisplays()
+	}
+	centerX := target.Bounds.X + target.Bounds.Width/2
+	centerY := target.Bounds.Y + target.Bounds.Height/2
+	for _, display := range displays {
+		pixel := display.PixelBounds
+		if centerX >= pixel.X && centerX < pixel.Right() && centerY >= pixel.Y && centerY < pixel.Bottom() && display.Scale > 0 {
+			scale := float32(display.Scale)
+			return woxui.Rect{X: bounds.X / scale, Y: bounds.Y / scale, Width: bounds.Width / scale, Height: bounds.Height / scale}, true
+		}
+	}
+	return bounds, true
+}
+
+func screenRect(rect screen.Rect) woxui.Rect {
+	return woxui.Rect{X: float32(rect.X), Y: float32(rect.Y), Width: float32(rect.Width), Height: float32(rect.Height)}
+}
+
+func clampBounds(bounds, workArea woxui.Rect) woxui.Rect {
+	bounds.Width = min(bounds.Width, workArea.Width)
+	bounds.Height = min(bounds.Height, workArea.Height)
+	bounds.X = min(max(bounds.X, workArea.X), workArea.X+workArea.Width-bounds.Width)
+	bounds.Y = min(max(bounds.Y, workArea.Y), workArea.Y+workArea.Height-bounds.Height)
+	return bounds
+}
+
+func sameBounds(left, right woxui.Rect) bool {
+	return math.Abs(float64(left.X-right.X)) < 0.5 && math.Abs(float64(left.Y-right.Y)) < 0.5 && math.Abs(float64(left.Width-right.Width)) < 0.5 && math.Abs(float64(left.Height-right.Height)) < 0.5
 }

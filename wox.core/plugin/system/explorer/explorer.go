@@ -1106,10 +1106,8 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				return
 			}
 			messageKey := "plugin_explorer_hint_message_dialog"
-			fontSize := 10.0
 			if util.IsMacOS() {
 				messageKey = "plugin_explorer_hint_message_dialog_macos"
-				fontSize = 12
 			}
 
 			title := window.GetWindowNameByPid(pid)
@@ -1125,8 +1123,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					StickyWindowId:  dialogWindowId,
 					MaxWidth:        500,
 				},
-				Message:  c.api.GetTranslation(localCtx, messageKey),
-				FontSize: fontSize,
+				Message: c.api.GetTranslation(localCtx, messageKey),
 				OnClick: func() bool {
 					clickCtx := context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
 					clickCtx = util.WithCoreSessionContext(clickCtx)

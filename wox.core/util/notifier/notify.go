@@ -22,13 +22,6 @@ func Notify(icon image.Image, message string) {
 	}
 
 	util.Go(util.NewTraceContext(), "notifier.Notify", func() {
-		// Windows renders the notification at 11px to keep the toast compact; other
-		// platforms keep the larger 12px default.
-		fontSize := 12.0
-		if util.IsWindows() {
-			fontSize = 11.0
-		}
-
 		textoverlay.Show(textoverlay.Options{
 			Window: overlay.WindowOptions{
 				ID:      defaultNotificationName,
@@ -40,7 +33,6 @@ func Notify(icon image.Image, message string) {
 			AutoCloseSeconds: 5,
 			Message:          message,
 			Icon:             icon,
-			FontSize:         fontSize,
 			IconSize:         20,
 		})
 	})

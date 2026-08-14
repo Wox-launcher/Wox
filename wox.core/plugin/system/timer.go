@@ -567,9 +567,9 @@ func (t *TimerPlugin) tick(ctx context.Context) {
 			toRemove = append(toRemove, resultID)
 			return true
 		}
-		if !t.pushTimerResultUpdate(ctx, resultID, timerID) {
-			toRemove = append(toRemove, resultID)
-		}
+		// The first tick can race with the query result reaching the UI. Keep the
+		// active timer tracked so a transient miss is retried on the next tick.
+		t.pushTimerResultUpdate(ctx, resultID, timerID)
 		return true
 	})
 	for _, resultID := range toRemove {

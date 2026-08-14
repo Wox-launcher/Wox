@@ -843,7 +843,6 @@ func (p *ScreenshotPlugin) pinScreenshotToScreen(ctx context.Context, screenshot
 		Width:         width,
 		Height:        height,
 		Movable:       true,
-		Shadow:        true,
 		CloseOnEscape: true,
 		// Bug fix: Windows native overlays normally position screen overlays relative to the
 		// primary work area. Screenshot selections are already desktop-absolute, so pinning must

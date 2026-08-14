@@ -60,6 +60,9 @@ const (
 	accentAcrylicBlurBehind  = 4
 	win10DarkAcrylicTint     = 0xCC202020
 	win10LightAcrylicTint    = 0xCCF5F5F5
+	windowsWSSizeBox         = uint32(0x00040000)
+	windowsWMSizing          = uint32(0x0214)
+	windowsResizeGrip        = float32(10)
 )
 
 var (
@@ -84,13 +87,13 @@ var (
 	setWindowCompositionAttribute        = syscall.NewLazyDLL("user32.dll").NewProc("SetWindowCompositionAttribute")
 	isWindowProc                         = syscall.NewLazyDLL("user32.dll").NewProc("IsWindow")
 	allowSetForegroundWindow             = syscall.NewLazyDLL("user32.dll").NewProc("AllowSetForegroundWindow")
-	postThreadMessageW                   = syscall.NewLazyDLL("user32.dll").NewProc("PostThreadMessageW")
 	dpiAwarenessContextPerMonitorAwareV2 = ^uintptr(3)
 	platformRuntime                      struct {
 		sync.Mutex
 		running           bool
 		messageLoopActive bool
 		uiThreadID        uint32
+		callWindow        win.HWND
 		windowCount       int
 		runErr            error
 		nextCallID        uintptr
@@ -294,6 +297,7 @@ func platformRun(start func() error) (runErr error) {
 	platformRuntime.running = true
 	platformRuntime.messageLoopActive = false
 	platformRuntime.uiThreadID = win.GetCurrentThreadId()
+	platformRuntime.callWindow = 0
 	platformRuntime.windowCount = 0
 	platformRuntime.runErr = nil
 	platformRuntime.nextCallID = 0
@@ -307,6 +311,7 @@ func platformRun(start func() error) (runErr error) {
 		platformRuntime.running = false
 		platformRuntime.messageLoopActive = false
 		platformRuntime.uiThreadID = 0
+		platformRuntime.callWindow = 0
 		platformRuntime.windowCount = 0
 		platformRuntime.runErr = nil
 		pendingCalls := platformRuntime.calls
@@ -329,6 +334,14 @@ func platformRun(start func() error) (runErr error) {
 	if err := ensureWindowClass(); err != nil {
 		return err
 	}
+	callWindow, err := createRuntimeCallWindow()
+	if err != nil {
+		return err
+	}
+	platformRuntime.Lock()
+	platformRuntime.callWindow = callWindow
+	platformRuntime.Unlock()
+	defer win.DestroyWindow(callWindow)
 	message := new(win.MSG)
 	var messagePinner runtime.Pinner
 	// DispatchMessageW can re-enter Go and grow the goroutine stack while User32 still holds MSG's address.
@@ -361,10 +374,6 @@ func platformRun(start func() error) (runErr error) {
 		}
 		if result == -1 {
 			return errors.New("GetMessage failed")
-		}
-		if message.Message == runtimeCallMessage {
-			runWindowsRuntimeCall(message.WParam)
-			continue
 		}
 		win.TranslateMessage(message)
 		win.DispatchMessage(message)
@@ -402,16 +411,31 @@ func queuePlatformCall(fn func(), done chan error) (bool, error) {
 	platformRuntime.nextCallID++
 	callID := platformRuntime.nextCallID
 	platformRuntime.calls[callID] = windowsRuntimeCall{fn: fn, done: done}
+	callWindow := platformRuntime.callWindow
 	platformRuntime.Unlock()
 
-	posted, _, postErr := postThreadMessageW.Call(uintptr(uiThreadID), runtimeCallMessage, callID, 0)
-	if posted == 0 {
+	// Window messages survive nested modal loops; thread messages can be removed
+	// without dispatch and leave synchronous callers blocked forever.
+	if callWindow == 0 || win.PostMessage(callWindow, runtimeCallMessage, callID, 0) == 0 {
 		platformRuntime.Lock()
 		delete(platformRuntime.calls, callID)
 		platformRuntime.Unlock()
-		return false, fmt.Errorf("post UI callback: %w", postErr)
+		return false, fmt.Errorf("post UI callback: %w", syscall.GetLastError())
 	}
 	return true, nil
+}
+
+// createRuntimeCallWindow creates a message-only window for cross-thread UI calls.
+func createRuntimeCallWindow() (win.HWND, error) {
+	className, err := syscall.UTF16PtrFromString(windowClassName)
+	if err != nil {
+		return 0, err
+	}
+	hwnd := win.CreateWindowEx(0, className, nil, 0, 0, 0, 0, 0, win.HWND_MESSAGE, 0, win.GetModuleHandle(nil), nil)
+	if hwnd == 0 {
+		return 0, fmt.Errorf("create runtime call window: %w", syscall.GetLastError())
+	}
+	return hwnd, nil
 }
 
 func runWindowsRuntimeCall(callID uintptr) {
@@ -683,11 +707,15 @@ func (w *platformWindow) createNativeWindow() error {
 	if w.options.Role == WindowRoleApplication {
 		exStyle = uint32(win.WS_EX_APPWINDOW | wsExNoRedirectionBitmap)
 	}
+	style := uint32(win.WS_POPUP)
+	if w.options.Resizable {
+		style |= windowsWSSizeBox
+	}
 	hwnd := win.CreateWindowEx(
 		exStyle,
 		className,
 		title,
-		win.WS_POPUP,
+		style,
 		x,
 		y,
 		int32(width),
@@ -727,7 +755,7 @@ func (w *platformWindow) createNativeWindow() error {
 		return err
 	}
 	w.renderer = renderer
-	if windowsWindowUsesSystemBackdrop(w.options.Role) && !w.options.Nonactivating {
+	if windowsWindowUsesSystemBackdrop(w.options) && !w.options.Nonactivating {
 		applyWindowsBackdrop(hwnd, w.darkAppearance)
 	}
 	nativeWindows.Store(uintptr(hwnd), w)
@@ -745,8 +773,61 @@ func windowsRendererNeedsEmbeddedSurfaceOverlay(role WindowRole) bool {
 // Screenshot windows cover the desktop with captured pixels, so a system backdrop is unnecessary.
 // More importantly, DWM can expose that backdrop for one refresh while the first swap-chain frame
 // is still being composed, which appears as a full-screen gray flash when capture starts.
-func windowsWindowUsesSystemBackdrop(role WindowRole) bool {
-	return role != WindowRoleScreenshot
+func windowsWindowUsesSystemBackdrop(options WindowOptions) bool {
+	return options.Role != WindowRoleScreenshot
+}
+
+// constrainWindowsAspectRatio adjusts the dragged edge while preserving the requested window ratio.
+func constrainWindowsAspectRatio(edge uintptr, bounds *win.RECT, ratio float32) {
+	if bounds == nil || ratio <= 0 {
+		return
+	}
+	width := bounds.Right - bounds.Left
+	height := bounds.Bottom - bounds.Top
+	if width <= 0 || height <= 0 {
+		return
+	}
+	if edge == 3 || edge == 6 {
+		targetWidth := int32(math.Round(float64(float32(height) * ratio)))
+		delta := targetWidth - width
+		bounds.Left -= delta / 2
+		bounds.Right += delta - delta/2
+		return
+	}
+	targetHeight := int32(math.Round(float64(float32(width) / ratio)))
+	if edge == 3 || edge == 4 || edge == 5 {
+		bounds.Top = bounds.Bottom - targetHeight
+	} else {
+		bounds.Bottom = bounds.Top + targetHeight
+	}
+}
+
+// windowsResizeHitTest exposes native resize edges for frameless resizable windows.
+func windowsResizeHitTest(position win.POINT, bounds win.RECT, grip int32) uintptr {
+	left := position.X <= grip
+	right := position.X >= bounds.Right-grip
+	top := position.Y <= grip
+	bottom := position.Y >= bounds.Bottom-grip
+	switch {
+	case top && left:
+		return win.HTTOPLEFT
+	case top && right:
+		return win.HTTOPRIGHT
+	case bottom && left:
+		return win.HTBOTTOMLEFT
+	case bottom && right:
+		return win.HTBOTTOMRIGHT
+	case left:
+		return win.HTLEFT
+	case right:
+		return win.HTRIGHT
+	case top:
+		return win.HTTOP
+	case bottom:
+		return win.HTBOTTOM
+	default:
+		return win.HTCLIENT
+	}
 }
 
 // applyWindowsBackdrop uses the supported DWM system backdrop on Windows 11 and the legacy
@@ -897,6 +978,10 @@ func ensureWindowClass() error {
 
 // windowProcedure serializes window, renderer, and focus transitions on the UI thread.
 func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uintptr {
+	if message == runtimeCallMessage {
+		runWindowsRuntimeCall(wParam)
+		return 0
+	}
 	value, ok := nativeWindows.Load(uintptr(hwnd))
 	if !ok {
 		return win.DefWindowProc(hwnd, message, wParam, lParam)
@@ -965,15 +1050,48 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		return 0
 	case win.WM_ERASEBKGND:
 		return 1
+	case win.WM_NCCALCSIZE:
+		if window.options.Resizable {
+			return 0
+		}
 	case win.WM_NCHITTEST:
 		if window.pointerPassthrough {
 			return ^uintptr(0)
+		}
+		if window.options.Resizable {
+			position := win.POINT{X: win.GET_X_LPARAM(lParam), Y: win.GET_Y_LPARAM(lParam)}
+			var bounds win.RECT
+			if win.ScreenToClient(hwnd, &position) && win.GetClientRect(hwnd, &bounds) {
+				grip := int32(math.Ceil(float64(windowsResizeGrip * max(window.scale, 1))))
+				if hit := windowsResizeHitTest(position, bounds, grip); hit != win.HTCLIENT {
+					return hit
+				}
+			}
+		}
+	case windowsWMSizing:
+		if window.options.AspectRatio > 0 && lParam != 0 {
+			constrainWindowsAspectRatio(wParam, (*win.RECT)(unsafe.Pointer(lParam)), window.options.AspectRatio)
+			return 1
 		}
 	case win.WM_MOUSEACTIVATE:
 		if window.options.Nonactivating {
 			return windowsMouseActivateNoActivate
 		}
 	case win.WM_SETCURSOR:
+		switch win.LOWORD(uint32(lParam)) {
+		case win.HTTOPLEFT, win.HTBOTTOMRIGHT:
+			win.SetCursor(windowsPointerCursor(PointerCursorResizeNWSE))
+			return 1
+		case win.HTTOPRIGHT, win.HTBOTTOMLEFT:
+			win.SetCursor(windowsPointerCursor(PointerCursorResizeNESW))
+			return 1
+		case win.HTLEFT, win.HTRIGHT:
+			win.SetCursor(windowsPointerCursor(PointerCursorResizeHorizontal))
+			return 1
+		case win.HTTOP, win.HTBOTTOM:
+			win.SetCursor(windowsPointerCursor(PointerCursorResizeVertical))
+			return 1
+		}
 		win.SetCursor(window.resolvedPointerCursor())
 		return 1
 	case win.WM_MOUSEMOVE:
@@ -1460,7 +1578,9 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		return windowCommandResult{}
 	case windowCommandSetAppearance:
 		w.darkAppearance = command.darkAppearance
-		applyWindowsBackdrop(w.hwnd, command.darkAppearance)
+		if windowsWindowUsesSystemBackdrop(w.options) && !w.options.Nonactivating {
+			applyWindowsBackdrop(w.hwnd, command.darkAppearance)
+		}
 		return windowCommandResult{}
 	case windowCommandSetFontFamily:
 		if w.renderer == nil {
@@ -1783,7 +1903,7 @@ func (w *platformWindow) showNative() FocusEpoch {
 
 // synchronizeBackdropAfterShow replaces the backdrop policy cached while the HWND was hidden.
 func (w *platformWindow) synchronizeBackdropAfterShow() {
-	if !windowsWindowUsesSystemBackdrop(w.options.Role) || w.options.Nonactivating {
+	if !windowsWindowUsesSystemBackdrop(w.options) || w.options.Nonactivating {
 		return
 	}
 	if osvariant.GetCurrentPlatformVariant() == "win11" && dwmSetWindowAttribute.Find() == nil {

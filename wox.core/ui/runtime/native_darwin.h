@@ -12,7 +12,7 @@ enum {
 
 int32_t wox_darwin_run(uintptr_t context);
 int32_t wox_darwin_call(uintptr_t context);
-WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, uintptr_t context);
+WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context);
 uint64_t wox_darwin_window_show(WoxDarwinWindow *window);
 int32_t wox_darwin_window_hide(WoxDarwinWindow *window);
 int32_t wox_darwin_window_set_bounds(WoxDarwinWindow *window, float x, float y, float width, float height);

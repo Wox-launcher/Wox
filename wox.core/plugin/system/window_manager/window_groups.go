@@ -31,7 +31,6 @@ const (
 const (
 	windowGroupLaunchPlaceholderPrefix       = "window_group_launch_"
 	windowGroupLaunchPlaceholderCornerRadius = 8.0
-	windowGroupLaunchPlaceholderFontSize     = 18.0
 )
 
 const (
@@ -469,7 +468,6 @@ func (p *WindowManagerPlugin) showWindowGroupLaunchPlaceholder(ctx context.Conte
 		Message:       message,
 		Loading:       true,
 		CenterContent: true,
-		FontSize:      windowGroupLaunchPlaceholderFontSize,
 	})
 	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager showed launch placeholder: group=%s app=%s identity=%s overlay=%s rect=%+v", group.Id, placement.AppName, placement.Identity, name, placement.Rect))
 	return name

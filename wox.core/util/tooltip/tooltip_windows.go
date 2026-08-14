@@ -21,10 +21,6 @@ var (
 	trackers   = map[string]*tracker{}
 )
 
-func tooltipFontSizePt() float64 {
-	return tooltipBaseFontSizePt
-}
-
 func startVisibilityTracking(opts Options) {
 	if opts.Name == "" {
 		return

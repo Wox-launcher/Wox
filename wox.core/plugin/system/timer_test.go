@@ -4,7 +4,23 @@ import (
 	"context"
 	"testing"
 	"time"
+	"wox/plugin"
+	"wox/util"
 )
+
+type timerUpdateTestAPI struct {
+	plugin.API
+	updates int
+}
+
+func (a *timerUpdateTestAPI) IsVisible(context.Context) bool {
+	return true
+}
+
+func (a *timerUpdateTestAPI) UpdateResult(context.Context, plugin.UpdatableResult) bool {
+	a.updates++
+	return a.updates > 1
+}
 
 func TestParseTimerQuery(t *testing.T) {
 	tests := []struct {
@@ -152,5 +168,25 @@ func TestTimerPersistedRoundTrip(t *testing.T) {
 	}
 	if !restored.Deadline.Equal(original.Deadline) {
 		t.Fatalf("deadline=%v want %v", restored.Deadline, original.Deadline)
+	}
+}
+
+func TestTimerTickRetriesTransientResultMiss(t *testing.T) {
+	api := &timerUpdateTestAPI{}
+	timer := &TimerPlugin{
+		api:            api,
+		timers:         map[string]*timerEntry{"t1": {ID: "t1", DurationLabel: "1m", Deadline: time.Now().Add(time.Minute)}},
+		trackedResults: util.NewHashMap[string, string](),
+	}
+	timer.trackedResults.Store("t1", "t1")
+
+	timer.tick(context.Background())
+	timer.tick(context.Background())
+
+	if api.updates != 2 {
+		t.Fatalf("updates=%d want 2", api.updates)
+	}
+	if _, ok := timer.trackedResults.Load("t1"); !ok {
+		t.Fatal("active timer should remain tracked after a transient update miss")
 	}
 }

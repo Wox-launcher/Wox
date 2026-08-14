@@ -126,6 +126,10 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	if options.Nonactivating {
 		nonactivating = 1
 	}
+	resizable := C.int32_t(0)
+	if options.Resizable {
+		resizable = 1
+	}
 	window.native = C.wox_linux_window_create(
 		title,
 		C.float(options.Size.Width),
@@ -133,6 +137,8 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		hideOnBlur,
 		C.int32_t(options.Role),
 		nonactivating,
+		resizable,
+		C.float(options.AspectRatio),
 		C.uintptr_t(window.handle),
 	)
 	if window.native == nil {

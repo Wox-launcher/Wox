@@ -22,10 +22,6 @@ var (
 	trackers   = map[string]*tracker{}
 )
 
-func tooltipFontSizePt() float64 {
-	return tooltipBaseFontSizePt + 2
-}
-
 // startVisibilityTracking mirrors the Windows tooltip lifetime behavior on macOS.
 func startVisibilityTracking(opts Options) {
 	if opts.Name == "" {

@@ -1479,7 +1479,7 @@ int32_t wox_linux_run(uintptr_t context) {
   return start_result == 0 ? 0 : -1;
 }
 
-WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, uintptr_t context) {
+WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context) {
   if (!is_main_thread() || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
   }
@@ -1533,6 +1533,13 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   }
 #endif
   gtk_window_set_decorated(GTK_WINDOW(window->window), FALSE);
+  gtk_window_set_resizable(GTK_WINDOW(window->window), resizable != 0);
+  if (aspect_ratio > 0.0f) {
+    GdkGeometry geometry = {0};
+    geometry.min_aspect = aspect_ratio;
+    geometry.max_aspect = aspect_ratio;
+    gtk_window_set_geometry_hints(GTK_WINDOW(window->window), NULL, &geometry, GDK_HINT_ASPECT);
+  }
   // Application windows must stay visible to the desktop shell instead of using launcher-only utility hints.
   if (application_window) {
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window->window), FALSE);
@@ -1554,7 +1561,6 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
 
   gtk_gl_area_set_required_version(GTK_GL_AREA(window->gl_area), 3, 3);
   gtk_gl_area_set_use_es(GTK_GL_AREA(window->gl_area), FALSE);
-  // Recording surfaces need real alpha; ordinary Linux windows remain opaque because compositor blur is inconsistent.
   gtk_gl_area_set_has_alpha(GTK_GL_AREA(window->gl_area), window->nonactivating);
   gtk_gl_area_set_has_depth_buffer(GTK_GL_AREA(window->gl_area), FALSE);
   gtk_gl_area_set_has_stencil_buffer(GTK_GL_AREA(window->gl_area), FALSE);

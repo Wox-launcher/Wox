@@ -14,7 +14,6 @@ import (
 
 const tooltipOverlayPrefix = "wox_tooltip_"
 const (
-	tooltipBaseFontSizePt   = 9
 	tooltipMaxWidthDip      = 400
 	tooltipMaxHeightDip     = 600
 	tooltipMinWidthDip      = 1
@@ -77,8 +76,7 @@ func Show(ctx context.Context, opts Options) {
 			MaxHeight:        tooltipMaxHeightDip,
 			CornerRadius:     8,
 		},
-		Message:  opts.Text,
-		FontSize: tooltipFontSizePt(),
+		Message: opts.Text,
 	})
 	startVisibilityTracking(opts.withBounds(placement.trackingX, placement.trackingY, width, placement.trackingHeight))
 
@@ -366,7 +364,7 @@ func estimateLineWidth(text string) float64 {
 		return 0
 	}
 
-	fontSize := tooltipFontSizePt()
+	fontSize := float64(textoverlay.DefaultFontSize)
 	width := 0.0
 	for _, r := range text {
 		switch {

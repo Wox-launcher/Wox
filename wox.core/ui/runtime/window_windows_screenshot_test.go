@@ -2,7 +2,11 @@
 
 package woxui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lxn/win"
+)
 
 func TestWindowsScreenshotWindowUsesPhysicalPixelScale(t *testing.T) {
 	for _, dpi := range []uint32{96, 120, 144, 192} {
@@ -13,6 +17,34 @@ func TestWindowsScreenshotWindowUsesPhysicalPixelScale(t *testing.T) {
 
 	if scale := windowsWindowScale(WindowRoleApplication, 144); scale != 1.5 {
 		t.Fatalf("application scale at 144 DPI = %v, want 1.5", scale)
+	}
+}
+
+func TestConstrainWindowsAspectRatio(t *testing.T) {
+	bounds := win.RECT{Left: 0, Top: 0, Right: 300, Bottom: 100}
+	constrainWindowsAspectRatio(2, &bounds, 2)
+	if bounds.Bottom != 150 {
+		t.Fatalf("constrained bounds = %+v, want height 150", bounds)
+	}
+}
+
+func TestWindowsResizeHitTest(t *testing.T) {
+	bounds := win.RECT{Right: 300, Bottom: 200}
+	tests := []struct {
+		position win.POINT
+		want     uintptr
+	}{
+		{position: win.POINT{X: 5, Y: 5}, want: win.HTTOPLEFT},
+		{position: win.POINT{X: 295, Y: 5}, want: win.HTTOPRIGHT},
+		{position: win.POINT{X: 5, Y: 195}, want: win.HTBOTTOMLEFT},
+		{position: win.POINT{X: 295, Y: 195}, want: win.HTBOTTOMRIGHT},
+		{position: win.POINT{X: 150, Y: 5}, want: win.HTTOP},
+		{position: win.POINT{X: 150, Y: 100}, want: win.HTCLIENT},
+	}
+	for _, test := range tests {
+		if got := windowsResizeHitTest(test.position, bounds, 10); got != test.want {
+			t.Fatalf("resize hit at %+v = %d, want %d", test.position, got, test.want)
+		}
 	}
 }
 
@@ -37,11 +69,11 @@ func TestWindowsScreenshotRendererSkipsEmbeddedSurfaceOverlay(t *testing.T) {
 }
 
 func TestWindowsScreenshotWindowSkipsSystemBackdrop(t *testing.T) {
-	if windowsWindowUsesSystemBackdrop(WindowRoleScreenshot) {
+	if windowsWindowUsesSystemBackdrop(WindowOptions{Role: WindowRoleScreenshot}) {
 		t.Fatal("screenshot window should not expose a system backdrop before its first frame")
 	}
 	for _, role := range []WindowRole{WindowRoleUtility, WindowRoleApplication} {
-		if !windowsWindowUsesSystemBackdrop(role) {
+		if !windowsWindowUsesSystemBackdrop(WindowOptions{Role: role}) {
 			t.Fatalf("window role %d still requires its system backdrop", role)
 		}
 	}

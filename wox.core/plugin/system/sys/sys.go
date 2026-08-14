@@ -479,11 +479,10 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 			Icon:  common.CPUProfileIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				img, _ := common.WoxIcon.ToImage()
-				notifier.Notify(img, `This is a very long notification message to test the notification system in Wox.
-				If you see this message, the notification system is working properly.
-				You can customize the duration, appearance, and behavior of notifications as needed.
-				Enjoy using Wox!
-				`+time.Now().String())
+				notifier.Notify(img, "This is a very long notification message to test the notification system in Wox.\n"+
+					"If you see this message, the notification system is working properly.\n"+
+					"You can customize the duration, appearance, and behavior of notifications as needed.\n"+
+					"Enjoy using Wox!\n"+time.Now().String())
 			},
 		},
 

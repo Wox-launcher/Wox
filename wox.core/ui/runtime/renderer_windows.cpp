@@ -991,13 +991,16 @@ extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *
   DWRITE_TEXT_METRICS metrics = {};
   result = layout->GetMetrics(&metrics);
   if (SUCCEEDED(result)) {
-    DWRITE_LINE_METRICS line = {};
+    *width = metrics.widthIncludingTrailingWhitespace;
+    *height = metrics.height;
     UINT32 line_count = 0;
-    result = layout->GetLineMetrics(&line, 1, &line_count);
-    if (SUCCEEDED(result) && line_count > 0) {
-      *width = metrics.widthIncludingTrailingWhitespace;
-      *height = metrics.height;
-      *baseline = line.baseline;
+    layout->GetLineMetrics(nullptr, 0, &line_count);
+    if (line_count > 0) {
+      std::vector<DWRITE_LINE_METRICS> lines(line_count);
+      result = layout->GetLineMetrics(lines.data(), line_count, &line_count);
+      if (SUCCEEDED(result)) {
+        *baseline = lines[0].baseline;
+      }
     }
   }
   layout->Release();

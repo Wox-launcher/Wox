@@ -2065,7 +2065,7 @@ int32_t wox_darwin_run(uintptr_t context) {
   return 0;
 }
 
-WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, uintptr_t context) {
+WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context) {
   if (![NSThread isMainThread] || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
   }
@@ -2083,6 +2083,9 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
         style_mask |= NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
       }
     }
+    if (resizable != 0) {
+      style_mask |= NSWindowStyleMaskResizable;
+    }
     WoxNativeWindow *native_window = [[WoxNativeWindow alloc]
         initWithContentRect:frame
                   styleMask:style_mask
@@ -2093,6 +2096,9 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     native_window.opaque = NO;
     native_window.backgroundColor = [NSColor clearColor];
     native_window.hasShadow = !is_overlay_style;
+    if (aspect_ratio > 0.0f) {
+      native_window.contentAspectRatio = NSMakeSize(aspect_ratio, 1.0);
+    }
     native_window.acceptsMouseMovedEvents = YES;
     if (!is_overlay_style) {
       native_window.titlebarAppearsTransparent = YES;
@@ -2171,7 +2177,6 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->context = context;
     window->hide_on_blur = hide_on_blur != 0;
     window->screenshot_window = is_screenshot_window;
-    // Use launcher material instead of compositing the transparent UI surface directly over the desktop.
     NSVisualEffectView *effect_view = [[NSVisualEffectView alloc] initWithFrame:frame];
     effect_view.material = NSVisualEffectMaterialPopover;
     effect_view.state = NSVisualEffectStateActive;

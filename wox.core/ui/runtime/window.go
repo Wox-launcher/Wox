@@ -119,6 +119,10 @@ type WindowOptions struct {
 	Title string
 	Size  Size
 	Role  WindowRole
+	// Resizable enables native edge resizing for frameless windows.
+	Resizable bool
+	// AspectRatio constrains native resizing to width/height when greater than zero.
+	AspectRatio float32
 	// Nonactivating keeps recording chrome visible without stealing focus from the captured app.
 	Nonactivating              bool
 	HideOnBlur                 bool

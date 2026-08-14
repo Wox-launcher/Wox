@@ -2,10 +2,6 @@
 
 package tooltip
 
-func tooltipFontSizePt() float64 {
-	return tooltipBaseFontSizePt
-}
-
 func startVisibilityTracking(opts Options) {
 	_ = opts
 }

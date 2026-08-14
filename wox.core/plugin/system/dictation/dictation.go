@@ -1637,7 +1637,6 @@ func (p *DictationPlugin) showActionResultOverlay(ctx context.Context, text stri
 		Window:                   window,
 		Closable:                 true,
 		Message:                  text,
-		FontSize:                 14,
 		FollowScroll:             true,
 		ShowCopyButton:           true,
 		CopyButtonTooltip:        i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_action_copy"),

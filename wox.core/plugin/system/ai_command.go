@@ -26,6 +26,7 @@ import (
 )
 
 var aiCommandIcon = common.PluginAICommandIcon
+var aiCommandTitleIcon, _ = aiCommandIcon.ToImage()
 
 var (
 	// Native overlays require the app main thread. Keeping the calls replaceable
@@ -373,35 +374,13 @@ func buildAICommandLoadingOptions(name string, position mouse.Point, message str
 			Anchor:           overlay.AnchorTopLeft,
 			OffsetX:          position.X + aiCommandLoadingOverlayOffsetX,
 			OffsetY:          position.Y + aiCommandLoadingOverlayOffsetY,
-			Width:            estimateAICommandLoadingOverlayWidth(message),
+			MinWidth:         aiCommandLoadingOverlayMinWidth,
+			MaxWidth:         aiCommandLoadingOverlayMaxWidth,
 		},
 		Message:  message,
 		Loading:  true,
-		FontSize: 12,
 		IconSize: aiCommandLoadingOverlayIconSize,
 	}
-}
-
-func estimateAICommandLoadingOverlayWidth(message string) float64 {
-	// Bug fix: the old fixed width was sized for "AI". Localized labels such as
-	// "Thinking..." need enough room after the spinner and padding are reserved,
-	// otherwise the native text view wraps into unreadable fragments.
-	textWidth := 0.0
-	for _, r := range message {
-		if r <= 0x7f {
-			textWidth += 7
-		} else {
-			textWidth += 12
-		}
-	}
-	width := 12 + float64(aiCommandLoadingOverlayIconSize) + 8 + textWidth + 12
-	if width < aiCommandLoadingOverlayMinWidth {
-		return aiCommandLoadingOverlayMinWidth
-	}
-	if width > aiCommandLoadingOverlayMaxWidth {
-		return aiCommandLoadingOverlayMaxWidth
-	}
-	return width
 }
 
 func (c *Plugin) showAICommandLoadingOverlay(ctx context.Context, name string) bool {
@@ -430,23 +409,26 @@ func (c *Plugin) currentAICommandOverlayPosition(ctx context.Context) mouse.Poin
 	return position
 }
 
-func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, position *mouse.Point, streamResult common.ChatStreamData) {
+func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, title string, position *mouse.Point, streamResult common.ChatStreamData) {
 	message := formatAICommandResultOverlayMessage(ctx, streamResult)
 	copyText := strings.TrimSpace(streamResult.Data)
 	opts := textoverlay.Options{
 		Window: overlay.WindowOptions{
 			ID:            name,
 			Topmost:       true,
+			TakeFocus:     true,
+			Width:         aiCommandResultOverlayMaxWidth,
 			MinWidth:      aiCommandResultOverlayMinWidth,
 			MaxWidth:      aiCommandResultOverlayMaxWidth,
 			MaxHeight:     aiCommandResultOverlayMaxHeight,
 			Movable:       true,
 			CloseOnEscape: true,
 		},
+		Title:        title,
+		TitleIcon:    aiCommandTitleIcon,
 		Closable:     true,
 		Message:      message,
 		Loading:      streamResult.Status == common.ChatStreamStatusStreaming && copyText == "",
-		FontSize:     12,
 		IconSize:     aiCommandLoadingOverlayIconSize,
 		FollowScroll: true,
 	}
@@ -649,7 +631,7 @@ func (c *Plugin) buildAICommandActions(ctx context.Context, command commandSetti
 				util.Go(ctx, "ai command run and show", func() {
 					overlayName := fmt.Sprintf("ai_command_run_and_show_result_%s", actionContext.ResultId)
 					position := c.currentAICommandOverlayPosition(ctx)
-					c.showAICommandResultOverlay(ctx, overlayName, &position, common.ChatStreamData{Status: common.ChatStreamStatusStreaming})
+					c.showAICommandResultOverlay(ctx, overlayName, command.Name, &position, common.ChatStreamData{Status: common.ChatStreamStatusStreaming})
 					lastOverlayUpdateAt := int64(0)
 					lastOverlayMessage := ""
 
@@ -664,7 +646,7 @@ func (c *Plugin) buildAICommandActions(ctx context.Context, command commandSetti
 								lastOverlayUpdateAt = now
 								lastOverlayMessage = message
 							}
-							c.showAICommandResultOverlay(ctx, overlayName, nil, streamResult)
+							c.showAICommandResultOverlay(ctx, overlayName, command.Name, nil, streamResult)
 						},
 					})
 					if final.Err != nil {

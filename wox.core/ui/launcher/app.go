@@ -227,6 +227,11 @@ func New(isDev bool, services contract.Services) *App {
 	return app
 }
 
+// WindowManager returns the process-local registry shared by launcher-owned secondary surfaces.
+func (a *App) WindowManager() *woxui.WindowManager {
+	return a.windows
+}
+
 // newApp builds isolated launcher state while sharing only process-wide window and message infrastructure.
 func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager, instances *appInstanceRegistry, primary *App, isPrimary bool, instanceName string, windowID woxui.WindowID) *App {
 	sessionID := newID()

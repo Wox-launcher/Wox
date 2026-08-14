@@ -31,6 +31,7 @@ import (
 	"wox/util/clipboard"
 	"wox/util/imagecache"
 	"wox/util/mainthread"
+	"wox/util/overlay"
 	"wox/util/permission"
 	"wox/util/selection"
 
@@ -377,6 +378,7 @@ func run() {
 	}
 	coreServices := ui.NewCoreServices()
 	embeddedGoUIApp = golauncher.New(util.IsDev(), coreServices)
+	overlay.SetWindowManager(embeddedGoUIApp.WindowManager())
 	coreServices.AttachView(embeddedGoUIApp)
 	// Wire text-field copy/cut/paste to the cross-platform clipboard backend.
 	golauncher.SetClipboardProvider(golauncher.NewUtilClipboardProvider())
