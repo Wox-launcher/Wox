@@ -758,7 +758,7 @@ func (w *platformWindow) createNativeWindow() error {
 	}
 	w.renderer = renderer
 	if windowsWindowUsesSystemBackdrop(w.options) {
-		applyWindowsBackdrop(hwnd, w.darkAppearance)
+		applyWindowsBackdrop(hwnd, w.darkAppearance, w.options.Nonactivating)
 	}
 	nativeWindows.Store(uintptr(hwnd), w)
 	platformRuntime.Lock()
@@ -834,11 +834,10 @@ func windowsResizeHitTest(position win.POINT, bounds win.RECT, grip int32) uintp
 	}
 }
 
-// applyWindowsBackdrop uses the supported DWM system backdrop on Windows 11 and the legacy
-// SetWindowCompositionAttribute Acrylic path on Windows 10. The same HWND attributes
-// apply to activating launcher windows and nonactivating overlays; WS_EX_NOACTIVATE
-// only suppresses focus and does not disable DWM materials.
-func applyWindowsBackdrop(hwnd win.HWND, isDark bool) {
+// applyWindowsBackdrop uses the DWM system material for activating Windows 11 windows.
+// Never-active overlays use Accent Acrylic because DWM renders its inactive system
+// backdrop as a solid fallback when no Wox window owns input focus.
+func applyWindowsBackdrop(hwnd win.HWND, isDark, nonactivating bool) {
 	dark := int32(0)
 	if isDark {
 		dark = 1
@@ -846,31 +845,40 @@ func applyWindowsBackdrop(hwnd win.HWND, isDark bool) {
 	if dwmSetWindowAttribute.Find() == nil {
 		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaUseImmersiveDark, uintptr(unsafe.Pointer(&dark)), unsafe.Sizeof(dark))
 	}
-	if osvariant.GetCurrentPlatformVariant() == "win11" {
-		applyWindows11Backdrop(hwnd)
+	platformVariant := osvariant.GetCurrentPlatformVariant()
+	if platformVariant == "win11" {
+		applyWindows11Backdrop(hwnd, isDark, windowsUsesAccentBackdrop(platformVariant, nonactivating))
 		return
 	}
-	applyWindows10AcrylicBackdrop(hwnd, isDark)
+	applyWindowsAccentBackdrop(hwnd, isDark)
 }
 
-func applyWindows11Backdrop(hwnd win.HWND) {
+func windowsUsesAccentBackdrop(platformVariant string, nonactivating bool) bool {
+	return platformVariant != "win11" || nonactivating
+}
+
+func applyWindows11Backdrop(hwnd win.HWND, isDark, useAccent bool) {
 	corner := int32(dwmWindowCornerRound)
-	// The launcher needs live translucency over the windows behind it; standard Mica is a wallpaper-derived opaque material.
 	backdrop := int32(dwmSystemBackdropWox)
-	margins := windowsMargins{left: -1, right: -1, top: -1, bottom: -1}
-	if dwmExtendFrameIntoClientArea.Find() == nil {
-		_, _, _ = dwmExtendFrameIntoClientArea.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&margins)))
+	if useAccent {
+		backdrop = dwmSystemBackdropNone
+	} else {
+		// The launcher needs live translucency over the windows behind it; standard Mica is a wallpaper-derived opaque material.
+		margins := windowsMargins{left: -1, right: -1, top: -1, bottom: -1}
+		if dwmExtendFrameIntoClientArea.Find() == nil {
+			_, _, _ = dwmExtendFrameIntoClientArea.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&margins)))
+		}
 	}
 	if dwmSetWindowAttribute.Find() == nil {
 		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaWindowCorner, uintptr(unsafe.Pointer(&corner)), unsafe.Sizeof(corner))
 		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), dwmwaSystemBackdrop, uintptr(unsafe.Pointer(&backdrop)), unsafe.Sizeof(backdrop))
 	}
+	if useAccent {
+		applyWindowsAccentBackdrop(hwnd, isDark)
+	}
 }
 
-func applyWindows10AcrylicBackdrop(hwnd win.HWND, isDark bool) {
-	if osvariant.GetCurrentPlatformVariant() == "win11" {
-		return
-	}
+func applyWindowsAccentBackdrop(hwnd win.HWND, isDark bool) {
 	if tryApplyWindowsAccent(hwnd, accentAcrylicBlurBehind, windows10AcrylicTint(isDark), 2) ||
 		tryApplyWindowsAccent(hwnd, accentBlurBehind, windows10AcrylicTint(isDark), 0) {
 		margins := windowsMargins{left: -1, right: -1, top: -1, bottom: -1}
@@ -1592,7 +1600,7 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 	case windowCommandSetAppearance:
 		w.darkAppearance = command.darkAppearance
 		if windowsWindowUsesSystemBackdrop(w.options) {
-			applyWindowsBackdrop(w.hwnd, command.darkAppearance)
+			applyWindowsBackdrop(w.hwnd, command.darkAppearance, w.options.Nonactivating)
 		}
 		return windowCommandResult{}
 	case windowCommandSetFontFamily:
@@ -1926,7 +1934,7 @@ func (w *platformWindow) synchronizeBackdropAfterShow() {
 		backdrop := int32(dwmSystemBackdropNone)
 		_, _, _ = dwmSetWindowAttribute.Call(uintptr(w.hwnd), dwmwaSystemBackdrop, uintptr(unsafe.Pointer(&backdrop)), unsafe.Sizeof(backdrop))
 	}
-	applyWindowsBackdrop(w.hwnd, w.darkAppearance)
+	applyWindowsBackdrop(w.hwnd, w.darkAppearance, w.options.Nonactivating)
 	if dwmFlush.Find() == nil {
 		_, _, _ = dwmFlush.Call()
 	}

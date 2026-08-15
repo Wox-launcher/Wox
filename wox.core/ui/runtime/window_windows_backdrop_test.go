@@ -22,9 +22,15 @@ func TestWindows11SystemBackdropValuesMatchWindowsSDK(t *testing.T) {
 	}
 }
 
-func TestWindowsNonactivatingUtilityWindowUsesSystemBackdrop(t *testing.T) {
-	if !windowsWindowUsesSystemBackdrop(WindowOptions{Role: WindowRoleUtility, Nonactivating: true}) {
-		t.Fatal("nonactivating overlays still need Desktop Acrylic")
+func TestWindowsNonactivatingUtilityWindowUsesAccentBackdrop(t *testing.T) {
+	if !windowsUsesAccentBackdrop("win11", true) {
+		t.Fatal("never-active Windows 11 overlays need Accent Acrylic")
+	}
+	if windowsUsesAccentBackdrop("win11", false) {
+		t.Fatal("activating Windows 11 windows should keep the supported system backdrop")
+	}
+	if !windowsUsesAccentBackdrop("win10", false) {
+		t.Fatal("Windows 10 windows need the Accent Acrylic fallback")
 	}
 	if windowsWindowUsesSystemBackdrop(WindowOptions{Role: WindowRoleScreenshot, Nonactivating: true}) {
 		t.Fatal("screenshot windows must keep skipping system backdrop")
