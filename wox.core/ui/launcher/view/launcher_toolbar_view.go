@@ -74,7 +74,7 @@ type measuredLauncherToolbarAction struct {
 
 // LauncherToolbarView builds the status footer and the actions that fit its current width.
 func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
-	contentHeight := scaledLauncherSize(28, props.DensityScale)
+	contentHeight := launcherToolbarContentHeight(props.DensityScale)
 	fontSize := scaledLauncherSize(woxcomponent.ToolbarFontSize, props.DensityScale)
 	actionGap := scaledLauncherSize(16, props.DensityScale)
 	contentWidth := max(float32(0), props.Width-props.Padding.Left-props.Padding.Right)
@@ -182,19 +182,7 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 
 // launcherToolbarActionView builds one label-and-keycap unit and reports its width.
 func launcherToolbarActionView(action LauncherToolbarAction, theme woxcomponent.Theme, window *woxui.Window, densityScale float32) (woxwidget.Widget, float32) {
-	labelStyle := woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.ToolbarFontSize, densityScale)}
-	labelMetrics, _ := window.MeasureText(action.Label, labelStyle)
-	chip, chipWidth := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
-		Labels: action.HotkeyLabels, Foreground: theme.ToolbarText, Background: theme.ToolbarBackground,
-		FontSize: scaledLauncherSize(woxcomponent.TailFontSize, densityScale), Compact: densityScale < 1, Window: window,
-	})
-	contentHeight := scaledLauncherSize(28, densityScale)
-	gap := scaledLauncherSize(8, densityScale)
-	width := labelMetrics.Size.Width + gap + chipWidth
-	content := woxwidget.Container{Width: width, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{
-		woxwidget.Align{Width: labelMetrics.Size.Width, Height: contentHeight, Vertical: 0.5, Child: woxwidget.Text{Value: action.Label, Style: labelStyle, Color: theme.ToolbarText}},
-		chip,
-	}}}
+	_, width := launcherToolbarActionSurface(action, theme, window, densityScale, false)
 	return woxwidget.Semantics{
 		Key: woxwidget.Key(action.ID + "-semantics"), AutomationID: action.ID, Role: woxui.AccessibilityRoleButton, Label: action.Label,
 		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}, OnAction: func(semanticAction woxui.AccessibilityAction, _ string) error {
@@ -206,6 +194,46 @@ func launcherToolbarActionView(action LauncherToolbarAction, theme woxcomponent.
 			}
 			return nil
 		},
-		Child: woxwidget.Gesture{ID: action.ID, OnTap: action.OnTap, Child: content},
+		// Label and keycaps share one tap target, so hover covers the whole action instead of
+		// treating the shortcut chips as a second control.
+		Child: woxcomponent.Hoverable(woxwidget.Key(action.ID+"-hover"), false, func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
+			content, _ := launcherToolbarActionSurface(action, theme, window, densityScale, hovered)
+			return woxwidget.Gesture{ID: action.ID, OnTap: action.OnTap, OnHoverAt: onHoverAt, Child: content}
+		}),
 	}, width
+}
+
+// launcherToolbarActionSurface paints one toolbar action, including the shared hover overlay.
+func launcherToolbarActionSurface(action LauncherToolbarAction, theme woxcomponent.Theme, window *woxui.Window, densityScale float32, hovered bool) (woxwidget.Widget, float32) {
+	labelStyle := woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.ToolbarFontSize, densityScale)}
+	labelMetrics, _ := window.MeasureText(action.Label, labelStyle)
+	background := woxui.Color{}
+	chipBackground := theme.ToolbarBackground
+	if hovered {
+		background = woxcomponent.ControlHoverColor(theme.ToolbarBackground, theme.ToolbarText)
+		chipBackground = background
+	}
+	chip, chipWidth := woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{
+		Labels: action.HotkeyLabels, Foreground: theme.ToolbarText, Background: chipBackground,
+		FontSize: scaledLauncherSize(woxcomponent.TailFontSize, densityScale), Compact: densityScale < 1, Window: window,
+	})
+	innerHeight := scaledLauncherSize(28, densityScale)
+	gap := scaledLauncherSize(8, densityScale)
+	horizontalPadding := scaledLauncherSize(8, densityScale)
+	verticalPadding := scaledLauncherSize(2, densityScale)
+	contentHeight := launcherToolbarContentHeight(densityScale)
+	width := horizontalPadding*2 + labelMetrics.Size.Width + gap + chipWidth
+	return woxwidget.Container{
+		Width: width, Height: contentHeight, Radius: scaledLauncherSize(4, densityScale), Color: background,
+		Padding: woxwidget.Insets{Left: horizontalPadding, Top: verticalPadding, Right: horizontalPadding, Bottom: verticalPadding},
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxwidget.Align{Width: labelMetrics.Size.Width, Height: innerHeight, Vertical: 0.5, Child: woxwidget.Text{Value: action.Label, Style: labelStyle, Color: theme.ToolbarText}},
+			chip,
+		}},
+	}, width
+}
+
+// launcherToolbarContentHeight includes a 2px optical inset above and below the 28px action content.
+func launcherToolbarContentHeight(densityScale float32) float32 {
+	return scaledLauncherSize(28, densityScale) + scaledLauncherSize(2, densityScale)*2
 }
