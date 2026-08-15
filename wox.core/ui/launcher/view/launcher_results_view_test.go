@@ -67,7 +67,11 @@ func TestLauncherResultWithoutSubtitleCentersTitleVertically(t *testing.T) {
 	}).(woxwidget.Semantics)
 	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
-	labelViewport := launcherResultRowContent(row).Children[1].(woxwidget.Clip)
+	content := launcherResultRowContent(row)
+	if len(content.Children) != 2 {
+		t.Fatalf("row children = %d, want icon and label without a zero-width tail slot", len(content.Children))
+	}
+	labelViewport := content.Children[1].(woxwidget.Clip)
 	label := labelViewport.Child.(woxwidget.Container).Child.(woxwidget.Align)
 
 	if label.Vertical != 0.5 || label.Height != 50 {

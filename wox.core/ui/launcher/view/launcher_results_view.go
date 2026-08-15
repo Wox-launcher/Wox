@@ -179,8 +179,15 @@ func launcherResultTextBoundary(key woxwidget.Key, label string, props launcherR
 }
 
 // LauncherSplitContentView places the result list beside a prepared preview.
-func LauncherSplitContentView(results, preview woxwidget.Widget) woxwidget.Widget {
-	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{results, preview}}
+// Each pane is capped to its allocated width so a loose horizontal flex cannot
+// measure both children at the full content width and report a 1:1 overflow.
+// Height is not filled: the launcher column is a sequential vertical flex, so
+// available height is the window, not the remaining content slot.
+func LauncherSplitContentView(resultsWidth float32, results woxwidget.Widget, previewWidth float32, preview woxwidget.Widget) woxwidget.Widget {
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+		woxwidget.Constrained{MaxWidth: resultsWidth, FillWidth: true, Child: results},
+		woxwidget.Constrained{MaxWidth: previewWidth, FillWidth: true, Child: preview},
+	}}
 }
 
 // LauncherResultsView builds the virtualized result list.
@@ -290,13 +297,18 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 			return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: props.Radius, Color: props.Color}
 		},
 	}
+	rowChildren := []woxwidget.Widget{
+		woxwidget.Align{Width: props.IconSize, Height: props.BaseHeight, Vertical: 0.5, Child: icon},
+		woxwidget.Clip{Width: labelWidth, Height: props.BaseHeight, Child: labelContent},
+	}
+	// Align with Width 0 fills the parent, so an empty tail slot would consume the
+	// full row width and overflow a sequential horizontal flex by exactly that amount.
+	if item.TailWidth > 0 {
+		rowChildren = append(rowChildren, woxwidget.Align{Width: item.TailWidth, Height: props.BaseHeight, Vertical: 0.5, Child: tail})
+	}
 	contentLayer := woxwidget.Container{
 		Width: props.RowWidth, Height: props.RowHeight, Padding: props.ItemPadding,
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: props.IconGap, Children: []woxwidget.Widget{
-			woxwidget.Align{Width: props.IconSize, Height: props.BaseHeight, Vertical: 0.5, Child: icon},
-			woxwidget.Clip{Width: labelWidth, Height: props.BaseHeight, Child: labelContent},
-			woxwidget.Align{Width: item.TailWidth, Height: props.BaseHeight, Vertical: 0.5, Child: tail},
-		}},
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: props.IconGap, Children: rowChildren},
 	}
 	resultControl := woxwidget.Gesture{
 		ID: fmt.Sprintf("result-gesture-%s", item.ID),

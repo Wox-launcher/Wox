@@ -210,51 +210,69 @@ func FindLauncherResult(snapshot woxwidget.AutomationSnapshot, label string) (st
 // SelectLauncherResult moves native keyboard selection to a current dynamic result ID.
 func SelectLauncherResult(t *testing.T, ctx context.Context, client *automationdriver.Client, resultID string) woxwidget.AutomationSnapshot {
 	t.Helper()
-	snapshot, err := client.Snapshot(ctx)
+	return selectLauncherResult(t, ctx, client, resultID, func(node woxui.AccessibilityNode) bool {
+		return node.AutomationID == resultID
+	})
+}
+
+// SelectLauncherResultLabelPrefix moves selection to the visible result whose label starts with prefix.
+// Plugins such as Clipboard mint a new result ID when the watcher republishes, so ID-based selection is racy.
+func SelectLauncherResultLabelPrefix(t *testing.T, ctx context.Context, client *automationdriver.Client, prefix string) woxwidget.AutomationSnapshot {
+	t.Helper()
+	return selectLauncherResult(t, ctx, client, prefix, func(node woxui.AccessibilityNode) bool {
+		return strings.HasPrefix(node.Label, prefix)
+	})
+}
+
+// selectLauncherResult moves keyboard selection to the current result matching match.
+func selectLauncherResult(t *testing.T, ctx context.Context, client *automationdriver.Client, description string, match func(woxui.AccessibilityNode) bool) woxwidget.AutomationSnapshot {
+	t.Helper()
+	resultCount, selectedIndex, targetIndex := 0, -1, -1
+	snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		resultCount, selectedIndex, targetIndex = launcherResultMatchIndexes(snapshot, match)
+		return selectedIndex >= 0 && targetIndex >= 0
+	})
 	if err != nil {
-		t.Fatalf("read launcher results before selecting %q: %v", resultID, err)
+		t.Fatalf("wait for launcher result %q before selecting: %v", description, err)
 	}
-	resultIDs := make([]string, 0)
-	selectedIndex := -1
-	targetIndex := -1
-	for _, node := range snapshot.Tree.Nodes {
-		if !strings.HasPrefix(node.AutomationID, "launcher.result.") {
-			continue
-		}
-		index := len(resultIDs)
-		resultIDs = append(resultIDs, node.AutomationID)
-		if node.Selected {
-			selectedIndex = index
-		}
-		if node.AutomationID == resultID {
-			targetIndex = index
-		}
-	}
-	if targetIndex < 0 || selectedIndex < 0 {
-		t.Fatalf("select launcher result %q: target index %d, selected index %d", resultID, targetIndex, selectedIndex)
-	}
-	if targetIndex == selectedIndex {
-		return snapshot
-	}
-	key := woxui.KeyArrowDown
-	if targetIndex < selectedIndex {
-		key = woxui.KeyArrowUp
-	}
-	for range resultIDs {
-		if err := client.PressKey(ctx, key, 0); err != nil {
-			t.Fatalf("navigate to launcher result %q: %v", resultID, err)
-		}
-		snapshot, err = client.Snapshot(ctx)
-		if err != nil {
-			t.Fatalf("read launcher results while selecting %q: %v", resultID, err)
-		}
-		target, found := automationdriver.Find(snapshot, resultID)
-		if found && target.Selected {
+	for range resultCount {
+		if targetIndex == selectedIndex {
 			return snapshot
 		}
+		key := woxui.KeyArrowDown
+		if targetIndex < selectedIndex {
+			key = woxui.KeyArrowUp
+		}
+		if err := client.PressKey(ctx, key, 0); err != nil {
+			t.Fatalf("navigate to launcher result %q: %v", description, err)
+		}
+		snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			_, selectedIndex, targetIndex = launcherResultMatchIndexes(snapshot, match)
+			return selectedIndex >= 0 && targetIndex >= 0
+		})
+		if err != nil {
+			t.Fatalf("wait for launcher result %q while selecting: %v", description, err)
+		}
 	}
-	t.Fatalf("launcher result %q was not selected after keyboard navigation", resultID)
+	t.Fatalf("launcher result %q was not selected after keyboard navigation", description)
 	return woxwidget.AutomationSnapshot{}
+}
+
+// launcherResultMatchIndexes returns visible result count and the selected/target indexes for match.
+func launcherResultMatchIndexes(snapshot woxwidget.AutomationSnapshot, match func(woxui.AccessibilityNode) bool) (resultCount, selectedIndex, targetIndex int) {
+	selectedIndex, targetIndex = -1, -1
+	for _, node := range snapshot.Tree.Nodes {
+		if strings.HasPrefix(node.AutomationID, "launcher.result.") {
+			if node.Selected {
+				selectedIndex = resultCount
+			}
+			if match(node) {
+				targetIndex = resultCount
+			}
+			resultCount++
+		}
+	}
+	return resultCount, selectedIndex, targetIndex
 }
 
 // OpenResultActionPanel opens the action panel through its platform shortcut and waits for the focused filter.

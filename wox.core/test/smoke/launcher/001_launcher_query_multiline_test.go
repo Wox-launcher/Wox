@@ -6,7 +6,6 @@ import (
 	"context"
 	"runtime"
 	"testing"
-	"time"
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
@@ -72,17 +71,13 @@ func Test001LauncherQueryMultiline(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("scroll multiline query with wheel: %v", err)
 		}
-		scrollCtx, cancelScroll := context.WithTimeout(ctx, 5*time.Second)
-		defer cancelScroll()
-		snapshot, err = client.WaitFor(scrollCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			input, found := automationdriver.Find(snapshot, "launcher.query.input")
 			scroll, scrollFound := automationdriver.Find(snapshot, "launcher.query.scroll")
 			return found && input.Value == expected && scrollFound && scroll.Value != beforeScroll.Value
 		})
 		if err != nil {
-			currentSnapshot, snapshotErr := client.Snapshot(ctx)
-			current, currentFound := automationdriver.Find(currentSnapshot, "launcher.query.scroll")
-			t.Fatalf("wait for multiline query wheel scroll: %v; before %q current found %v value %q snapshot error %v", err, beforeScroll.Value, currentFound, current.Value, snapshotErr)
+			t.Fatalf("wait for multiline query wheel scroll: %v", err)
 		}
 		smoke.AssertNoDiagnostics(t, snapshot)
 	})

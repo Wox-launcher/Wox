@@ -130,10 +130,17 @@ func TestLauncherHeaderUsesAlignmentForVerticalAccessoryPlacement(t *testing.T) 
 	}).(woxwidget.Container)
 	row := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 
-	for index, child := range row.Children[:4] {
+	querySlot, ok := row.Children[0].(woxwidget.Expanded)
+	if !ok {
+		t.Fatalf("query slot = %T, want Expanded", row.Children[0])
+	}
+	if alignment, ok := querySlot.Child.(woxwidget.Align); !ok || alignment.Vertical != 0.5 || alignment.Width != 400 {
+		t.Fatalf("query alignment = %#v, want vertically centered Align 400 wide", querySlot.Child)
+	}
+	for index, child := range row.Children[1:4] {
 		alignment, ok := child.(woxwidget.Align)
 		if !ok || alignment.Vertical != 0.5 {
-			t.Fatalf("header accessory %d = %T, want vertically centered Align", index, child)
+			t.Fatalf("header accessory %d = %T, want vertically centered Align", index+1, child)
 		}
 	}
 }

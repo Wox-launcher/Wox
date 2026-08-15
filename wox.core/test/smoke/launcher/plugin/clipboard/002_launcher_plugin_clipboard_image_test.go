@@ -37,13 +37,13 @@ func Test002LauncherPluginClipboardImage(t *testing.T) {
 			t.Fatalf("write external image clipboard: %v", err)
 		}
 
-		snapshot, resultID := waitForClipboardImageResult(t, ctx, client, width, height)
-		if resultID == "" {
-			t.Fatalf("Clipboard image result was not found in snapshot: %+v", snapshot)
+		labelPrefix := fmt.Sprintf("Image (%d×%d)", width, height)
+		if _, resultID := waitForClipboardImageResult(t, ctx, client, width, height); resultID == "" {
+			t.Fatal("Clipboard image result was not found")
 		}
-		smoke.SelectLauncherResult(t, ctx, client, resultID)
+		smoke.SelectLauncherResultLabelPrefix(t, ctx, client, labelPrefix)
 
-		snapshot = smoke.OpenResultActionPanel(t, ctx, client)
+		snapshot := smoke.OpenResultActionPanel(t, ctx, client)
 		copyAction, found := automationdriver.FindByAutomationIDPrefix(snapshot, "action-result-")
 		if !found {
 			t.Fatal("Clipboard image Copy action was not exposed")
@@ -104,15 +104,28 @@ func waitForClipboardImageResult(t *testing.T, ctx context.Context, client *auto
 		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, query); err != nil {
 			t.Fatalf("enter Clipboard image query %q: %v", query, err)
 		}
-		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		waitCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		snapshot, err := client.WaitFor(waitCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			input, found := automationdriver.Find(snapshot, "launcher.query.input")
-			return found && input.Value == query
+			if !found || input.Value != query {
+				return false
+			}
+			results, complete := automationdriver.Find(snapshot, "launcher.results")
+			if !complete || results.Value != "complete" {
+				return false
+			}
+			for _, node := range snapshot.Tree.Nodes {
+				if strings.HasPrefix(node.AutomationID, "launcher.result.") && strings.HasPrefix(node.Label, labelPrefix) {
+					return true
+				}
+			}
+			return false
 		})
+		cancel()
 		if err != nil {
-			t.Fatalf("wait for Clipboard image query %q: %v", query, err)
-		}
-		results, complete := automationdriver.Find(snapshot, "launcher.results")
-		if !complete || results.Value != "complete" {
+			if ctx.Err() != nil {
+				t.Fatalf("wait for Clipboard image query %q: %v", query, ctx.Err())
+			}
 			continue
 		}
 		for _, node := range snapshot.Tree.Nodes {

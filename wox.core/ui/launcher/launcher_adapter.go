@@ -828,9 +828,10 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale floa
 		return a.buildResults(snapshot, width, height, imageScale)
 	}
 	splitX := width * ratio
+	previewWidth := width - splitX
 	return launcherview.LauncherSplitContentView(
-		a.buildResults(snapshot, splitX, height, imageScale),
-		a.buildPreviewSection(snapshot.results[snapshot.selected], snapshot, width-splitX, height, imageScale),
+		splitX, a.buildResults(snapshot, splitX, height, imageScale),
+		previewWidth, a.buildPreviewSection(snapshot.results[snapshot.selected], snapshot, previewWidth, height, imageScale),
 	)
 }
 

@@ -70,12 +70,14 @@ func (p LauncherQueryProps) Equal(other LauncherQueryProps) bool {
 	return true
 }
 
-// LauncherQueryBoundary retains the query subtree between text, focus, and caret phase changes.
+// LauncherQueryBoundary retains the query editor while keeping scroll chrome outside the cache.
+// Scroll offset and scrollbar animation are retained widgets, so caching them makes
+// WOX_DEBUG_REPAINT=verify compare a live scrolled paint with a shadow rebuild at offset 0.
 func LauncherQueryBoundary(props LauncherQueryProps) woxwidget.Widget {
-	return woxwidget.Boundary[LauncherQueryProps]{
+	return launcherQueryScrollSurface(props, woxwidget.Boundary[LauncherQueryProps]{
 		Key: "launcher-query-boundary", Label: "header:query", Props: props,
-		Build: func(props LauncherQueryProps) woxwidget.Widget { return LauncherQueryView(props) },
-	}
+		Build: launcherQueryEditor,
+	})
 }
 
 // LauncherQueryLine contains adapter-measured text slices for one query line.
@@ -141,10 +143,10 @@ func (p launcherQueryLoadingProps) Equal(other launcherQueryLoadingProps) bool {
 func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 	queryLeftPadding := scaledLauncherSize(8, props.DensityScale)
 	accessoryGap := scaledLauncherSize(12, props.DensityScale)
-	children := []woxwidget.Widget{woxwidget.Align{
+	children := []woxwidget.Widget{woxwidget.Expanded{Child: woxwidget.Align{
 		Width: props.QueryWidth, Height: props.QueryBoxHeight, Vertical: 0.5,
 		Child: LauncherQueryBoundary(props.Query),
-	}}
+	}}}
 	if props.Refinement != nil {
 		children = append(children, woxwidget.Align{
 			Width: props.RefinementWidth, Height: props.QueryBoxHeight, Vertical: 0.5, Child: props.Refinement,
@@ -231,20 +233,30 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 
 // LauncherQueryView builds the query editor from adapter-prepared text metrics.
 func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
+	return launcherQueryScrollSurface(props, launcherQueryEditor(props))
+}
+
+// launcherQueryLineMetrics returns the painted line box, display lines, and scrollable content height.
+func launcherQueryLineMetrics(props LauncherQueryProps) (lineHeight float32, lines []LauncherQueryLine, contentHeight float32) {
+	lineHeight = props.LineHeight
+	if lineHeight <= 0 {
+		lineHeight = props.CaretHeight
+	}
+	lines = props.Lines
+	if len(lines) == 0 {
+		lines = []LauncherQueryLine{{}}
+	}
+	return lineHeight, lines, max(props.Height, float32(len(lines))*lineHeight)
+}
+
+// launcherQueryEditor builds the retained query text painter without scroll chrome.
+func launcherQueryEditor(props LauncherQueryProps) woxwidget.Widget {
 	const cursorWidth = float32(2)
 	pointerCursor := woxui.PointerCursorText
 	if !props.Enabled {
 		pointerCursor = woxui.PointerCursorDefault
 	}
-	lineHeight := props.LineHeight
-	if lineHeight <= 0 {
-		lineHeight = props.CaretHeight
-	}
-	lines := props.Lines
-	if len(lines) == 0 {
-		lines = []LauncherQueryLine{{}}
-	}
-	contentHeight := max(props.Height, float32(len(lines))*lineHeight)
+	lineHeight, lines, contentHeight := launcherQueryLineMetrics(props)
 
 	var editor woxwidget.Widget = woxwidget.Gesture{
 		ID:     "query-editor",
@@ -349,6 +361,12 @@ func LauncherQueryView(props LauncherQueryProps) woxwidget.Widget {
 			}},
 		}}
 	}
+	return editor
+}
+
+// launcherQueryScrollSurface clips overflowing query lines and reserves the trailing window-drag region.
+func launcherQueryScrollSurface(props LauncherQueryProps, editor woxwidget.Widget) woxwidget.Widget {
+	lineHeight, _, contentHeight := launcherQueryLineMetrics(props)
 	keepVisible := &woxwidget.ScrollRange{Start: float32(props.CaretLine) * lineHeight, End: float32(props.CaretLine)*lineHeight + props.CaretHeight}
 	editor = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "launcher-query-scroll", Content: editor, Width: props.Width, Height: props.Height, ContentHeight: contentHeight,
