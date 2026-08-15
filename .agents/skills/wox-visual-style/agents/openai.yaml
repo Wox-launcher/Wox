@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wox Visual Style"
+  short_description: "Unify Wox Go UI visual language and states"
+  default_prompt: "Use $wox-visual-style to design, implement, or review a Wox Go UI change for visual consistency."
