@@ -669,7 +669,10 @@ static void CALLBACK foregroundChangedProc(
 
     if (hwnd == gLastExplorerHwnd)
     {
-        logMessage("foregroundChangedProc: same hwnd, skip activation");
+        // WINEVENT_SKIPOWNPROCESS hides the intermediate Wox foreground event,
+        // so the same dialog HWND must publish activation again after Wox closes.
+        logMessage("foregroundChangedProc: same hwnd, reactivate");
+        triggerActivation(hwnd, pid, isOpenSaveDialog(hwnd) ? 1 : 0);
         return;
     }
 

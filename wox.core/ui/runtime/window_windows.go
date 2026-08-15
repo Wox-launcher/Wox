@@ -70,6 +70,8 @@ const (
 var (
 	registerWindowClassOnce              sync.Once
 	registerWindowClassErr               error
+	stickyChangedOnce                    sync.Once
+	stickyChangedMessage                 uint32
 	windowProcedureCallback              = syscall.NewCallback(windowProcedure)
 	nativeWindows                        sync.Map
 	setProcessDPIAwarenessContext        = syscall.NewLazyDLL("user32.dll").NewProc("SetProcessDpiAwarenessContext")
@@ -87,6 +89,7 @@ var (
 	dwmSetWindowAttribute                = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmSetWindowAttribute")
 	dwmExtendFrameIntoClientArea         = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmExtendFrameIntoClientArea")
 	setWindowCompositionAttribute        = syscall.NewLazyDLL("user32.dll").NewProc("SetWindowCompositionAttribute")
+	registerWindowMessageW               = syscall.NewLazyDLL("user32.dll").NewProc("RegisterWindowMessageW")
 	isWindowProc                         = syscall.NewLazyDLL("user32.dll").NewProc("IsWindow")
 	allowSetForegroundWindow             = syscall.NewLazyDLL("user32.dll").NewProc("AllowSetForegroundWindow")
 	dpiAwarenessContextPerMonitorAwareV2 = ^uintptr(3)
@@ -969,6 +972,27 @@ func redrawWindowAfterResize(hwnd win.HWND) {
 	win.RedrawWindow(hwnd, nil, 0, win.RDW_INVALIDATE|win.RDW_UPDATENOW)
 }
 
+// WindowsHandle returns the HWND used by Windows-only native integrations.
+func (w *Window) WindowsHandle() uintptr {
+	if w == nil || w.native == nil {
+		return 0
+	}
+	return uintptr(w.native.hwnd)
+}
+
+// windowsStickyChangedMessage registers the notification shared with WoxWindowHook64.dll.
+func windowsStickyChangedMessage() uint32 {
+	stickyChangedOnce.Do(func() {
+		name, err := syscall.UTF16PtrFromString("Wox.WindowHook.StickyChanged.v1")
+		if err != nil {
+			return
+		}
+		result, _, _ := registerWindowMessageW.Call(uintptr(unsafe.Pointer(name)))
+		stickyChangedMessage = uint32(result)
+	})
+	return stickyChangedMessage
+}
+
 // ensureWindowClass registers the shared process-wide class exactly once.
 func ensureWindowClass() error {
 	registerWindowClassOnce.Do(func() {
@@ -1007,6 +1031,12 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		return win.DefWindowProc(hwnd, message, wParam, lParam)
 	}
 	window := value.(*platformWindow)
+	if stickyMessage := windowsStickyChangedMessage(); stickyMessage != 0 && message == stickyMessage {
+		if window.options.OnStickyWindowChanged != nil {
+			window.options.OnStickyWindowChanged(wParam)
+		}
+		return 0
+	}
 
 	switch message {
 	case wmGetObject:

@@ -54,7 +54,6 @@ const (
 	explorerPluginID                = "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e"
 	explorerCommandAdd              = "add"
 	explorerDialogHintOverlayName   = "explorer_dialog_hint"
-	explorerDialogHintVerticalInset = 40
 	explorerDialogPathCacheDuration = 30 * time.Second
 )
 
@@ -1106,8 +1105,11 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				return
 			}
 			messageKey := "plugin_explorer_hint_message_dialog"
+			// The old Windows renderer accepted points; DirectWrite uses DIPs.
+			fontSize := float32(10.0 * 96.0 / 72.0)
 			if util.IsMacOS() {
 				messageKey = "plugin_explorer_hint_message_dialog_macos"
+				fontSize = 12
 			}
 
 			title := window.GetWindowNameByPid(pid)
@@ -1117,13 +1119,13 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				Window: overlay.WindowOptions{
 					ID:              explorerDialogHintOverlayName,
 					StickyWindowPid: pid,
-					Anchor:          overlay.AnchorBottomCenter,
-					OffsetY:         explorerDialogHintVerticalInset,
+					Anchor:          overlay.AnchorBelowCenter,
 					Topmost:         true,
 					StickyWindowId:  dialogWindowId,
 					MaxWidth:        500,
 				},
-				Message: c.api.GetTranslation(localCtx, messageKey),
+				Message:  c.api.GetTranslation(localCtx, messageKey),
+				FontSize: fontSize,
 				OnClick: func() bool {
 					clickCtx := context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
 					clickCtx = util.WithCoreSessionContext(clickCtx)

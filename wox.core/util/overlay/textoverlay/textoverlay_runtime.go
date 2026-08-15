@@ -393,7 +393,11 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 	}
 	padding := textOverlayPadding(instance.options)
 	rootChildren = append(rootChildren, woxwidget.StackChild{Left: padding.Left, Top: layout.titleBarHeight + padding.Top, Child: content})
-	return woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: rootChildren}
+	root := woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: rootChildren}
+	if instance.options.OnClick != nil {
+		return woxwidget.Gesture{ID: "text-overlay-click", OnTap: func() { instance.options.OnClick() }, Child: root}
+	}
+	return root
 }
 
 // textOverlayFontSize resolves the message font size, defaulting to the shared

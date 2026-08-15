@@ -144,9 +144,12 @@ type WindowOptions struct {
 	OnWebViewHideRequested     func()
 	OnWebViewTooltip           func(event WebViewTooltipEvent)
 	OnWebViewNavigationChanged func(state WebViewNavigationState)
-	OnCloseRequested           func()
-	OnClosed                   func()
-	frameMetrics               *frameMetricsRecorder
+	// OnStickyWindowChanged receives the Windows hook notification used by overlays
+	// that follow a foreign native window. Other platforms ignore it.
+	OnStickyWindowChanged func(target uintptr)
+	OnCloseRequested      func()
+	OnClosed              func()
+	frameMetrics          *frameMetricsRecorder
 }
 
 // Window wraps the native implementation selected for the current platform.

@@ -18,6 +18,12 @@ import (
 
 var dialogCommandMu sync.Mutex
 
+// StickyHook owns the loaded hook DLL and injected target subclass.
+type StickyHook struct {
+	dll    *windows.DLL
+	handle uintptr
+}
+
 type navigationDiagnostic struct {
 	Stage           uint32
 	Win32Error      uint32
@@ -32,6 +38,48 @@ type navigationDiagnostic struct {
 
 func DLLPath() string {
 	return filepath.Join(util.GetLocation().GetOthersDirectory(), "window_hook", "WoxWindowHook64.dll")
+}
+
+// AttachSticky injects the existing target-thread hook and sends move notifications to observerHWND.
+func AttachSticky(windowID string, pid int, observerHWND uintptr) *StickyHook {
+	target, err := strconv.ParseUint(strings.TrimSpace(windowID), 10, 64)
+	if err != nil || target == 0 || pid <= 0 || observerHWND == 0 {
+		return nil
+	}
+	dll, err := windows.LoadDLL(DLLPath())
+	if err != nil {
+		return nil
+	}
+	attach, err := dll.FindProc("WoxWindowHookAttachSticky")
+	if err != nil {
+		_ = dll.Release()
+		return nil
+	}
+	handle, _, _ := attach.Call(uintptr(target), uintptr(uint32(pid)), observerHWND)
+	if handle == 0 {
+		_ = dll.Release()
+		return nil
+	}
+	return &StickyHook{dll: dll, handle: handle}
+}
+
+// Detach removes the target subclass before releasing Wox's DLL reference.
+func (hook *StickyHook) Detach() bool {
+	if hook == nil || hook.dll == nil || hook.handle == 0 {
+		return true
+	}
+	detach, err := hook.dll.FindProc("WoxWindowHookDetachSticky")
+	if err != nil {
+		return false
+	}
+	detached, _, _ := detach.Call(hook.handle)
+	if detached == 0 {
+		return false
+	}
+	hook.handle = 0
+	_ = hook.dll.Release()
+	hook.dll = nil
+	return true
 }
 
 // NavigateDialog performs one target-thread Shell browser navigation and unloads its DLL reference afterward.

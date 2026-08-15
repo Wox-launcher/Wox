@@ -23,6 +23,15 @@ func TestBoundsPreservesPositionUntilClampingIsNeeded(t *testing.T) {
 	}
 }
 
+func TestBoundsPlacesBelowAnchorTopAtWindowBottom(t *testing.T) {
+	workArea := woxui.Rect{Width: 1920, Height: 1080}
+	target := woxui.Rect{X: 200, Y: 100, Width: 1200, Height: 500}
+	bounds := boundsForTarget(WindowOptions{Anchor: AnchorBelowCenter}, target, workArea, woxui.Size{Width: 500, Height: 48})
+	if bounds.X != 550 || bounds.Y != 600 {
+		t.Fatalf("below-center origin = (%v, %v), want (550, 600)", bounds.X, bounds.Y)
+	}
+}
+
 func TestRequestCloseFiresCallbackOnce(t *testing.T) {
 	called := 0
 	RegisterCloseCallback("test", func() { called++ })

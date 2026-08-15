@@ -149,3 +149,20 @@ func TestRuntimeTextOverlayBuildUsesWindowChrome(t *testing.T) {
 		t.Fatalf("overlay panel chrome = radius %v border %v/%#v, want %v/%v/%#v", panel.Radius, panel.BorderWidth, panel.BorderColor, radius, borderWidth, borderColor)
 	}
 }
+
+func TestRuntimeTextOverlayBuildInvokesClick(t *testing.T) {
+	clicked := false
+	instance := &runtimeTextOverlay{
+		layout: runtimeTextLayout{
+			windowSize:  woxui.Size{Width: 160, Height: 48},
+			contentSize: woxui.Size{Width: 140, Height: 28},
+			textWidth:   140,
+		},
+		options: Options{Message: "click", OnClick: func() bool { clicked = true; return true }},
+	}
+	root := instance.build(woxui.FrameInfo{Size: woxui.Size{Width: 160, Height: 48}}).(woxwidget.Gesture)
+	root.OnTap()
+	if !clicked {
+		t.Fatal("clickable text overlay did not invoke OnClick")
+	}
+}

@@ -22,6 +22,7 @@ const (
 	AnchorBottomLeft   = 6
 	AnchorBottomCenter = 7
 	AnchorBottomRight  = 8
+	AnchorBelowCenter  = 9
 )
 
 // WindowOptions defines the window-level behavior shared by runtime overlays.
@@ -77,7 +78,8 @@ type runtimeOverlay struct {
 	window  *woxui.Window
 	host    *woxwidget.Host
 
-	stickyStop chan struct{}
+	stickyStop   chan struct{}
+	stickyDetach func()
 }
 
 var runtimeOverlays = struct {
@@ -143,6 +145,11 @@ func showWindowOnUI(options WindowOptions, view View) bool {
 			initialHeight = 80
 		}
 		nativeOptions := overlayNativeWindowOptions(options, woxui.Size{Width: initialWidth, Height: initialHeight})
+		nativeOptions.OnStickyWindowChanged = func(uintptr) {
+			if instance.options.StickyWindowPid > 0 {
+				instance.applyLayout(false)
+			}
+		}
 		nativeOptions.OnFrame = instance.host.Frame
 		nativeOptions.OnPointer = func(event woxui.PointerEvent) {
 			if instance.view.OnPointer != nil {
@@ -322,10 +329,7 @@ func runtimeOverlayByID(id string) *runtimeOverlay {
 }
 
 func (instance *runtimeOverlay) dispose() {
-	if instance.stickyStop != nil {
-		close(instance.stickyStop)
-		instance.stickyStop = nil
-	}
+	instance.stopStickyTracking()
 	if instance.view.OnDispose != nil {
 		instance.view.OnDispose()
 	}
@@ -403,16 +407,16 @@ func (instance *runtimeOverlay) applyLayout(preserveOrigin bool) {
 }
 
 func (instance *runtimeOverlay) restartStickyTracking() {
-	if instance.stickyStop != nil {
-		close(instance.stickyStop)
-		instance.stickyStop = nil
-	}
+	instance.stopStickyTracking()
 	if instance.options.StickyWindowPid <= 0 {
+		return
+	}
+	if instance.startNativeStickyTracking() {
 		return
 	}
 	stop := make(chan struct{})
 	instance.stickyStop = stop
-	// ponytail: 100ms polling replaces three native window-hook implementations; add event hooks only if measured lag matters.
+	// Polling is the cross-platform fallback when the native Windows hook is unavailable.
 	go func() {
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
@@ -429,6 +433,18 @@ func (instance *runtimeOverlay) restartStickyTracking() {
 			}
 		}
 	}()
+}
+
+// stopStickyTracking detaches the platform hook or stops its polling fallback.
+func (instance *runtimeOverlay) stopStickyTracking() {
+	if instance.stickyStop != nil {
+		close(instance.stickyStop)
+		instance.stickyStop = nil
+	}
+	if instance.stickyDetach != nil {
+		instance.stickyDetach()
+		instance.stickyDetach = nil
+	}
 }
 
 // WorkArea resolves the logical display work area used for sizing and clamping.
@@ -472,6 +488,18 @@ func Bounds(options WindowOptions, current, workArea woxui.Rect, size woxui.Size
 		target = sticky
 	} else if options.AbsolutePosition {
 		target = woxui.Rect{}
+	}
+	return boundsForTarget(options, target, workArea, size)
+}
+
+// boundsForTarget aligns one overlay against its resolved window or display rectangle.
+func boundsForTarget(options WindowOptions, target, workArea woxui.Rect, size woxui.Size) woxui.Rect {
+	if options.Anchor == AnchorBelowCenter {
+		return clampBounds(woxui.Rect{
+			X:     target.X + target.Width/2 - size.Width/2 + float32(options.OffsetX),
+			Y:     target.Y + target.Height + float32(options.OffsetY),
+			Width: size.Width, Height: size.Height,
+		}, workArea)
 	}
 	column := options.Anchor % 3
 	row := options.Anchor / 3
