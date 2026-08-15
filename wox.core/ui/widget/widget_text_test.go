@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"math"
 	"testing"
 
 	woxui "wox/ui/runtime"
@@ -109,6 +110,38 @@ func TestTextBlockReflowsLayoutMeasuredAtZeroWidth(t *testing.T) {
 
 	if !precomputed.HasConstraintWidth || root.bounds.Height != expected.Size.Height {
 		t.Fatalf("zero-width layout contract = known %v height %.0f, want known width and height %.0f", precomputed.HasConstraintWidth, root.bounds.Height, expected.Size.Height)
+	}
+}
+
+func TestTextBlockUnboundedHeightHonorsMaxLines(t *testing.T) {
+	measurer := &fakeHostServices{}
+	style := woxui.TextStyle{Size: 10}
+	value := "alpha beta gamma delta"
+	block := TextBlock{Value: value, Style: style, Width: 25, MaxLines: 2, LineHeight: 10}
+
+	root := block.layout(context{window: measurer}, constraints{width: 25, height: math.MaxFloat32})
+	expected := layoutTextBlock(measurer, value, style, 25, 2, 10)
+	if root.bounds.Height != expected.Size.Height || expected.Size.Height != 20 {
+		t.Fatalf("unbounded MaxLines 2 height = %.0f lines %d, want 20px across %d wrapped lines", root.bounds.Height, len(expected.Lines), 2)
+	}
+
+	unlimited := TextBlock{Value: value, Style: style, Width: 25, LineHeight: 10}.layout(
+		context{window: measurer}, constraints{width: 25, height: math.MaxFloat32},
+	)
+	full := layoutTextBlock(measurer, value, style, 25, 0, 10)
+	if unlimited.bounds.Height != full.Size.Height || full.Size.Height <= 20 {
+		t.Fatalf("unbounded unlimited height = %.0f, want full wrap %.0f taller than two lines", unlimited.bounds.Height, full.Size.Height)
+	}
+}
+
+func TestTextBlockBoundedHeightStillClipsMaxLines(t *testing.T) {
+	measurer := &fakeHostServices{}
+	style := woxui.TextStyle{Size: 10}
+	root := (TextBlock{Value: "alpha beta gamma", Style: style, Width: 25, MaxLines: 2, LineHeight: 10}).layout(
+		context{window: measurer}, constraints{width: 25, height: 10},
+	)
+	if root.bounds.Height != 10 {
+		t.Fatalf("bounded height = %.0f, want one 10px line", root.bounds.Height)
 	}
 }
 

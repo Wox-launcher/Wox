@@ -1128,7 +1128,10 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 		lineHeight = max(metrics.Size.Height, w.Style.Size*1.35)
 	}
 	maxLines := w.MaxLines
-	if heightLimit > 0 {
+	// Scroll content is measured with unbounded height (MaxFloat32). Converting
+	// that sentinel to a line count overflows int and collapses wrapping to one
+	// ellipsized line, so only finite boxes may reduce MaxLines.
+	if heightLimit > 0 && heightLimit < math.MaxFloat32 {
 		visibleLines := max(1, int(heightLimit/lineHeight))
 		if maxLines <= 0 || visibleLines < maxLines {
 			maxLines = visibleLines
