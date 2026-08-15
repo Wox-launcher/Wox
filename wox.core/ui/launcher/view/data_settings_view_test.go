@@ -39,6 +39,23 @@ func TestDataLogLevelUsesSharedAnchoredDropdown(t *testing.T) {
 	}
 }
 
+func TestDataBackupTableKeepsOperationColumnInsideNarrowViewport(t *testing.T) {
+	table := dataBackupTable(DataSettingsProps{Labels: DataSettingsLabels{BackupListTitle: "Backups"}}, 880)
+	content := table.(woxwidget.Container).Child.(woxwidget.Flex)
+	grid := content.Children[1].(woxwidget.Stateful).Widget.(formTableGridProps)
+	widths := formTableColumnWidthsWithOperation(grid.field.Columns, grid.width, false)
+	totalWidth := float32(0)
+	for _, width := range widths {
+		totalWidth += width
+	}
+	if totalWidth > grid.width {
+		t.Fatalf("backup table declared width = %.0f, want no wider than viewport %.0f", totalWidth, grid.width)
+	}
+	if got := grid.field.Columns[2].Width; got != dataBackupOperationColumnWidth {
+		t.Fatalf("backup operation column width = %.0f, want %.0f", got, dataBackupOperationColumnWidth)
+	}
+}
+
 func TestDataStorageFieldUsesIntrinsicButtonWidths(t *testing.T) {
 	field := dataStorageField(DataSettingsProps{
 		Labels: DataSettingsLabels{

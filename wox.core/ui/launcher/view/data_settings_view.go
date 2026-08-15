@@ -10,6 +10,8 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+const dataBackupOperationColumnWidth = float32(140)
+
 // DataBackup is the display data required for one backup table row.
 type DataBackup struct {
 	ID        string
@@ -137,9 +139,9 @@ func dataStorageField(props DataSettingsProps, width float32) woxwidget.Widget {
 func dataAutoBackupField(props DataSettingsProps, width float32) woxwidget.Widget {
 	label := props.Labels.AutoBackupTitle
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
-		Label: label, Description: props.Labels.AutoBackupDescription, Width: width, Height: 66,
+		Label: label, Description: props.Labels.AutoBackupDescription, Width: width, Height: woxcomponent.SettingsRowHeight,
 		Gap: 12, Padding: woxwidget.Insets{Top: 5}, Theme: props.Theme,
-		Child: woxwidget.Container{Width: 42, Height: 48, Padding: woxwidget.Insets{Top: 4}, Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
+		Child: woxwidget.Align{Width: woxcomponent.SettingsSwitchWidth, Height: woxcomponent.SettingsControlHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
 			ID: "data-auto-backup-switch", Label: label, Value: props.AutoBackup, OnChange: func(bool) {
 				if props.OnToggleAutoBackup != nil {
 					props.OnToggleAutoBackup()
@@ -168,7 +170,7 @@ func dataBackupTable(props DataSettingsProps, width float32) woxwidget.Widget {
 	return FormTableField(FormTableFieldProps{
 		ID: "data-backups", Title: props.Labels.BackupListTitle, Width: width,
 		Height: FormTableFieldHeight(true, "", visibleRows, maxHeight), MaxHeight: maxHeight, InlineTitle: true, ReadOnly: true,
-		Columns: []FormTableColumn{{Label: props.Labels.BackupDate, Width: 350}, {Label: props.Labels.BackupType, Width: 220}, {Label: props.Labels.BackupOperation, Width: 300}},
+		Columns: []FormTableColumn{{Label: props.Labels.BackupDate, Width: 350}, {Label: props.Labels.BackupType, Width: 220}, {Label: props.Labels.BackupOperation, Width: dataBackupOperationColumnWidth}},
 		Rows:    rows, SecondaryLabel: props.Labels.BackupNow, EmptyLabel: props.Labels.BackupEmpty, Theme: props.Theme, OnSecondary: props.OnCreateBackup,
 	})
 }
@@ -206,12 +208,12 @@ func dataLogLevelField(props DataSettingsProps, width float32) woxwidget.Widget 
 	}
 	controlWidth := min(float32(280), width*0.34)
 	choice := woxwidget.Keyed{Key: SettingChoiceAnchorKey("LogLevel"), Child: woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
-		ID: "data-log-level", Label: props.Labels.LogLevelTitle, Value: level, Width: controlWidth, Height: 34,
+		ID: "data-log-level", Label: props.Labels.LogLevelTitle, Value: level, Width: controlWidth, Height: woxcomponent.SettingsControlHeight,
 		Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140), Foreground: props.Theme.ResultTitle, Theme: props.Theme, OnTapBounds: props.OnOpenLogLevel,
 	})}
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LogLevelTitle, Description: props.Labels.LogLevelDescription,
-		Width: width, Height: 66, Gap: 32, Padding: woxwidget.Insets{Top: 5}, Child: choice, Theme: props.Theme,
+		Width: width, Height: woxcomponent.SettingsRowHeight, Gap: 32, Padding: woxwidget.Insets{Top: 5}, Child: choice, Theme: props.Theme,
 	})
 }
 
@@ -222,7 +224,7 @@ func dataLogActionsField(props DataSettingsProps, width float32) woxwidget.Widge
 	}
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
 		Label: props.Labels.LogClearTitle, Description: props.Labels.LogClearDescription,
-		Width: width, Height: 66, Gap: 10, Padding: woxwidget.Insets{Top: 5}, Theme: props.Theme,
+		Width: width, Height: woxcomponent.SettingsRowHeight, Gap: 10, Padding: woxwidget.Insets{Top: 5}, Theme: props.Theme,
 		Child: woxwidget.Container{Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 			dataButton(props, "data-log-clear", clearLabel, woxcomponent.ButtonOutline, props.OnClearLogs),
 			dataButton(props, "data-log-open", props.Labels.LogOpenButton, woxcomponent.ButtonOutline, props.OnOpenLog),

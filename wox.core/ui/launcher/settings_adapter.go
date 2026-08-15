@@ -295,7 +295,7 @@ func (a *App) settingsSearchResultTypeLabel(kind settingsSearchResultKind) strin
 }
 
 func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, width, height, imageScale float32) woxwidget.Widget {
-	contentWidth := max(float32(0), width-82)
+	contentWidth := launcherview.SettingsPageContentWidth(width)
 	children := make([]woxwidget.Widget, 0, len(items)+9)
 	children = append(children, a.buildSettingsPageHeader(
 		a.activeSettingsNavLabel(snapshot),
@@ -316,13 +316,13 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			contentHeight += 43
 		}
 		if index == snapshot.row {
-			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + 62}
+			keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + woxcomponent.SettingsRowHeight}
 		}
 		row := a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{}, imageScale)
 		children = append(children, woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
-			Width: contentWidth, Height: 62, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette.componentTheme(),
+			Width: contentWidth, Height: woxcomponent.SettingsRowHeight, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette.componentTheme(),
 		}))
-		contentHeight += 62
+		contentHeight += woxcomponent.SettingsRowHeight
 	}
 	if snapshot.tab == "general" && snapshot.hotkey.Form != nil {
 		children = append(children, a.buildSettingsSectionHeader(a.translate("i18n:ui_general_section_hotkeys"), contentWidth, snapshot.palette))

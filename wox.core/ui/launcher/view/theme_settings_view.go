@@ -99,7 +99,7 @@ func ThemeSettingsView(props ThemeSettingsProps) woxwidget.Widget {
 }
 
 func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget {
-	const searchHeight = float32(42)
+	const searchHeight = woxcomponent.SettingsSearchHeight
 	const searchGap = float32(20)
 	viewportHeight := max(float32(0), height-searchHeight-searchGap)
 

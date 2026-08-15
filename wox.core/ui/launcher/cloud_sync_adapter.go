@@ -20,7 +20,7 @@ type cloudPlanTooltipState struct {
 
 // buildCloudSettingsPage maps cloud state into the portable cloud settings view.
 func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
-	contentWidth := max(float32(0), width-82)
+	contentWidth := launcherview.SettingsPageContentWidth(width)
 	theme := snapshot.palette.componentTheme()
 	message := snapshot.cloud.Error
 	messageColor := theme.ErrorText

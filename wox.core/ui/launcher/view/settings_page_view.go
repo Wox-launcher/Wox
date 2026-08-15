@@ -19,7 +19,7 @@ type SettingsPageProps struct {
 
 // SettingsPageContentWidth returns the content width inside the shared page insets.
 func SettingsPageContentWidth(width float32) float32 {
-	return max(float32(0), width-82)
+	return max(float32(0), width-80)
 }
 
 // SettingsPage builds the common scrollable settings page.
@@ -30,7 +30,7 @@ func SettingsPage(props SettingsPageProps) woxwidget.Widget {
 	if id == "" {
 		id = "settings-page-scroll"
 	}
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 38, Top: 34, Right: 44, Bottom: 24}, Child: woxwidget.ScrollView{
+	return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 40, Top: 34, Right: 40, Bottom: 24}, Child: woxwidget.ScrollView{
 		Key: woxwidget.Key(id), ID: id, KeepVisible: props.KeepVisible, KeepVisibleKey: props.KeepVisibleKey,
 		Width: contentWidth, Height: viewportHeight,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.Gap, Children: props.Children},
@@ -90,9 +90,6 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 			valueWidth = props.ControlWidth
 		}
 	}
-	if props.Kind == "bool" {
-		valueWidth = 42
-	}
 	labelWidth := max(float32(180), props.Width-valueWidth-32)
 	var valueField woxwidget.Widget
 	switch props.Kind {
@@ -117,7 +114,7 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 			})}}
 		}
 	case "bool":
-		valueField = woxwidget.Container{Width: valueWidth, Height: 44, Padding: woxwidget.Insets{Top: 10}, Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
+		valueField = woxwidget.Align{Width: valueWidth, Height: woxcomponent.SettingsControlHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
 			ID: "setting-switch-" + props.ID, Label: props.Title, Value: props.Value == "true", Disabled: props.Disabled, Theme: props.Theme,
 			OnChange: func(bool) {
 				if props.OnTap != nil {
@@ -137,12 +134,12 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 		}
 		valueField = woxwidget.Keyed{Key: SettingChoiceAnchorKey(props.ID), Child: woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
 			ID: "setting-choice-" + props.ID, Label: props.Title, Value: props.Value, Trailing: props.ValueTrailing, Leading: props.ValueLeading,
-			Width: valueWidth, Height: 34, Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140),
+			Width: valueWidth, Height: woxcomponent.SettingsControlHeight, Outline: settingsColorAlpha(props.Theme.ResultSubtitle, 140),
 			Foreground: valueColor, Secondary: subtitle, Theme: props.Theme, OnTap: onTap, OnTapBounds: onTapBounds,
 		})}
 	}
 	return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
-		Label: props.Title, Description: props.Description, Width: props.Width, Height: 62, LabelWidth: labelWidth, Gap: 28,
+		Label: props.Title, Description: props.Description, Width: props.Width, Height: woxcomponent.SettingsRowHeight, LabelWidth: labelWidth, Gap: 28,
 		Radius: 6, Background: props.Background, Padding: woxwidget.Insets{Left: 2, Right: 2, Bottom: 5}, Child: valueField, Theme: fieldTheme,
 	})
 }

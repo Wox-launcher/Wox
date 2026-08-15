@@ -214,8 +214,11 @@ func buildActionsView(context woxwidget.StateContext, props ActionsProps, scroll
 		})
 	}
 	if len(rows) == 0 {
-		rows = append(rows, woxwidget.Container{Width: innerWidth, Height: ActionRowHeight, Padding: woxwidget.Insets{Left: 8, Top: 13}, Child: woxwidget.Text{
-			Value: props.NoMatchesLabel, Style: woxui.TextStyle{Size: emptyFontSize}, Color: props.ActionHeader,
+		rows = append(rows, woxwidget.Align{Width: innerWidth, Height: ActionRowHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{
+			Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+				woxcomponent.SearchGlyph(scaledLauncherSize(18, props.DensityScale), props.ActionHeader),
+				woxwidget.Text{Value: props.NoMatchesLabel, Style: woxui.TextStyle{Size: emptyFontSize}, Color: props.ActionHeader},
+			},
 		}})
 	}
 	listHeight := float32(visibleRows * ActionRowHeight)

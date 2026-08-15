@@ -24,3 +24,22 @@ func TestWoxCheckboxMatchesFlutterGeometryAndSemantics(t *testing.T) {
 		t.Fatal("checked checkbox hover background did not change")
 	}
 }
+
+func TestWoxCheckboxSupportsControlledFocusAndKeyboardCallbacks(t *testing.T) {
+	focused := false
+	keyHandled := false
+	checkbox := WoxCheckbox(CheckboxProps{
+		ID: "filter", Label: "Filter", Focused: true, OnChange: func(bool) {},
+		OnKey:         func(woxui.KeyEvent) bool { keyHandled = true; return true },
+		OnFocusChange: func(value bool) { focused = value }, Theme: Theme{},
+	}).(woxwidget.Semantics)
+	control := checkbox.Child.(woxwidget.Focusable)
+	if !control.Autofocus || control.OnKey == nil || control.OnFocusChange == nil {
+		t.Fatal("checkbox should expose controlled focus hooks")
+	}
+	control.OnFocusChange(true)
+	control.OnKey(woxui.KeyEvent{Key: woxui.KeyArrowDown})
+	if !focused || !keyHandled {
+		t.Fatalf("checkbox callbacks = focused %v key %v, want both callbacks", focused, keyHandled)
+	}
+}

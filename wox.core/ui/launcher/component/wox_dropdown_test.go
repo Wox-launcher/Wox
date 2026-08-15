@@ -24,3 +24,12 @@ func TestWoxDropdownAddsHoverSurface(t *testing.T) {
 		t.Fatalf("dropdown hover background = %#v", got)
 	}
 }
+
+func TestWoxDropdownDefaultsToStandardControlHeight(t *testing.T) {
+	dropdown := WoxDropdown(DropdownProps{ID: "mode", Label: "Mode", Value: "Auto", Width: 160, OnTap: func() {}}).(woxwidget.Semantics)
+	stateful := dropdown.Child.(woxwidget.Focusable).Child
+	trigger := buildHoverable(stateful, false).(woxwidget.Gesture).Child.(woxwidget.Container)
+	if trigger.Height != SettingsControlHeight {
+		t.Fatalf("dropdown default height = %.0f, want %.0f", trigger.Height, SettingsControlHeight)
+	}
+}

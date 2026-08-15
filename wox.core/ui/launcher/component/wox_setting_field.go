@@ -25,7 +25,7 @@ type SettingFieldProps struct {
 func WoxSettingField(props SettingFieldProps) woxwidget.Widget {
 	height := props.Height
 	if height <= 0 {
-		height = 66
+		height = SettingsRowHeight
 	}
 	gap := props.Gap
 	if gap <= 0 {

@@ -9,12 +9,15 @@ import (
 
 // CheckboxProps describes one compact Wox checkbox.
 type CheckboxProps struct {
-	ID       string
-	Label    string
-	Value    bool
-	Disabled bool
-	OnChange func(bool)
-	Theme    Theme
+	ID            string
+	Label         string
+	Value         bool
+	Focused       bool
+	Disabled      bool
+	OnChange      func(bool)
+	OnKey         func(woxui.KeyEvent) bool
+	OnFocusChange func(bool)
+	Theme         Theme
 }
 
 // WoxCheckbox builds the Flutter-aligned 18px checkbox interaction.
@@ -67,7 +70,10 @@ func WoxCheckbox(props CheckboxProps) woxwidget.Widget {
 			toggle()
 			return nil
 		},
-		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 4, OnKey: func(event woxui.KeyEvent) bool {
+		Child: woxwidget.Focusable{Key: key, Autofocus: props.Focused, Disabled: props.Disabled, FocusRingColor: props.Theme.Cursor, FocusRingRadius: 4, OnKey: func(event woxui.KeyEvent) bool {
+			if props.OnKey != nil && props.OnKey(event) {
+				return true
+			}
 			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 				return false
 			}
@@ -75,6 +81,6 @@ func WoxCheckbox(props CheckboxProps) woxwidget.Widget {
 				toggle()
 			}
 			return true
-		}, Child: hoverable(key, props.Disabled, buildVisual)},
+		}, OnFocusChange: props.OnFocusChange, Child: hoverable(key, props.Disabled, buildVisual)},
 	}
 }

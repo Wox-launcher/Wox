@@ -52,6 +52,8 @@ Interpret results in context. Primitive gestures are valid for page-specific poi
 6. Prefer an existing categorized SVG from `wox.core/common/icons.go`; add a reusable icon there before introducing a local asset.
 7. Check light and dark themes, long or translated text, narrow widths, scrolling, logical units, DPI boundaries, and disabled/error content.
 
+Express alignment through layout primitives first: use `Align`, Flex main/cross-axis alignment, `Expanded`, or `Constrained` to center and place controls. Do not hand-calculate offsets such as `(rowHeight-controlHeight)/2`, or use padding as a substitute for alignment; improve the owning layout/component boundary when the existing primitives cannot express the relationship.
+
 When reviewing only, report concrete violations with the owning layer and recommended shared fix. Do not mutate files unless the user requested implementation.
 
 ## Implement at the correct layer
@@ -62,6 +64,7 @@ When reviewing only, report concrete violations with the owning layer and recomm
 - Centralize stable metrics used by multiple production surfaces. Do not add a token for a single local constraint.
 - Keep ordinary control size explicit through shared defaults or a semantic size API; do not copy the same height into call sites.
 - Keep Launcher and Action Panel metrics independent so ordinary component changes cannot alter their geometry accidentally.
+- Prefer layout components over manual alignment math. Center controls with `Align` or Flex alignment and reserve padding for actual content insets, not positional compensation.
 - Add English intent comments only for non-obvious visual constraints or exceptions.
 
 Preserve existing behavior unless the request includes interaction changes. A visual refactor must not alter values, callbacks, focus order, IME ownership, keyboard activation, scrolling, or window lifecycle.

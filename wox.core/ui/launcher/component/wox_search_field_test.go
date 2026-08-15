@@ -25,7 +25,7 @@ func TestWoxSearchFieldUsesHostFocusRing(t *testing.T) {
 		},
 	}).(woxwidget.Container)
 
-	if field.BorderColor != withAlpha(subtitle, 170) || field.BorderWidth != 1 {
+	if field.Height != SettingsSearchHeight || field.BorderColor != withAlpha(subtitle, 170) || field.BorderWidth != 1 {
 		t.Fatalf("focused search border = %#v at %v, want neutral 1px border", field.BorderColor, field.BorderWidth)
 	}
 	stack := field.Child.(woxwidget.Stack)
@@ -33,7 +33,7 @@ func TestWoxSearchFieldUsesHostFocusRing(t *testing.T) {
 	if input.Controller != controller || input.Controller.State().Selection != (woxui.TextSelection{Anchor: 0, Focus: 8}) {
 		t.Fatalf("search controller selection = %+v, want existing text selected", input.Controller.State().Selection)
 	}
-	if input.Width != 200 || input.Padding.Left != 36+2 || input.Padding.Right != 6+34 {
+	if input.Width != 200 || input.Height != SettingsSearchHeight || input.Padding.Left != 36+2 || input.Padding.Right != 6+34 || input.Padding.Top != 10 || input.Padding.Bottom != 10 {
 		t.Fatalf("search input geometry = %.0f with padding %+v, want full-width input with leading/trailing insets", input.Width, input.Padding)
 	}
 	if input.FocusRingColor != cursor || input.FocusRingOutsets != (woxwidget.Insets{}) {

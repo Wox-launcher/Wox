@@ -92,13 +92,13 @@ func TestFormModelFieldUsesCompactAnchoredDropdown(t *testing.T) {
 	semantics := controlColumn.Children[0].(woxwidget.Semantics)
 	gesture := focusedControlGesture(semantics)
 	control := gesture.Child.(woxwidget.Container)
-	if control.Height != 34 || control.BorderWidth != 1 {
-		t.Fatalf("model trigger geometry = height %.0f border %.0f, want Flutter 34/1", control.Height, control.BorderWidth)
+	if control.Height != woxcomponent.SettingsControlHeight || control.BorderWidth != 1 {
+		t.Fatalf("model trigger geometry = height %.0f border %.0f, want standard %.0f/1", control.Height, control.BorderWidth, woxcomponent.SettingsControlHeight)
 	}
 	if gesture.OnTap != nil || gesture.OnTapBounds == nil {
 		t.Fatal("model trigger should open a field-anchored dropdown")
 	}
-	anchor := woxui.Rect{X: 300, Y: 140, Width: 580, Height: 34}
+	anchor := woxui.Rect{X: 300, Y: 140, Width: 580, Height: woxcomponent.SettingsControlHeight}
 	gesture.OnTapBounds(anchor)
 	if openedAt != anchor {
 		t.Fatalf("model menu anchor = %#v, want %#v", openedAt, anchor)

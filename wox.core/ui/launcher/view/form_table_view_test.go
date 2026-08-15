@@ -23,10 +23,13 @@ func TestFormTableRowNonTextControlsExposeControlledFocus(t *testing.T) {
 	if !checkbox.Autofocus || checkbox.OnKey == nil || checkbox.OnFocusChange == nil {
 		t.Fatal("checkbox should expose the controlled table-row focus contract")
 	}
+	if _, ok := checkbox.Child.(woxwidget.Stateful); !ok {
+		t.Fatalf("checkbox control = %T, want shared hoverable checkbox state", checkbox.Child)
+	}
 	checkbox.OnFocusChange(true)
 
 	props.OnChoiceTap = func(woxui.Rect) {}
-	selectControl := formTableRowSelectControl(props, 200, 34).(woxwidget.Semantics).Child.(woxwidget.Focusable)
+	selectControl := formTableRowSelectControl(props, 200, woxcomponent.SettingsControlHeight).(woxwidget.Semantics).Child.(woxwidget.Focusable)
 	if !selectControl.Autofocus || selectControl.OnKey == nil || selectControl.OnFocusChange == nil {
 		t.Fatal("select should expose the controlled table-row focus contract")
 	}
@@ -42,7 +45,7 @@ func TestFormTableRowTextControlLeavesCaretFocusToHost(t *testing.T) {
 	control := formTableRowTextControl(FormTableRowFieldProps{
 		ID: "field", Focused: true, State: woxui.TextEditingState{}, Theme: woxcomponent.Theme{},
 		OnFocusChange: func(focused bool) { changes = append(changes, focused) },
-	}, 240, 34)
+	}, 240, woxcomponent.SettingsControlHeight)
 	field := control.(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
 	if field.Focused {
 		t.Fatal("table row state must not control the retained text field caret")
@@ -59,7 +62,7 @@ func TestFormTableRowTextControlPlacesActionBesideInput(t *testing.T) {
 	control := formTableRowTextControl(FormTableRowFieldProps{
 		ID: "query", State: woxui.TextEditingState{Text: "ai translate {wox:selected_text}"}, Theme: woxcomponent.Theme{},
 		ActionIcon: &woxui.Image{}, ActionLabel: "Test this query", OnActionTap: func() { tapped = true },
-	}, 420, 34).(woxwidget.Flex)
+	}, 420, woxcomponent.SettingsControlHeight).(woxwidget.Flex)
 	if control.Gap != 8 || len(control.Children) != 2 {
 		t.Fatalf("query action layout = children %d gap %.0f, want input plus outside action icon", len(control.Children), control.Gap)
 	}

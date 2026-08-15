@@ -561,8 +561,8 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 	}
 	paddingTop := float32(10)
 	if cell.Child != nil {
-		content = cell.Child
-		paddingTop = 6
+		content = woxwidget.Align{Width: contentWidth, Height: tableSurfaceRowHeight, Vertical: 0.5, Child: cell.Child}
+		paddingTop = 0
 	} else if cell.IndicatorColor != nil {
 		content = woxwidget.Container{Width: 16, Height: 16, Radius: 8, Color: *cell.IndicatorColor}
 	} else if cell.Icon != nil {
@@ -857,13 +857,13 @@ func FormTableRowFieldHeightFor(kind, description, errorMessage string, maxLines
 	case "app":
 		return 46 + descriptionHeight + errorHeight
 	case "textbox", "password", "dirPath":
-		controlHeight := float32(34)
+		controlHeight := woxcomponent.SettingsControlHeight
 		if maxLines > 1 {
 			controlHeight = 14 + float32(min(maxLines, 8))*20
 		}
 		return controlHeight + 4 + descriptionHeight + errorHeight
 	default:
-		return 38 + descriptionHeight + errorHeight
+		return woxcomponent.SettingsControlHeight + 4 + descriptionHeight + errorHeight
 	}
 }
 
@@ -989,11 +989,11 @@ func formTableRowControlHeight(props FormTableRowFieldProps) float32 {
 		if props.MaxLines > 1 {
 			return 14 + float32(min(props.MaxLines, 8))*20
 		}
-		return 34
+		return woxcomponent.SettingsControlHeight
 	case "label":
 		return 24
 	default:
-		return 34
+		return woxcomponent.SettingsControlHeight
 	}
 }
 
@@ -1067,7 +1067,7 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 		}
 		sideActions = append(sideActions, action)
 	}
-	padding := woxwidget.Insets{Left: 10, Top: 7, Right: 9, Bottom: 6}
+	padding := woxwidget.Insets{Left: 10, Top: 6, Right: 9, Bottom: 6}
 	if props.TrailingLabel != "" {
 		padding.Right = 38
 	}
@@ -1103,29 +1103,23 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 }
 
 func formTableRowCheckboxControl(props FormTableRowFieldProps) woxwidget.Widget {
-	var mark woxwidget.Widget = woxwidget.Container{Width: 16, Height: 16}
-	if props.Checked {
-		mark = woxwidget.Align{Width: 16, Height: 16, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
-			Value: "✓", Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionText,
-		}}
-	}
-	control := woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, Child: woxwidget.Container{
-		Width: 18, Height: 18, Radius: 3, BorderColor: formTableRowOutline(props.Theme, props.Focused), BorderWidth: 1, Padding: woxwidget.UniformInsets(1), Child: mark,
-	}}
-	return woxwidget.Semantics{
-		AutomationID: props.ID, Role: woxui.AccessibilityRoleCheckBox, Label: props.Label,
-		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionToggle}, Checked: props.Checked,
-		OnAction: func(action woxui.AccessibilityAction, _ string) error {
-			if action != woxui.AccessibilityActionToggle && action != woxui.AccessibilityActionActivate {
-				return fmt.Errorf("unsupported checkbox action %q", action)
-			}
+	return woxcomponent.WoxCheckbox(woxcomponent.CheckboxProps{
+		ID: props.ID, Label: props.Label, Value: props.Checked, Focused: props.Focused, Theme: props.Theme,
+		OnChange: func(bool) {
 			if props.OnTap != nil {
 				props.OnTap()
 			}
-			return nil
 		},
-		Child: formTableRowFocusableControl(props, control),
-	}
+		OnKey: props.OnKey,
+		OnFocusChange: func(focused bool) {
+			if props.OnFocusChange != nil {
+				props.OnFocusChange(focused)
+			}
+			if focused && props.OnFocus != nil {
+				props.OnFocus()
+			}
+		},
+	})
 }
 
 // formTableRowImageControl restores Flutter's preview plus emoji and upload actions.

@@ -7,13 +7,16 @@ import (
 )
 
 func TestSettingFieldUsesSharedTypography(t *testing.T) {
-	field := WoxSettingField(SettingFieldProps{Label: "Font", Description: "Used throughout Wox", Width: 400, Height: 66, LabelWidth: 180}).(woxwidget.Container)
+	field := WoxSettingField(SettingFieldProps{Label: "Font", Description: "Used throughout Wox", Width: 400, LabelWidth: 180}).(woxwidget.Container)
 	label := field.Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
 	labelText := label.Children[0].(woxwidget.Text)
 	description := label.Children[1].(woxwidget.Text)
 
 	if labelText.Style.Size != SettingsLabelFontSize || description.Style.Size != SettingsHelpFontSize {
 		t.Fatalf("setting typography = %v/%v, want %v/%v", labelText.Style.Size, description.Style.Size, SettingsLabelFontSize, SettingsHelpFontSize)
+	}
+	if field.Height != SettingsRowHeight {
+		t.Fatalf("setting row height = %.0f, want %.0f", field.Height, SettingsRowHeight)
 	}
 }
 
@@ -22,5 +25,13 @@ func TestSettingFieldCanAllocateRemainingWidthToLabel(t *testing.T) {
 	row := field.Child.(woxwidget.Flex)
 	if _, ok := row.Children[0].(woxwidget.Expanded); !ok {
 		t.Fatalf("automatic setting label slot = %T, want Expanded", row.Children[0])
+	}
+}
+
+func TestSettingTextFieldUsesStandardControlGeometry(t *testing.T) {
+	field := WoxSettingTextField(TextFieldProps{ID: "font", Label: "Font", Width: 240}).(woxwidget.Stateful)
+	props := field.Widget.(TextFieldProps)
+	if props.Height != SettingsControlHeight || props.Padding.Top != 6 || props.Padding.Bottom != 6 {
+		t.Fatalf("setting text field geometry = height %.0f padding %+v, want %.0f with 6px vertical padding", props.Height, props.Padding, SettingsControlHeight)
 	}
 }

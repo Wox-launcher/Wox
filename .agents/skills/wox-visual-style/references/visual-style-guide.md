@@ -166,7 +166,7 @@ Use the 4-unit rhythm: 4, 8, 12, 16, 20, and 24. Allow 6, 10, and 14 only for es
 
 - Align repeated labels, controls, and actions to shared leading or trailing edges.
 - Align controls in one row by interaction-frame centerline.
-- Use built-in horizontal and vertical alignment primitives instead of manual offsets.
+- Use built-in horizontal and vertical alignment primitives (`Align`, Flex alignment, `Expanded`, and `Constrained`) instead of manual offsets or calculated centering padding. Do not write formulas such as `(rowHeight-controlHeight)/2` to position a child; make the layout component express the relationship.
 - Keep related label, value, and action content together; separate unrelated tasks into sections.
 - Preserve room for validation and progress where it prevents avoidable layout jumps.
 - Use a 1-unit border or divider for structure.

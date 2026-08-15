@@ -117,7 +117,7 @@ func buildFormAppPickerDialog(context woxwidget.StateContext, props FormAppPicke
 	innerWidth := max(float32(0), panelWidth-48)
 	innerHeight := max(float32(0), panelHeight-48)
 	const titleHeight = float32(36)
-	const searchHeight = float32(42)
+	const searchHeight = woxcomponent.SettingsSearchHeight
 	const actionsHeight = SettingsDialogActionsHeight
 	errorHeight := float32(0)
 	if props.Error != "" {
@@ -130,7 +130,7 @@ func buildFormAppPickerDialog(context woxwidget.StateContext, props FormAppPicke
 	}}
 	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "form-table-app-search", Label: props.SearchPlaceholder, Hint: props.SearchPlaceholder, Width: innerWidth, Height: searchHeight, Radius: 4,
-		Padding: woxwidget.Insets{Left: 12, Top: 11, Right: 10, Bottom: 10}, Transparent: true,
+		Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 10, Bottom: 10}, Transparent: true,
 		BorderColor: formAppPickerAlpha(props.Theme.ResultSubtitle, 170), BorderWidth: 1,
 		Style: woxui.TextStyle{Size: 13}, Controller: state.queryController, FocusNode: state.queryFocusNode, Autofocus: true, MaxLines: 1,
 		Window: props.Window, Theme: props.Theme, OnKey: func(event woxui.KeyEvent) bool { return state.handleKey(context, props, visible, event) },

@@ -8,7 +8,7 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const formAIModelControlHeight = float32(34)
+const formAIModelControlHeight = woxcomponent.SettingsControlHeight
 
 // FormPanelProps contains the prepared rows and actions rendered by a launcher form.
 type FormPanelProps struct {
@@ -102,10 +102,10 @@ type FormModelFieldProps struct {
 func FormModelField(props FormModelFieldProps) woxwidget.Widget {
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
 	control := woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
-		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: 34, Outline: formFieldOutline(props.Focused, props.Theme),
+		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: woxcomponent.SettingsControlHeight, Outline: formFieldOutline(props.Focused, props.Theme),
 		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, Theme: props.Theme, OnTapBounds: props.OnTap,
 	})
-	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 34, props.Theme)
+	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme)
 }
 
 // FormAppFieldProps contains one application selector row.
@@ -235,16 +235,16 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 			}})
 		}
 	}
-	control := woxwidget.Stack{Width: controlWidth, Height: 34, Children: controlChildren}
+	control := woxwidget.Stack{Width: controlWidth, Height: woxcomponent.SettingsControlHeight, Children: controlChildren}
 	if props.SettingsLayout {
 		const gap = float32(32)
 		return woxcomponent.WoxSettingField(woxcomponent.SettingFieldProps{
-			Label: props.Label, Description: props.Description, Width: props.Width, Height: 62, LabelWidth: settingsLabelWidth, Gap: gap,
+			Label: props.Label, Description: props.Description, Width: props.Width, Height: woxcomponent.SettingsRowHeight, LabelWidth: settingsLabelWidth, Gap: gap,
 			Padding: woxwidget.Insets{Left: 2, Top: 5, Right: 2, Bottom: 5},
 			Child:   control, Theme: props.Theme,
 		})
 	}
-	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 34, props.Theme)
+	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme)
 }
 
 // FormSwitchFieldProps contains one Flutter-style plugin boolean row.
@@ -285,10 +285,10 @@ type FormSelectFieldProps struct {
 func FormSelectField(props FormSelectFieldProps) woxwidget.Widget {
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
 	control := woxcomponent.WoxDropdown(woxcomponent.DropdownProps{
-		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: 34, Outline: formFieldOutline(props.Focused, props.Theme),
+		ID: props.ID, Label: props.Label, Value: props.Value, Width: controlWidth, Height: woxcomponent.SettingsControlHeight, Outline: formFieldOutline(props.Focused, props.Theme),
 		Foreground: props.Theme.ActionText, Secondary: props.Theme.ActionHeader, Theme: props.Theme, OnTap: props.OnTap, OnTapBounds: props.OnChoiceTap,
 	})
-	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, 34, props.Theme)
+	return formFieldLayout(props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme)
 }
 
 // FormAIModelFieldProps contains Flutter's two-part provider/model selector state.
@@ -348,7 +348,7 @@ func (s *formAIModelFieldState) DidUpdateWidget(_ woxwidget.StateContext, oldWid
 func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
 	props := widget.(FormAIModelFieldProps)
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
-	editWidth := float32(34)
+	editWidth := woxcomponent.SettingsControlHeight
 	gap := float32(8)
 	selectorsWidth := max(float32(0), controlWidth-editWidth-gap)
 	providerWidth := max(float32(90), (selectorsWidth-gap)/3)
@@ -364,7 +364,7 @@ func (s *formAIModelFieldState) Build(context woxwidget.StateContext, widget any
 	if s.editing {
 		model = woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 			ID: props.ID + "-name", Label: props.Label, Hint: props.ModelNameHint, Width: modelWidth, Height: formAIModelControlHeight, Radius: 4,
-			Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 9, Bottom: 6}, Transparent: true, BorderColor: outline, BorderWidth: 1,
+			Padding: woxwidget.Insets{Left: 10, Top: 6, Right: 9, Bottom: 6}, Transparent: true, BorderColor: outline, BorderWidth: 1,
 			Style: woxui.TextStyle{Size: 13}, Controller: s.controller, FocusNode: s.focusNode, Autofocus: true, MaxLines: 1, Window: props.Window, Theme: props.Theme,
 			OnChanged: props.OnModelNameChanged,
 		})
@@ -438,13 +438,13 @@ func FormTextField(props FormTextFieldProps) woxwidget.Widget {
 		suffixWidth = 28
 		inputWidth = max(float32(60), inputWidth-suffixWidth)
 	}
-	fieldHeight := float32(34)
+	fieldHeight := woxcomponent.SettingsControlHeight
 	if props.MaxLines > 1 {
 		fieldHeight = 14 + float32(min(props.MaxLines, 8))*20
 	}
 	input := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: props.ID, Label: props.Label, Width: inputWidth, Height: fieldHeight, Radius: 4,
-		Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 9, Bottom: 6}, Transparent: true,
+		Padding: woxwidget.Insets{Left: 10, Top: 6, Right: 9, Bottom: 6}, Transparent: true,
 		BorderColor: formFieldOutline(props.Focused, props.Theme), BorderWidth: 1,
 		Style: woxui.TextStyle{Size: 13}, Value: props.State.Text, Controller: props.Controller, Focused: props.Focused, Protected: props.Protected,
 		MaxLines: props.MaxLines, Window: props.Window, Theme: props.Theme, OnChanged: props.OnChanged, OnKey: props.OnKey,

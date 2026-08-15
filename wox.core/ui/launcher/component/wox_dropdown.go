@@ -27,6 +27,9 @@ type DropdownProps struct {
 
 // WoxDropdown builds a focusable dropdown trigger with shared visuals and accessibility semantics.
 func WoxDropdown(props DropdownProps) woxwidget.Widget {
+	if props.Height <= 0 {
+		props.Height = SettingsControlHeight
+	}
 	disabled := props.OnTap == nil && props.OnTapBounds == nil
 	key := woxwidget.Key(props.ID)
 	trigger := hoverable(key, disabled, func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {

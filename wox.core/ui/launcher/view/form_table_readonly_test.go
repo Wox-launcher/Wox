@@ -37,8 +37,9 @@ func TestReadonlyFormTableUsesFullWidthAndCellTooltip(t *testing.T) {
 func TestFormTableCellSupportsCustomContent(t *testing.T) {
 	child := woxwidget.Text{Value: "Restore"}
 	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.Theme{}}, FormTableCell{Child: child}, 220).(woxwidget.Container)
-	if cell.Child != child || cell.Padding.Top != 6 {
-		t.Fatal("custom table cell should render its child with control padding")
+	content, ok := cell.Child.(woxwidget.Align)
+	if !ok || content.Width != 206 || content.Height != tableSurfaceRowHeight || content.Vertical != 0.5 || cell.Padding.Top != 0 {
+		t.Fatalf("custom table cell alignment = %#v with padding top %.0f, want a full-height centered slot", cell.Child, cell.Padding.Top)
 	}
 }
 

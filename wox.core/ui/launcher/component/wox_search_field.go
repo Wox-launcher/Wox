@@ -40,7 +40,7 @@ type SearchFieldProps struct {
 
 // WoxSearchField keeps compact search geometry and native text focus consistent across settings surfaces.
 func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
-	const height = float32(42)
+	const height = SettingsSearchHeight
 	leadingWidth := float32(0)
 	if props.SearchIcon != nil {
 		leadingWidth = 36
@@ -83,7 +83,7 @@ func WoxSearchField(props SearchFieldProps) woxwidget.Widget {
 	}
 	input := WoxTextField(TextFieldProps{
 		ID: props.ID, Label: props.Label, Hint: props.Label, Width: inputWidth, Height: height, Radius: 4,
-		Padding: woxwidget.Insets{Left: leftPadding, Top: 11, Right: rightPadding, Bottom: 11}, Transparent: true,
+		Padding: woxwidget.Insets{Left: leftPadding, Top: 10, Right: rightPadding, Bottom: 10}, Transparent: true,
 		BorderColor: border, BorderWidth: 1, FocusRingColor: props.Theme.Cursor,
 		Style: woxui.TextStyle{Size: SettingsControlFontSize}, TextColor: props.Theme.ResultTitle, TextAlignmentY: 0.5,
 		Value: props.Value, Focused: props.Focused, Autofocus: props.Autofocus, Controller: props.Controller, MaxLines: 1, Window: props.Window, Theme: props.Theme,

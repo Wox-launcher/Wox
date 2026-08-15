@@ -40,7 +40,7 @@ func WoxSwitch(props SwitchProps) woxwidget.Widget {
 			}
 			trackColor = lerpColor(trackColor, controlHoverColor(trackColor, hoverForeground), hoverPosition)
 			thumbSize := 9.6 + 4.8*colorPosition + 1.6*hoverPosition
-			return woxwidget.Stack{Width: 36, Height: 24, Children: []woxwidget.StackChild{
+			return woxwidget.Stack{Width: SettingsSwitchWidth, Height: 24, Children: []woxwidget.StackChild{
 				{Left: 2.4, Top: 2.4, Child: woxwidget.Container{Width: 31.2, Height: 19.2, Radius: 9.6, Color: trackColor}},
 				{Left: 12 + 12*position - thumbSize/2, Top: 12 - thumbSize/2, Child: woxwidget.Container{Width: thumbSize, Height: thumbSize, Radius: thumbSize / 2, Color: woxui.Color{R: 255, G: 255, B: 255, A: 255}}},
 			}}

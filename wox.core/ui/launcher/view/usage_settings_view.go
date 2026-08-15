@@ -12,8 +12,7 @@ import (
 )
 
 const (
-	usagePageHorizontalInset = float32(38)
-	usagePageRightInset      = float32(44)
+	usagePageHorizontalInset = float32(40)
 	usagePageTopInset        = float32(34)
 	usagePageBottomInset     = float32(30)
 	usageSectionGap          = float32(18)
@@ -85,7 +84,7 @@ type UsageSettingsProps struct {
 
 // UsageSettingsView builds the responsive dashboard used by the Usage settings route.
 func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
-	contentWidth := max(float32(0), props.Width-usagePageHorizontalInset-usagePageRightInset)
+	contentWidth := max(float32(0), props.Width-usagePageHorizontalInset*2)
 	header, _ := usageSummaryHeader(props, contentWidth)
 	kpiGrid, _ := usageKPIGrid(props, contentWidth)
 	rankings, _ := usageRankings(props, contentWidth)
@@ -98,7 +97,7 @@ func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 	children = append(children, kpiGrid, usageActivityPanel(props, contentWidth), rankings)
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height,
-		Padding: woxwidget.Insets{Left: usagePageHorizontalInset, Top: usagePageTopInset, Right: usagePageRightInset, Bottom: usagePageBottomInset},
+		Padding: woxwidget.Insets{Left: usagePageHorizontalInset, Top: usagePageTopInset, Right: usagePageHorizontalInset, Bottom: usagePageBottomInset},
 		Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "usage-page-scroll", FillWidth: true, FillHeight: true,
 			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: usageSectionGap, Children: children}, ThumbColor: props.Theme.ResultSubtitle,
@@ -143,24 +142,14 @@ func usagePeriodSelector(props UsageSettingsProps) (woxwidget.Widget, float32) {
 	for _, period := range props.Periods {
 		buttonWidth := usagePeriodButtonWidth(period.Label)
 		selectorWidth += buttonWidth
-		background := woxui.Color{}
-		foreground := props.Theme.ResultSubtitle
-		if period.Selected {
-			background = props.Theme.SelectedBackground
-			foreground = props.Theme.SelectedTitle
-		}
-		if props.Loading && !period.Selected {
-			foreground = usageWithAlpha(foreground, 120)
-		}
 		onSelect := period.OnSelect
 		if props.Loading || period.Selected {
 			onSelect = nil
 		}
-		buttons = append(buttons, woxwidget.Gesture{ID: "usage-period-" + period.ID, OnTap: onSelect, Child: woxwidget.Container{
-			Width: buttonWidth, Height: 32, Radius: 6, Color: background, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Align{
-				Width: buttonWidth, Height: 18, Horizontal: 0.5, Child: woxwidget.Text{Value: period.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: foreground},
-			},
-		}})
+		buttons = append(buttons, woxcomponent.WoxSegmentedButton(woxcomponent.SegmentedButtonProps{
+			ID: "usage-period-" + period.ID, Label: period.Label, Width: buttonWidth,
+			Selected: period.Selected, Disabled: props.Loading, Theme: props.Theme, OnTap: onSelect,
+		}))
 	}
 	return woxwidget.Container{
 		Width: selectorWidth, Height: 38, Radius: 8, Color: props.Theme.QueryBackground, BorderColor: usageOutlineColor(props.Theme), BorderWidth: 1,
