@@ -86,6 +86,34 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 	}
 }
 
+func TestCloudSettingsActionsUseSharedButtonHeight(t *testing.T) {
+	theme := woxcomponent.Theme{}
+	buttonHeight := func(widget woxwidget.Widget) float32 {
+		return focusedControlGesture(widget).Child.(woxwidget.Container).Height
+	}
+
+	account := cloudAccountCard(CloudAccountProps{
+		LoggedIn: true, LabelWidth: 520, SupportLabel: "Contact Support", SupportIcon: &woxui.Image{},
+	}, 830, 162, theme).(woxwidget.Container)
+	accountRows := account.Child.(woxwidget.Flex)
+	billingRow := accountRows.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
+	if got := buttonHeight(billingRow.Children[1].(woxwidget.Align).Child); got != 32 {
+		t.Fatalf("support button height = %v, want shared 32", got)
+	}
+
+	syncCard := cloudSyncCard(CloudSyncProps{LabelWidth: 520, ButtonLabel: "Sync"}, 830, theme).(woxwidget.Container)
+	syncRow := syncCard.Child.(woxwidget.Flex)
+	if got := buttonHeight(syncRow.Children[1].(woxwidget.Align).Child); got != 32 {
+		t.Fatalf("sync button height = %v, want shared 32", got)
+	}
+
+	deviceHeader := cloudDeviceHeader(CloudDevicesProps{LabelWidth: 520, RefreshLabel: "Refresh", RefreshIcon: &woxui.Image{}}, 830, theme).(woxwidget.Container)
+	deviceRow := deviceHeader.Child.(woxwidget.Flex)
+	if got := buttonHeight(deviceRow.Children[1].(woxwidget.Align).Child); got != 32 {
+		t.Fatalf("refresh button height = %v, want shared 32", got)
+	}
+}
+
 func TestCloudRefreshButtonWidthIncludesLeadingIcon(t *testing.T) {
 	plain := cloudFormButtonWidth("Refresh", false)
 	withIcon := cloudFormButtonWidth("Refresh", true)
@@ -185,12 +213,12 @@ func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 	}
 	field := child.Children[0].(woxwidget.Container)
 	actionsFooter := child.Children[1].(woxwidget.Container)
-	if actionsFooter.Height != SettingsDialogActionsHeight || actionsFooter.Padding.Top != 12 {
+	if actionsFooter.Height != SettingsDialogActionsHeight || actionsFooter.Padding.Top != SettingsDialogActionsHeight-settingsDialogActionHeight {
 		t.Fatalf("plugin exclusion footer = height %v padding %+v, want shared settings actions", actionsFooter.Height, actionsFooter.Padding)
 	}
 	actions := actionsFooter.Child.(woxwidget.Align)
-	if actions.Horizontal != 1 || actions.Height != 36 {
-		t.Fatalf("plugin exclusion actions = height %v alignment %v, want right-aligned 36px row", actions.Height, actions.Horizontal)
+	if actions.Horizontal != 1 || actions.Height != settingsDialogActionHeight {
+		t.Fatalf("plugin exclusion actions = height %v alignment %v, want right-aligned compact row", actions.Height, actions.Horizontal)
 	}
 	if field.Height+child.Gap+actionsFooter.Height+props.Padding.Top+props.Padding.Bottom != props.Height {
 		t.Fatal("plugin exclusion dialog should not reserve extra space below its actions")

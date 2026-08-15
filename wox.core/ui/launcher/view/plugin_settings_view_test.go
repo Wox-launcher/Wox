@@ -491,7 +491,7 @@ func TestFormTableInlineHeaderShowsTemplateAndAddActions(t *testing.T) {
 	column := container.Child.(woxwidget.Flex)
 	header := column.Children[0].(woxwidget.Flex)
 	actionSlot := header.Children[1].(woxwidget.Align)
-	if actionSlot.Width != 204 || actionSlot.Height != 30 || actionSlot.Horizontal != 1 {
+	if actionSlot.Width != 204 || actionSlot.Height != 32 || actionSlot.Horizontal != 1 {
 		t.Fatalf("header action slot = %vx%v alignment %v, want a compact slot right-aligned to the table edge", actionSlot.Width, actionSlot.Height, actionSlot.Horizontal)
 	}
 	actions := actionSlot.Child.(woxwidget.Flex)
@@ -514,7 +514,7 @@ func TestFormTableInlineHeaderAlignsAddButtonWithTableRightEdge(t *testing.T) {
 
 	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
 	actionSlot := header.Children[1].(woxwidget.Align)
-	if actionSlot.Width != 74 || actionSlot.Height != 30 || actionSlot.Horizontal != 1 {
+	if actionSlot.Width != 74 || actionSlot.Height != 32 || actionSlot.Horizontal != 1 {
 		t.Fatalf("add action slot = %vx%v alignment %v, want compact height and its right edge aligned with the table", actionSlot.Width, actionSlot.Height, actionSlot.Horizontal)
 	}
 }
@@ -806,12 +806,12 @@ func TestFormTableDeleteDialogMatchesFlutterActions(t *testing.T) {
 	state.InitState(woxwidget.StateContext{}, dialog.Widget)
 	stack := state.Build(woxwidget.StateContext{}, dialog.Widget).(woxwidget.Stack)
 	panel := stack.Children[1].Child.(woxwidget.FocusScope).Child.(woxwidget.Semantics).Child.(woxwidget.Container)
-	if panel.Width != 270 || panel.Height != 120 || panel.Radius != 20 {
-		t.Fatalf("delete dialog geometry = %vx%v radius %v, want 270x120 radius 20", panel.Width, panel.Height, panel.Radius)
+	if panel.Width != 270 || panel.Height != 116 || panel.Radius != 20 {
+		t.Fatalf("delete dialog geometry = %vx%v radius %v, want 270x116 radius 20", panel.Width, panel.Height, panel.Radius)
 	}
 	content := panel.Child.(woxwidget.Flex)
 	actionsFooter := content.Children[1].(woxwidget.Container)
-	if actionsFooter.Height != SettingsDialogActionsHeight || actionsFooter.Padding.Top != 12 {
+	if actionsFooter.Height != SettingsDialogActionsHeight || actionsFooter.Padding.Top != SettingsDialogActionsHeight-settingsDialogActionHeight {
 		t.Fatalf("delete footer = height %v padding %+v, want shared settings actions", actionsFooter.Height, actionsFooter.Padding)
 	}
 	actions := actionsFooter.Child.(woxwidget.Align)

@@ -44,7 +44,7 @@ func (a *App) buildManualNativeFilePreview(path string, theme woxcomponent.Theme
 	return woxwidget.Container{Width: width, Height: height, Radius: 10, Color: theme.QueryBackground, Child: woxwidget.Align{
 		Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: "Large Office files are loaded on demand.", Style: woxui.TextStyle{Size: 13}, Color: theme.PreviewText},
-			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "native-file-preview-load", Label: "Load full preview", Variant: woxcomponent.ButtonSecondary, Size: woxcomponent.ButtonCompact, Theme: theme, OnTap: func() {
+			woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "native-file-preview-load", Label: "Load full preview", Variant: woxcomponent.ButtonSecondary, Theme: theme, OnTap: func() {
 				a.requestManualNativeFilePreview(path)
 			}}),
 		}},

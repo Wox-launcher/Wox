@@ -181,7 +181,7 @@ func dataBackupOperationCell(props DataSettingsProps, backup DataBackup, rowInde
 	}
 	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: fmt.Sprintf("data-backup-restore-%d", rowIndex), Label: restoreLabel, Height: 24,
+			ID: fmt.Sprintf("data-backup-restore-%d", rowIndex), Label: restoreLabel,
 			Padding: woxwidget.Insets{Left: 4, Right: 4}, FontSize: woxcomponent.TableBodyFontSize, Variant: woxcomponent.ButtonText, OnTap: func() {
 				if props.OnRestoreBackup != nil {
 					props.OnRestoreBackup(backup.ID)
@@ -189,7 +189,7 @@ func dataBackupOperationCell(props DataSettingsProps, backup DataBackup, rowInde
 			}, Theme: props.Theme,
 		}),
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: fmt.Sprintf("data-backup-open-%d", rowIndex), Label: props.Labels.Open, Height: 24,
+			ID: fmt.Sprintf("data-backup-open-%d", rowIndex), Label: props.Labels.Open,
 			Padding: woxwidget.Insets{Left: 4, Right: 4}, FontSize: woxcomponent.TableBodyFontSize, Variant: woxcomponent.ButtonText, OnTap: func() {
 				if props.OnOpenPath != nil {
 					props.OnOpenPath(backup.Path)
@@ -232,6 +232,6 @@ func dataLogActionsField(props DataSettingsProps, width float32) woxwidget.Widge
 
 func dataButton(props DataSettingsProps, id, label string, variant woxcomponent.ButtonVariant, onTap func()) woxwidget.Widget {
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: id, Label: label, Variant: variant, Size: woxcomponent.ButtonCompact, OnTap: onTap, Theme: props.Theme,
+		ID: id, Label: label, Variant: variant, OnTap: onTap, Theme: props.Theme,
 	})
 }

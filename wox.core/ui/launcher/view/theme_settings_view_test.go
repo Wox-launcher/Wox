@@ -30,8 +30,8 @@ func TestThemeApplyUsesIntrinsicOutlinedButton(t *testing.T) {
 	actions := themeActions(ThemeSettingsProps{ApplyLabel: "应用", Theme: woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 255}}}, ThemeCatalogItem{IsInstalled: true, IsSystem: true})
 	button := focusedControlGesture(actions[0]).Child.(woxwidget.Container)
 
-	if button.Width != 0 || button.Height != 36 || button.Color.A != 0 || button.BorderWidth != 1 {
-		t.Fatalf("apply button = width %v height %v background alpha %v border %v, want intrinsic 36px outlined button", button.Width, button.Height, button.Color.A, button.BorderWidth)
+	if button.Width != 0 || button.Height != 32 || button.Color.A != 0 || button.BorderWidth != 1 {
+		t.Fatalf("apply button = width %v height %v background alpha %v border %v, want intrinsic shared outlined button", button.Width, button.Height, button.Color.A, button.BorderWidth)
 	}
 }
 

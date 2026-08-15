@@ -189,8 +189,8 @@ func usageShareButton(props UsageSettingsProps) (woxwidget.Widget, float32) {
 	theme := props.Theme
 	theme.ResultSubtitle = usageOutlineColor(props.Theme)
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: "usage-share-x", Label: props.ShareLabel, Icon: props.ShareIcon, IconSize: 16, IconGap: 8, Width: width, Height: 38, Radius: 8,
-		FontSize: 13, Size: woxcomponent.ButtonCompact, Variant: woxcomponent.ButtonOutlinedSurface,
+		ID: "usage-share-x", Label: props.ShareLabel, Icon: props.ShareIcon, IconSize: 16, IconGap: 8, Width: width, Radius: 8,
+		FontSize: 13, Variant: woxcomponent.ButtonOutlinedSurface,
 		Disabled: props.Loading, OnTap: props.OnShare, Theme: theme,
 	}), width
 }

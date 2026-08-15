@@ -15,7 +15,7 @@ func TestFormTableSkillAddDialogDoesNotDuplicateBottomPadding(t *testing.T) {
 	}).(woxwidget.Stateful)
 	props := dialog.Widget.(woxcomponent.DialogProps)
 	content := props.Child.(woxwidget.Flex)
-	const expectedContentHeight = float32(28 + 32 + 40 + 38 + 48 + 4*12)
+	const expectedContentHeight = float32(28 + 32 + 40 + 38 + SettingsDialogActionsHeight + 4*12)
 
 	if len(content.Children) != 5 || content.Gap != 12 {
 		t.Fatalf("skill add content = %d children with %v gap, want five children with 12px gaps", len(content.Children), content.Gap)

@@ -144,7 +144,7 @@ func chatHeaderButton(id, label string, selected bool, theme woxcomponent.Theme,
 	if selected {
 		variant = woxcomponent.ButtonSelected
 	}
-	return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, Height: 34, Radius: 7, FontSize: 10, Variant: variant, OnTap: action, Theme: theme})
+	return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, Radius: 7, FontSize: 10, Variant: variant, OnTap: action, Theme: theme})
 }
 
 // ChatCatalogItemProps contains one selectable history, model, or skill entry.
@@ -1034,7 +1034,7 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	statusWidth := max(float32(0), props.Width-statusLeft-100)
 	toolbarChildren := []woxwidget.StackChild{
 		{Left: 8, Child: woxwidget.Align{Width: props.ModelWidth, Height: toolbarHeight, Vertical: 0.5, Child: modelButton}},
-		{AnchorRight: true, Right: 8, Top: 6, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: label, Height: 30, Radius: 7, Size: woxcomponent.ButtonCompact, Variant: variant, OnTap: props.OnSend, Theme: props.Theme})},
+		{AnchorRight: true, Right: 8, Top: 6, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: label, Radius: 7, Variant: variant, OnTap: props.OnSend, Theme: props.Theme})},
 	}
 	if props.Status != "" && statusWidth > 30 {
 		toolbarChildren = append(toolbarChildren, woxwidget.StackChild{Left: statusLeft, Top: 14, Child: woxwidget.Container{Width: statusWidth, Height: 16, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 9}, Color: props.StatusColor}}})
@@ -1105,9 +1105,9 @@ func ChatQuestion(props ChatQuestionProps) woxwidget.Widget {
 			},
 		}))
 	}
-	children = append(children, woxwidget.Align{Width: innerWidth, Height: 30, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-question-cancel", Label: "Cancel", Height: 30, Variant: woxcomponent.ButtonSurface, OnTap: props.OnCancel, Theme: props.Theme}),
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-question-submit", Label: "Submit", Height: 30, Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSubmit, Theme: props.Theme}),
+	children = append(children, woxwidget.Align{Width: innerWidth, Height: 32, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-question-cancel", Label: "Cancel", Variant: woxcomponent.ButtonSurface, OnTap: props.OnCancel, Theme: props.Theme}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-question-submit", Label: "Submit", Variant: woxcomponent.ButtonPrimary, OnTap: props.OnSubmit, Theme: props.Theme}),
 	}}})
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 9, Color: props.Theme.ActionBackground, Padding: woxwidget.Insets{Left: 12, Top: 8, Right: 12, Bottom: 8}, Child: woxwidget.Clip{
 		Width: innerWidth, Height: max(float32(0), props.Height-16), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: children},

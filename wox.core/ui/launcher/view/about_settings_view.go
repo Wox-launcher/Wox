@@ -32,7 +32,7 @@ func AboutSettingsView(props AboutSettingsProps) woxwidget.Widget {
 	links := make([]woxwidget.Widget, 0, len(props.Links))
 	for _, link := range props.Links {
 		links = append(links, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: link.ID, Label: link.Label, Icon: link.Icon, IconSize: 18, IconGap: 8, Height: 26, IntrinsicWidth: true,
+			ID: link.ID, Label: link.Label, Icon: link.Icon, IconSize: 18, IconGap: 8, IntrinsicWidth: true,
 			Variant: woxcomponent.ButtonText, Padding: woxwidget.Insets{Left: 6, Top: 4, Right: 6, Bottom: 4}, OnTap: link.OnTap, Theme: props.Theme,
 		}))
 	}
@@ -60,7 +60,7 @@ func AboutSettingsView(props AboutSettingsProps) woxwidget.Widget {
 			Value: props.Description, Style: woxui.TextStyle{Size: 16}, Color: props.Theme.ResultTitle,
 		}},
 		woxwidget.Container{Height: 40},
-		woxwidget.Align{Width: contentWidth, Height: 26, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 30, Children: links}},
+		woxwidget.Align{Width: contentWidth, Height: 32, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 30, Children: links}},
 	}
 	if props.Status != "" {
 		children = append(children,

@@ -113,7 +113,7 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 		valueField = input
 		if props.BrowseFile {
 			valueField = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{input, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "setting-browse-" + props.ID, Label: "Browse", Height: 38, Disabled: props.Disabled, Variant: woxcomponent.ButtonSurface, OnTap: props.OnBrowse, Theme: props.Theme,
+				ID: "setting-browse-" + props.ID, Label: "Browse", Disabled: props.Disabled, Variant: woxcomponent.ButtonSurface, OnTap: props.OnBrowse, Theme: props.Theme,
 			})}}
 		}
 	case "bool":

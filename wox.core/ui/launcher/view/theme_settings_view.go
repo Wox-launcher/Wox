@@ -211,14 +211,14 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 		}}
 	}
 	theme := *props.Detail
-	const headerHeight = float32(120)
+	const headerHeight = float32(124)
 	const tabHeight = float32(46)
 	innerWidth := max(float32(0), width-32)
-	var website woxwidget.Widget = woxwidget.Container{Width: 104, Height: 28}
+	var website woxwidget.Widget = woxwidget.Container{Width: 104, Height: 32}
 	if strings.TrimSpace(theme.URL) != "" && props.OnOpenWebsite != nil {
-		website = woxwidget.Align{Width: 104, Height: 28, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		website = woxwidget.Align{Width: 104, Height: 32, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: "theme-website", Label: props.WebsiteLabel, Icon: props.ExternalIcon, IconSize: 13, IconGap: 7,
-			Height: 28, FontSize: 11, Size: woxcomponent.ButtonCompact, Padding: woxwidget.Insets{Left: 6, Right: 4},
+			FontSize: 11, Padding: woxwidget.Insets{Left: 6, Right: 4},
 			Variant: woxcomponent.ButtonText, OnTap: props.OnOpenWebsite, Theme: props.Theme,
 		})}
 	}
@@ -228,7 +228,7 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 			woxwidget.Text{Value: theme.Version, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle},
 		}}}},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Expanded{Child: woxwidget.Container{Height: 28, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}},
+			woxwidget.Expanded{Child: woxwidget.Container{Height: 32, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: 12}, Color: props.Theme.ResultSubtitle}}},
 			website,
 		}},
 		woxwidget.Container{Width: innerWidth, Height: 52, Padding: woxwidget.Insets{Top: 6}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: themeActions(props, theme)}},
@@ -574,7 +574,7 @@ func themeActions(props ThemeSettingsProps, theme ThemeCatalogItem) []woxwidget.
 		if props.Operation == operation+":"+theme.ID {
 			label += "…"
 		}
-		return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, Height: 36, IntrinsicWidth: true, Disabled: busy || disabled, Variant: woxcomponent.ButtonOutline, OnTap: func() {
+		return woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: id, Label: label, IntrinsicWidth: true, Disabled: busy || disabled, Variant: woxcomponent.ButtonOutline, OnTap: func() {
 			if props.OnOperation != nil {
 				props.OnOperation(operation)
 			}

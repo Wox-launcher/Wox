@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	settingsDialogActionHeight = float32(36)
+	settingsDialogActionHeight = float32(32)
 	settingsDialogActionGap    = float32(12)
 	// SettingsDialogActionsHeight includes the action row and its top spacing.
-	SettingsDialogActionsHeight = float32(48)
+	SettingsDialogActionsHeight = float32(44)
 )
 
 type settingsDialogAction struct {
@@ -23,7 +23,7 @@ type settingsDialogAction struct {
 func settingsDialogActions(width float32, theme woxcomponent.Theme, cancel, confirm settingsDialogAction) woxwidget.Widget {
 	button := func(action settingsDialogAction, variant woxcomponent.ButtonVariant) woxwidget.Widget {
 		return woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: action.ID, Label: action.Label, Height: settingsDialogActionHeight, Radius: 4, FontSize: 13,
+			ID: action.ID, Label: action.Label, Radius: 4, FontSize: 13,
 			Variant: variant, Disabled: action.Disabled, OnTap: action.OnTap, Theme: theme,
 		})
 	}

@@ -19,14 +19,6 @@ const (
 	ButtonOutlinedSurface
 )
 
-// ButtonSize selects the standard geometry for a Wox button.
-type ButtonSize uint8
-
-const (
-	ButtonNormal ButtonSize = iota
-	ButtonCompact
-)
-
 // ButtonProps describes one themed, focusable Wox button.
 type ButtonProps struct {
 	ID               string
@@ -41,13 +33,11 @@ type ButtonProps struct {
 	// keep the flag for call sites that want the intent to be explicit.
 	IntrinsicWidth    bool
 	Width             float32
-	Height            float32
 	Radius            float32
 	Padding           woxwidget.Insets
 	FontSize          float32
 	Disabled          bool
 	Variant           ButtonVariant
-	Size              ButtonSize
 	OnTap             func()
 	OnTrailingHoverAt func(bool, woxui.Rect)
 	OnFocusChange     func(bool)
@@ -56,21 +46,13 @@ type ButtonProps struct {
 
 // WoxButton builds a button with shared visuals, keyboard activation, and accessibility semantics.
 func WoxButton(props ButtonProps) woxwidget.Widget {
-	height := float32(38)
+	height := float32(32)
 	radius := float32(4)
-	padding := woxwidget.Insets{Left: 20, Right: 20}
-	fontSize := ButtonFontSize
-	fontWeight := woxui.FontWeightRegular
-	if props.Size == ButtonCompact {
-		height = 30
-		radius = 4
-		padding = woxwidget.Insets{Left: 12, Right: 12}
-		fontSize = CompactButtonFontSize
-		fontWeight = woxui.FontWeightSemibold
-	}
-	if props.Height > 0 {
-		height = props.Height
-	}
+	padding := woxwidget.Insets{Left: 12, Right: 12}
+	fontSize := CompactButtonFontSize
+	fontWeight := woxui.FontWeightSemibold
+	// Intrinsic buttons need the tallest child when calculating symmetric vertical padding.
+	contentHeight := fontSize * 1.35
 	if props.Radius > 0 {
 		radius = props.Radius
 	}
@@ -127,6 +109,7 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		if iconSize <= 0 {
 			iconSize = 16
 		}
+		contentHeight = max(contentHeight, iconSize)
 		iconGap := props.IconGap
 		if iconGap <= 0 {
 			iconGap = 8
@@ -142,6 +125,7 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		if iconSize <= 0 {
 			iconSize = 15
 		}
+		contentHeight = max(contentHeight, iconSize)
 		icon := woxwidget.Gesture{ID: props.ID + "-trailing", OnHoverAt: props.OnTrailingHoverAt, Child: woxwidget.Image{Source: props.TrailingIcon, Width: iconSize, Height: iconSize}}
 		trailingLabel := props.TrailingLabel
 		if trailingLabel == "" {
@@ -159,7 +143,9 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	buttonWidth := props.Width
 	if intrinsicWidth {
 		if padding.Top == 0 && padding.Bottom == 0 {
-			padding.Top = max(float32(0), (height-fontSize*1.35)/2)
+			verticalPadding := max(float32(0), (height-contentHeight)/2)
+			padding.Top = verticalPadding
+			padding.Bottom = verticalPadding
 		}
 		alignedChild = child
 		buttonWidth = 0

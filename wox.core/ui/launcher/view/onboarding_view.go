@@ -334,7 +334,7 @@ func onboardingPermissions(props OnboardingProps, width, height float32) woxwidg
 				status = props.Labels["permission.checking"]
 			}
 			action = woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "onboarding-permission-" + permission.ID, Label: status, Height: 30, Size: woxcomponent.ButtonCompact,
+				ID: "onboarding-permission-" + permission.ID, Label: status,
 				Variant: woxcomponent.ButtonOutline, Disabled: props.PermissionLoading, Theme: props.Theme,
 				OnTap: func() {
 					if props.OnPermission != nil {
@@ -420,16 +420,16 @@ func onboardingFooter(props OnboardingProps, active int) woxwidget.Widget {
 		Padding: woxwidget.Insets{Left: 28, Top: 17, Right: 28, Bottom: 17},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisSpaceBetween, Children: []woxwidget.Widget{
 			woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "onboarding-skip", Label: props.Labels["skip"], Height: 38, Padding: woxwidget.Insets{Left: 8, Right: 8},
+				ID: "onboarding-skip", Label: props.Labels["skip"], Padding: woxwidget.Insets{Left: 8, Right: 8},
 				Variant: woxcomponent.ButtonText, Theme: props.Theme, OnTap: props.OnSkip,
 			}),
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 				woxcomponent.WoxButton(woxcomponent.ButtonProps{
-					ID: "onboarding-back", Label: props.Labels["back"], Height: 38, Disabled: active == 0,
+					ID: "onboarding-back", Label: props.Labels["back"], Disabled: active == 0,
 					Variant: woxcomponent.ButtonOutline, Theme: props.Theme, OnTap: props.OnBack,
 				}),
 				woxcomponent.WoxButton(woxcomponent.ButtonProps{
-					ID: nextID, Label: nextLabel, Height: 38, Variant: woxcomponent.ButtonPrimary, Theme: props.Theme, OnTap: nextAction,
+					ID: nextID, Label: nextLabel, Variant: woxcomponent.ButtonPrimary, Theme: props.Theme, OnTap: nextAction,
 				}),
 			}},
 		}},

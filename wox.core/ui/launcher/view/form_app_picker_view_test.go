@@ -40,7 +40,7 @@ func TestFormAppPickerMatchesFlutterDialogAndDefersCommit(t *testing.T) {
 		t.Fatalf("search field = hint %q autofocus %v", search.Hint, search.Autofocus)
 	}
 	footer := children[len(children)-1].(woxwidget.Container)
-	if footer.Height != SettingsDialogActionsHeight || footer.Padding.Top != 12 {
+	if footer.Height != SettingsDialogActionsHeight || footer.Padding.Top != SettingsDialogActionsHeight-settingsDialogActionHeight {
 		t.Fatalf("app picker footer = height %v padding %+v, want shared action height plus top spacing", footer.Height, footer.Padding)
 	}
 	list := children[3].(woxwidget.Stack)

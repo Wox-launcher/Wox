@@ -199,7 +199,7 @@ type CloudPluginExclusionDialogProps struct {
 }
 
 // CloudPluginExclusionDialogHeight fits the field and shared actions inside the dialog padding.
-const CloudPluginExclusionDialogHeight = float32(168)
+const CloudPluginExclusionDialogHeight = float32(164)
 
 const cloudSyncCardHeight = float32(66)
 
@@ -807,14 +807,14 @@ func CloudFormOverlay(props CloudFormOverlayProps) woxwidget.Widget {
 	linkHeight := float32(0)
 	var links woxwidget.Widget = woxwidget.Painter{Width: innerWidth}
 	if len(props.Links) > 0 {
-		linkHeight = 30
+		linkHeight = 32
 		linkChildren := make([]woxwidget.Widget, 0, len(props.Links)+1)
 		if props.LinkPrefix != "" && !cloudFormHasCheckbox(props.Fields) {
 			linkChildren = append(linkChildren, woxwidget.Text{Value: props.LinkPrefix, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ActionHeader})
 		}
 		for _, link := range props.Links {
 			linkChildren = append(linkChildren, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: link.ID, Label: link.Label, Width: link.Width, Height: 30, Radius: 4, Padding: woxwidget.Insets{Left: 4, Right: 4}, FontSize: 12,
+				ID: link.ID, Label: link.Label, Width: link.Width, Radius: 4, Padding: woxwidget.Insets{Left: 4, Right: 4}, FontSize: 12,
 				Disabled: props.Saving, Variant: woxcomponent.ButtonText, OnTap: link.OnTap, Theme: props.Theme,
 			}))
 		}
@@ -878,7 +878,7 @@ func cloudFormTextField(field CloudFormFieldProps, trailingLink *CloudFormLinkPr
 		label = woxwidget.Flex{Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisSpaceBetween, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: field.Label, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ActionText},
 			woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: trailingLink.ID, Label: trailingLink.Label, Height: 17, Radius: 4, Padding: woxwidget.Insets{Left: 1, Right: 1}, FontSize: 11,
+				ID: trailingLink.ID, Label: trailingLink.Label, Radius: 4, Padding: woxwidget.Insets{Left: 1, Right: 1}, FontSize: 11,
 				Disabled: disabled, Variant: woxcomponent.ButtonText, OnTap: trailingLink.OnTap, Theme: theme,
 			}),
 		}}

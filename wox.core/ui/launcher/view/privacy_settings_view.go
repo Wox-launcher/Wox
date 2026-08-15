@@ -34,7 +34,7 @@ func PrivacySettingsView(props PrivacySettingsProps) woxwidget.Widget {
 	controlAreaWidth := max(controlWidth, contentWidth-labelWidth-32)
 	telemetryControls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: "privacy-view-sample", Label: props.ViewSampleLabel, Height: 30, FontSize: 12,
+			ID: "privacy-view-sample", Label: props.ViewSampleLabel, FontSize: 12,
 			Padding: woxwidget.Insets{Right: 8}, Variant: woxcomponent.ButtonText, OnTap: props.OnViewSample, Theme: props.Theme,
 		}),
 		woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
@@ -100,9 +100,9 @@ func PrivacySampleDialog(props PrivacySampleDialogProps) woxwidget.Widget {
 	dialogHeight := max(float32(0), min(float32(370), props.Height-40))
 	innerWidth := max(float32(0), dialogWidth-40)
 	innerHeight := max(float32(0), dialogHeight-40)
-	fixedHeight := float32(100)
+	fixedHeight := float32(96)
 	if props.Error != "" {
-		fixedHeight = 132
+		fixedHeight = 128
 	}
 	sampleHeight := max(float32(100), innerHeight-fixedHeight)
 	children := []woxwidget.Widget{

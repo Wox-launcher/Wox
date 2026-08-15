@@ -405,7 +405,7 @@ func pluginDetailTabBody(props PluginDetailTabBodyProps) woxwidget.Widget {
 func pluginEditor(props PluginEditorProps, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	innerWidth := max(float32(0), width-32)
 	innerHeight := height
-	const headerHeight = float32(112)
+	const headerHeight = float32(114)
 	const tabHeight = float32(44)
 	header := pluginDetailHeader(props.Header, innerWidth, headerHeight, theme)
 	tabs := PluginTabs(PluginTabsProps{Width: innerWidth, Height: tabHeight, Active: props.ActiveTab, Tabs: props.Tabs, Theme: theme, OnSelect: props.OnSelectTab})
@@ -467,7 +467,7 @@ func pluginDetailHeader(props PluginHeaderProps, width, height float32, theme wo
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{icon, identity}},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			author,
-			woxwidget.Container{Width: actionsWidth, Height: 30, Child: pluginTextActions(props.MetadataActions, theme)},
+			woxwidget.Container{Width: actionsWidth, Height: 32, Child: pluginTextActions(props.MetadataActions, theme)},
 		}},
 		woxwidget.Container{Width: width, Height: 42, Padding: woxwidget.Insets{Left: 8, Top: 3}, Child: pluginOutlineActions(props.Management, theme)},
 	}}}
@@ -629,7 +629,7 @@ func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, them
 	if props.Icon != nil {
 		icon = woxwidget.Image{Source: props.Icon, Width: 32, Height: 32, Fit: woxwidget.ImageFitContain}
 	}
-	const headerHeight = float32(120)
+	const headerHeight = float32(124)
 	const tabHeight = float32(44)
 	identity := woxwidget.Container{Width: innerWidth, Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		icon,
@@ -639,18 +639,18 @@ func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, them
 		}}}},
 	}}}
 	websiteWidth := float32(104)
-	var website woxwidget.Widget = woxwidget.Container{Width: websiteWidth, Height: 28}
+	var website woxwidget.Widget = woxwidget.Container{Width: websiteWidth, Height: 32}
 	if props.WebsiteLabel != "" && props.OnWebsite != nil {
-		website = woxwidget.Align{Width: websiteWidth, Height: 28, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		website = woxwidget.Align{Width: websiteWidth, Height: 32, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: "plugin-website", Label: props.WebsiteLabel, Icon: props.ExternalIcon, IconSize: 13, IconGap: 7,
-			Height: 28, FontSize: 13, Padding: woxwidget.Insets{Left: 6, Right: 4}, Variant: woxcomponent.ButtonText,
+			FontSize: 13, Padding: woxwidget.Insets{Left: 6, Right: 4}, Variant: woxcomponent.ButtonText,
 			OnTap: props.OnWebsite, Theme: theme,
 		})}
 	}
 	header := woxwidget.Container{Width: innerWidth, Height: headerHeight, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		identity,
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			woxwidget.Expanded{Child: woxwidget.Container{Height: 28, Padding: woxwidget.Insets{Left: 6, Top: 6}, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle}}},
+			woxwidget.Expanded{Child: woxwidget.Container{Height: 32, Padding: woxwidget.Insets{Left: 6, Top: 6}, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: 13}, Color: theme.ResultSubtitle}}},
 			website,
 		}},
 		woxwidget.Container{Width: innerWidth, Height: 52, Padding: woxwidget.Insets{Left: 6, Top: 6}, Child: pluginOutlineActions(props.Management, theme)},
@@ -736,7 +736,7 @@ func pluginOutlineActions(actions []PluginAction, theme woxcomponent.Theme) woxw
 	buttons := make([]woxwidget.Widget, 0, len(actions))
 	for _, action := range actions {
 		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: action.ID, Label: action.Label, Icon: action.Icon, IconSize: 14, IntrinsicWidth: true, Height: 36, Radius: 4, FontSize: 13,
+			ID: action.ID, Label: action.Label, Icon: action.Icon, IconSize: 14, IntrinsicWidth: true, Radius: 4, FontSize: 13,
 			Disabled: !action.Enabled, Variant: woxcomponent.ButtonOutline, OnTap: action.OnTap, Theme: theme,
 		}))
 	}
@@ -748,7 +748,7 @@ func pluginTextActions(actions []PluginAction, theme woxcomponent.Theme) woxwidg
 	buttons := make([]woxwidget.Widget, 0, len(actions))
 	for _, action := range actions {
 		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: action.ID, Label: action.Label, Icon: action.Icon, IconSize: 13, IconGap: 6, Height: 30, FontSize: 12,
+			ID: action.ID, Label: action.Label, Icon: action.Icon, IconSize: 13, IconGap: 6, FontSize: 12,
 			Padding: woxwidget.Insets{Left: 6, Right: 4}, Disabled: !action.Enabled, Variant: woxcomponent.ButtonText, OnTap: action.OnTap, Theme: theme,
 		}))
 	}

@@ -100,7 +100,7 @@ func TestFormTableRowAppControlMatchesFlutterSelectorLayout(t *testing.T) {
 		t.Fatal("app selector button should keep table-row focus synchronized")
 	}
 	button := focusedControlGesture(control.Children[1]).Child.(woxwidget.Container)
-	if button.Width != 0 || button.Height != 42 || button.Color != theme.ActionSelected {
+	if button.Width != 0 || button.Height != 32 || button.Color != theme.ActionSelected {
 		t.Fatal("app selector action should use a content-sized Flutter-style primary button")
 	}
 	selected := formTableRowAppControl(FormTableRowFieldProps{
@@ -123,7 +123,7 @@ func TestFormTableRowEditorActionsSizeToTranslatedLabels(t *testing.T) {
 		Width: 700, Height: 400, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.Theme{},
 	}).(woxwidget.Flex)
 	footer := editor.Children[len(editor.Children)-1].(woxwidget.Container)
-	if footer.Height != FormTableRowEditorFooterHeight || footer.Padding.Top != 12 {
+	if footer.Height != FormTableRowEditorFooterHeight || footer.Padding.Top != SettingsDialogActionsHeight-settingsDialogActionHeight {
 		t.Fatalf("row editor footer = height %v padding %+v, want shared action height plus top spacing", footer.Height, footer.Padding)
 	}
 	actions := footer.Child.(woxwidget.Align)

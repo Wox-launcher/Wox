@@ -101,7 +101,7 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 		}
 		if props.EngineEnabled {
 			engineChildren = append(engineChildren, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: "model-manager-engine", Label: props.EngineButtonLabel, Height: 34, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnEngine, Theme: props.Theme,
+				ID: "model-manager-engine", Label: props.EngineButtonLabel, Variant: woxcomponent.ButtonSecondary, OnTap: props.OnEngine, Theme: props.Theme,
 			}))
 		}
 		children = append(children, woxwidget.Container{Width: menuWidth, Height: engineHeight, Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: engineChildren}})
@@ -147,7 +147,7 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 				buttonTheme := props.Theme
 				buttonTheme.ResultTitle = props.Theme.ResultSubtitle
 				trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{
-					ID: fmt.Sprintf("model-delete-%d", index), Label: props.DeleteLabel, Height: 34,
+					ID: fmt.Sprintf("model-delete-%d", index), Label: props.DeleteLabel,
 					Variant: woxcomponent.ButtonText, FontSize: 10, Disabled: props.Busy || props.Loading, OnTap: option.OnDelete, Theme: buttonTheme,
 				})
 			}
@@ -160,7 +160,7 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 			} else if option.State == "failed" {
 				icon = props.ErrorIcon
 			}
-			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-action-%d", index), Label: option.ActionLabel, Icon: icon, IconSize: 14, IconGap: 6, Height: 34, Padding: woxwidget.Insets{Left: 10, Right: 10}, FontSize: 11, Disabled: !option.ActionEnabled, Variant: woxcomponent.ButtonOutline, OnTap: option.OnAction, Theme: props.Theme})
+			trailing = woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: fmt.Sprintf("model-action-%d", index), Label: option.ActionLabel, Icon: icon, IconSize: 14, IconGap: 6, Padding: woxwidget.Insets{Left: 10, Right: 10}, FontSize: 11, Disabled: !option.ActionEnabled, Variant: woxcomponent.ButtonOutline, OnTap: option.OnAction, Theme: props.Theme})
 		}
 		activate := option.OnSelect
 		if option.OnChoose != nil {
