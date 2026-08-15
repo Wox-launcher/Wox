@@ -749,7 +749,7 @@ func TestFormTableOperationCellSupportsSpecializedTrailingActions(t *testing.T) 
 	}
 
 	cell := formTableOperationCell(props, row, 130).(woxwidget.Container)
-	actions := cell.Child.(woxwidget.Flex)
+	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	if len(actions.Children) != 2 {
 		t.Fatalf("skills operation count = %d, want delete and open-folder", len(actions.Children))
 	}
@@ -765,8 +765,8 @@ func TestFormTableDataCellDoesNotOpenEditor(t *testing.T) {
 func TestFormTableTypographyMatchesSharedTokens(t *testing.T) {
 	props := FormTableFieldProps{ID: "commands", EmptyLabel: "No rows", Theme: woxcomponent.Theme{}}
 	header := formTableHeaderCell(props, FormTableColumn{Label: "Name"}, 120, 0).(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.TextBlock)
-	body := formTableDataCell(props, FormTableCell{Text: "Translate"}, 120).(woxwidget.Container).Child.(woxwidget.TextBlock)
-	empty := formTableEmptyState(props, 240, tableSurfaceEmptyHeight).(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Text)
+	body := formTableDataCell(props, FormTableCell{Text: "Translate"}, 120).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.TextBlock)
+	empty := formTableEmptyState(props, 240, tableSurfaceEmptyHeight).(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Align).Child.(woxwidget.Text)
 
 	if header.Style.Size != woxcomponent.TableHeaderFontSize || body.Style.Size != woxcomponent.TableBodyFontSize || empty.Style.Size != woxcomponent.TableEmptyFontSize {
 		t.Fatalf("table typography = %v/%v/%v, want %v/%v/%v", header.Style.Size, body.Style.Size, empty.Style.Size, woxcomponent.TableHeaderFontSize, woxcomponent.TableBodyFontSize, woxcomponent.TableEmptyFontSize)
@@ -783,7 +783,7 @@ func TestFormTableOperationIncludesEditCloneAndDelete(t *testing.T) {
 		EditIcon: icon, CloneIcon: icon, DeleteIcon: icon, Theme: woxcomponent.Theme{ResultSubtitle: woxui.Color{A: 255}},
 	}
 	cell := formTableOperationCell(props, FormTableRow{Index: 3}, 130).(woxwidget.Container)
-	actions := cell.Child.(woxwidget.Flex)
+	actions := cell.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	if len(actions.Children) != 3 {
 		t.Fatalf("operation action count = %d, want edit, clone, and delete", len(actions.Children))
 	}

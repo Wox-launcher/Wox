@@ -101,7 +101,7 @@ func ChatHeader(props ChatHeaderProps) woxwidget.Widget {
 		Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText},
 	}}
 	children := []woxwidget.StackChild{
-		{Left: 2, Top: 5, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+		{Left: 2, Child: woxwidget.Align{Width: 36, Height: props.Height, Vertical: 0.5, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 			ID: "chat-history-" + props.Key, Label: props.HistoryLabel, Icon: menuIcon, Width: 36, Height: 36, Radius: 7,
 			Background: menuBackground, HoverBackground: menuHoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: props.OnHistory,
 			OnHoverAt: func(inside bool, bounds woxui.Rect) {
@@ -109,18 +109,18 @@ func ChatHeader(props ChatHeaderProps) woxwidget.Widget {
 					props.OnHistoryHover(inside, props.HistoryTooltip, bounds)
 				}
 			},
-		})},
-		{Left: 44, Top: 5, Right: 4 + debugWidth + exitWidth, StretchWidth: true, Child: title},
+		})}},
+		{Left: 44, Right: 4 + debugWidth + exitWidth, StretchWidth: true, Child: woxwidget.Align{Height: props.Height, Vertical: 0.5, Child: title}},
 	}
 	if props.ShowDebug {
 		debugBackground := woxui.Color{}
 		if props.DebugOpen {
 			debugBackground = props.Theme.ActionBackground
 		}
-		children = append(children, woxwidget.StackChild{Top: 9, Right: 12 + exitWidth, AnchorRight: true, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+		children = append(children, woxwidget.StackChild{Right: 12 + exitWidth, AnchorRight: true, Child: woxwidget.Align{Width: 28, Height: props.Height, Vertical: 0.5, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 			ID: "chat-debug-" + props.Key, Label: "Debug trace", Icon: woxcomponent.DebugGlyph(16, props.Theme.ResultSubtitle),
 			Width: 28, Height: 28, Radius: 7, Background: debugBackground, HoverBackground: menuHoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: props.OnDebug,
-		})})
+		})}})
 	}
 	if props.ShowExit {
 		hoverBackground := props.Theme.ResultSubtitle
@@ -133,7 +133,7 @@ func ChatHeader(props ChatHeaderProps) woxwidget.Widget {
 				}
 			},
 		})
-		children = append(children, woxwidget.StackChild{Top: 9, Right: 6, AnchorRight: true, Child: button})
+		children = append(children, woxwidget.StackChild{Right: 6, AnchorRight: true, Child: woxwidget.Align{Width: 28, Height: props.Height, Vertical: 0.5, Child: button}})
 	}
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: children}}
 }
@@ -507,11 +507,10 @@ func ChatMessages(props ChatMessagesProps) woxwidget.Widget {
 		color := props.Theme.ResultTitle
 		color.A = uint8(float32(color.A) * 0.59)
 		textWidth := min(max(float32(0), innerWidth-48), props.EmptyTextWidth)
-		left := max(float32(24), (innerWidth-textWidth)/2)
-		top := max(float32(0), (innerHeight-props.EmptyTextHeight)/2)
-		return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: woxwidget.Stack{Width: innerWidth, Height: innerHeight, Children: []woxwidget.StackChild{
-			{Left: left, Top: top, Child: woxwidget.Container{Width: textWidth, Height: props.EmptyTextHeight, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: 28, Weight: woxui.FontWeightSemibold}, Color: color}}},
-		}}}
+		return woxwidget.Container{Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: woxwidget.Align{
+			Width: innerWidth, Height: innerHeight, Horizontal: 0.5, Vertical: 0.5,
+			Child: woxwidget.Container{Width: textWidth, Height: props.EmptyTextHeight, Child: woxwidget.Text{Value: props.EmptyMessage, Style: woxui.TextStyle{Size: 28, Weight: woxui.FontWeightSemibold}, Color: color}},
+		}}
 	}
 	rows := make([]woxwidget.Widget, 0, len(props.Messages))
 	for _, message := range props.Messages {
@@ -1034,10 +1033,10 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	statusWidth := max(float32(0), props.Width-statusLeft-100)
 	toolbarChildren := []woxwidget.StackChild{
 		{Left: 8, Child: woxwidget.Align{Width: props.ModelWidth, Height: toolbarHeight, Vertical: 0.5, Child: modelButton}},
-		{AnchorRight: true, Right: 8, Top: 6, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: label, Radius: 7, Variant: variant, OnTap: props.OnSend, Theme: props.Theme})},
+		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: toolbarHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: label, Radius: 7, Variant: variant, OnTap: props.OnSend, Theme: props.Theme})}},
 	}
 	if props.Status != "" && statusWidth > 30 {
-		toolbarChildren = append(toolbarChildren, woxwidget.StackChild{Left: statusLeft, Top: 14, Child: woxwidget.Container{Width: statusWidth, Height: 16, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 9}, Color: props.StatusColor}}})
+		toolbarChildren = append(toolbarChildren, woxwidget.StackChild{Left: statusLeft, Child: woxwidget.Align{Width: statusWidth, Height: toolbarHeight, Vertical: 0.5, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 9}, Color: props.StatusColor}}})
 	}
 	card := woxwidget.Container{Width: props.Width, Height: cardHeight, Radius: 9, Color: props.Theme.QueryBackground, BorderColor: divider, BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		input,

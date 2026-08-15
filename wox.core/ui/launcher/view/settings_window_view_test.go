@@ -136,6 +136,10 @@ func TestSettingsTitleBarWindowsUsesInsetStretchAndRightAnchors(t *testing.T) {
 	if title.Left != 40 || title.Right != 92 || !title.StretchWidth {
 		t.Fatalf("Windows title slot = left %.0f right %.0f stretch %v, want 40/92/true", title.Left, title.Right, title.StretchWidth)
 	}
+	titleAlignment, ok := title.Child.(woxwidget.Align)
+	if !ok || title.Top != 0 || titleAlignment.Height != SettingsTitleBarHeight || titleAlignment.Vertical != 0.5 {
+		t.Fatalf("Windows title alignment = top %.0f child %#v, want full-height vertical center", title.Top, title.Child)
+	}
 	if !border.StretchWidth || !border.AnchorBottom || !minimize.AnchorRight || minimize.Right != 46 || !closeButton.AnchorRight {
 		t.Fatalf("Windows chrome anchors = border %v/%v minimize %v/%.0f close %v, want true/true true/46 true", border.StretchWidth, border.AnchorBottom, minimize.AnchorRight, minimize.Right, closeButton.AnchorRight)
 	}

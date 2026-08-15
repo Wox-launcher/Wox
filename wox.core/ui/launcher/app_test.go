@@ -184,6 +184,21 @@ func TestLauncherPreviewTitleBarRequiresOptInFullPreview(t *testing.T) {
 	}
 }
 
+func TestLauncherBrowserTitleBarRequiresDirectWebViewPreview(t *testing.T) {
+	snapshot := viewSnapshot{
+		selected:            0,
+		results:             []queryResult{{Preview: queryPreview{PreviewType: "file", PreviewData: "video.mp4"}}},
+		selectedPreviewType: "file",
+	}
+	if launcherPreviewUsesWebView(snapshot) {
+		t.Fatal("file previews must not expose browser navigation chrome")
+	}
+	snapshot.selectedPreviewType = "webview"
+	if !launcherPreviewUsesWebView(snapshot) {
+		t.Fatal("direct WebView previews need browser navigation chrome")
+	}
+}
+
 func TestLauncherReservesFullPreviewHeightBeforeResultsArrive(t *testing.T) {
 	previewOnly := showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true}
 	if !launcherReservesFullPreviewHeight(previewOnly, false) {

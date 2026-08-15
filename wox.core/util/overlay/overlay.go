@@ -344,13 +344,14 @@ func (instance *runtimeOverlay) dispose() {
 // comes from the platform window, not from a painted panel fill.
 func overlayNativeWindowOptions(options WindowOptions, size woxui.Size) woxui.WindowOptions {
 	return woxui.WindowOptions{
-		Title:         "Wox Overlay",
-		Size:          size,
-		Role:          woxui.WindowRoleUtility,
-		Resizable:     options.Resizable,
-		AspectRatio:   float32(options.AspectRatio),
-		Nonactivating: !(options.TakeFocus || options.CloseOnEscape),
-		Topmost:       options.Topmost,
+		Title:            "Wox Overlay",
+		Size:             size,
+		Role:             woxui.WindowRoleUtility,
+		Resizable:        options.Resizable,
+		AspectRatio:      float32(options.AspectRatio),
+		Nonactivating:    !(options.TakeFocus || options.CloseOnEscape),
+		TransientOverlay: true,
+		Topmost:          options.Topmost,
 	}
 }
 

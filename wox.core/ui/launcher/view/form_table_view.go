@@ -474,7 +474,7 @@ func formTableEmptyState(props FormTableFieldProps, width, height float32) woxwi
 		woxwidget.Align{Width: contentWidth, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: woxcomponent.TableEmptyFontSize}, Color: props.Theme.ResultSubtitle}},
 	}}
 	return woxwidget.Container{Width: width, Height: height, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-		Padding: woxwidget.Insets{Left: max(float32(0), (width-contentWidth)/2), Top: max(float32(0), (height-46)/2)}, Child: content}
+		Child: woxwidget.Align{Width: width, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: content}}
 }
 
 // formTableDataRowCells builds the horizontally scrolling portion of one row.
@@ -524,7 +524,7 @@ func formTableOperationCell(props FormTableFieldProps, row FormTableRow, width f
 	}
 	operation := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, Children: actions}
 	return woxwidget.Container{Width: width, Height: tableSurfaceRowHeight, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-		Padding: woxwidget.Insets{Left: 4, Top: 6, Right: 4}, Child: operation}
+		Padding: woxwidget.Insets{Left: 4, Right: 4}, Child: woxwidget.Align{Width: max(float32(0), width-8), Height: tableSurfaceRowHeight, Vertical: 0.5, Child: operation}}
 }
 
 func formTableIconButton(props FormTableFieldProps, id, label string, icon *woxui.Image, onTap func()) woxwidget.Widget {
@@ -559,10 +559,8 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 		Value: cell.Text, Width: contentWidth, Height: 18, MaxLines: 1, ShrinkWrap: cell.Tooltip != "",
 		Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle,
 	}
-	paddingTop := float32(10)
 	if cell.Child != nil {
-		content = woxwidget.Align{Width: contentWidth, Height: tableSurfaceRowHeight, Vertical: 0.5, Child: cell.Child}
-		paddingTop = 0
+		content = cell.Child
 	} else if cell.IndicatorColor != nil {
 		content = woxwidget.Container{Width: 16, Height: 16, Radius: 8, Color: *cell.IndicatorColor}
 	} else if cell.Icon != nil {
@@ -574,8 +572,7 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 		if cell.Text != "" {
 			children = append(children, woxwidget.TextBlock{Value: cell.Text, Width: max(float32(0), contentWidth-iconSize-8), Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: woxcomponent.TableBodyFontSize}, Color: props.Theme.ResultTitle})
 		}
-		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: children}
-		paddingTop = max(float32(0), (tableSurfaceRowHeight-iconSize)/2)
+		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}
 	}
 	if cell.Tooltip != "" && props.InfoIcon != nil {
 		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 5, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
@@ -588,7 +585,7 @@ func formTableDataCellAt(props FormTableFieldProps, rowIndex, columnIndex int, c
 		}}
 	}
 	return woxwidget.Container{Width: width, Height: tableSurfaceRowHeight, Color: style.bodyBackground, BorderColor: style.border, BorderWidth: tableSurfaceBorderWidth,
-		Padding: woxwidget.Insets{Left: 8, Top: paddingTop, Right: 6}, Child: content}
+		Padding: woxwidget.Insets{Left: 8, Right: 6}, Child: woxwidget.Align{Width: contentWidth, Height: tableSurfaceRowHeight, Vertical: 0.5, Child: content}}
 }
 
 func formTableAlpha(color woxui.Color, alpha uint8) woxui.Color {
@@ -1183,7 +1180,7 @@ func formTableRowAppControl(props FormTableRowFieldProps, width, height float32)
 			}
 		},
 	})
-	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{preview, selectButton}}
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{preview, selectButton}}
 }
 
 // formTableRowSelectControl keeps the selected value and dropdown indicator in separate aligned slots, matching Flutter's expanded dropdown button.

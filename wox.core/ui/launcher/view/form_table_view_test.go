@@ -87,7 +87,7 @@ func TestFormTableRowAppControlMatchesFlutterSelectorLayout(t *testing.T) {
 	control := formTableRowAppControl(FormTableRowFieldProps{
 		ID: "app", Value: "No app selected", SelectLabel: "Select Apps", SelectWidth: 104, Theme: theme, OnTap: func() {},
 	}, 420, 42).(woxwidget.Flex)
-	if control.Gap != 10 || len(control.Children) != 2 {
+	if control.Gap != 10 || control.CrossAxisAlignment != woxwidget.CrossAxisCenter || len(control.Children) != 2 {
 		t.Fatal("app selector should keep Flutter's preview and primary button split layout")
 	}
 	preview := control.Children[0].(woxwidget.Container)

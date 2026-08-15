@@ -51,8 +51,6 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	padding := woxwidget.Insets{Left: 12, Right: 12}
 	fontSize := CompactButtonFontSize
 	fontWeight := woxui.FontWeightSemibold
-	// Intrinsic buttons need the tallest child when calculating symmetric vertical padding.
-	contentHeight := fontSize * 1.35
 	if props.Radius > 0 {
 		radius = props.Radius
 	}
@@ -62,6 +60,8 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	if props.FontSize > 0 {
 		fontSize = props.FontSize
 	}
+	// Intrinsic buttons need the tallest child when calculating symmetric vertical padding.
+	contentHeight := fontSize * 1.35
 
 	background := props.Theme.QueryBackground
 	foreground := props.Theme.ActionText

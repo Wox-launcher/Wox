@@ -124,8 +124,9 @@ func TestFormHotkeyFieldStartsAtMeasuredControlColumn(t *testing.T) {
 	}
 	controlColumn := row.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	control := controlColumn.Children[0].(woxwidget.Stack)
-	if control.Children[0].Left != 0 {
-		t.Fatalf("hotkey recorder left = %.0f, want start of control column", control.Children[0].Left)
+	recorder := control.Children[0].Child.(woxwidget.Align)
+	if control.Children[0].Left != 0 || control.Children[0].Top != 0 || recorder.Height != woxcomponent.SettingsControlHeight || recorder.Vertical != 0.5 {
+		t.Fatalf("hotkey recorder alignment = position %#v child %#v", control.Children[0], recorder)
 	}
 	description := controlColumn.Children[1].(woxwidget.TextBlock)
 	if description.Value != "Press or hold a modifier" {
@@ -172,10 +173,11 @@ func TestFormHotkeyFieldUsesFlutterSettingsLayout(t *testing.T) {
 		t.Fatalf("settings recorder geometry = width %.0f right anchored %v inset %.0f, want 534/true/2", controlArea.Width, controlArea.Children[0].AnchorRight, controlArea.Children[0].Right)
 	}
 	hint := controlArea.Children[1]
-	if hint.Left != -582 {
-		t.Fatalf("settings hint left = %.0f, want Flutter-style overflow to page edge at -582", hint.Left)
+	hintAlignment := hint.Child.(woxwidget.Align)
+	if hint.Left != -582 || hint.Top != 0 || hintAlignment.Height != woxcomponent.SettingsControlHeight || hintAlignment.Vertical != 0.5 {
+		t.Fatalf("settings hint geometry = position %#v child %#v", hint, hintAlignment)
 	}
-	hintClip := hint.Child.(woxwidget.Clip)
+	hintClip := hintAlignment.Child.(woxwidget.Clip)
 	if hintClip.Width != 1006 {
 		t.Fatalf("settings hint clip width = %.0f, want the same 12px gap used by right-side hints", hintClip.Width)
 	}

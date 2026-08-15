@@ -103,8 +103,11 @@ func TestLauncherResultTailsScrollHorizontallyWhenClipped(t *testing.T) {
 	}).(woxwidget.Semantics)
 	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
-	tailContainer := launcherResultRowContent(row).Children[2].(woxwidget.Container)
-	tailBoundary := tailContainer.Child.(woxwidget.Boundary[launcherResultTailsProps])
+	tailAlignment := launcherResultRowContent(row).Children[2].(woxwidget.Align)
+	tailBoundary := tailAlignment.Child.(woxwidget.Boundary[launcherResultTailsProps])
+	if tailAlignment.Vertical != 0.5 || tailAlignment.Height != 50 {
+		t.Fatalf("tail alignment = %#v, want full-height vertical center", tailAlignment)
+	}
 	tails := tailBoundary.Build(tailBoundary.Props).(woxwidget.ScrollView)
 
 	if !tails.Horizontal || tails.Key != "launcher-result-tails-many-tags" {
@@ -136,12 +139,12 @@ func TestLauncherResultUsesIndependentUpdateBoundaries(t *testing.T) {
 	rowStack := row.Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
 	background := rowStack.Children[0].Child.(woxwidget.Boundary[launcherResultBackgroundProps])
 	content := launcherResultRowContent(row)
-	icon := content.Children[0].(woxwidget.Container).Child.(woxwidget.Boundary[launcherResultIconProps])
+	icon := content.Children[0].(woxwidget.Align).Child.(woxwidget.Boundary[launcherResultIconProps])
 	labelViewport := content.Children[1].(woxwidget.Clip)
 	labels := labelViewport.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	title := labels.Children[0].(woxwidget.Boundary[launcherResultTextProps])
 	subtitle := labels.Children[1].(woxwidget.Boundary[launcherResultTextProps])
-	tails := content.Children[2].(woxwidget.Container).Child.(woxwidget.Boundary[launcherResultTailsProps])
+	tails := content.Children[2].(woxwidget.Align).Child.(woxwidget.Boundary[launcherResultTailsProps])
 
 	want := []woxwidget.Key{
 		LauncherResultBackgroundBoundaryKey("live"), LauncherResultIconBoundaryKey("live"), LauncherResultTitleBoundaryKey("live"),

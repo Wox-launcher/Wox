@@ -159,17 +159,16 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(8, props.DensityScale), Children: leftWidgets},
 		}}
 	}
-	verticalPadding := max(float32(0), (props.Height-contentHeight)/2)
 	body := woxwidget.Container{
 		Width: props.Width, Height: props.Height, Color: props.Theme.ToolbarBackground,
-		Padding: woxwidget.Insets{Left: props.Padding.Left, Top: verticalPadding, Right: props.Padding.Right, Bottom: verticalPadding},
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
+		Padding: woxwidget.Insets{Left: props.Padding.Left, Right: props.Padding.Right},
+		Child: woxwidget.Align{Height: props.Height, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: leftWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(8, props.DensityScale), Children: leftWidgets}},
 			woxwidget.Gesture{ID: "launcher-toolbar-drag-area", OnDragStart: props.OnDragStart, Child: woxwidget.Container{
 				Width: max(float32(0), contentWidth-leftWidth-rightWidth), Height: contentHeight,
 			}},
 			woxwidget.Container{Width: rightWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: actionGap, Children: rightChildren}},
-		}},
+		}}},
 	}
 	border := props.Theme.ToolbarText
 	border.A = min(border.A, uint8(26))
@@ -193,7 +192,7 @@ func launcherToolbarActionView(action LauncherToolbarAction, theme woxcomponent.
 	gap := scaledLauncherSize(8, densityScale)
 	width := labelMetrics.Size.Width + gap + chipWidth
 	content := woxwidget.Container{Width: width, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: labelMetrics.Size.Width, Height: contentHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(7, densityScale)}, Child: woxwidget.Text{Value: action.Label, Style: labelStyle, Color: theme.ToolbarText}},
+		woxwidget.Align{Width: labelMetrics.Size.Width, Height: contentHeight, Vertical: 0.5, Child: woxwidget.Text{Value: action.Label, Style: labelStyle, Color: theme.ToolbarText}},
 		chip,
 	}}}
 	return woxwidget.Semantics{

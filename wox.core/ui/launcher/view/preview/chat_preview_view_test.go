@@ -128,6 +128,16 @@ func TestChatMessagesUsesSharedScrollView(t *testing.T) {
 	}
 }
 
+func TestChatMessagesCentersEmptyStateWithAlign(t *testing.T) {
+	view := ChatMessages(ChatMessagesProps{
+		Width: 500, Height: 300, EmptyMessage: "Ask anything", EmptyTextWidth: 180, EmptyTextHeight: 36,
+	}).(woxwidget.Container)
+	alignment := view.Child.(woxwidget.Align)
+	if alignment.Width != 500 || alignment.Height != 286 || alignment.Horizontal != 0.5 || alignment.Vertical != 0.5 {
+		t.Fatalf("chat empty alignment = %#v, want centered 500x286 viewport", alignment)
+	}
+}
+
 func TestChatDebugUsesMeasuredControlledScrollGeometry(t *testing.T) {
 	view := ChatDebug(ChatDebugProps{
 		Width: 500, Height: 300, Key: "debug", Value: "trace", Layout: woxwidget.TextBlockLayout{Size: woxui.Size{Width: 400, Height: 180}},

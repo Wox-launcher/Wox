@@ -22,18 +22,27 @@ func TestWindows11SystemBackdropValuesMatchWindowsSDK(t *testing.T) {
 	}
 }
 
-func TestWindowsNonactivatingUtilityWindowUsesAccentBackdrop(t *testing.T) {
+func TestWindowsOverlayWindowsUseAccentBackdrop(t *testing.T) {
 	if !windowsUsesAccentBackdrop("win11", true) {
-		t.Fatal("never-active Windows 11 overlays need Accent Acrylic")
+		t.Fatal("Windows 11 overlays need Accent Acrylic")
 	}
 	if windowsUsesAccentBackdrop("win11", false) {
-		t.Fatal("activating Windows 11 windows should keep the supported system backdrop")
+		t.Fatal("the Windows 11 launcher should keep the supported system backdrop")
 	}
 	if !windowsUsesAccentBackdrop("win10", false) {
 		t.Fatal("Windows 10 windows need the Accent Acrylic fallback")
 	}
 	if windowsWindowUsesSystemBackdrop(WindowOptions{Role: WindowRoleScreenshot, Nonactivating: true}) {
 		t.Fatal("screenshot windows must keep skipping system backdrop")
+	}
+}
+
+func TestWindowsTransientOverlaySkipsThickFrame(t *testing.T) {
+	if windowsWindowStyle(WindowOptions{Resizable: true})&windowsWSSizeBox == 0 {
+		t.Fatal("regular resizable windows need WS_THICKFRAME")
+	}
+	if windowsWindowStyle(WindowOptions{Resizable: true, TransientOverlay: true})&windowsWSSizeBox != 0 {
+		t.Fatal("Accent overlays must resize through hit testing without WS_THICKFRAME")
 	}
 }
 

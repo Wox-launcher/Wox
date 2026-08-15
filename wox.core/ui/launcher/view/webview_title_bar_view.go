@@ -94,10 +94,11 @@ func buildWebViewTitleBar(props WebViewTitleBarProps, closeHovered, closePressed
 	omniboxWidth := max(float32(0), openLeft-sideGap-omniboxLeft)
 
 	iconButton := func(id, label string, icon woxwidget.Widget, left float32, disabled bool, onTap func()) woxwidget.StackChild {
-		return woxwidget.StackChild{Left: left, Top: 4, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+		button := woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 			ID: id, Label: label, Icon: icon, Width: buttonSize, Height: buttonSize, Radius: 5,
 			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Cursor, Disabled: disabled, OnTap: onTap,
-		})}
+		})
+		return woxwidget.StackChild{Left: left, Child: woxwidget.Align{Width: buttonSize, Height: height, Vertical: 0.5, Child: button}}
 	}
 	backColor := foreground
 	if !props.CanGoBack {
@@ -110,22 +111,22 @@ func buildWebViewTitleBar(props WebViewTitleBarProps, closeHovered, closePressed
 
 	children := []woxwidget.StackChild{
 		{Child: woxwidget.Gesture{ID: "webview-title-drag", OnDragStart: props.OnDrag, Child: woxwidget.Container{Width: props.Width, Height: height}}},
-		{Top: height - 1, Child: woxwidget.Container{Width: props.Width, Height: 1, Color: borderColor}},
+		{AnchorBottom: true, Child: woxwidget.Container{Width: props.Width, Height: 1, Color: borderColor}},
 	}
 	if props.Platform != "darwin" && props.AppIcon != nil {
-		children = append(children, woxwidget.StackChild{Left: 12, Top: 10, Child: woxwidget.Image{Source: props.AppIcon, Width: 20, Height: 20}})
+		children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: height, Vertical: 0.5, Child: woxwidget.Image{Source: props.AppIcon, Width: 20, Height: 20}}})
 	}
 	children = append(children,
 		iconButton("webview-go-back", props.GoBackLabel, woxcomponent.ArrowLeftGlyph(16, backColor), navLeft, !props.CanGoBack, props.OnGoBack),
 		iconButton("webview-go-forward", props.GoForwardLabel, woxcomponent.ArrowRightGlyph(16, forwardColor), navLeft+buttonSize+buttonGap, !props.CanGoForward, props.OnGoForward),
 		iconButton("webview-refresh", props.RefreshLabel, woxcomponent.RefreshGlyph(15, foreground), navLeft+(buttonSize+buttonGap)*2, false, props.OnRefresh),
-		woxwidget.StackChild{Left: omniboxLeft, Top: 6, Child: woxwidget.Semantics{
+		woxwidget.StackChild{Left: omniboxLeft, Child: woxwidget.Align{Width: omniboxWidth, Height: height, Vertical: 0.5, Child: woxwidget.Semantics{
 			AutomationID: "webview-location", Role: woxui.AccessibilityRoleText, Label: props.URL,
 			Child: woxwidget.Container{
-				Width: omniboxWidth, Height: 28, Radius: 7, Color: omniboxBackground, Padding: woxwidget.Insets{Left: 10, Right: 10, Top: 5},
-				Child: woxwidget.Clip{Width: max(float32(0), omniboxWidth-20), Height: 18, Child: woxwidget.Text{Value: props.URL, Style: woxui.TextStyle{Size: 12}, Color: woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 205)}},
+				Width: omniboxWidth, Height: 28, Radius: 7, Color: omniboxBackground, Padding: woxwidget.Insets{Left: 10, Right: 10},
+				Child: woxwidget.Align{Width: max(float32(0), omniboxWidth-20), Height: 28, Vertical: 0.5, Child: woxwidget.Clip{Width: max(float32(0), omniboxWidth-20), Height: 18, Child: woxwidget.Text{Value: props.URL, Style: woxui.TextStyle{Size: 12}, Color: woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 205)}}},
 			},
-		}},
+		}}},
 		iconButton("webview-open-in-browser", props.OpenInBrowserLabel, woxcomponent.ExternalGlyph(15, foreground), openLeft, false, props.OnOpenInBrowser),
 	)
 

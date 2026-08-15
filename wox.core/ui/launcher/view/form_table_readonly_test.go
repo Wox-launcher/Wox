@@ -17,7 +17,8 @@ func TestReadonlyFormTableUsesFullWidthAndCellTooltip(t *testing.T) {
 
 	icon := &woxui.Image{}
 	cell := formTableDataCellAt(FormTableFieldProps{ID: "notes", InfoIcon: icon, Theme: woxcomponent.Theme{}}, 2, 1, FormTableCell{Text: "Platform sync", Tooltip: "Per platform"}, 220)
-	content := cell.(woxwidget.Container).Child.(woxwidget.Flex)
+	alignment := cell.(woxwidget.Container).Child.(woxwidget.Align)
+	content := alignment.Child.(woxwidget.Flex)
 	if len(content.Children) != 2 {
 		t.Fatalf("tooltip cell children = %d, want text and shared tooltip trigger", len(content.Children))
 	}
@@ -27,6 +28,9 @@ func TestReadonlyFormTableUsesFullWidthAndCellTooltip(t *testing.T) {
 	}
 	if content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
 		t.Fatalf("tooltip cell alignment = %v, want vertical center", content.CrossAxisAlignment)
+	}
+	if alignment.Height != tableSurfaceRowHeight || alignment.Vertical != 0.5 {
+		t.Fatalf("tooltip cell slot = %#v, want full-height vertical center", alignment)
 	}
 	tooltip := content.Children[1].(woxwidget.Gesture)
 	if tooltip.ID != "notes-row-2-cell-1-tooltip" || tooltip.OnHoverAt == nil {
@@ -45,10 +49,11 @@ func TestFormTableCellSupportsCustomContent(t *testing.T) {
 
 func TestFormTableCellUsesRequestedIconSize(t *testing.T) {
 	cell := formTableDataCell(FormTableFieldProps{Theme: woxcomponent.Theme{}}, FormTableCell{Icon: &woxui.Image{}, IconSize: 24}, 120).(woxwidget.Container)
-	content := cell.Child.(woxwidget.Flex)
+	alignment := cell.Child.(woxwidget.Align)
+	content := alignment.Child.(woxwidget.Flex)
 	icon := content.Children[0].(woxwidget.Image)
 
-	if icon.Width != 24 || icon.Height != 24 || cell.Padding.Top != 6 {
-		t.Fatalf("24px table icon geometry = %vx%v with top padding %v", icon.Width, icon.Height, cell.Padding.Top)
+	if icon.Width != 24 || icon.Height != 24 || cell.Padding.Top != 0 || alignment.Height != tableSurfaceRowHeight || alignment.Vertical != 0.5 {
+		t.Fatalf("24px table icon geometry = %vx%v with alignment %#v", icon.Width, icon.Height, alignment)
 	}
 }

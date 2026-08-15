@@ -117,6 +117,21 @@ func TestImageOverlayChromePaintsThemeBackground(t *testing.T) {
 	}
 }
 
+func TestImageOverlayChromeLeavesWindowsTitleBarTransparent(t *testing.T) {
+	chrome := buildImageOverlayChrome(imageOverlayTitleBarProps{
+		Width: 400, Height: 280, Title: "shot.png", Platform: "windows",
+		Colors: ThemeColors{Background: woxui.Color{A: 255}, Foreground: woxui.Color{A: 255}, Toolbar: woxui.Color{A: 255}},
+	}, "", "", nil, nil).(woxwidget.Stack)
+	background := chrome.Children[0]
+	panel, ok := background.Child.(woxwidget.Container)
+	if !ok {
+		t.Fatalf("Windows chrome panel = %T, want Container", background.Child)
+	}
+	if background.Top != imageOverlayTitleBarHeight || panel.Height != 280-imageOverlayTitleBarHeight {
+		t.Fatalf("Windows background = top %v height %v, want title bar left transparent", background.Top, panel.Height)
+	}
+}
+
 func TestImageOverlayChromeOmitsWidgetWindowOutline(t *testing.T) {
 	for _, platform := range []string{"windows", "darwin", "linux"} {
 		chrome := buildImageOverlayChrome(imageOverlayTitleBarProps{

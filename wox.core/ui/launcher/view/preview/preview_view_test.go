@@ -72,9 +72,17 @@ func TestTerminalPreviewUsesFramelessFlutterSurface(t *testing.T) {
 	if command.Left != 17 || command.Right != 79 || !command.StretchWidth {
 		t.Fatalf("terminal command layout = left/right %.0f/%.0f stretch %v, want 17/79/true", command.Left, command.Right, command.StretchWidth)
 	}
-	find := headerStack.Children[2].Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	commandAlign := command.Child.(woxwidget.Align)
+	if command.Top != 0 || commandAlign.Height != 34 || commandAlign.Vertical != 0.5 {
+		t.Fatalf("terminal command alignment = top %.0f child %#v, want full-height vertical center", command.Top, command.Child)
+	}
+	findAlign := headerStack.Children[2].Child.(woxwidget.Align)
+	find := findAlign.Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	if !headerStack.Children[2].AnchorRight || headerStack.Children[2].Right != 34 || !headerStack.Children[3].AnchorRight {
 		t.Fatalf("terminal action anchors = find %v/%.0f fullscreen %v, want true/34/true", headerStack.Children[2].AnchorRight, headerStack.Children[2].Right, headerStack.Children[3].AnchorRight)
+	}
+	if findAlign.Height != 34 || findAlign.Vertical != 0.5 {
+		t.Fatalf("terminal find alignment = %#v, want full-height vertical center", findAlign)
 	}
 	if find.Label != "Find" || find.Icon == nil || find.OnHoverAt == nil {
 		t.Fatalf("terminal find action = %+v; want shared icon button", find)
@@ -83,7 +91,7 @@ func TestTerminalPreviewUsesFramelessFlutterSurface(t *testing.T) {
 	if tooltip != "Cmd+Shift+F" {
 		t.Fatalf("terminal find tooltip = %q, want Cmd+Shift+F", tooltip)
 	}
-	fullscreen := headerStack.Children[3].Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	fullscreen := headerStack.Children[3].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	if fullscreen.Label != "Toggle fullscreen" || fullscreen.Icon == nil || fullscreen.OnHoverAt == nil {
 		t.Fatalf("terminal fullscreen action = %+v; want shared icon button", fullscreen)
 	}
@@ -118,15 +126,16 @@ func TestChatHeaderExitKeepsGlyphVisible(t *testing.T) {
 	header := ChatHeader(ChatHeaderProps{Width: 500, Height: 48, Key: "test", ShowExit: true, ExitLabel: "Close", Theme: theme, OnExit: func() {}, OnDrag: func() { dragged = true }}).(woxwidget.Container)
 	stack := header.Child.(woxwidget.Stack)
 	title := stack.Children[1]
-	if title.Top != 5 || title.Right != 44 || !title.StretchWidth {
-		t.Fatalf("chat title layout = top/right %.0f/%.0f stretch %v, want 5/44/true", title.Top, title.Right, title.StretchWidth)
+	titleAlign := title.Child.(woxwidget.Align)
+	if title.Top != 0 || title.Right != 44 || !title.StretchWidth || titleAlign.Height != 48 || titleAlign.Vertical != 0.5 {
+		t.Fatalf("chat title layout = top/right %.0f/%.0f stretch %v alignment %#v", title.Top, title.Right, title.StretchWidth, titleAlign)
 	}
-	titleDrag := title.Child.(woxwidget.Gesture)
+	titleDrag := titleAlign.Child.(woxwidget.Gesture)
 	titleDrag.OnDragStart()
 	if !dragged {
 		t.Fatal("chat title drag did not start window dragging")
 	}
-	menu := stack.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	menu := stack.Children[0].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	if menu.Width != 36 || menu.Height != 36 || menu.HoverBackground.A == 0 {
 		t.Fatalf("chat menu props = %+v, want hoverable 36x36 icon button", menu)
 	}
@@ -134,10 +143,11 @@ func TestChatHeaderExitKeepsGlyphVisible(t *testing.T) {
 		t.Fatalf("chat menu glyph = %vx%v, want centered 22x22", glyph.Width, glyph.Height)
 	}
 	exitChild := stack.Children[len(stack.Children)-1]
-	if exitChild.Top != 9 || exitChild.Right != 6 || !exitChild.AnchorRight {
-		t.Fatalf("chat exit layout = top/right %.0f/%.0f anchor %v, want 9/6/true", exitChild.Top, exitChild.Right, exitChild.AnchorRight)
+	exitAlign := exitChild.Child.(woxwidget.Align)
+	if exitChild.Top != 0 || exitChild.Right != 6 || !exitChild.AnchorRight || exitAlign.Height != 48 || exitAlign.Vertical != 0.5 {
+		t.Fatalf("chat exit layout = top/right %.0f/%.0f anchor %v alignment %#v", exitChild.Top, exitChild.Right, exitChild.AnchorRight, exitAlign)
 	}
-	exit := exitChild.Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	exit := exitAlign.Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	if exit.OnHoverAt == nil || exit.OnTap == nil || exit.Width != 28 || exit.Height != 28 {
 		t.Fatalf("chat exit props = %+v, want hoverable 28x28 icon button", exit)
 	}

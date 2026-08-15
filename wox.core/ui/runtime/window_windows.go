@@ -684,6 +684,16 @@ func (w *platformWindow) close() error {
 	return w.call(windowCommand{kind: windowCommandClose}).err
 }
 
+// windowsWindowStyle keeps Accent overlays frameless while preserving edge resize hit testing.
+func windowsWindowStyle(options WindowOptions) uint32 {
+	style := uint32(win.WS_POPUP)
+	if options.Resizable && !options.TransientOverlay {
+		// Accent Acrylic becomes opaque with WS_THICKFRAME; overlays already resize through WM_NCHITTEST.
+		style |= windowsWSSizeBox
+	}
+	return style
+}
+
 // createNativeWindow publishes the HWND only after CreateWindowEx has completed its synchronous messages.
 func (w *platformWindow) createNativeWindow() error {
 	instance := win.GetModuleHandle(nil)
@@ -709,10 +719,7 @@ func (w *platformWindow) createNativeWindow() error {
 	if w.options.Role == WindowRoleApplication {
 		exStyle = uint32(win.WS_EX_APPWINDOW | wsExNoRedirectionBitmap)
 	}
-	style := uint32(win.WS_POPUP)
-	if w.options.Resizable {
-		style |= windowsWSSizeBox
-	}
+	style := windowsWindowStyle(w.options)
 	hwnd := win.CreateWindowEx(
 		exStyle,
 		className,
@@ -758,7 +765,7 @@ func (w *platformWindow) createNativeWindow() error {
 	}
 	w.renderer = renderer
 	if windowsWindowUsesSystemBackdrop(w.options) {
-		applyWindowsBackdrop(hwnd, w.darkAppearance, w.options.Nonactivating)
+		applyWindowsBackdrop(hwnd, w.darkAppearance, w.options.TransientOverlay)
 	}
 	nativeWindows.Store(uintptr(hwnd), w)
 	platformRuntime.Lock()
@@ -834,10 +841,9 @@ func windowsResizeHitTest(position win.POINT, bounds win.RECT, grip int32) uintp
 	}
 }
 
-// applyWindowsBackdrop uses the DWM system material for activating Windows 11 windows.
-// Never-active overlays use Accent Acrylic because DWM renders its inactive system
-// backdrop as a solid fallback when no Wox window owns input focus.
-func applyWindowsBackdrop(hwnd win.HWND, isDark, nonactivating bool) {
+// applyWindowsBackdrop keeps shared overlays on Accent Acrylic so their material
+// does not change when they gain focus. Other Windows 11 windows use DWM Acrylic.
+func applyWindowsBackdrop(hwnd win.HWND, isDark, transientOverlay bool) {
 	dark := int32(0)
 	if isDark {
 		dark = 1
@@ -847,14 +853,14 @@ func applyWindowsBackdrop(hwnd win.HWND, isDark, nonactivating bool) {
 	}
 	platformVariant := osvariant.GetCurrentPlatformVariant()
 	if platformVariant == "win11" {
-		applyWindows11Backdrop(hwnd, isDark, windowsUsesAccentBackdrop(platformVariant, nonactivating))
+		applyWindows11Backdrop(hwnd, isDark, windowsUsesAccentBackdrop(platformVariant, transientOverlay))
 		return
 	}
 	applyWindowsAccentBackdrop(hwnd, isDark)
 }
 
-func windowsUsesAccentBackdrop(platformVariant string, nonactivating bool) bool {
-	return platformVariant != "win11" || nonactivating
+func windowsUsesAccentBackdrop(platformVariant string, transientOverlay bool) bool {
+	return platformVariant != "win11" || transientOverlay
 }
 
 func applyWindows11Backdrop(hwnd win.HWND, isDark, useAccent bool) {
@@ -1600,7 +1606,7 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 	case windowCommandSetAppearance:
 		w.darkAppearance = command.darkAppearance
 		if windowsWindowUsesSystemBackdrop(w.options) {
-			applyWindowsBackdrop(w.hwnd, command.darkAppearance, w.options.Nonactivating)
+			applyWindowsBackdrop(w.hwnd, command.darkAppearance, w.options.TransientOverlay)
 		}
 		return windowCommandResult{}
 	case windowCommandSetFontFamily:
@@ -1934,7 +1940,7 @@ func (w *platformWindow) synchronizeBackdropAfterShow() {
 		backdrop := int32(dwmSystemBackdropNone)
 		_, _, _ = dwmSetWindowAttribute.Call(uintptr(w.hwnd), dwmwaSystemBackdrop, uintptr(unsafe.Pointer(&backdrop)), unsafe.Sizeof(backdrop))
 	}
-	applyWindowsBackdrop(w.hwnd, w.darkAppearance, w.options.Nonactivating)
+	applyWindowsBackdrop(w.hwnd, w.darkAppearance, w.options.TransientOverlay)
 	if dwmFlush.Find() == nil {
 		_, _, _ = dwmFlush.Call()
 	}

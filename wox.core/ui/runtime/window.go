@@ -128,6 +128,8 @@ type WindowOptions struct {
 	// Nonactivating keeps tooltips and recording chrome visible without stealing
 	// focus. It is a focus policy only; native window materials still apply.
 	Nonactivating bool
+	// TransientOverlay selects the platform material used by shared overlay windows.
+	TransientOverlay bool
 	// Topmost raises a utility window above the launcher so preview overlays
 	// cannot open behind Wox when both share the floating window band.
 	Topmost                    bool

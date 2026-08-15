@@ -86,7 +86,6 @@ type viewSnapshot struct {
 	palette               uiPalette
 	densityMetrics        launcherDensityMetrics
 	selectedPreviewType   string
-	selectedFileKind      string
 	webViewNavigation     woxui.WebViewNavigationState
 }
 
@@ -138,13 +137,9 @@ func (a *App) snapshot() viewSnapshot {
 		a.actionsSectionRevision++
 	}
 	selectedPreviewType := ""
-	selectedFileKind := ""
 	if a.selected >= 0 && a.selected < len(a.results) {
 		preview := a.resolvePreview(a.results[a.selected].Preview)
 		selectedPreviewType = preview.PreviewType
-		if preview.PreviewType == "file" {
-			selectedFileKind = a.filePreviewFor(preview.PreviewData).Kind
-		}
 	}
 	return viewSnapshot{
 		editing:               a.editor.State(),
@@ -183,7 +178,6 @@ func (a *App) snapshot() viewSnapshot {
 		palette:               a.palette,
 		densityMetrics:        a.densityMetrics.normalized(),
 		selectedPreviewType:   selectedPreviewType,
-		selectedFileKind:      selectedFileKind,
 		webViewNavigation:     a.webViewNavigation,
 	}
 }
@@ -276,7 +270,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	})
 }
 
-// buildPreviewTitleBar selects browser chrome for WebViews and native title chrome for other full previews.
+// buildPreviewTitleBar selects browser chrome for direct WebView previews and native title chrome for other full previews.
 func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowFocused bool) woxwidget.Widget {
 	title := "Wox"
 	if snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) {
@@ -350,7 +344,7 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowF
 	})
 }
 
-// launcherPreviewUsesWebView identifies direct and file-backed WebView previews.
+// launcherPreviewUsesWebView limits browser chrome to the public WebView preview type.
 func launcherPreviewUsesWebView(snapshot viewSnapshot) bool {
 	if snapshot.selected < 0 || snapshot.selected >= len(snapshot.results) {
 		return false
@@ -359,7 +353,7 @@ func launcherPreviewUsesWebView(snapshot viewSnapshot) bool {
 	if previewType == "" {
 		previewType = snapshot.results[snapshot.selected].Preview.PreviewType
 	}
-	return previewType == "webview" || previewType == "file" && snapshot.selectedFileKind == "webview"
+	return previewType == "webview"
 }
 
 // launcherPreviewOnly identifies the chrome-free layout that needs edge drag hit areas.

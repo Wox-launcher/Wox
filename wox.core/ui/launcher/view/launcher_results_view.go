@@ -293,9 +293,9 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	contentLayer := woxwidget.Container{
 		Width: props.RowWidth, Height: props.RowHeight, Padding: props.ItemPadding,
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: props.IconGap, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: props.IconSize, Height: props.BaseHeight, Padding: woxwidget.Insets{Top: max(float32(0), (props.BaseHeight-props.IconSize)/2)}, Child: icon},
+			woxwidget.Align{Width: props.IconSize, Height: props.BaseHeight, Vertical: 0.5, Child: icon},
 			woxwidget.Clip{Width: labelWidth, Height: props.BaseHeight, Child: labelContent},
-			woxwidget.Container{Width: item.TailWidth, Height: props.BaseHeight, Padding: woxwidget.Insets{Top: max(float32(0), (props.BaseHeight-item.TailHeight)/2)}, Child: tail},
+			woxwidget.Align{Width: item.TailWidth, Height: props.BaseHeight, Vertical: 0.5, Child: tail},
 		}},
 	}
 	resultControl := woxwidget.Gesture{

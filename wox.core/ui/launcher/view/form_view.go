@@ -184,9 +184,10 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 	}
 	controlWidth := formFieldControlWidth(props.Width, props.LabelWidth)
 	statusGap := float32(12)
-	recorderChild := woxwidget.StackChild{Top: 2, Child: recorder}
+	recorderSlot := woxwidget.Align{Width: recorderWidth, Height: woxcomponent.SettingsControlHeight, Vertical: 0.5, Child: recorder}
+	recorderChild := woxwidget.StackChild{Child: recorderSlot}
 	if props.AlignRecorderRight {
-		recorderChild = woxwidget.StackChild{Top: 2, Right: 0, AnchorRight: true, Child: recorder}
+		recorderChild = woxwidget.StackChild{Right: 0, AnchorRight: true, Child: recorderSlot}
 	}
 	controlChildren := []woxwidget.StackChild{recorderChild}
 	settingsLabelWidth := props.LabelWidth
@@ -206,7 +207,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 		// The settings field reserves a 2px inset on both sides, so keep the
 		// responsive label, gap, and recorder column inside the field's content width.
 		controlWidth = max(float32(0), props.Width-settingsLabelWidth-gap-edgeInset*2)
-		controlChildren[0] = woxwidget.StackChild{Top: 2, Right: edgeInset, AnchorRight: true, Child: recorder}
+		controlChildren[0] = woxwidget.StackChild{Right: edgeInset, AnchorRight: true, Child: recorderSlot}
 	}
 	if props.Recording && props.Status != "" && controlWidth > recorderWidth+statusGap {
 		statusColor := props.Theme.ResultSubtitle
@@ -219,20 +220,21 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 			hintLeft := -settingsLabelWidth - labelGap
 			hintWidth := max(float32(0), recorderLeft-statusGap-hintLeft)
 			// Flutter positions the hint from its actual render box. Clip Go's wider overflow area before the recorder so fallback glyphs cannot outpaint measured text bounds.
-			controlChildren = append(controlChildren, woxwidget.StackChild{Left: hintLeft, Top: 6, Child: woxwidget.Clip{
+			controlChildren = append(controlChildren, woxwidget.StackChild{Left: hintLeft, Child: woxwidget.Align{Width: hintWidth, Height: woxcomponent.SettingsControlHeight, Vertical: 0.5, Child: woxwidget.Clip{
 				Width: hintWidth, Height: 22, Child: woxwidget.Align{Width: hintWidth, Height: 22, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{
 					Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
 				}},
-			}})
+			}}})
 		} else if props.AlignRecorderRight {
 			hintWidth := max(float32(0), controlWidth-recorderWidth-statusGap)
-			controlChildren = append(controlChildren, woxwidget.StackChild{Left: 0, Top: 8, Child: woxwidget.Clip{
+			controlChildren = append(controlChildren, woxwidget.StackChild{Left: 0, Child: woxwidget.Align{Width: hintWidth, Height: woxcomponent.SettingsControlHeight, Vertical: 0.5, Child: woxwidget.Clip{
 				Width: hintWidth, Height: 22, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor},
-			}})
+			}}})
 		} else {
-			controlChildren = append(controlChildren, woxwidget.StackChild{Left: recorderWidth + statusGap, Top: 8, Child: woxwidget.Text{
+			statusWidth := max(float32(0), controlWidth-recorderWidth-statusGap)
+			controlChildren = append(controlChildren, woxwidget.StackChild{Left: recorderWidth + statusGap, Child: woxwidget.Align{Width: statusWidth, Height: woxcomponent.SettingsControlHeight, Vertical: 0.5, Child: woxwidget.Text{
 				Value: props.Status, Style: woxui.TextStyle{Size: 12}, Color: statusColor,
-			}})
+			}}})
 		}
 	}
 	control := woxwidget.Stack{Width: controlWidth, Height: woxcomponent.SettingsControlHeight, Children: controlChildren}

@@ -13,8 +13,15 @@ func TestWebViewTitleBarWindowsContainsNavigationAndCloseControls(t *testing.T) 
 	}, false, false, nil, nil).(woxwidget.Stack)
 
 	controls := map[woxwidget.Key]bool{}
-	for _, child := range titleBar.Children {
-		if stateful, ok := child.Child.(woxwidget.Stateful); ok {
+	for _, positioned := range titleBar.Children {
+		child := positioned.Child
+		if align, ok := child.(woxwidget.Align); ok {
+			if positioned.Top != 0 || align.Height != SettingsTitleBarHeight || align.Vertical != 0.5 {
+				t.Fatalf("WebView title-bar control alignment = top %.0f child %#v", positioned.Top, child)
+			}
+			child = align.Child
+		}
+		if stateful, ok := child.(woxwidget.Stateful); ok {
 			controls[stateful.Key] = true
 		}
 	}
