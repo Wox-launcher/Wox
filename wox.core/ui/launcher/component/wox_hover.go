@@ -7,6 +7,16 @@ import (
 
 const controlHoverAlpha = uint8(25)
 
+// Hoverable wraps a build callback with the shared retained hover state used by Wox controls.
+func Hoverable(key woxwidget.Key, disabled bool, build func(bool, func(bool, woxui.Rect)) woxwidget.Widget) woxwidget.Widget {
+	return hoverable(key, disabled, build)
+}
+
+// ControlHoverColor composites the standard hover overlay without replacing a variant's base color.
+func ControlHoverColor(base, foreground woxui.Color) woxui.Color {
+	return controlHoverColor(base, foreground)
+}
+
 type hoverableProps struct {
 	disabled bool
 	build    func(bool, func(bool, woxui.Rect)) woxwidget.Widget

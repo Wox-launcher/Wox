@@ -26,6 +26,9 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 	if app.settingsInlineTooltip.Anchor != anchor {
 		t.Fatalf("tooltip anchor = %#v, want %#v", app.settingsInlineTooltip.Anchor, anchor)
 	}
+	if app.settingsInlineTooltip.Side != "top" {
+		t.Fatalf("tooltip side = %q, want top", app.settingsInlineTooltip.Side)
+	}
 
 	app.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	if app.settingsInlineTooltip != nil {

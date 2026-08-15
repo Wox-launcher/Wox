@@ -37,6 +37,40 @@ func TestRequestCloseFiresCallbackOnce(t *testing.T) {
 	}
 }
 
+func TestPreviewOverlayFloatsAboveLauncher(t *testing.T) {
+	options := overlayNativeWindowOptions(WindowOptions{Topmost: true, CloseOnEscape: true, TakeFocus: true, Resizable: true}, woxui.Size{Width: 400, Height: 280})
+	if options.Role != woxui.WindowRoleUtility {
+		t.Fatalf("overlay role = %d, want utility", options.Role)
+	}
+	if !options.Topmost {
+		t.Fatal("preview overlays must stay above the launcher")
+	}
+	if options.Nonactivating {
+		t.Fatal("escape-to-close preview overlays still take focus")
+	}
+	if !options.Resizable {
+		t.Fatal("preview overlays should keep native resizing")
+	}
+}
+
+func TestSyncOverlayAppearanceFollowsThemeWhenRequested(t *testing.T) {
+	themed := WindowOptions{LightAppearance: true, FollowsThemeAppearance: true}
+	if !syncOverlayAppearance(&themed, true) {
+		t.Fatal("themed overlay should update native appearance")
+	}
+	if themed.LightAppearance {
+		t.Fatal("dark theme should request a dark overlay appearance")
+	}
+
+	unthemed := WindowOptions{LightAppearance: true}
+	if syncOverlayAppearance(&unthemed, true) {
+		t.Fatal("unthemed overlay should keep its creation appearance")
+	}
+	if !unthemed.LightAppearance {
+		t.Fatal("unthemed overlay LightAppearance should stay unchanged")
+	}
+}
+
 func TestScaledBoundsPreservesCenterAndAspectRatio(t *testing.T) {
 	current := woxui.Rect{X: 300, Y: 200, Width: 400, Height: 250}
 	target := scaledBounds(current, woxui.Rect{Width: 1200, Height: 900}, 1.25, 1.6, woxui.Size{Width: 180, Height: 120})

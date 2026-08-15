@@ -99,7 +99,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
 		Width: width, Height: height, PageID: snapshot.tab, Platform: runtime.GOOS, RailWidth: railWidth, Theme: snapshot.palette.componentTheme(),
-		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight, frame.Scale), Page: page,
+		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth, frame.WindowFocused), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight, frame.Scale), Page: page,
 		Overlay: overlay, OverlayLeft: overlayLeft, OverlayTop: overlayTop,
 	})
 }
@@ -112,7 +112,7 @@ func (a *App) settingsWindowTitle() string {
 	return title
 }
 
-func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth float32) woxwidget.Widget {
+func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth float32, windowFocused bool) woxwidget.Widget {
 	title := a.settingsWindowTitle()
 	titleStyle := woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}
 	titleWidth := float32(160)
@@ -123,7 +123,7 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth 
 	}
 	return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
 		Width: width, RailWidth: railWidth, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.imageFor(appIconImageSource),
-		Theme: snapshot.palette.componentTheme(),
+		Theme: snapshot.palette.componentTheme(), Active: windowFocused,
 		OnDrag: func() {
 			if window := a.settingsNativeWindow(); window != nil {
 				_ = window.StartDragging()

@@ -18,6 +18,26 @@ func TestRuntimeTextWindowGrowsUntilMaximumHeight(t *testing.T) {
 	}
 }
 
+func TestTextOverlayFontSize(t *testing.T) {
+	if size := textOverlayFontSize(Options{}); size != DefaultFontSize {
+		t.Fatalf("default font size = %v, want %v", size, DefaultFontSize)
+	}
+	if size := textOverlayFontSize(Options{FontSize: 12}); size != 12 {
+		t.Fatalf("custom font size = %v, want 12", size)
+	}
+}
+
+func TestTextOverlayPadding(t *testing.T) {
+	fallback := textOverlayPadding(Options{})
+	if fallback.Left != runtimeTextPaddingX || fallback.Top != runtimeTextPaddingY {
+		t.Fatalf("default padding = %+v, want %v/%v", fallback, runtimeTextPaddingX, runtimeTextPaddingY)
+	}
+	custom := textOverlayPadding(Options{Padding: woxwidget.Insets{Left: 11, Top: 8, Right: 11, Bottom: 8}})
+	if custom.Left != 11 || custom.Top != 8 {
+		t.Fatalf("custom padding = %+v, want 11/8", custom)
+	}
+}
+
 func TestRuntimeTextTitleBarIsReservedForDialogStyleOverlays(t *testing.T) {
 	if runtimeTextUsesTitleBar(Options{Closable: true}) {
 		t.Fatal("compact auto-close notification unexpectedly uses a title bar")

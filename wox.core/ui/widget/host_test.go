@@ -267,6 +267,26 @@ func TestHostHidesCaretWhileWindowIsUnfocused(t *testing.T) {
 	}
 }
 
+func TestHostExposesWindowFocusedOnFrameInfo(t *testing.T) {
+	var focused bool
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		focused = frame.WindowFocused
+		return Container{Width: 20, Height: 20}
+	})
+	host.AttachServices(&fakeHostServices{})
+	defer host.Dispose()
+
+	renderTestFrame(host)
+	if !focused || !host.WindowFocused() {
+		t.Fatal("new host should report a focused window")
+	}
+	host.SetWindowFocused(false)
+	renderTestFrame(host)
+	if focused || host.WindowFocused() {
+		t.Fatal("unfocused window still reported as focused to the widget tree")
+	}
+}
+
 func TestHostKeepsPressedIdentityAcrossKeyedReorder(t *testing.T) {
 	order := []string{"a", "b"}
 	taps := map[string]int{}

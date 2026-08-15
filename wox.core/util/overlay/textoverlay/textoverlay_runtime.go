@@ -13,22 +13,25 @@ import (
 )
 
 const (
-	runtimeTextDefaultWidth    = float32(400)
-	runtimeTextMinimumWidth    = float32(100)
-	DefaultFontSize            = float32(14)
-	runtimeTextPaddingX        = float32(18)
-	runtimeTextPaddingY        = float32(12)
-	runtimeTextLeadingGap      = float32(8)
-	runtimeTextCloseSize       = float32(20)
-	runtimeTextCloseGap        = float32(8)
-	runtimeTextCopySize        = float32(28)
-	runtimeTextCopyGap         = float32(8)
-	runtimeTextBottomPadding   = float32(4)
-	runtimeTextTitleBarHeight  = float32(40)
-	runtimeTextTitleButtonSize = float32(32)
-	runtimeTextTitleIconSize   = float32(20)
-	runtimeTextTooltipHeight   = float32(28)
-	runtimeTextTooltipGap      = float32(4)
+	runtimeTextDefaultWidth = float32(400)
+	runtimeTextMinimumWidth = float32(100)
+	DefaultFontSize         = float32(14)
+	runtimeTextPaddingX     = float32(18)
+	runtimeTextPaddingY     = float32(12)
+	// runtimeTextSystemCornerRadius matches wox_window_corner_radius in
+	// native_darwin.m so the drawn border follows the window's rounded corners.
+	runtimeTextSystemCornerRadius = float32(14)
+	runtimeTextLeadingGap         = float32(8)
+	runtimeTextCloseSize          = float32(20)
+	runtimeTextCloseGap           = float32(8)
+	runtimeTextCopySize           = float32(28)
+	runtimeTextCopyGap            = float32(8)
+	runtimeTextBottomPadding      = float32(4)
+	runtimeTextTitleBarHeight     = float32(40)
+	runtimeTextTitleButtonSize    = float32(32)
+	runtimeTextTitleIconSize      = float32(20)
+	runtimeTextTooltipHeight      = float32(28)
+	runtimeTextTooltipGap         = float32(4)
 )
 
 var (
@@ -172,7 +175,7 @@ func (instance *runtimeTextOverlay) tryAutoClose() {
 }
 
 func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui.Rect) runtimeTextLayout {
-	style := woxui.TextStyle{Size: DefaultFontSize}
+	style := woxui.TextStyle{Size: textOverlayFontSize(instance.options)}
 	leadingWidth := float32(0)
 	if instance.options.Loading || instance.icon != nil {
 		leadingWidth = float32(instance.options.IconSize)
@@ -205,7 +208,8 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	}
 
 	natural, _ := window.MeasureText(instance.options.Message, style)
-	windowWidth := natural.Size.Width + leadingReserve + tipReserve + closeReserve + runtimeTextPaddingX*2
+	padding := textOverlayPadding(instance.options)
+	windowWidth := natural.Size.Width + leadingReserve + tipReserve + closeReserve + padding.Left + padding.Right
 	if titleBarHeight > 0 && (instance.options.Title != "" || instance.titleIcon != nil) {
 		titleWidth := float32(0)
 		if instance.options.Title != "" {
@@ -240,7 +244,7 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 		windowWidth = min(max(float32(instance.options.Window.Width), minWidth), maxWidth)
 	}
 
-	contentWidth := max(float32(1), windowWidth-runtimeTextPaddingX*2)
+	contentWidth := max(float32(1), windowWidth-padding.Left-padding.Right)
 	textWidth := max(float32(1), contentWidth-leadingReserve-tipReserve-closeReserve)
 	textLayout := woxwidget.LayoutTextBlock(window, instance.options.Message, style, textWidth, 0, 0)
 	textHeight := textLayout.Size.Height + runtimeTextBottomPadding
@@ -252,13 +256,13 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	if instance.options.ShowCopyButton && titleBarHeight == 0 {
 		copyReserve = runtimeTextCopySize + runtimeTextCopyGap
 	}
-	naturalHeight := titleBarHeight + rowHeight + copyReserve + runtimeTextPaddingY*2
+	naturalHeight := titleBarHeight + rowHeight + copyReserve + padding.Top + padding.Bottom
 	maxHeight := workArea.Height
 	if instance.options.Window.MaxHeight > 0 {
 		maxHeight = min(maxHeight, float32(instance.options.Window.MaxHeight))
 	}
 	windowHeight := runtimeTextWindowHeight(naturalHeight, float32(instance.options.Window.Height), maxHeight)
-	contentHeight := max(float32(1), windowHeight-titleBarHeight-runtimeTextPaddingY*2)
+	contentHeight := max(float32(1), windowHeight-titleBarHeight-padding.Top-padding.Bottom)
 	viewportHeight := max(float32(1), contentHeight-copyReserve)
 
 	return runtimeTextLayout{
@@ -290,7 +294,7 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 	layout := instance.layout
 	textColor := woxui.Color{R: 246, G: 246, B: 246, A: 255}
 	mutedColor := woxui.Color{R: 230, G: 230, B: 230, A: 235}
-	style := woxui.TextStyle{Size: DefaultFontSize}
+	style := woxui.TextStyle{Size: textOverlayFontSize(instance.options)}
 	text := woxwidget.TextBlock{
 		Value: instance.options.Message, Style: style, Color: textColor, Width: layout.textWidth,
 		LineHeight: layout.textLayout.LineHeight, Centered: instance.options.CenterContent, Layout: &layout.textLayout,
@@ -350,14 +354,15 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 		}
 		rowHeight = max(rowHeight, iconSize)
 	}
-	rowY := max(float32(0), (layout.viewportHeight-rowHeight)/2)
-	if layout.scrollable {
-		crossAxis = woxwidget.CrossAxisStart
-		rowY = 0
-	}
 	rowWidget := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: runtimeTextLeadingGap, CrossAxisAlignment: crossAxis, Children: row}
-
-	children := []woxwidget.StackChild{{Top: rowY, Child: rowWidget}}
+	children := []woxwidget.StackChild{}
+	if layout.scrollable {
+		children = append(children, woxwidget.StackChild{Top: 0, Child: rowWidget})
+	} else {
+		// Center the row vertically: rowHeight carries the bottom padding slack,
+		// so a top-aligned Stack child would leave the text visually off-center.
+		children = append(children, woxwidget.StackChild{Child: woxwidget.Align{Width: layout.contentSize.Width, Height: layout.viewportHeight, Horizontal: 0, Vertical: 0.5, Child: rowWidget}})
+	}
 	if instance.options.ShowCopyButton && layout.titleBarHeight == 0 {
 		label := instance.options.CopyButtonTooltip
 		if instance.copied && instance.options.CopyButtonSuccessTooltip != "" {
@@ -377,14 +382,36 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 	content := woxwidget.Stack{Width: layout.contentSize.Width, Height: layout.contentSize.Height, Children: children}
 	rootChildren := []woxwidget.StackChild{{Child: woxwidget.Container{
 		Width: frame.Size.Width, Height: frame.Size.Height,
-		Color: woxui.Color{R: 24, G: 24, B: 26, A: 242}, BorderColor: woxui.Color{R: 255, G: 255, B: 255, A: 30}, BorderWidth: 1,
-		Radius: max(float32(8), float32(instance.options.Window.CornerRadius)),
+		// No panel fill: every platform window supplies its own material
+		// (macOS NSVisualEffectView, Windows acrylic) or stays transparent, so
+		// the desktop shows through behind the overlay text.
+		BorderColor: woxui.Color{R: 255, G: 255, B: 255, A: 30}, BorderWidth: 1,
+		Radius: runtimeTextSystemCornerRadius,
 	}}}
 	if layout.titleBarHeight > 0 {
 		rootChildren = append(rootChildren, woxwidget.StackChild{Child: instance.buildTitleBar(frame.Size.Width, textColor)})
 	}
-	rootChildren = append(rootChildren, woxwidget.StackChild{Left: runtimeTextPaddingX, Top: layout.titleBarHeight + runtimeTextPaddingY, Child: content})
+	padding := textOverlayPadding(instance.options)
+	rootChildren = append(rootChildren, woxwidget.StackChild{Left: padding.Left, Top: layout.titleBarHeight + padding.Top, Child: content})
 	return woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: rootChildren}
+}
+
+// textOverlayFontSize resolves the message font size, defaulting to the shared
+// overlay size when the caller did not request a custom one.
+func textOverlayFontSize(options Options) float32 {
+	if options.FontSize > 0 {
+		return options.FontSize
+	}
+	return DefaultFontSize
+}
+
+// textOverlayPadding resolves the panel padding, defaulting to the shared
+// overlay padding when the caller did not request a custom one.
+func textOverlayPadding(options Options) woxwidget.Insets {
+	if options.Padding != (woxwidget.Insets{}) {
+		return options.Padding
+	}
+	return woxwidget.Insets{Left: runtimeTextPaddingX, Top: runtimeTextPaddingY, Right: runtimeTextPaddingX, Bottom: runtimeTextPaddingY}
 }
 
 func (instance *runtimeTextOverlay) buildTitleBar(width float32, foreground woxui.Color) woxwidget.Widget {
@@ -499,8 +526,8 @@ func (instance *runtimeTextOverlay) showCopyTooltip() {
 		OffsetX: x, OffsetY: y, Width: float64(width), Height: float64(runtimeTextTooltipHeight), CornerRadius: 6,
 	}, overlay.View{Kind: "text-copy-tooltip", Build: func(_ *woxui.Window, _ woxui.FrameInfo) woxwidget.Widget {
 		return woxwidget.Container{
-			Width: width, Height: runtimeTextTooltipHeight, Radius: 6,
-			Color: woxui.Color{R: 45, G: 45, B: 48, A: 255}, BorderColor: woxui.Color{R: 255, G: 255, B: 255, A: 35}, BorderWidth: 1,
+			Width: width, Height: runtimeTextTooltipHeight, Radius: runtimeTextSystemCornerRadius,
+			BorderColor: woxui.Color{R: 255, G: 255, B: 255, A: 35}, BorderWidth: 1,
 			Child: woxwidget.Align{Width: width, Height: runtimeTextTooltipHeight, Horizontal: .5, Vertical: .5, Child: woxwidget.TextBlock{
 				Value: label, Width: width - 16, Height: 18, MaxLines: 1, Centered: true, Style: style, Color: foreground,
 			}},

@@ -42,7 +42,7 @@ func (d *linuxWebViewDriver) Show(content webviewruntime.Content, bounds webview
 	if content.CacheDisabled {
 		cacheDisabled = 1
 	}
-	result := C.wox_linux_window_show_webview(native, url, html, css, userAgent, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height))
+	result := C.wox_linux_window_show_webview(native, url, html, css, userAgent, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height), C.float(content.CornerRadius))
 	if result == -2 {
 		return fmt.Errorf("%w: install WebKitGTK 4.1 or 4.0", webviewruntime.ErrUnavailable)
 	}

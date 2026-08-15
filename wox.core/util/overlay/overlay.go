@@ -26,9 +26,11 @@ const (
 
 // WindowOptions defines the window-level behavior shared by runtime overlays.
 type WindowOptions struct {
-	ID               string
-	CloseOnEscape    bool
-	TakeFocus        bool
+	ID            string
+	CloseOnEscape bool
+	TakeFocus     bool
+	// Topmost keeps the overlay above the launcher. Preview windows need this
+	// because they take focus and would otherwise share Wox's floating level.
 	Topmost          bool
 	AbsolutePosition bool
 	PreservePosition bool
@@ -39,14 +41,21 @@ type WindowOptions struct {
 	OffsetY          float64
 	Movable          bool
 	Resizable        bool
-	CornerRadius     float64
-	AspectRatio      float64
-	Width            float64
-	MinWidth         float64
-	MaxWidth         float64
-	Height           float64
-	MaxHeight        float64
-	OnClose          func()
+	// LightAppearance requests the light window appearance instead of the
+	// default dark one, letting themed overlays match the active theme.
+	LightAppearance bool
+	// FollowsThemeAppearance updates native window materials when the Wox
+	// theme switches between light and dark, instead of freezing the
+	// creation-time appearance.
+	FollowsThemeAppearance bool
+	CornerRadius           float64
+	AspectRatio            float64
+	Width                  float64
+	MinWidth               float64
+	MaxWidth               float64
+	Height                 float64
+	MaxHeight              float64
+	OnClose                func()
 }
 
 // View supplies one overlay's portable measurement, widget tree, and interaction state.
@@ -133,40 +142,34 @@ func showWindowOnUI(options WindowOptions, view View) bool {
 		if initialHeight <= 0 {
 			initialHeight = 80
 		}
-		managed, _, err := manager.Open(woxui.WindowID("overlay."+options.ID), woxui.WindowOptions{
-			Title:         "Wox Overlay",
-			Size:          woxui.Size{Width: initialWidth, Height: initialHeight},
-			Role:          woxui.WindowRoleUtility,
-			Resizable:     options.Resizable,
-			AspectRatio:   float32(options.AspectRatio),
-			Nonactivating: !(options.TakeFocus || options.CloseOnEscape),
-			OnFrame:       instance.host.Frame,
-			OnPointer: func(event woxui.PointerEvent) {
-				if instance.view.OnPointer != nil {
-					instance.view.OnPointer(event)
-				}
-				instance.host.Pointer(event)
-			},
-			OnKey: func(event woxui.KeyEvent) bool {
-				if event.Down && event.Key == woxui.KeyEscape && instance.options.CloseOnEscape {
-					RequestClose(instance.id)
-					return true
-				}
-				if instance.view.OnKey != nil && instance.view.OnKey(event) {
-					return true
-				}
-				return instance.host.Key(event)
-			},
-			OnTextInput: func(event woxui.TextInputEvent) { instance.host.TextInput(event) },
-			OnFocus: func(event woxui.FocusEvent) {
-				instance.host.SetWindowFocused(event.Active)
-				if instance.view.OnFocus != nil {
-					instance.view.OnFocus(event)
-				}
-			},
-			OnCloseRequested: func() { RequestClose(instance.id) },
-			OnClosed:         instance.dispose,
-		})
+		nativeOptions := overlayNativeWindowOptions(options, woxui.Size{Width: initialWidth, Height: initialHeight})
+		nativeOptions.OnFrame = instance.host.Frame
+		nativeOptions.OnPointer = func(event woxui.PointerEvent) {
+			if instance.view.OnPointer != nil {
+				instance.view.OnPointer(event)
+			}
+			instance.host.Pointer(event)
+		}
+		nativeOptions.OnKey = func(event woxui.KeyEvent) bool {
+			if event.Down && event.Key == woxui.KeyEscape && instance.options.CloseOnEscape {
+				RequestClose(instance.id)
+				return true
+			}
+			if instance.view.OnKey != nil && instance.view.OnKey(event) {
+				return true
+			}
+			return instance.host.Key(event)
+		}
+		nativeOptions.OnTextInput = func(event woxui.TextInputEvent) { instance.host.TextInput(event) }
+		nativeOptions.OnFocus = func(event woxui.FocusEvent) {
+			instance.host.SetWindowFocused(event.Active)
+			if instance.view.OnFocus != nil {
+				instance.view.OnFocus(event)
+			}
+		}
+		nativeOptions.OnCloseRequested = func() { RequestClose(instance.id) }
+		nativeOptions.OnClosed = instance.dispose
+		managed, _, err := manager.Open(woxui.WindowID("overlay."+options.ID), nativeOptions)
 		if err != nil {
 			instance.host.Dispose()
 			return false
@@ -174,7 +177,7 @@ func showWindowOnUI(options WindowOptions, view View) bool {
 		instance.managed = managed
 		instance.window = managed.Window()
 		instance.host.Attach(instance.window)
-		_ = instance.window.SetAppearance(true)
+		_ = instance.window.SetAppearance(!options.LightAppearance)
 		runtimeOverlays.Lock()
 		runtimeOverlays.byID[instance.id] = instance
 		runtimeOverlays.Unlock()
@@ -184,8 +187,12 @@ func showWindowOnUI(options WindowOptions, view View) bool {
 		instance.view.OnDispose()
 	}
 	stickyChanged := instance.options.StickyWindowPid != options.StickyWindowPid || instance.options.StickyWindowId != options.StickyWindowId
+	appearanceChanged := !created && instance.options.LightAppearance != options.LightAppearance
 	instance.options = options
 	instance.view = view
+	if appearanceChanged {
+		_ = instance.window.SetAppearance(!options.LightAppearance)
+	}
 	instance.applyLayout(false)
 	if created {
 		if _, err := instance.managed.Show(); err != nil {
@@ -265,6 +272,38 @@ func Invalidate(id string) {
 	})
 }
 
+// NotifyThemeChanged updates native appearance and requests a new frame for
+// every open overlay so themed chrome (for example image overlay title bars)
+// matches the active light or dark theme. Invalidate alone cannot retint the
+// platform title-bar material, which is owned by SetAppearance.
+func NotifyThemeChanged(isDark bool) {
+	_ = woxui.Call(func() {
+		runtimeOverlays.Lock()
+		instances := make([]*runtimeOverlay, 0, len(runtimeOverlays.byID))
+		for _, instance := range runtimeOverlays.byID {
+			instances = append(instances, instance)
+		}
+		runtimeOverlays.Unlock()
+		for _, instance := range instances {
+			if syncOverlayAppearance(&instance.options, isDark) {
+				_ = instance.window.SetAppearance(isDark)
+			}
+			_ = instance.window.Invalidate()
+		}
+	})
+}
+
+// syncOverlayAppearance writes the live light/dark native appearance onto
+// overlays that opted into theme following. It returns whether SetAppearance
+// must run; unthemed overlays keep the appearance chosen at creation.
+func syncOverlayAppearance(options *WindowOptions, isDark bool) bool {
+	if options == nil || !options.FollowsThemeAppearance {
+		return false
+	}
+	options.LightAppearance = !isDark
+	return true
+}
+
 // Close removes one overlay without firing its user-close callback.
 func Close(id string) {
 	RegisterCloseCallback(id, nil)
@@ -297,6 +336,20 @@ func (instance *runtimeOverlay) dispose() {
 		delete(runtimeOverlays.byID, instance.id)
 	}
 	runtimeOverlays.Unlock()
+}
+
+// overlayNativeWindowOptions maps overlay chrome onto a utility window. Topmost
+// preview surfaces take focus but still float above the launcher.
+func overlayNativeWindowOptions(options WindowOptions, size woxui.Size) woxui.WindowOptions {
+	return woxui.WindowOptions{
+		Title:         "Wox Overlay",
+		Size:          size,
+		Role:          woxui.WindowRoleUtility,
+		Resizable:     options.Resizable,
+		AspectRatio:   float32(options.AspectRatio),
+		Nonactivating: !(options.TakeFocus || options.CloseOnEscape),
+		Topmost:       options.Topmost,
+	}
 }
 
 // windowCreationOptionsChanged identifies native flags that cannot be updated in place.

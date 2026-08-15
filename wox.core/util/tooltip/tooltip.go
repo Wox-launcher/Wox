@@ -7,6 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	woxwidget "wox/ui/widget"
 	"wox/util/overlay"
 	"wox/util/overlay/textoverlay"
 	"wox/util/screen"
@@ -17,6 +18,7 @@ const (
 	tooltipMaxWidthDip      = 400
 	tooltipMaxHeightDip     = 600
 	tooltipMinWidthDip      = 1
+	tooltipFontSizeDip      = 12
 	tooltipPaddingXDip      = 24
 	tooltipPaddingYDip      = 22
 	tooltipLineHeightDip    = 16
@@ -76,7 +78,11 @@ func Show(ctx context.Context, opts Options) {
 			MaxHeight:        tooltipMaxHeightDip,
 			CornerRadius:     8,
 		},
-		Message: opts.Text,
+		Message:  opts.Text,
+		FontSize: tooltipFontSizeDip,
+		Padding: woxwidget.Insets{
+			Left: 11, Top: 8, Right: 11, Bottom: 8,
+		},
 	})
 	startVisibilityTracking(opts.withBounds(placement.trackingX, placement.trackingY, width, placement.trackingHeight))
 
@@ -364,7 +370,7 @@ func estimateLineWidth(text string) float64 {
 		return 0
 	}
 
-	fontSize := float64(textoverlay.DefaultFontSize)
+	fontSize := float64(tooltipFontSizeDip)
 	width := 0.0
 	for _, r := range text {
 		switch {

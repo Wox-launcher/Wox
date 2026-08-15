@@ -3,6 +3,7 @@ package textoverlay
 import (
 	"image"
 
+	woxwidget "wox/ui/widget"
 	"wox/util/overlay"
 )
 
@@ -17,6 +18,10 @@ type Options struct {
 	Closable  bool
 	// AutoCloseSeconds closes the text overlay after the delay unless the cursor is still over it.
 	AutoCloseSeconds int
+	// FontSize overrides the default message font size; zero keeps DefaultFontSize.
+	FontSize float32
+	// Padding overrides the panel padding; zero keeps the shared overlay padding.
+	Padding woxwidget.Insets
 
 	CenterContent bool
 	FollowScroll  bool

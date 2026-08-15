@@ -23,7 +23,7 @@ type SettingsWindowProps struct {
 	Theme       woxcomponent.Theme
 }
 
-const SettingsTitleBarHeight = float32(40)
+const SettingsTitleBarHeight = woxcomponent.TitleBarHeight
 
 // SettingsWindow builds the shared settings window frame.
 func SettingsWindow(props SettingsWindowProps) woxwidget.Widget {
@@ -69,6 +69,9 @@ type SettingsTitleBarProps struct {
 	OnDrag     func()
 	OnMinimize func()
 	OnClose    func()
+	// Active is true while this window is the key window. macOS traffic lights
+	// stay gray until it is, matching AppKit.
+	Active bool
 }
 
 // SettingsTitleBar builds the draggable settings title bar.
@@ -128,23 +131,26 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 	dragArea := woxwidget.Gesture{ID: "settings-title-drag", OnDragStart: props.OnDrag, Child: woxwidget.Container{Width: dragWidth, Height: height}}
 	children := make([]woxwidget.StackChild, 0, 7)
 	if props.Platform == "darwin" && props.RailWidth > 0 {
-		children = append(children, woxwidget.StackChild{Child: woxwidget.Container{Width: props.RailWidth, Height: height, Color: settingsTitleBarAlpha(props.Theme.ToolbarText, 9)}})
+		children = append(children, woxwidget.StackChild{Child: woxwidget.Container{Width: props.RailWidth, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 9)}})
 	}
 	children = append(children, woxwidget.StackChild{Child: dragArea})
 	switch props.Platform {
 	case "darwin":
+		macLight := func(id string, color woxui.Color, glyph string, glyphColor woxui.Color, hovered, pressed bool, onTap func()) woxwidget.Widget {
+			return woxcomponent.MacTrafficLight(id, color, glyph, glyphColor, hovered, pressed, props.Active, props.Theme, onTap, onHover, onPress)
+		}
 		if props.CloseOnly {
 			if props.RailWidth > 0 {
-				children = append(children, woxwidget.StackChild{Left: props.RailWidth - 1, Child: woxwidget.Container{Width: 1, Height: height, Color: settingsTitleBarAlpha(props.Theme.ToolbarText, 26)}})
+				children = append(children, woxwidget.StackChild{Left: props.RailWidth - 1, Child: woxwidget.Container{Width: 1, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 26)}})
 			}
-			children = append(children, woxwidget.StackChild{Left: 13, Child: settingsMacTrafficLight("settings-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", pressed == "settings-window-close", props.OnClose, onHover, onPress)})
+			children = append(children, woxwidget.StackChild{Left: 13, Child: macLight("settings-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", pressed == "settings-window-close", props.OnClose)})
 			break
 		}
 		children = append(children,
-			woxwidget.StackChild{Left: max(float32(0), props.RailWidth-1), Child: woxwidget.Container{Width: 1, Height: height, Color: settingsTitleBarAlpha(props.Theme.ToolbarText, 26)}},
-			woxwidget.StackChild{Left: 13, Child: settingsMacTrafficLight("settings-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", pressed == "settings-window-close", props.OnClose, onHover, onPress)},
-			woxwidget.StackChild{Left: 36, Child: settingsMacTrafficLight("settings-window-minimize", woxui.Color{R: 250, G: 200, B: 0, A: 255}, "−", woxui.Color{R: 126, G: 100, B: 11, A: 255}, hovered == "mac-controls", pressed == "settings-window-minimize", props.OnMinimize, onHover, onPress)},
-			woxwidget.StackChild{Left: 59, Child: settingsMacTrafficLight("settings-window-zoom", woxui.Color{R: 142, G: 142, B: 147, A: 255}, "", woxui.Color{}, false, false, nil, nil, nil)},
+			woxwidget.StackChild{Left: max(float32(0), props.RailWidth-1), Child: woxwidget.Container{Width: 1, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 26)}},
+			woxwidget.StackChild{Left: 13, Child: macLight("settings-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", pressed == "settings-window-close", props.OnClose)},
+			woxwidget.StackChild{Left: 36, Child: macLight("settings-window-minimize", woxui.Color{R: 250, G: 200, B: 0, A: 255}, "−", woxui.Color{R: 126, G: 100, B: 11, A: 255}, hovered == "mac-controls", pressed == "settings-window-minimize", props.OnMinimize)},
+			woxwidget.StackChild{Left: 59, Child: macLight("settings-window-zoom", woxui.Color{R: 142, G: 142, B: 147, A: 255}, "", woxui.Color{}, false, false, nil)},
 		)
 	case "windows":
 		if props.CloseOnly {
@@ -153,8 +159,8 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 			}
 			children = append(children,
 				woxwidget.StackChild{Left: 40, Top: 9, Right: 46, StretchWidth: true, Child: woxwidget.Container{Height: 24, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
-				woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: settingsTitleBarAlpha(props.Theme.PreviewSplit, 76)}},
-				woxwidget.StackChild{AnchorRight: true, Child: settingsWindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)},
+				woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: woxcomponent.TitleBarAlpha(props.Theme.PreviewSplit, 76)}},
+				woxwidget.StackChild{AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)},
 			)
 			break
 		}
@@ -163,14 +169,14 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 		}
 		children = append(children,
 			woxwidget.StackChild{Left: 40, Top: 9, Right: 92, StretchWidth: true, Child: woxwidget.Container{Height: 24, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
-			woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: settingsTitleBarAlpha(props.Theme.PreviewSplit, 76)}},
-			woxwidget.StackChild{Right: 46, AnchorRight: true, Child: settingsWindowsTitleBarButton("settings-window-minimize", "−", false, hovered == "minimize", props.Theme, props.OnMinimize, onHover)},
-			woxwidget.StackChild{AnchorRight: true, Child: settingsWindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)},
+			woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: woxcomponent.TitleBarAlpha(props.Theme.PreviewSplit, 76)}},
+			woxwidget.StackChild{Right: 46, AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("settings-window-minimize", "−", false, hovered == "minimize", props.Theme, props.OnMinimize, onHover)},
+			woxwidget.StackChild{AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)},
 		)
 	default:
-		closeButton := settingsWindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)
+		closeButton := woxcomponent.WindowsTitleBarButton("settings-window-close", "×", true, hovered == "close", props.Theme, props.OnClose, onHover)
 		if props.Platform == "linux" {
-			closeButton = settingsLinuxTitleBarCloseButton("settings-window-close", hovered == "close", props.Theme, props.OnClose, onHover)
+			closeButton = woxcomponent.LinuxTitleBarCloseButton("settings-window-close", hovered == "close", props.Theme, props.OnClose, onHover)
 		}
 		children = append(children,
 			woxwidget.StackChild{Left: max(float32(0), (props.Width-props.TitleWidth)/2), Top: 9, Child: woxwidget.Container{Width: props.TitleWidth, Height: 24, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.ToolbarText}}},
@@ -180,98 +186,7 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered, pressed string,
 	return woxwidget.Stack{Width: props.Width, Height: height, Children: children}
 }
 
-// settingsLinuxTitleBarCloseButton uses a compact circular hover highlight to match common Linux chrome conventions.
-func settingsLinuxTitleBarCloseButton(id string, hovered bool, theme woxcomponent.Theme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
-	foreground := settingsTitleBarAlpha(theme.ToolbarText, 230)
-	circleColor := woxui.Color{}
-	if hovered {
-		circleColor = woxui.Color{R: 232, G: 17, B: 35, A: 255}
-		foreground = woxui.Color{R: 255, G: 255, B: 255, A: 255}
-	}
-	return woxwidget.Gesture{ID: id, OnTap: onTap, OnHover: func(inside bool) {
-		if onHover != nil {
-			onHover("close", inside)
-		}
-	}, Child: woxwidget.Container{Width: 46, Height: SettingsTitleBarHeight, Child: woxwidget.Align{Width: 46, Height: SettingsTitleBarHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Container{Width: 24, Height: 24, Radius: 12, Color: circleColor, Child: woxwidget.Align{Width: 24, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.CloseGlyph(16, foreground)}}}}}
-}
-
-// settingsWindowsTitleBarButton matches the compact native hover treatment while keeping the frameless window fully custom-drawn.
-func settingsWindowsTitleBarButton(id, glyph string, closeButton, hovered bool, theme woxcomponent.Theme, onTap func(), onHover func(string, bool)) woxwidget.Widget {
-	background := woxui.Color{}
-	foreground := settingsTitleBarAlpha(theme.ToolbarText, 230)
-	if hovered {
-		background = settingsTitleBarAlpha(theme.ToolbarText, 26)
-		if closeButton {
-			background = woxui.Color{R: 232, G: 17, B: 35, A: 255}
-			foreground = woxui.Color{R: 255, G: 255, B: 255, A: 255}
-		}
-	}
-	control := "minimize"
-	if closeButton {
-		control = "close"
-	}
-	return woxwidget.Gesture{ID: id, OnTap: onTap, OnHover: func(inside bool) {
-		if onHover != nil {
-			onHover(control, inside)
-		}
-	}, Child: woxwidget.Container{Width: 46, Height: SettingsTitleBarHeight, Color: background, Child: woxwidget.Align{Width: 46, Height: SettingsTitleBarHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{Value: glyph, Style: woxui.TextStyle{Size: 18}, Color: foreground}}}}
-}
-
-// settingsMacTrafficLight matches the compact macOS controls and reveals their glyphs while the group is hovered.
-func settingsMacTrafficLight(id string, color woxui.Color, glyph string, glyphColor woxui.Color, hovered, pressed bool, onTap func(), onHover, onPress func(string, bool)) woxwidget.Widget {
-	if pressed {
-		color = settingsMacTrafficLightPressedColor(color)
-	}
-	var symbol woxwidget.Widget = woxwidget.Container{Width: 14, Height: 14}
-	if hovered {
-		switch glyph {
-		case "×":
-			symbol = settingsMacCloseGlyph(glyphColor)
-		case "−":
-			symbol = woxwidget.Container{Width: 7, Height: 2, Radius: 1, Color: glyphColor}
-		default:
-			symbol = woxwidget.Text{Value: glyph, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: glyphColor}
-		}
-	}
-	control := woxwidget.Align{Width: 20, Height: SettingsTitleBarHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Container{Width: 14, Height: 14, Radius: 7, Color: color, Child: woxwidget.Align{Width: 14, Height: 14, Horizontal: 0.5, Vertical: 0.5, Child: symbol}}}
-	if onTap == nil && onHover == nil && onPress == nil {
-		return control
-	}
-	return woxwidget.Gesture{ID: id, OnTap: onTap, OnPressChange: func(pressed bool) {
-		if onPress != nil {
-			onPress(id, pressed)
-		}
-	}, OnHover: func(inside bool) {
-		if onHover != nil {
-			onHover("mac-controls", inside)
-		}
-	}, Child: control}
-}
-
-// settingsMacTrafficLightPressedColor approximates AppKit's highlighted luminance while preserving hue.
-func settingsMacTrafficLightPressedColor(color woxui.Color) woxui.Color {
-	color.R = uint8(uint16(color.R) * 220 / 255)
-	color.G = uint8(uint16(color.G) * 220 / 255)
-	color.B = uint8(uint16(color.B) * 220 / 255)
-	return color
-}
-
-// settingsMacCloseGlyph draws the thicker cross used by the native macOS traffic light.
-func settingsMacCloseGlyph(color woxui.Color) woxwidget.Widget {
-	return woxwidget.Painter{Width: 14, Height: 14, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		for step := 0; step < 5; step++ {
-			offset := float32(step)
-			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 4 + offset, Y: bounds.Y + 4 + offset, Width: 2, Height: 2}, 1, color)
-			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 8 - offset, Y: bounds.Y + 4 + offset, Width: 2, Height: 2}, 1, color)
-		}
-	}}
-}
-
-func settingsTitleBarAlpha(color woxui.Color, alpha uint8) woxui.Color {
-	color.A = alpha
-	return color
-}
-
+// woxcomponent.LinuxTitleBarCloseButton uses a compact circular hover highlight to match common Linux chrome conventions.
 // SettingsThemePageProps contains the active theme route's prepared body.
 type SettingsThemePageProps struct {
 	Width  float32

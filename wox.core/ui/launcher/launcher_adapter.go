@@ -230,7 +230,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	titleBarHeight := float32(0)
 	if showTitleBar {
 		titleBarHeight = launcherview.SettingsTitleBarHeight
-		titleBar = a.buildPreviewTitleBar(snapshot, width)
+		titleBar = a.buildPreviewTitleBar(snapshot, width, frame.WindowFocused)
 	}
 	contentHeight := max(0, height-queryHeight-refinementHeight-toolbarHeight-titleBarHeight)
 	content := a.buildContent(snapshot, width, contentHeight, frame.Scale)
@@ -277,7 +277,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 }
 
 // buildPreviewTitleBar selects browser chrome for WebViews and native title chrome for other full previews.
-func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32) woxwidget.Widget {
+func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowFocused bool) woxwidget.Widget {
 	title := "Wox"
 	if snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) {
 		title = strings.TrimSpace(snapshot.results[snapshot.selected].Title)
@@ -294,7 +294,7 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32) woxwidg
 			url = title
 		}
 		return launcherview.WebViewTitleBar(launcherview.WebViewTitleBarProps{
-			Width: width, Platform: runtime.GOOS, AppIcon: a.appIcon, Theme: snapshot.palette.componentTheme(),
+			Width: width, Platform: runtime.GOOS, AppIcon: a.appIcon, Theme: snapshot.palette.componentTheme(), Active: windowFocused,
 			URL: url, CanGoBack: snapshot.webViewNavigation.CanGoBack, CanGoForward: snapshot.webViewNavigation.CanGoForward,
 			GoBackLabel: a.translate("i18n:ui_action_webview_go_back"), RefreshLabel: a.translate("i18n:ui_action_webview_refresh"),
 			GoForwardLabel: a.translate("i18n:ui_action_webview_go_forward"), OpenInBrowserLabel: a.translate("i18n:ui_action_webview_open_in_browser"),
@@ -335,7 +335,7 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32) woxwidg
 	}
 	return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
 		Width: width, CloseOnly: true, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.appIcon,
-		Theme: snapshot.palette.componentTheme(),
+		Theme: snapshot.palette.componentTheme(), Active: windowFocused,
 		OnDrag: func() {
 			if a.window != nil {
 				_ = a.window.StartDragging()

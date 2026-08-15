@@ -25,6 +25,9 @@ type WebViewTitleBarProps struct {
 	OnGoForward        func()
 	OnRefresh          func()
 	OnOpenInBrowser    func()
+	// Active is true while this window is the key window. macOS traffic lights
+	// stay gray until it is, matching AppKit.
+	Active bool
 }
 
 type webViewTitleBarState struct {
@@ -72,11 +75,11 @@ func buildWebViewTitleBar(props WebViewTitleBarProps, closeHovered, closePressed
 		sideGap    = float32(8)
 	)
 	height := SettingsTitleBarHeight
-	foreground := settingsTitleBarAlpha(props.Theme.ToolbarText, 230)
-	disabledForeground := settingsTitleBarAlpha(props.Theme.ToolbarText, 90)
-	hoverBackground := settingsTitleBarAlpha(props.Theme.ToolbarText, 20)
-	omniboxBackground := settingsTitleBarAlpha(props.Theme.ToolbarText, 14)
-	borderColor := settingsTitleBarAlpha(props.Theme.PreviewSplit, 76)
+	foreground := woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 230)
+	disabledForeground := woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 90)
+	hoverBackground := woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 20)
+	omniboxBackground := woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 14)
+	borderColor := woxcomponent.TitleBarAlpha(props.Theme.PreviewSplit, 76)
 
 	navLeft := float32(6)
 	if props.Platform == "darwin" {
@@ -120,7 +123,7 @@ func buildWebViewTitleBar(props WebViewTitleBarProps, closeHovered, closePressed
 			AutomationID: "webview-location", Role: woxui.AccessibilityRoleText, Label: props.URL,
 			Child: woxwidget.Container{
 				Width: omniboxWidth, Height: 28, Radius: 7, Color: omniboxBackground, Padding: woxwidget.Insets{Left: 10, Right: 10, Top: 5},
-				Child: woxwidget.Clip{Width: max(float32(0), omniboxWidth-20), Height: 18, Child: woxwidget.Text{Value: props.URL, Style: woxui.TextStyle{Size: 12}, Color: settingsTitleBarAlpha(props.Theme.ToolbarText, 205)}},
+				Child: woxwidget.Clip{Width: max(float32(0), omniboxWidth-20), Height: 18, Child: woxwidget.Text{Value: props.URL, Style: woxui.TextStyle{Size: 12}, Color: woxcomponent.TitleBarAlpha(props.Theme.ToolbarText, 205)}},
 			},
 		}},
 		iconButton("webview-open-in-browser", props.OpenInBrowserLabel, woxcomponent.ExternalGlyph(15, foreground), openLeft, false, props.OnOpenInBrowser),
@@ -128,14 +131,14 @@ func buildWebViewTitleBar(props WebViewTitleBarProps, closeHovered, closePressed
 
 	switch props.Platform {
 	case "darwin":
-		children = append(children, woxwidget.StackChild{Left: 13, Child: settingsMacTrafficLight(
+		children = append(children, woxwidget.StackChild{Left: 13, Child: woxcomponent.MacTrafficLight(
 			"webview-window-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255},
-			closeHovered, closePressed, props.OnClose, onHover, onPress,
+			closeHovered, closePressed, props.Active, props.Theme, props.OnClose, onHover, onPress,
 		)})
 	case "linux":
-		children = append(children, woxwidget.StackChild{Left: closeLeft, Child: settingsLinuxTitleBarCloseButton("webview-window-close", closeHovered, props.Theme, props.OnClose, onHover)})
+		children = append(children, woxwidget.StackChild{Left: closeLeft, Child: woxcomponent.LinuxTitleBarCloseButton("webview-window-close", closeHovered, props.Theme, props.OnClose, onHover)})
 	default:
-		children = append(children, woxwidget.StackChild{Left: closeLeft, Child: settingsWindowsTitleBarButton("webview-window-close", "×", true, closeHovered, props.Theme, props.OnClose, onHover)})
+		children = append(children, woxwidget.StackChild{Left: closeLeft, Child: woxcomponent.WindowsTitleBarButton("webview-window-close", "×", true, closeHovered, props.Theme, props.OnClose, onHover)})
 	}
 	return woxwidget.Stack{Width: props.Width, Height: height, Children: children}
 }

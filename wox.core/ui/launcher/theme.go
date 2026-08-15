@@ -14,6 +14,7 @@ import (
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util/overlay"
 )
 
 type themeData struct {
@@ -219,6 +220,7 @@ func (a *App) applyTheme(theme themeData) {
 	}
 	a.invalidateSettingsWindow()
 	a.invalidateOnboardingWindow()
+	overlay.NotifyThemeChanged(isDark)
 }
 
 func themeColorIsDark(color woxui.Color) bool {

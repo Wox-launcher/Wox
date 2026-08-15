@@ -1902,6 +1902,9 @@ func (w *platformWindow) showNative() FocusEpoch {
 		win.ShowWindow(w.hwnd, showCommand)
 		activateWindow(w.hwnd)
 	}
+	if w.options.Topmost {
+		win.SetWindowPos(w.hwnd, win.HWND_TOP, 0, 0, 0, 0, win.SWP_NOMOVE|win.SWP_NOSIZE)
+	}
 	if w.isWithinFocusDomain(win.GetForegroundWindow()) {
 		w.confirmActivation()
 	}

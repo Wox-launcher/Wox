@@ -158,6 +158,9 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		window.handle.Delete()
 		return nil, errors.New("woxui: failed to create AppKit window or native renderer")
 	}
+	if options.Topmost {
+		_ = C.wox_darwin_window_set_topmost(window.native, 1)
+	}
 	window.webView = webviewruntime.New(&darwinWebViewDriver{window: window})
 	window.startRenderWorker()
 	run.mu.Lock()

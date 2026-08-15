@@ -42,6 +42,38 @@ func TestSettingsInlineTooltipOverlayFlipsInsideWindow(t *testing.T) {
 	}
 }
 
+func TestSettingsInlineTooltipOverlayAnchorsAboveField(t *testing.T) {
+	overlay, left, top := SettingsInlineTooltipOverlay(SettingsInlineTooltipProps{
+		Width: 900, Height: 640, Anchor: woxui.Rect{X: 520, Y: 180, Width: 14, Height: 14}, Message: "Tooltip content", Side: "top", Theme: woxcomponent.Theme{},
+	})
+	if overlay == nil {
+		t.Fatal("expected tooltip overlay")
+	}
+	container, ok := overlay.(woxwidget.Container)
+	if !ok {
+		t.Fatalf("overlay type = %T, want woxwidget.Container", overlay)
+	}
+	if top+container.Height > 180 {
+		t.Fatalf("tooltip top = %.0f height = %.0f, want above the anchor", top, container.Height)
+	}
+	center := left + container.Width/2
+	if center < 520 || center > 534 {
+		t.Fatalf("tooltip center = %.0f, want horizontally centered on the 520-534 anchor", center)
+	}
+}
+
+func TestSettingsInlineTooltipOverlayFlipsBelowWhenTopOverflows(t *testing.T) {
+	overlay, _, top := SettingsInlineTooltipOverlay(SettingsInlineTooltipProps{
+		Width: 900, Height: 640, Anchor: woxui.Rect{X: 520, Y: 4, Width: 14, Height: 14}, Message: "Tooltip content", Side: "top", Theme: woxcomponent.Theme{},
+	})
+	if overlay == nil {
+		t.Fatal("expected tooltip overlay")
+	}
+	if top < 18 {
+		t.Fatalf("tooltip top = %.0f, want below the anchor when the top side overflows", top)
+	}
+}
+
 func TestSettingsInlineTooltipOverlayReturnsNilForEmptyMessage(t *testing.T) {
 	overlay, _, _ := SettingsInlineTooltipOverlay(SettingsInlineTooltipProps{Width: 600, Height: 400, Message: "   "})
 	if overlay != nil {

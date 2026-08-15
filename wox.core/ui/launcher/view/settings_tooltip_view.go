@@ -105,9 +105,15 @@ func settingsInlineTooltipPosition(props SettingsInlineTooltipProps, tooltipWidt
 
 	if side == "top" {
 		top = anchor.Y - tooltipHeight - settingsInlineTooltipGap
+		if top < minTop {
+			top = anchor.Y + anchor.Height + settingsInlineTooltipGap
+		}
 	}
 	if side == "bottom" {
 		top = anchor.Y + anchor.Height + settingsInlineTooltipGap
+		if top+tooltipHeight > props.Height-settingsInlineTooltipMargin {
+			top = anchor.Y - tooltipHeight - settingsInlineTooltipGap
+		}
 	}
 
 	minLeft := settingsInlineTooltipMargin

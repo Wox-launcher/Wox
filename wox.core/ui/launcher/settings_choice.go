@@ -139,6 +139,11 @@ func (a *App) chooseSettingChoice(index int) {
 }
 
 func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rect) {
+	a.setSettingsHoverTooltip(inside, text, anchor, "top")
+}
+
+// setSettingsHoverTooltip shows one settings-window tooltip on the requested side.
+func (a *App) setSettingsHoverTooltip(inside bool, text string, anchor woxui.Rect, side string) {
 	if util.IsLinux() {
 		if !a.settingsOpen {
 			if a.settingsInlineTooltip != nil {
@@ -155,7 +160,7 @@ func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rec
 			}
 			return
 		}
-		next := settingsInlineTooltipState{Text: message, Side: "left", Anchor: anchor}
+		next := settingsInlineTooltipState{Text: message, Side: side, Anchor: anchor}
 		if current := a.settingsInlineTooltip; current != nil && current.Text == next.Text && current.Side == next.Side && current.Anchor == next.Anchor {
 			return
 		}
@@ -191,7 +196,7 @@ func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rec
 			return
 		}
 		err = a.services.ShowTooltip(ctx, a.sessionID, contract.TooltipOptions{
-			Name: "go-ui-setting-choice", Text: text, Side: "left",
+			Name: "go-ui-setting-choice", Text: text, Side: side,
 			AnchorX: float64(windowBounds.X + anchor.X), AnchorY: float64(windowBounds.Y + anchor.Y),
 			AnchorWidth: float64(anchor.Width), AnchorHeight: float64(anchor.Height),
 		})

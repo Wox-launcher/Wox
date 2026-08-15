@@ -102,3 +102,14 @@ func TestNormalizeClampsCornerRadiusToBounds(t *testing.T) {
 		t.Fatalf("negative corner radius normalized to %v, want 0", normalized.CornerRadius)
 	}
 }
+
+func TestControllerForwardsCornerRadius(t *testing.T) {
+	driver := &fakeDriver{}
+	controller := New(driver)
+	if err := controller.Show(Content{URL: "https://example.com", CornerRadius: 7}, Rect{Width: 100, Height: 80}, 1); err != nil {
+		t.Fatalf("show WebView: %v", err)
+	}
+	if len(driver.shown) != 1 || driver.shown[0].CornerRadius != 7 {
+		t.Fatalf("shown corner radius = %+v, want 7", driver.shown)
+	}
+}

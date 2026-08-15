@@ -17,7 +17,8 @@ type WebViewContent struct {
 	UserAgent     string
 	CacheDisabled bool
 	CacheKey      string
-	CornerRadius  float32
+	// CornerRadius clips the native surface so it stays concentric with the preview shell.
+	CornerRadius float32
 }
 
 // WebViewNavigationState mirrors the live browser chrome for an attached WebView.

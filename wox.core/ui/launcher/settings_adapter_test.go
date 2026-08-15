@@ -142,10 +142,13 @@ func TestSettingsTitleBarUsesFixedWindowTitle(t *testing.T) {
 	app := newApp(false, nil, windows, newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
 	app.translations["ui_settings_window_title"] = "Wox Settings"
-	titleBar := app.buildSettingsTitleBar(settingsSnapshot{tab: "general"}, 1200, 240).(woxwidget.Stateful)
+	titleBar := app.buildSettingsTitleBar(settingsSnapshot{tab: "general"}, 1200, 240, true).(woxwidget.Stateful)
 	props := titleBar.Widget.(launcherview.SettingsTitleBarProps)
 
 	if props.Title != "Wox Settings" {
 		t.Fatalf("settings title bar title = %q, want fixed window title", props.Title)
+	}
+	if !props.Active {
+		t.Fatal("settings title bar should receive the host window focus state")
 	}
 }

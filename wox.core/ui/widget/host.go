@@ -189,6 +189,16 @@ func (h *Host) SetWindowFocused(focused bool) {
 	}
 }
 
+// WindowFocused reports whether this host's native window currently owns key focus.
+func (h *Host) WindowFocused() bool {
+	if h == nil {
+		return false
+	}
+	h.caretBlinkMu.Lock()
+	defer h.caretBlinkMu.Unlock()
+	return h.windowFocused
+}
+
 // Frame reconciles one widget description, publishes semantics, and paints it.
 func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	if h.disposed || h.window == nil || h.build == nil {
@@ -204,6 +214,9 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	// Preserve the zero-rectangle full-frame sentinel instead of narrowing it to rebuilt Boundary bounds.
 	fullDamage := damage.Width <= 0 || damage.Height <= 0
 	h.elements.beginFrame()
+	h.caretBlinkMu.Lock()
+	frame.WindowFocused = h.windowFocused
+	h.caretBlinkMu.Unlock()
 	base := h.build(frame)
 	h.lastFrameSize = frame.Size
 	if base == nil {

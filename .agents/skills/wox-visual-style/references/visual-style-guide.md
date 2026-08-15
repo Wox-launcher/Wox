@@ -198,6 +198,7 @@ If the widget runtime lacks a reusable pressed-state capability, improve the sha
 Use shared `Wox*` components before primitive widgets. A page may use a primitive `Gesture` for a page-specific region, drag target, or tooltip, but not to recreate a common control.
 
 - Prefer categorized SVG icons from `wox.core/common/icons.go`.
+- Place Settings help tooltips above their trigger, including table header/cell info icons and choice-picker options. If the top side overflows, flip below the trigger.
 - Use 16-unit icons in ordinary controls, 18 in navigation, and 24 where an item needs stronger identity.
 - Pair unfamiliar icons with text. Give icon-only controls an accessible label and visible hover/focus treatment.
 - Preserve image aspect ratio and use physical-pixel snapping only in the renderer or platform boundary.
@@ -212,6 +213,7 @@ Use shared `Wox*` components before primitive widgets. A page may use a primitiv
 - Cover loading, empty, populated, error, disabled, narrow, and long-content layouts during design.
 - Keep one portable widget tree on macOS, Windows, and Linux unless the difference is genuinely platform-owned.
 - Keep window controls, font resolution, IME, native dialogs, clipboard, accessibility bridges, and renderer compositing behind runtime capabilities.
+- Custom-drawn macOS traffic lights follow the native key-window contract: red/yellow/green (or unavailable gray) while the window is key, and a uniform inactive gray when it is not. Hovering the group restores the colored glyphs, matching AppKit.
 - Distinguish logical units from physical pixels and test non-100% scaling, mixed-DPI displays, display transitions, and negative desktop origins when coordinates or capture are involved.
 
 Document deliberate visual divergence next to the platform implementation.

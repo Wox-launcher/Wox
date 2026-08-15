@@ -7,6 +7,12 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestWebViewPreviewCornerRadiusStaysConcentricWithPreviewShell(t *testing.T) {
+	if WebViewPreviewCornerRadius != previewSurfaceRadius-previewSurfaceBorderWidth {
+		t.Fatalf("WebView radius = %v, want preview shell %v minus %v border", WebViewPreviewCornerRadius, previewSurfaceRadius, previewSurfaceBorderWidth)
+	}
+}
+
 func TestWebViewPreviewReportsOnlyPositiveBounds(t *testing.T) {
 	var reported []woxui.Rect
 	focusable := WebViewPreview(WebViewPreviewProps{Width: 100, Height: 100, OnBounds: func(bounds woxui.Rect) {

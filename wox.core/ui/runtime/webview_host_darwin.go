@@ -42,7 +42,7 @@ func (d *darwinWebViewDriver) Show(content webviewruntime.Content, bounds webvie
 	if content.CacheDisabled {
 		cacheDisabled = 1
 	}
-	if C.wox_darwin_window_show_webview(native, url, html, css, userAgent, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
+	if C.wox_darwin_window_show_webview(native, url, html, css, userAgent, cacheDisabled, cacheKey, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height), C.float(content.CornerRadius)) != 0 {
 		return errors.New("woxui: failed to show macOS WebView")
 	}
 	return nil

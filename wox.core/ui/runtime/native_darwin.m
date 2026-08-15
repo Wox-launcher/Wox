@@ -1097,6 +1097,7 @@ static void *wox_web_view_toolbar_forward_context = &wox_web_view_toolbar_forwar
   [self showToolbarKeepingVisible:YES];
   NSButton *button = event.trackingArea.userInfo[@"button"];
   if (button != nil) {
+    [self setButtonHighlighted:button highlighted:YES];
     [self showTooltipForButton:button];
   }
 }
@@ -1104,6 +1105,7 @@ static void *wox_web_view_toolbar_forward_context = &wox_web_view_toolbar_forwar
 - (void)mouseExited:(NSEvent *)event {
   NSButton *button = event.trackingArea.userInfo[@"button"];
   if (button != nil) {
+    [self setButtonHighlighted:button highlighted:NO];
     [self hideTooltip];
     return;
   }
@@ -1118,7 +1120,24 @@ static void *wox_web_view_toolbar_forward_context = &wox_web_view_toolbar_forwar
   button.imagePosition = NSImageOnly;
   button.imageScaling = NSImageScaleProportionallyDown;
   button.focusRingType = NSFocusRingTypeNone;
+  button.wantsLayer = YES;
   return button;
+}
+
+// setButtonHighlighted paints a rounded hover backdrop on one toolbar button,
+// matching the toolbar's light/dark appearance.
+- (void)setButtonHighlighted:(NSButton *)button highlighted:(BOOL)highlighted {
+  if (!button.enabled) {
+    return;
+  }
+  button.layer.cornerRadius = 7.0;
+  NSString *appearance = [self.effectiveAppearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameDarkAqua, NSAppearanceNameAqua ]];
+  BOOL dark = [appearance isEqualToString:NSAppearanceNameDarkAqua];
+  if (highlighted) {
+    button.layer.backgroundColor = [NSColor colorWithWhite:0.0 alpha:dark ? 0.18 : 0.08].CGColor;
+  } else {
+    button.layer.backgroundColor = nil;
+  }
 }
 
 - (void)setWebView:(WKWebView *)web_view {
@@ -1491,7 +1510,6 @@ static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css,
   [message_handler release];
   web_view.autoresizingMask = NSViewNotSizable;
   web_view.wantsLayer = YES;
-  web_view.layer.cornerRadius = wox_window_corner_radius;
   web_view.layer.masksToBounds = YES;
   if (user_agent.length > 0) {
     web_view.customUserAgent = user_agent;
@@ -1991,6 +2009,12 @@ static uint8_t portable_pointer_button(NSEvent *event) {
     } else {
       woxGoDarwinFrame(owner->context, (float)size.width, (float)size.height, pixel_width, pixel_height, (float)scale);
     }
+    if (owner->nonactivating && owner->window.hasShadow) {
+      // Transparent overlay content renders after AppKit computes the first
+      // shadow, so recompute it now or the stale rectangular shadow outline
+      // shows as dark streaks beside the tooltip.
+      [owner->window invalidateShadow];
+    }
   }
 }
 
@@ -2095,7 +2119,9 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     native_window.woxNonactivating = is_nonactivating;
     native_window.opaque = NO;
     native_window.backgroundColor = [NSColor clearColor];
-    native_window.hasShadow = !is_overlay_style;
+    // Every window floats with a native shadow except the screenshot surface,
+    // which covers the desktop and must not cast an outline over it.
+    native_window.hasShadow = !is_screenshot_window;
     if (aspect_ratio > 0.0f) {
       native_window.contentAspectRatio = NSMakeSize(aspect_ratio, 1.0);
     }
@@ -2593,6 +2619,26 @@ int32_t wox_darwin_window_set_hide_on_blur(WoxDarwinWindow *window, int32_t enab
   return result;
 }
 
+// wox_darwin_window_set_topmost raises activating utility windows above the
+// launcher's NSFloatingWindowLevel so preview overlays cannot open behind Wox.
+int32_t wox_darwin_window_set_topmost(WoxDarwinWindow *window, int32_t topmost) {
+  if (window == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed || window->window == nil) {
+      result = -1;
+      return;
+    }
+    if (window->screenshot_window || window->nonactivating) {
+      return;
+    }
+    window->window.level = topmost != 0 ? NSModalPanelWindowLevel : NSFloatingWindowLevel;
+  });
+  return result;
+}
+
 // wox_darwin_window_set_appearance keeps AppKit materials aligned with the active Wox theme.
 int32_t wox_darwin_window_set_appearance(WoxDarwinWindow *window, int32_t is_dark) {
   if (window == NULL) {
@@ -2735,7 +2781,7 @@ int32_t wox_darwin_window_open_external_url(WoxDarwinWindow *window, const char 
 
 static void notify_darwin_webview_navigation(WoxDarwinWindow *window, WKWebView *web_view);
 
-int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height) {
+int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height, float corner_radius) {
   if (window == NULL || url == NULL || html == NULL || inject_css == NULL || user_agent == NULL || cache_key == NULL || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
@@ -2797,6 +2843,10 @@ int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url,
     }
     web_view.frame = NSMakeRect(x, y, width, height);
     web_view.wantsLayer = YES;
+    // Use the preview-shell radius from Go, not the window chrome radius. The
+    // native surface sits inside the 1px preview border and must stay concentric.
+    web_view.layer.cornerRadius = fmaxf(0.0f, fminf(corner_radius, fminf(width, height) * 0.5f));
+    web_view.layer.masksToBounds = YES;
     web_view.layer.zPosition = 1.0;
     web_view.hidden = NO;
     // Floating overlay toolbar is replaced by the Go UI WebView title bar.

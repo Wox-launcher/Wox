@@ -16,6 +16,9 @@ func TestPreviewSurfaceUsesFlutterTranslucentFill(t *testing.T) {
 	}
 	surface := previewSurface(woxwidget.Container{}, theme, 320, 180).(woxwidget.Container)
 
+	if surface.Radius != previewSurfaceRadius || surface.BorderWidth != previewSurfaceBorderWidth || surface.Padding != woxwidget.UniformInsets(previewSurfaceBorderWidth) {
+		t.Fatalf("preview shell = radius %v border %v padding %#v, want concentric %v/%v inset", surface.Radius, surface.BorderWidth, surface.Padding, previewSurfaceRadius, previewSurfaceBorderWidth)
+	}
 	if surface.BorderColor.A != 115 || surface.BorderWidth != 1 {
 		t.Fatalf("preview border = %#v at %v, want Flutter 0.45 alpha 1px stroke", surface.BorderColor, surface.BorderWidth)
 	}

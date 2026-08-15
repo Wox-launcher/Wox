@@ -85,6 +85,8 @@ type FrameInfo struct {
 	Scale     float32
 	// Damage is the logical region requiring redraw; the zero value means the complete frame.
 	Damage Rect
+	// WindowFocused is populated by the widget Host from the latest native focus event.
+	WindowFocused bool
 }
 
 // FocusEvent reports whether this window's focus domain owns keyboard input.
@@ -124,7 +126,10 @@ type WindowOptions struct {
 	// AspectRatio constrains native resizing to width/height when greater than zero.
 	AspectRatio float32
 	// Nonactivating keeps recording chrome visible without stealing focus from the captured app.
-	Nonactivating              bool
+	Nonactivating bool
+	// Topmost raises a utility window above the launcher so preview overlays
+	// cannot open behind Wox when both share the floating window band.
+	Topmost                    bool
 	HideOnBlur                 bool
 	OnFrame                    func(displayList *DisplayList, frame FrameInfo)
 	OnFocus                    func(event FocusEvent)

@@ -386,6 +386,88 @@ static void on_webview_action_panel_message(gpointer manager, gpointer javascrip
   }
 }
 
+static const char *const wox_webview_radius_key = "wox-webview-corner-radius";
+static const char *const wox_webview_css_key = "wox-webview-corner-css";
+
+// rounded_rect_region builds a device-pixel mask so WebKit's native GdkWindow can
+// stay concentric with the Go preview shell. GTK CSS alone does not clip WebKitGTK.
+static cairo_region_t *rounded_rect_region(int width, int height, float radius) {
+  if (width <= 0 || height <= 0) {
+    return cairo_region_create();
+  }
+  radius = fmaxf(0.0f, fminf(radius, fminf((float)width, (float)height) * 0.5f));
+  if (radius <= 0.0f) {
+    cairo_rectangle_int_t rect = {.x = 0, .y = 0, .width = width, .height = height};
+    return cairo_region_create_rectangle(&rect);
+  }
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_A8, width, height);
+  cairo_t *cr = cairo_create(surface);
+  cairo_new_sub_path(cr);
+  cairo_arc(cr, width - radius, radius, radius, -G_PI_2, 0);
+  cairo_arc(cr, width - radius, height - radius, radius, 0, G_PI_2);
+  cairo_arc(cr, radius, height - radius, radius, G_PI_2, G_PI);
+  cairo_arc(cr, radius, radius, radius, G_PI, 3 * G_PI_2);
+  cairo_close_path(cr);
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+  cairo_fill(cr);
+  cairo_destroy(cr);
+  cairo_region_t *region = gdk_cairo_region_create_from_surface(surface);
+  cairo_surface_destroy(surface);
+  return region;
+}
+
+static float stored_web_view_corner_radius(GtkWidget *web_view) {
+  float *stored = g_object_get_data(G_OBJECT(web_view), wox_webview_radius_key);
+  return stored != NULL ? *stored : 0.0f;
+}
+
+static void store_web_view_corner_radius(GtkWidget *web_view, float radius) {
+  float *stored = g_new(float, 1);
+  *stored = fmaxf(0.0f, radius);
+  g_object_set_data_full(G_OBJECT(web_view), wox_webview_radius_key, stored, g_free);
+}
+
+static void apply_web_view_corner_radius(GtkWidget *web_view) {
+  float radius = stored_web_view_corner_radius(web_view);
+  GtkStyleContext *style = gtk_widget_get_style_context(web_view);
+  GtkCssProvider *provider = g_object_get_data(G_OBJECT(web_view), wox_webview_css_key);
+  if (provider == NULL) {
+    provider = gtk_css_provider_new();
+    gtk_style_context_add_class(style, "wox-webview-preview");
+    gtk_style_context_add_provider(style, GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_set_data_full(G_OBJECT(web_view), wox_webview_css_key, provider, g_object_unref);
+  }
+  char *css = g_strdup_printf(".wox-webview-preview { border-radius: %.2fpx; }", radius);
+  gtk_css_provider_load_from_data(provider, css, -1, NULL);
+  g_free(css);
+
+  if (!gtk_widget_get_realized(web_view)) {
+    return;
+  }
+  GdkWindow *gdk_window = gtk_widget_get_window(web_view);
+  if (gdk_window == NULL) {
+    return;
+  }
+  int scale = gtk_widget_get_scale_factor(web_view);
+  if (scale < 1) {
+    scale = 1;
+  }
+  cairo_region_t *region = rounded_rect_region(gdk_window_get_width(gdk_window), gdk_window_get_height(gdk_window), radius * (float)scale);
+  gtk_widget_shape_combine_region(web_view, region);
+  cairo_region_destroy(region);
+}
+
+static void on_web_view_realize(GtkWidget *web_view, gpointer data) {
+  (void)data;
+  apply_web_view_corner_radius(web_view);
+}
+
+static void on_web_view_size_allocate(GtkWidget *web_view, GtkAllocation *allocation, gpointer data) {
+  (void)allocation;
+  (void)data;
+  apply_web_view_corner_radius(web_view);
+}
+
 static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css, const char *user_agent) {
   GtkWidget *web_view = NULL;
   bool supports_manager = wox_webkit.manager_new != NULL && wox_webkit.view_new_with_manager != NULL;
@@ -453,6 +535,8 @@ static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css
     gtk_widget_set_no_show_all(web_view, TRUE);
     gtk_widget_set_halign(web_view, GTK_ALIGN_START);
     gtk_widget_set_valign(web_view, GTK_ALIGN_START);
+    g_signal_connect(web_view, "realize", G_CALLBACK(on_web_view_realize), NULL);
+    g_signal_connect(web_view, "size-allocate", G_CALLBACK(on_web_view_size_allocate), NULL);
   }
   return web_view;
 }
@@ -2117,6 +2201,7 @@ typedef struct {
   float y;
   float width;
   float height;
+  float corner_radius;
   bool cache_disabled;
   int32_t result;
 } WoxWebViewCall;
@@ -2199,6 +2284,8 @@ static void show_webview_main(void *data) {
   gtk_widget_set_margin_start(web_view, (int)floorf(call->x));
   gtk_widget_set_margin_top(web_view, (int)floorf(call->y));
   gtk_widget_set_size_request(web_view, (int)ceilf(call->width), (int)ceilf(call->height));
+  store_web_view_corner_radius(web_view, fmaxf(0.0f, fminf(call->corner_radius, fminf(call->width, call->height) * 0.5f)));
+  apply_web_view_corner_radius(web_view);
   gtk_widget_show(web_view);
 
   if (should_load) {
@@ -2212,7 +2299,7 @@ static void show_webview_main(void *data) {
   g_free(signature);
 }
 
-int32_t wox_linux_window_show_webview(WoxLinuxWindow *window, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height) {
+int32_t wox_linux_window_show_webview(WoxLinuxWindow *window, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height, float corner_radius) {
   if (window == NULL || url == NULL || html == NULL || inject_css == NULL || user_agent == NULL || cache_key == NULL || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
@@ -2227,6 +2314,7 @@ int32_t wox_linux_window_show_webview(WoxLinuxWindow *window, const char *url, c
       .y = y,
       .width = width,
       .height = height,
+      .corner_radius = corner_radius,
       .cache_disabled = cache_disabled != 0,
   };
   return run_on_main_sync(show_webview_main, &call) ? call.result : -1;
