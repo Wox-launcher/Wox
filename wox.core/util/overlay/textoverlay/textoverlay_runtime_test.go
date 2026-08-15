@@ -64,6 +64,7 @@ func TestRuntimeTextTitleBarContainsCopyAndCloseControls(t *testing.T) {
 	hasTitle := false
 	hasIcon := false
 	hasCopyTooltip := false
+	hasTitleDrag := false
 	for _, child := range titleBar.Children {
 		switch widget := child.Child.(type) {
 		case woxwidget.Stateful:
@@ -75,6 +76,10 @@ func TestRuntimeTextTitleBarContainsCopyAndCloseControls(t *testing.T) {
 			hasTitle = widget.Value == "Summarize"
 		case woxwidget.Image:
 			hasIcon = true
+		case woxwidget.Gesture:
+			if widget.ID == "text-overlay-title-drag" && widget.OnDragStart != nil {
+				hasTitleDrag = true
+			}
 		}
 	}
 	for _, key := range []woxwidget.Key{"text-overlay-copy", "text-overlay-close"} {
@@ -87,6 +92,59 @@ func TestRuntimeTextTitleBarContainsCopyAndCloseControls(t *testing.T) {
 	}
 	if !hasCopyTooltip {
 		t.Fatal("text overlay copy button does not expose a tooltip hover trigger")
+	}
+	if !hasTitleDrag {
+		t.Fatal("movable text overlay title bar is not a window-drag target")
+	}
+}
+
+func TestRuntimeTextTitleBarRemainsDraggableWhenBodyIsClickable(t *testing.T) {
+	instance := &runtimeTextOverlay{
+		layout: runtimeTextLayout{
+			windowSize:     woxui.Size{Width: 420, Height: 160},
+			contentSize:    woxui.Size{Width: 384, Height: 96},
+			titleBarHeight: runtimeTextTitleBarHeight,
+			viewportHeight: 96,
+			textWidth:      384,
+		},
+		options: Options{
+			Title: "Translate", Closable: true, ShowCopyButton: true,
+			OnClick: func() bool { return true },
+			Window:  overlay.WindowOptions{Movable: true},
+		},
+	}
+	root := instance.build(woxui.FrameInfo{Size: woxui.Size{Width: 420, Height: 160}}).(woxwidget.Gesture)
+	if root.ID != "text-overlay-click" {
+		t.Fatalf("root id = %q, want text-overlay-click", root.ID)
+	}
+	stack := root.Child.(woxwidget.Stack)
+	var titleBar woxwidget.Stack
+	found := false
+	for _, child := range stack.Children {
+		inner, ok := child.Child.(woxwidget.Stack)
+		if !ok || inner.Height != runtimeTextTitleBarHeight {
+			continue
+		}
+		titleBar = inner
+		found = true
+		break
+	}
+	if !found {
+		t.Fatal("clickable text overlay is missing its title bar")
+	}
+	drag, ok := titleBar.Children[0].Child.(woxwidget.Gesture)
+	if !ok || drag.ID != "text-overlay-title-drag" || drag.OnDragStart == nil {
+		t.Fatal("clickable text overlay title bar is not draggable")
+	}
+}
+
+func TestRuntimeTextTitleBarOmitsDragWhenNotMovable(t *testing.T) {
+	instance := &runtimeTextOverlay{
+		options: Options{Title: "Translate", Closable: true, ShowCopyButton: true},
+	}
+	titleBar := instance.buildTitleBar(420, woxui.Color{R: 255, G: 255, B: 255, A: 255}).(woxwidget.Stack)
+	if _, ok := titleBar.Children[0].Child.(woxwidget.Gesture); ok {
+		t.Fatal("fixed text overlay title bar unexpectedly starts window dragging")
 	}
 }
 

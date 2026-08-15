@@ -442,8 +442,19 @@ func runtimeTextCopyTooltip(width float32, label string, style woxui.TextStyle, 
 
 func (instance *runtimeTextOverlay) buildTitleBar(width float32, foreground woxui.Color) woxwidget.Widget {
 	hoverBackground := woxui.Color{R: 255, G: 255, B: 255, A: 20}
+	titleSurface := woxwidget.Widget(woxwidget.Container{Width: width, Height: runtimeTextTitleBarHeight})
+	if instance.options.Window.Movable {
+		// Caption drag sits behind copy/close. Dialog overlays wrap the body in
+		// OnTap (copy/activate), which would otherwise capture title-bar presses
+		// before the window-level overlay drag layer behind the content can start.
+		titleSurface = woxwidget.Gesture{ID: "text-overlay-title-drag", OnDragStart: func() {
+			if instance.window != nil {
+				_ = instance.window.StartDragging()
+			}
+		}, Child: titleSurface}
+	}
 	children := []woxwidget.StackChild{
-		{Child: woxwidget.Container{Width: width, Height: runtimeTextTitleBarHeight}},
+		{Child: titleSurface},
 		{Top: runtimeTextTitleBarHeight - 1, Child: woxwidget.Container{Width: width, Height: 1, Color: woxui.Color{R: 255, G: 255, B: 255, A: 76}}},
 	}
 	closeWidth := runtimeTextTitleButtonSize
