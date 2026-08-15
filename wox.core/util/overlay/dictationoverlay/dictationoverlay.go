@@ -15,6 +15,7 @@ const (
 	dictationOverlayWidth         = 132
 	dictationOverlayHeight        = 48
 	dictationOverlayContentHeight = 24
+	dictationOverlayCloseReserve  = 36
 )
 
 // Options configures the dictation overlay.
@@ -41,6 +42,9 @@ func Show(opts Options) {
 	window := opts.Window
 	if window.Width <= 0 {
 		window.Width = dictationOverlayWidth
+		if opts.Closable {
+			window.Width += dictationOverlayCloseReserve
+		}
 	}
 	if window.Height <= 0 {
 		window.Height = dictationOverlayHeight
@@ -54,17 +58,25 @@ func Show(opts Options) {
 			state.Lock()
 			active, phase := state.active, state.phase
 			state.Unlock()
-			children := []woxwidget.StackChild{{Child: waveform(frame.Size.Width, frame.Size.Height, active, phase)}}
+			children := []woxwidget.StackChild{{Child: waveform(dictationWaveformWidth(frame.Size.Width, opts.Closable), frame.Size.Height, active, phase)}}
 			if opts.Closable {
 				children = append(children, woxwidget.StackChild{Right: 8, Top: 10, AnchorRight: true, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 					ID: "dictation-overlay-close", Label: "Close", Icon: woxcomponent.CloseGlyph(13, woxui.Color{R: 245, G: 245, B: 245, A: 255}),
 					Width: 28, Height: 28, Radius: 6, HoverBackground: woxui.Color{R: 255, G: 255, B: 255, A: 28}, OnTap: func() { overlay.RequestClose(window.ID) },
 				})})
 			}
-			return woxwidget.Container{Width: frame.Size.Width, Height: frame.Size.Height, Radius: 12, Color: woxui.Color{R: 24, G: 24, B: 26, A: 242}, Child: woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: children}}
+			return woxwidget.Container{Width: frame.Size.Width, Height: frame.Size.Height, Radius: 12, Child: woxwidget.Stack{Width: frame.Size.Width, Height: frame.Size.Height, Children: children}}
 		},
 		OnDispose: func() { releaseState(window.ID) },
 	})
+}
+
+// dictationWaveformWidth centers the bars before the close-button region.
+func dictationWaveformWidth(width float32, closable bool) float32 {
+	if closable {
+		return max(float32(1), width-dictationOverlayCloseReserve)
+	}
+	return width
 }
 
 // UpdateActive updates the voice activity animation state without rebuilding the window.
