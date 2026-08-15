@@ -339,7 +339,9 @@ func (instance *runtimeOverlay) dispose() {
 }
 
 // overlayNativeWindowOptions maps overlay chrome onto a utility window. Topmost
-// preview surfaces take focus but still float above the launcher.
+// preview surfaces take focus but still float above the launcher. Tooltips stay
+// nonactivating so they do not steal focus; native acrylic or vibrancy still
+// comes from the platform window, not from a painted panel fill.
 func overlayNativeWindowOptions(options WindowOptions, size woxui.Size) woxui.WindowOptions {
 	return woxui.WindowOptions{
 		Title:         "Wox Overlay",

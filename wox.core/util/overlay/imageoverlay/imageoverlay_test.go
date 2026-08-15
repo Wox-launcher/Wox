@@ -117,6 +117,22 @@ func TestImageOverlayChromePaintsThemeBackground(t *testing.T) {
 	}
 }
 
+func TestImageOverlayChromeOmitsWidgetWindowOutline(t *testing.T) {
+	for _, platform := range []string{"windows", "darwin", "linux"} {
+		chrome := buildImageOverlayChrome(imageOverlayTitleBarProps{
+			Width: 400, Height: 280, Title: "clipboard", Platform: platform,
+			Colors: ThemeColors{Background: woxui.Color{A: 255}, Border: woxui.Color{A: 30}},
+		}, "", "", nil, nil).(woxwidget.Stack)
+		panel, ok := chrome.Children[0].Child.(woxwidget.Container)
+		if !ok {
+			t.Fatalf("%s panel = %T, want Container", platform, chrome.Children[0].Child)
+		}
+		if panel.Radius != 0 || panel.BorderWidth != 0 || panel.BorderColor.A != 0 {
+			t.Fatalf("%s panel chrome = radius %v border %v/%#v, want platform window corners only", platform, panel.Radius, panel.BorderWidth, panel.BorderColor)
+		}
+	}
+}
+
 func TestImageOverlayDefaultPositionUsesMouseScreenCenter(t *testing.T) {
 	x, y, ok := imageOverlayDefaultPosition(screen.Size{X: -1920, Y: 0, Width: 1920, Height: 1080})
 	if !ok || x != -960 || y != 540 {

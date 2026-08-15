@@ -1,6 +1,7 @@
 package textoverlay
 
 import (
+	"runtime"
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -99,5 +100,52 @@ func TestRuntimeTextCopyTooltipIsAnchoredAboveTitleButton(t *testing.T) {
 	x, y := runtimeTextCopyTooltipAnchor(woxui.Rect{X: 100, Y: 200}, woxui.Rect{X: 320, Y: 4, Width: 32, Height: 32})
 	if x != 436 || y != 200 {
 		t.Fatalf("copy tooltip anchor = (%v, %v), want (436, 200)", x, y)
+	}
+}
+
+func TestRuntimeTextWindowChromeDefersToSystemCorners(t *testing.T) {
+	for _, goos := range []string{"windows", "darwin"} {
+		radius, borderWidth, borderColor := runtimeTextWindowChrome(goos)
+		if radius != 0 || borderWidth != 0 || borderColor.A != 0 {
+			t.Fatalf("%s chrome = radius %v border %v/%#v, want system window corners only", goos, radius, borderWidth, borderColor)
+		}
+	}
+}
+
+func TestRuntimeTextWindowChromeStrokesLinuxAlphaCorners(t *testing.T) {
+	radius, borderWidth, borderColor := runtimeTextWindowChrome("linux")
+	if radius != runtimeTextSystemCornerRadius || borderWidth != 1 || borderColor.A != 30 {
+		t.Fatalf("linux chrome = radius %v border %v/%#v, want 14px stroke for square GTK windows", radius, borderWidth, borderColor)
+	}
+}
+
+func TestRuntimeTextCopyTooltipUsesWindowChrome(t *testing.T) {
+	tooltip := runtimeTextCopyTooltip(80, "Copy date", woxui.TextStyle{Size: 11}, woxui.Color{R: 246, G: 246, B: 246, A: 255})
+	radius, borderWidth, borderColor := runtimeTextWindowChrome(runtime.GOOS)
+	if tooltip.Radius != radius || tooltip.BorderWidth != borderWidth || tooltip.BorderColor != borderColor {
+		t.Fatalf("copy tooltip chrome = radius %v border %v/%#v, want %+v/%v/%#v", tooltip.Radius, tooltip.BorderWidth, tooltip.BorderColor, radius, borderWidth, borderColor)
+	}
+	if tooltip.Height != runtimeTextTooltipHeight {
+		t.Fatalf("copy tooltip height = %v, want %v", tooltip.Height, runtimeTextTooltipHeight)
+	}
+}
+
+func TestRuntimeTextOverlayBuildUsesWindowChrome(t *testing.T) {
+	instance := &runtimeTextOverlay{
+		layout: runtimeTextLayout{
+			windowSize:  woxui.Size{Width: 160, Height: 48},
+			contentSize: woxui.Size{Width: 140, Height: 28},
+			textWidth:   140,
+		},
+		options: Options{Message: "hello"},
+	}
+	root := instance.build(woxui.FrameInfo{Size: woxui.Size{Width: 160, Height: 48}}).(woxwidget.Stack)
+	panel, ok := root.Children[0].Child.(woxwidget.Container)
+	if !ok {
+		t.Fatalf("root panel type = %T, want Container", root.Children[0].Child)
+	}
+	radius, borderWidth, borderColor := runtimeTextWindowChrome(runtime.GOOS)
+	if panel.Radius != radius || panel.BorderWidth != borderWidth || panel.BorderColor != borderColor {
+		t.Fatalf("overlay panel chrome = radius %v border %v/%#v, want %v/%v/%#v", panel.Radius, panel.BorderWidth, panel.BorderColor, radius, borderWidth, borderColor)
 	}
 }

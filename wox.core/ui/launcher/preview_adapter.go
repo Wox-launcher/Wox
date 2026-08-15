@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"wox/common"
-	"wox/ui/contract"
 	woxcomponent "wox/ui/launcher/component"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
@@ -371,35 +370,7 @@ func (a *App) previewTags(tags []previewTag) []previewview.PreviewTag {
 
 // setPreviewTooltip anchors preview controls and metadata help to the launcher window.
 func (a *App) setPreviewTooltip(inside bool, text string, anchor woxui.Rect) {
-	revision := a.previewTooltipRevision.Add(1)
-	util.Go(a.lifecycleCtx, "update preview tag tooltip", func() {
-		a.tooltipMu.Lock()
-		defer a.tooltipMu.Unlock()
-		if revision != a.previewTooltipRevision.Load() {
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		const name = "go-ui-preview-tag"
-		if !inside {
-			if err := a.services.HideTooltip(ctx, a.sessionID, name); err != nil {
-				log.Printf("hide preview tag tooltip: %v", err)
-			}
-			return
-		}
-		windowBounds, err := a.window.Bounds()
-		if err != nil {
-			log.Printf("read launcher bounds for preview tag tooltip: %v", err)
-			return
-		}
-		if err := a.services.ShowTooltip(ctx, a.sessionID, contract.TooltipOptions{
-			Name: name, Text: text, Side: "top",
-			AnchorX: float64(windowBounds.X + anchor.X), AnchorY: float64(windowBounds.Y + anchor.Y),
-			AnchorWidth: float64(anchor.Width), AnchorHeight: float64(anchor.Height),
-		}); err != nil {
-			log.Printf("show preview tag tooltip: %v", err)
-		}
-	})
+	a.setNativeHoverTooltip(&a.previewTooltipRevision, "go-ui-preview-tag", "update preview tag tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window })
 }
 
 func previewColorWithOpacity(color woxui.Color, opacity float32) woxui.Color {

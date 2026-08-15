@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"wox/plugin"
-	"wox/ui/contract"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -183,37 +182,7 @@ func (a *App) stopGlanceLocked(clear bool) {
 }
 
 func (a *App) setGlanceHover(inside bool, text string, anchor woxui.Rect) {
-	revision := a.glanceTooltipRevision.Add(1)
-
-	util.Go(a.lifecycleCtx, "update glance tooltip", func() {
-		a.tooltipMu.Lock()
-		defer a.tooltipMu.Unlock()
-		current := revision == a.glanceTooltipRevision.Load()
-		if !current {
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if !inside {
-			if err := a.services.HideTooltip(ctx, a.sessionID, "go-ui-glance"); err != nil {
-				log.Printf("hide glance tooltip: %v", err)
-			}
-			return
-		}
-		windowBounds, err := a.window.Bounds()
-		if err != nil {
-			log.Printf("read launcher bounds for glance tooltip: %v", err)
-			return
-		}
-		err = a.services.ShowTooltip(ctx, a.sessionID, contract.TooltipOptions{
-			Name: "go-ui-glance", Text: text, Side: "top",
-			AnchorX: float64(windowBounds.X + anchor.X), AnchorY: float64(windowBounds.Y + anchor.Y),
-			AnchorWidth: float64(anchor.Width), AnchorHeight: float64(anchor.Height),
-		})
-		if err != nil {
-			log.Printf("show glance tooltip: %v", err)
-		}
-	})
+	a.setNativeHoverTooltip(&a.glanceTooltipRevision, "go-ui-glance", "update glance tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window })
 }
 
 func (a *App) scheduleGlanceRefreshLocked(ref glanceRef) {

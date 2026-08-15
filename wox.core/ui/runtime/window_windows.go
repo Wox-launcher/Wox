@@ -757,7 +757,7 @@ func (w *platformWindow) createNativeWindow() error {
 		return err
 	}
 	w.renderer = renderer
-	if windowsWindowUsesSystemBackdrop(w.options) && !w.options.Nonactivating {
+	if windowsWindowUsesSystemBackdrop(w.options) {
 		applyWindowsBackdrop(hwnd, w.darkAppearance)
 	}
 	nativeWindows.Store(uintptr(hwnd), w)
@@ -775,6 +775,8 @@ func windowsRendererNeedsEmbeddedSurfaceOverlay(role WindowRole) bool {
 // Screenshot windows cover the desktop with captured pixels, so a system backdrop is unnecessary.
 // More importantly, DWM can expose that backdrop for one refresh while the first swap-chain frame
 // is still being composed, which appears as a full-screen gray flash when capture starts.
+// Nonactivating is not part of this decision: tooltips and other overlays keep
+// Desktop Acrylic the same way macOS keeps NSVisualEffectView on non-key windows.
 func windowsWindowUsesSystemBackdrop(options WindowOptions) bool {
 	return options.Role != WindowRoleScreenshot
 }
@@ -833,7 +835,9 @@ func windowsResizeHitTest(position win.POINT, bounds win.RECT, grip int32) uintp
 }
 
 // applyWindowsBackdrop uses the supported DWM system backdrop on Windows 11 and the legacy
-// SetWindowCompositionAttribute Acrylic path on Windows 10, matching Flutter's Win32 runner.
+// SetWindowCompositionAttribute Acrylic path on Windows 10. The same HWND attributes
+// apply to activating launcher windows and nonactivating overlays; WS_EX_NOACTIVATE
+// only suppresses focus and does not disable DWM materials.
 func applyWindowsBackdrop(hwnd win.HWND, isDark bool) {
 	dark := int32(0)
 	if isDark {
@@ -1587,7 +1591,7 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		return windowCommandResult{}
 	case windowCommandSetAppearance:
 		w.darkAppearance = command.darkAppearance
-		if windowsWindowUsesSystemBackdrop(w.options) && !w.options.Nonactivating {
+		if windowsWindowUsesSystemBackdrop(w.options) {
 			applyWindowsBackdrop(w.hwnd, command.darkAppearance)
 		}
 		return windowCommandResult{}
@@ -1915,7 +1919,7 @@ func (w *platformWindow) showNative() FocusEpoch {
 
 // synchronizeBackdropAfterShow replaces the backdrop policy cached while the HWND was hidden.
 func (w *platformWindow) synchronizeBackdropAfterShow() {
-	if !windowsWindowUsesSystemBackdrop(w.options) || w.options.Nonactivating {
+	if !windowsWindowUsesSystemBackdrop(w.options) {
 		return
 	}
 	if osvariant.GetCurrentPlatformVariant() == "win11" && dwmSetWindowAttribute.Find() == nil {

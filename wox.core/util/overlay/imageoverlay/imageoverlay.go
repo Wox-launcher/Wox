@@ -34,7 +34,6 @@ import (
 const imageOverlayPrefix = "wox_image_overlay_"
 const defaultImageOverlayCornerRadius = 16
 const imageOverlayTitleBarHeight = 40
-const imageOverlaySystemCornerRadius = 14
 const imageOverlayMinWidth = 180
 const imageOverlayMinHeight = 120
 const imageOverlayWheelSensitivity = 0.0025
@@ -351,9 +350,11 @@ func buildImageOverlayChrome(props imageOverlayTitleBarProps, hovered, pressed s
 	bodyHeight := max(float32(1), props.Height-imageOverlayTitleBarHeight)
 	theme := woxcomponent.Theme{Background: props.Colors.Background, ToolbarText: props.Colors.Toolbar}
 	children := []woxwidget.StackChild{
+		// Fill only: Windows DWM, macOS NSVisualEffectView, and the opaque Linux
+		// utility window already own the outer shape. A widget radius/stroke
+		// stacks a second corner on top of that clip.
 		{Child: woxwidget.Container{
 			Width: props.Width, Height: props.Height, Color: props.Colors.Background,
-			BorderColor: props.Colors.Border, BorderWidth: 1, Radius: imageOverlaySystemCornerRadius,
 		}},
 		{Top: imageOverlayTitleBarHeight, Child: woxwidget.Image{
 			Source: props.Image, Width: props.Width, Height: bodyHeight, Fit: woxwidget.ImageFitContain,

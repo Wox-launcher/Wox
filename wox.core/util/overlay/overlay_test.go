@@ -37,6 +37,19 @@ func TestRequestCloseFiresCallbackOnce(t *testing.T) {
 	}
 }
 
+func TestTooltipOverlayStaysNonactivating(t *testing.T) {
+	options := overlayNativeWindowOptions(WindowOptions{Topmost: true}, woxui.Size{Width: 280, Height: 48})
+	if options.Role != woxui.WindowRoleUtility {
+		t.Fatalf("tooltip role = %d, want utility", options.Role)
+	}
+	if !options.Nonactivating {
+		t.Fatal("tooltips must not steal focus")
+	}
+	if !options.Topmost {
+		t.Fatal("tooltips must stay above the settings window")
+	}
+}
+
 func TestPreviewOverlayFloatsAboveLauncher(t *testing.T) {
 	options := overlayNativeWindowOptions(WindowOptions{Topmost: true, CloseOnEscape: true, TakeFocus: true, Resizable: true}, woxui.Size{Width: 400, Height: 280})
 	if options.Role != woxui.WindowRoleUtility {

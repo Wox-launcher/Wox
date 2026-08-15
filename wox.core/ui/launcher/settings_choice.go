@@ -2,11 +2,8 @@ package launcher
 
 import (
 	"context"
-	"log"
 	"strings"
-	"time"
 
-	"wox/ui/contract"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -169,41 +166,7 @@ func (a *App) setSettingsHoverTooltip(inside bool, text string, anchor woxui.Rec
 		return
 	}
 
-	revision := a.choiceTooltipRevision.Add(1)
-
-	util.Go(a.lifecycleCtx, "update setting choice tooltip", func() {
-		a.tooltipMu.Lock()
-		defer a.tooltipMu.Unlock()
-		current := revision == a.choiceTooltipRevision.Load()
-		if !current {
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if !inside {
-			if err := a.services.HideTooltip(ctx, a.sessionID, "go-ui-setting-choice"); err != nil {
-				log.Printf("hide settings choice tooltip: %v", err)
-			}
-			return
-		}
-		window := a.settingsNativeWindow()
-		if window == nil {
-			return
-		}
-		windowBounds, err := window.Bounds()
-		if err != nil {
-			log.Printf("read settings bounds for choice tooltip: %v", err)
-			return
-		}
-		err = a.services.ShowTooltip(ctx, a.sessionID, contract.TooltipOptions{
-			Name: "go-ui-setting-choice", Text: text, Side: side,
-			AnchorX: float64(windowBounds.X + anchor.X), AnchorY: float64(windowBounds.Y + anchor.Y),
-			AnchorWidth: float64(anchor.Width), AnchorHeight: float64(anchor.Height),
-		})
-		if err != nil {
-			log.Printf("show settings choice tooltip: %v", err)
-		}
-	})
+	a.setNativeHoverTooltip(&a.choiceTooltipRevision, "go-ui-setting-choice", "update setting choice tooltip", inside, text, anchor, side, a.settingsNativeWindow)
 }
 
 // loadSystemFontFamilies keeps enumeration in core while the framework only consumes portable family names.

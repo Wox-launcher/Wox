@@ -18,8 +18,8 @@ const (
 	DefaultFontSize         = float32(14)
 	runtimeTextPaddingX     = float32(18)
 	runtimeTextPaddingY     = float32(12)
-	// runtimeTextSystemCornerRadius matches wox_window_corner_radius in
-	// native_darwin.m so the drawn border follows the window's rounded corners.
+	// runtimeTextSystemCornerRadius is the Linux tooltip outline. Windows and
+	// macOS clip the overlay window themselves and must not stroke a second radius.
 	runtimeTextSystemCornerRadius = float32(14)
 	runtimeTextLeadingGap         = float32(8)
 	runtimeTextCloseSize          = float32(20)
@@ -380,13 +380,13 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 	}
 
 	content := woxwidget.Stack{Width: layout.contentSize.Width, Height: layout.contentSize.Height, Children: children}
+	radius, borderWidth, borderColor := runtimeTextWindowChrome(runtime.GOOS)
 	rootChildren := []woxwidget.StackChild{{Child: woxwidget.Container{
 		Width: frame.Size.Width, Height: frame.Size.Height,
 		// No panel fill: every platform window supplies its own material
-		// (macOS NSVisualEffectView, Windows acrylic) or stays transparent, so
-		// the desktop shows through behind the overlay text.
-		BorderColor: woxui.Color{R: 255, G: 255, B: 255, A: 30}, BorderWidth: 1,
-		Radius: runtimeTextSystemCornerRadius,
+		// (macOS NSVisualEffectView, Windows Desktop Acrylic). Windows applies
+		// that HWND backdrop even when the overlay is WS_EX_NOACTIVATE.
+		Radius: radius, BorderWidth: borderWidth, BorderColor: borderColor,
 	}}}
 	if layout.titleBarHeight > 0 {
 		rootChildren = append(rootChildren, woxwidget.StackChild{Child: instance.buildTitleBar(frame.Size.Width, textColor)})
@@ -412,6 +412,28 @@ func textOverlayPadding(options Options) woxwidget.Insets {
 		return options.Padding
 	}
 	return woxwidget.Insets{Left: runtimeTextPaddingX, Top: runtimeTextPaddingY, Right: runtimeTextPaddingX, Bottom: runtimeTextPaddingY}
+}
+
+// runtimeTextWindowChrome returns the widget-drawn window outline. Windows DWM
+// and macOS NSVisualEffectView already clip the overlay, so a second 14px stroke
+// reads as double corners. Linux utility windows stay square; nonactivating
+// tooltips still need this stroke so their alpha corners read as rounded.
+func runtimeTextWindowChrome(goos string) (radius, borderWidth float32, borderColor woxui.Color) {
+	if goos == "linux" {
+		return runtimeTextSystemCornerRadius, 1, woxui.Color{R: 255, G: 255, B: 255, A: 30}
+	}
+	return 0, 0, woxui.Color{}
+}
+
+// runtimeTextCopyTooltip builds the compact copy-feedback overlay.
+func runtimeTextCopyTooltip(width float32, label string, style woxui.TextStyle, foreground woxui.Color) woxwidget.Container {
+	radius, borderWidth, borderColor := runtimeTextWindowChrome(runtime.GOOS)
+	return woxwidget.Container{
+		Width: width, Height: runtimeTextTooltipHeight, Radius: radius, BorderWidth: borderWidth, BorderColor: borderColor,
+		Child: woxwidget.Align{Width: width, Height: runtimeTextTooltipHeight, Horizontal: .5, Vertical: .5, Child: woxwidget.TextBlock{
+			Value: label, Width: width - 16, Height: 18, MaxLines: 1, Centered: true, Style: style, Color: foreground,
+		}},
+	}
 }
 
 func (instance *runtimeTextOverlay) buildTitleBar(width float32, foreground woxui.Color) woxwidget.Widget {
@@ -523,15 +545,9 @@ func (instance *runtimeTextOverlay) showCopyTooltip() {
 	foreground := woxui.Color{R: 246, G: 246, B: 246, A: 255}
 	overlay.ShowWindow(overlay.WindowOptions{
 		ID: instance.copyTooltipID(), Topmost: true, AbsolutePosition: true, Anchor: overlay.AnchorBottomCenter,
-		OffsetX: x, OffsetY: y, Width: float64(width), Height: float64(runtimeTextTooltipHeight), CornerRadius: 6,
+		OffsetX: x, OffsetY: y, Width: float64(width), Height: float64(runtimeTextTooltipHeight),
 	}, overlay.View{Kind: "text-copy-tooltip", Build: func(_ *woxui.Window, _ woxui.FrameInfo) woxwidget.Widget {
-		return woxwidget.Container{
-			Width: width, Height: runtimeTextTooltipHeight, Radius: runtimeTextSystemCornerRadius,
-			BorderColor: woxui.Color{R: 255, G: 255, B: 255, A: 35}, BorderWidth: 1,
-			Child: woxwidget.Align{Width: width, Height: runtimeTextTooltipHeight, Horizontal: .5, Vertical: .5, Child: woxwidget.TextBlock{
-				Value: label, Width: width - 16, Height: 18, MaxLines: 1, Centered: true, Style: style, Color: foreground,
-			}},
-		}
+		return runtimeTextCopyTooltip(width, label, style, foreground)
 	}})
 }
 

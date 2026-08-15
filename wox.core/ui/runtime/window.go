@@ -125,7 +125,8 @@ type WindowOptions struct {
 	Resizable bool
 	// AspectRatio constrains native resizing to width/height when greater than zero.
 	AspectRatio float32
-	// Nonactivating keeps recording chrome visible without stealing focus from the captured app.
+	// Nonactivating keeps tooltips and recording chrome visible without stealing
+	// focus. It is a focus policy only; native window materials still apply.
 	Nonactivating bool
 	// Topmost raises a utility window above the launcher so preview overlays
 	// cannot open behind Wox when both share the floating window band.

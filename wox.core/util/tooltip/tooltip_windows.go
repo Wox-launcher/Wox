@@ -53,6 +53,9 @@ func stopVisibilityTracking(name string) {
 }
 
 func (current *tracker) run() {
+	// Owner-window pointer-leave cannot dismiss the tooltip: showing this HWND
+	// generates WM_MOUSELEAVE on the launcher/settings window. Poll until the
+	// cursor leaves both the trigger and the overlay.
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 

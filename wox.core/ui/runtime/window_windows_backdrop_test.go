@@ -22,6 +22,15 @@ func TestWindows11SystemBackdropValuesMatchWindowsSDK(t *testing.T) {
 	}
 }
 
+func TestWindowsNonactivatingUtilityWindowUsesSystemBackdrop(t *testing.T) {
+	if !windowsWindowUsesSystemBackdrop(WindowOptions{Role: WindowRoleUtility, Nonactivating: true}) {
+		t.Fatal("nonactivating overlays still need Desktop Acrylic")
+	}
+	if windowsWindowUsesSystemBackdrop(WindowOptions{Role: WindowRoleScreenshot, Nonactivating: true}) {
+		t.Fatal("screenshot windows must keep skipping system backdrop")
+	}
+}
+
 func TestWindows10AcrylicTintMatchesFlutterRunner(t *testing.T) {
 	if got := windows10AcrylicTint(true); got != win10DarkAcrylicTint {
 		t.Fatalf("dark tint = %#x, want %#x", got, win10DarkAcrylicTint)

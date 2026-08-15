@@ -582,6 +582,8 @@ func (a *App) hideWindow(notify bool) error {
 		a.visible = false
 		a.bottomAnchorY = 0
 		a.stopGlanceLocked(false)
+		a.setPreviewTooltip(false, "", woxui.Rect{})
+		a.setGlanceHover(false, "", woxui.Rect{})
 		launcher = a.launcher
 		a.reconcileSelectedPreview()
 		a.requirementForm = nil
