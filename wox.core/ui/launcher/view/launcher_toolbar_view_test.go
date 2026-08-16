@@ -110,6 +110,45 @@ func TestLauncherToolbarKeepsSixteenPixelActionContentSpacing(t *testing.T) {
 	}
 }
 
+func TestLauncherToolbarOmitsEmptyActionLabels(t *testing.T) {
+	theme := woxcomponent.Theme{
+		ToolbarBackground: woxui.Color{R: 20, G: 24, B: 28, A: 255},
+		ToolbarText:       woxui.Color{R: 220, G: 230, B: 240, A: 255},
+	}
+	empty, emptyWidth := launcherToolbarActionSurface(LauncherToolbarAction{ID: "blank", HotkeyLabels: []string{"Enter"}}, theme, &woxui.Window{}, 1, false)
+	labeled, labeledWidth := launcherToolbarActionSurface(LauncherToolbarAction{ID: "more", Label: "More Actions", HotkeyLabels: []string{"Ctrl", "J"}}, theme, &woxui.Window{}, 1, false)
+
+	emptyFlex := empty.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(emptyFlex.Children) != 1 {
+		t.Fatalf("empty toolbar action children = %d, want only the Enter keycap", len(emptyFlex.Children))
+	}
+	labeledFlex := labeled.(woxwidget.Container).Child.(woxwidget.Flex)
+	if len(labeledFlex.Children) != 2 {
+		t.Fatalf("labeled toolbar action children = %d, want label and keycaps", len(labeledFlex.Children))
+	}
+	if _, isAlign := emptyFlex.Children[0].(woxwidget.Align); isAlign {
+		t.Fatal("empty toolbar action must not use Align with width 0, which fills the row and overlaps the next action")
+	}
+	if _, isText := emptyFlex.Children[0].(woxwidget.Text); isText {
+		t.Fatal("empty toolbar action must not render a blank label before the Enter keycap")
+	}
+	if emptyWidth >= labeledWidth {
+		t.Fatalf("empty toolbar action width = %v, want smaller than labeled width %v", emptyWidth, labeledWidth)
+	}
+
+	built := LauncherToolbarView(LauncherToolbarProps{
+		Width: 800, Height: 40, Window: &woxui.Window{}, DensityScale: 1,
+		Actions: []LauncherToolbarAction{
+			{ID: "blank", HotkeyLabels: []string{"Enter"}},
+			{ID: "more", Label: "More Actions", HotkeyLabels: []string{"Ctrl", "J"}},
+		},
+	}).(woxwidget.Stack)
+	right := built.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
+	if right.Width != emptyWidth+labeledWidth {
+		t.Fatalf("toolbar action row width = %v, want %v so empty Enter does not overlap More Actions", right.Width, emptyWidth+labeledWidth)
+	}
+}
+
 func TestLauncherToolbarActionHoversLabelAndKeycapsTogether(t *testing.T) {
 	theme := woxcomponent.Theme{
 		ToolbarBackground: woxui.Color{R: 20, G: 24, B: 28, A: 255},

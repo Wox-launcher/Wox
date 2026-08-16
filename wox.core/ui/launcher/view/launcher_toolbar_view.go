@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"strings"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -221,19 +222,25 @@ func launcherToolbarActionSurface(action LauncherToolbarAction, theme woxcompone
 		Labels: action.HotkeyLabels, Foreground: theme.ToolbarText, Background: chipBackground,
 		FontSize: scaledLauncherSize(woxcomponent.TailFontSize, densityScale), Compact: densityScale < 1, Window: window,
 	})
-	innerHeight := scaledLauncherSize(28, densityScale)
 	gap := scaledLauncherSize(8, densityScale)
 	horizontalPadding := scaledLauncherSize(8, densityScale)
 	verticalPadding := scaledLauncherSize(2, densityScale)
 	contentHeight := launcherToolbarContentHeight(densityScale)
-	width := horizontalPadding*2 + labelMetrics.Size.Width + gap + chipWidth
+	children := []woxwidget.Widget{chip}
+	width := horizontalPadding*2 + chipWidth
+	// Skip empty labels. Align{Width: 0} means fill-available, so a blank
+	// doctor/default action would push Enter onto the next toolbar action.
+	if strings.TrimSpace(action.Label) != "" {
+		children = []woxwidget.Widget{
+			woxwidget.Text{Value: action.Label, Style: labelStyle, Color: theme.ToolbarText},
+			chip,
+		}
+		width += labelMetrics.Size.Width + gap
+	}
 	return woxwidget.Container{
 		Width: width, Height: contentHeight, Radius: scaledLauncherSize(4, densityScale), Color: background,
 		Padding: woxwidget.Insets{Left: horizontalPadding, Top: verticalPadding, Right: horizontalPadding, Bottom: verticalPadding},
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Align{Width: labelMetrics.Size.Width, Height: innerHeight, Vertical: 0.5, Child: woxwidget.Text{Value: action.Label, Style: labelStyle, Color: theme.ToolbarText}},
-			chip,
-		}},
+		Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children},
 	}, width
 }
 

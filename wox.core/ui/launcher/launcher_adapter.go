@@ -1125,8 +1125,12 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 	actions := make([]launcherview.LauncherToolbarAction, 0)
 	entries := unifiedActionPanelEntries(snapshot.results, snapshot.selected, snapshot.toolbarMsg)
 	for _, entry := range toolbarActionEntries(entries, snapshot.toolbarMsg != nil) {
+		label := a.translate(entry.Name)
+		if strings.TrimSpace(label) == "" {
+			continue
+		}
 		actions = append(actions, launcherview.LauncherToolbarAction{
-			ID: "toolbar-action-" + entry.ID, Label: a.translate(entry.Name), HotkeyLabels: formatHotkeyLabels(entry.Hotkey),
+			ID: "toolbar-action-" + entry.ID, Label: label, HotkeyLabels: formatHotkeyLabels(entry.Hotkey),
 			OnTap: func() { a.activateActionPanelEntry(entry) },
 		})
 	}
